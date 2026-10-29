@@ -43,6 +43,11 @@ pub const Seat = struct {
     /// Practice's click on the seat and on each idea (ui/practice.zig Act); "" for none
     act: []const u8 = "",
     idea_acts: []const []const u8 = &.{},
+    /// The app's lane panel: a click shows this lane (role's backing int, 255 mine);
+    /// bridge.js sends it, so ui-app.wasm carries no handler
+    lane: ?u8 = null,
+    /// The lane panel beside shows this ally's lane
+    shown: bool = false,
     // Full variant from here
     /// In the draft's order, 1-10; null when the order isn't known
     pick: ?u8 = null,
@@ -140,6 +145,9 @@ fn seat(h: *H, s: Seat, side: Side) N {
         .data_turn = s.picking,
         .data_you = s.you,
         .data_act = if (s.act.len > 0) s.act else null,
+        .data_lane = s.lane,
+        .data_shown = s.shown,
+        .role = if (s.lane != null) "button" else null,
     }, .{
         champ.view(h, s.champ, .{
             .px = .@"40",

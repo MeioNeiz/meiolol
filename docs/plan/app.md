@@ -101,9 +101,11 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   Data's certificate: a "live client data: <error>" line in record's output means
   https.get needs another root for port 2999
 - APP3 Every role and pick order (both editions). Done: the board (Window layout
-  below) with the mode chip and ideas for allies still to pick. Left: switch the lane
-  panel to any ally's role (click a seat), and the blind-safe ranking itself (J2:
-  options that hold up against the role's likely picks, not the average)
+  below) with the mode chip and ideas for allies still to pick; in the webview shell a
+  click on an ally's seat switches the lane panel to their role (options from everyone
+  who plays it, by the draft alone; "Your lane" or my seat goes back). Left: the
+  blind-safe ranking itself (J2: options that hold up against the role's likely picks,
+  not the average)
 - APP4 Hovers: picks and bans from hovered champions, live (both editions). The board
   shows ally hovers and intents and counts them in the draft; left: an enemy's hover
   never shows, so nothing to do there; check ban hovers in a real capture (APP1)

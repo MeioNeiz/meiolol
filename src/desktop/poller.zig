@@ -506,7 +506,9 @@ const Poller = struct {
     }
 
     fn tick(p: *Poller, arena: std.mem.Allocator, data: *const Data) !state.Status {
-        const cs = switch (try p.watch.step(arena)) {
+        const step = try p.watch.step(arena);
+        if (step != .select) state.lane_role.store(state.own_lane, .release);
+        const cs = switch (step) {
             .phase => |phase| {
                 // Live Client Data is up once the game has loaded; until then, waiting
                 // After it, the client's end of game block; the game's history stays
@@ -545,14 +547,17 @@ const Poller = struct {
         const own = p.own.?;
         const pool = p.watch.pool;
         const by_mastery = state.by_mastery.load(.acquire);
+        const shown = state.lane_role.load(.acquire);
         var h: std.hash.Wyhash = .init(cs.fingerprint());
         h.update(std.mem.asBytes(&role));
         h.update(std.mem.asBytes(&by_mastery));
+        h.update(&.{shown});
         if (pool) |ids| h.update(std.mem.sliceAsBytes(ids));
         p.fingerprint = h.final();
 
         const sel = try arena.create(state.Select);
-        sel.card = try lanecard.build(arena, .{
+        sel.ally = false;
+        const mine: lanecard.Input = .{
             .stats = &data.stats,
             .curves = if (data.curves) |*c| c else null,
             .role = role,
@@ -565,8 +570,13 @@ const Poller = struct {
             .mastery = own.mastery,
             .tier = own.tier,
             .expertise = if (by_mastery) .fitted else null,
-        });
+        };
+        sel.card = try lanecard.build(arena, mine);
         sel.board = try board.build(arena, &data.stats, .{}, cs, &sel.card);
+        if (shown < core.Role.count) if (try board.allyLane(arena, mine, cs, @fromBackingInt(@intCast(shown)))) |in| {
+            sel.card = try lanecard.build(arena, in);
+            sel.ally = true;
+        };
         sel.comp = try comp.after(arena, .{
             .stats = &data.stats,
             .curves = if (data.curves) |*c| c else null,

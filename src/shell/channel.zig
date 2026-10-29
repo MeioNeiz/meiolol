@@ -65,6 +65,8 @@ pub const FromPage = union(enum) {
     signin: struct { username: []const u8, password: []const u8 },
     /// Options weigh the player's mastery points (champ select's toggle)
     mastery: bool,
+    /// The lane panel shows this role's ally (a seat click), 255 my own lane
+    lane: u8,
     /// Private edition: practice on or off, or a change to its draft (practice.zig)
     practice: @import("ui").toshell.Practice,
 };
@@ -130,6 +132,7 @@ test "from page: each kind parses, anything else is an error" {
     try std.testing.expectEqualStrings("https://meio.lol/", (try read(a, "{\"open\":\"https://meio.lol/\"}")).open);
     try std.testing.expectEqualStrings("a\"b", (try read(a, "{\"signin\":{\"username\":\"ann\",\"password\":\"a\\\"b\"}}")).signin.password);
     try std.testing.expectEqual(false, (try read(a, "{\"mastery\":false}")).mastery);
+    try std.testing.expectEqual(255, (try read(a, "{\"lane\":255}")).lane);
     try std.testing.expectError(error.UnknownField, read(a, "{\"quit\":{}}"));
     try std.testing.expect(std.meta.isError(read(a, "{\"drawn\":-1}")));
     try std.testing.expect(std.meta.isError(read(a, "not json")));

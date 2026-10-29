@@ -38,6 +38,8 @@ pub const Mode = enum { blind, counter, locked };
 
 pub const Lane = struct {
     role: role.Role,
+    /// An ally's lane (a click on their seat): `me` is theirs, no pool or mastery
+    ally: bool = false,
     me: ?champ.Champ = null,
     them: ?champ.Champ = null,
     /// Their role is a guess: enemy positions are hidden
@@ -107,7 +109,7 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
     for (l.options, 0..) |o, i| opts.add(option(h, i, o, l.mode == .locked));
     return h.section(.{ .class = "lane" }, .{
         h.div(.{ .class = "vs" }, .{
-            champ.view(h, l.me, .{ .px = .@"48", .you = true, .named = false, .label = W.no_pick }),
+            champ.view(h, l.me, .{ .px = .@"48", .you = !l.ally, .named = false, .label = W.no_pick }),
             h.div(.{ .class = "who" }, .{
                 h.h2(.{}, .{
                     if (l.me) |m| m.name else W.no_pick.s,
@@ -115,6 +117,7 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
                 }),
                 h.span(.{ .class = "tags" }, .{
                     badge.view(h, .us, .{role.Role.label(l.role)}),
+                    if (l.ally) badge.view(h, .neutral, .{W.ally}) else null,
                     badge.view(h, if (l.mode == .locked) .accent else .neutral, .{switch (l.mode) {
                         .blind => W.blind,
                         .counter => W.counter,
@@ -134,6 +137,8 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
                 .locked => W.head_locked,
             }}),
             if (l.mastery) |m| chip.view(h, .{ .pressed = m, .on = on_mastery }, .{W.mastery}) else null,
+            // bridge.js sends data-lane: no handler in ui-app.wasm
+            if (l.ally) h.button(.{ .class = "c-btn", .type = "button", .data_s = "s", .data_lane = 255 }, .{W.own}) else null,
         }),
         if (l.options.len == 0) h.p(.{ .class = "say" }, .{W.none}) else h.el(.ol, .{ .class = "opts" }, .{opts.done()}),
         if (l.scope.len > 0) h.p(.{ .class = "scope" }, .{l.scope}) else null,
@@ -199,6 +204,8 @@ const W = struct {
     const head_counter = plain("Options into them");
     const head_locked = plain("Other options");
     const mastery = plain("Count mastery");
+    const ally = plain("Ally");
+    const own = plain("Your lane");
     const none = plain("No champion you can pick has enough games in this role.");
     const your_lane = plain("your lane");
     const ban_now = plain("Your ban");
@@ -241,6 +248,8 @@ pub const css =
     \\    font-weight: var(--w-b); font-variant-numeric: tabular-nums; color: var(--c, var(--text)); }
     \\  .c-cs .win > small { font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
     \\  .c-cs .bans[data-turn] h3 { color: var(--turn); }
+    \\  .c-cs .c-draft .seat[role="button"] { cursor: pointer; }
+    \\  .c-cs .c-draft .seat[data-shown] { box-shadow: inset 0 0 0 1px var(--sel-line); border-radius: var(--r-s); }
     \\}
     \\
 ;
@@ -302,6 +311,27 @@ fn private(h: *H, s: Screen) Screen {
     return p;
 }
 
+/// Top's seat clicked: their lane, options from everyone who plays it
+fn allyLane(h: *H) Screen {
+    var s = sample;
+    const lanes = h.mem.dupe(draftboard.Lane, sample.board.lanes) catch {
+        h.oom = true;
+        return sample;
+    };
+    lanes[0].us.shown = true;
+    s.board.lanes = lanes;
+    s.lane = .{
+        .role = .top,
+        .ally = true,
+        .me = lanes[0].us.champ,
+        .mode = .locked,
+        .sentence = "",
+        .options = sample.lane.options[1..],
+        .scope = "EUW, last 30 days",
+    };
+    return s;
+}
+
 fn chartState(h: *H) ?*lanechart.Held {
     const x = h.mem.create(lanechart.Held) catch {
         h.oom = true;
@@ -315,6 +345,7 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.addFill("counter, public", view(h, sample, chartState(h), null));
     g.addFill("counter, private", view(h, private(h, sample), chartState(h), null));
+    g.addFill("an ally's lane", view(h, allyLane(h), chartState(h), null));
     g.addFill("your ban, blind", view(h, .{
         .board = .{ .lanes = draftboard.sample.lanes[0..5], .bans_them = draftboard.sample.bans_them },
         .banning = true,

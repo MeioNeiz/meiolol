@@ -41,6 +41,12 @@ file and packed rows: docs/architecture.md.
   static HTML (no interaction; when it comes or changes the shell sends `reload`, which
   bridge.js turns into a page load). The Mac build's `--dump DIR --seconds N` writes
   each change to DIR/<seq>/ for a look against the mock client
+- Lane panel: a click on an ally's seat shows their lane: the shell writes data-lane
+  on the board's seats (role, 255 mine; ui/draftboard.zig Seat.lane) and bridge.js
+  sends `lane`, so ui-app.wasm carries no handler. The poller then builds the card from
+  that ally's side (board.allyLane: their champion, no pool, mastery or rank) beside my
+  own card's board and bans (state.lane_role, back to mine when champ select ends). Not
+  under practice, whose seat clicks place champions
 - Page to shell: ui/toshell.zig's Out, written by ui-app.wasm through bridge.js. The
   sign-in form (ui/signin.zig: the screen until there is data, else a line under it)
   sends `signin`, which the shell hands to the poller (device.zig); never logged

@@ -280,8 +280,8 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
         .act = try c.act(a, .{ .ban = o.champion }),
     };
     return .{
-        .board = .{ .lanes = try lanes(a, c, b), .bans_us = bans_us, .bans_them = bans_them },
-        .lane = try lane(a, c, &s.card, b.mode),
+        .board = .{ .lanes = try lanes(a, c, b, if (s.ally) s.card.role else null), .bans_us = bans_us, .bans_them = bans_them },
+        .lane = try lane(a, c, &s.card, board.modeOf(&s.card), s.ally),
         .ban_options = ban_options,
         .banning = b.turn == .ban,
         .draft = if (c.private) if (b.draft) |d| @floatCast(100 * d.win) else null else null,
@@ -351,8 +351,8 @@ fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
 }
 
 /// A row per role in draft order; a seat without a role takes the first row its side
-/// left empty
-fn lanes(a: Allocator, c: Ctx, b: *const board.Board) ![]const ui.draftboard.Lane {
+/// left empty. `shown`: the ally whose lane the panel shows
+fn lanes(a: Allocator, c: Ctx, b: *const board.Board, shown: ?core.Role) ![]const ui.draftboard.Lane {
     var rows: [5]ui.draftboard.Lane = undefined;
     for (&rows, ui.role.Role.all) |*r, role| r.* = .{ .role = role };
     var filled: [2][5]bool = @splat(@splat(false));
@@ -369,6 +369,15 @@ fn lanes(a: Allocator, c: Ctx, b: *const board.Board) ![]const ui.draftboard.Lan
             break;
         };
     }
+    if (shown) |r| rows[@backingInt(r)].us.shown = true;
+    // A click on an ally's seat shows their lane, on mine (while an ally's shows) mine
+    // again; under practice the seats' clicks place champions instead
+    if (!c.practice) for (&rows, filled[0], 0..) |*row, seated, i| {
+        if (!seated) continue;
+        if (row.us.you) {
+            if (shown != null) row.us.lane = state.own_lane;
+        } else if (!row.us.shown) row.us.lane = @intCast(i);
+    };
     return a.dupe(ui.draftboard.Lane, &rows);
 }
 
@@ -418,7 +427,8 @@ fn seat(a: Allocator, c: Ctx, s: board.Seat, side: usize, k: usize) !ui.draftboa
     return out;
 }
 
-fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode) !ui.champselect.Lane {
+/// `ally`: an ally's lane, without my pool or mastery
+fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode, ally: bool) !ui.champselect.Lane {
     const options = try a.alloc(ui.champselect.Option, card.options.len);
     for (options, card.options) |*x, o| {
         const reasons = try a.alloc(ui.champselect.Reason, o.reasons.len);
@@ -454,6 +464,7 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode) !ui.
     } else null else null;
     return .{
         .role = uiRole(card.role),
+        .ally = ally,
         .me = me_champ,
         .them = them_champ,
         .guessed = if (them) |o| o.guessed else false,
@@ -465,9 +476,11 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode) !ui.
         .sentence = card.sentence,
         .thin = if (card.matchup) |m| m.thin else false,
         .chart = chart,
-        .caption = if (card.matchup) |m| try a.print("Gold, you minus them: the line is the average, the band the middle half of {d} games ({s}, EUW, {s}).", .{ m.games, m.bracket.label(), card.period }) else "",
+        .caption = if (card.matchup) |m| try a.print("Gold, {s} minus them: the line is the average, the band the middle half of {d} games ({s}, EUW, {s}).", .{
+            if (ally) if (me_champ) |x| x.name else "them" else "you", m.games, m.bracket.label(), card.period,
+        }) else "",
         .options = options,
-        .mastery = state.by_mastery.load(.acquire),
+        .mastery = if (ally) null else state.by_mastery.load(.acquire),
         .scope = if (card.period.len > 0) try a.print("EUW, {s}", .{card.period}) else "EUW",
     };
 }
@@ -861,6 +874,39 @@ test "champ select: the private edition's numbers, the public one's words" {
     try ui.data.encode(a, app.Data, d, &bin);
     const back = try ui.data.decode(a, app.Data, bin.items);
     try testing.expectEqualStrings("Syndra", back.screen.select.lane.them.?.name);
+}
+
+test "an ally's lane: their seat marked, no mastery toggle, their name in the caption" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    var sel = testSelect();
+    sel.ally = true;
+    sel.card.role = .top;
+    sel.card.me = galio;
+    const allies = [_]board.Seat{
+        sel.board.allies[0],
+        .{ .slot = .{ .champion = galio, .role = .top, .state = .locked }, .role = .top, .guessed = false, .games = 900, .win = 0.5 },
+        .{ .slot = .{ .champion = syndra, .role = .jungle, .state = .locked }, .role = .jungle, .guessed = false, .games = 9, .win = 0.5 },
+    };
+    sel.board.allies = &allies;
+    const s = (try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .select = &sel }, .none)).screen.select;
+    try testing.expect(s.lane.ally);
+    try testing.expectEqual(null, s.lane.mastery);
+    try testing.expect(s.board.lanes[0].us.shown and !s.board.lanes[2].us.shown);
+    // Seats send their lane (bridge.js): the shown one none, mine back to mine, an
+    // empty row none
+    try testing.expectEqual(null, s.board.lanes[0].us.lane);
+    try testing.expectEqual(1, s.board.lanes[1].us.lane);
+    try testing.expectEqual(state.own_lane, s.board.lanes[2].us.lane);
+    try testing.expectEqual(null, s.board.lanes[3].us.lane);
+    const html = try render(a, try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .select = &sel }, .none), null, null);
+    try testing.expect(std.mem.find(u8, html, "data-lane=\"1\"") != null);
+    try testing.expect(std.mem.startsWith(u8, s.lane.caption, "Gold, Galio minus them"));
+    // The board's mode is still mine; the panel's is the card's
+    try testing.expectEqual(.counter, s.lane.mode);
 }
 
 test "comp view: once all ten are locked, words for everyone and numbers for testers" {

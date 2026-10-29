@@ -42,6 +42,14 @@ pub fn mastery(on: bool) void {
     s.practice_changed();
 }
 
+/// A seat click: the lane panel shows that ally's role (255 mine) from the next build
+pub fn lane(role: u8) void {
+    state.lane_role.store(role, .release);
+    const s = poller.lock();
+    defer poller.unlock();
+    s.practice_changed();
+}
+
 pub fn current() Client {
     const s = poller.lock();
     defer poller.unlock();
