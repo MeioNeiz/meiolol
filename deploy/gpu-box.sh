@@ -7,8 +7,10 @@
 # never the working tree (jomify.sh's rule: 17 Oct, a hand copy ran 3 commits old).
 # Installs are recorded in ~/ml/bin/installed ("meiolol SHA TIME"), which drift reads.
 # WSL's /etc gets deploy/wsl (the lab disk's writeback and queue limits) as root, through
-# wsl.exe -u root. Run-time pieces are elsewhere: lab-run.sh copies lab-gates/lab-usage
-# into each run, snapshot.sh copies snapshot-gpu.sh for each make. docs/compute.md
+# wsl.exe -u root, as does apt for the tools ci needs there (deploy/remote-build.sh):
+# zstd, shellcheck, jq; node from nodejs.org into ~/.local. Run-time pieces are elsewhere: lab-run.sh copies lab-gates
+# and lab-usage into each run, snapshot.sh copies snapshot-gpu.sh for each make,
+# remote-build.sh sends build-job.sh with each build. docs/compute.md
 #
 #   deploy/gpu-box.sh drift       installed vs HEAD, per piece
 #   deploy/gpu-box.sh install     every piece, then daemon-reload, the watcher restarted
@@ -27,6 +29,11 @@ ETC=(sysctl.d/60-meiolol-disk.conf udev/rules.d/60-meiolol-disk.rules)
 # Root without a PATH: commands by full path
 WSL_ROOT="/mnt/c/Windows/System32/wsl.exe -u root -e"
 WATCH=meiolol-lab-watch
+# Commands ci needs on the gpu-box: apt's zstd, shellcheck and jq, and node, which
+# Ubuntu ships too old (18: `node --check` fails on ES modules), from nodejs.org
+CI_TOOLS="zstd shellcheck jq node"
+NODE_VERSION=v24.22.2
+NODE=node-$NODE_VERSION-linux-x64
 RECORD=ml/bin/installed
 # What the mirror's meiolol is built from, for drift. Lab and GPU code isn't in it
 MEIOLOL_PATHS=(src build.zig build.zig.zon ':(exclude)src/lab' ':(exclude)src/gpu')
@@ -64,6 +71,7 @@ drift() {
         else echo "${paths[i]##*/}: DIFFERS from HEAD (deploy/gpu-box.sh install)"; fi
         i=$(( i + 1 ))
     done <<< "$have"
+    ssh "$HOST" "PATH=\$HOME/.local/bin:\$PATH; for t in $CI_TOOLS; do command -v \$t > /dev/null || echo \"\$t: MISSING (deploy/gpu-box.sh install)\"; done"
     local rev
     rev=$(ssh "$HOST" "awk '\$1 == \"meiolol\" { s = \$2 } END { print s }' $RECORD 2> /dev/null || true")
     if [[ -z "$rev" ]] || ! git -C "$ROOT" cat-file -e "$rev^{commit}" 2> /dev/null; then
@@ -110,6 +118,14 @@ install() {
         rm /tmp/\${f##*/}; done; $WSL_ROOT /usr/sbin/sysctl -q --system \
         && $WSL_ROOT /usr/bin/udevadm control --reload \
         && $WSL_ROOT /usr/bin/udevadm trigger --action=change --subsystem-match=block"
+    ssh "$HOST" "command -v zstd shellcheck jq > /dev/null || { $WSL_ROOT /usr/bin/apt-get -qq update \
+        && $WSL_ROOT /usr/bin/env DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get -qq -y install \
+        zstd shellcheck jq > /dev/null; }"
+    ssh "$HOST" "set -e; [ -x .local/node/$NODE/bin/node ] || { u=https://nodejs.org/dist/$NODE_VERSION; \
+        cd /tmp; curl -fsSLO \$u/$NODE.tar.xz; \
+        curl -fsSL \$u/SHASUMS256.txt | grep ' $NODE.tar.xz\$' | sha256sum -c --quiet -; \
+        mkdir -p ~/.local/node; tar -xJf $NODE.tar.xz -C ~/.local/node; rm $NODE.tar.xz; }; \
+        mkdir -p .local/bin; ln -sfn ~/.local/node/$NODE/bin/node .local/bin/node"
     ssh "$HOST" "loginctl enable-linger \$USER; systemctl --user daemon-reload \
         && systemctl --user enable -q $WATCH ${TIMERS[*]} \
         && systemctl --user restart $WATCH \

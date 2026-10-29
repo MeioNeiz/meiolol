@@ -11,6 +11,8 @@
 # - Sleep (Jacob: awake while busy): while a run is live, or another job keeps a file in
 #   ~/ml/awake.d fresh (touched in the last 15 min, eg the archive pull), Windows is held
 #   awake by deploy/windows/meiolol-awake.ps1, which watches a flag file this keeps fresh
+# - Builds (deploy/remote-build.sh, jobs in ~/ml/build/jobs): ended while League is up,
+#   and keep Windows awake while one runs
 set -u
 cd ~/ml/runs || exit 1
 mkdir -p ~/ml/awake.d
@@ -74,6 +76,18 @@ while true; do
         elif [[ $now == down && -f $d/paused ]]; then
             kill -CONT -- "-$pg" && rm "$d/paused" && log "CONT" >> "$d/pauses.log" \
                 && log "resumed $d"
+        fi
+    done
+    # Builds (deploy/build-job.sh) end instead: the Mac builds them again, while a paused
+    # build would hold a session or a push
+    for d in ~/ml/build/jobs/*/; do
+        [[ -f $d/job.pgid && ! -f $d/exit ]] || continue
+        pg=$(cat "$d/job.pgid")
+        kill -0 -- "-$pg" 2> /dev/null || continue
+        if [[ $now == up ]]; then
+            kill -TERM -- "-$pg" && log "ended build ${d%/} (League $league)"
+        else
+            busy=build
         fi
     done
     [[ -n $busy ]] || busy=$(find ~/ml/awake.d -type f -mmin -15 -printf '%f\n' | head -1)

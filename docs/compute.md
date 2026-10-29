@@ -46,6 +46,39 @@ docs/lab-run.md.
   champcomp's ratings offsets per window (`offsets-BEFORE-HI`, keyed by the binary),
   which champgroups shares (fold 3's). Safe to delete: the next run rebuilds them
 
+## Builds on the gpu-box
+
+Zig builds and tests can run there instead of on the Mac (29 Oct, idle gpu-box vs the
+Mac): test after a backend edit 47 s vs ~150 s quiet and 440-617 s with ~10 sessions;
+ci 51 s; test-ui 3.9 s vs 5-28 s. Debug x86_64 builds use Zig's self-hosted backend, no
+LLVM. The deploy build (ReleaseSafe, LLVM, one long single-core step) is faster on the
+M5: 185 s vs 230 s, so it stays on the Mac.
+
+- `deploy/compute.sh` shows both hosts: the Mac's load, swap, build slots and zig
+  compiles (naming those outside any slot), the gpu-box's League, load, builds and lab
+  slots, and where test, ci and test-ui would go now
+- `deploy/place.sh KIND` says where a build of KIND goes and why: test and ci to the
+  gpu-box when builds there are on, it answers ssh in 3 s, League is down and a build
+  slot is free (or none waits); test-ui only while the Mac's load is over its cores.
+  `place.sh off|on` for every session (eg the gpu-box away for a while);
+  MEIOLOL_WHERE=mac|gpu-box per call. ssh shares one connection (~/.ssh/cm, 10 min)
+- `deploy/remote-build.sh [--commit REV] ARGS` runs `zig build ARGS` there and looks
+  local: output streamed with the tree's paths turned into the checkout's, the build's
+  exit code. Inputs: HEAD (git push to ~/ml/build/repo.git) plus the working tree's
+  patch and untracked files, or a commit alone; ~1 s here, then the build. Exit 75: not
+  built there (off, unreachable, League, no slot in 60 s, lost 30 s mid-build, the job
+  died): build on the Mac
+- There: deploy/build-job.sh (sent with each build) in ~/ml/build/jobs/ID, own process
+  group, outlives ssh; a slot ~/ml/locks/build.K (build.slots, default 2) and its fixed
+  tree ~/ml/build/tree.K (zig's cache is keyed by path: a fresh dir is a cold build),
+  cache ~/ml/build/cache; nice 0, ahead of lab runs. lab-watch.sh ends builds while
+  League is up (the Mac builds them again) and keeps Windows awake while one runs
+- ci there needs zstd, shellcheck, jq and node 24 (Ubuntu's 18 can't `--check` ES
+  modules): deploy/gpu-box.sh install; versions head the output. Not built there:
+  shellMac (macOS only). Linux skips 4 tests. Open: the ui.wasm gzip budgets use the
+  host's gzip, and GNU gzip -9 makes ~20 B more than Apple's from the same wasm
+  (ui-daily 40973 vs 40953 of 40960), so ci fails there on that step alone
+
 ## gpu-box storage
 
 The lab disk is a Crucial P3 2 TB NVMe with no Windows letter (Disk resets, below):

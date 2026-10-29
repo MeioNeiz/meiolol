@@ -24,6 +24,9 @@ starting beside a waiting bigger one when it leaves that one's slots free. Holde
 waiters: `deploy/slots.sh status`. A zig build outside zb.sh: `deploy/slots.sh 1 zig
 build ...`.
 
+Builds on the gpu-box instead (faster, off the Mac's cores), and one view of both
+hosts' load: docs/compute.md "Builds on the gpu-box".
+
 deploy/zb.sh runs builds and tests in slots and answers a check (test, test-ui, ci) from
 a run that started after the request, finished or still going: that run saw the
 request's saved files.
