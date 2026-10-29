@@ -451,12 +451,32 @@ fn stat(d: *const rows.Data, r: *const Result, arm: usize, ref: usize, ctx: anyt
     return .{ .n = @intFromFloat(n), .loss = sl / n, .diff = m, .half = 1.96 * @sqrt(@max(v, 0) / n) };
 }
 
-pub const Subset = enum { all, changed };
+/// changed: games with a changed champion; euw1: the home platform's (PT6: EUW1 decides)
+pub const Subset = enum { all, changed, euw1 };
+
+/// Which scored games a figure covers
+pub const Filter = struct {
+    changed: ?*const ChampSet = null,
+    platform: ?u8 = null,
+
+    pub fn of(sub: Subset, changed: *const ChampSet) Filter {
+        return switch (sub) {
+            .all => .{},
+            .changed => .{ .changed = changed },
+            .euw1 => .{ .platform = homePlatform() },
+        };
+    }
+};
+
+fn homePlatform() u8 {
+    for (protocol.platformIds(), 0..) |id, i| if (std.mem.eql(u8, id, protocol.home_platform)) return @intCast(i);
+    unreachable;
+}
 
 const Sel = struct {
     d: *const rows.Data,
     r: *const Result,
-    changed: ?*const ChampSet,
+    f: Filter = .{},
     /// Days whose bucket is this (null: any)
     bucket: ?usize = null,
     day: ?u16 = null,
@@ -466,7 +486,8 @@ const Sel = struct {
         const v = s.r.pd.day[gi].?;
         if (s.day) |x| if (v != x) return false;
         if (s.bucket) |b| if (PatchDays.bucket(v) != b) return false;
-        if (s.changed) |c| if (!hasAny(c, s.d.games[gi])) return false;
+        if (s.f.changed) |c| if (!hasAny(c, s.d.games[gi])) return false;
+        if (s.f.platform) |p| if (s.d.games[gi].platform != p) return false;
         return true;
     }
 };
@@ -477,12 +498,12 @@ pub fn refArm(opts: Options) usize {
 }
 
 /// Days weighted equally: the mean of per-day differences, its variance the sum of theirs
-pub fn patchMean(d: *const rows.Data, r: *const Result, arm: usize, ref: usize, changed: ?*const ChampSet) Stat {
+pub fn patchMean(d: *const rows.Data, r: *const Result, arm: usize, ref: usize, f: Filter) Stat {
     var out: Stat = .{};
     var v: f64 = 0;
     var k: f64 = 0;
     for (r.days) |day| {
-        const s = stat(d, r, arm, ref, Sel{ .d = d, .r = r, .changed = changed, .day = day }, Sel.keep);
+        const s = stat(d, r, arm, ref, Sel{ .d = d, .r = r, .f = f, .day = day }, Sel.keep);
         if (s.n < 2) continue;
         out.n += s.n;
         out.loss += s.loss;
@@ -526,13 +547,13 @@ fn writeFiles(io: Io, dir: Io.Dir, d: *const rows.Data, r: *const Result, change
         var fw = file.writer(io, &buf);
         const w = &fw.interface;
         try w.print("arm\tbucket\tsubset\tgames\tloss\tdiff_vs_{s}\thalf\n", .{opts.arms[ref].name(&nbuf)});
-        for (opts.arms, 0..) |a, ai| for ([_]Subset{ .all, .changed }) |sub| {
-            const c: ?*const ChampSet = if (sub == .changed) changed else null;
+        for (opts.arms, 0..) |a, ai| for (std.enums.values(Subset)) |sub| {
+            const f = Filter.of(sub, changed);
             for (PatchDays.buckets, 0..) |bn, b| {
-                const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .changed = c, .bucket = b }, Sel.keep);
+                const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .f = f, .bucket = b }, Sel.keep);
                 try w.print("{s}\t{s}\t{t}\t{d}\t{d:.6}\t{d:.6}\t{d:.6}\n", .{ a.name(&nbuf), bn, sub, s.n, s.loss, s.diff, s.half });
             }
-            const s = patchMean(d, r, ai, ref, c);
+            const s = patchMean(d, r, ai, ref, f);
             try w.print("{s}\tpatch\t{t}\t{d}\t{d:.6}\t{d:.6}\t{d:.6}\n", .{ a.name(&nbuf), sub, s.n, s.loss, s.diff, s.half });
         };
         try w.flush();
@@ -545,7 +566,7 @@ fn writeFiles(io: Io, dir: Io.Dir, d: *const rows.Data, r: *const Result, change
         const w = &fw.interface;
         try w.writeAll("day\tcut_ms\tfit_games\tlatest_fit\tscored\tarm\tloss\tdiff\thalf\tsd\n");
         for (r.days, 0..) |day, di| for (opts.arms, 0..) |a, ai| {
-            const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .changed = null, .day = day }, Sel.keep);
+            const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .day = day }, Sel.keep);
             try w.print("{d}\t{d}\t{d}\t{d}\t{d}\t{s}\t{d:.6}\t{d:.6}\t{d:.6}\t{d:.4}\n", .{ day, r.pd.cut[day], r.fit_games[di], r.latest_fit[di], s.n, a.name(&nbuf), s.loss, s.diff, s.half, r.sd[ai][di] });
         };
         try w.flush();
@@ -564,23 +585,28 @@ fn report(w: *Io.Writer, d: *const rows.Data, r: *const Result, changed: *const 
         for (r.scored) |gi| n += @intFromBool(r.pd.day[gi].? == day);
         try w.print("| {d} | {d} | {d} | {d} |\n", .{ day, r.fit_games[di], r.latest_fit[di], n });
     }
-    for ([_]Subset{ .all, .changed }) |sub| {
-        const c: ?*const ChampSet = if (sub == .changed) changed else null;
+    for (std.enums.values(Subset)) |sub| {
+        const f = Filter.of(sub, changed);
         if (sub == .changed and changed.count() == 0) continue;
-        try w.print("\nMilli-nats a game vs {s} ({s}: its log loss), 95% paired; {s} games\n\n| arm |", .{ opts.arms[ref].name(&nbuf), opts.arms[ref].name(&nbuf), if (sub == .all) "all" else "changed-champion" });
+        const what = switch (sub) {
+            .all => "all",
+            .changed => "changed-champion",
+            .euw1 => protocol.home_platform,
+        };
+        try w.print("\nMilli-nats a game vs {s} ({s}: its log loss), 95% paired; {s} games\n\n| arm |", .{ opts.arms[ref].name(&nbuf), opts.arms[ref].name(&nbuf), what });
         for (PatchDays.buckets) |b| try w.print(" day {s} |", .{b});
         try w.writeAll(" patch (days equal) |\n| --- |");
         for (0..PatchDays.buckets.len + 1) |_| try w.writeAll(" --- |");
         try w.writeAll("\n| games |");
-        for (0..PatchDays.buckets.len) |b| try w.print(" {d} |", .{stat(d, r, ref, ref, Sel{ .d = d, .r = r, .changed = c, .bucket = b }, Sel.keep).n});
-        try w.print(" {d} |\n", .{patchMean(d, r, ref, ref, c).n});
+        for (0..PatchDays.buckets.len) |b| try w.print(" {d} |", .{stat(d, r, ref, ref, Sel{ .d = d, .r = r, .f = f, .bucket = b }, Sel.keep).n});
+        try w.print(" {d} |\n", .{patchMean(d, r, ref, ref, f).n});
         for (opts.arms, 0..) |a, ai| {
             try w.print("| {s} |", .{a.name(&nbuf)});
             for (0..PatchDays.buckets.len) |b| {
-                const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .changed = c, .bucket = b }, Sel.keep);
+                const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .f = f, .bucket = b }, Sel.keep);
                 try cell(w, s, ai == ref);
             }
-            try cell(w, patchMean(d, r, ai, ref, c), ai == ref);
+            try cell(w, patchMean(d, r, ai, ref, f), ai == ref);
             try w.writeAll("\n");
         }
     }
@@ -588,7 +614,7 @@ fn report(w: *Io.Writer, d: *const rows.Data, r: *const Result, changed: *const 
         try w.writeAll("\nA0 vs A1 by day:");
         var caught: ?u16 = null;
         for (r.days) |day| {
-            const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .changed = null, .day = day }, Sel.keep);
+            const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .day = day }, Sel.keep);
             try w.print(" {d}: {d:.2} ± {d:.2};", .{ day, s.diff * 1000, s.half * 1000 });
             if (caught == null and s.diff - s.half <= 0) caught = day;
         }
@@ -770,15 +796,21 @@ test "patchdays: arms on a planted jump; latest-only knows nothing on day 0, the
     try std.testing.expectEqual(1, ref);
     // On the changed champion's games every patch-aware arm beats pooled over the patch
     for ([_]usize{ 2, 3, 4, 5 }) |ai| {
-        const s = patchMean(&data, &r, ai, ref, &changed);
+        const s = patchMean(&data, &r, ai, ref, .{ .changed = &changed });
         try std.testing.expect(s.diff + s.half < 0);
     }
     // The looser prior for the changed champion helps there
-    try std.testing.expect(patchMean(&data, &r, 3, ref, &changed).diff < patchMean(&data, &r, 2, ref, &changed).diff);
+    try std.testing.expect(patchMean(&data, &r, 3, ref, .{ .changed = &changed }).diff < patchMean(&data, &r, 2, ref, .{ .changed = &changed }).diff);
     // Shuffled patch flags: no gain (its offsets shrink to ~0); the real jump's is bigger
-    const c = patchMean(&data, &r, 6, ref, null);
+    const c = patchMean(&data, &r, 6, ref, .{});
     try std.testing.expect(@abs(c.diff) < 0.0005);
-    try std.testing.expect(patchMean(&data, &r, 2, ref, null).diff < c.diff - 0.002);
+    try std.testing.expect(patchMean(&data, &r, 2, ref, .{}).diff < c.diff - 0.002);
+    // One platform's figures cover its games alone
+    var on_one: usize = 0;
+    for (r.scored) |gi| on_one += @intFromBool(data.games[gi].platform == 1);
+    try std.testing.expect(on_one > 0);
+    try std.testing.expectEqual(on_one, patchMean(&data, &r, 2, ref, .{ .platform = 1 }).n);
+    try std.testing.expectEqualStrings(protocol.home_platform, protocol.platformIds()[Filter.of(.euw1, &changed).platform.?]);
 }
 
 test "patchdays: arms and options parse" {
