@@ -21,6 +21,8 @@ pub const Select = struct {
     board: board.Board,
     /// Once every seat is locked
     comp: ?*const comp.Comp = null,
+    /// The card is an ally's lane (lane_role), not mine
+    ally: bool = false,
 };
 
 pub const Status = union(enum) {
@@ -55,6 +57,11 @@ pub const Note = union(enum) {
 
 /// The window's "Count your mastery points" box; the poller reads it each tick
 pub var by_mastery: std.atomic.Value(bool) = .init(true);
+
+/// The lane the card shows (Role's backing int), set by a click on an ally's seat;
+/// `own_lane` shows mine. Back to mine when champ select ends
+pub var lane_role: std.atomic.Value(u8) = .init(own_lane);
+pub const own_lane = 255;
 
 /// The sign-in form's, under the poller's mutex
 pub const SignIn = struct {

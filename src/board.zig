@@ -99,10 +99,38 @@ pub fn build(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, 
         .their_bans = cs.their_bans,
         .turn = cs.my_turn,
         .stage = stage(cs.phase),
-        .mode = if (card) |c| if (c.locked) .locked else if (c.opponent) |o| .{ .counter = o } else .blind else .blind,
+        .mode = if (card) |c| modeOf(c) else .blind,
         .ban_options = if (cs.bans_open) try banOptions(arena, stats, cs, enemies, card) else &.{},
         .draft = draft(stats, opts, allies, enemies),
     };
+}
+
+pub fn modeOf(card: *const lanecard.Card) Mode {
+    return if (card.locked) .locked else if (card.opponent) |o| .{ .counter = o } else .blind;
+}
+
+/// The lane card's input seen from the ally in `role`: their champion as mine, the rest
+/// of my team (me too) as allies. Their pool, mastery and rank aren't known: options
+/// come from everyone who plays the role, by the draft alone. Null when no other ally
+/// has the role
+pub fn allyLane(arena: std.mem.Allocator, mine: lanecard.Input, cs: session.ChampSelect, role: Role) !?lanecard.Input {
+    if (cs.my_role == role) return null;
+    const ally = for (cs.my_team) |sl| {
+        if (!sl.me and sl.role == role) break sl;
+    } else return null;
+    var allies: std.ArrayList(core.Pick) = .empty;
+    if (cs.my_champion != 0) try allies.append(arena, .{ .champion = cs.my_champion, .role = cs.my_role, .hover = !cs.my_locked });
+    for (cs.allies) |p| if (p.role != role) try allies.append(arena, p);
+    var in = mine;
+    in.role = role;
+    in.me = ally.champion;
+    in.locked = ally.champion != 0 and ally.state == .locked;
+    in.allies = allies.items;
+    in.pickable = null;
+    in.mastery = &.{};
+    in.tier = null;
+    in.expertise = null;
+    return in;
 }
 
 fn seat(stats: *const Stats, opts: core.Options, sl: Slot, role: ?Role, guessed: bool) Seat {
@@ -315,4 +343,40 @@ test "board: seats, guessed enemy roles, ideas, bans, draft" {
     try testing.expectEqual(.{ 2, 2 }, d.picks);
     try testing.expectEqual(1, d.hovers);
     try testing.expect(d.win > 0.3 and d.win < 0.7 and d.se > 0);
+}
+
+test "board: an ally's lane as the card sees it" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var mine = [_]Slot{
+        .{ .champion = 122, .role = .top, .state = .locked },
+        .{ .role = .jungle },
+        .{ .champion = 103, .role = .middle, .state = .hover, .me = true },
+    };
+    const cs: session.ChampSelect = .{
+        .my_role = .middle,
+        .my_champion = 103,
+        .my_locked = false,
+        .allies = @constCast(&[_]core.Pick{.{ .champion = 122, .role = .top }}),
+        .enemies = &.{},
+        .bans = &.{},
+        .phase = "BAN_PICK",
+        .my_team = &mine,
+    };
+    var f = try cardscenes.fixture();
+    defer f.deinit();
+    const base: lanecard.Input = .{ .stats = &f.stats, .curves = null, .role = .middle, .me = 103, .pickable = &.{103}, .tier = "GOLD" };
+    const top = (try allyLane(arena, base, cs, .top)).?;
+    try testing.expectEqual(122, top.me);
+    try testing.expect(top.locked);
+    try testing.expectEqual(null, top.pickable);
+    try testing.expectEqual(null, top.expertise);
+    try testing.expectEqualSlices(core.Pick, &.{.{ .champion = 103, .role = .middle, .hover = true }}, top.allies);
+    const jungle = (try allyLane(arena, base, cs, .jungle)).?;
+    try testing.expectEqual(0, jungle.me);
+    try testing.expect(!jungle.locked);
+    try testing.expectEqual(2, jungle.allies.len);
+    try testing.expectEqual(null, try allyLane(arena, base, cs, .middle));
+    try testing.expectEqual(null, try allyLane(arena, base, cs, .bottom));
 }

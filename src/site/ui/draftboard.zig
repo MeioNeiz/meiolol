@@ -40,7 +40,9 @@ pub const Seat = struct {
     lean: Lean = .none,
     /// An ally still to pick: options for the role
     ideas: []const champ.Champ = &.{},
-    /// Practice's click on the seat and on each idea (ui/practice.zig Act); "" for none
+    /// A click on the seat and on each idea, "" for none: practice's (ui/practice.zig Act)
+    /// or the app's lane panel ("lane <role's backing int>", 255 mine), which bridge.js
+    /// sends so ui-app.wasm carries no handler
     act: []const u8 = "",
     idea_acts: []const []const u8 = &.{},
     // Full variant from here
@@ -54,6 +56,7 @@ pub const Seat = struct {
     sub: tree.Text = .{ .s = "" },
     /// The game's line, after a reveal
     game: ?Game = null,
+    /// Full: the seat picked; compact: the lane the app's panel shows
     sel: bool = false,
 };
 
@@ -140,6 +143,7 @@ fn seat(h: *H, s: Seat, side: Side) N {
         .data_turn = s.picking,
         .data_you = s.you,
         .data_act = if (s.act.len > 0) s.act else null,
+        .data_sel = s.sel,
     }, .{
         champ.view(h, s.champ, .{
             .px = .@"40",

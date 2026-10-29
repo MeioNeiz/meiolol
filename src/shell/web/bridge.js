@@ -10,6 +10,12 @@
     if (e.data && e.data.reload) return location.reload();
     dispatchEvent(new CustomEvent('meiolol', { detail: e.data }));
   });
+  // The board's seats and "Your lane" (ui/draftboard.zig Seat.act "lane N"): the lane
+  // panel switches without a handler in ui-app.wasm
+  addEventListener('click', (e) => {
+    const el = e.target.closest && e.target.closest('[data-act^="lane "]');
+    if (el) meiolol.send({ lane: +el.dataset.act.slice(5) });
+  });
   const page = location.pathname.replace(/^\//, '') || 'index.html';
   addEventListener('DOMContentLoaded', () => {
     requestAnimationFrame(() => requestAnimationFrame(() => meiolol.send({ painted: { page } })));
