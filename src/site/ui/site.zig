@@ -1,8 +1,11 @@
 //! SiteHeader: every page's top bar: the logo, the page links, the search. Under 760 px
 //! of header the links give way to a menu button whose popover lists them and the pages
 //! under Champions, the current one selected (popovertarget: no script). Also every
-//! page's foot (`foot`) and the preview strip under the header (`preview`)
+//! page's foot (`foot`), the preview strip under the header (`preview`) and, on the
+//! Champions pages, the bar under it (`subbar`): the section's tabs and the view picks
 const tree = @import("tree.zig");
+const tabs = @import("tabs.zig");
+const segmented = @import("segmented.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const phrase = @import("phrase.zig");
 const plain = phrase.plain;
@@ -10,7 +13,7 @@ const H = tree.H;
 const N = tree.N;
 
 pub const name = "SiteHeader";
-pub const scope = .{ ".c-site", ".c-sitemenu", ".c-sitefoot", ".c-preview" };
+pub const scope = .{ ".c-site", ".c-sitemenu", ".c-sitefoot", ".c-preview", ".c-subbar" };
 
 pub const Link = struct {
     label: tree.Text,
@@ -42,6 +45,14 @@ const W = struct {
     pub const legal_pages = plain("Site");
     /// Riot: a personal key may not serve the public while a production key is in review
     pub const preview = plain("Preview: this site is in review for a Riot Games production API key and is not yet open to the public.");
+    pub const region = plain("Region");
+    pub const all_regions = plain("All regions");
+    pub const period = plain("Period");
+    pub const days = plain("30 days");
+    pub const patch = phrase.Phrase("Patch {p:text}");
+    pub const rank = plain("Rank");
+    pub const ranks = [_]tree.Text{ plain("Plat+"), plain("Emerald+"), plain("Diamond+"), plain("Master+") };
+    pub const plat = "Every game we crawl: Platinum IV+ players' lobbies";
 };
 
 pub const Foot = struct {
@@ -65,6 +76,57 @@ pub fn foot(h: *H, f: Foot) N {
         h.el(.nav, .{ .aria_label = W.legal_pages }, .{links(h, f.links)}),
         h.p(.{ .class = "legal", .data_prose = {} }, .{tree.Text{ .s = f.legal }}),
     })});
+}
+
+pub const Subbar = struct {
+    /// The Champions section's pages; empty: none
+    tabs: []const Link = &.{},
+    picks: ?Picks = null,
+};
+
+/// Region and period: links to this page in each view. Rank: Plat+ only, the rest greyed
+pub const Picks = struct {
+    /// The root view's region ("EUW"), then all regions
+    home: []const u8,
+    region: [2]Pick,
+    /// Last 30 days, then the patch
+    period: [2]Pick,
+    patch: []const u8,
+    /// Why the ranks past Plat+ are greyed
+    rank_off: []const u8,
+};
+
+pub const Pick = struct { href: []const u8, current: bool = false };
+
+pub fn subbar(h: *H, o: Subbar) N {
+    const items = h.mem.alloc(tabs.Item, o.tabs.len) catch {
+        h.oom = true;
+        return .none;
+    };
+    for (o.tabs, items) |x, *it| it.* = .{ .label = x.label, .href = x.href, .selected = x.current, .view = x.view };
+    return h.div(.{ .class = "c-subbar" }, .{h.div(.{ .class = "in" }, .{
+        if (o.tabs.len > 0) tabs.view(h, W.champions, items, &.{}) else null,
+        if (o.picks) |p| picks(h, p) else null,
+    })});
+}
+
+fn picks(h: *H, p: Picks) N {
+    var ranks: [W.ranks.len]segmented.Item = undefined;
+    for (&ranks, W.ranks, 0..) |*it, l, i| it.* = if (i == 0)
+        .{ .label = l, .selected = true, .href = "", .title = W.plat }
+    else
+        .{ .label = l, .disabled = true, .href = "", .title = p.rank_off };
+    return h.div(.{ .class = "picks" }, .{
+        segmented.view(h, .{ .s = .s, .label = W.region }, &.{
+            .{ .label = .{ .s = p.home }, .href = p.region[0].href, .selected = p.region[0].current },
+            .{ .label = W.all_regions, .href = p.region[1].href, .selected = p.region[1].current },
+        }),
+        segmented.view(h, .{ .s = .s, .label = W.period }, &.{
+            .{ .label = W.days, .href = p.period[0].href, .selected = p.period[0].current },
+            .{ .label = W.patch.with(h, .{ .p = p.patch }), .href = p.period[1].href, .selected = p.period[1].current },
+        }),
+        segmented.view(h, .{ .s = .s, .label = W.rank }, &ranks),
+    });
 }
 
 pub fn preview(h: *H) N {
@@ -160,6 +222,11 @@ pub const css =
     \\  .c-preview { background: var(--panel); border-bottom: 1px solid var(--line); color: var(--muted);
     \\    font-size: var(--fs-s); line-height: 1.55; }
     \\  .c-preview > p { max-width: var(--wrap); margin: 0 auto; padding: var(--sp-2) var(--gutter); }
+    \\  .c-subbar { border-bottom: 1px solid var(--line); }
+    \\  .c-subbar > .in { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-4); max-width: var(--wrap);
+    \\    margin: 0 auto; padding: 0 var(--gutter); }
+    \\  .c-subbar .c-tabs { box-shadow: none; margin-left: calc(-1 * var(--sp-3)); }
+    \\  .c-subbar .picks { display: flex; flex-wrap: wrap; gap: var(--sp-2); max-width: 100%; margin-left: auto; padding: var(--sp-1) 0; }
     \\}
     \\
 ;
@@ -186,6 +253,15 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("the bar; a menu button under 760 px", view(h, with_search));
     g.add("menu open, the current page selected", menu(h, o, true));
     g.addFill("the preview strip", preview(h));
+    const view_picks: Picks = .{
+        .home = "EUW",
+        .region = .{ .{ .href = "#", .current = true }, .{ .href = "#" } },
+        .period = .{ .{ .href = "#" }, .{ .href = "#", .current = true } },
+        .patch = "16.21",
+        .rank_off = "Champion pages and the champions board only",
+    };
+    g.addFill("the subbar: Champions tabs and the view picks; they wrap under the tabs when narrow", subbar(h, .{ .tabs = o.more, .picks = view_picks }));
+    g.addFill("the subbar, tabs only", subbar(h, .{ .tabs = o.more }));
     g.addFill("the foot", foot(h, .{
         .data = "in EUW, last 30 days, 23,210 games",
         .legal = "meiolol isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties.",

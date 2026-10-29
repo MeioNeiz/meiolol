@@ -79,39 +79,6 @@ a:hover { text-decoration: underline; }
 .look-list span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .look-list small { color: var(--muted); font-size: 12px; }
 .look-list p { margin: 0; padding: 8px; color: var(--muted); font-size: 13px; }
-/* Champions section: its pages as tabs, and the region, period and rank picks */
-.subbar { border-bottom: 1px solid var(--line); }
-.subbar .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding-top: 4px; padding-bottom: 4px; }
-.subbar .section { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
-.subbar .section a { color: var(--muted); padding: 4px 10px; border-radius: 6px; font-size: 13px; white-space: nowrap; }
-.subbar .section a:hover { color: var(--text); text-decoration: none; }
-.subbar .section a[aria-current="page"] { color: var(--text); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
-.subbar .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
-nav.switch {
-  display: flex; gap: 0; border: 1px solid var(--line-2); border-radius: 7px; overflow: hidden;
-  background: var(--panel); font-size: 12.5px;
-}
-nav.switch a { padding: 3px 11px; color: var(--muted); }
-nav.switch a:hover { text-decoration: none; color: var(--text); }
-nav.switch a[aria-current="page"] { background: var(--panel-3); color: var(--text); }
-/* Picks a page can't take (html.zig switches: champion pages only) */
-nav.switch a[aria-disabled="true"], .region-list a[aria-disabled="true"] { color: var(--faint); cursor: default; }
-details.regions { position: relative; font-size: 12.5px; }
-details.regions summary {
-  list-style: none; cursor: pointer; padding: 3px 11px; border: 1px solid var(--line-2); border-radius: 7px;
-  background: var(--panel); color: var(--text);
-}
-details.regions summary::-webkit-details-marker { display: none; }
-details.regions summary::after { content: "\25BE"; margin-left: 6px; color: var(--muted); }
-.region-list {
-  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; display: grid; grid-template-columns: repeat(4, auto);
-  gap: 2px; padding: 6px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 8px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
-}
-.region-list a { padding: 4px 10px; border-radius: 6px; color: var(--muted); white-space: nowrap; }
-.region-list a:first-child { grid-column: 1 / -1; }
-.region-list a[href]:hover { background: var(--panel-3); color: var(--text); text-decoration: none; }
-.region-list a[aria-current="page"] { background: var(--panel-3); color: var(--text); }
 /* main.wrap: .wrap's padding shorthand would win over a plain main rule */
 main.wrap { padding-top: 16px; padding-bottom: 32px; }
 h1 { font-size: 22px; line-height: 1.2; margin: 4px 0 6px; letter-spacing: -0.025em; font-weight: 650; }
@@ -302,8 +269,6 @@ button.primary { background: var(--text); color: var(--bg); border-color: var(--
   .wrap { padding: 0 16px; }
   .chart text, .chart .side { font-size: 15px; }
   main.wrap { padding-top: 18px; padding-bottom: 28px; }
-  .subbar .filters { margin-left: 0; }
-  .region-list { left: 0; right: auto; }
 }
 /* Scope chip (scope.zig): the region, period and rank a block's numbers are from; .off
    a pick the block doesn't follow */

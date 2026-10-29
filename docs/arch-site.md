@@ -13,10 +13,11 @@ it; never in a URL). URLs: src/site/ui/urls.zig spells every page (`Page`, `{f}`
 reads it back (`parse`); a page's file is its path + ".html" (root.filePath; home
 index.html), all hrefs root-relative. Each view has its own stats, pool and curves file
 (recent-curves.bin, curves-<patch>.bin, and all- versions from `meiolol curves
---platform all`). Header switches link to the same page in another view (a matchup that
-view lacks: the matchups finder); localStorage remembers the last view's query so shared
-pages (Daily Draft, Learn, Your games, legal: root only, made from the EUW patch view)
-link back into it. Old URLs get no redirects (Jacob, 29 Oct).
+--platform all`). The subbar's region and period picks (ui.site.subbar) link to the same
+page in another view (a matchup that view lacks: the matchups finder); localStorage
+remembers the last view's query so shared pages (Daily Draft, Learn, Your games, legal:
+root only, made from the EUW patch view) link back into it. Old URLs get no redirects
+(Jacob, 29 Oct).
 
 Champion pages are the exception: root view only, /champions/<slug> (main role, canonical)
 and /champions/<slug>/<role> per role it plays (the main role's canonical to the bare

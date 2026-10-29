@@ -6,14 +6,6 @@
 // in no view (champion and shared pages) use the last one visited, as meioView does.
 "use strict";
 
-// The subbar's region picker (html.zig switches) closes on a click elsewhere or Escape
-document.addEventListener("click", (e) => {
-  for (const d of document.querySelectorAll("details.regions[open]")) if (!d.contains(e.target)) d.open = false;
-});
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") for (const d of document.querySelectorAll("details.regions[open]")) d.open = false;
-});
-
 (() => {
   const script = document.currentScript;
   const form = document.querySelector("header form.look");

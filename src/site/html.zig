@@ -24,7 +24,7 @@ pub const Nav = enum {
     method,
     none,
 
-    /// Pages under Champions in the menu, with its tabs and the stats switches
+    /// Pages under Champions in the menu, with its tabs and the view picks
     pub fn inChampions(n: Nav) bool {
         return n == .champions or n == .matchups or n == .patch or n == .pool;
     }
@@ -85,15 +85,12 @@ pub const Page = struct {
     description: []const u8,
     /// View the page belongs to; null for shared pages and champion pages
     view: ?View = null,
-    /// This page's href in each view (View.index) for the switches: usually its URL with
-    /// that view's query. Null: no switches. Without a view, the switches start on
-    /// View.all[0] (champion pages: filters.js moves them)
+    /// This page's href in each view (View.index) for the subbar's picks: usually its URL
+    /// with that view's query. Null: no picks
     counterparts: ?[View.count][]const u8 = null,
     nav: Nav = .none,
-    /// Current patch, for the period switch
+    /// Current patch, for the period pick
     patch: []const u8,
-    /// Every platform crawled, for the region pick; champion pages offer them all
-    regions: []const []const u8 = &.{},
     /// The platform of the root view (EUW)
     home: []const u8 = "EUW1",
     /// Footer: "in EUW, last 30 days, 5,123 games"
@@ -163,7 +160,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
             .js = toSite(assets.search_js.path),
             .view = if (p.view) |v| tpl.attr("data-view", v.query()) else null,
         }),
-        .subbar = tpl.when(p.nav.inChampions() or p.counterparts != null, tpl.call(subbar, .{p})),
+        .subbar = tpl.when(p.nav.inChampions() or p.counterparts != null, Subbar{ .p = p }),
         // Remembered so shared pages link back into this view
         .remember = if (p.view) |v| tpl.t(
             \\<script>try{localStorage.setItem("view","{dir}")}catch(e){}</script>
@@ -269,105 +266,55 @@ const champion_tabs = [_]NavItem{
     .{ .nav = .pool, .path = "/pool", .label = "Champion pool", .in_view = true },
 };
 
-fn tabItem(p: Page, w: *Writer, it: NavItem) Writer.Error!void {
-    try navLink(p, w, it, it.nav == p.nav);
-}
+/// Under the header on the Champions pages: the section's tabs and, with counterparts,
+/// the view picks
+const Subbar = struct {
+    p: Page,
 
-fn navLink(p: Page, w: *Writer, it: NavItem, here: bool) Writer.Error!void {
-    var buf: [64]u8 = undefined;
-    var fba: std.heap.FixedBufferAllocator = .init(&buf);
-    try tpl.render(w, "<a href=\"{href}\"{current}{view}>{label}</a>\n", .{
-        .href = navHref(fba.allocator(), p, it) catch return error.WriteFailed,
-        .current = tpl.flag(here, "aria-current=\"page\""),
-        .view = tpl.flag(it.in_view and p.view == null, "data-view"),
-        .label = it.label,
-    });
-}
+    pub fn render(x: Subbar, w: *Writer) Writer.Error!void {
+        const p = x.p;
+        var buf: [16 * 1024]u8 = undefined;
+        var fba: std.heap.FixedBufferAllocator = .init(&buf);
+        const a = fba.allocator();
+        var t: ui.Tree = .{};
+        var h: ui.H = .init(a, &t);
+        var tabs: [champion_tabs.len]ui.site.Link = undefined;
+        for (champion_tabs, &tabs) |it, *l| l.* = SiteHeader.link(a, p, it, it.nav == p.nav) catch return error.WriteFailed;
+        t.root = ui.site.subbar(&h, .{
+            .tabs = if (p.nav.inChampions()) &tabs else &.{},
+            .picks = if (p.counterparts) |c| picks(p, c) else null,
+        });
+        if (h.oom) return error.WriteFailed;
+        try ui.html.write(&t, t.root, w);
+        try w.writeByte('\n');
+    }
 
-/// Under the header on stats pages: the section's tabs and the region and period switches
-fn subbar(w: *Writer, p: Page) Writer.Error!void {
-    try tpl.render(w,
-        \\<div class="subbar"><div class="wrap">
-        \\{tabs}{switches}</div></div>
-        \\
-    , .{
-        .tabs = tpl.when(p.nav.inChampions(), tpl.t("<nav class=\"section\" aria-label=\"Champions\">\n{items}</nav>\n", .{
-            .items = tpl.each(&champion_tabs, p, tabItem),
-        })),
-        .switches = tpl.when(p.counterparts != null, tpl.call(switches, .{p})),
-    });
-}
+    fn picks(p: Page, c: [View.count][]const u8) ui.site.Picks {
+        const v = p.view orelse View.all[0];
+        const at = struct {
+            fn f(cs: [View.count][]const u8, cur: View, to: View) ui.site.Pick {
+                return .{ .href = cs[to.index()], .current = to.index() == cur.index() };
+            }
+        }.f;
+        return .{
+            .home = platformName(p.home),
+            .region = .{ at(c, v, .{ .region = .euw, .period = v.period }), at(c, v, .{ .region = .all, .period = v.period }) },
+            .period = .{ at(c, v, .{ .region = v.region, .period = .days30 }), at(c, v, .{ .region = v.region, .period = .patch }) },
+            .patch = p.patch,
+            .rank_off = p.rank_off,
+        };
+    }
+};
 
 /// Rank picks: tier index as filters.zig tiers ("" all games: the crawl samples
 /// Platinum IV+ players, so its lobbies are Platinum+); higher tiers are too thin to offer
 pub const ranks = [_][2][]const u8{ .{ "", "Plat+" }, .{ "5", "Emerald+" }, .{ "6", "Diamond+" }, .{ "7", "Master+" } };
 
-/// "EUW1" -> "EUW", "EUN1" -> "EUNE", as static/filters.js platformName
+/// "EUW1" -> "EUW", "EUN1" -> "EUNE"
 pub fn platformName(p: []const u8) []const u8 {
     const names = [_][2][]const u8{ .{ "EUN1", "EUNE" }, .{ "LA1", "LAN" }, .{ "LA2", "LAS" }, .{ "OC1", "OCE" } };
     for (names) |n| if (std.mem.eql(u8, n[0], p)) return n[1];
     return std.mem.trimEnd(u8, p, "0123456789");
-}
-
-/// Region, period and rank picks; data-region, data-period, data-rank: what filters.js
-/// sets on a click. Champion pages (no view) take every pick; other pages only the
-/// views', the rest greyed
-fn switches(w: *Writer, p: Page) Writer.Error!void {
-    const v = p.view orelse View.all[0];
-    const live = p.view == null;
-    try tpl.renderPart(w,
-        \\<div class="filters">
-        \\<details class="regions"><summary aria-label="Region">{region}</summary><div class="region-list">
-        \\
-    , .{ .region = if (v.region == .all) "All regions" else platformName(p.home) });
-    const views = [_]struct { View, []const u8, []const u8 }{
-        .{ .{ .region = .all, .period = v.period }, "all", "All regions" },
-        .{ .{ .region = .euw, .period = v.period }, p.home, platformName(p.home) },
-    };
-    for (views) |e| try viewLink(w, p, e[0], v, "region", e[1], e[2], "");
-    for (p.regions) |pl| {
-        if (std.mem.eql(u8, pl, p.home)) continue;
-        try pick(w, p, live, "region", pl, platformName(pl));
-    }
-    try w.writeAll("</div></details>\n<nav class=\"switch\" aria-label=\"Period\">");
-    for ([_]Period{ .days30, .patch }) |pe| {
-        const to: View = .{ .region = v.region, .period = pe };
-        try viewLink(w, p, to, v, "period", @tagName(pe), if (pe == .days30) "30 days" else "Patch ", if (pe == .days30) "" else p.patch);
-    }
-    try w.writeAll("</nav>\n<nav class=\"switch\" aria-label=\"Rank\">");
-    try w.writeAll("<a aria-current=\"page\" data-rank=\"\" title=\"Every game we crawl: Platinum IV+ players' lobbies\">Plat+</a>");
-    for (ranks[1..]) |r| try pick(w, p, live, "rank", r[0], r[1]);
-    try w.writeAll("</nav>\n</div>\n");
-}
-
-/// A pick no view has: on a champion page a link with it (filters.js takes the click),
-/// elsewhere greyed
-fn pick(w: *Writer, p: Page, live: bool, comptime key: []const u8, value: []const u8, label: []const u8) Writer.Error!void {
-    if (live) {
-        try tpl.render(w, "<a href=\"{to}?" ++ key ++ "={value}\" data-" ++ key ++ "=\"{value}\">{label}</a>", .{
-            .to = p.counterparts.?[0],
-            .value = value,
-            .label = label,
-        });
-    } else {
-        try tpl.render(w, "<a aria-disabled=\"true\" title=\"{why}\" data-" ++ key ++ "=\"{value}\">{label}</a>", .{
-            .why = if (comptime std.mem.eql(u8, key, "rank")) p.rank_off else "Champion pages only",
-            .value = value,
-            .label = label,
-        });
-    }
-}
-
-/// A pick that is a view: a link to the page's counterpart there, current when it is `v`
-fn viewLink(w: *Writer, p: Page, to: View, v: View, comptime key: []const u8, value: []const u8, label: []const u8, tail: []const u8) Writer.Error!void {
-    const here = to.index() == v.index();
-    try tpl.render(w, "<a{current}{href} data-" ++ key ++ "=\"{value}\">{label}{tail}</a>", .{
-        .current = tpl.flag(here, "aria-current=\"page\""),
-        .href = tpl.when(!here, tpl.attr("href", p.counterparts.?[to.index()])),
-        .value = value,
-        .label = label,
-        .tail = tail,
-    });
 }
 
 pub fn foot(w: *Writer, p: Page) Writer.Error!void {

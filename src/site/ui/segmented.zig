@@ -19,6 +19,8 @@ pub const Item = struct {
     selected: bool = false,
     /// Shown but not choosable (no data for it)
     disabled: bool = false,
+    /// A line on hover: why it is disabled, what it counts
+    title: ?[]const u8 = null,
     /// A count after the label
     n: ?u32 = null,
     /// A link instead of a button: the page that shows it
@@ -44,11 +46,13 @@ pub fn view(h: *H, o: Opts, items: []const Item) N {
             .href = if (it.disabled or it.selected) null else href,
             .aria_current = if (it.selected) "page" else null,
             .aria_disabled = if (it.disabled) true else null,
+            .title = it.title,
         }, kids) else h.button(.{
             .key = i,
             .type = "button",
             .aria_pressed = it.selected,
             .aria_disabled = if (it.disabled) true else null,
+            .title = it.title,
             .on_click = if (it.disabled) null else it.on,
         }, kids));
     }

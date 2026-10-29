@@ -210,15 +210,14 @@ test "views: a tree each, switches between them, shared pages once" {
         try std.testing.expect(std.mem.find(u8, page, c[1]) != null);
     }
     // The champions board picks the view in its own toolbar; other view pages keep the
-    // switches
+    // subbar's picks
     const tiers = try read(arena, out, "_v/all/champions.html");
-    try std.testing.expect(std.mem.find(u8, tiers, "data-region=\"EUW1\"") == null);
+    try std.testing.expect(std.mem.find(u8, tiers, "<div class=\"picks\">") == null);
     const pool = try read(arena, out, "_v/all/pool.html");
     for ([_][]const u8{
-        "<a href=\"/pool?region=all&amp;period=patch\" data-period=\"patch\">Patch 16.20</a>",
-        "<a href=\"/pool\" data-region=\"EUW1\">EUW</a>",
-        "<a aria-disabled=\"true\" title=\"Champion pages only\" data-region=\"KR\">KR</a>",
-        "<a aria-disabled=\"true\" title=\"Champion pages and the champions board only\" data-rank=\"6\">Diamond+</a>",
+        "<a href=\"/pool?region=all&amp;period=patch\">Patch 16.20</a>",
+        "<a href=\"/pool\">EUW</a><a aria-current=\"page\">All regions</a>",
+        "<a aria-disabled=\"true\" title=\"Champion pages and the champions board only\">Diamond+</a>",
         "href=\"/" ++ @import("style.zig").file.path ++ "\"",
         "href=\"/daily\"",
     }) |s| try std.testing.expect(std.mem.find(u8, pool, s) != null);
@@ -232,7 +231,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "href=\"/" ++ @import("style.zig").file.path ++ "\"",
         "<a href=\"/champions\" aria-current=\"page\" data-view=\"\">",
     }) |s| try std.testing.expect(std.mem.find(u8, champ, s) != null);
-    try std.testing.expect(std.mem.find(u8, champ, "data-region=\"KR\"") == null);
+    try std.testing.expect(std.mem.find(u8, champ, "<div class=\"picks\">") == null);
     try std.testing.expectError(error.FileNotFound, read(arena, out, "_v/all/champions/a.html"));
     const shared_page = try read(arena, out, "daily.html");
     try std.testing.expect(std.mem.find(u8, shared_page, "<a href=\"/champions\" data-view=\"\">") != null);
@@ -240,10 +239,10 @@ test "views: a tree each, switches between them, shared pages once" {
     try std.testing.expectError(error.FileNotFound, read(arena, out, "_v/patch/style.css"));
     // Under Champions: the section's tabs and the switches; not on home or shared pages
     for ([_][]const u8{
-        "<nav class=\"section\" aria-label=\"Champions\">",
+        "<nav class=\"c-tabs\" aria-label=\"Champions\">",
         "<a href=\"/matchups?region=all\">Matchups</a>",
     }) |s| try std.testing.expect(std.mem.find(u8, tiers, s) != null);
-    try std.testing.expect(std.mem.find(u8, shared_page, "class=\"subbar\"") == null);
+    try std.testing.expect(std.mem.find(u8, shared_page, "class=\"c-subbar\"") == null);
     // Home in a view: the lookup and its islands, their script at the site root
     const home = try read(arena, out, "_v/all/index.html");
     for ([_][]const u8{
@@ -251,7 +250,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "<form class=\"box\" method=\"get\" role=\"search\" action=\"/your\"",
         "<script src=\"/" ++ assets.home_js.path ++ "\" data-wasm=\"",
     }) |s| try std.testing.expect(std.mem.find(u8, home, s) != null);
-    try std.testing.expect(std.mem.find(u8, home, "class=\"subbar\"") == null);
+    try std.testing.expect(std.mem.find(u8, home, "class=\"c-subbar\"") == null);
     _ = try read(arena, out, "print.css");
     // Pages link the hashed names only
     try std.testing.expectError(error.FileNotFound, read(arena, out, "style.css"));
