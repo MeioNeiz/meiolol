@@ -70,6 +70,9 @@ players back.
 10. Jacob's open decisions: decisions.md "Open decisions"
 11. Professional URLs (J32): public pages on the scheme (URL1-URL4); left: URL5,
     /admin and /private without .html (docs/plan/urls.md)
+12. Build speed (Jacob 29 Oct: keep sessions working at pace): next BS2 (slots mean
+    cores), BS3 (ci and deploy builds on the gpu-box, with W8), BS4 (slow tests):
+    docs/plan/build-speed.md
 
 Others own: the TW2 mastery retry (meiolol-8f); neural nets vs today's model; the
 draft's "Rammus into high AD/AP" check.
@@ -98,6 +101,7 @@ draft's "Rammus into high AD/AP" check.
 - docs/plan/vm.md: moving off Oracle onto the Essex VM, steps VM0-VM8
 - docs/plan/decisions.md: Jacob's decisions (J, Q, G ids), open decisions, ruled out
 - docs/plan/how-we-work.md: sessions, team size, unattended runs
+- docs/plan/build-speed.md: build and test times on the Mac, gpu-box builds, steps BS1-BS7
 - docs/backlog.md: older next steps by area; check before acting, move what you pick
   up into an area file
 
