@@ -15,7 +15,6 @@ const ld = @import("learndata.zig");
 const champ = @import("champ.zig");
 const choice = @import("choice.zig");
 const draftboard = @import("draftboard.zig");
-const candlist = @import("candlist.zig");
 const role = @import("role.zig");
 const phrase = @import("phrase.zig");
 const url = @import("url.zig");
@@ -317,7 +316,7 @@ pub const Page = struct {
     }
 
     fn iconSrc(p: *const Page, h: *H, c: ld.Champ) []const u8 {
-        return h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ p.d.ddragon, c.key });
+        return h.fmt(champ.icon_fmt, .{ p.d.ddragon, c.key });
     }
 
     fn icon(p: *const Page, h: *H, c: ld.Champ, px: champ.Px) N {
@@ -384,9 +383,9 @@ pub const Page = struct {
                     .champ = if (!open) .{ .name = c.name, .src = p.iconSrc(h, c) } else if (p.revealed) if (x.choices[x.right].champ) |y| .{ .name = y.name, .src = p.iconSrc(h, y) } else null else null,
                     .hidden = open,
                     .sel = open and p.revealed,
-                    .sub = if (open) .{ .s = "" } else damageWord(m[i]),
+                    .sub = if (open and !p.revealed) .{ .s = "" } else damageWord(m[i]),
                 };
-                if (open or m[i] == null) {
+                if ((open and !p.revealed) or m[i] == null) {
                     mx.unknown += 0.2;
                 } else {
                     const v: f32 = @floatFromInt(m[i].?);
@@ -416,25 +415,24 @@ pub const Page = struct {
             .bans_us = bans[0],
             .bans_them = bans[1],
         }, &.{});
-        if (!p.revealed) return h.div(.{ .class = "draft" }, .{board});
-        const rows = h.mem.alloc(candlist.Row, x.choices.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        for (x.choices, rows, 0..) |c, *o, i| {
-            const why = h.mem.alloc(candlist.Reason, c.why.len) catch {
-                h.oom = true;
-                return .none;
-            };
-            for (c.why, why) |w, *dst| dst.* = .{ .text = .{ .s = w.text }, .pp = if (w.up) 1 else -1 };
-            o.* = .{
-                .champ = if (c.champ) |y| .{ .name = y.name, .src = p.iconSrc(h, y) } else .{ .name = c.text, .src = "" },
-                .star = i == x.right,
-                .ref = p.pick != null and p.pick.? == i,
-                .reasons = why,
-            };
+        return h.div(.{ .class = "draft" }, .{ board, if (p.revealed) p.whyList(h, x) else null });
+    }
+
+    /// Each option with its reasons in words, the right one marked. Not CandidateList:
+    /// its code put ui-learn.wasm over its budget
+    fn whyList(p: *const Page, h: *H, x: ld.Pick) N {
+        var l = h.list();
+        for (x.choices, 0..) |c, i| {
+            var t = h.list();
+            t.add(h.b(.{ .key = 0 }, .{if (c.champ) |y| y.name else c.text}));
+            if (p.pick != null and p.pick.? == i) t.add(h.span(.{ .key = 1 }, .{badge.view(h, .accent, .{W.your_pick})}));
+            for (c.why, 2..) |w, j| t.add(h.span(.{ .key = j, .data_up = w.up }, .{ h.b(.{ .aria_hidden = true }, .{if (w.up) "▲" else "▼"}), w.text }));
+            l.add(h.el(.li, .{ .key = i, .data_right = i == x.right }, .{
+                if (c.champ) |y| p.icon(h, y, .@"24") else h.span(.{}, .{}),
+                h.span(.{ .class = "t" }, .{t.done()}),
+            }));
         }
-        return h.div(.{ .class = "draft" }, .{ board, candlist.view(h, .{ .rows = rows, .mode = .words, .ref_label = W.your_pick }) });
+        return h.el(.ul, .{ .class = "why" }, .{l.done()});
     }
 
     fn damageWord(m: ?u8) tree.Text {
@@ -528,6 +526,14 @@ pub const css =
     \\  .c-learn .vs3 { display: flex; gap: var(--sp-4); }
     \\  .c-learn .vs3 > span { display: grid; justify-items: center; gap: 2px; }
     \\  .c-learn .draft { display: grid; gap: var(--sp-3); min-width: 0; }
+    \\  .c-learn .why { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+    \\  .c-learn .why > li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--sp-2); align-items: start; }
+    \\  .c-learn .why .t { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); min-height: 24px;
+    \\    font-size: var(--fs-s); color: var(--t2); }
+    \\  .c-learn .why .t > b { color: var(--text); }
+    \\  .c-learn .why > li[data-right] .t > b { color: var(--hi2); }
+    \\  .c-learn .why .t > span > b { margin-right: 4px; font-size: var(--fs-xs); color: var(--lo2); }
+    \\  .c-learn .why .t > [data-up] > b { color: var(--hi2); }
     \\  .c-learn .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--sp-2); }
     \\  .c-learn .tile { display: grid; justify-items: center; gap: var(--sp-2); padding: var(--sp-3) var(--sp-2);
     \\    border-radius: var(--r-m); background: var(--bg); border: 1px solid var(--line); }
@@ -705,14 +711,17 @@ test "a chapter end draft: the open seat stays hidden, then the right pick fills
     var h: H = .init(a, &t);
     var out: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, shown(a, &draft_demo, 0, 0, null).?.view(&h), &out.writer);
-    const before = std.mem.count(u8, out.written(), "/Lux.png");
+    const before = std.mem.count(u8, out.written(), "/Lux.jpg");
+    const ap_before = std.mem.count(u8, out.written(), ">AP<");
     try testing.expect(std.mem.find(u8, out.written(), "Adds the magic your team lacks") == null);
     out = .init(a);
     try html.write(&t, shown(a, &draft_demo, 0, 0, 0).?.view(&h), &out.writer);
     try testing.expect(!h.oom);
     try testing.expect(std.mem.find(u8, out.written(), "Adds the magic your team lacks") != null);
     // On its card as before, now also in the open seat and the reasons list
-    try testing.expect(std.mem.count(u8, out.written(), "/Lux.png") > before);
+    try testing.expect(std.mem.count(u8, out.written(), "/Lux.jpg") > before);
+    // The filled seat gets its damage word
+    try testing.expectEqual(ap_before + 1, std.mem.count(u8, out.written(), ">AP<"));
 }
 
 test "a puzzle's link opens it" {
@@ -771,7 +780,7 @@ const draft_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &.{
         .us = .{ ld.ch("Darius", "Darius"), ld.ch("LeeSin", "Lee Sin"), ld.ch("Zed", "Zed"), ld.ch("Jinx", "Jinx"), ld.ch("Thresh", "Thresh") },
         .them = .{ ld.ch("Ornn", "Ornn"), ld.ch("Elise", "Elise"), ld.ch("Ahri", "Ahri"), ld.ch("Caitlyn", "Caitlyn"), ld.ch("Nautilus", "Nautilus") },
         .bans = .{ &.{ ld.ch("Yasuo", "Yasuo"), ld.ch("Yone", "Yone") }, &.{ld.ch("Vex", "Vex")} },
-        .magic = .{ .{ 3, 8, 6, 4, null }, .{ 55, 88, 90, 2, 72 } },
+        .magic = .{ .{ 3, 8, 6, 4, 91 }, .{ 55, 88, 90, 2, 72 } },
     } },
     .answer = .{ .pick = .{ .right = 2, .choices = &.{
         .{ .text = "Pyke", .champ = ld.ch("Pyke", "Pyke"), .shown = "4% magic", .games = 5_200, .why = &.{.{ .text = "Hard into Caitlyn", .up = false }} },

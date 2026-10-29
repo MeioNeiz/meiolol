@@ -47,7 +47,7 @@ away (the chapter strip at the top).
 | 2 | Whose lead wins games? | fed (other four behind), fed top vs bot, 5k behind at 15, bounty gold |
 | 3 | Does winning lane win the game? | lane (Pyke vs Thresh), lean hook (Draven), lean x4 |
 | 4 | Counter, or just strong? | counter top, counter mid (bot when one clears) |
-| 5 | Myth or measured | split pushers, first dragon vs herald, kills at 3:00, luck (Riven) |
+| 5 | Myth or measured | split pushers, comp win conditions (only the damage mix shows), luck (Riven) |
 
 Chapter 0 replaces Basics with puzzles that do not give the answer away: the lesson
 screen shows three examples as tiles, the questions ask about other champions that fit
@@ -131,7 +131,8 @@ like pair of bars per opponent: "Yone vs Jax" against "Jax vs everyone".
 - Practice drills (4-option drafts) leave the default path: their answers are not clear
   (34% agree with our own model). They come back as one "draft" puzzle per chapter end
   (proposal's boss) only where one option is clearly apart, on the DraftBoard with
-  ChoiceCards, revealed as a CandidateList in tiers with words (J2), never "+X%".
+  ChoiceCards, revealed with each option's reasons in words (J2), never "+X%"; Learn's
+  own short list, not CandidateList (its code put ui-learn.wasm over 40 KB)
   Clearly apart: the four teammates deal under a fifth of their damage as magic
   (learned.md Win, Sure), exactly one option brings 60%+ magic, and it is also the
   model's best of the four. Box pack 27 Oct: 2-3 such drafts a day, so some chapters

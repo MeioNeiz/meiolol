@@ -56,7 +56,8 @@ pub const Draft = struct {
     us: [5]Champ,
     them: [5]Champ,
     bans: [2][]const Champ = .{ &.{}, &.{} },
-    /// Each seat's magic share of its damage, %, us then them; the open seat's unused
+    /// Each seat's magic share of its damage, %, us then them; the open seat's is the right
+    /// pick's, shown once revealed
     magic: [2][5]?u8 = @splat(@splat(null)),
 };
 

@@ -812,6 +812,7 @@ fn draftPuzzle(site: *const Site, facts: learn.Facts, p: learn.Practice, right: 
         const c = site.stats.index(id);
         m.* = if (c) |x| if (facts.champs[x].magic) |v| @intFromFloat(@round(100 * v)) else null else null;
     };
+    magic[0][@backingInt(p.hidden_role)] = p.options[right].magic;
     return .{
         .id = try a.print("draft-{x:0>8}", .{@as(u32, @truncate(std.hash.Wyhash.hash(0, std.mem.asBytes(&p.teams))))}),
         .q = "Your team picks last. Which champion fits this draft?",

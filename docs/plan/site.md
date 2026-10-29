@@ -108,6 +108,8 @@ No win chance or points anywhere in Learn.
 
 Next (order and detail: data/team/2026-10-29-next/notes/w5.md):
 - More myth or measured cards, only from final learned.md lines whose Site: allows it
+  and with a measured count (objectives are post-game only; "lost in champ select" is
+  a model read of win chance, so not here)
 - Hand-written numbers refreshed when their checks are rerun
 - Later: a daily five; "your lane, your game" (an export from the pack)
 
