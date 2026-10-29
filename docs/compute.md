@@ -1,6 +1,6 @@
 # Compute: where heavy model work runs
 
-The box (Oracle A1, 2 cores) crawls and serves; it only exports data. Training and
+The box (C01, docs/hosting.md) crawls and serves; it only exports data. Training and
 experiments run on:
 
 | host | CPU | memory | GPU | how |

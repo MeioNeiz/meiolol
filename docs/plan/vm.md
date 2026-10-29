@@ -9,27 +9,7 @@ on 26 Oct), and its 2 cores sit at load ~3. The move replaces the Hetzner BX11 o
 
 ## C01 today
 
-- ssh alias `essex-vm` (user jacob, key ~/.ssh/essex_vm), Tailscale 100.95.95.44 on
-  Jacob's tailnet (MeioNeiz@github), direct from the Mac. Sudo asks for the password
-  (from Ethan's note; goes into vault meiolol/essex-vm)
-- KVM, 16 vCPU of a Xeon E5-2630 v3 (CPU type host since 27 Oct: AVX2, builds at
-  x86_64_v3 from box.sh's host_target), 62 GB, Ubuntu 24.04 x86_64, 60 GB disk (14 GB
-  free; data is on /srv/meiolol)
-- Network shares, CIFS, both mounted `soft`: /mnt/storage (Essex Storage, 192.168.18.12,
-  14.5 TB free) and /mnt/jacob (Megatron, 192.168.18.54, 3.1 TB free)
-- Measured 26 Oct (Python, O_DIRECT, 2 GB file; SQLite test 2.8 GB WAL db, writer of
-  20-game commits with 2 readers, then cold scans):
-
-| | 4 KB random read | seq read | commits/s, p50 | lookups/s beside writer | cold scan |
-|---|---|---|---|---|---|
-| local disk | 0.2 ms | 766 MB/s | 359, 1.3 ms | 5,528 | 176 MB/s |
-| Megatron share | 1.0 ms | 347 MB/s | | | |
-| ext4 image on Megatron | 1.15 ms | 270 MB/s | 13-15, 43-54 ms | 170-221 | 61-71 MB/s |
-| Essex Storage share | 6.6 ms | 52 MB/s | | | |
-| the box (research) | ~0.7 ms | cap 72 MB/s | | | |
-
-- SQLite in WAL (src/store/schema.zig) can't live on a share (its -shm is mapped by every
-  process); an ext4 image on a share, loop mounted, works but is no faster than the box
+Moved to docs/hosting.md "C01" (access, shares, measurements, data disk, web side).
 
 ## Running it
 

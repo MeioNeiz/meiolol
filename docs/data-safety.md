@@ -7,8 +7,9 @@ pushes from the box.
 
 ## Disk
 
-- Box: one 150 GB boot volume (docs/hosting.md), backups on the same disk until mirrored
-  (`MEIOLOL_BACKUPS` in host.env). Kept data grows ~1.6 GB/day at the full rate; raw
+- Box: C01's data disk /srv/meiolol, 492 GB on Megatron (docs/hosting.md "Data disk"),
+  backups on it until mirrored (`MEIOLOL_BACKUPS` in host.env). The 60 GB system disk
+  holds the disk's 30 GB cache file and the web side (nginx cache, API data). Kept data grows ~1.6 GB/day at the full rate; raw
   JSON leaves through the raw archive, and under 10 GB free the valve drops unarchived
   raw (Raw archive). More storage: docs/plan/ops.md "Storage and hosts"
 - Off-host: backups mirrored to Megatron outside C01's disk image, the Mac and the
@@ -133,7 +134,7 @@ only in matches whose timeline came after the backup point.
 The web server's accounts.db (logins: emails or usernames, argon2id password hashes,
 roles, session, desktop app and invite hashes; docs/plan/accounts.md) to the gpu-box
 every 6 h: meiolol-accounts-pull.timer runs deploy/accounts-pull.sh, which asks host
-meiolol-accounts (gpu-box key ~/.ssh/meiolol_accounts; on jomify user meiolol's
+meiolol-accounts (gpu-box key ~/.ssh/meiolol_accounts; on C01 user meiolol's
 authorized_keys, forced command `sudo -n /usr/local/bin/meiolol-accounts-send`, one line
 in /etc/sudoers.d/meiolol-accounts-send). That script (deploy/accounts-send.sh,
 installed by `deploy/jomify.sh install accounts-send`) runs `meiolol account backup` as
@@ -146,7 +147,7 @@ deleted login leaves the backups within 14 days). Log ~/ml/accounts-pull.log on 
 gpu-box; each archive pull reports its state to the box for Health alerts. api.db (Your
 games' cache, refetchable) is not backed up.
 
-Restore: `ssh gpu-box`, pick a file; on jomify `sudo systemctl stop meiolol-api`, copy
+Restore: `ssh gpu-box`, pick a file; on C01 `sudo systemctl stop meiolol-api`, copy
 it to /var/lib/meiolol-api/accounts.db (owner meiolol-api, mode 600), delete
 accounts.db-wal and -shm there, `sudo systemctl start meiolol-api`. Sessions in the
 copy still work; logins made since are gone (remake with `meiolol account`).
@@ -172,7 +173,7 @@ deploy/health.sh runs on the box and prints one line per problem:
 | crawler silent | last per-minute report older than 15 min |
 | no new matches | report's per-region match counters unchanged for 2h (STALL_H) |
 | site | unit `meiolol-web` not active, or last upload in web.log older than 26h |
-| disk | / at 80% |
+| disk | / or the data's disk at 80% |
 | mounts | a path in host.env's MEIOLOL_MOUNTS not mounted (C01: /srv/meiolol, /srv/megatron, /srv/megatron-backups); with the data disk itself down health.sh can't run: mac-watch.sh says "data disk not mounted" (ssh's exit 127) |
 | deploy | the newest finished deploy in data/deploys.tsv failed (the Mac's on-push.sh queues events until the box answers) |
 | backup | unit `meiolol-backup` not active, or newest state snapshot older than 26h |
@@ -184,10 +185,10 @@ deploy/health.sh runs on the box and prints one line per problem:
 | raw valve | the disk valve dropped raw the archive never got in the last 24 h (raw-export --status drops_24h, data/raw-dropped.log) |
 | backup mirrors | backups not mirrored for 26 h, or a mirror silent for 48 h (backup-serve.sh status) |
 
-- Box: tmux `meiolol-health` (deploy/health-loop.sh) every 15 min; pushes to the private
-  ntfy.sh topic NTFY_TOPIC from .env when the problems change, every 12h while they last,
-  and once when resolved. Subscribe in the ntfy app to that topic (`vault get meiolol
-  NTFY_TOPIC` in your own terminal)
+- Box: user unit meiolol-health (deploy/health-loop.sh) every 15 min, log
+  data/health.log; with NTFY_TOPIC in .env it pushes to that private ntfy.sh topic when
+  the problems change, every 12h while they last, and once when resolved (no topic is
+  set today: the Mac's toast is the alert)
 - Mac: launchd `net.jacob.meiolol-watch` every 30 min (deploy/mac-watch.sh): the same
   check over ssh, toasted with `wz notify`; adds "gpu-box unreachable" (PC off or asleep)
   and a stale Mac mirror. Log in ~/.cache/meiolol-watch/log

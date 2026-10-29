@@ -49,7 +49,7 @@ docs/plan.md "Now". Read it first.
 - The box: `ssh essex-vm` (C01; sudo password: vault meiolol/essex-vm). Crawler 24/7:
   `deploy/box.sh start|stop|restart|status|logs|run`. Data lives there
   (~/ml/meiolol/data, on Megatron); backups mirrored to Megatron, the Mac and the
-  gpu-box. Hosts, limits: docs/hosting.md, docs/plan/vm.md. The old Oracle box
+  gpu-box. Hosts, data disk (deploy/c01), limits: docs/hosting.md. The old Oracle box
   (`meiolol-cloud`) is stopped and kept as is for a benchmark: don't change it
 - Box jobs over a minute: `deploy/box.sh job run NAME 'CMD'` (a user unit, outlives
   ssh), `job status|wait NAME`. Waiting for a push: `deploy/box.sh wait-deployed [REV]

@@ -1,44 +1,80 @@
 # Hosting the backend (the box)
 
-Off Jacob's PC so it and the laptop can be off. The box is C01, a VM Ethan lent
-(docs/plan/vm.md: storage, web side, the move); the old box ran on Oracle Cloud Always
-Free, home region uk-london-1 (tenancy `jacobmaschler`; free
-accounts may use Always Free only in the home region). Sections below on the Oracle
-hosts and the box's limits describe the Oracle setup; C01 runs the same layout
-(~/ml/meiolol, user units), builds for x86_64_v3; its limits are still the box's except
-the web loop's MemoryHigh (docs/plan/vm.md Later).
+Off Jacob's PC so it and the laptop can be off. The box is C01, a VM Ethan (Burnt Water)
+lent: crawler, site build, renderer, backups, health, nginx, the Your games API and
+traffic, reached through Cloudflare Tunnel `meiolol-c01`. The move from Oracle Cloud:
+docs/plan/vm.md.
 
 ## Hosts
 
 | alias | what | shape | disk |
 |---|---|---|---|
-| essex-vm | the box (C01): crawler, site build, renderer, backups, health; nginx, the Your games API and traffic behind Cloudflare Tunnel `meiolol-c01` | KVM, 16 vCPU (host CPU: Xeon E5-2630 v3, AVX2), 62 GB, Tailscale 100.95.95.44 | /srv/meiolol 492 GB on Megatron, 30 GB local cache |
-| meiolol-cloud | the old box, stopped: units masked, data as of the move; kept (Jacob decides standby or termination) | A1 `meiolol`, VM.Standard.A1.Flex 2 OCPU / 12 GB (aarch64), AD-1, 140.238.101.20 | 150 GB boot |
-| jomify | jomove's server; its old meiolol web units still run, unused (meio.lol points at C01). Leave alone | E2.1.Micro, 193.123.180.81 | 47 GB boot |
+| essex-vm | the box (C01) | KVM, 16 vCPU (host CPU: Xeon E5-2630 v3, AVX2), 62 GB, Ubuntu 24.04 x86_64 | 60 GB system disk; /srv/meiolol 492 GB on Megatron, 30 GB local cache |
+| meiolol-cloud | the old Oracle box, stopped: units masked, data as of the move; kept as is for a benchmark (Jacob decides standby or termination) | A1 2 OCPU / 12 GB (aarch64), uk-london-1, 140.238.101.20 | 150 GB boot |
+| jomify | jomove's server (Oracle E2.1.Micro, 193.123.180.81); its old meiolol web units still run, unused. Never touch it | | |
 
-- Free tier: A1 up to 2 OCPU / 12 GB in total (1500 OCPU-h + 9000 GB-h a month), so the
-  box takes all of it. Boot volume grown online (rescan, growpart, resize2fs); balanced
-  volumes scale throughput with size (50 GB was ~24 MB/s)
-- Mount / `nodiscard` on any new host, with fstrim.timer weekly: the Ubuntu image's
-  online `discard` queues a ~75 s trim per delete, and a backlog of them starves the
-  crawler's commits
-- Account on Pay As You Go (Jacob's card; limits of 250 A1 OCPUs). Guards: quota policy
-  `free-tier-guard` (other compute shapes zero, A1 2/12, E2 micro 2, block storage per
-  AD summing to 200 GB: AD-1 153, AD-2 47, AD-3 0, 5 backups, 20 GB object storage) and
-  budget `free-tier-guard` (1 a month, email at 1% actual and 100% forecast). Why:
-  research/questions/oci-payg-upgrade.md
-- Block storage: 200 GB free in total. In use: A1 boot 150, jomify boot 47. Backup
-  "jomify-boot-2026-04 (kept before delete)", 1 of 5 free, holds an old terminated
-  instance's boot volume (restore it as a volume to look inside)
-- jomify: the web server, first set up for Jacob's jomify.lol domain (OCI name
-  instance-20260714-1317). It serves meio.lol (meiolol.jomify.lol) and also runs jomove
-  (jomove.jomify.lol, jomove.service, ~/jomove, conf.d/jomove.conf): Jacob's house-moving
-  app for Southampton, nothing to do with meiolol. Leave jomove's files alone
-- Ssh: `meiolol-cloud` and `jomify` in ~/.ssh/config (user ubuntu, key
-  oci_instance-20260714-1317).
-  On the box, ~/.ssh/config has meiolol-web and meiolol-exchange (rrsync users on jomify)
-- OCI CLI on the Mac: ~/.oci/config, API key ~/.oci/oci_api_key.pem (Jacob's user). The
-  console login is in jodrive (`jodrive oracle login`, .env.oracle incl. the TOTP key)
+## C01
+
+- ssh alias `essex-vm` (user jacob, key ~/.ssh/essex_vm), Tailscale 100.95.95.44 on
+  Jacob's tailnet (MeioNeiz@github), direct from the Mac; LAN 192.168.18.71. Sudo
+  password in vault meiolol/essex-vm (SUDO_PASSWORD): `head -1 | sudo -S -p "" -v`
+  once per ssh command, then plain sudo (sudo -S per call eats the stdin of what it runs)
+- Builds for x86_64_v3 (box.sh's host_target). Lingering, unattended upgrades, UTC,
+  journald 1 GB, ufw (everything on tailscale0; ssh from 192.168.18.0/24 for Ethan)
+- Ethan has admin on C01 and the shares; his VM host and Megatron reboot when they like
+- Network shares, CIFS: Ethan's /mnt/storage (Essex Storage, 192.168.18.12, 14.5 TB
+  free) and /mnt/jacob (Megatron, `soft`); ours on Megatron (192.168.18.54, 3.1 TB
+  free): /srv/megatron (`hard,nosharesock`:
+  without nosharesock the kernel reuses Ethan's soft session and its options) and
+  /srv/megatron-backups (the same plus nobrl, for the backup mirror's SQLite),
+  credentials /etc/meiolol/megatron.cred
+- Web side, set up by deploy/vm-web.sh (repeatable): nginx (deploy/nginx/meiolol.conf)
+  on 127.0.0.1:8080, cloudflared as a system service (tunnel meiolol-c01, token vault
+  meiolol/essex-vm TUNNEL_TOKEN), meiolol-api, the traffic timer. User meiolol keeps
+  jomify's rrsync and forced-command keys; the box's aliases meiolol-web,
+  meiolol-exchange and meiolol-cache reach it at 127.0.0.1, so no script changed in the
+  move. Pieces outside the push deploy: `deploy/jomify.sh drift|install`
+- Oracle account (stopped box, jomify): Pay As You Go on Jacob's card behind quota
+  policy and budget `free-tier-guard` (Always Free shapes only, 200 GB block storage, 1
+  a month, email at 1%); research/questions/oci-payg-upgrade.md. OCI CLI on the Mac
+  (~/.oci/config), console login `jodrive oracle login`. Ssh `meiolol-cloud`, `jomify`
+  (user ubuntu, key oci_instance-20260714-1317)
+
+### Data disk
+
+/srv/meiolol (ext4, `noatime,nodiscard`) is LVM volume meiolol/data: a 500 GB image on
+Megatron (/srv/megatron/meiolol/disk.img) with a 30 GB writethrough cache file on C01's
+disk (/var/lib/meiolol/cache.img), loops with direct IO; ~/ml links to /srv/meiolol/ml.
+SQLite in WAL can't live on a share itself (every process maps its -shm). Writeback
+cache was refused by LVM (a damaged cachevol can't be repaired). With the cache: commits
+11-12/s (p50 ~62 ms), lookups beside the writer 243-260/s, cold scan 147-171 MB/s, cold
+row reads 1,450-1,640/s: scans near local disk, row reads ~2x the bare image, writes at
+Megatron's pace. Without the cache, measured 26 Oct (Python, O_DIRECT, 2 GB file; SQLite test 2.8 GB WAL db, writer of
+20-game commits with 2 readers, then cold scans):
+
+| | 4 KB random read | seq read | commits/s, p50 | lookups/s beside writer | cold scan |
+|---|---|---|---|---|---|
+| local disk | 0.2 ms | 766 MB/s | 359, 1.3 ms | 5,528 | 176 MB/s |
+| Megatron share | 1.0 ms | 347 MB/s | | | |
+| ext4 image on Megatron | 1.15 ms | 270 MB/s | 13-15, 43-54 ms | 170-221 | 61-71 MB/s |
+| Essex Storage share | 6.6 ms | 52 MB/s | | | |
+| the Oracle box (research) | ~0.7 ms | cap 72 MB/s | | | |
+
+- deploy/c01 holds it all; `deploy/c01/install.sh` (from the Mac) installs
+  /usr/local/sbin/meiolol-disk, meiolol-disk.service and the fstab lines, makes the
+  empty mount points immutable on / (nothing can write there while one is down), and
+  sets host.env's MEIOLOL_MOUNTS for health.sh. It never restarts the disk unit (its
+  stop unmounts the data)
+- Boot: the shares mount from fstab (nofail); meiolol-disk.service mounts any that
+  failed, then loops, LVM and /srv/meiolol, and on failure runs again every 30 s until
+  Megatron answers (journal: "Megatron (192.168.18.54) not answering"). Each user unit
+  on ~/ml/meiolol fails its pre-start check ("waiting for the data disk") and restarts
+  until data/ is there; the Megatron mirror timer skips. Megatron pausing while up:
+  `hard` stalls IO until it is back
+- Alerts: health.sh lines for a share or the disk not mounted; with the disk down
+  health.sh itself is missing, which mac-watch.sh reports (docs/data-safety.md "Health
+  alerts")
+- Left: fstrim.timer
 
 ## On the box
 
@@ -49,13 +85,11 @@ the web loop's MemoryHigh (docs/plan/vm.md Later).
   MEIOLOL_VIEW_LOADS, views the views write loads at once, 1, 1 to 4)
 - systemd --user services, lingering: meiolol-crawl, meiolol-web, meiolol-backup,
   meiolol-health (deploy/systemd). `systemctl --user status meiolol-crawl`; logs in data/
-- Disk scheduler: mq-deadline, on trial, set at runtime only (a reboot reverts to the
-  image's `none`; so does `echo none | sudo tee /sys/block/sda/queue/scheduler`).
-  Under the image's `none`, ionice does nothing. Why and numbers:
-  research/questions/box-io-priority.md. Under mq-deadline an idle-class read waits up to
-  10 s behind the crawler's, so nothing holding a database write lock runs idle class
-  (an idle prune can hold raw.db's lock for many minutes); those use `ionice -c 2 -n 7`
-- crawl.args: `--proxy 10.0.0.3:8092 --timelines 50 --timelines-priority 100
+- Disk scheduler: C01 runs the image's `none`, under which ionice does nothing (the
+  Oracle box trialled mq-deadline: research/questions/box-io-priority.md). Under
+  mq-deadline an idle-class read waits up to 10 s behind the crawler's, so nothing
+  holding a database write lock runs idle class; those use `ionice -c 2 -n 7`
+- crawl.args: `--proxy 127.0.0.1:8092 --timelines 50 --timelines-priority 100
   --timeline-min-s 900 --raw-timeline-days 3650
   --raw-match-days 0 --raw-valve-free-gb 10 --keep-days 0 --ladder-per-hour 500
   --ladder-refresh-hours 12 --player-sample 16 --min-tier PLATINUM --cache-mb 512
@@ -87,8 +121,8 @@ on C01); a trailing slash 301s off. The renderer does the same (serve.zig) and g
 what it sends when the client accepts it (nginx compresses only HTML itself; stats.bin
 is ~12 MB raw), with Vary: Accept-Encoding; on a miss whose lowercase is a page, a 301
 to it.
-- `meiolol render` (systemd meiolol-render@a or @b) on the box's private address
-  10.0.0.3:8091, every view loaded up front from data/views.bin. Loading views from the
+- `meiolol render` (systemd meiolol-render@a or @b) on C01's LAN address
+  (192.168.18.71:8091, `hostname -I`'s first; ufw keeps it to the host), every view loaded up front from data/views.bin. Loading views from the
   database beside the crawler takes 10-105 min and ~2.5 GB, so that work happens once
   per data refresh, in the web loop (research/questions/fast-deploy-data-servers.md):
   after each upload `meiolol site --views data/views.bin` (same flags as the core build)
@@ -122,17 +156,12 @@ to it.
   (the root view after ~40 s, all ~3 min, longer while the disk is busy); until then
   503, so nginx serves its cached copy where it has one, and pages not in its cache are
   down. Log data/render.log
-- Network: jomify (10.0.0.214) and the box share subnet 10.0.0.0/24. Security list rule
-  "meiolol-render: jomify nginx to the box" (TCP 8091 from 10.0.0.214/32; the list
-  before it: .git/oci-ingress-before-render.json on the Mac) and an iptables ACCEPT on
-  the box before its REJECT (saved with netfilter-persistent). The same for the
-  crawler's Your games proxy: "meiolol-proxy: Your games service to the crawler", TCP
-  8092 from 10.0.0.214/32
-- nginx config on jomify is installed by hand and not in the repo: before each change a
-  copy is kept as /etc/nginx/meiolol.conf.bak-<date>-<what> (a few older ones in
-  /home/ubuntu/meiolol.conf.bak-*); `ls` them to roll back
-- jomify nginx (/etc/nginx/conf.d/meiolol.conf): try_files, then `@render` (upstream
-  meiolol_render: the box twice, for the retry): proxy cache /var/cache/nginx/meiolol (2
+- The crawler's Your games proxy listens on 127.0.0.1:8092 for meiolol-api
+- nginx (deploy/nginx/meiolol.conf, installed by deploy/vm-web.sh as
+  /etc/nginx/conf.d/meiolol.conf; the token and key includes stay on C01 only):
+  every request comes from cloudflared on 127.0.0.1, so real_ip takes the visitor from
+  CF-Connecting-IP (limit_req keys on it). try_files, then `@render` (upstream
+  meiolol_render: the renderer twice, for the retry): proxy cache /var/cache/nginx/meiolol (2
   GB, key `$uri|$meiolol_version`), 200s 10 min, 404s 1 min (the site's own 404 page,
   status kept: only 5xx are intercepted), stale copies while the box
   is down or refreshing, one render per page under a burst. Header X-Meiolol-Render:
@@ -141,7 +170,7 @@ to it.
   ns as 16 hex digits, written to its --ready file. meiolol-cache-version.path on the
   box runs deploy/cache-version.sh when a ready file changes, and render-swap.sh runs it
   once the old renderer has stopped. With exactly one renderer serving, it sends that
-  version over ssh alias meiolol-cache (box key ~/.ssh/meiolol_cache, in jomify user
+  version over ssh alias meiolol-cache (box key ~/.ssh/meiolol_cache, in C01 user
   meiolol's authorized_keys with forced command `sudo -n
   /usr/local/bin/meiolol-cache-version`, one line in
   /etc/sudoers.d/meiolol-cache-version). That script (deploy/cache-version-receive.sh;
@@ -159,8 +188,8 @@ to it.
   faster than a warm-up run, so the warm-up fills the unversioned key:
   deploy/cache-warm.sh (meiolol-cache-warm.service, started by cache-version.sh after
   each version; a run under way finishes, then runs again) requests every page and file
-  through nginx over the private address (10.0.0.214:443) with X-Meiolol-Warm: 1, which
-  nginx honours only from 10.0.0.3 (geo $meiolol_from_box): always fetched anew
+  through nginx at 127.0.0.1:8080 with X-Meiolol-Warm: 1, which nginx honours only from
+  127.0.0.1 (geo $meiolol_from_box): always fetched anew
   (proxy_cache_bypass) and stored under `<uri>|any`. One at a time at 20/s: the site's
   7-day top 30 first (the receive script answers with them from traffic.json), then the
   renderer's list (/admin/api/pages.txt, admin token: every page of the loaded views,
@@ -169,8 +198,8 @@ to it.
   Log `cache-warm:` in data/render.log. @render asks the box for gzip (`proxy_set_header
   Accept-Encoding gzip;`, `gunzip on;` for clients without it) and ignores Vary, so one
   copy per page serves everyone; it intercepts the box's 503 (proxy_intercept_errors) to
-  reach @render_any. jomify's access log skips user agent meiolol-cache-warm (map
-  $meiolol_logged), so traffic.json counts visits only. STALE in jomify's log is the
+  reach @render_any. nginx's access log skips user agent meiolol-cache-warm (map
+  $meiolol_logged), so traffic.json counts visits only. STALE in that log is the
   background refresh of an expired copy, not an outage. A renderer start reads views.bin
   and serves in 1.3 s (file in page cache) to 16.6 s (evicted, as after a boot); swaps
   take as long; with the renderer stopped a warmed page is ANY-HIT, an unwarmed one 503
@@ -243,7 +272,7 @@ to it.
   /account: own password, log out everywhere. The admin page's Accounts tab
   (manage_accounts) lists logins, makes invite and reset links, changes roles and
   disables, below the signed-in role only. Accounts by hand: `sudo -u meiolol-api
-  meiolol account ... --data /var/lib/meiolol-api` on jomify (list, reset, link,
+  meiolol account ... --data /var/lib/meiolol-api` on C01 (list, reset, link,
   revoke-links, delete; the owner only here).
 - Private site (/p/, docs/plan/accounts.md "private"): static, uploaded by the web loop to
   /var/www/meiolol/p (`meiolol admin --private-out`: the Draft tester in private mode, the
