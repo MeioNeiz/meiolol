@@ -396,7 +396,7 @@ fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
         .root_source_file = b.path(b.fmt("src/site/ui/wasm/{s}.zig", .{family})),
         .target = wasm_target,
         .optimize = if (wasm_dev) .ReleaseSafe else .ReleaseSmall,
-        .strip = true,
+        .strip = false,
         .imports = &.{
             .{ .name = "ui", .module = ui },
             .{ .name = "zjb", .module = zjb.module("zjb") },
