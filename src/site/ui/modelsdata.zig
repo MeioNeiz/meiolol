@@ -185,8 +185,6 @@ pub const NnFile = struct { key: []const u8, title: []const u8, rows: []const Nn
 
 /// training.bin
 pub const Training = struct {
-    /// When the Mac made it
-    made: i64,
     /// The gpu-box last reached (the Mac reaches it on the home network only)
     gpu_seen: ?i64,
     /// Newest first

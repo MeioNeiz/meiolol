@@ -137,7 +137,7 @@ pub const Models = struct {
 const W = struct {
     pub const views = plain("Model categories");
     pub const loading = ap.W.loading;
-    pub const models_failed = plain("The eval digest (models.bin) didn't load: Refresh to try again");
+    pub const models_failed = plain("The eval digest (models.bin) didn't load: reload the page to try again");
     pub const training_failed = plain("The lab view (training/training.bin) didn't load: the Mac uploads it with deploy/lab-push.sh, on the home network only");
 
     pub const learnt = plain("What we learnt");
@@ -311,6 +311,7 @@ fn headline(m: *const Models, h: *H, c: md.Cat) N {
         .early => {
             const te = (m.training orelse return .none).team orelse return .none;
             const o = outcomeIndex(te, "lanediff14") orelse return .none;
+            if (o >= te.total.len) return .none;
             const v = te.total[o] orelse return .none;
             return h.p(.{ .class = "headline" }, .{W.head_early.with(h, .{ .v = dec(h, v.mean, 1) })});
         },
@@ -418,10 +419,14 @@ fn winReadings(h: *H, mo: *const md.Models, w: md.Win) []const Text {
     }
     if (w.curve) |c| if (c.per_doubling) |pd| if (pd > 0 and c.games.len > 0) {
         const need = (c.last - ll_published) / pd;
-        const n: f64 = @floatFromInt(c.games[c.games.len - 1]);
-        const target = n * std.math.pow(f64, 2, need);
-        const days = if (mo.matches_per_day) |r| if (r > 0) h.fmt(" (~{s} days of crawling at today's rate, while patches change every two weeks)", .{count(h, @as(u64, @intFromFloat(@min((target - n) / r, 1e12))))}) else "" else "";
-        add(h, &out, .{ .s = h.fmt("More games help slowly: each doubling of games improves champion win rates by {d:.4} log loss. At that pace reaching published accuracy takes about {d:.0} more doublings, ~{s} games{s}. Gains have to come from better inputs too, not volume alone.", .{ pd, need, count(h, @as(u64, @intFromFloat(@min(target, 1e15)))), days }) });
+        if (need <= 0) {
+            add(h, &out, .{ .s = h.fmt("More games help slowly: each doubling of games improves champion win rates by {d:.4} log loss, and at today's size they already reach published accuracy.", .{pd}) });
+        } else {
+            const n: f64 = @floatFromInt(c.games[c.games.len - 1]);
+            const target = n * std.math.pow(f64, 2, need);
+            const days = if (mo.matches_per_day) |r| if (r > 0) h.fmt(" (~{s} days of crawling at today's rate, while patches change every two weeks)", .{count(h, @as(u64, @intFromFloat(@min((target - n) / r, 1e12))))}) else "" else "";
+            add(h, &out, .{ .s = h.fmt("More games help slowly: each doubling of games improves champion win rates by {d:.4} log loss. At that pace reaching published accuracy takes about {d:.0} more doublings, ~{s} games{s}. Gains have to come from better inputs too, not volume alone.", .{ pd, need, count(h, @as(u64, @intFromFloat(@min(target, 1e15)))), days }) });
+        }
     };
     if (w.experience) |x| if (@abs(x.d.mean) <= x.d.ci) {
         var all_up = x.bins.len > 0;
@@ -488,7 +493,9 @@ fn picksChart(h: *H, ev: []const ad.EvalRow) ?timechart.Time {
             return if (r.pick_top10_win) |p| 100 * p else null;
         }
     }.f);
-    for (vs) |v| if (v != null) break else return null;
+    for (vs) |v| {
+        if (v != null) break;
+    } else return null;
     const series = h.mem.dupe(timechart.Series, &.{.{ .name = W.s_picks, .values = vs, .colour = 2 }}) catch {
         h.oom = true;
         return null;
@@ -970,7 +977,6 @@ pub const Demo = struct {
     } };
 
     pub const training: md.Training = .{
-        .made = now - 1_200,
         .gpu_seen = now - 600,
         .runs = &.{
             .{ .run = "20261028T120000Z-items", .state = .running, .started = now - 7_200, .args = "item-paths SNAP", .cat = .items, .last = "step 3", .findings = &.{.{ .campaign = "items-a", .text = "The first finished item explains more of gold at 14 min than the boots." }} },
@@ -1152,4 +1158,41 @@ test "admin models: short run names" {
     try testing.expectEqualStrings("golden", shortRun("20261024T001511Z-golden"));
     try testing.expectEqualStrings("gold14-a-ref", shortRun("20261012T2222Z-gold14-a-ref"));
     try testing.expectEqualStrings("plain-name", shortRun("plain-name"));
+}
+
+test "admin models: the picks chart once a later day has picks" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    // The column came after the first eval rows
+    const ev = [_]ad.EvalRow{
+        .{ .date = 1, .games = 1, .@"test" = 1 },
+        .{ .date = 2, .games = 1, .@"test" = 1, .pick_top10_win = 0.53 },
+    };
+    try testing.expect(picksChart(&h, &ev) != null);
+    try testing.expect(picksChart(&h, &.{ ev[0], ev[0] }) == null);
+}
+
+test "admin models: a curve past published accuracy, a team table with no total row" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var w = Demo.win;
+    w.curve.?.last = 0.6860;
+    var mo = Demo.models;
+    mo.win = w;
+    var m = Demo.island(.win);
+    m.models = &mo;
+    const s = try render(a, &m);
+    try expectHas(s, &.{"already reach published accuracy"});
+    try testing.expect(std.mem.find(u8, s, "more doublings") == null);
+
+    var t = Demo.training;
+    var te = t.team.?;
+    te.total = &.{};
+    t.team = te;
+    var all = Demo.island(.all);
+    all.training = &t;
+    try testing.expect(std.mem.find(u8, try render(a, &all), "of lane gold leads") == null);
 }

@@ -489,7 +489,7 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
         } else if (c.is("--private-out")) {
             private_out = try c.value();
         } else if (c.is("--training")) {
-            try adminmodels.training(c.init.gpa, c.init.io, try c.value(), now);
+            try adminmodels.training(c.init.gpa, c.init.io, try c.value());
             return 0;
         } else return error.Usage;
     }
