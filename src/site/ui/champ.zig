@@ -47,6 +47,8 @@ pub fn view(h: *H, c: ?Champ, o: Opts) N {
     // No src: the app's icon isn't fetched from the client yet
     const pic: ?N = if (c) |x| if (x.src.len == 0) null else h.img(.{
         .src = x.src,
+        .srcset = if (bigOf(x.src)) |b| h.fmt("{s} {d}w, {s}120/{s} {d}w", .{ x.src, icon_px, b[0], b[1], icon_big_px }) else null,
+        .sizes = if (bigOf(x.src) != null) h.fmt("{d}px", .{px}) else null,
         .alt = if (o.named) x.name else "",
         .width = px,
         .height = px,
@@ -137,6 +139,17 @@ pub const css =
 /// makes them (src/icons.zig) as icon_px squares; a name never changes what it shows
 pub const icon_fmt = "/icon/{s}/{s}.jpg";
 pub const icon_px = 80;
+/// Each also at Data Dragon's full size, for a portrait drawn large on a sharp screen
+/// (srcset: the browser picks by drawn size times pixel ratio)
+pub const icon_big_fmt = "/icon/{s}/120/{s}.jpg";
+pub const icon_big_px = 120;
+
+/// An icon_fmt path's icon_big_fmt one, as its two halves; null for any other src
+fn bigOf(src: []const u8) ?[2][]const u8 {
+    if (!std.mem.startsWith(u8, src, "/icon/") or !std.mem.endsWith(u8, src, ".jpg")) return null;
+    const slash = std.mem.findScalarLast(u8, src, '/').?;
+    return .{ src[0 .. slash + 1], src[slash..][1..] };
+}
 
 pub const demo_version = "16.21.1";
 
@@ -167,6 +180,16 @@ pub fn gallery(g: *Gallery) void {
         view(h, demo("Orianna", "Orianna"), .{ .px = .@"40", .state = .add }),
     }));
     g.add("beside its name", h.span(.{ .class = "g-row" }, .{ view(h, demo("Yone", "Yone"), .{ .px = .@"32", .named = false }), h.b(.{}, .{"Yone"}) }));
+}
+
+test "view: a site portrait offers its big one by width" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const src = try std.fmt.allocPrint(a, icon_fmt, .{ "16.21.1", "Ahri" });
+    const big = bigOf(src).?;
+    try std.testing.expectEqualStrings(try std.fmt.allocPrint(a, icon_big_fmt, .{ "16.21.1", "Ahri" }), try std.mem.concat(a, u8, &.{ big[0], "120/", big[1] }));
+    try std.testing.expectEqual(null, bigOf(demo("Ahri", "Ahri").src));
 }
 
 test "slug" {

@@ -209,7 +209,8 @@ a 301 to it.
   `public, max-age=31536000, immutable`, rune art (`/dd/img/perk-images/...png`, no
   version) a week, everything else `no-cache`, in `/`, @render and @render_any (which
   hide the renderer's own no-cache). A page after the first asks for none of them. Art
-  not made yet (`location ~ ^/dd/`) 302s to Data Dragon's own. A replaced hashed file
+  not made yet (`location ~ ^/dd/`) 302s to Data Dragon's own; a portrait's 120 px copy
+  (`/icon/<version>/120/`, srcset) not made yet serves the 80 px one, uncached. A replaced hashed file
   stays 3 days after its replacement came, as does an older icon or art folder, and a
   hashed name no longer built 30 days (`meiolol site --prune-assets`, from
   deploy/web-loop.sh); one missing from the upload falls through to the renderer, which

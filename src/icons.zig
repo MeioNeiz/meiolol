@@ -1,5 +1,5 @@
 //! The site's champion portraits (ui.champ.icon_fmt): Data Dragon's squares shrunk to
-//! ui.champ.icon_px JPEGs (~3 KB against ~29 KB), and its item, spell and rune art
+//! ui.champ.icon_px JPEGs (~3 KB against ~29 KB) and at icon_big_px, and its item, spell and rune art
 //! (ui.art.local: items and spells JPEG, runes PNG at most art_px; a keystone is up to
 //! 512 px, 360 KB). Made once into a cache laid out as the site (<cache>/icon/<version>/
 //! <Key>.jpg, <cache>/dd/...), then copied into each build: the web round builds into a
@@ -72,11 +72,9 @@ pub fn syncKeys(gpa: Allocator, io: Io, cache_dir: []const u8, site_dir: ?[]cons
             counts.failed += 1;
             continue;
         }
-        try wants.append(arena, .{
-            .rel = try arena.print(ui.champ.icon_fmt[1..], .{ version, key }),
-            .url = try arena.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ version, key }),
-            .side = ui.champ.icon_px,
-        });
+        const url = try arena.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ version, key });
+        try wants.append(arena, .{ .rel = try arena.print(ui.champ.icon_fmt[1..], .{ version, key }), .url = url, .side = ui.champ.icon_px });
+        try wants.append(arena, .{ .rel = try arena.print(ui.champ.icon_big_fmt[1..], .{ version, key }), .url = url, .side = ui.champ.icon_big_px });
     }
     return syncWants(gpa, io, cache_dir, site_dir, wants.items, source, counts);
 }
@@ -258,7 +256,8 @@ test "syncKeys: made once, kept after; bad keys and missing art counted" {
     const cache = try arena.print("{s}/cache", .{base});
     const site = try arena.print("{s}/site", .{base});
     const first = try syncKeys(gpa, io, cache, site, "16.21.1", keys, .{ .dir = tmp.dir });
-    try std.testing.expectEqual(Counts{ .made = 1, .failed = 2 }, first);
+    try std.testing.expectEqual(Counts{ .made = 2, .failed = 3 }, first);
+    try tmp.dir.access(io, "site/icon/16.21.1/120/Ahri.jpg", .{});
     const jpg = try tmp.dir.readFileAlloc(io, "cache/icon/16.21.1/Ahri.jpg", arena, .limited(1 << 16));
     try std.testing.expect(std.mem.startsWith(u8, jpg, &.{ 0xFF, 0xD8 }));
     const sof = std.mem.find(u8, jpg, &.{ 0xFF, 0xC0 }) orelse return error.TestUnexpectedResult;
@@ -272,7 +271,7 @@ test "syncKeys: made once, kept after; bad keys and missing art counted" {
     // A fresh build: copied from the cache, nothing made
     try tmp.dir.deleteTree(io, "site");
     const again = try syncKeys(gpa, io, cache, site, "16.21.1", keys, .{ .dir = tmp.dir });
-    try std.testing.expectEqual(Counts{ .had = 1, .failed = 2 }, again);
+    try std.testing.expectEqual(Counts{ .had = 2, .failed = 3 }, again);
     try tmp.dir.access(io, "site/icon/16.21.1/Ahri.jpg", .{});
     try std.testing.expectEqual(Counts{ .failed = 3 }, try syncKeys(gpa, io, cache, null, "../16", keys, .{ .dir = tmp.dir }));
 }
@@ -295,7 +294,7 @@ test "syncKeys: gives up after a few failures in a row, still copies cached ones
     const cache = try arena.print("{s}/cache", .{base});
     const site = try arena.print("{s}/site", .{base});
     const got = try syncKeys(gpa, io, cache, site, "16.21.1", keys, .{ .dir = tmp.dir });
-    try std.testing.expectEqual(Counts{ .had = 1, .failed = 4 }, got);
+    try std.testing.expectEqual(Counts{ .had = 1, .failed = 9 }, got);
     try tmp.dir.access(io, "site/icon/16.21.1/D.jpg", .{});
     try std.testing.expectError(error.FileNotFound, tmp.dir.access(io, "cache/icon/16.21.1/E.jpg", .{}));
 }
