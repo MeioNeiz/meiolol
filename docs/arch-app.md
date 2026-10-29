@@ -35,11 +35,12 @@ file and packed rows: docs/architecture.md.
   navigation stays on that origin, links to meio.lol and Riot open in the browser.
   bridge.js (injected) turns channel.zig messages into `meiolol` events and back
 - screens.zig: the poller's state as ui.app.Data in the edition's words (notes,
-  ChampSelect, LoadScreen, GameScreen private only, PostGame; CompView is built,
-  compView(), but waits for its own island: ui-app.wasm is at its 40 KB budget), rendered per page load and encoded at app.bin; the App island
-  (ui-app.wasm) patches from it on each `app` message and keeps the charts' state. The
-  Mac build's `--dump DIR --seconds N` writes each change to DIR/<seq>/ for a look
-  against the mock client
+  ChampSelect, LoadScreen, GameScreen private only, PostGame), rendered per page load
+  and encoded at app.bin; the App island (ui-app.wasm) patches from it on each `app`
+  message and keeps the charts' state. Once all ten lock, CompView after the island as
+  static HTML (no interaction; when it comes or changes the shell sends `reload`, which
+  bridge.js turns into a page load). The Mac build's `--dump DIR --seconds N` writes
+  each change to DIR/<seq>/ for a look against the mock client
 - Page to shell: ui/toshell.zig's Out, written by ui-app.wasm through bridge.js. The
   sign-in form (ui/signin.zig: the screen until there is data, else a line under it)
   sends `signin`, which the shell hands to the poller (device.zig); never logged

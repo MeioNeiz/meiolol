@@ -122,10 +122,8 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   bump. Left: comp leans (Malphite into AP teams) after their held-out look
   (data-and-model.md step 1); "who carries" (no shipped carry measure: gold or damage
   share per champion would need a new tally); the loading screen's team pills from the
-  same comp; a release so testers get it; the shell: ui/compview.zig and
-  screens.compView are built and checked against the mock (under the board), and wait
-  for an island of their own (ui-appcomp.wasm, loaded once all ten are locked:
-  ui-app.wasm is at its 40 KB budget)
+  same comp; a release so testers get it; the shell: CompView under the
+  page once all ten lock, static HTML (ui-app.wasm is at its 40 KB budget)
 - APP7 Private: scouting where names are visible (needs APP1's queue facts and AC6 for
   "me"), percentages, experimental models
 - APP10 Loading screen cards, first pass done: in GameStart the window shows

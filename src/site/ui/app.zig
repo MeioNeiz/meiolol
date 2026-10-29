@@ -15,6 +15,7 @@ const lane = @import("lane.zig");
 const signin = @import("signin.zig");
 const toshell = @import("toshell.zig");
 const chip = @import("chip.zig");
+const compview = @import("compview.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
 const H = tree.H;
@@ -125,6 +126,7 @@ pub const css =
     \\  .c-app > .note p { margin: 0; color: var(--muted); }
     \\  .c-app [data-act] { cursor: pointer; }
     \\  .c-app > .restart { margin: 0; color: var(--muted); font-size: var(--fs-s); }
+    \\  .c-app + .c-comp { padding: 0 var(--sp-4) var(--sp-5); }
     \\}
     \\
 ;
@@ -141,6 +143,13 @@ pub fn gallery(g: *Gallery) void {
         .where = "Champ select · Picks",
         .screen = .{ .select = champselect.sample },
         .practice = false,
+    }));
+    // The shell's page once all ten lock: the comp view after the island
+    var locked = champselect.sample;
+    locked.lane.mode = .locked;
+    g.addFill("all locked, comp under", h.div(.{}, .{
+        page(h, .{ .seq = 6, .private = false, .where = "Champ select · Finalization", .screen = .{ .select = locked } }),
+        compview.view(h, compview.sample),
     }));
     g.addFill("in game", page(h, .{ .seq = 3, .private = true, .where = "In game · 14:05", .screen = .{ .game = gamescreen.sample } }));
     g.addFill("first start, sign in", page(h, .{ .seq = 4, .private = false, .where = "No data", .screen = .{ .note = .{
