@@ -5,6 +5,8 @@
 # 152 s on 1.1 cores, 1.7 GB; ci after it 97 s on 3.8), MEIOLOL_SLOTS in all (default 6
 # of the 10 cores, the rest for sessions and browsers). First come first served, but a
 # smaller run starts beside a waiting bigger one when it leaves that one's slots free.
+# A held run gets MEIOLOL_ZIG_JOBS=2*WEIGHT, which the ~/.local/bin/zig shim passes to
+# `zig build` as -j: else each build runs a compile per core (load 106 on 29 Oct)
 #   deploy/slots.sh WEIGHT CMD [ARG...]   run CMD holding WEIGHT slots
 #   deploy/slots.sh status                holders and waiters
 # Sourced (zb.sh): slots_enqueue W, slots_take (0 once held, 1 not yet), slots_release.
@@ -74,6 +76,7 @@ slots_take() {
         rm -f "$slots_dir/wait/$slots_mine"
         : > "$slots_dir/held/$$-$w-${slots_mine%%-*}"
         slots_mine=held
+        export MEIOLOL_ZIG_JOBS=$((2 * w))
         code=0
     fi
     _slots_ungate

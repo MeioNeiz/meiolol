@@ -19,7 +19,9 @@ A zig compile runs on one core, so builds run side by side, not one at a time.
 ## Build slots
 
 deploy/slots.sh hands out 6 slots across sessions (MEIOLOL_SLOTS); a run takes about the
-cores it keeps busy: ci 3, anything else 1. First come first served, with a smaller run
+cores it keeps busy: ci 3, anything else 1. A holder's `zig build` runs at most
+2 x weight compiles at once (-j via MEIOLOL_ZIG_JOBS and the ~/.local/bin/zig shim); the
+dev server's watch 2. First come first served, with a smaller run
 starting beside a waiting bigger one when it leaves that one's slots free. Holders and
 waiters: `deploy/slots.sh status`. A zig build outside zb.sh: `deploy/slots.sh 1 zig
 build ...`.

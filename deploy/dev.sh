@@ -37,10 +37,11 @@ if pid=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2> /dev/null) && [[ -n $pid ]]; then
         "builds: .zig-cache/dev-watch.log"
     exit 0
 fi
-# Its own prefix, so other sessions' builds don't restart it
+# Its own prefix, so other sessions' builds don't restart it. Outside the slots, so
+# capped as one (slots.sh MEIOLOL_ZIG_JOBS)
 prefix=zig-out/dev
 deploy/slots.sh 1 zig build backend --prefix "$prefix"
-zig build backend --watch --prefix "$prefix" > .zig-cache/dev-watch.log 2>&1 &
+MEIOLOL_ZIG_JOBS=2 zig build backend --watch --prefix "$prefix" > .zig-cache/dev-watch.log 2>&1 &
 watch=$!
 trap 'kill $watch 2> /dev/null' EXIT
 "$prefix/bin/meiolol" dev --data "$data" "$@"
