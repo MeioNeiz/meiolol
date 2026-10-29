@@ -22,7 +22,7 @@ pub const names = std.enums.EnumArray(Key, []const u8).init(.{
 });
 
 pub const whats = std.enums.EnumArray(Key, []const u8).init(.{
-    .ci = "zig build ci on the Mac, before the push",
+    .ci = "zig build ci on the machine that pushed, before the push",
     .deploy = "on-push.sh runs deploy/box.sh web start",
     .build = "clean checkout, cross-compile, binary and scripts to the box",
     .web = "signalled (or restarted) for a round with the new binary",
@@ -57,6 +57,9 @@ pub const Deploy = struct {
     waited: ?bool = null,
     /// The later of the static upload and the renderer's cache key
     live: ?i64 = null,
+    /// Where the push check or deploy ran ("the Mac", "the gpu-box"): the end of their
+    /// start's "... on X"
+    host: []const u8 = "",
 
     pub fn subject(d: Deploy) []const u8 {
         if (d.commits.len == 0) return "";
@@ -193,6 +196,11 @@ pub fn list(a: std.mem.Allocator, evs: []const ad.DeployEvent) ![]Deploy {
             try commits.append(a, if (cut(e.detail)) try std.mem.concat(a, u8, &.{ e.detail, "…" }) else e.detail);
         };
         d.commits = commits.items;
+        for (xs) |e| if (std.mem.eql(u8, e.status, "start") and (std.mem.eql(u8, e.step, "ci") or std.mem.eql(u8, e.step, "deploy"))) {
+            const at = std.mem.findLast(u8, e.detail, " on ") orelse continue;
+            d.host = e.detail[at + 4 ..];
+            break;
+        };
         var failed = false;
         for (std.enums.values(Key)) |k| if (k != .cache) if (d.steps.get(k)) |s| {
             failed = failed or s.state == .failed;
@@ -230,6 +238,41 @@ pub fn list(a: std.mem.Allocator, evs: []const ad.DeployEvent) ![]Deploy {
         };
     }
     return out.items;
+}
+
+/// A running step quiet for this many times its usual time (at least `quiet_min`, or
+/// `quiet_unknown` with no usual time) failed: its host stopped mid-run (the Mac asleep)
+const quiet_x = 3;
+const quiet_min = 30 * 60;
+const quiet_unknown = 90 * 60;
+pub const quiet_detail = "no word since: its host likely stopped mid-run";
+
+/// Running deploys that went quiet: superseded once a newer deploy began after their last
+/// word (its build replaces whatever they left), else failed once a running step has
+/// taken `quiet_x` times its usual time. `all` as `list` returns it, newest first
+pub fn settle(all: []Deploy, now: i64) void {
+    for (all, 0..) |*d, i| {
+        if (d.state != .running) continue;
+        var last = d.start;
+        for (d.steps.values) |x| if (x) |s| {
+            last = @max(last, s.end orelse s.start orelse last);
+        };
+        for (all[0..i]) |n| if (n.state != .skipped and n.steps.get(.deploy) != null and n.start > last) {
+            d.state = .superseded;
+            break;
+        };
+        if (d.state != .running) continue;
+        const u = usual(all, d);
+        for (std.enums.values(Key)) |k| {
+            const s = d.steps.getPtr(k).* orelse continue;
+            if (s.end != null or (s.state != .running and s.state != .waiting)) continue;
+            const t0 = s.start orelse continue;
+            const limit = if (u.step.get(k)) |t| @max(quiet_x * t, quiet_min) else quiet_unknown;
+            if (now - t0 <= limit) continue;
+            d.steps.set(k, .{ .state = .failed, .start = t0, .detail = quiet_detail });
+            d.state = .failed;
+        }
+    }
 }
 
 /// Usual times from recent deploys that went live, to measure a running one by
@@ -448,6 +491,41 @@ test "list: a re-run starts its own attempt with its own commits; failed step" {
     try testing.expectEqual(1, l[0].commits.len);
     try testing.expectEqualStrings("Second try", l[0].subject());
     try testing.expectEqualStrings("error: still", l[0].steps.get(.build).?.detail);
+}
+
+test "settle: a deploy whose host stopped mid-build" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var evs: std.ArrayList(ad.DeployEvent) = .empty;
+    try evs.appendSlice(a, &whole(1000, "s1", false));
+    try evs.appendSlice(a, &whole(2000, "s2", false));
+    // s3's Mac went to sleep in its build (6c298359, 29 Oct); s4's push check began on a
+    // host that stopped too
+    try evs.appendSlice(a, &.{
+        ev(3000, "s3", "deploy", "start", ""),
+        ev(3000, "s3", "build", "start", ""),
+        ev(3100, "s4", "ci", "start", ""),
+    });
+    var l = try list(a, evs.items);
+    settle(l, 3200);
+    try testing.expectEqual(st.State.running, l[1].state);
+    // Usual build 10 s, push check 190 s: 3 x either is under the floor of 30 min
+    settle(l, 3100 + quiet_min);
+    try testing.expectEqual(st.State.failed, l[1].state);
+    try testing.expectEqualStrings(quiet_detail, l[1].steps.get(.build).?.detail);
+    try testing.expectEqual(st.State.running, l[0].state);
+    settle(l, 3100 + quiet_min + 1);
+    try testing.expectEqual(st.State.failed, l[0].state);
+
+    // s5 began after s3's last word: s3 superseded at once, and s4 with it
+    try evs.append(a, ev(3300, "s5", "deploy", "start", ""));
+    l = try list(a, evs.items);
+    settle(l, 3301);
+    try testing.expectEqualStrings("s5", l[0].sha);
+    try testing.expectEqual(st.State.running, l[0].state);
+    try testing.expectEqual(st.State.superseded, l[1].state);
+    try testing.expectEqual(st.State.superseded, l[2].state);
 }
 
 test "median" {

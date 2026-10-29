@@ -17,7 +17,7 @@ while read -r _ sha remote_ref remote_sha; do
         continue
     fi
     echo "pre-push: zig build ci on $(git -C "$root" rev-parse --short "$sha")"
-    "$events" add "$sha" ci start "zig build ci on the Mac"
+    "$events" add "$sha" ci start "zig build ci on $("$events" where)"
     # 3 of the Mac's build slots (deploy/slots.sh), as zb.sh's ci
     if ! "$root/deploy/slots.sh" 3 "$root/deploy/build-tree.sh" ci "$sha" \
         zig build ci --cache-dir "$root/.zig-cache"; then

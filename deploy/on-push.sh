@@ -113,7 +113,7 @@ while [[ -e "$state.pending" ]]; do
     fi
     echo "$(now) deploying origin/main"
     commits "$deployed" "$sha"
-    event "$sha" deploy start "deploy/box.sh web start on the Mac"
+    event "$sha" deploy start "deploy/box.sh web start on $("$events" where)"
     event "$sha" build start "clean checkout, cross-compile and copy to the box"
     flush
     out=$(mktemp)

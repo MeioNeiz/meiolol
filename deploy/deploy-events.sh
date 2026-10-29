@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Deploy events from the Mac (pre-push check, deploy/on-push.sh) for the admin page's
-# Deploys tab: queued in .git/meiolol-deploy-events.tsv, appended to the box's
+# Deploy events from the pushing machine (pre-push check, deploy/on-push.sh) for the admin
+# page's Deploys tab: queued in .git/meiolol-deploy-events.tsv, appended to the box's
 # data/deploys.tsv on the next flush that reaches it, so a deploy that failed before the
 # box still shows once it is reachable. Format: docs/hosting.md "Deploy events".
 #   deploy/deploy-events.sh add SHA STEP STATUS [DETAIL]
 #   deploy/deploy-events.sh flush
+#   deploy/deploy-events.sh where (this machine for a detail: "the Mac", "the gpu-box")
 set -u
 ROOT=${MEIOLOL_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 common=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)
@@ -13,6 +14,12 @@ lock=$common/meiolol-deploy-events.lock
 host=${MEIOLOL_HOST:-essex-vm}
 
 case "${1:-}" in
+    where)
+        if [[ $(uname -s) == Darwin ]]; then echo "the Mac"
+        elif grep -qi microsoft /proc/version 2> /dev/null; then echo "the gpu-box"
+        else hostname -s
+        fi
+        ;;
     add)
         detail=${5:-}
         detail=${detail//$'\t'/ }

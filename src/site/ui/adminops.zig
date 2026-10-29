@@ -1,6 +1,6 @@
 //! AdminOps: the admin page's Deploys and Logs tabs, an island of its own below
 //! AdminTraffic (ui-adminops.wasm, which fetches only once one of them shows). Deploys:
-//! every push from the check on the Mac until the site serves it (ui.admindeploys over
+//! every push from its check until the site serves it (ui.admindeploys over
 //! live.bin's deploy events, admin.bin's when the live API is down), one StepTimeline
 //! each. Logs: the tail of each of the box's logs (api/log, text) in a LogView, stamps in
 //! UK time, errors and warnings of the last 24 h per file
@@ -145,11 +145,12 @@ pub const Ops = struct {
 
 const W = struct {
     pub const deploys = plain("Deploys");
-    pub const deploys_lead = plain("Every push to main: the check on the Mac, the build and copy, the deploy round on the box and the renderer swap, until the site serves it. Times in UK time; steps from data/deploys.tsv on the box (docs/hosting.md, Deploy events).");
+    pub const deploys_lead = plain("Every push to main: the push check, the build and copy, the deploy round on the box and the renderer swap, until the site serves it. Times in UK time; steps from data/deploys.tsv on the box (docs/hosting.md, Deploy events).");
     pub const from_snap = plain("The live API is unavailable: deploys as of the last snapshot.");
     pub const failed = plain("Deploys (api/live.bin, admin.bin) didn't load: Refresh to try again");
     pub const no_deploys = plain("No deploy events yet: the next push records them.");
     pub const pushed = Phrase("pushed {t:text}");
+    pub const from = Phrase("{t:text} from {h:text}");
     pub const live_at = Phrase(", live at {at:text} after {t:time}");
     pub const tracks = Phrase(" (static upload {u:text}, renderer {r:text})");
     pub const eta = Phrase(", expected live around {at:text} ({b:text})");
@@ -170,6 +171,7 @@ fn deploysTab(o: *Ops, h: *H) N {
         h.oom = true;
         return .none;
     };
+    dl.settle(all, o.now);
     var rows = h.list();
     for (all[0..@min(all.len, max_deploys)], 0..) |*d, i| {
         var short: Short = @splat(' ');
@@ -209,7 +211,8 @@ fn deploysTab(o: *Ops, h: *H) N {
 /// "pushed 28 Oct 14:02, live at 14:09 after 7:12 (…)", or how it ended, or when it is
 /// expected live
 fn deployWhen(h: *H, d: *const dl.Deploy, u: ?dl.Usual, now: i64) Text {
-    const pushed = W.pushed.with(h, .{ .t = ap.when(h, d.start).s }).s;
+    const when = W.pushed.with(h, .{ .t = ap.when(h, d.start).s }).s;
+    const pushed = if (d.host.len > 0) W.from.with(h, .{ .t = when, .h = d.host }).s else when;
     const rest: []const u8 = switch (d.state) {
         .live => blk: {
             const l = d.live orelse break :blk "";
@@ -364,7 +367,7 @@ pub const Demo = struct {
         } ++ whole(now - 3_600, "c9e836bf23992353", "c9e836bf Prose leftovers SF4/6/7") ++
         [_]ad.DeployEvent{
             ev(now - 1_800, "6cdb138100000000", "deploy", "skipped", "docs only: no copy, no round"),
-            ev(now - 450, "e80f952e00000000", "ci", "start", ""),
+            ev(now - 450, "e80f952e00000000", "ci", "start", "zig build ci on the gpu-box"),
             ev(now - 245, "e80f952e00000000", "ci", "ok", ""),
             ev(now - 241, "e80f952e00000000", "commit", "info", "e80f952e Draft tester review fixes: restore checks champions"),
             ev(now - 241, "e80f952e00000000", "commit", "info", "11b1467d game.html reads the default role's file"),
@@ -464,7 +467,7 @@ test "admin deploys: newest and running open, a fold kept, the running one timed
     // Running since 13:56, live in 8:20 both times before
     try expectHas(s, &.{
         "data-state=\"running\" open",
-        "pushed 28 Oct 13:56, expected live around 14:04 (median 8:20 over the last 2 deploys)",
+        "pushed 28 Oct 13:56 from the gpu-box, expected live around 14:04 (median 8:20 over the last 2 deploys)",
         "Site build<span class=\"sr\">, running</span><span class=\"t\">1:10 so far, usually 2:40</span>",
         ">docs or research only<",
         "live at 13:08 after 8:20 (static upload 13:06, renderer 13:08)",

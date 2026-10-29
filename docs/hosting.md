@@ -298,11 +298,14 @@ a 301 to it.
 
 ### Deploy events
 
-The admin page's Deploys tab shows every push from the check on the Mac until the site
-serves it. Its backbone is data/deploys.tsv on the box: one line per step, `time` (unix
+The admin page's Deploys tab shows every push from its check until the site serves it,
+and the machine that pushed (the end of the ci or deploy start's detail, "... on the
+gpu-box"). Its backbone is data/deploys.tsv on the box: one line per step, `time` (unix
 s), `sha` (full commit), `step`, `status` (start, ok, failed, skipped, waiting, info),
 `detail` (free text; redacted when served). live.json carries the last 3,000 lines as
-`deploys`, the 15 min snapshot as `deploy_events`.
+`deploys`, the 15 min snapshot as `deploy_events`. A deploy whose machine stopped mid-run
+(the Mac asleep) shows superseded once a later one starts, else failed after 3 times its
+step's usual time (at least 30 min).
 
 | step | written by | when |
 | --- | --- | --- |
