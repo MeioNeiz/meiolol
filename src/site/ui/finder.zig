@@ -106,7 +106,7 @@ pub const Finder = struct {
         const entries = try a.alloc(champsearch.Entry, data.champs.len);
         for (entries, data.champs, 0..) |*e, c, i| e.* = .{
             .name = c.name,
-            .src = try std.mem.concat(a, u8, &.{ "https://ddragon.leagueoflegends.com/cdn/", data.ddragon, "/img/champion/", c.key, ".png" }),
+            .src = try std.fmt.allocPrint(a, champ.icon_fmt, .{ data.ddragon, c.key }),
             .roles = if (i < data.roles.len) data.roles[i] else &.{},
         };
         const ix = try a.create(champsearch.Index);

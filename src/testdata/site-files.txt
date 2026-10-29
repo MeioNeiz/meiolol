@@ -60,7 +60,7 @@ _v/all-patch/data/search.bin 305561e34fffe2a3
 _v/all-patch/data/stats.bin 1c6b64a93978f120
 _v/all-patch/data/tiers.bin cc08dd7acdba407a
 _v/all-patch/index.html e6298e5f6fc7c78b
-_v/all-patch/matchups.html 81780fc0e17a313e
+_v/all-patch/matchups.html 6f8e346cc881761a
 _v/all-patch/matchups/bot/kaisa-vs-twitch.html 412c5d9c999ead5e
 _v/all-patch/matchups/bot/twitch-vs-kaisa.html 045a52db3e39499d
 _v/all-patch/matchups/jungle/amumu-vs-leesin.html adbef72572ff9ea8
@@ -78,7 +78,7 @@ _v/all-patch/pickup/jungle.html 9e28e31348f0fb86
 _v/all-patch/pickup/mid.html 986be34539c8cd98
 _v/all-patch/pickup/support.html 27b656374a7eebb8
 _v/all-patch/pickup/top.html c865001307e77a80
-_v/all-patch/pool.html a3eaa7b78cccec9a
+_v/all-patch/pool.html 170a23173973a42d
 _v/all/champions.html 529720997c2c3097
 _v/all/champions/bot.html 6777ce4a1fa03692
 _v/all/champions/jungle.html c51fb3b0ee4831f4
@@ -142,7 +142,7 @@ _v/all/data/search.bin 305561e34fffe2a3
 _v/all/data/stats.bin 7b37d059d60f077f
 _v/all/data/tiers.bin b2e742edbe527240
 _v/all/index.html 33b0fdfe59e2aa05
-_v/all/matchups.html 9ecb4f8c4443a0fb
+_v/all/matchups.html beac0c3e280628fe
 _v/all/matchups/bot/kaisa-vs-twitch.html 30e3f383f31077dc
 _v/all/matchups/bot/twitch-vs-kaisa.html 593cf0bbc6475ec6
 _v/all/matchups/jungle/amumu-vs-leesin.html 1a52d0ae5f66759e
@@ -161,7 +161,7 @@ _v/all/pickup/jungle.html 0fafeaabe95f6bd1
 _v/all/pickup/mid.html 265ecaa88790dbac
 _v/all/pickup/support.html be8f8f0eef145e13
 _v/all/pickup/top.html b81ca6541ef56c72
-_v/all/pool.html d38c8383d0d9ee35
+_v/all/pool.html cd8e559749ba37dd
 _v/patch/champions.html e881a872bf01a6b2
 _v/patch/champions/bot.html b36bcc0e484afc16
 _v/patch/champions/jungle.html c044520d5a5e4123
@@ -224,7 +224,7 @@ _v/patch/data/search.bin 305561e34fffe2a3
 _v/patch/data/stats.bin 1c6b64a93978f120
 _v/patch/data/tiers.bin 4595bc16146d87cc
 _v/patch/index.html 5a95faf8e74ca2ef
-_v/patch/matchups.html 1acf4797efbd791a
+_v/patch/matchups.html 543ab9894f79d37c
 _v/patch/matchups/bot/kaisa-vs-twitch.html e967f6c11b842ee0
 _v/patch/matchups/bot/twitch-vs-kaisa.html 93af12b1399f2014
 _v/patch/matchups/jungle/amumu-vs-leesin.html 51bbdeec6dc4071b
@@ -242,7 +242,7 @@ _v/patch/pickup/jungle.html 9555ebdd6035baa1
 _v/patch/pickup/mid.html e467b15fb5c263e1
 _v/patch/pickup/support.html 4b7e31865861f585
 _v/patch/pickup/top.html de40f0425bdbfab0
-_v/patch/pool.html f194d60fef14ab4e
+_v/patch/pool.html 73aedb7afc1df1a2
 champions.html ecd64057120f376b
 champions/ahri.html a1e8892e4761846a
 champions/ahri/mid.html 29036be7549e7fd0
@@ -348,7 +348,7 @@ index.html 745a48c33f553018
 learn.html 491e482e4a75ef8c
 learn/champs.json 7c5a77a4464faa98
 learn/practice.json 4f53cda18c2baa0c
-matchups.html 04bfc6a6a16233d4
+matchups.html 02be9d3d8920dea7
 matchups/bot/kaisa-vs-twitch.html 48323c21c1185763
 matchups/bot/twitch-vs-kaisa.html 8784c3894894de09
 matchups/jungle/amumu-vs-leesin.html cc89499cc4b5926d
@@ -368,7 +368,7 @@ pickup/jungle.html 9f1f2286b26149d2
 pickup/mid.html 42e477d9d1204106
 pickup/support.html 3176aac510dd7cd2
 pickup/top.html c8e89c529a736db5
-pool.html 1f26cbe671b4f7d1
+pool.html ca6b394f0cb0d831
 privacy.html 14c8a7384958b49d
 robots.txt 331ea9090db0c9f6
 terms.html 90fbcab999422ff8
