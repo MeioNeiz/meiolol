@@ -90,31 +90,27 @@ comp leans (data-and-model.md step 5).
 
 Jacob's asks: harder and easier at once (an easy start, harder levels later), more
 engaging, much fewer words, one thing per screen; "learn is boring ... too easy, its
-gotta make someone think". Redesign as a discovery puzzle game: docs/learn-proposal.md.
+gotta make someone think". Plan: docs/plan/ui/learn.md (content: docs/learn-proposal.md).
 
-Status: tabs Puzzles (first), Basics, Practice; progress in localStorage only. Puzzles
-(src/site/puzzles.zig): one a screen, a committed guess (slider or one of two to four),
-then the real number with its games, the table behind it, one line why and a takeaway.
-Ten hand-written from finished checks (each names its source), one from this patch's
-curves (a lane leader that loses), and generated ones from live data: early or late
-(`meiolol lean`), counter or just strong (lane curves, every region, 30 days); 18 in one
-line. Basics: a lesson a screen, questions only where the answer clears chance (5+
-points and 2 SE). Practice: three levels of five drills by the generator's Difficulty.
+Status: the ui.learnpage island (src/site/learn.zig, learnbuild.zig, learnfixed.zig).
+Chapters of puzzles, one a screen; a first visit lands on chapter 1, chapter 0 ("The
+basics": roles, a counter, early or late, damage where damage facts load) one tap away
+in the Chapters aside. A puzzle: a setup (rate rows, a duel, tiles or chips), a short
+question, a guess (slider, no value until touched) or ChoiceCards, Lock in; then every
+row with its games, stars 0-3, one line why and a takeaway; a chapter's end lists its
+takeaways. Hand-written puzzles from finished checks in learnfixed.zig; generated ones
+from live data: lane leader that loses, early or late (`meiolol lean`), counter or just
+strong (lane curves, every region, 30 days). Progress in localStorage, links #p=<id>.
 No win chance or points anywhere in Learn.
 
-Next:
-- The chapter map (proposal "Home"): chapters as tiles with their question, progress
-  and tips earned; a champion icon on generated questions; refresh the hand-written
-  numbers when their checks are rerun; myth or measured cards (chapter 5); a daily five;
-  drop or keep Basics and Practice (Jacob)
-- Levels inside a Difficulty by clarity (easy drills whose one bringer also leads its
-  lane first; hard ones sorted by how close the four sit); lesson examples as tiles,
-  not sentences; a lesson from lane curves (who is ahead at 14) as Level 2's primer
-- Undecided, for Jacob (research/questions/coach-draft-advice.md,
-  coach-stat-claims.md): a "popular advice, tested" page or lesson set, each common
-  coaching claim with what our games say (jungler-support and mid-ADC synergy not
-  detected; damage mix matters; split pushers no better than other top laners; bounties
-  pay the team behind more per kill)
+Next (order and detail: data/team/2026-10-29-next/notes/w5.md):
+- A guess readable before the first touch (chips setups show no scale); Your tips only
+  for this chapter
+- Setups as pictures, not chips plus a line repeating them; counter wording
+- Chapter-end drafts where one option is clearly apart (plan "Chapter end")
+- More myth or measured cards, only from final learned.md lines whose Site: allows it
+- Hand-written numbers refreshed when their checks are rerun
+- Later: a daily five; "your lane, your game" (an export from the pack)
 
 ## Search
 
