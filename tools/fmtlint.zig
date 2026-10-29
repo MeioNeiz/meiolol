@@ -1,8 +1,9 @@
 //! fmtlint: number formatting through std.fmt in code that can compile to ui.wasm. Each
-//! placeholder type a format string prints ({d}, {}, {x}, {e}, {any}...) instantiates
-//! std's formatter for it, ~0.5 KB gz per family that reaches it (d803924c put three
-//! families over their budget with two `{d}`s in a shared component). Text through
-//! {s} and {t} is cheap; numbers go through phrase.num / fmt.write (src/site/ui/fmt.zig).
+//! call site is code of its own in every family that reaches it, and each int type
+//! printed adds std's formatter for that type (printValue + printIntAny, ~170 B gz):
+//! d803924c put three families over their budget with two `{d}`s in a shared component.
+//! Text through {s} and {t} is cheap; numbers go through phrase.num / fmt.write
+//! (src/site/ui/fmt.zig). tools/wasmsize --numbers shows what a family carries.
 //!
 //! Flags string literals with such a placeholder outside tests, comptimePrint and
 //! @compileError, unless the line says `fmt-ok` in a comment or the literal is in the
@@ -77,13 +78,14 @@ pub fn main(init: std.process.Init) !void {
         }
         bad += 1;
         std.debug.print("{s}:{d}: {s} formats a number with std.fmt in code that can reach " ++
-            "ui.wasm (~0.5 KB gz per family that uses it)\n", .{ h.path, h.line, h.literal });
+            "ui.wasm\n", .{ h.path, h.line, h.literal });
     }
     if (bad > 0) {
         std.debug.print(
-            \\fmtlint: {d} new number format string(s). Use phrase.num(h, .int, v) or
-            \\fmt.write(w, .int, v) (src/site/ui/fmt.zig), whose one instance all of ui shares;
-            \\or, where the code never reaches a wasm island, mark the line `// fmt-ok: <why>`
+            \\fmtlint: {d} new number format string(s): code in every family that reaches them,
+            \\and std's formatter (~170 B gz) for each new int type. Use phrase.num(h, .int, v)
+            \\or fmt.write(w, .int, v) (src/site/ui/fmt.zig), shared by all of ui; where the
+            \\code never reaches a wasm island, mark the line `// fmt-ok: <why>`
             \\
         , .{bad});
         std.process.exit(1);

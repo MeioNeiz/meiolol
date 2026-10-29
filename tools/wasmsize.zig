@@ -12,6 +12,8 @@
 //! usage: wasmsize [--tree DIR] [--store DIR] [--std DIR] [--record] [--threshold BYTES] [--base REV]
 //!          NAME BUDGET WASM NAMED_WASM [NAME BUDGET WASM NAMED_WASM...]
 //!        wasmsize --list NAMED_WASM: every function, biggest first
+//!        wasmsize --numbers NAMED_WASM: std's number formatting in it, and which of our
+//!          functions keep each piece alive
 //! WASM or NAMED_WASM may be "-" (no symbols, or the shipped size from NAMED_WASM)
 
 const std = @import("std");
@@ -61,6 +63,9 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, a, "--list")) {
             if (i + 1 >= argv.len) fail("--list needs a wasm", .{});
             return listFuncs(io, arena, argv[i + 1]);
+        } else if (std.mem.eql(u8, a, "--numbers")) {
+            if (i + 1 >= argv.len) fail("--numbers needs a wasm", .{});
+            return numbers(io, arena, tree, std_dir, argv[i + 1]);
         } else if (std.mem.startsWith(u8, a, "--")) {
             if (i + 1 >= argv.len) fail("{s} needs a value", .{a});
             i += 1;
@@ -91,7 +96,7 @@ pub fn main(init: std.process.Init) !void {
     for (fams.items, files.items) |*f, paths| try measure(io, arena, store_dir, f, paths[0], paths[1]);
     const base = try findBase(io, arena, tree, store_dir, base_rev);
     var out_buf: [4096]u8 = undefined;
-    var out_file = Io.File.stdout().writer(io, &out_buf);
+    var out_file = Io.File.stdout().writerStreaming(io, &out_buf);
     const out = &out_file.interface;
     var res: Resolver = .{ .io = io, .arena = arena, .tree = tree, .std_dir = std_dir orelse stdDir(io, arena) };
     try report(arena, out, fams.items, base, threshold, &res);
@@ -110,9 +115,98 @@ fn listFuncs(io: Io, arena: Allocator, path: []const u8) !void {
         }
     }.more);
     var buf: [4096]u8 = undefined;
-    var out_file = Io.File.stdout().writer(io, &buf);
+    var out_file = Io.File.stdout().writerStreaming(io, &buf);
     const out = &out_file.interface;
     for (m.funcs) |f| try out.print("{d} {s}\n", .{ f.size, f.name });
+    try out.flush();
+}
+
+/// std number formatting: Writer.print's instances and what they reach
+fn isFormatter(name: []const u8) bool {
+    return std.mem.startsWith(u8, name, "Io.Writer.print") or std.mem.startsWith(u8, name, "fmt.format") or
+        std.mem.startsWith(u8, name, "fmt.float");
+}
+
+/// Generic wrappers of ours whose instances belong to their call sites (one per format
+/// string): a call is followed through them to the component
+const pass_through = [_][]const u8{"tree.H.fmt"};
+
+fn passThrough(name: []const u8) bool {
+    for (pass_through) |p| if (std.mem.eql(u8, name, p)) return true;
+    return false;
+}
+
+fn numbers(io: Io, arena: Allocator, tree: []const u8, std_dir: ?[]const u8, path: []const u8) !void {
+    const m = try parse(arena, try readFile(io, arena, path));
+    var res: Resolver = .{ .io = io, .arena = arena, .tree = tree, .std_dir = std_dir orelse stdDir(io, arena) };
+    const n = m.funcs.len;
+    // Owners: our functions (not pass-through) that reach a function through std and
+    // pass-through code only
+    const owner = try arena.alloc(bool, n);
+    for (m.funcs, 0..) |f, k| {
+        const name = f.key;
+        owner[k] = res.ours(name) and !passThrough(name);
+    }
+    const owners = try arena.alloc(std.ArrayList(u32), n);
+    for (owners) |*o| o.* = .empty;
+    const seen = try arena.alloc(u32, n);
+    @memset(seen, std.math.maxInt(u32));
+    var stack: std.ArrayList(u32) = .empty;
+    for (0..n) |c| if (owner[c]) {
+        stack.clearRetainingCapacity();
+        try stack.append(arena, @intCast(c));
+        seen[c] = @intCast(c);
+        while (stack.pop()) |k| for (m.funcs[k].calls) |callee| {
+            if (callee < m.imported or callee - m.imported >= n) continue;
+            const g = callee - m.imported;
+            if (owner[g] or seen[g] == c) continue;
+            seen[g] = @intCast(c);
+            try owners[g].append(arena, @intCast(c));
+            try stack.append(arena, g);
+        };
+    };
+    var buf: [4096]u8 = undefined;
+    var out_file = Io.File.stdout().writerStreaming(io, &buf);
+    const out = &out_file.interface;
+    var total: u64 = 0;
+    var excl: std.AutoArrayHashMapUnmanaged(u32, u64) = .empty;
+    try out.writeAll("std number formatting (raw bytes; gz is about a third), and what keeps it:\n");
+    var order: std.ArrayList(u32) = .empty;
+    for (m.funcs, 0..) |f, k| if (isFormatter(f.key)) try order.append(arena, @intCast(k));
+    std.mem.sort(u32, order.items, m, struct {
+        fn more(mm: Module, a: u32, b: u32) bool {
+            return mm.funcs[a].size > mm.funcs[b].size;
+        }
+    }.more);
+    for (order.items) |k| {
+        const f = m.funcs[k];
+        total += f.size;
+        try out.print("  {d:>5} {s}\n        kept by: ", .{ f.size, f.name });
+        if (owners[k].items.len == 0) try out.writeAll("(no direct caller of ours: a vtable)");
+        var names: std.StringArrayHashMapUnmanaged(u32) = .empty;
+        for (owners[k].items) |o| (try names.getOrPutValue(arena, m.funcs[o].key, 0)).value_ptr.* += 1;
+        for (names.keys(), names.values(), 0..) |name, count, j| {
+            if (j > 0) try out.writeAll(", ");
+            try out.writeAll(name);
+            if (count > 1) try out.print(" x{d}", .{count});
+        }
+        try out.writeAll("\n");
+        if (owners[k].items.len == 1) (try excl.getOrPutValue(arena, owners[k].items[0], 0)).value_ptr.* += f.size;
+    }
+    try out.print("  {d} B raw in all\n\nours, by formatter bytes only they keep:\n", .{total});
+    excl.sort(struct {
+        v: []const u64,
+        pub fn lessThan(ctx: @This(), a: usize, b: usize) bool {
+            return ctx.v[a] > ctx.v[b];
+        }
+    }{ .v = excl.values() });
+    for (excl.keys(), excl.values()) |o, v| {
+        const name = m.funcs[o].key;
+        try out.print("  {d:>5} {s}", .{ v, name });
+        if (try res.place(name)) |p| try out.print("  {s}", .{p.file});
+        try out.writeAll("\n");
+    }
+    if (m.unparsed > 0) try out.print("({d} functions with opcodes not followed: their calls are missing)\n", .{m.unparsed});
     try out.flush();
 }
 
@@ -136,7 +230,7 @@ fn measure(io: Io, arena: Allocator, store: []const u8, f: *Family, wasm: []cons
     const m = try parse(arena, try readFile(io, arena, named));
     f.module = m;
     for (m.funcs) |fn_| {
-        const g = try f.syms.getOrPut(arena, normalise(fn_.name));
+        const g = try f.syms.getOrPut(arena, fn_.key);
         if (!g.found_existing) g.value_ptr.* = .{};
         g.value_ptr.bytes += fn_.size;
         g.value_ptr.count += 1;
@@ -168,6 +262,8 @@ fn gzipSize(io: Io, arena: Allocator, store: []const u8, path: ?[]const u8, byte
 
 const Func = struct {
     name: []const u8,
+    /// The name without instance numbers (normalise)
+    key: []const u8,
     /// Body bytes with its size prefix
     size: u32,
     calls: []u32,
@@ -179,6 +275,8 @@ const Module = struct {
     funcs: []Func,
     data: u64,
     other: u64,
+    /// Bodies with an opcode calls() doesn't know: their calls are missing
+    unparsed: u32,
 };
 
 fn parse(arena: Allocator, bytes: []const u8) !Module {
@@ -189,6 +287,7 @@ fn parse(arena: Allocator, bytes: []const u8) !Module {
     var funcs: []Func = &.{};
     var data: u64 = 0;
     var other: u64 = 0;
+    var unparsed: u32 = 0;
     while (r.seek < r.end) {
         const id = try r.takeByte();
         const len = try r.takeLeb128(u32);
@@ -227,8 +326,12 @@ fn parse(arena: Allocator, bytes: []const u8) !Module {
                     const code = try s.take(size);
                     f.* = .{
                         .name = "",
+                        .key = "",
                         .size = @intCast(s.seek - at),
-                        .calls = calls(arena, code) catch &.{},
+                        .calls = calls(arena, code) catch blk: {
+                            unparsed += 1;
+                            break :blk &.{};
+                        },
                     };
                 }
             },
@@ -243,8 +346,9 @@ fn parse(arena: Allocator, bytes: []const u8) !Module {
     for (funcs, 0..) |*f, k| {
         f.name = names.get(imported + @as(u32, @intCast(k))) orelse
             try std.fmt.allocPrint(arena, "[func {d}]", .{imported + k});
+        f.key = try normalise(arena, f.name);
     }
-    return .{ .imported = imported, .funcs = funcs, .data = data, .other = other };
+    return .{ .imported = imported, .funcs = funcs, .data = data, .other = other, .unparsed = unparsed };
 }
 
 fn skipLimits(s: *Io.Reader) !void {
@@ -344,19 +448,30 @@ fn stripCustom(arena: Allocator, bytes: []const u8) ![]const u8 {
     return out.items;
 }
 
-/// A generic's instances under one name: `Io.Writer.print__func_336` and `foo__5678` lose
-/// their numbers, which change from build to build
-fn normalise(name: []const u8) []const u8 {
-    var n = name;
-    while (std.mem.findLast(u8, n, "__")) |at| {
-        var tail = n[at + 2 ..];
-        for ([_][]const u8{ "anon_", "func_" }) |pre| {
-            if (std.mem.startsWith(u8, tail, pre)) tail = tail[pre.len..];
+/// A generic's instances under one name: `Io.Writer.print__func_336` and
+/// `tree.H.on__func_609.thunk.call` lose their numbers, which change from build to build
+fn normalise(arena: Allocator, name: []const u8) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    var k: usize = 0;
+    outer: while (k < name.len) {
+        if (std.mem.startsWith(u8, name[k..], "__")) {
+            var e = k + 2;
+            for ([_][]const u8{ "anon_", "func_", "struct_", "union_", "enum_", "opaque_" }) |pre| {
+                if (std.mem.startsWith(u8, name[e..], pre)) e += pre.len;
+            }
+            const digits = e;
+            while (e < name.len and std.ascii.isDigit(name[e])) e += 1;
+            const ends = e == name.len or std.mem.startsWith(u8, name[e..], "__") or
+                !std.ascii.isAlphanumeric(name[e]) and name[e] != '_';
+            if (e > digits and ends) {
+                k = e;
+                continue :outer;
+            }
         }
-        if (tail.len == 0 or std.mem.findNone(u8, tail, "0123456789") != null) break;
-        n = n[0..at];
+        try out.append(arena, name[k]);
+        k += 1;
     }
-    return n;
+    return out.items;
 }
 
 // The baseline store
@@ -485,9 +600,62 @@ fn report(arena: Allocator, out: *Io.Writer, fams: []Family, base: ?Base, thresh
         if (grew or f.gz > f.budget) try flagged.append(arena, k);
     }
     for (flagged.items) |k| try explain(arena, out, &fams[k], if (base) |b| b.fams.get(fams[k].name) else null, res);
+    if (base) |b| try shared(arena, out, fams, flagged.items, b, res);
+}
+
+/// What grew in several flagged families at once: a shared component, the usual cause
+/// when many go up together (d803924c: champ.view in all 37)
+fn shared(arena: Allocator, out: *Io.Writer, fams: []Family, flagged: []const usize, base: Base, res: *Resolver) !void {
+    if (flagged.len < 3) return;
+    const Grew = struct { families: u32 = 0, bytes: i64 = 0 };
+    var all: std.StringArrayHashMapUnmanaged(Grew) = .empty;
+    for (flagged) |k| {
+        const o = base.fams.get(fams[k].name) orelse continue;
+        if (fams[k].module == null or o.syms.count() == 0) continue;
+        for (try diff(arena, &fams[k], o)) |c| {
+            if (delta(c) < 64 or c.name[0] == '[') continue;
+            const g = try all.getOrPutValue(arena, c.name, .{});
+            g.value_ptr.families += 1;
+            g.value_ptr.bytes += delta(c);
+        }
+    }
+    all.sort(struct {
+        v: []const Grew,
+        pub fn lessThan(ctx: @This(), a: usize, b: usize) bool {
+            return ctx.v[a].families > ctx.v[b].families or
+                (ctx.v[a].families == ctx.v[b].families and ctx.v[a].bytes > ctx.v[b].bytes);
+        }
+    }{ .v = all.values() });
+    var shown: usize = 0;
+    for (all.keys(), all.values()) |name, g| {
+        if (g.families * 3 < flagged.len or shown == max_lines) break;
+        if (shown == 0) try out.print("\nGrew in most of the {d} families above (a shared component):\n", .{flagged.len});
+        shown += 1;
+        try out.print("  {s}: in {d}, ~{d} B raw each", .{ name, g.families, @divTrunc(g.bytes, g.families) });
+        if (try res.place(name)) |p| try out.print("  {s}", .{p.file});
+        try out.writeAll("\n");
+    }
 }
 
 const Change = struct { name: []const u8, now: Sym, was: Sym };
+
+/// Symbols whose bytes differ from the baseline's, most grown first
+fn diff(arena: Allocator, f: *const Family, o: Family) ![]Change {
+    var changes: std.ArrayList(Change) = .empty;
+    for (f.syms.keys(), f.syms.values()) |name, now| {
+        const was = o.syms.get(name) orelse Sym{};
+        if (now.bytes != was.bytes) try changes.append(arena, .{ .name = name, .now = now, .was = was });
+    }
+    for (o.syms.keys(), o.syms.values()) |name, was| {
+        if (!f.syms.contains(name)) try changes.append(arena, .{ .name = name, .now = .{}, .was = was });
+    }
+    std.mem.sort(Change, changes.items, {}, struct {
+        fn more(_: void, a: Change, b: Change) bool {
+            return delta(a) > delta(b);
+        }
+    }.more);
+    return changes.items;
+}
 
 fn explain(arena: Allocator, out: *Io.Writer, f: *Family, old: ?Family, res: *Resolver) !void {
     try out.print("\n{s}: ", .{f.name});
@@ -498,18 +666,7 @@ fn explain(arena: Allocator, out: *Io.Writer, f: *Family, old: ?Family, res: *Re
         try out.print("raw {d} B ({s}{d} B); what changed, in raw bytes:\n", .{
             f.raw, if (f.raw >= o.raw) "+" else "", @as(i64, @intCast(f.raw)) - @as(i64, @intCast(o.raw)),
         });
-        for (f.syms.keys(), f.syms.values()) |name, now| {
-            const was = o.syms.get(name) orelse Sym{};
-            if (now.bytes != was.bytes) try changes.append(arena, .{ .name = name, .now = now, .was = was });
-        }
-        for (o.syms.keys(), o.syms.values()) |name, was| {
-            if (!f.syms.contains(name)) try changes.append(arena, .{ .name = name, .now = .{}, .was = was });
-        }
-        std.mem.sort(Change, changes.items, {}, struct {
-            fn more(_: void, a: Change, b: Change) bool {
-                return delta(a) > delta(b);
-            }
-        }.more);
+        try changes.appendSlice(arena, try diff(arena, f, o));
     } else {
         try out.writeAll("no baseline; its largest functions:\n");
         for (f.syms.keys(), f.syms.values()) |name, now| try changes.append(arena, .{ .name = name, .now = now, .was = .{} });
@@ -567,7 +724,7 @@ fn ourCallers(arena: Allocator, m: Module, sym: []const u8, res: *Resolver) ![]c
     const seen = try arena.alloc(bool, n);
     @memset(seen, false);
     var queue: std.ArrayList(u32) = .empty;
-    for (m.funcs, 0..) |f, k| if (std.mem.eql(u8, normalise(f.name), sym)) {
+    for (m.funcs, 0..) |f, k| if (std.mem.eql(u8, f.key, sym)) {
         seen[k] = true;
         try queue.append(arena, @intCast(k));
     };
@@ -577,7 +734,7 @@ fn ourCallers(arena: Allocator, m: Module, sym: []const u8, res: *Resolver) ![]c
         for (callers[queue.items[head]].items) |c| {
             if (seen[c]) continue;
             seen[c] = true;
-            const name = normalise(m.funcs[c].name);
+            const name = m.funcs[c].key;
             if (res.ours(name)) try found.put(arena, name, {}) else try queue.append(arena, c);
         }
     }
@@ -679,8 +836,14 @@ fn stdDir(io: Io, arena: Allocator) ?[]const u8 {
 }
 
 test normalise {
-    try std.testing.expectEqualStrings("fmt.printValue", normalise("fmt.printValue__anon_1234"));
-    try std.testing.expectEqualStrings("tree.H.fmt", normalise("tree.H.fmt__anon_12__345"));
-    try std.testing.expectEqualStrings("Io.Writer.print", normalise("Io.Writer.print__func_336"));
-    try std.testing.expectEqualStrings("a__b", normalise("a__b"));
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqualStrings("fmt.printValue", try normalise(a, "fmt.printValue__anon_1234"));
+    try std.testing.expectEqualStrings("tree.H.fmt", try normalise(a, "tree.H.fmt__anon_12__345"));
+    try std.testing.expectEqualStrings("Io.Writer.print", try normalise(a, "Io.Writer.print__func_336"));
+    try std.testing.expectEqualStrings("tree.H.on.thunk.call", try normalise(a, "tree.H.on__func_609.thunk.call"));
+    try std.testing.expectEqualStrings("kda.view.f", try normalise(a, "kda.view__struct_777.f"));
+    try std.testing.expectEqualStrings("a__b", try normalise(a, "a__b"));
+    try std.testing.expectEqualStrings("__zig_tag_name_role", try normalise(a, "__zig_tag_name_role"));
 }
