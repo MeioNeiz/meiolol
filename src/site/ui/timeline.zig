@@ -91,6 +91,8 @@ pub const Timeline = struct {
     cur: ?u8 = null,
     /// ChartTip at this second
     tip: ?u16 = null,
+    /// Compact: a tap keeps the tip after the pointer leaves (a phone lifts the finger)
+    pinned: bool = false,
     press: chart.Press = .{},
     /// Home's small game: a reading tip only (no range, no moment), deaths as ticks,
     /// epic objectives only, no fight marks
@@ -194,9 +196,18 @@ pub const Timeline = struct {
             .plot => if (t.compact) switch (t.press.pointer(ev)) {
                 // Read-only: the reading under the pointer, never a range or a moment
                 .none => {},
-                .hover, .tap => |f| t.tip = t.sec(f),
+                .hover => |f| {
+                    t.tip = t.sec(f);
+                    t.pinned = false;
+                },
+                .tap => |f| {
+                    t.tip = t.sec(f);
+                    t.pinned = true;
+                },
                 .range => t.tip = t.sec(std.math.clamp(ev.x / @max(1, ev.w), 0, 1)),
-                .leave => t.tip = null,
+                .leave => if (!t.pinned) {
+                    t.tip = null;
+                },
             } else switch (t.press.pointer(ev)) {
                 .none => {},
                 .hover => |f| t.tip = t.sec(f),
@@ -544,5 +555,40 @@ test "on the fake DOM: a linked moment, a dragged range, arrows within it, Escap
     try testing.expectEqual(@as(?u8, 17), state.cur);
     try testing.expectEqual(pushes + 1, fake.pushes);
     try testing.expectEqualStrings("#m=2107", fake.fragment.items);
+    try testing.expectEqual(@as(u32, 0), fake.warnings);
+}
+
+test "compact: the pointer shows the reading, never a range; a tap keeps it" {
+    const island = @import("island.zig");
+    const Fake = @import("fakedom.zig").Fake;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fake: Fake = .{ .a = a, .width = 760 };
+    var rt: island.Runtime(Fake) = .init(a, &fake);
+    var server: Timeline = .{ .game = &demo_game, .compact = true };
+    var state = server;
+    const t = try a.create(tree.Tree);
+    t.* = .{};
+    var h: H = .init(a, t);
+    t.root = server.view(&h);
+    fake.server = t;
+    const i = try rt.add(Timeline, &state, &server, "#tl");
+    const cur = i.current();
+    const plot = cur.node(cur.find(cur.root, "class", "plot").?).dom;
+    _ = rt.event(0, .{ .kind = .pointermove, .target = plot, .x = 456 });
+    try testing.expectEqual(@as(?u16, 1499), state.tip);
+    _ = rt.event(0, .{ .kind = .pointerleave, .target = plot });
+    try testing.expectEqual(@as(?u16, null), state.tip);
+    _ = rt.event(0, .{ .kind = .pointerdown, .target = plot, .x = 456 });
+    _ = rt.event(0, .{ .kind = .pointermove, .target = plot, .x = 548 });
+    _ = rt.event(0, .{ .kind = .pointerup, .target = plot, .x = 548 });
+    try testing.expectEqual(@as(?[2]u16, null), state.range);
+    try testing.expectEqual(@as(?u16, 1801), state.tip);
+    _ = rt.event(0, .{ .kind = .pointerdown, .target = plot, .x = 456 });
+    _ = rt.event(0, .{ .kind = .pointerup, .target = plot, .x = 456 });
+    _ = rt.event(0, .{ .kind = .pointerleave, .target = plot });
+    try testing.expectEqual(@as(?u16, 1499), state.tip);
+    try testing.expectEqual(@as(?u8, null), state.cur);
     try testing.expectEqual(@as(u32, 0), fake.warnings);
 }
