@@ -59,7 +59,8 @@ src/
                      (both: docs/data-safety.md)
   status.zig         `meiolol status`: read-only counts, estimates for big tables
   site/              public website generator (`meiolol site`): html.zig layout and
-                     boilerplate (all markup goes through tpl/), prose.zig fixed pages,
+                     boilerplate (all markup goes through tpl/), textpages.zig fixed
+                     pages (markdown on ui.textpage; the rest still in prose.zig),
                      static/ (css, draft.js)
   wasm.zig           recommender in the browser (wasm32-freestanding),
                      embedded into the backend binary by build.zig

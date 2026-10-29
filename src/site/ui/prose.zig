@@ -1,7 +1,8 @@
 //! Prose: a markdown doc (learned.md, model.md, the eval report) as nodes. parse() runs
 //! server side and gives a Doc that data.zig encodes, so ui.wasm carries the view and no
 //! parser. The subset the docs use: # headings, paragraphs, bullets (one nested level),
-//! pipe tables, ``` fences, inline `code` and **bold**; anything else stays literal text.
+//! pipe tables, ``` fences, inline `code`, **bold** and [links](/path); anything else stays
+//! literal text.
 //! The root carries data-prose: check.zig holds quoted docs to no label or word budget
 const std = @import("std");
 const tree = @import("tree.zig");
@@ -15,8 +16,10 @@ pub const name = "Prose";
 pub const scope = .{".c-prose"};
 
 pub const Run = struct {
-    kind: enum { plain, code, bold } = .plain,
+    kind: enum { plain, code, bold, link } = .plain,
     s: []const u8,
+    /// A link's target
+    href: []const u8 = "",
 };
 
 /// Runs of one line of text: a paragraph, a list item, a table cell
@@ -25,7 +28,8 @@ pub const Line = []const Run;
 pub const Item = struct { line: Line, sub: []const Line = &.{} };
 
 /// `id`: the text's slug, unique in the doc ("lane-model", a second one "lane-model-2").
-/// By text and order, so an edited or moved heading changes what an old link opens
+/// By text and order, so an edited or moved heading changes what an old link opens; a
+/// heading ending `{#name}` has that id instead
 pub const Heading = struct { level: u8, line: Line, id: []const u8 = "" };
 
 /// `head` empty when the table has no separator row. `cut`: rows that had more cells than
@@ -56,7 +60,8 @@ pub fn parse(a: Allocator, src: []const u8) Allocator.Error!Doc {
             try blocks.append(a, .{ .code = try p.fence() });
         } else if (headingLevel(t)) |n| {
             p.skip();
-            try blocks.append(a, .{ .heading = .{ .level = n, .line = try inline_(a, std.mem.trim(u8, t[n..], " #")) } });
+            const text, const id = explicitId(std.mem.trim(u8, t[n..], " #"));
+            try blocks.append(a, .{ .heading = .{ .level = n, .line = try inline_(a, text), .id = id } });
         } else if (p.tableAhead(t)) {
             try blocks.append(a, .{ .table = try p.table() });
         } else if (bullet(t) != null) {
@@ -69,9 +74,20 @@ pub fn parse(a: Allocator, src: []const u8) Allocator.Error!Doc {
     return .{ .blocks = blocks.items };
 }
 
+/// `Early or late {#lean}`: the text and its own id, kept when the text changes
+fn explicitId(t: []const u8) struct { []const u8, []const u8 } {
+    if (!std.mem.endsWith(u8, t, "}")) return .{ t, "" };
+    const at = std.mem.findLast(u8, t, " {#") orelse return .{ t, "" };
+    const id = t[at + 3 .. t.len - 1];
+    for (id) |c| if (!std.ascii.isAlphanumeric(c) and c != '-') return .{ t, "" };
+    if (id.len == 0) return .{ t, "" };
+    return .{ std.mem.trimEnd(u8, t[0..at], " "), id };
+}
+
 fn slugs(a: Allocator, blocks: []Block) Allocator.Error!void {
     var seen: std.StringHashMapUnmanaged(void) = .empty;
-    for (blocks) |*b| if (b.* == .heading) {
+    for (blocks) |b| if (b == .heading and b.heading.id.len > 0) try seen.put(a, b.heading.id, {});
+    for (blocks) |*b| if (b.* == .heading and b.heading.id.len == 0) {
         var w: std.ArrayList(u8) = .empty;
         for (b.heading.line) |r| for (r.s) |c| {
             if (std.ascii.isAlphanumeric(c)) {
@@ -265,12 +281,19 @@ fn isSeparator(l: []const u8) bool {
     return n > 0;
 }
 
-/// `code` and **bold** spans; an unclosed marker is literal
+/// `code`, **bold** and [text](href) spans; an unclosed marker is literal
 fn inline_(a: Allocator, s: []const u8) Allocator.Error!Line {
     var out: std.ArrayList(Run) = .empty;
     var start: usize = 0;
     var i: usize = 0;
     while (i < s.len) {
+        if (s[i] == '[') if (link(s[i..])) |l| {
+            if (i > start) try out.append(a, .{ .s = s[start..i] });
+            try out.append(a, l.run);
+            i += l.len;
+            start = i;
+            continue;
+        };
         const mark: []const u8 = if (s[i] == '`') "`" else if (std.mem.startsWith(u8, s[i..], "**")) "**" else {
             i += 1;
             continue;
@@ -290,6 +313,21 @@ fn inline_(a: Allocator, s: []const u8) Allocator.Error!Line {
     }
     if (start < s.len) try out.append(a, .{ .s = s[start..] });
     return out.items;
+}
+
+/// `[text](href)` at the start of `s`, the text plain. Only targets on this site, its
+/// anchors, https and mailto: the docs' relative links (`docs/model.md`) stay literal
+fn link(s: []const u8) ?struct { run: Run, len: usize } {
+    const mid = std.mem.find(u8, s, "](") orelse return null;
+    const end = std.mem.findScalarPos(u8, s, mid + 2, ')') orelse return null;
+    const text = s[1..mid];
+    const href = s[mid + 2 .. end];
+    if (text.len == 0 or std.mem.findAny(u8, text, "[]`") != null) return null;
+    if (href.len == 0 or std.mem.findAny(u8, href, " \t<>\"'") != null) return null;
+    for ([_][]const u8{ "/", "#", "https://", "mailto:" }) |p| {
+        if (std.mem.startsWith(u8, href, p)) return .{ .run = .{ .kind = .link, .s = text, .href = href }, .len = end + 1 };
+    }
+    return null;
 }
 
 pub const Opts = struct {
@@ -516,6 +554,7 @@ fn runs(h: *H, line: Line) []const N {
         .plain => h.text(r.s),
         .code => h.span(.{ .class = "c" }, .{r.s}),
         .bold => h.strong(.{}, .{r.s}),
+        .link => h.a(.{ .href = r.href }, .{r.s}),
     });
     return l.done();
 }
@@ -541,6 +580,7 @@ pub const css =
     \\  .c-prose ul { padding-inline-start: 1.25em; }
     \\  .c-prose li + li { margin-block-start: var(--sp-1); }
     \\  .c-prose strong { color: var(--text); font-weight: var(--w-b); }
+    \\  .c-prose a { text-decoration: underline; text-underline-offset: 2px; }
     \\  .c-prose .c, .c-prose .code { font-family: ui-monospace, monospace; font-size: var(--fs-xs); }
     \\  .c-prose .c { padding: 0 2px; border-radius: 2px; background: var(--panel-2); overflow-wrap: anywhere; }
     \\  .c-prose .code { padding: var(--sp-2); border-radius: var(--r-s); background: var(--panel-2);
@@ -739,6 +779,26 @@ test "parse: each block kind, wrapped lines joined, the rest literal" {
     try testing.expectEqualStrings("unclosed fence", bs[7].code);
 }
 
+test "links: on this site, anchors, https and mailto; anything else stays text" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d = try parse(a, "See [Accounts](#accounts), [Home](/) or [us](mailto:a@b.c); [doc](docs/model.md), [x](javascript:y) and [a b](/c d) stay");
+    try expectRuns(&.{
+        .{ .s = "See " },
+        .{ .kind = .link, .s = "Accounts" },
+        .{ .s = ", " },
+        .{ .kind = .link, .s = "Home" },
+        .{ .s = " or " },
+        .{ .kind = .link, .s = "us" },
+        .{ .s = "; [doc](docs/model.md), [x](javascript:y) and [a b](/c d) stay" },
+    }, d.blocks[0].para);
+    try testing.expectEqualStrings("mailto:a@b.c", d.blocks[0].para[5].href);
+    const out = try render(a, "[ICO](https://ico.org.uk), `[not](/a)`", .{ .id_prefix = "" });
+    try testing.expect(std.mem.find(u8, out, "<a href=\"https://ico.org.uk\">ICO</a>") != null);
+    try testing.expect(std.mem.find(u8, out, "<span class=\"c\">[not](/a)</span>") != null);
+}
+
 test "parse: empty and odd input" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
@@ -920,6 +980,17 @@ test "heading ids: slugs, unique in the doc; split cuts at ##; a section builds 
         return error.TestExpectedEqual;
     };
     try testing.expect(std.mem.find(u8, s, "<p>x</p>") == null);
+}
+
+test "heading ids: {#name} sets one, and a slug steps around it" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const d = try parse(arena.allocator(), "## Lean\n## Early or late {#lean}\n## Odd {#a b}\n## Empty {#}");
+    const want = [_][2][]const u8{ .{ "Lean", "lean-2" }, .{ "Early or late", "lean" }, .{ "Odd {#a b}", "odd-a-b" }, .{ "Empty {#}", "empty" } };
+    for (want, d.blocks) |w, b| {
+        try testing.expectEqualStrings(w[0], b.heading.line[0].s);
+        try testing.expectEqualStrings(w[1], b.heading.id);
+    }
 }
 
 test "split: a level 1 heading starts a section; a big one is cut at its next level" {

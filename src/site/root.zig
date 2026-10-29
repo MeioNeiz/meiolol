@@ -6,6 +6,7 @@ const core = @import("core");
 pub const html = @import("html.zig");
 const urls = ui.urls;
 const prose = @import("prose.zig");
+const textpages = @import("textpages.zig");
 const account_page = @import("account.zig");
 const daily_page = @import("daily.zig");
 const yourgame = @import("yourgame.zig");
@@ -582,11 +583,12 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
         .game => return yourgame.writePage(site, w),
         .your => return yourpage.writePage(site, w),
         else => {
-            const fixed = [_]struct { std.meta.Tag(urls.Page), []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
+            // null: the body is textpages.body's
+            const fixed = [_]struct { std.meta.Tag(urls.Page), []const u8, []const u8, html.Nav, ?*const fn (*Writer, prose.Info) Writer.Error!void }{
                 .{ .method, "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
                 .{ .download, "Champ select helper", "The meiolol champ select helper, a desktop app for Windows, in development.", .none, prose.download },
                 .{ .privacy, "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },
-                .{ .terms, "Terms of use", "Terms for using meiolol.", .none, prose.terms },
+                .{ .terms, "Terms of use", "Terms for using meiolol.", .none, null },
                 .{ .login, "Log in", "Log in to meiolol.", .none, account_page.login },
                 .{ .signup, "Make your account", "Make a meiolol account from a sign-up link.", .none, account_page.signup },
                 .{ .join, "Set up your login", "Set up a meiolol login from an invite link.", .none, account_page.join },
@@ -601,7 +603,7 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
                     if (std.meta.eql(s, at)) break true;
                 } else false;
                 try html.head(w, p);
-                try f[4](w, site.info());
+                if (f[4]) |body| try body(w, site.info()) else _ = try textpages.body(site, w, at);
                 if (f[3] == .method) try evalchart.section(w, site.eval);
                 try html.foot(w, p);
                 return true;
@@ -614,18 +616,7 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
 
 /// The site's 404 page, never indexed
 pub fn renderNotFound(site: *const Site, w: *Writer) !void {
-    var p = try site.sharedPage("Page not found | meiolol", "No page at this address.", .none);
-    p.index = false;
-    try html.head(w, p);
-    try w.writeAll(
-        \\<div class="prose">
-        \\<h1>Page not found</h1>
-        \\<p class="lead">There's no page at this address: it may have moved, or the link has a typo.</p>
-        \\<p><a href="/">Home</a> · <a href="/champions">Champions</a> · <a href="/matchups">Matchups</a></p>
-        \\</div>
-        \\
-    );
-    try html.foot(w, p);
+    return textpages.notFound(site, w);
 }
 
 pub fn ratio(part: u64, whole: u64) f64 {

@@ -305,7 +305,6 @@ const admin_download =
 
 /// Changed by hand with the text: the build date would claim a new policy every day
 const privacy_updated = "24 October 2026";
-const terms_updated = "12 October 2026";
 
 pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
     try tpl.render(w,
@@ -428,25 +427,4 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\</div>
         \\
     , .{ .updated = privacy_updated, .contact = info.contact });
-}
-
-pub fn terms(w: *Writer, info: Info) Writer.Error!void {
-    try tpl.render(w,
-        \\<div class="prose">
-        \\<h1>Terms of use</h1>
-        \\<p class="muted">Last updated {updated}.</p>
-        \\<ul>
-        \\<li>meiolol (this site and the desktop app) is free to use. Its statistics are
-        \\estimates from past games and come with no guarantee.</li>
-        \\<li>You remain bound by Riot Games' Terms of Service when you play. meiolol only
-        \\shows information; it never acts in the game client for you.</li>
-        \\<li>Do not scrape the site at a rate that disrupts it or resell its data.</li>
-        \\<li>The software is provided as is, without warranty of any kind.</li>
-        \\<li>These terms may change; the date above shows the latest version.</li>
-        \\</ul>
-        \\<p>{legal}</p>
-        \\<p>Contact: <a href="mailto:{contact}">{contact}</a>.</p>
-        \\</div>
-        \\
-    , .{ .updated = terms_updated, .legal = tpl.trusted(html.boilerplate), .contact = info.contact });
 }
