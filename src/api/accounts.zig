@@ -33,8 +33,9 @@
 //!   POST /auth/disable    {"username","disabled"}: disabling signs it out everywhere
 //!   POST /auth/reset      {"username"}: {"invite":TOKEN}, a one-use link to set its password
 //!
-//! me, logout, accounts, invite, role, disable and reset also as NAME.bin: bodies and 200s
-//! in ui.data (ui/accountsdata.zig), for the islands; errors JSON
+//! Each but check and device also as NAME.bin: bodies and 200s in ui.data
+//! (ui/accountsdata.zig; login, join, signup and password answer a Me), for the islands;
+//! errors JSON
 
 const std = @import("std");
 const Io = std.Io;
@@ -572,10 +573,7 @@ pub const Service = struct {
             in.bin = true;
         }
         const r = std.meta.stringToEnum(Route, in.path) orelse return not_found;
-        if (in.bin) switch (r) {
-            .me, .logout, .accounts, .invite, .role, .disable, .reset => {},
-            else => return not_found,
-        };
+        if (in.bin and r == .device) return not_found;
         if (post != (r != .me and r != .accounts and r != .devices)) return notAllowed();
         if (post and !in.action) return .{ .status = .forbidden, .body = errorJson("missing X-Meiolol-Action") };
         return switch (r) {
@@ -594,10 +592,10 @@ pub const Service = struct {
                 defer db.close();
                 const token = in.token orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
                 const a = try session(db, arena, token, now) orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
-                if (r == .devices) return .{ .status = .ok, .body = try devicesJson(db, arena, a.id, now) };
-                const b = parseBody(struct { id: i64 }, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with id") };
+                if (r == .devices) return answer(arena, in, ad.Devices{ .devices = try devices(db, arena, a.id, now) });
+                const b = parseBody(ad.Revoke, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with id") };
                 if (!try revokeDevice(db, a.id, b.id)) return .{ .status = .not_found, .body = errorJson("no such device") };
-                return .{ .status = .ok, .body = "{\"ok\":true}" };
+                return okOut(in);
             },
             .accounts, .invite, .role, .disable, .reset => {
                 const db = try open(s.db_path);
@@ -651,8 +649,7 @@ pub const Service = struct {
     }
 
     fn login(s: *Service, arena: Allocator, in: In, now: i64) !Out {
-        const Body = struct { username: []const u8, password: []const u8 };
-        const b = parseBody(Body, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username and password") };
+        const b = parseBody(ad.Login, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username and password") };
         const db = try open(s.db_path);
         defer db.close();
         const a = switch (try s.credentials(db, arena, b.username, b.password, now)) {
@@ -660,12 +657,9 @@ pub const Service = struct {
             .refused => |out| return out,
         };
         const t = try startSession(db, s.io, a.id, now);
-        return .{
-            .status = .ok,
-            .body = try accountJson(arena, .{ .id = a.id, .username = a.username, .role = a.role }),
-            .set_cookie = try sessionCookie(arena, &t),
-            .marker = if (a.role.can(.take_notes)) marker_on else null,
-        };
+        var out = try signedInOut(arena, in, .{ .id = a.id, .username = a.username, .role = a.role }, &t);
+        out.marker = if (a.role.can(.take_notes)) marker_on else null;
+        return out;
     }
 
     /// A login for the desktop app: its token instead of a cookie
@@ -704,8 +698,7 @@ pub const Service = struct {
     }
 
     fn join(s: *Service, arena: Allocator, in: In, now: i64) !Out {
-        const Body = struct { invite: []const u8, username: []const u8 = "", password: []const u8 };
-        const b = parseBody(Body, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with invite, username and password") };
+        const b = parseBody(ad.Join, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with invite, username and password") };
         const bad_invite: Out = .{ .status = .bad_request, .body = errorJson("this invite link has been used or has expired") };
         const token = parseToken(b.invite) orelse return bad_invite;
         if (!passwordOk(b.password)) return .{ .status = .bad_request, .body = errorJson("password must be 8 to 256 characters") };
@@ -742,14 +735,13 @@ pub const Service = struct {
         try db.commit();
         const t = try startSession(db, s.io, id, now);
         const a = try session(db, arena, &t, now) orelse return error.Unexpected;
-        return .{ .status = .ok, .body = try accountJson(arena, a), .set_cookie = try sessionCookie(arena, &t) };
+        return signedInOut(arena, in, a, &t);
     }
 
     /// Wrong passwords count against the link (its first characters), as logins count
     /// against a username: guessing the shared password is slow, whoever holds the link
     fn signup(s: *Service, arena: Allocator, in: In, now: i64) !Out {
-        const Body = struct { link: []const u8, email: []const u8, password: []const u8 };
-        const b = parseBody(Body, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with link, email and password") };
+        const b = parseBody(ad.Signup, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with link, email and password") };
         const bad_link: Out = .{ .status = .bad_request, .body = errorJson("this sign-up link no longer works") };
         const token = parseToken(b.link) orelse return bad_link;
         var name_buf: [username_max]u8 = undefined;
@@ -776,14 +768,13 @@ pub const Service = struct {
         const h = tokenHash(token);
         try db.run("UPDATE signup_links SET uses = uses + 1 WHERE hash = ?", .{Blob{ .bytes = &h }});
         const t = try startSession(db, s.io, id, now);
-        return .{ .status = .ok, .body = try accountJson(arena, .{ .id = id, .username = name, .role = link.role }), .set_cookie = try sessionCookie(arena, &t) };
+        return signedInOut(arena, in, .{ .id = id, .username = name, .role = link.role }, &t);
     }
 
     /// The old password again, counted as a login try: a borrowed session can't take
     /// the account over
     fn password(s: *Service, arena: Allocator, in: In, now: i64) !Out {
-        const Body = struct { password: []const u8, new: []const u8 };
-        const b = parseBody(Body, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with password and new") };
+        const b = parseBody(ad.Password, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with password and new") };
         const token = in.token orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
         if (!passwordOk(b.new)) return .{ .status = .bad_request, .body = errorJson("password must be 8 to 256 characters") };
         const db = try open(s.db_path);
@@ -800,7 +791,7 @@ pub const Service = struct {
         var phc_buf: [128]u8 = undefined;
         try setPassword(db, a.id, try s.hasher.hash(s.gpa, s.io, b.new, &phc_buf));
         const t = try startSession(db, s.io, a.id, now);
-        return .{ .status = .ok, .body = try accountJson(arena, a), .set_cookie = try sessionCookie(arena, &t) };
+        return signedInOut(arena, in, a, &t);
     }
 
     fn newInvite(s: *Service, db: Db, arena: Allocator, in: In, actor: Account, now: i64) !Out {
@@ -864,9 +855,8 @@ fn tooMany(arena: Allocator, wait: i64) !Out {
 }
 
 /// Live ones, oldest first
-fn devicesJson(db: Db, arena: Allocator, account: i64, now: i64) ![]const u8 {
-    const Row = struct { id: i64, name: []const u8, created: i64, last_used: i64 };
-    var rows: std.ArrayList(Row) = .empty;
+fn devices(db: Db, arena: Allocator, account: i64, now: i64) ![]const ad.Device {
+    var rows: std.ArrayList(ad.Device) = .empty;
     var q = try db.prepare("SELECT id, name, created, expires FROM devices WHERE account = ? AND expires > ? ORDER BY id");
     defer q.deinit();
     try q.bind(.{ account, now });
@@ -874,7 +864,7 @@ fn devicesJson(db: Db, arena: Allocator, account: i64, now: i64) ![]const u8 {
         const r = q.row(struct { id: i64, name: []const u8, created: i64, expires: i64 });
         try rows.append(arena, .{ .id = r.id, .name = try arena.dupe(u8, r.name), .created = r.created, .last_used = r.expires - device_s });
     }
-    return std.json.Stringify.valueAlloc(arena, .{ .devices = rows.items }, .{});
+    return rows.items;
 }
 
 fn notAllowed() Out {
@@ -911,8 +901,11 @@ fn meOf(arena: Allocator, a: Account) !ad.Me {
     return .{ .username = a.username, .role = @tagName(a.role), .can = can.items };
 }
 
-fn accountJson(arena: Allocator, a: Account) ![]const u8 {
-    return std.json.Stringify.valueAlloc(arena, try meOf(arena, a), .{});
+/// A sign-in's 200: who, and the new session's cookie
+fn signedInOut(arena: Allocator, in: In, a: Account, token: []const u8) !Out {
+    var out = try answer(arena, in, try meOf(arena, a));
+    out.set_cookie = try sessionCookie(arena, token);
+    return out;
 }
 
 fn sessionCookie(arena: Allocator, token: []const u8) ![]const u8 {
@@ -1490,9 +1483,25 @@ test "NAME.bin: the same answers in ui.data, a ui.data body in; errors stay JSON
     try testing.expect(!bad.bin and std.mem.startsWith(u8, bad.body, "{\"error\""));
     // A JSON body to a .bin path is no body at all
     try testing.expectEqual(Status.bad_request, (try f.service.route(a, .{ .method = .POST, .path = "reset.bin", .token = admin, .action = true, .body = "{\"username\":\"private\"}" }, Fixture.now)).status);
-    for ([_][]const u8{ "devices.bin", "check.bin", "me.bin.bin" }) |p| {
+    for ([_][]const u8{ "device.bin", "check.bin", "me.bin.bin" }) |p| {
         try testing.expectEqual(Status.not_found, (try f.service.route(a, .{ .method = .GET, .path = p, .token = admin }, Fixture.now)).status);
     }
+
+    // The account pages' island ("private" is disabled above): a login answers a Me
+    // with the cookie; devices, revoke
+    const in = try post(&f, a, "", "login.bin", ad.Login{ .username = "admin", .password = "password-admin" });
+    try testing.expect(in.bin and in.set_cookie != null);
+    try testing.expectEqualStrings("admin", (try ui.data.decode(a, ad.Me, in.body)).username);
+    const wrong = try post(&f, a, "", "login.bin", ad.Login{ .username = "admin", .password = "guess" });
+    try testing.expectEqual(Status.unauthorized, wrong.status);
+    try testing.expectEqualStrings("{\"error\":\"wrong username or password\"}", wrong.body);
+    _ = try f.pair(.admin);
+    const cookie = try f.signIn(.admin);
+    const ds = try ui.data.decode(a, ad.Devices, (try f.service.route(a, .{ .method = .GET, .path = "devices.bin", .token = cookie }, Fixture.now)).body);
+    try testing.expectEqual(@as(usize, 1), ds.devices.len);
+    try testing.expectEqual(Status.ok, (try post(&f, a, cookie, "revoke.bin", ad.Revoke{ .id = ds.devices[0].id })).status);
+    const changed = try post(&f, a, cookie, "password.bin", ad.Password{ .password = "password-admin", .new = "brand new one" });
+    try testing.expect(changed.bin and changed.set_cookie != null);
 }
 
 test "password: the old one first, then every other session ends" {
