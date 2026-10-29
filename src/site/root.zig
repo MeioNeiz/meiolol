@@ -348,7 +348,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm };
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm, assets.home_js, assets.home_wasm, assets.homegame_js, assets.homegame_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -358,7 +358,6 @@ pub const shared_assets = [_]File{
     .{ .path = "reasons.js", .data = @embedFile("static/reasons.js") },
     .{ .path = "your.js", .data = @embedFile("static/your.js") },
     .{ .path = "review.js", .data = @embedFile("static/review.js") },
-    .{ .path = "home.js", .data = @embedFile("static/home.js") },
     .{ .path = "inter.woff2", .data = @embedFile("static/inter.woff2") },
     .{ .path = "table.js", .data = @embedFile("static/table.js") },
     .{ .path = "search.js", .data = @embedFile("static/search.js") },
@@ -390,6 +389,10 @@ pub const shared_assets = [_]File{
     .{ .path = "ui-learn.js", .data = @embedFile("ui-learn.js") },
     .{ .path = "ui-patch.wasm", .data = @embedFile("ui-patch.wasm") },
     .{ .path = "ui-patch.js", .data = @embedFile("ui-patch.js") },
+    .{ .path = "ui-home.wasm", .data = @embedFile("ui-home.wasm") },
+    .{ .path = "ui-home.js", .data = @embedFile("ui-home.js") },
+    .{ .path = "ui-homegame.wasm", .data = @embedFile("ui-homegame.wasm") },
+    .{ .path = "ui-homegame.js", .data = @embedFile("ui-homegame.js") },
 };
 /// And in every view's directory
 pub const view_assets = [_]File{

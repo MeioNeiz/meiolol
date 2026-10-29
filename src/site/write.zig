@@ -3,12 +3,15 @@
 const std = @import("std");
 const store = @import("store");
 const html = @import("html.zig");
+const home_page = @import("home.zig");
 
 const Writer = std.Io.Writer;
 
 const log = std.log.scoped(.site);
 
 const root = @import("root.zig");
+const File = root.File;
+const assets = @import("assets.zig");
 const Options = root.Options;
 const isStatic = root.isStatic;
 const Site = root.Site;
@@ -34,12 +37,17 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     defer root_dir.close(io);
     const gz_window = try gpa.alloc(u8, store.raw.window_len);
     defer gpa.free(gz_window);
-    for (html.View.all) |v| {
+    // The shared view first: every view's home shows its example and Daily Draft
+    var home_files: []const File = &.{};
+    for ([_]html.View{html.View.shared} ++ html.View.all, 0..) |v, i| {
+        const shared = i == 0;
+        if (!shared and std.meta.eql(v, html.View.shared)) continue;
         if (opts.euw_only and v.region != .euw) continue;
         // Static.core: only the root's files, from the root view and the shared one
         if (opts.static == .core and v.index() != 0 and !std.meta.eql(v, html.View.shared)) continue;
         const site = try loadParts(gpa, io, db, opts, v, &extras, null);
         defer unload(site);
+        if (shared) home_files = try home_page.files(arena_state.allocator(), site.daily_files) else site.daily_files = home_files;
         try writeSite(site, root_dir, gz_window);
     }
 }
@@ -209,17 +217,16 @@ test "views: a tree each, switches between them, shared pages once" {
         "<a href=\"matchup/index.html\">Matchups</a>",
     }) |s| try std.testing.expect(std.mem.find(u8, tiers, s) != null);
     try std.testing.expect(std.mem.find(u8, shared_page, "class=\"subbar\"") == null);
-    // Home in a view: the lookup and the review demo, its scripts at the site root
+    // Home in a view: the lookup and its islands, their script at the site root
     const home = try read(arena, out, "all/index.html");
     for ([_][]const u8{
-        "<form class=\"search\" action=\"../your.html\"",
-        "<script src=\"../review.js\" defer></script>",
-        "<script src=\"../home.js\" data-root=\"../\" defer></script>",
-        "against ranked games in EUW on that game's patch",
+        "data-island=\"lookup\" data-to=\"../your.html\"",
+        "<form class=\"box\" method=\"get\" role=\"search\" action=\"../your.html\"",
+        "<script src=\"../" ++ assets.home_js.path ++ "\" data-wasm=\"",
     }) |s| try std.testing.expect(std.mem.find(u8, home, s) != null);
     try std.testing.expect(std.mem.find(u8, home, "class=\"subbar\"") == null);
     const your = try read(arena, out, "your.html");
     try std.testing.expect(std.mem.find(u8, your, "<script src=\"review.js\" defer></script>\n<script src=\"your.js\" defer></script>") != null);
-    for ([_][]const u8{ "review.js", "home.js", "inter.woff2", "print.css" }) |f| _ = try read(arena, out, f);
+    for ([_][]const u8{ "review.js", "inter.woff2", "print.css" }) |f| _ = try read(arena, out, f);
     for (root.hashed_assets) |h| try std.testing.expectEqualStrings(h.data, try read(arena, out, h.path));
 }

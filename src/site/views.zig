@@ -97,6 +97,10 @@ pub const Loaded = struct {
         if (try asset(arena, l.io, l.opts, rest)) |data| return data;
         var s = (try l.site(view)).*;
         s.arena = arena;
+        // Every view's home shows the shared view's example and Daily Draft, once loaded
+        if (std.mem.eql(u8, rest, "index.html") and !std.meta.eql(view, html.View.shared)) {
+            if (l.site(html.View.shared)) |sh| s.daily_files = sh.daily_files else |err| if (err != error.Loading) return err;
+        }
         var aw: Writer.Allocating = .init(arena);
         if (try renderPage(&s, &aw.writer, rest)) return aw.written();
         for (s.files) |f| if (std.mem.eql(u8, f.path, rest)) return f.data;

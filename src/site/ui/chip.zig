@@ -29,6 +29,8 @@ pub const Opts = struct {
     remove: bool = false,
     label: ?tree.Text = null,
     on: ?tree.Handler = null,
+    /// A link (recent Riot IDs): goes there, not pressed
+    href: ?[]const u8 = null,
 };
 
 pub fn view(h: *H, o: Opts, kids: anytype) N {
@@ -36,6 +38,7 @@ pub fn view(h: *H, o: Opts, kids: anytype) N {
     if (o.v == .scope or o.v == .reason or o.disabled) {
         return h.span(.{ .class = "c-chip", .data_v = if (o.disabled) null else o.v, .aria_disabled = if (o.disabled) true else null }, kids ++ .{x});
     }
+    if (o.href) |href| return h.a(.{ .class = "c-chip", .href = href, .aria_label = o.label }, kids ++ .{x});
     return h.button(.{
         .class = "c-chip",
         .type = "button",
@@ -53,6 +56,7 @@ pub const css =
     \\    background: var(--ctl-bg); color: var(--t2); font-size: var(--fs-s); font-weight: var(--w-m);
     \\    white-space: nowrap; cursor: pointer; position: relative; min-height: 0;
     \\    transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+    \\  .c-chip:is(a):hover { text-decoration: none; }
     \\  .c-chip:hover { color: var(--text); background: var(--ctl-bg-2); }
     \\  .c-chip[aria-pressed="true"] { color: var(--sel-ink); background: var(--sel-bg); border-color: var(--sel-line); }
     \\  .c-chip[aria-disabled="true"] { color: var(--faint); cursor: default; background: none; }
@@ -76,6 +80,7 @@ pub fn gallery(g: *Gallery) void {
     g.add("disabled", view(h, .{ .disabled = true }, .{"Herald"}));
     g.add("removable", view(h, .{ .remove = true, .label = plain("Remove Darius") }, .{"Darius"}));
     g.add("expand", view(h, .{ .v = .expand }, .{"+134 rare"}));
+    g.add("link", view(h, .{ .href = "#" }, .{"Faker#KR1"}));
     g.add("scope", view(h, .{ .v = .scope }, .{"Patch 16.21"}));
     g.add("reason", view(h, .{ .v = .reason }, .{ "strong bot ", h.b(.{ .class = "hi1" }, .{"+1.7"}) }));
     g.add("a filter row", h.div(.{ .class = "g-row" }, .{

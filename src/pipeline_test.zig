@@ -311,13 +311,14 @@ test "fixture games to stats, curves and the website" {
         .{ "patch/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "<div class=\"c-patch\" data-island=\"patch\" data-src=\"data/patch.bin\" data-stamp=\"", "href=\"../patch/champion/darius.html#role=top\"", "<span class=\"ar\" aria-hidden=\"true\">▲</span>Q</span>", "league-of-legends-patch-25-13-notes/", "<script src=\"../" ++ assets.patch_js.path ++ "\" data-wasm=\"" ++ assets.patch_wasm.path ++ "\" defer></script>" } },
         .{ "all/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "href=\"../all/patch/champion/darius.html#role=top\"", "title=\"This page counts every game we crawl (Plat+)\" data-rank=\"5\"" } },
         .{ "champions.html", &.{"Matchups</a>\n<a href=\"patch.html\">Patch changes</a>"} },
-        .{ "index.html", &.{"New patch: <a href=\"patch/patch.html\">what changed in 15.13 since 15.12</a>."} },
         // Champion page: the ui.champpage island from the root view, its data file for
         // the other roles; the head, the build, the matchups with the most met opponent's
         // brief linking to the matchup page from the champion's side
         .{ "champion/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"../data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"../data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"../data/champion/darius-more.bin\"", "data-js=\"../" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"../matchup/top/darius-vs-mordekaiser.html\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "<script src=\"../" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
         .{ "champions.html", &.{ "<div class=\"c-tiers\" data-island=\"tiers\" data-src=\"data/tiers.bin\" data-stamp=\"", "data-base=\"\" data-view=\"0\" data-path=\"champions.html\"", "<h1>Champions</h1>", "<linearGradient id=\"c-violin-g\"", "<symbol id=\"ri-top\"", "<a href=\"all/champions.html\">All</a>", "<table class=\"c-table\">", "<script src=\"" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
-        .{ "index.html", &.{"<a href=\"download.html\">Coming: a champ select helper for Windows</a>"} },
+        // Home: the lookup, each role's most played (the example's game: core_loaded); no
+        // clear patch move on a patch's first day, so no Patch card
+        .{ "index.html", &.{ "data-island=\"lookup\" data-to=\"your.html\"", "data-island=\"homechamps\" data-bin=\"", "<script src=\"" ++ assets.home_js.path ++ "\" data-wasm=\"" ++ assets.home_wasm.path ++ "\" defer></script>" } },
         // Daily Draft: a recent game, read in words (no draft win chance,
         // points or gold amounts); reasons from the list Learn uses; option cards and lane
         // rows that static/daily.js fills
@@ -690,6 +691,13 @@ test "fixture games to stats, curves and the website" {
     const game_page = (try core_loaded.get(arena, "game.html")).?;
     for ([_][]const u8{ "data-island=\"games\"", "data-src=\"data/your/mid.bin\"", "ui-games.", "noindex", "data-island=\"gamemore\"", "data-js=\"" ++ assets.gamemore_js.path ++ "\" data-wasm=\"" ++ assets.gamemore_wasm.path ++ "\"", "data-island=\"gamelane\"", "data-js=\"" ++ assets.gamelane_js.path ++ "\" data-wasm=\"" ++ assets.gamelane_wasm.path ++ "\"" }) |want| {
         try testing.expect(std.mem.find(u8, game_page, want) != null);
+    }
+    // Home in every view: the shared view's example, its game file loaded lazily
+    for ([_][]const u8{ "index.html", "all/index.html" }) |path| {
+        const home = (try core_loaded.get(arena, path)).?;
+        for ([_][]const u8{ "data-island=\"home\" data-src=\"", "data/your/mid.bin\"", "data-js=\"", assets.homegame_js.path ++ "\" data-wasm=\"" ++ assets.homegame_wasm.path ++ "\"" }) |want| {
+            try testing.expect(std.mem.find(u8, home, want) != null);
+        }
     }
     inline for (core.Role.all) |r| {
         const bin = (try core_loaded.get(arena, "data/your/" ++ comptime r.label() ++ ".bin")).?;
