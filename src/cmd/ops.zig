@@ -6,6 +6,7 @@ const core = @import("core");
 const api = @import("../api/root.zig");
 const admin = @import("../admin.zig");
 const site_tester = @import("../site/tester.zig");
+const site_notes = @import("../site/notes.zig");
 const status = @import("../status.zig");
 const main = @import("../main.zig");
 const Cmd = main.Cmd;
@@ -288,7 +289,8 @@ pub const usage_admin =
     \\              --log FILE       crawler log (default DIR/crawl.log)
     \\              --disk "S U A"   data disk size, used, available in bytes
     \\              --health TEXT    deploy/health.sh output
-    \\              --private-out DIR  also the private site's Draft tester (/p/)
+    \\              --private-out DIR  also the private site's Draft tester and the
+    \\                               notes tool's files (/p/)
     \\
 ;
 
@@ -319,11 +321,13 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
     const db = try store.open(c.init.gpa, c.data_dir);
     defer db.close();
     try admin.generate(c.init.gpa, c.init.io, db, o);
+    site_notes.writeAdmin(c.init.gpa, c.init.io, o.out_dir) catch |e| std.log.err("notes page: {t}", .{e});
     if (private_out) |p| {
         try admin.private(c.init.gpa, c.init.io, p, now);
         // web-loop.sh skips the admin and private uploads when this exits non-zero: the
         // new tester must not freeze the admin page
         site_tester.write(c.init.gpa, c.init.io, p, db) catch |e| std.log.err("tester page: {t}", .{e});
+        site_notes.writeFiles(c.init.gpa, c.init.io, p) catch |e| std.log.err("notes files: {t}", .{e});
     }
     return 0;
 }

@@ -49,8 +49,8 @@ pub const schema =
 pub const max_notes = 5000;
 /// Open notes one page's GET returns, newest first
 pub const max_page = 200;
-/// A New with every field at its cap fits
-pub const max_body = 8 * 1024;
+/// A New with every field at its cap fits (about 7.4 KB)
+pub const max_body = 12 * 1024;
 
 pub const Reply = struct { status: Status, body: []const u8, binary: bool = false };
 
@@ -308,4 +308,30 @@ test "notes: a damaged row is an error, never a bad value" {
     try fill(db, 1, "/a");
     try db.run("UPDATE notes SET theme = 7", .{});
     try std.testing.expectError(error.BadNote, handle(a, db, .GET, "path=/a", "", "", 0));
+}
+
+test "notes: a New with every field at its cap fits max_body" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    var steps: std.ArrayList(u8) = .empty;
+    for (0..nd.max_steps) |i| try steps.print(a, "{s}abcdefghijklmnop:999", .{if (i > 0) ">" else ""});
+    var path: std.ArrayList(u8) = .empty;
+    try path.append(a, '/');
+    try path.appendNTimes(a, 'a', nd.max_path - 1);
+    const n: nd.New = .{
+        .path = path.items,
+        .hash = try a.dupe(u8, &@as([nd.max_hash]u8, @splat('a'))),
+        .scope = .everywhere,
+        .target = .{
+            .kind = .component,
+            .name = "c-" ++ @as([nd.max_name - 2]u8, @splat('a')),
+            .nth = std.math.maxInt(u16),
+            .steps = steps.items,
+            .snippet = &@as([nd.max_snippet]u8, @splat('a')),
+        },
+        .text = &@as([nd.max_text]u8, @splat('a')),
+    };
+    try std.testing.expectEqual(null, nd.check(n));
+    try std.testing.expect((try encoded(a, nd.New, n)).len <= max_body);
 }

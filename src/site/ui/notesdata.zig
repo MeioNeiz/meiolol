@@ -76,7 +76,11 @@ pub const Change = struct {
     reply: ?[]const u8 = null,
 };
 
-pub const max_text = 2000;
+/// The textarea's maxlength, in UTF-16 units
+pub const max_chars = 2000;
+/// Bytes: a UTF-16 unit is at most 3 bytes of UTF-8 (a pair, 4), so whatever maxlength
+/// lets through fits
+pub const max_text = 3 * max_chars;
 pub const max_reply = 500;
 pub const max_path = 256;
 pub const max_hash = 512;
@@ -86,6 +90,10 @@ pub const max_steps = 16;
 /// A tag in a step ("svg", "foreignobject"), and a child index
 const max_tag = 16;
 const max_index = 999;
+
+/// The marker cookie: set at an admin's login (or the /admin/notes toggle), it has
+/// nginx add the tool's tag to pages (site/notes.zig)
+pub const marker = "__Host-meiolol_notes";
 
 /// Why `n` is refused; null when every field is in bounds
 pub fn check(n: New) ?[]const u8 {
@@ -148,6 +156,22 @@ pub fn snippet(out: []u8, raw: []const u8) []const u8 {
     }
     while (n > 0 and out[n - 1] == ' ') n -= 1;
     return out[0..n];
+}
+
+/// `s` cut to at most `max` bytes on a whole character
+pub fn cut(s: []const u8, max: usize) []const u8 {
+    if (s.len <= max) return s;
+    var n = max;
+    // Back over the cut character's continuation bytes, then its lead
+    while (n > 0 and s[n] & 0xC0 == 0x80) n -= 1;
+    return s[0..n];
+}
+
+test cut {
+    try std.testing.expectEqualStrings("abc", cut("abc", 5));
+    try std.testing.expectEqualStrings("ab", cut("abé", 3));
+    try std.testing.expectEqualStrings("abé", cut("abéx", 4));
+    try std.testing.expectEqualStrings("", cut("€", 2));
 }
 
 test snippet {

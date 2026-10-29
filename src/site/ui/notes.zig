@@ -116,10 +116,13 @@ pub const Tool = struct {
             pins.done(),
             if (t.open) |i| if (i < t.pins.len) card(t, h, t.pins[i]) else null else null,
             switch (t.mode) {
-                .idle => h.div(.{ .key = "bar", .class = "bar" }, .{button.view(h, .{ .v = .primary, .on = h.on(t, .note) }, .{
-                    "Note",
-                    if (t.pins.len > 0) h.span(.{ .class = "n" }, .{t.pins.len}) else null,
-                })}),
+                .idle => h.div(.{ .key = "bar", .class = "bar" }, .{
+                    button.view(h, .{ .s = .s, .v = .quiet, .href = "/admin/notes.html" }, .{"All notes"}),
+                    button.view(h, .{ .v = .primary, .on = h.on(t, .note) }, .{
+                        "Note",
+                        if (t.pins.len > 0) h.span(.{ .class = "n" }, .{t.pins.len}) else null,
+                    }),
+                }),
                 .picking => h.div(.{ .key = "bar", .class = "bar" }, .{
                     h.span(.{ .class = "hint" }, .{"Tap what to note"}),
                     button.view(h, .{ .s = .s, .on = h.on(t, .whole) }, .{"Whole page"}),
@@ -144,7 +147,7 @@ pub const Tool = struct {
                 .key = "text",
                 .data_ref = "text",
                 .rows = 4,
-                .maxlength = nd.max_text,
+                .maxlength = nd.max_chars,
                 .placeholder = "What to change",
                 .aria_label = "Note",
                 .disabled = saving,

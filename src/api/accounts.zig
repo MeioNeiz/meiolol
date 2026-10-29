@@ -38,6 +38,7 @@ const Io = std.Io;
 const store = @import("store");
 const core = @import("core");
 const roles = @import("roles.zig");
+const notes_marker = @import("ui").notesdata.marker;
 
 const Allocator = std.mem.Allocator;
 const Db = store.Db;
@@ -119,6 +120,10 @@ pub fn open(path: [:0]const u8) !Db {
 
 /// __Host-: the browser keeps it to this exact host, over HTTPS, for every path
 pub const cookie_name = "__Host-meiolol";
+/// The notes tool's marker, as long as a session: nginx adds the tool to pages for it.
+/// HttpOnly: only nginx reads it
+pub const marker_on = notes_marker ++ "=1; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax";
+pub const marker_off = notes_marker ++ "=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax";
 const session_s: i64 = 30 * 24 * 60 * 60;
 /// A session's expiry moves forward at most once a day, so a busy one writes little
 const renew_after_s: i64 = 24 * 60 * 60;
@@ -496,6 +501,8 @@ pub const Out = struct {
     status: Status,
     body: []const u8 = "",
     set_cookie: ?[]const u8 = null,
+    /// The notes marker's Set-Cookie (marker_on or marker_off)
+    marker: ?[]const u8 = null,
     user: ?[]const u8 = null,
     role: ?Role = null,
 };
@@ -636,7 +643,12 @@ pub const Service = struct {
             .refused => |out| return out,
         };
         const t = try startSession(db, s.io, a.id, now);
-        return .{ .status = .ok, .body = try accountJson(arena, .{ .id = a.id, .username = a.username, .role = a.role }), .set_cookie = try sessionCookie(arena, &t) };
+        return .{
+            .status = .ok,
+            .body = try accountJson(arena, .{ .id = a.id, .username = a.username, .role = a.role }),
+            .set_cookie = try sessionCookie(arena, &t),
+            .marker = if (a.role.can(.take_notes)) marker_on else null,
+        };
     }
 
     /// A login for the desktop app: its token instead of a cookie
@@ -658,7 +670,7 @@ pub const Service = struct {
     }
 
     fn logout(s: *Service, arena: Allocator, in: In, now: i64) !Out {
-        const out: Out = .{ .status = .ok, .body = "{\"ok\":true}", .set_cookie = cookie_name ++ "=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax" };
+        const out: Out = .{ .status = .ok, .body = "{\"ok\":true}", .set_cookie = cookie_name ++ "=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax", .marker = marker_off };
         if (in.bearer) |t| {
             const db = try open(s.db_path);
             defer db.close();
@@ -875,7 +887,7 @@ fn sessionCookie(arena: Allocator, token: []const u8) ![]const u8 {
 }
 
 fn respond(request: *Request, out: Out, keep_alive: bool) !void {
-    var headers: [5]std.http.Header = undefined;
+    var headers: [6]std.http.Header = undefined;
     var n: usize = 0;
     headers[n] = .{ .name = "cache-control", .value = "no-store" };
     n += 1;
@@ -884,6 +896,10 @@ fn respond(request: *Request, out: Out, keep_alive: bool) !void {
         n += 1;
     }
     if (out.set_cookie) |c| {
+        headers[n] = .{ .name = "set-cookie", .value = c };
+        n += 1;
+    }
+    if (out.marker) |c| {
         headers[n] = .{ .name = "set-cookie", .value = c };
         n += 1;
     }
@@ -1454,4 +1470,16 @@ test "fuzz: a damaged login body is a 400 or 401, never a crash" {
     try f.init();
     defer f.deinit();
     try testing.fuzz(&f, fuzzLogin, .{});
+}
+
+test "an admin's login sets the notes marker, a lower role's doesn't; logout clears it" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const a = f.arena();
+    const admin = try f.login("admin", "password-admin");
+    try testing.expectEqualStrings(marker_on, admin.marker.?);
+    try testing.expectEqual(null, (try f.login("private", "password-private")).marker);
+    const out = try f.service.route(a, .{ .method = .POST, .path = "logout", .action = true, .token = cookieValue(admin.set_cookie.?).? }, Fixture.now);
+    try testing.expectEqualStrings(marker_off, out.marker.?);
 }

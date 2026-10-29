@@ -340,3 +340,48 @@ test "a focused node removed: its id may go to a text node, which focus would th
     try testing.expect(state.done);
     if (p.fake.nodes.get(p.fake.focused)) |n| try testing.expect(!std.mem.eql(u8, n.tag, "#text"));
 }
+
+test "notes: the form's textarea stays the same node through pins, the outline and errors" {
+    const notes = @import("notes.zig");
+    var p: Page = undefined;
+    p.init("");
+    defer p.arena.deinit();
+    var state: notes.Tool = .{};
+    var server: notes.Tool = .{};
+    const i = p.add(notes.Tool, &state, &server);
+    state.mode = .form;
+    state.what = "c-tierrow > span";
+    state.component = true;
+    i.render();
+    const text = Page.id(i, "data-ref", "text");
+    const node = p.fake.nodes.get(text).?;
+    const pin: notes.Pin = .{ .note = .{
+        .id = 7,
+        .created = 0,
+        .updated = 0,
+        .author = "jacob",
+        .path = "/",
+        .hash = "",
+        .scope = .page,
+        .target = .{ .kind = .page },
+        .vw = 390,
+        .vh = 844,
+        .theme = .dark,
+        .text = "x",
+        .status = .open,
+        .reply = "",
+    }, .x = 10, .y = 10 };
+    const pins = [_]notes.Pin{pin};
+    state.pins = &pins;
+    state.hl = .{ .x = 1, .y = 2, .w = 3, .h = 4 };
+    i.render();
+    state.failed = true;
+    state.empty = true;
+    i.render();
+    state.mode = .saving;
+    state.hl = null;
+    i.render();
+    try testing.expectEqual(text, Page.id(i, "data-ref", "text"));
+    try testing.expectEqual(node, p.fake.nodes.get(text).?);
+    try p.matches(i);
+}
