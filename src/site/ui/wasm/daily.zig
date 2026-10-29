@@ -1,6 +1,8 @@
 //! ui-daily.wasm: the Daily Draft page (ui.dailypage.Page) from its data-bin, answers from
-//! and to localStorage (meiolol.daily.v1, Home and the days strip read it too). zjb's
-//! generated loader (ui-daily.js, `<script src data-wasm>`) calls `main`
+//! and to localStorage (meiolol.daily.v1, Home and the days strip read it too). Once
+//! answered it loads ui-dailyseat.wasm (the seat review) and tells it of each seat picked
+//! on the board. zjb's generated loader (ui-daily.js, `<script src data-wasm>`) calls
+//! `main`
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -27,12 +29,36 @@ export fn main() void {
     server = .init(gpa, &data);
     state = .init(gpa, &data);
     const i = dom.rt.add(dp.Page, &state, &server, dp.sel) catch return dom.dom.warn("daily: out of memory");
-    dom.rt.changed = save;
+    dom.rt.changed = changed;
     // Last: blocked storage throws, ending this call with the page already live
     if (dom.stored(key)) |s| {
         state.restore(s);
         i.render();
+        seat();
     }
+}
+
+fn changed() void {
+    // First: save's storage may throw
+    seat();
+    save();
+}
+
+var told: ?u8 = null;
+var loaded = false;
+
+/// Once answered, the seat review's island: loaded, then told of each new seat (it reads
+/// the root's data-seat)
+fn seat() void {
+    if (state.phase() != .done or told == state.seat) return;
+    if (!loaded) {
+        loaded = true;
+        dom.script(ui.dailyseat.sel);
+    }
+    told = state.seat;
+    const e = zjb.global("Event").new(.{zjb.constString("ui-daily-seat")});
+    defer e.release();
+    zjb.global("window").call("dispatchEvent", .{e}, void);
 }
 
 fn save() void {

@@ -186,11 +186,14 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   data, site/dailydata.zig), up to tomorrow (UTC): today+2's answer stays on the box
   (`daily.published_ahead`). /daily (site/daily.zig, per request) is the island
   (ui.dailypage, ui-daily.wasm) with the newest puzzle up to today (UTC) in its data-bin:
-  pick, Lock in, who won, then the board grown, the seat panel and On paper. Answers in
-  localStorage meiolol.daily.v1 (object by n, {opt, side, hint, marks, on}; Home reads
-  marks). The Range hint (melee or ranged, from Options.ddragon_dir's championFull.json
-  attackrange; hidden where unknown or form-changing) costs the clean tick ("Pick, with
-  a hint").
+  pick, Lock in, who won, then the board grown. The selected seat's panel and On paper
+  are their own island (ui.dailyseat, ui-dailyseat.wasm) beside it, loaded by
+  ui-daily.wasm once answered; it reads the answers and the board's seat off the page
+  island's root (data-phase, data-seat, data-guess) on its "ui-daily-seat" event, so
+  it works without storage. Answers in localStorage meiolol.daily.v1 (object by n,
+  {opt, side, hint, marks, on}; Home reads marks). The Range hint (melee or ranged,
+  from Options.ddragon_dir's championFull.json attackrange; hidden where unknown or
+  form-changing) costs the clean tick ("Pick, with a hint").
 - /daily/<n>: puzzle n's own page, the same island; none past tomorrow (UTC), so a
   viewer a day ahead of UTC can play theirs and later ones 404. Rendered on request under
   --static core (the renderer, from the shared view's daily files), written by --static

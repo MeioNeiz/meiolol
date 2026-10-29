@@ -1,6 +1,7 @@
 //! Daily Draft's page on the fake DOM: the server's render, keys and clicks through the
-//! three phases with focus moved to each new panel, a seat and a row after the reveal,
-//! answers restored; each patch equal to a fresh render. Then the branches by hand
+//! three phases with focus moved to each new panel, a seat after the reveal, answers
+//! restored; each patch equal to a fresh render. Then the branches by hand, the seat
+//! review (ui.dailyseat) with them
 const std = @import("std");
 const tree = @import("tree.zig");
 const diff = @import("diff.zig");
@@ -9,87 +10,96 @@ const check = @import("check.zig");
 const island = @import("island.zig");
 const dp = @import("dailypage.zig");
 const dd = @import("dailydata.zig");
+const dailyseat = @import("dailyseat.zig");
 const Fake = @import("fakedom.zig").Fake;
 const testing = std.testing;
 
-const Page = struct {
-    arena: std.heap.ArenaAllocator,
-    fake: Fake = undefined,
-    rt: island.Runtime(Fake) = undefined,
-    state: dp.Page = undefined,
-    server: dp.Page = undefined,
-    i: *island.Island(dp.Page, Fake) = undefined,
+const Page = On(dp.Page, dp.sel, "daily");
+const SeatIsland = On(dailyseat.Seat, dailyseat.sel, "dailyseat");
 
-    fn init(p: *Page, puzzle: *const dd.Puzzle) !void {
-        p.* = .{ .arena = .init(testing.allocator) };
-        const a = p.arena.allocator();
-        p.fake = .{ .a = a };
-        p.rt = .init(a, &p.fake);
-        p.server = .init(a, puzzle);
-        p.state = p.server;
-        const t = try a.create(tree.Tree);
-        t.* = .{};
-        var h: tree.H = .init(a, t);
-        t.root = p.server.view(&h);
-        p.fake.server = t;
-        p.i = try p.rt.add(dp.Page, &p.state, &p.server, dp.sel);
-    }
+/// Component C's island under `sel` on the fake DOM
+fn On(comptime C: type, comptime sel: []const u8, comptime island_name: []const u8) type {
+    return struct {
+        arena: std.heap.ArenaAllocator,
+        fake: Fake = undefined,
+        rt: island.Runtime(Fake) = undefined,
+        state: C = undefined,
+        server: C = undefined,
+        i: *island.Island(C, Fake) = undefined,
 
-    /// The page as a reader sees it, checked equal to a fresh render
-    fn shown(p: *Page) ![]const u8 {
-        const a = p.arena.allocator();
-        var got: std.Io.Writer.Allocating = .init(a);
-        try p.fake.html(p.fake.roots.items[0], &got.writer);
-        var fresh: Fake = .{ .a = a };
-        var t = p.i.current().*;
-        t.nodes = try t.nodes.clone(a);
-        var ids: diff.Ids = .{};
-        number(&t, t.root, &ids);
-        var want: std.Io.Writer.Allocating = .init(a);
-        try fresh.html(fresh.mirror(&t, t.root), &want.writer);
-        try testing.expectEqualStrings(want.written(), got.written());
-        return got.written();
-    }
+        const Self = @This();
 
-    fn number(t: *tree.Tree, n: tree.N, ids: *diff.Ids) void {
-        t.node(n).dom = ids.take();
-        for (t.kidsOf(n)) |k| number(t, k, ids);
-    }
+        fn init(p: *Self, puzzle: *const dd.Puzzle) !void {
+            p.* = .{ .arena = .init(testing.allocator) };
+            const a = p.arena.allocator();
+            p.fake = .{ .a = a };
+            p.rt = .init(a, &p.fake);
+            p.server = .init(a, puzzle);
+            p.state = p.server;
+            const t = try a.create(tree.Tree);
+            t.* = .{};
+            var h: tree.H = .init(a, t);
+            t.root = p.server.view(&h);
+            p.fake.server = t;
+            p.i = try p.rt.add(C, &p.state, &p.server, sel);
+        }
 
-    fn id(p: *Page, name: []const u8, value: ?[]const u8) u32 {
-        const t = p.i.current();
-        return t.node(t.find(t.root, name, value).?).dom;
-    }
+        /// The page as a reader sees it, checked equal to a fresh render
+        fn shown(p: *Self) ![]const u8 {
+            const a = p.arena.allocator();
+            var got: std.Io.Writer.Allocating = .init(a);
+            try p.fake.html(p.fake.roots.items[0], &got.writer);
+            var fresh: Fake = .{ .a = a };
+            var t = p.i.current().*;
+            t.nodes = try t.nodes.clone(a);
+            var ids: diff.Ids = .{};
+            number(&t, t.root, &ids);
+            var want: std.Io.Writer.Allocating = .init(a);
+            try fresh.html(fresh.mirror(&t, t.root), &want.writer);
+            try testing.expectEqualStrings(want.written(), got.written());
+            return got.written();
+        }
 
-    /// The node whose `name` attribute starts with `prefix`
-    fn idStarting(p: *Page, name: []const u8, prefix: []const u8) u32 {
-        const t = p.i.current();
-        return t.node(starting(t, t.root, name, prefix).?).dom;
-    }
+        fn number(t: *tree.Tree, n: tree.N, ids: *diff.Ids) void {
+            t.node(n).dom = ids.take();
+            for (t.kidsOf(n)) |k| number(t, k, ids);
+        }
 
-    fn starting(t: *const tree.Tree, n: tree.N, name: []const u8, prefix: []const u8) ?tree.N {
-        if (t.attr(n, name)) |v| if (std.mem.startsWith(u8, v, prefix)) return n;
-        for (t.kidsOf(n)) |k| if (starting(t, k, name, prefix)) |f| return f;
-        return null;
-    }
+        fn id(p: *Self, name: []const u8, value: ?[]const u8) u32 {
+            const t = p.i.current();
+            return t.node(t.find(t.root, name, value).?).dom;
+        }
 
-    fn click(p: *Page, target: u32) void {
-        _ = p.rt.event(0, .{ .kind = .click, .target = target });
-    }
+        /// The node whose `name` attribute starts with `prefix`
+        fn idStarting(p: *Self, name: []const u8, prefix: []const u8) u32 {
+            const t = p.i.current();
+            return t.node(starting(t, t.root, name, prefix).?).dom;
+        }
 
-    /// A key on the island, as if pressed with focus on `target`
-    fn key(p: *Page, target: u32, k: []const u8) bool {
-        return p.rt.event(0, .{ .kind = .keydown, .target = target, .text = k });
-    }
+        fn starting(t: *const tree.Tree, n: tree.N, name: []const u8, prefix: []const u8) ?tree.N {
+            if (t.attr(n, name)) |v| if (std.mem.startsWith(u8, v, prefix)) return n;
+            for (t.kidsOf(n)) |k| if (starting(t, k, name, prefix)) |f| return f;
+            return null;
+        }
 
-    fn root(p: *Page) u32 {
-        return p.id("data-island", "daily");
-    }
+        fn click(p: *Self, target: u32) void {
+            _ = p.rt.event(0, .{ .kind = .click, .target = target });
+        }
 
-    fn deinit(p: *Page) void {
-        p.arena.deinit();
-    }
-};
+        /// A key on the island, as if pressed with focus on `target`
+        fn key(p: *Self, target: u32, k: []const u8) bool {
+            return p.rt.event(0, .{ .kind = .keydown, .target = target, .text = k });
+        }
+
+        fn root(p: *Self) u32 {
+            return p.id("data-island", island_name);
+        }
+
+        fn deinit(p: *Self) void {
+            p.arena.deinit();
+        }
+    };
+}
 
 test "the server renders the pick panel, clean" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
@@ -147,17 +157,13 @@ test "keys and clicks through pick, who won and the reveal; focus follows the pa
     const done = try p.shown();
     try testing.expect(std.mem.find(u8, done, "Blue won") != null);
 
-    // Another seat, then the played pick's reasons open from the hidden seat's list
+    // The answers and seat for ui-dailyseat.wasm on the root; another seat moves it
+    for ([_][]const u8{ "data-phase=\"done\"", "data-seat=\"5\"", "data-guess=\"3\"" }) |want| try testing.expect(std.mem.find(u8, done, want) != null);
     p.click(p.idStarting("aria-label", "Blue Top, K'Sante"));
     try testing.expectEqual(@as(u8, 0), p.state.seat);
-    _ = try p.shown();
+    try testing.expect(std.mem.find(u8, try p.shown(), "data-seat=\"0\"") != null);
     p.click(p.idStarting("aria-label", "Red Top, Jayce"));
     try testing.expectEqual(@as(u8, 5), p.state.seat);
-    p.click(p.id("aria-label", "Why Jayce"));
-    try testing.expectEqual([2]?u16{ 5, null }, p.state.open);
-    try testing.expect(std.mem.find(u8, try p.shown(), "aria-expanded=\"true\"") != null);
-    p.click(p.id("aria-label", "Why Jayce"));
-    try testing.expectEqual([2]?u16{ null, null }, p.state.open);
     _ = try p.shown();
 }
 
@@ -176,9 +182,30 @@ test "answers restored after the server's render patch to the same page" {
     }
 }
 
-test "cand: two rows open at most, a third drops the oldest; seat closes them" {
-    var s: dp.Page = .init(testing.allocator, &dd.sample);
-    s.marks = .{ true, true };
+test "the seat review: empty from the server, then the seat read off the page; rows open" {
+    var p: SeatIsland = undefined;
+    try p.init(&dp.pro);
+    defer p.deinit();
+    try testing.expectEqualStrings("<div class=\"c-dseat\" data-island=\"dailyseat\"></div>", try p.shown());
+    p.state.read("done", "5", "1");
+    p.i.render();
+    const out = try p.shown();
+    try testing.expect(std.mem.find(u8, out, "On paper") != null);
+    try testing.expect(std.mem.find(u8, out, "Red Top") != null);
+    p.click(p.id("aria-label", "Why Jayce"));
+    try testing.expectEqual([2]?u16{ 5, null }, p.state.open);
+    try testing.expect(std.mem.find(u8, try p.shown(), "aria-expanded=\"true\"") != null);
+    p.state.read("done", "0", "1");
+    p.i.render();
+    try testing.expectEqual([2]?u16{ null, null }, p.state.open);
+    try testing.expect(std.mem.find(u8, try p.shown(), "Blue Top") != null);
+}
+
+test "cand: two rows open at most, a third drops the oldest; a new seat closes them" {
+    var s: dailyseat.Seat = .init(testing.allocator, &dd.sample);
+    s.read("done", "5", "1");
+    try testing.expect(s.done);
+    try testing.expectEqual(@as(?u8, 1), s.guess);
     var ev: tree.Event = .{ .kind = .click };
     s.update(.{ .cand = 1 }, &ev);
     s.update(.{ .cand = 2 }, &ev);
@@ -187,14 +214,29 @@ test "cand: two rows open at most, a third drops the oldest; seat closes them" {
     try testing.expectEqual([2]?u16{ 3, 2 }, s.open);
     s.update(.{ .cand = 3 }, &ev);
     try testing.expectEqual([2]?u16{ 2, null }, s.open);
-    s.update(.{ .seat = 10 }, &ev);
-    try testing.expectEqual(@as(u8, 5), s.seat);
-    s.update(.{ .seat = 2 }, &ev);
+    s.read("done", "5", "1");
+    try testing.expectEqual([2]?u16{ 2, null }, s.open);
+    s.read("done", "2", "1");
+    try testing.expectEqual(@as(u8, 2), s.seat);
     try testing.expectEqual([2]?u16{ null, null }, s.open);
-    // Seats only after the reveal
+    // Before the reveal, or attributes it never writes: nothing, the hidden seat
+    s.read("winner", "", "");
+    try testing.expect(!s.done);
+    try testing.expectEqual(@as(?u8, null), s.guess);
+    try testing.expectEqual(@as(u8, 5), s.seat);
+    s.read("done", "12", "9");
+    try testing.expectEqual(@as(u8, 5), s.seat);
+    try testing.expectEqual(@as(?u8, null), s.guess);
+
+    // Page seats only after the reveal, and only the ten
     var t: dp.Page = .init(testing.allocator, &dd.sample);
     t.update(.{ .seat = 2 }, &ev);
     try testing.expectEqual(@as(u8, 5), t.seat);
+    t.marks = .{ true, true };
+    t.update(.{ .seat = 10 }, &ev);
+    try testing.expectEqual(@as(u8, 5), t.seat);
+    t.update(.{ .seat = 2 }, &ev);
+    try testing.expectEqual(@as(u8, 2), t.seat);
 }
 
 test "the hint: only while picking, saved, and it costs the clean tick" {
@@ -361,10 +403,11 @@ fn answered(a: std.mem.Allocator, p: *const dd.Puzzle, opt: u8, w: dd.Side) dp.P
     return s;
 }
 
+/// The page and its seat review, as daily.zig lays them out
 fn render(a: std.mem.Allocator, s: *dp.Page) ![]const u8 {
     var t: tree.Tree = .{};
     var h: tree.H = .init(a, &t);
-    t.root = s.view(&h);
+    t.root = dp.both(&h, s, .{ null, null });
     try testing.expect(!h.oom);
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, t.root, &w.writer);

@@ -1,8 +1,9 @@
 //! Daily Draft's page (docs/plan/ui/daily.md, mock round 4): the board with the last pick
 //! hidden and the pick panel (six ChoiceCards, Lock in), then "Who won?", then the reveal:
-//! the result line, the board grown, the selected seat's CandidateList (rows open their
-//! ReasonBreakdown, two at most) and On paper. One island (ui-daily.wasm); answers in
-//! localStorage "meiolol.daily.v1" through the page's code (`saved`, `restore`)
+//! the result line and the board grown, its seats selectable. ui-daily.wasm; answers in
+//! localStorage "meiolol.daily.v1" through the page's code (`saved`, `restore`). The
+//! selected seat's review and On paper are ui.dailyseat, an island of their own beside
+//! this one (`layout`)
 const std = @import("std");
 const tree = @import("tree.zig");
 const dd = @import("dailydata.zig");
@@ -14,9 +15,8 @@ const card = @import("card.zig");
 const choice = @import("choice.zig");
 const draftboard = @import("draftboard.zig");
 const draftflow = @import("draftflow.zig");
-const candlist = @import("candlist.zig");
-const reasons = @import("reasons.zig");
-const split = @import("split.zig");
+const puzzle = @import("puzzle.zig");
+const dailyseat = @import("dailyseat.zig");
 const phrase = @import("phrase.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
@@ -24,7 +24,7 @@ const H = tree.H;
 const N = tree.N;
 
 pub const name = "DailyPage";
-pub const scope = .{".c-daily"};
+pub const scope = .{ ".c-dailyw", ".c-daily" };
 pub const sel = "[data-island=daily]";
 
 pub const Phase = enum { pick, winner, done };
@@ -41,14 +41,12 @@ pub const Page = struct {
     hint: bool = false,
     /// The selected seat after the reveal: side * 5 + role
     seat: u8,
-    /// Candidate rows open in the seat panel (champion indexes)
-    open: [2]?u16 = .{ null, null },
     /// Set when the answers changed: the page's code saves them
     dirty: bool = false,
     /// The server's render: the puzzle as ui.data, base64, for the island
     bin: []const u8 = "",
 
-    pub const Msg = union(enum) { choose: u8, lock, winner: dd.Side, seat: u8, cand: u16, hint, key };
+    pub const Msg = union(enum) { choose: u8, lock, winner: dd.Side, seat: u8, hint, key };
 
     pub fn init(_: std.mem.Allocator, p: *const dd.Puzzle) Page {
         return .{ .p = p, .seat = hiddenSeat(p) };
@@ -88,19 +86,8 @@ pub const Page = struct {
             },
             .lock => s.lock(),
             .winner => |w| s.answer(w),
-            .seat => |x| if (s.phase() == .done and x < 10 and x != s.seat) {
+            .seat => |x| if (s.phase() == .done and x < 10) {
                 s.seat = x;
-                s.open = .{ null, null };
-            },
-            .cand => |c| {
-                if (s.open[0] == c) {
-                    s.open = .{ s.open[1], null };
-                } else if (s.open[1] == c) {
-                    s.open[1] = null;
-                } else {
-                    const keep = s.open[0];
-                    s.open = .{ c, keep };
-                }
             },
             .hint => if (s.phase() == .pick and !s.hint) {
                 s.hint = true;
@@ -158,19 +145,17 @@ pub const Page = struct {
             .data_island = "daily",
             .data_bin = if (s.bin.len > 0) s.bin else null,
             .data_phase = ph,
+            // ui-dailyseat.wasm's (dailyseat.Seat.read)
+            .data_seat = if (ph == .done) s.seat else null,
+            .data_guess = if (ph == .done) s.guess else null,
             .on_keydown = h.on(s, .key),
         }, .{
-            h.div(.{ .class = "cols" }, .{
-                h.div(.{ .class = "left" }, .{
-                    card.view(h, .{ .label = W.draft }, &.{ if (ph == .done) s.result(h) else .none, s.board(h) }),
-                    if (ph == .done) s.paper(h) else .none,
-                }),
-                switch (ph) {
-                    .pick => s.pickPanel(h),
-                    .winner => s.winnerPanel(h),
-                    .done => s.seatPanel(h),
-                },
-            }),
+            h.div(.{ .key = 1, .class = "left" }, .{card.view(h, .{ .label = W.draft }, &.{ if (ph == .done) s.result(h) else .none, s.board(h) })}),
+            switch (ph) {
+                .pick => s.pickPanel(h),
+                .winner => s.winnerPanel(h),
+                .done => null,
+            },
         });
     }
 
@@ -285,6 +270,8 @@ pub const Page = struct {
         return out;
     }
 
+    /// The question as a PuzzleCard (Learn's); its setup is the board beside it, so no
+    /// stage band
     fn pickPanel(s: *Page, h: *H) N {
         const p = s.p;
         const cs = h.mem.alloc(choice.Choice, p.options.len) catch {
@@ -297,18 +284,20 @@ pub const Page = struct {
             .on = h.on(s, .{ .choose = @as(u8, @intCast(i)) }),
         };
         const ask = W.ask.with(h, .{ .side = sideWord(p.hidden_side).s });
-        return card.view(h, .{ .label = ask }, &.{h.div(.{ .class = "ask" }, .{
-            h.h2(.{}, .{ask}),
-            choice.view(h, .{ .label = ask }, cs),
-            h.div(.{ .class = "lock" }, .{button.view(h, .{ .v = .primary, .disabled = s.choice == null, .on = h.on(s, .lock), .ref = "lock" }, .{W.lock})}),
-            if (p.ranged) |r| h.div(.{ .class = "hints" }, .{
-                h.span(.{ .class = "lab" }, .{W.hints}),
+        return puzzle.view(h, .{
+            .stage = .none,
+            .label = ask,
+            .q = h.span(.{}, .{ask}),
+            .answer = choice.view(h, .{ .label = ask }, cs),
+            .games = if (p.ranged) |r| h.span(.{ .class = "hints" }, .{
+                h.span(.{ .class = "lab" }, .{W.hint}),
                 if (s.hint)
                     badge.view(h, .accent, .{if (r) W.ranged else W.melee})
                 else
                     button.view(h, .{ .s = .s, .on = h.on(s, .hint) }, .{W.range}),
             }) else null,
-        })});
+            .action = button.view(h, .{ .v = .primary, .disabled = s.choice == null, .on = h.on(s, .lock), .ref = "lock" }, .{W.lock}),
+        });
     }
 
     fn winnerPanel(s: *Page, h: *H) N {
@@ -324,13 +313,17 @@ pub const Page = struct {
                 c.* = if (hid) s.shownAnswer() orelse .{ .name = "?", .src = "" } else s.champOf(p.seats[t][r].champ);
             }
         }
-        return card.view(h, .{ .label = W.who_won }, &.{h.div(.{ .class = "ask" }, .{
-            h.h2(.{ .tabindex = @as(i8, -1), .data_ref = "q" }, .{W.who_won}),
-            choice.view(h, .{ .label = W.who_won }, &.{
+        return puzzle.view(h, .{
+            .stage = .none,
+            .label = W.who_won,
+            .q = h.span(.{ .tabindex = @as(i8, -1), .data_ref = "q" }, .{W.who_won}),
+            .answer = choice.view(h, .{ .label = W.who_won }, &.{
                 .{ .label = W.blue, .side = .us, .icons = sides[0], .on = h.on(s, .{ .winner = .blue }) },
                 .{ .label = W.red, .side = .them, .icons = sides[1], .on = h.on(s, .{ .winner = .red }) },
             }),
-        })});
+            // A card commits it
+            .action = .none,
+        });
     }
 
     fn result(s: *Page, h: *H) N {
@@ -350,190 +343,14 @@ pub const Page = struct {
             }),
         });
     }
-
-    fn seatPanel(s: *Page, h: *H) N {
-        const p = s.p;
-        const t = s.seat / 5;
-        const r = s.seat % 5;
-        const x = p.seats[t][r];
-        const side: dd.Side = @fromBackingInt(@intCast(t));
-        const rl = role.Role.all[r];
-        const played = for (x.cands) |c| {
-            if (c.champ == x.champ) break c;
-        } else null;
-        const rows = h.mem.alloc(candlist.Row, x.cands.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        var last: u16 = 0;
-        for (rows, x.cands) |*row, c| {
-            const nm = s.champOf(c.champ).name;
-            const detail = if (c.terms.len == 0) null else s.breakdown(h, x, c, side, rl);
-            row.* = .{
-                .champ = s.champOf(c.champ),
-                .rank = c.rank,
-                .star = c.rank == 1,
-                .ref = c.champ == x.champ,
-                .win = c.win,
-                .vs = if (c.champ == x.champ) null else if (played) |pc| c.win - pc.win else null,
-                .reasons = s.chips(h, c, rl, side),
-                .gap = @as(u32, c.rank) > @as(u32, last) + 1,
-                .open = detail != null and (s.open[0] == c.champ or s.open[1] == c.champ),
-                .detail = detail,
-                .label = if (detail != null) W.why.with(h, .{ .n = nm }) else null,
-                .id = if (detail != null) h.fmt("dw-{d}", .{c.champ}) else "",
-                .on = if (detail != null) h.on(s, .{ .cand = c.champ }) else null,
-            };
-            last = c.rank;
-        }
-        const pick = pickOf(p, t, x.champ);
-        return card.view(h, .{ .label = W.seat }, &.{
-            // Kept across seats, so a screen reader hears which seat the panel now shows
-            h.div(.{ .class = "sh", .aria_live = "polite" }, .{
-                champ.view(h, s.champOf(x.champ), .{ .px = .@"40", .named = false }),
-                h.div(.{}, .{
-                    h.b(.{}, .{s.champOf(x.champ).name}),
-                    h.span(.{ .class = "sub" }, .{
-                        if (pick) |n| W.where_pick.with(h, .{ .side = sideWord(side).s, .r = rl.label().s, .n = n }) else W.where.with(h, .{ .side = sideWord(side).s, .r = rl.label().s }),
-                    }),
-                }),
-                if (x.rank) |n| h.span(.{ .class = "of" }, .{
-                    h.b(.{}, .{W.nth.with(h, .{ .n = n, .s = draftboard.ordinal(n) })}),
-                    h.span(.{}, .{W.of.with(h, .{ .n = x.of })}),
-                }) else null,
-            }),
-            if (s.seat == hiddenSeat(p)) s.yours(h, x) else .none,
-            if (rows.len > 0) candlist.view(h, .{ .rows = rows, .head = .{ W.chance.with(h, .{ .side = sideWord(side).s }), W.with_, W.vs } }) else h.p(.{ .class = "none" }, .{W.unrated}),
-        });
-    }
-
-    /// The pick locked in, when not the played one: its chance and the gap
-    fn yours(s: *const Page, h: *H, x: dd.Seat) N {
-        const g = s.guess orelse return .none;
-        const c = s.p.options[g];
-        if (c == x.champ) return .none;
-        const nm = s.champOf(c).name;
-        var mine: ?f32 = null;
-        var played: ?f32 = null;
-        for (x.cands) |k| {
-            if (k.champ == c) mine = k.win;
-            if (k.champ == x.champ) played = k.win;
-        }
-        return h.p(.{ .class = "yours" }, .{
-            champ.view(h, s.champOf(c), .{ .px = .@"20", .named = false }),
-            if (mine != null and played != null) W.yours_at.with(h, .{
-                .n = nm,
-                .w = mine orelse 0,
-                .d = (mine orelse 0) - (played orelse 0),
-            }) else W.yours.with(h, .{ .n = nm }),
-        });
-    }
-
-    /// Up to three of the pick's largest terms as words
-    /// Strength as the role icon, a pair as the other champion in its team's ring: the
-    /// words go to the chip's title and the opened breakdown
-    fn chips(s: *const Page, h: *H, c: dd.Cand, rl: role.Role, side: dd.Side) []const candlist.Reason {
-        var idx: [3]usize = undefined;
-        var n: usize = 0;
-        for (c.terms, 0..) |t, i| {
-            var at = n;
-            while (at > 0 and @abs(c.terms[idx[at - 1]].pp) < @abs(t.pp)) : (at -= 1) {
-                if (at < 3) idx[at] = idx[at - 1];
-            }
-            if (at < 3) idx[at] = i;
-            n = @min(n + 1, 3);
-        }
-        const out = h.mem.alloc(candlist.Reason, n) catch {
-            h.oom = true;
-            return &.{};
-        };
-        for (out, idx[0..n]) |*o, i| {
-            const t = c.terms[i];
-            o.* = .{ .pp = t.pp, .text = switch (t.kind) {
-                .strength => W.strength.with(h, .{ .r = rl.label().s }),
-                .into => W.into_l.with(h, .{ .n = s.otherName(t) }),
-                .with => W.with_l.with(h, .{ .n = s.otherName(t) }),
-            } };
-            // The board's rings: blue is us
-            o.pic = if (t.kind == .strength)
-                role.view(h, rl, .{ .s = .s, .named = false })
-            else if (t.other) |x|
-                champ.view(h, s.champOf(x), .{ .px = .@"20", .side = if ((t.kind == .with) == (side == .blue)) .us else .them, .named = false })
-            else
-                null;
-        }
-        return out;
-    }
-
-    fn otherName(s: *const Page, t: dd.Term) []const u8 {
-        return if (t.other) |o| s.champOf(o).name else "?";
-    }
-
-    fn breakdown(s: *const Page, h: *H, x: dd.Seat, c: dd.Cand, side: dd.Side, rl: role.Role) reasons.Breakdown {
-        const terms = h.mem.alloc(reasons.Term, c.terms.len) catch {
-            h.oom = true;
-            return .{ .base_label = W.even, .base = x.base, .terms = &.{}, .total_label = W.even };
-        };
-        for (terms, c.terms) |*o, t| o.* = .{
-            .label = switch (t.kind) {
-                .strength => W.strength.with(h, .{ .r = rl.label().s }),
-                .into => W.into.with(h, .{ .n = s.otherName(t) }),
-                .with => W.with.with(h, .{ .n = s.otherName(t) }),
-            },
-            .pp = t.pp,
-            .games = t.games,
-        };
-        return .{
-            .base_label = W.even,
-            .base = x.base,
-            .terms = terms,
-            .rest = if (c.rest != 0) c.rest else null,
-            .total_label = W.side_with.with(h, .{ .side = sideWord(side).s, .n = s.champOf(c.champ).name }),
-            .low = c.low,
-            .high = c.high,
-            .tip_id = h.fmt("dr-{d}", .{c.champ}),
-        };
-    }
-
-    fn paper(s: *const Page, h: *H) N {
-        const pp = s.p.paper orelse return .none;
-        var rows = h.list();
-        var most: f32 = 0.5;
-        for (pp.edges) |e| most = @max(most, @abs(e));
-        for (pp.edges, W.kinds, 0..) |e, k, i| {
-            const side: dd.Side = if (e >= 0) .blue else .red;
-            const w = 50 * @min(@abs(e) / most, 1);
-            rows.add(h.div(.{ .key = i, .class = "e" }, .{
-                h.span(.{ .class = "lab" }, .{k}),
-                h.span(.{ .class = "bar", .aria_hidden = true }, .{h.el(.i, .{
-                    .data_side = sideOf(side),
-                    .style = h.vars(.{ .l = if (side == .blue) 50 - w else 50, .w = w }),
-                }, .{})}),
-                h.span(.{ .class = "v", .data_side = sideOf(side) }, .{W.edge.with(h, .{ .side = sideWord(side).s, .d = @abs(e) })}),
-            }));
-        }
-        return card.view(h, .{ .label = W.paper }, &.{
-            card.head(h, W.paper, null, &.{}),
-            h.div(.{ .class = "paper" }, .{
-                split.view(h, .{
-                    .p = pp.blue,
-                    .lo = pp.low,
-                    .hi = pp.high,
-                    .won = if (s.p.result.winner == .blue) .blue else .red,
-                    .s = .l,
-                }),
-                h.div(.{ .class = "edges" }, .{rows.done()}),
-            }),
-        });
-    }
 };
 
-fn hiddenSeat(p: *const dd.Puzzle) u8 {
+pub fn hiddenSeat(p: *const dd.Puzzle) u8 {
     return 5 * @as(u8, @backingInt(p.hidden_side)) + @as(u8, @backingInt(p.hidden_role));
 }
 
 /// The seat's champion's pick number in the draft (1-10); null without the order
-fn pickOf(p: *const dd.Puzzle, t: usize, c: u16) ?u8 {
+pub fn pickOf(p: *const dd.Puzzle, t: usize, c: u16) ?u8 {
     var n: u8 = 0;
     for (p.turns, 0..) |x, i| {
         if (i < 6 or (i >= 12 and i < 16)) continue;
@@ -553,11 +370,11 @@ fn pair(h: *H, label: tree.Text, b: anytype, r: anytype) N {
     });
 }
 
-fn sideOf(s: dd.Side) draftboard.Side {
+pub fn sideOf(s: dd.Side) draftboard.Side {
     return if (s == .blue) .us else .them;
 }
 
-fn sideWord(s: dd.Side) tree.Text {
+pub fn sideWord(s: dd.Side) tree.Text {
     return if (s == .blue) W.blue else W.red;
 }
 
@@ -700,7 +517,7 @@ const W = struct {
     const pick_n = Phrase("pick {n:int}");
     const ask = Phrase("{side:text}'s last pick?");
     const lock = plain("Lock in");
-    const hints = plain("Hints");
+    const hint = plain("Hint");
     const range = plain("Range");
     const ranged = plain("Ranged");
     const melee = plain("Melee");
@@ -714,101 +531,63 @@ const W = struct {
     const towers = plain("towers");
     const dragons = plain("dragons");
     const barons = plain("barons");
-    const seat = plain("The selected seat");
-    const where = Phrase("{side:text} {r:text}");
-    const where_pick = Phrase("{side:text} {r:text} · pick {n:int}");
-    const nth = Phrase("{n:int}{s:text}");
-    const of = Phrase("of {n:int}");
-    const yours = Phrase("Your pick {n:text}");
-    const yours_at = Phrase("Your pick {n:text}: {w:rate}, {d:points} on the played");
-    const chance = Phrase("{side:text}'s win chance");
-    const with_ = plain("with");
-    const vs = plain("vs played");
-    const unrated = plain("The model can't rate this seat.");
-    const why = Phrase("Why {n:text}");
-    const into_l = Phrase("into {n:text}");
-    const with_l = Phrase("with {n:text}");
-    const even = plain("Even game");
-    const strength = Phrase("{r:text} strength");
-    const into = Phrase("Into {n:text}");
-    const with = Phrase("With {n:text}");
-    const side_with = Phrase("{side:text} with {n:text}");
-    const paper = plain("On paper");
-    const kinds = [4]tree.Text{ plain("Champions"), plain("Teammates"), plain("Lanes"), plain("Matchups") };
-    const edge = Phrase("{side:text} {d:points}");
 };
 
 pub const css =
     \\@layer components {
-    \\  .c-daily { display: grid; gap: var(--sp-3); container: daily / inline-size; scroll-margin-top: calc(var(--header) + var(--sp-3)); }
-    \\  .c-daily > .cols { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: var(--sp-3); align-items: start; }
-    \\  .c-daily[data-phase="done"] > .cols { grid-template-columns: minmax(0, 1fr) 380px; }
-    \\  .c-daily .left { display: grid; gap: var(--sp-3); min-width: 0; }
+    \\  .c-dailyw { container: daily / inline-size; scroll-margin-top: calc(var(--header) + var(--sp-3)); }
+    \\  .c-dailyw > .cols { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: var(--sp-3); align-items: start; }
+    \\  .c-dailyw > .cols:has(> [data-phase="done"]) { grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: auto 1fr; }
+    \\  .c-daily { display: contents; }
+    \\  .c-daily > .left { grid-column: 1; grid-row: 1; min-width: 0; }
+    \\  .c-daily > .c-card { grid-column: 2; grid-row: 1; }
     \\  .c-daily .bd { display: grid; gap: var(--sp-3); }
-    \\  .c-daily .ask { display: grid; gap: var(--sp-3); }
-    \\  .c-daily .ask h2 { margin: 0; font-size: var(--fs-xl); }
-    \\  .c-daily :is(.ask h2, .res) { scroll-margin: calc(var(--header) + var(--sp-3)) 0 var(--sp-3); }
+    \\  .c-daily :is(.c-puzzle .q, .res) { scroll-margin: calc(var(--header) + var(--sp-3)) 0 var(--sp-3); }
     \\  .c-daily [tabindex="-1"]:focus { outline: none; }
-    \\  .c-daily .cols > .c-card:has(.ask) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
-    \\  .c-daily .lock { display: grid; }
-    \\  .c-daily .hints { display: flex; align-items: center; gap: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
+    \\  .c-daily .c-puzzle > .stage:empty, .c-daily[data-phase="winner"] .c-puzzle > .foot { display: none; }
+    \\  .c-daily .hints { display: flex; align-items: center; gap: var(--sp-2); }
     \\  .c-daily .hints .lab { font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
     \\  .c-daily .res { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); padding-bottom: var(--sp-3);
     \\    margin-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
     \\  .c-daily .gl { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); margin-left: auto; font-size: var(--fs-s);
     \\    font-variant-numeric: tabular-nums; }
-    \\  .c-daily :is(.gl, .e .v) [data-side="us"], .c-daily .e .v[data-side="us"] { color: var(--us); }
-    \\  .c-daily :is(.gl, .e .v) [data-side="them"], .c-daily .e .v[data-side="them"] { color: var(--them); }
+    \\  .c-daily .gl [data-side="us"] { color: var(--us); }
+    \\  .c-daily .gl [data-side="them"] { color: var(--them); }
     \\  .c-daily .pr { white-space: nowrap; color: var(--faint); }
     \\  .c-daily .pr .k { color: var(--muted); }
-    \\  .c-daily .sh { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center;
-    \\    padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
-    \\  .c-daily .sh .sub { display: block; font-size: var(--fs-s); color: var(--muted); }
-    \\  .c-daily .of { display: grid; justify-items: end; font-size: var(--fs-xs); color: var(--muted); }
-    \\  .c-daily .of b { font-size: var(--fs-l); color: var(--text); }
-    \\  .c-daily .yours { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--t2); }
-    \\  .c-daily .none { color: var(--muted); font-size: var(--fs-s); }
-    \\  .c-daily .paper { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: center; }
-    \\  .c-daily .edges { display: grid; gap: 6px; }
-    \\  .c-daily .edges .lab { color: var(--t2); }
-    \\  .c-daily .e { display: grid; grid-template-columns: 96px minmax(0, 1fr) 80px; gap: var(--sp-2); align-items: center; font-size: var(--fs-s); }
-    \\  .c-daily .e .bar { position: relative; height: 8px; background: linear-gradient(var(--line-2), var(--line-2)) 50% / 1px 100% no-repeat; }
-    \\  .c-daily .e .bar i { position: absolute; top: 0; bottom: 0; left: calc(var(--l) * 1%); width: calc(var(--w) * 1%); border-radius: 2px; }
-    \\  .c-daily .e .bar i[data-side="us"] { background: var(--us); }
-    \\  .c-daily .e .bar i[data-side="them"] { background: var(--them); }
-    \\  .c-daily .e .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: var(--w-m); }
-    \\  @container daily (max-width: 1000px) { .c-daily > .cols { grid-template-columns: minmax(0, 1fr); } }
-    \\  @container daily (max-width: 1400px) { .c-daily[data-phase="done"] > .cols { grid-template-columns: minmax(0, 1fr); } }
+    \\  @container daily (max-width: 1000px) {
+    \\    .c-dailyw > .cols { grid-template-columns: minmax(0, 1fr); }
+    \\    .c-daily > .c-card { grid-column: 1; grid-row: auto; }
+    \\  }
+    \\  @container daily (max-width: 1400px) {
+    \\    .c-dailyw > .cols:has(> [data-phase="done"]) { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+    \\  }
     \\  @container daily (max-width: 760px) {
-    \\    .c-daily:not([data-phase="done"]) .cols > .c-card:has(.ask) { position: sticky; bottom: 0; z-index: 2; box-shadow: var(--shadow-pop); }
-    \\    .c-daily .ask h2 { font-size: var(--fs-l); }
-    \\    .c-daily .paper { grid-template-columns: minmax(0, 1fr); }
+    \\    .c-daily:not([data-phase="done"]) > .c-card { position: sticky; bottom: 0; z-index: 2; box-shadow: var(--shadow-pop); }
     \\    .c-daily .gl { margin-left: 0; }
     \\  }
     \\}
     \\
 ;
 
+/// The page as daily.zig writes it: this island and ui.dailyseat's, side by side
+pub fn layout(h: *H, page: N, seat: N) N {
+    return h.div(.{ .class = "c-dailyw" }, .{h.div(.{ .class = "cols" }, .{ page, seat })});
+}
+
 pub fn gallery(g: *@import("gallery.zig").Gallery) void {
     const h = g.h;
-    if (shown(h, &dd.sample, null, null, null)) |p| g.addFill("first visit: red's last pick asked", p.view(h));
+    if (shown(h, &dd.sample, null, null, null)) |p| g.addFill("first visit: red's last pick asked", both(h, p, .{ null, null }));
     if (shown(h, &pro, 1, null, null)) |p| {
         p.hint = true;
-        g.addFill("pro draft, one chosen, the range hint used", p.view(h));
+        g.addFill("pro draft, one chosen, the range hint used", both(h, p, .{ null, null }));
     }
-    if (shown(h, &pro, 1, 1, null)) |p| g.addFill("locked in: who won?", p.view(h));
-    if (shown(h, &pro, 1, 1, .red)) |p| {
-        p.open = .{ 5, null };
-        g.addFill("revealed: wrong pick, wrong winner, the played pick's reasons open", p.view(h));
-    }
-    if (shown(h, &dd.sample, 0, 0, .blue)) |p| {
-        p.seat = 1;
-        g.addFill("ranked puzzle revealed, another seat selected", p.view(h));
-    }
+    if (shown(h, &pro, 1, 1, null)) |p| g.addFill("locked in: who won?", both(h, p, .{ null, null }));
+    if (shown(h, &pro, 1, 1, .red)) |p| g.addFill("revealed: wrong pick, wrong winner, the played pick's reasons open", both(h, p, .{ 5, null }));
 }
 
 /// A page on `p` with option `c` chosen, `locked` in and `w` answered
-fn shown(h: *H, p: *const dd.Puzzle, c: ?u8, locked: ?u8, w: ?dd.Side) ?*Page {
+pub fn shown(h: *H, p: *const dd.Puzzle, c: ?u8, locked: ?u8, w: ?dd.Side) ?*Page {
     const s = h.mem.create(Page) catch {
         h.oom = true;
         return null;
@@ -818,6 +597,16 @@ fn shown(h: *H, p: *const dd.Puzzle, c: ?u8, locked: ?u8, w: ?dd.Side) ?*Page {
     if (locked != null) s.lock();
     if (w) |x| s.answer(x);
     return s;
+}
+
+/// `s` in the layout with the seat review its answers give, rows `open`
+pub fn both(h: *H, s: *Page, open: [2]?u16) N {
+    const x = h.mem.create(dailyseat.Seat) catch {
+        h.oom = true;
+        return .none;
+    };
+    x.* = .{ .p = s.p, .seat = s.seat, .guess = s.guess, .done = s.phase() == .done, .open = open };
+    return layout(h, s.view(h), x.view(h));
 }
 
 /// The sample with its pro draft, six options and a range hint

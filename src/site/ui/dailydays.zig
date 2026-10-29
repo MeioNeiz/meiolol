@@ -333,7 +333,7 @@ const W = struct {
 
 pub const css =
     \\@layer components {
-    \\  .c-dhead { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
+    \\  .c-dhead { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
     \\  .c-dhead h1 { margin: 0 var(--sp-1) 0 0; font-size: var(--fs-l); }
     \\  .c-dhead .n { color: var(--muted); font-weight: var(--w-m); }
     \\  .c-days { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; column-gap: var(--sp-3); row-gap: var(--sp-1); margin-left: auto; }

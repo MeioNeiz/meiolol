@@ -99,13 +99,16 @@ fn body(a: std.mem.Allocator, w: *Writer, files: []const File, shown: Shown, at:
     strip.bin = enc.encode(try a.alloc(u8, enc.calcSize(raw.items.len)), raw.items);
     var page: ui.dailypage.Page = .init(a, &shown.p);
     page.bin = shown.base64;
+    var seat: ui.dailyseat.Seat = .init(a, &shown.p);
+    seat.js = "/" ++ assets.dailyseat_js.path;
+    seat.wasm = "/" ++ assets.dailyseat_wasm.path;
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
     const head = ds.head(&h, &shown.p, strip.view(&h));
-    const island = page.view(&h);
+    const cols = ui.dailypage.layout(&h, page.view(&h), seat.view(&h));
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, head, w);
-    try ui.html.write(&t, island, w);
+    try ui.html.write(&t, cols, w);
     try tpl.render(w,
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\<script src="{djs}" data-wasm="{dwasm}" defer></script>
@@ -284,6 +287,8 @@ test "the head's days island and the puzzle's, from the site root or daily/" {
     try std.testing.expect(std.mem.find(u8, s, "data-island=\"daily\"") != null);
     try std.testing.expect(std.mem.find(u8, s, try a.print("<script src=\"/{s}\" data-wasm=\"/{s}\"", .{ assets.daily_js.path, assets.daily_wasm.path })) != null);
     try std.testing.expect(std.mem.find(u8, s, try a.print("<script src=\"/{s}\" data-wasm=\"/{s}\"", .{ assets.dailydays_js.path, assets.dailydays_wasm.path })) != null);
+    // The seat review's island, loaded by ui-daily.wasm once answered
+    try std.testing.expect(std.mem.find(u8, s, try a.print("<div class=\"c-dseat\" data-island=\"dailyseat\" data-js=\"/{s}\" data-wasm=\"/{s}\"></div>", .{ assets.dailyseat_js.path, assets.dailyseat_wasm.path })) != null);
     // The strip: puzzles with good page data up to tomorrow; n + 2 not yet, n - 1's
     // would be a link to a 404
     const days = try dayList(a, &files, n + 1);
