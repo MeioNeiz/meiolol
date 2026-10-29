@@ -18,19 +18,26 @@ docs/lab-run.md.
   asks tasklist.exe every 3 s (5 while up). While LeagueClient.exe or League of
   Legends.exe is up, or Windows can't be asked, it stops every run's process group
   (each run's pauses.log says when) and ends remote-build jobs. Only while the game
-  (League of Legends.exe) is up, or Windows can't be asked, not for the client alone
-  (Jacob), it also stops the process groups of agents' zig compiles, headless Chromium
-  (and the node driving it) and `meiolol dev` (only those processes when the group also
-  holds Claude, ssh or a login shell).
-  Those go in ~/.cache/meiolol-league-stopped ("quiet:" log lines) and continue when
-  the game closes or the watcher stops or starts. Not paused: ssh and rsync copies,
-  snapshot builds, the archive pull, the backup mirror
-- State each tick (up, down or unknown; removed when the watcher stops): client or game
-  in ~/.cache/meiolol-league, the game alone in ~/.cache/meiolol-league-game
+  (League of Legends.exe) is up, not for the client alone (Jacob), it also stops the
+  process groups of agents' zig compiles, headless Chromium (and the node driving it)
+  and meiolol binaries not in ~/ml/bin (`meiolol dev|eval`, `meiolol-lab bench`); only
+  those processes when the group also holds Claude, ssh or a login shell. A Claude Bash
+  call's shell (job control) is stopped with its command, so the call waits, never
+  ends 147. Not paused: ssh and rsync copies, snapshot builds, the archive pull, the
+  backup mirror
+- Stopped groups go in ~/.cache/meiolol-league-stopped ("quiet:" log lines) and continue
+  when the game closes or the watcher stops, starts or exits any way (the unit's
+  ExecStopPost). Stopped groups keep their locks (push.sh, build-tree, slots gate,
+  .git/index.lock) until then: not stale, don't remove them. The Mac's lab-run builds
+  over ssh wait the same way
+- Windows unanswered (tasklist fails, hangs 10 s or lists nothing, twice in a tick):
+  nothing changes for 2 ticks, then unknown (as the game); after 3 min agents' work goes
+  on (blind, WARNING lines in watcher.log), runs stay paused
+- State each tick (up, down, unknown or blind; removed when the watcher stops): client
+  or game in ~/.cache/meiolol-league, the game alone in ~/.cache/meiolol-league-game
 - Builds there wait: deploy/slots.sh (zb.sh, pre-push ci, gpu-box.sh install) grants no
-  slot while ~/.cache/meiolol-league-game isn't down (a file over a minute old: no
-  watcher, builds go), and runs held builds at nice 19, idle I/O.
-  Lowering the WSL VM's Windows priority needs admin: not done.
+  slot while ~/.cache/meiolol-league-game says up or unknown (a file over a minute old:
+  no watcher, builds go). Lowering the WSL VM's Windows priority needs admin: not done.
   Test: deploy/lab-watch-test.sh
 - Tell the sessions using it (cc-peers) before restarting WSL or
   rebooting the gpu-box: it kills running jobs

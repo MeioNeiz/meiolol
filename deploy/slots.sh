@@ -13,10 +13,10 @@
 # State: ~/.cache/meiolol-slots (MEIOLOL_SLOTS_DIR), entries named by pid: a dead
 # holder's or waiter's entry is dropped by the next caller.
 # On the gpu-box (WSL on Jacob's PC) no slot is granted while League's game runs (the
-# client alone doesn't hold builds): the watcher (deploy/lab-watch.sh) writes up, down or
-# unknown to ~/.cache/meiolol-league-game each few s (MEIOLOL_LEAGUE_FILE; a file a
-# minute old means no watcher: builds go). A held run goes to nice 19 and idle I/O there,
-# so the watcher's lag before it stops one costs little
+# client alone doesn't hold builds): the watcher (deploy/lab-watch.sh) writes up, down,
+# unknown or blind (Windows unanswered for minutes: builds go) to
+# ~/.cache/meiolol-league-game each few s (MEIOLOL_LEAGUE_FILE; a file a minute old means
+# no watcher: builds go); slots wait on up and unknown
 slots_dir=${MEIOLOL_SLOTS_DIR:-$HOME/.cache/meiolol-slots}
 slots_n=${MEIOLOL_SLOTS:-6}
 slots_mine=""
@@ -70,7 +70,8 @@ _slots_league() {
     local st
     [ -n "$slots_wsl$MEIOLOL_LEAGUE_FILE" ] || return 1
     st=$(cat "$slots_league_file" 2> /dev/null) || return 1
-    [ "$st" != down ] && [ -n "$(find "$slots_league_file" -mmin -1 2> /dev/null)" ] || return 1
+    case $st in up | unknown) ;; *) return 1 ;; esac
+    [ -n "$(find "$slots_league_file" -mmin -1 2> /dev/null)" ] || return 1
     [ -n "$slots_league_said" ] \
         || echo "slots: League game $st on this PC: no build starts until it closes (docs/compute.md)" >&2
     slots_league_said=1
@@ -99,10 +100,6 @@ slots_take() {
         : > "$slots_dir/held/$$-$w-${slots_mine%%-*}"
         slots_mine=held
         export MEIOLOL_ZIG_JOBS=$((2 * w))
-        if [ -n "$slots_wsl" ]; then
-            renice -n 19 -p $$ > /dev/null
-            ionice -c 3 -p $$
-        fi
         code=0
     fi
     _slots_ungate
