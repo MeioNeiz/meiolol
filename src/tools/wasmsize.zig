@@ -4,8 +4,8 @@
 //!
 //! The baseline is a store of earlier runs, one file per commit
 //! (<git common dir>/meiolol-wasm-sizes/<sha>), written by --record when the tree is
-//! clean (pre-push ci's build tree) and looked up for origin/main or its nearest recorded
-//! first-parent ancestor. Symbols come from a build with a name section (strip = false);
+//! clean (pre-push ci's build tree) and every family is within budget (a failed save only
+//! warns), and looked up for origin/main or its nearest recorded first-parent ancestor. Symbols come from a build with a name section (strip = false);
 //! the shipped size is that module minus its custom sections, or a stripped build if one
 //! is given.
 //!
@@ -92,7 +92,6 @@ pub fn main(init: std.process.Init) !void {
     if (fams.items.len == 0) fail("", .{});
 
     const store_dir = store orelse try storeDir(io, arena, tree);
-    try Io.Dir.cwd().createDirPath(io, store_dir);
     for (fams.items, files.items) |*f, paths| try measure(io, arena, f, paths[0], paths[1]);
     const base = try findBase(io, arena, tree, store_dir, base_rev);
     var out_buf: [4096]u8 = undefined;
@@ -102,8 +101,10 @@ pub fn main(init: std.process.Init) !void {
     try report(arena, out, fams.items, base, threshold, &res);
     try out.flush();
 
-    if (record) if (try cleanHead(io, arena, tree)) |sha| try save(io, arena, store_dir, sha, fams.items);
     for (fams.items) |f| if (f.gz > f.budget) std.process.exit(1);
+    // Only sizes within budget become a baseline; the sizes are checked either way
+    if (record) if (try cleanHead(io, arena, tree)) |sha| save(io, arena, store_dir, sha, fams.items) catch |err|
+        std.debug.print("wasmsize: baseline for {s} not saved in {s}: {t}\n", .{ sha[0..8], store_dir, err });
 }
 
 /// Every function, biggest first, with the file it comes from
@@ -548,6 +549,7 @@ fn save(io: Io, arena: Allocator, store: []const u8, sha: []const u8, fams: []co
         try w.print("f {s} {d} {d}\n", .{ f.name, f.raw, f.gz });
         for (f.syms.keys(), f.syms.values()) |k, v| try w.print("s {s} {d} {d} {s}\n", .{ f.name, v.bytes, v.count, k });
     }
+    try Io.Dir.cwd().createDirPath(io, store);
     var dir = try Io.Dir.cwd().openDir(io, store, .{ .iterate = true });
     defer dir.close(io);
     const tmp = try std.fmt.allocPrint(arena, "{s}.tmp", .{sha});
