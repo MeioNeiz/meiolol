@@ -4,15 +4,16 @@ Many sessions share one checkout and one Mac (10 cores, 24 GB). What each step c
 how they share the machine, and the two push modes. Scripts in deploy/; their tests:
 deploy/flow-test.sh.
 
-## Costs (26 Oct, quiet Mac)
+## Costs (29 Oct, Mac at load 10-25)
 
-| step | time | cores |
-|---|---|---|
-| test-ui after a ui edit | 5 s | 2 |
-| test after an edit (the backend's test binary is the long pole) | ~150 s | 1.1 |
-| test -Dtest-filter=NAME | ~85 s: it skips running tests (~50 s), not compiling | 1.4 |
-| backend build (dev server, qa) | ~90 s | 1 |
-| ci after a test of the same tree | ~100 s | 3.8 |
+| step | time |
+|---|---|
+| test-ui after a ui edit | 28 s (gpu-box 4 s) |
+| test after a backend edit | ~130 s: backend test compile 42 s, its run 60-110 s (slow tests: docs/plan/build-speed.md BS4) |
+| test after a ui edit (35 islands rebuild) | ~340 s |
+| backend build (dev server, qa) | ~80 s |
+| deploy build (ReleaseSafe, box target) | ~185 s (gpu-box 230 s) |
+| -Dtest-filter=NAME | skips running tests, not compiling them |
 
 A zig compile runs on one core, so builds run side by side, not one at a time.
 
