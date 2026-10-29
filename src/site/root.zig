@@ -468,6 +468,7 @@ test {
     _ = yourgame;
     _ = yourpage;
     _ = scope;
+    _ = textpages;
     _ = @import("dailydata.zig");
     _ = @import("daily.zig");
 }

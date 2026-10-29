@@ -211,8 +211,7 @@ fn onKey(e: zjb.Handle) callconv(.c) void {
     var buf: [16]u8 = undefined;
     const key = k.readString(&buf) catch return;
     if (tool.mode == .form and std.mem.eql(u8, key, "Enter")) {
-        // isComposing: Enter that ends an IME word, not a save
-        if (e.get("shiftKey", bool) or e.get("isComposing", bool) or !inText(e)) return;
+        if (e.get("shiftKey", bool) or composing(e) or !inText(e)) return;
         swallow(e);
         var ev: ui.tree.Event = .{ .kind = .keydown, .text = key };
         tool.update(.save, &ev);
@@ -226,10 +225,16 @@ fn onKey(e: zjb.Handle) callconv(.c) void {
         tool.want = .pick;
         return changed();
     }
-    if (!std.mem.eql(u8, key, "Escape")) return;
+    if (!std.mem.eql(u8, key, "Escape") or composing(e)) return;
     swallow(e);
     tool.reset();
     changed();
+}
+
+/// A key the IME takes: Enter ending a word, Escape cancelling it. Safari's ending Enter
+/// comes after compositionend, isComposing false, so keyCode 229 too
+fn composing(e: zjb.Handle) bool {
+    return e.get("isComposing", bool) or e.get("keyCode", i32) == 229;
 }
 
 fn inText(e: zjb.Handle) bool {

@@ -316,7 +316,8 @@ fn inline_(a: Allocator, s: []const u8) Allocator.Error!Line {
 }
 
 /// `[text](href)` at the start of `s`, the text plain. Only targets on this site, its
-/// anchors, https and mailto: the docs' relative links (`docs/model.md`) stay literal
+/// anchors, https and mailto: the docs' relative links (`docs/model.md`) stay literal, and
+/// `//host` and `/\host` (browsers read both as another site)
 fn link(s: []const u8) ?struct { run: Run, len: usize } {
     const mid = std.mem.find(u8, s, "](") orelse return null;
     const end = std.mem.findScalarPos(u8, s, mid + 2, ')') orelse return null;
@@ -324,6 +325,7 @@ fn link(s: []const u8) ?struct { run: Run, len: usize } {
     const href = s[mid + 2 .. end];
     if (text.len == 0 or std.mem.findAny(u8, text, "[]`") != null) return null;
     if (href.len == 0 or std.mem.findAny(u8, href, " \t<>\"'") != null) return null;
+    if (href.len > 1 and href[0] == '/' and (href[1] == '/' or href[1] == '\\')) return null;
     for ([_][]const u8{ "/", "#", "https://", "mailto:" }) |p| {
         if (std.mem.startsWith(u8, href, p)) return .{ .run = .{ .kind = .link, .s = text, .href = href }, .len = end + 1 };
     }
@@ -783,7 +785,7 @@ test "links: on this site, anchors, https and mailto; anything else stays text" 
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const d = try parse(a, "See [Accounts](#accounts), [Home](/) or [us](mailto:a@b.c); [doc](docs/model.md), [x](javascript:y) and [a b](/c d) stay");
+    const d = try parse(a, "See [Accounts](#accounts), [Home](/) or [us](mailto:a@b.c); [doc](docs/model.md), [x](javascript:y), [o](//o.x/a), [b](/\\o.x) and [a b](/c d) stay");
     try expectRuns(&.{
         .{ .s = "See " },
         .{ .kind = .link, .s = "Accounts" },
@@ -791,7 +793,7 @@ test "links: on this site, anchors, https and mailto; anything else stays text" 
         .{ .kind = .link, .s = "Home" },
         .{ .s = " or " },
         .{ .kind = .link, .s = "us" },
-        .{ .s = "; [doc](docs/model.md), [x](javascript:y) and [a b](/c d) stay" },
+        .{ .s = "; [doc](docs/model.md), [x](javascript:y), [o](//o.x/a), [b](/\\o.x) and [a b](/c d) stay" },
     }, d.blocks[0].para);
     try testing.expectEqualStrings("mailto:a@b.c", d.blocks[0].para[5].href);
     const out = try render(a, "[ICO](https://ico.org.uk), `[not](/a)`", .{ .id_prefix = "" });

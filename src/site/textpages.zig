@@ -16,6 +16,7 @@ const extras = @import("extras.zig");
 const lean = @import("../lean.zig");
 
 const Writer = std.Io.Writer;
+const Allocator = std.mem.Allocator;
 
 /// Changed by hand with the text: the build date would claim a new policy every day
 const method_lead = "meiolol helps players understand how lane matchups unfold and compare their own lane with the typical curve. The statistics are champion and aggregate data from ranked games, and it never names a \"best pick\".";
@@ -378,11 +379,52 @@ const download_md =
 
 const not_found_md = "[Home](/) · [Champions](/champions) · [Matchups](/matchups)";
 
-/// `{name}` holes in `md` filled from `fills`, then parsed
-fn doc(a: std.mem.Allocator, md: []const u8, fills: []const [2][]const u8) !ui.prose.Doc {
+/// `{name}` holes in `md`: `md_fills` (markdown, as a table) before parsing, `fills` after,
+/// into each run's text and href, so a value's `]`, `*` or "" can't change the markup. A
+/// heading's slug is the hole's
+fn doc(a: Allocator, md: []const u8, md_fills: []const Fill, fills: []const Fill) !ui.prose.Doc {
     var s = md;
-    for (fills) |f| s = try std.mem.replaceOwned(u8, a, s, try std.fmt.allocPrint(a, "{{{s}}}", .{f[0]}), f[1]);
-    return ui.prose.parse(a, s);
+    for (md_fills) |f| s = try fillIn(a, s, f);
+    const d = try ui.prose.parse(a, s);
+    const blocks = try a.dupe(ui.prose.Block, d.blocks);
+    for (blocks) |*b| switch (b.*) {
+        .heading => |*x| x.line = try fillLine(a, x.line, fills),
+        .para => |*l| l.* = try fillLine(a, l.*, fills),
+        .list => |*items| {
+            const out = try a.dupe(ui.prose.Item, items.*);
+            for (out) |*it| it.* = .{ .line = try fillLine(a, it.line, fills), .sub = try fillLines(a, it.sub, fills) };
+            items.* = out;
+        },
+        .table => |*t| {
+            const rows = try a.dupe([]const ui.prose.Line, t.rows);
+            for (rows) |*r| r.* = try fillLines(a, r.*, fills);
+            t.* = .{ .head = try fillLines(a, t.head, fills), .rows = rows, .cut = t.cut };
+        },
+        .code => {},
+    };
+    return .{ .blocks = blocks };
+}
+
+const Fill = [2][]const u8;
+
+fn fillIn(a: Allocator, s: []const u8, f: Fill) ![]const u8 {
+    if (std.mem.findScalar(u8, s, '{') == null) return s;
+    return std.mem.replaceOwned(u8, a, s, try std.fmt.allocPrint(a, "{{{s}}}", .{f[0]}), f[1]);
+}
+
+fn fillLine(a: Allocator, l: ui.prose.Line, fills: []const Fill) !ui.prose.Line {
+    const out = try a.dupe(ui.prose.Run, l);
+    for (out) |*r| for (fills) |f| {
+        r.s = try fillIn(a, r.s, f);
+        r.href = try fillIn(a, r.href, f);
+    };
+    return out;
+}
+
+fn fillLines(a: Allocator, ls: []const ui.prose.Line, fills: []const Fill) ![]const ui.prose.Line {
+    const out = try a.dupe(ui.prose.Line, ls);
+    for (out) |*l| l.* = try fillLine(a, l.*, fills);
+    return out;
 }
 
 fn writeBody(h: *ui.H, w: *Writer, p: ui.textpage.TextPage) !void {
@@ -436,6 +478,7 @@ pub fn body(site: *const Site, w: *Writer, at: std.meta.Tag(urls.Page)) !bool {
             .lead = method_lead,
             .body = try doc(a, try std.mem.concat(a, u8, &.{ method_md, "\n", try evalchart.intro(a, site.eval) }), &.{
                 .{ "k_table", try gamesToStabilise(a, extras.biggestCurves(site.view_curves)) },
+            }, &.{
                 .{ "gm", try std.fmt.allocPrint(a, "{d}", .{lean.gold_minute}) },
                 .{ "wm", try std.fmt.allocPrint(a, "{d}", .{lean.win_minute}) },
                 .{ "min", try std.fmt.allocPrint(a, "{d}", .{lean.min_games}) },
@@ -445,12 +488,12 @@ pub fn body(site: *const Site, w: *Writer, at: std.meta.Tag(urls.Page)) !bool {
         .terms => .{
             .title = "Terms of use",
             .sub = "Last updated " ++ terms_updated ++ ".",
-            .body = try doc(a, terms_md, &.{ .{ "legal", html.boilerplate }, .{ "contact", site.opts.contact } }),
+            .body = try doc(a, terms_md, &.{}, &.{ .{ "legal", html.boilerplate }, .{ "contact", site.opts.contact } }),
         },
         .privacy => .{
             .title = "Privacy policy",
             .sub = "Last updated " ++ privacy_updated ++ ".",
-            .body = try doc(a, privacy_md, &.{.{ "contact", site.opts.contact }}),
+            .body = try doc(a, privacy_md, &.{}, &.{.{ "contact", site.opts.contact }}),
         },
         .download => .{
             .title = "Champ select helper (desktop app)",
@@ -477,4 +520,24 @@ pub fn notFound(site: *const Site, w: *Writer) !void {
         .body = try ui.prose.parse(site.arena, not_found_md),
     });
     try html.foot(w, p);
+}
+
+test "doc: text fills go in after parsing, so their markdown characters stay text" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const md = "Write to [{contact}](mailto:{contact}).\n\n- **{n}** {contact}\n\n{t}";
+    const md_fills: []const Fill = &.{.{ "t", "| a |\n| --- |\n| {n} |" }};
+    for ([_][]const u8{ "a*b]c`d@x.y", "" }) |c| {
+        const d = try doc(a, md, md_fills, &.{ .{ "contact", c }, .{ "n", "5" } });
+        const p = d.blocks[0].para;
+        try std.testing.expectEqual(.link, p[1].kind);
+        try std.testing.expectEqualStrings(c, p[1].s);
+        try std.testing.expectEqualStrings(try std.mem.concat(a, u8, &.{ "mailto:", c }), p[1].href);
+        try std.testing.expectEqualStrings(".", p[2].s);
+        const li = d.blocks[1].list[0].line;
+        try std.testing.expectEqualStrings("5", li[0].s);
+        try std.testing.expectEqualStrings(try std.mem.concat(a, u8, &.{ " ", c }), li[1].s);
+        try std.testing.expectEqualStrings("5", d.blocks[2].table.rows[0][0][0].s);
+    }
 }
