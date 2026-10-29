@@ -503,7 +503,7 @@ pub const css =
     \\  .c-build .names > .w { color: var(--t2); font-weight: var(--w-b); }
     \\  .c-build .slots > .cells { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3) var(--sp-4); }
     \\  @container (max-width: 520px) { .c-build .slots > .cells { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); } }
-    \\  .c-build .slot { display: flex; flex-direction: column; min-width: 0; }
+    \\  .c-build .slot { container-type: inline-size; display: flex; flex-direction: column; min-width: 0; }
     \\  .c-build .slot[data-k="core"], .c-build .slot[data-k="skills"], .c-build .slot[data-open] { grid-column: 1 / -1; }
     \\  .c-build .slot > .sh { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
     \\    height: var(--ctl-s); border-bottom: 1px solid var(--line); }
@@ -531,6 +531,7 @@ pub const css =
     \\      overflow: hidden; color: transparent; background: var(--accent); }
     \\    .c-build .c-table[data-v="compact"] :is(th, td) { padding: 0 2px; }
     \\    .c-build .what > .usual { display: none; }
+    \\    .c-build .what > .c-art + .c-art { margin-left: -8px; box-shadow: -1.5px 0 0 var(--panel); }
     \\  }
     \\}
     \\

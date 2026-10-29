@@ -571,20 +571,12 @@ pub fn ratio(part: u64, whole: u64) f64 {
 /// Under this many games a page says its data is early
 const early_games = 50_000;
 
-/// `filtered`: written even when hidden, for filters.js to show when the filters pick fewer
-/// games
-pub fn earlyNote(site: *const Site, w: *Writer, filtered: bool) !void {
-    const early = site.games < early_games;
-    if (!early and !filtered) return;
+pub fn earlyNote(site: *const Site, w: *Writer) !void {
+    if (site.games >= early_games) return;
     try tpl.render(w,
-        \\<p class="note" data-early="{early}"{hidden}>Early data: <span data-early-games>{games} games so far ({when})</span>. Win rates fade the fewer games they have. Colour runs from hot pink through orange (low) to blue through aqua (high), grey at 50%.</p>
+        \\<p class="note">Early data: {games} games so far.</p>
         \\
-    , .{
-        .early = early_games,
-        .hidden = tpl.flag(!early, "hidden"),
-        .games = Thousands{ .n = site.games },
-        .when = site.when,
-    });
+    , .{ .games = Thousands{ .n = site.games } });
 }
 
 pub fn roleFromSlug(s: []const u8) ?Role {
