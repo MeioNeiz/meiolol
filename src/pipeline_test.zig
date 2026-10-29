@@ -20,6 +20,7 @@ const site = @import("site/root.zig");
 const assets = @import("site/assets.zig");
 const admin = @import("admin.zig");
 const site_tester = @import("site/tester.zig");
+const site_admin = @import("site/adminpage.zig");
 const api = @import("api/root.zig");
 const lab_rows = @import("lab/rows.zig");
 const lab_pack = @import("lab/pack.zig");
@@ -963,6 +964,15 @@ test "admin page from the fixture games and a crawl log" {
     }
     for ([_][]const u8{ assets.tester_js.path, assets.tester_wasm.path, assets.testercand_js.path, assets.testercand_wasm.path, site_tester.css_file.path, "tester.html.gz" }) |f| {
         try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ private, f }), .{});
+    }
+    // The new admin page beside the old: an empty island the wasm fills from admin.bin
+    try site_admin.write(gpa, io, out);
+    const a_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "new.html" }), arena, .limited(1 << 20));
+    for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "data-island=\"admin\"", site_admin.js.path, site_admin.wasm.path, site_admin.css_file.path }) |s| {
+        try std.testing.expect(std.mem.find(u8, a_html, s) != null);
+    }
+    for ([_][]const u8{ site_admin.js.path, site_admin.wasm.path, site_admin.css_file.path, "new.html.gz", "admin.bin" }) |f| {
+        try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ out, f }), .{});
     }
     // data.json: the page's data, for polling between rebuilds
     const json = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data.json" }), arena, .limited(4 << 20));

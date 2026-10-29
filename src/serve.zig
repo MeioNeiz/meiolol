@@ -7,6 +7,7 @@
 const std = @import("std");
 const Io = std.Io;
 const site = @import("site/root.zig");
+const site_admin = @import("site/adminpage.zig");
 const store = @import("store");
 const httpd = @import("net").server;
 const client = @import("net").client;
@@ -352,6 +353,13 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             defer arena_state.deinit();
             return request.respond(try site.notes.adminPage(arena_state.allocator()), .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/html; charset=utf-8" }} });
         }
+        if (std.mem.startsWith(u8, path, "admin/") or std.mem.startsWith(u8, path, "auth/")) {
+            var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+            defer arena_state.deinit();
+            if (try devAdmin(arena_state.allocator(), path)) |body| {
+                return request.respond(body, .{ .extra_headers = &.{.{ .name = "content-type", .value = contentType(path) }} });
+            }
+        }
     }
 
     var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
@@ -581,6 +589,26 @@ fn notFound(request: *std.http.Server.Request) !void {
         .status = .not_found,
         .extra_headers = &.{.{ .name = "content-type", .value = "text/plain; charset=utf-8" }},
     });
+}
+
+/// The new admin page on its fixtures (ui.adminpage.Demo): the page, its files, and what
+/// it fetches. No accounts API here, so its writes fail
+fn devAdmin(a: std.mem.Allocator, path: []const u8) !?[]const u8 {
+    const ui = site.ui;
+    const demo = ui.adminpage.Demo;
+    if (std.mem.eql(u8, path, "admin/new.html")) return try site_admin.page(a);
+    if (std.mem.startsWith(u8, path, "admin/")) if (site_admin.file(path["admin/".len..])) |f| return f;
+    var out: std.ArrayList(u8) = .empty;
+    if (std.mem.eql(u8, path, "admin/admin.bin")) {
+        try ui.data.encode(a, ui.admindata.Snapshot, demo.snap, &out);
+    } else if (std.mem.eql(u8, path, "admin/api/live.bin")) {
+        try ui.data.encode(a, ui.admindata.Live, demo.live, &out);
+    } else if (std.mem.eql(u8, path, "auth/me.bin")) {
+        try ui.data.encode(a, ui.accountsdata.Me, demo.me, &out);
+    } else if (std.mem.eql(u8, path, "auth/accounts.bin")) {
+        try ui.data.encode(a, ui.accountsdata.Accounts, demo.accounts, &out);
+    } else return null;
+    return out.items;
 }
 
 fn contentType(name: []const u8) []const u8 {

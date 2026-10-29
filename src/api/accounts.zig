@@ -32,13 +32,18 @@
 //!   POST /auth/role       {"username","role"}
 //!   POST /auth/disable    {"username","disabled"}: disabling signs it out everywhere
 //!   POST /auth/reset      {"username"}: {"invite":TOKEN}, a one-use link to set its password
+//!
+//! me, logout, accounts, invite, role, disable and reset also as NAME.bin: bodies and 200s
+//! in ui.data (ui/accountsdata.zig), for the islands; errors JSON
 
 const std = @import("std");
 const Io = std.Io;
 const store = @import("store");
 const core = @import("core");
 const roles = @import("roles.zig");
-const notes_marker = @import("ui").notesdata.marker;
+const ui = @import("ui");
+const notes_marker = ui.notesdata.marker;
+const ad = ui.accountsdata;
 
 const Allocator = std.mem.Allocator;
 const Db = store.Db;
@@ -495,6 +500,8 @@ pub const In = struct {
     /// X-Meiolol-Action: 1
     action: bool = false,
     body: []const u8 = "",
+    /// The path ended .bin: ui.data in and out
+    bin: bool = false,
 };
 
 pub const Out = struct {
@@ -505,6 +512,7 @@ pub const Out = struct {
     marker: ?[]const u8 = null,
     user: ?[]const u8 = null,
     role: ?Role = null,
+    bin: bool = false,
 };
 
 pub const Service = struct {
@@ -547,7 +555,8 @@ pub const Service = struct {
         try respond(request, out, true);
     }
 
-    pub fn route(s: *Service, arena: Allocator, in: In, now: i64) !Out {
+    pub fn route(s: *Service, arena: Allocator, in_: In, now: i64) !Out {
+        var in = in_;
         const post = in.method == .POST;
         const Route = enum { login, logout, me, join, signup, password, device, devices, revoke, accounts, invite, role, disable, reset };
         const not_found: Out = .{ .status = .not_found, .body = errorJson("not found") };
@@ -558,7 +567,15 @@ pub const Service = struct {
             if (!a.role.can(cap) or in.bearer != null and !cap.forDevices()) return .{ .status = .forbidden };
             return .{ .status = .no_content, .user = a.username, .role = a.role };
         }
+        if (std.mem.endsWith(u8, in.path, ".bin")) {
+            in.path = in.path[0 .. in.path.len - ".bin".len];
+            in.bin = true;
+        }
         const r = std.meta.stringToEnum(Route, in.path) orelse return not_found;
+        if (in.bin) switch (r) {
+            .me, .logout, .accounts, .invite, .role, .disable, .reset => {},
+            else => return not_found,
+        };
         if (post != (r != .me and r != .accounts and r != .devices)) return notAllowed();
         if (post and !in.action) return .{ .status = .forbidden, .body = errorJson("missing X-Meiolol-Action") };
         return switch (r) {
@@ -566,7 +583,7 @@ pub const Service = struct {
             .logout => s.logout(arena, in, now),
             .me => {
                 const a = try s.signedIn(arena, in, now) orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
-                return .{ .status = .ok, .body = try accountJson(arena, a) };
+                return answer(arena, in, try meOf(arena, a));
             },
             .join => s.join(arena, in, now),
             .signup => s.signup(arena, in, now),
@@ -578,7 +595,7 @@ pub const Service = struct {
                 const token = in.token orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
                 const a = try session(db, arena, token, now) orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
                 if (r == .devices) return .{ .status = .ok, .body = try devicesJson(db, arena, a.id, now) };
-                const b = parseBody(struct { id: i64 }, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with id") };
+                const b = parseBody(struct { id: i64 }, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with id") };
                 if (!try revokeDevice(db, a.id, b.id)) return .{ .status = .not_found, .body = errorJson("no such device") };
                 return .{ .status = .ok, .body = "{\"ok\":true}" };
             },
@@ -589,7 +606,7 @@ pub const Service = struct {
                 const actor = try session(db, arena, token, now) orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
                 if (!actor.role.can(.manage_accounts)) return .{ .status = .forbidden, .body = errorJson("your role cannot manage accounts") };
                 return switch (r) {
-                    .accounts => .{ .status = .ok, .body = try accountsJson(db, arena, actor) },
+                    .accounts => answer(arena, in, try accounts(db, arena, actor)),
                     .invite => s.newInvite(db, arena, in, actor, now),
                     else => s.manage(db, arena, in, actor, r == .role, r == .disable, now),
                 };
@@ -635,7 +652,7 @@ pub const Service = struct {
 
     fn login(s: *Service, arena: Allocator, in: In, now: i64) !Out {
         const Body = struct { username: []const u8, password: []const u8 };
-        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username and password") };
+        const b = parseBody(Body, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username and password") };
         const db = try open(s.db_path);
         defer db.close();
         const a = switch (try s.credentials(db, arena, b.username, b.password, now)) {
@@ -654,7 +671,7 @@ pub const Service = struct {
     /// A login for the desktop app: its token instead of a cookie
     fn newDevice(s: *Service, arena: Allocator, in: In, now: i64) !Out {
         const Body = struct { username: []const u8, password: []const u8, name: []const u8 = "" };
-        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username and password") };
+        const b = parseBody(Body, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username and password") };
         const db = try open(s.db_path);
         defer db.close();
         const a = switch (try s.credentials(db, arena, b.username, b.password, now)) {
@@ -670,12 +687,12 @@ pub const Service = struct {
     }
 
     fn logout(s: *Service, arena: Allocator, in: In, now: i64) !Out {
-        const out: Out = .{ .status = .ok, .body = "{\"ok\":true}", .set_cookie = cookie_name ++ "=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax", .marker = marker_off };
+        const out: Out = .{ .status = .ok, .body = okOut(in).body, .bin = in.bin, .set_cookie = cookie_name ++ "=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax", .marker = marker_off };
         if (in.bearer) |t| {
             const db = try open(s.db_path);
             defer db.close();
             try endDevice(db, t);
-            return .{ .status = .ok, .body = out.body };
+            return okOut(in);
         }
         const token = in.token orelse return out;
         const db = try open(s.db_path);
@@ -688,7 +705,7 @@ pub const Service = struct {
 
     fn join(s: *Service, arena: Allocator, in: In, now: i64) !Out {
         const Body = struct { invite: []const u8, username: []const u8 = "", password: []const u8 };
-        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with invite, username and password") };
+        const b = parseBody(Body, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with invite, username and password") };
         const bad_invite: Out = .{ .status = .bad_request, .body = errorJson("this invite link has been used or has expired") };
         const token = parseToken(b.invite) orelse return bad_invite;
         if (!passwordOk(b.password)) return .{ .status = .bad_request, .body = errorJson("password must be 8 to 256 characters") };
@@ -732,7 +749,7 @@ pub const Service = struct {
     /// against a username: guessing the shared password is slow, whoever holds the link
     fn signup(s: *Service, arena: Allocator, in: In, now: i64) !Out {
         const Body = struct { link: []const u8, email: []const u8, password: []const u8 };
-        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with link, email and password") };
+        const b = parseBody(Body, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with link, email and password") };
         const bad_link: Out = .{ .status = .bad_request, .body = errorJson("this sign-up link no longer works") };
         const token = parseToken(b.link) orelse return bad_link;
         var name_buf: [username_max]u8 = undefined;
@@ -766,7 +783,7 @@ pub const Service = struct {
     /// the account over
     fn password(s: *Service, arena: Allocator, in: In, now: i64) !Out {
         const Body = struct { password: []const u8, new: []const u8 };
-        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with password and new") };
+        const b = parseBody(Body, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with password and new") };
         const token = in.token orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
         if (!passwordOk(b.new)) return .{ .status = .bad_request, .body = errorJson("password must be 8 to 256 characters") };
         const db = try open(s.db_path);
@@ -787,23 +804,22 @@ pub const Service = struct {
     }
 
     fn newInvite(s: *Service, db: Db, arena: Allocator, in: In, actor: Account, now: i64) !Out {
-        const b = parseBody(struct { role: []const u8 }, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with role") };
+        const b = parseBody(ad.NewInvite, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with role") };
         const role = Role.parse(b.role) orelse return .{ .status = .bad_request, .body = errorJson("no such role") };
         if (!actor.role.canManage(role)) return .{ .status = .forbidden, .body = errorJson("your role cannot give that role") };
         const t = try makeInvite(db, s.io, role, null, actor.username, now);
-        return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, .{ .invite = &t }, .{}) };
+        return answer(arena, in, ad.Invite{ .invite = &t });
     }
 
     /// role, disable or reset on one account
     fn manage(s: *Service, db: Db, arena: Allocator, in: In, actor: Account, set_role: bool, disable: bool, now: i64) !Out {
-        const Body = struct { username: []const u8, role: []const u8 = "", disabled: bool = false };
-        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username") };
+        const b = parseBody(ad.Manage, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username") };
         var name_buf: [username_max]u8 = undefined;
         const name = username(&name_buf, b.username) orelse return .{ .status = .not_found, .body = errorJson("no such account") };
         const target = try find(db, arena, name) orelse return .{ .status = .not_found, .body = errorJson("no such account") };
         const cannot: Out = .{ .status = .forbidden, .body = errorJson("your role cannot manage that account") };
         if (!actor.role.canManage(target.role)) return cannot;
-        const ok: Out = .{ .status = .ok, .body = "{\"ok\":true}" };
+        const ok = okOut(in);
         if (set_role) {
             const role = Role.parse(b.role) orelse return .{ .status = .bad_request, .body = errorJson("no such role") };
             if (!actor.role.canManage(role)) return .{ .status = .forbidden, .body = errorJson("your role cannot give that role") };
@@ -815,15 +831,14 @@ pub const Service = struct {
             return ok;
         }
         const t = try makeInvite(db, s.io, target.role, target.id, actor.username, now);
-        return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, .{ .invite = &t }, .{}) };
+        return answer(arena, in, ad.Invite{ .invite = &t });
     }
 };
 
 /// Every account, each marked with whether `actor` may manage it; and the roles it may
 /// give, lowest first
-fn accountsJson(db: Db, arena: Allocator, actor: Account) ![]const u8 {
-    const Row = struct { username: []const u8, role: []const u8, created: i64, last_seen: ?i64, disabled: bool, manage: bool };
-    var rows: std.ArrayList(Row) = .empty;
+fn accounts(db: Db, arena: Allocator, actor: Account) !ad.Accounts {
+    var rows: std.ArrayList(ad.Account) = .empty;
     var q = try db.prepare("SELECT username, role, created, last_seen, disabled FROM accounts ORDER BY id");
     defer q.deinit();
     try q.bind(.{});
@@ -841,7 +856,7 @@ fn accountsJson(db: Db, arena: Allocator, actor: Account) ![]const u8 {
     }
     var give: std.ArrayList([]const u8) = .empty;
     for (std.enums.values(Role)) |role| if (actor.role.canManage(role)) try give.append(arena, @tagName(role));
-    return std.json.Stringify.valueAlloc(arena, .{ .accounts = rows.items, .roles = give.items }, .{});
+    return .{ .accounts = rows.items, .roles = give.items };
 }
 
 fn tooMany(arena: Allocator, wait: i64) !Out {
@@ -871,15 +886,33 @@ fn errorJson(comptime message: []const u8) []const u8 {
     return "{\"error\":\"" ++ message ++ "\"}";
 }
 
-/// null for anything but a JSON object with string fields T names
-fn parseBody(comptime T: type, arena: Allocator, body: []const u8) ?T {
-    return std.json.parseFromSliceLeaky(T, arena, body, .{ .ignore_unknown_fields = true }) catch null;
+/// null for anything but a JSON object with string fields T names, or with .bin a T
+fn parseBody(comptime T: type, arena: Allocator, in: In) ?T {
+    if (in.bin) return ui.data.decode(arena, T, in.body) catch null;
+    return std.json.parseFromSliceLeaky(T, arena, in.body, .{ .ignore_unknown_fields = true }) catch null;
+}
+
+/// 200 with `v` as JSON, or ui.data for .bin
+fn answer(arena: Allocator, in: In, v: anytype) !Out {
+    if (!in.bin) return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, v, .{}) };
+    var out: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, @TypeOf(v), v, &out);
+    return .{ .status = .ok, .body = out.items, .bin = true };
+}
+
+/// A write's 200: {"ok":true}, or nothing for .bin
+fn okOut(in: In) Out {
+    return if (in.bin) .{ .status = .ok, .bin = true } else .{ .status = .ok, .body = "{\"ok\":true}" };
+}
+
+fn meOf(arena: Allocator, a: Account) !ad.Me {
+    var can: std.ArrayList([]const u8) = .empty;
+    for (std.enums.values(Capability)) |cap| if (a.role.can(cap)) try can.append(arena, @tagName(cap));
+    return .{ .username = a.username, .role = @tagName(a.role), .can = can.items };
 }
 
 fn accountJson(arena: Allocator, a: Account) ![]const u8 {
-    var can: std.ArrayList([]const u8) = .empty;
-    for (std.enums.values(Capability)) |cap| if (a.role.can(cap)) try can.append(arena, @tagName(cap));
-    return std.json.Stringify.valueAlloc(arena, .{ .username = a.username, .role = @tagName(a.role), .can = can.items }, .{});
+    return std.json.Stringify.valueAlloc(arena, try meOf(arena, a), .{});
 }
 
 fn sessionCookie(arena: Allocator, token: []const u8) ![]const u8 {
@@ -892,7 +925,7 @@ fn respond(request: *Request, out: Out, keep_alive: bool) !void {
     headers[n] = .{ .name = "cache-control", .value = "no-store" };
     n += 1;
     if (out.body.len > 0) {
-        headers[n] = .{ .name = "content-type", .value = "application/json" };
+        headers[n] = .{ .name = "content-type", .value = if (out.bin) "application/octet-stream" else "application/json" };
         n += 1;
     }
     if (out.set_cookie) |c| {
@@ -1421,6 +1454,45 @@ test "manage: what each change does" {
     const rt = (try std.json.parseFromSliceLeaky(struct { invite: []const u8 }, a, reset.body, .{})).invite;
     try testing.expectEqual(Status.ok, (try postAs(&f, null, "join", .{ .invite = rt, .password = "pal's new one" })).status);
     try testing.expectEqual(Status.ok, (try f.login("pal", "pal's new one")).status);
+}
+
+test "NAME.bin: the same answers in ui.data, a ui.data body in; errors stay JSON" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const a = f.arena();
+    const admin = try f.signIn(.admin);
+    const me_ = try f.service.route(a, .{ .method = .GET, .path = "me.bin", .token = admin }, Fixture.now);
+    try testing.expect(me_.bin);
+    const m = try ui.data.decode(a, ad.Me, me_.body);
+    try testing.expectEqualStrings("admin", m.role);
+    try testing.expect(m.can.len > 0);
+    const list = try ui.data.decode(a, ad.Accounts, (try f.service.route(a, .{ .method = .GET, .path = "accounts.bin", .token = admin }, Fixture.now)).body);
+    try testing.expectEqual(@as(usize, 3), list.roles.len);
+    for (list.accounts) |x| try testing.expectEqual(!std.mem.eql(u8, x.role, "admin") and !std.mem.eql(u8, x.role, "owner"), x.manage);
+
+    const post = struct {
+        fn go(fx: *Fixture, al: Allocator, token: []const u8, path: []const u8, v: anytype) !Out {
+            var body: std.ArrayList(u8) = .empty;
+            try ui.data.encode(al, @TypeOf(v), v, &body);
+            return fx.service.route(al, .{ .method = .POST, .path = path, .token = token, .action = true, .body = body.items }, Fixture.now);
+        }
+    }.go;
+    const inv = try post(&f, a, admin, "invite.bin", ad.NewInvite{ .role = "private" });
+    try testing.expectEqual(Status.ok, inv.status);
+    try testing.expect(inv.bin and (try ui.data.decode(a, ad.Invite, inv.body)).invite.len > 20);
+    const ok = try post(&f, a, admin, "disable.bin", ad.Manage{ .username = "private", .disabled = true });
+    try testing.expectEqual(Status.ok, ok.status);
+    try testing.expectEqualStrings("", ok.body);
+    try testing.expectEqual(1, try f.db.scalar("SELECT disabled FROM accounts WHERE username = 'private'", .{}));
+    const bad = try post(&f, a, admin, "role.bin", ad.Manage{ .username = "private", .role = "king" });
+    try testing.expectEqual(Status.bad_request, bad.status);
+    try testing.expect(!bad.bin and std.mem.startsWith(u8, bad.body, "{\"error\""));
+    // A JSON body to a .bin path is no body at all
+    try testing.expectEqual(Status.bad_request, (try f.service.route(a, .{ .method = .POST, .path = "reset.bin", .token = admin, .action = true, .body = "{\"username\":\"private\"}" }, Fixture.now)).status);
+    for ([_][]const u8{ "devices.bin", "check.bin", "me.bin.bin" }) |p| {
+        try testing.expectEqual(Status.not_found, (try f.service.route(a, .{ .method = .GET, .path = p, .token = admin }, Fixture.now)).status);
+    }
 }
 
 test "password: the old one first, then every other session ends" {

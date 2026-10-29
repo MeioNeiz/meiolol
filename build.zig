@@ -384,13 +384,13 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
 }
 
 /// ui.wasm files, one per page family so each page loads only its islands (Jacob 25 Oct)
-const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice", "finder", "findergrid", "learn", "patch", "pool", "poolgrid", "daily", "dailydays", "home", "homegame", "tester", "testercand", "your", "yourviews", "yourtime", "yourlookup", "forget", "notes" };
+const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice", "finder", "findergrid", "learn", "patch", "pool", "poolgrid", "daily", "dailydays", "home", "homegame", "tester", "testercand", "your", "yourviews", "yourtime", "yourlookup", "forget", "notes", "admin" };
 /// gzip bytes per family: stack.md's 40 KB
 const ui_budget = 40 * 1024;
 /// -Dwasm-dev
 var wasm_dev = false;
 /// Families only logins load (/p/): 64 KB (Jacob 27 Oct)
-const ui_private = [_][]const u8{ "ui-tester", "ui-testercand", "ui-notes" };
+const ui_private = [_][]const u8{ "ui-tester", "ui-testercand", "ui-notes", "ui-admin" };
 const ui_private_budget = 64 * 1024;
 
 const UiWasm = struct { name: []const u8, wasm: std.Build.LazyPath, js: std.Build.LazyPath };

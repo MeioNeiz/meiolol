@@ -595,7 +595,7 @@ fn dayOf(at_s: i64) i32 {
 }
 
 /// BST: from 01:00 UTC on March's last Sunday to 01:00 UTC on October's
-fn ukOffset(at_s: i64) i64 {
+pub fn ukOffset(at_s: i64) i64 {
     const y: i64 = fmt.civil(dayOf(at_s)).year;
     const on = lastSunday(y, 3) * 86400 + 3600;
     const end = lastSunday(y, 10) * 86400 + 3600;

@@ -8,6 +8,7 @@ const api = @import("../api/root.zig");
 const admin = @import("../admin.zig");
 const site_tester = @import("../site/tester.zig");
 const site_notes = @import("../site/notes.zig");
+const site_admin = @import("../site/adminpage.zig");
 const status = @import("../status.zig");
 const main = @import("../main.zig");
 const Cmd = main.Cmd;
@@ -516,6 +517,7 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
     defer db.close();
     try admin.generate(c.init.gpa, c.init.io, db, o);
     site_notes.writeAdmin(c.init.gpa, c.init.io, o.out_dir) catch |e| std.log.err("notes page: {t}", .{e});
+    site_admin.write(c.init.gpa, c.init.io, o.out_dir) catch |e| std.log.err("new admin page: {t}", .{e});
     if (private_out) |p| {
         try admin.private(c.init.gpa, c.init.io, p, now);
         // web-loop.sh skips the admin and private uploads when this exits non-zero: the
