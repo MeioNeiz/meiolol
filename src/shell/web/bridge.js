@@ -6,7 +6,10 @@
   const wv = window.chrome && window.chrome.webview;
   if (!wv) return;
   window.meiolol = { send: (m) => wv.postMessage(JSON.stringify(m)) };
-  wv.addEventListener('message', (e) => dispatchEvent(new CustomEvent('meiolol', { detail: e.data })));
+  wv.addEventListener('message', (e) => {
+    if (e.data && e.data.reload) return location.reload();
+    dispatchEvent(new CustomEvent('meiolol', { detail: e.data }));
+  });
   const page = location.pathname.replace(/^\//, '') || 'index.html';
   addEventListener('DOMContentLoaded', () => {
     requestAnimationFrame(() => requestAnimationFrame(() => meiolol.send({ painted: { page } })));

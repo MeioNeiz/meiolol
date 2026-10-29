@@ -17,6 +17,9 @@ pub const ToPage = union(enum) {
     champ_select: ChampSelect,
     /// The app's page changed: app.bin is at this seq (ui/wasm/app.zig fetches it)
     app: u32,
+    /// What's around the app's island changed (the comp view under it): bridge.js loads
+    /// the page afresh
+    reload: u32,
 };
 
 pub const Hello = struct {
@@ -94,6 +97,11 @@ test "to page: a tagged object, nulls left out" {
     var w: std.Io.Writer = .fixed(&buf);
     try write(&w, .{ .status = .{ .client = .champ_select } });
     try std.testing.expectEqualStrings("{\"status\":{\"client\":\"champ_select\"}}", w.buffered());
+
+    // bridge.js reloads on this one rather than passing it on
+    w = .fixed(&buf);
+    try write(&w, .{ .reload = 15 });
+    try std.testing.expectEqualStrings("{\"reload\":15}", w.buffered());
 
     w = .fixed(&buf);
     var seats: [10]Seat = @splat(.{ .state = .empty });
