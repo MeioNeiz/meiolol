@@ -571,12 +571,12 @@ fn isNum(line: Line) bool {
 pub const css =
     \\@layer components {
     \\  .c-prose { max-width: 72ch; color: var(--t2); font-size: var(--fs-s); line-height: var(--lh); }
+    \\  .c-prose :where(p, ul) { margin: 0; }
     \\  .c-prose > * + *, .c-prose .sec > * + * { margin-block-start: var(--sp-2); }
     \\  .c-prose :is(h1, h2, h3, h4) { margin: var(--sp-3) 0 0; color: var(--text); font-size: var(--fs-m);
     \\    font-weight: var(--w-b); line-height: var(--lh-tight); }
     \\  .c-prose h1 { font-size: var(--fs-l); }
     \\  .c-prose h4 { font-size: var(--fs-s); }
-    \\  .c-prose p, .c-prose ul { margin: 0; }
     \\  .c-prose ul { padding-inline-start: 1.25em; }
     \\  .c-prose li + li { margin-block-start: var(--sp-1); }
     \\  .c-prose strong { color: var(--text); font-weight: var(--w-b); }

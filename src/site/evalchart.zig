@@ -80,9 +80,9 @@ pub fn intro(a: std.mem.Allocator, points: []const Point) ![]const u8 {
         \\
         \\How well each model tells winners from losers on ranked games it never saw, as
         \\more games come in. 0.5 is a coin flip, 1 would be always right. A draft decides
-        \\little of a game, so expect small numbers: at {d} games the best is {d:.3}.
+        \\little of a game, so expect small numbers: at {f} games the best is {d:.3}.
         \\
-    , .{ last.games, @max(last.auc[0], last.auc[1], last.auc[2]) });
+    , .{ @import("root.zig").Thousands{ .n = last.games }, @max(last.auc[0], last.auc[1], last.auc[2]) });
 }
 
 /// The model in use first: the chart's answer

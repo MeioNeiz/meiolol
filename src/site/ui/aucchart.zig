@@ -5,6 +5,7 @@
 const std = @import("std");
 const tree = @import("tree.zig");
 const chart = @import("chart.zig");
+const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const H = tree.H;
 const N = tree.N;
@@ -52,8 +53,8 @@ pub const AucChart = struct {
         }
         const main = c.series[0].auc;
         const xs = h.mem.dupe(chart.Tick, &.{
-            .{ .at = 0, .label = .{ .s = h.fmt("{d} games", .{c.games[0]}) } },
-            .{ .at = 100, .label = .{ .s = h.fmt("{d} games", .{c.games[n - 1]}) } },
+            .{ .at = 0, .label = .{ .s = h.fmt("{s} games", .{phrase.num(h, .count, c.games[0]).s}) } },
+            .{ .at = 100, .label = .{ .s = h.fmt("{s} games", .{phrase.num(h, .count, c.games[n - 1]).s}) } },
         }) catch {
             h.oom = true;
             return .none;
@@ -94,7 +95,7 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = "Champion win rates alone", .auc = &.{ 0.538, 0.540, 0.541, 0.541, 0.542, 0.541 }, .kind = .prev },
         .{ .label = "Joint ratings (on trial)", .auc = &.{ 0.549, 0.557, 0.563, 0.568, 0.571, 0.574 }, .kind = .typ },
     };
-    g.add("six runs, three models", (AucChart{ .games = &demo_games, .series = &series, .caption = "AUC on held-out games against the games the models learnt from; one point per daily run." }).view(g.h));
+    g.addFill("six runs, three models", (AucChart{ .games = &demo_games, .series = &series, .caption = "AUC on held-out games against the games the models learnt from; one point per daily run." }).view(g.h));
 }
 
 const testing = std.testing;
@@ -113,7 +114,7 @@ test "the coin flip stays in view; the model in use ends on its figure; under tw
     try @import("html.zig").write(&t, (AucChart{ .games = &.{ 1000, 2000 }, .series = &series }).view(&h), &out.writer);
     try testing.expect(!h.oom);
     const s = out.written();
-    for ([_][]const u8{ ">0.50<", ">0.59<", ">0.571<", ">1000 games<", ">2000 games<", "data-k=\"prev\"" }) |w| {
+    for ([_][]const u8{ ">0.50<", ">0.59<", ">0.571<", ">1,000 games<", ">2,000 games<", "data-k=\"prev\"" }) |w| {
         if (std.mem.find(u8, s, w) == null) {
             std.debug.print("missing {s} in {s}\n", .{ w, s });
             return error.TestUnexpectedResult;
