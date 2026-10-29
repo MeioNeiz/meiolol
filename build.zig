@@ -494,10 +494,11 @@ fn uiSizes(b: *std.Build, families: []const []const u8) *std.Build.Step.Run {
     return run;
 }
 
-/// src/tools/fmtlint.zig over the code that compiles to ui.wasm
+/// src/tools/fmtlint.zig over the code that compiles to ui.wasm: uiExe's modules, core
+/// as far as ui imports it
 fn fmtLint(b: *std.Build) *std.Build.Step.Run {
     const run = b.addRunArtifact(hostTool(b, "fmtlint"));
-    run.addArgs(&.{ "src/site/ui", "src/tpl" });
+    run.addArgs(&.{ "--module", "core=src/core/root.zig", "src/site/ui", "src/tpl" });
     run.setCwd(b.path("."));
     run.has_side_effects = true;
     return run;

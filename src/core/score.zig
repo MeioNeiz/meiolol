@@ -171,7 +171,8 @@ pub fn describe(
     r: Reason,
     w: *std.Io.Writer,
 ) std.Io.Writer.Error!void {
-    try w.print("{s}{d:.1}% ", .{ if (r.pp >= 0) "+" else "", r.pp });
+    // fmt-ok below: app and backend; ui.wasm takes only Reason.Kind from this file
+    try w.print("{s}{d:.1}% ", .{ if (r.pp >= 0) "+" else "", r.pp }); // fmt-ok
     switch (r.kind) {
         .base => try w.print("{s} in {s}{f}", .{
             if (r.pp >= 0) "strong" else "weak",

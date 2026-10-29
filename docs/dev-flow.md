@@ -83,7 +83,9 @@ that file `wasmsize --list` prints every function, `--numbers` std's number form
 and which of our functions keep each piece.
 
 Number formatting in wasm: src/tools/fmtlint.zig (in ci) flags format strings with numeric
-placeholders in src/site/ui and src/tpl. Each call site is code in every family it
-reaches, and each int type std prints adds ~170 B gz. Numbers go through phrase.num or
-fmt.write; old ones are listed in src/tools/fmtlint-allow.txt (the follow-up list), a
-line that never reaches wasm says `// fmt-ok: <why>`.
+placeholders and direct calls of std's number formatters (printIntAny, printFloat, ...) in
+src/site/ui, src/tpl and the src/core files they import. Each call site is code in every
+family it reaches, and each int type std prints adds ~170 B gz. Numbers go through
+phrase.num or fmt.write; old ones are counted per file in src/tools/fmtlint-allow.txt (the
+follow-up list; one more copy in that file fails), a line that never reaches wasm says
+`// fmt-ok: <why>`.
