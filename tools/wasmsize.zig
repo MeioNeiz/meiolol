@@ -93,7 +93,7 @@ pub fn main(init: std.process.Init) !void {
 
     const store_dir = store orelse try storeDir(io, arena, tree);
     try Io.Dir.cwd().createDirPath(io, store_dir);
-    for (fams.items, files.items) |*f, paths| try measure(io, arena, store_dir, f, paths[0], paths[1]);
+    for (fams.items, files.items) |*f, paths| try measure(io, arena, f, paths[0], paths[1]);
     const base = try findBase(io, arena, tree, store_dir, base_rev);
     var out_buf: [4096]u8 = undefined;
     var out_file = Io.File.stdout().writerStreaming(io, &out_buf);
@@ -215,7 +215,7 @@ fn fail(comptime f: []const u8, args: anytype) noreturn {
     std.process.exit(2);
 }
 
-fn measure(io: Io, arena: Allocator, store: []const u8, f: *Family, wasm: []const u8, named: []const u8) !void {
+fn measure(io: Io, arena: Allocator, f: *Family, wasm: []const u8, named: []const u8) !void {
     const have_named = !std.mem.eql(u8, named, "-");
     const have_wasm = !std.mem.eql(u8, wasm, "-");
     const shipped: []const u8 = if (have_wasm)
@@ -225,7 +225,7 @@ fn measure(io: Io, arena: Allocator, store: []const u8, f: *Family, wasm: []cons
     else
         fail("{s}: no wasm", .{f.name});
     f.raw = shipped.len;
-    f.gz = try gzipSize(io, arena, store, if (have_wasm) wasm else null, shipped);
+    f.gz = try gzipSize(arena, shipped);
     if (!have_named) return;
     const m = try parse(arena, try readFile(io, arena, named));
     f.module = m;
@@ -245,17 +245,16 @@ fn readFile(io: Io, arena: Allocator, path: []const u8) ![]u8 {
         fail("{s}: {t}", .{ path, err });
 }
 
-/// gzip -9's size, as nginx's static .gz files and stack.md's budget. Bytes not in a file
-/// yet (a named build's stripped copy) go through one in the store
-fn gzipSize(io: Io, arena: Allocator, store: []const u8, path: ?[]const u8, bytes: []const u8) !u64 {
-    const file = path orelse blk: {
-        const tmp = try std.fs.path.join(arena, &.{ store, ".gzip-input.wasm" });
-        try Io.Dir.cwd().writeFile(io, .{ .sub_path = tmp, .data = bytes });
-        break :blk tmp;
-    };
-    const r = try std.process.run(arena, io, .{ .argv = &.{ "gzip", "-9", "-c", file }, .stdout_limit = .unlimited });
-    if (r.term != .exited or r.term.exited != 0) fail("gzip {s}: {s}", .{ file, r.stderr });
-    return r.stdout.len;
+/// The .gz nginx serves: the site writer's own flate (src/store/raw.zig compressWith,
+/// .default), so the same number on every host (Apple and GNU gzip -9 differ by ~20 B)
+fn gzipSize(arena: Allocator, bytes: []const u8) !u64 {
+    const flate = std.compress.flate;
+    const window = try arena.alloc(u8, flate.max_window_len);
+    var out: Io.Writer.Allocating = try .initCapacity(arena, @max(64, bytes.len / 2));
+    var c = try flate.Compress.init(&out.writer, window, .gzip, .default);
+    try c.writer.writeAll(bytes);
+    try c.finish();
+    return out.written().len;
 }
 
 // The wasm module: function names and body sizes, and who calls whom
@@ -503,12 +502,16 @@ fn findBase(io: Io, arena: Allocator, tree: []const u8, store: []const u8, rev: 
     while (it.next()) |sha| : (behind += 1) {
         const path = try std.fs.path.join(arena, &.{ store, sha });
         const text = Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(64 << 20)) catch continue;
+        if (!std.mem.startsWith(u8, text, store_version)) continue;
         return .{ .sha = sha, .behind = behind, .fams = try load(arena, text) };
     }
     return null;
 }
 
-/// Lines `f NAME RAW GZ` and `s NAME BYTES COUNT SYMBOL`
+/// The first line of a store file: a new one when sizes or names are measured differently
+const store_version = "v 2\n";
+
+/// Lines `f NAME RAW GZ` and `s NAME BYTES COUNT SYMBOL` after store_version
 fn load(arena: Allocator, text: []const u8) !std.StringArrayHashMapUnmanaged(Family) {
     var fams: std.StringArrayHashMapUnmanaged(Family) = .empty;
     var lines = std.mem.tokenizeScalar(u8, text, '\n');
@@ -540,6 +543,7 @@ fn cleanHead(io: Io, arena: Allocator, tree: []const u8) !?[]const u8 {
 fn save(io: Io, arena: Allocator, store: []const u8, sha: []const u8, fams: []const Family) !void {
     var text: Io.Writer.Allocating = .init(arena);
     const w = &text.writer;
+    try w.writeAll(store_version);
     for (fams) |f| {
         try w.print("f {s} {d} {d}\n", .{ f.name, f.raw, f.gz });
         for (f.syms.keys(), f.syms.values()) |k, v| try w.print("s {s} {d} {d} {s}\n", .{ f.name, v.bytes, v.count, k });
