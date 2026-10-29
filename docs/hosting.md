@@ -244,7 +244,7 @@ a 301 to it.
   whose page view is matched to a /print.css fetch by the same agent within 60 s (every
   page links it for print, so it never holds up rendering, and revalidates it); browser
   agents with no such fetch are "unconfirmed" (hours column 6), nearly all of them.
-  The new admin page reads it as /admin/api/traffic.bin: `meiolol render` converts the
+  The admin page reads it as /admin/api/traffic.bin: `meiolol render` converts the
   file on each request (src/admin.zig trafficBin, last 30 days)
   Reinstall: `deploy/jomify.sh install traffic`; units by hand into /etc/systemd/system,
   then `daemon-reload` (`deploy/jomify.sh drift` shows what differs)
@@ -262,7 +262,7 @@ a 301 to it.
   (accounts.md AC5; the web loop's private/ upload, same gate) for the private edition's
   channel, and under /p/desktop/ while older apps check there
 - Admin API (/admin/api/, src/admin_api.zig): `meiolol render` on the box answers
-  live.json (crawler's last 3 h by minute, queues, services, health; cached 30 s),
+  live.bin (crawler's last 3 h by minute, queues, services, health; cached 30 s),
   log?file=&lines= (crawl, web, eval, render, health, backup, builds; ids and Riot IDs
   redacted) and POST action/NAME (crawl-start|stop|restart, site-build, eval-run,
   health-check: fixed commands, one at a time across both instances via

@@ -31,13 +31,13 @@ pub const Api = struct {
     data_dir: []const u8,
     mutex: Io.Mutex = .init,
     /// gpa-owned
-    live: std.EnumArray(LiveFormat, ?[]u8) = .initFill(null),
-    live_at: std.EnumArray(LiveFormat, i64) = .initFill(0),
+    live: ?[]u8 = null,
+    live_at: i64 = 0,
     health: ?[]u8 = null,
     health_at: i64 = 0,
 
     pub fn deinit(api: *Api) void {
-        for (api.live.values) |cached| if (cached) |l| api.gpa.free(l);
+        if (api.live) |l| api.gpa.free(l);
         if (api.health) |h| api.gpa.free(h);
     }
 };
@@ -61,15 +61,10 @@ pub fn handle(api: *Api, request: *Request) !bool {
         return true;
     }
     if (request.head.method != .GET) return reply(request, .method_not_allowed, "text/plain; charset=utf-8", "method not allowed\n");
-    if (std.mem.eql(u8, path, "live.json") or std.mem.eql(u8, path, "live.bin")) {
+    if (std.mem.eql(u8, path, "live.bin")) {
         var arena_state: std.heap.ArenaAllocator = .init(api.gpa);
         defer arena_state.deinit();
-        const format: LiveFormat = if (std.mem.endsWith(u8, path, ".bin")) .bin else .json;
-        const content_type = switch (format) {
-            .json => "application/json",
-            .bin => "application/octet-stream",
-        };
-        return reply(request, .ok, content_type, try live(api, arena_state.allocator(), format));
+        return reply(request, .ok, "application/octet-stream", try live(api, arena_state.allocator()));
     }
     if (std.mem.eql(u8, path, "traffic.bin")) {
         var arena_state: std.heap.ArenaAllocator = .init(api.gpa);
@@ -234,9 +229,9 @@ fn runAction(api: *Api, request: *Request, action: Action) !void {
     appendActionLog(arena, io, try std.fs.path.join(arena, &.{ api.data_dir, admin.action_log }), now, action.name, outcome, output) catch |err| {
         log.warn("action log: {t}", .{err});
     };
-    // A new action shows in live.json and live.bin at once
+    // A new action shows in live.bin at once
     api.mutex.lockUncancelable(io);
-    api.live_at = .initFill(0);
+    api.live_at = 0;
     api.mutex.unlock(io);
     const body = try std.json.Stringify.valueAlloc(arena, .{ .ok = outcome == .ok, .output = output }, .{});
     _ = try reply(request, if (outcome == .refused) .conflict else .ok, "application/json", body);
@@ -265,7 +260,7 @@ fn takeLock(io: Io, path: []const u8, name: []const u8, now: i64) !bool {
     return false;
 }
 
-/// The lock's holder, for live.json
+/// The lock's holder, for live.bin
 fn runningAction(arena: std.mem.Allocator, io: Io, path: []const u8) ?admin.RunningAction {
     var buf: [128]u8 = undefined;
     const text = Io.Dir.cwd().readFile(io, path, &buf) catch return null;
@@ -315,16 +310,13 @@ fn evalSince(arena: std.mem.Allocator, io: Io, now: i64) !?i64 {
     return null;
 }
 
-/// live.json for the old page, live.bin (ui/admindata.zig) for the new
-const LiveFormat = enum { json, bin };
-
 /// Cached live_cache_s; one build at a time
-fn live(api: *Api, arena: std.mem.Allocator, format: LiveFormat) ![]const u8 {
+fn live(api: *Api, arena: std.mem.Allocator) ![]const u8 {
     const io = api.io;
     api.mutex.lockUncancelable(io);
     defer api.mutex.unlock(io);
     const now = Io.Clock.real.now(io).toSeconds();
-    if (api.live.get(format)) |l| if (now - api.live_at.get(format) < live_cache_s) return arena.dupe(u8, l);
+    if (api.live) |l| if (now - api.live_at < live_cache_s) return arena.dupe(u8, l);
 
     if (api.health == null or now - api.health_at >= health_cache_s) {
         const h = run(arena, io, &.{"bin/health.sh"});
@@ -345,14 +337,11 @@ fn live(api: *Api, arena: std.mem.Allocator, format: LiveFormat) ![]const u8 {
     };
     const db = try store.schema.openReadOnly(api.gpa, api.data_dir);
     defer db.close();
-    const body = switch (format) {
-        .json => try admin.liveJson(arena, io, db, l),
-        .bin => try admin.liveBin(arena, io, db, l),
-    };
+    const body = try admin.liveBin(arena, io, db, l);
     const copy = try api.gpa.dupe(u8, body);
-    if (api.live.get(format)) |old| api.gpa.free(old);
-    api.live.set(format, copy);
-    api.live_at.set(format, now);
+    if (api.live) |old| api.gpa.free(old);
+    api.live = copy;
+    api.live_at = now;
     return body;
 }
 

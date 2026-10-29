@@ -2029,7 +2029,7 @@ Results (dev only; audited by meiolol-4b: every number reproduces from preds.tsv
 
 #### Results dashboard (meiolol-2a)
 
-Admin Models tab, "Neural nets" (#models/nn, src/site/static/admin-nn.js): per question a
+Admin Models tab, "Neural nets" (#tab=models&cat=nn, src/site/ui/adminlab.zig): per question a
 one-line headline, a table (model, against, measured on, change in log loss ± 95%,
 verdict, seeds with the single-seed range, games, source) and an interval chart; scaling
 as log loss against fit games plus each model's gap at each size; the newest learned.md

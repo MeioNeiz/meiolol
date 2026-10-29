@@ -47,7 +47,8 @@ src/
                      state_model.bin embedded (py/state/stateship.py writes it; format:
                      docs/model.md "In-game model file"). winchance.zig: the fallback
                      when a game lacks full roles
-  admin.zig          `meiolol admin`: private ops page (/admin, static/admin.js charts)
+  admin.zig          `meiolol admin`: the private ops page's data (admin.bin, models.bin,
+                     live.bin); the page site/adminpage.zig, islands ui/admin*.zig
   admin_api.zig      /admin/api/ in `meiolol render`: live data, logs, actions (hosting.md)
   site/tester.zig    /private/tester (`admin --private-out`): the new Draft tester island
                      (ui/testerpage.zig, ui-tester.wasm fetches /private model bins) and its

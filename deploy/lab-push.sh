@@ -7,11 +7,11 @@
 # that went to sleep. Also sent: docs/learned.md, docs/model.md and docs/nn-results/*.tsv
 # (nn.txt lists them) from this checkout, each lab campaign's digest.md and hypotheses.tsv
 # (~/ml/agent/<campaign>, LAB_CANDS), and a run's result.tsv, findings.tsv and
-# effects-*.tsv (meiolol-lab), all also read into training.bin for the new admin
+# effects-*.tsv (meiolol-lab), all also read into training.bin for the admin
 # page (`meiolol admin --training`); and the admin Draft tester's models
 # (draft-model.json, lane-model.json and their -ref.json) from the export a human chose
 # with `use`, never just the newest (a smoke or agent run may export one). The tester
-# reads the box's daily files (admin/models/, `meiolol draft-model`) as "Shipped model";
+# reads the box's daily files (private/models/, `meiolol draft-model`) as "Shipped model";
 # these are "Lab experiment".
 # The gpu-box (home network only) is staged over ssh at most once a minute; when
 # unreachable its last staged copy is sent and hosts.tsv says when it was last reached.

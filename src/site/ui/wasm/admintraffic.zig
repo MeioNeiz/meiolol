@@ -52,7 +52,7 @@ fn render() void {
 fn get() void {
     if (in_flight) return;
     in_flight = true;
-    dom.fetch("api/traffic.bin", 0, done);
+    dom.fetch("/admin/api/traffic.bin", 0, done);
 }
 
 /// The tab came up (the URL): its first data

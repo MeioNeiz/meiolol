@@ -1,3 +1,6 @@
+// Only /private loads this (PRIVATE: the Draft tester, admin.zig private); the admin page is
+// site/adminpage.zig now, so the admin-mode code below is dead until the new tester
+// replaces this page.
 // meiolol admin dashboard (src/admin.zig writes the snapshot): tabs over the crawler, Riot
 // limits, storage, ingest, the draft model, Mac training runs, site traffic and box
 // controls. Data, freshest first: api/live.json (box, every minute: crawler tail, queues,

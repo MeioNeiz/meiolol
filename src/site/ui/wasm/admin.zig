@@ -50,15 +50,29 @@ const lazy = [_][]const u8{ ui.admincharts.sel, ui.admintraffic.sel, ui.adminops
 
 export fn main() void {
     dom.start();
+    legacy();
     dom.lazyLoad(&lazy);
     defer dom.lazyLater();
     island = dom.rt.add(ap.Page, &page, &server, ap.sel) catch return dom.dom.warn("admin: out of memory");
     dom.rt.changed = changed;
-    get(.snap, "admin.bin");
-    get(.live, "api/live.bin");
+    get(.snap, "/admin/admin.bin");
+    get(.live, "/admin/api/live.bin");
     get(.me, "/auth/me.bin");
     zjb.global("window").call("setInterval", .{ zjb.fnHandle("adminTick", &onTick), @as(i32, live_ms) }, void);
     zjb.global("document").call("addEventListener", .{ zjb.constString("visibilitychange"), zjb.fnHandle("adminShown", &onShown), @as(i32, 0) }, void);
+}
+
+/// An old page's link ("#models/draft") in this page's form, before any island reads it
+fn legacy() void {
+    const v = zjb.global("location").get("hash", zjb.Handle);
+    defer v.release();
+    var buf: [64]u8 = undefined;
+    const h = v.readString(&buf) catch return;
+    var out: [80]u8 = undefined;
+    const to = ap.legacyHash(&out, h) orelse return;
+    const t = zjb.string(to);
+    defer t.release();
+    zjb.global("history").call("replaceState", .{ zjb.ConstHandle.null, zjb.ConstHandle.empty_string, t }, void);
 }
 
 fn now() i64 {
@@ -79,8 +93,8 @@ fn get(c: Call, path: []const u8) void {
 /// Only while the tab shows: a hidden one catches up when it comes back
 fn onTick() callconv(.c) void {
     if (zjb.global("document").get("hidden", bool)) return;
-    get(.live, "api/live.bin");
-    if (now() - snap_at >= snap_s) get(.snap, "admin.bin");
+    get(.live, "/admin/api/live.bin");
+    if (now() - snap_at >= snap_s) get(.snap, "/admin/admin.bin");
 }
 
 fn onShown(e: zjb.Handle) callconv(.c) void {
@@ -99,8 +113,8 @@ fn changed() void {
     switch (w) {
         .none, .accounts => {},
         .refresh => {
-            get(.snap, "admin.bin");
-            get(.live, "api/live.bin");
+            get(.snap, "/admin/admin.bin");
+            get(.live, "/admin/api/live.bin");
             get(.me, "/auth/me.bin");
             if (page.accounts != null) get(.accounts, "/auth/accounts.bin");
         },
@@ -130,7 +144,7 @@ fn changed() void {
 fn run(a: ap.Act) void {
     acting = .{ .act = a, .before = newest(a) orelse std.math.minInt(i64) };
     var buf: [48]u8 = undefined;
-    const path = std.fmt.bufPrint(&buf, "api/action/{s}", .{a.path()}) catch return;
+    const path = std.fmt.bufPrint(&buf, "/admin/api/action/{s}", .{a.path()}) catch return;
     dom.send("POST", path, "", @backingInt(Call.action), done);
 }
 
@@ -182,7 +196,7 @@ fn done(ctx: i32, bytes: ?[]u8) void {
         .live => {
             defer if (again) {
                 again = false;
-                get(.live, "api/live.bin");
+                get(.live, "/admin/api/live.bin");
             } else settle();
             const b = bytes orelse {
                 page.live_down = true;
@@ -212,7 +226,7 @@ fn done(ctx: i32, bytes: ?[]u8) void {
         .action => {
             if (bytes) |b| gpa.free(b);
             if (acting) |*x| x.answered = true;
-            if (in_flight.contains(.live)) again = true else get(.live, "api/live.bin");
+            if (in_flight.contains(.live)) again = true else get(.live, "/admin/api/live.bin");
         },
         .write, .link => {
             page.acct_failed = bytes == null;

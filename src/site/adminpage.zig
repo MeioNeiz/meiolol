@@ -1,11 +1,11 @@
-//! The new admin page (/admin/new, ui.adminpage): an empty shell ui-admin.wasm fills
+//! The admin page (/admin, ui.adminpage): an empty shell ui-admin.wasm fills
 //! from admin.bin, api/live.bin and /auth/ (the chart tabs: ui.admincharts in
 //! ui-admincharts.wasm, Traffic: ui.admintraffic in ui-admintraffic.wasm, Deploys and Logs:
 //! ui.adminops in ui-adminops.wasm, Models: ui.adminmodels in ui-adminmodels.wasm, its nets
 //! and campaigns ui.adminlab in ui-adminlab.wasm and its runs ui.adminruns in
-//! ui-adminruns.wasm, all of
-//! which it loads), its stylesheet and code, written into the admin dir beside the old page
-//! by `meiolol admin`. Never public: nginx serves /admin to view_admin logins only
+//! ui-adminruns.wasm, all of which it loads), its stylesheet and code, written into the
+//! admin dir beside the data by `meiolol admin`. Never public: nginx serves /admin to
+//! view_admin logins only
 const std = @import("std");
 const store = @import("store");
 const ui = @import("ui");
@@ -32,22 +32,27 @@ pub const lab_wasm = assets.built("ui-adminlab.wasm", @embedFile("ui-adminlab.wa
 pub const runs_js = assets.built("ui-adminruns.js", @embedFile("ui-adminruns.js"));
 pub const runs_wasm = assets.built("ui-adminruns.wasm", @embedFile("ui-adminruns.wasm"));
 
+/// Absolute: the page is /admin, where a relative path would resolve at /
+fn at(comptime f: assets.Hashed) []const u8 {
+    return "/admin/" ++ f.path;
+}
+
 pub fn page(a: std.mem.Allocator) ![]const u8 {
     var p: ui.adminpage.Page = .{};
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
     const n = p.view(&h);
-    var c: ui.admincharts.Charts = .{ .js = charts_js.path, .wasm = charts_wasm.path };
+    var c: ui.admincharts.Charts = .{ .js = at(charts_js), .wasm = at(charts_wasm) };
     const cn = c.view(&h);
-    var tr: ui.admintraffic.Traffic = .{ .js = traffic_js.path, .wasm = traffic_wasm.path };
+    var tr: ui.admintraffic.Traffic = .{ .js = at(traffic_js), .wasm = at(traffic_wasm) };
     const tn = tr.view(&h);
-    var ops: ui.adminops.Ops = .{ .js = ops_js.path, .wasm = ops_wasm.path };
+    var ops: ui.adminops.Ops = .{ .js = at(ops_js), .wasm = at(ops_wasm) };
     const on = ops.view(&h);
-    var mo: ui.adminmodels.Models = .{ .js = models_js.path, .wasm = models_wasm.path };
+    var mo: ui.adminmodels.Models = .{ .js = at(models_js), .wasm = at(models_wasm) };
     const mn = mo.view(&h);
-    var la: ui.adminlab.Lab = .{ .js = lab_js.path, .wasm = lab_wasm.path };
+    var la: ui.adminlab.Lab = .{ .js = at(lab_js), .wasm = at(lab_wasm) };
     const ln = la.view(&h);
-    var ru: ui.adminruns.Runs = .{ .js = runs_js.path, .wasm = runs_wasm.path };
+    var ru: ui.adminruns.Runs = .{ .js = at(runs_js), .wasm = at(runs_wasm) };
     const rn = ru.view(&h);
     if (h.oom) return error.OutOfMemory;
     var out: Io.Writer.Allocating = .init(a);
@@ -62,7 +67,7 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
         \\<title>meiolol admin</title>
         \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
         \\<link rel="stylesheet" href="/{s}">
-        \\<link rel="stylesheet" href="{s}">
+        \\<link rel="stylesheet" href="/admin/{s}">
         \\</head>
         \\<body>
         \\<main class="wrap">
@@ -78,7 +83,7 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
     try w.print(
         \\
         \\</main>
-        \\<script src="{s}" data-wasm="{s}" defer></script>
+        \\<script src="/admin/{s}" data-wasm="/admin/{s}" defer></script>
         \\</body>
         \\</html>
         \\
@@ -92,7 +97,7 @@ pub fn file(name: []const u8) ?[]const u8 {
     return null;
 }
 
-/// new.html, its stylesheet and code into `out_dir`, each with a .gz (gzip_static)
+/// index.html, its stylesheet and code into `out_dir`, each with a .gz (gzip_static)
 pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
@@ -100,7 +105,7 @@ pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
     var dir = try Io.Dir.cwd().openDir(io, out_dir, .{});
     defer dir.close(io);
     const files = [_]struct { []const u8, []const u8 }{
-        .{ "new.html", try page(a) },
+        .{ "index.html", try page(a) },
         .{ css_file.path, css_file.data },
         .{ js.path, js.data },
         .{ wasm.path, wasm.data },

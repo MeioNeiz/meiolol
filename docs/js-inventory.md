@@ -196,7 +196,7 @@ Deleted with daily.js.
   src/lab/draft.zig and lane.zig Scorer, checked against reference pairs at load: the
   strongest wasm case on the admin side; W/G ~560 draft board and pickers
 - admin-setnet.js (174): W, forward pass of lab/setnet.zig
-- admin-nn.js (180): S, TSV result tables
+- Since the admin page moved to ui islands, only /private (PRIVATE mode) loads these
 
 ## Works without JS today
 

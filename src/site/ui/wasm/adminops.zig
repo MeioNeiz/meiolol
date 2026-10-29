@@ -64,14 +64,14 @@ fn render() void {
 fn getLive() void {
     if (live_flight) return;
     live_flight = true;
-    dom.fetch("api/live.bin", @backingInt(Call.live), done);
+    dom.fetch("/admin/api/live.bin", @backingInt(Call.live), done);
 }
 
 fn getLog(i: usize) void {
     if (i >= ao.log_files.len or log_flight[i]) return;
     log_flight[i] = true;
     var buf: [64]u8 = undefined;
-    const path = std.fmt.bufPrint(&buf, "api/log?file={s}&lines={d}", .{ ao.log_files[i], ao.log_lines }) catch return;
+    const path = std.fmt.bufPrint(&buf, "/admin/api/log?file={s}&lines={d}", .{ ao.log_files[i], ao.log_lines }) catch return;
     dom.fetch(path, log_ctx + @as(i32, @intCast(i)), done);
 }
 
@@ -115,7 +115,7 @@ fn done(ctx: i32, bytes: ?[]u8) void {
                 state.events = x.deploys;
                 state.snap = false;
                 state.failed = false;
-            } else dom.fetch("admin.bin", @backingInt(Call.snap), done);
+            } else dom.fetch("/admin/admin.bin", @backingInt(Call.snap), done);
         },
         .snap => {
             const s = (if (bytes) |b| snap.set(b) else null) orelse {

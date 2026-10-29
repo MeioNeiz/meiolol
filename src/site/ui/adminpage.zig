@@ -36,6 +36,21 @@ pub const join_link = "https://meio.lol/join#{s}";
 /// Keys as the old page's (admin.js), so its links carry over
 pub const Tab = enum { overview, crawler, riot, storage, ingest, models, traffic, deploys, logs, accounts, ops };
 
+/// The old page's links ("#crawler", "#models/win", "#training") in this page's form
+/// ("#tab=crawler", "#tab=models&cat=win"); null when `h` is no such link
+pub fn legacyHash(buf: []u8, h: []const u8) ?[]const u8 {
+    if (h.len < 2 or h[0] != '#' or std.mem.findScalar(u8, h, '=') != null) return null;
+    const slash = std.mem.findScalar(u8, h, '/');
+    const key = h[1 .. slash orelse h.len];
+    const tab = if (std.mem.eql(u8, key, "model") or std.mem.eql(u8, key, "training")) "models" else key;
+    _ = std.meta.stringToEnum(Tab, tab) orelse return null;
+    const cat = if (slash) |i| h[i + 1 ..] else "";
+    return (if (cat.len > 0)
+        std.fmt.bufPrint(buf, "#tab={s}&cat={s}", .{ tab, cat })
+    else
+        std.fmt.bufPrint(buf, "#tab={s}", .{tab})) catch null;
+}
+
 /// The box's admin actions (admin_api.zig `actions`)
 pub const Act = enum {
     crawl_restart,
@@ -94,8 +109,8 @@ pub const Page = struct {
     running: ?Act = null,
     /// The last run from here: ok, and its output
     ran: ?struct { act: Act, ok: bool, output: []const u8 } = null,
-    /// Invite: role index into `accounts.roles`
-    give: u8 = 0,
+    /// Invite: role index into `accounts.roles`; null: giveOf's default
+    give: ?u8 = null,
     /// A role picked in a row, waiting for Make or Cancel
     pending: ?[2]u16 = null,
     link: ?Link = null,
@@ -148,7 +163,7 @@ pub const Page = struct {
             },
             .logout => p.want = .logout,
             .give => |i| p.give = i,
-            .invite => p.want = .{ .invite = p.give },
+            .invite => p.want = .{ .invite = p.giveOf() orelse return },
             .pick => |row| {
                 const l = p.accounts orelse return;
                 for (l.roles, 0..) |r, i| if (std.mem.eql(u8, r, ev.text)) {
@@ -175,6 +190,19 @@ pub const Page = struct {
         const me = p.me orelse return false;
         for (me.can) |c| if (std.mem.eql(u8, c, cap)) return true;
         return false;
+    }
+
+    /// The invite's role: the one chosen, else private (the old page's default), else the
+    /// lowest; never public
+    pub fn giveOf(p: *const Page) ?u8 {
+        const l = p.accounts orelse return null;
+        if (p.give) |g| if (g < l.roles.len and !std.mem.eql(u8, l.roles[g], "public")) return g;
+        var first: ?u8 = null;
+        for (l.roles, 0..) |r, i| {
+            if (std.mem.eql(u8, r, "private")) return @intCast(i);
+            if (first == null and !std.mem.eql(u8, r, "public")) first = @intCast(i);
+        }
+        return first;
     }
 
     pub fn view(p: *Page, h: *H) N {
@@ -342,7 +370,7 @@ fn head(p: *Page, h: *H) N {
         }),
         card.spacer(h),
         button.view(h, .{ .v = .quiet, .s = .s, .href = "/admin/notes" }, .{W.notes}),
-        button.view(h, .{ .v = .quiet, .s = .s, .href = "desktop/meiolol-desktop.zip" }, .{W.desktop}),
+        button.view(h, .{ .v = .quiet, .s = .s, .href = "/admin/desktop/meiolol-desktop.zip" }, .{W.desktop}),
         button.view(h, .{ .s = .s, .on = h.on(p, .refresh) }, .{W.refresh}),
         if (p.me) |me| h.span(.{ .class = "me" }, .{
             h.a(.{ .href = "/account" }, .{me.username}),
@@ -619,9 +647,10 @@ fn accountsTab(p: *Page, h: *H) N {
     if (!p.can("manage_accounts")) return card.view(h, .{}, &.{ card.head(h, W.accounts, null, &.{}), h.p(.{}, .{if (p.me == null) W.loading else W.cannot}) });
     const l = p.accounts orelse return card.view(h, .{}, &.{ card.head(h, W.accounts, null, &.{}), h.p(.{ .role = "status" }, .{W.loading}) });
     var give: std.ArrayList(segmented.Item) = .empty;
+    const chosen = p.giveOf();
     for (l.roles, 0..) |r, i| {
         if (std.mem.eql(u8, r, "public")) continue;
-        give.append(h.mem, .{ .label = .{ .s = r }, .selected = p.give == i, .on = h.on(p, .{ .give = @intCast(i) }) }) catch {
+        give.append(h.mem, .{ .label = .{ .s = r }, .selected = chosen != null and chosen.? == i, .on = h.on(p, .{ .give = @intCast(i) }) }) catch {
             h.oom = true;
         };
     }
@@ -887,7 +916,7 @@ pub const Demo = struct {
     };
 
     fn page(tab: Tab) Page {
-        return .{ .tab = tab, .snap = &snap, .live = &live, .me = &me, .accounts = &accounts, .now = now, .live_at = now - 20, .give = 2 };
+        return .{ .tab = tab, .snap = &snap, .live = &live, .me = &me, .accounts = &accounts, .now = now, .live_at = now - 20 };
     }
 };
 
@@ -990,8 +1019,12 @@ test "admin accounts: pick then Make, invite with the chosen role, the URL keeps
     ev.text = "king";
     p.update(.{ .pick = 1 }, &ev);
     try testing.expectEqual(@as(?[2]u16, null), p.pending);
+    // Nothing chosen: private, as the old page; public is never offered
     p.update(.invite, &ev);
     try testing.expectEqual(Want{ .invite = 2 }, p.want);
+    p.update(.{ .give = 3 }, &ev);
+    p.update(.invite, &ev);
+    try testing.expectEqual(Want{ .invite = 3 }, p.want);
     try expectHas(try render(a, &p), &.{ "jacob", ">owner<", "never", "Enable", "Reset link", "Invite link" });
 
     var q: Page = .{};
@@ -999,6 +1032,12 @@ test "admin accounts: pick then Make, invite with the chosen role, the URL keeps
     try testing.expectEqual(Tab.ops, q.tab);
     q.fromUrl(url.read(Page.Url, "#ops"));
     try testing.expectEqual(Tab.overview, q.tab);
+    var buf: [64]u8 = undefined;
+    try testing.expectEqualStrings("#tab=ops", legacyHash(&buf, "#ops").?);
+    try testing.expectEqualStrings("#tab=models&cat=draft", legacyHash(&buf, "#models/draft").?);
+    try testing.expectEqualStrings("#tab=models", legacyHash(&buf, "#training").?);
+    try testing.expectEqual(@as(?[]const u8, null), legacyHash(&buf, "#tab=riot"));
+    try testing.expectEqual(@as(?[]const u8, null), legacyHash(&buf, "#nope"));
     q.update(.{ .tab = .accounts }, &ev);
     try testing.expectEqual(Want.accounts, q.want);
     try testing.expectEqualStrings("crawl-restart", Act.crawl_restart.path());

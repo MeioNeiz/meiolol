@@ -61,14 +61,14 @@ fn get(c: Call, path: []const u8) void {
 /// A chart tab came up (the URL): its first data
 fn changed() void {
     if (!state.shows()) return;
-    if (state.snap == null and !state.snap_failed) get(.snap, "admin.bin");
-    if (state.live == null) get(.live, "api/live.bin");
+    if (state.snap == null and !state.snap_failed) get(.snap, "/admin/admin.bin");
+    if (state.live == null) get(.live, "/admin/api/live.bin");
 }
 
 fn onTick() callconv(.c) void {
     if (!state.shows() or zjb.global("document").get("hidden", bool)) return;
-    get(.live, "api/live.bin");
-    if (now() - snap_at >= snap_s) get(.snap, "admin.bin");
+    get(.live, "/admin/api/live.bin");
+    if (now() - snap_at >= snap_s) get(.snap, "/admin/admin.bin");
 }
 
 fn onShown(e: zjb.Handle) callconv(.c) void {

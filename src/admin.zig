@@ -1,8 +1,7 @@
-//! `meiolol admin`: private ops page (crawl rates, storage growth, ingest mix, queues,
-//! model accuracy, site uploads) as one static page plus admin.js, which draws the
-//! charts, admin-draft.js, the Draft tester (admin-setnet.js: its set net), admin-nn.js, the
-//! neural net results, and admin-accounts.js, the logins. The box rebuilds it every 15 min
-//! with the site (deploy/web-loop.sh); nginx serves it at /admin/ behind a login.
+//! `meiolol admin`: the admin page's data (crawl rates, storage growth, ingest mix, queues,
+//! model accuracy, site uploads) as admin.bin and models.bin, beside the page itself
+//! (site/adminpage.zig), and its live API's (admin_api.zig) live.bin. The box rebuilds it
+//! every round with the site (deploy/web-loop.sh); nginx serves it at /admin behind a login.
 //! Aggregates only: no PUUIDs, Riot IDs or match ids (log messages are normalised before
 //! they are counted).
 
@@ -12,7 +11,6 @@ const date = @import("date.zig");
 const ep = @import("riot/endpoints.zig");
 const ratelimit = @import("riot/ratelimit.zig");
 const tsvlog = @import("tsvlog.zig");
-const tpl = @import("tpl");
 const status = @import("status.zig");
 const ui = @import("ui");
 const adminmodels = @import("adminmodels.zig");
@@ -117,120 +115,47 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     const storage_rows = try storage(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "storage.tsv" }));
     const crawl_args = std.mem.trim(u8, try readHead(arena, io, o.crawl_args orelse
         try std.fs.path.join(arena, &.{ o.data_dir, "..", "crawl.args" }), 4096) orelse "", " \n");
-    const page = .{
+    const snap: ad.Snapshot = .{
         .now = o.now_s,
         .days = days_shown,
-        .health = o.health,
-        .disk = o.disk,
-        .platforms = ep.platforms,
-        .files = files,
+        .health = o.health orelse "",
+        .disk = adDisk(o.disk),
+        .platforms = try adPlatforms(arena),
+        .files = try adFiles(arena, files),
         .counts = counts,
         .queues = queue_groups,
         .players = try playersByRegion(arena, db, count(counts, "players")),
         .ladder = try ladderTiers(arena, db),
         .by_patch = try groups(arena, db, "SELECT patch, count(*) FROM matches GROUP BY 1 ORDER BY 1 DESC LIMIT 8"),
-        .drafts = drafts,
-        .crawl = crawl,
-        .history = history,
-        .eval = eval,
-        .uploads = try uploads(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "web.log" }), window_start),
-        .deploys = deployed,
-        .deploy_events = deploy_events,
-        .logs = .{
-            .health = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "health.log" }), 12),
-            .backup = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "backup.log" }), 6),
-            .builds = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "builds.log" }), 6),
-        },
-        .eval_report = eval_report,
-        .storage = storage_rows,
-        .backups = try backups(arena, io, o.backups_dir orelse try std.fs.path.join(arena, &.{ o.data_dir, "..", "backups" })),
-        .riot = .{
-            .app_limit = ratelimit.personal_key,
-            // None seeded: the limiter learns them from Riot's headers
-            .method_limits = struct {}{},
-            .crawl_args = crawl_args,
-            .key_problems = kp[kp.len -| 50..],
-        },
-    };
-    const snap: ad.Snapshot = .{
-        .now = page.now,
-        .days = page.days,
-        .health = page.health orelse "",
-        .disk = adDisk(page.disk),
-        .platforms = try adPlatforms(arena),
-        .files = try adFiles(arena, files),
-        .counts = counts,
-        .queues = queue_groups,
-        .players = page.players,
-        .ladder = page.ladder,
-        .by_patch = page.by_patch,
         .drafts = try adDrafts(arena, drafts),
         .crawl = adCrawl(crawl),
         .history = try tsvRows(arena, ad.HistoryRow, history),
         .eval = try tsvRows(arena, ad.EvalRow, eval),
-        .uploads = page.uploads,
+        .uploads = try uploads(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "web.log" }), window_start),
         .deploys = try adDeployed(arena, deployed),
         .deploy_events = try adDeployEvents(arena, deploy_events),
         .eval_report = eval_report orelse "",
         .storage = if (storage_rows) |st| try adStorage(arena, st) else null,
-        .backups = page.backups,
+        .backups = try backups(arena, io, o.backups_dir orelse try std.fs.path.join(arena, &.{ o.data_dir, "..", "backups" })),
         .riot = .{
             .app_limit = ratelimit.personal_key,
             .crawl_args = crawl_args,
-            .key_problems = try adKeyProblems(arena, page.riot.key_problems),
+            .key_problems = try adKeyProblems(arena, kp[kp.len -| 50..]),
         },
     };
     var bin: std.ArrayList(u8) = .empty;
     try ui.data.encode(arena, ad.Snapshot, snap, &bin);
     var models_bin: std.ArrayList(u8) = .empty;
     try ui.data.encode(arena, ui.modelsdata.Models, try adminmodels.models(arena, o.now_s, snap.eval, eval_report, snap.history), &models_bin);
-    const json = try std.json.Stringify.valueAlloc(arena, page, .{});
 
-    var out: Io.Writer.Allocating = .init(arena);
-    const w = &out.writer;
-    try w.writeAll(
-        \\<!doctype html>
-        \\<html lang="en">
-        \\<head>
-        \\<meta charset="utf-8">
-        \\<meta name="viewport" content="width=device-width, initial-scale=1">
-        \\<meta name="robots" content="noindex">
-        \\<title>meiolol admin</title>
-        \\<link rel="stylesheet" href="/admin/admin.css">
-        \\</head>
-        \\<body>
-        \\<main id="app"><p>Loading…</p></main>
-        \\<script id="data" type="application/json">
-    );
-    try tpl.json(page).render(w);
-    try w.writeAll(
-        \\</script>
-        \\<script src="/admin/admin-setnet.js"></script>
-        \\<script src="/admin/admin-draft.js"></script>
-        \\<script src="/admin/admin-nn.js"></script>
-        \\<script src="/admin/admin-accounts.js"></script>
-        \\<script src="/admin/admin.js"></script>
-        \\</body>
-        \\</html>
-        \\
-    );
     try cwd.createDirPath(io, o.out_dir);
     var dir = try cwd.openDir(io, o.out_dir, .{});
     defer dir.close(io);
-    try writeGz(gpa, io, dir, "index.html", out.written());
-    // The same data for the page to poll between rebuilds
-    try writeGz(gpa, io, dir, "data.json", json);
     try writeGz(gpa, io, dir, "admin.bin", bin.items);
     try writeGz(gpa, io, dir, "models.bin", models_bin.items);
-    try writeGz(gpa, io, dir, "admin-setnet.js", @embedFile("site/static/admin-setnet.js"));
-    try writeGz(gpa, io, dir, "admin-draft.js", @embedFile("site/static/admin-draft.js"));
-    try writeGz(gpa, io, dir, "admin-nn.js", @embedFile("site/static/admin-nn.js"));
-    try writeGz(gpa, io, dir, "admin-accounts.js", @embedFile("site/static/admin-accounts.js"));
-    try writeGz(gpa, io, dir, "admin.js", @embedFile("site/static/admin.js"));
-    try writeGz(gpa, io, dir, "admin.css", @embedFile("site/static/admin.css"));
 }
 
-// admin.bin (ui/admindata.zig) from the pieces data.json carries
+// admin.bin (ui/admindata.zig) from its pieces
 
 fn adDisk(d: ?[3]u64) ?ad.Disk {
     const x = d orelse return null;
@@ -813,26 +738,8 @@ pub const Live = struct {
 const live_window_s = 3 * 3600;
 const live_step_s = 60;
 
-/// /admin/api/live.json: the crawler's last 3 h by minute, queues, files and the admin
-/// actions, with `l`'s command results. `db` read-only
-pub fn liveJson(arena: std.mem.Allocator, io: Io, db: store.Db, l: Live) ![]const u8 {
-    const crawl_log = try std.fs.path.join(arena, &.{ l.data_dir, "crawl.log" });
-    const live = .{
-        .now = l.now_s,
-        .services = l.services,
-        .health = l.health,
-        .crawl = try crawlSeries(arena, io, crawl_log, l.now_s - live_window_s, l.now_s, live_step_s, 4 << 20, null),
-        .queues = try queues(arena, db),
-        .disk = l.disk,
-        .files = try fileSizes(arena, io, l.data_dir),
-        .actions = try actionLog(arena, io, try std.fs.path.join(arena, &.{ l.data_dir, action_log })),
-        .deploys = try deployEvents(arena, io, try std.fs.path.join(arena, &.{ l.data_dir, deploys_file })),
-        .running = .{ .eval = l.eval_since, .action = l.action },
-    };
-    return std.json.Stringify.valueAlloc(arena, live, .{});
-}
-
-/// /admin/api/live.bin: live.json's data as ui/admindata.zig's Live, for the new page
+/// /admin/api/live.bin: the crawler's last 3 h by minute, queues, files, the admin actions
+/// and deploys as ui/admindata.zig's Live, with `l`'s command results. `db` read-only
 pub fn liveBin(arena: std.mem.Allocator, io: Io, db: store.Db, l: Live) ![]const u8 {
     const crawl_log = try std.fs.path.join(arena, &.{ l.data_dir, "crawl.log" });
     var services: std.ArrayList(ad.Service) = .empty;

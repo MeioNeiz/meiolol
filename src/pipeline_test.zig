@@ -932,19 +932,6 @@ test "admin page from the fixture games and a crawl log" {
         .backups_dir = try std.fs.path.join(arena, &.{ dir, "backups" }),
         .crawl_args = try std.fs.path.join(arena, &.{ dir, "crawl.args" }),
     });
-    const html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "index.html" }), arena, .limited(4 << 20));
-    for ([_][]const u8{
-        "\"name\":\"matches\",\"rows\":3",
-        "\"restarts\":[1760223600]",
-        "\"m\":[0,0,25,0]",
-        "\"text\":\"warning(riot): 429 (server) on /lol/match/vN/matches/…, waiting Ns\"",
-        "\"rows\":3,\"days\":[{\"day\":",
-        "\"recent\":[0,0,1,0]}]",
-    }) |want| if (std.mem.find(u8, html, want) == null) {
-        std.debug.print("admin page lacks {s}\n", .{want});
-        return error.TestUnexpectedResult;
-    };
-    try std.testing.expect(std.mem.find(u8, html, "EUW1_7123456") == null);
     // The private site's Draft tester: the page in private mode, none of the box's data
     const private = try std.fs.path.join(arena, &.{ dir, "p" });
     try admin.private(gpa, io, private, 1760224200);
@@ -967,32 +954,20 @@ test "admin page from the fixture games and a crawl log" {
     for ([_][]const u8{ assets.tester_js.path, assets.tester_wasm.path, assets.testercand_js.path, assets.testercand_wasm.path, site_tester.css_file.path, "tester.html.gz" }) |f| {
         try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ private, f }), .{});
     }
-    // The new admin page beside the old: empty islands the wasms fill from admin.bin, the
+    // The admin page beside its data: empty islands the wasms fill from admin.bin, the
     // chart tabs' hidden with their code on the root (loaded by ui-admin.wasm)
     try site_admin.write(gpa, io, out);
-    const a_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "new.html" }), arena, .limited(1 << 20));
+    const a_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "index.html" }), arena, .limited(1 << 20));
     for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "data-island=\"admin\"", site_admin.js.path, site_admin.wasm.path, site_admin.css_file.path, "data-island=\"admincharts\"", site_admin.charts_js.path, site_admin.charts_wasm.path, "data-island=\"admintraffic\"", site_admin.traffic_js.path, site_admin.traffic_wasm.path, "data-island=\"adminops\"", site_admin.ops_js.path, site_admin.ops_wasm.path, "data-island=\"adminmodels\"", site_admin.models_js.path, site_admin.models_wasm.path, "data-island=\"adminlab\"", site_admin.lab_js.path, site_admin.lab_wasm.path, "data-island=\"adminruns\"", site_admin.runs_js.path, site_admin.runs_wasm.path }) |s| {
         try std.testing.expect(std.mem.find(u8, a_html, s) != null);
     }
-    for ([_][]const u8{ site_admin.js.path, site_admin.wasm.path, site_admin.charts_js.path, site_admin.charts_wasm.path, site_admin.css_file.path, "new.html.gz", "admin.bin" }) |f| {
+    for ([_][]const u8{ site_admin.js.path, site_admin.wasm.path, site_admin.charts_js.path, site_admin.charts_wasm.path, site_admin.css_file.path, "index.html.gz", "admin.bin.gz", "models.bin.gz" }) |f| {
         try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ out, f }), .{});
     }
-    // data.json: the page's data, for polling between rebuilds
-    const json = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data.json" }), arena, .limited(4 << 20));
-    for ([_][]const u8{
-        "\"eval_report\":\"# meiolol eval\\n\"",
-        "\"storage\":{\"generated\":",
-        "\"rows\":[[\"meiolol\",\"matches\",\"table\",4096,12]]",
-        "\"backups\":{\"bytes\":5,\"files\":1,\"newest\":",
-        "\"deploy_events\":[[1760224000,\"ab12cd\",\"deploy\",\"start\",",
-        "\"riot\":{\"app_limit\":\"20:1,100:120\",\"method_limits\":{},\"crawl_args\":\"--proxy 10.0.0.3:8092\"," ++
-            "\"key_problems\":[[1760223780,\"error(riot): 403 on /lol/match/vN/matches/…: key missing or expired\"]," ++
-            "[1760223780,\"KEY REJECTED\"]]}",
-    }) |want| if (std.mem.find(u8, json, want) == null) {
-        std.debug.print("data.json lacks {s}\n", .{want});
-        return error.TestUnexpectedResult;
-    };
-    try std.testing.expect(std.mem.find(u8, html, json) != null);
+    // The old page's files are gone: no JSON copy of the data, no admin.js
+    for ([_][]const u8{ "data.json", "admin.js", "admin-nn.js", "admin.css" }) |f| {
+        try std.testing.expectError(error.FileNotFound, std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ out, f }), .{}));
+    }
     // admin.bin: the same snapshot typed, for the new page (ui/admindata.zig)
     const bin = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "admin.bin" }), arena, .limited(4 << 20));
     const snap = try ui.data.decode(arena, ui.admindata.Snapshot, bin);
@@ -1017,30 +992,11 @@ test "admin page from the fixture games and a crawl log" {
     try std.testing.expectEqual(1, snap.backups.?.files);
     try std.testing.expectEqualStrings("# meiolol eval\n", snap.eval_report);
     try std.testing.expect(std.mem.find(u8, bin, "EUW1_7123456") == null);
-    // live.json (admin_api.zig), its command results given
-    const live = try admin.liveJson(arena, io, db, .{
-        .data_dir = dir,
-        .now_s = 1760224200,
-        .services = .{ .@"meiolol-crawl" = "active" },
-        .health = "crawler silent",
-        .disk = .{ 100, 40, 60 },
-        .action = .{ .name = "site-build", .since = 1760224190 },
-    });
-    for ([_][]const u8{
-        "{\"now\":1760224200,\"services\":{\"meiolol-crawl\":\"active\",\"meiolol-web\":\"unknown\",",
-        "\"health\":\"crawler silent\",\"crawl\":{\"start\":1760213400,\"step\":60,",
-        "\"queues\":{\"match\":",
-        "\"disk\":[100,40,60],\"files\":[{\"name\":\"meiolol.db\",",
-        "\"actions\":[[1760223900,\"crawl-restart\",\"ok\",\"\"]]",
-        "\"deploys\":[[1760224000,\"ab12cd\",\"deploy\",\"start\",\"deploy/box.sh web start on the Mac\"]," ++
-            "[1760224010,\"ab12cd\",\"commit\",\"info\",\"ab12cd fix …'s timeline\"]," ++
-            "[1760224030,\"ab12cd\",\"swap\",\"ok\",\"meiolol-render@a serving; stopped meiolol-render@b\"]]",
-        "\"running\":{\"eval\":null,\"action\":{\"name\":\"site-build\",\"since\":1760224190}}}",
-    }) |want| if (std.mem.find(u8, live, want) == null) {
-        std.debug.print("live.json lacks {s}\n{s}\n", .{ want, live });
-        return error.TestUnexpectedResult;
-    };
-    // live.bin: the same for the new page
+    for (snap.counts) |c| if (std.mem.eql(u8, c.name, "matches")) try std.testing.expectEqual(3, c.rows);
+    try std.testing.expectEqualStrings("warning(riot): 429 (server) on /lol/match/vN/matches/…, waiting Ns", snap.crawl.messages[0].text);
+    try std.testing.expectEqualSlices(u64, &.{ 0, 0, 1, 0 }, &snap.drafts.days[0].recent);
+    try std.testing.expectEqualStrings("error(riot): 403 on /lol/match/vN/matches/…: key missing or expired", snap.riot.key_problems[0].text);
+    // live.bin (admin_api.zig), its command results given
     const live_bin = try ui.data.decode(arena, ui.admindata.Live, try admin.liveBin(arena, io, db, .{
         .data_dir = dir,
         .now_s = 1760224200,
@@ -1055,11 +1011,10 @@ test "admin page from the fixture games and a crawl log" {
     try std.testing.expectEqual(@as(u64, 40), live_bin.disk.?.used);
     try std.testing.expectEqualStrings("crawl-restart", live_bin.actions[0].name);
     try std.testing.expectEqual(3, live_bin.deploys.len);
+    // Redacted when served
+    try std.testing.expectEqualStrings("ab12cd fix …'s timeline", live_bin.deploys[1].detail);
     try std.testing.expectEqualStrings("site-build", live_bin.action.?.name);
     try std.testing.expectEqual(@as(?i64, null), live_bin.eval_since);
-    for ([_][]const u8{ "admin.js", "admin.css", "index.html.gz", "data.json.gz" }) |f| {
-        try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ out, f }), .{});
-    }
     // One history line per build, under one header
     const history = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ dir, "admin-history.tsv" }), arena, .limited(1 << 20));
     try testing.expectEqual(4, std.mem.count(u8, history, "\n"));

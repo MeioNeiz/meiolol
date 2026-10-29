@@ -41,8 +41,8 @@ export fn main() void {
 fn changed() void {
     if (!state.shows() or asked) return;
     asked = true;
-    dom.fetch("models.bin", @backingInt(Call.models), done);
-    dom.fetch("training/training.bin", @backingInt(Call.training), done);
+    dom.fetch("/admin/models.bin", @backingInt(Call.models), done);
+    dom.fetch("/admin/training/training.bin", @backingInt(Call.training), done);
 }
 
 fn done(ctx: i32, bytes: ?[]u8) void {

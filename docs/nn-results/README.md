@@ -1,6 +1,6 @@
 # Neural net programme results
 
-Read by the admin Models tab, "Neural nets" (src/site/static/admin-nn.js); sent by
+Read by the admin Models tab, "Neural nets" (src/site/ui/adminlab.zig); sent by
 deploy/lab-push.sh. One file per question, `<question>.tsv`, owned by the session working
 on it (keys in use: nets comp pretrain stack scaling player context embx ldai gains effects
 draftpath pytorch). Append a row when you write the result up in docs/model.md; edit a row when a
