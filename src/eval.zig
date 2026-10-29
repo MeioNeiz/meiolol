@@ -963,12 +963,19 @@ fn metrics(gpa: std.mem.Allocator, p: []const f64, games: []const Game) !Metrics
     m.log_loss /= n;
     m.brier /= n;
     m.accuracy /= n;
-    m.auc = try auc(gpa, p, games);
+    const blue = try gpa.alloc(bool, games.len);
+    defer gpa.free(blue);
+    for (blue, games) |*b, g| b.* = g.winner == 0;
+    m.auc = try auc(gpa, p, blue, null);
     return m;
 }
 
-/// Mann-Whitney: chance a random blue win scores above a random blue loss; ties half
-fn auc(gpa: std.mem.Allocator, p: []const f64, games: []const Game) !f64 {
+/// Mann-Whitney: chance a random positive scores above a random negative; ties half.
+/// `placements` (p.len, or null) gets DeLong's placement of each item: a positive's share
+/// of negatives below it, a negative's share of positives above it (ties half). AUC is
+/// their mean over either class, so per-cluster sums of (placement - AUC) / class size
+/// give its variance
+pub fn auc(gpa: std.mem.Allocator, p: []const f64, pos: []const bool, placements: ?[]f64) !f64 {
     const idx = try gpa.alloc(usize, p.len);
     defer gpa.free(idx);
     for (idx, 0..) |*x, i| x.* = i;
@@ -977,22 +984,33 @@ fn auc(gpa: std.mem.Allocator, p: []const f64, games: []const Game) !f64 {
             return ps[a] < ps[b];
         }
     }.lt);
-    var rank_sum: f64 = 0;
-    var pos: f64 = 0;
+    var n_pos: f64 = 0;
+    for (pos) |b| n_pos += @floatFromInt(@intFromBool(b));
+    const n_neg = @as(f64, @floatFromInt(p.len)) - n_pos;
+    if (n_pos == 0 or n_neg == 0) {
+        if (placements) |out| @memset(out, 0.5);
+        return 0.5;
+    }
+    // Positives and negatives below the current tie group
+    var pos_below: f64 = 0;
+    var neg_below: f64 = 0;
+    var sum: f64 = 0;
     var i: usize = 0;
     while (i < idx.len) {
         var j = i;
-        while (j < idx.len and p[idx[j]] == p[idx[i]]) j += 1;
-        const avg_rank = (@as(f64, @floatFromInt(i + j - 1)) / 2) + 1;
-        for (idx[i..j]) |k| if (games[k].winner == 0) {
-            rank_sum += avg_rank;
-            pos += 1;
+        var tie_pos: f64 = 0;
+        while (j < idx.len and p[idx[j]] == p[idx[i]]) : (j += 1) tie_pos += @floatFromInt(@intFromBool(pos[idx[j]]));
+        const tie_neg = @as(f64, @floatFromInt(j - i)) - tie_pos;
+        const pos_place = (neg_below + tie_neg / 2) / n_neg;
+        sum += tie_pos * pos_place;
+        if (placements) |out| for (idx[i..j]) |k| {
+            out[k] = if (pos[k]) pos_place else (n_pos - pos_below - tie_pos / 2) / n_pos;
         };
+        pos_below += tie_pos;
+        neg_below += tie_neg;
         i = j;
     }
-    const neg = @as(f64, @floatFromInt(p.len)) - pos;
-    if (pos == 0 or neg == 0) return 0.5;
-    return (rank_sum - pos * (pos + 1) / 2) / (pos * neg);
+    return sum / n_pos;
 }
 
 const Evaluated = struct { p: []f64, m: Metrics };
@@ -1325,7 +1343,7 @@ fn pickMetric(
 
     var pct: std.ArrayList(f64) = .empty;
     defer pct.deinit(gpa);
-    var won: std.ArrayList(Game) = .empty;
+    var won: std.ArrayList(bool) = .empty;
     defer won.deinit(gpa);
     var missed: usize = 0;
     for (games, 0..) |g, gi| for (0..2) |s| for (Role.all) |r| {
@@ -1337,31 +1355,28 @@ fn pickMetric(
             .short => continue,
             .pct => |q| q,
         });
-        // Reuse the AUC helper: "blue won" here means this pick's side won
-        var fake = g;
-        fake.winner = if (g.winner == s) 0 else 1;
-        try won.append(gpa, fake);
+        try won.append(gpa, g.winner == s);
     };
     var sw: f64 = 0;
     var nw: f64 = 0;
     var sl: f64 = 0;
     var top_n: f64 = 0;
     var top_w: f64 = 0;
-    for (pct.items, won.items) |q, g| {
-        if (g.winner == 0) {
+    for (pct.items, won.items) |q, win| {
+        if (win) {
             sw += q;
             nw += 1;
         } else sl += q;
         if (q >= 0.9) {
             top_n += 1;
-            top_w += blueWon(g);
+            top_w += @floatFromInt(@intFromBool(win));
         }
     }
     const nl = @as(f64, @floatFromInt(pct.items.len)) - nw;
     const out: PickResult = .{
         .top_n = @trunc(top_n),
         .top_win = top_w / @max(top_n, 1),
-        .auc = try auc(gpa, pct.items, won.items),
+        .auc = try auc(gpa, pct.items, won.items, null),
     };
     try w.print("| {s} | {d} ({d} not candidates) | {d:.3} | {d:.3} | {d:.3} | {d:.1}% of {d} |\n", .{
         pr.label, pct.items.len, missed, sw / nw, sl / nl, out.auc, 100 * out.top_win, out.top_n,
@@ -1415,14 +1430,18 @@ const testing = std.testing;
 
 test "auc and logistic fit" {
     const gpa = testing.allocator;
-    var games: [4]Game = undefined;
-    for (&games, [_]u1{ 1, 0, 1, 0 }) |*g, won| {
-        g.* = .{ .id = 0, .start = 0, .patch = 0, .platform = 0, .teams = @splat(@splat(0)), .winner = won };
-    }
-    // Blue won games 1 and 3; perfectly ranked, then one swap
-    try testing.expectEqual(1.0, try auc(gpa, &.{ 0.1, 0.9, 0.2, 0.8 }, &games));
-    try testing.expectEqual(0.75, try auc(gpa, &.{ 0.1, 0.9, 0.85, 0.8 }, &games));
-    try testing.expectEqual(0.5, try auc(gpa, &.{ 0.5, 0.5, 0.5, 0.5 }, &games));
+    const won = [_]bool{ false, true, false, true };
+    // Perfectly ranked, then one swap, then all tied
+    try testing.expectEqual(1.0, try auc(gpa, &.{ 0.1, 0.9, 0.2, 0.8 }, &won, null));
+    var place: [4]f64 = undefined;
+    try testing.expectEqual(0.75, try auc(gpa, &.{ 0.1, 0.9, 0.85, 0.8 }, &won, &place));
+    // The loss at 0.85 sits above the win at 0.8: each is placed against half the other class
+    try testing.expectEqualSlices(f64, &.{ 1, 1, 0.5, 0.5 }, &place);
+    try testing.expectEqual(0.5, try auc(gpa, &.{ 0.5, 0.5, 0.5, 0.5 }, &won, &place));
+    try testing.expectEqualSlices(f64, &.{ 0.5, 0.5, 0.5, 0.5 }, &place);
+    // A tie across classes counts half
+    try testing.expectEqual(0.875, try auc(gpa, &.{ 0.1, 0.9, 0.5, 0.5 }, &won, &place));
+    try testing.expectEqualSlices(f64, &.{ 1, 1, 0.75, 0.75 }, &place);
 
     // y = 1 when x > 0, noisy: weight on x positive, intercept ~0
     var xs: [200]Weights = undefined;
