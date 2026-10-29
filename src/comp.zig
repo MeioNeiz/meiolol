@@ -147,6 +147,30 @@ fn team(arena: std.mem.Allocator, in: Input, seats: []const loading.Seat) !Team 
     return .{ .damage = damage, .timing = timing.items };
 }
 
+/// Each side's lane in words, its own way round: "ahead in lane, level 6 sooner"
+pub fn lines(obuf: []u8, tbuf: []u8, l: Lane) [2][]const u8 {
+    const f = l.facts orelse return .{ if (l.ours != 0 and l.theirs != 0) "few games of this lane" else "", "" };
+    const where = if (l.role == .jungle) "early" else "in lane";
+    var out: [2][]const u8 = undefined;
+    for ([_][]u8{ obuf, tbuf }, [_]bool{ true, false }, &out) |buf, mine, *o| {
+        var bw: std.Io.Writer = .fixed(buf);
+        if (f.edge()) |e| {
+            const flipped: loading.LaneFacts.Edge = if (mine) e else switch (e) {
+                .ahead => .behind,
+                .behind => .ahead,
+                .even => .even,
+            };
+            bw.print("{t} {s}", .{ flipped, where }) catch {};
+        }
+        if (loading.timingWord(f.level6)) |word| {
+            const sooner = (word == .sooner) == mine;
+            bw.print("{s}level 6 {s}", .{ if (bw.end > 0) ", " else "", if (sooner) "sooner" else "later" }) catch {};
+        }
+        o.* = bw.buffered();
+    }
+    return out;
+}
+
 fn winsLess(c: Counts) bool {
     if (c.games == 0) return false;
     const n: f64 = @floatFromInt(c.games);

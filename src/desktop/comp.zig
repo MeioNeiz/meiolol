@@ -6,7 +6,6 @@ const std = @import("std");
 const dvui = @import("dvui");
 const core = @import("core");
 const comp = @import("../comp.zig");
-const loading = @import("../loading.zig");
 const rows = @import("rows.zig");
 const w = @import("widgets.zig");
 const Ctx = w.Ctx;
@@ -103,7 +102,7 @@ fn timing(ctx: Ctx, i: usize, t: comp.Timing) void {
 fn lane(ctx: Ctx, i: usize, l: comp.Lane) void {
     var obuf: [64]u8 = undefined;
     var tbuf: [64]u8 = undefined;
-    const ours, const theirs = lines(&obuf, &tbuf, l);
+    const ours, const theirs = comp.lines(&obuf, &tbuf, l);
     const gold: ?i64 = if (ctx.private()) if (l.facts) |f| if (f.gold) |g| g.mean else null else null else null;
     rows.mirrored(
         ctx,
@@ -113,28 +112,4 @@ fn lane(ctx: Ctx, i: usize, l: comp.Lane) void {
         if (l.theirs != 0) .{ .champion = l.theirs, .me = false, .line = theirs } else null,
         gold,
     );
-}
-
-/// Each side's lane in words, its own way round: "ahead in lane, level 6 sooner"
-fn lines(obuf: []u8, tbuf: []u8, l: comp.Lane) [2][]const u8 {
-    const f = l.facts orelse return .{ if (l.ours != 0 and l.theirs != 0) "few games of this lane" else "", "" };
-    const where = if (l.role == .jungle) "early" else "in lane";
-    var out: [2][]const u8 = undefined;
-    for ([_][]u8{ obuf, tbuf }, [_]bool{ true, false }, &out) |buf, mine, *o| {
-        var bw: std.Io.Writer = .fixed(buf);
-        if (f.edge()) |e| {
-            const flipped: loading.LaneFacts.Edge = if (mine) e else switch (e) {
-                .ahead => .behind,
-                .behind => .ahead,
-                .even => .even,
-            };
-            bw.print("{t} {s}", .{ flipped, where }) catch {};
-        }
-        if (loading.timingWord(f.level6)) |word| {
-            const sooner = (word == .sooner) == mine;
-            bw.print("{s}level 6 {s}", .{ if (bw.end > 0) ", " else "", if (sooner) "sooner" else "later" }) catch {};
-        }
-        o.* = bw.buffered();
-    }
-    return out;
 }

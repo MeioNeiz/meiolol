@@ -23,7 +23,8 @@ pub const Seat = struct {
     you: bool = false,
     /// Seconds to respawn while dead
     dead: ?u16 = null,
-    kda: kda.Kda,
+    /// Null before the game (the comp view): the line alone
+    kda: ?kda.Kda = null,
     /// After the KDA ("Lv 9 · 84 cs")
     line: []const u8 = "",
 };
@@ -76,8 +77,8 @@ fn seat(h: *H, s_or: ?Seat, side: Side) N {
         h.span(.{ .class = "who" }, .{
             h.b(.{}, .{if (s.champ) |c| c.name else W.unknown.s}),
             h.span(.{ .class = "line" }, .{
-                kda.view(h, s.kda, .{}),
-                if (s.line.len > 0) h.span(.{}, .{ W.dot, s.line }) else null,
+                if (s.kda) |k| kda.view(h, k, .{}) else null,
+                if (s.line.len > 0) h.span(.{}, .{ if (s.kda != null) W.dot else null, s.line }) else null,
             }),
             if (s.dead) |t| h.span(.{ .class = "dead" }, .{W.back.with(h, .{ .t = @as(u32, t) })}) else null,
         }),

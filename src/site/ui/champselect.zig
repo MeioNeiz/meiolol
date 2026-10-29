@@ -13,6 +13,7 @@ const card = @import("card.zig");
 const fmt = @import("fmt.zig");
 const draftboard = @import("draftboard.zig");
 const lanechart = @import("lane.zig");
+const compview = @import("compview.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
@@ -32,6 +33,8 @@ pub const Screen = struct {
     banning: bool = false,
     /// Private edition: your team's draft win chance in %
     draft: ?f32 = null,
+    /// Once all ten are locked: under the board
+    comp: ?compview.Comp = null,
 };
 
 pub const Mode = enum { blind, counter, locked };
@@ -93,6 +96,7 @@ pub fn view(h: *H, s: Screen, held: ?*lanechart.Held, mastery: ?tree.Handler) N 
         h.div(.{ .class = "board" }, .{
             if (s.draft) |d| h.p(.{ .class = "draft", .style = h.vars(.{ .c = fmt.wrColour(d / 100, 0.2) }) }, .{W.draft.with(h, .{ .p = d })}) else null,
             draftboard.view(h, s.board),
+            if (s.comp) |c| compview.view(h, c) else null,
             if (!s.banning) bans else null,
         }),
         h.div(.{ .class = "side" }, .{
@@ -315,6 +319,10 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.addFill("counter, public", view(h, sample, chartState(h), null));
     g.addFill("counter, private", view(h, private(h, sample), chartState(h), null));
+    var done = sample;
+    done.lane.mode = .locked;
+    done.comp = compview.sample;
+    g.addFill("all locked, comp", view(h, done, chartState(h), null));
     g.addFill("your ban, blind", view(h, .{
         .board = .{ .lanes = draftboard.sample.lanes[0..5], .bans_them = draftboard.sample.bans_them },
         .banning = true,

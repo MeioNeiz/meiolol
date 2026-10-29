@@ -5,6 +5,7 @@ pub const state = @import("desktop/state.zig");
 pub const board = @import("board.zig");
 pub const lanecard = @import("lanecard.zig");
 pub const loading = @import("loading.zig");
+pub const comp = @import("comp.zig");
 pub const ingame = @import("ingame.zig");
 pub const postgame = @import("postgame.zig");
 pub const practice = @import("practice.zig");

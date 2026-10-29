@@ -12,6 +12,7 @@ const state = desktop.state;
 const board = desktop.board;
 const lanecard = desktop.lanecard;
 const loading = desktop.loading;
+const comp = desktop.comp;
 const ingame = desktop.ingame;
 const postgame = desktop.postgame;
 const files = @import("files.zig");
@@ -19,7 +20,7 @@ const practice = @import("practice.zig");
 const app = ui.app;
 const Allocator = std.mem.Allocator;
 
-pub const css = ui.css.head ++ ui.css.join(.{ ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.app });
+pub const css = ui.css.head ++ ui.css.join(.{ ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.app });
 
 const Page = struct {
     arena: std.heap.ArenaAllocator,
@@ -257,6 +258,62 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
         .ban_options = ban_options,
         .banning = b.turn == .ban,
         .draft = if (c.private) if (b.draft) |d| @floatCast(100 * d.win) else null else null,
+        .comp = if (s.comp) |x| try compView(a, c, x) else null,
+    };
+}
+
+/// Words for everyone; the share, the mix's record, lean numbers and lane gold for testers
+fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
+    var teams: [2]ui.compview.Team = undefined;
+    for (&teams, x.teams) |*out, t| {
+        const timing = try a.alloc(ui.compview.Timing, t.timing.len);
+        for (timing, t.timing) |*y, tm| y.* = .{
+            .champ = (try c.champ(a, tm.champion)).?,
+            .late = tm.lean == .late,
+            .gold = if (c.private) @intFromFloat(tm.gold) else null,
+            .win = if (c.private) @floatCast(tm.win) else null,
+        };
+        out.* = .{ .timing = timing };
+        const d = t.damage orelse continue;
+        out.damage = .{
+            .magic = @floatCast(d.magic),
+            .mix = switch (d.mix) {
+                .physical => .physical,
+                .mixed => .mixed,
+                .magic => .magic,
+            },
+            .wins_less = d.wins_less,
+            .share = c.private,
+            .rate = if (c.private and d.teams.games > 0) @floatCast(100 * @as(f64, @floatFromInt(d.teams.wins)) / @as(f64, @floatFromInt(d.teams.games))) else null,
+            .teams = d.teams.games,
+        };
+    }
+    const rows = try a.alloc(ui.teamrows.Row, x.lanes.len);
+    for (rows, x.lanes) |*r, l| {
+        const words = comp.lines(try a.alloc(u8, 64), try a.alloc(u8, 64), l);
+        r.* = .{
+            .role = uiRole(l.role),
+            .us = if (l.ours != 0) .{ .champ = try c.champ(a, l.ours), .you = l.me, .line = words[0] } else null,
+            .them = if (l.theirs != 0) .{ .champ = try c.champ(a, l.theirs), .line = words[1] } else null,
+        };
+        const f = l.facts orelse continue;
+        const g = f.gold orelse continue;
+        if (!c.private) continue;
+        r.gap = try a.print("{f}", .{gold(g.mean)});
+        r.lean = switch (f.edge().?) {
+            .ahead => .good,
+            .behind => .bad,
+            .even => .none,
+        };
+    }
+    return .{
+        .us = teams[0],
+        .them = teams[1],
+        .lanes = rows,
+        .patch = x.patch,
+        .gold_minute = core.champfacts.gold_minute,
+        .win_minute = core.champfacts.win_minute,
+        .lane_minute = core.curvesfile.lane_minute,
     };
 }
 
@@ -771,6 +828,47 @@ test "champ select: the private edition's numbers, the public one's words" {
     try ui.data.encode(a, app.Data, d, &bin);
     const back = try ui.data.decode(a, app.Data, bin.items);
     try testing.expectEqualStrings("Syndra", back.screen.select.lane.them.?.name);
+}
+
+test "comp view: once all ten are locked, words for everyone and numbers for testers" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    var sel = testSelect();
+    var rows: [5]comp.Lane = undefined;
+    for (&rows, core.Role.all) |*l, r| l.* = .{ .role = r, .ours = 0, .theirs = 0, .me = false, .facts = null };
+    rows[2] = .{ .role = .middle, .ours = ahri, .theirs = syndra, .me = true, .facts = .{ .games = 900, .gold = .{ .mean = -420, .se = 100 }, .level6 = 40, .first_item = null } };
+    const c: comp.Comp = .{
+        .teams = .{
+            .{ .damage = .{ .magic = 0.81, .mix = .magic, .teams = .{ .games = 6_000, .wins = 2_850 }, .wins_less = true }, .timing = &.{.{ .champion = ahri, .role = .middle, .lean = .late, .gold = -394, .win = 3.1 }} },
+            .{ .damage = null, .timing = &.{} },
+        },
+        .lanes = rows,
+        .patch = "15.21",
+    };
+    sel.comp = &c;
+
+    const priv = (try data(a, .{ .stats = &f.stats, .icons = null, .private = true }, .{ .select = &sel }, .none)).screen.select.comp.?;
+    try testing.expectApproxEqAbs(@as(f32, 47.5), priv.us.damage.?.rate.?, 0.01);
+    try testing.expectEqual(-394, priv.us.timing[0].gold.?);
+    const mid = priv.lanes[2];
+    try testing.expectEqualStrings("behind in lane, level 6 later", mid.us.?.line);
+    try testing.expectEqualStrings("ahead in lane, level 6 sooner", mid.them.?.line);
+    try testing.expectEqualStrings("\u{2212}420", mid.gap);
+    try testing.expectEqual(.bad, mid.lean);
+    try testing.expectEqual(null, priv.lanes[0].us);
+
+    const d = try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .select = &sel }, .none);
+    const public = d.screen.select.comp.?;
+    try testing.expect(!public.us.damage.?.share and public.us.damage.?.rate == null and public.us.damage.?.wins_less);
+    try testing.expectEqual(null, public.us.timing[0].win);
+    try testing.expectEqualStrings("", public.lanes[2].gap);
+    const html = try render(a, d, null);
+    try testing.expect(std.mem.find(u8, html, "Mostly magic damage") != null);
+    try testing.expect(std.mem.find(u8, html, "Ahri leans late") != null);
+    try testing.expect(std.mem.find(u8, html, "%") == null);
 }
 
 test "practice: the board's clicks while it shows, its island and file above the app" {
