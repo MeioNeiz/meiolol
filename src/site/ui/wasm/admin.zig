@@ -46,7 +46,7 @@ const live_ms = 60_000;
 const snap_s = 300;
 
 /// The chart, traffic, deploys, logs and models tabs' islands (dom.lazyLoad)
-const lazy = [_][]const u8{ ui.admincharts.sel, ui.admintraffic.sel, ui.adminops.sel, ui.adminmodels.sel };
+const lazy = [_][]const u8{ ui.admincharts.sel, ui.admintraffic.sel, ui.adminops.sel, ui.adminmodels.sel, ui.adminlab.sel, ui.adminruns.sel };
 
 export fn main() void {
     dom.start();

@@ -27,30 +27,33 @@ pub const name = "AdminModels";
 pub const scope = .{".c-admodels"};
 pub const sel = "[data-island=adminmodels]";
 
-pub const View = enum { all, win, draft, early, items, objectives, playstyle, player, data };
-const views = [_]View{ .all, .win, .draft, .early, .items, .objectives, .playstyle, .player, .data };
+/// nn and lab: AdminRuns (ui-adminruns.wasm) draws them; this island only the picker
+pub const View = enum { all, win, draft, nn, early, items, objectives, playstyle, player, data, lab };
+const views = std.enums.values(View);
 const cats = [_]md.Cat{ .win, .early, .items, .objectives, .playstyle, .player, .data };
 
-const view_names: std.EnumArray(View, Text) = .init(.{
+pub const view_names: std.EnumArray(View, Text) = .init(.{
     .all = plain("All"),
     .win = plain("Win (draft)"),
     .draft = plain("Draft tester"),
+    .nn = plain("Neural nets"),
     .early = plain("Early game"),
     .items = plain("Items"),
     .objectives = plain("Objectives"),
     .playstyle = plain("Playstyle"),
     .player = plain("Player"),
     .data = plain("Data quality"),
+    .lab = plain("Lab campaigns"),
 });
 
-fn catOf(v: View) ?md.Cat {
+pub fn catOf(v: View) ?md.Cat {
     return switch (v) {
-        .all, .draft => null,
+        .all, .draft, .nn, .lab => null,
         inline else => |t| @field(md.Cat, @tagName(t)),
     };
 }
 
-fn viewOf(c: md.Cat) View {
+pub fn viewOf(c: md.Cat) View {
     return switch (c) {
         inline else => |t| @field(View, @tagName(t)),
     };
@@ -75,7 +78,7 @@ fn outcomeOf(key: []const u8) ?Outcome {
     return null;
 }
 
-fn outcomeLabel(key: []const u8) []const u8 {
+pub fn outcomeLabel(key: []const u8) []const u8 {
     return if (outcomeOf(key)) |o| o.label else key;
 }
 
@@ -221,6 +224,7 @@ fn body(m: *Models, h: *H) N {
                 h.a(.{ .href = tester_href }, .{W.open_tester}),
             }),
             .early => earlyView(m, h),
+            .nn, .lab => null,
             else => |v| catView(m, h, catOf(v).?),
         },
     });
@@ -248,7 +252,7 @@ fn learnedIn(h: *H, t: ?*const md.Training, c: md.Cat) []const md.Learned {
 }
 
 /// Learned items as a list, each whole or its first sentence
-fn learnedList(h: *H, items: []const md.Learned, short: bool) N {
+pub fn learnedList(h: *H, items: []const md.Learned, short: bool) N {
     if (items.len == 0) return h.p(.{ .class = "lead" }, .{W.nothing});
     const out = h.mem.alloc(prose.Item, items.len) catch {
         h.oom = true;
@@ -728,7 +732,7 @@ fn runFindings(m: *Models, h: *H, c: md.Cat) N {
 }
 
 /// An effects file as a forest, largest first; long ones as the ten largest and smallest
-fn effectForest(h: *H, e: md.Effect) N {
+pub fn effectForest(h: *H, e: md.Effect) N {
     if (e.rows.len == 0) return .none;
     const all = h.mem.alloc(FRow, e.rows.len) catch {
         h.oom = true;
@@ -756,10 +760,11 @@ fn effectForest(h: *H, e: md.Effect) N {
 
 // ---------- Forest ----------
 
-const FRow = struct { label: []const u8, v: f32, ci: f32, gap: bool = false };
+pub const FRow = struct { label: []const u8, v: f32, ci: f32, gap: bool = false };
 
-const ForestOpts = struct {
-    num: enum { ll, pct, sig },
+pub const ForestOpts = struct {
+    /// ll5: log loss to five places (the nets' differences)
+    num: enum { ll, ll5, pct, sig },
     unit: []const u8 = "",
     better: enum { lower, higher } = .lower,
     /// What either end means
@@ -769,7 +774,7 @@ const ForestOpts = struct {
 
 /// Estimates with 95% intervals, a dot and whiskers each from a line at zero; blue where
 /// clear of zero on the better side, orange on the worse
-fn forest(h: *H, title: Text, caption: Text, rows: []const FRow, o: ForestOpts) N {
+pub fn forest(h: *H, title: Text, caption: Text, rows: []const FRow, o: ForestOpts) N {
     var span: f32 = 0;
     for (rows) |r| span = @max(span, @abs(r.v) + r.ci);
     span = if (span > 0) span * 1.1 else 1;
@@ -786,6 +791,7 @@ fn forest(h: *H, title: Text, caption: Text, rows: []const FRow, o: ForestOpts) 
             h.td(.{ .class = "bar" }, .{delta.bar(h, .{ .d = r.v, .ci = r.ci, .span = span, .dot = true })}),
             h.td(.{ .class = "num nw" }, .{switch (o.num) {
                 .ll => pm(h, .{ .mean = r.v, .ci = r.ci }, .ll),
+                .ll5 => h.fmt("{s}{s} ± {s}", .{ sign(r.v), dec(h, @abs(r.v), 5), dec(h, r.ci, 5) }),
                 .pct => pmPct(h, .{ .mean = r.v, .ci = r.ci }),
                 .sig => h.fmt("{s}{s}{s}", .{ sig(h, r.v, r.ci), if (o.unit.len > 0) " " else "", o.unit }),
             }}),
@@ -807,7 +813,7 @@ fn forest(h: *H, title: Text, caption: Text, rows: []const FRow, o: ForestOpts) 
 
 // ---------- Numbers ----------
 
-fn count(h: *H, n: anytype) []const u8 {
+pub fn count(h: *H, n: anytype) []const u8 {
     return phrase.num(h, .count, n).s;
 }
 
@@ -816,7 +822,7 @@ fn pct(h: *H, share: f32) Text {
     return phrase.num(h, .rate, 100 * share);
 }
 
-fn dec(h: *H, v: f32, comptime places: u4) []const u8 {
+pub fn dec(h: *H, v: f32, comptime places: u4) []const u8 {
     var out: std.Io.Writer.Allocating = .init(h.mem);
     fmt.fixed(&out.writer, v, places, false) catch {
         h.oom = true;
@@ -840,7 +846,7 @@ fn sign(v: f32) []const u8 {
 }
 
 /// "−2.10 ± 0.80": about three significant figures, the range to the same places
-fn sig(h: *H, v: f32, ci: f32) []const u8 {
+pub fn sig(h: *H, v: f32, ci: f32) []const u8 {
     const a = @abs(v);
     const s = if (v < 0) "−" else "";
     const c = @abs(ci);
@@ -859,7 +865,7 @@ fn ll(h: *H, v: ?f32) []const u8 {
 }
 
 /// "Gold at 14 min" as "gold at 14 min", "CS at 10 min" kept
-fn lowerFirst(h: *H, s: []const u8) []const u8 {
+pub fn lowerFirst(h: *H, s: []const u8) []const u8 {
     if (s.len < 2 or !std.ascii.isLower(s[1])) return s;
     const out = h.mem.dupe(u8, s) catch {
         h.oom = true;

@@ -1,7 +1,9 @@
 //! The new admin page (/admin/new, ui.adminpage): an empty shell ui-admin.wasm fills
 //! from admin.bin, api/live.bin and /auth/ (the chart tabs: ui.admincharts in
 //! ui-admincharts.wasm, Traffic: ui.admintraffic in ui-admintraffic.wasm, Deploys and Logs:
-//! ui.adminops in ui-adminops.wasm, Models: ui.adminmodels in ui-adminmodels.wasm, all of
+//! ui.adminops in ui-adminops.wasm, Models: ui.adminmodels in ui-adminmodels.wasm, its nets
+//! and campaigns ui.adminlab in ui-adminlab.wasm and its runs ui.adminruns in
+//! ui-adminruns.wasm, all of
 //! which it loads), its stylesheet and code, written into the admin dir beside the old page
 //! by `meiolol admin`. Never public: nginx serves /admin to view_admin logins only
 const std = @import("std");
@@ -13,7 +15,7 @@ const style = @import("style.zig");
 const Io = std.Io;
 
 /// What the public stylesheet leaves out (ui.components): it is linked first
-pub const css = ui.css.join(.{ ui.alertband, ui.actionbutton, ui.adminpage, ui.timechart, ui.admincharts, ui.admintraffic, ui.steptimeline, ui.logview, ui.adminops, ui.adminmodels });
+pub const css = ui.css.join(.{ ui.alertband, ui.actionbutton, ui.adminpage, ui.timechart, ui.admincharts, ui.admintraffic, ui.steptimeline, ui.logview, ui.adminops, ui.adminmodels, ui.adminlab, ui.adminruns });
 pub const css_file = assets.hashed("admin.css", css);
 pub const js = assets.built("ui-admin.js", @embedFile("ui-admin.js"));
 pub const wasm = assets.built("ui-admin.wasm", @embedFile("ui-admin.wasm"));
@@ -25,6 +27,10 @@ pub const ops_js = assets.built("ui-adminops.js", @embedFile("ui-adminops.js"));
 pub const ops_wasm = assets.built("ui-adminops.wasm", @embedFile("ui-adminops.wasm"));
 pub const models_js = assets.built("ui-adminmodels.js", @embedFile("ui-adminmodels.js"));
 pub const models_wasm = assets.built("ui-adminmodels.wasm", @embedFile("ui-adminmodels.wasm"));
+pub const lab_js = assets.built("ui-adminlab.js", @embedFile("ui-adminlab.js"));
+pub const lab_wasm = assets.built("ui-adminlab.wasm", @embedFile("ui-adminlab.wasm"));
+pub const runs_js = assets.built("ui-adminruns.js", @embedFile("ui-adminruns.js"));
+pub const runs_wasm = assets.built("ui-adminruns.wasm", @embedFile("ui-adminruns.wasm"));
 
 pub fn page(a: std.mem.Allocator) ![]const u8 {
     var p: ui.adminpage.Page = .{};
@@ -39,6 +45,10 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
     const on = ops.view(&h);
     var mo: ui.adminmodels.Models = .{ .js = models_js.path, .wasm = models_wasm.path };
     const mn = mo.view(&h);
+    var la: ui.adminlab.Lab = .{ .js = lab_js.path, .wasm = lab_wasm.path };
+    const ln = la.view(&h);
+    var ru: ui.adminruns.Runs = .{ .js = runs_js.path, .wasm = runs_wasm.path };
+    const rn = ru.view(&h);
     if (h.oom) return error.OutOfMemory;
     var out: Io.Writer.Allocating = .init(a);
     const w = &out.writer;
@@ -63,6 +73,8 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
     try ui.html.write(&t, tn, w);
     try ui.html.write(&t, on, w);
     try ui.html.write(&t, mn, w);
+    try ui.html.write(&t, ln, w);
+    try ui.html.write(&t, rn, w);
     try w.print(
         \\
         \\</main>
@@ -76,7 +88,7 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
 
 /// One of the page's files by its name under /admin/ (the dev server)
 pub fn file(name: []const u8) ?[]const u8 {
-    for ([_]assets.Hashed{ css_file, js, wasm, charts_js, charts_wasm, traffic_js, traffic_wasm, ops_js, ops_wasm, models_js, models_wasm }) |f| if (std.mem.eql(u8, f.path, name)) return f.data;
+    for ([_]assets.Hashed{ css_file, js, wasm, charts_js, charts_wasm, traffic_js, traffic_wasm, ops_js, ops_wasm, models_js, models_wasm, lab_js, lab_wasm, runs_js, runs_wasm }) |f| if (std.mem.eql(u8, f.path, name)) return f.data;
     return null;
 }
 
@@ -100,6 +112,10 @@ pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
         .{ ops_wasm.path, ops_wasm.data },
         .{ models_js.path, models_js.data },
         .{ models_wasm.path, models_wasm.data },
+        .{ lab_js.path, lab_js.data },
+        .{ lab_wasm.path, lab_wasm.data },
+        .{ runs_js.path, runs_js.data },
+        .{ runs_wasm.path, runs_wasm.data },
     };
     for (files) |f| {
         try dir.writeFile(io, .{ .sub_path = f[0], .data = f[1] });
