@@ -49,7 +49,7 @@ fi
 use=$(df --output=pcent / 2>/dev/null | tail -n 1 | tr -dc '0-9')
 (( ${use:-0} >= 80 )) && problems+=("disk / at ${use}%")
 # C01's shares and data disk (host.env; deploy/c01). With the data disk itself down this
-# script can't run: mac-watch.sh's ssh gets "No such file"
+# script can't run: mac-watch.sh reports that (ssh's exit 127)
 for m in ${MEIOLOL_MOUNTS:-}; do
     mountpoint -q "$m" || problems+=("$m not mounted: meiolol-disk.service retries (its journal says why)")
 done

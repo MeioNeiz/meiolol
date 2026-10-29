@@ -14,6 +14,8 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
 out=$(ssh -o ConnectTimeout=20 -o BatchMode=yes "$HOST" ml/meiolol/bin/health.sh 2>&1)
 rc=$?
 (( rc == 255 )) && out="$HOST unreachable (down or no network)"
+# health.sh lives on the data disk (C01: deploy/c01)
+(( rc == 127 )) && out="$HOST: data disk not mounted (journalctl -u meiolol-disk)"
 (( rc == 0 )) && out=''
 
 # Whatever the box reports, as long as it answers: problems are when a copy matters most
