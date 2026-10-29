@@ -79,7 +79,7 @@ pub const IdLookup = struct {
         });
     }
 
-    fn href(l: *const L, h: *H, id: []const u8) []const u8 {
+    pub fn href(l: *const L, h: *H, id: []const u8) []const u8 {
         var f: Frag = .{};
         f.id.set(id);
         var out: std.Io.Writer.Allocating = .init(h.mem);

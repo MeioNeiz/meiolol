@@ -225,7 +225,7 @@ pub const css =
     \\  .c-subbar { border-bottom: 1px solid var(--line); }
     \\  .c-subbar > .in { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-4); max-width: var(--wrap);
     \\    margin: 0 auto; padding: 0 var(--gutter); }
-    \\  .c-subbar .c-tabs { box-shadow: none; margin-left: calc(-1 * var(--sp-3)); }
+    \\  .c-subbar .c-tabs { height: var(--ctl); box-shadow: none; margin-left: calc(-1 * var(--sp-3)); }
     \\  .c-subbar .picks { display: flex; flex-wrap: wrap; gap: var(--sp-2); max-width: 100%; margin-left: auto; padding: var(--sp-1) 0; }
     \\}
     \\
