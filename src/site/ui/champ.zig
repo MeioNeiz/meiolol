@@ -2,6 +2,7 @@
 //! needs: thin data faded, banned struck, dead greyed with a cross, an empty seat dashed,
 //! a suggestion not yet yours (dashed accent ring), a side's ring, the player's own ring,
 //! a level, and a role badge in the corner
+const std = @import("std");
 const tree = @import("tree.zig");
 const role = @import("role.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -65,6 +66,27 @@ pub fn view(h: *H, c: ?Champ, o: Opts) N {
         if (o.role) |r| role.view(h, r, .{ .named = false }) else null,
         if (o.level) |l| h.span(.{ .class = "lvl" }, .{l}) else null,
     });
+}
+
+/// The champion page's name for `full` into `out` (full.len bytes at most): "Kai'Sa" -> "kaisa",
+/// "Nunu & Willump" -> "nunu-willump"
+pub fn slug(out: []u8, full: []const u8) []u8 {
+    var n: usize = 0;
+    var gap = false;
+    for (full) |ch| {
+        if (std.ascii.isAlphanumeric(ch)) {
+            if (gap and n > 0) {
+                out[n] = '-';
+                n += 1;
+            }
+            gap = false;
+            out[n] = std.ascii.toLower(ch);
+            n += 1;
+        } else if (ch == ' ' or ch == '&') {
+            gap = true;
+        }
+    }
+    return out[0..n];
 }
 
 fn parse(comptime s: []const u8) u8 {
@@ -145,4 +167,15 @@ pub fn gallery(g: *Gallery) void {
         view(h, demo("Orianna", "Orianna"), .{ .px = .@"40", .state = .add }),
     }));
     g.add("beside its name", h.span(.{ .class = "g-row" }, .{ view(h, demo("Yone", "Yone"), .{ .px = .@"32", .named = false }), h.b(.{}, .{"Yone"}) }));
+}
+
+test "slug" {
+    const cases = [_][2][]const u8{
+        .{ "Kai'Sa", "kaisa" },
+        .{ "Nunu & Willump", "nunu-willump" },
+        .{ "Dr. Mundo", "dr-mundo" },
+        .{ "Lee Sin", "lee-sin" },
+    };
+    var buf: [32]u8 = undefined;
+    for (cases) |c| try std.testing.expectEqualStrings(c[1], slug(&buf, c[0]));
 }
