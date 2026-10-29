@@ -44,9 +44,12 @@ pub const AucChart = struct {
         var marks = h.list();
         var key = h.list();
         var at = lo;
-        while (at <= hi + 1e-4) : (at += 0.01) ticks.append(h.mem, .{ .at = p.py(at), .label = .{ .s = h.fmt("{d:.2}", .{at}) }, .zero = @abs(at - 0.5) < 1e-4 }) catch {
-            h.oom = true;
-        };
+        while (at <= hi + 1e-4) : (at += 0.01) {
+            const label = h.fmt("{d:.2}", .{at}); // fmt-ok: method page only, server-rendered
+            ticks.append(h.mem, .{ .at = p.py(at), .label = .{ .s = label }, .zero = @abs(at - 0.5) < 1e-4 }) catch {
+                h.oom = true;
+            };
+        }
         for (c.series) |s| {
             marks.add(chart.line(h, p, s.auc, s.kind));
             key.add(h.li(.{ .data_k = s.kind }, .{ h.el(.i, .{}, .{}), s.label }));
@@ -68,7 +71,7 @@ pub const AucChart = struct {
             .x = xs,
             .above = &.{h.ul(.{ .class = "key" }, .{key.done()})},
             .marks = marks.done(),
-            .over = &.{chart.endLabel(h, p, main[main.len - 1], .{ .s = h.fmt("{d:.3}", .{main[main.len - 1]}) })},
+            .over = &.{chart.endLabel(h, p, main[main.len - 1], .{ .s = h.fmt("{d:.3}", .{main[main.len - 1]}) })}, // fmt-ok: server-rendered
             .foot = if (c.caption.len > 0) h.p(.{ .class = "cap" }, .{c.caption}) else .none,
         });
     }

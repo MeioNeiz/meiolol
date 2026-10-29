@@ -167,7 +167,10 @@ pub fn scan(arena: Allocator, path: []const u8, src: [:0]const u8, hits: *std.Ar
             .r_paren => if (parens.pop()) |ct| {
                 if (ct) in_comptime_call -= 1;
             },
-            .string_literal, .multiline_string_literal_line => if (test_depth == null and in_comptime_call == 0) {
+            // A test's name is not code either
+            .string_literal, .multiline_string_literal_line => if (test_depth == null and in_comptime_call == 0 and
+                prev.tag != .keyword_test)
+            {
                 const lit = std.mem.trimEnd(u8, src[tok.loc.start..tok.loc.end], "\r\n");
                 if (numeric(lit) and !marked(src, tok.loc.start)) try hits.append(arena, .{
                     .path = path,
@@ -186,7 +189,7 @@ const phrase_kinds = [_][]const u8{ "rate", "pct", "count", "points", "signed", 
 
 /// A placeholder that prints a number: any but {s}, {t} (a tag's name), {c} (a byte),
 /// {f} (a format method) and {*}, with an optional ? (optional) or [name] before the
-/// specifier
+/// specifier. Braces around anything else (JS, CSS, `{#id}` in markdown) are text
 pub fn numeric(lit: []const u8) bool {
     var k: usize = 0;
     while (std.mem.findScalarPos(u8, lit, k, '{')) |open| {
@@ -206,13 +209,18 @@ pub fn numeric(lit: []const u8) bool {
             } else false) continue;
             spec = spec[0..c];
         }
-        // Not a Zig placeholder: a JS or CSS brace pair, or text in braces
-        if (std.mem.findAny(u8, spec, " ;,\"'(=") != null) continue;
+        if (!specifier(spec)) continue;
         if (std.mem.startsWith(u8, spec, "?")) spec = spec[1..];
         if (spec.len == 1 and std.mem.findScalar(u8, "stcf*", spec[0]) != null) continue;
         return true;
     }
     return false;
+}
+
+/// Zig's specifiers are letters and digits (d, x, any, b64), *, and ? or ! before one
+fn specifier(spec: []const u8) bool {
+    for (spec) |c| if (!std.ascii.isAlphanumeric(c) and c != '*' and c != '?' and c != '!') return false;
+    return true;
 }
 
 /// `fmt-ok` in a comment on the literal's line
@@ -237,6 +245,10 @@ test numeric {
     try std.testing.expect(!numeric("\"{n:count} games, {p:pct}\""));
     try std.testing.expect(numeric("\"{d:0>2}\""));
     try std.testing.expect(!numeric("\"\\u{2212}\""));
+    try std.testing.expect(!numeric("\"## Early or late {#lean}\""));
+    try std.testing.expect(!numeric("\"function f() {return 1}\""));
+    try std.testing.expect(numeric("\"{any}\""));
+    try std.testing.expect(numeric("\"{d:.3}\""));
 }
 
 test scan {
@@ -250,12 +262,15 @@ test scan {
         \\    \\{d} games
         \\;
         \\fn f() void { @compileError("bad {d}"); }
+        \\test "heading ids: {#name} and {d} in a name" {}
+        \\const g = h.fmt("{#x} {d:.2}", .{v});
     ;
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     var hits: std.ArrayList(Hit) = .empty;
     try scan(arena.allocator(), "x.zig", src, &hits);
-    try std.testing.expectEqual(2, hits.items.len);
+    try std.testing.expectEqual(3, hits.items.len);
     try std.testing.expectEqual(1, hits.items[0].line);
     try std.testing.expectEqual(7, hits.items[1].line);
+    try std.testing.expectEqual(11, hits.items[2].line);
 }
