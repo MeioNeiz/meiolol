@@ -12,6 +12,19 @@ pub const Side = enum(u1) { blue, red };
 
 pub const Dmg = enum(u2) { ad, ap, mixed };
 
+/// Under about a third magic reads as AD, over two thirds as AP
+pub fn dmgOf(magic: ?f32) ?Dmg {
+    const x = magic orelse return null;
+    return if (x < 0.35) .ad else if (x > 0.65) .ap else .mixed;
+}
+
+/// The hidden champion's trait that splits the options, and which options share it
+pub const Hint = struct {
+    kind: enum(u2) { melee, ranged, ad, ap },
+    /// A bit per option, display order; options whose trait is unknown are set too
+    fits: u8,
+};
+
 pub const Puzzle = struct {
     n: u32,
     /// The game's patch ("26.20")
@@ -28,8 +41,8 @@ pub const Puzzle = struct {
     hidden_role: role.Role,
     /// Up to six (four on ranked puzzles), in display order; the played one among them
     options: []const u16,
-    /// Hint: the hidden champion is ranged; null without the champion's range
-    ranged: ?bool = null,
+    /// Null when no trait splits the options
+    hint: ?Hint = null,
     /// Blue's win chance from each lane alone, %, by role
     lanes: [5]?f32,
     result: Result,
@@ -59,6 +72,7 @@ pub const Puzzle = struct {
         }
         for (p.seats) |side| for (side) |st| {
             if (st.champ >= n or !std.math.isFinite(st.base)) return false;
+            if (st.magic) |m| if (!(m >= 0 and m <= 1)) return false;
             for (st.cands) |c| {
                 if (c.champ >= n or !c.finite()) return false;
                 for (c.terms) |t| {
@@ -87,8 +101,8 @@ pub const Turn = struct {
 
 pub const Seat = struct {
     champ: u16,
-    /// Null when the champion's damage wasn't sampled
-    dmg: ?Dmg,
+    /// Magic share of the champion's damage to champions, 0..1; null unsampled
+    magic: ?f32,
     kills: u16,
     deaths: u16,
     assists: u16,
@@ -182,14 +196,14 @@ pub const sample: Puzzle = .{
     },
     .seats = .{
         .{
-            seat(0, .ad, 51.0, 4),
-            seat(1, .ad, 50.0, 2),
-            seat(2, .ap, 50.0, 6),
-            seat(3, .ad, 50.0, 1),
-            seat(4, .mixed, 50.0, 3),
+            seat(0, 0.08, 51.0, 4),
+            seat(1, 0.21, 50.0, 2),
+            seat(2, 0.93, 50.0, 6),
+            seat(3, 0.04, 50.0, 1),
+            seat(4, 0.47, 50.0, 3),
         },
         .{
-            .{ .champ = 5, .dmg = .ad, .kills = 1, .deaths = 3, .assists = 1, .cs = 429, .gold = 16200, .damage = 21000, .base = 47.5, .rank = 3, .of = 31, .cands = &.{
+            .{ .champ = 5, .magic = 0.12, .kills = 1, .deaths = 3, .assists = 1, .cs = 429, .gold = 16200, .damage = 21000, .base = 47.5, .rank = 3, .of = 31, .cands = &.{
                 .{ .champ = 10, .rank = 1, .win = 49.9, .low = 48.5, .high = 51.3, .terms = &.{}, .rest = 0 },
                 .{ .champ = 11, .rank = 2, .win = 49.4, .low = 48.0, .high = 50.8, .terms = &.{}, .rest = 0 },
                 .{ .champ = 5, .rank = 3, .win = 48.9, .low = 47.6, .high = 50.2, .rest = 0.1, .terms = &.{
@@ -199,24 +213,24 @@ pub const sample: Puzzle = .{
                     .{ .kind = .into, .other = 2, .pp = -0.4, .games = 2300 },
                 } },
             } },
-            seat(6, .ad, 50.0, 5),
-            seat(7, .ap, 50.0, 9),
-            seat(8, .ad, 50.0, 2),
-            seat(9, .ap, 50.0, 7),
+            seat(6, 0.1, 50.0, 5),
+            seat(7, 0.96, 50.0, 9),
+            seat(8, 0.03, 50.0, 2),
+            seat(9, 0.81, 50.0, 7),
         },
     },
     .turns = &.{},
     .hidden_side = .red,
     .hidden_role = .top,
     .options = &.{ 5, 11, 10 },
-    .ranged = false,
+    .hint = .{ .kind = .ad, .fits = 0b011 },
     .lanes = .{ 51.4, 50.1, 49.1, 50.9, 51.3 },
     .result = .{ .winner = .blue, .secs = 2491, .kills = .{ 10, 8 }, .gold = .{ 84300, 79300 }, .towers = .{ 9, 6 }, .dragons = .{ 2, 4 }, .barons = .{ 1, 1 } },
     .paper = .{ .blue = 51.1, .low = 48.9, .high = 53.3, .edges = .{ 1.2, 0.3, -0.6, 0.2 } },
 };
 
-fn seat(c: u16, d: Dmg, base: f32, rank: u16) Seat {
-    return .{ .champ = c, .dmg = d, .kills = 2, .deaths = 2, .assists = 4, .cs = 300, .gold = 15000, .damage = 12000, .base = base, .rank = rank, .of = 30, .cands = &.{} };
+fn seat(c: u16, magic: f32, base: f32, rank: u16) Seat {
+    return .{ .champ = c, .magic = magic, .kills = 2, .deaths = 2, .assists = 4, .cs = 300, .gold = 15000, .damage = 12000, .base = base, .rank = rank, .of = 30, .cands = &.{} };
 }
 
 test "a puzzle survives the binary file" {
@@ -251,6 +265,17 @@ test "valid: an index past the champions or the played pick missing from the opt
     p = sample;
     p.lanes[2] = std.math.inf(f32);
     try std.testing.expect(!p.valid());
+    p = sample;
+    p.seats[0][3].magic = 1.5;
+    try std.testing.expect(!p.valid());
+}
+
+test "dmgOf: a third and two thirds magic are mixed, past them AD or AP" {
+    try std.testing.expectEqual(Dmg.ad, dmgOf(0.34).?);
+    try std.testing.expectEqual(Dmg.mixed, dmgOf(0.35).?);
+    try std.testing.expectEqual(Dmg.mixed, dmgOf(0.65).?);
+    try std.testing.expectEqual(Dmg.ap, dmgOf(0.66).?);
+    try std.testing.expectEqual(null, dmgOf(null));
 }
 
 /// A pro draft for `sample`: red's last pick its played top, one ban not made
@@ -273,7 +298,7 @@ test "a pro puzzle survives the binary file: 20 turns with a ban not made, bans,
     p.paper = null;
     p.lanes[1] = null;
     p.result.towers = null;
-    p.ranged = true;
+    p.hint = .{ .kind = .ap, .fits = 0b101 };
     try std.testing.expect(p.valid());
     const back = try decode(a, try encode(a, p));
     try std.testing.expect(back.valid());
@@ -284,7 +309,7 @@ test "a pro puzzle survives the binary file: 20 turns with a ban not made, bans,
     try std.testing.expectEqual(@as(?u16, null), back.seats[0][1].rank);
     try std.testing.expect(back.paper == null and back.lanes[1] == null);
     try std.testing.expect(back.result.towers == null and back.result.dragons != null);
-    try std.testing.expectEqual(@as(?bool, true), back.ranged);
+    try std.testing.expectEqual(@as(u8, 0b101), back.hint.?.fits);
     try std.testing.expectEqual(@as(?f32, 48.5), back.seats[1][0].cands[0].low);
 
     var bad = p;

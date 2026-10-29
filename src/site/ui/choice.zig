@@ -1,5 +1,5 @@
-//! ChoiceCards: a puzzle's 2 to 6 answers as big cards, each with its key number (the
-//! page binds keys 1-6 and Enter). Choosing marks a card (the others dim) and the page
+//! ChoiceCards: a puzzle's 2 to 6 answers as cards, each with its key number (the page
+//! binds keys 1-6 and Enter); a champion card is a row like a DraftBoard seat. Choosing marks a card (the others dim) and the page
 //! commits with its own button; once done, the cards stop being buttons and the answer
 //! is marked right, a wrong choice wrong. Champion cards (icon, name) or side cards
 //! (label in the side's colour, the side's five icons): Daily's pick and "Who won?",
@@ -128,10 +128,19 @@ pub const css =
     \\  .c-choice .mk { position: absolute; top: 4px; right: 6px; font-weight: var(--w-b); color: var(--good); }
     \\  .c-choice[data-mark="wrong"] .mk { color: var(--bad); }
     \\  .c-choices[data-side] .c-choice { min-height: 96px; }
+    \\  .c-choices[data-n="6"]:has(> .c-choice > .c-champ) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    \\  .c-choice:has(> .c-champ) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: var(--sp-3);
+    \\    row-gap: 0; align-items: center; justify-items: start; padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-2);
+    \\    border-radius: var(--r-s); text-align: left; }
+    \\  .c-choice:has(> .c-champ) > .c-champ { --sz: 40px; grid-row: 1 / span 2; }
+    \\  .c-choice:has(> .c-champ) > .nm { grid-column: 2; grid-row: 1 / span 2; }
+    \\  .c-choice:has(> .c-champ) > :is(.kn, .mk) { position: static; grid-column: 3; grid-row: 1 / span 2; }
+    \\  .c-choice:has(> .sub) > .nm { grid-row: 1; align-self: end; }
+    \\  .c-choice:has(> .c-champ) > .sub { grid-column: 2; grid-row: 2; align-self: start; }
     \\  @media (pointer: coarse) { .c-choice .kn { display: none; } }
     \\  @container (max-width: 420px) {
-    \\    .c-choices[data-n="6"] { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
-    \\    .c-choices[data-n="6"] .c-choice { padding: 4px; gap: 0; }
+    \\    .c-choices[data-n="6"], .c-choices[data-n="6"]:has(> .c-choice > .c-champ) { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+    \\    .c-choices[data-n="6"] .c-choice { display: flex; padding: 4px; gap: 0; }
     \\    .c-choices[data-n="6"] .c-champ { --sz: 44px; }
     \\    .c-choices[data-n="6"] :is(.nm, .kn) { position: absolute; width: 1px; height: 1px; overflow: hidden;
     \\      clip-path: inset(50%); white-space: nowrap; }

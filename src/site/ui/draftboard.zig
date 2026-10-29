@@ -467,6 +467,8 @@ pub const css =
     \\    font-variant-numeric: tabular-nums; }
     \\  .c-draft .mx .ends b { color: var(--text); }
     \\  .c-draft[data-v="full"] .bans { padding-top: var(--sp-2); }
+    \\  .c-draft[data-v="full"] .bans .c-champ { --sz: var(--icon-m); }
+    \\  .c-draft[data-v="full"] .bans .c-champ > img { opacity: 1; filter: none; }
     \\  @keyframes c-draft-pulse { 50% { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 4px var(--accent-bg); } }
     \\  @media (prefers-reduced-motion: reduce) { .c-draft .seat[data-hidden] .c-champ { animation: none; } }
     \\  @container (max-width: 1000px) {

@@ -175,7 +175,7 @@ pub fn puzzle(
         };
         seats[t][r] = .{
             .champ = try ids.at(id),
-            .dmg = dmgOf(magic(ctx, id)),
+            .magic = magic(ctx, id),
             .kills = clamp16(pl.kills),
             .deaths = clamp16(pl.deaths),
             .assists = clamp16(pl.assists),
@@ -228,7 +228,7 @@ pub fn puzzle(
         .hidden_side = @fromBackingInt(@intCast(p.hidden_team)),
         .hidden_role = uiRole(p.hidden_role),
         .options = options,
-        .ranged = ranged(ctx, p.played),
+        .hint = try hintFor(a, p, ctx, magic, ranged),
         .lanes = lanes,
         .result = .{
             .winner = @fromBackingInt(@intCast(p.winner)),
@@ -307,10 +307,47 @@ fn clamp16(x: u32) u16 {
     return @intCast(@min(x, std.math.maxInt(u16)));
 }
 
-/// Under about a third magic reads as AD, over two thirds as AP
-fn dmgOf(m: ?f32) ?dd.Dmg {
-    const x = m orelse return null;
-    return if (x < 0.35) .ad else if (x > 0.65) .ap else .mixed;
+const Traits = struct { ranged: ?bool, dmg: ?dd.Dmg };
+
+fn hintFor(
+    a: std.mem.Allocator,
+    p: daily.Puzzle,
+    ctx: anytype,
+    magic: fn (@TypeOf(ctx), u32) ?f32,
+    ranged: fn (@TypeOf(ctx), u32) ?bool,
+) !?dd.Hint {
+    const opts = try a.alloc(Traits, p.options.len);
+    for (opts, p.options) |*t, o| t.* = .{ .ranged = ranged(ctx, o.id), .dmg = dd.dmgOf(magic(ctx, o.id)) };
+    return hintOf(.{ .ranged = ranged(ctx, p.played), .dmg = dd.dmgOf(magic(ctx, p.played)) }, opts);
+}
+
+/// The played pick's trait that leaves the fewest options, two at least (one would be
+/// the answer), range before damage on a tie; null when none splits them. An option
+/// whose trait is unknown stays in, so the hint never rules one out wrongly
+fn hintOf(played: Traits, options: []const Traits) ?dd.Hint {
+    if (options.len > 8) return null;
+    var best: ?dd.Hint = null;
+    var left: usize = options.len;
+    if (played.ranged) |r| {
+        var fits: u8 = 0;
+        for (options, 0..) |o, i| if ((o.ranged orelse r) == r) {
+            fits |= @as(u8, 1) << @intCast(i);
+        };
+        const n = @popCount(fits);
+        if (n >= 2 and n < left) {
+            best = .{ .kind = if (r) .ranged else .melee, .fits = fits };
+            left = n;
+        }
+    }
+    if (played.dmg) |d| if (d != .mixed) {
+        var fits: u8 = 0;
+        for (options, 0..) |o, i| if ((o.dmg orelse d) == d) {
+            fits |= @as(u8, 1) << @intCast(i);
+        };
+        const n = @popCount(fits);
+        if (n >= 2 and n < left) best = .{ .kind = if (d == .ad) .ad else .ap, .fits = fits };
+    };
+    return best;
 }
 
 const testing = std.testing;
@@ -386,9 +423,9 @@ test "a ranked puzzle: bans per side, the played pick's reasons from its option,
     try testing.expectEqual(@as(usize, 0), bare.turns.len);
     try testing.expectEqualStrings("K", bare.champs[bare.bans[0][0]].name);
     try testing.expectEqual(@as(usize, 0), bare.seats[1][2].cands.len);
-    try testing.expectEqual(dd.Dmg.ap, bare.seats[0][2].dmg.?);
-    try testing.expectEqual(dd.Dmg.ad, bare.seats[0][0].dmg.?);
-    try testing.expectEqual(null, bare.seats[0][1].dmg);
+    try testing.expectEqual(@as(?f32, 0.9), bare.seats[0][2].magic);
+    try testing.expectEqual(@as(?f32, 0.1), bare.seats[0][0].magic);
+    try testing.expectEqual(null, bare.seats[0][1].magic);
 
     const p = try puzzle(a, testPuzzle(null, test_review), Fake{}, Fake.champ, Fake.magic, Fake.ranged);
     try testing.expect(p.valid());
@@ -423,8 +460,8 @@ test "a ranked puzzle: bans per side, the played pick's reasons from its option,
     const back = try dd.decode(a, try dd.encode(a, p));
     try testing.expect(back.valid());
     try testing.expectEqualStrings("H", back.champs[dd.played(&back)].name);
-    // The played champion's range: the hint
-    try testing.expectEqual(@as(?bool, true), back.ranged);
+    // Two options, so no trait can leave two and rule one out
+    try testing.expect(back.hint == null);
 }
 
 fn named(p: *const dd.Puzzle, i: u16) bool {
@@ -485,12 +522,26 @@ test "rangesOf: melee up to 250, ranged past it, champions whose range changes l
     try testing.expectEqual(null, r.get(122));
 }
 
-test "dmgOf: a third and two thirds magic are mixed, past them AD or AP" {
-    try testing.expectEqual(dd.Dmg.ad, dmgOf(0.34).?);
-    try testing.expectEqual(dd.Dmg.mixed, dmgOf(0.35).?);
-    try testing.expectEqual(dd.Dmg.mixed, dmgOf(0.65).?);
-    try testing.expectEqual(dd.Dmg.ap, dmgOf(0.66).?);
-    try testing.expectEqual(null, dmgOf(null));
+test "hintOf: the trait leaving the fewest, two at least; unknown options stay in" {
+    const mel: Traits = .{ .ranged = false, .dmg = .ad };
+    const adc: Traits = .{ .ranged = true, .dmg = .ad };
+    const mage: Traits = .{ .ranged = true, .dmg = .ap };
+    const odd: Traits = .{ .ranged = null, .dmg = null };
+    // All ranged: range says nothing, damage leaves the two AP
+    var h = hintOf(mage, &.{ adc, mage, adc, mage, adc, adc }).?;
+    try testing.expect(h.kind == .ap);
+    try testing.expectEqual(@as(u8, 0b001010), h.fits);
+    // Melee leaves two (one unknown), AD would leave four
+    h = hintOf(mel, &.{ adc, mel, adc, odd, adc, mage }).?;
+    try testing.expect(h.kind == .melee);
+    try testing.expectEqual(@as(u8, 0b001010), h.fits);
+    // A tie keeps range
+    h = hintOf(mel, &.{ mel, mel, mage, mage }).?;
+    try testing.expect(h.kind == .melee);
+    // One left would be the answer; all alike rules none out
+    try testing.expect(hintOf(mel, &.{ mel, mage, mage, mage }) == null);
+    try testing.expect(hintOf(adc, &.{ adc, adc, adc, adc }) == null);
+    try testing.expect(hintOf(.{ .ranged = null, .dmg = .mixed }, &.{ mel, adc, mage, odd }) == null);
 }
 
 test "puzzleName: numbered puzzles only" {

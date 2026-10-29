@@ -239,14 +239,19 @@ test "cand: two rows open at most, a third drops the oldest; a new seat closes t
     try testing.expectEqual(@as(u8, 2), t.seat);
 }
 
-test "the hint: only while picking, saved, and it costs the clean tick" {
+test "the hint: only while picking, fades the options it rules out, saved, costs the clean tick" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var s: dp.Page = .init(a, &dp.pro);
     var ev: tree.Event = .{ .kind = .click };
+    try testing.expect(std.mem.find(u8, try render(a, &s), "data-out") == null);
     s.update(.hint, &ev);
     try testing.expect(s.hint and s.dirty);
+    // pro's hint: AD, four of the six
+    const hinted = try render(a, &s);
+    try testing.expect(std.mem.find(u8, hinted, "<div class=\"opts\" data-out=\"4 5\">") != null);
+    try testing.expect(std.mem.find(u8, hinted, "data-k=\"accent\">AD</span>") != null);
     s.update(.{ .choose = 0 }, &ev);
     s.update(.lock, &ev);
     s.update(.{ .winner = .blue }, &ev);
@@ -350,12 +355,20 @@ test "the reveal's views: result line, seat panel parts, On paper and the mix" {
     try testing.expect(std.mem.find(u8, out, "can&#39;t rate") != null or std.mem.find(u8, out, "can't rate") != null);
     try testing.expect(std.mem.find(u8, out, "Your pick") == null);
 
+    // Lane win chances only after the reveal; the mix from each seat's magic share
+    var fresh: dp.Page = .init(a, &dd.sample);
+    const before = try render(a, &fresh);
+    try testing.expect(std.mem.find(u8, before, "from the lane") == null);
+    try testing.expect(std.mem.find(u8, out, "from the lane") != null);
+    // Blue: 0.08 0.21 0.93 0.04 0.47 magic, so 35% AP
+    try testing.expect(std.mem.find(u8, before, "AP <b>35%</b>") != null);
+
     // No paper, no damage kinds: neither part drawn
     var bare = dd.sample;
     bare.paper = null;
     var seats = bare.seats;
     for (&seats) |*side| for (side) |*x| {
-        x.dmg = null;
+        x.magic = null;
     };
     bare.seats = seats;
     var b = answered(a, &bare, 0, .red);

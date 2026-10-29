@@ -180,7 +180,8 @@ pub const Page = struct {
         var on: [5][2]?tree.Handler = undefined;
         for (&lanes, &on, 0..) |*l, *o, r| {
             const asked = r == @backingInt(p.hidden_role) and !done;
-            l.* = .{ .role = role.Role.all[r], .win = p.lanes[r], .ask = asked };
+            // Only after the reveal: while guessing they are more than the question needs
+            l.* = .{ .role = role.Role.all[r], .win = if (done) p.lanes[r] else null, .ask = asked };
             inline for (.{ &l.us, &l.them }, 0..) |seat, t| {
                 const x = p.seats[t][r];
                 const hidden = asked and t == @backingInt(p.hidden_side);
@@ -190,7 +191,7 @@ pub const Page = struct {
                     .hidden = r == @backingInt(p.hidden_role) and t == @backingInt(p.hidden_side),
                     .preview = if (hidden) s.shownAnswer() else null,
                     .pick = pick,
-                    .sub = if (done) .{ .s = "" } else if (hidden) (if (pick) |n| W.pick_n.with(h, .{ .n = n }) else .{ .s = "" }) else dmgWord(x.dmg),
+                    .sub = if (done) .{ .s = "" } else if (hidden) (if (pick) |n| W.pick_n.with(h, .{ .n = n }) else .{ .s = "" }) else dmgWord(dd.dmgOf(x.magic)),
                     .game = if (!done) null else .{
                         .kda = .{ .k = x.kills, .d = x.deaths, .a = x.assists },
                         .cs = x.cs,
@@ -233,30 +234,24 @@ pub const Page = struct {
         });
     }
 
-    /// Each side's damage mix by its champions' kinds, a fifth a seat; the hidden seat
-    /// and seats without a kind unknown. Null when no seat has a kind
+    /// Each side's damage mix: a fifth a seat, split by its champion's usual magic share;
+    /// the hidden seat and unsampled champions unknown. Null when none is sampled
     fn mix(s: *const Page) ?[2]draftboard.Mix {
         const p = s.p;
         var any = false;
         for (p.seats) |side| for (side) |x| {
-            any = any or x.dmg != null;
+            any = any or x.magic != null;
         };
         if (!any) return null;
         var out: [2]draftboard.Mix = .{ .{ .phys = 0, .magic = 0 }, .{ .phys = 0, .magic = 0 } };
         for (p.seats, &out, 0..) |side, *m, t| for (side, 0..) |x, r| {
             const hid = s.phase() != .done and t == @backingInt(p.hidden_side) and r == @backingInt(p.hidden_role);
-            const d = if (hid) null else x.dmg;
-            switch (d orelse {
+            const g = (if (hid) null else x.magic) orelse {
                 m.unknown += 0.2;
                 continue;
-            }) {
-                .ad => m.phys += 0.2,
-                .ap => m.magic += 0.2,
-                .mixed => {
-                    m.phys += 0.1;
-                    m.magic += 0.1;
-                },
-            }
+            };
+            m.magic += 0.2 * g;
+            m.phys += 0.2 * (1 - g);
         };
         return out;
     }
@@ -284,17 +279,37 @@ pub const Page = struct {
             .on = h.on(s, .{ .choose = @as(u8, @intCast(i)) }),
         };
         const ask = W.ask.with(h, .{ .side = sideWord(p.hidden_side).s });
+        // The options a used hint rules out, 1-based ("2 5"), for the CSS to fade
+        var outs: ?[]const u8 = null;
+        if (p.hint) |x| if (s.hint) {
+            var b: [12]u8 = undefined;
+            var n: usize = 0;
+            for (0..cs.len) |i| if ((x.fits >> @intCast(i)) & 1 == 0) {
+                b[n] = '1' + @as(u8, @intCast(i));
+                b[n + 1] = ' ';
+                n += 2;
+            };
+            outs = h.mem.dupe(u8, b[0..n -| 1]) catch blk: {
+                h.oom = true;
+                break :blk null;
+            };
+        };
         return puzzle.view(h, .{
             .stage = .none,
             .label = ask,
             .q = h.span(.{}, .{ask}),
-            .answer = choice.view(h, .{ .label = ask }, cs),
-            .games = if (p.ranged) |r| h.span(.{ .class = "hints" }, .{
+            .answer = h.div(.{ .class = "opts", .data_out = outs }, .{choice.view(h, .{ .label = ask }, cs)}),
+            .games = if (p.hint) |x| h.span(.{ .class = "hints" }, .{
                 h.span(.{ .class = "lab" }, .{W.hint}),
                 if (s.hint)
-                    badge.view(h, .accent, .{if (r) W.ranged else W.melee})
+                    badge.view(h, .accent, .{switch (x.kind) {
+                        .melee => W.melee,
+                        .ranged => W.ranged,
+                        .ad => W.ad,
+                        .ap => W.ap,
+                    }})
                 else
-                    button.view(h, .{ .s = .s, .on = h.on(s, .hint) }, .{W.range}),
+                    button.view(h, .{ .s = .s, .on = h.on(s, .hint) }, .{W.show}),
             }) else null,
             .action = button.view(h, .{ .v = .primary, .disabled = s.choice == null, .on = h.on(s, .lock), .ref = "lock" }, .{W.lock}),
         });
@@ -518,7 +533,7 @@ const W = struct {
     const ask = Phrase("{side:text}'s last pick?");
     const lock = plain("Lock in");
     const hint = plain("Hint");
-    const range = plain("Range");
+    const show = plain("Show");
     const ranged = plain("Ranged");
     const melee = plain("Melee");
     const who_won = plain("Who won?");
@@ -546,6 +561,8 @@ pub const css =
     \\  .c-daily [tabindex="-1"]:focus { outline: none; }
     \\  .c-daily .c-puzzle > .stage:empty, .c-daily[data-phase="winner"] .c-puzzle > .foot { display: none; }
     \\  .c-daily .hints { display: flex; align-items: center; gap: var(--sp-2); }
+    \\  .c-daily .opts .c-choice:not([aria-pressed="true"]):is([data-out~="1"] :nth-child(1), [data-out~="2"] :nth-child(2),
+    \\    [data-out~="3"] :nth-child(3), [data-out~="4"] :nth-child(4), [data-out~="5"] :nth-child(5), [data-out~="6"] :nth-child(6)) { opacity: 0.35; }
     \\  .c-daily .hints .lab { font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
     \\  .c-daily .res { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); padding-bottom: var(--sp-3);
     \\    margin-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
@@ -554,7 +571,7 @@ pub const css =
     \\  .c-daily .gl [data-side="us"] { color: var(--us); }
     \\  .c-daily .gl [data-side="them"] { color: var(--them); }
     \\  .c-daily .pr { white-space: nowrap; color: var(--faint); }
-    \\  .c-daily .pr .k { color: var(--muted); }
+    \\  .c-daily .pr .k { margin-right: 0.3em; color: var(--muted); }
     \\  @container daily (max-width: 1000px) {
     \\    .c-dailyw > .cols { grid-template-columns: minmax(0, 1fr); }
     \\    .c-daily > .c-card { grid-column: 1; grid-row: auto; }
@@ -609,12 +626,12 @@ pub fn both(h: *H, s: *Page, open: [2]?u16) N {
     return layout(h, s.view(h), x.view(h));
 }
 
-/// The sample with its pro draft, six options and a range hint
+/// The sample with its pro draft, six options and a hint
 pub const pro = blk: {
     var p = dd.sample;
     p.turns = &dd.pro_turns;
     p.options = &.{ 5, 11, 10, 9, 7, 8 };
-    p.ranged = false;
+    p.hint = .{ .kind = .ad, .fits = 0b100111 };
     break :blk p;
 };
 
