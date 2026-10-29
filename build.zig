@@ -488,6 +488,8 @@ fn uiSizes(b: *std.Build, families: []const []const u8) *std.Build.Step.Run {
         } else ui_budget;
         run.addArgs(&.{ w.name, b.fmt("{d}", .{budget}) });
         run.addFileArg(w.wasm);
+        // Builds beside the tests' compile, off ci's critical path: a ui change's ci
+        // takes about as long without these (measured on the gpu-box, 80-105 s either way)
         run.addFileArg(uiExe(b, f, false).getEmittedBin());
     }
     run.has_side_effects = true;
