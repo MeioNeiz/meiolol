@@ -969,7 +969,7 @@ test "admin page from the fixture games and a crawl log" {
     // chart tabs' hidden with their code on the root (loaded by ui-admin.wasm)
     try site_admin.write(gpa, io, out);
     const a_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "new.html" }), arena, .limited(1 << 20));
-    for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "data-island=\"admin\"", site_admin.js.path, site_admin.wasm.path, site_admin.css_file.path, "data-island=\"admincharts\"", site_admin.charts_js.path, site_admin.charts_wasm.path, "data-island=\"admintraffic\"", site_admin.traffic_js.path, site_admin.traffic_wasm.path }) |s| {
+    for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "data-island=\"admin\"", site_admin.js.path, site_admin.wasm.path, site_admin.css_file.path, "data-island=\"admincharts\"", site_admin.charts_js.path, site_admin.charts_wasm.path, "data-island=\"admintraffic\"", site_admin.traffic_js.path, site_admin.traffic_wasm.path, "data-island=\"adminops\"", site_admin.ops_js.path, site_admin.ops_wasm.path }) |s| {
         try std.testing.expect(std.mem.find(u8, a_html, s) != null);
     }
     for ([_][]const u8{ site_admin.js.path, site_admin.wasm.path, site_admin.charts_js.path, site_admin.charts_wasm.path, site_admin.css_file.path, "new.html.gz", "admin.bin" }) |f| {

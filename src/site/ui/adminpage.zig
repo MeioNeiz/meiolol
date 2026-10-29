@@ -365,8 +365,8 @@ fn body(p: *Page, h: *H, s: *const ad.Snapshot) N {
             .overview => overview(p, h, s),
             .ops => controls(p, h, s),
             .accounts => accountsTab(p, h),
-            // AdminCharts and AdminTraffic, the islands below
-            .crawler, .riot, .storage, .ingest, .traffic => .none,
+            // AdminCharts, AdminTraffic and AdminOps, the islands below
+            .crawler, .riot, .storage, .ingest, .traffic, .deploys, .logs => .none,
             else => |t| card.view(h, .{}, &.{h.p(.{}, .{
                 W.old.with(h, .{ .t = tab_names.get(t).s }),
                 ": ",

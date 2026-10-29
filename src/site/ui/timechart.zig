@@ -623,7 +623,7 @@ fn lastSunday(y: i64, m: i64) i64 {
 }
 
 /// Days since 1970-01-01 of a civil date (Hinnant's days_from_civil)
-fn days(y0: i64, m: i64, d: i64) i64 {
+pub fn days(y0: i64, m: i64, d: i64) i64 {
     const y = if (m <= 2) y0 - 1 else y0;
     const era = @divFloor(y, 400);
     const yoe = y - era * 400;
