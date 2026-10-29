@@ -32,8 +32,9 @@ export fn main() void {
     if (dom.binOf(root, "data-bin")) |b| return inline_(b);
     src = dom.attrOf(root, "data-src");
     root_path = dom.attrOf(root, "data-root");
-    want = std.fmt.parseInt(u32, dom.attrOf(root, "data-stamp"), 10) catch return;
-    dom.fetch(src, 0, loaded);
+    const stamp = dom.attrOf(root, "data-stamp");
+    want = std.fmt.parseInt(u32, stamp, 10) catch return;
+    dom.fetchStamped(src, stamp, 0, loaded);
 }
 
 fn loaded(_: i32, bytes: ?[]u8) void {

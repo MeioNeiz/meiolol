@@ -23,9 +23,10 @@ export fn main() void {
     if (root == .null) return;
     defer root.release();
     base = dom.attrOf(root, "data-base");
-    want = std.fmt.parseInt(u32, dom.attrOf(root, "data-stamp"), 10) catch return;
+    const stamp = dom.attrOf(root, "data-stamp");
+    want = std.fmt.parseInt(u32, stamp, 10) catch return;
     src = dom.attrOf(root, "data-src");
-    dom.fetch(src, 0, loaded);
+    dom.fetchStamped(src, stamp, 0, loaded);
 }
 
 fn loaded(_: i32, bytes: ?[]u8) void {

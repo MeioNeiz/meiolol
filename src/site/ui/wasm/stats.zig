@@ -38,8 +38,9 @@ export fn main() void {
     if (view_index >= tiers.rank_paths.len) return dom.dom.warn("tiers: bad data-view");
     path = dom.attrOf(root, "data-path");
     src = dom.attrOf(root, "data-src");
-    want = std.fmt.parseInt(u32, dom.attrOf(root, "data-stamp"), 10) catch return;
-    dom.fetch(src, 0, loaded);
+    const stamp = dom.attrOf(root, "data-stamp");
+    want = std.fmt.parseInt(u32, stamp, 10) catch return;
+    dom.fetchStamped(src, stamp, 0, loaded);
 }
 
 fn loaded(_: i32, bytes: ?[]u8) void {

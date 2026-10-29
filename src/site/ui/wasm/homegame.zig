@@ -46,14 +46,15 @@ fn game() void {
     const el = zjb.global("document").call("querySelector", .{zjb.constString(sel)}, zjb.Handle);
     if (el == .null) return;
     defer el.release();
-    want = std.fmt.parseInt(u32, dom.attrOf(el, "data-stamp"), 10) catch return;
+    const stamp = dom.attrOf(el, "data-stamp");
+    want = std.fmt.parseInt(u32, stamp, 10) catch return;
     up = dom.attrOf(el, "data-up");
     roles = hp.rolesOf(std.fmt.parseInt(u8, dom.attrOf(el, "data-roles"), 10) catch return);
     default = std.meta.stringToEnum(Role, dom.attrOf(el, "data-role")) orelse return;
     src = dom.attrOf(el, "data-src");
     js = dom.attrOf(el, "data-js");
     wasm = dom.attrOf(el, "data-wasm");
-    dom.fetch(src, 0, loaded);
+    dom.fetchStamped(src, stamp, 0, loaded);
 }
 
 fn loaded(_: i32, bytes: ?[]u8) void {
