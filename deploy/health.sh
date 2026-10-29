@@ -46,8 +46,11 @@ if [[ -z "$uploaded" ]] || (( now - $(date -d "$uploaded" +%s) > 26 * 3600 )); t
     problems+=("site upload stale: last ${uploaded:-never}")
 fi
 
-use=$(df --output=pcent / 2>/dev/null | tail -n 1 | tr -dc '0-9')
-(( ${use:-0} >= 80 )) && problems+=("disk / at ${use}%")
+# Without C01's data disk cache file (deploy/c01): 30 GB of its 60 GB /, and it never grows
+read -r size used <<< "$(df -B1 --output=size,used / 2>/dev/null | tail -n 1)"
+fixed=$(stat -c %s /var/lib/meiolol/cache.img 2>/dev/null || echo 0)
+use=$(( ${size:-0} > fixed ? (${used:-0} - fixed) * 100 / (size - fixed) : 0 ))
+(( use >= 80 )) && problems+=("disk / at ${use}% (not counting the disk cache file)")
 mnt=$(df --output=target data 2>/dev/null | tail -n 1)
 use=$(df --output=pcent data 2>/dev/null | tail -n 1 | tr -dc '0-9')
 [[ "$mnt" != / ]] && (( ${use:-0} >= 80 )) && problems+=("disk $mnt at ${use}%")

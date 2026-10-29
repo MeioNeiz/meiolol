@@ -173,7 +173,7 @@ deploy/health.sh runs on the box and prints one line per problem:
 | crawler silent | last per-minute report older than 15 min |
 | no new matches | report's per-region match counters unchanged for 2h (STALL_H) |
 | site | unit `meiolol-web` not active, or last upload in web.log older than 26h |
-| disk | / or the data's disk at 80% |
+| disk | / at 80% not counting C01's fixed 30 GB disk cache file (the rest grows slowly: snaps, nginx's 2 GB cache, /var/www), or the data's disk at 80% |
 | mounts | a path in host.env's MEIOLOL_MOUNTS not mounted (C01: /srv/meiolol, /srv/megatron, /srv/megatron-backups); with the data disk itself down health.sh can't run: mac-watch.sh says "data disk not mounted" (ssh's exit 127) |
 | deploy | the newest finished deploy in data/deploys.tsv failed (the Mac's on-push.sh queues events until the box answers) |
 | backup | unit `meiolol-backup` not active, or newest state snapshot older than 26h |
