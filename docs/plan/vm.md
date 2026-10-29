@@ -96,15 +96,15 @@ on C01's disk (/var/lib/meiolol/cache.img), loops with direct IO.
 /srv/megatron is our own fstab mount of Megatron, `hard,nosharesock` (without
 nosharesock the kernel reuses Ethan's `soft` /mnt/jacob session and its options);
 credentials /etc/meiolol/megatron.cred. meiolol-disk.service (/usr/local/sbin/meiolol-disk)
-assembles it at boot. ~/ml links to /srv/meiolol/ml. Writeback was refused by LVM (a
+mounts the shares and assembles it, every 30 s until Megatron answers; the units using
+~/ml/meiolol fail and restart until its data/ is there; the empty mount points are
+immutable on /. All in deploy/c01 (install.sh from the Mac). ~/ml links to /srv/meiolol/ml. Writeback was refused by LVM (a
 damaged cachevol can't be repaired)
 
 - SQLite test with the cache: commits 11-12/s (p50 ~62 ms), lookups beside the writer
   243-260/s, cold scan 147-171 MB/s, cold row reads 1,450-1,640/s: scans near local
   disk, row reads ~2x the bare image, writes still at Megatron's pace
-- Reboot (27 Oct, Ethan's RAM and CPU change): disk back, but the user units start
-  before it and fail CHDIR once, then come up on Restart's 60 s. Left: fstrim.timer; backups/ to
-  Megatron outside the image (VM8)
+- Left: fstrim.timer; backups/ to Megatron outside the image (VM8)
 
 ### VM2: base host
 

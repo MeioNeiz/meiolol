@@ -1,0 +1,32 @@
+#!/bin/sh
+# meiolol's data disk on C01: LVM volume meiolol/data, a 500 GB ext4 image on Megatron
+# (/srv/megatron, CIFS) with a writethrough cache on a local file. Shares, loops, LVM,
+# then mount; every step skips what is already up, so a failed start just runs again.
+# meiolol-disk.service retries it until Megatron answers. Installed by install.sh
+set -eu
+slow=/srv/megatron/meiolol/disk.img
+fast=/var/lib/meiolol/cache.img
+loop() { losetup -j "$1" | cut -d: -f1 | grep . || losetup --find --show --direct-io=on "$1"; }
+# fstab's lines and options. Boot tries them first (nofail): a failure there is only
+# retried here. With packets dropped a CIFS mount hangs for minutes, hence the timeout
+share() {
+    mountpoint -q "$1" && return 0
+    timeout 60 mount "$1" && return 0
+    echo "$1: Megatron (192.168.18.54) not answering; meiolol-disk.service retries" >&2
+    exit 1
+}
+case ${1:-start} in
+start)
+    share /srv/megatron
+    loop "$slow" > /dev/null
+    loop "$fast" > /dev/null
+    vgchange -q -ay meiolol > /dev/null
+    mountpoint -q /srv/meiolol || mount -o noatime,nodiscard /dev/meiolol/data /srv/meiolol
+    share /srv/megatron-backups ;;
+stop)
+    ! mountpoint -q /srv/meiolol || umount /srv/meiolol
+    vgchange -q -an meiolol > /dev/null || true
+    for f in "$slow" "$fast"; do
+        for l in $(losetup -j "$f" | cut -d: -f1); do losetup -d "$l"; done
+    done ;;
+esac

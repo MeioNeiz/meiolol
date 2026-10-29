@@ -1,0 +1,4 @@
+# meiolol: Megatron, hard so a NAS pause stalls IO instead of failing it under the disk image; meiolol-disk.service retries these (deploy/c01)
+//192.168.18.54/Megatron/Essex\040Storage/Jacob /srv/megatron cifs credentials=/etc/meiolol/megatron.cred,vers=3.1.1,hard,nosharesock,uid=1000,gid=1000,file_mode=0600,dir_mode=0700,_netdev,nofail,x-systemd.mount-timeout=60 0 0
+# meiolol: nobrl, as SQLite's locks fail on CIFS byte-range locks (backup-mirror.sh)
+//192.168.18.54/Megatron/Essex\040Storage/Jacob /srv/megatron-backups cifs credentials=/etc/meiolol/megatron.cred,vers=3.1.1,hard,nosharesock,nobrl,uid=1000,gid=1000,file_mode=0600,dir_mode=0700,_netdev,nofail,x-systemd.mount-timeout=60 0 0

@@ -1,0 +1,20 @@
+[Unit]
+Description=meiolol data disk (Megatron image + local cache) at /srv/meiolol
+# Megatron reboots when it likes and may be down at boot (28 Oct: the disk stayed down
+# for hours). The shares are nofail in fstab; meiolol-disk mounts them when boot's try
+# failed, and a failed start runs again every 30 s for as long as it takes
+Wants=network-online.target
+After=network-online.target srv-megatron.mount srv-megatron\x2dbackups.mount
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/meiolol-disk start
+ExecStop=/usr/local/sbin/meiolol-disk stop
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=5min
+
+[Install]
+WantedBy=multi-user.target

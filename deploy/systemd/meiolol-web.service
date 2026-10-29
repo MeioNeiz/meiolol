@@ -7,7 +7,10 @@ Description=meiolol site build and upload (deploy/web-loop.sh)
 # its commits stalled, crawl rate 77% for that hour. Over this, the jobs reclaim their
 # own cache first. C01 (62 GB) keeps the same share of RAM
 MemoryHigh=30G
-WorkingDirectory=%h/ml/meiolol
+# The data disk (C01: deploy/c01) can come up long after boot: fail here, saying why,
+# and Restart tries again, rather than start without it
+WorkingDirectory=-%h/ml/meiolol
+ExecStartPre=/bin/sh -c 'test -d %h/ml/meiolol/data || { echo "waiting for the data disk: %h/ml/meiolol/data missing" >&2; exit 1; }'
 EnvironmentFile=-%h/ml/meiolol/host.env
 ExecStart=/bin/sh -c 'exec bin/web-loop.sh "$(cat contact)" >> data/web.log 2>&1'
 Restart=always

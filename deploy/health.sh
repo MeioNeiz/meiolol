@@ -48,6 +48,19 @@ fi
 
 use=$(df --output=pcent / 2>/dev/null | tail -n 1 | tr -dc '0-9')
 (( ${use:-0} >= 80 )) && problems+=("disk / at ${use}%")
+# C01's shares and data disk (host.env; deploy/c01). With the data disk itself down this
+# script can't run: mac-watch.sh's ssh gets "No such file"
+for m in ${MEIOLOL_MOUNTS:-}; do
+    mountpoint -q "$m" || problems+=("$m not mounted: meiolol-disk.service retries (its journal says why)")
+done
+
+# The newest deploy's outcome (data/deploys.tsv, from the Mac's on-push.sh): after a
+# failed one the site lags main until a push deploys. The line carries its time
+last=$(awk -F'\t' '$3 == "deploy" && $4 != "start"' data/deploys.tsv 2> /dev/null | tail -n 1)
+IFS=$'\t' read -r at sha _ status detail <<< "$last"
+if [[ "$status" == failed && "$at" =~ ^[0-9]+$ ]]; then
+    problems+=("deploy ${sha:0:7} failed $(date -u -d "@$at" '+%F %H:%MZ'): ${detail:0:200}")
+fi
 
 if ! running meiolol-backup; then
     problems+=("backup loop not running (meiolol-backup)")

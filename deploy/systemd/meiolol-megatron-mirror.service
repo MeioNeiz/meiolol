@@ -2,6 +2,7 @@
 Description=meiolol backups mirrored onto Megatron, outside the disk image (deploy/backup-mirror.sh, C01)
 # Its own mount of the share with nobrl: SQLite's locks fail on CIFS byte-range locks
 ConditionPathIsMountPoint=/srv/megatron-backups
+ConditionPathIsDirectory=%h/ml/meiolol/data
 
 [Service]
 Type=oneshot

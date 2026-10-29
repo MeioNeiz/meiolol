@@ -173,6 +173,8 @@ deploy/health.sh runs on the box and prints one line per problem:
 | no new matches | report's per-region match counters unchanged for 2h (STALL_H) |
 | site | unit `meiolol-web` not active, or last upload in web.log older than 26h |
 | disk | / at 80% |
+| mounts | a path in host.env's MEIOLOL_MOUNTS not mounted (C01: /srv/meiolol, /srv/megatron, /srv/megatron-backups); with the data disk itself down health.sh can't run, and mac-watch.sh's ssh reports "No such file" |
+| deploy | the newest finished deploy in data/deploys.tsv failed (the Mac's on-push.sh queues events until the box answers) |
 | backup | unit `meiolol-backup` not active, or newest state snapshot older than 26h |
 | gpu-box | no raw archive ack for 12h (ACK_H): PC off, asleep or WSL down; first export never acked; one export unacked for 12h while others are acked (see archive-pull.log on the gpu-box) |
 | gpu-box disks | C: (holds the WSL disk) or the WSL disk or the archive partition at 85%, or the partition not attached; reported by each archive pull |
