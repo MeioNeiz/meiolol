@@ -5411,6 +5411,54 @@ Not covered: three-way and comp effects beyond the four blocks (the damage mix a
 capture some; their gain shows as the models' log loss, not here), drift within a cell
 (the estimate is each block's own cell effect), player terms (D1, the replay).
 
+### Blind pick ranking (J2), 2026-10-29 (w4)
+
+Question (docs/plan/app.md APP3, J2): while my lane opponent is unknown, should the
+pick list favour champions that hold up against the role's likely picks, rather than
+rank as if the opponent were average (today: no lane term)? `meiolol eval --blind`
+(src/blindpick.zig) on data/snap of 29 Oct (games 26 Sep to 29 Oct, every patch
+pooled), the shipped model (as the stats file) fit on train, pick metric as Method but with
+my lane opponent hidden. Variants add a per champion-role offset to the pick's logit,
+over the role's likely opponents (10+ train games, weighted by them): the expected lane
+term, its 25th and 10th percentile, mean minus one spread; and the base rating's lower
+bound (minus one SE). Two scenarios: the other eight known; four allies only. Gap =
+winners' mean percentile minus losers'; "vs today" is the paired difference, ± 95% by
+game. Variants pre-declared; dev-val first, then one test run, nothing tuned.
+
+Dev-val (train 429k games to 24 Oct, 57k scored):
+
+| ranking | lane hidden: gap vs today | AUC | no enemy: gap vs today | AUC |
+| --- | --- | --- | --- | --- |
+| today (gap 0.0190 / 0.0165) | | 0.5187 | | 0.5168 |
+| + expected lane term | -0.0001 ± 0.0001 | 0.5186 | +0.0000 ± 0.0001 | 0.5168 |
+| + 25th percentile | +0.0002 ± 0.0003 | 0.5181 | +0.0003 ± 0.0003 | 0.5163 |
+| + 10th percentile | -0.0002 ± 0.0005 | 0.5171 | +0.0002 ± 0.0006 | 0.5154 |
+| + mean minus spread | +0.0001 ± 0.0004 | 0.5176 | +0.0004 ± 0.0004 | 0.5160 |
+| base rating minus one SE | -0.0074 ± 0.0008 | 0.5193 | -0.0064 ± 0.0008 | 0.5169 |
+
+Test (train 487k games to 26 Oct, 86k scored, 859k picks):
+
+| ranking | lane hidden: gap vs today | AUC | top 10% win | no enemy: gap vs today | AUC |
+| --- | --- | --- | --- | --- | --- |
+| today (gap 0.0191 / 0.0164) | | 0.5190 | 52.09% | | 0.5169 |
+| + expected lane term | +0.0001 ± 0.0001 | 0.5191 | 52.12% | +0.0001 ± 0.0001 | 0.5172 |
+| + 25th percentile | +0.0002 ± 0.0002 | 0.5186 | 52.21% | +0.0004 ± 0.0002 | 0.5167 |
+| + 10th percentile | +0.0002 ± 0.0004 | 0.5178 | 52.29% | +0.0006 ± 0.0005 | 0.5160 |
+| + mean minus spread | +0.0003 ± 0.0003 | 0.5183 | 52.28% | +0.0005 ± 0.0003 | 0.5164 |
+| base rating minus one SE | -0.0074 ± 0.0006 | 0.5194 | 51.79% | -0.0065 ± 0.0006 | 0.5169 |
+
+Result: no win. On dev no variant's interval excludes 0; on test the low-end variants
+gain 0.0006 at most of a 0.0164 gap (under 7% at the interval's top) while their AUC
+drops, so the two measures disagree and the size is negligible either way. The
+expected lane term moves nothing: lane matchups average out over the role's likely opponents. Penalising thin
+base ratings is clearly worse (it pushes popular champions up whatever they win). For
+a win or loss, the expected win chance over the unknown opponent is the right target,
+and today's average-opponent ranking already is it; "safe" only adds something under
+risk aversion a single game doesn't have. Not covered: pick order isn't in the match
+data, so seats that were really counter-picked can't be split out; an opponent that
+counters on purpose is the q10 variant's case, and it doesn't help on all seats.
+Decision: the app's blind ranking stays; "Safe blind" stays a label of the mode.
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now

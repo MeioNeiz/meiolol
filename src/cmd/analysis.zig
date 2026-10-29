@@ -9,6 +9,7 @@ const looks = @import("../lab/looks.zig");
 const ddragon = @import("../ddragon.zig");
 const patchnotes = @import("../patchnotes.zig");
 const replay = @import("../replay.zig");
+const blindpick = @import("../blindpick.zig");
 const objectives = @import("../objectives.zig");
 const winchance = @import("../winchance.zig");
 const playstyle = @import("../playstyle.zig");
@@ -71,6 +72,8 @@ pub const usage_eval =
     \\              --replay         only the pool and expertise replay, on a snapshot
     \\                               with mastery_pre.tsv and mastery_pre_pool.tsv
     \\                               (meiolol-lab mastery-pre); fits lanecard.Expertise
+    \\              --blind          only the blind pick ranking (J2): lane opponent
+    \\                               hidden, today's ranking against safe variants
     \\
 ;
 
@@ -79,6 +82,7 @@ pub fn cmdEval(c: *Cmd) !u8 {
     var o: eval.Options = .{};
     var history: ?[]const u8 = null;
     var replay_only = false;
+    var blind_only = false;
     var setnets: std.ArrayList(draftfile.SetNet) = .empty;
     var test_look = false;
     while (c.next()) |_| {
@@ -90,6 +94,8 @@ pub fn cmdEval(c: *Cmd) !u8 {
             history = try c.value();
         } else if (c.is("--replay")) {
             replay_only = true;
+        } else if (c.is("--blind")) {
+            blind_only = true;
         } else if (c.is("--dev")) {
             o.dev = true;
         } else if (c.is("--test-look")) {
@@ -101,7 +107,8 @@ pub fn cmdEval(c: *Cmd) !u8 {
     }
     o.setnets = setnets.items;
     // The history is the daily's test-window line of the shipped models
-    if (replay_only and history != null) return error.Usage;
+    if ((replay_only or blind_only) and history != null) return error.Usage;
+    if (replay_only and blind_only) return error.Usage;
     const lab = o.setnets.len > 0;
     if (history != null and (o.dev or lab)) return error.Usage;
     // A lab model on the test window is a test look: declared, then counted
@@ -116,6 +123,11 @@ pub fn cmdEval(c: *Cmd) !u8 {
     if (test_look) _ = try looks.record(c.init.gpa, io, std.Io.Dir.cwd(), c.data_dir, "eval", c.args, &stdout.interface);
     if (replay_only) {
         try replay.run(c.init.gpa, io, db, c.data_dir, chosen, platforms, o, &stdout.interface);
+        try stdout.interface.flush();
+        return 0;
+    }
+    if (blind_only) {
+        try blindpick.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
         try stdout.interface.flush();
         return 0;
     }
