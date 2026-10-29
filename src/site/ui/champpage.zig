@@ -109,6 +109,7 @@ pub const Role = struct {
     comeback: ?Comeback = null,
     kills: ?Kills = null,
     ranks: ?Ranks = null,
+    timing: []const Timed = &.{},
     build: ?buildpanel.Data = null,
     /// Against or with each role: lane opponents first
     rels: []const Rel,
@@ -118,6 +119,9 @@ pub const Role = struct {
 };
 
 pub const Counts = struct { games: u32, wins: u32 };
+
+/// Games and wins in a bucket of minutes ("<10", "10-12", "16+")
+pub const Timed = struct { label: []const u8, games: u32, wins: u32 };
 
 /// The champion minus its lane opponent by minute, against the average one (all ranks)
 pub const LaneCurves = struct {
@@ -348,6 +352,9 @@ pub const W = struct {
     pub const rank_tip_thin = Phrase("{r:rate} in {n:count} games");
     pub const rank_key = plain("dashed: every rank");
     pub const rank_note = plain("Games by the middle rank of the players, when 5 or more are known. We crawl from Platinum up, so the lowest bracket is thin and the middle one mostly Platinum and Emerald.");
+    pub const first_item = plain("First item done");
+    pub const first_item_key = plain("dashed: all games");
+    pub const first_item_note = Phrase("Win rate by the minute {c:text} finished its first item. Games that ended before one are left out; a quick item partly follows a game already going well.");
     pub const players = plain("Players");
     pub const spread_head = Phrase("{n:count} · middle half {lo:pct}-{hi:pct}");
     pub const spread_note = Phrase("Players with 10+ games on it. Luck alone would spread the middle half over {lo:pct}-{hi:pct}.");
@@ -506,6 +513,8 @@ pub const ChartsRole = struct {
     comeback: ?Comeback = null,
     kills: ?Kills = null,
     ranks: ?Ranks = null,
+    /// Platinum+, from the view's builds file
+    timing: []const Timed = &.{},
 };
 
 /// Games and wins by the champion's lane gold lead at 10 and 15 minutes, in the curves'
@@ -554,7 +563,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
         m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_length = x.by_length };
-        c.* = .{ .role = x.role, .lane = x.lane, .comeback = x.comeback, .kills = x.kills, .ranks = x.ranks };
+        c.* = .{ .role = x.role, .lane = x.lane, .comeback = x.comeback, .kills = x.kills, .ranks = x.ranks, .timing = x.timing };
     }
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
@@ -1153,6 +1162,7 @@ pub const Charts = struct {
     comeback: trend.Trend = .{ .label = W.comeback, .points = &.{} },
     pickup: trend.Trend = .{ .label = W.pickup, .points = &.{}, .height = 110 },
     ranks: trend.Trend = .{ .label = W.by_rank, .points = &.{} },
+    timing: trend.Trend = .{ .label = W.first_item, .points = &.{} },
     /// Comeback.at's index: 10 or 15 minutes
     at: u8 = 0,
 
@@ -1212,7 +1222,7 @@ pub const Charts = struct {
         }, .{
             h.div(.{ .class = "row2" }, .{ p.laneCard(h), p.comebackCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
-            h.div(.{ .class = "row2" }, .{ p.killsCard(h), p.rankCard(h) }),
+            h.div(.{ .class = "row3" }, .{ p.killsCard(h), p.rankCard(h), p.timingCard(h) }),
         });
     }
 
@@ -1320,6 +1330,41 @@ pub const Charts = struct {
         };
         const tip = toggletip.view(h, "cp-rank", .{W.rank_key}, W.by_rank, W.rank_note);
         return card.view(h, .{}, &.{ card.head(h, W.by_rank, null, &.{h.span(.{ .class = "note" }, .{&tip})}), p.ranks.view(h) });
+    }
+
+    /// Win rate by the minute the first item was finished, dashed at the rate over every
+    /// bucket; buckets under min_games left out
+    fn timingCard(p: *P, h: *H) N {
+        const none = card.view(h, .{}, &.{ card.head(h, W.first_item, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        const k = p.r().timing;
+        const pts = h.mem.alloc(trend.Point, k.len) catch {
+            h.oom = true;
+            return .none;
+        };
+        var all: Counts = .{ .games = 0, .wins = 0 };
+        var n: usize = 0;
+        for (k) |b| {
+            const c: Counts = .{ .games = b.games, .wins = b.wins };
+            all.games += b.games;
+            all.wins += b.wins;
+            if (b.games < min_games) continue;
+            pts[n] = .{
+                .label = .{ .s = b.label },
+                .sub = phrase.num(h, .kilo, b.games),
+                .v = rate(c),
+                .ci = ci(c),
+                .tip = W.length_tip.with(h, .{ .l = b.label, .r = rate(c), .n = b.games }),
+            };
+            n += 1;
+        }
+        if (n < 2) return none;
+        p.timing.points = pts[0..n];
+        p.timing.ref = rate(all);
+        if (p.timing.tip) |t| if (t >= n) {
+            p.timing.tip = null;
+        };
+        const tip = toggletip.view(h, "cp-item", .{W.first_item_key}, W.first_item, W.first_item_note.with(h, .{ .c = p.data.name }));
+        return card.view(h, .{}, &.{ card.head(h, W.first_item, null, &.{ p.plat(h), h.span(.{ .class = "note" }, .{&tip}) }), p.timing.view(h) });
     }
 
     fn pickupCard(p: *P, h: *H) N {
@@ -1479,4 +1524,30 @@ test "by rank: brackets under min_games left out, no chart under two" {
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "Gold-Emerald") == null);
+}
+
+test "first item done: buckets under min_games left out, no chart under two" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var timing = [_]Timed{
+        .{ .label = "<9", .games = 99, .wins = 60 },
+        .{ .label = "9-11", .games = 900, .wins = 470 },
+        .{ .label = "11+", .games = 300, .wins = 140 },
+    };
+    var roles = [_]ChartsRole{.{ .role = .top, .timing = &timing }};
+    const d: ChartsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles };
+    var p: Charts = .{ .data = &d, .root = "/" };
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "&lt;9") == null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "9-11") != null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "11+") != null);
+
+    timing[2].games = 99;
+    w.clearRetainingCapacity();
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "9-11") == null);
 }

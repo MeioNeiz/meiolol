@@ -129,13 +129,15 @@ its kind. Candidates, data we have first (arch-stats.md):
   players, 5+ known; the rest in none), dashed at the head's rate over every game, gold
   at 14 from the bracket's pair curves in the tip; brackets under 100 games left out, so
   on our Platinum+ crawl mostly two)
-- Item timing: first core item minute against win rate (builds' minutes per game:
-  new counting)
+- Item timing: done ("First item done": win rate by the minute the first finished item
+  was bought, builds' first_item from the view's builds file, Platinum+; tails of a
+  twentieth of the games, 2-minute steps between, at most 7 buckets, under 100 games
+  left out)
 - Side (blue, red) and games played on it in the last 30 days: new counting
 One chart style for all (Chart frame), two per row as Pick-up and Also play. The
-Charts island (ui-champcharts.wasm) holds Lane, comeback odds, Pick-up, Also play, Lane
-kills and By rank;
-ui-champmore.wasm the matchups and trends.
+Charts island (ui-champcharts.wasm) holds Lane, comeback odds, Pick-up, Also play, and
+Lane kills, By rank and First item done in a row of three; ui-champmore.wasm the
+matchups and trends.
 
 ## References (research refs/champion/notes.md, 27 shots)
 

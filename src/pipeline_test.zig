@@ -21,6 +21,7 @@ const assets = @import("site/assets.zig");
 const admin = @import("admin.zig");
 const site_tester = @import("site/tester.zig");
 const site_admin = @import("site/adminpage.zig");
+const site_champion = @import("site/champion.zig");
 const api = @import("api/root.zig");
 const lab_rows = @import("lab/rows.zig");
 const lab_pack = @import("lab/pack.zig");
@@ -106,6 +107,14 @@ test "fixture games to stats, curves and the website" {
     try testing.expectEqual(games, darius.get(.skill_start).?.games);
     try testing.expectEqual(games, darius.get(.skill_path).?.games);
     try testing.expect(darius.minutes.len > 0);
+    // First item timing: every game's first finished item counted, in the champion page's
+    // buckets with the threshold at one game
+    var first_item: u32 = 0;
+    for (darius.first_item) |x| first_item += x.games;
+    try testing.expectEqual(games, first_item);
+    var timed: u32 = 0;
+    for (try site_champion.timingOf(arena, darius.first_item, 1)) |x| timed += x.games;
+    try testing.expectEqual(games, timed);
     // The champion page's build block: the file as BuildPanel's data, drawn
     const block = try buildblock.data(arena, &build_file, darius, "Darius");
     try testing.expectEqual(.spells, block.slots[0].kind);
@@ -369,7 +378,7 @@ test "fixture games to stats, curves and the website" {
         // Champion page: the ui.champpage island from the root view, its data file for
         // the other roles; the head, the build, the matchups with the most met opponent's
         // brief linking to the matchup page from the champion's side
-        .{ "champions/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"/data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"/data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"/data/champion/darius-more.bin\"", "data-js=\"/" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"/matchups/top/darius-vs-mordekaiser\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "data-island=\"champcharts\" data-src=\"/data/champion/darius-charts.bin\"", "<h2>Lane</h2>", "<h2>Won by lane gold</h2>", "<h2>Pick-up</h2>", "<h2>By rank</h2>", "<script src=\"/" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
+        .{ "champions/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"/data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"/data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"/data/champion/darius-more.bin\"", "data-js=\"/" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"/matchups/top/darius-vs-mordekaiser\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "data-island=\"champcharts\" data-src=\"/data/champion/darius-charts.bin\"", "<h2>Lane</h2>", "<h2>Won by lane gold</h2>", "<h2>Pick-up</h2>", "<h2>By rank</h2>", "<h2>First item done</h2>", "<script src=\"/" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
         .{ "champions.html", &.{ "<div class=\"c-tiers\" data-island=\"tiers\" data-src=\"/data/tiers.bin\" data-stamp=\"", "data-base=\"/\" data-view=\"0\" data-path=\"/champions\"", "<h1>Champions</h1>", "<linearGradient id=\"c-violin-g\"", "<a href=\"/champions?region=all\">All</a>", "<div class=\"rb\">", "<script src=\"/" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
         // Home: the lookup, each role's most played (the example's game: core_loaded); no
         // clear patch move on a patch's first day, so the Patch card is its link alone

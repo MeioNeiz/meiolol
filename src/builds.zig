@@ -1,8 +1,9 @@
 //! `meiolol builds`: what players build per champion and role, as lolalytics shows it:
 //! rune pages, summoner spells (participants), starting items, boots, the first finished
 //! items in purchase order, the 4th to 6th finished items, skill priority and the skill
-//! path through level 18 (compact timelines), and per finished item and boots the median
-//! minute bought. Written as a JSON file
+//! path through level 18 (compact timelines), per finished item and boots the median
+//! minute bought, and wins by the minute the first finished item was bought. Written as a
+//! JSON file
 //! (`File`) that `meiolol site` turns into build pages (src/site/builds.zig).
 //!
 //! Memory is bounded by Options.max_keys distinct options, whatever the number of games:
@@ -79,7 +80,8 @@ const min_skill_ups = 11;
 pub const max_level = 18;
 /// Finished items in Picks.core: core2, core3 and item4 to item6
 const max_items = 6;
-/// File.Build.minutes: a minute bucket each, the last for that minute and later
+/// File.Build.minutes and first_item: a minute bucket each, the last for that minute and
+/// later
 const minute_buckets = 60;
 
 pub const Options = struct {
@@ -152,6 +154,9 @@ pub const File = struct {
         /// Median minute each boots and finished item of the options was bought, by slot;
         /// none in `matchups` and files before 24 Oct 2026
         minutes: []const Minute = &.{},
+        /// Players by the minute (index) they bought their first finished item, and their
+        /// wins; empties at the end cut. None in `matchups` and files before 29 Oct 2026
+        first_item: []const Count = &.{},
 
         pub fn get(b: Build, kind: Kind) ?Rows {
             for (b.kinds) |r| if (r.kind == kind) return r;
@@ -206,6 +211,7 @@ const Key = struct { champion: u16, role: Role, opponent: u16 = 0, kind: Kind, v
 const Total = struct { champion: u16, role: Role, opponent: u16 = 0, kind: ?Kind };
 const MinuteKey = struct { champion: u16, role: Role, slot: u8, item: u32 };
 const Minutes = [minute_buckets]u32;
+const RoleKey = struct { champion: u16, role: Role };
 
 pub const Builder = struct {
     gpa: std.mem.Allocator,
@@ -215,6 +221,8 @@ pub const Builder = struct {
     totals: std.AutoHashMapUnmanaged(Total, Count) = .empty,
     /// Role-wide only: players per minute bought, every boots and finished item by slot
     minutes: std.AutoHashMapUnmanaged(MinuteKey, Minutes) = .empty,
+    /// Role-wide only: players and wins per minute their first finished item was bought
+    first_item: std.AutoHashMapUnmanaged(RoleKey, [minute_buckets]Count) = .empty,
     /// Options at or under this count were dropped
     floor: u32 = 0,
     dropped_games: u64 = 0,
@@ -232,6 +240,7 @@ pub const Builder = struct {
         b.options.deinit(b.gpa);
         b.totals.deinit(b.gpa);
         b.minutes.deinit(b.gpa);
+        b.first_item.deinit(b.gpa);
         if (b.vs) |v| {
             v.deinit();
             b.gpa.destroy(v);
@@ -286,8 +295,15 @@ pub const Builder = struct {
     fn addMinute(b: *Builder, c: u16, role: Role, slot: u8, item: u32, ms: i64) !void {
         const e = try b.minutes.getOrPut(b.gpa, .{ .champion = c, .role = role, .slot = slot, .item = item });
         if (!e.found_existing) e.value_ptr.* = @splat(0);
-        const m: usize = @intCast(std.math.clamp(@divFloor(ms, std.time.ms_per_min), 0, minute_buckets - 1));
-        e.value_ptr[m] += 1;
+        e.value_ptr[minuteOf(ms)] += 1;
+    }
+
+    fn addFirstItem(b: *Builder, c: u16, role: Role, ms: i64, won: bool) !void {
+        const e = try b.first_item.getOrPut(b.gpa, .{ .champion = c, .role = role });
+        if (!e.found_existing) e.value_ptr.* = @splat(.{});
+        const x = &e.value_ptr[minuteOf(ms)];
+        x.games += 1;
+        x.wins += @intFromBool(won);
     }
 
     /// Drops the rarest options until at most half of max_keys are left
@@ -357,6 +373,7 @@ pub const Builder = struct {
         if (b.per_opponent) return;
         if (k.boots != 0) if (d.bootsOf(k.boots)) |boots| try b.addMinute(c, p.role, 0, boots, k.boots_ms);
         for (k.core[0..k.core_len], k.core_ms[0..k.core_len], 1..) |item, ms, slot| try b.addMinute(c, p.role, @intCast(slot), item, ms);
+        if (k.core_len > 0) try b.addFirstItem(c, p.role, k.core_ms[0], p.won);
     }
 
     /// The file, in `arena`: `rows` options per champion, role and kind, and the names
@@ -454,6 +471,7 @@ pub const Builder = struct {
                 .wins = all.wins,
                 .kinds = kinds.items,
                 .minutes = try b.fileMinutes(arena, first.champion, first.role, kinds.items),
+                .first_item = try b.fileFirstItem(arena, first.champion, first.role),
             });
         }
         return builds.items;
@@ -477,7 +495,18 @@ pub const Builder = struct {
         }.f);
         return out.items;
     }
+
+    fn fileFirstItem(b: *const Builder, arena: std.mem.Allocator, c: u16, role: Role) ![]const Count {
+        const hist = b.first_item.get(.{ .champion = c, .role = role }) orelse return &.{};
+        var n: usize = hist.len;
+        while (n > 0 and hist[n - 1].games == 0) n -= 1;
+        return arena.dupe(Count, hist[0..n]);
+    }
 };
+
+fn minuteOf(ms: i64) usize {
+    return @intCast(std.math.clamp(@divFloor(ms, std.time.ms_per_min), 0, minute_buckets - 1));
+}
 
 /// File.Minute.slot of the item at `i` in an option of `kind`; null for kinds without
 pub fn itemSlot(kind: Kind, i: usize) ?u8 {
@@ -1200,6 +1229,9 @@ test "builder: per lane opponent, own floor, only matchups with enough games" {
     // Minutes 25 to 30, one each: the third of six is all of 27
     try testing.expectEqual(28, darius.minute(4, 3078).?.minute);
     try testing.expectEqual(10.5, darius.minute(1, 3078).?.minute);
+    // Every first item at 10:00: minute 10's bucket, the last kept
+    try testing.expectEqual(11, darius.first_item.len);
+    try testing.expectEqual(Count{ .games = 6, .wins = 2 }, darius.first_item[10]);
     try testing.expectEqual(1, f.matchups.len);
     const garen = f.getVs(122, .top, 86).?;
     try testing.expectEqual(3, garen.games);
@@ -1210,6 +1242,7 @@ test "builder: per lane opponent, own floor, only matchups with enough games" {
     try testing.expectEqualSlices(u32, &.{ 4, 12 }, garen.get(.spells).?.options[0].v);
     try testing.expectEqual(3, garen.get(.item4).?.games);
     try testing.expectEqual(0, garen.minutes.len);
+    try testing.expectEqual(0, garen.first_item.len);
     // Role-wide only
     try testing.expectEqual(null, garen.get(.keystone));
     try testing.expectEqual(null, garen.get(.skill_start));
@@ -1217,6 +1250,7 @@ test "builder: per lane opponent, own floor, only matchups with enough games" {
 
     const back = try File.parse(arena, try std.json.Stringify.valueAlloc(arena, f, .{}));
     try testing.expectEqual(3, back.getVs(122, .top, 86).?.games);
+    try testing.expectEqual(6, back.get(122, .top).?.first_item[10].games);
     const old = try File.parse(arena,
         \\{"label":"16.20","min_tier":"","games":0,"timelines":0,"items":[],"runes":[],"spells":[],"builds":[]}
     );
