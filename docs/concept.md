@@ -10,7 +10,8 @@ the board (deaths, objectives, your position by minute: timelines have positions
 API doesn't send them yet). Look: Linear-like (small type, dark, violet accent, data in
 colour); Jacob rejected League-site looks (splash art, big condensed type), editorial,
 terminal and Wrapped styles. Home leads with the lookup and a review demo. Menu: Your
-games, Daily Draft, Learn, Champions (Matchups and Champion pool as its tabs). Code:
+games, Squads, Daily Draft, Learn, Champions, Matchups (the matchup curves one click from
+home; Patch changes and Champion pool as Champions' tabs). Code:
 static/review.js, your.js; home.zig writeIndex (ui.homepage); html.zig nav
 
 ## Identity draft four: scout your own games (Jacob, 2026-10-12)

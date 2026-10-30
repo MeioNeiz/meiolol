@@ -1,4 +1,4 @@
-//! SiteHeader: every page's top bar: the logo, the page links, the search. Under 760 px
+//! SiteHeader: every page's top bar: the logo, the page links, the search. Under 860 px
 //! of header the links give way to a menu button whose popover lists them and the pages
 //! under Champions, the current one selected (popovertarget: no script). Also every
 //! page's foot (`foot`), the preview strip under the header (`preview`), on the
@@ -202,7 +202,7 @@ pub const css =
     \\  .c-site .bar > :not(.logo, .links, .menu, .c-sitemenu) { margin-left: auto; max-width: 300px; flex: 1; }
     \\  .c-site .menu { display: none; flex: none; }
     \\  .c-site .menu svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-    \\  @container site (max-width: 760px) {
+    \\  @container site (max-width: 860px) {
     \\    .c-site > .bar { gap: var(--sp-2); }
     \\    .c-site .links { display: none; }
     \\    .c-site .bar > :not(.logo, .links, .menu, .c-sitemenu) { max-width: none; }
@@ -262,7 +262,7 @@ pub fn gallery(g: *Gallery) void {
     };
     var with_search = o;
     with_search.search = h.input(.{ .type = "search", .placeholder = plain("Champion or Riot ID"), .aria_label = plain("Search") });
-    g.addFill("the bar; a menu button under 760 px", view(h, with_search));
+    g.addFill("the bar; a menu button under 860 px", view(h, with_search));
     g.add("menu open, the current page selected", menu(h, o, true));
     g.addFill("the preview strip", preview(h));
     const view_picks: Picks = .{

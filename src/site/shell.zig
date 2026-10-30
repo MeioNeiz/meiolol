@@ -83,11 +83,12 @@ const SiteHeader = struct {
         var h: ui.H = .init(a, &t);
         var links: [nav_items.len]ui.site.Link = undefined;
         for (nav_items, &links) |it, *l| {
-            const here = it.nav == p.nav or (it.nav == .champions and p.nav.inChampions());
+            const here = it.nav == p.nav or (it.nav == .champions and p.nav.inChampions() and p.nav != .matchups);
             l.* = link(a, p, it, here) catch return error.WriteFailed;
         }
-        var more: [champion_tabs.len - 1]ui.site.Link = undefined;
-        for (champion_tabs[1..], &more) |it, *l| l.* = link(a, p, it, it.nav == p.nav) catch return error.WriteFailed;
+        // Champions and Matchups are in the bar already
+        var more: [champion_tabs.len - 2]ui.site.Link = undefined;
+        for (champion_tabs[2..], &more) |it, *l| l.* = link(a, p, it, it.nav == p.nav) catch return error.WriteFailed;
         var search: ui.sitesearch.SiteSearch = .{
             .js = "/" ++ assets.sitesearch_js.path,
             .wasm = "/" ++ assets.sitesearch_wasm.path,
@@ -159,13 +160,15 @@ const meio_view =
 
 const NavItem = struct { nav: Nav, path: []const u8, label: []const u8, in_view: bool };
 
-/// The menu: the player's own games first; the stats pages sit under Champions
+/// The menu: the player's own games first, then the stats: Champions and Matchups, the rest
+/// as Champions' tabs
 const nav_items = [_]NavItem{
     .{ .nav = .your, .path = "/your", .label = "Your games", .in_view = false },
     .{ .nav = .squad, .path = "/squad", .label = "Squads", .in_view = false },
     .{ .nav = .daily, .path = "/daily", .label = "Daily Draft", .in_view = false },
     .{ .nav = .learn, .path = "/learn", .label = "Learn", .in_view = false },
     .{ .nav = .champions, .path = "/champions", .label = "Champions", .in_view = true },
+    .{ .nav = .matchups, .path = "/matchups", .label = "Matchups", .in_view = true },
 };
 
 /// Tabs on the pages under Champions
