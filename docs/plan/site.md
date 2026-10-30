@@ -117,8 +117,9 @@ Next (order and detail: data/team/2026-10-29-next/notes/w5.md):
 - More myth or measured cards, only from final learned.md lines whose Site: allows it
   and with a measured count (objectives are post-game only; "lost in champ select" is
   a model read of win chance, so not here). Chapter 5 has split pushers, comp win
-  conditions, support gold, Kayle's scaling, luck; the remaining lesson lines are early
-  or rank-caveated (gold at 14 by rank)
+  conditions, support gold, Kayle's scaling, comeback champions, rune pages,
+  skillshots, luck; the remaining lesson lines are early or rank-caveated (gold at 14
+  by rank)
 - Hand-written numbers refreshed when their checks are rerun (all match learned.md and
   coach-stat-claims.md on 30 Oct)
 - Later: past days on the five's row (a strip as Daily Draft's, if ui-learn finds the

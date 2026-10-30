@@ -12,6 +12,8 @@ const fed_from = "Ranked solo, Platinum IV and up, every region, patches 16.19-1
 const all_regions = "Ranked solo, Platinum IV and up, every region, patches 16.19-16.20";
 const state_from = "Ranked solo, Platinum IV and up, every region, 117,806 games reaching " ++
     "15 minutes (snapshot of 12 Oct), the same team gold, XP and objectives";
+const held_from = "Ranked solo, Platinum IV and up: fitted on 117,806 games from every " ++
+    "region, checked on 10,604 EUW games set aside (snapshot of 12 Oct)";
 
 const ch = ld.ch;
 
@@ -169,6 +171,51 @@ pub const scaling: ld.Puzzle = .{
     .from = state_from,
 };
 
+pub const comeback: ld.Puzzle = .{
+    .id = "comeback",
+    .q = "Behind, does her edge grow?",
+    .setup = .{ .facts = &.{ .{ .v = "Kayle top", .label = "wins more than her gold says" }, .{ .v = "−2,000 gold", .label = "her team, at 15 min" } } },
+    .answer = .{ .pick = .{ .right = 1, .choices = &.{
+        .{ .text = "It grows" },
+        .{ .text = "About the same", .shown = "No change found" },
+        .{ .text = "It shrinks" },
+    } } },
+    .why = "No champion's edge grew or shrank with the gold gap: at most 2-3.5 points per 1,000 gold.",
+    .tip = "Late champions win more at any gold, not more from behind.",
+    .games = 117_806,
+    .from = state_from ++ ", 10 to 30 minutes",
+};
+
+pub const runes: ld.Puzzle = .{
+    .id = "runes",
+    .q = "Does your rune page change your odds?",
+    .setup = .{ .facts = &.{ .{ .v = "Runes, spells", .label = "and shards, set in champ select" }, .{ .v = "Same", .label = "champion and role" } } },
+    .answer = .{ .pick = .{ .right = 2, .choices = &.{
+        .{ .text = "A lot" },
+        .{ .text = "A little" },
+        .{ .text = "Not detected", .shown = "Within noise" },
+    } } },
+    .why = "First Strike goes with 120 more gold at 14, yet no rune, spell or shard moved wins beyond noise.",
+    .tip = "Take the page you know; it won't decide the game.",
+    .games = 10_604,
+    .from = held_from,
+};
+
+pub const skillshots: ld.Puzzle = .{
+    .id = "skillshots",
+    .q = "What decides most of the skillshots you land?",
+    .setup = .{ .facts = &.{ .{ .v = "Skillshots hit", .label = "per game, same role" }, .{ .v = "10,604", .label = "games, set aside before the check" } } },
+    .answer = .{ .pick = .{ .right = 1, .choices = &.{
+        .{ .text = "Your aim" },
+        .{ .text = "Your champ", .shown = "82%" },
+        .{ .text = "Their laner", .shown = "0.4%" },
+    } } },
+    .why = "Your champion explains 82% of the spread in skillshots hit; your lane opponent, a third of those you dodge.",
+    .tip = "Judge your aim only against others on your champion.",
+    .games = 10_604,
+    .from = held_from,
+};
+
 pub const luck: ld.Puzzle = .{
     .id = "luck",
     .q = "How much of that spread is skill?",
@@ -182,7 +229,9 @@ pub const luck: ld.Puzzle = .{
 
 pub const chapter1 = [_]ld.Puzzle{ know, newcomer };
 pub const chapter2 = [_]ld.Puzzle{ fed, fed_role, surrender, bounty };
-pub const chapter5 = [_]ld.Puzzle{ splitpush, wincon, support_gold, scaling, luck };
+pub const chapter5 = [_]ld.Puzzle{
+    splitpush, wincon, support_gold, scaling, comeback, runes, skillshots, luck,
+};
 
 test "fixed puzzles: answers in range, games on every bar, no pick advice" {
     const std = @import("std");
