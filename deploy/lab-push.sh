@@ -198,17 +198,24 @@ model() {
         fi
     done
     [[ "$(cat "$cache/from" 2>/dev/null)" == "$pick" ]] || return 0
-    # The new tester page reads <kind>-model.bin, made by this checkout's build. Tried
-    # once per copy: no-bin holds why it failed (delete it to try again)
-    if [[ ! -f "$cache/$kind-model.bin" && ! -f "$cache/no-bin" ]]; then
-        if ! "$(meiolol_bin)" tester-bin "$cache" > "$cache/no-bin" 2>&1; then
-            echo "lab-push: no $kind-model.bin for $pick: $(tail -1 "$cache/no-bin")" >&2
+    # The new tester page reads <kind>-model.bin (and draft-setnet.bin), made by this
+    # checkout's build. Tried once per copy and build: no-bin holds why it failed.
+    # --data: every command makes its data dir, and launchd's cwd is /
+    local bin rev
+    bin=$(meiolol_bin)
+    rev=$(cat "$STATE/bin/rev" 2>/dev/null || true)
+    if [[ "$(cat "$cache/bin-rev" 2>/dev/null)" != "$rev" ]]; then
+        if ! "$bin" tester-bin "$cache" --data "$cache" > "$cache/no-bin" 2>&1; then
+            echo "lab-push: tester-bin for $pick: $(tail -1 "$cache/no-bin")" >&2
         else
             rm -f "$cache/no-bin"
         fi
+        echo "$rev" > "$cache/bin-rev"
     fi
     cp "$cache/$kind"-*.json "$out/"
-    [[ -f "$cache/$kind-model.bin" ]] && cp "$cache/$kind-model.bin" "$out/"
+    for f in "$cache/$kind"-*.bin; do
+        [[ -f "$f" ]] && cp "$f" "$out/"
+    done
     return 0
 }
 
