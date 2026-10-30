@@ -416,7 +416,15 @@ pub const More = struct {
         return card.view(h, .{}, &.{
             card.head(h, W.lane_head, null, &.{ few, p.chart.switcher(h) }),
             h.div(.{ .class = "plot", .data_thin = d.thin }, .{p.chart.view(h)}),
+            lines(h, laneLines(h, d)),
         });
+    }
+
+    fn lines(h: *H, ts: []const tree.Text) N {
+        if (ts.len == 0) return .none;
+        var l = h.list();
+        for (ts) |t| l.add(h.li(.{}, .{t}));
+        return h.ul(.{ .class = "lines" }, .{l.done()});
     }
 
     fn h2hCard(p: *P, h: *H) N {
@@ -490,6 +498,144 @@ pub const More = struct {
         return card.view(h, .{}, &.{ card.head(h, W.partners, null, &.{h.span(.{ .class = "lg" }, .{W.partners_key})}), h.div(.{ .class = "partners" }, .{sides.done()}) });
     }
 };
+
+/// Lane minion gold per CS before 14 minutes: 3 melee (21), 3 casters (14) a wave and a
+/// cannon (60 to 70) every third, 381 gold over 19 minions. Jungle camps and support
+/// CS differ, so those roles get no split
+pub const gold_per_cs = 20;
+
+/// Under these a gap gets no line. The curves are already shrunk toward the champions'
+/// baseline, so a small estimate is noise or the baseline, not this pair
+const close_gold = 150;
+const level6_gap = 10;
+const item_gap = 20;
+/// Points of games
+const kill_gap = 5;
+
+const L = struct {
+    pub const level = Phrase("Gold is level at 14 min: {g:signed} for {x:text}.");
+    pub const ahead = Phrase("{a:text} is {g:count} gold ahead at 14 min");
+    pub const cs_all = Phrase("{l:text}, all of it from CS ({n:int} more, about {c:count} gold).");
+    pub const cs_most = Phrase("{l:text}, most of it from CS ({n:int} more, about {c:count} gold).");
+    pub const cs_some = Phrase("{l:text}, about {c:count} of it from CS ({n:int} more).");
+    pub const cs_little = Phrase("{l:text}, little of it from CS.");
+    pub const cs_against = Phrase("{l:text}, though {b:text} has {n:int} more CS.");
+    pub const end = Phrase("{l:text}.");
+    pub const kills = Phrase("{l:text} {p:text} {a:text} takes part in a kill on {b:text} in {k:pct} of games, {b:text} on {a:text} in {d:pct}.");
+    pub const phases = [2]tree.Text{ plain("Before 6 min"), plain("From 6 to 14 min") };
+    pub const flip = Phrase("{b:text} leads until {m:int} min ({e:count} gold at 6), {a:text} from {n:int} min on ({g:count} at 14).");
+    pub const late = Phrase("{a:text}'s lead builds after 6 min: {e:count} gold at 6, {g:count} at 14.");
+    pub const early = Phrase("{a:text}'s lead is there early: {e:count} gold by 6 min, {g:count} at 14.");
+    pub const steady = Phrase("{a:text}'s lead grows through the lane: {e:count} gold at 6 min, {g:count} at 14.");
+    pub const fades = Phrase("{a:text} is {e:count} gold ahead at 6 min, level by 14 ({g:signed} for {a:text}).");
+    pub const level6 = Phrase("{a:text} reaches level 6 at {t:time}, {g:text} before {b:text}");
+    pub const item = Phrase("{a:text} finishes a first item at {t:time}, {g:text} before {b:text}");
+    pub const both = Phrase("{l:text}; {i:text}.");
+    pub const same = Phrase("{l:text}, and finishes a first item at {t:time}, {g:text} earlier.");
+    pub const secs = Phrase("{s:int} s");
+    pub const mins = Phrase("{t:time}");
+};
+
+/// Up to three facts on how the lane goes, each with its numbers (site.md "Matchup page"):
+/// where the gold at 14 comes from, when it appears, who reaches level 6 and a first item
+/// first. None on a thin pair: the page greys its figures as the champions' baseline
+pub fn laneLines(h: *H, d: *const MoreData) []const tree.Text {
+    const out = h.mem.alloc(tree.Text, 3) catch {
+        h.oom = true;
+        return &.{};
+    };
+    if (d.thin) return out[0..0];
+    var n: usize = 0;
+    const k14 = 13;
+    const gold = d.curves[0].line;
+    if (gold.len > k14) {
+        const g: i32 = gold[k14];
+        const e: i32 = gold[5];
+        const names = [2][]const u8{ d.x, d.y };
+        const up: usize = if (g < 0) 1 else 0;
+        const s: i32 = if (g < 0) -1 else 1;
+        const a = names[up];
+        const b = names[1 - up];
+        if (@abs(g) < close_gold) {
+            const early: usize = @intFromBool(e < 0);
+            out[n] = if (@abs(e) >= close_gold) L.fades.with(h, .{ .a = names[early], .e = @abs(e), .g = if (e < 0) -g else g }) else L.level.with(h, .{ .g = g, .x = d.x });
+            n += 1;
+        } else {
+            out[n] = source(h, d, a, b, s * g, up);
+            n += 1;
+            out[n] = if (s * e <= -close_gold / 2) flip: {
+                var m: usize = 5;
+                while (m < k14 and s * @as(i32, gold[m + 1]) < 0) m += 1;
+                break :flip L.flip.with(h, .{ .a = a, .b = b, .m = m + 1, .e = @abs(e), .n = m + 2, .g = @abs(g) });
+            } else if (3 * s * e < s * g) L.late.with(h, .{ .a = a, .e = @max(0, s * e), .g = @abs(g) }) else if (3 * s * e > 2 * s * g) L.early.with(h, .{ .a = a, .e = s * e, .g = @abs(g) }) else L.steady.with(h, .{ .a = a, .e = s * e, .g = @abs(g) });
+            n += 1;
+        }
+    }
+    if (spikes(h, d)) |t| {
+        out[n] = t;
+        n += 1;
+    }
+    return out[0..n];
+}
+
+/// The lead at 14 split into CS and the rest; the clearer kill gap by 14 when the rest
+/// carries it
+fn source(h: *H, d: *const MoreData, a: []const u8, b: []const u8, g: i32, up: usize) tree.Text {
+    const lead = L.ahead.with(h, .{ .a = a, .g = g });
+    var rest = g;
+    const clause = if (d.role == .jungle or d.role == .support or d.curves[2].line.len <= 13) L.end.with(h, .{ .l = lead.s }) else cs: {
+        const cs: i32 = if (up == 0) d.curves[2].line[13] else -@as(i32, d.curves[2].line[13]);
+        const c = round10(cs * gold_per_cs);
+        rest = g - c;
+        break :cs if (cs < 0) L.cs_against.with(h, .{ .l = lead.s, .b = b, .n = -cs }) else if (c >= g) L.cs_all.with(h, .{ .l = lead.s, .n = cs, .c = c }) else if (3 * c >= 2 * g) L.cs_most.with(h, .{ .l = lead.s, .n = cs, .c = c }) else if (3 * c <= g) L.cs_little.with(h, .{ .l = lead.s }) else L.cs_some.with(h, .{ .l = lead.s, .c = c, .n = cs });
+    };
+    if (rest < close_gold or d.h2h.games == 0) return clause;
+    const v = d.h2h;
+    var best: ?usize = null;
+    var best_gap: f32 = kill_gap;
+    for (0..2) |p| {
+        const k = if (up == 0) v.kills[p] else v.deaths[p];
+        const o = if (up == 0) v.deaths[p] else v.kills[p];
+        const gap = rate(v.games, k) - rate(v.games, o);
+        if (gap >= best_gap) {
+            best = p;
+            best_gap = gap;
+        }
+    }
+    const p = best orelse return clause;
+    const k = if (up == 0) v.kills[p] else v.deaths[p];
+    const o = if (up == 0) v.deaths[p] else v.kills[p];
+    return L.kills.with(h, .{ .l = clause.s, .p = L.phases[p].s, .a = a, .b = b, .k = pct(v.games, k), .d = pct(v.games, o) });
+}
+
+fn spikes(h: *H, d: *const MoreData) ?tree.Text {
+    const names = [2][]const u8{ d.x, d.y };
+    const six = spike(h, d.h2h.level6, level6_gap);
+    const item = spike(h, d.h2h.first_item, item_gap);
+    const l = if (six) |x| L.level6.with(h, .{ .a = names[x.first], .t = x.t, .g = x.gap.s, .b = names[1 - x.first] }) else null;
+    const i = item orelse return if (l) |t| L.end.with(h, .{ .l = t.s }) else null;
+    if (six) |x| if (x.first == i.first) return L.same.with(h, .{ .l = l.?.s, .t = i.t, .g = i.gap.s });
+    const it = L.item.with(h, .{ .a = names[i.first], .t = i.t, .g = i.gap.s, .b = names[1 - i.first] });
+    return if (l) |t| L.both.with(h, .{ .l = t.s, .i = it.s }) else L.end.with(h, .{ .l = it.s });
+}
+
+const Spike = struct { first: usize, t: u32, gap: tree.Text };
+
+fn spike(h: *H, t: [2]u16, min_gap: u32) ?Spike {
+    if (t[0] == 0 or t[1] == 0) return null;
+    const gap: u32 = @abs(@as(i32, t[0]) - t[1]);
+    if (gap < min_gap) return null;
+    const first: usize = @intFromBool(t[1] < t[0]);
+    return .{ .first = first, .t = t[first], .gap = if (gap < 60) L.secs.with(h, .{ .s = gap }) else L.mins.with(h, .{ .t = gap }) };
+}
+
+fn pct(games: u32, k: u32) u32 {
+    return @intFromFloat(@round(rate(games, k)));
+}
+
+fn round10(v: i32) i32 {
+    return @divTrunc(v + if (v < 0) @as(i32, -5) else 5, 10) * 10;
+}
 
 /// `t`'s points from the buckets with games, its base their wider group's rates when
 /// each has games; how many points
@@ -577,6 +723,7 @@ pub const css =
     \\  .c-mpage .partners { display: grid; gap: var(--sp-3) var(--sp-5); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
     \\  .c-mpage .partners h3 { margin: 0 0 var(--sp-1); font-size: var(--fs-s); font-weight: var(--w-m); color: var(--t2); }
     \\  .c-mpage .c-head .lg { font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-mpage .lines { margin: var(--sp-3) 0 0; padding-left: var(--sp-4); font-size: var(--fs-s); color: var(--t2); }
     \\  .c-mpage .lanerow { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
     \\  @media (min-width: 1000px) {
     \\    .c-mpage .lanerow { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
@@ -584,3 +731,67 @@ pub const css =
     \\}
     \\
 ;
+
+const testing = std.testing;
+
+/// Gold and CS lines through 14 min, linear from `at6` at 6 min to `at14`
+fn testMore(a: std.mem.Allocator, at6: i16, at14: i16, cs14: i16) !MoreData {
+    var curves: [3]Curve = undefined;
+    for (&curves, [_][2]i16{ .{ at6, at14 }, .{ 0, 0 }, .{ @divTrunc(cs14, 2), cs14 } }) |*c, v| {
+        const line = try a.alloc(i16, 15);
+        for (line, 0..) |*l, i| {
+            const t: i32 = @as(i32, @intCast(i)) - 5;
+            l.* = @intCast(v[0] + @divTrunc((v[1] - v[0]) * t, 8));
+        }
+        c.* = .{ .line = line, .band = &.{} };
+    }
+    return .{
+        .x = "Darius",
+        .y = "Garen",
+        .ddragon = "",
+        .role = .top,
+        .games = &.{},
+        .curves = curves,
+        .h2h = .{ .games = 1000, .wins = 520, .lane_games = 900, .ahead = 500, .behind = 400, .wins_ahead = 300, .wins_behind = 150, .first_blood = .{ 0, 0 }, .kills = .{ 200, 400, 300 }, .deaths = .{ 190, 250, 300 }, .level2 = .{ 0, 0 }, .level6 = .{ 365, 390 }, .first_item = .{ 640, 700 } },
+        .gold10 = @splat(.{}),
+        .ranks = &.{},
+    };
+}
+
+test "lane lines: the lead's source and timing, the spikes, none when thin" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    const eq = testing.expectEqualStrings;
+
+    var d = try testMore(a, 100, 600, 12);
+    var ls = laneLines(&h, &d);
+    try testing.expectEqual(3, ls.len);
+    try eq("Darius is 600 gold ahead at 14 min, about 240 of it from CS (12 more). From 6 to 14 min Darius takes part in a kill on Garen in 40% of games, Garen on Darius in 25%.", ls[0].s);
+    try eq("Darius's lead builds after 6 min: 100 gold at 6, 600 at 14.", ls[1].s);
+    try eq("Darius reaches level 6 at 6:05, 25 s before Garen, and finishes a first item at 10:40, 1:00 earlier.", ls[2].s);
+
+    // Garen's side: an early Darius lead turned, and most of it CS
+    d = try testMore(a, 200, -400, -20);
+    d.h2h.level6 = .{ 380, 385 };
+    ls = laneLines(&h, &d);
+    try testing.expectEqual(3, ls.len);
+    try eq("Garen is 400 gold ahead at 14 min, all of it from CS (20 more, about 400 gold).", ls[0].s);
+    try eq("Darius leads until 8 min (200 gold at 6), Garen from 9 min on (400 at 14).", ls[1].s);
+    try eq("Darius finishes a first item at 10:40, 1:00 before Garen.", ls[2].s);
+
+    d = try testMore(a, -300, 60, 0);
+    d.h2h.first_item = .{ 0, 700 };
+    ls = laneLines(&h, &d);
+    try testing.expectEqual(2, ls.len);
+    try eq("Garen is 300 gold ahead at 6 min, level by 14 (\u{2212}60 for Garen).", ls[0].s);
+
+    try eq("Darius reaches level 6 at 6:05, 25 s before Garen.", ls[1].s);
+    d.h2h.first_item = .{ 700, 640 };
+    try eq("Darius reaches level 6 at 6:05, 25 s before Garen; Garen finishes a first item at 10:40, 1:00 before Darius.", laneLines(&h, &d)[1].s);
+
+    d.thin = true;
+    try testing.expectEqual(0, laneLines(&h, &d).len);
+}

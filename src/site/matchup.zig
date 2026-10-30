@@ -252,7 +252,7 @@ fn headData(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cham
         .usual = @floatCast(100 * o.usual),
         .vs_usual = @floatCast(100 * o.d.mean),
         .gold = if (has_gold) v.estimate(.gold, i).mean else null,
-        .cs_gold = if (has_gold and r != .jungle and r != .utility) @intCast(round10(@as(i32, v.estimate(.cs, i).mean) * gold_per_cs)) else null,
+        .cs_gold = if (has_gold and r != .jungle and r != .utility) @intCast(round10(@as(i32, v.estimate(.cs, i).mean) * mp.gold_per_cs)) else null,
         .lane_games = lane.games,
         .ahead = lane.ahead,
         .thin = thin(v),
@@ -420,11 +420,6 @@ fn odds(st: *const core.Stats, r: Role, x: Champ, y: Champ, ka: f64) Odds {
     const u = champion.usual(base, root.ratio(yr.wins, yr.games));
     return .{ .wins = e.wins, .games = e.games, .base = base, .usual = u, .d = champion.VsUsual.of(e.wins, e.games, u, ka) };
 }
-
-/// Lane minion gold per CS before 14 minutes: 3 melee (21), 3 casters (14) a wave and a
-/// cannon (60 to 70) every third, 381 gold over 19 minions. Jungle camps and support
-/// CS differ, so those roles get no split
-const gold_per_cs = 20;
 
 fn round10(v: i32) i32 {
     return @divTrunc(v + if (v < 0) @as(i32, -5) else 5, 10) * 10;
