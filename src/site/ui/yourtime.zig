@@ -64,16 +64,12 @@ const W = struct {
     pub const wl = plain("W–L");
     pub const per = plain("Trend");
     pub const per_tip = plain("The chart's measure in each game, oldest to newest.");
-    pub const win = plain("Win");
-    pub const loss = plain("Loss");
-    pub const tip = Phrase("{r:text} · {w:text} · {d:text}");
-    pub const tip_mean = Phrase("Average of 5: {v:text}");
     pub const last = plain("Last");
     pub const none = plain("No games match");
     pub const no_measure = plain("No games with this figure");
     pub const score = Phrase("{w:int}–{l:int}");
     pub const vs = Phrase("{a:text} vs {b:text}");
-    pub const dot = Phrase("{c:text} · {v:text} · {d:text}");
+    pub const dot = Phrase("{v:text} {r:text} · {c:text} · {d:text}");
     pub const one = plain("one-game matchups");
     pub const wc_tip = plain("Your team's win chance at 15 minutes, on average.");
     pub const vt_tip = plain("Your gold lead at 14 over the matchup's typical one.");
@@ -359,8 +355,7 @@ pub const YourTime = struct {
     wasm: []const u8 = "",
     /// The game the chart's pointer picked; a tap keeps it after the pointer leaves
     at: ?u16 = null,
-    pinned: bool = false,
-    press: chart.Press = .{},
+    read: chart.Reading = .{},
     /// Games on the chart at the last view
     shown: u16 = 0,
 
@@ -427,20 +422,17 @@ pub const YourTime = struct {
             },
             .by => |x| p.by = x,
             .plot => {
-                switch (p.press.pointer(ev)) {
+                const pick = gametrend.pick;
+                switch (p.read.pointer(ev)) {
                     .none => {},
-                    .hover => |f| {
-                        p.at = @intCast(gametrend.pick(f, p.shown));
-                        p.pinned = false;
+                    .at => |f| p.at = @intCast(pick(f, p.shown)),
+                    .tap => |x| {
+                        const g: u16 = @intCast(pick(x.f, p.shown));
+                        const again = if (x.was) |w| pick(w, p.shown) == g else false;
+                        p.at = if (again) null else g;
+                        if (again) p.read.drop();
                     },
-                    .tap => |f| {
-                        p.at = @intCast(gametrend.pick(f, p.shown));
-                        p.pinned = true;
-                    },
-                    .range => p.at = @intCast(gametrend.pick(std.math.clamp(ev.x / @max(1, ev.w), 0, 1), p.shown)),
-                    .leave => if (!p.pinned) {
-                        p.at = null;
-                    },
+                    .clear => p.at = null,
                 }
                 return;
             },
@@ -523,7 +515,8 @@ pub const YourTime = struct {
         var hi: f32 = -std.math.inf(f32);
         var sum: f32 = 0;
         var last_week: ?i32 = null;
-        var tip_line: tree.Text = .{ .s = "" };
+        // The picked game's figure, the head of its label
+        var at_v: usize = 0;
         var i = games.len;
         while (i > 0) {
             i -= 1;
@@ -536,14 +529,17 @@ pub const YourTime = struct {
             const date = yp.dayText(h, day);
             const me = p.l.champs[g.champ].name;
             const who = if (g.opp) |o| W.vs.with(h, .{ .a = me, .b = p.l.champs[o].name }) else tree.Text{ .s = me };
-            if (p.at != null and p.at.? == pts.items.len) tip_line = W.tip.with(h, .{ .r = (if (g.win) W.win else W.loss).s, .w = who.s, .d = date.s });
+            const vt = text(h, m, v).s;
+            if (p.at) |a| if (a == pts.items.len) {
+                at_v = vt.len;
+            };
             pts.append(h.mem, .{
                 .v = v,
                 .win = g.win,
                 .patch = g.patch,
                 .week = if (last_week != weekOf(day)) date else null,
                 .href = yp.gameHref(h, p.game, p.id, g, 0),
-                .label = W.dot.with(h, .{ .c = who.s, .v = text(h, m, v).s, .d = date.s }),
+                .label = W.dot.with(h, .{ .v = vt, .r = (if (g.win) gametrend.W.win else gametrend.W.loss).s, .c = who.s, .d = date.s }),
             }) catch {
                 h.oom = true;
                 return .none;
@@ -556,17 +552,14 @@ pub const YourTime = struct {
             p.at = null;
         };
         const tip: N = if (p.at) |a| blk: {
-            const vs = h.mem.alloc(f32, pts.items.len) catch {
-                h.oom = true;
-                return .none;
-            };
-            for (vs, pts.items) |*v, pt| v.* = pt.v;
-            const rm = gametrend.rolling(h, vs) orelse return .none;
+            const from = a -| 4;
+            var total: f32 = 0;
+            for (pts.items[from .. a + 1]) |pt| total += pt.v;
+            const label = pts.items[a].label.s;
             break :blk h.span(.{}, .{
-                h.b(.{}, .{text(h, m, vs[a])}),
-                " ",
-                tip_line,
-                h.small(.{}, .{W.tip_mean.with(h, .{ .v = text(h, m, rm[a]).s })}),
+                h.b(.{}, .{label[0..at_v]}),
+                label[at_v..],
+                h.small(.{}, .{ gametrend.W.mean, ": ", text(h, m, total / @as(f32, @floatFromInt(a + 1 - from))) }),
             });
         } else .none;
         const s = scaleOf(m, lo, hi);
@@ -580,6 +573,7 @@ pub const YourTime = struct {
             ticks[n] = .{ .at = plane.py(v), .label = text(h, m, v), .zero = (v == 0 and s.lo < 0) or (m == .wc and v == 50) };
             n += 1;
         }
+        const on = h.on(p, .plot);
         return gametrend.view(h, .{
             .label = labelOf(m),
             .points = pts.items,
@@ -592,13 +586,7 @@ pub const YourTime = struct {
             },
             .at = if (p.at) |a| a else null,
             .tip = tip,
-            .on = .{
-                .down = h.on(p, .plot),
-                .move = h.on(p, .plot),
-                .up = h.on(p, .plot),
-                .leave = h.on(p, .plot),
-                .cancel = h.on(p, .plot),
-            },
+            .on = .{ .down = on, .move = on, .up = on, .leave = on, .cancel = on },
         });
     }
 };
@@ -810,8 +798,19 @@ test "the chart: the pointer picks the nearest game, a tap keeps it" {
     try testing.expectEqual(@as(?u16, 9), p.at);
     try testing.expect(!ev.push);
     var n = p.view(&h);
-    try testing.expect(t.find(n, "class", "tip") != null);
     try testing.expectEqual(1, t.count(n, "data-at"));
+    // The tip: the dot's label, then gametrend's mean of 5 there
+    var said: std.Io.Writer.Allocating = .init(arena.allocator());
+    try t.textOf(t.find(n, "class", "tip").?, &said.writer);
+    try testing.expectStringStartsWith(said.written(), t.attr(t.find(n, "data-at", null).?, "aria-label").?);
+    var vs: std.ArrayList(f32) = .empty;
+    var g = demo.list.games.len;
+    while (g > 0) {
+        g -= 1;
+        if (valueOf(.wc, demo.list.games[g])) |v| try vs.append(arena.allocator(), v);
+    }
+    const mean = gametrend.rolling(&h, vs.items).?[9];
+    try testing.expectStringEndsWith(said.written(), h.fmt("Average of 5: {s}", .{text(&h, .wc, mean).s}));
     ev = .{ .kind = .pointerleave };
     p.update(.plot, &ev);
     try testing.expectEqual(null, p.at);
@@ -822,6 +821,17 @@ test "the chart: the pointer picks the nearest game, a tap keeps it" {
     try testing.expectEqual(@as(?u16, 0), p.at);
     n = p.view(&h);
     try testing.expect(t.find(n, "class", "tip") != null);
+    // A tap on another game moves it, a tap on the kept game drops it
+    for ([_]f32{ 25, 21 }) |x| for ([_]tree.Ev{ .pointerdown, .pointerup, .pointerleave }) |k| {
+        ev = .{ .kind = k, .x = x, .w = 100 };
+        p.update(.plot, &ev);
+    };
+    try testing.expectEqual(null, p.at);
+    for ([_]tree.Ev{ .pointerdown, .pointerup, .pointerleave }) |k| {
+        ev = .{ .kind = k, .x = 25, .w = 100 };
+        p.update(.plot, &ev);
+    }
+    try testing.expectEqual(@as(?u16, 2), p.at);
     ev = .{ .kind = .click };
     p.update(.{ .measure = .kda }, &ev);
     try testing.expectEqual(null, p.at);

@@ -176,8 +176,9 @@ New, two parts:
    - Week: week, games, W-L, the same averages
    Rows press to filter the chart to that champion or matchup
 
-The pointer anywhere on the chart picks the nearest game (a tap keeps it): its dot
-ringed, a tip with its figure, W or L, matchup, date and the average of 5 there. A key
+The pointer anywhere on the chart picks the nearest game (a tap keeps it, a second tap
+on it drops it): its dot ringed, a tip with the dot's label (figure, Win or Loss,
+matchup, date) and the average of 5 there. A key
 under the plot names the dots and the line (note 52: hollow vs filled wasn't read). The
 table's sparkline column is "Trend", its tip naming it (note 53: "Per game" unclear).
 
