@@ -39,8 +39,9 @@ filter URLs and canonicals). Any URL work follows this file; change it here firs
   the old paths
 - URL6 (done 30 Oct): /p/desktop/ and /admin/desktop/ gone, no release first (Jacob: no
   one uses the app yet; an old install reinstalls from the private site). Released exes
-  (last 0453f11, 23 Oct) still check /admin/desktop/ and now get 404: the app's update
-  failure handling says how to get the new one. The next release checks /private/desktop/
+  (last 0453f11, 23 Oct) still check /admin/desktop/ and now get 404, which they only
+  log. From the next release (checks /private/desktop/), a 404, 410 or redirect says to
+  get the new version at meio.lol/download; other failures back off 5 min to 3 h
 - Checked 30 Oct from C01: the application text (submitted and revised) and
   production-key.md quote only meio.lol and privacy@meio.lol; every page they name
   (/, /your, /daily, /learn, /pool, /champions, /matchups, /patch, /method, /privacy,
