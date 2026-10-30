@@ -1,8 +1,8 @@
 //! matchup/index.html: the matchup finder (ui.finder). Each champion's roles and, per
-//! role, three short lists of lane pairs with a matchup page: the patch's clearest win
-//! rate moves (as the patch page picks them), the hardest lanes and the lane bullies, in
-//! the island's data-bin. A pick's matchups are the
-//! champion page's data files (champion.dataFiles), fetched by ui-findergrid.wasm
+//! role, three short lists of lane pairs with a matchup page: the patch's win rate moves
+//! (clear ones as the patch page picks them, then thinner ones), the hardest lanes and
+//! the lane bullies, in the island's data-bin. A pick's matchups are the champion page's
+//! data files (champion.dataFiles), fetched by ui-findergrid.wasm
 const std = @import("std");
 const core = @import("core");
 const root = @import("root.zig");
@@ -173,8 +173,8 @@ fn bullies(a: std.mem.Allocator, pairs: []const LanePair) ![]const fd.Lead {
     return list[0..@min(list.len, shown)];
 }
 
-/// Per role, win rate moves too big to be luck (the patch page's test), from the side
-/// that gained
+/// Per role, the win rate moves too big to be luck (the patch page's test), then the
+/// surest of the rest down to moved_games, each from the side that gained
 fn moved(site: *const Site, pd: *const patchday.PatchDay) ![]const []const fd.Move {
     const a = site.arena;
     const o = pd.opts;
@@ -183,30 +183,40 @@ fn moved(site: *const Site, pd: *const patchday.PatchDay) ![]const []const fd.Mo
     return out;
 }
 
+/// Games on each patch for a move to be listed: early in a patch few pairs pass the
+/// patch page's 400, and an empty card hides what there is (shown faint, with its range)
+const moved_games = 100;
+
 fn movedIn(site: *const Site, pd: *const patchday.PatchDay, r: Role, o: patchday.Options) ![]const fd.Move {
     const a = site.arena;
-    var list: std.ArrayList(fd.Move) = .empty;
+    const Scored = struct { m: fd.Move, z: f64 };
+    var list: std.ArrayList(Scored) = .empty;
     for (pd.matchups) |m0| {
-        if (m0.role != r or !m0.win.clear(o.min_pair_games, o.z)) continue;
+        if (m0.role != r or !m0.win.enough(moved_games) or m0.win.z == 0) continue;
         const m = if (m0.win.z > 0) m0 else pd.matchup(m0.role, m0.b, m0.a).?;
         const x = index(site, m.a) orelse continue;
         const y = index(site, m.b) orelse continue;
         const rg = m.win.range(ci_z);
-        try list.append(a, .{
+        try list.append(a, .{ .z = m.win.z, .m = .{
             .role = champion.uiRole(m.role),
             .x = x,
             .y = y,
             .d = @floatCast(m.win.delta()),
             .ci = @floatCast((rg[1] - rg[0]) / 2),
             .games = m.win.cur.games,
-        });
+            .clear = m.win.clear(o.min_pair_games, o.z),
+        } });
     }
-    std.mem.sort(fd.Move, list.items, {}, struct {
-        fn f(_: void, p: fd.Move, q: fd.Move) bool {
-            return p.d > q.d;
+    // Clear moves first, biggest first; then the rest, surest first
+    std.mem.sort(Scored, list.items, {}, struct {
+        fn f(_: void, p: Scored, q: Scored) bool {
+            if (p.m.clear != q.m.clear) return p.m.clear;
+            return if (p.m.clear) p.m.d > q.m.d else p.z > q.z;
         }
     }.f);
-    return list.items[0..@min(list.items.len, shown)];
+    const out = try a.alloc(fd.Move, @min(list.items.len, shown));
+    for (out, list.items[0..out.len]) |*v, x| v.* = x.m;
+    return out;
 }
 
 /// `v` as ui.data, base64: the island root's data-bin

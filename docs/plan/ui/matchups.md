@@ -29,12 +29,12 @@ champion": they know one. Nobody comes to read 5,000 rows.
   RelationPicker, Against preselected) under the slots, so the second pick can be a tile
   tap
 - Nothing picked: a RolePicker, then three short `ChampList`s for that role side by side
-  (8 rows each, every row a matchup page): Moved this patch (clearest win rate moves,
-  from the side that gained, Delta with range, link to the patch page), Hardest lanes
-  (lowest win rates from the losing side, ranked by the upper end of the 95% range),
-  Lane bullies (biggest median gold lead at 14). Hardest and bullies need 500 games a
-  pair. Most played is gone (Jacob 27 Oct: "almost feels silly except the moved this
-  patch")
+  (8 rows each, every row a matchup page): Moved this patch (clear win rate moves, then
+  the surest others down to 100 games a patch, faint with ±range; from the side that
+  gained, link to the patch page), Hardest lanes (lowest win rates from the losing side,
+  ranked by the upper end of the 95% range), Lane bullies (biggest median gold lead at
+  14). Hardest and bullies need 500 games a pair. Most played is gone (Jacob 27 Oct:
+  "almost feels silly except the moved this patch")
 - Header search keeps doing "ahri zed" from any page; this page is its slower twin
 
 ## First screen

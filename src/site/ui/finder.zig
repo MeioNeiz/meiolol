@@ -1,8 +1,8 @@
 //! The matchup finder (matchup/index.html, docs/plan/ui/matchups.md): a way to a matchup
 //! page, not a list of them. Two islands. Finder: two ChampRolePickers, one lane for both;
-//! nothing picked, a role and three short lists of its lane pairs (this patch's clearest
-//! movers, the hardest lanes, the lane bullies), each a link to its page. Grid (its own, lazily loaded file):
-//! the first pick's MatchupGrid, Against its lane, from the champion page's
+//! nothing picked, a role and three short lists of its lane pairs (this patch's movers,
+//! the hardest lanes, the lane bullies), each a link to its page. Grid (its own, lazily
+//! loaded file): the first pick's MatchupGrid, Against its lane, from the champion page's
 //! data/champion/<slug>-more.bin; the second pick is that opponent's dot, and its page when
 //! there is one. Finder writes the picks to the URL, Grid reads them (same keys).
 //!
@@ -45,7 +45,8 @@ pub const Data = struct {
     hard: []const []const Pair = &.{},
     /// The biggest gold leads at 14 minutes, from the side ahead
     bully: []const []const Lead = &.{},
-    /// The clearest win rate moves this patch, from the side that gained, biggest first
+    /// This patch's win rate moves, from the side that gained: clear ones, then the surest
+    /// of the rest
     moved: []const []const Move = &.{},
     /// "16.21"; "" without an earlier patch to compare with
     patch: []const u8 = "",
@@ -67,6 +68,8 @@ pub const Move = struct {
     ci: f32,
     /// This patch's
     games: u32,
+    /// Too big to be luck (the patch page's test); else faint with its range
+    clear: bool = true,
 };
 
 const W = struct {
@@ -78,6 +81,7 @@ const W = struct {
     pub const patch = Phrase("Patch {p:text}");
     pub const role_label = plain("Role");
     pub const none = plain("Not enough games yet.");
+    pub const pm = Phrase("±{ci:dec}");
     pub const yours = plain("Your champion");
     pub const opponent = plain("Opponent");
     pub const go = plain("Matchup ›");
@@ -243,7 +247,10 @@ pub const Finder = struct {
             .champ = f.icon(h, m.x),
             .vs = f.icon(h, m.y),
             .href = f.href(h, d.patch_query, m.role, m.x, m.y),
-            .value = delta.view(h, .{ .d = m.d, .ci = m.ci }),
+            .value = if (m.clear) delta.view(h, .{ .d = m.d }) else h.span(.{}, .{
+                delta.view(h, .{ .d = m.d, .ci = m.ci }),
+                h.span(.{ .class = "pm" }, .{W.pm.with(h, .{ .ci = m.ci })}),
+            }),
             .note = phrase.num(h, .count, m.games),
         };
         const link = h.a(.{ .class = "more", .href = h.fmt("/patch{s}", .{f.query}) }, .{W.patch.with(h, .{ .p = d.patch })});
@@ -443,6 +450,7 @@ pub const css =
     \\  .c-finder .lists { display: grid; gap: var(--sp-3); justify-items: start; }
     \\  .c-finder .cols { justify-self: stretch; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--sp-4); align-items: start; }
     \\  .c-finder .none { margin: 0; color: var(--faint); }
+    \\  .c-finder .pm { margin-left: 4px; color: var(--faint); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
     \\  .c-fgrid:not(:empty) { display: grid; gap: var(--sp-4); margin-top: var(--sp-4); }
     \\  .c-fgrid > .go, .c-fgrid > .none { margin: 0; }
     \\  .c-fgrid > .none { color: var(--faint); }
@@ -478,7 +486,7 @@ pub const Demo = struct {
         .roles = &.{ &top_only, &.{ .top, .mid }, &.{ .top, .support }, &top_only, &mid_only, &mid_only, &.{.jungle} },
         .hard = &.{ &top, &.{}, &mid, &.{}, &.{} },
         .bully = &.{ &top_leads, &.{}, &.{}, &.{}, &.{} },
-        .moved = &.{ &.{.{ .role = .top, .x = 2, .y = 0, .d = 3.4, .ci = 2.1, .games = 1630 }}, &.{}, &.{.{ .role = .mid, .x = 5, .y = 4, .d = 2.8, .ci = 1.9, .games = 1310 }}, &.{}, &.{} },
+        .moved = &.{ &.{ .{ .role = .top, .x = 2, .y = 0, .d = 3.4, .ci = 2.1, .games = 1630 }, .{ .role = .top, .x = 1, .y = 3, .d = 6.2, .ci = 9.8, .games = 140, .clear = false } }, &.{}, &.{.{ .role = .mid, .x = 5, .y = 4, .d = 2.8, .ci = 1.9, .games = 1310 }}, &.{}, &.{} },
         .patch = "16.21",
     };
 
