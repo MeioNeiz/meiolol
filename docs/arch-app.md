@@ -41,6 +41,15 @@ file and packed rows: docs/architecture.md.
   static HTML (no interaction; when it comes or changes the shell sends `reload`, which
   bridge.js turns into a page load). The Mac build's `--dump DIR --seconds N` writes
   each change to DIR/<seq>/ for a look against the mock client
+- Review pages (src/site/appreview.zig, /private/app; the dev server makes them on the first
+  request): each scenario in testdata/lcu/scenarios (embedded through its all.zig, which
+  lists them) played through the poller's own tick (poller.Replay: the mock client on
+  free local ports), a page per change it would publish; full-game's champ select from
+  each seat too, each ally's lane once all ten lock, the no-client, sign-in and update
+  states, and practice (testers only). Rendered by screens.renderIn in both editions with
+  the site's icons, the island and CSS under /private/app/, at the window's 1120 px or
+  420; a fake bridge shows what the page sends the shell, and a seat click opens that
+  lane's page. URLs /private/app/<edition>/<slug>, app.bin under <slug>/ (a <base>)
 - Lane panel: a click on an ally's seat shows their lane: the shell writes the board's
   seats' data-act as "lane <role>" (255 mine; only seats with a role, as allyLane finds
   the ally by role; ui/draftboard.zig Seat.act, the shown one Seat.sel) and bridge.js

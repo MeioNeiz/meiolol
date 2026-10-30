@@ -63,9 +63,15 @@ pub const Scenario = struct {
         const dir = std.fs.path.dirname(path) orelse ".";
         const table_path = try std.fs.path.join(arena, &.{ dir, champions_file });
         const table_bytes = try cwd.readFileAlloc(io, table_path, arena, .limited(1 << 20));
+        const bytes = try cwd.readFileAlloc(io, path, arena, .limited(1 << 20));
+        return parse(arena, std.fs.path.stem(path), bytes, table_bytes);
+    }
+
+    /// load's from the files' bytes (embedded ones: src/site/appreview.zig)
+    pub fn parse(arena: std.mem.Allocator, name: []const u8, bytes: []const u8, table_bytes: []const u8) !Scenario {
         const table = try std.json.parseFromSliceLeaky(Value, arena, table_bytes, .{});
         var s: Scenario = .{
-            .name = std.fs.path.stem(path),
+            .name = name,
             .queue = 420,
             .local_cell = 2,
             .positions = .{ "top", "jungle", "middle", "bottom", "utility", "", "", "", "", "" },
@@ -86,7 +92,6 @@ pub const Scenario = struct {
             try s.ids.put(arena, id, e.key_ptr.*);
         }
 
-        const bytes = try cwd.readFileAlloc(io, path, arena, .limited(1 << 20));
         const root = try std.json.parseFromSliceLeaky(Value, arena, bytes, .{});
         const o = root.object;
         if (o.get("queue")) |v| s.queue = v.integer;

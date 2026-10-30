@@ -176,6 +176,25 @@ fn dumpFile(io: std.Io, gpa: Allocator, dir: []const u8, name: []const u8, bytes
 /// With `bar`, practice's island above the app's and its file; with `under`, the comp
 /// view after it
 pub fn render(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp) ![]const u8 {
+    return renderIn(a, d, bar, under, .{});
+}
+
+/// What the page links and wraps it in: the shell's own files, or the review pages'
+/// (src/site/appreview.zig)
+pub const Frame = struct {
+    css: []const u8 = "app.css",
+    js: []const u8 = "ui-app.js",
+    wasm: []const u8 = "ui-app.wasm",
+    practice_js: []const u8 = "ui-practice.js",
+    practice_wasm: []const u8 = "ui-practice.wasm",
+    /// Before </head>
+    head: []const u8 = "",
+    /// After <body> and before the scripts
+    top: []const u8 = "",
+    end: []const u8 = "",
+};
+
+pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp, f: Frame) ![]const u8 {
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
     var island: app.App = .{ .data = d };
@@ -188,20 +207,26 @@ pub fn render(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.comp
     const comp_n: ?ui.N = if (under) |x| ui.compview.view(&h, x) else null;
     if (h.oom) return error.OutOfMemory;
     var out: std.Io.Writer.Allocating = .init(a);
-    try out.writer.writeAll(
+    const w = &out.writer;
+    try w.print(
         \\<!doctype html><html lang="en"><head><meta charset="utf-8">
         \\<meta name="viewport" content="width=device-width, initial-scale=1">
-        \\<title>meiolol</title><link rel="stylesheet" href="app.css"></head>
-        \\<body class="ui">
-    );
-    if (top) |n| try ui.html.write(&t, n, &out.writer);
-    try ui.html.write(&t, body, &out.writer);
-    if (comp_n) |n| try ui.html.write(&t, n, &out.writer);
-    try out.writer.writeAll("\n<script src=\"ui-app.js\" data-wasm=\"ui-app.wasm\" defer></script>");
-    if (top != null) try out.writer.writeAll("<script src=\"ui-practice.js\" data-wasm=\"ui-practice.wasm\" defer></script>");
-    try out.writer.writeAll("</body></html>\n");
+        \\<title>meiolol</title><link rel="stylesheet" href="{s}">{s}</head>
+        \\<body class="ui">{s}
+    , .{ f.css, f.head, f.top });
+    if (top) |n| try ui.html.write(&t, n, w);
+    try ui.html.write(&t, body, w);
+    if (comp_n) |n| try ui.html.write(&t, n, w);
+    try w.print("{s}\n<script src=\"{s}\" data-wasm=\"{s}\" defer></script>", .{ f.end, f.js, f.wasm });
+    if (top != null) try w.print("<script src=\"{s}\" data-wasm=\"{s}\" defer></script>", .{ f.practice_js, f.practice_wasm });
+    try w.writeAll("</body></html>\n");
     return out.written();
 }
+
+pub const SiteIcons = struct {
+    ddragon: []const u8,
+    keys: *const std.AutoHashMapUnmanaged(u32, []const u8),
+};
 
 pub const Ctx = struct {
     stats: ?*const core.Stats,
@@ -209,10 +234,13 @@ pub const Ctx = struct {
     private: bool,
     /// Practice shows: the board's seats and options carry practice's clicks
     practice: bool = false,
+    /// The site's icons in place of the client's (the review pages)
+    site: ?*const SiteIcons = null,
 
     pub fn champ(c: Ctx, a: Allocator, id: u32) !?ui.champ.Champ {
         if (id == 0) return null;
         const stats = c.stats orelse return null;
+        if (c.site) |s| if (s.keys.get(id)) |key| return .{ .name = stats.nameOf(id), .src = try a.print(ui.champ.icon_fmt, .{ s.ddragon, key }) };
         const has = if (c.icons) |i| i.get(id) != null else false;
         return .{ .name = stats.nameOf(id), .src = if (has) try a.print("icon/{d}.png", .{id}) else "" };
     }
@@ -290,7 +318,7 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
 
 /// Words for everyone; the share, the mix's record, lean numbers and lane gold for
 /// testers
-fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
+pub fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
     var teams: [2]ui.compview.Team = undefined;
     for (&teams, x.teams) |*out, t| {
         // champ-facts.tsv and the stats file ship apart: a champion only the facts know

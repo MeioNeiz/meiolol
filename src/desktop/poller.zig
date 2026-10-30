@@ -57,7 +57,7 @@ const Shared = struct {
 };
 
 /// Stats, curves and champion facts with the memory they live in
-const Data = struct {
+pub const Data = struct {
     arena: std.heap.ArenaAllocator,
     stats: core.Stats,
     curves: ?core.curvesfile.Curves,
@@ -128,15 +128,35 @@ fn load(gpa: std.mem.Allocator) ?*Data {
 
 fn loadInto(data: *Data) !void {
     const arena = data.arena.allocator();
+    try fill(data, .{
+        .stats = try datafiles.stats(arena, io) orelse return error.NoStatsFile,
+        .curves = try datafiles.curves(arena, io),
+        .facts = try datafiles.facts(arena, io),
+    });
+}
+
+pub const Paths = struct { stats: []const u8, curves: ?[]const u8, facts: ?[]const u8 };
+
+/// Named files rather than the newest beside the app, for Replay
+pub fn loadPaths(gpa: std.mem.Allocator, io_: std.Io, paths: Paths) !*Data {
+    io = io_;
+    const data = try gpa.create(Data);
+    data.arena = .init(gpa);
+    errdefer freeData(gpa, data);
+    try fill(data, paths);
+    return data;
+}
+
+fn fill(data: *Data, paths: Paths) !void {
+    const arena = data.arena.allocator();
     const cwd = std.Io.Dir.cwd();
     const limit: std.Io.Limit = .limited(1 << 30);
-    const stats_path = try datafiles.stats(arena, io) orelse return error.NoStatsFile;
-    data.stats = try core.Stats.parse(arena, try cwd.readFileAlloc(io, stats_path, arena, limit));
+    data.stats = try core.Stats.parse(arena, try cwd.readFileAlloc(io, paths.stats, arena, limit));
     data.curves = null;
     // Without curves the card still lists options, without lane gold. Viewed in place, not
     // parsed (a copy): the file is ~100 MB. Not mapped: the update renames a new file
     // over it, which Windows may refuse while mapped (untested)
-    if (try datafiles.curves(arena, io)) |p| {
+    if (paths.curves) |p| {
         const file_align: std.mem.Alignment = comptime .fromByteUnits(core.curvesfile.file_align);
         const bytes = try cwd.readFileAllocOptions(io, p, arena, limit, file_align, null);
         data.curves = core.curvesfile.Curves.view(arena, bytes) catch |err| blk: {
@@ -146,7 +166,7 @@ fn loadInto(data: *Data) !void {
     }
     // Without facts the comp view has the lanes alone
     data.facts = null;
-    if (try datafiles.facts(arena, io)) |p| {
+    if (paths.facts) |p| {
         data.facts = core.champfacts.Facts.parse(arena, try cwd.readFileAlloc(io, p, arena, .limited(1 << 22))) catch |err| blk: {
             std.log.err("{s}: {t}", .{ p, err });
             break :blk null;
@@ -154,7 +174,7 @@ fn loadInto(data: *Data) !void {
     }
 }
 
-fn freeData(gpa: std.mem.Allocator, data: *Data) void {
+pub fn freeData(gpa: std.mem.Allocator, data: *Data) void {
     data.arena.deinit();
     gpa.destroy(data);
 }
@@ -461,6 +481,8 @@ const Poller = struct {
     /// Mastery and tier for practice, loaded once per client connection
     practice_arena: std.heap.ArenaAllocator,
     practice_own: ?Own = null,
+    /// Live Client Data's; Replay's mock serves it on a free one
+    live_port: u16 = lcu.live.port,
 
     const Own = struct {
         mastery: []lanecard.Mastery,
@@ -635,7 +657,7 @@ const Poller = struct {
         const client = p.watch.client.?;
         const live = lcu.live;
         const resp = if (client.credentials.plain)
-            try lcu.https.getPlain(client.gpa, io, live.port, "", live.path)
+            try lcu.https.getPlain(client.gpa, io, p.live_port, "", live.path)
         else
             try lcu.https.get(client.gpa, io, live.port, "", live.path);
         defer client.gpa.free(resp.body);
@@ -722,6 +744,8 @@ const Poller = struct {
     /// changes the fingerprint so the window redraws
     fn fetchIcons(p: *Poller, want: []const u32) void {
         const client = p.watch.client orelse return;
+        // Replay: no store, the review pages use the site's icons
+        if (shared.icons == null) return;
         var got: u32 = 0;
         for (want) |c| {
             shared.mutex.lockUncancelable(io);
@@ -753,6 +777,39 @@ const Poller = struct {
             own.tier = lcu.me.parseSoloTier(a, body) catch null;
         } else |_| {}
         return own;
+    }
+};
+
+/// The poller's tick without its thread, window or updates, for the app review pages
+/// (src/site/appreview.zig): a mock client's lockfile, stepped by the caller. Not beside
+/// start(): both set this file's io
+pub const Replay = struct {
+    p: Poller,
+    data: *const Data,
+    shown: u64 = 0,
+
+    pub fn init(gpa: std.mem.Allocator, io_: std.Io, lock_path: []const u8, live_port: u16, data: *const Data) Replay {
+        io = io_;
+        var p: Poller = .{ .watch = .init(gpa, io, lock_path), .own_arena = .init(gpa), .seats_arena = .init(gpa), .practice_arena = .init(gpa) };
+        p.live_port = live_port;
+        return .{ .p = p, .data = data };
+    }
+
+    pub fn deinit(r: *Replay) void {
+        r.p.deinit();
+    }
+
+    /// What the client shows now, into `arena`; null when the poller would publish
+    /// nothing new
+    pub fn tick(r: *Replay, arena: std.mem.Allocator) !?state.Status {
+        const s = r.p.tick(arena, r.data) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => r.p.disconnect(err),
+        };
+        const k = r.p.key(s, false);
+        if (k == r.shown) return null;
+        r.shown = k;
+        return s;
     }
 };
 

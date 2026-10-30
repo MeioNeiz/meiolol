@@ -1,7 +1,7 @@
 //! `meiolol desktop-sign` and `desktop-curves`: what the desktop app downloads
 
 const std = @import("std");
-const sign = @import("../desktop/sign.zig");
+const sign = @import("desktop").sign;
 const curvesfile = @import("core").curvesfile;
 const main = @import("../main.zig");
 const Cmd = main.Cmd;

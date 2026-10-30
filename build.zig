@@ -377,6 +377,17 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
         .optimize = optimize,
         .imports = &.{.{ .name = "api", .module = lab_api }},
     }));
+    // The app's poller and screens for its review pages on the private site
+    // (src/site/appreview.zig), with the mock client's scenarios
+    const desktop_options = desktopOptions(b, 0, .private).createModule();
+    backend.addImport("build_options", desktop_options);
+    backend.addImport("desktop", b.createModule(.{
+        .root_source_file = b.path("src/desktop_app.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{ .{ .name = "core", .module = core }, .{ .name = "net", .module = net }, .{ .name = "build_options", .module = desktop_options } },
+    }));
+    backend.addAnonymousImport("scenarios", .{ .root_source_file = b.path("testdata/lcu/scenarios/all.zig") });
     const app = b.createModule(.{
         .root_source_file = b.path("src/app_main.zig"),
         .target = target,

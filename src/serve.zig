@@ -8,6 +8,7 @@ const std = @import("std");
 const Io = std.Io;
 const site = @import("site/root.zig");
 const site_admin = @import("site/adminpage.zig");
+const site_appreview = @import("site/appreview.zig");
 const store = @import("store");
 const httpd = @import("net").server;
 const client = @import("net").client;
@@ -340,6 +341,20 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
                 .{ .name = "content-type", .value = contentType(path) },
                 .{ .name = "cache-control", .value = "no-cache" },
             } });
+        };
+        // The desktop app's review pages (site/appreview.zig), made on the first request
+        if (std.mem.eql(u8, path, "private/app") or std.mem.startsWith(u8, path, "private/app/")) if (ctx.opts.render) |r| {
+            const entry = r.acquire();
+            defer r.release(entry);
+            var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+            defer arena_state.deinit();
+            var body = (try site_appreview.devFile(ctx.gpa, ctx.io, entry.loaded, path["private/".len..])) orelse return notFound(request);
+            const page = std.fs.path.extension(path).len == 0;
+            if (page) if (std.mem.findLast(u8, body, "</body>")) |at| {
+                const notes_tag = if (notesMarked(request)) site.notes.tag else "";
+                body = try std.mem.concat(arena_state.allocator(), u8, &.{ body[0..at], reload_script, notes_tag, body[at..] });
+            };
+            return request.respond(body, .{ .extra_headers = &.{.{ .name = "content-type", .value = contentType(if (page) "index.html" else path) }} });
         };
         if (std.mem.eql(u8, path, "__notes/on") or std.mem.eql(u8, path, "__notes/off")) {
             const on = std.mem.endsWith(u8, path, "on");

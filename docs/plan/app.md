@@ -221,8 +221,10 @@ training-receive.sh puts only the tester's model files in private/lab); the ship
 win chances on the public champion and matchup pages for private logins (/private/pv.js,
 loaded by the header script in browsers that opened /admin/ or /private, data
 private/models/champ/<id>.json from `meiolol draft-model`): a line in the hero and a last line
-on every opponent and duo tile. Next: all regions and patches without the public
-page-weight cuts.
+on every opponent and duo tile. The app review pages, /private/app (arch-app.md "Review
+pages"): every screen the app can show, from the mock scenarios, in both editions, for
+Jacob's notes. Next: the Draft tester out of /admin; all regions and patches without the
+public page-weight cuts.
 
 Private ideas from the feature survey (league-apps-feature-matrix), after the above:
 loading-screen scouting of the lane opponent and the rest (mainstream; names are
