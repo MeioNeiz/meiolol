@@ -7,6 +7,7 @@ const store = @import("store");
 const ui = @import("ui");
 const csp = @import("csp.zig");
 const sheets = @import("sheets.zig");
+const shell = @import("shell.zig");
 
 /// With every public component: a page inlines only those it uses (sheets.zig), and the
 /// tag comes after; repeated whole, the cascade stays the one sheet's
@@ -39,8 +40,8 @@ pub fn marked(header: []const u8) bool {
     return false;
 }
 
-/// /admin/notes: every note (ui.noteslist), the same ui-notes.wasm in list mode, its CSS
-/// inline
+/// /admin/notes: every note (ui.noteslist) in the site shell, the same ui-notes.wasm in list
+/// mode, its CSS inline
 pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
     var l: ui.noteslist.List = .{};
     var t: ui.Tree = .{};
@@ -49,28 +50,11 @@ pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
     if (h.oom) return error.OutOfMemory;
     var out: std.Io.Writer.Allocating = .init(a);
     const w = &out.writer;
-    try w.print(
-        \\<!doctype html>
-        \\<html lang="en">
-        \\<head>
-        \\<meta charset="utf-8">
-        \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
-        \\<meta name="robots" content="noindex">
-        \\<title>Notes · meiolol admin</title>
-        \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        \\{s}
-        \\</head>
-        \\<body class="ui">
-        \\
-    , .{ csp.files_only, sheets.slot });
+    const page: @import("html.zig").Page = .{ .title = "Notes | meiolol", .description = "Every note on the site", .patch = "", .data = "", .public = false, .private = .notes };
+    try shell.open(w, page);
     try ui.html.write(&t, n, w);
-    try w.writeAll(
-        \\
-        \\<script src="/private/notes.js" data-wasm="/private/notes.wasm" defer></script>
-        \\</body>
-        \\</html>
-        \\
-    );
+    try w.writeAll("\n<script src=\"/private/notes.js\" data-wasm=\"/private/notes.wasm\" defer></script>\n");
+    try shell.close(w, page);
     return sheets.deliverWith(a, out.written(), &.{.{ .plain = "notes.wasm", .path = "notes.wasm", .data = file("notes.wasm").? }});
 }
 
