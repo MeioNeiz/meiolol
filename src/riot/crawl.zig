@@ -1996,6 +1996,30 @@ test "whole documents: empty, cut short or not a match is a failed fetch" {
     try std.testing.expect(wholeDoc(tl));
 }
 
+test "complete form: a summary and timeline as Riot sends them come back byte for byte" {
+    const gpa = std.testing.allocator;
+    const tl = try store.raw.decompress(gpa, @embedFile("testdata/timeline.json.gz"));
+    defer gpa.free(tl);
+    // The fixtures end in a newline Riot's bodies don't have
+    const docs = [_][]const u8{
+        std.mem.trimEnd(u8, @embedFile("testdata/match.json"), "\n"),
+        std.mem.trimEnd(u8, tl, "\n"),
+    };
+    var b: store.jsonpack.Block = .init(gpa);
+    defer b.deinit();
+    for (docs) |d| try std.testing.expect(try b.add(d));
+    var block: std.ArrayList(u8) = .empty;
+    defer block.deinit(gpa);
+    try b.finish(&block);
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(gpa);
+    const ends = try store.jsonpack.decode(gpa, block.items, &out);
+    defer gpa.free(ends);
+    try std.testing.expectEqualStrings(docs[0], out.items[0..ends[0]]);
+    try std.testing.expectEqualStrings(docs[1], out.items[ends[0]..ends[1]]);
+    try std.testing.expect(block.items.len < (docs[0].len + docs[1].len) / 4);
+}
+
 test "gold at 10, 14 and 15 minutes" {
     const gpa = std.testing.allocator;
     var arena: std.heap.ArenaAllocator = .init(gpa);

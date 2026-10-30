@@ -127,8 +127,14 @@ S1 measured (30 Oct, 1,950 timelines and their summaries from C01, prototype cod
 
 Steps (S2 on, anything that writes on C01 or changes the crawler, through the
 coordinator first):
-- S2 codec in src/store: round-trip and fuzz tests, blocks of documents per stream,
-  the S1 leftovers above
+- S2 done: store.jsonpack, blocks of documents (format in its header), with a block
+  wide dictionary for long strings, types per path, deltas only where they save bytes,
+  and refs for an array element repeated from an earlier array in the same object (98%
+  of a kill's damage breakdown repeats in its teamfight one). Blocks of 256 at zstd
+  -19: timeline 21.7 KB, summary 3.4 KB, all 3,900 sample documents exact (prototype
+  data/team/2026-10-30-steady/w6/jblock.zig); ~3.2 GB a day. Next lever if needed: a
+  damage entry's name, spell and slot repeat together. std has no zstd compressor:
+  blocks go through the zstd binary (as raw exports do) or a vendored libzstd (S3)
 - S3 the crawler writes the complete form for every summary, timeline and mastery
   fetch: sealed per-day files on the data disk (outside SQLite, so the writer's WAL
   doesn't carry the bytes), raw kept only for a document that fails its check
