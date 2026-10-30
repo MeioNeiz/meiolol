@@ -21,6 +21,7 @@ const screens = @import("../shell/screens.zig");
 const shell_files = @import("../shell/files.zig");
 const shell_practice = @import("../shell/practice.zig");
 const site = @import("root.zig");
+const csp = @import("csp.zig");
 const core = desktop.core;
 const poller = desktop.poller;
 const state = desktop.state;
@@ -428,8 +429,8 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         .practice_js = root ++ "/ui-practice.js",
         .practice_wasm = root ++ "/ui-practice.wasm",
         .head = try a.print(
-            \\<link rel="stylesheet" href="{s}/review.css"><script src="{s}/review.js"></script><script src="{s}/nav.js" defer></script>
-        , .{ root, root, root }),
+            \\{s}<link rel="stylesheet" href="{s}/review.css"><script src="{s}/review.js"></script><script src="{s}/nav.js" defer></script>
+        , .{ csp.files_only, root, root, root }),
         .top = try reviewTop(a, ed, groups, shots, i),
         .end = "</div>",
     });
@@ -541,13 +542,13 @@ fn index(a: Allocator, groups: []const Group, shots: []const Shot) ![]const u8 {
     const x = &w.writer;
     try x.print(
         \\<!doctype html><html lang="en"><head><meta charset="utf-8">
-        \\<meta name="viewport" content="width=device-width, initial-scale=1">
+        \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
         \\<meta name="robots" content="noindex"><title>App review</title>
         \\<link rel="stylesheet" href="{s}/app.css"><link rel="stylesheet" href="{s}/review.css"><script src="{s}/nav.js" defer></script></head>
         \\<body class="ui rv-index"><main data-first-public="{s}" data-first-private="{s}"><h1>App review</h1>
         \\<p>Every screen the desktop app can show, played from the mock client's scenarios through the app's own poller. Each opens as the public edition or the testers' (practice: testers only), at the window's width or narrow; notes pin to the page. Arrow keys: left and right for the previous and next state, up and down for the previous and next group.</p>
         \\
-    , .{ root, root, root, try url(a, .public, shots[0].slug), try url(a, .private, shots[0].slug) });
+    , .{ csp.files_only, root, root, root, try url(a, .public, shots[0].slug), try url(a, .private, shots[0].slug) });
     try navigator(x, a, .public, groups, shots, null);
     try x.writeAll("</main></body></html>\n");
     return w.written();
@@ -737,6 +738,7 @@ test "every scenario's states as pages in both editions, practice testers only" 
         pages[@intFromBool(public)] += 1;
         try testing.expect(std.mem.find(u8, f.data, "data-island=\"app\"") != null);
         try testing.expect(std.mem.find(u8, f.data, "<base") == null);
+        try csp.check(f.data);
         try testing.expect(std.mem.find(u8, f.data, "aria-current=\"page\"") != null);
         // Its app.bin beside it
         const bin = try std.mem.concat(a, u8, &.{ f.path[0 .. f.path.len - ".html".len], "/app.bin" });
@@ -749,6 +751,7 @@ test "every scenario's states as pages in both editions, practice testers only" 
     try testing.expectEqual(pages[1] + 4, pages[0]);
     try testing.expect(pages[1] > 40);
     const ix = index_page orelse return error.NoIndex;
+    try csp.check(ix);
     for ([_][]const u8{ "/private/app/public/full-game-01", "/private/app/private/practice-post", "/private/app/public/top-01", "lane-top" }) |want| {
         if (std.mem.find(u8, ix, want) == null) {
             std.debug.print("index lacks {s}\n", .{want});
