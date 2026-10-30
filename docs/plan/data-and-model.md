@@ -50,15 +50,13 @@ In order:
    weights near 1, so shown numbers stay near the data); more traits (range and poke,
    waveclear, scaling) and leans by rank bracket and patch; rerun as games grow (each
    doubling ~-0.0008 log loss)
-7. Data and ops (decisions.md, Open decisions "Storage and hosting"): the box keeps a
-   ~30-day window of games plus per-patch aggregates; the PC holds everything, raw
-   pseudonymised (~6 GB a day) and the backups; a Hetzner Storage Box (BX11, EUR 3.20 a
-   month) is the off-site copy; raw timelines (88% of the archive) reviewed ~mid January
-   against what the compact timelines lack. The production key multiplies all of it
+7. Data and ops: C01 keeps every game, Megatron is the off-site copy (J31); the PC holds
+   the raw archive pseudonymised (~6 GB a day) and a backup mirror; raw timelines (88% of
+   the archive) reviewed ~mid January against what the compact timelines lack. The
+   production key multiplies all of it
 
-Open for Jacob: the storage decisions; whether comp-lean reasons may appear in the
-desktop app in champ select once the held-out look passes (policy allows options with
-reasons; the app shows champion and aggregate stats only)
+Open for Jacob (decisions.md "Open decisions"): the per-seat stats table; comp-lean
+reasons in the desktop app's champ select once the held-out look passes
 
 ## A4 shipped (DM1): pair cells that borrow strength
 

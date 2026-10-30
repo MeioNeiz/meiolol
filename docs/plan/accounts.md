@@ -36,11 +36,11 @@ Five, in order, each with everything the one before has.
 
 ## Design
 
-- Where: `meiolol api` on jomify (already the dynamic service, behind nginx), own file
+- Where: `meiolol api` on C01 (the dynamic service, behind nginx), own file
   accounts.db beside api.db (backups, erasure and migrations stay separate from Riot
   data)
 - Accounts: username, argon2id hash (std.crypto.pwhash.argon2; params sized for
-  jomify's 400 MB cap, one hash at a time), role, created, last seen, optional linked
+  a 400 MB cap, one hash at a time), role, created, last seen, optional linked
   PUUID. No email: invites go by chat, so nothing to mail and less personal data
 - Invites: admin makes a one-use link (/join#TOKEN, 7 days); the friend picks a username
   and password. Admin can change roles, reset (new invite link) and disable
@@ -61,7 +61,7 @@ Five, in order, each with everything the one before has.
   the account page), sent as `Authorization: Bearer`; nginx checks it with the same
   /_auth. Replaces the shared update.key (hosting.md "Desktop app files"), which is
   rotated out once every install has a device token
-- Break-glass: `meiolol account` on jomify over ssh (hosting.md "Logins"); no basic
+- Break-glass: `meiolol account` on C01 over ssh (hosting.md "Logins"); no basic
   auth fallback, as the CLI can reset any login
 - Privacy: friends are data subjects; the privacy page gets an accounts section before
   anyone outside Jacob has one (what is kept, deletion on request: `meiolol account
@@ -87,7 +87,7 @@ is /private/desktop/ (/p/desktop/ for older apps).
 
 ## Steps
 
-Each step ends tested and deployed; nginx and systemd changes on jomify need Jacob's OK
+Each step ends tested and deployed; nginx and systemd changes on C01 need Jacob's OK
 (how-we-work.md).
 
 - AC0 Jacob's: the policy framing (app.md "Policy line"), who gets the first private
@@ -98,19 +98,18 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
   1. Release an exe that carries sign in (deploy/desktop-release.sh). Installed apps
      still update with update.key and get it; the zip still bundles the key
   2. Each tester signs in from the app (a private account: the form says why not
-     otherwise); check with the account page or `meiolol account devices NAME` on jomify
-  3. When everyone is on a sign in: on jomify back up /etc/nginx/conf.d/meiolol.conf,
-     drop the `include /etc/nginx/meiolol-desktop-key.conf;` line from location
-     /_meiolol_desktop_key, `sudo nginx -t`, reload. An app still on the key gets 401
+     otherwise); check with the account page or `meiolol account devices NAME` on C01
+  3. When everyone is on a sign in: drop the `include
+     /etc/nginx/meiolol-desktop-key.conf;` line from location /_meiolol_desktop_key in
+     deploy/nginx/meiolol.conf, install on C01 with deploy/vm-web.sh, `sudo nginx -t`,
+     reload. An app still on the key gets 401
      and shows the form
   4. A session commits web-loop.sh desktop_files without the key (no desktop.token, no
      update.key in the zip, nothing appended to the exe), then removes the box's
-     ml/meiolol/desktop.token and jomify's meiolol-desktop-key.conf; hosting.md
+     ml/meiolol/desktop.token and C01's /etc/nginx/meiolol-desktop-key.conf; hosting.md
      "Desktop app files" follows. The privacy page's desktop app paragraph says the app
      signs in (with step 1)
-- AC5 Retire admin/desktop/ and its nginx location once every installed app updates
-  from /private/desktop/ (the account page's devices, or nginx's log for
-  /admin/desktop/update.signed)
+- AC5 Retire admin/desktop/ and its nginx location: urls.md URL6 (with /p/desktop/)
 - AC6 Later: friends link their Riot ID (profile icon check, as Remove a Riot ID does);
   friends' groups become Squads (backlog.md "Your games and Squads") for the private
   tier first

@@ -112,6 +112,8 @@ recommendations"). A later decision that overrides an earlier one says so.
   /matchups/<role>/<a>-vs-<b>, no .html, 301 from every old URL) plus the five
   additions in docs/plan/urls.md; built after the notes run
 - nn on the GPU: planned, not now
+- J33 (30 Oct) Squads: yes, a minimal public form (invite-link pages, noindex, Riot IDs
+  shown to members only, games together, weekly recap), built later, once a lane frees
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built
 - Q3 Ban suggestions in scope: yes, several with games and range, never auto-ban
@@ -121,51 +123,67 @@ recommendations"). A later decision that overrides an earlier one says so.
   Pop!_OS install untouched; you format it and add it to wsl-mount.ps1), not a
   directory on the Pop!_OS partition
 - Patch day movers bar: z 2.58 (fewer, surer movers on a public page)
-- Storage and hosting: Hetzner BX11 for backups and old segments plus a rolling window
-  on the box (options (1) and (2) below); Jacob orders
+- Storage and hosting: C01's disk, Megatron the off-site copy (J31, vm.md VM8); no
+  BX11, no rolling window on the box
 
 ## Open decisions (Jacob)
 
-- Legal: retention periods (docs/legal/privacy.md top). Decided: controller "Jacob
-  Maschler, trading as meiolol", contact privacy@meio.lol (Namecheap forward to add)
-- Alerts and backups: an ntfy topic for phone alerts (NTFY_TOPIC in .env; the health loop
-  only logs until then); install the Mac job (`deploy/box.sh watch install`: notifications
-  + backup mirror); ok to delete de's pre-deploy copies in ml/meiolol/backup (1.8 GB)
-  after a second nightly backup
-- Squads as private invite-link pages with Riot IDs shown to members only
-- Budget for EUNE/TR/RU/ME in the europe bucket (EUW takes it all while it has players due)
-- Indexing (which pages and view search sees): open, decided on evidence of clicks
-- Name/domain: "lol" in name and TLD is a mild Riot-trademark risk
-- Storage and hosting (research/questions/free-hosting-storage.md): (1) Hetzner Storage
-  Box BX11, 1 TB for EUR 3.20/month, for off-host backups and old segments (~1.5 years
-  at full rate; B2 $6.95/TB second; no free option holds this); (2) keep a rolling
-  window of match data on the box instead of everything (recommended, also less
-  personal data kept); (3) Oracle Pay As You Go: still free within limits, A1 capacity
-  sooner, paid disk possible; (4) ok to delete the unattached April 47 GB "Jomify (Boot
-  Volume)" to free block storage. GitHub/Hugging Face ruled out: size limits, "not a
-  backup tool", erasure from git history impractical
+The one list: each with the recommended answer. Plan files point here.
 
-- Questions from the night run's notes (data/team/2026-10-19-night/<agent>.md):
-  - Champion/matchup: "vs usual" quiet for most matchups (-3 to +2 on big ones): fine,
-    or a wider range shown? Opponent grid mostly grey now that only vs usual is
-    coloured: wanted? Matchup CS split "about 20 gold a CS" clear, or raw CS and gold?
-    Matchups index lists 50+ game pairs only (page weight): fine? "% won" on build
-    options: ok, or games and share only?
-  - Your games: moments list, keep all or only those that moved win chance? "(lane)"
-    after the lane opponent's name clear? Last player reopens on every visit, or only
-    within a day?
-  - Daily Draft: items and summoner spells on the scoreboard too? Keep the "Blue wins it
-    more" lane chip (draft model's lane edge, words only)?
-  - Learn: keep the old lessons as "Basics"? Daily streak on Learn or Daily Draft?
-    Levels lock or stay pickable? (docs/learn-proposal.md is the redesign)
-  - Site: preview banner as a slim strip or a header badge? Blue means both "good" and
-    "your side" in review and Daily Draft: ok?
-  - Privacy (docs/privacy-rules.md "For Jacob"): retention lengths; ICO fee and EEA
-    representative (names on public pages: J18)
-  - Desktop: lane card gold coloured by sign alone or only 2 SE from even? Refresh or
-    drop data/desktop (v4 curves)?
-  - jomify: "Tešter#EUW" was looked up by a test and is stored (ages out in 30 days);
-    `meiolol forget` it now?
+Unblocking work:
+- Phone alerts: a private ntfy.sh topic as NTFY_TOPIC in .env (health-loop.sh pushes
+  once it is set). Recommended yes; Jacob 30 Oct: not now
+- gpu-box: Windows Tailscale login (jmw) and WSL's sudo for Tailscale there, so its
+  backup mirror and archive pull run again (stale since 28 Oct). Recommended: when the PC
+  is on
+- Revised application text (production-key.md): don't paste while queued (editing
+  reportedly resets the queue); keep it for Riot's reply
+- 16.21 frozen test look (patch-transfer.md, code frozen f58587b6): go when the gpu-box
+  is on
+- Comp leans' blocker (data-and-model.md step 1): a per-seat stats table in meiolol.db
+  written at crawl time plus a one-off backfill from the archive. Recommended yes
+- Old /private tester: an index first, the old tester at /private/old/ until
+  /private/tester has its features (coordinator's pick; stands unless Jacob says)
+- W9 note 39 (Daily streak pips): look at its shots (on the PC), then merge
+  wip/pc-2026-10-30/w9-note39
+- Portraits as one 120 px AVIF: avifenc in the art pipeline and libavif-bin on C01, no
+  fallback for non-AVIF browsers. Recommended yes to both
+- BS3: ci, pre-push ci and deploy builds on the gpu-box when free (build-speed.md).
+  Recommended yes once the PC is on reliably
+- ~50 stale worktrees (all on wip/mac-2026-10-29-wt/*): prune. Recommended yes
+
+Product:
+- Champion page CH0: (d) trends by patch, by day only inside the newest patch; (e) no
+  blind-safe score (J2 measured no win), rune rows by melee or ranged opponent yes,
+  purchases by gold lead later
+- Estimates E0: name "Meio"; default stays 30 days until E2 holds two patches; EUW and
+  every region now
+- Lab P3 test-look rule (lab-frontier.md): accept as written (2004Z's test, the ladder
+  as listed, comp leans on win-draft as declared)
+- Comp-lean reasons in the desktop app's champ select once the held-out look passes:
+  yes, as context words, never a percentage or an order
+- Pick-up difficulty somewhere general again: a column on the champions index
+- Pool page keeps the chosen mains in the browser: yes, like Your games' last player
+- Your games "the top": what exactly? A note on the live page with the notes tool
+- Desktop lane gold colour: only 2 SE from even (as arch-app.md and the app's pills)
+- Later pages, not blocking: ui/contextual-builds.md Q1-3 (an aggregates service first,
+  rows to the browser only after the key), ui/rankings.md Q1-2, ui/why.md Q1-3: the
+  plans' leans
+
+Hosts, legal, ops:
+- Oracle box (stopped, kept for a benchmark): terminate once the benchmark is recorded;
+  delete the unattached 47 GB "Jomify (Boot Volume)" now
+- AC4 desktop sign-in cut-over: release an exe with sign in now (step 1), testers sign
+  in, then the key line goes from C01's nginx; AC0: who gets the first private accounts
+- Privacy: retention periods as docs/legal/privacy.md drafts them; ICO registration
+  before the production review; an EEA representative only once EU users are targeted
+- Old-box leftovers: de's 1.8 GB pre-deploy copies in ml/meiolol/backup: delete
+- EUNE/TR/RU/ME budget in the europe bucket: EUW first until the production key
+- Name and domain: keep meio.lol (the application quotes it); indexing stays open,
+  decided on evidence of clicks
+- The night run's page questions (19 Oct): closed, the rebuilt pages answered most;
+  re-ask any still live through the notes tool. "Tešter#EUW", looked up by a test:
+  `meiolol forget` it now
 
 ## Ruled out (do not revisit without new facts)
 

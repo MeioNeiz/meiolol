@@ -47,10 +47,10 @@ drops.
 ## Traffic
 
 deploy/traffic.sh counts a browser-agent page view as a person only when the same agent
-fetched /style.css within 60 s (pages revalidate it on every load and link with
-no-referrer, so the match is by agent); most of the old count was bots. Scanners (.env,
-.php, wp-) are 404s, never page views. The admin traffic tab shows people, unconfirmed
-and bots. Next, only if needed:
+fetched /print.css within 60 s (every page links it no-cache, so browsers revalidate it
+on each load; pages link with no-referrer, so the match is by agent); most of the old
+count was bots. Scanners (.env, .php, wp-) are 404s, never page views. The admin traffic
+tab shows people, unconfirmed and bots. Next, only if needed:
 - Headless bots that load CSS still count. A JS beacon (nginx location, Jacob installs)
   would add little over the CSS match: proposal in data/team/2026-10-19-night/traffic.md
 - Cloudflare analytics comparison if the zone gets proxied
@@ -61,9 +61,8 @@ and bots. Next, only if needed:
   (docs/data-safety.md "Raw archive"). The databases grow ~3.6 GB a day (meiolol.db and timeline.db ~8 KB a
   match each); box backups prune once both mirrors hold them (backup-loop.sh re-execs
   the deployed script each day). The admin's "full in ~N days" counts the databases only
-- Off-site and rolling window: Hetzner BX11 plus a ~30-day window on the box
-  (decisions.md "Storage and hosting", data-and-model.md step 7). Jacob orders; the
-  admin's "full in ~N days" is the deadline
+- Off-site: Megatron (J31); no rolling window on the box. The admin's "full in ~N days"
+  is the deadline for anything more
 - gpu-box C: at 90% (the archive is on the P3, safe). Left: docs/compute.md "gpu-box storage", Open
   "gpu-box storage", compacting the WSL disk (~120 GB back, C: to ~77%); it stops WSL,
   so when the gpu-box is idle, after warning its sessions
@@ -71,7 +70,7 @@ and bots. Next, only if needed:
   skips a just-rotated empty log
 - NIC offload on the gpu-box if other home ssh dies ("message authentication code
   incorrect")
-- Alerts and backups: decisions.md "Open decisions" (ntfy topic, Mac watch job)
+- Phone alerts: decisions.md "Open decisions" (ntfy topic); the Mac watch job runs
 - Crawl floor Gold IV once the key's rate allows (Q4)
 - Incremental snapshots ("adding to the data rather than copying it"): daily now, but
   each make still restores the whole mirror, anonymises, splits and packs (~70 min on

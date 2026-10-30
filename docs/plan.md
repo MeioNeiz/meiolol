@@ -31,52 +31,48 @@ patch moves numbers), lab-frontier.md (models); findings land in docs/learned.md
 
 ## Now
 
-Ranked by harm: outages and data risk, then what Riot's reviewers see, then what brings
-players back.
+Legacy UI off first (Jacob, 30 Oct), then by harm: outages and data risk, then what
+Riot's reviewers see, then what brings players back. Jacob's open decisions:
+decisions.md "Open decisions".
 
-1. Storage and hosts: C01 runs everything (docs/plan/vm.md; data disk 405 GB free on 30
-   Oct at ~3.6 GB a day). Left: the gpu-box step once it is on Tailscale, VM7-8;
-   gpu-box WSL compaction: ops.md "Storage and hosts"
-2. Front end from the ground up (J29, J30): one UI for the site and the desktop. Page
-   plans and the foundation in docs/plan/ui/, the stack in docs/plan/ui/stack.md,
-   Jacob's answers in each plan. Next: a visual pass on the gallery and the mocks he
-   found plain, with the foundation build (tree core, island runtime) beside it.
-   Direction: docs/frontend.md
-3. Champion and matchup pages to LoLalytics' level (gaps, measurements and target
-   layout: docs/champion-matchup.md): site.md CH0 (Jacob's choices), then the open CH
-   and MU steps, CH1 first screen first; Learn redesign (docs/learn-proposal.md); Daily
-   Draft pick verdicts (site.md "Daily Draft")
-4. Application: Jacob checks the draft text and pastes it (production-key.md);
-   screenshots, video and LCU list need his real champ select run (app.md APP1);
-   docs/privacy-rules.md lists what the text and privacy page must still match (J10);
-   eight gaps for Jacob (archive wording and LCU list in the text, controller name, mail
-   retention): data/team/2026-10-23-progress/prodkey-notes.md "For Jacob"
-5. Accounts and two apps (J21): roles public, paid, private, admin, owner. Jacob's:
-   the AC4 desktop sign-in cut-over (release, testers sign in, then the shared key
-   goes), the first private accounts, APP1 (real capture). Next: app.md APP3-APP4
-   against the mock; the Draft tester moves to the private site (app.md "Private site")
-6. Comp leans: the held-out look, then champion pages and reasons: data-and-model.md.
-   The desktop app gets A4 once web-loop.sh's strip_fitted goes
-7. The latest patch (J25, J27, J28): docs/plan/patch-transfer.md. Evaluate on
-   latest-patch games only, day by day; old patches always pooled with a correction
-   between patches (shrunk per-patch offsets the main candidate). PT1-PT3 dev done
-   (A2, pooled + offsets, wins from day 1); the frozen test look on 16.21 days 4+
-   (model.md) waits Jacob's go; the Patch changes page says why each champion moved
-   (site.md PC1-PC2)
-8. The data edge (J23, J24): day cubes as storage (E7) so any patch, season, rank and
-   region is a sum, a public truth test (E2) and "Meio", one estimate per number from
-   every game, patch and season history views (E10): docs/plan/estimates.md. Items 6
-   and 7 feed it
-9. Our Zig "libraries" toward what the Rust crates give, checks outside ci: the open
-   additions in docs/plan/libraries.md
-10. Jacob's open decisions: decisions.md "Open decisions"
-11. Professional URLs (J32): done, every page on the scheme (docs/plan/urls.md)
-12. Build speed (Jacob 29 Oct: keep sessions working at pace): next BS2 (slots mean
-    cores), BS3 (ci and deploy builds on the gpu-box, with W8), BS4 (slow tests):
-    docs/plan/build-speed.md
-
-Others own: the TW2 mastery retry (meiolol-8f); neural nets vs today's model; the
-draft's "Rammus into high AD/AP" check.
+1. Legacy UI off, public (stack.md): the legacy head and style.css are gone. Left: each
+   page inlines only its own CSS (cold FCP 768 vs 1504 ms, research css-per-page), then
+   a CSP and Trusted Types live on meio.lol without console errors. Keep the print.css
+   link: traffic.sh counts people by it. Owner W1
+2. Legacy UI off, private (app.md "Private site"): /private is an index, the old JS
+   tester at /private/old. Done when /private/tester has its bans, Random/Fill/Undo,
+   lane model, compare and set net, and /private/old, admin.js, admin-draft.js,
+   admin-setnet.js and admin.css are gone, pv.js an island. Owner W4
+3. Crawler at 99%+ of the key, every region, every hour (ops.md J16): done when hourly
+   key use holds 97-100% per region through a gpu-box catch-up and a daily job, with a
+   learned.md line. Owner W6; the catch-up test needs the gpu-box on
+4. URL leftovers (urls.md): retire /p/desktop/ and /admin/desktop/ (AC5) once installed
+   apps update from /private/desktop/ (how we know: urls.md URL6). Unowned
+5. Alerts and hosts: health alerts reach Jacob's phone (open decision), the gpu-box on
+   Tailscale with its backup mirror and archive pull current, VM8 (vm.md), WSL
+   compaction when idle (ops.md "Storage and hosts"). Owner coordinator; blocked on
+   Jacob
+6. The site matches the application as submitted (production-key.md): "friends can group
+   up to see recaps of the games they played together" has only Your games' Friends
+   view. Squads, minimal (J33; backlog.md "Your games and Squads"), so every claim is one
+   click from the home page. Unowned, after a lane frees. APP1 gives the app's
+   screenshots
+7. Daily Draft and Learn (site.md): Daily's pick verdicts (J26: every option's rank, who
+   should have won, lanes won), share with facts; Learn's myth-or-measured cards from
+   final learned.md lines. Owner W3
+8. Champion and matchup pages to LoLalytics' level (docs/champion-matchup.md): CH0's
+   open choices, then site.md's CH Later list. Unowned; CH0 waits Jacob
+9. The data edge (J23, J24; estimates.md): E7 day cubes, then E2's truth test, then
+   Meio. Items 11 and 12 feed it. Owner W2
+10. Accounts and the desktop app (J21; app.md, accounts.md): AC4 sign-in cut-over and
+    APP1 real capture (Jacob's), then APP4-APP6's left items. Owner W4 after item 2
+11. The latest patch (J25, J27, J28; patch-transfer.md): the frozen 16.21 test look,
+    then PT4 and PT6 on A2. Blocked on Jacob's go and the gpu-box
+12. Comp leans (data-and-model.md): the held-out look, then champion pages and reasons.
+    Blocked on the per-seat stats decision and the gpu-box
+13. Build speed (build-speed.md): BS4's pipeline gzip, BS6's islands out of `test`;
+    BS3 waits Jacob. Owner W5
+14. Our Zig libraries toward the Rust crates (libraries.md "Next"). Unowned
 
 ## Areas
 

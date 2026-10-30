@@ -55,4 +55,4 @@ into its own design trap. Use judgement per case.
   errors, failed requests; warnings only; --webkit, --shots DIR). Its own build is
   -Dwasm-dev: ui.wasm with safety checks, and zjb handles neither kept nor released
   reported (rule: src/site/ui/wasm/dom.zig's top)
-- Status: docs/plan.md "Now" item 3
+- Status: docs/plan.md "Now" items 1-2 (legacy off)

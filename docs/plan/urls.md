@@ -36,8 +36,19 @@ filter URLs and canonicals). Any URL work follows this file; change it here firs
 - URL1-URL4 (done 28-29 Oct): ui/urls.zig spells every page's URL and reads it back;
   the generator, wasm, nginx and serve.zig on the scheme; old-URL redirects removed 29 Oct
 - URL5 (done 29 Oct): /admin and /private (was /p/) without .html, no redirects from
-  the old paths. Installed private apps' update check still reads /p/desktop/ (the same
-  files, not a redirect) until they have all updated
+  the old paths
+- URL6 Retire /p/desktop/ (apps built before URL5 check for updates there; the same
+  files, not a redirect) and /admin/desktop/ (AC5, apps still on the shared key).
+  How we know: C01's nginx log (/var/log/nginx/meiolol.access.log, JSON lines, `u` the
+  path) shows no GET of /p/desktop/update.signed or /admin/desktop/update.signed for 14
+  days after the last release whose update base is /private/desktop/; the account
+  page's devices say who signed in. 27-30 Oct: /admin/desktop/update.signed 200 (29 Oct,
+  an app on the key), /p/desktop/update.signed 401 twice (a signed-out app). Then drop
+  both nginx locations; an app left behind needs a fresh download
+- Checked 30 Oct from C01: the application text (submitted and revised) and
+  production-key.md quote only meio.lol and privacy@meio.lol; every page they name
+  (/, /your, /daily, /learn, /pool, /champions, /matchups, /patch, /method, /privacy,
+  /terms, /download) answers 200
 
 ## Risks
 
