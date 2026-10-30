@@ -235,8 +235,10 @@ the index pages it touched). Between batches the writer prunes, one 500-row chun
 time: raw documents, unseen players and old mastery, PUUIDs past 24 months, and matches
 past `--keep-days` with their participants, bans and timelines (not their draft rows;
 not matches still waiting for the draft backfill). Only the writer's
-connection has a big page cache (`--cache-mb`, default 64); WAL files are capped at 64
-MB after a checkpoint. Why: on the 1/8-OCPU micro 19 writing threads waited on the lock
+connection has a big page cache (`--cache-mb`, default 64). A checkpointer thread on
+its own connection copies WAL frames every 2 s (PASSIVE, beside commits) and truncates
+a WAL once nearly all copied (at most a minute apart; files capped at 64 MB); the
+writer never checkpoints, as a truncate blocks commits while it copies. Why: on the 1/8-OCPU micro 19 writing threads waited on the lock
 (holders descheduled mid-transaction, gzip inside it), and per-row commits with 2 MB
 caches wrote 43 GB and read 32 GB in 4 hours for ~2k matches.
 
@@ -257,7 +259,10 @@ caches wrote 43 GB and read 32 GB in 4 hours for ~2k matches.
   ladder already lists every ranked player)
 - main thread: per-region report every minute, plus writer jobs, commits, queue length,
   busy retries and the writer's pages written and read (cache misses; page = 4 KB; a
-  checkpoint writes pages again). On start, drops 'done' rows older crawlers left in the
+  checkpoint writes pages again); then a "time %" line: each region's (and all
+  platform threads') minute split into rate limit slot wait, Riot's answers, blocked on
+  a full writer queue, waiting for commits and the rest (reads, parsing, naps), and the
+  writer's commit and checkpoint seconds with the longest of each. On start, drops 'done' rows older crawlers left in the
   queues, and with an empty timeline_queue queues timelines for crawled matches
 
 Benchmark: `deploy/bench-crawl.sh seed DIR`, then `run DIR MINUTES [slow|micro]` crawls

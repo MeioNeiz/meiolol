@@ -5,17 +5,27 @@ docs/data-safety.md.
 
 ## Crawler at 99%+ of the key (J16)
 
-Steady hours use ~97-100% of the key per region (crawl.log report lines: region
-requests vs 100 per 120 s). In place: rate windows saved and reloaded across restarts
-with a paced catch-up of up to 16 slots, so a deploy restart costs seconds, not 2-3
-minutes; MemoryHigh=6G on the web loop and box jobs; idle IO priority for export, pack,
-ack and prune, with rests between catch-up passes.
-- Dips left: daily jobs and runs of deploys (50-94% for an hour while a job reads
-  meiolol.db hard and the writer's commits stall). If they stay: pipelined steps
-  instead of Bucket.flush after each, or BFQ (mq-deadline honours ionice -c 3 only
-  partly)
-- Sea runs ~98.6% (long round trips, one request at a time) and has few "due" players,
-  so more id lookups per new match: a yield question, not key use
+Steady hours use ~97-100% of the key per region on C01 as on the Oracle box (crawl.log
+report lines: region requests vs 100 per 120 s; a report's totals run from the
+crawler's start, so a dip drags them for a day: measure per hour). In place: rate
+windows saved and reloaded across restarts with a paced catch-up of up to 16 slots, so
+a deploy restart costs seconds, not 2-3 minutes; MemoryHigh=6G on the web loop and box
+jobs; idle IO priority for export, pack, ack and prune, with rests between catch-up
+passes; WAL checkpoints in their own thread, never the writer's; ack prunes keep 8 GB
+of raw.db's free pages instead of moving pages back to the disk.
+- The big loss was the gpu-box's archive catch-up on C01's disk (29-30 Oct: 70-90% for
+  11 hours after a day offline): each ack's prune moved ~500 MB of raw.db pages and
+  left a GB of WAL, and the writer's own checkpoint copied it while blocking commits:
+  0-2 commits a minute for minutes at a time, the queue full, every region idle. Fixed
+  30 Oct as above; the next catch-up is the test. The "time %" report line shows where
+  each region's minute goes (slot wait is budget-bound, the rest is lost key use)
+- Dips left: daily jobs and runs of deploys (90-95% for an hour while a job reads
+  meiolol.db hard). If they stay: pipelined steps instead of Bucket.flush after each,
+  or BFQ (mq-deadline honours ionice -c 3 only partly)
+- Sea runs ~93-95% on C01 (~98% on Oracle): one request at a time, and its answers
+  take longer than the 1.2 s pace leaves room for, so slots lost to a flush or a read
+  are barely caught up. Its few "due" players mean more id lookups per new match: a
+  yield question, not key use
 
 ## Crawler speed
 
@@ -47,7 +57,7 @@ and bots. Next, only if needed:
 
 ## Storage and hosts
 
-- Box disk: raw.db runs auto_vacuum=INCREMENTAL, so prunes return pages
+- Box disk: raw.db runs auto_vacuum=INCREMENTAL; prunes return free pages past 8 GB
   (docs/data-safety.md "Raw archive"). The databases grow ~3.6 GB a day (meiolol.db and timeline.db ~8 KB a
   match each); box backups prune once both mirrors hold them (backup-loop.sh re-execs
   the deployed script each day). The admin's "full in ~N days" counts the databases only

@@ -130,6 +130,7 @@ const RegionCounters = struct {
     /// Timelines the sample skipped, fetched with spare budget
     backfill: std.atomic.Value(u64) = .init(0),
     idle_s: std.atomic.Value(u64) = .init(0),
+    times: Times = .{},
 };
 
 const Counters = struct {
@@ -137,6 +138,20 @@ const Counters = struct {
     ladder_pages: std.atomic.Value(u64) = .init(0),
     mastery: std.atomic.Value(u64) = .init(0),
     platform_requests: std.atomic.Value(u64) = .init(0),
+    platform_times: Times = .{},
+};
+
+/// Where a group of threads' time goes, ns. The rest is database reads, parsing and naps
+const Times = struct {
+    spent: @import("client.zig").Spent = .{},
+    /// Blocked on a full writer queue
+    submit: std.atomic.Value(u64) = .init(0),
+    /// Waiting for the writer to commit what the thread queued
+    flush: std.atomic.Value(u64) = .init(0),
+
+    fn values(t: *const Times) [4]u64 {
+        return .{ t.spent.slot.load(.monotonic), t.spent.riot.load(.monotonic), t.submit.load(.monotonic), t.flush.load(.monotonic) };
+    }
 };
 
 pub const Crawler = struct {
@@ -162,6 +177,11 @@ pub const Crawler = struct {
     key_ok_at: ?i64 = null,
     /// --timelines-sparse counts: seeded by run(), then the writer's alone
     sparse: sparse.Cells = .{},
+    /// report's previous Times values (regions, then platforms) and writer times, for
+    /// each line's share of the minute
+    reported_times: [all_regions.len + 1][4]u64 = @splat(@splat(0)),
+    reported_writer: [2]u64 = @splat(0),
+    reported_at_ns: u64 = 0,
 
     pub fn run(c: *Crawler) !void {
         c.limiters = try .init(c.gpa, c.io);
@@ -190,6 +210,9 @@ pub const Crawler = struct {
         c.writer = .{ .c = c };
         defer c.writer.deinit();
         const writer_thread = try std.Thread.spawn(.{}, writer.Writer.run, .{&c.writer});
+        // Joined after stopAll, which sets c.stop
+        const checkpointer = try std.Thread.spawn(.{}, writer.checkpoints, .{&c.writer});
+        defer checkpointer.join();
         var threads: std.ArrayList(std.Thread) = .empty;
         defer threads.deinit(c.gpa);
         defer c.stopAll(&threads, writer_thread);
@@ -197,6 +220,7 @@ pub const Crawler = struct {
         log.info("{d} threads for {d} regions", .{ threads.items.len, c.opts.regions.len });
 
         const started = c.nowS();
+        c.reported_at_ns = nowNs(c.io);
         var last_report = started;
         var saved_ok = true;
         while (!c.stop.load(.acquire)) {
@@ -386,6 +410,52 @@ pub const Crawler = struct {
         log.info("scans, ids calls/new{s}", .{
             w.buffered(),
         });
+        c.reportTimes();
+    }
+
+    /// Each thread group's minute, % (slot wait, Riot, writer queue full, waiting for
+    /// commits, rest), then the writer's commit and checkpoint seconds (total, longest)
+    fn reportTimes(c: *Crawler) void {
+        const now = nowNs(c.io);
+        const span = now - c.reported_at_ns;
+        c.reported_at_ns = now;
+        if (span == 0) return;
+        var buf: [512]u8 = undefined;
+        var w: std.Io.Writer = .fixed(&buf);
+        var platforms: u64 = 0;
+        for (c.opts.regions) |r| {
+            const i = @backingInt(r);
+            shares(&w, @tagName(r), &c.counters.region[i].times, &c.reported_times[i], span) catch break;
+            for (ep.platforms) |p| platforms += @intFromBool(p.region == r);
+        }
+        if (platforms > 0) {
+            shares(&w, "platforms", &c.counters.platform_times, &c.reported_times[all_regions.len], span * platforms) catch {};
+        }
+        const ws = &c.writer.stats;
+        const commit = ws.commit_ns.load(.monotonic);
+        const checkpoint = ws.checkpoint_ns.load(.monotonic);
+        const s = std.time.ns_per_s;
+        log.info("time %, slot/riot/full/commits/rest{s} | writer commits {d:.1}s, longest {d:.1}s, " ++
+            "checkpoints {d:.1}s, longest {d:.1}s", .{
+            w.buffered(),
+            @as(f64, @floatFromInt(commit - c.reported_writer[0])) / s,
+            @as(f64, @floatFromInt(ws.commit_max_ns.swap(0, .monotonic))) / s,
+            @as(f64, @floatFromInt(checkpoint - c.reported_writer[1])) / s,
+            @as(f64, @floatFromInt(ws.checkpoint_max_ns.swap(0, .monotonic))) / s,
+        });
+        c.reported_writer = .{ commit, checkpoint };
+    }
+
+    fn shares(w: *std.Io.Writer, name: []const u8, times: *const Times, last: *[4]u64, span: u64) !void {
+        const now = times.values();
+        try w.print(" | {s}", .{name});
+        var used: u64 = 0;
+        for (now, last) |v, l| {
+            used += v - l;
+            try w.print(" {d}", .{(v - l) * 100 / span});
+        }
+        try w.print(" {d}", .{(span -| used) * 100 / span});
+        last.* = now;
     }
 
     fn isPriority(c: *const Crawler, p: ep.Platform) bool {
@@ -411,6 +481,10 @@ pub const Crawler = struct {
 
     fn nowS(c: *Crawler) i64 {
         return std.Io.Clock.real.now(c.io).toSeconds();
+    }
+
+    fn nowNs(io: std.Io) u64 {
+        return @intCast(std.Io.Clock.awake.now(io).nanoseconds);
     }
 
     pub fn fail(c: *Crawler, err: anyerror) void {
@@ -578,14 +652,16 @@ const Bucket = struct {
     reported_requests: u64 = 0,
     /// Sequence number of this thread's newest job, for flush
     last_seq: u64 = 0,
+    times: ?*Times = null,
 
     /// run() migrated already; threads only connect
-    fn init(c: *Crawler, name: []const u8, priority: bool, requests: *std.atomic.Value(u64)) !Bucket {
+    fn init(c: *Crawler, name: []const u8, priority: bool, requests: *std.atomic.Value(u64), times: *Times) !Bucket {
         const db = try store.schema.connect(c.gpa, c.opts.data_dir);
         errdefer db.close();
         var client: Client = .init(c.gpa, c.io, c.opts.key, c.limiters.get(name).?);
         client.fake = c.opts.fake;
-        return .{ .c = c, .name = name, .db = db, .client = client, .priority = priority, .requests = requests };
+        client.spent = &times.spent;
+        return .{ .c = c, .name = name, .db = db, .client = client, .priority = priority, .requests = requests, .times = times };
     }
 
     fn deinit(b: *Bucket) void {
@@ -602,12 +678,16 @@ const Bucket = struct {
 
     /// Hand a job to the writer, which owns it from then on
     fn submit(b: *Bucket, job: *Job) !void {
+        const t = Crawler.nowNs(b.c.io);
         b.last_seq = try b.c.writer.submit(job, b.priority);
+        if (b.times) |times| _ = times.submit.fetchAdd(Crawler.nowNs(b.c.io) - t, .monotonic);
     }
 
     /// Until everything this thread queued is committed: before reading what it changes
     fn flush(b: *Bucket) !void {
+        const t = Crawler.nowNs(b.c.io);
         try b.c.writer.wait(b.last_seq);
+        if (b.times) |times| _ = times.flush.fetchAdd(Crawler.nowNs(b.c.io) - t, .monotonic);
     }
 
     fn check(b: *Bucket) !void {
@@ -759,9 +839,9 @@ const RegionCrawler = struct {
     const Of = ep.Region;
 
     fn init(c: *Crawler, r: ep.Region) !RegionCrawler {
-        const requests = &c.counters.region[@backingInt(r)].requests;
+        const rcs = &c.counters.region[@backingInt(r)];
         var rc: RegionCrawler = .{
-            .b = try .init(c, @tagName(r), c.isPriorityRegion(r), requests),
+            .b = try .init(c, @tagName(r), c.isPriorityRegion(r), &rcs.requests, &rcs.times),
             .region = r,
             .patches = c.patches,
         };
@@ -1247,7 +1327,7 @@ const PlatformCrawler = struct {
     const Of = ep.Platform;
 
     fn init(c: *Crawler, p: ep.Platform) !PlatformCrawler {
-        return .{ .b = try .init(c, p.host, false, &c.counters.platform_requests), .platform = p };
+        return .{ .b = try .init(c, p.host, false, &c.counters.platform_requests, &c.counters.platform_times), .platform = p };
     }
 
     fn step(pc: *PlatformCrawler) !void {

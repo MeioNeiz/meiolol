@@ -91,7 +91,7 @@ pub fn cmdRawExport(c: *Cmd) !u8 {
         try archive.ack(io, db, dir, name, now);
         try w.print("acked {s}\n", .{name});
     } else if (prune) {
-        const p = try archive.pruneAcked(db, keep_days, now);
+        const p = try archive.pruneAcked(db, io, keep_days, now);
         try w.print("dropped {d} raw summaries, {d} raw timelines, acked and {d} days old\n", .{ p.summaries, p.timelines, keep_days });
     } else if (try archive.exportNew(c.arena, io, db, dir, now)) |e| {
         try w.print("{s}\t{d}\t{d}\t{d}\t{d}\t{d}\n", .{ e.name, e.summaries, e.timelines, e.mastery, e.pruned, @intFromBool(e.more) });

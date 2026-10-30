@@ -486,7 +486,7 @@ fn isExportName(name: []const u8) bool {
 
 /// Drops raw documents that are acked (older than every unacked export) and older than
 /// `keep_days`
-pub fn pruneAcked(db: store.Db, keep_days: u32, now_s: i64) !Pruned {
+pub fn pruneAcked(db: store.Db, io: Io, keep_days: u32, now_s: i64) !Pruned {
     const acked_until = (try store.schema.archivedUntil(db)) orelse 0;
     const cutoff = @min(acked_until, now_s - @as(i64, keep_days) * std.time.s_per_day);
     var out: Pruned = .{ .summaries = 0, .timelines = 0 };
@@ -509,24 +509,37 @@ pub fn pruneAcked(db: store.Db, keep_days: u32, now_s: i64) !Pruned {
         out.timelines += n;
         if (n == 0) break;
     }
-    const freed = try returnFree(db);
+    const freed = try returnFree(db, io, prune_keep_free);
     if (freed > 0) log.info("prune: {d} MB of raw.db returned to the disk", .{freed >> 20});
     return out;
 }
 
-/// Hands raw.db's free pages back to the disk, ~100 MB a write transaction (the
-/// crawler's writer shares raw.db); bytes returned. Only with auto_vacuum=INCREMENTAL,
-/// which a VACUUM sets (docs/data-safety.md "Raw archive"); without it freed pages stay
-/// for new raw to reuse. Not in an export's prune: that runs in the gpu-box's ssh
-/// session, which the home link kills; the next ack's prune returns those pages
-pub fn returnFree(db: store.Db) !i64 {
+/// Free raw.db pages an ack's prune leaves for new raw to reuse: about a day of raw at
+/// the key's rate. Handing pages back moves pages from the file's end, a GB of writes an
+/// ack, which on C01's disk held the crawler's commits for minutes on end through a
+/// catch-up (29-30 Oct); the data disk has room for raw.db at its high-water mark
+pub const prune_keep_free = 8 << 30;
+/// Pages a write transaction hands back (the crawler's writer shares raw.db), and the
+/// rest between transactions so its commits get in
+const vacuum_step = 2560;
+const vacuum_rest_ms = 500;
+
+/// Hands raw.db's free pages past `keep_bytes` back to the disk; bytes returned. Only
+/// with auto_vacuum=INCREMENTAL, which a VACUUM sets (docs/data-safety.md "Raw
+/// archive"); without it freed pages stay for new raw to reuse. Not in an export's
+/// prune: that runs in the gpu-box's ssh session, which the home link kills; the next
+/// ack's prune returns those pages
+pub fn returnFree(db: store.Db, io: Io, keep_bytes: i64) !i64 {
     if (try int(db, "PRAGMA raw.auto_vacuum", .{}) != 2) return 0;
     const page = try int(db, "PRAGMA raw.page_size", .{});
+    const keep = @divFloor(keep_bytes, page);
     var freed: i64 = 0;
+    var buf: [64]u8 = undefined;
     while (true) {
         const before = try int(db, "PRAGMA raw.freelist_count", .{});
-        if (before == 0) break;
-        try db.exec("PRAGMA raw.incremental_vacuum(25600)");
+        if (before <= keep) break;
+        if (freed > 0) try io.sleep(.fromMilliseconds(vacuum_rest_ms), .awake);
+        try db.exec(try std.mem.printSentinel(&buf, "PRAGMA raw.incremental_vacuum({d})", .{@min(before - keep, vacuum_step)}, 0));
         const after = try int(db, "PRAGMA raw.freelist_count", .{});
         if (after >= before) break;
         freed += (before - after) * page;
@@ -601,7 +614,7 @@ pub fn valve(
     if (free_mb >= min_free_mb) return null;
     try db.exec(ddl);
     const d = try dropExport(arena, io, db, dir, now_s) orelse try dropRaw(arena, db) orelse return null;
-    if (d.kind == .raw) _ = try returnFree(db);
+    if (d.kind == .raw) _ = try returnFree(db, io, 0);
     const free: i64 = @intCast(free_mb);
     try db.run("INSERT INTO raw.archive_dropped VALUES (?,?,?,?,?,?,?,?)", .{
         now_s, @tagName(d.kind), d.name, d.from_s, d.to_s, d.docs, d.bytes, free,
@@ -737,16 +750,16 @@ test "export, ack, prune only what is acked and old enough" {
     const second = (try exportNew(arena, io, db, out, later)).?;
     try testing.expectEqual(1, second.summaries);
     try testing.expectEqual(null, try exportNew(arena, io, db, out, later));
-    try testing.expectEqual(0, try returnFree(db)); // auto_vacuum off: pages stay
+    try testing.expectEqual(0, try returnFree(db, io, 0)); // auto_vacuum off: pages stay
 
     // Acking the newer export alone drops nothing: the older one still waits
     try ack(io, db, out, second.name, later);
-    try testing.expectEqual(Pruned{ .summaries = 0, .timelines = 0 }, try pruneAcked(db, 0, later));
+    try testing.expectEqual(Pruned{ .summaries = 0, .timelines = 0 }, try pruneAcked(db, io, 0, later));
     try testing.expectEqual(1, (try status(db, later)).unacked);
     // Both acked: everything older than 2 days goes, the fresh summary stays
     try ack(io, db, out, first.name, later);
     try ack(io, db, out, first.name, later);
-    try testing.expectEqual(Pruned{ .summaries = 1, .timelines = 0 }, try pruneAcked(db, 2, later));
+    try testing.expectEqual(Pruned{ .summaries = 1, .timelines = 0 }, try pruneAcked(db, io, 2, later));
     try testing.expectEqual(1, try int(db, "SELECT count(*) FROM raw.raw_docs", .{}));
     try testing.expectEqual(0, (try status(db, later)).unacked);
     // The ack deleted the file
@@ -842,7 +855,7 @@ test "a backlog goes in windows; a received file goes before the ack, and stays 
     try list(arena, io, db, out, &w);
     try testing.expect(std.mem.endsWith(u8, w.buffered(), try arena.print("{s} received\n", .{b.name})));
     // Received yet unacked: summaries stay, and the valve passes it over
-    try testing.expectEqual(Pruned{ .summaries = 0, .timelines = 0 }, try pruneAcked(db, 0, now));
+    try testing.expectEqual(Pruned{ .summaries = 0, .timelines = 0 }, try pruneAcked(db, io, 0, now));
     const saved = testing.log_level;
     defer testing.log_level = saved;
     testing.log_level = .err;
@@ -852,7 +865,7 @@ test "a backlog goes in windows; a received file goes before the ack, and stays 
 
     try ack(io, db, out, b.name, now);
     try testing.expectError(error.NotUnacked, received(io, db, out, b.name, now));
-    try testing.expectEqual(Pruned{ .summaries = 2, .timelines = 0 }, try pruneAcked(db, 0, now));
+    try testing.expectEqual(Pruned{ .summaries = 2, .timelines = 0 }, try pruneAcked(db, io, 0, now));
 }
 
 test "an export prunes only the timelines it holds, never failed parses" {
@@ -979,13 +992,17 @@ test "freed raw pages go back to the disk once auto_vacuum is incremental" {
     defer db.close();
     try db.exec("PRAGMA raw.auto_vacuum = INCREMENTAL; VACUUM raw");
     try db.exec(
-        \\WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000)
+        \\WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3000)
         \\INSERT INTO raw.timeline_docs SELECT 'EUW1_' || i, 1, randomblob(4000) FROM n
     );
     const pages = try int(db, "PRAGMA raw.page_count", .{});
     try db.exec("DELETE FROM raw.timeline_docs");
-    try testing.expect(try int(db, "PRAGMA raw.freelist_count", .{}) > 0);
-    try testing.expect(try returnFree(db) > 4000 * 1000);
+    const free = try int(db, "PRAGMA raw.freelist_count", .{});
+    try testing.expect(free > vacuum_step);
+    const page = try int(db, "PRAGMA raw.page_size", .{});
+    try testing.expect(try returnFree(db, io, 100 * page) > 0);
+    try testing.expectEqual(100, try int(db, "PRAGMA raw.freelist_count", .{}));
+    try testing.expect(try returnFree(db, io, 0) > 0);
     try testing.expectEqual(0, try int(db, "PRAGMA raw.freelist_count", .{}));
     try testing.expect(try int(db, "PRAGMA raw.page_count", .{}) < @divFloor(pages, 10));
 }

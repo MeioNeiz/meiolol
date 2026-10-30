@@ -10,6 +10,12 @@ const deadline = @import("net").deadline;
 
 const log = std.log.scoped(.riot);
 
+/// ns waiting for a rate limit slot, and in Riot's answers (connect to the body's end)
+pub const Spent = struct {
+    slot: std.atomic.Value(u64) = .init(0),
+    riot: std.atomic.Value(u64) = .init(0),
+};
+
 pub const Client = struct {
     gpa: Allocator,
     io: std.Io,
@@ -22,6 +28,8 @@ pub const Client = struct {
     /// Base URL of a crawler's proxy ("http://10.0.0.3:8092"), instead of Riot
     proxy: ?[]const u8 = null,
     requests: std.atomic.Value(u64) = .init(0),
+    /// Where this client's time goes, added up with other threads' for the crawl report
+    spent: ?*Spent = null,
     /// Benchmarks only: answers instead of Riot, no rate limits
     fake: ?*const Fake = null,
 
@@ -56,8 +64,15 @@ pub const Client = struct {
         var limited: usize = 0;
         for (0..tries) |attempt| {
             const backoff: i64 = @as(i64, 1) << @intCast(attempt);
+            const asked = c.now();
             try limiter.acquire(method, c.priority);
-            const res = deadline.within(c.io, riot_timeout, once, .{ c, limiter, uri, method, backoff }) catch |err| switch (err) {
+            const sent = c.now();
+            const result = deadline.within(c.io, riot_timeout, once, .{ c, limiter, uri, method, backoff });
+            if (c.spent) |s| {
+                _ = s.slot.fetchAdd(sent - asked, .monotonic);
+                _ = s.riot.fetchAdd(c.now() - sent, .monotonic);
+            }
+            const res = result catch |err| switch (err) {
                 error.OutOfMemory, error.Canceled, error.ConcurrencyUnavailable => return err,
                 else => {
                     log.warn("{s} on {s}, retrying", .{ @errorName(err), shown });
@@ -98,6 +113,10 @@ pub const Client = struct {
             }
         }
         return if (limited == tries) error.RateLimited else error.GaveUp;
+    }
+
+    fn now(c: *Client) u64 {
+        return @intCast(std.Io.Clock.awake.now(c.io).nanoseconds);
     }
 
     const tries = 6;

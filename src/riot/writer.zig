@@ -24,6 +24,8 @@ const log = std.log.scoped(.crawl);
 const max_pending = 128;
 /// Busy here means another process (backup, rebuild) holds the lock: retry the batch
 const busy_pause_s = 5;
+/// The checkpointer copies WAL frames into the databases this often
+const checkpoint_s = 2;
 /// journal_size_limit only trims the WAL when it restarts, which needs a moment with
 /// every frame copied back and no reader on it. With nonstop writes and readers always
 /// about that moment never came, and main's WAL reached 57 GB. So force it this often,
@@ -96,6 +98,17 @@ pub const Stats = struct {
     /// checkpoint writes WAL pages to the database file again, not counted here
     pages_written: std.atomic.Value(u64) = .init(0),
     pages_read: std.atomic.Value(u64) = .init(0),
+    /// ns in commits (writes and busy waits) and checkpoints; the longest of each since
+    /// the crawl report took it
+    commit_ns: std.atomic.Value(u64) = .init(0),
+    commit_max_ns: std.atomic.Value(u64) = .init(0),
+    checkpoint_ns: std.atomic.Value(u64) = .init(0),
+    checkpoint_max_ns: std.atomic.Value(u64) = .init(0),
+
+    fn add(total: *std.atomic.Value(u64), max: *std.atomic.Value(u64), ns: u64) void {
+        _ = total.fetchAdd(ns, .monotonic);
+        _ = max.fetchMax(ns, .monotonic);
+    }
 };
 
 pub const Writer = struct {
@@ -203,7 +216,6 @@ pub const Writer = struct {
         defer s.deinit();
         var batch: std.ArrayList(*Job) = .empty;
         defer batch.deinit(gpa);
-        var truncate_at: i64 = 0;
         var valve_at: i64 = 0;
         while (true) {
             {
@@ -220,17 +232,8 @@ pub const Writer = struct {
                 for (batch.items) |job| job.destroy(gpa);
                 batch.clearRetainingCapacity();
             }
-            // Here, after the linger, not after a commit: readers that started before
-            // the last commit have finished, and newer ones read the database file once
-            // every frame is copied back, so they don't hold the truncate up
             const now = std.Io.Clock.real.now(wr.c.io).toSeconds();
-            if (now >= truncate_at) {
-                const done = truncateWal(db) catch |err| blk: {
-                    log.warn("writer: WAL truncate: {t}", .{err});
-                    break :blk false;
-                };
-                truncate_at = now + @as(i64, if (done) wal_truncate_s else wal_truncate_retry_s);
-            }
+            const began = nowNs(wr.c.io);
             var tries: u32 = 0;
             while (true) : (tries += 1) {
                 wr.commit(db, &s, batch.items) catch |err| {
@@ -248,6 +251,7 @@ pub const Writer = struct {
                 };
                 break;
             }
+            Stats.add(&wr.stats.commit_ns, &wr.stats.commit_max_ns, nowNs(wr.c.io) - began);
             wr.counted(batch.items);
             const pages = db.pageCounts();
             wr.stats.pages_written.store(pages.written, .monotonic);
@@ -484,14 +488,67 @@ pub const Writer = struct {
     }
 };
 
-/// True once every attached database's WAL is empty; false when a reader or writer kept
-/// one busy (the others are still truncated)
-fn truncateWal(db: store.Db) !bool {
+fn nowNs(io: std.Io) u64 {
+    return @intCast(std.Io.Clock.awake.now(io).nanoseconds);
+}
+
+/// Thread body beside the writer, on its own connection: copies WAL frames into the
+/// databases so the writer never does. A checkpoint that truncates blocks commits while
+/// it copies, and the writer's own (autocheckpoint, its truncate) did it in its thread:
+/// a GB of WAL left by the archive prune or behind a long reader stopped commits for
+/// minutes and with them every region (29-30 Oct). PASSIVE copies beside commits; the
+/// truncate runs only on a WAL already copied, so it holds commits for a moment
+pub fn checkpoints(wr: *Writer) void {
+    const c = wr.c;
+    const db = store.schema.connect(c.gpa, c.opts.data_dir) catch |err| {
+        log.err("checkpointer: {t}, the WAL is not truncated", .{err});
+        return;
+    };
+    defer db.close();
+    var truncate_at: [schemas.len]i64 = @splat(0);
+    var warned = false;
+    while (!wr.stopping()) {
+        const began = nowNs(c.io);
+        const now = std.Io.Clock.real.now(c.io).toSeconds();
+        for (schemas, &truncate_at) |schema, *at| {
+            const done = checkpoint(db, schema, now >= at.*) catch |err| switch (err) {
+                error.Busy => false,
+                else => {
+                    if (!warned) log.warn("checkpointer: {s}: {t}", .{ schema, err });
+                    warned = true;
+                    continue;
+                },
+            };
+            if (done) |truncated| at.* = now + @as(i64, if (truncated) wal_truncate_s else wal_truncate_retry_s);
+        }
+        Stats.add(&wr.stats.checkpoint_ns, &wr.stats.checkpoint_max_ns, nowNs(c.io) - began);
+        c.io.sleep(.fromSeconds(checkpoint_s), .awake) catch return;
+    }
+}
+
+const schemas = [_][:0]const u8{ "main", "raw", "timeline" };
+
+/// Frames a PASSIVE checkpoint may leave for the truncate to copy while it holds commits
+/// (readers a moment behind the newest commit keep a few back)
+const truncate_left_frames = 4096;
+
+/// A PASSIVE checkpoint of `schema`, then with `truncate` and nearly every frame copied a
+/// TRUNCATE one. Null when no truncate was tried, else whether it emptied the WAL
+fn checkpoint(db: store.Db, schema: [:0]const u8, truncate: bool) !?bool {
+    var buf: [64]u8 = undefined;
+    var s = try db.prepare(try std.mem.print(&buf, "PRAGMA {s}.wal_checkpoint(PASSIVE)", .{schema}));
+    defer s.deinit();
+    if (!try s.step()) return null;
+    const frames = s.int(1);
+    const left = frames - s.int(2);
+    s.reset();
+    if (!truncate or frames <= 0 or left > truncate_left_frames) return null;
+    // Short: commits wait while the truncate waits on readers
     db.setBusyTimeout(wal_truncate_busy_ms);
     defer db.setBusyTimeout(store.sqlite.busy_timeout_ms);
-    var s = try db.prepare("PRAGMA wal_checkpoint(TRUNCATE)");
-    defer s.deinit();
-    return try s.step() and s.int(0) == 0;
+    var t = try db.prepare(try std.mem.print(&buf, "PRAGMA {s}.wal_checkpoint(TRUNCATE)", .{schema}));
+    defer t.deinit();
+    return try t.step() and t.int(0) == 0;
 }
 
 /// The writer's connection: the only one that needs a big page cache, and a quarter of
@@ -510,6 +567,7 @@ fn tune(db: store.Db, cache_mb: u32) !void {
         \\PRAGMA raw.journal_size_limit = 67108864;
         \\PRAGMA timeline.journal_size_limit = 67108864;
         \\PRAGMA temp_store = MEMORY;
+        \\PRAGMA wal_autocheckpoint = 0;
         \\CREATE TEMP TABLE IF NOT EXISTS gone (id TEXT PRIMARY KEY);
     );
 }
@@ -1055,29 +1113,37 @@ test "a match whose document names another id is failed, not counted as stored" 
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM matches", .{}));
 }
 
-test "truncateWal empties every attached database's WAL" {
+test "the checkpointer copies the writer's WAL and truncates it once copied" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buf: [256]u8 = undefined;
+    var raw_buf: [256]u8 = undefined;
     const path = try std.mem.printSentinel(&path_buf, ".zig-cache/tmp/{s}/t.db", .{&tmp.sub_path}, 0);
-    const db = try store.Db.open(path);
-    defer db.close();
-    try db.run("ATTACH ? AS raw", .{try std.mem.printSentinel(&path_buf, ".zig-cache/tmp/{s}/r.db", .{&tmp.sub_path}, 0)});
-    try db.exec(
+    const raw_path = try std.mem.printSentinel(&raw_buf, ".zig-cache/tmp/{s}/r.db", .{&tmp.sub_path}, 0);
+    const writer_db = try store.Db.open(path);
+    defer writer_db.close();
+    try writer_db.run("ATTACH ? AS raw", .{raw_path});
+    try writer_db.exec(
         \\PRAGMA main.journal_mode = WAL;
         \\PRAGMA raw.journal_mode = WAL;
+        \\PRAGMA wal_autocheckpoint = 0;
         \\CREATE TABLE t (x);
         \\CREATE TABLE raw.t (x);
         \\INSERT INTO t VALUES (1), (2), (3);
         \\INSERT INTO raw.t VALUES (1), (2), (3);
     );
-    try std.testing.expect(try truncateWal(db));
+    const db = try store.Db.open(path);
+    defer db.close();
+    try db.run("ATTACH ? AS raw", .{raw_path});
+    try std.testing.expectEqual(@as(?bool, null), try checkpoint(db, "raw", false));
     inline for (.{ "main", "raw" }) |schema| {
+        try std.testing.expectEqual(@as(?bool, true), try checkpoint(db, schema, true));
         var s = try db.prepare("PRAGMA " ++ schema ++ ".wal_checkpoint(PASSIVE)");
         defer s.deinit();
         try std.testing.expect(try s.step());
         try std.testing.expectEqual(0, s.int(1));
     }
+    try std.testing.expectEqual(@as(?bool, null), try checkpoint(db, "main", true));
 }
 
 test "rolling window prunes old matches with their rows" {

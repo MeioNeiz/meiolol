@@ -339,8 +339,10 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   (`--raw-timeline-days`, `--raw-match-days`) also stops at the start of the oldest
   unacked export. A stopped pull shows in Health alerts: gpu-box (no ack for 12h) and
   raw held (days of raw above the valve)
-- raw.db is auto_vacuum=INCREMENTAL, so each prune's archive.returnFree hands freed
-  pages back to the disk. A new box's raw.db needs the same once: `PRAGMA
+- raw.db is auto_vacuum=INCREMENTAL: an ack's prune hands freed pages past 8 GB back
+  to the disk (archive.returnFree, 10 MB a transaction); up to 8 GB stay for new raw to
+  reuse, since moving pages stalled the crawler's commits through a catch-up. The valve
+  hands back all. A new box's raw.db needs the same once: `PRAGMA
   auto_vacuum=INCREMENTAL; VACUUM` (~2x live size free; ~25 min at 40 GB, a 10 GB WAL).
   Stop the crawler first (its 60 s busy timeout) and hold data/.archive-prune.lock; Your
   games lookups fail meanwhile (they go through the crawler's proxy)
