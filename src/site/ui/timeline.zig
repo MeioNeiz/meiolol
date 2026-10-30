@@ -91,9 +91,9 @@ pub const Timeline = struct {
     cur: ?u8 = null,
     /// ChartTip at this second
     tip: ?u16 = null,
-    /// Compact: a tap keeps the tip after the pointer leaves (a phone lifts the finger)
-    pinned: bool = false,
     press: chart.Press = .{},
+    /// Compact's pointer
+    read: chart.Reading = .{},
     /// Home's small game: a reading tip only (no range, no moment), deaths as ticks,
     /// epic objectives only, no fight marks
     compact: bool = false,
@@ -193,21 +193,17 @@ pub const Timeline = struct {
                 ev.handled = true;
                 if (t.cur != null) ev.after = .{ .op = .focus, .ref = "tl-cur" };
             },
-            .plot => if (t.compact) switch (t.press.pointer(ev)) {
-                // Read-only: the reading under the pointer, never a range or a moment
+            .plot => if (t.compact) switch (t.read.pointer(ev)) {
+                // The reading under the pointer, never a range or a moment
                 .none => {},
-                .hover => |f| {
-                    t.tip = t.sec(f);
-                    t.pinned = false;
-                },
-                .tap => |f| {
-                    t.tip = t.sec(f);
-                    t.pinned = true;
-                },
-                .range => t.tip = t.sec(std.math.clamp(ev.x / @max(1, ev.w), 0, 1)),
-                .leave => if (!t.pinned) {
+                .at => |f| t.tip = t.sec(f),
+                .tap => |x| if (x.was != null and @abs(x.f - x.was.?) * ev.w < 12) {
                     t.tip = null;
+                    t.read.drop();
+                } else {
+                    t.tip = t.sec(x.f);
                 },
+                .clear => t.tip = null,
             } else switch (t.press.pointer(ev)) {
                 .none => {},
                 .hover => |f| t.tip = t.sec(f),
@@ -496,7 +492,7 @@ pub fn gallery(g: *Gallery) void {
     const states = [_]struct { []const u8, Timeline }{
         .{ "the turning moment picked", .{ .game = &demo_game, .cur = 17 } },
         .{ "gold, a range dragged, the tip", .{ .game = &demo_game, .mode = .gold, .range = .{ 1500, 1800 }, .tip = 1800 } },
-        .{ "compact, read-only", .{ .game = &demo_game, .compact = true } },
+        .{ "compact, the reading tip only", .{ .game = &demo_game, .compact = true } },
     };
     for (states) |s| {
         const t = h.mem.create(Timeline) catch {
@@ -590,5 +586,21 @@ test "compact: the pointer shows the reading, never a range; a tap keeps it" {
     _ = rt.event(0, .{ .kind = .pointerleave, .target = plot });
     try testing.expectEqual(@as(?u16, 1499), state.tip);
     try testing.expectEqual(@as(?u8, null), state.cur);
+    // A second tap on the kept reading drops it (a phone has no hover to leave)
+    for ([_]tree.Ev{ .pointerdown, .pointerup, .pointerleave }) |k| _ = rt.event(0, .{ .kind = k, .target = plot, .x = 462 });
+    try testing.expectEqual(@as(?u16, null), state.tip);
+    // A touch drag reads, and the tip goes with the finger
+    _ = rt.event(0, .{ .kind = .pointerdown, .target = plot, .x = 456 });
+    _ = rt.event(0, .{ .kind = .pointermove, .target = plot, .x = 548 });
+    try testing.expectEqual(@as(?u16, 1801), state.tip);
+    _ = rt.event(0, .{ .kind = .pointerup, .target = plot, .x = 548 });
+    _ = rt.event(0, .{ .kind = .pointerleave, .target = plot });
+    try testing.expectEqual(@as(?u16, null), state.tip);
+    // A kept tip, then a scroll that starts on the plot (pointercancel): it goes
+    for ([_]tree.Ev{ .pointerdown, .pointerup, .pointerleave }) |k| _ = rt.event(0, .{ .kind = k, .target = plot, .x = 456 });
+    try testing.expectEqual(@as(?u16, 1499), state.tip);
+    _ = rt.event(0, .{ .kind = .pointerdown, .target = plot, .x = 300 });
+    _ = rt.event(0, .{ .kind = .pointercancel, .target = plot });
+    try testing.expectEqual(@as(?u16, null), state.tip);
     try testing.expectEqual(@as(u32, 0), fake.warnings);
 }
