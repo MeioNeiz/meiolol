@@ -77,6 +77,8 @@ pub const Board = struct {
 };
 
 pub const max_ban_options = 5;
+/// Ban rows from my lane that lead while my opponent is unknown
+pub const my_lane_first = 2;
 pub const max_ideas = 3;
 
 /// Allocates in `arena`. `card` is the lane card already built for the same select
@@ -190,7 +192,8 @@ fn stage(phase: []const u8) []const u8 {
 }
 
 /// Champions the enemy may still pick, by ban impact in a role they have not filled;
-/// my lane opponent's role first among equals; never one of the lane card's options. The
+/// my lane's best `my_lane_first` lead while my opponent is unknown (in bans they always
+/// are); never one of the lane card's options. The
 /// desktop stats file has no ban counts, so impact is per 10,000 games of all, not of
 /// games where it was available
 fn banOptions(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSelect, enemies: []const Seat, card: ?*const lanecard.Card) ![]const BanOption {
@@ -235,12 +238,26 @@ fn banOptions(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSe
         }
     }.more);
     // One row per champion, its strongest role
-    var out: std.ArrayList(BanOption) = .empty;
+    var rows: std.ArrayList(BanOption) = .empty;
     for (list.items) |o| {
-        if (out.items.len == max_ban_options) break;
-        for (out.items) |p| {
+        for (rows.items) |p| {
             if (p.champion == o.champion) break;
-        } else try out.append(arena, o);
+        } else try rows.append(arena, o);
+    }
+    var out: std.ArrayList(BanOption) = .empty;
+    for (rows.items) |o| {
+        if (out.items.len == my_lane_first) break;
+        if (o.my_lane) try out.append(arena, o);
+    }
+    // The rest by impact, past the my-lane rows already in
+    var skip = out.items.len;
+    for (rows.items) |o| {
+        if (out.items.len == max_ban_options) break;
+        if (o.my_lane and skip > 0) {
+            skip -= 1;
+            continue;
+        }
+        try out.append(arena, o);
     }
     return out.items;
 }
@@ -323,6 +340,20 @@ test "board: seats, guessed enemy roles, ideas, bans, draft" {
     // Bans only in roles the enemy has not filled
     try testing.expect(b.ban_options.len > 0);
     for (b.ban_options) |o| try testing.expect(o.role != .top and o.role != .middle);
+    // In bans, before any enemy pick: my lane's best lead, the rest by impact
+    var empty: [5]Slot = @splat(.{});
+    var bans = cs;
+    bans.enemies = &.{};
+    bans.their_team = &empty;
+    const opening = (try build(arena, st, cardscenes.test_opts, bans, null)).ban_options;
+    try testing.expectEqual(max_ban_options, opening.len);
+    // The fixture's one middle option leads though others have more impact
+    var lead: usize = 0;
+    while (lead < my_lane_first and opening[lead].my_lane) lead += 1;
+    try testing.expect(lead > 0 and opening[0].role == .middle);
+    try testing.expect(opening[0].impact < opening[lead].impact);
+    const rest = opening[lead..];
+    for (rest[1..], rest[0 .. rest.len - 1]) |o, before| try testing.expect(o.impact <= before.impact);
     // Never one of my own options; none once the bans are in
     const card: lanecard.Card = .{
         .role = .middle,
