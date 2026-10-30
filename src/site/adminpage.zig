@@ -1,4 +1,4 @@
-//! The admin page (/admin, ui.adminpage): an empty shell ui-admin.wasm fills
+//! The admin page (/admin, ui.adminpage) in the site shell (shell.zig): a page ui-admin.wasm fills
 //! from admin.bin, api/live.bin and /auth/ (the chart tabs: ui.admincharts in
 //! ui-admincharts.wasm, Traffic: ui.admintraffic in ui-admintraffic.wasm, Deploys and Logs:
 //! ui.adminops in ui-adminops.wasm, Models: ui.adminmodels in ui-adminmodels.wasm, its nets
@@ -12,6 +12,7 @@ const ui = @import("ui");
 const assets = @import("assets.zig");
 const csp = @import("csp.zig");
 const sheets = @import("sheets.zig");
+const shell = @import("shell.zig");
 
 const Io = std.Io;
 
@@ -35,6 +36,15 @@ fn at(comptime f: assets.Hashed) []const u8 {
     return "/admin/" ++ f.path;
 }
 
+const shell_page: @import("html.zig").Page = .{
+    .title = "Admin | meiolol",
+    .description = "The crawler, the site and the models",
+    .patch = "",
+    .data = "",
+    .public = false,
+    .private = .admin,
+};
+
 pub fn page(a: std.mem.Allocator) ![]const u8 {
     var p: ui.adminpage.Page = .{};
     var t: ui.Tree = .{};
@@ -55,36 +65,10 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
     if (h.oom) return error.OutOfMemory;
     var out: Io.Writer.Allocating = .init(a);
     const w = &out.writer;
-    try w.print(
-        \\<!doctype html>
-        \\<html lang="en">
-        \\<head>
-        \\<meta charset="utf-8">
-        \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
-        \\<meta name="robots" content="noindex">
-        \\<title>meiolol admin</title>
-        \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        \\{s}
-        \\</head>
-        \\<body class="ui">
-        \\<main class="c-sitemain">
-        \\
-    , .{ csp.files_only, sheets.slot });
-    try ui.html.write(&t, n, w);
-    try ui.html.write(&t, cn, w);
-    try ui.html.write(&t, tn, w);
-    try ui.html.write(&t, on, w);
-    try ui.html.write(&t, mn, w);
-    try ui.html.write(&t, ln, w);
-    try ui.html.write(&t, rn, w);
-    try w.print(
-        \\
-        \\</main>
-        \\<script src="/admin/{s}" data-wasm="/admin/{s}" defer></script>
-        \\</body>
-        \\</html>
-        \\
-    , .{ js.path, wasm.path });
+    try shell.open(w, shell_page);
+    for ([_]ui.N{ n, cn, tn, on, mn, ln, rn }) |x| try ui.html.write(&t, x, w);
+    try w.print("\n<script src=\"/admin/{s}\" data-wasm=\"/admin/{s}\" defer></script>\n", .{ js.path, wasm.path });
+    try shell.close(w, shell_page);
     return sheets.deliverWith(a, out.written(), &islands);
 }
 
