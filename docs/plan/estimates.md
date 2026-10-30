@@ -96,7 +96,7 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   load from cubes, with sizes measured. Unlocks: with the pass cheap, the 30-day builds
   can count matchups (~1.1 GB a builder of C01's 62 GB), so the matchup builds strip
   can follow the period picked, and builds by rank are a filter over the seats (E8).
-  Open: the box's step times after the deploy (data/web.log)
+  Open: a later box curves run (a few days of cubes) and builds --site on cubes
 - E8 Rank respected everywhere: with brackets in the cubes, filters.js sums every block
   by the rank picked (raw modes), and Meio uses E3-E5's bracket terms. Rank is the one
   at game start (rank_history, from 12 Oct), never the post-game one (learned.md Data
@@ -167,6 +167,11 @@ Snapshot snap-20261023T2004Z on the Mac (M-series, ReleaseFast; 24 days, 1.6M ga
   ~10 days a run, hence the in-place update: a changed 100k-game day is read and
   written again in ~12 s (mostly the compression), plus ~0.5 ms a game decoded: ~2 min
   of cubes a box run
+- Box (C01, 30 Oct, `curves --site --patch 16.21` in the web loop, beside the crawler
+  and renderer): before, timelines ~8 min and fit and files ~9 min, ~17 min (06:43 to
+  07:00; 23:30 the night before ~30 min). First cube run: 31 days built in ~17 min
+  (2.66M games, 2.85 GB, ~95 MB a 100k-game day), then fit and files ~9 min, ~26 min.
+  On C01 the fit, not the read, is the larger part
 
 ### E2 baseline, raw 30 days vs raw patch
 
