@@ -146,6 +146,7 @@ const W = struct {
     pub const up = phrase.Phrase("▲{n:count}");
     pub const down = phrase.Phrase("▼{n:count}");
     pub const moved = plain("Moved clearly");
+    pub const moved_says = Phrase("Moved clearly: win rate {u:count} up, {d:count} down; {o:count} more in lane or matchups");
     pub const all = plain("All");
     pub const role_label = plain("Role");
     pub const show = plain("Show");
@@ -568,33 +569,27 @@ pub const Page = struct {
         p.refilter();
     }
 
-    const Counts = struct { up: u32 = 0, down: u32 = 0, riot: u32 = 0, all: u32 = 0 };
+    const Counts = struct { up: u32 = 0, down: u32 = 0, others: u32 = 0, riot: u32 = 0, all: u32 = 0 };
 
-    /// The role's: rows moved each way, champions Riot changed, every row
-    fn counts(p: *const P, h: *H) Counts {
+    /// The role's rows each chip shows: moved (win rate each way, then lane or matchups
+    /// only), Riot changed, every row
+    fn counts(p: *const P) Counts {
         var c: Counts = .{};
-        const seen = h.mem.alloc(bool, p.d.champs.len) catch {
-            h.oom = true;
-            return c;
-        };
-        @memset(seen, false);
-        for (p.d.rows) |r| {
+        for (p.lines.rows) |*l| {
+            const r = l.row();
             if (!inRole(p.role, r.role)) continue;
             c.all += 1;
             if (r.clear) {
                 if (points(r.prev, r.cur) > 0) c.up += 1 else c.down += 1;
-            }
-            if (r.change != null and !seen[r.champ]) {
-                seen[r.champ] = true;
-                c.riot += 1;
-            }
+            } else if (l.moved()) c.others += 1;
+            if (r.change != null) c.riot += 1;
         }
         return c;
     }
 
     pub fn view(p: *P, h: *H) N {
         const d = p.d;
-        const c = p.counts(h);
+        const c = p.counts();
         var roles: [Role.names.len + 1]rolepicker.Item = undefined;
         for (&roles, 0..) |*it, k| {
             const s: Shown = @fromBackingInt(@intCast(k));
@@ -620,11 +615,14 @@ pub const Page = struct {
             card.view(h, .{ .flush = true }, &.{
                 card.toolbar(h, &.{
                     h.div(.{ .class = "chips" }, .{
-                        // Named by its words: the counts are a badge, not the label
-                        chip.view(h, .{ .pressed = p.moved, .label = W.moved, .on = h.on(p, .moved) }, .{
+                        // ▲▼ win rate moves, +N the rows only their lane or matchups moved
+                        chip.view(h, .{ .pressed = p.moved, .label = W.moved_says.with(h, .{ .u = c.up, .d = c.down, .o = c.others }), .on = h.on(p, .moved) }, .{
+                            // The leading spaces part the badge from the words for the label
+                            // check; a flex item's line drops them
                             W.moved,
-                            h.span(.{ .class = "n", .data_d = "up" }, .{W.up.with(h, .{ .n = c.up })}),
-                            h.span(.{ .class = "n", .data_d = "down" }, .{W.down.with(h, .{ .n = c.down })}),
+                            h.span(.{ .class = "n", .data_d = "up" }, .{ " ", W.up.with(h, .{ .n = c.up }) }),
+                            h.span(.{ .class = "n", .data_d = "down" }, .{ " ", W.down.with(h, .{ .n = c.down }) }),
+                            if (c.others > 0) h.span(.{ .class = "n" }, .{ " ", W.more.with(h, .{ .n = c.others }) }) else null,
                         }),
                         if (d.riot) chip.view(h, .{ .pressed = p.riot, .on = h.on(p, .riot) }, .{ W.changed, h.span(.{ .class = "n" }, .{phrase.num(h, .count, c.riot)}) }) else null,
                         chip.view(h, .{ .pressed = !p.moved and !p.riot, .on = h.on(p, .all) }, .{ W.all, h.span(.{ .class = "n" }, .{phrase.num(h, .count, c.all)}) }),
@@ -720,8 +718,8 @@ pub const css =
     \\  .c-patch .c-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2) var(--sp-4); }
     \\  .c-patch .chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
     \\  .c-patch .c-toolbar .n { margin-left: 2px; color: var(--muted); font-variant-numeric: tabular-nums; }
-    \\  .c-patch .c-toolbar .n[data-d="up"] { color: var(--us); }
-    \\  .c-patch .c-toolbar .n[data-d="down"] { color: var(--them); }
+    \\  .c-patch .c-toolbar .n[data-d="up"] { color: var(--hi2); }
+    \\  .c-patch .c-toolbar .n[data-d="down"] { color: var(--lo2); }
     \\  .c-patch .c-table-wrap { overflow-x: clip; }
     \\  .c-patch .c-table thead th { top: var(--header); }
     \\  .c-patch .who { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; color: inherit; text-decoration: none; }

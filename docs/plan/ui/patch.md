@@ -61,7 +61,7 @@ this page but again too generic, could be so much better".
 
 ```
 ChampHeader patch  ‹ Patch 16.21 vs 16.20 ›  day 5 · 79,549 games · official notes ↗
-FilterBar [Moved clearly ▲3 ▼4 | Riot changed 22 | All 160]   RolePicker [All | ...]
+FilterBar [Moved clearly ▲3 ▼4 +9 | Riot changed 22 | All 160]   RolePicker [All | ...]
 DataTable   champion | role | Riot | 16.20 | 16.21 | Change (Delta bar) | Ahead at 14
             (Delta bar, small) | games 16.21
 ```
@@ -71,8 +71,9 @@ Riot badge; rates and lane in RowDetail.
 
 Words on the first screen (without names, numbers): "Patch", "vs", "day", "games",
 "official notes", chip labels, column heads: ~20. No summary strip (Jacob, note 37:
-too many words): the counts sit in the chips they filter by, the role's; lanes and
-matchups that moved are the Lane lead and Matchups columns' sorts.
+too many words): the counts sit in the chips they filter by, the role's rows: ▲▼ clear
+win rate moves in the Change column's colours, +N rows only their lane or matchups
+moved (the Lane lead and Matchups columns' sorts).
 
 ## References (research refs/patch/notes.md)
 
