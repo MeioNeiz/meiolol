@@ -38,6 +38,13 @@ else
     fi
 fi
 
+# The crawler's checkpointer keeps WALs to ~64 MB; a long reader can hold one at ~1 GB
+for wal in data/*.db-wal; do
+    [[ -f "$wal" ]] || continue
+    size=$(stat -c %s "$wal")
+    (( size > 4 << 30 )) && problems+=("${wal#data/} at $(( size >> 30 )) GB: WAL not checkpointed (crawl.log checkpointer lines)")
+done
+
 if ! running meiolol-web; then
     problems+=("site loop not running (meiolol-web)")
 fi

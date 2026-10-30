@@ -172,6 +172,7 @@ deploy/health.sh runs on the box and prints one line per problem:
 | crawler | unit `meiolol-crawl` not active; "Riot rejected the key" if crawl.log ends in KEY REJECTED |
 | crawler silent | last per-minute report older than 15 min |
 | no new matches | report's per-region match counters unchanged for 2h (STALL_H) |
+| WAL not checkpointed | a data/*.db-wal over 4 GB (crawler's checkpointer stuck, or a reader holding it) |
 | site | unit `meiolol-web` not active, or last upload in web.log older than 26h |
 | disk | / at 80% not counting C01's fixed 30 GB disk cache file (the rest grows slowly: snaps, nginx's 2 GB cache, /var/www), or the data's disk at 80% |
 | mounts | a path in host.env's MEIOLOL_MOUNTS not mounted (C01: /srv/meiolol, /srv/megatron, /srv/megatron-backups); with the data disk itself down health.sh can't run: mac-watch.sh says "data disk not mounted" (ssh's exit 127) |

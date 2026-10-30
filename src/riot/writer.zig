@@ -26,6 +26,11 @@ const max_pending = 128;
 const busy_pause_s = 5;
 /// The checkpointer copies WAL frames into the databases this often
 const checkpoint_s = 2;
+/// No whole checkpoint round this long: the writer checkpoints again itself (slow
+/// commits beat a WAL growing without end) until the checkpointer is back
+const checkpointer_stall_s = 300;
+/// Its warnings at most this often
+const checkpointer_warn_s = 600;
 /// journal_size_limit only trims the WAL when it restarts, which needs a moment with
 /// every frame copied back and no reader on it. With nonstop writes and readers always
 /// about that moment never came, and main's WAL reached 57 GB. So force it this often,
@@ -129,6 +134,9 @@ pub const Writer = struct {
     /// it stores, rather than each job's fetch time, so a raw archive export (archive.zig)
     /// never misses a document whose job waited long in the queue
     stamp: i64 = 0,
+    /// When the checkpointer last copied every schema's WAL (s), for the writer's
+    /// fallback; 0 before its first round
+    checkpointed_at: std.atomic.Value(i64) = .init(0),
 
     pub fn deinit(wr: *Writer) void {
         for (wr.pending.items) |job| job.destroy(wr.c.gpa);
@@ -217,6 +225,8 @@ pub const Writer = struct {
         var batch: std.ArrayList(*Job) = .empty;
         defer batch.deinit(gpa);
         var valve_at: i64 = 0;
+        const started = std.Io.Clock.real.now(wr.c.io).toSeconds();
+        var self_checkpoints = false;
         while (true) {
             {
                 wr.mutex.lockUncancelable(wr.c.io);
@@ -252,6 +262,14 @@ pub const Writer = struct {
                 break;
             }
             Stats.add(&wr.stats.commit_ns, &wr.stats.commit_max_ns, nowNs(wr.c.io) - began);
+            const quiet = now - @max(started, wr.checkpointed_at.load(.monotonic));
+            if ((quiet > checkpointer_stall_s) != self_checkpoints) {
+                self_checkpoints = !self_checkpoints;
+                try db.exec(if (self_checkpoints) "PRAGMA wal_autocheckpoint = 1000" else "PRAGMA wal_autocheckpoint = 0");
+                if (self_checkpoints) {
+                    log.err("writer: no checkpoint for {d} s, the writer checkpoints again", .{quiet});
+                } else log.info("writer: the checkpointer is back, the writer stops checkpointing", .{});
+            }
             wr.counted(batch.items);
             const pages = db.pageCounts();
             wr.stats.pages_written.store(pages.written, .monotonic);
@@ -500,27 +518,36 @@ fn nowNs(io: std.Io) u64 {
 /// truncate runs only on a WAL already copied, so it holds commits for a moment
 pub fn checkpoints(wr: *Writer) void {
     const c = wr.c;
-    const db = store.schema.connect(c.gpa, c.opts.data_dir) catch |err| {
-        log.err("checkpointer: {t}, the WAL is not truncated", .{err});
-        return;
+    var wait_s: i64 = 5;
+    const db = while (true) {
+        break store.schema.connect(c.gpa, c.opts.data_dir) catch |err| {
+            log.err("checkpointer: {t}, connecting again in {d} s", .{ err, wait_s });
+            c.io.sleep(.fromSeconds(wait_s), .awake) catch return;
+            if (wr.stopping()) return;
+            wait_s = @min(wait_s * 2, 60);
+            continue;
+        };
     };
     defer db.close();
     var truncate_at: [schemas.len]i64 = @splat(0);
-    var warned = false;
+    var warned_at: i64 = 0;
     while (!wr.stopping()) {
         const began = nowNs(c.io);
         const now = std.Io.Clock.real.now(c.io).toSeconds();
+        var whole = true;
         for (schemas, &truncate_at) |schema, *at| {
-            const done = checkpoint(db, schema, now >= at.*) catch |err| switch (err) {
-                error.Busy => false,
-                else => {
-                    if (!warned) log.warn("checkpointer: {s}: {t}", .{ schema, err });
-                    warned = true;
-                    continue;
-                },
+            const done = checkpoint(db, schema, now >= at.*) catch |err| blk: {
+                whole = false;
+                if (err == error.Busy) break :blk false;
+                if (now - warned_at >= checkpointer_warn_s) {
+                    log.warn("checkpointer: {s}: {t}", .{ schema, err });
+                    warned_at = now;
+                }
+                continue;
             };
             if (done) |truncated| at.* = now + @as(i64, if (truncated) wal_truncate_s else wal_truncate_retry_s);
         }
+        if (whole) wr.checkpointed_at.store(now, .monotonic);
         Stats.add(&wr.stats.checkpoint_ns, &wr.stats.checkpoint_max_ns, nowNs(c.io) - began);
         c.io.sleep(.fromSeconds(checkpoint_s), .awake) catch return;
     }
