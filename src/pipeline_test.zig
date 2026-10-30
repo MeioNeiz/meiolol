@@ -972,10 +972,11 @@ test "admin page from the fixture games and a crawl log" {
     for (site.hashed_assets) |x| {
         for ([_][]const u8{ assets.tester_js.path, assets.tester_wasm.path, assets.testercand_js.path, assets.testercand_wasm.path }) |f| try std.testing.expect(!std.mem.eql(u8, x.path, f));
     }
-    for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "data-island=\"tester\"", "data-bin=\"", assets.tester_js.path, site_tester.css_file.path, "data-island=\"testercand\"", assets.testercand_js.path }) |s| {
+    for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "data-island=\"tester\"", "data-bin=\"", assets.tester_js.path, "<style>@layer", "data-island=\"testercand\"", assets.testercand_js.path }) |s| {
         try std.testing.expect(std.mem.find(u8, t_html, s) != null);
     }
-    for ([_][]const u8{ assets.tester_js.path, assets.tester_wasm.path, assets.testercand_js.path, assets.testercand_wasm.path, site_tester.css_file.path, "tester.html.gz" }) |f| {
+    try std.testing.expect(std.mem.find(u8, t_html, "stylesheet") == null);
+    for ([_][]const u8{ assets.tester_js.path, assets.tester_wasm.path, assets.testercand_js.path, assets.testercand_wasm.path, "tester.html.gz" }) |f| {
         try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ private, f }), .{});
     }
     // The admin page beside its data: empty islands the wasms fill from admin.bin, the

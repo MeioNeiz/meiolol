@@ -1,5 +1,5 @@
 //! The new Draft tester page (/private/tester, ui.testerpage and ui.testercand): its HTML
-//! with the champion list inline, its stylesheet, ui-tester.wasm and the candidate panel's
+//! with the champion list and its CSS inline (sheets.zig), ui-tester.wasm and the candidate panel's
 //! ui-testercand.wasm (which ui-tester.wasm loads), written into the private site's dir
 //! beside the old page (admin.private) by `meiolol admin --private-out`. Never public:
 //! nginx serves /private to view_private logins only
@@ -9,13 +9,10 @@ const ui = @import("ui");
 const assets = @import("assets.zig");
 const style = @import("style.zig");
 const csp = @import("csp.zig");
+const sheets = @import("sheets.zig");
 
 const Io = std.Io;
 const tp = ui.testerpage;
-
-/// What the public stylesheet leaves out (ui.components): it is linked first
-pub const css = ui.css.join(.{ ui.select, ui.split, ui.draftboard, ui.modelbadge, ui.rankstrip, ui.testerpage, ui.testercand });
-pub const css_file = assets.hashed("tester.css", css);
 
 /// Champion keys, names and the Data Dragon version, from the champions table
 pub fn head(a: std.mem.Allocator, db: store.Db) !tp.Head {
@@ -61,12 +58,11 @@ pub fn page(a: std.mem.Allocator, h: *const tp.Head) ![]const u8 {
         \\<meta name="robots" content="noindex">
         \\<title>Draft tester</title>
         \\<link rel="stylesheet" href="/{s}">
-        \\<link rel="stylesheet" href="{s}">
         \\</head>
         \\<body class="ui">
         \\<main class="c-sitemain">
         \\
-    , .{ csp.files_only, style.file.path, css_file.path });
+    , .{ csp.files_only, style.file.path });
     try ui.html.write(&t, top, w);
     try ui.html.write(&t, panel, w);
     try w.print(
@@ -77,10 +73,10 @@ pub fn page(a: std.mem.Allocator, h: *const tp.Head) ![]const u8 {
         \\</html>
         \\
     , .{ assets.tester_js.path, assets.tester_wasm.path });
-    return out.written();
+    return sheets.deliverWith(a, out.written(), &.{ assets.tester_wasm, assets.testercand_wasm });
 }
 
-/// tester.html, its stylesheet and code into `out_dir`, each with a .gz (gzip_static)
+/// tester.html and its code into `out_dir`, each with a .gz (gzip_static)
 pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, db: store.Db) !void {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
@@ -90,7 +86,6 @@ pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, db: store.Db) 
     defer dir.close(io);
     const files = [_]struct { []const u8, []const u8 }{
         .{ "tester.html", try page(a, &h) },
-        .{ css_file.path, css_file.data },
         .{ assets.tester_js.path, assets.tester_js.data },
         .{ assets.tester_wasm.path, assets.tester_wasm.data },
         .{ assets.testercand_js.path, assets.testercand_js.data },
