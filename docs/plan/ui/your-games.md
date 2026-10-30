@@ -102,7 +102,9 @@ New: `record-tile`s in four labelled groups, each a row of tiles of one size:
   longest game, fastest win, most played
 
 Each group is one card (its title the head), as wide as its records, the cards filling
-the row; records inside split by 1 px lines (Jacob chose this, note 42).
+the row; records inside split by 1 px lines (Jacob chose this, note 42). A streak is the
+bare count ("5") over "Win streak" or "Loss streak", with the newest 10 results as pips
+under it, the run boxed (note 39: "5 wins" read as only five wins).
 
 `record-tile`: the figure at --fs-xl, a label of 1-3 words, and a `game-chip` (your
 champion and theirs as 20 px icons, W/L dot, date) in place of the sentence. Pressing

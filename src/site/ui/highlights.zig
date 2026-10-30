@@ -24,13 +24,16 @@ pub const scope = .{".c-hl"};
 const gold_cuts: [4]f32 = .{ 250, 750, 1500, 2500 };
 const short_s = 300;
 const lane_s = 14 * 60;
+/// A streak's pips
+const form_n = 10;
 
 const W = struct {
     pub const streaks = plain("Streaks");
     pub const lane = plain("Lane");
     pub const fights = plain("Fights");
     pub const games = plain("Games");
-    pub const streak = plain("Current streak");
+    pub const win_streak = plain("Win streak");
+    pub const loss_streak = plain("Loss streak");
     pub const longest = plain("Longest win streak");
     pub const record = plain("Record");
     pub const lead = plain("Biggest lead at 14");
@@ -42,8 +45,6 @@ const W = struct {
     pub const long = plain("Longest game");
     pub const fast = plain("Fastest win");
     pub const most = phrase.Phrase("Most played, {n:count} games");
-    pub const wins = phrase.Phrase("{n:count} wins");
-    pub const losses = phrase.Phrase("{n:count} losses");
     pub const wl = phrase.Phrase("{w:int}–{l:int}");
     pub const ratio = phrase.Phrase("{r:dec}");
     pub const moved = phrase.Phrase("{a:int}% → {b:int}%");
@@ -147,14 +148,25 @@ const Tiles = struct {
     fn streak(t: Tiles) ?Tile {
         const s = t.r.streak orelse return null;
         if (s.n < 2) return null;
-        return .{ .label = W.streak, .value = if (s.win) W.wins.with(t.h, .{ .n = s.n }) else W.losses.with(t.h, .{ .n = s.n }) };
+        var rs: [form_n]bool = undefined;
+        var n: usize = 0;
+        for (t.games) |g| if (!g.remake and n < form_n) {
+            rs[n] = g.win;
+            n += 1;
+        };
+        std.mem.reverse(bool, rs[0..n]);
+        const form = t.h.mem.dupe(bool, rs[0..n]) catch {
+            t.h.oom = true;
+            return null;
+        };
+        return .{ .label = if (s.win) W.win_streak else W.loss_streak, .value = phrase.num(t.h, .count, s.n), .form = form, .run = s.n };
     }
 
     fn longest(t: Tiles) ?Tile {
         // The current run already says it
         if (t.r.longest < 2) return null;
         if (t.r.streak) |s| if (s.win and s.n == t.r.longest) return null;
-        return .{ .label = W.longest, .value = W.wins.with(t.h, .{ .n = t.r.longest }) };
+        return .{ .label = W.longest, .value = phrase.num(t.h, .count, t.r.longest) };
     }
 
     fn record(t: Tiles) ?Tile {
