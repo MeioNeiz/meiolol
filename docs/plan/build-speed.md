@@ -18,8 +18,8 @@ What we know (29 Oct):
 ## Steps
 
 - BS1 done: comptime asset hashing and CSS minify out of the compile
-- BS2: slots mean cores: each slot holder's zig build gets -j 2 x weight (slots.sh,
-  MEIOLOL_ZIG_JOBS through the ~/.local/bin/zig shim); the dev server's watch too
+- BS2 done: slots mean cores, each slot holder's zig build gets -j 2 x weight (slots.sh,
+  MEIOLOL_ZIG_JOBS through the ~/.local/bin/zig shim)
 - BS3: ci, pre-push ci and the deploy build on the gpu-box when free, the Mac when not
   (W8, meiolol-86, owns the routing; data/team/2026-10-29-next/notes/w8.md). Needs on the
   gpu-box: zstd, shellcheck, nodejs; a .git for check-deploy.sh
@@ -30,7 +30,13 @@ What we know (29 Oct):
   of the site's .gz twins (write.zig); additive "parents" 6 s, real fitting
 - BS5 done: pipeline_test.zig reads src/testdata/site-files.txt at run time, an input of
   the backend test run (build.zig siteFiles): an edit to it reruns the tests, no compile
-- BS6: the ui edit path: 35 islands rebuild on any ui change (3-7 s each, ReleaseSmall);
-  measure what in them costs before changing
+- BS6 measured (step times in `--summary all` are wall under contention: CPU only by
+  timing a step alone). After a ui edit, 41 islands: 50 s CPU, ~50 s wall at -j2,
+  ~1.2 s each; the rest is the backend test compile and run, due anyway as the backend
+  imports ui. Done: Zig caches no failed compile, so the 47 compile-error cases reran on
+  every test (16 s CPU, 8-15 s wall with nothing changed): now one compile per file,
+  src/tools/compileerrors.zig matching errors to cases. A no-change test 21 to 6 s CPU.
+  Open: islands out of `test` (stubs in the backend test, real ones in ci and the dev
+  server) would save ~50 s per ui-edit test but leave islands to ci
 - BS7: the per-page CSS work (sheets.zig) keeps minifying out of comptime: cssmin.zig
   writes per-component minified CSS if that lands

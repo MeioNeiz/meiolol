@@ -243,4 +243,14 @@ test "fixtures filled as replacing the id and each \"puuid-N\" in turn" {
         want = next;
     }
     try std.testing.expectEqualStrings(want, got);
+
+    // The timeline is too big to replace in Debug each run: no match id, quoted or not,
+    // or "puuid-N" left instead. Its numeric gameId stays, as it always did
+    const filled = try f.timeline.fill(gpa, id);
+    defer gpa.free(filled);
+    try std.testing.expect(std.mem.find(u8, filled, "EUW1_8009933221") == null);
+    for (0..10) |slot| {
+        var buf: [16]u8 = undefined;
+        try std.testing.expect(std.mem.find(u8, filled, try std.mem.print(&buf, "\"puuid-{d}\"", .{slot})) == null);
+    }
 }

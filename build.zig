@@ -63,10 +63,10 @@ pub fn build(b: *std.Build) void {
     // edit under plain `test` rebuilds the backend's tests too
     const test_ui_step = b.step("test-ui", "Run the ui module's tests only (-Dtest-filter=NAME)");
     test_ui_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = m.ui, .filters = test_filters })).step);
-    test_ui_step.dependOn(errorChecks(b, target, "ui", m.ui, "src/site/ui/compile_errors.zig", &ui_errors.cases));
+    test_ui_step.dependOn(errorChecks(b, "ui", m.ui, "src/site/ui/compile_errors.zig", &ui_errors.cases));
     test_step.dependOn(test_ui_step);
 
-    test_step.dependOn(errorChecks(b, target, "tpl", m.tpl, "src/tpl/compile_errors.zig", &tpl_errors.cases));
+    test_step.dependOn(errorChecks(b, "tpl", m.tpl, "src/tpl/compile_errors.zig", &tpl_errors.cases));
     const shell_options = desktopOptions(b, 0, .private).createModule();
     const shell_test = b.createModule(.{
         .root_source_file = b.path("src/shell/test.zig"),
@@ -718,33 +718,32 @@ fn desktopShot(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
     return exe;
 }
 
-/// Code that must not compile (src/tpl/compile_errors.zig, src/site/ui/compile_errors.zig),
-/// each case built on its own and expecting its error: a Zig test can't catch a compile
-/// error
-fn errorChecks(
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    comptime name: []const u8,
-    mod: *std.Build.Module,
-    root: []const u8,
-    cases: anytype,
-) *std.Build.Step {
+/// Code that must not compile (src/tpl/compile_errors.zig, src/site/ui/compile_errors.zig):
+/// every case in one `zig test`, src/tools/compileerrors.zig matching its errors to the
+/// cases. It runs every time, as Zig caches no failed compile
+fn errorChecks(b: *std.Build, comptime name: []const u8, mod: *std.Build.Module, root: []const u8, cases: anytype) *std.Build.Step {
     const step = b.step(name ++ "-errors", "Check that bad " ++ name ++ " code fails to compile, each with its error");
-    for (cases) |c| {
-        const options = b.addOptions();
-        options.addOption([]const u8, "case", c.name);
-        const t = b.addTest(.{ .name = c.name, .root_module = b.createModule(.{
-            .root_source_file = b.path(root),
-            .target = target,
-            .imports = &.{
-                .{ .name = name, .module = mod },
-                .{ .name = "options", .module = options.createModule() },
-            },
-        }) });
-        t.expect_errors = .{ .contains = c.expect };
-        step.dependOn(&t.step);
-    }
+    const run = b.addRunArtifact(hostTool(b, "compileerrors"));
+    for (cases) |c| run.addArg(c.expect);
+    run.addArgs(&.{ "--", b.graph.zig_exe, "test", "-fno-emit-bin" });
+    var seen: std.ArrayList(*std.Build.Module) = .empty;
+    run.addArgs(&.{ "--dep", name });
+    run.addPrefixedFileArg("-Mroot=", b.path(root));
+    moduleArgs(b, run, &seen, name, mod);
+    run.setCwd(b.path("."));
+    run.has_side_effects = true;
+    step.dependOn(&run.step);
     return step;
+}
+
+/// The `zig` command line's `--dep`s and `-M` for `mod`, imported as `name`, and each
+/// module under it once
+fn moduleArgs(b: *std.Build, run: *std.Build.Step.Run, seen: *std.ArrayList(*std.Build.Module), name: []const u8, mod: *std.Build.Module) void {
+    for (seen.items) |m| if (m == mod) return;
+    seen.append(b.allocator, mod) catch @panic("OOM");
+    for (mod.import_table.keys()) |k| run.addArgs(&.{ "--dep", k });
+    run.addPrefixedFileArg(b.fmt("-M{s}=", .{name}), mod.root_source_file.?);
+    for (mod.import_table.keys(), mod.import_table.values()) |k, m| moduleArgs(b, run, seen, k, m);
 }
 
 /// A non-Zig check run from the repo root. A missing tool fails the step, not the

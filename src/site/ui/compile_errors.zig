@@ -1,6 +1,6 @@
 //! Components that must not compile, each with the end of the error it must give: the
 //! attribute guards that keep escaping to two contexts, and the phrase and codec checks.
-//! Built one case at a time by build.zig's errorChecks (`zig build ui-errors`), as
+//! All built in one compile by build.zig's errorChecks (`zig build ui-errors`), as
 //! src/tpl/compile_errors.zig.
 
 const std = @import("std");
@@ -27,14 +27,22 @@ pub const cases = [_]Case{
 };
 
 const ui = @import("ui");
-const case = @import("options").case;
+
+/// Each case in an instantiation of its own: an error in one doesn't stop the others'
+fn Run(comptime name: []const u8) type {
+    return struct {
+        fn run() void {
+            var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+            defer arena.deinit();
+            var t: ui.Tree = .{};
+            var h: ui.H = .init(arena.allocator(), &t);
+            @field(bad, name)(&h);
+        }
+    };
+}
 
 test {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    var t: ui.Tree = .{};
-    var h: ui.H = .init(arena.allocator(), &t);
-    @field(bad, case)(&h);
+    inline for (cases) |c| _ = &Run(c.name).run;
 }
 
 var runtime_text: []const u8 = "x";

@@ -1,7 +1,7 @@
 //! Templates that must not compile, each with the end of the error it must give. A Zig
-//! test can't catch a compile error, so the build compiles each case on its own (the
-//! `case` option names its function in `bad`) and expects its message: build.zig's
-//! tplErrorChecks, `zig build tpl-errors`.
+//! test can't catch a compile error, so the build compiles every case of `bad` at once
+//! and src/tools/compileerrors.zig matches its errors to the cases: build.zig's
+//! errorChecks, `zig build tpl-errors`.
 
 const std = @import("std");
 
@@ -48,13 +48,21 @@ const trusted_in_attribute = "tpl.trusted HTML inside an attribute value would b
 const string_in_code = "a string in an on*, style or srcdoc attribute is script, CSS or HTML once entities are decoded; pass a number or a `format` value";
 
 const tpl = @import("tpl");
-const case = @import("options").case;
 const Writer = std.Io.Writer;
 
+/// Each case in an instantiation of its own: an error in one doesn't stop the others'
+fn Run(comptime name: []const u8) type {
+    return struct {
+        fn run() !void {
+            var buf: [256]u8 = undefined;
+            var w: Writer = .fixed(&buf);
+            try @field(bad, name)(&w);
+        }
+    };
+}
+
 test {
-    var buf: [256]u8 = undefined;
-    var w: Writer = .fixed(&buf);
-    try @field(bad, case)(&w);
+    inline for (cases) |c| _ = &Run(c.name).run;
 }
 
 const bad = struct {
