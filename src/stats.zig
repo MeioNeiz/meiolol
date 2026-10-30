@@ -541,8 +541,14 @@ pub const Trend = struct {
     patch_games: []u32,
     /// By patch, role, champion
     by_patch: []Counts,
+    /// UTC days (since 1970) the newest patch has games on, oldest first; at most
+    /// max_days, the newest
+    days: []const i32 = &.{},
+    /// By day, role, champion
+    by_day: []Counts = &.{},
 
     pub const max_patches = 6;
+    pub const max_days = 28;
 
     pub const Lane = struct {
         key: u32,
@@ -593,6 +599,11 @@ pub const Trend = struct {
 
     pub fn onPatch(t: *const Trend, p: usize, r: Role, c: usize) Counts {
         return t.by_patch[(p * Role.count + @backingInt(r)) * t.n + c];
+    }
+
+    /// d: an index into days
+    pub fn onDay(t: *const Trend, d: usize, r: Role, c: usize) Counts {
+        return t.by_day[(d * Role.count + @backingInt(r)) * t.n + c];
     }
 };
 
@@ -656,6 +667,10 @@ pub fn buildTrend(
         .since_ms = since_ms,
     };
     defer sink.lanes.deinit(gpa);
+    defer {
+        for (sink.days.values()) |d| gpa.free(d);
+        sink.days.deinit(gpa);
+    }
     _ = if (from) |games|
         try scanFrom(gpa, games, chosen.items, platforms, 0, &sink)
     else
@@ -670,6 +685,18 @@ pub fn buildTrend(
             return a.key < b.key;
         }
     }.f);
+
+    sink.days.sort(struct {
+        keys: []const i32,
+        pub fn lessThan(c: @This(), a: usize, b: usize) bool {
+            return c.keys[a] < c.keys[b];
+        }
+    }{ .keys = sink.days.keys() });
+    const kept = sink.days.count() - @min(sink.days.count(), Trend.max_days);
+    const days = try arena.dupe(i32, sink.days.keys()[kept..]);
+    t.days = days;
+    t.by_day = try arena.alloc(Counts, days.len * Role.count * st.n);
+    for (sink.days.values()[kept..], 0..) |d, k| @memcpy(t.by_day[k * d.len ..][0..d.len], d);
     return t;
 }
 
@@ -682,6 +709,8 @@ const TrendSink = struct {
     recent: []const u32,
     since_ms: i64,
     lanes: std.AutoHashMapUnmanaged(u32, [length_buckets]Counts) = .empty,
+    /// The newest patch's games by UTC day: by role, champion
+    days: std.AutoArrayHashMapUnmanaged(i32, []Counts) = .empty,
 
     fn add(s: *TrendSink, r: Row) !void {
         const t = s.t;
@@ -694,6 +723,19 @@ const TrendSink = struct {
             for (cs, 0..) |team, side| for (team, 0..) |c, role| {
                 add1(&t.by_patch[(p * Role.count + role) * t.n + (c orelse continue)], side == r.winner);
             };
+            if (p == 0) {
+                const e = try s.days.getOrPut(s.gpa, @intCast(@divFloor(r.start, std.time.ms_per_day)));
+                if (!e.found_existing) {
+                    e.value_ptr.* = s.gpa.alloc(Counts, Role.count * t.n) catch |err| {
+                        _ = s.days.pop();
+                        return err;
+                    };
+                    @memset(e.value_ptr.*, .{ .games = 0, .wins = 0 });
+                }
+                for (cs, 0..) |team, side| for (team, 0..) |c, role| {
+                    add1(&e.value_ptr.*[role * t.n + (c orelse continue)], side == r.winner);
+                };
+            }
         }
         if (r.start < s.since_ms or std.mem.findScalar(u32, s.window, r.patch) == null) return;
         const b = lengthBucket(r.duration_s);
@@ -905,6 +947,40 @@ test "trend: lengths in the view's window, patch counts over the newest patches"
     try testing.expectEqual(c(1, 0), t.bracket(.top, j, .mid));
     try testing.expectEqual(c(0, 0), t.bracket(.top, a, .low));
     try testing.expectEqual(c(0, 0), t.bracket(.top, a, .high));
+    // Starts 2000, 2000, 500 ms: one day
+    try testing.expectEqualSlices(i32, &.{0}, t.days);
+    try testing.expectEqual(c(3, 2), t.onDay(0, .top, a));
+}
+
+test "trend: the newest patch by day, oldest first, the newest max_days kept" {
+    const gpa = testing.allocator;
+    const db = try testDb();
+    defer db.close();
+    const day = std.time.ms_per_day;
+    for (0..Trend.max_days + 2) |i| {
+        var id: [16]u8 = undefined;
+        const m = try std.fmt.bufPrint(&id, "EUW1_{d}", .{i + 1});
+        try addMatch(db, m, "16.20", 420, if (i % 2 == 0) 100 else 200, false, roles_ok);
+        try db.run("UPDATE matches SET game_start = ? WHERE match_id = ?", .{ @as(i64, @intCast((40 - i) * day)), m });
+    }
+    try addMatch(db, "EUW1_99", "16.19", 420, 100, false, roles_ok);
+    var built = try build(gpa, db, &.{ "16.19", "16.20" }, euw);
+    defer built.builder.deinit();
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    try built.builder.write(&aw.writer, "16.20");
+    var s: core.Stats = try .parse(gpa, aw.written());
+    defer s.deinit(gpa);
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const t = try buildTrend(gpa, arena.allocator(), db, null, &s, &.{"16.20"}, &.{ "16.20", "16.19" }, euw, 0);
+    try testing.expectEqual(Trend.max_days, t.days.len);
+    try testing.expectEqual(@as(i32, 13), t.days[0]);
+    try testing.expectEqual(@as(i32, 40), t.days[t.days.len - 1]);
+    const a = s.index(1).?;
+    // Day 40: game 1, blue won; day 39: game 2, red won
+    try testing.expectEqual(Counts{ .games = 1, .wins = 1 }, t.onDay(t.days.len - 1, .top, a));
+    try testing.expectEqual(Counts{ .games = 1, .wins = 0 }, t.onDay(t.days.len - 2, .top, a));
 }
 
 test lengthBucket {

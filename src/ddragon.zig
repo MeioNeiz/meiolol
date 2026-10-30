@@ -226,6 +226,24 @@ pub const BuildData = struct {
     runes: []const Named,
     spells: []const Named,
     trees: []const Tree = &.{},
+    /// [champion, base attack range]
+    ranges: []const [2]u32 = &.{},
+
+    /// Melee under this base attack range (Jayce, Kayle, Gnar and Elise by their first
+    /// form)
+    pub const melee_range = 300;
+
+    pub const Reach = enum { melee, ranged };
+
+    /// null when the champion is unknown
+    pub fn reachOf(d: *const BuildData, champion: u32) ?Reach {
+        const i = std.sort.binarySearch([2]u32, d.ranges, champion, struct {
+            fn f(key: u32, r: [2]u32) std.math.Order {
+                return std.math.order(key, r[0]);
+            }
+        }.f) orelse return null;
+        return if (d.ranges[i][1] < melee_range) .melee else .ranged;
+    }
 
     pub fn isLegendary(d: *const BuildData, item: u32) bool {
         return std.sort.binarySearch(u32, d.legendary, item, orderU32) != null;
@@ -285,12 +303,36 @@ pub fn buildData(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io, p
     var http: std.http.Client = .{ .allocator = gpa, .io = io };
     defer http.deinit();
     const version = try versionFor(&http, arena, patch);
-    var bodies: [3][]const u8 = undefined;
-    for ([_][]const u8{ "item", "runesReforged", "summoner" }, &bodies) |file, *body| {
+    var bodies: [4][]const u8 = undefined;
+    for ([_][]const u8{ "item", "runesReforged", "summoner", "champion" }, &bodies) |file, *body| {
         const url = try arena.print(base ++ "/cdn/{s}/data/en_GB/{s}.json", .{ version, file });
         body.* = try fetch(&http, arena, url);
     }
-    return parseBuildData(arena, version, bodies[0], bodies[1], bodies[2]);
+    var d = try parseBuildData(arena, version, bodies[0], bodies[1], bodies[2]);
+    d.ranges = try parseRanges(arena, bodies[3]);
+    return d;
+}
+
+/// champion.json's base attack ranges, by champion id
+fn parseRanges(arena: std.mem.Allocator, body: []const u8) ![]const [2]u32 {
+    const Champ = struct { key: []const u8, stats: struct { attackrange: f32 } };
+    const doc = try std.json.parseFromSliceLeaky(
+        struct { data: std.json.ArrayHashMap(Champ) },
+        arena,
+        body,
+        .{ .ignore_unknown_fields = true },
+    );
+    var out: std.ArrayList([2]u32) = .empty;
+    for (doc.data.map.values()) |c| try out.append(arena, .{
+        std.fmt.parseInt(u32, c.key, 10) catch continue,
+        @intFromFloat(@max(c.stats.attackrange, 0)),
+    });
+    std.mem.sort([2]u32, out.items, {}, struct {
+        fn f(_: void, a: [2]u32, b: [2]u32) bool {
+            return a[0] < b[0];
+        }
+    }.f);
+    return out.items;
 }
 
 pub fn parseBuildData(
@@ -480,6 +522,23 @@ test "build data: boots tiers, trinkets, names" {
     try std.testing.expectEqual(8010, d.trees[0].slots[0][0]);
     try std.testing.expectEqualStrings("Adaptive force", find(d.runes, 5008).?.name);
     try std.testing.expectEqualStrings("Flash", find(d.spells, 4).?.name);
+}
+
+test "build data: melee or ranged by base attack range" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const body =
+        \\{"data": {
+        \\ "Darius": {"key": "122", "stats": {"attackrange": 175, "hp": 652}},
+        \\ "Jinx": {"key": "222", "stats": {"attackrange": 525}},
+        \\ "Jayce": {"key": "126", "stats": {"attackrange": 125}}
+        \\}}
+    ;
+    const d: BuildData = .{ .version = "", .legendary = &.{}, .trinkets = &.{}, .boots = &.{}, .items = &.{}, .runes = &.{}, .spells = &.{}, .ranges = try parseRanges(arena.allocator(), body) };
+    try std.testing.expectEqual(.melee, d.reachOf(122).?);
+    try std.testing.expectEqual(.ranged, d.reachOf(222).?);
+    try std.testing.expectEqual(.melee, d.reachOf(126).?);
+    try std.testing.expectEqual(null, d.reachOf(1));
 }
 
 test "champions: by id, with their image" {

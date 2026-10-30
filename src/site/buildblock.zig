@@ -17,9 +17,19 @@ const Art = ui.art.Art;
 const min_tree_share = 0.02;
 const pages_shown = 4;
 
-/// `b` (a File.Build of `f`) as the panel's data, in `a`. `champion`: its name
+/// `b` (a File.Build of `f`) as the panel's data, in `a`, with its runes against melee
+/// and ranged lane opponents when the file has them. `champion`: its name
 pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8) !bp.Data {
-    return dataVs(a, f, b, champion, null);
+    var d = try dataVs(a, f, b, champion, null);
+    const melee = f.getReach(b.champion, b.role, .melee);
+    const ranged = f.getReach(b.champion, b.role, .ranged);
+    if (melee == null and ranged == null) return d;
+    const reach = try a.alloc(rt.Data, 2);
+    for (reach, [_]?File.Build{ melee, ranged }) |*r, x| {
+        r.* = if (x) |y| try runes(a, f, y, b.get(.rune)) else .{ .trees = &.{}, .games = 0, .wins = 0 };
+    }
+    d.reach = reach;
+    return d;
 }
 
 /// A matchup's `b`, with the champion's `usual` build: each slot's "as usual" option and

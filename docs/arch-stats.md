@@ -126,7 +126,9 @@ histogram, interpolated) of each boots and finished item in its slot (0 boots, 1
 item), for the items in the file's options; role-wide only. Per build `first_item`:
 players and wins by the minute their first finished item was bought (one-minute buckets;
 the champion page's First item done card); role-wide only. Matchups count every kind but
-keystone and skill_start. Needs Data Dragon's item.json,
+keystone and skill_start. `by_reach`: the rune kinds (runes, shards, rune, shard) by the
+lane opponent's reach, melee under 300 base attack range (Data Dragon champion.json),
+groups of 100+ players (Options.min_reach_games), 4 pages each. Needs Data Dragon's item.json,
 runesReforged.json and summoner.json for the patch (ddragon.buildData); stat shard names
 are a table in ddragon.zig.
 

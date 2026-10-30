@@ -95,7 +95,7 @@ test "fixture games to stats, curves and the website" {
 
     // Builds count Platinum IV and up only: one rank snapshot below it is left out
     try db.exec("UPDATE participants SET tier = CASE slot WHEN 5 THEN 'GOLD' ELSE 'PLATINUM' END");
-    var bd = try buildsOne(try cubeDir(arena, dir, "builds"), db, .{ .min_matchup_games = 0 }, .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} } });
+    var bd = try buildsOne(try cubeDir(arena, dir, "builds"), db, .{ .min_matchup_games = 0, .min_reach_games = 1 }, .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} } });
     defer bd.deinit();
     try testing.expectEqual(games, bd.timelines);
     const build_file = try bd.file(arena, &build_data, patch, "PLATINUM", 10);
@@ -130,6 +130,11 @@ test "fixture games to stats, curves and the website" {
     try testing.expectEqualStrings("Conqueror", block.runes.pages[0].keystone.name);
     try testing.expectEqualStrings("Resolve", block.runes.pages[0].second.name);
     try testing.expectEqual(3, block.runes.shards.len);
+    // Against Mordekaiser, melee, every game; none against a ranged opponent
+    try testing.expectEqual(2, block.reach.len);
+    try testing.expectEqual(games, block.reach[0].games);
+    try testing.expectEqualStrings("Conqueror", block.reach[0].pages[0].keystone.name);
+    try testing.expectEqual(0, block.reach[1].games);
     var panel: site.ui.buildpanel.BuildPanel = undefined;
     try panel.init(arena, &block);
     var panel_tree: site.ui.Tree = .{};
@@ -1973,6 +1978,9 @@ const build_data: ddragon.BuildData = .{
         .{ .id = 8000, .slots = &.{ &.{ 8005, 8008, 8021, 8010 }, &.{ 9101, 9111, 8009 }, &.{ 9104, 9105, 9103 }, &.{ 8014, 8017, 8299 } } },
         .{ .id = 8400, .slots = &.{ &.{ 8437, 8439, 8465 }, &.{ 8446, 8463, 8401 }, &.{ 8429, 8444, 8473 }, &.{ 8451, 8453, 8242 } } },
     },
+    // The fixture's champions: Twitch, Amumu, Orianna, Lee Sin, Mordekaiser, Ahri, Darius,
+    // Kai'Sa, Rakan, Pyke
+    .ranges = &.{ .{ 29, 550 }, .{ 32, 125 }, .{ 61, 525 }, .{ 64, 125 }, .{ 82, 175 }, .{ 103, 550 }, .{ 122, 175 }, .{ 145, 525 }, .{ 497, 300 }, .{ 555, 150 } },
 };
 
 /// The fixture game stored `games` times under EUW match ids, with its timeline and

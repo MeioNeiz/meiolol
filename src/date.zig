@@ -62,6 +62,16 @@ pub const Date = struct {
         return .{ .data = d };
     }
 
+    /// "11 Oct", for charts
+    pub fn short(d: Date) std.fmt.Alt(Date, writeShort) {
+        return .{ .data = d };
+    }
+
+    fn writeShort(d: Date, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+        try w.print("{d} {s}", .{ d.day, months[d.month - 1] });
+    }
+
     fn writeLong(d: Date, w: *std.Io.Writer) std.Io.Writer.Error!void {
         const months = [_][]const u8{
             "January",
@@ -125,6 +135,7 @@ test Date {
     var buf: [32]u8 = undefined;
     try std.testing.expectEqualStrings("2025-10-11", try std.mem.print(&buf, "{f}", .{d}));
     try std.testing.expectEqualStrings("11 October 2025", try std.mem.print(&buf, "{f}", .{d.long()}));
+    try std.testing.expectEqualStrings("11 Oct", try std.mem.print(&buf, "{f}", .{d.short()}));
     try std.testing.expectEqual(d, Date.parse("2025-10-11").?);
     try std.testing.expectEqual(null, Date.parse("2025-13-01"));
     try std.testing.expectEqual(0, (Date{ .year = 1970, .month = 1, .day = 1 }).toDay());

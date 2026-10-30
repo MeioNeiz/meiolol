@@ -16,6 +16,7 @@ const stats = @import("../stats.zig");
 const builds = @import("../builds.zig");
 const learning = @import("../learning.zig");
 const ddragon = @import("../ddragon.zig");
+const Date = @import("../date.zig").Date;
 const curvesfile = core.curvesfile;
 
 const Writer = std.Io.Writer;
@@ -196,6 +197,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
     const lean: ?i16 = if (site.lean) |l| if (l.get(ch.id, r)) |row| (if (row.enough()) @intFromFloat(@round(row.gold / 10) * 10) else null) else null else null;
 
     var by_patch: []cp.Patch = &.{};
+    var by_day: []cp.Day = &.{};
     var by_length: []cp.Counts = &.{};
     if (site.trend) |*t| {
         by_patch = try a.alloc(cp.Patch, t.patches.len);
@@ -204,6 +206,17 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
             const c = t.onPatch(pi, r, ch.c);
             const k = try trend.patchRank(a, t, pi, r, ch.c);
             x.* = .{ .patch = t.patches[pi], .games = c.games, .wins = c.wins, .rank = if (k) |x2| @intCast(x2.rank) else 0 };
+        }
+        by_day = try a.alloc(cp.Day, t.days.len);
+        for (by_day, t.days, 0..) |*x, day, i| {
+            const c = t.onDay(i, r, ch.c);
+            const d: Date = .fromDay(@max(day, 0));
+            x.* = .{
+                .label = try std.fmt.allocPrint(a, "{d}", .{d.day}),
+                .tip = try std.fmt.allocPrint(a, "{f}", .{d.short()}),
+                .games = c.games,
+                .wins = c.wins,
+            };
         }
         by_length = try a.alloc(cp.Counts, stats.length_buckets);
         for (by_length, 0..) |*x, b| {
@@ -238,6 +251,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .build = if (picked) |b| try buildblock.data(a, b.f, b.b, ch.name) else null,
         .rels = rels.items,
         .by_patch = by_patch,
+        .by_day = by_day,
         .by_length = by_length,
     };
 }

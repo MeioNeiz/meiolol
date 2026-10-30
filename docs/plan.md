@@ -56,8 +56,8 @@ decisions.md "Open decisions".
 5. Daily Draft and Learn (site.md): Daily's pick verdicts (J26: every option's rank, who
    should have won, lanes won), share with facts; Learn's myth-or-measured cards from
    final learned.md lines. Owner W3
-6. Champion and matchup pages to LoLalytics' level (docs/champion-matchup.md): CH0 (open
-   choices on decisions.md's recommendations for now), then site.md's CH Later list.
+6. Champion and matchup pages to LoLalytics' level (docs/champion-matchup.md): CH0 done
+   (rune rows by reach, trends by day), then site.md's CH Later list.
    Owner W9
 7. The data edge (J23, J24; estimates.md): E7 day cubes, then E2's truth test, then
    Meio. Items 10 and 11 feed it. Owner W2

@@ -142,10 +142,8 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
 
 ### Steps
 
-- CH0 Jacob's choices still open: (d) trends by patch or by day; (e) a blind-safe score,
-  rune rows split by melee or ranged opponent, purchases split by gold lead. (a)-(c)
-  answered: docs/plan/ui/champion.md (one role on screen, most played and highest win
-  rate at once, no tier letters)
+None open: the Later list below. CH0 on decisions.md's recommendations (Jacob to
+confirm): no blind-safe score (J2 measured no win), purchases by gold lead later
 
 ### Status
 
@@ -165,7 +163,10 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
   vs Mid, vs Bot, vs Support, Duos (by ally role), vs usual with k per tab
   (champion.Pairs; off-lane pairs pull harder). Under a filter other than the root
   view, filters.js reuses the root view's opponent strengths
-- By patch (win line, pick bars, rank in role) and by game length (5 buckets) cards
+- Rune panel: All | vs melee | vs ranged (the lane opponent's base attack range under
+  300), ▲▼ on runes the reach moves from all; builds files' by_reach, groups of 100+
+- By patch (win line, pick bars, rank in role; Patches | Days: the newest patch by UTC
+  day, stats.Trend.days) and by game length (5 buckets) cards
   after the opponents, from stats.Trend per view
 - Build page: tables in a grid of ~490 px cells, rune pages drawn as in game with
   per-rune pick and win rate, "highest win rate" marks pulled by k per kind (File.shrink,
@@ -177,6 +178,7 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
 
 ### Later
 
+- Purchases split by gold lead (CH0)
 - Influence per opponent (bans into your pool's hard lanes, B3) and per rank filter
 - Grey the builds strip when a filter leaves the patch view's region (filters.js)
 - Objectives secured and won, end-of-game stats ranked in the role (LoLalytics only)

@@ -98,6 +98,9 @@ pub const Slot = struct {
 
 pub const Data = struct {
     runes: runetree.Data,
+    /// The runes against melee, then ranged lane opponents (moves from `runes` marked),
+    /// or none
+    reach: []const runetree.Data = &.{},
     /// Any order; a kind with no options draws no cell
     slots: []const Slot,
     champion: []const u8,
@@ -118,6 +121,8 @@ const W = struct {
     pub const sort = plain("Sort");
     pub const levels = plain("Levels");
     pub const most_picked = plain("Most picked");
+    pub const reach = plain("Lane opponent");
+    pub const reaches = [3]tree.Text{ plain("All"), plain("vs melee"), plain("vs ranged") };
     pub const highest = plain("Highest WR");
 };
 
@@ -277,13 +282,15 @@ pub const BuildPanel = struct {
     /// The cell open across the panel
     open: ?Kind = null,
     order: Order = .pick,
+    /// The runes shown: 0 all, then Data.reach's
+    reach: u8 = 0,
     /// Unique on the page: the note's id starts with it
     id: []const u8 = "build",
     ctx: [n_kinds]Ctx = undefined,
     rows: [n_kinds][]Row = @splat(&.{}),
     tables: [n_kinds]Table = undefined,
 
-    pub const Msg = union(enum) { open: Kind, key, order: Order };
+    pub const Msg = union(enum) { open: Kind, key, order: Order, reach: u8 };
 
     pub const Url = struct {
         slot: ?Kind = null,
@@ -351,6 +358,10 @@ pub const BuildPanel = struct {
                 p.setOrder(o);
                 ev.push = true;
             },
+            .reach => |i| {
+                p.reach = if (i <= p.data.reach.len) i else 0;
+                p.runes.data = if (p.reach == 0) &p.data.runes else &p.data.reach[p.reach - 1];
+            },
             // Escape in the open cell closes it, focus back on its "all"
             .key => {
                 const k = p.open orelse return;
@@ -368,7 +379,7 @@ pub const BuildPanel = struct {
         for ([_]Kind{ .spells, .start, .boots, .core, .item4, .item5, .item6 }) |k| if (p.cell(h, k)) |c| cells.add(c);
         if (p.skillsCell(h)) |c| cells.add(c);
         return h.div(.{ .class = "c-build" }, .{h.div(.{ .class = "in" }, .{
-            h.div(.{ .class = "runes" }, .{p.runes.view(h)}),
+            h.div(.{ .class = "runes" }, .{ p.reachPick(h), p.runes.view(h) }),
             p.levels(h),
             h.div(.{ .class = "slots" }, .{
                 h.div(.{ .class = "sort" }, .{
@@ -381,6 +392,17 @@ pub const BuildPanel = struct {
                 h.div(.{ .class = "cells" }, .{cells.done()}),
             }),
         })});
+    }
+
+    /// All runes, or those against melee or ranged lane opponents
+    fn reachPick(p: *BuildPanel, h: *H) N {
+        if (p.data.reach.len == 0) return .none;
+        var items: [W.reaches.len]segmented.Item = undefined;
+        for (&items, W.reaches, 0..) |*it, label, i| {
+            const games = if (i == 0) p.data.runes.games else if (i <= p.data.reach.len) p.data.reach[i - 1].games else 0;
+            it.* = .{ .label = label, .n = games, .selected = p.reach == i, .disabled = games == 0, .on = h.on(p, .{ .reach = @intCast(i) }) };
+        }
+        return h.div(.{ .class = "reach" }, .{segmented.view(h, .{ .s = .s, .label = W.reach }, items[0 .. p.data.reach.len + 1])});
     }
 
     fn allRef(k: Kind) []const u8 {
@@ -549,6 +571,7 @@ pub const css =
     \\  @container (min-width: 1400px) { .c-build > .in { grid-template-columns: minmax(0, 660px) minmax(0, 1fr); } }
     \\  .c-build > .in > * { min-width: 0; }
     \\  .c-build > .in > .levels { order: 1; }
+    \\  .c-build .runes > .reach { margin-bottom: var(--sp-3); }
     \\  .c-build .slots { container-type: inline-size; display: flex; flex-direction: column; }
     \\  .c-build .slots > .sort { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3);
     \\    font-size: var(--fs-s); color: var(--muted); }
@@ -642,6 +665,23 @@ pub fn gallery(g: *Gallery) void {
         p.runes.id = p.id;
         g.addFill(s[0], p.view(h));
     }
+    const reach = h.mem.create(Data) catch {
+        h.oom = true;
+        return;
+    };
+    reach.* = demo.darius;
+    reach.reach = &.{ demo.darius.runes, .{ .trees = &.{}, .games = 0, .wins = 0 } };
+    const pr = h.mem.create(BuildPanel) catch {
+        h.oom = true;
+        return;
+    };
+    pr.init(h.mem, reach) catch {
+        h.oom = true;
+        return;
+    };
+    pr.id = h.fmt("build-reach-{d}", .{g.width});
+    pr.runes.id = pr.id;
+    g.addFill("runes by lane opponent: All, vs melee, vs ranged (none here)", pr.view(h));
     const vs = matchup(h, &demo.darius) catch {
         h.oom = true;
         return;

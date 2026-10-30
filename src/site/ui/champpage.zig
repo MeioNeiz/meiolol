@@ -114,11 +114,21 @@ pub const Role = struct {
     /// Against or with each role: lane opponents first
     rels: []const Rel,
     by_patch: []const Patch,
+    /// The newest patch by day, oldest first
+    by_day: []const Day = &.{},
     /// Data.lengths' buckets
     by_length: []const Counts,
 };
 
 pub const Counts = struct { games: u32, wins: u32 };
+
+pub const Day = struct {
+    /// The day of the month ("24"); tip: "24 Oct"
+    label: []const u8,
+    tip: []const u8,
+    games: u32,
+    wins: u32,
+};
 
 /// Games and wins in a bucket of minutes ("<10", "10-12", "16+")
 pub const Timed = struct { label: []const u8, games: u32, wins: u32 };
@@ -328,6 +338,10 @@ pub const W = struct {
     pub const wins = Phrase("{c:text} wins");
     pub const none = plain("Not enough games yet.");
     pub const by_patch = plain("By patch");
+    pub const by_day = Phrase("{p:text} by day");
+    pub const span = plain("Patches or days");
+    pub const patches = plain("Patches");
+    pub const by_days = plain("Days");
     pub const by_length = plain("By game length");
     pub const lean = Phrase("Early lean {g:signed} gold");
     pub const lean_note = plain("Gold at 14 minutes against an average lane opponent, from games of every length: whether it wins lanes, apart from how long its games last.");
@@ -369,6 +383,7 @@ pub const W = struct {
     pub const share = Phrase("{s:pct}");
     pub const pool = plain("Pool");
     pub const patch_tip = Phrase("{p:text}: {r:rate} in {n:count} games");
+    pub const day_tip = Phrase("{d:text}: {r:rate} in {n:count} games");
     pub const length_tip = Phrase("{l:text} min: {r:rate} in {n:count} games");
     pub const band_tip = Phrase("{l:text}: {r:rate} in {n:count} games");
     pub const few = Phrase("Too few games at {r:text}.");
@@ -491,6 +506,7 @@ pub const MoreRole = struct {
     lean: ?i16 = null,
     rels: []const Rel,
     by_patch: []const Patch,
+    by_day: []const Day = &.{},
     by_length: []const Counts,
 };
 
@@ -562,7 +578,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
     for (d.roles, top, build, more, charts) |x, *t, *b, *m, *c| {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
-        m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_length = x.by_length };
+        m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_day = x.by_day, .by_length = x.by_length };
         c.* = .{ .role = x.role, .lane = x.lane, .comeback = x.comeback, .kills = x.kills, .ranks = x.ranks, .timing = x.timing };
     }
     return .{
@@ -960,9 +976,21 @@ pub const More = struct {
     cur: u8 = 0,
     grid: matchgrid.MatchupGrid = .{},
     by_patch: trend.Trend = .{ .label = W.by_patch, .points = &.{} },
+    span: Span = .{},
     by_length: trend.Trend = .{ .label = W.by_length, .points = &.{} },
 
     const P = @This();
+
+    /// The By patch card's: the last patches, or the newest one by day
+    const Span = struct {
+        days: bool = false,
+
+        pub const Msg = enum { patches, days };
+
+        pub fn update(s: *Span, m: Span.Msg, _: *tree.Event) void {
+            s.days = m == .days;
+        }
+    };
 
     pub const Msg = matchgrid.Msg;
 
@@ -1069,10 +1097,12 @@ pub const More = struct {
     }
 
     fn patchCard(p: *P, h: *H) N {
-        const by_patch = if (p.ranked()) |x| switch (x) {
+        const by_patch, const by_day = if (p.ranked()) |x| switch (x) {
             .few => return card.view(h, .{}, &.{ card.head(h, W.by_patch, null, &.{}), p.few(h) }),
-            .role => |y| y.by_patch,
-        } else p.r().by_patch;
+            .role => |y| .{ y.by_patch, y.by_day },
+        } else .{ p.r().by_patch, p.r().by_day };
+        if (by_day.len < 2) p.span.days = false;
+        if (p.span.days) return p.dayCard(h, by_patch, by_day);
         const pts = h.mem.alloc(trend.Point, by_patch.len) catch {
             h.oom = true;
             return .none;
@@ -1094,7 +1124,46 @@ pub const More = struct {
         if (p.by_patch.tip) |t| if (t >= n) {
             p.by_patch.tip = null;
         };
-        return card.view(h, .{}, &.{ card.head(h, W.by_patch, null, &.{}), p.by_patch.view(h) });
+        p.by_patch.label = W.by_patch;
+        return card.view(h, .{}, &.{ card.head(h, W.by_patch, null, &.{p.spanPick(h, by_day.len)}), p.by_patch.view(h) });
+    }
+
+    /// The newest patch by day (by_patch's last), the first with its month; every other
+    /// day named past 10
+    fn dayCard(p: *P, h: *H, by_patch: []const Patch, by_day: []const Day) N {
+        const pts = h.mem.alloc(trend.Point, by_day.len) catch {
+            h.oom = true;
+            return .none;
+        };
+        var n: usize = 0;
+        for (by_day, 0..) |x, i| {
+            if (x.games == 0) continue;
+            const c: Counts = .{ .games = x.games, .wins = x.wins };
+            const named = by_day.len <= 10 or (by_day.len - 1 - i) % 2 == 0;
+            pts[n] = .{
+                .label = .{ .s = if (n == 0) x.tip else if (named) x.label else "" },
+                .sub = if (named) phrase.num(h, .kilo, c.games) else null,
+                .v = rate(c),
+                .ci = ci(c),
+                .tip = W.day_tip.with(h, .{ .d = x.tip, .r = rate(c), .n = x.games }),
+            };
+            n += 1;
+        }
+        p.by_patch.points = pts[0..n];
+        if (p.by_patch.tip) |t| if (t >= n) {
+            p.by_patch.tip = null;
+        };
+        const title = W.by_day.with(h, .{ .p = if (by_patch.len > 0) by_patch[by_patch.len - 1].patch else "" });
+        p.by_patch.label = title;
+        return card.view(h, .{}, &.{ card.head(h, title, null, &.{p.spanPick(h, by_day.len)}), p.by_patch.view(h) });
+    }
+
+    fn spanPick(p: *P, h: *H, days: usize) N {
+        if (days < 2) return .none;
+        return segmented.view(h, .{ .s = .s, .label = W.span }, &.{
+            .{ .label = W.patches, .selected = !p.span.days, .on = h.on(&p.span, .patches) },
+            .{ .label = W.by_days, .selected = p.span.days, .on = h.on(&p.span, .days) },
+        });
     }
 
     fn lengthCard(p: *P, h: *H) N {

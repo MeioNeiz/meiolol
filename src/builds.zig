@@ -99,6 +99,9 @@ pub const Options = struct {
     /// Matchups (champion, role and lane opponent) written: those with this many games
     /// or more; null for none
     min_matchup_games: ?u32 = null,
+    /// By the lane opponent's reach: groups with this many players; under it the panel
+    /// shows no win rate (ui.buildpanel.rate_games)
+    min_reach_games: u32 = 100,
 };
 
 pub const Count = struct { games: u32 = 0, wins: u32 = 0 };
@@ -123,6 +126,9 @@ pub const File = struct {
     /// Per lane opponent, sorted by champion, role, then opponent; only matchup_kinds.
     /// Empty in files from before 20 Oct 2026
     matchups: []const Build = &.{},
+    /// By the lane opponent's reach (opponent: Reach), sorted as matchups; only
+    /// reach_kinds. Empty in files from before 30 Oct 2026
+    by_reach: []const Build = &.{},
     /// Per kind, k: the games that pull an option's win rate halfway to its slot's, so a
     /// few lucky games can't make an option look best (spreadK). Empty in files before
     /// 21 Oct 2026
@@ -175,6 +181,12 @@ pub const File = struct {
         return f.matchups[i];
     }
 
+    pub fn getReach(f: *const File, champion: u32, role: Role, reach: ddragon.BuildData.Reach) ?Build {
+        const key: BuildKey = .{ .champion = champion, .role = role, .opponent = reachKey(reach) };
+        const i = std.sort.binarySearch(Build, f.by_reach, key, BuildKey.order) orelse return null;
+        return f.by_reach[i];
+    }
+
     pub fn parse(arena: std.mem.Allocator, bytes: []const u8) !File {
         return std.json.parseFromSliceLeaky(File, arena, bytes, .{ .ignore_unknown_fields = true });
     }
@@ -195,6 +207,15 @@ const BuildKey = struct {
 
 /// Kinds counted per lane opponent; keystone and skill_start only role-wide
 pub const matchup_kinds = [_]Kind{ .runes, .shards, .rune, .shard, .spells, .start, .boots, .core2, .core3, .item4, .item5, .item6, .skills, .skill_path };
+/// Kinds counted by the lane opponent's reach (melee or ranged): the rune page's
+pub const reach_kinds = [_]Kind{ .runes, .shards, .rune, .shard };
+/// Rune pages written per reach: the panel's (site/buildblock.zig pages_shown)
+const reach_pages = 4;
+
+/// File.Build.opponent in by_reach
+fn reachKey(r: ddragon.BuildData.Reach) u16 {
+    return @as(u16, @backingInt(r)) + 1;
+}
 
 const Key = struct { champion: u16, role: Role, opponent: u16 = 0, kind: Kind, v: [max_values]u32 };
 const Total = struct { champion: u16, role: Role, opponent: u16 = 0, kind: ?Kind };
@@ -222,26 +243,51 @@ pub const Builder = struct {
     vs: ?*Builder = null,
     /// Matchups below this many games are left out of the file
     min_matchup_games: u32 = 0,
-    /// This builder counts per opponent (Player.opponent, 0: skipped) and matchup_kinds
-    per_opponent: bool = false,
+    /// By the lane opponent's reach; owned
+    reach: ?*Builder = null,
+    /// Reach groups below this many players are left out of the file
+    min_reach_games: u32 = 0,
+    /// What this builder counts apart: everything role-wide, per opponent
+    /// (Player.opponent, 0 skipped) matchup_kinds, or by the opponent's reach
+    /// reach_kinds
+    split: Split = .none,
+
+    pub const Split = enum { none, opponent, reach };
 
     pub fn deinit(b: *Builder) void {
         b.options.deinit(b.gpa);
         b.totals.deinit(b.gpa);
         b.minutes.deinit(b.gpa);
         b.first_item.deinit(b.gpa);
-        if (b.vs) |v| {
+        for ([_]?*Builder{ b.vs, b.reach }) |sub| if (sub) |v| {
             v.deinit();
             b.gpa.destroy(v);
-        }
+        };
     }
 
     /// Starts counting per lane opponent beside the role-wide counts
     pub fn countMatchups(b: *Builder, max_keys: usize, min_games: u32) !void {
         const v = try b.gpa.create(Builder);
-        v.* = .{ .gpa = b.gpa, .max_keys = @max(max_keys, 2), .per_opponent = true };
+        v.* = .{ .gpa = b.gpa, .max_keys = @max(max_keys, 2), .split = .opponent };
         b.vs = v;
         b.min_matchup_games = min_games;
+    }
+
+    /// Starts counting the rune page by the lane opponent's reach
+    pub fn countReach(b: *Builder, min_games: u32) !void {
+        const v = try b.gpa.create(Builder);
+        v.* = .{ .gpa = b.gpa, .max_keys = @max(b.max_keys / 4, 2), .split = .reach };
+        b.reach = v;
+        b.min_reach_games = min_games;
+    }
+
+    /// Whether this builder counts `kind`
+    fn counts(b: *const Builder, kind: Kind) bool {
+        return switch (b.split) {
+            .none => true,
+            .opponent => std.mem.findScalar(Kind, &matchup_kinds, kind) != null,
+            .reach => std.mem.findScalar(Kind, &reach_kinds, kind) != null,
+        };
     }
 
     fn total(b: *Builder, t: Total, won: bool) !void {
@@ -257,7 +303,7 @@ pub const Builder = struct {
 
     fn addVs(b: *Builder, champion: u32, role: Role, opponent: u16, kind: Kind, v: []const u32, won: bool) !void {
         const c: u16 = @intCast(champion);
-        if (b.per_opponent and std.mem.findScalar(Kind, &matchup_kinds, kind) == null) return;
+        if (!b.counts(kind)) return;
         try b.total(.{ .champion = c, .role = role, .opponent = opponent, .kind = kind }, won);
         try b.option(c, role, opponent, kind, v, won);
     }
@@ -266,7 +312,7 @@ pub const Builder = struct {
     /// 0 (no rune) is skipped
     fn addEach(b: *Builder, champion: u32, role: Role, opponent: u16, kind: Kind, vs: []const []const u32, won: bool) !void {
         const c: u16 = @intCast(champion);
-        if (b.per_opponent and std.mem.findScalar(Kind, &matchup_kinds, kind) == null) return;
+        if (!b.counts(kind)) return;
         try b.total(.{ .champion = c, .role = role, .opponent = opponent, .kind = kind }, won);
         for (vs) |v| if (v[v.len - 1] != 0) try b.option(c, role, opponent, kind, v, won);
     }
@@ -311,16 +357,27 @@ pub const Builder = struct {
             b.options = kept;
         }
         log.info("{s}dropped options with {d} or fewer games ({d} games in all)", .{
-            if (b.per_opponent) "matchups: " else "", b.floor, b.dropped_games,
+            switch (b.split) {
+                .none => "",
+                .opponent => "matchups: ",
+                .reach => "by reach: ",
+            },
+            b.floor,
+            b.dropped_games,
         });
     }
 
     /// One player: their participants row and, with a timeline, their picks
     pub fn addPlayer(b: *Builder, p: Player, chosen: ?Picks, d: *const ddragon.BuildData) !void {
         if (b.vs) |v| if (p.opponent != 0) try v.addPlayer(p, chosen, d);
+        if (b.reach) |v| if (p.opponent != 0) try v.addPlayer(p, chosen, d);
         const c: u16 = @intCast(p.champion);
-        const opp: u16 = if (b.per_opponent) @intCast(p.opponent) else 0;
-        if (b.per_opponent and opp == 0) return;
+        const opp: u16 = switch (b.split) {
+            .none => 0,
+            .opponent => @intCast(p.opponent),
+            .reach => reachKey(d.reachOf(p.opponent) orelse return),
+        };
+        if (b.split == .opponent and opp == 0) return;
         try b.total(.{ .champion = c, .role = p.role, .opponent = opp, .kind = null }, p.won);
         if (p.keystone != 0) {
             try b.addVs(p.champion, p.role, opp, .keystone, &.{p.keystone}, p.won);
@@ -341,6 +398,7 @@ pub const Builder = struct {
         if (p.spells[0] != 0) try b.addVs(p.champion, p.role, opp, .spells, &.{
             @min(p.spells[0], p.spells[1]), @max(p.spells[0], p.spells[1]),
         }, p.won);
+        if (b.split == .reach) return;
         const k = chosen orelse return;
         if (!k.start_overflow and k.start_len > 0) {
             var start = k.start;
@@ -359,7 +417,7 @@ pub const Builder = struct {
         if (k.skillOrder()) |order| try b.addVs(p.champion, p.role, opp, .skills, &order, p.won);
         if (k.skill_ups >= 3) try b.addVs(p.champion, p.role, opp, .skill_start, &.{ k.first[0], k.first[1], k.first[2] }, p.won);
         if (k.skillPath()) |path| try b.addVs(p.champion, p.role, opp, .skill_path, &path, p.won);
-        if (b.per_opponent) return;
+        if (b.split != .none) return;
         if (k.boots != 0) if (d.bootsOf(k.boots)) |boots| try b.addMinute(c, p.role, 0, boots, k.boots_ms);
         for (k.core[0..k.core_len], k.core_ms[0..k.core_len], 1..) |item, ms, slot| try b.addMinute(c, p.role, @intCast(slot), item, ms);
         if (k.core_len > 0) try b.addFirstItem(c, p.role, k.core_ms[0], p.won);
@@ -371,6 +429,7 @@ pub const Builder = struct {
         var used: [3]std.AutoArrayHashMapUnmanaged(u32, void) = @splat(.empty);
         const builds = try b.fileBuilds(arena, &used, rows, 0);
         const matchups = if (b.vs) |v| try v.fileBuilds(arena, &used, @min(rows, matchup_rows), b.min_matchup_games) else &.{};
+        const by_reach = if (b.reach) |v| try v.fileBuilds(arena, &used, @min(rows, reach_pages), b.min_reach_games) else &.{};
         for (d.trees) |t| {
             try used[1].put(arena, t.id, {});
             for (t.slots) |slot| for (slot) |id| try used[1].put(arena, id, {});
@@ -395,6 +454,7 @@ pub const Builder = struct {
             .trees = d.trees,
             .builds = builds,
             .matchups = matchups,
+            .by_reach = by_reach,
             .shrink = try shrinks(arena, builds, matchups, d.trees),
         };
     }
@@ -828,6 +888,7 @@ pub const Set = struct {
 pub fn initSets(gpa: std.mem.Allocator, o: Options, sets: []const Set, out: []Builder) !void {
     for (out) |*b| b.* = .{ .gpa = gpa, .max_keys = @max(o.max_keys, 2) };
     errdefer for (out) |*b| b.deinit();
+    for (out) |*b| try b.countReach(o.min_reach_games);
     if (o.min_matchup_games) |min| for (out, sets) |*b, set| {
         if (set.matchups) try b.countMatchups(o.max_matchup_keys, min);
     };
@@ -1176,4 +1237,37 @@ test "builder: per lane opponent, own floor, only matchups with enough games" {
         \\{"label":"16.20","min_tier":"","games":0,"timelines":0,"items":[],"runes":[],"spells":[],"builds":[]}
     );
     try testing.expectEqual(0, old.matchups.len);
+}
+
+test "builder: rune pages by the lane opponent's reach, nothing else" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var d = try testData(arena);
+    d.ranges = &.{ .{ 86, 175 }, .{ 222, 525 } };
+    var b: Builder = .{ .gpa = testing.allocator, .max_keys = 64 };
+    defer b.deinit();
+    try b.countReach(100);
+    // Darius top, 50 times over: 2 vs Garen (melee, 1 won, Conqueror), 2 vs Jinx (ranged,
+    // 1 won, Grasp), 1 vs a champion without a range, 1 without a lane opponent; Garen top
+    // once vs Darius, under 100
+    for (0..50) |_| for ([_]u32{ 86, 86, 222, 222, 1, 0 }, [_]u32{ 8010, 8010, 8437, 8437, 8010, 8010 }, 0..) |opp, keystone, i| {
+        try b.addPlayer(.{ .champion = 122, .role = .top, .won = i % 2 == 0, .keystone = keystone, .primary = 8000, .secondary = 8400, .shards = .{ 5008, 5008, 5011 }, .spells = .{ 4, 12 }, .opponent = opp }, .{}, &d);
+    };
+    try b.addPlayer(.{ .champion = 86, .role = .top, .won = true, .keystone = 8010, .opponent = 122 }, .{}, &d);
+    const f = try b.file(arena, &d, "16.20", "PLATINUM", 3);
+    try testing.expectEqual(300, f.get(122, .top).?.games);
+    try testing.expectEqual(2, f.by_reach.len);
+    const melee = f.getReach(122, .top, .melee).?;
+    try testing.expectEqual(100, melee.games);
+    try testing.expectEqual(50, melee.wins);
+    try testing.expectEqualSlices(u32, &.{8010}, melee.get(.rune).?.options[0].v);
+    try testing.expectEqual(100, melee.get(.shards).?.games);
+    try testing.expectEqual(null, melee.get(.spells));
+    const ranged = f.getReach(122, .top, .ranged).?;
+    try testing.expectEqual(100, ranged.games);
+    try testing.expectEqual(8437, ranged.get(.runes).?.options[0].v[1]);
+    try testing.expectEqual(null, f.getReach(86, .top, .melee));
+    const back = try File.parse(arena, try std.json.Stringify.valueAlloc(arena, f, .{}));
+    try testing.expectEqual(100, back.getReach(122, .top, .melee).?.games);
 }
