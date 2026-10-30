@@ -1,5 +1,6 @@
 ---
-status: answered
+status: decided
+decision: docs/plan/ui/stack.md#3-styles-beside-each-component-inlined-per-page
 priority: soon
 area: ui
 tags: [web]
@@ -30,6 +31,14 @@ Components first drawn on the client need their CSS on the page already (C17).
 For meiolol (C18): work the CSS out automatically, no lists: the classes in the page's
 own HTML plus those compiled into its islands' wasm (post-link, so only reachable code).
 Inline it, or link one sheet per page kind if repeat views weigh more.
+
+Measured 29 Oct (local h2 proxy, applied Slow 4G and CPU 4x, FCP medians of 3, a cold
+page then four warm): one sheet 1504 then ~610 ms; inline 768 then ~675 (12-15 KB more
+HTML each, break-even ~12 pages a visit); cached common base 1320 then ~620; a sheet per
+page kind or per island ~1370 then ~1300 (each new kind misses the cache). Inline alone
+clears the render-blocking audit; Lighthouse's simulated FCP rates it a little worse
+(1152 vs 1020 mean), its bigger HTML charged in round trips. Computed styles identical
+on 11 pages. Chosen: inline (docs/plan/ui/stack.md section 3)
 
 ## Claims
 

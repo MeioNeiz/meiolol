@@ -21,6 +21,7 @@ const Writer = std.Io.Writer;
 const log = std.log.scoped(.site);
 
 const root = @import("root.zig");
+const sheets = @import("sheets.zig");
 const Options = root.Options;
 const Champ = root.Champ;
 const Site = root.Site;
@@ -117,6 +118,10 @@ pub const Loaded = struct {
 
     /// The page or file at `path` from the site root, in `arena`; null when there is none
     pub fn get(l: *Loaded, arena: std.mem.Allocator, path: []const u8) !?[]const u8 {
+        return try sheets.deliver(arena, try l.find(arena, path) orelse return null);
+    }
+
+    fn find(l: *Loaded, arena: std.mem.Allocator, path: []const u8) !?[]const u8 {
         const view, const rest = for ([_]html.View{ html.View.all[3], html.View.all[2], html.View.all[1] }) |v| {
             if (std.mem.startsWith(u8, path, v.dir())) break .{ v, path[v.dir().len..] };
         } else .{ html.View.all[0], path };
@@ -148,7 +153,7 @@ pub const Loaded = struct {
         shared.arena = arena;
         var aw: Writer.Allocating = .init(arena);
         try root.renderNotFound(&shared, &aw.writer);
-        return aw.written();
+        return try sheets.deliver(arena, aw.written());
     }
 
     /// The pages and files of the views loaded so far, each path from the site root,
