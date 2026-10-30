@@ -7,6 +7,7 @@ const std = @import("std");
 const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const champion = @import("champion.zig");
 const matchup = @import("matchup.zig");
 const assets = @import("assets.zig");
@@ -36,7 +37,7 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
         .matchups,
         .matchups,
     );
-    try html.head(w, p);
+    try shell.open(w, p);
     const d = try a.create(fd.Data);
     d.* = try data(site, if (site.curves) |*c| c else null);
     var f: fd.Finder = try .init(a, d, site.view.query());
@@ -64,7 +65,7 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
         .js = html.Link{ .path = assets.finder_js.path },
         .wasm = assets.finder_wasm.path,
     });
-    try html.foot(w, p);
+    try shell.close(w, p);
 }
 
 pub fn data(site: *const Site, curves: ?*const Curves) !fd.Data {

@@ -7,6 +7,7 @@ const core = @import("core");
 const ui = @import("ui");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const tpl = html.tpl;
 const champion = @import("champion.zig");
 const matchup = @import("matchup.zig");
@@ -48,7 +49,7 @@ pub fn writePage(site: *const Site, w: *Writer, r: ?Role) !void {
         .{ .pickup = if (r) |x| champion.uiRole(x) else null },
         .pool,
     );
-    try html.head(w, pg);
+    try shell.open(w, pg);
     // Every region's games, by the view's period (load.zig)
     try tpl.renderPart(w, "<h1>{title} ", .{ .title = W.title });
     try site.writeChip(w, .all_regions, site.periodDim(site.view.period), .plat);
@@ -58,7 +59,7 @@ pub fn writePage(site: *const Site, w: *Writer, r: ?Role) !void {
     tree.root = try view(site, &h, r);
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&tree, tree.root, w);
-    try html.foot(w, pg);
+    try shell.close(w, pg);
 }
 
 fn view(site: *const Site, h: *H, r: ?Role) !N {

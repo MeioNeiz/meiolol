@@ -7,6 +7,7 @@
 const std = @import("std");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const assets = @import("assets.zig");
 const daily = @import("../daily.zig");
 const Date = @import("../date.zig").Date;
@@ -27,17 +28,22 @@ pub fn write(site: *const Site, w: *Writer) !void {
         "Guess the last pick and the winner of a real pro draft, then see how the model reads every seat.",
         .daily,
     );
-    try html.head(w, p);
+    try shell.open(w, p);
     const today = todayNumber(site.io);
     const got = try pick(a, site.daily_files, today);
     if (if (got) |g| g.page else null) |shown| {
         try body(a, w, site.daily_files, shown, .{ .today = today, .redirects = true, .root = "/", .origin = origin(site) });
-    } else try w.writeAll(
-        \\<h1>Daily Draft</h1>
-        \\<p class="note">No puzzle today. Come back tomorrow.</p>
-        \\
-    );
-    try html.foot(w, p);
+    } else {
+        var t: ui.Tree = .{};
+        var h: ui.H = .init(a, &t);
+        t.root = h.div(.{}, .{
+            h.el(.h1, .{}, .{ui.phrase.plain("Daily Draft")}),
+            ui.site.note(&h, ui.phrase.plain("No puzzle today. Come back tomorrow.")),
+        });
+        if (h.oom) return error.OutOfMemory;
+        try ui.html.write(&t, t.root, w);
+    }
+    try shell.close(w, p);
 }
 
 /// /daily/<n>; false (not found) past tomorrow or without page data
@@ -56,9 +62,9 @@ fn routeOn(site: *const Site, w: *Writer, slug: []const u8, today: u32) !bool {
         .daily,
     );
     p.index = false;
-    try html.head(w, p);
+    try shell.open(w, p);
     try body(a, w, site.daily_files, shown, .{ .today = today, .redirects = false, .root = "/", .origin = origin(site) });
-    try html.foot(w, p);
+    try shell.close(w, p);
     return true;
 }
 

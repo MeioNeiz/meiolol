@@ -59,8 +59,9 @@ src/
   forget.zig         `meiolol forget`: GDPR erasure, `forgotten` suppression list
                      (both: docs/data-safety.md)
   status.zig         `meiolol status`: read-only counts, estimates for big tables
-  site/              public website generator (`meiolol site`): html.zig layout and
-                     boilerplate (markup through tpl/ or ui trees), textpages.zig fixed
+  site/              public website generator (`meiolol site`): html.zig links and
+                     Page, shell.zig the layout every page shares (head, ui.site's
+                     header and foot; markup through tpl/ or ui trees), textpages.zig fixed
                      text pages (markdown on ui.textpage) and the account pages
                      (ui.account), static/ (css, admin scripts)
   wasm.zig           recommender in the browser (wasm32-freestanding),

@@ -1,11 +1,10 @@
 //! /gallery in `meiolol dev`: ui.gallery's page, styled by every component's CSS (the
-//! site's bundle ships only the components a page uses) and no legacy layer
+//! site's bundle ships only the components a page uses)
 const std = @import("std");
 const ui = @import("ui");
 const style = @import("style.zig");
 
-const font = "@font-face { font-family: \"Inter\"; font-style: normal; font-weight: 100 900; font-display: swap;\n" ++
-    "  src: url(\"" ++ style.font.path ++ "\") format(\"woff2\"); }\n";
+const font = ui.css.font_face[0] ++ style.font.path ++ ui.css.font_face[1];
 
 pub const css = ui.css.head ++ font ++ ui.css.join(ui.all) ++ ui.gallery.css;
 

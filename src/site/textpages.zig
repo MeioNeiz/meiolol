@@ -3,6 +3,7 @@
 const std = @import("std");
 const ui = @import("ui");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const root = @import("root.zig");
 const assets = @import("assets.zig");
 const urls = ui.urls;
@@ -467,7 +468,7 @@ fn kCell(w: *Writer, p: curvesfile.curvefit.Param) Writer.Error!void {
     try w.print(" {d:.0} |", .{p.k()});
 }
 
-/// The body of text page `at`, between html.head and foot; false for one not here
+/// The body of text page `at`, between shell.open and close; false for one not here
 pub fn body(site: *const Site, w: *Writer, at: std.meta.Tag(urls.Page)) !bool {
     const a = site.arena;
     var t: ui.Tree = .{};
@@ -523,7 +524,7 @@ pub fn account(site: *const Site, w: *Writer, kind: ui.account.Kind) !void {
 pub fn notFound(site: *const Site, w: *Writer) !void {
     var p = try site.sharedPage("Page not found | meiolol", "No page at this address.", .none);
     p.index = false;
-    try html.head(w, p);
+    try shell.open(w, p);
     var t: ui.Tree = .{};
     var h: ui.H = .init(site.arena, &t);
     try writeBody(&h, w, .{
@@ -531,7 +532,7 @@ pub fn notFound(site: *const Site, w: *Writer) !void {
         .lead = "There's no page at this address: it may have moved, or the link has a typo.",
         .body = try ui.prose.parse(site.arena, not_found_md),
     });
-    try html.foot(w, p);
+    try shell.close(w, p);
 }
 
 test "doc: text fills go in after parsing, so their markdown characters stay text" {

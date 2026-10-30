@@ -7,6 +7,7 @@ const std = @import("std");
 const ui = @import("ui");
 const core = @import("core");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const assets = @import("assets.zig");
 const daily = @import("../daily.zig");
 const daily_page = @import("daily.zig");
@@ -40,7 +41,7 @@ pub fn writeIndex(site: *const Site, w: *Writer) !void {
         .home,
     );
     p.counterparts = null;
-    try html.head(w, p);
+    try shell.open(w, p);
     // Root-relative: home's own view copies sit under /_v/
     const up = "/";
 
@@ -62,7 +63,7 @@ pub fn writeIndex(site: *const Site, w: *Writer) !void {
         .js = html.Link{ .path = assets.home_js.path },
         .wasm = assets.home_wasm.path,
     });
-    try html.foot(w, p);
+    try shell.close(w, p);
 }
 
 comptime {

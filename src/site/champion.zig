@@ -6,6 +6,7 @@ const std = @import("std");
 const core = @import("core");
 const ui = @import("ui");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const assets = @import("assets.zig");
 const trend = @import("trend.zig");
 const tierlist = @import("tierlist.zig");
@@ -55,7 +56,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
     const desc = try a.print("{s} in ranked solo queue: runes, items and skills with their win rates, every lane opponent, by patch and game length.", .{ch.name});
     var p = try site.sharedPage(title, desc, .champions);
     p.canonical = try site.canonical(.{ .champion = .{ .slug = ch.slug, .role = if (own_canonical) uiRole(r) else null } });
-    try html.head(w, p);
+    try shell.open(w, p);
     const shown: cp.Top.Url = .{ .role = if (in_url) uiRole(r) else null };
 
     const d = try a.create(cp.Data);
@@ -114,7 +115,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
         .js = html.Link{ .path = assets.champion_js.path },
         .wasm = assets.champion_wasm.path,
     });
-    try html.foot(w, p);
+    try shell.close(w, p);
 }
 
 /// Each island's data file, in Part order: what the page renders from

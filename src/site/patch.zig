@@ -9,6 +9,7 @@ const core = @import("core");
 const ui = @import("ui");
 const root = @import("root.zig");
 const html = root.html;
+const shell = @import("shell.zig");
 const assets = @import("assets.zig");
 const matchup = @import("matchup.zig");
 const patchday = @import("../patchday.zig");
@@ -108,9 +109,9 @@ test named {
 pub fn writePage(site: *const Site, w: *Writer) !void {
     const pair = newest(site) orelse {
         const pg = try site.page("Patch changes | meiolol", "How champions and lane matchups changed from the previous patch.", .{ .patch = null }, .patch);
-        try html.head(w, pg);
+        try shell.open(w, pg);
         try tpl.render(w, "<h1>Patch changes</h1>\n<p>No earlier patch in the data yet to compare with.</p>\n", .{});
-        return html.foot(w, pg);
+        return shell.close(w, pg);
     };
     try writePair(site, w, pair);
 }
@@ -129,7 +130,7 @@ fn writePair(site: *const Site, w: *Writer, pair: Pair) !void {
     if (pair.older != null) if (pg.counterparts) |*c| for (html.View.all) |v| {
         if (v.period == .patch) c[v.index()] = c[(html.View{ .region = v.region, .period = .days30 }).index()];
     };
-    try html.head(w, pg);
+    try shell.open(w, pg);
     const d = try a.create(pp.Data);
     d.* = try data(site, pair);
     var bytes: std.ArrayList(u8) = .empty;
@@ -147,7 +148,7 @@ fn writePair(site: *const Site, w: *Writer, pair: Pair) !void {
         .js = html.Link{ .path = assets.patch_js.path },
         .wasm = assets.patch_wasm.path,
     });
-    try html.foot(w, pg);
+    try shell.close(w, pg);
 }
 
 /// data/patch.bin, and each older pair's

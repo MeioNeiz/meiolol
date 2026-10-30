@@ -6,6 +6,7 @@ const std = @import("std");
 const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const text = @import("text.zig");
 const champion = @import("champion.zig");
 const stats = @import("../stats.zig");
@@ -149,7 +150,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     }
     // The head's view links replace the subbar's switches
     p.counterparts = null;
-    try html.head(w, p);
+    try shell.open(w, p);
 
     const head_data = try a.create(mp.HeadData);
     head_data.* = try headData(site, curves, r, x, y, views);
@@ -204,7 +205,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         .js = html.Link{ .path = assets.matchup_js.path },
         .wasm = assets.matchup_wasm.path,
     });
-    try html.foot(w, p);
+    try shell.close(w, p);
 }
 
 /// `v` as ui.data, base64: an island root's data-bin

@@ -7,6 +7,7 @@
 const std = @import("std");
 const ui = @import("ui");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const assets = @import("assets.zig");
 const root = @import("root.zig");
 const yourgame = @import("yourgame.zig");
@@ -37,7 +38,7 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
     };
     var p = try site.sharedPage("Your games | meiolol", "Your recent ranked games day by day: the result, your lane at 14 minutes and the win chance through each game, with your champions and roles beside them.", .your);
     p.canonical = try site.canonical(.your);
-    try html.head(w, p);
+    try shell.open(w, p);
     const enc = std.base64.standard.Encoder;
     const bin = try a.alloc(u8, enc.calcSize(f.data.len));
     // The lookup's status line above the list; ui-your loads its file for a URL's id
@@ -64,6 +65,6 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
         .vjs = html.Link{ .path = assets.yourviews_js.path },
         .vwasm = assets.yourviews_wasm.path,
     });
-    try html.foot(w, p);
+    try shell.close(w, p);
     return true;
 }

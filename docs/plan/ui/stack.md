@@ -17,7 +17,7 @@ measure.json); desktop sources: research/questions/desktop-toolkit.md.
   scroll, pointer capture and an open row all survive by construction, with no glue per
   component. Server HTML is adopted, not re-created
 - Styles: CSS beside each component (`pub const css`), collected at comptime with tokens
-  from one Zig source into one hashed file; layers and the legacy file as README says
+  from one Zig source into one hashed file; layers as README says
 - Words: a typed phrase catalogue beside each component; holes formatted by fmt.zig;
   word counts from the test tree, as warnings
 - Desktop: the system webview (WebView2 on Windows, WKWebView on the Mac) driven from
@@ -171,8 +171,8 @@ Gotchas found (each goes in the runtime or the CSS lint once):
 
 Decision: each component declares `pub const css` next to its view; tokens come from
 `tokens.zig` (one source that writes tokens.css and can give the desktop a native theme
-if ever needed); a comptime list of components is bundled with tokens, base and legacy
-into `style.<hash>.css`. README's layers stand (`tokens, base, legacy, components,
+if ever needed); a comptime list of components is bundled with tokens, base and the font
+into `style.<hash>.css`. README's layers stand (`tokens, base, components,
 pages`), as do container queries and the three page breakpoints.
 
 - Why beside the component: several sessions edit at once; a component and its rules

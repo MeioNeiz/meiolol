@@ -1,8 +1,9 @@
 //! SiteHeader: every page's top bar: the logo, the page links, the search. Under 760 px
 //! of header the links give way to a menu button whose popover lists them and the pages
 //! under Champions, the current one selected (popovertarget: no script). Also every
-//! page's foot (`foot`), the preview strip under the header (`preview`) and, on the
-//! Champions pages, the bar under it (`subbar`): the section's tabs and the view picks
+//! page's foot (`foot`), the preview strip under the header (`preview`), on the
+//! Champions pages the bar under it (`subbar`: the section's tabs and the view picks), the
+//! page's main column (`main_class`) and a one-line notice in it (`note`)
 const tree = @import("tree.zig");
 const tabs = @import("tabs.zig");
 const segmented = @import("segmented.zig");
@@ -13,7 +14,10 @@ const H = tree.H;
 const N = tree.N;
 
 pub const name = "SiteHeader";
-pub const scope = .{ ".c-site", ".c-sitemenu", ".c-sitefoot", ".c-preview", ".c-subbar" };
+pub const scope = .{ ".c-site", ".c-sitemenu", ".c-sitefoot", ".c-preview", ".c-subbar", ".c-sitemain", ".c-sitenote" };
+
+/// The page's <main>, written by the page shell (site/shell.zig) around the page's body
+pub const main_class = "c-sitemain";
 
 pub const Link = struct {
     label: tree.Text,
@@ -129,6 +133,11 @@ fn picks(h: *H, p: Picks) N {
     });
 }
 
+/// "Early data: 1,234 games so far.", "No puzzle today."
+pub fn note(h: *H, text: tree.Text) N {
+    return h.p(.{ .class = "c-sitenote" }, .{text});
+}
+
 pub fn preview(h: *H) N {
     return h.div(.{ .class = "c-preview" }, .{h.p(.{}, .{W.preview})});
 }
@@ -226,6 +235,9 @@ pub const css =
     \\  .c-subbar > .in { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-4); max-width: var(--wrap);
     \\    margin: 0 auto; padding: 0 var(--gutter); }
     \\  .c-subbar .c-tabs { height: var(--ctl); box-shadow: none; margin-left: calc(-1 * var(--sp-3)); }
+    \\  .c-sitemain { max-width: var(--wrap); margin: 0 auto; padding: var(--sp-4) var(--gutter) var(--sp-6); }
+    \\  .c-sitenote { margin: var(--sp-2) 0 var(--sp-3); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line);
+    \\    border-radius: var(--r-m); background: var(--panel); color: var(--muted); }
     \\  .c-subbar .picks { display: flex; flex-wrap: wrap; gap: var(--sp-2); max-width: 100%; margin-left: auto; padding: var(--sp-1) 0; }
     \\}
     \\
@@ -262,6 +274,7 @@ pub fn gallery(g: *Gallery) void {
     };
     g.addFill("the subbar: Champions tabs and the view picks; they wrap under the tabs when narrow", subbar(h, .{ .tabs = o.more, .picks = view_picks }));
     g.addFill("the subbar, tabs only", subbar(h, .{ .tabs = o.more }));
+    g.addFill("the main column, a notice in it", h.div(.{ .class = main_class }, .{note(h, plain("Early data: 1,234 games so far."))}));
     g.addFill("the foot", foot(h, .{
         .data = "in EUW, last 30 days, 23,210 games",
         .legal = "meiolol isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties.",

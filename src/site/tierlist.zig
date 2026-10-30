@@ -4,6 +4,7 @@ const std = @import("std");
 const core = @import("core");
 const ui = @import("ui");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const assets = @import("assets.zig");
 const spread = @import("../spread.zig");
 const patchday = @import("../patchday.zig");
@@ -271,8 +272,8 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     var p = try site.page(title, desc, at, .champions);
     // The island's toolbar picks the view
     p.counterparts = null;
-    try html.head(w, p);
+    try shell.open(w, p);
     try earlyNote(site, w);
     try writeIsland(site, w, role, at);
-    try html.foot(w, p);
+    try shell.close(w, p);
 }

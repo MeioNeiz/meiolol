@@ -200,9 +200,8 @@ passes.
 
 ### CSS
 
-- `@layer tokens, base, legacy, components, pages`. The current style.css moves whole
-  into `legacy` on day one: unlayered rules beat every layer, so it has to be layered
-  for new components to win, and each migrated page deletes its legacy rules
+- `@layer tokens, base, components, pages`. Every page's body carries class ui, so base's
+  element rules (`:where(.ui)`) apply to all of it; the legacy layer and style.css are gone
 - Tokens (mocks/tokens.css): surfaces, ink, the diverging scale lo4..hi4 and its fills,
   neutral bar, us/them, moment kinds, 5 type sizes (11, 12, 13.5, 16, 22), spacing 2-32,
   radii 4/8/12, control sizes that grow to 44 px tap areas on touch screens

@@ -1,18 +1,22 @@
 //! Styles beside components: each declares `pub const css` (its rules in `@layer
 //! components`, every selector under its `.c-<name>`); `head` is the layer order, tokens
-//! and base, and src/site/style.zig joins it with the legacy file and the components
-//! into one stylesheet, versioned by its hash. Scoping and the lint are checks, not rewriting: the
+//! and base, and src/site/style.zig joins it with the font and the components into one
+//! stylesheet, versioned by its hash. Scoping and the lint are checks, not rewriting: the
 //! server, ui.wasm and tests all write the same class names
 const std = @import("std");
 const tokens = @import("tokens.zig");
 
-/// Unlayered rules would beat every layer, so legacy CSS goes in its own, below the
-/// components and pages that replace it
-pub const layers = "@layer tokens, base, legacy, components, pages;\n";
+pub const layers = "@layer tokens, base, components, pages;\n";
 
 pub const base = @embedFile("base.css");
 
 pub const head = layers ++ tokens.css ++ base;
+
+/// The --font token's Inter, around its file's URL: `font_face[0] ++ url ++ font_face[1]`
+pub const font_face = [2][]const u8{
+    "@font-face { font-family: \"Inter\"; font-style: normal; font-weight: 100 900; font-display: swap;\n  src: url(\"",
+    "\") format(\"woff2\"); }\n",
+};
 
 /// Each listed component's rules, in order. A component no page lists ships no CSS
 pub fn join(comptime components: anytype) []const u8 {

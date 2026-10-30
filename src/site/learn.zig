@@ -3,6 +3,7 @@
 const std = @import("std");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const assets = @import("assets.zig");
 const learnbuild = @import("learnbuild.zig");
 const ui = @import("ui");
@@ -19,7 +20,7 @@ pub fn write(site: *const Site, w: *Writer) !void {
         "League of Legends puzzles from real ranked games: guess, then see the numbers.",
         .learn,
     );
-    try html.head(w, p);
+    try shell.open(w, p);
     const d = try a.create(ld.Data);
     d.* = try learnbuild.data(site);
     var page: ui.learnpage.Page = .init(a, d);
@@ -33,7 +34,7 @@ pub fn write(site: *const Site, w: *Writer) !void {
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
     , .{ .js = html.Link{ .path = assets.learn_js.path }, .wasm = assets.learn_wasm.path });
-    try html.foot(w, p);
+    try shell.close(w, p);
 }
 
 /// `v` as ui.data, base64: the island root's data-bin

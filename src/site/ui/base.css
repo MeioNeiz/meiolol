@@ -1,11 +1,12 @@
 /* Base element styles (layer base). Transcribed from the gallery's mocks/tokens.css by
    data/team/2026-10-25-ui-build/tools/tokens2zig.py. Under :where(.ui) (no added
-   specificity): pages still on legacy CSS are unchanged; a rebuilt page's body and an
-   island's root carry class ui */
+   specificity): a page's body and an island's root carry class ui */
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text); font: var(--w-r) var(--fs-m) / var(--lh) var(--font); font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; }
+  /* The violet glow behind the header */
+  :where(body.ui)::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 520px; pointer-events: none; z-index: -1; background: radial-gradient(55% 70% at 50% 0%, color-mix(in srgb, var(--brand) 12%, transparent), transparent 70%); }
   :where(.ui) :is(h1, h2, h3) { margin: 0; line-height: var(--lh-tight); }
   :where(.ui) h1 { font-size: var(--fs-xl); font-weight: var(--w-b); letter-spacing: -0.025em; }
   :where(.ui) h2 { font-size: var(--fs-l); font-weight: var(--w-b); letter-spacing: -0.015em; }
@@ -27,6 +28,8 @@
   :where(.ui) :is(input:focus, select:focus) { outline: none; border-color: var(--sel-line); box-shadow: 0 0 0 3px var(--accent-bg); }
   :where(.ui) table { width: 100%; border-collapse: collapse; }
   :where(.ui) :is(th, td) { padding: 0 var(--sp-2); height: var(--row); text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  /* Phones: tables fit the screen without sideways scrolling where they can */
+  @media (max-width: 480px) { :where(.ui) :is(th, td) { padding: 0 var(--sp-1); } }
   :where(.ui) th { font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
   :where(.ui) .num { text-align: right; font-variant-numeric: tabular-nums; }
   :where(.ui) .muted { color: var(--muted); }

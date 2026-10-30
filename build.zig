@@ -410,7 +410,6 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
         .imports = &.{.{ .name = "ui", .module = host_ui }},
     }) }));
     const style_min = cssmin.addOutputFileArg("style.min.css");
-    cssmin.addFileArg(b.path("src/site/static/style.css"));
     cssmin.addFileArg(b.path("src/site/static/inter.woff2"));
     backend.addAnonymousImport("style.min.css", .{ .root_source_file = style_min });
     const names = b.addRunArtifact(b.addExecutable(.{ .name = "assetnames", .root_module = b.createModule(.{

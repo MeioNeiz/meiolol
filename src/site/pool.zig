@@ -7,6 +7,7 @@
 const std = @import("std");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const tpl = html.tpl;
 const pool = @import("../pool.zig");
 const learning = @import("../learning.zig");
@@ -123,7 +124,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
         .pool,
         .pool,
     );
-    try html.head(w, pg);
+    try shell.open(w, pg);
     const d = try a.create(page_ui.Data);
     d.* = try pageData(site, p);
     var page: page_ui.Page = try .init(a, d);
@@ -161,7 +162,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
         .grid_js = html.Link{ .path = assets.poolgrid_js.path },
         .grid_wasm = assets.poolgrid_wasm.path,
     });
-    try html.foot(w, pg);
+    try shell.close(w, pg);
 }
 
 /// Champions with a file (dataFiles' rule), most players first as pool.mains are

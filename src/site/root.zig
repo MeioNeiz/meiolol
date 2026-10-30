@@ -4,6 +4,7 @@
 const std = @import("std");
 const core = @import("core");
 pub const html = @import("html.zig");
+const shell = @import("shell.zig");
 const urls = ui.urls;
 const textpages = @import("textpages.zig");
 const daily_page = @import("daily.zig");
@@ -381,10 +382,10 @@ pub fn asset(arena: std.mem.Allocator, io: std.Io, opts: Options, wanted: []cons
         if (std.mem.eql(u8, f.path, wanted)) break .{ f.path, f.data };
     } else return null;
     const dir = opts.static_dir orelse return embedded;
-    if (std.mem.startsWith(u8, name, "ui-")) return embedded;
+    // Built, not in static_dir
+    if (std.mem.startsWith(u8, name, "ui-") or std.mem.eql(u8, name, "style.css")) return embedded;
     const path = try std.fs.path.join(arena, &.{ dir, name });
-    const data = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 24));
-    return if (std.mem.eql(u8, name, "style.css")) try style.rebuild(arena, data) else data;
+    return try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 24));
 }
 
 /// Pages in no view, from the shared view (renderShared)
@@ -603,9 +604,9 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
                 p.index = for (shared_pages) |s| {
                     if (std.meta.eql(s, at)) break true;
                 } else false;
-                try html.head(w, p);
+                try shell.open(w, p);
                 if (f[4]) |kind| try textpages.account(site, w, kind) else _ = try textpages.body(site, w, at);
-                try html.foot(w, p);
+                try shell.close(w, p);
                 return true;
             }
             return false;
@@ -626,12 +627,16 @@ pub fn ratio(part: u64, whole: u64) f64 {
 /// Under this many games a page says its data is early
 const early_games = 50_000;
 
+const early_note = ui.phrase.Phrase("Early data: {n:count} games so far.");
+
 pub fn earlyNote(site: *const Site, w: *Writer) !void {
     if (site.games >= early_games) return;
-    try tpl.render(w,
-        \\<p class="note">Early data: {games} games so far.</p>
-        \\
-    , .{ .games = Thousands{ .n = site.games } });
+    var t: ui.Tree = .{};
+    var h: ui.H = .init(site.arena, &t);
+    t.root = ui.site.note(&h, early_note.with(&h, .{ .n = site.games }));
+    if (h.oom) return error.OutOfMemory;
+    try ui.html.write(&t, t.root, w);
+    try w.writeByte('\n');
 }
 
 pub fn roleName(r: Role) []const u8 {

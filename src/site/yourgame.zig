@@ -5,6 +5,7 @@ const std = @import("std");
 const ui = @import("ui");
 const game = @import("../api/game.zig");
 const html = @import("html.zig");
+const shell = @import("shell.zig");
 const assets = @import("assets.zig");
 const root = @import("root.zig");
 const pagedata = @import("../api/pagedata.zig");
@@ -77,7 +78,7 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
     if (d.games.len == 0) return false;
     var p = try site.sharedPage("Your game | meiolol", "One ranked game minute by minute: your team's win chance, the fights and objectives that moved it, and each player's part.", .your);
     p.index = false;
-    try html.head(w, p);
+    try shell.open(w, p);
     var gp: ui.gamepage.GamePage = try .init(a, d);
     gp.all = ui.gamepage.all_games;
     gp.src = f.path;
@@ -108,7 +109,7 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
         .js = html.Link{ .path = assets.games_js.path },
         .wasm = assets.games_wasm.path,
     });
-    try html.foot(w, p);
+    try shell.close(w, p);
     return true;
 }
 
