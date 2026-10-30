@@ -36,7 +36,10 @@ back. Jacob's open decisions: decisions.md "Open decisions".
 
 1. Crawler at 99%+ of the key, every region, every hour (ops.md J16): done when hourly
    key use holds 97-100% per region through a gpu-box catch-up and a daily job, with a
-   learned.md line. Owner W6; the catch-up test needs the gpu-box (off until Monday 2 Nov)
+   learned.md line. Owner W6; the catch-up test needs the gpu-box (off until Monday 2 Nov).
+   Then the complete form (Jacob 30 Oct; ops.md "Complete form", S1-S7): C01 keeps every
+   document in a form the raw JSON is recreated from byte-exact, the gpu-box a
+   pseudonymised copy; raw JSON ends everywhere once proven (replaces the raw archive)
 2. Alerts and hosts: health alerts reach Jacob's phone (open decision), the gpu-box on
    Tailscale with its backup mirror and archive pull current, VM8 (vm.md), WSL
    compaction when idle (ops.md "Storage and hosts"). Owner coordinator; blocked on
