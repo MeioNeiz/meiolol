@@ -46,8 +46,9 @@ decisions.md "Open decisions".
 3. Crawler at 99%+ of the key, every region, every hour (ops.md J16): done when hourly
    key use holds 97-100% per region through a gpu-box catch-up and a daily job, with a
    learned.md line. Owner W6; the catch-up test needs the gpu-box on
-4. URL leftovers (urls.md): retire /p/desktop/ and /admin/desktop/ (AC5) once installed
-   apps update from /private/desktop/ (how we know: urls.md URL6). Unowned
+4. URL leftovers (urls.md URL6): /p/desktop/ gone (30 Oct). /admin/desktop/ (AC5) waits
+   for a desktop release on the /private/desktop/ base, the admin page's links moved off
+   it, then 14 days with no app checks there (count in URL6). Unowned
 5. Alerts and hosts: health alerts reach Jacob's phone (open decision), the gpu-box on
    Tailscale with its backup mirror and archive pull current, VM8 (vm.md), WSL
    compaction when idle (ops.md "Storage and hosts"). Owner coordinator; blocked on
