@@ -98,6 +98,9 @@ const W = struct {
     const wrong = plain("Wrong");
 };
 
+// Champion cards are rows needing ~200 px each, so three across only from 600 px; below,
+// each spans the row (the cards' container is .c-choices itself, which can't query its
+// own width for its columns)
 pub const css =
     \\@layer components {
     \\  .c-choices { container-type: inline-size; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -138,13 +141,18 @@ pub const css =
     \\  .c-choice:has(> .sub) > .nm { grid-row: 1; align-self: end; }
     \\  .c-choice:has(> .c-champ) > .sub { grid-column: 2; grid-row: 2; align-self: start; }
     \\  @media (pointer: coarse) { .c-choice .kn { display: none; } }
+    \\  @container (max-width: 600px) {
+    \\    .c-choices:is([data-n="3"], [data-n="5"]) > .c-choice:has(> .c-champ) { grid-column: 1 / -1; }
+    \\  }
     \\  @container (max-width: 420px) {
+    \\    .c-choices[data-side] .c-choice { min-height: 0; padding: var(--sp-2); }
+    \\  }
+    \\  @media (max-width: 480px) {
     \\    .c-choices[data-n="6"], .c-choices[data-n="6"]:has(> .c-choice > .c-champ) { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
     \\    .c-choices[data-n="6"] .c-choice { display: flex; padding: 4px; gap: 0; }
     \\    .c-choices[data-n="6"] .c-champ { --sz: 44px; }
     \\    .c-choices[data-n="6"] :is(.nm, .kn) { position: absolute; width: 1px; height: 1px; overflow: hidden;
     \\      clip-path: inset(50%); white-space: nowrap; }
-    \\    .c-choices[data-side] .c-choice { min-height: 0; padding: var(--sp-2); }
     \\  }
     \\}
     \\
@@ -180,6 +188,7 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("six champions", view(h, .{ .label = plain("Red's last pick") }, champs(h, null, false)));
     g.addFill("one chosen, not locked in", view(h, .{}, champs(h, 1, false)));
     g.addFill("done: chose wrong", view(h, .{ .done = true }, champs(h, 1, true)));
+    g.addFill("three, done: one per row when narrow", view(h, .{ .done = true }, champs(h, 2, true)[0..3]));
     g.addFill("who won: sides", view(h, .{ .label = plain("Who won") }, &.{
         .{ .label = plain("Blue"), .side = .us, .icons = six[0..5] },
         .{ .label = plain("Red"), .side = .them, .icons = six[1..6] },
