@@ -34,9 +34,9 @@ patch moves numbers), lab-frontier.md (models); findings land in docs/learned.md
 Ranked by harm: outages and data risk, then what Riot's reviewers see, then what brings
 players back.
 
-1. Storage and hosts: everything moves to the Essex VM (docs/plan/vm.md, VM0 first; the
-   box fills in ~3 weeks from 26 Oct), replacing the Hetzner BX11 order; gpu-box WSL
-   compaction: ops.md "Storage and hosts"
+1. Storage and hosts: C01 runs everything (docs/plan/vm.md; data disk 405 GB free on 30
+   Oct at ~3.6 GB a day). Left: the gpu-box step once it is on Tailscale, VM7-8;
+   gpu-box WSL compaction: ops.md "Storage and hosts"
 2. Front end from the ground up (J29, J30): one UI for the site and the desktop. Page
    plans and the foundation in docs/plan/ui/, the stack in docs/plan/ui/stack.md,
    Jacob's answers in each plan. Next: a visual pass on the gallery and the mocks he

@@ -415,7 +415,11 @@ SQL
                 # The contact email is remembered on the box. A running loop whose
                 # script, unit and contact are unchanged (data/web-loop.sum) gets SIGUSR1:
                 # build and upload now with the new binary. Anything else restarts it
-                contact=${3:-$(ssh "$HOST" "cat $DIR/contact 2>/dev/null" || true)}
+                contact=${3:-}
+                if [[ -z "$contact" ]]; then
+                    contact=$(ssh "$HOST" "cat $DIR/contact 2>/dev/null; true") \
+                        || { echo "$HOST unreachable: web start not run"; exit 1; }
+                fi
                 [[ -n "$contact" ]] || { echo "usage: deploy/box.sh web start <contact email>"; exit 2; }
                 sync
                 # A c01-bench.sh run has the loop paused: restarting it or swapping the
