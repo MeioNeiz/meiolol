@@ -58,9 +58,10 @@
 # running carries on beside it. That write keeps the parts of the old file the new
 # binary would make the same way (`--reuse`: same types and sources, src/site/root.zig
 # partKeys) and loads only the rest, so a deploy that changed one part waits for that
-# part alone; the next upload's write refreshes every part (data/views.full: the last such write). A views write running when a deploy
-# changes the format finishes first: its parts the deploy left alone keep their keys, so
-# the deploy's --reuse write takes them from it. Stopping it (until 17 Oct) threw that
+# part alone; the next upload's write refreshes every part (data/views.full: the last
+# such write). A views write running when a deploy changes the format finishes first:
+# its parts the deploy left alone keep their keys, so the deploy's --reuse write takes
+# them from it. Stopping it (until 17 Oct) threw that
 # work away: two deploys that day cost a 10 and a 72 min write, and the swap waited 1 h 43
 # `deploy/box.sh web rebuild` (data/views.full-request, then SIGUSR1) makes the next
 # round a forced one without --reuse: every part fresh, Daily Draft and Learn included.
