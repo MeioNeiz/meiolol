@@ -60,6 +60,8 @@ test "fixture games to stats, curves and the website" {
     const db = try store.schema.memory();
     defer db.close();
     try fill(arena, db);
+    // One ban of a played champion, for champ-facts' ban line: Darius for Dr. Mundo
+    try db.exec("UPDATE bans SET champion_id = 122 WHERE match_id = 'EUW1_1' AND pick_turn = 1");
     // Ranked flex copies (the crawler's --flex-calls-per-day sample): every count below
     // and every site file stays as for the solo games alone
     try fillFlex(arena, db);
@@ -332,10 +334,11 @@ test "fixture games to stats, curves and the website" {
         const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/champ-facts.tsv" }), arena, .limited(1 << 20));
         const facts = try core.champfacts.Facts.parse(arena, bytes);
         try testing.expectEqual(games, facts.leanOf(122, .top).?.games);
-        // The fixture bans only champions nobody plays in it, who have no row to rate:
-        // the patch's games, no ban lines
-        try testing.expect(facts.games > 0);
-        try testing.expectEqual(0, facts.bans.len);
+        // The fixture's other bans are of champions nobody plays in it, with no row to
+        // rate: Darius's ban, in one game of the patch's, is the only line
+        try testing.expectEqual(1, facts.bans.len);
+        try testing.expectEqual(122, facts.bans[0].champion);
+        try testing.expectApproxEqAbs(1 / @as(f32, @floatFromInt(facts.games)), facts.bans[0].rate, 1e-4);
         try testing.expectEqualStrings("15.13", facts.patch);
     }
     // Pool grid: a lanes file per champion and view, the champion page's lane opponents
