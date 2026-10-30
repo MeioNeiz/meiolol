@@ -467,6 +467,8 @@ pub const css =
     \\  .c-hrev .gr { flex: 1; display: flex; flex-direction: column; }
     \\  .c-hrev .gr > .c-tl { flex: 1; }
     \\  .c-hrev .c-tl > .plot { flex: 1 0 auto; height: auto; min-height: calc(var(--h) * 1px); }
+    \\  /* chart.zig's phone height, which the min-height above would beat */
+    \\  @container (max-width: 480px) { .c-hrev .c-tl > .plot { min-height: calc(var(--h) * 0.8px); } }
     \\  .c-hrev .c-head { padding-inline: var(--card-px); }
     \\  .c-hrev .c-head > .c-btn { margin-left: auto; }
     \\  .c-hrev .you { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
