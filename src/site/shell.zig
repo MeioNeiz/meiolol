@@ -5,7 +5,7 @@
 const std = @import("std");
 const ui = @import("ui");
 const html = @import("html.zig");
-const style = @import("style.zig");
+const sheets = @import("sheets.zig");
 const assets = @import("assets.zig");
 const csp = @import("csp.zig");
 const Writer = std.Io.Writer;
@@ -31,7 +31,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         \\<meta name="referrer" content="no-referrer">
         \\<title>{title}</title>
         \\<meta name="description" content="{description}">
-        \\<link rel="stylesheet" href="{css}">
+        \\{css}
         \\<link rel="stylesheet" href="{print}" media="print">
         \\<link rel="icon" href="{icon}" type="image/svg+xml">
         \\{robots}{canonical}</head>
@@ -44,7 +44,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         .csp = tpl.trusted(csp_meta),
         .title = p.title,
         .description = p.description,
-        .css = toSite(style.file.path),
+        .css = tpl.trusted(sheets.slot),
         .print = toSite("print.css"),
         .icon = toSite("favicon.svg"),
         .robots = tpl.when(!p.public or !p.index, tpl.trusted("<meta name=\"robots\" content=\"noindex\">\n")),

@@ -7,7 +7,6 @@ const std = @import("std");
 const store = @import("store");
 const ui = @import("ui");
 const assets = @import("assets.zig");
-const style = @import("style.zig");
 const csp = @import("csp.zig");
 const sheets = @import("sheets.zig");
 
@@ -57,12 +56,12 @@ pub fn page(a: std.mem.Allocator, h: *const tp.Head) ![]const u8 {
         \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
         \\<meta name="robots" content="noindex">
         \\<title>Draft tester</title>
-        \\<link rel="stylesheet" href="/{s}">
+        \\{s}
         \\</head>
         \\<body class="ui">
         \\<main class="c-sitemain">
         \\
-    , .{ csp.files_only, style.file.path });
+    , .{ csp.files_only, sheets.slot });
     try ui.html.write(&t, top, w);
     try ui.html.write(&t, panel, w);
     try w.print(

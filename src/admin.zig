@@ -16,7 +16,6 @@ const ui = @import("ui");
 const adminmodels = @import("adminmodels.zig");
 const csp = @import("site/csp.zig");
 const sheets = @import("site/sheets.zig");
-const style = @import("site/style.zig");
 const ad = ui.admindata;
 
 const Io = std.Io;
@@ -376,12 +375,12 @@ pub fn privateIndex(a: std.mem.Allocator) ![]const u8 {
         \\<meta name="robots" content="noindex">
         \\<title>meiolol private</title>
         \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        \\<link rel="stylesheet" href="/{s}">
+        \\{s}
         \\</head>
         \\<body class="ui">
         \\<main class="c-sitemain">
         \\
-    , .{ index_csp, style.file.path });
+    , .{ index_csp, sheets.slot });
     try ui.html.write(&t, n, w);
     try w.writeAll("\n</main>\n" ++ index_script ++ "</body>\n</html>\n");
     return sheets.deliver(a, out.written());

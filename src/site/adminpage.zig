@@ -10,7 +10,6 @@ const std = @import("std");
 const store = @import("store");
 const ui = @import("ui");
 const assets = @import("assets.zig");
-const style = @import("style.zig");
 const csp = @import("csp.zig");
 const sheets = @import("sheets.zig");
 
@@ -65,12 +64,12 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
         \\<meta name="robots" content="noindex">
         \\<title>meiolol admin</title>
         \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        \\<link rel="stylesheet" href="/{s}">
+        \\{s}
         \\</head>
         \\<body class="ui">
         \\<main class="c-sitemain">
         \\
-    , .{ csp.files_only, style.file.path });
+    , .{ csp.files_only, sheets.slot });
     try ui.html.write(&t, n, w);
     try ui.html.write(&t, cn, w);
     try ui.html.write(&t, tn, w);

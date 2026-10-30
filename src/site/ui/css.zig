@@ -1,7 +1,7 @@
 //! Styles beside components: each declares `pub const css` (its rules in `@layer
 //! components`, every selector under its `.c-<name>`); `head` is the layer order, tokens
-//! and base, and src/site/style.zig joins it with the font and the components into one
-//! stylesheet, versioned by its hash. Scoping and the lint are checks, not rewriting: the
+//! and base, and src/site/sheets.zig puts it with the font and the components each page
+//! uses inline in the page. Scoping and the lint are checks, not rewriting: the
 //! server, ui.wasm and tests all write the same class names
 const std = @import("std");
 const tokens = @import("tokens.zig");
@@ -352,4 +352,19 @@ test "the lint finds what README rules out" {
 test "a stylesheet's version changes with its bytes" {
     try testing.expect(!std.mem.eql(u8, version("a{}"), version("b{}")));
     try testing.expectEqual(@as(usize, 8), version("a{}").len);
+}
+
+test minify {
+    const in =
+        \\/* head */
+        \\@layer a, b;
+        \\.x > .y:hover , .z :is(.w) {
+        \\  width: calc(100% - 2px); /* gap */
+        \\  content: "a  ;  b";
+        \\  font: 12px "x\" y";
+        \\}
+        \\
+    ;
+    var buf: [in.len]u8 = undefined;
+    try testing.expectEqualStrings("@layer a,b;.x > .y:hover,.z :is(.w){width:calc(100% - 2px);content:\"a  ;  b\";font:12px \"x\\\" y\"}", minify(&buf, in));
 }

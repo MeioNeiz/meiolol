@@ -38,10 +38,10 @@ decisions.md "Open decisions".
 1. Legacy UI off (stack.md; app.md "Private site"). Public done: per-page CSS, a CSP and
    Trusted Types live with no console errors (keep the print.css link: traffic.sh counts
    people by it). Private: /private, /admin, /admin/notes and the tester inline their
-   CSS; the old JS tester at /private/old. Done when /private/tester has its bans,
-   Random/Fill/Undo, lane model, compare and set net, /private/old, admin.js,
-   admin-draft.js, admin-setnet.js, admin.css and style.css are gone, pv.js an island.
-   Owners W4 (tester), W1 (pv.js, style.css)
+   CSS (style.css gone); the old JS tester at /private/old. Done when /private/tester has
+   its bans, Random/Fill/Undo, lane model, compare and set net, /private/old, admin.js,
+   admin-draft.js, admin-setnet.js and admin.css are gone, pv.js an island. Owners W4
+   (tester), W1 (pv.js)
 2. Crawler at 99%+ of the key, every region, every hour (ops.md J16): done when hourly
    key use holds 97-100% per region through a gpu-box catch-up and a daily job, with a
    learned.md line. Owner W6; the catch-up test needs the gpu-box on

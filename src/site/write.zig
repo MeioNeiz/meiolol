@@ -228,7 +228,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "<style>",
         "href=\"/daily\"",
     }) |s| try std.testing.expect(std.mem.find(u8, pool, s) != null);
-    try std.testing.expect(std.mem.find(u8, pool, @import("style.zig").file.path) == null);
+    try std.testing.expect(std.mem.find(u8, pool, sheets.slot) == null);
     try std.testing.expect(std.mem.find(u8, tiers, "<a href=\"/champions?region=all&amp;period=patch\">Patch</a>") != null);
     // One page per champion, at the site root: the root view's, no switches until the
     // island takes the views

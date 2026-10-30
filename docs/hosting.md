@@ -203,7 +203,7 @@ a 301 to it.
   and serves in 1.3 s (file in page cache) to 16.6 s (evicted, as after a boot); swaps
   take as long; with the renderer stopped a warmed page is ANY-HIT, an unwarmed one 503
 - Cache-Control: `map $uri $meiolol_cache_control` gives hashed assets
-  (src/site/assets.zig: `style.1a2b3c4d.css`, the font, search.js, the islands' .js and
+  (src/site/assets.zig: `inter.1a2b3c4d.woff2`, search.js, the islands' .js and
   .wasm; `name.<8 hex>.ext` at the root), champion portraits and item and spell art
   (src/icons.zig: `/icon/<Data Dragon version>/<Key>.jpg`, `/dd/<version>/img/item/<id>.jpg`)
   `public, max-age=31536000, immutable`, rune art (`/dd/img/perk-images/...png`, no

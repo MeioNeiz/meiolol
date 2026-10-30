@@ -2,9 +2,9 @@
 //! site's bundle ships only the components a page uses)
 const std = @import("std");
 const ui = @import("ui");
-const style = @import("style.zig");
+const assets = @import("assets.zig");
 
-const font = ui.css.font_face[0] ++ style.font.path ++ ui.css.font_face[1];
+const font = ui.css.font_face[0] ++ assets.font.path ++ ui.css.font_face[1];
 
 pub const css = ui.css.head ++ font ++ ui.css.join(ui.all) ++ ui.gallery.css;
 

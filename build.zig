@@ -404,35 +404,15 @@ fn modulesWith(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
         .imports = &.{ .{ .name = "core", .module = core }, .{ .name = "net", .module = net } },
     });
 
-    // The stylesheet minified and every hashed asset's name, by tools on the host: at
-    // comptime they took minutes of each backend compile (src/site/assets.zig)
-    const host_tpl = b.createModule(.{ .root_source_file = b.path("src/tpl/root.zig"), .target = b.graph.host });
-    const host_core = b.createModule(.{ .root_source_file = b.path("src/core/root.zig"), .target = b.graph.host });
-    const host_ui = b.createModule(.{
-        .root_source_file = b.path("src/site/ui/root.zig"),
-        .target = b.graph.host,
-        .imports = &.{ .{ .name = "tpl", .module = host_tpl }, .{ .name = "core", .module = host_core } },
-    });
-    const cssmin = b.addRunArtifact(b.addExecutable(.{ .name = "cssmin", .root_module = b.createModule(.{
-        .root_source_file = b.path("src/tools/cssmin.zig"),
-        .target = b.graph.host,
-        .imports = &.{.{ .name = "ui", .module = host_ui }},
-    }) }));
-    const style_min = cssmin.addOutputFileArg("style.min.css");
-    cssmin.addFileArg(b.path("src/site/static/inter.woff2"));
-    backend.addAnonymousImport("style.min.css", .{ .root_source_file = style_min });
+    // Every hashed asset's name, by a tool on the host: at comptime it took minutes of
+    // each backend compile (src/site/assets.zig)
     const names = b.addRunArtifact(b.addExecutable(.{ .name = "assetnames", .root_module = b.createModule(.{
         .root_source_file = b.path("src/tools/assetnames.zig"),
         .target = b.graph.host,
     }) }));
     const names_zig = names.addOutputFileArg("asset_names.zig");
-    for ([_]struct { []const u8, std.Build.LazyPath }{
-        .{ "style.css", style_min },
-        .{ "inter.woff2", b.path("src/site/static/inter.woff2") },
-    }) |f| {
-        names.addArg(f[0]);
-        names.addFileArg(f[1]);
-    }
+    names.addArg("inter.woff2");
+    names.addFileArg(b.path("src/site/static/inter.woff2"));
 
     // The site's islands, per page family (src/site/ui/wasm), with zjb's loaders
     for (ui_families) |f| {

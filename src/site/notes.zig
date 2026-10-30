@@ -5,7 +5,6 @@
 const std = @import("std");
 const store = @import("store");
 const ui = @import("ui");
-const style = @import("style.zig");
 const csp = @import("csp.zig");
 const sheets = @import("sheets.zig");
 
@@ -59,11 +58,11 @@ pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
         \\<meta name="robots" content="noindex">
         \\<title>Notes · meiolol admin</title>
         \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        \\<link rel="stylesheet" href="/{s}">
+        \\{s}
         \\</head>
         \\<body class="ui">
         \\
-    , .{ csp.files_only, style.file.path });
+    , .{ csp.files_only, sheets.slot });
     try ui.html.write(&t, n, w);
     try w.writeAll(
         \\

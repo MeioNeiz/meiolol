@@ -9,6 +9,8 @@ const ui = @import("ui");
 
 pub const Hashed = struct { plain: []const u8, path: []const u8, data: []const u8 };
 
+pub const font = built("inter.woff2", @embedFile("static/inter.woff2"));
+
 pub const stats_js = built("ui-stats.js", @embedFile("ui-stats.js"));
 pub const stats_wasm = built("ui-stats.wasm", @embedFile("ui-stats.wasm"));
 pub const champion_js = built("ui-champion.js", @embedFile("ui-champion.js"));

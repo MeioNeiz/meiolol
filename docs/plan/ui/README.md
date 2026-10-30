@@ -91,8 +91,8 @@ src/site/ui/            components: structs with view(h) building a tree (stack.
 src/site/ui/fmt.zig     the formatters and the colour step (StatCell, Delta, charts)
 src/site/ui/chart.zig   one chart system (lanechart.zig grows into it)
 src/site/ui/wasm.zig    ui.wasm entry: one island per interactive component, via zjb
-src/site/ui/tokens.zig  tokens, the one source for tokens.css; component css bundled
-                        at comptime into one hashed style.<hash>.css
+src/site/ui/tokens.zig  tokens, the one source for tokens.css; each page inlines the
+                        component css it uses (src/site/sheets.zig)
 ```
 
 - Server: page modules compose components; the tree's HTML backend (tpl's escaper)

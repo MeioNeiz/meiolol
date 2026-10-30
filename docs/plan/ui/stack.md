@@ -185,7 +185,7 @@ the page CSP (csp.zig): first view ~0.7 s sooner, later ~60 ms slower (css-per-p
 - "Unused rules gone" holds per component (only listed components ship). Inside one,
   dead rules show only against renders of every state: the gallery provides them, and
   the test reports classes no state emits
-- The CSS lint (README) runs on the bundled text: colours only from tokens, the five
+- The CSS lint (README) runs on each component's CSS: colours only from tokens, the five
   type sizes, three breakpoints, no `!important`, popover display rule. Warnings first
 - Not a utility approach (Tailwind-like): it puts styling words into every one of 862
   rows' markup, needs its own generator, and moves design decisions into call sites

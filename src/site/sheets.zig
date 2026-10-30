@@ -1,10 +1,9 @@
 //! Each page's CSS inline: the head (tokens, base, the font) and the components its HTML and
 //! its islands' wasm name, by a scan for their scope classes (only code that can run is in
-//! a wasm). Public and private pages alike. Measured against the one linked sheet: first page ~0.7 s sooner on Slow 4G,
-//! each later page ~60 ms slower (research/questions/css-per-page.md)
+//! a wasm). Public and private pages alike. Measured against one linked sheet: first page
+//! ~0.7 s sooner on Slow 4G, each later page ~60 ms slower (research/questions/css-per-page.md)
 const std = @import("std");
 const ui = @import("ui");
-const style = @import("style.zig");
 const root = @import("root.zig");
 const csp = @import("csp.zig");
 const assets = @import("assets.zig");
@@ -61,8 +60,7 @@ fn scanIslands(set: *Set, page: []const u8, files: []const assets.Hashed) void {
     }
 }
 
-/// The head (tokens, base, the font) and each component, minified apart: the public ones
-/// the same bytes as the minified bundle. At first use, not comptime: minifying there costs a
+/// The head (tokens, base, the font) and each component, minified apart. At first use, not comptime: minifying there costs a
 /// minute of every backend compile
 const Pieces = struct {
     head: []const u8,
@@ -73,14 +71,14 @@ var pieces: Pieces = undefined;
 var state: std.atomic.Value(u8) = .init(0); // 0 none, 1 building, 2 ready
 
 fn minified(a: std.mem.Allocator, readable: []const u8) ![]const u8 {
-    return style.minify(try a.alloc(u8, readable.len), readable);
+    return ui.css.minify(try a.alloc(u8, readable.len), readable);
 }
 
 fn build() !Pieces {
     // Process lifetime: never freed
     const a = std.heap.page_allocator;
     // Root-relative: the CSS is inlined into pages at any depth
-    const head = ui.css.head ++ ui.css.font_face[0] ++ "/" ++ style.font.path ++ ui.css.font_face[1];
+    const head = ui.css.head ++ ui.css.font_face[0] ++ "/" ++ assets.font.path ++ ui.css.font_face[1];
     var p: Pieces = .{ .head = try minified(a, head), .components = undefined };
     inline for (all, &p.components) |C, *c| c.* = try minified(a, C.css);
     return p;
@@ -103,7 +101,7 @@ fn get() !*const Pieces {
     }
 }
 
-/// The head, then `set`'s components in order: the one sheet's cascade
+/// The head, then `set`'s components in order: one cascade for every page
 pub fn css(a: std.mem.Allocator, set: Set) ![]const u8 {
     const p = try get();
     var out: std.ArrayList(u8) = .empty;
@@ -112,10 +110,11 @@ pub fn css(a: std.mem.Allocator, set: Set) ![]const u8 {
     return out.items;
 }
 
-const link = "<link rel=\"stylesheet\" href=\"/" ++ style.file.path ++ "\">";
+/// Where a page's head wants its CSS
+pub const slot = "<!--page css-->";
 
-/// `page` with its link to the one sheet replaced by the CSS it uses, its hash in the
-/// page's CSP; anything else as is
+/// `page` with its slot filled with the CSS it uses, its hash in the page's CSP; anything
+/// else as is
 pub fn deliver(a: std.mem.Allocator, page: []const u8) ![]const u8 {
     return deliverWith(a, page, &root.hashed_assets);
 }
@@ -123,12 +122,12 @@ pub fn deliver(a: std.mem.Allocator, page: []const u8) ![]const u8 {
 /// As deliver, for a private page whose islands' files are `files`
 pub fn deliverWith(a: std.mem.Allocator, page: []const u8, files: []const assets.Hashed) ![]const u8 {
     if (!std.mem.startsWith(u8, page, "<!doctype html>")) return page;
-    const at = std.mem.find(u8, page, link) orelse return page;
+    const at = std.mem.find(u8, page, slot) orelse return page;
     var set: Set = .empty;
     scan(&set, page);
     scanIslands(&set, page, files);
     const text = try css(a, set);
-    return csp.withStyle(a, try std.mem.concat(a, u8, &.{ page[0..at], "<style>", text, "</style>", page[at + link.len ..] }), text);
+    return csp.withStyle(a, try std.mem.concat(a, u8, &.{ page[0..at], "<style>", text, "</style>", page[at + slot.len ..] }), text);
 }
 
 fn index(comptime scope: []const u8) usize {
@@ -143,7 +142,7 @@ test "scan: whole scope classes only" {
     try std.testing.expectEqual(1, set.count());
 }
 
-test "deliver: the link becomes the page's CSS, islands' included" {
+test "deliver: the slot gets the page's CSS, islands' included" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -151,11 +150,11 @@ test "deliver: the link becomes the page's CSS, islands' included" {
     scan(&island, wasmData(&root.hashed_assets, assets.sitesearch_wasm.path).?);
     try std.testing.expect(island.count() > 0);
     const page = try std.mem.concat(a, u8, &.{
-        "<!doctype html><head>",     link,        "</head><div class=\"c-card\"></div><div data-js=\"x\" data-wasm=\"/",
+        "<!doctype html><head>",     slot,        "</head><div class=\"c-card\"></div><div data-js=\"x\" data-wasm=\"/",
         assets.sitesearch_wasm.path, "\"></div>",
     });
     const out = try deliver(a, page);
-    try std.testing.expect(std.mem.find(u8, out, link) == null);
+    try std.testing.expect(std.mem.find(u8, out, slot) == null);
     var want: Set = island;
     want.set(index("c-card"));
     const start = std.mem.find(u8, out, "<style>").? + "<style>".len;
@@ -164,11 +163,12 @@ test "deliver: the link becomes the page's CSS, islands' included" {
     try std.testing.expectEqualStrings("{}", try deliver(a, "{}"));
 }
 
-test "css: every public component is the one sheet" {
+test "css: every public component, minified apart, is them all minified together" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var public: Set = .empty;
     public.setRangeValue(.{ .start = 0, .end = ui.components.len }, true);
-    try std.testing.expectEqualStrings(style.bundle, try css(a, public));
+    const readable = try std.mem.concat(a, u8, &.{ ui.css.head, ui.css.font_face[0], "/" ++ assets.font.path, ui.css.font_face[1], ui.css.join(ui.components) });
+    try std.testing.expectEqualStrings(try minified(a, readable), try css(a, public));
 }

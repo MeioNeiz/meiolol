@@ -40,5 +40,5 @@ What we know (29 Oct):
   Islands out of `test` (Jacob, 30 Oct): the tests get stub islands (build.zig uiStub),
   ci and the dev server build the real ones; a ui-edit test 168 to 125 s CPU (203 s wall
   at load 15-19 to 174 s at load 25). A wasm-only compile error now shows in ci
-- BS7: the per-page CSS work (sheets.zig) keeps minifying out of comptime: cssmin.zig
-  writes per-component minified CSS if that lands
+- BS7 done: no CSS minifying at comptime or in the build; sheets.zig minifies each
+  component once at run time, on first use

@@ -1,5 +1,5 @@
-//! Design tokens, the one source: tokens.css is written from here (`css`), into the
-//! bundle by src/site/style.zig. Transcribed from the gallery's mocks/tokens.css by
+//! Design tokens, the one source: tokens.css is written from here (`css`), into each
+//! page's CSS by src/site/sheets.zig. Transcribed from the gallery's mocks/tokens.css by
 //! data/team/2026-10-25-ui-build/tools/tokens2zig.py; edit here once the visual pass ends
 const std = @import("std");
 
