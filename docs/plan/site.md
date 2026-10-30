@@ -107,6 +107,11 @@ Hand-written puzzles from finished checks in learnfixed.zig; generated ones from
 data: lane leader that loses, early or late (`meiolol lean`), counter or just
 strong (lane curves, every region, 30 days). Progress in localStorage, links #p=<id>.
 No win chance or points anywhere in Learn.
+Today's five, a row over it all: a puzzle of each chapter from 1 on, the one whose id
+hashes lowest with the viewer's date (the same for everyone that day; a rebuild that adds
+puzzles moves no other pick), a slot locked until its chapter's end is reached. A slot
+keeps its first try; the day ends on its takeaways with their stars. Day marks in the same
+localStorage string, the last 30 days'.
 
 Next (order and detail: data/team/2026-10-29-next/notes/w5.md):
 - More myth or measured cards, only from final learned.md lines whose Site: allows it
@@ -116,7 +121,8 @@ Next (order and detail: data/team/2026-10-29-next/notes/w5.md):
   or rank-caveated (gold at 14 by rank)
 - Hand-written numbers refreshed when their checks are rerun (all match learned.md and
   coach-stat-claims.md on 30 Oct)
-- Later: a daily five; "your lane, your game" (an export from the pack)
+- Later: past days on the five's row (a strip as Daily Draft's, if ui-learn finds the
+  bytes: 99% of 40 KB); "your lane, your game" (an export from the pack)
 
 ## Search
 

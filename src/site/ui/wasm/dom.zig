@@ -634,6 +634,26 @@ pub fn attrOf(el: zjb.Handle, name: []const u8) []const u8 {
     return v.allocString(gpa) catch "";
 }
 
+/// The viewer's own date, "2026-10-27": the day pages and streaks count on
+pub fn today() [10]u8 {
+    const d = zjb.global("Date").new(.{});
+    defer d.release();
+    var out = "0000-00-00".*;
+    digits(out[0..4], d.call("getFullYear", .{}, i32));
+    digits(out[5..7], d.call("getMonth", .{}, i32) + 1);
+    digits(out[8..10], d.call("getDate", .{}, i32));
+    return out;
+}
+
+fn digits(out: []u8, v: i32) void {
+    var x: u32 = @intCast(std.math.clamp(v, 0, 9999));
+    var i = out.len;
+    while (i > 0) : (x /= 10) {
+        i -= 1;
+        out[i] = '0' + @as(u8, @intCast(x % 10));
+    }
+}
+
 /// localStorage's `key`, gpa's; null when missing. Blocked storage throws, ending the
 /// calling export there: call it last
 pub fn stored(key: []const u8) ?[]const u8 {

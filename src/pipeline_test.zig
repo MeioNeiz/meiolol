@@ -389,8 +389,8 @@ test "fixture games to stats, curves and the website" {
         .{ "daily.html", &.{ "<h1>Daily Draft</h1>", "No puzzle today." } },
         .{ "privacy.html", &.{ "the date shown is the puzzle&#39;s, not the game&#39;s", "we keep only each puzzle&#39;s totals", "<h2 id=\"accounts\">Accounts</h2>" } },
         // Learn (ui.learnpage): the island with its chapters inline, a first visit on
-        // chapter 1's first puzzle
-        .{ "learn.html", &.{ "<div class=\"c-learn\" data-island=\"learn\" data-bin=\"", "Does knowing your champion matter?", "How often do mains win?", "<script src=\"/" ++ assets.learn_js.path ++ "\" data-wasm=\"" ++ assets.learn_wasm.path ++ "\" defer></script>" } },
+        // chapter 1's first puzzle, today's five over it
+        .{ "learn.html", &.{ "<div class=\"c-learn\" data-island=\"learn\" data-bin=\"", "Does knowing your champion matter?", "How often do mains win?", "Today&#39;s five", "<script src=\"/" ++ assets.learn_js.path ++ "\" data-wasm=\"" ++ assets.learn_wasm.path ++ "\" defer></script>" } },
         // A search for one champion turns its rows to its side (MU8); gold under a clear
         // lead plain (J11, J12)
         .{ "matchups.html", &.{ "<div class=\"c-finder\" data-island=\"finder\" data-query=\"\" data-bin=\"", "<h1>Matchups</h1>", "<div class=\"c-crp-pair\">", "Your champion", "Opponent", "<div class=\"c-fgrid\" data-island=\"findergrid\" data-root=\"/\" data-query=\"\" data-js=\"/" ++ assets.findergrid_js.path ++ "\" data-wasm=\"" ++ assets.findergrid_wasm.path ++ "\"></div>", "<h2>Hardest lanes</h2>", "<h2>Lane bullies</h2>", "<script src=\"/" ++ assets.finder_js.path ++ "\" data-wasm=\"" ++ assets.finder_wasm.path ++ "\" defer></script>" } },

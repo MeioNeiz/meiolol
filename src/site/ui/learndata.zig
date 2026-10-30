@@ -14,7 +14,8 @@ pub const Data = struct {
     /// Data Dragon version for champion icons
     ddragon: []const u8,
     chapters: []const Chapter,
-    /// The chapter a first visit lands on (1: chapter 0 is one tap away)
+    /// The chapter a first visit lands on (1: chapter 0 is one tap away); today's five
+    /// come from it and the four after
     start: u8 = 1,
 };
 
@@ -130,7 +131,27 @@ pub const Puzzle = struct {
 
 pub const Term = struct { word: []const u8, note: []const u8 };
 
-/// Stars per puzzle id, as "id:n" joined by commas ("know:2,newcomer:3")
+/// Today's puzzle of `c`: the one whose id hashes lowest with the date, so a puzzle added or
+/// dropped by a rebuild moves no other day's pick
+pub fn pickOf(date: []const u8, c: Chapter) u8 {
+    var best: u8 = 0;
+    var low: u32 = std.math.maxInt(u32);
+    for (c.puzzles, 0..) |z, i| {
+        var f: std.hash.Fnv1a_32 = .init();
+        f.update(date);
+        f.update(z.id);
+        if (f.final() < low) {
+            low = f.final();
+            best = @intCast(i);
+        }
+    }
+    return best;
+}
+
+/// Stars per puzzle id, as "id:n" joined by commas ("know:2,newcomer:3"). Two more kinds of
+/// id: "@2026-10-30.2", slot 2 of that day's five (its first try), and "end-<title>", a
+/// chapter's end reached (generated puzzles change with the data, so "every
+/// puzzle done" alone would lock a finished chapter again)
 pub const Progress = struct {
     ids: std.ArrayList([]const u8) = .empty,
     stars: std.ArrayList(u2) = .empty,
@@ -161,11 +182,54 @@ pub const Progress = struct {
         try p.stars.append(a, n);
     }
 
+    /// Day marks kept: the newest 30 days' five
+    pub const keep_marks = 150;
+
+    /// Drops the oldest day marks past `keep_marks`
     pub fn write(p: *const Progress, w: *std.Io.Writer) !void {
-        for (p.ids.items, p.stars.items, 0..) |x, n, i| {
-            if (i > 0) try w.writeByte(',');
+        var marks: usize = 0;
+        for (p.ids.items) |x| marks += @intFromBool(isMark(x));
+        var drop = marks -| keep_marks;
+        var first = true;
+        for (p.ids.items, p.stars.items) |x, n| {
+            if (drop > 0 and isMark(x)) {
+                drop -= 1;
+                continue;
+            }
+            if (!first) try w.writeByte(',');
+            first = false;
             try w.print("{s}:{d}", .{ x, n });
         }
+    }
+
+    fn isMark(id: []const u8) bool {
+        return id.len > 0 and id[0] == '@';
+    }
+
+    /// Slot `slot` of `date`'s five
+    pub fn mark(buf: *[40]u8, date: []const u8, slot: u8) []const u8 {
+        return idOf(buf, &.{ "@", date, ".", &.{'0' + slot} });
+    }
+
+    /// `c`'s end reached
+    pub fn endOf(buf: *[40]u8, c: Chapter) []const u8 {
+        return idOf(buf, &.{ "end-", c.title });
+    }
+
+    /// `parts` joined without the list's own separators, cut to fit
+    fn idOf(buf: *[40]u8, parts: []const []const u8) []const u8 {
+        var n: usize = 0;
+        for (parts) |x| for (x) |b| if (b != ',' and b != ':' and n < buf.len) {
+            buf[n] = b;
+            n += 1;
+        };
+        return buf[0..n];
+    }
+
+    /// Played to its end, or every puzzle of this data done: its slot in the day's five opens
+    pub fn finished(p: *const Progress, c: Chapter) bool {
+        var buf: [40]u8 = undefined;
+        return p.get(endOf(&buf, c)) != null or p.chapter(c).done == c.puzzles.len;
     }
 
     /// Puzzles done and stars won in `c`
@@ -281,6 +345,35 @@ test "progress keeps the best try and round-trips" {
     const c = p.chapter(demo.chapters[1]);
     try testing.expectEqual(@as(u8, 2), c.done);
     try testing.expectEqual(@as(u8, 5), c.stars);
+}
+
+test "day marks: the oldest dropped past keep_marks; a chapter's end opens its slot" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var p: Progress = .{};
+    var buf: [40]u8 = undefined;
+    try p.set(a, try a.dupe(u8, Progress.mark(&buf, "2026-01-01", 0)), 1);
+    try p.set(a, "know", 3);
+    for (0..Progress.keep_marks) |i| try p.set(a, try std.fmt.allocPrint(a, "@x.{d}", .{i}), 2);
+    var out: std.Io.Writer.Allocating = .init(a);
+    try p.write(&out.writer);
+    try testing.expect(std.mem.startsWith(u8, out.written(), "know:3,@x.0:2,"));
+    const q = try Progress.parse(a, out.written());
+    try testing.expectEqual(Progress.keep_marks + 1, q.ids.items.len);
+    try testing.expect(!p.finished(demo.chapters[1]));
+    try p.set(a, Progress.endOf(&buf, demo.chapters[1]), 0);
+    try testing.expect(p.finished(demo.chapters[1]));
+    try testing.expect(p.finished(demo.chapters[0]) == false);
+}
+
+test "a day's pick holds when another puzzle is added" {
+    const c = demo.chapters[1];
+    const i = pickOf("2026-10-30", c);
+    var more: [3]Puzzle = .{ c.puzzles[0], c.puzzles[1], c.puzzles[1] };
+    more[2].id = "new-one";
+    const j = pickOf("2026-10-30", .{ .title = c.title, .puzzles = &more });
+    try testing.expect(j == i or j == 2);
 }
 
 test "the demo round-trips through ui.data" {

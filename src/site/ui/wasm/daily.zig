@@ -65,31 +65,11 @@ fn save() void {
     if (!state.dirty) return;
     state.dirty = false;
     const old = dom.stored(key) orelse "";
-    const s = dp.write(gpa, old, data.n, state.saved(), &today()) catch return;
+    const s = dp.write(gpa, old, data.n, state.saved(), &dom.today()) catch return;
     defer gpa.free(s);
     dom.store(key, s);
     // The head's days strip (ui-dailydays.wasm) reads them again
     const e = zjb.global("Event").new(.{zjb.constString("ui-daily")});
     defer e.release();
     zjb.global("window").call("dispatchEvent", .{e}, void);
-}
-
-/// The viewer's own date, "2026-10-27": days in a row count puzzles finished on theirs
-fn today() [10]u8 {
-    const d = zjb.global("Date").new(.{});
-    defer d.release();
-    var out = "0000-00-00".*;
-    digits(out[0..4], d.call("getFullYear", .{}, i32));
-    digits(out[5..7], d.call("getMonth", .{}, i32) + 1);
-    digits(out[8..10], d.call("getDate", .{}, i32));
-    return out;
-}
-
-fn digits(out: []u8, v: i32) void {
-    var x: u32 = @intCast(std.math.clamp(v, 0, 9999));
-    var i = out.len;
-    while (i > 0) : (x /= 10) {
-        i -= 1;
-        out[i] = '0' + @as(u8, @intCast(x % 10));
-    }
 }

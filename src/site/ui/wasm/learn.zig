@@ -1,6 +1,6 @@
 //! ui-learn.wasm: the Learn page (ui.learnpage.Page) from its data-bin, progress from
-//! and to localStorage (meiolol.learn.v2). zjb's generated loader (ui-learn.js,
-//! `<script src data-wasm>`) calls `main`
+//! and to localStorage (meiolol.learn.v2), today's five by the viewer's date. zjb's
+//! generated loader (ui-learn.js, `<script src data-wasm>`) calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -16,6 +16,7 @@ const key = "meiolol.learn.v2";
 var data: ui.learndata.Data = undefined;
 var state: lp.Page = undefined;
 var server: lp.Page = undefined;
+var date: [10]u8 = undefined;
 
 export fn main() void {
     dom.start();
@@ -27,7 +28,10 @@ export fn main() void {
     data = ui.data.decode(gpa, ui.learndata.Data, b) catch return dom.dom.warn("learn: bad data");
     server = .init(gpa, &data);
     state = .init(gpa, &data);
-    _ = dom.rt.add(lp.Page, &state, &server, lp.sel) catch return dom.dom.warn("learn: out of memory");
+    const island = dom.rt.add(lp.Page, &state, &server, lp.sel) catch return dom.dom.warn("learn: out of memory");
+    date = dom.today();
+    state.date = &date;
+    island.render();
     dom.rt.changed = save;
     // Last: blocked storage throws, ending this call with the page already live
     if (dom.stored(key)) |s| {

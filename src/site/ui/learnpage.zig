@@ -1,8 +1,10 @@
 //! The Learn page (docs/plan/ui/learn.md): one puzzle a screen. ChapterStrip on top
 //! (title, the chapter's question, n/N, stars), the PuzzleCard, and beside it (under it
 //! on a phone) ChapterPath: this chapter's puzzles, the tips earned, every chapter with
-//! its progress. A chapter's end lists its takeaways with their stars. One island
-//! (ui-learn.wasm); progress in localStorage through the page's code (`progress`)
+//! its progress. A chapter's end lists its takeaways with their stars. Over it all, today's
+//! five: a puzzle of each chapter from `start` on, the same for everyone that day, a slot
+//! open once its chapter is finished. One island (ui-learn.wasm); progress in localStorage
+//! through the page's code (`progress`)
 const std = @import("std");
 const tree = @import("tree.zig");
 const card = @import("card.zig");
@@ -47,6 +49,10 @@ const W = struct {
     pub const ap = plain("AP");
     pub const ad = plain("AD");
     pub const both = plain("AD and AP");
+    pub const today = plain("Today's five");
+    pub const locked = Phrase("Finish chapter {n:int} first");
+    pub const tomorrow = plain("Five more tomorrow.");
+    pub const chapters_btn = plain("Back to chapters");
 };
 
 pub const Page = struct {
@@ -54,8 +60,12 @@ pub const Page = struct {
     a: std.mem.Allocator,
     c: u8,
     p: u8 = 0,
-    /// On a chapter's end screen
+    /// On a chapter's end screen (with `day`, the day's)
     end: bool = false,
+    /// The slot of today's five being played
+    day: ?u8 = null,
+    /// The viewer's date, "2026-10-30"; none on the server, whose render shows no day's pick
+    date: []const u8 = "",
     g: guess.Guess = .{ .lo = 0, .hi = 100 },
     pick: ?u8 = null,
     revealed: bool = false,
@@ -75,6 +85,8 @@ pub const Page = struct {
         again,
         choose: u8,
         go: [2]u8,
+        /// A slot of today's five
+        today: u8,
         key,
     };
 
@@ -118,7 +130,43 @@ pub const Page = struct {
             .pick => |x| if (p.pick == x.right) 3 else 0,
         };
         p.progress.set(p.a, z.id, n) catch {};
+        // A day's slot keeps its first try
+        if (p.day) |i| {
+            var buf: [40]u8 = undefined;
+            const m = ld.Progress.mark(&buf, p.date, i);
+            if (p.progress.get(m) == null) p.progress.set(p.a, p.a.dupe(u8, m) catch return, n) catch {};
+        }
         p.dirty = true;
+    }
+
+    pub const Five = struct {
+        n: u8 = 0,
+        /// Chapter and puzzle of each slot
+        at: [5][2]u8 = undefined,
+        open: [5]bool = undefined,
+    };
+
+    pub fn five(p: *const Page) Five {
+        var f: Five = .{};
+        for (p.d.chapters[@min(p.d.start, p.d.chapters.len)..], p.d.start..) |ch, ci| {
+            if (f.n == 5) break;
+            f.at[f.n] = .{ @intCast(ci), ld.pickOf(p.date, ch) };
+            f.open[f.n] = p.progress.finished(ch);
+            f.n += 1;
+        }
+        return f;
+    }
+
+    fn dayStars(p: *const Page, i: u8) ?u2 {
+        var buf: [40]u8 = undefined;
+        return p.progress.get(ld.Progress.mark(&buf, p.date, i));
+    }
+
+    fn openSlot(p: *Page, f: Five, i: u8) void {
+        p.day = i;
+        p.c = f.at[i][0];
+        p.p = f.at[i][1];
+        p.reset();
     }
 
     pub fn update(p: *Page, m: Msg, ev: *tree.Event) void {
@@ -136,7 +184,14 @@ pub const Page = struct {
             .go => |x| {
                 p.c = x[0];
                 p.p = x[1];
+                p.day = null;
                 p.reset();
+                ev.push = true;
+            },
+            .today => |i| {
+                const f = p.five();
+                if (i >= f.n or !f.open[i]) return;
+                p.openSlot(f, i);
                 ev.push = true;
             },
             // 1-9 choose and focus Lock in, so Enter locks in; Enter itself stays the focused
@@ -159,6 +214,27 @@ pub const Page = struct {
 
     fn advance(p: *Page) void {
         const ch = p.d.chapters[p.c];
+        if (p.day) |d| {
+            const f = p.five();
+            if (p.end) {
+                // Back to the first chapter not yet finished
+                p.day = null;
+                p.p = 0;
+                p.reset();
+                for (0..f.n) |i| if (!f.open[i]) {
+                    p.c = f.at[i][0];
+                    break;
+                };
+                return;
+            }
+            // The next slot still to play, from any start
+            for (1..f.n) |k| {
+                const i: u8 = @intCast((d + k) % f.n);
+                if (f.open[i] and p.dayStars(i) == null) return p.openSlot(f, i);
+            }
+            p.end = true;
+            return;
+        }
         if (p.end) {
             p.c = @intCast((p.c + 1) % p.d.chapters.len);
             p.p = 0;
@@ -166,7 +242,15 @@ pub const Page = struct {
         } else if (p.p + 1 < ch.puzzles.len) {
             p.p += 1;
             p.reset();
-        } else p.end = true;
+        } else {
+            p.end = true;
+            var buf: [40]u8 = undefined;
+            const e = ld.Progress.endOf(&buf, ch);
+            if (p.progress.get(e) == null) {
+                p.progress.set(p.a, p.a.dupe(u8, e) catch return, 0) catch {};
+                p.dirty = true;
+            }
+        }
     }
 
     pub fn toUrl(p: *const Page) Url {
@@ -179,6 +263,7 @@ pub const Page = struct {
         for (p.d.chapters, 0..) |ch, ci| for (ch.puzzles, 0..) |z, zi| if (std.mem.eql(u8, z.id, u.p.slice())) {
             p.c = @intCast(ci);
             p.p = @intCast(zi);
+            p.day = null;
             p.reset();
             return;
         };
@@ -187,6 +272,7 @@ pub const Page = struct {
     pub fn view(p: *Page, h: *H) N {
         return h.div(.{ .class = "c-learn", .data_island = "learn", .data_bin = if (p.bin.len > 0) p.bin else null, .on_keydown = h.on(p, .key) }, .{
             p.strip(h),
+            p.todayRow(h),
             h.div(.{ .class = "grid" }, .{
                 h.div(.{ .class = "main", .data_ref = "main" }, .{if (p.end) p.endCard(h) else p.puzzleCard(h)}),
                 p.path(h),
@@ -459,27 +545,61 @@ pub const Page = struct {
         return choice.view(h, .{ .done = p.revealed, .label = .{ .s = p.cur().q } }, cs);
     }
 
+    /// A chapter's end, or the day's five played: each takeaway with its stars (a day's
+    /// slot, its first try)
     fn endCard(p: *Page, h: *H) N {
         const ch = p.d.chapters[p.c];
-        const s = p.progress.chapter(ch);
+        const f = p.five();
+        const day = p.day != null;
         var l = h.list();
-        for (ch.puzzles, 0..) |z, i| l.add(h.el(.li, .{ .key = i }, .{
-            h.span(.{ .class = "t" }, .{z.tip}),
-            puzzle.stars(h, p.progress.get(z.id) orelse 0, false),
-        }));
-        const full: u32 = 3 * @as(u32, @intCast(ch.puzzles.len));
+        var won: u32 = 0;
+        var full: u32 = 0;
+        for (0..if (day) f.n else ch.puzzles.len) |ix| {
+            const i: u8 = @intCast(ix);
+            if (day and !f.open[i]) continue;
+            const z = if (day) p.d.chapters[f.at[i][0]].puzzles[f.at[i][1]] else ch.puzzles[i];
+            const s = (if (day) p.dayStars(i) else p.progress.get(z.id)) orelse 0;
+            won += s;
+            full += 3;
+            l.add(h.el(.li, .{ .key = i }, .{ h.span(.{ .class = "t" }, .{z.tip}), puzzle.stars(h, s, false) }));
+        }
         return card.view(h, .{}, &.{h.div(.{ .class = "end" }, .{
             h.div(.{ .class = "done-h" }, .{
-                h.span(.{ .class = "k" }, .{W.done.with(h, .{ .n = p.c })}),
-                h.h2(.{}, .{ch.title}),
-                puzzle.stars(h, @intCast(@min(3, (3 * @as(u32, s.stars) + full / 2) / @max(full, 1))), true),
+                h.span(.{ .class = "k" }, .{if (day) W.today else W.done.with(h, .{ .n = p.c })}),
+                h.h2(.{}, .{if (day) W.tomorrow else tree.Text{ .s = ch.title }}),
+                puzzle.stars(h, @intCast(@min(3, (3 * won + full / 2) / @max(full, 1))), true),
             }),
             h.el(.ul, .{ .class = "tk" }, .{l.done()}),
             h.div(.{ .class = "foot" }, .{
-                button.view(h, .{ .v = .quiet, .on = h.on(p, .again) }, .{W.again}),
-                button.view(h, .{ .v = .primary, .on = h.on(p, .next) }, .{W.next_chapter}),
+                if (day) h.span(.{}, .{}) else button.view(h, .{ .v = .quiet, .on = h.on(p, .again) }, .{W.again}),
+                button.view(h, .{ .v = .primary, .on = h.on(p, .next) }, .{if (day) W.chapters_btn else W.next_chapter}),
             }),
         })});
+    }
+
+    /// Today's five as one row of slots: a chapter's number, its stars once played, locked
+    /// (greyed) until the chapter is finished
+    fn todayRow(p: *Page, h: *H) N {
+        const f = p.five();
+        if (f.n == 0) return .none;
+        var l = h.list();
+        for (0..f.n) |ix| {
+            const i: u8 = @intCast(ix);
+            const ci = f.at[i][0];
+            const s = p.dayStars(i);
+            const n: N = if (s) |x| h.span(.{}, .{ "★", @as(u8, x) }) else h.span(.{}, .{ci});
+            l.add(h.el(.button, .{
+                .key = i,
+                .type = "button",
+                .class = "sl",
+                .title = if (f.open[i]) tree.Text{ .s = p.d.chapters[ci].title } else W.locked.with(h, .{ .n = ci }),
+                .disabled = !f.open[i],
+                .data_s = s != null,
+                .aria_current = if (p.day == i) "step" else null,
+                .on_click = h.on(p, .{ .today = i }),
+            }, .{n}));
+        }
+        return h.el(.nav, .{ .class = "today", .aria_label = W.today }, .{ h.span(.{ .class = "lab" }, .{W.today}), l.done() });
     }
 
     fn path(p: *Page, h: *H) N {
@@ -566,6 +686,14 @@ pub const css =
     \\  .c-learn .tk li { list-style: none; display: flex; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3);
     \\    border-radius: var(--r-m); background: var(--panel-2); }
     \\  .c-learn .end .foot { display: flex; justify-content: space-between; }
+    \\  .c-learn > .today { display: flex; align-items: center; gap: var(--sp-2); }
+    \\  .c-learn > .today .lab { margin-right: var(--sp-1); font-size: var(--fs-s); font-weight: var(--w-m); white-space: nowrap; }
+    \\  .c-learn .sl { all: unset; box-sizing: border-box; display: grid; place-items: center; min-width: 36px; height: 36px;
+    \\    padding: 0 6px; border-radius: 18px; border: 1px solid var(--line); font-size: var(--fs-s); font-variant-numeric: tabular-nums; cursor: pointer; }
+    \\  .c-learn .sl:enabled:hover { background: var(--panel-2); }
+    \\  .c-learn .sl[data-s] { border-color: var(--accent); color: var(--accent); }
+    \\  .c-learn .sl[aria-current] { background: var(--panel-2); font-weight: var(--w-b); }
+    \\  .c-learn .sl:disabled { border-style: dashed; color: var(--faint); cursor: default; }
     \\  @container learn (max-width: 1000px) { .c-learn > .grid { grid-template-columns: minmax(0, 1fr); } }
     \\  @container learn (max-width: 760px) { .c-learn > .strip .ct { display: none; } }
     \\}
@@ -585,6 +713,12 @@ pub fn gallery(g: *@import("gallery.zig").Gallery) void {
     if (shown(h.mem, &chips_demo, 0, 0, null)) |p| g.addFill("chips setup: a champion and its figure", p.view(h));
     if (shown(h.mem, &draft_demo, 0, 0, null)) |p| g.addFill("chapter end draft: the team lacks magic", p.view(h));
     if (shown(h.mem, &draft_demo, 0, 0, 0)) |p| g.addFill("chapter end draft, a wrong pick revealed: reasons in words", p.view(h));
+    if (shown(h.mem, &ld.demo, 1, 1, 1)) |p| {
+        var buf: [40]u8 = undefined;
+        p.progress.set(h.mem, "know", 2) catch {};
+        p.progress.set(h.mem, h.mem.dupe(u8, ld.Progress.mark(&buf, p.date, 0)) catch "", 2) catch {};
+        g.addFill("today's five: chapter 1 finished, its slot played", p.view(h));
+    }
     if (shown(h.mem, &ld.demo, 1, 1, 1)) |p| {
         p.progress.set(h.mem, "know", 2) catch {
             h.oom = true;
@@ -690,6 +824,50 @@ test "first visit on chapter 1; guess, lock in, pick by key and click, chapter e
     var h: H = .init(arena.allocator(), &t);
     _ = p.view(&h);
     try testing.expect(!h.oom);
+}
+
+test "today's five: a slot opens once its chapter's end is reached, keeps its first try, then the day's end" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d = ld.demo;
+    var p: Page = .init(a, &d);
+    p.date = "2026-10-30";
+    var ev: tree.Event = .{ .kind = .click };
+    try testing.expectEqual(@as(u8, 1), p.five().n);
+    p.update(.{ .today = 0 }, &ev);
+    try testing.expectEqual(@as(?u8, null), p.day);
+    p.p = 1;
+    p.reset();
+    p.end = false;
+    p.revealed = true;
+    p.update(.next, &ev);
+    try testing.expect(p.end);
+    try testing.expect(p.five().open[0]);
+    p.update(.{ .today = 0 }, &ev);
+    try testing.expectEqual(@as(?u8, 0), p.day);
+    try testing.expectEqual(ld.pickOf(p.date, d.chapters[1]), p.p);
+    // A wrong first try, then a right one: the day keeps the first, the puzzle the best
+    switch (p.cur().answer) {
+        .guess => |x| p.g.value = if (x.real - x.lo > x.hi - x.real) x.lo else x.hi,
+        .pick => |x| p.pick = if (x.right == 0) 1 else 0,
+    }
+    p.reveal(&ev);
+    switch (p.cur().answer) {
+        .guess => |x| p.g.value = x.real,
+        .pick => |x| p.pick = x.right,
+    }
+    p.reveal(&ev);
+    try testing.expectEqual(@as(?u2, 0), p.dayStars(0));
+    try testing.expectEqual(@as(?u2, 3), p.progress.get(p.cur().id));
+    p.update(.next, &ev);
+    try testing.expect(p.end and p.day != null);
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    _ = p.view(&h);
+    try testing.expect(!h.oom);
+    p.update(.next, &ev);
+    try testing.expect(!p.end and p.day == null);
 }
 
 test "ticks: a round step per range, fewer for gold's longer labels" {

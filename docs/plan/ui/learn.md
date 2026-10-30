@@ -138,7 +138,8 @@ like pair of bars per opponent: "Yone vs Jax" against "Jax vs everyone".
   of unknown share rules the draft out), and it is also the model's best of the four.
   Box pack 27 Oct: 2-3 such drafts a day, each used once, so some chapters end without
   one; the why line ("little magic damage") carries no number (that finding's Site:)
-- Daily five (later): one puzzle per finished chapter, same for everyone, ResultStrip (days)
+- Today's five: one puzzle per finished chapter, same for everyone, a row of slots over
+  the page (docs/plan/site.md "Learn"); the days strip (ResultStrip) waits for bytes
 
 ## Components used (register names)
 

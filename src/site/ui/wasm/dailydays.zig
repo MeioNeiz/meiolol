@@ -31,7 +31,7 @@ export fn main() void {
     defer root.release();
     const b = dom.binOf(root, "data-bin") orelse return dom.dom.warn("days: no data");
     data = ui.data.decode(gpa, ds.Data, b) catch return dom.dom.warn("days: bad data");
-    date = today();
+    date = dom.today();
     if (data.redirects) if (ds.target(data.days, &date, wanted())) |n| if (n != data.n) return open(n);
     server = .init(gpa, &data);
     state = .init(gpa, &data);
@@ -190,17 +190,4 @@ fn open(n: u32) void {
     const u = zjb.string(url);
     defer u.release();
     zjb.global("location").call("replace", .{u}, void);
-}
-
-/// The viewer's own date, "2026-10-27"
-fn today() [10]u8 {
-    const d = zjb.global("Date").new(.{});
-    defer d.release();
-    var out: [10]u8 = undefined;
-    _ = std.fmt.bufPrint(&out, "{d:0>4}-{d:0>2}-{d:0>2}", .{
-        @as(u32, @intCast(std.math.clamp(d.call("getFullYear", .{}, i32), 0, 9999))),
-        @as(u32, @intCast(@max(d.call("getMonth", .{}, i32) + 1, 0))),
-        @as(u32, @intCast(@max(d.call("getDate", .{}, i32), 0))),
-    }) catch return "0000-00-00".*;
-    return out;
 }
