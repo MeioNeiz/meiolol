@@ -552,6 +552,9 @@ pub const css =
     \\    .c-draft[data-v="full"] .seat > .ic > .c-champ { --sz: 32px; }
     \\    .c-draft[data-v="full"] .lane, .c-draft .mix { grid-template-columns: minmax(0, 1fr) 52px minmax(0, 1fr); }
     \\    .c-draft .st { flex-wrap: wrap; column-gap: 4px; row-gap: 0; max-width: 100%; }
+    \\    .c-draft[data-v="full"] .bans { gap: var(--sp-1); padding-inline: 0; }
+    \\    .c-draft[data-v="full"] .bans > span { gap: 2px; }
+    \\    .c-draft[data-v="full"] .bans .c-champ { --sz: 20px; }
     \\  }
     \\}
     \\

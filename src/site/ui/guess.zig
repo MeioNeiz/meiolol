@@ -211,9 +211,11 @@ fn span(h: *H, comptime class: []const u8, a: f32, b: f32) N {
     return h.el(.i, .{ .class = class, .style = h.vars(.{ .a = @min(a, b), .b = @max(a, b) }) }, .{});
 }
 
-/// A marker at x; its figure leans away from the other marker and off the track's ends
+/// A marker at x; its figure leans off the track's ends first, then away from the other
+/// marker
 fn mark(h: *H, comptime k: []const u8, x: f32, other: ?f32, label: ?[2]tree.Text) N {
-    const side: ?[]const u8 = if (other) |o| (if (x < o) "l" else "r") else if (x < 12) "r" else if (x > 88) "l" else null;
+    const end: ?[]const u8 = if (x < 12) "r" else if (x > 88) "l" else null;
+    const side: ?[]const u8 = end orelse if (other) |o| (if (x < o) "l" else "r") else null;
     return h.span(.{ .class = "mark", .data_k = k, .data_side = side, .style = h.vars(.{ .x = x }) }, .{
         if (label) |l| h.span(.{}, .{ l[0], l[1] }) else null,
     });
@@ -269,6 +271,7 @@ pub fn gallery(g: *Gallery) void {
         .{ "revealed, 3.3 off", demo(55, 51.7) },
         .{ "revealed, guess at the end", demo(40, 51.7) },
         .{ "gold", .{ .lo = 0, .hi = 1000, .step = 25, .unit = .gold, .value = 450, .real = 300 } },
+        .{ "gold, guess at the top", .{ .lo = 0, .hi = 1000, .step = 25, .unit = .gold, .value = 1000, .real = 300 } },
     };
     for (states) |s| {
         const x = h.mem.create(Guess) catch {
@@ -346,7 +349,7 @@ test "a first arrow starts from the fill's start" {
     try testing.expectEqual(@as(?f32, 50.5), g.value);
 }
 
-test "markup: unset has no aria-valuenow and no marks; revealed takes no input" {
+test "markup: unset has no aria-valuenow and no marks; revealed takes no input; a figure at an end leans in" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -375,4 +378,9 @@ test "markup: unset has no aria-valuenow and no marks; revealed takes no input" 
     try testing.expect(std.mem.indexOf(u8, s, "You 55%") != null);
     try testing.expect(std.mem.indexOf(u8, s, "51.7%") != null);
     try testing.expect(std.mem.indexOf(u8, s, "aria-valuetext=\"55%\"") != null);
+    try testing.expect(std.mem.indexOf(u8, s, "data-k=\"you\" data-side=\"r\"") != null);
+    x.g.value = 65;
+    out = .init(a);
+    try html.write(&t, view(&h, &x.g, .{ .on = h.on(&x, .ev) }), &out.writer);
+    try testing.expect(std.mem.indexOf(u8, out.written(), "data-k=\"you\" data-side=\"l\"") != null);
 }
