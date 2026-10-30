@@ -60,6 +60,20 @@ fn textOf(r: *Report, t: *const tree.Tree, n: tree.N) []const u8 {
     return std.mem.trim(u8, w.written(), " ");
 }
 
+/// The words' length, the spaces between them included: a badge's figures ("▲7 ▼10")
+/// don't count, as in countWords
+fn labelChars(s: []const u8) usize {
+    var it = std.mem.tokenizeAny(u8, s, " \n");
+    var n: usize = 0;
+    var words: usize = 0;
+    while (it.next()) |w| for (w) |c| if (std.ascii.isAlphabetic(c)) {
+        n += w.len;
+        words += 1;
+        break;
+    };
+    return n + (words -| 1);
+}
+
 fn countWords(s: []const u8) usize {
     var it = std.mem.tokenizeAny(u8, s, " \n");
     var n: usize = 0;
@@ -106,10 +120,10 @@ fn walk(r: *Report, t: *const tree.Tree, n: tree.N, rules: Rules) void {
             // A listbox row (Select's menu) is a choice in a list, as a table cell, not an
             // action's label: it may carry a ModelBadge and its facts line
             const row = if (t.attr(n, "role")) |v| std.mem.eql(u8, v, "option") else false;
-            if (!row and (label.len > rules.label_chars or countWords(label) > rules.label_words)) {
+            if (!row and (labelChars(label) > rules.label_chars or countWords(label) > rules.label_words)) {
                 // An aria-label may be longer than what shows; the visible text is the label
                 const shown = textOf(r, t, n);
-                if (shown.len > rules.label_chars or countWords(shown) > rules.label_words) {
+                if (labelChars(shown) > rules.label_chars or countWords(shown) > rules.label_words) {
                     r.add(rules.label, "label \"{s}\" over {d} chars or {d} words", .{ shown, rules.label_chars, rules.label_words });
                 }
             }
@@ -149,6 +163,15 @@ test "a label over budget is a warning, not a failure; a raised rule fails" {
     try testing.expectEqual(@as(usize, 0), r.errors());
     try testing.expectEqual(@as(usize, 1), (try run(arena.allocator(), &t, .{ .button_name = .err })).errors());
     try testing.expectEqual(@as(usize, 5), r.words);
+}
+
+test "a label's figures don't count toward its budget" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: tree.H = .init(arena.allocator(), &t);
+    t.root = h.button(.{ .aria_label = "Moved clearly: win rate 12 up, 10 down" }, .{ "Moved clearly", " ", "▲12", " ", "▼10", " ", "+21" });
+    try testing.expectEqual(@as(usize, 0), (try run(arena.allocator(), &t, .{ .label = .err })).findings.items.len);
 }
 
 test "a listbox row may run past the label budget" {

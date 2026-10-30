@@ -175,8 +175,13 @@ test "the chips count the role's rows; the role in place; the URL restores both"
     try p.init("");
     defer p.deinit();
     try testing.expectEqual(@as(u32, 0), p.fake.warnings);
+    // Moved clearly shows 5 rows: 2 up, 2 down, 1 by its lane or matchups only
     try testing.expect(std.mem.find(u8, try p.shown(), "▲2") != null);
     try testing.expect(std.mem.find(u8, try p.shown(), "▼2") != null);
+    try testing.expect(std.mem.find(u8, try p.shown(), " +1</span>") != null);
+    try testing.expect(std.mem.find(u8, try p.shown(), "aria-label=\"Moved clearly: win rate 2 up, 2 down; 1 more in lane or matchups\"") != null);
+    // Riot changed counts rows, as it filters them
+    try testing.expect(std.mem.find(u8, try p.shown(), "Riot changed<span class=\"n\">4</span>") != null);
     p.click(p.id("aria-label", "Bot"));
     try testing.expectEqualStrings("#role=bot", p.fake.fragment.items);
     try testing.expect(std.mem.find(u8, try p.shown(), "▼1") != null);
