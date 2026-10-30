@@ -22,6 +22,7 @@ const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const fmt = @import("fmt.zig");
 const url = @import("url.zig");
+const tl = @import("testerlane.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
 const H = tree.H;
@@ -179,6 +180,9 @@ pub const Page = struct {
     head: *const Head,
     which: Which = .live,
     loads: std.enums.EnumArray(Which, Load) = .initFill(.none),
+    /// The lane model, for the candidate panel's Gold column: fetched once, whatever the
+    /// draft model
+    lane: tl.Load = .none,
     /// By side (0 blue) and role; 0 empty
     teams: [2][n_role]u32 = @splat(@splat(0)),
     /// The seat being filled: side * n_role + role, side 0 blue; null: the first empty
@@ -453,6 +457,7 @@ pub const Page = struct {
                 .none => tree.Text{ .s = h.fmt("{s}: {s}", .{ i.file, W.not_loaded.s }) },
             }}));
         }
+        lines.add(h.li(.{ .key = 100 }, .{tl.fileLine(h, p.lane)}));
         return h.ul(.{ .class = "files" }, .{lines.done()});
     }
 };

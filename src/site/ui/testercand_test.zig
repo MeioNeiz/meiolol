@@ -304,3 +304,52 @@ test "the feed: the seat's options, sorted by the low end or by fit, another sea
     try testing.expectEqual(tc.Sort.win, u.o);
     try testing.expectEqual(tp.Which.live, u.m);
 }
+
+test "lane gold: blind or into the opponent, the Gold sort by its low end, none off lane" {
+    const tl = @import("testerlane.zig");
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var l: tp.Loaded = .{ .m = tp.Demo.model(), .sc = undefined, .check = undefined };
+    l.sc = try l.m.scorer(a);
+    const head = &tp.Demo.head;
+    const lm: tl.Model = .{
+        .meta = .{ .name = "t", .newest_game = "2026-10-29", .training_games = 1000, .patch = "16.21", .oldest_patch = "16.21", .newest_patch = "16.21", .lanediff_removed = 10 },
+        .intercept = @splat(@splat(0)),
+        .champ = &.{
+            .{ .champion = 266, .role = 0, .n = 500, .b = .{ 0, 300, 80, 1 }, .sd = .{ 0, 50, 1, 0.1 } },
+            .{ .champion = 122, .role = 0, .n = 400, .b = .{ 0, -100, 75, 1.5 }, .sd = .{ 0, 50, 1, 0.1 } },
+        },
+        .enemy = &.{},
+        .pairs = &.{.{ .champion = 122, .enemy = 266, .role = 0, .n = 80, .b = .{ 0, 500, 0, 0 }, .sd = .{ 0, 20, 0, 0 } }},
+        .refs = &.{},
+    };
+    const sc = try tl.Scorer.init(a, &lm);
+    const empty: [2][n_role]u32 = @splat(@splat(0));
+    // Blind: each into the other, the only other likely pick; Darius's matchup cell wins it
+    var f = try tc.feed(a, head, .{ .ready = &l }, .live, empty, @splat(0), 0);
+    try tc.addLane(a, &f, .{ .ready = &l }, &sc);
+    try testing.expect(f.lane);
+    try testing.expectEqual(0, f.opp);
+    const c = try tc.sorted(a, &f, .gold);
+    try testing.expectEqual(122, c[0].id);
+    try testing.expectApproxEqAbs(400, c[0].gold.?.v, 1e-3);
+    try testing.expectEqual(266, c[0].gold.?.hardest);
+    // Into red's Aatrox: the matchup's games
+    f = try tc.feed(a, head, .{ .ready = &l }, .live, .{ @splat(0), .{ 266, 0, 0, 0, 0 } }, @splat(0), 0);
+    try tc.addLane(a, &f, .{ .ready = &l }, &sc);
+    try testing.expectEqual(266, f.opp);
+    try testing.expectEqual(80, f.opts[0].gold.?.pair_games);
+    // Through ui.data, as it crosses to the panel's wasm
+    var raw: std.ArrayList(u8) = .empty;
+    try data.encode(a, tc.Feed, f, &raw);
+    const back = try data.decode(a, tc.Feed, raw.items);
+    try testing.expectEqual(f.opts[0].gold.?.v, back.opts[0].gold.?.v);
+    // Jungle has no lane line; nor does a feed whose model isn't in
+    f = try tc.feed(a, head, .{ .ready = &l }, .live, empty, @splat(0), 1);
+    try tc.addLane(a, &f, .{ .ready = &l }, &sc);
+    try testing.expect(!f.lane);
+    f = try tc.feed(a, head, .loading, .live, empty, @splat(0), 0);
+    try tc.addLane(a, &f, .loading, &sc);
+    try testing.expect(!f.lane);
+}

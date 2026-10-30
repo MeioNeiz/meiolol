@@ -22,9 +22,10 @@ var state: tp.Page = undefined;
 var server: tp.Page = undefined;
 var island: ?*ui.island.Island(tp.Page, dom.Dom) = null;
 var loaded: std.enums.EnumArray(tp.Which, tp.Loaded) = undefined;
+var lane: ui.testerlane.Loaded = undefined;
 var feed_arena: std.heap.ArenaAllocator = .init(gpa);
 /// What the last feed was for: the panel needs a new one when any of it changes
-const Sent = struct { which: tp.Which, teams: @FieldType(tp.Page, "teams"), bans: [tp.n_ban]u32, seat: u8, load: std.meta.Tag(tp.Load) };
+const Sent = struct { which: tp.Which, teams: @FieldType(tp.Page, "teams"), bans: [tp.n_ban]u32, seat: u8, load: std.meta.Tag(tp.Load), lane: std.meta.Tag(ui.testerlane.Load) };
 var sent: ?Sent = null;
 var pending = false;
 
@@ -59,6 +60,8 @@ export fn main() void {
 
 fn start() callconv(.c) void {
     fetchShown();
+    state.lane = .loading;
+    dom.fetch(ui.testerlane.file, lane_ctx, done);
     if (island) |i| i.render();
     dom.lazyLater();
     schedule();
@@ -83,7 +86,11 @@ fn fetchShown() void {
     dom.fetch(tp.infos.get(w).file, @backingInt(w), done);
 }
 
+/// dom.fetch has one callback for every request in flight: ctx tells them apart
+const lane_ctx = -1;
+
 fn done(ctx: i32, bytes: ?[]u8) void {
+    if (ctx == lane_ctx) return laneDone(bytes);
     const w = std.enums.fromInt(tp.Which, ctx) orelse return;
     defer schedule();
     defer if (island) |i| i.render();
@@ -100,6 +107,23 @@ fn done(ctx: i32, bytes: ?[]u8) void {
     state.loads.set(w, .{ .ready = l });
 }
 
+fn laneDone(bytes: ?[]u8) void {
+    defer schedule();
+    defer if (island) |i| i.render();
+    const b = bytes orelse return {
+        state.lane = .failed;
+    };
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    lane.init(arena.allocator(), b) catch {
+        dom.dom.warn("tester: bad lane model file");
+        arena.deinit();
+        gpa.free(b);
+        state.lane = .bad;
+        return;
+    };
+    state.lane = .{ .ready = &lane };
+}
+
 /// The panel's feed on the next task: out of this runtime's event, and once for a burst
 fn schedule() void {
     if (pending) return;
@@ -111,11 +135,15 @@ fn publish() callconv(.c) void {
     pending = false;
     const seat = tp.shownSeat(state.teams, state.seat) orelse return;
     const load = state.loads.get(state.which);
-    const now: Sent = .{ .which = state.which, .teams = state.teams, .bans = state.bans, .seat = seat, .load = std.meta.activeTag(load) };
+    const now: Sent = .{ .which = state.which, .teams = state.teams, .bans = state.bans, .seat = seat, .load = std.meta.activeTag(load), .lane = std.meta.activeTag(state.lane) };
     if (sent) |s| if (std.meta.eql(s, now)) return;
     _ = feed_arena.reset(.retain_capacity);
     const a = feed_arena.allocator();
-    const f = ui.testercand.feed(a, &head, load, state.which, state.teams, state.bans, seat) catch return dom.dom.warn("tester: out of memory");
+    var f = ui.testercand.feed(a, &head, load, state.which, state.teams, state.bans, seat) catch return dom.dom.warn("tester: out of memory");
+    switch (state.lane) {
+        .ready => |l| ui.testercand.addLane(a, &f, load, &l.sc) catch return dom.dom.warn("tester: out of memory"),
+        else => {},
+    }
     var raw: std.ArrayList(u8) = .empty;
     ui.data.encode(a, ui.testercand.Feed, f, &raw) catch return dom.dom.warn("tester: out of memory");
     const e = std.base64.standard.Encoder;

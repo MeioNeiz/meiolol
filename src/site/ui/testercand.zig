@@ -18,6 +18,7 @@ const rankstrip = @import("rankstrip.zig");
 const role = @import("role.zig");
 const segmented = @import("segmented.zig");
 const url = @import("url.zig");
+const tl = @import("testerlane.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
@@ -34,6 +35,8 @@ const n_role = ds.n_role;
 const max_rows = 30;
 /// Chips: a part under this many points says nothing a row's number doesn't
 const min_chip_pp = 0.1;
+/// Lane gold at 14 over many games: the old page's ±50 for a colour, up from there
+const gold_cuts: [4]f32 = .{ 50, 150, 300, 500 };
 
 const W = struct {
     pub const seat = Phrase("{side:text} {r:text}");
@@ -55,6 +58,11 @@ const W = struct {
     pub const side_with = Phrase("{side:text} with {n:text}");
     pub const why = Phrase("Why {n:text}");
     pub const pick = Phrase("Pick {n:text}");
+    pub const gold = plain("Gold");
+    pub const gold_h = plain("gold 14");
+    pub const lane_into = Phrase("Lane into {n:text}: {g:signed} gold at 14 ({lo:signed} to {hi:signed}), {cs:int} CS at 10, {d:dec} deaths before 15; {m:count} games of the matchup");
+    pub const lane_new = Phrase("Lane into {n:text}: {g:signed} gold at 14 ({lo:signed} to {hi:signed}), {cs:int} CS at 10, {d:dec} deaths before 15; no games of the matchup yet, champion averages only");
+    pub const lane_blind = Phrase("Blind lane: {g:signed} gold at 14 over likely opponents ({lo:signed} to {hi:signed}); hardest common one {n:text}, {hg:signed}");
     pub const in_seat = plain("in seat");
     pub const every = Phrase("Every pick for {side:text} {r:text}");
     pub const full = plain("Every seat is filled: choose one to change it");
@@ -66,7 +74,8 @@ const W = struct {
     pub const red = plain("Red");
 };
 
-pub const Sort = enum(u8) { win, fit };
+/// Gold: the lane model's gold at 14, low end first; without it, as Win
+pub const Sort = enum(u8) { win, fit, gold };
 
 /// The shown seat's options under the shown model for one board: what ui-tester.wasm
 /// hands the panel (ui.data). Unsorted; the panel sorts
@@ -79,6 +88,9 @@ pub const Feed = struct {
     /// The seat's side's chance with the role's average pick, %
     empty: f32 = 50,
     opts: []const Opt = &.{},
+    /// The options have lane gold (addLane): into `opp`, or blind when it is 0
+    lane: bool = false,
+    opp: u32 = 0,
 
     /// For this board, bans, model and seat
     pub fn of(f: *const Feed, which: tp.Which, teams: [2][n_role]u32, bans: [tp.n_ban]u32, seat: u8) bool {
@@ -97,6 +109,7 @@ pub const Opt = struct {
     hi: f32,
     parts: []const Part,
     rest: f32,
+    gold: ?tl.Gold = null,
 
     /// Points over the role's average pick
     fn total(o: *const Opt, f: *const Feed) f32 {
@@ -156,6 +169,31 @@ pub fn feed(a: std.mem.Allocator, head: *const tp.Head, load: tp.Load, which: tp
     return f;
 }
 
+/// The lane model's gold for each option where the seat's role has a lane line (top,
+/// mid, bot): into the seat's lane opponent, else blind over the role's likely picks
+pub fn addLane(a: std.mem.Allocator, f: *Feed, load: tp.Load, sc: *const tl.Scorer) !void {
+    const l = switch (load) {
+        .ready => |x| x,
+        else => return,
+    };
+    if (f.load != .ready or f.seat >= 2 * n_role) return;
+    const side = f.seat / n_role;
+    const r: u8 = f.seat % n_role;
+    if (!tl.shown(r)) return;
+    const opp = f.teams[1 - side][r];
+    var field: std.ArrayList(tl.Opp) = .empty;
+    if (opp == 0) for (l.m.cells) |cell| {
+        if (cell.role != r or !(cell.patch_share > 0)) continue;
+        if (elsewhere(f.teams, f.seat, cell.champion) or std.mem.findScalar(u32, &f.bans, cell.champion) != null) continue;
+        try field.append(a, .{ .id = cell.champion, .w = @floatCast(cell.patch_share) });
+    };
+    const opts = try a.dupe(Opt, f.opts);
+    for (opts) |*o| o.gold = tl.gold(sc, r, o.id, opp, field.items);
+    f.opts = opts;
+    f.lane = true;
+    f.opp = opp;
+}
+
 fn elsewhere(teams: [2][n_role]u32, seat: u8, id: u32) bool {
     for (0..2 * n_role) |i| if (i != seat and teams[i / n_role][i % n_role] == id) return true;
     return false;
@@ -174,6 +212,7 @@ fn key(f: *const Feed, sort: Sort, x: *const Opt) f32 {
     return switch (sort) {
         .win => x.lo,
         .fit => x.fit(f),
+        .gold => if (x.gold) |g| g.lo else x.lo,
     };
 }
 
@@ -352,20 +391,21 @@ pub const Panel = struct {
         const in_seat = f.teams[f.seat / n_role][f.seat % n_role];
         const rows = p.rowsOf(h, f, all, in_seat, cur != null);
         return h.div(attrs, .{
-            p.top(h, side, r, all.len),
+            p.top(h, side, r, all.len, f.lane),
             p.strip(h, all, side, r, in_seat),
             if (rows.len > 0) candlist.withPick(h, .{
                 .rows = rows,
                 .head = .{ W.chance.with(h, .{ .side = side.s }), W.with_, if (p.sort == .fit) W.fit_h else W.vs_avg },
                 .ref_label = W.in_seat,
                 .base = if (p.q.len == 0) .{ .label = W.average.with(h, .{ .r = roleName(r) }), .win = f.empty } else null,
+                .extra = if (f.lane) .{ .head = W.gold_h, .cuts = gold_cuts } else null,
             }) else h.p(.{ .class = "wait" }, .{W.none}),
         });
     }
 
     fn waiting(p: *Panel, h: *H, attrs: anytype, side: tree.Text, r: role.Role, s: Status) N {
         return h.div(attrs, .{
-            p.top(h, side, r, null),
+            p.top(h, side, r, null, false),
             h.p(.{ .class = "wait" }, .{switch (s) {
                 .failed => W.failed,
                 .bad => W.bad,
@@ -374,7 +414,13 @@ pub const Panel = struct {
         });
     }
 
-    fn top(p: *Panel, h: *H, side: tree.Text, r: role.Role, n: ?usize) N {
+    /// Gold only where the seat has a lane line; a Gold sort without one sorts as Win
+    fn top(p: *Panel, h: *H, side: tree.Text, r: role.Role, n: ?usize, lane: bool) N {
+        const sorts = [_]segmented.Item{
+            .{ .label = W.win, .selected = p.sort == .win or (p.sort == .gold and !lane), .on = h.on(p, .{ .sort = .win }) },
+            .{ .label = W.fit, .selected = p.sort == .fit, .on = h.on(p, .{ .sort = .fit }) },
+            .{ .label = W.gold, .selected = p.sort == .gold, .on = h.on(p, .{ .sort = .gold }) },
+        };
         return h.div(.{ .class = "hd" }, .{
             role.view(h, r, .{ .s = .s }),
             h.b(.{}, .{W.seat.with(h, .{ .side = side.s, .r = r.label().s })}),
@@ -390,10 +436,7 @@ pub const Panel = struct {
                 .on_input = h.on(p, .input),
                 .on_keydown = h.on(p, .key),
             }),
-            segmented.view(h, .{ .s = .s, .label = W.sort }, &.{
-                .{ .label = W.win, .selected = p.sort == .win, .on = h.on(p, .{ .sort = .win }) },
-                .{ .label = W.fit, .selected = p.sort == .fit, .on = h.on(p, .{ .sort = .fit }) },
-            }),
+            segmented.view(h, .{ .s = .s, .label = W.sort }, sorts[0..if (lane) 3 else 2]),
         });
     }
 
@@ -444,13 +487,22 @@ pub const Panel = struct {
             .reasons = p.chips(h, o, f.seat),
             .gap = gap,
             .open = open,
+            .x = if (o.gold) |g| g.v else null,
             .detail = if (open) p.breakdown(h, f, o) else null,
+            .note = if (open) p.laneLine(h, f, o) else null,
             .label = W.why.with(h, .{ .n = nm }),
             .id = h.fmt("tc-{d}", .{o.id}),
             .on = h.on(p, .{ .open = o.id }),
             .pick = if (live and o.id != in_seat) h.on(p, .{ .pick = o.id }) else null,
             .pick_label = W.pick.with(h, .{ .n = nm }),
         };
+    }
+
+    fn laneLine(p: *const Panel, h: *H, f: *const Feed, o: *const Opt) ?tree.Text {
+        const g = o.gold orelse return null;
+        if (f.opp == 0) return W.lane_blind.with(h, .{ .g = whole(g.v), .lo = whole(g.lo), .hi = whole(g.hi), .n = p.nameOf(g.hardest), .hg = whole(g.hardest_gold) });
+        if (g.pair_games == 0) return W.lane_new.with(h, .{ .n = p.nameOf(f.opp), .g = whole(g.v), .lo = whole(g.lo), .hi = whole(g.hi), .cs = whole(g.cs10), .d = g.deaths15 });
+        return W.lane_into.with(h, .{ .n = p.nameOf(f.opp), .g = whole(g.v), .lo = whole(g.lo), .hi = whole(g.hi), .cs = whole(g.cs10), .d = g.deaths15, .m = g.pair_games });
     }
 
     fn nameOf(p: *const Panel, id: u32) []const u8 {
@@ -518,6 +570,10 @@ pub const Panel = struct {
         };
     }
 };
+
+fn whole(x: f32) i64 {
+    return if (std.math.isFinite(x)) @intFromFloat(@round(x)) else 0;
+}
 
 fn roleName(r: role.Role) []const u8 {
     return @tagName(r);
