@@ -17,6 +17,7 @@ const testerbin = @import("testerbin.zig");
 const digests = @import("digests.zig");
 const ddragon = @import("ddragon.zig");
 const site = @import("site/root.zig");
+const csp = @import("site/csp.zig");
 const assets = @import("site/assets.zig");
 const admin = @import("admin.zig");
 const site_tester = @import("site/tester.zig");
@@ -599,13 +600,20 @@ test "fixture games to stats, curves and the website" {
         };
         try testing.expectEqualStrings(want, got);
         checked += 1;
-        if (std.mem.endsWith(u8, e.path, ".html")) try expectPageLinks(arena, e.path, want);
+        if (std.mem.endsWith(u8, e.path, ".html")) {
+            try expectPageLinks(arena, e.path, want);
+            csp.check(want) catch |err| {
+                std.debug.print("{s}: CSP {t}\n", .{ e.path, err });
+                return err;
+            };
+        }
     }
     try testing.expect(checked > 50);
     // The account pages (ui.account): rendered on request only, never indexed
     for ([_][]const u8{ "login", "signup", "join", "account" }) |p| {
         const page = try loaded.get(arena, try std.fmt.allocPrint(arena, "{s}.html", .{p})) orelse return error.TestUnexpectedResult;
         try testing.expect(std.mem.find(u8, page, "<meta name=\"robots\" content=\"noindex\">") != null);
+        try csp.check(page);
         try testing.expect(std.mem.find(u8, page, try std.fmt.allocPrint(arena, "data-island=\"account\" data-kind=\"{s}\"", .{p})) != null);
         const action = if (std.mem.eql(u8, p, "account")) "password" else p;
         try testing.expect(std.mem.find(u8, page, try std.fmt.allocPrint(arena, "<form method=\"post\" action=\"/auth/{s}\">", .{action})) != null);
