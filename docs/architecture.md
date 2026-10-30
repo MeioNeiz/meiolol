@@ -27,12 +27,15 @@ src/
   fitted.zig         the draft model in it (additive v2 on its games; additive.zig fits)
   partials.zig       views partials (data/partials): the views write's games and mastery
                      contributions kept between writes (arch-site.md "Views partials")
+  cubes.zig          day cubes (data/cubes): per game what curves and builds --site
+                     read, decoded once (estimates.md E7)
   eval.zig           draft model on held-out newer games (`meiolol eval`, docs/model.md)
   draftfile.zig      the admin Draft tester's model file: shapes, writer (shared with
                      lab/draft.zig; docs/model.md "Draft model file"); its scorer is
                      core/draftscore.zig, which ui.wasm scores the tester page with
-  testerbin.zig      `meiolol tester-bin`: that file and lane-model.json as draft-model.bin
-                     and lane-model.bin (ui/testerdata.zig, ui/testerlane.zig)
+  testerbin.zig      `meiolol tester-bin`: that file, lane-model.json and the lab's
+                     draft-setnet.json as draft-model.bin, lane-model.bin and
+                     draft-setnet.bin (ui/testerdata.zig, testerlane.zig, testersetnet.zig)
   draftmodel.zig     `meiolol draft-model`: the shipped model as that file, daily on the box
   lanefile.zig       the tester's lane model file, as draftfile.zig (lab/lane.zig shares it)
   lanemodel.zig      `meiolol lane-model`: lab candidate team2 (imported as a module,
@@ -205,6 +208,10 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
 - `partials/` (views partials, ~0.6 GB for 835k matches): the views write's copy of the
   games and mastery contributions it reads (docs/arch-site.md "Views partials"); derived,
   never backed up, safe to delete (the next write rebuilds it)
+- `cubes/` (day cubes, ~115 MB a day at 100k games, ~3.5 GB for 30 days): per game the
+  lanes and builds seats `curves --site` and `builds --site` read (src/cubes.zig), so
+  they pass over days instead of timelines; derived, never backed up, safe to delete
+  (the next curves run rebuilds it, ~15-25 min on the box)
 - Schema changes: `schema.zig` migrate() alters or rebuilds tables in place (checks
   inside the write lock, so concurrent opens are safe). Back up before a first run
 - Scale at full rate (4 regions, ~135k matches/day): kept forever ~8.6 KB timeline +

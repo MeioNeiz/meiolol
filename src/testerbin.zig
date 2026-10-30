@@ -1,11 +1,14 @@
 //! The Draft tester's model files as the page's wasm reads them (ui/testerdata.zig,
 //! ui/testerlane.zig): DIR/draft-model.json and lane-model.json with their -ref.json, the
-//! box's or the lab's export, to DIR/draft-model.bin and lane-model.bin. One converter for
-//! both sources, so a lab export pushed as JSON gets the same file
+//! box's or the lab's export, to DIR/draft-model.bin and lane-model.bin, and the lab's
+//! draft-setnet.json to draft-setnet.bin (ui/testersetnet.zig). One converter for both
+//! sources, so a lab export pushed as JSON gets the same file
 const std = @import("std");
 const ui = @import("ui");
 const df = @import("draftfile.zig");
 const lf = @import("lanefile.zig");
+const Date = @import("date.zig").Date;
+const tsn = ui.testersetnet;
 
 const Io = std.Io;
 const Model = ui.testerdata.Model;
@@ -123,6 +126,13 @@ pub fn convert(arena: std.mem.Allocator, io: Io, dir: []const u8, w: *Io.Writer)
             };
         }
     }
+    if (try read(arena, io, dir, "draft-setnet.json", 256 << 20)) |bytes| {
+        any = true;
+        convertSetNet(arena, io, dir, bytes, w) catch |e| switch (e) {
+            error.ScorerDisagrees => refused = true,
+            else => return e,
+        };
+    }
     if (!any) return error.NoModelFiles;
     if (refused) return error.ScorerDisagrees;
 }
@@ -158,4 +168,121 @@ fn convertDraft(arena: std.mem.Allocator, io: Io, dir: []const u8, json: []const
     try w.print("draft-model.bin against {d} reference drafts: max |diff| {e}\n", .{ c.drafts, c.worst });
     if (!c.ok()) return error.ScorerDisagrees;
     try write(arena, io, dir, "draft-model.bin", m, w);
+}
+
+/// draft-setnet.json: the lab's seeds together (`meiolol-lab netcheck --export`)
+const SetNetsFile = struct { format: []const u8, nets: []const df.SetNetFile };
+
+/// The page's file, and each seed's reference forward pass (draftfile.SetNet) to hold
+/// it to
+pub fn setNet(arena: std.mem.Allocator, json: []const u8) !struct { m: tsn.Model, ref: []const df.SetNet } {
+    const f = try std.json.parseFromSliceLeaky(SetNetsFile, arena, json, .{ .ignore_unknown_fields = true });
+    if (!std.mem.eql(u8, f.format, "meiolol-setnets") or f.nets.len == 0) return error.NotSetNet;
+    const nets = try arena.alloc(tsn.Net, f.nets.len);
+    const ref = try arena.alloc(df.SetNet, f.nets.len);
+    for (nets, ref, f.nets) |*o, *r, x| {
+        r.* = try .init(arena, x);
+        if (x.features.len != f.nets[0].features.len) return error.NotSetNet;
+        for (x.features, f.nets[0].features) |a, b| if (!std.mem.eql(u8, a, b)) return error.NotSetNet;
+        // Files without their platforms are in the lab's order (protocol.platformIds)
+        const euw = r.platform("EUW1") orelse if (x.platforms.len == 0) legacy_euw else return error.NoEuw;
+        if (euw >= r.n_platforms) return error.NoEuw;
+        const l = x.layout;
+        const ids = try arena.alloc(tsn.Id, x.ids.len);
+        for (ids, x.ids) |*i, y| i.* = .{ .champion = y.champion, .role = y.role, .id = y.id };
+        const profiles = try arena.alloc(tsn.Profile, x.profiles.len);
+        for (profiles, x.profiles) |*i, y| i.* = .{ .champion = y.champion, .role = y.role, .z = y.z };
+        const refs = try arena.alloc(tsn.Ref, x.refs.len);
+        for (refs, x.refs) |*i, y| i.* = .{ .teams = y.teams, .platform = y.platform, .offset = y.offset, .logit = y.logit };
+        o.* = .{
+            .seed = x.seed,
+            .phi = @intCast(x.phi),
+            .rho = @intCast(x.rho),
+            .emb = @intCast(x.emb),
+            .n_prof = @intCast(x.n_prof),
+            .cross = x.cross,
+            .euw = euw,
+            .layout = .{ .in = @intCast(l.in), .rin = @intCast(l.rin), .c = @intCast(l.c), .a = @intCast(l.a), .b1 = @intCast(l.b1), .cb = @intCast(l.cb), .e = @intCast(l.e), .w1 = @intCast(l.w1), .v = @intCast(l.v), .out = @intCast(l.out), .len = @intCast(l.len) },
+            .params = x.params,
+            .ids = ids,
+            .profiles = profiles,
+            .refs = refs,
+        };
+    }
+    const n0 = f.nets[0];
+    return .{ .m = .{
+        .candidate = n0.candidate,
+        .fit_games = @intCast(n0.fit_games),
+        .fit_newest = if (n0.fit_newest > 0) try arena.print("{f}", .{Date.fromMs(n0.fit_newest)}) else "",
+        .features = n0.features,
+        .nets = nets,
+    }, .ref = ref };
+}
+
+/// EUW1's index in the lab's platform list (riot/endpoints.zig)
+const legacy_euw = 6;
+
+/// Each seed against its references and the reference forward pass; then, when DIR has
+/// the draft model, whether it is the base the nets were fitted on (a note: the page
+/// shows the net only on its own base)
+fn convertSetNet(arena: std.mem.Allocator, io: Io, dir: []const u8, json: []const u8, w: *Io.Writer) !void {
+    var s = try setNet(arena, json);
+    var worst: f64 = 0;
+    var apart: f64 = 0;
+    for (s.m.nets, s.ref) |*n, *r| {
+        const sc: tsn.Scorer = try .init(n);
+        worst = @max(worst, sc.check());
+        for (n.refs) |x| apart = @max(apart, @abs(sc.logit(x.teams, x.platform, x.offset, .none) - r.logit(x.teams, x.platform, x.offset)));
+    }
+    const n0 = &s.m.nets[0];
+    try w.print("draft-setnet.bin, {d} seeds against {d} reference games: max |diff| {e}, {e} from draftfile.SetNet\n", .{ s.m.nets.len, n0.refs.len, worst, apart });
+    if (n0.refs.len == 0 or worst > tsn.ref_tol or apart > 1e-9) return error.ScorerDisagrees;
+    if (try read(arena, io, dir, "draft-model.json", 256 << 20)) |mj| if (try read(arena, io, dir, "draft-ref.json", 16 << 20)) |rj| {
+        const m = try model(arena, mj, rj);
+        const sc = try m.scorer(arena);
+        var base: f64 = 0;
+        for (n0.refs) |r| if (r.platform == n0.euw) {
+            s.m.base_games += 1;
+            const d = @abs(sc.rawLogit(r.teams) - r.offset);
+            if (!(d <= base)) base = if (std.math.isNan(d)) std.math.inf(f64) else d;
+        };
+        s.m.base_worst = @floatCast(base);
+        const same = s.m.base_games > 0 and base <= tsn.base_tol;
+        try w.print("draft-setnet.bin base: draft-model.json on {d} EUW1 reference games, max |diff| {d:.4}{s}\n", .{ s.m.base_games, base, if (same) "" else ": not its base, the page won't show it" });
+    };
+    try write(arena, io, dir, "draft-setnet.bin", s.m, w);
+}
+
+test "set net: the page's forward pass is draftfile.SetNet's" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const params = tsn.testParams();
+    const n = tsn.testNet(&params, &.{});
+    var json: Io.Writer.Allocating = .init(arena);
+    try std.json.Stringify.value(.{ .format = "meiolol-setnets", .nets = .{.{
+        .format = "meiolol-setnet",
+        .version = 1,
+        .fit_newest = 1792000844515,
+        .platforms = .{ "NA1", "EUW1" },
+        .phi = n.phi,
+        .rho = n.rho,
+        .emb = n.emb,
+        .cross = n.cross,
+        .n_prof = n.n_prof,
+        .features = .{ "magic", "cc" },
+        .layout = n.layout,
+        .params = n.params,
+        .ids = n.ids,
+        .profiles = n.profiles,
+        .refs = n.refs,
+    }} }, .{}, &json.writer);
+    const s = try setNet(arena, json.written());
+    try std.testing.expectEqualStrings("2026-10-14", s.m.fit_newest);
+    try std.testing.expectEqual(1, s.m.nets[0].euw);
+    const sc = try tsn.Scorer.init(&s.m.nets[0]);
+    const drafts = [_][2][5]u32{ .{ .{ 10, 0, 0, 0, 0 }, .{ 0, 0, 0, 20, 0 } }, .{ .{ 0, 0, 0, 20, 0 }, .{ 10, 0, 0, 0, 0 } }, @splat(@splat(0)) };
+    for (drafts) |t| for ([_]u8{ 0, 1 }) |plat| {
+        try std.testing.expectApproxEqAbs(s.ref[0].logit(t, plat, 0.3), sc.logit(t, plat, 0.3, .none), 1e-12);
+    };
 }

@@ -261,6 +261,11 @@ pub const Scorer = struct {
         return .{ .p = sigmoid(t * x.l), .lo = sigmoid(t * (x.l - x.half)), .hi = sigmoid(t * (x.l + x.half)) };
     }
 
+    /// Blue's logit before the temperature: the base the lab's set net corrects
+    pub fn rawLogit(sc: *const Scorer, teams: [2][n_role]u32) f64 {
+        return sc.logit(teams).l;
+    }
+
     /// Blue's logit before the temperature, and its 95% half-width
     fn logit(sc: *const Scorer, teams: [2][n_role]u32) struct { l: f64, half: f64 } {
         var sl: [2][n_role]Slot = undefined;

@@ -5687,8 +5687,11 @@ src/core/draftscore.zig, shared with the lab and ui.wasm. `meiolol tester-bin DI
 encodes DIR's export as draft-model.bin for the new tester page (ui/testerdata.zig),
 only when the Zig scorer reading it matches draft-ref.json, and DIR's lane-model.json
 as lane-model.bin (ui/testerlane.zig: intercept and others summed, f32, the scorer
-within 0.01 of lane-ref.json); the web loop runs it after `lane-model`,
-deploy/lab-push.sh on a lab export.
+within 0.01 of lane-ref.json), and the lab's draft-setnet.json as draft-setnet.bin
+(ui/testersetnet.zig: every seed's forward pass equal to draftfile.SetNet's and within
+1e-4 of its references; with DIR's draft model, the base check: that model's raw logit
+within 0.05 of the EUW1 references' offsets, else the page doesn't show the net); the web
+loop runs it after `lane-model`, deploy/lab-push.sh on a lab export.
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
 `exportModel`, today win-ratings) fits on every game in the snapshot and writes

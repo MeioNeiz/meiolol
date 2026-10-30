@@ -497,7 +497,10 @@ pub const SetNet = struct {
     n_platforms: usize,
 
     pub fn parse(arena: std.mem.Allocator, json: []const u8) !SetNet {
-        const f = try std.json.parseFromSliceLeaky(SetNetFile, arena, json, .{ .ignore_unknown_fields = true });
+        return init(arena, try std.json.parseFromSliceLeaky(SetNetFile, arena, json, .{ .ignore_unknown_fields = true }));
+    }
+
+    pub fn init(arena: std.mem.Allocator, f: SetNetFile) !SetNet {
         if (!std.mem.eql(u8, f.format, "meiolol-setnet") or f.version != 1) return error.NotSetNet;
         const l = f.layout;
         const n_ids = if (f.emb > 0) (l.w1 - l.e) / f.emb else 0;
