@@ -233,7 +233,7 @@ pub fn top(h: *H, l: *const yl.List, games: []const yl.Game, to: Links, more: ?t
         n += 1;
     };
     if (n == 0) return .none;
-    return h.div(.{ .class = "c-hl", .data_top = true }, .{
+    return h.div(.{ .class = "c-hl", .data_top = true, .style = h.vars(.{ .n = n }) }, .{
         if (more) |m| h.button(.{ .type = "button", .class = "more", .on_click = m }, .{W.all}) else null,
         h.div(.{ .class = "tiles" }, .{row.done()}),
     });
@@ -254,14 +254,16 @@ pub const css =
     \\  /* One card: its label opens Highlights, the records cells split by lines */
     \\  .c-hl[data-top] { display: flex; flex-direction: column; gap: var(--sp-1); padding-top: var(--sp-3);
     \\    background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-l); overflow: hidden; }
-    \\  .c-hl[data-top] .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    \\  /* As many columns as records: one or two (a short or filtered history) fill the card */
+    \\  .c-hl[data-top] .tiles { grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
     \\  .c-hl[data-top] .c-rtile { padding: var(--sp-1) var(--sp-4) var(--sp-3); box-shadow: none; border-left: 1px solid var(--line); }
     \\  .c-hl[data-top] .c-rtile:first-child { border-left: 0; }
     \\  .c-hl > .more { all: unset; align-self: start; margin-inline: var(--sp-4); cursor: pointer; color: var(--accent); font-size: var(--fs-s); }
     \\  .c-hl > .more:hover { text-decoration: underline; }
     \\  .c-hl > .more:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-ctl); }
     \\  @media (max-width: 760px) {
-    \\    .c-hl .tiles, .c-hl[data-top] .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    \\    .c-hl .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    \\    .c-hl[data-top] .tiles { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
     \\    .c-hl > .grp { flex-basis: 100%; }
     \\  }
     \\}
