@@ -1,10 +1,11 @@
 //! The Draft tester page (docs/plan/ui/draft-tester.md, /private/tester): build a
 //! draft, see blue's win chance under a named model, each seat's term and the model's
-//! checks. One model at a time from a Select of ModelBadges; the board is DraftBoard's
+//! checks. A model from a Select of ModelBadges, "vs" a second one to compare (a tick on
+//! the split, a column in the candidate panel); the board is DraftBoard's
 //! full variant, a click choosing the seat the candidate panel (testercand.zig, its own
 //! island and wasm) fills; Random game and Fill empty draw seats by play share, Undo
-//! takes the last draw back. Board | Terms | Files under it. The model, board, seat and tab
-//! are the URL fragment's (Url), which the panel shares. Models are draft-model.bin files
+//! takes the last draw back. Board | Terms | Files under it. The models, board, seat and
+//! tab are the URL fragment's (Url), which the panel shares. Models are draft-model.bin files
 //! the page's code fetches (testerdata.zig); champion keys and names come inline (data-bin)
 const std = @import("std");
 const tree = @import("tree.zig");
@@ -48,6 +49,8 @@ comptime {
 const W = struct {
     pub const title = plain("Draft tester");
     pub const model = plain("Model");
+    pub const vs = plain("vs");
+    pub const none = plain("none");
     pub const clear = plain("Clear");
     pub const random = plain("Random game");
     pub const fill = plain("Fill empty");
@@ -187,6 +190,8 @@ pub const Tab = enum(u8) { board, terms, files };
 pub const Page = struct {
     head: *const Head,
     which: Which = .live,
+    /// The model compared with `which`, never it
+    vs: ?Which = null,
     loads: std.enums.EnumArray(Which, Load) = .initFill(.none),
     /// The lane model, for the candidate panel's Gold column: fetched once, whatever the
     /// draft model
@@ -214,9 +219,10 @@ pub const Page = struct {
 
     /// The state both islands read and write: `b` blue's and `r` red's champions by role
     /// (0 empty), `s` the seat being filled (side * n_role + role; null: the first empty),
-    /// `n` the bans
+    /// `n` the bans, `v` the model compared
     pub const Url = struct {
         m: Which = .live,
+        v: ?Which = null,
         b: [n_role]u32 = @splat(0),
         r: [n_role]u32 = @splat(0),
         s: ?u8 = null,
@@ -225,7 +231,7 @@ pub const Page = struct {
     };
 
     /// `unban`: the ban's index
-    pub const Msg = union(enum) { model: Which, tab: Tab, seat: u8, clear, ban, unban: u8, random, fill, undo };
+    pub const Msg = union(enum) { model: Which, vs: ?Which, tab: Tab, seat: u8, clear, ban, unban: u8, random, fill, undo };
 
     pub fn useIndex(p: *Page, ix: *const champsearch.Index) void {
         p.search.index = ix;
@@ -237,7 +243,7 @@ pub const Page = struct {
     }
 
     pub fn toUrl(p: *const Page) Url {
-        return .{ .m = p.which, .b = p.teams[0], .r = p.teams[1], .s = p.seat, .t = p.tab, .n = p.bans };
+        return .{ .m = p.which, .v = p.vs, .b = p.teams[0], .r = p.teams[1], .s = p.seat, .t = p.tab, .n = p.bans };
     }
 
     /// The other island's change (a pick) or Back: saved again when it moved the board
@@ -247,6 +253,7 @@ pub const Page = struct {
         if (!std.meta.eql(teams, p.teams)) p.undo = null;
         if (u.m != p.which or !std.meta.eql(teams, p.teams) or !std.meta.eql(bans, p.bans)) p.dirty = true;
         p.which = u.m;
+        p.vs = if (u.v == u.m) null else u.v;
         p.teams = teams;
         p.bans = bans;
         p.seat = if (u.s) |i| (if (i < 2 * n_role) i else null) else null;
@@ -256,13 +263,14 @@ pub const Page = struct {
     pub fn update(p: *Page, m: Msg, ev: *tree.Event) void {
         switch (m) {
             .model => |w| {
+                if (p.vs == w) p.vs = p.which;
                 p.which = w;
-                // Chosen again after a failure: the page's code fetches it again
-                switch (p.loads.get(w)) {
-                    .failed, .bad => p.loads.set(w, .none),
-                    else => {},
-                }
+                p.retry(w);
                 p.dirty = true;
+            },
+            .vs => |w| {
+                p.vs = if (w == p.which) null else w;
+                if (w) |x| p.retry(x);
             },
             .tab => |t| p.tab = t,
             .seat => |i| {
@@ -316,9 +324,26 @@ pub const Page = struct {
         }
     }
 
+    /// Chosen again after a failure: the page's code fetches it again
+    fn retry(p: *Page, w: Which) void {
+        switch (p.loads.get(w)) {
+            .failed, .bad => p.loads.set(w, .none),
+            else => {},
+        }
+    }
+
     /// The model the page shows, once fetched
     pub fn ready(p: *const Page) ?*const Loaded {
-        return switch (p.loads.get(p.which)) {
+        return p.readyOf(p.which);
+    }
+
+    /// The model compared, once fetched
+    pub fn vsReady(p: *const Page) ?*const Loaded {
+        return p.readyOf(p.vs orelse return null);
+    }
+
+    fn readyOf(p: *const Page, w: Which) ?*const Loaded {
+        return switch (p.loads.get(w)) {
             .ready => |l| l,
             else => null,
         };
@@ -384,7 +409,27 @@ pub const Page = struct {
             return h.div(.{}, .{});
         };
         const parts = select.view(h, o, p.badge(h, p.which).short, shown);
-        return h.div(.{ .class = "model" }, .{ parts[0], parts[1] });
+        const vs = p.vsModel(h);
+        return h.div(.{ .class = "model" }, .{ parts[0], parts[1], vs[0], vs[1] });
+    }
+
+    /// "none" and the models other than the shown one
+    fn vsModel(p: *Page, h: *H) [2]N {
+        var items: [std.enums.values(Which).len]select.Item = undefined;
+        items[0] = .{ .label = W.none, .selected = p.vs == null, .on = h.on(p, .{ .vs = null }) };
+        var n: usize = 1;
+        for (std.enums.values(Which)) |w| {
+            if (w == p.which) continue;
+            const b = p.badge(h, w);
+            items[n] = .{ .label = b.name, .node = modelbadge.option(h, b), .selected = w == p.vs, .on = h.on(p, .{ .vs = w }) };
+            n += 1;
+        }
+        const shown = h.mem.dupe(select.Item, items[0..n]) catch {
+            h.oom = true;
+            return .{ .none, .none };
+        };
+        const value = if (p.vs) |w| infos.get(w).short else W.none;
+        return select.view(h, .{ .id = "tester-vs", .label = W.vs }, value, shown);
     }
 
     fn chance(p: *Page, h: *H) N {
@@ -394,7 +439,15 @@ pub const Page = struct {
             else => W.loading,
         }});
         const c = l.sc.blue(p.teams);
-        return split.view(h, .{ .p = @floatCast(100 * c.p), .lo = @floatCast(100 * c.lo), .hi = @floatCast(100 * c.hi), .s = .l });
+        const b: ?f32 = if (p.vsReady()) |x| @floatCast(100 * x.sc.blue(p.teams).p) else null;
+        return split.view(h, .{
+            .p = @floatCast(100 * c.p),
+            .lo = @floatCast(100 * c.lo),
+            .hi = @floatCast(100 * c.hi),
+            .b = b,
+            .b_name = if (b != null) infos.get(p.vs.?).short else null,
+            .s = .l,
+        });
     }
 
     fn board(p: *Page, h: *H) N {

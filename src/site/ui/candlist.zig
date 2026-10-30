@@ -50,6 +50,10 @@ pub const Row = struct {
     vs: ?f32 = null,
     /// The list's extra column (List.extra); null leaves the cell empty
     x: ?f32 = null,
+    /// The team's win chance with it under a second model (List.b_head), %, and its
+    /// points there over that model's reference
+    b: ?f32 = null,
+    b_vs: ?f32 = null,
     reasons: []const Reason = &.{},
     /// A neutral Badge after the reasons ("harder to pick up")
     tag: ?tree.Text = null,
@@ -83,6 +87,8 @@ pub const Base = struct {
     /// "Average top"
     label: tree.Text,
     win: f32,
+    /// Under the second model (List.b_head)
+    b: ?f32 = null,
 };
 
 pub const List = struct {
@@ -96,6 +102,8 @@ pub const List = struct {
     base: ?Base = null,
     /// A number column after vs, points mode (the tester's lane gold)
     extra: ?Extra = null,
+    /// A second model's name: a column after vs of its chance and points (Row.b, b_vs)
+    b_head: ?tree.Text = null,
 };
 
 pub fn view(h: *H, l: List) N {
@@ -115,11 +123,13 @@ fn viewOf(h: *H, l: List, comptime pick: bool) N {
         rows.add(row(h, l, r, 3 * i + 2, pick));
     }
     const x = l.mode == .points and l.extra != null;
-    return h.div(.{ .class = "c-cand", .data_v = if (l.mode == .points) null else l.mode, .data_x = x }, .{
+    const bc = l.mode == .points and l.b_head != null;
+    return h.div(.{ .class = "c-cand", .data_v = if (l.mode == .points) null else l.mode, .data_x = x, .data_b = bc }, .{
         if (l.head) |hd| h.div(.{ .class = "hd" }, .{
             h.span(.{ .class = "nm" }, .{hd[0]}),
             h.span(.{ .class = "v" }, .{hd[1]}),
             h.span(.{ .class = "d" }, .{hd[2]}),
+            if (bc) h.span(.{ .class = "b" }, .{l.b_head.?}) else null,
             if (x) h.span(.{ .class = "x" }, .{l.extra.?.head}) else null,
         }) else null,
         if (l.base) |b| h.div(.{ .class = "r base" }, .{
@@ -127,6 +137,7 @@ fn viewOf(h: *H, l: List, comptime pick: bool) N {
             h.span(.{ .class = "nm" }, .{b.label}),
             if (l.mode == .points) h.span(.{ .class = "v" }, .{phrase.num(h, .rate, b.win)}) else null,
             if (l.mode == .points) h.span(.{ .class = "d" }, .{}) else null,
+            if (bc) h.span(.{ .class = "b" }, .{if (b.b) |v| phrase.num(h, .rate, v) else null}) else null,
             if (x) h.span(.{ .class = "x" }, .{}) else null,
         }) else null,
         rows.done(),
@@ -169,6 +180,7 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
             .class = "d",
             .style = if (r.vs) |d| h.vars(.{ .c = fmt.Step.of(d, fmt.win_cuts) }) else null,
         }, .{if (r.vs) |d| phrase.num(h, .points, d) else null}) else null,
+        if (l.mode == .points and l.b_head != null) h.span(.{ .class = "b" }, .{bCell(h, r)}) else null,
         if (l.mode == .points) if (l.extra) |e| h.span(.{
             .class = "x",
             .style = if (r.x) |v| h.vars(.{ .c = fmt.Step.of(v, e.cuts) }) else null,
@@ -188,6 +200,13 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
         if (r.note) |n| h.p(.{ .class = "note" }, .{n}) else null,
     }) else null else null;
     return h.div(.{ .key = key, .class = "row" }, .{ head, det });
+}
+
+/// The second model's chance, then its points in their colour
+fn bCell(h: *H, r: Row) ?N {
+    const b = r.b orelse return null;
+    const d: ?N = if (r.b_vs) |x| h.b(.{ .style = h.vars(.{ .c = fmt.Step.of(x, fmt.win_cuts) }) }, .{phrase.num(h, .points, x)}) else null;
+    return h.span(.{}, .{ phrase.num(h, .rate, b), d });
 }
 
 fn goButton(h: *H, r: Row, comptime pick: bool) ?N {
@@ -226,6 +245,11 @@ pub const css =
     \\  .c-cand .d, .c-cand .x { text-align: right; font-size: var(--fs-s); font-weight: var(--w-m); color: var(--c, var(--faint)); }
     \\  .c-cand .hd .v, .c-cand .hd .d, .c-cand .hd .x { font-weight: var(--w-r); color: var(--faint); font-size: var(--fs-xs); }
     \\  .c-cand[data-x] .r, .c-cand[data-x] .hd { grid-template-columns: 22px minmax(0, 1fr) 56px 48px 52px; }
+    \\  .c-cand[data-b] .r, .c-cand[data-b] .hd { grid-template-columns: 22px minmax(0, 1fr) 56px 48px 96px; }
+    \\  .c-cand[data-b][data-x] .r, .c-cand[data-b][data-x] .hd { grid-template-columns: 22px minmax(0, 1fr) 56px 48px 96px 52px; }
+    \\  .c-cand .b { text-align: right; font-size: var(--fs-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    \\  .c-cand .b > span > b { margin-left: var(--sp-1); color: var(--c); font-weight: var(--w-m); }
+    \\  .c-cand .hd .b { color: var(--faint); font-size: var(--fs-xs); }
     \\  .c-cand .det .note { margin: 0 0 var(--sp-1); color: var(--muted); font-size: var(--fs-s); }
     \\  .c-cand .why { grid-column: 2 / -1; display: flex; gap: 4px; flex-wrap: wrap; padding-left: 32px; }
     \\  .c-cand .why b { color: var(--c); font-weight: var(--w-b); }
@@ -241,6 +265,8 @@ pub const css =
     \\  @container (min-width: 640px) {
     \\    .c-cand .r, .c-cand .hd { grid-template-columns: 22px minmax(140px, 200px) 64px 56px minmax(0, 1fr); }
     \\    .c-cand[data-x] .r, .c-cand[data-x] .hd { grid-template-columns: 22px minmax(140px, 200px) 64px 56px 60px minmax(0, 1fr); }
+    \\    .c-cand[data-b] .r, .c-cand[data-b] .hd { grid-template-columns: 22px minmax(140px, 200px) 64px 56px 104px minmax(0, 1fr); }
+    \\    .c-cand[data-b][data-x] .r, .c-cand[data-b][data-x] .hd { grid-template-columns: 22px minmax(140px, 200px) 64px 56px 104px 60px minmax(0, 1fr); }
     \\    .c-cand[data-v="words"] .r { grid-template-columns: 22px minmax(140px, 200px) minmax(0, 1fr); }
     \\    .c-cand .why { grid-column: auto; grid-row: 1; grid-column-end: -1; padding-left: var(--sp-2); }
     \\  }
@@ -328,6 +354,18 @@ pub fn gallery(g: *Gallery) void {
     }
     gold.rows = golds;
     g.addFill("tester: Gold column, one row without, lane line", view(h, gold));
+    var vs = gold;
+    vs.b_head = plain("Comp model");
+    const bs = h.mem.dupe(Row, gold.rows) catch {
+        h.oom = true;
+        return;
+    };
+    for (bs, 0..) |*r, i| {
+        r.b = if (r.win) |w| w + 4 + @as(f32, @floatFromInt(i)) * 0.4 else null;
+        r.b_vs = if (r.vs) |v| v + @as(f32, @floatFromInt(i)) * 0.4 - 0.8 else null;
+    }
+    vs.rows = bs;
+    g.addFill("tester: a second model's column, then Gold", view(h, vs));
     var gap = sample(h, g, false);
     gap.base = .{ .label = plain("Average top"), .win = 47.5 };
     if (gap.rows.len != sample_rows.len) return;

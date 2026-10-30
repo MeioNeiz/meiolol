@@ -77,8 +77,11 @@ Blue 48.8% ━━━━━━━━━━━━━━━━━━━━━━|�
 ```
 
 - Model row: a Select of ModelBadges (each option shows name and tags), and "vs" a second
-  model to compare (none by default). With a second model: the WinSplit shows its split
-  as a tick, each candidate row gets the B number and the difference
+  model to compare (none by default; `v` in the URL). With a second model: the WinSplit
+  shows its split as a tick, the candidate list a column of its chance and its points
+  over its own average pick (the average row has its chance): models' baselines sit
+  points apart (Comp ~5 bluer than Live on one board), so a raw A-B gap would mostly
+  repeat that
 - Board: `DraftBoard`; each seat shows its own part of the win chance (the rating term,
   signed points, coloured, a small Bar); the middle column the lane pair's term; a lock
   icon replaces the "keep" button; empty seat = ChampIcon empty. Tap a seat: the
@@ -118,8 +121,8 @@ private user: the cheapest place to get them right.
 5. `ModelBadge` and the model registry: the same badge names the model in Daily's "the
    model's pick" toggletip and in admin
 6. `HeatGrid`: Pool's coverage grid
-7. The interaction layer: the tester recomputes everything in the browser (draftModel in
-   admin-draft.js, 864 lines, a JS copy of core/score.zig). On the new stack the same
+7. The interaction layer: the tester recomputes everything in the browser (the old one
+   with a JS copy of core/score.zig). On the new stack the same
    Zig scoring compiles into ui.wasm: the first proof that model maths runs once, in
    Zig, on server and client (frontend-rework.md "JS copies of Zig logic"), before the
    desktop needs it in champ select

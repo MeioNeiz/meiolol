@@ -1,7 +1,7 @@
 //! The Draft tester's candidate panel on the fake DOM, fed as ui-tester.wasm feeds it: the
 //! server's render, the seat from the URL, a stale feed, Pick and Enter into it, the sort,
 //! a row's breakdown; each patch equal to a fresh render. Then the feed itself: options,
-//! order, its bytes, and what the URL may not set
+//! order, its bytes, a second model's column, and what the URL may not set
 const std = @import("std");
 const tree = @import("tree.zig");
 const diff = @import("diff.zig");
@@ -352,4 +352,43 @@ test "lane gold: blind or into the opponent, the Gold sort by its low end, none 
     f = try tc.feed(a, head, .loading, .live, empty, @splat(0), 0);
     try tc.addLane(a, &f, .loading, &sc);
     try testing.expect(!f.lane);
+}
+
+test "vs a second model: each option's chance under it for the seat's side, a column of it and the gap; the v in the URL kept" {
+    var p: Panel = undefined;
+    try p.init("v=comp&r=266-0-0-0-0&s=0");
+    defer p.deinit();
+    const a = p.arena.allocator();
+    try testing.expectEqual(.comp, p.state.vs.?);
+    var comp: tp.Loaded = .{ .m = tp.Demo.model(), .sc = undefined, .check = undefined };
+    comp.m.params.intercept = &.{0.4};
+    comp.sc = try comp.m.scorer(a);
+    try testing.expect(std.mem.find(u8, try p.shown(), "Comp model") == null);
+    try tc.addVs(a, &p.feed, .comp, &comp);
+    p.i.render();
+    // Blue top into red's Aatrox: Darius only, his blue chance under Comp
+    try testing.expectEqual(1, p.feed.opts.len);
+    const o = p.feed.opts[0];
+    try testing.expectEqual(122, o.id);
+    const want = 100 * comp.sc.blue(.{ .{ 122, 0, 0, 0, 0 }, .{ 266, 0, 0, 0, 0 } }).p;
+    try testing.expectApproxEqAbs(want, o.b.?, 1e-3);
+    try testing.expect(o.b.? > o.p);
+    const avg = 100 * comp.sc.blue(.{ @splat(0), .{ 266, 0, 0, 0, 0 } }).p;
+    try testing.expectApproxEqAbs(avg, p.feed.b_empty, 1e-3);
+    const s = try p.shown();
+    try has(s, "Comp model");
+    try has(s, "data-b");
+    // Red's seat: red's chance, so under a bluer intercept it falls
+    var f = try tc.feed(a, &tp.Demo.head, .{ .ready = &p.l }, .live, .{ .{ 266, 0, 0, 0, 0 }, @splat(0) }, @splat(0), n_role);
+    try tc.addVs(a, &f, .comp, &comp);
+    try testing.expect(f.opts[0].b.? < f.opts[0].p);
+    // Through ui.data, as it crosses to the panel's wasm
+    var raw: std.ArrayList(u8) = .empty;
+    try data.encode(a, tc.Feed, f, &raw);
+    const back = try data.decode(a, tc.Feed, raw.items);
+    try testing.expectEqual(.comp, back.vs.?);
+    try testing.expectEqual(f.opts[0].b.?, back.opts[0].b.?);
+    // A pick writes the URL back with v
+    p.click("aria-label", "Pick Darius");
+    try has(p.fake.fragment.items, "v=comp");
 }

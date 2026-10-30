@@ -3,7 +3,9 @@
 //! CandidateList in points mode, sorted by Win (the low end of its 95% range) or Fit (the
 //! change less the champion's own strength). A row's chips and, opened, its
 //! ReasonBreakdown are draftscore's Scorer.why parts; Pick fills the seat. The search
-//! keeps the rows whose name holds it, Enter picks the first. Its own island and wasm
+//! keeps the rows whose name holds it, Enter picks the first. With a model compared, a
+//! column of its chance and points over its own average pick: the two models' baselines
+//! can sit points apart, so a raw gap would mostly repeat that Its own island and wasm
 //! (ui-testercand.wasm, which ui-tester.wasm loads) with no model of its own, so it fits
 //! its budget: the two share the board through the URL fragment (testerpage.Page.Url),
 //! and ui-tester.wasm, which holds the model, hands it the seat's options (Feed)
@@ -91,6 +93,10 @@ pub const Feed = struct {
     /// The options have lane gold (addLane): into `opp`, or blind when it is 0
     lane: bool = false,
     opp: u32 = 0,
+    /// The options have this model's chance too (addVs), and `b_empty` the side's with
+    /// the role's average pick under it
+    vs: ?tp.Which = null,
+    b_empty: f32 = 50,
 
     /// For this board, bans, model and seat
     pub fn of(f: *const Feed, which: tp.Which, teams: [2][n_role]u32, bans: [tp.n_ban]u32, seat: u8) bool {
@@ -110,6 +116,8 @@ pub const Opt = struct {
     parts: []const Part,
     rest: f32,
     gold: ?tl.Gold = null,
+    /// The seat's side's chance with it under the model compared, %
+    b: ?f32 = null,
 
     /// Points over the role's average pick
     fn total(o: *const Opt, f: *const Feed) f32 {
@@ -194,6 +202,25 @@ pub fn addLane(a: std.mem.Allocator, f: *Feed, load: tp.Load, sc: *const tl.Scor
     f.opp = opp;
 }
 
+/// Each option's chance under `l`, the model compared
+pub fn addVs(a: std.mem.Allocator, f: *Feed, vs: tp.Which, l: *const tp.Loaded) !void {
+    if (f.load != .ready or f.seat >= 2 * n_role) return;
+    const opts = try a.dupe(Opt, f.opts);
+    for (opts) |*o| o.b = sideChance(l, f, o.id);
+    f.opts = opts;
+    f.vs = vs;
+    f.b_empty = sideChance(l, f, 0);
+}
+
+/// The seat's side's chance, %, with `id` in the seat (0 empty)
+fn sideChance(l: *const tp.Loaded, f: *const Feed, id: u32) f32 {
+    var t = f.teams;
+    t[f.seat / n_role][f.seat % n_role] = 0;
+    if (id != 0) tp.place(&t, f.seat, id);
+    const c = l.sc.blue(t).p;
+    return @floatCast(100 * if (f.seat < n_role) c else 1 - c);
+}
+
 fn elsewhere(teams: [2][n_role]u32, seat: u8, id: u32) bool {
     for (0..2 * n_role) |i| if (i != seat and teams[i / n_role][i % n_role] == id) return true;
     return false;
@@ -252,6 +279,7 @@ fn fold(buf: []u8, s: []const u8) []const u8 {
 pub const Panel = struct {
     head: *const tp.Head,
     which: tp.Which = .live,
+    vs: ?tp.Which = null,
     teams: [2][n_role]u32 = @splat(@splat(0)),
     seat: ?u8 = null,
     tab: tp.Tab = .board,
@@ -269,6 +297,7 @@ pub const Panel = struct {
     /// testerpage.Page.Url's fields, which the tester island writes too, and the sort
     pub const Url = struct {
         m: tp.Which = .live,
+        v: ?tp.Which = null,
         b: [n_role]u32 = @splat(0),
         r: [n_role]u32 = @splat(0),
         s: ?u8 = null,
@@ -288,7 +317,7 @@ pub const Panel = struct {
     }
 
     pub fn toUrl(p: *const Panel) Url {
-        return .{ .m = p.which, .b = p.teams[0], .r = p.teams[1], .s = p.seat, .t = p.tab, .n = p.bans, .o = p.sort };
+        return .{ .m = p.which, .v = p.vs, .b = p.teams[0], .r = p.teams[1], .s = p.seat, .t = p.tab, .n = p.bans, .o = p.sort };
     }
 
     pub fn fromUrl(p: *Panel, u: Url) void {
@@ -297,6 +326,7 @@ pub const Panel = struct {
         const seat: ?u8 = if (u.s) |i| (if (i < 2 * n_role) i else null) else null;
         if (!std.meta.eql(teams, p.teams) or !std.meta.eql(bans, p.bans) or seat != p.seat) p.open = 0;
         p.which = u.m;
+        p.vs = u.v;
         p.teams = teams;
         p.bans = bans;
         p.seat = seat;
@@ -397,8 +427,9 @@ pub const Panel = struct {
                 .rows = rows,
                 .head = .{ W.chance.with(h, .{ .side = side.s }), W.with_, if (p.sort == .fit) W.fit_h else W.vs_avg },
                 .ref_label = W.in_seat,
-                .base = if (p.q.len == 0) .{ .label = W.average.with(h, .{ .r = roleName(r) }), .win = f.empty } else null,
+                .base = if (p.q.len == 0) .{ .label = W.average.with(h, .{ .r = roleName(r) }), .win = f.empty, .b = if (f.vs != null) f.b_empty else null } else null,
                 .extra = if (f.lane) .{ .head = W.gold_h, .cuts = gold_cuts } else null,
+                .b_head = if (f.vs) |w| tp.infos.get(w).short else null,
             }) else h.p(.{ .class = "wait" }, .{W.none}),
         });
     }
@@ -488,6 +519,8 @@ pub const Panel = struct {
             .gap = gap,
             .open = open,
             .x = if (o.gold) |g| g.v else null,
+            .b = o.b,
+            .b_vs = if (o.b) |b| b - f.b_empty else null,
             .detail = if (open) p.breakdown(h, f, o) else null,
             .note = if (open) p.laneLine(h, f, o) else null,
             .label = W.why.with(h, .{ .n = nm }),

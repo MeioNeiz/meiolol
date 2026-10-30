@@ -1,5 +1,5 @@
 //! ui-tester.wasm: the Draft tester (ui.testerpage.Page) from its data-bin, the chosen
-//! model's draft-model.bin fetched and scored here, the board from the URL (a link) or
+//! models' draft-model.bin files fetched and scored here, the board from the URL (a link) or
 //! else localStorage (meiolol.tester.v1), and to it; then ui-testercand.wasm, the
 //! candidate panel, which has no model: each board's seat options go to it as a Feed on
 //! its data-feed and a tester-feed event. zjb's generated loader (ui-tester.js, `<script
@@ -26,7 +26,7 @@ var lane: ui.testerlane.Loaded = undefined;
 var net: ui.testersetnet.Loaded = undefined;
 var feed_arena: std.heap.ArenaAllocator = .init(gpa);
 /// What the last feed was for: the panel needs a new one when any of it changes
-const Sent = struct { which: tp.Which, teams: @FieldType(tp.Page, "teams"), bans: [tp.n_ban]u32, seat: u8, load: std.meta.Tag(tp.Load), lane: std.meta.Tag(ui.testerlane.Load) };
+const Sent = struct { which: tp.Which, vs: ?tp.Which, vs_ready: bool, teams: @FieldType(tp.Page, "teams"), bans: [tp.n_ban]u32, seat: u8, load: std.meta.Tag(tp.Load), lane: std.meta.Tag(ui.testerlane.Load) };
 var sent: ?Sent = null;
 var pending = false;
 
@@ -69,7 +69,7 @@ fn start() callconv(.c) void {
     schedule();
 }
 
-/// After each update: fetch a newly chosen model, tell the panel, save the board
+/// After each update: fetch a newly chosen model or the one compared, tell the panel, save the board
 fn changed() void {
     fetchShown();
     schedule();
@@ -82,7 +82,11 @@ fn changed() void {
 }
 
 fn fetchShown() void {
-    const w = state.which;
+    fetchModel(state.which);
+    if (state.vs) |w| fetchModel(w);
+}
+
+fn fetchModel(w: tp.Which) void {
     if (state.loads.get(w) != .none) return;
     state.loads.set(w, .loading);
     dom.fetch(tp.infos.get(w).file, @backingInt(w), done);
@@ -160,7 +164,7 @@ fn publish() callconv(.c) void {
     pending = false;
     const seat = tp.shownSeat(state.teams, state.seat) orelse return;
     const load = state.loads.get(state.which);
-    const now: Sent = .{ .which = state.which, .teams = state.teams, .bans = state.bans, .seat = seat, .load = std.meta.activeTag(load), .lane = std.meta.activeTag(state.lane) };
+    const now: Sent = .{ .which = state.which, .vs = state.vs, .vs_ready = state.vsReady() != null, .teams = state.teams, .bans = state.bans, .seat = seat, .load = std.meta.activeTag(load), .lane = std.meta.activeTag(state.lane) };
     if (sent) |s| if (std.meta.eql(s, now)) return;
     _ = feed_arena.reset(.retain_capacity);
     const a = feed_arena.allocator();
@@ -169,6 +173,7 @@ fn publish() callconv(.c) void {
         .ready => |l| ui.testercand.addLane(a, &f, load, &l.sc) catch return dom.dom.warn("tester: out of memory"),
         else => {},
     }
+    if (state.vsReady()) |l| ui.testercand.addVs(a, &f, state.vs.?, l) catch return dom.dom.warn("tester: out of memory");
     var raw: std.ArrayList(u8) = .empty;
     ui.data.encode(a, ui.testercand.Feed, f, &raw) catch return dom.dom.warn("tester: out of memory");
     const e = std.base64.standard.Encoder;

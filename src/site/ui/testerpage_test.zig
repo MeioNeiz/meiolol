@@ -1,6 +1,6 @@
 //! The Draft tester on the fake DOM: the server's render, hydration, seats chosen, the
 //! board from the URL (the candidate panel's picks) and into it, the model Select, the
-//! tabs with each load state, bans, Random, Fill empty, Undo, Clear; each patch equal to
+//! vs a second model, the tabs with each load state, bans, Random, Fill empty, Undo, Clear; each patch equal to
 //! a fresh render. Then restore's edge cases and the model file's bad bytes
 const std = @import("std");
 const tree = @import("tree.zig");
@@ -8,6 +8,7 @@ const diff = @import("diff.zig");
 const html = @import("html.zig");
 const check = @import("check.zig");
 const island = @import("island.zig");
+const fmt = @import("fmt.zig");
 const tp = @import("testerpage.zig");
 const td = @import("testerdata.zig");
 const tsn = @import("testersetnet.zig");
@@ -311,6 +312,46 @@ test "the model Select switches, a failed model retries; tabs show terms and fil
     off.check = .{ .drafts = 0, .worst = 0 };
     p.i.render();
     try has(try p.shown(), "lab/draft-model.bin: no reference drafts");
+}
+
+test "vs a second model: its tick and chance on the split, in the URL; chosen as the model, the two swap; none" {
+    var p: Page = undefined;
+    try p.init();
+    defer p.deinit();
+    var comp: tp.Loaded = .{ .m = tp.Demo.model(), .sc = undefined, .check = .{ .drafts = 0, .worst = 0 } };
+    comp.m.params.intercept = &.{0.4};
+    comp.sc = try comp.m.scorer(p.arena.allocator());
+    p.state.loads.set(.live, .{ .ready = &p.l });
+    p.state.teams[0][0] = 266;
+    p.i.render();
+    try testing.expect(std.mem.find(u8, try p.shown(), "class=\"bt\"") == null);
+
+    // The vs menu: none, then the models other than the shown one
+    p.state.loads.set(.comp, .failed);
+    p.click(p.nth("role", "option", 3));
+    try testing.expectEqual(.comp, p.state.vs.?);
+    try testing.expectEqual(.none, std.meta.activeTag(p.state.loads.get(.comp)));
+    try has(p.fake.fragment.items, "v=comp");
+    p.state.loads.set(.comp, .{ .ready = &comp });
+    p.i.render();
+    const b = 100 * comp.sc.blue(p.state.teams).p;
+    try testing.expect(b > 100 * p.l.sc.blue(p.state.teams).p);
+    var want: std.Io.Writer.Allocating = .init(p.arena.allocator());
+    try fmt.write(&want.writer, .rate, b);
+    try has(try p.shown(), want.written());
+    try has(try p.shown(), "Comp model");
+
+    // Comp as the model: Live is compared instead
+    p.click(p.nth("role", "option", 1));
+    try testing.expectEqual(.comp, p.state.which);
+    try testing.expectEqual(.live, p.state.vs.?);
+    try p.hashed("m=comp&v=comp");
+    try testing.expectEqual(null, p.state.vs);
+    try p.hashed("m=comp&v=live");
+    try testing.expectEqual(.live, p.state.vs.?);
+    p.click(p.nth("role", "option", 2));
+    try testing.expectEqual(null, p.state.vs);
+    try testing.expect(std.mem.find(u8, try p.shown(), "class=\"bt\"") == null);
 }
 
 test "the set net on the Comp model: a line under the split, its parts in Terms, Files; another base hides it" {
