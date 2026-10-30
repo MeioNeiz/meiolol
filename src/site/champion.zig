@@ -245,6 +245,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .lane = try laneOf(site, ch, r),
         .comeback = try comebackOf(site, ch, r),
         .kills = try killsOf(site, ch, r),
+        .objectives = objectivesOf(site, ch, r),
         .ranks = try ranksOf(site, ch, r),
         // The card has no period label: this view's games only, as the head's
         .timing = if (builds_page.forChampionHere(site, site.view, ch, r)) |b| try timingOf(a, b.first_item, cp.min_games) else &.{},
@@ -423,6 +424,27 @@ fn goldAt14(site: *const Site, ch: Champ, r: Role, b: curvesfile.Bracket) !?i16 
     return @intFromFloat(@round(sum / @as(f64, @floatFromInt(lanes))));
 }
 
+/// ch's objectives taken first in r (builds.File.Build.firsts) beside the role's over
+/// every champion, from the view's builds file; null under min_games or a file without
+pub fn objectivesOf(site: *const Site, ch: Champ, r: Role) ?cp.Objectives {
+    const f = if (site.view_builds[site.view.index()]) |*f| f else return null;
+    const b = builds_page.forChampionHere(site, site.view, ch, r) orelse return null;
+    return objectivesIn(f.builds, b, r);
+}
+
+fn objectivesIn(all: []const builds.File.Build, b: builds.File.Build, r: Role) ?cp.Objectives {
+    comptime std.debug.assert(cp.W.firsts.len == builds.firsts_len);
+    const n = 1 + builds.firsts_len;
+    if (b.firsts.len != n or b.firsts[0].games < cp.min_games) return null;
+    var out: cp.Objectives = .{ .mine = undefined, .role = @splat(.{ .games = 0, .wins = 0 }) };
+    for (&out.mine, b.firsts) |*o, x| o.* = .{ .games = x.games, .wins = x.wins };
+    for (all) |x| if (x.role == r and x.firsts.len == n) for (&out.role, x.firsts) |*o, y| {
+        o.games += y.games;
+        o.wins += y.wins;
+    };
+    return out;
+}
+
 /// Games by the minute the first item was finished (builds.File.Build.first_item) in
 /// buckets: the minutes between two tails in steps of 2 or wider, at most 7 buckets, the
 /// steps' remainder split between the tails. Each tail holds at least a twentieth of the
@@ -555,6 +577,48 @@ test "first item done: players counted by the builder to a drawn card" {
     var wins: u32 = 0;
     for (timing) |x| wins += x.wins;
     try std.testing.expectApproxEqAbs(@as(f32, @floatFromInt(wins)) * 100 / 1200, p.timing.ref, 0.01);
+}
+
+test "objectives: firsts counted by the builder, against the role, to a drawn card" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d: ddragon.BuildData = .{ .version = "16.21.1", .legendary = &.{ 3078, 6631 }, .trinkets = &.{}, .boots = &.{}, .items = &.{}, .runes = &.{}, .spells = &.{} };
+    var b: builds.Builder = .{ .gpa = std.testing.allocator, .max_keys = 64 };
+    defer b.deinit();
+    // A build is written for an option: everyone finishes the same two items
+    var k: builds.Picks = .{ .core = .{ 3078, 6631, 0, 0, 0, 0 }, .core_ms = .{ 600_000, 900_000, 0, 0, 0, 0 }, .core_len = 2 };
+    // 200 Darius and 200 Garen tops: Darius's team takes first dragon in 150 and wins 100
+    // of those, Garen's in 50; a Darius jungle stays out of the top role
+    for (0..400) |i| {
+        const darius = i < 200;
+        k.firsts[@backingInt(builds.First.dragon)] = if (darius) i < 150 else i < 250;
+        try b.addPlayer(.{ .champion = if (darius) 122 else 86, .role = .top, .won = i < 100 }, k, &d);
+    }
+    k.firsts = @splat(true);
+    try b.addPlayer(.{ .champion = 122, .role = .jungle, .won = true }, k, &d);
+    const f = try b.file(a, &d, "16.21", "PLATINUM", 3);
+    const o = objectivesIn(f.builds, f.get(122, .top).?, .top).?;
+    try std.testing.expectEqual(200, o.mine[0].games);
+    try std.testing.expectEqual(150, o.mine[1 + @backingInt(builds.First.dragon)].games);
+    try std.testing.expectEqual(100, o.mine[1 + @backingInt(builds.First.dragon)].wins);
+    try std.testing.expectEqual(400, o.role[0].games);
+    try std.testing.expectEqual(200, o.role[1 + @backingInt(builds.First.dragon)].games);
+    try std.testing.expectEqual(0, o.role[1 + @backingInt(builds.First.tower)].games);
+    // Under min_games of timelines: none
+    try std.testing.expectEqual(null, objectivesIn(f.builds, f.get(122, .jungle).?, .jungle));
+
+    var roles = [_]cp.ChartsRole{.{ .role = .top, .objectives = o }};
+    const data: cp.ChartsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles };
+    var p: cp.Charts = .{ .data = &data, .root = "/" };
+    var t: ui.Tree = .{};
+    var h: ui.H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try ui.html.write(&t, p.view(&h), &w.writer);
+    // Took first dragon 75% against 50%; won after it 67% against 50%. Only dragon has
+    // 100+ takes for a win rate
+    for ([_][]const u8{ "Objectives", "Role average", "First Rift Herald", "75%", "Win rate after taking it first", "67%" }) |x|
+        try std.testing.expect(std.mem.indexOf(u8, w.written(), x) != null);
 }
 
 /// Minutes drawn while this many lanes are still going, as a matchup page's

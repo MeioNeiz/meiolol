@@ -106,6 +106,12 @@ pub const Options = struct {
 
 pub const Count = struct { games: u32 = 0, wins: u32 = 0 };
 
+/// Objectives a team takes first (Picks.firsts, File.Build.firsts). No Baron: digests
+/// keep elite monsters only before their last frame (~25 min), so later first Barons
+/// would be missed
+pub const First = enum { tower, dragon, grubs, herald };
+pub const firsts_len = std.enums.values(First).len;
+
 /// The file the site reads
 pub const File = struct {
     /// "16.20"
@@ -155,6 +161,9 @@ pub const File = struct {
         /// Players by the minute (index) they bought their first finished item, and their
         /// wins; empties at the end cut. None in `matchups` and files before 29 Oct 2026
         first_item: []const Count = &.{},
+        /// Players with a timeline, then those whose team took each First first (in
+        /// First's order), and their wins. None in `matchups` and files before 30 Oct 2026
+        firsts: []const Count = &.{},
 
         pub fn get(b: Build, kind: Kind) ?Rows {
             for (b.kinds) |r| if (r.kind == kind) return r;
@@ -265,6 +274,8 @@ pub const Builder = struct {
     minutes: std.AutoHashMapUnmanaged(MinuteKey, Minutes) = .empty,
     /// Role-wide only: players and wins per minute their first finished item was bought
     first_item: std.AutoHashMapUnmanaged(RoleKey, [minute_buckets]Count) = .empty,
+    /// Role-wide only: File.Build.firsts
+    firsts: std.AutoHashMapUnmanaged(RoleKey, [1 + firsts_len]Count) = .empty,
     /// Options at or under this count were dropped
     floor: u32 = 0,
     dropped_games: u64 = 0,
@@ -293,6 +304,7 @@ pub const Builder = struct {
         b.totals.deinit(b.gpa);
         b.minutes.deinit(b.gpa);
         b.first_item.deinit(b.gpa);
+        b.firsts.deinit(b.gpa);
         for ([_]?*Builder{ b.vs, b.reach, b.lead }) |sub| if (sub) |v| {
             v.deinit();
             b.gpa.destroy(v);
@@ -379,6 +391,15 @@ pub const Builder = struct {
         x.wins += @intFromBool(won);
     }
 
+    fn addFirsts(b: *Builder, c: u16, role: Role, took: [firsts_len]bool, won: bool) !void {
+        const e = try b.firsts.getOrPut(b.gpa, .{ .champion = c, .role = role });
+        if (!e.found_existing) e.value_ptr.* = @splat(.{});
+        for (e.value_ptr, [1]bool{true} ++ took) |*x, on| if (on) {
+            x.games += 1;
+            x.wins += @intFromBool(won);
+        };
+    }
+
     /// Drops the rarest options until at most half of max_keys are left
     fn prune(b: *Builder) !void {
         while (b.options.count() > b.max_keys / 2) {
@@ -462,6 +483,7 @@ pub const Builder = struct {
         if (k.boots != 0) if (d.bootsOf(k.boots)) |boots| try b.addMinute(c, p.role, 0, boots, k.boots_ms);
         for (k.core[0..k.core_len], k.core_ms[0..k.core_len], 1..) |item, ms, slot| try b.addMinute(c, p.role, @intCast(slot), item, ms);
         if (k.core_len > 0) try b.addFirstItem(c, p.role, k.core_ms[0], p.won);
+        try b.addFirsts(c, p.role, k.firsts, p.won);
     }
 
     /// The file, in `arena`: `rows` options per champion, role and kind, and the names
@@ -564,6 +586,7 @@ pub const Builder = struct {
                 .kinds = kinds.items,
                 .minutes = try b.fileMinutes(arena, first.champion, first.role, kinds.items),
                 .first_item = try b.fileFirstItem(arena, first.champion, first.role),
+                .firsts = if (b.firsts.get(.{ .champion = first.champion, .role = first.role })) |x| try arena.dupe(Count, &x) else &.{},
             });
         }
         return builds.items;
@@ -782,6 +805,8 @@ pub const Picks = struct {
     /// Slot (1 Q to 4 R) of every skill-up up to max_level
     path: [max_level]u8 = @splat(0),
     path_len: u8 = 0,
+    /// Whether the player's team took each First first
+    firsts: [firsts_len]bool = @splat(false),
 
     fn removeStart(p: *Picks, item: u32) bool {
         const i = std.mem.findScalar(u32, p.start[0..p.start_len], item) orelse return false;
@@ -856,6 +881,21 @@ pub fn unpackPath(v: []const u32) [max_level]u8 {
 /// Every participant's picks; out[participant id - 1]
 pub fn picks(t: timeline.Timeline, d: *const ddragon.BuildData, out: []Picks) void {
     @memset(out, .{});
+    // Per First: the team that took it first (100 or 200), 0 for none yet
+    var first_team: [firsts_len]u16 = @splat(0);
+    for (t.events) |e| switch (e.data) {
+        // e.team: the building's own team
+        .building_kill => |k| if (std.mem.eql(u8, k.building, "TOWER_BUILDING")) {
+            takeFirst(&first_team, .tower, if (k.team == 100) 200 else if (k.team == 200) 100 else 0);
+        },
+        .elite_monster => |m| if (firstOf(m.monster)) |f| takeFirst(&first_team, f, m.team),
+        else => {},
+    };
+    // Blue's five are participants 1 to 5 (cubes' seats: slot < 5)
+    if (out.len == 10) for (out, 0..) |*p, i| {
+        const team: u16 = if (i < 5) 100 else 200;
+        for (&p.firsts, first_team) |*x, f| x.* = f == team;
+    };
     for (t.events) |e| switch (e.data) {
         .item_purchased => |b| {
             const p = at(out, b.participant) orelse continue;
@@ -914,6 +954,19 @@ pub fn picks(t: timeline.Timeline, d: *const ddragon.BuildData, out: []Picks) vo
         },
         else => {},
     };
+}
+
+fn firstOf(monster: []const u8) ?First {
+    if (std.mem.eql(u8, monster, "DRAGON")) return .dragon;
+    if (std.mem.eql(u8, monster, "HORDE")) return .grubs;
+    if (std.mem.eql(u8, monster, "RIFTHERALD")) return .herald;
+    return null;
+}
+
+/// Events are in time order: the first taker of each kind stays
+fn takeFirst(first_team: *[firsts_len]u16, f: First, team: u16) void {
+    const x = &first_team[@backingInt(f)];
+    if (x.* == 0 and (team == 100 or team == 200)) x.* = team;
 }
 
 fn at(out: []Picks, participant: u8) ?*Picks {
@@ -1127,6 +1180,42 @@ test "picks: starting items, boots, core and skills from events" {
     try testing.expectEqualSlices(u8, &.{ 1, 2, 3, 1, 1, 4, 1, 3, 1, 3, 4, 3, 3, 2, 2, 4, 2, 2 }, &unpackPath(&p.skillPath().?));
 }
 
+test "picks: the team that took each objective first" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const d = try testData(arena_state.allocator());
+    const E = timeline.Event;
+    const monster = struct {
+        fn f(t: i64, team: u16, name: []const u8) E {
+            return .{ .t_ms = t, .data = .{ .elite_monster = .{ .killer = 0, .team = team, .monster = name, .subtype = "", .assists = &.{} } } };
+        }
+    }.f;
+    const tower = struct {
+        fn f(t: i64, own: u16, building: []const u8) E {
+            return .{ .t_ms = t, .data = .{ .building_kill = .{ .killer = 0, .team = own, .building = building, .lane = "", .tower = "", .assists = &.{} } } };
+        }
+    }.f;
+    const events = [_]E{
+        monster(300_000, 200, "HORDE"),
+        monster(310_000, 100, "HORDE"),
+        monster(400_000, 100, "DRAGON"),
+        monster(500_000, 200, "DRAGON"),
+        // Red's tower falls: blue took it; the inhibitor is no tower
+        tower(550_000, 100, "INHIBITOR_BUILDING"),
+        tower(600_000, 200, "TOWER_BUILDING"),
+        tower(700_000, 100, "TOWER_BUILDING"),
+    };
+    var out: [10]Picks = undefined;
+    picks(.{ .participants = 10, .frames = &.{}, .events = &events }, &d, &out);
+    // tower, dragon, grubs, herald
+    try testing.expectEqual([firsts_len]bool{ true, true, false, false }, out[0].firsts);
+    try testing.expectEqual([firsts_len]bool{ false, false, true, false }, out[9].firsts);
+    // Not ten players: no teams
+    var two: [2]Picks = undefined;
+    picks(.{ .participants = 2, .frames = &.{}, .events = &events }, &d, &two);
+    try testing.expectEqual([firsts_len]bool{ false, false, false, false }, two[0].firsts);
+}
+
 test "picks: the start ends at the first purchase the starting gold can't cover" {
     var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena_state.deinit();
@@ -1256,6 +1345,8 @@ test "builder: per lane opponent, own floor, only matchups with enough games" {
         k.core = .{ 3078, 3153, 6631, 3078, 0, 0 };
         k.core_ms = .{ 600_000, 800_000, 900_000, 1_500_000 + @as(i64, @intCast(i)) * 60_000, 0, 0 };
         k.core_len = 4;
+        // The first two games' team took the first dragon
+        k.firsts[@backingInt(First.dragon)] = i < 2;
         try b.addPlayer(.{ .champion = 122, .role = .top, .won = i < 2, .keystone = 8010, .spells = .{ 4, 12 }, .opponent = opp }, k, &d);
     }
     const f = try b.file(arena, &d, "16.20", "PLATINUM", 3);
@@ -1280,6 +1371,10 @@ test "builder: per lane opponent, own floor, only matchups with enough games" {
     try testing.expectEqual(3, garen.get(.item4).?.games);
     try testing.expectEqual(0, garen.minutes.len);
     try testing.expectEqual(0, garen.first_item.len);
+    try testing.expectEqual(Count{ .games = 6, .wins = 2 }, darius.firsts[0]);
+    try testing.expectEqual(Count{ .games = 2, .wins = 2 }, darius.firsts[1 + @backingInt(First.dragon)]);
+    try testing.expectEqual(Count{}, darius.firsts[1 + @backingInt(First.tower)]);
+    try testing.expectEqual(0, garen.firsts.len);
     // Role-wide only
     try testing.expectEqual(null, garen.get(.keystone));
     try testing.expectEqual(null, garen.get(.skill_start));
@@ -1288,6 +1383,7 @@ test "builder: per lane opponent, own floor, only matchups with enough games" {
     const back = try File.parse(arena, try std.json.Stringify.valueAlloc(arena, f, .{}));
     try testing.expectEqual(3, back.getVs(122, .top, 86).?.games);
     try testing.expectEqual(6, back.get(122, .top).?.first_item[10].games);
+    try testing.expectEqual(2, back.get(122, .top).?.firsts[1 + @backingInt(First.dragon)].games);
     const old = try File.parse(arena,
         \\{"label":"16.20","min_tier":"","games":0,"timelines":0,"items":[],"runes":[],"spells":[],"builds":[]}
     );

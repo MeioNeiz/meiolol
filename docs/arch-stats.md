@@ -125,10 +125,14 @@ past 5, only from a full 18). Per build `minutes`: median minute bought (one-min
 histogram, interpolated) of each boots and finished item in its slot (0 boots, 1-6 nth
 item), for the items in the file's options; role-wide only. Per build `first_item`:
 players and wins by the minute their first finished item was bought (one-minute buckets;
-the champion page's First item done card); role-wide only. Matchups count every kind but
-keystone and skill_start. `by_reach`: the rune kinds (runes, shards, rune, shard) by the
-lane opponent's reach, melee under 300 base attack range (Data Dragon champion.json),
-groups of 100+ players (Options.min_split_games), 4 pages each. `by_lead`: the item kinds
+the champion page's First item done card); role-wide only. Per build `firsts`: players
+with a timeline, then those whose team took first tower, dragon, Voidgrubs and Rift Herald
+(builds.First; no Baron, digests keep elite monsters to ~25 min) and their wins (the
+champion page's Objectives card, against the role's sum); role-wide only. Matchups count
+every kind but keystone and skill_start. `by_reach`: the rune kinds (runes, shards, rune,
+shard) by the lane opponent's reach, melee under 300 base attack range (Data Dragon
+champion.json), groups of 100+ players (Options.min_split_games), 4 pages each.
+`by_lead`: the item kinds
 (boots, core2, core3, item4-6) of players 500+ gold ahead of or behind their lane
 opponent at 14 minutes (participants.gold14), groups of 100+, 6 options each. Needs Data
 Dragon's item.json,

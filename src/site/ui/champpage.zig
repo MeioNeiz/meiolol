@@ -108,6 +108,7 @@ pub const Role = struct {
     lane: ?LaneCurves = null,
     comeback: ?Comeback = null,
     kills: ?Kills = null,
+    objectives: ?Objectives = null,
     ranks: ?Ranks = null,
     timing: []const Timed = &.{},
     build: ?buildpanel.Data = null,
@@ -360,6 +361,10 @@ pub const W = struct {
     pub const kills_them = "Opponent";
     pub const first_blood = plain("First blood");
     pub const kills = [3]tree.Text{ plain("Kills to 6 min"), plain("Kills 6-14 min"), plain("Kills after 14") };
+    pub const objectives_head = plain("Objectives");
+    pub const role_average = "Role average";
+    pub const firsts = [4]tree.Text{ plain("First tower"), plain("First dragon"), plain("First Voidgrubs"), plain("First Rift Herald") };
+    pub const won_after = plain("Win rate after taking it first");
     pub const by_rank = plain("By rank");
     pub const brackets = [3]tree.Text{ plain("Iron-Silver"), plain("Gold-Emerald"), plain("Diamond+") };
     pub const rank_tip = Phrase("{r:rate} in {n:count} games · gold at 14 {g:signed}, estimated from common matchups");
@@ -409,8 +414,13 @@ fn rate(c: Counts) f32 {
 
 /// A Versus row of a and b in `games`, as the matchup page's head to head
 fn share(h: *H, label: tree.Text, games: u32, a: u32, b: u32) versus.Row {
-    const pa = rate(.{ .games = games, .wins = a });
-    const pb = rate(.{ .games = games, .wins = b });
+    return rates(h, label, .{ .games = games, .wins = a }, .{ .games = games, .wins = b });
+}
+
+/// A Versus row of a's and b's rates
+fn rates(h: *H, label: tree.Text, a: Counts, b: Counts) versus.Row {
+    const pa = rate(a);
+    const pb = rate(b);
     const ra = @round(pa);
     const rb = @round(pb);
     return .{
@@ -528,9 +538,18 @@ pub const ChartsRole = struct {
     lane: ?LaneCurves = null,
     comeback: ?Comeback = null,
     kills: ?Kills = null,
+    /// Platinum+, from the view's builds file
+    objectives: ?Objectives = null,
     ranks: ?Ranks = null,
     /// Platinum+, from the view's builds file
     timing: []const Timed = &.{},
+};
+
+/// Games with a timeline, then those whose team took each objective first (W.firsts'
+/// order) and their wins; `role`: every champion in the role
+pub const Objectives = struct {
+    mine: [5]Counts,
+    role: [5]Counts,
 };
 
 /// Games and wins by the champion's lane gold lead at 10 and 15 minutes, in the curves'
@@ -579,7 +598,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
         m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_day = x.by_day, .by_length = x.by_length };
-        c.* = .{ .role = x.role, .lane = x.lane, .comeback = x.comeback, .kills = x.kills, .ranks = x.ranks, .timing = x.timing };
+        c.* = .{ .role = x.role, .lane = x.lane, .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ranks = x.ranks, .timing = x.timing };
     }
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
@@ -1291,7 +1310,8 @@ pub const Charts = struct {
         }, .{
             h.div(.{ .class = "row2" }, .{ p.laneCard(h), p.comebackCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
-            h.div(.{ .class = "row3" }, .{ p.killsCard(h), p.rankCard(h), p.timingCard(h) }),
+            h.div(.{ .class = "row2" }, .{ p.killsCard(h), p.objectivesCard(h) }),
+            h.div(.{ .class = "row2" }, .{ p.rankCard(h), p.timingCard(h) }),
         });
     }
 
@@ -1367,6 +1387,28 @@ pub const Charts = struct {
         }
         const names: [2][]const u8 = .{ p.data.name, W.kills_them };
         return card.view(h, .{}, &.{ card.head(h, W.kills_head, null, &.{versus.key(h, names)}), versus.rows(h, names, rows[0..n]) });
+    }
+
+    /// How often the champion's team took each objective first and won after it, against
+    /// the role's; win rates under min_games left out
+    fn objectivesCard(p: *P, h: *H) N {
+        const k = p.r().objectives orelse return card.view(h, .{}, &.{ card.head(h, W.objectives_head, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        var took: [4]versus.Row = undefined;
+        var won: [4]versus.Row = undefined;
+        var n: usize = 0;
+        for (W.firsts, k.mine[1..], k.role[1..], &took) |l, x, y, *t| {
+            t.* = rates(h, l, .{ .games = k.mine[0].games, .wins = x.games }, .{ .games = k.role[0].games, .wins = y.games });
+            if (x.games < min_games) continue;
+            won[n] = rates(h, l, x, y);
+            n += 1;
+        }
+        const names: [2][]const u8 = .{ p.data.name, W.role_average };
+        return card.view(h, .{}, &.{
+            card.head(h, W.objectives_head, null, &.{ p.plat(h), versus.key(h, names) }),
+            versus.rows(h, names, &took),
+            if (n > 0) h.p(.{ .class = "vs-sub" }, .{W.won_after}) else .none,
+            if (n > 0) versus.rows(h, names, won[0..n]) else .none,
+        });
     }
 
     /// Win rate by rank bracket, dashed at its rate over every game (the head's); brackets under
@@ -1521,6 +1563,7 @@ pub const css =
     \\  .c-cpage .note { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .c-head .lg { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .more { margin-left: auto; font-size: var(--fs-s); }
+    \\  .c-cpage .vs-sub { margin: var(--sp-3) 0 var(--sp-1); font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .plot { padding: var(--sp-1) 0 var(--sp-3); }
     \\  .c-cpage .row3, .c-cpage .row2 { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
     \\  @media (min-width: 1000px) {

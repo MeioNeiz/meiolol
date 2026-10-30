@@ -126,6 +126,12 @@ test "fixture games to stats, curves and the website" {
     var timed: u32 = 0;
     for (try site_champion.timingOf(arena, darius.first_item, 1)) |x| timed += x.games;
     try testing.expectEqual(games, timed);
+    // Objectives taken first come through the day cubes: every game, some taken
+    try testing.expectEqual(1 + builds.firsts_len, darius.firsts.len);
+    try testing.expectEqual(games, darius.firsts[0].games);
+    var took: u32 = 0;
+    for (darius.firsts[1..]) |x| took += x.games;
+    try testing.expect(took > 0);
     // The champion page's build block: the file as BuildPanel's data, drawn
     const block = try buildblock.data(arena, &build_file, darius, "Darius");
     try testing.expectEqual(.spells, block.slots[0].kind);

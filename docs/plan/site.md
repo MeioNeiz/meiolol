@@ -183,7 +183,7 @@ confirm): no blind-safe score (J2 measured no win)
 
 - Influence per opponent (bans into your pool's hard lanes, B3) and per rank filter
 - Grey the builds strip when a filter leaves the patch view's region (filters.js)
-- Objectives secured and won, end-of-game stats ranked in the role (LoLalytics only)
+- End-of-game stats ranked in the role (LoLalytics only)
 - Build variants (Kai'Sa AP, U.GG's tabs) as clusters of item paths
 
 ## Matchup page
