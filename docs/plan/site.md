@@ -214,10 +214,10 @@ None open: the Later list below.
   each side's 5 most played partners with vs usual and games
 - Matchups index: the finder (docs/plan/ui/matchups.md): Your champion ⇄ Opponent in
   one row, Most played and Moved this patch, one picked champion's matchup grid
-- Lane lines under the Lane chart (matchpage.laneLines, none when thin): gold at 14
-  split into CS and the rest with the clearer kill gap by 14, when the lead appears
-  (crossing minute, or share by 6 min), level 6 and first item each when 10 s / 20 s
-  apart. Facts and numbers only; no leader has free matchup tips (Mobalytics charges)
+- Lane lines under the Lane chart (matchpage.laneLines), only what the figures don't say:
+  the lead by 6 min and from 6 to 14 with CS's worth in each (or the crossing minute),
+  and the 3 minutes where gold moves most with a level 6 or first item lead inside them.
+  None when thin or flat; no leader has free matchup tips (Mobalytics charges)
 - MU7 audit items: gold line grey, runes without the empty band; the header's "usually"
   is x's expected rate against an opponent this strong (its tip says so), not the
   champion page's overall rate
