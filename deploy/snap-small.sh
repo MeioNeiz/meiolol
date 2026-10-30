@@ -87,8 +87,8 @@ sqlite3 -readonly "$src/meiolol.db" \
     sqlite3 "$tmp/meiolol.db"
 nice sqlite3 "$tmp/meiolol.db" > /dev/null << SQL
 ATTACH 'file:$src/meiolol.db?mode=ro' AS s;
-PRAGMA journal_mode=OFF;
-PRAGMA synchronous=OFF;
+PRAGMA main.journal_mode=OFF;
+PRAGMA main.synchronous=OFF;
 BEGIN;
 INSERT INTO matches SELECT * FROM s.matches WHERE rowid % $n = 0;
 INSERT INTO participants SELECT p.* FROM matches m CROSS JOIN s.participants p USING (match_id);
@@ -128,4 +128,4 @@ if ! [[ -f "$dst/.source" ]]; then
 fi
 rm -rf "$old"
 echo "snap-small: $(du -sh "$dst/meiolol.db" | cut -f1) in $((SECONDS - start)) s:" \
-    "$(sqlite3 -readonly "$dst/meiolol.db" 'SELECT count(*) FROM matches') games" >&2
+    "$(sqlite3 "$dst/meiolol.db" 'SELECT count(*) FROM matches') games" >&2
