@@ -174,8 +174,8 @@ Decision: each component declares `pub const css` next to its view; tokens come 
 if ever needed); a comptime list of components is bundled with tokens, base and the font
 into `style.<hash>.css` (the Draft tester links it). README's layers stand, as do container
 queries and the three page breakpoints. Pages inline the head and the components their
-HTML or islands' wasm name (sheets.zig; private ones from a second list): first view
-~0.7 s sooner, later ones ~60 ms slower (research/questions/css-per-page.md)
+HTML or islands' wasm name (sheets.zig; private ones from a second list), its hash in
+the page CSP (csp.zig): first view ~0.7 s sooner, later ~60 ms slower (css-per-page)
 
 - Why beside the component: several sessions edit at once; a component and its rules
   move, review and get deleted together, and nobody edits one 1,400-line file

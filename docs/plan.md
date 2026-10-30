@@ -35,44 +35,43 @@ Legacy UI off first (Jacob, 30 Oct), then by harm: outages and data risk, then w
 Riot's reviewers see, then what brings players back. Jacob's open decisions:
 decisions.md "Open decisions".
 
-1. Legacy UI off, public (stack.md): the legacy head and style.css are gone. Left: each
-   page inlines only its own CSS (cold FCP 768 vs 1504 ms, research css-per-page), then
-   a CSP and Trusted Types live on meio.lol without console errors. Keep the print.css
-   link: traffic.sh counts people by it. Owner W1
-2. Legacy UI off, private (app.md "Private site"): /private is an index, the old JS
-   tester at /private/old. Done when /private/tester has its bans, Random/Fill/Undo,
-   lane model, compare and set net, and /private/old, admin.js, admin-draft.js,
-   admin-setnet.js and admin.css are gone, pv.js an island. Owner W4
-3. Crawler at 99%+ of the key, every region, every hour (ops.md J16): done when hourly
+1. Legacy UI off (stack.md; app.md "Private site"). Public done: per-page CSS, a CSP and
+   Trusted Types live with no console errors (keep the print.css link: traffic.sh counts
+   people by it). Private: /private, /admin, /admin/notes and the tester inline their
+   CSS; the old JS tester at /private/old. Done when /private/tester has its bans,
+   Random/Fill/Undo, lane model, compare and set net, /private/old, admin.js,
+   admin-draft.js, admin-setnet.js, admin.css and style.css are gone, pv.js an island.
+   Owners W4 (tester), W1 (pv.js, style.css)
+2. Crawler at 99%+ of the key, every region, every hour (ops.md J16): done when hourly
    key use holds 97-100% per region through a gpu-box catch-up and a daily job, with a
    learned.md line. Owner W6; the catch-up test needs the gpu-box on
-4. URL leftovers (urls.md URL6): /p/desktop/ and /admin/desktop/ gone (30 Oct). Left:
+3. URL leftovers (urls.md URL6): /p/desktop/ and /admin/desktop/ gone (30 Oct). Left:
    the app's update failures (404, 401, 5xx, bad signature, offline) retried with
    backoff, logged, and a plain "get the new version" line after a 404 or 401. Owner W4
-5. Alerts and hosts: health alerts reach Jacob's phone (open decision), the gpu-box on
+4. Alerts and hosts: health alerts reach Jacob's phone (open decision), the gpu-box on
    Tailscale with its backup mirror and archive pull current, VM8 (vm.md), WSL
    compaction when idle (ops.md "Storage and hosts"). Owner coordinator; blocked on
    Jacob
-6. The site matches the application as submitted (production-key.md): "friends can group
+5. The site matches the application as submitted (production-key.md): "friends can group
    up to see recaps of the games they played together" has only Your games' Friends
    view. Squads, minimal (J33; backlog.md "Your games and Squads"), so every claim is one
    click from the home page. Unowned, after a lane frees. APP1 gives the app's
    screenshots
-7. Daily Draft and Learn (site.md): Daily's pick verdicts (J26: every option's rank, who
+6. Daily Draft and Learn (site.md): Daily's pick verdicts (J26: every option's rank, who
    should have won, lanes won), share with facts; Learn's myth-or-measured cards from
    final learned.md lines. Owner W3
-8. Champion and matchup pages to LoLalytics' level (docs/champion-matchup.md): CH0's
+7. Champion and matchup pages to LoLalytics' level (docs/champion-matchup.md): CH0's
    open choices, then site.md's CH Later list. Unowned; CH0 waits Jacob
-9. The data edge (J23, J24; estimates.md): E7 day cubes, then E2's truth test, then
+8. The data edge (J23, J24; estimates.md): E7 day cubes, then E2's truth test, then
    Meio. Items 11 and 12 feed it. Owner W2
-10. Accounts and the desktop app (J21; app.md, accounts.md): AC4 sign-in cut-over and
+9. Accounts and the desktop app (J21; app.md, accounts.md): AC4 sign-in cut-over and
     APP1 real capture (Jacob's), then APP4-APP6's left items. Owner W4 after item 2
-11. The latest patch (J25, J27, J28; patch-transfer.md): the frozen 16.21 test look,
+10. The latest patch (J25, J27, J28; patch-transfer.md): the frozen 16.21 test look,
     then PT4 and PT6 on A2. Blocked on Jacob's go and the gpu-box
-12. Comp leans (data-and-model.md): the held-out look, then champion pages and reasons.
+11. Comp leans (data-and-model.md): the held-out look, then champion pages and reasons.
     Blocked on the per-seat stats decision and the gpu-box
-13. Build speed (build-speed.md): BS3 waits Jacob. Owner W5
-14. Our Zig libraries toward the Rust crates (libraries.md "Next"). Unowned
+12. Build speed (build-speed.md): BS3 waits Jacob. Owner W5
+13. Our Zig libraries toward the Rust crates (libraries.md "Next"). Unowned
 
 ## Areas
 
