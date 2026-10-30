@@ -13,7 +13,7 @@ const chart = @import("chart.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 
-const W = struct {
+pub const W = struct {
     pub const win = plain("Win");
     pub const loss = plain("Loss");
     pub const mean = plain("Average of 5");
@@ -74,10 +74,15 @@ pub fn rolling(h: *H, vs: []const f32) ?[]f32 {
     return mean;
 }
 
+/// Game i at i, half a game's room at either end
+fn plane(n: usize, y: chart.Scale) chart.Plane {
+    return .{ .x = .{ .lo = -0.5, .hi = @as(f32, @floatFromInt(n)) - 0.5 }, .y = y };
+}
+
 pub fn view(h: *H, t: Trend) N {
     const n = t.points.len;
     if (n == 0) return .none;
-    const p: chart.Plane = .{ .x = .{ .lo = -0.5, .hi = @as(f32, @floatFromInt(n)) - 0.5 }, .y = t.y };
+    const p = plane(n, t.y);
     const vs = h.mem.alloc(f32, n) catch {
         h.oom = true;
         return .none;
@@ -188,4 +193,11 @@ test "dots link their games, patch changes divide, the mean starts at the first 
     try testing.expectEqual(11, t.count(n, "data-win"));
     try testing.expect(t.find(n, "class", "pl") != null);
     try testing.expect(!h.oom);
+}
+
+test "pick: the game whose dot is under the pointer" {
+    for (1..21) |n| {
+        const p = plane(n, .{ .lo = 0, .hi = 1 });
+        for (0..n) |i| try testing.expectEqual(i, pick(p.px(i) / 100, n));
+    }
 }
