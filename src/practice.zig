@@ -306,6 +306,7 @@ pub fn build(arena: std.mem.Allocator, in: Input, s: Setup) !Built {
         .loading => return .{ .loading = try loading.build(arena, .{
             .stats = in.stats,
             .curves = in.curves,
+            .facts = in.facts,
             .seats = try loading.seatsOf(arena, &sel.board),
             .draft = sel.board.draft,
             .tier = in.tier,

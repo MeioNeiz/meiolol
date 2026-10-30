@@ -575,6 +575,7 @@ const Poller = struct {
                         l.* = try loading.build(arena, .{
                             .stats = &data.stats,
                             .curves = if (data.curves) |*c| c else null,
+                            .facts = if (data.facts) |*f| f else null,
                             .seats = seats,
                             .draft = p.draft,
                             .tier = if (p.own) |o| o.tier else null,

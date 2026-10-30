@@ -104,6 +104,7 @@ fn build(a: Allocator, live: bool) !?Next {
     }
     const under: ?ui.compview.Comp = switch (s.status) {
         .select => |x| if (x.comp) |cv| try compView(a, c, cv) else null,
+        .loading => |l| if (l.comp) |*cv| try lockedComp(a, c, cv) else null,
         else => null,
     };
     return finish(a, d, bar, under);
@@ -337,6 +338,18 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
 
 /// Words for everyone; the share, the mix's record, lean numbers and lane gold for
 /// testers
+/// The comp view under the loading screen: the island has no room for team pills
+/// (ui-app.wasm at its budget), so this static HTML carries the same facts. Picks are
+/// locked, so no "win less" and no win rates: they would rate teammates' picks
+fn lockedComp(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
+    var v = try compView(a, c, x);
+    for ([_]*ui.compview.Team{ &v.us, &v.them }) |t| if (t.damage) |*d| {
+        d.wins_less = false;
+        d.rate = null;
+    };
+    return v;
+}
+
 pub fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
     var teams: [2]ui.compview.Team = undefined;
     for (&teams, x.teams) |*out, t| {
@@ -1053,6 +1066,11 @@ test "comp view: once all ten are locked, words for everyone and numbers for tes
     try testing.expectEqualStrings("\u{2212}420", mid.gap);
     try testing.expectEqual(.bad, mid.lean);
     try testing.expectEqual(null, priv.lanes[0].us);
+
+    // Under the loading screen picks are locked: no "win less", no win rate
+    const locked = try lockedComp(a, .{ .stats = &f.stats, .icons = null, .private = true }, sel.comp.?);
+    try testing.expect(!locked.us.damage.?.wins_less and locked.us.damage.?.rate == null);
+    try testing.expectEqual(.magic, locked.us.damage.?.mix);
 
     const public = try compView(a, .{ .stats = &f.stats, .icons = null, .private = false }, sel.comp.?);
     try testing.expect(!public.us.damage.?.share and public.us.damage.?.rate == null and public.us.damage.?.wins_less);

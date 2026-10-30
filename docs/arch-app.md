@@ -37,9 +37,10 @@ file and packed rows: docs/architecture.md.
 - screens.zig: the poller's state as ui.app.Data in the edition's words (notes,
   ChampSelect, LoadScreen, GameScreen private only, PostGame), rendered per page load
   and encoded at app.bin; the App island (ui-app.wasm) patches from it on each `app`
-  message and keeps the charts' state. Once all ten lock, CompView after the island as
-  static HTML (no interaction; when it comes or changes the shell sends `reload`, which
-  bridge.js turns into a page load). The Mac build's `--dump DIR --seconds N` writes
+  message and keeps the charts' state. Once all ten lock, and on the loading screen,
+  CompView after the island as static HTML (no interaction; when it comes or changes
+  the shell sends `reload`, which bridge.js turns into a page load); on the loading
+  screen without "win less" or win rates, as picks are locked. The Mac build's `--dump DIR --seconds N` writes
   each change to DIR/<seq>/ for a look against the mock client
 - Review pages (src/site/appreview.zig, /private/app; the dev server makes them on the first
   request): each scenario in testdata/lcu/scenarios (embedded through its all.zig, which
@@ -164,7 +165,9 @@ file and packed rows: docs/architecture.md.
   the chart (new game: game time goes back)
 - Loading screen (APP10; loading.zig, desktop/loadscreen.zig): the poller keeps the
   last champ select's seats and draft (seats_arena) and in GameStart builds ten cards
-  from them; nothing shows when it saw no champ select
+  from them, and the comp of the same ten (comp.build): each team's pills, damage mix
+  and early or late lean counts, neutral (comp.pills); nothing shows when it saw no
+  champ select
 - Post game (APP11; postgame.zig, desktop/post.zig, rows.zig as in game): in
   PreEndOfGame and EndOfGame the poller reads the end of game block (lcu/eog.zig) and
   builds the view with the game's gold samples and the positions the last in-game tick

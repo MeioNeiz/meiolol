@@ -147,6 +147,25 @@ fn team(arena: std.mem.Allocator, in: Input, seats: []const loading.Seat) !Team 
     return .{ .damage = damage, .timing = timing.items };
 }
 
+/// A team's comp as loading screen pills. Picks are locked by then, so neutral facts
+/// only: a tone or a win rate there would rate teammates' picks (production-key.md)
+pub fn pills(arena: std.mem.Allocator, t: Team) ![]const loading.Pill {
+    var out: std.ArrayList(loading.Pill) = .empty;
+    if (t.damage) |d| try out.append(arena, .{ .text = switch (d.mix) {
+        .physical => "mostly physical",
+        .mixed => "mixed damage",
+        .magic => "mostly magic",
+    }, .tone = .neutral });
+    var leans: [2]usize = .{ 0, 0 };
+    for (t.timing) |tm| leans[if (tm.lean == .early) 0 else 1] += 1;
+    for (leans, [_][]const u8{ "early", "late" }) |n, when| {
+        if (n == 0) continue;
+        const text = try std.fmt.allocPrint(arena, "{d} lean{s} {s}", .{ n, if (n == 1) "s" else "", when });
+        try out.append(arena, .{ .text = text, .tone = .neutral });
+    }
+    return out.items;
+}
+
 /// Each side's lane in words, its own way round: "ahead in lane, level 6 sooner"
 pub fn lines(obuf: []u8, tbuf: []u8, l: Lane) [2][]const u8 {
     const f = l.facts orelse return .{ if (l.ours != 0 and l.theirs != 0) "few games of this lane" else "", "" };
@@ -217,6 +236,11 @@ test "comp: damage mix, early and late champions, lanes by role" {
     try testing.expectEqual(id(st, "Darius"), c.teams[0].timing[0].champion);
     try testing.expectEqual(champfacts.Lean.late, c.teams[0].timing[1].lean);
     try testing.expectEqual(0, c.teams[1].timing.len);
+    const ps = try pills(arena, c.teams[0]);
+    try testing.expectEqual(2, ps.len);
+    try testing.expectEqualStrings("1 leans early", ps[0].text);
+    try testing.expectEqualStrings("1 leans late", ps[1].text);
+    try testing.expectEqual(0, (try pills(arena, c.teams[1])).len);
     // Planted: Malphite beats Darius in lane, Syndra beats Ahri
     const top = c.lanes[@backingInt(Role.top)];
     try testing.expectEqual(loading.LaneFacts.Edge.behind, top.facts.?.edge().?);
@@ -243,6 +267,10 @@ test "comp: a full team's mix and whether such teams win less" {
     try testing.expectEqual(Mix.physical, d.mix);
     try testing.expectApproxEqAbs(0.1, d.magic, 1e-6);
     try testing.expect(d.wins_less);
+    // Even so, the pill says what the mix is, never how it does
+    const ps = try pills(arena, c.teams[0]);
+    try testing.expectEqualStrings("mostly physical", ps[0].text);
+    try testing.expectEqual(loading.Tone.neutral, ps[0].tone);
     facts.mix[0] = .{ .games = 100, .wins = 48 };
     try testing.expect(!(try build(arena, .{ .stats = &f.stats, .facts = &facts }, .{ &seats, &.{} })).teams[0].damage.?.wins_less);
 }

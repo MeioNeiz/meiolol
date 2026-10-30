@@ -126,9 +126,10 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   in the desktop manifest, fetched by update.zig (older exes skip it), not a stats file
   bump. Left: comp leans (Malphite into AP teams) after their held-out look
   (data-and-model.md step 1); "who carries" (no shipped carry measure: gold or damage
-  share per champion would need a new tally); the loading screen's team pills from the
-  same comp; a release so testers get it; the shell: CompView under the
-  page once all ten lock, static HTML (ui-app.wasm is at its 40 KB budget)
+  share per champion would need a new tally); a release so testers get it. Done: the
+  shell's CompView under the page, static HTML (ui-app.wasm at its 40 KB budget); the
+  loading screen's team pills from the same comp, neutral (the desktop under each
+  team's heading, the shell the comp view under the page)
 - APP7 Private: scouting where names are visible (needs APP1's queue facts and AC6 for
   "me"), percentages, experimental models
 - APP10 Loading screen cards, first pass done: in GameStart the window shows

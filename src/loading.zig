@@ -9,6 +9,7 @@ const std = @import("std");
 const core = @import("core");
 const lanecard = @import("lanecard.zig");
 const board = @import("board.zig");
+const comp = @import("comp.zig");
 const Role = core.Role;
 const Stats = core.Stats;
 const curvesfile = core.curvesfile;
@@ -44,11 +45,15 @@ pub const Loading = struct {
     teams: [2][]const Card,
     /// The draft model at the end of champ select; the private edition shows it
     draft: ?board.Draft,
+    /// The comp view of the same ten (comp.zig), and each team's pills from it
+    comp: ?comp.Comp = null,
+    team_pills: [2][]const Pill = .{ &.{}, &.{} },
 };
 
 pub const Input = struct {
     stats: *const Stats,
     curves: ?*const curvesfile.Curves = null,
+    facts: ?*const core.champfacts.Facts = null,
     /// Ours, theirs
     seats: [2][]const Seat,
     draft: ?board.Draft = null,
@@ -63,7 +68,9 @@ const timing_gap = 20;
 
 /// Allocates in `arena`
 pub fn build(arena: std.mem.Allocator, in: Input) !Loading {
-    var out: Loading = .{ .teams = undefined, .draft = in.draft };
+    const cv = try comp.build(arena, .{ .stats = in.stats, .curves = in.curves, .facts = in.facts, .tier = in.tier }, in.seats);
+    var out: Loading = .{ .teams = undefined, .draft = in.draft, .comp = cv };
+    for (&out.team_pills, cv.teams) |*p, t| p.* = try comp.pills(arena, t);
     for (in.seats, 0..) |team, side| {
         const sorted = try arena.dupe(Seat, team);
         std.mem.sort(Seat, sorted, {}, struct {

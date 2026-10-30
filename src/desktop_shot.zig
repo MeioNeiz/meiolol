@@ -265,7 +265,7 @@ pub fn main(init: std.process.Init) !void {
                 const card = try lanecard.build(a, .{ .stats = &stats, .curves = if (curves) |*c| c else null, .role = scene.role, .me = cs.my_champion, .locked = true, .allies = cs.allies, .enemies = cs.enemies, .tier = scene.tier, .opts = opts });
                 const b = try board.build(a, &stats, opts, cs, &card);
                 const l = try a.create(loading.Loading);
-                l.* = try loading.build(a, .{ .stats = &stats, .curves = if (curves) |*c| c else null, .seats = try loading.seatsOf(a, &b), .draft = b.draft, .tier = scene.tier, .opts = opts });
+                l.* = try loading.build(a, .{ .stats = &stats, .curves = if (curves) |*c| c else null, .facts = if (facts) |*f| f else null, .seats = try loading.seatsOf(a, &b), .draft = b.draft, .tier = scene.tier, .opts = opts });
                 break :blk .{ .loading = l };
             },
             .select => |scene| blk: {

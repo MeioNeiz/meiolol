@@ -22,6 +22,11 @@ pub fn view(ctx: Ctx, l: *const loading.Loading) void {
             var head = dvui.box(@src(), .{ .dir = .horizontal }, .{ .id_extra = side, .expand = .horizontal, .margin = .{ .y = if (ours) 0 else 10 } });
             defer head.deinit();
             w.heading(@src(), if (ours) "Your team" else "Enemy team", team);
+            for (l.team_pills[side], 0..) |p, i| {
+                var at = dvui.box(@src(), .{}, .{ .id_extra = side * 10 + i, .gravity_y = 0.5, .margin = .{ .x = if (i == 0) 8 else 0 } });
+                defer at.deinit();
+                w.pill(@src(), p.text, tone(p.tone), i);
+            }
             if (ctx.private()) if (l.draft) |d| {
                 const win = if (ours) d.win else 1 - d.win;
                 dvui.label(@src(), "{d:.0}% draft", .{100 * win}, .{
