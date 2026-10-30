@@ -35,8 +35,8 @@ docs/plan.md "Now". Read it first.
   it when adding a pipeline step or page
 - Local site: `deploy/dev.sh`, one server for all sessions at localhost:8080, rebuilt
   on each edit (data/snap; `--exports` refreshes the box's curves and builds when it
-  warns the curves are an old version). Page checks and screenshots: `--small` (1 in
-  20 games, loads in ~2 min, not 22; docs/dev-flow.md "Seeing pages")
+  warns the curves are an old version). Page checks and screenshots: `--small`
+  (docs/dev-flow.md "Seeing pages")
 - Zig 0.16/0.17 std changed a lot (std.Io everywhere, renames): look it up, don't recall
   it. `deploy/zigstd.sh PATTERN [PATH under std]` greps the std source; the exact
   signature at an existing call site: LSP hover (ZLS; ToolSearch "select:LSP")

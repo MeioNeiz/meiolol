@@ -69,12 +69,14 @@ only the box shows: real data volume, render swap, nginx.
 data/snap (15 GB) takes ~22 min to load on the gpu-box (30 Oct: people tallies 982 s
 Debug, 1228 s ReleaseSafe, reading the database), 3.4-4.8 GB peak. For page checks and
 screenshots, `deploy/dev.sh --small` serves data/snap-small (deploy/snap-small.sh, built
-on first use in ~80 s and again once data/snap is newer): 1 in 20 games with their rows,
-so every page renders with the same shapes at 1/20 the counts; curves and builds are
-data/snap's, linked. Loads in ~100 s, ~1.3 GB private (640 MB of it the builds files,
-whatever the games) plus ~1 GB of mapped curves and database. `--no-watch` builds once and
-serves, so edits meanwhile don't restart the load. Full servers are capped at 2 on the
-machine (MEIOLOL_DEV_MAX), small ones at 3 apart (MEIOLOL_DEV_MAX_SMALL).
+on first use in ~80 s and again once data/snap changes, beside it and swapped in, so small
+servers already running stay on the old copy): 1 in 20 games with their rows, so every
+page renders with the same shapes at 1/20 the counts; curves and builds are data/snap's,
+linked. Loads in ~100 s, ~1.3 GB private (640 MB of it the builds files, whatever the
+games) plus ~1 GB of mapped curves and database. `--no-watch` builds once, into
+zig-out/dev-PORT, and serves, so edits meanwhile don't restart the load. Full servers are
+capped at 2 on the machine (MEIOLOL_DEV_MAX), small ones at 3 apart
+(MEIOLOL_DEV_MAX_SMALL).
 
 ## ui.wasm sizes
 

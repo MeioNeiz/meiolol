@@ -9,9 +9,9 @@
 # fetches the box's curves, builds, lean and Daily Draft files into $data (~1.2 GB): older
 # curves files fail to load, so matchup pages and gold columns stay empty.
 # Page checks and screenshots (team lanes): `--small` serves $data-small, 1 in 20 of
-# $data's games (deploy/snap-small.sh, built on first use and when $data is newer), loaded
-# in ~100 s where data/snap takes ~22 min. `--no-watch`: one build, then serve, so edits
-# meanwhile don't restart the load
+# $data's games (deploy/snap-small.sh, built on first use and when $data changes), loaded
+# in ~100 s where data/snap takes ~22 min. `--no-watch`: one build of its own, then serve,
+# so edits meanwhile don't restart the load
 set -euo pipefail
 cd "$(dirname "$0")/.."
 data=${MEIOLOL_DEV_DATA:-data/snap}
@@ -59,28 +59,49 @@ if $small; then
 else
     max=${MEIOLOL_DEV_MAX:-2} kind=full
 fi
-same=()
-# Anchored on the binary: a shell whose command line names it isn't one
-for pid in $(pgrep -u "$USER" -f '^[^ ]*/meiolol dev( |$)' || true); do
-    a=$(ps -o args= -p "$pid" || true)
-    if [[ $a =~ --data\ [^\ ]*-small( |$) ]]; then k=small; else k=full; fi
-    [[ $k == "$kind" ]] && same+=("$pid $(cut -c1-110 <<< "$a")")
-done
-if ((${#same[@]} >= max)); then
+# At $max servers of this kind on the machine: lists them and returns 0
+at_cap() {
+    local pid a k same=()
+    # Anchored on the binary: a shell whose command line names it isn't one
+    for pid in $(pgrep -u "$USER" -f '^[^ ]*/meiolol dev( |$)' || true); do
+        a=$(ps -o args= -p "$pid" || true)
+        [[ -n $a ]] || continue
+        if [[ $a =~ --data\ [^\ ]*-small( |$) ]]; then k=small; else k=full; fi
+        if [[ $k == "$kind" ]]; then same+=("$pid $(cut -c1-110 <<< "$a")"); fi
+    done
+    ((${#same[@]} >= max)) || return 1
     echo "dev.sh: $max $kind dev servers already run here: use one of them," \
         "or stop yours when done (kill PID):"
     printf '  %s\n' "${same[@]}"
-    exit 1
-fi
+}
+# Early, before minutes of snap-small and build; again below
+if at_cap; then exit 1; fi
 if $small; then
     small_dir=${data%/}-small
     deploy/snap-small.sh "$data" "$small_dir"
+    if $exports; then
+        for f in "$data/daily" "$data/lean.tsv"; do
+            if [[ -e $f ]]; then cp -Rp "$f" "$small_dir/"; fi
+        done
+    fi
     data=$small_dir
 fi
-# Its own prefix, so other sessions' builds don't restart it. Outside the slots, so
+# Its own prefix, so other sessions' builds don't restart it; not watching, one of its
+# own, else this checkout's shared server's watch build would. Outside the slots, so
 # capped as one (slots.sh MEIOLOL_ZIG_JOBS)
-prefix=zig-out/dev
+if $watch; then prefix=zig-out/dev; else prefix=zig-out/dev-$port; fi
 deploy/slots.sh 1 zig build backend --prefix "$prefix"
+# Lanes started together all passed the early count: count again under a machine-wide
+# lock, held until this server shows in ps (it starts right after)
+lock=/tmp/meiolol-dev-start-$USER
+for ((i = 0; i < 15; i++)); do
+    mkdir "$lock" 2> /dev/null && break
+    sleep 1
+done
+# 15 s: its holder died before its release below
+((i < 15)) || mkdir -p "$lock"
+if at_cap; then rm -rf "$lock"; exit 1; fi
+(sleep 3; rm -rf "$lock") > /dev/null 2>&1 &
 if $watch; then
     MEIOLOL_ZIG_JOBS=2 zig build backend --watch --prefix "$prefix" > .zig-cache/dev-watch.log 2>&1 &
     watch_pid=$!

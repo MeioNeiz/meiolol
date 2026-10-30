@@ -51,8 +51,10 @@ echo d > "$big/daily/1.json"
 sqlite3 "$big/meiolol.db" << 'EOF'
 CREATE TABLE matches (match_id TEXT PRIMARY KEY, patch TEXT);
 CREATE INDEX matches_patch ON matches (patch);
-CREATE TABLE participants (match_id TEXT, slot INTEGER, puuid TEXT, PRIMARY KEY (match_id, slot)) WITHOUT ROWID;
-CREATE TABLE bans (match_id TEXT, team_id INTEGER, PRIMARY KEY (match_id, team_id)) WITHOUT ROWID;
+CREATE TABLE participants (match_id TEXT, slot INTEGER, puuid TEXT,
+    PRIMARY KEY (match_id, slot)) WITHOUT ROWID;
+CREATE TABLE bans (match_id TEXT, team_id INTEGER,
+    PRIMARY KEY (match_id, team_id)) WITHOUT ROWID;
 CREATE TABLE mastery (puuid TEXT PRIMARY KEY, data BLOB);
 CREATE TABLE drafts (id INTEGER PRIMARY KEY);
 CREATE TABLE champions (id INTEGER PRIMARY KEY);
@@ -63,7 +65,8 @@ CREATE TABLE ranks (key INTEGER PRIMARY KEY);
 CREATE TABLE rank_history (key INTEGER, day INTEGER, PRIMARY KEY (key, day));
 CREATE TABLE match_queue (match_id TEXT PRIMARY KEY);
 INSERT INTO matches VALUES ('m1', '16.21'), ('m2', '16.21'), ('m3', '16.21'), ('m4', '16.20');
-INSERT INTO participants SELECT match_id, s.value, match_id || 'p' || s.value FROM matches, json_each('[0,1]') s;
+INSERT INTO participants
+    SELECT match_id, s.value, match_id || 'p' || s.value FROM matches, json_each('[0,1]') s;
 INSERT INTO bans SELECT match_id, 100 FROM matches;
 INSERT INTO mastery SELECT puuid, x'00' FROM participants;
 INSERT INTO mastery VALUES ('nobody', x'00');
@@ -78,7 +81,8 @@ for db in raw timeline; do sqlite3 "$big/$db.db" 'CREATE TABLE d (x)'; done
 q() { sqlite3 "$small/meiolol.db" "$1"; }
 [ "$(q 'SELECT group_concat(match_id) FROM matches')" = m2,m4 ] \
     && [ "$(q 'SELECT count(*) FROM participants')" = 4 ] \
-    && [ "$(q 'SELECT group_concat(puuid) FROM mastery ORDER BY puuid')" = m2p0,m2p1,m4p0,m4p1 ] \
+    && [ "$(q 'SELECT group_concat(puuid) FROM (SELECT puuid FROM mastery ORDER BY puuid)')" \
+        = m2p0,m2p1,m4p0,m4p1 ] \
     && [ "$(q 'SELECT count(*) FROM bans') $(q 'SELECT count(*) FROM drafts')" = "2 2" ] \
     && [ "$(q 'SELECT count(*) FROM players') $(q 'SELECT count(*) FROM champions')" = "2 2" ] \
     && [ "$(q 'SELECT count(*) FROM match_queue') $(q 'PRAGMA user_version')" = "0 7" ] \
@@ -86,12 +90,43 @@ q() { sqlite3 "$small/meiolol.db" "$1"; }
     && ok "snap-small: sampled games and their rows" || bad "snap-small rows"
 [ -L "$small/export" ] && [ -f "$small/daily/1.json" ] && ! [ -L "$small/daily" ] \
     && [ -f "$small/raw.db" ] && ok "snap-small: side files" || bad "snap-small side files"
-touch "$small/daily/mark"
+touch "$small/daily/mark" "$small/dev-notes.db"
 "$here/snap-small.sh" "$big" "$small" 2 2> /dev/null
-[ -f "$small/daily/mark" ] && ok "snap-small: kept while newer" || bad "snap-small rebuilt"
-touch -d '+1 minute' "$big/meiolol.db"
+[ -f "$small/daily/mark" ] && ok "snap-small: kept while built from this source" \
+    || bad "snap-small rebuilt"
+# A new snapshot carrying an older mtime (rsync keeps the box's)
+cp -p "$big/meiolol.db" "$t/new.db"
+touch -t 200001010000 "$t/new.db"
+mv "$t/new.db" "$big/meiolol.db"
 "$here/snap-small.sh" "$big" "$small" 2 2> /dev/null
-! [ -f "$small/daily/mark" ] && ok "snap-small: rebuilt for a newer source" || bad "snap-small stale"
+! [ -f "$small/daily/mark" ] && [ -f "$small/dev-notes.db" ] && [ -f "$small/.source" ] \
+    && ! [ -e "$small.tmp" ] && ! [ -e "$small.old" ] \
+    && ok "snap-small: rebuilt for a new source, notes kept" || bad "snap-small stale"
+sqlite3 "$big/meiolol.db" 'CREATE TABLE newtab (x)'
+"$here/snap-small.sh" "$big" "$small" 2 2>&1 | grep -q 'table newtab is new' \
+    && ok "snap-small: an unknown table fails" || bad "snap-small took an unknown table"
+sqlite3 "$big/meiolol.db" 'DROP TABLE newtab'
+# Never DST over SRC or data/, physical paths: each must refuse and leave SRC whole
+ln -s "$t" "$t/up"
+mkdir -p "$t/repo-small/deploy" "$t/repo-small/data"
+cp "$here/snap-small.sh" "$t/repo-small/deploy/"
+ln -s "$big" "$t/link-small"
+mkdir "$t/outer-small"
+cp -Rp "$big" "$t/outer-small/"
+refused=0
+for pair in "$small $small" "$small $small/" "$big $big/x-small" \
+    "$t/up/snap $big/x-small" "$t/outer-small/snap $t/outer-small" "$big $t/link-small" \
+    "$big $t"; do
+    # shellcheck disable=SC2086 # two words
+    "$here/snap-small.sh" $pair 2 2> /dev/null && echo "built: $pair"
+    [ $? = 2 ] && refused=$((refused + 1))
+done
+"$t/repo-small/deploy/snap-small.sh" "$big" "$t/repo-small" 2 2> /dev/null
+[ $? = 2 ] && refused=$((refused + 1))
+[ $refused = 8 ] && [ -f "$big/meiolol.db" ] && [ -f "$small/meiolol.db" ] \
+    && [ -f "$t/outer-small/snap/meiolol.db" ] && [ -d "$t/repo-small/data" ] \
+    && ! [ -e "$big/x-small" ] && ok "snap-small: DST over SRC or data/ refused" \
+    || bad "snap-small DST guard: $refused of 8 refused"
 
 # push.sh in a throwaway repo
 # No toast: a real one says a batch commit failed
@@ -136,7 +171,7 @@ $p --flush > "$t/flush.log" 2>&1
 on_main "$c3" && ! on_main "$c4" && ok "flush: up to the failing commit, without it" \
     || bad "flush: $(git log --oneline origin/main | head -1)"
 $p --status | grep -q 'bad (ci failed)' && ok "the failed commit shows" || bad "failed not shown"
-sed -i '' '/^bad$/d' f
+grep -vx bad f > f.new; mv f.new f
 c6=$(c fixed)
 $p "$c6" > /dev/null
 $p --mode fast > /dev/null 2>&1
