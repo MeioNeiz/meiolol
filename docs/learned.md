@@ -43,9 +43,10 @@ How to write a line:
   hair better by one measure and a hair worse by another. Sure: 86k held-out games (29
   Oct snap), no enemy known: winners' picks rank a little higher (at most 7% of the
   ranking's link to winning; not seen on 57k dev games), winner-loser pairs are ordered
-  slightly worse on both. The safer lists push popular champions down, so they partly
-  measure popularity, not safety. Site: the app keeps its blind ranking; "safe blind"
-  stays a label, not a different list. Evidence: docs/model.md "Blind pick ranking (J2)"
+  slightly worse on dev and held-out games alike. The safer lists push popular champions
+  down, so they partly measure popularity, not safety. Site: the app keeps its blind
+  ranking; "safe blind" stays a label, not a different list. Evidence: docs/model.md
+  "Blind pick ranking (J2)"
 - (early) The draft alone has a little more to give than our best model takes: knowing
   exactly how every pair of champions does together and against each other would call
   about 56.5% of games right, against about 55.4% now. Most of what is left sits in

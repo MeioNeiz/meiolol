@@ -5433,8 +5433,15 @@ Looks: variants pre-declared, dev-val first, nothing tuned. Test look 1 of data/
 (29 Oct, w4) gave the gaps, AUCs and top 10%; look 2 (w4fix, same ranking code)
 reproduced them to the last digit with the AUC intervals added: a reproduction for
 paired output, as win-comp's rerun ("Comp features from champion profiles"), not a
-second look at the question. Both are in data/snap/test-looks.tsv (look 1 recorded
-after the fact: `--blind` counted no looks then; it now needs `--test-look` on test).
+second look at the question. Both are in data/snap's ledger (look 1 recorded after the
+fact: `--blind` counted no looks then; it now needs `--test-look` on test), a rolling
+copy that `deploy/box.sh snapshot` replaces, so this section is the record. Test: EUW1
+ranked solo, every patch, from the cut 1792985933900 ms (2026-10-26 03:38:53.900 UTC:
+the newest 15% of EUW1's played games, eval's own cut, not the all-platform protocol
+one) to the copy's newest game, 1793301516647 ms (29 Oct 19:18:36 UTC): 85,904 games.
+A later pin whose test window covers them lists them in its test-exclude.tsv. Copies
+(gitignored): data/team/2026-10-29-next/w4/test-looks.tsv, and test-exclude.tsv there
+(the 85,904 match ids, in that file's format). A further J2 test look runs on a pin.
 
 Offsets (test fit, 809 champion-roles; dev within 0.002, r within 0.01):
 
@@ -5471,20 +5478,24 @@ AUC 0.5190 / 0.5169, top 10% win 52.09% / 51.81%):
 Result: no ranking gains on every measure. On test, no enemy known, three gap intervals
 exclude 0: 25th percentile +0.0004 ± 0.0002 (about 4 SE), 10th +0.0006 ± 0.0005 and mean
 minus spread +0.0005 ± 0.0003, at most 7% of today's 0.0164 gap at the intervals' top;
-their top 10% win is up 0.05 to 0.2 pp (unpaired, fewer picks). The same variants' AUC
-goes down, beyond its interval for the 10th percentile and mean minus spread on both
-windows and scenarios, and on dev no gap interval excludes 0. The base rating's lower
-bound is the mirror case: gap clearly lower (-0.0074, 39% of it), AUC level or slightly
-up (+0.0004 to +0.0006 with the lane hidden, both windows). Both follow from the
-offsets: the low-end ones correlate -0.58 to -0.66 with log role games and push popular
-champions down, the lower bound (0.96) pushes them up, and the gap moves with that
-squeeze while AUC stays level or moves the other way. So the small gap gain is as likely
-the squeeze as safety. The expected lane term is about 0 by construction (sd 0.004): the
-fitted base rating already averages the champion over its real opponents, so
-frequency-weighted lane deltas centre on 0; that it moves nothing is a property of the
-model, not a finding about matchups. For a win or loss, the expected win chance over the
-unknown opponent is the right target, and today's average-opponent ranking already is
-it; "safe" only adds something under risk aversion a single game doesn't have.
+their top 10% win is up 0.05 to 0.2 pp (unpaired, fewer picks). On test with the lane
+hidden, the 25th percentile, mean minus spread and expected term's intervals end on 0
+(+0.0002 ± 0.0002, +0.0003 ± 0.0003, +0.0001 ± 0.0001): at 4 decimals the table can't
+say whether they exclude it. The low-end variants' AUC goes down, beyond its interval for
+the 10th percentile and mean minus spread on both windows and scenarios and for the 25th
+on three of four, and on dev no low-end variant's gap interval excludes 0. The base
+rating's lower bound is the mirror case: gap clearly lower (-0.0074, 39% of it), AUC
+level or slightly up (+0.0004 to +0.0006 with the lane hidden, both windows). Both
+follow from the offsets: the low-end ones correlate -0.58 to -0.66 with log role games
+and push popular champions down, the lower bound (0.96) pushes them up, and the gap
+moves with that squeeze while AUC stays level or moves the other way. So the small gap
+gain is as likely the squeeze as safety. The expected lane term is about 0 by
+construction (sd 0.004): the fitted base rating already averages the champion over its
+real opponents, so frequency-weighted lane deltas centre on 0; that it moves nothing is
+a property of the model, not a finding about matchups. For a win or loss, the expected
+win chance over the unknown opponent is the right target, and today's average-opponent
+ranking already is it; "safe" only adds something under risk aversion a single game
+doesn't have.
 
 Not covered: the spread of shrunk estimates grows with the games behind each pair (thin
 cells shrink to 0 or to their pair parents), so the quantile and spread variants mix in
