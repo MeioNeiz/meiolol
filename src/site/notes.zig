@@ -1,7 +1,7 @@
 //! The notes tool's files (ui.notes, ui-notes.wasm) under /private/ at fixed names, and the tag
-//! that loads them. nginx (deploy/nginx/meiolol.conf, @notes) or the dev server adds the
-//! tag to a page only for a request carrying the marker cookie, which the API sets at an
-//! admin's login: public pages hold none of it
+//! that loads them. nginx (deploy/nginx/meiolol.conf, @notes and @notes_private) or the dev
+//! server adds the tag to a page only for a request carrying the marker cookie, which the
+//! API sets at an admin's login: public pages hold none of it
 const std = @import("std");
 const store = @import("store");
 const ui = @import("ui");
@@ -17,7 +17,7 @@ pub const files = [_]struct { []const u8, []const u8 }{
     .{ "notes.wasm", @embedFile("ui-notes.wasm") },
 };
 
-/// deploy/nginx/meiolol.conf's @notes holds this verbatim
+/// deploy/nginx/meiolol.conf's @notes and @notes_private hold this verbatim
 pub const tag = "<link rel=\"stylesheet\" href=\"/private/notes.css\"><script src=\"/private/notes.js\" data-wasm=\"/private/notes.wasm\" defer></script>";
 
 /// The marker; the dev server's has no __Host- prefix (that needs HTTPS)
