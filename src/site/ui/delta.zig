@@ -1,5 +1,6 @@
 //! Delta: a signed change in points, on the scale's colour with its sign (or an arrow) as
-//! the second cue; faint when its 95% range spans zero (it could be luck). DeltaBar draws
+//! the second cue; faint when its 95% range spans zero (it could be luck) or the caller
+//! says it may be (`faint`). DeltaBar draws
 //! it from a centre line with the range as a whisker; dot for a forest of them
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -19,9 +20,13 @@ pub const Delta = struct {
     scale: fmt.Scale = .aggregate,
     /// ▲ or ▼ instead of the sign
     arrow: bool = false,
+    /// Faint whatever its range: past 1.96 can still be luck, e.g. the most extreme of
+    /// many tests
+    faint: bool = false,
 };
 
 fn unclear(x: Delta) bool {
+    if (x.faint) return true;
     const c = x.ci orelse return false;
     return @abs(x.d) < c;
 }
@@ -94,6 +99,7 @@ pub fn gallery(g: *Gallery) void {
     g.add("inline", view(h, .{ .d = 2.6 }));
     g.add("arrow", view(h, .{ .d = -4.4, .arrow = true }));
     g.add("spans 0", view(h, .{ .d = 0.2, .ci = 0.9 }));
+    g.add("faint, may be luck", view(h, .{ .d = 12.4, .faint = true }));
     g.add("one game", view(h, .{ .d = -6.2, .scale = .game }));
     var bars = h.list();
     for ([_][2]f32{ .{ 2.6, 1.4 }, .{ 2.0, 1.2 }, .{ -4.4, 2.8 }, .{ -0.6, 1.5 } }) |p| bars.add(bar(h, .{ .d = p[0], .ci = p[1] }));

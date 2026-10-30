@@ -177,25 +177,32 @@ fn bullies(a: std.mem.Allocator, pairs: []const LanePair) ![]const fd.Lead {
 /// surest of the rest down to moved_games, each from the side that gained
 fn moved(site: *const Site, pd: *const patchday.PatchDay) ![]const []const fd.Move {
     const a = site.arena;
-    const o = pd.opts;
     const out = try a.alloc([]const fd.Move, Role.all.len);
-    for (Role.all, out) |r, *x| x.* = try movedIn(site, pd, r, o);
+    for (Role.all, out) |r, *x| x.* = try movedIn(a, pd, r, SiteIndex{ .site = site });
     return out;
 }
+
+const SiteIndex = struct {
+    site: *const Site,
+    fn of(s: SiteIndex, id: u32) ?u16 {
+        return index(s.site, id);
+    }
+};
 
 /// Games on each patch for a move to be listed: early in a patch few pairs pass the
 /// patch page's 400, and an empty card hides what there is (shown faint, with its range)
 const moved_games = 100;
 
-fn movedIn(site: *const Site, pd: *const patchday.PatchDay, r: Role, o: patchday.Options) ![]const fd.Move {
-    const a = site.arena;
+/// `ids.of(id)`: the champion's index in fd.Data.champs, null without a page
+fn movedIn(a: std.mem.Allocator, pd: *const patchday.PatchDay, r: Role, ids: anytype) ![]const fd.Move {
+    const o = pd.opts;
     const Scored = struct { m: fd.Move, z: f64 };
     var list: std.ArrayList(Scored) = .empty;
     for (pd.matchups) |m0| {
         if (m0.role != r or !m0.win.enough(moved_games) or m0.win.z == 0) continue;
         const m = if (m0.win.z > 0) m0 else pd.matchup(m0.role, m0.b, m0.a).?;
-        const x = index(site, m.a) orelse continue;
-        const y = index(site, m.b) orelse continue;
+        const x = ids.of(m.a) orelse continue;
+        const y = ids.of(m.b) orelse continue;
         const rg = m.win.range(ci_z);
         try list.append(a, .{ .z = m.win.z, .m = .{
             .role = champion.uiRole(m.role),
@@ -226,4 +233,47 @@ fn bin(a: std.mem.Allocator, v: fd.Data) ![]const u8 {
     const e = std.base64.standard.Encoder;
     const out = try a.alloc(u8, e.calcSize(raw.items.len));
     return e.encode(out, raw.items);
+}
+
+test "moved: clear moves first, biggest first; then the surest others, from the side that gained" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const Counts = core.curvesfile.Counts;
+    const mv = struct {
+        fn f(r: Role, a: u32, b: u32, prev: Counts, cur: Counts) patchday.MatchupMove {
+            return .{ .role = r, .a = a, .b = b, .win = .of(prev, cur) };
+        }
+    }.f;
+    const pd: patchday.PatchDay = .{
+        .matchups = &.{
+            // 1 down from 60 to 45 against 2: listed from 2's side; 150 games, z 2.5, thin
+            mv(.top, 1, 2, .{ .games = 150, .wins = 90 }, .{ .games = 150, .wins = 68 }),
+            mv(.top, 3, 4, .{ .games = 1000, .wins = 500 }, .{ .games = 1000, .wins = 560 }),
+            mv(.top, 5, 6, .{ .games = 2000, .wins = 1000 }, .{ .games = 2000, .wins = 1100 }),
+            // Thin, z 0.8
+            mv(.top, 7, 8, .{ .games = 120, .wins = 60 }, .{ .games = 120, .wins = 66 }),
+            // 90 games on this patch; no move at all; another role; no page for 99
+            mv(.top, 9, 10, .{ .games = 500, .wins = 200 }, .{ .games = 90, .wins = 60 }),
+            mv(.top, 11, 12, .{ .games = 300, .wins = 150 }, .{ .games = 300, .wins = 150 }),
+            mv(.middle, 13, 14, .{ .games = 1000, .wins = 500 }, .{ .games = 1000, .wins = 600 }),
+            mv(.top, 15, 99, .{ .games = 1000, .wins = 500 }, .{ .games = 1000, .wins = 600 }),
+        },
+    };
+    const Ids = struct {
+        fn of(_: @This(), id: u32) ?u16 {
+            return if (id == 99) null else @intCast(id);
+        }
+    };
+    const got = try movedIn(arena.allocator(), &pd, .top, Ids{});
+    const want = [_]struct { u16, u16, bool }{ .{ 3, 4, true }, .{ 5, 6, true }, .{ 2, 1, false }, .{ 7, 8, false } };
+    try std.testing.expectEqual(want.len, got.len);
+    for (want, got) |w, g| {
+        try std.testing.expectEqual(w[0], g.x);
+        try std.testing.expectEqual(w[1], g.y);
+        try std.testing.expectEqual(w[2], g.clear);
+        try std.testing.expect(g.d > 0 and g.ci > 0);
+    }
+    try std.testing.expectApproxEqAbs(6, got[0].d, 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 100.0 * 22.0 / 150.0), got[2].d, 1e-4);
+    try std.testing.expectEqual(150, got[2].games);
 }

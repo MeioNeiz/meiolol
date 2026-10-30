@@ -248,7 +248,7 @@ pub const Finder = struct {
             .vs = f.icon(h, m.y),
             .href = f.href(h, d.patch_query, m.role, m.x, m.y),
             .value = if (m.clear) delta.view(h, .{ .d = m.d }) else h.span(.{}, .{
-                delta.view(h, .{ .d = m.d, .ci = m.ci }),
+                delta.view(h, .{ .d = m.d, .faint = true }),
                 h.span(.{ .class = "pm" }, .{W.pm.with(h, .{ .ci = m.ci })}),
             }),
             .note = phrase.num(h, .count, m.games),
@@ -486,7 +486,7 @@ pub const Demo = struct {
         .roles = &.{ &top_only, &.{ .top, .mid }, &.{ .top, .support }, &top_only, &mid_only, &mid_only, &.{.jungle} },
         .hard = &.{ &top, &.{}, &mid, &.{}, &.{} },
         .bully = &.{ &top_leads, &.{}, &.{}, &.{}, &.{} },
-        .moved = &.{ &.{ .{ .role = .top, .x = 2, .y = 0, .d = 3.4, .ci = 2.1, .games = 1630 }, .{ .role = .top, .x = 1, .y = 3, .d = 6.2, .ci = 9.8, .games = 140, .clear = false } }, &.{}, &.{.{ .role = .mid, .x = 5, .y = 4, .d = 2.8, .ci = 1.9, .games = 1310 }}, &.{}, &.{} },
+        .moved = &.{ &.{ .{ .role = .top, .x = 2, .y = 0, .d = 3.4, .ci = 2.1, .games = 1630 }, .{ .role = .top, .x = 1, .y = 3, .d = 12.4, .ci = 11.6, .games = 140, .clear = false } }, &.{}, &.{.{ .role = .mid, .x = 5, .y = 4, .d = 2.8, .ci = 1.9, .games = 1310 }}, &.{}, &.{} },
         .patch = "16.21",
     };
 
@@ -593,6 +593,21 @@ test "Finder: one lane for both picks; the URL keeps them" {
     w.clearRetainingCapacity();
     try url.write(Finder.Url, g.toUrl(), &w.writer);
     try testing.expectEqualStrings("role=mid&vs=zed", w.written());
+}
+
+test "Finder: a thin move is faint with its range however big, a clear one bright" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var f = try Finder.init(a, &Demo.data, "");
+    f.fromUrl(.{ .role = .top });
+    var w: std.Io.Writer.Allocating = .init(a);
+    try @import("html.zig").write(&t, f.view(&h), &w.writer);
+    const s = w.written();
+    try testing.expect(std.mem.find(u8, s, "<span class=\"c-delta\" style=\"--c:var(--hi2)\">+3.4</span></span>") != null);
+    try testing.expect(std.mem.find(u8, s, "<span class=\"c-delta\" data-state=\"unclear\" style=\"--c:var(--hi4)\">+12.4</span><span class=\"pm\">±11.6</span>") != null);
 }
 
 test "Grid: the first pick's file, the second its dot and once its page" {
