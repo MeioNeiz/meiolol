@@ -352,7 +352,7 @@ fn selectOf(arena: std.mem.Allocator, in: Input, sc: *const mock.Scenario, s: Se
         .tier = in.tier,
         .expertise = in.expertise,
     });
-    const b = try board.build(arena, in.stats, .{}, cs, &card);
+    const b = try board.build(arena, in.stats, .{}, cs, &card, in.facts);
     return .{ .card = card, .board = b, .comp = try comp.after(arena, .{ .stats = in.stats, .curves = in.curves, .facts = in.facts, .tier = in.tier }, &b) };
 }
 

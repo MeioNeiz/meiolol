@@ -7,6 +7,8 @@
 //!   damage CHAMPION MAGIC                magic share of damage to champions, 0..1
 //!   mix BUCKET GAMES WINS                teams by damage mix (mix_bounds)
 //!   lean CHAMPION ROLE GAMES GOLD GOLD_SD WIN_PP WIN_SD    as lean.tsv's rows
+//!   games N                              the patch's games, the ban rates' base
+//!   ban CHAMPION RATE                    share of them it was banned in, 0..1
 //! Readers skip kinds they don't know, so a new kind needs no version bump; a changed
 //! kind does.
 
@@ -37,6 +39,10 @@ pub const win_minute = 20;
 pub const lean_min_games = 200;
 /// An effect is clear this many posterior sds from 0
 pub const clear_z = 2.0;
+/// Fewer games on the patch (its first hours) and ban rates say nothing: at this many a
+/// rate's standard error is at most 1.1 points (at 50%), so a champion's share of games
+/// left to pick, 1 - rate, is known to about 2%
+pub const ban_min_games = 2000;
 
 pub const Lean = enum { early, late, none };
 
@@ -80,17 +86,29 @@ fn clear(b: f64, sd: f64, n: u32) bool {
 }
 
 pub const Damage = struct { champion: u32, magic: f32 };
+pub const Ban = struct { champion: u32, rate: f32 };
 
 pub const Facts = struct {
     patch: []const u8 = "",
     damage: []const Damage = &.{},
     mix: [mixes]Counts = @splat(.{ .games = 0, .wins = 0 }),
     lean: []const LeanRow = &.{},
+    /// The patch's games and each champion's ban rate on them
+    games: u32 = 0,
+    bans: []const Ban = &.{},
 
     /// Magic share of the champion's damage to champions; null when unsampled
     pub fn magicOf(f: *const Facts, champion: u32) ?f32 {
         for (f.damage) |d| if (d.champion == champion) return d.magic;
         return null;
+    }
+
+    /// Null below ban_min_games, so callers keep their no-ban reading; 0 for a champion
+    /// never banned
+    pub fn banRate(f: *const Facts, champion: u32) ?f32 {
+        if (f.games < ban_min_games) return null;
+        for (f.bans) |b| if (b.champion == champion) return b.rate;
+        return 0;
     }
 
     pub fn leanOf(f: *const Facts, champion: u32, role: Role) ?LeanRow {
@@ -107,8 +125,9 @@ pub const Facts = struct {
         var f: Facts = .{ .patch = head.next() orelse "" };
         var damage: std.ArrayList(Damage) = .empty;
         var lean: std.ArrayList(LeanRow) = .empty;
+        var bans: std.ArrayList(Ban) = .empty;
         while (lines.next()) |line| {
-            if (damage.items.len + lean.items.len >= max_rows) return error.BadFacts;
+            if (damage.items.len + lean.items.len + bans.items.len >= max_rows) return error.BadFacts;
             var it = std.mem.splitScalar(u8, line, '\t');
             const kind = it.next() orelse continue;
             if (std.mem.eql(u8, kind, "damage")) {
@@ -131,10 +150,18 @@ pub const Facts = struct {
                     .win = try finite(it.next()),
                     .win_sd = try finite(it.next()),
                 });
+            } else if (std.mem.eql(u8, kind, "games")) {
+                f.games = try int(u32, it.next());
+            } else if (std.mem.eql(u8, kind, "ban")) {
+                const champion = try int(u32, it.next());
+                const r = try float(it.next());
+                if (!(r >= 0 and r <= 1)) return error.BadFacts;
+                try bans.append(arena, .{ .champion = champion, .rate = @floatCast(r) });
             }
         }
         f.damage = damage.items;
         f.lean = lean.items;
+        f.bans = bans.items;
         return f;
     }
 
@@ -152,12 +179,23 @@ pub const Facts = struct {
     }
 };
 
+/// The patch's games and how many each champion was banned in
+pub const BanCounts = struct {
+    games: u32,
+    ids: []const u32,
+    banned: []const u32,
+};
+
 /// `magic` indexed as `ids` (null: unsampled)
-pub fn write(w: *std.Io.Writer, patch: []const u8, ids: []const u32, magic_share: []const ?f32, mix: [mixes]Counts, lean: []const LeanRow) !void {
+pub fn write(w: *std.Io.Writer, patch: []const u8, ids: []const u32, magic_share: []const ?f32, mix: [mixes]Counts, lean: []const LeanRow, bans: BanCounts) !void {
     try w.print("{s}\t{d}\t{s}\n", .{ magic, version, patch });
     for (ids, magic_share) |id, m| if (m) |x| try w.print("damage\t{d}\t{d:.3}\n", .{ id, x });
     for (mix, 0..) |m, b| try w.print("mix\t{d}\t{d}\t{d}\n", .{ b, m.games, m.wins });
     for (lean) |r| try w.print("lean\t{d}\t{t}\t{d}\t{d:.0}\t{d:.0}\t{d:.2}\t{d:.2}\n", .{ r.champion, r.role, r.games, r.gold, r.gold_sd, r.win, r.win_sd });
+    if (bans.games == 0) return;
+    try w.print("games\t{d}\n", .{bans.games});
+    const games: f64 = @floatFromInt(bans.games);
+    for (bans.ids, bans.banned) |id, n| if (n > 0) try w.print("ban\t{d}\t{d:.4}\n", .{ id, @min(1, @as(f64, @floatFromInt(n)) / games) });
 }
 
 const testing = std.testing;
@@ -168,7 +206,8 @@ test "facts file round trip, unknown kinds skipped" {
     const arena = arena_state.allocator();
     const rows = [_]LeanRow{.{ .champion = 119, .role = .bottom, .games = 900, .gold = 900, .gold_sd = 100, .win = -8, .win_sd = 1.5 }};
     var aw: std.Io.Writer.Allocating = .init(arena);
-    try write(&aw.writer, "16.21", &.{ 1, 2, 3 }, &.{ 0.9, null, 0.05 }, .{ .{ .games = 10, .wins = 4 }, .{ .games = 20, .wins = 10 }, .{ .games = 5, .wins = 2 } }, &rows);
+    const bans: BanCounts = .{ .games = 4000, .ids = &.{ 1, 2, 3 }, .banned = &.{ 1000, 0, 4 } };
+    try write(&aw.writer, "16.21", &.{ 1, 2, 3 }, &.{ 0.9, null, 0.05 }, .{ .{ .games = 10, .wins = 4 }, .{ .games = 20, .wins = 10 }, .{ .games = 5, .wins = 2 } }, &rows, bans);
     try aw.writer.writeAll("someday\t1\t2\n");
     const f = try Facts.parse(arena, aw.written());
     try testing.expectEqualStrings("16.21", f.patch);
@@ -177,6 +216,14 @@ test "facts file round trip, unknown kinds skipped" {
     try testing.expectEqual(20, f.mix[1].games);
     try testing.expectEqual(Lean.early, f.leanOf(119, .bottom).?.lean());
     try testing.expectEqual(null, f.leanOf(119, .top));
+    try testing.expectApproxEqAbs(0.25, f.banRate(1).?, 1e-6);
+    try testing.expectEqual(0, f.banRate(2).?);
+    try testing.expectApproxEqAbs(0.001, f.banRate(3).?, 1e-6);
+    // A patch's first hours: too few games for any rate
+    var early = f;
+    early.games = ban_min_games - 1;
+    try testing.expectEqual(null, early.banRate(1));
+    try testing.expectError(error.BadFacts, Facts.parse(arena, "meiolol-champs\t1\t16.21\nban\t1\t1.5\n"));
     try testing.expectError(error.BadFacts, Facts.parse(arena, "meiolol-champs\t1\t16.21\ndamage\t1\t1.5\n"));
     try testing.expectError(error.UnsupportedVersion, Facts.parse(arena, "meiolol-champs\t2\t16.21\n"));
 }
@@ -190,6 +237,6 @@ fn fuzzParse(valid: []const u8, s: *testing.Smith) !void {
 }
 
 test "fuzz: a damaged facts file is parsed or refused" {
-    const valid: []const u8 = "meiolol-champs\t1\t16.21\ndamage\t1\t0.900\nmix\t0\t10\t4\nlean\t119\tbottom\t900\t900\t100\t-8.00\t1.50\n";
+    const valid: []const u8 = "meiolol-champs\t1\t16.21\ndamage\t1\t0.900\nmix\t0\t10\t4\nlean\t119\tbottom\t900\t900\t100\t-8.00\t1.50\ngames\t4000\nban\t1\t0.2500\n";
     try testing.fuzz(valid, fuzzParse, .{});
 }

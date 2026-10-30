@@ -84,8 +84,9 @@ file and packed rows: docs/architecture.md.
   dvui pinned to PR #1012, lazy so the box never fetches it). Reads the newest
   stats-*.bin and recent-curves.bin (else curves-<patch>.bin) from data/export or next
   to the exe (src/datafiles.zig, shared with `meiolol-app`), and champ-facts.tsv when
-  there (core/champfacts.zig: damage split, team mix tally and early or late leans, which
-  the site's shared view writes as data/champ-facts.tsv; the comp view's, src/comp.zig)
+  there (core/champfacts.zig: damage split, team mix tally, early or late leans and the
+  patch's ban rates, which the site's shared view writes as data/champ-facts.tsv; the
+  comp view's, src/comp.zig, and the ban options')
 - A detached poller thread does what `watch` does once a second and publishes a
   ui.Status (with the lane card) under a mutex, waking the window with a WM_NULL; the
   UI thread only draws, and sleeps between messages (own main loop: dvui's dx11 App

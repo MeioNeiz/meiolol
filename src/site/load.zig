@@ -598,12 +598,20 @@ fn addFiles(site: *Site) !void {
 }
 
 /// The desktop's comp view facts (core/champfacts.zig): Learn's damage split and mix
-/// tally, and the lean file's rows when there is one
+/// tally, the lean file's rows when there is one, and the view's ban counts (the ban
+/// options': the desktop's stats file is another view's and has none)
 fn champFacts(site: *const Site, facts: learn.Facts) ![]const u8 {
     const magic = try site.arena.alloc(?f32, facts.champs.len);
     for (magic, facts.champs) |*m, ch| m.* = ch.magic;
+    const ids = try site.arena.alloc(u32, site.champs.len);
+    const banned = try site.arena.alloc(u32, site.champs.len);
+    for (ids, banned, site.champs) |*i, *b, ch| {
+        i.* = ch.id;
+        b.* = ch.banned;
+    }
+    const bans: core.champfacts.BanCounts = .{ .games = site.games, .ids = ids, .banned = banned };
     var aw: Writer.Allocating = .init(site.arena);
-    try core.champfacts.write(&aw.writer, site.patch, site.stats.ids[0..facts.champs.len], magic, facts.mix, if (site.lean) |l| l.rows else &.{});
+    try core.champfacts.write(&aw.writer, site.patch, site.stats.ids[0..facts.champs.len], magic, facts.mix, if (site.lean) |l| l.rows else &.{}, bans);
     return aw.written();
 }
 

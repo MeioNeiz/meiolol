@@ -327,11 +327,12 @@ test "fixture games to stats, curves and the website" {
         try testing.expect(helper.fitted_bytes != null);
     }
     // The desktop's comp view facts: the lean file's rows, a mix tally (damage split from
-    // raw JSON the fixture may lack)
+    // raw JSON the fixture may lack), the ban options' ban rates
     {
         const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/champ-facts.tsv" }), arena, .limited(1 << 20));
         const facts = try core.champfacts.Facts.parse(arena, bytes);
         try testing.expectEqual(games, facts.leanOf(122, .top).?.games);
+        try testing.expect(facts.games > 0 and facts.bans.len > 0);
         try testing.expectEqualStrings("15.13", facts.patch);
     }
     // Pool grid: a lanes file per champion and view, the champion page's lane opponents

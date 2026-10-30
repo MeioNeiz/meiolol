@@ -114,8 +114,9 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   never shows, so nothing to do there; check ban hovers in a real capture (APP1)
 - APP5 Ban options: first pass done (board.zig: ban impact in roles the enemy hasn't
   filled, never an ally's hover, my lane's best two first while my opponent is unknown;
-  the desktop stats file has no ban counts, so impact is per all games). Left: ban
-  counts in the desktop's files; private adds pools where names are visible
+  per games where it was available, by champ-facts.tsv's ban rates from the current
+  patch, per all games under 2,000 patch games). Left: private adds pools where names
+  are visible
 - APP6 After picks: comp view, first pass done (both editions; comp.zig,
   desktop/comp.zig): once all ten are locked, above the lane panel, each team's damage
   split bar and mix (and "teams this one-sided win less often" when Learn's tally is 2

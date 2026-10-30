@@ -81,8 +81,9 @@ pub const max_ban_options = 5;
 pub const my_lane_first = 2;
 pub const max_ideas = 3;
 
-/// Allocates in `arena`. `card` is the lane card already built for the same select
-pub fn build(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, cs: session.ChampSelect, card: ?*const lanecard.Card) !Board {
+/// Allocates in `arena`. `card` is the lane card already built for the same select;
+/// `facts` give the ban options their ban rates
+pub fn build(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, cs: session.ChampSelect, card: ?*const lanecard.Card, facts: ?*const core.champfacts.Facts) !Board {
     const allies = try arena.alloc(Seat, cs.my_team.len);
     for (allies, cs.my_team) |*s, sl| s.* = seat(stats, opts, sl, sl.role, false);
     const enemies = try arena.alloc(Seat, cs.their_team.len);
@@ -102,7 +103,7 @@ pub fn build(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, 
         .turn = cs.my_turn,
         .stage = stage(cs.phase),
         .mode = if (card) |c| modeOf(c) else .blind,
-        .ban_options = if (cs.bans_open) try banOptions(arena, stats, cs, enemies, card) else &.{},
+        .ban_options = if (cs.bans_open) try banOptions(arena, stats, cs, enemies, card, facts) else &.{},
         .draft = draft(stats, opts, allies, enemies),
     };
 }
@@ -193,10 +194,10 @@ fn stage(phase: []const u8) []const u8 {
 
 /// Champions the enemy may still pick, by ban impact in a role they have not filled;
 /// my lane's best `my_lane_first` lead while my opponent is unknown (in bans they always
-/// are); never one of the lane card's options. The
-/// desktop stats file has no ban counts, so impact is per 10,000 games of all, not of
-/// games where it was available
-fn banOptions(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSelect, enemies: []const Seat, card: ?*const lanecard.Card) ![]const BanOption {
+/// are); never one of the lane card's options. Impact is per 10,000 games where the
+/// champion was available, by the facts' ban rate (the current patch's: the stats file
+/// has no bans); without one, per 10,000 games of all
+fn banOptions(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSelect, enemies: []const Seat, card: ?*const lanecard.Card, facts: ?*const core.champfacts.Facts) ![]const BanOption {
     const my_role = if (card) |c| c.role else cs.my_role;
     const mine: []const lanecard.Option = if (card) |c| c.options else &.{};
     var open: [Role.count]bool = @splat(true);
@@ -220,7 +221,9 @@ fn banOptions(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSe
             for (cs.my_team) |sl| if (sl.champion == id) continue :candidates;
             for (mine) |o| if (o.champion == id) continue :candidates;
             for (cs.their_team) |sl| if (sl.champion == id and sl.state == .locked) continue :candidates;
-            const impact = prior.score(cr.wins, cr.games, 0, role_games);
+            const rate: f64 = if (facts) |f| f.banRate(id) orelse 0 else 0;
+            const banned: u64 = @intFromFloat(@round(rate * @as(f64, @floatFromInt(role_games))));
+            const impact = prior.score(cr.wins, cr.games, banned, role_games);
             if (impact <= 0) continue;
             try list.append(arena, .{
                 .champion = id,
@@ -324,7 +327,7 @@ test "board: seats, guessed enemy roles, ideas, bans, draft" {
         .their_team = &theirs,
         .my_turn = .pick,
     };
-    const b = try build(arena, st, cardscenes.test_opts, cs, null);
+    const b = try build(arena, st, cardscenes.test_opts, cs, null, null);
 
     try testing.expectEqualStrings("Picks and bans", b.stage);
     try testing.expectEqual(Role.top, b.enemies[0].role.?);
@@ -345,7 +348,7 @@ test "board: seats, guessed enemy roles, ideas, bans, draft" {
     var bans = cs;
     bans.enemies = &.{};
     bans.their_team = &empty;
-    const opening = (try build(arena, st, cardscenes.test_opts, bans, null)).ban_options;
+    const opening = (try build(arena, st, cardscenes.test_opts, bans, null, null)).ban_options;
     try testing.expectEqual(max_ban_options, opening.len);
     // The fixture's one middle option leads though others have more impact
     var lead: usize = 0;
@@ -354,6 +357,17 @@ test "board: seats, guessed enemy roles, ideas, bans, draft" {
     try testing.expect(opening[0].impact < opening[lead].impact);
     const rest = opening[lead..];
     for (rest[1..], rest[0 .. rest.len - 1]) |o, before| try testing.expect(o.impact <= before.impact);
+    // Banned in half the patch's games: picked in twice the share of games it was there
+    const last = opening[opening.len - 1];
+    var facts: core.champfacts.Facts = .{ .games = core.champfacts.ban_min_games, .bans = &.{.{ .champion = last.champion, .rate = 0.5 }} };
+    const rated = (try build(arena, st, cardscenes.test_opts, bans, null, &facts)).ban_options;
+    const again = for (rated) |o| {
+        if (o.champion == last.champion) break o;
+    } else return error.TestExpectedEqual;
+    try testing.expectApproxEqRel(2 * last.impact, again.impact, 1e-3);
+    // Too few games on the patch: as without facts
+    facts.games -= 1;
+    try testing.expectEqualDeep(opening, (try build(arena, st, cardscenes.test_opts, bans, null, &facts)).ban_options);
     // Never one of my own options; none once the bans are in
     const card: lanecard.Card = .{
         .role = .middle,
@@ -365,11 +379,11 @@ test "board: seats, guessed enemy roles, ideas, bans, draft" {
         .options = &.{.{ .champion = b.ban_options[0].champion, .mastery = 0, .lane = null, .reasons = &.{} }},
         .period = "",
     };
-    const with_card = try build(arena, st, cardscenes.test_opts, cs, &card);
+    const with_card = try build(arena, st, cardscenes.test_opts, cs, &card, null);
     for (with_card.ban_options) |o| try testing.expect(o.champion != b.ban_options[0].champion);
     var done = cs;
     done.bans_open = false;
-    try testing.expectEqual(0, (try build(arena, st, cardscenes.test_opts, done, null)).ban_options.len);
+    try testing.expectEqual(0, (try build(arena, st, cardscenes.test_opts, done, null, null)).ban_options.len);
     // Darius into Garen and Ahri into Syndra: the planted matchups cancel roughly
     const d = b.draft.?;
     try testing.expectEqual(.{ 2, 2 }, d.picks);

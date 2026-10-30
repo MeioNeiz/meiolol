@@ -620,7 +620,7 @@ const Poller = struct {
             .expertise = if (by_mastery) .fitted else null,
         };
         sel.card = try lanecard.build(arena, mine);
-        sel.board = try board.build(arena, &data.stats, .{}, cs, &sel.card);
+        sel.board = try board.build(arena, &data.stats, .{}, cs, &sel.card, if (data.facts) |*f| f else null);
         if (shown < core.Role.count) if (try board.allyLane(arena, mine, cs, @fromBackingInt(@intCast(shown)))) |in| {
             sel.card = try lanecard.build(arena, in);
             sel.ally = true;
