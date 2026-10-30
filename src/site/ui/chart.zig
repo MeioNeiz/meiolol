@@ -367,6 +367,51 @@ pub const Press = struct {
     }
 };
 
+/// A reading tip's pointer, never a range: hover or a drag reads where the pointer is, a
+/// tap keeps the reading after the pointer leaves (a phone lifts the finger), and the
+/// caller drops it on a tap at the kept reading (there is no tap outside to dismiss it)
+pub const Reading = struct {
+    press: Press = .{},
+    /// Where a tap kept the reading
+    kept: ?f32 = null,
+    /// `kept` as the press began
+    was: ?f32 = null,
+
+    pub const Out = union(enum) {
+        none,
+        /// Read at f
+        at: f32,
+        /// A tap at f, kept; `was` the reading kept before it, if any
+        tap: struct { f: f32, was: ?f32 },
+        /// The tip goes
+        clear,
+    };
+
+    pub fn pointer(r: *Reading, ev: *tree.Event) Out {
+        if (ev.kind == .pointerdown) r.was = r.kept;
+        switch (r.press.pointer(ev)) {
+            .none => return .none,
+            .hover => |f| {
+                r.kept = null;
+                return .{ .at = f };
+            },
+            .range => {
+                r.kept = null;
+                return .{ .at = std.math.clamp(ev.x / @max(1, ev.w), 0, 1) };
+            },
+            .tap => |f| {
+                r.kept = f;
+                return .{ .tap = .{ .f = f, .was = r.was } };
+            },
+            .leave => return if (r.kept == null) .clear else .none,
+        }
+    }
+
+    pub fn drop(r: *Reading) void {
+        r.kept = null;
+    }
+};
+
 pub const css =
     \\@layer components {
     \\  .c-chart { container-type: inline-size; position: relative; display: flex; flex-direction: column; margin: 0;

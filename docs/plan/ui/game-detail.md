@@ -85,7 +85,7 @@ build.
 
 Phone 390 (a minute is ~8 px, too narrow for portraits): the fight strip keeps fights
 and epic monsters only, deaths become 3 px ticks on the edges (taller for more deaths).
-The same compact form is home's read-only review.
+The same compact form is home's review, with the reading tip only (no range or moment).
 
 Phone 390: game strip (scrolls), header in two rows (portraits, KDA and result; then the
 four figure cells as a 4-up grid, build on a third row), graph full width at 200 px with

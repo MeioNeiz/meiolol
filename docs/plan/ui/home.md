@@ -42,7 +42,8 @@ Desktop 1280, a 12-column grid under the site header:
     - Learn: today's lesson title and a progress ring of the five
 - Right (8/12): the review (`game-header`, `timeline-graph` in its compact form: the
   fight strip above and deaths as ticks on the plot's edges, game-detail.md; the
-  `stat-cell` row; the game-detail kit, read-only, no inspector) of:
+  `stat-cell` row; the game-detail kit with a reading tip only: no range, moment or
+  inspector) of:
   - the visitor's newest game when this device has looked a Riot ID up (their player
     bar compact above it: Riot ID, record, form strip), with "Open" to the game
   - otherwise the example, with the role switch (exists) as `segmented`, and its
@@ -79,7 +80,7 @@ on the page, ~150 in the first screen.
   instead offers the champion (the header search's logic, shared `search` component)
 - Review on home: the stat cells are live (press a cell, the graph shows it); the
   graph shows the reading under the pointer or a tap, no range drag (that is the game
-  page's); "Open" goes to the full game. The cells sit boxed under a rule, apart from
+  page's); a tap keeps it, a second tap there drops it; "Open" goes to the full game. The cells sit boxed under a rule, apart from
   the axis (loose under it they read as moments on the timeline). The graph grows to
   the side column's height, so the card has no empty band
 - Example role switch (exists)
