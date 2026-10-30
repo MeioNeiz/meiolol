@@ -65,6 +65,7 @@ pub const lane = @import("lane.zig");
 pub const timeline = @import("timeline.zig");
 pub const gamedata = @import("gamedata.zig");
 pub const testerdata = @import("testerdata.zig");
+pub const testerlane = @import("testerlane.zig");
 pub const testerpage = @import("testerpage.zig");
 pub const testercand = @import("testercand.zig");
 pub const modelbadge = @import("modelbadge.zig");

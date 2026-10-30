@@ -31,7 +31,8 @@ src/
   draftfile.zig      the admin Draft tester's model file: shapes, writer (shared with
                      lab/draft.zig; docs/model.md "Draft model file"); its scorer is
                      core/draftscore.zig, which ui.wasm scores the tester page with
-  testerbin.zig      `meiolol tester-bin`: that file as draft-model.bin (ui/testerdata.zig)
+  testerbin.zig      `meiolol tester-bin`: that file and lane-model.json as draft-model.bin
+                     and lane-model.bin (ui/testerdata.zig, ui/testerlane.zig)
   draftmodel.zig     `meiolol draft-model`: the shipped model as that file, daily on the box
   lanefile.zig       the tester's lane model file, as draftfile.zig (lab/lane.zig shares it)
   lanemodel.zig      `meiolol lane-model`: lab candidate team2 (imported as a module,

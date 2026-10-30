@@ -1110,7 +1110,11 @@ test "fixture games to the Draft tester's draft and lane models" {
     try testing.expectEqual(10, lane.champ.len);
     try testing.expectEqual(10, lane.pairs.len);
     for (lane.champ) |t| try testing.expectEqual(100, t.n);
-    _ = try tmp.dir.readFileAlloc(io, "tester/lane-ref.json", arena, .limited(1 << 20));
+    // The new tester page's lane file, checked against lane-ref.json by ui.wasm's scorer
+    try testerbin.convert(arena, io, dir, &log.writer);
+    const lane_bin = try ui.testerlane.Model.decode(arena, try tmp.dir.readFileAlloc(io, "tester/lane-model.bin", arena, .limited(16 << 20)));
+    try testing.expectEqual(10, lane_bin.champ.len);
+    try testing.expect((try ui.testerlane.Scorer.init(arena, &lane_bin)).check().ok());
 }
 
 test "curves, lean, lane-model and builds: the same files with digests, without, old ones" {

@@ -198,17 +198,17 @@ model() {
         fi
     done
     [[ "$(cat "$cache/from" 2>/dev/null)" == "$pick" ]] || return 0
-    # The new tester page reads draft-model.bin, made by this checkout's build. Tried
+    # The new tester page reads <kind>-model.bin, made by this checkout's build. Tried
     # once per copy: no-bin holds why it failed (delete it to try again)
-    if [[ $kind == draft && ! -f "$cache/draft-model.bin" && ! -f "$cache/no-bin" ]]; then
+    if [[ ! -f "$cache/$kind-model.bin" && ! -f "$cache/no-bin" ]]; then
         if ! "$(meiolol_bin)" tester-bin "$cache" > "$cache/no-bin" 2>&1; then
-            echo "lab-push: no draft-model.bin for $pick: $(tail -1 "$cache/no-bin")" >&2
+            echo "lab-push: no $kind-model.bin for $pick: $(tail -1 "$cache/no-bin")" >&2
         else
             rm -f "$cache/no-bin"
         fi
     fi
     cp "$cache/$kind"-*.json "$out/"
-    [[ $kind == draft && -f "$cache/draft-model.bin" ]] && cp "$cache/draft-model.bin" "$out/"
+    [[ -f "$cache/$kind-model.bin" ]] && cp "$cache/$kind-model.bin" "$out/"
     return 0
 }
 

@@ -151,7 +151,7 @@ pub const Meta = struct {
     dev: []const DevOut,
 };
 
-const ModelFile = struct {
+pub const ModelFile = struct {
     format: []const u8 = "meiolol-lane-model",
     version: u32 = 1,
     meta: Meta,
@@ -170,7 +170,7 @@ const ModelFile = struct {
     pairs: []const PairRow,
 };
 
-const PairRow = struct { u32, u32, u8, u32, f64, f64, f64, f64, f64, f64, f64, f64 };
+pub const PairRow = struct { u32, u32, u8, u32, f64, f64, f64, f64, f64, f64, f64, f64 };
 
 const pair_columns = blk: {
     var out: [4 + 2 * n_lane][]const u8 = undefined;
@@ -189,7 +189,7 @@ fn pairRows(arena: std.mem.Allocator, terms: []const Term) ![]const PairRow {
     return out;
 }
 
-const Ref = struct {
+pub const Ref = struct {
     label: []const u8,
     role: u8,
     champion: u32,
@@ -201,7 +201,7 @@ const Ref = struct {
     pair_games: u32,
 };
 
-const RefFile = struct {
+pub const RefFile = struct {
     format: []const u8 = "meiolol-lane-ref",
     what: []const u8 = "Scorer.value with others: intercept + others + champ + enemy + pair per outcome; lo/hi = value -/+ 1.96 sqrt(sum of the present terms' sd^2)",
     refs: []const Ref,
