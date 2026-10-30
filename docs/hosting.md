@@ -134,6 +134,9 @@ a 301 to it.
   the parts still current and loads only the changed ones; a write running at the deploy
   finishes first and the deploy's write reuses its unchanged parts (stopping it costs
   far more). Kept parts refresh at the next upload's full write
+- A deploy's round puts its views write before a due curves pass, and the next round
+  runs it at once; curves overdue by more than an interval (back-to-back deploys) run in
+  the forced round too (deploy/web-loop.sh curves_due)
 - A full write reads only new, REPLACEd or newly timelined games from data/partials
   (docs/arch-site.md "Views partials"); above ~150k games to read it reads whole
   tables instead. Typical: ~320-470 s, ~1,040 s for a first build over all games. Learn

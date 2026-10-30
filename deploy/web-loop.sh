@@ -53,12 +53,12 @@
 # disk honours only under mq-deadline or bfq (not `none`).
 # A deploy (deploy/box.sh web start) sends SIGUSR1 rather than restarting, unless this
 # script, its unit or the contact changed (data/web-loop.sum). Either way the next round
-# (at once) builds, uploads and writes the views file with the new binary before any
-# curves pass; a daily job already running carries on beside it. That write keeps the
-# parts of the old file the new binary would make the same way (`--reuse`: same types
-# and sources, src/site/root.zig partKeys) and loads only the rest, so a deploy that
-# changed one part waits for that part alone; the next upload's write refreshes every
-# part (data/views.full: the last such write). A views write running when a deploy
+# (at once) builds, uploads and writes the views file with the new binary before a due
+# curves pass, which the round after runs at once (curves_due); a daily job already
+# running carries on beside it. That write keeps the parts of the old file the new
+# binary would make the same way (`--reuse`: same types and sources, src/site/root.zig
+# partKeys) and loads only the rest, so a deploy that changed one part waits for that
+# part alone; the next upload's write refreshes every part (data/views.full: the last such write). A views write running when a deploy
 # changes the format finishes first: its parts the deploy left alone keep their keys, so
 # the deploy's --reuse write takes them from it. Stopping it (until 17 Oct) threw that
 # work away: two deploys that day cost a 10 and a 72 min write, and the swap waited 1 h 43
@@ -298,6 +298,18 @@ views_parts() {
     done
     echo "loaded again: ${loaded:-none}; kept: ${kept:-none}"
 }
+# A new patch or curves format can't wait. A deploy's or start's round leaves a due pass
+# to the next round (held_curves: that round follows at once), so the views file comes
+# first. Overdue by more than an interval, a deploy burst (back-to-back forced rounds)
+# held it back, and it runs: else a busy afternoon of deploys starves the curves
+curves_due() {
+    local age=$(( now - last_curves ))
+    [[ "$patch" != "$curves_patch" ]] && return 0
+    (( ! forced )) && { (( age >= interval )); return; }
+    (( age >= 2 * interval )) && return 0
+    (( age >= interval )) && held_curves=1
+    return 1
+}
 round_sha=''
 # meio.lol/private's last answer, so a held private upload is logged once
 private_gate=''
@@ -407,9 +419,8 @@ while true; do
     # Digests of the timelines stored since the last round, for this round's curves and
     # daily jobs (a game without one is read in full, same output)
     batch bin/meiolol digest 2>&1 || true
-    # A deploy's or start's round leaves a due pass to the next round, so the views file
-    # comes first; a new patch or curves format can't wait
-    if [[ "$patch" != "$curves_patch" ]] || { (( ! forced )) && (( now - last_curves >= interval )); }; then
+    held_curves=0
+    if curves_due; then
         # Fails harmlessly (logged) until there are timelines
         if batch bin/meiolol curves --site ${patch:+--patch "$patch"} 2>&1; then fresh_curves=1; fi
         [[ -n "$curves_patch" && -n "$patch" && "$patch" != "$curves_patch" ]] && prev_patch=$curves_patch
@@ -496,9 +507,10 @@ while true; do
         private_gate=$gate
     fi
     run_daily "$(date +%s)" || true
-    # Hourly; SIGUSR1 interrupts the wait, and one during the round skips it. A daily job
-    # longer than the hour holds the next round back rather than run beside it
-    if (( ! force )); then
+    # Hourly; SIGUSR1 interrupts the wait, and one during the round or a held curves pass
+    # skips it. A daily job longer than the hour holds the next round back rather than run
+    # beside it
+    if (( ! force && ! held_curves )); then
         sleep 3600 &
         wait $!
         kill $! 2> /dev/null
