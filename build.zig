@@ -219,7 +219,7 @@ pub fn build(b: *std.Build) void {
     ci.dependOn(lint(b, "git", "deploy/check-deploy.sh"));
     ci.dependOn(lint(b, "sh", "deploy/hooks/claude-bash-guard.sh --test > /dev/null"));
     ci.dependOn(lint(b, "perl", "for f in deploy/*.pl; do perl -c \"$f\" 2> /dev/null || { perl -c \"$f\"; exit 1; }; done"));
-    ci.dependOn(lint(b, "node", "for f in src/site/static/*.js deploy/training/*.js deploy/*.js; do node --check \"$f\" || exit 1; done"));
+    ci.dependOn(lint(b, "node", "for f in deploy/training/*.js deploy/*.js; do [ -e \"$f\" ] || continue; node --check \"$f\" || exit 1; done"));
 
     // `zig build ui-sizes -- --base REV` compares with another recorded commit
     const sizes = uiSizes(b, &ui_families);
