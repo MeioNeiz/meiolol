@@ -57,7 +57,7 @@ pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
         \\<link rel="stylesheet" href="/{s}">
         \\<link rel="stylesheet" href="/private/notes.css">
         \\</head>
-        \\<body>
+        \\<body class="ui">
         \\
     , .{style.file.path});
     try ui.html.write(&t, n, w);

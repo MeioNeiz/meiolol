@@ -69,8 +69,8 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
         \\<link rel="stylesheet" href="/{s}">
         \\<link rel="stylesheet" href="/admin/{s}">
         \\</head>
-        \\<body>
-        \\<main class="wrap">
+        \\<body class="ui">
+        \\<main class="c-sitemain">
         \\
     , .{ style.file.path, css_file.path });
     try ui.html.write(&t, n, w);
