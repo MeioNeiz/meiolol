@@ -35,7 +35,7 @@ pub const Spec = struct {
     since_ms: i64,
     platforms: []const []const u8,
 
-    fn takes(s: Spec, patch: []const u8, start: i64, platform: []const u8) bool {
+    pub fn takes(s: Spec, patch: []const u8, start: i64, platform: []const u8) bool {
         if (start < s.since_ms) return false;
         if (s.chosen.len > 0 and !has(s.chosen, patch)) return false;
         return has(s.platforms, platform);
@@ -114,10 +114,7 @@ pub fn buildMany(
     try q.bind(args);
     // tier is the rank snapshot stored with the match (players is emptied on a rekey);
     // mastery is a later snapshot of each player, absent after a rekey
-    var players = try db.prepare(
-        \\SELECT slot, team_id, position, champion_id, tier, puuid
-        \\FROM participants WHERE match_id = ?
-    );
+    var players = try db.prepare("SELECT " ++ participant_columns ++ " FROM participants WHERE match_id = ?");
     defer players.deinit();
     var experienced: Experienced = try .load(gpa, db);
     defer experienced.deinit(gpa);
@@ -167,7 +164,7 @@ pub fn buildMany(
         };
         for (Role.all) |r| {
             const l = lane(t, game, r, blue_won, legendaries);
-            for (takers.items) |i| try builders[i].addLane(l);
+            for (takers.items) |i| try builders[i].addLaneOf(l, gameHash(m.match_id));
         }
         for (takers.items) |i| {
             builders[i].addGame();
@@ -185,14 +182,20 @@ pub const Game = struct {
     experienced: [2][5]bool = @splat(@splat(false)),
 };
 
+/// Lane.game: which split half a game's lanes fall in (curvefit.Half), the same whatever
+/// window or order the game is read in
+pub fn gameHash(match_id: []const u8) u32 {
+    return @truncate(std.hash.Wyhash.hash(0, match_id));
+}
+
 /// (puuid, champion) pairs with at least curvesfile.experienced_points, from one pass over
 /// mastery: a lookup per player per game was ~4.8M random reads, 45-60 min of the box's
 /// curves pass (15 Oct). Keyed by a hash of both, so a collision (odds ~1e-7 at 2M
 /// players) would mark one player wrongly
-const Experienced = struct {
+pub const Experienced = struct {
     set: std.AutoHashMapUnmanaged(u64, void) = .empty,
 
-    fn load(gpa: std.mem.Allocator, db: store.Db) !Experienced {
+    pub fn load(gpa: std.mem.Allocator, db: store.Db) !Experienced {
         var e: Experienced = .{};
         errdefer e.deinit(gpa);
         var q = try db.prepare("SELECT puuid, data, fetched_at FROM mastery");
@@ -211,7 +214,7 @@ const Experienced = struct {
         return e;
     }
 
-    fn deinit(e: *Experienced, gpa: std.mem.Allocator) void {
+    pub fn deinit(e: *Experienced, gpa: std.mem.Allocator) void {
         e.set.deinit(gpa);
     }
 
@@ -224,39 +227,70 @@ const Experienced = struct {
     }
 };
 
-/// Null unless every position is filled exactly once per side
+/// participants columns Participant reads
+pub const participant_columns = "slot, team_id, position, champion_id, tier, puuid";
+
+/// A participants row; its strings live until the statement's next step
+pub const Participant = struct {
+    slot: i64,
+    team: i64,
+    position: []const u8,
+    champion: u32,
+    tier: ?[]const u8,
+    puuid: ?[]const u8,
+};
+
+/// What gameOf needs of a participant, without the row's strings
+pub const Seat = struct {
+    slot: i64,
+    blue: bool,
+    role: ?Role,
+    champion: u32,
+    rank: ?usize,
+    experienced: bool,
+};
+
+pub fn seatOf(p: Participant, experienced: *const Experienced) Seat {
+    return .{
+        .slot = p.slot,
+        .blue = p.team == 100,
+        .role = Role.fromLcu(p.position),
+        .champion = p.champion,
+        .rank = if (p.tier) |t| curvesfile.tierRank(t) else null,
+        .experienced = if (p.puuid) |id| experienced.has(id, p.champion) else false,
+    };
+}
+
 fn readGame(players: *store.sqlite.Stmt, experienced: *const Experienced) !?Game {
+    var seats: [10]Seat = undefined;
+    var n: usize = 0;
+    while (try players.step()) : (n += 1) {
+        if (n == seats.len) return null;
+        seats[n] = seatOf(players.row(Participant), experienced);
+    }
+    return gameOf(seats[0..n]);
+}
+
+/// Null unless there are ten players and every position is filled exactly once per side
+pub fn gameOf(seats: []const Seat) ?Game {
+    if (seats.len != 10) return null;
     var g: Game = .{ .ids = undefined, .champions = undefined, .bracket = null };
     var seen: [2][5]bool = @splat(@splat(false));
     var ranks: [10]usize = undefined;
     var n_ranks: usize = 0;
-    var rows: usize = 0;
-    while (try players.step()) : (rows += 1) {
-        const p = players.row(struct {
-            slot: i64,
-            team: i64,
-            position: []const u8,
-            champion: u32,
-            tier: ?[]const u8,
-            puuid: ?[]const u8,
-        });
-        const side: usize = if (p.team == 100) 0 else 1;
-        const r = @backingInt(Role.fromLcu(p.position) orelse return null);
-        const slot = p.slot;
-        if (seen[side][r] or slot < 0 or slot >= timeline.max_participants) return null;
+    for (seats) |p| {
+        const side: usize = if (p.blue) 0 else 1;
+        const r = @backingInt(p.role orelse return null);
+        if (seen[side][r] or p.slot < 0 or p.slot >= timeline.max_participants) return null;
         seen[side][r] = true;
-        g.ids[side][r] = @intCast(slot + 1);
-        const champion = p.champion;
-        g.champions[side][r] = champion;
-        if (p.puuid) |id| g.experienced[side][r] = experienced.has(id, champion);
-        if (p.tier != null and n_ranks < ranks.len) {
-            if (curvesfile.tierRank(p.tier.?)) |rank| {
-                ranks[n_ranks] = rank;
-                n_ranks += 1;
-            }
+        g.ids[side][r] = @intCast(p.slot + 1);
+        g.champions[side][r] = p.champion;
+        g.experienced[side][r] = p.experienced;
+        if (p.rank) |rank| {
+            ranks[n_ranks] = rank;
+            n_ranks += 1;
         }
     }
-    if (rows != 10) return null;
     if (curvesfile.medianRank(ranks[0..n_ranks])) |rank| g.bracket = .ofRank(rank);
     return g;
 }

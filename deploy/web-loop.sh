@@ -19,9 +19,9 @@
 # lives in riot.txt beside bin/.
 # Lane curves are rebuilt every `interval` and when the patch changes, one file per site view (EUW
 # and every region, by last 30 days and current patch; the EUW patch file is also the
-# Your games service's), all four in one pass over the timelines (`meiolol curves
-# --site`); fresh site curves force an upload. The upload rules count EUW
-# games on the current patch only.
+# Your games service's), all four in one pass over the day cubes (`meiolol curves
+# --site`; data/cubes, a game's timeline decoded once); fresh site curves force an
+# upload. The upload rules count EUW games on the current patch only.
 # Daily, `meiolol eval` (docs/model.md) appends a line to data/eval-history.tsv (model
 # accuracy vs data volume) and leaves its report in data/eval-latest.md. Read-only on the
 # DB. One at a time with the admin page's Run eval (src/admin_api.zig): both flock

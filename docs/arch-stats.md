@@ -10,7 +10,9 @@ solo game with a timeline: by default every patch of the last --days (30) to
 data/export/recent-curves.bin (label "last 30 days"); with --patch, those patches to
 data/export/curves-<patch>.bin (the Your games service reads these per patch). `--site`
 (the web loop) writes the four files the site reads, EUW and every platform by last 30
-days and --patch, in one pass: each timeline is decoded once. Per lane
+days and --patch, in one pass over the day cubes (data/cubes, src/cubes.zig): a game's
+lanes are decoded from its timeline once, when its day is built, and a day's new or
+changed games each run after (timelines arrive up to 9 days late). Per lane
 matchup (role, champion pair), bracket (all, Iron-Silver, Gold-Emerald, Diamond+;
 median visible tier of the game's players, never MMR) and experience (all games, or a
 or b with 100k+ mastery): per minute 1..25 the raw p25/p50/p75 of gold, XP and CS (lane
@@ -51,7 +53,7 @@ sigma^2/tau^2 <= 100; estimate = baseline + n/(n+k) r. Brackets shrink toward th
 all-ranks curve and experienced curves toward their bracket's, tau^2 from each unit
 against the rest of its parent's games (the parent holds the unit's games). Then a
 Whittaker smoother (second differences) across minutes, its strength per role and
-metric picked by a split-half test (fit on half the games by game hash, score against
+metric picked by a split-half test (fit on half the games by match id hash, score against
 the other half's raw means; leave-one-minute-out would pick too little, as a curve's
 minutes share their games). The command logs per role and metric sd/tau/k at 5, 10, 14
 and 20 min, nested k, lambda and the split-half error of zero, baseline, raw, shrunk and
@@ -134,7 +136,8 @@ a full EUW patch (~400k) is a couple of minutes on a fast disk; on the micro the
 first run took ~7.5 ms a game (docs/backlog.md "Builds"). deploy/web-loop.sh runs
 `builds --site` daily and on a new patch: EUW and all regions, the current patch and
 the last 30 days (data/export/recent-builds.json, all-recent-builds.json; no matchups),
-from one pass over the timelines (builds.buildEach, a stats.Slice per file), in the
+from one pass over the day cubes (cubes.buildsFrom, a stats.Slice per file; picks
+decoded once, with Data Dragon of the game's own patch), in the
 background at nice 10 (log data/builds.log); the next site build picks them up. Names
 and icons come from the patch's Data Dragon, so an item removed since has none.
 

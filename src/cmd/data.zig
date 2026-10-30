@@ -9,6 +9,7 @@ const backup = @import("../backup.zig");
 const forget = @import("../forget.zig");
 const rekey = @import("../rekey.zig");
 const partials = @import("../partials.zig");
+const cubes = @import("../cubes.zig");
 const main = @import("../main.zig");
 const Cmd = main.Cmd;
 
@@ -113,6 +114,7 @@ pub fn cmdRebuild(c: *Cmd) !u8 {
     std.log.info("{d} matches rebuilt", .{try riot.match.rebuild(c.init.gpa, db)});
     std.log.info("{d} timelines gave gold columns", .{try riot.crawl.rebuildGold(c.init.gpa, db)});
     try partials.drop(c.init.gpa, c.init.io, try partials.dirIn(c.arena, c.data_dir));
+    try cubes.drop(c.init.gpa, c.init.io, try cubes.dirIn(c.arena, c.data_dir));
     return 0;
 }
 
@@ -341,6 +343,7 @@ pub fn cmdRestore(c: *Cmd) !u8 {
         c.data_dir, r.files, r.matches, r.timelines, r.removed.total(),
     });
     try partials.drop(c.init.gpa, c.init.io, try partials.dirIn(c.arena, c.data_dir));
+    try cubes.drop(c.init.gpa, c.init.io, try cubes.dirIn(c.arena, c.data_dir));
     return 0;
 }
 

@@ -81,22 +81,22 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   how much a pair's residual moves across a patch, compared with noise; if residuals
   hold, pairs gain most, as they are thinnest
 - E5 Lane curves: last patch's curve as a prior and patch-decay weights (curvefit's
-  "not yet" list), brackets as today. Percentiles from E7's histograms
+  "not yet" list), brackets as today. Percentiles exact, from E7's per-game records
 - E6 Builds: what people take is a fact, so shares stay raw. Meio shows the newest
   patch, falling back to the previous one for items and runes the patch left alone
   (builds.zig pick() does this for a whole build today); build win rates shrunk
-- E7 Storage: day cubes, so that every mode, rank and region is a sum. Per day,
-  platform, patch and rank bracket, mergeable aggregates: champion-role games, wins and
-  bans; enemy and ally pairs; curve sums and sums of squares, plus fixed-bin histograms
-  per minute for percentiles; build counts, per matchup too. A view becomes the sum of
-  its days: no rescans of games or timelines, no fourfold stats, curves and builds
-  passes, and memory per day instead of per window (today's per-matchup builds cost ~1.1
-  GB a builder, which is why the 30-day builds files have no matchups). The estimate
-  modes read the same cubes. Done when the views, curves --site and builds --site load
-  from cubes, with sizes measured and percentile error at the chosen bins checked
-  against exact percentiles. Start: partials.zig (already per-day game files, 1.2 GB on
-  the box), curves.zig, builds.zig, stats.zig Slice. Measure a day's cube against the
-  box's free disk and RAM before choosing the bins
+- E7 Storage: day cubes (src/cubes.zig, data/cubes/days/<unix day>.bin), so that
+  every mode, rank and region is a pass over its days. Per game records, not per-cell
+  sums (measured below): platform, patch, start, the five curves lanes and the ten
+  players' builds seats (participants row, picks, rank). Each game is decoded from its
+  timeline once and kept; a changed day (late timelines, up to 9 days) decodes only its
+  new and changed games. `curves --site` and `builds --site` read the days instead of
+  every timeline, with the same output. The views write stays on data/partials
+  (already per day, per game). Done when the views, curves --site and builds --site
+  load from cubes, with sizes measured. Unlocks: with the pass cheap, the 30-day builds
+  can count matchups (~1.1 GB a builder of C01's 62 GB), so the matchup builds strip
+  can follow the period picked, and builds by rank are a filter over the seats (E8).
+  Open: the box's step times after the deploy (data/web.log)
 - E8 Rank respected everywhere: with brackets in the cubes, filters.js sums every block
   by the rank picked (raw modes), and Meio uses E3-E5's bracket terms. Rank is the one
   at game start (rank_history, from 12 Oct), never the post-game one (learned.md Data
@@ -133,6 +133,40 @@ the default switch (E0b). E10 follows E7; E11 follows each estimate that passes 
 - Your games compares each game with EUW curves on that game's patch, whatever the
   player's region (labelled); the all-region curves for other regions
   would roughly double the service's mapped memory
+
+### E7 day cubes, measured
+
+Sums or records: on 15 Oct (all regions, timelined) 486,112 lanes fell in 86,445
+cells of (platform, patch, role, pair), 5.6 lanes a cell before bracket (4),
+experience (4) and split half (2): one or two lanes a cell. A cell's sums (games per
+minute, sum and sum of squares per metric and minute) are ~2 KB against ~200 B for a
+lane, and per-minute histograms more again, so a day of sums would be ~10x a day of
+records and percentiles would carry bin error. Records keep percentiles and medians
+exact; no bins to choose.
+
+Snapshot snap-20261023T2004Z on the Mac (M-series, ReleaseFast; 24 days, 1.6M games,
+1.23M with timelines in the 30 days), `--site --patch 16.21`:
+
+| | curves | builds |
+| --- | --: | --: |
+| before (every timeline) | 707 s, 4.5 GB | 652 s, 4.7 GB |
+| first run (builds 24 days) | 966 s, 4.3 GB | |
+| after (days built) | 157 s, 1.8 GB | 118 s, 2.7 GB |
+| 10 days changed (rewritten, 0 decoded) | 306 s, 1.5 GB | |
+
+- Files: 1.75 GB for 24 days, ~115 MB a day at 100k games (~1.1 KB a game); 30 days
+  ~3.5 GB of C01's 405 GB free. Days before the views' first game are dropped
+- Same output: builds patch files byte for byte; curves game counts equal, values
+  equal but the smoothing pick, as split halves now follow a hash of the match id
+  rather than the query order (22 of 60 picks moved one step on the grid, support gold
+  two)
+- After the change, curves is mostly the fit (~110 s of the 157); builds is decoding
+  every day's seats (~100 s)
+- Late timelines: in 6 h on C01, 11.5k timelines for today's games, 1.5k for
+  yesterday's, 0.9k down to 0.06k a day for days 2-9; a whole-day rebuild would redo
+  ~10 days a run, hence the in-place update: a changed 100k-game day is read and
+  written again in ~12 s (mostly the compression), plus ~0.5 ms a game decoded: ~2 min
+  of cubes a box run
 
 ### E2 baseline, raw 30 days vs raw patch
 

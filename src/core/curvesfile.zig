@@ -229,7 +229,8 @@ pub const Lane = struct {
     /// Mastery of at least experienced_points on their champion
     experienced_a: bool = false,
     experienced_b: bool = false,
-    /// The game's number in the builder (set by addLane), for split-half tests
+    /// The game, for split-half tests: its hash (curves.gameHash, the same in every
+    /// window) or its number in the builder (addLane)
     game: u32 = 0,
 
     /// The same lane from b's side
@@ -273,9 +274,15 @@ pub const Builder = struct {
         b.games += 1;
     }
 
+    /// The lane of the builder's next game (games numbered as added)
     pub fn addLane(b: *Builder, lane: Lane) !void {
+        try b.addLaneOf(lane, b.games);
+    }
+
+    /// The lane of game `game` (Lane.game)
+    pub fn addLaneOf(b: *Builder, lane: Lane, game: u32) !void {
         var l = if (lane.a > lane.b) lane.swapped() else lane;
-        l.game = b.games;
+        l.game = game;
         try b.lanes.append(b.gpa, l);
     }
 

@@ -135,12 +135,6 @@ pub const File = struct {
 
     pub const Shrink = struct { kind: Kind, k: f64, vs: f64 };
 
-    /// `kind`'s k in `builds`, or with `vs` in `matchups`
-    pub fn shrinkK(f: *const File, kind: Kind, vs: bool) ?f64 {
-        for (f.shrink) |x| if (x.kind == kind) return if (vs) x.vs else x.k;
-        return null;
-    }
-
     pub const Build = struct {
         champion: u32,
         role: Role,
@@ -856,11 +850,8 @@ pub fn buildEach(
     out: []Builder,
 ) !void {
     std.debug.assert(sets.len == out.len and sets.len <= max_sets);
-    for (out) |*b| b.* = .{ .gpa = gpa, .max_keys = @max(o.max_keys, 2) };
+    try initSets(gpa, o, sets, out);
     errdefer for (out) |*b| b.deinit();
-    if (o.min_matchup_games) |min| for (out, sets) |*b, set| {
-        if (set.matchups) try b.countMatchups(o.max_matchup_keys, min);
-    };
     // Every set's games and some more: those on a set's patches, or from the earliest
     // start of a set on any patch; each set then takes its own
     var patches: std.ArrayList([]const u8) = .empty;
@@ -875,9 +866,8 @@ pub fn buildEach(
     defer gpa.free(patch_json);
     const platform_json = try std.json.Stringify.valueAlloc(gpa, o.platforms, .{});
     defer gpa.free(platform_json);
-    const floor: ?usize = if (o.min_tier) |t| tierIndex(t) orelse return error.UnknownTier else null;
     var floors: [max_sets]?usize = undefined;
-    for (sets, floors[0..sets.len]) |set, *f| f.* = if (set.min_tier) |t| tierIndex(t) orelse return error.UnknownTier else floor;
+    try setFloors(o, sets, floors[0..sets.len]);
 
     const where =
         \\WHERE (m.patch IN (SELECT value FROM json_each(?)) OR m.game_start >= ?)
@@ -894,12 +884,7 @@ pub fn buildEach(
     ++ where);
     defer q.deinit();
     try q.bind(args);
-    var players = try db.prepare(
-        \\SELECT slot, position, champion_id, win, tier, summoner1, summoner2,
-        \\  keystone, primary_style, perk1, perk2, perk3, perk4, perk5, secondary_style,
-        \\  shard_offense, shard_flex, shard_defense
-        \\FROM participants WHERE match_id = ?
-    );
+    var players = try db.prepare("SELECT " ++ participant_columns ++ " FROM participants WHERE match_id = ?");
     defer players.deinit();
     var source: digest.Source = try .init(db);
     defer source.deinit();
@@ -915,9 +900,8 @@ pub fn buildEach(
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     var all: [timeline.max_participants]Picks = undefined;
-    // One game's players, kept until the loop has seen every lane opponent
-    const Row = struct { p: Player, team: bool, k: ?Picks, rank: ?usize };
-    var game: [timeline.max_participants]Row = undefined;
+    var seats: [timeline.max_participants]Seat = undefined;
+    var teams: [timeline.max_participants]bool = undefined;
     while (try q.step()) {
         ahead.next();
         _ = arena_state.reset(.retain_capacity);
@@ -925,8 +909,6 @@ pub fn buildEach(
         const m = q.row(struct { match_id: []const u8, platform: []const u8, start: i64, patch: []const u8, source: ?i64, digest: ?[]const u8 });
         const mask = stats.Slice.of(slices[0..sets.len], m.platform, m.start, m.patch);
         if (mask == 0) continue;
-        var in: [max_sets]bool = undefined;
-        for (&in, 0..) |*yes, i| yes.* = mask & (@as(u32, 1) << @intCast(i)) != 0;
         var have_picks = false;
         if (m.source) |src| {
             if (source.get(arena, src, m.digest)) |t| {
@@ -934,68 +916,109 @@ pub fn buildEach(
                 have_picks = true;
             } else |err| log.warn("{s}: {t}", .{ m.match_id, err });
         }
-        for (out, in[0..out.len]) |*b, yes| if (yes) {
-            b.games += 1;
-            b.timelines += @intFromBool(have_picks);
-        };
         try players.bind(.{m.match_id});
         var n: usize = 0;
         while (try players.step()) {
-            const r = players.row(struct {
-                slot: usize,
-                position: []const u8,
-                champion_id: u32,
-                win: bool,
-                tier: ?[]const u8,
-                summoner1: ?i64,
-                summoner2: ?i64,
-                keystone: ?i64,
-                primary_style: ?i64,
-                perk1: ?i64,
-                perk2: ?i64,
-                perk3: ?i64,
-                perk4: ?i64,
-                perk5: ?i64,
-                secondary_style: ?i64,
-                shard_offense: ?i64,
-                shard_flex: ?i64,
-                shard_defense: ?i64,
-            });
+            const r = players.row(ParticipantRow);
             const role = Role.fromLcu(r.position) orelse continue;
-            if (n == game.len) break;
-            const p: Player = .{
-                .champion = r.champion_id,
-                .role = role,
-                .won = r.win,
-                .spells = .{ idOf(r.summoner1), idOf(r.summoner2) },
-                .keystone = idOf(r.keystone),
-                .primary = idOf(r.primary_style),
-                .perks = .{ idOf(r.perk1), idOf(r.perk2), idOf(r.perk3), idOf(r.perk4), idOf(r.perk5) },
-                .secondary = idOf(r.secondary_style),
-                .shards = .{ idOf(r.shard_offense), idOf(r.shard_flex), idOf(r.shard_defense) },
-            };
+            if (n == seats.len) break;
             const k: ?Picks = if (have_picks and r.slot < timeline.max_participants) all[r.slot] else null;
-            game[n] = .{ .p = p, .team = r.slot < 5, .k = k, .rank = if (r.tier) |t| tierIndex(t) else null };
+            seats[n] = .{ .p = playerOf(r, role), .k = k, .rank = rankOf(r.tier) };
+            teams[n] = r.slot < 5;
             n += 1;
         }
-        for (game[0..n], 0..) |*g, i| {
-            // Below a set's floor: not counted there, still someone's lane opponent
-            var counted: [max_sets]bool = undefined;
-            var any = false;
-            for (floors[0..out.len], counted[0..out.len], in[0..out.len]) |f, *c, yes| {
-                c.* = yes and if (f) |lowest| g.rank != null and g.rank.? <= lowest else true;
-                any = any or c.*;
-            }
-            if (!any) continue;
-            var found: usize = 0;
-            for (game[0..n], 0..) |h, j| if (i != j and h.team != g.team and h.p.role == g.p.role) {
-                g.p.opponent = h.p.champion;
-                found += 1;
-            };
-            if (found != 1) g.p.opponent = 0;
-            for (out, counted[0..out.len]) |*b, yes| if (yes) try b.addPlayer(g.p, g.k, d);
-        }
+        setOpponents(seats[0..n], teams[0..n]);
+        try addSeats(out, mask, floors[0..out.len], seats[0..n], have_picks, d);
     }
+}
+
+/// A builder per set, as buildEach fills them; on error none is left to free
+pub fn initSets(gpa: std.mem.Allocator, o: Options, sets: []const Set, out: []Builder) !void {
+    for (out) |*b| b.* = .{ .gpa = gpa, .max_keys = @max(o.max_keys, 2) };
+    errdefer for (out) |*b| b.deinit();
+    if (o.min_matchup_games) |min| for (out, sets) |*b, set| {
+        if (set.matchups) try b.countMatchups(o.max_matchup_keys, min);
+    };
+}
+
+/// participants columns a player's builds read; slot and tier besides
+pub const participant_columns =
+    \\slot, position, champion_id, win, tier, summoner1, summoner2,
+    \\  keystone, primary_style, perk1, perk2, perk3, perk4, perk5, secondary_style,
+    \\  shard_offense, shard_flex, shard_defense
+;
+
+pub const ParticipantRow = struct {
+    slot: usize,
+    position: []const u8,
+    champion_id: u32,
+    win: bool,
+    tier: ?[]const u8,
+    summoner1: ?i64,
+    summoner2: ?i64,
+    keystone: ?i64,
+    primary_style: ?i64,
+    perk1: ?i64,
+    perk2: ?i64,
+    perk3: ?i64,
+    perk4: ?i64,
+    perk5: ?i64,
+    secondary_style: ?i64,
+    shard_offense: ?i64,
+    shard_flex: ?i64,
+    shard_defense: ?i64,
+};
+
+pub fn playerOf(r: ParticipantRow, role: Role) Player {
+    return .{
+        .champion = r.champion_id,
+        .role = role,
+        .won = r.win,
+        .spells = .{ idOf(r.summoner1), idOf(r.summoner2) },
+        .keystone = idOf(r.keystone),
+        .primary = idOf(r.primary_style),
+        .perks = .{ idOf(r.perk1), idOf(r.perk2), idOf(r.perk3), idOf(r.perk4), idOf(r.perk5) },
+        .secondary = idOf(r.secondary_style),
+        .shards = .{ idOf(r.shard_offense), idOf(r.shard_flex), idOf(r.shard_defense) },
+    };
+}
+
+/// One player of a game as the builders count them: their picks when the game has a
+/// timeline, rank as an index into store.schema.tiers
+pub const Seat = struct { p: Player, k: ?Picks, rank: ?u8 };
+
+/// Each seat's lane opponent: the other team's player in the same role when there is
+/// exactly one, else 0. `blue`: per seat, on team 100
+pub fn setOpponents(seats: []Seat, blue: []const bool) void {
+    for (seats, blue, 0..) |*s, team, i| {
+        var found: usize = 0;
+        for (seats, blue, 0..) |h, other, j| if (i != j and other != team and h.p.role == s.p.role) {
+            s.p.opponent = h.p.champion;
+            found += 1;
+        };
+        if (found != 1) s.p.opponent = 0;
+    }
+}
+
+/// One game in each builder whose bit is set in `mask`, every seat at or above that
+/// builder's floor (setFloors)
+pub fn addSeats(out: []Builder, mask: u32, floors: []const ?usize, seats: []const Seat, have_picks: bool, d: *const ddragon.BuildData) !void {
+    for (out, 0..) |*b, i| if (mask & (@as(u32, 1) << @intCast(i)) != 0) {
+        b.games += 1;
+        b.timelines += @intFromBool(have_picks);
+    };
+    // Below a set's floor: not counted there, still someone's lane opponent
+    for (seats) |s| for (out, floors, 0..) |*b, f, i| {
+        if (mask & (@as(u32, 1) << @intCast(i)) == 0) continue;
+        if (f) |lowest| if (s.rank == null or s.rank.? > lowest) continue;
+        try b.addPlayer(s.p, s.k, d);
+    };
+}
+
+/// Each set's lowest tier index counted (Set.min_tier, else o.min_tier); null counts all
+pub fn setFloors(o: Options, sets: []const Set, out: []?usize) !void {
+    const floor: ?usize = if (o.min_tier) |t| tierIndex(t) orelse return error.UnknownTier else null;
+    for (sets, out) |set, *f| f.* = if (set.min_tier) |t| tierIndex(t) orelse return error.UnknownTier else floor;
 }
 
 /// Sets one buildEach pass feeds: `builds --site`'s four views at four rank floors
@@ -1004,6 +1027,12 @@ pub const max_sets = 16;
 /// NULL or out of range: 0, none
 fn idOf(v: ?i64) u32 {
     return std.math.cast(u32, v orelse 0) orelse 0;
+}
+
+/// Seat.rank of a participants tier
+pub fn rankOf(tier: ?[]const u8) ?u8 {
+    const i = tierIndex(tier orelse return null) orelse return null;
+    return @intCast(i);
 }
 
 fn tierIndex(tier: []const u8) ?usize {

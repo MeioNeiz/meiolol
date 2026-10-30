@@ -29,6 +29,7 @@ const lab_seatstats = @import("lab/seatstats.zig");
 const lab_events = @import("lab/events.zig");
 const objectives = @import("objectives.zig");
 const partials = @import("partials.zig");
+const cubes = @import("cubes.zig");
 const patchday = @import("patchday.zig");
 const flat = @import("site/flat.zig");
 const forget = @import("forget.zig");
@@ -1243,6 +1244,129 @@ test "fixture games to builds: EUW and every region, patch and recent, from one 
     // `site --patch-games`, which the web loop decides on
     try testing.expectEqual(30, try stats.countGames(db, &.{patch}, &.{"EUW1"}));
     try testing.expectEqual(0, try stats.countGames(db, &.{"15.12"}, &.{"EUW1"}));
+}
+
+test "day cubes: curves and builds as from the database, days built again when their games change" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const db = try store.schema.memory();
+    defer db.close();
+    // An hour apart from start_ms (18:40 UTC): three UTC days
+    try fillGames(arena, db, 40, true);
+    try db.exec("UPDATE participants SET tier = CASE WHEN slot < 3 THEN 'MASTER' WHEN slot < 6 THEN 'EMERALD' ELSE 'PLATINUM' END");
+    const cube = try cubes.Store.open(gpa, io, try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "cubes" }));
+    defer cube.deinit();
+    var items_ctx: u8 = 0;
+    const items: cubes.Items = .{ .ctx = &items_ctx, .get = struct {
+        fn f(_: *anyopaque, _: []const u8) anyerror!*const ddragon.BuildData {
+            return &build_data;
+        }
+    }.f };
+
+    var n = try cube.refresh(db, start_ms, items);
+    try testing.expectEqual(3, n.days);
+    try testing.expectEqual(3, n.built);
+    try testing.expectEqual(40, n.games_built);
+    try expectCubesMatch(arena, io, db, cube);
+    n = try cube.refresh(db, start_ms, items);
+    try testing.expectEqual(0, n.built);
+
+    // A timeline gone, a new one, a game REPLACEd: their days, and in them only those
+    // games; a day with no games left goes
+    try db.exec("DELETE FROM timeline.timelines WHERE match_id = 'EUW1_2'");
+    try db.exec("UPDATE timeline.timelines SET rowid = rowid + 1000 WHERE match_id = 'EUW1_5'");
+    try db.exec("INSERT OR REPLACE INTO matches SELECT * FROM matches WHERE match_id = 'EUW1_30'");
+    n = try cube.refresh(db, start_ms, items);
+    try testing.expectEqual(2, n.built);
+    try testing.expectEqual(3, n.games_built);
+    try expectCubesMatch(arena, io, db, cube);
+    try db.run("DELETE FROM matches WHERE game_start >= ?", .{start_ms + 30 * std.time.ms_per_hour});
+    n = try cube.refresh(db, start_ms, items);
+    try testing.expectEqual(1, n.dropped);
+    const left = try cube.days(gpa, start_ms);
+    defer gpa.free(left);
+    try testing.expectEqual(2, left.len);
+    try expectCubesMatch(arena, io, db, cube);
+    // Days before the window go
+    n = try cube.refresh(db, start_ms + std.time.ms_per_day, items);
+    try testing.expectEqual(1, n.dropped);
+}
+
+test "day cubes: drop deletes every day, and a missing directory is fine" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "cubes" });
+    try cubes.drop(gpa, io, dir);
+    try tmp.dir.createDirPath(io, "cubes/days");
+    try tmp.dir.writeFile(io, .{ .sub_path = "cubes/days/20000.bin", .data = "x" });
+    try cubes.drop(gpa, io, dir);
+    const cube = try cubes.Store.open(gpa, io, dir);
+    defer cube.deinit();
+    const left = try cube.days(gpa, 0);
+    defer gpa.free(left);
+    try testing.expectEqual(0, left.len);
+}
+
+/// curves --site's and builds --site's sets from the cubes as from the database
+fn expectCubesMatch(arena: std.mem.Allocator, io: std.Io, db: store.Db, cube: *const cubes.Store) !void {
+    const gpa = testing.allocator;
+    const both: []const []const u8 = &.{ "EUW1", "NA1" };
+    const since = start_ms + 20 * std.time.ms_per_hour;
+    const specs = [_]curves.Spec{
+        .{ .chosen = &.{patch}, .since_ms = 0, .platforms = &.{"EUW1"} },
+        .{ .chosen = &.{}, .since_ms = since, .platforms = both },
+        .{ .chosen = &.{patch}, .since_ms = 0, .platforms = both },
+    };
+    var want: [specs.len]core.curvesfile.Builder = @splat(.{ .gpa = gpa });
+    defer for (&want) |*b| b.deinit();
+    var got: [specs.len]core.curvesfile.Builder = @splat(.{ .gpa = gpa });
+    defer for (&got) |*b| b.deinit();
+    var want_sum: [specs.len]curves.Summary = undefined;
+    var got_sum: [specs.len]curves.Summary = undefined;
+    try curves.buildMany(gpa, io, db, &specs, build_data.legendary, &want, &want_sum);
+    try cubes.curvesFrom(cube, start_ms, &specs, &got, &got_sum);
+    for (&want, &got, want_sum, got_sum) |*a, *b, x, y| {
+        try testing.expectEqual(x, y);
+        try testing.expect(x.games > 0);
+        var wa: std.Io.Writer.Allocating = .init(arena);
+        try a.write(&wa.writer, patch, 1);
+        var wb: std.Io.Writer.Allocating = .init(arena);
+        try b.write(&wb.writer, patch, 1);
+        try testing.expectEqualSlices(u8, wa.written(), wb.written());
+    }
+
+    const o: builds.Options = .{ .patches = &.{patch}, .platforms = both, .min_matchup_games = 0 };
+    const sets = [_]builds.Set{
+        .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} } },
+        .{ .slice = .{ .platforms = both, .patches = &.{patch} } },
+        .{ .slice = .{ .platforms = both, .since_ms = since }, .matchups = false },
+        .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} }, .matchups = false, .min_tier = "EMERALD" },
+        .{ .slice = .{ .platforms = both, .since_ms = since }, .matchups = false, .min_tier = "MASTER" },
+    };
+    var bw: [sets.len]builds.Builder = undefined;
+    try builds.buildEach(gpa, io, db, &build_data, o, &sets, &bw);
+    defer for (&bw) |*b| b.deinit();
+    var bg: [sets.len]builds.Builder = undefined;
+    try cubes.buildsFrom(cube, start_ms, &build_data, o, &sets, &bg);
+    defer for (&bg) |*b| b.deinit();
+    for (&bw, &bg, sets) |*a, *b, set| {
+        try testing.expectEqual(a.games, b.games);
+        try testing.expectEqual(a.timelines, b.timelines);
+        const tier = set.min_tier orelse "PLATINUM";
+        const fa = try std.json.Stringify.valueAlloc(arena, try a.file(arena, &build_data, patch, tier, 10), .{});
+        const fb = try std.json.Stringify.valueAlloc(arena, try b.file(arena, &build_data, patch, tier, 10), .{});
+        try testing.expectEqualStrings(fa, fb);
+    }
 }
 
 test "fixture games to lab rows, from SQLite and packed" {

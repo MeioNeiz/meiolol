@@ -7,6 +7,7 @@ const ddragon = @import("../ddragon.zig");
 const stats = @import("../stats.zig");
 const curves = @import("../curves.zig");
 const builds = @import("../builds.zig");
+const cubes = @import("../cubes.zig");
 const lean = @import("../lean.zig");
 const draftmodel = @import("../draftmodel.zig");
 const testerbin = @import("../testerbin.zig");
@@ -117,18 +118,28 @@ pub fn cmdCurves(c: *Cmd) !u8 {
     else
         (try newestPatch(arena, db, if (site_files) &.{"EUW1"} else g.platformIds()))[0];
 
-    const legendaries = ddragon.legendaries(gpa, io, item_patch) catch |err| blk: {
-        std.log.warn("no item list from Data Dragon ({t}): curves without first items", .{err});
-        break :blk &.{};
-    };
-    defer gpa.free(legendaries);
     const specs = try arena.alloc(curves.Spec, files.items.len);
     for (files.items, specs) |f, *s| s.* = f.spec;
     const builders = try arena.alloc(core.curvesfile.Builder, files.items.len);
     @memset(builders, .{ .gpa = gpa });
     defer for (builders) |*b| b.deinit();
     const summaries = try arena.alloc(curves.Summary, files.items.len);
-    try curves.buildMany(gpa, io, db, specs, legendaries, builders, summaries);
+    if (site_files) {
+        // The day cubes: only days whose games changed decode their timelines
+        var items: CubeItems = .{ .gpa = gpa, .arena = arena, .io = io };
+        const cube = try cubes.Store.open(gpa, io, try cubes.dirIn(arena, c.data_dir));
+        defer cube.deinit();
+        const from = try cubes.firstStart(db, recent_ms, wanted);
+        logCubes(try cube.refresh(db, from, items.source()));
+        try cubes.curvesFrom(cube, from, specs, builders, summaries);
+    } else {
+        const legendaries = ddragon.legendaries(gpa, io, item_patch) catch |err| blk: {
+            std.log.warn("no item list from Data Dragon ({t}): curves without first items", .{err});
+            break :blk &.{};
+        };
+        defer gpa.free(legendaries);
+        try curves.buildMany(gpa, io, db, specs, legendaries, builders, summaries);
+    }
 
     var missing = false;
     for (files.items, builders, summaries) |f, *b, sum| {
@@ -233,7 +244,15 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
     var sets: [builds.max_sets]builds.Set = undefined;
     for (targets, 0..) |t, i| sets[i] = t.set;
     var bs: [builds.max_sets]builds.Builder = undefined;
-    try builds.buildEach(gpa, io, db, &data, o, sets[0..targets.len], bs[0..targets.len]);
+    if (site_files) {
+        var items: CubeItems = .{ .gpa = gpa, .arena = c.arena, .io = io };
+        try items.put(o.patches[0], &data);
+        const cube = try cubes.Store.open(gpa, io, try cubes.dirIn(c.arena, c.data_dir));
+        defer cube.deinit();
+        const from = try cubes.firstStart(db, recent_ms, o.patches);
+        logCubes(try cube.refresh(db, from, items.source()));
+        try cubes.buildsFrom(cube, from, &data, o, sets[0..targets.len], bs[0..targets.len]);
+    } else try builds.buildEach(gpa, io, db, &data, o, sets[0..targets.len], bs[0..targets.len]);
     defer for (bs[0..targets.len]) |*b| b.deinit();
     for (targets, bs[0..targets.len]) |t, *b| {
         if (b.games == 0) {
@@ -255,6 +274,35 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
         if (t.set.min_tier == null) for (f.shrink) |x| std.log.info("{s}: k {d:.0}, in matchups {d:.0}", .{ @tagName(x.kind), x.k, x.vs });
     }
     return 0;
+}
+
+/// Data Dragon's item data per patch for the day cubes, each fetched once
+const CubeItems = struct {
+    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    io: std.Io,
+    by_patch: std.StringHashMapUnmanaged(*const ddragon.BuildData) = .empty,
+
+    fn put(x: *CubeItems, patch: []const u8, d: *const ddragon.BuildData) !void {
+        try x.by_patch.put(x.arena, try x.arena.dupe(u8, patch), d);
+    }
+
+    fn get(ctx: *anyopaque, patch: []const u8) anyerror!*const ddragon.BuildData {
+        const x: *CubeItems = @ptrCast(@alignCast(ctx));
+        if (x.by_patch.get(patch)) |d| return d;
+        const d = try x.arena.create(ddragon.BuildData);
+        d.* = try ddragon.buildData(x.gpa, x.arena, x.io, patch);
+        try x.put(patch, d);
+        return d;
+    }
+
+    fn source(x: *CubeItems) cubes.Items {
+        return .{ .ctx = x, .get = get };
+    }
+};
+
+fn logCubes(n: cubes.Counts) void {
+    std.log.info("day cubes: {d} days, {d} built ({d} games, {d} B), {d} dropped", .{ n.days, n.built, n.games_built, n.bytes, n.dropped });
 }
 
 pub const usage_lean =
