@@ -374,7 +374,7 @@ fn winReadings(h: *H, mo: *const md.Models, w: md.Win) []const Text {
     if (w.shipped) |si| {
         const s = w.models[si];
         const share = @max(0, (ll_coin - s.ll) / (ll_coin - ll_published));
-        var t = h.fmt("From the draft alone the shipped model calls the winner of {s} new games right {s} of the time (a coin flip: 50%). Published draft models trained on millions of games reach about 55 to 57%; by log loss we are {d:.0}% of the way there.", .{ count(h, w.games), pct(h, s.acc).s, 100 * share });
+        var t = h.fmt("From the draft alone the shipped model calls the winner of {s} new games right {s} of the time (a coin flip: 50%). Published draft models trained on millions of games reach about 55 to 57%; by log loss we are {s}% of the way there.", .{ count(h, w.games), pct(h, s.acc).s, dec(h, 100 * share, 0) });
         if (w.experiment) |ei| {
             const e = w.models[ei];
             const against = if (e.d) |d| h.fmt(" (log loss {s} against the shipped model)", .{pm(h, d, .ll)}) else "";
@@ -400,10 +400,10 @@ fn winReadings(h: *H, mo: *const md.Models, w: md.Win) []const Text {
     if (winners.items.len > 0) {
         var why: []const u8 = "";
         if (w.lane_weight) |x| if (x > 1.3) {
-            why = h.fmt(" The tuning weighs lane matchups {d:.1} times the default: lane matchups carry signal the shipped model shrinks away.", .{x});
+            why = h.fmt(" The tuning weighs lane matchups {s} times the default: lane matchups carry signal the shipped model shrinks away.", .{dec(h, x, 1)});
         };
         if (w.duo_weight) |x| if (x < 0.85) {
-            why = h.fmt("{s} Duo terms are shrunk to {d:.2}: mostly noise.", .{ why, x });
+            why = h.fmt("{s} Duo terms are shrunk to {s}: mostly noise.", .{ why, dec(h, x, 2) });
         };
         add(h, &out, .{ .s = h.fmt("Beats the shipped model beyond noise: {s}. The eval runs several times a day, so check it holds run after run (Run by run chart).{s}", .{ winners.items, why }) });
     }
@@ -411,7 +411,7 @@ fn winReadings(h: *H, mo: *const md.Models, w: md.Win) []const Text {
         const n: f32 = @floatFromInt(@max(p.n, 1));
         const z = (p.p - 0.5) / @sqrt(0.25 / n);
         add(h, &out, .{ .s = if (z >= 3)
-            h.fmt("Picks the shipped model ranks in its top 10% for their slot won {s} of {s} games: a small but real edge of {d:.1} points (about {d:.0} standard errors; fewer in truth, as picks in one team share a result).", .{ pct(h, p.p).s, count(h, p.n), (p.p - 0.5) * 100, z })
+            h.fmt("Picks the shipped model ranks in its top 10% for their slot won {s} of {s} games: a small but real edge of {s} points (about {s} standard errors; fewer in truth, as picks in one team share a result).", .{ pct(h, p.p).s, count(h, p.n), dec(h, (p.p - 0.5) * 100, 1), dec(h, z, 0) })
         else
             h.fmt("Picks the shipped model ranks in its top 10% won {s} of {s} games: not yet distinguishable from 50%.", .{ pct(h, p.p).s, count(h, p.n) }) });
     }
@@ -419,17 +419,17 @@ fn winReadings(h: *H, mo: *const md.Models, w: md.Win) []const Text {
         var miss: f32 = 0;
         for (w.deciles) |c| miss = @max(miss, @abs(c.predicted - c.won));
         const se = 100 * @sqrt(0.25 / @as(f32, @floatFromInt(@max(w.deciles[0].games, 1))));
-        add(h, &out, .{ .s = h.fmt("Its percentages can be read at face value: predictions run from {d:.1}% to {d:.1}% and each tenth of games landed within {d:.1} points of its prediction (noise alone is about ±{d:.1}).", .{ w.deciles[0].predicted, w.deciles[w.deciles.len - 1].predicted, miss, 2 * se }) });
+        add(h, &out, .{ .s = h.fmt("Its percentages can be read at face value: predictions run from {s}% to {s}% and each tenth of games landed within {s} points of its prediction (noise alone is about ±{s}).", .{ dec(h, w.deciles[0].predicted, 1), dec(h, w.deciles[w.deciles.len - 1].predicted, 1), dec(h, miss, 1), dec(h, 2 * se, 1) }) });
     }
     if (w.curve) |c| if (c.per_doubling) |pd| if (pd > 0 and c.games.len > 0) {
         const need = (c.last - ll_published) / pd;
         if (need <= 0) {
-            add(h, &out, .{ .s = h.fmt("More games help slowly: each doubling of games improves champion win rates by {d:.4} log loss, and at today's size they already reach published accuracy.", .{pd}) });
+            add(h, &out, .{ .s = h.fmt("More games help slowly: each doubling of games improves champion win rates by {s} log loss, and at today's size they already reach published accuracy.", .{dec(h, pd, 4)}) });
         } else {
             const n: f64 = @floatFromInt(c.games[c.games.len - 1]);
             const target = n * std.math.pow(f64, 2, need);
             const days = if (mo.matches_per_day) |r| if (r > 0) h.fmt(" (~{s} days of crawling at today's rate, while patches change every two weeks)", .{count(h, @as(u64, @intFromFloat(@min((target - n) / r, 1e12))))}) else "" else "";
-            add(h, &out, .{ .s = h.fmt("More games help slowly: each doubling of games improves champion win rates by {d:.4} log loss. At that pace reaching published accuracy takes about {d:.0} more doublings, ~{s} games{s}. Gains have to come from better inputs too, not volume alone.", .{ pd, need, count(h, @as(u64, @intFromFloat(@min(target, 1e15)))), days }) });
+            add(h, &out, .{ .s = h.fmt("More games help slowly: each doubling of games improves champion win rates by {s} log loss. At that pace reaching published accuracy takes about {s} more doublings, ~{s} games{s}. Gains have to come from better inputs too, not volume alone.", .{ dec(h, pd, 4), dec(h, need, 0), count(h, @as(u64, @intFromFloat(@min(target, 1e15)))), days }) });
         }
     };
     if (w.experience) |x| if (@abs(x.d.mean) <= x.d.ci) {
@@ -437,7 +437,7 @@ fn winReadings(h: *H, mo: *const md.Models, w: md.Win) []const Text {
         for (x.bins) |b| all_up = all_up and b > 0;
         add(h, &out, .{ .s = h.fmt("Knowing how many games the player has on the champion doesn't improve the prediction yet ({s}).{s}", .{ pm(h, x.d, .ll), if (all_up) " Every experience band shows a positive effect against unknown players, which fits selection (crawled players come from the current ladder, where winners sit) better than skill." else "" }) });
     };
-    if (w.gold) |g| add(h, &out, .{ .s = h.fmt("Adding typical lane gold at 14 min (from timelines) to the draft: accuracy {s} vs {s}, log loss {d:.4} vs {d:.4}.", .{ pct(h, g[0].acc).s, pct(h, g[1].acc).s, g[0].ll, g[1].ll }) });
+    if (w.gold) |g| add(h, &out, .{ .s = h.fmt("Adding typical lane gold at 14 min (from timelines) to the draft: accuracy {s} vs {s}, log loss {s} vs {s}.", .{ pct(h, g[0].acc).s, pct(h, g[1].acc).s, dec(h, g[0].ll, 4), dec(h, g[1].ll, 4) }) });
     return out.items;
 }
 
@@ -535,7 +535,7 @@ fn curveTable(h: *H, c: md.Curve) N {
         tds.add(h.th(.{ .class = "num" }, .{count(h, g)}));
         for (0..c.cols.len) |k| {
             const v: ?f32 = if (i < c.ll.len and k < c.ll[i].len) c.ll[i][k] else null;
-            tds.add(h.td(.{ .class = "num" }, .{if (v) |x| h.fmt("{d:.4}", .{x}) else "–"}));
+            tds.add(h.td(.{ .class = "num" }, .{if (v) |x| dec(h, x, 4) else "–"}));
         }
         rows.add(h.tr(.{}, .{tds.done()}));
     }
