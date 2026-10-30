@@ -31,44 +31,33 @@ patch moves numbers), lab-frontier.md (models); findings land in docs/learned.md
 
 ## Now
 
-Legacy UI off first (Jacob, 30 Oct), then by harm: outages and data risk, then what
-Riot's reviewers see, then what brings players back. Jacob's open decisions:
-decisions.md "Open decisions".
+By harm: outages and data risk, then what Riot's reviewers see, then what brings players
+back. Jacob's open decisions: decisions.md "Open decisions".
 
-1. Legacy UI off (stack.md; app.md "Private site"). Public done: per-page CSS, a CSP and
-   Trusted Types live with no console errors (keep the print.css link: traffic.sh counts
-   people by it). Private: /private, /admin, /admin/notes and the tester inline their
-   CSS (style.css gone); the old JS tester at /private/old. Done when /private/tester has
-   its bans, Random/Fill/Undo, lane model, compare and set net, /private/old, admin.js,
-   admin-draft.js, admin-setnet.js and admin.css are gone. Owner W4
-2. Crawler at 99%+ of the key, every region, every hour (ops.md J16): done when hourly
+1. Crawler at 99%+ of the key, every region, every hour (ops.md J16): done when hourly
    key use holds 97-100% per region through a gpu-box catch-up and a daily job, with a
-   learned.md line. Owner W6; the catch-up test needs the gpu-box on
-3. Alerts and hosts: health alerts reach Jacob's phone (open decision), the gpu-box on
+   learned.md line. Owner W6; the catch-up test needs the gpu-box (off until Monday 2 Nov)
+2. Alerts and hosts: health alerts reach Jacob's phone (open decision), the gpu-box on
    Tailscale with its backup mirror and archive pull current, VM8 (vm.md), WSL
    compaction when idle (ops.md "Storage and hosts"). Owner coordinator; blocked on
    Jacob
-4. The site matches the application as submitted (production-key.md): "friends can group
-   up to see recaps of the games they played together" has only Your games' Friends
-   view. Squads, minimal (J33; backlog.md "Your games and Squads"), so every claim is one
-   click from the home page. Owner W5. APP1 gives the app's
-   screenshots
-5. Daily Draft and Learn (site.md): Daily's pick verdicts (J26: every option's rank, who
+3. Daily Draft and Learn (site.md): Daily's pick verdicts (J26: every option's rank, who
    should have won, lanes won), share with facts; Learn's myth-or-measured cards from
    final learned.md lines. Owner W3
-6. Champion and matchup pages to LoLalytics' level (docs/champion-matchup.md): CH0 done
+4. Champion and matchup pages to LoLalytics' level (docs/champion-matchup.md): CH0 done
    (rune rows by reach, trends by day), then site.md's CH Later list.
-   Owner W9
-7. The data edge (J23, J24; estimates.md): E7 day cubes, then E2's truth test, then
-   Meio. Items 10 and 11 feed it. Owner W2
-8. Accounts and the desktop app (J21; app.md, accounts.md): AC4 sign-in cut-over and
-   APP1 real capture (Jacob's), then APP4-APP6's left items. Owner W4
-9. The latest patch (J25, J27, J28; patch-transfer.md): the frozen 16.21 test look,
-    then PT4 and PT6 on A2. Blocked on Jacob's go and the gpu-box
-10. Comp leans (data-and-model.md): the held-out look, then champion pages and reasons.
-    Blocked on the per-seat stats decision and the gpu-box
-11. Build speed (build-speed.md): BS3 waits Jacob. Owner W5
-12. Our Zig libraries toward the Rust crates (libraries.md "Next"). Unowned
+   Owner W9; the matchup page's lane lines W7
+5. The data edge (J23, J24; estimates.md): E7 day cubes, then E2's truth test, then
+   Meio. Items 8 and 9 feed it. Owner W2
+6. Accounts and the desktop app (J21; app.md, accounts.md): AC4 sign-in cut-over and
+   APP1 real capture (Jacob's; also the app's screenshots for the application and
+   /download), then APP4-APP6's left items. Owner W4
+7. The latest patch (J25, J27, J28; patch-transfer.md): the frozen 16.21 test look,
+   then PT4 and PT6 on A2. Blocked on Jacob's go and the gpu-box
+8. Comp leans (data-and-model.md): the held-out look, then champion pages and reasons.
+   Blocked on the per-seat stats decision and the gpu-box
+9. Build speed (build-speed.md): BS3 waits Jacob. Owner W5
+10. Our Zig libraries toward the Rust crates (libraries.md "Next"). Unowned
 
 ## Areas
 
