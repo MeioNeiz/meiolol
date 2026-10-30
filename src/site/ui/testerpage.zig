@@ -24,6 +24,7 @@ const Gallery = @import("gallery.zig").Gallery;
 const fmt = @import("fmt.zig");
 const url = @import("url.zig");
 const tl = @import("testerlane.zig");
+const tsn = @import("testersetnet.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
 const H = tree.H;
@@ -190,6 +191,8 @@ pub const Page = struct {
     /// The lane model, for the candidate panel's Gold column: fetched once, whatever the
     /// draft model
     lane: tl.Load = .none,
+    /// The lab's set net, on the Comp model: fetched once that is in
+    net: tsn.Load = .none,
     /// By side (0 blue) and role; 0 empty
     teams: [2][n_role]u32 = @splat(@splat(0)),
     /// The seat being filled: side * n_role + role, side 0 blue; null: the first empty
@@ -333,6 +336,7 @@ pub const Page = struct {
                 p.models(h),
             }),
             p.chance(h),
+            if (p.netOn()) |n| tsn.line(h, n.net, &n.l.sc, p.teams) else null,
             segmented.view(h, .{ .s = .s }, &.{
                 .{ .label = W.board, .selected = p.tab == .board, .on = h.on(p, .{ .tab = .board }) },
                 .{ .label = W.terms, .selected = p.tab == .terms, .on = h.on(p, .{ .tab = .terms }) },
@@ -443,7 +447,23 @@ pub const Page = struct {
         };
     }
 
+    /// The set net with the Comp model it corrects, when both are in and match
+    fn netOn(p: *const Page) ?struct { net: *const tsn.Loaded, l: *const Loaded } {
+        if (p.which != .comp) return null;
+        const l = p.ready() orelse return null;
+        return switch (p.net) {
+            .ready => |n| if (n.shown()) .{ .net = n, .l = l } else null,
+            else => null,
+        };
+    }
+
     fn termsView(p: *Page, h: *H) N {
+        const terms = p.termsTable(h);
+        const n = p.netOn() orelse return terms;
+        return h.div(.{ .class = "bd" }, .{ terms, tsn.breakdown(h, n.net, &n.l.sc, p.teams, p.head, 8) });
+    }
+
+    fn termsTable(p: *Page, h: *H) N {
         const l = p.ready() orelse return h.p(.{ .class = "wait" }, .{W.loading});
         var rows = h.list();
         for (0..2) |side| for (0..n_role) |r| {
@@ -492,6 +512,7 @@ pub const Page = struct {
             }}));
         }
         lines.add(h.li(.{ .key = 100 }, .{tl.fileLine(h, p.lane)}));
+        if (p.net != .none) lines.add(h.li(.{ .key = 101 }, .{tsn.fileLine(h, p.net)}));
         return h.ul(.{ .class = "files" }, .{lines.done()});
     }
 };

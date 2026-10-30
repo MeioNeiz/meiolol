@@ -23,6 +23,7 @@ var server: tp.Page = undefined;
 var island: ?*ui.island.Island(tp.Page, dom.Dom) = null;
 var loaded: std.enums.EnumArray(tp.Which, tp.Loaded) = undefined;
 var lane: ui.testerlane.Loaded = undefined;
+var net: ui.testersetnet.Loaded = undefined;
 var feed_arena: std.heap.ArenaAllocator = .init(gpa);
 /// What the last feed was for: the panel needs a new one when any of it changes
 const Sent = struct { which: tp.Which, teams: @FieldType(tp.Page, "teams"), bans: [tp.n_ban]u32, seat: u8, load: std.meta.Tag(tp.Load), lane: std.meta.Tag(ui.testerlane.Load) };
@@ -89,9 +90,11 @@ fn fetchShown() void {
 
 /// dom.fetch has one callback for every request in flight: ctx tells them apart
 const lane_ctx = -1;
+const net_ctx = -2;
 
 fn done(ctx: i32, bytes: ?[]u8) void {
     if (ctx == lane_ctx) return laneDone(bytes);
+    if (ctx == net_ctx) return netDone(bytes);
     const w = std.enums.fromInt(tp.Which, ctx) orelse return;
     defer schedule();
     defer if (island) |i| i.render();
@@ -106,6 +109,27 @@ fn done(ctx: i32, bytes: ?[]u8) void {
         return state.loads.set(w, .bad);
     };
     state.loads.set(w, .{ .ready = l });
+    // The lab's set net corrects the Comp model only: asked for once it is in
+    if (w == .comp and state.net == .none) {
+        state.net = .loading;
+        dom.fetch(ui.testersetnet.file, net_ctx, done);
+    }
+}
+
+fn netDone(bytes: ?[]u8) void {
+    defer if (island) |i| i.render();
+    const b = bytes orelse return {
+        state.net = .failed;
+    };
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    net.init(arena.allocator(), b) catch {
+        dom.dom.warn("tester: bad set net file");
+        arena.deinit();
+        gpa.free(b);
+        state.net = .bad;
+        return;
+    };
+    state.net = .{ .ready = &net };
 }
 
 fn laneDone(bytes: ?[]u8) void {

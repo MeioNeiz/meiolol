@@ -10,6 +10,7 @@ const check = @import("check.zig");
 const island = @import("island.zig");
 const tp = @import("testerpage.zig");
 const td = @import("testerdata.zig");
+const tsn = @import("testersetnet.zig");
 const data = @import("data.zig");
 const champsearch = @import("champsearch.zig");
 const Fake = @import("fakedom.zig").Fake;
@@ -310,6 +311,58 @@ test "the model Select switches, a failed model retries; tabs show terms and fil
     off.check = .{ .drafts = 0, .worst = 0 };
     p.i.render();
     try has(try p.shown(), "lab/draft-model.bin: no reference drafts");
+}
+
+test "the set net on the Comp model: a line under the split, its parts in Terms, Files; another base hides it" {
+    var p: Page = undefined;
+    try p.init();
+    defer p.deinit();
+    const a = p.arena.allocator();
+    p.state.which = .comp;
+    p.state.loads.set(.comp, .{ .ready = &p.l });
+    p.state.teams[0][0] = 266;
+    p.state.teams[1][0] = 122;
+    p.i.render();
+    try testing.expect(std.mem.find(u8, try p.shown(), "Set net") == null);
+
+    // One EUW1 reference on the Comp model's own logit, the converter's base check passed
+    const params = tsn.testParams();
+    var net = tsn.testNet(&params, &.{});
+    net.ids = &.{ .{ .champion = 266, .role = 0, .id = 5 }, .{ .champion = 122, .role = 0, .id = 4 } };
+    net.profiles = &.{ .{ .champion = 266, .role = 0, .z = &.{ 1, -0.5 } }, .{ .champion = 122, .role = 0, .z = &.{ 0.3, 2 } } };
+    const offset: f32 = @floatCast(p.l.sc.rawLogit(p.state.teams));
+    const s0 = try tsn.Scorer.init(&net);
+    const refs = [_]tsn.Ref{.{ .teams = p.state.teams, .platform = 1, .offset = offset, .logit = @floatCast(s0.logit(p.state.teams, 1, offset, .none)) }};
+    net.refs = &refs;
+    var bytes: std.ArrayList(u8) = .empty;
+    try (tsn.Model{ .candidate = "win-additive", .fit_games = 10, .fit_newest = "2026-10-14", .features = &.{ "magic", "cc" }, .nets = &.{ net, net }, .base_games = 1 }).encode(a, &bytes);
+    var l: tsn.Loaded = undefined;
+    try l.init(a, bytes.items);
+    try testing.expect(l.shown());
+    p.state.net = .{ .ready = &l };
+    p.i.render();
+    try has(try p.shown(), "Set net ×2: blue");
+
+    p.click(p.nth("aria-pressed", "false", 0));
+    try testing.expectEqual(.terms, p.state.tab);
+    const terms = try p.shown();
+    try has(terms, "Swapped out");
+    try has(terms, "Every pick's own learnt row");
+    p.click(p.nth("aria-pressed", "false", 1));
+    try has(try p.shown(), "lab/draft-setnet.bin: 2 seeds, 1 reference games match");
+
+    // Fitted on another model: no line, a Files note
+    l.check.base_worst = 1;
+    p.i.render();
+    const off = try p.shown();
+    try has(off, "lab/draft-setnet.bin: fitted on another Comp model");
+    try testing.expect(std.mem.find(u8, off, "Set net ×") == null);
+    // The Live model never shows it
+    l.check.base_worst = 0;
+    p.state.which = .live;
+    p.state.loads.set(.live, .{ .ready = &p.l });
+    p.i.render();
+    try testing.expect(std.mem.find(u8, try p.shown(), "Set net ×") == null);
 }
 
 test "restore: malformed leaves the page, unknown and repeated champions empty" {
