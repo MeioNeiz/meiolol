@@ -5591,10 +5591,15 @@ Reading (dev, 16.21 days 0-3):
 - EUW1 agrees with all platforms within its noise (A2 -0.31 ± 0.16)
 
 Test look on days 4+ (PT3), declared before it runs; not run: Jacob's call.
-- Frozen: A2 with the offset sd estimated, against A1; A0 and C reported. Command (a
-  binary with patchdays' test tables, 30 Oct on): `meiolol-lab patchdays
+- Frozen: A2 with the offset sd estimated, against A1; A0 and C reported. Code frozen
+  at f58587b6: the lab binary's src/additive.zig, src/lab/harness.zig, patchdays.zig and
+  rowsql.zig must match it (`git diff f58587b6 -- <those>` empty). First a dev rerun on
+  that binary (no --final): its days 0-3 preds must match
+  20261030T015524Z-pt-1621-est-w6fix. Then: `meiolol-lab patchdays
   ~/ml/snaps/snap-20261029T1810Z --arms A0,A1,A2,C --threads 4 --out pd --final`
-  (gpu-box, ~9 min, ~10 GB; no --changed: A3 not frozen)
+  (gpu-box idle, no dev server; dev took ~9 min, ~10 GB, --final fits more: 3 threads
+  gives the same numbers if memory is short; a crash after the ledger entry still counts
+  as the look; no --changed: A3 not frozen)
 - Figure: d, the mean paired log loss difference A2 minus A1 over the test games
   (is_test) on days 4+ since 16.21 went live on their platform, game-weighted, all
   platforms; h its 95% half-width. The "test games" table, column "days 4+ pooled",

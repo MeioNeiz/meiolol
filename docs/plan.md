@@ -59,8 +59,10 @@ players back.
    The desktop app gets A4 once web-loop.sh's strip_fitted goes
 7. The latest patch (J25, J27, J28): docs/plan/patch-transfer.md. Evaluate on
    latest-patch games only, day by day; old patches always pooled with a correction
-   between patches (shrunk per-patch offsets the main candidate). PT1 pin next; the
-   Patch changes page says why each champion moved (site.md PC1-PC2)
+   between patches (shrunk per-patch offsets the main candidate). PT1-PT3 dev done
+   (A2, pooled + offsets, wins from day 1); the frozen test look on 16.21 days 4+
+   (model.md) waits Jacob's go; the Patch changes page says why each champion moved
+   (site.md PC1-PC2)
 8. The data edge (J23, J24): day cubes as storage (E7) so any patch, season, rank and
    region is a sum, a public truth test (E2) and "Meio", one estimate per number from
    every game, patch and season history views (E10): docs/plan/estimates.md. Items 6
