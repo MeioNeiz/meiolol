@@ -39,6 +39,7 @@ export fn main() void {
     head = ui.data.decode(gpa, tp.Head, b) catch return dom.dom.warn("tester: bad data");
     server = .init(&head);
     state = .init(&head);
+    state.rng = .init(@bitCast(zjb.global("Math").call("random", .{}, f64)));
     index = tp.searchIndex(gpa, &head) catch return dom.dom.warn("tester: out of memory");
     server.useIndex(&index);
     state.useIndex(&index);

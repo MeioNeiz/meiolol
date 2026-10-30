@@ -2,7 +2,8 @@
 //! draft, see blue's win chance under a named model, each seat's term and the model's
 //! checks. One model at a time from a Select of ModelBadges; the board is DraftBoard's
 //! full variant, a click choosing the seat the candidate panel (testercand.zig, its own
-//! island and wasm) fills. Board | Terms | Files under it. The model, board, seat and tab
+//! island and wasm) fills; Random game and Fill empty draw seats by play share, Undo
+//! takes the last draw back. Board | Terms | Files under it. The model, board, seat and tab
 //! are the URL fragment's (Url), which the panel shares. Models are draft-model.bin files
 //! the page's code fetches (testerdata.zig); champion keys and names come inline (data-bin)
 const std = @import("std");
@@ -35,6 +36,9 @@ pub const sel = "[data-island=tester]";
 const n_role = ds.n_role;
 /// Both teams' in one list, as champ select's ten: left out of the candidates
 pub const n_ban = 10;
+/// The fills draw only champions with this share of the role's games or more on the
+/// share patch (the old tester's)
+const min_share = 0.01;
 
 comptime {
     std.debug.assert(@typeInfo(role.Role).@"enum".field_names.len == n_role);
@@ -44,6 +48,9 @@ const W = struct {
     pub const title = plain("Draft tester");
     pub const model = plain("Model");
     pub const clear = plain("Clear");
+    pub const random = plain("Random game");
+    pub const fill = plain("Fill empty");
+    pub const undo = plain("Undo");
     pub const ban = plain("Ban a champion");
     pub const bans = plain("Bans");
     pub const unban = Phrase("Remove the ban on {c:text}");
@@ -189,6 +196,10 @@ pub const Page = struct {
     seat: ?u8 = null,
     /// Filled from the front; 0 empty
     bans: [n_ban]u32 = @splat(0),
+    /// The board before the last fill, for Undo; any other change of it drops this
+    undo: ?[2][n_role]u32 = null,
+    /// The fills' draws; the page's code seeds it
+    rng: std.Random.DefaultPrng = .init(0),
     /// The ban box; shown once `useIndex` gave it the champions
     search: champsearch.ChampSearch = .{ .index = undefined, .id = "tester-ban", .mode = .pick, .label = W.ban },
     has_index: bool = false,
@@ -211,7 +222,7 @@ pub const Page = struct {
     };
 
     /// `unban`: the ban's index
-    pub const Msg = union(enum) { model: Which, tab: Tab, seat: u8, clear, ban, unban: u8 };
+    pub const Msg = union(enum) { model: Which, tab: Tab, seat: u8, clear, ban, unban: u8, random, fill, undo };
 
     pub fn useIndex(p: *Page, ix: *const champsearch.Index) void {
         p.search.index = ix;
@@ -230,6 +241,7 @@ pub const Page = struct {
     pub fn fromUrl(p: *Page, u: Url) void {
         const teams = clean(p.head, .{ u.b, u.r });
         const bans = cleanBans(p.head, u.n, teams);
+        if (!std.meta.eql(teams, p.teams)) p.undo = null;
         if (u.m != p.which or !std.meta.eql(teams, p.teams) or !std.meta.eql(bans, p.bans)) p.dirty = true;
         p.which = u.m;
         p.teams = teams;
@@ -258,6 +270,22 @@ pub const Page = struct {
                 p.teams = @splat(@splat(0));
                 p.bans = @splat(0);
                 p.seat = null;
+                p.undo = null;
+                p.dirty = true;
+            },
+            .random, .fill => {
+                const l = p.ready() orelse return;
+                const before = p.teams;
+                // Emptied first, so a champion on a later seat isn't kept off an earlier one
+                if (m == .random) p.teams = @splat(@splat(0));
+                fill(&l.m, p.head, &p.teams, p.bans, p.rng.random());
+                if (std.meta.eql(before, p.teams)) return;
+                p.undo = before;
+                p.dirty = true;
+            },
+            .undo => {
+                p.teams = p.undo orelse return;
+                p.undo = null;
                 p.dirty = true;
             },
             .ban => {
@@ -266,6 +294,7 @@ pub const Page = struct {
                 ev.after = .{ .op = .focus, .ref = "input" };
                 if (e >= p.head.champs.len) return;
                 const id = p.head.champs[e].id;
+                p.undo = null;
                 // Banned off the board: a seat can't hold a banned champion
                 for (&p.teams) |*team| for (team) |*x| {
                     if (x.* == id) x.* = 0;
@@ -375,7 +404,12 @@ pub const Page = struct {
         return h.div(.{ .class = "bd" }, .{
             draftboard.fullOn(h, .{ .v = .full, .lanes = &lanes }, &on),
             p.bansRow(h),
-            button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .clear) }, .{W.clear}),
+            h.div(.{ .class = "acts" }, .{
+                button.view(h, .{ .s = .s, .disabled = l == null, .on = h.on(p, .random) }, .{W.random}),
+                button.view(h, .{ .s = .s, .disabled = l == null, .on = h.on(p, .fill) }, .{W.fill}),
+                if (p.undo != null) button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .undo) }, .{W.undo}) else null,
+                button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .clear) }, .{W.clear}),
+            }),
         });
     }
 
@@ -490,6 +524,34 @@ fn shortDate(h: *H, ymd: []const u8) []const u8 {
     return h.fmt("{d} {s}", .{ d, months[m - 1] });
 }
 
+/// Each empty seat of `teams` drawn by play share in its role on the share patch, from
+/// the champions the candidates list with min_share or more, not banned, not on another
+/// seat; a role with none left stays empty
+pub fn fill(m: *const td.Model, head: *const Head, teams: *[2][n_role]u32, bans: [n_ban]u32, rnd: std.Random) void {
+    for (teams) |*team| for (team, 0..) |*seat, r| {
+        if (seat.* != 0) continue;
+        var sum: f64 = 0;
+        for (m.cells) |c| if (drawable(m, head, teams.*, bans, c, r)) {
+            sum += c.patch_share;
+        };
+        var x = rnd.float(f64) * sum;
+        var pick: u32 = 0;
+        // The last one drawable when rounding leaves x above 0
+        for (m.cells) |c| {
+            if (!drawable(m, head, teams.*, bans, c, r)) continue;
+            pick = c.champion;
+            x -= c.patch_share;
+            if (x <= 0) break;
+        }
+        seat.* = pick;
+    };
+}
+
+fn drawable(m: *const td.Model, head: *const Head, teams: [2][n_role]u32, bans: [n_ban]u32, c: td.Cell, r: usize) bool {
+    if (c.role != r or c.games < m.min_games or !(c.patch_share >= min_share)) return false;
+    return champOf(head, c.champion) != null and !onBoard(teams, c.champion) and std.mem.findScalar(u32, &bans, c.champion) == null;
+}
+
 /// `id` into seat `i` (side * n_role + role): a champion plays one seat a draft
 pub fn place(teams: *[2][n_role]u32, i: u8, id: u32) void {
     if (i >= 2 * n_role) return;
@@ -564,6 +626,7 @@ pub const css =
     \\  .c-tester .bans { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap; }
     \\  .c-tester .bans > .line { color: var(--muted); font-size: var(--fs-s); margin-right: var(--sp-1); }
     \\  .c-tester .bans > .ban { padding: 0; border: 0; background: none; cursor: pointer; }
+    \\  .c-tester .acts { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
     \\  .c-tester .files { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-1); font-size: var(--fs-s); }
     \\}
     \\

@@ -220,8 +220,8 @@ this on the site)
 The /private pages (accounts.md "Status"); /private itself is an index of them. Live: the
 Draft tester (/private/tester, draft-tester.md) with the live model and the Lab's comp
 model (jomify's training-receive.sh puts only the tester's model files in private/lab);
-the old JS tester at /private/old until the new one has Random/Fill/Undo, the lane model
-(Gold column), compare and set net (bans done; ported in that order). Then /private/old, admin.js, admin-draft.js,
+the old JS tester at /private/old until the new one has compare and set net (bans,
+Random/Fill/Undo and the lane model's Gold column done). Then /private/old, admin.js, admin-draft.js,
 admin-setnet.js and admin.css go, and pv.js becomes an island. The shipped model's
 win chances on the public champion and matchup pages for private logins (/private/pv.js,
 loaded by the header script in browsers that opened /admin/ or /private, data

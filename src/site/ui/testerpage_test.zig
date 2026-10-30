@@ -1,7 +1,7 @@
 //! The Draft tester on the fake DOM: the server's render, hydration, seats chosen, the
 //! board from the URL (the candidate panel's picks) and into it, the model Select, the
-//! tabs with each load state, bans, Clear; each patch equal to a fresh render. Then
-//! restore's edge cases and the model file's bad bytes
+//! tabs with each load state, bans, Random, Fill empty, Undo, Clear; each patch equal to
+//! a fresh render. Then restore's edge cases and the model file's bad bytes
 const std = @import("std");
 const tree = @import("tree.zig");
 const diff = @import("diff.zig");
@@ -210,6 +210,51 @@ test "bans: typed and taken off the board, into the URL and out of the panel's; 
 
     p.click(p.nth("data-v", "quiet", 0));
     try testing.expectEqual(bansOf(&.{}), p.state.bans);
+    _ = try p.shown();
+}
+
+test "Random and Fill empty draw by play share, never a ban or a seat twice; Undo" {
+    var p: Page = undefined;
+    try p.init();
+    defer p.deinit();
+    var ev: tree.Event = .{ .kind = .click };
+    // No model yet: nothing to draw from
+    p.state.update(.random, &ev);
+    try testing.expect(p.state.undo == null);
+    p.state.loads.set(.live, .{ .ready = &p.l });
+    p.i.render();
+
+    // Darius banned: Aatrox, the only one left, to blue top; red top stays empty (the demo
+    // has top only)
+    try p.hashed("#n=122-0-0-0-0-0-0-0-0-0");
+    p.state.update(.random, &ev);
+    p.i.render();
+    try testing.expectEqual([2][n_role]u32{ .{ 266, 0, 0, 0, 0 }, @splat(0) }, p.state.teams);
+    try has(try p.shown(), "Undo");
+    // Undo, before Clear
+    p.click(p.nth("data-v", "quiet", 0));
+    try testing.expectEqual([2][n_role]u32{ @splat(0), @splat(0) }, p.state.teams);
+    try testing.expect(p.state.undo == null);
+    _ = try p.shown();
+
+    // Fill empty keeps red's pick
+    try p.hashed("#r=266-0-0-0-0");
+    p.state.update(.fill, &ev);
+    try testing.expectEqual([2][n_role]u32{ .{ 122, 0, 0, 0, 0 }, .{ 266, 0, 0, 0, 0 } }, p.state.teams);
+    // A pick from the panel drops Undo
+    try p.hashed("#r=266-0-0-0-0");
+    try testing.expect(p.state.undo == null);
+
+    // Random redraws both: blue top Aatrox by its share, 0.6
+    var aatrox: u32 = 0;
+    for (0..200) |_| {
+        p.state.update(.random, &ev);
+        const t = p.state.teams;
+        try testing.expect(t[0][0] != t[1][0] and t[0][0] != 0 and t[1][0] != 0);
+        if (t[0][0] == 266) aatrox += 1;
+    }
+    try testing.expect(aatrox > 95 and aatrox < 145);
+    p.i.render();
     _ = try p.shown();
 }
 

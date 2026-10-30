@@ -131,8 +131,11 @@ public risk), then Daily Draft (80% the same parts), then the desktop's champ se
 
 - Seat tap: select; type in the seat to search; Enter picks the top match; x clears;
   lock toggles keep
-- Random / Fill empty / Clear / Undo: as today (fills skip locked seats); the "Fill..."
-  presets (by role order, by best) in a Select
+- Random game / Fill empty / Undo / Clear: a draw by play share in the role on the share
+  patch, from the candidates with 1%+ of it, never a ban; Random empties the board
+  first, Fill empty only the empty seats; Undo takes back the last draw, any other board
+  change drops it. Not yet: keep toggles (Fill empty after picking covers most of it),
+  the "Fill..." presets (top 15, swap sides, AD/AP, mirror)
 - Bans: one list of 10 for both teams under the board (as the old tester); the box bans,
   a chip tap lifts it; a banned champion leaves the board and the candidates; in the
   link's fragment (`n`)
