@@ -14,6 +14,11 @@
 //!   GET  /api/friends.bin?id=..     the same as ui.yourfriends.Friends (ui.data)
 //!   POST /api/forget?id=Name%23TAG  objection: issue a profile icon; &check=1 checks it
 //!   GET  /api/forget?id=Name%23TAG  the objection's state
+//!   GET  /api/squad?s=TOKEN         a squad and its games together as ui.squad.Data
+//!                                   (squads.zig)
+//!   POST /api/squad/check?id=..&do=create&name=N | do=join&s=T | do=leave&s=T  a squad
+//!                                   icon check; &k=KEY&check=1 checks it
+//!   GET  /api/squad/check?id=..&k=KEY  its state (and a new squad's token)
 //!   GET  /api/health                queue length
 //!   POST /api/daily?n=N&pick=I&side=S  a finished Daily Draft puzzle's answers (option
 //!                                   index 0-5, side 0 blue or 1 red), counted; returns
@@ -42,6 +47,7 @@ pub const devfixture = @import("devfixture.zig");
 const ui = @import("ui");
 pub const friends = @import("friends.zig");
 pub const notes = @import("notes.zig");
+pub const squads = @import("squads.zig");
 
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.api);
@@ -380,6 +386,18 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
         const r = try forget(ctx, arena, db, query, method == .POST);
+        return send(ctx, request, r);
+    }
+    if (std.mem.eql(u8, path, "/api/squad") and method == .GET) {
+        const db = try cache.open(ctx.opts.db_path);
+        defer db.close();
+        const r = try squadRead(ctx, arena, db, query);
+        return send(ctx, request, r);
+    }
+    if (std.mem.eql(u8, path, "/api/squad/check") and (method == .POST or method == .GET)) {
+        const db = try cache.open(ctx.opts.db_path);
+        defer db.close();
+        const r = try squadCheck(ctx, arena, db, query, method == .POST);
         return send(ctx, request, r);
     }
     if (std.mem.eql(u8, path, "/api/daily") and (method == .POST or method == .GET)) {
@@ -971,6 +989,140 @@ fn riotIds(arena: Allocator, db: store.Db, match_id: []const u8, players: usize)
     return out;
 }
 
+/// A squad as ui.squad.Data, state none for an unknown token. At most every
+/// squads.refresh_s per squad (not per read, so reloads and a leaked link can't multiply
+/// Riot calls) a read counts as a lookup of each member and queues their refreshes
+fn squadRead(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Reply {
+    const token = try param(arena, query, "s") orelse "";
+    var out: ui.squad.Data = .{ .state = .none };
+    if (squads.validToken(token)) if (try squadData(ctx, arena, db, token)) |d| {
+        out = d;
+    };
+    var bytes: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, ui.squad.Data, out, &bytes);
+    return .{ .status = .ok, .body = bytes.items, .binary = true };
+}
+
+fn squadData(ctx: *Context, arena: Allocator, db: store.Db, token: []const u8) !?ui.squad.Data {
+    const sq = blk: {
+        var q = try db.prepare("SELECT id, name, refreshed FROM squads WHERE token = ?");
+        defer q.deinit();
+        try q.bind(.{token});
+        if (!try q.step()) return null;
+        const r = q.row(struct { id: i64, name: []const u8, refreshed: i64 });
+        break :blk .{ .id = r.id, .name = try arena.dupe(u8, r.name), .refreshed = r.refreshed };
+    };
+    const now = std.Io.Clock.real.now(ctx.io).toSeconds();
+    var puuids: std.ArrayList([]const u8) = .empty;
+    var members: std.ArrayList(ui.squad.Member) = .empty;
+    {
+        var q = try db.prepare(
+            \\SELECT p.puuid, p.game_name, p.tag_line, p.refreshed,
+            \\  (SELECT count(*) FROM player_games g WHERE g.puuid = p.puuid)
+            \\FROM squad_members m JOIN players p USING (puuid) WHERE m.squad = ? ORDER BY m.joined, p.puuid
+        );
+        defer q.deinit();
+        try q.bind(.{sq.id});
+        while (try q.step()) {
+            const r = q.row(struct { puuid: []const u8, name: []const u8, tag: []const u8, refreshed: i64, games: i64 });
+            try puuids.append(arena, try arena.dupe(u8, r.puuid));
+            try members.append(arena, .{ .riot_id = try arena.print("{s}#{s}", .{ r.name, r.tag }), .games = @intCast(r.games) });
+        }
+    }
+    if (now - sq.refreshed >= squads.refresh_s) {
+        try db.run("UPDATE squads SET refreshed = ? WHERE id = ?", .{ now, sq.id });
+        for (puuids.items) |puuid| {
+            try db.run("UPDATE players SET looked_up = ? WHERE puuid = ?", .{ now, puuid });
+            if (try db.scalar("SELECT 1 FROM players WHERE puuid = ? AND refreshed < ?", .{ puuid, now - squads.refresh_s }) != null)
+                _ = try enqueue(db, puuid, now);
+        }
+    }
+    for (members.items, puuids.items) |*m, puuid| {
+        m.waiting = try db.scalar("SELECT 1 FROM jobs WHERE key = ?1 OR key = ?2 || ?1", .{ puuid, cache.history_prefix }) != null;
+    }
+
+    // Only matches two or more members share
+    const by_member = try arena.alloc(std.ArrayList(squads.Seen), puuids.items.len);
+    @memset(by_member, .empty);
+    var summaries: std.StringHashMapUnmanaged(game.Summary) = .empty;
+    var q = try db.prepare(
+        \\SELECT sm.puuid, pg.match_id, pg.slot, m.summary
+        \\FROM squad_members sm JOIN player_games pg USING (puuid) JOIN matches m USING (match_id)
+        \\WHERE sm.squad = ?1 AND pg.match_id IN (
+        \\  SELECT g.match_id FROM squad_members s JOIN player_games g USING (puuid)
+        \\  WHERE s.squad = ?1 GROUP BY g.match_id HAVING count(*) >= 2)
+    );
+    defer q.deinit();
+    try q.bind(.{sq.id});
+    while (try q.step()) {
+        const r = q.row(struct { puuid: []const u8, match_id: []const u8, slot: u8, summary: []const u8 });
+        const at = for (puuids.items, 0..) |p, i| {
+            if (std.mem.eql(u8, p, r.puuid)) break i;
+        } else continue;
+        const e = try summaries.getOrPut(arena, r.match_id);
+        if (!e.found_existing) {
+            e.key_ptr.* = try arena.dupe(u8, r.match_id);
+            e.value_ptr.* = fetch.readSummary(arena, r.summary) catch |err| {
+                log.warn("{s}: summary {t}", .{ r.match_id, err });
+                _ = summaries.remove(r.match_id);
+                continue;
+            };
+        }
+        try by_member[at].append(arena, .{ .match_id = e.key_ptr.*, .slot = r.slot, .summary = e.value_ptr.* });
+    }
+    const lists = try arena.alloc([]const squads.Seen, by_member.len);
+    for (lists, by_member) |*l, b| l.* = b.items;
+    const together = try squads.together(arena, lists);
+
+    var ids: std.ArrayList(u32) = .empty;
+    const out_games = try arena.alloc(ui.squad.Game, together.len);
+    for (out_games, together) |*g, t| {
+        const seats = try arena.alloc(ui.squad.Seat, t.seats.len);
+        for (seats, t.seats) |*s, x| {
+            const p = t.summary.players[x.slot];
+            s.* = .{
+                .member = x.member,
+                .champ = try champIndex(arena, &ids, p.champion),
+                .role = if (core.Role.fromLcu(p.position)) |r| ui.role.Role.all[@backingInt(r)] else null,
+                .k = @intCast(std.math.clamp(p.kills, 0, std.math.maxInt(u16))),
+                .d = @intCast(std.math.clamp(p.deaths, 0, std.math.maxInt(u16))),
+                .a = @intCast(std.math.clamp(p.assists, 0, std.math.maxInt(u16))),
+            };
+        }
+        g.* = .{
+            .start_ms = t.summary.start_ms,
+            .queue = ui.yourlist.queueOf(t.summary.queue),
+            .duration_s = @intCast(std.math.clamp(t.summary.duration_s, 0, std.math.maxInt(u32))),
+            .win = t.summary.players[t.seats[0].slot].win,
+            .seats = seats,
+        };
+    }
+    const champs = try arena.alloc(ui.champ.Champ, ids.items.len);
+    for (champs, ids.items) |*c, id| c.* = try ctx.shown.champ(id);
+    return .{ .state = .ready, .name = sq.name, .members = members.items, .champs = champs, .games = out_games };
+}
+
+/// A squad's start, join or leave behind the profile icon check (squads.post, the
+/// fetcher's squadCheck); GET and a repeat POST answer the check's state for its key
+fn squadCheck(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8, post: bool) !Reply {
+    const key = try riotIdParam(arena, query) orelse
+        return errorReply(arena, .bad_request, "error", "expected ?id=Name#TAG");
+    const k = try param(arena, query, "k") orelse "";
+    if (post) {
+        const action = if (try param(arena, query, "do")) |d| std.meta.stringToEnum(squads.Action, d) else null;
+        const check = try param(arena, query, "check") != null;
+        const room = try queued(db) < max_jobs;
+        switch (try squads.post(db, ctx.io, key, action, try param(arena, query, "s"), try param(arena, query, "name"), k, check, room, fetch.challenge_s)) {
+            .started => |t| return .{ .status = .ok, .body = try arena.print("{{\"state\":\"pending\",\"k\":\"{s}\"}}", .{&t}) },
+            .bad => |why| return errorReply(arena, .bad_request, "error", why),
+            .busy => return busy(arena),
+            .waiting => {},
+        }
+    }
+    const now = std.Io.Clock.real.now(ctx.io).toSeconds();
+    return .{ .status = .ok, .body = try squads.checkJson(arena, db, key, k, now) };
+}
+
 /// Objection and removal, gated by the profile icon check (docs/your-games.md).
 /// POST starts a challenge (or, with &check=1, checks the icon); GET reports its state.
 /// The fetcher does the Riot calls: the page polls GET until the state settles
@@ -1052,6 +1204,67 @@ test "games: a visit refreshes after refresh_after_s, a check after check_after_
     try db.run("UPDATE players SET refreshed = ?", .{now - 30});
     _ = try games(&ctx, arena, db, "id=A%231&refresh=1");
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM jobs", .{}));
+}
+
+test "squad: games together, a refresh at most every refresh_s, a check's key" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = std.testing.io;
+    var ctx: Context = .{ .gpa = std.testing.allocator, .io = io, .opts = .{ .db_path = ":memory:", .curves_dir = "" }, .curves = .{}, .accounts = .{ .gpa = std.testing.allocator, .io = io, .db_path = "" } };
+    const db = try cache.open(":memory:");
+    defer db.close();
+    const now = std.Io.Clock.real.now(io).toSeconds();
+    try db.run("INSERT INTO players (puuid, game_name, tag_line, platform, refreshed) VALUES ('pa', 'A', '1', 'EUW1', 0), ('pb', 'B', '1', 'EUW1', ?), ('pc', 'C', '1', 'EUW1', 0)", .{now});
+    try db.run("INSERT INTO squads (id, token, name, created) VALUES (1, 'AbCdEfGhIjKlMnOpQrStUv', 'Duo', 0)", .{});
+    try db.run("INSERT INTO squad_members VALUES (1, 'pa', 1), (1, 'pb', 2)", .{});
+    // Games 0-2 A and B together, 3 A alone; C (no member) in game 0
+    for (0..4) |i| {
+        const players = try arena.alloc(game.Summary.Player, 10);
+        for (players, 0..) |*p, slot| p.* = .{ .hash = "", .team = if (slot < 5) 100 else 200, .position = "MIDDLE", .champion = 1, .win = (i != 1) == (slot < 5), .kills = 2, .deaths = 1, .assists = 3 };
+        const summary: game.Summary = .{ .patch = "16.20", .queue = 440, .start_ms = @intCast(100 - i), .duration_s = 1800, .remake = false, .players = players };
+        const json = try std.json.Stringify.valueAlloc(arena, summary, .{});
+        const id = try arena.print("EUW1_{d}", .{i});
+        try db.run("INSERT INTO matches VALUES (?, 0, ?, NULL)", .{ id, store.Blob{ .bytes = try store.raw.compress(arena, json) } });
+        try db.run("INSERT INTO player_games VALUES ('pa', ?, ?, 0)", .{ id, summary.start_ms });
+        if (i < 3) try db.run("INSERT INTO player_games VALUES ('pb', ?, ?, 1)", .{ id, summary.start_ms });
+        if (i == 0) try db.run("INSERT INTO player_games VALUES ('pc', ?, ?, 2)", .{ id, summary.start_ms });
+    }
+    const r = try squadRead(&ctx, arena, db, "s=AbCdEfGhIjKlMnOpQrStUv");
+    const d = try ui.data.decode(arena, ui.squad.Data, r.body);
+    try std.testing.expectEqual(.ready, d.state);
+    try std.testing.expectEqualStrings("Duo", d.name);
+    try std.testing.expectEqual(2, d.members.len);
+    try std.testing.expectEqualStrings("A#1", d.members[0].riot_id);
+    try std.testing.expectEqual(4, d.members[0].games);
+    try std.testing.expectEqual(3, d.games.len);
+    try std.testing.expect(d.games[0].win and !d.games[1].win);
+    try std.testing.expectEqual(.flex, d.games[0].queue);
+    try std.testing.expectEqual(2, d.games[0].seats.len);
+    try std.testing.expectEqual(ui.role.Role.mid, d.games[0].seats[1].role.?);
+    // A was stale and is queued, B fresh is not; both count as looked up
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM jobs", .{}));
+    try std.testing.expect(d.members[0].waiting and !d.members[1].waiting);
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM players WHERE looked_up >= ?", .{now}));
+    try db.run("DELETE FROM jobs", .{});
+    _ = try squadRead(&ctx, arena, db, "s=AbCdEfGhIjKlMnOpQrStUv");
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM jobs", .{}));
+
+    const unknown = try ui.data.decode(arena, ui.squad.Data, (try squadRead(&ctx, arena, db, "s=nope")).body);
+    try std.testing.expectEqual(.none, unknown.state);
+
+    const started = try squadCheck(&ctx, arena, db, "id=C%231&do=join&s=AbCdEfGhIjKlMnOpQrStUv", true);
+    const k = (try std.json.parseFromSliceLeaky(struct { state: []const u8, k: []const u8 }, arena, started.body, .{})).k;
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM jobs WHERE key = 'squad:c#1'", .{}));
+    const mine = try squadCheck(&ctx, arena, db, try arena.print("id=C%231&k={s}", .{k}), false);
+    try std.testing.expect(std.mem.find(u8, mine.body, "\"state\":\"pending\"") != null);
+    try std.testing.expectEqualStrings("{\"state\":\"none\"}", (try squadCheck(&ctx, arena, db, "id=C%231", false)).body);
+    try std.testing.expectEqual(.bad_request, (try squadCheck(&ctx, arena, db, "id=C%231&do=create&name=", true)).status);
+
+    // An erasure takes the member out; the last one out deletes the squad
+    try cache.forget(db, "pa", now);
+    try cache.forget(db, "pb", now);
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM squads", .{}));
 }
 
 test "friends: a friend's record with and without the player once both are looked up" {

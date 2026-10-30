@@ -173,12 +173,7 @@ pub const Forget = struct {
                 }),
                 button.view(h, .{ .v = .primary, .s = .s, .disabled = waiting or !valid(std.mem.trim(u8, p.q.slice(), " \t")), .on = h.on(p, .start) }, .{W.start}),
             }),
-            if (icon) h.el(.img, .{
-                .src = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/profileicon/{d}.png", .{ p.ddragon, p.icon.? }),
-                .alt = W.icon,
-                .width = "64",
-                .height = "64",
-            }, .{}) else null,
+            if (icon) iconImg(h, p.ddragon, p.icon.?, W.icon) else null,
             h.p(.{ .role = "status" }, .{p.line(h)}),
             if (p.at == .issued or p.at == .mismatch) button.view(h, .{ .v = .primary, .s = .s, .on = h.on(p, .check) }, .{W.check}) else null,
         });
@@ -200,6 +195,16 @@ pub const Forget = struct {
         };
     }
 };
+
+/// The profile icon to set for the check (ui.squad's too)
+pub fn iconImg(h: *H, ddragon: []const u8, icon: u32, alt: tree.Text) N {
+    return h.el(.img, .{
+        .src = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/profileicon/{d}.png", .{ ddragon, icon }),
+        .alt = alt,
+        .width = "64",
+        .height = "64",
+    }, .{});
+}
 
 /// Name#TAG: something either side of one #
 fn valid(id: []const u8) bool {

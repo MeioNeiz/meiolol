@@ -24,6 +24,8 @@ pub const Fake = struct {
     /// Paths containing this get Riot's JSON 403 (error.KeyRejected); "" every path, a
     /// rejected key
     refuse: ?[]const u8 = null,
+    /// Every account's profile icon (summoner-v4), for the icon checks
+    icon: i64 = 1,
 
     pub fn init(gpa: std.mem.Allocator, io: std.Io, latency_ms: u32) !Fake {
         var match: Template = try .init(gpa, @embedFile("testdata/match.json"), "NA1_5321429660");
@@ -56,6 +58,8 @@ pub const Fake = struct {
         if (std.mem.startsWith(u8, path, "/lol/league-exp/v4/entries/")) return try ladder(gpa, route, path);
         if (std.mem.startsWith(u8, path, "/lol/champion-mastery/")) return try gpa.dupe(u8, f.mastery_json);
         if (std.mem.startsWith(u8, path, "/riot/account/v1/accounts/")) return try f.account(gpa, path);
+        if (std.mem.startsWith(u8, path, "/riot/account/v1/region/by-game/lol/by-puuid/")) return try gpa.dupe(u8, "{\"game\":\"lol\",\"region\":\"euw1\"}");
+        if (std.mem.startsWith(u8, path, "/lol/summoner/v4/summoners/by-puuid/")) return try gpa.print("{{\"profileIconId\":{d}}}", .{f.icon});
         const by_puuid = "/lol/match/v5/matches/by-puuid/";
         if (std.mem.startsWith(u8, path, by_puuid)) return try matchIds(gpa, route, path[by_puuid.len..]);
         const matches = "/lol/match/v5/matches/";

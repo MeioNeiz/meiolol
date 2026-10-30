@@ -10,6 +10,7 @@ const textpages = @import("textpages.zig");
 const daily_page = @import("daily.zig");
 const yourgame = @import("yourgame.zig");
 const yourpage = @import("yourpage.zig");
+const squadpage = @import("squadpage.zig");
 const daily = @import("../daily.zig");
 const learn = @import("../learn.zig");
 const learn_page = @import("learn.zig");
@@ -364,7 +365,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ assets.font, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.champcharts_js, assets.champcharts_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.findergrid_js, assets.findergrid_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm, assets.pool_js, assets.pool_wasm, assets.poolgrid_js, assets.poolgrid_wasm, assets.daily_js, assets.daily_wasm, assets.dailydays_js, assets.dailydays_wasm, assets.dailyseat_js, assets.dailyseat_wasm, assets.home_js, assets.home_wasm, assets.homegame_js, assets.homegame_wasm, assets.your_js, assets.your_wasm, assets.yourviews_js, assets.yourviews_wasm, assets.yourtime_js, assets.yourtime_wasm, assets.yourlookup_js, assets.yourlookup_wasm, assets.yourfriends_js, assets.yourfriends_wasm, assets.forget_js, assets.forget_wasm, assets.account_js, assets.account_wasm, assets.sitesearch_js, assets.sitesearch_wasm };
+pub const hashed_assets = [_]assets.Hashed{ assets.font, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.champcharts_js, assets.champcharts_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.findergrid_js, assets.findergrid_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm, assets.pool_js, assets.pool_wasm, assets.poolgrid_js, assets.poolgrid_wasm, assets.daily_js, assets.daily_wasm, assets.dailydays_js, assets.dailydays_wasm, assets.dailyseat_js, assets.dailyseat_wasm, assets.home_js, assets.home_wasm, assets.homegame_js, assets.homegame_wasm, assets.your_js, assets.your_wasm, assets.yourviews_js, assets.yourviews_wasm, assets.yourtime_js, assets.yourtime_wasm, assets.yourlookup_js, assets.yourlookup_wasm, assets.yourfriends_js, assets.yourfriends_wasm, assets.forget_js, assets.forget_wasm, assets.squad_js, assets.squad_wasm, assets.account_js, assets.account_wasm, assets.sitesearch_js, assets.sitesearch_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -398,7 +399,7 @@ pub fn sharedRenders(site: *const Site, at: urls.Page) bool {
 }
 
 /// Shared pages the static build writes but the sitemap leaves out
-pub const unlisted_pages = [_]urls.Page{.game};
+pub const unlisted_pages = [_]urls.Page{ .game, .squad };
 
 /// `at`'s file in view `v`'s tree, from the site root: "_v/all/champions/top.html"
 /// (nginx: $uri.html), "index.html" for home
@@ -583,6 +584,7 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
         .daily => |n| if (n) |x| return daily_page.route(site, w, x) else try daily_page.write(site, w),
         .game => return yourgame.writePage(site, w),
         .your => return yourpage.writePage(site, w),
+        .squad => try squadpage.writePage(site, w),
         else => {
             // null: the body is textpages.body's
             const fixed = [_]struct { std.meta.Tag(urls.Page), []const u8, []const u8, html.Nav, ?ui.account.Kind }{

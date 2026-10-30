@@ -14,6 +14,7 @@ pub const boilerplate = core.boilerplate;
 pub const Nav = enum {
     home,
     your,
+    squad,
     matchups,
     patch,
     daily,

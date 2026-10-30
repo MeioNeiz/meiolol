@@ -1,11 +1,12 @@
 //! api.db: looked-up accounts and players, the refresh queue, matches cached by id, Daily
-//! Draft answer counts and notes on the site (notes.zig). Own file, separate from the crawler's databases: the
+//! Draft answer counts, notes on the site (notes.zig) and squads (squads.zig). Own file, separate from the crawler's databases: the
 //! service runs on the web server.
 
 const std = @import("std");
 const store = @import("store");
 const game = @import("game.zig");
 const notes = @import("notes.zig");
+const squads = @import("squads.zig");
 
 const Db = store.Db;
 
@@ -108,7 +109,7 @@ pub const schema =
     \\    PRIMARY KEY (n, pick, side)
     \\) WITHOUT ROWID;
     \\
-++ notes.schema;
+++ notes.schema ++ squads.schema;
 
 /// Job keys for a player's backlog: this prefix, then the PUUID
 pub const history_prefix = "history:";
@@ -157,6 +158,7 @@ pub fn prune(db: Db, before: i64, now: i64) !void {
     errdefer db.rollback();
     try deletePlayers(db, "SELECT puuid FROM players WHERE looked_up < ?1", .{before});
     try db.run("DELETE FROM challenges WHERE expires < ?", .{now - std.time.s_per_day});
+    try db.run("DELETE FROM squad_checks WHERE expires < ?", .{now - std.time.s_per_day});
     try db.run("DELETE FROM accounts WHERE puuid IS NULL AND checked < ?", .{now - std.time.s_per_day});
     try db.commit();
 }
@@ -170,6 +172,7 @@ pub fn clearForRekey(db: Db) !void {
     try db.run("DELETE FROM jobs WHERE instr(key, '#') = 0", .{});
     try db.run("DELETE FROM accounts", .{});
     try db.run("DELETE FROM challenges", .{});
+    try db.run("DELETE FROM squad_checks", .{});
 }
 
 /// Players whose PUUIDs `select` returns, with their games, accounts and jobs; then
@@ -182,6 +185,8 @@ fn deletePlayers(db: Db, comptime select: []const u8, args: anytype) !void {
     try db.run("DELETE FROM player_games WHERE puuid IN temp.gone", .{});
     try db.run("DELETE FROM backlog WHERE puuid IN temp.gone", .{});
     try db.run("DELETE FROM accounts WHERE puuid IN temp.gone", .{});
+    try db.run("DELETE FROM squad_members WHERE puuid IN temp.gone", .{});
+    try squads.dropEmpty(db);
     try db.run("DELETE FROM jobs WHERE key IN temp.gone OR key IN (SELECT ?1 || puuid FROM temp.gone)", .{history_prefix});
     try db.run(
         \\DELETE FROM matches WHERE match_id NOT IN (SELECT match_id FROM player_games)

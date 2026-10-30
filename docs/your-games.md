@@ -97,6 +97,9 @@ copies the file into each site build; a failed run deletes it, so no stale examp
 | POST /api/forget?id=...&check=1 | checks the icon: checking, then done or mismatch |
 | GET /api/friends?id=Name%23TAG | state (none, opted_out, ready), friends (src/api/friends.zig): games, waiting (backlog), with_friends and alone, and per friend (3+ games on the same team, top 20): riot_id, together, against, last_ms, you and them (with, apart, apart_rate, diff, lo, hi), their_games, top 3 champion and role pairs. Fetches nothing |
 | GET /api/forget?id=... | the objection's state (none, pending, issued, checking, mismatch, done, not_found, failed, expired) |
+| GET /api/squad?s=TOKEN | a squad as ui.squad.Data in ui.data's binary: state (none, ready), name, members (riot_id, games, waiting), the games together (Squads below) with each member's champion, role and K/D/A; always 200 |
+| POST /api/squad/check?id=Name%23TAG&do=create&name=N, do=join&s=TOKEN, do=leave&s=TOKEN | starts a Squads icon check: {state: pending, k}; with &k=KEY&check=1 checks the icon |
+| GET /api/squad/check?id=..&k=KEY | the check's state (as /api/forget's, plus done, full, gone, opted_out) and, once a start is done, the new squad's token `s`; state none without the right key |
 | GET /api/health | {ok, jobs} |
 | POST /api/daily?n=N&pick=0-5&side=0-1 | Daily Draft: one finished puzzle's answers counted (option index in the puzzle's order, side 0 blue); replies as GET |
 | GET /api/daily?n=N | {n, players, picks[6], sides[2]}: counts only, daily_answers in api.db |
@@ -125,7 +128,33 @@ together first.
   are still coming
 - Facts, not causes: the page says games with friends differ in other ways too
 
-Next (docs/backlog.md "Your games and Squads"): opt-in Squads pages built on this.
+## Squads
+
+/squad (src/site/squadpage.zig, ui.squad, api/squads.zig): friends who each joined by
+the profile icon check see the games they played together. Linked from every page's
+header.
+
+- A squad is its name, an invite token (16 random bytes, base64url) and its members'
+  PUUIDs (api.db squads, squad_members); up to 10 members. Its games are the members'
+  Your games caches: nothing else is stored. The invite link is /squad#s=TOKEN: the
+  token stays in the fragment, so it is never in a page request, nginx log or Referer.
+  Never indexed, not in the sitemap
+- Start, join and leave all pass the objection's icon check (squad_checks, fetcher job
+  `squad:<riot id>`); nothing about the player is stored until it passes. Then the
+  player is added as a lookup adds them and a refresh is queued. The check's key `k`,
+  returned when it starts, is needed to read it, so nobody reads a new squad's token
+  by Riot ID. A blocked PUUID ends opted_out
+- Games together: a match in two or more members' player_games with them on the same
+  team (members on both teams: the bigger side), remakes left out, newest 50, any
+  queue the service fetches. Each opens the first member's game review
+- Refresh: a read queues refreshes of members not refreshed for 30 min, at most once
+  per squad per 30 min (squads.refreshed), so reloads or a leaked link can't multiply
+  Riot calls. That read also counts as each member's lookup (looked_up), so a squad in
+  use keeps its members; one unopened for 30 days loses them to the prune and, empty,
+  is deleted. Erasure (cache.deletePlayers: forget, prune, rekey) drops memberships,
+  then empty squads
+- Not yet (docs/backlog.md "Your games and Squads"): weekly recap with awards, lane
+  awards, squad Daily Draft, Discord image, coach kind
 
 ## Rate limits
 

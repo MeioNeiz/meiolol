@@ -245,7 +245,8 @@ crawler's proxy at priority. Matches cached by id (summary
 without names, PUUIDs hashed; compact timeline). Per-game numbers come from curves.zig
 `lane()`, compared with `Curves.get` for the player's visible-tier bracket. Objection:
 profile-icon check, then delete and block the PUUID. Players not looked up for 30 days
-are pruned.
+are pruned. Squads (/squad, api/squads.zig): members join by the same icon check and see
+their games together (your-games.md "Squads").
 
 ## Notes tool (src/site/notes.zig, ui/notes.zig, ui/noteslist.zig, src/api/notes.zig)
 

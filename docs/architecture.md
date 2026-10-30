@@ -44,7 +44,8 @@ src/
                      with a timeline by role, paired gains, shrinkage priors,
                      prediction files
   api/               "Your games" service (`meiolol api`, docs/your-games.md): cache.zig
-                     (api.db), fetch.zig (the one Riot caller), game.zig (lane vs curve)
+                     (api.db), fetch.zig (the one Riot caller), game.zig (lane vs curve),
+                     squads.zig (Squads)
   livestate.zig      the game state by minute from a timeline, per seat and team (shared
                      by lab/stateexport.zig and statemodel.zig)
   statemodel.zig     in-game win chance (richc) for Your games; model file

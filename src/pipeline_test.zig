@@ -862,6 +862,13 @@ test "fixture games to stats, curves and the website" {
     for ([_][]const u8{ "data-island=\"your\" data-bin=\"", "class=\"c-player\"", "class=\"c-psum\"", "href=\"/game#g=0\"", "data-wasm=\"" ++ assets.your_wasm.path ++ "\"", "data-island=\"yourviews\"", "data-island=\"yourtime\"", "data-js=\"" ++ assets.yourtime_js.path ++ "\" data-wasm=\"" ++ assets.yourtime_wasm.path ++ "\"", "data-wasm=\"" ++ assets.yourviews_wasm.path ++ "\"", "data-island=\"yourlookup\"", "data-island=\"forget\"", "data-island=\"yourfriends\"", "data-wasm=\"" ++ assets.yourfriends_wasm.path ++ "\"", "data-wasm=\"" ++ assets.forget_wasm.path ++ "\"", "data-js=\"" ++ assets.yourlookup_js.path ++ "\" data-wasm=\"" ++ assets.yourlookup_wasm.path ++ "\"", "An example player" }) |want| {
         try testing.expect(std.mem.find(u8, your_page, want) != null);
     }
+    // Squads: the start view, its island loads the fragment's squad; never indexed, and
+    // one click from every page (the header)
+    const squad_page = (try core_loaded.get(arena, "squad.html")).?;
+    for ([_][]const u8{ "noindex", "data-island=\"squad\"", "data-wasm=\"" ++ assets.squad_wasm.path ++ "\"", "class=\"c-squad\"" }) |want| {
+        try testing.expect(std.mem.find(u8, squad_page, want) != null);
+    }
+    try testing.expect(std.mem.find(u8, (try core_loaded.get(arena, "index.html")).?, "href=\"/squad\"") != null);
     // Home in every view: the shared view's example, its game file loaded lazily; the
     // Patch card's moves (all/ has none: its patch day isn't in views-moved.bin)
     {
@@ -897,7 +904,7 @@ test "fixture games to stats, curves and the website" {
         try testing.expect(std.mem.find(u8, sitemap, want) != null);
     }
     // Unlisted pages, a main role's own URL and the views stay out: one sitemap
-    for ([_][]const u8{ "x.io/game<", "x.io/champions/darius/top<", "region=", "period=" }) |page| {
+    for ([_][]const u8{ "x.io/game<", "x.io/squad<", "x.io/champions/darius/top<", "region=", "period=" }) |page| {
         try testing.expect(std.mem.find(u8, sitemap, page) == null);
     }
     try testing.expectEqual(null, try core_loaded.get(arena, "_v/patch/sitemap.xml"));

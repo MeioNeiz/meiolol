@@ -11,6 +11,7 @@ const store = @import("store");
 const riot = @import("../riot/root.zig");
 const cache = @import("cache.zig");
 const game = @import("game.zig");
+const squads = @import("squads.zig");
 
 const Allocator = std.mem.Allocator;
 const Client = riot.client.Client;
@@ -112,6 +113,11 @@ pub const Fetcher = struct {
                             \\UPDATE challenges SET state = CASE WHEN icon IS NULL THEN 'failed'
                             \\  ELSE 'mismatch' END WHERE riot_id = ?
                         , .{key[verify_prefix.len..]});
+                    } else if (std.mem.startsWith(u8, key, squads.check_prefix)) {
+                        try f.db.run(
+                            \\UPDATE squad_checks SET state = CASE WHEN icon IS NULL THEN 'failed'
+                            \\  ELSE 'mismatch' END WHERE riot_id = ?
+                        , .{key[squads.check_prefix.len..]});
                     } else if (std.mem.findScalar(u8, key, '#') == null) {
                         try f.db.run("UPDATE players SET error = ? WHERE puuid = ?", .{ @errorName(err), key });
                     }
@@ -127,6 +133,10 @@ pub const Fetcher = struct {
     fn job(f: *Fetcher, arena: Allocator, key: []const u8) !bool {
         if (std.mem.startsWith(u8, key, verify_prefix)) {
             try f.verify(arena, key[verify_prefix.len..]);
+            return false;
+        }
+        if (std.mem.startsWith(u8, key, squads.check_prefix)) {
+            try f.squadCheck(arena, key[squads.check_prefix.len..]);
             return false;
         }
         if (std.mem.startsWith(u8, key, cache.history_prefix)) {
@@ -179,14 +189,21 @@ pub const Fetcher = struct {
             try f.db.run("INSERT OR REPLACE INTO accounts VALUES (?, NULL, ?)", .{ riot_id, now });
             return null;
         };
+        if (try f.blocked(a.puuid)) {
+            try f.db.run("INSERT OR REPLACE INTO accounts VALUES (?, ?, ?)", .{ riot_id, a.puuid, now });
+            return null;
+        }
+        try f.addPlayer(riot_id, a, now);
+        return a.puuid;
+    }
+
+    fn addPlayer(f: *Fetcher, riot_id: []const u8, a: Account, now: i64) !void {
         try f.db.run("INSERT OR REPLACE INTO accounts VALUES (?, ?, ?)", .{ riot_id, a.puuid, now });
-        if (try f.blocked(a.puuid)) return null;
         try f.db.run(
             \\INSERT INTO players (puuid, game_name, tag_line, platform) VALUES (?, ?, ?, ?)
             \\ON CONFLICT (puuid) DO UPDATE SET game_name = excluded.game_name,
             \\  tag_line = excluded.tag_line, platform = excluded.platform
         , .{ a.puuid, a.name, a.tag, a.platform.id });
-        return a.puuid;
     }
 
     /// Objection: issue a starter icon (state pending) or check it (state checking);
@@ -205,9 +222,7 @@ pub const Fetcher = struct {
             try f.db.run("UPDATE challenges SET state = 'not_found' WHERE riot_id = ?", .{riot_id});
             return;
         };
-        const body = try f.keep(arena, try endpoints.summonerByPuuid(try f.route(a.platform.host), a.platform, a.puuid)) orelse
-            return error.NoSummoner;
-        const current = (try endpoints.parse(struct { profileIconId: i64 }, arena, body)).profileIconId;
+        const current = try f.profileIcon(arena, a);
         const now = f.seconds();
         if (std.mem.eql(u8, state, "pending")) {
             const wanted = pickIcon(f.io, current);
@@ -226,6 +241,55 @@ pub const Fetcher = struct {
             } else {
                 try f.db.run("UPDATE challenges SET state = 'mismatch' WHERE riot_id = ?", .{riot_id});
             }
+        }
+    }
+
+    fn profileIcon(f: *Fetcher, arena: Allocator, a: Account) !i64 {
+        const body = try f.keep(arena, try endpoints.summonerByPuuid(try f.route(a.platform.host), a.platform, a.puuid)) orelse
+            return error.NoSummoner;
+        return (try endpoints.parse(struct { profileIconId: i64 }, arena, body)).profileIconId;
+    }
+
+    /// Squads' start, join or leave (squads.zig): the objection's icon check, then on a
+    /// match the player is added as a lookup would add them (their games are the
+    /// squad's) and the squad changes. Nothing is stored before the match
+    fn squadCheck(f: *Fetcher, arena: Allocator, riot_id: []const u8) !void {
+        const state, const icon = blk: {
+            var q = try f.db.prepare("SELECT state, icon FROM squad_checks WHERE riot_id = ?");
+            defer q.deinit();
+            try q.bind(.{riot_id});
+            if (!try q.step()) return;
+            const r = q.row(struct { state: []const u8, icon: ?i64 });
+            break :blk .{ try arena.dupe(u8, r.state), r.icon };
+        };
+        const a = try f.account(arena, riot_id) orelse {
+            try f.db.run("UPDATE squad_checks SET state = 'not_found' WHERE riot_id = ?", .{riot_id});
+            return;
+        };
+        if (try f.blocked(a.puuid)) {
+            try f.db.run("UPDATE squad_checks SET state = 'opted_out' WHERE riot_id = ?", .{riot_id});
+            return;
+        }
+        const current = try f.profileIcon(arena, a);
+        const now = f.seconds();
+        if (std.mem.eql(u8, state, "pending")) {
+            try f.db.run(
+                "UPDATE squad_checks SET icon = ?, expires = ?, state = 'issued' WHERE riot_id = ?",
+                .{ pickIcon(f.io, current), now + challenge_s, riot_id },
+            );
+        } else if (std.mem.eql(u8, state, "checking")) {
+            if (icon == null or current != icon.?) {
+                try f.db.run("UPDATE squad_checks SET state = 'mismatch' WHERE riot_id = ?", .{riot_id});
+                return;
+            }
+            try f.db.begin();
+            errdefer f.db.rollback();
+            try f.addPlayer(riot_id, a, now);
+            try f.db.run("UPDATE players SET looked_up = ? WHERE puuid = ?", .{ now, a.puuid });
+            const outcome = try squads.apply(f.db, f.io, riot_id, a.puuid, now);
+            try f.db.run("UPDATE squad_checks SET state = ? WHERE riot_id = ?", .{ @tagName(outcome), riot_id });
+            try f.db.run("INSERT OR IGNORE INTO jobs (key, requested) VALUES (?, ?)", .{ a.puuid, now });
+            try f.db.commit();
         }
     }
 
@@ -552,6 +616,40 @@ test "a refresh frees every Riot body it fetched" {
     try db.run("INSERT INTO players (puuid, game_name, tag_line, platform) VALUES ('p', 'A', '1', 'EUW1')", .{});
     try f.refresh(arena_state.allocator(), "p", "p");
     try std.testing.expectEqual(@as(?i64, max_new), try db.scalar("SELECT count(*) FROM matches WHERE timeline IS NOT NULL", .{}));
+}
+
+test "a squad check: icon issued, a wrong icon, then the right one joins and queues a refresh" {
+    const gpa = std.testing.allocator;
+    var fake: riot.fake.Fake = try .init(gpa, std.testing.io, 0);
+    defer fake.deinit(gpa);
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const db = try cache.open(":memory:");
+    defer db.close();
+    var f: Fetcher = .{ .gpa = gpa, .io = std.testing.io, .db = db, .opts = .{} };
+    defer f.deinit();
+    for ([_][]const u8{ "europe", "euw1" }) |name| (try f.route(name)).fake = &fake;
+    _ = try squads.post(db, std.testing.io, "a#1", .create, null, "Duo", null, false, true, challenge_s);
+    try std.testing.expect(!try f.job(arena, "squad:a#1"));
+    const icon = (try db.scalar("SELECT icon FROM squad_checks WHERE state = 'issued'", .{})).?;
+    // Nothing kept about the player before the check passes
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM players", .{}));
+    try db.run("UPDATE squad_checks SET state = 'checking'", .{});
+    try std.testing.expect(!try f.job(arena, "squad:a#1"));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM squad_checks WHERE state = 'mismatch'", .{}));
+    fake.icon = icon;
+    try db.run("UPDATE squad_checks SET state = 'checking'", .{});
+    try std.testing.expect(!try f.job(arena, "squad:a#1"));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM squad_checks WHERE state = 'done'", .{}));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM squad_members WHERE puuid = 'acct0.a.1'", .{}));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM players WHERE puuid = 'acct0.a.1' AND looked_up > 0", .{}));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM jobs WHERE key = 'acct0.a.1'", .{}));
+
+    try db.run("INSERT INTO blocked VALUES ('acct0.b.1', 0)", .{});
+    _ = try squads.post(db, std.testing.io, "b#1", .create, null, "Duo", null, false, true, challenge_s);
+    try std.testing.expect(!try f.job(arena, "squad:b#1"));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM squad_checks WHERE riot_id = 'b#1' AND state = 'opted_out'", .{}));
 }
 
 test "a refresh fetches the newest games whole, the backlog the rest without timelines" {

@@ -430,7 +430,7 @@ fn modulesWith(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
 }
 
 /// ui.wasm files, one per page family so each page loads only its islands (Jacob 25 Oct)
-const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "champcharts", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice", "finder", "findergrid", "learn", "patch", "pool", "poolgrid", "daily", "dailyseat", "dailydays", "home", "homegame", "tester", "testercand", "your", "yourviews", "yourtime", "yourlookup", "yourfriends", "forget", "account", "sitesearch", "notes", "admin", "admincharts", "admintraffic", "adminops", "adminmodels", "adminlab", "adminruns", "pv" };
+const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "champcharts", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice", "finder", "findergrid", "learn", "patch", "pool", "poolgrid", "daily", "dailyseat", "dailydays", "home", "homegame", "tester", "testercand", "your", "yourviews", "yourtime", "yourlookup", "yourfriends", "forget", "squad", "account", "sitesearch", "notes", "admin", "admincharts", "admintraffic", "adminops", "adminmodels", "adminlab", "adminruns", "pv" };
 /// gzip bytes per family: stack.md's 40 KB
 const ui_budget = 40 * 1024;
 /// -Dwasm-dev

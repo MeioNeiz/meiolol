@@ -76,7 +76,7 @@ const SiteHeader = struct {
 
     pub fn render(x: SiteHeader, w: *Writer) Writer.Error!void {
         const p = x.p;
-        var buf: [16 * 1024]u8 = undefined;
+        var buf: [20 * 1024]u8 = undefined;
         var fba: std.heap.FixedBufferAllocator = .init(&buf);
         const a = fba.allocator();
         var t: ui.Tree = .{};
@@ -162,6 +162,7 @@ const NavItem = struct { nav: Nav, path: []const u8, label: []const u8, in_view:
 /// The menu: the player's own games first; the stats pages sit under Champions
 const nav_items = [_]NavItem{
     .{ .nav = .your, .path = "/your", .label = "Your games", .in_view = false },
+    .{ .nav = .squad, .path = "/squad", .label = "Squads", .in_view = false },
     .{ .nav = .daily, .path = "/daily", .label = "Daily Draft", .in_view = false },
     .{ .nav = .learn, .path = "/learn", .label = "Learn", .in_view = false },
     .{ .nav = .champions, .path = "/champions", .label = "Champions", .in_view = true },

@@ -289,6 +289,19 @@ const privacy_md =
     \\identifier on a "do not collect" list so we never fetch your games or store your
     \\name again.
     \\
+    \\## Squads
+    \\
+    \\A squad is a group of players who have each joined themselves: friends who join
+    \\[a squad](/squad) see the games they played together in the last 60 days. To start,
+    \\join or leave one you prove the Riot ID is yours with the same profile icon check;
+    \\we read your icon to check and don't keep it. For a squad we store its name, a
+    \\random invite code and each member's encrypted player identifier; members' games
+    \\are the ones Your games keeps for them, and their Riot IDs are shown only to
+    \\people with the squad's invite link. Legal basis: consent. You can leave at any
+    \\time, which removes you at once; a squad with no members is deleted. Opening a
+    \\squad's page counts as looking up its members, so a squad nobody opens for 30
+    \\days loses them and is deleted. Removing a Riot ID takes it out of every squad.
+    \\
     \\## Accounts
     \\
     \\Logins are only for people we invite to help run or test the site; there are no

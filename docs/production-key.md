@@ -106,8 +106,9 @@ What differs from the submitted text, and what to check before pasting:
 - Rewritten around game review of your own games (the site's headline), lane curves as
   the benchmark, Platinum IV+ scope, Pool, the desktop app with its six read-only LCU
   endpoints (src/lcu/session.zig, me.zig), data kept and for how long (privacy.md)
-- Squads left out: not on the site, and "squads promised but not found" was the first
-  mismatch reviewers flagged (A2). Once built, a support ticket or edit can add them
+- Squads left out of this draft, though now on the site (/squad, linked from every
+  page; docs/your-games.md "Squads"): "squads promised but not found" was the first
+  mismatch reviewers flagged (A2); a support ticket or edit can add them
 - 24-month PUUID blanking is built live (writer prune) and over backup segments on the
   box and both mirrors (backup.sweepAged); the raw archive's step removes the one-way
   codes rather than deleting the archive, as "Data kept" says. Deletion lists:

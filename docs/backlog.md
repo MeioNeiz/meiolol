@@ -29,13 +29,11 @@ overtaken: check the code and git log before acting.
 - Extras: experienced-players curve, flex/normal once curves cover them, rank at game
   time
 - Friends: architecture.md's api/ list
-- Squads (concept part 4), design agreed: join by profile-icon challenge (purpose=join),
-  leave any time; api.db squads/members; private invite-link pages, noindex, Riot IDs
-  visible to the squad only; games together by intersecting members' match ids; queues
+- Squads (concept part 4): the minimal page is live (docs/your-games.md "Squads": icon
+  check join and leave, invite link, games together). Left from the agreed design: queues
   420/440/400/450/900/700/1700/1750 (not Mayhem 2400); lane awards on Summoner's Rift
   only; weekly recap on read with curve awards; squad Daily Draft needs a score endpoint;
-  Discord PNG via canvas; coach kind = roster + weekly review + chart export; refresh
-  on visit at most every 30 min
+  Discord PNG via canvas; coach kind = roster + weekly review + chart export
 - Short games (under 15:00, remake=0) are early surrenders after a leaver, real
   results: an ended_early flag for stats and models needs an owner
 - Then, in Jacob's order of interest: spike window, level spikes, counter-item timing,

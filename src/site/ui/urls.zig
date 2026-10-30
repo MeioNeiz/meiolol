@@ -25,6 +25,8 @@ pub const Page = union(enum) {
     learn,
     pool,
     your,
+    /// A squad, by its fragment's token (ui.squad)
+    squad,
     game,
     method,
     download,
@@ -133,7 +135,7 @@ pub fn parse(path: []const u8) ?Page {
     if (a != null) return null;
     const p = std.meta.stringToEnum(std.meta.Tag(Page), head) orelse return null;
     return switch (p) {
-        inline .learn, .pool, .your, .game, .method, .download, .privacy, .terms, .login, .signup, .join, .account => |t| t,
+        inline .learn, .pool, .your, .squad, .game, .method, .download, .privacy, .terms, .login, .signup, .join, .account => |t| t,
         else => null,
     };
 }
@@ -194,6 +196,7 @@ test "urls: each page spelt and parsed back" {
         .{ .{ .pickup = .mid }, "/pickup/mid" },
         .{ .learn, "/learn" },
         .{ .pool, "/pool" },
+        .{ .squad, "/squad" },
         .{ .account, "/account" },
     };
     var buf: [64]u8 = undefined;
