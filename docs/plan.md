@@ -71,7 +71,7 @@ decisions.md "Open decisions".
     then PT4 and PT6 on A2. Blocked on Jacob's go and the gpu-box
 12. Comp leans (data-and-model.md): the held-out look, then champion pages and reasons.
     Blocked on the per-seat stats decision and the gpu-box
-13. Build speed (build-speed.md): BS4's pipeline gzip; BS3 waits Jacob. Owner W5
+13. Build speed (build-speed.md): BS3 waits Jacob. Owner W5
 14. Our Zig libraries toward the Rust crates (libraries.md "Next"). Unowned
 
 ## Areas

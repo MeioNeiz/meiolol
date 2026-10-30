@@ -26,8 +26,9 @@ What we know (29 Oct):
 - BS4: slow backend tests. Backend test run 74 s CPU before (451 tests, Mac load 7), 50 s
   after the fake fix. Done: the two api.fetch refresh tests 17 s + 13.5 s to 0.2 s each
   (riot/fake.zig cut its fixtures once; it ran 11 Debug mem.replace passes over the
-  725 KB timeline per game). Left: pipeline fixture 9-22 s by load, ~4 s of it Debug gzip
-  of the site's .gz twins (write.zig); additive "parents" 6 s, real fitting
+  725 KB timeline per game). The site's .gz twins are stored gzip in tests (write.zig,
+  raw.storeWith): Debug deflate was ~5 s of the pipeline fixture. Left: additive
+  "parents" 6 s, real fitting
 - BS5 done: pipeline_test.zig reads src/testdata/site-files.txt at run time, an input of
   the backend test run (build.zig siteFiles): an edit to it reruns the tests, no compile
 - BS6 done (step times in `--summary all` are wall under contention: CPU only by
