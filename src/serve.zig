@@ -358,7 +358,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             defer arena_state.deinit();
             if (try devAdmin(arena_state.allocator(), path)) |body| {
                 const page = std.mem.eql(u8, path, "admin");
-                return request.respond(body, .{ .extra_headers = &.{.{ .name = "content-type", .value = if (page) contentType(".html") else contentType(path) }} });
+                return request.respond(body, .{ .extra_headers = &.{.{ .name = "content-type", .value = if (page) contentType("index.html") else contentType(path) }} });
             }
         }
     }

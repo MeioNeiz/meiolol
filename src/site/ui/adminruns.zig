@@ -475,7 +475,8 @@ pub const css =
     \\  .c-adruns .runs { display: grid; gap: var(--sp-2); margin-top: var(--sp-2);
     \\    grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
     \\  .c-adruns .run { display: grid; gap: var(--sp-1); align-content: start; text-align: start; padding: var(--sp-2) var(--sp-3);
-    \\    border: 1px solid var(--line); border-radius: var(--r-m); background: none; color: var(--text); font: inherit; cursor: pointer; }
+    \\    border: 1px solid var(--line); border-radius: var(--r-m); background: none; color: var(--text); font: inherit; cursor: pointer;
+    \\    white-space: normal; }
     \\  .c-adruns .run:hover { border-color: var(--line-2); }
     \\  .c-adruns .run[aria-selected="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
     \\  .c-adruns .run .top { display: flex; justify-content: space-between; gap: var(--sp-2); overflow-wrap: anywhere; }
@@ -508,6 +509,10 @@ pub const Demo = struct {
         t.nn = &al.Demo.nn;
         var runs: [t.runs.len + 1]md.Run = undefined;
         @memcpy(runs[0..t.runs.len], t.runs);
+        // The run metrics.bin and log.txt are for has curves
+        for (runs[0..t.runs.len]) |*r| if (std.mem.eql(u8, r.run, run)) {
+            r.metrics = true;
+        };
         runs[t.runs.len] = .{ .run = "20261027T080000Z-gold14-screen", .state = .finished, .started = now - 120_000, .cat = .early, .target = "gold14", .lab = true, .res = .{ .kind = .screen, .features = 40, .clear = 3 } };
         const fixed = runs;
         t.runs = &fixed;
