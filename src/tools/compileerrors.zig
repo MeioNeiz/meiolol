@@ -10,7 +10,14 @@ pub fn main(init: std.process.Init) !void {
     const a = init.arena.allocator();
     const args = try init.minimal.args.toSlice(a);
     const sep = for (args, 0..) |arg, i| (if (std.mem.eql(u8, arg, "--")) break i) else return error.Usage;
-    const expects = args[1..sep];
+    // Longest first: an expect that ends another's would otherwise take that one's error
+    const expects = try a.alloc([]const u8, sep - 1);
+    for (expects, args[1..sep]) |*e, arg| e.* = arg;
+    std.mem.sort([]const u8, expects, {}, struct {
+        fn longer(_: void, x: []const u8, y: []const u8) bool {
+            return x.len > y.len;
+        }
+    }.longer);
     const r = try std.process.run(a, io, .{ .argv = args[sep + 1 ..], .stderr_limit = .limited(4 << 20) });
 
     var errors: std.ArrayList([]const u8) = .empty;
