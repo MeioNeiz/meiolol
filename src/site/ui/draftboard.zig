@@ -492,6 +492,7 @@ pub const css =
     \\    .c-draft[data-v="full"] .lane.hd { display: none; }
     \\    .c-draft[data-v="full"] .lane, .c-draft .mix { grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); }
     \\    .c-draft[data-v="full"] .heads { font-size: var(--fs-m); }
+    \\    .c-draft[data-v="full"] .bans .c-champ { --sz: var(--icon); }
     \\  }
     \\  @container (max-width: 360px) {
     \\    .c-draft .seat > .c-champ { --sz: var(--icon-m); }
