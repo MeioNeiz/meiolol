@@ -43,7 +43,8 @@ request's saved files.
   3 slots); a push that changes nothing in src, deploy or build files skips it
 - deploy/push.sh holds its own lock, so builds go on during a push
 - deploy/push.sh refuses a REV that leaves out local main's unpushed commits (a worktree
-  off origin): rebase it onto main (MEIOLOL_PUSH_BESIDE=1 if main's are not to go)
+  off origin): rebase it onto main (MEIOLOL_PUSH_BESIDE=1 if main's are not to go); an
+  older sha on main passes
 
 Two modes, for every session (`deploy/push.sh --mode fast|bulk [MIN]`, `--status`):
 
@@ -97,10 +98,10 @@ from a second build of each family with names (strip = false), built beside it; 
 that file `wasmsize --list` prints every function, `--numbers` std's number formatting
 and which of our functions keep each piece.
 
-Number formatting in wasm: src/tools/fmtlint.zig (in ci) flags format strings with numeric
-placeholders and direct calls of std's number formatters (printIntAny, printFloat, ...) in
-src/site/ui, src/tpl and the src/core files they import. Each call site is code in every
-family it reaches, and each int type std prints adds ~170 B gz. Numbers go through
+Number formatting in wasm: src/tools/fmtlint.zig (in test-ui, so test and ci) flags
+format strings with numeric placeholders and direct calls of std's number formatters
+(printIntAny, printFloat, ...) in src/site/ui, src/tpl and the src/core files they
+import. Each call site is code in every family it reaches, and each int type std prints adds ~170 B gz. Numbers go through
 phrase.num or fmt.write; old ones are counted per file in src/tools/fmtlint-allow.txt (the
 follow-up list; one more copy in that file fails), a line that never reaches wasm says
 `// fmt-ok: <why>`.

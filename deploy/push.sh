@@ -179,10 +179,12 @@ if pushed "$rev"; then
     exit 0
 fi
 # A REV from a worktree off origin, beside local main's unpushed commits, splits the two:
-# someone then has to replay main by hand
+# someone then has to replay main by hand. A REV on main (an older tested sha) is fine:
+# main's later commits fast-forward onto it
 if [ -z "${MEIOLOL_PUSH_BESIDE:-}" ] \
     && [ -n "$(git rev-list -1 refs/remotes/origin/main..refs/heads/main)" ] \
-    && ! git merge-base --is-ancestor refs/heads/main "$rev"; then
+    && ! git merge-base --is-ancestor refs/heads/main "$rev" \
+    && ! git merge-base --is-ancestor "$rev" refs/heads/main; then
     echo "push: $(short "$rev") leaves out local main's unpushed commits (git log origin/main..main):" \
         "rebase it onto main, or MEIOLOL_PUSH_BESIDE=1 if main's are not to go" >&2
     exit 1

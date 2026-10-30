@@ -67,6 +67,8 @@ pub fn build(b: *std.Build) void {
     const test_ui_step = b.step("test-ui", "Run the ui module's tests only (-Dtest-filter=NAME)");
     test_ui_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = m.ui, .filters = test_filters })).step);
     test_ui_step.dependOn(errorChecks(b, "ui", m.ui, "src/site/ui/compile_errors.zig", &ui_errors.cases));
+    // Here, not only in ci: a hit found at pre-push blocks every commit stacked on it
+    test_ui_step.dependOn(&fmtLint(b).step);
     test_step.dependOn(test_ui_step);
 
     test_step.dependOn(errorChecks(b, "tpl", m.tpl, "src/tpl/compile_errors.zig", &tpl_errors.cases));
@@ -211,7 +213,6 @@ pub fn build(b: *std.Build) void {
     // ui.wasm per page family: built, and its size against the budget (stack.md) and the
     // last pushed main's; no number formatting through std.fmt in what compiles to it
     ci.dependOn(&uiSizes(b, &ui_families).step);
-    ci.dependOn(&fmtLint(b).step);
     // Debug: ci only needs it to compile, and ReleaseFast spends up to a minute in LLVM
     const lab_check = labModule(b, b.resolveTargetQuery(gpu_box), .Debug, cand);
     ci.dependOn(&b.addExecutable(.{ .name = "meiolol-lab", .root_module = lab_check }).step);
