@@ -476,8 +476,10 @@ fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
 }
 
 /// A family's files for the tests, which only embed them and link them by hashed name:
-/// distinct bytes per family, so no two share a name
+/// distinct bytes per family, so no two share a name. Sitesearch is real: sheets.zig's
+/// deliver test scans its wasm for scope classes
 fn uiStub(b: *std.Build, family: []const u8) UiWasm {
+    if (std.mem.eql(u8, family, "sitesearch")) return uiWasm(b, family);
     const name = b.fmt("ui-{s}", .{family});
     const files = b.addWriteFiles();
     return .{

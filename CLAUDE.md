@@ -26,11 +26,12 @@ docs/plan.md "Now". Read it first.
 ## Build and test
 
 - `zig build`; `zig build test` (`-Dtest-filter=NAME`; a test that logs a warning
-  fails); format only your own files, `zig fmt <paths>` (`zig build fmt` rewrites the
+  fails; UI islands are stubs here, so their compile errors show only in ci or the dev
+  server); format only your own files, `zig fmt <paths>` (`zig build fmt` rewrites the
   whole tree, other sessions' dirty files too); `zig build ci` = fmt check, tests,
-  Windows and Linux builds, shellcheck, JS syntax. Lab and nn tests: `zig build test-lab`
-  (not in ci; deploy/lab-run.sh runs them before a new lab build), run it after a lab
-  change
+  Windows and Linux builds, every island and its size, shellcheck, JS syntax. Lab and
+  nn tests: `zig build test-lab` (not in ci; deploy/lab-run.sh runs them before a new
+  lab build), run it after a lab change
 - src/pipeline_test.zig: fixture games through stats, curves and the whole site; extend
   it when adding a pipeline step or page
 - Local site: `deploy/dev.sh`, one server for all sessions at localhost:8080, rebuilt
@@ -84,7 +85,8 @@ docs/plan.md "Now". Read it first.
 - Builds and tests through `deploy/zb.sh test|test-ui|ci|<zig build args>`: shared
   build slots (`deploy/slots.sh status`), and a run that started after your request
   answers it; other zig builds `deploy/slots.sh 1 zig build ...`. UI work: `test-ui`
-  while iterating, `test` before a commit
+  while iterating, `test` before a commit; neither compiles the islands, so their errors
+  show in the dev server (.zig-cache/dev-watch.log) or `zig build ui-sizes`
 - Tests: `deploy/zb.sh test 2>&1 | tee $SCRATCH/t.log | tail -30`, then grep the log
 - Hand over at 25-33% context (a hook reminds; fleet skill); a new topic starts fresh
 - Team runs: shared state in the run's common.md; messages are "done: <path>" or
