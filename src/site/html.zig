@@ -104,7 +104,12 @@ pub const Page = struct {
     index: bool = true,
     /// Why the rank picks past Plat+ are greyed, on pages with a view
     rank_off: []const u8 = "Champion pages and the champions board only",
+    /// A private or admin page: the private tabs under the header, no preview strip
+    private: ?Private = null,
 };
+
+/// The private and admin pages, nginx's view_private and view_admin logins only
+pub const Private = enum { index, tester, app, notes, admin };
 
 /// `path` under the site root, root-relative: for href and src holes
 pub const Link = struct {

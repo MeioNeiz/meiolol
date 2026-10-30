@@ -60,7 +60,8 @@ const W = struct {
 };
 
 pub const Foot = struct {
-    /// Where the page's numbers are from: "in EUW, last 30 days, 5,123 games"
+    /// Where the page's numbers are from: "in EUW, last 30 days, 5,123 games"; empty: no
+    /// line (private pages)
     data: []const u8,
     links: []const Link = &foot_links,
     /// Riot's legal line, quoted as given
@@ -76,15 +77,17 @@ pub const foot_links = [_]Link{
 
 pub fn foot(h: *H, f: Foot) N {
     return h.el(.footer, .{ .class = "c-sitefoot" }, .{h.div(.{ .class = "in" }, .{
-        h.p(.{}, .{W.data.with(h, .{ .d = f.data })}),
+        if (f.data.len > 0) h.p(.{}, .{W.data.with(h, .{ .d = f.data })}) else null,
         h.el(.nav, .{ .aria_label = W.legal_pages }, .{links(h, f.links)}),
         h.p(.{ .class = "legal", .data_prose = {} }, .{tree.Text{ .s = f.legal }}),
     })});
 }
 
 pub const Subbar = struct {
-    /// The Champions section's pages; empty: none
+    /// The Champions section's pages, or the private ones; empty: none
     tabs: []const Link = &.{},
+    /// The tabs' name for screen readers; null: Champions
+    label: ?tree.Text = null,
     picks: ?Picks = null,
 };
 
@@ -109,7 +112,7 @@ pub fn subbar(h: *H, o: Subbar) N {
     };
     for (o.tabs, items) |x, *it| it.* = .{ .label = x.label, .href = x.href, .selected = x.current, .view = x.view };
     return h.div(.{ .class = "c-subbar" }, .{h.div(.{ .class = "in" }, .{
-        if (o.tabs.len > 0) tabs.view(h, W.champions, items, &.{}) else null,
+        if (o.tabs.len > 0) tabs.view(h, o.label orelse W.champions, items, &.{}) else null,
         if (o.picks) |p| picks(h, p) else null,
     })});
 }

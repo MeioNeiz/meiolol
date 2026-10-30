@@ -14,6 +14,7 @@ const Page = html.Page;
 const Link = html.Link;
 const View = html.View;
 const Nav = html.Nav;
+const Private = html.Private;
 const boilerplate = html.boilerplate;
 
 fn toSite(path: []const u8) Link {
@@ -32,8 +33,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         \\<title>{title}</title>
         \\<meta name="description" content="{description}">
         \\{css}
-        \\<link rel="stylesheet" href="{print}" media="print">
-        \\<link rel="icon" href="{icon}" type="image/svg+xml">
+        \\{print}<link rel="icon" href="{icon}" type="image/svg+xml">
         \\{robots}{canonical}</head>
         \\<body class="ui">
         \\{header}
@@ -45,7 +45,8 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         .title = p.title,
         .description = p.description,
         .css = tpl.trusted(sheets.slot),
-        .print = toSite("print.css"),
+        // traffic.sh counts people by it: not the private pages' loads
+        .print = tpl.when(p.private == null, tpl.trusted("<link rel=\"stylesheet\" href=\"/print.css\" media=\"print\">\n")),
         .icon = toSite("favicon.svg"),
         .robots = tpl.when(!p.public or !p.index, tpl.trusted("<meta name=\"robots\" content=\"noindex\">\n")),
         .canonical = if (p.public and p.index) if (p.canonical) |url|
@@ -54,18 +55,18 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
             null else null,
         .header = SiteHeader{ .p = p },
         .look = tpl.trusted(search_loader),
-        .subbar = tpl.when(p.nav.inChampions() or p.counterparts != null, Subbar{ .p = p }),
+        .subbar = tpl.when(p.nav.inChampions() or p.counterparts != null or p.private != null, Subbar{ .p = p }),
         // Remembered so shared pages link back into this view
         .remember = if (p.view) |v| tpl.t("<script data-v=\"{v}\">" ++ remember ++ "</script>\n", .{ .v = v.query() }) else null,
         .meio_view = tpl.when(p.view == null, tpl.trusted(meio_view)),
-        .admin = tpl.trusted(admin_link),
-        .banner = tpl.when(!p.public, Preview{}),
+        .admin = tpl.trusted(if (p.private != null) private_mark else admin_link),
+        .banner = tpl.when(!p.public and p.private == null, Preview{}),
         .main = ui.site.main_class,
     });
 }
 
 /// The page's CSP (csp.zig): the inline scripts here; its <style> is added at delivery
-const csp_meta = csp.meta(&.{ search_loader, admin_link, meio_view, "<script>" ++ remember ++ "</script>" }, &.{});
+const csp_meta = csp.meta(&.{ search_loader, admin_link, private_mark, meio_view, "<script>" ++ remember ++ "</script>" }, &.{});
 
 /// Its view (data-v): the hash is one for every view
 const remember = "try{localStorage.setItem(\"view\",document.currentScript.dataset.v)}catch(e){}";
@@ -148,6 +149,21 @@ const admin_link =
     \\
 ;
 
+/// On private pages, for admin_link on the public ones (which also loads the private numbers)
+const private_mark =
+    \\<script>try{localStorage.setItem("admin-link",JSON.stringify({href:"/private/tester",label:"Draft tester"}))}catch(e){}</script>
+    \\
+;
+
+/// The tabs under the header on private pages; nginx keeps Notes and Admin to admin logins
+const private_tabs = [_]struct { Private, []const u8, []const u8 }{
+    .{ .index, "/private", "Private" },
+    .{ .tester, "/private/tester", "Draft tester" },
+    .{ .app, "/private/app", "App review" },
+    .{ .notes, "/admin/notes", "Notes" },
+    .{ .admin, "/admin", "Admin" },
+};
+
 /// On shared and champion pages: moves data-view links into the last view visited (its
 /// query, View.query); meioView(v) again from the champion page's filters, which move
 /// between views
@@ -191,12 +207,18 @@ const Subbar = struct {
         const a = fba.allocator();
         var t: ui.Tree = .{};
         var h: ui.H = .init(a, &t);
-        var tabs: [champion_tabs.len]ui.site.Link = undefined;
-        for (champion_tabs, &tabs) |it, *l| l.* = SiteHeader.link(a, p, it, it.nav == p.nav) catch return error.WriteFailed;
-        t.root = ui.site.subbar(&h, .{
-            .tabs = if (p.nav.inChampions()) &tabs else &.{},
-            .picks = if (p.counterparts) |c| picks(p, c) else null,
-        });
+        if (p.private) |cur| {
+            var tabs: [private_tabs.len]ui.site.Link = undefined;
+            for (private_tabs, &tabs) |it, *l| l.* = .{ .label = .{ .s = it[2] }, .href = it[1], .current = it[0] == cur };
+            t.root = ui.site.subbar(&h, .{ .tabs = &tabs, .label = .{ .s = "Private" } });
+        } else {
+            var tabs: [champion_tabs.len]ui.site.Link = undefined;
+            for (champion_tabs, &tabs) |it, *l| l.* = SiteHeader.link(a, p, it, it.nav == p.nav) catch return error.WriteFailed;
+            t.root = ui.site.subbar(&h, .{
+                .tabs = if (p.nav.inChampions()) &tabs else &.{},
+                .picks = if (p.counterparts) |c| picks(p, c) else null,
+            });
+        }
         if (h.oom) return error.WriteFailed;
         try ui.html.write(&t, t.root, w);
         try w.writeByte('\n');

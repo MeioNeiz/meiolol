@@ -1,4 +1,4 @@
-//! The new Draft tester page (/private/tester, ui.testerpage and ui.testercand): its HTML
+//! The Draft tester page (/private/tester, ui.testerpage and ui.testercand) in the site shell: its HTML
 //! with the champion list and its CSS inline (sheets.zig), ui-tester.wasm and the candidate panel's
 //! ui-testercand.wasm (which ui-tester.wasm loads), written into the private site's dir
 //! beside the old page (admin.private) by `meiolol admin --private-out`. Never public:
@@ -7,8 +7,8 @@ const std = @import("std");
 const store = @import("store");
 const ui = @import("ui");
 const assets = @import("assets.zig");
-const csp = @import("csp.zig");
 const sheets = @import("sheets.zig");
+const shell = @import("shell.zig");
 
 const Io = std.Io;
 const tp = ui.testerpage;
@@ -30,6 +30,15 @@ pub fn head(a: std.mem.Allocator, db: store.Db) !tp.Head {
     return .{ .ddragon = version, .champs = list.items };
 }
 
+const shell_page: @import("html.zig").Page = .{
+    .title = "Draft tester | meiolol",
+    .description = "Build a draft, see the model's win chance and every candidate",
+    .patch = "",
+    .data = "",
+    .public = false,
+    .private = .tester,
+};
+
 pub fn page(a: std.mem.Allocator, h: *const tp.Head) ![]const u8 {
     var raw: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, tp.Head, h.*, &raw);
@@ -48,30 +57,11 @@ pub fn page(a: std.mem.Allocator, h: *const tp.Head) ![]const u8 {
     if (hh.oom) return error.OutOfMemory;
     var out: Io.Writer.Allocating = .init(a);
     const w = &out.writer;
-    try w.print(
-        \\<!doctype html>
-        \\<html lang="en">
-        \\<head>
-        \\<meta charset="utf-8">
-        \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
-        \\<meta name="robots" content="noindex">
-        \\<title>Draft tester</title>
-        \\{s}
-        \\</head>
-        \\<body class="ui">
-        \\<main class="c-sitemain">
-        \\
-    , .{ csp.files_only, sheets.slot });
+    try shell.open(w, shell_page);
     try ui.html.write(&t, top, w);
     try ui.html.write(&t, panel, w);
-    try w.print(
-        \\
-        \\</main>
-        \\<script src="{s}" data-wasm="{s}" defer></script>
-        \\</body>
-        \\</html>
-        \\
-    , .{ assets.tester_js.path, assets.tester_wasm.path });
+    try w.print("\n<script src=\"{s}\" data-wasm=\"{s}\" defer></script>\n", .{ assets.tester_js.path, assets.tester_wasm.path });
+    try shell.close(w, shell_page);
     return sheets.deliverWith(a, out.written(), &.{ assets.tester_wasm, assets.testercand_wasm });
 }
 
