@@ -5568,7 +5568,7 @@ equal, 800,302 games, 6 s on the Mac; meta.snapshot "box database"). It stops un
 the file's scorer matches core.score.draftWin on 500 test games within 1e-4 (5e-9
 measured); meta.dev refits on the played games older than dev-val and scores dev-val per
 game, baseline champion strength alone. Daily on the box (deploy/web-loop.sh), served at
-/admin/models/ with the admin upload. The tester's Model switch picks the draft model:
+/private/models/ with the private upload. The tester's Model switch picks the draft model:
 "Shipped model" (this file) or "Lab experiment" (/admin/training/, `lab-push.sh use`, with
 the set net when draft-setnet.json is there); the lane model is the box's, else the lab's;
 comp terms the lab's. It also writes champ/<id>.json (and .gz) per champion: by role, its team's
@@ -5737,7 +5737,7 @@ games, 849 champion terms, 48,194 pairs, 2.8 MB).
 `meiolol lane-model [--out DIR]` (src/lanemodel.zig, default DATA/tester) fits the same
 candidate (team2's fitLane: its fit on compact rows, lane outcomes only) on every played
 game in the database and writes the same files, daily on the box beside `meiolol
-draft-model` (served at /admin/models/). Its rows are the lab's (gold14 from
+draft-model` (served at /private/models/). Its rows are the lab's (gold14 from
 participants, else the timeline's; the rest from timelines that reached 15:00; one
 participants pass and one timelines pass), 0.9 GB peak for 800k games where the lab's
 full rows take 4.8 GB. On snap-20261017T1320Z (17 Oct) every term, pair cell, intercept

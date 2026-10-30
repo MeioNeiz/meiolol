@@ -961,7 +961,7 @@ test "admin page from the fixture games and a crawl log" {
     for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "data-island=\"admin\"", site_admin.js.path, site_admin.wasm.path, site_admin.css_file.path, "data-island=\"admincharts\"", site_admin.charts_js.path, site_admin.charts_wasm.path, "data-island=\"admintraffic\"", site_admin.traffic_js.path, site_admin.traffic_wasm.path, "data-island=\"adminops\"", site_admin.ops_js.path, site_admin.ops_wasm.path, "data-island=\"adminmodels\"", site_admin.models_js.path, site_admin.models_wasm.path, "data-island=\"adminlab\"", site_admin.lab_js.path, site_admin.lab_wasm.path, "data-island=\"adminruns\"", site_admin.runs_js.path, site_admin.runs_wasm.path }) |s| {
         try std.testing.expect(std.mem.find(u8, a_html, s) != null);
     }
-    for ([_][]const u8{ site_admin.js.path, site_admin.wasm.path, site_admin.charts_js.path, site_admin.charts_wasm.path, site_admin.css_file.path, "index.html.gz", "admin.bin.gz", "models.bin.gz" }) |f| {
+    for ([_][]const u8{ site_admin.js.path, site_admin.wasm.path, site_admin.charts_js.path, site_admin.charts_wasm.path, site_admin.css_file.path, "index.html.gz", "new.html", "admin.bin.gz", "models.bin.gz" }) |f| {
         try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ out, f }), .{});
     }
     // The old page's files are gone: no JSON copy of the data, no admin.js

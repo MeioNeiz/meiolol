@@ -5,7 +5,8 @@
 # box still shows once it is reachable. Format: docs/hosting.md "Deploy events".
 #   deploy/deploy-events.sh add SHA STEP STATUS [DETAIL]
 #   deploy/deploy-events.sh flush
-#   deploy/deploy-events.sh where (this machine for a detail: "the Mac", "the gpu-box")
+#   deploy/deploy-events.sh where (this machine for a detail: "the Mac", "the gpu-box",
+#   else its hostname)
 set -u
 ROOT=${MEIOLOL_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 common=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)
@@ -15,9 +16,12 @@ host=${MEIOLOL_HOST:-essex-vm}
 
 case "${1:-}" in
     where)
-        if [[ $(uname -s) == Darwin ]]; then echo "the Mac"
-        elif grep -qi microsoft /proc/version 2> /dev/null; then echo "the gpu-box"
-        else hostname -s
+        # The gpu-box is the WSL on jmw; MEIOLOL_PUSH_HOST names any machine itself
+        h=$(hostname -s)
+        if [[ -n ${MEIOLOL_PUSH_HOST:-} ]]; then echo "$MEIOLOL_PUSH_HOST"
+        elif [[ $(uname -s) == Darwin ]]; then echo "the Mac"
+        elif [[ $h == jmw ]] && grep -qi microsoft /proc/version 2> /dev/null; then echo "the gpu-box"
+        else echo "$h"
         fi
         ;;
     add)

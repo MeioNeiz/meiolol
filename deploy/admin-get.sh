@@ -3,7 +3,7 @@
 # meiolol-check account (role admin: sees /admin, not the owner's controls). The password
 # never reaches argv, the screen or a transcript: vault group meiolol/local
 # (MEIOLOL_CHECK_PASSWORD) over ssh stdin. Runs on C01, as the Mac can't reach meio.lol
-# (Sophos). PATH is under /admin/ (`models/draft-model.json`)
+# (Sophos). PATH is under /admin/ (`admin.bin`)
 set -euo pipefail
 (( $# )) || { echo "usage: deploy/admin-get.sh URL|PATH [curl args]" >&2; exit 2; }
 if [[ -z ${MEIOLOL_CHECK_PASSWORD:-} ]]; then

@@ -97,6 +97,14 @@ pub fn file(name: []const u8) ?[]const u8 {
     return null;
 }
 
+/// /admin/new, the page's URL while it was a preview, for bookmarks of it
+const moved =
+    \\<!DOCTYPE html><html lang="en-GB"><meta charset="utf-8">
+    \\<meta name="robots" content="noindex"><meta http-equiv="refresh" content="0; url=/admin">
+    \\<title>Admin</title><a href="/admin">Admin</a>
+    \\
+;
+
 /// index.html, its stylesheet and code into `out_dir`, each with a .gz (gzip_static)
 pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
     var arena: std.heap.ArenaAllocator = .init(gpa);
@@ -106,6 +114,7 @@ pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
     defer dir.close(io);
     const files = [_]struct { []const u8, []const u8 }{
         .{ "index.html", try page(a) },
+        .{ "new.html", moved },
         .{ css_file.path, css_file.data },
         .{ js.path, js.data },
         .{ wasm.path, wasm.data },

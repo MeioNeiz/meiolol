@@ -479,7 +479,7 @@ while true; do
         fi
     fi
     desktop_files || true
-    rm -rf data/private.new
+    rm -rf data/admin.new data/private.new
     if nice -n 10 bin/meiolol admin --out data/admin.new --private-out data/private.new \
         --disk "$(df -B1 --output=size,used,avail data | tail -n 1)" \
         --health "$(bin/health.sh)" 2>&1; then
