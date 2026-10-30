@@ -332,7 +332,10 @@ test "fixture games to stats, curves and the website" {
         const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/champ-facts.tsv" }), arena, .limited(1 << 20));
         const facts = try core.champfacts.Facts.parse(arena, bytes);
         try testing.expectEqual(games, facts.leanOf(122, .top).?.games);
-        try testing.expect(facts.games > 0 and facts.bans.len > 0);
+        // The fixture bans only champions nobody plays in it, who have no row to rate:
+        // the patch's games, no ban lines
+        try testing.expect(facts.games > 0);
+        try testing.expectEqual(0, facts.bans.len);
         try testing.expectEqualStrings("15.13", facts.patch);
     }
     // Pool grid: a lanes file per champion and view, the champion page's lane opponents
