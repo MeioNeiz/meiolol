@@ -5,7 +5,9 @@ reviews, and a private one for the private, admin and owner roles (Jacob's frien
 testers; docs/plan/accounts.md). Paid accounts (later) get extras in the public
 edition, within the public rules. Public release: no date, "after Riot's production
 review" (J7). How it is built: docs/arch-app.md "App" and "Desktop window";
-`zig build desktop-shot` for PNGs.
+`zig build desktop-shot` for PNGs. Once the webview shell takes the exe name, install and
+updates (stack.md step 6), delete the dvui window: src/desktop, desktop_main/dev/shot,
+the dvui dependency and the desktop-* build steps.
 
 ## Two editions
 

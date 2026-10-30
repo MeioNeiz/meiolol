@@ -66,7 +66,7 @@ pub const Options = struct {
     min_reason_games: u32 = 20,
     /// Drafts score with the stats file's fitted model when it has one (statsfile version
     /// 2): its terms replace the smoothed counts, priors and weights. min_games, role
-    /// inference and reasons' games still read the counts; page rates (roleWin, duoPp,
+    /// inference and reasons' games still read the counts; page rates (roleWin,
     /// matchupPp) always do
     fitted: bool = true,
 };
@@ -198,14 +198,8 @@ pub fn roleWin(stats: *const Stats, opts: Options, c: usize, r: Role) f64 {
     return sigmoid(ctx.base(c, r));
 }
 
-/// Stats pages: percentage points `c` in `r` gains alongside ally `a` in `ar`, beyond
-/// what the two champions' own ratings predict, in an otherwise even game
-pub fn duoPp(stats: *const Stats, opts: Options, r: Role, c: usize, ar: Role, a: usize) f64 {
-    const ctx: Context = .counts(stats, opts);
-    return evenPp(ctx.duo(ctx.place(c, r), ctx.place(a, ar)));
-}
-
-/// Stats pages: as duoPp, against enemy `e` in `er`
+/// Stats pages: percentage points `c` in `r` gains against enemy `e` in `er`, beyond what
+/// the two champions' own ratings predict, in an otherwise even game
 pub fn matchupPp(stats: *const Stats, opts: Options, r: Role, c: usize, er: Role, e: usize) f64 {
     const ctx: Context = .counts(stats, opts);
     return evenPp(ctx.matchup(ctx.place(c, r), ctx.place(e, er)));

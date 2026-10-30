@@ -176,7 +176,7 @@ fn runes(a: std.mem.Allocator, f: *const File, b: File.Build, usual: ?File.Rows)
 
 /// A rune counts as taken differently in a matchup when its pick share is this many
 /// points away from the champion's in the role. Win rates don't enter: pulled toward the
-/// row's by File.shrinkK (about 6,000 games for runes in matchups), no rune's moves 2
+/// row's by File.shrink's k (about 6,000 games for runes in matchups), no rune's moves 2
 /// points from its usual in any EUW matchup with a file (16.20, 2,002 pairs)
 const shift_points = 10;
 /// Under this many players a rune's share is left out either way

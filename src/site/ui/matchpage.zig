@@ -109,7 +109,6 @@ const W = struct {
     pub const lane_head = plain("Lane");
     pub const h2h = plain("Head to head");
     pub const few = plain("few games");
-    pub const few_note = plain("Few games of this pair: the lines lean on how both champions do against everyone.");
     pub const none = plain("Not enough games yet.");
     pub const metrics = [3]tree.Text{ plain("Gold"), plain("XP"), plain("CS") };
     pub const won = plain("Wins");

@@ -261,17 +261,3 @@ fn laneMates(mine: u3, theirs: u3) bool {
     const support = 4;
     return mine == theirs or (mine >= bot and theirs >= bot and mine <= support and theirs <= support);
 }
-
-/// One enemy's interaction term for e (enemy index k), in model units; 0 outside pairwise
-/// and lane models or for a masked role pair
-pub fn pairTerm(m: *const Model, e: *const Example, k: usize) f32 {
-    if (m.cfg.kind != .lane and m.cfg.kind != .pairwise) return 0;
-    const rx = e.enemy_roles[k];
-    if (m.cfg.kind == .lane and !laneMates(e.role, rx)) return 0;
-    const d = m.cfg.dim;
-    const um = m.u[@as(usize, e.me) * d ..][0..d];
-    const vx = m.v[@as(usize, e.enemies[k]) * d ..][0..d];
-    var dot: f32 = 0;
-    for (um, vx) |p, q| dot += p * q;
-    return m.w[@as(usize, e.role) * 5 + rx] * dot;
-}

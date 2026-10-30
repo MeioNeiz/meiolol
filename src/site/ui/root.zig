@@ -17,7 +17,6 @@ pub const css = @import("css.zig");
 pub const diff = @import("diff.zig");
 pub const island = @import("island.zig");
 pub const tiers = @import("tiers.zig");
-pub const FakeDom = @import("fakedom.zig").Fake;
 pub const gallery = @import("gallery.zig");
 
 pub const button = @import("button.zig");

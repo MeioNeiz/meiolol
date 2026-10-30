@@ -28,6 +28,7 @@ core build 222 s (box 287), site step 202-230 s, render p50 13 ms p95 22 ms at l
 with the page cache refilling after the reboot (IO pressure ~10%); measure render again.
 Left: push mode back to fast (Jacob), the gpu-box step (`deploy/vm-cutover.sh` again
 once it is on Tailscale), bench-crawl.sh seed on C01 (base db not created), then VM7-8.
+After the gpu-box step, delete deploy/vm-chain.sh and vm-cutover.sh (move only).
 
 Migration mode, set 26-27 Oct (undo in VM6, from the new host where moved):
 - Deploys held: `deploy/push.sh --mode bulk 1440` (sessions queue, check pages on
