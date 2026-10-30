@@ -48,6 +48,8 @@ pub const Row = struct {
     win: ?f32 = null,
     /// Points against the reference row; null on that row
     vs: ?f32 = null,
+    /// The list's extra column (List.extra); null leaves the cell empty
+    x: ?f32 = null,
     reasons: []const Reason = &.{},
     /// A neutral Badge after the reasons ("harder to pick up")
     tag: ?tree.Text = null,
@@ -56,6 +58,8 @@ pub const Row = struct {
     open: bool = false,
     /// What opens under the row, in the list's mode
     detail: ?reasons.Breakdown = null,
+    /// A line under the open detail: what the breakdown has no term for
+    note: ?tree.Text = null,
     /// The button's name when it opens a detail ("Why Gnar"); null: the champion's name
     label: ?tree.Text = null,
     /// Page-unique id of the open detail, for aria-controls; "" for none
@@ -67,6 +71,12 @@ pub const Row = struct {
     pick: ?tree.Handler = null,
     /// The Pick button's name ("Pick Gnar")
     pick_label: ?tree.Text = null,
+};
+
+pub const Extra = struct {
+    head: tree.Text,
+    /// Its diverging colour scale
+    cuts: [4]f32,
 };
 
 pub const Base = struct {
@@ -84,6 +94,8 @@ pub const List = struct {
     ref_label: tree.Text = W.played,
     /// A pinned first row: the role's average
     base: ?Base = null,
+    /// A number column after vs, points mode (the tester's lane gold)
+    extra: ?Extra = null,
 };
 
 pub fn view(h: *H, l: List) N {
@@ -102,17 +114,20 @@ fn viewOf(h: *H, l: List, comptime pick: bool) N {
         if (r.gap) rows.add(h.div(.{ .key = 3 * i + 1, .class = "gap", .aria_hidden = true }, .{"⋯"}));
         rows.add(row(h, l, r, 3 * i + 2, pick));
     }
-    return h.div(.{ .class = "c-cand", .data_v = if (l.mode == .points) null else l.mode }, .{
+    const x = l.mode == .points and l.extra != null;
+    return h.div(.{ .class = "c-cand", .data_v = if (l.mode == .points) null else l.mode, .data_x = x }, .{
         if (l.head) |hd| h.div(.{ .class = "hd" }, .{
             h.span(.{ .class = "nm" }, .{hd[0]}),
             h.span(.{ .class = "v" }, .{hd[1]}),
             h.span(.{ .class = "d" }, .{hd[2]}),
+            if (x) h.span(.{ .class = "x" }, .{l.extra.?.head}) else null,
         }) else null,
         if (l.base) |b| h.div(.{ .class = "r base" }, .{
             h.span(.{ .class = "rk" }, .{}),
             h.span(.{ .class = "nm" }, .{b.label}),
             if (l.mode == .points) h.span(.{ .class = "v" }, .{phrase.num(h, .rate, b.win)}) else null,
             if (l.mode == .points) h.span(.{ .class = "d" }, .{}) else null,
+            if (x) h.span(.{ .class = "x" }, .{}) else null,
         }) else null,
         rows.done(),
     });
@@ -154,6 +169,10 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
             .class = "d",
             .style = if (r.vs) |d| h.vars(.{ .c = fmt.Step.of(d, fmt.win_cuts) }) else null,
         }, .{if (r.vs) |d| phrase.num(h, .points, d) else null}) else null,
+        if (l.mode == .points) if (l.extra) |e| h.span(.{
+            .class = "x",
+            .style = if (r.x) |v| h.vars(.{ .c = fmt.Step.of(v, e.cuts) }) else null,
+        }, .{if (r.x) |v| phrase.num(h, .signed, @as(i64, @intFromFloat(@round(v)))) else null}) else null else null,
         if (r.reasons.len > 0 or r.tag != null or (pick and r.pick != null)) h.span(.{ .class = "why" }, .{
             chips.done(),
             if (r.tag) |t| badge.view(h, .neutral, .{t}) else null,
@@ -164,7 +183,10 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
         .key = 1,
         .class = "det",
         .id = if (r.id.len > 0) r.id else null,
-    }, .{reasons.view(h, d, l.mode)}) else null else null;
+    }, .{
+        reasons.view(h, d, l.mode),
+        if (r.note) |n| h.p(.{ .class = "note" }, .{n}) else null,
+    }) else null else null;
     return h.div(.{ .key = key, .class = "row" }, .{ head, det });
 }
 
@@ -201,8 +223,10 @@ pub const css =
     \\  .c-cand .pk > b { font-weight: var(--w-m); overflow: hidden; text-overflow: ellipsis; }
     \\  .c-cand .star { color: var(--turn); }
     \\  .c-cand .v { text-align: right; font-weight: var(--w-b); }
-    \\  .c-cand .d { text-align: right; font-size: var(--fs-s); font-weight: var(--w-m); color: var(--c, var(--faint)); }
-    \\  .c-cand .hd .v, .c-cand .hd .d { font-weight: var(--w-r); color: var(--faint); font-size: var(--fs-xs); }
+    \\  .c-cand .d, .c-cand .x { text-align: right; font-size: var(--fs-s); font-weight: var(--w-m); color: var(--c, var(--faint)); }
+    \\  .c-cand .hd .v, .c-cand .hd .d, .c-cand .hd .x { font-weight: var(--w-r); color: var(--faint); font-size: var(--fs-xs); }
+    \\  .c-cand[data-x] .r, .c-cand[data-x] .hd { grid-template-columns: 22px minmax(0, 1fr) 56px 48px 52px; }
+    \\  .c-cand .det .note { margin: 0 0 var(--sp-1); color: var(--muted); font-size: var(--fs-s); }
     \\  .c-cand .why { grid-column: 2 / -1; display: flex; gap: 4px; flex-wrap: wrap; padding-left: 32px; }
     \\  .c-cand .why b { color: var(--c); font-weight: var(--w-b); }
     \\  .c-cand .go { margin-left: auto; position: relative; z-index: 1; }
@@ -216,6 +240,7 @@ pub const css =
     \\  .c-cand[data-v="words"] .r { grid-template-columns: 22px minmax(0, 1fr); }
     \\  @container (min-width: 640px) {
     \\    .c-cand .r, .c-cand .hd { grid-template-columns: 22px minmax(140px, 200px) 64px 56px minmax(0, 1fr); }
+    \\    .c-cand[data-x] .r, .c-cand[data-x] .hd { grid-template-columns: 22px minmax(140px, 200px) 64px 56px 60px minmax(0, 1fr); }
     \\    .c-cand[data-v="words"] .r { grid-template-columns: 22px minmax(140px, 200px) minmax(0, 1fr); }
     \\    .c-cand .why { grid-column: auto; grid-row: 1; grid-column-end: -1; padding-left: var(--sp-2); }
     \\  }
@@ -291,6 +316,18 @@ fn sample(h: *H, g: *Gallery, open: bool) List {
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.addFill("seat panel, played row open", view(h, sample(h, g, true)));
+    var gold = sample(h, g, true);
+    gold.extra = .{ .head = plain("gold 14"), .cuts = .{ 50, 150, 300, 500 } };
+    const golds = h.mem.dupe(Row, gold.rows) catch {
+        h.oom = true;
+        return;
+    };
+    for (golds, 0..) |*r, i| {
+        r.x = if (i == 1) null else @as(f32, @floatFromInt(i * 230)) - 400;
+        if (r.open) r.note = plain("Lane into Yuumi: +274 gold at 14 (+90 to +458), 82 CS at 10, 1.4 deaths before 15");
+    }
+    gold.rows = golds;
+    g.addFill("tester: Gold column, one row without, lane line", view(h, gold));
     var gap = sample(h, g, false);
     gap.base = .{ .label = plain("Average top"), .win = 47.5 };
     if (gap.rows.len != sample_rows.len) return;

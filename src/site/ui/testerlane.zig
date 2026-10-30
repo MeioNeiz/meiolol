@@ -4,6 +4,18 @@
 //! 15 for a champion into its lane opponent, or blind over likely opponents
 const std = @import("std");
 const data = @import("data.zig");
+const tree = @import("tree.zig");
+const phrase = @import("phrase.zig");
+const Phrase = phrase.Phrase;
+
+const W = struct {
+    const ok = Phrase("✓ {file:text}: {n:int} reference matchups match");
+    const bad = Phrase("✗ {file:text}: {n:int} reference matchups, worst {gap:text} off");
+    const no_refs = Phrase("✗ {file:text}: no reference matchups");
+    const failed = Phrase("{file:text}: not found");
+    const damaged = Phrase("{file:text}: damaged");
+    const loading = Phrase("{file:text}: …");
+};
 
 pub const n_role = 5;
 pub const n_lane = 4;
@@ -85,7 +97,7 @@ pub const Value = struct {
     }
 };
 
-/// An opponent and its weight, the weights summing to 1
+/// A likely opponent and its weight (its play share in the role)
 pub const Opp = struct { id: u32, w: f32 };
 
 pub const Blind = struct {
@@ -144,23 +156,30 @@ pub const Scorer = struct {
         return v;
     }
 
-    /// Into a field of opponents: the weighted average; in its range the champion's own
-    /// term stays whole while the opponents' and pairs' average down
+    /// Into a field of opponents, the champion itself left out and the rest's weights
+    /// scaled to 1: the weighted average; in its range the champion's own term stays whole
+    /// while the opponents' and pairs' average down
     pub fn blind(s: *const Scorer, role: u8, champion: u32, field: []const Opp) Blind {
         const own = s.champ.get(key(role, champion, 0));
         var sum: [n_lane]f64 = @splat(0);
         var vr: [n_lane]f64 = @splat(0);
         var out: Blind = .{ .v = .{ .value = undefined, .lo = undefined, .hi = undefined, .champ_games = if (own) |x| x.n else 0, .pair_games = 0 } };
+        var total: f64 = 0;
         for (field) |f| {
+            if (f.id != champion) total += f.w;
+        }
+        for (field) |f| {
+            if (f.id == champion or total <= 0) continue;
+            const w = f.w / total;
             const v = s.value(role, champion, f.id);
             const t = s.present(role, champion, f.id);
             for (0..n_lane) |o| {
-                sum[o] += f.w * v.value[o];
+                sum[o] += w * v.value[o];
                 var rest: f64 = 0;
                 for (t[1..]) |maybe| if (maybe) |term| {
                     rest += @as(f64, term.sd[o]) * term.sd[o];
                 };
-                vr[o] += f.w * f.w * rest;
+                vr[o] += w * w * rest;
             }
         }
         for (0..n_lane) |o| {
@@ -172,6 +191,7 @@ pub const Scorer = struct {
         }
         var top: [10]?Opp = @splat(null);
         for (field) |f| {
+            if (f.id == champion) continue;
             var cur = f;
             for (&top) |*slot| {
                 const x = slot.* orelse {
@@ -210,6 +230,73 @@ pub const Scorer = struct {
         return c;
     }
 };
+
+/// On the private site: the box's daily refit
+pub const file = "/private/models/lane-model.bin";
+
+/// `failed`: not fetched (a network error, no file); `bad`: fetched, didn't decode or
+/// score
+pub const Load = union(enum) { none, loading, failed, bad, ready: *const Loaded };
+
+/// A lane model file, decoded, with its scorer and self-check
+pub const Loaded = struct {
+    m: Model,
+    sc: Scorer,
+    check: Check,
+
+    /// In place: the scorer points at `l.m`. Decoded slices point into `bytes`
+    pub fn init(l: *Loaded, a: std.mem.Allocator, bytes: []const u8) !void {
+        l.m = try Model.decode(a, bytes);
+        l.sc = try Scorer.init(a, &l.m);
+        l.check = l.sc.check();
+    }
+};
+
+/// The tester's Files line for the lane model
+pub fn fileLine(h: *tree.H, load: Load) tree.Text {
+    return switch (load) {
+        .ready => |l| if (l.check.refs == 0)
+            W.no_refs.with(h, .{ .file = file })
+        else if (l.check.ok())
+            W.ok.with(h, .{ .file = file, .n = l.check.refs })
+        else
+            W.bad.with(h, .{ .file = file, .n = l.check.refs, .gap = if (std.math.isFinite(l.check.worst)) h.fmt("{d:.3}", .{l.check.worst}) else "?" }),
+        .failed => W.failed.with(h, .{ .file = file }),
+        .bad => W.damaged.with(h, .{ .file = file }),
+        .none, .loading => W.loading.with(h, .{ .file = file }),
+    };
+}
+
+/// One candidate's lane, for the candidate panel's feed (ui.data): lane gold at 14 and
+/// its 95% range, CS at 10, deaths before 15
+pub const Gold = struct {
+    v: f32,
+    lo: f32,
+    hi: f32,
+    cs10: f32,
+    deaths15: f32,
+    /// Games of the matchup in the model; blind 0
+    pair_games: u32 = 0,
+    /// Blind: of the likeliest opponents, the one with the least gold for it (0 none)
+    hardest: u32 = 0,
+    hardest_gold: f32 = 0,
+};
+
+/// `champion` in `role` into `opp`, or blind over `field` when `opp` is 0
+pub fn gold(s: *const Scorer, role: u8, champion: u32, opp: u32, field: []const Opp) Gold {
+    const b: Blind = if (opp != 0) .{ .v = s.value(role, champion, opp) } else s.blind(role, champion, field);
+    const g = @backingInt(Outcome.lanediff14);
+    return .{
+        .v = b.v.value[g],
+        .lo = b.v.lo[g],
+        .hi = b.v.hi[g],
+        .cs10 = b.v.of(.cs10),
+        .deaths15 = b.v.of(.deaths15),
+        .pair_games = b.v.pair_games,
+        .hardest = b.hardest,
+        .hardest_gold = b.hardest_gold,
+    };
+}
 
 pub const Check = struct {
     refs: u32,
@@ -264,6 +351,13 @@ test "lane: the documented formula, encoded and back" {
     try testing.expectApproxEqAbs(190, b.v.of(.lanediff14), 1e-4);
     try testing.expectApproxEqAbs(190 - 1.96 * @sqrt(@as(f32, 40 * 40 + 0.25 * (30 * 30 + 30 * 30))), b.v.lo[1], 1e-3);
     try testing.expectEqual(2, b.hardest);
+    // The champion itself in the field is left out, the rest scaled to 1
+    const self = s.blind(0, 1, &.{ .{ .id = 1, .w = 0.5 }, .{ .id = 2, .w = 0.25 }, .{ .id = 3, .w = 0.25 } });
+    try testing.expectApproxEqAbs(190, self.v.of(.lanediff14), 1e-4);
+    try testing.expectEqual(2, self.hardest);
+    const g = gold(&s, 0, 1, 2, &.{});
+    try testing.expectApproxEqAbs(190, g.v, 1e-4);
+    try testing.expectEqual(120, g.pair_games);
 }
 
 test "lane: the check finds an off reference, and passes a true one" {
