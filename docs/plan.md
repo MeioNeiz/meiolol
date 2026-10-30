@@ -44,9 +44,9 @@ back. Jacob's open decisions: decisions.md "Open decisions".
    Tailscale with its backup mirror and archive pull current, VM8 (vm.md), WSL
    compaction when idle (ops.md "Storage and hosts"). Owner coordinator; blocked on
    Jacob
-3. Daily Draft and Learn (site.md): Daily's pick verdicts (J26: every option's rank, who
-   should have won, lanes won), share with facts; Learn's myth-or-measured cards from
-   final learned.md lines. Owner W3
+3. Daily Draft and Learn (site.md): Daily's pick verdicts (J26) and share with facts
+   done, Learn has 8 myth-or-measured cards; waits Jacob's look at /daily's reveal. More
+   cards as learned.md lines become final. Owner W3
 4. Champion and matchup pages to LoLalytics' level (docs/champion-matchup.md): CH0 done
    (rune rows by reach, trends by day), then site.md's CH Later list.
    Owner W9; the matchup page's lane lines W7
