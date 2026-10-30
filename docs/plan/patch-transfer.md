@@ -94,10 +94,15 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
 - 16.21: ~120-135k games played a day (drafts table)
 - PT2-PT3 tool: `meiolol-lab patchdays`; dry run with 16.20 as latest (docs/model.md "The latest patch day by day"): control gains 0, pooled wins,
   no jump detectable as 16.19 has only 51k games
-- PT1 cut (Jacob's): tune on 16.21 days 0-3 day by day, days 4+ stay test. No
-  protocol change: the daily snapshot of ~28 Oct has its newest 15% (~340k of ~2.26M
-  played) from about 25 Oct 00:00 UTC, EUW1's day 4. Pin that one (check split.tsv's
-  test_cut_ms first; 27 Oct's would cut near day 3), then patchdays A1, A2, A3, C
+- PT1 pinned: snap-20261029T1810Z (28 Oct 04:00 backup, games to 28 Oct 03:43Z), cut
+  24 Oct 23:16Z, ~6 h before EUW1's day 4: days 0-3 dev, the rest test. On the
+  gpu-box (~/ml/snaps); not yet on the Mac
+- PT3 on 16.21, dev (docs/model.md "The latest patch day by day on 16.21"): pooled +
+  offsets (A2, sd estimated) wins, -0.28 ± 0.07 milli-nats a game vs A1 on days 1-3
+  (EUW1 -0.31 ± 0.16), control 0; the changed list adds nothing once the sd is
+  estimated (A3 - A2 -0.02 ± 0.03); A0 is still +2 behind on day 3; A4 and A7 lose.
+  Frozen for the test look on days 4+: A2 estimated (`patchdays ... --final`, Jacob's
+  call). Then PT4 and PT6 on A2
 
 ## Step 0 SQL
 

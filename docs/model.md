@@ -5509,6 +5509,83 @@ on all seats.
 
 Decision: the app's blind ranking stays; "Safe blind" stays a label of the mode.
 
+### The latest patch day by day on 16.21: PT1-PT3, 2026-10-30 (W6, run 2026-10-29-next)
+
+docs/plan/patch-transfer.md PT1-PT3 with 16.21 as the latest patch: the tool of "The
+latest patch day by day" (dry run on 16.20), now with an EUW1 subset (PT6: EUW1
+decides, every platform reported). Dev only: 16.21's test days were neither fitted nor
+scored.
+
+Pin (PT1): snap-20261029T1810Z, the 28 Oct 04:00 backup restored on the gpu-box plus
+the box's extra stream, games to 28 Oct 03:43Z (2,389,165 played; pack 2,330,587
+games). The protocol's cut, unchanged: test_cut_ms 1792883802858 (24 Oct 23:16Z),
+about 6 h before EUW1's day 4 (16.21's first EUW1 game 21 Oct 05:12Z; OC1 20 Oct
+20:59Z, KR 22:25Z, NA1 21 Oct 11:07Z). So days 0-3 are dev (588,641 games; day 4 only
+605, on the earliest platforms), the rest to day 7 test (344,434). Changed list: Step
+0's 12 (Data Dragon 16.20.1 -> 16.21.1). Runs on the gpu-box, ~9 min each on 4 threads,
+~10 GB: ~/ml/runs/20261030T010122Z-pt-1621-est (A0, A1, A2, A3, C, offset sd estimated),
+...011102Z-pt-1621-sd04 (A1, A2, A3, A4, A7 x3 at sd 0.04), ...012432Z-pt-1621-sd01
+(A1, A2, A3 at sd 0.01). Loading this snapshot from SQLite first ran out of 24 GB
+(rows.loadSql's buffers grew in an arena); fixed by sizing them up front.
+
+Milli-nats a game vs A1, 95% paired, by day (estimated offsets; A1 row: its log loss):
+
+| arm | day 0 | day 1 | days 2-3 |
+| --- | --- | --- | --- |
+| games (EUW1) | 159,950 (32,928) | 151,880 (31,215) | 276,206 (57,990) |
+| fit games (16.21) | 1.36M (0) | 1.49M (125k) | 1.64-1.79M (278-426k) |
+| A1 pooled | 0.68480 | 0.68465 | 0.68374 |
+| A0 latest only | +8.35 ± 0.63 | +3.99 ± 0.49 | +2.60 ± 0.28 |
+| A2 offsets | 0 | -0.30 ± 0.14 | -0.26 ± 0.09 |
+| A3 changed x16 | 0 | -0.33 ± 0.15 | -0.27 ± 0.09 |
+| C control | 0 | -0.00 ± 0.01 | +0.00 ± 0.00 |
+| EUW1: A2 | 0 | -0.42 ± 0.30 | -0.26 ± 0.18 |
+| EUW1: A0 | +7.90 ± 1.31 | +3.32 ± 1.04 | +1.98 ± 0.61 |
+
+Days 1-3 pooled (428,086 games, game-weighted; EUW1 89,205; games with a changed
+champion 263,301), vs A1:
+
+| arm | all | EUW1 | changed-champion games |
+| --- | --- | --- | --- |
+| A2, sd estimated (0.020-0.024) | -0.28 ± 0.07 | -0.31 ± 0.16 | -0.40 ± 0.10 |
+| A2, sd 0.01 | -0.17 ± 0.03 | -0.18 ± 0.07 | -0.24 ± 0.04 |
+| A2, sd 0.04 | -0.21 ± 0.10 | -0.28 ± 0.22 | -0.38 ± 0.13 |
+| A3, estimated (0.014-0.017, changed x4) | -0.29 ± 0.08 | -0.34 ± 0.17 | -0.42 ± 0.12 |
+| A3, sd 0.01 (changed 0.04) | -0.28 ± 0.06 | -0.29 ± 0.12 | -0.41 ± 0.09 |
+| A3, sd 0.04 (changed 0.16) | -0.19 ± 0.11 | -0.26 ± 0.23 | -0.35 ± 0.15 |
+| A4 warm start | -0.06 ± 0.09 | -0.19 ± 0.17 | -0.20 ± 0.12 |
+| A7 latest x3 | +0.49 ± 0.14 | +0.66 ± 0.30 | +0.43 ± 0.17 |
+| A0 latest only | +3.10 ± 0.25 | +2.45 ± 0.54 | +2.99 ± 0.32 |
+| C shuffled | -0.00 ± 0.01 | -0.00 ± 0.01 | +0.00 ± 0.01 |
+
+A3 minus A2 (estimated, same run): -0.02 ± 0.03; A3 at sd 0.01 minus A2 estimated
+(across runs, same games and A1): -0.00 ± 0.04.
+
+Reading (dev, 16.21 days 0-3):
+- Unlike 16.19 -> 16.20 (dry run: offsets collapsed to 0), 16.21 has a jump the pooled
+  model can learn: per-patch offsets gain ~0.3 milli-nats a game from day 1 on, about a
+  quarter of Step 0's ~1.1 cost of ignoring the jump, and more on changed-champion
+  games (-0.40). The shuffled control gains nothing, so this is the patch, not extra
+  freedom
+- The estimated (MacKay) offset sd is the right strength: 0.01 is too tight (-0.17) and
+  0.04 too loose (-0.21) around the estimate's ~0.02 (-0.28). No tuning knob needed
+- The changed list adds nothing once the sd is estimated (-0.02 ± 0.03): a looser prior
+  for the 12 changed champions only helps when the shared sd is held too tight (A3 at
+  0.01 recovers A2's estimated gain). Data Dragon's list is a stand-in for what the
+  patch moved, and the estimate already takes what it can
+- Old patches never stop helping in these days: A0 is still +2.05 ± 0.39 on day 3 with
+  426k of 16.21's own games, so it does not catch up before the test days. A4 (prior on
+  the old fit) and A7 (up-weight the new patch) both lose to pooling with offsets, as on
+  16.20
+- Day 0 can't gain from any of these arms (no 16.21 game in the fit). The 16.21 jump
+  on day 0 costs what Step 0 sized; only a predicted jump (Later in the plan) could
+  claim it
+- EUW1 agrees with all platforms within its noise (A2 -0.31 ± 0.16)
+
+Frozen for a test look on days 4+ (PT3, not run: Jacob's call): A2 with the offset sd
+estimated, against A1, with A0 and C reported. `meiolol-lab patchdays
+snap-20261029T1810Z --arms A0,A1,A2,C --final`.
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now

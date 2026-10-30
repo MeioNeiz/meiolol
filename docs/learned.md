@@ -380,6 +380,13 @@ How to write a line:
   RMS on 16.21's first day, 1.9 pp for the 12 changed champions; last patch's numbers
   unchanged cost about 1 milli-nat a game on day one. Sure: 52k games, day one only.
   Evidence: docs/model.md "Patch 16.21's first day"
+- Across a patch, pooling every old game with a small per-patch champion offset predicts
+  the new patch best from its second day: 0.3 milli-nats a game better than plain
+  pooling (more for changed champions), while the new patch's games alone are still 2
+  milli-nats worse after four days. A list of changed champions adds nothing once the
+  offset strength is estimated. Sure: dev, 16.21 days 1-3, 428k games, shuffled control
+  0; days 4+ not yet looked at. Models: pooled + offsets (patch-transfer.md A2).
+  Evidence: docs/model.md "The latest patch day by day on 16.21"
 - On a patch's first day most players have not played it: 75-89% of players checked
   had no game on it; players just seen in a new game give 3.1-3.5 new games per call.
   Crawler: snowball and patch-start reset. Evidence:
