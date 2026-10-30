@@ -56,7 +56,6 @@ pub const Draft = struct {
     role: Role,
     us: [5]Champ,
     them: [5]Champ,
-    bans: [2][]const Champ = .{ &.{}, &.{} },
     /// Each seat's magic share of its damage, %, us then them; the open seat's is the right
     /// pick's, shown once revealed
     magic: [2][5]?u8 = @splat(@splat(null)),
@@ -153,33 +152,34 @@ pub fn pickOf(date: []const u8, c: Chapter) u8 {
 /// chapter's end reached (generated puzzles change with the data, so "every
 /// puzzle done" alone would lock a finished chapter again)
 pub const Progress = struct {
-    ids: std.ArrayList([]const u8) = .empty,
-    stars: std.ArrayList(u2) = .empty,
+    /// One list, not ids and stars apart: each append is code in ui-learn.wasm
+    all: std.ArrayList(Entry) = .empty,
+
+    pub const Entry = struct { id: []const u8, n: u2 };
 
     pub fn parse(a: std.mem.Allocator, s: []const u8) !Progress {
         var p: Progress = .{};
-        var it = std.mem.tokenizeScalar(u8, s, ',');
+        var it = std.mem.splitScalar(u8, s, ',');
+        // By hand, not tokenize and parseInt: ui-learn's bytes
         while (it.next()) |e| {
-            const c = std.mem.findScalarLast(u8, e, ':') orelse continue;
-            const n = std.fmt.parseInt(u2, e[c + 1 ..], 10) catch continue;
-            try p.set(a, try a.dupe(u8, e[0..c]), n);
+            if (e.len < 3 or e[e.len - 2] != ':' or e[e.len - 1] < '0' or e[e.len - 1] > '3') continue;
+            try p.set(a, try a.dupe(u8, e[0 .. e.len - 2]), @intCast(e[e.len - 1] - '0'));
         }
         return p;
     }
 
     pub fn get(p: *const Progress, id: []const u8) ?u2 {
-        for (p.ids.items, p.stars.items) |x, n| if (std.mem.eql(u8, x, id)) return n;
+        for (p.all.items) |e| if (std.mem.eql(u8, e.id, id)) return e.n;
         return null;
     }
 
     /// Keeps the best try
     pub fn set(p: *Progress, a: std.mem.Allocator, id: []const u8, n: u2) !void {
-        for (p.ids.items, p.stars.items) |x, *m| if (std.mem.eql(u8, x, id)) {
-            m.* = @max(m.*, n);
+        for (p.all.items) |*e| if (std.mem.eql(u8, e.id, id)) {
+            e.n = @max(e.n, n);
             return;
         };
-        try p.ids.append(a, id);
-        try p.stars.append(a, n);
+        try p.all.append(a, .{ .id = id, .n = n });
     }
 
     /// Day marks kept: the newest 30 days' five
@@ -188,17 +188,18 @@ pub const Progress = struct {
     /// Drops the oldest day marks past `keep_marks`
     pub fn write(p: *const Progress, w: *std.Io.Writer) !void {
         var marks: usize = 0;
-        for (p.ids.items) |x| marks += @intFromBool(isMark(x));
+        for (p.all.items) |e| marks += @intFromBool(isMark(e.id));
         var drop = marks -| keep_marks;
         var first = true;
-        for (p.ids.items, p.stars.items) |x, n| {
-            if (drop > 0 and isMark(x)) {
+        for (p.all.items) |e| {
+            if (drop > 0 and isMark(e.id)) {
                 drop -= 1;
                 continue;
             }
             if (!first) try w.writeByte(',');
             first = false;
-            try w.print("{s}:{d}", .{ x, n });
+            try w.writeAll(e.id);
+            try w.writeAll(&.{ ':', '0' + @as(u8, e.n) });
         }
     }
 
@@ -360,7 +361,7 @@ test "day marks: the oldest dropped past keep_marks; a chapter's end opens its s
     try p.write(&out.writer);
     try testing.expect(std.mem.startsWith(u8, out.written(), "know:3,@x.0:2,"));
     const q = try Progress.parse(a, out.written());
-    try testing.expectEqual(Progress.keep_marks + 1, q.ids.items.len);
+    try testing.expectEqual(Progress.keep_marks + 1, q.all.items.len);
     try testing.expect(!p.finished(demo.chapters[1]));
     try p.set(a, Progress.endOf(&buf, demo.chapters[1]), 0);
     try testing.expect(p.finished(demo.chapters[1]));

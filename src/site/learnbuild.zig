@@ -803,12 +803,6 @@ fn draftPuzzle(site: *const Site, facts: learn.Facts, p: learn.Practice, right: 
     for (&sides, p.teams) |*side, team| for (side, team) |*dst, id| {
         dst.* = uiChamp(matchup.champ(site, id) orelse return null);
     };
-    var bans: [2][]ld.Champ = undefined;
-    for (&bans, p.bans) |*dst, ids| {
-        var l: std.ArrayList(ld.Champ) = .empty;
-        for (ids) |id| if (matchup.champ(site, id)) |c| try l.append(a, uiChamp(c));
-        dst.* = l.items;
-    }
     const us = p.hidden_team;
     var choices: [4]ld.Choice = undefined;
     var games: u32 = 0;
@@ -840,7 +834,6 @@ fn draftPuzzle(site: *const Site, facts: learn.Facts, p: learn.Practice, right: 
             .role = champion.uiRole(p.hidden_role),
             .us = sides[us],
             .them = sides[1 - us],
-            .bans = .{ bans[us], bans[1 - us] },
             .magic = magic,
         } },
         .answer = .{ .pick = .{ .right = right, .choices = try a.dupe(ld.Choice, &choices) } },

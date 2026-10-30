@@ -481,14 +481,6 @@ pub const Page = struct {
             }
             l.* = .{ .role = r, .us = seats[0], .them = seats[1], .ask = r == d.role and !p.revealed };
         }
-        var bans: [2][]champ.Champ = undefined;
-        for (&bans, d.bans) |*dst, src| {
-            dst.* = h.mem.alloc(champ.Champ, src.len) catch {
-                h.oom = true;
-                return .none;
-            };
-            for (dst.*, src) |*o, c| o.* = .{ .name = c.name, .src = p.iconSrc(h, c) };
-        }
         // No seat takes a click here: the answer is the ChoiceCards
         const board = draftboard.question(h, .{
             .v = .full,
@@ -498,8 +490,6 @@ pub const Page = struct {
             },
             .heads = .{ W.your_team, W.enemy },
             .mix = mix,
-            .bans_us = bans[0],
-            .bans_them = bans[1],
         });
         return h.div(.{ .class = "draft" }, .{ board, if (p.revealed) p.whyList(h, x) else null });
     }
@@ -957,7 +947,6 @@ const draft_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &.{
         .role = .support,
         .us = .{ ld.ch("Darius", "Darius"), ld.ch("LeeSin", "Lee Sin"), ld.ch("Zed", "Zed"), ld.ch("Jinx", "Jinx"), ld.ch("Thresh", "Thresh") },
         .them = .{ ld.ch("Ornn", "Ornn"), ld.ch("Elise", "Elise"), ld.ch("Ahri", "Ahri"), ld.ch("Caitlyn", "Caitlyn"), ld.ch("Nautilus", "Nautilus") },
-        .bans = .{ &.{ ld.ch("Yasuo", "Yasuo"), ld.ch("Yone", "Yone") }, &.{ld.ch("Vex", "Vex")} },
         .magic = .{ .{ 3, 8, 6, 4, 91 }, .{ 55, 88, 90, 2, 72 } },
     } },
     .answer = .{ .pick = .{ .right = 2, .choices = &.{
