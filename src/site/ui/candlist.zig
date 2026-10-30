@@ -57,6 +57,9 @@ pub const Row = struct {
     reasons: []const Reason = &.{},
     /// A neutral Badge after the reasons ("harder to pick up")
     tag: ?tree.Text = null,
+    /// A Badge by the name, after the reference row's ("your pick")
+    mark: ?tree.Text = null,
+    mark_k: badge.Kind = .neutral,
     /// Rows left out above this one (the played pick far down the list)
     gap: bool = false,
     open: bool = false,
@@ -174,6 +177,7 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
             }, who) else h.span(.{ .class = "pk" }, who),
             if (r.star) h.span(.{ .class = "star", .role = "img", .aria_label = W.star }, .{"★"}) else null,
             if (r.ref) badge.view(h, .accent, .{l.ref_label}) else null,
+            if (r.mark) |m| badge.view(h, r.mark_k, .{m}) else null,
         }),
         if (l.mode == .points) h.span(.{ .class = "v" }, .{if (r.win) |w| phrase.num(h, .rate, w) else null}) else null,
         if (l.mode == .points) h.span(.{
@@ -376,6 +380,7 @@ pub fn gallery(g: *Gallery) void {
     for (rows, [_]usize{ 0, 1, 3, 4, 2 }) |*r, i| r.* = gap.rows[i];
     rows[4].rank = 10;
     rows[4].gap = true;
+    rows[1].mark = plain("your pick");
     const owner = h.mem.create(Owner) catch {
         h.oom = true;
         return;
@@ -385,7 +390,7 @@ pub fn gallery(g: *Gallery) void {
         r.pick_label = plain("Pick it");
     }
     gap.rows = rows;
-    g.addFill("average pinned, played far down, Pick", withPick(h, gap));
+    g.addFill("average pinned, played far down, a mark by a name, Pick", withPick(h, gap));
     g.addFill("words, public app", view(h, .{ .mode = .words, .ref_label = plain("locked in"), .rows = &words_rows }));
 }
 
