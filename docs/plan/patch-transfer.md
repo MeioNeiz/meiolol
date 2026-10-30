@@ -101,8 +101,10 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
   offsets (A2, sd estimated) wins, -0.28 ± 0.07 milli-nats a game vs A1 on days 1-3
   (EUW1 -0.31 ± 0.16), control 0; the changed list adds nothing once the sd is
   estimated (A3 - A2 -0.02 ± 0.03); A0 is still +2 behind on day 3; A4 and A7 lose.
-  Frozen for the test look on days 4+: A2 estimated (`patchdays ... --final`, Jacob's
-  call). Then PT4 and PT6 on A2
+  Test look on days 4+ declared, not run (Jacob's call; docs/model.md, same section):
+  A2 estimated minus A1 on the test games of days 4+, all platforms, passes when d + h
+  < 0; EUW1 and the test minus test-exclude.tsv (J2's EUW1 games) beside. Then PT4 and
+  PT6 on A2
 
 ## Step 0 SQL
 

@@ -5512,16 +5512,18 @@ Decision: the app's blind ranking stays; "Safe blind" stays a label of the mode.
 ### The latest patch day by day on 16.21: PT1-PT3, 2026-10-30 (W6, run 2026-10-29-next)
 
 docs/plan/patch-transfer.md PT1-PT3 with 16.21 as the latest patch: the tool of "The
-latest patch day by day" (dry run on 16.20), now with an EUW1 subset (PT6: EUW1
-decides, every platform reported). Dev only: 16.21's test days were neither fitted nor
+latest patch day by day" (dry run on 16.20), now with an EUW1 subset (PT6: EUW1 the
+target region, reported beside all). Dev only: 16.21's test games were neither fitted nor
 scored.
 
 Pin (PT1): snap-20261029T1810Z, the 28 Oct 04:00 backup restored on the gpu-box plus
 the box's extra stream, games to 28 Oct 03:43Z (2,389,165 played; pack 2,330,587
 games). The protocol's cut, unchanged: test_cut_ms 1792883802858 (24 Oct 23:16Z),
 about 6 h before EUW1's day 4 (16.21's first EUW1 game 21 Oct 05:12Z; OC1 20 Oct
-20:59Z, KR 22:25Z, NA1 21 Oct 11:07Z). So days 0-3 are dev (588,641 games; day 4 only
-605, on the earliest platforms), the rest to day 7 test (344,434). Changed list: Step
+20:59Z, KR 22:25Z, NA1 21 Oct 11:07Z). Dev: 588,641 scored games, days 0-3 plus 605 on
+day 4 (the earliest platforms: KR 276, JP1 170, OC1 133, VN2 15, SG2 11). Test: the rest
+to day 7 (344,434), from the tail of day 3 on the later platforms (EUW1's last ~6 h,
+NA1's last ~12 h). Changed list: Step
 0's 12 (Data Dragon 16.20.1 -> 16.21.1). Runs on the gpu-box, ~9 min each on 4 threads,
 ~10 GB: ~/ml/runs/20261030T010122Z-pt-1621-est (A0, A1, A2, A3, C, offset sd estimated),
 ...011102Z-pt-1621-sd04 (A1, A2, A3, A4, A7 x3 at sd 0.04), ...012432Z-pt-1621-sd01
@@ -5543,23 +5545,27 @@ Milli-nats a game vs A1, 95% paired, by day (estimated offsets; A1 row: its log 
 | EUW1: A0 | +7.90 ± 1.31 | +3.32 ± 1.04 | +1.98 ± 0.61 |
 
 Days 1-3 pooled (428,086 games, game-weighted; EUW1 89,205; games with a changed
-champion 263,301), vs A1:
+champion 263,301), vs A1: the est rows are patchdays' "days 1-3 pooled" column (a rerun,
+20261030T015524Z-pt-1621-est-w6fix, bit-identical preds); the sd 0.01 and 0.04 rows the
+same sums over their runs' pd/preds.tsv (data/team/2026-10-29-next/w6/pair.py,
+gitignored; rounding of 5-decimal preds can move the last digit):
 
 | arm | all | EUW1 | changed-champion games |
 | --- | --- | --- | --- |
 | A2, sd estimated (0.020-0.024) | -0.28 ± 0.07 | -0.31 ± 0.16 | -0.40 ± 0.10 |
 | A2, sd 0.01 | -0.17 ± 0.03 | -0.18 ± 0.07 | -0.24 ± 0.04 |
 | A2, sd 0.04 | -0.21 ± 0.10 | -0.28 ± 0.22 | -0.38 ± 0.13 |
-| A3, estimated (0.014-0.017, changed x4) | -0.29 ± 0.08 | -0.34 ± 0.17 | -0.42 ± 0.12 |
+| A3, estimated (0.014-0.017, changed x4) | -0.29 ± 0.08 | -0.34 ± 0.17 | -0.42 ± 0.11 |
 | A3, sd 0.01 (changed 0.04) | -0.28 ± 0.06 | -0.29 ± 0.12 | -0.41 ± 0.09 |
 | A3, sd 0.04 (changed 0.16) | -0.19 ± 0.11 | -0.26 ± 0.23 | -0.35 ± 0.15 |
 | A4 warm start | -0.06 ± 0.09 | -0.19 ± 0.17 | -0.20 ± 0.12 |
 | A7 latest x3 | +0.49 ± 0.14 | +0.66 ± 0.30 | +0.43 ± 0.17 |
 | A0 latest only | +3.10 ± 0.25 | +2.45 ± 0.54 | +2.99 ± 0.32 |
-| C shuffled | -0.00 ± 0.01 | -0.00 ± 0.01 | +0.00 ± 0.01 |
+| C shuffled | -0.00 ± 0.00 | -0.00 ± 0.01 | +0.00 ± 0.01 |
 
 A3 minus A2 (estimated, same run): -0.02 ± 0.03; A3 at sd 0.01 minus A2 estimated
-(across runs, same games and A1): -0.00 ± 0.04.
+(across runs, same games and A1, bit-identical in all three): -0.00 ± 0.04. Cross-run
+pairs: data/team/2026-10-29-next/w6/cross.py.
 
 Reading (dev, 16.21 days 0-3):
 - Unlike 16.19 -> 16.20 (dry run: offsets collapsed to 0), 16.21 has a jump the pooled
@@ -5567,8 +5573,10 @@ Reading (dev, 16.21 days 0-3):
   quarter of Step 0's ~1.1 cost of ignoring the jump, and more on changed-champion
   games (-0.40). The shuffled control gains nothing, so this is the patch, not extra
   freedom
-- The estimated (MacKay) offset sd is the right strength: 0.01 is too tight (-0.17) and
-  0.04 too loose (-0.21) around the estimate's ~0.02 (-0.28). No tuning knob needed
+- The estimated (MacKay) offset sd is the right strength on all platforms, paired across
+  runs on the same games: A2 estimated minus A2 at sd 0.04 -0.06 ± 0.04, minus sd 0.01
+  -0.10 ± 0.05. On EUW1 alone within noise (-0.03 ± 0.09, -0.13 ± 0.10). No tuning knob
+  needed
 - The changed list adds nothing once the sd is estimated (-0.02 ± 0.03): a looser prior
   for the 12 changed champions only helps when the shared sd is held too tight (A3 at
   0.01 recovers A2's estimated gain). Data Dragon's list is a stand-in for what the
@@ -5582,9 +5590,26 @@ Reading (dev, 16.21 days 0-3):
   claim it
 - EUW1 agrees with all platforms within its noise (A2 -0.31 ± 0.16)
 
-Frozen for a test look on days 4+ (PT3, not run: Jacob's call): A2 with the offset sd
-estimated, against A1, with A0 and C reported. `meiolol-lab patchdays
-snap-20261029T1810Z --arms A0,A1,A2,C --final`.
+Test look on days 4+ (PT3), declared before it runs; not run: Jacob's call.
+- Frozen: A2 with the offset sd estimated, against A1; A0 and C reported. Command (a
+  binary with patchdays' test tables, 30 Oct on): `meiolol-lab patchdays
+  ~/ml/snaps/snap-20261029T1810Z --arms A0,A1,A2,C --threads 4 --out pd --final`
+  (gpu-box, ~9 min, ~10 GB; no --changed: A3 not frozen)
+- Figure: d, the mean paired log loss difference A2 minus A1 over the test games
+  (is_test) on days 4+ since 16.21 went live on their platform, game-weighted, all
+  platforms; h its 95% half-width. The "test games" table, column "days 4+ pooled",
+  and the RESULT line's test_all. Pass (lab-frontier.md, a model without seeds):
+  d + h < 0
+- Reported beside, never deciding: EUW1's test games (PT6; RESULT test_euw1), the test
+  minus test-exclude.tsv for both (kept_all, kept_euw1), each bucket, the tail of day 3
+  (test games in bucket 2-3), A0 and C. The run's "all" and "EUW1" tables mix dev and
+  test games: not the figure. Days 0-4's fits are dev's (each cut is before the test
+  cut), so the dev games score as in dev
+- snap-20261029T1810Z/test-exclude.tsv: the 39,295 EUW1 test games of this pin that
+  J2's test looks saw ("Blind pick ranking (J2)": every EUW1 game from 26 Oct
+  03:38:53.900Z, the last ~1.5 h of EUW1's day 4 and days 5-6), w4's match ids hashed
+  with the snapshot salt (data/team/2026-10-29-next/w6fix/hashex.py); the only
+  ledgered looks at these days (data/snap's test-looks.tsv, 29 Oct)
 
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
