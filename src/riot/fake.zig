@@ -14,7 +14,9 @@ const matches_per_player = 20;
 pub const Fake = struct {
     io: std.Io,
     latency_ms: u32,
-    match_json: []const u8,
+    match: Template,
+    timeline: Template,
+    /// The timeline's pieces point into it
     timeline_json: []u8,
     mastery_json: []u8,
     /// Which app's key this stands for: account-v1 PUUIDs differ per app (rekey.zig)
@@ -24,16 +26,25 @@ pub const Fake = struct {
     refuse: ?[]const u8 = null,
 
     pub fn init(gpa: std.mem.Allocator, io: std.Io, latency_ms: u32) !Fake {
+        var match: Template = try .init(gpa, @embedFile("testdata/match.json"), "NA1_5321429660");
+        errdefer match.deinit(gpa);
+        const timeline_json = try raw.decompress(gpa, @embedFile("testdata/timeline.json.gz"));
+        errdefer gpa.free(timeline_json);
+        var timeline: Template = try .init(gpa, timeline_json, "EUW1_8009933221");
+        errdefer timeline.deinit(gpa);
         return .{
             .io = io,
             .latency_ms = latency_ms,
-            .match_json = @embedFile("testdata/match.json"),
-            .timeline_json = try raw.decompress(gpa, @embedFile("testdata/timeline.json.gz")),
+            .match = match,
+            .timeline = timeline,
+            .timeline_json = timeline_json,
             .mastery_json = try raw.decompress(gpa, @embedFile("testdata/mastery.json.gz")),
         };
     }
 
     pub fn deinit(f: *Fake, gpa: std.mem.Allocator) void {
+        f.match.deinit(gpa);
+        f.timeline.deinit(gpa);
         gpa.free(f.timeline_json);
         gpa.free(f.mastery_json);
     }
@@ -50,10 +61,8 @@ pub const Fake = struct {
         const matches = "/lol/match/v5/matches/";
         if (!std.mem.startsWith(u8, path, matches)) return null;
         const rest = path[matches.len..];
-        if (std.mem.endsWith(u8, rest, "/timeline")) {
-            return try withIds(gpa, f.timeline_json, "EUW1_8009933221", rest[0 .. rest.len - "/timeline".len]);
-        }
-        return try withIds(gpa, f.match_json, "NA1_5321429660", rest);
+        if (std.mem.endsWith(u8, rest, "/timeline")) return try f.timeline.fill(gpa, rest[0 .. rest.len - "/timeline".len]);
+        return try f.match.fill(gpa, rest);
     }
 
     /// Account PUUIDs are "acct<encryption>.<name>.<tag>", so any key can turn them into
@@ -139,22 +148,65 @@ fn matchIds(gpa: std.mem.Allocator, region: []const u8, rest: []const u8) ![]u8 
     return out.toOwnedSlice();
 }
 
-/// The fixture with its match id replaced and "puuid-0".."puuid-9" made real-looking
-fn withIds(gpa: std.mem.Allocator, fixture: []const u8, fixture_id: []const u8, id: []const u8) ![]u8 {
-    var body = try std.mem.replaceOwned(u8, gpa, fixture, fixture_id, id);
-    for (0..10) |slot| {
-        var from_buf: [16]u8 = undefined;
-        const from = try std.mem.print(&from_buf, "\"puuid-{d}\"", .{slot});
-        var puuid_buf: [78]u8 = undefined;
-        var to_buf: [80]u8 = undefined;
-        const seed = std.hash.Wyhash.hash(slot, id) % player_pool;
-        const to = try std.mem.print(&to_buf, "\"{s}\"", .{puuidOf(&puuid_buf, seed)});
-        const next = try std.mem.replaceOwned(u8, gpa, body, from, to);
-        gpa.free(body);
-        body = next;
+/// A fixture cut once at its quoted match id and "puuid-0".."puuid-9": a replace pass
+/// per hole for every answer took ~13 s of each refresh test in Debug
+const Template = struct {
+    /// Fixture text around the holes: one more than holes
+    pieces: []const []const u8,
+    /// The slot whose PUUID fills each hole; null for the match id
+    holes: []const ?u8,
+
+    fn init(gpa: std.mem.Allocator, fixture: []const u8, fixture_id: []const u8) !Template {
+        var pieces: std.ArrayList([]const u8) = .empty;
+        defer pieces.deinit(gpa);
+        var holes: std.ArrayList(?u8) = .empty;
+        defer holes.deinit(gpa);
+        var start: usize = 0;
+        var i: usize = 0;
+        while (std.mem.findScalarPos(u8, fixture, i, '"')) |quote| {
+            const in = fixture[quote + 1 ..];
+            const hole: ?u8, const len: usize = if (std.mem.startsWith(u8, in, fixture_id) and
+                std.mem.startsWith(u8, in[fixture_id.len..], "\""))
+                .{ null, fixture_id.len }
+            else if (in.len >= 8 and std.mem.startsWith(u8, in, "puuid-") and
+                std.ascii.isDigit(in[6]) and in[7] == '"')
+                .{ in[6] - '0', 7 }
+            else {
+                i = quote + 1;
+                continue;
+            };
+            try pieces.append(gpa, fixture[start .. quote + 1]);
+            try holes.append(gpa, hole);
+            start = quote + 1 + len;
+            i = start + 1;
+        }
+        try pieces.append(gpa, fixture[start..]);
+        const owned_holes = try holes.toOwnedSlice(gpa);
+        errdefer gpa.free(owned_holes);
+        return .{ .pieces = try pieces.toOwnedSlice(gpa), .holes = owned_holes };
     }
-    return body;
-}
+
+    fn deinit(t: *Template, gpa: std.mem.Allocator) void {
+        gpa.free(t.pieces);
+        gpa.free(t.holes);
+    }
+
+    /// The fixture with match id `id` and real-looking PUUIDs drawn from it
+    fn fill(t: *const Template, gpa: std.mem.Allocator, id: []const u8) ![]u8 {
+        var puuids: [10][78]u8 = undefined;
+        for (&puuids, 0..) |*buf, slot| _ = puuidOf(buf, std.hash.Wyhash.hash(slot, id) % player_pool);
+        var len = t.pieces[t.holes.len].len;
+        for (t.pieces[0..t.holes.len], t.holes) |piece, hole| len += piece.len + if (hole) |_| 78 else id.len;
+        const out = try gpa.alloc(u8, len);
+        var w: std.Io.Writer = .fixed(out);
+        for (t.pieces[0..t.holes.len], t.holes) |piece, hole| {
+            w.writeAll(piece) catch unreachable;
+            w.writeAll(if (hole) |slot| &puuids[slot] else id) catch unreachable;
+        }
+        w.writeAll(t.pieces[t.holes.len]) catch unreachable;
+        return out;
+    }
+};
 
 test "fake match parses with the requested id" {
     const gpa = std.testing.allocator;
@@ -167,4 +219,28 @@ test "fake match parses with the requested id" {
     const doc = try @import("match.zig").parse(arena.allocator(), body);
     try std.testing.expectEqualStrings("EUW1_42", doc.metadata.matchId);
     try std.testing.expectEqual(@as(usize, 78), doc.info.participants[0].puuid.?.len);
+}
+
+test "fixtures filled as replacing the id and each \"puuid-N\" in turn" {
+    const gpa = std.testing.allocator;
+    var f: Fake = try .init(gpa, std.testing.io, 0);
+    defer f.deinit(gpa);
+    // The timeline's "puuid-10" is no hole, as before
+    try std.testing.expectEqual(19, f.timeline.holes.len);
+    const id = "EUW1_42";
+    const got = try f.match.fill(gpa, id);
+    defer gpa.free(got);
+    var want = try std.mem.replaceOwned(u8, gpa, @embedFile("testdata/match.json"), "NA1_5321429660", id);
+    defer gpa.free(want);
+    for (0..10) |slot| {
+        var from_buf: [16]u8 = undefined;
+        var puuid_buf: [78]u8 = undefined;
+        var to_buf: [80]u8 = undefined;
+        const from = try std.mem.print(&from_buf, "\"puuid-{d}\"", .{slot});
+        const to = try std.mem.print(&to_buf, "\"{s}\"", .{puuidOf(&puuid_buf, std.hash.Wyhash.hash(slot, id) % player_pool)});
+        const next = try std.mem.replaceOwned(u8, gpa, want, from, to);
+        gpa.free(want);
+        want = next;
+    }
+    try std.testing.expectEqualStrings(want, got);
 }

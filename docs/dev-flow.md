@@ -9,7 +9,7 @@ deploy/flow-test.sh.
 | step | time |
 |---|---|
 | test-ui after a ui edit | 28 s (gpu-box 4 s) |
-| test after a backend edit | ~130 s: backend test compile 42 s, its run 60-110 s (slow tests: docs/plan/build-speed.md BS4) |
+| test after a backend edit | ~100 s: backend test compile 42 s, its run 50-60 s (slow tests: docs/plan/build-speed.md BS4) |
 | test after a ui edit (35 islands rebuild) | ~340 s |
 | backend build (dev server, qa) | ~80 s |
 | deploy build (ReleaseSafe, box target) | ~185 s (gpu-box 230 s) |

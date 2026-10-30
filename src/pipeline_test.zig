@@ -1471,7 +1471,8 @@ fn expectSiteFiles(arena: std.mem.Allocator, io: std.Io, out: []const u8) !void 
         }
     }.f);
     const got = try std.mem.concat(arena, u8, lines.items);
-    const want = @embedFile("testdata/site-files.txt");
+    // Read, not embedded: build.zig siteFiles
+    const want = try std.Io.Dir.cwd().readFileAlloc(io, "src/testdata/site-files.txt", arena, .limited(1 << 20));
     if (std.mem.eql(u8, got, want)) return;
     // Paths whose line is in one list only
     for ([_][]const u8{ got, want }, [_][]const u8{ "now", "was" }) |list, label| {

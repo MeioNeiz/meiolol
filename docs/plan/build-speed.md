@@ -23,10 +23,13 @@ What we know (29 Oct):
 - BS3: ci, pre-push ci and the deploy build on the gpu-box when free, the Mac when not
   (W8, meiolol-86, owns the routing; data/team/2026-10-29-next/notes/w8.md). Needs on the
   gpu-box: zstd, shellcheck, nodejs; a .git for check-deploy.sh
-- BS4: slow backend tests, 66 of ~113 s: pipeline fixture 27 s, two api.fetch refresh
-  tests 20 s and 18 s (time in string compares, likely the fake), additive 11 s
-- BS5: site-files.txt read at runtime, not @embedFile: each change to it (half of src
-  commits) recompiles the backend test
+- BS4: slow backend tests. Backend test run 74 s CPU before (451 tests, Mac load 7), 50 s
+  after the fake fix. Done: the two api.fetch refresh tests 17 s + 13.5 s to 0.2 s each
+  (riot/fake.zig cut its fixtures once; it ran 11 Debug mem.replace passes over the
+  725 KB timeline per game). Left: pipeline fixture 9-22 s by load, ~4 s of it Debug gzip
+  of the site's .gz twins (write.zig); additive "parents" 6 s, real fitting
+- BS5 done: pipeline_test.zig reads src/testdata/site-files.txt at run time, an input of
+  the backend test run (build.zig siteFiles): an edit to it reruns the tests, no compile
 - BS6: the ui edit path: 35 islands rebuild on any ui change (3-7 s each, ReleaseSmall);
   measure what in them costs before changing
 - BS7: the per-page CSS work (sheets.zig) keeps minifying out of comptime: cssmin.zig

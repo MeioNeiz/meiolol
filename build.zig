@@ -55,8 +55,9 @@ pub fn build(b: *std.Build) void {
         b.step(e.name, b.fmt("Run {s} ({s})", .{ e.name, e.about })).dependOn(&run.step);
     }
     for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store, m.tpl, m.net }) |mod| {
-        const t = b.addTest(.{ .root_module = mod, .filters = test_filters });
-        test_step.dependOn(&b.addRunArtifact(t).step);
+        const run = b.addRunArtifact(b.addTest(.{ .root_module = mod, .filters = test_filters }));
+        test_step.dependOn(&run.step);
+        if (mod == m.backend) siteFiles(b, run);
     }
     // Component work's inner loop (deploy/zb.sh test-ui): the backend imports ui, so a ui
     // edit under plain `test` rebuilds the backend's tests too
@@ -238,7 +239,9 @@ pub fn build(b: *std.Build) void {
     };
     for ([_]*std.Build.Module{ backend_tsan.backend, backend_tsan.store, backend_tsan.net }) |t| {
         t.sanitize_thread = true;
-        backend_check.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = t, .filters = tsan_filters })).step);
+        const run = b.addRunArtifact(b.addTest(.{ .root_module = t, .filters = tsan_filters }));
+        if (t == backend_tsan.backend) siteFiles(b, run);
+        backend_check.dependOn(&run.step);
     }
     // The crawler's threads need a run: zig-out/tsan/meiolol crawl --fake-api (libraries.md)
     b.step("backend-tsan", "meiolol under ThreadSanitizer in zig-out/tsan").dependOn(&b.addInstallArtifact(
@@ -269,6 +272,14 @@ pub fn build(b: *std.Build) void {
     for ([_]*std.Build.Module{ backend_fuzz.backend, backend_fuzz.store }) |f| {
         backend_fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = fuzz_filters })).step);
     }
+}
+
+/// A backend test run: pipeline_test.zig reads src/testdata/site-files.txt at run time,
+/// not embedded, so an edit to it reruns the tests without recompiling them (Zig skips a
+/// test run whose inputs match)
+fn siteFiles(b: *std.Build, run: *std.Build.Step.Run) void {
+    run.setCwd(b.path("."));
+    run.addFileInput(b.path("src/testdata/site-files.txt"));
 }
 
 const Modules = struct {
