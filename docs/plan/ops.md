@@ -17,14 +17,17 @@ of raw.db's free pages instead of moving pages back to the disk.
   11 hours after a day offline): each ack's prune moved ~500 MB of raw.db pages and
   left a GB of WAL, and the writer's own checkpoint copied it while blocking commits:
   0-2 commits a minute for minutes at a time, the queue full, every region idle. Fixed
-  30 Oct as above; the next catch-up is the test. The "time %" report line shows where
-  each region's minute goes (slot wait is budget-bound, the rest is lost key use)
+  30 Oct as above. A restart-free hour after it (10:30-11:32): americas 99.8%, asia
+  99.5%, europe 99.3%, sea 98.0%, ~163k matches a day; writer waits 0-1% of each
+  region's minute, WALs 2-60 MB. Still to see: the next gpu-box catch-up (it was off).
+  The "time %" report line shows where each region's minute goes (slot wait is
+  budget-bound, the rest is lost key use)
 - Dips left: daily jobs and runs of deploys (90-95% for an hour while a job reads
   meiolol.db hard). If they stay: pipelined steps instead of Bucket.flush after each,
   or BFQ (mq-deadline honours ionice -c 3 only partly)
-- Sea runs ~93-95% on C01 (~98% on Oracle): one request at a time, and its answers
-  take longer than the 1.2 s pace leaves room for, so slots lost to a flush or a read
-  are barely caught up. Its few "due" players mean more id lookups per new match: a
+- Sea runs ~98% (93-95% on C01 before the fix): one request at a time, ~0.7 s of each
+  1.2 s slot in Riot's answer (time %: 36-40 slot wait, 56-61 Riot), so slots lost to
+  a restart or a stall are caught up slowly; two requests in flight would close it. Its few "due" players mean more id lookups per new match: a
   yield question, not key use
 
 ## Crawler speed

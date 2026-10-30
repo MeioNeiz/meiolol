@@ -392,6 +392,12 @@ How to write a line:
   had no game on it; players just seen in a new game give 3.1-3.5 new games per call.
   Crawler: snowball and patch-start reset. Evidence:
   research/sources/patch-day-discovery-measured.md
+- The crawler's key use on C01 is limited by its writer, not the box: steady hours run
+  97-100% per region (the pace caps a region at 99.4%), and the drops came from the
+  writer copying a GB WAL while blocking commits (29-30 Oct archive catch-up: 70-90% for
+  11 hours). With checkpoints on their own thread: 99.3-99.8% (sea 98.0%), ~163k
+  matches a day. Crawler: checkpointer thread, ack prunes keep free pages. Evidence:
+  docs/plan/ops.md "Crawler at 99%+ of the key"
 - In the newest snapshot (2004Z) every game has end-of-game stats, but all ten
   players' mastery from before the game in only 1 game in 15 (1 in 3 of the newest
   days), and all ten ranks at game start in about half the games since 13 Oct; every
