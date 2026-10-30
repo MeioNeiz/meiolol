@@ -17,13 +17,14 @@ const key = "meiolol.tester.v1";
 const lazy = [_][]const u8{ui.testercand.sel};
 
 var head: tp.Head = undefined;
+var index: ui.champsearch.Index = undefined;
 var state: tp.Page = undefined;
 var server: tp.Page = undefined;
 var island: ?*ui.island.Island(tp.Page, dom.Dom) = null;
 var loaded: std.enums.EnumArray(tp.Which, tp.Loaded) = undefined;
 var feed_arena: std.heap.ArenaAllocator = .init(gpa);
 /// What the last feed was for: the panel needs a new one when any of it changes
-const Sent = struct { which: tp.Which, teams: @FieldType(tp.Page, "teams"), seat: u8, load: std.meta.Tag(tp.Load) };
+const Sent = struct { which: tp.Which, teams: @FieldType(tp.Page, "teams"), bans: [tp.n_ban]u32, seat: u8, load: std.meta.Tag(tp.Load) };
 var sent: ?Sent = null;
 var pending = false;
 
@@ -37,6 +38,9 @@ export fn main() void {
     head = ui.data.decode(gpa, tp.Head, b) catch return dom.dom.warn("tester: bad data");
     server = .init(&head);
     state = .init(&head);
+    index = tp.searchIndex(gpa, &head) catch return dom.dom.warn("tester: out of memory");
+    server.useIndex(&index);
+    state.useIndex(&index);
     island = dom.rt.add(tp.Page, &state, &server, tp.sel) catch return dom.dom.warn("tester: out of memory");
     dom.rt.changed = changed;
     // The first fetch and the panel wait a task, so they see the saved board and still
@@ -107,11 +111,11 @@ fn publish() callconv(.c) void {
     pending = false;
     const seat = tp.shownSeat(state.teams, state.seat) orelse return;
     const load = state.loads.get(state.which);
-    const now: Sent = .{ .which = state.which, .teams = state.teams, .seat = seat, .load = std.meta.activeTag(load) };
+    const now: Sent = .{ .which = state.which, .teams = state.teams, .bans = state.bans, .seat = seat, .load = std.meta.activeTag(load) };
     if (sent) |s| if (std.meta.eql(s, now)) return;
     _ = feed_arena.reset(.retain_capacity);
     const a = feed_arena.allocator();
-    const f = ui.testercand.feed(a, &head, load, state.which, state.teams, seat) catch return dom.dom.warn("tester: out of memory");
+    const f = ui.testercand.feed(a, &head, load, state.which, state.teams, state.bans, seat) catch return dom.dom.warn("tester: out of memory");
     var raw: std.ArrayList(u8) = .empty;
     ui.data.encode(a, ui.testercand.Feed, f, &raw) catch return dom.dom.warn("tester: out of memory");
     const e = std.base64.standard.Encoder;

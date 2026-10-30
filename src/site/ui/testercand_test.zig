@@ -51,7 +51,7 @@ const Panel = struct {
     /// ui-tester.wasm's answer to the panel's board
     fn fed(p: *Panel) !void {
         const seat = tp.shownSeat(p.state.teams, p.state.seat) orelse 0;
-        p.feed = try tc.feed(p.arena.allocator(), &tp.Demo.head, .{ .ready = &p.l }, p.state.which, p.state.teams, seat);
+        p.feed = try tc.feed(p.arena.allocator(), &tp.Demo.head, .{ .ready = &p.l }, p.state.which, p.state.teams, p.state.bans, seat);
         p.state.feed = &p.feed;
         p.i.render();
     }
@@ -246,7 +246,7 @@ test "the feed: the seat's options, sorted by the low end or by fit, another sea
     l.sc = try l.m.scorer(a);
     const head = &tp.Demo.head;
     const empty: [2][n_role]u32 = @splat(@splat(0));
-    var f = try tc.feed(a, head, .{ .ready = &l }, .live, empty, 0);
+    var f = try tc.feed(a, head, .{ .ready = &l }, .live, empty, @splat(0), 0);
     try testing.expectEqual(tc.Status.ready, f.load);
     try testing.expectEqual(2, f.opts.len);
     var c = try tc.sorted(a, &f, .win);
@@ -273,24 +273,25 @@ test "the feed: the seat's options, sorted by the low end or by fit, another sea
         try testing.expectEqual(3, c[0].id);
         try testing.expectEqual(9, c[1].id);
     }
-    f = try tc.feed(a, head, .{ .ready = &l }, .live, .{ @splat(0), .{ 266, 0, 0, 0, 0 } }, 0);
+    f = try tc.feed(a, head, .{ .ready = &l }, .live, .{ @splat(0), .{ 266, 0, 0, 0, 0 } }, @splat(0), 0);
     try testing.expectEqual(1, f.opts.len);
     try testing.expectEqual(122, f.opts[0].id);
     // Its own seat's champion stays an option
-    f = try tc.feed(a, head, .{ .ready = &l }, .live, .{ @splat(0), .{ 266, 0, 0, 0, 0 } }, n_role);
+    f = try tc.feed(a, head, .{ .ready = &l }, .live, .{ @splat(0), .{ 266, 0, 0, 0, 0 } }, @splat(0), n_role);
     try testing.expectEqual(2, f.opts.len);
-    try testing.expectEqual(0, (try tc.feed(a, head, .{ .ready = &l }, .live, empty, 2 * n_role)).opts.len);
-    try testing.expectEqual(tc.Status.loading, (try tc.feed(a, head, .loading, .comp, empty, 0)).load);
-    try testing.expectEqual(tc.Status.failed, (try tc.feed(a, head, .failed, .comp, empty, 0)).load);
-    try testing.expectEqual(tc.Status.bad, (try tc.feed(a, head, .bad, .comp, empty, 0)).load);
+    try testing.expectEqual(0, (try tc.feed(a, head, .{ .ready = &l }, .live, empty, @splat(0), 2 * n_role)).opts.len);
+    try testing.expectEqual(tc.Status.loading, (try tc.feed(a, head, .loading, .comp, empty, @splat(0), 0)).load);
+    try testing.expectEqual(tc.Status.failed, (try tc.feed(a, head, .failed, .comp, empty, @splat(0), 0)).load);
+    try testing.expectEqual(tc.Status.bad, (try tc.feed(a, head, .bad, .comp, empty, @splat(0), 0)).load);
 
     // Through ui.data, as it crosses between the two wasm files
-    f = try tc.feed(a, head, .{ .ready = &l }, .live, empty, 0);
+    f = try tc.feed(a, head, .{ .ready = &l }, .live, empty, @splat(0), 0);
     var raw: std.ArrayList(u8) = .empty;
     try data.encode(a, tc.Feed, f, &raw);
     const back = try data.decode(a, tc.Feed, raw.items);
-    try testing.expect(back.of(.live, empty, 0));
-    try testing.expect(!back.of(.comp, empty, 0));
+    try testing.expect(back.of(.live, empty, @splat(0), 0));
+    try testing.expect(!back.of(.comp, empty, @splat(0), 0));
+    try testing.expect(!back.of(.live, empty, .{ 266, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, 0));
     try testing.expectEqual(f.opts[1].parts[0].pp, back.opts[1].parts[0].pp);
     try testing.expectError(error.Truncated, data.decode(a, tc.Feed, raw.items[0 .. raw.items.len - 1]));
 

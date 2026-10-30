@@ -10,6 +10,7 @@ const tree = @import("tree.zig");
 const ds = @import("core").draftscore;
 const td = @import("testerdata.zig");
 const champ = @import("champ.zig");
+const champsearch = @import("champsearch.zig");
 const draftboard = @import("draftboard.zig");
 const modelbadge = @import("modelbadge.zig");
 const role = @import("role.zig");
@@ -31,6 +32,8 @@ pub const scope = .{".c-tester"};
 pub const sel = "[data-island=tester]";
 
 const n_role = ds.n_role;
+/// Both teams' in one list, as champ select's ten: left out of the candidates
+pub const n_ban = 10;
 
 comptime {
     std.debug.assert(@typeInfo(role.Role).@"enum".field_names.len == n_role);
@@ -40,6 +43,9 @@ const W = struct {
     pub const title = plain("Draft tester");
     pub const model = plain("Model");
     pub const clear = plain("Clear");
+    pub const ban = plain("Ban a champion");
+    pub const bans = plain("Bans");
+    pub const unban = Phrase("Remove the ban on {c:text}");
     pub const loading = plain("Loading the model…");
     pub const failed = plain("Could not load the model file: choose it again to retry");
     pub const bad_file = plain("The model file is damaged");
@@ -132,6 +138,32 @@ pub fn clean(head: *const Head, teams: [2][n_role]u32) [2][n_role]u32 {
     return out;
 }
 
+/// `bans` with champions the head lacks, repeats and gaps dropped, and none on `teams`
+pub fn cleanBans(head: *const Head, bans: [n_ban]u32, teams: [2][n_role]u32) [n_ban]u32 {
+    var out: [n_ban]u32 = @splat(0);
+    var n: usize = 0;
+    for (bans) |id| {
+        if (champOf(head, id) == null or std.mem.findScalar(u32, out[0..n], id) != null) continue;
+        if (onBoard(teams, id)) continue;
+        out[n] = id;
+        n += 1;
+    }
+    return out;
+}
+
+fn onBoard(teams: [2][n_role]u32, id: u32) bool {
+    for (teams) |team| if (std.mem.findScalar(u32, &team, id) != null) return true;
+    return false;
+}
+
+/// The ban box's entries: the head's champions in its order, so an entry's index is a
+/// champion's
+pub fn searchIndex(a: std.mem.Allocator, head: *const Head) !champsearch.Index {
+    const entries = try a.alloc(champsearch.Entry, head.champs.len);
+    for (entries, head.champs) |*e, c| e.* = .{ .name = c.name, .src = try std.fmt.allocPrint(a, champ.icon_fmt, .{ head.ddragon, c.key }) };
+    return .init(a, entries);
+}
+
 pub fn champOf(head: *const Head, id: u32) ?*const Champ {
     if (id == 0) return null;
     for (head.champs) |*c| if (c.id == id) return c;
@@ -151,6 +183,11 @@ pub const Page = struct {
     teams: [2][n_role]u32 = @splat(@splat(0)),
     /// The seat being filled: side * n_role + role, side 0 blue; null: the first empty
     seat: ?u8 = null,
+    /// Filled from the front; 0 empty
+    bans: [n_ban]u32 = @splat(0),
+    /// The ban box; shown once `useIndex` gave it the champions
+    search: champsearch.ChampSearch = .{ .index = undefined, .id = "tester-ban", .mode = .pick, .label = W.ban },
+    has_index: bool = false,
     tab: Tab = .board,
     /// The server's render: Head as ui.data, base64
     bin: []const u8 = "",
@@ -158,36 +195,46 @@ pub const Page = struct {
     dirty: bool = false,
 
     /// The state both islands read and write: `b` blue's and `r` red's champions by role
-    /// (0 empty), `s` the seat being filled (side * n_role + role; null: the first empty)
+    /// (0 empty), `s` the seat being filled (side * n_role + role; null: the first empty),
+    /// `n` the bans
     pub const Url = struct {
         m: Which = .live,
         b: [n_role]u32 = @splat(0),
         r: [n_role]u32 = @splat(0),
         s: ?u8 = null,
         t: Tab = .board,
+        n: [n_ban]u32 = @splat(0),
     };
 
-    pub const Msg = union(enum) { model: Which, tab: Tab, seat: u8, clear };
+    /// `unban`: the ban's index
+    pub const Msg = union(enum) { model: Which, tab: Tab, seat: u8, clear, ban, unban: u8 };
+
+    pub fn useIndex(p: *Page, ix: *const champsearch.Index) void {
+        p.search.index = ix;
+        p.has_index = true;
+    }
 
     pub fn init(head: *const Head) Page {
         return .{ .head = head };
     }
 
     pub fn toUrl(p: *const Page) Url {
-        return .{ .m = p.which, .b = p.teams[0], .r = p.teams[1], .s = p.seat, .t = p.tab };
+        return .{ .m = p.which, .b = p.teams[0], .r = p.teams[1], .s = p.seat, .t = p.tab, .n = p.bans };
     }
 
     /// The other island's change (a pick) or Back: saved again when it moved the board
     pub fn fromUrl(p: *Page, u: Url) void {
         const teams = clean(p.head, .{ u.b, u.r });
-        if (u.m != p.which or !std.meta.eql(teams, p.teams)) p.dirty = true;
+        const bans = cleanBans(p.head, u.n, teams);
+        if (u.m != p.which or !std.meta.eql(teams, p.teams) or !std.meta.eql(bans, p.bans)) p.dirty = true;
         p.which = u.m;
         p.teams = teams;
+        p.bans = bans;
         p.seat = if (u.s) |i| (if (i < 2 * n_role) i else null) else null;
         p.tab = u.t;
     }
 
-    pub fn update(p: *Page, m: Msg, _: *tree.Event) void {
+    pub fn update(p: *Page, m: Msg, ev: *tree.Event) void {
         switch (m) {
             .model => |w| {
                 p.which = w;
@@ -205,7 +252,29 @@ pub const Page = struct {
             },
             .clear => {
                 p.teams = @splat(@splat(0));
+                p.bans = @splat(0);
                 p.seat = null;
+                p.dirty = true;
+            },
+            .ban => {
+                const e = p.search.chosen orelse return;
+                p.search.chosen = null;
+                ev.after = .{ .op = .focus, .ref = "input" };
+                if (e >= p.head.champs.len) return;
+                const id = p.head.champs[e].id;
+                // Banned off the board: a seat can't hold a banned champion
+                for (&p.teams) |*team| for (team) |*x| {
+                    if (x.* == id) x.* = 0;
+                };
+                const n = std.mem.findScalar(u32, &p.bans, 0) orelse return;
+                if (std.mem.findScalar(u32, p.bans[0..n], id) != null) return;
+                p.bans[n] = id;
+                p.dirty = true;
+            },
+            .unban => |i| {
+                if (i >= n_ban) return;
+                std.mem.copyForwards(u32, p.bans[i .. n_ban - 1], p.bans[i + 1 ..]);
+                p.bans[n_ban - 1] = 0;
                 p.dirty = true;
             },
         }
@@ -301,7 +370,27 @@ pub const Page = struct {
         }
         return h.div(.{ .class = "bd" }, .{
             draftboard.fullOn(h, .{ .v = .full, .lanes = &lanes }, &on),
+            p.bansRow(h),
             button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .clear) }, .{W.clear}),
+        });
+    }
+
+    /// Each ban a button that lifts it, then the box while there is room
+    fn bansRow(p: *Page, h: *H) N {
+        var chips = h.list();
+        for (p.bans, 0..) |id, i| {
+            if (id == 0) break;
+            const c = p.icon(h, id) orelse continue;
+            chips.add(h.button(.{ .key = id, .type = "button", .class = "ban", .aria_label = W.unban.with(h, .{ .c = c.name }), .on_click = h.on(p, .{ .unban = @intCast(i) }) }, .{
+                champ.view(h, c, .{ .px = .@"20", .state = .banned, .named = false }),
+            }));
+        }
+        p.search.on_pick = h.on(p, .ban);
+        const room = p.has_index and std.mem.findScalar(u32, &p.bans, 0) != null;
+        return h.div(.{ .class = "bans" }, .{
+            h.span(.{ .class = "line" }, .{W.bans}),
+            chips.done(),
+            if (room) p.search.view(h) else null,
         });
     }
 
@@ -405,17 +494,19 @@ pub fn place(teams: *[2][n_role]u32, i: u8, id: u32) void {
     teams[i / n_role][i % n_role] = id;
 }
 
-/// The board as saved: "w t0,..,t9", w the model's index
+/// The board as saved: "w t0,..,t9[ b0,..,b9]", w the model's index, t the seats, b the
+/// bans when there are any
 pub fn saved(p: *const Page, w: *std.Io.Writer) !void {
     try w.print("{d}", .{@backingInt(p.which)});
     for (p.teams, 0..) |team, s| for (team, 0..) |id, r| try w.print("{s}{d}", .{ if (s == 0 and r == 0) " " else ",", id });
+    if (p.bans[0] != 0) for (p.bans, 0..) |id, i| try w.print("{s}{d}", .{ if (i == 0) " " else ",", id });
 }
 
 /// The saved board on a page opened with none (`p` as the URL `fragment` set it,
 /// `server` its default): true if it took it. A link's board and model win over the
 /// saved ones
 pub fn restoreSaved(p: *Page, server: *const Page, fragment: []const u8, s: []const u8) bool {
-    if (!std.meta.eql(p.teams, server.teams)) return false;
+    if (!std.meta.eql(p.teams, server.teams) or !std.meta.eql(p.bans, server.bans)) return false;
     const linked = p.which;
     restore(p, s);
     if (linksModel(fragment)) p.which = linked;
@@ -429,8 +520,9 @@ fn linksModel(fragment: []const u8) bool {
     return false;
 }
 
-/// Back from `saved`; anything malformed leaves the page as it is. A champion the head
-/// lacks (removed since) or seen on an earlier seat leaves its seat empty
+/// Back from `saved` (bans optional: older saves have none); anything malformed leaves
+/// the page as it is. A champion the head lacks (removed since) or seen on an earlier
+/// seat leaves its seat empty
 pub fn restore(p: *Page, s: []const u8) void {
     var it = std.mem.tokenizeAny(u8, s, " ,");
     const w = std.fmt.parseInt(u8, it.next() orelse return, 10) catch return;
@@ -439,9 +531,14 @@ pub fn restore(p: *Page, s: []const u8) void {
     for (&teams) |*team| for (team) |*x| {
         x.* = std.fmt.parseInt(u32, it.next() orelse return, 10) catch return;
     };
+    var bans: [n_ban]u32 = @splat(0);
+    if (it.peek() != null) for (&bans) |*x| {
+        x.* = std.fmt.parseInt(u32, it.next() orelse return, 10) catch return;
+    };
     if (it.next() != null) return;
     p.which = which;
     p.teams = clean(p.head, teams);
+    p.bans = cleanBans(p.head, bans, p.teams);
 }
 
 pub const css =
@@ -453,6 +550,9 @@ pub const css =
     \\  .c-tester .wait { color: var(--muted); margin: 0; }
     \\  .c-tester .bd { display: grid; gap: var(--sp-2); justify-items: start; }
     \\  .c-tester .bd > .c-draft { width: 100%; }
+    \\  .c-tester .bans { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap; }
+    \\  .c-tester .bans > .line { color: var(--muted); font-size: var(--fs-s); margin-right: var(--sp-1); }
+    \\  .c-tester .bans > .ban { padding: 0; border: 0; background: none; cursor: pointer; }
     \\  .c-tester .files { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-1); font-size: var(--fs-s); }
     \\}
     \\
@@ -484,14 +584,15 @@ pub fn gallery(g: *Gallery) void {
     const l = a.create(Loaded) catch return;
     l.* = .{ .m = Demo.model(), .sc = undefined, .check = .{ .drafts = 0, .worst = 0 } };
     l.sc = l.m.scorer(a) catch return;
-    const states = [_][]const u8{ "loading", "a draft", "a seat chosen", "terms", "files" };
+    const states = [_][]const u8{ "loading", "a draft", "a seat chosen", "terms", "files", "a ban" };
     for (states, 0..) |caption, i| {
         const p = a.create(Page) catch return;
         p.* = .init(&Demo.head);
         if (i > 0) p.loads.set(.live, .{ .ready = l });
         p.loads.set(.comp, .failed);
         p.teams[0][0] = 266;
-        if (i != 2) p.teams[1][0] = 122;
+        if (i != 2 and i != 5) p.teams[1][0] = 122;
+        if (i == 5) p.bans[0] = 122;
         if (i == 2) p.seat = n_role;
         p.tab = switch (i) {
             3 => .terms,

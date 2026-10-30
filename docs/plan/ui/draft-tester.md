@@ -133,6 +133,9 @@ public risk), then Daily Draft (80% the same parts), then the desktop's champ se
   lock toggles keep
 - Random / Fill empty / Clear / Undo: as today (fills skip locked seats); the "Fill..."
   presets (by role order, by best) in a Select
+- Bans: one list of 10 for both teams under the board (as the old tester); the box bans,
+  a chip tap lifts it; a banned champion leaves the board and the candidates; in the
+  link's fragment (`n`)
 - Pair cell tap: highlight seats, Toggletip
 - Candidate: row opens ReasonBreakdown, "Pick" fills the seat, sort Segmented, search
 - Model Select and "vs": reload model files (13 MB and 10 MB, cached after first load)

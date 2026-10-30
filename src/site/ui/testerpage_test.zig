@@ -1,7 +1,7 @@
 //! The Draft tester on the fake DOM: the server's render, hydration, seats chosen, the
 //! board from the URL (the candidate panel's picks) and into it, the model Select, the
-//! tabs with each load state, Clear; each patch equal to a fresh render. Then restore's
-//! edge cases and the model file's bad bytes
+//! tabs with each load state, bans, Clear; each patch equal to a fresh render. Then
+//! restore's edge cases and the model file's bad bytes
 const std = @import("std");
 const tree = @import("tree.zig");
 const diff = @import("diff.zig");
@@ -11,6 +11,7 @@ const island = @import("island.zig");
 const tp = @import("testerpage.zig");
 const td = @import("testerdata.zig");
 const data = @import("data.zig");
+const champsearch = @import("champsearch.zig");
 const Fake = @import("fakedom.zig").Fake;
 const testing = std.testing;
 
@@ -33,6 +34,9 @@ const Page = struct {
         p.l = .{ .m = tp.Demo.model(), .sc = undefined, .check = .{ .drafts = 3, .worst = 0 } };
         p.l.sc = try p.l.m.scorer(a);
         p.server = .init(&tp.Demo.head);
+        const ix = try a.create(champsearch.Index);
+        ix.* = try tp.searchIndex(a, &tp.Demo.head);
+        p.server.useIndex(ix);
         p.state = p.server;
         const t = try a.create(tree.Tree);
         t.* = .{};
@@ -95,6 +99,12 @@ const Page = struct {
         p.arena.deinit();
     }
 };
+
+fn bansOf(ids: []const u32) [tp.n_ban]u32 {
+    var out: [tp.n_ban]u32 = @splat(0);
+    @memcpy(out[0..ids.len], ids);
+    return out;
+}
 
 fn has(s: []const u8, want: []const u8) !void {
     if (std.mem.find(u8, s, want) == null) {
@@ -164,6 +174,43 @@ test "seats chosen into the URL, a pick from it, moved to the other side, scored
     try testing.expectEqual(@as([2][n_role]u32, @splat(@splat(0))), p.state.teams);
     try testing.expectEqualStrings("#", p.fake.fragment.items);
     try has(try p.shown(), "Blue 50.5%");
+}
+
+test "bans: typed and taken off the board, into the URL and out of the panel's; lifted; Clear" {
+    var p: Page = undefined;
+    try p.init();
+    defer p.deinit();
+    p.state.loads.set(.live, .{ .ready = &p.l });
+    p.i.render();
+    try p.hashed("#b=266-0-0-0-0");
+    _ = try p.shown();
+
+    // Aatrox banned: off blue top, the first ban
+    _ = p.rt.event(0, .{ .kind = .input, .target = p.nth("data-ref", "input", 0), .text = "aat" });
+    _ = p.rt.event(0, .{ .kind = .keydown, .target = p.nth("data-ref", "input", 0), .text = "Enter" });
+    try testing.expectEqual(266, p.state.bans[0]);
+    try testing.expectEqual(0, p.state.teams[0][0]);
+    try testing.expect(p.state.dirty);
+    try testing.expectEqualStrings("#n=266-0-0-0-0-0-0-0-0-0", p.fake.fragment.items);
+    try has(try p.shown(), "Remove the ban on Aatrox");
+    _ = p.rt.event(0, .{ .kind = .input, .target = p.nth("data-ref", "input", 0), .text = "dar" });
+    _ = p.rt.event(0, .{ .kind = .keydown, .target = p.nth("data-ref", "input", 0), .text = "Enter" });
+    try testing.expectEqual(bansOf(&.{ 266, 122 }), p.state.bans);
+    _ = try p.shown();
+
+    // Lifted: the rest move up
+    p.click(p.nth("aria-label", "Remove the ban on Aatrox", 0));
+    try testing.expectEqual(bansOf(&.{122}), p.state.bans);
+    _ = try p.shown();
+
+    // A link's bans: unknown and repeated dropped, a picked one too
+    try p.hashed("#b=122-0-0-0-0&n=999-266-266-122-0-0-0-0-0-0");
+    try testing.expectEqual(bansOf(&.{266}), p.state.bans);
+    _ = try p.shown();
+
+    p.click(p.nth("data-v", "quiet", 0));
+    try testing.expectEqual(bansOf(&.{}), p.state.bans);
+    _ = try p.shown();
 }
 
 test "the model Select switches, a failed model retries; tabs show terms and files" {
@@ -244,6 +291,17 @@ test "restore: malformed leaves the page, unknown and repeated champions empty" 
     tp.restore(&p, "1 266,999,0,0,0,266,122,0,0,4294967295");
     try testing.expectEqual(.comp, p.which);
     try testing.expectEqual([_][n_role]u32{ .{ 266, 0, 0, 0, 0 }, .{ 0, 122, 0, 0, 0 } }, p.teams);
+    // Bans: short or long refused; a picked one dropped
+    tp.restore(&p, "0 0,0,0,0,0,0,0,0,0,0 266");
+    try testing.expectEqual(.comp, p.which);
+    tp.restore(&p, "0 0,0,0,0,0,0,0,0,0,0 0,0,0,0,0,0,0,0,0,0,0");
+    try testing.expectEqual(.comp, p.which);
+    tp.restore(&p, "0 0,122,0,0,0,0,0,0,0,0 122,0,266,0,0,0,0,0,0,0");
+    try testing.expectEqual(.live, p.which);
+    try testing.expectEqual(bansOf(&.{266}), p.bans);
+    var w: std.Io.Writer.Allocating = .init(arena.allocator());
+    try tp.saved(&p, &w.writer);
+    try testing.expectEqualStrings("0 0,122,0,0,0,0,0,0,0,0 266,0,0,0,0,0,0,0,0,0", w.written());
 }
 
 test "the saved board: taken on a page opened without one, a linked model kept" {

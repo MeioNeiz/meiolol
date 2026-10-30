@@ -73,15 +73,16 @@ pub const Sort = enum(u8) { win, fit };
 pub const Feed = struct {
     which: tp.Which,
     teams: [2][n_role]u32,
+    bans: [tp.n_ban]u32 = @splat(0),
     seat: u8,
     load: Status = .loading,
     /// The seat's side's chance with the role's average pick, %
     empty: f32 = 50,
     opts: []const Opt = &.{},
 
-    /// For this board, model and seat
-    pub fn of(f: *const Feed, which: tp.Which, teams: [2][n_role]u32, seat: u8) bool {
-        return f.which == which and f.seat == seat and std.meta.eql(f.teams, teams);
+    /// For this board, bans, model and seat
+    pub fn of(f: *const Feed, which: tp.Which, teams: [2][n_role]u32, bans: [tp.n_ban]u32, seat: u8) bool {
+        return f.which == which and f.seat == seat and std.meta.eql(f.teams, teams) and std.meta.eql(f.bans, bans);
     }
 };
 
@@ -120,13 +121,13 @@ pub const Part = struct {
 };
 
 /// The feed for a board: the seat's options are champions with min_games or more in its
-/// role, in the head, not on another seat
-pub fn feed(a: std.mem.Allocator, head: *const tp.Head, load: tp.Load, which: tp.Which, teams: [2][n_role]u32, seat: u8) !Feed {
-    var f: Feed = .{ .which = which, .teams = teams, .seat = seat };
+/// role, in the head, not on another seat, not banned
+pub fn feed(a: std.mem.Allocator, head: *const tp.Head, load: tp.Load, which: tp.Which, teams: [2][n_role]u32, bans: [tp.n_ban]u32, seat: u8) !Feed {
+    var f: Feed = .{ .which = which, .teams = teams, .bans = bans, .seat = seat };
     const l = switch (load) {
         .ready => |x| x,
-        .failed => return .{ .which = which, .teams = teams, .seat = seat, .load = .failed },
-        .bad => return .{ .which = which, .teams = teams, .seat = seat, .load = .bad },
+        .failed => return .{ .which = which, .teams = teams, .bans = bans, .seat = seat, .load = .failed },
+        .bad => return .{ .which = which, .teams = teams, .bans = bans, .seat = seat, .load = .bad },
         .none, .loading => return f,
     };
     f.load = .ready;
@@ -138,7 +139,7 @@ pub fn feed(a: std.mem.Allocator, head: *const tp.Head, load: tp.Load, which: tp
     for (l.m.cells) |cell| {
         if (cell.role != r or cell.games < l.m.min_games) continue;
         const c = tp.champOf(head, cell.champion) orelse continue;
-        if (elsewhere(teams, seat, c.id)) continue;
+        if (elsewhere(teams, seat, c.id) or std.mem.findScalar(u32, &bans, c.id) != null) continue;
         const w = l.sc.why(teams, side, r, c.id);
         const parts = try a.alloc(Part, w.n);
         for (parts, w.parts()) |*o, x| o.* = .{ .kind = x.kind, .other = x.other, .pp = @floatCast(x.pp), .games = x.games };
@@ -215,6 +216,7 @@ pub const Panel = struct {
     teams: [2][n_role]u32 = @splat(@splat(0)),
     seat: ?u8 = null,
     tab: tp.Tab = .board,
+    bans: [tp.n_ban]u32 = @splat(0),
     sort: Sort = .win,
     /// The champion whose breakdown is open; 0 for none
     open: u32 = 0,
@@ -232,6 +234,7 @@ pub const Panel = struct {
         r: [n_role]u32 = @splat(0),
         s: ?u8 = null,
         t: tp.Tab = .board,
+        n: [tp.n_ban]u32 = @splat(0),
         o: Sort = .win,
     };
 
@@ -246,15 +249,17 @@ pub const Panel = struct {
     }
 
     pub fn toUrl(p: *const Panel) Url {
-        return .{ .m = p.which, .b = p.teams[0], .r = p.teams[1], .s = p.seat, .t = p.tab, .o = p.sort };
+        return .{ .m = p.which, .b = p.teams[0], .r = p.teams[1], .s = p.seat, .t = p.tab, .n = p.bans, .o = p.sort };
     }
 
     pub fn fromUrl(p: *Panel, u: Url) void {
         const teams = tp.clean(p.head, .{ u.b, u.r });
+        const bans = tp.cleanBans(p.head, u.n, teams);
         const seat: ?u8 = if (u.s) |i| (if (i < 2 * n_role) i else null) else null;
-        if (!std.meta.eql(teams, p.teams) or seat != p.seat) p.open = 0;
+        if (!std.meta.eql(teams, p.teams) or !std.meta.eql(bans, p.bans) or seat != p.seat) p.open = 0;
         p.which = u.m;
         p.teams = teams;
+        p.bans = bans;
         p.seat = seat;
         p.tab = u.t;
         p.sort = u.o;
@@ -313,7 +318,7 @@ pub const Panel = struct {
     pub fn current(p: *const Panel) ?*const Feed {
         const f = p.feed orelse return null;
         const seat = tp.shownSeat(p.teams, p.seat) orelse return null;
-        return if (f.of(p.which, p.teams, seat)) f else null;
+        return if (f.of(p.which, p.teams, p.bans, seat)) f else null;
     }
 
     /// The last feed under the shown model, while ui-tester computes the shown board's
@@ -544,7 +549,7 @@ pub fn gallery(g: *Gallery) void {
         p.seat = n_role;
         if (i > 0) {
             const f = a.create(Feed) catch return;
-            f.* = feed(a, &tp.Demo.head, .{ .ready = l }, .live, p.teams, n_role) catch return;
+            f.* = feed(a, &tp.Demo.head, .{ .ready = l }, .live, p.teams, p.bans, n_role) catch return;
             p.feed = f;
         }
         if (i == 1) p.open = 122;

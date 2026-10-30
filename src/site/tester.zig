@@ -40,6 +40,8 @@ pub fn page(a: std.mem.Allocator, h: *const tp.Head) ![]const u8 {
     const e = std.base64.standard.Encoder;
     var p: tp.Page = .init(h);
     p.bin = e.encode(try a.alloc(u8, e.calcSize(raw.items.len)), raw.items);
+    const ix = try tp.searchIndex(a, h);
+    p.useIndex(&ix);
     var c: ui.testercand.Panel = .init(h);
     c.js = assets.testercand_js.path;
     c.wasm = assets.testercand_wasm.path;
