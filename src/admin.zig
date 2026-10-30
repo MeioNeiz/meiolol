@@ -17,6 +17,8 @@ const adminmodels = @import("adminmodels.zig");
 const csp = @import("site/csp.zig");
 const sheets = @import("site/sheets.zig");
 const site_pv = @import("site/pv.zig");
+const site_shell = @import("site/shell.zig");
+const site_html = @import("site/html.zig");
 const ad = ui.admindata;
 
 const Io = std.Io;
@@ -329,8 +331,9 @@ pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
     for (site_pv.files) |f| try writeGz(gpa, io, dir, f[0], f[1]);
 }
 
-/// /private: the private pages, on ui.textpage with its CSS inline (site/sheets.zig). Its
-/// script sets the site menu's link (shell.zig admin_link), which also loads the private numbers (site/pv.zig)
+/// /private: the private pages, on ui.textpage in the site shell (site/shell.zig), its CSS
+/// inline (site/sheets.zig). The shell sets the site menu's link (shell.zig admin_link),
+/// which also loads the private numbers (site/pv.zig)
 pub fn privateIndex(a: std.mem.Allocator) ![]const u8 {
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
@@ -339,38 +342,17 @@ pub fn privateIndex(a: std.mem.Allocator) ![]const u8 {
     if (h.oom) return error.OutOfMemory;
     var out: Io.Writer.Allocating = .init(a);
     const w = &out.writer;
-    try w.print(
-        \\<!doctype html>
-        \\<html lang="en">
-        \\<head>
-        \\<meta charset="utf-8">
-        \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
-        \\<meta name="robots" content="noindex">
-        \\<title>meiolol private</title>
-        \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        \\{s}
-        \\</head>
-        \\<body class="ui">
-        \\<main class="c-sitemain">
-        \\
-    , .{ index_csp, sheets.slot });
+    const page: site_html.Page = .{ .title = "Private | meiolol", .description = "Tools for private logins", .patch = "", .data = "", .public = false, .private = .index };
+    try site_shell.open(w, page);
     try ui.html.write(&t, n, w);
-    try w.writeAll("\n</main>\n" ++ index_script ++ "</body>\n</html>\n");
+    try site_shell.close(w, page);
     return sheets.deliver(a, out.written());
 }
-
-const index_csp = csp.meta(&.{index_script}, &.{});
 
 const index_md =
     \\- [Draft tester](/private/tester): build a draft, see the model's win chance and every candidate
     \\- [App review](/private/app): every screen the desktop app can show, both editions
-    \\
-    \\[Back to meiolol](/)
-;
-
-const index_script =
-    \\<script>try{localStorage.setItem("admin-link",JSON.stringify({href:"/private/tester",label:"Draft tester"}))}catch(e){}</script>
-    \\
+    \\- [Notes](/admin/notes) and [Admin](/admin): admin logins only
 ;
 
 test "private index: on ui, its CSS inline, its CSP allows its script and style" {
