@@ -117,7 +117,11 @@ pub fn loadSql(
     // Scan order is by start; index by match key for the participant pass
     var index: std.AutoHashMapUnmanaged(u64, u32) = .empty;
     defer index.deinit(gpa);
-    var games: std.ArrayList(Game) = .empty;
+    // Sized up front: rows and games live in the arena, which keeps every buffer a
+    // growing list leaves behind (rows ~3x their size: 2.4M games ran out of 24 GB)
+    const n_games = parts.train.len + parts.tests.len;
+    try index.ensureTotalCapacity(gpa, @intCast(n_games));
+    var games: std.ArrayList(Game) = try .initCapacity(arena, n_games);
     for ([_][]const stats.Row{ parts.train, parts.tests }, [_]bool{ false, true }) |set, is_test| {
         for (set) |g| {
             try index.put(gpa, g.id, @intCast(games.items.len));
@@ -154,6 +158,12 @@ pub fn loadSql(
     defer by_game.deinit(gpa);
     var keys: std.ArrayList(?i64) = .empty;
     defer keys.deinit(gpa);
+    const n_seats = n_games * 10;
+    try rows.ensureTotalCapacityPrecise(arena, n_seats);
+    try players.ensureTotalCapacityPrecise(gpa, n_seats);
+    try extras.ensureTotalCapacityPrecise(gpa, n_seats);
+    try keys.ensureTotalCapacityPrecise(gpa, n_seats);
+    try by_game.ensureTotalCapacity(gpa, @intCast(n_games));
     {
         var q = try db.prepare(
             \\SELECT match_id, slot, team_id, position, champion_id, tier, division, gold14, puuid,
