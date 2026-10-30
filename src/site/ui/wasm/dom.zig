@@ -623,6 +623,37 @@ fn onScriptError(e: zjb.Handle) callconv(.c) void {
     el.call("removeAttribute", .{zjb.constString("aria-busy")}, void);
 }
 
+/// `n` as new DOM nodes, as the browser would parse html.write's bytes: no HTML sink
+/// (Trusted Types, site/csp.zig)
+pub fn nodes(t: *const ui.Tree, n: ui.tree.N) zjb.Handle {
+    const x = t.node(n);
+    const doc = zjb.global("document");
+    if (x.tag == .@"#text") {
+        const s = zjb.string(x.text);
+        defer s.release();
+        return doc.call("createTextNode", .{s}, zjb.Handle);
+    }
+    const name = zjb.string(@tagName(x.tag));
+    defer name.release();
+    const el = if (x.tag.isSvg())
+        doc.call("createElementNS", .{ zjb.constString("http://www.w3.org/2000/svg"), name }, zjb.Handle)
+    else
+        doc.call("createElement", .{name}, zjb.Handle);
+    for (t.attrsOf(n)) |a| {
+        const k = zjb.string(a.name);
+        defer k.release();
+        const v = zjb.string(a.value);
+        defer v.release();
+        el.call("setAttribute", .{ k, v }, void);
+    }
+    for (t.kidsOf(n)) |k| {
+        const c = nodes(t, k);
+        defer c.release();
+        el.call("append", .{c}, void);
+    }
+    return el;
+}
+
 /// An element's attribute, kept ("" when missing). The name is a runtime string: one
 /// copy of this however many attributes a family reads
 pub fn attrOf(el: zjb.Handle, name: []const u8) []const u8 {

@@ -137,11 +137,13 @@ const search_loader =
 
 /// A menu link to the Draft tester for logins that opened it: the admin page (/admin) or the
 /// private one (/private) stores it in this origin's localStorage, so visitors' pages carry
-/// neither link nor path. Those browsers also load /private/pv.js (static/pv.js), the private
-/// numbers, which nginx serves to private logins only
+/// neither link nor path. Those browsers also load the private numbers (site/pv.zig), which
+/// nginx serves to private logins only: for anyone else they are the login page's HTML,
+/// which never runs or styles
 const admin_link =
     \\<script>try{const l=JSON.parse(localStorage.getItem("admin-link"));if(l&&typeof l.href=="string"&&/^\/(admin|private)[/#]/.test(l.href)){const a=document.createElement("a");
-    \\a.href=l.href;a.textContent=l.label;document.querySelector("header .links").append(a);const s=document.createElement("script");s.src="/private/pv.js";document.head.append(s)}}catch(e){}</script>
+    \\a.href=l.href;a.textContent=l.label;document.querySelector("header .links").append(a);const c=document.createElement("link");c.rel="stylesheet";c.href="/private/pv.css";
+    \\const s=document.createElement("script");s.src="/private/pv.js";s.dataset.wasm="/private/pv.wasm";document.head.append(c,s)}}catch(e){}</script>
     \\
 ;
 

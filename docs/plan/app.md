@@ -222,11 +222,12 @@ Draft tester (/private/tester, draft-tester.md) with the live model and the Lab'
 model (jomify's training-receive.sh puts only the tester's model files in private/lab);
 the old JS tester at /private/old until the new one has compare (bans, Random/Fill/Undo,
 the lane model's Gold column and the set net done). Then /private/old, admin.js, admin-draft.js,
-admin-setnet.js and admin.css go, and pv.js becomes an island. The shipped model's
-win chances on the public champion and matchup pages for private logins (/private/pv.js,
+admin-setnet.js and admin.css go. The shipped model's win chances on the public champion
+and matchup pages for private logins (ui.pv, ui-pv.wasm at /private/pv.{js,wasm,css},
 loaded by the header script in browsers that opened /admin/ or /private, data
-private/models/champ/<id>.json from `meiolol draft-model`): a line in the hero and a last line
-on every opponent and duo tile. The app review pages, /private/app (arch-app.md "Review
+private/models/champ/<id>.bin from `meiolol draft-model`): a box after the page's head,
+the shown role's line and the matchup brief's champion beside it; on a matchup page, the
+pair. The app review pages, /private/app (arch-app.md "Review
 pages"): every screen the app can show, from the mock scenarios, in both editions, for
 Jacob's notes. Next: the tester ports above; all regions and patches without the public
 page-weight cuts.

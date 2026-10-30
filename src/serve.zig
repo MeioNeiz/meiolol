@@ -341,8 +341,9 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         if (std.mem.eql(u8, path, "gallery.css")) {
             return request.respond(site.gallery.css, .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/css; charset=utf-8" }} });
         }
-        // The notes tool (site/notes.zig): its files, and the marker that adds its tag
-        if (std.mem.startsWith(u8, path, "private/")) if (site.notes.file(path["private/".len..])) |data| {
+        // The notes tool (site/notes.zig) and the private numbers (site/pv.zig): their
+        // files; the marker that adds the notes tag
+        if (std.mem.startsWith(u8, path, "private/")) if (site.notes.file(path["private/".len..]) orelse site.pv.file(path["private/".len..])) |data| {
             return request.respond(data, .{ .extra_headers = &.{
                 .{ .name = "content-type", .value = contentType(path) },
                 .{ .name = "cache-control", .value = "no-cache" },

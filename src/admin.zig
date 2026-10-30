@@ -16,6 +16,7 @@ const ui = @import("ui");
 const adminmodels = @import("adminmodels.zig");
 const csp = @import("site/csp.zig");
 const sheets = @import("site/sheets.zig");
+const site_pv = @import("site/pv.zig");
 const ad = ui.admindata;
 
 const Io = std.Io;
@@ -318,7 +319,8 @@ test "tsv rows by column name: optional cells null, rows short of a required cel
 /// The private site's index (/private) and the old Draft tester (/private/old, until the
 /// new one at /private/tester has its features): the admin page in private mode (admin.js
 /// PRIVATE), no box data, only the shipped models the web loop copies into models/; and
-/// pv.js, the public pages' private numbers. nginx serves it to view_private logins
+/// pv's files, the public pages' private numbers (site/pv.zig). nginx serves it to
+/// view_private logins
 pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) !void {
     var buf: [2048]u8 = undefined;
     const page = try std.fmt.bufPrint(&buf,
@@ -353,11 +355,11 @@ pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) 
     try writeGz(gpa, io, dir, "admin-draft.js", @embedFile("site/static/admin-draft.js"));
     try writeGz(gpa, io, dir, "admin.js", @embedFile("site/static/admin.js"));
     try writeGz(gpa, io, dir, "admin.css", @embedFile("site/static/admin.css"));
-    try writeGz(gpa, io, dir, "pv.js", @embedFile("site/static/pv.js"));
+    for (site_pv.files) |f| try writeGz(gpa, io, dir, f[0], f[1]);
 }
 
 /// /private: the private pages, on ui.textpage with its CSS inline (site/sheets.zig). Its
-/// script sets the site menu's link (shell.zig admin_link), which also loads pv.js
+/// script sets the site menu's link (shell.zig admin_link), which also loads the private numbers (site/pv.zig)
 pub fn privateIndex(a: std.mem.Allocator) ![]const u8 {
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
