@@ -9,6 +9,7 @@ const Io = std.Io;
 const site = @import("site/root.zig");
 const site_admin = @import("site/adminpage.zig");
 const site_appreview = @import("site/appreview.zig");
+const admin = @import("admin.zig");
 const store = @import("store");
 const httpd = @import("net").server;
 const client = @import("net").client;
@@ -367,6 +368,11 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
                 .{ .name = "location", .value = "/" },
                 .{ .name = "set-cookie", .value = if (on) dev_marker_on else dev_marker_off },
             } });
+        }
+        if (std.mem.eql(u8, path, "private")) {
+            var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+            defer arena_state.deinit();
+            return request.respond(try admin.privateIndex(arena_state.allocator()), .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/html; charset=utf-8" }} });
         }
         if (std.mem.eql(u8, path, "admin/notes")) {
             var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);

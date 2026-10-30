@@ -3,8 +3,8 @@
 //! ui-admincharts.wasm, Traffic: ui.admintraffic in ui-admintraffic.wasm, Deploys and Logs:
 //! ui.adminops in ui-adminops.wasm, Models: ui.adminmodels in ui-adminmodels.wasm, its nets
 //! and campaigns ui.adminlab in ui-adminlab.wasm and its runs ui.adminruns in
-//! ui-adminruns.wasm, all of which it loads), its stylesheet and code, written into the
-//! admin dir beside the data by `meiolol admin`. Never public: nginx serves /admin to
+//! ui-adminruns.wasm, all of which it loads) with its CSS inline (sheets.zig), and its code,
+//! written into the admin dir beside the data by `meiolol admin`. Never public: nginx serves /admin to
 //! view_admin logins only
 const std = @import("std");
 const store = @import("store");
@@ -12,12 +12,10 @@ const ui = @import("ui");
 const assets = @import("assets.zig");
 const style = @import("style.zig");
 const csp = @import("csp.zig");
+const sheets = @import("sheets.zig");
 
 const Io = std.Io;
 
-/// What the public stylesheet leaves out (ui.components): it is linked first
-pub const css = ui.css.join(.{ ui.alertband, ui.actionbutton, ui.adminpage, ui.timechart, ui.admincharts, ui.admintraffic, ui.steptimeline, ui.logview, ui.adminops, ui.adminmodels, ui.adminlab, ui.adminruns });
-pub const css_file = assets.hashed("admin.css", css);
 pub const js = assets.built("ui-admin.js", @embedFile("ui-admin.js"));
 pub const wasm = assets.built("ui-admin.wasm", @embedFile("ui-admin.wasm"));
 pub const charts_js = assets.built("ui-admincharts.js", @embedFile("ui-admincharts.js"));
@@ -68,12 +66,11 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
         \\<title>meiolol admin</title>
         \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
         \\<link rel="stylesheet" href="/{s}">
-        \\<link rel="stylesheet" href="/admin/{s}">
         \\</head>
         \\<body class="ui">
         \\<main class="c-sitemain">
         \\
-    , .{ csp.files_only, style.file.path, css_file.path });
+    , .{ csp.files_only, style.file.path });
     try ui.html.write(&t, n, w);
     try ui.html.write(&t, cn, w);
     try ui.html.write(&t, tn, w);
@@ -89,12 +86,14 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
         \\</html>
         \\
     , .{ js.path, wasm.path });
-    return out.written();
+    return sheets.deliverWith(a, out.written(), &islands);
 }
+
+const islands = [_]assets.Hashed{ js, wasm, charts_js, charts_wasm, traffic_js, traffic_wasm, ops_js, ops_wasm, models_js, models_wasm, lab_js, lab_wasm, runs_js, runs_wasm };
 
 /// One of the page's files by its name under /admin/ (the dev server)
 pub fn file(name: []const u8) ?[]const u8 {
-    for ([_]assets.Hashed{ css_file, js, wasm, charts_js, charts_wasm, traffic_js, traffic_wasm, ops_js, ops_wasm, models_js, models_wasm, lab_js, lab_wasm, runs_js, runs_wasm }) |f| if (std.mem.eql(u8, f.path, name)) return f.data;
+    for (islands) |f| if (std.mem.eql(u8, f.path, name)) return f.data;
     return null;
 }
 
@@ -106,7 +105,7 @@ const moved =
     \\
 ;
 
-/// index.html, its stylesheet and code into `out_dir`, each with a .gz (gzip_static)
+/// index.html and its code into `out_dir`, each with a .gz (gzip_static)
 pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
@@ -116,7 +115,6 @@ pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
     const files = [_]struct { []const u8, []const u8 }{
         .{ "index.html", try page(a) },
         .{ "new.html", moved },
-        .{ css_file.path, css_file.data },
         .{ js.path, js.data },
         .{ wasm.path, wasm.data },
         .{ charts_js.path, charts_js.data },
@@ -136,4 +134,12 @@ pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
         try dir.writeFile(io, .{ .sub_path = f[0], .data = f[1] });
         try dir.writeFile(io, .{ .sub_path = try std.mem.concat(a, u8, &.{ f[0], ".gz" }), .data = try store.raw.compress(a, f[1]) });
     }
+}
+
+test "page: its CSS inline, allowed by its CSP" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const p = try page(arena.allocator());
+    try std.testing.expect(std.mem.find(u8, p, "stylesheet") == null);
+    try csp.check(p);
 }

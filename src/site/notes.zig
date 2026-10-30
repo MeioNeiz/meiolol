@@ -7,6 +7,7 @@ const store = @import("store");
 const ui = @import("ui");
 const style = @import("style.zig");
 const csp = @import("csp.zig");
+const sheets = @import("sheets.zig");
 
 /// With every public component: a page inlines only those it uses (sheets.zig), and the
 /// tag comes after; repeated whole, the cascade stays the one sheet's
@@ -39,7 +40,8 @@ pub fn marked(header: []const u8) bool {
     return false;
 }
 
-/// /admin/notes: every note (ui.noteslist), the same ui-notes.wasm in list mode
+/// /admin/notes: every note (ui.noteslist), the same ui-notes.wasm in list mode, its CSS
+/// inline
 pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
     var l: ui.noteslist.List = .{};
     var t: ui.Tree = .{};
@@ -58,7 +60,6 @@ pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
         \\<title>Notes · meiolol admin</title>
         \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
         \\<link rel="stylesheet" href="/{s}">
-        \\<link rel="stylesheet" href="/private/notes.css">
         \\</head>
         \\<body class="ui">
         \\
@@ -71,7 +72,7 @@ pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
         \\</html>
         \\
     );
-    return out.written();
+    return sheets.deliverWith(a, out.written(), &.{.{ .plain = "notes.wasm", .path = "notes.wasm", .data = file("notes.wasm").? }});
 }
 
 /// The tool's files into the private site's dir (`meiolol admin --private-out`), each with
@@ -126,6 +127,8 @@ test adminPage {
     const page = try adminPage(arena.allocator());
     try std.testing.expect(std.mem.find(u8, page, "data-island=\"noteslist\"") != null);
     try std.testing.expect(std.mem.find(u8, page, "/private/notes.wasm") != null);
+    try std.testing.expect(std.mem.find(u8, page, "stylesheet") == null);
+    try csp.check(page);
 }
 
 test writeFiles {

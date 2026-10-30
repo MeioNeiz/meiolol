@@ -15,6 +15,8 @@ const status = @import("status.zig");
 const ui = @import("ui");
 const adminmodels = @import("adminmodels.zig");
 const csp = @import("site/csp.zig");
+const sheets = @import("site/sheets.zig");
+const style = @import("site/style.zig");
 const ad = ui.admindata;
 
 const Io = std.Io;
@@ -344,7 +346,9 @@ pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) 
     try cwd.createDirPath(io, out_dir);
     var dir = try cwd.openDir(io, out_dir, .{});
     defer dir.close(io);
-    try writeGz(gpa, io, dir, "index.html", private_index);
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    try writeGz(gpa, io, dir, "index.html", try privateIndex(arena.allocator()));
     try writeGz(gpa, io, dir, "old.html", page);
     try writeGz(gpa, io, dir, "admin-setnet.js", @embedFile("site/static/admin-setnet.js"));
     try writeGz(gpa, io, dir, "admin-draft.js", @embedFile("site/static/admin-draft.js"));
@@ -353,45 +357,44 @@ pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) 
     try writeGz(gpa, io, dir, "pv.js", @embedFile("site/static/pv.js"));
 }
 
-/// Sets the site menu's link (html.zig admin_link), which also loads pv.js
-const private_index =
-    \\<!doctype html>
-    \\<html lang="en">
-    \\<head>
-    \\<meta charset="utf-8">
-    \\
-++ csp.meta(&.{index_script}, &.{index_style}) ++
-    \\<meta name="viewport" content="width=device-width, initial-scale=1">
-    \\<meta name="robots" content="noindex">
-    \\<title>meiolol private</title>
-    \\
-++ index_style ++
-    \\</head>
-    \\<body>
-    \\<main>
-    \\<h1><a href="/">meiolol</a> private</h1>
-    \\<ul>
-    \\<li><a href="/private/tester">Draft tester</a>: build a draft, see the model's win chance and every candidate</li>
-    \\<li><a href="/private/app">App review</a>: every screen the desktop app can show, both editions</li>
-    \\<li><a href="/private/old">Old Draft tester</a>: lane model, set net, bans and compare, until the new one has them</li>
-    \\</ul>
-    \\</main>
-    \\
-++ index_script ++
-    \\</body>
-    \\</html>
-    \\
-;
+/// /private: the private pages, on ui.textpage with its CSS inline (site/sheets.zig). Its
+/// script sets the site menu's link (shell.zig admin_link), which also loads pv.js
+pub fn privateIndex(a: std.mem.Allocator) ![]const u8 {
+    var t: ui.Tree = .{};
+    var h: ui.H = .init(a, &t);
+    const p: ui.textpage.TextPage = .{ .title = "Private", .lead = "Tools for private logins: never on the public site.", .body = try ui.prose.parse(a, index_md) };
+    const n = p.view(&h);
+    if (h.oom) return error.OutOfMemory;
+    var out: Io.Writer.Allocating = .init(a);
+    const w = &out.writer;
+    try w.print(
+        \\<!doctype html>
+        \\<html lang="en">
+        \\<head>
+        \\<meta charset="utf-8">
+        \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
+        \\<meta name="robots" content="noindex">
+        \\<title>meiolol private</title>
+        \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+        \\<link rel="stylesheet" href="/{s}">
+        \\</head>
+        \\<body class="ui">
+        \\<main class="c-sitemain">
+        \\
+    , .{ index_csp, style.file.path });
+    try ui.html.write(&t, n, w);
+    try w.writeAll("\n</main>\n" ++ index_script ++ "</body>\n</html>\n");
+    return sheets.deliver(a, out.written());
+}
 
-const index_style =
-    \\<style>
-    \\body { margin: 0; background: #10141c; color: #c8cdd8; font: 15px/1.5 system-ui, sans-serif; }
-    \\main { max-width: 640px; margin: 32px auto; padding: 0 16px; }
-    \\h1 a { color: #fff; text-decoration: none; }
-    \\li { margin: 10px 0; }
-    \\li a { color: #8ab4ff; font-weight: 600; }
-    \\</style>
+const index_csp = csp.meta(&.{index_script}, &.{});
+
+const index_md =
+    \\- [Draft tester](/private/tester): build a draft, see the model's win chance and every candidate
+    \\- [App review](/private/app): every screen the desktop app can show, both editions
+    \\- [Old Draft tester](/private/old): lane model, set net, bans and compare, until the new one has them
     \\
+    \\[Back to meiolol](/)
 ;
 
 const index_script =
@@ -399,8 +402,14 @@ const index_script =
     \\
 ;
 
-test "private index: its CSP allows its own script and style" {
-    try csp.check(private_index);
+test "private index: on ui, its CSS inline, its CSP allows its script and style" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const page = try privateIndex(arena.allocator());
+    try std.testing.expect(std.mem.find(u8, page, "<style>") != null);
+    try std.testing.expect(std.mem.find(u8, page, "stylesheet") == null);
+    try std.testing.expect(std.mem.find(u8, page, "class=\"c-textpage\"") != null);
+    try csp.check(page);
 }
 
 /// Also `path`.gz, as the site's pages (nginx gzip_static)

@@ -1,19 +1,25 @@
 //! Each page's CSS inline: the head (tokens, base, the font) and the components its HTML and
 //! its islands' wasm name, by a scan for their scope classes (only code that can run is in
-//! a wasm). Measured against the one linked sheet: first page ~0.7 s sooner on Slow 4G,
+//! a wasm). Public and private pages alike. Measured against the one linked sheet: first page ~0.7 s sooner on Slow 4G,
 //! each later page ~60 ms slower (research/questions/css-per-page.md)
 const std = @import("std");
 const ui = @import("ui");
 const style = @import("style.zig");
 const root = @import("root.zig");
 const csp = @import("csp.zig");
+const assets = @import("assets.zig");
 
-const n = ui.components.len;
+/// The private pages' (admin, notes list, Draft tester), after the public ones: the
+/// cascade they had as a second sheet
+const private = .{ ui.alertband, ui.actionbutton, ui.adminpage, ui.timechart, ui.admincharts, ui.admintraffic, ui.steptimeline, ui.logview, ui.adminops, ui.adminmodels, ui.adminlab, ui.adminruns, ui.select, ui.modelbadge, ui.rankstrip, ui.testerpage, ui.testercand, ui.notes, ui.noteslist };
+const all = ui.components ++ private;
+
+const n = all.len;
 pub const Set = std.bit_set.Array(u64, n);
 
 const by_scope = blk: {
     var kvs: []const struct { []const u8, u16 } = &.{};
-    for (ui.components, 0..) |C, i| {
+    for (all, 0..) |C, i| {
         for (C.scope) |s| kvs = kvs ++ .{.{ s[1..], @as(u16, i) }};
     }
     break :blk std.StaticStringMap(u16).initComptime(kvs);
@@ -35,27 +41,28 @@ pub fn scan(set: *Set, bytes: []const u8) void {
     }
 }
 
-fn wasmData(path: []const u8) ?[]const u8 {
-    const p = if (std.mem.startsWith(u8, path, "/")) path[1..] else path;
-    for (root.hashed_assets) |h| if (std.mem.eql(u8, h.path, p)) return h.data;
+/// By file name: islands load from / or the private page's folder
+fn wasmData(files: []const assets.Hashed, path: []const u8) ?[]const u8 {
+    const name = path[if (std.mem.findScalarLast(u8, path, '/')) |i| i + 1 else 0..];
+    for (files) |h| if (std.mem.eql(u8, h.path, name)) return h.data;
     return null;
 }
 
 /// Adds the components of every island `page` names in a data-wasm, loaded at once or
-/// on first use
-fn scanIslands(set: *Set, page: []const u8) void {
+/// on first use; their files among `files`
+fn scanIslands(set: *Set, page: []const u8, files: []const assets.Hashed) void {
     var i: usize = 0;
     const key = "data-wasm=\"";
     while (std.mem.findPos(u8, page, i, key)) |at| {
         const start = at + key.len;
         const end = std.mem.findScalarPos(u8, page, start, '"') orelse break;
         i = end;
-        if (wasmData(page[start..end])) |wasm| scan(set, wasm);
+        if (wasmData(files, page[start..end])) |wasm| scan(set, wasm);
     }
 }
 
-/// The head (tokens, base, the font) and each of ui.components, minified apart: the same
-/// bytes as the minified bundle. At first use, not comptime: minifying there costs a
+/// The head (tokens, base, the font) and each component, minified apart: the public ones
+/// the same bytes as the minified bundle. At first use, not comptime: minifying there costs a
 /// minute of every backend compile
 const Pieces = struct {
     head: []const u8,
@@ -75,7 +82,7 @@ fn build() !Pieces {
     // Root-relative: the CSS is inlined into pages at any depth
     const head = ui.css.head ++ ui.css.font_face[0] ++ "/" ++ style.font.path ++ ui.css.font_face[1];
     var p: Pieces = .{ .head = try minified(a, head), .components = undefined };
-    inline for (ui.components, &p.components) |C, *c| c.* = try minified(a, C.css);
+    inline for (all, &p.components) |C, *c| c.* = try minified(a, C.css);
     return p;
 }
 
@@ -96,7 +103,7 @@ fn get() !*const Pieces {
     }
 }
 
-/// The head, then `set`'s components in ui.components order: the one sheet's cascade
+/// The head, then `set`'s components in order: the one sheet's cascade
 pub fn css(a: std.mem.Allocator, set: Set) ![]const u8 {
     const p = try get();
     var out: std.ArrayList(u8) = .empty;
@@ -110,11 +117,16 @@ const link = "<link rel=\"stylesheet\" href=\"/" ++ style.file.path ++ "\">";
 /// `page` with its link to the one sheet replaced by the CSS it uses, its hash in the
 /// page's CSP; anything else as is
 pub fn deliver(a: std.mem.Allocator, page: []const u8) ![]const u8 {
+    return deliverWith(a, page, &root.hashed_assets);
+}
+
+/// As deliver, for a private page whose islands' files are `files`
+pub fn deliverWith(a: std.mem.Allocator, page: []const u8, files: []const assets.Hashed) ![]const u8 {
     if (!std.mem.startsWith(u8, page, "<!doctype html>")) return page;
     const at = std.mem.find(u8, page, link) orelse return page;
     var set: Set = .empty;
     scan(&set, page);
-    scanIslands(&set, page);
+    scanIslands(&set, page, files);
     const text = try css(a, set);
     return csp.withStyle(a, try std.mem.concat(a, u8, &.{ page[0..at], "<style>", text, "</style>", page[at + link.len ..] }), text);
 }
@@ -136,11 +148,11 @@ test "deliver: the link becomes the page's CSS, islands' included" {
     defer arena.deinit();
     const a = arena.allocator();
     var island: Set = .empty;
-    scan(&island, wasmData(@import("assets.zig").sitesearch_wasm.path).?);
+    scan(&island, wasmData(&root.hashed_assets, assets.sitesearch_wasm.path).?);
     try std.testing.expect(island.count() > 0);
     const page = try std.mem.concat(a, u8, &.{
-        "<!doctype html><head>",                    link,        "</head><div class=\"c-card\"></div><div data-js=\"x\" data-wasm=\"/",
-        @import("assets.zig").sitesearch_wasm.path, "\"></div>",
+        "<!doctype html><head>",     link,        "</head><div class=\"c-card\"></div><div data-js=\"x\" data-wasm=\"/",
+        assets.sitesearch_wasm.path, "\"></div>",
     });
     const out = try deliver(a, page);
     try std.testing.expect(std.mem.find(u8, out, link) == null);
@@ -152,11 +164,11 @@ test "deliver: the link becomes the page's CSS, islands' included" {
     try std.testing.expectEqualStrings("{}", try deliver(a, "{}"));
 }
 
-test "css: every component is the one sheet" {
+test "css: every public component is the one sheet" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var all: Set = .empty;
-    all.setRangeValue(.{ .start = 0, .end = n }, true);
-    try std.testing.expectEqualStrings(style.bundle, try css(a, all));
+    var public: Set = .empty;
+    public.setRangeValue(.{ .start = 0, .end = ui.components.len }, true);
+    try std.testing.expectEqualStrings(style.bundle, try css(a, public));
 }
