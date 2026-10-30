@@ -37,19 +37,10 @@ filter URLs and canonicals). Any URL work follows this file; change it here firs
   the generator, wasm, nginx and serve.zig on the scheme; old-URL redirects removed 29 Oct
 - URL5 (done 29 Oct): /admin and /private (was /p/) without .html, no redirects from
   the old paths
-- URL6 Retire /admin/desktop/ (AC5): every release so far (last 0453f11, 23 Oct) has
-  update base /admin/desktop/; /private/desktop/ is the base from the next one. /p/desktop/
-  went 30 Oct: no release ever had it as its base, and no app fetched it on C01. Steps:
-  (1) a release (deploy/desktop-release.sh); installed apps take its exe within 3 h of
-  running, and from their next start check /private/desktop/; (2) the admin page's zip
-  link and info.json (adminpage.zig, admin.js) read /private/desktop/; (3) count, from
-  the Mac, the app's update checks per day and path (logs kept 14 days):
-  `ssh essex-vm "zcat -f /var/log/nginx/meiolol.access.log* | grep -F desktop/update |
-  jq -r 'select(.a|startswith(\"zig/\")) | \"\\(.t|strftime(\"%F\")) \\(.s) \\(.u)\"' | sort | uniq -c"`.
-  27-30 Oct: /admin/desktop/update.signed 200 on 27 and 29 Oct, nothing on /private/.
-  Check 14 days after (1): no /admin/desktop/ line in 14 days, then drop its nginx
-  location and web-loop.sh's admin/desktop copy; an app left behind needs a fresh
-  download. The account page's devices say who signed in
+- URL6 (done 30 Oct): /p/desktop/ and /admin/desktop/ gone, no release first (Jacob: no
+  one uses the app yet; an old install reinstalls from the private site). Released exes
+  (last 0453f11, 23 Oct) still check /admin/desktop/ and now get 404: the app's update
+  failure handling says how to get the new one. The next release checks /private/desktop/
 - Checked 30 Oct from C01: the application text (submitted and revised) and
   production-key.md quote only meio.lol and privacy@meio.lol; every page they name
   (/, /your, /daily, /learn, /pool, /champions, /matchups, /patch, /method, /privacy,

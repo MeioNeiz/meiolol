@@ -370,7 +370,7 @@ fn head(p: *Page, h: *H) N {
         }),
         card.spacer(h),
         button.view(h, .{ .v = .quiet, .s = .s, .href = "/admin/notes" }, .{W.notes}),
-        button.view(h, .{ .v = .quiet, .s = .s, .href = "/admin/desktop/meiolol-desktop.zip" }, .{W.desktop}),
+        button.view(h, .{ .v = .quiet, .s = .s, .href = "/private/desktop/meiolol-desktop.zip" }, .{W.desktop}),
         button.view(h, .{ .s = .s, .on = h.on(p, .refresh) }, .{W.refresh}),
         if (p.me) |me| h.span(.{ .class = "me" }, .{
             h.a(.{ .href = "/account" }, .{me.username}),

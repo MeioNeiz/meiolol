@@ -251,7 +251,7 @@ a 301 to it.
   file on each request (src/admin.zig trafficBin, last 30 days)
   Reinstall: `deploy/jomify.sh install traffic`; units by hand into /etc/systemd/system,
   then `daemon-reload` (`deploy/jomify.sh drift` shows what differs)
-- Desktop app files (/admin/desktop/: zip, update.signed, update.json (unsigned, for
+- Desktop app files (/private/desktop/: zip, update.signed, update.json (unsigned, for
   older apps), stats.bin, recent-curves.bin, champ-facts.tsv, the exe, .gz copies;
   deploy/web-loop.sh desktop_files from the box's release/ (deploy/desktop-release.sh),
   manifest signed with ml/meiolol/desktop-data.key, mode 600, copy in vault
@@ -261,9 +261,8 @@ a 301 to it.
   above); the key opens this directory only. Key: box ml/meiolol/desktop.token (64 hex,
   made by web-loop.sh if missing), shipped in the zip as update.key and after the zip's
   exe (install.zig bundled). Rotate: new token on the box, the same in the conf, `nginx
-  -t`, reload; old zips stop updating. The same files under /private/desktop/
-  (accounts.md AC5; the web loop's private/ upload, same gate) for the private edition's
-  channel
+  -t`, reload; old zips stop updating. They go up with the private site (the web loop's
+  private/ upload)
 - Admin API (/admin/api/, src/admin_api.zig): `meiolol render` on the box answers
   live.bin (crawler's last 3 h by minute, queues, services, health; cached 30 s),
   log?file=&lines= (crawl, web, eval, render, health, backup, builds; ids and Riot IDs

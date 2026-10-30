@@ -18,8 +18,6 @@ const sign = @import("sign.zig");
 const device = @import("device.zig");
 const client = @import("net").client;
 
-/// Released apps from before sign in check /admin/desktop/, which serves the same files
-/// until they have all updated (urls.md URL6)
 pub const default_base = "https://meio.lol/private/desktop/";
 pub const key_file = "update.key";
 pub const old_exe = "meiolol-desktop.old.exe";

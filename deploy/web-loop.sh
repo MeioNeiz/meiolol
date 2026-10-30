@@ -43,8 +43,7 @@
 # the file, so a stale example (perhaps a player forgotten since) never ships; the pages
 # then offer none until the next success.
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
-# behind basic auth there; the site's rsync leaves that directory alone. data/desktop
-# (the Windows app's files and zip, desktop_files) goes with it to admin/desktop/. The
+# behind basic auth there; the site's rsync leaves that directory alone. The
 # private site's Draft tester (`--private-out`, with the tester's files) goes to private/,
 # but only while meio.lol/private sends a visitor without a login to the login page: the
 # draft win chances must never be public, and nginx's /private gate is installed by hand.
@@ -114,7 +113,7 @@ storage_scan() {
     mv data/storage.tsv.new data/storage.tsv
 }
 
-# The Windows app, admin/desktop/ (behind the login until the public release, plan J7,
+# The Windows app, private/desktop/ (behind the login until the public release, plan J7,
 # J19): the released exe (release/, put there by deploy/desktop-release.sh on the Mac,
 # never by a deploy), the renderer's data/stats.bin (EUW, current patch: what meio.lol
 # serves), its data/champ-facts.tsv (the comp view's, src/core/champfacts.zig) and
@@ -484,11 +483,8 @@ while true; do
         --health "$(bin/health.sh)" 2>&1; then
         # Times kept, so the upload sends the tester's files only when the daily job changed them
         [[ -d data/tester ]] && cp -pR data/tester data/private.new/models
-        # The private edition's channel, private/desktop/ (app.md "Two editions"); admin/desktop/
-        # too while installed apps check there
+        # The private edition's channel (app.md "Two editions"); linked, not copied (~50 MB)
         [[ -d data/desktop ]] && cp -al data/desktop data/private.new/desktop
-        # Linked, not copied (~50 MB)
-        [[ -d data/desktop ]] && cp -al data/desktop data/admin.new/desktop
         rm -rf data/admin && mv data/admin.new data/admin
         rsync -a --delete data/admin/ meiolol-web:admin/ || echo "$(date -u +%FT%TZ) admin upload FAILED"
         rm -rf data/private && mv data/private.new data/private
