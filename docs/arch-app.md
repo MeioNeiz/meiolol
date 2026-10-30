@@ -49,7 +49,11 @@ file and packed rows: docs/architecture.md.
   states, and practice (testers only). Rendered by screens.renderIn in both editions with
   the site's icons, the island and CSS under /private/app/, at the window's 1120 px or
   420; a fake bridge shows what the page sends the shell, and a seat click opens that
-  lane's page. URLs /private/app/<edition>/<slug>, app.bin under <slug>/ (a <base>)
+  lane's page. URLs /private/app/<edition>/<slug>, app.bin under <slug>/ (review.js
+  points the island's relative fetch there: nginx sends base-uri 'none'). A navigator of
+  every group and state on the left (a drawer when the frame leaves no room), the
+  group's steps above the frame, arrow keys between states (left, right) and groups (up,
+  down); /private/app opens the last edition's first state (nav.js)
 - Lane panel: a click on an ally's seat shows their lane: the shell writes the board's
   seats' data-act as "lane <role>" (255 mine; only seats with a role, as allyLane finds
   the ally by role; ui/draftboard.zig Seat.act, the shown one Seat.sel) and bridge.js

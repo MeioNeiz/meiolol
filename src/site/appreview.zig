@@ -5,10 +5,12 @@
 //! page per change it would publish, rendered by the shell's screens.zig in both
 //! editions: the same island and CSS, at the window's width or narrow, and a fake bridge
 //! that shows what the page would send the shell.
-//!   /private/app                      the index
+//!   /private/app                      the index: opens the last edition's first state
 //!   /private/app/<edition>/<slug>     a state; its app.bin under <slug>/ (review.js points
 //!                                     the island's relative fetch there: nginx sends
 //!                                     base-uri 'none' and drops a trailing slash)
+//! Each state page: a navigator of every group and state on the left, a strip of the
+//! group's steps above the frame, arrow keys between states and groups (nav.js)
 
 const std = @import("std");
 const store = @import("store");
@@ -43,6 +45,8 @@ const Shot = struct {
     group: usize,
     slug: []const u8,
     title: []const u8,
+    /// The navigator's name
+    short: []const u8,
     status: state.Status,
     note: state.Note = .none,
     signin: ?ui.signin.SignIn = null,
@@ -70,7 +74,7 @@ pub fn files(a: Allocator, gpa: Allocator, io: Io, in: Inputs) ![]File {
     try others(a, &shots);
     for (scenarios.list) |sc| {
         const g = groups.items.len;
-        try groups.append(a, .{ .title = sc[0], .text = try comment(a, sc[1]) });
+        try groups.append(a, .{ .title = readable(sc[0]), .text = try comment(a, sc[1]) });
         try play(a, gpa, io, data, lock, &shots, .{ .group = g, .name = sc[0], .bytes = sc[1] });
     }
     // Each seat: full-game's champ select from my other places
@@ -78,7 +82,7 @@ pub fn files(a: Allocator, gpa: Allocator, io: Io, in: Inputs) ![]File {
     for (seats) |s| {
         const g = groups.items.len;
         try groups.append(a, .{
-            .title = try a.print("full-game as {s}", .{s[1]}),
+            .title = try a.print("Full game as {s}", .{s[1]}),
             .text = try a.print("full-game's champ select played from the {s} seat (cell {d}).", .{ s[1], s[0] }),
         });
         try play(a, gpa, io, data, lock, &shots, .{ .group = g, .name = scenarios.list[0][0], .bytes = scenarios.list[0][1], .cell = s[0], .slug = s[1], .select_only = true });
@@ -101,6 +105,12 @@ pub fn files(a: Allocator, gpa: Allocator, io: Io, in: Inputs) ![]File {
                 .group = g,
                 .slug = try a.print("practice-{t}", .{screen}),
                 .title = try a.print("Practice: {t}", .{screen}),
+                .short = switch (screen) {
+                    .select => "Champ select",
+                    .loading => "Loading screen",
+                    .game => "In game",
+                    .post => "Post game",
+                },
                 .status = try statusOf(a, built),
                 .practice = x,
             });
@@ -113,7 +123,7 @@ pub fn files(a: Allocator, gpa: Allocator, io: Io, in: Inputs) ![]File {
         for (shots.items, 0..) |*s, i| {
             if (s.practice != null and ed == .public) continue;
             c.practice = s.practice != null;
-            try page(a, &out, c, ed, shots.items, i);
+            try page(a, &out, c, ed, groups.items, shots.items, i);
         }
     }
     try out.append(a, .{ .path = "app.html", .data = try index(a, groups.items, shots.items) });
@@ -121,6 +131,7 @@ pub fn files(a: Allocator, gpa: Allocator, io: Io, in: Inputs) ![]File {
         .{ .path = "app/app.css", .data = screens.css },
         .{ .path = "app/review.css", .data = review_css },
         .{ .path = "app/review.js", .data = review_js },
+        .{ .path = "app/nav.js", .data = nav_js },
         .{ .path = "app/ui-app.js", .data = shell_files.get("ui-app.js").? },
         .{ .path = "app/ui-app.wasm", .data = shell_files.get("ui-app.wasm").? },
         .{ .path = "app/ui-practice.js", .data = shell_files.get("ui-practice.js").? },
@@ -221,17 +232,17 @@ pub fn siteIcons(a: Allocator, db: store.Db) !screens.SiteIcons {
 /// States with no client in them: before it starts, no data, sign in, an update waiting
 fn others(a: Allocator, shots: *std.ArrayList(Shot)) !void {
     try shots.appendSlice(a, &.{
-        .{ .group = 0, .slug = "signin", .title = "First start: sign in, no data yet", .status = .no_data, .signin = .{ .full = true } },
-        .{ .group = 0, .slug = "signin-busy", .title = "Signing in", .status = .no_data, .signin = .{ .full = true, .busy = true } },
-        .{ .group = 0, .slug = "signin-failed", .title = "Sign in refused", .status = .no_data, .signin = .{ .full = true, .message = "Wrong username or password." } },
-        .{ .group = 0, .slug = "downloading", .title = "Signed in, downloading the data", .status = .no_data, .note = .downloading },
-        .{ .group = 0, .slug = "download-failed", .title = "Download failed", .status = .no_data, .note = .{ .failed = "ConnectionTimedOut" } },
-        .{ .group = 0, .slug = "no-data", .title = "No data and no sign in offered", .status = .no_data },
-        .{ .group = 0, .slug = "no-client", .title = "League client closed", .status = .no_client },
-        .{ .group = 0, .slug = "client-error", .title = "Client not reachable", .status = .{ .client_error = "ConnectionRefused" } },
-        .{ .group = 0, .slug = "home", .title = "Client on its home screen", .status = .{ .waiting = "Home" } },
-        .{ .group = 0, .slug = "signed-out", .title = "Signed out, data from before: the line under it", .status = .{ .waiting = "Lobby" }, .signin = .{ .full = false } },
-        .{ .group = 0, .slug = "restart", .title = "A new version waits for the next start", .status = .{ .waiting = "Lobby" }, .restart = true },
+        .{ .group = 0, .slug = "signin", .short = "Sign in", .title = "First start: sign in, no data yet", .status = .no_data, .signin = .{ .full = true } },
+        .{ .group = 0, .slug = "signin-busy", .short = "Signing in", .title = "Signing in", .status = .no_data, .signin = .{ .full = true, .busy = true } },
+        .{ .group = 0, .slug = "signin-failed", .short = "Sign in refused", .title = "Sign in refused", .status = .no_data, .signin = .{ .full = true, .message = "Wrong username or password." } },
+        .{ .group = 0, .slug = "downloading", .short = "Downloading the data", .title = "Signed in, downloading the data", .status = .no_data, .note = .downloading },
+        .{ .group = 0, .slug = "download-failed", .short = "Download failed", .title = "Download failed", .status = .no_data, .note = .{ .failed = "ConnectionTimedOut" } },
+        .{ .group = 0, .slug = "no-data", .short = "No data", .title = "No data and no sign in offered", .status = .no_data },
+        .{ .group = 0, .slug = "no-client", .short = "Client closed", .title = "League client closed", .status = .no_client },
+        .{ .group = 0, .slug = "client-error", .short = "Client not reachable", .title = "Client not reachable", .status = .{ .client_error = "ConnectionRefused" } },
+        .{ .group = 0, .slug = "home", .short = "Client home screen", .title = "Client on its home screen", .status = .{ .waiting = "Home" } },
+        .{ .group = 0, .slug = "signed-out", .short = "Signed out", .title = "Signed out, data from before: the line under it", .status = .{ .waiting = "Lobby" }, .signin = .{ .full = false } },
+        .{ .group = 0, .slug = "restart", .short = "Update waiting", .title = "A new version waits for the next start", .status = .{ .waiting = "Lobby" }, .restart = true },
     });
 }
 
@@ -276,7 +287,9 @@ fn play(a: Allocator, gpa: Allocator, io: Io, data: *const poller.Data, lock: []
         if (p.select_only and s != .select) continue;
         n += 1;
         const slug = try a.print("{s}-{d:0>2}", .{ prefix, n });
-        try shots.append(a, .{ .group = p.group, .slug = slug, .title = try describe(a, &sc, step, s), .status = s });
+        const title = try describe(a, &sc, step, s);
+        const short = if (std.mem.startsWith(u8, title, "Champ select, ")) title["Champ select, ".len..] else title;
+        try shots.append(a, .{ .group = p.group, .slug = slug, .title = title, .short = short, .status = s });
         // All ten locked: every ally's lane, as a seat click shows it
         if (lanes_done or p.cell != null or s != .select or s.select.comp == null) continue;
         lanes_done = true;
@@ -288,7 +301,13 @@ fn play(a: Allocator, gpa: Allocator, io: Io, data: *const poller.Data, lock: []
             if (ally != .select or !ally.select.ally) continue;
             const ally_slug = try a.print("{s}-lane-{s}", .{ slug, @tagName(role) });
             shots.items[mine].lanes[i] = ally_slug;
-            try shots.append(a, .{ .group = p.group, .slug = ally_slug, .title = try a.print("{s}: {s}'s lane (their seat clicked)", .{ shots.items[mine].title, role.label() }), .status = ally });
+            try shots.append(a, .{
+                .group = p.group,
+                .slug = ally_slug,
+                .title = try a.print("{s}: {s}'s lane (their seat clicked)", .{ shots.items[mine].title, role.label() }),
+                .short = try a.print("{c}{s}'s lane", .{ std.ascii.toUpper(role.label()[0]), role.label()[1..] }),
+                .status = ally,
+            });
         }
         // Back to mine: that tick's page is the one above
         state.lane_role.store(state.own_lane, .release);
@@ -332,6 +351,20 @@ fn describe(a: Allocator, sc: *const mock.Scenario, step: std.json.Value, s: sta
     return w.written();
 }
 
+/// A scenario's name for the navigator; its file name when it has none here
+fn readable(name: []const u8) []const u8 {
+    const names = [_]struct { []const u8, []const u8 }{
+        .{ "full-game", "Full game" },
+        .{ "laner-locked-first", "Laner locks first" },
+        .{ "trade", "Trade" },
+        .{ "dodge", "Dodge" },
+        .{ "blind-normal", "Blind pick (normal)" },
+        .{ "aram", "ARAM" },
+    };
+    for (names) |n| if (std.mem.eql(u8, n[0], name)) return n[1];
+    return name;
+}
+
 fn comment(a: Allocator, bytes: []const u8) ![]const u8 {
     const v = try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{});
     const c = v.object.get("_comment") orelse return "";
@@ -363,7 +396,7 @@ fn url(a: Allocator, ed: Edition, slug: []const u8) ![]const u8 {
 }
 
 /// The state's page and its app.bin (practice.bin) for one edition
-fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, shots: []const Shot, i: usize) !void {
+fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, groups: []const Group, shots: []const Shot, i: usize) !void {
     const s = shots[i];
     var d = try screens.data(a, c, s.status, s.note);
     d.seq = 1;
@@ -395,23 +428,27 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, sh
         .practice_js = root ++ "/ui-practice.js",
         .practice_wasm = root ++ "/ui-practice.wasm",
         .head = try a.print(
-            \\<link rel="stylesheet" href="{s}/review.css"><script src="{s}/review.js"></script>
-        , .{ root, root }),
-        .top = try reviewBar(a, ed, shots, i),
+            \\<link rel="stylesheet" href="{s}/review.css"><script src="{s}/review.js"></script><script src="{s}/nav.js" defer></script>
+        , .{ root, root, root }),
+        .top = try reviewTop(a, ed, groups, shots, i),
         .end = "</div>",
     });
     try out.append(a, .{ .path = try a.print("{s}.html", .{dir}), .data = html });
 }
 
-/// Above the app: where this is, its neighbours, the edition and width switches, and
-/// what the page sent the shell. Then the frame the app draws in
-fn reviewBar(a: Allocator, ed: Edition, shots: []const Shot, i: usize) ![]const u8 {
+/// Every page's left side, the bar above the app (where this is, its neighbours, the
+/// edition and width switches, what the page sent the shell), the group's steps, then
+/// the frame the app draws in
+fn reviewTop(a: Allocator, ed: Edition, groups: []const Group, shots: []const Shot, i: usize) ![]const u8 {
     const s = shots[i];
     var w: Io.Writer.Allocating = .init(a);
     const x = &w.writer;
-    try x.print("<nav class=\"rv-bar\"", .{});
+    try navigator(x, a, ed, groups, shots, i);
+    try x.print("<header class=\"rv-bar\" data-edition=\"{t}\"", .{ed});
     for (s.lanes, 0..) |l, k| if (l) |slug| try x.print(" data-lane-{d}=\"{s}\"", .{ if (k == 5) state.own_lane else k, try url(a, ed, slug) });
-    try x.print("><a href=\"{s}\">App review</a><b>", .{root});
+    if (groupStart(shots, ed, s.group, false)) |k| try x.print(" data-prev-group=\"{s}\"", .{try url(a, ed, shots[k].slug)});
+    if (groupStart(shots, ed, s.group, true)) |k| try x.print(" data-next-group=\"{s}\"", .{try url(a, ed, shots[k].slug)});
+    try x.writeAll("><button type=\"button\" class=\"rv-menu\" aria-controls=\"rv-nav\" aria-expanded=\"false\">States</button><b>");
     try escaped(x, s.title);
     try x.writeAll("</b><span class=\"rv-sw\">");
     if (neighbour(shots, ed, i, false)) |p| try x.print("<a href=\"{s}\" rel=\"prev\">Previous</a>", .{try url(a, ed, shots[p].slug)});
@@ -420,12 +457,48 @@ fn reviewBar(a: Allocator, ed: Edition, shots: []const Shot, i: usize) ![]const 
     for ([_]Edition{ .public, .private }) |e| {
         if (e == ed) {
             try x.print("<b>{s}</b>", .{label(e)});
-        } else if (s.practice == null) try x.print("<a href=\"{s}\">{s}</a>", .{ try url(a, e, s.slug), label(e) });
+        } else if (s.practice == null) {
+            try x.print("<a href=\"{s}\">{s}</a>", .{ try url(a, e, s.slug), label(e) });
+        } else try x.print("<span class=\"rv-off\" title=\"Testers only\">{s}</span>", .{label(e)});
     }
     try x.writeAll(
-        \\</span><span class="rv-sw"><button type="button" data-rv-width="wide">Window</button><button type="button" data-rv-width="narrow">Narrow</button></span><output id="rv-log"></output></nav><div class="rv-frame">
+        \\</span><span class="rv-sw"><button type="button" data-rv-width="wide">Window</button><button type="button" data-rv-width="narrow">Narrow</button></span><output id="rv-log"></output></header>
     );
+    try x.writeAll("<ol class=\"rv-steps\"><li><span>");
+    try escaped(x, groups[s.group].title);
+    try x.writeAll("</span></li>");
+    var n: usize = 0;
+    for (shots, 0..) |t, k| if (t.group == s.group and (ed == .private or t.practice == null)) {
+        n += 1;
+        try x.print("<li><a href=\"{s}\" data-label=\"", .{try url(a, ed, t.slug)});
+        try escaped(x, t.title);
+        try x.print("\"{s}>{d}</a></li>", .{ if (k == i) " aria-current=\"page\"" else "", n });
+    };
+    try x.writeAll("</ol><div class=\"rv-frame\">");
     return w.written();
+}
+
+/// Every group and its states as this edition's links (practice: the testers'), `cur`
+/// marked and only its group open; the index has none, every group open
+fn navigator(x: *Io.Writer, a: Allocator, ed: Edition, groups: []const Group, shots: []const Shot, cur: ?usize) !void {
+    try x.writeAll("<nav class=\"rv-nav\" id=\"rv-nav\" aria-label=\"App states\"><p class=\"rv-home\"><a href=\"/private\">Private</a> / App review</p>");
+    for (groups, 0..) |g, gi| {
+        const open = if (cur) |k| shots[k].group == gi else true;
+        try x.print("<details{s}><summary>", .{if (open) " open" else ""});
+        try escaped(x, g.title);
+        try x.writeAll("</summary><ol>");
+        var n: usize = 0;
+        for (shots, 0..) |s, k| if (s.group == gi) {
+            n += 1;
+            try x.print("<li><a href=\"{s}\" title=\"", .{try url(a, if (s.practice != null) .private else ed, s.slug)});
+            try escaped(x, s.title);
+            try x.print("\"{s}><i>{d}</i>", .{ if (cur == k) " aria-current=\"page\"" else "", n });
+            try escaped(x, s.short);
+            try x.writeAll("</a></li>");
+        };
+        try x.writeAll("</ol></details>");
+    }
+    try x.writeAll("</nav>");
 }
 
 fn label(e: Edition) []const u8 {
@@ -450,6 +523,19 @@ fn neighbour(shots: []const Shot, ed: Edition, i: usize, next: bool) ?usize {
     }
 }
 
+/// The first shot this edition has in the next (or previous) group that has one
+fn groupStart(shots: []const Shot, ed: Edition, group: usize, next: bool) ?usize {
+    var prev: ?usize = null;
+    for (shots, 0..) |s, k| {
+        if (ed == .public and s.practice != null) continue;
+        if (next) {
+            if (s.group > group) return k;
+        } else if (s.group < group and (prev == null or shots[prev.?].group != s.group)) prev = k;
+    }
+    return prev;
+}
+
+/// The navigator full width; nav.js opens the last edition's first state from here
 fn index(a: Allocator, groups: []const Group, shots: []const Shot) ![]const u8 {
     var w: Io.Writer.Allocating = .init(a);
     const x = &w.writer;
@@ -457,25 +543,12 @@ fn index(a: Allocator, groups: []const Group, shots: []const Shot) ![]const u8 {
         \\<!doctype html><html lang="en"><head><meta charset="utf-8">
         \\<meta name="viewport" content="width=device-width, initial-scale=1">
         \\<meta name="robots" content="noindex"><title>App review</title>
-        \\<link rel="stylesheet" href="{s}/app.css"><link rel="stylesheet" href="{s}/review.css"></head>
-        \\<body class="ui rv-index"><main><h1>App review</h1>
-        \\<p>Every screen the desktop app can show, played from the mock client's scenarios through the app's own poller. Each opens as the public edition or the testers' (practice: testers only), at the window's width or narrow; notes pin to the page.</p>
+        \\<link rel="stylesheet" href="{s}/app.css"><link rel="stylesheet" href="{s}/review.css"><script src="{s}/nav.js" defer></script></head>
+        \\<body class="ui rv-index"><main data-first-public="{s}" data-first-private="{s}"><h1>App review</h1>
+        \\<p>Every screen the desktop app can show, played from the mock client's scenarios through the app's own poller. Each opens as the public edition or the testers' (practice: testers only), at the window's width or narrow; notes pin to the page. Arrow keys: left and right for the previous and next state, up and down for the previous and next group.</p>
         \\
-    , .{ root, root });
-    for (groups, 0..) |g, gi| {
-        try x.writeAll("<section><h2>");
-        try escaped(x, g.title);
-        try x.writeAll("</h2><p>");
-        try escaped(x, g.text);
-        try x.writeAll("</p><ol>");
-        for (shots) |s| if (s.group == gi) {
-            try x.writeAll("<li>");
-            try escaped(x, s.title);
-            if (s.practice == null) try x.print(" <a href=\"{s}\">public</a>", .{try url(a, .public, s.slug)});
-            try x.print(" <a href=\"{s}\">testers</a></li>", .{try url(a, .private, s.slug)});
-        };
-        try x.writeAll("</ol></section>\n");
-    }
+    , .{ root, root, root, try url(a, .public, shots[0].slug), try url(a, .private, shots[0].slug) });
+    try navigator(x, a, .public, groups, shots, null);
     try x.writeAll("</main></body></html>\n");
     return w.written();
 }
@@ -495,16 +568,93 @@ const review_css =
     \\  padding: 8px 16px; background: #10141c; border-bottom: 1px solid #2a3140; font: 13px/1.4 system-ui, sans-serif; color: #c8cdd8; }
     \\.rv-bar a { color: #8ab4ff; }
     \\.rv-bar b { color: #fff; }
+    \\.rv-off { color: #5d6577; }
     \\.rv-sw { display: inline-flex; gap: 8px; align-items: center; }
-    \\.rv-sw button { font: inherit; color: inherit; background: #1d2330; border: 1px solid #2a3140; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+    \\.rv-sw button, .rv-menu { font: inherit; color: inherit; background: #1d2330; border: 1px solid #2a3140; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
     \\html:not(.rv-narrow) [data-rv-width="wide"], .rv-narrow [data-rv-width="narrow"] { border-color: #8ab4ff; color: #fff; }
     \\#rv-log { flex-basis: 100%; color: #9aa3b5; font-family: ui-monospace, monospace; font-size: 12px; }
     \\#rv-log:empty { display: none; }
+    \\.rv-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; list-style: none; max-width: 1120px; margin: 12px auto 0;
+    \\  padding: 0; font: 12px/1 system-ui, sans-serif; color: #9aa3b5; }
+    \\.rv-steps span { margin-right: 6px; }
+    \\.rv-steps a { position: relative; display: inline-block; min-width: 24px; box-sizing: border-box; padding: 5px 6px; text-align: center;
+    \\  border: 1px solid #2a3140; border-radius: 4px; background: #141924; color: #c8cdd8; text-decoration: none; }
+    \\.rv-steps a:hover, .rv-steps a:focus-visible { border-color: #8ab4ff; color: #fff; }
+    \\.rv-steps [aria-current] { border-color: #8ab4ff; background: #8ab4ff; color: #0c1017; }
+    \\.rv-steps a:hover::after { content: attr(data-label); position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: max-content;
+    \\  max-width: 360px; padding: 6px 8px; border: 1px solid #2a3140; border-radius: 4px; background: #1d2330; color: #fff;
+    \\  line-height: 1.35; text-align: left; white-space: normal; }
     \\.rv-frame { width: 1120px; min-height: 720px; margin: 16px auto; outline: 1px dashed #2a3140; }
     \\.rv-narrow .rv-frame { width: 420px; }
+    \\.rv-narrow .rv-steps { max-width: 420px; }
+    \\.rv-nav { position: fixed; z-index: 20; left: 0; top: 0; bottom: 0; width: 240px; box-sizing: border-box; overflow-y: auto;
+    \\  padding: 10px 8px 48px; background: #0c1017; border-right: 1px solid #2a3140; font: 13px/1.35 system-ui, sans-serif; color: #c8cdd8; }
+    \\body:has(> .rv-nav) { padding-left: 240px; }
+    \\.rv-home { margin: 0; padding: 4px 8px 10px; color: #fff; font-weight: 600; }
+    \\.rv-home a { color: #8ab4ff; font-weight: 400; }
+    \\.rv-nav summary { padding: 4px 8px; border-radius: 4px; color: #fff; font-weight: 600; cursor: pointer; }
+    \\.rv-nav summary:hover { background: #1d2330; }
+    \\.rv-nav ol { margin: 0 0 6px; padding: 0; list-style: none; }
+    \\.rv-nav li a { display: block; padding: 3px 8px 3px 12px; border-radius: 4px; color: #c8cdd8; text-decoration: none;
+    \\  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    \\.rv-nav li a:hover { background: #1d2330; color: #fff; }
+    \\.rv-nav i { display: inline-block; min-width: 22px; color: #6b7385; font-style: normal; }
+    \\.rv-nav [aria-current] { background: #22304d; color: #fff; box-shadow: inset 2px 0 #8ab4ff; }
+    \\.rv-menu { display: none; }
+    \\.rv-drawer body:has(> .rv-nav) { padding-left: 0; }
+    \\.rv-drawer .rv-nav { transform: translateX(-100%); transition: transform 0.15s; }
+    \\.rv-drawer.rv-nav-open .rv-nav { transform: none; box-shadow: 8px 0 24px #0009; }
+    \\.rv-drawer .rv-menu { display: inline-block; }
     \\.rv-index main { max-width: 900px; margin: 24px auto; padding: 0 16px; font: 14px/1.5 system-ui, sans-serif; }
-    \\.rv-index a { color: #8ab4ff; margin-left: 6px; }
-    \\.rv-index li { margin: 2px 0; }
+    \\.rv-index .rv-nav { position: static; width: auto; padding: 0; border: 0; background: none; font-size: 14px; }
+    \\.rv-index .rv-nav li a { white-space: normal; }
+    \\.rv-index .rv-home { display: none; }
+    \\
+;
+
+/// Arrow keys between states and groups, the navigator's drawer when the frame leaves no
+/// room for it, the current state in view, and the index opening the last edition
+const nav_js =
+    \\(() => {
+    \\  const html = document.documentElement;
+    \\  const key = 'meiolol-review-edition';
+    \\  const ix = document.querySelector('[data-first-public]');
+    \\  if (ix) {
+    \\    let ed = 'public';
+    \\    try { ed = localStorage.getItem(key) === 'private' ? 'private' : ed; } catch (e) {}
+    \\    return location.replace(ix.getAttribute('data-first-' + ed));
+    \\  }
+    \\  const nav = document.getElementById('rv-nav');
+    \\  const bar = document.querySelector('.rv-bar');
+    \\  if (!nav || !bar) return;
+    \\  try { localStorage.setItem(key, bar.dataset.edition); } catch (e) {}
+    \\  const dock = () => html.classList.toggle('rv-drawer', innerWidth < (html.classList.contains('rv-narrow') ? 720 : 1400));
+    \\  dock();
+    \\  addEventListener('resize', dock);
+    \\  const menu = bar.querySelector('.rv-menu');
+    \\  const open = (on) => {
+    \\    html.classList.toggle('rv-nav-open', on);
+    \\    menu.setAttribute('aria-expanded', on);
+    \\  };
+    \\  addEventListener('click', (e) => {
+    \\    if (e.target.closest('[data-rv-width]')) return dock();
+    \\    if (e.target.closest('.rv-menu')) return open(!html.classList.contains('rv-nav-open'));
+    \\    if (!e.target.closest('#rv-nav')) open(false);
+    \\  });
+    \\  const cur = nav.querySelector('[aria-current]');
+    \\  if (cur) nav.scrollTop = cur.offsetTop - nav.clientHeight / 2;
+    \\  const typing = (t) => t && t.closest && t.closest('input, textarea, select, [contenteditable], .c-notes');
+    \\  addEventListener('keydown', (e) => {
+    \\    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    \\    if (typing(e.target) || typing(document.activeElement)) return;
+    \\    if (e.key === 'Escape') return open(false);
+    \\    const link = (rel) => { const l = bar.querySelector('[rel=' + rel + ']'); return l && l.href; };
+    \\    const to = { ArrowLeft: link('prev'), ArrowRight: link('next'), ArrowUp: bar.dataset.prevGroup, ArrowDown: bar.dataset.nextGroup }[e.key];
+    \\    if (!to) return;
+    \\    e.preventDefault();
+    \\    location.assign(to);
+    \\  });
+    \\})();
     \\
 ;
 
@@ -587,6 +737,7 @@ test "every scenario's states as pages in both editions, practice testers only" 
         pages[@intFromBool(public)] += 1;
         try testing.expect(std.mem.find(u8, f.data, "data-island=\"app\"") != null);
         try testing.expect(std.mem.find(u8, f.data, "<base") == null);
+        try testing.expect(std.mem.find(u8, f.data, "aria-current=\"page\"") != null);
         // Its app.bin beside it
         const bin = try std.mem.concat(a, u8, &.{ f.path[0 .. f.path.len - ".html".len], "/app.bin" });
         for (list) |g| {
