@@ -502,9 +502,15 @@ pub fn place(teams: *[2][n_role]u32, i: u8, id: u32) void {
 /// The board as saved: "w t0,..,t9[ b0,..,b9]", w the model's index, t the seats, b the
 /// bans when there are any
 pub fn saved(p: *const Page, w: *std.Io.Writer) !void {
-    try w.print("{d}", .{@backingInt(p.which)});
-    for (p.teams, 0..) |team, s| for (team, 0..) |id, r| try w.print("{s}{d}", .{ if (s == 0 and r == 0) " " else ",", id });
-    if (p.bans[0] != 0) for (p.bans, 0..) |id, i| try w.print("{s}{d}", .{ if (i == 0) " " else ",", id });
+    try fmt.write(w, .int, @backingInt(p.which));
+    for (p.teams, 0..) |team, s| for (team, 0..) |id, r| {
+        try w.writeAll(if (s == 0 and r == 0) " " else ",");
+        try fmt.write(w, .int, id);
+    };
+    if (p.bans[0] != 0) for (p.bans, 0..) |id, i| {
+        try w.writeAll(if (i == 0) " " else ",");
+        try fmt.write(w, .int, id);
+    };
 }
 
 /// The saved board on a page opened with none (`p` as the URL `fragment` set it,
