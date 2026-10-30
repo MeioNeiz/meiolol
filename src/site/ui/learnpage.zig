@@ -573,23 +573,30 @@ pub const Page = struct {
         const f = p.five();
         if (f.n == 0) return .none;
         var l = h.list();
+        // The first locked slot's chapter, said in words: a phone shows no title
+        var lock: ?u8 = null;
         for (0..f.n) |ix| {
             const i: u8 = @intCast(ix);
             const ci = f.at[i][0];
+            if (!f.open[i] and lock == null) lock = ci;
             const s = p.dayStars(i);
             const n: N = if (s) |x| h.span(.{}, .{ "★", @as(u8, x) }) else h.span(.{}, .{ci});
             l.add(h.el(.button, .{
                 .key = i,
                 .type = "button",
                 .class = "sl",
-                .title = if (f.open[i]) tree.Text{ .s = p.d.chapters[ci].title } else W.locked.with(h, .{ .n = ci }),
+                .title = p.d.chapters[ci].title,
                 .disabled = !f.open[i],
                 .data_s = s != null,
                 .aria_current = if (p.day == i) "step" else null,
                 .on_click = h.on(p, .{ .today = i }),
             }, .{n}));
         }
-        return h.el(.nav, .{ .class = "today", .aria_label = W.today }, .{ h.span(.{ .class = "lab" }, .{W.today}), l.done() });
+        return h.el(.nav, .{ .class = "today", .aria_label = W.today }, .{
+            h.span(.{ .class = "lab" }, .{W.today}),
+            h.span(.{ .class = "sls" }, .{l.done()}),
+            if (lock) |n| h.span(.{ .class = "hint" }, .{W.locked.with(h, .{ .n = n })}) else null,
+        });
     }
 
     fn path(p: *Page, h: *H) N {
@@ -676,10 +683,12 @@ pub const css =
     \\  .c-learn .tk li { list-style: none; display: flex; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3);
     \\    border-radius: var(--r-m); background: var(--panel-2); }
     \\  .c-learn .end .foot { display: flex; justify-content: space-between; }
-    \\  .c-learn > .today { display: flex; align-items: center; gap: var(--sp-2); }
+    \\  .c-learn > .today { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+    \\  .c-learn > .today .hint { font-size: var(--fs-xs); color: var(--faint); }
+    \\  .c-learn > .today .sls { display: flex; gap: var(--sp-1); }
     \\  .c-learn > .today .lab { margin-right: var(--sp-1); font-size: var(--fs-s); font-weight: var(--w-m); white-space: nowrap; }
-    \\  .c-learn .sl { all: unset; box-sizing: border-box; display: grid; place-items: center; min-width: 36px; height: 36px;
-    \\    padding: 0 6px; border-radius: 18px; border: 1px solid var(--line); font-size: var(--fs-s); font-variant-numeric: tabular-nums; cursor: pointer; }
+    \\  .c-learn .sl { all: unset; box-sizing: border-box; display: grid; place-items: center; min-width: 32px; height: 32px;
+    \\    padding: 0 5px; border-radius: 16px; border: 1px solid var(--line); font-size: var(--fs-s); font-variant-numeric: tabular-nums; cursor: pointer; }
     \\  .c-learn .sl:enabled:hover { background: var(--panel-2); }
     \\  .c-learn .sl[data-s] { border-color: var(--accent); color: var(--accent); }
     \\  .c-learn .sl[aria-current] { background: var(--panel-2); font-weight: var(--w-b); }
