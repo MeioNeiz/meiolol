@@ -141,7 +141,8 @@ WSL hung until `wsl --shutdown`. Since then:
   browsers first, never Claude sessions or shells. What it killed: `journalctl -u
   earlyoom`
 - A dev server on data/snap holds 3+ GB (plus ~8 GB of page cache while it loads, for
-  minutes): deploy/dev.sh starts at most 2 on the machine (MEIOLOL_DEV_MAX)
+  minutes): deploy/dev.sh starts at most 2 on the machine (MEIOLOL_DEV_MAX); `--small`
+  ones (data/snap-small, docs/dev-flow.md "Seeing pages") count apart, at most 3
 
 ## Disk resets
 
