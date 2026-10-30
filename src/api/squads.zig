@@ -197,7 +197,7 @@ pub fn checkJson(arena: Allocator, db: Db, riot_id: []const u8, key: []const u8,
     try q.bind(.{riot_id});
     if (!try q.step()) return "{\"state\":\"none\"}";
     const r = q.row(struct { key: []const u8, state: []const u8, icon: ?i64, expires: i64, action: []const u8, token: ?[]const u8 });
-    if (!std.crypto.timing_safe.eql([token_len]u8, keyBytes(r.key), keyBytes(key))) return "{\"state\":\"none\"}";
+    if (!keyMatches(r.key, key)) return "{\"state\":\"none\"}";
     const settled = !std.mem.eql(u8, r.state, "pending") and !std.mem.eql(u8, r.state, "issued") and
         !std.mem.eql(u8, r.state, "checking") and !std.mem.eql(u8, r.state, "mismatch");
     const expired = r.expires <= now and !settled;
@@ -210,10 +210,10 @@ pub fn checkJson(arena: Allocator, db: Db, riot_id: []const u8, key: []const u8,
     }, .{ .emit_null_optional_fields = false });
 }
 
-fn keyBytes(s: []const u8) [token_len]u8 {
-    var b: [token_len]u8 = @splat(0);
-    if (s.len == token_len) @memcpy(&b, s);
-    return b;
+/// Lengths first: zero-filling a short key would let an empty one match a bad stored key
+fn keyMatches(stored: []const u8, sent: []const u8) bool {
+    if (stored.len != token_len or sent.len != token_len) return false;
+    return std.crypto.timing_safe.eql(Token, stored[0..token_len].*, sent[0..token_len].*);
 }
 
 pub const Start = union(enum) {
@@ -238,7 +238,7 @@ pub fn post(db: Db, io: std.Io, riot_id: []const u8, action: ?Action, token: ?[]
         try q.bind(.{riot_id});
         if (!try q.step()) return .{ .bad = "no check started" };
         const r = q.row(struct { key: []const u8, state: []const u8, expires: i64 });
-        if (!std.crypto.timing_safe.eql([token_len]u8, keyBytes(r.key), keyBytes(key orelse ""))) return .{ .bad = "no check started" };
+        if (!keyMatches(r.key, key orelse "")) return .{ .bad = "no check started" };
         const waiting = std.mem.eql(u8, r.state, "issued") or std.mem.eql(u8, r.state, "mismatch");
         if (!waiting or r.expires <= now) return .waiting;
         if (!room) return .busy;
@@ -380,6 +380,8 @@ test "checkJson: the new squad's token only with the check's key" {
     try std.testing.expect(std.mem.find(u8, mine, "\"state\":\"done\"") != null);
     const theirs = try checkJson(arena, db, "a#1", "wrongkeywrongkeywrongk", 20);
     try std.testing.expectEqualStrings("{\"state\":\"none\"}", theirs);
+    try std.testing.expectEqualStrings("{\"state\":\"none\"}", try checkJson(arena, db, "a#1", "", 20));
+    try db.run("UPDATE squad_checks SET key = 'short'", .{});
     try std.testing.expectEqualStrings("{\"state\":\"none\"}", try checkJson(arena, db, "a#1", "", 20));
 }
 
