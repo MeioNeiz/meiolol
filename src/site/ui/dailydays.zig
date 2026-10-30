@@ -9,6 +9,7 @@ const badge = @import("badge.zig");
 const button = @import("button.zig");
 const role = @import("role.zig");
 const draftboard = @import("draftboard.zig");
+const fmt = @import("fmt.zig");
 const dd = @import("dailydata.zig");
 const dp = @import("dailypage.zig");
 const phrase = @import("phrase.zig");
@@ -187,17 +188,31 @@ pub fn shareText(buf: []u8, s: *const Page) ?[]const u8 {
     w.print("Who won? {s}\n", .{mark[@intFromBool(k[1])]}) catch return null;
     if (m.opt) |o| if (o < d.ranks.len and d.answer < d.ranks.len) {
         const mine = d.ranks[o];
-        w.print("My pick: {d}{s} of {d} for the model", .{ mine, draftboard.ordinal(mine), d.of }) catch return null;
+        w.writeAll("My pick: ") catch return null;
+        nth(&w, mine) catch return null;
+        w.writeAll(" of ") catch return null;
+        fmt.write(&w, .int, d.of) catch return null;
+        w.writeAll(" for the model") catch return null;
         if (o != d.answer) {
-            const played = d.ranks[d.answer];
-            w.print(", the played one {d}{s}", .{ played, draftboard.ordinal(played) }) catch return null;
+            w.writeAll(", the played one ") catch return null;
+            nth(&w, d.ranks[d.answer]) catch return null;
         }
         w.writeByte('\n') catch return null;
     };
     const run = s.streak().run;
-    if (run >= 2) w.print("\u{1F525} {d} days in a row\n", .{run}) catch return null;
+    if (run >= 2) {
+        w.writeAll("\u{1F525} ") catch return null;
+        fmt.write(&w, .int, run) catch return null;
+        w.writeAll(" days in a row\n") catch return null;
+    }
     w.writeAll(d.url) catch return null;
     return w.buffered();
+}
+
+/// "12th"
+fn nth(w: *std.Io.Writer, n: u16) std.Io.Writer.Error!void {
+    try fmt.write(w, .int, n);
+    try w.writeAll(draftboard.ordinal(n));
 }
 
 /// /api/daily for puzzle `n` once finished in `saved`, with its answers when `send`
