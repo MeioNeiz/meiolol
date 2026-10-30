@@ -74,7 +74,7 @@ Live on meio.lol: accounts core in `meiolol api` (src/api/accounts.zig, roles.zi
 the check route /auth/check/CAP (nginx maps /_auth to it), tested by route x role over
 HTTP; the owner login and admin sign-up links (email plus a shared password); nginx
 gates /admin/ and /private; /account (password, devices, log out everywhere); the admin
-Accounts tab; /private serves the Draft tester in private mode (hosting.md "Private site").
+Accounts tab; /private is the private site's index (hosting.md "Private site").
 accounts.db is backed up to the gpu-box every 6 h (data-safety.md "Logins backup").
 Desktop sign in is built on both sides: POST /auth/device gives a device token (hash
 only, 90 days unused, 10 per account) that opens download_private_app only; the app's

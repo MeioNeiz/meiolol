@@ -291,11 +291,11 @@ a 301 to it.
   revoke-links, delete; the owner only here).
 - Private site (/private, docs/plan/accounts.md "private"; pages without .html, as
   /admin): static, uploaded by the web loop to /var/www/meiolol/private (`meiolol admin
-  --private-out`: the Draft tester in private mode, the app review pages from
-  data/desktop's stats and facts and export/recent-curves.bin, the shipped models in
-  models/). nginx
-  location /private/ with auth_request /_meiolol_private (/auth/check/view_private), 401
-  to the login page, X-Robots-Tag noindex. The loop uploads private/ only while
+  --private-out`: the index, the Draft tester (tester, the old one at old), the app
+  review pages from data/desktop's stats and facts and export/recent-curves.bin, the
+  shipped models in models/). nginx location /private/ with auth_request
+  /_meiolol_private (/auth/check/view_private), 401 to the login page, X-Robots-Tag
+  noindex. The loop uploads private/ only while
   meio.lol/private answers 302 (the gate), so nothing private is public without it; the
   site's rsync leaves private/ alone
 

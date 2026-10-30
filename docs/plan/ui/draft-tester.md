@@ -1,4 +1,4 @@
-# Draft tester (/private)
+# Draft tester (/private/tester)
 
 Identity: the model's workbench: build any draft, see the win chance, every term behind
 it and every candidate for a seat, under a named model. Private (view_private logins);

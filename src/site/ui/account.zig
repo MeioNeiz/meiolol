@@ -211,7 +211,7 @@ pub const Account = struct {
     fn who(p: *const P, h: *H) N {
         const m = p.me orelse return h.p(.{ .class = "info" }, .{if (p.me_at == .down) W.down else W.loading});
         const links = [_]struct { []const u8, []const u8, tree.Text }{
-            .{ "view_private", "/private", W.tester },
+            .{ "view_private", "/private/tester", W.tester },
             .{ "view_admin", "/admin", W.admin },
         };
         var kids: [links.len]N = @splat(.none);

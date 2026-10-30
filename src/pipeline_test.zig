@@ -950,10 +950,15 @@ test "admin page from the fixture games and a crawl log" {
         .backups_dir = try std.fs.path.join(arena, &.{ dir, "backups" }),
         .crawl_args = try std.fs.path.join(arena, &.{ dir, "crawl.args" }),
     });
-    // The private site's Draft tester: the page in private mode, none of the box's data
+    // The private site's index, and the old Draft tester at /private/old: the page in
+    // private mode, none of the box's data
     const private = try std.fs.path.join(arena, &.{ dir, "p" });
     try admin.private(gpa, io, private, 1760224200);
-    const p_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ private, "index.html" }), arena, .limited(1 << 20));
+    const i_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ private, "index.html" }), arena, .limited(1 << 20));
+    for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "href=\"/private/tester\"", "href=\"/private/app\"", "href=\"/private/old\"", "\"admin-link\"" }) |s| {
+        try std.testing.expect(std.mem.find(u8, i_html, s) != null);
+    }
+    const p_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ private, "old.html" }), arena, .limited(1 << 20));
     try std.testing.expect(std.mem.find(u8, p_html, "<script id=\"data\" type=\"application/json\">{\"private\":true,\"now\":1760224200}</script>") != null);
     for ([_][]const u8{ "admin.js", "admin-draft.js", "admin-setnet.js", "admin.css" }) |f| {
         try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ private, f }), .{});
