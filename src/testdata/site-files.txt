@@ -71,7 +71,7 @@ _v/all-patch/matchups/support/pyke-vs-rakan.html c7e7df34d69a9564
 _v/all-patch/matchups/support/rakan-vs-pyke.html 260dd36270e78f6a
 _v/all-patch/matchups/top/darius-vs-mordekaiser.html b89ac70fc0f6961c
 _v/all-patch/matchups/top/mordekaiser-vs-darius.html 3f13104a0b4167ce
-_v/all-patch/patch.html f34a5feb1c8bcfa2
+_v/all-patch/patch.html 3fbb2416e248ce2d
 _v/all-patch/pickup.html fc2e6de465044a07
 _v/all-patch/pickup/bot.html aff78b3c4cfbae9f
 _v/all-patch/pickup/jungle.html 5a18c0827cf7da30
@@ -153,8 +153,8 @@ _v/all/matchups/support/pyke-vs-rakan.html dac6378dbb103634
 _v/all/matchups/support/rakan-vs-pyke.html 0aa5cf34372a4d3d
 _v/all/matchups/top/darius-vs-mordekaiser.html d92629e3b1a0de63
 _v/all/matchups/top/mordekaiser-vs-darius.html 3b719470a5761a03
-_v/all/patch.html 1dd6ba0b85a55767
-_v/all/patch/15-12.html bcd87b2140c19385
+_v/all/patch.html bec7f5227b6fcf2d
+_v/all/patch/15-12.html 535a9620b3ae724c
 _v/all/pickup.html 5062e3ae8e42022c
 _v/all/pickup/bot.html 4679b7616080b6e2
 _v/all/pickup/jungle.html c44e90c371b84929
@@ -235,7 +235,7 @@ _v/patch/matchups/support/pyke-vs-rakan.html 9ab0eb0ad5d3fc4f
 _v/patch/matchups/support/rakan-vs-pyke.html c59c5f05903c8661
 _v/patch/matchups/top/darius-vs-mordekaiser.html 7707120240488d98
 _v/patch/matchups/top/mordekaiser-vs-darius.html 43c8e071ef2eab84
-_v/patch/patch.html da304439985ece09
+_v/patch/patch.html cc985af8127599e3
 _v/patch/pickup.html bb6f9be167d92fb2
 _v/patch/pickup/bot.html d5afe3b880ab4129
 _v/patch/pickup/jungle.html 30ad8cb44e46ef5b
@@ -343,7 +343,7 @@ data/tiers-rank-all.bin 4c240cfb8cd83537
 data/tiers-rank-patch.bin fa292dd251d359ee
 data/tiers-rank.bin 061698ea172da830
 data/tiers.bin a17e546e59c118df
-download.html 608ad5c2db162bd2
+download.html 7534872c5530914b
 index.html b76d1b22a93959fa
 learn.html 031a2ecdfbab52e6
 learn/champs.json 7c5a77a4464faa98
@@ -359,9 +359,9 @@ matchups/support/pyke-vs-rakan.html 2f08628566c4326c
 matchups/support/rakan-vs-pyke.html a77c078e3fd5e91b
 matchups/top/darius-vs-mordekaiser.html 35f581525505774c
 matchups/top/mordekaiser-vs-darius.html 7aa62951a7a3f3b1
-method.html 641861838e0955e0
-patch.html b5ace70b12b37d30
-patch/15-12.html f45ab6df7f9bdc7f
+method.html 13fc16325d8c8d82
+patch.html dcc3ed8678e72ee2
+patch/15-12.html d819fa4b72208d98
 pickup.html a413bac5df46b7bf
 pickup/bot.html 31ed65a5d5f83391
 pickup/jungle.html 6f3168bbec1fbea8
@@ -369,7 +369,7 @@ pickup/mid.html 35009d014d4628be
 pickup/support.html 71149bddb0512668
 pickup/top.html 071833cce38587dc
 pool.html e72b5dfcefb1c3fd
-privacy.html ccda11a3bac02253
+privacy.html 225cffea0fd2d1ef
 robots.txt 331ea9090db0c9f6
 squad.html 8ce39618ae56c119
-terms.html ba68b5ec396da232
+terms.html 29a420bd62be99f8

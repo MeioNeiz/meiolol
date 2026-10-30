@@ -767,6 +767,11 @@ pub const css =
     \\    .c-patch .mvs li { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); }
     \\    .c-patch .mvs .gd { grid-column: 2 / -1; }
     \\  }
+    \\  @container (max-width: 420px) {
+    \\    .c-patch .dl { width: 96px; }
+    \\    .c-patch .mv .c-dbar { min-width: 40px; }
+    \\    .c-patch td.ch .who { max-width: 112px; }
+    \\  }
     \\  @container (max-width: 300px) {
     \\    .c-patch .dl { width: 96px; }
     \\    .c-patch .mv .c-dbar { min-width: 40px; }

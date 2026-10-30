@@ -34,7 +34,7 @@ pub const TextPage = struct {
 
 pub const css =
     \\@layer components {
-    \\  .c-textpage { display: grid; gap: var(--sp-3); max-width: 72ch; }
+    \\  .c-textpage { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); max-width: 72ch; }
     \\  .c-textpage > h1 { margin: 0; font-size: var(--fs-xl); line-height: var(--lh-tight); }
     \\  .c-textpage > .sub { margin: calc(-1 * var(--sp-2)) 0 0; color: var(--muted); font-size: var(--fs-s); }
     \\  .c-textpage > .lead { margin: 0; color: var(--t2); font-size: var(--fs-l); line-height: var(--lh); }
