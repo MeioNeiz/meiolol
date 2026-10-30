@@ -128,7 +128,10 @@ players and wins by the minute their first finished item was bought (one-minute 
 the champion page's First item done card); role-wide only. Matchups count every kind but
 keystone and skill_start. `by_reach`: the rune kinds (runes, shards, rune, shard) by the
 lane opponent's reach, melee under 300 base attack range (Data Dragon champion.json),
-groups of 100+ players (Options.min_reach_games), 4 pages each. Needs Data Dragon's item.json,
+groups of 100+ players (Options.min_split_games), 4 pages each. `by_lead`: the item kinds
+(boots, core2, core3, item4-6) of players 500+ gold ahead of or behind their lane
+opponent at 14 minutes (participants.gold14), groups of 100+, 6 options each. Needs Data
+Dragon's item.json,
 runesReforged.json and summoner.json for the patch (ddragon.buildData); stat shard names
 are a table in ddragon.zig.
 

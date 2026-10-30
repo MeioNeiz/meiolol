@@ -144,7 +144,7 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
 ### Steps
 
 None open: the Later list below. CH0 on decisions.md's recommendations (Jacob to
-confirm): no blind-safe score (J2 measured no win), purchases by gold lead later
+confirm): no blind-safe score (J2 measured no win)
 
 ### Status
 
@@ -166,6 +166,8 @@ confirm): no blind-safe score (J2 measured no win), purchases by gold lead later
   view, filters.js reuses the root view's opponent strengths
 - Rune panel: All | vs melee | vs ranged (the lane opponent's base attack range under
   300), ▲▼ on runes the reach moves from all; builds files' by_reach, groups of 100+
+- Item cells: All | Ahead | Behind (500+ gold on the lane opponent at 14 minutes; about
+  two in three lanes are that far apart), builds files' by_lead, groups of 100+
 - By patch (win line, pick bars, rank in role; Patches | Days: the newest patch by UTC
   day, stats.Trend.days) and by game length (5 buckets) cards
   after the opponents, from stats.Trend per view
@@ -179,7 +181,6 @@ confirm): no blind-safe score (J2 measured no win), purchases by gold lead later
 
 ### Later
 
-- Purchases split by gold lead (CH0)
 - Influence per opponent (bans into your pool's hard lanes, B3) and per rank filter
 - Grey the builds strip when a filter leaves the patch view's region (filters.js)
 - Objectives secured and won, end-of-game stats ranked in the role (LoLalytics only)

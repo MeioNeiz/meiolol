@@ -97,9 +97,16 @@ test "fixture games to stats, curves and the website" {
 
     // Builds count Platinum IV and up only: one rank snapshot below it is left out
     try db.exec("UPDATE participants SET tier = CASE slot WHEN 5 THEN 'GOLD' ELSE 'PLATINUM' END");
-    var bd = try buildsOne(try cubeDir(arena, dir, "builds"), db, .{ .min_matchup_games = 0, .min_reach_games = 1 }, .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} } });
+    // Darius 1,000 gold ahead of every lane opponent at 14 minutes
+    try db.exec("CREATE TEMP TABLE gold AS SELECT match_id, slot, gold14 FROM participants");
+    try db.exec("UPDATE participants SET gold14 = CASE champion_id WHEN 122 THEN 6000 ELSE 5000 END");
+    var bd = try buildsOne(try cubeDir(arena, dir, "builds"), db, .{ .min_matchup_games = 0, .min_split_games = 1 }, .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} } });
     defer bd.deinit();
     try testing.expectEqual(games, bd.timelines);
+    try db.exec(
+        \\UPDATE participants SET gold14 = g.gold14 FROM temp.gold g
+        \\  WHERE g.match_id = participants.match_id AND g.slot = participants.slot
+    );
     const build_file = try bd.file(arena, &build_data, patch, "PLATINUM", 10);
     try testing.expectEqual(9, build_file.builds.len);
     const darius = build_file.get(122, .top).?;
@@ -137,6 +144,14 @@ test "fixture games to stats, curves and the website" {
     try testing.expectEqual(games, block.reach[0].games);
     try testing.expectEqualStrings("Conqueror", block.reach[0].pages[0].keystone.name);
     try testing.expectEqual(0, block.reach[1].games);
+    try testing.expectEqual(2, block.lead.len);
+    try testing.expectEqual(games, block.lead[0].games);
+    try testing.expectEqual(0, block.lead[1].games);
+    // Every game ahead: the same item rows as all games
+    for (block.slots) |all| if (all.kind == .core) for (block.lead[0].slots) |s| if (s.kind == .core) {
+        try testing.expectEqual(all.games, s.games);
+        try testing.expectEqual(all.options.len, s.options.len);
+    };
     var panel: site.ui.buildpanel.BuildPanel = undefined;
     try panel.init(arena, &block);
     var panel_tree: site.ui.Tree = .{};

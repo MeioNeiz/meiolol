@@ -18,18 +18,42 @@ const min_tree_share = 0.02;
 const pages_shown = 4;
 
 /// `b` (a File.Build of `f`) as the panel's data, in `a`, with its runes against melee
-/// and ranged lane opponents when the file has them. `champion`: its name
+/// and ranged lane opponents and its items ahead and behind on gold when the file has
+/// them. `champion`: its name
 pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8) !bp.Data {
     var d = try dataVs(a, f, b, champion, null);
     const melee = f.getReach(b.champion, b.role, .melee);
     const ranged = f.getReach(b.champion, b.role, .ranged);
-    if (melee == null and ranged == null) return d;
-    const reach = try a.alloc(rt.Data, 2);
-    for (reach, [_]?File.Build{ melee, ranged }) |*r, x| {
-        r.* = if (x) |y| try runes(a, f, y, b.get(.rune)) else .{ .trees = &.{}, .games = 0, .wins = 0 };
+    if (melee != null or ranged != null) {
+        const reach = try a.alloc(rt.Data, 2);
+        for (reach, [_]?File.Build{ melee, ranged }) |*r, x| {
+            r.* = if (x) |y| try runes(a, f, y, b.get(.rune)) else .{ .trees = &.{}, .games = 0, .wins = 0 };
+        }
+        d.reach = reach;
     }
-    d.reach = reach;
+    const ahead = f.getLead(b.champion, b.role, .ahead);
+    const behind = f.getLead(b.champion, b.role, .behind);
+    if (ahead != null or behind != null) {
+        const lead = try a.alloc(bp.Lead, 2);
+        for (lead, [_]?File.Build{ ahead, behind }) |*l, x| l.* = if (x) |y| .{
+            .slots = try leadSlots(a, f, y, d.slots),
+            .games = y.games,
+            .wins = y.wins,
+        } else .{ .slots = &.{}, .games = 0, .wins = 0 };
+        d.lead = lead;
+    }
     return d;
+}
+
+/// `all` with its item slots from the lead group `b`'s, a kind it lacks left out
+fn leadSlots(a: std.mem.Allocator, f: *const File, b: File.Build, all: []const bp.Slot) ![]const bp.Slot {
+    var out: std.ArrayList(bp.Slot) = .empty;
+    for (all) |s| switch (s.kind) {
+        .boots, .core, .item4, .item5, .item6 => {},
+        else => try out.append(a, s),
+    };
+    try out.appendSlice(a, (try dataVs(a, f, b, "", null)).slots);
+    return out.items;
 }
 
 /// A matchup's `b`, with the champion's `usual` build: each slot's "as usual" option and

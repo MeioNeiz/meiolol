@@ -96,6 +96,8 @@ pub const Slot = struct {
     usual: ?u8 = null,
 };
 
+pub const Lead = struct { slots: []const Slot, games: u32, wins: u32 };
+
 pub const Data = struct {
     runes: runetree.Data,
     /// The runes against melee, then ranged lane opponents (moves from `runes` marked),
@@ -103,6 +105,9 @@ pub const Data = struct {
     reach: []const runetree.Data = &.{},
     /// Any order; a kind with no options draws no cell
     slots: []const Slot,
+    /// `slots` with the items of players ahead, then behind their lane opponent on gold
+    /// (builds.lead_gold at 14 minutes), or none
+    lead: []const Lead = &.{},
     champion: []const u8,
     /// The champion's win rate in the role, %: the quieter reading's middle
     own: f64,
@@ -123,6 +128,9 @@ const W = struct {
     pub const most_picked = plain("Most picked");
     pub const reach = plain("Lane opponent");
     pub const reaches = [3]tree.Text{ plain("All"), plain("vs melee"), plain("vs ranged") };
+    pub const gold = plain("Gold at 14 min");
+    pub const leads = [3]tree.Text{ plain("All"), plain("Ahead"), plain("Behind") };
+    pub const lead_note = "500 or more gold ahead of or behind the lane opponent at 14 minutes";
     pub const highest = plain("Highest WR");
 };
 
@@ -284,13 +292,20 @@ pub const BuildPanel = struct {
     order: Order = .pick,
     /// The runes shown: 0 all, then Data.reach's
     reach: u8 = 0,
+    /// The cells shown: 0 all, then Data.lead's
+    lead: u8 = 0,
     /// Unique on the page: the note's id starts with it
     id: []const u8 = "build",
-    ctx: [n_kinds]Ctx = undefined,
-    rows: [n_kinds][]Row = @splat(&.{}),
+    /// Data.slots, then each Data.lead's
+    sets: []Set,
+    /// sets[lead]'s
+    ctx: *[n_kinds]Ctx,
+    rows: *[n_kinds][]Row,
     tables: [n_kinds]Table = undefined,
 
-    pub const Msg = union(enum) { open: Kind, key, order: Order, reach: u8 };
+    const Set = struct { ctx: [n_kinds]Ctx, rows: [n_kinds][]Row };
+
+    pub const Msg = union(enum) { open: Kind, key, order: Order, reach: u8, lead: u8 };
 
     pub const Url = struct {
         slot: ?Kind = null,
@@ -324,24 +339,31 @@ pub const BuildPanel = struct {
 
     /// In place: the rows point into the panel
     pub fn init(p: *BuildPanel, a: std.mem.Allocator, data: *const Data) !void {
-        p.* = .{ .data = data, .runes = .{ .data = &data.runes } };
-        for (&p.ctx, 0..) |*c, i| c.* = .{ .kind = @fromBackingInt(@intCast(i)), .games = 0, .ref = 50, .own = data.own };
-        for (data.slots) |s| {
+        const sets = try a.alloc(Set, 1 + data.lead.len);
+        try fill(&sets[0], a, data.slots, data.own);
+        for (sets[1..], data.lead) |*s, l| try fill(s, a, l.slots, rate(l.games, l.wins));
+        p.* = .{ .data = data, .runes = .{ .data = &data.runes }, .sets = sets, .ctx = &sets[0].ctx, .rows = &sets[0].rows };
+        for (&p.tables, 0..) |*t, i| t.* = .{ .rows = p.rows[i], .head = false };
+    }
+
+    fn fill(set: *Set, a: std.mem.Allocator, slots: []const Slot, own: f64) !void {
+        set.rows = @splat(&.{});
+        for (&set.ctx, 0..) |*c, i| c.* = .{ .kind = @fromBackingInt(@intCast(i)), .games = 0, .ref = 50, .own = own };
+        for (slots) |s| {
             const i = @backingInt(s.kind);
-            p.ctx[i] = .{
+            set.ctx[i] = .{
                 .kind = s.kind,
                 .games = s.games,
                 .ref = rate(s.games, s.wins),
-                .own = data.own,
+                .own = own,
                 .top = if (s.options.len > 0) s.options[0].art else &.{},
                 .best = bestOf(s.options),
                 .usual = if (s.usual) |u| (if (u < s.options.len) &s.options[u] else null) else null,
             };
             const rows = try a.alloc(Row, s.options.len);
-            for (rows, s.options) |*r, *o| r.* = .{ .o = o, .c = &p.ctx[i] };
-            p.rows[i] = rows;
+            for (rows, s.options) |*r, *o| r.* = .{ .o = o, .c = &set.ctx[i] };
+            set.rows[i] = rows;
         }
-        for (&p.tables, 0..) |*t, i| t.* = .{ .rows = p.rows[i], .head = false };
     }
 
     pub fn update(p: *BuildPanel, m: Msg, ev: *tree.Event) void {
@@ -361,6 +383,11 @@ pub const BuildPanel = struct {
             .reach => |i| {
                 p.reach = if (i <= p.data.reach.len) i else 0;
                 p.runes.data = if (p.reach == 0) &p.data.runes else &p.data.reach[p.reach - 1];
+            },
+            .lead => |i| {
+                p.lead = if (i < p.sets.len) i else 0;
+                p.ctx = &p.sets[p.lead].ctx;
+                p.rows = &p.sets[p.lead].rows;
             },
             // Escape in the open cell closes it, focus back on its "all"
             .key => {
@@ -388,6 +415,7 @@ pub const BuildPanel = struct {
                         .{ .label = W.most_picked, .selected = p.order == .pick, .on = h.on(p, .{ .order = .pick }) },
                         .{ .label = W.highest, .selected = p.order == .win, .on = h.on(p, .{ .order = .win }) },
                     }),
+                    p.leadPick(h),
                 }),
                 h.div(.{ .class = "cells" }, .{cells.done()}),
             }),
@@ -403,6 +431,20 @@ pub const BuildPanel = struct {
             it.* = .{ .label = label, .n = games, .selected = p.reach == i, .disabled = games == 0, .on = h.on(p, .{ .reach = @intCast(i) }) };
         }
         return h.div(.{ .class = "reach" }, .{segmented.view(h, .{ .s = .s, .label = W.reach }, items[0 .. p.data.reach.len + 1])});
+    }
+
+    /// All players' items, or those ahead or behind on gold
+    fn leadPick(p: *BuildPanel, h: *H) N {
+        if (p.data.lead.len == 0) return .none;
+        var items: [W.leads.len]segmented.Item = undefined;
+        for (&items, W.leads, 0..) |*it, label, i| {
+            const games = if (i == 0) null else if (i <= p.data.lead.len) p.data.lead[i - 1].games else 0;
+            it.* = .{ .label = label, .n = games, .selected = p.lead == i, .disabled = games == 0, .title = if (i > 0) W.lead_note else null, .on = h.on(p, .{ .lead = @intCast(i) }) };
+        }
+        return h.span(.{ .class = "lead" }, .{
+            h.span(.{ .aria_hidden = true }, .{W.gold}),
+            segmented.view(h, .{ .s = .s, .label = W.gold }, items[0 .. p.data.lead.len + 1]),
+        });
     }
 
     fn allRef(k: Kind) []const u8 {
@@ -573,8 +615,10 @@ pub const css =
     \\  .c-build > .in > .levels { order: 1; }
     \\  .c-build .runes > .reach { margin-bottom: var(--sp-3); }
     \\  .c-build .slots { container-type: inline-size; display: flex; flex-direction: column; }
-    \\  .c-build .slots > .sort { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3);
+    \\  .c-build .slots > .sort { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3);
     \\    font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-build .sort > .lead { display: flex; align-items: center; gap: var(--sp-2); margin-left: var(--sp-3); white-space: nowrap; }
+    \\  @container (max-width: 300px) { .c-build .sort > .lead { margin-left: 0; } .c-build .sort > .lead > span { display: none; } }
     \\  .c-build .slots > .cells { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-flow: dense;
     \\    gap: var(--sp-4) var(--sp-5); }
     \\  .c-build .slots > .cells:has(> [data-open]) { grid-auto-flow: row; }
@@ -671,6 +715,7 @@ pub fn gallery(g: *Gallery) void {
     };
     reach.* = demo.darius;
     reach.reach = &.{ demo.darius.runes, .{ .trees = &.{}, .games = 0, .wins = 0 } };
+    reach.lead = &.{ .{ .slots = demo.darius.slots, .games = 4120, .wins = 2580 }, .{ .slots = &.{}, .games = 0, .wins = 0 } };
     const pr = h.mem.create(BuildPanel) catch {
         h.oom = true;
         return;
@@ -681,7 +726,9 @@ pub fn gallery(g: *Gallery) void {
     };
     pr.id = h.fmt("build-reach-{d}", .{g.width});
     pr.runes.id = pr.id;
-    g.addFill("runes by lane opponent: All, vs melee, vs ranged (none here)", pr.view(h));
+    var ev: tree.Event = .{ .kind = .click };
+    pr.update(.{ .lead = 1 }, &ev);
+    g.addFill("runes by lane opponent (none vs ranged here), items 500+ gold ahead (none behind)", pr.view(h));
     const vs = matchup(h, &demo.darius) catch {
         h.oom = true;
         return;
