@@ -55,7 +55,8 @@ fn render() void {
 fn get(c: Call, path: []const u8) void {
     if (in_flight.contains(c)) return;
     in_flight.insert(c);
-    dom.fetch(path, @backingInt(c), done);
+    // The snapshot is a file; the APIs answer no-store
+    if (c == .snap) dom.fetchFresh(path, @backingInt(c), done) else dom.fetch(path, @backingInt(c), done);
 }
 
 /// A chart tab came up (the URL): its first data

@@ -71,7 +71,8 @@ fn getLog(i: usize) void {
     if (i >= ao.log_files.len or log_flight[i]) return;
     log_flight[i] = true;
     var buf: [64]u8 = undefined;
-    const path = std.fmt.bufPrint(&buf, "/admin/api/log?file={s}&lines={d}", .{ ao.log_files[i], ao.log_lines }) catch return;
+    const lines = std.fmt.comptimePrint("{d}", .{ao.log_lines});
+    const path = std.fmt.bufPrint(&buf, "/admin/api/log?file={s}&lines=" ++ lines, .{ao.log_files[i]}) catch return;
     dom.fetch(path, log_ctx + @as(i32, @intCast(i)), done);
 }
 
@@ -115,7 +116,7 @@ fn done(ctx: i32, bytes: ?[]u8) void {
                 state.events = x.deploys;
                 state.snap = false;
                 state.failed = false;
-            } else dom.fetch("/admin/admin.bin", @backingInt(Call.snap), done);
+            } else dom.fetchFresh("/admin/admin.bin", @backingInt(Call.snap), done);
         },
         .snap => {
             const s = (if (bytes) |b| snap.set(b) else null) orelse {

@@ -683,6 +683,18 @@ pub fn fetchStamped(path: []const u8, stamp: []const u8, ctx: i32, done: *const 
     fetch(ui.urls.stamped(&buf, path, stamp) orelse return done(ctx, null), ctx, done);
 }
 
+/// `fetch` stamped with the minute (?v=, as ui.urls.stamped; `path` has no query): for a
+/// file whose page has no data stamp and polls it (the admin page's), else the browser
+/// keeps its copy 4 h as with an unstamped one
+pub fn fetchFresh(path: []const u8, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
+    const p = zjb.string(path);
+    defer p.release();
+    const minute = @floor(zjb.global("Date").call("now", .{}, f64) / 60_000);
+    const u = p.call("concat", .{ zjb.constString("?v="), minute }, zjb.Handle);
+    defer u.release();
+    request(zjb.ConstHandle.global.call("fetch", .{u}, zjb.Handle), ctx, done);
+}
+
 /// POST `path` with no body, then as `fetch`
 pub fn post(path: []const u8, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
     const u = zjb.string(path);

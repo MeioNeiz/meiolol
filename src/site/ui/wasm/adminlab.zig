@@ -36,7 +36,7 @@ export fn main() void {
 fn changed() void {
     if (!state.shows() or asked) return;
     asked = true;
-    dom.fetch("/admin/training/training.bin", 0, done);
+    dom.fetchFresh("/admin/training/training.bin", 0, done);
 }
 
 fn done(_: i32, bytes: ?[]u8) void {

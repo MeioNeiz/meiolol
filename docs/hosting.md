@@ -213,7 +213,8 @@ a 301 to it.
   Cloudflare caches (.bin, not HTML): browsers keep a data file 4 h, the edge revalidates
   each hit. So islands fetch data with `?v=<the page's data stamp>` (ui.urls.stamped);
   Cloudflare keys on the query, nginx and the renderer ignore it. Unstamped fetches
-  (findergrid's -more.bin, pool and admin files) can be 4 h old. Art
+  (findergrid's -more.bin, pool files) can be 4 h old; the admin page has no stamp and
+  stamps its files with the minute (dom.fetchFresh). Art
   not made yet (`location ~ ^/dd/`) 302s to Data Dragon's own; a portrait's 120 px copy
   (`/icon/<version>/120/`, srcset) not made yet serves the 80 px one, uncached. A replaced hashed file
   stays 3 days after its replacement came, as does an older icon or art folder, and a
@@ -302,10 +303,12 @@ The admin page's Deploys tab shows every push from its check until the site serv
 and the machine that pushed (the end of the ci or deploy start's detail, "... on the
 gpu-box"). Its backbone is data/deploys.tsv on the box: one line per step, `time` (unix
 s), `sha` (full commit), `step`, `status` (start, ok, failed, skipped, waiting, info),
-`detail` (free text; redacted when served). live.json carries the last 3,000 lines as
-`deploys`, the 15 min snapshot as `deploy_events`. A deploy whose machine stopped mid-run
-(the Mac asleep) shows superseded once a later one starts, else failed after 3 times its
-step's usual time (at least 30 min).
+`detail` (free text; redacted when served). live.bin carries the last 3,000 lines as
+`deploys`, the 15 min admin.bin as `deploy_events`. A deploy whose machine stopped
+mid-run (the Mac asleep) shows superseded once a later one starts (not while its push
+check runs), else failed after 3 times the step's usual time (at least 30 min) in a step
+that machine runs (push check, deploy, build, web loop signal); the box's steps fail by
+their own events.
 
 | step | written by | when |
 | --- | --- | --- |

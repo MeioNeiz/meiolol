@@ -69,7 +69,7 @@ fn render() void {
 fn getTraining() void {
     if (training_flight) return;
     training_flight = true;
-    dom.fetch(base ++ "training.bin", @backingInt(Call.training), done);
+    dom.fetchFresh(base ++ "training.bin", @backingInt(Call.training), done);
 }
 
 /// The URL changed (tab, category) or a card was picked
@@ -125,10 +125,10 @@ fn files() void {
     var full: [272]u8 = undefined;
     if (r.metrics) {
         waiting += 1;
-        dom.fetch(std.fmt.bufPrint(&full, "{s}/metrics.bin", .{dir}) catch return, ctx(.metrics), done);
+        dom.fetchFresh(std.fmt.bufPrint(&full, "{s}/metrics.bin", .{dir}) catch return, ctx(.metrics), done);
     }
     waiting += 1;
-    dom.fetch(std.fmt.bufPrint(&full, "{s}/log.txt", .{dir}) catch return, ctx(.log), done);
+    dom.fetchFresh(std.fmt.bufPrint(&full, "{s}/log.txt", .{dir}) catch return, ctx(.log), done);
 }
 
 /// The name the files are for, set once both answered (detail shows Loading till then)

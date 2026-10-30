@@ -68,6 +68,12 @@ pub const Deploy = struct {
         return c[sp + 1 ..];
     }
 
+    /// Its push check runs: a deploy begun meanwhile is of an older commit
+    fn checking(d: Deploy) bool {
+        const c = d.steps.get(.ci) orelse return false;
+        return c.end == null and c.state == .running;
+    }
+
     fn doneAt(d: Deploy, k: Key) ?i64 {
         const s = d.steps.get(k) orelse return null;
         return if (s.state == .done) s.end else null;
@@ -232,7 +238,7 @@ pub fn list(a: std.mem.Allocator, evs: []const ad.DeployEvent) ![]Deploy {
     // a skipped one (binary unchanged, no round of its own) leaves this one running
     var built = false;
     for (out.items) |*d| {
-        if (d.state == .running and built) d.state = .superseded;
+        if (d.state == .running and built and !d.checking()) d.state = .superseded;
         if (d.state != .skipped) if (d.steps.get(.build)) |b| {
             built = built or b.state == .done;
         };
@@ -240,16 +246,19 @@ pub fn list(a: std.mem.Allocator, evs: []const ad.DeployEvent) ![]Deploy {
     return out.items;
 }
 
-/// A running step quiet for this many times its usual time (at least `quiet_min`, or
-/// `quiet_unknown` with no usual time) failed: its host stopped mid-run (the Mac asleep)
+/// A running step of the pushing host's quiet for this many times its usual time (at
+/// least `quiet_min`, or `quiet_unknown` with no usual time) failed: the host stopped
+/// mid-run (the Mac asleep). The box's steps say failed themselves, after their own
+/// ceilings (render-swap.sh waits up to 3 h for a views file)
 const quiet_x = 3;
 const quiet_min = 30 * 60;
 const quiet_unknown = 90 * 60;
 pub const quiet_detail = "no word since: its host likely stopped mid-run";
 
 /// Running deploys that went quiet: superseded once a newer deploy began after their last
-/// word (its build replaces whatever they left), else failed once a running step has
-/// taken `quiet_x` times its usual time. `all` as `list` returns it, newest first
+/// word (its build replaces whatever they left) unless their push check runs, else failed
+/// once a pushing host's running step has taken `quiet_x` times its usual time. `all` as
+/// `list` returns it, newest first
 pub fn settle(all: []Deploy, now: i64) void {
     for (all, 0..) |*d, i| {
         if (d.state != .running) continue;
@@ -257,13 +266,13 @@ pub fn settle(all: []Deploy, now: i64) void {
         for (d.steps.values) |x| if (x) |s| {
             last = @max(last, s.end orelse s.start orelse last);
         };
-        for (all[0..i]) |n| if (n.state != .skipped and n.steps.get(.deploy) != null and n.start > last) {
+        if (!d.checking()) for (all[0..i]) |n| if (n.state != .skipped and n.steps.get(.deploy) != null and n.start > last) {
             d.state = .superseded;
             break;
         };
         if (d.state != .running) continue;
         const u = usual(all, d);
-        for (std.enums.values(Key)) |k| {
+        for ([_]Key{ .ci, .deploy, .build, .web }) |k| {
             const s = d.steps.getPtr(k).* orelse continue;
             if (s.end != null or (s.state != .running and s.state != .waiting)) continue;
             const t0 = s.start orelse continue;
@@ -520,14 +529,31 @@ test "settle: a deploy whose host stopped mid-build" {
     settle(l, 3100 + quiet_min + 1);
     try testing.expectEqual(st.State.failed, l[0].state);
 
-    // s5 began after s3's last word: s3 superseded at once, and s4 with it
-    try evs.append(a, ev(3300, "s5", "deploy", "start", ""));
+    // s5 began after s3's last word and built: s3 superseded at once. s4's push check
+    // still runs (s5 can be an older commit, another session's), so not s4
+    try evs.appendSlice(a, &.{ ev(3300, "s5", "deploy", "start", ""), ev(3310, "s5", "build", "ok", "") });
     l = try list(a, evs.items);
-    settle(l, 3301);
+    settle(l, 3311);
     try testing.expectEqualStrings("s5", l[0].sha);
     try testing.expectEqual(st.State.running, l[0].state);
-    try testing.expectEqual(st.State.superseded, l[1].state);
+    try testing.expectEqualStrings("s4", l[1].sha);
+    try testing.expectEqual(st.State.running, l[1].state);
     try testing.expectEqual(st.State.superseded, l[2].state);
+}
+
+test "settle: the box's steps are not timed out" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var evs: std.ArrayList(ad.DeployEvent) = .empty;
+    try evs.appendSlice(a, &whole(1000, "s1", false));
+    try evs.appendSlice(a, &whole(2000, "s2", false));
+    // s3's swap waits for a views file in a new format; usual swap 25 s
+    try evs.appendSlice(a, whole(3000, "s3", true)[0..13]);
+    const l = try list(a, evs.items);
+    settle(l, 3065 + 45 * 60);
+    try testing.expectEqual(st.State.running, l[0].state);
+    try testing.expectEqual(st.StepState.waiting, l[0].steps.get(.swap).?.state);
 }
 
 test "median" {
