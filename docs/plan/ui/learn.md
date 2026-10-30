@@ -47,7 +47,7 @@ away (the chapter strip at the top).
 | 2 | Whose lead wins games? | fed (other four behind), fed top vs bot, 5k behind at 15, bounty gold |
 | 3 | Does winning lane win the game? | lane (Pyke vs Thresh), lean hook (Draven), lean x4 |
 | 4 | Counter, or just strong? | counter top, counter mid (bot when one clears) |
-| 5 | Myth or measured | split pushers, comp win conditions (only the damage mix shows), luck (Riven) |
+| 5 | Myth or measured | split pushers, comp win conditions (only the damage mix shows), support gold (worth least), scaling (Kayle at 25 min), luck |
 
 Chapter 0 replaces Basics with puzzles that do not give the answer away: the lesson
 screen shows three examples as tiles, the questions ask about other champions that fit

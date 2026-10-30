@@ -345,7 +345,7 @@ data/tiers-rank.bin 061698ea172da830
 data/tiers.bin a17e546e59c118df
 download.html 51907346ecd40c2c
 index.html e4d00bc3925fb4f0
-learn.html fb5c81bff2cbadf3
+learn.html 11f1e0099e809b57
 learn/champs.json 7c5a77a4464faa98
 learn/practice.json 4f53cda18c2baa0c
 matchups.html 3f6af8ffd01afcf1

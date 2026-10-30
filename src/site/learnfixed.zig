@@ -10,6 +10,8 @@ const mastery_from = "Ranked solo, Platinum IV and up, every region, 1.92M playe
 const fed_from = "Ranked solo, Platinum IV and up, every region, patches 16.19-16.20, " ++
     "65,240 games of 15+ minutes";
 const all_regions = "Ranked solo, Platinum IV and up, every region, patches 16.19-16.20";
+const state_from = "Ranked solo, Platinum IV and up, every region, 117,806 games reaching " ++
+    "15 minutes (snapshot of 12 Oct), the same team gold, XP and objectives";
 
 const ch = ld.ch;
 
@@ -141,6 +143,32 @@ pub const wincon: ld.Puzzle = .{
     .from = all_regions ++ ", 89,584 games",
 };
 
+pub const support_gold: ld.Puzzle = .{
+    .id = "support-gold",
+    .q = "Where is that gold worth least?",
+    .setup = .{ .facts = &.{ .{ .v = "+1,000 gold", .label = "on one player" }, .{ .v = "Same", .label = "team gold, XP and objectives" } } },
+    .answer = .{ .pick = .{ .right = 1, .choices = &.{
+        .{ .text = "Top", .role = .top, .shown = "4-8 points" },
+        .{ .text = "Support", .role = .support, .shown = "1-3 points" },
+        .{ .text = "Bot", .role = .bot, .shown = "6-12 points" },
+    } } },
+    .why = "Gold is not gold: 1,000 is worth 1-3 points of win chance on a support, 6-12 on the bot laner.",
+    .tip = "Support? Leave the farm and the kills to your carries.",
+    .games = 117_806,
+    .from = state_from ++ ", 10 to 30 minutes",
+};
+
+pub const scaling: ld.Puzzle = .{
+    .id = "scaling",
+    .q = "It wins like an average team how far ahead?",
+    .setup = .{ .facts = &.{ .{ .v = "Kayle top", .label = "your team, at 25 min" }, .{ .v = "Even", .label = "gold, XP and objectives" } } },
+    .answer = .{ .guess = .{ .lo = 1000, .hi = 4000, .step = 100, .unit = .gold, .real = 2900, .tol = 300 } },
+    .why = "Late champions turn the same gold into more. Pyke support plays like 2,600 behind.",
+    .tip = "On a late champion, a little behind early is par: farm, don't force.",
+    .games = 117_806,
+    .from = state_from,
+};
+
 pub const luck: ld.Puzzle = .{
     .id = "luck",
     .q = "How much of that spread is skill?",
@@ -154,7 +182,7 @@ pub const luck: ld.Puzzle = .{
 
 pub const chapter1 = [_]ld.Puzzle{ know, newcomer };
 pub const chapter2 = [_]ld.Puzzle{ fed, fed_role, surrender, bounty };
-pub const chapter5 = [_]ld.Puzzle{ splitpush, wincon, luck };
+pub const chapter5 = [_]ld.Puzzle{ splitpush, wincon, support_gold, scaling, luck };
 
 test "fixed puzzles: answers in range, games on every bar, no pick advice" {
     const std = @import("std");
