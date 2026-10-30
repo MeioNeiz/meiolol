@@ -49,10 +49,19 @@ pub const Note = union(enum) {
     none,
     /// First start, signed in: fetching the data
     downloading,
-    /// Error name of the last failed check (@errorName: static)
-    failed: []const u8,
+    failed: Failed,
+    /// The update address answers 404 or moved: only a new version from meio.lol/download
+    /// updates again
+    moved,
     /// A new version is in place for the next start
     restart,
+
+    pub const Failed = struct {
+        /// update.why's plain words (static)
+        why: []const u8,
+        /// Until the next check
+        minutes: u32,
+    };
 };
 
 /// The window's "Count your mastery points" box; the poller reads it each tick

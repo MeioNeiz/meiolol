@@ -268,14 +268,18 @@ pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.D
             .post_game => "Post game",
         },
         .screen = switch (status) {
-            .no_data => .{ .note = switch (note) {
-                .downloading => .{ .title = "Downloading champion statistics from meio.lol" },
-                .failed => |e| .{
-                    .title = "Could not download champion statistics from meio.lol",
-                    .text = try a.print("{s}; trying again in 5 minutes.", .{e}),
+            .no_data => .{
+                .note = switch (note) {
+                    .downloading => .{ .title = "Downloading champion statistics from meio.lol" },
+                    .failed => |f| .{
+                        .title = "Could not download champion statistics from meio.lol",
+                        .text = try a.print("{s}; trying again in {d} minutes.", .{ try upper(a, f.why), f.minutes }),
+                    },
+                    // The foot says how to get the new version
+                    .moved => .{ .title = "Could not download champion statistics from meio.lol" },
+                    .none, .restart => .{ .title = "No stats file found", .text = "Put stats-*.bin and recent-curves.bin next to the app." },
                 },
-                .none, .restart => .{ .title = "No stats file found", .text = "Put stats-*.bin and recent-curves.bin next to the app." },
-            } },
+            },
             .no_client => .{ .note = .{ .title = "Waiting for the League client to start" } },
             .client_error => |e| .{ .note = .{ .title = "League client not reachable", .text = try a.print("{s}; retrying.", .{e}) } },
             .waiting => .{ .note = .{ .title = "The board shows in champ select", .text = "Both teams, your lane, options and bans." } },
@@ -286,8 +290,23 @@ pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.D
             .in_game => |g| if (c.private) .{ .game = try game(a, c, g) } else .{ .note = .{ .title = "In game", .text = "The board comes back in your next champ select." } },
             .post_game => |p| .{ .post = try post(a, c, p) },
         },
-        .restart = note == .restart,
+        .foot = switch (note) {
+            .restart => restart_line,
+            .moved => moved_line,
+            .none, .downloading, .failed => "",
+        },
     };
+}
+
+pub const restart_line = "A new version of meiolol is downloaded: it starts the next time you open the app.";
+pub const moved_line = "This version of meiolol can no longer update itself: get the new one at meio.lol/download.";
+
+/// `s` with its first letter a capital
+fn upper(a: Allocator, s: []const u8) ![]const u8 {
+    if (s.len == 0) return s;
+    const out = try a.dupe(u8, s);
+    out[0] = std.ascii.toUpper(out[0]);
+    return out;
 }
 
 fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
@@ -1086,9 +1105,12 @@ test "notes while there is no board" {
     try testing.expectEqualStrings("Lobby", (try data(a, c, .{ .waiting = "Lobby" }, .none)).where);
     const e = try data(a, c, .{ .client_error = "ConnectionRefused" }, .none);
     try testing.expectEqualStrings("ConnectionRefused; retrying.", e.screen.note.text);
-    const f = try data(a, c, .no_data, .{ .failed = "Timeout" });
-    try testing.expectEqualStrings("Timeout; trying again in 5 minutes.", f.screen.note.text);
-    try testing.expect((try data(a, c, .{ .waiting = "Lobby" }, .restart)).restart);
+    const f = try data(a, c, .no_data, .{ .failed = .{ .why = "no connection to meio.lol", .minutes = 20 } });
+    try testing.expectEqualStrings("No connection to meio.lol; trying again in 20 minutes.", f.screen.note.text);
+    try testing.expectEqualStrings(restart_line, (try data(a, c, .{ .waiting = "Lobby" }, .restart)).foot);
+    try testing.expectEqualStrings(moved_line, (try data(a, c, .{ .waiting = "Lobby" }, .moved)).foot);
+    try testing.expectEqualStrings(moved_line, (try data(a, c, .no_data, .moved)).foot);
+    try testing.expectEqualStrings("", (try data(a, c, .{ .waiting = "Lobby" }, .none)).foot);
 }
 
 test "sign-in: the form is the screen until there is data; what pages send parses" {

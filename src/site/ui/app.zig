@@ -44,8 +44,9 @@ pub const Data = struct {
     screen: Screen,
     /// No working sign-in: the form, or a line that opens it
     signin: ?signin.SignIn = null,
-    /// A new version is in place for the next start
-    restart: bool = false,
+    /// A line under every screen in the shell's words: a new version waiting for the next
+    /// start, or this version unable to update itself; "" none
+    foot: []const u8 = "",
     /// Private edition: practice is on (ui/practice.zig above the page); null shows no
     /// button. Turning it on or off reloads the page, which loads ui-practice.wasm or not
     practice: ?bool = null,
@@ -90,7 +91,7 @@ pub const App = struct {
                 .game => |s| gamescreen.view(h, s, .{ .lane = &a.lane, .team = &a.team }),
                 .post => |s| postgame.view(h, s, &a.team),
             },
-            if (d.restart) h.p(.{ .class = "restart" }, .{W.restart}) else null,
+            if (d.foot.len > 0) h.p(.{ .class = "foot" }, .{d.foot}) else null,
             if (d.signin) |s| signin.view(h, s, &a.form) else null,
         });
     }
@@ -109,7 +110,6 @@ pub fn page(h: *H, d: Data) N {
 const W = struct {
     const private = plain("private");
     const practice = plain("Practice");
-    const restart = plain("A new version of meiolol is downloaded: it starts the next time you open the app.");
 };
 
 pub const name = "App";
@@ -125,7 +125,7 @@ pub const css =
     \\  .c-app > .note h1 { margin: 0; font-size: var(--fs-l); font-weight: var(--w-b); }
     \\  .c-app > .note p { margin: 0; color: var(--muted); }
     \\  .c-app [data-act] { cursor: pointer; }
-    \\  .c-app > .restart { margin: 0; color: var(--muted); font-size: var(--fs-s); }
+    \\  .c-app > .foot { margin: 0; color: var(--muted); font-size: var(--fs-s); }
     \\  .c-app + .c-comp { padding: 0 var(--sp-4) var(--sp-5); }
     \\}
     \\
@@ -157,5 +157,8 @@ pub fn gallery(g: *Gallery) void {
     } }, .signin = .{ .full = true } }));
     g.addFill("waiting, sign in and restart lines", page(h, .{ .seq = 5, .private = false, .where = "Lobby", .screen = .{ .note = .{
         .title = "The board shows in champ select",
-    } }, .signin = .{ .message = "Your sign-in was removed: sign in again." }, .restart = true }));
+    } }, .signin = .{ .message = "Your sign-in was removed: sign in again." }, .foot = "A new version of meiolol is downloaded: it starts the next time you open the app." }));
+    g.addFill("waiting, update address gone", page(h, .{ .seq = 7, .private = false, .where = "Lobby", .screen = .{ .note = .{
+        .title = "The board shows in champ select",
+    } }, .foot = "This version of meiolol can no longer update itself: get the new one at meio.lol/download." }));
 }

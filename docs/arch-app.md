@@ -116,8 +116,8 @@ file and packed rows: docs/architecture.md.
   /auth/device, the token in device.token beside the exe; until accounts.md AC4's
   cut-over, update.key beside it also works), a detached thread reads
   https://meio.lol/private/desktop/update.signed
-  at start and every 3 h (5 min after a failure; MEIOLOL_UPDATE_URL elsewhere), and at
-  once after a sign in, checks its signature, and fetches each listed
+  at start and every 3 h (MEIOLOL_UPDATE_URL elsewhere), and at once after a sign in,
+  checks its signature, and fetches each listed
   file whose SHA-256 differs from the local copy: stats.bin as stats-<patch>.bin (older stats-*.bin
   deleted), recent-curves.bin, champ-facts.tsv, meiolol-desktop.exe (names it doesn't
   know are skipped, so a new data file needs no version bump). Each goes to NAME.part (gzip on the
@@ -128,7 +128,11 @@ file and packed rows: docs/architecture.md.
   then frees the old. The token goes as Authorization: Bearer (the key in
   X-Meiolol-Desktop) with redirects off (std 0.17's privileged_headers are never sent). A
   401 on the token deletes it and the sign-in form comes back (signin.zig: the whole
-  window with no data yet, else a line under the content). `meiolol-app signin DIR` and
+  window with no data yet, else a line under the content). A failed check waits 5 min,
+  doubling to 3 h (a success or a sign in starts again), logs the error, and without
+  data the window says why in plain words (update.why). The update list at 404, 410 or
+  a redirect is error.Moved: a line under every screen says this version can't update
+  itself, get the new one at meio.lol/download. `meiolol-app signin DIR` and
   `meiolol-app update DIR` do the same on a folder. Box side: web-loop.sh desktop_files; gate: hosting.md
 - Install (desktop/install.zig, setup.zig; 23 Oct): a release, or an exe with an update
   key (the zip's exe carries it after its image, as Explorer runs an exe inside a zip

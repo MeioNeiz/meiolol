@@ -65,8 +65,13 @@ pub const Data = struct {
 };
 
 /// Between checks; after a failure, sooner
-const update_every: std.Io.Duration = .fromSeconds(3 * 3600);
-const retry_after: std.Io.Duration = .fromSeconds(5 * 60);
+const update_every_s = 3 * 3600;
+
+/// Seconds to the next check after `fails` failed ones in a row: 5 minutes, doubling,
+/// at most the usual wait
+fn retryAfter(fails: u32) u32 {
+    return @min(@as(u32, 5 * 60) << @intCast(@min(fails -| 1, 6)), update_every_s);
+}
 
 var shared: Shared = .{};
 var io: std.Io = undefined;
@@ -205,28 +210,38 @@ var auth_url: []const u8 = device.default_url;
 /// Without a sign in it waits for one
 fn updateLoop(base: update.Options) void {
     var buf: [512]u8 = undefined;
+    var fails: u32 = 0;
+    var last_gen = shared.auth_gen.load(.acquire);
     while (!shared.quit.load(.acquire)) {
         const gen = shared.auth_gen.load(.acquire);
+        // A new sign in starts the backoff again
+        if (gen != last_gen) fails = 0;
+        last_gen = gen;
         shared.mutex.lockUncancelable(io);
         const auth = if (shared.auth) |a| copyAuth(&buf, a) else null;
         shared.mutex.unlock(io);
-        var wait = update_every;
+        var wait_s: u32 = update_every_s;
         if (auth) |a| {
             var o = base;
             o.auth = a;
             if (update.run(o)) |r| {
+                fails = 0;
+                clearFailure();
                 if (r.data) shared.fresh.store(true, .release);
                 if (r.exe) setNote(.restart);
             } else |err| {
-                std.log.warn("update: {t}", .{err});
-                wait = retry_after;
+                fails +|= 1;
+                wait_s = retryAfter(fails);
+                std.log.warn("update: {t} ({s}), check {d} in a row, next in {d} min", .{ err, o.base, fails, wait_s / 60 });
                 switch (err) {
                     error.Unauthorized, error.Forbidden => signedOut(a, err == error.Forbidden),
-                    else => setNote(.{ .failed = @errorName(err) }),
+                    error.Moved => setNote(.moved),
+                    else => setNote(.{ .failed = .{ .why = update.why(err), .minutes = wait_s / 60 } }),
                 }
             }
         }
         // A sign in ends the wait
+        const wait: std.Io.Duration = .fromSeconds(wait_s);
         io.futexWaitTimeout(u32, &shared.auth_gen.raw, gen, .{ .duration = .{ .raw = wait, .clock = .awake } }) catch {};
     }
 }
@@ -330,9 +345,19 @@ fn signInThread(c: *Credentials) void {
 /// A failure never hides the restart note
 fn setNote(note: state.Note) void {
     shared.mutex.lockUncancelable(io);
-    if (note != .failed or shared.note != .restart) shared.note = note;
+    const failure = note == .failed or note == .moved;
+    if (!failure or shared.note != .restart) shared.note = note;
     shared.mutex.unlock(io);
     wake();
+}
+
+/// A check went through: an earlier failure's note no longer holds
+fn clearFailure() void {
+    shared.mutex.lockUncancelable(io);
+    const was = shared.note == .failed or shared.note == .moved;
+    if (was) shared.note = .none;
+    shared.mutex.unlock(io);
+    if (was) wake();
 }
 
 pub fn stop() void {
@@ -369,7 +394,7 @@ pub fn lock() Shown {
         .note = switch (shared.note) {
             // Only matters while there is nothing else to show
             .failed => if (stats == null) shared.note else .none,
-            .none, .downloading, .restart => shared.note,
+            .none, .downloading, .moved, .restart => shared.note,
         },
         .signin = if (updates != null) &shared.signin else null,
         .practice = &shared.practice,
@@ -828,4 +853,10 @@ fn phaseLabel(phase: []const u8) []const u8 {
     };
     for (names) |n| if (std.mem.eql(u8, phase, n[0])) return n[1];
     return "Client open";
+}
+
+test "update retries back off from 5 minutes to the usual 3 hours" {
+    const want = [_]u32{ 300, 300, 600, 1200, 2400, 4800, 9600, 10800, 10800 };
+    for (want, 0..) |w, fails| try std.testing.expectEqual(w, retryAfter(@intCast(fails)));
+    try std.testing.expectEqual(10800, retryAfter(std.math.maxInt(u32)));
 }

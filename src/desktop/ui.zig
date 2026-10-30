@@ -113,6 +113,9 @@ pub fn frame(v: View) void {
     if (v.note == .restart) {
         w.para(@src(), "A new version of meiolol is downloaded: it starts the next time you open the app.", .{}, .{ .muted = true, .small = true });
     }
+    if (v.note == .moved) {
+        w.para(@src(), "This version of meiolol can no longer update itself: get the new one at meio.lol/download.", .{}, .{ .small = true });
+    }
     if (v.signin) |h| if (v.status != .no_data) signin.view(h, false);
 }
 
@@ -120,7 +123,7 @@ fn message(v: View) void {
     switch (v.status) {
         .no_data => if (v.signin != null and v.signin.?.state.needed) signin.view(v.signin.?, true) else switch (v.note) {
             .downloading => w.para(@src(), "Downloading champion statistics from meio.lol.", .{}, .{}),
-            .failed => |e| w.para(@src(), "Could not download champion statistics from meio.lol ({s}); trying again in 5 minutes.", .{e}, .{}),
+            .failed => |f| w.para(@src(), "Could not download champion statistics from meio.lol ({s}); trying again in {d} minutes.", .{ f.why, f.minutes }, .{}),
             else => w.para(@src(), "No stats file found. Put stats-*.bin and recent-curves.bin next to meiolol-desktop.exe.", .{}, .{}),
         },
         .no_client => w.para(@src(), "Waiting for the League client to start.", .{}, .{}),

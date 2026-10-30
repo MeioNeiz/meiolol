@@ -51,7 +51,6 @@ const Shot = struct {
     status: state.Status,
     note: state.Note = .none,
     signin: ?ui.signin.SignIn = null,
-    restart: bool = false,
     /// Private edition only, with practice's bar
     practice: ?practice.Setup = null,
     /// The board's seat clicks (lane N, 255 mine): the slug that lane's page has
@@ -237,13 +236,14 @@ fn others(a: Allocator, shots: *std.ArrayList(Shot)) !void {
         .{ .group = 0, .slug = "signin-busy", .short = "Signing in", .title = "Signing in", .status = .no_data, .signin = .{ .full = true, .busy = true } },
         .{ .group = 0, .slug = "signin-failed", .short = "Sign in refused", .title = "Sign in refused", .status = .no_data, .signin = .{ .full = true, .message = "Wrong username or password." } },
         .{ .group = 0, .slug = "downloading", .short = "Downloading the data", .title = "Signed in, downloading the data", .status = .no_data, .note = .downloading },
-        .{ .group = 0, .slug = "download-failed", .short = "Download failed", .title = "Download failed", .status = .no_data, .note = .{ .failed = "ConnectionTimedOut" } },
+        .{ .group = 0, .slug = "download-failed", .short = "Download failed", .title = "Download failed", .status = .no_data, .note = .{ .failed = .{ .why = "no connection to meio.lol", .minutes = 10 } } },
         .{ .group = 0, .slug = "no-data", .short = "No data", .title = "No data and no sign in offered", .status = .no_data },
         .{ .group = 0, .slug = "no-client", .short = "Client closed", .title = "League client closed", .status = .no_client },
         .{ .group = 0, .slug = "client-error", .short = "Client not reachable", .title = "Client not reachable", .status = .{ .client_error = "ConnectionRefused" } },
         .{ .group = 0, .slug = "home", .short = "Client home screen", .title = "Client on its home screen", .status = .{ .waiting = "Home" } },
         .{ .group = 0, .slug = "signed-out", .short = "Signed out", .title = "Signed out, data from before: the line under it", .status = .{ .waiting = "Lobby" }, .signin = .{ .full = false } },
-        .{ .group = 0, .slug = "restart", .short = "Update waiting", .title = "A new version waits for the next start", .status = .{ .waiting = "Lobby" }, .restart = true },
+        .{ .group = 0, .slug = "restart", .short = "Update waiting", .title = "A new version waits for the next start", .status = .{ .waiting = "Lobby" }, .note = .restart },
+        .{ .group = 0, .slug = "update-moved", .short = "Update address gone", .title = "The update address is gone: get the new version", .status = .{ .waiting = "Lobby" }, .note = .moved },
     });
 }
 
@@ -402,7 +402,6 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
     var d = try screens.data(a, c, s.status, s.note);
     d.seq = 1;
     d.signin = s.signin;
-    d.restart = s.restart;
     if (ed == .private) d.practice = if (s.practice != null) true else if (shell_practice.offered(.private, c.stats, null, s.status)) false else null;
     var bar: ?ui.practice.Data = null;
     if (s.practice) |x| {

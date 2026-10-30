@@ -62,6 +62,8 @@ pub const Options = struct {
     /// 0, unreleased builds, takes any signed exe
     version: u64 = 0,
     keys: sign.Keys = sign.shipped,
+    /// For the manifest; downloads get one by their size
+    timeout: Io.Duration = .fromSeconds(30),
 };
 
 pub const Auth = union(enum) {
@@ -85,7 +87,21 @@ pub fn readKey(arena: std.mem.Allocator, io: Io, dir: Io.Dir) ?[]const u8 {
     return if (key.len > 0) key else null;
 }
 
-/// One check: every listed file whose local copy differs is replaced
+/// A failed check's cause in plain words (static), for the window; the log has the error
+pub fn why(err: anyerror) []const u8 {
+    return switch (err) {
+        error.Moved => "this version's update address is gone",
+        error.Timeout, error.ConnectionTimedOut => "meio.lol took too long to answer",
+        error.HttpStatus => "meio.lol had a problem",
+        error.BadSignature, error.BadManifest, error.HashMismatch, error.ShortBody, error.ResponseTooLarge, error.UnsupportedCompressionMethod => "the downloaded files didn't check out",
+        error.ConnectionRefused, error.ConnectionResetByPeer, error.NetworkUnreachable, error.NetworkDown, error.UnknownHostName, error.NameServerFailure, error.TemporaryNameServerFailure, error.HostLacksNetworkAddresses => "no connection to meio.lol",
+        error.AccessDenied, error.PermissionDenied, error.NoSpaceLeft, error.DiskQuota, error.RenameFailed, error.FileBusy => "couldn't write next to the app",
+        else => "an unexpected error",
+    };
+}
+
+/// One check: every listed file whose local copy differs is replaced. The manifest at
+/// 404, 410 or a redirect is error.Moved: the base is gone for good, no retry fixes it
 pub fn run(o: Options) !Result {
     var arena_state: std.heap.ArenaAllocator = .init(o.gpa);
     defer arena_state.deinit();
@@ -99,7 +115,10 @@ pub fn run(o: Options) !Result {
     var u: Updater = .{ .o = o, .http = &http, .headers = &headers };
 
     var body: Io.Writer.Allocating = .init(arena);
-    try u.get(sign.manifest_name, &body.writer, 1024 * 1024, .fromSeconds(30));
+    u.get(sign.manifest_name, &body.writer, 1024 * 1024, o.timeout) catch |err| return switch (err) {
+        error.NotFound => error.Moved,
+        else => err,
+    };
     const json = try sign.openManifest(body.written(), o.keys.data);
     const manifest = try std.json.parseFromSliceLeaky(Manifest, arena, json, .{
         .ignore_unknown_fields = true,
@@ -214,8 +233,10 @@ const Updater = struct {
             .unauthorized => return error.Unauthorized,
             // The account's role no longer gets the app
             .forbidden => return error.Forbidden,
-            .not_found => return error.NotFound,
+            // Gone or moved: never followed (the token stays on this host)
+            .not_found, .gone => return error.NotFound,
             else => {
+                if (@backingInt(status) / 100 == 3) return error.NotFound;
                 std.log.warn("{s}: HTTP {d}", .{ name, @backingInt(status) });
                 return error.HttpStatus;
             },
@@ -295,7 +316,7 @@ test "Auth.find: the sign in before the shared key" {
 const httpd = @import("net").server;
 
 /// Serves the files in `dir` under /d/ to requests carrying the key "k" or the device
-/// token "t"
+/// token "t"; the other bases answer as a broken server would
 const TestServer = struct {
     dir: Io.Dir,
 
@@ -312,7 +333,22 @@ const TestServer = struct {
             if (std.ascii.eqlIgnoreCase(h.name, "authorization")) break std.mem.eql(u8, h.value, "Bearer t");
         } else false;
         if (!key_ok) return r.respond("", .{ .status = .unauthorized });
-        const name = r.head.target["/d/".len..];
+        const target = r.head.target;
+        const on = struct {
+            fn base(s: []const u8, b: []const u8) bool {
+                return std.mem.startsWith(u8, s, b);
+            }
+        }.base;
+        if (on(target, "/e500/")) return r.respond("", .{ .status = .internal_server_error });
+        if (on(target, "/gone/")) return r.respond("", .{ .status = .gone });
+        if (on(target, "/moved/")) return r.respond("", .{ .status = .moved_permanently, .extra_headers = &.{.{ .name = "location", .value = "http://127.0.0.1:1/" }} });
+        if (on(target, "/garbage/")) return r.respond("<html>not an update list</html>", .{});
+        if (on(target, "/slow/")) {
+            try std.testing.io.sleep(.fromMilliseconds(1500), .awake);
+            return r.respond("", .{});
+        }
+        if (!on(target, "/d/")) return r.respond("", .{ .status = .not_found });
+        const name = target["/d/".len..];
         var buf: [4096]u8 = undefined;
         const body = t.dir.readFile(std.testing.io, name, &buf) catch return r.respond("", .{ .status = .not_found });
         try r.respond(body, .{});
@@ -422,4 +458,60 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
     try testManifest(srv, &.{.{ exe_name, "older exe" }}, 6);
     try std.testing.expectError(error.BadSignature, run(o));
     try std.testing.expectError(error.FileNotFound, app.access(io, "app.exe.part", .{}));
+}
+
+test "a broken or gone update address fails the check, never hangs, says why" {
+    const io = std.testing.io;
+    const saved = std.testing.log_level;
+    defer std.testing.log_level = saved;
+    // The 500's warning is the point here
+    std.testing.log_level = .err;
+    var server_dir = std.testing.tmpDir(.{});
+    defer server_dir.cleanup();
+    var app_dir = std.testing.tmpDir(.{ .iterate = true });
+    defer app_dir.cleanup();
+    const address = try Io.net.IpAddress.parse("127.0.0.1", 0);
+    var server = try address.listen(io, .{ .reuse_address = true });
+    defer server.deinit(io);
+    var ts: TestServer = .{ .dir = server_dir.dir };
+    var serving = try io.concurrent(TestServer.serve, .{ &ts, &server });
+    defer serving.cancel(io);
+    const port = server.socket.address.getPort();
+    var o: Options = .{
+        .gpa = std.testing.allocator,
+        .io = io,
+        .dir = app_dir.dir,
+        .exe = "app.exe",
+        .base = "",
+        .auth = .{ .key = "k" },
+        .keys = sign.testKeys(),
+        .timeout = .fromMilliseconds(300),
+    };
+    const cases = [_]struct { base: []const u8, err: anyerror, why: []const u8 }{
+        // Released exes' /admin/desktop/ since URL6, and a base with no manifest yet
+        .{ .base = "/admin/desktop/", .err = error.Moved, .why = "this version's update address is gone" },
+        .{ .base = "/d/", .err = error.Moved, .why = "this version's update address is gone" },
+        .{ .base = "/gone/", .err = error.Moved, .why = "this version's update address is gone" },
+        .{ .base = "/moved/", .err = error.Moved, .why = "this version's update address is gone" },
+        .{ .base = "/e500/", .err = error.HttpStatus, .why = "meio.lol had a problem" },
+        .{ .base = "/garbage/", .err = error.BadSignature, .why = "the downloaded files didn't check out" },
+        .{ .base = "/slow/", .err = error.Timeout, .why = "meio.lol took too long to answer" },
+    };
+    var buf: [128]u8 = undefined;
+    for (cases) |c| {
+        o.base = try std.mem.print(&buf, "http://127.0.0.1:{d}{s}", .{ port, c.base });
+        const got = if (run(o)) |_| error.TestUnexpectedResult else |err| err;
+        try std.testing.expectEqual(c.err, got);
+        try std.testing.expectEqualStrings(c.why, why(got));
+    }
+    // Offline: nothing listens on the port
+    var closed = try address.listen(io, .{ .reuse_address = true });
+    const closed_port = closed.socket.address.getPort();
+    closed.deinit(io);
+    o.base = try std.mem.print(&buf, "http://127.0.0.1:{d}/d/", .{closed_port});
+    const offline = if (run(o)) |_| error.TestUnexpectedResult else |err| err;
+    try std.testing.expectEqualStrings("no connection to meio.lol", why(offline));
+    // Nothing was written beside the app
+    var it = app_dir.dir.iterate();
+    try std.testing.expectEqual(null, try it.next(io));
 }
