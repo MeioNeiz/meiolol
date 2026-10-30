@@ -11,8 +11,11 @@
 //!   flag on a hashed share of fit games, as many as A2 has: a control that must gain
 //!   nothing.
 //! Writes OUT/preds.tsv (per scored game: match id, platform, day, bucket, any changed
-//! champion, blue won, each arm's blue chance), OUT/curve.tsv (per arm, bucket and subset:
-//! loss and the paired difference to A1) and OUT/days.tsv; prints the curve.
+//! champion, test game, in SNAP/test-exclude.tsv, blue won, each arm's blue chance),
+//! OUT/curve.tsv (per arm, bucket or pooled days and subset: loss and the paired
+//! difference to A1) and OUT/days.tsv; prints the curve. --final adds the test games
+//! alone and minus test-exclude.tsv (docs/model.md "Shared protocol"): the declared
+//! figure is days 4+ there (docs/model.md "The latest patch day by day on 16.21").
 //! `patchdays changed OLD NEW`: champions whose Data Dragon championFull.json differs
 //! (stats, spells' cooldown, cost, range, effectBurn and tooltip, passive text), the
 //! --changed list
@@ -41,7 +44,8 @@ pub const usage =
     \\                                  ratings arms on additive v2 (PT2-PT3,
     \\                                  docs/plan/patch-transfer.md); FILE: champion ids
     \\                                  in column 1 (patchdays changed); dev skips test
-    \\                                  games, --final fits and scores them (a test look)
+    \\                                  games, --final fits and scores them (a test look:
+    \\                                  the test games alone and minus test-exclude.tsv)
     \\  patchdays changed OLD NEW       champions whose Data Dragon championFull.json
     \\                                  differs: id, name, changed|new
     \\
@@ -128,19 +132,25 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
-    if (opts.phase == .final) _ = try looks.record(gpa, io, Io.Dir.cwd(), snap, "patchdays", argv, w);
+    var exclude: ?looks.Exclude = null;
+    defer if (exclude) |*e| e.deinit(gpa);
+    if (opts.phase == .final) {
+        _ = try looks.record(gpa, io, Io.Dir.cwd(), snap, "patchdays", argv, w);
+        exclude = try looks.Exclude.load(gpa, io, Io.Dir.cwd(), snap);
+    }
     var data = try rows.loadSnap(gpa, io, snap);
     defer data.deinit();
     std.debug.assert(protocol.platformIds().len <= A.n_platforms);
     const changed = if (opts.changed) |path| try loadChanged(arena, io, path) else ChampSet{};
+    const sets: Sets = .{ .changed = &changed, .exclude = if (exclude) |*e| e else null, .phase = opts.phase };
 
     try Io.Dir.cwd().createDirPath(io, opts.out);
     var dir = try Io.Dir.cwd().openDir(io, opts.out, .{});
     defer dir.close(io);
     var r = try run(gpa, arena, io, &data, &changed, opts);
     defer r.deinit(gpa);
-    try writeFiles(io, dir, &data, &r, &changed, opts);
-    try report(w, &data, &r, &changed, opts);
+    try writeFiles(io, dir, &data, &r, sets, opts);
+    try report(w, &data, &r, sets, opts);
     try w.flush();
     return 0;
 }
@@ -451,22 +461,46 @@ fn stat(d: *const rows.Data, r: *const Result, arm: usize, ref: usize, ctx: anyt
     return .{ .n = @intFromFloat(n), .loss = sl / n, .diff = m, .half = 1.96 * @sqrt(@max(v, 0) / n) };
 }
 
-/// changed: games with a changed champion; euw1: the home platform's (PT6: EUW1 decides)
-pub const Subset = enum { all, changed, euw1 };
+/// changed: games with a changed champion; euw1: the home platform's (PT6: the target).
+/// --final only: test_*, the test games alone; kept_*, those minus SNAP/test-exclude.tsv
+pub const Subset = enum { all, changed, euw1, test_all, test_euw1, kept_all, kept_euw1 };
+
+/// What the subsets draw on
+pub const Sets = struct {
+    changed: *const ChampSet,
+    exclude: ?*const looks.Exclude = null,
+    phase: harness.Phase = .dev,
+};
 
 /// Which scored games a figure covers
 pub const Filter = struct {
     changed: ?*const ChampSet = null,
     platform: ?u8 = null,
+    test_only: bool = false,
+    /// Games in it left out
+    exclude: ?*const looks.Exclude = null,
 
-    pub fn of(sub: Subset, changed: *const ChampSet) Filter {
+    /// null when the subset has no games here: test ones in dev, kept ones without a file
+    pub fn of(sub: Subset, sets: Sets) ?Filter {
+        const home = homePlatform();
+        if (sets.phase == .dev and @backingInt(sub) >= @backingInt(Subset.test_all)) return null;
         return switch (sub) {
             .all => .{},
-            .changed => .{ .changed = changed },
-            .euw1 => .{ .platform = homePlatform() },
+            .changed => .{ .changed = sets.changed },
+            .euw1 => .{ .platform = home },
+            .test_all => .{ .test_only = true },
+            .test_euw1 => .{ .test_only = true, .platform = home },
+            .kept_all => .{ .test_only = true, .exclude = sets.exclude orelse return null },
+            .kept_euw1 => .{ .test_only = true, .platform = home, .exclude = sets.exclude orelse return null },
         };
     }
 };
+
+/// Days pooled game-weighted beside the buckets: the protocol's dev days after day 0, and
+/// the test days (docs/plan/patch-transfer.md "Evaluation rule": tuned on days 0-3,
+/// scored on days 4+)
+pub const Pool = struct { name: []const u8, lo: u16, hi: u16 };
+pub const pools = [_]Pool{ .{ .name = "1-3", .lo = 1, .hi = 3 }, .{ .name = "4+", .lo = 4, .hi = std.math.maxInt(u16) } };
 
 fn homePlatform() u8 {
     for (protocol.platformIds(), 0..) |id, i| if (std.mem.eql(u8, id, protocol.home_platform)) return @intCast(i);
@@ -480,14 +514,19 @@ const Sel = struct {
     /// Days whose bucket is this (null: any)
     bucket: ?usize = null,
     day: ?u16 = null,
+    pool: ?Pool = null,
 
     fn keep(s: Sel, i: usize) bool {
         const gi = s.r.scored[i];
+        const g = s.d.games[gi];
         const v = s.r.pd.day[gi].?;
         if (s.day) |x| if (v != x) return false;
         if (s.bucket) |b| if (PatchDays.bucket(v) != b) return false;
-        if (s.f.changed) |c| if (!hasAny(c, s.d.games[gi])) return false;
-        if (s.f.platform) |p| if (s.d.games[gi].platform != p) return false;
+        if (s.pool) |p| if (v < p.lo or v > p.hi) return false;
+        if (s.f.changed) |c| if (!hasAny(c, g)) return false;
+        if (s.f.platform) |p| if (g.platform != p) return false;
+        if (s.f.test_only and !g.is_test) return false;
+        if (s.f.exclude) |e| if (e.has(g.match_id)) return false;
         return true;
     }
 };
@@ -518,7 +557,7 @@ pub fn patchMean(d: *const rows.Data, r: *const Result, arm: usize, ref: usize, 
     return out;
 }
 
-fn writeFiles(io: Io, dir: Io.Dir, d: *const rows.Data, r: *const Result, changed: *const ChampSet, opts: Options) !void {
+fn writeFiles(io: Io, dir: Io.Dir, d: *const rows.Data, r: *const Result, sets: Sets, opts: Options) !void {
     var nbuf: [16]u8 = undefined;
     {
         var file = try dir.createFile(io, "preds.tsv", .{});
@@ -526,14 +565,15 @@ fn writeFiles(io: Io, dir: Io.Dir, d: *const rows.Data, r: *const Result, change
         var buf: [64 * 1024]u8 = undefined;
         var fw = file.writer(io, &buf);
         const w = &fw.interface;
-        try w.writeAll("match_id\tplatform\tday\tbucket\tchanged\ty");
+        try w.writeAll("match_id\tplatform\tday\tbucket\tchanged\ttest\texcluded\ty");
         for (opts.arms) |a| try w.print("\t{s}", .{a.name(&nbuf)});
         try w.writeAll("\n");
         const ids = protocol.platformIds();
         for (r.scored, 0..) |gi, i| {
             const g = d.games[gi];
             const v = r.pd.day[gi].?;
-            try w.print("{s}\t{s}\t{d}\t{s}\t{d}\t{d}", .{ g.match_id, if (g.platform < ids.len) ids[g.platform] else "?", v, PatchDays.buckets[PatchDays.bucket(v)], @intFromBool(hasAny(changed, g)), blueWon(g) });
+            const excluded = if (sets.exclude) |e| e.has(g.match_id) else false;
+            try w.print("{s}\t{s}\t{d}\t{s}\t{d}\t{d}\t{d}\t{d}", .{ g.match_id, if (g.platform < ids.len) ids[g.platform] else "?", v, PatchDays.buckets[PatchDays.bucket(v)], @intFromBool(hasAny(sets.changed, g)), @intFromBool(g.is_test), @intFromBool(excluded), blueWon(g) });
             for (r.preds) |p| try w.print("\t{d:.5}", .{p[i]});
             try w.writeAll("\n");
         }
@@ -548,10 +588,14 @@ fn writeFiles(io: Io, dir: Io.Dir, d: *const rows.Data, r: *const Result, change
         const w = &fw.interface;
         try w.print("arm\tbucket\tsubset\tgames\tloss\tdiff_vs_{s}\thalf\n", .{opts.arms[ref].name(&nbuf)});
         for (opts.arms, 0..) |a, ai| for (std.enums.values(Subset)) |sub| {
-            const f = Filter.of(sub, changed);
+            const f = Filter.of(sub, sets) orelse continue;
             for (PatchDays.buckets, 0..) |bn, b| {
                 const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .f = f, .bucket = b }, Sel.keep);
                 try w.print("{s}\t{s}\t{t}\t{d}\t{d:.6}\t{d:.6}\t{d:.6}\n", .{ a.name(&nbuf), bn, sub, s.n, s.loss, s.diff, s.half });
+            }
+            for (pools) |p| {
+                const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .f = f, .pool = p }, Sel.keep);
+                try w.print("{s}\t{s}\t{t}\t{d}\t{d:.6}\t{d:.6}\t{d:.6}\n", .{ a.name(&nbuf), p.name, sub, s.n, s.loss, s.diff, s.half });
             }
             const s = patchMean(d, r, ai, ref, f);
             try w.print("{s}\tpatch\t{t}\t{d}\t{d:.6}\t{d:.6}\t{d:.6}\n", .{ a.name(&nbuf), sub, s.n, s.loss, s.diff, s.half });
@@ -573,32 +617,39 @@ fn writeFiles(io: Io, dir: Io.Dir, d: *const rows.Data, r: *const Result, change
     }
 }
 
-fn report(w: *Io.Writer, d: *const rows.Data, r: *const Result, changed: *const ChampSet, opts: Options) !void {
+fn report(w: *Io.Writer, d: *const rows.Data, r: *const Result, sets: Sets, opts: Options) !void {
     var nbuf: [16]u8 = undefined;
     const ref = refArm(opts);
     try w.print("# patchdays: latest patch {d}.{d}, {t}, {d} scored games on {d} days", .{ r.pd.latest / 1000, r.pd.latest % 1000, opts.phase, r.scored.len, r.days.len });
     if (r.held_out > 0) try w.print(" ({d} more held out as test games)", .{r.held_out});
-    try w.print("; changed champions {d}, scale {d}; offset sd {s}\n\n", .{ changed.count(), opts.changed_scale, if (opts.offset_sd != null) "fixed" else "estimated" });
+    try w.print("; changed champions {d}, scale {d}; offset sd {s}\n\n", .{ sets.changed.count(), opts.changed_scale, if (opts.offset_sd != null) "fixed" else "estimated" });
     try w.writeAll("| day | fit games | latest-patch fit games | scored |\n| --- | --- | --- | --- |\n");
     for (r.days, 0..) |day, di| {
         var n: usize = 0;
         for (r.scored) |gi| n += @intFromBool(r.pd.day[gi].? == day);
         try w.print("| {d} | {d} | {d} | {d} |\n", .{ day, r.fit_games[di], r.latest_fit[di], n });
     }
+    if (opts.phase == .final and sets.exclude == null) try w.print("No {s}: the test numbers are the only ones.\n", .{looks.exclude_name});
     for (std.enums.values(Subset)) |sub| {
-        const f = Filter.of(sub, changed);
-        if (sub == .changed and changed.count() == 0) continue;
+        const f = Filter.of(sub, sets) orelse continue;
+        if (sub == .changed and sets.changed.count() == 0) continue;
         const what = switch (sub) {
             .all => "all",
             .changed => "changed-champion",
             .euw1 => protocol.home_platform,
+            .test_all => "test",
+            .test_euw1 => protocol.home_platform ++ " test",
+            .kept_all => "test minus " ++ looks.exclude_name,
+            .kept_euw1 => protocol.home_platform ++ " test minus " ++ looks.exclude_name,
         };
         try w.print("\nMilli-nats a game vs {s} ({s}: its log loss), 95% paired; {s} games\n\n| arm |", .{ opts.arms[ref].name(&nbuf), opts.arms[ref].name(&nbuf), what });
         for (PatchDays.buckets) |b| try w.print(" day {s} |", .{b});
+        for (pools) |p| try w.print(" days {s} pooled |", .{p.name});
         try w.writeAll(" patch (days equal) |\n| --- |");
-        for (0..PatchDays.buckets.len + 1) |_| try w.writeAll(" --- |");
+        for (0..PatchDays.buckets.len + pools.len + 1) |_| try w.writeAll(" --- |");
         try w.writeAll("\n| games |");
         for (0..PatchDays.buckets.len) |b| try w.print(" {d} |", .{stat(d, r, ref, ref, Sel{ .d = d, .r = r, .f = f, .bucket = b }, Sel.keep).n});
+        for (pools) |p| try w.print(" {d} |", .{stat(d, r, ref, ref, Sel{ .d = d, .r = r, .f = f, .pool = p }, Sel.keep).n});
         try w.print(" {d} |\n", .{patchMean(d, r, ref, ref, f).n});
         for (opts.arms, 0..) |a, ai| {
             try w.print("| {s} |", .{a.name(&nbuf)});
@@ -606,6 +657,7 @@ fn report(w: *Io.Writer, d: *const rows.Data, r: *const Result, changed: *const 
                 const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .f = f, .bucket = b }, Sel.keep);
                 try cell(w, s, ai == ref);
             }
+            for (pools) |p| try cell(w, stat(d, r, ai, ref, Sel{ .d = d, .r = r, .f = f, .pool = p }, Sel.keep), ai == ref);
             try cell(w, patchMean(d, r, ai, ref, f), ai == ref);
             try w.writeAll("\n");
         }
@@ -619,6 +671,18 @@ fn report(w: *Io.Writer, d: *const rows.Data, r: *const Result, changed: *const 
             if (caught == null and s.diff - s.half <= 0) caught = day;
         }
         if (caught) |c| try w.print("\nA0 first within its interval of A1 (or better) on day {d}\n", .{c}) else try w.writeAll("\nA0 never catches A1 here\n");
+    };
+    var rbuf: [16]u8 = undefined;
+    if (opts.phase == .final) try w.writeAll("\n");
+    if (opts.phase == .final) for (opts.arms, 0..) |a, ai| if (ai != ref) {
+        // The declared figure: days 4+ test games, all platforms and EUW1, full and kept
+        try w.print("RESULT patchdays final arm={s} vs={s} days=4+ milli-nats", .{ a.name(&nbuf), opts.arms[ref].name(&rbuf) });
+        for ([_]Subset{ .test_all, .test_euw1, .kept_all, .kept_euw1 }) |sub| {
+            const f = Filter.of(sub, sets) orelse continue;
+            const s = stat(d, r, ai, ref, Sel{ .d = d, .r = r, .f = f, .pool = pools[1] }, Sel.keep);
+            try w.print(" {t}={d:.3}±{d:.3}(n={d})", .{ sub, s.diff * 1000, s.half * 1000, s.n });
+        }
+        try w.writeAll("\n");
     };
 }
 
@@ -810,7 +874,56 @@ test "patchdays: arms on a planted jump; latest-only knows nothing on day 0, the
     for (r.scored) |gi| on_one += @intFromBool(data.games[gi].platform == 1);
     try std.testing.expect(on_one > 0);
     try std.testing.expectEqual(on_one, patchMean(&data, &r, 2, ref, .{ .platform = 1 }).n);
-    try std.testing.expectEqualStrings(protocol.home_platform, protocol.platformIds()[Filter.of(.euw1, &changed).platform.?]);
+    try std.testing.expectEqualStrings(protocol.home_platform, protocol.platformIds()[Filter.of(.euw1, .{ .changed = &changed }).?.platform.?]);
+}
+
+test "patchdays --final: test games alone and minus test-exclude.tsv, days 4+ pooled" {
+    const gpa = std.testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var data = try fixture(gpa, 12_000, 6_000, 0.8);
+    defer data.deinit();
+    // Test from mid day 3 of the patch on, as the 16.21 pin's cut
+    const test_from = 6_000 + 3 * 1440 + 600;
+    var exclude: looks.Exclude = .{};
+    defer exclude.deinit(gpa);
+    var n_test: usize = 0;
+    var n_kept4: usize = 0;
+    for (data.games, 0..) |*g, i| {
+        g.match_id = try std.fmt.allocPrint(data.arena.allocator(), "EUW1_{d}", .{i});
+        g.is_test = i >= test_from;
+        n_test += @intFromBool(g.is_test);
+        if (g.is_test and i % 4 == 0) try exclude.keys.put(gpa, std.hash.Wyhash.hash(0, g.match_id), {});
+    }
+    const changed: ChampSet = .empty;
+    const opts = try parseOptions(arena, &.{ "--arms", "A1,A2", "--threads", "2", "--final" });
+    var r = try run(gpa, arena, std.testing.io, &data, &changed, opts);
+    defer r.deinit(gpa);
+    const sets: Sets = .{ .changed = &changed, .exclude = &exclude, .phase = .final };
+    var n_test4: usize = 0;
+    for (r.scored) |gi| {
+        const g = data.games[gi];
+        const day4 = r.pd.day[gi].? >= 4;
+        n_test4 += @intFromBool(g.is_test and day4);
+        n_kept4 += @intFromBool(g.is_test and day4 and !exclude.has(g.match_id));
+    }
+    try std.testing.expect(n_test4 > 0 and n_kept4 < n_test4 and n_test4 < n_test);
+    const four = Sel{ .d = &data, .r = &r, .f = Filter.of(.test_all, sets).?, .pool = pools[1] };
+    try std.testing.expectEqual(n_test4, stat(&data, &r, 1, 0, four, Sel.keep).n);
+    var kept = four;
+    kept.f = Filter.of(.kept_all, sets).?;
+    try std.testing.expectEqual(n_kept4, stat(&data, &r, 1, 0, kept, Sel.keep).n);
+    // Every test game, the day 3 tail included
+    try std.testing.expectEqual(n_test, patchMean(&data, &r, 1, 0, Filter.of(.test_all, sets).?).n);
+    // Dev has no test subsets, and no kept ones without a file
+    try std.testing.expectEqual(null, Filter.of(.test_all, .{ .changed = &changed }));
+    try std.testing.expectEqual(null, Filter.of(.kept_euw1, .{ .changed = &changed, .phase = .final }));
+    var out: Io.Writer.Allocating = .init(gpa);
+    defer out.deinit();
+    try report(&out.writer, &data, &r, sets, opts);
+    try std.testing.expect(std.mem.find(u8, out.written(), "RESULT patchdays final arm=A2 vs=A1 days=4+") != null);
+    try std.testing.expect(std.mem.find(u8, out.written(), "kept_euw1=") != null);
 }
 
 test "patchdays: arms and options parse" {
