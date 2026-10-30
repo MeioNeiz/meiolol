@@ -10,7 +10,7 @@ deploy/flow-test.sh.
 |---|---|
 | test-ui after a ui edit | 28 s (gpu-box 4 s) |
 | test after a backend edit | ~100 s: backend test compile 42 s, its run 50-60 s (slow tests: docs/plan/build-speed.md BS4) |
-| test after a ui edit | ~165 s at load 15: 41 islands ~50 s, then the backend test compile and run |
+| test after a ui edit | ~175 s at load 25: the backend test compile and run; the tests get stub islands, ci and the dev server build the real 41 (~50 s CPU) |
 | test with nothing changed | ~10 s (compile-error checks rerun: Zig caches no failed compile) |
 | backend build (dev server, qa) | ~80 s |
 | deploy build (ReleaseSafe, box target) | ~185 s (gpu-box 230 s) |

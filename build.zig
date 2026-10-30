@@ -54,10 +54,13 @@ pub fn build(b: *std.Build) void {
         run.addPassthruArgs();
         b.step(e.name, b.fmt("Run {s} ({s})", .{ e.name, e.about })).dependOn(&run.step);
     }
-    for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store, m.tpl, m.net }) |mod| {
+    // Stub islands: the 41 wasm builds took ~50 s of `test` after a ui edit. ci still
+    // builds them all (uiSizes, the cross builds), and the dev server on each edit
+    const stub = modulesWith(b, target, optimize, uiStub);
+    for ([_]*std.Build.Module{ stub.backend, stub.app, stub.core, stub.store, stub.tpl, stub.net }) |mod| {
         const run = b.addRunArtifact(b.addTest(.{ .root_module = mod, .filters = test_filters }));
         test_step.dependOn(&run.step);
-        if (mod == m.backend) siteFiles(b, run);
+        if (mod == stub.backend) siteFiles(b, run);
     }
     // Component work's inner loop (deploy/zb.sh test-ui): the backend imports ui, so a ui
     // edit under plain `test` rebuilds the backend's tests too
@@ -73,11 +76,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "desktop", .module = desktopModule(b, m, target, optimize, shell_options) },
+            .{ .name = "desktop", .module = desktopModule(b, stub, target, optimize, shell_options) },
             .{ .name = "build_options", .module = shell_options },
         },
     });
-    shellUi(b, shell_test, m.ui);
+    shellUi(b, shell_test, stub.ui, uiStub);
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = shell_test, .filters = test_filters })).step);
 
     b.step("fmt", "Format the Zig sources").dependOn(&b.addFmt(.{ .paths = &fmt_paths }).step);
@@ -293,6 +296,12 @@ const Modules = struct {
 };
 
 fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) Modules {
+    return modulesWith(b, target, optimize, uiWasm);
+}
+
+const Island = fn (*std.Build, []const u8) UiWasm;
+
+fn modulesWith(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode, island: Island) Modules {
     const sqlite = b.dependency("sqlite", .{});
 
     // Pure: std only, shared by backend and app (draft model, stats file, scoring)
@@ -427,7 +436,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
 
     // The site's islands, per page family (src/site/ui/wasm), with zjb's loaders
     for (ui_families) |f| {
-        const u = uiWasm(b, f);
+        const u = island(b, f);
         backend.addAnonymousImport(b.fmt("{s}.wasm", .{u.name}), .{ .root_source_file = u.wasm });
         backend.addAnonymousImport(b.fmt("{s}.js", .{u.name}), .{ .root_source_file = u.js });
         for ([_][]const u8{ "wasm", "js" }, [_]std.Build.LazyPath{ u.wasm, u.js }) |ext, p| {
@@ -464,6 +473,18 @@ fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
     gen.addArtifactArg(exe);
     gen.addArg("--loader");
     return .{ .name = exe.name, .wasm = exe.getEmittedBin(), .js = js };
+}
+
+/// A family's files for the tests, which only embed them and link them by hashed name:
+/// distinct bytes per family, so no two share a name
+fn uiStub(b: *std.Build, family: []const u8) UiWasm {
+    const name = b.fmt("ui-{s}", .{family});
+    const files = b.addWriteFiles();
+    return .{
+        .name = name,
+        .wasm = files.add(b.fmt("{s}.wasm", .{name}), b.fmt("stub {s}\n", .{name})),
+        .js = files.add(b.fmt("{s}.js", .{name}), b.fmt("// stub {s}\n", .{name})),
+    };
 }
 
 /// The family's wasm; `strip` false keeps a name section for src/tools/wasmsize.zig
@@ -614,7 +635,7 @@ fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
             },
         }),
     });
-    shellUi(b, exe.root_module, m.ui);
+    shellUi(b, exe.root_module, m.ui, uiWasm);
     exe.root_module.addWin32ResourceFile(.{ .file = b.path("src/desktop/meiolol.rc") });
     for ([_][]const u8{ "user32", "gdi32", "ole32", "shlwapi", "shell32", "advapi32", "psapi" }) |l|
         exe.root_module.linkSystemLibrary(l, .{});
@@ -624,11 +645,11 @@ fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
 
 /// The app's page (src/shell/screens.zig): the ui module, ui-app.wasm and ui-practice.wasm
 /// with their loaders
-fn shellUi(b: *std.Build, mod: *std.Build.Module, ui: *std.Build.Module) void {
+fn shellUi(b: *std.Build, mod: *std.Build.Module, ui: *std.Build.Module, island: Island) void {
     mod.addImport("ui", ui);
     // Practice's file is embedded in the private edition only (files.zig)
     for ([_][]const u8{ "app", "practice" }) |f| {
-        const u = uiWasm(b, f);
+        const u = island(b, f);
         mod.addAnonymousImport(b.fmt("{s}.wasm", .{u.name}), .{ .root_source_file = u.wasm });
         mod.addAnonymousImport(b.fmt("{s}.js", .{u.name}), .{ .root_source_file = u.js });
     }
@@ -646,7 +667,7 @@ fn shellMac(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
             .{ .name = "build_options", .module = options },
         },
     });
-    shellUi(b, mod, m.ui);
+    shellUi(b, mod, m.ui, uiWasm);
     mod.linkFramework("AppKit", .{});
     mod.linkFramework("WebKit", .{});
     mod.linkSystemLibrary("objc", .{});

@@ -30,13 +30,14 @@ What we know (29 Oct):
   of the site's .gz twins (write.zig); additive "parents" 6 s, real fitting
 - BS5 done: pipeline_test.zig reads src/testdata/site-files.txt at run time, an input of
   the backend test run (build.zig siteFiles): an edit to it reruns the tests, no compile
-- BS6 measured (step times in `--summary all` are wall under contention: CPU only by
+- BS6 done (step times in `--summary all` are wall under contention: CPU only by
   timing a step alone). After a ui edit, 41 islands: 50 s CPU, ~50 s wall at -j2,
   ~1.2 s each; the rest is the backend test compile and run, due anyway as the backend
   imports ui. Done: Zig caches no failed compile, so the 47 compile-error cases reran on
   every test (16 s CPU, 8-15 s wall with nothing changed): now one compile per file,
   src/tools/compileerrors.zig matching errors to cases. A no-change test 21 to 6 s CPU.
-  Open: islands out of `test` (stubs in the backend test, real ones in ci and the dev
-  server) would save ~50 s per ui-edit test but leave islands to ci
+  Islands out of `test` (Jacob, 30 Oct): the tests get stub islands (build.zig uiStub),
+  ci and the dev server build the real ones; a ui-edit test 168 to 125 s CPU (203 s wall
+  at load 15-19 to 174 s at load 25). A wasm-only compile error now shows in ci
 - BS7: the per-page CSS work (sheets.zig) keeps minifying out of comptime: cssmin.zig
   writes per-component minified CSS if that lands
