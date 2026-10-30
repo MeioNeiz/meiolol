@@ -269,7 +269,8 @@ pub fn settle(all: []Deploy, now: i64) void {
             const t0 = s.start orelse continue;
             const limit = if (u.step.get(k)) |t| @max(quiet_x * t, quiet_min) else quiet_unknown;
             if (now - t0 <= limit) continue;
-            d.steps.set(k, .{ .state = .failed, .start = t0, .detail = quiet_detail });
+            // Ended at the deploy's last word, so its time stops growing
+            d.steps.set(k, .{ .state = .failed, .start = t0, .end = last, .detail = quiet_detail });
             d.state = .failed;
         }
     }
@@ -514,6 +515,7 @@ test "settle: a deploy whose host stopped mid-build" {
     settle(l, 3100 + quiet_min);
     try testing.expectEqual(st.State.failed, l[1].state);
     try testing.expectEqualStrings(quiet_detail, l[1].steps.get(.build).?.detail);
+    try testing.expectEqual(@as(?i64, 3000), l[1].steps.get(.build).?.end);
     try testing.expectEqual(st.State.running, l[0].state);
     settle(l, 3100 + quiet_min + 1);
     try testing.expectEqual(st.State.failed, l[0].state);
