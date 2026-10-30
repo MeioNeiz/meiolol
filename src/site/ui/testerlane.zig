@@ -6,6 +6,7 @@ const std = @import("std");
 const data = @import("data.zig");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
+const fmt = @import("fmt.zig");
 const Phrase = phrase.Phrase;
 
 const W = struct {
@@ -260,11 +261,22 @@ pub fn fileLine(h: *tree.H, load: Load) tree.Text {
         else if (l.check.ok())
             W.ok.with(h, .{ .file = file, .n = l.check.refs })
         else
-            W.bad.with(h, .{ .file = file, .n = l.check.refs, .gap = if (std.math.isFinite(l.check.worst)) h.fmt("{d:.3}", .{l.check.worst}) else "?" }),
+            W.bad.with(h, .{ .file = file, .n = l.check.refs, .gap = gap(h, l.check.worst) }),
         .failed => W.failed.with(h, .{ .file = file }),
         .bad => W.damaged.with(h, .{ .file = file }),
         .none, .loading => W.loading.with(h, .{ .file = file }),
     };
+}
+
+/// Three decimals through ui/fmt.zig: std's float formatter is KBs of ui.wasm
+fn gap(h: *tree.H, x: f32) []const u8 {
+    if (!std.math.isFinite(x)) return "?";
+    var w: std.Io.Writer.Allocating = .init(h.mem);
+    fmt.fixed(&w.writer, x, 3, false) catch {
+        h.oom = true;
+        return "?";
+    };
+    return w.written();
 }
 
 /// One candidate's lane, for the candidate panel's feed (ui.data): lane gold at 14 and
