@@ -224,10 +224,12 @@ a 301 to it.
 - Security headers: deploy/nginx/meiolol-headers.conf (/etc/nginx/, included in the
   server and each location with its own add_header): X-Frame-Options DENY and CSP
   frame-ancestors, base-uri and object-src (the rest of the CSP is each page's meta:
-  arch-site.md "CSP"), COOP same-origin, nosniff, HSTS. HSTS goes up
-  in stages, each after a clean spell: 300 s (29 Oct), a day (30 Oct, pages clean under
-  the CSP), then a year with includeSubDomains (every subdomain HTTPS first; preload only
-  after that)
+  arch-site.md "CSP"), COOP same-origin, nosniff, Referrer-Policy
+  strict-origin-when-cross-origin, HSTS. HSTS goes up in stages, each after a clean
+  spell: 300 s (29 Oct), a day (30 Oct, pages clean under the CSP), then a year with
+  includeSubDomains (every subdomain HTTPS first; preload only after that). Files
+  Cloudflare's edge caches (robots.txt, print.css, hashed assets) keep the headers they
+  were first cached with, a revalidation included, until purged
 - Training view (/admin/training/, same login as /admin/; data for the admin Models
   tab): lab runs of the Mac and the gpu-box (staged over ssh, home network only),
   learned.md, model.md, campaigns, uploaded by deploy/lab-push.sh (launchd, every 30 s
