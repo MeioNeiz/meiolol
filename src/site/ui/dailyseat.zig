@@ -14,6 +14,7 @@ const draftboard = @import("draftboard.zig");
 const candlist = @import("candlist.zig");
 const reasons = @import("reasons.zig");
 const split = @import("split.zig");
+const toggletip = @import("toggletip.zig");
 const phrase = @import("phrase.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
@@ -101,6 +102,7 @@ pub const Seat = struct {
             h.oom = true;
             return .none;
         };
+        const mine: ?u16 = if (s.seat == dp.hiddenSeat(p)) if (s.guess) |g| p.options[g] else null else null;
         var last: u16 = 0;
         for (rows, x.cands) |*row, c| {
             const nm = s.champOf(c.champ).name;
@@ -113,6 +115,7 @@ pub const Seat = struct {
                 .win = c.win,
                 .vs = if (c.champ == x.champ) null else if (played) |pc| c.win - pc.win else null,
                 .reasons = s.chips(h, c, rl, side),
+                .tag = if (c.champ == mine and c.champ != x.champ) W.yours_tag else null,
                 .gap = @as(u32, c.rank) > @as(u32, last) + 1,
                 .open = detail != null and (s.open[0] == c.champ or s.open[1] == c.champ),
                 .detail = detail,
@@ -143,25 +146,16 @@ pub const Seat = struct {
         })});
     }
 
-    /// The pick locked in, when not the played one: its chance and the gap
+    /// The pick locked in, when neither the played one nor in the list (where it is tagged:
+    /// puzzles whose review ranks the options)
     fn yours(s: *const Seat, h: *H, x: dd.Seat) N {
         const g = s.guess orelse return .none;
         const c = s.p.options[g];
         if (c == x.champ) return .none;
-        const nm = s.champOf(c).name;
-        var mine: ?f32 = null;
-        var played: ?f32 = null;
-        for (x.cands) |k| {
-            if (k.champ == c) mine = k.win;
-            if (k.champ == x.champ) played = k.win;
-        }
+        for (x.cands) |k| if (k.champ == c) return .none;
         return h.p(.{ .class = "yours" }, .{
             champ.view(h, s.champOf(c), .{ .px = .@"20", .named = false }),
-            if (mine != null and played != null) W.yours_at.with(h, .{
-                .n = nm,
-                .w = mine orelse 0,
-                .d = (mine orelse 0) - (played orelse 0),
-            }) else W.yours.with(h, .{ .n = nm }),
+            W.yours.with(h, .{ .n = s.champOf(c).name }),
         });
     }
 
@@ -248,21 +242,38 @@ pub const Seat = struct {
                 h.span(.{ .class = "v", .data_side = dp.sideOf(side) }, .{W.edge.with(h, .{ .side = dp.sideWord(side).s, .d = @abs(e) })}),
             }));
         }
+        const won = s.p.result.winner;
         return h.div(.{ .key = 2, .class = "onpaper" }, .{card.view(h, .{ .label = W.paper }, &.{
             card.head(h, W.paper, null, &.{}),
             h.div(.{ .class = "paper" }, .{
-                split.view(h, .{
-                    .p = pp.blue,
-                    .lo = pp.low,
-                    .hi = pp.high,
-                    .won = if (s.p.result.winner == .blue) .blue else .red,
-                    .s = .l,
+                h.div(.{}, .{
+                    split.view(h, .{
+                        .p = pp.blue,
+                        .lo = pp.low,
+                        .hi = pp.high,
+                        .range_tip = "dp-range",
+                        .won = if (won == .blue) .blue else .red,
+                        .s = .l,
+                    }),
+                    toggletip.tip(h, "dp-range", W.range, W.range_note, false),
+                    h.p(.{ .class = "verdict" }, .{verdict(pp.blue, won)}),
                 }),
                 h.div(.{ .class = "edges" }, .{rows.done()}),
             }),
         })});
     }
 };
+
+/// Which draft was better against who won, in words: the split above has the numbers.
+/// Drafts seldom differ by much (most of a puzzle's blue chances are 44-56%), so a
+/// point either side is even and under four is "slightly"
+pub fn verdict(blue: f32, won: dd.Side) tree.Text {
+    const lead = @abs(blue - 50);
+    if (lead < 1) return if (won == .blue) W.even_blue else W.even_red;
+    const better: dd.Side = if (blue > 50) .blue else .red;
+    const i: usize = @as(usize, @intFromBool(lead >= 4)) * 4 + @as(usize, @backingInt(better)) * 2 + @intFromBool(better != won);
+    return W.verdicts[i];
+}
 
 fn digit(v: []const u8) ?u8 {
     return if (v.len == 1 and v[0] >= '0' and v[0] <= '9') v[0] - '0' else null;
@@ -275,7 +286,7 @@ const W = struct {
     const nth = Phrase("{n:int}{s:text}");
     const of = Phrase("of {n:int}");
     const yours = Phrase("Your pick {n:text}");
-    const yours_at = Phrase("Your pick {n:text}: {w:rate}, {d:points} on the played");
+    const yours_tag = plain("your pick");
     const chance = Phrase("{side:text}'s win chance");
     const with_ = plain("with");
     const vs = plain("vs played");
@@ -291,6 +302,21 @@ const W = struct {
     const paper = plain("On paper");
     const kinds = [4]tree.Text{ plain("Champions"), plain("Teammates"), plain("Lanes"), plain("Matchups") };
     const edge = Phrase("{side:text} {d:points}");
+    const range = plain("95% range");
+    const range_note = plain("How sure the model is of this draft's chance: it would land in this range 19 times in 20.");
+    const even_blue = plain("Even drafts. Blue won.");
+    const even_red = plain("Even drafts. Red won.");
+    /// By [better by 4+][better side][an upset]
+    const verdicts = [8]tree.Text{
+        plain("Blue's draft was slightly better, and blue won."),
+        plain("Blue's draft was slightly better, but red won."),
+        plain("Red's draft was slightly better, and red won."),
+        plain("Red's draft was slightly better, but blue won."),
+        plain("Blue's draft was better, and blue won."),
+        plain("Blue's draft was better, but red won."),
+        plain("Red's draft was better, and red won."),
+        plain("Red's draft was better, but blue won."),
+    };
 };
 
 pub const css =
@@ -307,6 +333,7 @@ pub const css =
     \\  .c-dseat .yours { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--t2); }
     \\  .c-dseat .none { color: var(--muted); font-size: var(--fs-s); }
     \\  .c-dseat .paper { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: center; }
+    \\  .c-dseat .verdict { margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--t2); }
     \\  .c-dseat .edges { display: grid; gap: 6px; }
     \\  .c-dseat .edges .lab { color: var(--t2); }
     \\  .c-dseat .e { display: grid; grid-template-columns: 96px minmax(0, 1fr) 80px; gap: var(--sp-2); align-items: center; font-size: var(--fs-s); }
@@ -325,7 +352,16 @@ pub const css =
 
 pub fn gallery(g: *@import("gallery.zig").Gallery) void {
     const h = g.h;
-    if (dp.shown(h, &dd.sample, 2, 2, .blue)) |p| g.addFill("wrong pick: yours beside the played, On paper", dp.both(h, p, .{ null, null }));
+    if (dp.shown(h, &dd.sample, 2, 2, .blue)) |p| g.addFill("wrong pick: yours tagged in the list, On paper", dp.both(h, p, .{ null, null }));
+    if (h.mem.create(dd.Puzzle)) |old| {
+        // A review from before the options' ranks: the hidden seat lists the played one only
+        old.* = dd.sample;
+        var seats = old.seats;
+        const x = &seats[@backingInt(old.hidden_side)][@backingInt(old.hidden_role)];
+        x.cands = x.cands[x.cands.len - 1 ..];
+        old.seats = seats;
+        if (dp.shown(h, old, 2, 2, .blue)) |p| g.addFill("wrong pick off the list: named in a line", dp.both(h, p, .{ null, null }));
+    } else |_| h.oom = true;
     if (dp.shown(h, &dd.sample, 0, 0, .blue)) |p| {
         p.seat = 1;
         g.addFill("another seat, one the model can't rate", dp.both(h, p, .{ null, null }));

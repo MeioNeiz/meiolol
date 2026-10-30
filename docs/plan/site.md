@@ -68,23 +68,25 @@ Jacob's asks: more engaging, more interesting things, fewer words, clearer facts
 "much more info in a nice view of what champ should have got picked and what champ
 should have won".
 
-Status: framed as the last pick (match data has no pick order), recent games, EUW in
-the context line, bans as icons per side, each player's rank. Options flip after the
-guess, each to one fact with its numbers and games, the team's win chance and a star on
-the model's pick; a score card with days in a row (one missed puzzle forgiven) and best.
-After the reveal: a scoreboard per team, lanes at 14 with this game's gold difference
-beside the patch's usual and which champion should win them, and the draft review
-(Puzzle.review, refreshed while the patch is current): "Who should have won, on paper"
-(blue's draft win chance with its 95% range), "Who should have been picked" (the model's
-top five for the hidden slot), "Every pick, rated" (all ten seats as the last pick).
-Pick shares: answers go once per browser to POST /api/daily, counted in api.db
-daily_answers with nothing about the sender. Share is hidden in preview mode (keyed on
-html.zig's preview banner; production-key.md "do not advertise"). Hint before the
-guess: Range (the hidden champion melee or ranged, Data Dragon attackrange; none for
-champions whose range changes, dailydata.no_range), costing the clean tick.
+Status: a pro game's draft in order with red's last pick hidden behind six options when
+Leaguepedia has an unused one, else a ranked game's best-explained seat behind four. The
+board (DraftBoard) with bans and ranks; a hint that splits the options (melee or ranged,
+AD or AP), costing the clean tick; then "Who won?". After the reveal: the marks and the
+game line; the board grows (K/D/A, each seat's rank as the last pick, which champion
+should win each lane); On paper (blue's draft win chance, its 95% range behind a
+toggletip, one verdict line: which draft was better against who won, the edge by kind);
+the selected seat's panel (the hidden seat first, any seat on tap): its rank of N and the
+model's top five with reason chips, each opening its breakdown. On the hidden seat the
+other options join the list at their ranks (Review.ranks, refreshed with the review), the
+guess tagged "your pick". Days strip and streak (one miss forgiven); pick shares: answers
+go once per browser to POST /api/daily, counted in api.db daily_answers with nothing
+about the sender. Share (hidden in preview mode, keyed on html.zig's preview banner;
+production-key.md "do not advertise"): the marks as emoji rows, the model's rank for the
+pick and the played one's (no champion named), the streak.
 
-Next: share text with the facts. Later: puzzles from clear
-comp leans (data-and-model.md step 5).
+Next: lanes say whether the favoured champion won the lane at 14 (the gold duel is in
+the data, lanes[].gold). Later: puzzles from clear comp leans (data-and-model.md step 5);
+"try this pick in the board" (plan/ui/daily.md).
 
 ## Learn
 

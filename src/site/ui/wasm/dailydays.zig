@@ -105,8 +105,8 @@ fn onCrowd(post: i32, bytes: ?[]u8) void {
 fn changed() void {
     if (!state.sharing) return;
     state.sharing = false;
-    var buf: [256]u8 = undefined;
-    const text = zjb.string(ds.shareText(&buf, &data, state.saved) orelse return);
+    var buf: [512]u8 = undefined;
+    const text = zjb.string(ds.shareText(&buf, &state) orelse return);
     defer text.release();
     const nav = zjb.global("navigator");
     const w = zjb.global("window");
@@ -150,8 +150,8 @@ fn onShared(e: zjb.Handle) callconv(.c) void {
     defer name.release();
     var nb: [32]u8 = undefined;
     if (std.mem.eql(u8, name.readString(&nb) catch "", "AbortError")) return;
-    var buf: [256]u8 = undefined;
-    const text = zjb.string(ds.shareText(&buf, &data, state.saved) orelse return);
+    var buf: [512]u8 = undefined;
+    const text = zjb.string(ds.shareText(&buf, &state) orelse return);
     defer text.release();
     copy(text);
 }
@@ -170,8 +170,8 @@ fn onCopiedEnd() callconv(.c) void {
 
 fn onNoCopy(e: zjb.Handle) callconv(.c) void {
     e.release();
-    var buf: [256]u8 = undefined;
-    const text = zjb.string(ds.shareText(&buf, &data, state.saved) orelse return);
+    var buf: [512]u8 = undefined;
+    const text = zjb.string(ds.shareText(&buf, &state) orelse return);
     defer text.release();
     ask(text);
 }

@@ -255,23 +255,38 @@ fn plain(ids: *Ids, id: u32, rank: u32, win: f64) !dd.Cand {
     return .{ .champ = try ids.at(id), .rank = clamp16(rank), .win = @floatCast(win), .terms = &.{}, .rest = @floatCast(win - base) };
 }
 
-/// The review's top picks with their reasons as terms, then the played one where it is
-/// not among them (its reasons from the options, its win chance the seat's). A pick from
-/// before win chances were kept is left out; the others keep the model's rank, so the
-/// shown ranks can skip one
+/// The review's top picks with their reasons as terms, then the options not among them
+/// at their ranks (the guess placed: what should have been picked of what was offered),
+/// best first. Reviews from before the ranks add only the played one (its win chance the
+/// seat's). A pick from before win chances were kept is left out; the others keep the
+/// model's rank, so the shown ranks can skip one
 fn hiddenCands(a: std.mem.Allocator, ids: *Ids, p: daily.Puzzle, rv: daily.Review) ![]const dd.Cand {
     var out: std.ArrayList(dd.Cand) = .empty;
-    var has_played = false;
     for (rv.picks, 1..) |o, rank| {
         const win = o.win orelse continue;
         try out.append(a, try cand(a, ids, o, @intCast(rank), win));
-        has_played = has_played or o.id == p.played;
     }
-    if (!has_played) {
-        const s = rv.seats[p.hidden_team][@backingInt(p.hidden_role)];
-        for (p.options) |o| if (o.id == p.played) try out.append(a, try cand(a, ids, o, s.rank, s.win));
+    const s = rv.seats[p.hidden_team][@backingInt(p.hidden_role)];
+    const ranked = rv.ranks.len == p.options.len;
+    for (p.options, 0..) |o, i| {
+        if (inPicks(rv.picks, o.id)) continue;
+        if (o.id == p.played) {
+            try out.append(a, try cand(a, ids, o, s.rank, s.win));
+        } else if (ranked) {
+            try out.append(a, try cand(a, ids, o, rv.ranks[i], o.win orelse continue));
+        }
     }
+    std.sort.insertion(dd.Cand, out.items, {}, byRank);
     return out.toOwnedSlice(a);
+}
+
+fn inPicks(picks: []const daily.Option, id: u32) bool {
+    for (picks) |o| if (o.id == id and o.win != null) return true;
+    return false;
+}
+
+fn byRank(_: void, x: dd.Cand, y: dd.Cand) bool {
+    return x.rank < y.rank;
 }
 
 fn cand(a: std.mem.Allocator, ids: *Ids, o: daily.Option, rank: u32, win: f64) !dd.Cand {
@@ -462,6 +477,29 @@ test "a ranked puzzle: bans per side, the played pick's reasons from its option,
     try testing.expectEqualStrings("H", back.champs[dd.played(&back)].name);
     // Two options, so no trait can leave two and rule one out
     try testing.expect(back.hint == null);
+}
+
+test "the hidden seat: each option at its rank, best first, after the top picks" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const opts = [_]daily.Option{
+        .{ .id = 12, .games = 50, .reasons = &.{reason(.base, 12, -0.5)}, .win = 46 },
+        test_options[1],
+    };
+    var rv = test_review;
+    rv.ranks = &.{ 9, 2 };
+    var raw = testPuzzle(null, rv);
+    raw.options = &opts;
+    const p = try puzzle(a, raw, Fake{}, Fake.champ, Fake.magic, Fake.ranged);
+    try testing.expect(p.valid());
+    const hidden = p.seats[1][2].cands;
+    try testing.expectEqual(@as(usize, 3), hidden.len);
+    for (hidden, [_][]const u8{ "M", "H", "L" }, [_]u16{ 1, 2, 9 }) |c, nm, rank| {
+        try testing.expectEqualStrings(nm, p.champs[c.champ].name);
+        try testing.expectEqual(rank, c.rank);
+    }
+    try testing.expectApproxEqAbs(@as(f32, 46), hidden[2].win, 1e-4);
 }
 
 fn named(p: *const dd.Puzzle, i: u16) bool {

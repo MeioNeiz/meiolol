@@ -166,6 +166,9 @@ pub const Review = struct {
     seats: [2][5]Seat,
     /// The model's top picks for the hidden slot, best first
     picks: []const Option,
+    /// Each option's rank in the hidden slot, as `Seat.rank`, in display order; empty in
+    /// reviews from before
+    ranks: []const u32 = &.{},
 };
 
 pub const Edge = struct {
@@ -798,11 +801,10 @@ fn review(
         draft.pool = &pool;
         var mine: [1]core.Suggestion = undefined;
         if (core.recommend(st, draft, opts, &mine).len != 1) return null;
-        var above: u32 = 0;
-        var listed = false;
-        for (all) |s| {
-            if (s.champion == played) listed = true else if (s.pp > mine[0].pp) above += 1;
-        }
+        const above = rankIn(all, mine[0]) - 1;
+        const listed = for (all) |s| {
+            if (s.champion == played) break true;
+        } else false;
         // The played champion may have too few games to be listed, yet rate higher
         const top = if (above == 0) mine[0] else all[0];
         var swapped = p.teams;
@@ -829,8 +831,28 @@ fn review(
             .win = percent(s.win),
         };
         r.picks = picks;
+        var ids: [max_options]u32 = undefined;
+        if (p.options.len > ids.len) return null;
+        for (p.options, ids[0..p.options.len]) |o, *id| id.* = o.id;
+        draft.pool = ids[0..p.options.len];
+        var scored: [max_options]core.Suggestion = undefined;
+        const got = core.recommend(st, draft, opts, scored[0..p.options.len]);
+        const ranks = try arena.alloc(u32, p.options.len);
+        for (p.options, ranks) |o, *rank| rank.* = for (got) |s| {
+            if (s.champion == o.id) break rankIn(all, s);
+        } else return null;
+        r.ranks = ranks;
     };
     return r;
+}
+
+/// `s`'s rank among `all` (the seat's listed champions), whether or not it is listed
+fn rankIn(all: []const core.Suggestion, s: core.Suggestion) u32 {
+    var above: u32 = 0;
+    for (all) |x| {
+        if (x.champion != s.champion and x.pp > s.pp) above += 1;
+    }
+    return above + 1;
 }
 
 const participants_sql =
@@ -1066,6 +1088,13 @@ test "puzzles are made once, anonymised and published" {
     if (hidden.rank > 1) try testing.expectEqual(hidden.top, rv.picks[0].id);
     for (rv.picks[1..], rv.picks[0 .. rv.picks.len - 1]) |o, prev| {
         try testing.expect(o.win.? <= prev.win.?);
+    }
+    // Each option at its place: the played one at the seat's rank, a listed pick at its
+    // own or above (ties share a rank)
+    try testing.expectEqual(p.options.len, rv.ranks.len);
+    for (p.options, rv.ranks) |o, rank| {
+        if (o.id == p.played) try testing.expectEqual(hidden.rank, rank);
+        for (rv.picks, 1..) |x, i| if (x.id == o.id) try testing.expect(rank <= i);
     }
     for (p.lanes) |l| try testing.expect(l.win != null);
 

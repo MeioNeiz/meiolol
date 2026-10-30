@@ -497,6 +497,11 @@ pub const css =
     \\  @container (max-width: 360px) {
     \\    .c-draft .seat > .c-champ { --sz: var(--icon-m); }
     \\    .c-draft .lane { gap: var(--sp-1); padding: 4px; }
+    \\    .c-draft[data-v="full"] .seat { grid-template-columns: 32px minmax(0, 1fr); column-gap: 6px; }
+    \\    .c-draft[data-v="full"] .seat[data-side="them"] { grid-template-columns: minmax(0, 1fr) 32px; }
+    \\    .c-draft[data-v="full"] .seat > .ic > .c-champ { --sz: 32px; }
+    \\    .c-draft[data-v="full"] .lane, .c-draft .mix { grid-template-columns: minmax(0, 1fr) 52px minmax(0, 1fr); }
+    \\    .c-draft .st { flex-wrap: wrap; column-gap: 4px; row-gap: 0; max-width: 100%; }
     \\  }
     \\}
     \\

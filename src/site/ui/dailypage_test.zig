@@ -338,17 +338,26 @@ test "the reveal's views: result line, seat panel parts, On paper and the mix" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    // Wrong pick (Gnar), the hidden seat: "Your pick" with its chance and the gap
+    // Wrong pick (Gnar), the hidden seat: tagged in the list, which ranks it; no line
     var s = answered(a, &dd.sample, 2, .blue);
     var out = try render(a, &s);
     try testing.expect(std.mem.find(u8, out, "class=\"res\"") != null);
-    try testing.expect(std.mem.find(u8, out, "Your pick Gnar: 49.9%") != null);
+    try testing.expect(std.mem.find(u8, out, "your pick") != null);
+    try testing.expect(std.mem.find(u8, out, "Your pick") == null);
     try testing.expect(std.mem.find(u8, out, "On paper") != null);
     try testing.expect(std.mem.count(u8, out, "</b> v <b") >= 3);
     // The played pick's chips: its three largest terms, by size
     const into = std.mem.find(u8, out, "into K&#39;Sante") orelse std.mem.find(u8, out, "into K'Sante").?;
     const strength = std.mem.find(u8, out, "Top strength").?;
     try testing.expect(into < strength);
+    // A review from before the options were ranked: the guess off the list, named in a line
+    var old = dd.sample;
+    var old_seats = old.seats;
+    const hs = &old_seats[@backingInt(old.hidden_side)][@backingInt(old.hidden_role)];
+    hs.cands = hs.cands[2..];
+    old.seats = old_seats;
+    var o = answered(a, &old, 2, .blue);
+    try testing.expect(std.mem.find(u8, try render(a, &o), "Your pick Gnar") != null);
     // A seat without candidates: unrated; no "Your pick" off the hidden seat
     s.seat = 1;
     out = try render(a, &s);
@@ -438,4 +447,13 @@ test "Home reads the marks this page writes" {
     const half = try dp.write(a, "", 11, .{ .opt = 2, .hint = true }, "");
     defer a.free(half);
     try testing.expectEqual(null, hp.dailyMarks(half, 11));
+}
+
+test "On paper's verdict: which draft was better against who won" {
+    const v = dailyseat.verdict;
+    try testing.expectEqualStrings("Even drafts. Red won.", v(50.9, .red).s);
+    try testing.expectEqualStrings("Blue's draft was slightly better, and blue won.", v(51.3, .blue).s);
+    try testing.expectEqualStrings("Red's draft was slightly better, but blue won.", v(47.1, .blue).s);
+    try testing.expectEqualStrings("Red's draft was better, and red won.", v(41.1, .red).s);
+    try testing.expectEqualStrings("Blue's draft was better, but red won.", v(57.6, .red).s);
 }

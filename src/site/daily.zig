@@ -91,6 +91,8 @@ fn body(a: std.mem.Allocator, w: *Writer, files: []const File, shown: Shown, at:
         .hidden_side = shown.p.hidden_side,
         .hidden_role = shown.p.hidden_role,
         .url = if (at.origin) |o| try a.print("{s}/daily/{d}", .{ o, shown.p.n }) else "",
+        .ranks = try optionRanks(a, &shown.p),
+        .of = shown.p.seats[@backingInt(shown.p.hidden_side)][@backingInt(shown.p.hidden_role)].of,
     };
     var raw: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, ds.Data, days, &raw);
@@ -122,6 +124,16 @@ fn body(a: std.mem.Allocator, w: *Writer, files: []const File, shown: Shown, at:
 }
 
 /// The puzzles' own pages the static build writes (route answers the same)
+/// Each option's rank in the hidden seat, display order; empty unless the review ranks all
+fn optionRanks(a: std.mem.Allocator, p: *const dd.Puzzle) ![]const u16 {
+    const seat = p.seats[@backingInt(p.hidden_side)][@backingInt(p.hidden_role)];
+    const out = try a.alloc(u16, p.options.len);
+    for (p.options, out) |o, *r| r.* = for (seat.cands) |c| {
+        if (c.champ == o) break c.rank;
+    } else return &.{};
+    return out;
+}
+
 pub fn pagePaths(site: *const Site) ![]const ui.urls.Page {
     const a = site.arena;
     const days = try dayList(a, site.daily_files, todayNumber(site.io) + 1);
@@ -361,7 +373,11 @@ test "route: a good n renders noindex from daily/, any other slug or n past tomo
     var out: std.Io.Writer.Allocating = .init(a);
     try std.testing.expect(try routeOn(&site, &out.writer, try a.print("{d}", .{n}), n));
     const s = out.written();
-    try std.testing.expectEqualStrings(try a.print("https://x.io/daily/{d}", .{n}), (try daysData(a, s)).url);
+    const days = try daysData(a, s);
+    try std.testing.expectEqualStrings(try a.print("https://x.io/daily/{d}", .{n}), days.url);
+    // The options' ranks for the share text, display order
+    try std.testing.expectEqualSlices(u16, &.{ 3, 2, 1 }, days.ranks);
+    try std.testing.expectEqual(31, days.of);
     try std.testing.expect(std.mem.find(u8, s, try a.print("<title>Daily Draft #{d} | meiolol</title>", .{n})) != null);
     try std.testing.expect(std.mem.find(u8, s, "content=\"noindex") != null);
     try std.testing.expect(std.mem.find(u8, s, "rel=\"canonical\"") == null);

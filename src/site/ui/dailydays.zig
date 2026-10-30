@@ -8,6 +8,7 @@ const tree = @import("tree.zig");
 const badge = @import("badge.zig");
 const button = @import("button.zig");
 const role = @import("role.zig");
+const draftboard = @import("draftboard.zig");
 const dd = @import("dailydata.zig");
 const dp = @import("dailypage.zig");
 const phrase = @import("phrase.zig");
@@ -45,6 +46,10 @@ pub const Data = struct {
     /// The page's own address for the share text; "" hides Share (preview: the site may
     /// not be advertised, docs/production-key.md)
     url: []const u8 = "",
+    /// Each option's rank in the hidden seat by the model (display order) and of how many;
+    /// empty when the review doesn't rank them all
+    ranks: []const u16 = &.{},
+    of: u16 = 0,
 };
 
 /// /api/daily's counts for the page's puzzle: players, those who got the pick, the winner
@@ -161,10 +166,12 @@ fn pct(k: u32, n: u32) u32 {
 }
 
 /// What Share sends, Wordle style: the marks, both teams' seats by role with the hidden one
-/// as the pick's mark, the "Who won?" mark and the page; null until the page's puzzle is
-/// finished
-pub fn shareText(buf: []u8, d: *const Data, saved: []const u8) ?[]const u8 {
-    const m = dp.read(saved, d.n) orelse return null;
+/// as the pick's mark, the "Who won?" mark, the model's rank for the pick (and the played
+/// one's when wrong: no champion named, so nothing given away), the streak and the page;
+/// null until the page's puzzle is finished
+pub fn shareText(buf: []u8, s: *const Page) ?[]const u8 {
+    const d = s.d;
+    const m = dp.read(s.saved, d.n) orelse return null;
     const k = m.marks orelse return null;
     const mark = [2][]const u8{ "\u{274C}", "\u{2705}" };
     const seat = [2][]const u8{ "\u{1F7E6}", "\u{1F7E5}" };
@@ -177,7 +184,19 @@ pub fn shareText(buf: []u8, d: *const Data, saved: []const u8) ?[]const u8 {
         }
         w.writeByte('\n') catch return null;
     }
-    w.print("Who won? {s}\n{s}", .{ mark[@intFromBool(k[1])], d.url }) catch return null;
+    w.print("Who won? {s}\n", .{mark[@intFromBool(k[1])]}) catch return null;
+    if (m.opt) |o| if (o < d.ranks.len and d.answer < d.ranks.len) {
+        const mine = d.ranks[o];
+        w.print("My pick: {d}{s} of {d} for the model", .{ mine, draftboard.ordinal(mine), d.of }) catch return null;
+        if (o != d.answer) {
+            const played = d.ranks[d.answer];
+            w.print(", the played one {d}{s}", .{ played, draftboard.ordinal(played) }) catch return null;
+        }
+        w.writeByte('\n') catch return null;
+    };
+    const run = s.streak().run;
+    if (run >= 2) w.print("\u{1F525} {d} days in a row\n", .{run}) catch return null;
+    w.writeAll(d.url) catch return null;
     return w.buffered();
 }
 
@@ -376,6 +395,8 @@ const demo_archive: Data = .{
     .hidden_side = .red,
     .hidden_role = .mid,
     .url = "https://meio.lol/daily/12",
+    .ranks = &.{ 1, 12, 3, 2 },
+    .of = 40,
 };
 
 /// Finished on their days but #11 (late) and #15 (missed): the streak forgives #15, and
@@ -387,6 +408,12 @@ const demo_saved =
     \\"14":{"opt":1,"side":1,"marks":"11","on":"2026-10-24"},"16":{"opt":5,"side":1,"marks":"01","on":"2026-10-26"},
     \\"17":{"opt":2}}
 ;
+
+/// demo_saved with #12 right (the played option, 0)
+const demo_right = "{\"8\":{\"opt\":0,\"side\":0,\"marks\":\"11\",\"on\":\"2026-10-18\"},\"9\":{\"opt\":1,\"side\":1,\"marks\":\"10\",\"on\":\"2026-10-19\"}," ++
+    "\"10\":{\"opt\":2,\"side\":0,\"marks\":\"00\",\"on\":\"2026-10-20\"},\"11\":{\"opt\":0,\"side\":1,\"marks\":\"01\",\"on\":\"2026-10-22\"}," ++
+    "\"12\":{\"opt\":0,\"side\":0,\"marks\":\"11\",\"on\":\"2026-10-22\"},\"13\":{\"opt\":0,\"side\":0,\"marks\":\"10\",\"on\":\"2026-10-23\"}," ++
+    "\"14\":{\"opt\":1,\"side\":1,\"marks\":\"11\",\"on\":\"2026-10-24\"},\"16\":{\"opt\":5,\"side\":1,\"marks\":\"01\",\"on\":\"2026-10-26\"},\"17\":{\"opt\":2}}";
 
 fn demoPage(h: *H, d: *const Data, saved: []const u8) ?*Page {
     const p = h.mem.create(Page) catch return null;
@@ -618,30 +645,44 @@ test "the crowd: sent once finished, read back for the page's puzzle only" {
     try testing.expectEqual(null, withSent(list[0..3], "15", 12345));
 }
 
-test "share: the marks on the hidden seat, only once finished and public" {
-    var buf: [256]u8 = undefined;
-    try testing.expectEqual(null, shareText(&buf, &demo_archive, ""));
-    try testing.expectEqual(null, shareText(&buf, &demo_archive, "{\"12\":{\"opt\":3}}"));
+test "share: the marks on the hidden seat, the model's ranks, the streak; once finished" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var buf: [512]u8 = undefined;
+    var sp: Page = .init(arena.allocator(), &demo_archive);
+    try testing.expectEqual(null, shareText(&buf, &sp));
+    sp.saved = "{\"12\":{\"opt\":3}}";
+    try testing.expectEqual(null, shareText(&buf, &sp));
+    // Right: its rank alone; seven days in a row (late #11 and missed #15 forgiven)
+    sp.saved = demo_right;
     try testing.expectEqualStrings(
         "Daily Draft #12: 2/2\n" ++
             "\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\n" ++
             "\u{1F7E5}\u{1F7E5}\u{2705}\u{1F7E5}\u{1F7E5}\n" ++
-            "Who won? \u{2705}\nhttps://meio.lol/daily/12",
-        shareText(&buf, &demo_archive, demo_saved).?,
+            "Who won? \u{2705}\nMy pick: 1st of 40 for the model\n" ++
+            "\u{1F525} 7 days in a row\nhttps://meio.lol/daily/12",
+        shareText(&buf, &sp).?,
     );
+    try testing.expectEqual(null, shareText(buf[0..20], &sp));
+    // Wrong, with a hint, alone: the played one's rank too, no streak line
+    sp.saved = "{\"12\":{\"opt\":1,\"side\":0,\"hint\":1,\"marks\":\"01\"}}";
     try testing.expectEqualStrings(
         "Daily Draft #12: 1/2, with a hint\n" ++
             "\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\n" ++
             "\u{1F7E5}\u{1F7E5}\u{274C}\u{1F7E5}\u{1F7E5}\n" ++
-            "Who won? \u{2705}\nhttps://meio.lol/daily/12",
-        shareText(&buf, &demo_archive, "{\"12\":{\"opt\":1,\"side\":0,\"hint\":1,\"marks\":\"01\"}}").?,
+            "Who won? \u{2705}\nMy pick: 12th of 40 for the model, the played one 1st\n" ++
+            "https://meio.lol/daily/12",
+        shareText(&buf, &sp).?,
     );
-    try testing.expectEqual(null, shareText(buf[0..20], &demo_archive, demo_saved));
+    // A review without ranks: no model line
+    var bare = demo_archive;
+    bare.ranks = &.{};
+    sp.d = &bare;
+    try testing.expect(std.mem.find(u8, shareText(&buf, &sp).?, "model") == null);
     // A hint taken, nothing finished
-    try testing.expectEqual(null, shareText(&buf, &demo_archive, "{\"12\":{\"hint\":1}}"));
+    sp.saved = "{\"12\":{\"hint\":1}}";
+    try testing.expectEqual(null, shareText(&buf, &sp));
 
-    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
     var t: tree.Tree = .{};
     var h: H = .init(arena.allocator(), &t);
     var p: Page = .init(arena.allocator(), &demo_archive);
