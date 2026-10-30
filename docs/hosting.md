@@ -262,7 +262,7 @@ a 301 to it.
   exe (install.zig bundled). Rotate: new token on the box, the same in the conf, `nginx
   -t`, reload; old zips stop updating. The same files under /private/desktop/
   (accounts.md AC5; the web loop's private/ upload, same gate) for the private edition's
-  channel, and under /p/desktop/ while older apps check there
+  channel
 - Admin API (/admin/api/, src/admin_api.zig): `meiolol render` on the box answers
   live.bin (crawler's last 3 h by minute, queues, services, health; cached 30 s),
   log?file=&lines= (crawl, web, eval, render, health, backup, builds; ids and Riot IDs

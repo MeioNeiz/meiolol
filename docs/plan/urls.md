@@ -37,14 +37,19 @@ filter URLs and canonicals). Any URL work follows this file; change it here firs
   the generator, wasm, nginx and serve.zig on the scheme; old-URL redirects removed 29 Oct
 - URL5 (done 29 Oct): /admin and /private (was /p/) without .html, no redirects from
   the old paths
-- URL6 Retire /p/desktop/ (apps built before URL5 check for updates there; the same
-  files, not a redirect) and /admin/desktop/ (AC5, apps still on the shared key).
-  How we know: C01's nginx log (/var/log/nginx/meiolol.access.log, JSON lines, `u` the
-  path) shows no GET of /p/desktop/update.signed or /admin/desktop/update.signed for 14
-  days after the last release whose update base is /private/desktop/; the account
-  page's devices say who signed in. 27-30 Oct: /admin/desktop/update.signed 200 (29 Oct,
-  an app on the key), /p/desktop/update.signed 401 twice (a signed-out app). Then drop
-  both nginx locations; an app left behind needs a fresh download
+- URL6 Retire /admin/desktop/ (AC5): every release so far (last 0453f11, 23 Oct) has
+  update base /admin/desktop/; /private/desktop/ is the base from the next one. /p/desktop/
+  went 30 Oct: no release ever had it as its base, and no app fetched it on C01. Steps:
+  (1) a release (deploy/desktop-release.sh); installed apps take its exe within 3 h of
+  running, and from their next start check /private/desktop/; (2) the admin page's zip
+  link and info.json (adminpage.zig, admin.js) read /private/desktop/; (3) count, from
+  the Mac, the app's update checks per day and path (logs kept 14 days):
+  `ssh essex-vm "zcat -f /var/log/nginx/meiolol.access.log* | grep -F desktop/update |
+  jq -r 'select(.a|startswith(\"zig/\")) | \"\\(.t|strftime(\"%F\")) \\(.s) \\(.u)\"' | sort | uniq -c"`.
+  27-30 Oct: /admin/desktop/update.signed 200 on 27 and 29 Oct, nothing on /private/.
+  Check 14 days after (1): no /admin/desktop/ line in 14 days, then drop its nginx
+  location and web-loop.sh's admin/desktop copy; an app left behind needs a fresh
+  download. The account page's devices say who signed in
 - Checked 30 Oct from C01: the application text (submitted and revised) and
   production-key.md quote only meio.lol and privacy@meio.lol; every page they name
   (/, /your, /daily, /learn, /pool, /champions, /matchups, /patch, /method, /privacy,

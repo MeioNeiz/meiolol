@@ -83,7 +83,7 @@ removed device stops at its next check (3 h, or the next start); `meiolol-app si
 does the same from a terminal. The release script builds, checks and signs both
 editions (private to the box's release/, public to release/public/, served nowhere
 yet); /private/desktop/ serves them with /admin/desktop/'s gate, and the app's update base
-is /private/desktop/ (/p/desktop/ for older apps).
+is /private/desktop/ (/admin/desktop/ for apps released before sign in).
 
 ## Steps
 
@@ -109,7 +109,7 @@ Each step ends tested and deployed; nginx and systemd changes on C01 need Jacob'
      ml/meiolol/desktop.token and C01's /etc/nginx/meiolol-desktop-key.conf; hosting.md
      "Desktop app files" follows. The privacy page's desktop app paragraph says the app
      signs in (with step 1)
-- AC5 Retire admin/desktop/ and its nginx location: urls.md URL6 (with /p/desktop/)
+- AC5 Retire admin/desktop/ and its nginx location: urls.md URL6
 - AC6 Later: friends link their Riot ID (profile icon check, as Remove a Riot ID does);
   friends' groups become Squads (backlog.md "Your games and Squads") for the private
   tier first
