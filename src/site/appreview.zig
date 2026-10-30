@@ -6,8 +6,9 @@
 //! editions: the same island and CSS, at the window's width or narrow, and a fake bridge
 //! that shows what the page would send the shell.
 //!   /private/app                      the index
-//!   /private/app/<edition>/<slug>     a state; its app.bin under <slug>/ (a <base>: the
-//!                                     island fetches app.bin relative to the page)
+//!   /private/app/<edition>/<slug>     a state; its app.bin under <slug>/ (review.js points
+//!                                     the island's relative fetch there: nginx sends
+//!                                     base-uri 'none' and drops a trailing slash)
 
 const std = @import("std");
 const store = @import("store");
@@ -394,8 +395,8 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, sh
         .practice_js = root ++ "/ui-practice.js",
         .practice_wasm = root ++ "/ui-practice.wasm",
         .head = try a.print(
-            \\<base href="{s}/{t}/{s}/"><link rel="stylesheet" href="{s}/review.css"><script src="{s}/review.js"></script>
-        , .{ root, ed, s.slug, root, root }),
+            \\<link rel="stylesheet" href="{s}/review.css"><script src="{s}/review.js"></script>
+        , .{ root, root }),
         .top = try reviewBar(a, ed, shots, i),
         .end = "</div>",
     });
@@ -508,9 +509,13 @@ const review_css =
 ;
 
 /// What the shell's webview gives a page (mac.zig's shim), faked, then the shell's own
-/// bridge.js. Messages to the shell show in the bar; a seat click opens that lane's page
+/// bridge.js. Messages to the shell show in the bar; a seat click opens that lane's page.
+/// The islands fetch app.bin and practice.bin relative to the page: from its own folder
 const review_js =
     \\(() => {
+    \\  const dir = location.pathname.replace(/\/$/, '') + '/';
+    \\  const get = window.fetch;
+    \\  window.fetch = (u, o) => get(typeof u === 'string' && /^(app|practice)\.bin\b/.test(u) ? dir + u : u, o);
     \\  const ls = [];
     \\  const show = (m) => { const o = document.getElementById('rv-log'); if (o) o.textContent = 'to the app: ' + m; };
     \\  window.chrome = window.chrome || {};
@@ -581,7 +586,7 @@ test "every scenario's states as pages in both editions, practice testers only" 
         const public = std.mem.startsWith(u8, f.path, "app/public/");
         pages[@intFromBool(public)] += 1;
         try testing.expect(std.mem.find(u8, f.data, "data-island=\"app\"") != null);
-        try testing.expect(std.mem.find(u8, f.data, "<base href=\"/private/") != null);
+        try testing.expect(std.mem.find(u8, f.data, "<base") == null);
         // Its app.bin beside it
         const bin = try std.mem.concat(a, u8, &.{ f.path[0 .. f.path.len - ".html".len], "/app.bin" });
         for (list) |g| {
