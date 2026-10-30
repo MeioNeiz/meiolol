@@ -90,8 +90,8 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   sums (measured below): platform, patch, start, the five curves lanes and the ten
   players' builds seats (participants row, picks, rank). Each game is decoded from its
   timeline once and kept; a changed day (late timelines, up to 9 days) decodes only its
-  new and changed games. `curves --site` and `builds --site` read the days instead of
-  every timeline, with the same output. The views write stays on data/partials
+  new and changed games. `curves` and `builds` (--site or not) read the days instead
+  of every timeline, with the same output. The views write stays on data/partials
   (already per day, per game). Done when the views, curves --site and builds --site
   load from cubes, with sizes measured. Unlocks: with the pass cheap, the 30-day builds
   can count matchups (~1.1 GB a builder of C01's 62 GB), so the matchup builds strip

@@ -108,6 +108,11 @@ pub fn drop(gpa: Allocator, io: std.Io, dir: []const u8) !void {
     try std.Io.Dir.cwd().deleteTree(io, try std.fmt.bufPrint(&buf, "{s}/days", .{dir}));
 }
 
+/// Days kept older than the run's own window: the site's 30 days. The web loop's
+/// previous-patch curves reach back ~27 days on two-week patches; after a longer patch
+/// that run builds its older days again
+pub const keep_days = 30;
+
 pub const Counts = struct {
     /// Days from the refresh's first on, with games
     days: usize = 0,
@@ -154,11 +159,13 @@ pub const Store = struct {
     }
 
     /// Builds every day from `from_ms`'s on whose games changed since its file was made,
-    /// and drops files of days before it, or with no games left
+    /// and drops files of days with no games left, or older than keep_days and from_ms
     pub fn refresh(s: *Store, db: store.Db, from_ms: i64, items: Items) !Counts {
         const gpa = s.gpa;
         s.counts = .{};
         const first = @divFloor(from_ms, day_ms);
+        const today = @divFloor(std.Io.Clock.real.now(s.io).toMilliseconds(), day_ms);
+        const drop_before = @min(first, today - keep_days);
         var sigs = try daySigs(gpa, db, first * day_ms);
         defer sigs.deinit(gpa);
         s.counts.days = sigs.count();
@@ -181,7 +188,7 @@ pub const Store = struct {
             s.counts.games_built += r.decoded;
             s.counts.bytes += r.bytes;
         }
-        // Days before the window, or whose games went
+        // Days no run reads, or whose games went
         var dir = try std.Io.Dir.cwd().openDir(s.io, try std.fmt.bufPrint(&buf, "{s}/days", .{s.dir}), .{ .iterate = true });
         defer dir.close(s.io);
         var stale: std.ArrayList(i64) = .empty;
@@ -190,7 +197,7 @@ pub const Store = struct {
         while (try files.next(s.io)) |f| {
             const stem = std.mem.cutSuffix(u8, f.name, ".bin") orelse continue;
             const day = std.fmt.parseInt(i64, stem, 10) catch continue;
-            if (day < first or !sigs.contains(day)) try stale.append(gpa, day);
+            if (day < drop_before or (day >= first and !sigs.contains(day))) try stale.append(gpa, day);
         }
         for (stale.items) |day| {
             try std.Io.Dir.cwd().deleteFile(s.io, try s.dayPath(&buf, day));
@@ -532,10 +539,10 @@ fn intern(a: Allocator, map: *std.StringArrayHashMapUnmanaged(void), text: []con
     return std.math.cast(Code, gop.index) orelse error.TooManyStrings;
 }
 
-/// The first game start a view needs: `since_ms`, or earlier for the first game on one of
-/// `patches`
-pub fn firstStart(db: store.Db, since_ms: i64, patches: []const []const u8) !i64 {
-    var first = since_ms;
+/// The first game start a view of `patches` (empty: any) from `since_ms` on needs
+fn firstStart(db: store.Db, since_ms: i64, patches: []const []const u8) !i64 {
+    if (patches.len == 0) return since_ms;
+    var first: i64 = std.math.maxInt(i64);
     for (patches) |p| {
         var q = try db.prepare("SELECT min(game_start) FROM matches WHERE patch = ?");
         defer q.deinit();
@@ -544,11 +551,46 @@ pub fn firstStart(db: store.Db, since_ms: i64, patches: []const []const u8) !i64
             first = @min(first, start);
         };
     }
-    return first;
+    return @max(since_ms, first);
 }
 
-/// As curves.buildMany, from the day files from `from_ms`'s day on
-pub fn curvesFrom(
+/// Curves files, builders[i] for specs[i], from one pass over their days (made current
+/// first). Caller owns the builders, also on error
+pub fn curvesOf(
+    s: *Store,
+    db: store.Db,
+    items: Items,
+    specs: []const curves.Spec,
+    builders: []core.curvesfile.Builder,
+    summaries: []curves.Summary,
+) !Counts {
+    var from: i64 = std.math.maxInt(i64);
+    for (specs) |spec| from = @min(from, try firstStart(db, spec.since_ms, spec.chosen));
+    const n = try s.refresh(db, from, items);
+    try curvesFrom(s, from, specs, builders, summaries);
+    return n;
+}
+
+/// Builds files, out[i] for sets[i], from one pass over their days (made current first);
+/// `d` names what the files hold. Caller owns `out`
+pub fn buildsOf(
+    s: *Store,
+    db: store.Db,
+    items: Items,
+    d: *const ddragon.BuildData,
+    o: builds.Options,
+    sets: []const builds.Set,
+    out: []builds.Builder,
+) !Counts {
+    var from: i64 = std.math.maxInt(i64);
+    for (sets) |set| from = @min(from, try firstStart(db, set.slice.since_ms, set.slice.patches));
+    const n = try s.refresh(db, from, items);
+    try buildsFrom(s, from, d, o, sets, out);
+    return n;
+}
+
+/// Curves from the day files from `from_ms`'s day on
+fn curvesFrom(
     s: *const Store,
     from_ms: i64,
     specs: []const curves.Spec,
@@ -580,8 +622,8 @@ pub fn curvesFrom(
     }
 }
 
-/// As builds.buildEach, from the day files from `from_ms`'s day on. Caller owns `out`
-pub fn buildsFrom(
+/// Builds from the day files from `from_ms`'s day on. Caller owns `out`
+fn buildsFrom(
     s: *const Store,
     from_ms: i64,
     d: *const ddragon.BuildData,

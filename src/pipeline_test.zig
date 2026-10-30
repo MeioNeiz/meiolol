@@ -84,7 +84,7 @@ test "fixture games to stats, curves and the website" {
     }
     try testing.expectEqual(games, n_drafts);
 
-    var cv = try curves.build(gpa, io, db, &.{patch}, 0, &.{"EUW1"}, &.{});
+    var cv = try curvesOne(try cubeDir(arena, dir, "curves"), db, .{ .chosen = &.{patch}, .since_ms = 0, .platforms = &.{"EUW1"} });
     defer cv.builder.deinit();
     try testing.expectEqual(games, cv.summary.games);
     const curves_path = try std.fs.path.join(arena, &.{ dir, "curves.bin" });
@@ -94,7 +94,7 @@ test "fixture games to stats, curves and the website" {
 
     // Builds count Platinum IV and up only: one rank snapshot below it is left out
     try db.exec("UPDATE participants SET tier = CASE slot WHEN 5 THEN 'GOLD' ELSE 'PLATINUM' END");
-    var bd = try builds.build(gpa, io, db, &build_data, .{ .patches = &.{patch}, .platforms = &.{"EUW1"}, .min_matchup_games = 0 });
+    var bd = try buildsOne(try cubeDir(arena, dir, "builds"), db, .{ .min_matchup_games = 0 }, .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} } });
     defer bd.deinit();
     try testing.expectEqual(games, bd.timelines);
     const build_file = try bd.file(arena, &build_data, patch, "PLATINUM", 10);
@@ -211,7 +211,7 @@ test "fixture games to stats, curves and the website" {
 
     try fillPrev(arena, db);
     try fillOn(arena, db, older_patch, 2, 3000);
-    var prev_cv = try curves.build(gpa, io, db, &.{prev_patch}, 0, &.{"EUW1"}, &.{});
+    var prev_cv = try curvesOne(try cubeDir(arena, dir, "prev"), db, .{ .chosen = &.{prev_patch}, .since_ms = 0, .platforms = &.{"EUW1"} });
     defer prev_cv.builder.deinit();
     try testing.expectEqual(games, prev_cv.summary.games);
     var prev_curves_bytes: std.Io.Writer.Allocating = .init(arena);
@@ -1164,13 +1164,14 @@ fn timelineOutputs(arena: std.mem.Allocator, io: std.Io, db: store.Db, tmp: std.
     const both: []const []const u8 = &.{ "EUW1", "NA1" };
     var out: [5][]const u8 = undefined;
 
-    var cv = try curves.build(gpa, io, db, &.{patch}, 0, both, &.{});
+    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, tag });
+    var cv = try curvesOne(try cubeDir(arena, dir, "curves"), db, .{ .chosen = &.{patch}, .since_ms = 0, .platforms = both });
     defer cv.builder.deinit();
     var curves_bytes: std.Io.Writer.Allocating = .init(arena);
     try cv.builder.write(&curves_bytes.writer, patch, 1);
     out[0] = curves_bytes.written();
 
-    var bd = try builds.build(gpa, io, db, &build_data, .{ .patches = &.{patch}, .platforms = both });
+    var bd = try buildsOne(try cubeDir(arena, dir, "builds"), db, .{}, .{ .slice = .{ .platforms = both, .patches = &.{patch} } });
     defer bd.deinit();
     out[1] = try std.json.Stringify.valueAlloc(arena, try bd.file(arena, &build_data, patch, "PLATINUM", 10), .{});
 
@@ -1182,7 +1183,6 @@ fn timelineOutputs(arena: std.mem.Allocator, io: std.Io, db: store.Db, tmp: std.
     try lean.write(&lean_bytes.writer, &lf, ln.champs.ids.items, ln.list.items, "every region");
     out[2] = lean_bytes.written();
 
-    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, tag });
     var log: std.Io.Writer.Allocating = .init(arena);
     try lanemodel.run(gpa, io, db, dir, &log.writer);
     const model = try tmp.dir.readFileAlloc(io, try arena.print("{s}/lane-model.json", .{tag}), arena, .limited(16 << 20));
@@ -1205,12 +1205,17 @@ test "fixture games to builds: EUW and every region, patch and recent, from one 
     // Every 4th game NA1, every 3rd without a timeline
     try fillGames(arena, db, 40, true);
     const both: []const []const u8 = &.{ "EUW1", "NA1" };
-    const o: builds.Options = .{ .patches = &.{patch}, .platforms = both, .min_tier = null };
+    const o: builds.Options = .{ .min_tier = null };
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path });
     try db.exec("UPDATE participants SET tier = CASE WHEN slot < 3 THEN 'MASTER' WHEN slot < 6 THEN 'EMERALD' ELSE 'PLATINUM' END");
     // An hour apart: the third set (a 30-day view's) from game 20, any patch; the last
     // two the rank filter's (EUW at Emerald+ and Master+)
     var each: [5]builds.Builder = undefined;
-    try builds.buildEach(gpa, io, db, &build_data, o, &.{
+    const cube = try cubes.Store.open(gpa, io, try cubeDir(arena, dir, "each"));
+    defer cube.deinit();
+    _ = try cubes.buildsOf(cube, db, fixture_items, &build_data, o, &.{
         .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} } },
         .{ .slice = .{ .platforms = both, .patches = &.{patch} } },
         .{ .slice = .{ .platforms = both, .since_ms = start_ms + 20 * std.time.ms_per_hour }, .matchups = false },
@@ -1223,7 +1228,7 @@ test "fixture games to builds: EUW and every region, patch and recent, from one 
     try testing.expectEqual(27, each[1].timelines);
     try testing.expectEqual(20, each[2].games);
     for (each[0..2], [_][]const []const u8{ &.{"EUW1"}, both }) |b, platforms| {
-        var alone = try builds.build(gpa, io, db, &build_data, .{ .patches = &.{patch}, .platforms = platforms, .min_tier = null });
+        var alone = try buildsOne(try cubeDir(arena, dir, "alone"), db, o, .{ .slice = .{ .platforms = platforms, .patches = &.{patch} } });
         defer alone.deinit();
         try testing.expectEqual(alone.games, b.games);
         try testing.expectEqual(alone.timelines, b.timelines);
@@ -1233,7 +1238,7 @@ test "fixture games to builds: EUW and every region, patch and recent, from one 
     }
     // Each rank set as a run at that floor alone, without matchups
     for (each[3..], [_][]const u8{ "EMERALD", "MASTER" }, [_]u32{ 6, 3 }) |b, tier, per_game| {
-        var alone = try builds.build(gpa, io, db, &build_data, .{ .patches = &.{patch}, .platforms = &.{"EUW1"}, .min_tier = tier });
+        var alone = try buildsOne(try cubeDir(arena, dir, tier), db, .{ .min_tier = tier }, .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} } });
         defer alone.deinit();
         const a = try std.json.Stringify.valueAlloc(arena, try alone.file(arena, &build_data, patch, tier, 10), .{});
         const f = try b.file(arena, &build_data, patch, tier, 10);
@@ -1247,7 +1252,7 @@ test "fixture games to builds: EUW and every region, patch and recent, from one 
     try testing.expectEqual(0, try stats.countGames(db, &.{"15.12"}, &.{"EUW1"}));
 }
 
-test "day cubes: curves and builds as from the database, days built again when their games change" {
+test "day cubes: days built again when their games change, as if built afresh" {
     const gpa = testing.allocator;
     const io = testing.io;
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
@@ -1262,19 +1267,13 @@ test "day cubes: curves and builds as from the database, days built again when t
     try db.exec("UPDATE participants SET tier = CASE WHEN slot < 3 THEN 'MASTER' WHEN slot < 6 THEN 'EMERALD' ELSE 'PLATINUM' END");
     const cube = try cubes.Store.open(gpa, io, try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "cubes" }));
     defer cube.deinit();
-    var items_ctx: u8 = 0;
-    const items: cubes.Items = .{ .ctx = &items_ctx, .get = struct {
-        fn f(_: *anyopaque, _: []const u8) anyerror!*const ddragon.BuildData {
-            return &build_data;
-        }
-    }.f };
 
-    var n = try cube.refresh(db, start_ms, items);
+    var n = try cube.refresh(db, start_ms, fixture_items);
     try testing.expectEqual(3, n.days);
     try testing.expectEqual(3, n.built);
     try testing.expectEqual(40, n.games_built);
-    try expectCubesMatch(arena, io, db, cube);
-    n = try cube.refresh(db, start_ms, items);
+    try expectCubesMatch(arena, io, db, cube, try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "fresh-first" }));
+    n = try cube.refresh(db, start_ms, fixture_items);
     try testing.expectEqual(0, n.built);
 
     // A timeline gone, a new one, a game REPLACEd: their days, and in them only those
@@ -1282,19 +1281,19 @@ test "day cubes: curves and builds as from the database, days built again when t
     try db.exec("DELETE FROM timeline.timelines WHERE match_id = 'EUW1_2'");
     try db.exec("UPDATE timeline.timelines SET rowid = rowid + 1000 WHERE match_id = 'EUW1_5'");
     try db.exec("INSERT OR REPLACE INTO matches SELECT * FROM matches WHERE match_id = 'EUW1_30'");
-    n = try cube.refresh(db, start_ms, items);
+    n = try cube.refresh(db, start_ms, fixture_items);
     try testing.expectEqual(2, n.built);
     try testing.expectEqual(3, n.games_built);
-    try expectCubesMatch(arena, io, db, cube);
+    try expectCubesMatch(arena, io, db, cube, try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "fresh-changed" }));
     try db.run("DELETE FROM matches WHERE game_start >= ?", .{start_ms + 30 * std.time.ms_per_hour});
-    n = try cube.refresh(db, start_ms, items);
+    n = try cube.refresh(db, start_ms, fixture_items);
     try testing.expectEqual(1, n.dropped);
     const left = try cube.days(gpa, start_ms);
     defer gpa.free(left);
     try testing.expectEqual(2, left.len);
-    try expectCubesMatch(arena, io, db, cube);
-    // Days before the window go
-    n = try cube.refresh(db, start_ms + std.time.ms_per_day, items);
+    try expectCubesMatch(arena, io, db, cube, try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "fresh-dropped" }));
+    // Days before the window and older than keep_days go
+    n = try cube.refresh(db, start_ms + std.time.ms_per_day, fixture_items);
     try testing.expectEqual(1, n.dropped);
 }
 
@@ -1318,8 +1317,11 @@ test "day cubes: drop deletes every day, and a missing directory is fine" {
     try testing.expectEqual(0, left.len);
 }
 
-/// curves --site's and builds --site's sets from the cubes as from the database
-fn expectCubesMatch(arena: std.mem.Allocator, io: std.Io, db: store.Db, cube: *const cubes.Store) !void {
+/// curves --site's and builds --site's sets from `cube`, current, as from a cube built
+/// afresh in `fresh_dir`
+fn expectCubesMatch(arena: std.mem.Allocator, io: std.Io, db: store.Db, cube: *cubes.Store, fresh_dir: []const u8) !void {
+    const fresh = try cubes.Store.open(testing.allocator, io, fresh_dir);
+    defer fresh.deinit();
     const gpa = testing.allocator;
     const both: []const []const u8 = &.{ "EUW1", "NA1" };
     const since = start_ms + 20 * std.time.ms_per_hour;
@@ -1334,8 +1336,8 @@ fn expectCubesMatch(arena: std.mem.Allocator, io: std.Io, db: store.Db, cube: *c
     defer for (&got) |*b| b.deinit();
     var want_sum: [specs.len]curves.Summary = undefined;
     var got_sum: [specs.len]curves.Summary = undefined;
-    try curves.buildMany(gpa, io, db, &specs, build_data.legendary, &want, &want_sum);
-    try cubes.curvesFrom(cube, start_ms, &specs, &got, &got_sum);
+    _ = try cubes.curvesOf(fresh, db, fixture_items, &specs, &want, &want_sum);
+    try testing.expectEqual(0, (try cubes.curvesOf(cube, db, fixture_items, &specs, &got, &got_sum)).built);
     for (&want, &got, want_sum, got_sum) |*a, *b, x, y| {
         try testing.expectEqual(x, y);
         try testing.expect(x.games > 0);
@@ -1346,7 +1348,7 @@ fn expectCubesMatch(arena: std.mem.Allocator, io: std.Io, db: store.Db, cube: *c
         try testing.expectEqualSlices(u8, wa.written(), wb.written());
     }
 
-    const o: builds.Options = .{ .patches = &.{patch}, .platforms = both, .min_matchup_games = 0 };
+    const o: builds.Options = .{ .min_matchup_games = 0 };
     const sets = [_]builds.Set{
         .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} } },
         .{ .slice = .{ .platforms = both, .patches = &.{patch} } },
@@ -1355,10 +1357,10 @@ fn expectCubesMatch(arena: std.mem.Allocator, io: std.Io, db: store.Db, cube: *c
         .{ .slice = .{ .platforms = both, .since_ms = since }, .matchups = false, .min_tier = "MASTER" },
     };
     var bw: [sets.len]builds.Builder = undefined;
-    try builds.buildEach(gpa, io, db, &build_data, o, &sets, &bw);
+    _ = try cubes.buildsOf(fresh, db, fixture_items, &build_data, o, &sets, &bw);
     defer for (&bw) |*b| b.deinit();
     var bg: [sets.len]builds.Builder = undefined;
-    try cubes.buildsFrom(cube, start_ms, &build_data, o, &sets, &bg);
+    try testing.expectEqual(0, (try cubes.buildsOf(cube, db, fixture_items, &build_data, o, &sets, &bg)).built);
     defer for (&bg) |*b| b.deinit();
     for (&bw, &bg, sets) |*a, *b, set| {
         try testing.expectEqual(a.games, b.games);
@@ -1907,6 +1909,41 @@ fn putMastery(arena: std.mem.Allocator, db: store.Db, puuid: []const u8, platfor
 
 /// Data Dragon's classes for the fixture timeline's purchases (16.20): its finished
 /// items and boots; Darius's runes and spells for names
+/// A day cube directory of its own under `dir`: tests change rows in place, which a
+/// cube's day signature does not see
+fn cubeDir(arena: std.mem.Allocator, dir: []const u8, tag: []const u8) ![]const u8 {
+    return std.fs.path.join(arena, &.{ dir, "cubes", tag });
+}
+
+/// The fixture's Data Dragon data for every patch
+const fixture_items: cubes.Items = .{ .ctx = @ptrCast(@constCast(&build_data)), .get = struct {
+    fn f(_: *anyopaque, _: []const u8) anyerror!*const ddragon.BuildData {
+        return &build_data;
+    }
+}.f };
+
+/// One curves file, through a day cube in `dir`
+fn curvesOne(dir: []const u8, db: store.Db, spec: curves.Spec) !struct { builder: core.curvesfile.Builder, summary: curves.Summary } {
+    const gpa = testing.allocator;
+    const cube = try cubes.Store.open(gpa, testing.io, dir);
+    defer cube.deinit();
+    var b: [1]core.curvesfile.Builder = .{.{ .gpa = gpa }};
+    errdefer b[0].deinit();
+    var sum: [1]curves.Summary = undefined;
+    _ = try cubes.curvesOf(cube, db, fixture_items, &.{spec}, &b, &sum);
+    return .{ .builder = b[0], .summary = sum[0] };
+}
+
+/// One builds file, through a day cube in `dir`
+fn buildsOne(dir: []const u8, db: store.Db, o: builds.Options, set: builds.Set) !builds.Builder {
+    const gpa = testing.allocator;
+    const cube = try cubes.Store.open(gpa, testing.io, dir);
+    defer cube.deinit();
+    var b: [1]builds.Builder = undefined;
+    _ = try cubes.buildsOf(cube, db, fixture_items, &build_data, o, &.{set}, &b);
+    return b[0];
+}
+
 const build_data: ddragon.BuildData = .{
     .version = "16.20.1",
     .legendary = &.{ 2510, 2520, 3071, 3073, 3087, 3094, 3118, 3124, 3179, 3302, 3508, 3814, 4633, 4645, 4646, 6653, 6665, 6672, 6676, 6698, 6699 },

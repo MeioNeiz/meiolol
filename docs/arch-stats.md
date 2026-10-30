@@ -6,14 +6,16 @@ file and packed rows: docs/architecture.md.
 ## Lane curves (src/curves.zig, src/core/curvesfile.zig, curvefit.zig, src/site/matchup.zig)
 
 `meiolol curves` (--platform as stats, --min-games default 10) reads every ranked
-solo game with a timeline: by default every patch of the last --days (30) to
-data/export/recent-curves.bin (label "last 30 days"); with --patch, those patches to
-data/export/curves-<patch>.bin (the Your games service reads these per patch). `--site`
-(the web loop) writes the four files the site reads, EUW and every platform by last 30
-days and --patch, in one pass over the day cubes (data/cubes, src/cubes.zig): a game's
+solo game with a timeline, from the day cubes (data/cubes, src/cubes.zig): a game's
 lanes are decoded from its timeline once, when its day is built, and a day's new or
-changed games each run after (timelines arrive up to 9 days late). Per lane
-matchup (role, champion pair), bracket (all, Iron-Silver, Gold-Emerald, Diamond+;
+changed games each run after (timelines arrive up to 9 days late). Days are kept from
+30 days back (cubes.keep_days), which covers the previous patch's curves on two-week
+patches, or a run's own first day if earlier. By default every patch of the last
+--days (30) to data/export/recent-curves.bin (label "last 30 days"); with --patch,
+those patches to data/export/curves-<patch>.bin (the Your games service reads these per
+patch). `--site` (the web loop) writes the four files the site reads, EUW and every
+platform by last 30 days and --patch, in one pass over their days. Per lane matchup
+(role, champion pair), bracket (all, Iron-Silver, Gold-Emerald, Diamond+;
 median visible tier of the game's players, never MMR) and experience (all games, or a
 or b with 100k+ mastery): per minute 1..25 the raw p25/p50/p75 of gold, XP and CS (lane
 + jungle) difference with n still playing, and the estimated mean with its standard
@@ -136,8 +138,9 @@ a full EUW patch (~400k) is a couple of minutes on a fast disk; on the micro the
 first run took ~7.5 ms a game (docs/backlog.md "Builds"). deploy/web-loop.sh runs
 `builds --site` daily and on a new patch: EUW and all regions, the current patch and
 the last 30 days (data/export/recent-builds.json, all-recent-builds.json; no matchups),
-from one pass over the day cubes (cubes.buildsFrom, a stats.Slice per file; picks
-decoded once, with Data Dragon of the game's own patch), in the
+from one pass over the day cubes (cubes.buildsOf, a stats.Slice per file; picks
+decoded once, with Data Dragon of the game's own patch; plain `builds` reads them
+too), in the
 background at nice 10 (log data/builds.log); the next site build picks them up. Names
 and icons come from the patch's Data Dragon, so an item removed since has none.
 

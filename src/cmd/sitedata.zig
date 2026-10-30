@@ -35,7 +35,7 @@ pub const usage_curves =
     \\              --min-games N    leave out matchups with fewer games (default 10;
     \\                               the fit still uses every game)
     \\              --site           the files the site reads, in one pass over the
-    \\                               timelines: EUW and every platform, last --days
+    \\                               day cubes: EUW and every platform, last --days
     \\                               and (with --patch) that patch, default paths
     \\              --format-version print the file format version this binary writes
     \\                               and reads, then exit (deploy/web-loop.sh)
@@ -112,33 +112,17 @@ pub fn cmdCurves(c: *Cmd) !u8 {
             .path = path,
         });
     }
-    // --site: EUW's patch for every file, so EUW's files match a run of their own
-    const item_patch = if (wanted.len > 0)
-        wanted[0]
-    else
-        (try newestPatch(arena, db, if (site_files) &.{"EUW1"} else g.platformIds()))[0];
-
     const specs = try arena.alloc(curves.Spec, files.items.len);
     for (files.items, specs) |f, *s| s.* = f.spec;
     const builders = try arena.alloc(core.curvesfile.Builder, files.items.len);
     @memset(builders, .{ .gpa = gpa });
     defer for (builders) |*b| b.deinit();
     const summaries = try arena.alloc(curves.Summary, files.items.len);
-    if (site_files) {
-        // The day cubes: only days whose games changed decode their timelines
+    {
         var items: CubeItems = .{ .gpa = gpa, .arena = arena, .io = io };
         const cube = try cubes.Store.open(gpa, io, try cubes.dirIn(arena, c.data_dir));
         defer cube.deinit();
-        const from = try cubes.firstStart(db, recent_ms, wanted);
-        logCubes(try cube.refresh(db, from, items.source()));
-        try cubes.curvesFrom(cube, from, specs, builders, summaries);
-    } else {
-        const legendaries = ddragon.legendaries(gpa, io, item_patch) catch |err| blk: {
-            std.log.warn("no item list from Data Dragon ({t}): curves without first items", .{err});
-            break :blk &.{};
-        };
-        defer gpa.free(legendaries);
-        try curves.buildMany(gpa, io, db, specs, legendaries, builders, summaries);
+        logCubes(try cubes.curvesOf(cube, db, items.source(), specs, builders, summaries));
     }
 
     var missing = false;
@@ -179,7 +163,7 @@ pub const usage_builds =
     \\              --out FILE       default DIR/export/builds-<patch>.json
     \\                               (all-builds-... with --platform all)
     \\              --site           the files the site reads, in one pass over the
-    \\                               timelines: EUW and every platform, the patch and
+    \\                               day cubes: EUW and every platform, the patch and
     \\                               the last 30 days (no matchups), default paths;
     \\                               each again at Emerald+, Diamond+ and Master+
     \\                               (builds-16.21-emerald.json, no matchups)
@@ -190,7 +174,7 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
     var g: Games = .{};
     var out: ?[]const u8 = null;
     var site_files = false;
-    var o: builds.Options = .{ .patches = &.{}, .platforms = &.{}, .min_matchup_games = builds.min_matchup_games };
+    var o: builds.Options = .{ .min_matchup_games = builds.min_matchup_games };
     while (c.next()) |_| {
         if (try g.parse(c)) continue;
         if (c.is("--out")) {
@@ -212,21 +196,21 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
     const db = try c.open();
     defer db.close();
     const every = platform_ids;
-    o.platforms = if (site_files) every else g.platformIds();
-    o.patches = if (g.patches.items.len > 0) g.patches.items else try newestPatch(c.arena, db, if (site_files) &.{"EUW1"} else o.platforms);
+    const platforms = if (site_files) every else g.platformIds();
+    const patches = if (g.patches.items.len > 0) g.patches.items else try newestPatch(c.arena, db, if (site_files) &.{"EUW1"} else platforms);
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
-    const label = try stats.label(&label_buf, o.patches);
+    const label = try stats.label(&label_buf, patches);
     const recent_ms = std.Io.Clock.real.now(io).toMilliseconds() - recent_days * std.time.ms_per_day;
     const recent_label = std.fmt.comptimePrint("last {d} days", .{recent_days});
     const Target = struct { set: builds.Set, label: []const u8, path: []const u8 };
     const views: []const Target = if (site_files) &.{
-        .{ .set = .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = o.patches } }, .label = label, .path = try buildsPath(c.arena, c.data_dir, o.patches, false) },
-        .{ .set = .{ .slice = .{ .platforms = every, .patches = o.patches } }, .label = label, .path = try buildsPath(c.arena, c.data_dir, o.patches, true) },
+        .{ .set = .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = patches } }, .label = label, .path = try buildsPath(c.arena, c.data_dir, patches, false) },
+        .{ .set = .{ .slice = .{ .platforms = every, .patches = patches } }, .label = label, .path = try buildsPath(c.arena, c.data_dir, patches, true) },
         // The champion pages' 30-day views; matchup pages show the patch's
         .{ .set = .{ .slice = .{ .platforms = &.{"EUW1"}, .since_ms = recent_ms }, .matchups = false }, .label = recent_label, .path = try recentBuildsPath(c.arena, c.data_dir, false) },
         .{ .set = .{ .slice = .{ .platforms = every, .since_ms = recent_ms }, .matchups = false }, .label = recent_label, .path = try recentBuildsPath(c.arena, c.data_dir, true) },
     } else &.{
-        .{ .set = .{ .slice = .{ .platforms = o.platforms, .patches = o.patches } }, .label = label, .path = out orelse try buildsPath(c.arena, c.data_dir, o.patches, g.every_platform) },
+        .{ .set = .{ .slice = .{ .platforms = platforms, .patches = patches } }, .label = label, .path = out orelse try buildsPath(c.arena, c.data_dir, patches, g.every_platform) },
     };
     // The site's views again at each higher rank filter, no matchups (rank_tiers)
     var all_targets: std.ArrayList(Target) = .empty;
@@ -239,20 +223,18 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
     };
     const targets = all_targets.items;
     // Names and icons from the patch's Data Dragon: an item gone since has none
-    const data = try ddragon.buildData(gpa, c.arena, io, o.patches[0]);
+    const data = try ddragon.buildData(gpa, c.arena, io, patches[0]);
 
     var sets: [builds.max_sets]builds.Set = undefined;
     for (targets, 0..) |t, i| sets[i] = t.set;
     var bs: [builds.max_sets]builds.Builder = undefined;
-    if (site_files) {
+    {
         var items: CubeItems = .{ .gpa = gpa, .arena = c.arena, .io = io };
-        try items.put(o.patches[0], &data);
+        try items.put(patches[0], &data);
         const cube = try cubes.Store.open(gpa, io, try cubes.dirIn(c.arena, c.data_dir));
         defer cube.deinit();
-        const from = try cubes.firstStart(db, recent_ms, o.patches);
-        logCubes(try cube.refresh(db, from, items.source()));
-        try cubes.buildsFrom(cube, from, &data, o, sets[0..targets.len], bs[0..targets.len]);
-    } else try builds.buildEach(gpa, io, db, &data, o, sets[0..targets.len], bs[0..targets.len]);
+        logCubes(try cubes.buildsOf(cube, db, items.source(), &data, o, sets[0..targets.len], bs[0..targets.len]));
+    }
     defer for (bs[0..targets.len]) |*b| b.deinit();
     for (targets, bs[0..targets.len]) |t, *b| {
         if (b.games == 0) {

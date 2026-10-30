@@ -14,7 +14,6 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
-const digest = @import("riot/digest.zig");
 const ddragon = @import("ddragon.zig");
 const stats = @import("stats.zig");
 
@@ -84,12 +83,8 @@ const max_items = 6;
 /// later
 const minute_buckets = 60;
 
+/// Every set's: the sets' slices pick the games
 pub const Options = struct {
-    /// Empty: any
-    patches: []const []const u8,
-    /// Riot ms; 0 for any
-    since_ms: i64 = 0,
-    platforms: []const []const u8,
     /// Lowest tier counted (participants.tier: the player's ladder rank when the game was
     /// stored); null counts everyone, unranked too
     min_tier: ?[]const u8 = "PLATINUM",
@@ -819,15 +814,7 @@ fn at(out: []Picks, participant: u8) ?*Picks {
     return &out[participant - 1];
 }
 
-/// Every ranked solo game (no remake, a winner) of `o.patches` from `o.platforms`, with
-/// its timeline where there is one. Caller owns the builder
-pub fn build(gpa: std.mem.Allocator, io: std.Io, db: store.Db, d: *const ddragon.BuildData, o: Options) !Builder {
-    var b: [1]Builder = undefined;
-    try buildEach(gpa, io, db, d, o, &.{.{ .slice = .{ .platforms = o.platforms, .since_ms = o.since_ms, .patches = o.patches } }}, &b);
-    return b[0];
-}
-
-/// One builder of buildEach: the games of `slice` (platforms within Options.platforms)
+/// One builder of a pass (cubes.buildsOf): the games of `slice` (platforms within Options.platforms)
 pub const Set = struct {
     slice: stats.Slice,
     /// Per lane opponent too (Options.min_matchup_games)
@@ -837,102 +824,7 @@ pub const Set = struct {
     min_tier: ?[]const u8 = null,
 };
 
-/// As build, one builder per set, every timeline read once: EUW's and every region's
-/// files, a patch's and the last 30 days', in one pass. The sets' slices pick the games,
-/// not o.patches and o.since_ms. Caller owns `out`
-pub fn buildEach(
-    gpa: std.mem.Allocator,
-    io: std.Io,
-    db: store.Db,
-    d: *const ddragon.BuildData,
-    o: Options,
-    sets: []const Set,
-    out: []Builder,
-) !void {
-    std.debug.assert(sets.len == out.len and sets.len <= max_sets);
-    try initSets(gpa, o, sets, out);
-    errdefer for (out) |*b| b.deinit();
-    // Every set's games and some more: those on a set's patches, or from the earliest
-    // start of a set on any patch; each set then takes its own
-    var patches: std.ArrayList([]const u8) = .empty;
-    defer patches.deinit(gpa);
-    var any_since: i64 = std.math.maxInt(i64);
-    var slices: [max_sets]stats.Slice = undefined;
-    for (sets, slices[0..sets.len]) |set, *sl| {
-        sl.* = set.slice;
-        if (set.slice.patches.len == 0) any_since = @min(any_since, set.slice.since_ms) else try patches.appendSlice(gpa, set.slice.patches);
-    }
-    const patch_json = try std.json.Stringify.valueAlloc(gpa, patches.items, .{});
-    defer gpa.free(patch_json);
-    const platform_json = try std.json.Stringify.valueAlloc(gpa, o.platforms, .{});
-    defer gpa.free(platform_json);
-    var floors: [max_sets]?usize = undefined;
-    try setFloors(o, sets, floors[0..sets.len]);
-
-    const where =
-        \\WHERE (m.patch IN (SELECT value FROM json_each(?)) OR m.game_start >= ?)
-        \\  AND m.queue_id = ?
-        \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
-    ;
-    const args = .{ patch_json, any_since, stats.ranked_solo, platform_json };
-    var q = try db.prepare(
-        \\SELECT m.match_id, m.platform, m.game_start, m.patch, t.rowid, d.data
-        \\FROM matches m LEFT JOIN timeline.timelines t USING (match_id)
-        \\LEFT JOIN timeline.digests d ON d.source = t.rowid AND d.match_id = m.match_id
-        \\
-    ++ where);
-    defer q.deinit();
-    try q.bind(args);
-    var players = try db.prepare("SELECT " ++ participant_columns ++ " FROM participants WHERE match_id = ?");
-    defer players.deinit();
-    var source: digest.Source = try .init(db);
-    defer source.deinit();
-    defer log.info("timelines from digests {d}, in full {d}", .{ source.digests, source.fulls });
-
-    // Each game is ~3 reads at random (digest, its overflow page, participants)
-    const ahead: *store.Ahead = try .start(gpa, io, db, .{
-        .list = "SELECT m.match_id, t.rowid FROM matches m LEFT JOIN timeline.timelines t USING (match_id)\n" ++ where,
-        .reads = &.{ digest.read_ahead, "SELECT slot FROM participants WHERE match_id = ?1" },
-    }, args);
-    defer ahead.stop();
-
-    var arena_state: std.heap.ArenaAllocator = .init(gpa);
-    defer arena_state.deinit();
-    var all: [timeline.max_participants]Picks = undefined;
-    var seats: [timeline.max_participants]Seat = undefined;
-    var teams: [timeline.max_participants]bool = undefined;
-    while (try q.step()) {
-        ahead.next();
-        _ = arena_state.reset(.retain_capacity);
-        const arena = arena_state.allocator();
-        const m = q.row(struct { match_id: []const u8, platform: []const u8, start: i64, patch: []const u8, source: ?i64, digest: ?[]const u8 });
-        const mask = stats.Slice.of(slices[0..sets.len], m.platform, m.start, m.patch);
-        if (mask == 0) continue;
-        var have_picks = false;
-        if (m.source) |src| {
-            if (source.get(arena, src, m.digest)) |t| {
-                picks(t, d, all[0..t.participants]);
-                have_picks = true;
-            } else |err| log.warn("{s}: {t}", .{ m.match_id, err });
-        }
-        try players.bind(.{m.match_id});
-        var n: usize = 0;
-        while (try players.step()) {
-            const r = players.row(ParticipantRow);
-            const role = Role.fromLcu(r.position) orelse continue;
-            if (n == seats.len) break;
-            const k: ?Picks = if (have_picks and r.slot < timeline.max_participants) all[r.slot] else null;
-            seats[n] = .{ .p = playerOf(r, role), .k = k, .rank = rankOf(r.tier) };
-            teams[n] = r.slot < 5;
-            n += 1;
-        }
-        setOpponents(seats[0..n], teams[0..n]);
-        try addSeats(out, mask, floors[0..out.len], seats[0..n], have_picks, d);
-    }
-}
-
-/// A builder per set, as buildEach fills them; on error none is left to free
+/// A builder per set; on error none is left to free
 pub fn initSets(gpa: std.mem.Allocator, o: Options, sets: []const Set, out: []Builder) !void {
     for (out) |*b| b.* = .{ .gpa = gpa, .max_keys = @max(o.max_keys, 2) };
     errdefer for (out) |*b| b.deinit();
@@ -1021,7 +913,7 @@ pub fn setFloors(o: Options, sets: []const Set, out: []?usize) !void {
     for (sets, out) |set, *f| f.* = if (set.min_tier) |t| tierIndex(t) orelse return error.UnknownTier else floor;
 }
 
-/// Sets one buildEach pass feeds: `builds --site`'s four views at four rank floors
+/// Sets one pass feeds: `builds --site`'s four views at four rank floors
 pub const max_sets = 16;
 
 /// NULL or out of range: 0, none
