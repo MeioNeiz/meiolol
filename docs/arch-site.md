@@ -159,7 +159,10 @@ a per-page <style> gets its hash at delivery (`csp.withStyle`). Style attributes
 allowed (h.vars). Trusted Types: only the default policy (first script in the head),
 which passes same-origin script URLs and blocks every HTML and script sink, so an
 island builds nodes (the notes overlay too), never HTML strings. An inline script or
-<style> not listed is blocked: `csp.check(page)` in a page's test. Dev reload is
+<style> not listed is blocked: `csp.check(page)` in a page's test. Cloudflare's Email
+Obfuscation is off for the zone (30 Oct): its /cdn-cgi/ decoder writes innerHTML, which
+Trusted Types blocks, leaving "[email protected]"; turn on no Cloudflare feature that
+injects a script. Dev reload is
 /__dev.js. Page check: `node deploy/csp.mjs BASE` (every page in headless Chrome,
 violations and console errors; its header says how to reach meio.lol from the Mac)
 

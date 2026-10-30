@@ -9,7 +9,13 @@ const std = @import("std");
 
 /// First in <head> after charset: the policy holds for what follows it only
 pub fn meta(comptime scripts: []const []const u8, comptime styles: []const []const u8) []const u8 {
-    return "<meta http-equiv=\"Content-Security-Policy\" content=\"" ++ policy(scripts, styles) ++ "\">\n" ++
+    return metaFetching(scripts, styles, "");
+}
+
+/// meta, and fetch from `origins` (space separated) as well as this one
+pub fn metaFetching(comptime scripts: []const []const u8, comptime styles: []const []const u8, comptime origins: []const u8) []const u8 {
+    const connect = comptime if (origins.len > 0) "; connect-src 'self' " ++ origins else "";
+    return comptime "<meta http-equiv=\"Content-Security-Policy\" content=\"" ++ policy(scripts, styles) ++ connect ++ "\">\n" ++
         trusted_types;
 }
 

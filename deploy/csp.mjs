@@ -1,7 +1,11 @@
 // CSP and Trusted Types check (src/site/csp.zig): each page in headless Chrome, scrolled
 // and the header search opened, with every console error and securitypolicyviolation.
-// Exits 1 if any page has one. 404s for resources are left out (a small dev snapshot
-// lacks data files). NOTES=1 sets the dev server's notes cookie (the overlay).
+// Exits 1 if any page has one. 404s and 401s for resources are left out (a small dev
+// snapshot lacks data files; /account asks for a session). NOTES=1 sets the dev server's
+// notes cookie (the overlay). LOGIN=1 signs in as meiolol-check first (/private, /admin,
+// the notes overlay), out at the end:
+//   LOGIN=1 vault run meiolol/local -- node deploy/csp.mjs BASE
+// Also lists scripts from elsewhere or /cdn-cgi/ (Cloudflare's injections).
 //   node deploy/csp.mjs BASE [PATH...]
 // meio.lol from the Mac (Sophos re-signs its TLS): through C01,
 //   ssh -fN -L 8443:meio.lol:443 essex-vm
@@ -21,6 +25,19 @@ const pages = process.argv.length > 3 ? process.argv.slice(3) : [
 const args = process.env.MAP ? [`--host-resolver-rules=MAP ${process.env.MAP}`] : [];
 const browser = await pw.chromium.launch({ channel: 'chrome', headless: true, args });
 const ctx = await browser.newContext({ userAgent: 'Mozilla/5.0 meiolol-agent csp' });
+// In a page, not ctx.request: that skips MAP
+const post = async (path, body) => {
+  const pg = await ctx.newPage();
+  await pg.goto(base + '/nosuch');
+  const st = await pg.evaluate(async ([path, body]) => (await fetch(path, { method: 'POST', body,
+    headers: { 'content-type': 'application/json', 'x-meiolol-action': '1' } })).status, [path, body]);
+  await pg.close();
+  return st;
+};
+if (process.env.LOGIN) {
+  const st = await post('/auth/login', JSON.stringify({ username: 'meiolol-check', password: process.env.MEIOLOL_CHECK_PASSWORD }));
+  if (st >= 300) { console.log('login failed', st); process.exit(1); }
+}
 if (process.env.NOTES) await ctx.addCookies([{ name: 'meiolol_notes', value: '1', url: base }]);
 await ctx.addInitScript(() => document.addEventListener('securitypolicyviolation', e =>
   console.error(`CSPV ${e.violatedDirective} ${e.blockedURI} ${e.sample || ''}`)));
@@ -49,14 +66,17 @@ for (const p of pages) {
       const tt = !!m && /require-trusted-types-for/.test(m.content);
       const isl = [...document.querySelectorAll('[data-island]')]
         .map(e => e.dataset.island + (e.dataset.failed ? '!FAILED' : '')).join(',');
-      return `csp=${!!m} tt=${tt} islands=${isl}`;
+      const foreign = [...document.scripts].map(s => s.src)
+        .filter(u => u && (new URL(u).origin != location.origin || u.includes('/cdn-cgi/')));
+      return `csp=${!!m} tt=${tt} islands=${isl}` + (foreign.length ? ' FOREIGN=' + foreign.join(',') : '');
     });
   } catch (e) { errs.push('eval ' + e.message.slice(0, 80)); }
-  const real = errs.filter(e => !/Failed to load resource: the server responded with a status of 404/.test(e));
-  if (real.length || info.includes('FAILED')) bad++;
+  const real = errs.filter(e => !/Failed to load resource: the server responded with a status of 40[14]/.test(e));
+  if (real.length || /FAILED|FOREIGN/.test(info)) bad++;
   console.log(p, status, info, real.length ? '\n   ' + real.join('\n   ') : 'OK');
   await page.close();
 }
+if (process.env.LOGIN) await post('/auth/logout', '');
 await browser.close();
 console.log(bad ? `${bad} pages with errors` : 'all clean');
 process.exit(bad ? 1 : 0);

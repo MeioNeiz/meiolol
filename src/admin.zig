@@ -339,7 +339,7 @@ pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) 
         \\</body>
         \\</html>
         \\
-    , .{ csp.files_only, now_s });
+    , .{ csp.metaFetching(&.{}, &.{}, "https://ddragon.leagueoflegends.com"), now_s });
     const cwd = Io.Dir.cwd();
     try cwd.createDirPath(io, out_dir);
     var dir = try cwd.openDir(io, out_dir, .{});
