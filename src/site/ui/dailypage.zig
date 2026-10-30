@@ -181,7 +181,12 @@ pub const Page = struct {
         for (&lanes, &on, 0..) |*l, *o, r| {
             const asked = r == @backingInt(p.hidden_role) and !done;
             // Only after the reveal: while guessing they are more than the question needs
-            l.* = .{ .role = role.Role.all[r], .win = if (done) p.lanes[r] else null, .ask = asked };
+            l.* = .{
+                .role = role.Role.all[r],
+                .win = if (done) p.lanes[r] else null,
+                .lead = if (done) blueLead(p, r) else null,
+                .ask = asked,
+            };
             inline for (.{ &l.us, &l.them }, 0..) |seat, t| {
                 const x = p.seats[t][r];
                 const hidden = asked and t == @backingInt(p.hidden_side);
@@ -365,6 +370,13 @@ pub fn hiddenSeat(p: *const dd.Puzzle) u8 {
 }
 
 /// The seat's champion's pick number in the draft (1-10); null without the order
+/// Blue's gold lead at 14 in lane `r`; null without both seats' gold
+fn blueLead(p: *const dd.Puzzle, r: usize) ?i32 {
+    const blue = p.seats[0][r].gold14 orelse return null;
+    const red = p.seats[1][r].gold14 orelse return null;
+    return std.math.cast(i32, @as(i64, blue) - red);
+}
+
 pub fn pickOf(p: *const dd.Puzzle, t: usize, c: u16) ?u8 {
     var n: u8 = 0;
     for (p.turns, 0..) |x, i| {

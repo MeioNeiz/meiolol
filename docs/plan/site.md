@@ -73,8 +73,9 @@ Leaguepedia has an unused one, else a ranked game's best-explained seat behind f
 board (DraftBoard) with bans and ranks; a hint that splits the options (melee or ranged,
 AD or AP), costing the clean tick; then "Who won?". After the reveal: the marks and the
 game line; the board grows (K/D/A, each seat's rank as the last pick, which champion
-should win each lane); On paper (blue's draft win chance, its 95% range behind a
-toggletip, one verdict line: which draft was better against who won, the edge by kind);
+should win each lane and who led it in gold at 14, ticked when the favoured side did); On
+paper (blue's draft win chance, its 95% range behind a toggletip, one verdict line: which
+draft was better against who won, the edge by kind);
 the selected seat's panel (the hidden seat first, any seat on tap): its rank of N and the
 model's top five with reason chips, each opening its breakdown. On the hidden seat the
 other options join the list at their ranks (Review.ranks, refreshed with the review), the
@@ -84,9 +85,8 @@ about the sender. Share (hidden in preview mode, keyed on html.zig's preview ban
 production-key.md "do not advertise"): the marks as emoji rows, the model's rank for the
 pick and the played one's (no champion named), the streak.
 
-Next: lanes say whether the favoured champion won the lane at 14 (the gold duel is in
-the data, lanes[].gold). Later: puzzles from clear comp leans (data-and-model.md step 5);
-"try this pick in the board" (plan/ui/daily.md).
+Later: puzzles from clear comp leans (data-and-model.md step 5); "try this pick in the
+board" (plan/ui/daily.md).
 
 ## Learn
 

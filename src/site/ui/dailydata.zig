@@ -110,6 +110,8 @@ pub const Seat = struct {
     gold: u32,
     /// To champions
     damage: u32,
+    /// Total gold at 14 minutes; null without a timeline (pro games)
+    gold14: ?u32 = null,
     /// The role's average win chance, %: the waterfall's start
     base: f32,
     /// The played pick's place among the seat's options and how many there were; null
@@ -196,14 +198,14 @@ pub const sample: Puzzle = .{
     },
     .seats = .{
         .{
-            seat(0, 0.08, 51.0, 4),
-            seat(1, 0.21, 50.0, 2),
-            seat(2, 0.93, 50.0, 6),
-            seat(3, 0.04, 50.0, 1),
-            seat(4, 0.47, 50.0, 3),
+            seat(0, 0.08, 51.0, 4, 5400),
+            seat(1, 0.21, 50.0, 2, 5100),
+            seat(2, 0.93, 50.0, 6, 4800),
+            seat(3, 0.04, 50.0, 1, 5900),
+            seat(4, 0.47, 50.0, 3, 3800),
         },
         .{
-            .{ .champ = 5, .magic = 0.12, .kills = 1, .deaths = 3, .assists = 1, .cs = 429, .gold = 16200, .damage = 21000, .base = 47.5, .rank = 3, .of = 31, .cands = &.{
+            .{ .champ = 5, .magic = 0.12, .kills = 1, .deaths = 3, .assists = 1, .cs = 429, .gold = 16200, .damage = 21000, .gold14 = 5000, .base = 47.5, .rank = 3, .of = 31, .cands = &.{
                 .{ .champ = 10, .rank = 1, .win = 49.9, .low = 48.5, .high = 51.3, .terms = &.{}, .rest = 0 },
                 .{ .champ = 11, .rank = 2, .win = 49.4, .low = 48.0, .high = 50.8, .terms = &.{}, .rest = 0 },
                 .{ .champ = 5, .rank = 3, .win = 48.9, .low = 47.6, .high = 50.2, .rest = 0.1, .terms = &.{
@@ -213,10 +215,10 @@ pub const sample: Puzzle = .{
                     .{ .kind = .into, .other = 2, .pp = -0.4, .games = 2300 },
                 } },
             } },
-            seat(6, 0.1, 50.0, 5),
-            seat(7, 0.96, 50.0, 9),
-            seat(8, 0.03, 50.0, 2),
-            seat(9, 0.81, 50.0, 7),
+            seat(6, 0.1, 50.0, 5, 5200),
+            seat(7, 0.96, 50.0, 9, 5300),
+            seat(8, 0.03, 50.0, 2, 5000),
+            seat(9, 0.81, 50.0, 7, 4300),
         },
     },
     .turns = &.{},
@@ -229,8 +231,8 @@ pub const sample: Puzzle = .{
     .paper = .{ .blue = 51.1, .low = 48.9, .high = 53.3, .edges = .{ 1.2, 0.3, -0.6, 0.2 } },
 };
 
-fn seat(c: u16, magic: f32, base: f32, rank: u16) Seat {
-    return .{ .champ = c, .magic = magic, .kills = 2, .deaths = 2, .assists = 4, .cs = 300, .gold = 15000, .damage = 12000, .base = base, .rank = rank, .of = 30, .cands = &.{} };
+fn seat(c: u16, magic: f32, base: f32, rank: u16, gold14: u32) Seat {
+    return .{ .champ = c, .magic = magic, .kills = 2, .deaths = 2, .assists = 4, .cs = 300, .gold = 15000, .damage = 12000, .gold14 = gold14, .base = base, .rank = rank, .of = 30, .cands = &.{} };
 }
 
 test "a puzzle survives the binary file" {

@@ -404,7 +404,7 @@ pub const Page = struct {
             for (dst.*, src) |*o, c| o.* = .{ .name = c.name, .src = p.iconSrc(h, c) };
         }
         // No seat takes a click here: the answer is the ChoiceCards
-        const board = draftboard.fullOn(h, .{
+        const board = draftboard.question(h, .{
             .v = .full,
             .lanes = h.mem.dupe(draftboard.Lane, &lanes) catch {
                 h.oom = true;
@@ -414,7 +414,7 @@ pub const Page = struct {
             .mix = mix,
             .bans_us = bans[0],
             .bans_them = bans[1],
-        }, &.{});
+        });
         return h.div(.{ .class = "draft" }, .{ board, if (p.revealed) p.whyList(h, x) else null });
     }
 

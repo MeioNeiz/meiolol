@@ -6,7 +6,8 @@
 //! player names or ranks (product rules). The full variant (Daily, the tester): 48 px
 //! seats with their pick number, the hidden seat asked about, a chosen answer previewed
 //! dashed, seats selectable, the game's line grown under each name after a reveal, each
-//! lane's middle its win chance from the matchup, and each side's damage mix
+//! lane's middle its win chance from the matchup and who led it at 14, and each side's
+//! damage mix. Learn's `question`: the full variant with none of the game's parts
 const std = @import("std");
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
@@ -79,6 +80,9 @@ pub const Lane = struct {
     them: Seat = .{},
     /// Full variant: our side's win chance from this lane alone, %
     win: ?f32 = null,
+    /// Full variant, after the game: our side's gold lead at 14 minutes, what the lane
+    /// came to (null unknown)
+    lead: ?i32 = null,
     /// The lane asked about: the middle hides its figure, the row carries the accent
     ask: bool = false,
 };
@@ -178,26 +182,46 @@ fn bans(h: *H, b: Board) ?N {
     });
 }
 
-/// The full variant (Daily, Learn), seats as buttons where `on[i]` has lane i's us and
-/// them click (kept off Seat, which the app encodes and a handler can't be)
+/// The full variant (Daily, the tester), seats as buttons where `on[i]` has lane i's us
+/// and them click (kept off Seat, which the app encodes and a handler can't be)
 pub fn fullOn(h: *H, b: Board, on: []const [2]?tree.Handler) N {
+    return full(h, b, on, true);
+}
+
+/// The full variant for a draft with no game behind it (Learn): `b`'s game lines, lane
+/// figures, winner and buttons go unshown, and its wasm carries none of their code
+pub fn question(h: *H, b: Board) N {
+    return full(h, b, &.{}, false);
+}
+
+fn full(h: *H, b: Board, on: []const [2]?tree.Handler, comptime game: bool) N {
     var grown = false;
-    for (b.lanes) |l| grown = grown or l.us.game != null or l.them.game != null;
+    var led = false;
+    if (game) for (b.lanes) |l| {
+        grown = grown or l.us.game != null or l.them.game != null;
+        led = led or l.lead != null;
+    };
     var rows = h.list();
     for (b.lanes, 0..) |l, i| {
-        const ons: [2]?tree.Handler = if (i < on.len) on[i] else .{ null, null };
+        const ons: [2]?tree.Handler = if (game and i < on.len) on[i] else .{ null, null };
         rows.add(h.div(.{ .key = @as(u32, @backingInt(l.role)), .class = "lane", .data_ask = l.ask }, .{
-            fullSeat(h, l.us, .us, ons[0], b.heads[0], l.role),
-            mid(h, l, b.heads),
-            fullSeat(h, l.them, .them, ons[1], b.heads[1], l.role),
+            fullSeat(h, l.us, .us, ons[0], b.heads[0], l.role, game),
+            if (game) mid(h, l, b.heads) else bareMid(h, l),
+            fullSeat(h, l.them, .them, ons[1], b.heads[1], l.role, game),
         }));
     }
+    // A comptime null child doesn't compile, hence the typed nulls
+    const none: ?N = null;
     return h.div(.{ .class = "c-draft", .data_v = Variant.full }, .{
         h.div(.{ .class = "heads" }, .{
-            h.span(.{ .data_side = Side.us }, .{ h.b(.{}, .{b.heads[0]}), if (b.won == .us) badge.view(h, .us, .{words.won}) else null }),
-            h.span(.{ .data_side = Side.them }, .{ if (b.won == .them) badge.view(h, .them, .{words.won}) else null, h.b(.{}, .{b.heads[1]}) }),
+            h.span(.{ .data_side = Side.us }, .{ h.b(.{}, .{b.heads[0]}), if (!game) none else if (b.won == .us) badge.view(h, .us, .{words.won}) else null }),
+            h.span(.{ .data_side = Side.them }, .{ if (!game) none else if (b.won == .them) badge.view(h, .them, .{words.won}) else null, h.b(.{}, .{b.heads[1]}) }),
         }),
-        if (grown) h.div(.{ .class = "lane hd", .aria_hidden = true }, .{ statHead(h, .us), h.span(.{}, .{}), statHead(h, .them) }) else null,
+        if (grown) h.div(.{ .class = "lane hd", .aria_hidden = true }, .{
+            statHead(h, .us),
+            if (led) h.span(.{ .class = "lh" }, .{words.lane_head}) else h.span(.{}, .{}),
+            statHead(h, .them),
+        }) else null,
         h.div(.{ .class = "lanes" }, .{rows.done()}),
         if (b.mix) |m| h.div(.{ .class = "mix" }, .{ mixBar(h, m[0], .us), h.span(.{ .class = "line" }, .{words.damage}), mixBar(h, m[1], .them) }) else null,
         bans(h, b),
@@ -214,7 +238,7 @@ fn statHead(h: *H, side: Side) N {
     });
 }
 
-fn fullSeat(h: *H, s: Seat, side: Side, on: ?tree.Handler, head: tree.Text, rl: role.Role) N {
+fn fullSeat(h: *H, s: Seat, side: Side, on: ?tree.Handler, head: tree.Text, rl: role.Role, comptime game: bool) N {
     // A hidden seat with its champion set has been revealed
     const asked = s.hidden and s.champ == null;
     const shown = if (asked) s.preview else s.champ;
@@ -241,7 +265,7 @@ fn fullSeat(h: *H, s: Seat, side: Side, on: ?tree.Handler, head: tree.Text, rl: 
         }),
         h.span(.{ .class = "who" }, .{
             // Only the name is the button (a short label); its ::after covers the seat
-            if (on) |o| h.button(.{
+            if (!game) h.b(.{}, .{nm}) else if (on) |o| h.button(.{
                 .class = "nb",
                 .type = "button",
                 .aria_pressed = s.sel,
@@ -250,7 +274,7 @@ fn fullSeat(h: *H, s: Seat, side: Side, on: ?tree.Handler, head: tree.Text, rl: 
             }, .{nm}) else h.b(.{}, .{nm}),
             if (s.sub.s.len > 0) h.span(.{ .class = "line" }, .{s.sub}) else null,
         }),
-        if (s.game) |g| gameLine(h, g, side) else null,
+        if (!game) @as(?N, null) else if (s.game) |g| gameLine(h, g, side) else null,
     });
 }
 
@@ -282,11 +306,11 @@ pub fn ordinal(n: u32) []const u8 {
 }
 
 /// The lane's middle: role, and our side's win chance from the lane, as a bar out from
-/// even toward the side it favours
+/// even toward the side it favours; under it who led at 14, marked by whether the
+/// favoured side did
 fn mid(h: *H, l: Lane, heads: [2]tree.Text) N {
-    const bare = h.span(.{ .class = "mid" }, .{role.view(h, l.role, .{ .s = .s })});
-    const raw = l.win orelse return bare;
-    if (!std.math.isFinite(raw)) return bare;
+    const raw = l.win orelse return bareMid(h, l);
+    if (!std.math.isFinite(raw)) return bareMid(h, l);
     if (l.ask) return h.span(.{ .class = "mid", .data_ask = true }, .{
         role.view(h, l.role, .{ .s = .s }),
         h.span(.{ .class = "lb" }, .{}),
@@ -298,7 +322,13 @@ fn mid(h: *H, l: Lane, heads: [2]tree.Text) N {
     const side: Side = if (d >= 0) .us else .them;
     const fav = if (side == .us) w else 100 - w;
     const head = heads[@backingInt(side)];
-    const said = if (even) words.even else words.lane.with(h, .{ .s = head.s, .w = fav });
+    const odds = if (even) words.even else words.lane.with(h, .{ .s = head.s, .w = fav });
+    const led: ?Side = if (l.lead) |g| (if (@abs(g) < min_lead) null else if (g > 0) .us else .them) else null;
+    const said = if (l.lead == null) odds else if (led) |s| words.led.with(h, .{
+        .o = odds.s,
+        .s = heads[@backingInt(s)].s,
+        .g = @abs(l.lead.?),
+    }) else words.led_even.with(h, .{ .o = odds.s });
     // Half the bar is 5 points
     const reach = @min(@abs(d), 5) * 10;
     return h.span(.{ .class = "mid", .data_side = if (even) null else side, .title = said, .role = "img", .aria_label = said }, .{
@@ -308,7 +338,19 @@ fn mid(h: *H, l: Lane, heads: [2]tree.Text) N {
             .w = reach,
         }) }, .{})}),
         h.span(.{ .class = "v", .aria_hidden = true }, .{if (even) words.even else phrase.num(h, .rate, fav)}),
+        if (l.lead) |g| h.span(.{ .class = "ld", .data_side = led, .aria_hidden = true }, .{if (led) |s| h.span(.{}, .{
+            if (even) "" else if (s == side) "\u{2713} " else "\u{2717} ",
+            "+",
+            phrase.num(h, .kilo, @abs(g)),
+        }) else h.span(.{}, .{words.even})}) else null,
     });
+}
+
+/// A smaller lead at 14 reads as even (as the matchup page's, J11)
+const min_lead = 200;
+
+fn bareMid(h: *H, l: Lane) N {
+    return h.span(.{ .class = "mid" }, .{role.view(h, l.role, .{ .s = .s })});
 }
 
 fn mixBar(h: *H, m: Mix, side: Side) N {
@@ -355,6 +397,9 @@ const words = struct {
     const nth = phrase.Phrase("{n:int}{s:text}");
     const lane = phrase.Phrase("{s:text} {w:rate} from the lane");
     const even = plain("Even");
+    const lane_head = plain("Odds, gold at 14");
+    const led = phrase.Phrase("{o:text}; {s:text} {g:kilo} gold ahead at 14");
+    const led_even = phrase.Phrase("{o:text}; even in gold at 14");
     const damage = plain("Damage");
     const ad = plain("AD");
     const ap = plain("AP");
@@ -433,6 +478,7 @@ pub const css =
     \\  .c-draft .st[data-side="them"] > * { direction: ltr; }
     \\  .c-draft .lane.hd .st { grid-area: auto; font-size: var(--fs-xs); color: var(--faint); justify-self: end; padding: 0 var(--sp-2); }
     \\  .c-draft .lane.hd .st[data-side="them"] { justify-self: start; }
+    \\  .c-draft .lane.hd .lh { grid-column: 2; text-align: center; line-height: 1.2; }
     \\  .c-draft .dm > span { display: block; position: relative; height: 4px; border-radius: 2px; background: var(--bar-track);
     \\    overflow: hidden; }
     \\  .c-draft .dm i { position: absolute; inset: 0 auto 0 0; width: calc(var(--w) * 1%); background: var(--bar-hi); }
@@ -451,6 +497,10 @@ pub const css =
     \\  .c-draft .mid .v { font-size: var(--fs-xs); font-weight: var(--w-b); font-variant-numeric: tabular-nums; color: var(--c, var(--muted));
     \\    line-height: 14px; }
     \\  .c-draft .mid[data-ask] { color: var(--accent); --c: var(--accent); }
+    \\  .c-draft .mid .ld { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; line-height: 14px; white-space: nowrap;
+    \\    color: var(--muted); text-align: center; }
+    \\  .c-draft .mid .ld[data-side="us"] { color: var(--us); }
+    \\  .c-draft .mid .ld[data-side="them"] { color: var(--them); }
     \\  .c-draft .mix { display: grid; grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr); align-items: center;
     \\    padding: var(--sp-3) 0 var(--sp-2); }
     \\  .c-draft .mix > .line { text-align: center; text-transform: uppercase; letter-spacing: 0.06em; font-weight: var(--w-b);
@@ -489,7 +539,7 @@ pub const css =
     \\    .c-draft .st { display: flex; gap: 6px; font-size: var(--fs-xs); }
     \\    .c-draft .st[data-side="them"] { justify-content: flex-end; }
     \\    .c-draft .st > :nth-child(n+2):not(.rk) { display: none; }
-    \\    .c-draft[data-v="full"] .lane.hd { display: none; }
+    \\    .c-draft[data-v="full"] .lane.hd:not(:has(.lh)), .c-draft .lane.hd .st { display: none; }
     \\    .c-draft[data-v="full"] .lane, .c-draft .mix { grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); }
     \\    .c-draft[data-v="full"] .heads { font-size: var(--fs-m); }
     \\    .c-draft[data-v="full"] .bans .c-champ { --sz: var(--icon); }
@@ -567,8 +617,9 @@ fn revealed(h: *H) Board {
         .{ .{ .kda = .{ .k = 4, .d = 0, .a = 3 }, .cs = 507, .gold = 22100, .dmg = 18000, .dmg_of = 24000, .rated = 1, .star = true }, .{ .kda = .{ .k = 4, .d = 1, .a = 2 }, .cs = 472, .gold = 21700, .dmg = 24000, .dmg_of = 24000, .rated = 2 } },
         .{ .{ .kda = .{ .k = 2, .d = 1, .a = 6 }, .cs = 64, .gold = 12000, .dmg = 5000, .dmg_of = 24000, .rated = 3 }, .{ .kda = .{ .k = 0, .d = 1, .a = 5 }, .cs = 68, .gold = 10900, .dmg = 7000, .dmg_of = 24000, .rated = 7 } },
     };
-    for (lanes, lines) |*l, g| {
+    for (lanes, lines, [5]i32{ 400, -100, -500, 900, -500 }) |*l, g, lead| {
         l.ask = false;
+        l.lead = lead;
         l.us.game = g[0];
         l.them.game = g[1];
         l.us.sub = .{ .s = "" };
@@ -646,7 +697,7 @@ const Tap = struct {
     pub fn update(_: *Tap, _: Msg, _: *tree.Event) void {}
 };
 
-test "full variant by hand: buttons from a short `on`, lane middles, a red win, odd data" {
+test "full variant by hand: buttons from a short `on`, lane middles, a red win, odd data; Learn's without the game" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -661,10 +712,10 @@ test "full variant by hand: buttons from a short `on`, lane middles, a red win, 
         .won = .them,
         .mix = .{ .{ .phys = 0.5, .magic = 0.5 }, .{ .phys = 1.4, .magic = std.math.nan(f32), .unknown = 0.2 } },
         .lanes = &.{
-            .{ .role = .top, .win = 47.9, .us = .{ .champ = demo("Gnar", "Gnar"), .sel = true }, .them = .{ .hidden = true, .preview = demo("Jax", "Jax") } },
-            .{ .role = .jungle, .win = 130, .us = .{ .game = game }, .them = .{ .hidden = true, .pick = 10 } },
-            .{ .role = .mid, .win = std.math.nan(f32) },
-            .{ .role = .bot },
+            .{ .role = .top, .win = 47.9, .lead = 600, .us = .{ .champ = demo("Gnar", "Gnar"), .sel = true }, .them = .{ .hidden = true, .preview = demo("Jax", "Jax") } },
+            .{ .role = .jungle, .win = 130, .lead = -150, .us = .{ .game = game }, .them = .{ .hidden = true, .pick = 10 } },
+            .{ .role = .mid, .win = 53, .lead = std.math.minInt(i32) },
+            .{ .role = .bot, .win = std.math.nan(f32) },
             .{ .role = .support, .win = 50.2 },
         },
     };
@@ -683,8 +734,11 @@ test "full variant by hand: buttons from a short `on`, lane middles, a red win, 
     try std.testing.expectEqual(1, std.mem.count(u8, s, "data-preview"));
     try std.testing.expect(std.mem.find(u8, s, "Jax") != null);
     try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Blue Top, Gnar\"") != null);
-    try std.testing.expect(std.mem.find(u8, s, "Red 52.1% from the lane") != null);
-    try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Blue 100") != null);
+    try std.testing.expect(std.mem.find(u8, s, "Red 52.1% from the lane; Blue 600 gold ahead at 14") != null);
+    try std.testing.expect(std.mem.find(u8, s, "\u{2717} +600") != null);
+    try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Blue 100.0% from the lane; even in gold at 14") != null);
+    try std.testing.expect(std.mem.find(u8, s, "Blue 53.0% from the lane; Red 2147484k gold ahead") != null);
+    try std.testing.expectEqual(2, std.mem.count(u8, s, "\u{2717} +"));
     try std.testing.expectEqual(1, std.mem.count(u8, s, "aria-label=\"Even\""));
     try std.testing.expect(std.mem.find(u8, s, "Empty seat") != null);
     try std.testing.expect(std.mem.find(u8, s, "class=\"uk\"") != null);
@@ -696,6 +750,14 @@ test "full variant by hand: buttons from a short `on`, lane middles, a red win, 
     out = .init(a);
     try html.write(&t, fullOn(&h, .{ .v = .full, .lanes = &.{} }, &.{}), &out.writer);
     try std.testing.expect(std.mem.find(u8, out.written(), "class=\"lanes\"") != null);
+
+    out = .init(a);
+    try html.write(&t, question(&h, b), &out.writer);
+    const q = out.written();
+    try std.testing.expect(std.mem.find(u8, q, "Gnar") != null);
+    for ([_][]const u8{ "<button", "from the lane", "12th", "Won", "class=\"ld\"" }) |gone| {
+        try std.testing.expect(std.mem.find(u8, q, gone) == null);
+    }
 }
 
 test "the app's board stays encodable" {

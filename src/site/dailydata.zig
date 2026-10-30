@@ -182,6 +182,7 @@ pub fn puzzle(
             .cs = clamp16(pl.cs),
             .gold = pl.gold,
             .damage = pl.damage,
+            .gold14 = pl.gold14,
             .base = base,
             .rank = if (rs) |x| clamp16(x.rank) else null,
             .of = if (rs) |x| clamp16(x.of) else 0,
