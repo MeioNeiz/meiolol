@@ -21,6 +21,7 @@ var view_index: u8 = 0;
 var path: []const u8 = "";
 var src: []const u8 = "";
 var want: u32 = 0;
+var stamp: []const u8 = "";
 var island: *ui.island.Island(tiers.Tiers, dom.Dom) = undefined;
 var asked = false;
 
@@ -38,7 +39,7 @@ export fn main() void {
     if (view_index >= tiers.rank_paths.len) return dom.dom.warn("tiers: bad data-view");
     path = dom.attrOf(root, "data-path");
     src = dom.attrOf(root, "data-src");
-    const stamp = dom.attrOf(root, "data-stamp");
+    stamp = dom.attrOf(root, "data-stamp");
     want = std.fmt.parseInt(u32, stamp, 10) catch return;
     dom.fetchStamped(src, stamp, 0, loaded);
 }
@@ -67,7 +68,7 @@ fn check() void {
         if (asked) return;
         asked = true;
         const p = std.mem.concat(gpa, u8, &.{ base, tiers.rank_paths[view_index] }) catch return;
-        return dom.fetch(p, 0, rankLoaded);
+        return dom.fetchStamped(p, stamp, 0, rankLoaded);
     }
     if (!state.busy()) return;
     state.show(gpa) catch return dom.dom.warn("tiers: out of memory");

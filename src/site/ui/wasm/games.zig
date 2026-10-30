@@ -28,8 +28,9 @@ export fn main() void {
     if (root == .null) return dom.lazyLater();
     defer root.release();
     src = dom.attrOf(root, "data-src");
-    want = std.fmt.parseInt(u32, dom.attrOf(root, "data-stamp"), 10) catch return dom.lazyLater();
-    gamesrc.load("games", sel, src, want, loaded);
+    const stamp = dom.attrOf(root, "data-stamp");
+    want = std.fmt.parseInt(u32, stamp, 10) catch return dom.lazyLater();
+    gamesrc.load("games", sel, src, stamp, want, loaded);
 }
 
 fn loaded(ok: bool) void {

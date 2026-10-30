@@ -27,8 +27,9 @@ export fn main() void {
     src = dom.attrOf(root, "data-src");
     js = dom.attrOf(root, "data-js");
     wasm = dom.attrOf(root, "data-wasm");
-    want = std.fmt.parseInt(u32, dom.attrOf(root, "data-stamp"), 10) catch return;
-    gamesrc.load("gamemore", sel, src, want, loaded);
+    const stamp = dom.attrOf(root, "data-stamp");
+    want = std.fmt.parseInt(u32, stamp, 10) catch return;
+    gamesrc.load("gamemore", sel, src, stamp, want, loaded);
 }
 
 fn loaded(ok: bool) void {

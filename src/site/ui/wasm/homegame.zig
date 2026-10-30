@@ -19,6 +19,7 @@ var review: hp.HomeReview = undefined;
 var review0: hp.HomeReview = undefined;
 var review_i: *ui.island.Island(hp.HomeReview, dom.Dom) = undefined;
 var want: u32 = 0;
+var stamp: []const u8 = "";
 var asked: ?Role = null;
 var src: []const u8 = "";
 var up: []const u8 = "";
@@ -46,7 +47,7 @@ fn game() void {
     const el = zjb.global("document").call("querySelector", .{zjb.constString(sel)}, zjb.Handle);
     if (el == .null) return;
     defer el.release();
-    const stamp = dom.attrOf(el, "data-stamp");
+    stamp = dom.attrOf(el, "data-stamp");
     want = std.fmt.parseInt(u32, stamp, 10) catch return;
     up = dom.attrOf(el, "data-up");
     roles = hp.rolesOf(std.fmt.parseInt(u8, dom.attrOf(el, "data-roles"), 10) catch return);
@@ -113,7 +114,7 @@ fn check() void {
     if (pages[@backingInt(review.want)]) |s| return show(review.want, s);
     const path = review.path(gpa, review.want) catch return dom.dom.warn("home: out of memory");
     asked = review.want;
-    dom.fetch(path, 1, switched);
+    dom.fetchStamped(path, stamp, 1, switched);
 }
 
 fn switched(_: i32, bytes: ?[]u8) void {

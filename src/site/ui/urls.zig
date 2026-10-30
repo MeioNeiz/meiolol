@@ -83,6 +83,20 @@ pub const view_queries = [_][]const u8{ "", "?period=patch", "?region=all", "?re
 /// in a page's URL: nginx maps the query to it
 pub const view_dirs = [_][]const u8{ "", "_v/patch/", "_v/all/", "_v/all-patch/" };
 
+/// A data file's URL with its page's stamp, ?v= (or &v=): the file keeps its path from one
+/// site round to the next and browsers keep a copy 4 h (Cloudflare's browser cache TTL),
+/// so a newer page would get an older file. The server ignores the query. Null when `buf`
+/// is too short
+pub fn stamped(buf: []u8, path: []const u8, stamp: []const u8) ?[]const u8 {
+    const sep = if (std.mem.findScalar(u8, path, '?') == null) "?v=" else "&v=";
+    const n = path.len + sep.len + stamp.len;
+    if (n > buf.len) return null;
+    @memcpy(buf[0..path.len], path);
+    @memcpy(buf[path.len..][0..sep.len], sep);
+    @memcpy(buf[path.len + sep.len ..][0..stamp.len], stamp);
+    return buf[0..n];
+}
+
 /// `path`'s page (no query or fragment); null: not a page
 pub fn parse(path: []const u8) ?Page {
     if (std.mem.eql(u8, path, "/")) return .home;
@@ -190,6 +204,13 @@ test "urls: each page spelt and parsed back" {
         const back = parse(s) orelse return error.NoParse;
         try testing.expectEqualStrings(c[1], try std.fmt.bufPrint(&again, "{f}", .{back}));
     }
+}
+
+test "urls: a data file stamped" {
+    var buf: [32]u8 = undefined;
+    try testing.expectEqualStrings("data/tiers.bin?v=123", stamped(&buf, "data/tiers.bin", "123").?);
+    try testing.expectEqualStrings("practice.bin?7&v=123", stamped(&buf, "practice.bin?7", "123").?);
+    try testing.expectEqual(null, stamped(buf[0..19], "data/tiers.bin", "123"));
 }
 
 test "urls: not pages" {

@@ -676,14 +676,11 @@ pub fn fetch(path: []const u8, ctx: i32, done: *const fn (i32, ?[]u8) void) void
     request(zjb.ConstHandle.global.call("fetch", .{u}, zjb.Handle), ctx, done);
 }
 
-/// `fetch` with the page's data stamp in the URL: a data file keeps its URL from one
-/// site round to the next and is cached for hours (browser and Cloudflare), and an island
-/// refuses a copy older than its page, leaving the page static
+/// `fetch` with the page's data stamp in the URL (ui.urls.stamped): an island refuses a
+/// copy older than its page, leaving the page static
 pub fn fetchStamped(path: []const u8, stamp: []const u8, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
-    const sep = if (std.mem.findScalar(u8, path, '?') == null) "?v=" else "&v=";
-    const u = std.mem.concat(gpa, u8, &.{ path, sep, stamp }) catch return done(ctx, null);
-    defer gpa.free(u);
-    fetch(u, ctx, done);
+    var buf: [512]u8 = undefined;
+    fetch(ui.urls.stamped(&buf, path, stamp) orelse return done(ctx, null), ctx, done);
 }
 
 /// POST `path` with no body, then as `fetch`

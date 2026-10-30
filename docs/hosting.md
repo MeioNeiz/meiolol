@@ -208,7 +208,12 @@ a 301 to it.
   (src/icons.zig: `/icon/<Data Dragon version>/<Key>.jpg`, `/dd/<version>/img/item/<id>.jpg`)
   `public, max-age=31536000, immutable`, rune art (`/dd/img/perk-images/...png`, no
   version) a week, everything else `no-cache`, in `/`, @render and @render_any (which
-  hide the renderer's own no-cache). A page after the first asks for none of them. Art
+  hide the renderer's own no-cache). A page after the first asks for none of them. The
+  zone's Browser Cache TTL (4 h) turns no-cache into `max-age=14400` on extensions
+  Cloudflare caches (.bin, not HTML): browsers keep a data file 4 h, the edge revalidates
+  each hit. So islands fetch data with `?v=<the page's data stamp>` (ui.urls.stamped);
+  Cloudflare keys on the query, nginx and the renderer ignore it. Unstamped fetches
+  (findergrid's -more.bin, pool and admin files) can be 4 h old. Art
   not made yet (`location ~ ^/dd/`) 302s to Data Dragon's own; a portrait's 120 px copy
   (`/icon/<version>/120/`, srcset) not made yet serves the 80 px one, uncached. A replaced hashed file
   stays 3 days after its replacement came, as does an older icon or art folder, and a

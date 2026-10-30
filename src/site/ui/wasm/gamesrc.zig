@@ -46,14 +46,14 @@ fn style(selector: []const u8, v: []const u8) void {
 
 /// Fetch the island's data, then call `done(true)` with `server` and `shown` set (it
 /// calls `ready` once its runtime holds them), or `done(false)` after a warning. `label`
-/// names the file in warnings
-pub fn load(label: []const u8, selector: []const u8, src: []const u8, stamp: u32, done: *const fn (bool) void) void {
+/// names the file in warnings; `stamp_n`: `stamp` parsed
+pub fn load(label: []const u8, selector: []const u8, src: []const u8, stamp: []const u8, stamp_n: u32, done: *const fn (bool) void) void {
     name = label;
     sel = selector;
-    want = stamp;
+    want = stamp_n;
     then = done;
     if (lookup() != null) hide(sel);
-    dom.fetch(src, 0, loaded);
+    dom.fetchStamped(src, stamp, 0, loaded);
 }
 
 pub fn ready() void {
