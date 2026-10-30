@@ -1,6 +1,7 @@
 //! The static build (`meiolol site`): every view's pages and files into Options.out_dir
 
 const std = @import("std");
+const builtin = @import("builtin");
 const store = @import("store");
 const html = @import("html.zig");
 const home_page = @import("home.zig");
@@ -146,7 +147,9 @@ const FileWriter = struct {
         if (std.fs.path.dirname(path)) |d| try dir.createDirPath(fw.io, d);
         try dir.writeFile(fw.io, .{ .sub_path = path, .data = data });
         if (data.len < 1024) return;
-        const gz = try store.raw.compressWith(fw.gpa, fw.gz_window, data);
+        // Tests store: Debug deflate was about half the pipeline fixture test
+        const compress = if (builtin.is_test) store.raw.storeWith else store.raw.compressWith;
+        const gz = try compress(fw.gpa, fw.gz_window, data);
         defer fw.gpa.free(gz);
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         const gz_path = try std.mem.print(&buf, "{s}.gz", .{path});

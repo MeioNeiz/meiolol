@@ -32,6 +32,16 @@ pub fn compressWith(gpa: Allocator, window: []u8, data: []const u8) ![]u8 {
     return out.toOwnedSlice();
 }
 
+/// As compressWith, in stored blocks: gzip any reader takes, no smaller than `data`
+pub fn storeWith(gpa: Allocator, window: []u8, data: []const u8) ![]u8 {
+    var out: std.Io.Writer.Allocating = try .initCapacity(gpa, data.len + 64);
+    errdefer out.deinit();
+    var c = try flate.Compress.Raw.init(&out.writer, window, .gzip);
+    try c.writer.writeAll(data);
+    try c.finish();
+    return out.toOwnedSlice();
+}
+
 pub fn decompress(gpa: Allocator, blob: []const u8) ![]u8 {
     var in: std.Io.Reader = .fixed(blob);
     if (std.mem.startsWith(u8, blob, zstd_magic)) {
@@ -62,6 +72,20 @@ test "gzip round trip" {
     const unpacked = try decompress(gpa, packed_);
     defer gpa.free(unpacked);
     try std.testing.expectEqualStrings(text, unpacked);
+}
+
+test "stored gzip round trip, over a stored block's 64 KiB" {
+    const gpa = std.testing.allocator;
+    const text = try gpa.alloc(u8, 150_000);
+    defer gpa.free(text);
+    for (text, 0..) |*c, i| c.* = @truncate(i *% 7);
+    const window = try gpa.alloc(u8, window_len);
+    defer gpa.free(window);
+    const stored = try storeWith(gpa, window, text);
+    defer gpa.free(stored);
+    const unpacked = try decompress(gpa, stored);
+    defer gpa.free(unpacked);
+    try std.testing.expectEqualSlices(u8, text, unpacked);
 }
 
 test "zstd from python" {
