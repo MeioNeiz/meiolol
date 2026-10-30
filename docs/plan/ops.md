@@ -26,8 +26,10 @@ of raw.db's free pages instead of moving pages back to the disk.
   meiolol.db hard). If they stay: pipelined steps instead of Bucket.flush after each,
   or BFQ (mq-deadline honours ionice -c 3 only partly)
 - Sea runs ~98% (93-95% on C01 before the fix): one request at a time, ~0.7 s of each
-  1.2 s slot in Riot's answer (time %: 36-40 slot wait, 56-61 Riot), so slots lost to
-  a restart or a stall are caught up slowly; two requests in flight would close it. Its few "due" players mean more id lookups per new match: a
+  1.2 s slot in Riot's answer (time %: 36-40 slot wait, 56-61 Riot). Two in flight
+  would not help: every minute sea still waits 25%+ on the limiter, whose catch-up
+  (16 slots) makes up short stalls; the gap to 99.4% is within the per-step counters'
+  noise (+-1.5% an hour). Its few "due" players mean more id lookups per new match: a
   yield question, not key use
 
 ## Crawler speed
@@ -85,6 +87,64 @@ tab shows people, unconfirmed and bots. Next, only if needed:
   anonymise and split assume a full rebuild (row order, split.tsv over all games, pack
   and seat stats rebuilt whole), and erasure must still reach the copy (forget applied
   to it, as to the mirrors)
+
+## Complete form
+
+Jacob (30 Oct): C01 keeps every document we collect in a form the raw JSON is recreated
+from, byte for byte; the gpu-box keeps a pseudonymised copy for model tests; raw JSON
+ends everywhere once that holds. Why: compact timelines (~10 KB) drop about half the
+JSON (per-minute champion stats and damage split, kill damage breakdowns), so today the
+raw archive is the only copy of that half, raw piles up on C01 (~9 GB a day) whenever
+the gpu-box is off, and catch-ups stalled the crawler.
+
+S1 measured (30 Oct, 1,950 timelines and their summaries from C01, prototype codec):
+- Codec: schema-free and structural. Key lists go to a shape dictionary, values to one
+  stream per JSON path (integers as zigzag deltas, strings by a per-path dictionary,
+  other numbers as their text), then zstd. Every document decodes to its exact bytes
+  (3,900 of 3,900; a failed check would keep that document raw)
+- Bytes per document, against the archive's zstd -15 stream of plain JSON:
+
+  | | raw JSON | stored on C01 now (gzip) | archive now | complete form |
+  |---|---|---|---|---|
+  | timeline | 790 KB | 75 KB | 44 KB | 24.5 KB (29 KB doc by doc) |
+  | summary | 76 KB | 12 KB | 5 KB | 3.4 KB (4.5 KB doc by doc) |
+  | mastery fetch | ~35 KB | not kept (compact 0.9 KB, lossy) | compact | ~1.3 KB |
+
+  "Doc by doc": each document's streams together, zstd over the file; the lower figure
+  groups each stream across documents (blocks of documents in S2)
+- A timeline's bytes: kill damage breakdowns 38%, per-minute damage split 17%, other
+  events 15%, per-minute gold/XP/CS/position 12%, per-minute champion stats 9%,
+  structure 6%, PUUIDs 4%. Left for S2: a document-wide string dictionary (each PUUID
+  is there twice), type tags inferred from the path (~1 KB), one spell-name dictionary
+  per file
+- A day at today's rate (91k timelines, 163k summaries, 536k mastery fetches): ~3.5 GB,
+  against ~6.6 GB a day into the archive now. C01 then grows ~6 GB a day with the
+  databases: 400 GB free lasts ~2 months, so a bigger disk image (Megatron, Ethan's
+  call) by about January
+- Mastery: no raw JSON has ever been kept (compact drops seasonal and derived fields,
+  last play rounded to hours), so its complete form starts when S3 does
+- Speed: 7 ms a timeline to encode and check on the Mac, ~10 CPU minutes a day
+
+Steps (S2 on, anything that writes on C01 or changes the crawler, through the
+coordinator first):
+- S2 codec in src/store: round-trip and fuzz tests, blocks of documents per stream,
+  the S1 leftovers above
+- S3 the crawler writes the complete form for every summary, timeline and mastery
+  fetch: sealed per-day files on the data disk (outside SQLite, so the writer's WAL
+  doesn't carry the bytes), raw kept only for a document that fails its check
+- S4 forget rewrites the day files it touches (an erased document no longer equals the
+  original), the 24-month sweep blanks the same; backups, restore test, health lines
+- S5 the gpu-box pulls day files instead of raw exports and pseudonymises them as the
+  archive does now; lab readers (summaries, mastery-pre, seat-stats, comp-stats) read
+  them. With its salt the copy rejoins meiolol.db backups, so it is also the copy off
+  Megatron
+- S6 raw ends: no raw docs, raw exports, valve or prune; raw.db goes
+- S7 the gpu-box's raw archive (12 Oct on, pseudonymised) converted there, checked byte
+  for byte, then its raw files deleted
+
+Open, defaults taken: (a) C01 also gets the converted history (hashed ids) or it stays
+on the gpu-box only: gpu-box only until asked. (b) A Mac mirror of the day files
+(~3.5 GB a day): no, the gpu-box copy is the one off Megatron.
 
 ## Deploys
 
