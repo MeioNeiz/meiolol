@@ -20,7 +20,7 @@ const pages = process.argv.length > 3 ? process.argv.slice(3) : [
   '/matchups/top/darius-vs-garen', '/daily', '/patch', '/patch?region=all', '/pickup', '/pickup/top',
   '/pool', '/learn', '/your', '/your#view=highlights', '/game', '/method', '/download', '/privacy',
   '/terms', '/login', '/account', '/signup', '/join', '/nosuch', '/private', '/private/tester',
-  '/private/old', '/admin', '/admin/notes',
+  '/admin', '/admin/notes',
 ];
 const args = process.env.MAP ? [`--host-resolver-rules=MAP ${process.env.MAP}`] : [];
 const browser = await pw.chromium.launch({ channel: 'chrome', headless: true, args });

@@ -12,7 +12,7 @@
 # by agent, one fetch per view. The rest are "unconfirmed" (hours column 6). Pages until
 # 25 Oct linked /style.css the same way, so it still counts (a page links one or the
 # other; the stylesheet is now cached for a year by a hashed name)
-# Shape of traffic.json: section 3 of the admin dashboard contract (admin.js reads it)
+# Shape of traffic.json: section 3 of the admin dashboard contract (ui/admintraffic.zig reads it)
 set -euo pipefail
 
 LOG=${MEIOLOL_TRAFFIC_LOG:-/var/log/nginx/meiolol.access.log}

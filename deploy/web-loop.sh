@@ -35,8 +35,7 @@
 # lane-model` (team2's lane outcomes, every timeline read once; 0.9 GB, ~2 min of CPU on
 # the Mac for 800k games), each file with a .gz copy, written beside it and swapped in
 # whole. Each round copies it into the private upload at private/models/, where the
-# tester reads it before the lab's pick (admin-draft.js modelFile; docs/model.md "Draft
-# model file").
+# tester reads it before the lab's pick (docs/model.md "Draft model file").
 # Daily, `meiolol your-example` (read-only, background) leaves an anonymised player's
 # games per role in data/your-example.json, which meiolol-render serves at the same path
 # from its next load, for your.html's and the home page's example. A failed run removes

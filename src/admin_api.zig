@@ -1,5 +1,5 @@
 //! /admin/api/ in `meiolol render`: live data, site traffic, log tails and a few fixed
-//! actions for the admin page (src/site/static/admin.js). nginx checks the login
+//! actions for the admin page (site/ui/adminpage.zig). nginx checks the login
 //! (/auth/check/view_admin) and adds X-Meiolol-Admin with the token in admin.token (cwd);
 //! without exactly that token, a request here is answered as if these routes did not
 //! exist. Actions also need the X-Meiolol-Role nginx passes on to have run_actions (the

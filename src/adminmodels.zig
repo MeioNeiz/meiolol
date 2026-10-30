@@ -1,7 +1,8 @@
 //! The admin Models tab's files (ui/modelsdata.zig): models.bin from the box's eval
 //! (generate() in admin.zig, each web round), and training.bin plus runs/<run>/metrics.bin
 //! from the lab view deploy/lab-push.sh stages on the Mac (`meiolol admin --training DIR`).
-//! Ports the old admin.js parsing (winReadings, runInfo, labResult, learnedByCat, loadNn)
+//! Ports the old JS admin page's parsing (winReadings, runInfo, labResult, learnedByCat,
+//! loadNn)
 const std = @import("std");
 const store = @import("store");
 const date = @import("date.zig");

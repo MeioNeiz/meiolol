@@ -186,17 +186,11 @@ Deleted with daily.js.
 - [G] :272 (1) lookup forms: Riot ID into the fragment (privacy)
 - pool.zig:45 `onsubmit="return false"` goes with the pool form GET
 
-## Admin scripts (3,712 lines, private page, brief)
+## Admin scripts
 
-- admin.js (2,497): G ~600 (polling live/snapshot/traffic/training, shell, tabs,
-  storage, action POSTs, log viewer); S ~1,300 (views built from JSON, markdown and
-  report tables, bars, tiles: admin.zig already writes the snapshot); W ~550 (SVG
-  charts with zoom and range, interval charts)
-- admin-draft.js (861): W ~300 draftModel/laneModel/checks (:153-470), a JS copy of
-  src/lab/draft.zig and lane.zig Scorer, checked against reference pairs at load: the
-  strongest wasm case on the admin side; W/G ~560 draft board and pickers
-- admin-setnet.js (174): W, forward pass of lab/setnet.zig
-- Since the admin page moved to ui islands, only /private (PRIVATE mode) loads these
+- Gone: the admin page is ui islands (site/ui/adminpage.zig), the Draft tester is
+  ui-tester (draft-tester.md); admin.js, admin-draft.js, admin-setnet.js and admin.css
+  with the old tester at /private/old
 
 ## Works without JS today
 

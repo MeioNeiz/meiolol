@@ -316,33 +316,9 @@ test "tsv rows by column name: optional cells null, rows short of a required cel
     try std.testing.expectEqual(@as(?f32, 0.5), e[1].ll_tunedw);
 }
 
-/// The private site's index (/private) and the old Draft tester (/private/old, until the
-/// new one at /private/tester has its features): the admin page in private mode (admin.js
-/// PRIVATE), no box data, only the shipped models the web loop copies into models/; and
-/// pv's files, the public pages' private numbers (site/pv.zig). nginx serves it to
-/// view_private logins
-pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) !void {
-    var buf: [2048]u8 = undefined;
-    const page = try std.fmt.bufPrint(&buf,
-        \\<!doctype html>
-        \\<html lang="en">
-        \\<head>
-        \\<meta charset="utf-8">
-        \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
-        \\<meta name="robots" content="noindex">
-        \\<title>meiolol private</title>
-        \\<link rel="stylesheet" href="/private/admin.css">
-        \\</head>
-        \\<body>
-        \\<main id="app"><p>Loading…</p></main>
-        \\<script id="data" type="application/json">{{"private":true,"now":{d}}}</script>
-        \\<script src="/private/admin-setnet.js"></script>
-        \\<script src="/private/admin-draft.js"></script>
-        \\<script src="/private/admin.js"></script>
-        \\</body>
-        \\</html>
-        \\
-    , .{ csp.metaFetching(&.{}, &.{}, "https://ddragon.leagueoflegends.com"), now_s });
+/// The private site's index (/private) and pv's files, the public pages' private numbers
+/// (site/pv.zig). nginx serves it to view_private logins
+pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
     const cwd = Io.Dir.cwd();
     try cwd.createDirPath(io, out_dir);
     var dir = try cwd.openDir(io, out_dir, .{});
@@ -350,11 +326,6 @@ pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) 
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     try writeGz(gpa, io, dir, "index.html", try privateIndex(arena.allocator()));
-    try writeGz(gpa, io, dir, "old.html", page);
-    try writeGz(gpa, io, dir, "admin-setnet.js", @embedFile("site/static/admin-setnet.js"));
-    try writeGz(gpa, io, dir, "admin-draft.js", @embedFile("site/static/admin-draft.js"));
-    try writeGz(gpa, io, dir, "admin.js", @embedFile("site/static/admin.js"));
-    try writeGz(gpa, io, dir, "admin.css", @embedFile("site/static/admin.css"));
     for (site_pv.files) |f| try writeGz(gpa, io, dir, f[0], f[1]);
 }
 
@@ -393,7 +364,6 @@ const index_csp = csp.meta(&.{index_script}, &.{});
 const index_md =
     \\- [Draft tester](/private/tester): build a draft, see the model's win chance and every candidate
     \\- [App review](/private/app): every screen the desktop app can show, both editions
-    \\- [Old Draft tester](/private/old): lane model, set net, bans and compare, until the new one has them
     \\
     \\[Back to meiolol](/)
 ;

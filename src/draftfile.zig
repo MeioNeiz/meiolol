@@ -486,7 +486,7 @@ pub const SetNetFile = struct {
     refs: []const struct { teams: [2][n_role]u32, platform: u8, offset: f32, logit: f32 },
 };
 
-/// The set net's reference forward pass, the one admin-setnet.js must match:
+/// The set net's reference forward pass, the one ui/testersetnet.zig must match:
 /// logit = (f(blue, red) - f(red, blue)) / 2 + c[platform] + a * base. A slot's input is
 /// its champion-role's z profile (zeros without one), its role one-hot and the
 /// embedding row of its id (the role's row 0..4 without one), as for an average pick

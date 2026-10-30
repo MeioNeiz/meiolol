@@ -219,18 +219,16 @@ this on the site)
 
 The /private pages (accounts.md "Status"); /private itself is an index of them. Live: the
 Draft tester (/private/tester, draft-tester.md) with the live model and the Lab's comp
-model (jomify's training-receive.sh puts only the tester's model files in private/lab);
-the old JS tester at /private/old until the new one has compare (bans, Random/Fill/Undo,
-the lane model's Gold column and the set net done). Then /private/old, admin.js, admin-draft.js,
-admin-setnet.js and admin.css go. The shipped model's win chances on the public champion
+model (jomify's training-receive.sh puts only the tester's model files in private/lab):
+bans, Random/Fill/Undo, the lane model's Gold column, the set net and compare, so the old
+JS tester and its files are gone. The shipped model's win chances on the public champion
 and matchup pages for private logins (ui.pv, ui-pv.wasm at /private/pv.{js,wasm,css},
 loaded by the header script in browsers that opened /admin/ or /private, data
 private/models/champ/<id>.bin from `meiolol draft-model`): a box after the page's head,
 the shown role's line and the matchup brief's champion beside it; on a matchup page, the
-pair. The app review pages, /private/app (arch-app.md "Review
-pages"): every screen the app can show, from the mock scenarios, in both editions, for
-Jacob's notes. Next: the tester ports above; all regions and patches without the public
-page-weight cuts.
+pair. The app review pages, /private/app (arch-app.md "Review pages"): every screen the
+app can show, from the mock scenarios, in both editions, for Jacob's notes. Next: all
+regions and patches without the public page-weight cuts.
 
 Private ideas from the feature survey (league-apps-feature-matrix), after the above:
 loading-screen scouting of the lane opponent and the rest (mainstream; names are

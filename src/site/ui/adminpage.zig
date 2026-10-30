@@ -33,7 +33,7 @@ pub const sel = "[data-island=admin]";
 /// An invite or reset token's link
 pub const join_link = "https://meio.lol/join#{s}";
 
-/// Keys as the old page's (admin.js), so its links carry over
+/// Keys as the old JS page's, so its links carry over
 pub const Tab = enum { overview, crawler, riot, storage, ingest, models, traffic, deploys, logs, accounts, ops };
 
 /// The old page's links ("#crawler", "#models/win", "#training") in this page's form

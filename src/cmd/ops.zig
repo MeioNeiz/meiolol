@@ -502,7 +502,7 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
     site_notes.writeAdmin(c.init.gpa, c.init.io, o.out_dir) catch |e| std.log.err("notes page: {t}", .{e});
     try site_admin.write(c.init.gpa, c.init.io, o.out_dir);
     if (private_out) |p| {
-        try admin.private(c.init.gpa, c.init.io, p, now);
+        try admin.private(c.init.gpa, c.init.io, p);
         // web-loop.sh skips the admin and private uploads when this exits non-zero: the
         // new tester must not freeze the admin page
         site_tester.write(c.init.gpa, c.init.io, p, db) catch |e| std.log.err("tester page: {t}", .{e});

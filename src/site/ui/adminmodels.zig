@@ -59,7 +59,6 @@ pub fn viewOf(c: md.Cat) View {
     };
 }
 
-/// The new tester (the old one, admin.js PRIVATE, stays at /private/old until parity)
 const tester_href = "/private/tester";
 
 /// meiolol-lab's targets; short: the outcome pick's label

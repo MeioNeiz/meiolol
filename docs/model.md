@@ -4466,7 +4466,7 @@ writes each seed's dev-block fit as setnet-s<seed>.json (format meiolol-setnet v
 setnet.writeExport's doc comment). An independent forward pass from the file matches its
 200 reference logits within 6e-8 and netcheck's preds within 5e-7 (win-draft, seed 1:
 14,353 params, 823 vocab ids, 865 profiles). The tester reads it through
-src/site/static/admin-setnet.js, on additive v2 fitted on the same games (`draft
+src/site/ui/testersetnet.zig, on additive v2 fitted on the same games (`draft
 --model additive --fit dev --export`); its parts are swaps (a pick for its role's
 average, a trait zeroed across a team, every embedding row for its role's), not terms
 - Not yet: a test look (needs Jacob's go; rule to declare first) and `meiolol eval`'s view
