@@ -178,6 +178,15 @@ if pushed "$rev"; then
     echo "push: $(short "$rev") is on main"
     exit 0
 fi
+# A REV from a worktree off origin, beside local main's unpushed commits, splits the two:
+# someone then has to replay main by hand
+if [ -z "${MEIOLOL_PUSH_BESIDE:-}" ] \
+    && [ -n "$(git rev-list -1 refs/remotes/origin/main..refs/heads/main)" ] \
+    && ! git merge-base --is-ancestor refs/heads/main "$rev"; then
+    echo "push: $(short "$rev") leaves out local main's unpushed commits (git log origin/main..main):" \
+        "rebase it onto main, or MEIOLOL_PUSH_BESIDE=1 if main's are not to go" >&2
+    exit 1
+fi
 if [ "$(mode)" = bulk ]; then
     echo "$rev" > "$q/bulk/$rev"
     rm -f "$q/failed/$rev"

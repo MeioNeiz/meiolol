@@ -42,6 +42,8 @@ request's saved files.
 - The pre-push hook runs ci on a clean checkout of the pushed commit (build tree "ci",
   3 slots); a push that changes nothing in src, deploy or build files skips it
 - deploy/push.sh holds its own lock, so builds go on during a push
+- deploy/push.sh refuses a REV that leaves out local main's unpushed commits (a worktree
+  off origin): rebase it onto main (MEIOLOL_PUSH_BESIDE=1 if main's are not to go)
 
 Two modes, for every session (`deploy/push.sh --mode fast|bulk [MIN]`, `--status`):
 
