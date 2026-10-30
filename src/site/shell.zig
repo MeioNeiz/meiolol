@@ -7,6 +7,7 @@ const ui = @import("ui");
 const html = @import("html.zig");
 const style = @import("style.zig");
 const assets = @import("assets.zig");
+const csp = @import("csp.zig");
 const Writer = std.Io.Writer;
 const tpl = html.tpl;
 const Page = html.Page;
@@ -26,7 +27,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         \\<html lang="en">
         \\<head>
         \\<meta charset="utf-8">
-        \\<meta name="viewport" content="width=device-width, initial-scale=1">
+        \\{csp}<meta name="viewport" content="width=device-width, initial-scale=1">
         \\<meta name="referrer" content="no-referrer">
         \\<title>{title}</title>
         \\<meta name="description" content="{description}">
@@ -40,6 +41,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         \\{subbar}{banner}<main class="{main}">
         \\
     , .{
+        .csp = tpl.trusted(csp_meta),
         .title = p.title,
         .description = p.description,
         .css = toSite(style.file.path),
@@ -54,16 +56,19 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         .look = tpl.trusted(search_loader),
         .subbar = tpl.when(p.nav.inChampions() or p.counterparts != null, Subbar{ .p = p }),
         // Remembered so shared pages link back into this view
-        .remember = if (p.view) |v| tpl.t(
-            \\<script>try{localStorage.setItem("view","{dir}")}catch(e){}</script>
-            \\
-        , .{ .dir = tpl.trusted(v.query()) }) else null,
+        .remember = if (p.view) |v| tpl.t("<script data-v=\"{v}\">" ++ remember ++ "</script>\n", .{ .v = v.query() }) else null,
         .meio_view = tpl.when(p.view == null, tpl.trusted(meio_view)),
         .admin = tpl.trusted(admin_link),
         .banner = tpl.when(!p.public, Preview{}),
         .main = ui.site.main_class,
     });
 }
+
+/// The page's CSP (csp.zig): the inline scripts here; its <style> is added at delivery
+const csp_meta = csp.meta(&.{ search_loader, admin_link, meio_view, "<script>" ++ remember ++ "</script>" }, &.{});
+
+/// Its view (data-v): the hash is one for every view
+const remember = "try{localStorage.setItem(\"view\",document.currentScript.dataset.v)}catch(e){}";
 
 /// ui.site's bar. Its search: ui.sitesearch's island; without JS a Riot ID lookup
 const SiteHeader = struct {
@@ -233,3 +238,13 @@ const Preview = struct {
         try w.writeByte('\n');
     }
 };
+
+test "open: its CSP allows each inline script it writes" {
+    for ([_]?View{ null, View.all[3] }) |v| {
+        var out: Writer.Allocating = .init(std.testing.allocator);
+        defer out.deinit();
+        try open(&out.writer, .{ .title = "t", .description = "d", .patch = "16.21", .data = "", .public = true, .view = v, .nav = .champions });
+        try close(&out.writer, .{ .title = "t", .description = "d", .patch = "16.21", .data = "", .public = true });
+        try csp.check(out.written());
+    }
+}

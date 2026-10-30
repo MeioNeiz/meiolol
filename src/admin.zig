@@ -14,6 +14,7 @@ const tsvlog = @import("tsvlog.zig");
 const status = @import("status.zig");
 const ui = @import("ui");
 const adminmodels = @import("adminmodels.zig");
+const csp = @import("site/csp.zig");
 const ad = ui.admindata;
 
 const Io = std.Io;
@@ -318,13 +319,13 @@ test "tsv rows by column name: optional cells null, rows short of a required cel
 /// PRIVATE), no box data, only the shipped models the web loop copies into models/; and
 /// pv.js, the public pages' private numbers. nginx serves it to view_private logins
 pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) !void {
-    var buf: [1024]u8 = undefined;
+    var buf: [2048]u8 = undefined;
     const page = try std.fmt.bufPrint(&buf,
         \\<!doctype html>
         \\<html lang="en">
         \\<head>
         \\<meta charset="utf-8">
-        \\<meta name="viewport" content="width=device-width, initial-scale=1">
+        \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
         \\<meta name="robots" content="noindex">
         \\<title>meiolol private</title>
         \\<link rel="stylesheet" href="/private/admin.css">
@@ -338,7 +339,7 @@ pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) 
         \\</body>
         \\</html>
         \\
-    , .{now_s});
+    , .{ csp.files_only, now_s });
     const cwd = Io.Dir.cwd();
     try cwd.createDirPath(io, out_dir);
     var dir = try cwd.openDir(io, out_dir, .{});
@@ -358,16 +359,13 @@ const private_index =
     \\<html lang="en">
     \\<head>
     \\<meta charset="utf-8">
+    \\
+++ csp.meta(&.{index_script}, &.{index_style}) ++
     \\<meta name="viewport" content="width=device-width, initial-scale=1">
     \\<meta name="robots" content="noindex">
     \\<title>meiolol private</title>
-    \\<style>
-    \\body { margin: 0; background: #10141c; color: #c8cdd8; font: 15px/1.5 system-ui, sans-serif; }
-    \\main { max-width: 640px; margin: 32px auto; padding: 0 16px; }
-    \\h1 a { color: #fff; text-decoration: none; }
-    \\li { margin: 10px 0; }
-    \\li a { color: #8ab4ff; font-weight: 600; }
-    \\</style>
+    \\
+++ index_style ++
     \\</head>
     \\<body>
     \\<main>
@@ -378,11 +376,32 @@ const private_index =
     \\<li><a href="/private/old">Old Draft tester</a>: lane model, set net, bans and compare, until the new one has them</li>
     \\</ul>
     \\</main>
-    \\<script>try{localStorage.setItem("admin-link",JSON.stringify({href:"/private/tester",label:"Draft tester"}))}catch(e){}</script>
+    \\
+++ index_script ++
     \\</body>
     \\</html>
     \\
 ;
+
+const index_style =
+    \\<style>
+    \\body { margin: 0; background: #10141c; color: #c8cdd8; font: 15px/1.5 system-ui, sans-serif; }
+    \\main { max-width: 640px; margin: 32px auto; padding: 0 16px; }
+    \\h1 a { color: #fff; text-decoration: none; }
+    \\li { margin: 10px 0; }
+    \\li a { color: #8ab4ff; font-weight: 600; }
+    \\</style>
+    \\
+;
+
+const index_script =
+    \\<script>try{localStorage.setItem("admin-link",JSON.stringify({href:"/private/tester",label:"Draft tester"}))}catch(e){}</script>
+    \\
+;
+
+test "private index: its CSP allows its own script and style" {
+    try csp.check(private_index);
+}
 
 /// Also `path`.gz, as the site's pages (nginx gzip_static)
 fn writeGz(gpa: std.mem.Allocator, io: Io, dir: Io.Dir, path: []const u8, data: []const u8) !void {

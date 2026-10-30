@@ -151,6 +151,18 @@ hourly; docs/plan.md step 2), and at once on each push to main (deploy/on-push.s
 every other page from meiolol-render on the box, which reads the new views file after
 each upload.
 
+CSP (src/site/csp.zig): each page's head carries a meta CSP right after charset;
+nginx's meiolol-headers.conf adds what a meta can't (frame-ancestors, base-uri,
+object-src). Scripts: same-origin files, 'wasm-unsafe-eval', and the page's own inline
+ones by sha256 (`csp.meta(scripts, styles)`; `csp.files_only` for a page without any);
+a per-page <style> gets its hash at delivery (`csp.withStyle`). Style attributes stay
+allowed (h.vars). Trusted Types: only the default policy (first script in the head),
+which passes same-origin script URLs and blocks every HTML and script sink, so an
+island builds nodes (the notes overlay too), never HTML strings. An inline script or
+<style> not listed is blocked: `csp.check(page)` in a page's test. Dev reload is
+/__dev.js. Page check: `node deploy/csp.mjs BASE` (every page in headless Chrome,
+violations and console errors; its header says how to reach meio.lol from the Mac)
+
 Known gaps: stats.bin is dense (~12 MB raw; brotli helps while sparse), no rank
 brackets (statsfile has none), no per-patch history.
 

@@ -11,6 +11,7 @@ const store = @import("store");
 const ui = @import("ui");
 const assets = @import("assets.zig");
 const style = @import("style.zig");
+const csp = @import("csp.zig");
 
 const Io = std.Io;
 
@@ -62,7 +63,7 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
         \\<html lang="en">
         \\<head>
         \\<meta charset="utf-8">
-        \\<meta name="viewport" content="width=device-width, initial-scale=1">
+        \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
         \\<meta name="robots" content="noindex">
         \\<title>meiolol admin</title>
         \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -72,7 +73,7 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
         \\<body class="ui">
         \\<main class="c-sitemain">
         \\
-    , .{ style.file.path, css_file.path });
+    , .{ csp.files_only, style.file.path, css_file.path });
     try ui.html.write(&t, n, w);
     try ui.html.write(&t, cn, w);
     try ui.html.write(&t, tn, w);

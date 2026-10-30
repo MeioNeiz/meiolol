@@ -223,7 +223,8 @@ a 301 to it.
   serves its own
 - Security headers: deploy/nginx/meiolol-headers.conf (/etc/nginx/, included in the
   server and each location with its own add_header): X-Frame-Options DENY and CSP
-  frame-ancestors, base-uri and object-src, COOP same-origin, nosniff, HSTS. HSTS goes up
+  frame-ancestors, base-uri and object-src (the rest of the CSP is each page's meta:
+  arch-site.md "CSP"), COOP same-origin, nosniff, HSTS. HSTS goes up
   in stages, each after a clean spell: 300 s (29 Oct), a day, then a year with
   includeSubDomains (every subdomain HTTPS first; preload only after that)
 - Training view (/admin/training/, same login as /admin/; data for the admin Models

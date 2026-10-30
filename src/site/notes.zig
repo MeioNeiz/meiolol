@@ -6,6 +6,7 @@ const std = @import("std");
 const store = @import("store");
 const ui = @import("ui");
 const style = @import("style.zig");
+const csp = @import("csp.zig");
 
 pub const css = ui.css.join(.{ ui.notes, ui.noteslist });
 
@@ -50,7 +51,7 @@ pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
         \\<html lang="en">
         \\<head>
         \\<meta charset="utf-8">
-        \\<meta name="viewport" content="width=device-width, initial-scale=1">
+        \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
         \\<meta name="robots" content="noindex">
         \\<title>Notes · meiolol admin</title>
         \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -59,7 +60,7 @@ pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
         \\</head>
         \\<body class="ui">
         \\
-    , .{style.file.path});
+    , .{ csp.files_only, style.file.path });
     try ui.html.write(&t, n, w);
     try w.writeAll(
         \\

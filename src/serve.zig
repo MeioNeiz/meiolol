@@ -143,10 +143,11 @@ pub const Dev = struct {
     }
 };
 
-const reload_script =
-    \\<script>(()=>{let v;const p=async()=>{try{const t=await(await fetch("/__dev",{cache:"no-store"})).text();
-    \\if(v&&t!==v)location.reload();v=t}catch(e){}setTimeout(p,400)};p()})()</script>
-    \\
+/// A file, not inline: a page's CSP (site/csp.zig) allows only its own inline scripts
+const reload_script = "<script src=\"/__dev.js\"></script>\n";
+const reload_js =
+    \\(()=>{let v;const p=async()=>{try{const t=await(await fetch("/__dev",{cache:"no-store"})).text();
+    \\if(v&&t!==v)location.reload();v=t}catch(e){}setTimeout(p,400)};p()})()
 ;
 
 /// The root is opened by path per request: a rebuilt site may be swapped in by renaming
@@ -317,6 +318,10 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             std.mem.find(u8, h.value, "gzip") != null) gzip = true;
     }
 
+    if (ctx.opts.dev != null and std.mem.eql(u8, path, "__dev.js")) return request.respond(reload_js, .{ .extra_headers = &.{
+        .{ .name = "content-type", .value = "text/javascript; charset=utf-8" },
+        .{ .name = "cache-control", .value = "no-store" },
+    } });
     if (ctx.opts.dev) |d| if (std.mem.eql(u8, path, "__dev")) {
         var buf: [64]u8 = undefined;
         const v = try std.mem.print(&buf, "{d}-{d}", .{ ctx.started, staticVersion(ctx.io, d.static_dir) });

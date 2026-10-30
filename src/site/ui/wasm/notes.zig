@@ -66,24 +66,51 @@ export fn main() void {
     load();
 }
 
-/// The closed tool's HTML at the end of <body>, for the runtime to adopt
+/// The closed tool at the end of <body>, for the runtime to adopt: built as nodes, as the
+/// browser would parse html.write's bytes. No HTML sink: Trusted Types (site/csp.zig)
 fn mount() bool {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
-    const a = arena.allocator();
     var t: ui.Tree = .{};
-    var h: ui.H = .init(a, &t);
+    var h: ui.H = .init(arena.allocator(), &t);
     const n = server.view(&h);
     if (h.oom) return false;
-    var out: std.Io.Writer.Allocating = .init(a);
-    ui.html.write(&t, n, &out.writer) catch return false;
-    const s = zjb.string(out.written());
-    defer s.release();
     const body = zjb.global("document").get("body", zjb.Handle);
     defer body.release();
     if (body == .null) return false;
-    body.call("insertAdjacentHTML", .{ zjb.constString("beforeend"), s }, void);
+    const el = build(&t, n);
+    defer el.release();
+    body.call("append", .{el}, void);
     return true;
+}
+
+fn build(t: *const ui.Tree, n: ui.tree.N) zjb.Handle {
+    const x = t.node(n);
+    const doc = zjb.global("document");
+    if (x.tag == .@"#text") {
+        const s = zjb.string(x.text);
+        defer s.release();
+        return doc.call("createTextNode", .{s}, zjb.Handle);
+    }
+    const name = zjb.string(@tagName(x.tag));
+    defer name.release();
+    const el = if (x.tag.isSvg())
+        doc.call("createElementNS", .{ zjb.constString("http://www.w3.org/2000/svg"), name }, zjb.Handle)
+    else
+        doc.call("createElement", .{name}, zjb.Handle);
+    for (t.attrsOf(n)) |a| {
+        const k = zjb.string(a.name);
+        defer k.release();
+        const v = zjb.string(a.value);
+        defer v.release();
+        el.call("setAttribute", .{ k, v }, void);
+    }
+    for (t.kidsOf(n)) |k| {
+        const c = build(t, k);
+        defer c.release();
+        el.call("append", .{c}, void);
+    }
+    return el;
 }
 
 fn render() void {
