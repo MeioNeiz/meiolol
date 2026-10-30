@@ -169,8 +169,8 @@ fn champOf(site: *const Site, id: u32) anyerror!?ui.champ.Champ {
     return null;
 }
 
-/// The biggest clear win rate moves since the last patch, up then down; the link alone
-/// without them (the box's core build loads no patch day); null on a patch's first day
+/// The biggest clear win rate moves since the last patch, each way (the card orders them,
+/// today.changes); the link alone without them (the box's core build loads no patch day); null on a patch's first day
 fn patchCard(site: *const Site, h: *ui.H, up: []const u8) !?ui.N {
     const a = site.arena;
     const pd = site.patchday orelse {
@@ -207,7 +207,7 @@ fn patchHead(a: Allocator, up: []const u8, cur: []const u8, prev: []const u8) !u
     };
 }
 
-/// The clear moves, the per_way biggest up then the per_way biggest down
+/// The clear moves: the per_way biggest each way
 fn biggest(a: Allocator, moves: []const patchday.ChampionMove, o: patchday.Options) ![]patchday.ChampionMove {
     var ups: std.ArrayList(patchday.ChampionMove) = .empty;
     var downs: std.ArrayList(patchday.ChampionMove) = .empty;
