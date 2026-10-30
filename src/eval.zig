@@ -991,26 +991,31 @@ pub fn auc(gpa: std.mem.Allocator, p: []const f64, pos: []const bool, placements
         if (placements) |out| @memset(out, 0.5);
         return 0.5;
     }
-    // Positives and negatives below the current tie group
+    // Positives and negatives below the current tie group. The Mann-Whitney U sums
+    // half-integers, exact below 2^53, and is divided once
     var pos_below: f64 = 0;
     var neg_below: f64 = 0;
-    var sum: f64 = 0;
+    var u: f64 = 0;
     var i: usize = 0;
     while (i < idx.len) {
         var j = i;
         var tie_pos: f64 = 0;
-        while (j < idx.len and p[idx[j]] == p[idx[i]]) : (j += 1) tie_pos += @floatFromInt(@intFromBool(pos[idx[j]]));
+        while (j < idx.len and p[idx[j]] == p[idx[i]]) : (j += 1) {
+            tie_pos += @floatFromInt(@intFromBool(pos[idx[j]]));
+        }
         const tie_neg = @as(f64, @floatFromInt(j - i)) - tie_pos;
-        const pos_place = (neg_below + tie_neg / 2) / n_neg;
-        sum += tie_pos * pos_place;
+        u += tie_pos * (neg_below + tie_neg / 2);
         if (placements) |out| for (idx[i..j]) |k| {
-            out[k] = if (pos[k]) pos_place else (n_pos - pos_below - tie_pos / 2) / n_pos;
+            out[k] = if (pos[k])
+                (neg_below + tie_neg / 2) / n_neg
+            else
+                (n_pos - pos_below - tie_pos / 2) / n_pos;
         };
         pos_below += tie_pos;
         neg_below += tie_neg;
         i = j;
     }
-    return sum / n_pos;
+    return u / (n_pos * n_neg);
 }
 
 const Evaluated = struct { p: []f64, m: Metrics };

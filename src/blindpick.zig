@@ -184,11 +184,23 @@ fn offsetsOf(arena: std.mem.Allocator, st: *const core.Stats, min_games: u32) !O
 
 /// Each offset over the candidate champion-roles: its mean, spread and correlation with
 /// log role games. A spread of shrunk estimates grows with the games behind them, so an
-/// offset that tracks games partly ranks by popularity, not by safety
-fn offsetTable(w: *Io.Writer, st: *const core.Stats, offsets: *const Offsets, min_games: u32) !void {
+/// offset that tracks games partly ranks by popularity, not by safety. r is "-" when
+/// either side doesn't vary
+fn offsetTable(
+    w: *Io.Writer,
+    st: *const core.Stats,
+    offsets: *const Offsets,
+    min_games: u32,
+) !void {
+    var candidates: usize = 0;
+    for (Role.all) |r| for (0..st.n) |c| {
+        candidates += @intFromBool(st.champRole(r, c).games >= min_games);
+    };
+    if (candidates < 2) return error.TooFewGames;
     try w.writeAll("\n## Offsets\n\nPer champion-role with the candidates' train games: " ++
         "mean, spread and correlation with log role games.\n\n" ++
-        "| offset | champion-roles | mean | sd | r with log games |\n| --- | --- | --- | --- | --- |\n");
+        "| offset | champion-roles | mean | sd | r with log games |\n" ++
+        "| --- | --- | --- | --- | --- |\n");
     for (variants[1..], 1..) |v, vi| {
         var n: f64 = 0;
         var sx: f64 = 0;
@@ -208,12 +220,14 @@ fn offsetTable(w: *Io.Writer, st: *const core.Stats, offsets: *const Offsets, mi
             syy += y * y;
             sxy += x * y;
         };
-        const vx = sxx / n - (sx / n) * (sx / n);
-        const vy = syy / n - (sy / n) * (sy / n);
-        const r = (sxy / n - sx / n * sy / n) / @sqrt(vx * vy);
-        try w.print("| {s} | {d} | {d:.4} | {d:.4} | {d:.2} |\n", .{
-            v.label(), @as(usize, @intFromFloat(n)), sx / n, @sqrt(vx), r,
+        const vx = @max(0, sxx / n - (sx / n) * (sx / n));
+        const vy = @max(0, syy / n - (sy / n) * (sy / n));
+        try w.print("| {s} | {d} | {d:.4} | {d:.4} |", .{
+            v.label(), @as(usize, @intFromFloat(n)), sx / n, @sqrt(vx),
         });
+        if (vx > 0 and vy > 0) {
+            try w.print(" {d:.2} |\n", .{(sxy / n - sx / n * sy / n) / @sqrt(vx * vy)});
+        } else try w.writeAll(" - |\n");
     }
 }
 
@@ -399,7 +413,10 @@ fn summarise(gpa: std.mem.Allocator, games: []const Game, pct: []const [nv]f32) 
             .losers = sl / nl,
             .auc = auc,
             .gap_vs = if (v == .current) .{ .diff = 0, .half = 0 } else .of(d_gap, null),
-            .auc_vs = if (v == .current) .{ .diff = 0, .half = 0 } else .of(d_auc, auc - out.rows[0].auc),
+            .auc_vs = if (v == .current)
+                .{ .diff = 0, .half = 0 }
+            else
+                .of(d_auc, auc - out.rows[0].auc),
             .top_n = @intFromFloat(top_n),
             .top_win = top_w / @max(top_n, 1),
         };
@@ -411,12 +428,18 @@ fn report(w: *Io.Writer, sc: Scenario, sum: Summary) !void {
     try w.print("\n## {s}\n\n{d} picks ({d} not ranked: no candidate, or under two). Gap: " ++
         "winners' mean percentile minus losers' (1 = the ranking's top); \"vs today\" ± 95% " ++
         "paired by game.\n\n" ++
-        "| ranking | winners | losers | gap | gap vs today | AUC | AUC vs today | top 10% win |\n" ++
-        "| --- | --- | --- | --- | --- | --- | --- | --- |\n", .{ sc.label(), sum.picks, sum.unranked });
+        "| ranking | winners | losers | gap | gap vs today | AUC | AUC vs today | " ++
+        "top 10% win |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n", .{
+        sc.label(), sum.picks, sum.unranked,
+    });
     for (variants, sum.rows) |v, row| {
-        try w.print("| {s} | {d:.4} | {d:.4} | {d:.4} |", .{ v.label(), row.winners, row.losers, row.gap() });
+        try w.print("| {s} | {d:.4} | {d:.4} | {d:.4} |", .{
+            v.label(), row.winners, row.losers, row.gap(),
+        });
         if (v == .current) try w.print(" | {d:.4} |", .{row.auc}) else {
-            try w.print(" {f} | {d:.4} | {f} |", .{ signed(row.gap_vs), row.auc, signed(row.auc_vs) });
+            try w.print(" {f} | {d:.4} | {f} |", .{
+                signed(row.gap_vs), row.auc, signed(row.auc_vs),
+            });
         }
         if (v == .current) try w.writeAll(" |");
         try w.print(" {d:.2}% of {d} |\n", .{ 100 * row.top_win, row.top_n });
@@ -477,6 +500,10 @@ const planted_champs = blk: {
     break :blk c;
 };
 
+fn runPlanted(games: []Game, o: eval.Options, w: *Io.Writer) !void {
+    return runGames(testing.allocator, testing.io, &planted_champs, &.{}, games, &.{"EUW1"}, o, w);
+}
+
 test "offsets: a planted bad lane matchup lowers the 10th percentile and the mean" {
     const gpa = testing.allocator;
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
@@ -512,8 +539,16 @@ test "summary: paired gap and AUC differences, their intervals against a jackkni
     const games = try arena.alloc(Game, n_games);
     const pct = try arena.alloc([nv]f32, n_games * 2 * Role.count);
     for (games, 0..) |*g, gi| {
-        g.* = .{ .id = gi, .start = @intCast(gi), .patch = 0, .platform = 0, .teams = @splat(@splat(0)), .winner = rnd.int(u1) };
-        // A game-level shift shared by its seats, so clustering by game matters
+        g.* = .{
+            .id = gi,
+            .start = @intCast(gi),
+            .patch = 0,
+            .platform = 0,
+            .teams = @splat(@splat(0)),
+            .winner = rnd.int(u1),
+        };
+        // A game-level shift shared by its seats, in the differences too (winners'), so
+        // clustering by game matters
         const shift = 0.2 * rnd.float(f32);
         for (0..2) |s| for (0..Role.count) |r| {
             const p = &pct[(gi * 2 + s) * Role.count + r];
@@ -521,7 +556,8 @@ test "summary: paired gap and AUC differences, their intervals against a jackkni
             p[0] = @min(1, 0.8 * rnd.float(f32) + shift);
             for (p[1..], 1..) |*x, vi| {
                 const vf: f32 = @floatFromInt(vi);
-                x.* = p[0] + 0.05 * vf * (rnd.float(f32) - 0.5) + 0.01 * vf * won;
+                x.* = p[0] + 0.05 * vf * (rnd.float(f32) - 0.5) + 0.01 * vf * won +
+                    0.3 * vf * shift * won;
             }
         };
     }
@@ -547,6 +583,28 @@ test "summary: paired gap and AUC differences, their intervals against a jackkni
         try testing.expectApproxEqAbs(try eval.auc(gpa, q, won, null), row.auc, 1e-12);
         try testing.expectApproxEqAbs(row.auc - sum.rows[0].auc, row.auc_vs.diff, 1e-12);
     }
+    // Seats as if independent: the gap difference's SE from the seats' spread alone
+    var seat_se: [nv]f64 = undefined;
+    for (1..nv) |vi| {
+        var sum_d: [2]f64 = .{ 0, 0 };
+        var ss_d: [2]f64 = .{ 0, 0 };
+        var count: [2]f64 = .{ 0, 0 };
+        for (games, 0..) |g, gi| for (0..2) |s| for (0..Role.count) |r| {
+            const p = pct[(gi * 2 + s) * Role.count + r];
+            if (std.math.isNan(p[0])) continue;
+            const d: f64 = p[vi] - p[0];
+            const c = @intFromBool(g.winner == s);
+            sum_d[c] += d;
+            ss_d[c] += d * d;
+            count[c] += 1;
+        };
+        var v: f64 = 0;
+        for (0..2) |c| {
+            const mean = sum_d[c] / count[c];
+            v += (ss_d[c] / count[c] - mean * mean) / count[c];
+        }
+        seat_se[vi] = @sqrt(v);
+    }
     var jack: [nv][2]f64 = @splat(.{ 0, 0 });
     var jack_ss: [nv][2]f64 = @splat(.{ 0, 0 });
     for (0..n_games) |drop| {
@@ -569,6 +627,7 @@ test "summary: paired gap and AUC differences, their intervals against a jackkni
         const half = if (m == 0) sum.rows[vi].gap_vs.half else sum.rows[vi].auc_vs.half;
         const ratio = half / 1.96 / se;
         try testing.expect(ratio > 0.85 and ratio < 1.15);
+        if (m == 0) try testing.expect(seat_se[vi] < 0.7 * se);
     };
 }
 
@@ -584,9 +643,34 @@ test "summary and run: too few games is an error, not NaN or a panic" {
 
     var discard: Io.Writer.Discarding = .init(&.{});
     var o: eval.Options = .{ .cuts = .{ .test_ = 0, .dev = 0, .bounds = @splat(0) } };
-    try testing.expectError(error.TooFewGames, runGames(gpa, testing.io, &planted_champs, &.{}, games, &.{"EUW1"}, o, &discard.writer));
+    try testing.expectError(error.TooFewGames, runPlanted(games, o, &discard.writer));
     o.cuts.?.test_ = games[games.len - 1].start;
-    try testing.expectError(error.TooFewGames, runGames(gpa, testing.io, &planted_champs, &.{}, games, &.{"EUW1"}, o, &discard.writer));
+    try testing.expectError(error.TooFewGames, runPlanted(games, o, &discard.writer));
+
+    // No candidate champion-role: refused before the offsets table prints a NaN
+    var out: Io.Writer.Allocating = .init(arena);
+    const none: eval.Options = .{ .pick_min_games = std.math.maxInt(u32) };
+    try testing.expectError(error.TooFewGames, runPlanted(games, none, &out.writer));
+    try testing.expect(std.mem.indexOf(u8, out.written(), "nan") == null);
+}
+
+test "offset table: offsets that don't vary print no correlation, not NaN" {
+    const gpa = testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const games = try plantedGames(arena, 400);
+    var m: eval.Model = try .buildShipped(gpa, &planted_champs, games, &.{});
+    defer m.deinit(gpa);
+    var off: Offsets = undefined;
+    for (&off) |*per_role| for (per_role) |*x| {
+        x.* = try arena.alloc(f64, m.stats.n);
+        @memset(x.*, 0);
+    };
+    var out: Io.Writer.Allocating = .init(arena);
+    try offsetTable(&out.writer, &m.stats, &off, 10);
+    try testing.expect(std.mem.indexOf(u8, out.written(), "nan") == null);
+    try testing.expectEqual(nv - 1, std.mem.count(u8, out.written(), " - |\n"));
 }
 
 test "run on planted games: every table filled, the planted matchup in the offsets" {
@@ -597,7 +681,7 @@ test "run on planted games: every table filled, the planted matchup in the offse
     const games = try plantedGames(arena, 1500);
     for ([_]bool{ true, false }) |dev| {
         var out: Io.Writer.Allocating = .init(arena);
-        try runGames(gpa, testing.io, &planted_champs, &.{}, games, &.{"EUW1"}, .{ .dev = dev }, &out.writer);
+        try runPlanted(games, .{ .dev = dev }, &out.writer);
         const text = out.written();
         try testing.expect(std.mem.indexOf(u8, text, if (dev) "Dev-val: " else "Test: ") != null);
         for (scenarios) |sc| try testing.expect(std.mem.indexOf(u8, text, sc.label()) != null);
