@@ -54,7 +54,7 @@ file and packed rows: docs/architecture.md.
   points the island's relative fetch there: nginx sends base-uri 'none'). A navigator of
   every group and state on the left (a drawer when the frame leaves no room), the
   group's steps above the frame, arrow keys between states (left, right) and groups (up,
-  down); /private/app opens the last edition's first state (nav.js)
+  down); /private/app is an index in the site shell linking each edition's first state
 - Lane panel: a click on an ally's seat shows their lane: the shell writes the board's
   seats' data-act as "lane <role>" (255 mine; only seats with a role, as allyLane finds
   the ally by role; ui/draftboard.zig Seat.act, the shown one Seat.sel) and bridge.js

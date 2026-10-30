@@ -5,7 +5,7 @@
 //! page per change it would publish, rendered by the shell's screens.zig in both
 //! editions: the same island and CSS, at the window's width or narrow, and a fake bridge
 //! that shows what the page would send the shell.
-//!   /private/app                      the index: opens the last edition's first state
+//!   /private/app                      the index, in the site shell (site/shell.zig)
 //!   /private/app/<edition>/<slug>     a state; its app.bin under <slug>/ (review.js points
 //!                                     the island's relative fetch there: nginx sends
 //!                                     base-uri 'none' and drops a trailing slash)
@@ -22,6 +22,9 @@ const shell_files = @import("../shell/files.zig");
 const shell_practice = @import("../shell/practice.zig");
 const site = @import("root.zig");
 const csp = @import("csp.zig");
+const sheets = @import("sheets.zig");
+const site_shell = @import("shell.zig");
+const site_html = @import("html.zig");
 const core = desktop.core;
 const poller = desktop.poller;
 const state = desktop.state;
@@ -481,7 +484,7 @@ fn reviewTop(a: Allocator, ed: Edition, groups: []const Group, shots: []const Sh
 /// Every group and its states as this edition's links (practice: the testers'), `cur`
 /// marked and only its group open; the index has none, every group open
 fn navigator(x: *Io.Writer, a: Allocator, ed: Edition, groups: []const Group, shots: []const Shot, cur: ?usize) !void {
-    try x.writeAll("<nav class=\"rv-nav\" id=\"rv-nav\" aria-label=\"App states\"><p class=\"rv-home\"><a href=\"/private\">Private</a> / App review</p>");
+    try x.writeAll("<nav class=\"rv-nav\" id=\"rv-nav\" aria-label=\"App states\"><p class=\"rv-home\"><a href=\"/\">meiolol</a> / <a href=\"/private\">Private</a> / App review</p>");
     for (groups, 0..) |g, gi| {
         const open = if (cur) |k| shots[k].group == gi else true;
         try x.print("<details{s}><summary>", .{if (open) " open" else ""});
@@ -535,22 +538,22 @@ fn groupStart(shots: []const Shot, ed: Edition, group: usize, next: bool) ?usize
     return prev;
 }
 
-/// The navigator full width; nav.js opens the last edition's first state from here
+/// The navigator full width in the site shell, with each edition's first state
 fn index(a: Allocator, groups: []const Group, shots: []const Shot) ![]const u8 {
     var w: Io.Writer.Allocating = .init(a);
     const x = &w.writer;
+    const pg: site_html.Page = .{ .title = "App review | meiolol", .description = "Every screen the desktop app can show", .patch = "", .data = "", .public = false, .private = .app };
+    try site_shell.open(x, pg);
     try x.print(
-        \\<!doctype html><html lang="en"><head><meta charset="utf-8">
-        \\{s}<meta name="viewport" content="width=device-width, initial-scale=1">
-        \\<meta name="robots" content="noindex"><title>App review</title>
-        \\<link rel="stylesheet" href="{s}/app.css"><link rel="stylesheet" href="{s}/review.css"><script src="{s}/nav.js" defer></script></head>
-        \\<body class="ui rv-index"><main data-first-public="{s}" data-first-private="{s}"><h1>App review</h1>
+        \\<link rel="stylesheet" href="{s}/review.css"><div class="rv-index"><h1>App review</h1>
         \\<p>Every screen the desktop app can show, played from the mock client's scenarios through the app's own poller. Each opens as the public edition or the testers' (practice: testers only), at the window's width or narrow; notes pin to the page. Arrow keys: left and right for the previous and next state, up and down for the previous and next group.</p>
+        \\<p class="rv-open"><a href="{s}">Public edition</a><a href="{s}">Testers' edition</a></p>
         \\
-    , .{ csp.files_only, root, root, root, try url(a, .public, shots[0].slug), try url(a, .private, shots[0].slug) });
+    , .{ root, try url(a, .public, shots[0].slug), try url(a, .private, shots[0].slug) });
     try navigator(x, a, .public, groups, shots, null);
-    try x.writeAll("</main></body></html>\n");
-    return w.written();
+    try x.writeAll("</div>\n");
+    try site_shell.close(x, pg);
+    return sheets.deliver(a, w.written());
 }
 
 fn escaped(w: *Io.Writer, s: []const u8) !void {
@@ -605,29 +608,25 @@ const review_css =
     \\.rv-drawer .rv-nav { transform: translateX(-100%); transition: transform 0.15s; }
     \\.rv-drawer.rv-nav-open .rv-nav { transform: none; box-shadow: 8px 0 24px #0009; }
     \\.rv-drawer .rv-menu { display: inline-block; }
-    \\.rv-index main { max-width: 900px; margin: 24px auto; padding: 0 16px; font: 14px/1.5 system-ui, sans-serif; }
-    \\.rv-index .rv-nav { position: static; width: auto; padding: 0; border: 0; background: none; font-size: 14px; }
+    \\.rv-index { display: grid; gap: var(--sp-3); max-width: 72ch; }
+    \\.rv-index h1 { margin: 0; font-size: var(--fs-xl); }
+    \\.rv-index p { margin: 0; color: var(--t2); }
+    \\.rv-open { display: flex; gap: var(--sp-2); }
+    \\.rv-open a { padding: 6px 12px; border-radius: var(--r-ctl); background: var(--ctl-bg); color: var(--text); text-decoration: none; }
+    \\.rv-index .rv-nav { position: static; width: auto; padding: 0; border: 0; background: none; font: inherit; }
     \\.rv-index .rv-nav li a { white-space: normal; }
     \\.rv-index .rv-home { display: none; }
     \\
 ;
 
 /// Arrow keys between states and groups, the navigator's drawer when the frame leaves no
-/// room for it, the current state in view, and the index opening the last edition
+/// room for it, the current state in view
 const nav_js =
     \\(() => {
     \\  const html = document.documentElement;
-    \\  const key = 'meiolol-review-edition';
-    \\  const ix = document.querySelector('[data-first-public]');
-    \\  if (ix) {
-    \\    let ed = 'public';
-    \\    try { ed = localStorage.getItem(key) === 'private' ? 'private' : ed; } catch (e) {}
-    \\    return location.replace(ix.getAttribute('data-first-' + ed));
-    \\  }
     \\  const nav = document.getElementById('rv-nav');
     \\  const bar = document.querySelector('.rv-bar');
     \\  if (!nav || !bar) return;
-    \\  try { localStorage.setItem(key, bar.dataset.edition); } catch (e) {}
     \\  const dock = () => html.classList.toggle('rv-drawer', innerWidth < (html.classList.contains('rv-narrow') ? 720 : 1400));
     \\  dock();
     \\  addEventListener('resize', dock);
