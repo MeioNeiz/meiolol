@@ -178,6 +178,9 @@ const W = struct {
     pub const off = plain("off-role");
     pub const clear = plain("Clear search");
     pub const sort_by = plain("Sort");
+    pub const layout = plain("Layout");
+    pub const by_role = plain("By role");
+    pub const one_table = plain("One table");
     pub const all_n = Phrase("All {n:int} ›");
     pub const win_note = plain("Faint under 1,000 games: could be luck.");
     pub const influence_note = plain("Games its team won above the role's average, per 10,000 games it wasn't banned: its win rate over the role's, pulled toward it when games are few, times how often it was picked.");
@@ -427,6 +430,8 @@ pub const Tiers = struct {
     stamp: u32 = 0,
     /// The toolbar's filters open (narrow screens)
     open: bool = false,
+    /// Under All: every role's rows in one table, not the board
+    whole: bool = false,
 
     const T = @This();
 
@@ -457,7 +462,7 @@ pub const Tiers = struct {
         return if (s == .all) null else @fromBackingInt(@intCast(@backingInt(s) - 1));
     }
 
-    pub const Msg = union(enum) { role: Shown, rank: Rank, mover: u16, clear, sort: u8, filters };
+    pub const Msg = union(enum) { role: Shown, rank: Rank, mover: u16, clear, sort: u8, filters, whole: bool };
 
     pub const Url = struct {
         /// Null: the page's own
@@ -468,6 +473,7 @@ pub const Tiers = struct {
         /// Null: the data's own
         min: ?u8 = null,
         rank: Rank = .plat,
+        whole: bool = false,
     };
 
     pub fn toUrl(t: *const T) Url {
@@ -479,6 +485,7 @@ pub const Tiers = struct {
             .q = u.q,
             .min = if (u.min == t.data.min) null else u.min,
             .rank = t.want,
+            .whole = t.whole,
         };
     }
 
@@ -486,6 +493,7 @@ pub const Tiers = struct {
         t.setRole(if (u.role) |s| roleOf(s) else t.page_role);
         t.table.fromUrl(.{ .sort = u.sort, .desc = u.desc, .q = u.q, .min = u.min orelse t.data.min });
         t.want = u.rank;
+        t.whole = u.whole;
     }
 
     /// The rank file is wanted and not yet asked for
@@ -544,6 +552,10 @@ pub const Tiers = struct {
             },
             .sort => |i| t.table.update(.{ .sort = i }, ev),
             .filters => t.open = !t.open,
+            .whole => |w| {
+                t.whole = w;
+                ev.push = true;
+            },
         }
     }
 
@@ -591,15 +603,22 @@ pub const Tiers = struct {
             }),
             card.view(h, .{ .flush = true }, &.{
                 t.movers(h),
-                if (t.onBoard()) t.board(h) else t.table.view(h),
+                if (t.onBoard()) t.board(h) else if (t.role == null and t.table.q.slice().len == 0) h.div(.{}, .{ h.div(.{ .class = "bs" }, .{t.layout(h)}), t.table.view(h) }) else t.table.view(h),
             }),
             violin.defs(h),
         });
     }
 
-    /// All with no search: each role's column side by side, not one long table
+    /// All with no search: each role's column side by side, unless one table is asked for
     fn onBoard(t: *const T) bool {
-        return t.role == null and t.table.q.slice().len == 0;
+        return t.role == null and t.table.q.slice().len == 0 and !t.whole;
+    }
+
+    fn layout(t: *T, h: *H) N {
+        return h.span(.{ .class = "ly" }, .{segmented.view(h, .{ .s = .s, .label = W.layout }, &.{
+            .{ .label = W.by_role, .selected = !t.whole, .on = h.on(t, .{ .whole = false }) },
+            .{ .label = W.one_table, .selected = t.whole, .on = h.on(t, .{ .whole = true }) },
+        })});
     }
 
     fn board(t: *T, h: *H) N {
@@ -634,7 +653,7 @@ pub const Tiers = struct {
             }));
         }
         return h.div(.{ .class = "rb" }, .{
-            h.div(.{ .class = "bs" }, .{ card.label(h, W.sort_by), segmented.view(h, .{ .s = .s, .label = W.sort_by }, &sorts) }),
+            h.div(.{ .class = "bs" }, .{ card.label(h, W.sort_by), segmented.view(h, .{ .s = .s, .label = W.sort_by }, &sorts), t.layout(h) }),
             h.div(.{ .class = "cols" }, .{cols.done()}),
         });
     }
@@ -753,7 +772,7 @@ pub const css =
     \\  .c-tiers .moved .more { margin-left: auto; font-size: var(--fs-s); white-space: nowrap; }
     \\  .c-tiers .c-table-wrap { overflow-x: clip; }
     \\  .c-tiers .rb { container-type: inline-size; }
-    \\  .c-tiers .bs { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4);
+    \\  .c-tiers .bs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4);
     \\    border-bottom: 1px solid var(--line); }
     \\  .c-tiers .rb .cols { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
     \\  .c-tiers .rb .col { min-width: 0; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
@@ -777,6 +796,7 @@ pub const css =
     \\  .c-tiers .rb .all:hover { text-decoration: underline; }
     \\  .c-tiers .rb .all:focus-visible { outline: 2px solid var(--focus); }
     \\  .c-tiers .rb .bs > .c-seg { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+    \\  .c-tiers .bs > .ly { margin-left: auto; flex: none; }
     \\  @container (max-width: 420px) {
     \\    .c-tiers .rb .bs { padding-inline: var(--sp-3); }
     \\    .c-tiers .rb .bs > .lab { display: none; }

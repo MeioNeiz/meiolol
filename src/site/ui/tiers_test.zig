@@ -221,3 +221,15 @@ test "influence: a column and the board's second figure, the patch change in the
     page = try p.shown();
     try testing.expect(std.mem.find(u8, page, "<b>+0.9 ±3.0 points</b>16.20 51.0% of 3,000 → 16.21 51.9% of 1,600 Could be luck.") != null);
 }
+
+test "All as one table: every role's rows, sorted by the head, back to the board" {
+    var p: Page = undefined;
+    try p.init("#min=0", null);
+    defer p.deinit();
+    _ = p.rt.event(0, .{ .kind = .click, .target = p.by(.button, "One table") });
+    try testing.expectEqualStrings("#min=0&whole=1", p.fake.fragment.items);
+    try testing.expectEqualStrings("Kai'Sa,Ahri,Zed,Lux", try p.names());
+    try testing.expect(std.mem.find(u8, try p.shown(), "class=\"rb\"") == null);
+    _ = p.rt.event(0, .{ .kind = .click, .target = p.by(.button, "By role") });
+    try testing.expect(std.mem.find(u8, try p.shown(), "class=\"rb\"") != null);
+}
