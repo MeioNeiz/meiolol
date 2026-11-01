@@ -33,6 +33,12 @@ const L = struct {
     /// Under the With plot: the page's lane cards don't follow the partner (walk 1 Nov S2)
     pub const alone = Phrase("The cards below are {c:text}'s alone, not with {p:text}.");
     pub const alone_any = Phrase("The cards below are {c:text}'s alone, not with a partner.");
+    /// Gold at 14 names the side ahead: a signed lead read the wrong way round (walk S1)
+    pub const gold_ahead = Phrase("{c:text} ahead");
+    pub const level = phrase.plain("level");
+    /// A dot's readout, its champion the subject: "Caitlyn 380 ahead"
+    pub const dot_ahead = Phrase("{g:count} ahead");
+    pub const dot_behind = Phrase("{g:count} behind");
 };
 
 /// What the grid shows: the champion in one role
@@ -215,7 +221,13 @@ pub const MatchupGrid = struct {
         return switch (g.measure) {
             .win => phrase.num(h, .rate, rate(.{ .games = o.games, .wins = o.wins })),
             .usual => phrase.num(h, .points, o.usual),
-            .gold => phrase.num(h, .signed, @as(i32, o.gold orelse 0)),
+            .gold => {
+                // x minus the dot's champion: the dot's champion is ahead when negative
+                const gd: i32 = o.gold orelse 0;
+                if (gd == 0) return L.level;
+                if (gd < 0) return L.dot_ahead.with(h, .{ .g = @abs(gd) });
+                return L.dot_behind.with(h, .{ .g = @abs(gd) });
+            },
         };
     }
 };
@@ -231,7 +243,7 @@ fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief
     items[n] = .{ .label = W.m_usual, .value = phrase.num(h, .points, o.usual), .step = .of(o.usual, fmt.win_cuts), .tip = .{ .id = usual_tip, .note = W.usual_note.with(h, .{ .c = in.name }) } };
     n += 1;
     if (o.gold) |gd| {
-        items[n] = .{ .label = W.m_gold, .value = phrase.num(h, .signed, @as(i32, gd)) };
+        items[n] = goldItem(h, in, o.champ, gd);
         n += 1;
     }
     items[n] = .{ .label = W.games, .value = phrase.num(h, .count, o.games), .ctx = phrase.num(h, .pct, @as(u32, @intFromFloat(@round(100 * @as(f32, @floatFromInt(o.games)) / @as(f32, @floatFromInt(@max(rl.games, 1))))))) };
@@ -242,6 +254,14 @@ fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief
         .thin = o.games < thin_games,
         .figures = strip.view(h, items[0..n]),
         .href = matchHref(h, in, o),
+    };
+}
+
+fn goldItem(h: *H, in: *const Input, other: u16, gd: i16) strip.Item {
+    return .{
+        .label = W.m_gold,
+        .value = phrase.num(h, .count, @abs(@as(i32, gd))),
+        .ctx = if (gd == 0) L.level else L.gold_ahead.with(h, .{ .c = if (gd > 0) in.name else in.champs[other].name }),
     };
 }
 
@@ -347,4 +367,23 @@ pub fn gallery(g: *Gallery) void {
         d.grid.dots.sel = s[3];
         g.addFill(s[0], d.grid.view(h, d, &d.in));
     }
+}
+
+test "gold at 14 names the side ahead, never a signed lead" {
+    const testing = std.testing;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    const in: Input = .{ .name = "Darius", .slug = "darius", .ddragon = champ.demo_version, .champs = &demo_champs, .role = .top, .counts = .{ .games = 1000, .wins = 500 }, .rels = &demo_rels };
+    const g: MatchupGrid = .{ .measure = .gold };
+    // Darius minus Fiora -384: Fiora ahead
+    const o = demoOpp(10, 400, 48, -1, -384);
+    try testing.expectEqualStrings("384 ahead", g.figure(&h, o).s);
+    try testing.expectEqualStrings("level", g.figure(&h, demoOpp(10, 400, 48, -1, 0)).s);
+    try testing.expectEqualStrings("120 behind", g.figure(&h, demoOpp(10, 400, 48, -1, 120)).s);
+    const it = goldItem(&h, &in, o.champ, -384);
+    try testing.expectEqualStrings("384", it.value.s);
+    try testing.expectEqualStrings("Fiora ahead", it.ctx.?.s);
+    try testing.expectEqualStrings("Darius ahead", goldItem(&h, &in, o.champ, 90).ctx.?.s);
 }

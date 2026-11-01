@@ -94,6 +94,8 @@ the first screen, 1,154 on the page (frontend-rework.md).
    and sort by the pulled rate (shown as raw, ui-audit 3: the header says "sorted by
    pulled rate" in its Toggletip). Tap a tile: the matchup page. View switch
    [Tiles | Table]: the same rows as DataTable (sortable, every number)
+   Gold at 14 names the side ahead, never a signed lead: the brief "384 Caitlyn ahead",
+   a dot "Caitlyn 384 ahead" (a signed lead read the wrong way round, walk 1 Nov S1)
    With: a line under the plot says the cards below are the champion's alone; a bot or
    support partner's brief has "Lane opponents ›" (Against the lane, whose matchup pages
    list the pair in Lane partners). The pair's own lane (gold, cards): open, for Jacob
