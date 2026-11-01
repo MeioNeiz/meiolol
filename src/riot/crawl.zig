@@ -426,15 +426,16 @@ pub const Crawler = struct {
         }
         const per_day = if (elapsed_s > 0) matches * 86400 / @as(u64, @intCast(elapsed_s)) else 0;
         const ws = &c.writer.stats;
-        var cbuf: [160]u8 = undefined;
+        var cbuf: [192]u8 = undefined;
         // health.sh looks for "complete off"
-        const cf = if (c.packer) |p| std.fmt.bufPrint(&cbuf, " | complete {d} docs, {d} raw, {d} frames, {d} MB, {d} queued, {d} dropped{s}", .{
+        const cf = if (c.packer) |p| std.fmt.bufPrint(&cbuf, " | complete {d} docs, {d} raw, {d} frames, {d} MB, {d} queued, {d} dropped, {d} restarts/h{s}", .{
             p.stats.docs.load(.monotonic),
             p.stats.raw.load(.monotonic),
             p.stats.frames.load(.monotonic),
             p.stats.bytes.load(.monotonic) >> 20,
             p.queued(),
             p.stats.dropped.load(.monotonic),
+            p.stats.restartsLastHour(c.io),
             if (p.isOff()) " | complete off" else "",
         }) catch "" else "";
         log.info("{d} matches/day | ladder pages {d} | mastery {d} | platform req {d}{s}" ++

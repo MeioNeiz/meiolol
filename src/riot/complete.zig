@@ -57,6 +57,18 @@ pub const Stats = struct {
     /// Pushed while the queue was full (off for long): in neither a file nor the spool
     dropped: std.atomic.Value(u64) = .init(0),
     bytes: std.atomic.Value(u64) = .init(0),
+    /// Awake-clock seconds of the latest restarts after an error, newest last
+    restarts: [restarts_kept]std.atomic.Value(i64) = @splat(.init(std.math.minInt(i64) / 2)),
+
+    const restarts_kept = 8;
+
+    /// Restarts after an error in the last hour (at most restarts_kept)
+    pub fn restartsLastHour(s: *const Stats, io: Io) usize {
+        const now = Io.Clock.awake.now(io).toSeconds();
+        var n: usize = 0;
+        for (&s.restarts) |*r| n += @intFromBool(now - r.load(.monotonic) < std.time.s_per_hour);
+        return n;
+    }
 };
 
 /// An item in one allocation: key then gz
@@ -123,9 +135,11 @@ pub const Packer = struct {
     /// Seals day files of older days, finds the spool to replay, starts both threads.
     /// `p` stays put until close
     pub fn start(p: *Packer) !void {
-        p.day = p.clock(p.io);
         for (&p.lanes, 0..) |*l, i| l.* = .{ .kind = @fromBackingInt(@intCast(i)), .block = .init(p.gpa) };
         p.sealer = .{ .p = p };
+        // Never a day already sealed: a clock behind (stepped back, or wrong at boot)
+        // writes to the day after the newest sealed one until it catches up
+        p.day = @max(p.clock(p.io), (try p.sealer.newestSealed() orelse 0) + 1);
         try p.sealer.sealOlder(p.day);
         p.next_seg = try p.lastSegment() + 1;
         p.sealer_thread = try std.Thread.spawn(.{}, Sealer.run, .{&p.sealer});
@@ -185,6 +199,9 @@ pub const Packer = struct {
                 // A warning: the report line says "complete off" and health.sh alerts
                 log.warn("complete: packer stopped: {t}; off, starting again from the spool in {d} s", .{ err, p.restart_s });
                 p.off.store(true, .release);
+                const r = &p.stats.restarts;
+                for (r[0 .. r.len - 1], r[1..]) |*a, *b| a.store(b.load(.monotonic), .monotonic);
+                r[r.len - 1].store(Io.Clock.awake.now(p.io).toSeconds(), .monotonic);
                 p.restart() catch |e| {
                     log.err("complete: no restart: {t}; off until the crawler restarts", .{e});
                     p.spoolRest();
@@ -299,7 +316,8 @@ pub const Packer = struct {
     /// Midnight: partial blocks to the old day, its files sealed. `later` as for seal
     fn rollDay(p: *Packer, later: []const Owned) !void {
         const today = p.clock(p.io);
-        if (today == p.day) return;
+        // Forward only: a clock stepped back keeps today's files open
+        if (today <= p.day) return;
         for (&p.lanes) |*l| try p.seal(l, later);
         try p.sealer.submit(.{ .seal_day = p.day });
         log.info("complete: day {f} done, {d} documents so far, {d} raw", .{
@@ -789,9 +807,34 @@ const Sealer = struct {
             _ = try dayfile.recover(gpa, io, f);
             try f.sync(io);
         }
-        try cwd.rename(part, cwd, sealed, io);
+        cwd.renamePreserve(part, cwd, sealed, io) catch |err| switch (err) {
+            // Never meant to happen (start and rollDay keep to days after the sealed
+            // ones): both kept, the newer aside for a hand merge
+            error.PathAlreadyExists => {
+                const aside = try std.fmt.allocPrint(gpa, "{s}.clash-{d}", .{ sealed, Io.Clock.real.now(io).toSeconds() });
+                defer gpa.free(aside);
+                try cwd.rename(part, cwd, aside, io);
+                log.err("complete: {s} was sealed already: the new one is {s}", .{ std.fs.path.basename(sealed), std.fs.path.basename(aside) });
+            },
+            else => return err,
+        };
         try archive.syncPath(io, s.p.dir, .directory);
         log.info("complete: sealed {s}", .{std.fs.path.basename(sealed)});
+    }
+
+    /// The newest day with a sealed file
+    fn newestSealed(s: *Sealer) !?i64 {
+        const io = s.p.io;
+        var dir = try Io.Dir.cwd().openDir(io, s.p.dir, .{ .iterate = true });
+        defer dir.close(io);
+        var it = dir.iterate();
+        var newest: ?i64 = null;
+        while (try it.next(io)) |e| {
+            if (e.kind != .file or !std.mem.endsWith(u8, e.name, ".cfd") or e.name.len < 10) continue;
+            const day = (Date.parse(e.name[0..10]) orelse continue).toDay();
+            if (newest == null or day > newest.?) newest = day;
+        }
+        return newest;
     }
 
     /// At start: `.part` files of days before `today` (the crawler was down at midnight)
@@ -1087,4 +1130,47 @@ test "after a sealer error the form is off, then starts again from the spool" {
     var seen: std.StringHashMapUnmanaged(void) = .empty;
     for (got) |d| try seen.put(arena, d.key, {});
     for (0..6) |i| try std.testing.expect(seen.contains(try arena.print("K{d}", .{i})));
+}
+
+test "a clock stepped back never reopens a sealed day" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const data = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const gz = try store.raw.compress(arena, "[1]");
+    const sealed = try arena.print("{s}/complete/{f}.summary.cfd", .{ data, Date.fromDay(20_000) });
+
+    // Day 20,000 sealed, then the clock steps back to it mid-run: the next day stays open
+    test_day = 20_000;
+    var p: Packer = try .init(gpa, io, data);
+    p.clock = testClock;
+    p.block_docs = 1;
+    try p.start();
+    try p.push(.{ .kind = .summary, .key = "A", .t = 1, .gz = gz });
+    try settle(&p);
+    test_day += 1;
+    try p.push(.{ .kind = .summary, .key = "B", .t = 2, .gz = gz });
+    try settle(&p);
+    test_day -= 1;
+    try p.push(.{ .kind = .summary, .key = "C", .t = 3, .gz = gz });
+    try settle(&p);
+    p.close();
+    // A restart with the clock still behind
+    var p2: Packer = try .init(gpa, io, data);
+    p2.clock = testClock;
+    p2.block_docs = 1;
+    try p2.start();
+    try p2.push(.{ .kind = .summary, .key = "D", .t = 4, .gz = gz });
+    try settle(&p2);
+    p2.close();
+
+    const old = try dayfile.readAll(gpa, arena, io, sealed);
+    try std.testing.expectEqual(1, old.len);
+    try std.testing.expectEqualStrings("A", old[0].key);
+    const next = try dayfile.readAll(gpa, arena, io, try arena.print("{s}/complete/{f}.summary.cfd.part", .{ data, Date.fromDay(20_001) }));
+    try std.testing.expectEqual(3, next.len);
 }

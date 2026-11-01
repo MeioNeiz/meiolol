@@ -32,6 +32,10 @@ else
     if grep -q '| complete off' <<< "$report"; then
         problems+=("complete form off: day files not written (crawl.log 'complete:' lines)")
     fi
+    restarts=$(grep -oE '[0-9]+ restarts/h' <<< "$report" | cut -d' ' -f1)
+    (( ${restarts:-0} >= 3 )) && problems+=("complete form restarted $restarts times in the last hour (crawl.log 'complete:' lines)")
+    dropped=$(grep -oE '[0-9]+ dropped' <<< "$report" | cut -d' ' -f1)
+    (( ${dropped:-0} > 0 )) && problems+=("complete form dropped $dropped documents: its queue was full")
     total=$(grep -oE ' [0-9]+m ' <<< "$report" | awk '{ s += $1 } END { print s + 0 }')
     state=${HEALTH_STATE:-data/health.state}
     read -r last_total last_progress 2> /dev/null < "$state" || last_progress=$now
