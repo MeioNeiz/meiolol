@@ -12,6 +12,7 @@
 //! when the machine falls behind. The main thread reports.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const store = @import("store");
 const Client = @import("client.zig").Client;
 const Limiters = @import("ratelimit.zig").Limiters;
@@ -158,6 +159,22 @@ const Times = struct {
     }
 };
 
+/// SIGTERM (systemd's stop) or SIGINT: run() stops as --hours does, so the writer
+/// drains and the complete form's queue reaches its spool. Without it a stop was a crash
+var term_signal: std.atomic.Value(bool) = .init(false);
+
+fn onTerm(_: std.posix.SIG) callconv(.c) void {
+    term_signal.store(true, .release);
+}
+
+fn catchTerm() void {
+    if (builtin.os.tag != .windows) {
+        const act: std.posix.Sigaction = .{ .handler = .{ .handler = onTerm }, .mask = std.posix.sigemptyset(), .flags = 0 };
+        std.posix.sigaction(.TERM, &act, null);
+        std.posix.sigaction(.INT, &act, null);
+    }
+}
+
 pub const Crawler = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
@@ -192,7 +209,11 @@ pub const Crawler = struct {
     pub fn run(c: *Crawler) !void {
         c.limiters = try .init(c.gpa, c.io);
         defer c.limiters.deinit();
-        for (&c.limiters.all) |*l| l.paced = true;
+        for (&c.limiters.all) |*l| {
+            l.paced = true;
+            l.stop = &c.stop;
+        }
+        catchTerm();
         c.loadWindows();
         // First, so a lookup waits only for the restart itself
         var proxy: Proxy = .{ .gpa = c.gpa, .io = c.io, .key = c.opts.key, .limiters = &c.limiters, .fake = c.opts.fake };
@@ -242,6 +263,11 @@ pub const Crawler = struct {
         var saved_ok = true;
         while (!c.stop.load(.acquire)) {
             c.io.sleep(.fromSeconds(1), .awake) catch break;
+            if (term_signal.load(.acquire)) {
+                log.info("stopping on a signal", .{});
+                c.stop.store(true, .release);
+                break;
+            }
             const now = c.nowS();
             if (@mod(now, windows_save_s) == 0) {
                 if (c.saveWindows()) {
@@ -267,8 +293,7 @@ pub const Crawler = struct {
 
     /// The limiters' send times, saved every few seconds and loaded at start: a
     /// deploy's restart then waits only for what it sent, not 2-3 min of windows padded
-    /// full from Riot's counts (Limiters.save). systemd stops the crawler with a
-    /// SIGTERM, so the last save is the periodic one
+    /// full from Riot's counts (Limiters.save), and once more on the way out
     const windows_file = "rate-windows.txt";
     const windows_save_s = 2;
 

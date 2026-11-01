@@ -158,6 +158,9 @@ pub const Limiter = struct {
     /// Priority callers waiting for a slot; the others hold back while there are any
     priority_waiting: u32 = 0,
     mutex: std.Io.Mutex = .init,
+    /// Set: a wait for a slot looks at it every second and gives up with error.Stopping
+    /// (the crawler's stop, so a full window doesn't hold its exit past systemd's 90 s)
+    stop: ?*const std.atomic.Value(bool) = null,
 
     /// How often a caller without priority looks again while a priority one waits
     const yield_ns = 20 * std.time.ns_per_ms;
@@ -203,9 +206,11 @@ pub const Limiter = struct {
         if (priority) l.countPriority(1);
         defer if (priority) l.countPriority(-1);
         while (true) {
+            if (l.stop) |stop| if (stop.load(.acquire)) return error.Stopping;
             const wait = try l.take(key, priority);
             if (wait <= 0) return;
-            try l.io.sleep(.fromNanoseconds(wait), .awake);
+            const most: i96 = if (l.stop != null) std.time.ns_per_s else wait;
+            try l.io.sleep(.fromNanoseconds(@min(wait, most)), .awake);
         }
     }
 

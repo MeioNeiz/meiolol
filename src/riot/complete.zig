@@ -3,9 +3,9 @@
 //! <data>/complete/YYYY-MM-DD.<kind>.cfd (store/dayfile.zig), `.cfd.part` while that day
 //! is open. A sealed file is never opened for write again.
 //!
-//! The writer hands each committed document to the Packer thread, which appends it to a
-//! spool segment (complete/spool/<kind>.<n>, gzip as the raw store has it, no fsync) and
-//! a jsonpack block in memory. At block_docs documents (or block_plain bytes) the block is
+//! The writer hands each committed document to the Packer thread, which appends each
+//! batch it takes to spool segments (complete/spool/<kind>.<n>, gzip as the raw store has
+//! it, no fsync) before adding it to a jsonpack block in memory. At block_docs documents (or block_plain bytes) the block is
 //! decoded again and each document compared (length and xxhash64 kept per add); one that
 //! does not come back is tried alone and kept raw if it fails, the rest repacked. The
 //! Sealer thread then runs `zstd -19`, reads the result back through std's decompressor,
@@ -13,8 +13,10 @@
 //!
 //! Crash safety: a torn frame at a file's end is cut on start (dayfile.recover); spool
 //! segments left behind are replayed through the same path, so a crash loses at most the
-//! documents queued but not yet spooled. A crash between a frame's fsync and its
-//! segment's delete stores those documents twice: readers keep one per key.
+//! documents queued but not yet spooled (ms). A stop (SIGTERM, crawl.zig) spools the
+//! queue, finishes the zstd run in hand (zstd ignores the signal) and leaves the rest in
+//! the spool. A crash between a frame's fsync and its segment's delete stores those
+//! documents twice: readers keep one per key.
 //! Day = the UTC day a document reached the Packer; at midnight partial blocks go to the
 //! old day's files, which are then sealed.
 
@@ -36,6 +38,8 @@ pub const block_docs = 256;
 pub const block_plain = 256 << 20;
 /// Seal jobs waiting at most: the Packer waits when zstd falls this far behind
 const max_jobs = 4;
+/// Queue length that warns (spooled only once the Packer takes it)
+const queue_warn = 20_000;
 const zstd_level = "-19";
 
 /// One stored document, as the writer hands it over (copied)
@@ -74,6 +78,9 @@ pub const Packer = struct {
     cond: Io.Condition = .init,
     queue: std.ArrayList(Owned) = .empty,
     closing: bool = false,
+    /// Set with closing: packing stops at the next document (it is spooled already) and
+    /// a wait for the sealer gives up, so a stop takes at most the zstd run in hand
+    stopping: std.atomic.Value(bool) = .init(false),
     /// Stopped on an error: pushes are dropped (raw still has them)
     dead: bool = false,
     /// Adding a batch taken from the queue
@@ -100,9 +107,9 @@ pub const Packer = struct {
         gpa.free(r.stderr);
         const dir = try std.fs.path.join(gpa, &.{ data_dir, "complete" });
         errdefer gpa.free(dir);
-        const spool = try std.fs.path.join(gpa, &.{ dir, "spool" });
-        defer gpa.free(spool);
-        try Io.Dir.cwd().createDirPath(io, spool);
+        const spool_dir = try std.fs.path.join(gpa, &.{ dir, "spool" });
+        defer gpa.free(spool_dir);
+        try Io.Dir.cwd().createDirPath(io, spool_dir);
         return .{ .gpa = gpa, .io = io, .dir = dir };
     }
 
@@ -125,12 +132,18 @@ pub const Packer = struct {
             p.mutex.lockUncancelable(p.io);
             defer p.mutex.unlock(p.io);
             p.closing = true;
+            p.stopping.store(true, .release);
             p.cond.broadcast(p.io);
+        }
+        {
+            p.sealer.mutex.lockUncancelable(p.io);
+            defer p.sealer.mutex.unlock(p.io);
+            p.sealer.cond.broadcast(p.io);
         }
         if (p.thread) |t| t.join();
         p.sealer.close();
         if (p.sealer_thread) |t| t.join();
-        for (&p.lanes) |*l| l.deinit(p.gpa);
+        for (&p.lanes) |*l| l.deinit(p.gpa, p.io);
         for (p.queue.items) |o| p.gpa.free(o.buf);
         p.queue.deinit(p.gpa);
         p.sealer.deinit();
@@ -152,6 +165,7 @@ pub const Packer = struct {
             p.gpa.free(buf);
             return err;
         };
+        if (p.queue.items.len == queue_warn) log.warn("complete: {d} documents queued: zstd is behind", .{queue_warn});
         p.cond.broadcast(p.io);
     }
 
@@ -190,8 +204,11 @@ pub const Packer = struct {
                 p.busy = false;
                 p.mutex.unlock(p.io);
             }
-            try p.rollDay();
-            for (batch.items) |o| try p.add(o.kind, o.key(), o.t, o.gz());
+            // The whole batch reaches the spool before anything else: a stop (or a
+            // crash) from here on loses none of it
+            for (batch.items) |o| try p.spool(o.kind, o.key(), o.t, o.gz());
+            // Stopping: the queue left is spooled on the closing round
+            p.packBatch(batch.items) catch |err| if (err != error.Stopping) return err;
             if (closing) {
                 for (&p.lanes) |*l| l.closeSegment(p.io);
                 return;
@@ -199,11 +216,19 @@ pub const Packer = struct {
         }
     }
 
-    /// Midnight: partial blocks to the old day, its files sealed
-    fn rollDay(p: *Packer) !void {
+    fn packBatch(p: *Packer, batch: []const Owned) !void {
+        try p.rollDay(batch);
+        for (batch, 0..) |o, i| {
+            if (p.stopping.load(.acquire)) return;
+            try p.pack(o.kind, o.key(), o.t, o.gz(), batch[i + 1 ..]);
+        }
+    }
+
+    /// Midnight: partial blocks to the old day, its files sealed. `later` as for seal
+    fn rollDay(p: *Packer, later: []const Owned) !void {
         const today = p.clock(p.io);
         if (today == p.day) return;
-        for (&p.lanes) |*l| try p.seal(l);
+        for (&p.lanes) |*l| try p.seal(l, later);
         try p.sealer.submit(.{ .seal_day = p.day });
         log.info("complete: day {f} done, {d} documents so far, {d} raw", .{
             Date.fromDay(p.day), p.stats.docs.load(.monotonic), p.stats.raw.load(.monotonic),
@@ -211,7 +236,14 @@ pub const Packer = struct {
         p.day = today;
     }
 
+    /// Replay: one record at a time
     fn add(p: *Packer, kind: Kind, key: []const u8, t: i64, gz: []const u8) !void {
+        try p.spool(kind, key, t, gz);
+        try p.pack(kind, key, t, gz, &.{});
+    }
+
+    /// Appends a record to the segment of `kind`'s lane (one is begun when none is open)
+    fn spool(p: *Packer, kind: Kind, key: []const u8, t: i64, gz: []const u8) !void {
         const l = &p.lanes[@backingInt(kind)];
         if (l.seg == null) {
             p.next_seg += 1;
@@ -230,8 +262,14 @@ pub const Packer = struct {
         try l.seg.?.writePositionalAll(p.io, rec.items, l.seg_len);
         try l.seg.?.writePositionalAll(p.io, gz, l.seg_len + rec.items.len);
         l.seg_len += rec.items.len + gz.len;
+    }
+
+    /// Adds a spooled document to its lane's block, sealed when full. `later`: the batch's
+    /// documents after it, spooled but not packed
+    fn pack(p: *Packer, kind: Kind, key: []const u8, t: i64, gz: []const u8, later: []const Owned) !void {
+        const l = &p.lanes[@backingInt(kind)];
         try p.addPlain(l, key, t, gz);
-        if (l.count() >= p.block_docs or l.plain >= block_plain) try p.seal(l);
+        if (l.count() >= p.block_docs or l.plain >= block_plain) try p.seal(l, later);
     }
 
     fn addPlain(p: *Packer, l: *Lane, key: []const u8, t: i64, gz: []const u8) !void {
@@ -256,15 +294,18 @@ pub const Packer = struct {
     }
 
     /// The lane's block and raw documents as one seal job; its segment goes once the
-    /// job's frames are on disk
-    fn seal(p: *Packer, l: *Lane) !void {
-        l.closeSegment(p.io);
+    /// job's frames are on disk, so `later` (spooled there, not in this block) are
+    /// spooled again into the next segment first
+    fn seal(p: *Packer, l: *Lane, later: []const Owned) !void {
+        // Nothing packed: the open segment (if any) carries on
         if (l.count() == 0) return;
+        l.closeSegment(p.io);
         const gpa = p.gpa;
         var job: Job = .{ .frames = .{ .kind = l.kind, .day = p.day } };
         errdefer job.deinit(gpa);
         if (l.seg_n != 0) job.frames.segment = try p.segPath(gpa, l.kind, l.seg_n);
         l.seg_n = 0;
+        for (later) |o| if (o.kind == l.kind) try p.spool(o.kind, o.key(), o.t, o.gz());
         if (l.packed_docs.items.len > 0) {
             var block: std.ArrayList(u8) = .empty;
             defer block.deinit(gpa);
@@ -350,14 +391,14 @@ pub const Packer = struct {
             for (segs) |s| gpa.free(s.name);
             gpa.free(segs);
         }
-        const spool = try std.fs.path.join(gpa, &.{ p.dir, "spool" });
-        defer gpa.free(spool);
+        const spool_dir = try std.fs.path.join(gpa, &.{ p.dir, "spool" });
+        defer gpa.free(spool_dir);
         var docs: usize = 0;
         for (segs) |s| {
             if (s.n > p.next_seg) p.next_seg = s.n;
             var arena_state: std.heap.ArenaAllocator = .init(gpa);
             defer arena_state.deinit();
-            const path = try std.fs.path.join(arena_state.allocator(), &.{ spool, s.name });
+            const path = try std.fs.path.join(arena_state.allocator(), &.{ spool_dir, s.name });
             const records = try readSegment(arena_state.allocator(), p.io, path);
             for (records) |r| try p.add(s.kind, r.key, r.t, r.gz);
             docs += records.len;
@@ -376,9 +417,9 @@ pub const Packer = struct {
     }
 
     fn listSegments(gpa: Allocator, io: Io, complete_dir: []const u8) ![]Seg {
-        const spool = try std.fs.path.join(gpa, &.{ complete_dir, "spool" });
-        defer gpa.free(spool);
-        var dir = try Io.Dir.cwd().openDir(io, spool, .{ .iterate = true });
+        const spool_dir = try std.fs.path.join(gpa, &.{ complete_dir, "spool" });
+        defer gpa.free(spool_dir);
+        var dir = try Io.Dir.cwd().openDir(io, spool_dir, .{ .iterate = true });
         defer dir.close(io);
         var list: std.ArrayList(Seg) = .empty;
         errdefer {
@@ -467,7 +508,8 @@ const Lane = struct {
         l.plain = 0;
     }
 
-    fn deinit(l: *Lane, gpa: Allocator) void {
+    fn deinit(l: *Lane, gpa: Allocator, io: Io) void {
+        l.closeSegment(io);
         l.clear(gpa);
         l.packed_docs.deinit(gpa);
         l.raws.deinit(gpa);
@@ -560,8 +602,10 @@ const Sealer = struct {
         const io = s.p.io;
         s.mutex.lockUncancelable(io);
         defer s.mutex.unlock(io);
-        while (s.jobs.items.len >= max_jobs and !s.dead) s.cond.waitUncancelable(io, &s.mutex);
+        while (s.jobs.items.len >= max_jobs and !s.dead and !s.p.stopping.load(.acquire)) s.cond.waitUncancelable(io, &s.mutex);
         if (s.dead) return error.SealerStopped;
+        // The job's documents stay in its segment, replayed on the next start
+        if (s.jobs.items.len >= max_jobs) return error.Stopping;
         try s.jobs.append(s.p.gpa, job);
         s.cond.broadcast(io);
     }
@@ -694,14 +738,10 @@ const Sealer = struct {
     /// Bytes appended: the frame's header and zstd payload
     fn appendFrame(s: *Sealer, f: Io.File, at: u64, t: dayfile.Type, plain: []const u8) !u64 {
         const gpa = s.p.gpa;
-        const zst = try compress(gpa, s.p.io, s.p.dir, plain);
+        const tmp = try std.fmt.allocPrint(gpa, "{s}/frame.zst.tmp", .{s.p.dir});
+        defer gpa.free(tmp);
+        const zst = try compress(gpa, s.p.io, tmp, plain);
         defer gpa.free(zst);
-        {
-            var arena_state: std.heap.ArenaAllocator = .init(gpa);
-            defer arena_state.deinit();
-            const back = try dayfile.inflate(gpa, arena_state.allocator(), zst);
-            if (!std.mem.eql(u8, back, plain)) return error.ZstdRoundTrip;
-        }
         const h = dayfile.header(t, zst);
         try f.writePositionalAll(s.p.io, &h, at);
         try f.writePositionalAll(s.p.io, zst, at + h.len);
@@ -714,15 +754,18 @@ const Sealer = struct {
     }
 };
 
-/// `plain` through `nice zstd -19 -T1` (std has no compressor), via a temp file in `dir`
-fn compress(gpa: Allocator, io: Io, dir: []const u8, plain: []const u8) ![]u8 {
-    const tmp = try std.fmt.allocPrint(gpa, "{s}/frame.zst.tmp", .{dir});
-    defer gpa.free(tmp);
+/// `plain` through `nice zstd -19 -T1` (std has no compressor) via the temp file `tmp`
+/// (one per process: the crawler's and a scrub's differ), read back through std's
+/// decompressor and compared
+pub fn compress(gpa: Allocator, io: Io, tmp: []const u8, plain: []const u8) ![]u8 {
     const cwd = Io.Dir.cwd();
     defer cwd.deleteFile(io, tmp) catch {};
     {
+        // systemd's stop signals every process of the service: zstd ignores it and
+        // finishes the block in hand while the crawler stops (ignored stays ignored
+        // through exec)
         var child = try std.process.spawn(io, .{
-            .argv = &.{ "nice", "-n", "19", "zstd", "-q", "-f", zstd_level, "-T1", "-", "-o", tmp },
+            .argv = &.{ "sh", "-c", "trap '' TERM INT; exec nice -n 19 zstd -q -f " ++ zstd_level ++ " -T1 - -o \"$0\"", tmp },
             .stdin = .pipe,
         });
         var ok = false;
@@ -736,17 +779,23 @@ fn compress(gpa: Allocator, io: Io, dir: []const u8, plain: []const u8) ![]u8 {
         ok = true;
         if (!(try child.wait(io)).success()) return error.ZstdFailed;
     }
-    return cwd.readFileAlloc(io, tmp, gpa, .limited(dayfile.max_payload));
+    const zst = try cwd.readFileAlloc(io, tmp, gpa, .limited(dayfile.max_payload));
+    errdefer gpa.free(zst);
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const back = try dayfile.inflate(gpa, arena_state.allocator(), zst);
+    if (!std.mem.eql(u8, back, plain)) return error.ZstdRoundTrip;
+    return zst;
 }
 
-var test_day: i64 = 20_000;
+pub var test_day: i64 = 20_000;
 
-fn testClock(_: Io) i64 {
+pub fn testClock(_: Io) i64 {
     return test_day;
 }
 
 /// Until both threads have nothing left to do
-fn settle(p: *Packer) !void {
+pub fn settle(p: *Packer) !void {
     for (0..2000) |_| {
         const idle = blk: {
             p.mutex.lockUncancelable(p.io);
@@ -887,4 +936,44 @@ test "a block that fails its check keeps the failing document raw and packs the 
         try std.testing.expectEqualStrings(try arena.print("K{d}", .{i}), d.key);
         try std.testing.expectEqualStrings(docs[i], d.bytes);
     }
+}
+
+test "a stop mid-queue leaves every pushed document in a day file or the spool" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const data = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    test_day = 20_000;
+
+    var p: Packer = try .init(gpa, io, data);
+    p.clock = testClock;
+    p.block_docs = 2;
+    try p.start();
+    const n = 300;
+    const pad: [64]u8 = @splat('x');
+    for (0..n) |i| {
+        const kind: Kind = @fromBackingInt(@intCast(i % 3));
+        const doc = try arena.print("{{\"n\":{d},\"s\":\"{s}\"}}", .{ i, &pad });
+        try p.push(.{ .kind = kind, .key = try arena.print("K{d}", .{i}), .t = @intCast(i), .gz = try store.raw.compress(arena, doc) });
+        if (i == n / 2) test_day += 1;
+    }
+    p.close();
+
+    var seen: std.StringHashMapUnmanaged(void) = .empty;
+    const dir_path = try arena.print("{s}/complete", .{data});
+    var dir = try Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true });
+    defer dir.close(io);
+    var it = dir.iterate();
+    while (try it.next(io)) |e| {
+        if (e.kind != .file or !std.mem.endsWith(u8, e.name, ".cfd") and !std.mem.endsWith(u8, e.name, ".cfd.part")) continue;
+        for (try dayfile.readAll(gpa, arena, io, try arena.print("{s}/{s}", .{ dir_path, e.name }))) |d| try seen.put(arena, d.key, {});
+    }
+    for (try Packer.listSegments(arena, io, dir_path)) |s| {
+        for (try readSegment(arena, io, try arena.print("{s}/spool/{s}", .{ dir_path, s.name }))) |r| try seen.put(arena, r.key, {});
+    }
+    for (0..n) |i| try std.testing.expect(seen.contains(try arena.print("K{d}", .{i})));
 }
