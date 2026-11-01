@@ -72,14 +72,14 @@ pub fn view(h: *H, g: *const gamedata.Game, champs: []const champ.Champ, arts: [
     }
 
     var rows: [2]tree.List = .{ h.list(), h.list() };
-    for (g.seats, 0..) |s, i| rows[@intFromBool(!s.us)].add(seat(h, champs[s.champ], s.role, i == g.you));
+    for (g.seats, 0..) |s, i| rows[@intFromBool(!s.us)].add(linked(h, champs[s.champ], s.role, .{ .you = i == g.you }));
     const opp_name = if (opp) |o| champs[o.champ].name else "";
 
     return h.el(.section, .{ .class = "c-ghead", .data_win = g.win, .aria_label = W.label }, .{
         h.div(.{ .class = "who" }, .{
-            champ.view(h, champs[me.champ], .{ .px = .@"56", .level = if (me.level > 0) me.level else null, .eager = true }),
+            linked(h, champs[me.champ], me.role, .{ .px = .@"56", .level = if (me.level > 0) me.level else null, .eager = true }),
             if (opp != null) h.span(.{ .class = "vs" }, .{W.vs}) else null,
-            if (opp) |o| champ.view(h, champs[o.champ], .{ .px = .@"32", .eager = true }) else null,
+            if (opp) |o| linked(h, champs[o.champ], o.role, .{ .px = .@"32", .eager = true }) else null,
         }),
         h.div(.{ .class = "res" }, .{
             h.div(.{ .class = "top" }, .{
@@ -104,9 +104,9 @@ pub fn view(h: *H, g: *const gamedata.Game, champs: []const champ.Champ, arts: [
     });
 }
 
-/// A team's champion, linked to its page in the seat's role
-fn seat(h: *H, c: champ.Champ, r: ?role.Role, you: bool) N {
-    const icon = champ.view(h, c, .{ .you = you });
+/// A champion icon linked to its page in the seat's role
+fn linked(h: *H, c: champ.Champ, r: ?role.Role, o: champ.Opts) N {
+    const icon = champ.view(h, c, o);
     if (c.name.len == 0) return icon;
     const buf = h.mem.alloc(u8, c.name.len) catch return icon;
     const parts = [_][]const u8{ "/champions/", champ.slug(buf, c.name), if (r != null) "/" else "", if (r) |x| @tagName(x) else "" };
@@ -162,7 +162,7 @@ pub const css =
     \\  .c-ghead .kit > span { display: flex; align-items: center; gap: 3px; }
     \\  .c-ghead > .teams { grid-area: teams; display: flex; flex-direction: column; gap: 6px; align-self: start; }
     \\  .c-ghead > .teams > div { display: flex; gap: 4px; }
-    \\  .c-ghead > .teams a { display: flex; border-radius: calc(var(--icon) / 6); }
+    \\  .c-ghead > :is(.who, .teams) a { display: flex; border-radius: calc(var(--icon) / 6); }
     \\  @container (max-width: 640px) {
     \\    .c-ghead { grid-template-columns: auto 1fr; grid-template-areas: "who res" "how how" "teams teams"; }
     \\    .c-ghead > .teams { flex-direction: row; justify-content: space-between; }
