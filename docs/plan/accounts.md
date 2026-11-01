@@ -12,7 +12,7 @@ Five, in order, each with everything the one before has.
 
 | Role | Gets | Never |
 | --- | --- | --- |
-| public | the site, the public app once released (no login; a free signed-in account may come later, same role) | anything below |
+| public | the site, the public app once released; with or without an account (open sign-up, same role) | anything below |
 | paid | extras in the public site and app, within the public product rules (app.md "Policy line") | private pages, private app |
 | private | Jacob's friends and testers: private site pages (/private), private app, read-only admin views opened to them | actions, logs, accounts, settings, raw data |
 | admin | everything private, /admin/ views, manage public, paid and private accounts | the admin page's controls, other admins or the owner, irreversible things below |
@@ -42,6 +42,11 @@ Five, in order, each with everything the one before has.
 - Accounts: username, argon2id hash (std.crypto.pwhash.argon2; params sized for
   a 400 MB cap, one hash at a time), role, created, last seen, optional linked
   PUUID. No email: invites go by chat, so nothing to mail and less personal data
+- Open sign-up (Jacob 2 Nov, site identity: data/team/2026-11-01-live-notes/notes/
+  identity.md): /signup, a username (no @) and a password make a public account and sign
+  in; POST /auth/signup without a link. No IPs, so the cap is on the rate: 30 per 10
+  minutes across everyone (OpenSignups), counted before the hash. Recovery will be the
+  linked Riot ID's icon check (AC6), as there is no email
 - Invites: admin makes a one-use link (/join#TOKEN, 7 days); the friend picks a username
   and password. Admin can change roles, reset (new invite link) and disable
 - Sessions: 32 random bytes in cookie `__Host-meiolol` (Secure, HttpOnly, SameSite=Lax),
@@ -121,7 +126,8 @@ Each step ends tested and deployed; nginx and systemd changes on C01 need Jacob'
 
 ## Not doing
 
-- Riot Sign On: not needed for the key (production-key.md) and only for public users;
-  revisit if the public site gets accounts
+- Riot Sign On for now: production keys only, Riot starts it after approval
+  (research riot-docs-lol ^f12). Public accounts exist now, so with the key it replaces
+  the icon check for linking a Riot ID
 - Third-party login (Discord, Google): another processor in the privacy page for a
   handful of friends; invites are simpler

@@ -593,7 +593,7 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
                 .{ .privacy, "Privacy policy", "What meiolol collects and why.", .none, null },
                 .{ .terms, "Terms of use", "Terms for using meiolol.", .none, null },
                 .{ .login, "Log in", "Log in to meiolol.", .none, .login },
-                .{ .signup, "Make your account", "Make a meiolol account from a sign-up link.", .none, .signup },
+                .{ .signup, "Make your account", "Make a meiolol account: a username and a password, no email.", .none, .signup },
                 .{ .join, "Set up your login", "Set up a meiolol login from an invite link.", .none, .join },
                 .{ .account, "Your account", "Your meiolol login: password and sign out.", .none, .account },
             };

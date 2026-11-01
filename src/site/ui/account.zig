@@ -1,5 +1,5 @@
-//! The account pages (docs/plan/accounts.md): log in, make an account through a sign-up
-//! link (/signup#LINK), set up a login from an invite or reset link (/join#INVITE) and
+//! The account pages (docs/plan/accounts.md): log in, make an account (/signup: open, a
+//! username and password; /signup#LINK: a sign-up link's email form), set up a login from an invite or reset link (/join#INVITE) and
 //! the signed-in account (/account: who, a new password, its desktop apps, log out).
 //! Island Account (ui-account.wasm) against /auth/NAME.bin (api/accounts.zig). A link's
 //! token stays in the fragment, which browsers never send. What is typed stays in the
@@ -26,6 +26,10 @@ pub const Kind = enum { login, signup, join, account };
 const W = struct {
     const login = plain("Log in");
     const signup = plain("Make your account");
+    const no_account = plain("No account?");
+    const sign_up = plain("Sign up");
+    const have_one = plain("Have one?");
+    const no_email = plain("No email needed: we keep none.");
     const join = plain("Set up your login");
     const account = plain("Your account");
     const user = plain("Email or username");
@@ -59,6 +63,7 @@ const W = struct {
     const out_here = plain("This browser");
     const out_all = plain("Everywhere");
     const out_note = plain("Everywhere includes your desktop apps.");
+    const out_note_web = plain("Everywhere logs out every browser you use.");
     const wait = phrase.Phrase("Too many tries: wait {n:int} min.");
     const failed = phrase.Phrase("Something went wrong ({n:int}).");
     const tester = plain("Draft tester");
@@ -72,6 +77,8 @@ pub const Load = enum { loading, ok, down };
 
 pub const Account = struct {
     kind: Kind,
+    /// Sign-up through a link (its token in the fragment): the email form, else the open one
+    linked: bool = false,
     busy: bool = false,
     say: Say = .none,
     /// Say.server's: the API's error, as a sentence
@@ -141,8 +148,13 @@ pub const Account = struct {
             .account => W.account,
         }});
         return switch (p.kind) {
-            .login => h.div(at, .{ title, p.form(h) }),
-            .signup => h.div(at, .{ title, p.form(h), h.p(.{ .class = "info" }, .{ W.email_note, " ", W.see, " ", privacy(h), "." }) }),
+            .login => h.div(at, .{ title, p.form(h), h.p(.{ .class = "info" }, .{ W.no_account, " ", h.a(.{ .href = "/signup" }, .{W.sign_up}) }) }),
+            .signup => h.div(at, .{
+                title,
+                p.form(h),
+                h.p(.{ .class = "info" }, .{ if (p.linked) W.email_note else W.no_email, " ", W.see, " ", privacy(h), "." }),
+                if (p.linked) null else h.p(.{ .class = "info" }, .{ W.have_one, " ", h.a(.{ .href = "/login" }, .{W.login}) }),
+            }),
             .join => h.div(at, .{ title, p.form(h), h.p(.{ .class = "info" }, .{ W.see, " ", privacy(h), "." }) }),
             .account => blk: {
                 const after = p.rest(h);
@@ -158,7 +170,11 @@ pub const Account = struct {
                 field(h, W.pass, null, .{ .name = "password", .type = "password", .autocomplete = "current-password", .required = true }),
                 .none,
             },
-            .signup => .{
+            .signup => if (!p.linked) .{
+                field(h, W.username, null, .{ .name = "username", .autocomplete = "username", .autocapitalize = "none", .spellcheck = "false", .minlength = "2", .maxlength = "64", .required = true }),
+                field(h, W.pass, W.eight, .{ .name = "password", .type = "password", .autocomplete = "new-password", .minlength = "8", .required = true }),
+                .none,
+            } else .{
                 field(h, W.email, null, .{ .name = "email", .type = "email", .autocomplete = "email", .autocapitalize = "none", .spellcheck = "false", .required = true }),
                 field(h, W.pass, W.ten, .{ .name = "password", .type = "password", .autocomplete = "new-password", .placeholder = "iykyk", .minlength = "10", .required = true }),
                 .none,
@@ -225,6 +241,7 @@ pub const Account = struct {
 
     /// The account page's after the password form
     fn rest(p: *P, h: *H) [7]N {
+        const apps = if (p.me) |m| can(m, "download_private_app") else false;
         const list: N = switch (p.devices_at) {
             .loading => h.p(.{ .class = "info" }, .{W.loading}),
             .down => h.p(.{ .class = "info" }, .{W.apps_down}),
@@ -242,15 +259,15 @@ pub const Account = struct {
             },
         };
         return .{
-            h.h2(.{}, .{W.apps}),
-            h.p(.{ .class = "info" }, .{W.apps_note}),
-            list,
+            if (apps) h.h2(.{}, .{W.apps}) else .none,
+            if (apps) h.p(.{ .class = "info" }, .{W.apps_note}) else .none,
+            if (apps) list else .none,
             h.h2(.{}, .{W.out}),
             h.div(.{ .class = "out" }, .{
                 button.view(h, .{ .on = h.on(p, .{ .logout = false }) }, .{W.out_here}),
                 button.view(h, .{ .on = h.on(p, .{ .logout = true }) }, .{W.out_all}),
             }),
-            h.p(.{ .class = "info" }, .{W.out_note}),
+            h.p(.{ .class = "info" }, .{if (apps) W.out_note else W.out_note_web}),
             h.p(.{ .class = "info" }, .{ W.see, " ", privacy(h), "." }),
         };
     }
@@ -343,7 +360,7 @@ pub const css =
 ;
 
 pub const Demo = struct {
-    pub const me: ac.Me = .{ .username = "ann", .role = "admin", .can = &.{ "view_private", "view_admin", "manage_accounts" } };
+    pub const me: ac.Me = .{ .username = "ann", .role = "admin", .can = &.{ "view_private", "download_private_app", "view_admin", "manage_accounts" } };
     pub const devices = [_]ac.Device{
         .{ .id = 1, .name = "Ann's PC", .created = 1_790_000_000, .last_used = 1_793_200_000 },
         .{ .id = 2, .name = "Laptop", .created = 1_792_000_000, .last_used = 1_792_100_000 },
@@ -354,6 +371,8 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     var refused: Account = .{ .kind = .login };
     _ = refused.answered(401, "{\"error\":\"wrong username or password\"}");
+    var taken: Account = .{ .kind = .signup };
+    _ = taken.answered(409, "{\"error\":\"that username is taken\"}");
     var waiting: Account = .{ .kind = .login };
     _ = waiting.answered(429, "{\"error\":\"too many tries\",\"retry_s\":300}");
     const states = [_]struct { []const u8, Account }{
@@ -362,11 +381,14 @@ pub fn gallery(g: *Gallery) void {
         .{ "log in: refused", refused },
         .{ "log in: too many tries", waiting },
         .{ "log in: server down", .{ .kind = .login, .say = .down } },
-        .{ "sign-up link", .{ .kind = .signup } },
+        .{ "sign up", .{ .kind = .signup } },
+        .{ "sign up: name taken", taken },
+        .{ "sign-up link", .{ .kind = .signup, .linked = true } },
         .{ "invite without its link", .{ .kind = .join, .say = .no_link } },
         .{ "account: loading", .{ .kind = .account } },
         .{ "account: down", .{ .kind = .account, .me_at = .down, .devices_at = .down } },
-        .{ "account: no apps", .{ .kind = .account, .me = .{ .username = "pal", .role = "private", .can = &.{"view_private"} }, .me_at = .ok, .devices_at = .ok } },
+        .{ "account: no apps", .{ .kind = .account, .me = .{ .username = "pal", .role = "private", .can = &.{ "view_private", "download_private_app" } }, .me_at = .ok, .devices_at = .ok } },
+        .{ "account: public", .{ .kind = .account, .me = .{ .username = "player", .role = "public", .can = &.{} }, .me_at = .ok, .devices_at = .ok } },
         .{ "account: password changed", .{ .kind = .account, .me = Demo.me, .me_at = .ok, .devices = &Demo.devices, .devices_at = .ok, .say = .changed } },
     };
     for (states) |s| {
@@ -425,21 +447,22 @@ test "the form's fields by kind, and a removed app by its id" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const want = [_]struct { Kind, []const []const u8 }{
-        .{ .login, &.{ "name=\"username\"", "autocomplete=\"current-password\"" } },
-        .{ .signup, &.{ "name=\"email\"", "minlength=\"10\"", "href=\"/privacy#accounts\"" } },
-        .{ .join, &.{ "name=\"username\"", "minlength=\"8\"" } },
-        .{ .account, &.{ "name=\"new\"", "autocomplete=\"new-password\"", "Loading" } },
+    const want = [_]struct { Kind, bool, []const []const u8 }{
+        .{ .login, false, &.{ "name=\"username\"", "autocomplete=\"current-password\"", "href=\"/signup\"" } },
+        .{ .signup, false, &.{ "name=\"username\"", "minlength=\"8\"", "href=\"/privacy#accounts\"", "href=\"/login\"" } },
+        .{ .signup, true, &.{ "name=\"email\"", "minlength=\"10\"", "href=\"/privacy#accounts\"" } },
+        .{ .join, false, &.{ "name=\"username\"", "minlength=\"8\"" } },
+        .{ .account, false, &.{ "name=\"new\"", "autocomplete=\"new-password\"", "Loading" } },
     };
     for (want) |w| {
         var t: tree.Tree = .{};
         var h: H = .init(a, &t);
-        var p: Account = .{ .kind = w[0] };
+        var p: Account = .{ .kind = w[0], .linked = w[1] };
         var out: std.Io.Writer.Allocating = .init(a);
         try @import("html.zig").write(&t, p.view(&h), &out.writer);
         try testing.expect(!h.oom);
         try testing.expect(std.mem.find(u8, out.written(), "<form method=\"post\" action=\"/auth/") != null);
-        for (w[1]) |s| if (std.mem.find(u8, out.written(), s) == null) {
+        for (w[2]) |s| if (std.mem.find(u8, out.written(), s) == null) {
             std.debug.print("{t}: no {s}\n", .{ w[0], s });
             return error.TestUnexpectedResult;
         };

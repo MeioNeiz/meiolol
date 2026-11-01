@@ -9,8 +9,10 @@
 //!   GET  /auth/me         {"username","role","can":[...]}, or 401
 //!   POST /auth/join       {"invite","username","password"}: a new account, or a new
 //!                         password for a reset invite's account; signs in
-//!   POST /auth/signup     {"link","email","password"}: a new account through a sign-up
-//!                         link, whose password is the link's shared one; signs in
+//!   POST /auth/signup     {"username","password"}: a new public account, open to anyone
+//!                         (OpenSignups caps the rate); or {"link","email","password"}: a
+//!                         new account through a sign-up link, whose password is the
+//!                         link's shared one. Signs in
 //!   GET  /auth/check/CAP  204 with X-Meiolol-User and X-Meiolol-Role when the session's
 //!                         role has CAP (roles.zig); 401 without a session, 403 without CAP
 //!   POST /auth/password   {"password","new"}: a new password for the signed-in account;
@@ -488,6 +490,31 @@ pub const Throttle = struct {
     }
 };
 
+/// Open sign-ups across everyone, in memory: no IPs are kept, so the cap is on the rate.
+/// Each try counts before its argon2 hash, which bounds the work a flood can cause
+pub const OpenSignups = struct {
+    mutex: Io.Mutex = .init,
+    window: i64 = 0,
+    count: u32 = 0,
+
+    pub const per_window = 30;
+    pub const window_s = 10 * 60;
+
+    /// 0 when a sign-up may go ahead (and is counted); else seconds to wait
+    pub fn take(o: *OpenSignups, io: Io, now: i64) i64 {
+        o.mutex.lockUncancelable(io);
+        defer o.mutex.unlock(io);
+        const w = @divFloor(now, window_s);
+        if (o.window != w) {
+            o.window = w;
+            o.count = 0;
+        }
+        if (o.count >= per_window) return window_s - @mod(now, window_s);
+        o.count += 1;
+        return 0;
+    }
+};
+
 /// One /auth/ request, read off the wire: what route() needs
 pub const In = struct {
     method: std.http.Method,
@@ -522,6 +549,7 @@ pub const Service = struct {
     db_path: [:0]const u8,
     hasher: Hasher = .{},
     throttle: Throttle = .{},
+    signups: OpenSignups = .{},
 
     pub fn deinit(s: *Service) void {
         s.throttle.deinit(s.gpa);
@@ -741,7 +769,8 @@ pub const Service = struct {
     /// Wrong passwords count against the link (its first characters), as logins count
     /// against a username: guessing the shared password is slow, whoever holds the link
     fn signup(s: *Service, arena: Allocator, in: In, now: i64) !Out {
-        const b = parseBody(ad.Signup, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with link, email and password") };
+        const b = parseBody(ad.Signup, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username and password, or link, email and password") };
+        if (b.link.len == 0) return s.signupOpen(arena, in, b, now);
         const bad_link: Out = .{ .status = .bad_request, .body = errorJson("this sign-up link no longer works") };
         const token = parseToken(b.link) orelse return bad_link;
         var name_buf: [username_max]u8 = undefined;
@@ -769,6 +798,27 @@ pub const Service = struct {
         try db.run("UPDATE signup_links SET uses = uses + 1 WHERE hash = ?", .{Blob{ .bytes = &h }});
         const t = try startSession(db, s.io, id, now);
         return signedInOut(arena, in, .{ .id = id, .username = name, .role = link.role }, &t);
+    }
+
+    /// No email (nothing to mail, less to keep), so a name with an @ is refused
+    fn signupOpen(s: *Service, arena: Allocator, in: In, b: ad.Signup, now: i64) !Out {
+        var name_buf: [username_max]u8 = undefined;
+        const name = username(&name_buf, std.mem.trim(u8, b.username, " ")) orelse return .{ .status = .bad_request, .body = errorJson("username: 2 to 64 letters, digits, dots, dashes or underscores") };
+        if (std.mem.findScalar(u8, name, '@') != null) return .{ .status = .bad_request, .body = errorJson("pick a username, not an email: we keep no email") };
+        if (!passwordOk(b.password)) return .{ .status = .bad_request, .body = errorJson("password must be 8 to 256 characters") };
+        const wait = s.signups.take(s.io, now);
+        if (wait > 0) return tooMany(arena, wait);
+
+        var phc_buf: [128]u8 = undefined;
+        const phc = try s.hasher.hash(s.gpa, s.io, b.password, &phc_buf);
+        const db = try open(s.db_path);
+        defer db.close();
+        const id = create(db, name, phc, .public, now) catch |err| switch (err) {
+            error.Taken => return .{ .status = .conflict, .body = errorJson("that username is taken") },
+            else => return err,
+        };
+        const t = try startSession(db, s.io, id, now);
+        return signedInOut(arena, in, .{ .id = id, .username = name, .role = .public }, &t);
     }
 
     /// The old password again, counted as a login try: a borrowed session can't take
@@ -1327,6 +1377,37 @@ test isEmail {
     try testing.expect(isEmail("a@b.co"));
     try testing.expect(isEmail("first.last+x@mail.co.uk"));
     for ([_][]const u8{ "ab", "@b.co", "a@b", "a@.co", "a@b.", "a@b@c.co" }) |s| try testing.expect(!isEmail(s));
+}
+
+test "signup: open, a username and a password make a public account; no email; capped" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const a = f.arena();
+    const T = struct {
+        fn signup(fx: *Fixture, name: []const u8, password: []const u8, at: i64) !Out {
+            const b = try std.json.Stringify.valueAlloc(fx.arena(), .{ .username = name, .password = password }, .{});
+            return fx.service.route(fx.arena(), .{ .method = .POST, .path = "signup", .action = true, .body = b }, at);
+        }
+    };
+    const now = Fixture.now;
+
+    const out = try T.signup(&f, " NewPlayer ", "eight chars", now);
+    try testing.expectEqual(Status.ok, out.status);
+    const acc = (try find(f.db, a, "newplayer")).?;
+    try testing.expectEqual(Role.public, acc.role);
+    const token = cookieValue(out.set_cookie.?).?;
+    try testing.expectEqual(Status.forbidden, try f.check(token, "view_paid"));
+    try testing.expectEqual(Status.ok, (try f.login("newplayer", "eight chars")).status);
+
+    try testing.expectEqual(Status.conflict, (try T.signup(&f, "newplayer", "eight chars", now)).status);
+    try testing.expectEqual(Status.bad_request, (try T.signup(&f, "pal@mail.com", "eight chars", now)).status);
+    try testing.expectEqual(Status.bad_request, (try T.signup(&f, "x", "eight chars", now)).status);
+    try testing.expectEqual(Status.bad_request, (try T.signup(&f, "short", "seven c", now)).status);
+
+    for (2..OpenSignups.per_window) |i| try testing.expectEqual(Status.ok, (try T.signup(&f, try a.print("p{d}", .{i}), "eight chars", now)).status);
+    try testing.expectEqual(Status.too_many_requests, (try T.signup(&f, "onemore", "eight chars", now)).status);
+    try testing.expectEqual(Status.ok, (try T.signup(&f, "onemore", "eight chars", now + OpenSignups.window_s)).status);
 }
 
 test "signup: the link and its shared password make accounts; wrong ones are slowed" {

@@ -228,7 +228,7 @@ const terms_md =
     \\Contact: [{contact}](mailto:{contact}).
 ;
 
-const privacy_updated = "24 October 2026";
+const privacy_updated = "2 November 2026";
 
 const privacy_md =
     \\What meiolol collects, why, how long it keeps it and what you can ask us to do.
@@ -304,15 +304,16 @@ const privacy_md =
     \\
     \\## Accounts
     \\
-    \\Logins are only for people we invite to help run or test the site; there are no
-    \\public accounts. For each account we keep the email address or username used to log
-    \\in, a one-way hash of the password, its role, and when it was made and last used.
-    \\Logging in sets one cookie, which keeps you logged in for 30 days and does nothing
-    \\else; we store only a one-way hash of it. Nothing is ever sent to your email
-    \\address. The desktop app, once signed in, keeps a sign-in of its own: we store a
-    \\one-way hash of it and when it was made and last used; it ends when you remove it on
-    \\your account page, log out everywhere or change your password, or after 90 days
-    \\unused. To delete your account, write to the address below and we remove it, its
+    \\Anyone can make an account with a username and a password; we ask for no email.
+    \\People we invite to help run or test the site may log in with an email address
+    \\instead, which is only their login. For each account we keep the username or email
+    \\address, a one-way hash of the password, its role, and when it was made and last
+    \\used. Legal basis: the agreement to provide the account. Logging in sets one cookie,
+    \\which keeps you logged in for 30 days and does nothing else; we store only a one-way
+    \\hash of it. Nothing is ever sent to an email address. The desktop app, once signed
+    \\in, keeps a sign-in of its own: we store a one-way hash of it and when it was made
+    \\and last used; it ends when you remove it on your account page, log out everywhere
+    \\or change your password, or after 90 days unused. To delete your account, write to the address below and we remove it, its
     \\sessions and its app sign-ins. Copies in our backups are gone within 14 days.
     \\
     \\## The desktop app

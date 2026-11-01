@@ -40,7 +40,12 @@ export fn main() void {
     dom.rt.changed = changed;
     switch (kind) {
         .login => {},
-        .signup, .join => if (token().len == 0) {
+        .signup => if (token().len > 0) {
+            page.linked = true;
+            server.linked = true;
+            render();
+        },
+        .join => if (token().len == 0) {
             page.say = .no_link;
             render();
         },
@@ -130,7 +135,10 @@ fn send() void {
     }
     switch (page.kind) {
         .login => post("/auth/login.bin", ac.Login, .{ .username = f.trimmed("username"), .password = f.get("password") }, .send),
-        .signup => post("/auth/signup.bin", ac.Signup, .{ .link = token(), .email = f.trimmed("email"), .password = f.get("password") }, .send),
+        .signup => if (page.linked)
+            post("/auth/signup.bin", ac.Signup, .{ .link = token(), .email = f.trimmed("email"), .password = f.get("password") }, .send)
+        else
+            post("/auth/signup.bin", ac.Signup, .{ .username = f.trimmed("username"), .password = f.get("password") }, .send),
         .join => post("/auth/join.bin", ac.Join, .{ .invite = token(), .username = f.trimmed("username"), .password = f.get("password") }, .send),
         .account => post("/auth/password.bin", ac.Password, .{ .password = f.get("password"), .new = f.get("new") }, .send),
     }

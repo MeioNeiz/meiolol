@@ -23,9 +23,10 @@ published: no personal email on the site).
 - **Mail.** privacy@ mail is kept in Cloudflare KV with no end (deploy/mail-worker.js)
   and forwarded to Gmail: needs a retention length, and Cloudflare is outside the UK
 - **Children.** League is played by teenagers. The UK Age Appropriate Design Code may
-  apply to a site likely to be used by under-18s. This site has no public accounts, ads or
-  tracking, which is most of what the code asks for (logins are for invited testers and
-  admins only). Not researched beyond that
+  apply to a site likely to be used by under-18s. No ads or tracking; public accounts
+  (open since 2 Nov) hold a username and a password hash only, no email, no profile,
+  which keeps data to the minimum the code asks for. Not researched beyond that: check
+  the code's standards before accounts store more (a linked Riot ID, saved settings)
 - **EU transfers.** Data is stored in the UK (C01 in Essex; backup mirrors and the
   archive on our own machines in the UK); Cloudflare (US) carries the site's traffic. The EU
   treats the UK as adequate, so no extra safeguards are needed; check that this still
@@ -50,10 +51,10 @@ who is the controller of the data described here. Contact: privacy@meio.lol.
 
 ## The short version
 
-- No public accounts, no advertising, no analytics trackers; logins (one session cookie)
-  only for people we invite: email or username, password hash, role, created and last
-  used, deleted on request (`meiolol account delete`); backups (gpu-box, 14 days)
-  age it out within 14 days
+- No advertising, no analytics trackers. Anyone can make an account (one session
+  cookie): username, password hash, role, created and last used; no email. Invited
+  testers and admins may log in with an email instead. Deleted on request (`meiolol
+  account delete`); backups (gpu-box, 14 days) age it out within 14 days
 - The public pages show champion and aggregate statistics, and Daily Draft games with
   players shown only as seats (no names); a player's games, with the Riot IDs of the
   players in them, appear only when someone looks up their Riot ID

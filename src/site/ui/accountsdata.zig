@@ -30,8 +30,9 @@ pub const Login = struct { username: []const u8, password: []const u8 };
 /// POST join: `username` is ignored by a reset invite
 pub const Join = struct { invite: []const u8, username: []const u8 = "", password: []const u8 };
 
-/// POST signup: `password` is the link's shared one
-pub const Signup = struct { link: []const u8, email: []const u8, password: []const u8 };
+/// POST signup: open, a username and a new password; through a link, an email and the
+/// link's shared password
+pub const Signup = struct { link: []const u8 = "", email: []const u8 = "", username: []const u8 = "", password: []const u8 };
 
 /// POST password
 pub const Password = struct { password: []const u8, new: []const u8 };
