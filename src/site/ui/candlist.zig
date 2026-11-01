@@ -12,7 +12,6 @@ const fmt = @import("fmt.zig");
 const champ = @import("champ.zig");
 const chip = @import("chip.zig");
 const badge = @import("badge.zig");
-const button = @import("button.zig");
 const reasons = @import("reasons.zig");
 const role = @import("role.zig");
 const phrase = @import("phrase.zig");
@@ -76,8 +75,11 @@ pub const Row = struct {
     act: []const u8 = "",
     /// Puts the champion in the seat (withPick only); null: no Pick button
     pick: ?tree.Handler = null,
-    /// The Pick button's name ("Pick Gnar")
+    /// The row's name when it picks ("Pick Gnar")
     pick_label: ?tree.Text = null,
+    /// The keyboard's row (Up and Down in the owner's search): marked, its button
+    /// `data-ref="cur"` for scrolling to it
+    cur: bool = false,
 };
 
 pub const Extra = struct {
@@ -161,12 +163,21 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
         }));
     }
     const pressable = r.on != null or r.act.len > 0;
+    // The row picks when it can (a click anywhere on it); its breakdown then opens from
+    // the Why toggle
+    const picks = pick and r.pick != null;
     // Only the name is the button (a short label); its ::after stretches over the row
     const who = .{ champ.view(h, r.champ, .{ .named = false }), h.b(.{}, .{r.champ.name}) };
-    const head = h.div(.{ .key = 0, .class = "r", .data_ref = r.ref }, .{
+    const head = h.div(.{ .key = 0, .class = "r", .data_ref = r.ref, .data_cur = r.cur }, .{
         h.span(.{ .class = "rk" }, .{if (r.rank) |n| phrase.num(h, .int, n) else null}),
         h.span(.{ .class = "nm" }, .{
-            if (pressable) h.button(.{
+            if (picks) h.button(.{
+                .class = "pk",
+                .type = "button",
+                .aria_label = r.pick_label,
+                .on_click = r.pick,
+                .data_ref = if (r.cur) "cur" else null,
+            }, who) else if (pressable) h.button(.{
                 .class = "pk",
                 .type = "button",
                 .aria_label = r.label,
@@ -174,6 +185,7 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
                 .aria_controls = if (r.open and r.detail != null and r.id.len > 0) r.id else null,
                 .on_click = r.on,
                 .data_act = if (r.act.len > 0) r.act else null,
+                .data_ref = if (r.cur) "cur" else null,
             }, who) else h.span(.{ .class = "pk" }, who),
             if (r.star) h.span(.{ .class = "star", .role = "img", .aria_label = W.star }, .{"★"}) else null,
             if (r.ref) badge.view(h, .accent, .{l.ref_label}) else null,
@@ -189,10 +201,10 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
             .class = "x",
             .style = if (r.x) |v| h.vars(.{ .c = fmt.Step.of(v, e.cuts) }) else null,
         }, .{if (r.x) |v| phrase.num(h, .signed, @as(i64, @intFromFloat(@round(v)))) else null}) else null else null,
-        if (r.reasons.len > 0 or r.tag != null or (pick and r.pick != null)) h.span(.{ .class = "why" }, .{
+        if (r.reasons.len > 0 or r.tag != null or picks) h.span(.{ .class = "why" }, .{
             chips.done(),
             if (r.tag) |t| badge.view(h, .neutral, .{t}) else null,
-            goButton(h, r, pick),
+            whyButton(h, r, picks),
         }) else null,
     });
     const det: ?N = if (r.open) if (r.detail) |d| h.div(.{
@@ -213,16 +225,24 @@ fn bCell(h: *H, r: Row) ?N {
     return h.span(.{}, .{ phrase.num(h, .rate, b), d });
 }
 
-fn goButton(h: *H, r: Row, comptime pick: bool) ?N {
-    if (!pick) return null;
-    const hd = r.pick orelse return null;
-    return h.span(.{ .class = "go" }, .{button.view(h, .{ .v = .quiet, .s = .s, .label = r.pick_label, .on = hd }, .{W.pick})});
+/// A picking row's breakdown toggle, over the row's stretched Pick
+fn whyButton(h: *H, r: Row, picks: bool) ?N {
+    if (!picks) return null;
+    const on = r.on orelse return null;
+    return h.span(.{ .class = "go" }, .{h.button(.{
+        .class = "wy",
+        .type = "button",
+        .aria_label = r.label,
+        .aria_expanded = r.open,
+        .aria_controls = if (r.open and r.detail != null and r.id.len > 0) r.id else null,
+        .on_click = on,
+    }, .{ h.span(.{ .class = "t" }, .{W.why}), h.span(.{ .aria_hidden = true }, .{if (r.open) "▴" else "▾"}) })});
 }
 
 const W = struct {
     const played = plain("played");
     const star = plain("The model's pick");
-    const pick = plain("Pick");
+    const why = plain("Why");
 };
 
 pub const css =
@@ -258,6 +278,12 @@ pub const css =
     \\  .c-cand .why { grid-column: 2 / -1; display: flex; gap: 4px; flex-wrap: wrap; padding-left: 32px; }
     \\  .c-cand .why b { color: var(--c); font-weight: var(--w-b); }
     \\  .c-cand .go { margin-left: auto; position: relative; z-index: 1; }
+    \\  .c-cand .wy { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 2px; min-height: 28px;
+    \\    padding: 0 var(--sp-2); border-radius: var(--r-s); color: var(--muted); font-size: var(--fs-s); }
+    \\  .c-cand .wy:hover, .c-cand .wy[aria-expanded="true"] { color: var(--text); background: var(--panel-3); }
+    \\  .c-cand .wy:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+    \\  .c-cand .r:has(.wy) .c-chip { pointer-events: none; }
+    \\  .c-cand .r[data-cur] { background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--focus); }
     \\  .c-cand .why b[data-dir="up"] { color: var(--hi2); }
     \\  .c-cand .why b[data-dir="down"] { color: var(--lo2); }
     \\  .c-cand .base { color: var(--muted); }
@@ -273,6 +299,10 @@ pub const css =
     \\    .c-cand[data-b][data-x] .r, .c-cand[data-b][data-x] .hd { grid-template-columns: 22px minmax(140px, 200px) 64px 56px 104px 60px minmax(0, 1fr); }
     \\    .c-cand[data-v="words"] .r { grid-template-columns: 22px minmax(140px, 200px) minmax(0, 1fr); }
     \\    .c-cand .why { grid-column: auto; grid-row: 1; grid-column-end: -1; padding-left: var(--sp-2); }
+    \\  }
+    \\  @container (max-width: 639px) {
+    \\    .c-cand .wy > .t { display: none; }
+    \\    .c-cand .wy { min-width: 28px; justify-content: center; padding: 0; }
     \\  }
     \\  @container (max-width: 340px) {
     \\    .c-cand .why { padding-left: 0; }

@@ -35,6 +35,8 @@ pub const sel = "[data-island=testercand]";
 const n_role = ds.n_role;
 /// Rows shown before a search, the seat's own champion added below them
 const max_rows = 30;
+/// Rows Up, Down and Enter reach: more than a role's options
+const max_ids = 256;
 /// Chips: a part under this many points says nothing a row's number doesn't
 const min_chip_pp = 0.1;
 /// Lane gold at 14 over many games: the old page's ±50 for a colour, up from there
@@ -293,6 +295,16 @@ pub const Panel = struct {
     /// ui-testercand.js and .wasm, for ui-tester.wasm to load (dom.lazyLoad)
     js: []const u8 = "",
     wasm: []const u8 = "",
+    /// The keyboard's row among the shown ones (Up, Down; Enter picks it), marked once
+    /// the search was typed in or an arrow pressed
+    cur: u16 = 0,
+    keyed: bool = false,
+    /// The shown rows' champions in order, as the last view drew them: what Up, Down and
+    /// Enter move over
+    ids: [max_ids]u32 = undefined,
+    n_ids: u16 = 0,
+    /// A seat was chosen on the board: the page's code puts the search in reach
+    want_focus: bool = false,
 
     /// testerpage.Page.Url's fields, which the tester island writes too, and the sort
     pub const Url = struct {
@@ -324,7 +336,11 @@ pub const Panel = struct {
         const teams = tp.clean(p.head, .{ u.b, u.r });
         const bans = tp.cleanBans(p.head, u.n, teams);
         const seat: ?u8 = if (u.s) |i| (if (i < 2 * n_role) i else null) else null;
-        if (!std.meta.eql(teams, p.teams) or !std.meta.eql(bans, p.bans) or seat != p.seat) p.open = 0;
+        if (!std.meta.eql(teams, p.teams) or !std.meta.eql(bans, p.bans) or seat != p.seat) {
+            p.open = 0;
+            p.unkey();
+        }
+        if (seat != null and seat != p.seat) p.want_focus = true;
         p.which = u.m;
         p.vs = u.v;
         p.teams = teams;
@@ -338,6 +354,7 @@ pub const Panel = struct {
         switch (m) {
             .sort => |s| {
                 p.sort = s;
+                p.unkey();
                 ev.push = true;
             },
             .open => |id| p.open = if (p.open == id) 0 else id,
@@ -345,17 +362,37 @@ pub const Panel = struct {
             .input => {
                 p.q.set(ev.text);
                 p.open = 0;
+                p.cur = 0;
+                p.keyed = ev.text.len > 0;
             },
             .key => {
-                if (std.mem.eql(u8, ev.text, "Escape") and p.q.len > 0) {
+                const k = ev.text;
+                if (std.mem.eql(u8, k, "Escape") and p.q.len > 0) {
                     p.q.set("");
+                    p.unkey();
                     ev.handled = true;
-                } else if (std.mem.eql(u8, ev.text, "Enter")) {
+                } else if (std.mem.eql(u8, k, "Enter")) {
                     ev.handled = true;
-                    if (p.first()) |o| p.place(o.id);
+                    if (p.n_ids > 0) p.place(p.ids[@min(p.cur, p.n_ids - 1)]);
+                } else if (std.mem.eql(u8, k, "ArrowDown") or std.mem.eql(u8, k, "ArrowUp")) {
+                    ev.handled = true;
+                    if (p.n_ids == 0) return;
+                    const down = k[5] == 'D';
+                    if (!p.keyed) {
+                        p.keyed = true;
+                        p.cur = if (down) 0 else p.n_ids - 1;
+                    } else if (down) {
+                        p.cur = @min(p.cur + 1, p.n_ids - 1);
+                    } else p.cur -|= 1;
+                    ev.after = .{ .op = .scroll, .ref = "cur" };
                 }
             },
         }
+    }
+
+    fn unkey(p: *Panel) void {
+        p.cur = 0;
+        p.keyed = false;
     }
 
     /// Only an option of the current feed: a pick from a stale list would land in the
@@ -367,20 +404,9 @@ pub const Panel = struct {
             p.seat = null;
             p.open = 0;
             p.q.set("");
+            p.unkey();
             return;
         };
-    }
-
-    /// The first row the search keeps
-    fn first(p: *const Panel) ?*const Opt {
-        const f = p.current() orelse return null;
-        var best: ?*const Opt = null;
-        for (f.opts) |*o| {
-            if (!matches(p.nameOf(o.id), p.q.slice())) continue;
-            if (best) |b| if (!before(f, p.sort, o, b)) continue;
-            best = o;
-        }
-        return best;
     }
 
     /// The feed for the shown board, once it is in
@@ -407,6 +433,7 @@ pub const Panel = struct {
             .hidden = p.tab != .board,
             .aria_busy = shown != null and cur == null,
         };
+        p.n_ids = 0;
         const seat = shown orelse return h.div(attrs, .{h.p(.{ .class = "wait" }, .{W.full})});
         const side = if (seat < n_role) W.blue else W.red;
         const r = role.Role.all[seat % n_role];
@@ -492,17 +519,34 @@ pub const Panel = struct {
     fn rowsOf(p: *Panel, h: *H, f: *const Feed, all: []const *const Opt, in_seat: u32, live: bool) []const candlist.Row {
         var rows: std.ArrayList(candlist.Row) = .empty;
         const searching = p.q.len > 0;
+        var n_kept: u16 = 0;
+        for (all, 0..) |o, i| {
+            if (p.keeps(o, i, in_seat)) n_kept += 1;
+        }
         var last: usize = 0;
         for (all, 0..) |o, i| {
-            const keep = if (searching) matches(p.nameOf(o.id), p.q.slice()) else i < max_rows or o.id == in_seat;
-            if (!keep) continue;
-            rows.append(h.mem, p.row(h, f, o, i, in_seat, !searching and i > last + 1, live)) catch {
+            if (!p.keeps(o, i, in_seat)) continue;
+            p.add(h, &rows, f, o, i, in_seat, !searching and i > last + 1, live, n_kept) catch {
                 h.oom = true;
                 return &.{};
             };
             last = i;
         }
         return rows.items;
+    }
+
+    fn add(p: *Panel, h: *H, rows: *std.ArrayList(candlist.Row), f: *const Feed, o: *const Opt, i: usize, in_seat: u32, gap: bool, live: bool, n_kept: u16) !void {
+        var r = p.row(h, f, o, i, in_seat, gap, live);
+        r.cur = p.keyed and rows.items.len == @min(p.cur, n_kept -| 1);
+        try rows.append(h.mem, r);
+        if (live and p.n_ids < max_ids) {
+            p.ids[p.n_ids] = o.id;
+            p.n_ids += 1;
+        }
+    }
+
+    fn keeps(p: *const Panel, o: *const Opt, i: usize, in_seat: u32) bool {
+        return if (p.q.len > 0) matches(p.nameOf(o.id), p.q.slice()) else i < max_rows or o.id == in_seat;
     }
 
     fn row(p: *Panel, h: *H, f: *const Feed, o: *const Opt, i: usize, in_seat: u32, gap: bool, live: bool) candlist.Row {

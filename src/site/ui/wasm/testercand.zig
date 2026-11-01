@@ -38,8 +38,38 @@ export fn main() void {
     server.wasm = dom.attrOf(root, "data-wasm");
     state = server;
     island = dom.rt.add(tc.Panel, &state, &server, tc.sel) catch return dom.dom.warn("testercand: out of memory");
+    // A linked seat isn't a click
+    state.want_focus = false;
+    dom.rt.changed = changed;
     zjb.global("window").call("addEventListener", .{ zjb.constString("tester-feed"), zjb.fnHandle("testerFeed", &onFeed) }, void);
     read();
+}
+
+/// A seat chosen on the board (the fragment's s): type to search at once. Touch gets the
+/// panel scrolled up instead, so no keyboard covers the list
+fn changed() void {
+    if (!state.want_focus) return;
+    state.want_focus = false;
+    const doc = zjb.global("document");
+    const root = doc.call("querySelector", .{zjb.constString(tc.sel)}, zjb.Handle);
+    if (root == .null) return;
+    defer root.release();
+    const mq = zjb.global("window").call("matchMedia", .{zjb.constString("(pointer: coarse)")}, zjb.Handle);
+    defer mq.release();
+    if (mq.get("matches", bool)) {
+        const r = root.call("getBoundingClientRect", .{}, zjb.Handle);
+        defer r.release();
+        if (r.get("top", f64) < 0.6 * zjb.global("window").get("innerHeight", f64)) return;
+        const o = zjb.global("Object").new(.{});
+        defer o.release();
+        o.set("block", zjb.constString("start"));
+        o.set("behavior", zjb.constString("smooth"));
+        return root.call("scrollIntoView", .{o}, void);
+    }
+    const input = root.call("querySelector", .{zjb.constString("input")}, zjb.Handle);
+    if (input == .null) return;
+    defer input.release();
+    input.call("focus", .{}, void);
 }
 
 fn onFeed(e: zjb.Handle) callconv(.c) void {

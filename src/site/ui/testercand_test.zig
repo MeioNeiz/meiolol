@@ -144,7 +144,7 @@ test "the server renders the panel, clean, the model loading, its code's paths o
     try testing.expectEqual(@as(usize, 0), report.findings.items.len);
 }
 
-test "the first empty seat, Pick into it, the next seat from the URL, Enter picks the search's first" {
+test "the first empty seat, a row picks into it, the next seat from the URL, Enter picks the search's first" {
     var p: Panel = undefined;
     try p.init("");
     defer p.deinit();
@@ -199,6 +199,54 @@ test "the first empty seat, Pick into it, the next seat from the URL, Enter pick
     _ = p.rt.event(0, .{ .kind = .keydown, .target = p.find("data-ref", "input"), .text = "Escape" });
     try testing.expectEqual(0, p.state.q.len);
     _ = try p.shown();
+}
+
+test "keys: Down and Up move a marked row, Enter picks it; a row's click picks; a seat chosen asks for focus" {
+    var p: Panel = undefined;
+    try p.init("");
+    defer p.deinit();
+    try testing.expect(!p.state.want_focus);
+    // Nothing marked until a key: Aatrox first, Darius second
+    var s = try p.shown();
+    try testing.expect(std.mem.find(u8, s, "data-cur") == null);
+    const key = struct {
+        fn press(q: *Panel, k: []const u8) bool {
+            return q.rt.event(0, .{ .kind = .keydown, .target = q.find("data-ref", "input"), .text = k });
+        }
+    }.press;
+    try testing.expect(key(&p, "ArrowDown"));
+    try testing.expectEqual(0, p.state.cur);
+    s = try p.shown();
+    try testing.expectEqual(1, std.mem.count(u8, s, "data-cur"));
+    try testing.expect(key(&p, "ArrowDown"));
+    try testing.expect(key(&p, "ArrowDown"));
+    // Held at the last row
+    try testing.expectEqual(1, p.state.cur);
+    try testing.expect(key(&p, "ArrowUp"));
+    try testing.expect(key(&p, "ArrowDown"));
+    s = try p.shown();
+    try testing.expect(std.mem.find(u8, s, "data-cur").? > std.mem.find(u8, s, "Pick Aatrox").?);
+    try testing.expect(key(&p, "Enter"));
+    try testing.expectEqual(122, p.state.teams[0][0]);
+    try testing.expect(!p.state.keyed);
+    try p.fed();
+    _ = try p.shown();
+
+    // Typing marks the first hit; Escape clears it
+    try p.hashed("#b=122-0-0-0-0&s=5");
+    try testing.expect(p.state.want_focus);
+    p.state.want_focus = false;
+    _ = p.rt.event(0, .{ .kind = .input, .target = p.find("data-ref", "input"), .text = "a" });
+    s = try p.shown();
+    try testing.expectEqual(1, std.mem.count(u8, s, "data-cur"));
+    _ = key(&p, "Escape");
+    try testing.expect(std.mem.find(u8, try p.shown(), "data-cur") == null);
+    // The whole row is the Pick: its name's button, Why apart
+    p.click("aria-label", "Pick Aatrox");
+    try testing.expectEqual(266, p.state.teams[1][0]);
+    // Back to the same seat: no new focus
+    try p.hashed("#b=122-0-0-0-0&r=266-0-0-0-0");
+    try testing.expect(!p.state.want_focus);
 }
 
 test "sort and a row's breakdown; other tabs hide the panel; a full board says so" {
