@@ -81,17 +81,19 @@ if [[ $name == gpu-box || $name == megatron ]]; then echo 730 > "$dir/mastery-ke
 # mirror of files the box keeps and never changes but by a scrub or the 24-month delete
 # (at most 2 days, 6 files, a run), so --delete carries both here. Never a .part (still
 # being written). A box with fewer sealed files than this copy (a fresh disk, a restore
-# from elsewhere) must not empty it: refused, and deletes capped
+# from elsewhere) must not empty it: refused, and deletes capped. Over 12 short stays
+# refused: by hand, docs/data-safety.md "Complete form mirror gap". Sealed: *.cfd and a
+# seal's set-aside *.cfd.clash-<time>
 if [[ $name == megatron && $host == local ]]; then
     src=$(dirname "$(dirname "$bin")")/data/complete
     mkdir -p "$dir/complete"
-    have=$(find "$src" -maxdepth 1 -name '*.cfd' 2> /dev/null | wc -l | tr -d ' ')
-    held=$(find "$dir/complete" -maxdepth 1 -name '*.cfd' | wc -l | tr -d ' ')
+    have=$(find "$src" -maxdepth 1 \( -name '*.cfd' -o -name '*.cfd.clash-*' \) 2> /dev/null | wc -l | tr -d ' ')
+    held=$(find "$dir/complete" -maxdepth 1 \( -name '*.cfd' -o -name '*.cfd.clash-*' \) | wc -l | tr -d ' ')
     if (( have < held - 12 || (have == 0 && held > 0) )); then
         log "complete form day files: the box has $have sealed, this copy $held: not mirrored"
         exit 1
     fi
-    rsync -rt --delete --max-delete=12 --include='*.cfd' --exclude='*' "$src/" "$dir/complete/" \
+    rsync -rt --delete --max-delete=12 --include='*.cfd' --include='*.cfd.clash-*' --exclude='*' "$src/" "$dir/complete/" \
         || { log "complete form day files: rsync failed"; exit 1; }
 fi
 kb=$(du -sk "$dir/mastery" | cut -f1)

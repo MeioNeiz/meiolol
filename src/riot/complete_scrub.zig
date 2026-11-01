@@ -94,18 +94,22 @@ pub fn tend(gpa: Allocator, io: Io, data_dir: []const u8, forgotten: []const []c
     const list = try syncList(arena, io, dir, forgotten);
     const old = try readApplied(arena, io, dir);
     // Files gone (aged, or deleted by hand) leave the table and the index; a file not as
-    // its row says (replaced: a restore over it, a hand merge) is read whole again
+    // its row says (replaced: a restore over it, a hand merge), or past the list's end
+    // (forgotten.txt cut short by hand: the pair is append-only), is read whole again
     var applied: std.StringArrayHashMapUnmanaged(Applied) = .empty;
     var changed = false;
+    var past_end: usize = 0;
     for (sealed.items) |name| {
         const st = try dir.statFile(io, name, .{});
         const now_as: Applied = .{ .n = 0, .size = st.size, .mtime = st.mtime.toNanoseconds() };
         const row = old.get(name) orelse now_as;
-        const as_row = row.size == st.size and row.mtime == now_as.mtime;
+        if (row.n > list.len) past_end += 1;
+        const as_row = row.size == st.size and row.mtime == now_as.mtime and row.n <= list.len;
         try applied.put(arena, name, if (as_row) row else now_as);
         changed = changed or !as_row;
     }
     changed = changed or applied.count() != old.count();
+    if (past_end > 0) log.warn("complete: {d} files applied more of forgotten.txt than it holds: read whole again", .{past_end});
     try dir.createDirPath(io, index_dir);
     try dropStaleIndexes(arena, io, dir, applied);
 
@@ -230,8 +234,9 @@ fn dropStaleIndexes(arena: Allocator, io: Io, dir: Io.Dir, applied: std.StringAr
 }
 
 /// Quarantined spool segments (complete.zig) rewritten without the records naming any
-/// of `m`'s PUUIDs, or whose body does not inflate (can't be checked), and without a
-/// torn last record (can't be checked or replayed); a segment left empty is deleted.
+/// of `m`'s PUUIDs, or whose body does not inflate (can't be checked), and without
+/// everything from a damaged record on (framing lost: can't be checked or replayed); a
+/// segment left empty is deleted.
 /// Count of records dropped. Rare and small: read whole each run
 fn scrubQuarantine(arena: Allocator, io: Io, dir: Io.Dir, m: *const Matcher) !usize {
     var q = dir.openDir(io, "spool/quarantine", .{ .iterate = true }) catch |err| switch (err) {
@@ -241,7 +246,7 @@ fn scrubQuarantine(arena: Allocator, io: Io, dir: Io.Dir, m: *const Matcher) !us
     defer q.close(io);
     var names: std.ArrayList([]const u8) = .empty;
     var it = q.iterate();
-    while (try it.next(io)) |e| if (e.kind == .file) try names.append(arena, try arena.dupe(u8, e.name));
+    while (try it.next(io)) |e| if (e.kind == .file and isSegmentName(e.name)) try names.append(arena, try arena.dupe(u8, e.name));
     var dropped: usize = 0;
     for (names.items) |name| {
         const bytes = try q.readFileAlloc(io, name, arena, .unlimited);
@@ -254,7 +259,10 @@ fn scrubQuarantine(arena: Allocator, io: Io, dir: Io.Dir, m: *const Matcher) !us
                 changed = true;
                 break;
             };
-            const plain = store.raw.decompress(arena, rec.gz) catch null;
+            const plain = store.raw.decompress(arena, rec.gz) catch |err| switch (err) {
+                error.OutOfMemory => return err,
+                else => null,
+            };
             if (plain == null or m.any(rec.key) or m.any(plain.?)) {
                 dropped += 1;
                 changed = true;
@@ -266,6 +274,18 @@ fn scrubQuarantine(arena: Allocator, io: Io, dir: Io.Dir, m: *const Matcher) !us
         if (kept.items.len == 0) try q.deleteFile(io, name) else try replaceFile(io, q, name, kept.items);
     }
     return dropped;
+}
+
+/// A quarantined segment's name, <kind>.<n>.<unix time> (complete.zig): never a temp
+/// file a crash left
+fn isSegmentName(name: []const u8) bool {
+    var parts = std.mem.splitScalar(u8, name, '.');
+    _ = std.meta.stringToEnum(complete.Kind, parts.next().?) orelse return false;
+    for (0..2) |_| {
+        const digits = parts.next() orelse return false;
+        if (digits.len == 0 or std.mem.indexOfNone(u8, digits, "0123456789") != null) return false;
+    }
+    return parts.next() == null;
 }
 
 /// A sealed day file's UTC day from its name (YYYY-MM-DD.<kind>.cfd)
@@ -741,6 +761,20 @@ test "a forget drops exactly the documents naming the player; the rest stay byte
     var it = idx.iterate();
     try testing.expect(std.mem.startsWith(u8, (try it.next(io)).?.name, try arena.print("{f}.mastery.cfd", .{Date.fromDay(20_000 + aged_days)})));
     try testing.expect(try it.next(io) == null);
+
+    // forgotten.txt cut short by hand: a row past its end is read whole again
+    try dir.writeFile(io, .{ .sub_path = "forgotten.txt", .data = try arena.print("{s}\n", .{b}) });
+    t = try tend(gpa, io, data, &.{}, null);
+    try testing.expectEqual(1, t.files);
+}
+
+test "quarantined segments by name, never a temp file" {
+    try testing.expect(isSegmentName("mastery.7.1761955200"));
+    try testing.expect(!isSegmentName("mastery.7"));
+    try testing.expect(!isSegmentName(".scrub.tmp"));
+    try testing.expect(!isSegmentName("mastery.7.1761955200.tmp"));
+    try testing.expect(!isSegmentName("other.7.1"));
+    try testing.expect(!isSegmentName("timeline..1"));
 }
 
 test "sealed day files by name: set-aside clashes too, never an open one" {
