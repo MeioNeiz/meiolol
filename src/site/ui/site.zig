@@ -1,11 +1,12 @@
 //! SiteHeader: every page's top bar: the logo, the page links, the search. Under 860 px
 //! of header the links give way to a menu button whose popover lists them and the pages
-//! under Champions, the current one selected (popovertarget: no script). From 861 to 1060
-//! px, with a login's private links in the bar, the search folds to its icon and opens
-//! over the links on focus. Also every
-//! page's foot (`foot`), the preview strip under the header (`preview`), on the
-//! Champions pages the bar under it (`subbar`: the section's tabs and the view picks), the
-//! page's main column (`main_class`) and a one-line notice in it (`note`)
+//! under Champions, the current one selected (popovertarget: no script). Log in (or the
+//! account) sits beside the search, in the menu on a phone. From 861 to 1160 px, with a
+//! login's private links in the bar, the search folds to its icon and opens over the
+//! links on focus. Also every page's foot (`foot`), the preview strip under the header
+//! (`preview`), on the Champions pages the bar under it (`subbar`: the section's tabs and
+//! the view picks), the page's main column (`main_class`) and a one-line notice in it
+//! (`note`)
 const tree = @import("tree.zig");
 const tabs = @import("tabs.zig");
 const segmented = @import("segmented.zig");
@@ -41,6 +42,9 @@ pub const Opts = struct {
     more: []const Link = &.{},
     /// The page's search box
     search: ?N = null,
+    /// A private page, so signed in: Account where others say Log in. Either becomes the
+    /// username once the account island stored it (site/shell.zig account_link)
+    signed_in: bool = false,
     menu_id: []const u8 = "site-menu",
 };
 
@@ -48,6 +52,8 @@ const W = struct {
     pub const product = plain("meiolol");
     pub const pages = plain("Pages");
     pub const menu = plain("Menu");
+    pub const login = plain("Log in");
+    pub const account = plain("Account");
     pub const champions = plain("Champions");
     pub const data = phrase.Phrase("Ranked solo/duo {d:text}. Updated daily.");
     pub const legal_pages = plain("Site");
@@ -155,6 +161,7 @@ pub fn view(h: *H, o: Opts) N {
         h.a(.{ .class = "logo", .href = o.home, .data_view = o.home_view }, .{ logo(h), W.product }),
         h.el(.nav, .{ .class = "links", .aria_label = W.pages }, .{links(h, o.links)}),
         o.search,
+        acct(h, o),
         h.button(.{ .class = "c-btn menu", .type = "button", .data_v = "icon", .popovertarget = o.menu_id, .aria_label = W.menu }, .{
             h.svg(.{ .viewBox = "0 0 24 24", .aria_hidden = true }, .{h.path(.{ .d = "M4 7h16M4 12h16M4 17h16" }, .{})}),
         }),
@@ -173,7 +180,12 @@ pub fn menu(h: *H, o: Opts, open: bool) N {
         links(h, o.links),
         if (o.more.len > 0) h.span(.{ .class = "lab" }, .{W.champions}) else null,
         links(h, o.more),
+        acct(h, o),
     });
+}
+
+fn acct(h: *H, o: Opts) N {
+    return h.a(.{ .class = "acct", .href = if (o.signed_in) "/account" else "/login" }, .{if (o.signed_in) W.account else W.login});
 }
 
 fn links(h: *H, ls: []const Link) []const N {
@@ -207,9 +219,15 @@ pub const css =
     \\    color: var(--t2); font-weight: var(--w-m); white-space: nowrap; text-decoration: none; }
     \\  .c-site .links > a:hover { background: var(--ctl-bg-2); color: var(--text); }
     \\  .c-site .links > a[aria-current="page"] { color: var(--text); background: var(--ctl-bg); }
-    \\  .c-site .bar > :not(.logo, .links, .menu, .c-sitemenu) { margin-left: auto; max-width: 300px; flex: 1; }
+    \\  .c-site .bar > :not(.logo, .links, .acct, .menu, .c-sitemenu) { margin-left: auto; max-width: 300px; flex: 1; }
+    \\  .c-site .bar > .acct { display: flex; align-items: center; flex: none; height: var(--ctl); max-width: 160px;
+    \\    padding: 0 var(--sp-3); box-sizing: border-box; border: 1px solid var(--ctl-line); border-radius: var(--r-ctl);
+    \\    background: var(--ctl-bg); color: var(--text); font-weight: var(--w-m); text-decoration: none;
+    \\    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    \\  .c-site .bar > .acct:hover { background: var(--ctl-bg-2); }
+    \\  .c-site .bar > .links + .acct { margin-left: auto; }
     \\  .c-site .menu { display: none; flex: none; }
-    \\  @container site (min-width: 861px) and (max-width: 1060px) {
+    \\  @container site (min-width: 861px) and (max-width: 1160px) {
     \\    .c-site .bar:has(.links > a[href$=tester]) > [role="search"]:not(:focus-within) { flex: 0 0 var(--ctl); }
     \\    .c-site .bar:has(.links > a[href$=tester]) > [role="search"]:not(:focus-within) > input { padding: 0; color: transparent; }
     \\    .c-site .bar:has(.links > a[href$=tester]) > [role="search"]:not(:focus-within) > input::placeholder { color: transparent; }
@@ -219,10 +237,10 @@ pub const css =
     \\  .c-site .menu svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
     \\  @container site (max-width: 860px) {
     \\    .c-site > .bar { gap: var(--sp-2); }
-    \\    .c-site .links { display: none; }
-    \\    .c-site .bar > :not(.logo, .links, .menu, .c-sitemenu) { max-width: none; }
+    \\    .c-site .links, .c-site .bar > .acct { display: none; }
+    \\    .c-site .bar > :not(.logo, .links, .acct, .menu, .c-sitemenu) { max-width: none; }
     \\    .c-site .menu { display: inline-flex; margin-left: auto; }
-    \\    .c-site .bar > :not(.logo, .links, .menu, .c-sitemenu) + .menu { margin-left: 0; }
+    \\    .c-site .bar > :not(.logo, .links, .acct, .menu, .c-sitemenu) + .menu { margin-left: 0; }
     \\    .c-site input { font-size: var(--fs-l); }
     \\  }
     \\  .c-sitemenu { margin: 0; position: fixed; inset: calc(var(--header) + 4px) var(--sp-2) auto auto;
@@ -234,6 +252,8 @@ pub const css =
     \\    border-radius: var(--r-ctl); color: var(--t2); font-weight: var(--w-m); text-decoration: none; }
     \\  .c-sitemenu > a:hover { background: var(--ctl-bg-2); color: var(--text); }
     \\  .c-sitemenu > a[aria-current="page"] { background: var(--sel-bg); color: var(--sel-ink); }
+    \\  .c-sitemenu > .acct { margin-top: 2px; border-top: 1px solid var(--line); border-radius: 0 0 var(--r-ctl) var(--r-ctl);
+    \\    color: var(--text); }
     \\  .c-sitemenu > .lab { padding: var(--sp-2) 12px 2px; margin-top: 2px; border-top: 1px solid var(--line);
     \\    font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
     \\  .c-sitefoot { margin-top: var(--sp-5); border-top: 1px solid var(--line); font-size: var(--fs-s); color: var(--faint); }

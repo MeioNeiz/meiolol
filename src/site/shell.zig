@@ -37,7 +37,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         \\{robots}{canonical}</head>
         \\<body class="ui">
         \\{header}
-        \\{look}{remember}{meio_view}{admin}
+        \\{look}{remember}{meio_view}{admin}{account}
         \\{subbar}{login}{banner}<main class="{main}">
         \\
     , .{
@@ -60,6 +60,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         .remember = if (p.view) |v| tpl.t("<script data-v=\"{v}\">" ++ remember ++ "</script>\n", .{ .v = v.query() }) else null,
         .meio_view = tpl.when(p.view == null, tpl.trusted(meio_view)),
         .admin = tpl.when(p.private == null, tpl.trusted(admin_link)),
+        .account = tpl.trusted(account_link),
         // After the subbar, whose admin tabs it shows
         .login = if (p.private) |pr| tpl.trusted(if (adminOnly(pr)) admin_mark else private_mark) else null,
         .banner = tpl.when(!p.public and p.private == null, Preview{}),
@@ -68,7 +69,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
 }
 
 /// The page's CSP (csp.zig): the inline scripts here; its <style> is added at delivery
-const csp_meta = csp.meta(&.{ search_loader, admin_link, private_mark, admin_mark, meio_view, "<script>" ++ remember ++ "</script>" }, &.{});
+const csp_meta = csp.meta(&.{ search_loader, admin_link, account_link, private_mark, admin_mark, meio_view, "<script>" ++ remember ++ "</script>" }, &.{});
 
 /// Its view (data-v): the hash is one for every view
 const remember = "try{localStorage.setItem(\"view\",document.currentScript.dataset.v)}catch(e){}";
@@ -108,6 +109,7 @@ const SiteHeader = struct {
             .links = if (p.private != null) &links else links[0..nav_items.len],
             .more = &more,
             .search = look,
+            .signed_in = p.private != null,
         });
         if (h.oom) return error.WriteFailed;
         try ui.html.write(&t, t.root, w);
@@ -152,6 +154,13 @@ const admin_link =
     \\<script>try{const r=localStorage.getItem("login");if(r=="tester"||r=="admin"){const ls=[["/private/tester","Draft tester"]];if(r=="admin")ls.push(["/admin","Admin"]);
     \\for(const n of document.querySelectorAll("header .links,header .c-sitemenu"))for(const[h,t]of ls){const a=document.createElement("a");a.href=h;a.textContent=t;n.insertBefore(a,n.querySelector(":scope>.lab"))}
     \\const c=document.createElement("link");c.rel="stylesheet";c.href="/private/pv.css";const s=document.createElement("script");s.src="/private/pv.js";s.dataset.wasm="/private/pv.wasm";document.head.append(c,s)}}catch(e){}</script>
+    \\
+;
+
+/// The header's Log in or Account link as the signed-in username, which the account
+/// island stores on sign-in and clears on sign-out (ui/wasm/account.zig shown_as)
+const account_link =
+    \\<script>try{const u=localStorage.getItem("account");if(u)for(const a of document.querySelectorAll("header a.acct")){a.href="/account";a.textContent=u;a.title=u}}catch(e){}</script>
     \\
 ;
 

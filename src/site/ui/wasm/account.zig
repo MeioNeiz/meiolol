@@ -24,6 +24,9 @@ var me: Held(ac.Me) = .{};
 var devices: Held(ac.Devices) = .{};
 
 const login_again = "/login?next=/account";
+/// The signed-in username, for the header's Log in link (ui.site); empty once signed out.
+/// The session cookie is HttpOnly, so pages can't see it
+const shown_as = "account";
 
 export fn main() void {
     dom.start();
@@ -139,14 +142,18 @@ fn done(ctx: i32, status: u16, bytes: ?[]u8) void {
     const b = bytes orelse &none;
     var kept = false;
     defer if (!kept and b.len > 0) gpa.free(b);
-    if (status == 401 and page.kind == .account) return go(login_again);
+    if (status == 401 and page.kind == .account) {
+        go(login_again);
+        return dom.store(shown_as, "");
+    }
     switch (c) {
         .send => {
             if (page.answered(status, b)) {
                 kept = true;
                 var q: [512]u8 = undefined;
                 const m = me.set(b) orelse return go("/");
-                return go(acct.next(location("search", &q), m.*));
+                go(acct.next(location("search", &q), m.*));
+                return dom.store(shown_as, m.username);
             }
         },
         .me => if (status == 200) {
@@ -166,7 +173,11 @@ fn done(ctx: i32, status: u16, bytes: ?[]u8) void {
             page.devices_at = .down;
         },
         .revoke => get(.devices, "/auth/devices.bin"),
-        .logout => return go("/login"),
+        .logout => {
+            go("/login");
+            return dom.store(shown_as, "");
+        },
     }
     render();
+    if (c == .me) if (page.me) |m| dom.store(shown_as, m.username);
 }
