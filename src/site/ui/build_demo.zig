@@ -14,10 +14,8 @@ fn r(id: u32, comptime path: []const u8, comptime name: []const u8, games: u32, 
     return .{ .id = id, .art = art.rune(path, name), .games = games, .wins = wins(games, pct) };
 }
 
-const cdragon = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/statmods/";
-
 fn shard(id: u32, comptime icon: []const u8, comptime name: []const u8, games: u32, pct: f64) Rune {
-    return .{ .id = id, .art = .{ .name = name, .src = cdragon ++ icon ++ ".png" }, .games = games, .wins = wins(games, pct) };
+    return .{ .id = id, .art = .{ .name = name, .src = "/dd/img/perk-images/StatMods/" ++ icon ++ ".png" }, .games = games, .wins = wins(games, pct) };
 }
 
 const precision: runetree.Tree = .{ .id = 8000, .art = art.rune("7201_Precision", "Precision"), .rows = &.{
@@ -44,9 +42,9 @@ const resolve: runetree.Tree = .{ .id = 8400, .art = art.rune("7204_Resolve", "R
 pub const runes: runetree.Data = .{
     .trees = &.{ precision, sorcery, resolve },
     .shards = &.{
-        &.{ shard(5008, "statmodsadaptiveforceicon", "Adaptive force", 957, 48.3), shard(5005, "statmodsattackspeedicon", "Attack speed", 26335, 50.0), shard(5007, "statmodscdrscalingicon", "Ability haste", 45, 50) },
-        &.{ shard(5008, "statmodsadaptiveforceicon", "Adaptive force", 26286, 50.0), shard(5010, "statmodsmovementspeedicon", "Move speed", 881, 48.6), shard(5001, "statmodshealthplusicon", "Health scaling", 170, 51.2) },
-        &.{ shard(5011, "statmodshealthscalingicon", "Health", 3210, 51.3), shard(5013, "statmodstenacityicon", "Tenacity and slow resist", 1217, 51.9), shard(5001, "statmodshealthplusicon", "Health scaling", 22910, 49.6) },
+        &.{ shard(5008, "StatModsAdaptiveForceIcon", "Adaptive force", 957, 48.3), shard(5005, "StatModsAttackSpeedIcon", "Attack speed", 26335, 50.0), shard(5007, "StatModsCDRScalingIcon", "Ability haste", 45, 50) },
+        &.{ shard(5008, "StatModsAdaptiveForceIcon", "Adaptive force", 26286, 50.0), shard(5010, "StatModsMovementSpeedIcon", "Move speed", 881, 48.6), shard(5001, "StatModsHealthPlusIcon", "Health scaling", 170, 51.2) },
+        &.{ shard(5011, "StatModsHealthScalingIcon", "Health", 3210, 51.3), shard(5013, "StatModsTenacityIcon", "Tenacity and slow resist", 1217, 51.9), shard(5001, "StatModsHealthPlusIcon", "Health scaling", 22910, 49.6) },
     },
     .games = 27320,
     .wins = 13633,

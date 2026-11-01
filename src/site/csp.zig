@@ -30,8 +30,8 @@ const style_elem = "style-src-elem 'self'";
 fn policy(comptime scripts: []const []const u8, comptime styles: []const []const u8) []const u8 {
     return "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'" ++ hashes(&.{trusted_types}, "script") ++ hashes(scripts, "script") ++
         "; style-src 'self' 'unsafe-inline'; " ++ style_elem ++ hashes(styles, "style") ++
-        "; style-src-attr 'unsafe-inline'; img-src 'self' data: https://ddragon.leagueoflegends.com" ++
-        " https://raw.communitydragon.org; require-trusted-types-for 'script'; trusted-types default";
+        "; style-src-attr 'unsafe-inline'; img-src 'self' data: https://ddragon.leagueoflegends.com;" ++
+        " require-trusted-types-for 'script'; trusted-types default";
 }
 
 const trusted_types =

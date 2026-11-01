@@ -278,20 +278,22 @@ fn orderU32(key: u32, item: u32) std.math.Order {
     return std.math.order(key, item);
 }
 
-const shard_icons = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/statmods/";
+/// Where the site serves Data Dragon's cdn/img/perk-images/StatMods/ (ui.art.local's form)
+const shard_icons = "/dd/img/perk-images/StatMods/";
 
-/// Stat shards are not in runesReforged.json; ids as match-v5 reports them, icons from
-/// CommunityDragon (its perks.json pairs 5001 with the "plus" icon and 5011 with "scaling")
+/// Stat shards are not in runesReforged.json; ids as match-v5 reports them, icons in Data
+/// Dragon's StatMods folder by CommunityDragon's perks.json, which pairs 5001 with the
+/// "plus" icon and 5011 with "scaling"
 pub const shards = [_]Named{
-    .{ .id = 5001, .name = "Health scaling", .icon = shard_icons ++ "statmodshealthplusicon.png" },
-    .{ .id = 5002, .name = "Armor" },
-    .{ .id = 5003, .name = "Magic resist" },
-    .{ .id = 5005, .name = "Attack speed", .icon = shard_icons ++ "statmodsattackspeedicon.png" },
-    .{ .id = 5007, .name = "Ability haste", .icon = shard_icons ++ "statmodscdrscalingicon.png" },
-    .{ .id = 5008, .name = "Adaptive force", .icon = shard_icons ++ "statmodsadaptiveforceicon.png" },
-    .{ .id = 5010, .name = "Move speed", .icon = shard_icons ++ "statmodsmovementspeedicon.png" },
-    .{ .id = 5011, .name = "Health", .icon = shard_icons ++ "statmodshealthscalingicon.png" },
-    .{ .id = 5013, .name = "Tenacity and slow resist", .icon = shard_icons ++ "statmodstenacityicon.png" },
+    .{ .id = 5001, .name = "Health scaling", .icon = shard_icons ++ "StatModsHealthPlusIcon.png" },
+    .{ .id = 5002, .name = "Armor", .icon = shard_icons ++ "StatModsArmorIcon.png" },
+    .{ .id = 5003, .name = "Magic resist", .icon = shard_icons ++ "StatModsMagicResIcon.png" },
+    .{ .id = 5005, .name = "Attack speed", .icon = shard_icons ++ "StatModsAttackSpeedIcon.png" },
+    .{ .id = 5007, .name = "Ability haste", .icon = shard_icons ++ "StatModsCDRScalingIcon.png" },
+    .{ .id = 5008, .name = "Adaptive force", .icon = shard_icons ++ "StatModsAdaptiveForceIcon.png" },
+    .{ .id = 5010, .name = "Move speed", .icon = shard_icons ++ "StatModsMovementSpeedIcon.png" },
+    .{ .id = 5011, .name = "Health", .icon = shard_icons ++ "StatModsHealthScalingIcon.png" },
+    .{ .id = 5013, .name = "Tenacity and slow resist", .icon = shard_icons ++ "StatModsTenacityIcon.png" },
 };
 
 /// The shard page's rows (offense, flex, defense), left to right as in game

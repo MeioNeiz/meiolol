@@ -283,7 +283,7 @@ fn makeIcons(c: *Cmd, db: store.Db, out_dir: ?[]const u8, patch: ?[]const u8) vo
             std.log.warn("art: {s}: {t}", .{ p, err });
             continue;
         };
-        for ([_][]const main.ddragon.Named{ d.items, d.spells, d.runes }) |list| for (list) |x| {
+        for ([_][]const main.ddragon.Named{ d.items, d.spells, d.runes, &main.ddragon.shards }) |list| for (list) |x| {
             if (std.mem.startsWith(u8, x.icon, "/dd/")) paths.append(c.arena, x.icon) catch return;
         };
     }
