@@ -21,13 +21,17 @@ const Page = struct {
     i: *island.Island(P, Fake) = undefined,
 
     fn init(p: *Page, fragment: []const u8) !void {
+        try p.initData(fragment, &demo.darius);
+    }
+
+    fn initData(p: *Page, fragment: []const u8, data: *const bp.Data) !void {
         p.* = .{ .arena = .init(testing.allocator) };
         const a = p.arena.allocator();
         p.fake = .{ .a = a };
         try p.fake.fragment.appendSlice(a, fragment);
         p.rt = .init(a, &p.fake);
-        try p.server.init(a, &demo.darius);
-        try p.state.init(a, &demo.darius);
+        try p.server.init(a, data);
+        try p.state.init(a, data);
         const t = try a.create(tree.Tree);
         t.* = .{};
         var h: tree.H = .init(a, t);
@@ -261,4 +265,38 @@ test "rune pages light their runes; a tapped rune fills the readout; Every tree 
     try testing.expect(try p.has(">Chosen page</button>"));
     // Rune taps leave the URL alone
     try testing.expectEqualStrings("", p.fake.fragment.items);
+}
+
+test "a page whose keystone has a build locks on tap: every cell its players', a chip unlocks" {
+    var p: Page = undefined;
+    try p.initData("", &demo.darius_locked);
+    defer p.deinit();
+    // Arcane Comet's page has no build of its own: it only lights
+    p.click(p.nth("class", "ks", 0));
+    try testing.expect(!try p.has("data-lock"));
+    try testing.expectEqualStrings("", p.fake.fragment.items);
+    // Conqueror's locks: Treads lead Boots, no boots named, the chip with its players
+    p.click(p.nth("class", "ks", 1));
+    try testing.expect(try p.has("data-lock"));
+    try testing.expectEqualStrings("#k=8010", p.fake.fragment.items);
+    const boots = cellOf(try p.shown(), "boots");
+    try testing.expect(inOrder(boots, &.{ "Mercury", "Plated", "No boots</span>" }));
+    try testing.expect(try p.has("11,053 games"));
+    try testing.expect(!try p.has("data-k=\"core\""));
+    // The × unlocks: every player's again
+    p.click(p.nth("class", "c-chip", 0));
+    try testing.expect(!try p.has("data-lock"));
+    try testing.expect(inOrder(cellOf(try p.shown(), "boots"), &.{ "Plated", "Mercury" }));
+    try testing.expectEqualStrings("#", p.fake.fragment.items);
+    // A second tap on the locked page unlocks it too
+    p.click(p.nth("class", "ks", 2));
+    try testing.expect(try p.has("data-lock"));
+    p.click(p.nth("class", "ks", 2));
+    try testing.expect(!try p.has("data-lock"));
+    p.deinit();
+
+    try p.initData("#k=8010", &demo.darius_locked);
+    try testing.expectEqual(@as(u32, 0), p.fake.warnings);
+    try testing.expect(try p.has("data-lock"));
+    try testing.expect(inOrder(cellOf(try p.shown(), "boots"), &.{ "Mercury", "Plated" }));
 }

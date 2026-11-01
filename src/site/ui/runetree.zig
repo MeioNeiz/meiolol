@@ -3,7 +3,9 @@
 //! games; the figures' names said once. Win rates are coloured against their row's (a
 //! row is one choice), none under bp.rate_games, faded under bp.solid_games. The top rune
 //! pages sit above as cards; the chosen one lights its runes. In a narrow container the
-//! trees fold to the chosen page's (Every tree opens the rest). Tap a rune: its name and
+//! trees fold to the chosen page's (Every tree opens the rest). A page whose keystone
+//! the host has builds for (locks) locks on tap, and the host shows the rest of the build
+//! for that keystone; a second tap unlocks. Tap a rune: its name and
 //! figures in the readout line. On a matchup's, ▲▼ after a share the matchup moved from
 //! the champion's usual. An island part: a host embeds it and re-renders on its
 //! events
@@ -87,6 +89,10 @@ pub const RuneTree = struct {
     page: ?u8 = 0,
     /// Every tree, when folded to the chosen page's
     all: bool = false,
+    /// Keystones the host has the rest of the build for: their pages lock on tap
+    locks: []const u32 = &.{},
+    /// The chosen page is locked (its keystone in locks)
+    lock: bool = false,
     /// The rune in the readout
     rune: ?Pos = null,
     /// Unique on the page
@@ -95,15 +101,49 @@ pub const RuneTree = struct {
     pub const Msg = union(enum) { page: u8, all, rune: u16 };
 
     pub fn update(t: *RuneTree, m: Msg, ev: *tree.Event) void {
-        _ = ev;
         switch (m) {
-            .page => |i| t.page = if (t.page == i) null else i,
+            .page => |i| {
+                if (i < t.data.pages.len and t.lockable(t.data.pages[i].v[1])) {
+                    t.lock = !(t.page == i and t.lock);
+                    t.page = i;
+                    ev.push = true;
+                } else {
+                    t.page = if (t.page == i) null else i;
+                    if (t.lock) ev.push = true;
+                    t.lock = false;
+                }
+            },
             .all => t.all = !t.all,
             .rune => |p| {
                 const pos: Pos = @bitCast(p);
                 t.rune = if (t.rune != null and @as(u16, @bitCast(t.rune.?)) == p) null else pos;
             },
         }
+    }
+
+    fn lockable(t: *const RuneTree, keystone: u32) bool {
+        return std.mem.findScalar(u32, t.locks, keystone) != null;
+    }
+
+    /// The locked page's keystone
+    pub fn locked(t: *const RuneTree) ?u32 {
+        return if (t.lockedPage()) |p| p.v[1] else null;
+    }
+
+    pub fn lockedPage(t: *const RuneTree) ?Page {
+        return if (t.lock) t.chosen() else null;
+    }
+
+    /// Locks the page with `keystone` (most played first), or unlocks on null or none
+    pub fn lockOn(t: *RuneTree, keystone: ?u32) void {
+        t.lock = false;
+        const k = keystone orelse return;
+        if (!t.lockable(k)) return;
+        for (t.data.pages, 0..) |p, i| if (p.v[1] == k) {
+            t.page = @intCast(i);
+            t.lock = true;
+            return;
+        };
     }
 
     fn chosen(t: *const RuneTree) ?Page {
@@ -152,7 +192,7 @@ pub const RuneTree = struct {
 
     fn pageCard(t: *RuneTree, h: *H, p: Page, i: u8) N {
         const share = 100 * @as(f64, @floatFromInt(p.games)) / @as(f64, @floatFromInt(@max(t.data.games, 1)));
-        return h.div(.{ .class = "page", .key = i, .data_state = if (p.games < bp.solid_games) "thin" else null }, .{
+        return h.div(.{ .class = "page", .key = i, .data_state = if (p.games < bp.solid_games) "thin" else null, .data_lock = t.lock and t.page == i }, .{
             h.button(.{
                 .type = "button",
                 .class = "ks",
@@ -273,6 +313,7 @@ pub const css =
     \\  .c-runes .page > .ks > .c-art + .c-art { --sz: 18px; }
     \\  .c-runes .page:hover { background: var(--panel-2); }
     \\  .c-runes .page:has(> .ks[aria-pressed="true"]) { border-color: var(--sel-line); background: var(--accent-bg); }
+    \\  .c-runes .page[data-lock] { border-color: var(--focus); box-shadow: inset 0 0 0 1px var(--focus); }
     \\  .c-runes .page > .ks { all: unset; display: flex; align-items: center; gap: 2px; grid-row: span 2; cursor: pointer; }
     \\  .c-runes .page > .ks::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
     \\  .c-runes .page > .ks:focus-visible::after { outline: 2px solid var(--focus); }

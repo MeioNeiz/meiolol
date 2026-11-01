@@ -18,8 +18,8 @@ const min_tree_share = 0.02;
 const pages_shown = 4;
 
 /// `b` (a File.Build of `f`) as the panel's data, in `a`, with its runes against melee
-/// and ranged lane opponents and its items ahead and behind on gold when the file has
-/// them. `champion`: its name
+/// and ranged lane opponents, its items ahead and behind on gold and the build of each
+/// rune page's keystone when the file has them. `champion`: its name
 pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8) !bp.Data {
     var d = try dataVs(a, f, b, champion, null);
     const melee = f.getReach(b.champion, b.role, .melee);
@@ -42,6 +42,19 @@ pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []con
         } else .{ .slots = &.{}, .games = 0, .wins = 0 };
         d.lead = lead;
     }
+    var locks: std.ArrayList(bp.Lock) = .empty;
+    for (d.runes.pages) |page| {
+        const k = page.v[1];
+        for (locks.items) |l| {
+            if (l.keystone == k) break;
+        } else if (f.getKeystone(b.champion, b.role, k)) |x| try locks.append(a, .{
+            .keystone = k,
+            .slots = (try dataVs(a, f, x, "", null)).slots,
+            .games = x.games,
+            .wins = x.wins,
+        });
+    }
+    d.keystones = locks.items;
     return d;
 }
 

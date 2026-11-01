@@ -1,4 +1,4 @@
-# Contextual builds (design note, not built)
+# Contextual builds (design note; keystone lock built, the rest not)
 
 Jacob (builds.md answers 2): choosing a rune or one or more items filters the rest of
 the BuildPanel to games with that choice ("with Conqueror, what do people buy"), as
@@ -88,7 +88,10 @@ same cost, so no list to choose. The panel says the context's games; under rate_
 - Rune pages (Jacob 27 Oct, site note 31): a tap on a page card is the main way in:
   it locks that page and the rest of the panel, then the page's other blocks
   (matchups, trends), follow it. He expects the models to help: a thin condition
-  borrows from the unfiltered panel (E6's shrink) rather than showing raw small counts
+  borrows from the unfiltered panel (E6's shrink) rather than showing raw small counts.
+  Built as a first step without rows: builds.by_keystone (A's single condition, keystone
+  only), a page card tap locks its keystone (chip with ×, `#k=`); the rows design
+  replaces its data, not the UI
 
 ## Cost per web round
 

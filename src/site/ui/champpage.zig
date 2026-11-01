@@ -900,6 +900,8 @@ pub const Build = struct {
         rank: Rank = .plat,
         slot: ?buildpanel.Kind = null,
         order: buildpanel.Order = .pick,
+        /// The locked keystone (BuildPanel's)
+        k: ?u32 = null,
     };
 
     /// The shown rank's build of the role, else the base one
@@ -929,6 +931,7 @@ pub const Build = struct {
             .rank = w.rank,
             .slot = if (b) |x| x.open else null,
             .order = if (b) |x| x.order else p.order,
+            .k = if (b) |x| x.runes.locked() else null,
         };
     }
 
@@ -937,7 +940,7 @@ pub const Build = struct {
         p.files.want = .of(u);
         p.cur = roleIndex(p.data.roles, u.role);
         p.order = u.order;
-        if (p.panel()) |b| b.fromUrl(.{ .slot = u.slot, .order = u.order });
+        if (p.panel()) |b| b.fromUrl(.{ .slot = u.slot, .order = u.order, .k = u.k });
     }
 
     /// The loader's, once what files.want needs is in: the open slot stays open

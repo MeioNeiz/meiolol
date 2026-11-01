@@ -99,8 +99,8 @@ pub const Options = struct {
     /// Matchups (champion, role and lane opponent) written: those with this many games
     /// or more; null for none
     min_matchup_games: ?u32 = null,
-    /// By the lane opponent's reach or the gold lead on them: groups with this many
-    /// players; under it the panel shows no win rate (ui.buildpanel.rate_games)
+    /// By the lane opponent's reach, the gold lead on them or the keystone: groups with
+    /// this many players; under it the panel shows no win rate (ui.buildpanel.rate_games)
     min_split_games: u32 = 100,
 };
 
@@ -138,6 +138,9 @@ pub const File = struct {
     /// By the gold lead on the lane opponent at 14 minutes (opponent: leadKey), sorted
     /// as matchups; only lead_kinds. Empty in files from before 30 Oct 2026
     by_lead: []const Build = &.{},
+    /// By keystone (opponent: the keystone's id), sorted as matchups; only
+    /// keystone_kinds. Empty in files from before 2 Nov 2026
+    by_keystone: []const Build = &.{},
     /// Per kind, k: the games that pull an option's win rate halfway to its slot's, so a
     /// few lucky games can't make an option look best (spreadK). Empty in files before
     /// 21 Oct 2026
@@ -205,6 +208,12 @@ pub const File = struct {
         return f.by_lead[i];
     }
 
+    pub fn getKeystone(f: *const File, champion: u32, role: Role, keystone: u32) ?Build {
+        const key: BuildKey = .{ .champion = champion, .role = role, .opponent = keystone };
+        const i = std.sort.binarySearch(Build, f.by_keystone, key, BuildKey.order) orelse return null;
+        return f.by_keystone[i];
+    }
+
     pub fn parse(arena: std.mem.Allocator, bytes: []const u8) !File {
         return std.json.parseFromSliceLeaky(File, arena, bytes, .{ .ignore_unknown_fields = true });
     }
@@ -237,8 +246,11 @@ fn reachKey(r: ddragon.BuildData.Reach) u16 {
 
 /// Kinds counted by the gold lead: the items bought once lanes have a lead
 pub const lead_kinds = [_]Kind{ .boots, .core2, .core3, .item4, .item5, .item6 };
-/// Options written per kind and lead
+/// Options written per kind in a lead or keystone group
 const lead_rows = 6;
+/// Kinds counted by keystone: the rest of the build once a rune page is locked
+pub const keystone_kinds = [_]Kind{ .spells, .start, .boots, .core2, .core3, .item4, .item5, .item6, .skills, .skill_path };
+
 /// Ahead or behind by this much total gold at 14 minutes; between, in neither. In a
 /// 650k-player snapshot about two in three lane opponents were 500 or more apart
 pub const lead_gold = 500;
@@ -290,14 +302,16 @@ pub const Builder = struct {
     reach: ?*Builder = null,
     /// By the gold lead on the lane opponent; owned
     lead: ?*Builder = null,
-    /// Reach and lead groups below this many players are left out of the file
+    /// By keystone; owned
+    keystone: ?*Builder = null,
+    /// Reach, lead and keystone groups below this many players are left out of the file
     min_split_games: u32 = 0,
     /// What this builder counts apart: everything role-wide, per opponent
     /// (Player.opponent, 0 skipped) matchup_kinds, by the opponent's reach reach_kinds,
-    /// or by the gold lead lead_kinds
+    /// by the gold lead lead_kinds, or by keystone keystone_kinds
     split: Split = .none,
 
-    pub const Split = enum { none, opponent, reach, lead };
+    pub const Split = enum { none, opponent, reach, lead, keystone };
 
     pub fn deinit(b: *Builder) void {
         b.options.deinit(b.gpa);
@@ -305,7 +319,7 @@ pub const Builder = struct {
         b.minutes.deinit(b.gpa);
         b.first_item.deinit(b.gpa);
         b.firsts.deinit(b.gpa);
-        for ([_]?*Builder{ b.vs, b.reach, b.lead }) |sub| if (sub) |v| {
+        for ([_]?*Builder{ b.vs, b.reach, b.lead, b.keystone }) |sub| if (sub) |v| {
             v.deinit();
             b.gpa.destroy(v);
         };
@@ -319,10 +333,10 @@ pub const Builder = struct {
         b.min_matchup_games = min_games;
     }
 
-    /// Starts counting the rune page by the lane opponent's reach and the items by the
-    /// gold lead on them
+    /// Starts counting the rune page by the lane opponent's reach, the items by the gold
+    /// lead on them and the rest of the build by keystone
     pub fn countSplits(b: *Builder, min_games: u32) !void {
-        for ([_]*?*Builder{ &b.reach, &b.lead }, [_]Split{ .reach, .lead }) |sub, split| {
+        for ([_]*?*Builder{ &b.reach, &b.lead, &b.keystone }, [_]Split{ .reach, .lead, .keystone }) |sub, split| {
             const v = try b.gpa.create(Builder);
             v.* = .{ .gpa = b.gpa, .max_keys = @max(b.max_keys / 4, 2), .split = split };
             sub.* = v;
@@ -337,6 +351,7 @@ pub const Builder = struct {
             .opponent => std.mem.findScalar(Kind, &matchup_kinds, kind) != null,
             .reach => std.mem.findScalar(Kind, &reach_kinds, kind) != null,
             .lead => std.mem.findScalar(Kind, &lead_kinds, kind) != null,
+            .keystone => std.mem.findScalar(Kind, &keystone_kinds, kind) != null,
         };
     }
 
@@ -421,6 +436,7 @@ pub const Builder = struct {
                 .opponent => "matchups: ",
                 .reach => "by reach: ",
                 .lead => "by lead: ",
+                .keystone => "by keystone: ",
             },
             b.floor,
             b.dropped_games,
@@ -432,12 +448,14 @@ pub const Builder = struct {
         if (b.vs) |v| if (p.opponent != 0) try v.addPlayer(p, chosen, d);
         if (b.reach) |v| if (p.opponent != 0) try v.addPlayer(p, chosen, d);
         if (b.lead) |v| if (leadOf(p.lead) != null) try v.addPlayer(p, chosen, d);
+        if (b.keystone) |v| if (p.keystone != 0) try v.addPlayer(p, chosen, d);
         const c: u16 = @intCast(p.champion);
         const opp: u16 = switch (b.split) {
             .none => 0,
             .opponent => @intCast(p.opponent),
             .reach => reachKey(d.reachOf(p.opponent) orelse return),
             .lead => leadKey(leadOf(p.lead) orelse return),
+            .keystone => std.math.cast(u16, p.keystone) orelse return,
         };
         if (b.split == .opponent and opp == 0) return;
         try b.total(.{ .champion = c, .role = p.role, .opponent = opp, .kind = null }, p.won);
@@ -494,6 +512,7 @@ pub const Builder = struct {
         const matchups = if (b.vs) |v| try v.fileBuilds(arena, &used, @min(rows, matchup_rows), b.min_matchup_games) else &.{};
         const by_reach = if (b.reach) |v| try v.fileBuilds(arena, &used, @min(rows, reach_pages), b.min_split_games) else &.{};
         const by_lead = if (b.lead) |v| try v.fileBuilds(arena, &used, @min(rows, lead_rows), b.min_split_games) else &.{};
+        const by_keystone = if (b.keystone) |v| try v.fileBuilds(arena, &used, @min(rows, lead_rows), b.min_split_games) else &.{};
         for (d.trees) |t| {
             try used[1].put(arena, t.id, {});
             for (t.slots) |slot| for (slot) |id| try used[1].put(arena, id, {});
@@ -520,6 +539,7 @@ pub const Builder = struct {
             .matchups = matchups,
             .by_reach = by_reach,
             .by_lead = by_lead,
+            .by_keystone = by_keystone,
             .shrink = try shrinks(arena, builds, matchups, d.trees),
         };
     }
@@ -1453,6 +1473,38 @@ test "builder: items by the gold lead at 14 minutes, nothing else" {
     try testing.expectEqualSlices(u32, &.{ 6631, 3053 }, bh.get(.core2).?.options[0].v);
     const back = try File.parse(arena, try std.json.Stringify.valueAlloc(arena, f, .{}));
     try testing.expectEqual(100, back.getLead(122, .top, .behind).?.games);
+}
+
+test "builder: the rest of the build by keystone, under 100 players left out" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const d = try testData(arena);
+    var b: Builder = .{ .gpa = testing.allocator, .max_keys = 64 };
+    defer b.deinit();
+    try b.countSplits(100);
+    var cleaver: Picks = .{ .core_len = 3 };
+    cleaver.core[0..3].* = .{ 6631, 3071, 3053 };
+    var sundered: Picks = .{ .core_len = 3 };
+    sundered.core[0..3].* = .{ 6631, 3053, 3071 };
+    // Darius top, 100 times over: Conqueror with Cleaver second (won), Grasp with Sterak's
+    // second; Phase Rush once
+    for (0..100) |_| for ([_]u32{ 8010, 8437 }, [_]Picks{ cleaver, sundered }, 0..) |keystone, k, i| {
+        try b.addPlayer(.{ .champion = 122, .role = .top, .won = i == 0, .keystone = keystone, .primary = 8000, .secondary = 8400, .spells = .{ 4, 12 }, .opponent = 86 }, k, &d);
+    };
+    try b.addPlayer(.{ .champion = 122, .role = .top, .won = true, .keystone = 8230, .opponent = 86 }, cleaver, &d);
+    const f = try b.file(arena, &d, "16.20", "PLATINUM", 3);
+    try testing.expectEqual(2, f.by_keystone.len);
+    const conq = f.getKeystone(122, .top, 8010).?;
+    try testing.expectEqual(100, conq.games);
+    try testing.expectEqual(100, conq.wins);
+    try testing.expectEqualSlices(u32, &.{ 6631, 3071, 3053 }, conq.get(.core3).?.options[0].v);
+    try testing.expectEqual(100, conq.get(.spells).?.games);
+    try testing.expectEqual(null, conq.get(.runes));
+    try testing.expectEqual(0, f.getKeystone(122, .top, 8437).?.wins);
+    try testing.expectEqual(null, f.getKeystone(122, .top, 8230));
+    const back = try File.parse(arena, try std.json.Stringify.valueAlloc(arena, f, .{}));
+    try testing.expectEqual(100, back.getKeystone(122, .top, 8437).?.games);
 }
 
 test "setOpponents: the gold lead on the one lane opponent" {

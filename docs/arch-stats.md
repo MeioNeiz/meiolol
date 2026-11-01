@@ -132,12 +132,12 @@ champion page's Objectives card, against the role's sum); role-wide only. Matchu
 every kind but keystone and skill_start. `by_reach`: the rune kinds (runes, shards, rune,
 shard) by the lane opponent's reach, melee under 300 base attack range (Data Dragon
 champion.json), groups of 100+ players (Options.min_split_games), 4 pages each.
-`by_lead`: the item kinds
-(boots, core2, core3, item4-6) of players 500+ gold ahead of or behind their lane
-opponent at 14 minutes (participants.gold14), groups of 100+, 6 options each. Needs Data
-Dragon's item.json,
+`by_lead`: the item kinds (boots, core2, core3, item4-6) of players 500+ gold ahead of or
+behind their lane opponent at 14 minutes (participants.gold14), groups of 100+, 6 options
+each. `by_keystone`: every kind but the rune ones per keystone (the champion page's
+locked rune page), groups of 100+, 6 options each. Needs Data Dragon's item.json,
 runesReforged.json and summoner.json for the patch (ddragon.buildData); stat shard names
-are a table in ddragon.zig.
+and their Data Dragon icons are a table in ddragon.zig.
 
 Memory: one hash map of distinct options (~50 B each) capped by --max-keys (default
 1M, ~60 MB); at the cap options at or under a rising count floor are dropped (logged),

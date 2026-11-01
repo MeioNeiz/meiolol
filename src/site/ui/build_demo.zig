@@ -161,3 +161,21 @@ pub const darius: bp.Data = .{
         } },
     },
 };
+
+/// `darius` with Conqueror's own build (its pages lock): Ignite and Treads lead, some
+/// skip boots
+pub const darius_locked: bp.Data = blk: {
+    var d = darius;
+    d.keystones = &.{.{ .keystone = 8010, .games = 11053, .wins = wins(11053, 50.4), .slots = &.{
+        .{ .kind = .spells, .games = 11053, .wins = wins(11053, 50.4), .options = &.{
+            named(&.{ flash, ignite }, "Flash Ignite", 6120, 51.0),
+            named(&.{ flash, ghost }, "Flash Ghost", 4810, 49.8),
+        } },
+        .{ .kind = .boots, .games = 10900, .wins = wins(10900, 50.3), .options = &.{
+            timed(&.{treads}, &.{13}, 5400, 50.9),
+            timed(&.{steelcaps}, &.{10}, 4800, 49.9),
+            o(&.{.{ .name = "No boots", .src = "" }}, 700, 47.0),
+        } },
+    } }};
+    break :blk d;
+};
