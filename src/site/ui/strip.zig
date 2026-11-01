@@ -72,7 +72,8 @@ pub const css =
     \\  .c-strip .lab { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
     \\  .c-strip .val { font-size: var(--fs-l); font-weight: var(--w-b); line-height: 1.25;
     \\    font-variant-numeric: tabular-nums; color: var(--c, var(--text)); white-space: nowrap; }
-    \\  .c-strip .val > small { font-size: var(--fs-s); font-weight: var(--w-r); color: var(--faint); margin-left: 4px; }
+    \\  .c-strip .val > small { font-size: var(--fs-s); font-weight: var(--w-r); color: var(--faint); }
+    \\  .c-strip .val > small::before { content: " "; }
     \\  .c-strip > .answer .val { font-size: var(--fs-xl); }
     \\  .c-strip > a:hover { text-decoration: none; }
     \\  .c-strip > a:hover .lab { color: var(--text); }
@@ -86,7 +87,7 @@ pub const css =
     \\  .c-strip > [data-press]:has(> [aria-pressed="true"]) { background: var(--sel-bg); box-shadow: inset 0 0 0 1px var(--sel-line); }
     \\  @container (max-width: 440px) {
     \\    .c-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
-    \\    .c-strip .val > small { display: block; margin-left: 0; line-height: 1.2; }
+    \\    .c-strip .val > small { display: block; line-height: 1.2; }
     \\    .c-strip > [data-press] { margin: 0; }
     \\    .c-strip:has(> [data-press]) > :not([data-press]) { padding: 4px var(--sp-2); }
     \\  }
