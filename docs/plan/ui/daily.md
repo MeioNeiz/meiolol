@@ -95,9 +95,12 @@ Daily Draft #14  ...                                                 [ResultStri
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- Result strip: the two marks as Badges (Pick ✗, Winner ✓), then the game line as a
-  StatStrip (winner, minutes, kills, gold; later towers and dragons). Replaces "Not this
-  time", the 3 tiles and the separate score card; the streak lives in the header
+- Result strip: the two marks as Badges saying what was judged ("✕ Leona was played",
+  "✓ You called the winner": a tick is a right guess, not a good pick), then the game
+  line as a StatStrip (winner, minutes, kills, gold; later towers and dragons). Replaces
+  "Not this time", the 3 tiles and the separate score card; the streak lives in the header.
+  "Rated" (board column, seat head) opens a tip: the model's place for the champion
+  played among those it rates for that seat
 - Board, grown: per seat Kda, CS, gold (StatCell count), damage as a neutral Bar; the
   seat's rating as "3rd" with a star when it is the model's pick; the hidden seat
   outlined. This is the Scoreboard in its versus variant (games session's component:

@@ -288,9 +288,9 @@ test "the hint: only while picking, fades the options it rules out, saved, costs
     s.update(.{ .winner = .blue }, &ev);
     try testing.expectEqual([2]bool{ true, true }, s.marks.?);
     const out = try render(a, &s);
-    try testing.expect(std.mem.find(u8, out, "Pick, with a hint") != null);
-    try testing.expect(std.mem.find(u8, out, "<span class=\"c-badge\">✓ Pick, with a hint") != null);
-    try testing.expect(std.mem.find(u8, out, "<span class=\"c-badge\" data-k=\"buff\">✓ Winner") != null);
+    try testing.expect(std.mem.find(u8, out, "<span class=\"c-badge\">✓ You guessed ") != null);
+    try testing.expect(std.mem.find(u8, out, ", with a hint</span>") != null);
+    try testing.expect(std.mem.find(u8, out, "<span class=\"c-badge\" data-k=\"buff\">✓ You called the winner") != null);
     const json = try dp.write(a, "", 11, s.saved(), "2026-10-27");
     try testing.expectEqualStrings("{\"11\":{\"opt\":0,\"side\":0,\"hint\":1,\"marks\":\"11\",\"on\":\"2026-10-27\"}}", json);
     var back: dp.Page = .init(a, &dp.pro);

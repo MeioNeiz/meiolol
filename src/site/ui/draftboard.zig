@@ -10,6 +10,7 @@
 //! damage mix. Learn's `question`: the full variant with none of the game's parts
 const std = @import("std");
 const tree = @import("tree.zig");
+const toggletip = @import("toggletip.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const badge = @import("badge.zig");
@@ -229,12 +230,13 @@ fn full(h: *H, b: Board, on: []const [2]?tree.Handler, comptime game: bool) N {
 }
 
 fn statHead(h: *H, side: Side) N {
+    const tip = toggletip.view(h, if (side == .us) "db-rated-us" else "db-rated-them", .{words.rated}, words.rated, words.rated_note);
     return h.span(.{ .class = "st", .data_side = side }, .{
         h.span(.{}, .{words.kda_h}),
         h.span(.{}, .{words.cs}),
         h.span(.{}, .{words.gold}),
         h.span(.{}, .{words.dmg}),
-        h.span(.{}, .{words.rated}),
+        h.span(.{}, .{&tip}),
     });
 }
 
@@ -408,6 +410,7 @@ const words = struct {
     const gold = plain("Gold");
     const dmg = plain("Dmg");
     const rated = plain("Rated");
+    const rated_note = plain("The model's place for the champion played, among those it rates for that seat: 1st is its top pick.");
 };
 
 pub const css =
@@ -729,7 +732,9 @@ test "full variant by hand: buttons from a short `on`, lane middles, a red win, 
     };
     try html.write(&t, fullOn(&h, b, &on), &out.writer);
     const s = out.written();
-    try std.testing.expectEqual(4, std.mem.count(u8, s, "<button"));
+    // Four seats from `on`, two "Rated" toggletips
+    try std.testing.expectEqual(6, std.mem.count(u8, s, "<button"));
+    try std.testing.expectEqual(2, std.mem.count(u8, s, "class=\"c-tt\""));
     try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Red Top, Jax\"") != null);
     try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Blue Jungle, Empty seat\"") != null);
     try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Red Jungle, Hidden pick, pick 10\"") != null);

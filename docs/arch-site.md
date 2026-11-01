@@ -209,9 +209,9 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   {opt, side, hint, marks, on}; Home reads marks). The hint is the played pick's trait
   that leaves the fewest options, two at least: melee or ranged (Options.ddragon_dir's
   championFull.json attackrange; none where form-changing) or AD or AP (Learn's magic
-  share); the options without it fade, and it costs the clean tick ("Pick, with a
-  hint"). Lane win chances show after the reveal; each side's damage mix is its seats'
-  magic shares, the hidden one unknown until then.
+  share); the options without it fade, and it costs the clean tick ("You guessed
+  Leona, with a hint"). Lane win chances show after the reveal; each side's damage mix
+  is its seats' magic shares, the hidden one unknown until then.
 - /daily/<n>: puzzle n's own page, the same island; none past tomorrow (UTC), so a
   viewer a day ahead of UTC can play theirs and later ones 404. Rendered on request under
   --static core (the renderer, from the shared view's daily files), written by --static

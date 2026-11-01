@@ -349,10 +349,15 @@ pub const Page = struct {
     fn result(s: *Page, h: *H) N {
         const r = s.p.result;
         const m = s.marks orelse return .none;
+        const who = s.champOf(dd.played(s.p)).name;
         return h.div(.{ .class = "res", .tabindex = @as(i8, -1), .data_ref = "res" }, .{
             // A hint costs the clean tick
-            badge.view(h, if (!m[0]) .nerf else if (s.hint) .neutral else .buff, .{ if (m[0]) "✓ " else "✕ ", if (s.hint) W.pick_hint else W.pick }),
-            badge.view(h, if (m[1]) .buff else .nerf, .{ if (m[1]) "✓ " else "✕ ", W.winner }),
+            // Says what was judged: a ✓ is the guess matching the game, not a good pick
+            badge.view(h, if (!m[0]) .nerf else if (s.hint) .neutral else .buff, .{
+                if (m[0]) "✓ " else "✕ ",
+                if (!m[0]) W.was_played.with(h, .{ .c = who }) else if (s.hint) W.guessed_hint.with(h, .{ .c = who }) else W.guessed.with(h, .{ .c = who }),
+            }),
+            badge.view(h, if (m[1]) .buff else .nerf, .{ if (m[1]) "✓ " else "✕ ", if (m[1]) W.called else W.missed }),
             h.span(.{ .class = "gl" }, .{
                 h.b(.{ .data_side = sideOf(r.winner) }, .{W.won.with(h, .{ .side = sideWord(r.winner).s, .t = r.secs })}),
                 pair(h, W.kills, r.kills[0], r.kills[1]),
@@ -549,9 +554,11 @@ const W = struct {
     const ranged = plain("Ranged");
     const melee = plain("Melee");
     const who_won = plain("Who won?");
-    const pick = plain("Pick");
-    const pick_hint = plain("Pick, with a hint");
-    const winner = plain("Winner");
+    const guessed = Phrase("You guessed {c:text}");
+    const guessed_hint = Phrase("You guessed {c:text}, with a hint");
+    const was_played = Phrase("{c:text} was played");
+    const called = plain("You called the winner");
+    const missed = plain("You missed the winner");
     const won = Phrase("{side:text} won · {t:time}");
     const kills = plain("kills");
     const gold = plain("gold");

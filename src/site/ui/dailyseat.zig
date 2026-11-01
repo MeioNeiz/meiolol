@@ -126,6 +126,7 @@ pub const Seat = struct {
             rest += 1;
         };
         const pick = dp.pickOf(p, t, x.champ);
+        const rated = toggletip.view(h, "ds-rated", .{W.rated}, W.rated, W.rated_note.with(h, .{ .c = s.champOf(x.champ).name, .n = x.of }));
         const head: [3]tree.Text = .{ W.chance.with(h, .{ .side = dp.sideWord(side).s }), W.with_, W.vs };
         return h.div(.{ .key = 1, .class = "seat" }, .{card.view(h, .{ .label = W.seat }, &.{
             // Kept across seats, so a screen reader hears which seat the panel now shows
@@ -138,6 +139,7 @@ pub const Seat = struct {
                     }),
                 }),
                 if (x.rank) |n| h.span(.{ .class = "of" }, .{
+                    h.span(.{}, .{&rated}),
                     h.b(.{}, .{W.nth.with(h, .{ .n = n, .s = draftboard.ordinal(n) })}),
                     h.span(.{}, .{W.of.with(h, .{ .n = x.of })}),
                 }) else null,
@@ -367,6 +369,8 @@ const W = struct {
     const where_pick = Phrase("{side:text} {r:text} · pick {n:int}");
     const nth = Phrase("{n:int}{s:text}");
     const of = Phrase("of {n:int}");
+    const rated = plain("Rated");
+    const rated_note = Phrase("The model's place for {c:text} among the {n:int} champions it rates for this seat: 1st is its top pick.");
     const yours = Phrase("Your pick {n:text}");
     const yours_tag = plain("your pick");
     const played = plain("played");
@@ -433,7 +437,7 @@ pub const css =
     \\  .c-dseat .more:hover { color: var(--text); background: var(--panel-2); }
     \\  .c-dseat .more:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
     \\  .c-dseat .of { display: grid; justify-items: end; font-size: var(--fs-xs); color: var(--muted); }
-    \\  .c-dseat .of b { font-size: var(--fs-l); color: var(--text); }
+    \\  .c-dseat .of > b { font-size: var(--fs-l); color: var(--text); }
     \\  .c-dseat .yours { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--t2); }
     \\  .c-dseat .none { color: var(--muted); font-size: var(--fs-s); }
     \\  .c-dseat .paper { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: center; }
