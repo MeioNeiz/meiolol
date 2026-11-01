@@ -172,3 +172,7 @@ Override the sections above where they differ.
 2. Note 60: a way to see every row together (read as: all roles in one table, with the
    Players violins). Now: under All, "By role | One table" beside the board's sort; the
    table sorts by its heads; in the URL as `whole=1`
+3. Note 77: the board's second figure read as a row count beside the rank. Now: each
+   role column has a head row naming its two figures (Win rate, then Influence or the
+   sorted column) in the table heads' style; the role head drops its champion count
+   (the column's "All N" carries it)

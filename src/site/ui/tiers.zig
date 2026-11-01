@@ -647,7 +647,8 @@ pub const Tiers = struct {
             }
             const to: Shown = @fromBackingInt(@intCast(k + 1));
             cols.add(h.div(.{ .key = k, .class = "col" }, .{
-                h.button(.{ .type = "button", .class = "rh", .on_click = h.on(t, .{ .role = to }) }, .{ role.view(h, r.ui(), .{ .s = .s }), h.b(.{}, .{r.name()}), h.span(.{ .class = "ct" }, .{order.len}) }),
+                h.button(.{ .type = "button", .class = "rh", .on_click = h.on(t, .{ .role = to }) }, .{ role.view(h, r.ui(), .{ .s = .s }), h.b(.{}, .{r.name()}) }),
+                h.div(.{ .class = "fh" }, .{ h.span(.{}, .{W.win}), h.span(.{}, .{t.secondLabel()}) }),
                 h.el(.ol, .{}, .{rows.done()}),
                 if (order.len > board_rows) h.button(.{ .type = "button", .class = "all", .on_click = h.on(t, .{ .role = to }) }, .{W.all_n.with(h, .{ .n = order.len })}) else null,
             }));
@@ -665,6 +666,15 @@ pub const Tiers = struct {
             5 => h.text(stat.figure(h, .rate, banOf(l)).s),
             6 => gamesCell(h, l),
             else => influenceCell(h, l),
+        };
+    }
+
+    fn secondLabel(t: *const T) tree.Text {
+        return switch (t.table.sort) {
+            4 => W.pick,
+            5 => W.ban,
+            6 => W.games,
+            else => W.influence,
         };
     }
 
@@ -782,15 +792,19 @@ pub const css =
     \\  .c-tiers .rb .rh:hover b { color: var(--accent); }
     \\  .c-tiers .rb .rh:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
     \\  .c-tiers .rb .rh > .c-role { color: var(--muted); }
-    \\  .c-tiers .rb .rh > .ct { margin-left: auto; color: var(--faint); font-variant-numeric: tabular-nums; }
+    \\  .c-tiers .rb :is(.fh, li > a) { display: grid; grid-template-columns: 18px 24px minmax(0, 1fr) 52px 70px; gap: var(--sp-2);
+    \\    align-items: center; padding: 0 var(--sp-3); }
+    \\  .c-tiers .rb .fh { height: 24px; border-bottom: 1px solid var(--line); font-size: var(--fs-xs); font-weight: var(--w-b);
+    \\    color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; text-align: right; }
+    \\  .c-tiers .rb .fh > span { justify-self: end; white-space: nowrap; }
+    \\  .c-tiers .rb .fh > :first-child { grid-column: 4; }
     \\  .c-tiers .rb ol { list-style: none; margin: 0; padding: 0; flex: 1; }
-    \\  .c-tiers .rb li > a { display: grid; grid-template-columns: 18px 24px minmax(0, 1fr) auto 44px; gap: var(--sp-2);
-    \\    align-items: center; height: 34px; padding: 0 var(--sp-3); color: inherit; border-bottom: 1px solid var(--line); }
+    \\  .c-tiers .rb li > a { height: 34px; color: inherit; border-bottom: 1px solid var(--line); }
     \\  .c-tiers .rb li > a:hover { background: var(--panel-2); text-decoration: none; }
     \\  .c-tiers .rb li > a:hover .nm { color: var(--accent); }
     \\  .c-tiers .rb .n { color: var(--faint); font-size: var(--fs-xs); text-align: right; font-variant-numeric: tabular-nums; }
     \\  .c-tiers .rb .nm { font-weight: var(--w-m); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    \\  .c-tiers .rb .c-stat { font-weight: var(--w-b); }
+    \\  .c-tiers .rb .c-stat { font-weight: var(--w-b); justify-self: end; }
     \\  .c-tiers .rb .sc { text-align: right; font-size: var(--fs-s); color: var(--muted); font-variant-numeric: tabular-nums; }
     \\  .c-tiers .rb .all { all: unset; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-s); color: var(--accent); cursor: pointer; }
     \\  .c-tiers .rb .all:hover { text-decoration: underline; }
