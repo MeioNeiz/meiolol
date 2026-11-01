@@ -54,6 +54,8 @@ pub const Champ = struct {
     pickup: Pickup = .usual,
     /// A bit per role it has lanes in (Role order): By role lists it there
     roles: u8 = 0,
+    /// Games it is banned in, ‰ of the view's
+    ban: u16 = 0,
 };
 
 /// A champion with a pool file
@@ -313,10 +315,10 @@ pub const css =
 pub const Demo = struct {
     pub const champs = [_]Champ{
         .{ .id = 30, .name = "Ahri", .key = "Ahri", .slug = "ahri", .roles = 0b00100 },
-        .{ .id = 1, .name = "Darius", .key = "Darius", .slug = "darius", .roles = 0b00001 },
+        .{ .id = 1, .name = "Darius", .key = "Darius", .slug = "darius", .roles = 0b00001, .ban = 92 },
         .{ .id = 4, .name = "Dr. Mundo", .key = "DrMundo", .slug = "drmundo", .roles = 0b00011 },
         .{ .id = 10, .name = "Fiora", .key = "Fiora", .slug = "fiora", .roles = 0b00001 },
-        .{ .id = 2, .name = "Garen", .key = "Garen", .slug = "garen", .pickup = .easier, .roles = 0b00001 },
+        .{ .id = 2, .name = "Garen", .key = "Garen", .slug = "garen", .pickup = .easier, .roles = 0b00001, .ban = 41 },
         .{ .id = 3, .name = "Jax", .key = "Jax", .slug = "jax", .pickup = .harder, .roles = 0b00011 },
         .{ .id = 20, .name = "Teemo", .key = "Teemo", .slug = "teemo", .roles = 0b00001 },
         .{ .id = 40, .name = "Vi", .key = "Vi", .slug = "vi", .roles = 0b00010 },

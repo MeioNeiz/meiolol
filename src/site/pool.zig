@@ -176,6 +176,7 @@ fn pageData(site: *const Site, p: *const pool.Pool) !page_ui.Data {
         .slug = ch.slug,
         .pickup = pickupOf(&site.learning, ch.id),
         .roles = rolesOf(site, ch),
+        .ban = permille(ch.banned, site.games),
     };
     var mains: std.ArrayList(page_ui.Main) = .empty;
     for (p.mains) |m| {
@@ -187,6 +188,11 @@ fn pageData(site: *const Site, p: *const pool.Pool) !page_ui.Data {
         try mains.append(a, .{ .c = @intCast(c), .role = champion.uiRole(r), .players = m.players });
     }
     return .{ .ddragon = site.ddragon_version, .champs = champs, .mains = mains.items, .view = @intCast(site.view.index()) };
+}
+
+fn permille(n: u64, of: u64) u16 {
+    if (of == 0) return 0;
+    return @intCast(@min(1000, (1000 * n + of / 2) / of));
 }
 
 /// A bit per role with a lanes file (ui.role.Role order)

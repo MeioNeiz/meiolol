@@ -73,10 +73,14 @@ const W = struct {
     pub const answered = plain("No lane your whole pool clearly loses");
     pub const alone = Phrase("{c:text} alone: one ban or counter-pick and you're off your pool");
     pub const covers = Phrase("covers {n:int}");
+    pub const banned = Phrase("One of them banned in {n:pct} of games");
+    pub const banned_one = Phrase("banned in {n:pct} of games");
 };
 
 /// No lane icons past this in a weak spot line
 const weak_shown = 5;
+/// Games a ban takes one of the role's champions in, ‰, before it is a weak spot
+const ban_clear = 50;
 
 fn Got(comptime T: type) type {
     return struct { id: u16 = 0, f: ?*const T = null, failed: bool = false };
@@ -228,8 +232,8 @@ pub const Page = struct {
     }
 
     /// What the whole pool shares in the role (note 50): lanes it has no answer to, by
-    /// how often they are met, and a role on one champion; each with its fix when the
-    /// role main's file has one
+    /// how often they are met, bans taking one of its champions often, and a role on one
+    /// champion; each with its fix when the role main's file has one
     fn weakSpots(p: *P, h: *H, r: Role, ids: []const u16, files: []const ?*const pd.LaneRole, lanes: []const Lane) N {
         var met: u64 = 0;
         for (files) |f| met += if (f) |x| x.games else 0;
@@ -261,9 +265,12 @@ pub const Page = struct {
                 p.coverFix(h, r, ids, none[0..n]),
             }));
         }
+        const banned = p.banExposure(ids);
+        if (ids.len > 1 and banned >= ban_clear) lines.add(p.bansLine(h, r, ids, banned));
         if (ids.len == 1) lines.add(h.el(.li, .{}, .{
             h.span(.{ .class = "wt" }, .{W.alone.with(h, .{ .c = pp.iconOf(p.d, h, ids[0]).name })}),
-            p.alsoFix(h, r, ids),
+            if (pctOf(banned) > 0) h.span(.{ .class = "m" }, .{W.banned_one.with(h, .{ .n = pctOf(banned) })}) else null,
+            p.optionFix(h, r, ids, .also),
         }));
         if (n_all == 0) lines.add(h.el(.li, .{ .data_ok = true }, .{if (thin > 0) W.unclear.with(h, .{ .n = thin }) else W.answered}));
         return h.div(.{ .class = "weak" }, .{ h.el(.h3, .{}, .{W.weak}), h.el(.ul, .{}, .{lines.done()}) });
@@ -294,20 +301,58 @@ pub const Page = struct {
         return h.span(.{ .class = "wt" }, .{ p.fix(h, r, f.cols[o.col].id), h.span(.{ .class = "m" }, .{W.covers.with(h, .{ .n = most })}) });
     }
 
-    /// What the role main's players also play most
-    fn alsoFix(p: *P, h: *H, r: Role, ids: []const u16) N {
+    /// Games a ban takes at least one of `ids` in, ‰; bans taken as independent, close
+    /// enough at these rates
+    fn banExposure(p: *const P, ids: []const u16) u32 {
+        var left: f32 = 1;
+        for (ids) |id| left *= 1 - @as(f32, @floatFromInt(p.banOf(id))) / 1000;
+        return @intFromFloat(@round(1000 * (1 - left)));
+    }
+
+    fn banOf(p: *const P, id: u16) u16 {
+        return if (pp.indexOf(p.d, id)) |c| p.d.champs[c].ban else 0;
+    }
+
+    /// The figure, then each champion a ban takes, most banned first
+    fn bansLine(p: *P, h: *H, r: Role, ids: []const u16, banned: u32) N {
+        var by: [pp.max]u16 = undefined;
+        @memcpy(by[0..ids.len], ids);
+        std.sort.insertion(u16, by[0..ids.len], @as(*const P, p), moreBanned);
+        var each = h.list();
+        for (by[0..ids.len]) |id| {
+            const b = pctOf(p.banOf(id));
+            if (b == 0) break;
+            each.add(h.span(.{ .class = "wt" }, .{
+                champ.view(h, pp.iconOf(p.d, h, id), .{ .px = .@"20" }),
+                h.span(.{ .class = "m" }, .{phrase.num(h, .pct, b)}),
+            }));
+        }
+        return h.el(.li, .{}, .{
+            h.span(.{ .class = "wt" }, .{ W.banned.with(h, .{ .n = pctOf(banned) }), each.done() }),
+            p.optionFix(h, r, ids, .banned),
+        });
+    }
+
+    fn moreBanned(p: *const P, a: u16, b: u16) bool {
+        return p.banOf(a) > p.banOf(b);
+    }
+
+    /// The role main's file's first option: what its players also play most, or what
+    /// stands in when it is banned
+    fn optionFix(p: *P, h: *H, r: Role, ids: []const u16, why: Why) N {
         const f = p.mainFile(r) orelse return .none;
         var buf: [1]pd.File.Option = undefined;
-        const os = f.options(ids, .also, &buf);
+        const os = f.options(ids, why, &buf);
         if (os.len == 0) return .none;
         return p.fix(h, r, f.cols[os[0].col].id);
     }
 
     fn fix(p: *P, h: *H, r: Role, id: u16) N {
         const c = pp.iconOf(p.d, h, id);
-        return h.button(.{ .type = "button", .class = "fix", .on_click = h.on(p, .{ .add = .{ .id = id, .role = r } }) }, .{
+        // The name shows, "+" before it (CSS): "Add Dr. Mundo" is over a label's 2 words
+        return h.button(.{ .type = "button", .class = "fix", .aria_label = W.add.with(h, .{ .c = c.name }), .on_click = h.on(p, .{ .add = .{ .id = id, .role = r } }) }, .{
             champ.view(h, c, .{ .px = .@"20", .named = false }),
-            W.add.with(h, .{ .c = c.name }),
+            c.name,
         });
     }
 
@@ -505,6 +550,11 @@ fn worstFirst(_: void, a: Lane, b: Lane) bool {
     return if (x != y) x < y else a.games > b.games;
 }
 
+/// ‰ to a whole %
+fn pctOf(permille: u32) u32 {
+    return (permille + 5) / 10;
+}
+
 /// Of the main's players, %
 fn share(f: *const pd.File, together: u32) ?f32 {
     if (f.players == 0) return null;
@@ -544,10 +594,11 @@ pub const css =
     \\  .c-poolgrid .weak .wt { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
     \\  .c-poolgrid .weak .ic { display: inline-flex; gap: 3px; }
     \\  .c-poolgrid .weak .m { color: var(--t2); font-size: var(--fs-xs); }
-    \\  .c-poolgrid .weak .fix { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 28px; padding: 0 var(--sp-2) 0 4px;
+    \\  .c-poolgrid .weak .fix { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 28px; padding: 0 var(--sp-2) 0 6px;
     \\    border: 1px solid var(--line); border-radius: var(--r-ctl); background: var(--panel-2); color: var(--t1); font: inherit;
     \\    font-size: var(--fs-xs); cursor: pointer; }
     \\  .c-poolgrid .weak .fix:hover { border-color: var(--sel-line); }
+    \\  .c-poolgrid .weak .fix::before { content: "+"; color: var(--t2); }
     \\  .c-poolgrid .weak .fix:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     \\  @container (max-width: 480px) {
     \\    .c-poolgrid .lanes .c-heat .rh { width: auto; }
@@ -717,4 +768,21 @@ test "weak spots: Darius alone top, no answer to Fiora and Yone, Jax covers both
     const both = try render(a, demoPage(&h, "1t-2t").?);
     try testing.expect(std.mem.find(u8, both, "No lane your whole pool clearly loses") != null);
     try testing.expect(std.mem.find(u8, both, " alone: ") == null);
+    // Darius banned 9.2%, Garen 4.1%: one of them in 13%; Mundo stands in, 50 games into Teemo
+    try testing.expect(std.mem.find(u8, both, "One of them banned in 13% of games") != null);
+    try testing.expect(std.mem.find(u8, both, "Add Dr. Mundo") != null);
+    try testing.expect(std.mem.find(u8, out, "banned in 9% of games") != null);
+    // Both at 2%: one of them in 4%, under the 5% a weak spot needs
+    const low = demoPage(&h, "1t-2t").?;
+    low.d = &low_bans;
+    try testing.expect(std.mem.find(u8, try render(a, low), "One of them banned") == null);
 }
+
+const low_bans: pp.Data = blk: {
+    var d = pp.Demo.data;
+    var cs = pp.Demo.champs;
+    for (&cs) |*c| c.ban = @min(c.ban, 20);
+    const frozen = cs;
+    d.champs = &frozen;
+    break :blk d;
+};

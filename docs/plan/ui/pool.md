@@ -212,9 +212,15 @@ more opponents, the pool across roles, more information.
       with too few games to tell"), never in the figure. Fix: the What to add option
       covering most of them among the main's hard lanes ("Add Jax, covers 2"). None: one
       quiet line, "No lane your whole pool clearly loses"
+    - bans: the role's champions banned often, "One of them banned in 13% of games",
+      then each with its ban rate, most banned first; only at 5% or more (1 - the product
+      of 1 - each rate, bans taken as independent). Fix: what stands in when the main is
+      banned (What to add's Banned). A role on one champion puts its rate on that line
+      instead ("banned in 9% of games")
     - one champion in the role: "Vi alone: one ban or counter-pick and you're off your
       pool"; fix: what the main's players also play most
-    - next: ban exposure (the pool's ban rates), then all early or all late (lean.tsv)
+    - next: all early or all late (lean.tsv)
+    - fix buttons show "+" and the name, "Add Dr. Mundo" as the aria-label
   - **Lanes grid** (HeatGrid): rows the role's opponents your pool meets, columns your
     champions in that role. Rows: every lane opponent in 1%+ of any pool champion's
     games, merged; 20 shown, "All N" expands in place. Sort Segmented: "Worst first"
