@@ -314,9 +314,9 @@ pub const css =
 
 const demo = champ.demo;
 
-/// The gallery's Pick buttons' target
+/// The gallery's Pick and Why buttons' target
 const Owner = struct {
-    pub const Msg = enum { pick };
+    pub const Msg = enum { pick, open };
     pub fn update(_: *Owner, _: Msg, _: *tree.Event) void {}
 };
 
@@ -418,6 +418,7 @@ pub fn gallery(g: *Gallery) void {
     for (rows[0..4]) |*r| {
         r.pick = h.on(owner, .pick);
         r.pick_label = plain("Pick it");
+        r.on = h.on(owner, .open);
     }
     gap.rows = rows;
     g.addFill("average pinned, played far down, a mark by a name, Pick", withPick(h, gap));
