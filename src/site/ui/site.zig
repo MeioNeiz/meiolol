@@ -210,10 +210,10 @@ pub const css =
     \\  .c-site .bar > :not(.logo, .links, .menu, .c-sitemenu) { margin-left: auto; max-width: 300px; flex: 1; }
     \\  .c-site .menu { display: none; flex: none; }
     \\  @container site (min-width: 861px) and (max-width: 1060px) {
-    \\    .c-site .bar:has(.links > a[href="/private/tester"]) > [role="search"]:not(:focus-within) { flex: 0 0 var(--ctl); }
-    \\    .c-site .bar:has(.links > a[href="/private/tester"]) > [role="search"]:not(:focus-within) > input { padding: 0; color: transparent; }
-    \\    .c-site .bar:has(.links > a[href="/private/tester"]) > [role="search"]:not(:focus-within) > input::placeholder { color: transparent; }
-    \\    .c-site .bar:has(.links > a[href="/private/tester"]) > [role="search"]:focus-within { position: absolute; right: var(--gutter);
+    \\    .c-site .bar:has(.links > a[href$=tester]) > [role="search"]:not(:focus-within) { flex: 0 0 var(--ctl); }
+    \\    .c-site .bar:has(.links > a[href$=tester]) > [role="search"]:not(:focus-within) > input { padding: 0; color: transparent; }
+    \\    .c-site .bar:has(.links > a[href$=tester]) > [role="search"]:not(:focus-within) > input::placeholder { color: transparent; }
+    \\    .c-site .bar:has(.links > a[href$=tester]) > [role="search"]:focus-within { position: absolute; right: var(--gutter);
     \\      width: 300px; z-index: 1; }
     \\  }
     \\  .c-site .menu svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
