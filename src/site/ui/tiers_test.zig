@@ -236,3 +236,41 @@ test "All as one table: every role's rows, sorted by the head, back to the board
     _ = p.rt.event(0, .{ .kind = .click, .target = p.by(.button, "By role") });
     try testing.expect(std.mem.find(u8, try p.shown(), "class=\"rb\"") != null);
 }
+
+const all_regions: tiers.Data = blk: {
+    var d = data;
+    d.games = 900_000;
+    d.region_in = "in all regions";
+    d.rows = rows[0..3];
+    break :blk d;
+};
+
+test "a view picked in place: faded until its file is in, then its board; back to the page's" {
+    var p: Page = undefined;
+    try p.init("#min=0", null);
+    defer p.deinit();
+    const t = p.i.current();
+    const region = t.find(t.root, "aria-label", "Region").?;
+    _ = p.rt.event(0, .{ .kind = .click, .target = t.node(t.kidsOf(region)[1]).dom });
+    try testing.expectEqualStrings("#min=0&region=all", p.fake.fragment.items);
+    try testing.expectEqual(tiers.Tiers.Need.view, p.state.need().?);
+    try testing.expect(std.mem.find(u8, try p.shown(), "data-busy") != null);
+    p.state.views[2] = &all_regions;
+    try p.state.show(p.arena.allocator());
+    p.i.render();
+    try testing.expectEqual(@as(u8, 2), p.state.view_index);
+    var page = try p.shown();
+    try testing.expect(std.mem.find(u8, page, "900,000 games in all regions") != null);
+    try testing.expect(std.mem.find(u8, page, "data-busy") == null);
+    try testing.expectEqualStrings("Ahri,Zed,Kai'Sa", try p.names());
+    // Back: the page's own view is kept, no fetch
+    p.fake.fragment.clearRetainingCapacity();
+    try p.fake.fragment.appendSlice(p.arena.allocator(), "#min=0");
+    p.rt.popstate();
+    try testing.expectEqual(null, p.state.need());
+    try p.state.show(p.arena.allocator());
+    p.i.render();
+    page = try p.shown();
+    try testing.expect(std.mem.find(u8, page, "400,000 games in EUW") != null);
+    try testing.expectEqualStrings("Ahri,Zed,Kai'Sa,Lux", try p.names());
+}

@@ -176,3 +176,9 @@ Override the sections above where they differ.
    role column has a head row naming its two figures (Win rate, then Influence or the
    sorted column) in the table heads' style; the role head drops its champion count
    (the column's "All N" carries it)
+4. Note 78: the sort segment flickered on EUW | All (each view was its own page, the sort
+   in the fragment came back only once ui-stats.wasm ran). Now: region and period are
+   picked in place, as on the champion page: the view's data file is fetched, the board
+   faded until it is in, views kept for a pick back; region and period stay in the query
+   (dom.UrlMap.views). A first load of a view with a sort in the fragment still renders
+   the default sort until the island runs. The footer's scope line stays the page's

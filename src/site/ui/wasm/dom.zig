@@ -337,8 +337,9 @@ fn onEvent(slot: i32, bit: i32, e: zjb.Handle) callconv(.c) void {
 /// segment (/champions/<c>/<r>), region and period in the query; pool: pool as ?champs=;
 /// learn: p as the bare fragment (#<id>). follow: the page's champion wasm keeps the
 /// address (window.meioFrag, meioSetHash), so the champion page's other wasms don't carry
-/// the mapping; the plain fragment without one (the matchup page's build)
-pub const UrlMap = enum { none, champion, pool, learn, follow };
+/// the mapping; the plain fragment without one (the matchup page's build). views: region
+/// and period in the query, the path as it is (the champions board)
+pub const UrlMap = enum { none, champion, pool, learn, follow, views };
 const url_map: UrlMap = if (@hasDecl(@import("root"), "url_map")) @import("root").url_map else .none;
 
 /// A mapped key: where it lives in the address bar, and its name there
@@ -348,6 +349,7 @@ const outs: []const Out = switch (url_map) {
     .none, .follow => &.{},
     .champion => &.{ .{ .key = "role", .to = .path }, .{ .key = "region", .to = .query, .as = "region" }, .{ .key = "period", .to = .query, .as = "period" } },
     .pool => &.{.{ .key = "pool", .to = .query, .as = "champs" }},
+    .views => &.{ .{ .key = "region", .to = .query, .as = "region" }, .{ .key = "period", .to = .query, .as = "period" } },
     .learn => &.{.{ .key = "p", .to = .bare }},
 };
 

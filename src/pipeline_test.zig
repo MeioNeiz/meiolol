@@ -579,6 +579,8 @@ test "fixture games to stats, curves and the website" {
     {
         const tiers = site.ui.tiers;
         for (tiers.rank_paths) |p| _ = try std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, p }), .{});
+        // Where ui-stats.wasm fetches a view picked in place
+        for (site.ui.urls.view_dirs) |d| _ = try std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, d, tiers.data_file }), .{});
         const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, tiers.rank_paths[0] }), arena, .limited(1 << 22));
         const rk = try site.ui.data.decode(arena, tiers.RankData, bytes);
         const em = &rk.groups[0];
@@ -590,7 +592,7 @@ test "fixture games to stats, curves and the website" {
         const plat = try site.ui.data.decode(arena, tiers.Data, try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/tiers.bin" }), arena, .limited(1 << 22)));
         var state: tiers.Tiers = .init(&plat, try tiers.prepare(arena, &plat, "/"), null);
         state.want = .emerald;
-        try testing.expect(state.need());
+        try testing.expectEqual(tiers.Tiers.Need.rank, state.need().?);
         state.ranks = &rk;
         try state.show(arena);
         try testing.expect(!state.busy() and state.data == em);

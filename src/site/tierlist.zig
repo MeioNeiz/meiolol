@@ -91,7 +91,7 @@ pub const table_span = ui.fmt.table_span;
 pub const wrColour = ui.fmt.wrColour;
 
 /// The champions table's data file, in each view's directory
-pub const data_path = "data/tiers.bin";
+pub const data_path = ui.tiers.data_file;
 
 /// The view's champions table, every role, for ui.tiers: tierRows' rows and order
 fn tiersData(site: *const Site) !ui.tiers.Data {

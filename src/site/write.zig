@@ -229,7 +229,8 @@ test "views: a tree each, switches between them, shared pages once" {
         "href=\"/daily\"",
     }) |s| try std.testing.expect(std.mem.find(u8, pool, s) != null);
     try std.testing.expect(std.mem.find(u8, pool, sheets.slot) == null);
-    try std.testing.expect(std.mem.find(u8, tiers, "<a href=\"/champions?region=all&amp;period=patch\">Patch</a>") != null);
+    // In place: buttons, not links to the other views' pages
+    try std.testing.expect(std.mem.find(u8, tiers, "aria-label=\"Region\"><button type=\"button\" aria-pressed=\"false\">EUW</button><button type=\"button\" aria-pressed=\"true\">All</button>") != null);
     // One page per champion, at the site root: the root view's, no switches until the
     // island takes the views
     const champ = try read(arena, out, "champions/a.html");

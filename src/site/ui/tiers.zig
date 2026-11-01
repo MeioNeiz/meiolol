@@ -5,9 +5,9 @@
 //!
 //! The server renders the default state from the same Data the view's data file
 //! (data/tiers.bin) carries; ui-stats.wasm decodes that file and adopts the page. A view
-//! (region, period) is its own page: the toolbar links to it, keeping the fragment. A
-//! rank above Platinum+ is picked in place: the view's rank file (rank_paths) is fetched
-//! on the first pick and the board shown faded until it is in
+//! (region, period; in the query) has its own page, but the toolbar picks it in place:
+//! its data file is fetched and the board shown faded until it is in. A rank above
+//! Platinum+ the same way: the view's rank file (rank_paths)
 const std = @import("std");
 const tree = @import("tree.zig");
 const url = @import("url.zig");
@@ -66,6 +66,10 @@ const view_queries = @import("urls.zig").view_queries;
 /// link carries it
 pub const Rank = champpage.Rank;
 pub const n_groups = @import("champrank.zig").n_groups;
+
+/// A view's data file, under its view_dirs entry
+pub const data_file = "data/tiers.bin";
+pub const n_views = view_queries.len;
 
 /// Each view's rank file, from the site root: the root view writes them all
 pub const rank_paths = [_][]const u8{ "data/tiers-rank.bin", "data/tiers-rank-patch.bin", "data/tiers-rank-all.bin", "data/tiers-rank-all-patch.bin" };
@@ -420,10 +424,14 @@ pub const Tiers = struct {
     page_role: ?Role = null,
     /// The role shown; null: All
     role: ?Role = null,
-    /// The site root, the page's view (view_queries' index) and its URL path: the
-    /// toolbar's links to the other views
+    /// The site root, the view shown (view_queries' index) and the page's URL path
     base: []const u8 = "/",
     view_index: u8 = 0,
+    /// The view picked: shown once its file is in; null: the one shown
+    want_view: ?u8 = null,
+    /// Each view's Platinum+ data and lines once fetched, kept for a pick back
+    views: [n_views]?*const Data = @splat(null),
+    view_lines: [n_views]?Lines = @splat(null),
     path: []const u8 = "/champions",
     /// The data file, from the page, and its hash (stamp)
     src: []const u8 = "",
@@ -462,7 +470,7 @@ pub const Tiers = struct {
         return if (s == .all) null else @fromBackingInt(@intCast(@backingInt(s) - 1));
     }
 
-    pub const Msg = union(enum) { role: Shown, rank: Rank, mover: u16, clear, sort: u8, filters, whole: bool };
+    pub const Msg = union(enum) { role: Shown, view: u8, rank: Rank, mover: u16, clear, sort: u8, filters, whole: bool };
 
     pub const Url = struct {
         /// Null: the page's own
@@ -474,6 +482,9 @@ pub const Tiers = struct {
         min: ?u8 = null,
         rank: Rank = .plat,
         whole: bool = false,
+        /// In the query (ui/wasm/dom.zig UrlMap.views)
+        region: champpage.Region = .euw,
+        period: champpage.Period = .days30,
     };
 
     pub fn toUrl(t: *const T) Url {
@@ -486,6 +497,8 @@ pub const Tiers = struct {
             .min = if (u.min == t.data.min) null else u.min,
             .rank = t.want,
             .whole = t.whole,
+            .region = @fromBackingInt(@intCast(t.wantView() / 2)),
+            .period = @fromBackingInt(@intCast(t.wantView() % 2)),
         };
     }
 
@@ -494,19 +507,47 @@ pub const Tiers = struct {
         t.table.fromUrl(.{ .sort = u.sort, .desc = u.desc, .q = u.q, .min = u.min orelse t.data.min });
         t.want = u.rank;
         t.whole = u.whole;
+        const v = 2 * @as(u8, @backingInt(u.region)) + @backingInt(u.period);
+        t.want_view = if (v == t.view_index) null else v;
     }
 
-    /// The rank file is wanted and not yet asked for
-    pub fn need(t: *const T) bool {
-        return t.want != .plat and t.ranks == null and !t.none;
+    pub fn wantView(t: *const T) u8 {
+        return t.want_view orelse t.view_index;
+    }
+
+    /// The file wanted and not yet in: the view's, then its rank file
+    pub const Need = enum { view, rank };
+
+    pub fn need(t: *const T) ?Need {
+        if (t.want_view) |v| return if (t.views[v] == null) .view else null;
+        return if (t.want != .plat and t.ranks == null and !t.none) .rank else null;
     }
 
     pub fn busy(t: *const T) bool {
-        return t.want != t.data.rank;
+        return t.want_view != null or t.want != t.data.rank;
     }
 
-    /// The rank wanted, its file in (or failed: back to Platinum+)
+    /// The view's file failed: the pick goes back to the view shown
+    pub fn noView(t: *T) void {
+        t.want_view = null;
+    }
+
+    /// The view and rank wanted, their files in (a rank file failed: back to Platinum+).
+    /// A new view drops the old one's rank files; its own comes next if wanted
     pub fn show(t: *T, a: std.mem.Allocator) !void {
+        if (t.want_view) |v| {
+            t.views[t.view_index] = t.plat;
+            t.view_lines[t.view_index] = t.plat_lines;
+            if (t.view_lines[v] == null) t.view_lines[v] = try prepare(a, t.views[v].?, t.base);
+            t.plat = t.views[v].?;
+            t.plat_lines = t.view_lines[v].?;
+            t.view_index = v;
+            t.want_view = null;
+            t.ranks = null;
+            t.none = false;
+            t.rank_lines = @splat(null);
+            if (t.want != .plat) return t.setData(t.plat, t.plat_lines);
+        }
         if (t.want != .plat and t.ranks == null) t.want = .plat;
         if (t.want == .plat) return t.setData(t.plat, t.plat_lines);
         const g = @backingInt(t.want) - 1;
@@ -534,6 +575,10 @@ pub const Tiers = struct {
         switch (m) {
             .role => |s| {
                 t.setRole(roleOf(s));
+                ev.push = true;
+            },
+            .view => |v| {
+                t.want_view = if (v == t.view_index) null else v;
                 ev.push = true;
             },
             .rank => |r| {
@@ -678,19 +723,9 @@ pub const Tiers = struct {
         };
     }
 
-    /// The same page in view `v`, keeping the fragment
-    fn viewHref(t: *const T, h: *H, v: usize) []const u8 {
-        var w: std.Io.Writer.Allocating = .init(h.mem);
-        url.write(Url, t.toUrl(), &w.writer) catch {
-            h.oom = true;
-        };
-        const frag = w.written();
-        return h.fmt("{s}{s}{s}{s}", .{ t.path, view_queries[v], if (frag.len > 0) "#" else "", frag });
-    }
-
     fn toolbar(t: *T, h: *H) N {
-        const region = t.view_index / 2;
-        const period = t.view_index % 2;
+        const region = t.wantView() / 2;
+        const period = t.wantView() % 2;
         const patch = if (t.data.cur_patch.len > 0) tree.Text{ .s = t.data.cur_patch } else W.patch;
         var ranks: [W.ranks.len]segmented.Item = undefined;
         for (&ranks, W.ranks, 0..) |*it, l, i| it.* = .{ .label = l, .selected = @backingInt(t.want) == i, .disabled = i > 0 and t.none, .on = h.on(t, .{ .rank = @fromBackingInt(@intCast(i)) }) };
@@ -701,12 +736,12 @@ pub const Tiers = struct {
                 .on_toggle = h.on(t, .filters),
             }, &.{
                 segmented.view(h, .{ .label = W.region }, &.{
-                    .{ .label = W.regions[0], .selected = region == 0, .href = t.viewHref(h, period) },
-                    .{ .label = W.regions[1], .selected = region == 1, .href = t.viewHref(h, 2 + period) },
+                    .{ .label = W.regions[0], .selected = region == 0, .on = h.on(t, .{ .view = period }) },
+                    .{ .label = W.regions[1], .selected = region == 1, .on = h.on(t, .{ .view = 2 + period }) },
                 }),
                 segmented.view(h, .{ .label = W.period }, &.{
-                    .{ .label = W.days, .selected = period == 0, .href = t.viewHref(h, 2 * region) },
-                    .{ .label = patch, .selected = period == 1, .href = t.viewHref(h, 2 * region + 1) },
+                    .{ .label = W.days, .selected = period == 0, .on = h.on(t, .{ .view = 2 * region }) },
+                    .{ .label = patch, .selected = period == 1, .on = h.on(t, .{ .view = 2 * region + 1 }) },
                 }),
                 segmented.view(h, .{ .label = W.rank_pick }, &ranks),
             }),
@@ -820,7 +855,7 @@ pub const css =
     \\    .c-tiers .rb .col { border-right: 0; }
     \\    .c-tiers .rb li:nth-child(n+6) { display: none; }
     \\  }
-    \\  .c-tiers[data-busy] .moved, .c-tiers[data-busy] .c-table { opacity: 0.55; transition: opacity 0.2s; }
+    \\  .c-tiers[data-busy] :is(.moved, .c-table, .rb .cols) { opacity: 0.55; transition: opacity 0.2s; }
     \\  .c-tiers .c-toolbar { container-type: inline-size; }
     \\  .c-tiers .c-toolbar > .grp { margin-left: auto; }
     \\  .c-tiers .pl .rt { display: block; width: 100%; }
