@@ -38,7 +38,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         \\<body class="ui">
         \\{header}
         \\{look}{remember}{meio_view}{admin}
-        \\{subbar}{banner}<main class="{main}">
+        \\{subbar}{login}{banner}<main class="{main}">
         \\
     , .{
         .csp = tpl.trusted(csp_meta),
@@ -59,14 +59,16 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         // Remembered so shared pages link back into this view
         .remember = if (p.view) |v| tpl.t("<script data-v=\"{v}\">" ++ remember ++ "</script>\n", .{ .v = v.query() }) else null,
         .meio_view = tpl.when(p.view == null, tpl.trusted(meio_view)),
-        .admin = tpl.trusted(if (p.private != null) private_mark else admin_link),
+        .admin = tpl.when(p.private == null, tpl.trusted(admin_link)),
+        // After the subbar, whose admin tabs it shows
+        .login = if (p.private) |pr| tpl.trusted(if (adminOnly(pr)) admin_mark else private_mark) else null,
         .banner = tpl.when(!p.public and p.private == null, Preview{}),
         .main = ui.site.main_class,
     });
 }
 
 /// The page's CSP (csp.zig): the inline scripts here; its <style> is added at delivery
-const csp_meta = csp.meta(&.{ search_loader, admin_link, private_mark, meio_view, "<script>" ++ remember ++ "</script>" }, &.{});
+const csp_meta = csp.meta(&.{ search_loader, admin_link, private_mark, admin_mark, meio_view, "<script>" ++ remember ++ "</script>" }, &.{});
 
 /// Its view (data-v): the hash is one for every view
 const remember = "try{localStorage.setItem(\"view\",document.currentScript.dataset.v)}catch(e){}";
@@ -82,14 +84,15 @@ const SiteHeader = struct {
         const a = fba.allocator();
         var t: ui.Tree = .{};
         var h: ui.H = .init(a, &t);
-        var links: [nav_items.len + 1]ui.site.Link = undefined;
+        var links: [nav_items.len + header_private.len]ui.site.Link = undefined;
         for (nav_items, links[0..nav_items.len]) |it, *l| {
             const here = it.nav == p.nav or (it.nav == .champions and p.nav.inChampions() and p.nav != .matchups);
             l.* = link(a, p, it, here) catch return error.WriteFailed;
         }
-        // Public pages get it from admin_link's script
-        const tester = private_tabs[1];
-        links[nav_items.len] = .{ .label = .{ .s = tester[2] }, .href = tester[1], .current = p.private == tester[0] };
+        // Public pages get them from admin_link's script
+        if (p.private != null) for (header_private, links[nav_items.len..]) |it, *l| {
+            l.* = privateLink(p, it);
+        };
         // Champions and Matchups are in the bar already
         var more: [champion_tabs.len - 2]ui.site.Link = undefined;
         for (champion_tabs[2..], &more) |it, *l| l.* = link(a, p, it, it.nav == p.nav) catch return error.WriteFailed;
@@ -140,32 +143,59 @@ const search_loader =
     \\
 ;
 
-/// A bar and menu link to the Draft tester for logins that opened it: the admin page (/admin) or the
-/// private one (/private) stores it in this origin's localStorage, so visitors' pages carry
-/// neither link nor path. Those browsers also load the private numbers (site/pv.zig), which
-/// nginx serves to private logins only: for anyone else they are the login page's HTML,
-/// which never runs or styles
+/// Bar and menu links for logins that opened a private page: Draft tester, and Admin
+/// once an admin page has opened. The pages mark it in this origin's localStorage
+/// ("login"), so visitors' pages carry neither links nor paths. Those browsers also load
+/// the private numbers (site/pv.zig), which nginx serves to private logins only: for
+/// anyone else they are the login page's HTML, which never runs or styles
 const admin_link =
-    \\<script>try{const l=JSON.parse(localStorage.getItem("admin-link"));if(l&&typeof l.href=="string"&&/^\/(admin|private)[/#]/.test(l.href)){const a=document.createElement("a");
-    \\a.href=l.href;a.textContent=l.label;for(const n of document.querySelectorAll("header .links,header .c-sitemenu"))n.append(a.cloneNode(true));const c=document.createElement("link");c.rel="stylesheet";c.href="/private/pv.css";
-    \\const s=document.createElement("script");s.src="/private/pv.js";s.dataset.wasm="/private/pv.wasm";document.head.append(c,s)}}catch(e){}</script>
+    \\<script>try{const r=localStorage.getItem("login");if(r=="tester"||r=="admin"){const ls=[["/private/tester","Draft tester"]];if(r=="admin")ls.push(["/admin","Admin"]);
+    \\for(const n of document.querySelectorAll("header .links,header .c-sitemenu"))for(const[h,t]of ls){const a=document.createElement("a");a.href=h;a.textContent=t;n.insertBefore(a,n.querySelector(":scope>.lab"))}
+    \\const c=document.createElement("link");c.rel="stylesheet";c.href="/private/pv.css";const s=document.createElement("script");s.src="/private/pv.js";s.dataset.wasm="/private/pv.wasm";document.head.append(c,s)}}catch(e){}</script>
     \\
 ;
 
-/// On private pages, for admin_link on the public ones (which also loads the private numbers)
+/// On the private pages any private login opens: shows the admin links to a browser an
+/// admin page marked, else marks it a tester's for admin_link
 const private_mark =
-    \\<script>try{localStorage.setItem("admin-link",JSON.stringify({href:"/private/tester",label:"Draft tester"}))}catch(e){}</script>
+    \\<script>try{if(localStorage.getItem("login")=="admin")for(const a of document.querySelectorAll("header a[hidden],.c-subbar a[hidden]"))a.hidden=false;else localStorage.setItem("login","tester")}catch(e){}</script>
     \\
 ;
 
-/// The tabs under the header on private pages; nginx keeps Notes and Admin to admin logins
-const private_tabs = [_]struct { Private, []const u8, []const u8 }{
-    .{ .index, "/private", "Private" },
-    .{ .tester, "/private/tester", "Draft tester" },
-    .{ .app, "/private/app", "App review" },
-    .{ .notes, "/admin/notes", "Notes" },
-    .{ .admin, "/admin", "Admin" },
+/// On the admin-only pages, which nginx serves to admin logins only
+const admin_mark =
+    \\<script>try{localStorage.setItem("login","admin")}catch(e){}</script>
+    \\
+;
+
+const PrivateTab = struct { page: Private, href: []const u8, label: []const u8 };
+
+/// The tabs under the header on private pages
+const private_tabs = [_]PrivateTab{
+    .{ .page = .index, .href = "/private", .label = "Private" },
+    header_private[0],
+    .{ .page = .app, .href = "/private/app", .label = "App review" },
+    .{ .page = .notes, .href = "/admin/notes", .label = "Notes" },
+    header_private[1],
 };
+
+/// Also in the bar
+const header_private = [_]PrivateTab{
+    .{ .page = .tester, .href = "/private/tester", .label = "Draft tester" },
+    .{ .page = .admin, .href = "/admin", .label = "Admin" },
+};
+
+/// nginx keeps these to admin logins
+fn adminOnly(pr: Private) bool {
+    return pr == .notes or pr == .admin;
+}
+
+/// Admin-only ones hidden on the other private pages until private_mark finds an admin's
+/// browser: a tester gets no link that fails
+fn privateLink(p: Page, it: PrivateTab) ui.site.Link {
+    const cur = p.private.?;
+    return .{ .label = .{ .s = it.label }, .href = it.href, .current = it.page == cur, .hidden = adminOnly(it.page) and !adminOnly(cur) };
+}
 
 /// On shared and champion pages: moves data-view links into the last view visited (its
 /// query, View.query); meioView(v) again from the champion page's filters, which move
@@ -210,9 +240,9 @@ const Subbar = struct {
         const a = fba.allocator();
         var t: ui.Tree = .{};
         var h: ui.H = .init(a, &t);
-        if (p.private) |cur| {
+        if (p.private != null) {
             var tabs: [private_tabs.len]ui.site.Link = undefined;
-            for (private_tabs, &tabs) |it, *l| l.* = .{ .label = .{ .s = it[2] }, .href = it[1], .current = it[0] == cur };
+            for (private_tabs, &tabs) |it, *l| l.* = privateLink(p, it);
             t.root = ui.site.subbar(&h, .{ .tabs = &tabs, .label = .{ .s = "Private" } });
         } else {
             var tabs: [champion_tabs.len]ui.site.Link = undefined;
@@ -280,7 +310,7 @@ test "open: its CSP allows each inline script it writes" {
     }
 }
 
-test "open: the bar links the Draft tester on private pages, where admin_link isn't" {
+test "open: the bar links the private pages on private pages, where admin_link isn't" {
     for ([_]?Private{ null, .tester, .notes }) |pr| {
         var out: Writer.Allocating = .init(std.testing.allocator);
         defer out.deinit();
@@ -289,5 +319,21 @@ test "open: the bar links the Draft tester on private pages, where admin_link is
         const tester = "<a href=\"/private/tester\"";
         try std.testing.expectEqual(pr != null, std.mem.indexOf(u8, bar, tester) != null);
         try std.testing.expectEqual(pr == .tester, std.mem.indexOf(u8, bar, tester ++ " aria-current=\"page\"") != null);
+        try std.testing.expectEqual(pr != null, std.mem.indexOf(u8, bar, "<a href=\"/admin\"") != null);
+    }
+}
+
+test "open: a tester's private pages hide the admin links until an admin's browser shows them" {
+    for ([_]Private{ .index, .tester, .app, .notes, .admin }) |pr| {
+        var out: Writer.Allocating = .init(std.testing.allocator);
+        defer out.deinit();
+        try open(&out.writer, .{ .title = "t", .description = "d", .patch = "16.21", .data = "", .public = false, .private = pr });
+        const page = out.written();
+        const hidden = std.mem.count(u8, page, " hidden=\"\">Admin</a>") + std.mem.count(u8, page, " hidden=\"\">Notes</a>");
+        // The bar's and the menu's Admin, the tabs' Notes and Admin
+        try std.testing.expectEqual(@as(usize, if (adminOnly(pr)) 0 else 4), hidden);
+        const mark = if (adminOnly(pr)) admin_mark else private_mark;
+        try std.testing.expect(std.mem.indexOf(u8, page, mark) != null);
+        try std.testing.expect(std.mem.indexOf(u8, page, mark).? > std.mem.indexOf(u8, page, "c-subbar").?);
     }
 }

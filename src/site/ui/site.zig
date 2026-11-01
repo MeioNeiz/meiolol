@@ -25,6 +25,8 @@ pub const Link = struct {
     current: bool = false,
     /// Moved into the last view visited by the page's script (html.zig meioView)
     view: bool = false,
+    /// Until a page script shows it
+    hidden: bool = false,
 };
 
 pub const Opts = struct {
@@ -110,7 +112,7 @@ pub fn subbar(h: *H, o: Subbar) N {
         h.oom = true;
         return .none;
     };
-    for (o.tabs, items) |x, *it| it.* = .{ .label = x.label, .href = x.href, .selected = x.current, .view = x.view };
+    for (o.tabs, items) |x, *it| it.* = .{ .label = x.label, .href = x.href, .selected = x.current, .view = x.view, .hidden = x.hidden };
     return h.div(.{ .class = "c-subbar" }, .{h.div(.{ .class = "in" }, .{
         if (o.tabs.len > 0) tabs.view(h, o.label orelse W.champions, items, &.{}) else null,
         if (o.picks) |p| picks(h, p) else null,
@@ -173,7 +175,7 @@ pub fn menu(h: *H, o: Opts, open: bool) N {
 
 fn links(h: *H, ls: []const Link) []const N {
     var l = h.list();
-    for (ls) |x| l.add(h.a(.{ .href = x.href, .aria_current = if (x.current) "page" else null, .data_view = x.view }, .{x.label}));
+    for (ls) |x| l.add(h.a(.{ .href = x.href, .aria_current = if (x.current) "page" else null, .data_view = x.view, .hidden = x.hidden }, .{x.label}));
     return l.done();
 }
 

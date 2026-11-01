@@ -1003,7 +1003,7 @@ test "admin page from the fixture games and a crawl log" {
     const private = try std.fs.path.join(arena, &.{ dir, "p" });
     try admin.private(gpa, io, private);
     const i_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ private, "index.html" }), arena, .limited(1 << 20));
-    for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "href=\"/private/tester\"", "href=\"/private/app\"", "\"admin-link\"" }) |s| {
+    for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "href=\"/private/tester\"", "href=\"/private/app\"", "localStorage.setItem(\"login\",\"tester\")" }) |s| {
         try std.testing.expect(std.mem.find(u8, i_html, s) != null);
     }
     try std.testing.expect(std.mem.find(u8, i_html, "/private/old") == null);
