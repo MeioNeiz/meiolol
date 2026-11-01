@@ -1,5 +1,6 @@
-//! GuessSlider: a guess on a number line. No value until touched (the dashed track is
-//! the hint, no thumb), so the owner's Lock in stays off until the first move; a press
+//! GuessSlider: a guess on a number line. No value until touched (a dashed track and a
+//! pulsing ring where the fill starts say to drag), so the owner's Lock in stays off
+//! until the first move; a press
 //! or drag, arrows, Page keys, Home and End set it, Enter commits. Once revealed the
 //! real value joins it as a second marker with the gap between, and it takes no input.
 //! The owner keeps a Guess and forwards its events (`event`), as chart.Press. `row`: the
@@ -199,6 +200,7 @@ pub fn view(h: *H, g: *const Guess, o: Opts) N {
         .on_keydown = on,
     }, .{
         h.el(.i, .{ .class = "track" }, .{}),
+        if (!done and you == null) h.el(.i, .{ .class = "knob", .style = h.vars(.{ .x = g.pos(g.from orelse (g.lo + g.hi) / 2) }) }, .{}) else null,
         if (o.row and !done and you != null and g.from != null) span(h, "fill", g.pos(g.from.?), you.?) else null,
         if (real) |r| span(h, "gap", r, you orelse r) else null,
         if (you) |x| mark(h, "you", x, real, if (o.row) null else if (done) .{ W.you, text(h, g.unit, g.value.?) } else .{ plain(""), text(h, g.unit, g.value.?) }) else null,
@@ -237,6 +239,12 @@ pub const css =
     \\  .c-guess > .mark { position: absolute; top: var(--top); left: calc(var(--x) * 1%); width: 4px; height: 24px; margin-left: -2px;
     \\    border-radius: 2px; background: var(--accent); }
     \\  .c-guess > .mark[data-k="real"] { background: var(--text); }
+    \\  .c-guess > .knob { position: absolute; top: calc(var(--top) + 2px); left: calc(var(--x) * 1%); width: 20px; height: 20px;
+    \\    margin-left: -10px; box-sizing: border-box; border: 2px solid var(--accent); border-radius: 50%; background: var(--panel);
+    \\    box-shadow: 0 0 0 4px var(--accent-bg); animation: c-guess-knob 1.6s var(--ease) infinite alternate; }
+    \\  .c-guess:hover > .knob, .c-guess:focus-visible > .knob { background: var(--accent-bg); }
+    \\  @keyframes c-guess-knob { to { box-shadow: 0 0 0 8px transparent; } }
+    \\  @media (prefers-reduced-motion: reduce) { .c-guess > .knob { animation: none; } }
     \\  .c-guess > .mark > span { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
     \\    font-size: var(--fs-s); font-weight: var(--w-b); white-space: nowrap; color: var(--accent);
     \\    font-variant-numeric: tabular-nums; }
@@ -253,6 +261,7 @@ pub const css =
     \\  .c-guess[data-v="row"] > .mark { height: 32px; }
     \\  .c-guess[data-v="row"] > .gap { top: 22px; }
     \\  .c-guess[data-v="row"] > .fill { top: 15px; }
+    \\  .c-guess[data-v="row"] > .knob { top: 16px; }
     \\}
     \\
 ;
