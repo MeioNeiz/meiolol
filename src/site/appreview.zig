@@ -5,12 +5,13 @@
 //! page per change it would publish, rendered by the shell's screens.zig in both
 //! editions: the same island and CSS, at the window's width or narrow, and a fake bridge
 //! that shows what the page would send the shell.
-//!   /private/app                      the index, in the site shell (site/shell.zig)
+//!   /private/app                      the first state's page (app.html)
 //!   /private/app/<edition>/<slug>     a state; its app.bin under <slug>/ (review.js points
 //!                                     the island's relative fetch there: nginx sends
 //!                                     base-uri 'none' and drops a trailing slash)
-//! Each state page: a navigator of every group and state on the left, a strip of the
-//! group's steps above the frame, arrow keys between states and groups (nav.js)
+//! Each state page: a navigator of every group and state on the left (full game's other
+//! seats only through the bar's seat switch), a strip of the group's steps above the
+//! frame while the navigator is a drawer, arrow keys between states and groups (nav.js)
 
 const std = @import("std");
 const store = @import("store");
@@ -22,9 +23,6 @@ const shell_files = @import("../shell/files.zig");
 const shell_practice = @import("../shell/practice.zig");
 const site = @import("root.zig");
 const csp = @import("csp.zig");
-const sheets = @import("sheets.zig");
-const site_shell = @import("shell.zig");
-const site_html = @import("html.zig");
 const core = desktop.core;
 const poller = desktop.poller;
 const state = desktop.state;
@@ -58,9 +56,21 @@ const Shot = struct {
     practice: ?practice.Setup = null,
     /// The board's seat clicks (lane N, 255 mine): the slug that lane's page has
     lanes: [6]?[]const u8 = @splat(null),
+    /// The scenario's step it was published on: the same moment from another seat
+    step: u32 = 0,
+    /// An ally's lane after a seat click
+    lane: bool = false,
 };
 
-const Group = struct { title: []const u8, text: []const u8 };
+const Group = struct {
+    title: []const u8,
+    text: []const u8,
+    /// My seat, where the group has others' (seat_of)
+    seat: ?[]const u8 = null,
+    /// A group of `seat_of`'s steps from another seat: in no navigator, reached by the
+    /// bar's seat switch
+    seat_of: ?usize = null,
+};
 
 const root = "/private/app";
 
@@ -75,18 +85,22 @@ pub fn files(a: Allocator, gpa: Allocator, io: Io, in: Inputs) ![]File {
 
     try groups.append(a, .{ .title = "The app on its own", .text = "Before the client, without data, signing in." });
     try others(a, &shots);
-    for (scenarios.list) |sc| {
+    for (scenarios.list, 0..) |sc, k| {
         const g = groups.items.len;
-        try groups.append(a, .{ .title = readable(sc[0]), .text = try comment(a, sc[1]) });
+        // full-game's own seat is mid (cell 2), the others below
+        try groups.append(a, .{ .title = readable(sc[0]), .text = try comment(a, sc[1]), .seat = if (k == 0) "Mid" else null });
         try play(a, gpa, io, data, lock, &shots, .{ .group = g, .name = sc[0], .bytes = sc[1] });
     }
     // Each seat: full-game's champ select from my other places
-    const seats = [_]struct { u8, []const u8 }{ .{ 0, "top" }, .{ 1, "jungle" }, .{ 3, "bottom" }, .{ 4, "support" } };
+    const full_game = groups.items.len - scenarios.list.len;
+    const seats = [_]struct { u8, []const u8, []const u8 }{ .{ 0, "top", "Top" }, .{ 1, "jungle", "Jungle" }, .{ 3, "bottom", "Bot" }, .{ 4, "support", "Support" } };
     for (seats) |s| {
         const g = groups.items.len;
         try groups.append(a, .{
             .title = try a.print("Full game as {s}", .{s[1]}),
             .text = try a.print("full-game's champ select played from the {s} seat (cell {d}).", .{ s[1], s[0] }),
+            .seat = s[2],
+            .seat_of = full_game,
         });
         try play(a, gpa, io, data, lock, &shots, .{ .group = g, .name = scenarios.list[0][0], .bytes = scenarios.list[0][1], .cell = s[0], .slug = s[1], .select_only = true });
     }
@@ -126,10 +140,11 @@ pub fn files(a: Allocator, gpa: Allocator, io: Io, in: Inputs) ![]File {
         for (shots.items, 0..) |*s, i| {
             if (s.practice != null and ed == .public) continue;
             c.practice = s.practice != null;
-            try page(a, &out, c, ed, groups.items, shots.items, i);
+            try page(a, &out, c, ed, groups.items, shots.items, i, false);
         }
     }
-    try out.append(a, .{ .path = "app.html", .data = try index(a, groups.items, shots.items) });
+    // The index is the first state, so the app shows on the first screen
+    try page(a, &out, .{ .stats = &data.stats, .icons = null, .private = false, .site = &in.icons }, .public, groups.items, shots.items, 0, true);
     try out.appendSlice(a, &.{
         .{ .path = "app/app.css", .data = screens.css },
         .{ .path = "app/review.css", .data = review_css },
@@ -285,15 +300,16 @@ fn play(a: Allocator, gpa: Allocator, io: Io, data: *const poller.Data, lock: []
     defer state.lane_role.store(state.own_lane, .release);
     const prefix = p.slug orelse p.name;
     var n: usize = 0;
+    var steps: u32 = 0;
     var lanes_done = false;
     while (try m.advance()) |step| {
+        steps += 1;
         const s = (try r.tick(a)) orelse continue;
         if (p.select_only and s != .select) continue;
         n += 1;
         const slug = try a.print("{s}-{d:0>2}", .{ prefix, n });
         const title = try describe(a, &sc, step, s);
-        const short = if (std.mem.startsWith(u8, title, "Champ select, ")) title["Champ select, ".len..] else title;
-        try shots.append(a, .{ .group = p.group, .slug = slug, .title = title, .short = short, .status = s });
+        try shots.append(a, .{ .group = p.group, .slug = slug, .title = title, .short = try short(a, title), .status = s, .step = steps });
         // All ten locked: every ally's lane, as a seat click shows it
         if (lanes_done or p.cell != null or s != .select or s.select.comp == null) continue;
         lanes_done = true;
@@ -311,6 +327,8 @@ fn play(a: Allocator, gpa: Allocator, io: Io, data: *const poller.Data, lock: []
                 .title = try a.print("{s}: {s}'s lane (their seat clicked)", .{ shots.items[mine].title, role.label() }),
                 .short = try a.print("{c}{s}'s lane", .{ std.ascii.toUpper(role.label()[0]), role.label()[1..] }),
                 .status = ally,
+                .step = steps,
+                .lane = true,
             });
         }
         // Back to mine: that tick's page is the one above
@@ -353,6 +371,18 @@ fn describe(a: Allocator, sc: *const mock.Scenario, step: std.json.Value, s: sta
     };
     if (o.get("swap") != null) try w.writer.print("{s}a trade", .{sep});
     return w.written();
+}
+
+/// The navigator's name: the title without the stage most of champ select is in
+fn short(a: Allocator, title: []const u8) ![]const u8 {
+    var t = title;
+    for ([_][]const u8{ "Champ select, ", "Picks and bans: " }) |p| {
+        if (std.mem.startsWith(u8, t, p)) t = t[p.len..];
+    }
+    if (t.len == title.len or t.len == 0) return t;
+    const out = try a.dupe(u8, t);
+    out[0] = std.ascii.toUpper(out[0]);
+    return out;
 }
 
 /// A scenario's name for the navigator; its file name when it has none here
@@ -399,8 +429,9 @@ fn url(a: Allocator, ed: Edition, slug: []const u8) ![]const u8 {
     return a.print("{s}/{t}/{s}", .{ root, ed, slug });
 }
 
-/// The state's page and its app.bin (practice.bin) for one edition
-fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, groups: []const Group, shots: []const Shot, i: usize) !void {
+/// The state's page and its app.bin (practice.bin) for one edition; `as_index` the page
+/// alone at app.html, its files fetched from the state's folder
+fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, groups: []const Group, shots: []const Shot, i: usize, as_index: bool) !void {
     const s = shots[i];
     var d = try screens.data(a, c, s.status, s.note);
     d.seq = 1;
@@ -416,6 +447,20 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         else => null,
     };
     const dir = try a.print("app/{t}/{s}", .{ ed, s.slug });
+    const html = try screens.renderIn(a, d, bar, under, .{
+        .css = root ++ "/app.css",
+        .js = root ++ "/ui-app.js",
+        .wasm = root ++ "/ui-app.wasm",
+        .practice_js = root ++ "/ui-practice.js",
+        .practice_wasm = root ++ "/ui-practice.wasm",
+        .head = try a.print(
+            \\{s}<meta name="rv-bin" content="/private/{s}/"><link rel="stylesheet" href="{s}/review.css"><script src="{s}/review.js"></script><script src="{s}/nav.js" defer></script>
+        , .{ csp.files_only, dir, root, root, root }),
+        .top = try reviewTop(a, ed, groups, shots, i),
+        .end = "</div>",
+    });
+    if (as_index) return out.append(a, .{ .path = "app.html", .data = html });
+    try out.append(a, .{ .path = try a.print("{s}.html", .{dir}), .data = html });
     var bin: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, ui.app.Data, d, &bin);
     try out.append(a, .{ .path = try a.print("{s}/app.bin", .{dir}), .data = bin.items });
@@ -424,45 +469,35 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         try ui.data.encode(a, ui.practice.Data, x, &pbin);
         try out.append(a, .{ .path = try a.print("{s}/practice.bin", .{dir}), .data = pbin.items });
     }
-    const html = try screens.renderIn(a, d, bar, under, .{
-        .css = root ++ "/app.css",
-        .js = root ++ "/ui-app.js",
-        .wasm = root ++ "/ui-app.wasm",
-        .practice_js = root ++ "/ui-practice.js",
-        .practice_wasm = root ++ "/ui-practice.wasm",
-        .head = try a.print(
-            \\{s}<link rel="stylesheet" href="{s}/review.css"><script src="{s}/review.js"></script><script src="{s}/nav.js" defer></script>
-        , .{ csp.files_only, root, root, root }),
-        .top = try reviewTop(a, ed, groups, shots, i),
-        .end = "</div>",
-    });
-    try out.append(a, .{ .path = try a.print("{s}.html", .{dir}), .data = html });
 }
 
 /// Every page's left side, the bar above the app (where this is, its neighbours, the
-/// edition and width switches, what the page sent the shell), the group's steps, then
+/// seat, app and width switches, what the page sent the shell), the group's steps, then
 /// the frame the app draws in
 fn reviewTop(a: Allocator, ed: Edition, groups: []const Group, shots: []const Shot, i: usize) ![]const u8 {
     const s = shots[i];
+    const base = groups[s.group].seat_of orelse s.group;
     var w: Io.Writer.Allocating = .init(a);
     const x = &w.writer;
-    try navigator(x, a, ed, groups, shots, i);
+    try navigator(x, a, ed, groups, shots, if (base == s.group) i else sameStep(shots, ed, i, base) orelse i);
     try x.print("<header class=\"rv-bar\" data-edition=\"{t}\"", .{ed});
     for (s.lanes, 0..) |l, k| if (l) |slug| try x.print(" data-lane-{d}=\"{s}\"", .{ if (k == 5) state.own_lane else k, try url(a, ed, slug) });
-    if (groupStart(shots, ed, s.group, false)) |k| try x.print(" data-prev-group=\"{s}\"", .{try url(a, ed, shots[k].slug)});
-    if (groupStart(shots, ed, s.group, true)) |k| try x.print(" data-next-group=\"{s}\"", .{try url(a, ed, shots[k].slug)});
+    if (groupStart(groups, shots, ed, base, false)) |k| try x.print(" data-prev-group=\"{s}\"", .{try url(a, ed, shots[k].slug)});
+    if (groupStart(groups, shots, ed, base, true)) |k| try x.print(" data-next-group=\"{s}\"", .{try url(a, ed, shots[k].slug)});
     try x.writeAll("><button type=\"button\" class=\"rv-menu\" aria-controls=\"rv-nav\" aria-expanded=\"false\">States</button><b>");
     try escaped(x, s.title);
     try x.writeAll("</b><span class=\"rv-sw\">");
-    if (neighbour(shots, ed, i, false)) |p| try x.print("<a href=\"{s}\" rel=\"prev\">Previous</a>", .{try url(a, ed, shots[p].slug)});
-    if (neighbour(shots, ed, i, true)) |n| try x.print("<a href=\"{s}\" rel=\"next\">Next</a>", .{try url(a, ed, shots[n].slug)});
-    try x.writeAll("</span><span class=\"rv-sw\">");
+    if (neighbour(groups, shots, ed, i, false)) |p| try x.print("<a href=\"{s}\" rel=\"prev\">Previous</a>", .{try url(a, ed, shots[p].slug)});
+    if (neighbour(groups, shots, ed, i, true)) |n| try x.print("<a href=\"{s}\" rel=\"next\">Next</a>", .{try url(a, ed, shots[n].slug)});
+    try x.writeAll("</span>");
+    try seatSwitch(x, a, ed, groups, shots, i);
+    try x.writeAll("<span class=\"rv-sw\">");
     for ([_]Edition{ .public, .private }) |e| {
         if (e == ed) {
-            try x.print("<b>{s}</b>", .{label(e)});
+            try x.print("<b title=\"{s}\">{s}</b>", .{ about(e), label(e) });
         } else if (s.practice == null) {
-            try x.print("<a href=\"{s}\">{s}</a>", .{ try url(a, e, s.slug), label(e) });
-        } else try x.print("<span class=\"rv-off\" title=\"Testers only\">{s}</span>", .{label(e)});
+            try x.print("<a href=\"{s}\" title=\"{s}\">{s}</a>", .{ try url(a, e, s.slug), about(e), label(e) });
+        } else try x.print("<span class=\"rv-off\" title=\"Private app only\">{s}</span>", .{label(e)});
     }
     try x.writeAll(
         \\</span><span class="rv-sw"><button type="button" data-rv-width="wide">Window</button><button type="button" data-rv-width="narrow">Narrow</button></span><output id="rv-log"></output></header>
@@ -481,13 +516,38 @@ fn reviewTop(a: Allocator, ed: Edition, groups: []const Group, shots: []const Sh
     return w.written();
 }
 
-/// Every group and its states as this edition's links (practice: the testers'), `cur`
-/// marked and only its group open; the index has none, every group open
-fn navigator(x: *Io.Writer, a: Allocator, ed: Edition, groups: []const Group, shots: []const Shot, cur: ?usize) !void {
+/// The same moment of champ select from every seat the group has: mine, then the others'
+fn seatSwitch(x: *Io.Writer, a: Allocator, ed: Edition, groups: []const Group, shots: []const Shot, i: usize) !void {
+    const s = shots[i];
+    const base = groups[s.group].seat_of orelse s.group;
+    if (s.lane or s.status != .select or groups[base].seat == null) return;
+    try x.writeAll("<span class=\"rv-sw\">Seat");
+    for (groups, 0..) |g, gi| {
+        if (gi != base and g.seat_of != base) continue;
+        if (gi == s.group) {
+            try x.print("<b>{s}</b>", .{g.seat.?});
+        } else if (sameStep(shots, ed, i, gi)) |k| {
+            try x.print("<a href=\"{s}\">{s}</a>", .{ try url(a, ed, shots[k].slug), g.seat.? });
+        } else try x.print("<span class=\"rv-off\">{s}</span>", .{g.seat.?});
+    }
+    try x.writeAll("</span>");
+}
+
+/// Group `g`'s shot published on shot `i`'s scenario step, not a lane
+fn sameStep(shots: []const Shot, ed: Edition, i: usize, g: usize) ?usize {
+    for (shots, 0..) |t, k| {
+        if (t.group == g and t.step == shots[i].step and !t.lane and (ed == .private or t.practice == null)) return k;
+    }
+    return null;
+}
+
+/// Every group and its states as this edition's links (practice: the private app's),
+/// `cur` marked and only its group open. Other seats' groups only through the seat switch
+fn navigator(x: *Io.Writer, a: Allocator, ed: Edition, groups: []const Group, shots: []const Shot, cur: usize) !void {
     try x.writeAll("<nav class=\"rv-nav\" id=\"rv-nav\" aria-label=\"App states\"><p class=\"rv-home\"><a href=\"/\">meiolol</a> / <a href=\"/private\">Private</a> / App review</p>");
     for (groups, 0..) |g, gi| {
-        const open = if (cur) |k| shots[k].group == gi else true;
-        try x.print("<details{s}><summary>", .{if (open) " open" else ""});
+        if (g.seat_of != null) continue;
+        try x.print("<details{s}><summary>", .{if (shots[cur].group == gi) " open" else ""});
         try escaped(x, g.title);
         try x.writeAll("</summary><ol>");
         var n: usize = 0;
@@ -506,13 +566,22 @@ fn navigator(x: *Io.Writer, a: Allocator, ed: Edition, groups: []const Group, sh
 
 fn label(e: Edition) []const u8 {
     return switch (e) {
-        .public => "Public",
-        .private => "Testers",
+        .public => "Public app",
+        .private => "Private app",
     };
 }
 
-/// The next (or previous) shot this edition has
-fn neighbour(shots: []const Shot, ed: Edition, i: usize, next: bool) ?usize {
+fn about(e: Edition) []const u8 {
+    return switch (e) {
+        .public => "The app Riot reviews, for everyone after the production key",
+        .private => "The app friends download today: adds practice and in game",
+    };
+}
+
+/// The next (or previous) shot this edition has: within the group for another seat's,
+/// else skipping those
+fn neighbour(groups: []const Group, shots: []const Shot, ed: Edition, i: usize, next: bool) ?usize {
+    const seat = groups[shots[i].group].seat_of != null;
     var k = i;
     while (true) {
         if (next) {
@@ -522,38 +591,23 @@ fn neighbour(shots: []const Shot, ed: Edition, i: usize, next: bool) ?usize {
             if (k == 0) return null;
             k -= 1;
         }
-        if (ed == .private or shots[k].practice == null) return k;
+        if (ed == .public and shots[k].practice != null) continue;
+        if (seat) return if (shots[k].group == shots[i].group) k else null;
+        if (groups[shots[k].group].seat_of == null) return k;
     }
 }
 
-/// The first shot this edition has in the next (or previous) group that has one
-fn groupStart(shots: []const Shot, ed: Edition, group: usize, next: bool) ?usize {
+/// The first shot this edition has in the next (or previous) navigator group that has one
+fn groupStart(groups: []const Group, shots: []const Shot, ed: Edition, group: usize, next: bool) ?usize {
     var prev: ?usize = null;
     for (shots, 0..) |s, k| {
         if (ed == .public and s.practice != null) continue;
+        if (groups[s.group].seat_of != null) continue;
         if (next) {
             if (s.group > group) return k;
         } else if (s.group < group and (prev == null or shots[prev.?].group != s.group)) prev = k;
     }
     return prev;
-}
-
-/// The navigator full width in the site shell, with each edition's first state
-fn index(a: Allocator, groups: []const Group, shots: []const Shot) ![]const u8 {
-    var w: Io.Writer.Allocating = .init(a);
-    const x = &w.writer;
-    const pg: site_html.Page = .{ .title = "App review | meiolol", .description = "Every screen the desktop app can show", .patch = "", .data = "", .public = false, .private = .app };
-    try site_shell.open(x, pg);
-    try x.print(
-        \\<link rel="stylesheet" href="{s}/review.css"><div class="rv-index"><h1>App review</h1>
-        \\<p>Every screen the desktop app can show, played from the mock client's scenarios through the app's own poller. Each opens as the public edition or the testers' (practice: testers only), at the window's width or narrow; notes pin to the page. Arrow keys: left and right for the previous and next state, up and down for the previous and next group.</p>
-        \\<p class="rv-open"><a href="{s}">Public edition</a><a href="{s}">Testers' edition</a></p>
-        \\
-    , .{ root, try url(a, .public, shots[0].slug), try url(a, .private, shots[0].slug) });
-    try navigator(x, a, .public, groups, shots, null);
-    try x.writeAll("</div>\n");
-    try site_shell.close(x, pg);
-    return sheets.deliver(a, w.written());
 }
 
 fn escaped(w: *Io.Writer, s: []const u8) !void {
@@ -578,7 +632,7 @@ const review_css =
     \\#rv-log { flex-basis: 100%; color: #9aa3b5; font-family: ui-monospace, monospace; font-size: 12px; }
     \\#rv-log:empty { display: none; }
     \\.rv-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; list-style: none; max-width: 1120px; margin: 12px auto 0;
-    \\  padding: 0; font: 12px/1 system-ui, sans-serif; color: #9aa3b5; }
+    \\  padding: 0 16px; box-sizing: border-box; font: 12px/1 system-ui, sans-serif; color: #9aa3b5; }
     \\.rv-steps span { margin-right: 6px; }
     \\.rv-steps a { position: relative; display: inline-block; min-width: 24px; box-sizing: border-box; padding: 5px 6px; text-align: center;
     \\  border: 1px solid #2a3140; border-radius: 4px; background: #141924; color: #c8cdd8; text-decoration: none; }
@@ -587,9 +641,10 @@ const review_css =
     \\.rv-steps a:hover::after { content: attr(data-label); position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: max-content;
     \\  max-width: 360px; padding: 6px 8px; border: 1px solid #2a3140; border-radius: 4px; background: #1d2330; color: #fff;
     \\  line-height: 1.35; text-align: left; white-space: normal; }
-    \\.rv-frame { width: 1120px; min-height: 720px; margin: 16px auto; outline: 1px dashed #2a3140; }
+    \\html:not(.rv-drawer) .rv-steps { display: none; }
+    \\.rv-frame { width: 1120px; max-width: 100%; min-height: 720px; margin: 16px auto; outline: 1px dashed #2a3140; }
     \\.rv-narrow .rv-frame { width: 420px; }
-    \\.rv-narrow .rv-steps { max-width: 420px; }
+    \\.rv-narrow .rv-steps { max-width: 452px; }
     \\.rv-nav { position: fixed; z-index: 20; left: 0; top: 0; bottom: 0; width: 240px; box-sizing: border-box; overflow-y: auto;
     \\  padding: 10px 8px 48px; background: #0c1017; border-right: 1px solid #2a3140; font: 13px/1.35 system-ui, sans-serif; color: #c8cdd8; }
     \\body:has(> .rv-nav) { padding-left: 240px; }
@@ -608,14 +663,6 @@ const review_css =
     \\.rv-drawer .rv-nav { transform: translateX(-100%); transition: transform 0.15s; }
     \\.rv-drawer.rv-nav-open .rv-nav { transform: none; box-shadow: 8px 0 24px #0009; }
     \\.rv-drawer .rv-menu { display: inline-block; }
-    \\.rv-index { display: grid; gap: var(--sp-3); max-width: 72ch; }
-    \\.rv-index h1 { margin: 0; font-size: var(--fs-xl); }
-    \\.rv-index p { margin: 0; color: var(--t2); }
-    \\.rv-open { display: flex; gap: var(--sp-2); }
-    \\.rv-open a { padding: 6px 12px; border-radius: var(--r-ctl); background: var(--ctl-bg); color: var(--text); text-decoration: none; }
-    \\.rv-index .rv-nav { position: static; width: auto; padding: 0; border: 0; background: none; font: inherit; }
-    \\.rv-index .rv-nav li a { white-space: normal; }
-    \\.rv-index .rv-home { display: none; }
     \\
 ;
 
@@ -659,10 +706,11 @@ const nav_js =
 
 /// What the shell's webview gives a page (mac.zig's shim), faked, then the shell's own
 /// bridge.js. Messages to the shell show in the bar; a seat click opens that lane's page.
-/// The islands fetch app.bin and practice.bin relative to the page: from its own folder
+/// The islands fetch app.bin and practice.bin relative to the page: from the state's
+/// folder (rv-bin; the index is a state's page at another address)
 const review_js =
     \\(() => {
-    \\  const dir = location.pathname.replace(/\/$/, '') + '/';
+    \\  const dir = document.querySelector('meta[name=rv-bin]').content;
     \\  const get = window.fetch;
     \\  window.fetch = (u, o) => get(typeof u === 'string' && /^(app|practice)\.bin\b/.test(u) ? dir + u : u, o);
     \\  const ls = [];
@@ -729,8 +777,11 @@ test "every scenario's states as pages in both editions, practice testers only" 
     });
     var pages: [2]usize = .{ 0, 0 };
     var index_page: ?[]const u8 = null;
+    var seat_switch = false;
     for (list) |f| {
         if (std.mem.eql(u8, f.path, "app.html")) index_page = f.data;
+        // Another seat's same step from full game's champ select, and back
+        if (std.mem.startsWith(u8, f.path, "app/public/full-game-") and std.mem.find(u8, f.data, "Seat<b>Mid</b><a href=\"/private/app/public/top-") != null) seat_switch = true;
         if (!std.mem.endsWith(u8, f.path, ".html") or !std.mem.startsWith(u8, f.path, "app/")) continue;
         const public = std.mem.startsWith(u8, f.path, "app/public/");
         pages[@intFromBool(public)] += 1;
@@ -748,14 +799,18 @@ test "every scenario's states as pages in both editions, practice testers only" 
     // The testers' edition has the practice pages on top
     try testing.expectEqual(pages[1] + 4, pages[0]);
     try testing.expect(pages[1] > 40);
+    try testing.expect(seat_switch);
+    // The index: the first state, its files from that state's folder
     const ix = index_page orelse return error.NoIndex;
     try csp.check(ix);
-    for ([_][]const u8{ "/private/app/public/full-game-01", "/private/app/private/practice-post", "/private/app/public/top-01", "lane-top" }) |want| {
+    for ([_][]const u8{ "data-island=\"app\"", "content=\"/private/app/public/signin/\"", "/private/app/public/full-game-01", "/private/app/private/practice-post", "lane-top" }) |want| {
         if (std.mem.find(u8, ix, want) == null) {
             std.debug.print("index lacks {s}\n", .{want});
             return error.Missing;
         }
     }
+    // Other seats are reached through the seat switch, not the navigator
+    try testing.expect(std.mem.find(u8, ix, "/private/app/public/top-01") == null);
     // The site's icons where the shell has the client's
     for (list) |f| {
         if (std.mem.find(u8, f.data, "/icon/16.21.1/Ahri.jpg") != null) break;

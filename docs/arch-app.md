@@ -51,10 +51,13 @@ file and packed rows: docs/architecture.md.
   the site's icons, the island and CSS under /private/app/, at the window's 1120 px or
   420; a fake bridge shows what the page sends the shell, and a seat click opens that
   lane's page. URLs /private/app/<edition>/<slug>, app.bin under <slug>/ (review.js
-  points the island's relative fetch there: nginx sends base-uri 'none'). A navigator of
-  every group and state on the left (a drawer when the frame leaves no room), the
-  group's steps above the frame, arrow keys between states (left, right) and groups (up,
-  down); /private/app is an index in the site shell linking each edition's first state
+  points the island's relative fetch at the page's rv-bin meta: nginx sends base-uri
+  'none'). A navigator of every group and state on the left (a drawer when the frame
+  leaves no room, then the group's steps above the frame too), arrow keys between states
+  (left, right) and groups (up, down). The bar switches the edition ("Public app",
+  "Private app") and, on full game's champ select, the seat at the same scenario step
+  (Shot.step): the other seats' groups are in no navigator. /private/app is the first
+  state's page
 - Lane panel: a click on an ally's seat shows their lane: the shell writes the board's
   seats' data-act as "lane <role>" (255 mine; only seats with a role, as allyLane finds
   the ally by role; ui/draftboard.zig Seat.act, the shown one Seat.sel) and bridge.js

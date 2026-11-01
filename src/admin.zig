@@ -351,7 +351,7 @@ pub fn privateIndex(a: std.mem.Allocator) ![]const u8 {
 
 const index_md =
     \\- [Draft tester](/private/tester): build a draft, see the model's win chance and every candidate
-    \\- [App review](/private/app): every screen the desktop app can show, both editions
+    \\- [App review](/private/app): every screen the desktop app can show, public and private app
     \\- [Desktop app](/private/desktop/meiolol-desktop.zip): the Windows app, latest build
     \\- [Notes](/admin/notes) and [Admin](/admin): admin logins only
     \\- [Your account](/account): password, signed-in apps, log out
