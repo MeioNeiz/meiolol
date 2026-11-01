@@ -30,8 +30,8 @@ Desktop 1280, a 12-column grid under the site header:
 - Left (4/12), stacked:
   - h1 "Review your games" (no lockup, no paragraph)
   - `id-lookup`: Riot ID input and "Review" button in one control, region inferred
-    from the tag; recent Riot IDs on this device as chips under it (exists in
-    localStorage, `your-recent`)
+    from the tag; the newest Riot IDs on this device as a row of equal chips under it,
+    edge to edge with the box, tag muted: three, two when narrow (`your-recent`)
   - Today (component `today-card`, three of them, 1 line title each, real content):
     - Daily Draft #N: the two teams as two rows of five 24 px icons, "Guess" button;
       done today: your result as the same chip as Daily's summary

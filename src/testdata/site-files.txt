@@ -59,7 +59,7 @@ _v/all-patch/data/pool/lanes/twitch.bin a7f3d931b8b13730
 _v/all-patch/data/search.bin 305561e34fffe2a3
 _v/all-patch/data/stats.bin 1c6b64a93978f120
 _v/all-patch/data/tiers.bin e7b375ca8d48220d
-_v/all-patch/index.html 51610c8ee1af45aa
+_v/all-patch/index.html 883ce7967adb123c
 _v/all-patch/matchups.html 03a41f44faa72e31
 _v/all-patch/matchups/bot/kaisa-vs-twitch.html a88df3ec404944a3
 _v/all-patch/matchups/bot/twitch-vs-kaisa.html 6c73df18c3f35127
@@ -141,7 +141,7 @@ _v/all/data/pool/lanes/twitch.bin a7f3d931b8b13730
 _v/all/data/search.bin 305561e34fffe2a3
 _v/all/data/stats.bin 7b37d059d60f077f
 _v/all/data/tiers.bin 0e479c88cad7df98
-_v/all/index.html eecdfd4b1eb11131
+_v/all/index.html 7448bb9f36f1605b
 _v/all/matchups.html b1fb23c3fe0d2a84
 _v/all/matchups/bot/kaisa-vs-twitch.html 0be77a267b3e4fb8
 _v/all/matchups/bot/twitch-vs-kaisa.html 7540b68b110c0f69
@@ -223,7 +223,7 @@ _v/patch/data/pool/lanes/twitch.bin a7f3d931b8b13730
 _v/patch/data/search.bin 305561e34fffe2a3
 _v/patch/data/stats.bin 1c6b64a93978f120
 _v/patch/data/tiers.bin b41dbd0f8979d17c
-_v/patch/index.html 70499fe8077202c3
+_v/patch/index.html f882a4ba64bf2576
 _v/patch/matchups.html bd02501393364c1d
 _v/patch/matchups/bot/kaisa-vs-twitch.html 065e6bb16fee51d3
 _v/patch/matchups/bot/twitch-vs-kaisa.html 534fa4ea6f980c0e
@@ -344,7 +344,7 @@ data/tiers-rank-patch.bin 6eb3edb6885e5b1a
 data/tiers-rank.bin 054e5ce56dec1b7b
 data/tiers.bin 4a609ff89ffaf06d
 download.html 691e20aa2d953ea6
-index.html 95b1748f7c1ce371
+index.html 0c3627226291d517
 learn.html 2df029487f6469bf
 learn/champs.json 7c5a77a4464faa98
 learn/practice.json 4f53cda18c2baa0c

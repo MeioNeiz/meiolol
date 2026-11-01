@@ -1,5 +1,6 @@
-//! IdLookup: a Riot ID box and Review as one control, the Riot IDs this device looked up
-//! as chips under it. Goes to the Your games page with the ID in the fragment, so it never
+//! IdLookup: a Riot ID box and Review as one control, the newest Riot IDs this device
+//! looked up as a row of equal chips under it, edge to edge with the box (three; two when
+//! narrow), the tag muted. Goes to the Your games page with the ID in the fragment, so it never
 //! reaches a server log; before the island runs Review submits the form, which sends it
 //! as ?id= instead (the page moves it to the fragment)
 const std = @import("std");
@@ -54,7 +55,14 @@ pub const IdLookup = struct {
 
     pub fn view(l: *L, h: *H) N {
         var chips = h.list();
-        for (l.recent, 0..) |*r, i| chips.add(h.li(.{ .key = i }, .{chip.view(h, .{ .href = l.href(h, r.slice()) }, .{r.slice()})}));
+        for (l.recent, 0..) |*r, i| {
+            const id = r.slice();
+            const at = std.mem.findScalar(u8, id, '#') orelse id.len;
+            chips.add(h.li(.{ .key = i }, .{chip.view(h, .{ .href = l.href(h, id) }, .{
+                h.span(.{ .class = "nm" }, .{id[0..at]}),
+                if (at < id.len) h.span(.{ .class = "tg" }, .{id[at..]}) else null,
+            })}));
+        }
         const q = trimmed(&l.q);
         return h.div(.{ .class = "c-lookup", .data_island = "lookup", .data_to = l.to }, .{
             h.el(.form, .{ .class = "box", .action = l.to, .method = "get", .role = "search" }, .{
@@ -99,7 +107,7 @@ fn trimmed(q: *const Id) []const u8 {
 
 pub const css =
     \\@layer components {
-    \\  .c-lookup { display: grid; gap: var(--sp-2); min-width: 0; }
+    \\  .c-lookup { display: grid; gap: var(--sp-2); min-width: 0; container: lookup / inline-size; }
     \\  .c-lookup > .box { display: flex; align-items: center; gap: 4px; height: var(--ctl-l); padding: 4px;
     \\    border: 1px solid var(--ctl-line); border-radius: calc(var(--r-ctl) + 4px); background: var(--ctl-bg);
     \\    transition: background var(--dur) var(--ease); }
@@ -109,7 +117,16 @@ pub const css =
     \\    background: none; font-size: var(--fs-l); }
     \\  .c-lookup input:hover, .c-lookup input:focus { background: none; box-shadow: none; outline: none; }
     \\  .c-lookup .c-btn { height: 100%; min-height: 0; padding: 0 var(--sp-4); }
-    \\  .c-lookup > .rec { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+    \\  .c-lookup > .rec { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); margin: 0;
+    \\    padding: 0; list-style: none; }
+    \\  .c-lookup > .rec > li:nth-child(n + 4) { display: none; }
+    \\  .c-lookup > .rec .c-chip { display: flex; gap: 0; width: 100%; }
+    \\  .c-lookup > .rec .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    \\  .c-lookup > .rec .tg { flex: none; color: var(--muted); font-weight: var(--w-r); }
+    \\  @container lookup (max-width: 420px) {
+    \\    .c-lookup > .rec { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    \\    .c-lookup > .rec > li:nth-child(n + 3) { display: none; }
+    \\  }
     \\}
     \\
 ;
