@@ -94,8 +94,11 @@ const W = struct {
     pub const usual = plain("Vs usual");
     pub const usually = Phrase("{r:rate} usually");
     pub const gold = plain("Gold at 14");
-    pub const cs_part = Phrase("{x:text} minus {y:text} at 14 minutes, estimated from games of every length; about {g:signed} of it from CS.");
-    pub const gold_note = Phrase("{x:text} minus {y:text} at 14 minutes, estimated from games of every length.");
+    pub const gold_ahead = Phrase("{c:text} ahead");
+    pub const gold_level = plain("level");
+    pub const cs_part = Phrase("At 14 minutes, estimated from games of every length; about {g:count} of it from CS.");
+    pub const cs_other = Phrase("At 14 minutes, estimated from games of every length; {c:text} about {g:count} gold ahead on CS.");
+    pub const gold_note = plain("At 14 minutes, estimated from games of every length.");
     pub const ahead = plain("Ahead at 14");
     pub const games = plain("Games");
     pub const opps = Phrase("{x:text}'s {r:text} opponents");
@@ -207,8 +210,9 @@ pub const Head = struct {
         if (d.gold) |g| {
             items[n] = .{
                 .label = W.gold,
-                .value = phrase.num(h, .signed, @as(i32, g)),
-                .tip = .{ .id = "mu-gold", .note = if (d.cs_gold) |c| W.cs_part.with(h, .{ .x = d.x.name, .y = d.y.name, .g = @as(i32, c) }) else W.gold_note.with(h, .{ .x = d.x.name, .y = d.y.name }) },
+                .value = phrase.num(h, .count, @abs(@as(i32, g))),
+                .ctx = if (g == 0) W.gold_level else W.gold_ahead.with(h, .{ .c = if (g > 0) d.x.name else d.y.name }),
+                .tip = .{ .id = "mu-gold", .note = goldNote(h, d, g) },
             };
             n += 1;
         }
@@ -219,6 +223,14 @@ pub const Head = struct {
         items[n] = .{ .label = W.games, .value = phrase.num(h, .count, d.games) };
         n += 1;
         return strip.view(h, items[0..n]);
+    }
+
+    /// Where Gold at 14 comes from, without a sign to read the wrong way round
+    fn goldNote(h: *H, d: *const HeadData, g: i16) tree.Text {
+        const c: i32 = d.cs_gold orelse return W.gold_note;
+        if (@abs(c) < 10) return W.gold_note;
+        if ((c < 0) == (g < 0)) return W.cs_part.with(h, .{ .g = @abs(c) });
+        return W.cs_other.with(h, .{ .c = if (c > 0) d.x.name else d.y.name, .g = @abs(c) });
     }
 
     /// The views as links to this page in each (lolalytics' filters), ranks greyed: the
@@ -507,15 +519,22 @@ pub const gold_per_cs = 20;
 /// Under these a gap gets no line. The curves are already shrunk toward the champions'
 /// baseline, so a small estimate is noise or the baseline, not this pair
 const close_gold = 150;
+/// Under this a phase reads as level
+const level_gold = 50;
 const swing_gold = 100;
 const level6_gap = 10;
 const item_gap = 20;
 
 const L = struct {
-    pub const phases = Phrase("{a:text}'s gold lead: {e:signed} by 6 min (CS worth {c:signed}), {f:signed} from 6 to 14 min (CS worth {k:signed}).");
-    pub const phases_bare = Phrase("{a:text}'s gold lead: {e:signed} by 6 min, {f:signed} from 6 to 14 min.");
+    pub const phases = Phrase("{p:text}, then {q:text}.");
+    pub const level_at6 = plain("Level at 6 min");
+    pub const ahead_at6 = Phrase("{a:text} {e:count} gold ahead at 6 min{c:text}");
+    pub const even_6to14 = plain("even from 6 to 14 min");
+    pub const gains_6to14 = Phrase("{a:text} gains {f:count} from 6 to 14 min{c:text}");
+    pub const cs_part = Phrase(" ({c:count} of it from CS)");
+    pub const cs_all = Phrase(" (CS alone worth {c:count})");
     pub const flip = Phrase("{b:text} leads until {m:int} min ({e:count} gold at 6), {a:text} from {n:int} min on ({g:count} at 14).");
-    pub const fades = Phrase("{a:text} is {e:count} gold ahead at 6 min, level by 14 ({g:signed} for {a:text}).");
+    pub const fades = Phrase("{a:text} is {e:count} gold ahead at 6 min, level by 14.");
     pub const swing = Phrase("{a:text} gains most from {m:int} to {n:int} min: {g:count} gold");
     pub const level6 = Phrase("{l:text}, around reaching level 6 at {t:time}, {s:text} before {b:text}.");
     pub const item = Phrase("{l:text}, around finishing a first item at {t:time}, {s:text} before {b:text}.");
@@ -544,7 +563,7 @@ pub fn laneLines(h: *H, d: *const MoreData) []const tree.Text {
     const s: i32 = if (g < 0) -1 else 1;
     if (@abs(g) < close_gold) {
         if (@abs(e) >= close_gold) {
-            out[n] = L.fades.with(h, .{ .a = names[@intFromBool(e < 0)], .e = @abs(e), .g = if (e < 0) -g else g });
+            out[n] = L.fades.with(h, .{ .a = names[@intFromBool(e < 0)], .e = @abs(e) });
             n += 1;
         }
     } else if (s * e <= -close_gold / 2) {
@@ -554,13 +573,21 @@ pub fn laneLines(h: *H, d: *const MoreData) []const tree.Text {
         n += 1;
     } else {
         const cs = d.curves[2].line;
-        out[n] = if (d.role == .jungle or d.role == .support or cs.len <= k14) L.phases_bare.with(h, .{ .a = names[up], .e = s * e, .f = s * (g - e) }) else L.phases.with(h, .{
-            .a = names[up],
-            .e = s * e,
-            .c = round10(s * @as(i32, cs[5]) * gold_per_cs),
-            .f = s * (g - e),
-            .k = round10(s * (@as(i32, cs[k14]) - cs[5]) * gold_per_cs),
+        const has_cs = !(d.role == .jungle or d.role == .support or cs.len <= k14);
+        // Each phase names the side that gains in it: a signed "lead" read as the other
+        // side ahead (walk 1 Nov S1)
+        const p = if (@abs(e) < level_gold) L.level_at6 else L.ahead_at6.with(h, .{
+            .a = names[@intFromBool(e < 0)],
+            .e = @abs(e),
+            .c = if (has_cs) csPart(h, e, cs[5]).s else "",
         });
+        const f = g - e;
+        const q = if (@abs(f) < level_gold) L.even_6to14 else L.gains_6to14.with(h, .{
+            .a = names[@intFromBool(f < 0)],
+            .f = @abs(f),
+            .c = if (has_cs) csPart(h, f, @as(i32, cs[k14]) - cs[5]).s else "",
+        });
+        out[n] = L.phases.with(h, .{ .p = p.s, .q = q.s });
         n += 1;
     }
     if (swing(h, d, gold[0 .. k14 + 1])) |t| {
@@ -568,6 +595,14 @@ pub fn laneLines(h: *H, d: *const MoreData) []const tree.Text {
         n += 1;
     }
     return out[0..n];
+}
+
+/// How much of a phase's `gold` (x minus y) came from its `cs` gap, for the side gaining
+/// it; nothing when CS went the other way or is too small to say
+fn csPart(h: *H, gold: i32, cs: i32) tree.Text {
+    const c = round10(std.math.sign(gold) * cs * gold_per_cs);
+    if (c < 10) return plain("");
+    return if (c > @abs(gold)) L.cs_all.with(h, .{ .c = c }) else L.cs_part.with(h, .{ .c = c });
 }
 
 /// The three minutes where gold moves most, and a level 6 or first item lead of the side
@@ -737,11 +772,20 @@ test "lane lines: the lead by phase and CS, the swing with a spike in it, none w
     var d = try testMore(a, .{ 0, 10, 20, 40, 60, 100, 180, 280, 360, 420, 480, 530, 570, 600 }, 2, 12);
     var ls = laneLines(&h, &d);
     try testing.expectEqual(2, ls.len);
-    try eq("Darius's gold lead: +100 by 6 min (CS worth +40), +500 from 6 to 14 min (CS worth +200).", ls[0].s);
+    try eq("Darius 100 gold ahead at 6 min (40 of it from CS), then Darius gains 500 from 6 to 14 min (200 of it from CS).", ls[0].s);
     try eq("Darius gains most from 6 to 9 min: 260 gold, around reaching level 6 at 6:05, 25 s before Garen.", ls[1].s);
 
     d.role = .jungle;
-    try eq("Darius's gold lead: +100 by 6 min, +500 from 6 to 14 min.", laneLines(&h, &d)[0].s);
+    try eq("Darius 100 gold ahead at 6 min, then Darius gains 500 from 6 to 14 min.", laneLines(&h, &d)[0].s);
+
+    // A small early lead the other way: named, never a negative lead (Fiora vs Darius, -23 at 6)
+    d = try testMore(a, .{ 0, -5, -10, -15, -20, -60, 0, 60, 120, 180, 240, 300, 360, 420 }, -1, 6);
+    try eq("Garen 60 gold ahead at 6 min (20 of it from CS), then Darius gains 480 from 6 to 14 min (140 of it from CS).", laneLines(&h, &d)[0].s);
+    d = try testMore(a, .{ 0, -5, -10, -15, -20, -23, 0, 60, 120, 180, 240, 300, 360, 420 }, 0, 6);
+    try eq("Level at 6 min, then Darius gains 443 from 6 to 14 min (120 of it from CS).", laneLines(&h, &d)[0].s);
+    // CS more than the whole gain
+    d = try testMore(a, .{ 0, 10, 20, 40, 60, 100, 120, 140, 160, 180, 200, 220, 240, 260 }, 1, 20);
+    try eq("Darius 100 gold ahead at 6 min (20 of it from CS), then Darius gains 160 from 6 to 14 min (CS alone worth 380).", laneLines(&h, &d)[0].s);
 
     // An early Darius lead turned; Garen's first item inside the swing
     d = try testMore(a, .{ 0, 50, 100, 150, 200, 200, 120, 40, -40, -120, -200, -280, -340, -400 }, 0, -20);
@@ -754,7 +798,7 @@ test "lane lines: the lead by phase and CS, the swing with a spike in it, none w
     d = try testMore(a, .{ 0, -50, -100, -150, -200, -300, -280, -250, -200, -150, -100, -50, 0, 60 }, 0, 0);
     ls = laneLines(&h, &d);
     try testing.expectEqual(2, ls.len);
-    try eq("Garen is 300 gold ahead at 6 min, level by 14 (\u{2212}60 for Garen).", ls[0].s);
+    try eq("Garen is 300 gold ahead at 6 min, level by 14.", ls[0].s);
     try eq("Garen gains most from 3 to 6 min: 200 gold.", ls[1].s);
 
     d = try testMore(a, @splat(20), 0, 0);

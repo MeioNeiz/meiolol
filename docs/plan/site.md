@@ -217,8 +217,9 @@ None open: the Later list below.
 - Matchups index: the finder (docs/plan/ui/matchups.md): Your champion ⇄ Opponent in
   one row, Most played and Moved this patch, one picked champion's matchup grid
 - Lane lines under the Lane chart (matchpage.laneLines), only what the figures don't say:
-  the lead by 6 min and from 6 to 14 with CS's worth in each (or the crossing minute),
-  and the 3 minutes where gold moves most with a level 6 or first item lead inside them.
+  who is ahead at 6 min and who gains from 6 to 14, each by how much and how much of it
+  CS, never a signed lead (read as the other side ahead; under 50 gold "level"), or the
+  crossing minute; and the 3 minutes where gold moves most with a level 6 or first item lead inside them.
   None when thin or flat; no leader has free matchup tips (Mobalytics charges)
 - MU7 audit items: gold line grey, runes without the empty band; the header's "usually"
   is x's expected rate against an opponent this strong (its tip says so), not the
