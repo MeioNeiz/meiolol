@@ -219,9 +219,11 @@ pub const Row = struct {
             .skills => h.span(.{ .class = "what" }, .{ h.span(.{ .class = "keys", .data_v = "max" }, .{keys(h, o.keys, true)}), bestMark(h, r), usualMark(h, r) }),
             .skill_path => h.span(.{ .class = "what" }, .{ h.span(.{ .class = "keys", .data_v = "path" }, .{keys(h, o.keys, false)}), usualMark(h, r) }),
             else => blk: {
+                // No icon ("No boots"): its name instead of an empty square, open or not
+                const bare = o.art.len == 1 and o.art[0].src.len == 0;
                 var icons = h.list();
-                for (o.art) |a| icons.add(art.view(h, a, .{ .k = if (r.c.kind == .spells) .spell else .item, .named = !open }));
-                const label: ?[]const u8 = if (!open) null else if (o.name.len > 0) o.name else if (o.art.len == 1) o.art[0].name else null;
+                if (!bare) for (o.art) |a| icons.add(art.view(h, a, .{ .k = if (r.c.kind == .spells) .spell else .item, .named = !open }));
+                const label: ?[]const u8 = if (bare) o.art[0].name else if (!open) null else if (o.name.len > 0) o.name else if (o.art.len == 1) o.art[0].name else null;
                 const minute: ?N = if (open and o.minutes.len == 1 and o.minutes[0] > 0)
                     h.span(.{ .class = "min" }, .{ phrase.num(h, .int, @as(u32, @intFromFloat(@round(o.minutes[0])))), " ", W.min })
                 else
@@ -653,6 +655,7 @@ pub const css =
     \\  .c-build .what { display: flex; align-items: center; gap: 4px; min-width: 0; }
     \\  .c-build .what .c-art { --sz: 30px; }
     \\  .c-build .what > .nm { margin-left: 6px; color: var(--t2); overflow: hidden; text-overflow: ellipsis; }
+    \\  .c-build .what > .nm:first-child { margin-left: 0; white-space: nowrap; }
     \\  .c-build .what > .min, .c-build .own { color: var(--faint); font-size: var(--fs-s); }
     \\  .c-build .what > .min { margin-left: var(--sp-2); }
     \\  .c-build :is(td, .lp) > .w { font-weight: var(--w-b); color: var(--c, var(--faint)); }
