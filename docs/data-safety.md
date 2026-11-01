@@ -182,7 +182,7 @@ deploy/health.sh runs on the box and prints one line per problem:
 | no new matches | report's per-region match counters unchanged for 2h (STALL_H) |
 | complete form off | the last report line says `complete off`: a packer or sealer error, the form restarts from its spool after 60 s (riot/complete.zig); the line's `complete` part counts docs, raw, frames, MB, queued, dropped (queue full at 200,000) and restarts in the last hour; also a problem: 3+ restarts in an hour, or any dropped |
 | complete form still | the newest `.part` in data/complete not written for 30 min while the crawler runs (mastery blocks seal about every minute) |
-| complete form scrub | the last `complete form:` line in data/backup.log reports failed day files (retried next run) |
+| complete form scrub | data/complete-scrub.status, the last scrub by any `forget` or `backup`, is not `ok`: day files failed (`failed N`) or the scrub stopped (`error NAME`); the next run retries. The forgotten list is exported before the scrub, so mirrors and the archive still get it |
 | Megatron mirror | unit `meiolol-megatron-mirror` failed (data/backup-mirror.log), e.g. its day files rsync |
 | complete form quarantine | files in data/complete/spool/quarantine (below) |
 | WAL not checkpointed | a data/*.db-wal over 4 GB (crawler's checkpointer stuck, or a reader holding it) |

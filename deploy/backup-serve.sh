@@ -96,10 +96,18 @@ case "${cmd:-}" in
         (( bad == 0 )) || { echo "some acks did not match the box's files" >&2; exit 1; }
         ;;
     forgotten)
-        tmp=$(mktemp)
-        bin/meiolol forget --data data --export "$tmp" > /dev/null 2>&1
-        cat "$tmp"
-        rm -f "$tmp"
+        # The list is written before the day file scrub, whose failure (exit 1) health.sh
+        # reports: the list goes out anyway. No list at all fails loudly, never an empty one
+        tmp=$(mktemp -d)
+        rc=0
+        bin/meiolol forget --data data --export "$tmp/list" > /dev/null 2> "$tmp/log" || rc=$?
+        if [[ ! -f "$tmp/list" ]]; then
+            echo "forget --export wrote no list (exit $rc): $(tail -n 1 "$tmp/log")" >&2
+            rm -rf "$tmp"
+            exit 1
+        fi
+        cat "$tmp/list"
+        rm -rf "$tmp"
         ;;
     prune)
         newest_state=$(files | grep '^state/' | tail -n 1)

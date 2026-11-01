@@ -8,9 +8,13 @@ cd "$(dirname "$0")/.." || exit 1
 export MEIOLOL_BACKUPS=${MEIOLOL_BACKUPS:-$HOME/ml/meiolol/backups}
 # Complete lists both ways (docs/your-games.md); the meiolol-exchange ssh alias is the
 # rrsync user on the web server. Skipped until the service is deployed
+# A failed day file scrub after the export (health.sh reports it) still sends the list
 if rsync -q meiolol-exchange:forgotten.txt data/exchange-forgotten.txt 2> /dev/null; then
+    rm -f data/box-forgotten.txt
     bin/meiolol forget --data data --list data/exchange-forgotten.txt \
         --backups "$MEIOLOL_BACKUPS" --export data/box-forgotten.txt \
+        || echo "$(date -u +%FT%TZ) forget FAILED"
+    [[ -f data/box-forgotten.txt ]] \
         && rsync -q data/box-forgotten.txt meiolol-exchange:box-forgotten.txt \
         || echo "$(date -u +%FT%TZ) forgotten exchange FAILED"
 fi

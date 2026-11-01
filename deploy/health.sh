@@ -93,10 +93,13 @@ fi
 if ! running meiolol-backup; then
     problems+=("backup loop not running (meiolol-backup)")
 fi
-# The daily forget and backup bring sealed day files up to the forgotten list
-# (riot/complete_scrub.zig); a file that failed is retried next day
-failed=$(grep 'complete form: .* failed$' data/backup.log 2> /dev/null | tail -n 1 | grep -oE '[0-9]+ failed$' | cut -d' ' -f1)
-(( ${failed:-0} > 0 )) && problems+=("complete form: $failed day files failed their scrub (data/backup.log)")
+# Every forget and backup brings sealed day files up to the forgotten list
+# (riot/complete_scrub.zig); the next run retries what failed. Last outcome: "<unix> ok",
+# "<unix> failed N" or "<unix> error NAME"
+read -r _ scrub detail < data/complete-scrub.status 2> /dev/null || scrub=
+if [[ -n "$scrub" && "$scrub" != ok ]]; then
+    problems+=("complete form scrub $scrub ${detail:-}: day files not brought up to the forgotten list")
+fi
 if systemctl --user -q is-failed meiolol-megatron-mirror.service 2> /dev/null; then
     problems+=("Megatron mirror failed (data/backup-mirror.log)")
 fi

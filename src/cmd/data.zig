@@ -318,14 +318,27 @@ pub fn cmdBackup(c: *Cmd) !u8 {
 }
 
 /// The complete form's sealed day files (riot/complete_scrub.zig): those past 24 months
-/// deleted, the rest brought up to every forgotten PUUID; false when a file failed
+/// deleted, the rest brought up to every forgotten PUUID; false when a file failed or the
+/// scrub stopped
 fn tendComplete(c: *Cmd, db: store.Db, now: i64) !bool {
-    const t = try riot.complete_scrub.tend(c.init.gpa, c.init.io, c.data_dir, try forget.list(c.arena, db), now);
+    const t = riot.complete_scrub.tend(c.init.gpa, c.init.io, c.data_dir, try forget.list(c.arena, db), now) catch |err| {
+        std.log.err("complete form: scrub stopped: {t}", .{err});
+        try scrubStatus(c, now, try std.fmt.allocPrint(c.arena, "error {t}", .{err}));
+        return false;
+    };
     std.log.info("complete form: {d} day files read, {d} rewritten ({d} documents dropped), " ++
         "{d} past 24 months deleted, {d} quarantined spool records dropped, {d} failed", .{
         t.files, t.rewritten, t.dropped, t.aged, t.quarantined, t.failed,
     });
+    try scrubStatus(c, now, if (t.failed == 0) "ok" else try std.fmt.allocPrint(c.arena, "failed {d}", .{t.failed}));
     return t.failed == 0;
+}
+
+/// Every run's outcome, whoever ran it (the serve scripts drop forget's output): health.sh
+/// alerts on the last one not ok. A later run retries what failed
+fn scrubStatus(c: *Cmd, now: i64, outcome: []const u8) !void {
+    const path = try std.fs.path.join(c.arena, &.{ c.data_dir, "complete-scrub.status" });
+    try std.Io.Dir.cwd().writeFile(c.init.io, .{ .sub_path = path, .data = try std.fmt.allocPrint(c.arena, "{d} {s}\n", .{ now, outcome }) });
 }
 
 pub const usage_restore =
@@ -571,8 +584,9 @@ pub fn cmdForget(c: *Cmd) !u8 {
         std.log.info("views partials: {d} rows blanked", .{n});
     }
     if (api_db != null and ids.len > 0) std.log.info("Your games cache: erased and blocked", .{});
-    const tended = if (db) |d| try tendComplete(c, d, now) else true;
     if (backups != null) std.log.info("backup rows: {d}", .{scrubbed.total()});
+    // Before the day file scrub: its failure must not keep the list from the mirrors and
+    // the archive (an archived player would never be erased there)
     if (export_path) |path| {
         const d = db orelse {
             std.log.err("--export needs meiolol.db in {s}", .{c.data_dir});
@@ -580,6 +594,7 @@ pub fn cmdForget(c: *Cmd) !u8 {
         };
         std.log.info("{d} forgotten PUUIDs written to {s}", .{ try forget.exportList(io, d, path), path });
     }
+    const tended = if (db) |d| try tendComplete(c, d, now) else true;
     // Not a failure: the daily exchange would stop pushing the box's list over one bad line
     if (malformed > 0) std.log.warn("{d} entries are neither a Riot ID (Name#TAG) nor a PUUID: skipped", .{malformed});
     if (unresolved > 0) {
