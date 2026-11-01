@@ -80,6 +80,8 @@ const W = struct {
     pub const tip_wc = phrase.Phrase(" · {v:pct}");
     pub const tip_gold = phrase.Phrase(" · {v:signed} gold");
     pub const star = plain("★");
+    pub const tip_fight = phrase.Phrase(" · fight {a:int}–{b:int}");
+    pub const tip_obj = phrase.Phrase(" · {o:text}");
 };
 
 pub const Timeline = struct {
@@ -94,9 +96,12 @@ pub const Timeline = struct {
     press: chart.Press = .{},
     /// Compact's pointer
     read: chart.Reading = .{},
-    /// Home's small game: a reading tip only (no range, no moment), deaths as ticks,
-    /// epic objectives only, no fight marks
+    /// Home's small game: the pointer reads (no range), the tip says what happened that
+    /// minute; marks for the big fights only, a picked one shows its tip
     compact: bool = false,
+    /// Compact's tip line, `happened` (home sets it, so the game page's island leaves it
+    /// out of its budget)
+    say: ?*const fn (*const T, *H, u16) N = null,
 
     const T = @This();
 
@@ -181,6 +186,12 @@ pub const Timeline = struct {
         switch (m) {
             .mode => |md| t.mode = md,
             .mark => |i| {
+                if (t.compact) {
+                    t.cur = if (is(t.cur, i)) null else i;
+                    t.tip = null;
+                    t.read.drop();
+                    return;
+                }
                 t.cur = i;
                 if (!t.inRange(t.game.moments[i].t)) t.range = null;
                 ev.push = true;
@@ -202,6 +213,7 @@ pub const Timeline = struct {
                     t.read.drop();
                 } else {
                     t.tip = t.sec(x.f);
+                    t.cur = null;
                 },
                 .clear => t.tip = null,
             } else switch (t.press.pointer(ev)) {
@@ -269,14 +281,16 @@ pub const Timeline = struct {
             const s: f32 = @floatFromInt(t.game.moments[i].t);
             for (chart.cursor(h, p.x.at(s), p.py(t.valAt(s)))) |n| over.add(n);
         }
-        if (t.tip) |s| {
+        const tip_at = t.tip orelse if (t.compact) if (t.cur) |i| t.game.moments[i].t else null else null;
+        if (tip_at) |s| {
             const sf: f32 = @floatFromInt(s);
             const val = t.valAt(sf);
             const figure = if (t.mode == .wc)
                 W.tip_wc.with(h, .{ .v = @as(i32, @intFromFloat(@round(val))) })
             else
                 W.tip_gold.with(h, .{ .v = @as(i32, @intFromFloat(@round(val))) });
-            for (chart.tip(h, p.x.at(sf), .{ h.b(.{}, .{phrase.num(h, .time, s)}), figure })) |n| over.add(n);
+            const what = if (t.say) |f| f(t, h, s) else N.none;
+            for (chart.tip(h, p.x.at(sf), .{ h.b(.{}, .{phrase.num(h, .time, s)}), figure, what })) |n| over.add(n);
         }
         const live = !t.compact;
         return chart.frame(h, .{
@@ -306,6 +320,27 @@ pub const Timeline = struct {
         });
     }
 
+    /// What happened around second s, for compact's tip: a picked moment's score, else
+    /// the kills and epic objectives of s's minute
+    pub fn happened(t: *const T, h: *H, s: u16) N {
+        var l = h.list();
+        var us: u8 = 0;
+        var them: u8 = 0;
+        if (t.tip == null) if (t.cur) |i| {
+            us = t.game.moments[i].us;
+            them = t.game.moments[i].them;
+        };
+        const minute = s / 60;
+        if (t.tip != null) for (t.game.deaths) |d| if (d.t / 60 == minute) {
+            if (d.ours) them +|= 1 else us +|= 1;
+        };
+        if (us + them > 0) l.add(h.span(.{}, .{W.tip_fight.with(h, .{ .a = us, .b = them })}));
+        for (t.game.objectives) |o| if (o.kind.epic() and o.t / 60 == minute) {
+            l.add(h.span(.{}, .{W.tip_obj.with(h, .{ .o = o.name })}));
+        };
+        return h.span(.{}, .{l.done()});
+    }
+
     fn yTicks(t: *const T, h: *H, p: chart.Plane) []const chart.Tick {
         if (t.mode == .wc) {
             const all = chart.chanceTicks(h, p);
@@ -332,7 +367,6 @@ pub const Timeline = struct {
         var l = h.list();
         var last: [2][2]f32 = .{ .{ -100, -100 }, .{ -100, -100 } };
         for (t.game.objectives) |o| {
-            if (t.compact and !o.kind.epic()) continue;
             const x = p.x.at(@floatFromInt(o.t));
             const side = &last[@intFromBool(!o.ours)];
             const row: u8 = if (x - side[0] >= 1.6) 0 else if (x - side[1] >= 1.6) 1 else 0;
@@ -353,7 +387,8 @@ pub const Timeline = struct {
             stop = i;
             break;
         };
-        if (!t.compact) for (t.game.moments, 0..) |m, i| {
+        for (t.game.moments, 0..) |m, i| {
+            if (t.compact and !big(m)) continue;
             const on = is(t.cur, i);
             l.add(h.button(.{
                 .key = i,
@@ -368,7 +403,7 @@ pub const Timeline = struct {
                 .style = h.vars(.{ .x = p.x.at(@floatFromInt(m.t)) }),
                 .on_click = h.on(t, .{ .mark = @as(u8, @intCast(i)) }),
             }, .{}));
-        };
+        }
         return h.div(.{ .class = "fs", .role = "group", .aria_label = W.fights }, .{l.done()});
     }
 
@@ -411,11 +446,15 @@ pub const Timeline = struct {
         return h.div(.{
             .class = "em",
             .data_at = if (under) "bottom" else "top",
-            .data_compact = t.compact,
             .style = h.vars(.{ .n = @max(tallest, 2) }),
         }, .{stacks.done()});
     }
 };
+
+/// A fight compact marks: two kills or more, or an objective
+fn big(m: Moment) bool {
+    return m.us + m.them >= 2 or m.objective;
+}
 
 fn is(x: anytype, i: usize) bool {
     return if (x) |v| v == i else false;
@@ -456,17 +495,14 @@ pub const css =
     \\  .c-tl > .em[data-at="bottom"] .pt { box-shadow: 0 0 0 1.2px var(--us); }
     \\  .c-tl > .em .pt[data-you] { box-shadow: 0 0 0 2px var(--accent); }
     \\  .c-tl .pt img { display: block; width: 100%; height: 100%; }
-    \\  .c-tl .tk { display: none; width: 3px; height: calc(var(--n) * 2px + 4px); border-radius: 1px; background: var(--them); }
-    \\  .c-tl > .em[data-at="bottom"] .tk { background: var(--us); }
-    \\  .c-tl > .em[data-compact] { height: 14px; }
-    \\  .c-tl > .em[data-compact] .pt { display: none; }
-    \\  .c-tl > .em[data-compact] .tk { display: block; }
+    \\  .c-tl .tk { display: none; width: 4px; height: calc(var(--n) * 3px + 5px); border-radius: 1px; background: var(--them-hot); }
+    \\  .c-tl > .em[data-at="bottom"] .tk { background: var(--us-hot); }
     \\  .c-tl .star { position: absolute; top: 2px; left: calc(var(--x) * 1%); transform: translateX(-50%);
     \\    color: var(--turn); line-height: 1; pointer-events: none; }
     \\  .c-tl .turn { fill: var(--turn); opacity: 0.13; }
     \\  @container (max-width: 480px) {
     \\    .c-tl .ob[data-minor] { display: none; }
-    \\    .c-tl > .em { height: 14px; }
+    \\    .c-tl > .em { height: 19px; }
     \\    .c-tl .pt { display: none; }
     \\    .c-tl .tk { display: block; }
     \\  }
@@ -492,7 +528,7 @@ pub fn gallery(g: *Gallery) void {
     const states = [_]struct { []const u8, Timeline }{
         .{ "the turning moment picked", .{ .game = &demo_game, .cur = 17 } },
         .{ "gold, a range dragged, the tip", .{ .game = &demo_game, .mode = .gold, .range = .{ 1500, 1800 }, .tip = 1800 } },
-        .{ "compact, the reading tip only", .{ .game = &demo_game, .compact = true } },
+        .{ "compact, a big fight picked", .{ .game = &demo_game, .compact = true, .say = Timeline.happened, .cur = 17 } },
     };
     for (states) |s| {
         const t = h.mem.create(Timeline) catch {
@@ -554,7 +590,7 @@ test "on the fake DOM: a linked moment, a dragged range, arrows within it, Escap
     try testing.expectEqual(@as(u32, 0), fake.warnings);
 }
 
-test "compact: the pointer shows the reading, never a range; a tap keeps it" {
+test "compact: the pointer shows the reading, never a range; a tap keeps it; marks pick" {
     const island = @import("island.zig");
     const Fake = @import("fakedom.zig").Fake;
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
@@ -562,7 +598,7 @@ test "compact: the pointer shows the reading, never a range; a tap keeps it" {
     const a = arena.allocator();
     var fake: Fake = .{ .a = a, .width = 760 };
     var rt: island.Runtime(Fake) = .init(a, &fake);
-    var server: Timeline = .{ .game = &demo_game, .compact = true };
+    var server: Timeline = .{ .game = &demo_game, .compact = true, .say = Timeline.happened };
     var state = server;
     const t = try a.create(tree.Tree);
     t.* = .{};
@@ -602,5 +638,12 @@ test "compact: the pointer shows the reading, never a range; a tap keeps it" {
     _ = rt.event(0, .{ .kind = .pointerdown, .target = plot, .x = 300 });
     _ = rt.event(0, .{ .kind = .pointercancel, .target = plot });
     try testing.expectEqual(@as(?u16, null), state.tip);
+    // A big fight's mark picks it, its tip says the score; a second press drops it
+    const mark = cur.node(cur.find(cur.root, "class", "fm").?).dom;
+    _ = rt.event(0, .{ .kind = .click, .target = mark });
+    try testing.expectEqual(@as(?u8, 2), state.cur);
+    try testing.expect(i.current().find(i.current().root, "role", "status") != null);
+    _ = rt.event(0, .{ .kind = .click, .target = i.current().node(i.current().find(i.current().root, "class", "fm").?).dom });
+    try testing.expectEqual(@as(?u8, null), state.cur);
     try testing.expectEqual(@as(u32, 0), fake.warnings);
 }

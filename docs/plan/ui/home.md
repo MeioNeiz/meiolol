@@ -40,10 +40,10 @@ Desktop 1280, a 12-column grid under the site header:
       in one order, biggest rise to biggest fall, a rule where rises turn to falls and
       the bars on one axis down the list (note 43: up then down by size read as random)
     - Learn: today's lesson title and a progress ring of the five
-- Right (8/12): the review (`game-header`, `timeline-graph` in its compact form: the
-  fight strip above and deaths as ticks on the plot's edges, game-detail.md; the
-  `stat-cell` row; the game-detail kit with a reading tip only: no range, moment or
-  inspector) of:
+- Right (8/12): the review (`game-header`, `timeline-graph` in its compact form,
+  game-detail.md: the fight strip above with every objective and a mark per big fight,
+  death portraits on the plot's edges (ticks on a phone); the `stat-cell` row; no range
+  or inspector; the tip says what happened that minute, notes 56-58) of:
   - the visitor's newest game when this device has looked a Riot ID up (their player
     bar compact above it: Riot ID, record, form strip), with "Open" to the game
   - otherwise the example, with the role switch (exists) as `segmented`, and its
@@ -88,7 +88,7 @@ on the page, ~150 in the first screen.
 ## Components used (register names)
 
 IdLookup, Chip, TodayCard, ChampIcon, Delta (patch changes, as stats uses it),
-GameHeader, TimelineChart (compact: FightStrip, edge ticks; reading tip only), StatStrip, Segmented, RolePicker,
+GameHeader, TimelineChart (compact: big fights, no range), StatStrip, Segmented, RolePicker,
 ChampSearch, PlayerBar (compact), ResultStrip (form).
 
 ## Data needed

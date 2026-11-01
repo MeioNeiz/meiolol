@@ -84,8 +84,10 @@ at ~740-800, the strip and portraits take ~80 px): the objectives row, players, 
 build.
 
 Phone 390 (a minute is ~8 px, too narrow for portraits): the fight strip keeps fights
-and epic monsters only, deaths become 3 px ticks on the edges (taller for more deaths).
-The same compact form is home's review, with the reading tip only (no range or moment).
+and epic monsters only, deaths become 4 px ticks on the edges (taller for more deaths).
+Home's review is the compact form: the pointer reads (no range), its tip adds that
+minute's kills and epic objectives; fight marks only for big fights (two kills or more,
+or an objective), a picked one shows its tip and a second press drops it.
 
 Phone 390: game strip (scrolls), header in two rows (portraits, KDA and result; then the
 four figure cells as a 4-up grid, build on a third row), graph full width at 200 px with

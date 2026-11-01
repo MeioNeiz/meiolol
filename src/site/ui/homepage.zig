@@ -19,6 +19,7 @@ const segmented = @import("segmented.zig");
 const bar = @import("bar.zig");
 const gamehead = @import("gamehead.zig");
 const gamepage = @import("gamepage.zig");
+const timeline = @import("timeline.zig");
 const gamedata = @import("gamedata.zig");
 const idlookup = @import("idlookup.zig");
 const yourlist = @import("yourlist.zig");
@@ -103,6 +104,7 @@ pub const HomeReview = struct {
         const s = &p.s;
         // Each game opened makes a new Timeline
         s.tl.compact = true;
+        s.tl.say = timeline.Timeline.happened;
         var roles: [5]rolepicker.Item = undefined;
         for (&roles, Role.all) |*it, r| it.* = .{
             .role = r,
