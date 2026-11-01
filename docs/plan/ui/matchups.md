@@ -29,7 +29,8 @@ champion": they know one. Nobody comes to read 5,000 rows.
   RelationPicker, Against preselected) under the slots, so the second pick can be a tile
   tap
 - Nothing picked: a RolePicker (All first, the default: every lane's pairs, each row
-  with its role), then three short `ChampList`s side by side (8 rows each, every row a
+  with its role), then three short `ChampList`s side by side (8 rows each, "N more" opens up to 25 in place
+  and stays open across roles; every row a
   matchup page, drawn as a duel: both portraits, the names over the lane's win rate bar
   with its 95% range, a ring where a patch move started; Jacob 1 Nov, notes 61-62): Moved this patch (clear win rate moves, then
   the surest others down to 100 games a patch, faint with ±range; from the side that

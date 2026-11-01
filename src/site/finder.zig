@@ -21,8 +21,8 @@ const Curves = core.curvesfile.Curves;
 const Site = root.Site;
 const tpl = html.tpl;
 
-/// Pairs per role (or All) in each list
-const shown = 8;
+/// Pairs per role (or All) in each list: the card shows fd.shown, its button the rest
+const kept = 25;
 /// Hardest lanes and lane bullies: fewer games and a pair's luck tops the lists (at 500 a
 /// win rate's 95% range is still about ±4.4 points: Hardest ranks by its edge)
 const list_games = 500;
@@ -154,7 +154,7 @@ fn hardest(a: std.mem.Allocator, pairs: []const LanePair) ![]const fd.Pair {
             return upper(p) < upper(q);
         }
     }.f);
-    return list[0..@min(list.len, shown)];
+    return list[0..@min(list.len, kept)];
 }
 
 fn upper(p: fd.Pair) f64 {
@@ -183,7 +183,7 @@ fn bullies(a: std.mem.Allocator, pairs: []const LanePair) ![]const fd.Lead {
             return p.gold > q.gold;
         }
     }.f);
-    return list[0..@min(list.len, shown)];
+    return list[0..@min(list.len, kept)];
 }
 
 /// Per role, then All, the win rate moves too big to be luck (the patch page's test), then
@@ -236,7 +236,7 @@ fn movedIn(a: std.mem.Allocator, pd: *const patchday.PatchDay, r: ?Role, ids: an
             return if (p.m.clear) p.m.d > q.m.d else p.z > q.z;
         }
     }.f);
-    const out = try a.alloc(fd.Move, @min(list.items.len, shown));
+    const out = try a.alloc(fd.Move, @min(list.items.len, kept));
     for (out, list.items[0..out.len]) |*v, x| v.* = x.m;
     return out;
 }

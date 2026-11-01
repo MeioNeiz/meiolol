@@ -35,6 +35,11 @@ pub const scope = .{ ".c-finder", ".c-fgrid" };
 
 pub const Other = champpage.Other;
 
+/// Rows a list shows closed; its button opens the rest the server kept
+pub const shown = 8;
+
+pub const List = enum(u8) { moved, hard, bully };
+
 pub const Data = struct {
     ddragon: []const u8,
     /// Pair.x and .y index it
@@ -83,6 +88,8 @@ const W = struct {
     pub const patch = Phrase("Patch {p:text}");
     pub const role_label = plain("Role");
     pub const none = plain("Not enough games yet.");
+    pub const more = Phrase("{n:int} more");
+    pub const fewer = plain("Fewer");
     pub const pm = Phrase("±{ci:dec}");
     pub const yours = plain("Your champion");
     pub const opponent = plain("Opponent");
@@ -101,10 +108,12 @@ pub const Finder = struct {
     pair: champrolepicker.Pair,
     /// The second champion as last seen: a new one is a pick, the same a role change
     b_seen: ?u16 = null,
+    /// List's order: open past `shown`, kept across roles
+    open: [3]bool = @splat(false),
 
     const F = @This();
 
-    pub const Msg = union(enum) { role: ?role.Role, a, b, swap };
+    pub const Msg = union(enum) { role: ?role.Role, a, b, swap, more: List };
 
     pub const Url = struct { role: ?role.Role = null, c: url.Str(24) = .{}, vs: url.Str(24) = .{} };
 
@@ -167,6 +176,7 @@ pub const Finder = struct {
                 f.role = r;
                 ev.push = true;
             },
+            .more => |l| f.open[@backingInt(l)] = !f.open[@backingInt(l)],
             .a, .swap => {
                 if (p.a.search.chosen != null and p.a.search.chosen == p.b.search.chosen) p.b.reset();
                 if (p.a.role) |r| {
@@ -234,10 +244,15 @@ pub const Finder = struct {
         return if (f.role == null) r else null;
     }
 
-    fn listCard(h: *H, title: tree.Text, controls: []const N, rows: []const champlist.Row) N {
+    fn listCard(f: *F, h: *H, l: List, title: tree.Text, controls: []const N, rows: []const champlist.Row) N {
+        const open = f.open[@backingInt(l)];
+        const more = if (rows.len <= shown) N.none else h.button(.{ .type = "button", .class = "all", .aria_expanded = open, .on_click = h.on(f, .{ .more = l }) }, .{
+            if (open) W.fewer else W.more.with(h, .{ .n = rows.len - shown }),
+        });
         return card.view(h, .{}, &.{
             card.head(h, title, null, controls),
-            if (rows.len == 0) h.p(.{ .class = "none" }, .{W.none}) else champlist.view(h, .{ .label = title }, rows),
+            if (rows.len == 0) h.p(.{ .class = "none" }, .{W.none}) else champlist.view(h, .{ .label = title }, rows[0..if (open) rows.len else @min(rows.len, shown)]),
+            more,
         });
     }
 
@@ -266,7 +281,7 @@ pub const Finder = struct {
             .note = phrase.num(h, .count, m.games),
         };
         const link = h.a(.{ .class = "more", .href = h.fmt("/patch{s}", .{f.query}) }, .{W.patch.with(h, .{ .p = d.patch })});
-        return listCard(h, W.moved, &.{link}, rows);
+        return f.listCard(h, .moved, W.moved, &.{link}, rows);
     }
 
     fn hardCard(f: *F, h: *H) N {
@@ -284,7 +299,7 @@ pub const Finder = struct {
                 .note = phrase.num(h, .count, p.games),
             };
         }
-        return listCard(h, W.hard, &.{}, rows);
+        return f.listCard(h, .hard, W.hard, &.{}, rows);
     }
 
     fn bullyCard(f: *F, h: *H) N {
@@ -299,7 +314,7 @@ pub const Finder = struct {
             .value = h.span(.{}, .{W.gold.with(h, .{ .g = l.gold })}),
             .note = phrase.num(h, .count, l.games),
         };
-        return listCard(h, W.bully, &.{}, rows);
+        return f.listCard(h, .bully, W.bully, &.{}, rows);
     }
 };
 
@@ -472,6 +487,9 @@ pub const css =
     \\  .c-finder .lists { display: grid; gap: var(--sp-3); justify-items: start; }
     \\  .c-finder .cols { justify-self: stretch; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--sp-4); align-items: start; }
     \\  .c-finder .none { margin: 0; color: var(--faint); }
+    \\  .c-finder .c-card > .all { all: unset; display: inline-flex; align-items: center; min-height: 32px; margin-top: var(--sp-1); font-size: var(--fs-s); color: var(--accent); cursor: pointer; }
+    \\  .c-finder .c-card > .all:hover { text-decoration: underline; }
+    \\  .c-finder .c-card > .all:focus-visible { outline: 2px solid var(--focus); }
     \\  .c-finder .pm { margin-left: 4px; color: var(--faint); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
     \\  .c-fgrid:not(:empty) { display: grid; gap: var(--sp-4); margin-top: var(--sp-4); }
     \\  .c-fgrid > .go, .c-fgrid > .none { margin: 0; }
@@ -517,6 +535,13 @@ pub const Demo = struct {
         .bully = &.{ &top_leads, &.{}, &.{}, &.{}, &.{}, &top_leads },
         .moved = &.{ &top_moves, &.{}, &mid_moves, &.{}, &.{}, &all_moves },
         .patch = "16.21",
+    };
+
+    const long_hard = [_]Pair{ top[0], mid[0], top[1], top[0], mid[0], top[1], top[0], mid[0], top[1], top[0], mid[0] };
+    pub const long: Data = blk: {
+        var d = data;
+        d.hard = &.{ &.{}, &.{}, &.{}, &.{}, &.{}, &long_hard };
+        break :blk d;
     };
 
     /// Darius's file: Opp.champ indexes matchgrid's demo champions (Garen first)
@@ -565,6 +590,20 @@ pub fn gallery(g: *Gallery) void {
         gr.fromUrl(u);
         if (st[4]) gr.got("darius", &Demo.more);
         g.addFill(st[0], h.div(.{}, .{ f.view(h), gr.view(h) }));
+    }
+    for ([_]bool{ false, true }) |open| {
+        const f = h.mem.create(Finder) catch {
+            h.oom = true;
+            return;
+        };
+        f.* = Finder.init(h.mem, &Demo.long, "") catch {
+            h.oom = true;
+            return;
+        };
+        f.pair.a.search.id = h.fmt("{s}-a", .{g.id("fd")});
+        f.pair.b.search.id = h.fmt("{s}-b", .{g.id("fd")});
+        f.open[@backingInt(List.hard)] = open;
+        g.addFill(if (open) "Hardest lanes opened past 8" else "Hardest lanes longer than 8: the button for the rest", f.view(h));
     }
 }
 
@@ -666,6 +705,49 @@ test "Finder: All by default, every lane's pairs, each row its role and its lane
     try @import("html.zig").write(&t, f.view(&h), &w.writer);
     try testing.expect(std.mem.find(u8, w.written(), "ahri-vs-zed") == null);
     try testing.expect(std.mem.find(u8, w.written(), "<span class=\"vs\">vs </span>") != null);
+}
+
+test "Finder: a list shows 8 rows, its button the rest the server kept, open across roles" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var pairs: [shown + 3]Pair = undefined;
+    for (&pairs, 0..) |*p, i| p.* = .{ .role = .top, .x = 0, .y = 1, .games = 600 + @as(u32, @intCast(i)), .wins = 250 };
+    var d = Demo.data;
+    d.hard = &.{ &pairs, &.{}, &.{}, &.{}, &.{}, &pairs };
+    var f = try Finder.init(a, &d, "");
+    const Html = struct {
+        fn of(x: *Finder, al: std.mem.Allocator) ![]const u8 {
+            var t: tree.Tree = .{};
+            var h: H = .init(al, &t);
+            var w: std.Io.Writer.Allocating = .init(al);
+            try @import("html.zig").write(&t, x.view(&h), &w.writer);
+            return w.written();
+        }
+        /// Rows in the list labelled `label`
+        fn rows(s: []const u8, label: []const u8) usize {
+            const at = std.mem.find(u8, s, label).?;
+            const end = std.mem.find(u8, s[at..], "</ul>").?;
+            return std.mem.count(u8, s[at..][0..end], "<li");
+        }
+    };
+    var s = try Html.of(&f, a);
+    try testing.expectEqual(shown, Html.rows(s, "aria-label=\"Hardest lanes\""));
+    try testing.expect(std.mem.find(u8, s, "aria-expanded=\"false\">3 more</button>") != null);
+    // Short lists: no button
+    try testing.expectEqual(1, std.mem.count(u8, s, "class=\"all\""));
+
+    var ev: tree.Event = .{ .kind = .click };
+    f.update(.{ .more = .hard }, &ev);
+    s = try Html.of(&f, a);
+    try testing.expectEqual(pairs.len, Html.rows(s, "aria-label=\"Hardest lanes\""));
+    try testing.expect(std.mem.find(u8, s, "aria-expanded=\"true\">Fewer</button>") != null);
+    f.update(.{ .role = .top }, &ev);
+    s = try Html.of(&f, a);
+    try testing.expectEqual(pairs.len, Html.rows(s, "aria-label=\"Hardest lanes\""));
+    f.update(.{ .more = .hard }, &ev);
+    s = try Html.of(&f, a);
+    try testing.expectEqual(shown, Html.rows(s, "aria-label=\"Hardest lanes\""));
 }
 
 test "Grid: the first pick's file, the second its dot and once its page" {
