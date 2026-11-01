@@ -16,7 +16,10 @@
 //! documents queued but not yet spooled (ms). A stop (SIGTERM, crawl.zig) spools the
 //! queue, finishes the zstd run in hand (zstd ignores the signal) and leaves the rest in
 //! the spool. A crash between a frame's fsync and its segment's delete stores those
-//! documents twice: readers keep one per key.
+//! documents twice: readers keep one per key. A document that crashes the packer would
+//! crash every start after (replay meets it again, in whichever segment it was moved
+//! to): after poison_starts unclean runs in a row the whole spool goes to
+//! spool/quarantine.
 //! Day = the UTC day a document reached the Packer; at midnight partial blocks go to the
 //! old day's files, which are then sealed.
 
@@ -44,6 +47,10 @@ const queue_warn = 20_000;
 const queue_drop = 200_000;
 /// Pause after an error before starting again from the spool
 const restart_s = 60;
+/// Unclean runs in a row (complete/starts) before a start sets the spool aside; a run
+/// counts as clean once it closes or has run healthy_s
+const poison_starts = 3;
+const healthy_s = 30 * 60;
 /// --zstd=wlog=23 pins the window to std's default 8 MB decompress window: a bigger one
 /// (--ultra, --long) would fail every readback
 const zstd_level = "-19 --zstd=wlog=23";
@@ -120,6 +127,8 @@ pub const Packer = struct {
     /// complete/lock, held while the packer runs: a second crawler on the same data would
     /// append to the same day files
     lock: Io.File,
+    /// Awake clock at start; null once this run counted as clean
+    started: ?i64 = null,
 
     /// Checks zstd is on PATH, makes the directories and takes the lock (error.Locked)
     pub fn init(gpa: Allocator, io: Io, data_dir: []const u8) !Packer {
@@ -152,7 +161,10 @@ pub const Packer = struct {
         // writes to the day after the newest sealed one until it catches up
         p.day = @max(p.clock(p.io), (try p.sealer.newestSealed() orelse 0) + 1);
         try p.sealer.sealOlder(p.day);
-        try p.quarantine();
+        const unclean = p.readStarts();
+        if (unclean >= poison_starts) try p.quarantine(unclean);
+        try p.writeStarts(if (unclean >= poison_starts) 1 else unclean + 1);
+        p.started = Io.Clock.awake.now(p.io).toSeconds();
         p.next_seg = try p.lastSegment() + 1;
         p.sealer_thread = try std.Thread.spawn(.{}, Sealer.run, .{&p.sealer});
         p.thread = try std.Thread.spawn(.{}, run, .{p});
@@ -176,6 +188,7 @@ pub const Packer = struct {
         if (p.thread) |t| t.join();
         p.sealer.close();
         if (p.sealer_thread) |t| t.join();
+        if (p.started != null) p.writeStarts(0) catch |err| log.warn("complete: starts not reset: {t}", .{err});
         for (&p.lanes) |*l| l.deinit(p.gpa, p.io);
         for (p.queue.items) |o| p.gpa.free(o.buf);
         p.queue.deinit(p.gpa);
@@ -316,6 +329,7 @@ pub const Packer = struct {
             for (batch.items) |o| try p.spool(o.kind, o.key(), o.t, o.gz());
             // Stopping: the queue left is spooled on the closing round
             p.packBatch(batch.items) catch |err| if (err != error.Stopping) return err;
+            p.markHealthy();
             if (closing) {
                 for (&p.lanes) |*l| l.closeSegment(p.io);
                 return;
@@ -513,12 +527,7 @@ pub const Packer = struct {
             if (s.n > p.next_seg) p.next_seg = s.n;
             var arena_state: std.heap.ArenaAllocator = .init(gpa);
             defer arena_state.deinit();
-            const seg_path = try std.fs.path.join(arena_state.allocator(), &.{ spool_dir, s.name });
-            // A panic replaying it leaves the .replaying name, quarantined on the next
-            // start: a poison document does not crash every start after
-            const path = try std.fmt.allocPrint(arena_state.allocator(), "{s}.replaying", .{seg_path});
-            try Io.Dir.cwd().rename(seg_path, Io.Dir.cwd(), path, p.io);
-            errdefer Io.Dir.cwd().rename(path, Io.Dir.cwd(), seg_path, p.io) catch {};
+            const path = try std.fs.path.join(arena_state.allocator(), &.{ spool_dir, s.name });
             const records = try readSegment(arena_state.allocator(), p.io, path);
             for (records) |r| try p.add(s.kind, r.key, r.t, r.gz);
             docs += records.len;
@@ -530,31 +539,51 @@ pub const Packer = struct {
         if (segs.len > 0) log.info("complete: replayed {d} documents from {d} spool segments", .{ docs, segs.len });
     }
 
-    /// Segments a replay crashed on, to spool/quarantine (kept for a look)
-    fn quarantine(p: *Packer) !void {
+    fn readStarts(p: *Packer) u64 {
+        var buf: [20]u8 = undefined;
+        const dir = Io.Dir.cwd().openDir(p.io, p.dir, .{}) catch return 0;
+        defer dir.close(p.io);
+        const got = dir.readFile(p.io, "starts", &buf) catch return 0;
+        return std.fmt.parseInt(u64, std.mem.trim(u8, got, " \n"), 10) catch 0;
+    }
+
+    /// No fsync: a count lost to a power cut only delays the quarantine
+    fn writeStarts(p: *Packer, n: u64) !void {
+        var buf: [21]u8 = undefined;
+        var dir = try Io.Dir.cwd().openDir(p.io, p.dir, .{});
+        defer dir.close(p.io);
+        try dir.writeFile(p.io, .{ .sub_path = "starts", .data = try std.fmt.bufPrint(&buf, "{d}\n", .{n}) });
+    }
+
+    /// After healthy_s this run counts as clean, so the next start's count begins again
+    fn markHealthy(p: *Packer) void {
+        const t = p.started orelse return;
+        if (Io.Clock.awake.now(p.io).toSeconds() - t < healthy_s) return;
+        p.writeStarts(0) catch |err| log.warn("complete: starts not reset: {t}", .{err});
+        p.started = null;
+    }
+
+    /// Every spool segment to spool/quarantine (kept for a look), named apart by time
+    fn quarantine(p: *Packer, unclean: u64) !void {
         const gpa = p.gpa;
         const io = p.io;
+        const segs = try p.segments(gpa);
+        defer {
+            for (segs) |s| gpa.free(s.name);
+            gpa.free(segs);
+        }
         const spool_dir = try std.fs.path.join(gpa, &.{ p.dir, "spool" });
         defer gpa.free(spool_dir);
-        var dir = try Io.Dir.cwd().openDir(io, spool_dir, .{ .iterate = true });
+        var dir = try Io.Dir.cwd().openDir(io, spool_dir, .{});
         defer dir.close(io);
-        var names: std.ArrayList([]u8) = .empty;
-        defer {
-            for (names.items) |n| gpa.free(n);
-            names.deinit(gpa);
-        }
-        var it = dir.iterate();
-        while (try it.next(io)) |e| {
-            if (e.kind == .file and std.mem.endsWith(u8, e.name, ".replaying")) try names.append(gpa, try gpa.dupe(u8, e.name));
-        }
-        if (names.items.len == 0) return;
         try dir.createDirPath(io, "quarantine");
-        for (names.items) |n| {
-            const to = try std.fmt.allocPrint(gpa, "quarantine/{s}", .{n});
+        const now = Io.Clock.real.now(io).toSeconds();
+        for (segs) |s| {
+            const to = try std.fmt.allocPrint(gpa, "quarantine/{s}.{d}", .{ s.name, now });
             defer gpa.free(to);
-            try dir.rename(n, dir, to, io);
-            log.warn("complete: the last replay of spool/{s} crashed: moved to spool/{s}, its documents left out", .{ n, to });
+            try dir.renamePreserve(s.name, dir, to, io);
         }
+        log.warn("complete: {d} unclean runs in a row: {d} spool segments moved to spool/quarantine, their documents left out", .{ unclean, segs.len });
     }
 
     const Seg = struct { kind: Kind, n: u64, name: []u8 };
@@ -684,7 +713,7 @@ fn check(gpa: Allocator, block: []const u8, metas: []const Meta) !bool {
     return true;
 }
 
-const Record = struct { key: []const u8, t: i64, gz: []const u8 };
+pub const Record = struct { key: []const u8, t: i64, gz: []const u8 };
 
 /// A spool segment's records, in `arena`; a torn last record (no fsync) is dropped
 fn readSegment(arena: Allocator, io: Io, path: []const u8) ![]Record {
@@ -702,7 +731,7 @@ fn readSegment(arena: Allocator, io: Io, path: []const u8) ![]Record {
     return list.items;
 }
 
-fn readRecord(r: *dayfile.Reader) !Record {
+pub fn readRecord(r: *dayfile.Reader) !Record {
     const t: i64 = @bitCast(try r.varint());
     const key = try r.bytes(try r.varint());
     const gz = try r.bytes(try r.varint());
@@ -816,7 +845,12 @@ const Sealer = struct {
             .frames => |f| {
                 const o = try s.file(f.kind, f.day);
                 var end = o.len;
-                if (f.packed_plain) |plain| end += try s.appendFrame(o.file, end, .block, plain);
+                if (f.packed_plain) |plain| {
+                    end += try s.appendFrame(o.file, end, .block, plain);
+                    // Only the last frame may be torn by a crash: one with a whole frame
+                    // after it is damage (dayfile.recover)
+                    if (f.raw_plain != null) try o.file.sync(s.p.io);
+                }
                 if (f.raw_plain) |plain| end += try s.appendFrame(o.file, end, .raw, plain);
                 try o.file.sync(s.p.io);
                 o.len = end;
@@ -1239,7 +1273,7 @@ test "a clock stepped back never reopens a sealed day" {
     try std.testing.expectEqual(3, next.len);
 }
 
-test "a second packer on the same data is refused; a segment a replay crashed on is set aside" {
+test "a second packer on the same data is refused; after unclean runs the spool is set aside" {
     const gpa = std.testing.allocator;
     const io = std.testing.io;
     var tmp = std.testing.tmpDir(.{});
@@ -1255,16 +1289,29 @@ test "a second packer on the same data is refused; a segment a replay crashed on
 
     var p: Packer = try .init(gpa, io, data);
     try std.testing.expectError(error.Locked, Packer.init(gpa, io, data));
-    try tmp.dir.writeFile(io, .{ .sub_path = "complete/spool/summary.3.replaying", .data = "poison" });
+    // One run short of the limit: the spool replays as usual
+    try tmp.dir.writeFile(io, .{ .sub_path = "complete/starts", .data = "2\n" });
     p.clock = testClock;
     try p.start();
+    try std.testing.expectEqualStrings("3\n", try tmp.dir.readFileAlloc(io, "complete/starts", arena, .limited(64)));
     try settle(&p);
     p.close();
-    try std.testing.expectEqualStrings("poison", try tmp.dir.readFileAlloc(io, "complete/spool/quarantine/summary.3.replaying", arena, .limited(64)));
-    try std.testing.expectEqual(0, (try Packer.listSegments(arena, io, try arena.print("{s}/complete", .{data}))).len);
-    // The lock goes with close
+    try std.testing.expectEqualStrings("0\n", try tmp.dir.readFileAlloc(io, "complete/starts", arena, .limited(64)));
+
+    // Three unclean runs in a row (none closed nor ran healthy_s): segments go aside
+    try tmp.dir.writeFile(io, .{ .sub_path = "complete/starts", .data = "3\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "complete/spool/summary.3", .data = "poison" });
     var p2: Packer = try .init(gpa, io, data);
     p2.clock = testClock;
     try p2.start();
+    try std.testing.expectEqualStrings("1\n", try tmp.dir.readFileAlloc(io, "complete/starts", arena, .limited(64)));
+    try settle(&p2);
     p2.close();
+    try std.testing.expectEqual(0, (try Packer.listSegments(arena, io, try arena.print("{s}/complete", .{data}))).len);
+    var q = try tmp.dir.openDir(io, "complete/spool/quarantine", .{ .iterate = true });
+    defer q.close(io);
+    var it = q.iterate();
+    const e = (try it.next(io)).?;
+    try std.testing.expect(std.mem.startsWith(u8, e.name, "summary.3."));
+    try std.testing.expectEqualStrings("poison", try q.readFileAlloc(io, e.name, arena, .limited(64)));
 }
