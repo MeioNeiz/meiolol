@@ -614,6 +614,10 @@ pub const css =
     \\    .c-build .levels > .lp > .c-skills > .grid > i { height: 20px; }
     \\  }
     \\  @container (min-width: 1400px) { .c-build > .in { grid-template-columns: minmax(0, 660px) minmax(0, 1fr); } }
+    \\  @container (min-width: 1500px) {
+    \\    .c-build > .in { grid-template-columns: minmax(0, 730px) minmax(0, 1fr); }
+    \\    .c-build .slots > .cells { column-gap: var(--sp-4); }
+    \\  }
     \\  .c-build > .in > * { min-width: 0; }
     \\  .c-build > .in > .levels { order: 1; }
     \\  .c-build .runes > .reach { margin-bottom: var(--sp-3); }

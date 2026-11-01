@@ -312,6 +312,16 @@ pub const css =
     \\  .c-runes .rune > .g { font-size: var(--fs-s); color: var(--faint); line-height: 1.2; }
     \\  .c-runes .rune[data-thin] > .pk, .c-runes .rune[data-thin] > .w { opacity: 0.55; }
     \\  .c-runes > .c-btn { display: none; align-self: flex-start; }
+    \\  @container (min-width: 680px) {
+    \\    .c-runes .trees { gap: var(--sp-4); }
+    \\    .c-runes .rune > .c-art { --sz: 36px; }
+    \\    .c-runes .row[data-v="ks"] .rune > .c-art { --sz: 44px; }
+    \\    .c-runes .tree[data-v="shards"] .rune > .c-art { --sz: 28px; }
+    \\    .c-runes .rune > .pk { font-size: var(--fs-m); }
+    \\    .c-runes .rune > .w { font-size: var(--fs-l); }
+    \\    .c-runes .rune > .g { font-size: var(--fs-m); }
+    \\    .c-runes .tree > h4 { font-size: var(--fs-l); height: 24px; }
+    \\  }
     \\  @container (max-width: 540px) {
     \\    .c-runes .trees { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     \\    .c-runes[data-fold] .tree[data-unlit] { display: none; }
