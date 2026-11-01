@@ -30,7 +30,8 @@ const W = struct {
     pub const lane = plain("Lane");
     pub const fights = plain("Fights");
     pub const games = plain("Games");
-    pub const streak = plain("Current streak");
+    pub const win_streak = plain("Win streak");
+    pub const loss_streak = plain("Loss streak");
     pub const longest = plain("Longest win streak");
     pub const record = plain("Record");
     pub const lead = plain("Biggest lead at 14");
@@ -42,8 +43,6 @@ const W = struct {
     pub const long = plain("Longest game");
     pub const fast = plain("Fastest win");
     pub const most = phrase.Phrase("Most played, {n:count} games");
-    pub const wins = phrase.Phrase("{n:count} wins");
-    pub const losses = phrase.Phrase("{n:count} losses");
     pub const wl = phrase.Phrase("{w:int}–{l:int}");
     pub const ratio = phrase.Phrase("{r:dec}");
     pub const moved = phrase.Phrase("{a:int}% → {b:int}%");
@@ -147,14 +146,15 @@ const Tiles = struct {
     fn streak(t: Tiles) ?Tile {
         const s = t.r.streak orelse return null;
         if (s.n < 2) return null;
-        return .{ .label = W.streak, .value = if (s.win) W.wins.with(t.h, .{ .n = s.n }) else W.losses.with(t.h, .{ .n = s.n }) };
+        // "5 wins" over "Current streak" read as only five wins (note 39)
+        return .{ .label = if (s.win) W.win_streak else W.loss_streak, .value = phrase.num(t.h, .count, s.n) };
     }
 
     fn longest(t: Tiles) ?Tile {
         // The current run already says it
         if (t.r.longest < 2) return null;
         if (t.r.streak) |s| if (s.win and s.n == t.r.longest) return null;
-        return .{ .label = W.longest, .value = W.wins.with(t.h, .{ .n = t.r.longest }) };
+        return .{ .label = W.longest, .value = phrase.num(t.h, .count, t.r.longest) };
     }
 
     fn record(t: Tiles) ?Tile {
@@ -221,11 +221,11 @@ pub fn view(h: *H, l: *const yl.List, games: []const yl.Game, to: Links) N {
     });
 }
 
-/// The Games view's three: the first there are of a run, the lane, the fights, a swing;
-/// `more` the press that opens Highlights
+/// The Games view's three: the first there are of the lane, the fights, a swing; no
+/// streak, the player bar above has it (note 39). `more` the press that opens Highlights
 pub fn top(h: *H, l: *const yl.List, games: []const yl.Game, to: Links, more: ?tree.Handler) N {
     const t = tilesOf(h, l, games, to) orelse return .none;
-    const first = [_]?Tile{ t.streak(), t.gold(W.lead, t.r.lead), t.gold(W.behind, t.r.behind), t.kda(), t.swing() };
+    const first = [_]?Tile{ t.gold(W.lead, t.r.lead), t.gold(W.behind, t.r.behind), t.kda(), t.swing() };
     var row = h.list();
     var n: usize = 0;
     for (first) |x| if (x) |tile| if (n < 3) {
@@ -341,7 +341,8 @@ test "the view: groups with something to say; the top three link to their moment
     // The demo has no lane figures: Streaks, Fights, Games
     try testing.expectEqual(3, count(&t, n, "grp"));
     const tp = top(&h, &yp.demo.list, &yp.demo.games, .{}, null);
-    try testing.expectEqual(2, count(&t, tp, "c-rtile"));
+    // No streak there, the player bar has it: the demo's KDA alone
+    try testing.expectEqual(1, count(&t, tp, "c-rtile"));
     try testing.expectEqualStrings("/game#g=0", t.attr(t.find(tp, "class", "chip").?, "href").?);
     try testing.expect(!h.oom);
     // None at all: nothing

@@ -56,8 +56,9 @@ First screen, desktop 1280: player bar, tabs, then two columns:
   which we don't store (Data needed)
 
 Above both columns, two cards of one height (notes 40-41): Highlights (its accent label
-opens the Highlights view, three records inside as cells) and Over time (its label opens
-that view: win chance at 15 over the last 5, a spark).
+opens the Highlights view, up to three records inside as cells, never the streak: the
+player bar above has it, note 39) and Over time (its label opens that view: win chance
+at 15 over the last 5, a spark).
 
 `game-row`, 56 px, one line at desktop:
 result edge (--us win, --them loss, 3 px) | champion 40 px with level and role badge |
@@ -93,7 +94,9 @@ third row.
 
 New: `record-tile`s in four labelled groups, each a row of tiles of one size:
 
-- Streaks: current streak, longest win streak, record
+- Streaks: current streak, longest win streak, record. A streak is the bare count over
+  "Win streak" or "Loss streak" (note 39: "2 wins" over "Current streak" read as only
+  two wins)
 - Lane: biggest lead at 14, furthest above typical at 14, lanes without a death before
   14
 - Fights: best KDA, kill gold given away per game, deaths the enemy turned into an
