@@ -371,5 +371,5 @@ pickup/top.html 8430c873fa597ae1
 pool.html 7043e7e655822552
 privacy.html ab9ac551cc8a2a02
 robots.txt 331ea9090db0c9f6
-squad.html 78103e4add7c6c95
+squad.html 81e203fb21878c4e
 terms.html 2af862a6ee3cd4bb

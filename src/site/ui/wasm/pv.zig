@@ -2,9 +2,9 @@
 //! from /private/ only by browsers that opened /admin or /private (site/shell.zig
 //! admin_link); nginx's login gate covers it and its data. Its box goes after the page's
 //! head island, outside every island so no diff meets it. Not an island: nothing in it
-//! takes input. A champion page's box follows the shown role and the matchup brief,
-//! which the islands patch in place with no event of their own: a MutationObserver
-//! redraws, and only a change of what's shown draws
+//! takes input. The box follows the shown role, the matchup brief and the head's win rate
+//! (filters), which the islands patch in place with no event of their own: a
+//! MutationObserver redraws, and only a change of what's shown draws
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -82,7 +82,6 @@ fn loaded(i: i32, bytes: ?[]u8) void {
     box = zjb.global("document").call("createElement", .{zjb.constString("div")}, zjb.Handle).kept();
     anchor.call("after", .{box}, void);
     draw();
-    if (matchup != null) return;
     const o = zjb.global("MutationObserver").new(.{zjb.fnHandle("pvChanged", &onChanged)});
     defer o.release();
     const opts = zjb.global("Object").new(.{});
@@ -105,7 +104,12 @@ fn draw() void {
     var key: [272]u8 = undefined;
     var kw: std.Io.Writer = .fixed(&key);
     const s = &slices[0].?;
+    var gb: [64]u8 = undefined;
+    const won = text(".c-champhead .c-strip > .answer .val", &gb);
+    kw.writeAll(won) catch {};
     if (matchup) |m| {
+        // Our own redraw is a mutation too
+        if (drawn_len > 0 and std.mem.eql(u8, kw.buffered(), drawn[0..drawn_len])) return;
         if (pv.matchup(s, if (slices[1]) |*b| b else null, m.role, m.vs)) |l| {
             lines[0] = l;
             shown = lines[0..1];
@@ -116,8 +120,7 @@ fn draw() void {
         var rb: [128]u8 = undefined;
         const who = text(".c-mpick .t b", &nb);
         const rel = text(".c-mpick .t small", &rb);
-        for ([_][]const u8{ @tagName(r), "|", who, "|", rel }) |part| kw.writeAll(part) catch {};
-        // Our own redraw is a mutation too
+        for ([_][]const u8{ "|", @tagName(r), "|", who, "|", rel }) |part| kw.writeAll(part) catch {};
         if (std.mem.eql(u8, kw.buffered(), drawn[0..drawn_len])) return;
         shown = pv.champion(s, r, pv.brief(who, rel), &lines);
     }
@@ -127,7 +130,7 @@ fn draw() void {
     defer a.deinit();
     var t: ui.Tree = .{};
     var h: ui.H = .init(a.allocator(), &t);
-    const n = pv.view(&h, shown);
+    const n = pv.view(&h, shown, leadingRate(won));
     if (h.oom) return;
     const el = dom.nodes(&t, n);
     box.call("replaceWith", .{el}, void);
@@ -159,4 +162,10 @@ fn text(comptime sel: []const u8, buf: []u8) []const u8 {
     const v = el.get("textContent", zjb.Handle);
     defer v.release();
     return v.readString(buf) catch "";
+}
+
+/// "46.2%23rd of 36" -> "46.2%": the head's win rate as shown, its rank after it
+fn leadingRate(s: []const u8) ?[]const u8 {
+    const end = std.mem.indexOfScalar(u8, s, '%') orelse return null;
+    return s[0 .. end + 1];
 }

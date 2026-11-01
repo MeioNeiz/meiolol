@@ -226,9 +226,10 @@ bans, Random/Fill/Undo, the lane model's Gold column, the set net and compare, s
 JS tester and its files are gone. The shipped model's win chances on the public champion
 and matchup pages for private logins (ui.pv, ui-pv.wasm at /private/pv.{js,wasm,css},
 loaded by the header script in browsers that opened /admin/ or /private, data
-private/models/champ/<id>.bin from `meiolol draft-model`): a box after the page's head,
-the shown role's line and the matchup brief's champion beside it; on a matchup page, the
-pair. The app review pages, /private/app (arch-app.md "Review pages"): every screen the
+private/models/champ/<id>.bin from `meiolol draft-model`): one row of figures under the
+page's head, the model's chance (95% range) beside the head's win rate, then the matchup
+brief's champion; on a matchup page the pair, and each alone. What it is: the Private
+badge's title. The app review pages, /private/app (arch-app.md "Review pages"): every screen the
 app can show, from the mock scenarios, in both editions, for Jacob's notes. Next: all
 regions and patches without the public page-weight cuts.
 

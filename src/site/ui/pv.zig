@@ -1,8 +1,9 @@
 //! Pv: the private numbers on public champion and matchup pages (app.md "Private site"),
 //! the shipped draft model's win chances, which the public pages never show
 //! (production-key.md "Product rules"). ui-pv.wasm draws it for admin logins only, from
-//! ui.pvdata files under /private/: a line for the shown role, and one for the matchup
-//! brief's champion; on a matchup page, the pair
+//! ui.pvdata files under /private/: one row of figures under the head, the model's
+//! chance beside the games' win rate the head shows, then the matchup brief's champion; on
+//! a matchup page, the pair
 const std = @import("std");
 const tree = @import("tree.zig");
 const badge = @import("badge.zig");
@@ -21,15 +22,17 @@ pub const sel = ".c-pv";
 
 const W = struct {
     pub const tag = plain("Private");
-    pub const about = plain("Private, for admin logins only: the shipped draft model's estimate (every region and patch, refitted daily) of the team's win chance with every other pick its role's average. The public site never shows it.");
-    pub const model = plain("Draft model: ");
-    pub const alone = Phrase(" in {r:text} against an average draft ({lo:rate} to {hi:rate})");
-    pub const with = Phrase("Model, with {c:text} ({r:text}): the team ");
-    pub const against = Phrase("Model, against {c:text} ({r:text}): the team ");
-    pub const together = Phrase(", {n:count} games together; {p:rate} alone");
-    pub const pair = Phrase("Model: {a:text}'s team ");
-    pub const pair_rest = Phrase(" against {b:text}'s in {r:text}; each alone against an average draft: {a:text} {pa:rate}");
-    pub const pair_b = Phrase(", {b:text} {pb:rate}");
+    pub const about = plain("Private, for admin logins only: the shipped draft model's estimate (every region and patch, refitted daily) of the team's win chance, every other pick its role's average, beside the games' win rate for the filters shown. The public site never shows it.");
+    pub const model = plain("Model");
+    pub const games = plain("Games");
+    pub const alone = plain("Alone");
+    pub const range = Phrase("{lo:dec}-{hi:dec}");
+    pub const with = Phrase("With {c:text}");
+    pub const against = Phrase("Vs {c:text}");
+    pub const together = Phrase("{n:count} together");
+    pub const pair = Phrase("{a:text} vs {b:text}");
+    pub const each = Phrase("{a:text} {pa:rate}");
+    pub const each_b = Phrase(" · {b:text} {pb:rate}");
 };
 
 pub const Line = union(enum) {
@@ -78,36 +81,53 @@ fn rate(p: f32) f32 {
     return 100 * p;
 }
 
-pub fn view(h: *H, lines: []const Line) N {
+/// `games`: the head's win rate as it shows it ("46.2%"), when the page has one
+pub fn view(h: *H, lines: []const Line, games: ?[]const u8) N {
     var l = h.list();
-    for (lines) |x| l.add(h.el(.p, .{ .title = W.about }, .{ badge.view(h, .accent, .{W.tag}), switch (x) {
-        .alone => |v| h.span(.{}, .{
-            W.model,
-            h.b(.{}, .{phrase.num(h, .rate, rate(v.win[0]))}),
-            W.alone.with(h, .{ .r = v.role.label().s, .lo = rate(v.win[1]), .hi = rate(v.win[2]) }),
-        }),
-        .pair => |v| h.span(.{}, .{
-            if (v.ally) W.with.with(h, .{ .c = v.name, .r = v.role.label().s }) else W.against.with(h, .{ .c = v.name, .r = v.role.label().s }),
-            h.b(.{}, .{phrase.num(h, .rate, rate(v.p))}),
-            W.together.with(h, .{ .n = v.games, .p = rate(v.alone) }),
-        }),
-        .matchup => |v| h.span(.{}, .{
-            W.pair.with(h, .{ .a = v.a }),
-            h.b(.{}, .{phrase.num(h, .rate, rate(v.p))}),
-            W.pair_rest.with(h, .{ .b = v.b, .r = v.role.label().s, .a = v.a, .pa = rate(v.a_alone) }),
-            if (v.b_alone) |pb| W.pair_b.with(h, .{ .b = v.b, .pb = rate(pb) }) else null,
-            ".",
-        }),
-    } }));
+    l.add(h.span(.{ .class = "tag", .title = W.about }, .{badge.view(h, .accent, .{W.tag})}));
+    for (lines) |x| switch (x) {
+        .alone => |v| {
+            l.add(cell(h, W.model, phrase.num(h, .rate, rate(v.win[0])), W.range.with(h, .{ .lo = rate(v.win[1]), .hi = rate(v.win[2]) })));
+            if (games) |g| l.add(cell(h, W.games, phrase.num(h, .text, g), null));
+        },
+        .pair => |v| l.add(cell(
+            h,
+            if (v.ally) W.with.with(h, .{ .c = v.name }) else W.against.with(h, .{ .c = v.name }),
+            phrase.num(h, .rate, rate(v.p)),
+            W.together.with(h, .{ .n = v.games }),
+        )),
+        .matchup => |v| {
+            l.add(cell(h, W.model, phrase.num(h, .rate, rate(v.p)), W.pair.with(h, .{ .a = v.a, .b = v.b })));
+            if (games) |g| l.add(cell(h, W.games, phrase.num(h, .text, g), null));
+            l.add(h.span(.{ .class = "f" }, .{
+                h.span(.{ .class = "l" }, .{W.alone}),
+                h.small(.{}, .{
+                    W.each.with(h, .{ .a = v.a, .pa = rate(v.a_alone) }),
+                    if (v.b_alone) |pb| W.each_b.with(h, .{ .b = v.b, .pb = rate(pb) }) else null,
+                }),
+            }));
+        },
+    };
     return h.div(.{ .class = "c-pv" }, .{l.done()});
+}
+
+fn cell(h: *H, label: tree.Text, value: tree.Text, ctx: ?tree.Text) N {
+    return h.span(.{ .class = "f" }, .{
+        h.span(.{ .class = "l" }, .{label}),
+        h.b(.{}, .{value}),
+        if (ctx) |c| h.small(.{}, .{c}) else null,
+    });
 }
 
 pub const css =
     \\@layer components {
-    \\  .c-pv { padding: 0 var(--card-px); }
-    \\  .c-pv > p { margin: 0 0 var(--sp-1); font-size: var(--fs-s); color: var(--t2); cursor: help; }
-    \\  .c-pv > p > .c-badge { margin-right: var(--sp-2); }
+    \\  .c-pv { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-5);
+    \\    padding: 0 var(--card-px); margin-bottom: var(--sp-2); font-variant-numeric: tabular-nums; }
+    \\  .c-pv > .tag { cursor: help; }
+    \\  .c-pv > .f { display: inline-flex; align-items: baseline; gap: var(--sp-2); white-space: nowrap; }
+    \\  .c-pv .l { font-size: var(--fs-xs); color: var(--muted); }
     \\  .c-pv b { color: var(--accent); font-weight: var(--w-b); }
+    \\  .c-pv small { font-size: var(--fs-xs); color: var(--faint); }
     \\}
     \\
 ;
@@ -119,8 +139,9 @@ const demo_lines = [_]Line{
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    g.add("champion page, with the brief's opponent", view(h, &demo_lines));
-    g.add("matchup page", view(h, &.{.{ .matchup = .{ .a = "Ahri", .b = "Zed", .role = .mid, .p = 0.497, .a_alone = 0.512, .b_alone = 0.505 } }}));
+    g.add("champion page, with the brief's opponent", view(h, &demo_lines, "49.1%"));
+    g.add("champion page, no brief, no head rate", view(h, demo_lines[0..1], null));
+    g.add("matchup page", view(h, &.{.{ .matchup = .{ .a = "Ahri", .b = "Zed", .role = .mid, .p = 0.497, .a_alone = 0.512, .b_alone = 0.505 } }}, "48.6%"));
 }
 
 const testing = std.testing;
@@ -164,8 +185,10 @@ test "view: the matchup line, and without the other's slice" {
     var h: H = .init(arena.allocator(), &t);
     const line = matchup(&demo, null, .mid, 238).?;
     try testing.expectEqual(null, matchup(&demo, null, .mid, 412));
-    const n = view(&h, &.{line});
     var out: std.Io.Writer.Allocating = .init(arena.allocator());
-    try @import("html.zig").write(&t, n, &out.writer);
-    try testing.expect(std.mem.find(u8, out.written(), "Model: Ahri&#39;s team <b>49.7%</b> against Zed&#39;s in Mid; each alone against an average draft: Ahri 51.2%.") != null);
+    try @import("html.zig").write(&t, view(&h, &.{line}, "48.6%"), &out.writer);
+    const html = out.written();
+    try testing.expect(std.mem.find(u8, html, "<b>49.7%</b><small>Ahri vs Zed</small>") != null);
+    try testing.expect(std.mem.find(u8, html, "<b>48.6%</b>") != null);
+    try testing.expect(std.mem.find(u8, html, "<small>Ahri 51.2%</small>") != null);
 }
