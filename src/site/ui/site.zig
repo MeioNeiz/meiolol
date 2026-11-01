@@ -1,6 +1,8 @@
 //! SiteHeader: every page's top bar: the logo, the page links, the search. Under 860 px
 //! of header the links give way to a menu button whose popover lists them and the pages
-//! under Champions, the current one selected (popovertarget: no script). Also every
+//! under Champions, the current one selected (popovertarget: no script). From 861 to 1060
+//! px, with a login's private links in the bar, the search folds to its icon and opens
+//! over the links on focus. Also every
 //! page's foot (`foot`), the preview strip under the header (`preview`), on the
 //! Champions pages the bar under it (`subbar`: the section's tabs and the view picks), the
 //! page's main column (`main_class`) and a one-line notice in it (`note`)
@@ -207,6 +209,13 @@ pub const css =
     \\  .c-site .links > a[aria-current="page"] { color: var(--text); background: var(--ctl-bg); }
     \\  .c-site .bar > :not(.logo, .links, .menu, .c-sitemenu) { margin-left: auto; max-width: 300px; flex: 1; }
     \\  .c-site .menu { display: none; flex: none; }
+    \\  @container site (min-width: 861px) and (max-width: 1060px) {
+    \\    .c-site .bar:has(.links > a[href="/private/tester"]) > [role="search"]:not(:focus-within) { flex: 0 0 var(--ctl); }
+    \\    .c-site .bar:has(.links > a[href="/private/tester"]) > [role="search"]:not(:focus-within) > input { padding: 0; color: transparent; }
+    \\    .c-site .bar:has(.links > a[href="/private/tester"]) > [role="search"]:not(:focus-within) > input::placeholder { color: transparent; }
+    \\    .c-site .bar:has(.links > a[href="/private/tester"]) > [role="search"]:focus-within { position: absolute; right: var(--gutter);
+    \\      width: 300px; z-index: 1; }
+    \\  }
     \\  .c-site .menu svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
     \\  @container site (max-width: 860px) {
     \\    .c-site > .bar { gap: var(--sp-2); }
@@ -241,6 +250,10 @@ pub const css =
     \\  .c-subbar > .in { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-4); max-width: var(--wrap);
     \\    margin: 0 auto; padding: 0 var(--gutter); }
     \\  .c-subbar .c-tabs { height: var(--ctl); box-shadow: none; margin-left: calc(-1 * var(--sp-3)); }
+    \\  @media (max-width: 480px) {
+    \\    .c-subbar .c-tabs { margin-left: -6px; }
+    \\    .c-subbar .c-tabs > a { padding: 0 6px; }
+    \\  }
     \\  .c-sitemain { max-width: var(--wrap); margin: 0 auto; padding: var(--sp-4) var(--gutter) var(--sp-6); }
     \\  .c-sitenote { margin: var(--sp-2) 0 var(--sp-3); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line);
     \\    border-radius: var(--r-m); background: var(--panel); color: var(--muted); }
