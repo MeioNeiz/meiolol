@@ -20,6 +20,7 @@ const timechart = @import("timechart.zig");
 const charts = @import("admincharts.zig");
 const ad = @import("admindata.zig");
 const ac = @import("accountsdata.zig");
+const apd = @import("applydata.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
@@ -34,7 +35,7 @@ pub const sel = "[data-island=admin]";
 pub const join_link = "https://meio.lol/join#{s}";
 
 /// Keys as the old JS page's, so its links carry over
-pub const Tab = enum { overview, crawler, riot, storage, ingest, models, traffic, deploys, logs, accounts, ops };
+pub const Tab = enum { overview, crawler, riot, storage, ingest, models, traffic, deploys, logs, accounts, applications, ops };
 
 /// The old page's links ("#crawler", "#models/win", "#training") in this page's form
 /// ("#tab=crawler", "#tab=models&cat=win"); null when `h` is no such link
@@ -85,7 +86,13 @@ pub const Want = union(enum) {
     disable: u16,
     reset: u16,
     copy,
+    /// Testers' applications (/api/applications.bin)
+    applications,
+    decide: Decide,
 };
+
+/// An application's row and what to do with it
+pub const Decide = struct { row: u16, set: apd.Set };
 
 /// A one-use link just made: shown once
 pub const Link = struct { reset: ?u16 = null, role: u8 = 0, token: []const u8 };
@@ -96,6 +103,9 @@ pub const Page = struct {
     live: ?*const ad.Live = null,
     me: ?*const ac.Me = null,
     accounts: ?*const ac.Accounts = null,
+    applications: ?*const apd.List = null,
+    /// The applications list didn't load, or a change to it failed
+    apps_failed: bool = false,
     /// The clock, unix s (the wasm's, before each draw)
     now: i64 = 0,
     /// When live.bin last answered; down: the last try failed
@@ -135,6 +145,7 @@ pub const Page = struct {
         reset: u16,
         copy,
         done,
+        decide: Decide,
     };
 
     pub fn toUrl(p: *const Page) Url {
@@ -152,6 +163,7 @@ pub const Page = struct {
                 p.tab = t;
                 ev.push = true;
                 if (t == .accounts and p.accounts == null) p.want = .accounts;
+                if (t == .applications and p.applications == null) p.want = .applications;
             },
             .refresh => p.want = .refresh,
             .run => |a| {
@@ -179,6 +191,7 @@ pub const Page = struct {
                 p.link = null;
                 p.copied = false;
             },
+            .decide => |d| p.want = .{ .decide = d },
         }
     }
 
@@ -298,6 +311,25 @@ pub const W = struct {
     pub const disable_q = Phrase("Disable {u:text}? It is signed out everywhere and can't log in until enabled.");
     pub const reset = plain("Reset link");
     pub const role_of = Phrase("Role of {u:text}");
+
+    pub const apps = plain("Testers' applications");
+    pub const apps_lead = plain("From /download. Approving only marks one: make a private invite link in Accounts and send it to their contact yourself. Deleted 30 days after a decision, or after 6 months unanswered.");
+    pub const apps_none = plain("None yet.");
+    pub const apps_failed = plain("Couldn't load or change them: Refresh and try again.");
+    pub const c_player = plain("Riot ID");
+    pub const c_contact = plain("Contact");
+    pub const c_plays = plain("Plays");
+    pub const c_why = plain("Why");
+    pub const c_came = plain("Came");
+    pub const open = plain("open");
+    pub const approved = plain("approved");
+    pub const declined = plain("declined");
+    pub const approve = plain("Approve");
+    pub const decline = plain("Decline");
+    pub const reopen = plain("Reopen");
+    pub const delete = plain("Delete");
+    pub const delete_q = Phrase("Delete {u:text}'s application? It can't be undone.");
+    pub const more = plain("More than shown: delete some to see the rest.");
 };
 
 const tab_names = std.enums.EnumArray(Tab, Text).init(.{
@@ -311,6 +343,7 @@ const tab_names = std.enums.EnumArray(Tab, Text).init(.{
     .deploys = plain("Deploys"),
     .logs = plain("Logs"),
     .accounts = plain("Accounts"),
+    .applications = plain("Applications"),
     .ops = plain("Controls"),
 });
 
@@ -382,6 +415,7 @@ fn body(p: *Page, h: *H, s: *const ad.Snapshot) N {
             .overview => overview(p, h, s),
             .ops => controls(p, h, s),
             .accounts => accountsTab(p, h),
+            .applications => applicationsTab(p, h),
             // AdminCharts, AdminTraffic, AdminOps and AdminModels, the islands below
             .crawler, .riot, .storage, .ingest, .traffic, .deploys, .logs, .models => .none,
         },
@@ -704,6 +738,85 @@ fn accountsTab(p: *Page, h: *H) N {
     });
 }
 
+fn applicationsTab(p: *Page, h: *H) N {
+    const head = card.head(h, W.apps, null, &.{});
+    if (!p.can("manage_accounts")) return card.view(h, .{}, &.{ head, h.p(.{}, .{if (p.me == null) W.loading else W.cannot}) });
+    const failed: N = if (p.apps_failed) h.p(.{ .class = "note bad", .role = "alert" }, .{W.apps_failed}) else .none;
+    const l = p.applications orelse return card.view(h, .{}, &.{ head, failed, if (p.apps_failed) .none else h.p(.{ .role = "status" }, .{W.loading}) });
+    var rows = h.list();
+    for (l.applications, 0..) |x, i| {
+        const row: u16 = @intCast(i);
+        const plays = h.fmt("{s}{s}{s}", .{ roleName(x.role), if (x.role != .none and x.rank != .none) " · " else "", rankName(x.rank) });
+        rows.add(h.tr(.{ .key = x.id }, .{
+            h.th(.{ .scope = "row" }, .{x.riot_id}),
+            h.td(.{ .class = "mono" }, .{x.contact}),
+            h.td(.{ .class = "nw" }, .{plays}),
+            h.td(.{}, .{x.why}),
+            h.td(.{ .class = "nw" }, .{day(h, x.created)}),
+            h.td(.{}, .{badge.view(h, switch (x.status) {
+                .open => .neutral,
+                .approved => .us,
+                .declined => .them,
+            }, .{switch (x.status) {
+                .open => W.open,
+                .approved => W.approved,
+                .declined => W.declined,
+            }})}),
+            h.td(.{ .class = "row-acts" }, .{h.span(.{ .class = "pick" }, .{
+                if (x.status == .open) button.view(h, .{ .v = .primary, .s = .s, .on = h.on(p, .{ .decide = .{ .row = row, .set = .approved } }) }, .{W.approve}) else null,
+                if (x.status == .open) button.view(h, .{ .s = .s, .on = h.on(p, .{ .decide = .{ .row = row, .set = .declined } }) }, .{W.decline}) else null,
+                if (x.status != .open) button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .{ .decide = .{ .row = row, .set = .open } }) }, .{W.reopen}) else null,
+                actionbutton.view(h, .{
+                    .id = h.fmt("app-del-{s}", .{phrase.num(h, .int, x.id).s}),
+                    .label = W.delete,
+                    .confirm = W.delete_q.with(h, .{ .u = x.riot_id }),
+                    .on = h.on(p, .{ .decide = .{ .row = row, .set = .delete } }),
+                }),
+            })}),
+        }));
+    }
+    return card.view(h, .{}, &.{
+        head,
+        h.p(.{ .class = "note" }, .{W.apps_lead}),
+        failed,
+        if (l.applications.len == 0) h.p(.{}, .{W.apps_none}) else h.div(.{ .class = "tw" }, .{h.table(.{}, .{
+            h.thead(.{}, .{h.tr(.{}, .{
+                h.th(.{}, .{W.c_player}),
+                h.th(.{}, .{W.c_contact}),
+                h.th(.{}, .{W.c_plays}),
+                h.th(.{}, .{W.c_why}),
+                h.th(.{}, .{W.c_came}),
+                h.th(.{ .data_answer = true }, .{W.c_status}),
+                h.th(.{}, .{}),
+            })}),
+            h.tbody(.{}, .{rows.done()}),
+        })}),
+        if (l.more) h.p(.{ .class = "note" }, .{W.more}) else .none,
+    });
+}
+
+fn roleName(r: apd.Role) []const u8 {
+    return switch (r) {
+        .none => "",
+        .top => "Top",
+        .jungle => "Jungle",
+        .mid => "Mid",
+        .bot => "Bot",
+        .support => "Support",
+    };
+}
+
+fn rankName(r: apd.Rank) []const u8 {
+    return if (r == .none) "" else switch (r) {
+        inline else => |x| comptime blk: {
+            var n: [@tagName(x).len]u8 = @tagName(x)[0..].*;
+            n[0] = std.ascii.toUpper(n[0]);
+            const out = n;
+            break :blk &out;
+        },
+    };
+}
+
 // Words for times and figures
 
 fn count(h: *H, n: u64) Text {
@@ -907,15 +1020,20 @@ pub const Demo = struct {
         },
         .roles = &.{ "public", "paid", "private", "admin" },
     };
+    pub const applications: apd.List = .{ .more = false, .applications = &.{
+        .{ .id = 3, .created = now - 2 * 3600, .decided = 0, .riot_id = "Kestrel Mid#EUW", .contact = "kestrel.mid", .role = .mid, .rank = .emerald, .why = "I main Ahri and want to see my lane curves in champ select", .status = .open },
+        .{ .id = 2, .created = now - 26 * 3600, .decided = 0, .riot_id = "Ponder#4421", .contact = "ponder@example.com", .role = .none, .rank = .none, .why = "Saw it on reddit", .status = .open },
+        .{ .id = 1, .created = now - 5 * 86400, .decided = now - 4 * 86400, .riot_id = "Lumen Support#EUW", .contact = "lumen_sup", .role = .support, .rank = .gold, .why = "Support player, happy to send feedback", .status = .approved },
+    } };
 
     fn page(tab: Tab) Page {
-        return .{ .tab = tab, .snap = &snap, .live = &live, .me = &me, .accounts = &accounts, .now = now, .live_at = now - 20 };
+        return .{ .tab = tab, .snap = &snap, .live = &live, .me = &me, .accounts = &accounts, .applications = &applications, .now = now, .live_at = now - 20 };
     }
 };
 
 pub fn gallery(g: *Gallery) void {
     const a = g.h.mem;
-    const states = [_][]const u8{ "loading", "overview: two problems", "controls: a failed build", "controls: live API down", "accounts: a role asked, a link made", "snapshot failed" };
+    const states = [_][]const u8{ "loading", "overview: two problems", "controls: a failed build", "controls: live API down", "accounts: a role asked, a link made", "applications", "snapshot failed" };
     for (states, 0..) |caption, i| {
         const p = a.create(Page) catch return;
         p.* = switch (i) {
@@ -924,6 +1042,7 @@ pub fn gallery(g: *Gallery) void {
             2 => Demo.page(.ops),
             3 => Demo.page(.ops),
             4 => Demo.page(.accounts),
+            5 => Demo.page(.applications),
             else => .{ .snap_failed = true },
         };
         switch (i) {
@@ -1034,6 +1153,24 @@ test "admin accounts: pick then Make, invite with the chosen role, the URL keeps
     q.update(.{ .tab = .accounts }, &ev);
     try testing.expectEqual(Want.accounts, q.want);
     try testing.expectEqualStrings("crawl-restart", Act.crawl_restart.path());
+}
+
+test "admin applications: rows with their contact, decide asks the wasm, loads once" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var p = Demo.page(.applications);
+    try expectHas(try render(a, &p), &.{ "Kestrel Mid#EUW", "kestrel.mid", "Mid · Emerald", ">open<", ">approved<", "Approve", "Reopen", "Delete Ponder#4421&#39;s application?" });
+    var ev: tree.Event = .{ .kind = .click };
+    p.update(.{ .decide = .{ .row = 1, .set = .approved } }, &ev);
+    try testing.expectEqual(Want{ .decide = .{ .row = 1, .set = .approved } }, p.want);
+    var q: Page = .{};
+    q.update(.{ .tab = .applications }, &ev);
+    try testing.expectEqual(Want.applications, q.want);
+    q.me = &Demo.me;
+    q.snap = &Demo.snap;
+    q.apps_failed = true;
+    try expectHas(try render(a, &q), &.{"Couldn&#39;t load or change them"});
 }
 
 test "admin times: UK clock, ago in steps" {

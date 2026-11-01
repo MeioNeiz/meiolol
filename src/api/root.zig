@@ -28,6 +28,8 @@
 //!                                   take_notes
 //!   POST /api/notes/tool?on=0|1     the tool on pages in this browser or not (its marker
 //!                                   cookie), for the same login
+//!   POST /api/apply                 a testers' application (applications.zig), anyone
+//!   /api/applications.bin           the applications, for a login with manage_accounts
 
 const std = @import("std");
 const Io = std.Io;
@@ -48,6 +50,7 @@ const ui = @import("ui");
 pub const friends = @import("friends.zig");
 pub const notes = @import("notes.zig");
 pub const squads = @import("squads.zig");
+pub const applications = @import("applications.zig");
 
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.api);
@@ -407,6 +410,8 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
         return send(ctx, request, r);
     }
     if (std.mem.eql(u8, path, "/api/notes") or std.mem.eql(u8, path, "/api/notes/tool")) return notesRequest(ctx, arena, request, path, query);
+    if (std.mem.eql(u8, path, "/api/apply")) return applyRequest(ctx, arena, request);
+    if (std.mem.eql(u8, path, "/api/applications.bin")) return applicationsRequest(ctx, arena, request, query);
     if (std.mem.eql(u8, path, "/api/health") and method == .GET) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
@@ -462,6 +467,54 @@ fn notesRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Reque
     defer db.close();
     const r = try notes.handle(arena, db, method, query, body, who.username, now);
     return send(ctx, request, .{ .status = r.status, .body = r.body, .binary = r.binary });
+}
+
+/// POST only, with X-Meiolol-Action: a cross-site form can't send it, and a cross-site
+/// fetch that does needs a preflight nothing here answers
+fn applyRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Request) !void {
+    if (request.head.method != .POST) return send(ctx, request, try errorReply(arena, .method_not_allowed, "error", "method not allowed"));
+    if (!actionHeader(request)) return send(ctx, request, try errorReply(arena, .forbidden, "error", "missing X-Meiolol-Action"));
+    var body_buf: [1024]u8 = undefined;
+    const r = try request.readerExpectContinue(&body_buf);
+    const body = r.allocRemaining(arena, .limited(applications.max_body)) catch |err| switch (err) {
+        error.StreamTooLong => return send(ctx, request, try errorReply(arena, .payload_too_large, "error", "too long")),
+        else => return err,
+    };
+    const db = try cache.open(ctx.opts.db_path);
+    defer db.close();
+    const out = try applications.apply(arena, db, body, Io.Clock.real.now(ctx.io).toSeconds());
+    return send(ctx, request, .{ .status = out.status, .body = out.body });
+}
+
+/// The applications for a login with manage_accounts; a change also needs
+/// X-Meiolol-Action, as notes'
+fn applicationsRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Request, query_head: []const u8) !void {
+    const post = switch (request.head.method) {
+        .GET => false,
+        .POST => true,
+        else => return send(ctx, request, try errorReply(arena, .method_not_allowed, "error", "method not allowed")),
+    };
+    const query = try arena.dupe(u8, query_head);
+    const now = Io.Clock.real.now(ctx.io).toSeconds();
+    const who = who: {
+        const token = accounts.cookieToken(request) orelse
+            return send(ctx, request, try errorReply(arena, .unauthorized, "error", "not signed in"));
+        const db = try accounts.open(ctx.opts.accounts_path);
+        defer db.close();
+        break :who try accounts.session(db, arena, token, now) orelse
+            return send(ctx, request, try errorReply(arena, .unauthorized, "error", "not signed in"));
+    };
+    if (!who.role.can(.manage_accounts)) return send(ctx, request, try errorReply(arena, .forbidden, "error", "your role cannot see applications"));
+    if (post and !actionHeader(request)) return send(ctx, request, try errorReply(arena, .forbidden, "error", "missing X-Meiolol-Action"));
+    const db = try cache.open(ctx.opts.db_path);
+    defer db.close();
+    const r = try applications.admin(arena, db, post, query, now);
+    return send(ctx, request, .{ .status = r.status, .body = r.body, .binary = r.binary });
+}
+
+fn actionHeader(request: *std.http.Server.Request) bool {
+    const v = accounts.header(request, "x-meiolol-action") orelse return false;
+    return std.mem.eql(u8, v, "1");
 }
 
 /// JSON, or ui.data's binary when 200 from a binary call (errors stay JSON)
@@ -1449,14 +1502,60 @@ test "daily: counts a finished puzzle's answers, refuses junk and puzzles not ou
 
 /// One request on its own connection, as nginx passes it on; the answer's bytes
 fn notesCall(ctx: *Context, arena: Allocator, method: []const u8, query: []const u8, token: ?[]const u8, action: bool, body: []const u8) ![]const u8 {
+    return apiCall(ctx, arena, method, try arena.print("/api/notes{s}", .{query}), token, action, body);
+}
+
+fn apiCall(ctx: *Context, arena: Allocator, method: []const u8, target: []const u8, token: ?[]const u8, action: bool, body: []const u8) ![]const u8 {
     var req: Io.Writer.Allocating = .init(arena);
-    try req.writer.print("{s} /api/notes{s} HTTP/1.1\r\nHost: x\r\nContent-Length: {d}\r\n", .{ method, query, body.len });
+    try req.writer.print("{s} {s} HTTP/1.1\r\nHost: x\r\nContent-Length: {d}\r\n", .{ method, target, body.len });
     if (token) |t| try req.writer.print("Cookie: a=b; " ++ accounts.cookie_name ++ "={s}\r\n", .{t});
     if (action) try req.writer.writeAll("X-Meiolol-Action: 1\r\n");
     try req.writer.print("\r\n{s}", .{body});
     var out: Io.Writer.Allocating = .init(arena);
     serveBytes(ctx, req.written(), &out.writer);
     return out.written();
+}
+
+test "/api/apply: anyone with X-Meiolol-Action; the list for manage_accounts only" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = testContext();
+    defer ctx.accounts.deinit();
+    ctx.opts.db_path = try arena.printSentinel(".zig-cache/tmp/{s}/api.db", .{&tmp.sub_path}, 0);
+    ctx.opts.accounts_path = try arena.printSentinel(".zig-cache/tmp/{s}/accounts.db", .{&tmp.sub_path}, 0);
+    const now = Io.Clock.real.now(io).toSeconds();
+    const adb = try accounts.open(ctx.opts.accounts_path);
+    defer adb.close();
+    const admin = try accounts.startSession(adb, io, try accounts.create(adb, "jacob", "x", .admin, now), now);
+    const private = try accounts.startSession(adb, io, try accounts.create(adb, "friend", "x", .private, now), now);
+    var new: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, ui.applydata.New, .{ .riot_id = "A#EUW", .contact = "a@b.cd", .why = "Mid main" }, &new);
+    const big: [applications.max_body + 1]u8 = @splat(0);
+    const cases = [_]struct { []const u8, []const u8, ?[]const u8, bool, []const u8, []const u8 }{
+        .{ "POST", "/api/apply", null, false, new.items, "403" },
+        .{ "GET", "/api/apply", null, true, "", "405" },
+        .{ "POST", "/api/apply", null, true, &big, "413" },
+        .{ "POST", "/api/apply", null, true, "x", "400" },
+        .{ "POST", "/api/apply", null, true, new.items, "200" },
+        .{ "GET", "/api/applications.bin", null, false, "", "401" },
+        .{ "GET", "/api/applications.bin", &private, false, "", "403" },
+        .{ "POST", "/api/applications.bin?id=1&set=approved", &admin, false, "", "403" },
+        .{ "POST", "/api/applications.bin?id=1&set=approved", &admin, true, "", "200" },
+    };
+    for (cases) |c| {
+        const out = try apiCall(&ctx, arena, c[0], c[1], c[2], c[3], c[4]);
+        try std.testing.expectStringStartsWith(out, try arena.print("HTTP/1.1 {s} ", .{c[5]}));
+    }
+    const got = try apiCall(&ctx, arena, "GET", "/api/applications.bin", &admin, false, "");
+    const at = std.mem.find(u8, got, "\r\n\r\n") orelse return error.TestUnexpectedResult;
+    const list = try ui.data.decode(arena, ui.applydata.List, got[at + 4 ..]);
+    try std.testing.expectEqual(1, list.applications.len);
+    try std.testing.expectEqualStrings("A#EUW", list.applications[0].riot_id);
+    try std.testing.expectEqual(ui.applydata.Status.approved, list.applications[0].status);
 }
 
 test "/api/notes: a take_notes login only, and a write needs X-Meiolol-Action" {

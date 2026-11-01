@@ -12,6 +12,7 @@ const riot = @import("../riot/root.zig");
 const cache = @import("cache.zig");
 const game = @import("game.zig");
 const squads = @import("squads.zig");
+const applications = @import("applications.zig");
 
 const Allocator = std.mem.Allocator;
 const Client = riot.client.Client;
@@ -233,6 +234,7 @@ pub const Fetcher = struct {
         } else if (std.mem.eql(u8, state, "checking")) {
             if (icon != null and current == icon.?) {
                 try cache.forget(f.db, a.puuid, now);
+                try applications.forgetRiotId(f.db, riot_id);
                 try f.db.run("UPDATE challenges SET puuid = NULL, state = 'done' WHERE riot_id = ?", .{riot_id});
                 if (f.opts.exchange_dir) |dir| syncForgotten(f.gpa, f.io, f.db, dir, now) catch |err| {
                     log.warn("forgotten list sync: {t}", .{err});

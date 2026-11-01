@@ -331,6 +331,19 @@ const privacy_md =
     \\testers, its sign-in ([Accounts](#accounts)), and our server logs them
     \\like any page visit (above).
     \\
+    \\## Testers
+    \\
+    \\To apply to test the desktop app before it is out ([the form](/download#apply)) you
+    \\give us your Riot ID, an email address or Discord username to reach you, and if you
+    \\like your main role, your rank and a line on why. We use them only to choose testers
+    \\and to send a login to those we choose, by hand; nothing is sent automatically, and
+    \\we don't look your Riot ID up with Riot. Legal basis: consent, given by applying.
+    \\We keep an application for 30 days after we answer it, and one we haven't answered
+    \\for 6 months; then it is deleted. It is never in our backups. To withdraw or delete
+    \\it sooner, write to [{contact}](mailto:{contact}); "Remove a Riot ID" on Your games
+    \\deletes it too. A login we send is an account like any other
+    \\([Accounts](#accounts)).
+    \\
     \\## Game data from Riot Games
     \\
     \\The statistics are computed from ranked games collected through the official
@@ -517,9 +530,18 @@ pub fn body(site: *const Site, w: *Writer, at: std.meta.Tag(urls.Page)) !bool {
             .title = "Champ select helper (desktop app)",
             .lead = "In development: a small Windows app that, once you have picked your champion in champ select, shows how your lane matchup usually unfolds and your own record in it.",
             .body = try ui.prose.parse(a, download_md),
+            .extra = blk: {
+                const ap = try a.create(ui.apply.Apply);
+                ap.* = .{};
+                break :blk ap.view(&h);
+            },
         },
         else => return false,
     });
+    if (at == .download) try html.tpl.render(w,
+        \\<script src="{js}" data-wasm="{wasm}" defer></script>
+        \\
+    , .{ .js = html.Link{ .path = assets.apply_js.path }, .wasm = assets.apply_wasm.path });
     return true;
 }
 

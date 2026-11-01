@@ -248,6 +248,18 @@ profile-icon check, then delete and block the PUUID. Players not looked up for 3
 are pruned. Squads (/squad, api/squads.zig): members join by the same icon check and see
 their games together (your-games.md "Squads").
 
+## Testers' applications (src/api/applications.zig, ui/apply.zig, ui/applydata.zig)
+
+- /download#apply: island Apply (ui-apply) POSTs a ui.applydata.New to /api/apply, no
+  login, X-Meiolol-Action, bounds in applydata.check. The same Riot ID and contact
+  updates its row; at most 50 new a day and 1000 kept
+- /admin's Applications tab (manage_accounts): GET /api/applications.bin, POST
+  ?id=N&set=open|approved|declined|delete. Approve only marks it: the private invite is
+  made in Accounts and sent by hand
+- Retention and erasure: docs/data-safety.md; privacy page "Testers"
+- Dev: `meiolol dev` answers /api/applications.bin with the admin fixture; /api/apply
+  goes to the local API (`meiolol api --fixture`), X-Meiolol-Action passed on
+
 ## Notes tool (src/site/notes.zig, ui/notes.zig, ui/noteslist.zig, src/api/notes.zig)
 
 Jacob's notes on the live site: tap an element (or the whole page), type, Save; pins

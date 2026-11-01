@@ -183,6 +183,13 @@ fn proxyApi(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
     const arena = arena_state.allocator();
     const method = request.head.method;
     const url = try std.mem.concat(arena, u8, &.{ d.api, request.head.target });
+    // As nginx passes it: the API's writes (/api/apply) need it. Before the body, which
+    // invalidates the head
+    var action = false;
+    var it = request.iterateHeaders();
+    while (it.next()) |h| if (std.ascii.eqlIgnoreCase(h.name, "x-meiolol-action")) {
+        action = std.mem.eql(u8, h.value, "1");
+    };
     var body_buf: [256]u8 = undefined;
     const payload: ?[]const u8 = if (method == .POST)
         try (try request.readerExpectContinue(&body_buf)).allocRemaining(arena, .limited(4096))
@@ -190,7 +197,7 @@ fn proxyApi(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
         null;
     var http: std.http.Client = .{ .allocator = ctx.gpa, .io = ctx.io };
     defer http.deinit();
-    const res = client.get(&http, arena, .{ .url = url, .method = method, .payload = payload }) catch |err| {
+    const res = client.get(&http, arena, .{ .url = url, .method = method, .payload = payload, .headers = if (action) &.{.{ .name = "X-Meiolol-Action", .value = "1" }} else &.{} }) catch |err| {
         log.warn("{s}: {t}", .{ url, err });
         return request.respond("{\"state\":\"error\",\"message\":\"no local API: meiolol api --fixture\"}", .{
             .status = .bad_gateway,
@@ -305,6 +312,15 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         if (try admin_api.handle(api, request)) return;
     }
     if (ctx.opts.dev) |d| if (d.notes_db.len > 0 and isNotes(request.head.target)) return devNotes(ctx, d, request);
+    // The admin page's Applications tab on its fixture, as accounts.bin below: no login
+    // here to reach the API's
+    if (ctx.opts.dev != null and std.mem.startsWith(u8, request.head.target, "/api/applications.bin")) {
+        var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+        defer arena_state.deinit();
+        var out: std.ArrayList(u8) = .empty;
+        try site.ui.data.encode(arena_state.allocator(), site.ui.applydata.List, site.ui.adminpage.Demo.applications, &out);
+        return request.respond(out.items, .{ .extra_headers = &.{.{ .name = "content-type", .value = "application/octet-stream" }} });
+    }
     if (ctx.opts.dev) |d| if (std.mem.startsWith(u8, request.head.target, "/api/")) return proxyApi(ctx, d, request);
     if (request.head.method != .GET and request.head.method != .HEAD) {
         return request.respond("method not allowed\n", .{ .status = .method_not_allowed, .keep_alive = false });

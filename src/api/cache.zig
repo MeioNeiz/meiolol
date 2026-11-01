@@ -1,11 +1,13 @@
 //! api.db: looked-up accounts and players, the refresh queue, matches cached by id, Daily
-//! Draft answer counts, notes on the site (notes.zig) and squads (squads.zig). Own file, separate from the crawler's databases: the
+//! Draft answer counts, notes on the site (notes.zig), squads (squads.zig) and testers'
+//! applications (applications.zig). Own file, separate from the crawler's databases: the
 //! service runs on the web server.
 
 const std = @import("std");
 const store = @import("store");
 const game = @import("game.zig");
 const notes = @import("notes.zig");
+const applications = @import("applications.zig");
 const squads = @import("squads.zig");
 
 const Db = store.Db;
@@ -109,7 +111,7 @@ pub const schema =
     \\    PRIMARY KEY (n, pick, side)
     \\) WITHOUT ROWID;
     \\
-++ notes.schema ++ squads.schema;
+++ notes.schema ++ squads.schema ++ applications.schema;
 
 /// Job keys for a player's backlog: this prefix, then the PUUID
 pub const history_prefix = "history:";
@@ -152,7 +154,7 @@ pub fn forget(db: Db, puuid: []const u8, now: i64) !void {
 
 /// Retention: players nobody has looked up since `before` (unix s) go, unblocked (a
 /// new lookup starts afresh); so do settled or expired challenges and remembered
-/// unknown Riot IDs older than a day
+/// unknown Riot IDs older than a day, and testers' applications past their time
 pub fn prune(db: Db, before: i64, now: i64) !void {
     try db.begin();
     errdefer db.rollback();
@@ -160,6 +162,7 @@ pub fn prune(db: Db, before: i64, now: i64) !void {
     try db.run("DELETE FROM challenges WHERE expires < ?", .{now - std.time.s_per_day});
     try db.run("DELETE FROM squad_checks WHERE expires < ?", .{now - std.time.s_per_day});
     try db.run("DELETE FROM accounts WHERE puuid IS NULL AND checked < ?", .{now - std.time.s_per_day});
+    try applications.prune(db, now);
     try db.commit();
 }
 

@@ -1,7 +1,8 @@
 //! ui-admin.wasm: /admin/ (ui.adminpage.Page), server-rendered empty, and the loader of
 //! ui-admincharts.wasm for the chart tabs (Traffic's, Deploys and Logs', Models' likewise).
 //! Fetches admin.bin (the box's snapshot, again each 5 min), api/live.bin (each minute) and
-//! /auth/me.bin; accounts.bin once the Accounts tab shows. Polls only while the tab shows,
+//! /auth/me.bin; accounts.bin once the Accounts tab shows, /api/applications.bin once
+//! Applications does. Polls only while the tab shows,
 //! catching up when it comes back. Runs what the page's `want` asks: an action (its result
 //! from the next live.bin), an account change, copy. dom.fetch and dom.send keep
 //! one callback: every request here answers in `done`, by its Call
@@ -18,7 +19,7 @@ pub const panic = zjb.panic;
 
 const gpa = std.heap.wasm_allocator;
 
-const Call = enum(i32) { snap, live, me, accounts, action, write, link };
+const Call = enum(i32) { snap, live, me, accounts, action, write, link, applications, decide };
 
 var page: ap.Page = .{};
 var server: ap.Page = .{};
@@ -29,6 +30,7 @@ var live: Held(ad.Live) = .{};
 var me: Held(ac.Me) = .{};
 var accounts: Held(ac.Accounts) = .{};
 var invite: Held(ac.Invite) = .{};
+var applications: Held(ui.applydata.List) = .{};
 
 var in_flight: std.enums.EnumSet(Call) = .empty;
 var snap_at: i64 = 0;
@@ -103,21 +105,26 @@ fn onShown(e: zjb.Handle) callconv(.c) void {
     onTick();
 }
 
-/// The Accounts tab's list, once the role is known to manage them
+/// The Accounts and Applications tabs' lists, once the role is known to manage them
 fn needAccounts() void {
     if (page.tab == .accounts and page.accounts == null and page.can("manage_accounts")) get(.accounts, "/auth/accounts.bin");
+    if (page.tab == .applications and page.applications == null and !page.apps_failed and page.can("manage_accounts")) get(.applications, apps_path);
 }
+
+const apps_path = "/api/applications.bin";
 
 fn changed() void {
     const w = page.want;
     page.want = .none;
     switch (w) {
-        .none, .accounts => {},
+        .none, .accounts, .applications => {},
         .refresh => {
             get(.snap, "/admin/admin.bin");
             get(.live, "/admin/api/live.bin");
             get(.me, "/auth/me.bin");
             if (page.accounts != null) get(.accounts, "/auth/accounts.bin");
+            page.apps_failed = false;
+            if (page.applications != null) get(.applications, apps_path);
         },
         .run => |a| run(a),
         .invite => |i| if (page.accounts) |l| if (i < l.roles.len) {
@@ -136,6 +143,18 @@ fn changed() void {
             write("/auth/reset.bin", ac.Manage, .{ .username = l.accounts[row].username }, .link);
         },
         .copy => if (page.link) |k| copy(k.token),
+        .decide => |d| if (page.applications) |l| if (d.row < l.applications.len) {
+            var buf: [96]u8 = undefined;
+            var q: std.Io.Writer = .fixed(&buf);
+            q.writeAll(apps_path ++ "?id=") catch unreachable;
+            ui.fmt.write(&q, .int, l.applications[d.row].id) catch unreachable;
+            q.print("&set={t}", .{d.set}) catch unreachable;
+            const path = q.buffered();
+            if (!in_flight.contains(.decide)) {
+                in_flight.insert(.decide);
+                dom.send("POST", path, "", @backingInt(Call.decide), done);
+            }
+        },
     }
     needAccounts();
     render();
@@ -227,6 +246,18 @@ fn done(ctx: i32, bytes: ?[]u8) void {
             if (bytes) |b| gpa.free(b);
             if (acting) |*x| x.answered = true;
             if (in_flight.contains(.live)) again = true else get(.live, "/admin/api/live.bin");
+        },
+        .applications, .decide => {
+            const b = bytes orelse {
+                page.apps_failed = true;
+                return;
+            };
+            const l = applications.set(b) orelse {
+                page.apps_failed = true;
+                return;
+            };
+            page.applications = l;
+            page.apps_failed = false;
         },
         .write, .link => {
             page.acct_failed = bytes == null;

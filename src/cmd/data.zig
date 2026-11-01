@@ -556,6 +556,8 @@ pub fn cmdForget(c: *Cmd) !u8 {
             malformed += 1;
             continue;
         }
+        // Testers' applications hold the Riot ID only: erased by it, resolved or not
+        if (api_db) |d| if (api.applications.riotKey(arena, id)) |k| try api.applications.forgetRiotId(d, k);
         const puuid = if (std.mem.findScalar(u8, id, '#') == null) id else blk: {
             if (client == null) client = .init(c.init.gpa, io, try c.apiKey(), &limiter);
             break :blk try forget.resolveRiotId(arena, &client.?, id) orelse {
