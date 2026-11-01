@@ -7,6 +7,7 @@
 const std = @import("std");
 const tree = @import("tree.zig");
 const card = @import("card.zig");
+const champ = @import("champ.zig");
 const segmented = @import("segmented.zig");
 const heatgrid = @import("heatgrid.zig");
 const candlist = @import("candlist.zig");
@@ -64,7 +65,18 @@ const W = struct {
     pub const harder = plain("harder to pick up");
     pub const easier = plain("easier to pick up");
     pub const add = Phrase("Add {c:text}");
+    pub const weak = plain("Weak spots");
+    pub const no_answer = plain("No answer to");
+    pub const met_in = Phrase("met in {n:pct} of games");
+    pub const thin_more = Phrase("{n:int} more with too few games to tell");
+    pub const unclear = Phrase("No clear gap; {n:int} lanes with too few games to tell");
+    pub const answered = plain("No lane your whole pool clearly loses");
+    pub const alone = Phrase("{c:text} alone: one ban or counter-pick and you're off your pool");
+    pub const covers = Phrase("covers {n:int}");
 };
+
+/// No lane icons past this in a weak spot line
+const weak_shown = 5;
 
 fn Got(comptime T: type) type {
     return struct { id: u16 = 0, f: ?*const T = null, failed: bool = false };
@@ -196,6 +208,8 @@ pub const Page = struct {
             k += 1;
         }
         const lanes = lanesOf(h, files[0..k]);
+        // Before grid() sorts the shown lanes: weak spots list them most met first
+        const weak: N = if (waiting or failed or lanes.len == 0) .none else p.weakSpots(h, r, ids[0..k], files[0..k], lanes);
         const total = @min(lanes.len, lanes_shown);
         var cov: u32 = 0;
         for (lanes[0..total]) |l| cov += @intFromBool(l.covered());
@@ -208,7 +222,92 @@ pub const Page = struct {
             card.head(h, label, if (lanes.len > 0) W.covered.with(h, .{ .a = cov, .b = total }) else null, &.{
                 if (lanes.len > 1) segmented.view(h, .{ .s = .s, .label = W.sort }, &items) else .none,
             }),
+            weak,
             h.div(.{ .class = "sec" }, .{ h.div(.{ .class = "lanes" }, .{body}), p.what(h, r, ids[0..k]) }),
+        });
+    }
+
+    /// What the whole pool shares in the role (note 50): lanes it has no answer to, by
+    /// how often they are met, and a role on one champion; each with its fix when the
+    /// role main's file has one
+    fn weakSpots(p: *P, h: *H, r: Role, ids: []const u16, files: []const ?*const pd.LaneRole, lanes: []const Lane) N {
+        var met: u64 = 0;
+        for (files) |f| met += if (f) |x| x.games else 0;
+        var none: [weak_shown]u16 = undefined;
+        var n: usize = 0;
+        var n_all: u32 = 0;
+        var thin: u32 = 0;
+        var none_games: u64 = 0;
+        for (lanes) |l| switch (answer(files, l.id)) {
+            .some => {},
+            .thin => thin += 1,
+            .none => {
+                if (n < none.len) {
+                    none[n] = l.id;
+                    n += 1;
+                }
+                n_all += 1;
+                none_games += l.games;
+            },
+        };
+        var lines = h.list();
+        if (n_all > 0) {
+            var icons = h.list();
+            for (none[0..n]) |id| icons.add(champ.view(h, pp.iconOf(p.d, h, id), .{ .px = .@"20" }));
+            const pct: u32 = if (met > 0) @intCast((100 * none_games + met / 2) / met) else 0;
+            lines.add(h.el(.li, .{}, .{
+                h.span(.{ .class = "wt" }, .{ W.no_answer, h.span(.{ .class = "ic" }, .{icons.done()}), h.span(.{ .class = "m" }, .{W.met_in.with(h, .{ .n = pct })}) }),
+                if (thin > 0) h.span(.{ .class = "m" }, .{W.thin_more.with(h, .{ .n = thin })}) else null,
+                p.coverFix(h, r, ids, none[0..n]),
+            }));
+        }
+        if (ids.len == 1) lines.add(h.el(.li, .{}, .{
+            h.span(.{ .class = "wt" }, .{W.alone.with(h, .{ .c = pp.iconOf(p.d, h, ids[0]).name })}),
+            p.alsoFix(h, r, ids),
+        }));
+        if (n_all == 0) lines.add(h.el(.li, .{ .data_ok = true }, .{if (thin > 0) W.unclear.with(h, .{ .n = thin }) else W.answered}));
+        return h.div(.{ .class = "weak" }, .{ h.el(.h3, .{}, .{W.weak}), h.el(.ul, .{}, .{lines.done()}) });
+    }
+
+    fn mainFile(p: *const P, r: Role) ?*const pd.File {
+        const g = find(pd.File, &p.mains, p.mainFor(r) orelse return null) orelse return null;
+        return g.f;
+    }
+
+    /// The option covering most of `lanes` among the main's hard lanes
+    fn coverFix(p: *P, h: *H, r: Role, ids: []const u16, lanes: []const u16) N {
+        const f = p.mainFile(r) orelse return .none;
+        var buf: [list_options]pd.File.Option = undefined;
+        var best: ?pd.File.Option = null;
+        var most: u32 = 0;
+        for (f.options(ids, .hard, &buf)) |o| {
+            var c: u32 = 0;
+            for (f.hard, 0..) |l, k| {
+                if (o.lanes & bit(k) != 0 and std.mem.findScalar(u16, lanes, l.id) != null) c += 1;
+            }
+            if (c > most) {
+                most = c;
+                best = o;
+            }
+        }
+        const o = best orelse return .none;
+        return h.span(.{ .class = "wt" }, .{ p.fix(h, r, f.cols[o.col].id), h.span(.{ .class = "m" }, .{W.covers.with(h, .{ .n = most })}) });
+    }
+
+    /// What the role main's players also play most
+    fn alsoFix(p: *P, h: *H, r: Role, ids: []const u16) N {
+        const f = p.mainFile(r) orelse return .none;
+        var buf: [1]pd.File.Option = undefined;
+        const os = f.options(ids, .also, &buf);
+        if (os.len == 0) return .none;
+        return p.fix(h, r, f.cols[os[0].col].id);
+    }
+
+    fn fix(p: *P, h: *H, r: Role, id: u16) N {
+        const c = pp.iconOf(p.d, h, id);
+        return h.button(.{ .type = "button", .class = "fix", .on_click = h.on(p, .{ .add = .{ .id = id, .role = r } }) }, .{
+            champ.view(h, c, .{ .px = .@"20", .named = false }),
+            W.add.with(h, .{ .c = c.name }),
         });
     }
 
@@ -342,6 +441,30 @@ fn find(comptime T: type, list: *const [kept]Got(T), id: u16) ?*const Got(T) {
     return null;
 }
 
+/// A lane is unanswered only when every pool champion is clearly below usual into it:
+/// min_games or more and min_pp or more below. `thin` when it would be but for a cell
+/// with too few games (or none)
+const Answer = enum { some, none, thin };
+
+fn answer(files: []const ?*const pd.LaneRole, id: u16) Answer {
+    var below: usize = 0;
+    var thin = false;
+    for (files) |f| {
+        const o = (if (f) |x| opp(x, id) else null) orelse {
+            thin = true;
+            continue;
+        };
+        if (o.games < pd.min_games) {
+            thin = true;
+            continue;
+        }
+        if (o.pp > -pd.min_pp) return .some;
+        below += 1;
+    }
+    if (below == 0) return .some;
+    return if (thin) .thin else .none;
+}
+
 fn opp(f: *const pd.LaneRole, id: u16) ?pd.Opp {
     for (f.opps) |o| if (o.id == id) return o;
     return null;
@@ -412,6 +535,20 @@ pub const css =
     \\    font-size: var(--fs-xs); cursor: pointer; }
     \\  .c-poolgrid .lanes button[aria-expanded]:hover { color: var(--t1); border-color: var(--sel-line); }
     \\  .c-poolgrid .read a { margin-left: auto; }
+    \\  .c-poolgrid .weak { display: grid; gap: var(--sp-2); padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
+    \\  .c-poolgrid .weak > h3 { margin: 0; font-size: var(--fs-m); }
+    \\  .c-poolgrid .weak ul { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+    \\  .c-poolgrid .weak li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3);
+    \\    padding-left: var(--sp-3); border-left: 3px solid var(--them); }
+    \\  .c-poolgrid .weak li[data-ok] { border-left-color: var(--us); color: var(--t2); }
+    \\  .c-poolgrid .weak .wt { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+    \\  .c-poolgrid .weak .ic { display: inline-flex; gap: 3px; }
+    \\  .c-poolgrid .weak .m { color: var(--t2); font-size: var(--fs-xs); }
+    \\  .c-poolgrid .weak .fix { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 28px; padding: 0 var(--sp-2) 0 4px;
+    \\    border: 1px solid var(--line); border-radius: var(--r-ctl); background: var(--panel-2); color: var(--t1); font: inherit;
+    \\    font-size: var(--fs-xs); cursor: pointer; }
+    \\  .c-poolgrid .weak .fix:hover { border-color: var(--sel-line); }
+    \\  .c-poolgrid .weak .fix:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     \\  @container (max-width: 480px) {
     \\    .c-poolgrid .lanes .c-heat .rh { width: auto; }
     \\  }
@@ -458,6 +595,8 @@ pub fn gallery(g: *Gallery) void {
     const p = demoPage(h, "1t-2t-40j") orelse return;
     p.cell = .{ .role = .top, .row = 0, .col = 0 };
     g.addFill("Darius and Garen top, Vi jungle: lanes worst first, what to add for top; jungle has no main's file", p.view(h));
+    const alone = demoPage(h, "1t") orelse return;
+    g.addFill("Darius alone top: weak spots, no answer to Fiora and Yone, a role on one champion", alone.view(h));
 }
 
 const testing = std.testing;
@@ -541,4 +680,41 @@ test "pool grid: needs lanes then mains, a section per role, what to add, add as
 
     p.update(.{ .add = .{ .id = 3, .role = .top } }, &ev);
     try testing.expectEqual(pp.Pick{ .id = 3, .role = .top }, p.adding.?);
+}
+
+test "weak spots: no answer only when every cell is clearly below, thin said apart" {
+    const lr = struct {
+        fn of(opps: []const pd.Opp) pd.LaneRole {
+            return .{ .role = .top, .games = 1000, .opps = opps };
+        }
+    };
+    const a = lr.of(&.{ .{ .id = 10, .games = 900, .pp = -26 }, .{ .id = 11, .games = 700, .pp = -17 }, .{ .id = 12, .games = 500, .pp = -9 } });
+    const b = lr.of(&.{ .{ .id = 10, .games = 400, .pp = -12 }, .{ .id = 11, .games = 20, .pp = -30 } });
+    const files = [_]?*const pd.LaneRole{ &a, &b };
+    try testing.expectEqual(Answer.none, answer(&files, 10));
+    // b's cell into 11 has 20 games
+    try testing.expectEqual(Answer.thin, answer(&files, 11));
+    // -0.9 is not clearly below
+    try testing.expectEqual(Answer.some, answer(&files, 12));
+    // Nobody has games into it: nothing to say
+    try testing.expectEqual(Answer.some, answer(&files, 13));
+}
+
+test "weak spots: Darius alone top, no answer to Fiora and Yone, Jax covers both" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    const p = demoPage(&h, "1t-40j").?;
+    const out = try render(a, p);
+    try testing.expectEqual(2, std.mem.count(u8, out, "Weak spots"));
+    try testing.expect(std.mem.find(u8, out, "met in 40% of games") != null);
+    try testing.expect(std.mem.find(u8, out, "covers 2") != null);
+    try testing.expect(std.mem.find(u8, out, "Darius alone: one ban") != null);
+    try testing.expect(std.mem.find(u8, out, "Vi alone: one ban") != null);
+    // With Garen top every lane has an answer
+    const both = try render(a, demoPage(&h, "1t-2t").?);
+    try testing.expect(std.mem.find(u8, both, "No lane your whole pool clearly loses") != null);
+    try testing.expect(std.mem.find(u8, both, " alone: ") == null);
 }

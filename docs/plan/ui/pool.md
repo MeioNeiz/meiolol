@@ -203,6 +203,18 @@ more opponents, the pool across roles, more information.
   254j-58t` (role letter t j m b s); old URLs without letters read as the main role
 - **One section per role in the pool** (Top, then Jungle...), each a Card:
   - head: role icon, "Top", the pool's champions there, "17 of 20 lanes covered"
+  - **Weak spots** (note 50: "i wanna see weakness in my champ pool not just see how
+    certain matchups go"): what the whole pool shares in the role, one line each with
+    its fix as an add button (from the role main's file, when there is one):
+    - no answer: lanes where every pool champion is clearly below usual (30+ games and
+      -1.0 or worse in every cell), up to 5 icons, most met first, "met in 13% of
+      games"; lanes that would be but for a thin or missing cell counted apart ("2 more
+      with too few games to tell"), never in the figure. Fix: the What to add option
+      covering most of them among the main's hard lanes ("Add Jax, covers 2"). None: one
+      quiet line, "No lane your whole pool clearly loses"
+    - one champion in the role: "Vi alone: one ban or counter-pick and you're off your
+      pool"; fix: what the main's players also play most
+    - next: ban exposure (the pool's ban rates), then all early or all late (lean.tsv)
   - **Lanes grid** (HeatGrid): rows the role's opponents your pool meets, columns your
     champions in that role. Rows: every lane opponent in 1%+ of any pool champion's
     games, merged; 20 shown, "All N" expands in place. Sort Segmented: "Worst first"
