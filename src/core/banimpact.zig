@@ -84,6 +84,12 @@ pub const Prior = struct {
         const available: f64 = @floatFromInt(total - banned);
         return 1e4 * p.edge(wins, picked) * @as(f64, @floatFromInt(picked)) / available;
     }
+
+    /// As score from rates (shares, not %): `pick` of all games, `ban` of all games
+    pub fn scoreRates(p: Prior, wins: u32, picked: u32, pick: f64, ban: f64) f64 {
+        if (ban >= 1) return 0;
+        return 1e4 * p.edge(wins, picked) * pick / (1 - ban);
+    }
 };
 
 test "score: wins per 10,000 games, thin champions pulled in" {
@@ -96,4 +102,5 @@ test "score: wins per 10,000 games, thin champions pulled in" {
     // 60% in 200 games: 10 points raw, 2.5 after shrinkage
     try std.testing.expectApproxEqAbs(0.025, shrunk.edge(120, 200), 1e-9);
     try std.testing.expectEqual(@as(f64, 0), shrunk.score(1, 2, 10, 10));
+    try std.testing.expectApproxEqAbs(s, p.scoreRates(3269, 6290, 0.0629, 0.0798), 1e-9);
 }

@@ -101,6 +101,8 @@ fn tiersData(site: *const Site) !ui.tiers.Data {
     for (champs, site.champs) |*c, ch| c.* = .{ .name = ch.name, .key = ch.key, .slug = ch.slug, .banned = ch.banned };
     const out = try a.alloc(ui.tiers.Row, rows.len);
     const s = &site.spread;
+    var priors: [Role.all.len]core.banimpact.Prior = undefined;
+    for (&priors, Role.all) |*p, r| p.* = .of(&site.stats, r);
     for (out, rows) |*o, row| {
         const pd = if (site.patchday) |*pd| pd else null;
         const move = if (pd) |x| x.champion(row.ch.id, row.role) else null;
@@ -111,6 +113,7 @@ fn tiersData(site: *const Site) !ui.tiers.Data {
             .games = row.games,
             .wins = row.wins,
             .share = @floatCast(row.share),
+            .influence = @floatCast(priors[@backingInt(row.role)].score(row.wins, row.games, row.ch.banned, site.games)),
             .spread = if (sp) |c| .{ .players = c.players, .p25 = c.p25, .p75 = c.p75, .shape = c.shape } else null,
             .patch = if (move) |m| .{
                 .prev = .{ m.win.prev.games, m.win.prev.wins },
@@ -185,6 +188,7 @@ pub fn rankFiles(site: *const Site, files: anytype) !void {
                     .rates = .{ x.pick, x.ban },
                 });
             };
+            try influence(a, rows.items);
             std.mem.sort(ui.tiers.Row, rows.items, {}, struct {
                 fn f(_: void, x: ui.tiers.Row, y: ui.tiers.Row) bool {
                     const rx = ratio(x.wins, x.games);
@@ -210,6 +214,23 @@ pub fn rankFiles(site: *const Site, files: anytype) !void {
         var out: std.ArrayList(u8) = .empty;
         try ui.data.encode(a, ui.tiers.RankData, .{ .groups = groups }, &out);
         try files.append(a, .{ .path = ui.tiers.rank_paths[vi], .data = out.items });
+    }
+}
+
+/// Each row's influence from its rank group's rates, priors from the group's rows by role
+fn influence(a: std.mem.Allocator, rows: []ui.tiers.Row) !void {
+    const cells = try a.alloc(core.statsfile.Counts, rows.len);
+    for (Role.all) |r| {
+        var n: usize = 0;
+        for (rows) |x| if (@backingInt(x.role) == @backingInt(r)) {
+            cells[n] = .{ .games = x.games, .wins = x.wins };
+            n += 1;
+        };
+        const prior: core.banimpact.Prior = .ofCounts(cells[0..n]);
+        for (rows) |*x| if (@backingInt(x.role) == @backingInt(r)) {
+            const rt = x.rates.?;
+            x.influence = @floatCast(prior.scoreRates(x.wins, x.games, rt[0] / 100, rt[1] / 100));
+        };
     }
 }
 
@@ -267,7 +288,7 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
         try a.print("{s} lane champions, {s} | meiolol", .{ roleName(r), site.period() })
     else
         try a.print("Champions, {s} | meiolol", .{site.period()});
-    const desc = try a.print("{s} champions in ranked solo queue {s}, {s}: win rate, its change this patch, how players' own win rates spread, pick and ban rates.", .{ name, site.view.region.in(), site.when });
+    const desc = try a.print("{s} champions in ranked solo queue {s}, {s}: win rate, influence, how players' own win rates spread, pick and ban rates.", .{ name, site.view.region.in(), site.when });
     const at: ui.urls.Page = .{ .champions = if (role) |r| @import("root.zig").urlRole(r) else null };
     var p = try site.page(title, desc, at, .champions);
     // The island's toolbar picks the view

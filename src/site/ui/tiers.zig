@@ -117,6 +117,9 @@ pub const Row = struct {
     wins: u32,
     /// Of the champion's games, the share in this role
     share: f32,
+    /// core.banimpact's score (J20): wins above the role's average per 10,000 games it
+    /// wasn't banned
+    influence: f32 = 0,
     spread: ?Spread,
     patch: ?Patch,
     /// Pick and ban %, a rank group's (filters.Ranked's, as the champion page shows);
@@ -147,7 +150,7 @@ const movers_each = 5;
 const board_rows = 10;
 /// The board's sort choices: Table's columns
 const board_sorts = [_]u8{ 1, 2, 4, 5, 6 };
-const board_labels = [_]tree.Text{ W.win, W.patch, W.pick, W.ban, W.games };
+const board_labels = [_]tree.Text{ W.win, W.influence, W.pick, W.ban, W.games };
 
 const W = struct {
     pub const title = plain("Champions");
@@ -167,6 +170,7 @@ const W = struct {
     pub const champion = plain("Champion");
     pub const win = plain("Win rate");
     pub const patch = plain("Patch");
+    pub const influence = plain("Influence");
     pub const players = plain("Players");
     pub const pick = plain("Pick");
     pub const ban = plain("Ban");
@@ -176,7 +180,8 @@ const W = struct {
     pub const sort_by = plain("Sort");
     pub const all_n = Phrase("All {n:int} ›");
     pub const win_note = plain("Faint under 1,000 games: could be luck.");
-    pub const patch_note = plain("Change in win rate, in points. Coloured when clear, faint when it could be luck.");
+    pub const influence_note = plain("Games its team won above the role's average, per 10,000 games it wasn't banned: its win rate over the role's, pulled toward it when games are few, times how often it was picked.");
+    pub const minus = Phrase("\u{2212}{n:int}");
     pub const players_note = plain("Each player's own win rate on it (10+ games), 25% to 75%. Thicker where more players are; the dot is the champion's. In 10-20 games luck alone moves a player by about 15 points.");
     pub const change = Phrase("{d:points} ±{ci:dec} points");
     pub const was = Phrase("{prev:text} {a:rate} of {an:count} → {cur:text} {b:rate} of {bn:count}");
@@ -244,8 +249,8 @@ fn offRole(l: *const Line) bool {
 fn rateOf(l: *const Line) f64 {
     return l.rate();
 }
-fn changeOf(l: *const Line) f64 {
-    return l.change() orelse -99;
+fn influenceOf(l: *const Line) f64 {
+    return l.row().influence;
 }
 fn middleOf(l: *const Line) f64 {
     const s = l.row().spread orelse return -1;
@@ -278,11 +283,13 @@ fn winCell(h: *H, l: *const Line) N {
     return stat.view(h, .{ .value = l.rate(), .scale = .aggregate, .ref = 50, .games = l.row().games });
 }
 
-fn patchCell(h: *H, l: *const Line) N {
-    const p = l.row().patch orelse return h.span(.{ .class = "c-delta", .data_state = "unclear" }, .{"·"});
-    return delta.view(h, .{ .d = @floatCast(l.change().?), .ci = if (p.clear) null else @floatCast(ci(p)) });
+/// Whole games, faint below 0 (winning less than the role)
+fn influenceCell(h: *H, l: *const Line) N {
+    const v: i64 = @intFromFloat(@round(l.row().influence));
+    return h.span(.{ .class = "iv", .data_low = v < 0 }, .{if (v < 0) W.minus.with(h, .{ .n = -v }) else phrase.num(h, .int, v)});
 }
 
+/// The win rate's tap: its change this patch
 fn patchTip(h: *H, l: *const Line) table.Tip {
     const p = l.row().patch orelse return .{ .title = W.patch, .note = W.no_patch };
     const was = W.was.with(h, .{ .prev = l.d.prev_patch, .a = 100 * share(p.prev), .an = p.prev[0], .cur = l.d.cur_patch, .b = 100 * share(p.cur), .bn = p.cur[0] });
@@ -339,8 +346,8 @@ pub const Table = table.DataTable(Line, .{
     .title = W.title,
     .columns = &.{
         .{ .label = W.champion, .cell = who, .name = nameOf, .num = false, .key = "ch" },
-        .{ .label = W.win, .cell = winCell, .sort = rateOf, .answer = true, .tip = W.win_note, .key = "wr" },
-        .{ .label = W.patch, .cell = patchCell, .sort = changeOf, .tip = W.patch_note, .row_tip = patchTip, .key = "dl" },
+        .{ .label = W.win, .cell = winCell, .sort = rateOf, .answer = true, .tip = W.win_note, .row_tip = patchTip, .key = "wr" },
+        .{ .label = W.influence, .cell = influenceCell, .sort = influenceOf, .tip = W.influence_note, .key = "in" },
         .{ .label = W.players, .cell = playersCell, .sort = middleOf, .num = false, .tip = W.players_note, .row_tip = playersTip, .wordless = true, .pick = true, .key = "pl" },
         .{ .label = W.pick, .cell = pickCell, .sort = pickOf, .pick = true, .key = "pk" },
         .{ .label = W.ban, .cell = banCell, .sort = banOf, .pick = true, .key = "bn" },
@@ -632,13 +639,13 @@ pub const Tiers = struct {
         });
     }
 
-    /// The board row's second figure: the sorted column's, the patch change under Win rate
+    /// The board row's second figure: the sorted column's, influence under Win rate
     fn second(t: *const T, h: *H, l: *const Line) N {
         return switch (t.table.sort) {
             4 => h.text(stat.figure(h, .rate, pickOf(l)).s),
             5 => h.text(stat.figure(h, .rate, banOf(l)).s),
             6 => gamesCell(h, l),
-            else => patchCell(h, l),
+            else => influenceCell(h, l),
         };
     }
 
@@ -793,7 +800,8 @@ pub const css =
     \\  .c-tiers .num.p3 { width: 44px; }
     \\  .c-tiers .wr { width: 96px; }
     \\  .c-tiers .ch { width: 210px; }
-    \\  .c-tiers .dl { width: 84px; }
+    \\  .c-tiers .in { width: 84px; }
+    \\  .c-tiers .iv[data-low] { color: var(--faint); }
     \\  .c-tiers .pk, .c-tiers .bn { width: 18%; }
     \\  .c-tiers .pl { width: 24%; }
     \\  .c-tiers td:is(.pk, .bn) .c-bar { display: flex; }
@@ -812,7 +820,7 @@ pub const css =
     \\  @container (max-width: 620px) {
     \\    .c-tiers .ch { width: auto; }
     \\    .c-tiers .wr { width: 66px; }
-    \\    .c-tiers .dl { width: 52px; }
+    \\    .c-tiers .in { width: 52px; }
     \\    .c-tiers .pl, .c-tiers .pk, .c-tiers .bn, .c-tiers .gm { width: 92px; }
     \\    .c-tiers .c-violin { min-width: 0; }
     \\    .c-tiers .who .c-badge { display: none; }

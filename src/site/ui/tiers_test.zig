@@ -22,10 +22,16 @@ fn row(champ: u16, role: tiers.Role, games: u32, wins: u32, share: f32, patch: ?
     return .{ .champ = champ, .role = role, .games = games, .wins = wins, .share = share, .spread = null, .patch = patch };
 }
 
+fn influence(r: tiers.Row, v: f32) tiers.Row {
+    var x = r;
+    x.influence = v;
+    return x;
+}
+
 // By win rate, as the server orders them. Lux top: under 500 games; Zed top: off-role
 const rows = [_]tiers.Row{
-    row(1, .bottom, 900, 480, 0.95, .{ .prev = .{ 2000, 960 }, .cur = .{ 900, 480 }, .clear = true }),
-    row(0, .middle, 1600, 830, 0.9, .{ .prev = .{ 3000, 1530 }, .cur = .{ 1600, 830 }, .clear = false }),
+    influence(row(1, .bottom, 900, 480, 0.95, .{ .prev = .{ 2000, 960 }, .cur = .{ 900, 480 }, .clear = true }), 12.6),
+    influence(row(0, .middle, 1600, 830, 0.9, .{ .prev = .{ 3000, 1530 }, .cur = .{ 1600, 830 }, .clear = false }), -3.4),
     row(2, .middle, 1800, 900, 0.8, .{ .prev = .{ 3000, 1590 }, .cur = .{ 1800, 900 }, .clear = true }),
     row(3, .utility, 2000, 980, 0.9, null),
     row(3, .top, 40, 19, 0.1, null),
@@ -198,4 +204,20 @@ test "the floor, the off-role chip, search and a mover" {
     // Zed mid fell clearly: its chip searches for it
     _ = p.rt.event(0, .{ .kind = .click, .target = p.id("aria-label", "Zed") });
     try testing.expectEqualStrings("Zed,Zed", try p.names());
+}
+
+test "influence: a column and the board's second figure, the patch change in the win rate's tip" {
+    var p: Page = undefined;
+    try p.init("#min=0", null);
+    defer p.deinit();
+    var page = try p.shown();
+    try testing.expect(std.mem.find(u8, page, "<span class=\"iv\">13</span>") != null);
+    try testing.expect(std.mem.find(u8, page, "<span class=\"iv\" data-low=\"\">\u{2212}3</span>") != null);
+    _ = p.rt.event(0, .{ .kind = .click, .target = p.id("aria-label", "Mid") });
+    page = try p.shown();
+    try testing.expect(std.mem.find(u8, page, ">Influence<") != null);
+    try testing.expect(std.mem.find(u8, page, ">Patch<") == null);
+    _ = p.rt.event(0, .{ .kind = .click, .target = p.by(.button, "51.9%") });
+    page = try p.shown();
+    try testing.expect(std.mem.find(u8, page, "<b>+0.9 ±3.0 points</b>16.20 51.0% of 3,000 → 16.21 51.9% of 1,600 Could be luck.") != null);
 }

@@ -158,3 +158,14 @@ Override the sections above where they differ. Raw: review artifact db, ids v4-*
 1. Sort by the rate shown; the Games floor (default 1.5k) keeps thin rows off the
    top. Win rate as StatCell ink with the continuous mix (fmt.wrColour), no box
 2. Round 4 mock "looks good"
+
+## Jacob's notes on the live board (1 Nov)
+
+Override the sections above where they differ.
+
+1. Note 59: no patch change column by default; bring back the ban-value stat under a
+   word that doesn't say ban. Now: "Influence" (J20's score, wins above the role's
+   average per 10,000 games it wasn't banned, whole numbers, faint below 0) in the
+   table and as the board's second figure under Win rate; Influence is a board sort.
+   The patch change stays in the Moved band and in the win rate cell's tap ("+0.9 ±3.0
+   points, 16.20 51.0% of 3,000 → 16.21 51.9% of 1,600")
