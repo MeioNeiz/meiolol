@@ -734,16 +734,17 @@ pub fn fetchStamped(path: []const u8, stamp: []const u8, ctx: i32, done: *const 
     fetch(ui.urls.stamped(&buf, path, stamp) orelse return done(ctx, null), ctx, done);
 }
 
-/// `fetch` stamped with the minute (?v=, as ui.urls.stamped; `path` has no query): for a
-/// file whose page has no data stamp and polls it (the admin page's), else the browser
-/// keeps its copy 4 h as with an unstamped one
+/// `fetch` stamped with the minute (as ui.urls.stamped, so a query in `path` keeps its
+/// last value): for a file whose page has no data stamp and polls it (the admin page's,
+/// a squad check's), else the browser keeps its copy 4 h as with an unstamped one
 pub fn fetchFresh(path: []const u8, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
-    const p = zjb.string(path);
-    defer p.release();
-    const minute = @floor(zjb.global("Date").call("now", .{}, f64) / 60_000);
-    const u = p.call("concat", .{ zjb.constString("?v="), minute }, zjb.Handle);
-    defer u.release();
-    request(zjb.ConstHandle.global.call("fetch", .{u}, zjb.Handle), ctx, done);
+    const minute: i64 = @intFromFloat(@floor(zjb.global("Date").call("now", .{}, f64) / 60_000));
+    var num: [24]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&num);
+    ui.fmt.write(&w, .int, minute) catch unreachable;
+    const stamp = w.buffered();
+    var buf: [512]u8 = undefined;
+    fetch(ui.urls.stamped(&buf, path, stamp) orelse return done(ctx, null), ctx, done);
 }
 
 /// POST `path` with no body, then as `fetch`
