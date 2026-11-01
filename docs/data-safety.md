@@ -14,8 +14,8 @@ pushes from the box.
   raw (Raw archive). More storage: docs/plan/ops.md "Storage and hosts"
 - Off-host: backups mirrored to Megatron outside C01's disk image, the Mac and the
   gpu-box (Backups); raw on the gpu-box's archive partition. The complete form's day
-  files (data/complete, ~3.5 GB a day estimated) are on the box only: not backed up or
-  mirrored until S4/S5, and the raw valve does not see them
+  files (data/complete, ~3.5 GB a day estimated): sealed ones mirrored to Megatron only
+  (Backups; the gpu-box copy is S5); the raw valve does not see them
 - The gpu-box keeps its pre-cloud data and backup in /mnt/d/meiolol-backups
   (restore-tested) as an old restore point. Its disks: docs/compute.md
 
@@ -70,6 +70,10 @@ under the write lock they starve the crawler on a slow host.
   buffer and the tables hold what it gives
 - After `meiolol rebuild` or `rekey` (they rewrite stored rows) run `meiolol backup
   --full`: one segment with everything, replacing the others
+- Complete form day files (riot/complete_scrub.zig): each backup first deletes those
+  past 730 days and brings the sealed rest up to `forgotten` (as forget does); the
+  Megatron mirror run then copies every sealed `.cfd` with rsync `--delete` (scrubs and
+  deletions follow) into DIR/complete. Not on the Mac or gpu-box mirrors
 - Mirrors, deploy/backup-mirror.sh: the Mac into `~/Backups/meiolol` (from
   deploy/mac-watch.sh, every ~20 h while it is awake; meiolol for the mirror in
   ~/.cache/meiolol-watch/bin, built by `deploy/box.sh watch install`) and the gpu-box
@@ -122,7 +126,8 @@ A restore from the Mac mirror takes ~12-17 min.
    views write rebuilds from the restored tables), start again
 
 Raw tables, players and ladder_pages come back empty; the crawler refills them. Restore
-re-applies `forgotten`.
+re-applies `forgotten`. From the Megatron mirror it also copies the sealed day files into
+`complete/` and scrubs them to the restored `forgotten` before it returns.
 
 Restore test, quarterly (last row by row 18 Oct 2026): back up the live data, restore
 it into another directory, then compare. Counts: `meiolol status --exact` on both,
@@ -175,6 +180,9 @@ deploy/health.sh runs on the box and prints one line per problem:
 | crawler silent | last per-minute report older than 15 min |
 | no new matches | report's per-region match counters unchanged for 2h (STALL_H) |
 | complete form off | the last report line says `complete off`: a packer or sealer error, the form restarts from its spool after 60 s (riot/complete.zig); the line's `complete` part counts docs, raw, frames, MB, queued, dropped (queue full at 200,000) and restarts in the last hour; also a problem: 3+ restarts in an hour, or any dropped |
+| complete form still | the newest `.part` in data/complete not written for 30 min while the crawler runs (mastery blocks seal about every minute) |
+| complete form scrub | the last `complete form:` line in data/backup.log reports failed day files (retried next run) |
+| Megatron mirror | unit `meiolol-megatron-mirror` failed (data/backup-mirror.log), e.g. its day files rsync |
 | WAL not checkpointed | a data/*.db-wal over 4 GB (crawler's checkpointer stuck, or a reader holding it) |
 | site | unit `meiolol-web` not active, or last upload in web.log older than 26h |
 | disk | / at 80% not counting C01's fixed 30 GB disk cache file (the rest grows slowly: snaps, nginx's 2 GB cache, /var/www), or the data's disk at 80% |
@@ -222,7 +230,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | backup mirrors (Mac, gpu-box) | each mirror run fetches the box's forgotten list and `meiolol backup --mirror` scrubs the PUUIDs new to it from every file it holds, including segments the box has pruned (applied list: forgotten-applied.txt in the mirror) |
 | raw archive (gpu-box) | ingest leaves out documents naming a forgotten PUUID; each pull runs `meiolol-lab archive-forget` for PUUIDs new on the box's list, which drops every archived summary, timeline and mastery line naming them (hashed with the salt) |
 | raw exports (box, data/archive-out) | short-lived: deleted on ack; an export holds what raw.db held when it was made |
-| complete form day files (box, data/complete) | not yet: forgotten players' summaries and blank timelines are never written, but documents written before a forget stay until S4 rewrites the files (docs/plan/ops.md "Complete form") |
+| complete form day files (box, data/complete; Megatron mirror) | a forgotten player's summaries, timelines and mastery are never written; each `forget` and `backup` rewrites every sealed file naming a forgotten PUUID without those documents (whole documents dropped, the rest byte for byte) and deletes files past 730 days, under complete/scrub.lock (riot/complete_scrub.zig). An index of PUUID hashes per file (complete/index) rules out files unread. Documents in the open `.part` or the spool wait for their seal (within a day) and the next daily run; quarantined spool segments naming one are deleted. The Megatron copy follows by rsync `--delete` within the hour. Progress: complete/forgotten.txt (applied, in order) and scrubbed.tsv (FILE, how many applied) |
 | Your games (api.db on the web server) | `forget --data /var/lib/meiolol-api` there: `api.cache.forget` deletes the player, their Riot ID in every cached match (`match_names` by PUUID hash) and adds them to `blocked` |
 | Logins (accounts.db on the web server) | `sudo -u meiolol-api meiolol account delete NAME --data /var/lib/meiolol-api` there: the account, its sessions, desktop app sign-ins and reset invites (privacy page "Accounts") |
 | analysis snapshots (Mac, gpu-box) | re-erased when made, hashed, deleted when replaced (Analysis snapshots, below) |

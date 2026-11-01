@@ -140,8 +140,12 @@ coordinator first):
   files on the data disk (outside SQLite, so the writer's WAL doesn't carry the
   bytes); a document that fails its block check goes in a raw frame. Raw keeps going
   beside it until S6. Not yet measured on the box: sizes, zstd CPU, raw frame share
-- S4 forget rewrites the day files it touches (an erased document no longer equals the
-  original), the 24-month sweep blanks the same; backups, restore test, health lines
+- S4 built (src/riot/complete_scrub.zig; data-safety.md "Erasure"): forget and the daily
+  backup rewrite sealed day files without documents naming a forgotten PUUID (a per-file
+  PUUID hash index skips files that hold none) and delete days past 730; Megatron
+  mirrors sealed files; restore copies them back and scrubs; health on a still `.part`,
+  scrub failures and a failed Megatron mirror. Left: a restore test with day files on
+  the box
 - S5 the gpu-box pulls day files instead of raw exports and pseudonymises them as the
   archive does now; lab readers (summaries, mastery-pre, seat-stats, comp-stats) read
   them. With its salt the copy rejoins meiolol.db backups, so it is also the copy off

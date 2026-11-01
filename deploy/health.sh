@@ -36,6 +36,11 @@ else
     (( ${restarts:-0} >= 3 )) && problems+=("complete form restarted $restarts times in the last hour (crawl.log 'complete:' lines)")
     dropped=$(grep -oE '[0-9]+ dropped' <<< "$report" | cut -d' ' -f1)
     (( ${dropped:-0} > 0 )) && problems+=("complete form dropped $dropped documents: its queue was full")
+    # Mastery blocks seal every minute or so: an open day file standing still means none do
+    part=$(ls -t data/complete/*.cfd.part 2> /dev/null | head -n 1)
+    if [[ -n "$part" ]] && (( now - $(stat -c %Y "$part") > 1800 )); then
+        problems+=("complete form: no day file written for $(( (now - $(stat -c %Y "$part")) / 60 )) min")
+    fi
     total=$(grep -oE ' [0-9]+m ' <<< "$report" | awk '{ s += $1 } END { print s + 0 }')
     state=${HEALTH_STATE:-data/health.state}
     read -r last_total last_progress 2> /dev/null < "$state" || last_progress=$now
@@ -85,6 +90,13 @@ fi
 
 if ! running meiolol-backup; then
     problems+=("backup loop not running (meiolol-backup)")
+fi
+# The daily forget and backup bring sealed day files up to the forgotten list
+# (riot/complete_scrub.zig); a file that failed is retried next day
+failed=$(grep 'complete form: .* failed$' data/backup.log 2> /dev/null | tail -n 1 | grep -oE '[0-9]+ failed$' | cut -d' ' -f1)
+(( ${failed:-0} > 0 )) && problems+=("complete form: $failed day files failed their scrub (data/backup.log)")
+if systemctl --user -q is-failed meiolol-megatron-mirror.service 2> /dev/null; then
+    problems+=("Megatron mirror failed (data/backup-mirror.log)")
 fi
 newest=$(ls -t "$BACKUPS"/state/state-*.db 2>/dev/null | head -n 1)
 if [[ -z "$newest" ]] || (( now - $(stat -c %Y "$newest") > 26 * 3600 )); then

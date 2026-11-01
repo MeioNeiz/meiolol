@@ -58,7 +58,10 @@ each host; the old key must still work, so switch before revoking it):
 5. Backups from before the switch hold old-key PUUIDs that a later erasure (by new PUUID)
    cannot find: the pre-switch state snapshots (rotate out within 4 weeks; the new full
    segment replaces the old segments), the Mac mirror (follows) and the gpu-box restore
-   point. Deleting them once the first new-key backup is restore-tested is Jacob's call
+   point. Deleting them once the first new-key backup is restore-tested is Jacob's call.
+   The complete form's day files (box, Megatron mirror) from before the switch are the
+   same: their old PUUIDs stay, so a later erasure misses them. Open, Jacob's call:
+   delete them, or blank their PUUIDs (no tool yet)
 6. gpu-box, the next UTC day: `~/ml/bin/meiolol-lab archive-age
    /mnt/wsl/archive/meiolol-raw 0` once. It blanks the hashed PUUIDs and deletes the
    mastery files of every archived day before today: all pre-switch days, and the

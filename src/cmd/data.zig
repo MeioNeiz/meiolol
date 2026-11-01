@@ -310,7 +310,22 @@ pub fn cmdBackup(c: *Cmd) !u8 {
         "{d} old files removed", .{
         r.state, r.segment orelse "none (nothing new)", r.matches, r.timelines, r.drafts, r.rank_history, r.removed,
     });
-    return 0;
+    // Day files sealed since the last forget are brought up to the whole list. Read only:
+    // store.open's migrations would take the write lock beside the crawler
+    const db = try store.sqlite.Db.openReadOnly(try std.fs.path.joinZ(c.arena, &.{ c.data_dir, "meiolol.db" }));
+    defer db.close();
+    return if (try tendComplete(c, db, o.now)) 0 else 1;
+}
+
+/// The complete form's sealed day files (riot/complete_scrub.zig): those past 24 months
+/// deleted, the rest brought up to every forgotten PUUID; false when a file failed
+fn tendComplete(c: *Cmd, db: store.Db, now: i64) !bool {
+    const t = try riot.complete_scrub.tend(c.init.gpa, c.init.io, c.data_dir, try forget.list(c.arena, db), now);
+    std.log.info("complete form: {d} day files read, {d} rewritten ({d} documents dropped), " ++
+        "{d} past 24 months deleted, {d} quarantined spool segments deleted, {d} failed", .{
+        t.files, t.rewritten, t.dropped, t.aged, t.quarantined, t.failed,
+    });
+    return t.failed == 0;
 }
 
 pub const usage_restore =
@@ -342,6 +357,12 @@ pub fn cmdRestore(c: *Cmd) !u8 {
     std.log.info("{s}: {d} files, {d} matches, {d} timelines; {d} rows re-erased", .{
         c.data_dir, r.files, r.matches, r.timelines, r.removed.total(),
     });
+    // A mirror's day files may predate erasures: scrubbed to the restored list at once
+    const days = try riot.complete_scrub.restore(c.init.io, from_dir, c.data_dir);
+    std.log.info("complete form: {d} sealed day files copied", .{days});
+    const db = try store.sqlite.Db.openReadOnly(try std.fs.path.joinZ(c.arena, &.{ c.data_dir, "meiolol.db" }));
+    defer db.close();
+    if (!try tendComplete(c, db, now)) return 1;
     try partials.drop(c.init.gpa, c.init.io, try partials.dirIn(c.arena, c.data_dir));
     try cubes.drop(c.init.gpa, c.init.io, try cubes.dirIn(c.arena, c.data_dir));
     return 0;
@@ -543,6 +564,7 @@ pub fn cmdForget(c: *Cmd) !u8 {
         std.log.info("views partials: {d} rows blanked", .{n});
     }
     if (api_db != null and ids.len > 0) std.log.info("Your games cache: erased and blocked", .{});
+    const tended = if (db) |d| try tendComplete(c, d, now) else true;
     if (backups != null) std.log.info("backup rows: {d}", .{scrubbed.total()});
     if (export_path) |path| {
         const d = db orelse {
@@ -555,5 +577,5 @@ pub fn cmdForget(c: *Cmd) !u8 {
         std.log.warn("{d} Riot IDs have no account (renamed or deleted): resolve them by PUUID", .{unresolved});
         return 1;
     }
-    return 0;
+    return if (tended) 0 else 1;
 }

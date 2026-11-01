@@ -144,10 +144,12 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   torn last frame (a bad frame with whole frames after it is damage: left, form off),
   seals older days' `.part` files and replays the spool, so a crash loses only
   documents not yet spooled; readers keep one document per key (a crash between a
-  frame's fsync and its segment's delete stores it twice). A segment a replay crashed
-  on goes to `spool/quarantine/` at the next start. `complete/lock`: a second crawler
+  frame's fsync and its segment's delete stores it twice). After 3 unclean runs in a row
+  (`complete/starts`; a close or 30 min up counts as clean) a start moves the spool to
+  `spool/quarantine/`, so a document that crashes the packer can't crash every start. `complete/lock`: a second crawler
   on the same data refuses to start. Other start errors leave the form off and the
-  crawl on. `--no-complete` turns it off
+  crawl on. `--no-complete` turns it off. Erasure and the 730-day delete:
+  riot/complete_scrub.zig, from forget, backup and restore
 - `timeline.db`: `timelines`, one compact blob per match (src/riot/timeline.zig: per
   minute per participant gold, xp, level, CS, position, damage, CC; events: kills
   with position, items, skills, wards, buildings, plates, monsters, transforms). ~8.6

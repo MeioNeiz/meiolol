@@ -121,6 +121,15 @@ pub fn reapply(gpa: std.mem.Allocator, db: Db, now: i64) !Removed {
     return total;
 }
 
+/// Every forgotten PUUID, in `arena`
+pub fn list(arena: std.mem.Allocator, db: Db) ![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    var s = try db.prepare("SELECT puuid FROM forgotten");
+    defer s.deinit();
+    while (try s.step()) try out.append(arena, try arena.dupe(u8, s.bytes(0)));
+    return out.items;
+}
+
 /// Every forgotten PUUID, one per line, written atomically to `path`: the box's half of
 /// the exchange with the Your games service (box-forgotten.txt, docs/your-games.md)
 pub fn exportList(io: std.Io, db: Db, path: []const u8) !usize {
