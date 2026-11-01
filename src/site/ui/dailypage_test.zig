@@ -201,6 +201,37 @@ test "the seat review: empty from the server, then the seat read off the page; r
     try testing.expect(std.mem.find(u8, try p.shown(), "Blue Top") != null);
 }
 
+test "the hidden seat: the options first with how often each is picked, the model's others folded" {
+    var p = dd.sample;
+    var seats = p.seats;
+    var cands: [4]dd.Cand = undefined;
+    cands[0] = .{ .champ = 9, .rank = 1, .win = 50.3, .terms = &.{}, .rest = 0 };
+    for (seats[1][0].cands, cands[1..]) |c, *x| {
+        x.* = c;
+        x.rank += 1;
+    }
+    seats[1][0].cands = &cands;
+    p.seats = seats;
+    var x: SeatIsland = undefined;
+    try x.init(&p);
+    defer x.deinit();
+    x.state.read("done", "5", "1");
+    x.i.render();
+    var out = try x.shown();
+    // Of 6,300 games: Ambessa 54%, Jayce 33%, Gnar 13%
+    try testing.expect(std.mem.find(u8, out, "54%").? < std.mem.find(u8, out, "33%").?);
+    try testing.expect(std.mem.find(u8, out, "13%") != null);
+    try testing.expect(std.mem.find(u8, out, "Neeko") == null);
+    try testing.expectEqual(1, std.mem.count(u8, out, "class=\"c-cand\""));
+    x.click(x.id("class", "more"));
+    try testing.expect(x.state.more);
+    out = try x.shown();
+    try testing.expectEqual(2, std.mem.count(u8, out, "class=\"c-cand\""));
+    try testing.expect(std.mem.find(u8, out, "Neeko") != null);
+    x.state.read("done", "0", "1");
+    try testing.expect(!x.state.more);
+}
+
 test "cand: two rows open at most, a third drops the oldest; a new seat closes them" {
     var s: dailyseat.Seat = .init(testing.allocator, &dd.sample);
     s.read("done", "5", "1");

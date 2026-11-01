@@ -643,6 +643,7 @@ pub const pro = blk: {
     var p = dd.sample;
     p.turns = &dd.pro_turns;
     p.options = &.{ 5, 11, 10, 9, 7, 8 };
+    p.picked = &.{ 2100, 3400, 800, 1500, 600, 300 };
     p.hint = .{ .kind = .ad, .fits = 0b100111 };
     break :blk p;
 };

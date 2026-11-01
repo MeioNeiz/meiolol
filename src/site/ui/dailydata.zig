@@ -41,6 +41,8 @@ pub const Puzzle = struct {
     hidden_role: role.Role,
     /// Up to six (four on ranked puzzles), in display order; the played one among them
     options: []const u16,
+    /// Ranked games with each option in the hidden role, as `options`; empty: unknown
+    picked: []const u32 = &.{},
     /// Null when no trait splits the options
     hint: ?Hint = null,
     /// Blue's win chance from each lane alone, %, by role
@@ -56,6 +58,7 @@ pub const Puzzle = struct {
         const n = p.champs.len;
         if (p.turns.len != 0 and p.turns.len != 20) return false;
         if (p.options.len == 0 or p.options.len > 6) return false;
+        if (p.picked.len != 0 and p.picked.len != p.options.len) return false;
         for (p.turns, 0..) |t, i| {
             if (t.side != pro_sides[i]) return false;
             if (t.champ) |c| if (c >= n) return false;
@@ -225,6 +228,7 @@ pub const sample: Puzzle = .{
     .hidden_side = .red,
     .hidden_role = .top,
     .options = &.{ 5, 11, 10 },
+    .picked = &.{ 2100, 3400, 800 },
     .hint = .{ .kind = .ad, .fits = 0b011 },
     .lanes = .{ 51.4, 50.1, 49.1, 50.9, 51.3 },
     .result = .{ .winner = .blue, .secs = 2491, .kills = .{ 10, 8 }, .gold = .{ 84300, 79300 }, .towers = .{ 9, 6 }, .dragons = .{ 2, 4 }, .barons = .{ 1, 1 } },

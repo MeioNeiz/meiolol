@@ -10,6 +10,7 @@ const dp = @import("dailypage.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const card = @import("card.zig");
+const badge = @import("badge.zig");
 const draftboard = @import("draftboard.zig");
 const candlist = @import("candlist.zig");
 const reasons = @import("reasons.zig");
@@ -34,11 +35,13 @@ pub const Seat = struct {
     done: bool = false,
     /// Candidate rows open (champion indexes)
     open: [2]?u16 = .{ null, null },
+    /// The hidden seat's picks beyond the options shown
+    more: bool = false,
     /// The server's render: this family's files, for ui-daily.wasm to load
     js: []const u8 = "",
     wasm: []const u8 = "",
 
-    pub const Msg = union(enum) { cand: u16 };
+    pub const Msg = union(enum) { cand: u16, more };
 
     pub fn init(_: std.mem.Allocator, p: *const dd.Puzzle) Seat {
         return .{ .p = p, .seat = dp.hiddenSeat(p) };
@@ -56,6 +59,7 @@ pub const Seat = struct {
                     s.open = .{ c, keep };
                 }
             },
+            .more => s.more = !s.more,
         }
     }
 
@@ -68,6 +72,7 @@ pub const Seat = struct {
         if (to != s.seat) {
             s.seat = to;
             s.open = .{ null, null };
+            s.more = false;
         }
     }
 
@@ -102,37 +107,32 @@ pub const Seat = struct {
             h.oom = true;
             return .none;
         };
-        const mine: ?u16 = if (s.seat == dp.hiddenSeat(p)) if (s.guess) |g| p.options[g] else null else null;
+        const hidden = s.seat == dp.hiddenSeat(p);
+        const mine: ?u16 = if (hidden) if (s.guess) |g| p.options[g] else null else null;
+        // The options offered come first, the model's other picks folded under them
+        const fold = hidden and offeredAll(p, x);
+        var offered: usize = 0;
         var last: u16 = 0;
-        for (rows, x.cands) |*row, c| {
-            const nm = s.champOf(c.champ).name;
-            const detail = if (c.terms.len == 0) null else s.breakdown(h, x, c, side, rl);
-            row.* = .{
-                .champ = s.champOf(c.champ),
-                .rank = c.rank,
-                .star = c.rank == 1,
-                .ref = c.champ == x.champ,
-                .win = c.win,
-                .vs = if (c.champ == x.champ) null else if (played) |pc| c.win - pc.win else null,
-                .reasons = s.chips(h, c, rl, side),
-                .mark = if (c.champ == mine and c.champ != x.champ) W.yours_tag else null,
-                .mark_k = .accent,
-                .gap = @as(u32, c.rank) > @as(u32, last) + 1,
-                .open = detail != null and (s.open[0] == c.champ or s.open[1] == c.champ),
-                .detail = detail,
-                .label = if (detail != null) W.why.with(h, .{ .n = nm }) else null,
-                .id = if (detail != null) h.fmt("dw-{d}", .{c.champ}) else "",
-                .on = if (detail != null) h.on(s, .{ .cand = c.champ }) else null,
-            };
+        for (x.cands) |c| {
+            if (fold and !isOption(p, c.champ)) continue;
+            s.row(h, &rows[offered], x, c, played, mine, side, rl, !fold and @as(u32, c.rank) > @as(u32, last) + 1);
+            offered += 1;
             last = c.rank;
         }
+        var rest = offered;
+        if (fold) for (x.cands) |c| {
+            if (isOption(p, c.champ)) continue;
+            s.row(h, &rows[rest], x, c, played, mine, side, rl, false);
+            rest += 1;
+        };
         const pick = dp.pickOf(p, t, x.champ);
+        const head: [3]tree.Text = .{ W.chance.with(h, .{ .side = dp.sideWord(side).s }), W.with_, W.vs };
         return h.div(.{ .key = 1, .class = "seat" }, .{card.view(h, .{ .label = W.seat }, &.{
             // Kept across seats, so a screen reader hears which seat the panel now shows
             h.div(.{ .class = "sh", .aria_live = "polite" }, .{
                 champ.view(h, s.champOf(x.champ), .{ .px = .@"40", .named = false }),
                 h.div(.{}, .{
-                    h.b(.{}, .{s.champOf(x.champ).name}),
+                    h.span(.{ .class = "nm" }, .{ h.b(.{}, .{s.champOf(x.champ).name}), badge.view(h, .accent, .{W.played}) }),
                     h.span(.{ .class = "sub" }, .{
                         if (pick) |n| W.where_pick.with(h, .{ .side = dp.sideWord(side).s, .r = rl.label().s, .n = n }) else W.where.with(h, .{ .side = dp.sideWord(side).s, .r = rl.label().s }),
                     }),
@@ -142,9 +142,76 @@ pub const Seat = struct {
                     h.span(.{}, .{W.of.with(h, .{ .n = x.of })}),
                 }) else null,
             }),
-            if (s.seat == dp.hiddenSeat(p)) s.yours(h, x) else .none,
-            if (rows.len > 0) candlist.view(h, .{ .rows = rows, .head = .{ W.chance.with(h, .{ .side = dp.sideWord(side).s }), W.with_, W.vs } }) else h.p(.{ .class = "none" }, .{W.unrated}),
+            if (hidden) s.yours(h, x) else .none,
+            if (fold) s.shares(h, x, rl) else .none,
+            if (rows.len == 0) h.p(.{ .class = "none" }, .{W.unrated}) else candlist.view(h, .{ .rows = rows[0..offered], .head = head }),
+            if (rest > offered) h.button(.{
+                .key = 2,
+                .class = "more",
+                .type = "button",
+                .aria_expanded = s.more,
+                .on_click = h.on(s, .more),
+            }, .{W.more.with(h, .{ .n = rest - offered })}) else .none,
+            if (rest > offered and s.more) candlist.view(h, .{ .rows = rows[offered..rest] }) else .none,
         })});
+    }
+
+    fn row(s: *Seat, h: *H, out: *candlist.Row, x: dd.Seat, c: dd.Cand, played: ?dd.Cand, mine: ?u16, side: dd.Side, rl: role.Role, gap: bool) void {
+        const nm = s.champOf(c.champ).name;
+        const detail = if (c.terms.len == 0) null else s.breakdown(h, x, c, side, rl);
+        out.* = .{
+            .champ = s.champOf(c.champ),
+            .rank = c.rank,
+            .star = c.rank == 1,
+            .ref = c.champ == x.champ,
+            .win = c.win,
+            .vs = if (c.champ == x.champ) null else if (played) |pc| c.win - pc.win else null,
+            .reasons = s.chips(h, c, rl, side),
+            .mark = if (c.champ == mine and c.champ != x.champ) W.yours_tag else null,
+            .mark_k = .accent,
+            .gap = gap,
+            .open = detail != null and (s.open[0] == c.champ or s.open[1] == c.champ),
+            .detail = detail,
+            .label = if (detail != null) W.why.with(h, .{ .n = nm }) else null,
+            .id = if (detail != null) h.fmt("dw-{d}", .{c.champ}) else "",
+            .on = if (detail != null) h.on(s, .{ .cand = c.champ }) else null,
+        };
+    }
+
+    /// How often each option is picked in the role, from the crowd's games (popularity,
+    /// not this draft), largest first; the played one ringed
+    fn shares(s: *const Seat, h: *H, x: dd.Seat, rl: role.Role) N {
+        const p = s.p;
+        if (p.picked.len != p.options.len) return .none;
+        var total: u64 = 0;
+        for (p.picked) |g| total += g;
+        if (total == 0) return .none;
+        var order: [6]u8 = undefined;
+        const n = p.options.len;
+        for (order[0..n], 0..) |*o, i| o.* = @intCast(i);
+        std.sort.insertion(u8, order[0..n], p.picked, struct {
+            fn more(g: []const u32, a: u8, b: u8) bool {
+                return g[a] > g[b];
+            }
+        }.more);
+        const top: f32 = @floatFromInt(p.picked[order[0]]);
+        var cells = h.list();
+        for (order[0..n]) |i| {
+            const c = p.options[i];
+            const g: f32 = @floatFromInt(p.picked[i]);
+            const pct: i64 = @intFromFloat(@round(100 * g / @as(f32, @floatFromInt(total))));
+            cells.add(h.div(.{ .key = @as(usize, c), .class = "sc", .data_ref = c == x.champ, .title = s.champOf(c).name }, .{
+                champ.view(h, s.champOf(c), .{ .px = .@"24", .named = false }),
+                h.span(.{ .class = "sr" }, .{s.champOf(c).name}),
+                h.b(.{}, .{phrase.num(h, .pct, pct)}),
+                h.span(.{ .class = "sb", .aria_hidden = true }, .{h.el(.i, .{ .style = h.vars(.{ .w = 100 * g / top }) }, .{})}),
+            }));
+        }
+        const tip = toggletip.view(h, "ds-picked", .{W.picked}, W.picked, W.picked_note.with(h, .{ .n = total, .r = rl.label().s }));
+        return h.div(.{ .key = 3, .class = "shares" }, .{
+            h.div(.{ .class = "st" }, .{&tip}),
+            h.div(.{ .class = "sg" }, .{cells.done()}),
+        });
     }
 
     /// The pick locked in, when neither the played one nor in the list (where it is tagged:
@@ -276,6 +343,20 @@ pub fn verdict(blue: f32, won: dd.Side) tree.Text {
     return W.verdicts[i];
 }
 
+fn isOption(p: *const dd.Puzzle, c: u16) bool {
+    return std.mem.findScalar(u16, p.options, c) != null;
+}
+
+/// Every option has a row: puzzles whose review ranks the options
+fn offeredAll(p: *const dd.Puzzle, x: dd.Seat) bool {
+    for (p.options) |o| {
+        for (x.cands) |c| {
+            if (c.champ == o) break;
+        } else return false;
+    }
+    return true;
+}
+
 fn digit(v: []const u8) ?u8 {
     return if (v.len == 1 and v[0] >= '0' and v[0] <= '9') v[0] - '0' else null;
 }
@@ -288,6 +369,10 @@ const W = struct {
     const of = Phrase("of {n:int}");
     const yours = Phrase("Your pick {n:text}");
     const yours_tag = plain("your pick");
+    const played = plain("played");
+    const more = Phrase("More picks ({n:int})");
+    const picked = plain("Pick share");
+    const picked_note = Phrase("Each option's share of {n:count} ranked {r:text} games with one of them: how popular it is, not how well it fits this draft.");
     const chance = Phrase("{side:text}'s win chance");
     const with_ = plain("with");
     const vs = plain("vs played");
@@ -329,6 +414,24 @@ pub const css =
     \\  .c-dseat .sh { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center;
     \\    padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
     \\  .c-dseat .sh .sub { display: block; font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-dseat .sh .nm { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+    \\  .c-dseat .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    \\  .c-dseat .shares { display: grid; gap: var(--sp-2); padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
+    \\  .c-dseat .st { font-size: var(--fs-xs); color: var(--faint); }
+    \\  .c-dseat .sg { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: var(--sp-2); }
+    \\  .c-dseat .sc { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px 6px;
+    \\    padding: 4px 6px; border-radius: var(--r-s); }
+    \\  .c-dseat .sc[data-ref] { box-shadow: inset 0 0 0 1px var(--accent); }
+    \\  .c-dseat .sc b { text-align: right; font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
+    \\  .c-dseat .sb { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--line-2); overflow: hidden; }
+    \\  .c-dseat .sb i { display: block; height: 100%; width: calc(var(--w) * 1%); background: var(--muted); }
+    \\  .c-dseat .sc[data-ref] .sb i { background: var(--accent); }
+    \\  .c-dseat .more { all: unset; cursor: pointer; box-sizing: border-box; width: 100%; min-height: 36px; padding: 0 var(--sp-2);
+    \\    color: var(--muted); font-size: var(--fs-s); border-bottom: 1px solid var(--line); }
+    \\  .c-dseat .more::after { content: " ▾"; }
+    \\  .c-dseat .more[aria-expanded="true"]::after { content: " ▴"; }
+    \\  .c-dseat .more:hover { color: var(--text); background: var(--panel-2); }
+    \\  .c-dseat .more:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
     \\  .c-dseat .of { display: grid; justify-items: end; font-size: var(--fs-xs); color: var(--muted); }
     \\  .c-dseat .of b { font-size: var(--fs-l); color: var(--text); }
     \\  .c-dseat .yours { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--t2); }
@@ -354,6 +457,29 @@ pub const css =
 pub fn gallery(g: *@import("gallery.zig").Gallery) void {
     const h = g.h;
     if (dp.shown(h, &dd.sample, 2, 2, .blue)) |p| g.addFill("wrong pick: yours tagged in the list, On paper", dp.both(h, p, .{ null, null }));
+    if (h.mem.create(dd.Puzzle)) |m| {
+        // A model's pick not offered: folded under the options, here opened
+        m.* = dd.sample;
+        var seats = m.seats;
+        const hs = &seats[1][0];
+        const cs = h.mem.alloc(dd.Cand, hs.cands.len + 1) catch {
+            h.oom = true;
+            return;
+        };
+        cs[0] = .{ .champ = 9, .rank = 1, .win = 50.3, .terms = &.{}, .rest = 0 };
+        for (hs.cands, cs[1..]) |c, *x| {
+            x.* = c;
+            x.rank += 1;
+        }
+        hs.cands = cs;
+        m.seats = seats;
+        if (dp.shown(h, m, 0, 0, .blue)) |p| if (h.mem.create(Seat)) |x| {
+            x.* = .{ .p = m, .seat = p.seat, .guess = p.guess, .done = true, .more = true };
+            g.addFill("more picks opened", dp.layout(h, p.view(h), x.view(h)));
+        } else |_| {
+            h.oom = true;
+        };
+    } else |_| h.oom = true;
     if (h.mem.create(dd.Puzzle)) |old| {
         // A review from before the options' ranks: the hidden seat lists the played one only
         old.* = dd.sample;

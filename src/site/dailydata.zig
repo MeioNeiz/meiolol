@@ -208,6 +208,8 @@ pub fn puzzle(
     }
     const options = try a.alloc(u16, p.options.len);
     for (options, p.options) |*x, o| x.* = try ids.at(o.id);
+    const picked = try a.alloc(u32, p.options.len);
+    for (picked, p.options) |*x, o| x.* = o.games;
     var lanes: [5]?f32 = undefined;
     for (&lanes, p.lanes) |*x, l| x.* = if (l.win) |w| @floatCast(w) else null;
 
@@ -229,6 +231,7 @@ pub fn puzzle(
         .hidden_side = @fromBackingInt(@intCast(p.hidden_team)),
         .hidden_role = uiRole(p.hidden_role),
         .options = options,
+        .picked = picked,
         .hint = try hintFor(a, p, ctx, magic, ranged),
         .lanes = lanes,
         .result = .{
@@ -445,6 +448,7 @@ test "a ranked puzzle: bans per side, the played pick's reasons from its option,
 
     const p = try puzzle(a, testPuzzle(null, test_review), Fake{}, Fake.champ, Fake.magic, Fake.ranged);
     try testing.expect(p.valid());
+    try testing.expectEqualSlices(u32, &.{ 50, 80 }, p.picked);
     try testing.expectApproxEqAbs(@as(f32, 52.5), p.paper.?.blue, 1e-4);
     // The top pick with its two reasons; the second pick has no win chance (left out);
     // then the played one, ranked as the seat says, its win chance the seat's
