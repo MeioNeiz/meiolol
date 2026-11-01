@@ -74,6 +74,27 @@ pub const Deploy = struct {
         return c.end == null and c.state == .running;
     }
 
+    /// Its first step's start: the push check runs before the push
+    pub fn origin(d: Deploy) i64 {
+        var t = d.start;
+        for (d.steps.values) |x| if (x) |s| if (s.start) |a| {
+            t = @min(t, a);
+        };
+        return t;
+    }
+
+    /// Seconds from the push: to live, to its last step's end, or so far while running
+    pub fn took(d: Deploy, now: i64) ?i64 {
+        if (d.state == .skipped) return null;
+        if (d.live) |l| return l - d.start;
+        if (d.state == .running) return now - d.start;
+        var end: ?i64 = null;
+        for (d.steps.values) |x| if (x) |s| if (s.end) |e| {
+            end = @max(end orelse e, e);
+        };
+        return if (end) |e| @max(0, e - d.start) else null;
+    }
+
     fn doneAt(d: Deploy, k: Key) ?i64 {
         const s = d.steps.get(k) orelse return null;
         return if (s.state == .done) s.end else null;
@@ -338,7 +359,7 @@ fn median(xs: []i64) ?i64 {
     return if (xs.len % 2 == 1) xs[h] else @divFloor(xs[h - 1] + xs[h], 2);
 }
 
-/// The pills in the order the steps ran; steps not begun keep the pipeline's order after
+/// The steps in the order they ran; steps not begun keep the pipeline's order after
 /// them, as pending while the deploy runs, skipped once live, not reached otherwise. A
 /// push check not recorded (--no-verify) has no pill, nor has a step a skipped or refused
 /// deploy never had
@@ -370,8 +391,12 @@ pub fn steps(a: std.mem.Allocator, d: *const Deploy, now: i64, u: ?Usual) ![]st.
         const s = d.steps.get(k) orelse continue;
         o.state = s.state;
         o.detail = s.detail;
-        if (s.start) |t0| o.took = @intCast(@max(0, (s.end orelse now) - t0));
-        if (s.end == null) if (u) |x| if (x.step.get(k)) |t| {
+        if (s.start) |t0| {
+            // A step a deploy that ended never finished has no time to count up
+            if (s.end != null or d.state == .running) o.took = @intCast(@max(0, (s.end orelse now) - t0));
+            o.at = @intCast(@max(0, t0 - d.origin()));
+        }
+        if (u) |x| if (x.step.get(k)) |t| {
             o.usual = @intCast(@max(0, t));
         };
     }
@@ -461,7 +486,10 @@ test "list: running with usual times; a newer build supersedes; refused and skip
     for (ps) |p| if (std.mem.eql(u8, p.name.s, "Site build")) {
         try testing.expectEqual(15, p.took.?);
         try testing.expectEqual(10, p.usual.?);
+        try testing.expectEqual(30, p.at.?);
     };
+    try testing.expectEqual(45, l[0].took(4045).?);
+    try testing.expectEqual(l[1].live.? - l[1].start, l[1].took(9999).?);
     try testing.expectEqual(st.StepState.pending, ps[ps.len - 1].state);
     try testing.expect(ps[0].state == .running and std.mem.eql(u8, ps[0].name.s, "Deploy"));
 

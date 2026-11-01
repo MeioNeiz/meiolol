@@ -31,8 +31,13 @@ const Call = enum(i32) { live, snap };
 /// A log's request answers with this plus its index
 const log_ctx = 64;
 
-const tick_ms = 10_000;
-const live_s = 60;
+/// Each second for a running deploy's clocks, else every `slow_ticks`
+const tick_ms = 1_000;
+const slow_ticks = 10;
+var ticks: u32 = 0;
+const live_s: i64 = 60;
+/// live.bin while a deploy runs, so its steps show soon after they change
+const live_running_s: i64 = 15;
 
 export fn main() void {
     dom.start();
@@ -92,15 +97,20 @@ fn changed() void {
 
 fn onTick() callconv(.c) void {
     if (!state.shows() or zjb.global("document").get("hidden", bool)) return;
+    ticks +%= 1;
+    const clocks = state.tab == .deploys and state.running;
+    if (!clocks and ticks % slow_ticks != 0) return;
     if (state.tab == .logs) {
         if (state.follow) getLog(state.shown);
         return;
     }
-    if (now() - live_at >= live_s) getLive() else render();
+    if (now() - live_at >= (if (clocks) live_running_s else live_s)) getLive() else render();
 }
 
 fn onShown(e: zjb.Handle) callconv(.c) void {
     e.release();
+    // Acts now, not on the next slow tick
+    ticks = slow_ticks - 1;
     onTick();
 }
 

@@ -53,6 +53,8 @@ pub const Ops = struct {
     now: i64 = 0,
     /// When the page opened: a deploy failing after it is announced
     opened: i64 = 0,
+    /// A deploy runs, as last drawn: the wasm ticks each second for its clocks
+    running: bool = false,
     /// The wasm's: live.bin's, or admin.bin's when live.bin failed (snap)
     events: ?[]const ad.DeployEvent = null,
     snap: bool = false,
@@ -172,13 +174,20 @@ fn deploysTab(o: *Ops, h: *H) N {
         return .none;
     };
     dl.settle(all, o.now);
+    const shown = all[0..@min(all.len, max_deploys)];
+    var scale: i64 = 0;
+    o.running = false;
+    for (shown) |*d| {
+        scale = @max(scale, d.took(o.now) orelse 0);
+        o.running = o.running or d.state == .running;
+    }
     var rows = h.list();
-    for (all[0..@min(all.len, max_deploys)], 0..) |*d, i| {
+    for (shown, 0..) |*d, i| {
         var short: Short = @splat(' ');
         const n = @min(d.sha.len, short.len);
         @memcpy(short[0..n], d.sha[0..n]);
         o.rows[i] = short;
-        const u: ?dl.Usual = if (d.state == .running) dl.usual(all, d) else null;
+        const u = dl.usual(all, d);
         const steps = dl.steps(h.mem, d, o.now, u) catch {
             h.oom = true;
             return .none;
@@ -198,6 +207,10 @@ fn deploysTab(o: *Ops, h: *H) N {
             .open = o.foldOf(short) orelse (i == 0 or d.state == .running),
             .on_toggle = h.on(o, .{ .fold = @intCast(i) }),
             .alert = alert,
+            .took = if (d.took(o.now)) |t| secs(t) else null,
+            .usual = if (u.total) |t| secs(t) else null,
+            .pushed_at = secs(d.start - d.origin()),
+            .scale = secs(scale),
         }));
     }
     return card.view(h, .{}, &.{
@@ -206,6 +219,10 @@ fn deploysTab(o: *Ops, h: *H) N {
         if (o.snap) h.p(.{ .class = "lead", .role = "status" }, .{W.from_snap}) else .none,
         if (all.len == 0) h.p(.{ .class = "lead" }, .{W.no_deploys}) else h.div(.{}, .{rows.done()}),
     });
+}
+
+fn secs(t: i64) u32 {
+    return @intCast(std.math.clamp(t, 0, std.math.maxInt(u32)));
 }
 
 /// "pushed 28 Oct 14:02, live at 14:09 after 7:12 (…)", or how it ended, or when it is
@@ -468,7 +485,8 @@ test "admin deploys: newest and running open, a fold kept, the running one timed
     try expectHas(s, &.{
         "data-state=\"running\" open",
         "pushed 28 Oct 13:56 from the gpu-box, expected live around 14:04 (median 8:20 over the last 2 deploys)",
-        "Site build<span class=\"sr\">, running</span><span class=\"t\">1:10 so far, usually 2:40</span>",
+        "Site build<span class=\"sr\">, running</span>",
+        "<span class=\"t\">1:10 of ~2:40</span>",
         ">docs or research only<",
         "live at 13:08 after 8:20 (static upload 13:06, renderer 13:08)",
         "role=\"alert\"",

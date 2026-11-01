@@ -309,14 +309,16 @@ a 301 to it.
 
 The admin page's Deploys tab shows every push from its check until the site serves it,
 and the machine that pushed (the end of the ci or deploy start's detail, "... on the
-gpu-box"). Its backbone is data/deploys.tsv on the box: one line per step, `time` (unix
-s), `sha` (full commit), `step`, `status` (start, ok, failed, skipped, waiting, info),
-`detail` (free text; redacted when served). live.bin carries the last 3,000 lines as
-`deploys`, the 15 min admin.bin as `deploy_events`. A deploy whose machine stopped
-mid-run (the Mac asleep) shows superseded once a later one starts (not while its push
-check runs), else failed after 3 times the step's usual time (at least 30 min) in a step
-that machine runs (push check, deploy, build, web loop signal); the box's steps fail by
-their own events.
+gpu-box"). Each push is a waterfall of its steps on its own time axis, with each step's
+and the whole deploy's usual time (median of the last live deploys); a running one ticks
+each second and polls live.bin every 15 s. Its backbone is data/deploys.tsv on the box:
+one line per step, `time` (unix s), `sha` (full commit), `step`, `status` (start, ok,
+failed, skipped, waiting, info), `detail` (free text; redacted when served). live.bin
+carries the last 3,000 lines as `deploys`, the 15 min admin.bin as `deploy_events`. A
+deploy whose machine stopped mid-run (the Mac asleep) shows superseded once a later one
+starts (not while its push check runs), else failed after 3 times the step's usual time
+(at least 30 min) in a step that machine runs (push check, deploy, build, web loop
+signal); the box's steps fail by their own events.
 
 | step | written by | when |
 | --- | --- | --- |
