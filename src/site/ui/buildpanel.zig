@@ -1,6 +1,6 @@
 //! BuildPanel: the champion's whole build in one panel, as an island. RuneTree on the
 //! left, the level path's SkillGrid under it; on the right the slot cells (Spells,
-//! Start, Boots / Core / Item 4, 5, 6 / Skills) in a 3-column grid, pairs in a narrow
+//! Start, Boots / Core / Item 4, 5, 6 / Max order) in a 3-column grid, pairs in a narrow
 //! container. Each cell lists its top 3 options as compact DataTable rows, most played
 //! first: pick share, win rate coloured against the slot's own (which choice is better
 //! here, Jacob 25 Oct), games; the quieter reading (the rate minus the champion's)
@@ -63,7 +63,9 @@ pub const Kind = enum {
             .item4 => plain("Item 4"),
             .item5 => plain("Item 5"),
             .item6 => plain("Item 6"),
-            .skills, .skill_path => plain("Skills"),
+            // Which ability players max first: League's own words for it
+            .skills => plain("Max order"),
+            .skill_path => plain("Levels"),
         };
     }
 };
@@ -124,7 +126,6 @@ const W = struct {
     pub const best = plain("best");
     pub const as_usual = plain("as usual");
     pub const sort = plain("Sort");
-    pub const levels = plain("Levels");
     pub const most_picked = plain("Most picked");
     pub const reach = plain("Lane opponent");
     pub const reaches = [3]tree.Text{ plain("All"), plain("vs melee"), plain("vs ranged") };
@@ -215,7 +216,7 @@ pub const Row = struct {
         const open = r.c.open;
         return switch (r.c.kind) {
             .core => h.span(.{ .class = "what" }, .{ itempath.view(h, o.art, .{ .minutes = o.minutes, .top = if (r.c.top.ptr == o.art.ptr) null else r.c.top }), bestMark(h, r), usualMark(h, r) }),
-            .skills => h.span(.{ .class = "what" }, .{ h.span(.{ .class = "keys" }, .{keys(h, o.keys, true)}), bestMark(h, r), usualMark(h, r) }),
+            .skills => h.span(.{ .class = "what" }, .{ h.span(.{ .class = "keys", .data_v = "max" }, .{keys(h, o.keys, true)}), bestMark(h, r), usualMark(h, r) }),
             .skill_path => h.span(.{ .class = "what" }, .{ h.span(.{ .class = "keys", .data_v = "path" }, .{keys(h, o.keys, false)}), usualMark(h, r) }),
             else => blk: {
                 var icons = h.list();
@@ -238,13 +239,15 @@ pub const Row = struct {
         return if (r.c.usual == r.o) h.span(.{ .class = "usual" }, .{W.as_usual}) else null;
     }
 
-    /// "Q › E › W", or the level path with R bold
+    /// "Q › E › W" as the level grid's lit cells, or the level path with R bold
     fn keys(h: *H, s: []const u8, arrows: bool) []const N {
         var out = h.list();
         for (s, 0..) |k, i| {
-            if (arrows and i > 0) out.add(h.span(.{ .class = "ar" }, .{"›"}));
             const t = h.fmt("{c}", .{k});
-            out.add(if (k == 'R') h.b(.{}, .{t}) else h.text(t));
+            if (arrows) {
+                if (i > 0) out.add(h.span(.{ .class = "ar", .aria_hidden = true }, .{"›"}));
+                out.add(h.el(.i, .{}, .{t}));
+            } else out.add(if (k == 'R') h.b(.{}, .{t}) else h.text(t));
         }
         return out.done();
     }
@@ -577,7 +580,7 @@ pub const BuildPanel = struct {
     fn levels(p: *BuildPanel, h: *H) ?N {
         if (p.open == .skills or p.rows[@backingInt(Kind.skill_path)].len == 0) return null;
         return h.div(.{ .class = "levels", .data_usual = p.asUsual(.skill_path) }, .{
-            h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{W.levels}), heads(h) }),
+            h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{Kind.skill_path.title()}), heads(h) }),
             p.pathRow(h, p.shownPath()),
         });
     }
@@ -652,6 +655,11 @@ pub const css =
     \\  .c-build .keys { font-family: ui-monospace, monospace; letter-spacing: 0.06em; color: var(--t2); }
     \\  .c-build .keys > b { color: var(--text); }
     \\  .c-build .keys > .ar { color: var(--faint); margin: 0 4px; font-family: var(--font); }
+    \\  .c-build .keys[data-v="max"] { display: flex; align-items: center; font-family: var(--font); letter-spacing: 0; }
+    \\  .c-build .keys[data-v="max"] > i { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+    \\    border-radius: var(--r-s); font-style: normal; font-weight: var(--w-b); color: var(--text);
+    \\    background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--focus); }
+    \\  .c-build .keys[data-v="max"] > .ar { margin: 0 3px; }
     \\  .c-build .lp { display: flex; align-items: center; gap: 0; min-height: 40px; padding: var(--sp-2) 0;
     \\    font-size: var(--fs-m); font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--line); }
     \\  .c-build .lp > .c-skills { flex: 1; min-width: 0; margin-right: var(--sp-2); }
@@ -673,6 +681,8 @@ pub const css =
     \\    .c-build :is(.slot, .levels) > * { --cwp: 32px; --cww: 36px; --cwg: 32px; }
     \\    .c-build .slot .c-table[data-v="compact"] { font-size: var(--fs-s); }
     \\    .c-build .what .c-art { --sz: 26px; }
+    \\    .c-build .keys[data-v="max"] > i { width: 20px; height: 20px; }
+    \\    .c-build .keys[data-v="max"] > .ar { margin: 0 1px; }
     \\  }
     \\  @container (max-width: 170px) { .c-build .hd > .p, .c-build .slot:not([data-open]) .c-table .p { display: none; } }
     \\  @container (max-width: 420px) { .c-build .what > .c-path > .min { display: none; } }
