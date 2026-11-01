@@ -1,0 +1,127 @@
+# Responding to feedback for the new build page | Buildkite
+
+<https://buildkite.com/resources/changelog/271-responding-to-feedback-for-the-new-build-page/>
+
+Platform
+Solutions
+Resources
+Company
+Docs
+Pricing
+Log in
+Contact
+Get Started
+Resources
+/
+Changelog
+/
+Responding to feedback for the new build page
+March 27, 2025
+Responding to feedback for the new build page
+
+Since turning on the new build page for everyone, we've been listening to your feedback and working hard to make improvements. Thank you for bearing with us. We're excited to announce a number of new changes that we hope you'll find valuable, with more on the way ahead of deprecating the classic build page on April 24, 2025.
+
+Performance Improvements: faster Canvas and Table
+
+To make the page faster for you, we’ve added virtualisation to the canvas and table views – rendering only what needs to be rendered, making a significant improvement for builds with hundreds or thousands of steps. On our backlog is to give the same treatment to the sidebar.
+
+Persistent sidebar between builds
+
+Keep your sidebar consistent as you navigate through builds now that we persist collapsed states in the build page sidebar (ie. Failed, Running, Passed). With large builds showing hundreds of passed steps you don't need to see, once you collapse Passed steps they'll stay like that on all consecutive builds.
+
+Get the same view by default on your builds
+
+Going between builds is now better as your preferred view persists. Your personal selection of "Canvas", "Table", or "Waterfall" is remembered as you navigate across builds. These views are now consolidated into a single "Steps" tab where you control which visualization you'd like to use.
+
+Many people gave us feedback about situations where the canvas or table weren’t particularly useful and now they’ll be able to stay on their preferred view.
+
+More intuitive filtering
+
+We’ve moved step filtering out of the sidebar and into the “Steps” view to allow users to filter down their pipeline steps whilst continuing to have the overall context of the pipeline. This lets the sidebar remain a navigational aid even when narrowing down on failed steps.
+
+An added benefit: debugging some job slowness using the waterfall view? Waterfall now supports job-level filtering.
+
+Less noise in the sidebar
+
+To make the sidebar more useful, we’ve improved the way we surface the relevant jobs based on the current state of a step. Here’s an example of this in action when viewing a build with a failing step with a high number of parallelism.
+
+You’ll see how we present the failed job, but we initially hide the passed jobs.
+
+We have also changed the way we display failed steps, by giving them a slight red background. Making it easier to see failed steps in your pipeline of the sidebar. Particularly useful when using the Pipeline view.
+
+What's next?
+
+We are still looking at opportunities to improve the page and make migration from the classic build UI easier. In particular we are considering improvements to annotations, layout and information architecture as well as unblocking block steps.
+
+Chris
+Copy link
+Atom feed
+You deserve better CI.
+
+Get started for free with a full month of our all-access trial.
+
+Start an all-access trial
+Platform
+Pipelines
+Public pipelines
+Test Engine
+Package Registries
+Pricing
+Hosting options
+Self-hosted agents
+Mac hosted agents
+Linux hosted agents
+Windows hosted agents
+Resources
+Docs
+Blog
+Changelog
+Example pipelines
+Plugins
+Webinars
+Case studies
+Events
+Migration Services
+Company
+About
+Careers
+Press
+Security
+Brand assets
+Contact
+Solutions
+Replace Jenkins
+Workflows for MLOps
+Testing at scale
+Monorepo mojo
+Bazel orchestration
+Compare
+All comparisons
+Buildkite vs GitHub Actions
+Buildkite vs Jenkins
+Buildkite vs CircleCI
+Buildkite vs Harness
+Buildkite vs CloudBees
+Buildkite vs Blacksmith
+Buildkite vs Depot
+Buildkite vs Dagger
+Legal
+Terms of Service
+Acceptable Use Policy
+Privacy Policy
+Subprocessors
+Service Level Agreement
+Supplier Code of Conduct
+Modern Slavery Statement
+Support
+System status
+Forum
+Theme: System
+© Buildkite Pty Ltd 2026
+Cookie settings
+
+We use optional cookies for analytics and advertising. Privacy policy
+
+Cookie preferences
+Accept all
+Reject optional

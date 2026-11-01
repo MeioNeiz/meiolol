@@ -1,0 +1,95 @@
+# Build waterfall view | Buildkite
+
+<https://buildkite.com/resources/changelog/191-build-waterfall-view/>
+
+Platform
+Solutions
+Resources
+Company
+Docs
+Pricing
+Log in
+Contact
+Get Started
+Resources
+/
+Changelog
+/
+Build waterfall view
+March 27, 2023
+Build waterfall view
+
+The waterfall view visualizes the timeline of each step in a build. You can see this summary in your Builds page a toggle–enabling to switch between list and waterfall views.
+
+Oz
+Copy link
+Atom feed
+You deserve better CI.
+
+Get started for free with a full month of our all-access trial.
+
+Start an all-access trial
+Platform
+Pipelines
+Public pipelines
+Test Engine
+Package Registries
+Pricing
+Hosting options
+Self-hosted agents
+Mac hosted agents
+Linux hosted agents
+Windows hosted agents
+Resources
+Docs
+Blog
+Changelog
+Example pipelines
+Plugins
+Webinars
+Case studies
+Events
+Migration Services
+Company
+About
+Careers
+Press
+Security
+Brand assets
+Contact
+Solutions
+Replace Jenkins
+Workflows for MLOps
+Testing at scale
+Monorepo mojo
+Bazel orchestration
+Compare
+All comparisons
+Buildkite vs GitHub Actions
+Buildkite vs Jenkins
+Buildkite vs CircleCI
+Buildkite vs Harness
+Buildkite vs CloudBees
+Buildkite vs Blacksmith
+Buildkite vs Depot
+Buildkite vs Dagger
+Legal
+Terms of Service
+Acceptable Use Policy
+Privacy Policy
+Subprocessors
+Service Level Agreement
+Supplier Code of Conduct
+Modern Slavery Statement
+Support
+System status
+Forum
+Theme: System
+© Buildkite Pty Ltd 2026
+Cookie settings
+
+We use optional cookies for analytics and advertising. Privacy policy
+
+Cookie preferences
+Accept all
+Reject optional

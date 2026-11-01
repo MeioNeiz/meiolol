@@ -56,6 +56,7 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `ux/desktop` | | desktop companion windows: window sizes, per-phase screens, player and champion cards, overlays, tags |
 | `ux/density` | | dense tables and number layout: colour-scaled cells, bars or sparklines in cells, small multiples |
 | `ux/postgame` | | game detail and match history: scoreboards, item and rune rows, damage and gold bars, timelines, profiles |
+| `ux/progress` | | a run's steps and progress: CI/CD and deploy run pages, step lists, graphs, waterfalls, timers, logs |
 | `ux/controls` | | champion search, region, rank and patch filters, dropdowns, role pickers, tooltips, toggles |
 | `ux/puzzle` | | daily games, quizzes and puzzles, in League or not: streaks, sharing, feedback |
 | `tools/paid` | | what tools charge for: tiers, prices, what sits behind the paywall |
