@@ -75,6 +75,8 @@ const W = struct {
     pub const covers = Phrase("covers {n:int}");
     pub const banned = Phrase("One of them banned in {n:pct} of games");
     pub const banned_one = Phrase("banned in {n:pct} of games");
+    pub const all_early = plain("All lean early: ahead at 14, weaker than usual from an even game at 20");
+    pub const all_late = plain("All lean late: behind at 14, stronger than usual from an even game at 20");
 };
 
 /// No lane icons past this in a weak spot line
@@ -232,8 +234,9 @@ pub const Page = struct {
     }
 
     /// What the whole pool shares in the role (note 50): lanes it has no answer to, by
-    /// how often they are met, bans taking one of its champions often, and a role on one
-    /// champion; each with its fix when the role main's file has one
+    /// how often they are met, bans taking one of its champions often, every champion
+    /// leaning early or late, and a role on one champion; each with its fix when the
+    /// role main's file has one
     fn weakSpots(p: *P, h: *H, r: Role, ids: []const u16, files: []const ?*const pd.LaneRole, lanes: []const Lane) N {
         var met: u64 = 0;
         for (files) |f| met += if (f) |x| x.games else 0;
@@ -267,6 +270,7 @@ pub const Page = struct {
         }
         const banned = p.banExposure(ids);
         if (ids.len > 1 and banned >= ban_clear) lines.add(p.bansLine(h, r, ids, banned));
+        if (ids.len > 1) if (p.allLean(r, ids)) |t| lines.add(h.el(.li, .{}, .{h.span(.{ .class = "wt" }, .{t})}));
         if (ids.len == 1) lines.add(h.el(.li, .{}, .{
             h.span(.{ .class = "wt" }, .{W.alone.with(h, .{ .c = pp.iconOf(p.d, h, ids[0]).name })}),
             if (pctOf(banned) > 0) h.span(.{ .class = "m" }, .{W.banned_one.with(h, .{ .n = pctOf(banned) })}) else null,
@@ -331,6 +335,19 @@ pub const Page = struct {
             h.span(.{ .class = "wt" }, .{ W.banned.with(h, .{ .n = pctOf(banned) }), each.done() }),
             p.optionFix(h, r, ids, .banned),
         });
+    }
+
+    /// Every champion in the role clearly leans the same way: advice, no fix
+    fn allLean(p: *const P, r: Role, ids: []const u16) ?tree.Text {
+        const b = bit(@backingInt(r));
+        var early = true;
+        var late = true;
+        for (ids) |id| {
+            const c = p.d.champs[pp.indexOf(p.d, id) orelse return null];
+            early = early and c.early & b != 0;
+            late = late and c.late & b != 0;
+        }
+        return if (early) W.all_early else if (late) W.all_late else null;
     }
 
     fn moreBanned(p: *const P, a: u16, b: u16) bool {
@@ -776,6 +793,11 @@ test "weak spots: Darius alone top, no answer to Fiora and Yone, Jax covers both
     const low = demoPage(&h, "1t-2t").?;
     low.d = &low_bans;
     try testing.expect(std.mem.find(u8, try render(a, low), "One of them banned") == null);
+    // Darius and Garen both lean early top; alone, Darius's lean is his own page's
+    try testing.expect(std.mem.find(u8, both, "All lean early") != null);
+    try testing.expect(std.mem.find(u8, out, "All lean") == null);
+    // Teemo (no lean) with Darius: not all
+    try testing.expect(std.mem.find(u8, try render(a, demoPage(&h, "1t-20t").?), "All lean") == null);
 }
 
 const low_bans: pp.Data = blk: {

@@ -177,6 +177,8 @@ fn pageData(site: *const Site, p: *const pool.Pool) !page_ui.Data {
         .pickup = pickupOf(&site.learning, ch.id),
         .roles = rolesOf(site, ch),
         .ban = permille(ch.banned, site.games),
+        .early = leanBits(site, ch, .early),
+        .late = leanBits(site, ch, .late),
     };
     var mains: std.ArrayList(page_ui.Main) = .empty;
     for (p.mains) |m| {
@@ -193,6 +195,16 @@ fn pageData(site: *const Site, p: *const pool.Pool) !page_ui.Data {
 fn permille(n: u64, of: u64) u16 {
     if (of == 0) return 0;
     return @intCast(@min(1000, (1000 * n + of / 2) / of));
+}
+
+/// A bit per role where the champion clearly leans that way (the champion pages' rule)
+fn leanBits(site: *const Site, ch: root.Champ, way: core.champfacts.Lean) u8 {
+    const l = site.lean orelse return 0;
+    var bits: u8 = 0;
+    for (core.Role.all) |r| if (l.get(ch.id, r)) |row| if (row.lean() == way) {
+        bits |= @as(u8, 1) << @backingInt(champion.uiRole(r));
+    };
+    return bits;
 }
 
 /// A bit per role with a lanes file (ui.role.Role order)

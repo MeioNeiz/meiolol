@@ -186,7 +186,9 @@ the background at nice 10 (log data/lean.log); the next site build reads it.
 champion pages, after the tiles: "Early lean" / "Late lean" when both numbers are clear
 (|effect| >= 2 posterior sd, 200+ games at 20) and opposite, each clear number alone
 otherwise, "no clear early or late lean" when neither, "too few games" under 200. Its
-own scope ("every region, last 30 days"), not the filters'. Method page `#lean`.
+own scope ("every region, last 30 days"), not the filters'. Method page `#lean`. The
+pool page's data carries each champion's clear leans by role, for Weak spots' "All lean
+early" (docs/plan/ui/pool.md).
 `meiolol lean --check` is the lab check (folds and dev-val, never the test window).
 
 ## Pool (src/pool.zig, src/site/pool.zig, ui/poolpage.zig)

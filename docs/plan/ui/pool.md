@@ -219,7 +219,10 @@ more opponents, the pool across roles, more information.
       instead ("banned in 9% of games")
     - one champion in the role: "Vi alone: one ban or counter-pick and you're off your
       pool"; fix: what the main's players also play most
-    - next: all early or all late (lean.tsv)
+    - all early or all late: every champion in the role (two or more) clearly leans the
+      same way, the champion pages' rule on data/lean.tsv (its own scope, every region,
+      30 days): "All lean early: ahead at 14, weaker than usual from an even game at
+      20". Advice, no fix
     - fix buttons show "+" and the name, "Add Dr. Mundo" as the aria-label
   - **Lanes grid** (HeatGrid): rows the role's opponents your pool meets, columns your
     champions in that role. Rows: every lane opponent in 1%+ of any pool champion's
