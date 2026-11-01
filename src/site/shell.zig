@@ -82,11 +82,14 @@ const SiteHeader = struct {
         const a = fba.allocator();
         var t: ui.Tree = .{};
         var h: ui.H = .init(a, &t);
-        var links: [nav_items.len]ui.site.Link = undefined;
-        for (nav_items, &links) |it, *l| {
+        var links: [nav_items.len + 1]ui.site.Link = undefined;
+        for (nav_items, links[0..nav_items.len]) |it, *l| {
             const here = it.nav == p.nav or (it.nav == .champions and p.nav.inChampions() and p.nav != .matchups);
             l.* = link(a, p, it, here) catch return error.WriteFailed;
         }
+        // Public pages get it from admin_link's script
+        const tester = private_tabs[1];
+        links[nav_items.len] = .{ .label = .{ .s = tester[2] }, .href = tester[1], .current = p.private == tester[0] };
         // Champions and Matchups are in the bar already
         var more: [champion_tabs.len - 2]ui.site.Link = undefined;
         for (champion_tabs[2..], &more) |it, *l| l.* = link(a, p, it, it.nav == p.nav) catch return error.WriteFailed;
@@ -99,7 +102,7 @@ const SiteHeader = struct {
         t.root = ui.site.view(&h, .{
             .home = if (p.view) |v| std.mem.concat(a, u8, &.{ "/", v.query() }) catch return error.WriteFailed else "/",
             .home_view = p.view == null,
-            .links = &links,
+            .links = if (p.private != null) &links else links[0..nav_items.len],
             .more = &more,
             .search = look,
         });
@@ -137,14 +140,14 @@ const search_loader =
     \\
 ;
 
-/// A menu link to the Draft tester for logins that opened it: the admin page (/admin) or the
+/// A bar and menu link to the Draft tester for logins that opened it: the admin page (/admin) or the
 /// private one (/private) stores it in this origin's localStorage, so visitors' pages carry
 /// neither link nor path. Those browsers also load the private numbers (site/pv.zig), which
 /// nginx serves to private logins only: for anyone else they are the login page's HTML,
 /// which never runs or styles
 const admin_link =
     \\<script>try{const l=JSON.parse(localStorage.getItem("admin-link"));if(l&&typeof l.href=="string"&&/^\/(admin|private)[/#]/.test(l.href)){const a=document.createElement("a");
-    \\a.href=l.href;a.textContent=l.label;document.querySelector("header .links").append(a);const c=document.createElement("link");c.rel="stylesheet";c.href="/private/pv.css";
+    \\a.href=l.href;a.textContent=l.label;for(const n of document.querySelectorAll("header .links,header .c-sitemenu"))n.append(a.cloneNode(true));const c=document.createElement("link");c.rel="stylesheet";c.href="/private/pv.css";
     \\const s=document.createElement("script");s.src="/private/pv.js";s.dataset.wasm="/private/pv.wasm";document.head.append(c,s)}}catch(e){}</script>
     \\
 ;
@@ -274,5 +277,17 @@ test "open: its CSP allows each inline script it writes" {
         try open(&out.writer, .{ .title = "t", .description = "d", .patch = "16.21", .data = "", .public = true, .view = v, .nav = .champions });
         try close(&out.writer, .{ .title = "t", .description = "d", .patch = "16.21", .data = "", .public = true });
         try csp.check(out.written());
+    }
+}
+
+test "open: the bar links the Draft tester on private pages, where admin_link isn't" {
+    for ([_]?Private{ null, .tester, .notes }) |pr| {
+        var out: Writer.Allocating = .init(std.testing.allocator);
+        defer out.deinit();
+        try open(&out.writer, .{ .title = "t", .description = "d", .patch = "16.21", .data = "", .public = false, .private = pr });
+        const bar = out.written()[0..std.mem.indexOf(u8, out.written(), "</header>").?];
+        const tester = "<a href=\"/private/tester\"";
+        try std.testing.expectEqual(pr != null, std.mem.indexOf(u8, bar, tester) != null);
+        try std.testing.expectEqual(pr == .tester, std.mem.indexOf(u8, bar, tester ++ " aria-current=\"page\"") != null);
     }
 }
