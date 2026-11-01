@@ -37,6 +37,9 @@ pub const Signup = struct { link: []const u8 = "", email: []const u8 = "", usern
 /// POST password
 pub const Password = struct { password: []const u8, new: []const u8 };
 
+/// POST delete: the account's password again
+pub const Delete = struct { password: []const u8 };
+
 /// A desktop app signed in to the account; times in unix seconds
 pub const Device = struct { id: i64, name: []const u8, created: i64, last_used: i64 };
 

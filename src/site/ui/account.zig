@@ -1,6 +1,7 @@
 //! The account pages (docs/plan/accounts.md): log in, make an account (/signup: open, a
 //! username and password; /signup#LINK: a sign-up link's email form), set up a login from an invite or reset link (/join#INVITE) and
-//! the signed-in account (/account: who, a new password, its desktop apps, log out).
+//! the signed-in account (/account: who, a new password, its desktop apps, log out,
+//! delete).
 //! Island Account (ui-account.wasm) against /auth/NAME.bin (api/accounts.zig). A link's
 //! token stays in the fragment, which browsers never send. What is typed stays in the
 //! inputs: the wasm reads the form once it is sent, so autofill before the island counts
@@ -64,6 +65,9 @@ const W = struct {
     const out_all = plain("Everywhere");
     const out_note = plain("Everywhere includes your desktop apps.");
     const out_note_web = plain("Everywhere logs out every browser you use.");
+    const del_h = plain("Delete your account");
+    const del_note = plain("It goes at once, with its sign-ins and desktop apps. This can't be undone.");
+    const del = plain("Delete account");
     const wait = phrase.Phrase("Too many tries: wait {n:int} min.");
     const failed = phrase.Phrase("Something went wrong ({n:int}).");
     const tester = plain("Draft tester");
@@ -87,6 +91,8 @@ pub const Account = struct {
     n: u32 = 0,
     /// Keys the form: a new, empty one after a password change
     forms: u32 = 0,
+    /// The account page's form last sent, whose answer `say` is
+    sent: Sent = .form,
     /// The account page's: who, and its desktop apps
     me: ?ac.Me = null,
     me_at: Load = .loading,
@@ -97,18 +103,21 @@ pub const Account = struct {
 
     const P = @This();
 
-    pub const Want = union(enum) { none, send, revoke: i64, logout: bool };
+    pub const Sent = enum { form, delete };
 
-    pub const Msg = union(enum) { submit, revoke: u32, logout: bool };
+    pub const Want = union(enum) { none, send, delete, revoke: i64, logout: bool };
+
+    pub const Msg = union(enum) { submit, delete, revoke: u32, logout: bool };
 
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
         switch (m) {
-            .submit => {
+            .submit, .delete => {
                 ev.handled = true;
                 if (p.busy) return;
                 p.busy = true;
                 p.say = .none;
-                p.want = .send;
+                p.sent = if (m == .delete) .delete else .form;
+                p.want = if (m == .delete) .delete else .send;
             },
             .revoke => |i| if (i < p.devices.len) {
                 p.want = .{ .revoke = p.devices[i].id };
@@ -122,7 +131,7 @@ pub const Account = struct {
         p.busy = false;
         p.say = switch (status) {
             0 => .down,
-            200 => if (p.kind == .account) .changed else return true,
+            200 => if (p.kind == .account and p.sent == .form) .changed else return true,
             429 => .wait,
             else => if (errorOf(body)) |e| blk: {
                 p.server.set(e);
@@ -158,7 +167,7 @@ pub const Account = struct {
             .join => h.div(at, .{ title, p.form(h), h.p(.{ .class = "info" }, .{ W.see, " ", privacy(h), "." }) }),
             .account => blk: {
                 const after = p.rest(h);
-                break :blk h.div(at, .{ title, p.who(h), h.h2(.{}, .{W.change_h}), p.form(h), &after });
+                break :blk h.div(at, .{ title, p.who(h), h.h2(.{}, .{W.change_h}), p.form(h), &after, p.deleteForm(h) });
             },
         };
     }
@@ -207,7 +216,23 @@ pub const Account = struct {
                 .join => W.save,
                 .account => W.change,
             }}),
-            if (p.say == .none) null else h.p(.{ .class = "msg", .role = "alert", .data_ok = p.say == .changed }, .{p.line(h)}),
+            if (p.say == .none or p.sent != .form) null else h.p(.{ .class = "msg", .role = "alert", .data_ok = p.say == .changed }, .{p.line(h)}),
+        });
+    }
+
+    /// Not for the owner, deleted only over ssh; the password again, as the API asks
+    fn deleteForm(p: *P, h: *H) N {
+        const m = p.me orelse return .none;
+        if (std.mem.eql(u8, m.role, "owner")) return .none;
+        return h.div(.{ .class = "del" }, .{
+            h.h2(.{}, .{W.del_h}),
+            h.p(.{ .class = "info" }, .{W.del_note}),
+            h.el(.form, .{ .class = "del", .method = "post", .action = "/auth/delete", .on_submit = h.on(p, .delete) }, .{
+                h.input(.{ .name = "username", .autocomplete = "username", .value = m.username, .hidden = true }),
+                field(h, W.pass, null, .{ .name = "password", .type = "password", .autocomplete = "current-password", .required = true }),
+                button.view(h, .{ .submit = true, .disabled = p.busy }, .{W.del}),
+                if (p.say == .none or p.sent != .delete) null else h.p(.{ .class = "msg", .role = "alert" }, .{p.line(h)}),
+            }),
         });
     }
 
@@ -355,6 +380,7 @@ pub const css =
     \\  .c-account .app { font-weight: var(--w-m); }
     \\  .c-account .when { flex: 1; color: var(--muted); font-size: var(--fs-s); }
     \\  .c-account .out { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+    \\  .c-account .del { display: grid; gap: var(--sp-3); }
     \\}
     \\
 ;
@@ -373,6 +399,8 @@ pub fn gallery(g: *Gallery) void {
     _ = refused.answered(401, "{\"error\":\"wrong username or password\"}");
     var taken: Account = .{ .kind = .signup };
     _ = taken.answered(409, "{\"error\":\"that username is taken\"}");
+    var refusedDel: Account = .{ .kind = .account, .me = .{ .username = "player", .role = "public", .can = &.{} }, .me_at = .ok, .devices_at = .ok, .sent = .delete };
+    _ = refusedDel.answered(403, "{\"error\":\"wrong password\"}");
     var waiting: Account = .{ .kind = .login };
     _ = waiting.answered(429, "{\"error\":\"too many tries\",\"retry_s\":300}");
     const states = [_]struct { []const u8, Account }{
@@ -389,6 +417,7 @@ pub fn gallery(g: *Gallery) void {
         .{ "account: down", .{ .kind = .account, .me_at = .down, .devices_at = .down } },
         .{ "account: no apps", .{ .kind = .account, .me = .{ .username = "pal", .role = "private", .can = &.{ "view_private", "download_private_app" } }, .me_at = .ok, .devices_at = .ok } },
         .{ "account: public", .{ .kind = .account, .me = .{ .username = "player", .role = "public", .can = &.{} }, .me_at = .ok, .devices_at = .ok } },
+        .{ "account: delete refused", refusedDel },
         .{ "account: password changed", .{ .kind = .account, .me = Demo.me, .me_at = .ok, .devices = &Demo.devices, .devices_at = .ok, .say = .changed } },
     };
     for (states) |s| {

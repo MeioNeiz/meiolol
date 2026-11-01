@@ -17,6 +17,9 @@
 //!                         role has CAP (roles.zig); 401 without a session, 403 without CAP
 //!   POST /auth/password   {"password","new"}: a new password for the signed-in account;
 //!                         signs it out everywhere else
+//!   POST /auth/delete     {"password"}: deletes the signed-in account (remove), counted
+//!                         as a login try; the owner's only over ssh. Open accounts have
+//!                         no email, so the session plus the password is the only proof
 //!   POST /auth/device     {"username","password","name"}: {"token",...} for the
 //!                         desktop app (AC4), checked and throttled as a login; needs
 //!                         download_private_app. No cookie: the app sends the token as
@@ -587,7 +590,7 @@ pub const Service = struct {
     pub fn route(s: *Service, arena: Allocator, in_: In, now: i64) !Out {
         var in = in_;
         const post = in.method == .POST;
-        const Route = enum { login, logout, me, join, signup, password, device, devices, revoke, accounts, invite, role, disable, reset };
+        const Route = enum { login, logout, me, join, signup, password, delete, device, devices, revoke, accounts, invite, role, disable, reset };
         const not_found: Out = .{ .status = .not_found, .body = errorJson("not found") };
         if (std.mem.startsWith(u8, in.path, "check/")) {
             if (in.method != .GET) return notAllowed();
@@ -614,6 +617,7 @@ pub const Service = struct {
             .join => s.join(arena, in, now),
             .signup => s.signup(arena, in, now),
             .password => s.password(arena, in, now),
+            .delete => s.deleteOwn(arena, in, now),
             .device => s.newDevice(arena, in, now),
             .devices, .revoke => {
                 const db = try open(s.db_path);
@@ -842,6 +846,25 @@ pub const Service = struct {
         try setPassword(db, a.id, try s.hasher.hash(s.gpa, s.io, b.new, &phc_buf));
         const t = try startSession(db, s.io, a.id, now);
         return signedInOut(arena, in, a, &t);
+    }
+
+    fn deleteOwn(s: *Service, arena: Allocator, in: In, now: i64) !Out {
+        const b = parseBody(ad.Delete, arena, in) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with password") };
+        const token = in.token orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
+        const db = try open(s.db_path);
+        defer db.close();
+        const a = try session(db, arena, token, now) orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
+        if (a.role == .owner) return .{ .status = .forbidden, .body = errorJson("the owner account is deleted only over ssh") };
+        const wait = s.throttle.wait(s.io, a.username, now);
+        if (wait > 0) return tooMany(arena, wait);
+        const stored = try find(db, arena, a.username) orelse return error.Unexpected;
+        if (!try s.hasher.verify(s.gpa, s.io, stored.hash, b.password)) {
+            try s.throttle.failed(s.gpa, s.io, a.username, now);
+            return .{ .status = .forbidden, .body = errorJson("wrong password") };
+        }
+        s.throttle.succeeded(s.gpa, s.io, a.username);
+        try remove(db, a.id);
+        return .{ .status = .ok, .body = okOut(in).body, .bin = in.bin, .set_cookie = cookie_name ++ "=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax", .marker = marker_off };
     }
 
     fn newInvite(s: *Service, db: Db, arena: Allocator, in: In, actor: Account, now: i64) !Out {
@@ -1351,6 +1374,29 @@ test "one owner" {
     try testing.expectError(error.Taken, create(f.db, "admin", "x", .admin, 0));
 }
 
+test "delete: your own account with its password; never the owner's; not without a session" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const a = f.arena();
+    const token = try f.signIn(.private);
+    _ = try f.pair(.private);
+    try testing.expectEqual(Status.unauthorized, (try postAs(&f, null, "delete", .{ .password = "password-private" })).status);
+    try testing.expectEqual(Status.forbidden, (try postAs(&f, token, "delete", .{ .password = "guess" })).status);
+    try testing.expect(try find(f.db, a, "private") != null);
+
+    const out = try postBin(&f, token, "delete.bin", ad.Delete{ .password = "password-private" });
+    try testing.expectEqual(Status.ok, out.status);
+    try testing.expect(std.mem.find(u8, out.set_cookie.?, "Max-Age=0") != null);
+    try testing.expectEqual(null, try find(f.db, a, "private"));
+    try testing.expectEqual(0, try f.db.scalar("SELECT count(*) FROM devices", .{}));
+    try testing.expectEqual(Status.unauthorized, try f.check(token, "view_paid"));
+
+    const owner = try f.signIn(.owner);
+    try testing.expectEqual(Status.forbidden, (try postAs(&f, owner, "delete", .{ .password = "password-owner" })).status);
+    try testing.expect(try find(f.db, a, "owner") != null);
+}
+
 test remove {
     var f: Fixture = undefined;
     try f.init();
@@ -1598,7 +1644,7 @@ test "NAME.bin writes: none without X-Meiolol-Action; join and signup sign in; r
     defer f.deinit();
     const a = f.arena();
     const admin = try f.signIn(.admin);
-    for ([_][]const u8{ "login.bin", "logout.bin", "join.bin", "signup.bin", "password.bin", "revoke.bin" }) |p| {
+    for ([_][]const u8{ "login.bin", "logout.bin", "join.bin", "signup.bin", "password.bin", "delete.bin", "revoke.bin" }) |p| {
         const out = try f.service.route(a, .{ .method = .POST, .path = p, .token = admin, .body = "x" }, Fixture.now);
         try testing.expectEqual(Status.forbidden, out.status);
         try testing.expect(out.set_cookie == null);

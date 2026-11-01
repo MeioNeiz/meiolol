@@ -313,8 +313,11 @@ const privacy_md =
     \\hash of it. Nothing is ever sent to an email address. The desktop app, once signed
     \\in, keeps a sign-in of its own: we store a one-way hash of it and when it was made
     \\and last used; it ends when you remove it on your account page, log out everywhere
-    \\or change your password, or after 90 days unused. To delete your account, write to the address below and we remove it, its
-    \\sessions and its app sign-ins. Copies in our backups are gone within 14 days.
+    \\or change your password, or after 90 days unused. To delete your account, use Delete
+    \\account on your account page (your password again): it, its sessions and its app
+    \\sign-ins go at once. Without access, write to the address below; an account with no
+    \\email can only be proved yours by logging in. Copies in our backups are gone within
+    \\14 days.
     \\
     \\## The desktop app
     \\

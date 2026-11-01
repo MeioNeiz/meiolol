@@ -369,7 +369,7 @@ pickup/mid.html 2a12083d0b7f833d
 pickup/support.html 3c2bd66ef3a6614b
 pickup/top.html 76502abb3082ebbe
 pool.html 0684533789f31099
-privacy.html 50c399231186b928
+privacy.html 5b3bd551f1ab6836
 robots.txt 331ea9090db0c9f6
 squad.html 617081c2cdf58070
 terms.html b3cf6271dbb12b82

@@ -1,7 +1,8 @@
 //! ui-account.wasm: the account pages (ui.account.Account), loaded by their own script
 //! tag. Sends the form to /auth/KIND.bin, read from the form itself once sent; a sign-in
 //! goes on to ?next= or the role's page. The account page fetches /auth/me.bin and
-//! devices.bin (signed out: to the login page), removes an app, logs out
+//! devices.bin (signed out: to the login page), removes an app, logs out, deletes the
+//! account (then home)
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -91,6 +92,7 @@ fn changed() void {
     switch (w) {
         .none => {},
         .send => send(),
+        .delete => sendDelete(),
         .revoke => |id| post("/auth/revoke.bin", ac.Revoke, .{ .id = id }, .revoke),
         .logout => |all| dom.ask("POST", if (all) "/auth/logout.bin?all=1" else "/auth/logout.bin", "", @backingInt(Call.logout), done),
     }
@@ -144,6 +146,17 @@ fn send() void {
     }
 }
 
+fn sendDelete() void {
+    const el = zjb.global("document").call("querySelector", .{zjb.constString(acct.sel ++ " form.del")}, zjb.Handle);
+    defer el.release();
+    var f: Form = .{ .data = zjb.global("FormData").new(.{el}) };
+    defer {
+        for (&f.bufs) |*b| @memset(b, 0);
+        f.data.release();
+    }
+    post("/auth/delete.bin", ac.Delete, .{ .password = f.get("password") }, .send);
+}
+
 fn done(ctx: i32, status: u16, bytes: ?[]u8) void {
     const c = std.enums.fromInt(Call, ctx) orelse return;
     var none: [0]u8 = .{};
@@ -157,6 +170,10 @@ fn done(ctx: i32, status: u16, bytes: ?[]u8) void {
     switch (c) {
         .send => {
             if (page.answered(status, b)) {
+                if (page.sent == .delete) {
+                    go("/");
+                    return dom.store(shown_as, "");
+                }
                 kept = true;
                 var q: [512]u8 = undefined;
                 const m = me.set(b) orelse return go("/");

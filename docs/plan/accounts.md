@@ -47,6 +47,12 @@ Five, in order, each with everything the one before has.
   in; POST /auth/signup without a link. No IPs, so the cap is on the rate: 30 per 10
   minutes across everyone (OpenSignups), counted before the hash. Recovery will be the
   linked Riot ID's icon check (AC6), as there is no email
+- The global cap lets one script take all 30 sign-ups a window and lock others out:
+  fine in preview. Fix before sign-up is announced: a Cloudflare rate limiting rule on
+  /auth/signup per IP (Cloudflare holds the IPs, we still keep none); needs Jacob's
+  Cloudflare dashboard (rules are on the zone) or the API token in vault
+- Delete: the account page's Delete account (POST /auth/delete, the password again)
+  removes it at once; with no email, the session is the only proof of who asks
 - Invites: admin makes a one-use link (/join#TOKEN, 7 days); the friend picks a username
   and password. Admin can change roles, reset (new invite link) and disable
 - Sessions: 32 random bytes in cookie `__Host-meiolol` (Secure, HttpOnly, SameSite=Lax),
