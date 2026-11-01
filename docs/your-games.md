@@ -82,9 +82,9 @@ ranked solo games of that role through the same report() as the API, as
 `{default, top, jungle, mid, bot, support}` (default mid; a role missing when nobody
 qualifies). The page and the home page's featured review switch role; a bare #example
 opens the default, and an older one-player file still shows, without the switch. No name,
-PUUID or match id; game starts cut to the day (UTC). The web loop runs it daily and
-copies the file into each site build; a failed run deletes it, so no stale example ships
-(the page then offers none).
+PUUID or match id; game starts cut to the day (UTC), lengths rounded to the minute. The
+web loop runs it daily and copies the file into each site build; a failed run deletes it,
+so no stale example ships (the page then offers none).
 
 ## API
 

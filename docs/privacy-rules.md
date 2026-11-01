@@ -29,6 +29,7 @@ keep** (our choice, cheap and harmless, or it deletes data: only Jacob changes i
 | Objection and erasure for anyone: "Remove a Riot ID" (icon check), email, do-not-collect list, erasure reaching backups, archive, snapshots | src/api (forget), `meiolol forget`, backup.zig, lab/archive.zig forget, docs/data-safety.md | law: on objection "you must stop unless you can show that you have compelling legitimate grounds" (ico-legitimate-interests#^f6). The icon check is identity verification before acting on a request: keep |
 | A true privacy page (what, why, how long, rights) | src/site/textpages.zig privacy, docs/legal/privacy.md | law (transparency): Art 13 for data people give us (lookups, logins, mail), Art 14 for crawled players, who get no notice of their own (disproportionate effort) only if "making the information available publicly" (ukgdpr-art14#^f5); the page must name controller and contact, purposes and legal basis, the legitimate interests, categories and source of the data, recipients, retention, the rights and complaints to us and to the Commission (identity-and-privacy C15-C17; ukgdpr-art13#^f1-f4, ukgdpr-art14#^f1-f2) |
 | Some retention limit on personal data | writer 24-month PUUID blank, backup.sweepAged, archive-age, 30-day Your games prune, 14-day server logs | law requires a limit: "kept in a form which permits identification of data subjects for no longer than is necessary" (ukgdpr-art5#^f1), and we must "be able to demonstrate compliance" (ukgdpr-art5#^f3). The lengths (24 months, 30 days, 14 days) are ours: **self, keep** (they delete data; Jacob only) |
+| Testers' applications (form at /download#apply): Riot ID, a contact, optional role and rank, one line; consent; no IP, no Riot lookup | src/api/applications.zig, ui.apply, privacy page "Testers", /admin Applications | law: Art 13 notice at collection (the form links the privacy page) and a limit (Art 5). Kept 30 days after a decision, 180 days unanswered: **self, keep** (Jacob) |
 | ICO fee, EEA representative | not built | law: identity-and-privacy C10, C11. Open, for Jacob |
 
 ## Self-imposed
@@ -39,7 +40,7 @@ keep** (our choice, cheap and harmless, or it deletes data: only Jacob changes i
 | Daily Draft and Learn puzzles carry no names, Riot IDs, match ids, dates; only team totals and one approximate tier | src/daily.zig, src/learn.zig, privacy page | self. Showing per-seat ranks or stats is allowed by J10; daily2 decides. If added, the privacy page's Daily Draft line and lia.md "Safeguards" must say so |
 | "Never shows other players" site-wide (method page lead and "never does" list) | src/site/textpages.zig method | self beyond champ select: narrowed to champ select (Riot) and hidden players on 20 Oct |
 | Your games showed no teammate or opponent names | src/api/game.zig, api/cache.zig, review.js | self, dropped 20 Oct (J18): a Players panel names all ten as at the game (api.db `match_names`, erased with the player); lia.md rebalanced |
-| Your games example player anonymised | src/api/example.zig, `meiolol your-example` | self, keep: a reviewer demo, a real name adds nothing |
+| Your games example player anonymised: no name, PUUID or match id, start cut to the day, length to the minute | src/api/example.zig, `meiolol your-example` | self, keep: a reviewer demo, a real name adds nothing |
 | Raw archive drops Riot IDs, hashes PUUIDs and match ids | src/lab/archive.zig, anonymise.rewriteMatch | self, keep: rewrites stored data; changing it is a data job (Jacob) |
 | Analysis snapshots (Mac, gpu-box) salted-hashed | src/lab/anonymise.zig, deploy/snapshot-gpu.sh | self, keep: lab copies, no page; hashing costs nothing |
 | nginx keeps no access log for /api/, the service never logs Riot IDs, no record of who looked up whom | C01's nginx, api service, docs/your-games.md | self, keep: costs nothing, and logs would otherwise need their own retention and erasure |
@@ -48,7 +49,8 @@ keep** (our choice, cheap and harmless, or it deletes data: only Jacob changes i
 ## For Jacob (not changed: data, retention, application text or servers)
 
 - Retention lengths: 24 months for PUUIDs in matches, backups and the archive; 30 days
-  for Your games players; 14 days for server logs. All ours; law only asks for a limit
+  for Your games players; 14 days for server logs; testers' applications 30 days after
+  a decision, 180 days unanswered (picked 1 Nov). All ours; law only asks for a limit
 - Raw archive: keep stripping Riot IDs, or keep them for 24 months like PUUIDs?
 - Riot application text (docs/production-key.md draft 18 Oct) says Daily Draft has "no
   player names" and the app never shows other players: true today; update it if Daily

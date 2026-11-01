@@ -1,8 +1,9 @@
 //! `meiolol your-example`: real players' recent games from the crawler's tables, one per
 //! role, each in the shape GET /api/games answers, so your.html can show Your games
 //! without a Riot ID (Riot's reviewers don't log in). Anonymised: no name, PUUID or match
-//! id, and game starts cut to the day; champions, results, K/D/A and the lane stay, as on
-//! the page.
+//! id, game starts cut to the day and lengths rounded to the minute, so a game can't be
+//! matched on a stats site by its exact length; champions, results, K/D/A and the lane
+//! stay, as on the page.
 
 const std = @import("std");
 const store = @import("store");
@@ -175,7 +176,7 @@ fn player(arena: Allocator, db: store.Db, set: game.CurveSet, role: Role, puuid:
                 .patch = try arena.dupe(u8, g.patch),
                 .queue = ranked_solo,
                 .start_ms = @divFloor(g.game_start, std.time.ms_per_day) * std.time.ms_per_day,
-                .duration_s = g.duration_s,
+                .duration_s = @divFloor(g.duration_s + 30, 60) * 60,
                 .remake = g.remake,
                 .players = list.items,
             },
