@@ -27,6 +27,9 @@ pub const Brief = struct {
     figures: N,
     /// The matchup page
     href: ?[]const u8 = null,
+    /// A lane partner: to the champion's lane opponents, whose matchup pages show the
+    /// pair (Lane partners)
+    lanes: ?tree.Handler = null,
 };
 
 pub const Common = struct {
@@ -42,6 +45,7 @@ pub const Common = struct {
 const W = struct {
     pub const few = plain("few games");
     pub const matchup = plain("Matchup ›");
+    pub const lanes = plain("Lane opponents ›");
     pub const common = plain("Most common");
 };
 
@@ -65,6 +69,7 @@ pub fn view(h: *H, b: Brief, common: []const Common) N {
             }),
             b.figures,
             if (b.href) |href| button.view(h, .{ .s = .s, .href = href }, .{W.matchup}) else null,
+            if (b.lanes) |on| button.view(h, .{ .s = .s, .on = on }, .{W.lanes}) else null,
         }),
         if (common.len > 0) h.div(.{ .class = "met" }, .{
             h.span(.{ .class = "sh" }, .{W.common}),

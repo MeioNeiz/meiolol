@@ -94,6 +94,9 @@ the first screen, 1,154 on the page (frontend-rework.md).
    and sort by the pulled rate (shown as raw, ui-audit 3: the header says "sorted by
    pulled rate" in its Toggletip). Tap a tile: the matchup page. View switch
    [Tiles | Table]: the same rows as DataTable (sortable, every number)
+   With: a line under the plot says the cards below are the champion's alone; a bot or
+   support partner's brief has "Lane opponents ›" (Against the lane, whose matchup pages
+   list the pair in Lane partners). The pair's own lane (gold, cards): open, for Jacob
 2. Trends row, three Chart cards of one height in one chart style (Chart frame):
    - By patch: TrendChart, win rate line with ±95% band, pick rate as thin bars on a
      second axis, rank in role as the x-axis label under each patch. No per-point text

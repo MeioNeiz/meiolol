@@ -7,6 +7,7 @@ const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
 const phrase = @import("phrase.zig");
+const Phrase = phrase.Phrase;
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const card = @import("card.zig");
@@ -27,6 +28,12 @@ const Measure = cp.Measure;
 const thin_games = fmt.thin_games;
 
 pub const Msg = union(enum) { rel: u8, ally: bool, rel_role: role.Role, measure: Measure };
+
+const L = struct {
+    /// Under the With plot: the page's lane cards don't follow the partner (walk 1 Nov S2)
+    pub const alone = Phrase("The cards below are {c:text}'s alone, not with {p:text}.");
+    pub const alone_any = Phrase("The cards below are {c:text}'s alone, not with a partner.");
+};
 
 /// What the grid shows: the champion in one role
 pub const Input = struct {
@@ -190,7 +197,15 @@ pub const MatchupGrid = struct {
             card.head(h, W.matchups, if (rare > 0) W.rare.with(h, .{ .n = count, .r = rare }) else phrase.num(h, .count, count), &.{ if (lane) .none else in.plat, controls[0], controls[1], controls[2] }),
             h.div(.{ .class = "c-mgrid" }, .{
                 if (few_games) in.few else h.div(.{ .class = "plot", .data_thin = in.faded and counts.games < cp.solid_games }, .{g.dots.view(h)}),
-                if (chosen) |o| (if (few_games) .none else h.div(.{ .class = "brief" }, .{matchbrief.view(h, brief(h, in, rel, counts, o), chips[0..nc])})) else .none,
+                if (rel.ally) h.p(.{ .class = "alone" }, .{if (chosen) |o| L.alone.with(h, .{ .c = in.name, .p = in.champs[o.champ].name }) else L.alone_any.with(h, .{ .c = in.name })}) else .none,
+                if (chosen) |o| (if (few_games) .none else h.div(.{ .class = "brief" }, .{matchbrief.view(h, b: {
+                    var x = brief(h, in, rel, counts, o);
+                    if (rel.ally and rel.role == partner(in.role) and (in.role == .bot or in.role == .support))
+                        if (g.relOf(in, false, in.role)) |k| {
+                            x.lanes = h.on(owner, .{ .rel = k });
+                        };
+                    break :b x;
+                }, chips[0..nc])})) else .none,
             }),
         });
     }
@@ -261,6 +276,7 @@ pub const css =
     \\  .c-mgrid { display: contents; }
     \\  .c-mgrid .plot { padding: var(--sp-3) 0; }
     \\  .c-mgrid .brief { container-type: inline-size; }
+    \\  .c-mgrid .alone { margin: 0 0 var(--sp-3); font-size: var(--fs-s); color: var(--muted); }
     \\}
     \\
 ;
