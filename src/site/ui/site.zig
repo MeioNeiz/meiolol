@@ -75,6 +75,7 @@ pub const foot_links = [_]Link{
     .{ .label = plain("Terms"), .href = "/terms" },
     .{ .label = plain("Method"), .href = "/method" },
     .{ .label = plain("Desktop app"), .href = "/download" },
+    .{ .label = plain("Log in"), .href = "/login" },
 };
 
 pub fn foot(h: *H, f: Foot) N {
