@@ -3,7 +3,7 @@
 //! Fetches admin.bin (the box's snapshot, again each 5 min), api/live.bin (each minute) and
 //! /auth/me.bin; accounts.bin once the Accounts tab shows. Polls only while the tab shows,
 //! catching up when it comes back. Runs what the page's `want` asks: an action (its result
-//! from the next live.bin), an account change, logout, copy. dom.fetch and dom.send keep
+//! from the next live.bin), an account change, copy. dom.fetch and dom.send keep
 //! one callback: every request here answers in `done`, by its Call
 const std = @import("std");
 const zjb = @import("zjb");
@@ -18,7 +18,7 @@ pub const panic = zjb.panic;
 
 const gpa = std.heap.wasm_allocator;
 
-const Call = enum(i32) { snap, live, me, accounts, action, write, link, logout };
+const Call = enum(i32) { snap, live, me, accounts, action, write, link };
 
 var page: ap.Page = .{};
 var server: ap.Page = .{};
@@ -120,7 +120,6 @@ fn changed() void {
             if (page.accounts != null) get(.accounts, "/auth/accounts.bin");
         },
         .run => |a| run(a),
-        .logout => dom.send("POST", "/auth/logout.bin", "", @backingInt(Call.logout), done),
         .invite => |i| if (page.accounts) |l| if (i < l.roles.len) {
             linking = .{ .role = i, .token = "" };
             write("/auth/invite.bin", ac.NewInvite, .{ .role = l.roles[i] }, .link);
@@ -242,10 +241,6 @@ fn done(ctx: i32, bytes: ?[]u8) void {
                 page.copied = false;
             } else gpa.free(b);
             get(.accounts, "/auth/accounts.bin");
-        },
-        .logout => {
-            if (bytes) |b| gpa.free(b);
-            zjb.global("location").call("assign", .{zjb.constString("/login")}, void);
         },
     }
 }

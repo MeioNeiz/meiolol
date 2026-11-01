@@ -352,7 +352,9 @@ pub fn privateIndex(a: std.mem.Allocator) ![]const u8 {
 const index_md =
     \\- [Draft tester](/private/tester): build a draft, see the model's win chance and every candidate
     \\- [App review](/private/app): every screen the desktop app can show, both editions
+    \\- [Desktop app](/private/desktop/meiolol-desktop.zip): the Windows app, latest build
     \\- [Notes](/admin/notes) and [Admin](/admin): admin logins only
+    \\- [Your account](/account): password, signed-in apps, log out
 ;
 
 test "private index: on ui, its CSS inline, its CSP allows its script and style" {

@@ -78,7 +78,6 @@ pub const Want = union(enum) {
     /// Every source again
     refresh,
     run: Act,
-    logout,
     accounts,
     invite: u8,
     /// Account row, role index into `accounts.roles`
@@ -126,7 +125,6 @@ pub const Page = struct {
         tab: Tab,
         refresh,
         run: Act,
-        logout,
         give: u8,
         invite,
         /// A row's role select changed: the new role is the event's value
@@ -161,7 +159,6 @@ pub const Page = struct {
                 p.ran = null;
                 p.want = .{ .run = a };
             },
-            .logout => p.want = .logout,
             .give => |i| p.give = i,
             .invite => p.want = .{ .invite = p.giveOf() orelse return },
             .pick => |row| {
@@ -206,9 +203,13 @@ pub const Page = struct {
     }
 
     pub fn view(p: *Page, h: *H) N {
+        // The page's heading: the shell's tabs show where it is
         return h.div(.{ .class = "c-admin", .data_island = "admin" }, .{
-            head(p, h),
-            if (p.snap) |s| body(p, h, s) else h.p(.{ .class = "wait", .role = "status" }, .{if (p.snap_failed) W.no_snap else W.loading}),
+            h.el(.h1, .{ .class = "sr" }, .{W.title}),
+            if (p.snap) |s| body(p, h, s) else h.div(.{ .class = "bar" }, .{
+                h.p(.{ .class = "wait", .role = "status" }, .{if (p.snap_failed) W.no_snap else W.loading}),
+                tools(p, h),
+            }),
         });
     }
 };
@@ -220,10 +221,7 @@ pub const W = struct {
     pub const live = Phrase("Live, updated {t:text}");
     pub const snapshot = Phrase("Snapshot from {t:text}");
     pub const live_down = plain(" (live API unavailable)");
-    pub const notes = plain("Notes");
-    pub const desktop = plain("Desktop app");
     pub const refresh = plain("Refresh");
-    pub const log_out = plain("Log out");
     pub const tabs_label = plain("Admin sections");
 
     pub const mins = Phrase("{n:count} min ago");
@@ -359,23 +357,16 @@ const silent_s = 900;
 /// Riot's per-region app limit we run at, per minute
 pub const per_region_min = 50;
 
-fn head(p: *Page, h: *H) N {
+/// Beside the tabs: how fresh the numbers are, and Refresh
+fn tools(p: *Page, h: *H) N {
     const live = p.live != null and !p.live_down;
-    return h.div(.{ .class = "top" }, .{
-        h.el(.h1, .{}, .{W.title}),
+    return h.div(.{ .class = "tools" }, .{
         h.span(.{ .class = "status", .role = "status" }, .{
             if (live) W.live.with(h, .{ .t = ago(h, p.now - p.live_at).s }) else null,
             if (!live) if (p.snap) |s| W.snapshot.with(h, .{ .t = ago(h, p.now - s.now).s }) else null else null,
             if (!live and p.live_down) W.live_down else null,
         }),
-        card.spacer(h),
-        button.view(h, .{ .v = .quiet, .s = .s, .href = "/admin/notes" }, .{W.notes}),
-        button.view(h, .{ .v = .quiet, .s = .s, .href = "/private/desktop/meiolol-desktop.zip" }, .{W.desktop}),
-        button.view(h, .{ .s = .s, .on = h.on(p, .refresh) }, .{W.refresh}),
-        if (p.me) |me| h.span(.{ .class = "me" }, .{
-            h.a(.{ .href = "/account" }, .{me.username}),
-            button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .logout) }, .{W.log_out}),
-        }) else null,
+        button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .refresh) }, .{W.refresh}),
     });
 }
 
@@ -386,7 +377,7 @@ fn body(p: *Page, h: *H, s: *const ad.Snapshot) N {
         it.* = .{ .label = tab_names.get(t), .selected = p.tab == t, .on = h.on(p, .{ .tab = t }) };
     }
     return h.div(.{ .class = "body" }, .{
-        tabs.view(h, W.tabs_label, &items, &.{}),
+        h.div(.{ .class = "bar" }, .{ tabs.view(h, W.tabs_label, &items, &.{}), tools(p, h) }),
         switch (p.tab) {
             .overview => overview(p, h, s),
             .ops => controls(p, h, s),
@@ -745,13 +736,15 @@ pub fn day(h: *H, at: i64) Text {
 pub const css =
     \\@layer components {
     \\  .c-admin { display: grid; gap: var(--sp-4); }
-    \\  .c-admin .top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
-    \\  .c-admin .top h1 { margin: 0; font-size: var(--fs-l); }
-    \\  .c-admin .top .sp { flex: 1; }
+    \\  .c-admin .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    \\  .c-admin .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-3); min-width: 0;
+    \\    box-shadow: inset 0 -1px 0 var(--line); }
+    \\  .c-admin .bar > .c-tabs { flex: 0 1 auto; min-width: 0; box-shadow: none; margin-left: calc(-1 * var(--sp-3)); }
+    \\  .c-admin .bar > .wait { margin: 0; }
+    \\  .c-admin .tools { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
     \\  .c-admin .status, .c-admin .note, .c-admin .wait { color: var(--muted); font-size: var(--fs-s); }
     \\  .c-admin .note { margin: 0; }
     \\  .c-admin .note.bad { color: var(--them); }
-    \\  .c-admin .me { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-s); }
     \\  .c-admin .body, .c-admin .tab { display: grid; gap: var(--sp-3); }
     \\  .c-admin .acts, .c-admin .invite, .c-admin .link, .c-admin .pick { display: flex; flex-wrap: wrap;
     \\    align-items: center; gap: var(--sp-2); }
