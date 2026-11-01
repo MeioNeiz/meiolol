@@ -208,7 +208,7 @@ pub const People = struct {
 
 /// Optional, as curves: a bad or missing builds file leaves out build pages, a lean file
 /// the champion pages' line
-fn loadParsed(comptime T: type, arena: std.mem.Allocator, io: std.Io, path: []const u8, what: []const u8, limit: std.Io.Limit) ?T {
+pub fn loadParsed(comptime T: type, arena: std.mem.Allocator, io: std.Io, path: []const u8, what: []const u8, limit: std.Io.Limit) ?T {
     const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, arena, limit) catch |err| {
         switch (err) {
             error.FileNotFound => log.info("no {s} at {s}", .{ what, path }),

@@ -505,7 +505,7 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
         try admin.private(c.init.gpa, c.init.io, p);
         // web-loop.sh skips the admin and private uploads when this exits non-zero: the
         // new tester must not freeze the admin page
-        site_tester.write(c.init.gpa, c.init.io, p, db) catch |e| std.log.err("tester page: {t}", .{e});
+        site_tester.writeWith(c.init.gpa, c.init.io, p, db, try std.fs.path.join(c.arena, &.{ c.data_dir, "lean.tsv" })) catch |e| std.log.err("tester page: {t}", .{e});
         site_notes.writeFiles(c.init.gpa, c.init.io, p) catch |e| std.log.err("notes files: {t}", .{e});
         site_appreview.write(c.init.gpa, c.init.io, p, c.data_dir, db) catch |e| std.log.err("app review pages: {t}", .{e});
     }

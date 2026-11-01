@@ -70,6 +70,12 @@ const W = struct {
     pub const files = plain("Files");
     pub const seat_pts = Phrase("{p:points} vs average");
     pub const seat_why = Phrase("{p:points} · {why:text}");
+    pub const seat_lean = Phrase("{t:text} · {l:text}");
+    pub const lean_early = plain("Blue leans early");
+    pub const lean_late = plain("Blue leans late");
+    pub const lean_none = plain("No clear early or late lean");
+    pub const lean_nums = Phrase(": blue minus red {g:signed} gold at {gm:int} min ({gl:signed} to {gh:signed}), {w:points} pts from an even game at {wm:int} ({wl:points} to {wh:points}).");
+    pub const lean_how = plain(" Each pick's own lean, summed: not the draft model.");
     pub const strong = Phrase("strong {r:text}");
     pub const weak = Phrase("weak {r:text}");
     pub const into_l = Phrase("into {n:text}");
@@ -102,9 +108,60 @@ pub const Head = struct {
     ddragon: []const u8,
     /// By name: the search's entries, so a pick's index is a champion's
     champs: []const Champ,
+    /// lean.tsv's champion-roles with enough games; empty without the file
+    lean: []const LeanCell = &.{},
+    lean_at: LeanAt = .{},
 };
 
 pub const Champ = struct { id: u32, key: []const u8, name: []const u8 };
+
+/// A champfacts.LeanRow, rounded: gold whole, win in hundredths of a point; its lean
+/// by Learn's rule (learnbuild.leanClear)
+pub const LeanCell = struct { id: u16, role: u8, gold: i16, gold_sd: u16, win: i16, win_sd: u16, lean: Lean };
+
+pub const Lean = enum(u8) { none, early, late };
+
+/// champfacts' minutes and clear_z and Learn's sizes, so the island needn't import them
+pub const LeanAt = struct { gold_minute: u8 = 14, win_minute: u8 = 20, z: f32 = 2, min_gold: u16 = 200, min_win: u8 = 3 };
+
+fn leanOf(head: *const Head, id: u32, r: usize) ?LeanCell {
+    for (head.lean) |c| if (c.id == id and c.role == r) return c;
+    return null;
+}
+
+const TeamLean = struct { gold: f64 = 0, gold_sd: f64 = 0, win: f64 = 0, win_sd: f64 = 0 };
+
+/// Blue minus red: gold at gold_minute and win points from an even game at win_minute,
+/// summed over the picks with lean rows, sds by root sum of squares; null without one
+fn teamLean(head: *const Head, teams: [2][n_role]u32) ?TeamLean {
+    var t: TeamLean = .{};
+    var n: usize = 0;
+    for (0..2) |side| for (0..n_role) |r| {
+        const c = leanOf(head, teams[side][r], r) orelse continue;
+        const sign: f64 = if (side == 0) 1 else -1;
+        const gsd: f64 = @floatFromInt(c.gold_sd);
+        const wsd = @as(f64, @floatFromInt(c.win_sd)) / 100;
+        t.gold += sign * @as(f64, @floatFromInt(c.gold));
+        t.gold_sd += gsd * gsd;
+        t.win += sign * @as(f64, @floatFromInt(c.win)) / 100;
+        t.win_sd += wsd * wsd;
+        n += 1;
+    };
+    if (n == 0) return null;
+    t.gold_sd = @sqrt(t.gold_sd);
+    t.win_sd = @sqrt(t.win_sd);
+    return t;
+}
+
+/// learnbuild.leanClear's rule: both clear and big enough, ahead early and winning less
+/// from even
+fn leanFor(t: TeamLean, at: LeanAt) Lean {
+    if (@abs(t.gold) < at.z * t.gold_sd or @abs(t.win) < at.z * t.win_sd) return .none;
+    if (@abs(t.gold) < @as(f64, @floatFromInt(at.min_gold)) or @abs(t.win) < @as(f64, @floatFromInt(at.min_win))) return .none;
+    if (t.gold > 0 and t.win < 0) return .early;
+    if (t.gold < 0 and t.win > 0) return .late;
+    return .none;
+}
 
 /// The models the page offers, in the Select's order (names: plan, Jacob 25 Oct)
 pub const Which = enum(u8) { live, comp };
@@ -376,6 +433,7 @@ pub const Page = struct {
                 p.models(h),
             }),
             p.chance(h),
+            p.leanLine(h),
             if (p.netOn()) |n| tsn.line(h, n.net, &n.l.sc, p.teams) else null,
             segmented.view(h, .{ .s = .s }, &.{
                 .{ .label = W.board, .selected = p.tab == .board, .on = h.on(p, .{ .tab = .board }) },
@@ -465,6 +523,33 @@ pub const Page = struct {
         });
     }
 
+    /// The draft's timing from its picks' leans, once both teams have one
+    fn leanLine(p: *const Page, h: *H) ?N {
+        if (p.ready() == null) return null;
+        for (p.teams) |t| if (std.mem.allEqual(u32, &t, 0)) return null;
+        const t = teamLean(p.head, p.teams) orelse return null;
+        const at = p.head.lean_at;
+        const z: f64 = at.z;
+        return h.p(.{ .class = "lean" }, .{
+            h.b(.{}, .{switch (leanFor(t, at)) {
+                .early => W.lean_early,
+                .late => W.lean_late,
+                .none => W.lean_none,
+            }}),
+            W.lean_nums.with(h, .{
+                .g = whole(t.gold),
+                .gl = whole(t.gold - z * t.gold_sd),
+                .gh = whole(t.gold + z * t.gold_sd),
+                .gm = at.gold_minute,
+                .w = t.win,
+                .wl = t.win - z * t.win_sd,
+                .wh = t.win + z * t.win_sd,
+                .wm = at.win_minute,
+            }),
+            h.span(.{}, .{W.lean_how}),
+        });
+    }
+
     fn board(p: *Page, h: *H) N {
         const l = p.ready();
         var lanes: [n_role]draftboard.Lane = undefined;
@@ -518,6 +603,16 @@ pub const Page = struct {
     /// The seat's points over the role's average pick and its largest named part in words
     /// ("+2.6 · into Darius"); the points alone when nothing is named
     fn seatLine(p: *const Page, h: *H, l: *const Loaded, side: u1, r: usize) tree.Text {
+        const line = p.seatWhy(h, l, side, r);
+        const c = leanOf(p.head, p.teams[side][r], r) orelse return line;
+        return switch (c.lean) {
+            .none => line,
+            .early => W.seat_lean.with(h, .{ .t = line.s, .l = "early" }),
+            .late => W.seat_lean.with(h, .{ .t = line.s, .l = "late" }),
+        };
+    }
+
+    fn seatWhy(p: *const Page, h: *H, l: *const Loaded, side: u1, r: usize) tree.Text {
         const w = l.sc.why(p.teams, side, r, p.teams[side][r]);
         var top: ?ds.Part = null;
         for (w.parts()) |x| {
@@ -672,6 +767,10 @@ pub const Page = struct {
     }
 };
 
+fn whole(x: f64) i64 {
+    return @intFromFloat(@round(x));
+}
+
 /// Lines of the full board's Why before the rest
 const max_lines = 8;
 /// A part under this many points says nothing the total doesn't
@@ -808,6 +907,8 @@ pub const css =
     \\  .c-tester .bans > .line { color: var(--muted); font-size: var(--fs-s); margin-right: var(--sp-1); }
     \\  .c-tester .bans > .ban { padding: 0; border: 0; background: none; cursor: pointer; }
     \\  .c-tester .acts { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
+    \\  .c-tester .lean { margin: 0; font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-tester .lean > b { color: var(--text); font-weight: var(--w-m); }
     \\  .c-tester .why { display: grid; gap: var(--sp-1); width: 100%; max-width: 720px; }
     \\  .c-tester .why > h2 { margin: 0; font-size: inherit; font-weight: var(--w-b); }
     \\  .c-tester .files { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-1); font-size: var(--fs-s); }
@@ -829,6 +930,12 @@ pub const Demo = struct {
         .{ .id = 51, .key = "Caitlyn", .name = "Caitlyn" },
         .{ .id = 117, .key = "Lulu", .name = "Lulu" },
         .{ .id = 412, .key = "Thresh", .name = "Thresh" },
+    }, .lean = &.{
+        .{ .id = 266, .role = 0, .gold = 280, .gold_sd = 20, .win = -390, .win_sd = 30, .lean = .early },
+        .{ .id = 122, .role = 0, .gold = 60, .gold_sd = 25, .win = -10, .win_sd = 30, .lean = .none },
+        .{ .id = 64, .role = 1, .gold = 240, .gold_sd = 15, .win = -320, .win_sd = 20, .lean = .early },
+        .{ .id = 222, .role = 3, .gold = -260, .gold_sd = 20, .win = 410, .win_sd = 30, .lean = .late },
+        .{ .id = 61, .role = 2, .gold = -40, .gold_sd = 20, .win = 30, .win_sd = 25, .lean = .none },
     } };
 
     const terms = [_]ds.Term{
@@ -956,4 +1063,35 @@ test "tester page: dates and views" {
     try testing.expectEqualStrings("0.000", fixed(&h, -0.0001, 3));
     try testing.expectEqualStrings("0.000000002", fixed(&h, 2e-9, 9));
     try testing.expectEqualStrings("?", fixed(&h, std.math.nan(f64), 3));
+}
+
+test "timing: blue minus red summed with its range, a lean only when both clear; seats' own leans" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var l: Loaded = .{ .m = Demo.model(), .sc = undefined, .check = undefined };
+    l.sc = try l.m.scorer(a);
+    var p: Page = .init(&Demo.full_head);
+    p.loads.set(.live, .{ .ready = &l });
+    p.teams = .{ .{ 266, 64, 103, 222, 117 }, .{ 122, 254, 61, 51, 412 } };
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try @import("html.zig").write(&t, p.view(&h), &w.writer);
+    const s = w.written();
+    // Gold +240 clears 2 x 45 and 200; win -3.2 clears 2 x 0.61 and 3
+    try testing.expect(std.mem.find(u8, s, "Blue leans early") != null);
+    try testing.expect(std.mem.find(u8, s, "+240 gold at 14 min") != null);
+    try testing.expect(std.mem.find(u8, s, "· early") != null);
+    try testing.expect(std.mem.find(u8, s, "· late") != null);
+    const t2 = teamLean(&Demo.full_head, .{ .{ 266, 64, 0, 0, 0 }, @splat(0) }).?;
+    try testing.expectEqual(Lean.early, leanFor(t2, .{}));
+    // Clear but small: no lean
+    try testing.expectEqual(Lean.none, leanFor(.{ .gold = 150, .gold_sd = 25, .win = -3.2, .win_sd = 0.3 }, .{}));
+    try testing.expectApproxEqAbs(25, t2.gold_sd, 1e-9);
+    // Red alone: a pick each side needed for the line
+    p.teams = .{ @splat(0), .{ 122, 0, 0, 0, 0 } };
+    w.clearRetainingCapacity();
+    try @import("html.zig").write(&t, p.view(&h), &w.writer);
+    try testing.expect(std.mem.find(u8, w.written(), "class=\"lean\"") == null);
 }

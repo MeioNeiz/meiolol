@@ -9,12 +9,16 @@ const ui = @import("ui");
 const assets = @import("assets.zig");
 const sheets = @import("sheets.zig");
 const shell = @import("shell.zig");
+const extras = @import("extras.zig");
+const learnbuild = @import("learnbuild.zig");
+const lean = @import("../lean.zig");
+const champfacts = @import("core").champfacts;
 
 const Io = std.Io;
 const tp = ui.testerpage;
 
 /// Champion keys, names and the Data Dragon version, from the champions table
-pub fn head(a: std.mem.Allocator, db: store.Db) !tp.Head {
+pub fn head(a: std.mem.Allocator, io: Io, db: store.Db, lean_path: ?[]const u8) !tp.Head {
     var list: std.ArrayList(tp.Champ) = .empty;
     var version: []const u8 = "";
     var q = try db.prepare("SELECT id, key, name, ddragon_version FROM champions ORDER BY name");
@@ -27,7 +31,43 @@ pub fn head(a: std.mem.Allocator, db: store.Db) !tp.Head {
     }
     // Icons need the version; an empty page would hide a broken champions table
     if (list.items.len == 0 or version.len == 0) return error.NoChampions;
-    return .{ .ddragon = version, .champs = list.items };
+    const f = if (lean_path) |p| extras.loadParsed(lean.File, a, io, p, "lean file", .limited(1 << 24)) else null;
+    return .{ .ddragon = version, .champs = list.items, .lean = if (f) |x| try leanCells(a, x.rows) else &.{}, .lean_at = .{
+        .gold_minute = champfacts.gold_minute,
+        .win_minute = champfacts.win_minute,
+        .z = champfacts.clear_z,
+        .min_gold = learnbuild.lean_min_gold,
+        .min_win = learnbuild.lean_min_points,
+    } };
+}
+
+/// The rows with enough games, rounded for the page's inline data; a lean as Learn's
+/// (clear and big enough to matter)
+fn leanCells(a: std.mem.Allocator, rows: []const lean.Row) ![]const tp.LeanCell {
+    var out: std.ArrayList(tp.LeanCell) = .empty;
+    for (rows) |r| {
+        if (!r.enough() or r.champion > std.math.maxInt(u16)) continue;
+        try out.append(a, .{
+            .id = @intCast(r.champion),
+            .role = @backingInt(r.role),
+            .gold = round(i16, r.gold),
+            .gold_sd = round(u16, r.gold_sd),
+            .win = round(i16, 100 * r.win),
+            .win_sd = round(u16, 100 * r.win_sd),
+            .lean = if (!learnbuild.leanClear(r)) .none else switch (r.lean()) {
+                .none => .none,
+                .early => .early,
+                .late => .late,
+            },
+        });
+    }
+    return out.items;
+}
+
+fn round(comptime T: type, x: f64) T {
+    const lo: f64 = @floatFromInt(std.math.minInt(T));
+    const hi: f64 = @floatFromInt(std.math.maxInt(T));
+    return @intFromFloat(std.math.clamp(@round(x), lo, hi));
 }
 
 const shell_page: @import("html.zig").Page = .{
@@ -67,10 +107,15 @@ pub fn page(a: std.mem.Allocator, h: *const tp.Head) ![]const u8 {
 
 /// tester.html and its code into `out_dir`, each with a .gz (gzip_static)
 pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, db: store.Db) !void {
+    return writeWith(gpa, io, out_dir, db, null);
+}
+
+/// `lean_path`: lean.tsv, for the draft's timing line; none or missing leaves it out
+pub fn writeWith(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, db: store.Db, lean_path: ?[]const u8) !void {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     const a = arena.allocator();
-    const h = try head(a, db);
+    const h = try head(a, io, db, lean_path);
     var dir = try Io.Dir.cwd().openDir(io, out_dir, .{});
     defer dir.close(io);
     const files = [_]struct { []const u8, []const u8 }{

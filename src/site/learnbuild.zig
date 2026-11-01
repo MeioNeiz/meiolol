@@ -214,11 +214,11 @@ fn laneName(r: Role) []const u8 {
 }
 
 /// A lean counts from this many win points from an even game at win_minute
-const lean_min_points = 3;
+pub const lean_min_points = 3;
 /// and this much team gold at gold_minute, against the role's average pick
-const lean_min_gold = 200;
+pub const lean_min_gold = 200;
 
-fn leanClear(r: lean.Row) bool {
+pub fn leanClear(r: lean.Row) bool {
     return r.enough() and r.lean() != .none and @abs(r.win) >= lean_min_points and
         @abs(r.gold) >= lean_min_gold;
 }
