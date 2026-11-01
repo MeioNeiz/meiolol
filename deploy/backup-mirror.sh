@@ -78,12 +78,20 @@ mv "$dir/forgotten.txt.tmp" "$dir/forgotten.txt"
 if [[ $name == gpu-box || $name == megatron ]]; then echo 730 > "$dir/mastery-keep-days"; else echo 32 > "$dir/mastery-keep-days"; fi
 "$bin" backup --mirror "$dir" --forgotten "$dir/forgotten.txt"
 # The complete form's sealed day files (riot/complete_scrub.zig), on Megatron only: a
-# mirror of files the box keeps and never changes but by a scrub or the 24-month delete,
-# so --delete carries both here. Never a .part (still being written)
+# mirror of files the box keeps and never changes but by a scrub or the 24-month delete
+# (at most 2 days, 6 files, a run), so --delete carries both here. Never a .part (still
+# being written). A box with fewer sealed files than this copy (a fresh disk, a restore
+# from elsewhere) must not empty it: refused, and deletes capped
 if [[ $name == megatron && $host == local ]]; then
+    src=$(dirname "$(dirname "$bin")")/data/complete
     mkdir -p "$dir/complete"
-    rsync -rt --delete --include='*.cfd' --exclude='*' \
-        "$(dirname "$(dirname "$bin")")/data/complete/" "$dir/complete/" \
+    have=$(find "$src" -maxdepth 1 -name '*.cfd' 2> /dev/null | wc -l | tr -d ' ')
+    held=$(find "$dir/complete" -maxdepth 1 -name '*.cfd' | wc -l | tr -d ' ')
+    if (( have < held - 12 || (have == 0 && held > 0) )); then
+        log "complete form day files: the box has $have sealed, this copy $held: not mirrored"
+        exit 1
+    fi
+    rsync -rt --delete --max-delete=12 --include='*.cfd' --exclude='*' "$src/" "$dir/complete/" \
         || { log "complete form day files: rsync failed"; exit 1; }
 fi
 kb=$(du -sk "$dir/mastery" | cut -f1)

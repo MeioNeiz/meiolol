@@ -12,6 +12,9 @@ EnvironmentFile=-%h/ml/meiolol/host.env
 ExecStart=/bin/sh -c 'bin/meiolol crawl $(cat crawl.args 2>/dev/null) >> data/crawl.log 2>&1; rc=$?; [ $rc -eq 3 ] && echo KEY REJECTED >> data/crawl.log; exit $rc'
 Restart=always
 RestartSec=60
+# A stop finishes the complete form's zstd run in hand (niced, minutes on a busy box); a
+# kill counts as an unclean run (riot/complete.zig poison_starts)
+TimeoutStopSec=600
 RestartPreventExitStatus=3
 
 [Install]

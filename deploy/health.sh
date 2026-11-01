@@ -36,6 +36,8 @@ else
     (( ${restarts:-0} >= 3 )) && problems+=("complete form restarted $restarts times in the last hour (crawl.log 'complete:' lines)")
     dropped=$(grep -oE '[0-9]+ dropped' <<< "$report" | cut -d' ' -f1)
     (( ${dropped:-0} > 0 )) && problems+=("complete form dropped $dropped documents: its queue was full")
+    quarantined=$(find data/complete/spool/quarantine -type f 2> /dev/null | wc -l | tr -d ' ')
+    (( quarantined > 0 )) && problems+=("complete form: $quarantined spool segments quarantined after unclean runs (docs/data-safety.md \"Complete form quarantine\")")
     # Mastery blocks seal every minute or so: an open day file standing still means none do
     part=$(ls -t data/complete/*.cfd.part 2> /dev/null | head -n 1)
     if [[ -n "$part" ]] && (( now - $(stat -c %Y "$part") > 1800 )); then

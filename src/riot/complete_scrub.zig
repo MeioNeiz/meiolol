@@ -36,14 +36,22 @@ pub const Tended = struct {
     rewritten: usize = 0,
     dropped: u64 = 0,
     aged: usize = 0,
-    /// Quarantined spool segments deleted
+    /// Records dropped from quarantined spool segments
     quarantined: usize = 0,
     /// Files that failed (logged, retried next run)
     failed: usize = 0,
 };
 
+/// Aging deletes no more than this many days' files a run: a clock jumped forward deletes
+/// slowly, warned, rather than every day at once
+const aged_days_per_run = 2;
+/// Aging waits while the clock is this far past the newest sealed day (a clock ahead, or
+/// the crawler down)
+const clock_slack_days = 3;
+
 /// Deletes day files past 24 months, then brings every sealed file up to `forgotten`
-/// (meiolol.db's whole list). Nothing to do without <data>/complete
+/// (meiolol.db's whole list; anything there but a PUUID is left out, warned). Nothing to
+/// do without <data>/complete
 pub fn tend(gpa: Allocator, io: Io, data_dir: []const u8, forgotten: []const []const u8, now: i64) !Tended {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -59,38 +67,63 @@ pub fn tend(gpa: Allocator, io: Io, data_dir: []const u8, forgotten: []const []c
     defer lock.close(io);
 
     var t: Tended = .{};
-    const today = @divFloor(now, std.time.s_per_day);
-    var sealed: std.ArrayList([]const u8) = .empty;
-    var aged: std.ArrayList([]const u8) = .empty;
+    const Named = struct { name: []const u8, day: i64 };
+    var all: std.ArrayList(Named) = .empty;
+    var newest: i64 = std.math.minInt(i64);
     var it = dir.iterate();
     while (try it.next(io)) |e| {
         const day = sealedDay(e.name) orelse continue;
         if (e.kind != .file) continue;
-        const list = if (day < today - aged_days) &aged else &sealed;
-        try list.append(arena, try arena.dupe(u8, e.name));
+        try all.append(arena, .{ .name = try arena.dupe(u8, e.name), .day = day });
+        newest = @max(newest, day);
     }
-    for (aged.items) |name| try dir.deleteFile(io, name);
-    t.aged = aged.items.len;
-    if (t.aged > 0) try archive.syncPath(io, dir_path, .directory);
+    const today = @divFloor(now, std.time.s_per_day);
+    var sealed: std.ArrayList([]const u8) = .empty;
+    if (all.items.len > 0 and today > newest + clock_slack_days) {
+        log.warn("complete: the clock is {d} days past the newest day file: none aged out until they agree", .{today - newest});
+        for (all.items) |f| try sealed.append(arena, f.name);
+    } else {
+        // The oldest aged_days_per_run days due go; the rest wait for the next run
+        var due: std.ArrayList(i64) = .empty;
+        for (all.items) |f| if (f.day < today - aged_days and std.mem.indexOfScalar(i64, due.items, f.day) == null) try due.append(arena, f.day);
+        std.mem.sort(i64, due.items, {}, std.sort.asc(i64));
+        if (due.items.len > aged_days_per_run) log.warn("complete: {d} days past 24 months, {d} deleted this run", .{ due.items.len, aged_days_per_run });
+        const cut = if (due.items.len > aged_days_per_run) due.items[aged_days_per_run] else std.math.maxInt(i64);
+        for (all.items) |f| {
+            if (f.day < today - aged_days and f.day < cut) {
+                try dir.deleteFile(io, f.name);
+                t.aged += 1;
+            } else try sealed.append(arena, f.name);
+        }
+        if (t.aged > 0) try archive.syncPath(io, dir_path, .directory);
+    }
 
     const list = try syncList(arena, io, dir, forgotten);
-    var applied = try readApplied(arena, io, dir);
-    // Files gone (aged, or deleted by hand) leave the table and the index
-    var kept: std.StringArrayHashMapUnmanaged(usize) = .empty;
-    for (sealed.items) |name| try kept.put(arena, name, applied.get(name) orelse 0);
-    var changed = kept.count() != applied.count();
-    applied = kept;
+    const old = try readApplied(arena, io, dir);
+    // Files gone (aged, or deleted by hand) leave the table and the index; a file not as
+    // its row says (replaced: a restore over it, a hand merge) is read whole again
+    var applied: std.StringArrayHashMapUnmanaged(Applied) = .empty;
+    var changed = false;
+    for (sealed.items) |name| {
+        const st = try dir.statFile(io, name, .{});
+        const now_as: Applied = .{ .n = 0, .size = st.size, .mtime = st.mtime.toNanoseconds() };
+        const row = old.get(name) orelse now_as;
+        const as_row = row.size == st.size and row.mtime == now_as.mtime;
+        try applied.put(arena, name, if (as_row) row else now_as);
+        changed = changed or !as_row;
+    }
+    changed = changed or applied.count() != old.count();
     try dir.createDirPath(io, index_dir);
     try dropStaleIndexes(arena, io, dir, applied);
 
     var m: Matcher = try .init(arena, list);
     t.quarantined = try scrubQuarantine(arena, io, dir, &m);
     for (sealed.items) |name| {
-        const n = applied.get(name).?;
-        if (n >= list.len) continue;
-        const fresh = list[n..];
-        if (try readIndex(arena, io, dir, name)) |ids| if (!mayHold(ids, fresh)) {
-            try applied.put(arena, name, list.len);
+        const row = applied.get(name).?;
+        if (row.n >= list.len) continue;
+        const fresh = list[row.n..];
+        if (row.n > 0) if (try readIndex(arena, io, dir, name)) |ids| if (!mayHold(ids, fresh)) {
+            try applied.put(arena, name, .{ .n = list.len, .size = row.size, .mtime = row.mtime });
             changed = true;
             continue;
         };
@@ -107,12 +140,19 @@ pub fn tend(gpa: Allocator, io: Io, data_dir: []const u8, forgotten: []const []c
             t.dropped += d;
         }
         try writeIndex(arena, io, dir, name, r.ids);
-        try applied.put(arena, name, list.len);
+        const st = try dir.statFile(io, name, .{});
+        try applied.put(arena, name, .{ .n = list.len, .size = st.size, .mtime = st.mtime.toNanoseconds() });
         try writeApplied(arena, io, dir, applied);
         changed = false;
     }
     if (changed) try writeApplied(arena, io, dir, applied);
     return t;
+}
+
+/// A real PUUID: 78 characters of base64url. Anything shorter would match nearly every
+/// document, and forgotten.txt never forgets an entry
+pub fn isPuuid(s: []const u8) bool {
+    return s.len == puuid_len and std.mem.indexOfNone(u8, s, &Matcher.chars) == null;
 }
 
 /// complete/index/<file>.ids: "CFI1" then the sorted Wyhash of every PUUID-long window
@@ -145,10 +185,9 @@ fn writeIndex(arena: Allocator, io: Io, dir: Io.Dir, name: []const u8, ids: []co
     try replaceFile(io, dir, try indexName(arena, name), bytes);
 }
 
-/// Whether a file with index `ids` may name any of `puuids` (one not PUUID-shaped: yes)
+/// Whether a file with index `ids` may name any of `puuids`
 fn mayHold(ids: []const u64, puuids: []const []const u8) bool {
     for (puuids) |p| {
-        if (p.len != puuid_len or std.mem.indexOfNone(u8, p, &Matcher.chars) != null) return true;
         if (std.sort.binarySearch(u64, ids, std.hash.Wyhash.hash(0, p), orderU64) != null) return true;
     }
     return false;
@@ -185,7 +224,7 @@ fn sortUnique(ids: *std.ArrayList(u64)) void {
     ids.shrinkRetainingCapacity(n);
 }
 
-fn dropStaleIndexes(arena: Allocator, io: Io, dir: Io.Dir, applied: std.StringArrayHashMapUnmanaged(usize)) !void {
+fn dropStaleIndexes(arena: Allocator, io: Io, dir: Io.Dir, applied: std.StringArrayHashMapUnmanaged(Applied)) !void {
     var idx = try dir.openDir(io, index_dir, .{ .iterate = true });
     defer idx.close(io);
     var stale: std.ArrayList([]const u8) = .empty;
@@ -197,36 +236,43 @@ fn dropStaleIndexes(arena: Allocator, io: Io, dir: Io.Dir, applied: std.StringAr
     for (stale.items) |name| try idx.deleteFile(io, name);
 }
 
-/// Quarantined spool segments (complete.zig) naming any of `m`'s PUUIDs, deleted whole;
-/// count deleted. Rare and small: read whole each run
+/// Quarantined spool segments (complete.zig) rewritten without the records naming any
+/// of `m`'s PUUIDs, or whose body does not inflate (can't be checked), and without a
+/// torn last record (can't be checked or replayed); a segment left empty is deleted.
+/// Count of records dropped. Rare and small: read whole each run
 fn scrubQuarantine(arena: Allocator, io: Io, dir: Io.Dir, m: *const Matcher) !usize {
     var q = dir.openDir(io, "spool/quarantine", .{ .iterate = true }) catch |err| switch (err) {
         error.FileNotFound => return 0,
         else => return err,
     };
     defer q.close(io);
-    var hits: std.ArrayList([]const u8) = .empty;
+    var names: std.ArrayList([]const u8) = .empty;
     var it = q.iterate();
-    while (try it.next(io)) |e| {
-        if (e.kind != .file) continue;
-        const bytes = try q.readFileAlloc(io, e.name, arena, .unlimited);
-        if (!m.any(bytes) and !try segmentNames(arena, bytes, m)) continue;
-        try hits.append(arena, try arena.dupe(u8, e.name));
+    while (try it.next(io)) |e| if (e.kind == .file) try names.append(arena, try arena.dupe(u8, e.name));
+    var dropped: usize = 0;
+    for (names.items) |name| {
+        const bytes = try q.readFileAlloc(io, name, arena, .unlimited);
+        var kept: std.ArrayList(u8) = .empty;
+        var r: dayfile.Reader = .{ .b = bytes };
+        var changed = false;
+        while (!r.done()) {
+            const at = r.i;
+            const rec = complete.readRecord(&r) catch {
+                changed = true;
+                break;
+            };
+            const plain = store.raw.decompress(arena, rec.gz) catch null;
+            if (plain == null or m.any(rec.key) or m.any(plain.?)) {
+                dropped += 1;
+                changed = true;
+                continue;
+            }
+            try kept.appendSlice(arena, bytes[at..r.i]);
+        }
+        if (!changed) continue;
+        if (kept.items.len == 0) try q.deleteFile(io, name) else try replaceFile(io, q, name, kept.items);
     }
-    for (hits.items) |name| try q.deleteFile(io, name);
-    return hits.items.len;
-}
-
-/// Whether a spool segment's gzipped bodies name any of `m`'s PUUIDs (keys are plain);
-/// a torn last record ends it (no fsync), a body that does not inflate counts as naming one
-fn segmentNames(arena: Allocator, bytes: []const u8, m: *const Matcher) !bool {
-    var r: dayfile.Reader = .{ .b = bytes };
-    while (!r.done()) {
-        const rec = complete.readRecord(&r) catch break;
-        const plain = store.raw.decompress(arena, rec.gz) catch return true;
-        if (m.any(plain)) return true;
-    }
-    return false;
+    return dropped;
 }
 
 /// A sealed day file's UTC day from its name (YYYY-MM-DD.<kind>.cfd)
@@ -242,7 +288,7 @@ fn sealedDay(name: []const u8) ?i64 {
 }
 
 /// forgotten.txt with every PUUID of `forgotten` not yet in it appended (sorted, so a
-/// run is repeatable); the whole list
+/// run is repeatable); the whole list. Entries that are not PUUIDs are left out, warned
 fn syncList(arena: Allocator, io: Io, dir: Io.Dir, forgotten: []const []const u8) ![]const []const u8 {
     const old = dir.readFileAlloc(io, "forgotten.txt", arena, .limited(1 << 30)) catch |err| switch (err) {
         error.FileNotFound => "",
@@ -252,14 +298,25 @@ fn syncList(arena: Allocator, io: Io, dir: Io.Dir, forgotten: []const []const u8
     var seen: std.StringHashMapUnmanaged(void) = .empty;
     var lines = std.mem.tokenizeScalar(u8, old, '\n');
     while (lines.next()) |l| {
+        // Counts in scrubbed.tsv name a prefix of this file: a line dropped would shift them
+        if (!isPuuid(l)) {
+            log.err("complete: forgotten.txt line {d} is not a PUUID: mend the file by hand", .{list.items.len + 1});
+            return error.Corrupt;
+        }
         try list.append(arena, l);
         try seen.put(arena, l, {});
     }
     const before = list.items.len;
+    var odd: usize = 0;
     for (forgotten) |p| {
-        if (p.len == 0 or (try seen.getOrPut(arena, p)).found_existing) continue;
+        if (!isPuuid(p)) {
+            odd += 1;
+            continue;
+        }
+        if ((try seen.getOrPut(arena, p)).found_existing) continue;
         try list.append(arena, p);
     }
+    if (odd > 0) log.warn("complete: {d} forgotten entries are not PUUIDs: left out", .{odd});
     const fresh = list.items[before..];
     if (fresh.len == 0) return list.items;
     std.mem.sort([]const u8, fresh, {}, struct {
@@ -273,24 +330,37 @@ fn syncList(arena: Allocator, io: Io, dir: Io.Dir, forgotten: []const []const u8
     return list.items;
 }
 
-fn readApplied(arena: Allocator, io: Io, dir: Io.Dir) !std.StringArrayHashMapUnmanaged(usize) {
-    var map: std.StringArrayHashMapUnmanaged(usize) = .empty;
+/// scrubbed.tsv row: the first `n` of forgotten.txt applied to the file as it was then
+/// (size, mtime in ns)
+const Applied = struct { n: usize, size: u64, mtime: i96 };
+
+fn readApplied(arena: Allocator, io: Io, dir: Io.Dir) !std.StringArrayHashMapUnmanaged(Applied) {
+    var map: std.StringArrayHashMapUnmanaged(Applied) = .empty;
     const text = dir.readFileAlloc(io, "scrubbed.tsv", arena, .limited(64 << 20)) catch |err| switch (err) {
         error.FileNotFound => return map,
         else => return err,
     };
     var lines = std.mem.tokenizeScalar(u8, text, '\n');
     while (lines.next()) |l| {
-        const tab = std.mem.indexOfScalar(u8, l, '\t') orelse return error.Corrupt;
-        try map.put(arena, l[0..tab], try std.fmt.parseInt(usize, l[tab + 1 ..], 10));
+        var cols = std.mem.splitScalar(u8, l, '\t');
+        const name = cols.first();
+        const row: Applied = .{
+            .n = std.fmt.parseInt(usize, cols.next() orelse return error.Corrupt, 10) catch return error.Corrupt,
+            .size = std.fmt.parseInt(u64, cols.next() orelse return error.Corrupt, 10) catch return error.Corrupt,
+            .mtime = std.fmt.parseInt(i96, cols.next() orelse return error.Corrupt, 10) catch return error.Corrupt,
+        };
+        try map.put(arena, name, row);
     }
     return map;
 }
 
-fn writeApplied(arena: Allocator, io: Io, dir: Io.Dir, map: std.StringArrayHashMapUnmanaged(usize)) !void {
+fn writeApplied(arena: Allocator, io: Io, dir: Io.Dir, map: std.StringArrayHashMapUnmanaged(Applied)) !void {
     var out: std.Io.Writer.Allocating = .init(arena);
     var it = map.iterator();
-    while (it.next()) |e| try out.writer.print("{s}\t{d}\n", .{ e.key_ptr.*, e.value_ptr.* });
+    while (it.next()) |e| {
+        const r = e.value_ptr.*;
+        try out.writer.print("{s}\t{d}\t{d}\t{d}\n", .{ e.key_ptr.*, r.n, r.size, r.mtime });
+    }
     try replaceFile(io, dir, "scrubbed.tsv", out.written());
 }
 
@@ -302,13 +372,10 @@ fn replaceFile(io: Io, dir: Io.Dir, name: []const u8, bytes: []const u8) !void {
     try file.replace(io);
 }
 
-/// Finds any of a set of PUUIDs in bytes. PUUIDs are base64url: each run of those
-/// characters is tried at every offset for every PUUID length in the set
+/// Finds any of a set of PUUIDs (isPuuid) in bytes: every PUUID-long window of each
+/// base64url run is looked up
 const Matcher = struct {
     set: std.StringHashMapUnmanaged(void) = .empty,
-    lens: std.ArrayList(usize) = .empty,
-    /// Any with a character outside base64url: searched for one by one
-    odd: std.ArrayList([]const u8) = .empty,
 
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".*;
     const word = blk: {
@@ -325,21 +392,14 @@ const Matcher = struct {
 
     fn reset(m: *Matcher, arena: Allocator, puuids: []const []const u8) !void {
         m.set.clearRetainingCapacity();
-        m.lens.clearRetainingCapacity();
-        m.odd.clearRetainingCapacity();
         for (puuids) |p| {
-            if (std.mem.indexOfNone(u8, p, &chars) != null) {
-                try m.odd.append(arena, p);
-                continue;
-            }
+            std.debug.assert(isPuuid(p));
             try m.set.put(arena, p, {});
-            if (std.mem.indexOfScalar(usize, m.lens.items, p.len) == null) try m.lens.append(arena, p.len);
         }
     }
 
     fn any(m: *const Matcher, hay: []const u8) bool {
-        for (m.odd.items) |p| if (std.mem.indexOf(u8, hay, p) != null) return true;
-        if (m.lens.items.len == 0) return false;
+        if (m.set.count() == 0) return false;
         var i: usize = 0;
         while (i < hay.len) {
             if (!word[hay[i]]) {
@@ -348,11 +408,9 @@ const Matcher = struct {
             }
             const start = i;
             while (i < hay.len and word[hay[i]]) i += 1;
-            for (m.lens.items) |n| {
-                if (n > i - start) continue;
-                var at = start;
-                while (at + n <= i) : (at += 1) if (m.set.contains(hay[at..][0..n])) return true;
-            }
+            if (i - start < puuid_len) continue;
+            var at = start;
+            while (at + puuid_len <= i) : (at += 1) if (m.set.contains(hay[at..][0..puuid_len])) return true;
         }
         return false;
     }
@@ -618,18 +676,41 @@ test "a forget drops exactly the documents naming the player; the rest stay byte
     try testing.expectEqual(1, t.dropped);
     try left(arena, data, &docs, "ab");
     try testing.expectEqualStrings(timeline_before, try Io.Dir.cwd().readFileAlloc(io, try arena.print("{s}/complete/{f}.timeline.cfd", .{ data, day0 }), arena, .unlimited));
-    const tsv = try Io.Dir.cwd().readFileAlloc(io, try arena.print("{s}/complete/scrubbed.tsv", .{data}), arena, .unlimited);
-    try testing.expectEqual(3, std.mem.count(u8, tsv, "\t2\n"));
+    const tsv = try dir.readFileAlloc(io, "scrubbed.tsv", arena, .unlimited);
+    try testing.expectEqual(3, std.mem.count(u8, tsv, "\t2\t"));
 
-    // A lost index: the file is read whole again, nothing more to drop
-    try dir.deleteFile(io, try indexName(arena, try arena.print("{f}.summary.cfd", .{day0})));
-    try dir.writeFile(io, .{ .sub_path = "scrubbed.tsv", .data = try arena.print("{f}.summary.cfd\t1\n", .{day0}) });
+    // Warned from here on
+    const saved_level = testing.log_level;
+    defer testing.log_level = saved_level;
+    testing.log_level = .err;
+
+    // Entries that are not PUUIDs never reach the list: "1" would match nearly every doc
+    t = try tend(gpa, io, data, &.{ "1", "EUW1", b, a }, now);
+    try testing.expectEqual(0, t.files);
+    try testing.expectEqual(2, std.mem.count(u8, try dir.readFileAlloc(io, "forgotten.txt", arena, .unlimited), "\n"));
+    try left(arena, data, &docs, "ab");
+
+    // A file not as its row says (replaced since) is read whole again, its index unused
+    {
+        var out: std.Io.Writer.Allocating = .init(arena);
+        var lines = std.mem.tokenizeScalar(u8, tsv, '\n');
+        while (lines.next()) |l| {
+            var cols = std.mem.splitScalar(u8, l, '\t');
+            const name = cols.first();
+            const n = cols.next().?;
+            const size = if (std.mem.indexOf(u8, name, "summary") != null) "1" else cols.next().?;
+            if (std.mem.indexOf(u8, name, "summary") != null) _ = cols.next();
+            try out.writer.print("{s}\t{s}\t{s}\t{s}\n", .{ name, n, size, cols.next().? });
+        }
+        try dir.writeFile(io, .{ .sub_path = "scrubbed.tsv", .data = out.written() });
+    }
     t = try tend(gpa, io, data, &.{ b, a }, now);
     try testing.expectEqual(1, t.files);
     try testing.expectEqual(0, t.rewritten);
     try left(arena, data, &docs, "ab");
 
-    // A quarantined spool segment naming a forgotten player goes whole; one that does not stays
+    // Quarantined spool segments lose the records naming a forgotten player and a torn
+    // tail; one left empty goes
     const c = try fakePuuid(arena, 'c');
     try dir.createDirPath(io, "spool/quarantine");
     const seg = struct {
@@ -638,20 +719,34 @@ test "a forget drops exactly the documents naming the player; the rest stay byte
             return std.mem.concat(al, u8, &.{ &.{ 9, @intCast(key.len) }, key, &.{@intCast(gz.len)}, gz });
         }
     }.bytes;
-    try dir.writeFile(io, .{ .sub_path = "spool/quarantine/mastery.7.replaying", .data = try seg(arena, "EUW1:k", try arena.print("[\"{s}\"]", .{c})) });
-    try dir.writeFile(io, .{ .sub_path = "spool/quarantine/mastery.8.replaying", .data = try seg(arena, "EUW1:k", try arena.print("[\"{s}\"]", .{x})) });
+    const keep = try seg(arena, "EUW1:k", try arena.print("[\"{s}\"]", .{x}));
+    try dir.writeFile(io, .{ .sub_path = "spool/quarantine/mastery.7.1", .data = try seg(arena, "EUW1:k", try arena.print("[\"{s}\"]", .{c})) });
+    try dir.writeFile(io, .{ .sub_path = "spool/quarantine/mastery.8.1", .data = keep });
+    try dir.writeFile(io, .{ .sub_path = "spool/quarantine/mastery.9.1", .data = try std.mem.concat(arena, u8, &.{ keep, try seg(arena, "EUW1:j", try arena.print("[\"{s}\"]", .{c})), keep, "\x09\x40EU" }) });
     t = try tend(gpa, io, data, &.{c}, now);
-    try testing.expectEqual(1, t.quarantined);
-    try testing.expectError(error.FileNotFound, dir.access(io, "spool/quarantine/mastery.7.replaying", .{}));
-    try dir.access(io, "spool/quarantine/mastery.8.replaying", .{});
+    try testing.expectEqual(2, t.quarantined);
+    try testing.expectError(error.FileNotFound, dir.access(io, "spool/quarantine/mastery.7.1", .{}));
+    try testing.expectEqualStrings(keep, try dir.readFileAlloc(io, "spool/quarantine/mastery.8.1", arena, .unlimited));
+    try testing.expectEqualStrings(try std.mem.concat(arena, u8, &.{ keep, keep }), try dir.readFileAlloc(io, "spool/quarantine/mastery.9.1", arena, .unlimited));
 
-    // 24 months on, the day's files go and leave the table and the index
-    t = try tend(gpa, io, data, &.{ b, a }, (20_000 + aged_days + 1) * std.time.s_per_day);
+    // 24 months on: a clock far past the newest day file deletes nothing
+    const later = (20_000 + aged_days + 1) * std.time.s_per_day;
+    t = try tend(gpa, io, data, &.{ b, a }, later);
+    try testing.expectEqual(0, t.aged);
+    // With a recent day file the old days go, at most aged_days_per_run a run, and leave
+    // the table and the index
+    try dir.writeFile(io, .{ .sub_path = try arena.print("{f}.mastery.cfd", .{Date.fromDay(20_000 + aged_days)}), .data = "" });
+    for ([_]i64{ 19_998, 19_999 }) |d| try dir.writeFile(io, .{ .sub_path = try arena.print("{f}.summary.cfd", .{Date.fromDay(d)}), .data = "" });
+    t = try tend(gpa, io, data, &.{ b, a }, later);
+    try testing.expectEqual(2, t.aged);
+    t = try tend(gpa, io, data, &.{ b, a }, later);
     try testing.expectEqual(3, t.aged);
-    try testing.expectEqualStrings("", try Io.Dir.cwd().readFileAlloc(io, try arena.print("{s}/complete/scrubbed.tsv", .{data}), arena, .unlimited));
+    const rows = try dir.readFileAlloc(io, "scrubbed.tsv", arena, .unlimited);
+    try testing.expectEqual(1, std.mem.count(u8, rows, "\n"));
     var idx = try dir.openDir(io, index_dir, .{ .iterate = true });
     defer idx.close(io);
     var it = idx.iterate();
+    try testing.expect(std.mem.startsWith(u8, (try it.next(io)).?.name, try arena.print("{f}.mastery.cfd", .{Date.fromDay(20_000 + aged_days)})));
     try testing.expect(try it.next(io) == null);
 }
 
@@ -668,9 +763,8 @@ test "the matcher finds a PUUID inside a longer run, and nothing else" {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const p = try fakePuuid(arena, 'q');
-    var m: Matcher = try .init(arena, &.{ p, "odd#one" });
+    var m: Matcher = try .init(arena, &.{p});
     try testing.expect(m.any(try arena.print("\x00N{s}N{s}", .{ p[0..77], p })));
     try testing.expect(!m.any(try arena.print("\x00{s}\x00{s}", .{ p[0..77], p[1..] })));
-    try testing.expect(m.any("xx odd#one"));
     try testing.expect(!m.any(""));
 }

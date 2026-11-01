@@ -322,7 +322,7 @@ pub fn cmdBackup(c: *Cmd) !u8 {
 fn tendComplete(c: *Cmd, db: store.Db, now: i64) !bool {
     const t = try riot.complete_scrub.tend(c.init.gpa, c.init.io, c.data_dir, try forget.list(c.arena, db), now);
     std.log.info("complete form: {d} day files read, {d} rewritten ({d} documents dropped), " ++
-        "{d} past 24 months deleted, {d} quarantined spool segments deleted, {d} failed", .{
+        "{d} past 24 months deleted, {d} quarantined spool records dropped, {d} failed", .{
         t.files, t.rewritten, t.dropped, t.aged, t.quarantined, t.failed,
     });
     return t.failed == 0;
@@ -525,7 +525,14 @@ pub fn cmdForget(c: *Cmd) !u8 {
     var erased: std.ArrayList([]const u8) = .empty;
     var unresolved: usize = 0;
     var already: usize = 0;
+    var malformed: usize = 0;
     for (ids) |id| {
+        // Not a Riot ID nor a PUUID: in `forgotten` it would match far more than one
+        // player in substring scrubs (complete form day files)
+        if (std.mem.findScalar(u8, id, '#') == null and !riot.complete_scrub.isPuuid(id)) {
+            malformed += 1;
+            continue;
+        }
         const puuid = if (std.mem.findScalar(u8, id, '#') == null) id else blk: {
             if (client == null) client = .init(c.init.gpa, io, try c.apiKey(), &limiter);
             break :blk try forget.resolveRiotId(arena, &client.?, id) orelse {
@@ -547,7 +554,7 @@ pub fn cmdForget(c: *Cmd) !u8 {
         std.log.info("{d} of {d} erased, {d} already forgotten; live rows: players {d}, " ++
             "mastery {d}, participants blanked {d}, raw matches {d}, raw timelines {d}, " ++
             "rank history {d}", .{
-            ids.len - unresolved - already,
+            ids.len - unresolved - already - malformed,
             ids.len,
             already,
             live.players,
@@ -573,6 +580,8 @@ pub fn cmdForget(c: *Cmd) !u8 {
         };
         std.log.info("{d} forgotten PUUIDs written to {s}", .{ try forget.exportList(io, d, path), path });
     }
+    // Not a failure: the daily exchange would stop pushing the box's list over one bad line
+    if (malformed > 0) std.log.warn("{d} entries are neither a Riot ID (Name#TAG) nor a PUUID: skipped", .{malformed});
     if (unresolved > 0) {
         std.log.warn("{d} Riot IDs have no account (renamed or deleted): resolve them by PUUID", .{unresolved});
         return 1;
