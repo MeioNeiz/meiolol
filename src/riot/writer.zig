@@ -410,6 +410,8 @@ pub const Writer = struct {
                 try s.ladder_page.exec(.{ l.platform.id, l.tier, l.division, l.page, l.entries.len, l.t });
             },
             .mastery => |m| if (m.blob) |blob| {
+                // Fetched before a forget, written after it
+                if (try s.isForgotten(m.puuid)) return false;
                 try s.mastery.exec(.{ m.puuid, m.platform, wr.stamp, m.champions, store.Blob{ .bytes = blob } });
                 job.complete = m.raw != null;
             } else {
@@ -1303,6 +1305,35 @@ test "ladder: ranks for everyone, player rows for the sample; matches take ranks
     for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
     // 1 in 1000 sampled: almost surely none of the 11 PUUIDs
     try std.testing.expect((try db.scalar("SELECT count(*) FROM players", .{})).? <= 2);
+}
+
+test "mastery of a forgotten player is neither stored nor sent to the complete form" {
+    const gpa = std.testing.allocator;
+    const db = try store.schema.memory();
+    defer db.close();
+    var c: crawl.Crawler = .{ .gpa = gpa, .io = std.testing.io, .opts = .{ .data_dir = "", .key = "" } };
+    var wr: Writer = .{ .c = &c };
+    defer wr.deinit();
+    var s: Stmts = try .init(db);
+    defer s.deinit();
+    try db.run("INSERT INTO forgotten VALUES ('gone', 1)", .{});
+
+    var jobs: [2]*Job = undefined;
+    for (&jobs, [_][]const u8{ "gone", "kept" }) |*job, puuid| job.* = try .create(gpa, .{ .mastery = .{
+        .puuid = puuid,
+        .platform = "EUW1",
+        .t = 5,
+        .champions = 1,
+        .blob = "b",
+        .raw = "r",
+    } });
+    defer for (jobs) |job| job.destroy(gpa);
+    try wr.commit(db, &s, &jobs);
+    try std.testing.expect(!jobs[0].stored and !jobs[0].complete);
+    try std.testing.expect(jobs[1].stored and jobs[1].complete);
+    const kept = "SELECT count(*) FROM mastery WHERE puuid = 'kept'";
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar(kept, .{}));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM mastery", .{}));
 }
 
 test "rank history: a row per change since the last sighting, the day's last wins" {
