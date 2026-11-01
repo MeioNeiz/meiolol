@@ -378,13 +378,15 @@ pub const Block = struct {
         };
         try putVar(a, &b.structure, n);
         b.pos = start + 1;
+        var seen: std.StringHashMapUnmanaged(u32) = .empty;
+        errdefer seen.deinit(b.gpa);
         if (n == 0) {
+            // An empty array still counts as one back for a ref, as the decoder counts it
             b.pos += 1;
+            if (siblings) |sib| try sib.append(b.gpa, seen);
             return;
         }
         const ep = try b.path(p, elem);
-        var seen: std.StringHashMapUnmanaged(u32) = .empty;
-        errdefer seen.deinit(b.gpa);
         for (0..n) |i| {
             if (siblings) |sib| {
                 const at = b.pos;
@@ -741,6 +743,10 @@ test "documents come back byte for byte" {
         ,
         \\{"k":"short","l":["short","short","abcdefghijklmnopqrstuvwxyz"]}
         ,
+        \\{"d":[1],"a":[],"f":[1]}
+        ,
+        \\{"d":[{"x":1},2],"a":[],"b":{},"c":[[]],"e":[],"f":[2,{"x":1}],"g":[[],[2]],"h":[[2]]}
+        ,
         "12",
         "null",
     };
@@ -829,6 +835,41 @@ test "fuzz: any compact document comes back exact" {
         ,
         \\[0,-1,1.5e3,"\\\"",true,false,null,[],{}]
     } });
+}
+
+/// A compact document from a small alphabet, so keys, elements and empty containers
+/// repeat as often as refs need
+fn genValue(s: *testing.Smith, w: *std.Io.Writer, depth: usize) !void {
+    const leaves = [_][]const u8{ "1", "2", "-3", "\"x\"", "\"y\"", "[]", "{}", "null", "1.5" };
+    const pick = s.index(if (depth >= 4) leaves.len else leaves.len + 2);
+    if (pick < leaves.len) return w.writeAll(leaves[pick]);
+    const object = pick == leaves.len;
+    try w.writeByte(if (object) '{' else '[');
+    const n = s.index(5);
+    for (0..n) |i| {
+        if (i > 0) try w.writeByte(',');
+        if (object) try w.print("\"{c}\":", .{"abcd"[s.index(4)]});
+        try genValue(s, w, depth + 1);
+    }
+    try w.writeByte(if (object) '}' else ']');
+}
+
+fn fuzzShaped(_: void, s: *testing.Smith) !void {
+    const gpa = testing.allocator;
+    var docs: [3][]u8 = undefined;
+    var n: usize = 0;
+    defer for (docs[0..n]) |d| gpa.free(d);
+    while (n < docs.len) : (n += 1) {
+        var w: std.Io.Writer.Allocating = .init(gpa);
+        errdefer w.deinit();
+        try genValue(s, &w.writer, 0);
+        docs[n] = try w.toOwnedSlice();
+    }
+    gpa.free(try roundTrip(&docs));
+}
+
+test "fuzz: generated documents with empty and repeated parts come back exact" {
+    try testing.fuzz({}, fuzzShaped, .{});
 }
 
 fn fuzzBlock(_: void, s: *testing.Smith) !void {
