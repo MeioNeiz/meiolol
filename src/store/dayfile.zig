@@ -64,7 +64,7 @@ pub const Reader = struct {
 pub fn keys(gpa: Allocator, out: *std.ArrayList(u8), docs: []const Doc) !void {
     try putVar(gpa, out, docs.len);
     for (docs) |d| {
-        try putVar(gpa, out, @intCast(d.t));
+        try putVar(gpa, out, @bitCast(d.t));
         try putVar(gpa, out, d.key.len);
         try out.appendSlice(gpa, d.key);
     }
@@ -122,15 +122,38 @@ pub const Frames = struct {
 };
 
 /// Cuts whatever follows the last whole frame of `file` (a crash mid-append); returns its
-/// length, where the next frame goes
+/// length, where the next frame goes. A crash tears only the tail: a whole frame after the
+/// bad bytes is damage (a disk error), and the file is left as it is (error.DamagedFrame)
 pub fn recover(gpa: Allocator, io: Io, file: Io.File) !u64 {
     var frames: Frames = .{ .file = file };
     while (try frames.next(gpa, io)) |fr| gpa.free(fr.zst);
-    if (try file.length(io) != frames.pos) {
-        try file.setLength(io, frames.pos);
-        try file.sync(io);
-    }
+    const len = try file.length(io);
+    if (len == frames.pos) return len;
+    if (try frameAfter(gpa, io, file, frames.pos + 1, len)) return error.DamagedFrame;
+    try file.setLength(io, frames.pos);
+    try file.sync(io);
     return frames.pos;
+}
+
+/// Whether a whole frame starts anywhere in `file` from `from` to `end`
+fn frameAfter(gpa: Allocator, io: Io, file: Io.File, from: u64, end: u64) !bool {
+    var buf: [1 << 16]u8 = undefined;
+    var at = from;
+    while (at < end) {
+        const got = buf[0..try file.readPositionalAll(io, &buf, at)];
+        var i: usize = 0;
+        while (std.mem.indexOfPos(u8, got, i, magic)) |k| : (i = k + 1) {
+            var f: Frames = .{ .file = file, .pos = at + k, .end = end };
+            if (try f.next(gpa, io)) |fr| {
+                gpa.free(fr.zst);
+                return true;
+            }
+        }
+        if (got.len < buf.len) break;
+        // A magic split across two reads is found in the next
+        at += got.len - (magic.len - 1);
+    }
+    return false;
 }
 
 /// The plain payload of a frame's zstd bytes, in `arena`
@@ -272,12 +295,17 @@ test "frames read back; a cut or damaged tail is cut, the frames before kept" {
         try std.testing.expectEqual(2, (try readAll(gpa, arena, io, file_path)).len);
     }
 
-    // A flipped payload byte fails the crc: that frame and all after it go
+    // A flipped payload byte fails the crc: as the last frame it is cut, with a whole
+    // frame after it the file is left as it is
     const file = try tmp.dir.createFile(io, "d.cfd", .{ .read = true });
     defer file.close(io);
     try file.writePositionalAll(io, fa, 0);
     fb[header_len + 3] ^= 1;
     try file.writePositionalAll(io, fb, fa.len);
+    try file.writePositionalAll(io, fa, fa.len + fb.len);
+    try std.testing.expectError(error.DamagedFrame, recover(gpa, io, file));
+    try std.testing.expectEqual(2 * fa.len + fb.len, try file.length(io));
+    try file.setLength(io, fa.len + fb.len);
     try std.testing.expectEqual(fa.len, try recover(gpa, io, file));
 }
 

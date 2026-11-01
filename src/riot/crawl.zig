@@ -234,10 +234,23 @@ pub const Crawler = struct {
             c.patches.log();
         }
 
+        // A start error turns the form off (the report line says so), the crawl goes on;
+        // only a second crawler on the same data stops it
         var packer: complete.Packer = undefined;
-        if (c.opts.complete) {
-            packer = try .init(c.gpa, c.io, c.opts.data_dir);
-            try packer.start();
+        if (c.opts.complete) start: {
+            packer = complete.Packer.init(c.gpa, c.io, c.opts.data_dir) catch |err| {
+                if (err == error.Locked) {
+                    log.err("{s}/complete is locked: another crawler runs on this data", .{c.opts.data_dir});
+                    return err;
+                }
+                log.err("complete form not started: {t}; the crawl goes on without it", .{err});
+                break :start;
+            };
+            packer.start() catch |err| {
+                log.err("complete form not started: {t}; the crawl goes on without it", .{err});
+                packer.close();
+                break :start;
+            };
             c.packer = &packer;
         }
         // After the writer stopped (defers run last first)
@@ -437,7 +450,7 @@ pub const Crawler = struct {
             p.stats.dropped.load(.monotonic),
             p.stats.restartsLastHour(c.io),
             if (p.isOff()) " | complete off" else "",
-        }) catch "" else "";
+        }) catch "" else if (c.opts.complete) " | complete off" else "";
         log.info("{d} matches/day | ladder pages {d} | mastery {d} | platform req {d}{s}" ++
             " | writes {d} in {d} commits, {d} queued, {d} busy | pages written {d}, read {d}{s}", .{
             per_day,

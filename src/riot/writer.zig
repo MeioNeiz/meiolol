@@ -276,7 +276,7 @@ pub const Writer = struct {
                 } else log.info("writer: the checkpointer is back, the writer stops checkpointing", .{});
             }
             wr.counted(batch.items);
-            if (wr.c.packer) |p| try toPacker(p, batch.items);
+            if (wr.c.packer) |p| toPacker(p, batch.items);
             const pages = db.pageCounts();
             wr.stats.pages_written.store(pages.written, .monotonic);
             wr.stats.pages_read.store(pages.missed, .monotonic);
@@ -519,7 +519,7 @@ pub const Writer = struct {
     }
 
     /// Committed documents to the complete form
-    fn toPacker(p: *complete_form.Packer, jobs: []const *Job) !void {
+    fn toPacker(p: *complete_form.Packer, jobs: []const *Job) void {
         var key_buf: [160]u8 = undefined;
         for (jobs) |job| {
             if (!job.stored or !job.complete) continue;
@@ -534,7 +534,7 @@ pub const Writer = struct {
                 },
                 else => continue,
             };
-            try p.push(item);
+            p.push(item);
         }
     }
 };
