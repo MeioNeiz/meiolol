@@ -210,6 +210,10 @@ Build up, each step measured on the one before:
 - E4 Mastery-adjusted drift: patch offsets with and without the expertise term
   [dynamics C8, causal C11]
 - E5 Kickscore or Kalman strength only if E2 or E3 find a real jump [dynamics C4]
+- E6 Chance by game length (tester note 68): v2 refit with a term per length bucket
+  (<25, 25-30, 30-35, 35+ min; or A5's length head), scored on held-out games within
+  each bucket vs v2. Only if a bucket beats v2 beyond its interval does the Draft tester
+  show the chance per bucket with ranges. gpu-box, from Mon 2 Nov
 
 ## Wild ideas (speculative, after the waves)
 
