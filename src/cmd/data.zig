@@ -314,14 +314,24 @@ pub fn cmdBackup(c: *Cmd) !u8 {
     // store.open's migrations would take the write lock beside the crawler
     const db = try store.sqlite.Db.openReadOnly(try std.fs.path.joinZ(c.arena, &.{ c.data_dir, "meiolol.db" }));
     defer db.close();
-    return if (try tendComplete(c, db, o.now)) 0 else 1;
+    return if (try tendComplete(c, db, o.now, try agedBy(db, o.now))) 0 else 1;
+}
+
+/// The clock day files age by, once a day (the backup; forget runs hourly from the mirrors):
+/// the newest game Riot dated, never past the box's. A box clock jumped forward, or a game
+/// dated ahead by Riot, deletes nothing early; with the crawler down aging waits for it
+fn agedBy(db: store.Db, now: i64) !?i64 {
+    var q = try db.prepare("SELECT max(game_start) / 1000 FROM matches");
+    defer q.deinit();
+    if (!try q.step() or q.isNull(0)) return null;
+    return @min(q.int(0), now);
 }
 
 /// The complete form's sealed day files (riot/complete_scrub.zig): those past 24 months
 /// deleted, the rest brought up to every forgotten PUUID; false when a file failed or the
 /// scrub stopped
-fn tendComplete(c: *Cmd, db: store.Db, now: i64) !bool {
-    const t = riot.complete_scrub.tend(c.init.gpa, c.init.io, c.data_dir, try forget.list(c.arena, db), now) catch |err| {
+fn tendComplete(c: *Cmd, db: store.Db, now: i64, aged_by: ?i64) !bool {
+    const t = riot.complete_scrub.tend(c.init.gpa, c.init.io, c.data_dir, try forget.list(c.arena, db), aged_by) catch |err| {
         std.log.err("complete form: scrub stopped: {t}", .{err});
         try scrubStatus(c, now, try std.fmt.allocPrint(c.arena, "error {t}", .{err}));
         return false;
@@ -375,7 +385,7 @@ pub fn cmdRestore(c: *Cmd) !u8 {
     std.log.info("complete form: {d} sealed day files copied", .{days});
     const db = try store.sqlite.Db.openReadOnly(try std.fs.path.joinZ(c.arena, &.{ c.data_dir, "meiolol.db" }));
     defer db.close();
-    if (!try tendComplete(c, db, now)) return 1;
+    if (!try tendComplete(c, db, now, null)) return 1;
     try partials.drop(c.init.gpa, c.init.io, try partials.dirIn(c.arena, c.data_dir));
     try cubes.drop(c.init.gpa, c.init.io, try cubes.dirIn(c.arena, c.data_dir));
     return 0;
@@ -594,7 +604,7 @@ pub fn cmdForget(c: *Cmd) !u8 {
         };
         std.log.info("{d} forgotten PUUIDs written to {s}", .{ try forget.exportList(io, d, path), path });
     }
-    const tended = if (db) |d| try tendComplete(c, d, now) else true;
+    const tended = if (db) |d| try tendComplete(c, d, now, null) else true;
     // Not a failure: the daily exchange would stop pushing the box's list over one bad line
     if (malformed > 0) std.log.warn("{d} entries are neither a Riot ID (Name#TAG) nor a PUUID: skipped", .{malformed});
     if (unresolved > 0) {

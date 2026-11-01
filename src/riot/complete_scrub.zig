@@ -42,17 +42,15 @@ pub const Tended = struct {
     failed: usize = 0,
 };
 
-/// Aging deletes no more than this many days' files a run: a clock jumped forward deletes
-/// slowly, warned, rather than every day at once
+/// Aging deletes no more than this many days' files a run: a bad reference deletes slowly,
+/// warned, rather than every day at once
 const aged_days_per_run = 2;
-/// Aging waits while the clock is this far past the newest sealed day (a clock ahead, or
-/// the crawler down)
-const clock_slack_days = 3;
 
-/// Deletes day files past 24 months, then brings every sealed file up to `forgotten`
-/// (meiolol.db's whole list; anything there but a PUUID is left out, warned). Nothing to
-/// do without <data>/complete
-pub fn tend(gpa: Allocator, io: Io, data_dir: []const u8, forgotten: []const []const u8, now: i64) !Tended {
+/// With `aged_by` (unix seconds; the caller's clock, null: no aging) deletes day files past
+/// 24 months of it, then brings every sealed file up to `forgotten` (meiolol.db's whole
+/// list; anything there but a PUUID is left out, warned). Nothing to do without
+/// <data>/complete
+pub fn tend(gpa: Allocator, io: Io, data_dir: []const u8, forgotten: []const []const u8, aged_by: ?i64) !Tended {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -69,20 +67,15 @@ pub fn tend(gpa: Allocator, io: Io, data_dir: []const u8, forgotten: []const []c
     var t: Tended = .{};
     const Named = struct { name: []const u8, day: i64 };
     var all: std.ArrayList(Named) = .empty;
-    var newest: i64 = std.math.minInt(i64);
     var it = dir.iterate();
     while (try it.next(io)) |e| {
         const day = sealedDay(e.name) orelse continue;
         if (e.kind != .file) continue;
         try all.append(arena, .{ .name = try arena.dupe(u8, e.name), .day = day });
-        newest = @max(newest, day);
     }
-    const today = @divFloor(now, std.time.s_per_day);
     var sealed: std.ArrayList([]const u8) = .empty;
-    if (all.items.len > 0 and today > newest + clock_slack_days) {
-        log.warn("complete: the clock is {d} days past the newest day file: none aged out until they agree", .{today - newest});
-        for (all.items) |f| try sealed.append(arena, f.name);
-    } else {
+    if (aged_by) |by| {
+        const today = @divFloor(by, std.time.s_per_day);
         // The oldest aged_days_per_run days due go; the rest wait for the next run
         var due: std.ArrayList(i64) = .empty;
         for (all.items) |f| if (f.day < today - aged_days and std.mem.indexOfScalar(i64, due.items, f.day) == null) try due.append(arena, f.day);
@@ -96,7 +89,7 @@ pub fn tend(gpa: Allocator, io: Io, data_dir: []const u8, forgotten: []const []c
             } else try sealed.append(arena, f.name);
         }
         if (t.aged > 0) try archive.syncPath(io, dir_path, .directory);
-    }
+    } else for (all.items) |f| try sealed.append(arena, f.name);
 
     const list = try syncList(arena, io, dir, forgotten);
     const old = try readApplied(arena, io, dir);
@@ -729,13 +722,13 @@ test "a forget drops exactly the documents naming the player; the rest stay byte
     try testing.expectEqualStrings(keep, try dir.readFileAlloc(io, "spool/quarantine/mastery.8.1", arena, .unlimited));
     try testing.expectEqualStrings(try std.mem.concat(arena, u8, &.{ keep, keep }), try dir.readFileAlloc(io, "spool/quarantine/mastery.9.1", arena, .unlimited));
 
-    // 24 months on: a clock far past the newest day file deletes nothing
+    // 24 months on: no aging without a clock (forget, restore)
     const later = (20_000 + aged_days + 1) * std.time.s_per_day;
-    t = try tend(gpa, io, data, &.{ b, a }, later);
-    try testing.expectEqual(0, t.aged);
-    // With a recent day file the old days go, at most aged_days_per_run a run, and leave
-    // the table and the index
     try dir.writeFile(io, .{ .sub_path = try arena.print("{f}.mastery.cfd", .{Date.fromDay(20_000 + aged_days)}), .data = "" });
+    t = try tend(gpa, io, data, &.{ b, a }, null);
+    try testing.expectEqual(0, t.aged);
+    // With one the old days go, at most aged_days_per_run a run, and leave the table and
+    // the index
     for ([_]i64{ 19_998, 19_999 }) |d| try dir.writeFile(io, .{ .sub_path = try arena.print("{f}.summary.cfd", .{Date.fromDay(d)}), .data = "" });
     t = try tend(gpa, io, data, &.{ b, a }, later);
     try testing.expectEqual(2, t.aged);
