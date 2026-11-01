@@ -69,6 +69,8 @@ pub const Data = struct {
 const W = struct {
     pub const title = plain("Squads");
     pub const lead = plain("Friends who join a squad see the games they played together. Each member joins with their own Riot ID.");
+    pub const proof = plain("Each member proves the Riot ID is theirs by setting a profile icon we pick, for a minute.");
+    pub const example = plain("An example squad:");
     pub const squad_name = plain("Squad name");
     pub const id = plain("Your Riot ID");
     pub const hint = plain("Name#TAG");
@@ -312,8 +314,14 @@ pub const Squad = struct {
         return h.div(.{ .class = "start" }, .{
             h.el(.h1, .{}, .{W.title}),
             h.p(.{ .class = "lead" }, .{W.lead}),
+            h.p(.{ .class = "lead" }, .{W.proof}),
             p.form(h, .create),
             h.a(.{ .href = "/privacy#squads", .class = "why" }, .{W.why}),
+            h.div(.{ .class = "example" }, .{
+                h.p(.{ .class = "note" }, .{W.example}),
+                p.head(h, &example, false),
+                p.games(h, &example, false),
+            }),
         });
     }
 
@@ -330,29 +338,37 @@ pub const Squad = struct {
             h.p(.{ .role = "status" }, .{W.no_squad}),
             h.a(.{ .href = "/squad" }, .{W.new}),
         });
+        return h.div(.{}, .{ p.head(h, d, true), p.games(h, d, true), p.actions(h) });
+    }
+
+    /// `live`: a real squad's, its members and games linked; else the start page's example
+    fn head(_: *const P, h: *H, d: *const Data, live: bool) N {
         var wins: i64 = 0;
         for (d.games) |g| wins += @intFromBool(g.win);
         const losses: i64 = @as(i64, @intCast(d.games.len)) - wins;
         var ms = h.list();
-        for (d.members) |m| ms.add(h.a(.{ .class = "member", .href = h.fmt("/your#{s}", .{homepage.idQuery(h.mem, m.riot_id) catch ""}) }, .{m.riot_id}));
-        var gs = h.list();
-        for (d.games) |g| gs.add(p.gameView(h, d, g));
-        return h.div(.{}, .{
-            h.div(.{ .class = "head" }, .{
-                h.el(.h1, .{}, .{d.name}),
-                h.div(.{ .class = "members", .role = "list", .aria_label = W.members }, .{ms.done()}),
-                h.div(.{ .class = "rec" }, .{
-                    h.el(.b, .{}, .{W.together.with(h, .{ .n = d.games.len })}),
-                    if (d.games.len > 0) h.span(.{ .class = "wl" }, .{W.record.with(h, .{ .w = wins, .l = losses })}) else null,
-                }),
-                if (d.waiting()) h.p(.{ .class = "msg", .role = "status" }, .{W.fetching}) else if (d.games.len == 0) h.p(.{ .class = "msg" }, .{W.none_yet}) else null,
+        for (d.members) |m| ms.add(if (live)
+            h.a(.{ .class = "member", .href = h.fmt("/your#{s}", .{homepage.idQuery(h.mem, m.riot_id) catch ""}) }, .{m.riot_id})
+        else
+            h.span(.{ .class = "member" }, .{m.riot_id}));
+        return h.div(.{ .class = "head" }, .{
+            if (live) h.el(.h1, .{}, .{d.name}) else h.el(.h2, .{}, .{d.name}),
+            h.div(.{ .class = "members", .role = "list", .aria_label = W.members }, .{ms.done()}),
+            h.div(.{ .class = "rec" }, .{
+                h.el(.b, .{}, .{W.together.with(h, .{ .n = d.games.len })}),
+                if (d.games.len > 0) h.span(.{ .class = "wl" }, .{W.record.with(h, .{ .w = wins, .l = losses })}) else null,
             }),
-            h.div(.{ .class = "games" }, .{gs.done()}),
-            p.actions(h),
+            if (d.waiting()) h.p(.{ .class = "msg", .role = "status" }, .{W.fetching}) else if (d.games.len == 0) h.p(.{ .class = "msg" }, .{W.none_yet}) else null,
         });
     }
 
-    fn gameView(p: *const P, h: *H, d: *const Data, g: Game) N {
+    fn games(p: *const P, h: *H, d: *const Data, live: bool) N {
+        var gs = h.list();
+        for (d.games) |g| gs.add(p.gameView(h, d, g, live));
+        return h.div(.{ .class = "games" }, .{gs.done()});
+    }
+
+    fn gameView(p: *const P, h: *H, d: *const Data, g: Game, live: bool) N {
         var seats = h.list();
         for (g.seats) |s| {
             const c: ?champ.Champ = if (s.champ < d.champs.len) d.champs[s.champ] else null;
@@ -364,15 +380,17 @@ pub const Squad = struct {
             }));
         }
         const first = if (g.seats.len > 0 and g.seats[0].member < d.members.len) d.members[g.seats[0].member].riot_id else "";
-        return h.a(.{ .class = "game", .href = gameHref(h.mem, first, g.start_ms) catch "", .data_win = g.win, .aria_label = W.open_game }, .{
+        const kids = .{
             h.div(.{ .class = "meta" }, .{
                 h.el(.b, .{}, .{if (g.win) W.win else W.loss}),
                 h.span(.{}, .{gamerow.queueName(g.queue)}),
                 h.span(.{}, .{W.mins.with(h, .{ .n = @divFloor(g.duration_s, 60) })}),
-                if (p.now_ms) |now| h.span(.{}, .{gamerow.ago(h, now - g.start_ms)}) else null,
+                if (!live) null else if (p.now_ms) |now| h.span(.{}, .{gamerow.ago(h, now - g.start_ms)}) else null,
             }),
             h.div(.{ .class = "seats" }, .{seats.done()}),
-        });
+        };
+        if (!live) return h.div(.{ .class = "game", .data_win = g.win }, kids);
+        return h.a(.{ .class = "game", .href = gameHref(h.mem, first, g.start_ms) catch "", .data_win = g.win, .aria_label = W.open_game }, kids);
     }
 
     fn actions(p: *P, h: *H) N {
@@ -488,10 +506,27 @@ pub const css =
     \\  .c-squad .box, .c-squad .invite, .c-squad .row { display: flex; flex-wrap: wrap; gap: var(--sp-1); width: 100%; max-width: 36rem; align-items: center; }
     \\  .c-squad .box input, .c-squad .invite input { flex: 1; min-width: 10rem; }
     \\  .c-squad .why { color: var(--t2); font-size: var(--fs-s); }
+    \\  .c-squad .example { display: grid; gap: var(--sp-2); width: 100%; max-width: 48rem; margin-top: var(--sp-4); padding-top: var(--sp-4);
+    \\    border-top: 1px solid var(--line); }
+    \\  .c-squad .example .note { color: var(--muted); font-size: var(--fs-s); }
+    \\  .c-squad .example h2 { margin: 0; font-size: var(--fs-l); }
+    \\  .c-squad .example .games { padding: 0; }
     \\  .c-squad img { border-radius: var(--r-s); }
     \\}
     \\
 ;
+
+/// The start page's: made-up members, never a real Riot ID
+const example: Data = .{
+    .state = .ready,
+    .name = "Weekend flex",
+    .members = &.{ .{ .riot_id = "You#EUW" }, .{ .riot_id = "Your duo#EUW" }, .{ .riot_id = "Jungle friend#EUW" } },
+    .champs = &.{ champ.demo("Ahri", "Ahri"), champ.demo("Leona", "Leona"), champ.demo("Jinx", "Jinx"), champ.demo("Vi", "Vi") },
+    .games = &.{
+        .{ .start_ms = 0, .queue = .flex, .duration_s = 1834, .win = true, .seats = &.{ .{ .member = 0, .champ = 0, .role = .mid, .k = 8, .d = 2, .a = 7 }, .{ .member = 1, .champ = 1, .role = .support, .k = 1, .d = 4, .a = 15 }, .{ .member = 2, .champ = 3, .role = .jungle, .k = 6, .d = 3, .a = 9 } } },
+        .{ .start_ms = 0, .queue = .flex, .duration_s = 1512, .win = false, .seats = &.{ .{ .member = 0, .champ = 2, .role = .bot, .k = 3, .d = 6, .a = 4 }, .{ .member = 1, .champ = 1, .role = .support, .k = 0, .d = 5, .a = 9 } } },
+    },
+};
 
 pub const demo_data: Data = .{
     .state = .ready,
