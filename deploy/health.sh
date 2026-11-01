@@ -28,6 +28,10 @@ else
     if (( age > 900 )); then
         problems+=("crawler silent: last report $(( age / 60 )) min ago")
     fi
+    # The complete form after a packer or sealer error, until its restart (riot/complete.zig)
+    if grep -q '| complete off' <<< "$report"; then
+        problems+=("complete form off: day files not written (crawl.log 'complete:' lines)")
+    fi
     total=$(grep -oE ' [0-9]+m ' <<< "$report" | awk '{ s += $1 } END { print s + 0 }')
     state=${HEALTH_STATE:-data/health.state}
     read -r last_total last_progress 2> /dev/null < "$state" || last_progress=$now

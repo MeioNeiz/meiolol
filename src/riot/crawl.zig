@@ -426,8 +426,19 @@ pub const Crawler = struct {
         }
         const per_day = if (elapsed_s > 0) matches * 86400 / @as(u64, @intCast(elapsed_s)) else 0;
         const ws = &c.writer.stats;
+        var cbuf: [160]u8 = undefined;
+        // health.sh looks for "complete off"
+        const cf = if (c.packer) |p| std.fmt.bufPrint(&cbuf, " | complete {d} docs, {d} raw, {d} frames, {d} MB, {d} queued, {d} dropped{s}", .{
+            p.stats.docs.load(.monotonic),
+            p.stats.raw.load(.monotonic),
+            p.stats.frames.load(.monotonic),
+            p.stats.bytes.load(.monotonic) >> 20,
+            p.queued(),
+            p.stats.dropped.load(.monotonic),
+            if (p.isOff()) " | complete off" else "",
+        }) catch "" else "";
         log.info("{d} matches/day | ladder pages {d} | mastery {d} | platform req {d}{s}" ++
-            " | writes {d} in {d} commits, {d} queued, {d} busy | pages written {d}, read {d}", .{
+            " | writes {d} in {d} commits, {d} queued, {d} busy | pages written {d}, read {d}{s}", .{
             per_day,
             c.counters.ladder_pages.load(.monotonic),
             c.counters.mastery.load(.monotonic),
@@ -439,6 +450,7 @@ pub const Crawler = struct {
             ws.busy.load(.monotonic),
             ws.pages_written.load(.monotonic),
             ws.pages_read.load(.monotonic),
+            cf,
         });
         w = .fixed(&buf);
         for (c.opts.regions) |r| {

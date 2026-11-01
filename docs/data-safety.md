@@ -174,6 +174,7 @@ deploy/health.sh runs on the box and prints one line per problem:
 | crawler | unit `meiolol-crawl` not active; "Riot rejected the key" if crawl.log ends in KEY REJECTED |
 | crawler silent | last per-minute report older than 15 min |
 | no new matches | report's per-region match counters unchanged for 2h (STALL_H) |
+| complete form off | the last report line says `complete off`: a packer or sealer error, the form restarts from its spool after 60 s (riot/complete.zig); the line's `complete` part counts docs, raw, frames, MB, queued and dropped (queue full at 200,000) |
 | WAL not checkpointed | a data/*.db-wal over 4 GB (crawler's checkpointer stuck, or a reader holding it) |
 | site | unit `meiolol-web` not active, or last upload in web.log older than 26h |
 | disk | / at 80% not counting C01's fixed 30 GB disk cache file (the rest grows slowly: snaps, nginx's 2 GB cache, /var/www), or the data's disk at 80% |

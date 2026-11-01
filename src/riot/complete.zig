@@ -40,6 +40,10 @@ pub const block_plain = 256 << 20;
 const max_jobs = 4;
 /// Queue length that warns (spooled only once the Packer takes it)
 const queue_warn = 20_000;
+/// Queue length past which pushes are dropped (off for long): ~1 GB of gzip bodies
+const queue_drop = 200_000;
+/// Pause after an error before starting again from the spool
+const restart_s = 60;
 const zstd_level = "-19";
 
 /// One stored document, as the writer hands it over (copied)
@@ -50,6 +54,8 @@ pub const Stats = struct {
     /// Documents kept raw: not compact, or did not come back from a block
     raw: std.atomic.Value(u64) = .init(0),
     frames: std.atomic.Value(u64) = .init(0),
+    /// Pushed while the queue was full (off for long): in neither a file nor the spool
+    dropped: std.atomic.Value(u64) = .init(0),
     bytes: std.atomic.Value(u64) = .init(0),
 };
 
@@ -81,11 +87,12 @@ pub const Packer = struct {
     /// Set with closing: packing stops at the next document (it is spooled already) and
     /// a wait for the sealer gives up, so a stop takes at most the zstd run in hand
     stopping: std.atomic.Value(bool) = .init(false),
-    /// Stopped on an error: pushes are dropped (raw still has them)
-    dead: bool = false,
+    /// Between an error and the restart from the spool (restart_s): pushes queue
+    off: std.atomic.Value(bool) = .init(false),
     /// Adding a batch taken from the queue
     busy: bool = false,
     block_docs: usize = block_docs,
+    restart_s: i64 = restart_s,
     lanes: [3]Lane = undefined,
     next_seg: u64 = 0,
     /// The UTC day the lanes' blocks belong to
@@ -157,8 +164,9 @@ pub const Packer = struct {
         @memcpy(buf[item.key.len..], item.gz);
         p.mutex.lockUncancelable(p.io);
         defer p.mutex.unlock(p.io);
-        if (p.dead) {
+        if (p.queue.items.len >= queue_drop) {
             p.gpa.free(buf);
+            _ = p.stats.dropped.fetchAdd(1, .monotonic);
             return;
         }
         p.queue.append(p.gpa, .{ .kind = item.kind, .t = item.t, .key_len = item.key.len, .buf = buf }) catch |err| {
@@ -169,17 +177,81 @@ pub const Packer = struct {
         p.cond.broadcast(p.io);
     }
 
+    /// On an error (here or in the sealer) the form is off for restart_s, then starts
+    /// again from the spool; the crawl goes on meanwhile and pushes queue
     fn run(p: *Packer) void {
-        p.loop() catch |err| {
-            // The crawl goes on without its complete form rather than stop: raw still
-            // keeps every document, and the spool replays on the next start
-            log.err("packer stopped: {t}; the spool waits for the next start", .{err});
-            p.mutex.lockUncancelable(p.io);
-            defer p.mutex.unlock(p.io);
-            for (p.queue.items) |o| p.gpa.free(o.buf);
-            p.queue.clearRetainingCapacity();
-            p.dead = true;
+        while (true) {
+            p.loop() catch |err| {
+                // A warning: the report line says "complete off" and health.sh alerts
+                log.warn("complete: packer stopped: {t}; off, starting again from the spool in {d} s", .{ err, p.restart_s });
+                p.off.store(true, .release);
+                p.restart() catch |e| {
+                    log.err("complete: no restart: {t}; off until the crawler restarts", .{e});
+                    p.spoolRest();
+                    return;
+                };
+                if (!p.pause()) {
+                    p.spoolRest();
+                    return;
+                }
+                p.off.store(false, .release);
+                log.info("complete: on again", .{});
+                continue;
+            };
+            return;
+        }
+    }
+
+    /// Lanes emptied (their documents are in the spool) and a fresh sealer; queued seal
+    /// jobs are dropped, their segments replay
+    fn restart(p: *Packer) !void {
+        for (&p.lanes) |*l| {
+            l.closeSegment(p.io);
+            l.clear(p.gpa);
+            l.seg_n = 0;
+        }
+        p.sealer.close();
+        if (p.sealer_thread) |t| t.join();
+        p.sealer_thread = null;
+        p.sealer.deinit();
+        p.sealer = .{ .p = p };
+        p.sealer_thread = try std.Thread.spawn(.{}, Sealer.run, .{&p.sealer});
+    }
+
+    /// restart_s, or until closing; false when closing
+    fn pause(p: *Packer) bool {
+        const until = Io.Clock.awake.now(p.io).toSeconds() + p.restart_s;
+        p.mutex.lockUncancelable(p.io);
+        defer p.mutex.unlock(p.io);
+        while (!p.closing and Io.Clock.awake.now(p.io).toSeconds() < until) {
+            p.cond.waitTimeout(p.io, &p.mutex, .{ .duration = .{ .raw = .fromSeconds(1), .clock = .awake } }) catch {};
+        }
+        return !p.closing;
+    }
+
+    /// Closing while off: the queue to the spool, for the next start
+    fn spoolRest(p: *Packer) void {
+        p.mutex.lockUncancelable(p.io);
+        defer p.mutex.unlock(p.io);
+        for (p.queue.items) |o| p.spool(o.kind, o.key(), o.t, o.gz()) catch |err| {
+            log.err("complete: {d} queued documents not spooled: {t}", .{ p.queue.items.len, err });
+            break;
         };
+        for (&p.lanes) |*l| l.closeSegment(p.io);
+    }
+
+    /// Whether the form is off (an error, restarting soon), for the report line
+    pub fn isOff(p: *Packer) bool {
+        if (p.off.load(.acquire)) return true;
+        p.sealer.mutex.lockUncancelable(p.io);
+        defer p.sealer.mutex.unlock(p.io);
+        return p.sealer.dead;
+    }
+
+    pub fn queued(p: *Packer) usize {
+        p.mutex.lockUncancelable(p.io);
+        defer p.mutex.unlock(p.io);
+        return p.queue.items.len;
     }
 
     fn loop(p: *Packer) !void {
@@ -595,6 +667,8 @@ const Sealer = struct {
     dead: bool = false,
     busy: bool = false,
     open: [3]?Open = @splat(null),
+    /// Tests: the next job fails
+    fail_once: bool = false,
 
     const Open = struct { day: i64, file: Io.File, len: u64 };
 
@@ -647,7 +721,7 @@ const Sealer = struct {
                 s.mutex.unlock(io);
             }
             s.do(job) catch |err| {
-                log.err("complete: sealer stopped: {t}; the spool waits for the next start", .{err});
+                log.warn("complete: sealer stopped: {t}; the packer starts both again", .{err});
                 s.mutex.lockUncancelable(io);
                 defer s.mutex.unlock(io);
                 s.dead = true;
@@ -658,6 +732,10 @@ const Sealer = struct {
     }
 
     fn do(s: *Sealer, job: Job) !void {
+        if (s.fail_once) {
+            s.fail_once = false;
+            return error.TestFailure;
+        }
         switch (job) {
             .seal_day => |day| for (std.enums.values(Kind)) |k| try s.sealFile(k, day),
             .frames => |f| {
@@ -976,4 +1054,37 @@ test "a stop mid-queue leaves every pushed document in a day file or the spool" 
         for (try readSegment(arena, io, try arena.print("{s}/spool/{s}", .{ dir_path, s.name }))) |r| try seen.put(arena, r.key, {});
     }
     for (0..n) |i| try std.testing.expect(seen.contains(try arena.print("K{d}", .{i})));
+}
+
+test "after a sealer error the form is off, then starts again from the spool" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const data = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const saved = std.testing.log_level;
+    defer std.testing.log_level = saved;
+    std.testing.log_level = .err;
+    test_day = 20_000;
+
+    var p: Packer = try .init(gpa, io, data);
+    p.clock = testClock;
+    p.block_docs = 2;
+    p.restart_s = 0;
+    try p.start();
+    p.sealer.fail_once = true;
+    for (0..6) |i| try p.push(.{ .kind = .summary, .key = try arena.print("K{d}", .{i}), .t = @intCast(i), .gz = try store.raw.compress(arena, "[1]") });
+    try settle(&p);
+    test_day += 1;
+    try p.push(.{ .kind = .mastery, .key = "wake", .t = 9, .gz = try store.raw.compress(arena, "[]") });
+    try settle(&p);
+    try std.testing.expect(!p.isOff());
+    p.close();
+    const got = try dayfile.readAll(gpa, arena, io, try arena.print("{s}/complete/{f}.summary.cfd", .{ data, Date.fromDay(20_000) }));
+    var seen: std.StringHashMapUnmanaged(void) = .empty;
+    for (got) |d| try seen.put(arena, d.key, {});
+    for (0..6) |i| try std.testing.expect(seen.contains(try arena.print("K{d}", .{i})));
 }
