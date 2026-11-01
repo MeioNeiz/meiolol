@@ -17,6 +17,7 @@ const draftboard = @import("draftboard.zig");
 const modelbadge = @import("modelbadge.zig");
 const role = @import("role.zig");
 const segmented = @import("segmented.zig");
+const reasons = @import("reasons.zig");
 const select = @import("select.zig");
 const split = @import("split.zig");
 const button = @import("button.zig");
@@ -68,6 +69,20 @@ const W = struct {
     pub const terms = plain("Terms");
     pub const files = plain("Files");
     pub const seat_pts = Phrase("{p:points} vs average");
+    pub const seat_why = Phrase("{p:points} · {why:text}");
+    pub const strong = Phrase("strong {r:text}");
+    pub const weak = Phrase("weak {r:text}");
+    pub const into_l = Phrase("into {n:text}");
+    pub const with_l = Phrase("with {n:text}");
+    pub const why_draft = Phrase("Why {side:text} {p:rate}");
+    pub const average_draft = plain("Every seat an average pick");
+    pub const this_draft = plain("Blue, this draft");
+    pub const strong_part = Phrase("{n:text} strong {r:text}");
+    pub const weak_part = Phrase("{n:text} weak {r:text}");
+    pub const ally_part = Phrase("{a:text} with {b:text}");
+    pub const more_parts = Phrase("{n:int} smaller picks and pairs");
+    pub const enemy_part = Phrase("{a:text} into {b:text}");
+    pub const comp_part = plain("Damage mix and team shape");
     pub const facts = Phrase("{kind:text} · {g:kilo} games · {lo:text} to {hi:text} · {acc:rate} on {n:kilo} held out");
     pub const from = Phrase("{where:text} {date:text}");
     pub const ok = Phrase("✓ {file:text}: {n:int} reference drafts match");
@@ -460,6 +475,7 @@ pub const Page = struct {
         }
         return h.div(.{ .class = "bd" }, .{
             draftboard.fullOn(h, .{ .v = .full, .lanes = &lanes }, &on),
+            if (l) |x| p.draftWhy(h, x) else null,
             p.bansRow(h),
             h.div(.{ .class = "acts" }, .{
                 button.view(h, .{ .s = .s, .disabled = l == null, .on = h.on(p, .random) }, .{W.random}),
@@ -491,13 +507,99 @@ pub const Page = struct {
 
     fn seatOf(p: *const Page, h: *H, l: ?*const Loaded, side: u1, r: usize) draftboard.Seat {
         const id = p.teams[side][r];
-        const pts: ?f64 = if (l) |x| (if (id != 0) seatPoints(x, p.teams, side, r) else null) else null;
         return .{
             .champ = p.icon(h, id),
             .state = if (id != 0) .locked else .empty,
-            .sub = if (pts) |x| W.seat_pts.with(h, .{ .p = x }) else .{ .s = "" },
+            .sub = if (l) |x| (if (id != 0) p.seatLine(h, x, side, r) else .{ .s = "" }) else .{ .s = "" },
             .sel = if (shownSeat(p.teams, p.seat)) |i| i == @as(usize, side) * n_role + r else false,
         };
+    }
+
+    /// The seat's points over the role's average pick and its largest named part in words
+    /// ("+2.6 · into Darius"); the points alone when nothing is named
+    fn seatLine(p: *const Page, h: *H, l: *const Loaded, side: u1, r: usize) tree.Text {
+        const w = l.sc.why(p.teams, side, r, p.teams[side][r]);
+        var top: ?ds.Part = null;
+        for (w.parts()) |x| {
+            if (top == null or @abs(x.pp) > @abs(top.?.pp)) top = x;
+        }
+        const x = top orelse return W.seat_pts.with(h, .{ .p = w.total() });
+        if (!(@abs(x.pp) >= min_part)) return W.seat_pts.with(h, .{ .p = w.total() });
+        const rl: []const u8 = @tagName(role.Role.all[r]);
+        const why: tree.Text = switch (x.kind) {
+            .base => if (x.pp > 0) W.strong.with(h, .{ .r = rl }) else W.weak.with(h, .{ .r = rl }),
+            .enemy => W.into_l.with(h, .{ .n = p.nameOf(x.other) }),
+            .ally => W.with_l.with(h, .{ .n = p.nameOf(x.other) }),
+        };
+        return W.seat_why.with(h, .{ .p = w.total(), .why = why.s });
+    }
+
+    fn nameOf(p: *const Page, id: u32) []const u8 {
+        return if (champOf(p.head, id)) |c| c.name else "?";
+    }
+
+    /// The full board's chance from the empty board's, part by part: the largest named,
+    /// the others summed as the rest. Only while the panel has no seat to fill
+    fn draftWhy(p: *const Page, h: *H, l: *const Loaded) ?N {
+        if (shownSeat(p.teams, p.seat) != null) return null;
+        const d = l.sc.draftWhy(p.teams);
+        var idx: [max_lines]usize = undefined;
+        var n: usize = 0;
+        for (d.parts(), 0..) |x, i| {
+            if (!(@abs(x.pp) >= min_part)) continue;
+            var at = n;
+            while (at > 0 and @abs(d.buf[idx[at - 1]].pp) < @abs(x.pp)) : (at -= 1) {
+                if (at < max_lines) idx[at] = idx[at - 1];
+            }
+            if (at < max_lines) idx[at] = i;
+            n = @min(n + 1, max_lines);
+        }
+        const comp = @abs(d.comp) >= min_part;
+        var small: f64 = 0;
+        for (d.parts()) |x| small += x.pp;
+        const terms = h.mem.alloc(reasons.Term, n + @intFromBool(comp) + 1) catch {
+            h.oom = true;
+            return null;
+        };
+        var named: f64 = 0;
+        for (terms[0..n], idx[0..n]) |*t, i| {
+            const x = d.buf[i];
+            named += x.pp;
+            // Blue's points: a red pick weaker than average is a plus
+            const own = if (x.side == 0) x.pp else -x.pp;
+            const r: []const u8 = @tagName(role.Role.all[x.ra]);
+            t.* = .{ .pp = @floatCast(x.pp), .games = x.games, .label = switch (x.kind) {
+                .base => if (own > 0) W.strong_part.with(h, .{ .n = p.nameOf(x.a), .r = r }) else W.weak_part.with(h, .{ .n = p.nameOf(x.a), .r = r }),
+                .ally => W.ally_part.with(h, .{ .a = p.nameOf(x.a), .b = p.nameOf(x.b) }),
+                .enemy => W.enemy_part.with(h, .{ .a = p.nameOf(x.a), .b = p.nameOf(x.b) }),
+            } };
+        }
+        var k = n;
+        if (comp) {
+            terms[k] = .{ .pp = @floatCast(d.comp), .label = W.comp_part };
+            k += 1;
+        }
+        small -= named;
+        const n_small = d.n - n;
+        // Factor terms, and whatever is too small for a line of its own
+        var rest = d.rest + (if (comp) 0 else d.comp);
+        if (n_small > 0 and @abs(small) >= 0.05) {
+            terms[k] = .{ .pp = @floatCast(small), .label = W.more_parts.with(h, .{ .n = n_small }) };
+            k += 1;
+        } else rest += small;
+        return h.div(.{ .class = "why" }, .{
+            h.el(.h2, .{}, .{W.why_draft.with(h, .{ .side = W.blue.s, .p = 100 * d.with.p })}),
+            reasons.view(h, .{
+                .base_label = W.average_draft,
+                .base = @floatCast(100 * d.empty.p),
+                .terms = terms[0..k],
+                .rest = if (@abs(rest) >= 0.05) @floatCast(rest) else null,
+                .total_label = W.this_draft,
+                .low = @floatCast(100 * d.with.lo),
+                .high = @floatCast(100 * d.with.hi),
+                .tip_id = "tester-why-rest",
+            }, .points),
+        });
     }
 
     /// The set net with the Comp model it corrects, when both are in and match
@@ -569,6 +671,11 @@ pub const Page = struct {
         return h.ul(.{ .class = "files" }, .{lines.done()});
     }
 };
+
+/// Lines of the full board's Why before the rest
+const max_lines = 8;
+/// A part under this many points says nothing the total doesn't
+const min_part = 0.1;
 
 /// What a seat adds to its team's chance over the role's average pick, in points
 fn seatPoints(l: *const Loaded, teams: [2][n_role]u32, side: u1, r: usize) f64 {
@@ -701,6 +808,8 @@ pub const css =
     \\  .c-tester .bans > .line { color: var(--muted); font-size: var(--fs-s); margin-right: var(--sp-1); }
     \\  .c-tester .bans > .ban { padding: 0; border: 0; background: none; cursor: pointer; }
     \\  .c-tester .acts { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
+    \\  .c-tester .why { display: grid; gap: var(--sp-1); width: 100%; max-width: 720px; }
+    \\  .c-tester .why > h2 { margin: 0; font-size: inherit; font-weight: var(--w-b); }
     \\  .c-tester .files { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-1); font-size: var(--fs-s); }
     \\}
     \\
@@ -709,6 +818,18 @@ pub const css =
 /// Hand-made data for the gallery and tests: two champions, one model
 pub const Demo = struct {
     pub const head: Head = .{ .ddragon = "16.21.1", .champs = &.{ .{ .id = 266, .key = "Aatrox", .name = "Aatrox" }, .{ .id = 122, .key = "Darius", .name = "Darius" } } };
+
+    /// The gallery's full board: the demo's two and eight more without terms
+    const full_head: Head = .{ .ddragon = "16.21.1", .champs = head.champs ++ &[_]Champ{
+        .{ .id = 64, .key = "LeeSin", .name = "Lee Sin" },
+        .{ .id = 254, .key = "Vi", .name = "Vi" },
+        .{ .id = 103, .key = "Ahri", .name = "Ahri" },
+        .{ .id = 61, .key = "Orianna", .name = "Orianna" },
+        .{ .id = 222, .key = "Jinx", .name = "Jinx" },
+        .{ .id = 51, .key = "Caitlyn", .name = "Caitlyn" },
+        .{ .id = 117, .key = "Lulu", .name = "Lulu" },
+        .{ .id = 412, .key = "Thresh", .name = "Thresh" },
+    } };
 
     const terms = [_]ds.Term{
         .{ .champion = 266, .role = 0, .games = 500, .b = 0.2, .sd = 0.1 },
@@ -749,6 +870,12 @@ pub fn gallery(g: *Gallery) void {
         };
         g.add(caption, p.view(g.h));
     }
+    const p = a.create(Page) catch return;
+    p.* = .init(&Demo.full_head);
+    p.loads.set(.live, .{ .ready = l });
+    p.loads.set(.comp, .failed);
+    p.teams = .{ .{ 266, 64, 103, 222, 117 }, .{ 122, 254, 61, 51, 412 } };
+    g.add("every seat picked: why blue's chance", p.view(g.h));
 }
 
 const testing = std.testing;

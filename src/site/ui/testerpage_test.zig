@@ -154,7 +154,7 @@ test "seats chosen into the URL, a pick from it, moved to the other side, scored
     try testing.expect(p.state.dirty);
     const one = try p.shown();
     try has(one, "Aatrox");
-    try has(one, "vs average");
+    try has(one, "strong top");
     try testing.expect(std.mem.find(u8, one, "Blue 50.5%") == null);
 
     // A key it doesn't own (the panel's sort) stays as it was

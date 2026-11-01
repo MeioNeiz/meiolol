@@ -402,6 +402,90 @@ pub const Scorer = struct {
         for (w.parts()) |x| w.rest -= x.pp;
         return w;
     }
+
+    /// Blue's chance over the empty board's (every seat the role's average pick), split
+    /// into each pick's strength, each pair cell the draft touches and the comp terms, in
+    /// points of blue's chance; factor terms, and parts past the buffer, are the rest. The
+    /// secant split of `why`, so parts and rest sum to the change exactly
+    pub fn draftWhy(sc: *const Scorer, t: [2][n_role]u32) DraftWhy {
+        const none: [2][n_role]u32 = @splat(@splat(0));
+        var w: DraftWhy = .{ .empty = sc.blue(none), .with = sc.blue(t) };
+        const d = w.with.p - w.empty.p;
+        const temp = sc.e.temperature;
+        const dl = temp * (sc.logit(t).l - sc.logit(none).l);
+        const slope = if (@abs(dl) > 1e-9) d / dl else w.with.p * (1 - w.with.p);
+        const k = 100 * slope * temp;
+        for (0..2) |side| for (0..n_role) |r| {
+            const id = t[side][r];
+            if (id == 0) continue;
+            const games = if (sc.terms.get(termKey(id, r))) |i| sc.e.terms[i].games else 0;
+            const x = k * (sc.slot(id, r).b - sc.average[r].b);
+            w.add(.{ .kind = .base, .side = @intCast(side), .a = id, .ra = @intCast(r), .pp = if (side == 0) x else -x, .games = games });
+        };
+        if (sc.e.pairs) |pr| for (pr.groups, 0..) |g, gi| {
+            const r = g.r;
+            const q = g.q;
+            if (std.mem.eql(u8, g.kind, "ally")) {
+                for (0..2) |side| if (sc.cellOf(gi, t[side][r], t[side][q])) |c| {
+                    const x = k * c.theta;
+                    w.add(.{ .kind = .ally, .side = @intCast(side), .a = t[side][r], .b = t[side][q], .ra = r, .rb = q, .pp = if (side == 0) x else -x, .games = c.games });
+                };
+            } else if (r != q) {
+                if (sc.cellOf(gi, t[0][r], t[1][q])) |c| w.add(.{ .kind = .enemy, .a = t[0][r], .b = t[1][q], .ra = r, .rb = q, .pp = k * c.theta, .games = c.games });
+                if (sc.cellOf(gi, t[1][r], t[0][q])) |c| w.add(.{ .kind = .enemy, .a = t[0][q], .b = t[1][r], .ra = q, .rb = r, .pp = -k * c.theta, .games = c.games });
+            } else {
+                const a = t[0][r];
+                const b = t[1][r];
+                if (a == b) continue;
+                const c = sc.cellOf(gi, @min(a, b), @max(a, b)) orelse continue;
+                w.add(.{ .kind = .enemy, .a = a, .b = b, .ra = r, .rb = r, .pp = if (a < b) k * c.theta else -k * c.theta, .games = c.games });
+            }
+        };
+        w.comp = k * (sc.compOf(t) - sc.compOf(none));
+        w.rest = 100 * d - w.comp;
+        for (w.parts()) |x| w.rest -= x.pp;
+        return w;
+    }
+};
+
+/// One named part of a whole draft (Scorer.draftWhy)
+pub const DraftPart = struct {
+    kind: Kind,
+    /// base and ally: the side whose pick or pair it is; enemy: 0, `a` blue's
+    side: u1 = 0,
+    a: u32,
+    /// The other champion of a pair; 0 for base
+    b: u32 = 0,
+    ra: u8,
+    rb: u8 = 0,
+    /// Points of blue's chance
+    pp: f64,
+    /// The champion-role's games for base, the pair cell's otherwise
+    games: u32,
+};
+
+/// Ten picks and every pair cell a model ships; past it, parts fall into the rest
+pub const max_draft_parts = 64;
+
+pub const DraftWhy = struct {
+    empty: Chance,
+    with: Chance,
+    buf: [max_draft_parts]DraftPart = undefined,
+    n: u8 = 0,
+    /// The comp terms (damage mix, profiles), points of blue's chance; 0 without them
+    comp: f64 = 0,
+    /// Every part not named, points of blue's chance
+    rest: f64 = 0,
+
+    fn add(w: *DraftWhy, p: DraftPart) void {
+        if (w.n == max_draft_parts) return;
+        w.buf[w.n] = p;
+        w.n += 1;
+    }
+
+    pub fn parts(w: *const DraftWhy) []const DraftPart {
+        return w.buf[0..w.n];
+    }
 };
 
 /// A named part's kind: the pick's own strength, a duo, a matchup (core.score's, so the
@@ -573,4 +657,69 @@ test "why: strength, bot duo, lane and bot-support matchups named, the rest summ
     // An empty seat's average: no change, nothing named but its zero strength
     w = sc.why(teams, 1, 0, 0);
     try std.testing.expectApproxEqAbs(0, w.total(), eps);
+}
+
+test "draftWhy: every pick's strength and pair named for blue, all adding up" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const Even = struct {
+        fn patchShare(_: *const @This(), _: u32, _: usize) f64 {
+            return 1;
+        }
+    };
+    const terms = [_]Term{
+        .{ .champion = 10, .role = 0, .games = 500, .b = 0.3, .sd = 0.05 },
+        .{ .champion = 11, .role = 0, .games = 400, .b = -0.3, .sd = 0.05 },
+        .{ .champion = 30, .role = 3, .games = 300, .b = 0.1, .sd = 0.05 },
+        .{ .champion = 40, .role = 4, .games = 200, .b = 0, .sd = 0.05 },
+    };
+    const groups = [_]PairGroup{
+        .{ .name = "", .kind = "ally", .r = 3, .q = 4, .sd = 0.1, .fitted = 1, .shipped = 1 },
+        .{ .name = "", .kind = "matchup", .r = 0, .q = 0, .sd = 0.1, .fitted = 1, .shipped = 1 },
+        .{ .name = "", .kind = "matchup", .r = 0, .q = 3, .sd = 0.1, .fitted = 1, .shipped = 1 },
+    };
+    const cells = [_]PairCell{
+        .{ .group = 0, .a = 30, .b = 40, .theta = 0.5, .games = 900 },
+        .{ .group = 1, .a = 10, .b = 11, .theta = 0.4, .games = 800 },
+        .{ .group = 2, .a = 10, .b = 30, .theta = 0.2, .games = 700 },
+    };
+    const p: Params = .{ .kind = "ratings", .dim = 0, .intercept = &.{0.02}, .w = @splat(0), .z = @splat(0), .terms = &terms, .pairs = .{ .min_games = 0, .groups = &groups, .cells = &cells }, .temperature = 0.9 };
+    const sc = try Scorer.init(a, p, 0, &Even{});
+    // Blue: top 11, bot 30, sup 40; red: top 10
+    const teams: [2][n_role]u32 = .{ .{ 11, 0, 0, 30, 40 }, .{ 10, 0, 0, 0, 0 } };
+    const d = sc.draftWhy(teams);
+    var sum = d.rest + d.comp;
+    try std.testing.expectEqual(0, d.comp);
+    for (d.parts()) |x| sum += x.pp;
+    try std.testing.expectApproxEqAbs(100 * (d.with.p - d.empty.p), sum, 1e-9);
+    try std.testing.expectApproxEqAbs(sc.blue(teams).p, d.with.p, 1e-12);
+    // 4 picks, the duo, the top lane, red top into blue bot
+    try std.testing.expectEqual(7, d.n);
+    var seen: [3]bool = @splat(false);
+    for (d.parts()) |x| switch (x.kind) {
+        .base => if (x.a == 10) {
+            try std.testing.expectEqual(1, x.side);
+            try std.testing.expect(x.pp < 0);
+        },
+        .ally => {
+            try std.testing.expectEqual(DraftPart{ .kind = .ally, .side = 0, .a = 30, .b = 40, .ra = 3, .rb = 4, .pp = x.pp, .games = 900 }, x);
+            try std.testing.expect(x.pp > 0);
+            seen[0] = true;
+        },
+        .enemy => if (x.ra == 0) {
+            // 10 facing 11 is the cell's +theta: blue's 11 loses it
+            try std.testing.expectEqual(11, x.a);
+            try std.testing.expect(x.pp < 0);
+            seen[1] = true;
+        } else {
+            // Red's top 10 into blue's bot 30, as blue's 30 against red's 10
+            try std.testing.expectEqual(DraftPart{ .kind = .enemy, .a = 30, .b = 10, .ra = 3, .rb = 0, .pp = x.pp, .games = 700 }, x);
+            try std.testing.expect(x.pp < 0);
+            seen[2] = true;
+        },
+    };
+    try std.testing.expect(seen[0] and seen[1] and seen[2]);
+    // No factors at dim 0: the named parts are all of it
+    try std.testing.expectApproxEqAbs(0, d.rest, 1e-9);
 }

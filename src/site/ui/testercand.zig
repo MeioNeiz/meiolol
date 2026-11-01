@@ -340,7 +340,12 @@ pub const Panel = struct {
             p.open = 0;
             p.unkey();
         }
-        if (seat != null and seat != p.seat) p.want_focus = true;
+        if (seat != null and seat != p.seat) {
+            p.want_focus = true;
+            // A filled seat chosen: why its champion, open at the top
+            const i = seat.?;
+            p.open = teams[i / n_role][i % n_role];
+        }
         p.which = u.m;
         p.vs = u.v;
         p.teams = teams;
@@ -523,9 +528,21 @@ pub const Panel = struct {
         for (all, 0..) |o, i| {
             if (p.keeps(o, i, in_seat)) n_kept += 1;
         }
+        // A chosen filled seat's champion first: the reader asked about it
+        const pin = !searching and p.seat != null and in_seat != 0;
+        if (pin) for (all, 0..) |o, i| if (o.id == in_seat) {
+            p.add(h, &rows, f, o, i, in_seat, false, live, n_kept) catch {
+                h.oom = true;
+                return &.{};
+            };
+        };
         var last: usize = 0;
         for (all, 0..) |o, i| {
             if (!p.keeps(o, i, in_seat)) continue;
+            if (pin and o.id == in_seat) {
+                last = i;
+                continue;
+            }
             p.add(h, &rows, f, o, i, in_seat, !searching and i > last + 1, live, n_kept) catch {
                 h.oom = true;
                 return &.{};

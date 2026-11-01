@@ -286,6 +286,21 @@ test "sort and a row's breakdown; other tabs hide the panel; a full board says s
     try has(try p.shown(), "Every seat is filled");
 }
 
+test "a filled seat chosen: its champion's row first, its breakdown open" {
+    var p: Panel = undefined;
+    try p.init("#b=266-0-0-0-0&r=122-0-0-0-0");
+    defer p.deinit();
+    try testing.expectEqual(0, p.state.open);
+    try p.hashed("#b=266-0-0-0-0&r=122-0-0-0-0&s=0");
+    try testing.expectEqual(266, p.state.open);
+    const s = try p.shown();
+    try has(s, "Top strength");
+    try testing.expect(std.mem.find(u8, s, "Why Aatrox").? < std.mem.find(u8, s, "Why Darius") orelse s.len);
+    // An empty seat chosen opens nothing
+    try p.hashed("#b=266-0-0-0-0&r=122-0-0-0-0&s=1");
+    try testing.expectEqual(0, p.state.open);
+}
+
 test "the feed: the seat's options, sorted by the low end or by fit, another seat's left out; its bytes" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
