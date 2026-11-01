@@ -103,6 +103,7 @@ const usage = usage_head ++
     cmd_data.usage_backup ++
     cmd_data.usage_restore ++
     cmd_data.usage_forget ++
+    cmd_data.usage_complete ++
     cmd_desktop.usage_desktop_sign ++
     cmd_lab.usage_lab_place ++
     cmd_lab.usage_lab_sweep ++
@@ -173,6 +174,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "backup", cmd_data.cmdBackup },
     .{ "restore", cmd_data.cmdRestore },
     .{ "forget", cmd_data.cmdForget },
+    .{ "complete", cmd_data.cmdComplete },
     .{ "desktop-sign", cmd_desktop.cmdDesktopSign },
     .{ "desktop-curves", cmd_desktop.cmdDesktopCurves },
     .{ "lab-place", cmd_lab.cmdLabPlace },

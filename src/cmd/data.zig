@@ -347,6 +347,105 @@ pub fn cmdRestore(c: *Cmd) !u8 {
     return 0;
 }
 
+pub const usage_complete =
+    \\  complete    read complete form day files back (riot/complete.zig): per file its
+    \\              frames, documents, share kept raw, repeated keys and sizes
+    \\              FILE...          day files (.cfd or .cfd.part)
+    \\              --check          decode every document too (slow: all of the JSON)
+    \\              --keys           every document: key, fetch time, block or raw
+    \\
+;
+
+pub fn cmdComplete(c: *Cmd) !u8 {
+    const io = c.init.io;
+    const gpa = c.init.gpa;
+    var files: std.ArrayList([]const u8) = .empty;
+    var check = false;
+    var keys = false;
+    while (c.next()) |arg| {
+        if (c.is("--check")) {
+            check = true;
+        } else if (c.is("--keys")) {
+            keys = true;
+        } else if (std.mem.startsWith(u8, arg, "--")) {
+            return error.Usage;
+        } else try files.append(c.arena, arg);
+    }
+    if (files.items.len == 0) {
+        c.flag = "FILE";
+        return error.Usage;
+    }
+    var buf: [4096]u8 = undefined;
+    var fw = std.Io.File.stdout().writer(io, &buf);
+    const w = &fw.interface;
+    var bad = false;
+    for (files.items) |path| {
+        const r = readDayFile(gpa, io, path, check, if (keys) w else null) catch |err| {
+            std.log.err("{s}: {t}", .{ path, err });
+            bad = true;
+            continue;
+        };
+        const docs = r.packed_docs + r.raw_docs;
+        try w.print("{s}: {d} frames ({d} raw), {d} documents, {d} raw ({d:.2}%), {d} repeated keys, " ++
+            "{d} bytes ({d} a document){s}{s}\n", .{
+            path,                                                                                           r.frames,   r.raw_frames, docs,                                r.raw_docs,
+            pct(r.raw_docs, docs),                                                                          r.repeated, r.bytes,      if (docs > 0) r.bytes / docs else 0, if (check) ", all decode" else "",
+            if (r.tail > 0) ", bytes after the last whole frame (an open file mid-append, or cut)" else "",
+        });
+        try w.flush();
+    }
+    return if (bad) 1 else 0;
+}
+
+fn pct(n: u64, d: u64) f64 {
+    return if (d == 0) 0 else @as(f64, @floatFromInt(n)) * 100 / @as(f64, @floatFromInt(d));
+}
+
+const DayFileCounts = struct {
+    frames: u64 = 0,
+    raw_frames: u64 = 0,
+    packed_docs: u64 = 0,
+    raw_docs: u64 = 0,
+    repeated: u64 = 0,
+    bytes: u64 = 0,
+    tail: u64 = 0,
+};
+
+fn readDayFile(gpa: std.mem.Allocator, io: std.Io, path: []const u8, check: bool, keys: ?*std.Io.Writer) !DayFileCounts {
+    const dayfile = store.dayfile;
+    const file = try std.Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
+    var seen: std.StringHashMapUnmanaged(void) = .empty;
+    var seen_arena: std.heap.ArenaAllocator = .init(gpa);
+    defer seen_arena.deinit();
+    defer seen.deinit(gpa);
+    var n: DayFileCounts = .{ .bytes = try file.length(io) };
+    var frames: dayfile.Frames = .{ .file = file };
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    while (try frames.next(gpa, io)) |fr| {
+        defer gpa.free(fr.zst);
+        defer _ = arena_state.reset(.retain_capacity);
+        const arena = arena_state.allocator();
+        const docs = if (check) try dayfile.decode(gpa, arena, fr) else (try dayfile.readKeys(arena, try dayfile.inflate(gpa, arena, fr.zst))).docs;
+        n.frames += 1;
+        switch (fr.type) {
+            .block => n.packed_docs += docs.len,
+            .raw => {
+                n.raw_frames += 1;
+                n.raw_docs += docs.len;
+            },
+        }
+        for (docs) |d| {
+            const got = try seen.getOrPut(gpa, d.key);
+            if (got.found_existing) n.repeated += 1 else got.key_ptr.* = try seen_arena.allocator().dupe(u8, d.key);
+            if (keys) |w| try w.print("{s}\t{d}\t{t}\n", .{ d.key, d.t, fr.type });
+        }
+    }
+    n.tail = n.bytes - frames.pos;
+    return n;
+}
+
 pub const usage_forget =
     \\  forget      erase players from every table (docs/data-safety.md)
     \\              --puuid P        repeatable

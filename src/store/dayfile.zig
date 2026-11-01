@@ -143,10 +143,8 @@ pub fn inflate(gpa: Allocator, arena: Allocator, zst: []const u8) ![]u8 {
     return plain;
 }
 
-/// A frame's documents, everything in `arena`. error.Corrupt for anything that is not a
-/// whole frame
-pub fn decode(gpa: Allocator, arena: Allocator, fr: Frame) ![]Doc {
-    const plain = try inflate(gpa, arena, fr.zst);
+/// A plain payload's keys and fetch times (bytes empty), and where its body starts
+pub fn readKeys(arena: Allocator, plain: []const u8) !struct { docs: []Doc, body: usize } {
     var r: Reader = .{ .b = plain };
     const n = try r.varint();
     if (n > plain.len) return error.Corrupt;
@@ -155,6 +153,16 @@ pub fn decode(gpa: Allocator, arena: Allocator, fr: Frame) ![]Doc {
         const t = try r.varint();
         d.* = .{ .t = @bitCast(t), .key = try r.bytes(try r.varint()), .bytes = "" };
     }
+    return .{ .docs = docs, .body = r.i };
+}
+
+/// A frame's documents, everything in `arena`. error.Corrupt for anything that is not a
+/// whole frame
+pub fn decode(gpa: Allocator, arena: Allocator, fr: Frame) ![]Doc {
+    const plain = try inflate(gpa, arena, fr.zst);
+    const k = try readKeys(arena, plain);
+    const docs = k.docs;
+    var r: Reader = .{ .b = plain, .i = k.body };
     switch (fr.type) {
         .raw => {
             for (docs) |*d| d.bytes = try r.bytes(try r.varint());
