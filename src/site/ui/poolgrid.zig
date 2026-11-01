@@ -276,7 +276,8 @@ pub const Page = struct {
             if (pctOf(banned) > 0) h.span(.{ .class = "m" }, .{W.banned_one.with(h, .{ .n = pctOf(banned) })}) else null,
             p.optionFix(h, r, ids, .also),
         }));
-        if (n_all == 0) lines.add(h.el(.li, .{ .data_ok = true }, .{if (thin > 0) W.unclear.with(h, .{ .n = thin }) else W.answered}));
+        // "No lane..." alone reads as filler beside a real weak spot: only as the sole line
+        if (n_all == 0 and (thin > 0 or lines.items.items.len == 0)) lines.add(h.el(.li, .{ .data_ok = true }, .{if (thin > 0) W.unclear.with(h, .{ .n = thin }) else W.answered}));
         return h.div(.{ .class = "weak" }, .{ h.el(.h3, .{}, .{W.weak}), h.el(.ul, .{}, .{lines.done()}) });
     }
 
@@ -781,29 +782,34 @@ test "weak spots: Darius alone top, no answer to Fiora and Yone, Jax covers both
     try testing.expect(std.mem.find(u8, out, "covers 2") != null);
     try testing.expect(std.mem.find(u8, out, "Darius alone: one ban") != null);
     try testing.expect(std.mem.find(u8, out, "Vi alone: one ban") != null);
-    // With Garen top every lane has an answer
+    // With Garen top every lane has an answer; said only when nothing else is
     const both = try render(a, demoPage(&h, "1t-2t").?);
-    try testing.expect(std.mem.find(u8, both, "No lane your whole pool clearly loses") != null);
     try testing.expect(std.mem.find(u8, both, " alone: ") == null);
+    try testing.expect(std.mem.find(u8, both, "No lane your whole pool clearly loses") == null);
     // Darius banned 9.2%, Garen 4.1%: one of them in 13%; Mundo stands in, 50 games into Teemo
     try testing.expect(std.mem.find(u8, both, "One of them banned in 13% of games") != null);
     try testing.expect(std.mem.find(u8, both, "Add Dr. Mundo") != null);
     try testing.expect(std.mem.find(u8, out, "banned in 9% of games") != null);
-    // Both at 2%: one of them in 4%, under the 5% a weak spot needs
-    const low = demoPage(&h, "1t-2t").?;
-    low.d = &low_bans;
-    try testing.expect(std.mem.find(u8, try render(a, low), "One of them banned") == null);
     // Darius and Garen both lean early top; alone, Darius's lean is his own page's
     try testing.expect(std.mem.find(u8, both, "All lean early") != null);
     try testing.expect(std.mem.find(u8, out, "All lean") == null);
-    // Teemo (no lean) with Darius: not all
-    try testing.expect(std.mem.find(u8, try render(a, demoPage(&h, "1t-20t").?), "All lean") == null);
+    // Bans at 2% each: 4%, under the 5% a weak spot needs; Garen not early: not all
+    const q = demoPage(&h, "1t-2t").?;
+    q.d = &quiet;
+    const calm = try render(a, q);
+    try testing.expect(std.mem.find(u8, calm, "One of them banned") == null);
+    try testing.expect(std.mem.find(u8, calm, "All lean") == null);
+    try testing.expect(std.mem.find(u8, calm, "No lane your whole pool clearly loses") != null);
 }
 
-const low_bans: pp.Data = blk: {
+/// The demo with low bans and no lean but Darius's
+const quiet: pp.Data = blk: {
     var d = pp.Demo.data;
     var cs = pp.Demo.champs;
-    for (&cs) |*c| c.ban = @min(c.ban, 20);
+    for (&cs) |*c| {
+        c.ban = @min(c.ban, 20);
+        if (c.id != 1) c.early = 0;
+    }
     const frozen = cs;
     d.champs = &frozen;
     break :blk d;

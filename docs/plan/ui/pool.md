@@ -211,7 +211,8 @@ more opponents, the pool across roles, more information.
       games"; lanes that would be but for a thin or missing cell counted apart ("2 more
       with too few games to tell"), never in the figure. Fix: the What to add option
       covering most of them among the main's hard lanes ("Add Jax, covers 2"). None: one
-      quiet line, "No lane your whole pool clearly loses"
+      quiet line, "No lane your whole pool clearly loses", only when no other weak spot
+      shows (beside one it reads as filler)
     - bans: the role's champions banned often, "One of them banned in 13% of games",
       then each with its ban rate, most banned first; only at 5% or more (1 - the product
       of 1 - each rate, bans taken as independent). Fix: what stands in when the main is
