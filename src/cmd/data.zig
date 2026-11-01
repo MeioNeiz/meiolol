@@ -420,7 +420,7 @@ fn readDayFile(gpa: std.mem.Allocator, io: std.Io, path: []const u8, check: bool
     defer seen_arena.deinit();
     defer seen.deinit(gpa);
     var n: DayFileCounts = .{ .bytes = try file.length(io) };
-    var frames: dayfile.Frames = .{ .file = file };
+    var frames: dayfile.Frames = .{ .file = file, .end = n.bytes };
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     while (try frames.next(gpa, io)) |fr| {

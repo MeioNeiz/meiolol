@@ -93,17 +93,21 @@ pub const Frame = struct { type: Type, zst: []u8 };
 pub const Frames = struct {
     file: Io.File,
     pos: u64 = 0,
+    /// Frames past this are not read: a `.part` the crawler is appending to grows
+    end: ?u64 = null,
 
     /// null at the end of the frames: the end of the file, or a cut or damaged frame
     /// (`pos` is where the whole frames end). zst owned by `gpa`
     pub fn next(f: *Frames, gpa: Allocator, io: Io) !?Frame {
+        const end = f.end orelse try f.file.length(io);
         var h: [header_len]u8 = undefined;
+        if (end -| f.pos < h.len) return null;
         if (try f.file.readPositionalAll(io, &h, f.pos) < h.len) return null;
         if (!std.mem.eql(u8, h[0..magic.len], magic)) return null;
         const t = std.enums.fromInt(Type, h[magic.len]) orelse return null;
         const n = std.mem.readInt(u32, h[magic.len + 1 ..][0..4], .little);
         // A damaged length must not allocate past the file
-        if (n > try f.file.length(io) - f.pos - h.len) return null;
+        if (n > end - f.pos - h.len) return null;
         const zst = try gpa.alloc(u8, n);
         errdefer gpa.free(zst);
         if (try f.file.readPositionalAll(io, zst, f.pos + h.len) < n or
@@ -255,6 +259,11 @@ test "frames read back; a cut or damaged tail is cut, the frames before kept" {
                 try std.testing.expectEqual(want.t, got.t);
                 try std.testing.expectEqualStrings(want.bytes, got.bytes);
             }
+            // A reader that took the length before fb was appended stops at it
+            var frames: Frames = .{ .file = file, .end = fa.len };
+            gpa.free((try frames.next(gpa, io)).?.zst);
+            try std.testing.expectEqual(null, try frames.next(gpa, io));
+            try std.testing.expectEqual(fa.len, frames.pos);
             continue;
         }
         try std.testing.expectError(error.Corrupt, readAll(gpa, arena, io, file_path));
