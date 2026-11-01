@@ -13,7 +13,9 @@ pushes from the box.
   JSON leaves through the raw archive, and under 10 GB free the valve drops unarchived
   raw (Raw archive). More storage: docs/plan/ops.md "Storage and hosts"
 - Off-host: backups mirrored to Megatron outside C01's disk image, the Mac and the
-  gpu-box (Backups); raw on the gpu-box's archive partition
+  gpu-box (Backups); raw on the gpu-box's archive partition. The complete form's day
+  files (data/complete, ~3.5 GB a day estimated) are on the box only: not backed up or
+  mirrored until S4/S5, and the raw valve does not see them
 - The gpu-box keeps its pre-cloud data and backup in /mnt/d/meiolol-backups
   (restore-tested) as an old restore point. Its disks: docs/compute.md
 
@@ -219,6 +221,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | backup mirrors (Mac, gpu-box) | each mirror run fetches the box's forgotten list and `meiolol backup --mirror` scrubs the PUUIDs new to it from every file it holds, including segments the box has pruned (applied list: forgotten-applied.txt in the mirror) |
 | raw archive (gpu-box) | ingest leaves out documents naming a forgotten PUUID; each pull runs `meiolol-lab archive-forget` for PUUIDs new on the box's list, which drops every archived summary, timeline and mastery line naming them (hashed with the salt) |
 | raw exports (box, data/archive-out) | short-lived: deleted on ack; an export holds what raw.db held when it was made |
+| complete form day files (box, data/complete) | not yet: forgotten players' summaries and blank timelines are never written, but documents written before a forget stay until S4 rewrites the files (docs/plan/ops.md "Complete form") |
 | Your games (api.db on the web server) | `forget --data /var/lib/meiolol-api` there: `api.cache.forget` deletes the player, their Riot ID in every cached match (`match_names` by PUUID hash) and adds them to `blocked` |
 | Logins (accounts.db on the web server) | `sudo -u meiolol-api meiolol account delete NAME --data /var/lib/meiolol-api` there: the account, its sessions, desktop app sign-ins and reset invites (privacy page "Accounts") |
 | analysis snapshots (Mac, gpu-box) | re-erased when made, hashed, deleted when replaced (Analysis snapshots, below) |

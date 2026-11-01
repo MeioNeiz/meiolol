@@ -15,6 +15,7 @@ const match = @import("match.zig");
 const crawl = @import("crawl.zig");
 const sparse = @import("sparse.zig");
 const archive = @import("../archive.zig");
+const complete_form = @import("complete.zig");
 
 const log = std.log.scoped(.crawl);
 
@@ -54,6 +55,9 @@ pub const Job = struct {
     /// Set by applyOne, counted once the batch commits: false when the job stored nothing
     /// (a document that was refused, a timeline that failed to parse)
     stored: bool = false,
+    /// Set by apply: its document goes into the complete form once committed (where raw
+    /// would be kept: no forgotten player's, no blank timeline)
+    complete: bool = false,
 
     pub fn create(gpa: std.mem.Allocator, kind: Kind) !*Job {
         const job = try gpa.create(Job);
@@ -74,8 +78,9 @@ pub const Job = struct {
 
 pub const Kind = union(enum) {
     ladder: struct { platform: ep.Platform, tier: []const u8, division: []const u8, page: u32, entries: []const ep.LeagueEntry, t: i64 },
-    /// blob null: Riot does not know the PUUID, so the player goes
-    mastery: struct { puuid: []const u8, platform: []const u8, t: i64, champions: usize, blob: ?[]const u8 },
+    /// blob null: Riot does not know the PUUID, so the player goes. raw: Riot's body as
+    /// gzip, for the complete form only
+    mastery: struct { puuid: []const u8, platform: []const u8, t: i64, champions: usize, blob: ?[]const u8, raw: ?[]const u8 = null },
     /// found: ids new to the queue, set by apply
     match_ids: struct { ids: []const []const u8, discovered_at: i64, region: ep.Region, source: crawl.Source = .stale, found: u32 = 0 },
     checked: struct { puuid: []const u8, t: i64 },
@@ -271,6 +276,7 @@ pub const Writer = struct {
                 } else log.info("writer: the checkpointer is back, the writer stops checkpointing", .{});
             }
             wr.counted(batch.items);
+            if (wr.c.packer) |p| try toPacker(p, batch.items);
             const pages = db.pageCounts();
             wr.stats.pages_written.store(pages.written, .monotonic);
             wr.stats.pages_read.store(pages.missed, .monotonic);
@@ -352,10 +358,12 @@ pub const Writer = struct {
     /// crawler (on restart the same match would come first again)
     fn applyOne(wr: *Writer, db: store.Db, s: *Stmts, job: *Job) !void {
         job.stored = false;
+        job.complete = false;
         try db.exec("SAVEPOINT job");
         const stored = wr.apply(db, s, job) catch |err| {
             db.exec("ROLLBACK TO job") catch {};
             try db.exec("RELEASE job");
+            job.complete = false;
             switch (err) {
                 error.Sqlite => {},
                 else => return err,
@@ -403,6 +411,7 @@ pub const Writer = struct {
             },
             .mastery => |m| if (m.blob) |blob| {
                 try s.mastery.exec(.{ m.puuid, m.platform, wr.stamp, m.champions, store.Blob{ .bytes = blob } });
+                job.complete = m.raw != null;
             } else {
                 // Riot does not know the PUUID: an erased or moved account. Forget it
                 // now rather than wait for the 30-day unseen expiry
@@ -416,8 +425,8 @@ pub const Writer = struct {
             },
             .checked => |ch| try s.checked.exec(.{ ch.t, ch.puuid }),
             .patch_start => |p| try s.patch_start.exec(.{ @tagName(p.platform.region), p.platform.id, p.start_s }),
-            .match => |m| return try wr.storeMatch(s, m.region, m.id, m.doc, m.raw, m.t, m.timeline),
-            .timeline => |t| return try wr.storeTimeline(s, t.id, t.raw, t.compact),
+            .match => |m| return try wr.storeMatch(s, m.region, m.id, m.doc, m.raw, m.t, m.timeline, &job.complete),
+            .timeline => |t| return try wr.storeTimeline(s, t.id, t.raw, t.compact, &job.complete),
             .queue => |q| switch (q.which) {
                 .match => switch (q.status) {
                     .attempt => try s.match_attempt.exec(.{q.id}),
@@ -432,7 +441,7 @@ pub const Writer = struct {
         return true;
     }
 
-    fn storeMatch(wr: *Writer, s: *Stmts, r: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64, want_timeline: bool) !bool {
+    fn storeMatch(wr: *Writer, s: *Stmts, r: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64, want_timeline: bool, complete: *bool) !bool {
         // Rows are keyed by the document's id and the queue by the requested one: were
         // they to differ, blanking and forget would miss the rows. Never seen; fail it
         if (!std.mem.eql(u8, doc.metadata.matchId, id)) {
@@ -447,6 +456,7 @@ pub const Writer = struct {
         }
         // The raw JSON names every player, so none is kept for a forgotten one's match
         if (!any_forgotten) try s.raw_doc.exec(.{ "riot_match", id, wr.stamp, store.Blob{ .bytes = raw } });
+        complete.* = !any_forgotten;
         try s.rows.write(doc, "riot", existed);
         const platform = doc.info.platformId orelse if (ep.platformOf(id)) |p| p.id else null;
         var game: sparse.Game = .{};
@@ -486,7 +496,7 @@ pub const Writer = struct {
         return true;
     }
 
-    fn storeTimeline(wr: *Writer, s: *Stmts, id: []const u8, raw: ?[]const u8, compact: ?crawl.Compact) !bool {
+    fn storeTimeline(wr: *Writer, s: *Stmts, id: []const u8, raw: ?[]const u8, compact: ?crawl.Compact, complete: *bool) !bool {
         // Raw timelines carry PUUIDs: none kept when a player is blank (forgotten, or a
         // match from before a rekey)
         try s.blank.bind(.{id});
@@ -502,7 +512,28 @@ pub const Writer = struct {
         try s.timeline.exec(.{ id, ct.frames, ct.events, store.Blob{ .bytes = ct.blob } });
         try crawl.storeGold(&s.gold, id, ct.participants, ct.gold);
         try s.timeline_done.exec(.{id});
+        complete.* = !blank and raw != null;
         return true;
+    }
+
+    /// Committed documents to the complete form
+    fn toPacker(p: *complete_form.Packer, jobs: []const *Job) !void {
+        var key_buf: [160]u8 = undefined;
+        for (jobs) |job| {
+            if (!job.stored or !job.complete) continue;
+            const item: complete_form.Item = switch (job.kind) {
+                .match => |m| .{ .kind = .summary, .key = m.id, .t = m.t, .gz = m.raw },
+                .timeline => |t| .{ .kind = .timeline, .key = t.id, .t = t.t, .gz = t.raw orelse continue },
+                .mastery => |m| .{
+                    .kind = .mastery,
+                    .key = std.fmt.bufPrint(&key_buf, "{s}:{s}", .{ m.platform, m.puuid }) catch continue,
+                    .t = m.t,
+                    .gz = m.raw orelse continue,
+                },
+                else => continue,
+            };
+            try p.push(item);
+        }
     }
 };
 

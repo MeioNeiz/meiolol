@@ -18,6 +18,7 @@ pub const usage_crawl =
     \\              --patch-only     match ids only from each platform's newest patch;
     \\                               older patches' matches get no timeline
     \\              --no-mastery     skip champion mastery
+    \\              --no-complete    no day files of every document (complete form)
     \\              --mastery-sweep-days N  the first participant mastery pass after
     \\                               start covers games N days back, not 7 (one-time
     \\                               sweep; refreshes stay weekly)
@@ -77,6 +78,8 @@ pub fn cmdCrawl(c: *Cmd) !u8 {
     while (c.next()) |_| {
         if (c.is("--no-mastery")) {
             o.mastery = false;
+        } else if (c.is("--no-complete")) {
+            o.complete = false;
         } else if (c.is("--mastery-sweep-days")) {
             o.mastery_sweep_days = try c.int(u32);
         } else if (c.is("--no-participant-players")) {

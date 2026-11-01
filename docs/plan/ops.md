@@ -135,9 +135,11 @@ coordinator first):
   data/team/2026-10-30-steady/w6/jblock.zig); ~3.2 GB a day. Next lever if needed: a
   damage entry's name, spell and slot repeat together. std has no zstd compressor:
   blocks go through the zstd binary (as raw exports do) or a vendored libzstd (S3)
-- S3 the crawler writes the complete form for every summary, timeline and mastery
-  fetch: sealed per-day files on the data disk (outside SQLite, so the writer's WAL
-  doesn't carry the bytes), raw kept only for a document that fails its check
+- S3 built (src/riot/complete.zig, store/dayfile.zig; architecture.md "Storage"): the
+  crawler writes every stored summary, timeline and mastery body to sealed per-day
+  files on the data disk (outside SQLite, so the writer's WAL doesn't carry the
+  bytes); a document that fails its block check goes in a raw frame. Raw keeps going
+  beside it until S6. Not yet measured on the box: sizes, zstd CPU, raw frame share
 - S4 forget rewrites the day files it touches (an erased document no longer equals the
   original), the 24-month sweep blanks the same; backups, restore test, health lines
 - S5 the gpu-box pulls day files instead of raw exports and pseudonymises them as the

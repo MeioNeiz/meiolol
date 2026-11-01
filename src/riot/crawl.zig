@@ -21,6 +21,7 @@ const match = @import("match.zig");
 const timeline = @import("timeline.zig");
 const mastery = @import("mastery.zig");
 const writer = @import("writer.zig");
+const complete = @import("complete.zig");
 const sparse = @import("sparse.zig");
 const Job = writer.Job;
 
@@ -91,6 +92,9 @@ pub const Options = struct {
     /// Rolling window: matches, their rows and timelines go this long after game
     /// start; 0 = forever
     keep_days: u32 = 0,
+    /// Every stored summary, timeline and mastery body also goes byte-exact into the
+    /// day files (complete.zig); needs zstd on PATH
+    complete: bool = true,
     /// Under this much free space on the data disk the writer drops raw the archive
     /// never got, oldest first (archive.valve); 0: never
     raw_valve_free_mb: u64 = 0,
@@ -164,6 +168,8 @@ pub const Crawler = struct {
     failure_lock: std.Io.Mutex = .init,
     /// Set up by run()
     writer: writer.Writer = undefined,
+    /// Set up by run() with Options.complete
+    packer: ?*complete.Packer = null,
     /// From the database at start; each RegionCrawler keeps its own copy up to date
     patches: Patches = .{},
     /// Set up by run(): shared by the bucket threads and the proxy
@@ -207,6 +213,17 @@ pub const Crawler = struct {
             c.patches.log();
         }
 
+        var packer: complete.Packer = undefined;
+        if (c.opts.complete) {
+            packer = try .init(c.gpa, c.io, c.opts.data_dir);
+            try packer.start();
+            c.packer = &packer;
+        }
+        // After the writer stopped (defers run last first)
+        defer if (c.packer) |p| {
+            p.close();
+            c.packer = null;
+        };
         c.writer = .{ .c = c };
         defer c.writer.deinit();
         const writer_thread = try std.Thread.spawn(.{}, writer.Writer.run, .{&c.writer});
@@ -1277,7 +1294,7 @@ const RegionCrawler = struct {
                 break :blk null;
             },
         };
-        const keep_raw = rc.b.c.opts.raw_timeline_days > 0 or compact == null;
+        const keep_raw = rc.b.c.opts.raw_timeline_days > 0 or compact == null or rc.b.c.opts.complete;
         job.kind = .{ .timeline = .{
             .region = rc.region,
             .id = try a.dupe(u8, id),
@@ -1595,6 +1612,7 @@ const PlatformCrawler = struct {
             .t = t,
             .champions = entries.len,
             .blob = if (got != null) try mastery.encode(a, entries, t) else null,
+            .raw = if (got != null and pc.b.c.opts.complete) try store.raw.compress(a, got.?) else null,
         } };
         try pc.b.submit(job);
     }

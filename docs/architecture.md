@@ -131,6 +131,20 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   (`--raw-match-days`), `timeline_docs` timelines 7 days (`--raw-timeline-days`, 0
   keeps none; ones that failed to parse are kept). `meiolol rebuild` re-parses kept summaries into the
   tables after a parser or schema change. Mastery is not kept raw
+- `complete/`: every summary, timeline and mastery body the crawler stores (not a
+  forgotten player's summary, nor a blank timeline), byte-exact, in day files
+  `YYYY-MM-DD.<summary|timeline|mastery>.cfd` (`.cfd.part` while the UTC day is open;
+  a sealed file is never written again). Frames (src/store/dayfile.zig): magic, type
+  (jsonpack block or raw), length, crc32, then one zstd -19 frame of each document's
+  key (match id; mastery `PLATFORM:puuid`) and fetch time, then the block or the raw
+  bodies. src/riot/complete.zig: the writer hands committed documents to a Packer
+  thread (spool segment in `complete/spool/`, gzip, no fsync; jsonpack block of 256),
+  each block decoded and compared per document before zstd (binary on PATH, niced),
+  read back, appended, fsynced; a document that fails goes raw, alone. Start cuts a
+  torn last frame, seals older days' `.part` files and replays the spool, so a crash
+  loses only documents not yet spooled; readers keep one document per key (a crash
+  between a frame's fsync and its segment's delete stores it twice). `--no-complete`
+  turns it off
 - `timeline.db`: `timelines`, one compact blob per match (src/riot/timeline.zig: per
   minute per participant gold, xp, level, CS, position, damage, CC; events: kills
   with position, items, skills, wards, buildings, plates, monsters, transforms). ~8.6

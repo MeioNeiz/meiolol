@@ -127,7 +127,7 @@ pub fn exportNew(arena: std.mem.Allocator, io: Io, db: store.Db, dir: []const u8
     };
 }
 
-fn syncPath(io: Io, path: []const u8, kind: enum { file, directory }) !void {
+pub fn syncPath(io: Io, path: []const u8, kind: enum { file, directory }) !void {
     const cwd = Io.Dir.cwd();
     switch (kind) {
         .file => {

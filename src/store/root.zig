@@ -5,6 +5,7 @@ pub const schema = @import("schema.zig");
 pub const raw = @import("raw.zig");
 pub const rawpack = @import("rawpack.zig");
 pub const jsonpack = @import("jsonpack.zig");
+pub const dayfile = @import("dayfile.zig");
 pub const draft = @import("draft.zig");
 pub const ahead = @import("ahead.zig");
 
