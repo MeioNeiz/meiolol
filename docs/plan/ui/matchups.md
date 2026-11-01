@@ -28,8 +28,10 @@ champion": they know one. Nobody comes to read 5,000 rows.
 - With one champion picked: its MatchupGrid (the champion page's component, same
   RelationPicker, Against preselected) under the slots, so the second pick can be a tile
   tap
-- Nothing picked: a RolePicker, then three short `ChampList`s for that role side by side
-  (8 rows each, every row a matchup page): Moved this patch (clear win rate moves, then
+- Nothing picked: a RolePicker (All first, the default: every lane's pairs, each row
+  with its role), then three short `ChampList`s side by side (8 rows each, every row a
+  matchup page, drawn as a duel: both portraits, the names over the lane's win rate bar
+  with its 95% range, a ring where a patch move started; Jacob 1 Nov, notes 61-62): Moved this patch (clear win rate moves, then
   the surest others down to 100 games a patch, faint with ±range; from the side that
   gained, link to the patch page), Hardest lanes (lowest win rates from the losing side,
   ranked by the upper end of the 95% range), Lane bullies (biggest median gold lead at
@@ -42,7 +44,7 @@ champion": they know one. Nobody comes to read 5,000 rows.
 ```
 h1 Matchups
 ChampRolePicker pair  [ Your champion ▾ ] ⇄ [ Opponent ▾ ]   RolePicker (after 1st pick)
-(nothing picked)  RolePicker
+(nothing picked)  RolePicker (All first)
                   Moved this patch | Hardest lanes | Lane bullies   (8 rows each)
 (one picked)      MatchupGrid of that champion, Against its lane
 ```
