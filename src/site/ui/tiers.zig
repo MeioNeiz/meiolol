@@ -189,6 +189,8 @@ const W = struct {
     pub const win_note = plain("Faint under 1,000 games: could be luck.");
     pub const influence_note = plain("Games its team won above the role's average, per 10,000 games it wasn't banned: its win rate over the role's, pulled toward it when games are few, times how often it was picked.");
     pub const minus = Phrase("\u{2212}{n:int}");
+    pub const key_in = plain("Influence: extra wins it gives its team per 10,000 games, against the role's average.");
+    pub const key_pl = plain(" Players: how its players' own win rates spread.");
     pub const players_note = plain("Each player's own win rate on it (10+ games), 25% to 75%. Thicker where more players are; the dot is the champion's. In 10-20 games luck alone moves a player by about 15 points.");
     pub const change = Phrase("{d:points} ±{ci:dec} points");
     pub const was = Phrase("{prev:text} {a:rate} of {an:count} → {cur:text} {b:rate} of {bn:count}");
@@ -650,6 +652,7 @@ pub const Tiers = struct {
             }),
             card.view(h, .{ .flush = true }, &.{
                 t.movers(h),
+                t.key(h),
                 if (t.onBoard()) t.board(h) else if (t.role == null and t.table.q.slice().len == 0) h.div(.{}, .{ h.div(.{ .class = "bs" }, .{t.layout(h)}), t.table.view(h) }) else t.table.view(h),
             }),
             violin.defs(h),
@@ -659,6 +662,12 @@ pub const Tiers = struct {
     /// All with no search: each role's column side by side, unless one table is asked for
     fn onBoard(t: *const T) bool {
         return t.role == null and t.table.q.slice().len == 0 and !t.whole;
+    }
+
+    /// Influence and Players in plain words: their header tips went unopened in walks.
+    /// The board has no Players column
+    fn key(t: *const T, h: *H) N {
+        return h.p(.{ .class = "key" }, .{ W.key_in, if (t.onBoard()) null else W.key_pl });
     }
 
     fn layout(t: *T, h: *H) N {
@@ -833,6 +842,7 @@ pub const css =
     \\  .c-tiers .moved .more { margin-left: auto; font-size: var(--fs-s); white-space: nowrap; }
     \\  .c-tiers .c-table-wrap { overflow-x: clip; }
     \\  .c-tiers .rb { container-type: inline-size; }
+    \\  .c-tiers .key { margin: 0; padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--line); color: var(--muted); font-size: var(--fs-s); }
     \\  .c-tiers .bs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4);
     \\    border-bottom: 1px solid var(--line); }
     \\  .c-tiers .rb .cols { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }

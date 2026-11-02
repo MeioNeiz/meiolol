@@ -122,6 +122,15 @@ const method_md =
     \\  200: with few games a rate can sit far from the truth. Sorting by win rate uses
     \\  the rate pulled toward the average, the more so the fewer its games, so a few
     \\  lucky games can't top a table.
+    \\- **Influence**: extra games its team wins per 10,000 games in which it could be
+    \\  picked, against the role's average. Its win rate over the role's, pulled toward
+    \\  the average when games are few, times its pick rate, over the share of games it
+    \\  wasn't banned in. A small edge on a popular champion can outweigh a big one on a
+    \\  rare pick.
+    \\- **Players**: each player's own win rate on the champion, for players with 10 or
+    \\  more games on it, drawn from 25% to 75% and thicker where more players are; the
+    \\  dot is the champion's. In 10 to 20 games luck alone moves a player by about 15
+    \\  points, so a wide spread is partly luck.
     \\- **Lane opponents**: the champion's win rate against each lane opponent and
     \\  the lane curve's gold difference at 14 minutes. Every opponent is listed, hardest
     \\  first; those with under 10 games are faded and listed last.

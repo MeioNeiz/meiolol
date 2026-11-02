@@ -167,7 +167,8 @@ Override the sections above where they differ.
    word that doesn't say ban. Now: "Influence" (J20's score, wins above the role's
    average per 10,000 games it wasn't banned, whole numbers, faint below 0) in the
    table and as the board's second figure under Win rate; Influence is a board sort.
-   The patch change stays in the Moved band and in the win rate cell's tap ("+0.9 ±3.0
+   A muted key line above the board or table says it in words (and Players, on a
+   table: walks never opened the head tips); the formula is in Method. The patch change stays in the Moved band and in the win rate cell's tap ("+0.9 ±3.0
    points, 16.20 51.0% of 3,000 → 16.21 51.9% of 1,600")
 2. Note 60: a way to see every row together (read as: all roles in one table, with the
    Players violins). Now: under All, "By role | One table" beside the board's sort; the

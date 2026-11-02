@@ -225,6 +225,21 @@ test "influence: a column and the board's second figure, named in its head; the 
     try testing.expect(std.mem.find(u8, page, "<b>+0.9 ±3.0 points</b>16.20 51.0% of 3,000 → 16.21 51.9% of 1,600 Could be luck.") != null);
 }
 
+test "the key line: Influence on the board, Players too on a role's table" {
+    var p: Page = undefined;
+    try p.init("#min=0", null);
+    defer p.deinit();
+    const in = "<p class=\"key\">Influence: extra wins";
+    const pl = "Players: how its players' own win rates spread.";
+    var page = try p.shown();
+    try testing.expect(std.mem.find(u8, page, in) != null);
+    try testing.expect(std.mem.find(u8, page, pl) == null);
+    _ = p.rt.event(0, .{ .kind = .click, .target = p.id("aria-label", "Mid") });
+    page = try p.shown();
+    try testing.expect(std.mem.find(u8, page, in) != null);
+    try testing.expect(std.mem.find(u8, page, pl) != null);
+}
+
 test "All as one table: every role's rows, sorted by the head, back to the board" {
     var p: Page = undefined;
     try p.init("#min=0", null);
