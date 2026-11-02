@@ -52,6 +52,7 @@ const W = struct {
     pub const chance = Phrase("{side:text}'s win chance");
     pub const with_ = plain("with");
     pub const vs_avg = plain("vs average");
+    pub const b_head = Phrase("{n:text}: rank, vs its average");
     pub const fit_h = plain("fit");
     pub const average = Phrase("Average {r:text}");
     pub const strength = Phrase("{r:text} strength");
@@ -118,8 +119,9 @@ pub const Opt = struct {
     parts: []const Part,
     rest: f32,
     gold: ?tl.Gold = null,
-    /// The seat's side's chance with it under the model compared, %
+    /// The seat's side's chance with it under the model compared, %, and its rank there
     b: ?f32 = null,
+    b_rank: u16 = 0,
 
     /// Points over the role's average pick
     fn total(o: *const Opt, f: *const Feed) f32 {
@@ -204,11 +206,19 @@ pub fn addLane(a: std.mem.Allocator, f: *Feed, load: tp.Load, sc: *const tl.Scor
     f.opp = opp;
 }
 
-/// Each option's chance under `l`, the model compared
+/// The compared model's picks: its first this many rows marked. Ranks 10 or more apart
+/// from the shown model's marked 21 of the first 30 rows on a real board: no signal
+const b_top = 5;
+
+/// Each option's chance under `l`, the model compared, and its rank there
 pub fn addVs(a: std.mem.Allocator, f: *Feed, vs: tp.Which, l: *const tp.Loaded) !void {
     if (f.load != .ready or f.seat >= 2 * n_role) return;
     const opts = try a.dupe(Opt, f.opts);
     for (opts) |*o| o.b = sideChance(l, f, o.id);
+    for (opts) |*o| {
+        o.b_rank = 1;
+        for (opts) |x| o.b_rank += @intFromBool(x.b.? > o.b.?);
+    }
     f.opts = opts;
     f.vs = vs;
     f.b_empty = sideChance(l, f, 0);
@@ -459,9 +469,9 @@ pub const Panel = struct {
                 .rows = rows,
                 .head = .{ W.chance.with(h, .{ .side = side.s }), W.with_, if (p.sort == .fit) W.fit_h else W.vs_avg },
                 .ref_label = W.in_seat,
-                .base = if (p.q.len == 0) .{ .label = W.average.with(h, .{ .r = roleName(r) }), .win = f.empty, .b = if (f.vs != null) f.b_empty else null } else null,
+                .base = if (p.q.len == 0) .{ .label = W.average.with(h, .{ .r = roleName(r) }), .win = f.empty } else null,
                 .extra = if (f.lane) .{ .head = W.gold_h, .cuts = gold_cuts } else null,
-                .b_head = if (f.vs) |w| tp.infos.get(w).short else null,
+                .b_head = if (f.vs) |w| W.b_head.with(h, .{ .n = tp.infos.get(w).short.s }) else null,
             }) else h.p(.{ .class = "wait" }, .{W.none}),
         });
     }
@@ -580,8 +590,9 @@ pub const Panel = struct {
             .gap = gap,
             .open = open,
             .x = if (o.gold) |g| g.v else null,
-            .b = o.b,
+            .b_rank = if (o.b != null) o.b_rank else null,
             .b_vs = if (o.b) |b| b - f.b_empty else null,
+            .b_top = o.b != null and o.b_rank <= b_top,
             .detail = if (open) p.breakdown(h, f, o) else null,
             .note = if (open) p.laneLine(h, f, o) else null,
             .label = W.why.with(h, .{ .n = nm }),

@@ -314,7 +314,7 @@ test "the model Select switches, a failed model retries; tabs show terms and fil
     try has(try p.shown(), "lab/draft-model.bin: no reference drafts");
 }
 
-test "vs a second model: its tick and chance on the split, in the URL; chosen as the model, the two swap; none" {
+test "vs a second model: a second named split, the gap in words, in the URL; chosen as the model, the two swap; none" {
     var p: Page = undefined;
     try p.init();
     defer p.deinit();
@@ -324,7 +324,7 @@ test "vs a second model: its tick and chance on the split, in the URL; chosen as
     p.state.loads.set(.live, .{ .ready = &p.l });
     p.state.teams[0][0] = 266;
     p.i.render();
-    try testing.expect(std.mem.find(u8, try p.shown(), "class=\"bt\"") == null);
+    try testing.expect(std.mem.find(u8, try p.shown(), "class=\"two\"") == null);
 
     // The vs menu: none, then the models other than the shown one
     p.state.loads.set(.comp, .failed);
@@ -339,7 +339,10 @@ test "vs a second model: its tick and chance on the split, in the URL; chosen as
     var want: std.Io.Writer.Allocating = .init(p.arena.allocator());
     try fmt.write(&want.writer, .rate, b);
     try has(try p.shown(), want.written());
-    try has(try p.shown(), "Comp model");
+    try has(try p.shown(), "class=\"two\"");
+    try has(try p.shown(), "Live model");
+    try has(try p.shown(), "Comp model gives Blue ");
+    try has(try p.shown(), " pts more");
 
     // Comp as the model: Live is compared instead
     p.click(p.nth("role", "option", 1));
@@ -351,7 +354,7 @@ test "vs a second model: its tick and chance on the split, in the URL; chosen as
     try testing.expectEqual(.live, p.state.vs.?);
     p.click(p.nth("role", "option", 2));
     try testing.expectEqual(null, p.state.vs);
-    try testing.expect(std.mem.find(u8, try p.shown(), "class=\"bt\"") == null);
+    try testing.expect(std.mem.find(u8, try p.shown(), "class=\"two\"") == null);
 }
 
 test "the set net on the Comp model: a line under the split, its parts in Terms, Files; another base hides it" {

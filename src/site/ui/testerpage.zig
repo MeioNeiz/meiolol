@@ -81,6 +81,9 @@ const W = struct {
     pub const weak = Phrase("weak {r:text}");
     pub const into_l = Phrase("into {n:text}");
     pub const with_l = Phrase("with {n:text}");
+    pub const gap_more = Phrase("{n:text} gives Blue {d:dec} pts more");
+    pub const gap_less = Phrase("{n:text} gives Blue {d:dec} pts less");
+    pub const agree = Phrase("{n:text} agrees within 1 pt");
     pub const why_draft = Phrase("Why {side:text} {p:rate}");
     pub const average_draft = plain("Every seat an average pick");
     pub const this_draft = plain("Blue, this draft");
@@ -510,15 +513,28 @@ pub const Page = struct {
             else => W.loading,
         }});
         const c = l.sc.blue(p.teams);
-        const b: ?f32 = if (p.vsReady()) |x| @floatCast(100 * x.sc.blue(p.teams).p) else null;
-        return split.view(h, .{
-            .p = @floatCast(100 * c.p),
-            .lo = @floatCast(100 * c.lo),
-            .hi = @floatCast(100 * c.hi),
-            .b = b,
-            .b_name = if (b != null) infos.get(p.vs.?).short else null,
-            .s = .l,
+        const one = splitOf(h, c);
+        const x = p.vsReady() orelse return one;
+        const b = x.sc.blue(p.teams);
+        const d = 100 * (b.p - c.p);
+        const n = infos.get(p.vs.?).short.s;
+        // Same size bars, so the two splits line up on one scale
+        return h.div(.{ .class = "two" }, .{
+            h.span(.{}, .{infos.get(p.which).short}),
+            one,
+            h.span(.{}, .{infos.get(p.vs.?).short}),
+            splitOf(h, b),
+            h.p(.{}, .{if (@abs(d) < 1)
+                W.agree.with(h, .{ .n = n })
+            else if (d > 0)
+                W.gap_more.with(h, .{ .n = n, .d = d })
+            else
+                W.gap_less.with(h, .{ .n = n, .d = -d })}),
         });
+    }
+
+    fn splitOf(h: *H, c: anytype) N {
+        return split.view(h, .{ .p = @floatCast(100 * c.p), .lo = @floatCast(100 * c.lo), .hi = @floatCast(100 * c.hi), .s = .l });
     }
 
     /// The draft's timing from its picks' leans, once both teams have one
@@ -910,6 +926,10 @@ pub const css =
     \\  .c-tester .bans > .line { color: var(--muted); font-size: var(--fs-s); margin-right: var(--sp-1); }
     \\  .c-tester .bans > .ban { padding: 0; border: 0; background: none; cursor: pointer; }
     \\  .c-tester .acts { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
+    \\  .c-tester > .two { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-1) var(--sp-3); align-items: start; }
+    \\  .c-tester > .two > span { font-size: var(--fs-s); color: var(--muted); font-weight: var(--w-m); padding-top: 0.55em; }
+    \\  .c-tester > .two > p { grid-column: 2; margin: 0; font-weight: var(--w-m); }
+    \\  @container (max-width: 480px) { .c-tester > .two { grid-template-columns: minmax(0, 1fr); } .c-tester > .two > p { grid-column: 1; } }
     \\  .c-tester .lean { margin: 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-tester .lean > b { color: var(--text); font-weight: var(--w-m); }
     \\  .c-tester .why { display: grid; gap: var(--sp-1); width: 100%; max-width: 720px; }
@@ -986,6 +1006,15 @@ pub fn gallery(g: *Gallery) void {
     p.loads.set(.comp, .failed);
     p.teams = .{ .{ 266, 64, 103, 222, 117 }, .{ 122, 254, 61, 51, 412 } };
     g.add("every seat picked: why blue's chance", p.view(g.h));
+    const c = a.create(Loaded) catch return;
+    c.* = .{ .m = Demo.model(), .sc = undefined, .check = .{ .drafts = 0, .worst = 0 } };
+    c.m.params.intercept = &.{0.4};
+    c.sc = c.m.scorer(a) catch return;
+    const q = a.create(Page) catch return;
+    q.* = p.*;
+    q.vs = .comp;
+    q.loads.set(.comp, .{ .ready = c });
+    g.add("Comp model compared: two splits, the gap", q.view(g.h));
 }
 
 const testing = std.testing;

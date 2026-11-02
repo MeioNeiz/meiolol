@@ -436,10 +436,12 @@ test "vs a second model: each option's chance under it for the seat's side, a co
     const want = 100 * comp.sc.blue(.{ .{ 122, 0, 0, 0, 0 }, .{ 266, 0, 0, 0, 0 } }).p;
     try testing.expectApproxEqAbs(want, o.b.?, 1e-3);
     try testing.expect(o.b.? > o.p);
+    try testing.expectEqual(1, o.b_rank);
     const avg = 100 * comp.sc.blue(.{ @splat(0), .{ 266, 0, 0, 0, 0 } }).p;
     try testing.expectApproxEqAbs(avg, p.feed.b_empty, 1e-3);
     const s = try p.shown();
-    try has(s, "Comp model");
+    try has(s, "Comp model: rank, vs its average");
+    try has(s, "#1");
     try has(s, "data-b");
     // Red's seat: red's chance, so under a bluer intercept it falls
     var f = try tc.feed(a, &tp.Demo.head, .{ .ready = &p.l }, .live, .{ .{ 266, 0, 0, 0, 0 }, @splat(0) }, @splat(0), n_role);

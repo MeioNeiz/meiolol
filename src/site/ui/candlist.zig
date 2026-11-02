@@ -49,10 +49,11 @@ pub const Row = struct {
     vs: ?f32 = null,
     /// The list's extra column (List.extra); null leaves the cell empty
     x: ?f32 = null,
-    /// The team's win chance with it under a second model (List.b_head), %, and its
-    /// points there over that model's reference
-    b: ?f32 = null,
+    /// Under a second model (List.b_head): its rank there, its points over that model's
+    /// reference, and whether it is among that model's first picks (marked)
+    b_rank: ?u32 = null,
     b_vs: ?f32 = null,
+    b_top: bool = false,
     reasons: []const Reason = &.{},
     /// A neutral Badge after the reasons ("harder to pick up")
     tag: ?tree.Text = null,
@@ -92,8 +93,6 @@ pub const Base = struct {
     /// "Average top"
     label: tree.Text,
     win: f32,
-    /// Under the second model (List.b_head)
-    b: ?f32 = null,
 };
 
 pub const List = struct {
@@ -107,7 +106,7 @@ pub const List = struct {
     base: ?Base = null,
     /// A number column after vs, points mode (the tester's lane gold)
     extra: ?Extra = null,
-    /// A second model's name: a column after vs of its chance and points (Row.b, b_vs)
+    /// A second model's column after vs, this its head: its rank and points (Row.b_rank)
     b_head: ?tree.Text = null,
 };
 
@@ -142,7 +141,7 @@ fn viewOf(h: *H, l: List, comptime pick: bool) N {
             h.span(.{ .class = "nm" }, .{b.label}),
             if (l.mode == .points) h.span(.{ .class = "v" }, .{phrase.num(h, .rate, b.win)}) else null,
             if (l.mode == .points) h.span(.{ .class = "d" }, .{}) else null,
-            if (bc) h.span(.{ .class = "b" }, .{if (b.b) |v| phrase.num(h, .rate, v) else null}) else null,
+            if (bc) h.span(.{ .class = "b" }, .{}) else null,
             if (x) h.span(.{ .class = "x" }, .{}) else null,
         }) else null,
         rows.done(),
@@ -218,11 +217,11 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
     return h.div(.{ .key = key, .class = "row" }, .{ head, det });
 }
 
-/// The second model's chance, then its points in their colour
+/// The second model's rank, then its points in their colour
 fn bCell(h: *H, r: Row) ?N {
-    const b = r.b orelse return null;
+    const b = r.b_rank orelse return null;
     const d: ?N = if (r.b_vs) |x| h.b(.{ .style = h.vars(.{ .c = fmt.Step.of(x, fmt.win_cuts) }) }, .{phrase.num(h, .points, x)}) else null;
-    return h.span(.{}, .{ phrase.num(h, .rate, b), d });
+    return h.span(.{ .data_top = r.b_top }, .{ W.nth.with(h, .{ .n = b }), d });
 }
 
 /// A picking row's breakdown toggle, over the row's stretched Pick
@@ -243,6 +242,7 @@ const W = struct {
     const played = plain("played");
     const star = plain("The model's pick");
     const why = plain("Why");
+    const nth = phrase.Phrase("#{n:int}");
 };
 
 pub const css =
@@ -273,7 +273,8 @@ pub const css =
     \\  .c-cand[data-b][data-x] .r, .c-cand[data-b][data-x] .hd { grid-template-columns: 22px minmax(0, 1fr) 56px 48px 96px 52px; }
     \\  .c-cand .b { text-align: right; font-size: var(--fs-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     \\  .c-cand .b > span > b { margin-left: var(--sp-1); color: var(--c); font-weight: var(--w-m); }
-    \\  .c-cand .hd .b { color: var(--faint); font-size: var(--fs-xs); }
+    \\  .c-cand .hd .b { color: var(--faint); font-size: var(--fs-xs); white-space: normal; line-height: 1.2; }
+    \\  .c-cand .b > [data-top] { color: var(--accent); font-weight: var(--w-m); }
     \\  .c-cand .det .note { margin: 0 0 var(--sp-1); color: var(--muted); font-size: var(--fs-s); }
     \\  .c-cand .why { grid-column: 2 / -1; display: flex; gap: 4px; flex-wrap: wrap; padding-left: 32px; }
     \\  .c-cand .why b { color: var(--c); font-weight: var(--w-b); }
@@ -389,13 +390,14 @@ pub fn gallery(g: *Gallery) void {
     gold.rows = golds;
     g.addFill("tester: Gold column, one row without, lane line", view(h, gold));
     var vs = gold;
-    vs.b_head = plain("Comp model");
+    vs.b_head = plain("Comp model: rank, vs its average");
     const bs = h.mem.dupe(Row, gold.rows) catch {
         h.oom = true;
         return;
     };
     for (bs, 0..) |*r, i| {
-        r.b = if (r.win) |w| w + 4 + @as(f32, @floatFromInt(i)) * 0.4 else null;
+        r.b_rank = if (r.win != null) @intCast(i * 7 % 12 + 1) else null;
+        r.b_top = i == 2;
         r.b_vs = if (r.vs) |v| v + @as(f32, @floatFromInt(i)) * 0.4 - 0.8 else null;
     }
     vs.rows = bs;
