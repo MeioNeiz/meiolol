@@ -165,14 +165,15 @@ const admin_link =
 
 /// The header's account slot: the chip named for a browser signed in (the account island
 /// stores the username on sign-in, ui/wasm/account.zig shown_as), else Log in and Sign up;
-/// the chip's Log out. A signed-in browser, and every private page, then asks /auth/me:
-/// the session's name and role ("login": tester or admin, for admin_link and the hidden
+/// the chip's Log out; data-in on the root while signed in (the foot, written after this
+/// runs, hides its Log in by CSS). A signed-in browser, and every private page, then asks
+/// /auth/me: the session's name and role ("login": tester or admin, for admin_link and the hidden
 /// admin links) come from it, so a browser marked by an older login catches up. A 401
 /// signs the browser out here; anything else (the dev server's 404) keeps what it has.
 /// data-private on private pages
 const account_js =
     \\try{const L=localStorage,q=s=>document.querySelectorAll(s),m=document.getElementById("acct-menu");
-    \\const show=u=>{for(const a of q("header a.acct"))a.hidden=!!u;for(const b of q("header .acct.me")){b.hidden=!u;if(u){b.textContent=u;b.title=u}}};
+    \\const show=u=>{document.documentElement.toggleAttribute("data-in",!!u);for(const a of q("header a.acct"))a.hidden=!!u;for(const b of q("header .acct.me")){b.hidden=!u;if(u){b.textContent=u;b.title=u}}};
     \\const out=()=>{L.removeItem("account");L.removeItem("login");show("")};const u=L.getItem("account");if(u)show(u);
     \\m?.querySelector(".out")?.addEventListener("click",()=>fetch("/auth/logout",{method:"POST",headers:{"X-Meiolol-Action":"1"}}).finally(()=>{out();location.href="/"}));
     \\if(u||document.currentScript.hasAttribute("data-private"))fetch("/auth/me").then(r=>{if(r.status==401)out();return r.ok?r.json():null}).then(me=>{if(!me)return;
