@@ -9,6 +9,7 @@ const html = @import("html.zig");
 const shell = @import("shell.zig");
 const assets = @import("assets.zig");
 const champion = @import("champion.zig");
+const stats_ = @import("../stats.zig");
 const tpl = html.tpl;
 
 const Writer = std.Io.Writer;
@@ -18,17 +19,24 @@ const Role = core.Role;
 const rk = ui.ranking;
 const Counts = core.statsfile.Counts;
 
-/// Every stat, All then each role, when the view has lane curves
+/// Every stat, All then each role, when the view has its data
 pub fn paths(site: *const Site, list: *std.ArrayList(ui.urls.Page)) !void {
-    if (site.curves == null) return;
     for (std.enums.values(rk.Stat)) |s| {
+        if (!has(site, s)) continue;
         try list.append(site.arena, .{ .ranking = .{ .stat = s } });
         for (Role.all) |r| try list.append(site.arena, .{ .ranking = .{ .stat = s, .role = champion.uiRole(r) } });
     }
 }
 
+fn has(site: *const Site, s: rk.Stat) bool {
+    return switch (rk.kindOf(s)) {
+        .rate => site.curves != null,
+        .gap => site.trend != null,
+    };
+}
+
 pub fn writePage(site: *const Site, w: *Writer, at: ui.urls.Ranking) !bool {
-    if (site.curves == null) return false;
+    if (!has(site, at.stat)) return false;
     const a = site.arena;
     const sp = rk.spec(at.stat);
     const r: ?Role = if (at.role) |x| root.coreRole(x) else null;
@@ -49,7 +57,7 @@ pub fn writePage(site: *const Site, w: *Writer, at: ui.urls.Ranking) !bool {
     p.bin = try bin(a, d.*);
     var tree: ui.Tree = .{};
     var h: ui.H = .init(a, &tree);
-    const lead: ui.Text = .{ .s = if (r) |x| try a.print("{s} {s}: {d:.1}%.", .{ sp.lead, root.roleName(x), usualOf(site, at.stat, x) orelse 0 }) else sp.lead };
+    const lead: ui.Text = .{ .s = if (r) |x| try std.mem.concat(a, u8, &.{ sp.lead, try usualText(site, at.stat, x) }) else sp.lead };
     tree.root = h.div(.{}, .{ try head(site, &h, at, r, lead), p.view(&h) });
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&tree, tree.root, w);
@@ -81,59 +89,134 @@ fn head(site: *const Site, h: *ui.H, at: ui.urls.Ranking, r: ?Role, lead: ui.Tex
     return rk.head(h, stats, roles, lead);
 }
 
-/// Which of the comeback counts a stat reads: [minute][bucket]
+/// Which of the comeback counts a rate stat reads: [minute][bucket]
 fn cell(s: rk.Stat) struct { usize, usize } {
     return switch (s) {
         .ahead => .{ 1, 4 },
         .behind => .{ 1, 0 },
+        .long_games => unreachable,
+    };
+}
+
+/// A stat's counts: a rate's one spot (second empty), or a gap's short then long games
+const Pair = [2]Counts;
+
+fn add(x: *Counts, games: u32, wins: u32) void {
+    x.games += games;
+    x.wins += wins;
+}
+
+/// Short games: under 25 minutes (stats.length_edges' first two buckets); long: 35+
+fn lengthPair(t: *const stats_.Trend, r: Role, c: usize) Pair {
+    var out: Pair = @splat(.{ .games = 0, .wins = 0 });
+    for (0..stats_.length_buckets) |b| {
+        const k = t.length(r, c, b);
+        if (b < 2) add(&out[0], k.games, k.wins);
+        if (b == stats_.length_buckets - 1) add(&out[1], k.games, k.wins);
+    }
+    return out;
+}
+
+fn countsOf(site: *const Site, s: rk.Stat, ch: Champ, r: Role) !?Pair {
+    switch (rk.kindOf(s)) {
+        .rate => {
+            const cb = try champion.comebackSums(site, ch, r) orelse return null;
+            const at = cell(s);
+            const k = cb.at[at[0]][at[1]];
+            return .{ .{ .games = k.games, .wins = k.wins }, .{ .games = 0, .wins = 0 } };
+        },
+        .gap => return lengthPair(&(site.trend orelse return null), r, ch.c),
+    }
+}
+
+/// Every lane or game in the role, as countsOf
+fn roleCounts(site: *const Site, s: rk.Stat, r: Role) ?Pair {
+    switch (rk.kindOf(s)) {
+        .rate => {
+            const c = &(site.curves orelse return null);
+            const base = c.baseline(r, .all) orelse return null;
+            const at = cell(s);
+            const k = base.comeback(std.enums.values(core.curvesfile.Comeback)[at[0]], at[1]);
+            return .{ .{ .games = k.games, .wins = k.wins }, .{ .games = 0, .wins = 0 } };
+        },
+        .gap => {
+            const t = &(site.trend orelse return null);
+            var out: Pair = @splat(.{ .games = 0, .wins = 0 });
+            for (site.champs) |ch| {
+                const p = lengthPair(t, r, ch.c);
+                for (&out, p) |*o, x| add(o, x.games, x.wins);
+            }
+            return out;
+        },
+    }
+}
+
+/// The figure from a pair: a rate (%) or a gap (points); null without games
+fn figure(s: rk.Stat, p: Pair) ?f32 {
+    return switch (rk.kindOf(s)) {
+        .rate => if (p[0].games == 0) null else rate(p[0].wins, p[0].games),
+        .gap => if (p[0].games == 0 or p[1].games == 0) null else rate(p[1].wins, p[1].games) - rate(p[0].wins, p[0].games),
     };
 }
 
 fn usualOf(site: *const Site, s: rk.Stat, r: Role) ?f32 {
-    const c = &(site.curves orelse return null);
-    const base = c.baseline(r, .all) orelse return null;
-    const at = cell(s);
-    const k = base.comeback(std.enums.values(core.curvesfile.Comeback)[at[0]], at[1]);
-    return if (k.games == 0) null else rate(k.wins, k.games);
+    return figure(s, roleCounts(site, s, r) orelse return null);
+}
+
+/// The role's figure in the lead line
+fn usualText(site: *const Site, s: rk.Stat, r: Role) ![]const u8 {
+    const u = usualOf(site, s, r) orelse return "";
+    return switch (rk.kindOf(s)) {
+        .rate => site.arena.print(" {s}: {d:.1}%.", .{ root.roleName(r), u }),
+        .gap => site.arena.print(" {s}: {s}{d:.1} points.", .{ root.roleName(r), if (u >= 0) "+" else "\u{2212}", @abs(u) }),
+    };
 }
 
 fn rate(wins: u32, games: u32) f32 {
     return @floatCast(100 * @as(f64, @floatFromInt(wins)) / @as(f64, @floatFromInt(games)));
 }
 
-/// Per role, every champion that plays it (on All: its main role) with games in the
-/// stat's spot; pulled toward the role by k from how much champions differ there
+/// Per role, every champion that plays it (on All: its main role) with games for the
+/// stat; pulled toward the role by k from how much champions differ there
 pub fn data(site: *const Site, s: rk.Stat, only: ?Role) !rk.Data {
     const a = site.arena;
-    const at = cell(s);
+    const gap = rk.kindOf(s) == .gap;
     var rows: std.ArrayList(rk.Row) = .empty;
     for (Role.all) |r| {
         if (only) |x| if (x != r) continue;
         const usual = usualOf(site, s, r) orelse continue;
-        var cells: std.ArrayList(Counts) = .empty;
+        var cells: [2]std.ArrayList(Counts) = .{ .empty, .empty };
         var chs: std.ArrayList(Champ) = .empty;
         for (site.champs) |ch| {
             const in = if (only != null) champion.plays(site, ch, r) else root.mainRole(site, ch) == r;
             if (!in) continue;
-            const cb = try champion.comebackSums(site, ch, r) orelse continue;
-            const k = cb.at[at[0]][at[1]];
-            if (k.games == 0) continue;
-            try cells.append(a, .{ .games = k.games, .wins = k.wins });
+            const p = try countsOf(site, s, ch, r) orelse continue;
+            if (figure(s, p) == null) continue;
+            for (&cells, p) |*c, k| try c.append(a, k);
             try chs.append(a, ch);
         }
-        const prior: core.banimpact.Prior = .ofCounts(cells.items);
-        for (cells.items, chs.items) |k, ch| {
+        const priors: [2]core.banimpact.Prior = .{ .ofCounts(cells[0].items), .ofCounts(cells[1].items) };
+        for (cells[0].items, cells[1].items, chs.items) |k0, k1, ch| {
             const cr = site.stats.champRole(r, ch.c);
+            const e0 = priors[0].edge(k0.wins, k0.games);
+            const lean_: rk.Lean = if (!gap) .none else if (site.lean) |l| if (l.get(ch.id, r)) |x| switch (x.lean()) {
+                .early => .early,
+                .late => .late,
+                .none => .none,
+            } else .none else .none;
             try rows.append(a, .{
                 .name = ch.name,
                 .key = ch.key,
                 .href = try site.href(.{ .champion = .{ .slug = ch.slug, .role = champion.uiRole(r) } }),
                 .role = champion.uiRole(r),
-                .value = rate(k.wins, k.games),
+                .value = figure(s, .{ k0, k1 }).?,
                 .usual = usual,
-                .pulled = @floatCast(100 * prior.edge(k.wins, k.games)),
-                .n = k.games,
+                .pulled = @floatCast(100 * if (gap) priors[1].edge(k1.wins, k1.games) - e0 else e0),
+                .n = if (gap) @min(k0.games, k1.games) else k0.games,
                 .overall = if (cr.games == 0) 0 else rate(cr.wins, cr.games),
+                .games = cr.games,
+                .sides = if (gap) .{ rate(k0.wins, k0.games), rate(k1.wins, k1.games) } else .{ 0, 0 },
+                .lean = lean_,
             });
         }
     }

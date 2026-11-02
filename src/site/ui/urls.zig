@@ -17,9 +17,19 @@ pub const Stat = enum {
     ahead,
     /// The same, behind
     behind,
+    /// Win rate in games of 35+ minutes minus in games under 25
+    long_games,
 
     pub fn slug(s: Stat) []const u8 {
-        return @tagName(s);
+        return switch (s) {
+            .long_games => "long-games",
+            else => @tagName(s),
+        };
+    }
+
+    pub fn fromSlug(x: []const u8) ?Stat {
+        for (std.enums.values(Stat)) |s| if (std.mem.eql(u8, s.slug(), x)) return s;
+        return null;
     }
 };
 
@@ -151,7 +161,7 @@ pub fn parse(path: []const u8) ?Page {
         return .{ .pickup = if (a) |x| std.meta.stringToEnum(Role, x) orelse return null else null };
     }
     if (std.mem.eql(u8, head, "rankings")) {
-        const stat = std.meta.stringToEnum(Stat, a orelse return null) orelse return null;
+        const stat = Stat.fromSlug(a orelse return null) orelse return null;
         return .{ .ranking = .{ .stat = stat, .role = if (b) |x| std.meta.stringToEnum(Role, x) orelse return null else null } };
     }
     if (a != null) return null;
@@ -218,6 +228,7 @@ test "urls: each page spelt and parsed back" {
         .{ .{ .pickup = .mid }, "/pickup/mid" },
         .{ .{ .ranking = .{ .stat = .ahead } }, "/rankings/ahead" },
         .{ .{ .ranking = .{ .stat = .behind, .role = .support } }, "/rankings/behind/support" },
+        .{ .{ .ranking = .{ .stat = .long_games, .role = .mid } }, "/rankings/long-games/mid" },
         .{ .learn, "/learn" },
         .{ .pool, "/pool" },
         .{ .squad, "/squad" },
@@ -261,6 +272,7 @@ test "urls: not pages" {
         "/rankings",
         "/rankings/x",
         "/rankings/ahead/adc",
+        "/rankings/long_games",
         "/rankings/ahead/top/x",
         "/learn/x",
         "/admin",

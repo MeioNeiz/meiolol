@@ -68,7 +68,9 @@ row in the stats pass, then a spec.
 
 1. Done: ui.ranking (StatRanking island, ui-rankings.wasm, data inline), the spec, wins
    from ahead and behind (/rankings/ahead, /rankings/behind[/role], every view)
-2. Long minus short game win rate, lean column
+2. Done: wins in long games (/rankings/long-games): win rate in 35+ minute games minus
+   under 25 (points, both sides pulled), lean.tsv's lean beside it; a second DataTable
+   type in ui.ranking (Kind: rate or gap)
 3. /rankings index and links from the champions section and home's Champions card
 4. "Nth of M ›" on the champion page cards, the champion highlighted on its ranking
 5. Lane gold at 14, pick-up gap, then the rest of the table above

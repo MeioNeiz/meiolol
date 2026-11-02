@@ -39,11 +39,25 @@ pub fn spec(s: Stat) Spec {
     return switch (s) {
         .ahead => .{ .title = "Wins from ahead", .short = "From ahead", .lead = "Win rate in games where the champion was 1,500+ gold ahead of its lane opponent at 15 minutes." },
         .behind => .{ .title = "Wins from behind", .short = "From behind", .lead = "Win rate in games where the champion was 1,500+ gold behind its lane opponent at 15 minutes." },
+        .long_games => .{ .title = "Wins in long games", .short = "Long games", .lead = "Win rate in games of 35+ minutes minus in games under 25, in points: who wins more of its long games. Stomps end early, so this is how its games go, not a power curve." },
     };
 }
 
+/// What a stat's figure is: a win rate in one spot, or a gap between two win rates
+pub const Kind = enum { rate, gap };
+
+pub fn kindOf(s: Stat) Kind {
+    return switch (s) {
+        .ahead, .behind => .rate,
+        .long_games => .gap,
+    };
+}
+
+/// lean.tsv's (champfacts.Lean)
+pub const Lean = enum { early, late, none };
+
 /// Stats shown as one page with a switch, in its order
-pub const siblings = [_][]const Stat{&.{ .ahead, .behind }};
+pub const siblings = [_][]const Stat{ &.{ .ahead, .behind }, &.{.long_games} };
 
 pub fn siblingsOf(s: Stat) []const Stat {
     for (siblings) |g| for (g) |x| if (x == s) return g;
@@ -63,15 +77,19 @@ pub const Row = struct {
     key: []const u8,
     href: []const u8,
     role: Role,
-    /// The figure (a win rate, %) and the role's in the same spot
+    /// The figure (a win rate, %; a gap, points) and the role's
     value: f32,
     usual: f32,
     /// value - usual pulled toward 0 by how few games it has: the sort
     pulled: f32,
-    /// Games behind the figure
+    /// Games behind the figure (a gap: its thinner side's)
     n: u32,
-    /// The champion's win rate over all its games in the role
+    /// The champion's win rate over all its games in the role, and those games
     overall: f32,
+    games: u32 = 0,
+    /// A gap's two win rates, short games' then long games'
+    sides: [2]f32 = .{ 0, 0 },
+    lean: Lean = .none,
 };
 
 /// Under this many games behind the figure a row waits behind the chip
@@ -91,6 +109,14 @@ const W = struct {
     pub const few = plain("unsure");
     pub const stat = plain("Stat");
     pub const role = plain("Role");
+    pub const gap = plain("Gap");
+    pub const gap_note = plain("Win rate in long games minus in short ones, in points; sorted pulled toward the role when games are few.");
+    pub const short = plain("Under 25");
+    pub const long = plain("35+ min");
+    pub const lean = plain("Lean");
+    pub const lean_note = plain("Early or late from gold at 14 and wins from an even game at 20, every region. Blank: neither is clear.");
+    pub const early = plain("Early");
+    pub const late = plain("Late");
     pub const none = plain("More data needed: no champion has games in this spot yet.");
 };
 
@@ -143,10 +169,40 @@ fn gamesCell(h: *H, l: *const Line) N {
 }
 
 fn overallCell(h: *H, l: *const Line) N {
-    return h.span(.{}, .{phrase.num(h, .rate, l.r.overall)});
+    return stat.view(h, .{ .value = l.r.overall, .games = l.r.games });
 }
 
-pub const Table = table.DataTable(Line, .{
+fn gapCell(h: *H, l: *const Line) N {
+    return stat.view(h, .{ .value = l.r.value, .kind = .points, .scale = .aggregate, .ref = l.r.usual, .games = l.r.n });
+}
+fn shortOf(l: *const Line) f64 {
+    return l.r.sides[0];
+}
+fn longOf(l: *const Line) f64 {
+    return l.r.sides[1];
+}
+fn shortCell(h: *H, l: *const Line) N {
+    return h.span(.{}, .{phrase.num(h, .rate, l.r.sides[0])});
+}
+fn longCell(h: *H, l: *const Line) N {
+    return h.span(.{}, .{phrase.num(h, .rate, l.r.sides[1])});
+}
+fn leanOf(l: *const Line) f64 {
+    return switch (l.r.lean) {
+        .early => -1,
+        .none => 0,
+        .late => 1,
+    };
+}
+fn leanCell(h: *H, l: *const Line) N {
+    return h.span(.{}, .{switch (l.r.lean) {
+        .early => W.early,
+        .late => W.late,
+        .none => plain(""),
+    }});
+}
+
+pub const RateTable = table.DataTable(Line, .{
     .title = W.title,
     .columns = &.{
         .{ .label = W.champion, .cell = who, .name = nameOf, .num = false },
@@ -162,6 +218,26 @@ pub const Table = table.DataTable(Line, .{
     .rare = thin,
     .rare_name = W.few,
 });
+
+pub const GapTable = table.DataTable(Line, .{
+    .title = W.title,
+    .columns = &.{
+        .{ .label = W.champion, .cell = who, .name = nameOf, .num = false },
+        .{ .label = W.gap, .cell = gapCell, .sort = pulledOf, .answer = true, .tip = W.gap_note },
+        .{ .label = W.short, .cell = shortCell, .sort = shortOf, .priority = 2 },
+        .{ .label = W.long, .cell = longCell, .sort = longOf, .priority = 2 },
+        .{ .label = W.lean, .cell = leanCell, .sort = leanOf, .num = false, .tip = W.lean_note },
+        .{ .label = W.games, .cell = gamesCell, .sort = nF, .priority = 3, .tip = W.games_note },
+    },
+    .default_sort = 1,
+    .search = nameOf,
+    .games = nOf,
+    .numbered = true,
+    .rare = thin,
+    .rare_name = W.few,
+});
+
+pub const Table = union(Kind) { rate: RateTable, gap: GapTable };
 
 pub const Ranking = struct {
     data: *const Data,
@@ -179,12 +255,17 @@ pub const Ranking = struct {
             .icon = try std.fmt.allocPrint(a, champ.icon_fmt, .{ d.ddragon, r.key }),
             .all = d.role == null,
         };
-        return .{ .data = d, .table = .{ .rows = lines, .id = "rk" } };
+        return .{ .data = d, .table = switch (kindOf(d.stat)) {
+            .rate => .{ .rate = .{ .rows = lines, .id = "rk" } },
+            .gap => .{ .gap = .{ .rows = lines, .id = "rk" } },
+        } };
     }
 
     pub fn view(p: *P, h: *H) N {
         return h.div(.{ .class = "c-rank", .data_island = "ranking", .data_bin = if (p.bin.len > 0) p.bin else null }, .{
-            if (p.data.rows.len == 0) h.p(.{ .class = "none" }, .{W.none}) else p.table.view(h),
+            if (p.data.rows.len == 0) h.p(.{ .class = "none" }, .{W.none}) else switch (p.table) {
+                inline else => |*t| t.view(h),
+            },
         });
     }
 };
@@ -227,6 +308,17 @@ pub fn demo(stat_: Stat, r: ?Role) Data {
     return .{ .stat = stat_, .role = r, .ddragon = "16.21.1", .rows = &rows.all };
 }
 
+pub fn demoGap() Data {
+    const rows = struct {
+        const all = [_]Row{
+            .{ .name = "Kayle", .key = "Kayle", .href = "#", .role = .top, .value = 9.1, .usual = 0.4, .pulled = 7.5, .n = 1310, .overall = 51.2, .sides = .{ 46.0, 55.1 }, .lean = .late },
+            .{ .name = "Darius", .key = "Darius", .href = "#", .role = .top, .value = -4.2, .usual = 0.4, .pulled = -4.0, .n = 2950, .overall = 50.1, .sides = .{ 52.3, 48.1 }, .lean = .early },
+            .{ .name = "Garen", .key = "Garen", .href = "#", .role = .top, .value = 0.8, .usual = 0.4, .pulled = 0.3, .n = 2400, .overall = 52.4, .sides = .{ 52.0, 52.8 } },
+        };
+    };
+    return .{ .stat = .long_games, .role = .top, .ddragon = "16.21.1", .rows = &rows.all };
+}
+
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const states = [_]struct { []const u8, ?Role, bool }{
@@ -247,8 +339,8 @@ pub fn gallery(g: *Gallery) void {
             h.oom = true;
             return;
         };
-        p.table.rare = s[2];
-        p.table.id = h.fmt("rk{d}-{d}", .{ k, g.width }); // fmt-ok: gallery only
+        p.table.rate.rare = s[2];
+        p.table.rate.id = h.fmt("rk{d}-{d}", .{ k, g.width }); // fmt-ok: gallery only
         g.addFill(s[0], p.view(h));
     }
     const empty = h.mem.create(Data) catch {
@@ -265,6 +357,21 @@ pub fn gallery(g: *Gallery) void {
         return;
     };
     g.add("no rows", p.view(h));
+    const gd = h.mem.create(Data) catch {
+        h.oom = true;
+        return;
+    };
+    gd.* = demoGap();
+    const gp = h.mem.create(Ranking) catch {
+        h.oom = true;
+        return;
+    };
+    gp.* = Ranking.init(h.mem, gd) catch {
+        h.oom = true;
+        return;
+    };
+    gp.table.gap.id = h.fmt("rkg-{d}", .{g.width}); // fmt-ok: gallery only
+    g.addFill("a gap: long minus short games, the lean beside it", gp.view(h));
     const stats = [_]segmented.Item{ .{ .label = plain("From ahead"), .selected = true, .href = "#" }, .{ .label = plain("From behind"), .href = "#" } };
     var roles: [1 + Role.all.len]segmented.Item = undefined;
     roles[0] = .{ .label = plain("All"), .href = "#" };
