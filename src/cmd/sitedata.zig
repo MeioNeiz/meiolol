@@ -9,6 +9,7 @@ const curves = @import("../curves.zig");
 const builds = @import("../builds.zig");
 const cubes = @import("../cubes.zig");
 const lean = @import("../lean.zig");
+const pairlane = @import("../pairlane.zig");
 const draftmodel = @import("../draftmodel.zig");
 const testerbin = @import("../testerbin.zig");
 const lanemodel = @import("../lanemodel.zig");
@@ -145,6 +146,64 @@ pub fn cmdCurves(c: *Cmd) !u8 {
         b.* = .{ .gpa = gpa };
     }
     if (missing) return error.NoMatches;
+    return 0;
+}
+
+pub const usage_pairlane =
+    \\  pairlane    write bot lanes as pairs, ADC and support against the enemy pair
+    \\              (pairlane.zig), from the day cubes: EUW and every platform, last
+    \\              --days, to DIR/export/{,all-}recent-pairlane.bin
+    \\              --days N         default 30
+    \\              --min-games N    leave out cells with fewer games (default 10)
+    \\
+;
+
+pub fn cmdPairlane(c: *Cmd) !u8 {
+    var days: u32 = recent_days;
+    var min_games: u32 = 10;
+    while (c.next()) |_| {
+        if (c.is("--days")) {
+            days = try c.int(u32);
+        } else if (c.is("--min-games")) {
+            min_games = try c.int(u32);
+        } else return error.Usage;
+    }
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    const arena = c.arena;
+    const db = try c.open();
+    defer db.close();
+    const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
+    const since_ms = now_ms - @as(i64, days) * std.time.ms_per_day;
+    const label = try arena.print("last {d} days", .{days});
+    var specs: [2]curves.Spec = undefined;
+    var paths: [2][]const u8 = undefined;
+    for ([_]bool{ false, true }, &specs, &paths) |all, *s, *p| {
+        s.* = .{ .chosen = &.{}, .since_ms = since_ms, .platforms = if (all) platform_ids else &.{"EUW1"} };
+        p.* = try arena.print("{s}/export/{s}recent-pairlane.bin", .{ c.data_dir, if (all) "all-" else "" });
+    }
+    var builders: [2]pairlane.Builder = @splat(.{ .gpa = gpa });
+    defer for (&builders) |*b| b.deinit();
+    {
+        var items: CubeItems = .{ .gpa = gpa, .arena = arena, .io = io };
+        const cube = try cubes.Store.open(gpa, io, try cubes.dirIn(arena, c.data_dir));
+        defer cube.deinit();
+        logCubes(try pairlane.fromCubes(cube, db, items.source(), &specs, &builders));
+    }
+    for (paths, &builders) |path, *b| {
+        if (b.games == 0) {
+            std.log.err("no ranked solo games with timelines for {s}: {s}", .{ label, path });
+            return error.NoMatches;
+        }
+        var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
+        defer file.deinit(io);
+        var buf: [64 * 1024]u8 = undefined;
+        var w = file.file.writer(io, &buf);
+        try b.write(&w.interface, label, min_games);
+        try w.interface.flush();
+        try file.replace(io);
+        std.log.info("{s}: {s}, {d} games, {d} cells", .{ path, label, b.games, b.cells.count() });
+    }
     return 0;
 }
 

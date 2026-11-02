@@ -28,6 +28,7 @@ pub const objectives = @import("objectives.zig");
 pub const winchance = @import("winchance.zig");
 pub const playstyle = @import("playstyle.zig");
 pub const lean = @import("lean.zig");
+pub const pairlane = @import("pairlane.zig");
 pub const draftmodel = @import("draftmodel.zig");
 pub const lanemodel = @import("lanemodel.zig");
 pub const digests = @import("digests.zig");
@@ -73,6 +74,7 @@ const usage = usage_head ++
     cmd_crawl.usage_stats ++
     cmd_sitedata.usage_curves ++
     cmd_sitedata.usage_builds ++
+    cmd_sitedata.usage_pairlane ++
     cmd_analysis.usage_eval ++
     cmd_analysis.usage_legendaries ++
     cmd_analysis.usage_patchnotes ++
@@ -144,6 +146,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "stats", cmd_crawl.cmdStats },
     .{ "curves", cmd_sitedata.cmdCurves },
     .{ "builds", cmd_sitedata.cmdBuilds },
+    .{ "pairlane", cmd_sitedata.cmdPairlane },
     .{ "eval", cmd_analysis.cmdEval },
     .{ "legendaries", cmd_analysis.cmdLegendaries },
     .{ "patchnotes", cmd_analysis.cmdPatchnotes },
