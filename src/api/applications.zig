@@ -1,8 +1,8 @@
 //! Testers' applications for the desktop app (ui.applydata): api.db's applications
 //! table behind /api/apply (anyone) and /api/applications.bin (manage_accounts; root.zig
-//! checks). Approving only marks a row: Jacob makes the private login and sends it
-//! himself. No IP, PUUID or Riot call; retention in `prune`, erasure in `forgetRiotId`
-//! and the admin's Delete (docs/data-safety.md)
+//! checks). Approving marks a row; the admin page then makes a private invite, which
+//! Jacob sends himself. No IP, PUUID or Riot call; retention in `prune`, erasure in
+//! `forgetRiotId` and the admin's Delete (docs/data-safety.md)
 //!
 //!   POST /api/apply                            a ui.applydata.New; {"ok":true}
 //!   GET  /api/applications.bin                 a ui.applydata.List

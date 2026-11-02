@@ -97,6 +97,9 @@ pub const Decide = struct { row: u16, set: apd.Set };
 /// A one-use link just made: shown once
 pub const Link = struct { reset: ?u16 = null, role: u8 = 0, token: []const u8 };
 
+/// The private invite Approve made for an application (its id): shown once
+pub const AppLink = struct { id: u32, token: []const u8 };
+
 pub const Page = struct {
     tab: Tab = .overview,
     snap: ?*const ad.Snapshot = null,
@@ -106,6 +109,9 @@ pub const Page = struct {
     applications: ?*const apd.List = null,
     /// The applications list didn't load, or a change to it failed
     apps_failed: bool = false,
+    app_link: ?AppLink = null,
+    /// Approved, but its invite wasn't made
+    app_link_failed: bool = false,
     /// The clock, unix s (the wasm's, before each draw)
     now: i64 = 0,
     /// When live.bin last answered; down: the last try failed
@@ -188,11 +194,17 @@ pub const Page = struct {
             .reset => |row| p.want = .{ .reset = row },
             .copy => p.want = .copy,
             .done => {
-                p.link = null;
+                if (p.tab == .applications) p.app_link = null else p.link = null;
                 p.copied = false;
             },
             .decide => |d| p.want = .{ .decide = d },
         }
+    }
+
+    /// The link the shown tab's Copy copies
+    pub fn shownToken(p: *const Page) ?[]const u8 {
+        if (p.tab == .applications) return if (p.app_link) |k| k.token else null;
+        return if (p.link) |k| k.token else null;
     }
 
     /// The signed-in role has `cap` (roles.zig Capability's name)
@@ -313,7 +325,10 @@ pub const W = struct {
     pub const role_of = Phrase("Role of {u:text}");
 
     pub const apps = plain("Testers' applications");
-    pub const apps_lead = plain("From /download. Approving only marks one: make a private invite link in Accounts and send it to their contact yourself. Deleted 30 days after a decision, or after 6 months unanswered.");
+    pub const apps_lead = plain("From /download. Approve makes a one-use private invite link (7 days): send it to their contact yourself. Deleted 30 days after a decision, or after 6 months unanswered.");
+    pub const app_link = Phrase("{u:text} approved: send this link to {c:text}. It is shown only now.");
+    pub const app_link_gone = plain("Approved: send this private invite link to their contact. It is shown only now.");
+    pub const app_link_failed = plain("Approved, but the invite link wasn't made: make a private one in Accounts.");
     pub const apps_none = plain("None yet.");
     pub const apps_failed = plain("Couldn't load or change them: Refresh and try again.");
     pub const c_player = plain("Riot ID");
@@ -718,12 +733,7 @@ fn accountsTab(p: *Page, h: *H) N {
             button.view(h, .{ .s = .s, .on = h.on(p, .invite) }, .{W.invite}),
             h.small(.{}, .{W.invite_hint}),
         }),
-        if (p.link) |k| h.div(.{ .class = "link", .role = "status" }, .{
-            h.p(.{}, .{if (k.reset) |r| W.reset_link.with(h, .{ .u = l.accounts[r].username }) else W.new_link.with(h, .{ .r = l.roles[k.role] })}),
-            h.el(.input, .{ .readonly = true, .value = h.fmt(join_link, .{k.token}), .aria_label = W.copy }, .{}),
-            button.view(h, .{ .s = .s, .on = h.on(p, .copy) }, .{if (p.copied) W.copied else W.copy}),
-            button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .done) }, .{W.done}),
-        }) else .none,
+        if (p.link) |k| linkBox(p, h, if (k.reset) |r| W.reset_link.with(h, .{ .u = l.accounts[r].username }) else W.new_link.with(h, .{ .r = l.roles[k.role] }), k.token) else .none,
         h.div(.{ .class = "tw" }, .{h.table(.{}, .{
             h.thead(.{}, .{h.tr(.{}, .{
                 h.th(.{}, .{W.c_login}),
@@ -735,6 +745,16 @@ fn accountsTab(p: *Page, h: *H) N {
             })}),
             h.tbody(.{}, .{rows.done()}),
         })}),
+    });
+}
+
+/// A one-use link just made, what it is for above it
+fn linkBox(p: *Page, h: *H, what: Text, token: []const u8) N {
+    return h.div(.{ .class = "link", .role = "status" }, .{
+        h.p(.{}, .{what}),
+        h.el(.input, .{ .readonly = true, .value = h.fmt(join_link, .{token}), .aria_label = W.copy }, .{}),
+        button.view(h, .{ .s = .s, .on = h.on(p, .copy) }, .{if (p.copied) W.copied else W.copy}),
+        button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .done) }, .{W.done}),
     });
 }
 
@@ -779,6 +799,10 @@ fn applicationsTab(p: *Page, h: *H) N {
         head,
         h.p(.{ .class = "note" }, .{W.apps_lead}),
         failed,
+        if (p.app_link_failed) h.p(.{ .class = "note bad", .role = "alert" }, .{W.app_link_failed}) else .none,
+        if (p.app_link) |k| linkBox(p, h, for (l.applications) |x| {
+            if (x.id == k.id) break W.app_link.with(h, .{ .u = x.riot_id, .c = x.contact });
+        } else W.app_link_gone, k.token) else .none,
         if (l.applications.len == 0) h.p(.{}, .{W.apps_none}) else h.div(.{ .class = "tw" }, .{h.table(.{}, .{
             h.thead(.{}, .{h.tr(.{}, .{
                 h.th(.{}, .{W.c_player}),
@@ -1033,7 +1057,7 @@ pub const Demo = struct {
 
 pub fn gallery(g: *Gallery) void {
     const a = g.h.mem;
-    const states = [_][]const u8{ "loading", "overview: two problems", "controls: a failed build", "controls: live API down", "accounts: a role asked, a link made", "applications", "snapshot failed" };
+    const states = [_][]const u8{ "loading", "overview: two problems", "controls: a failed build", "controls: live API down", "accounts: a role asked, a link made", "applications", "applications: approved, its invite link", "snapshot failed" };
     for (states, 0..) |caption, i| {
         const p = a.create(Page) catch return;
         p.* = switch (i) {
@@ -1042,7 +1066,7 @@ pub fn gallery(g: *Gallery) void {
             2 => Demo.page(.ops),
             3 => Demo.page(.ops),
             4 => Demo.page(.accounts),
-            5 => Demo.page(.applications),
+            5, 6 => Demo.page(.applications),
             else => .{ .snap_failed = true },
         };
         switch (i) {
@@ -1053,6 +1077,7 @@ pub fn gallery(g: *Gallery) void {
                 p.link = .{ .role = 2, .token = "q3Vt9xYbW2nA7kLmP0sR" };
                 p.acct_failed = true;
             },
+            6 => p.app_link = .{ .id = 1, .token = "Hc4pZ8wQe1rT6yUi2oNb" },
             else => {},
         }
         g.addFill(caption, p.view(g.h));
@@ -1155,7 +1180,7 @@ test "admin accounts: pick then Make, invite with the chosen role, the URL keeps
     try testing.expectEqualStrings("crawl-restart", Act.crawl_restart.path());
 }
 
-test "admin applications: rows with their contact, decide asks the wasm, loads once" {
+test "admin applications: rows with their contact, decide asks the wasm, approve's link, loads once" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1164,6 +1189,16 @@ test "admin applications: rows with their contact, decide asks the wasm, loads o
     var ev: tree.Event = .{ .kind = .click };
     p.update(.{ .decide = .{ .row = 1, .set = .approved } }, &ev);
     try testing.expectEqual(Want{ .decide = .{ .row = 1, .set = .approved } }, p.want);
+    p.app_link = .{ .id = 1, .token = "tok1" };
+    p.link = .{ .role = 2, .token = "tok2" };
+    try expectHas(try render(a, &p), &.{ "Lumen Support#EUW approved: send this link to lumen_sup", "https://meio.lol/join#tok1" });
+    try testing.expectEqualStrings("tok1", p.shownToken().?);
+    p.app_link = .{ .id = 99, .token = "tok1" };
+    p.app_link_failed = true;
+    try expectHas(try render(a, &p), &.{ "send this private invite link to their contact", "the invite link wasn&#39;t made" });
+    p.update(.done, &ev);
+    try testing.expectEqual(null, p.app_link);
+    try testing.expectEqualStrings("tok2", p.link.?.token);
     var q: Page = .{};
     q.update(.{ .tab = .applications }, &ev);
     try testing.expectEqual(Want.applications, q.want);

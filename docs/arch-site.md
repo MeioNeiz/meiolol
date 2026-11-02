@@ -254,8 +254,9 @@ their games together (your-games.md "Squads").
   login, X-Meiolol-Action, bounds in applydata.check. The same Riot ID and contact
   updates its row; at most 50 new a day and 1000 kept
 - /admin's Applications tab (manage_accounts): GET /api/applications.bin, POST
-  ?id=N&set=open|approved|declined|delete. Approve only marks it: the private invite is
-  made in Accounts and sent by hand
+  ?id=N&set=open|approved|declined|delete. Approve, once it answers, also makes a
+  one-use private invite (/auth/invite.bin) shown in the card with the contact, sent by
+  hand; if that fails the approval stands and the card says to make one in Accounts
 - Retention and erasure: docs/data-safety.md; privacy page "Testers"
 - Dev: `meiolol dev` answers /api/applications.bin with the admin fixture; /api/apply
   goes to the local API (`meiolol api --fixture`), X-Meiolol-Action passed on

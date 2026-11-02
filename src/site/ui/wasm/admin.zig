@@ -19,7 +19,7 @@ pub const panic = zjb.panic;
 
 const gpa = std.heap.wasm_allocator;
 
-const Call = enum(i32) { snap, live, me, accounts, action, write, link, applications, decide };
+const Call = enum(i32) { snap, live, me, accounts, action, write, link, applications, decide, app_link };
 
 var page: ap.Page = .{};
 var server: ap.Page = .{};
@@ -30,6 +30,8 @@ var live: Held(ad.Live) = .{};
 var me: Held(ac.Me) = .{};
 var accounts: Held(ac.Accounts) = .{};
 var invite: Held(ac.Invite) = .{};
+/// Approve's invite apart from Accounts' `invite`: a new one frees the old one's bytes
+var app_invite: Held(ac.Invite) = .{};
 var applications: Held(ui.applydata.List) = .{};
 
 var in_flight: std.enums.EnumSet(Call) = .empty;
@@ -43,6 +45,11 @@ var again = false;
 var ran_out: []u8 = &.{};
 /// What the link being made is for (Page.Link without its token)
 var linking: ap.Link = .{ .token = "" };
+/// The application being approved: its invite is made once the approve answers, so a
+/// failed approve leaves no invite behind
+var approving: ?u32 = null;
+/// The application the invite in flight is for
+var app_for: u32 = 0;
 
 const live_ms = 60_000;
 const snap_s = 300;
@@ -142,7 +149,7 @@ fn changed() void {
             linking = .{ .reset = row, .token = "" };
             write("/auth/reset.bin", ac.Manage, .{ .username = l.accounts[row].username }, .link);
         },
-        .copy => if (page.link) |k| copy(k.token),
+        .copy => if (page.shownToken()) |t| copy(t),
         .decide => |d| if (page.applications) |l| if (d.row < l.applications.len) {
             var buf: [96]u8 = undefined;
             var q: std.Io.Writer = .fixed(&buf);
@@ -152,6 +159,8 @@ fn changed() void {
             const path = q.buffered();
             if (!in_flight.contains(.decide)) {
                 in_flight.insert(.decide);
+                approving = if (d.set == .approved) l.applications[d.row].id else null;
+                page.app_link_failed = false;
                 dom.send("POST", path, "", @backingInt(Call.decide), done);
             }
         },
@@ -248,16 +257,34 @@ fn done(ctx: i32, bytes: ?[]u8) void {
             if (in_flight.contains(.live)) again = true else get(.live, "/admin/api/live.bin");
         },
         .applications, .decide => {
+            const id = if (c == .decide) approving else null;
+            if (c == .decide) approving = null;
             const b = bytes orelse {
                 page.apps_failed = true;
                 return;
             };
+            if (id) |x| {
+                app_for = x;
+                write("/auth/invite.bin", ac.NewInvite, .{ .role = "private" }, .app_link);
+            }
             const l = applications.set(b) orelse {
                 page.apps_failed = true;
                 return;
             };
             page.applications = l;
             page.apps_failed = false;
+        },
+        .app_link => {
+            const b = bytes orelse {
+                page.app_link_failed = true;
+                return;
+            };
+            const v = app_invite.set(b) orelse {
+                page.app_link_failed = true;
+                return;
+            };
+            page.app_link = .{ .id = app_for, .token = v.invite };
+            page.copied = false;
         },
         .write, .link => {
             page.acct_failed = bytes == null;
