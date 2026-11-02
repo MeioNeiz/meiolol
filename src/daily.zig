@@ -85,6 +85,18 @@ pub const Option = struct {
     /// The hidden team's draft win chance with this pick, percent; null on puzzles made
     /// before it
     win: ?f64 = null,
+    /// In a review's picks; null in reviews from before
+    range: ?Range = null,
+};
+
+/// A pick's 95% ranges, points
+pub const Range = struct {
+    /// Half-width of the top pick's win chance minus this one's (score.pickSe both
+    /// ways), as `Seat.range`; 0 on the top pick
+    gap: f64,
+    /// The team's draft win chance with it (score.draftSe)
+    low: f64,
+    high: f64,
 };
 
 /// Gold at lane_minute in a lane matchup, from the lane curves, from the first
@@ -169,6 +181,8 @@ pub const Review = struct {
     /// Each option's rank in the hidden slot, as `Seat.rank`, in display order; empty in
     /// reviews from before
     ranks: []const u32 = &.{},
+    /// Each option's, as `ranks`
+    ranges: []const Range = &.{},
 };
 
 pub const Edge = struct {
@@ -809,8 +823,6 @@ fn review(
         const top = if (above == 0) mine[0] else all[0];
         var swapped = p.teams;
         swapped[t][@backingInt(role)] = top.champion;
-        const diff_se = @sqrt(std.math.pow(f64, score.pickSe(st, opts, p.teams, t, role), 2) +
-            std.math.pow(f64, score.pickSe(st, opts, swapped, t, role), 2));
         const win = mine[0].win;
         r.seats[t][@backingInt(role)] = .{
             .rank = above + 1,
@@ -818,7 +830,7 @@ fn review(
             .win = percent(win),
             .top = top.champion,
             .top_win = percent(top.win),
-            .range = round1(100 * win * (1 - win) * 1.96 * diff_se),
+            .range = gapRange(st, opts, p.teams, swapped, t, role, win),
         };
         if (t != p.hidden_team or role != p.hidden_role) continue;
         const picks = try arena.alloc(Option, @min(review_picks, all.len));
@@ -829,6 +841,7 @@ fn review(
             .reasons = try reasonsOf(arena, s),
             .lane = laneGold(curves, role, s.champion, enemy),
             .win = percent(s.win),
+            .range = rangeOf(st, opts, p.teams, t, role, s.champion, top.champion, s.win),
         };
         r.picks = picks;
         var ids: [max_options]u32 = undefined;
@@ -842,8 +855,37 @@ fn review(
             if (s.champion == o.id) break rankIn(all, s);
         } else return null;
         r.ranks = ranks;
+        const ranges = try arena.alloc(Range, p.options.len);
+        for (p.options, ranges) |o, *rg| rg.* = for (got) |s| {
+            if (s.champion == o.id) break rangeOf(st, opts, p.teams, t, role, o.id, top.champion, s.win);
+        } else return null;
+        r.ranges = ranges;
     };
     return r;
+}
+
+/// `c`'s ranges in seat (t, role) against `top`, the seat's top pick; `win` the team's
+/// chance with `c`, 0..1
+fn rangeOf(st: *const Stats, opts: score.Options, teams: [2][5]u32, t: u1, role: Role, c: u32, top: u32, win: f64) Range {
+    var with = teams;
+    with[t][@backingInt(role)] = c;
+    var at_top = teams;
+    at_top[t][@backingInt(role)] = top;
+    const se = score.draftSe(st, opts, with);
+    const x = @log(win / (1 - win));
+    return .{
+        .gap = if (c == top) 0 else gapRange(st, opts, with, at_top, t, role, win),
+        .low = percent(sigmoid(x - 1.96 * se)),
+        .high = percent(sigmoid(x + 1.96 * se)),
+    };
+}
+
+/// 95% half-width of the win chance with `top`'s pick minus `with`'s, points (delta
+/// method at `win`, 0..1)
+fn gapRange(st: *const Stats, opts: score.Options, with: [2][5]u32, top: [2][5]u32, t: u1, role: Role, win: f64) f64 {
+    const diff_se = @sqrt(std.math.pow(f64, score.pickSe(st, opts, with, t, role), 2) +
+        std.math.pow(f64, score.pickSe(st, opts, top, t, role), 2));
+    return round1(100 * win * (1 - win) * 1.96 * diff_se);
 }
 
 /// `s`'s rank among `all` (the seat's listed champions), whether or not it is listed
@@ -1095,6 +1137,18 @@ test "puzzles are made once, anonymised and published" {
     for (p.options, rv.ranks) |o, rank| {
         if (o.id == p.played) try testing.expectEqual(hidden.rank, rank);
         for (rv.picks, 1..) |x, i| if (x.id == o.id) try testing.expect(rank <= i);
+    }
+    // Every pick and option with its ranges; the top pick's gap 0, the played option's
+    // the seat's
+    try testing.expectEqual(p.options.len, rv.ranges.len);
+    for (rv.picks) |o| {
+        const x = o.range.?;
+        try testing.expect(x.low <= o.win.? and o.win.? <= x.high);
+        try testing.expect(if (o.id == hidden.top) x.gap == 0 else x.gap > 0);
+    }
+    for (p.options, rv.ranges) |o, x| {
+        if (o.id == p.played and hidden.rank > 1) try testing.expectApproxEqAbs(hidden.range, x.gap, 0.11);
+        try testing.expect(x.low < x.high);
     }
     for (p.lanes) |l| try testing.expect(l.win != null);
 

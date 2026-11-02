@@ -171,7 +171,9 @@ pub fn puzzle(
         const hidden = t == p.hidden_team and r == @backingInt(p.hidden_role);
         if (rs) |x| if (!hidden) {
             if (x.top != id) try cands.append(a, try plain(&ids, x.top, 1, x.top_win));
-            try cands.append(a, try plain(&ids, id, x.rank, x.win));
+            var c = try plain(&ids, id, x.rank, x.win);
+            c.near = x.top != id and x.top_win - x.win <= x.range;
+            try cands.append(a, c);
         };
         seats[t][r] = .{
             .champ = try ids.at(id),
@@ -266,18 +268,23 @@ fn plain(ids: *Ids, id: u32, rank: u32, win: f64) !dd.Cand {
 /// model's rank, so the shown ranks can skip one
 fn hiddenCands(a: std.mem.Allocator, ids: *Ids, p: daily.Puzzle, rv: daily.Review) ![]const dd.Cand {
     var out: std.ArrayList(dd.Cand) = .empty;
+    const s = rv.seats[p.hidden_team][@backingInt(p.hidden_role)];
     for (rv.picks, 1..) |o, rank| {
         const win = o.win orelse continue;
-        try out.append(a, try cand(a, ids, o, @intCast(rank), win));
+        try out.append(a, try cand(a, ids, o, @intCast(rank), win, s.top_win, o.range));
     }
-    const s = rv.seats[p.hidden_team][@backingInt(p.hidden_role)];
     const ranked = rv.ranks.len == p.options.len;
+    const ranged = rv.ranges.len == p.options.len;
     for (p.options, 0..) |o, i| {
         if (inPicks(rv.picks, o.id)) continue;
+        const r: ?daily.Range = if (ranged) rv.ranges[i] else null;
         if (o.id == p.played) {
-            try out.append(a, try cand(a, ids, o, s.rank, s.win));
+            var c = try cand(a, ids, o, s.rank, s.win, s.top_win, r);
+            // Reviews from before the options' ranges: the seat's
+            if (r == null) c.near = s.top != o.id and s.top_win - s.win <= s.range;
+            try out.append(a, c);
         } else if (ranked) {
-            try out.append(a, try cand(a, ids, o, rv.ranks[i], o.win orelse continue));
+            try out.append(a, try cand(a, ids, o, rv.ranks[i], o.win orelse continue, s.top_win, r));
         }
     }
     std.sort.insertion(dd.Cand, out.items, {}, byRank);
@@ -293,7 +300,8 @@ fn byRank(_: void, x: dd.Cand, y: dd.Cand) bool {
     return x.rank < y.rank;
 }
 
-fn cand(a: std.mem.Allocator, ids: *Ids, o: daily.Option, rank: u32, win: f64) !dd.Cand {
+/// `top`: the seat's top pick's win chance, `rg` the pick's ranges against it
+fn cand(a: std.mem.Allocator, ids: *Ids, o: daily.Option, rank: u32, win: f64, top: f64, rg: ?daily.Range) !dd.Cand {
     const terms = try a.alloc(dd.Term, o.reasons.len);
     var rest = win - base;
     for (terms, o.reasons) |*t, r| {
@@ -309,7 +317,16 @@ fn cand(a: std.mem.Allocator, ids: *Ids, o: daily.Option, rank: u32, win: f64) !
         };
         rest -= r.pp;
     }
-    return .{ .champ = try ids.at(o.id), .rank = clamp16(rank), .win = @floatCast(win), .terms = terms, .rest = @floatCast(rest) };
+    return .{
+        .champ = try ids.at(o.id),
+        .rank = clamp16(rank),
+        .win = @floatCast(win),
+        .low = if (rg) |x| @floatCast(x.low) else null,
+        .high = if (rg) |x| @floatCast(x.high) else null,
+        .near = if (rg) |x| x.gap > 0 and top - win <= x.gap else false,
+        .terms = terms,
+        .rest = @floatCast(rest),
+    };
 }
 
 fn uiRole(r: core.Role) ui.role.Role {
@@ -505,6 +522,18 @@ test "the hidden seat: each option at its rank, best first, after the top picks"
         try testing.expectEqual(rank, c.rank);
     }
     try testing.expectApproxEqAbs(@as(f32, 46), hidden[2].win, 1e-4);
+    // Before the options' ranges, the played one's gap is the seat's: 1.5 behind the top
+    // at a range of 1 is outside it
+    try testing.expect(!hidden[1].near and hidden[1].low == null);
+
+    // With them: 1.5 behind at 1.6 is within, 3.5 at 2 is not, the top never
+    rv.ranges = &.{ .{ .gap = 2, .low = 43, .high = 49 }, .{ .gap = 1.6, .low = 45, .high = 51 } };
+    raw.review = rv;
+    const q = try puzzle(a, raw, Fake{}, Fake.champ, Fake.magic, Fake.ranged);
+    const r = q.seats[1][2].cands;
+    for (r, [_]bool{ false, true, false }) |c, near| try testing.expectEqual(near, c.near);
+    try testing.expectEqual(@as(?f32, 45), r[1].low);
+    try testing.expectEqual(@as(?f32, 49), r[2].high);
 }
 
 fn named(p: *const dd.Puzzle, i: u16) bool {

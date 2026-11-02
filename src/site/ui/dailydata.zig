@@ -133,6 +133,8 @@ pub const Cand = struct {
     /// 95% range of win, %; null when unknown
     low: ?f32 = null,
     high: ?f32 = null,
+    /// Not the top pick, yet within the model's 95% range of it
+    near: bool = false,
     terms: []const Term,
     /// Every term not named, summed, points
     rest: f32,
@@ -210,8 +212,8 @@ pub const sample: Puzzle = .{
         .{
             .{ .champ = 5, .magic = 0.12, .kills = 1, .deaths = 3, .assists = 1, .cs = 429, .gold = 16200, .damage = 21000, .gold14 = 5000, .base = 47.5, .rank = 3, .of = 31, .cands = &.{
                 .{ .champ = 10, .rank = 1, .win = 49.9, .low = 48.5, .high = 51.3, .terms = &.{}, .rest = 0 },
-                .{ .champ = 11, .rank = 2, .win = 49.4, .low = 48.0, .high = 50.8, .terms = &.{}, .rest = 0 },
-                .{ .champ = 5, .rank = 3, .win = 48.9, .low = 47.6, .high = 50.2, .rest = 0.1, .terms = &.{
+                .{ .champ = 11, .rank = 2, .win = 49.4, .low = 48.0, .high = 50.8, .near = true, .terms = &.{}, .rest = 0 },
+                .{ .champ = 5, .rank = 3, .win = 48.9, .low = 47.6, .high = 50.2, .near = true, .rest = 0.1, .terms = &.{
                     .{ .kind = .strength, .other = null, .pp = 0.6, .games = 4100 },
                     .{ .kind = .into, .other = 0, .pp = 0.9, .games = 1200 },
                     .{ .kind = .with, .other = 6, .pp = 0.2, .games = 880 },

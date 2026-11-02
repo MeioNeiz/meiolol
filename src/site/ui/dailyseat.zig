@@ -142,6 +142,7 @@ pub const Seat = struct {
                     h.span(.{}, .{&rated}),
                     h.b(.{}, .{W.nth.with(h, .{ .n = n, .s = draftboard.ordinal(n) })}),
                     h.span(.{}, .{W.of.with(h, .{ .n = x.of })}),
+                    if (played) |c| if (c.near) badge.view(h, .neutral, .{W.near}) else null else null,
                 }) else null,
             }),
             if (hidden) s.yours(h, x) else .none,
@@ -169,6 +170,7 @@ pub const Seat = struct {
             .win = c.win,
             .vs = if (c.champ == x.champ) null else if (played) |pc| c.win - pc.win else null,
             .reasons = s.chips(h, c, rl, side),
+            .tag = if (c.near and c.champ != x.champ) W.near else null,
             .mark = if (c.champ == mine and c.champ != x.champ) W.yours_tag else null,
             .mark_k = .accent,
             .gap = gap,
@@ -370,7 +372,8 @@ const W = struct {
     const nth = Phrase("{n:int}{s:text}");
     const of = Phrase("of {n:int}");
     const rated = plain("Rated");
-    const rated_note = Phrase("The model's place for {c:text} among the {n:int} champions it rates for this seat: 1st is its top pick.");
+    const rated_note = Phrase("{c:text}'s place among the {n:int} champions the model rates here. Within range: too close to the top pick to call.");
+    const near = plain("within range");
     const yours = Phrase("Your pick {n:text}");
     const yours_tag = plain("your pick");
     const played = plain("played");
