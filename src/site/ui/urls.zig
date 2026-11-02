@@ -45,6 +45,8 @@ pub const Page = union(enum) {
     /// The current diff, or an older one by its patch with hyphens ("26-21")
     patch: ?[]const u8,
     pickup: ?Role,
+    /// Every stat's card, its top three
+    rankings,
     ranking: Ranking,
     learn,
     pool,
@@ -161,7 +163,7 @@ pub fn parse(path: []const u8) ?Page {
         return .{ .pickup = if (a) |x| std.meta.stringToEnum(Role, x) orelse return null else null };
     }
     if (std.mem.eql(u8, head, "rankings")) {
-        const stat = Stat.fromSlug(a orelse return null) orelse return null;
+        const stat = Stat.fromSlug(a orelse return .rankings) orelse return null;
         return .{ .ranking = .{ .stat = stat, .role = if (b) |x| std.meta.stringToEnum(Role, x) orelse return null else null } };
     }
     if (a != null) return null;
@@ -226,6 +228,7 @@ test "urls: each page spelt and parsed back" {
         .{ .{ .patch = "26-21" }, "/patch/26-21" },
         .{ .{ .pickup = null }, "/pickup" },
         .{ .{ .pickup = .mid }, "/pickup/mid" },
+        .{ .rankings, "/rankings" },
         .{ .{ .ranking = .{ .stat = .ahead } }, "/rankings/ahead" },
         .{ .{ .ranking = .{ .stat = .behind, .role = .support } }, "/rankings/behind/support" },
         .{ .{ .ranking = .{ .stat = .long_games, .role = .mid } }, "/rankings/long-games/mid" },
@@ -269,7 +272,6 @@ test "urls: not pages" {
         "/patch/26.21",
         "/patch/26",
         "/pickup/adc",
-        "/rankings",
         "/rankings/x",
         "/rankings/ahead/adc",
         "/rankings/long_games",

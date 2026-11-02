@@ -572,6 +572,7 @@ pub fn renderPage(site: *const Site, w: *Writer, at: urls.Page) !bool {
         .matchup => |m| return matchup.route(site, w, if (site.curves) |*c| c else return false, m),
         .pool => try pool_page.writePage(site, w, &site.pool),
         .pickup => |r| try pickup_page.writePage(site, w, if (r) |x| coreRole(x) else null),
+        .rankings => return rankings_page.writeIndex(site, w),
         .ranking => |k| return rankings_page.writePage(site, w, k),
         .patch => |cur| if (cur) |x| return patch_page.writeOlder(site, w, x) else try patch_page.writePage(site, w),
         else => return false,

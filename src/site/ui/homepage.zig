@@ -64,6 +64,7 @@ const W = struct {
     pub const played = plain("Most played");
     pub const best = plain("Win rate");
     pub const none = plain("None clear yet");
+    pub const rankings = plain("Champion rankings ›");
 };
 
 /// The example's game: the data file's first (newest) game. Switching role fetches that
@@ -277,6 +278,8 @@ pub const Champs = struct {
     /// The champions table's, then each role's (the heads' links)
     index: []const u8 = "",
     role_hrefs: [5][]const u8 = @splat(""),
+    /// The rankings index; "": none
+    rankings: []const u8 = "",
     /// Most played by role, most games first
     roles: [5][]const Pick,
     /// Best win rate over the champions table's games floor, by role
@@ -374,6 +377,7 @@ pub const HomeChamps = struct {
                 rolepicker.view(h, .{ .v = .compact, .label = W.role }, &roles),
             }),
             h.div(.{ .class = "cols" }, .{cols.done()}),
+            if (d.rankings.len > 0) h.a(.{ .class = "foot", .href = d.rankings }, .{W.rankings}) else .none,
         })});
     }
 };
@@ -522,6 +526,8 @@ pub const css =
     \\  .c-hch .nm { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
     \\  .c-hch .nm > b { font-weight: var(--w-m); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-hch .c-stat { text-align: right; }
+    \\  .c-hch > .c-card > .foot { display: block; padding: var(--sp-2) var(--card-px); border-top: 1px solid var(--line);
+    \\    font-size: var(--fs-s); }
     \\  .c-hch .nm > .c-bar { font-size: var(--fs-xs); color: var(--muted); }
     \\  @container (max-width: 700px) {
     \\    .c-hch .c-head > .c-roles { display: inline-flex; }
@@ -549,6 +555,7 @@ pub fn demo(h: *H) ?struct { HomeReview, HomeChamps } {
     d.* = .{
         .champs = h.mem.dupe(champ.Champ, &.{ c("Garen", "Garen"), c("Yone", "Yone"), c("MonkeyKing", "Wukong"), c("Ahri", "Ahri"), c("Jinx", "Jinx"), c("Thresh", "Thresh") }) catch return null,
         .games = 403364,
+        .rankings = "#",
         .roles = picks,
         .best = .{ picks[2], picks[0], picks[1], &.{}, picks[4] },
     };

@@ -71,7 +71,8 @@ row in the stats pass, then a spec.
 2. Done: wins in long games (/rankings/long-games): win rate in 35+ minute games minus
    under 25 (points, both sides pulled), lean.tsv's lean beside it; a second DataTable
    type in ui.ranking (Kind: rate or gap)
-3. /rankings index and links from the champions section and home's Champions card
+3. Done: /rankings index (a card per stat, its top three over all roles, solid rows
+   only), a Rankings tab under Champions, a link at the foot of home's Champions card
 4. "Nth of M ›" on the champion page cards, the champion highlighted on its ranking
 5. Lane gold at 14, pick-up gap, then the rest of the table above
 

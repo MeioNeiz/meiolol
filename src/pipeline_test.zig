@@ -462,6 +462,11 @@ test "fixture games to stats, curves and the website" {
         .{ "rankings/ahead/top.html", &.{ "<h1>Wins from ahead <span class=\"c-scope\">", "<a href=\"/rankings/behind/top\">From behind</a>", "<a href=\"/rankings/ahead\">All</a>", "1,500+ gold ahead of its lane opponent at 15 minutes. Top: ", "<div class=\"c-rank\" data-island=\"ranking\" data-bin=\"", "+1 unsure", "<script src=\"/" ++ assets.rankings_js.path ++ "\" data-wasm=\"" ++ assets.rankings_wasm.path ++ "\" defer></script>" } },
         .{ "rankings/long-games/top.html", &.{ "<h1>Wins in long games", "games of 35+ minutes minus in games under 25", "data-island=\"ranking\"" } },
         .{ "_v/all/rankings/behind.html", &.{ "<h1>Wins from behind", "<a href=\"/rankings/behind/top?region=all\">Top</a>", "data-island=\"ranking\"" } },
+        // The index: a card per stat, the Champions tab lit; the fixture's rows are all
+        // thin, so no card names a champion. Home's Champions card links it
+        .{ "rankings.html", &.{ "<h1>Rankings <span class=\"c-scope\">", "<a href=\"/rankings/ahead\">Wins from ahead</a>", "<a href=\"/rankings/long-games\">Wins in long games</a>", "<a class=\"full\" href=\"/rankings/behind\">Every champion ›</a>", "href=\"/rankings\" aria-current=\"page\"" } },
+        .{ "_v/all/rankings.html", &.{"<a href=\"/rankings/ahead?region=all\">Wins from ahead</a>"} },
+        .{ "index.html", &.{"<a class=\"foot\" href=\"/rankings\">Champion rankings ›</a>"} },
         .{ "_v/patch/pickup/mid.html", &.{ "<a href=\"/pickup?period=patch\">All</a><a href=\"/pickup/top?period=patch\">Top</a>", "<a aria-current=\"page\">Mid</a>" } },
         .{ "_v/all-patch/pool.html", &.{"<span class=\"c-scope\"><span class=\"c-chip\" data-v=\"scope\" title=\"Region, period and rank these numbers are from\"><span class=\"part\">All regions</span><span class=\"part\">Patch 15.13</span><span class=\"part\">Plat+</span></span></span> Lane numbers:"} },
     };

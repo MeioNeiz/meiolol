@@ -250,6 +250,7 @@ const champion_tabs = [_]NavItem{
     .{ .nav = .champions, .path = "/champions", .label = "Champions", .in_view = true },
     .{ .nav = .matchups, .path = "/matchups", .label = "Matchups", .in_view = true },
     .{ .nav = .patch, .path = "/patch", .label = "Patch changes", .in_view = true },
+    .{ .nav = .rankings, .path = "/rankings", .label = "Rankings", .in_view = true },
 };
 
 /// Tabs on the pages under Your games

@@ -16,6 +16,7 @@ const patch_page = @import("patch.zig");
 const champion = @import("champion.zig");
 const yourgame = @import("yourgame.zig");
 const root = @import("root.zig");
+const rankings = @import("rankings.zig");
 
 const Allocator = std.mem.Allocator;
 const Writer = std.Io.Writer;
@@ -238,6 +239,7 @@ fn champsOf(site: *const Site, up: []const u8) !?*hp.HomeChamps {
     const d = try a.create(hp.Champs);
     d.* = .{ .champs = &.{}, .games = site.games, .index = try site.championsHref(null), .roles = @splat(&.{}) };
     for (Role.all, &d.role_hrefs) |r, *href| href.* = try site.championsHref(r);
+    if (rankings.any(site)) d.rankings = try site.href(.rankings);
     var l: Lists = .{ .site = site, .up = up, .slot = try a.alloc(?u16, site.champs.len) };
     @memset(l.slot, null);
     const scores = try a.alloc(?f64, site.champs.len);

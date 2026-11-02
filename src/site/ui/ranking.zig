@@ -14,13 +14,14 @@ const delta = @import("delta.zig");
 const fmt = @import("fmt.zig");
 const urls = @import("urls.zig");
 const segmented = @import("segmented.zig");
+const card = @import("card.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
 const N = tree.N;
 
 pub const name = "StatRanking";
-pub const scope = .{ ".c-rank", ".c-rankhead" };
+pub const scope = .{ ".c-rank", ".c-rankhead", ".c-rankidx" };
 
 pub const Stat = urls.Stat;
 pub const Role = role.Role;
@@ -33,13 +34,15 @@ pub const Spec = struct {
     short: []const u8,
     /// What the figure counts, one line under the heading
     lead: []const u8,
+    /// Shorter, on its card in the index
+    about: []const u8,
 };
 
 pub fn spec(s: Stat) Spec {
     return switch (s) {
-        .ahead => .{ .title = "Wins from ahead", .short = "From ahead", .lead = "Win rate in games where the champion was 1,500+ gold ahead of its lane opponent at 15 minutes." },
-        .behind => .{ .title = "Wins from behind", .short = "From behind", .lead = "Win rate in games where the champion was 1,500+ gold behind its lane opponent at 15 minutes." },
-        .long_games => .{ .title = "Wins in long games", .short = "Long games", .lead = "Win rate in games of 35+ minutes minus in games under 25, in points: who wins more of its long games. Stomps end early, so this is how its games go, not a power curve." },
+        .ahead => .{ .title = "Wins from ahead", .short = "From ahead", .lead = "Win rate in games where the champion was 1,500+ gold ahead of its lane opponent at 15 minutes.", .about = "Win rate when 1,500+ gold ahead of the lane opponent at 15 minutes: who turns a lead into a win." },
+        .behind => .{ .title = "Wins from behind", .short = "From behind", .lead = "Win rate in games where the champion was 1,500+ gold behind its lane opponent at 15 minutes.", .about = "Win rate when 1,500+ gold behind the lane opponent at 15 minutes: who still wins from a bad lane." },
+        .long_games => .{ .title = "Wins in long games", .short = "Long games", .lead = "Win rate in games of 35+ minutes minus in games under 25, in points: who wins more of its long games. Stomps end early, so this is how its games go, not a power curve.", .about = "Win rate in 35+ minute games minus under 25: who wins more of its long games." },
     };
 }
 
@@ -118,7 +121,54 @@ const W = struct {
     pub const early = plain("Early");
     pub const late = plain("Late");
     pub const none = plain("More data needed: no champion has games in this spot yet.");
+    pub const full = plain("Every champion ›");
+    pub const index_lead = plain("Every champion ranked by one stat, per role. Each card's top three come from all roles, each champion in its main role, with 100+ games behind the figure.");
 };
+
+/// A stat's card in the index (/rankings): its top champions over every role, each in
+/// its main role, solid rows only
+pub const Card = struct {
+    stat: Stat,
+    href: []const u8,
+    top: []const Top,
+
+    pub const Top = struct {
+        name: []const u8,
+        src: []const u8,
+        href: []const u8,
+        role: Role,
+        value: f32,
+        usual: f32,
+        n: u32,
+    };
+};
+
+/// How many champions a card names
+pub const card_top = 3;
+
+/// The index's cards, one per stat
+pub fn index(h: *H, cards: []const Card) N {
+    var kids = h.list();
+    for (cards, 0..) |c, i| {
+        const sp = spec(c.stat);
+        var rows = h.list();
+        for (c.top, 0..) |t, k| rows.add(h.li(.{ .key = k }, .{
+            h.a(.{ .class = "who", .href = t.href }, .{
+                champ.view(h, .{ .name = t.name, .src = t.src }, .{ .px = .@"32", .named = false, .eager = true }),
+                h.span(.{}, .{t.name}),
+                role.view(h, t.role, .{}),
+            }),
+            stat.view(h, .{ .value = t.value, .kind = if (kindOf(c.stat) == .gap) .points else .rate, .scale = .aggregate, .ref = t.usual, .games = t.n }),
+        }));
+        kids.add(h.div(.{ .key = i }, .{card.view(h, .{}, &.{
+            h.h2(.{}, .{h.a(.{ .href = c.href }, .{sp.title})}),
+            h.p(.{}, .{sp.about}),
+            if (c.top.len == 0) h.p(.{ .class = "none" }, .{W.none}) else h.ul(.{}, .{rows.done()}),
+            h.a(.{ .class = "full", .href = c.href }, .{W.full}),
+        })}));
+    }
+    return h.div(.{ .class = "c-rankidx" }, .{ h.p(.{ .class = "lead" }, .{W.index_lead}), h.div(.{ .class = "cards" }, .{kids.done()}) });
+}
 
 pub const Line = struct {
     r: *const Row,
@@ -291,6 +341,20 @@ pub const css =
     \\    text-decoration: none; font-weight: var(--w-b); }
     \\  .c-rank .who:hover > span:not(.c-role) { text-decoration: underline; }
     \\  .c-rank > .none { color: var(--muted); }
+    \\  .c-rankidx { display: grid; gap: var(--sp-3); }
+    \\  .c-rankidx > .cards { display: grid; gap: var(--sp-3);
+    \\    grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); }
+    \\  .c-rankidx > .cards > div { display: grid; }
+    \\  .c-rankidx .c-card { display: flex; flex-direction: column; gap: var(--sp-2); }
+    \\  .c-rankidx h2 { margin: 0; font-size: var(--fs-l); }
+    \\  .c-rankidx h2 > a { color: inherit; }
+    \\  .c-rankidx p { margin: 0; color: var(--muted); font-size: var(--fs-s); }
+    \\  .c-rankidx ul { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-1); }
+    \\  .c-rankidx li { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+    \\  .c-rankidx .who { display: inline-flex; align-items: center; gap: var(--sp-2); color: inherit;
+    \\    text-decoration: none; font-weight: var(--w-b); }
+    \\  .c-rankidx .who:hover > span:not(.c-role) { text-decoration: underline; }
+    \\  .c-rankidx .full { margin-top: auto; font-size: var(--fs-s); }
     \\}
     \\
 ;
@@ -377,4 +441,19 @@ pub fn gallery(g: *Gallery) void {
     roles[0] = .{ .label = plain("All"), .href = "#" };
     for (Role.all, roles[1..]) |r, *x| x.* = .{ .label = r.label(), .selected = r == .top, .href = "#" };
     g.add("head", head(h, &stats, &roles, plain(spec(.ahead).lead)));
+    const tops = struct {
+        const rate = [_]Card.Top{
+            .{ .name = "Darius", .src = "", .href = "#", .role = .top, .value = 78.1, .usual = 71.9, .n = 1240 },
+            .{ .name = "Ahri", .src = "", .href = "#", .role = .mid, .value = 74.0, .usual = 70.9, .n = 2210 },
+            .{ .name = "Garen", .src = "", .href = "#", .role = .top, .value = 74.0, .usual = 71.9, .n = 860 },
+        };
+        const gap = [_]Card.Top{
+            .{ .name = "Kayle", .src = "", .href = "#", .role = .top, .value = 9.1, .usual = 0.4, .n = 1310 },
+        };
+    };
+    g.addFill("index: a card per stat, its top three", index(h, &.{
+        .{ .stat = .ahead, .href = "#", .top = &tops.rate },
+        .{ .stat = .behind, .href = "#", .top = &.{} },
+        .{ .stat = .long_games, .href = "#", .top = &tops.gap },
+    }));
 }

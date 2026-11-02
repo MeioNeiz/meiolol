@@ -1,5 +1,6 @@
 //! Rankings (docs/plan/ui/rankings.md): /rankings/<stat>[/<role>], every champion ranked
-//! by one stat (ui.ranking), each view. All: each champion in its main role
+//! by one stat (ui.ranking), each view. All: each champion in its main role. /rankings:
+//! a card per stat with its top three
 
 const std = @import("std");
 const core = @import("core");
@@ -21,11 +22,17 @@ const Counts = core.statsfile.Counts;
 
 /// Every stat, All then each role, when the view has its data
 pub fn paths(site: *const Site, list: *std.ArrayList(ui.urls.Page)) !void {
+    if (any(site)) try list.append(site.arena, .rankings);
     for (std.enums.values(rk.Stat)) |s| {
         if (!has(site, s)) continue;
         try list.append(site.arena, .{ .ranking = .{ .stat = s } });
         for (Role.all) |r| try list.append(site.arena, .{ .ranking = .{ .stat = s, .role = champion.uiRole(r) } });
     }
+}
+
+pub fn any(site: *const Site) bool {
+    for (std.enums.values(rk.Stat)) |s| if (has(site, s)) return true;
+    return false;
 }
 
 fn has(site: *const Site, s: rk.Stat) bool {
@@ -44,7 +51,7 @@ pub fn writePage(site: *const Site, w: *Writer, at: ui.urls.Ranking) !bool {
         try a.print("{s}, {s} | meiolol", .{ sp.title, if (r) |x| root.roleName(x) else "all roles" }),
         try a.print("Every champion ranked: {s}", .{sp.lead}),
         .{ .ranking = at },
-        .champions,
+        .rankings,
     );
     try shell.open(w, pg);
     try tpl.renderPart(w, "<h1>{title} ", .{ .title = sp.title });
@@ -65,6 +72,41 @@ pub fn writePage(site: *const Site, w: *Writer, at: ui.urls.Ranking) !bool {
         .js = html.Link{ .path = assets.rankings_js.path },
         .wasm = assets.rankings_wasm.path,
     });
+    try shell.close(w, pg);
+    return true;
+}
+
+/// /rankings: each stat with data, its card's top from the All ranking
+pub fn writeIndex(site: *const Site, w: *Writer) !bool {
+    if (!any(site)) return false;
+    const a = site.arena;
+    const pg = try site.page(
+        "Champion rankings | meiolol",
+        "Every champion ranked by one stat at a time: wins from ahead, from behind, in long games.",
+        .rankings,
+        .rankings,
+    );
+    try shell.open(w, pg);
+    try w.writeAll("<h1>Rankings ");
+    try site.writeChip(w, site.regionDim(site.view.region), site.periodDim(site.view.period), .plat);
+    try w.writeAll("</h1>\n");
+    var cards: std.ArrayList(rk.Card) = .empty;
+    for (std.enums.values(rk.Stat)) |s| {
+        if (!has(site, s)) continue;
+        const d = try data(site, s, null);
+        var top: std.ArrayList(rk.Card.Top) = .empty;
+        for (d.rows) |row| {
+            if (row.n < rk.thin_games) continue;
+            try top.append(a, .{ .name = row.name, .src = try a.print(ui.champ.icon_fmt, .{ site.ddragon_version, row.key }), .href = row.href, .role = row.role, .value = row.value, .usual = row.usual, .n = row.n });
+            if (top.items.len == rk.card_top) break;
+        }
+        try cards.append(a, .{ .stat = s, .href = try site.href(.{ .ranking = .{ .stat = s } }), .top = top.items });
+    }
+    var tree: ui.Tree = .{};
+    var h: ui.H = .init(a, &tree);
+    tree.root = rk.index(&h, cards.items);
+    if (h.oom) return error.OutOfMemory;
+    try ui.html.write(&tree, tree.root, w);
     try shell.close(w, pg);
     return true;
 }

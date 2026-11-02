@@ -174,6 +174,7 @@ Rankings (src/site/rankings.zig, ui/ranking.zig; docs/plan/ui/rankings.md):
 in its main role. A DataTable island (ui-rankings.wasm) with its data inline (data-bin);
 the server picks rows (wins from ahead and behind: champion.comebackSums over the view's
 curves) and pulls each figure toward its role (core.banimpact.Prior) for the sort.
+/rankings (Champions tab): a static card per stat, its top three solid rows from All.
 
 ## Daily Draft (src/daily.zig, src/site/daily.zig, src/site/ui/dailypage.zig)
 
