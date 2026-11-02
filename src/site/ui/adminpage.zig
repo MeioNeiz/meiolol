@@ -855,19 +855,17 @@ pub fn ago(h: *H, s: i64) Text {
     return W.days.with(h, .{ .n = @divFloor(m, 24 * 60) });
 }
 
-const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-
 /// UK time ("28 Oct 14:05")
 pub fn when(h: *H, at: i64) Text {
     const t = at + timechart.ukOffset(at);
     const c = fmt.civil(@intCast(@divFloor(t, 86400)));
     const sec = @mod(t, 86400);
-    return W.when.with(h, .{ .d = c.day, .m = months[c.month - 1], .hh = h.fmt("{d:0>2}", .{@as(u32, @intCast(@divFloor(sec, 3600)))}), .mm = h.fmt("{d:0>2}", .{@as(u32, @intCast(@divFloor(@mod(sec, 3600), 60)))}) });
+    return W.when.with(h, .{ .d = c.day, .m = fmt.months_short[c.month - 1], .hh = h.fmt("{d:0>2}", .{@as(u32, @intCast(@divFloor(sec, 3600)))}), .mm = h.fmt("{d:0>2}", .{@as(u32, @intCast(@divFloor(@mod(sec, 3600), 60)))}) });
 }
 
 pub fn day(h: *H, at: i64) Text {
     const c = fmt.civil(@intCast(@divFloor(at + timechart.ukOffset(at), 86400)));
-    return Phrase("{d:int} {m:text} {y:int}").with(h, .{ .d = c.day, .m = months[c.month - 1], .y = c.year });
+    return Phrase("{d:int} {m:text} {y:int}").with(h, .{ .d = c.day, .m = fmt.months_short[c.month - 1], .y = c.year });
 }
 
 pub const css =

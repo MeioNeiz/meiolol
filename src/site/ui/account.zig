@@ -320,11 +320,10 @@ const Day = struct {
     s: i64,
 
     pub fn format(d: Day, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
         const c = fmt.civil(@intCast(@divFloor(d.s, std.time.s_per_day)));
         try fmt.write(w, .int, c.day);
         try w.writeByte(' ');
-        try w.writeAll(months[c.month - 1]);
+        try w.writeAll(fmt.months_short[c.month - 1]);
         try w.writeByte(' ');
         try fmt.write(w, .int, c.year);
     }
