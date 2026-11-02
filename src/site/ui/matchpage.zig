@@ -42,16 +42,7 @@ fn icon(a: std.mem.Allocator, ddragon: []const u8, c: Other) !champ.Champ {
     return .{ .name = c.name, .src = try a.print(champ.icon_fmt, .{ ddragon, c.key }) };
 }
 
-fn rate(games: u32, wins: u32) f32 {
-    return 100 * @as(f32, @floatFromInt(wins)) / @as(f32, @floatFromInt(@max(games, 1)));
-}
-
-/// ±95%, points
-fn ci(games: u32, wins: u32) f32 {
-    if (games == 0) return 0;
-    const p = rate(games, wins) / 100;
-    return 196 * @sqrt(p * (1 - p) / @as(f32, @floatFromInt(games)));
-}
+const rate = trend.rate;
 
 const n_views = 4;
 
@@ -125,11 +116,11 @@ const W = struct {
     pub const apart_long = Phrase("{t:time} apart");
     pub const never = plain("-");
     pub const gold10 = plain("Won by gold at 10");
-    pub const gold10_tip = Phrase("{l:text} at 10 min: {r:rate} in {n:count} games, all lanes {a:rate}");
+    pub const gold10_tip = Phrase("at 10 min: {r:rate} in {n:count} games, all lanes {a:rate}");
     pub const buckets = [5]tree.Text{ plain("-1.5k"), plain("-1k"), plain("0"), plain("+1k"), plain("+1.5k") };
     pub const all_lanes = plain("dashed: all lanes");
     pub const by_length = plain("By game length");
-    pub const length_tip = Phrase("{l:text} min: {r:rate} in {n:count} games, against everyone {a:rate}");
+    pub const length_tip = Phrase("min: {r:rate} in {n:count} games, against everyone {a:rate}");
     pub const lengths = [3]tree.Text{ plain("<25"), plain("25-35"), plain("35+") };
     pub const everyone = Phrase("dashed: {x:text} against everyone");
     pub const by_rank = plain("By rank and mastery");
@@ -647,51 +638,31 @@ fn round10(v: i32) i32 {
 /// `t`'s points from the buckets with games, its base their wider group's rates when
 /// each has games; how many points
 fn buckets(h: *H, t: *trend.Trend, bs: []const Bucket, labels: []const tree.Text, tip: anytype) usize {
-    const pts = h.mem.alloc(trend.Point, bs.len) catch {
-        h.oom = true;
-        return 0;
-    };
-    const base = h.mem.alloc(f32, bs.len) catch {
-        h.oom = true;
-        return 0;
-    };
+    const pts = trend.alloc(h, bs.len) orelse return 0;
+    var base: [8]f32 = undefined;
+    std.debug.assert(bs.len <= base.len);
     var n: usize = 0;
     var all = true;
     for (bs, labels) |b, l| {
         if (b.games == 0) continue;
         const a = rate(b.all_games, b.all_wins);
-        pts[n] = .{
-            .label = l,
-            .sub = phrase.num(h, .kilo, b.games),
-            .v = rate(b.games, b.wins),
-            .ci = ci(b.games, b.wins),
-            .tip = tip.with(h, .{ .l = l.s, .r = rate(b.games, b.wins), .n = b.games, .a = a }),
-        };
+        pts[n] = trend.point(h, l, b.games, b.wins, tip.with(h, .{ .r = rate(b.games, b.wins), .n = b.games, .a = a }));
         base[n] = a;
         all = all and b.all_games > 0;
         n += 1;
     }
-    t.points = pts[0..n];
-    t.base = if (all) base[0..n] else &.{};
-    if (t.tip) |i| if (i >= n) {
-        t.tip = null;
+    t.set(pts[0..n]);
+    t.base = &.{};
+    if (all) t.base = h.mem.dupe(f32, base[0..n]) catch blk: {
+        h.oom = true;
+        break :blk &.{};
     };
     return n;
 }
 
-/// A share row of head to head: each side's part of its games
+/// A share row of head to head: each side's part of its games ([part, of])
 fn share(h: *H, label: tree.Text, a: [2]u32, b: [2]u32) versus.Row {
-    const pa = rate(a[1], a[0]);
-    const pb = rate(b[1], b[0]);
-    const ra = @round(pa);
-    const rb = @round(pb);
-    return .{
-        .label = label,
-        .a = phrase.num(h, .pct, @as(u32, @intFromFloat(ra))),
-        .b = phrase.num(h, .pct, @as(u32, @intFromFloat(rb))),
-        .bars = .{ pa / 100, pb / 100 },
-        .lead = if (ra > rb) .a else if (rb > ra) .b else null,
-    };
+    return versus.shares(h, label, rate(a[1], a[0]) / 100, rate(b[1], b[0]) / 100);
 }
 
 /// A timing row: both medians, the earlier bold and the gap under the label

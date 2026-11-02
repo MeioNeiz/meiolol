@@ -1,13 +1,14 @@
 //! The champion page (/champions/<slug>, /champions/<slug>/<role>): one champion in one
-//! role (docs/plan/ui/champion.md), as three islands. Top: the head with the role picker,
+//! role (docs/plan/ui/champion.md), as five islands. Top: the head with the role picker,
 //! the opponent search and the headline figures. Build: the build panel. More: the
-//! matchups as a dot plot with the chosen opponent's brief; by patch, by game length and
-//! the players' spread; pick-up and what its mains also play.
+//! matchups as a dot plot with the chosen opponent's brief. Trends: by patch, by game
+//! length, the players' spread, by rank, first item done. Charts: lane, comeback odds,
+//! pick-up, also play, lane kills, objectives.
 //!
 //! The server renders the path's role (bare: the main role) from the same data the
-//! page's data files carry (data/champion/<slug>.bin, -build.bin, -more.bin: `split`).
-//! ui-champion.wasm adopts Top and fetches ui-champbuild.wasm and ui-champmore.wasm for
-//! the others (one file would be over the 40 KB gz budget: stack.md). Role tabs are
+//! page's data files carry (data/champion/<slug>.bin, -build, -more, -trends, -charts:
+//! `split`). ui-champion.wasm adopts Top and fetches the other islands' wasm as they near
+//! the screen (one file would be over the 40 KB gz budget: stack.md). Role tabs are
 //! links to the role's page; the islands see one fragment (role=, region=, ...), which
 //! dom.zig's url_map spreads over the path, query and fragment.
 //!
@@ -303,11 +304,16 @@ pub fn Files(comptime D: type, comptime R: type) type {
 }
 
 /// View `v`'s base or rank file of the island whose page file is `src`, `root` the
-/// site root from the page
+/// site root from the page. Trends has no rank file of its own: More's holds by patch
 pub fn viewPath(a: std.mem.Allocator, src: []const u8, root: []const u8, v: u8, rank: bool) ![]const u8 {
     if (src.len < root.len + ".bin".len) return error.BadPath;
     const rest = src[root.len..];
-    if (rank) return std.mem.concat(a, u8, &.{ root, rest[0 .. rest.len - ".bin".len], "-rank", rank_suffixes[v], ".bin" });
+    if (rank) {
+        var stem = rest[0 .. rest.len - ".bin".len];
+        const more = std.mem.endsWith(u8, stem, "-trends");
+        if (more) stem = stem[0 .. stem.len - "-trends".len];
+        return std.mem.concat(a, u8, &.{ root, stem, if (more) "-more" else "", "-rank", rank_suffixes[v], ".bin" });
+    }
     return std.mem.concat(a, u8, &.{ root, view_dirs[v], rest });
 }
 
@@ -371,15 +377,14 @@ pub const W = struct {
     pub const lane_ends_unit = plain("gold at 14");
     pub const lane_win = Phrase("{c:text} {g:count} gold ahead of {o:text} at 14");
     pub const lane_loss = Phrase("{o:text} {g:count} gold ahead at 14");
-    pub const lane_ends_note = plain("Gold at 14 minutes, lane opponents with 100+ games; each opens the matchup.");
     pub const lane_term = plain("vs the average opponent");
-    pub const lane_note = Phrase("{c:text} minus its lane opponent by minute, averaged over its opponents by games; the band holds the middle half of lanes. All ranks.");
+    pub const lane_note = Phrase("{c:text} minus its lane opponent by minute, over all its opponents; the band holds the middle half of lanes. All ranks.");
     pub const lane_metrics = [3]tree.Text{ plain("Gold"), plain("XP"), plain("CS") };
     pub const comeback = plain("Won by lane gold");
     pub const comeback_at = plain("Minute");
     pub const comeback_mins = [2]tree.Text{ plain("10 min"), plain("15 min") };
     pub const comeback_buckets = [5]tree.Text{ plain("-1.5k"), plain("-1k"), plain("0"), plain("+1k"), plain("+1.5k") };
-    pub const comeback_tip = Phrase("{l:text} at {m:text}: {r:rate} in {n:count} games, all lanes {a:rate}");
+    pub const comeback_tip = Phrase("at {m:text}: {r:rate} in {n:count} games, all lanes {a:rate}");
     pub const all_lanes = plain("dashed: all lanes");
     pub const kills_head = plain("Lane kills");
     pub const kills_them = "Opponent";
@@ -392,7 +397,6 @@ pub const W = struct {
     pub const by_rank = plain("By rank");
     pub const brackets = [3]tree.Text{ plain("Iron-Silver"), plain("Gold-Emerald"), plain("Diamond+") };
     pub const rank_tip = Phrase("{r:rate} in {n:count} games · gold at 14 {g:signed}, estimated from common matchups");
-    pub const rank_tip_thin = Phrase("{r:rate} in {n:count} games");
     pub const rank_key = plain("dashed: all games");
     pub const rank_note = plain("Games by the middle rank of the players, when 5 or more are known. We crawl from Platinum up, so the lowest bracket is thin and the middle one mostly Platinum and Emerald.");
     pub const first_item = plain("First item done");
@@ -404,17 +408,16 @@ pub const W = struct {
     pub const middle = plain("middle half");
     pub const pickup = plain("Pick-up");
     pub const pickup_head = Phrase("{a:rate} new → {b:rate} practised · gap {g:dec}, usual {u:dec}");
-    pub const pickup_note = plain("New: under 30k mastery points on it; practised: 100k+. Practised players are better players too, so every champion rises: the usual gap is the average over champions.");
+    pub const pickup_note = plain("New: under 30k mastery points; practised: 100k+. Every champion rises with practice: the usual gap is the average.");
     pub const harder = plain("harder to pick up");
     pub const easier = plain("easier to pick up");
     pub const also = Phrase("{c:text} mains also play");
     pub const lift = Phrase("×{x:dec}");
     pub const share = Phrase("{s:pct}");
     pub const pool = plain("Pool");
-    pub const patch_tip = Phrase("{p:text}: {r:rate} in {n:count} games");
-    pub const day_tip = Phrase("{d:text}: {r:rate} in {n:count} games");
-    pub const length_tip = Phrase("{l:text} min: {r:rate} in {n:count} games");
-    pub const band_tip = Phrase("{l:text}: {r:rate} in {n:count} games");
+    /// A chart point's tip, after its name
+    pub const rate_tip = Phrase("{r:rate} in {n:count} games");
+    pub const min_tip = Phrase("min: {r:rate} in {n:count} games");
     pub const few = Phrase("Too few games at {r:text}.");
     pub const rare_role = Phrase("A rare role for {c:text}: {n:count} games.");
     pub const from = Phrase("Build from {g:text} games: too few at {r:text}.");
@@ -439,34 +442,28 @@ pub fn usualSide(v: f32, below: tree.Text, above: tree.Text) ?tree.Text {
 }
 
 fn rate(c: Counts) f32 {
-    return @floatCast(buildpanel.rate(c.games, c.wins));
+    return trend.rate(c.games, c.wins);
 }
 
-/// A Versus row of a and b in `games`, as the matchup page's head to head
-fn share(h: *H, label: tree.Text, games: u32, a: u32, b: u32) versus.Row {
-    return rates(h, label, .{ .games = games, .wins = a }, .{ .games = games, .wins = b });
-}
-
-/// A Versus row of a's and b's rates
+/// A Versus row of a's and b's rates, as the matchup page's head to head
 fn rates(h: *H, label: tree.Text, a: Counts, b: Counts) versus.Row {
-    const pa = rate(a);
-    const pb = rate(b);
-    const ra = @round(pa);
-    const rb = @round(pb);
-    return .{
-        .label = label,
-        .a = phrase.num(h, .pct, @as(u32, @intFromFloat(ra))),
-        .b = phrase.num(h, .pct, @as(u32, @intFromFloat(rb))),
-        .bars = .{ pa / 100, pb / 100 },
-        .lead = if (ra > rb) .a else if (rb > ra) .b else null,
-    };
+    return versus.shares(h, label, rate(a) / 100, rate(b) / 100);
 }
 
-/// ±95%, points
-fn ci(c: Counts) f32 {
-    if (c.games == 0) return 0;
-    const p: f32 = @floatCast(buildpanel.rate(c.games, c.wins) / 100);
-    return 196 * @sqrt(p * (1 - p) / @as(f32, @floatFromInt(c.games)));
+/// A chart point of c's win rate, its games under the label
+fn point(h: *H, label: tree.Text, c: Counts) trend.Point {
+    return trend.point(h, label, c.games, c.wins, W.rate_tip.with(h, .{ .r = rate(c), .n = c.games }));
+}
+
+/// A card with nothing to show under its head
+fn noneCard(h: *H, title: tree.Text, foot: N) N {
+    return card.view(h, .{}, &.{ card.head(h, title, null, &.{}), h.p(.{ .class = "none" }, .{W.none}), foot });
+}
+
+/// A head's note with its Toggletip
+fn tipNote(h: *H, id: []const u8, shown: tree.Text, title: tree.Text, body: tree.Text) N {
+    const tip = toggletip.view(h, id, .{shown}, title, body);
+    return h.span(.{ .class = "note" }, .{&tip});
 }
 
 /// A stat's switch label, at comptime: a runtime spec() would pull every stat's strings
@@ -544,44 +541,66 @@ pub const BuildRole = struct {
     from: u8 = 0,
 };
 
-/// ui-champmore.wasm's: the matchups and the cards under them
+/// ui-champmore.wasm's: the matchups
 pub const MoreData = struct {
     name: []const u8,
     slug: []const u8,
-    id: u16 = 0,
     ddragon: []const u8,
     champs: []const Other,
     roles: []const MoreRole,
-    lengths: []const []const u8,
-    spread: ?Spread = null,
 };
 
+/// Also the rank files' (ui.champrank.More), which carry by patch and by day for the
+/// Trends island
 pub const MoreRole = struct {
     role: role.Role,
     thin: bool = false,
     games: u32,
     wins: u32,
-    lean: ?i16 = null,
     rels: []const Rel,
-    by_patch: []const Patch,
+    by_patch: []const Patch = &.{},
     by_day: []const Day = &.{},
-    by_length: []const Counts,
-    long_games: ?Place = null,
 };
 
-/// ui-champcharts.wasm's: the cards under the trends. Lane and comeback odds from every
-/// rank, Pick-up and Also play from Platinum+ (whatever the rank pick)
-pub const ChartsData = struct {
+/// ui-champtrends.wasm's: by patch, by game length, players, pick-up, also play, by rank,
+/// first item done. A rank pick changes by patch alone (the More island's rank file)
+pub const TrendsData = struct {
     name: []const u8,
-    /// The matchup links'
-    slug: []const u8 = "",
     /// Riot's champion id: the pool link's
     id: u16 = 0,
     ddragon: []const u8,
     champs: []const Other,
-    roles: []const ChartsRole,
+    roles: []const TrendsRole,
+    lengths: []const []const u8,
+    spread: ?Spread = null,
     pickup: ?Pickup = null,
     also: []const Also = &.{},
+};
+
+pub const TrendsRole = struct {
+    role: role.Role,
+    thin: bool = false,
+    games: u32,
+    wins: u32,
+    lean: ?i16 = null,
+    by_patch: []const Patch,
+    by_day: []const Day = &.{},
+    by_length: []const Counts,
+    long_games: ?Place = null,
+    ranks: ?Ranks = null,
+    /// Platinum+, from the view's builds file
+    timing: []const Timed = &.{},
+};
+
+/// ui-champcharts.wasm's: the lane and early game. Lane, comeback odds and lane kills
+/// from every rank, objectives from Platinum+ (whatever the rank pick)
+pub const ChartsData = struct {
+    name: []const u8,
+    /// The matchup links'
+    slug: []const u8 = "",
+    ddragon: []const u8,
+    champs: []const Other,
+    roles: []const ChartsRole,
 };
 
 pub const ChartsRole = struct {
@@ -594,9 +613,6 @@ pub const ChartsRole = struct {
     kills: ?Kills = null,
     /// Platinum+, from the view's builds file
     objectives: ?Objectives = null,
-    ranks: ?Ranks = null,
-    /// Platinum+, from the view's builds file
-    timing: []const Timed = &.{},
     ahead: ?Place = null,
     behind: ?Place = null,
     lane_gold: ?Place = null,
@@ -643,7 +659,7 @@ pub const Bracket = struct {
 /// Files' rank type for the charts, which have no rank files
 pub const NoRank = struct { groups: [1][]const ChartsRole };
 
-pub const Split = struct { top: TopData, build: BuildData, more: MoreData, charts: ChartsData };
+pub const Split = struct { top: TopData, build: BuildData, more: MoreData, trends: TrendsData, charts: ChartsData };
 
 /// Lanes the champion wins and loses by most at 14 minutes: thin pairs and small leads out
 /// (the curves shrink a thin pair toward the champions' baseline already)
@@ -680,18 +696,21 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
     const top = try a.alloc(TopRole, d.roles.len);
     const build = try a.alloc(BuildRole, d.roles.len);
     const more = try a.alloc(MoreRole, d.roles.len);
+    const trends = try a.alloc(TrendsRole, d.roles.len);
     const charts = try a.alloc(ChartsRole, d.roles.len);
-    for (d.roles, top, build, more, charts) |x, *t, *b, *m, *c| {
+    for (d.roles, top, build, more, trends, charts) |x, *t, *b, *m, *tr, *c| {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
-        m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_day = x.by_day, .by_length = x.by_length, .long_games = x.places.long_games };
-        c.* = .{ .role = x.role, .lane = x.lane, .lanes = try laneEnds(a, x.role, x.rels), .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ranks = x.ranks, .timing = x.timing, .ahead = x.places.ahead, .behind = x.places.behind, .lane_gold = x.places.lane_gold };
+        m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .rels = x.rels };
+        tr.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .by_patch = x.by_patch, .by_day = x.by_day, .by_length = x.by_length, .long_games = x.places.long_games, .ranks = x.ranks, .timing = x.timing };
+        c.* = .{ .role = x.role, .lane = x.lane, .lanes = try laneEnds(a, x.role, x.rels), .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ahead = x.places.ahead, .behind = x.places.behind, .lane_gold = x.places.lane_gold };
     }
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
         .build = .{ .roles = build },
-        .more = .{ .name = d.name, .slug = d.slug, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = more, .lengths = d.lengths, .spread = d.spread },
-        .charts = .{ .name = d.name, .slug = d.slug, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = charts, .pickup = d.pickup, .also = d.also },
+        .more = .{ .name = d.name, .slug = d.slug, .ddragon = d.ddragon, .champs = d.champs, .roles = more },
+        .trends = .{ .name = d.name, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = trends, .lengths = d.lengths, .spread = d.spread, .pickup = d.pickup, .also = d.also },
+        .charts = .{ .name = d.name, .slug = d.slug, .ddragon = d.ddragon, .champs = d.champs, .roles = charts },
     };
 }
 
@@ -1069,7 +1088,7 @@ pub const Build = struct {
     }
 };
 
-/// The matchups and the cards under them (ui-champmore.wasm, loaded after Top)
+/// The matchups (ui-champmore.wasm, loaded by ui-champion.wasm)
 pub const More = struct {
     data: *const MoreData,
     /// "../" from the page to the site root
@@ -1085,22 +1104,8 @@ pub const More = struct {
     /// Data.roles' index
     cur: u8 = 0,
     grid: matchgrid.MatchupGrid = .{},
-    by_patch: trend.Trend = .{ .label = W.by_patch, .points = &.{} },
-    span: Span = .{},
-    by_length: trend.Trend = .{ .label = W.by_length, .points = &.{} },
 
     const P = @This();
-
-    /// The By patch card's: the last patches, or the newest one by day
-    const Span = struct {
-        days: bool = false,
-
-        pub const Msg = enum { patches, days };
-
-        pub fn update(s: *Span, m: Span.Msg, _: *tree.Event) void {
-            s.days = m == .days;
-        }
-    };
 
     pub const Msg = matchgrid.Msg;
 
@@ -1148,8 +1153,8 @@ pub const More = struct {
         p.fromUrl(u);
     }
 
-    /// The shown rank's figures of the role, for lane opponents and by patch; null at
-    /// Platinum+ (Data's), .few without any
+    /// The shown rank's figures of the role, for lane opponents; null at Platinum+
+    /// (Data's), .few without any
     fn ranked(p: *const P) ?Ranked {
         const g = p.files.group() orelse return null;
         return if (at(MoreRole, g, p.r().role)) |x| .{ .role = x } else .few;
@@ -1190,7 +1195,6 @@ pub const More = struct {
             .data_thin = p.r().thin,
         }, .{
             p.matchups(h),
-            h.div(.{ .class = "row3", .id = "trends" }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
         });
     }
 
@@ -1205,6 +1209,115 @@ pub const More = struct {
         in.faded = p.files.shown.rank != .plat;
         return p.grid.view(h, p, &in);
     }
+};
+
+/// By patch, by game length, players, pick-up, also play, by rank and first item done
+/// (ui-champtrends.wasm, loaded by ui-champion.wasm). A rank pick changes by patch, from
+/// the More island's rank file; the rest say Platinum+ or are from every rank
+pub const Trends = struct {
+    data: *const TrendsData,
+    /// "../" from the page to the site root
+    root: []const u8,
+    /// The data file and its stamp, for ui.wasm
+    src: []const u8 = "",
+    stamp: u32 = 0,
+    /// ui-champtrends.js and .wasm, for ui-champion.wasm to load
+    js: ?[]const u8 = null,
+    wasm: ?[]const u8 = null,
+    files: Files(TrendsData, champrank.More) = .{},
+    want_role: ?role.Role = null,
+    /// Data.roles' index
+    cur: u8 = 0,
+    by_patch: trend.Trend = .{ .label = W.by_patch, .points = &.{} },
+    span: Span = .{},
+    by_length: trend.Trend = .{ .label = W.by_length, .points = &.{} },
+    ranks: trend.Trend = .{ .label = W.by_rank, .points = &.{} },
+    timing: trend.Trend = .{ .label = W.first_item, .points = &.{} },
+    pickup: trend.Trend = .{ .label = W.pickup, .points = &.{}, .height = 110 },
+
+    const P = @This();
+
+    /// The By patch card's: the last patches, or the newest one by day
+    const Span = struct {
+        days: bool = false,
+
+        pub const Msg = enum { patches, days };
+
+        pub fn update(s: *Span, m: Span.Msg, _: *tree.Event) void {
+            s.days = m == .days;
+        }
+    };
+
+    pub const Msg = union(enum) {};
+
+    pub const Url = struct {
+        role: ?role.Role = null,
+        region: Region = .euw,
+        period: Period = .days30,
+        rank: Rank = .plat,
+    };
+
+    fn r(p: *const P) *const TrendsRole {
+        return &p.data.roles[p.cur];
+    }
+
+    pub fn toUrl(p: *const P) Url {
+        const w = p.files.want;
+        return .{ .role = p.want_role, .region = w.region(), .period = w.period(), .rank = w.rank };
+    }
+
+    pub fn fromUrl(p: *P, u: Url) void {
+        p.want_role = u.role;
+        p.files.want = .of(u);
+        p.cur = roleIndex(p.data.roles, u.role);
+    }
+
+    /// The loader's, once what files.want needs is in
+    pub fn show(p: *P, _: std.mem.Allocator) void {
+        const u = p.toUrl();
+        p.files.shown = p.files.want;
+        p.data = p.files.base[p.files.shown.view].?;
+        p.fromUrl(u);
+    }
+
+    pub fn update(_: *P, m: Msg, _: *tree.Event) void {
+        switch (m) {}
+    }
+
+    /// The shown rank's role, for by patch; null at Platinum+, .few without one
+    fn ranked(p: *const P) ?Ranked {
+        const g = p.files.group() orelse return null;
+        return if (at(MoreRole, g, p.r().role)) |x| .{ .role = x } else .few;
+    }
+
+    const Ranked = union(enum) { role: *const MoreRole, few };
+
+    /// On the cards that stay Platinum+ under a rank pick
+    fn plat(p: *const P, h: *H) N {
+        return if (p.files.shown.rank != .plat) badge.view(h, .neutral, .{W.plat}) else .none;
+    }
+
+    fn few(p: *const P, h: *H) N {
+        return h.p(.{ .class = "none" }, .{W.few.with(h, .{ .r = W.ranks[@backingInt(p.files.shown.rank)].s })});
+    }
+
+    pub fn view(p: *P, h: *H) N {
+        return h.div(.{
+            .class = "part",
+            .data_island = "champtrends",
+            .data_src = if (p.src.len > 0) p.src else null,
+            .data_stamp = p.stamp,
+            .data_root = p.root,
+            .data_js = p.js,
+            .data_wasm = p.wasm,
+            .data_busy = p.files.busy(),
+            .data_thin = p.r().thin,
+        }, .{
+            h.div(.{ .class = "row3", .id = "trends" }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
+            h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
+            h.div(.{ .class = "row2" }, .{ p.rankCard(h), p.timingCard(h) }),
+        });
+    }
 
     fn patchCard(p: *P, h: *H) N {
         const by_patch, const by_day = if (p.ranked()) |x| switch (x) {
@@ -1213,27 +1326,15 @@ pub const More = struct {
         } else .{ p.r().by_patch, p.r().by_day };
         if (by_day.len < 2) p.span.days = false;
         if (p.span.days) return p.dayCard(h, by_patch, by_day);
-        const pts = h.mem.alloc(trend.Point, by_patch.len) catch {
-            h.oom = true;
-            return .none;
-        };
+        const pts = trend.alloc(h, by_patch.len) orelse return .none;
         var n: usize = 0;
         for (by_patch) |x| {
             if (x.games == 0) continue;
-            const c: Counts = .{ .games = x.games, .wins = x.wins };
-            pts[n] = .{
-                .label = .{ .s = x.patch },
-                .sub = if (x.rank > 0) W.nth.with(h, .{ .n = x.rank, .th = ordinal(x.rank) }) else null,
-                .v = rate(c),
-                .ci = ci(c),
-                .tip = W.patch_tip.with(h, .{ .p = x.patch, .r = rate(c), .n = x.games }),
-            };
+            pts[n] = point(h, .{ .s = x.patch }, .{ .games = x.games, .wins = x.wins });
+            pts[n].sub = if (x.rank > 0) W.nth.with(h, .{ .n = x.rank, .th = ordinal(x.rank) }) else null;
             n += 1;
         }
-        p.by_patch.points = pts[0..n];
-        if (p.by_patch.tip) |t| if (t >= n) {
-            p.by_patch.tip = null;
-        };
+        p.by_patch.set(pts[0..n]);
         p.by_patch.label = W.by_patch;
         return card.view(h, .{}, &.{ card.head(h, W.by_patch, null, &.{p.spanPick(h, by_day.len)}), p.by_patch.view(h) });
     }
@@ -1241,28 +1342,17 @@ pub const More = struct {
     /// The newest patch by day (by_patch's last), the first with its month; every other
     /// day named past 10
     fn dayCard(p: *P, h: *H, by_patch: []const Patch, by_day: []const Day) N {
-        const pts = h.mem.alloc(trend.Point, by_day.len) catch {
-            h.oom = true;
-            return .none;
-        };
+        const pts = trend.alloc(h, by_day.len) orelse return .none;
         var n: usize = 0;
         for (by_day, 0..) |x, i| {
             if (x.games == 0) continue;
-            const c: Counts = .{ .games = x.games, .wins = x.wins };
             const named = by_day.len <= 10 or (by_day.len - 1 - i) % 2 == 0;
-            pts[n] = .{
-                .label = .{ .s = if (n == 0) x.tip else if (named) x.label else "" },
-                .sub = if (named) phrase.num(h, .kilo, c.games) else null,
-                .v = rate(c),
-                .ci = ci(c),
-                .tip = W.day_tip.with(h, .{ .d = x.tip, .r = rate(c), .n = x.games }),
-            };
+            pts[n] = point(h, .{ .s = if (n == 0) x.tip else if (named) x.label else "" }, .{ .games = x.games, .wins = x.wins });
+            if (!named) pts[n].sub = null;
+            pts[n].name = .{ .s = x.tip };
             n += 1;
         }
-        p.by_patch.points = pts[0..n];
-        if (p.by_patch.tip) |t| if (t >= n) {
-            p.by_patch.tip = null;
-        };
+        p.by_patch.set(pts[0..n]);
         const title = W.by_day.with(h, .{ .p = if (by_patch.len > 0) by_patch[by_patch.len - 1].patch else "" });
         p.by_patch.label = title;
         return card.view(h, .{}, &.{ card.head(h, title, null, &.{p.spanPick(h, by_day.len)}), p.by_patch.view(h) });
@@ -1278,36 +1368,27 @@ pub const More = struct {
 
     fn lengthCard(p: *P, h: *H) N {
         const rl = p.r();
-        const pts = h.mem.alloc(trend.Point, rl.by_length.len) catch {
-            h.oom = true;
-            return .none;
-        };
+        const pts = trend.alloc(h, rl.by_length.len) orelse return .none;
         var n: usize = 0;
         for (rl.by_length, 0..) |c, i| {
             if (c.games == 0) continue;
             const l = if (i < p.data.lengths.len) p.data.lengths[i] else "";
-            pts[n] = .{
-                .label = .{ .s = l },
-                .sub = phrase.num(h, .kilo, c.games),
-                .v = rate(c),
-                .ci = ci(c),
-                .tip = W.length_tip.with(h, .{ .l = l, .r = rate(c), .n = c.games }),
-            };
+            pts[n] = trend.point(h, .{ .s = l }, c.games, c.wins, W.min_tip.with(h, .{ .r = rate(c), .n = c.games }));
             n += 1;
         }
-        p.by_length.points = pts[0..n];
+        p.by_length.set(pts[0..n]);
         p.by_length.ref = rate(.{ .games = rl.games, .wins = rl.wins });
-        const lean: ?[2]N = if (rl.lean) |g| toggletip.view(h, "cp-lean", .{W.lean.with(h, .{ .g = @as(i32, g) })}, W.lean.with(h, .{ .g = @as(i32, g) }), W.lean_note) else null;
-        return card.view(h, .{}, &.{ card.head(h, W.by_length, null, &.{ p.plat(h), if (lean) |*x| h.span(.{ .class = "note" }, .{x}) else .none }), p.by_length.view(h), places(h, &.{.{ short(.long_games), rl.long_games }}) });
+        const lean = if (rl.lean) |g| W.lean.with(h, .{ .g = @as(i32, g) }) else null;
+        return card.view(h, .{}, &.{ card.head(h, W.by_length, null, &.{ p.plat(h), if (lean) |x| tipNote(h, "cp-lean", x, x, W.lean_note) else .none }), p.by_length.view(h), places(h, &.{.{ short(.long_games), rl.long_games }}) });
     }
 
     fn playersCard(p: *P, h: *H) N {
-        const s = p.data.spread orelse return card.view(h, .{}, &.{ card.head(h, W.players, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
-        const tip = toggletip.view(h, "cp-spread", .{W.spread_head.with(h, .{ .n = s.players, .lo = s.p25, .hi = s.p75 })}, W.middle, W.spread_note.with(h, .{ .lo = s.luck_p25, .hi = s.luck_p75 }));
+        const s = p.data.spread orelse return noneCard(h, W.players, .none);
+        const head = W.spread_head.with(h, .{ .n = s.players, .lo = s.p25, .hi = s.p75 });
         return card.view(h, .{}, &.{
-            card.head(h, W.players, null, &.{ p.plat(h), h.span(.{ .class = "note" }, .{&tip}) }),
+            card.head(h, W.players, null, &.{ p.plat(h), tipNote(h, "cp-spread", head, W.middle, W.spread_note.with(h, .{ .lo = s.luck_p25, .hi = s.luck_p75 })) }),
             histogram.view(h, .{
-                .label = W.spread_head.with(h, .{ .n = s.players, .lo = s.p25, .hi = s.p75 }),
+                .label = head,
                 .counts = &s.bins,
                 .lo = -5,
                 .step = 10,
@@ -1315,9 +1396,101 @@ pub const More = struct {
             }),
         });
     }
+    /// Win rate by rank bracket, dashed at its rate over every game (the head's); brackets under
+    /// min_games left out
+    fn rankCard(p: *P, h: *H) N {
+        const k = p.r().ranks orelse return noneCard(h, W.by_rank, .none);
+        const pts = trend.alloc(h, k.by.len) orelse return .none;
+        var n: usize = 0;
+        for (k.by, W.brackets) |b, l| {
+            if (b.games < min_games) continue;
+            const c: Counts = .{ .games = b.games, .wins = b.wins };
+            pts[n] = point(h, l, c);
+            if (b.gold) |g| pts[n].tip = W.rank_tip.with(h, .{ .r = rate(c), .n = b.games, .g = @as(i32, g) });
+            n += 1;
+        }
+        if (n < 2) return noneCard(h, W.by_rank, .none);
+        p.ranks.set(pts[0..n]);
+        p.ranks.ref = rate(k.all);
+        return card.view(h, .{}, &.{ card.head(h, W.by_rank, null, &.{tipNote(h, "cp-rank", W.rank_key, W.by_rank, W.rank_note)}), p.ranks.view(h) });
+    }
+
+    /// Win rate by the minute the first item was finished, dashed at the rate over every
+    /// bucket; buckets under min_games left out
+    fn timingCard(p: *P, h: *H) N {
+        const k = p.r().timing;
+        const pts = trend.alloc(h, k.len) orelse return .none;
+        var all: Counts = .{ .games = 0, .wins = 0 };
+        var n: usize = 0;
+        for (k) |b| {
+            all.games += b.games;
+            all.wins += b.wins;
+            if (b.games < min_games) continue;
+            pts[n] = trend.point(h, .{ .s = b.label }, b.games, b.wins, W.min_tip.with(h, .{ .r = trend.rate(b.games, b.wins), .n = b.games }));
+            n += 1;
+        }
+        if (n < 2) return noneCard(h, W.first_item, .none);
+        p.timing.set(pts[0..n]);
+        p.timing.ref = rate(all);
+        return card.view(h, .{}, &.{ card.head(h, W.first_item, null, &.{ p.plat(h), tipNote(h, "cp-item", W.first_item_key, W.first_item, W.first_item_note.with(h, .{ .c = p.data.name })) }), p.timing.view(h) });
+    }
+    fn pickupCard(p: *P, h: *H) N {
+        const k = p.data.pickup orelse return noneCard(h, W.pickup, .none);
+        var all: Counts = .{ .games = 0, .wins = 0 };
+        for (k.bins) |b| {
+            all.games += b.games;
+            all.wins += b.wins;
+        }
+        const pts = trend.alloc(h, k.bins.len) orelse return .none;
+        var n: usize = 0;
+        for (k.bins, W.bands) |b, l| {
+            if (b.games < k.thin) continue;
+            pts[n] = point(h, l, b);
+            n += 1;
+        }
+        if (n < 2) return noneCard(h, W.pickup, .none);
+        p.pickup.set(pts[0..n]);
+        p.pickup.ref = rate(all);
+        const head = if (k.gap) |g| tipNote(h, "cp-pickup", W.pickup_head.with(h, .{ .a = k.new.?, .b = k.practised.?, .g = g, .u = k.usual_gap }), W.pickup, W.pickup_note) else .none;
+        return card.view(h, .{}, &.{
+            card.head(h, W.pickup, null, &.{
+                p.plat(h),
+                switch (k.kind) {
+                    .harder => badge.view(h, .neutral, .{W.harder}),
+                    .easier => badge.view(h, .neutral, .{W.easier}),
+                    .usual => .none,
+                },
+                head,
+            }),
+            p.pickup.view(h),
+        });
+    }
+
+    fn alsoCard(p: *P, h: *H) N {
+        const d = p.data;
+        const rows = h.mem.alloc(champlist.Row, d.also.len) catch {
+            h.oom = true;
+            return .none;
+        };
+        for (rows, d.also) |*x, a| {
+            const c = d.champs[a.champ];
+            x.* = .{
+                .champ = icon(h, d.ddragon, c),
+                .href = h.fmt("{s}champions/{s}", .{ p.root, c.slug }),
+                .tag = if (a.harder) badge.view(h, .neutral, .{W.harder}) else null,
+                .value = h.span(.{}, .{W.lift.with(h, .{ .x = a.lift })}),
+                .note = W.share.with(h, .{ .s = @as(u32, @intFromFloat(@round(a.share))) }),
+            };
+        }
+        const title = W.also.with(h, .{ .c = d.name });
+        return card.view(h, .{}, &.{
+            card.head(h, title, null, &.{ p.plat(h), h.a(.{ .class = "more", .href = h.fmt("{s}pool?champs={d}", .{ p.root, d.id }) }, .{W.pool}) }),
+            if (rows.len > 0) champlist.view(h, .{ .label = title }, rows) else h.p(.{ .class = "none" }, .{W.none}),
+        });
+    }
 };
 
-/// The charts under the trends (ui-champcharts.wasm, loaded by ui-champion.wasm). From
+/// The lane and early game (ui-champcharts.wasm, loaded by ui-champion.wasm). From
 /// every rank: a rank pick changes nothing here
 pub const Charts = struct {
     data: *const ChartsData,
@@ -1339,9 +1512,6 @@ pub const Charts = struct {
     /// lane's, pointed at the shown role's curves on each view
     lane_metrics: [3]lane.Metric = undefined,
     comeback: trend.Trend = .{ .label = W.comeback, .points = &.{} },
-    pickup: trend.Trend = .{ .label = W.pickup, .points = &.{}, .height = 110 },
-    ranks: trend.Trend = .{ .label = W.by_rank, .points = &.{} },
-    timing: trend.Trend = .{ .label = W.first_item, .points = &.{} },
     /// Comeback.at's index: 10 or 15 minutes
     at: u8 = 0,
 
@@ -1400,26 +1570,23 @@ pub const Charts = struct {
             .data_busy = p.files.busy(),
         }, .{
             h.div(.{ .class = "row2" }, .{ p.laneCard(h), p.comebackCard(h) }),
-            h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.killsCard(h), p.objectivesCard(h) }),
-            h.div(.{ .class = "row2" }, .{ p.rankCard(h), p.timingCard(h) }),
         });
     }
 
-    /// On Pick-up and Also play under a rank pick: they stay Platinum+
+    /// On the Platinum+ cards under a rank pick
     fn plat(p: *const P, h: *H) N {
         return if (p.rank != .plat) badge.view(h, .neutral, .{W.plat}) else .none;
     }
 
     fn laneCard(p: *P, h: *H) N {
         const foot = places(h, &.{.{ short(.lane_gold), p.r().lane_gold }});
-        const c = p.r().lane orelse return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{}), h.p(.{ .class = "none" }, .{W.none}), foot });
+        const c = p.r().lane orelse return noneCard(h, W.lane_head, foot);
         for (&p.lane_metrics, c.metrics, W.lane_metrics) |*m, x, l| m.* = .{ .label = l, .fit = lane_fit, .s = .{ .line = x.line, .band = x.band } };
         p.lane.a = p.data.name;
         p.lane.metrics = &p.lane_metrics;
         p.lane.games = c.games;
-        const tip = toggletip.view(h, "cp-lane", .{W.lane_term}, W.lane_head, W.lane_note.with(h, .{ .c = p.data.name }));
-        return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{ h.span(.{ .class = "note" }, .{&tip}), p.lane.switcher(h) }), p.lane.view(h), p.laneEnds(h), foot });
+        return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{ tipNote(h, "cp-lane", W.lane_term, W.lane_head, W.lane_note.with(h, .{ .c = p.data.name })), p.lane.switcher(h) }), p.lane.view(h), p.laneEnds(h), foot });
     }
 
     /// The lane opponents it wins and loses lane against most, each a link to the matchup
@@ -1442,41 +1609,29 @@ pub const Charts = struct {
             }
             row.* = if (os.len == 0) .none else h.p(.{}, .{ h.span(.{ .class = "k" }, .{ label, " ", h.small(.{}, .{W.lane_ends_unit}) }), links });
         }
-        return h.div(.{ .class = "ends", .title = W.lane_ends_note }, .{ rows[0], rows[1] });
+        return h.div(.{ .class = "ends" }, .{ rows[0], rows[1] });
     }
 
     fn comebackCard(p: *P, h: *H) N {
         const foot = places(h, &.{ .{ short(.ahead), p.r().ahead }, .{ short(.behind), p.r().behind } });
-        const none = card.view(h, .{}, &.{ card.head(h, W.comeback, null, &.{}), h.p(.{ .class = "none" }, .{W.none}), foot });
-        const c = p.r().comeback orelse return none;
-        const pts = h.mem.alloc(trend.Point, 5) catch {
-            h.oom = true;
-            return .none;
-        };
-        const base = h.mem.alloc(f32, 5) catch {
-            h.oom = true;
-            return .none;
-        };
+        const c = p.r().comeback orelse return noneCard(h, W.comeback, foot);
+        const pts = trend.alloc(h, 5) orelse return .none;
+        var base: [5]f32 = undefined;
         var n: usize = 0;
         var all = true;
         for (c.at[p.at], c.all[p.at], W.comeback_buckets) |b, a, l| {
             if (b.games == 0) continue;
-            pts[n] = .{
-                .label = l,
-                .sub = phrase.num(h, .kilo, b.games),
-                .v = rate(b),
-                .ci = ci(b),
-                .tip = W.comeback_tip.with(h, .{ .l = l.s, .m = W.comeback_mins[p.at].s, .r = rate(b), .n = b.games, .a = rate(a) }),
-            };
+            pts[n] = trend.point(h, l, b.games, b.wins, W.comeback_tip.with(h, .{ .m = W.comeback_mins[p.at].s, .r = rate(b), .n = b.games, .a = rate(a) }));
             base[n] = rate(a);
             all = all and a.games > 0;
             n += 1;
         }
-        if (n < 2) return none;
-        p.comeback.points = pts[0..n];
-        p.comeback.base = if (all) base[0..n] else &.{};
-        if (p.comeback.tip) |t| if (t >= n) {
-            p.comeback.tip = null;
+        if (n < 2) return noneCard(h, W.comeback, foot);
+        p.comeback.set(pts[0..n]);
+        p.comeback.base = &.{};
+        if (all) p.comeback.base = h.mem.dupe(f32, base[0..n]) catch blk: {
+            h.oom = true;
+            break :blk &.{};
         };
         var items: [2]segmented.Item = undefined;
         for (&items, W.comeback_mins, 0..) |*x, l, i| x.* = .{ .label = l, .selected = i == p.at, .on = h.on(p, .{ .at = @as(u8, @intCast(i)) }) };
@@ -1490,16 +1645,16 @@ pub const Charts = struct {
 
     /// Share of lanes with each, the champion against the average opponent
     fn killsCard(p: *P, h: *H) N {
-        const k = p.r().kills orelse return card.view(h, .{}, &.{ card.head(h, W.kills_head, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        const k = p.r().kills orelse return noneCard(h, W.kills_head, .none);
         var rows: [4]versus.Row = undefined;
         var n: usize = 0;
         // Curves files from before v6 have none: no row rather than 0%
         if (k.first_blood[0] + k.first_blood[1] > 0) {
-            rows[n] = share(h, W.first_blood, k.games, k.first_blood[0], k.first_blood[1]);
+            rows[n] = rates(h, W.first_blood, .{ .games = k.games, .wins = k.first_blood[0] }, .{ .games = k.games, .wins = k.first_blood[1] });
             n += 1;
         }
         for (W.kills, k.kills, k.deaths) |l, x, y| {
-            rows[n] = share(h, l, k.games, x, y);
+            rows[n] = rates(h, l, .{ .games = k.games, .wins = x }, .{ .games = k.games, .wins = y });
             n += 1;
         }
         const names: [2][]const u8 = .{ p.data.name, W.kills_them };
@@ -1509,7 +1664,7 @@ pub const Charts = struct {
     /// How often the champion's team took each objective first and won after it, against
     /// the role's; win rates under min_games left out
     fn objectivesCard(p: *P, h: *H) N {
-        const k = p.r().objectives orelse return card.view(h, .{}, &.{ card.head(h, W.objectives_head, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        const k = p.r().objectives orelse return noneCard(h, W.objectives_head, .none);
         var took: [4]versus.Row = undefined;
         var won: [4]versus.Row = undefined;
         var n: usize = 0;
@@ -1525,131 +1680,6 @@ pub const Charts = struct {
             versus.rows(h, names, &took),
             if (n > 0) h.p(.{ .class = "vs-sub" }, .{W.won_after}) else .none,
             if (n > 0) versus.rows(h, names, won[0..n]) else .none,
-        });
-    }
-
-    /// Win rate by rank bracket, dashed at its rate over every game (the head's); brackets under
-    /// min_games left out
-    fn rankCard(p: *P, h: *H) N {
-        const none = card.view(h, .{}, &.{ card.head(h, W.by_rank, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
-        const k = p.r().ranks orelse return none;
-        const pts = h.mem.alloc(trend.Point, k.by.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        var n: usize = 0;
-        for (k.by, W.brackets) |b, l| {
-            if (b.games < min_games) continue;
-            const c: Counts = .{ .games = b.games, .wins = b.wins };
-            pts[n] = .{
-                .label = l,
-                .sub = phrase.num(h, .kilo, b.games),
-                .v = rate(c),
-                .ci = ci(c),
-                .tip = if (b.gold) |g| W.rank_tip.with(h, .{ .r = rate(c), .n = b.games, .g = @as(i32, g) }) else W.rank_tip_thin.with(h, .{ .r = rate(c), .n = b.games }),
-            };
-            n += 1;
-        }
-        if (n < 2) return none;
-        p.ranks.points = pts[0..n];
-        p.ranks.ref = rate(k.all);
-        if (p.ranks.tip) |t| if (t >= n) {
-            p.ranks.tip = null;
-        };
-        const tip = toggletip.view(h, "cp-rank", .{W.rank_key}, W.by_rank, W.rank_note);
-        return card.view(h, .{}, &.{ card.head(h, W.by_rank, null, &.{h.span(.{ .class = "note" }, .{&tip})}), p.ranks.view(h) });
-    }
-
-    /// Win rate by the minute the first item was finished, dashed at the rate over every
-    /// bucket; buckets under min_games left out
-    fn timingCard(p: *P, h: *H) N {
-        const none = card.view(h, .{}, &.{ card.head(h, W.first_item, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
-        const k = p.r().timing;
-        const pts = h.mem.alloc(trend.Point, k.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        var all: Counts = .{ .games = 0, .wins = 0 };
-        var n: usize = 0;
-        for (k) |b| {
-            const c: Counts = .{ .games = b.games, .wins = b.wins };
-            all.games += b.games;
-            all.wins += b.wins;
-            if (b.games < min_games) continue;
-            pts[n] = .{
-                .label = .{ .s = b.label },
-                .sub = phrase.num(h, .kilo, b.games),
-                .v = rate(c),
-                .ci = ci(c),
-                .tip = W.length_tip.with(h, .{ .l = b.label, .r = rate(c), .n = b.games }),
-            };
-            n += 1;
-        }
-        if (n < 2) return none;
-        p.timing.points = pts[0..n];
-        p.timing.ref = rate(all);
-        if (p.timing.tip) |t| if (t >= n) {
-            p.timing.tip = null;
-        };
-        const tip = toggletip.view(h, "cp-item", .{W.first_item_key}, W.first_item, W.first_item_note.with(h, .{ .c = p.data.name }));
-        return card.view(h, .{}, &.{ card.head(h, W.first_item, null, &.{ p.plat(h), h.span(.{ .class = "note" }, .{&tip}) }), p.timing.view(h) });
-    }
-
-    fn pickupCard(p: *P, h: *H) N {
-        const k = p.data.pickup orelse return card.view(h, .{}, &.{ card.head(h, W.pickup, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
-        var all: Counts = .{ .games = 0, .wins = 0 };
-        for (k.bins) |b| {
-            all.games += b.games;
-            all.wins += b.wins;
-        }
-        const pts = h.mem.alloc(trend.Point, k.bins.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        var n: usize = 0;
-        for (k.bins, W.bands) |b, l| {
-            if (b.games < k.thin) continue;
-            pts[n] = .{ .label = l, .sub = phrase.num(h, .kilo, b.games), .v = rate(b), .ci = ci(b), .tip = W.band_tip.with(h, .{ .l = l.s, .r = rate(b), .n = b.games }) };
-            n += 1;
-        }
-        if (n < 2) return card.view(h, .{}, &.{ card.head(h, W.pickup, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
-        p.pickup.points = pts[0..n];
-        p.pickup.ref = rate(all);
-        const head: ?[2]N = if (k.gap) |g| toggletip.view(h, "cp-pickup", .{W.pickup_head.with(h, .{ .a = k.new.?, .b = k.practised.?, .g = g, .u = k.usual_gap })}, W.pickup, W.pickup_note) else null;
-        return card.view(h, .{}, &.{
-            card.head(h, W.pickup, null, &.{
-                p.plat(h),
-                switch (k.kind) {
-                    .harder => badge.view(h, .neutral, .{W.harder}),
-                    .easier => badge.view(h, .neutral, .{W.easier}),
-                    .usual => .none,
-                },
-                if (head) |*x| h.span(.{ .class = "note" }, .{x}) else .none,
-            }),
-            p.pickup.view(h),
-        });
-    }
-
-    fn alsoCard(p: *P, h: *H) N {
-        const d = p.data;
-        const rows = h.mem.alloc(champlist.Row, d.also.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        for (rows, d.also) |*x, a| {
-            const c = d.champs[a.champ];
-            x.* = .{
-                .champ = icon(h, d.ddragon, c),
-                .href = h.fmt("{s}champions/{s}", .{ p.root, c.slug }),
-                .tag = if (a.harder) badge.view(h, .neutral, .{W.harder}) else null,
-                .value = h.span(.{}, .{W.lift.with(h, .{ .x = a.lift })}),
-                .note = W.share.with(h, .{ .s = @as(u32, @intFromFloat(@round(a.share))) }),
-            };
-        }
-        const title = W.also.with(h, .{ .c = d.name });
-        return card.view(h, .{}, &.{
-            card.head(h, title, null, &.{ p.plat(h), h.a(.{ .class = "more", .href = h.fmt("{s}pool?champs={d}", .{ p.root, d.id }) }, .{W.pool}) }),
-            if (rows.len > 0) champlist.view(h, .{ .label = title }, rows) else h.p(.{ .class = "none" }, .{W.none}),
         });
     }
 };
@@ -1708,6 +1738,7 @@ test "a view's files sit beside the page's; rank files at the root" {
     try std.testing.expectEqualStrings("/_v/all-patch/data/champion/darius-more.bin", try viewPath(a, src, "/", 3, false));
     try std.testing.expectEqualStrings("/data/champion/darius-more-rank-all.bin", try viewPath(a, src, "/", 2, true));
     try std.testing.expectEqualStrings("/data/champion/darius-more-rank.bin", try viewPath(a, src, "/", 0, true));
+    try std.testing.expectEqualStrings("/data/champion/darius-more-rank-patch.bin", try viewPath(a, "/data/champion/darius-trends.bin", "/", 1, true));
     const p: Pick = .of(Top.Url{ .region = .all, .period = .patch, .rank = .diamond });
     try std.testing.expectEqual(3, p.view);
     try std.testing.expectEqual(.all, p.region());
@@ -1741,13 +1772,13 @@ test "by rank: brackets under min_games left out, no chart under two" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var roles = [_]ChartsRole{.{ .role = .top, .ranks = .{ .by = .{
+    var roles = [_]TrendsRole{.{ .role = .top, .games = 0, .wins = 0, .by_patch = &.{}, .by_length = &.{}, .ranks = .{ .by = .{
         .{ .games = 40, .wins = 20 },
         .{ .games = 900, .wins = 470, .gold = 120 },
         .{ .games = 300, .wins = 140 },
     }, .all = .{ .games = 1600, .wins = 800 } } }};
-    const d: ChartsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles };
-    var p: Charts = .{ .data = &d, .root = "/" };
+    const d: TrendsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles, .lengths = &.{} };
+    var p: Trends = .{ .data = &d, .root = "/" };
     var t: tree.Tree = .{};
     var h: H = .init(a, &t);
     var w: std.Io.Writer.Allocating = .init(a);
@@ -1773,9 +1804,9 @@ test "first item done: buckets under min_games left out, no chart under two" {
         .{ .label = "9-11", .games = 900, .wins = 470 },
         .{ .label = "11+", .games = 300, .wins = 140 },
     };
-    var roles = [_]ChartsRole{.{ .role = .top, .timing = &timing }};
-    const d: ChartsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles };
-    var p: Charts = .{ .data = &d, .root = "/" };
+    var roles = [_]TrendsRole{.{ .role = .top, .games = 0, .wins = 0, .by_patch = &.{}, .by_length = &.{}, .timing = &timing }};
+    const d: TrendsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles, .lengths = &.{} };
+    var p: Trends = .{ .data = &d, .root = "/" };
     var t: tree.Tree = .{};
     var h: H = .init(a, &t);
     var w: std.Io.Writer.Allocating = .init(a);

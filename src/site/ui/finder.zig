@@ -555,8 +555,7 @@ pub const Demo = struct {
         .slug = "darius",
         .ddragon = "16.21.1",
         .champs = &matchgrid.demo_champs,
-        .roles = &.{.{ .role = .top, .games = 20412, .wins = 10063, .rels = &matchgrid.demo_rels, .by_patch = &.{}, .by_length = &.{} }},
-        .lengths = &.{},
+        .roles = &.{.{ .role = .top, .games = 20412, .wins = 10063, .rels = &matchgrid.demo_rels }},
     };
 };
 

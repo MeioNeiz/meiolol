@@ -149,10 +149,11 @@ its kind. Candidates, data we have first (arch-stats.md):
   the games, 2-minute steps between, at most 7 buckets, under 100 games left out; dashed
   at the rate of the games with an item)
 - Side (blue, red) and games played on it in the last 30 days: new counting
-One chart style for all (Chart frame), two per row as Pick-up and Also play. The
-Charts island (ui-champcharts.wasm) holds Lane, comeback odds, Pick-up, Also play, and
-Lane kills, By rank and First item done in a row of three; ui-champmore.wasm the
-matchups and trends.
+One chart style for all (Chart frame), two per row as Pick-up and Also play. Islands
+under the build, each loaded as it nears the screen: ui-champmore.wasm the matchups;
+ui-champtrends.wasm By patch, By game length, Players, Pick-up, Also play, By rank and
+First item done (its rank file is More's, which carries by patch); ui-champcharts.wasm
+Lane, comeback odds, Lane kills and Objectives (2 Nov: ~80% of 40 KB gz each).
 
 ## References (research refs/champion/notes.md, 27 shots)
 

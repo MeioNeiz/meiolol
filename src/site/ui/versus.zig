@@ -169,6 +169,19 @@ pub const Row = struct {
 
 pub const Side = enum { a, b };
 
+/// A row of two shares (0-1), rounded to whole percents; the larger bold
+pub fn shares(h: *H, label: tree.Text, pa: f32, pb: f32) Row {
+    const ra = @round(pa * 100);
+    const rb = @round(pb * 100);
+    return .{
+        .label = label,
+        .a = phrase.num(h, .pct, @as(u32, @intFromFloat(ra))),
+        .b = phrase.num(h, .pct, @as(u32, @intFromFloat(rb))),
+        .bars = .{ pa, pb },
+        .lead = if (ra > rb) .a else if (rb > ra) .b else null,
+    };
+}
+
 /// `names`: the two sides, for screen readers (`key` shows them)
 pub fn rows(h: *H, names: [2][]const u8, items: []const Row) N {
     var l = h.list();

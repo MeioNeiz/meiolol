@@ -42,11 +42,12 @@ pub fn dataPath(a: std.mem.Allocator, ch: Champ, part: Part) ![]const u8 {
         .top => "",
         .build => "-build",
         .more => "-more",
+        .trends => "-trends",
         .charts => "-charts",
     } });
 }
 
-pub const Part = enum { top, build, more, charts };
+pub const Part = enum { top, build, more, trends, charts };
 
 /// `ch` in role `r`, from the root view (EUW, 30 days); its toolbar fetches the other
 /// views' files and the rank files (champrank.zig). `in_url`: the address names `r`
@@ -87,11 +88,19 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
         .js = "/" ++ assets.champmore_js.path,
         .wasm = assets.champmore_wasm.path,
     };
+    var trends: cp.Trends = .{
+        .data = &parts.trends,
+        .root = "/",
+        .src = try std.mem.concat(a, u8, &.{ "/", try dataPath(a, ch, .trends) }),
+        .stamp = cp.stamp(bytes[3]),
+        .js = "/" ++ assets.champtrends_js.path,
+        .wasm = assets.champtrends_wasm.path,
+    };
     var charts: cp.Charts = .{
         .data = &parts.charts,
         .root = "/",
         .src = try std.mem.concat(a, u8, &.{ "/", try dataPath(a, ch, .charts) }),
-        .stamp = cp.stamp(bytes[3]),
+        .stamp = cp.stamp(bytes[4]),
         .js = "/" ++ assets.champcharts_js.path,
         .wasm = assets.champcharts_wasm.path,
     };
@@ -101,11 +110,12 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
     for (d.roles, 0..) |x, i| try roles.print(a, "{s}{s}", .{ if (i > 0) " " else "", @tagName(x.role) });
     build.fromUrl(.{ .role = shown.role });
     more.fromUrl(.{ .role = shown.role });
+    trends.fromUrl(.{ .role = shown.role });
     charts.fromUrl(.{ .role = shown.role });
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
     // The role rendered for, when the path names it: the wasms' server state (dom.pageRole)
-    t.root = h.div(.{ .class = "c-cpage", .data_id = ch.id, .data_roles = roles.items, .data_role = shown.role }, .{ top.view(&h), build.view(&h), more.view(&h), charts.view(&h) });
+    t.root = h.div(.{ .class = "c-cpage", .data_id = ch.id, .data_roles = roles.items, .data_role = shown.role }, .{ top.view(&h), build.view(&h), more.view(&h), trends.view(&h), charts.view(&h) });
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
     // Only Top's: it loads the others' (ui/wasm/champion.zig)
@@ -121,13 +131,14 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
 }
 
 /// Each island's data file, in Part order: what the page renders from
-fn encode(site: *const Site, parts: *const cp.Split) ![4][]const u8 {
-    var out: [4]std.ArrayList(u8) = @splat(.empty);
+fn encode(site: *const Site, parts: *const cp.Split) ![5][]const u8 {
+    var out: [5]std.ArrayList(u8) = @splat(.empty);
     try ui.data.encode(site.arena, cp.TopData, parts.top, &out[0]);
     try ui.data.encode(site.arena, cp.BuildData, parts.build, &out[1]);
     try ui.data.encode(site.arena, cp.MoreData, parts.more, &out[2]);
-    try ui.data.encode(site.arena, cp.ChartsData, parts.charts, &out[3]);
-    return .{ out[0].items, out[1].items, out[2].items, out[3].items };
+    try ui.data.encode(site.arena, cp.TrendsData, parts.trends, &out[3]);
+    try ui.data.encode(site.arena, cp.ChartsData, parts.charts, &out[4]);
+    return .{ out[0].items, out[1].items, out[2].items, out[3].items, out[4].items };
 }
 
 /// Every champion's data files, under the view's directory
@@ -582,9 +593,9 @@ test "first item done: players counted by the builder to a drawn card" {
     try std.testing.expectEqual(200, timing[1].games);
     try std.testing.expectEqualStrings("17+", timing[6].label);
 
-    var roles = [_]cp.ChartsRole{.{ .role = .top, .timing = timing }};
-    const data: cp.ChartsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles };
-    var p: cp.Charts = .{ .data = &data, .root = "/" };
+    var roles = [_]cp.TrendsRole{.{ .role = .top, .games = 0, .wins = 0, .by_patch = &.{}, .by_length = &.{}, .timing = timing }};
+    const data: cp.TrendsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles, .lengths = &.{} };
+    var p: cp.Trends = .{ .data = &data, .root = "/" };
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
     var w: std.Io.Writer.Allocating = .init(a);

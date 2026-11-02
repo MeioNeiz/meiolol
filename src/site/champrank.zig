@@ -108,6 +108,6 @@ fn roleData(site: *const Site, x: *const filters.Ranked, k: f64) !Roles {
             .build = if (picked) |p| try buildblock.data(a, p.picked.f, p.picked.b, ch.name) else null,
             .from = if (picked) |p| p.rank else 0,
         },
-        .more = .{ .role = r, .games = x.games, .wins = x.wins, .rels = rels, .by_patch = by_patch, .by_length = &.{} },
+        .more = .{ .role = r, .games = x.games, .wins = x.wins, .rels = rels, .by_patch = by_patch },
     };
 }

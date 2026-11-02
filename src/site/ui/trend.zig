@@ -28,7 +28,34 @@ pub const Point = struct {
     ci: f32 = 0,
     /// The tip's figures after the label ("48.7% of 23,166 · pick 7.6%")
     tip: tree.Text = .{ .s = "" },
+    /// The tip's name when the label is short or empty ("24 Oct" for "24")
+    name: ?tree.Text = null,
 };
+
+/// Win rate in %
+pub fn rate(games: u32, wins: u32) f32 {
+    return 100 * @as(f32, @floatFromInt(wins)) / @as(f32, @floatFromInt(@max(games, 1)));
+}
+
+/// Half the 95% range of a win rate, points
+pub fn ci(games: u32, wins: u32) f32 {
+    if (games == 0) return 0;
+    const p = rate(games, wins) / 100;
+    return 196 * @sqrt(p * (1 - p) / @as(f32, @floatFromInt(games)));
+}
+
+/// A win rate point with its games under the label
+pub fn point(h: *H, label: tree.Text, games: u32, wins: u32, tip: tree.Text) Point {
+    return .{ .label = label, .sub = phrase.num(h, .kilo, games), .v = rate(games, wins), .ci = ci(games, wins), .tip = tip };
+}
+
+/// Room for n points; null when out of memory
+pub fn alloc(h: *H, n: usize) ?[]Point {
+    return h.mem.alloc(Point, n) catch {
+        h.oom = true;
+        return null;
+    };
+}
 
 pub const Trend = struct {
     label: tree.Text,
@@ -46,6 +73,14 @@ pub const Trend = struct {
     const T = @This();
 
     pub const Msg = union(enum) { plot };
+
+    /// A tip past the new points goes
+    pub fn set(t: *T, pts: []const Point) void {
+        t.points = pts;
+        if (t.tip) |i| if (i >= pts.len) {
+            t.tip = null;
+        };
+    }
 
     pub fn update(t: *T, _: Msg, ev: *tree.Event) void {
         const n = t.points.len;
@@ -115,7 +150,7 @@ pub const Trend = struct {
         if (n > 0) over.add(chart.endLabel(h, p, v[n - 1], phrase.num(h, .rate, v[n - 1])));
         if (t.tip) |i| if (i < n) {
             const pt = t.points[i];
-            for (chart.tip(h, p.px(i), .{ h.b(.{}, .{pt.label}), " ", pt.tip })) |x| over.add(x);
+            for (chart.tip(h, p.px(i), .{ h.b(.{}, .{pt.name orelse pt.label}), " ", pt.tip })) |x| over.add(x);
         };
         return chart.frame(h, .{
             .label = t.label,
