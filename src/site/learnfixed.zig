@@ -20,7 +20,7 @@ const ch = ld.ch;
 pub const know: ld.Puzzle = .{
     .id = "know",
     .q = "How often do mains win?",
-    .ctx = "Mastery points on the champion, before the game",
+    .ctx = "Mastery points, earned for each game played on the champion, before this game",
     .setup = .{ .rates = .{ .ask = 1, .rows = &.{
         .{ .label = "New", .sub = "under 10k", .v = 47.7, .games = 207_598 },
         .{ .label = "Main", .sub = "300k+", .v = 51.7, .games = 508_609 },
