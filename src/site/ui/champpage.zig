@@ -44,6 +44,7 @@ const url = @import("url.zig");
 const champrank = @import("champrank.zig");
 const lane = @import("lane.zig");
 const versus = @import("versus.zig");
+const ranking = @import("ranking.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
 const H = tree.H;
@@ -111,6 +112,7 @@ pub const Role = struct {
     objectives: ?Objectives = null,
     ranks: ?Ranks = null,
     timing: []const Timed = &.{},
+    places: Places = .{},
     build: ?buildpanel.Data = null,
     /// Against or with each role: lane opponents first
     rels: []const Rel,
@@ -122,6 +124,13 @@ pub const Role = struct {
 };
 
 pub const Counts = struct { games: u32, wins: u32 };
+
+/// Its place in a ranking (ui.ranking) of the role's champions, the view's; n 0: under
+/// its games floor. href: the ranking, the champion in its fragment
+pub const Place = struct { n: u16, of: u16, href: []const u8 };
+
+/// By urls.Stat: Platinum+ only, so a rank group's files have none
+pub const Places = struct { ahead: ?Place = null, behind: ?Place = null, long_games: ?Place = null };
 
 pub const Day = struct {
     /// The day of the month ("24"); tip: "24 Oct"
@@ -317,6 +326,8 @@ pub const W = struct {
     pub const vs_hint = plain("Against one champion? Pick them in “vs opponent” at the top for their build.");
     pub const won = plain("Win rate");
     pub const rank = Phrase("{n:int}{th:text} of {of:int} in {r:text}");
+    pub const place = Phrase("{l:text}: {n:int}{th:text} of {of:int} ›");
+    pub const place_thin = Phrase("{l:text}: unsure, few games ›");
     pub const pick = plain("Pick");
     pub const ban = plain("Ban");
     pub const games = plain("Games");
@@ -458,6 +469,18 @@ fn ci(c: Counts) f32 {
     return 196 * @sqrt(p * (1 - p) / @as(f32, @floatFromInt(c.games)));
 }
 
+/// A card's foot: its places in the rankings of what it shows, each a link there
+fn places(h: *H, ps: []const struct { ranking.Stat, ?Place }) N {
+    var kids = h.list();
+    for (ps, 0..) |x, i| {
+        const pl = x[1] orelse continue;
+        const l = ranking.spec(x[0]).short;
+        kids.add(h.a(.{ .key = i, .href = pl.href }, .{if (pl.n == 0) W.place_thin.with(h, .{ .l = l }) else W.place.with(h, .{ .l = l, .n = pl.n, .th = ordinal(pl.n), .of = pl.of })}));
+    }
+    if (kids.items.items.len == 0) return .none;
+    return h.p(.{ .class = "places" }, .{kids.done()});
+}
+
 fn ordinal(n: u16) []const u8 {
     if (n % 100 >= 11 and n % 100 <= 13) return "th";
     return switch (n % 10) {
@@ -537,6 +560,7 @@ pub const MoreRole = struct {
     by_patch: []const Patch,
     by_day: []const Day = &.{},
     by_length: []const Counts,
+    long_games: ?Place = null,
 };
 
 /// ui-champcharts.wasm's: the cards under the trends. Lane and comeback odds from every
@@ -567,6 +591,8 @@ pub const ChartsRole = struct {
     ranks: ?Ranks = null,
     /// Platinum+, from the view's builds file
     timing: []const Timed = &.{},
+    ahead: ?Place = null,
+    behind: ?Place = null,
 };
 
 /// Games with a timeline, then those whose team took each objective first (W.firsts'
@@ -651,8 +677,8 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
     for (d.roles, top, build, more, charts) |x, *t, *b, *m, *c| {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
-        m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_day = x.by_day, .by_length = x.by_length };
-        c.* = .{ .role = x.role, .lane = x.lane, .lanes = try laneEnds(a, x.role, x.rels), .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ranks = x.ranks, .timing = x.timing };
+        m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_day = x.by_day, .by_length = x.by_length, .long_games = x.places.long_games };
+        c.* = .{ .role = x.role, .lane = x.lane, .lanes = try laneEnds(a, x.role, x.rels), .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ranks = x.ranks, .timing = x.timing, .ahead = x.places.ahead, .behind = x.places.behind };
     }
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
@@ -1265,7 +1291,7 @@ pub const More = struct {
         p.by_length.points = pts[0..n];
         p.by_length.ref = rate(.{ .games = rl.games, .wins = rl.wins });
         const lean: ?[2]N = if (rl.lean) |g| toggletip.view(h, "cp-lean", .{W.lean.with(h, .{ .g = @as(i32, g) })}, W.lean.with(h, .{ .g = @as(i32, g) }), W.lean_note) else null;
-        return card.view(h, .{}, &.{ card.head(h, W.by_length, null, &.{ p.plat(h), if (lean) |*x| h.span(.{ .class = "note" }, .{x}) else .none }), p.by_length.view(h) });
+        return card.view(h, .{}, &.{ card.head(h, W.by_length, null, &.{ p.plat(h), if (lean) |*x| h.span(.{ .class = "note" }, .{x}) else .none }), p.by_length.view(h), places(h, &.{.{ .long_games, rl.long_games }}) });
     }
 
     fn playersCard(p: *P, h: *H) N {
@@ -1412,7 +1438,8 @@ pub const Charts = struct {
     }
 
     fn comebackCard(p: *P, h: *H) N {
-        const none = card.view(h, .{}, &.{ card.head(h, W.comeback, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        const foot = places(h, &.{ .{ .ahead, p.r().ahead }, .{ .behind, p.r().behind } });
+        const none = card.view(h, .{}, &.{ card.head(h, W.comeback, null, &.{}), h.p(.{ .class = "none" }, .{W.none}), foot });
         const c = p.r().comeback orelse return none;
         const pts = h.mem.alloc(trend.Point, 5) catch {
             h.oom = true;
@@ -1449,6 +1476,7 @@ pub const Charts = struct {
         return card.view(h, .{}, &.{
             card.head(h, W.comeback, null, &.{ key, segmented.view(h, .{ .s = .s, .label = W.comeback_at }, &items) }),
             p.comeback.view(h),
+            foot,
         });
     }
 
@@ -1643,6 +1671,8 @@ pub const css =
     \\  .c-cpage .from { margin: 0; padding: var(--sp-3) var(--card-px) 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .none { margin: var(--sp-3) 0; color: var(--muted); }
     \\  .c-cpage .note { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-cpage .places { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); margin: var(--sp-2) 0 0;
+    \\    font-size: var(--fs-s); }
     \\  .c-cpage .c-head .lg { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .more { margin-left: auto; font-size: var(--fs-s); }
     \\  .c-cpage .ends { display: grid; gap: var(--sp-2); margin-top: var(--sp-3); font-size: var(--fs-s); }

@@ -73,7 +73,10 @@ row in the stats pass, then a spec.
    type in ui.ranking (Kind: rate or gap)
 3. Done: /rankings index (a card per stat, its top three over all roles, solid rows
    only), a Rankings tab under Champions, a link at the foot of home's Champions card
-4. "Nth of M ›" on the champion page cards, the champion highlighted on its ranking
+4. Done: "Nth of M ›" under the champion page's Won by lane gold (from ahead, behind)
+   and By game length (long games) cards, each view's, Platinum+ only (rankings.places
+   once per view load); the link's fragment (#slug) lights the row, opens the unsure
+   rows when it is one, and scrolls to it
 5. Lane gold at 14, pick-up gap, then the rest of the table above
 
 ## Later (after the production key)

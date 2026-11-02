@@ -111,6 +111,59 @@ pub fn writeIndex(site: *const Site, w: *Writer) !bool {
     return true;
 }
 
+const n_stats = std.enums.values(rk.Stat).len;
+const unranked = std.math.maxInt(u16);
+
+/// Each champion's place in each stat's ranking of each role, as the page numbers its
+/// rows with the unsure ones hidden: by stats-file index, 0 under the games floor
+pub const Places = struct {
+    at: [n_stats][Role.all.len][]u16,
+    of: [n_stats][Role.all.len]u16,
+};
+
+pub fn places(site: *const Site) !Places {
+    const a = site.arena;
+    var by_key: std.StringHashMapUnmanaged(usize) = .empty;
+    var len: usize = 0;
+    for (site.champs) |ch| {
+        try by_key.put(a, ch.key, ch.c);
+        len = @max(len, ch.c + 1);
+    }
+    var out: Places = undefined;
+    for (std.enums.values(rk.Stat), &out.at, &out.of) |s, *at_s, *of_s| for (Role.all, at_s, of_s) |r, *at, *of| {
+        at.* = try a.alloc(u16, len);
+        @memset(at.*, unranked);
+        of.* = 0;
+        if (!has(site, s)) continue;
+        for ((try data(site, s, r)).rows) |row| {
+            const c = by_key.get(row.key) orelse continue;
+            if (row.n < rk.thin_games) {
+                at.*[c] = 0;
+                continue;
+            }
+            of.* += 1;
+            at.*[c] = of.*;
+        }
+    };
+    return out;
+}
+
+/// ch's places in r for its page, each linking its ranking with ch in the fragment
+pub fn placesOf(site: *const Site, ch: Champ, r: Role) !ui.champpage.Places {
+    const p = &(site.places orelse return .{});
+    var out: ui.champpage.Places = .{};
+    inline for (comptime std.enums.values(rk.Stat), 0..) |s, si| {
+        const ri = std.mem.findScalar(Role, &Role.all, r).?;
+        const at = p.at[si][ri];
+        if (ch.c < at.len and at[ch.c] != unranked) @field(out, @tagName(s)) = .{
+            .n = at[ch.c],
+            .of = p.of[si][ri],
+            .href = try site.arena.print("{s}#{s}", .{ try site.href(.{ .ranking = .{ .stat = s, .role = champion.uiRole(r) } }), ch.slug }),
+        };
+    }
+    return out;
+}
+
 /// ui.ranking.head: the sibling stats' switch and the roles'
 fn head(site: *const Site, h: *ui.H, at: ui.urls.Ranking, r: ?Role, lead: ui.Text) !ui.N {
     const a = site.arena;
@@ -249,6 +302,7 @@ pub fn data(site: *const Site, s: rk.Stat, only: ?Role) !rk.Data {
             try rows.append(a, .{
                 .name = ch.name,
                 .key = ch.key,
+                .slug = ch.slug,
                 .href = try site.href(.{ .champion = .{ .slug = ch.slug, .role = champion.uiRole(r) } }),
                 .role = champion.uiRole(r),
                 .value = figure(s, .{ k0, k1 }).?,

@@ -551,6 +551,19 @@ test "fixture games to stats, curves and the website" {
         var w: std.Io.Writer.Allocating = .init(arena);
         try site.ui.html.write(&t, rk.view(&h), &w.writer);
         try testing.expect(std.mem.find(u8, page, w.written()) != null);
+        // Its champion's page links its row with it in the fragment, which lights it and,
+        // under the games floor, opens the unsure rows
+        const slug = d.rows[0].slug;
+        const cpath = try std.fs.path.join(arena, &.{ out, "champions", try std.fmt.allocPrint(arena, "{s}.html", .{slug}) });
+        const cpage = try std.Io.Dir.cwd().readFileAlloc(io, cpath, arena, .limited(1 << 22));
+        const link = try std.fmt.allocPrint(arena, "<a href=\"/rankings/ahead/top#{s}\">From ahead: unsure, few games ›</a>", .{slug});
+        try testing.expect(std.mem.find(u8, cpage, link) != null);
+        try testing.expect(rk.mark(slug) and rk.table.rate.rare);
+        var t2: site.ui.Tree = .{};
+        var h2: site.ui.H = .init(arena, &t2);
+        var w2: std.Io.Writer.Allocating = .init(arena);
+        try site.ui.html.write(&t2, rk.view(&h2), &w2.writer);
+        try testing.expect(std.mem.find(u8, w2.written(), "aria-current=\"true\"") != null);
     }
 
     // The champions board: what ui-stats.wasm renders from the data file, before the

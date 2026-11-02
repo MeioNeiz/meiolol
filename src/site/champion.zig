@@ -10,6 +10,7 @@ const shell = @import("shell.zig");
 const assets = @import("assets.zig");
 const trend = @import("trend.zig");
 const tierlist = @import("tierlist.zig");
+const rankings = @import("rankings.zig");
 const builds_page = @import("builds.zig");
 const buildblock = @import("buildblock.zig");
 const stats = @import("../stats.zig");
@@ -249,6 +250,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .ranks = try ranksOf(site, ch, r),
         // The card has no period label: this view's games only, as the head's
         .timing = if (builds_page.forChampionHere(site, site.view, ch, r)) |b| try timingOf(a, b.first_item, cp.min_games) else &.{},
+        .places = try rankings.placesOf(site, ch, r),
         .build = if (picked) |b| try buildblock.data(a, b.f, b.b, ch.name) else null,
         .rels = rels.items,
         .by_patch = by_patch,

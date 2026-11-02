@@ -22,6 +22,22 @@ export fn main() void {
     const b = dom.binOf(root, "data-bin") orelse return dom.dom.warn("ranking: no data");
     data = ui.data.decode(gpa, rk.Data, b) catch return dom.dom.warn("ranking: bad data");
     server = rk.Ranking.init(gpa, &data) catch return dom.dom.warn("ranking: out of memory");
-    state = server;
+    state = rk.Ranking.init(gpa, &data) catch return dom.dom.warn("ranking: out of memory");
+    // A champion page's place link: its row lit and in view
+    var buf: [64]u8 = undefined;
+    const hash = zjb.global("location").get("hash", zjb.Handle);
+    const frag = hash.readString(&buf) catch "";
+    hash.release();
+    const marked = frag.len > 1 and state.mark(frag[1..]);
     _ = dom.rt.add(rk.Ranking, &state, &server, rk.sel) catch return dom.dom.warn("ranking: out of memory");
+    if (marked) {
+        const at = zjb.global("document").call("querySelector", .{zjb.constString(".c-rank .who[aria-current]")}, zjb.Handle);
+        defer at.release();
+        if (at != .null) {
+            const o = zjb.global("Object").new(.{});
+            defer o.release();
+            o.set("block", zjb.constString("center"));
+            at.call("scrollIntoView", .{o}, void);
+        }
+    }
 }

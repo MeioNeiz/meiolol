@@ -78,6 +78,8 @@ pub const Data = struct {
 pub const Row = struct {
     name: []const u8,
     key: []const u8,
+    /// The fragment that marks it (a champion page's place link)
+    slug: []const u8 = "",
     href: []const u8,
     role: Role,
     /// The figure (a win rate, %; a gap, points) and the role's
@@ -174,6 +176,8 @@ pub const Line = struct {
     r: *const Row,
     icon: []const u8,
     all: bool,
+    /// Named by the URL's fragment: lit
+    here: bool = false,
 };
 
 fn nameOf(l: *const Line) []const u8 {
@@ -199,7 +203,7 @@ fn thin(l: *const Line) bool {
 }
 
 fn who(h: *H, l: *const Line) N {
-    return h.a(.{ .class = "who", .href = l.r.href }, .{
+    return h.a(.{ .class = "who", .href = l.r.href, .aria_current = if (l.here) "true" else null }, .{
         champ.view(h, .{ .name = l.r.name, .src = l.icon }, .{ .named = false }),
         h.span(.{}, .{l.r.name}),
         if (l.all) role.view(h, l.r.role, .{}) else null,
@@ -292,12 +296,14 @@ pub const Table = union(Kind) { rate: RateTable, gap: GapTable };
 pub const Ranking = struct {
     data: *const Data,
     table: Table,
+    /// table's rows, writable
+    lines: []Line = &.{},
     /// The root's data-bin (server side)
     bin: []const u8 = "",
 
     const P = @This();
 
-    /// The table's lines, allocated: the server's and the island's copies share them
+    /// The table's lines, allocated: a copy marked (mark) needs its own
     pub fn init(a: std.mem.Allocator, d: *const Data) !P {
         const lines = try a.alloc(Line, d.rows.len);
         for (lines, d.rows) |*l, *r| l.* = .{
@@ -305,10 +311,24 @@ pub const Ranking = struct {
             .icon = try std.fmt.allocPrint(a, champ.icon_fmt, .{ d.ddragon, r.key }),
             .all = d.role == null,
         };
-        return .{ .data = d, .table = switch (kindOf(d.stat)) {
+        return .{ .data = d, .lines = lines, .table = switch (kindOf(d.stat)) {
             .rate => .{ .rate = .{ .rows = lines, .id = "rk" } },
             .gap => .{ .gap = .{ .rows = lines, .id = "rk" } },
         } };
+    }
+
+    /// Lights the row whose slug is `frag` (location.hash, "#" dropped) and opens the
+    /// unsure rows when it is one of them; false when no row has it
+    pub fn mark(p: *P, frag: []const u8) bool {
+        for (p.lines) |*l| {
+            if (frag.len == 0 or !std.mem.eql(u8, l.r.slug, frag)) continue;
+            l.here = true;
+            if (thin(l)) switch (p.table) {
+                inline else => |*t| t.rare = true,
+            };
+            return true;
+        }
+        return false;
     }
 
     pub fn view(p: *P, h: *H) N {
@@ -341,6 +361,7 @@ pub const css =
     \\    text-decoration: none; font-weight: var(--w-b); }
     \\  .c-rank .who:hover > span:not(.c-role) { text-decoration: underline; }
     \\  .c-rank > .none { color: var(--muted); }
+    \\  .c-rank tr:has(.who[aria-current]) > td { background: var(--accent-bg); }
     \\  .c-rankidx { display: grid; gap: var(--sp-3); }
     \\  .c-rankidx > .cards { display: grid; gap: var(--sp-3);
     \\    grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); }

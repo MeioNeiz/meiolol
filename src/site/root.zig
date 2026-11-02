@@ -233,6 +233,8 @@ pub const Site = struct {
     lean: ?*const lean.File = null,
     /// Win rates by game length and by patch (stats.Trend); null in a core static build
     trend: ?stats.Trend = null,
+    /// Each champion's place in each ranking (rankings.places), for its page's cards
+    places: ?rankings_page.Places = null,
     pool: pool.Pool = .{},
     learning: learning.Learning = .{},
     spread: spread.Spread = .{},

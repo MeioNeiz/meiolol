@@ -26,6 +26,7 @@ const tierlist = @import("tierlist.zig");
 const patch_page = @import("patch.zig");
 const champion = @import("champion.zig");
 const champrank = @import("champrank.zig");
+const rankings = @import("rankings.zig");
 const pool_page = @import("pool.zig");
 const Options = root.Options;
 const Site = root.Site;
@@ -195,6 +196,8 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
         site.trend = t.trend;
         phases.mark("trend kept");
     } else try loadTrend(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
+    site.places = try rankings.places(site);
+    phases.mark("rankings");
     try addFiles(site);
     if (old == null or !old.?.strict) log.info("view {d} ({s}) load:{s}", .{ view.index(), site.when, phases.text() });
     return site;
