@@ -1,10 +1,11 @@
 //! The matchup finder (matchup/index.html, docs/plan/ui/matchups.md): a way to a matchup
 //! page, not a list of them. Two islands. Finder: two ChampRolePickers, one lane for both;
-//! nothing picked, a role (All first) and three short lists of its lane pairs (the
-//! hardest lanes, the lane bullies, then this patch's movers: noisy, so last), each a link
-//! to its page. Grid (its own, lazily loaded file): the first pick's MatchupGrid, Against
-//! its lane, from the champion page's data/champion/<slug>-more.bin; the second pick is
-//! that opponent's dot, and its page when there is one. Finder writes the picks to the URL, Grid reads them (same keys).
+//! nothing picked, a role (All first) beside them and three short lists of its lane pairs
+//! (the hardest lanes, the lane bullies, then this patch's movers: noisy, so last), each a
+//! link to its page. Grid (its own, lazily loaded file): the first pick's MatchupGrid,
+//! Against its lane, from the champion page's data/champion/<slug>-more.bin; the second
+//! pick is that opponent's dot, and its page when there is one. Finder writes the picks to
+//! the URL, Grid reads them (same keys).
 //!
 //! Pages are rendered on request, so Finder's data rides in its data-bin, as the matchup
 //! page's do: ui-finder.wasm adopts it
@@ -211,8 +212,8 @@ pub const Finder = struct {
         return h.div(.{ .class = "c-finder", .data_island = "finder", .data_query = f.query, .data_bin = if (f.bin.len > 0) f.bin else null }, .{
             h.el(.h1, .{}, .{W.title}),
             if (f.data.sub.len > 0) h.p(.{ .class = "sub" }, .{f.data.sub}) else null,
-            p.view(h),
-            if (picked) N.none else f.lists(h),
+            h.div(.{ .class = "go" }, .{ p.view(h), if (picked) N.none else f.rolePick(h) }),
+            if (picked) N.none else h.div(.{ .class = "cols" }, .{ f.hardCard(h), f.bullyCard(h), f.movedCard(h) }),
         });
     }
 
@@ -225,15 +226,12 @@ pub const Finder = struct {
         return h.fmt("/matchups/{s}/{s}-vs-{s}{s}", .{ @tagName(r), f.data.champs[x].slug, f.data.champs[y].slug, query });
     }
 
-    /// Nothing picked: a role or All, then its three lists side by side
-    fn lists(f: *F, h: *H) N {
+    /// Nothing picked: the lists' role, or All, beside the pickers
+    fn rolePick(f: *F, h: *H) N {
         var items: [role.Role.all.len + 1]rolepicker.Item = undefined;
         items[0] = .{ .role = null, .current = f.role == null, .on = h.on(f, .{ .role = null }) };
         for (role.Role.all, items[1..]) |r, *it| it.* = .{ .role = r, .current = r == f.role, .on = h.on(f, .{ .role = r }) };
-        return h.div(.{ .class = "lists" }, .{
-            rolepicker.view(h, .{ .v = .compact, .label = W.role_label }, &items),
-            h.div(.{ .class = "cols" }, .{ f.hardCard(h), f.bullyCard(h), f.movedCard(h) }),
-        });
+        return rolepicker.view(h, .{ .v = .compact, .label = W.role_label }, &items);
     }
 
     /// All's list after the roles'
@@ -488,8 +486,8 @@ pub const css =
     \\  .c-finder > h1 { margin: 0; }
     \\  .c-finder > h1 + .sub { margin: calc(-1 * var(--sp-3)) 0 0; color: var(--muted); font-size: var(--fs-s); }
     \\  .c-finder .c-head > .more { margin-left: auto; font-size: var(--fs-s); }
-    \\  .c-finder .lists { display: grid; gap: var(--sp-3); justify-items: start; }
-    \\  .c-finder .cols { justify-self: stretch; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--sp-4); align-items: start; }
+    \\  .c-finder > .go { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3) var(--sp-5); }
+    \\  .c-finder > .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--sp-4); align-items: start; }
     \\  .c-finder .none { margin: 0; color: var(--faint); }
     \\  .c-finder .c-card > .all { all: unset; display: inline-flex; align-items: center; min-height: 32px; margin-top: var(--sp-1); font-size: var(--fs-s); color: var(--accent); cursor: pointer; }
     \\  .c-finder .c-card > .all:hover { text-decoration: underline; }
