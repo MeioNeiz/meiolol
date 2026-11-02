@@ -170,6 +170,8 @@ pub const Tool = struct {
         return h.div(.{ .key = "card", .class = "card", .role = "dialog", .aria_label = "Note", .style = h.vars(.{ .x = p.x, .y = p.y }) }, .{
             h.p(.{ .class = "text" }, .{n.text}),
             h.p(.{ .class = "meta" }, .{
+                n.author,
+                " · ",
                 if (n.scope == .everywhere) h.fmt("Everywhere: {s}", .{n.target.component()}) else "This page",
                 if (p.moved) " (moved)" else "",
             }),

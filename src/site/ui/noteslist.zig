@@ -158,7 +158,7 @@ pub const List = struct {
         const target = if (n.target.kind == .page and n.target.steps.len == 0) "whole page" else n.target.snippet;
         return h.li(.{ .key = n.id, .data_status = n.status }, .{
             h.p(.{ .class = "text" }, .{n.text}),
-            h.p(.{ .class = "meta" }, .{h.fmt("#{d}{s} · {d} {s} · {s}{s} · {s} · {d}×{d} {t}", .{
+            h.p(.{ .class = "meta" }, .{h.fmt("#{d}{s} · {s} · {d} {s} · {s}{s} · {s} · {d}×{d} {t}", .{
                 n.id,
                 switch (n.status) {
                     .open => "",
@@ -166,6 +166,7 @@ pub const List = struct {
                     .kept => " · kept",
                     .done => " · done",
                 },
+                n.author,
                 c.day,
                 months[(c.month -| 1) % 12],
                 n.path,
@@ -297,6 +298,7 @@ test "noteslist: groups by page or component, filters by status, asks the glue" 
     const tier = std.mem.find(u8, s, "<h2>/tier/</h2>") orelse return error.TestUnexpectedResult;
     try std.testing.expect(ahri < tier);
     try std.testing.expect(std.mem.find(u8, s, "Header overlaps") == null);
+    try std.testing.expect(std.mem.find(u8, s, " · jacob · ") != null);
     l.group = .component;
     l.filter = .any;
     s = try render(a, &l);
