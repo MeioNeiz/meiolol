@@ -141,11 +141,10 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
     try w.writeAll("</div>\n<p class=\"muted\">");
     try site.writeChip(w, site.regionDim(site.view.region), site.periodDim(site.view.period), .plat);
     try tpl.render(w,
-        \\ Lane numbers: how much more or less often your champion wins
-        \\that lane than the two champions' usual win rates predict, in points: −4.2 is about 4
-        \\games in 100 fewer. A lane with under {games} games says nothing either way. A main is a player's most played champion,
-        \\from {source}. Harder or easier to pick up: new players against practised ones, every
-        \\region (<a href="{pickup}">How hard to pick up</a>). <a href="/method">Method</a>.
+        \\ Lane numbers: win rate points against the two champions' usual (−4.2: about 4 games
+        \\in 100 fewer); under {games} games, too few to tell. A main is a player's most played
+        \\champion, from {source}. Harder or easier to pick up: new players against practised
+        \\ones (<a href="{pickup}">How hard to pick up</a>). <a href="/method">Method</a>.
     , .{
         .games = pd.min_games,
         .source = sourceText(p),
