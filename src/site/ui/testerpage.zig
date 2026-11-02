@@ -93,6 +93,10 @@ const W = struct {
     pub const more_parts = Phrase("{n:int} smaller picks and pairs");
     pub const enemy_part = Phrase("{a:text} into {b:text}");
     pub const comp_part = plain("Damage mix and team shape");
+    pub const why_gap = Phrase("Why {a:text} and {b:text} differ");
+    pub const both = Phrase("{w:text}: {a:text} {x:points}, {b:text} {y:points}");
+    pub const only = Phrase("{w:text}: {m:text} only");
+    pub const both_avg = Phrase("{w:text}: {a:text} {x:rate}, {b:text} {y:rate}");
     pub const facts = Phrase("{kind:text} · {g:kilo} games · {lo:text} to {hi:text} · {acc:rate} on {n:kilo} held out");
     pub const from = Phrase("{where:text} {date:text}");
     pub const ok = Phrase("✓ {file:text}: {n:int} reference drafts match");
@@ -170,6 +174,8 @@ pub const Which = enum(u8) { live, comp };
 pub const Info = struct {
     name: tree.Text,
     short: tree.Text,
+    /// In a compared Why's lines: "Live +5.5, Comp +1.2"
+    word: tree.Text,
     /// Where the model's numbers show today (from the code, draft-tester.md)
     used_in: []const tree.Text,
     where: tree.Text,
@@ -178,8 +184,8 @@ pub const Info = struct {
 };
 
 pub const infos = std.enums.EnumArray(Which, Info).init(.{
-    .live = .{ .name = plain("Live draft model"), .short = plain("Live model"), .used_in = &.{ plain("Daily"), plain("App") }, .where = plain("Box"), .file = "/private/models/draft-model.bin" },
-    .comp = .{ .name = plain("Comp model"), .short = plain("Comp model"), .used_in = &.{}, .where = plain("Lab"), .file = "/private/lab/draft-model.bin" },
+    .live = .{ .name = plain("Live draft model"), .short = plain("Live model"), .word = plain("Live"), .used_in = &.{ plain("Daily"), plain("App") }, .where = plain("Box"), .file = "/private/models/draft-model.bin" },
+    .comp = .{ .name = plain("Comp model"), .short = plain("Comp model"), .word = plain("Comp"), .used_in = &.{}, .where = plain("Lab"), .file = "/private/lab/draft-model.bin" },
 });
 
 /// A model file, decoded, with its scorer and self-check
@@ -575,7 +581,7 @@ pub const Page = struct {
         }
         return h.div(.{ .class = "bd" }, .{
             draftboard.fullOn(h, .{ .v = .full, .lanes = &lanes }, &on),
-            if (l) |x| p.draftWhy(h, x) else null,
+            if (l) |x| p.draftWhy(h, x, p.vsReady()) else null,
             p.bansRow(h),
             h.div(.{ .class = "acts" }, .{
                 button.view(h, .{ .s = .s, .disabled = l == null, .on = h.on(p, .random) }, .{W.random}),
@@ -649,67 +655,106 @@ pub const Page = struct {
     }
 
     /// The full board's chance from the empty board's, part by part: the largest named,
-    /// the others summed as the rest. Only while the panel has no seat to fill
-    fn draftWhy(p: *const Page, h: *H, l: *const Loaded) ?N {
+    /// the others summed as the rest. Compared (`e` the other model's): from the shown
+    /// model's chance to the other's, each line the gap between the two on one part, the
+    /// baselines' gap first. Only while the panel has no seat to fill
+    fn draftWhy(p: *const Page, h: *H, l: *const Loaded, vs: ?*const Loaded) ?N {
         if (shownSeat(p.teams, p.seat) != null) return null;
         const d = l.sc.draftWhy(p.teams);
+        const e: ?ds.DraftWhy = if (vs) |x| x.sc.draftWhy(p.teams) else null;
+        var buf: [2 * ds.max_draft_parts]Gap = undefined;
+        const g = gaps(&d, if (e) |*x| x else null, &buf);
         var idx: [max_lines]usize = undefined;
         var n: usize = 0;
-        for (d.parts(), 0..) |x, i| {
+        for (g, 0..) |x, i| {
             if (!(@abs(x.pp) >= min_part)) continue;
             var at = n;
-            while (at > 0 and @abs(d.buf[idx[at - 1]].pp) < @abs(x.pp)) : (at -= 1) {
+            while (at > 0 and @abs(g[idx[at - 1]].pp) < @abs(x.pp)) : (at -= 1) {
                 if (at < max_lines) idx[at] = idx[at - 1];
             }
             if (at < max_lines) idx[at] = i;
             n = @min(n + 1, max_lines);
         }
-        const comp = @abs(d.comp) >= min_part;
+        const wa = if (vs != null) infos.get(p.which).word.s else "";
+        const wb = if (vs != null) infos.get(p.vs.?).word.s else "";
+        const ec = if (e) |x| x.comp else 0;
+        const dc = if (e != null) ec - d.comp else d.comp;
+        const comp = @abs(dc) >= min_part;
         var small: f64 = 0;
-        for (d.parts()) |x| small += x.pp;
-        const terms = h.mem.alloc(reasons.Term, n + @intFromBool(comp) + 1) catch {
+        for (g) |x| small += x.pp;
+        const terms = h.mem.alloc(reasons.Term, n + @intFromBool(comp) + 2) catch {
             h.oom = true;
             return null;
         };
-        var named: f64 = 0;
-        for (terms[0..n], idx[0..n]) |*t, i| {
-            const x = d.buf[i];
-            named += x.pp;
-            // Blue's points: a red pick weaker than average is a plus
-            const own = if (x.side == 0) x.pp else -x.pp;
-            const r: []const u8 = @tagName(role.Role.all[x.ra]);
-            t.* = .{ .pp = @floatCast(x.pp), .games = x.games, .label = switch (x.kind) {
-                .base => if (own > 0) W.strong_part.with(h, .{ .n = p.nameOf(x.a), .r = r }) else W.weak_part.with(h, .{ .n = p.nameOf(x.a), .r = r }),
-                .ally => W.ally_part.with(h, .{ .a = p.nameOf(x.a), .b = p.nameOf(x.b) }),
-                .enemy => W.enemy_part.with(h, .{ .a = p.nameOf(x.a), .b = p.nameOf(x.b) }),
-            } };
+        var k: usize = 0;
+        if (e) |x| {
+            terms[0] = .{ .pp = @floatCast(100 * (x.empty.p - d.empty.p)), .label = W.both_avg.with(h, .{ .w = W.average_draft.s, .a = wa, .x = 100 * d.empty.p, .b = wb, .y = 100 * x.empty.p }) };
+            k = 1;
         }
-        var k = n;
+        var named: f64 = 0;
+        for (idx[0..n]) |i| {
+            const x = g[i];
+            named += x.pp;
+            const part = x.a orelse x.b.?;
+            const w = p.partLabel(h, part);
+            terms[k] = .{ .pp = @floatCast(x.pp), .games = part.games, .label = if (vs == null)
+                w
+            else if (x.a == null)
+                W.only.with(h, .{ .w = w.s, .m = wb })
+            else if (x.b == null)
+                W.only.with(h, .{ .w = w.s, .m = wa })
+            else
+                W.both.with(h, .{ .w = w.s, .a = wa, .x = tenth(x.a.?.pp), .b = wb, .y = tenth(x.b.?.pp) }) };
+            k += 1;
+        }
         if (comp) {
-            terms[k] = .{ .pp = @floatCast(d.comp), .label = W.comp_part };
+            terms[k] = .{ .pp = @floatCast(dc), .label = if (vs == null)
+                W.comp_part
+            else if (d.comp == 0)
+                W.only.with(h, .{ .w = W.comp_part.s, .m = wb })
+            else if (ec == 0)
+                W.only.with(h, .{ .w = W.comp_part.s, .m = wa })
+            else
+                W.both.with(h, .{ .w = W.comp_part.s, .a = wa, .x = tenth(d.comp), .b = wb, .y = tenth(ec) }) };
             k += 1;
         }
         small -= named;
-        const n_small = d.n - n;
+        const n_small = g.len - n;
         // Factor terms, and whatever is too small for a line of its own
-        var rest = d.rest + (if (comp) 0 else d.comp);
+        var rest = (if (e) |x| x.rest - d.rest else d.rest) + (if (comp) 0 else dc);
         if (n_small > 0 and @abs(small) >= 0.05) {
             terms[k] = .{ .pp = @floatCast(small), .label = W.more_parts.with(h, .{ .n = n_small }) };
             k += 1;
         } else rest += small;
-        return h.div(.{ .class = "why" }, .{
-            h.el(.h2, .{}, .{W.why_draft.with(h, .{ .side = W.blue.s, .p = 100 * d.with.p })}),
+        const to = if (e) |x| x.with else d.with;
+        return h.div(.{ .class = "why", .data_gap = vs != null }, .{
+            h.el(.h2, .{}, .{if (vs != null)
+                W.why_gap.with(h, .{ .a = infos.get(p.which).short.s, .b = infos.get(p.vs.?).short.s })
+            else
+                W.why_draft.with(h, .{ .side = W.blue.s, .p = 100 * d.with.p })}),
             reasons.view(h, .{
-                .base_label = W.average_draft,
-                .base = @floatCast(100 * d.empty.p),
+                .base_label = if (vs != null) infos.get(p.which).short else W.average_draft,
+                .base = @floatCast(100 * (if (vs != null) d.with.p else d.empty.p)),
                 .terms = terms[0..k],
                 .rest = if (@abs(rest) >= 0.05) @floatCast(rest) else null,
-                .total_label = W.this_draft,
-                .low = @floatCast(100 * d.with.lo),
-                .high = @floatCast(100 * d.with.hi),
+                .total_label = if (vs != null) infos.get(p.vs.?).short else W.this_draft,
+                .low = @floatCast(100 * to.lo),
+                .high = @floatCast(100 * to.hi),
                 .tip_id = "tester-why-rest",
             }, .points),
         });
+    }
+
+    /// A draft part in words: a pick's strength by its own side's sign, or a pair
+    fn partLabel(p: *const Page, h: *H, x: ds.DraftPart) tree.Text {
+        // Blue's points: a red pick weaker than average is a plus
+        const own = if (x.side == 0) x.pp else -x.pp;
+        const r: []const u8 = @tagName(role.Role.all[x.ra]);
+        return switch (x.kind) {
+            .base => if (own > 0) W.strong_part.with(h, .{ .n = p.nameOf(x.a), .r = r }) else W.weak_part.with(h, .{ .n = p.nameOf(x.a), .r = r }),
+            .ally => W.ally_part.with(h, .{ .a = p.nameOf(x.a), .b = p.nameOf(x.b) }),
+            .enemy => W.enemy_part.with(h, .{ .a = p.nameOf(x.a), .b = p.nameOf(x.b) }),
+        };
     }
 
     /// The set net with the Comp model it corrects, when both are in and match
@@ -790,8 +835,38 @@ fn whole(x: f64) i64 {
     return @intFromFloat(@round(x));
 }
 
+/// Rounded as shown, so a part a hair under 0 reads 0.0, not −0.0
+fn tenth(x: f64) f64 {
+    return @round(10 * x) / 10;
+}
+
 /// Lines of the full board's Why before the rest
 const max_lines = 8;
+
+/// One line of a Why: a pick or pair as the shown model (a) and, compared, the other (b)
+/// price it; pp the line's points: a's, or compared b's less a's
+pub const Gap = struct { a: ?ds.DraftPart, b: ?ds.DraftPart, pp: f64 };
+
+/// `a`'s parts, or with `b` the gap on each part either prices, matched by pick or pair.
+/// The gaps with the baselines', comp and rest gaps sum to b's chance less a's
+pub fn gaps(a: *const ds.DraftWhy, b: ?*const ds.DraftWhy, out: *[2 * ds.max_draft_parts]Gap) []Gap {
+    var n: usize = 0;
+    for (a.parts()) |x| {
+        const y = if (b) |w| find(w, x) else null;
+        out[n] = .{ .a = x, .b = y, .pp = if (b == null) x.pp else (if (y) |v| v.pp else 0) - x.pp };
+        n += 1;
+    }
+    if (b) |w| for (w.parts()) |y| if (find(a, y) == null) {
+        out[n] = .{ .a = null, .b = y, .pp = y.pp };
+        n += 1;
+    };
+    return out[0..n];
+}
+
+fn find(w: *const ds.DraftWhy, x: ds.DraftPart) ?ds.DraftPart {
+    for (w.parts()) |y| if (y.kind == x.kind and y.side == x.side and y.a == x.a and y.b == x.b and y.ra == x.ra and y.rb == x.rb) return y;
+    return null;
+}
 /// A part under this many points says nothing the total doesn't
 const min_part = 0.1;
 
@@ -932,6 +1007,7 @@ pub const css =
     \\  @container (max-width: 480px) { .c-tester > .two { grid-template-columns: minmax(0, 1fr); } .c-tester > .two > p { grid-column: 1; } }
     \\  .c-tester .lean { margin: 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-tester .lean > b { color: var(--text); font-weight: var(--w-m); }
+    \\  .c-tester .why[data-gap] .lab { white-space: normal; }
     \\  .c-tester .why { display: grid; gap: var(--sp-1); width: 100%; max-width: 720px; }
     \\  .c-tester .why > h2 { margin: 0; font-size: inherit; font-weight: var(--w-b); }
     \\  .c-tester .files { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-1); font-size: var(--fs-s); }
@@ -1128,4 +1204,60 @@ test "timing: blue minus red summed with its range, a lean only when both clear;
     w.clearRetainingCapacity();
     try @import("html.zig").write(&t, p.view(&h), &w.writer);
     try testing.expect(std.mem.find(u8, w.written(), "class=\"lean\"") == null);
+}
+
+test "gaps: two models' parts matched by pick or pair, adding up exactly to one chance less the other" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const Even = struct {
+        pub fn patchShare(_: *const @This(), _: u32, _: usize) f64 {
+            return 1;
+        }
+    };
+    const groups = [_]ds.PairGroup{
+        .{ .name = "", .kind = "ally", .r = 3, .q = 4, .sd = 0.1, .fitted = 1, .shipped = 1 },
+        .{ .name = "", .kind = "matchup", .r = 0, .q = 0, .sd = 0.1, .fitted = 1, .shipped = 1 },
+    };
+    const ta = [_]ds.Term{
+        .{ .champion = 10, .role = 0, .games = 500, .b = 0.3, .sd = 0.05 },
+        .{ .champion = 11, .role = 0, .games = 400, .b = -0.3, .sd = 0.05 },
+        .{ .champion = 30, .role = 3, .games = 300, .b = 0.1, .sd = 0.05 },
+        .{ .champion = 40, .role = 4, .games = 200, .b = 0, .sd = 0.05 },
+    };
+    var tb = ta;
+    tb[0].b = -0.1;
+    tb[2].b = 0.4;
+    // a has the duo only, b the top lane only
+    const ca = [_]ds.PairCell{.{ .group = 0, .a = 30, .b = 40, .theta = 0.5, .games = 900 }};
+    const cb = [_]ds.PairCell{.{ .group = 1, .a = 10, .b = 11, .theta = 0.4, .games = 800 }};
+    const pa: ds.Params = .{ .kind = "ratings", .dim = 0, .intercept = &.{0.02}, .w = @splat(0), .z = @splat(0), .terms = &ta, .pairs = .{ .min_games = 0, .groups = &groups, .cells = &ca }, .temperature = 0.9 };
+    var pb = pa;
+    pb.intercept = &.{0.3};
+    pb.terms = &tb;
+    pb.pairs.?.cells = &cb;
+    const sa = try ds.Scorer.init(a, pa, 0, &Even{});
+    const sb = try ds.Scorer.init(a, pb, 0, &Even{});
+    const teams: [2][n_role]u32 = .{ .{ 11, 0, 0, 30, 40 }, .{ 10, 0, 0, 0, 0 } };
+    const da = sa.draftWhy(teams);
+    const db = sb.draftWhy(teams);
+    var buf: [2 * ds.max_draft_parts]Gap = undefined;
+    const g = gaps(&da, &db, &buf);
+    var sum = 100 * (db.empty.p - da.empty.p) + (db.comp - da.comp) + (db.rest - da.rest);
+    var only_a: usize = 0;
+    var only_b: usize = 0;
+    for (g) |x| {
+        sum += x.pp;
+        only_a += @intFromBool(x.b == null);
+        only_b += @intFromBool(x.a == null);
+        if (x.a != null and x.b != null) try testing.expectApproxEqAbs(x.b.?.pp - x.a.?.pp, x.pp, 1e-12);
+    }
+    try testing.expectApproxEqAbs(100 * (db.with.p - da.with.p), sum, 1e-9);
+    try testing.expect(@abs(db.with.p - da.with.p) > 0.01);
+    try testing.expectEqual(1, only_a);
+    try testing.expectEqual(1, only_b);
+    // One model: its own parts
+    const one = gaps(&da, null, &buf);
+    try testing.expectEqual(da.n, one.len);
+    for (one, da.parts()) |x, y| try testing.expectEqual(y.pp, x.pp);
 }
