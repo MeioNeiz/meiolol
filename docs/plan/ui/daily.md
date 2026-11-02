@@ -123,6 +123,10 @@ Daily Draft #14  ...                                                 [ResultStri
     waterfall step per term ("strength as a bot", "into Caitlyn", "with Lulu",
     "rest") with points and games, the total with its 95% range. Two rows open at once
     compare (played vs model's pick)
+  - "clearly behind" on a pick (and the seat head's played one) only when its gap to the
+    top pick is beyond the model's 95% range of the gap: within it is the usual case
+    (237 of 243 played picks), so marking that said nothing. Ranges are the model's,
+    given its assumptions; no coverage claim
   - "Show the board as if": tap "Pick" on a candidate swaps it into the board and the
     WinSplit moves (client side, the puzzle JSON carries the terms); "Reset" undoes.
     Later, needs the per-seat terms in the JSON (Data needed)

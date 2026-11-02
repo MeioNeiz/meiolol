@@ -142,7 +142,7 @@ pub const Seat = struct {
                     h.span(.{}, .{&rated}),
                     h.b(.{}, .{W.nth.with(h, .{ .n = n, .s = draftboard.ordinal(n) })}),
                     h.span(.{}, .{W.of.with(h, .{ .n = x.of })}),
-                    if (played) |c| if (c.near) badge.view(h, .neutral, .{W.near}) else null else null,
+                    if (played) |c| if (c.behind) badge.view(h, .neutral, .{W.behind}) else null else null,
                 }) else null,
             }),
             if (hidden) s.yours(h, x) else .none,
@@ -170,7 +170,7 @@ pub const Seat = struct {
             .win = c.win,
             .vs = if (c.champ == x.champ) null else if (played) |pc| c.win - pc.win else null,
             .reasons = s.chips(h, c, rl, side),
-            .tag = if (c.near and c.champ != x.champ) W.near else null,
+            .tag = if (c.behind and c.champ != x.champ) W.behind else null,
             .mark = if (c.champ == mine and c.champ != x.champ) W.yours_tag else null,
             .mark_k = .accent,
             .gap = gap,
@@ -376,8 +376,8 @@ const W = struct {
     const nth = Phrase("{n:int}{s:text}");
     const of = Phrase("of {n:int}");
     const rated = plain("Rated");
-    const rated_note = Phrase("{c:text}'s place among the {n:int} champions the model rates here. Within range: too close to the top pick to call.");
-    const near = plain("within range");
+    const rated_note = Phrase("{c:text}'s place among the {n:int} the model rates here. Clearly behind: beyond its 95% range of the top pick.");
+    const behind = plain("clearly behind");
     const yours = Phrase("Your pick {n:text}");
     const yours_tag = plain("your pick");
     const played = plain("played");
@@ -401,7 +401,7 @@ const W = struct {
     const edge = Phrase("{side:text} {d:points} points");
     const edge_even = plain("Even");
     const range = plain("95% range");
-    const range_note = plain("The draft's true chance is inside it 19 times in 20.");
+    const range_note = plain("The model's 95% range, given its assumptions.");
     const even_blue = plain("Even drafts. Blue won.");
     const even_red = plain("Even drafts. Red won.");
     /// By [better by 4+][better side][an upset]

@@ -172,7 +172,7 @@ pub fn puzzle(
         if (rs) |x| if (!hidden) {
             if (x.top != id) try cands.append(a, try plain(&ids, x.top, 1, x.top_win));
             var c = try plain(&ids, id, x.rank, x.win);
-            c.near = x.top != id and x.top_win - x.win <= x.range;
+            c.behind = x.top != id and x.top_win - x.win > x.range;
             try cands.append(a, c);
         };
         seats[t][r] = .{
@@ -281,7 +281,7 @@ fn hiddenCands(a: std.mem.Allocator, ids: *Ids, p: daily.Puzzle, rv: daily.Revie
         if (o.id == p.played) {
             var c = try cand(a, ids, o, s.rank, s.win, s.top_win, r);
             // Reviews from before the options' ranges: the seat's
-            if (r == null) c.near = s.top != o.id and s.top_win - s.win <= s.range;
+            if (r == null) c.behind = s.top != o.id and s.top_win - s.win > s.range;
             try out.append(a, c);
         } else if (ranked) {
             try out.append(a, try cand(a, ids, o, rv.ranks[i], o.win orelse continue, s.top_win, r));
@@ -323,7 +323,7 @@ fn cand(a: std.mem.Allocator, ids: *Ids, o: daily.Option, rank: u32, win: f64, t
         .win = @floatCast(win),
         .low = if (rg) |x| @floatCast(x.low) else null,
         .high = if (rg) |x| @floatCast(x.high) else null,
-        .near = if (rg) |x| x.gap > 0 and top - win <= x.gap else false,
+        .behind = if (rg) |x| x.gap > 0 and top - win > x.gap else false,
         .terms = terms,
         .rest = @floatCast(rest),
     };
@@ -523,15 +523,15 @@ test "the hidden seat: each option at its rank, best first, after the top picks"
     }
     try testing.expectApproxEqAbs(@as(f32, 46), hidden[2].win, 1e-4);
     // Before the options' ranges, the played one's gap is the seat's: 1.5 behind the top
-    // at a range of 1 is outside it
-    try testing.expect(!hidden[1].near and hidden[1].low == null);
+    // at a range of 1 is clearly behind
+    try testing.expect(hidden[1].behind and hidden[1].low == null);
 
-    // With them: 1.5 behind at 1.6 is within, 3.5 at 2 is not, the top never
+    // With them: 3.5 behind at 2 is clearly behind, 1.5 at 1.6 is not, the top never
     rv.ranges = &.{ .{ .gap = 2, .low = 43, .high = 49 }, .{ .gap = 1.6, .low = 45, .high = 51 } };
     raw.review = rv;
     const q = try puzzle(a, raw, Fake{}, Fake.champ, Fake.magic, Fake.ranged);
     const r = q.seats[1][2].cands;
-    for (r, [_]bool{ false, true, false }) |c, near| try testing.expectEqual(near, c.near);
+    for (r, [_]bool{ false, false, true }) |c, behind| try testing.expectEqual(behind, c.behind);
     try testing.expectEqual(@as(?f32, 45), r[1].low);
     try testing.expectEqual(@as(?f32, 49), r[2].high);
 }
