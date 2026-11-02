@@ -5616,6 +5616,29 @@ Test look on days 4+ (PT3), declared before it runs; not run: Jacob's call.
   with the snapshot salt (data/team/2026-10-29-next/w6fix/hashex.py); the only
   ledgered looks at these days (data/snap's test-looks.tsv, 29 Oct)
 
+### Site figures checked, 2026-11-02 (stats-review, polish run)
+
+data/snap (85,693 ranked solo games, 16.19 + 16.20, all regions), sqlite3 on the Mac;
+halves by match id parity. Descriptive, no held-out look. Details and queries:
+data/team/2026-11-02-polish/notes/meiolol-stats-review.md.
+
+- Lane gold at 14, lane opponent's subtracted, per role: sd BOT 1,676, JG 1,248, MID
+  1,385, TOP 1,628, SUP 839; the curves' quartile estimate (IQR / 1.349) within 3%.
+  Champions' true spread 230-310 gold (SUP lowest). Rankings order between halves:
+  Spearman 0.92
+- Wins when 1,500+ gold ahead / behind at 15: Spearman between halves 0.63 / 0.34, long
+  games gap (35+ minus under 25) 0.52; ahead and behind rates track the champion's
+  overall win rate (Spearman 0.5)
+- Bot pair (ADC + support minus the enemy pair) gold at 14: sd 2,221. Pair own part
+  (pair mean minus ADC with anyone minus support with anyone), noise taken out: sd 49 /
+  101 / 109 / 109 at 25 / 50 / 100 / 200+ games; the additive part 360-440
+- Win rate spread beyond binomial noise (method of moments as score.empiricalPriors):
+  champion-role k 510-1,130 (200 / 1,000+ games), lane opponents 520-810, other enemy
+  pairs 6,600+ or none, ally pairs none at any floor. Against score.Options' 50 / 3,200
+  used by draftSe and pickSe
+- A player's own win rate on a champion (5+ games) varies 5.6 points beyond chance:
+  intra-player correlation 0.012; games-weighted 20 games per player-champion
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now

@@ -287,6 +287,12 @@ How to write a line:
   keeps champions with 1%+ of the role's games
 - (early) For your gold at 14 it is who the enemy laner is that counts, not how your
   champion matches theirs. Sure: dev only, 80k rows. Site: nothing yet
+- (early) A bot lane pair's gold at 14 is mostly its two champions: the ADC and support
+  each with anyone differ by about 400 gold, the pair's own part (how they suit each
+  other) by only 50-110, so a pair needs about 1,000 games before that part is more
+  signal than noise (at 200 games a third). Sure: data/snap, 85.7k games, pairs with
+  25-200+ games, noise taken out. Site: the duo page's "vs apart" pulled toward 0 or
+  left out. Evidence: docs/model.md "Site figures checked, 2026-11-02"
 
 ## Items
 
