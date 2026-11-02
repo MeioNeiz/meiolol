@@ -72,6 +72,9 @@ pub const max_opts = champsearch.max_hits + 2;
 
 const W = struct {
     pub const label = plain("Champion, matchup or Riot ID");
+    /// Under 860 px, where Log in or the chip leave the box a few letters (shell.zig's
+    /// search loader swaps it in before the page shows)
+    pub const short = plain("Search");
     pub const aria = plain("Search a champion, a matchup (Ahri vs Zed) or a Riot ID (Name#TAG)");
     pub const suggestions = plain("Suggestions");
     pub const champion = plain("Champion");
@@ -288,6 +291,7 @@ pub const SiteSearch = struct {
                 .type = "search",
                 .role = "combobox",
                 .placeholder = W.label,
+                .data_short = W.short,
                 .aria_label = W.aria,
                 .aria_autocomplete = "list",
                 .aria_controls = "look-list",

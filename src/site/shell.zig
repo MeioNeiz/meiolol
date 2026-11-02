@@ -144,7 +144,7 @@ fn navHref(a: std.mem.Allocator, p: Page, it: NavItem) ![]const u8 {
 /// If the island fails (script error, or not running 8 s on) that submit and later ones go
 /// as without JS. pagehide drops the 8 s timer: a page restored on Back resumes its timers
 const search_loader =
-    \\<script>{const f=document.querySelector("[data-island=search]");let on=false,bad=false,t;const own=()=>{bad=true;f.submit()};const go=()=>{if(on||!f)return;on=true;const s=document.createElement("script");
+    \\<script>{const f=document.querySelector("[data-island=search]");let on=false,bad=false,t;const i=f?.querySelector("input[data-short]");if(i&&matchMedia("(max-width:860px)").matches)i.placeholder=i.dataset.short;const own=()=>{bad=true;f.submit()};const go=()=>{if(on||!f)return;on=true;const s=document.createElement("script");
     \\s.src=f.dataset.js;s.dataset.wasm=f.dataset.wasm;s.onerror=()=>{bad=true;if(window.meioSearchGo)own()};document.head.append(s)};f?.addEventListener("focusin",go);f?.addEventListener("pointerdown",go);
     \\f?.addEventListener("submit",e=>{if(window.meioSearch||bad||f.querySelector("input").value.includes("#"))return;e.preventDefault();window.meioSearchGo=1;go();clearTimeout(t);t=setTimeout(()=>{if(!window.meioSearch)own()},8000)});addEventListener("pagehide",()=>clearTimeout(t));
     \\addEventListener("keydown",e=>{if(!f||e.key!="/"||e.ctrlKey||e.metaKey||e.altKey||e.target.closest?.("input,textarea,select,[contenteditable]"))return;e.preventDefault();go();f.querySelector("input").focus()})}</script>
