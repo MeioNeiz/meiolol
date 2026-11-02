@@ -183,3 +183,6 @@ Override the sections above where they differ.
    faded until it is in, views kept for a pick back; region and period stay in the query
    (dom.UrlMap.views). A first load of a view with a sort in the fragment still renders
    the default sort until the island runs. The footer's scope line stays the page's
+5. Walk S11: the head's "16.21 vs 16.20" read as the data's patch. Now the head says
+   what the view's games cover ("16,741 games in EUW, last 30 days, patches 16.19 and
+   16.20"; "patch 16.20" on a patch view), written by the server; the pair stays in Moved
