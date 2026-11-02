@@ -35,7 +35,7 @@ else
     restarts=$(grep -oE '[0-9]+ restarts/h' <<< "$report" | cut -d' ' -f1)
     (( ${restarts:-0} >= 3 )) && problems+=("complete form restarted $restarts times in the last hour (crawl.log 'complete:' lines)")
     dropped=$(grep -oE '[0-9]+ dropped' <<< "$report" | cut -d' ' -f1)
-    (( ${dropped:-0} > 0 )) && problems+=("complete form dropped $dropped documents: its queue was full")
+    (( ${dropped:-0} > 0 )) && problems+=("complete form dropped $dropped documents: its queue was full or a spool write failed")
     quarantined=$(find data/complete/spool/quarantine -type f 2> /dev/null | wc -l | tr -d ' ')
     (( quarantined > 0 )) && problems+=("complete form: $quarantined spool segments quarantined after unclean runs (docs/data-safety.md \"Complete form quarantine\")")
     damaged=$(find data/complete -maxdepth 1 -name '*.cfd.damaged-*' 2> /dev/null | wc -l | tr -d ' ')

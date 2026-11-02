@@ -67,7 +67,8 @@ pub const Stats = struct {
     /// Documents kept raw: not compact, or did not come back from a block
     raw: std.atomic.Value(u64) = .init(0),
     frames: std.atomic.Value(u64) = .init(0),
-    /// Pushed while the queue was full (off for long): in neither a file nor the spool
+    /// In neither a file nor the spool: pushed while the queue was full (off for long),
+    /// or taken from the queue when a spool write failed
     dropped: std.atomic.Value(u64) = .init(0),
     bytes: std.atomic.Value(u64) = .init(0),
     /// Awake-clock seconds of the latest restarts after an error, newest last
@@ -294,8 +295,9 @@ pub const Packer = struct {
     fn spoolRest(p: *Packer) void {
         p.mutex.lockUncancelable(p.io);
         defer p.mutex.unlock(p.io);
-        for (p.queue.items) |o| p.spool(o.kind, o.key(), o.t, o.gz()) catch |err| {
-            log.err("complete: {d} queued documents not spooled: {t}", .{ p.queue.items.len, err });
+        for (p.queue.items, 0..) |o, i| p.spool(o.kind, o.key(), o.t, o.gz()) catch |err| {
+            log.err("complete: {d} queued documents not spooled: {t}", .{ p.queue.items.len - i, err });
+            _ = p.stats.dropped.fetchAdd(p.queue.items.len - i, .monotonic);
             break;
         };
         for (&p.lanes) |*l| l.closeSegment(p.io);
@@ -339,7 +341,10 @@ pub const Packer = struct {
             }
             // The whole batch reaches the spool before anything else: a stop (or a
             // crash) from here on loses none of it
-            for (batch.items) |o| try p.spool(o.kind, o.key(), o.t, o.gz());
+            for (batch.items, 0..) |o, i| p.spool(o.kind, o.key(), o.t, o.gz()) catch |err| {
+                _ = p.stats.dropped.fetchAdd(batch.items.len - i, .monotonic);
+                return err;
+            };
             // Stopping: the queue left is spooled on the closing round
             p.packBatch(batch.items) catch |err| if (err != error.Stopping) return err;
             p.markHealthy();
@@ -1287,6 +1292,35 @@ test "a lasting error pauses longer before each restart, up to an hour" {
     for (0..8) |i| s.noteRestart(now + 300 + @as(i64, @intCast(i)));
     try std.testing.expectEqual(max_restart_s, backoff(restart_s, s.restartsWithin(now + 400, backoff_window_s)));
     try std.testing.expectEqual(0, backoff(0, 8));
+}
+
+test "documents a failed spool write leaves out are counted dropped" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const data = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const saved = std.testing.log_level;
+    defer std.testing.log_level = saved;
+    std.testing.log_level = .err;
+    test_day = 20_000;
+    const gz = try store.raw.compress(arena, "[1]");
+
+    var p: Packer = try .init(gpa, io, data);
+    p.clock = testClock;
+    p.restart_s = 0;
+    try p.start();
+    try settle(&p);
+    // No spool directory: every spool write fails
+    try tmp.dir.deleteTree(io, "complete/spool");
+    for ([_][]const u8{ "A", "B", "C" }) |k| p.push(.{ .kind = .summary, .key = k, .t = 1, .gz = gz });
+    try settle(&p);
+    try std.testing.expectEqual(3, p.stats.dropped.load(.monotonic));
+    try tmp.dir.createDirPath(io, "complete/spool");
+    p.close();
 }
 
 test "a clock stepped back never reopens a sealed day" {
