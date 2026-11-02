@@ -240,7 +240,7 @@ fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief
     var n: usize = 0;
     items[n] = .{ .label = W.wins.with(h, .{ .c = in.name }), .value = phrase.num(h, .rate, won), .ctx = phrase.num(h, .points, won - own), .step = .of(won - own, fmt.win_cuts), .answer = true };
     n += 1;
-    items[n] = .{ .label = W.m_usual, .value = phrase.num(h, .points, o.usual), .step = .of(o.usual, fmt.win_cuts), .tip = .{ .id = usual_tip, .note = W.usual_note.with(h, .{ .c = in.name }) } };
+    items[n] = .{ .label = W.m_usual, .value = phrase.num(h, .points, o.usual), .ctx = cp.usualSide(o.usual, W.below_usual, W.above_usual), .step = .of(o.usual, fmt.win_cuts), .tip = .{ .id = usual_tip, .note = W.usual_note.with(h, .{ .c = in.name }) } };
     n += 1;
     if (o.gold) |gd| {
         items[n] = goldItem(h, in, o.champ, gd);

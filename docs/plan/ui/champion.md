@@ -66,12 +66,16 @@ and TOO MANY WORDS"; "how hard champ is to pickup, why does it take up so much s
 header 48 | subbar 36 (filters: region, period, rank) | preview strip 22
 ChampHeader  [icon 56] Darius            RolePicker [Top 86% | Jungle 14%]
                                           vs [Pick opponent ▾]
-StatStrip    49.3% won  44th of 59 | pick 7.7% | ban 16.5% | 31,257 games |
-             16.21 +2.6 ±1.4 | early lean +160 gold
+StatStrip    49.3% won  44th of 59 in Top | pick 7.7% | ban 16.5% | 31,257 games |
+             16.21 change +2.6 give or take 1.4 | early lean +160 gold
 BuildPanel   RuneTree (both trees, every rune: pick %, win %)  | Spells | Skills
                                                                 | Start | Core path
                                                                 | Boots | Item 4 5 6
 ```
+
+Plain words for a new player (walk-site S12): the rank names its role, the patch move is a
+"change" with "give or take" for its range, and the Matchups brief's Vs usual says "above
+its usual" or "below its usual" (the matchup page's "54.6% usually" already does).
 
 Desktop: the panel fills the rest of the first screen (~520 px at 1280; RuneTree left
 430 px, slot cells right in a 3-column grid). Matchups start just under the fold at

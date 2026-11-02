@@ -316,11 +316,12 @@ pub const W = struct {
     /// The build panel has no opponent pick: the head's search is it (walk-rivals 6)
     pub const vs_hint = plain("Against one champion? Pick them in “vs opponent” at the top for their build.");
     pub const won = plain("Win rate");
-    pub const rank = Phrase("{n:int}{th:text} of {of:int}");
+    pub const rank = Phrase("{n:int}{th:text} of {of:int} in {r:text}");
     pub const pick = plain("Pick");
     pub const ban = plain("Ban");
     pub const games = plain("Games");
-    pub const pm = Phrase("±{v:dec}");
+    pub const move = Phrase("{p:text} change");
+    pub const pm = Phrase("give or take {v:dec}");
     pub const nth = Phrase("{n:int}{th:text}");
     pub const move_note = plain("Its win rate on this patch minus the previous one, and how far it may be off either way (95%).");
     pub const matchups = plain("Matchups");
@@ -337,6 +338,8 @@ pub const W = struct {
     pub const measure_label = plain("Placed by");
     pub const m_win = plain("Win rate");
     pub const m_usual = plain("Vs usual");
+    pub const below_usual = plain("below its usual");
+    pub const above_usual = plain("above its usual");
     pub const m_gold = plain("Gold at 14");
     pub const usual_note = Phrase("How much more or less often than usual {c:text} won, allowing for the other champion's own win rate in its role; pulled toward 0 the fewer the games.");
     pub const opponent = Phrase("{r:text} opponent");
@@ -417,6 +420,12 @@ pub const W = struct {
 
 /// Vs usual's Toggletip, the matchup page's too
 pub const usual_note = W.usual_note;
+
+/// Vs usual's sign in words; none when it shows as 0.0
+pub fn usualSide(v: f32, below: tree.Text, above: tree.Text) ?tree.Text {
+    if (@abs(v) < 0.05) return null;
+    return if (v < 0) below else above;
+}
 
 fn rate(c: Counts) f32 {
     return @floatCast(buildpanel.rate(c.games, c.wins));
@@ -876,14 +885,14 @@ pub const Top = struct {
         items[n] = .{
             .label = W.won,
             .value = phrase.num(h, .rate, won),
-            .ctx = if (rl.rank > 0) W.rank.with(h, .{ .n = rl.rank, .th = ordinal(rl.rank), .of = rl.of }) else null,
+            .ctx = if (rl.rank > 0) W.rank.with(h, .{ .n = rl.rank, .th = ordinal(rl.rank), .of = rl.of, .r = rl.role.label().s }) else null,
             .step = .of(won - 50, fmt.win_cuts),
             .answer = true,
         };
         n += 1;
         if (rl.patch_move) |m| {
             items[n] = .{
-                .label = .{ .s = p.data.patch },
+                .label = W.move.with(h, .{ .p = p.data.patch }),
                 .value = phrase.num(h, .points, m[0]),
                 .ctx = W.pm.with(h, .{ .v = m[1] }),
                 .step = .of(m[0], fmt.win_cuts),
