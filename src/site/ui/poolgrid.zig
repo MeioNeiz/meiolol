@@ -43,8 +43,8 @@ const W = struct {
     pub const vs = plain("vs");
     pub const all = Phrase("All {n:int}");
     pub const fewer = plain("Fewer");
-    pub const press = plain("Press a cell for its games");
-    pub const read = Phrase("{a:text} into {b:text} {v:text} · {g:text} games");
+    pub const press = plain("Points of win rate vs the two champions' usual. Press a cell for its games");
+    pub const read = Phrase("{a:text} into {b:text}: {v:text} points vs usual · {g:text} games");
     pub const read_none = Phrase("{a:text} into {b:text}: no games");
     pub const gold = Phrase("{v:text} gold at 14");
     pub const matchup = plain("Matchup");
@@ -410,8 +410,12 @@ pub const Page = struct {
             const v = o orelse break :blk h.span(.{}, .{W.read_none.with(h, .{ .a = a, .b = b })});
             break :blk h.span(.{}, .{
                 W.read.with(h, .{ .a = a, .b = b, .v = phrase.num(h, .points, @as(f32, @floatFromInt(v.pp)) / 10).s, .g = phrase.num(h, .count, v.games).s }),
-                if (v.gold) |g| h.span(.{}, .{ " · ", W.gold.with(h, .{ .v = phrase.num(h, .signed, g).s }) }) else null,
-                if (v.gold != null) h.a(.{ .href = h.fmt("/matchups/{s}/{s}-vs-{s}{s}", .{ @tagName(r), p.slug(ids[x[1]]), p.slug(lanes[x[0]].id), urls.view_queries[p.d.view] }) }, .{W.matchup}) else null,
+                if (v.gold) |g| h.span(.{}, .{
+                    " · ",
+                    W.gold.with(h, .{ .v = phrase.num(h, .signed, g).s }),
+                    " · ",
+                    h.a(.{ .href = h.fmt("/matchups/{s}/{s}-vs-{s}{s}", .{ @tagName(r), p.slug(ids[x[1]]), p.slug(lanes[x[0]].id), urls.view_queries[p.d.view] }) }, .{W.matchup}),
+                }) else null,
             });
         } else h.span(.{}, .{W.press});
         return h.div(.{}, .{
@@ -737,15 +741,15 @@ test "pool grid: needs lanes then mains, a section per role, what to add, add as
     var ev: tree.Event = .{ .kind = .click };
     p.update(.{ .cell = .{ .role = .top, .row = 0, .col = 1 } }, &ev);
     // Worst first: Darius's row
-    try testing.expect(std.mem.find(u8, try render(a, &p), "Garen into Darius −0.4 · 300 games") != null);
+    try testing.expect(std.mem.find(u8, try render(a, &p), "Garen into Darius: −0.4 points vs usual · 300 games") != null);
     p.update(.{ .cell = .{ .role = .top, .row = 0, .col = 1 } }, &ev);
     try testing.expectEqual(null, p.cell);
     p.update(.{ .sort = .met }, &ev);
     p.update(.{ .cell = .{ .role = .top, .row = 0, .col = 0 } }, &ev);
     // Most met: Fiora, with gold and the matchup page
     const fiora = try render(a, &p);
-    try testing.expect(std.mem.find(u8, fiora, "Darius into Fiora −2.6 · 900 games") != null);
-    try testing.expect(std.mem.find(u8, fiora, "href=\"/matchups/top/darius-vs-fiora\"") != null);
+    try testing.expect(std.mem.find(u8, fiora, "Darius into Fiora: −2.6 points vs usual · 900 games") != null);
+    try testing.expect(std.mem.find(u8, fiora, " gold at 14 · <a href=\"/matchups/top/darius-vs-fiora\"") != null);
 
     p.update(.{ .add = .{ .id = 3, .role = .top } }, &ev);
     try testing.expectEqual(pp.Pick{ .id = 3, .role = .top }, p.adding.?);

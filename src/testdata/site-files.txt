@@ -78,7 +78,7 @@ _v/all-patch/pickup/jungle.html 1b381f67fd4d86d5
 _v/all-patch/pickup/mid.html 007832a190948c56
 _v/all-patch/pickup/support.html 57269827e0ed117c
 _v/all-patch/pickup/top.html 686a51026a90dc19
-_v/all-patch/pool.html f28c60d48ffde53a
+_v/all-patch/pool.html 293d3c9effa512b0
 _v/all/champions.html a410f6879c5429dc
 _v/all/champions/bot.html a09310ec230b9aad
 _v/all/champions/jungle.html a57cebff1a85bb14
@@ -161,7 +161,7 @@ _v/all/pickup/jungle.html 7904e7426182eb17
 _v/all/pickup/mid.html 844acdbc2005425b
 _v/all/pickup/support.html 5395e413995d3dbb
 _v/all/pickup/top.html 68c597f0b4caa8f1
-_v/all/pool.html 1fbad500e3990148
+_v/all/pool.html 987601a98a0cd37b
 _v/patch/champions.html 2fe9549f65cd9b8b
 _v/patch/champions/bot.html 8bfa5dd055829f68
 _v/patch/champions/jungle.html a7062d0e636affe5
@@ -242,7 +242,7 @@ _v/patch/pickup/jungle.html b36de8f5122628fc
 _v/patch/pickup/mid.html dff4e71a0b85f3e1
 _v/patch/pickup/support.html 5960b22c6e1cf3e1
 _v/patch/pickup/top.html 481caf7083fbdd33
-_v/patch/pool.html 992d49d711f99c7e
+_v/patch/pool.html d400c9ea9273b472
 champions.html 7f42134b092e709e
 champions/ahri.html e9bcf626f5e20a70
 champions/ahri/mid.html 7c9f45da067bb4e4
@@ -368,7 +368,7 @@ pickup/jungle.html 2f825157bb743cae
 pickup/mid.html dae42c71d1b03173
 pickup/support.html e3d3b0b446f063e2
 pickup/top.html fd62c8f2562561d0
-pool.html 1b22e862e2961d41
+pool.html 2218011e23e9bf27
 privacy.html 2418bcff2fab1a85
 robots.txt 331ea9090db0c9f6
 squad.html bfe2ca57ee0fdf0f

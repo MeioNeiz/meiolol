@@ -170,10 +170,14 @@ pub fn rankFiles(site: *const Site, files: anytype) !void {
     for (champs, site.champs) |*c, ch| c.* = .{ .name = ch.name, .key = ch.key, .slug = ch.slug, .banned = 0 };
     // The head says what the games cover, not the patch pair the Moved band compares
     var scope: [n_v][]const u8 = undefined;
-    for (&scope, html.View.all) |*s, v| s.* = try a.print("{s}, {s}", .{ v.region.in(), switch (v.period) {
-        .patch => try a.print("patch {s}", .{site.patch}),
-        .days30 => if (site.view.period == .days30) site.when else "last 30 days",
-    } });
+    for (&scope, html.View.all) |*s, v| s.* = try a.print("{s}, {s}", .{
+        v.region.in(),
+        switch (v.period) {
+            .patch => try a.print("patch {s}", .{site.patch}),
+            // Only the root view (EUW, 30 days) writes rank files: its patches serve both
+            .days30 => site.when,
+        },
+    });
     for (html.View.all, 0..) |v, vi| {
         var groups: [n_g]ui.tiers.Data = undefined;
         for (&groups, 0..) |*d, g| {
