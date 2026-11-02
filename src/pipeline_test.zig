@@ -560,6 +560,8 @@ test "fixture games to stats, curves and the website" {
         const cpage = try std.Io.Dir.cwd().readFileAlloc(io, cpath, arena, .limited(1 << 22));
         const link = try std.fmt.allocPrint(arena, "<a href=\"/rankings/ahead/top#{s}\">From ahead: unsure, few games ›</a>", .{slug});
         try testing.expect(std.mem.find(u8, cpage, link) != null);
+        const gold = try std.fmt.allocPrint(arena, "<a href=\"/rankings/lane-gold/top#{s}\">Lane gold: ", .{slug});
+        try testing.expect(std.mem.find(u8, cpage, gold) != null);
         try testing.expect(rk.mark(slug) and rk.table.rate.rare);
         var t2: site.ui.Tree = .{};
         var h2: site.ui.H = .init(arena, &t2);

@@ -130,7 +130,7 @@ pub const Counts = struct { games: u32, wins: u32 };
 pub const Place = struct { n: u16, of: u16, href: []const u8 };
 
 /// By urls.Stat: Platinum+ only, so a rank group's files have none
-pub const Places = struct { ahead: ?Place = null, behind: ?Place = null, long_games: ?Place = null };
+pub const Places = struct { ahead: ?Place = null, behind: ?Place = null, long_games: ?Place = null, lane_gold: ?Place = null };
 
 pub const Day = struct {
     /// The day of the month ("24"); tip: "24 Oct"
@@ -599,6 +599,7 @@ pub const ChartsRole = struct {
     timing: []const Timed = &.{},
     ahead: ?Place = null,
     behind: ?Place = null,
+    lane_gold: ?Place = null,
 };
 
 /// Games with a timeline, then those whose team took each objective first (W.firsts'
@@ -684,7 +685,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
         m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_day = x.by_day, .by_length = x.by_length, .long_games = x.places.long_games };
-        c.* = .{ .role = x.role, .lane = x.lane, .lanes = try laneEnds(a, x.role, x.rels), .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ranks = x.ranks, .timing = x.timing, .ahead = x.places.ahead, .behind = x.places.behind };
+        c.* = .{ .role = x.role, .lane = x.lane, .lanes = try laneEnds(a, x.role, x.rels), .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ranks = x.ranks, .timing = x.timing, .ahead = x.places.ahead, .behind = x.places.behind, .lane_gold = x.places.lane_gold };
     }
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
@@ -1411,13 +1412,14 @@ pub const Charts = struct {
     }
 
     fn laneCard(p: *P, h: *H) N {
-        const c = p.r().lane orelse return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        const foot = places(h, &.{.{ short(.lane_gold), p.r().lane_gold }});
+        const c = p.r().lane orelse return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{}), h.p(.{ .class = "none" }, .{W.none}), foot });
         for (&p.lane_metrics, c.metrics, W.lane_metrics) |*m, x, l| m.* = .{ .label = l, .fit = lane_fit, .s = .{ .line = x.line, .band = x.band } };
         p.lane.a = p.data.name;
         p.lane.metrics = &p.lane_metrics;
         p.lane.games = c.games;
         const tip = toggletip.view(h, "cp-lane", .{W.lane_term}, W.lane_head, W.lane_note.with(h, .{ .c = p.data.name }));
-        return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{ h.span(.{ .class = "note" }, .{&tip}), p.lane.switcher(h) }), p.lane.view(h), p.laneEnds(h) });
+        return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{ h.span(.{ .class = "note" }, .{&tip}), p.lane.switcher(h) }), p.lane.view(h), p.laneEnds(h), foot });
     }
 
     /// The lane opponents it wins and loses lane against most, each a link to the matchup
