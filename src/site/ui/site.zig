@@ -32,6 +32,8 @@ pub const Link = struct {
     view: bool = false,
     /// Until a page script shows it
     hidden: bool = false,
+    /// Log in: hidden once signed in (shell.zig account_js marks the root data-in)
+    acct: bool = false,
 };
 
 pub const Opts = struct {
@@ -92,7 +94,7 @@ pub const foot_links = [_]Link{
     .{ .label = plain("Terms"), .href = "/terms" },
     .{ .label = plain("Method"), .href = "/method" },
     .{ .label = plain("Desktop app"), .href = "/download" },
-    .{ .label = plain("Log in"), .href = "/login" },
+    .{ .label = plain("Log in"), .href = "/login", .acct = true },
 };
 
 pub fn foot(h: *H, f: Foot) N {
@@ -221,7 +223,7 @@ fn groups(h: *H, gs: []const Group) []const N {
 
 fn links(h: *H, ls: []const Link) []const N {
     var l = h.list();
-    for (ls) |x| l.add(h.a(.{ .href = x.href, .aria_current = if (x.current) "page" else null, .data_view = x.view, .hidden = x.hidden }, .{x.label}));
+    for (ls) |x| l.add(h.a(.{ .class = if (x.acct) "acct" else null, .href = x.href, .aria_current = if (x.current) "page" else null, .data_view = x.view, .hidden = x.hidden }, .{x.label}));
     return l.done();
 }
 
@@ -302,6 +304,7 @@ pub const css =
     \\  .c-sitefoot p { margin: 0 0 var(--sp-3); }
     \\  .c-sitefoot nav { display: flex; flex-wrap: wrap; margin: 0 0 var(--sp-3); }
     \\  .c-sitefoot nav > a { color: var(--muted); }
+    \\  .c-sitefoot:is(:root[data-in] *) a.acct { display: none; }
     \\  .c-sitefoot nav > a + a::before { content: "·"; display: inline-block; padding: 0 0.35em; color: var(--faint); }
     \\  .c-sitefoot .legal { max-width: 720px; margin: 0; }
     \\  .c-preview { background: var(--panel); border-bottom: 1px solid var(--line); color: var(--muted);
