@@ -120,6 +120,18 @@ pub const schema =
     \\    uses INTEGER NOT NULL DEFAULT 0,
     \\    revoked INTEGER NOT NULL DEFAULT 0
     \\) WITHOUT ROWID;
+    \\
+    \\-- A signed-in account refused something its role lacks (refuse): what it asked for,
+    \\-- the page behind it when nginx's gate asked (uri), and why. The newest max_refusals
+    \\CREATE TABLE IF NOT EXISTS refusals (
+    \\    id INTEGER PRIMARY KEY,
+    \\    at INTEGER NOT NULL,
+    \\    username TEXT NOT NULL,
+    \\    role TEXT NOT NULL,
+    \\    what TEXT NOT NULL,
+    \\    uri TEXT NOT NULL,
+    \\    why TEXT NOT NULL
+    \\);
 ;
 
 pub fn open(path: [:0]const u8) !Db {
@@ -225,6 +237,41 @@ pub const Hasher = struct {
 };
 
 pub const Account = struct { id: i64, username: []const u8, role: Role };
+
+/// Refusals kept; older ones go as new ones come, so a loop of tries can't fill the disk
+pub const max_refusals = 10_000;
+/// Bytes kept of each text field
+const refusal_text = 200;
+
+/// Records that `a` was refused `what` (a method and path, or a capability) and why
+pub fn refuse(db: Db, now: i64, a: Account, what: []const u8, uri: []const u8, why: []const u8) !void {
+    try db.run("INSERT INTO refusals (at, username, role, what, uri, why) VALUES (?, ?, ?, ?, ?, ?)", .{
+        now, a.username, @tagName(a.role), ui.notesdata.cut(what, refusal_text), ui.notesdata.cut(uri, refusal_text), ui.notesdata.cut(why, refusal_text),
+    });
+    try db.run("DELETE FROM refusals WHERE id <= (SELECT max(id) FROM refusals) - ?", .{max_refusals});
+}
+
+pub const Refusal = struct { at: i64, username: []const u8, role: []const u8, what: []const u8, uri: []const u8, why: []const u8 };
+
+/// The newest `limit` refusals, newest first; `name` only that account's when given
+pub fn refusals(db: Db, arena: Allocator, name: ?[]const u8, limit: usize) ![]Refusal {
+    var q = try db.prepare("SELECT at, username, role, what, uri, why FROM refusals WHERE ?1 IS NULL OR username = ?1 ORDER BY id DESC LIMIT ?2");
+    defer q.deinit();
+    try q.bind(.{ name, limit });
+    var out: std.ArrayList(Refusal) = .empty;
+    while (try q.step()) {
+        const r = q.row(Refusal);
+        try out.append(arena, .{
+            .at = r.at,
+            .username = try arena.dupe(u8, r.username),
+            .role = try arena.dupe(u8, r.role),
+            .what = try arena.dupe(u8, r.what),
+            .uri = try arena.dupe(u8, r.uri),
+            .why = try arena.dupe(u8, r.why),
+        });
+    }
+    return out.items;
+}
 
 pub const Error = error{ Taken, OwnerExists, BadRole } || store.sqlite.Error;
 
@@ -533,6 +580,8 @@ pub const In = struct {
     body: []const u8 = "",
     /// The path ended .bin: ui.data in and out
     bin: bool = false,
+    /// X-Original-URI, which nginx's auth_request gates send: the page a check is for
+    uri: []const u8 = "",
 };
 
 pub const Out = struct {
@@ -573,6 +622,7 @@ pub const Service = struct {
             .token = if (cookieToken(request)) |t| try arena.dupe(u8, t) else null,
             .bearer = if (header(request, "authorization")) |v| if (bearerToken(v)) |t| try arena.dupe(u8, t) else null else null,
             .action = if (header(request, "x-meiolol-action")) |v| std.mem.eql(u8, v, "1") else false,
+            .uri = if (header(request, "x-original-uri")) |v| try arena.dupe(u8, v) else "",
         };
         if (in.method == .POST and in.action) {
             var body_buf: [1024]u8 = undefined;
@@ -587,7 +637,18 @@ pub const Service = struct {
         try respond(request, out, true);
     }
 
-    pub fn route(s: *Service, arena: Allocator, in_: In, now: i64) !Out {
+    /// Every 403 to a signed-in account is recorded (refuse)
+    pub fn route(s: *Service, arena: Allocator, in: In, now: i64) !Out {
+        const out = try s.routed(arena, in, now);
+        if (out.status == .forbidden) if (try s.signedIn(arena, in, now)) |a| {
+            const db = try open(s.db_path);
+            defer db.close();
+            try refuse(db, now, a, try arena.print("{t} /auth/{s}", .{ in.method, in.path }), in.uri, out.body);
+        };
+        return out;
+    }
+
+    fn routed(s: *Service, arena: Allocator, in_: In, now: i64) !Out {
         var in = in_;
         const post = in.method == .POST;
         const Route = enum { login, logout, me, join, signup, password, delete, device, devices, revoke, accounts, invite, role, disable, reset };
@@ -1125,6 +1186,39 @@ const Fixture = struct {
         return (try f.service.route(f.arena(), .{ .method = .GET, .path = path, .bearer = bearer }, at)).status;
     }
 };
+
+test "a signed-in account's 403 is recorded, with the page nginx's gate asked for" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const a = f.arena();
+    const admin = try f.signIn(.admin);
+    const in: In = .{ .method = .GET, .path = "check/run_actions", .token = admin, .uri = "/admin/api/action/crawl" };
+    try testing.expectEqual(Status.forbidden, (try f.service.route(a, in, Fixture.now)).status);
+    const private = try f.signIn(.private);
+    const role: In = .{ .method = .POST, .path = "role", .token = private, .action = true, .body = "{}" };
+    try testing.expectEqual(Status.forbidden, (try f.service.route(a, role, Fixture.now)).status);
+    // Allowed, and no login: nothing recorded
+    try testing.expectEqual(Status.no_content, try f.check(admin, "view_admin"));
+    try testing.expectEqual(Status.unauthorized, try f.check(null, "run_actions"));
+
+    const got = try refusals(f.db, a, null, 10);
+    try testing.expectEqual(2, got.len);
+    try testing.expectEqualStrings("private", got[0].username);
+    try testing.expectEqualStrings("POST /auth/role", got[0].what);
+    try testing.expectStringStartsWith(got[0].why, "{\"error\":\"your role cannot manage accounts");
+    try testing.expectEqualStrings("admin", got[1].username);
+    try testing.expectEqualStrings("admin", got[1].role);
+    try testing.expectEqualStrings("GET /auth/check/run_actions", got[1].what);
+    try testing.expectEqualStrings("/admin/api/action/crawl", got[1].uri);
+    try testing.expectEqual(1, (try refusals(f.db, a, "admin", 10)).len);
+
+    const who: Account = .{ .id = 1, .username = "x", .role = .admin };
+    try f.db.exec("BEGIN");
+    for (0..max_refusals + 5) |_| try refuse(f.db, Fixture.now, who, "w", "", "");
+    try f.db.exec("COMMIT");
+    try testing.expectEqual(max_refusals, try f.db.scalar("SELECT count(*) FROM refusals", .{}));
+}
 
 test "check: every capability against every role, and without a session" {
     var f: Fixture = undefined;

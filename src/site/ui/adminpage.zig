@@ -124,6 +124,9 @@ pub const Page = struct {
     running: ?Act = null,
     /// The last run from here: ok, and its output
     ran: ?struct { act: Act, ok: bool, output: []const u8 } = null,
+    /// A press came back 403: the controls show to every admin, run for the owner only
+    /// (run_actions), and the API records each refused try
+    denied: bool = false,
     /// Invite: role index into `accounts.roles`; null: giveOf's default
     give: ?u8 = null,
     /// A role picked in a row, waiting for Make or Cancel
@@ -288,6 +291,7 @@ pub const W = struct {
     pub const actions = plain("Actions");
     pub const busy = Phrase("Busy: {a:text} since {t:text}");
     pub const no_live = plain("The live API is unavailable: actions are off");
+    pub const denied = plain("Not allowed: only the owner runs these. Your try was logged.");
     pub const history = Phrase("Action history ({n:count})");
     pub const c_when = plain("When");
     pub const c_action = plain("Action");
@@ -608,7 +612,7 @@ fn controls(p: *Page, h: *H, s: *const ad.Snapshot) N {
     const eval_on = if (live) |l| l.eval_since != null else false;
     const held = if (live) |l| l.action else null;
     var btns = h.list();
-    if (p.can("run_actions")) {
+    {
         const list: []const Act = if (crawling) &.{ .crawl_restart, .crawl_stop, .site_build, .eval_run, .health_check } else &.{ .crawl_start, .site_build, .eval_run, .health_check };
         for (list) |a| {
             const mine = if (p.ran) |r| r.act == a else false;
@@ -637,12 +641,13 @@ fn controls(p: *Page, h: *H, s: *const ad.Snapshot) N {
             card.head(h, W.services, null, &.{}),
             h.table(.{ .class = "kv" }, .{h.tbody(.{}, .{rows.done()})}),
         }),
-        if (p.can("run_actions")) card.view(h, .{}, &.{
+        card.view(h, .{}, &.{
             card.head(h, W.actions, null, &.{}),
+            if (p.denied) h.p(.{ .class = "denied", .role = "alert" }, .{W.denied}) else .none,
             if (live == null) h.p(.{ .class = "note" }, .{W.no_live}) else .none,
             if (held) |r| h.p(.{ .class = "note", .role = "status" }, .{W.busy.with(h, .{ .a = r.name, .t = ago(h, p.now - r.since).s })}) else .none,
             h.div(.{ .class = "acts" }, .{btns.done()}),
-        }) else null,
+        }),
         h.el(.details, .{ .class = "c-card", .open = true }, .{
             h.el(.summary, .{}, .{W.history.with(h, .{ .n = acts.len })}),
             actionTable(h, p.now, acts),
@@ -880,6 +885,8 @@ pub const css =
     \\  .c-admin .status, .c-admin .note, .c-admin .wait { color: var(--muted); font-size: var(--fs-s); }
     \\  .c-admin .note { margin: 0; }
     \\  .c-admin .note.bad { color: var(--them); }
+    \\  .c-admin .denied { margin: 0; padding: var(--sp-3); border: 2px solid var(--bad); border-radius: var(--r-m);
+    \\    color: var(--bad); font-size: var(--fs-l); font-weight: var(--w-b); }
     \\  .c-admin .body, .c-admin .tab { display: grid; gap: var(--sp-3); }
     \\  .c-admin .acts, .c-admin .invite, .c-admin .link, .c-admin .pick { display: flex; flex-wrap: wrap;
     \\    align-items: center; gap: var(--sp-2); }
@@ -1055,27 +1062,28 @@ pub const Demo = struct {
 
 pub fn gallery(g: *Gallery) void {
     const a = g.h.mem;
-    const states = [_][]const u8{ "loading", "overview: two problems", "controls: a failed build", "controls: live API down", "accounts: a role asked, a link made", "applications", "applications: approved, its invite link", "snapshot failed" };
+    const states = [_][]const u8{ "loading", "overview: two problems", "controls: a failed build", "controls: live API down", "controls: an admin refused", "accounts: a role asked, a link made", "applications", "applications: approved, its invite link", "snapshot failed" };
     for (states, 0..) |caption, i| {
         const p = a.create(Page) catch return;
         p.* = switch (i) {
             0 => .{},
             1 => Demo.page(.overview),
             2 => Demo.page(.ops),
-            3 => Demo.page(.ops),
-            4 => Demo.page(.accounts),
-            5, 6 => Demo.page(.applications),
+            3, 4 => Demo.page(.ops),
+            5 => Demo.page(.accounts),
+            6, 7 => Demo.page(.applications),
             else => .{ .snap_failed = true },
         };
         switch (i) {
             2 => p.ran = .{ .act = .site_build, .ok = false, .output = "web build: upload refused (403)" },
             3 => p.live_down = true,
-            4 => {
+            4 => p.denied = true,
+            5 => {
                 p.pending = .{ 1, 2 };
                 p.link = .{ .role = 2, .token = "q3Vt9xYbW2nA7kLmP0sR" };
                 p.acct_failed = true;
             },
-            6 => p.app_link = .{ .id = 1, .token = "Hc4pZ8wQe1rT6yUi2oNb" },
+            7 => p.app_link = .{ .id = 1, .token = "Hc4pZ8wQe1rT6yUi2oNb" },
             else => {},
         }
         g.addFill(caption, p.view(g.h));
@@ -1121,7 +1129,7 @@ test "admin overview: tiles from live over the snapshot, health lines then spike
     try expectHas(try render(a, &p), &.{ "Warnings: Riot busy (429 server) 48 in the last hour, usually ~5", "data-state=\"warn\"" });
 }
 
-test "admin controls: actions only for run_actions, off while one runs, the crawler's pair" {
+test "admin controls: shown to every admin, off while one runs, the crawler's pair" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1136,7 +1144,11 @@ test "admin controls: actions only for run_actions, off while one runs, the craw
     try testing.expect(std.mem.count(u8, s, "disabled=\"\"") >= 4);
     const me: ac.Me = .{ .username = "pal", .role = "admin", .can = &.{"view_admin"} };
     p.me = &me;
-    try testing.expect(std.mem.find(u8, try render(a, &p), "act-crawl-restart") == null);
+    p.running = null;
+    // An admin sees them too; a press the API refuses says so, big
+    try testing.expect(std.mem.find(u8, try render(a, &p), "act-crawl-restart") != null);
+    p.denied = true;
+    try expectHas(try render(a, &p), &.{"Your try was logged."});
 }
 
 test "admin accounts: pick then Make, invite with the chosen role, the URL keeps the tab" {

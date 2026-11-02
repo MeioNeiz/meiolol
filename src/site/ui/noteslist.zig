@@ -1,8 +1,8 @@
 //! NotesList: /admin/notes, every note on the site grouped by page or by component, by
-//! status; Done, Reopen, a reply and Delete (asked twice) per note, Looks good or Not yet
-//! on one a session fixed, and the tool on or off in this browser. ui-notes.wasm's list mode fetches (again
-//! every 20 s while shown) and saves; the reply's input is uncontrolled and keyed, read by
-//! the glue at Save
+//! status; Done, Reopen, a reply and Delete (asked twice; the owner's, delete_notes) per
+//! note, Looks good or Not yet on one a session fixed, and the tool
+//! on or off in this browser. ui-notes.wasm's list mode fetches (again every 20 s while
+//! shown) and saves; the reply's input is uncontrolled and keyed, read by the glue at Save
 const std = @import("std");
 const tree = @import("tree.zig");
 const button = @import("button.zig");
@@ -45,6 +45,8 @@ pub const List = struct {
     reopening: bool = false,
     /// The note whose Delete waits for "Yes, delete"
     deleting: ?u32 = null,
+    /// A Delete came back 403: shown to every admin, the owner's only, each try recorded
+    denied: bool = false,
     /// What the last tool press did, for the line under it
     tool: ?bool = null,
     want: Want = .none,
@@ -132,6 +134,7 @@ pub const List = struct {
             }),
             if (l.loading) h.p(.{ .class = "meta" }, .{"Loading"}) else null,
             if (l.failed) h.p(.{ .class = "err" }, .{"Not loaded or not saved. Tries again in a moment."}) else null,
+            if (l.denied) h.p(.{ .class = "denied", .role = "alert" }, .{"Not allowed: only the owner deletes notes. Your try was logged."}) else null,
             groups(l, h),
         });
     }
@@ -241,6 +244,8 @@ pub const css =
     \\  .c-noteslist .reply { font-size: var(--fs-s); }
     \\  .c-noteslist .reply::before { content: "↳ "; color: var(--t2); }
     \\  .c-noteslist .err { color: var(--bad); }
+    \\  .c-noteslist .denied { padding: var(--sp-3); border: 2px solid var(--bad); border-radius: var(--r-m);
+    \\    color: var(--bad); font-size: var(--fs-l); font-weight: var(--w-b); }
     \\  .c-noteslist .acts, .c-noteslist .edit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
     \\  .c-noteslist .edit input { flex: 1 1 160px; min-height: var(--ctl-s); padding: 0 var(--sp-2); font: inherit;
     \\    color: var(--text); background: var(--ctl-bg); border: 1px solid var(--ctl-line); border-radius: var(--r-ctl); }
@@ -283,6 +288,7 @@ pub fn gallery(g: *Gallery) void {
         .{ "by component, all, replying", .{ .loading = false, .notes = &gallery_notes, .group = .component, .filter = .any, .replying = 3, .tool = true } },
         .{ "to check, not yet", .{ .loading = false, .notes = &gallery_notes, .filter = .check, .replying = 4, .reopening = true } },
         .{ "delete asked", .{ .loading = false, .notes = &gallery_notes, .deleting = 1 } },
+        .{ "delete refused", .{ .loading = false, .notes = &gallery_notes, .denied = true } },
         .{ "none, failed", .{ .loading = false, .failed = true } },
     };
     for (states) |s| {
@@ -348,6 +354,7 @@ test "noteslist: groups by page or component, filters by status, asks the glue" 
     try std.testing.expect(!l.reopening);
     l.notes = &gallery_notes;
     l.filter = .any;
+    try std.testing.expect(std.mem.find(u8, try render(a, &l), ">Delete<") != null);
     l.update(.{ .delete = 3 }, &ev);
     try std.testing.expect(std.mem.find(u8, try render(a, &l), "Yes, delete") != null);
     l.update(.{ .confirm = 3 }, &ev);

@@ -36,6 +36,8 @@ pub const Capability = enum {
     view_admin,
     /// Notes on the live site (api/notes.zig), and the marker cookie that loads the tool
     take_notes,
+    /// A note gone for good (api/notes.zig DELETE)
+    delete_notes,
     manage_accounts,
     /// The admin page's controls: crawl, site build, eval, health check
     run_actions,
@@ -63,6 +65,7 @@ const lowest: std.EnumArray(Capability, Role) = .init(.{
     .download_private_app = .private,
     .view_admin = .admin,
     .take_notes = .admin,
+    .delete_notes = .owner,
     .manage_accounts = .admin,
     .run_actions = .owner,
     .manage_admins = .owner,
@@ -76,6 +79,8 @@ test "admins get the private tier and the admin views, not the controls" {
     try std.testing.expect(Role.admin.can(.view_admin));
     try std.testing.expect(!Role.admin.can(.run_actions));
     try std.testing.expect(Role.owner.can(.run_actions));
+    try std.testing.expect(Role.admin.can(.take_notes));
+    try std.testing.expect(!Role.admin.can(.delete_notes));
     try std.testing.expect(!Role.private.can(.view_admin));
     try std.testing.expect(!Role.paid.can(.view_private));
     for (std.enums.values(Capability)) |cap| {

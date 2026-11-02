@@ -6,6 +6,7 @@ const ui = @import("ui");
 const core = @import("core");
 const api = @import("../api/root.zig");
 const admin = @import("../admin.zig");
+const date = @import("../date.zig");
 const adminmodels = @import("../adminmodels.zig");
 const site_tester = @import("../site/tester.zig");
 const site_notes = @import("../site/notes.zig");
@@ -89,6 +90,8 @@ pub const usage_account =
     \\              revoke-links     every sign-up link stops working
     \\              list
     \\              devices NAME     its signed-in desktop apps (password or disable ends them)
+    \\              refusals [NAME]  the newest 200 times a signed-in account was refused
+    \\                               what its role lacks: when, who, role, what, page, why
     \\              backup           a consistent copy of accounts.db on stdout (VACUUM INTO;
     \\                               deploy/accounts-pull.sh, docs/data-safety.md)
     \\
@@ -99,11 +102,12 @@ pub fn cmdAccount(c: *Cmd) !u8 {
     const io = c.init.io;
     const arena = c.arena;
     const verb = c.next() orelse return error.Usage;
-    const Verb = enum { add, password, role, disable, enable, delete, invite, reset, list, devices, link, links, @"revoke-links", backup };
+    const Verb = enum { add, password, role, disable, enable, delete, invite, reset, list, devices, link, links, @"revoke-links", backup, refusals };
     const v = std.meta.stringToEnum(Verb, verb) orelse return error.Usage;
     var name_buf: [accounts.username_max]u8 = undefined;
     const name: []const u8 = switch (v) {
         .invite, .list, .link, .links, .@"revoke-links", .backup => "",
+        .refusals => if (c.next()) |n| accounts.username(&name_buf, n) orelse return error.Usage else "",
         else => accounts.username(&name_buf, c.next() orelse return error.Usage) orelse {
             std.log.err("username: 2 to 64 letters, digits and . _ - @ +", .{});
             return 2;
@@ -185,6 +189,9 @@ pub fn cmdAccount(c: *Cmd) !u8 {
                 const r = q.row(struct { username: []const u8, role: []const u8, disabled: bool, created: i64, last_seen: ?i64 });
                 try out.print("{s}\t{s}\t{s}\tcreated {d}\tlast seen {?d}\n", .{ r.username, r.role, if (r.disabled) "disabled" else "active", r.created, r.last_seen });
             }
+        },
+        .refusals => for (try accounts.refusals(db, arena, if (name.len > 0) name else null, 200)) |r| {
+            try out.print("{f}\t{s}\t{s}\t{s}\t{s}\t{s}\n", .{ date.Time{ .secs = r.at }, r.username, r.role, r.what, if (r.uri.len > 0) r.uri else "-", r.why });
         },
         .devices => {
             var q = try db.prepare("SELECT id, name, created, expires FROM devices WHERE account = ? ORDER BY id");

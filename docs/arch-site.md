@@ -289,7 +289,8 @@ bytes.
 - API: /api/notes GET/POST/PATCH/DELETE, ui.notesdata binary, bounds in
   notesdata.check; api.db's notes table. Each note keeps its login's username (author,
   on the pin and the list). Writes need X-Meiolol-Action. Never cached (nginx or
-  Cloudflare). Delete on /admin/notes (asked twice) removes the row
+  Cloudflare). Delete (asked twice) is the owner's (delete_notes); an admin's try is
+  refused and recorded (accounts.zig refusals, `meiolol account refusals`)
 - Slurs: notesdata.slur (the n-word, leet, spaced and padded spellings) refuses a note or
   reply in check; the island catches it first: text cleared, a stamp and a synthesised
   sad trombone

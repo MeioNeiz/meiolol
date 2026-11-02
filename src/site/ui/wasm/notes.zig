@@ -572,14 +572,8 @@ fn done(ctx: i32, bytes: ?[]u8) void {
             list.replying = null;
             listRender();
         },
-        .delete => {
-            patching -|= 1;
-            // Gone on screen since the press; the list again either way, so a failed one
-            // comes back
-            if (bytes == null) list.failed = true;
-            fetchAll();
-            listRender();
-        },
+        // Answered in `deleted`
+        .delete => {},
         .tool_on, .tool_off => {
             if (bytes == null) return listFailed();
             list.tool = ctx == @backingInt(Call.tool_on);
@@ -811,8 +805,30 @@ var list_island: ?*ui.island.Island(ui.noteslist.List, dom.Dom) = null;
 /// The latest list answer's notes live here, freed when the next one lands
 var list_mem: ?std.heap.ArenaAllocator = null;
 var fetching = false;
-/// PATCHes and DELETEs sent and not answered
+/// PATCHes sent and not answered
 var patching: u32 = 0;
+/// The note a DELETE was sent for (one at a time: dom.ask holds one answer)
+var deleting: ?u32 = null;
+
+/// A DELETE's answer: gone from the list on 200; a 403 (an admin, recorded by the API)
+/// shows the big refusal
+fn deleted(_: i32, status: u16, bytes: ?[]u8) void {
+    if (bytes) |b| gpa.free(b);
+    const id = deleting orelse return;
+    deleting = null;
+    switch (status) {
+        200 => {
+            for (notes.items, 0..) |x, i| if (x.id == id) {
+                _ = notes.orderedRemove(i);
+                break;
+            };
+            list.notes = notes.items;
+        },
+        403 => list.denied = true,
+        else => list.failed = true,
+    }
+    listRender();
+}
 
 fn listMain() void {
     list_island = dom.rt.add(ui.noteslist.List, &list, &list_server, ui.noteslist.sel) catch return dom.dom.warn("notes: out of memory");
@@ -868,13 +884,9 @@ fn listChanged() void {
         .delete => |id| {
             var buf: [32]u8 = undefined;
             const path = idPath(&buf, id) orelse return;
-            for (notes.items, 0..) |x, i| if (x.id == id) {
-                _ = notes.orderedRemove(i);
-                break;
-            };
-            list.notes = notes.items;
-            patching += 1;
-            dom.send("DELETE", path, "", @backingInt(Call.delete), done);
+            list.denied = false;
+            deleting = id;
+            dom.ask("DELETE", path, "", @backingInt(Call.delete), deleted);
         },
         .tool => |on| if (on)
             dom.send("POST", "/api/notes/tool?on=1", "", @backingInt(Call.tool_on), done)

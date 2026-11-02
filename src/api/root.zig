@@ -444,8 +444,10 @@ fn notesRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Reque
         break :who try accounts.session(db, arena, token, now) orelse
             return send(ctx, request, try errorReply(arena, .unauthorized, "error", "not signed in"));
     };
-    if (!who.role.can(.take_notes)) return send(ctx, request, try errorReply(arena, .forbidden, "error", "your role cannot take notes"));
-    if (method != .GET and !action) return send(ctx, request, try errorReply(arena, .forbidden, "error", "missing X-Meiolol-Action"));
+    const what = try arena.print("{t} {s}", .{ request.head.method, path });
+    if (!who.role.can(.take_notes)) return deny(ctx, arena, request, who, what, "your role cannot take notes", now);
+    if (method != .GET and !action) return deny(ctx, arena, request, who, what, "missing X-Meiolol-Action", now);
+    if (method == .DELETE and !who.role.can(.delete_notes)) return deny(ctx, arena, request, who, what, "your role cannot delete notes", now);
     if (tool) {
         const on = try param(arena, query, "on") orelse "";
         if (!std.mem.eql(u8, on, "0") and !std.mem.eql(u8, on, "1")) return send(ctx, request, try errorReply(arena, .bad_request, "error", "expected ?on=0|1"));
@@ -505,12 +507,21 @@ fn applicationsRequest(ctx: *Context, arena: Allocator, request: *std.http.Serve
         break :who try accounts.session(db, arena, token, now) orelse
             return send(ctx, request, try errorReply(arena, .unauthorized, "error", "not signed in"));
     };
-    if (!who.role.can(.manage_accounts)) return send(ctx, request, try errorReply(arena, .forbidden, "error", "your role cannot see applications"));
-    if (post and !actionHeader(request)) return send(ctx, request, try errorReply(arena, .forbidden, "error", "missing X-Meiolol-Action"));
+    const what = try arena.print("{t} /api/applications", .{request.head.method});
+    if (!who.role.can(.manage_accounts)) return deny(ctx, arena, request, who, what, "your role cannot see applications", now);
+    if (post and !actionHeader(request)) return deny(ctx, arena, request, who, what, "missing X-Meiolol-Action", now);
     const db = try cache.open(ctx.opts.db_path);
     defer db.close();
     const r = try applications.admin(arena, db, post, query, now);
     return send(ctx, request, .{ .status = r.status, .body = r.body, .binary = r.binary });
+}
+
+/// A 403 for a signed-in account, recorded (accounts.refuse)
+fn deny(ctx: *Context, arena: Allocator, request: *std.http.Server.Request, who: accounts.Account, what: []const u8, why: []const u8, now: i64) !void {
+    const db = try accounts.open(ctx.opts.accounts_path);
+    defer db.close();
+    try accounts.refuse(db, now, who, what, "", why);
+    return send(ctx, request, try errorReply(arena, .forbidden, "error", why));
 }
 
 fn actionHeader(request: *std.http.Server.Request) bool {
@@ -1608,6 +1619,16 @@ test "/api/notes: a take_notes login only, and a write needs X-Meiolol-Action" {
     try std.testing.expectEqual(1, list.notes.len);
     try std.testing.expectEqualStrings("jacob", list.notes[0].author);
     try std.testing.expectEqualStrings("Too wide", list.notes[0].text);
+
+    // Deleting is the owner's: an admin's try is refused and recorded
+    const owner = try accounts.startSession(adb, io, try accounts.create(adb, "boss", "x", .owner, now), now);
+    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "DELETE", "?id=1", &admin, true, ""), "HTTP/1.1 403 ");
+    const tries = try accounts.refusals(adb, arena, "jacob", 10);
+    try std.testing.expect(tries.len > 0);
+    try std.testing.expectEqualStrings("DELETE /api/notes", tries[0].what);
+    try std.testing.expectEqualStrings("your role cannot delete notes", tries[0].why);
+    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "DELETE", "?id=1", &owner, true, ""), "HTTP/1.1 200 ");
+    try std.testing.expectEqual(0, (try accounts.refusals(adb, arena, "boss", 10)).len);
 }
 
 const fuzz_token: accounts.Token = @splat('A');

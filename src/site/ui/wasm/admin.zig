@@ -173,7 +173,21 @@ fn run(a: ap.Act) void {
     acting = .{ .act = a, .before = newest(a) orelse std.math.minInt(i64) };
     var buf: [48]u8 = undefined;
     const path = std.fmt.bufPrint(&buf, "/admin/api/action/{s}", .{a.path()}) catch return;
-    dom.send("POST", path, "", @backingInt(Call.action), done);
+    page.denied = false;
+    dom.ask("POST", path, "", @backingInt(Call.action), acted);
+}
+
+/// An action's answer: a 403 (an admin without run_actions, recorded by the API) ends it
+/// with the big refusal; anything else as `done`
+fn acted(ctx: i32, status: u16, bytes: ?[]u8) void {
+    if (status >= 200 and status < 300) return done(ctx, bytes);
+    if (bytes) |b| gpa.free(b);
+    if (status != 403) return done(ctx, null);
+    in_flight.remove(.action);
+    acting = null;
+    page.running = null;
+    page.denied = true;
+    render();
 }
 
 fn write(path: []const u8, comptime T: type, v: T, c: Call) void {

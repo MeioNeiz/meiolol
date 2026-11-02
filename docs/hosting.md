@@ -281,8 +281,14 @@ a 301 to it.
   read per request, so rotate by rewriting both and reloading nginx); without a match
   the routes do not exist (same 404/405 as any path). Actions also need the request
   header X-Meiolol-Action: 1, which a cross-site form cannot send, and X-Meiolol-Role
-  (nginx, from the login check) with run_actions: the owner only. 8091 takes only the
-  web server
+  (nginx, from the login check) with run_actions: the owner only. nginx gates
+  /admin/api/action/ on /auth/check/run_actions first, so an admin's press is refused
+  there and recorded. 8091 takes only the web server
+- Refusals: every 403 to a signed-in account (the auth_request gates, with the page in
+  X-Original-URI; account management; /api/notes and /api/applications) is a row in
+  accounts.db's refusals, the newest 10,000: `meiolol account refusals [NAME]` (--data
+  /var/lib/meiolol-api, as meiolol-api). Admins see the owner's controls (Delete on
+  notes, the admin actions); a press shows a big refusal
 - Logins (docs/plan/accounts.md; src/api/accounts.zig, roles.zig): `meiolol api` answers
   /auth/ (nginx location /auth/, unlogged, 4 KB bodies) from
   /var/lib/meiolol-api/accounts.db; desktop apps sign in with POST /auth/device and send
