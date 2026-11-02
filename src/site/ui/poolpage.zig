@@ -5,6 +5,7 @@
 const std = @import("std");
 const tree = @import("tree.zig");
 const card = @import("card.zig");
+const button = @import("button.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const rolepicker = @import("rolepicker.zig");
@@ -252,7 +253,7 @@ pub const Page = struct {
                         rolepicker.view(h, .{ .v = .compact, .label = W.by_role }, &items),
                     }),
                     h.div(.{ .class = "icons" }, .{icons.done()}),
-                    if (n > role_shown) h.button(.{ .type = "button", .aria_expanded = p.all, .on_click = h.on(p, .all) }, .{if (p.all) W.fewer else W.all.with(h, .{ .n = n })}) else null,
+                    if (n > role_shown) button.view(h, .{ .s = .s, .expanded = p.all, .on = h.on(p, .all) }, .{if (p.all) W.fewer else W.all.with(h, .{ .n = n })}) else null,
                 }),
             }),
         });
@@ -288,16 +289,19 @@ pub fn mainOf(d: *const Data, c: usize) ?Main {
 
 pub const css =
     \\@layer components {
-    \\  .c-poolwrap { container-type: inline-size; display: grid; gap: var(--sp-4); }
+    \\  /* A container can't query itself: the second track is auto, filled only from 960 px */
+    \\  .c-poolwrap { container-type: inline-size; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-4);
+    \\    align-items: start; }
+    \\  .c-poolwrap > *, .c-poolwrap > .c-poolpage > * { grid-column: 1 / -1; }
     \\  .c-poolwrap > .c-poolpage { display: contents; }
+    \\  .c-poolwrap + p { margin-top: var(--sp-4); }
     \\  .c-poolpage { display: grid; gap: var(--sp-4); }
     \\  .c-poolpage > .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-3); }
     \\  .c-poolpage > .top > h1 { margin: 0; }
     \\  .c-poolpage > .top > .lead { margin: 0; color: var(--muted); }
     \\  @container (min-width: 960px) {
-    \\    .c-poolwrap:has(.c-slots) { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
-    \\    .c-poolwrap > .c-poolpage > :is(.top, .c-slots) { grid-column: 1 / -1; }
-    \\    .c-poolwrap:has(.c-slots) > .c-poolpage > .side { grid-column: 2; grid-row: 3; position: sticky; top: var(--sp-4); }
+    \\    .c-poolwrap:has(.c-slots) > .c-poolpage > .side { grid-column: 2; grid-row: 3; width: 340px; position: sticky;
+    \\      top: var(--sp-4); }
     \\    .c-poolwrap:has(.c-slots) > .c-poolgrid { grid-column: 1; grid-row: 3; }
     \\  }
     \\  .c-poolwrap > .c-poolgrid:empty { display: none; }

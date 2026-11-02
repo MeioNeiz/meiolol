@@ -9,6 +9,7 @@ const tree = @import("tree.zig");
 const card = @import("card.zig");
 const champ = @import("champ.zig");
 const segmented = @import("segmented.zig");
+const button = @import("button.zig");
 const heatgrid = @import("heatgrid.zig");
 const candlist = @import("candlist.zig");
 const role = @import("role.zig");
@@ -238,8 +239,6 @@ pub const Page = struct {
     /// leaning early or late, and a role on one champion; each with its fix when the
     /// role main's file has one
     fn weakSpots(p: *P, h: *H, r: Role, ids: []const u16, files: []const ?*const pd.LaneRole, lanes: []const Lane) N {
-        var met: u64 = 0;
-        for (files) |f| met += if (f) |x| x.games else 0;
         var none: [weak_shown]u16 = undefined;
         var n: usize = 0;
         var n_all: u32 = 0;
@@ -261,7 +260,7 @@ pub const Page = struct {
         if (n_all > 0) {
             var icons = h.list();
             for (none[0..n]) |id| icons.add(champ.view(h, pp.iconOf(p.d, h, id), .{ .px = .@"20" }));
-            const pct: u32 = if (met > 0) @intCast((100 * none_games + met / 2) / met) else 0;
+            const pct = metPct(files, none_games);
             lines.add(h.el(.li, .{}, .{
                 h.span(.{ .class = "wt" }, .{ W.no_answer, h.span(.{ .class = "ic" }, .{icons.done()}), h.span(.{ .class = "m" }, .{W.met_in.with(h, .{ .n = pct })}) }),
                 if (thin > 0) h.span(.{ .class = "m" }, .{W.thin_more.with(h, .{ .n = thin })}) else null,
@@ -368,7 +367,8 @@ pub const Page = struct {
     fn fix(p: *P, h: *H, r: Role, id: u16) N {
         const c = pp.iconOf(p.d, h, id);
         // The name shows, "+" before it (CSS): "Add Dr. Mundo" is over a label's 2 words
-        return h.button(.{ .type = "button", .class = "fix", .aria_label = W.add.with(h, .{ .c = c.name }), .on_click = h.on(p, .{ .add = .{ .id = id, .role = r } }) }, .{
+        return button.view(h, .{ .s = .s, .label = W.add.with(h, .{ .c = c.name }), .on = h.on(p, .{ .add = .{ .id = id, .role = r } }) }, .{
+            "+",
             champ.view(h, c, .{ .px = .@"20", .named = false }),
             c.name,
         });
@@ -378,13 +378,10 @@ pub const Page = struct {
         const open = p.open & bit(@backingInt(r)) != 0;
         const lanes = all[0..if (open) all.len else @min(all.len, lanes_shown)];
         if (p.sort == .worst) std.sort.insertion(Lane, lanes, {}, worstFirst);
-        var met: u64 = 0;
-        for (files) |f| met += if (f) |x| x.games else 0;
         const rows = h.mem.alloc(heatgrid.Head, lanes.len) catch return oom(h);
         for (rows, lanes) |*x, l| {
             const c = pp.iconOf(p.d, h, l.id);
-            const met_pct: u32 = if (met > 0) @intCast((100 * @as(u64, l.games) + met / 2) / met) else 0;
-            x.* = .{ .champ = c, .label = .{ .s = c.name }, .flag = !l.covered(), .tail = phrase.num(h, .pct, met_pct) };
+            x.* = .{ .champ = c, .label = .{ .s = c.name }, .flag = !l.covered(), .tail = phrase.num(h, .pct, metPct(files, l.games)) };
         }
         const cols = h.mem.alloc(heatgrid.Head, ids.len) catch return oom(h);
         for (cols, ids) |*x, id| {
@@ -420,7 +417,7 @@ pub const Page = struct {
         } else h.span(.{}, .{W.press});
         return h.div(.{}, .{
             heatgrid.view(h, .{ .corner = W.vs, .rows = rows, .cols = cols, .cells = cells, .sel = s, .on = on, .readout = readout }),
-            if (all.len > lanes_shown) h.button(.{ .type = "button", .aria_expanded = open, .on_click = h.on(p, .{ .all = r }) }, .{if (open) W.fewer else W.all.with(h, .{ .n = all.len })}) else null,
+            if (all.len > lanes_shown) button.view(h, .{ .s = .s, .expanded = open, .on = h.on(p, .{ .all = r }) }, .{if (open) W.fewer else W.all.with(h, .{ .n = all.len })}) else null,
         });
     }
 
@@ -494,11 +491,7 @@ pub const Page = struct {
             n += 1;
         }
         out = out[0..n];
-        // Best first; at most 8 lanes
-        if (n > 1) for (1..n) |i| {
-            var j = i;
-            while (j > 0 and out[j - 1].pp < out[j].pp) : (j -= 1) std.mem.swap(candlist.Reason, &out[j - 1], &out[j]);
-        };
+        std.sort.insertion(candlist.Reason, out, {}, higherPp);
         return out;
     }
 };
@@ -561,6 +554,10 @@ pub fn lanesOf(h: *H, files: []const ?*const pd.LaneRole) []Lane {
     return out[0..n];
 }
 
+fn higherPp(_: void, a: candlist.Reason, b: candlist.Reason) bool {
+    return a.pp > b.pp;
+}
+
 fn mostMet(_: void, a: Lane, b: Lane) bool {
     return a.games > b.games;
 }
@@ -570,6 +567,13 @@ fn worstFirst(_: void, a: Lane, b: Lane) bool {
     const x = a.best orelse return if (b.best == null) a.games > b.games else false;
     const y = b.best orelse return true;
     return if (x != y) x < y else a.games > b.games;
+}
+
+/// `games` as a whole % of the role's games over the columns
+fn metPct(files: []const ?*const pd.LaneRole, games: u64) u32 {
+    var met: u64 = 0;
+    for (files) |f| met += if (f) |x| x.games else 0;
+    return if (met > 0) @intCast((100 * games + met / 2) / met) else 0;
 }
 
 /// ‰ to a whole %
@@ -602,10 +606,7 @@ pub const css =
     \\  .c-poolgrid .wh { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); }
     \\  .c-poolgrid .wh > h3 { margin: 0; font-size: var(--fs-m); }
     \\  .c-poolgrid .none { margin: 0; color: var(--faint); }
-    \\  .c-poolgrid .lanes button[aria-expanded] { justify-self: start; min-height: 28px; padding: 0 var(--sp-2); border: 1px solid var(--line);
-    \\    border-radius: var(--r-ctl); background: var(--panel-2); color: var(--t2); font: inherit;
-    \\    font-size: var(--fs-xs); cursor: pointer; }
-    \\  .c-poolgrid .lanes button[aria-expanded]:hover { color: var(--t1); border-color: var(--sel-line); }
+    \\  .c-poolgrid .lanes .c-btn[aria-expanded] { justify-self: start; }
     \\  .c-poolgrid .read a { margin-left: auto; }
     \\  .c-poolgrid .weak { display: grid; gap: var(--sp-2); padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
     \\  .c-poolgrid .weak > h3 { margin: 0; font-size: var(--fs-m); }
@@ -616,12 +617,6 @@ pub const css =
     \\  .c-poolgrid .weak .wt { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
     \\  .c-poolgrid .weak .ic { display: inline-flex; gap: 3px; }
     \\  .c-poolgrid .weak .m { color: var(--t2); font-size: var(--fs-xs); }
-    \\  .c-poolgrid .weak .fix { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 28px; padding: 0 var(--sp-2) 0 6px;
-    \\    border: 1px solid var(--line); border-radius: var(--r-ctl); background: var(--panel-2); color: var(--t1); font: inherit;
-    \\    font-size: var(--fs-xs); cursor: pointer; }
-    \\  .c-poolgrid .weak .fix:hover { border-color: var(--sel-line); }
-    \\  .c-poolgrid .weak .fix::before { content: "+"; color: var(--t2); }
-    \\  .c-poolgrid .weak .fix:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     \\  @container (max-width: 480px) {
     \\    .c-poolgrid .lanes .c-heat .rh { width: auto; }
     \\  }
