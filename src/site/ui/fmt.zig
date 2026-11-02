@@ -256,6 +256,9 @@ pub const WrColour = struct {
     }
 };
 
+/// Civil.month - 1 to its name
+pub const months_short = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
 /// A day count since 1970-01-01 as a calendar date
 pub const Civil = struct {
     /// 0 Monday
