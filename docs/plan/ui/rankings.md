@@ -1,6 +1,6 @@
 # Rankings: a page per stat (site note 4)
 
-Plan only. Jacob 27 Oct, on home: "For whole site, I want to have it like league of
+Building (dev 4, shape A, 2 Nov). Jacob 27 Oct, on home: "For whole site, I want to have it like league of
 graphs where there is just so many cool stat pages ... Like if there was a top aces thing
 on a champion page like 1/x champions then i could click and see a page showing the full
 ranking and they just had that for so many stats".
@@ -53,14 +53,30 @@ row in the stats pass, then a spec.
 - URLs per the URL plan (docs/plan/urls.md); links through the page path helpers
   (root.championsPath, Site.champHref), never hand-written paths
 
+## Decided (coord, 2 Nov)
+
+- All: each champion in its main role only
+- First five specs: wins from ahead, wins from behind (1,500+ gold either way at 15
+  min, curves comeback buckets), long minus short game win rate (stats.Trend lengths,
+  with lean.tsv's lean beside it), lane gold at 14, pick-up gap
+- Wording: "wins more of its long games", never "scales" (game length follows the game)
+- Sort by the edge over the role pulled toward 0 (core.banimpact.Prior, k from how
+  much the role's champions differ in that spot), shown raw; rows under 100 games
+  behind the figure wait behind a "+N unsure" chip, faded once shown
+
 ## Build order
 
-1. StatRanking component and the spec type; first three stats (lane gold at 14, first
-   blood, pick-up), the ranking pages and the "Nth of M" links on the champion page
-2. The rankings index and home's links into it
-3. The rest of the table above; new counting after
+1. Done: ui.ranking (StatRanking island, ui-rankings.wasm, data inline), the spec, wins
+   from ahead and behind (/rankings/ahead, /rankings/behind[/role], every view)
+2. Long minus short game win rate, lean column
+3. /rankings index and links from the champions section and home's Champions card
+4. "Nth of M ›" on the champion page cards, the champion highlighted on its ranking
+5. Lane gold at 14, pick-up gap, then the rest of the table above
 
-## Questions for Jacob
+## Later (after the production key)
 
-1. Under All: each champion in its main role only, or every champion-role row?
-2. Which five stats first?
+Game-wide pages, League of Graphs style (data/team/2026-11-01-live-notes/notes/
+log-catalogue.md): blue vs red per champion, first objective value and drakes/souls
+(learned.md: post-game only until the key), kill and death maps, warding vs win rate,
+surrender rate by rank (needs gameEndedInSurrender parsed). Never: player or mastery
+rankings, named records.

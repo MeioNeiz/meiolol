@@ -355,9 +355,17 @@ fn lanePairs(site: *const Site, c: *const curvesfile.Curves, ch: Champ, r: Role,
     return pairs;
 }
 
-/// ch's lanes in r by its gold lead at 10 and 15 minutes, summed over its pairs as
-/// laneOf, beside every lane in the role; null under cp.min_games lanes at 10
+/// comebackSums, null under cp.min_games lanes at 10
 fn comebackOf(site: *const Site, ch: Champ, r: Role) !?cp.Comeback {
+    const out = try comebackSums(site, ch, r) orelse return null;
+    var lanes: u32 = 0;
+    for (out.at[0]) |x| lanes += x.games;
+    return if (lanes < cp.min_games) null else out;
+}
+
+/// ch's lanes in r by its gold lead at 10 and 15 minutes, summed over its pairs as
+/// laneOf, beside every lane in the role; null without the role's curves
+pub fn comebackSums(site: *const Site, ch: Champ, r: Role) !?cp.Comeback {
     const c = if (site.curves) |*c| c else return null;
     const base = c.baseline(r, .all) orelse return null;
     const pairs = try lanePairs(site, c, ch, r, .all);
@@ -371,9 +379,7 @@ fn comebackOf(site: *const Site, ch: Champ, r: Role) !?cp.Comeback {
         const k = base.comeback(at, b);
         x.* = .{ .games = k.games, .wins = k.wins };
     };
-    var lanes: u32 = 0;
-    for (out.at[0]) |x| lanes += x.games;
-    return if (lanes < cp.min_games) null else out;
+    return out;
 }
 
 /// ch's lanes in r with kills on and by its lane opponent, summed over its pairs as

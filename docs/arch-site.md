@@ -169,6 +169,12 @@ violations and console errors; its header says how to reach meio.lol from the Ma
 Known gaps: stats.bin is dense (~12 MB raw; brotli helps while sparse), no rank
 brackets (statsfile has none), no per-patch history.
 
+Rankings (src/site/rankings.zig, ui/ranking.zig; docs/plan/ui/rankings.md):
+/rankings/<stat>[/<role>] per view, every champion by one stat (urls.Stat), All with each
+in its main role. A DataTable island (ui-rankings.wasm) with its data inline (data-bin);
+the server picks rows (wins from ahead and behind: champion.comebackSums over the view's
+curves) and pulls each figure toward its role (core.banimpact.Prior) for the sort.
+
 ## Daily Draft (src/daily.zig, src/site/daily.zig, src/site/ui/dailypage.zig)
 
 One real ranked solo game a day, same for everyone: one slot hidden behind four options

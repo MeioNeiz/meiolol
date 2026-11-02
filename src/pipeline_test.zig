@@ -456,6 +456,11 @@ test "fixture games to stats, curves and the website" {
         // lanes' scope, ui-pool.wasm and ui-poolgrid.wasm
         .{ "pool.html", &.{ "<h2>Choose your pool</h2>", "<div class=\"c-poolgrid\" data-island=\"poolgrid\"></div></div>", "<script src=\"/" ++ assets.poolgrid_js.path ++ "\" data-wasm=\"" ++ assets.poolgrid_wasm.path ++ "\" defer></script>", "<p class=\"muted\"><span class=\"c-scope\"><span class=\"c-chip\" data-v=\"scope\" title=\"Region, period and rank these numbers are from\"><span class=\"part\">EUW</span><span class=\"part\">30 days</span>", "(<a href=\"/pickup\">How hard to pick up</a>)", "<script src=\"/" ++ assets.pool_js.path ++ "\" data-wasm=\"" ++ assets.pool_wasm.path ++ "\" defer></script>" } },
         .{ "pickup.html", &.{ "<h1>How hard to pick up <span class=\"c-scope\"><span class=\"c-chip\" data-v=\"scope\" title=\"Region, period and rank these numbers are from\"><span class=\"part off\">All regions, not EUW alone</span><span class=\"part\">30 days</span>", "<a aria-current=\"page\">All</a><a href=\"/pickup/top\">Top</a>" } },
+        // Rankings (ui.ranking): the stat and role switches, the island with its data
+        // inline; each view its own, All with each champion in its main role. The
+        // fixture's one Top row has 3 games: behind the chip
+        .{ "rankings/ahead/top.html", &.{ "<h1>Wins from ahead <span class=\"c-scope\">", "<a href=\"/rankings/behind/top\">From behind</a>", "<a href=\"/rankings/ahead\">All</a>", "1,500+ gold ahead of its lane opponent at 15 minutes. Top: ", "<div class=\"c-rank\" data-island=\"ranking\" data-bin=\"", "+1 unsure", "<script src=\"/" ++ assets.rankings_js.path ++ "\" data-wasm=\"" ++ assets.rankings_wasm.path ++ "\" defer></script>" } },
+        .{ "_v/all/rankings/behind.html", &.{ "<h1>Wins from behind", "<a href=\"/rankings/behind/top?region=all\">Top</a>", "data-island=\"ranking\"" } },
         .{ "_v/patch/pickup/mid.html", &.{ "<a href=\"/pickup?period=patch\">All</a><a href=\"/pickup/top?period=patch\">Top</a>", "<a aria-current=\"page\">Mid</a>" } },
         .{ "_v/all-patch/pool.html", &.{"<span class=\"c-scope\"><span class=\"c-chip\" data-v=\"scope\" title=\"Region, period and rank these numbers are from\"><span class=\"part\">All regions</span><span class=\"part\">Patch 15.13</span><span class=\"part\">Plat+</span></span></span> Lane numbers:"} },
     };
@@ -523,6 +528,23 @@ test "fixture games to stats, curves and the website" {
                 return error.TestUnexpectedResult;
             }
         }
+    }
+
+    // A ranking's island: ui-rankings.wasm's render of its data-bin is the page's own
+    {
+        const path = try std.fs.path.join(arena, &.{ out, "rankings/ahead/top.html" });
+        const page = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 22));
+        const b = try dataBin(arena, page, "ranking");
+        const d = try arena.create(site.ui.ranking.Data);
+        d.* = try site.ui.data.decode(arena, site.ui.ranking.Data, b[1]);
+        try testing.expectEqual(1, d.rows.len);
+        var rk: site.ui.ranking.Ranking = try .init(arena, d);
+        rk.bin = b[0];
+        var t: site.ui.Tree = .{};
+        var h: site.ui.H = .init(arena, &t);
+        var w: std.Io.Writer.Allocating = .init(arena);
+        try site.ui.html.write(&t, rk.view(&h), &w.writer);
+        try testing.expect(std.mem.find(u8, page, w.written()) != null);
     }
 
     // The champions board: what ui-stats.wasm renders from the data file, before the

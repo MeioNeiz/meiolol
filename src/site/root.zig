@@ -18,6 +18,7 @@ const matchup = @import("matchup.zig");
 const finder = @import("finder.zig");
 const pool_page = @import("pool.zig");
 const pickup_page = @import("pickup.zig");
+const rankings_page = @import("rankings.zig");
 const pool = @import("../pool.zig");
 const learning = @import("../learning.zig");
 const spread = @import("../spread.zig");
@@ -365,7 +366,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ assets.font, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.champcharts_js, assets.champcharts_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.findergrid_js, assets.findergrid_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm, assets.pool_js, assets.pool_wasm, assets.poolgrid_js, assets.poolgrid_wasm, assets.daily_js, assets.daily_wasm, assets.dailydays_js, assets.dailydays_wasm, assets.dailyseat_js, assets.dailyseat_wasm, assets.home_js, assets.home_wasm, assets.homegame_js, assets.homegame_wasm, assets.your_js, assets.your_wasm, assets.yourviews_js, assets.yourviews_wasm, assets.yourtime_js, assets.yourtime_wasm, assets.yourlookup_js, assets.yourlookup_wasm, assets.yourfriends_js, assets.yourfriends_wasm, assets.forget_js, assets.forget_wasm, assets.apply_js, assets.apply_wasm, assets.squad_js, assets.squad_wasm, assets.account_js, assets.account_wasm, assets.sitesearch_js, assets.sitesearch_wasm };
+pub const hashed_assets = [_]assets.Hashed{ assets.font, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.champcharts_js, assets.champcharts_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.findergrid_js, assets.findergrid_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm, assets.pool_js, assets.pool_wasm, assets.poolgrid_js, assets.poolgrid_wasm, assets.rankings_js, assets.rankings_wasm, assets.daily_js, assets.daily_wasm, assets.dailydays_js, assets.dailydays_wasm, assets.dailyseat_js, assets.dailyseat_wasm, assets.home_js, assets.home_wasm, assets.homegame_js, assets.homegame_wasm, assets.your_js, assets.your_wasm, assets.yourviews_js, assets.yourviews_wasm, assets.yourtime_js, assets.yourtime_wasm, assets.yourlookup_js, assets.yourlookup_wasm, assets.yourfriends_js, assets.yourfriends_wasm, assets.forget_js, assets.forget_wasm, assets.apply_js, assets.apply_wasm, assets.squad_js, assets.squad_wasm, assets.account_js, assets.account_wasm, assets.sitesearch_js, assets.sitesearch_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -546,6 +547,7 @@ fn pagePathsMin(site: *const Site, min_games: u32) ![]const urls.Page {
     if (site.curves) |*c| try matchup.paths(site, c, &list, min_games);
     try list.append(a, .pool);
     try pickup_page.paths(site, &list);
+    try rankings_page.paths(site, &list);
     try list.append(a, .{ .patch = null });
     try patch_page.paths(site, &list);
     return list.items;
@@ -570,6 +572,7 @@ pub fn renderPage(site: *const Site, w: *Writer, at: urls.Page) !bool {
         .matchup => |m| return matchup.route(site, w, if (site.curves) |*c| c else return false, m),
         .pool => try pool_page.writePage(site, w, &site.pool),
         .pickup => |r| try pickup_page.writePage(site, w, if (r) |x| coreRole(x) else null),
+        .ranking => |k| return rankings_page.writePage(site, w, k),
         .patch => |cur| if (cur) |x| return patch_page.writeOlder(site, w, x) else try patch_page.writePage(site, w),
         else => return false,
     }

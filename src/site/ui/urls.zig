@@ -9,6 +9,19 @@ const Role = @import("role.zig").Role;
 
 pub const Champ = struct { slug: []const u8, role: ?Role = null };
 pub const Matchup = struct { role: Role, a: []const u8, b: []const u8 };
+/// A ranking of every champion by one stat (ui.ranking); no role: each in its main role
+pub const Ranking = struct { stat: Stat, role: ?Role = null };
+
+pub const Stat = enum {
+    /// Win rate when 1,500+ gold ahead of the lane opponent at 15 minutes
+    ahead,
+    /// The same, behind
+    behind,
+
+    pub fn slug(s: Stat) []const u8 {
+        return @tagName(s);
+    }
+};
 
 pub const Page = union(enum) {
     home,
@@ -22,6 +35,7 @@ pub const Page = union(enum) {
     /// The current diff, or an older one by its patch with hyphens ("26-21")
     patch: ?[]const u8,
     pickup: ?Role,
+    ranking: Ranking,
     learn,
     pool,
     your,
@@ -56,6 +70,10 @@ pub const Page = union(enum) {
                 if (s) |x| try w.print("/{s}", .{x});
             },
             .pickup => |r| try opt(w, "/pickup", r),
+            .ranking => |k| {
+                try w.print("/rankings/{s}", .{k.stat.slug()});
+                if (k.role) |r| try w.print("/{t}", .{r});
+            },
             else => try w.print("/{t}", .{p}),
         }
     }
@@ -132,6 +150,10 @@ pub fn parse(path: []const u8) ?Page {
         if (b != null) return null;
         return .{ .pickup = if (a) |x| std.meta.stringToEnum(Role, x) orelse return null else null };
     }
+    if (std.mem.eql(u8, head, "rankings")) {
+        const stat = std.meta.stringToEnum(Stat, a orelse return null) orelse return null;
+        return .{ .ranking = .{ .stat = stat, .role = if (b) |x| std.meta.stringToEnum(Role, x) orelse return null else null } };
+    }
     if (a != null) return null;
     const p = std.meta.stringToEnum(std.meta.Tag(Page), head) orelse return null;
     return switch (p) {
@@ -194,6 +216,8 @@ test "urls: each page spelt and parsed back" {
         .{ .{ .patch = "26-21" }, "/patch/26-21" },
         .{ .{ .pickup = null }, "/pickup" },
         .{ .{ .pickup = .mid }, "/pickup/mid" },
+        .{ .{ .ranking = .{ .stat = .ahead } }, "/rankings/ahead" },
+        .{ .{ .ranking = .{ .stat = .behind, .role = .support } }, "/rankings/behind/support" },
         .{ .learn, "/learn" },
         .{ .pool, "/pool" },
         .{ .squad, "/squad" },
@@ -234,6 +258,10 @@ test "urls: not pages" {
         "/patch/26.21",
         "/patch/26",
         "/pickup/adc",
+        "/rankings",
+        "/rankings/x",
+        "/rankings/ahead/adc",
+        "/rankings/ahead/top/x",
         "/learn/x",
         "/admin",
         "/index",
