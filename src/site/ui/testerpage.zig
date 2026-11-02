@@ -69,14 +69,17 @@ const W = struct {
     pub const terms = plain("Terms");
     pub const files = plain("Files");
     pub const seat_pts = Phrase("{p:points} vs average");
+    pub const seat_avg = plain("average");
     pub const seat_why = Phrase("{p:points} · {why:text}");
     pub const seat_lean = Phrase("{t:text} · {l:text}");
     pub const at_level = Phrase("Level at {m:int}");
     pub const at_ahead = Phrase("{s:text} ahead at {m:int}");
     pub const from_level = Phrase(", level from {m:int}");
     pub const from_strong = Phrase(", {s:text} stronger from {m:int}");
-    pub const lean_nums = Phrase(": blue minus red {g:signed} gold at {gm:int} min ({gl:signed} to {gh:signed}), {w:points} pts from an even game at {wm:int} ({wl:points} to {wh:points}).");
-    pub const lean_how = plain(" Each pick's own lean, summed: not the draft model.");
+    pub const lean_nums = Phrase(" · Blue {g:signed} gold ({gl:signed} to {gh:signed}), {w:points} pts ({wl:points} to {wh:points})");
+    pub const lean_how = plain("Each pick's own lean, summed: not the draft model");
+    pub const early = plain("early");
+    pub const late = plain("late");
     pub const strong = Phrase("strong {r:text}");
     pub const weak = Phrase("weak {r:text}");
     pub const into_l = Phrase("into {n:text}");
@@ -550,7 +553,7 @@ pub const Page = struct {
         const t = teamLean(p.head, p.teams) orelse return null;
         const at = p.head.lean_at;
         const z: f64 = at.z;
-        return h.p(.{ .class = "lean" }, .{
+        return h.p(.{ .class = "lean", .title = W.lean_how }, .{
             // Each minute on its own: a team sum isn't a champion's lean, where early means
             // ahead at 14 and weaker from even
             h.b(.{}, .{
@@ -561,13 +564,10 @@ pub const Page = struct {
                 .g = whole(t.gold),
                 .gl = whole(t.gold - z * t.gold_sd),
                 .gh = whole(t.gold + z * t.gold_sd),
-                .gm = at.gold_minute,
                 .w = t.win,
                 .wl = t.win - z * t.win_sd,
                 .wh = t.win + z * t.win_sd,
-                .wm = at.win_minute,
             }),
-            h.span(.{}, .{W.lean_how}),
         });
     }
 
@@ -628,8 +628,8 @@ pub const Page = struct {
         const c = leanOf(p.head, p.teams[side][r], r) orelse return line;
         return switch (c.lean) {
             .none => line,
-            .early => W.seat_lean.with(h, .{ .t = line.s, .l = "early" }),
-            .late => W.seat_lean.with(h, .{ .t = line.s, .l = "late" }),
+            .early => W.seat_lean.with(h, .{ .t = line.s, .l = W.early.s }),
+            .late => W.seat_lean.with(h, .{ .t = line.s, .l = W.late.s }),
         };
     }
 
@@ -639,8 +639,9 @@ pub const Page = struct {
         for (w.parts()) |x| {
             if (top == null or @abs(x.pp) > @abs(top.?.pp)) top = x;
         }
-        const x = top orelse return W.seat_pts.with(h, .{ .p = w.total() });
-        if (!(@abs(x.pp) >= min_part)) return W.seat_pts.with(h, .{ .p = w.total() });
+        const alone = if (@abs(w.total()) < 0.05) W.seat_avg else W.seat_pts.with(h, .{ .p = w.total() });
+        const x = top orelse return alone;
+        if (!(@abs(x.pp) >= min_part)) return alone;
         const rl: []const u8 = @tagName(role.Role.all[r]);
         const why: tree.Text = switch (x.kind) {
             .base => if (x.pp > 0) W.strong.with(h, .{ .r = rl }) else W.weak.with(h, .{ .r = rl }),
@@ -664,17 +665,9 @@ pub const Page = struct {
         const e: ?ds.DraftWhy = if (vs) |x| x.sc.draftWhy(p.teams) else null;
         var buf: [2 * ds.max_draft_parts]Gap = undefined;
         const g = gaps(&d, if (e) |*x| x else null, &buf);
-        var idx: [max_lines]usize = undefined;
+        std.mem.sort(Gap, g, {}, Gap.larger);
         var n: usize = 0;
-        for (g, 0..) |x, i| {
-            if (!(@abs(x.pp) >= min_part)) continue;
-            var at = n;
-            while (at > 0 and @abs(g[idx[at - 1]].pp) < @abs(x.pp)) : (at -= 1) {
-                if (at < max_lines) idx[at] = idx[at - 1];
-            }
-            if (at < max_lines) idx[at] = i;
-            n = @min(n + 1, max_lines);
-        }
+        while (n < @min(g.len, max_lines) and @abs(g[n].pp) >= min_part) n += 1;
         const wa = if (vs != null) infos.get(p.which).word.s else "";
         const wb = if (vs != null) infos.get(p.vs.?).word.s else "";
         const ec = if (e) |x| x.comp else 0;
@@ -692,30 +685,15 @@ pub const Page = struct {
             k = 1;
         }
         var named: f64 = 0;
-        for (idx[0..n]) |i| {
-            const x = g[i];
+        for (g[0..n]) |x| {
             named += x.pp;
             const part = x.a orelse x.b.?;
             const w = p.partLabel(h, part);
-            terms[k] = .{ .pp = @floatCast(x.pp), .games = part.games, .label = if (vs == null)
-                w
-            else if (x.a == null)
-                W.only.with(h, .{ .w = w.s, .m = wb })
-            else if (x.b == null)
-                W.only.with(h, .{ .w = w.s, .m = wa })
-            else
-                W.both.with(h, .{ .w = w.s, .a = wa, .x = tenth(x.a.?.pp), .b = wb, .y = tenth(x.b.?.pp) }) };
+            terms[k] = .{ .pp = @floatCast(x.pp), .games = part.games, .label = if (vs == null) w else gapLabel(h, w, if (x.a) |y| y.pp else null, if (x.b) |y| y.pp else null, wa, wb) };
             k += 1;
         }
         if (comp) {
-            terms[k] = .{ .pp = @floatCast(dc), .label = if (vs == null)
-                W.comp_part
-            else if (d.comp == 0)
-                W.only.with(h, .{ .w = W.comp_part.s, .m = wb })
-            else if (ec == 0)
-                W.only.with(h, .{ .w = W.comp_part.s, .m = wa })
-            else
-                W.both.with(h, .{ .w = W.comp_part.s, .a = wa, .x = tenth(d.comp), .b = wb, .y = tenth(ec) }) };
+            terms[k] = .{ .pp = @floatCast(dc), .label = if (vs == null) W.comp_part else gapLabel(h, W.comp_part, if (d.comp == 0) null else d.comp, if (ec == 0) null else ec, wa, wb) };
             k += 1;
         }
         small -= named;
@@ -845,7 +823,23 @@ const max_lines = 8;
 
 /// One line of a Why: a pick or pair as the shown model (a) and, compared, the other (b)
 /// price it; pp the line's points: a's, or compared b's less a's
-pub const Gap = struct { a: ?ds.DraftPart, b: ?ds.DraftPart, pp: f64 };
+pub const Gap = struct {
+    a: ?ds.DraftPart,
+    b: ?ds.DraftPart,
+    pp: f64,
+
+    fn larger(_: void, x: Gap, y: Gap) bool {
+        return @abs(x.pp) > @abs(y.pp);
+    }
+};
+
+/// A compared Why line's label: what each model (`wa`, `wb`) gives the part, or the one
+/// that prices it
+fn gapLabel(h: *H, what: tree.Text, a: ?f64, b: ?f64, wa: []const u8, wb: []const u8) tree.Text {
+    const x = a orelse return W.only.with(h, .{ .w = what.s, .m = wb });
+    const y = b orelse return W.only.with(h, .{ .w = what.s, .m = wa });
+    return W.both.with(h, .{ .w = what.s, .a = wa, .x = tenth(x), .b = wb, .y = tenth(y) });
+}
 
 /// `a`'s parts, or with `b` the gap on each part either prices, matched by pick or pair.
 /// The gaps with the baselines', comp and rest gaps sum to b's chance less a's
@@ -890,12 +884,11 @@ fn fixed(h: *H, x: f64, comptime places: u4) []const u8 {
 
 /// "2026-10-24" as "24 Oct"
 fn shortDate(h: *H, ymd: []const u8) []const u8 {
-    const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
     if (ymd.len != 10) return ymd;
     const m = std.fmt.parseInt(u8, ymd[5..7], 10) catch return ymd;
     const d = std.fmt.parseInt(u8, ymd[8..10], 10) catch return ymd;
     if (m < 1 or m > 12) return ymd;
-    return h.fmt("{d} {s}", .{ d, months[m - 1] });
+    return h.fmt("{d} {s}", .{ d, fmt.months_short[m - 1] });
 }
 
 /// Each empty seat of `teams` drawn by play share in its role on the share patch, from
@@ -1173,7 +1166,7 @@ test "tester page: dates and views" {
     try testing.expectEqualStrings("?", fixed(&h, std.math.nan(f64), 3));
 }
 
-test "timing: blue minus red summed with its range, a lean only when both clear; seats' own leans" {
+test "timing: blue's gold and points summed with their ranges, a lean only when both clear; seats' own leans" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1189,7 +1182,7 @@ test "timing: blue minus red summed with its range, a lean only when both clear;
     const s = w.written();
     // Gold +240 clears 2 x 45 and 200; win -3.2 clears 2 x 0.61 and 3
     try testing.expect(std.mem.find(u8, s, "Blue ahead at 14, Red stronger from 20") != null);
-    try testing.expect(std.mem.find(u8, s, "+240 gold at 14 min") != null);
+    try testing.expect(std.mem.find(u8, s, "Blue +240 gold (+149 to +331)") != null);
     try testing.expect(std.mem.find(u8, s, "· early") != null);
     try testing.expect(std.mem.find(u8, s, "· late") != null);
     const t2 = teamLean(&Demo.full_head, .{ .{ 266, 64, 0, 0, 0 }, @splat(0) }).?;
