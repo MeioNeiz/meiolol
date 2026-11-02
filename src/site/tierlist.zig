@@ -93,6 +93,16 @@ pub const wrColour = ui.fmt.wrColour;
 /// The champions table's data file, in each view's directory
 pub const data_path = ui.tiers.data_file;
 
+/// A board head's where, when and how fresh: "in EUW, last 30 days, patches 16.19 and
+/// 16.20 · updated 2 November"; `when` is `v`'s period in words
+pub fn scopeOf(site: *const Site, v: html.View, when: []const u8) ![]const u8 {
+    const u = site.opts.updated;
+    if (u.len == 0) return site.arena.print("{s}, {s}", .{ v.region.in(), when });
+    // "2 November 2026": the year goes, the date is this build's
+    const day = u[0 .. std.mem.findScalarLast(u8, u, ' ') orelse u.len];
+    return site.arena.print("{s}, {s} · updated {s}", .{ v.region.in(), when, day });
+}
+
 /// The view's champions table, every role, for ui.tiers: tierRows' rows and order
 fn tiersData(site: *const Site) !ui.tiers.Data {
     const a = site.arena;
@@ -128,7 +138,7 @@ fn tiersData(site: *const Site) !ui.tiers.Data {
         .spread_min_games = s.min_games,
         .cur_patch = if (site.patchday) |pd| pd.cur_patch else "",
         .prev_patch = if (site.patchday) |pd| pd.prev_patch else "",
-        .scope = try a.print("{s}, {s}", .{ site.view.region.in(), site.when }),
+        .scope = try scopeOf(site, site.view, site.when),
         .ddragon = site.ddragon_version,
         .query = site.view.query(),
         .champs = champs,
@@ -170,13 +180,10 @@ pub fn rankFiles(site: *const Site, files: anytype) !void {
     for (champs, site.champs) |*c, ch| c.* = .{ .name = ch.name, .key = ch.key, .slug = ch.slug, .banned = 0 };
     // The head says what the games cover, not the patch pair the Moved band compares
     var scope: [n_v][]const u8 = undefined;
-    for (&scope, html.View.all) |*s, v| s.* = try a.print("{s}, {s}", .{
-        v.region.in(),
-        switch (v.period) {
-            .patch => try a.print("patch {s}", .{site.patch}),
-            // Only the root view (EUW, 30 days) writes rank files: its patches serve both
-            .days30 => site.when,
-        },
+    for (&scope, html.View.all) |*s, v| s.* = try scopeOf(site, v, switch (v.period) {
+        .patch => try a.print("patch {s}", .{site.patch}),
+        // Only the root view (EUW, 30 days) writes rank files: its patches serve both
+        .days30 => site.when,
     });
     for (html.View.all, 0..) |v, vi| {
         var groups: [n_g]ui.tiers.Data = undefined;

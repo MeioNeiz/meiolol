@@ -10,6 +10,7 @@ const html = @import("html.zig");
 const shell = @import("shell.zig");
 const champion = @import("champion.zig");
 const matchup = @import("matchup.zig");
+const tierlist = @import("tierlist.zig");
 const assets = @import("assets.zig");
 const patchday = @import("../patchday.zig");
 const ui = @import("ui");
@@ -88,7 +89,14 @@ pub fn data(site: *const Site, curves: ?*const Curves) !fd.Data {
     }
     hard[Role.all.len] = try hardest(a, every.items);
     bully[Role.all.len] = try bullies(a, every.items);
-    var d: fd.Data = .{ .ddragon = site.ddragon_version, .champs = champs, .roles = roles, .hard = hard, .bully = bully };
+    var d: fd.Data = .{
+        .ddragon = site.ddragon_version,
+        .champs = champs,
+        .roles = roles,
+        .hard = hard,
+        .bully = bully,
+        .sub = try a.print("{f} games {s}", .{ root.Thousands{ .n = site.games }, try tierlist.scopeOf(site, site.view, site.when) }),
+    };
     if (site.patchday) |*pd| {
         d.moved = try moved(site, pd);
         d.patch = pd.cur_patch;

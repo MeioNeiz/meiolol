@@ -186,3 +186,5 @@ Override the sections above where they differ.
 5. Walk S11: the head's "16.21 vs 16.20" read as the data's patch. Now the head says
    what the view's games cover ("16,741 games in EUW, last 30 days, patches 16.19 and
    16.20"; "patch 16.20" on a patch view), written by the server; the pair stays in Moved
+6. Rival walk 7 (freshness, size): the head ends "· updated 2 November" (the build's date,
+   Options.updated); /matchups has the same line under its title (Data.sub)

@@ -56,6 +56,8 @@ pub const Data = struct {
     moved: []const []const Move = &.{},
     /// "16.21"; "" without an earlier patch to compare with
     patch: []const u8 = "",
+    /// Under the title: "16,741 games in EUW, last 30 days, ... · updated 2 November"
+    sub: []const u8 = "",
     /// The query of the view whose matchup pages have whole patches
     patch_query: []const u8 = "?period=patch",
 };
@@ -208,6 +210,7 @@ pub const Finder = struct {
         const picked = p.a.search.chosen != null;
         return h.div(.{ .class = "c-finder", .data_island = "finder", .data_query = f.query, .data_bin = if (f.bin.len > 0) f.bin else null }, .{
             h.el(.h1, .{}, .{W.title}),
+            if (f.data.sub.len > 0) h.p(.{ .class = "sub" }, .{f.data.sub}) else null,
             p.view(h),
             if (picked) N.none else f.lists(h),
         });
@@ -483,6 +486,7 @@ pub const css =
     \\@layer components {
     \\  .c-finder { display: grid; gap: var(--sp-4); }
     \\  .c-finder > h1 { margin: 0; }
+    \\  .c-finder > h1 + .sub { margin: calc(-1 * var(--sp-3)) 0 0; color: var(--muted); font-size: var(--fs-s); }
     \\  .c-finder .c-head > .more { margin-left: auto; font-size: var(--fs-s); }
     \\  .c-finder .lists { display: grid; gap: var(--sp-3); justify-items: start; }
     \\  .c-finder .cols { justify-self: stretch; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--sp-4); align-items: start; }
@@ -535,6 +539,7 @@ pub const Demo = struct {
         .bully = &.{ &top_leads, &.{}, &.{}, &.{}, &.{}, &top_leads },
         .moved = &.{ &top_moves, &.{}, &mid_moves, &.{}, &.{}, &all_moves },
         .patch = "16.21",
+        .sub = "657,323 games in EUW, last 30 days, patches 16.19 to 16.21 · updated 2 November",
     };
 
     const long_hard = [_]Pair{ top[0], mid[0], top[1], top[0], mid[0], top[1], top[0], mid[0], top[1], top[0], mid[0] };
