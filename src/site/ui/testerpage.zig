@@ -71,9 +71,10 @@ const W = struct {
     pub const seat_pts = Phrase("{p:points} vs average");
     pub const seat_why = Phrase("{p:points} · {why:text}");
     pub const seat_lean = Phrase("{t:text} · {l:text}");
-    pub const lean_early = plain("Blue leans early");
-    pub const lean_late = plain("Blue leans late");
-    pub const lean_none = plain("No clear early or late lean");
+    pub const at_level = Phrase("Level at {m:int}");
+    pub const at_ahead = Phrase("{s:text} ahead at {m:int}");
+    pub const from_level = Phrase(", level from {m:int}");
+    pub const from_strong = Phrase(", {s:text} stronger from {m:int}");
     pub const lean_nums = Phrase(": blue minus red {g:signed} gold at {gm:int} min ({gl:signed} to {gh:signed}), {w:points} pts from an even game at {wm:int} ({wl:points} to {wh:points}).");
     pub const lean_how = plain(" Each pick's own lean, summed: not the draft model.");
     pub const strong = Phrase("strong {r:text}");
@@ -153,14 +154,11 @@ fn teamLean(head: *const Head, teams: [2][n_role]u32) ?TeamLean {
     return t;
 }
 
-/// learnbuild.leanClear's rule: both clear and big enough, ahead early and winning less
-/// from even
-fn leanFor(t: TeamLean, at: LeanAt) Lean {
-    if (@abs(t.gold) < at.z * t.gold_sd or @abs(t.win) < at.z * t.win_sd) return .none;
-    if (@abs(t.gold) < @as(f64, @floatFromInt(at.min_gold)) or @abs(t.win) < @as(f64, @floatFromInt(at.min_win))) return .none;
-    if (t.gold > 0 and t.win < 0) return .early;
-    if (t.gold < 0 and t.win > 0) return .late;
-    return .none;
+/// The side ahead on one measure, blue minus red: Learn's sizes (learnbuild.leanClear),
+/// clear at z sds; null when level
+fn edge(x: f64, sd: f64, min: f64, z: f64) ?u1 {
+    if (@abs(x) < z * sd or @abs(x) < min) return null;
+    return if (x > 0) 0 else 1;
 }
 
 /// The models the page offers, in the Select's order (names: plan, Jacob 25 Oct)
@@ -531,11 +529,12 @@ pub const Page = struct {
         const at = p.head.lean_at;
         const z: f64 = at.z;
         return h.p(.{ .class = "lean" }, .{
-            h.b(.{}, .{switch (leanFor(t, at)) {
-                .early => W.lean_early,
-                .late => W.lean_late,
-                .none => W.lean_none,
-            }}),
+            // Each minute on its own: a team sum isn't a champion's lean, where early means
+            // ahead at 14 and weaker from even
+            h.b(.{}, .{
+                if (edge(t.gold, t.gold_sd, @floatFromInt(at.min_gold), z)) |x| W.at_ahead.with(h, .{ .s = sideName(x), .m = at.gold_minute }) else W.at_level.with(h, .{ .m = at.gold_minute }),
+                if (edge(t.win, t.win_sd, @floatFromInt(at.min_win), z)) |x| W.from_strong.with(h, .{ .s = sideName(x), .m = at.win_minute }) else W.from_level.with(h, .{ .m = at.win_minute }),
+            }),
             W.lean_nums.with(h, .{
                 .g = whole(t.gold),
                 .gl = whole(t.gold - z * t.gold_sd),
@@ -766,6 +765,10 @@ pub const Page = struct {
         return h.ul(.{ .class = "files" }, .{lines.done()});
     }
 };
+
+fn sideName(x: u1) []const u8 {
+    return (if (x == 0) W.blue else W.red).s;
+}
 
 fn whole(x: f64) i64 {
     return @intFromFloat(@round(x));
@@ -1080,14 +1083,16 @@ test "timing: blue minus red summed with its range, a lean only when both clear;
     try @import("html.zig").write(&t, p.view(&h), &w.writer);
     const s = w.written();
     // Gold +240 clears 2 x 45 and 200; win -3.2 clears 2 x 0.61 and 3
-    try testing.expect(std.mem.find(u8, s, "Blue leans early") != null);
+    try testing.expect(std.mem.find(u8, s, "Blue ahead at 14, Red stronger from 20") != null);
     try testing.expect(std.mem.find(u8, s, "+240 gold at 14 min") != null);
     try testing.expect(std.mem.find(u8, s, "· early") != null);
     try testing.expect(std.mem.find(u8, s, "· late") != null);
     const t2 = teamLean(&Demo.full_head, .{ .{ 266, 64, 0, 0, 0 }, @splat(0) }).?;
-    try testing.expectEqual(Lean.early, leanFor(t2, .{}));
-    // Clear but small: no lean
-    try testing.expectEqual(Lean.none, leanFor(.{ .gold = 150, .gold_sd = 25, .win = -3.2, .win_sd = 0.3 }, .{}));
+    try testing.expectEqual(0, edge(t2.gold, t2.gold_sd, 200, 2));
+    try testing.expectEqual(1, edge(t2.win, t2.win_sd, 3, 2));
+    // Clear but small, and big but unclear: level
+    try testing.expect(edge(150, 25, 200, 2) == null);
+    try testing.expect(edge(-400, 250, 200, 2) == null);
     try testing.expectApproxEqAbs(25, t2.gold_sd, 1e-9);
     // Red alone: a pick each side needed for the line
     p.teams = .{ @splat(0), .{ 122, 0, 0, 0, 0 } };
