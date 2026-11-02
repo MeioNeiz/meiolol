@@ -66,9 +66,13 @@ pub const Opt = union(enum) {
     lookup,
     /// recent[i]
     id: u8,
+    /// A way into the top champion's pages, in a row under it
+    go: struct { e: u16, to: Go },
+
+    pub const Go = enum { build, counters, patch };
 };
 
-pub const max_opts = champsearch.max_hits + 2;
+pub const max_opts = champsearch.max_hits + 2 + std.enums.values(Opt.Go).len;
 
 const W = struct {
     pub const label = plain("Champion, matchup or Riot ID");
@@ -84,6 +88,7 @@ const W = struct {
     pub const vs = phrase.Phrase("{a:text} vs {b:text}");
     pub const id_form = plain("A Riot ID is Name#TAG, for example Faker#KR1.");
     pub const none = plain("No champion or matchup by that name. A Riot ID needs its tag: Name#TAG.");
+    pub const go = [_]tree.Text{ plain("Build"), plain("Counters"), plain("Patch") };
 };
 
 pub const SiteSearch = struct {
@@ -241,6 +246,13 @@ pub const SiteSearch = struct {
             out[n] = f.o;
             n += 1;
         }
+        // The top champion's build, counters and patch change one step away (rival walk 8)
+        if (n > 0 and out[0] == .champ) {
+            const gos = std.enums.values(Opt.Go);
+            std.mem.copyBackwards(Opt, out[1 + gos.len .. n + gos.len], out[1..n]);
+            for (gos, 1..) |g, i| out[i] = .{ .go = .{ .e = out[0].champ.e, .to = g } };
+            n += gos.len;
+        }
         for (known[0..@min(nk, 2)]) |i| {
             out[n] = .{ .id = i };
             n += 1;
@@ -256,6 +268,17 @@ pub const SiteSearch = struct {
             .pair => |p| h.fmt("{f}{s}", .{ urls.Page{ .matchup = .{ .role = p.r, .a = s.index.?.data.champs[p.a].slug, .b = s.index.?.data.champs[p.b].slug } }, s.query }),
             .lookup => look.href(h, s.text()),
             .id => |i| look.href(h, s.recent[i].slice()),
+            .go => |g| {
+                const c = s.index.?.data.champs[g.e];
+                // The champion option's "{f}{s}", then by hand: a new format string or
+                // argument shape costs a copy of std's printValue (~1 KB)
+                const base = h.fmt("{f}{s}", .{ if (g.to == .patch) urls.Page{ .patch = null } else urls.Page{ .champion = .{ .slug = c.slug } }, s.query });
+                return switch (g.to) {
+                    .build => joined(h, base, "#build", ""),
+                    .counters => joined(h, base, "#matchups", ""),
+                    .patch => joined(h, base, "#q=", c.name),
+                };
+            },
         };
     }
 
@@ -269,7 +292,7 @@ pub const SiteSearch = struct {
         var lis = h.list();
         for (shown, 0..) |o, k| {
             const here = active == k and shown.len > 0;
-            lis.add(h.li(.{ .key = k, .id = h.fmt("look-opt-{d}", .{k}), .role = "option", .aria_selected = here }, .{
+            lis.add(h.li(.{ .key = k, .id = h.fmt("look-opt-{d}", .{k}), .class = if (o == .go) "go" else null, .role = "option", .aria_selected = here }, .{
                 h.a(.{ .href = s.href(h, o), .tabindex = -1, .data_ref = if (here) "active" else null }, .{s.option(h, o)}),
             }));
         }
@@ -333,6 +356,7 @@ pub const SiteSearch = struct {
                 l.add(h.span(.{ .class = "nm" }, .{s.recent[i].slice()}));
                 l.add(h.small(.{}, .{W.yours}));
             },
+            .go => |g| l.add(h.span(.{}, .{W.go[@backingInt(g.to)]})),
         }
         return l.done();
     }
@@ -340,6 +364,27 @@ pub const SiteSearch = struct {
 
 fn pic(h: *H, e: champsearch.Entry) N {
     return champ.view(h, .{ .name = e.name, .src = e.src }, .{ .named = false });
+}
+
+/// `base`, `tag`, then `t` %-escaped as a fragment value ("Lee Sin", "Nunu & Willump")
+fn joined(h: *H, base: []const u8, tag: []const u8, t: []const u8) []const u8 {
+    const out = h.mem.alloc(u8, base.len + tag.len + 3 * t.len) catch {
+        h.oom = true;
+        return "";
+    };
+    @memcpy(out[0..base.len], base);
+    @memcpy(out[base.len..][0..tag.len], tag);
+    var n = base.len + tag.len;
+    for (t) |c| {
+        if (std.ascii.isAlphanumeric(c)) {
+            out[n] = c;
+            n += 1;
+        } else {
+            out[n..][0..3].* = .{ '%', "0123456789ABCDEF"[c >> 4], "0123456789ABCDEF"[c & 15] };
+            n += 3;
+        }
+    }
+    return out[0..n];
 }
 
 fn same(x: Opt, y: Opt) bool {
@@ -423,6 +468,14 @@ pub const css =
     \\  .c-sitesearch li > a > .pics > .c-champ + .c-champ { margin-left: -4px; }
     \\  .c-sitesearch li > a > small { flex: none; color: var(--muted); font-size: var(--fs-xs); }
     \\  .c-sitesearch li.none { cursor: default; white-space: normal; }
+    \\  .c-sitesearch > ul:not([hidden]) { display: flex; flex-wrap: wrap; align-content: start; gap: 0 var(--sp-1); }
+    \\  .c-sitesearch li { flex: 1 0 100%; box-sizing: border-box; min-width: 0; }
+    \\  .c-sitesearch li.go { flex: none; min-height: 28px; margin-bottom: var(--sp-1); padding: 0 10px;
+    \\    border: 1px solid var(--line-2); border-radius: 999px; font-size: var(--fs-s); }
+    \\  .c-sitesearch li:not(.go) + li.go { margin-left: 32px; }
+    \\  @media (max-width: 760px) {
+    \\    .c-sitesearch:not([data-flow]) > ul { position: fixed; top: var(--header); left: var(--sp-2); right: var(--sp-2); max-height: 60vh; }
+    \\  }
     \\}
     \\
 ;
@@ -502,6 +555,11 @@ test "champions, matchups and Riot IDs" {
     s.q.set("kata");
     var o = s.options(&buf);
     try std.testing.expectEqualStrings("/champions/katarina?region=all", s.href(&h, o[0]));
+    // Under the top champion: its build, counters and patch change
+    try std.testing.expect(o.len >= 4 and o[1] == .go and o[3] == .go and (o.len == 4 or o[4] != .go));
+    try std.testing.expectEqualStrings("/champions/katarina?region=all#build", s.href(&h, o[1]));
+    try std.testing.expectEqualStrings("/champions/katarina?region=all#matchups", s.href(&h, o[2]));
+    try std.testing.expectEqualStrings("/patch?region=all#q=Katarina", s.href(&h, o[3]));
 
     // "vs": the pair's page in its role; "lee sin" is one champion, not Nidalee vs Singed
     s.q.set("Ahri vs Kassadin");
@@ -513,6 +571,7 @@ test "champions, matchups and Riot IDs" {
     s.q.set("lee sin");
     o = s.options(&buf);
     try std.testing.expect(o.len > 0 and o[0] == .champ);
+    try std.testing.expectEqualStrings("/patch?region=all#q=Lee%20Sin", s.href(&h, o[3]));
     for (o) |x| try std.testing.expect(x != .pair);
     s.q.set("ahri/kassadin");
     try std.testing.expect(s.options(&buf)[0] == .pair);
