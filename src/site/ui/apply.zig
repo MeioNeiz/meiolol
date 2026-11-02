@@ -37,9 +37,9 @@ const W = struct {
     const kept = plain("What we keep, and for how long");
 };
 
-const roles = std.EnumArray(ad.Role, []const u8).init(.{ .none = "", .top = "Top", .jungle = "Jungle", .mid = "Mid", .bot = "Bot", .support = "Support" });
+const roles = std.EnumArray(ad.Role, []const u8).init(.{ .none = "Choose", .top = "Top", .jungle = "Jungle", .mid = "Mid", .bot = "Bot", .support = "Support" });
 const ranks = std.EnumArray(ad.Rank, []const u8).init(.{
-    .none = "",
+    .none = "Choose",
     .iron = "Iron",
     .bronze = "Bronze",
     .silver = "Silver",
@@ -176,7 +176,8 @@ fn errorOf(json: []const u8) ?[]const u8 {
 
 pub const css =
     \\@layer components {
-    \\  .c-apply { display: grid; gap: var(--sp-3); max-width: 32rem; margin-top: var(--sp-6); scroll-margin-top: var(--sp-6); }
+    \\  .c-apply { display: grid; gap: var(--sp-3); max-width: 32rem; margin-top: var(--sp-6); scroll-margin-top: var(--sp-6);
+    \\    background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); padding: var(--card-pad); }
     \\  .c-apply h2 { margin: 0; font-size: var(--fs-l); }
     \\  .c-apply p { margin: 0; }
     \\  .c-apply .info { color: var(--t2); }
