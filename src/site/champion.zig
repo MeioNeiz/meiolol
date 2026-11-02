@@ -418,6 +418,16 @@ fn ranksOf(site: *const Site, ch: Champ, r: Role) !?cp.Ranks {
 /// ch's gold lead at 14 minutes in r over its pairs' curves in bracket b, weighted by lanes
 /// still going then; null under cp.min_games such lanes
 fn goldAt14(site: *const Site, ch: Champ, r: Role, b: curvesfile.Bracket) !?i16 {
+    const g = try laneGold(site, ch, r, b) orelse return null;
+    if (g.lanes < cp.min_games) return null;
+    return @intFromFloat(@round(g.mean));
+}
+
+pub const LaneGold = struct { mean: f64, lanes: u32 };
+
+/// ch's gold lead at 14 minutes in r, its pairs' curve estimates weighted by lanes still
+/// going then; null without such lanes
+pub fn laneGold(site: *const Site, ch: Champ, r: Role, b: curvesfile.Bracket) !?LaneGold {
     const c = if (site.curves) |*c| c else return null;
     const at = curvesfile.lane_minute - 1;
     var lanes: u32 = 0;
@@ -428,8 +438,8 @@ fn goldAt14(site: *const Site, ch: Champ, r: Role, b: curvesfile.Bracket) !?i16 
         lanes += n;
         sum += @as(f64, @floatFromInt(n)) * @as(f64, @floatFromInt(v.estimate(.gold, at).mean));
     }
-    if (lanes < cp.min_games) return null;
-    return @intFromFloat(@round(sum / @as(f64, @floatFromInt(lanes))));
+    if (lanes == 0) return null;
+    return .{ .mean = sum / @as(f64, @floatFromInt(lanes)), .lanes = lanes };
 }
 
 /// ch's objectives taken first in r (builds.File.Build.firsts) beside the role's over

@@ -37,7 +37,7 @@ pub fn any(site: *const Site) bool {
 
 fn has(site: *const Site, s: rk.Stat) bool {
     return switch (rk.kindOf(s)) {
-        .rate => site.curves != null,
+        .rate, .gold => site.curves != null,
         .gap => site.trend != null,
     };
 }
@@ -82,7 +82,7 @@ pub fn writeIndex(site: *const Site, w: *Writer) !bool {
     const a = site.arena;
     const pg = try site.page(
         "Champion rankings | meiolol",
-        "Every champion ranked by one stat at a time: wins from ahead, from behind, in long games.",
+        "Every champion ranked by one stat at a time: wins from ahead, from behind, in long games, lane gold at 14.",
         .rankings,
         .rankings,
     );
@@ -152,7 +152,7 @@ pub fn places(site: *const Site) !Places {
 pub fn placesOf(site: *const Site, ch: Champ, r: Role) !ui.champpage.Places {
     const p = &(site.places orelse return .{});
     var out: ui.champpage.Places = .{};
-    inline for (comptime std.enums.values(rk.Stat), 0..) |s, si| {
+    inline for (comptime std.enums.values(rk.Stat), 0..) |s, si| if (comptime @hasField(ui.champpage.Places, @tagName(s))) {
         const ri = std.mem.findScalar(Role, &Role.all, r).?;
         const at = p.at[si][ri];
         if (ch.c < at.len and at[ch.c] != unranked) @field(out, @tagName(s)) = .{
@@ -160,7 +160,7 @@ pub fn placesOf(site: *const Site, ch: Champ, r: Role) !ui.champpage.Places {
             .of = p.of[si][ri],
             .href = try site.arena.print("{s}#{s}", .{ try site.href(.{ .ranking = .{ .stat = s, .role = champion.uiRole(r) } }), ch.slug }),
         };
-    }
+    };
     return out;
 }
 
@@ -189,7 +189,7 @@ fn cell(s: rk.Stat) struct { usize, usize } {
     return switch (s) {
         .ahead => .{ 1, 4 },
         .behind => .{ 1, 0 },
-        .long_games => unreachable,
+        .long_games, .lane_gold => unreachable,
     };
 }
 
@@ -221,6 +221,7 @@ fn countsOf(site: *const Site, s: rk.Stat, ch: Champ, r: Role) !?Pair {
             return .{ .{ .games = k.games, .wins = k.wins }, .{ .games = 0, .wins = 0 } };
         },
         .gap => return lengthPair(&(site.trend orelse return null), r, ch.c),
+        .gold => unreachable,
     }
 }
 
@@ -243,6 +244,7 @@ fn roleCounts(site: *const Site, s: rk.Stat, r: Role) ?Pair {
             }
             return out;
         },
+        .gold => unreachable,
     }
 }
 
@@ -251,6 +253,7 @@ fn figure(s: rk.Stat, p: Pair) ?f32 {
     return switch (rk.kindOf(s)) {
         .rate => if (p[0].games == 0) null else rate(p[0].wins, p[0].games),
         .gap => if (p[0].games == 0 or p[1].games == 0) null else rate(p[1].wins, p[1].games) - rate(p[0].wins, p[0].games),
+        .gold => unreachable,
     };
 }
 
@@ -258,10 +261,10 @@ fn usualOf(site: *const Site, s: rk.Stat, r: Role) ?f32 {
     return figure(s, roleCounts(site, s, r) orelse return null);
 }
 
-/// The role's figure in the lead line; none for a gap, ~0 by construction (each game
-/// has a winner in the role, long or short)
+/// The role's figure in the lead line; none for a gap or gold, ~0 by construction (each
+/// game has a winner in the role, long or short; each lane a lead and a deficit)
 fn usualText(site: *const Site, s: rk.Stat, r: Role) ![]const u8 {
-    if (rk.kindOf(s) == .gap) return "";
+    if (rk.kindOf(s) != .rate) return "";
     const u = usualOf(site, s, r) orelse return "";
     return site.arena.print(" {s}: {d:.1}%.", .{ root.roleName(r), u });
 }
@@ -278,6 +281,10 @@ pub fn data(site: *const Site, s: rk.Stat, only: ?Role) !rk.Data {
     var rows: std.ArrayList(rk.Row) = .empty;
     for (Role.all) |r| {
         if (only) |x| if (x != r) continue;
+        if (rk.kindOf(s) == .gold) {
+            try goldRows(site, r, only != null, &rows);
+            continue;
+        }
         const usual = usualOf(site, s, r) orelse continue;
         var cells: [2]std.ArrayList(Counts) = .{ .empty, .empty };
         var chs: std.ArrayList(Champ) = .empty;
@@ -315,12 +322,69 @@ pub fn data(site: *const Site, s: rk.Stat, only: ?Role) !rk.Data {
             });
         }
     }
-    std.mem.sort(rk.Row, rows.items, {}, struct {
+    sortPulled(rows.items);
+    return .{ .stat = s, .role = if (only) |x| champion.uiRole(x) else null, .ddragon = site.ddragon_version, .rows = rows.items };
+}
+
+fn sortPulled(rows: []rk.Row) void {
+    std.mem.sort(rk.Row, rows, {}, struct {
         fn f(_: void, x: rk.Row, y: rk.Row) bool {
             return x.pulled > y.pulled;
         }
     }.f);
-    return .{ .stat = s, .role = if (only) |x| champion.uiRole(x) else null, .ddragon = site.ddragon_version, .rows = rows.items };
+}
+
+/// Lane gold at 14 in r, every champion that plays it (on All: its main role), the lead
+/// pulled toward 0 by its standard error against how much the role's champions differ
+/// (tau2/(tau2 + se2)); se from the role's spread of leads at 14 over the lanes behind it
+fn goldRows(site: *const Site, r: Role, plays: bool, rows: *std.ArrayList(rk.Row)) !void {
+    const a = site.arena;
+    const c = &(site.curves orelse return);
+    const base = c.baseline(r, .all) orelse return;
+    const at = core.curvesfile.lane_minute - 1;
+    if (at >= base.minutes()) return;
+    const q = base.minute(at).gold;
+    // A normal's interquartile range is 1.349 sd
+    const sd = @as(f64, @floatFromInt(@as(i32, q.p75) - q.p25)) / 1.349;
+    var leads: std.ArrayList(struct { Champ, champion.LaneGold }) = .empty;
+    for (site.champs) |ch| {
+        const in = if (plays) champion.plays(site, ch, r) else root.mainRole(site, ch) == r;
+        if (!in) continue;
+        const g = try champion.laneGold(site, ch, r, .all) orelse continue;
+        try leads.append(a, .{ ch, g });
+    }
+    if (leads.items.len == 0) return;
+    var mean: f64 = 0;
+    var se2: f64 = 0;
+    for (leads.items) |x| {
+        mean += x[1].mean;
+        se2 += sd * sd / @as(f64, @floatFromInt(x[1].lanes));
+    }
+    const k: f64 = @floatFromInt(leads.items.len);
+    mean /= k;
+    se2 /= k;
+    var spread: f64 = 0;
+    for (leads.items) |x| spread += (x[1].mean - mean) * (x[1].mean - mean);
+    // Floored: with few champions the spread can read under the noise
+    const tau2 = @max(spread / k - se2, 25 * 25);
+    for (leads.items) |x| {
+        const ch, const g = x;
+        const se_2 = sd * sd / @as(f64, @floatFromInt(g.lanes));
+        const cr = site.stats.champRole(r, ch.c);
+        try rows.append(a, .{
+            .name = ch.name,
+            .key = ch.key,
+            .slug = ch.slug,
+            .href = try site.href(.{ .champion = .{ .slug = ch.slug, .role = champion.uiRole(r) } }),
+            .role = champion.uiRole(r),
+            .value = @floatCast(g.mean),
+            .usual = 0,
+            .pulled = @floatCast(g.mean * tau2 / (tau2 + se_2)),
+            .n = g.lanes,
+            .overall = if (cr.games == 0) 0 else rate(cr.wins, cr.games),
+            .games = cr.games,
+        });
+    }
 }
 
 /// `v` as ui.data, base64: the island root's data-bin

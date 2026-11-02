@@ -19,10 +19,13 @@ pub const Stat = enum {
     behind,
     /// Win rate in games of 35+ minutes minus in games under 25
     long_games,
+    /// Gold lead over the lane opponent at 14 minutes
+    lane_gold,
 
     pub fn slug(s: Stat) []const u8 {
         return switch (s) {
             .long_games => "long-games",
+            .lane_gold => "lane-gold",
             else => @tagName(s),
         };
     }
@@ -232,6 +235,7 @@ test "urls: each page spelt and parsed back" {
         .{ .{ .ranking = .{ .stat = .ahead } }, "/rankings/ahead" },
         .{ .{ .ranking = .{ .stat = .behind, .role = .support } }, "/rankings/behind/support" },
         .{ .{ .ranking = .{ .stat = .long_games, .role = .mid } }, "/rankings/long-games/mid" },
+        .{ .{ .ranking = .{ .stat = .lane_gold } }, "/rankings/lane-gold" },
         .{ .learn, "/learn" },
         .{ .pool, "/pool" },
         .{ .squad, "/squad" },

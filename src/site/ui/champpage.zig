@@ -469,12 +469,18 @@ fn ci(c: Counts) f32 {
     return 196 * @sqrt(p * (1 - p) / @as(f32, @floatFromInt(c.games)));
 }
 
+/// A stat's switch label, at comptime: a runtime spec() would pull every stat's strings
+/// into the island
+fn short(comptime s: ranking.Stat) []const u8 {
+    return comptime ranking.spec(s).short;
+}
+
 /// A card's foot: its places in the rankings of what it shows, each a link there
-fn places(h: *H, ps: []const struct { ranking.Stat, ?Place }) N {
+fn places(h: *H, ps: []const struct { []const u8, ?Place }) N {
     var kids = h.list();
     for (ps, 0..) |x, i| {
         const pl = x[1] orelse continue;
-        const l = ranking.spec(x[0]).short;
+        const l = x[0];
         kids.add(h.a(.{ .key = i, .href = pl.href }, .{if (pl.n == 0) W.place_thin.with(h, .{ .l = l }) else W.place.with(h, .{ .l = l, .n = pl.n, .th = ordinal(pl.n), .of = pl.of })}));
     }
     if (kids.items.items.len == 0) return .none;
@@ -1291,7 +1297,7 @@ pub const More = struct {
         p.by_length.points = pts[0..n];
         p.by_length.ref = rate(.{ .games = rl.games, .wins = rl.wins });
         const lean: ?[2]N = if (rl.lean) |g| toggletip.view(h, "cp-lean", .{W.lean.with(h, .{ .g = @as(i32, g) })}, W.lean.with(h, .{ .g = @as(i32, g) }), W.lean_note) else null;
-        return card.view(h, .{}, &.{ card.head(h, W.by_length, null, &.{ p.plat(h), if (lean) |*x| h.span(.{ .class = "note" }, .{x}) else .none }), p.by_length.view(h), places(h, &.{.{ .long_games, rl.long_games }}) });
+        return card.view(h, .{}, &.{ card.head(h, W.by_length, null, &.{ p.plat(h), if (lean) |*x| h.span(.{ .class = "note" }, .{x}) else .none }), p.by_length.view(h), places(h, &.{.{ short(.long_games), rl.long_games }}) });
     }
 
     fn playersCard(p: *P, h: *H) N {
@@ -1438,7 +1444,7 @@ pub const Charts = struct {
     }
 
     fn comebackCard(p: *P, h: *H) N {
-        const foot = places(h, &.{ .{ .ahead, p.r().ahead }, .{ .behind, p.r().behind } });
+        const foot = places(h, &.{ .{ short(.ahead), p.r().ahead }, .{ short(.behind), p.r().behind } });
         const none = card.view(h, .{}, &.{ card.head(h, W.comeback, null, &.{}), h.p(.{ .class = "none" }, .{W.none}), foot });
         const c = p.r().comeback orelse return none;
         const pts = h.mem.alloc(trend.Point, 5) catch {

@@ -43,16 +43,19 @@ pub fn spec(s: Stat) Spec {
         .ahead => .{ .title = "Wins from ahead", .short = "From ahead", .lead = "Win rate in games where the champion was 1,500+ gold ahead of its lane opponent at 15 minutes.", .about = "Win rate when 1,500+ gold ahead of the lane opponent at 15 minutes: who turns a lead into a win." },
         .behind => .{ .title = "Wins from behind", .short = "From behind", .lead = "Win rate in games where the champion was 1,500+ gold behind its lane opponent at 15 minutes.", .about = "Win rate when 1,500+ gold behind the lane opponent at 15 minutes: who still wins from a bad lane." },
         .long_games => .{ .title = "Wins in long games", .short = "Long games", .lead = "Win rate in games of 35+ minutes minus in games under 25, in points: who wins more of its long games. Stomps end early, so this is how its games go, not a power curve.", .about = "Win rate in 35+ minute games minus under 25: who wins more of its long games." },
+        .lane_gold => .{ .title = "Lane gold at 14", .short = "Lane gold", .lead = "Gold ahead of or behind its lane opponent at 14 minutes, averaged over its lanes: who wins its lane.", .about = "Gold lead over the lane opponent at 14 minutes: who wins its lane." },
     };
 }
 
-/// What a stat's figure is: a win rate in one spot, or a gap between two win rates
-pub const Kind = enum { rate, gap };
+/// What a stat's figure is: a win rate in one spot, a gap between two win rates, or a
+/// gold lead
+pub const Kind = enum { rate, gap, gold };
 
 pub fn kindOf(s: Stat) Kind {
     return switch (s) {
         .ahead, .behind => .rate,
         .long_games => .gap,
+        .lane_gold => .gold,
     };
 }
 
@@ -60,7 +63,7 @@ pub fn kindOf(s: Stat) Kind {
 pub const Lean = enum { early, late, none };
 
 /// Stats shown as one page with a switch, in its order
-pub const siblings = [_][]const Stat{ &.{ .ahead, .behind }, &.{.long_games} };
+pub const siblings = [_][]const Stat{ &.{ .ahead, .behind }, &.{.long_games}, &.{.lane_gold} };
 
 pub fn siblingsOf(s: Stat) []const Stat {
     for (siblings) |g| for (g) |x| if (x == s) return g;
@@ -82,12 +85,12 @@ pub const Row = struct {
     slug: []const u8 = "",
     href: []const u8,
     role: Role,
-    /// The figure (a win rate, %; a gap, points) and the role's (a gap: 0)
+    /// The figure (a win rate, %; a gap, points; gold) and the role's (a gap, gold: 0)
     value: f32,
     usual: f32,
     /// value - usual pulled toward 0 by how few games it has: the sort
     pulled: f32,
-    /// Games behind the figure (a gap: its thinner side's)
+    /// Games behind the figure (a gap: its thinner side's; gold: lanes at 14)
     n: u32,
     /// The champion's win rate over all its games in the role, and those games
     overall: f32,
@@ -120,6 +123,10 @@ const W = struct {
     pub const long = plain("35+ min");
     pub const lean = plain("Lean");
     pub const lean_note = plain("Early or late from team gold at 14 and wins from an even game at 20, every region: its strength by phase. Gap counts results by game length, which follows how games go too, so the two can differ. Blank: neither is clear.");
+    pub const lead = plain("Gold lead");
+    pub const lead_note = plain("Gold ahead of the lane opponent at 14 minutes, averaged over its lanes; sorted pulled toward 0 when lanes are few.");
+    pub const lanes = plain("Lanes");
+    pub const lanes_note = plain("Lanes still going at 14 minutes.");
     pub const early = plain("Early");
     pub const late = plain("Late");
     pub const none = plain("More data needed: no champion has games in this spot yet.");
@@ -160,7 +167,10 @@ pub fn index(h: *H, cards: []const Card) N {
                 h.span(.{}, .{t.name}),
                 role.view(h, t.role, .{}),
             }),
-            stat.view(h, .{ .value = t.value, .kind = if (kindOf(c.stat) == .gap) .points else .rate, .scale = .aggregate, .ref = t.usual, .games = t.n }),
+            switch (kindOf(c.stat)) {
+                .gold => goldView(h, t.value, t.n),
+                else => |kd| stat.view(h, .{ .value = t.value, .kind = if (kd == .gap) .points else .rate, .scale = .aggregate, .ref = t.usual, .games = t.n }),
+            },
         }));
         kids.add(h.div(.{ .key = i }, .{card.view(h, .{}, &.{
             h.h2(.{}, .{h.a(.{ .href = c.href }, .{sp.title})}),
@@ -229,6 +239,18 @@ fn overallCell(h: *H, l: *const Line) N {
 fn gapCell(h: *H, l: *const Line) N {
     return stat.view(h, .{ .value = l.r.value, .kind = .points, .scale = .aggregate, .ref = l.r.usual, .games = l.r.n });
 }
+/// A champion's lead over many lanes: steps out from 0
+const gold_cuts: [4]f32 = .{ 50, 150, 300, 500 };
+
+fn goldView(h: *H, v: f32, n: u32) N {
+    return h.span(.{ .class = "c-stat", .data_state = if (n < thin_games) "thin" else null, .style = h.vars(.{ .c = fmt.Step.of(v, gold_cuts) }) }, .{
+        h.span(.{ .class = "v" }, .{stat.figure(h, .gold, v)}),
+    });
+}
+fn goldCell(h: *H, l: *const Line) N {
+    return goldView(h, l.r.value, l.r.n);
+}
+
 fn shortOf(l: *const Line) f64 {
     return l.r.sides[0];
 }
@@ -291,7 +313,23 @@ pub const GapTable = table.DataTable(Line, .{
     .rare_name = W.few,
 });
 
-pub const Table = union(Kind) { rate: RateTable, gap: GapTable };
+pub const GoldTable = table.DataTable(Line, .{
+    .title = W.title,
+    .columns = &.{
+        .{ .label = W.champion, .cell = who, .name = nameOf, .num = false },
+        .{ .label = W.lead, .cell = goldCell, .sort = pulledOf, .answer = true, .tip = W.lead_note },
+        .{ .label = W.lanes, .cell = gamesCell, .sort = nF, .priority = 2, .tip = W.lanes_note },
+        .{ .label = W.overall, .cell = overallCell, .sort = overallOf, .priority = 3, .tip = W.overall_note },
+    },
+    .default_sort = 1,
+    .search = nameOf,
+    .games = nOf,
+    .numbered = true,
+    .rare = thin,
+    .rare_name = W.few,
+});
+
+pub const Table = union(Kind) { rate: RateTable, gap: GapTable, gold: GoldTable };
 
 pub const Ranking = struct {
     data: *const Data,
@@ -314,6 +352,7 @@ pub const Ranking = struct {
         return .{ .data = d, .lines = lines, .table = switch (kindOf(d.stat)) {
             .rate => .{ .rate = .{ .rows = lines, .id = "rk" } },
             .gap => .{ .gap = .{ .rows = lines, .id = "rk" } },
+            .gold => .{ .gold = .{ .rows = lines, .id = "rk" } },
         } };
     }
 
@@ -404,6 +443,17 @@ pub fn demoGap() Data {
     return .{ .stat = .long_games, .role = .top, .ddragon = "16.21.1", .rows = &rows.all };
 }
 
+pub fn demoGold() Data {
+    const rows = struct {
+        const all = [_]Row{
+            .{ .name = "Renekton", .key = "Renekton", .href = "#", .role = .top, .value = 412, .usual = 0, .pulled = 380, .n = 2210, .overall = 49.8 },
+            .{ .name = "Garen", .key = "Garen", .href = "#", .role = .top, .value = 35, .usual = 0, .pulled = 30, .n = 2400, .overall = 52.4 },
+            .{ .name = "Kayle", .key = "Kayle", .href = "#", .role = .top, .value = -455, .usual = 0, .pulled = -410, .n = 1310, .overall = 51.2 },
+        };
+    };
+    return .{ .stat = .lane_gold, .role = .top, .ddragon = "16.21.1", .rows = &rows.all };
+}
+
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const states = [_]struct { []const u8, ?Role, bool }{
@@ -457,6 +507,21 @@ pub fn gallery(g: *Gallery) void {
     };
     gp.table.gap.id = h.fmt("rkg-{d}", .{g.width}); // fmt-ok: gallery only
     g.addFill("a gap: long minus short games, the lean beside it", gp.view(h));
+    const od = h.mem.create(Data) catch {
+        h.oom = true;
+        return;
+    };
+    od.* = demoGold();
+    const op = h.mem.create(Ranking) catch {
+        h.oom = true;
+        return;
+    };
+    op.* = Ranking.init(h.mem, od) catch {
+        h.oom = true;
+        return;
+    };
+    op.table.gold.id = h.fmt("rko-{d}", .{g.width}); // fmt-ok: gallery only
+    g.addFill("gold: lane lead at 14", op.view(h));
     const stats = [_]segmented.Item{ .{ .label = plain("From ahead"), .selected = true, .href = "#" }, .{ .label = plain("From behind"), .href = "#" } };
     var roles: [1 + Role.all.len]segmented.Item = undefined;
     roles[0] = .{ .label = plain("All"), .href = "#" };
@@ -471,10 +536,14 @@ pub fn gallery(g: *Gallery) void {
         const gap = [_]Card.Top{
             .{ .name = "Kayle", .src = "", .href = "#", .role = .top, .value = 9.1, .usual = 0.4, .n = 1310 },
         };
+        const gold = [_]Card.Top{
+            .{ .name = "Renekton", .src = "", .href = "#", .role = .top, .value = 412, .usual = 0, .n = 2210 },
+        };
     };
     g.addFill("index: a card per stat, its top three", index(h, &.{
         .{ .stat = .ahead, .href = "#", .top = &tops.rate },
         .{ .stat = .behind, .href = "#", .top = &.{} },
         .{ .stat = .long_games, .href = "#", .top = &tops.gap },
+        .{ .stat = .lane_gold, .href = "#", .top = &tops.gold },
     }));
 }

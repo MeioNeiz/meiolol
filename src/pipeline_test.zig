@@ -461,10 +461,12 @@ test "fixture games to stats, curves and the website" {
         // fixture's one Top row has 3 games: behind the chip
         .{ "rankings/ahead/top.html", &.{ "<h1>Wins from ahead <span class=\"c-scope\">", "<a href=\"/rankings/behind/top\">From behind</a>", "<a href=\"/rankings/ahead\">All</a>", "1,500+ gold ahead of its lane opponent at 15 minutes. Top: ", "<div class=\"c-rank\" data-island=\"ranking\" data-bin=\"", "+1 unsure", "<script src=\"/" ++ assets.rankings_js.path ++ "\" data-wasm=\"" ++ assets.rankings_wasm.path ++ "\" defer></script>" } },
         .{ "rankings/long-games/top.html", &.{ "<h1>Wins in long games", "games of 35+ minutes minus in games under 25", "data-island=\"ranking\"" } },
+        // Lane gold: no role figure (each lane has a lead and a deficit), no stat switch
+        .{ "rankings/lane-gold/top.html", &.{ "<h1>Lane gold at 14", "at 14 minutes, averaged over its lanes: who wins its lane.</p>", "data-island=\"ranking\"" } },
         .{ "_v/all/rankings/behind.html", &.{ "<h1>Wins from behind", "<a href=\"/rankings/behind/top?region=all\">Top</a>", "data-island=\"ranking\"" } },
         // The index: a card per stat, the Champions tab lit; the fixture's rows are all
         // thin, so no card names a champion. Home's Champions card links it
-        .{ "rankings.html", &.{ "<h1>Rankings <span class=\"c-scope\">", "<a href=\"/rankings/ahead\">Wins from ahead</a>", "<a href=\"/rankings/long-games\">Wins in long games</a>", "<a class=\"full\" href=\"/rankings/behind\">Every champion ›</a>", "href=\"/rankings\" aria-current=\"page\"" } },
+        .{ "rankings.html", &.{ "<h1>Rankings <span class=\"c-scope\">", "<a href=\"/rankings/ahead\">Wins from ahead</a>", "<a href=\"/rankings/long-games\">Wins in long games</a>", "<a href=\"/rankings/lane-gold\">Lane gold at 14</a>", "<a class=\"full\" href=\"/rankings/behind\">Every champion ›</a>", "href=\"/rankings\" aria-current=\"page\"" } },
         .{ "_v/all/rankings.html", &.{"<a href=\"/rankings/ahead?region=all\">Wins from ahead</a>"} },
         .{ "index.html", &.{"<a class=\"foot\" href=\"/rankings\">Champion rankings ›</a>"} },
         .{ "_v/patch/pickup/mid.html", &.{ "<a href=\"/pickup?period=patch\">All</a><a href=\"/pickup/top?period=patch\">Top</a>", "<a aria-current=\"page\">Mid</a>" } },
