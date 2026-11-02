@@ -135,3 +135,7 @@ Override the sections above where they differ.
 1. Default filter: clear moves plus Riot's changes
 2. Both sources long term (CommunityDragon ability numbers with Data Dragon); plan for
    the most useful page, not the cheapest first step. Order of building left to the plan
+3. Walk finding S3 (1 Nov): the table's Find sits in its toolbar (the board's style, ×
+   to clear, full width on phones). While it has text the chips step aside: a search
+   finds a champion that didn't move ("Fiora +1.5", faint), in the role picked; in the
+   URL as `q=`

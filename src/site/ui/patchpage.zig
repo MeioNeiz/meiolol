@@ -9,6 +9,7 @@
 //! (data/patch.bin) carries; ui-patch.wasm decodes that file and adopts the page
 const std = @import("std");
 const tree = @import("tree.zig");
+const url = @import("url.zig");
 const phrase = @import("phrase.zig");
 const table = @import("table.zig");
 const card = @import("card.zig");
@@ -148,6 +149,8 @@ const W = struct {
     pub const moved = plain("Moved clearly");
     pub const moved_says = Phrase("Moved clearly: win rate {u:count} up, {d:count} down; {o:count} more in lane or matchups");
     pub const all = plain("All");
+    pub const find = plain("Find");
+    pub const clear = plain("Clear search");
     pub const role_label = plain("Role");
     pub const show = plain("Show");
     pub const champion = plain("Champion");
@@ -498,7 +501,7 @@ pub const Page = struct {
         return p;
     }
 
-    pub const Msg = union(enum) { role: Shown, moved, riot, all, kit: u16 };
+    pub const Msg = union(enum) { role: Shown, moved, riot, all, kit: u16, find, clear };
 
     pub const Url = struct {
         role: Shown = .all,
@@ -506,6 +509,7 @@ pub const Page = struct {
         riot: bool = true,
         sort: u8 = 4,
         desc: bool = true,
+        q: url.Str(24) = .{},
     };
 
     pub fn toUrl(p: *const P) Url {
@@ -515,6 +519,7 @@ pub const Page = struct {
             .riot = p.riot or !p.d.riot,
             .sort = p.table.sort,
             .desc = p.table.desc,
+            .q = p.table.q,
         };
     }
 
@@ -522,14 +527,15 @@ pub const Page = struct {
         p.role = u.role;
         p.moved = u.moved;
         p.riot = u.riot and p.d.riot;
-        p.table.fromUrl(.{ .sort = u.sort, .desc = u.desc });
+        p.table.fromUrl(.{ .sort = u.sort, .desc = u.desc, .q = u.q });
         p.refilter();
     }
 
     fn keep(p: *const P, l: *const Line) bool {
         const r = l.row();
         if (!inRole(p.role, r.role)) return false;
-        if (!p.moved and !p.riot) return true;
+        // A search finds a row the chips hide: a champion that didn't move is an answer too
+        if (!p.moved and !p.riot or p.table.q.slice().len > 0) return true;
         return (p.moved and l.moved()) or (p.riot and r.change != null);
     }
 
@@ -564,6 +570,13 @@ pub const Page = struct {
                 p.kit = if (p.kit == k) null else k;
                 return;
             },
+            // Typing replaces the URL's state, as the table's own search does
+            .find => {
+                p.table.q.set(ev.text);
+                p.refilter();
+                return;
+            },
+            .clear => p.table.q.set(""),
         }
         ev.push = true;
         p.refilter();
@@ -628,9 +641,19 @@ pub const Page = struct {
                         chip.view(h, .{ .pressed = !p.moved and !p.riot, .on = h.on(p, .all) }, .{ W.all, h.span(.{ .class = "n" }, .{phrase.num(h, .count, c.all)}) }),
                     }),
                     rolepicker.view(h, .{ .v = .compact, .label = W.role_label }, &roles),
+                    p.find(h),
                 }),
                 if (p.table.rows.len > 0) p.table.view(h) else h.p(.{ .class = "empty" }, .{W.none}),
             }),
+        });
+    }
+
+    /// The champions board's Find: a search over every row of the role, × while it has text
+    fn find(p: *P, h: *H) N {
+        const q = p.table.q.slice();
+        return h.span(.{ .class = "find" }, .{
+            h.input(.{ .type = "search", .placeholder = W.find, .aria_label = W.find, .value = q, .on_input = h.on(p, .find) }),
+            if (q.len > 0) h.button(.{ .type = "button", .class = "x", .aria_label = W.clear, .on_click = h.on(p, .clear) }, .{"×"}) else null,
         });
     }
 
@@ -720,6 +743,17 @@ pub const css =
     \\  .c-patch .c-toolbar .n { margin-left: 2px; color: var(--muted); font-variant-numeric: tabular-nums; }
     \\  .c-patch .c-toolbar .n[data-d="up"] { color: var(--hi2); }
     \\  .c-patch .c-toolbar .n[data-d="down"] { color: var(--lo2); }
+    \\  .c-patch .find { position: relative; display: flex; flex: 0 1 220px; margin-left: auto; }
+    \\  .c-patch .find > input { flex: 1; min-width: 0; padding-right: 32px; }
+    \\  .c-patch .find > input::-webkit-search-cancel-button { display: none; }
+    \\  .c-patch .find > .x { all: unset; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    \\    width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; cursor: pointer;
+    \\    color: var(--muted); font-size: var(--fs-l); line-height: 1; }
+    \\  .c-patch .find > .x:hover { color: var(--text); background: var(--ctl-bg-2); }
+    \\  .c-patch .find > .x:focus-visible { outline: 2px solid var(--focus); }
+    \\  @media (max-width: 760px) {
+    \\    .c-patch .find { flex-basis: 100%; margin-left: 0; }
+    \\  }
     \\  .c-patch .c-table-wrap { overflow-x: clip; }
     \\  .c-patch .c-table thead th { top: var(--header); }
     \\  .c-patch .who { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; color: inherit; text-decoration: none; }

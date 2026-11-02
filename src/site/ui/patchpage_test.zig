@@ -170,6 +170,20 @@ test "chips: moved and Riot's by default; each toggles; All shows every row" {
     try testing.expectEqualStrings("Darius,Miss Fortune,Orianna,Jinx,Tristana,Viktor", try p.names());
 }
 
+test "Find: a search shows the rows the chips hide, × clears it" {
+    var p: Page = undefined;
+    try p.init("#riot=0");
+    defer p.deinit();
+    try testing.expectEqualStrings("Darius,Miss Fortune,Jinx,Tristana,Viktor", try p.names());
+    // Orianna: nothing moved clearly, hidden under Moved clearly alone
+    _ = p.rt.event(0, .{ .kind = .input, .target = p.id("type", "search"), .text = "ori" });
+    try testing.expectEqualStrings("Orianna", try p.names());
+    try testing.expectEqualStrings("#riot=0&q=ori", p.fake.fragment.items);
+    p.click(p.id("aria-label", "Clear search"));
+    try testing.expectEqualStrings("#riot=0", p.fake.fragment.items);
+    try testing.expectEqualStrings("Darius,Miss Fortune,Jinx,Tristana,Viktor", try p.names());
+}
+
 test "the chips count the role's rows; the role in place; the URL restores both" {
     var p: Page = undefined;
     try p.init("");
