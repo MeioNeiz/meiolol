@@ -26,7 +26,12 @@ pub const Nav = enum {
 
     /// Pages under Champions in the menu, with its tabs and the view picks
     pub fn inChampions(n: Nav) bool {
-        return n == .champions or n == .matchups or n == .patch or n == .pool;
+        return n == .champions or n == .matchups or n == .patch;
+    }
+
+    /// Pages under Your games, with its tabs
+    pub fn inYour(n: Nav) bool {
+        return n == .your or n == .squad or n == .pool;
     }
 };
 

@@ -65,9 +65,11 @@ Five, in order, each with everything the one before has.
 - nginx: `auth_request /_auth` on /admin/ (needs view_admin) and /private (needs
   view_private); /_auth answers 204 plus role, or 401, which becomes a redirect to
   /login?next=. Pages stay cached per URI (everyone with access sees the same page;
-  "you" bits come from /auth/me in JS; the header's Log in shows the username from
-  localStorage `account`, which the account island sets on sign-in and clears on
-  sign-out). The renderer serves /private only with a header nginx adds after auth, like
+  "you" bits come from /auth/me in JS. The header's account slot shows Log in and Sign
+  up, or a chip named from localStorage `account` (set by the account island on sign-in)
+  with Your games, Account and Log out; a signed-in browser and every private page ask
+  /auth/me, which renews `account` and the role mark `login` (tester or admin: the bar's
+  private links) and clears both on a 401: site/shell.zig account_js). The renderer serves /private only with a header nginx adds after auth, like
   X-Meiolol-Admin today; warm-up and the public cache never hold /private pages. noindex and robots.txt cover /private
 - Desktop: the app signs in once and gets a device token (named, revocable, listed on
   the account page), sent as `Authorization: Bearer`; nginx checks it with the same

@@ -1,9 +1,11 @@
 //! SiteHeader: every page's top bar: the logo, the page links, the search. Under 860 px
 //! of header the links give way to a menu button whose popover lists them and the pages
-//! under Champions, the current one selected (popovertarget: no script). Log in (or the
-//! account) sits beside the search, in the menu on a phone. From 861 to 1160 px, with a
-//! login's private links in the bar, the search folds to its icon and opens over the
-//! links on focus. Also every page's foot (`foot`), the preview strip under the header
+//! of each section (groups), the current one selected (popovertarget: no script). The
+//! account slot sits beside the search: Log in and Sign up, or once signed in a chip with
+//! the username whose popover holds Your games, Account and Log out (the page's script
+//! fills and wires it: site/shell.zig account_js). On a phone Sign up moves into the
+//! menu. From 861 to 1160 px, with a login's private links in the bar, the search folds
+//! to its icon and opens over the links on focus. Also every page's foot (`foot`), the preview strip under the header
 //! (`preview`), on the Champions pages the bar under it (`subbar`: the section's tabs and
 //! the view picks), the page's main column (`main_class`) and a one-line notice in it
 //! (`note`)
@@ -38,22 +40,29 @@ pub const Opts = struct {
     home_view: bool = false,
     /// The pages, in the bar and the menu
     links: []const Link,
-    /// In the menu only, under a Champions label
-    more: []const Link = &.{},
+    /// In the menu only, each under its section's label
+    groups: []const Group = &.{},
     /// The page's search box
     search: ?N = null,
-    /// A private page, so signed in: Account where others say Log in. Either becomes the
-    /// username once the account island stored it (site/shell.zig account_link)
+    /// A private page, so signed in: the chip, as Account until the page's script names it
     signed_in: bool = false,
     menu_id: []const u8 = "site-menu",
+    acct_menu_id: []const u8 = "acct-menu",
 };
+
+/// A section's pages past its first, which the bar links: "Your games": Champion pool,
+/// Squads
+pub const Group = struct { label: tree.Text, links: []const Link };
 
 const W = struct {
     pub const product = plain("meiolol");
     pub const pages = plain("Pages");
     pub const menu = plain("Menu");
     pub const login = plain("Log in");
+    pub const signup = plain("Sign up");
     pub const account = plain("Account");
+    pub const your = plain("Your games");
+    pub const logout = plain("Log out");
     pub const champions = plain("Champions");
     pub const data = phrase.Phrase("Ranked solo/duo {d:text}. Updated daily.");
     pub const legal_pages = plain("Site");
@@ -161,7 +170,10 @@ pub fn view(h: *H, o: Opts) N {
         h.a(.{ .class = "logo", .href = o.home, .data_view = o.home_view }, .{ logo(h), W.product }),
         h.el(.nav, .{ .class = "links", .aria_label = W.pages }, .{links(h, o.links)}),
         o.search,
-        acct(h, o),
+        h.a(.{ .class = "acct", .href = "/login", .hidden = o.signed_in }, .{W.login}),
+        h.a(.{ .class = "acct join", .href = "/signup", .hidden = o.signed_in }, .{W.signup}),
+        h.button(.{ .class = "acct me", .type = "button", .popovertarget = o.acct_menu_id, .hidden = !o.signed_in }, .{W.account}),
+        acctMenu(h, o, false),
         h.button(.{ .class = "c-btn menu", .type = "button", .data_v = "icon", .popovertarget = o.menu_id, .aria_label = W.menu }, .{
             h.svg(.{ .viewBox = "0 0 24 24", .aria_hidden = true }, .{h.path(.{ .d = "M4 7h16M4 12h16M4 17h16" }, .{})}),
         }),
@@ -178,14 +190,33 @@ pub fn menu(h: *H, o: Opts, open: bool) N {
         .aria_label = W.pages,
     }, .{
         links(h, o.links),
-        if (o.more.len > 0) h.span(.{ .class = "lab" }, .{W.champions}) else null,
-        links(h, o.more),
-        acct(h, o),
+        groups(h, o.groups),
+        h.a(.{ .class = "acct join", .href = "/signup", .hidden = o.signed_in }, .{W.signup}),
     });
 }
 
-fn acct(h: *H, o: Opts) N {
-    return h.a(.{ .class = "acct", .href = if (o.signed_in) "/account" else "/login" }, .{if (o.signed_in) W.account else W.login});
+/// The chip's popover; `open`: drawn in place, for the gallery. Log out is the page
+/// script's: the API wants a header a plain form can't send
+pub fn acctMenu(h: *H, o: Opts, open: bool) N {
+    return h.el(.nav, .{
+        .class = if (open) "c-sitemenu acctmenu static" else "c-sitemenu acctmenu",
+        .id = if (open) null else o.acct_menu_id,
+        .popover = if (open) null else "",
+        .aria_label = W.account,
+    }, .{
+        h.a(.{ .href = "/your" }, .{W.your}),
+        h.a(.{ .href = "/account" }, .{W.account}),
+        h.button(.{ .class = "out", .type = "button" }, .{W.logout}),
+    });
+}
+
+fn groups(h: *H, gs: []const Group) []const N {
+    var l = h.list();
+    for (gs) |g| {
+        l.add(h.span(.{ .class = "lab" }, .{g.label}));
+        for (links(h, g.links)) |n| l.add(n);
+    }
+    return l.done();
 }
 
 fn links(h: *H, ls: []const Link) []const N {
@@ -222,9 +253,18 @@ pub const css =
     \\  .c-site .bar > :not(.logo, .links, .acct, .menu, .c-sitemenu) { margin-left: auto; max-width: 300px; flex: 1; }
     \\  .c-site .bar > .acct { display: flex; align-items: center; flex: none; height: var(--ctl); max-width: 160px;
     \\    padding: 0 var(--sp-3); box-sizing: border-box; border: 1px solid var(--ctl-line); border-radius: var(--r-ctl);
-    \\    background: var(--ctl-bg); color: var(--text); font-weight: var(--w-m); text-decoration: none;
-    \\    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    \\    background: var(--ctl-bg); color: var(--text); font: inherit; font-weight: var(--w-m); text-decoration: none;
+    \\    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
     \\  .c-site .bar > .acct:hover { background: var(--ctl-bg-2); }
+    \\  .c-site .bar > .acct:not(.join, .me) { border-color: var(--brand); }
+    \\  .c-site .bar > .join { margin-left: calc(var(--sp-2) - var(--sp-5)); border-color: var(--brand);
+    \\    background: var(--brand); color: var(--on-brand); }
+    \\  .c-site .bar > .join:hover { background: var(--brand); filter: brightness(1.1); }
+    \\  .c-sitemenu.acctmenu { width: 200px; }
+    \\  .c-sitemenu > .out { display: flex; align-items: center; justify-content: flex-start; min-height: var(--ctl-l); padding: 0 12px; border: 0;
+    \\    border-top: 1px solid var(--line); border-radius: 0 0 var(--r-ctl) var(--r-ctl); background: none;
+    \\    color: var(--t2); font: inherit; font-weight: var(--w-m); text-align: left; cursor: pointer; }
+    \\  .c-sitemenu > .out:hover { background: var(--ctl-bg-2); color: var(--text); }
     \\  .c-site .bar > .links + .acct { margin-left: auto; }
     \\  .c-site .menu { display: none; flex: none; }
     \\  @container site (min-width: 861px) and (max-width: 1160px) {
@@ -237,10 +277,11 @@ pub const css =
     \\  .c-site .menu svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
     \\  @container site (max-width: 860px) {
     \\    .c-site > .bar { gap: var(--sp-2); }
-    \\    .c-site .links, .c-site .bar > .acct { display: none; }
+    \\    .c-site .links, .c-site .bar > .join { display: none; }
     \\    .c-site .bar > :not(.logo, .links, .acct, .menu, .c-sitemenu) { max-width: none; }
     \\    .c-site .menu { display: inline-flex; margin-left: auto; }
     \\    .c-site .bar > :not(.logo, .links, .acct, .menu, .c-sitemenu) + .menu { margin-left: 0; }
+    \\    .c-site .bar > .acct { max-width: 112px; }
     \\    .c-site input { font-size: var(--fs-l); }
     \\  }
     \\  .c-sitemenu { margin: 0; position: fixed; inset: calc(var(--header) + 4px) var(--sp-2) auto auto;
@@ -252,7 +293,7 @@ pub const css =
     \\    border-radius: var(--r-ctl); color: var(--t2); font-weight: var(--w-m); text-decoration: none; }
     \\  .c-sitemenu > a:hover { background: var(--ctl-bg-2); color: var(--text); }
     \\  .c-sitemenu > a[aria-current="page"] { background: var(--sel-bg); color: var(--sel-ink); }
-    \\  .c-sitemenu > .acct { margin-top: 2px; border-top: 1px solid var(--line); border-radius: 0 0 var(--r-ctl) var(--r-ctl);
+    \\  .c-sitemenu > .join { margin-top: 2px; border-top: 1px solid var(--line); border-radius: 0 0 var(--r-ctl) var(--r-ctl);
     \\    color: var(--text); }
     \\  .c-sitemenu > .lab { padding: var(--sp-2) 12px 2px; margin-top: 2px; border-top: 1px solid var(--line);
     \\    font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
@@ -288,21 +329,33 @@ pub fn gallery(g: *Gallery) void {
         .home = "#",
         .links = &.{
             .{ .label = plain("Your games"), .href = "#" },
+            .{ .label = plain("Champions"), .href = "#", .view = true },
+            .{ .label = plain("Matchups"), .href = "#", .view = true },
             .{ .label = plain("Daily Draft"), .href = "#", .current = true },
             .{ .label = plain("Learn"), .href = "#" },
-            .{ .label = plain("Champions"), .href = "#", .view = true },
         },
-        .more = &.{
-            .{ .label = plain("Matchups"), .href = "#", .view = true },
-            .{ .label = plain("Patch changes"), .href = "#", .view = true },
-            .{ .label = plain("Champion pool"), .href = "#", .view = true },
+        .groups = &.{
+            .{ .label = plain("Your games"), .links = &.{
+                .{ .label = plain("Champion pool"), .href = "#", .view = true },
+                .{ .label = plain("Squads"), .href = "#" },
+            } },
+            .{ .label = plain("Champions"), .links = &.{
+                .{ .label = plain("Patch changes"), .href = "#", .view = true },
+            } },
         },
         .menu_id = g.id("site-menu"),
+        .acct_menu_id = g.id("acct-menu"),
     };
     var with_search = o;
     with_search.search = h.input(.{ .type = "search", .placeholder = plain("Champion or Riot ID"), .aria_label = plain("Search") });
-    g.addFill("the bar; a menu button under 860 px", view(h, with_search));
+    g.addFill("the bar: Log in and Sign up; a menu button under 860 px, Sign up then in the menu", view(h, with_search));
+    var signed = with_search;
+    signed.signed_in = true;
+    signed.menu_id = g.id("site-menu-in");
+    signed.acct_menu_id = g.id("acct-menu-in");
+    g.addFill("signed in: the account chip, named by the page's script", view(h, signed));
     g.add("menu open, the current page selected", menu(h, o, true));
+    g.add("the chip's menu open", acctMenu(h, o, true));
     g.addFill("the preview strip", preview(h));
     const view_picks: Picks = .{
         .home = "EUW",
@@ -311,8 +364,8 @@ pub fn gallery(g: *Gallery) void {
         .patch = "16.21",
         .rank_off = "Champion pages and the champions board only",
     };
-    g.addFill("the subbar: Champions tabs and the view picks; they wrap under the tabs when narrow", subbar(h, .{ .tabs = o.more, .picks = view_picks }));
-    g.addFill("the subbar, tabs only", subbar(h, .{ .tabs = o.more }));
+    g.addFill("the subbar: Champions tabs and the view picks; they wrap under the tabs when narrow", subbar(h, .{ .tabs = o.groups[0].links, .picks = view_picks }));
+    g.addFill("the subbar, tabs only", subbar(h, .{ .tabs = o.groups[1].links }));
     g.addFill("the main column, a notice in it", h.div(.{ .class = main_class }, .{note(h, plain("Early data: 1,234 games so far."))}));
     g.addFill("the foot", foot(h, .{
         .data = "in EUW, last 30 days, 23,210 games",
