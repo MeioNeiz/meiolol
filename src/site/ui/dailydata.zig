@@ -234,7 +234,7 @@ pub const sample: Puzzle = .{
     .hint = .{ .kind = .ad, .fits = 0b011 },
     .lanes = .{ 51.4, 50.1, 49.1, 50.9, 51.3 },
     .result = .{ .winner = .blue, .secs = 2491, .kills = .{ 10, 8 }, .gold = .{ 84300, 79300 }, .towers = .{ 9, 6 }, .dragons = .{ 2, 4 }, .barons = .{ 1, 1 } },
-    .paper = .{ .blue = 51.1, .low = 48.9, .high = 53.3, .edges = .{ 1.2, 0.3, -0.6, 0.2 } },
+    .paper = .{ .blue = 51.1, .low = 48.9, .high = 53.3, .edges = .{ 1.2, 0.0, -0.6, 0.2 } },
 };
 
 fn seat(c: u16, magic: f32, base: f32, rank: u16, gold14: u32) Seat {

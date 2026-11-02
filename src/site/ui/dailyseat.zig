@@ -304,14 +304,18 @@ pub const Seat = struct {
         for (pp.edges) |e| most = @max(most, @abs(e));
         for (pp.edges, W.kinds, 0..) |e, k, i| {
             const side: dd.Side = if (e >= 0) .blue else .red;
+            // Edges come to one decimal: under 0.05 shows as 0.0
+            const even = @abs(e) < 0.05;
             const w = 50 * @min(@abs(e) / most, 1);
             rows.add(h.div(.{ .key = i, .class = "e" }, .{
                 h.span(.{ .class = "lab" }, .{k}),
-                h.span(.{ .class = "bar", .aria_hidden = true }, .{h.el(.i, .{
+                h.span(.{ .class = "bar", .aria_hidden = true }, .{if (even) null else h.el(.i, .{
                     .data_side = dp.sideOf(side),
                     .style = h.vars(.{ .l = if (side == .blue) 50 - w else 50, .w = w }),
                 }, .{})}),
-                h.span(.{ .class = "v", .data_side = dp.sideOf(side) }, .{W.edge.with(h, .{ .side = dp.sideWord(side).s, .d = @abs(e) })}),
+                h.span(.{ .class = "v", .data_side = if (even) null else dp.sideOf(side) }, .{
+                    if (even) W.edge_even else W.edge.with(h, .{ .side = dp.sideWord(side).s, .d = @abs(e) }),
+                }),
             }));
         }
         const won = s.p.result.winner;
@@ -394,9 +398,10 @@ const W = struct {
     const side_with = Phrase("{side:text} with {n:text}");
     const paper = plain("On paper");
     const kinds = [4]tree.Text{ plain("Champions"), plain("Teammates"), plain("Lanes"), plain("Matchups") };
-    const edge = Phrase("{side:text} {d:points}");
+    const edge = Phrase("{side:text} {d:points} points");
+    const edge_even = plain("Even");
     const range = plain("95% range");
-    const range_note = plain("How sure the model is of this draft's chance: it would land in this range 19 times in 20.");
+    const range_note = plain("The draft's true chance is inside it 19 times in 20.");
     const even_blue = plain("Even drafts. Blue won.");
     const even_red = plain("Even drafts. Red won.");
     /// By [better by 4+][better side][an upset]
@@ -445,9 +450,10 @@ pub const css =
     \\  .c-dseat .none { color: var(--muted); font-size: var(--fs-s); }
     \\  .c-dseat .paper { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: center; }
     \\  .c-dseat .verdict { margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--t2); }
-    \\  .c-dseat .edges { display: grid; gap: 6px; }
+    \\  .c-dseat .edges { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px var(--sp-2); align-items: center;
+    \\    font-size: var(--fs-s); }
     \\  .c-dseat .edges .lab { color: var(--t2); }
-    \\  .c-dseat .e { display: grid; grid-template-columns: 96px minmax(0, 1fr) 80px; gap: var(--sp-2); align-items: center; font-size: var(--fs-s); }
+    \\  .c-dseat .e { display: contents; }
     \\  .c-dseat .e .bar { position: relative; height: 8px; background: linear-gradient(var(--line-2), var(--line-2)) 50% / 1px 100% no-repeat; }
     \\  .c-dseat .e .bar i { position: absolute; top: 0; bottom: 0; left: calc(var(--l) * 1%); width: calc(var(--w) * 1%); border-radius: 2px; }
     \\  .c-dseat .e .bar i[data-side="us"] { background: var(--us); }
