@@ -467,6 +467,9 @@ pub const css =
     \\  .c-home :is(.rv, .td > :last-child) .c-card { height: 100%; }
     \\  .c-home > .hero .td { flex: 1; display: flex; flex-direction: column; gap: var(--sp-3); }
     \\  .c-home > .hero .td > :last-child { flex: 1; display: flex; flex-direction: column; }
+    \\  /* A head-only card (a patch's first day) keeps its height: the column's spare goes under it */
+    \\  .c-home > .hero .td:has(> :last-child > .c-card > .c-head:last-child),
+    \\  .c-home > .hero .td > :last-child:has(> .c-card > .c-head:last-child) { flex: none; }
     \\  @media (max-width: 1000px) {
     \\    .c-home > .hero { grid-template-columns: minmax(0, 1fr); grid-template-areas: "h1" "look" "rv" "td"; }
     \\    .c-home > .hero > .side { display: contents; }
