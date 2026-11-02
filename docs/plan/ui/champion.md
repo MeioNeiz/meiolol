@@ -124,7 +124,9 @@ its kind. Candidates, data we have first (arch-stats.md):
 - Pick-up across all five mastery bins: done (bins under 200 games left out)
 - Lane curve: done (Charts island, Lane card): gold, XP and CS lead by minute against
   the average lane opponent (its pairs' estimates weighted by lanes), the role's middle
-  half around it; all ranks
+  half around it; all ranks. Under it "Wins lane against" and "Loses lane to": the 5
+  lane opponents with the biggest gold lead at 14 each way (100+ games, 100+ gold), each
+  a link to the matchup (u.gg's Best Lane Counters, walk-rivals 5)
 - Comeback odds: done ("Won by lane gold", 10 | 15 min, the pairs' buckets summed
   against all lanes dashed; all ranks)
 - Early kills: done ("Lane kills", Versus rows as the matchup page's head to head:

@@ -135,6 +135,9 @@ pub const Day = struct {
 pub const Timed = struct { label: []const u8, games: u32, wins: u32 };
 
 /// The champion minus its lane opponent by minute, against the average one (all ranks)
+/// A lane opponent and the gold lead at 14 on one side (the list says whose)
+pub const LaneOpp = struct { champ: u16, gold: u16 };
+
 pub const LaneCurves = struct {
     /// Lanes still going at each minute
     games: []const u32,
@@ -348,6 +351,11 @@ pub const W = struct {
     pub const lean_note = plain("Gold at 14 minutes against an average lane opponent, from games of every length: whether it wins lanes, apart from how long its games last.");
     pub const lane_head = plain("Lane");
     pub const lane_them = "Opponent";
+    pub const lane_ends = [2]tree.Text{ plain("Wins lane against"), plain("Loses lane to") };
+    pub const lane_ends_unit = plain("gold at 14");
+    pub const lane_win = Phrase("{c:text} {g:count} gold ahead of {o:text} at 14");
+    pub const lane_loss = Phrase("{o:text} {g:count} gold ahead at 14");
+    pub const lane_ends_note = plain("Gold at 14 minutes, lane opponents with 100+ games; each opens the matchup.");
     pub const lane_term = plain("vs the average opponent");
     pub const lane_note = Phrase("{c:text} minus its lane opponent by minute, averaged over its opponents by games; the band holds the middle half of lanes. All ranks.");
     pub const lane_metrics = [3]tree.Text{ plain("Gold"), plain("XP"), plain("CS") };
@@ -524,6 +532,8 @@ pub const MoreRole = struct {
 /// rank, Pick-up and Also play from Platinum+ (whatever the rank pick)
 pub const ChartsData = struct {
     name: []const u8,
+    /// The matchup links'
+    slug: []const u8 = "",
     /// Riot's champion id: the pool link's
     id: u16 = 0,
     ddragon: []const u8,
@@ -536,6 +546,9 @@ pub const ChartsData = struct {
 pub const ChartsRole = struct {
     role: role.Role,
     lane: ?LaneCurves = null,
+    /// Lane opponents it wins lane against most, then those it loses lane to most, by gold
+    /// at 14 (u.gg's Best Lane Counters; walk-rivals 5)
+    lanes: [2][]const LaneOpp = .{ &.{}, &.{} },
     comeback: ?Comeback = null,
     kills: ?Kills = null,
     /// Platinum+, from the view's builds file
@@ -588,6 +601,36 @@ pub const NoRank = struct { groups: [1][]const ChartsRole };
 
 pub const Split = struct { top: TopData, build: BuildData, more: MoreData, charts: ChartsData };
 
+/// Lanes the champion wins and loses by most at 14 minutes: thin pairs and small leads out
+/// (the curves shrink a thin pair toward the champions' baseline already)
+fn laneEnds(a: std.mem.Allocator, r: role.Role, rels: []const Rel) ![2][]const LaneOpp {
+    const rel = for (rels) |x| {
+        if (!x.ally and x.role == r) break x;
+    } else return .{ &.{}, &.{} };
+    var all: std.ArrayList(Opp) = .empty;
+    for (rel.opps) |o| if (o.gold) |g| if (o.games >= thin_games and @abs(g) >= lane_end_gold) try all.append(a, o);
+    std.mem.sort(Opp, all.items, {}, struct {
+        fn f(_: void, x: Opp, y: Opp) bool {
+            return x.gold.? > y.gold.?;
+        }
+    }.f);
+    var out: [2][]LaneOpp = .{ try a.alloc(LaneOpp, lane_ends), try a.alloc(LaneOpp, lane_ends) };
+    var n: [2]usize = .{ 0, 0 };
+    for (0..all.items.len) |i| {
+        // Wins from the top, losses from the bottom
+        for ([2]Opp{ all.items[i], all.items[all.items.len - 1 - i] }, 0..) |o, k| {
+            if (n[k] == lane_ends or (o.gold.? > 0) != (k == 0)) continue;
+            out[k][n[k]] = .{ .champ = o.champ, .gold = @abs(o.gold.?) };
+            n[k] += 1;
+        }
+    }
+    return .{ out[0][0..n[0]], out[1][0..n[1]] };
+}
+
+const lane_ends = 5;
+/// Under this a lane reads as even
+const lane_end_gold = 100;
+
 /// Each island's data, pointing into `d`
 pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
     const top = try a.alloc(TopRole, d.roles.len);
@@ -598,13 +641,13 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
         m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_day = x.by_day, .by_length = x.by_length };
-        c.* = .{ .role = x.role, .lane = x.lane, .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ranks = x.ranks, .timing = x.timing };
+        c.* = .{ .role = x.role, .lane = x.lane, .lanes = try laneEnds(a, x.role, x.rels), .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ranks = x.ranks, .timing = x.timing };
     }
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
         .build = .{ .roles = build },
         .more = .{ .name = d.name, .slug = d.slug, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = more, .lengths = d.lengths, .spread = d.spread },
-        .charts = .{ .name = d.name, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = charts, .pickup = d.pickup, .also = d.also },
+        .charts = .{ .name = d.name, .slug = d.slug, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = charts, .pickup = d.pickup, .also = d.also },
     };
 }
 
@@ -1330,7 +1373,30 @@ pub const Charts = struct {
         p.lane.metrics = &p.lane_metrics;
         p.lane.games = c.games;
         const tip = toggletip.view(h, "cp-lane", .{W.lane_term}, W.lane_head, W.lane_note.with(h, .{ .c = p.data.name }));
-        return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{ h.span(.{ .class = "note" }, .{&tip}), p.lane.switcher(h) }), p.lane.view(h) });
+        return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{ h.span(.{ .class = "note" }, .{&tip}), p.lane.switcher(h) }), p.lane.view(h), p.laneEnds(h) });
+    }
+
+    /// The lane opponents it wins and loses lane against most, each a link to the matchup
+    fn laneEnds(p: *P, h: *H) N {
+        const rl = p.r();
+        const d = p.data;
+        if (rl.lanes[0].len + rl.lanes[1].len == 0) return .none;
+        var rows: [2]N = undefined;
+        for (&rows, rl.lanes, W.lane_ends, 0..) |*row, os, label, k| {
+            const links = h.mem.alloc(N, os.len) catch {
+                h.oom = true;
+                return .none;
+            };
+            for (links, os) |*l, o| {
+                const c = d.champs[o.champ];
+                l.* = h.a(.{
+                    .href = h.fmt("{s}matchups/{s}/{s}-vs-{s}", .{ p.root, @tagName(rl.role), d.slug, c.slug }),
+                    .aria_label = if (k == 0) W.lane_win.with(h, .{ .c = d.name, .o = c.name, .g = o.gold }) else W.lane_loss.with(h, .{ .o = c.name, .g = o.gold }),
+                }, .{ champ.view(h, icon(h, d.ddragon, c), .{ .named = false }), " ", phrase.num(h, .count, o.gold) });
+            }
+            row.* = if (os.len == 0) .none else h.p(.{}, .{ h.span(.{ .class = "k" }, .{ label, " ", h.small(.{}, .{W.lane_ends_unit}) }), links });
+        }
+        return h.div(.{ .class = "ends", .title = W.lane_ends_note }, .{ rows[0], rows[1] });
     }
 
     fn comebackCard(p: *P, h: *H) N {
@@ -1566,6 +1632,12 @@ pub const css =
     \\  .c-cpage .note { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .c-head .lg { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .more { margin-left: auto; font-size: var(--fs-s); }
+    \\  .c-cpage .ends { display: grid; gap: var(--sp-2); margin-top: var(--sp-3); font-size: var(--fs-s); }
+    \\  .c-cpage .ends p { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: 0; }
+    \\  .c-cpage .ends .k { display: flex; flex-direction: column; min-width: 9.5em; color: var(--muted); line-height: 1.25; }
+    \\  .c-cpage .ends .k small { font-size: var(--fs-xs); }
+    \\  @media (max-width: 600px) { .c-cpage .ends .k { flex-direction: row; gap: var(--sp-2); flex-basis: 100%; } }
+    \\  .c-cpage .ends a { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--ink); font-variant-numeric: tabular-nums; }
     \\  .c-cpage .vs-sub { margin: var(--sp-3) 0 var(--sp-1); font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .plot { padding: var(--sp-1) 0 var(--sp-3); }
     \\  .c-cpage .row3, .c-cpage .row2 { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
@@ -1665,4 +1737,27 @@ test "first item done: buckets under min_games left out, no chart under two" {
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "9-11") == null);
+}
+
+test "lane ends: biggest gold leads each way, thin and even lanes out" {
+    const testing = std.testing;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const opps = [_]Opp{
+        .{ .champ = 1, .games = 400, .wins = 200, .usual = 0, .gold = 300 },
+        .{ .champ = 2, .games = 400, .wins = 200, .usual = 0, .gold = -250 },
+        .{ .champ = 3, .games = 50, .wins = 20, .usual = 0, .gold = 900 },
+        .{ .champ = 4, .games = 400, .wins = 200, .usual = 0, .gold = 60 },
+        .{ .champ = 5, .games = 400, .wins = 200, .usual = 0, .gold = 500 },
+        .{ .champ = 6, .games = 400, .wins = 200, .usual = 0, .gold = -700 },
+        .{ .champ = 7, .games = 400, .wins = 200, .usual = 0 },
+    };
+    const rels = [_]Rel{
+        .{ .ally = true, .role = .jungle, .opps = &opps, .rare = 0 },
+        .{ .ally = false, .role = .top, .opps = &opps, .rare = 0 },
+    };
+    const e = try laneEnds(arena.allocator(), .top, &rels);
+    try testing.expectEqualSlices(LaneOpp, &.{ .{ .champ = 5, .gold = 500 }, .{ .champ = 1, .gold = 300 } }, e[0]);
+    try testing.expectEqualSlices(LaneOpp, &.{ .{ .champ = 6, .gold = 700 }, .{ .champ = 2, .gold = 250 } }, e[1]);
+    try testing.expectEqual(0, (try laneEnds(arena.allocator(), .mid, &rels))[0].len);
 }
