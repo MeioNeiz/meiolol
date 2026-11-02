@@ -127,7 +127,7 @@ pub fn gallery(g: *Gallery) void {
     };
     const on = h.on(&Inert.it, 0);
     g.add("pressable, one pressed", view(h, &.{
-        .{ .label = plain("Turn"), .value = plain("+38"), .ctx = plain("32–33"), .step = .of(38, fmt.game_cuts), .on = on, .pressed = true },
+        .{ .label = plain("Swing"), .value = plain("+38"), .ctx = plain("32–33"), .step = .of(38, fmt.game_cuts), .on = on, .pressed = true },
         .{ .label = plain("Biggest drop"), .value = plain("−19"), .ctx = plain("12–13"), .step = .of(-19, fmt.game_cuts), .on = on },
         .{ .label = plain("Ahead"), .value = plain("13"), .ctx = plain("of 33 min") },
     }));

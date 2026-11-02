@@ -72,8 +72,8 @@ Desktop 1280 (content 1232), top to bottom:
      they died), your K/D/A in the range, gold earned, objectives as icons, and below,
      the moments in the range as rows (component `moment-row`), scrolling
 4. Under the graph, the stat cells (component `stat-cell`, one row of 6 at desktop):
-   Turn +38% (52→90), Biggest drop −25%, Best minute +1,402, Peak 98%, Low 20%, Ahead
-   17/41. The turn is the biggest one-minute change, so the second cell is the biggest
+   Swing +38% (52→90), Biggest drop −25%, Best minute +1,402, Peak 98%, Low 20%, Ahead
+   17/41. The swing is the biggest one-minute change, so the second cell is the biggest
    move the other way (drop after a rising turn, rise after a falling one), never a
    repeat of the turn.
    Each cell's sub line is its time ("35-36"). Pressing a cell selects its range or
@@ -95,8 +95,8 @@ the control row as one scrolling chip row, stat cells as a 3 by 2 grid, inspecto
 the graph (not beside), its moment list capped at 5 rows with "All 26".
 
 Words on the first screen, labels only (data, champion names and times not counted):
-All games, WIN, KDA, KP, CS, Gold, Damage, Vision, Win chance, Gold, Game, Turn,
-Turn, Best minute, Biggest rise, Peak, Low, Ahead, Kills, Gold, plus the inspector's
+All games, WIN, KDA, KP, CS, Gold, Damage, Vision, Win chance, Gold, Game, Swing,
+Swing, Best minute, Biggest rise, Peak, Low, Ahead, Kills, Gold, plus the inspector's
 row labels (none: rows are icons and figures). About 22 words. Today's first screen has
 ~95 (the turning sentence, the chart caption, the stat line, the moments header).
 

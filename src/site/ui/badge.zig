@@ -54,5 +54,5 @@ pub fn gallery(g: *Gallery) void {
     g.add("patch note", riot(h, .adjusted, "Q, W"));
     g.add("patch buff", riot(h, .buff, "Q"));
     g.add("patch nerf", riot(h, .nerf, "W, stats"));
-    g.add("moment", view(h, .turn, .{"★ Turn"}));
+    g.add("moment", view(h, .turn, .{"★ Swing"}));
 }
