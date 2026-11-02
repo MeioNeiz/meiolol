@@ -1,10 +1,10 @@
 //! The matchup finder (matchup/index.html, docs/plan/ui/matchups.md): a way to a matchup
 //! page, not a list of them. Two islands. Finder: two ChampRolePickers, one lane for both;
-//! nothing picked, a role (All first) and three short lists of its lane pairs (this
-//! patch's movers, the hardest lanes, the lane bullies), each a link to its page. Grid (its own, lazily
-//! loaded file): the first pick's MatchupGrid, Against its lane, from the champion page's
-//! data/champion/<slug>-more.bin; the second pick is that opponent's dot, and its page when
-//! there is one. Finder writes the picks to the URL, Grid reads them (same keys).
+//! nothing picked, a role (All first) and three short lists of its lane pairs (the
+//! hardest lanes, the lane bullies, then this patch's movers: noisy, so last), each a link
+//! to its page. Grid (its own, lazily loaded file): the first pick's MatchupGrid, Against
+//! its lane, from the champion page's data/champion/<slug>-more.bin; the second pick is
+//! that opponent's dot, and its page when there is one. Finder writes the picks to the URL, Grid reads them (same keys).
 //!
 //! Pages are rendered on request, so Finder's data rides in its data-bin, as the matchup
 //! page's do: ui-finder.wasm adopts it
@@ -229,7 +229,7 @@ pub const Finder = struct {
         for (role.Role.all, items[1..]) |r, *it| it.* = .{ .role = r, .current = r == f.role, .on = h.on(f, .{ .role = r }) };
         return h.div(.{ .class = "lists" }, .{
             rolepicker.view(h, .{ .v = .compact, .label = W.role_label }, &items),
-            h.div(.{ .class = "cols" }, .{ f.movedCard(h), f.hardCard(h), f.bullyCard(h) }),
+            h.div(.{ .class = "cols" }, .{ f.hardCard(h), f.bullyCard(h), f.movedCard(h) }),
         });
     }
 

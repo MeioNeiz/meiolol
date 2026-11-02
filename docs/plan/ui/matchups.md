@@ -32,11 +32,12 @@ champion": they know one. Nobody comes to read 5,000 rows.
   with its role), then three short `ChampList`s side by side (8 rows each, "N more" opens up to 25 in place
   and stays open across roles; every row a
   matchup page, drawn as a duel: both portraits, the names over the lane's win rate bar
-  with its 95% range, a ring where a patch move started; Jacob 1 Nov, notes 61-62): Moved this patch (clear win rate moves, then
-  the surest others down to 100 games a patch, faint with ±range; from the side that
-  gained, link to the patch page), Hardest lanes (lowest win rates from the losing side,
-  ranked by the upper end of the 95% range), Lane bullies (biggest median gold lead at
-  14). Hardest and bullies need 500 games a pair. Most played is gone (Jacob 27 Oct:
+  with its 95% range, a ring where a patch move started; Jacob 1 Nov, notes 61-62): Hardest
+  lanes (lowest win rates from the losing side, ranked by the upper end of the 95%
+  range), Lane bullies (biggest median gold lead at 14), then Moved this patch (clear win
+  rate moves, then the surest others down to 100 games a patch, faint with ±range; from
+  the side that gained, link to the patch page). Movers last (note 80: odd as the first
+  card; noisy at 100-200 games a side). Hardest and bullies need 500 games a pair. Most played is gone (Jacob 27 Oct:
   "almost feels silly except the moved this patch")
 - Header search keeps doing "ahri zed" from any page; this page is its slower twin
 
@@ -46,7 +47,7 @@ champion": they know one. Nobody comes to read 5,000 rows.
 h1 Matchups
 ChampRolePicker pair  [ Your champion ▾ ] ⇄ [ Opponent ▾ ]   RolePicker (after 1st pick)
 (nothing picked)  RolePicker (All first)
-                  Moved this patch | Hardest lanes | Lane bullies   (8 rows each)
+                  Hardest lanes | Lane bullies | Moved this patch   (8 rows each)
 (one picked)      MatchupGrid of that champion, Against its lane
 ```
 
