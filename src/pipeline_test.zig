@@ -31,6 +31,7 @@ const lab_events = @import("lab/events.zig");
 const objectives = @import("objectives.zig");
 const partials = @import("partials.zig");
 const cubes = @import("cubes.zig");
+const pairlane = @import("pairlane.zig");
 const patchday = @import("patchday.zig");
 const flat = @import("site/flat.zig");
 const forget = @import("forget.zig");
@@ -2159,4 +2160,71 @@ fn dataBin(a: std.mem.Allocator, page: []const u8, island: []const u8) !struct {
     const out = try a.alloc(u8, try d.calcSizeForSlice(s));
     try d.decode(out, s);
     return .{ s, out };
+}
+
+test "fixture games to duo lanes: both sides of every game, the sum of its two lane curves" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const db = try store.schema.memory();
+    defer db.close();
+    // Every 4th game NA1, every 3rd without a timeline
+    try fillGames(arena, db, 40, true);
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path });
+    const specs = [_]curves.Spec{
+        .{ .chosen = &.{}, .since_ms = start_ms, .platforms = &.{"EUW1"} },
+        .{ .chosen = &.{}, .since_ms = start_ms + 20 * std.time.ms_per_hour, .platforms = &.{ "EUW1", "NA1" } },
+    };
+    var b: [specs.len]pairlane.Builder = @splat(.{ .gpa = gpa });
+    defer for (&b) |*x| x.deinit();
+    {
+        const cube = try cubes.Store.open(gpa, io, try cubeDir(arena, dir, "duo"));
+        defer cube.deinit();
+        _ = try pairlane.fromCubes(cube, db, fixture_items, &specs, &b);
+    }
+    // The fixture is one game again and again: the same four bot laners each time
+    const Seat = struct { champion_id: u32 };
+    var ids: [4]u32 = undefined;
+    var q = try db.prepare("SELECT champion_id FROM participants WHERE match_id = 'EUW1_1' AND position IN ('BOTTOM', 'UTILITY') ORDER BY team_id, position");
+    defer q.deinit();
+    try q.bind(.{});
+    for (&ids) |*id| {
+        try testing.expect(try q.step());
+        id.* = q.row(Seat).champion_id;
+    }
+    const blue: pairlane.Key = .{ .adc = @intCast(ids[0]), .sup = @intCast(ids[1]) };
+    const red: pairlane.Key = .{ .adc = @intCast(ids[2]), .sup = @intCast(ids[3]) };
+    for (specs, &b) |spec, *x| {
+        var cv = try curvesOne(try cubeDir(arena, dir, "duo-curves"), db, spec);
+        defer cv.builder.deinit();
+        try testing.expect(x.games > 0);
+        try testing.expectEqual(cv.summary.games, x.games);
+        var curves_bytes: std.Io.Writer.Allocating = .init(arena);
+        try cv.builder.write(&curves_bytes.writer, patch, 1);
+        const c = try core.curvesfile.Curves.parse(arena, curves_bytes.written());
+        var aw: std.Io.Writer.Allocating = .init(arena);
+        try x.write(&aw.writer, "last 30 days", 1);
+        const f = try pairlane.File.parse(arena, aw.written());
+
+        const bot = c.get(.bottom, .all, ids[0], ids[2]).?;
+        const sup = c.get(.utility, .all, ids[1], ids[3]).?;
+        const i = pairlane.lane_minute - 1;
+        const pair = f.get(blue).?;
+        try testing.expectEqual(x.games, pair.games);
+        try testing.expectEqual(bot.wins(), pair.wins);
+        try testing.expectEqual(bot.minute(i).n, pair.at14);
+        const want: f64 = @floatFromInt(@as(i32, bot.minute(i).gold.p50) + sup.minute(i).gold.p50);
+        try testing.expectEqual(want, pair.gold());
+        try testing.expectEqual(-want, f.get(red).?.gold());
+        try testing.expectEqual(x.games, f.get(.{ .adc = blue.adc, .sup = blue.sup, .o_adc = red.adc, .o_sup = red.sup }).?.games);
+        try testing.expectEqual(3, f.against(blue.adc, blue.sup).len);
+        const curve = f.curve(blue.adc, blue.sup).?;
+        try testing.expectEqual(bot.minute(i).n, curve.minutes[i].n);
+        try testing.expectApproxEqAbs(want, curve.minutes[i].of(.gold).mean, 0.5);
+        try testing.expectEqual(0, curve.minutes[i].of(.gold).sd);
+    }
 }
