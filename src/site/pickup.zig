@@ -90,7 +90,7 @@ fn view(site: *const Site, h: *H, r: ?Role) !N {
 
 /// Champions with a gap (on a role's page, those playing it), the biggest gap pulled
 /// toward the average first
-fn order(a: std.mem.Allocator, l: *const learning.Learning, st: *const core.Stats, r: ?Role) ![]learning.Champion {
+pub fn order(a: std.mem.Allocator, l: *const learning.Learning, st: *const core.Stats, r: ?Role) ![]learning.Champion {
     var list: std.ArrayList(learning.Champion) = .empty;
     for (l.champions) |c| {
         if (c.gap == null) continue;

@@ -11,6 +11,8 @@ const shell = @import("shell.zig");
 const assets = @import("assets.zig");
 const champion = @import("champion.zig");
 const stats_ = @import("../stats.zig");
+const pickup = @import("pickup.zig");
+const matchup = @import("matchup.zig");
 const tpl = html.tpl;
 
 const Writer = std.Io.Writer;
@@ -82,7 +84,7 @@ pub fn writeIndex(site: *const Site, w: *Writer) !bool {
     const a = site.arena;
     const pg = try site.page(
         "Champion rankings | meiolol",
-        "Every champion ranked by one stat at a time: wins from ahead, from behind, in long games, lane gold at 14.",
+        "Every champion ranked by one stat at a time: wins from ahead, from behind, in long games, lane gold at 14, how hard to pick up.",
         .rankings,
         .rankings,
     );
@@ -102,6 +104,7 @@ pub fn writeIndex(site: *const Site, w: *Writer) !bool {
         }
         try cards.append(a, .{ .stat = s, .href = try site.href(.{ .ranking = .{ .stat = s } }), .top = top.items });
     }
+    try cards.append(a, try pickupCard(site));
     var tree: ui.Tree = .{};
     var h: ui.H = .init(a, &tree);
     tree.root = rk.index(&h, cards.items);
@@ -109,6 +112,21 @@ pub fn writeIndex(site: *const Site, w: *Writer) !bool {
     try ui.html.write(&tree, tree.root, w);
     try shell.close(w, pg);
     return true;
+}
+
+/// /pickup's top: practised minus new players' win rate per champion, sorted pulled
+/// toward the average gap, shown raw against it
+fn pickupCard(site: *const Site) !rk.Card {
+    const a = site.arena;
+    const l = &site.learning;
+    var top: std.ArrayList(rk.Card.Top) = .empty;
+    for (try pickup.order(a, l, &site.stats, null)) |c| {
+        const ch = matchup.champ(site, c.id) orelse continue;
+        const g = c.gap.?;
+        try top.append(a, .{ .name = ch.name, .src = try site.icon(ch), .href = try site.champHref(ch), .role = null, .value = @floatCast(g.pp), .usual = @floatCast(l.mean_pp), .n = @min(g.new.games, g.practised.games) });
+        if (top.items.len == rk.card_top) break;
+    }
+    return .{ .stat = null, .href = try site.href(.{ .pickup = null }), .top = top.items };
 }
 
 const n_stats = std.enums.values(rk.Stat).len;

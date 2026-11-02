@@ -80,8 +80,9 @@ row in the stats pass, then a spec.
 5. Done: lane gold at 14 (/rankings/lane-gold): its pairs' curve estimates at 14 weighted
    by lanes, pulled toward 0 by its standard error (the role's spread of leads at 14 over
    its lanes) against how much the role's champions differ; a third table type (Kind
-   gold); no champion page place link yet (champcharts budget: coord decides)
-6. Pick-up gap: the index's card links /pickup (pickup.zig already ranks it), no spec
+   gold); the Lane card's place link
+6. Done: pick-up gap as the index's fifth card, its top three from /pickup (pickup.order:
+   per champion, every region, no role icon), linking there; no spec of its own
 7. The rest of the table above
 
 ## Later (after the production key)

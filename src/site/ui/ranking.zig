@@ -131,13 +131,16 @@ const W = struct {
     pub const late = plain("Late");
     pub const none = plain("More data needed: no champion has games in this spot yet.");
     pub const full = plain("Every champion ›");
+    pub const pickup = "How hard to pick up";
+    pub const pickup_about = "Practised players' win rate on the champion minus new players', every region: which take longest to learn.";
     pub const index_lead = plain("Every champion ranked by one stat, per role. Each card's top three come from all roles, each champion in its main role, with 100+ games behind the figure.");
 };
 
 /// A stat's card in the index (/rankings): its top champions over every role, each in
 /// its main role, solid rows only
 pub const Card = struct {
-    stat: Stat,
+    /// Null: how hard to pick up (/pickup, its own page: per champion, every region)
+    stat: ?Stat,
     href: []const u8,
     top: []const Top,
 
@@ -145,7 +148,8 @@ pub const Card = struct {
         name: []const u8,
         src: []const u8,
         href: []const u8,
-        role: Role,
+        /// Null: a figure over all its roles
+        role: ?Role,
         value: f32,
         usual: f32,
         n: u32,
@@ -159,22 +163,22 @@ pub const card_top = 3;
 pub fn index(h: *H, cards: []const Card) N {
     var kids = h.list();
     for (cards, 0..) |c, i| {
-        const sp = spec(c.stat);
+        const title, const about = if (c.stat) |s| .{ spec(s).title, spec(s).about } else .{ W.pickup, W.pickup_about };
         var rows = h.list();
         for (c.top, 0..) |t, k| rows.add(h.li(.{ .key = k }, .{
             h.a(.{ .class = "who", .href = t.href }, .{
                 champ.view(h, .{ .name = t.name, .src = t.src }, .{ .px = .@"32", .named = false, .eager = true }),
                 h.span(.{}, .{t.name}),
-                role.view(h, t.role, .{}),
+                if (t.role) |x| role.view(h, x, .{}) else null,
             }),
-            switch (kindOf(c.stat)) {
+            switch (if (c.stat) |s| kindOf(s) else .gap) {
                 .gold => goldView(h, t.value, t.n),
                 else => |kd| stat.view(h, .{ .value = t.value, .kind = if (kd == .gap) .points else .rate, .scale = .aggregate, .ref = t.usual, .games = t.n }),
             },
         }));
         kids.add(h.div(.{ .key = i }, .{card.view(h, .{}, &.{
-            h.h2(.{}, .{h.a(.{ .href = c.href }, .{sp.title})}),
-            h.p(.{}, .{sp.about}),
+            h.h2(.{}, .{h.a(.{ .href = c.href }, .{title})}),
+            h.p(.{}, .{about}),
             if (c.top.len == 0) h.p(.{ .class = "none" }, .{W.none}) else h.ul(.{}, .{rows.done()}),
             h.a(.{ .class = "full", .href = c.href }, .{W.full}),
         })}));
@@ -536,6 +540,9 @@ pub fn gallery(g: *Gallery) void {
         const gap = [_]Card.Top{
             .{ .name = "Kayle", .src = "", .href = "#", .role = .top, .value = 9.1, .usual = 0.4, .n = 1310 },
         };
+        const pick = [_]Card.Top{
+            .{ .name = "Azir", .src = "", .href = "#", .role = null, .value = 14.2, .usual = 6.1, .n = 820 },
+        };
         const gold = [_]Card.Top{
             .{ .name = "Renekton", .src = "", .href = "#", .role = .top, .value = 412, .usual = 0, .n = 2210 },
         };
@@ -545,5 +552,6 @@ pub fn gallery(g: *Gallery) void {
         .{ .stat = .behind, .href = "#", .top = &.{} },
         .{ .stat = .long_games, .href = "#", .top = &tops.gap },
         .{ .stat = .lane_gold, .href = "#", .top = &tops.gold },
+        .{ .stat = null, .href = "#", .top = &tops.pick },
     }));
 }

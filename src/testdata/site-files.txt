@@ -79,7 +79,7 @@ _v/all-patch/pickup/mid.html d9efbc185bbd797c
 _v/all-patch/pickup/support.html 96acf734447712ed
 _v/all-patch/pickup/top.html b4bbac5d23c5b66e
 _v/all-patch/pool.html b02d19785a646e48
-_v/all-patch/rankings.html 7ffcb90d46546c99
+_v/all-patch/rankings.html f2c46fb1562baf1b
 _v/all-patch/rankings/ahead.html b04c1195ed9b6218
 _v/all-patch/rankings/ahead/bot.html a531b5fe9b2d2573
 _v/all-patch/rankings/ahead/jungle.html 6c1d6d4643e5ed03
@@ -187,7 +187,7 @@ _v/all/pickup/mid.html f1a2ac7a1f98348c
 _v/all/pickup/support.html 8183036cce1f2703
 _v/all/pickup/top.html d6a12eb07bcc133e
 _v/all/pool.html c763cac17f93a5ab
-_v/all/rankings.html e06ada7736d9bac2
+_v/all/rankings.html fabb677a44270bec
 _v/all/rankings/ahead.html 31fb6a7e56970cd7
 _v/all/rankings/ahead/bot.html de69d0aefc8440f6
 _v/all/rankings/ahead/jungle.html 2bd315f45a98af56
@@ -293,7 +293,7 @@ _v/patch/pickup/mid.html c83716e00dbf8ca8
 _v/patch/pickup/support.html d565ddcb23931833
 _v/patch/pickup/top.html d65933a1527b2eca
 _v/patch/pool.html 06a614306aa4482b
-_v/patch/rankings.html ebef8946162fbb49
+_v/patch/rankings.html a36545dbe84efe6e
 _v/patch/rankings/ahead.html bdcf72a6a48e8963
 _v/patch/rankings/ahead/bot.html e4a6b160699604ff
 _v/patch/rankings/ahead/jungle.html 68a0df9ae850cd4b
@@ -445,7 +445,7 @@ pickup/support.html df5e1cf18feb58db
 pickup/top.html 88341f2c2b47cbe2
 pool.html cb108f82751b4b7e
 privacy.html 7cfc0941a8e77b73
-rankings.html f2ecc999429de3bb
+rankings.html 353321134f8c57ba
 rankings/ahead.html 1ce704d2fff7d561
 rankings/ahead/bot.html e16657c72a3a2f60
 rankings/ahead/jungle.html f581ff23b91a6eb0
