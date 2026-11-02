@@ -42,7 +42,7 @@ pub fn spec(s: Stat) Spec {
     return switch (s) {
         .ahead => .{ .title = "Wins from ahead", .short = "From ahead", .lead = "Win rate in games where the champion was 1,500+ gold ahead of its lane opponent at 15 minutes.", .about = "Win rate when 1,500+ gold ahead of the lane opponent at 15 minutes: who turns a lead into a win." },
         .behind => .{ .title = "Wins from behind", .short = "From behind", .lead = "Win rate in games where the champion was 1,500+ gold behind its lane opponent at 15 minutes.", .about = "Win rate when 1,500+ gold behind the lane opponent at 15 minutes: who still wins from a bad lane." },
-        .long_games => .{ .title = "Wins in long games", .short = "Long games", .lead = "Win rate in games of 35+ minutes minus in games under 25, in points: who wins more of its long games. Stomps end early, so this is how its games go, not a power curve.", .about = "Win rate in 35+ minute games minus under 25: who wins more of its long games." },
+        .long_games => .{ .title = "Wins in long games", .short = "Long games", .lead = "Win rate in games of 35+ minutes minus in games under 25, in points: who wins more of its long games. Stomps end early: this is how its games go, not a power curve.", .about = "Win rate in 35+ minute games minus under 25: who wins more of its long games." },
         .lane_gold => .{ .title = "Lane gold at 14", .short = "Lane gold", .lead = "Gold ahead of or behind its lane opponent at 14 minutes, averaged over its lanes: who wins its lane.", .about = "Gold lead over the lane opponent at 14 minutes: who wins its lane." },
     };
 }
@@ -122,7 +122,7 @@ const W = struct {
     pub const short = plain("Under 25");
     pub const long = plain("35+ min");
     pub const lean = plain("Lean");
-    pub const lean_note = plain("Early or late from team gold at 14 and wins from an even game at 20, every region: its strength by phase. Gap counts results by game length, which follows how games go too, so the two can differ. Blank: neither is clear.");
+    pub const lean_note = plain("Its strength by phase, from team gold at 14 and wins from an even game at 20, every region. Blank: neither is clear.");
     pub const lead = plain("Gold lead");
     pub const lead_note = plain("Gold ahead of the lane opponent at 14 minutes, averaged over its lanes; sorted pulled toward 0 when lanes are few.");
     pub const lanes = plain("Lanes");
@@ -133,7 +133,7 @@ const W = struct {
     pub const full = plain("Every champion ›");
     pub const pickup = "How hard to pick up";
     pub const pickup_about = "Practised players' win rate on the champion minus new players', every region: which take longest to learn.";
-    pub const index_lead = plain("Every champion ranked by one stat, per role. Each card's top three come from all roles, each champion in its main role, with 100+ games behind the figure.");
+    pub const index_lead = plain("Each card's top three over all roles, each champion in its main role, with 100+ games behind the figure.");
 };
 
 /// A stat's card in the index (/rankings): its top champions over every role, each in
@@ -143,6 +143,11 @@ pub const Card = struct {
     stat: ?Stat,
     href: []const u8,
     top: []const Top,
+
+    /// Pick-up's figure is a gap: practised minus new players' win rate
+    pub fn kind(c: Card) Kind {
+        return if (c.stat) |s| kindOf(s) else .gap;
+    }
 
     pub const Top = struct {
         name: []const u8,
@@ -166,12 +171,8 @@ pub fn index(h: *H, cards: []const Card) N {
         const title, const about = if (c.stat) |s| .{ spec(s).title, spec(s).about } else .{ W.pickup, W.pickup_about };
         var rows = h.list();
         for (c.top, 0..) |t, k| rows.add(h.li(.{ .key = k }, .{
-            h.a(.{ .class = "who", .href = t.href }, .{
-                champ.view(h, .{ .name = t.name, .src = t.src }, .{ .px = .@"32", .named = false, .eager = true }),
-                h.span(.{}, .{t.name}),
-                if (t.role) |x| role.view(h, x, .{}) else null,
-            }),
-            switch (if (c.stat) |s| kindOf(s) else .gap) {
+            whoView(h, .{ .name = t.name, .src = t.src }, t.href, t.role, .{ .px = .@"32", .eager = true }),
+            switch (c.kind()) {
                 .gold => goldView(h, t.value, t.n),
                 else => |kd| stat.view(h, .{ .value = t.value, .kind = if (kd == .gap) .points else .rate, .scale = .aggregate, .ref = t.usual, .games = t.n }),
             },
@@ -216,12 +217,19 @@ fn thin(l: *const Line) bool {
     return l.r.n < thin_games;
 }
 
-fn who(h: *H, l: *const Line) N {
-    return h.a(.{ .class = "who", .href = l.r.href, .aria_current = if (l.here) "true" else null }, .{
-        champ.view(h, .{ .name = l.r.name, .src = l.icon }, .{ .named = false }),
-        h.span(.{}, .{l.r.name}),
-        if (l.all) role.view(h, l.r.role, .{}) else null,
+const WhoOpts = struct { px: champ.Px = .@"24", eager: bool = false, here: bool = false };
+
+/// A champion's link: icon, name, and its role's icon where the list mixes roles
+fn whoView(h: *H, c: champ.Champ, href: []const u8, r: ?Role, o: WhoOpts) N {
+    return h.a(.{ .class = "who", .href = href, .aria_current = if (o.here) "true" else null }, .{
+        champ.view(h, c, .{ .px = o.px, .named = false, .eager = o.eager }),
+        h.span(.{}, .{c.name}),
+        if (r) |x| role.view(h, x, .{}) else null,
     });
+}
+
+fn who(h: *H, l: *const Line) N {
+    return whoView(h, .{ .name = l.r.name, .src = l.icon }, l.r.href, if (l.all) l.r.role else null, .{ .here = l.here });
 }
 
 fn winCell(h: *H, l: *const Line) N {
@@ -400,9 +408,10 @@ pub const css =
     \\  .c-rankhead { display: grid; gap: var(--sp-2); margin-bottom: var(--sp-3); }
     \\  .c-rankhead > .pick { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
     \\  .c-rankhead > p { margin: 0; color: var(--muted); font-size: var(--fs-s); }
-    \\  .c-rank .who { display: inline-flex; align-items: center; gap: var(--sp-2); color: inherit;
-    \\    text-decoration: none; font-weight: var(--w-b); }
-    \\  .c-rank .who:hover > span:not(.c-role) { text-decoration: underline; }
+    \\  .c-rank .who, .c-rankidx .who { display: inline-flex; align-items: center; gap: var(--sp-2);
+    \\    color: inherit; text-decoration: none; font-weight: var(--w-b); }
+    \\  .c-rank .who:hover > span:not(.c-role), .c-rankidx .who:hover > span:not(.c-role) {
+    \\    text-decoration: underline; }
     \\  .c-rank > .none { color: var(--muted); }
     \\  .c-rank tr:has(.who[aria-current]) > td { background: var(--accent-bg); }
     \\  .c-rankidx { display: grid; gap: var(--sp-3); }
@@ -415,9 +424,6 @@ pub const css =
     \\  .c-rankidx p { margin: 0; color: var(--muted); font-size: var(--fs-s); }
     \\  .c-rankidx ul { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-1); }
     \\  .c-rankidx li { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
-    \\  .c-rankidx .who { display: inline-flex; align-items: center; gap: var(--sp-2); color: inherit;
-    \\    text-decoration: none; font-weight: var(--w-b); }
-    \\  .c-rankidx .who:hover > span:not(.c-role) { text-decoration: underline; }
     \\  .c-rankidx .full { margin-top: auto; font-size: var(--fs-s); }
     \\}
     \\
@@ -458,74 +464,38 @@ pub fn demoGold() Data {
     return .{ .stat = .lane_gold, .role = .top, .ddragon = "16.21.1", .rows = &rows.all };
 }
 
-pub fn gallery(g: *Gallery) void {
+/// A gallery state: `d`'s table, its id unique per state and width
+fn addTable(g: *Gallery, label: []const u8, d: Data, id: []const u8, rare: bool, fill: bool) void {
     const h = g.h;
-    const states = [_]struct { []const u8, ?Role, bool }{
-        .{ "All: role icons, a thin row behind the chip", null, false },
-        .{ "a role, the thin row shown and faded", .top, true },
-    };
-    for (states, 0..) |s, k| {
-        const d = h.mem.create(Data) catch {
-            h.oom = true;
-            return;
-        };
-        d.* = demo(.ahead, s[1]);
-        const p = h.mem.create(Ranking) catch {
-            h.oom = true;
-            return;
-        };
-        p.* = Ranking.init(h.mem, d) catch {
-            h.oom = true;
-            return;
-        };
-        p.table.rate.rare = s[2];
-        p.table.rate.id = h.fmt("rk{d}-{d}", .{ k, g.width }); // fmt-ok: gallery only
-        g.addFill(s[0], p.view(h));
-    }
-    const empty = h.mem.create(Data) catch {
+    const dd = h.mem.create(Data) catch {
         h.oom = true;
         return;
     };
-    empty.* = .{ .stat = .behind, .role = .jungle, .ddragon = "", .rows = &.{} };
+    dd.* = d;
     const p = h.mem.create(Ranking) catch {
         h.oom = true;
         return;
     };
-    p.* = Ranking.init(h.mem, empty) catch {
+    p.* = Ranking.init(h.mem, dd) catch {
         h.oom = true;
         return;
     };
-    g.add("no rows", p.view(h));
-    const gd = h.mem.create(Data) catch {
-        h.oom = true;
-        return;
-    };
-    gd.* = demoGap();
-    const gp = h.mem.create(Ranking) catch {
-        h.oom = true;
-        return;
-    };
-    gp.* = Ranking.init(h.mem, gd) catch {
-        h.oom = true;
-        return;
-    };
-    gp.table.gap.id = h.fmt("rkg-{d}", .{g.width}); // fmt-ok: gallery only
-    g.addFill("a gap: long minus short games, the lean beside it", gp.view(h));
-    const od = h.mem.create(Data) catch {
-        h.oom = true;
-        return;
-    };
-    od.* = demoGold();
-    const op = h.mem.create(Ranking) catch {
-        h.oom = true;
-        return;
-    };
-    op.* = Ranking.init(h.mem, od) catch {
-        h.oom = true;
-        return;
-    };
-    op.table.gold.id = h.fmt("rko-{d}", .{g.width}); // fmt-ok: gallery only
-    g.addFill("gold: lane lead at 14", op.view(h));
+    switch (p.table) {
+        inline else => |*t| {
+            t.rare = rare;
+            t.id = h.fmt("{s}-{d}", .{ id, g.width }); // fmt-ok: gallery only
+        },
+    }
+    if (fill) g.addFill(label, p.view(h)) else g.add(label, p.view(h));
+}
+
+pub fn gallery(g: *Gallery) void {
+    const h = g.h;
+    addTable(g, "All: role icons, a thin row behind the chip", demo(.ahead, null), "rk0", false, true);
+    addTable(g, "a role, the thin row shown and faded", demo(.ahead, .top), "rk1", true, true);
+    addTable(g, "no rows", .{ .stat = .behind, .role = .jungle, .ddragon = "", .rows = &.{} }, "rke", false, false);
+    addTable(g, "a gap: long minus short games, the lean beside it", demoGap(), "rkg", false, true);
+    addTable(g, "gold: lane lead at 14", demoGold(), "rko", false, true);
     const stats = [_]segmented.Item{ .{ .label = plain("From ahead"), .selected = true, .href = "#" }, .{ .label = plain("From behind"), .href = "#" } };
     var roles: [1 + Role.all.len]segmented.Item = undefined;
     roles[0] = .{ .label = plain("All"), .href = "#" };
