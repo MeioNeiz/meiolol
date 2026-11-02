@@ -152,9 +152,6 @@ pub const off_role = 0.1;
 const movers_each = 5;
 /// Each role's column on the All board
 const board_rows = 10;
-/// The board's sort choices: Table's columns
-const board_sorts = [_]u8{ 1, 2, 4, 5, 6 };
-const board_labels = [_]tree.Text{ W.win, W.influence, W.pick, W.ban, W.games };
 
 const W = struct {
     pub const title = plain("Champions");
@@ -198,6 +195,8 @@ const W = struct {
     pub const no_spread = plain("Too few players with 10+ games on it.");
     pub const plat_only = plain("Plat+ only: too few players with 10+ games on it at higher ranks.");
     pub const no_patch = plain("No games last patch.");
+    pub const none_min = Phrase("None with {n:count}+ games yet.");
+    pub const no_match = plain("No champion by that name.");
 };
 
 /// One row: the data's row with what its cells need, made once (prepare)
@@ -349,18 +348,30 @@ pub fn defaultMin(games: u32) u8 {
     return k;
 }
 
+const columns = [_]table.Column(Line){
+    .{ .label = W.champion, .cell = who, .name = nameOf, .num = false, .key = "ch" },
+    .{ .label = W.win, .cell = winCell, .sort = rateOf, .answer = true, .tip = W.win_note, .row_tip = patchTip, .key = "wr" },
+    .{ .label = W.influence, .cell = influenceCell, .sort = influenceOf, .tip = W.influence_note, .key = "in" },
+    .{ .label = W.players, .cell = playersCell, .sort = middleOf, .num = false, .tip = W.players_note, .row_tip = playersTip, .wordless = true, .pick = true, .key = "pl" },
+    .{ .label = W.pick, .cell = pickCell, .sort = pickOf, .pick = true, .key = "pk" },
+    .{ .label = W.ban, .cell = banCell, .sort = banOf, .pick = true, .key = "bn" },
+    .{ .label = W.games, .cell = gamesCell, .sort = gamesF, .pick = true, .key = "gm" },
+};
+
+/// A column's index by its key
+fn col(comptime key: []const u8) u8 {
+    return comptime for (columns, 0..) |c, i| {
+        if (std.mem.eql(u8, c.key, key)) break i;
+    } else @compileError("no column " ++ key);
+}
+
+/// The board's sort choices
+const board_sorts = [_]u8{ col("wr"), col("in"), col("pk"), col("bn"), col("gm") };
+
 pub const Table = table.DataTable(Line, .{
     .title = W.title,
-    .columns = &.{
-        .{ .label = W.champion, .cell = who, .name = nameOf, .num = false, .key = "ch" },
-        .{ .label = W.win, .cell = winCell, .sort = rateOf, .answer = true, .tip = W.win_note, .row_tip = patchTip, .key = "wr" },
-        .{ .label = W.influence, .cell = influenceCell, .sort = influenceOf, .tip = W.influence_note, .key = "in" },
-        .{ .label = W.players, .cell = playersCell, .sort = middleOf, .num = false, .tip = W.players_note, .row_tip = playersTip, .wordless = true, .pick = true, .key = "pl" },
-        .{ .label = W.pick, .cell = pickCell, .sort = pickOf, .pick = true, .key = "pk" },
-        .{ .label = W.ban, .cell = banCell, .sort = banOf, .pick = true, .key = "bn" },
-        .{ .label = W.games, .cell = gamesCell, .sort = gamesF, .pick = true, .key = "gm" },
-    },
-    .default_sort = 1,
+    .columns = &columns,
+    .default_sort = col("wr"),
     .search = nameOf,
     .games = gamesOf,
     .min_games = &min_games,
@@ -475,7 +486,7 @@ pub const Tiers = struct {
     pub const Url = struct {
         /// Null: the page's own
         role: ?Shown = null,
-        sort: u8 = 1,
+        sort: u8 = col("wr"),
         desc: bool = true,
         q: url.Str(24) = .{},
         /// Null: the data's own
@@ -642,7 +653,11 @@ pub const Tiers = struct {
             card.view(h, .{ .flush = true }, &.{
                 t.movers(h),
                 t.key(h),
-                if (t.onBoard()) t.board(h) else if (t.role == null and t.table.q.slice().len == 0) h.div(.{}, .{ h.div(.{ .class = "bs" }, .{t.layout(h)}), t.table.view(h) }) else t.table.view(h),
+                if (t.onBoard()) t.board(h) else h.div(.{}, .{
+                    if (t.role == null and t.table.q.slice().len == 0) h.div(.{ .class = "bs" }, .{t.layout(h)}) else null,
+                    t.table.view(h),
+                    ifEmpty(h, t.table),
+                }),
             }),
             violin.defs(h),
         });
@@ -668,7 +683,7 @@ pub const Tiers = struct {
 
     fn board(t: *T, h: *H) N {
         var sorts: [board_sorts.len]segmented.Item = undefined;
-        for (&sorts, board_sorts, board_labels) |*it, i, label| it.* = .{ .label = label, .selected = t.table.sort == i, .on = h.on(t, .{ .sort = i }) };
+        for (&sorts, board_sorts) |*it, i| it.* = .{ .label = columns[i].label, .selected = t.table.sort == i, .on = h.on(t, .{ .sort = i }) };
         var cols = h.list();
         for (0..Role.names.len) |k| {
             var tb = t.table;
@@ -695,6 +710,7 @@ pub const Tiers = struct {
                 h.button(.{ .type = "button", .class = "rh", .on_click = h.on(t, .{ .role = to }) }, .{ role.view(h, r.ui(), .{ .s = .s }), h.b(.{}, .{r.name()}) }),
                 h.div(.{ .class = "fh" }, .{ h.span(.{}, .{W.win}), h.span(.{}, .{t.secondLabel()}) }),
                 h.el(.ol, .{}, .{rows.done()}),
+                if (order.len == 0) ifEmpty(h, tb) else null,
                 if (order.len > board_rows) h.button(.{ .type = "button", .class = "all", .on_click = h.on(t, .{ .role = to }) }, .{W.all_n.with(h, .{ .n = order.len })}) else null,
             }));
         }
@@ -704,21 +720,32 @@ pub const Tiers = struct {
         });
     }
 
+    /// Why `tb` shows no rows: the search, or the Games floor (a patch view on patch day)
+    fn ifEmpty(h: *H, tb: Table) N {
+        if (tb.q.slice().len > 0) {
+            const order = tb.order(h.mem) catch {
+                h.oom = true;
+                return .none;
+            };
+            return if (order.len == 0) h.p(.{ .class = "none" }, .{W.no_match}) else .none;
+        }
+        for (tb.rows) |*l| if (gamesOf(l) >= min_games[tb.min]) return .none;
+        return h.p(.{ .class = "none" }, .{W.none_min.with(h, .{ .n = min_games[tb.min] })});
+    }
+
     /// The board row's second figure: the sorted column's, influence under Win rate
     fn second(t: *const T, h: *H, l: *const Line) N {
         return switch (t.table.sort) {
-            4 => h.text(stat.figure(h, .rate, pickOf(l)).s),
-            5 => h.text(stat.figure(h, .rate, banOf(l)).s),
-            6 => gamesCell(h, l),
+            col("pk") => h.text(stat.figure(h, .rate, pickOf(l)).s),
+            col("bn") => h.text(stat.figure(h, .rate, banOf(l)).s),
+            col("gm") => gamesCell(h, l),
             else => influenceCell(h, l),
         };
     }
 
     fn secondLabel(t: *const T) tree.Text {
         return switch (t.table.sort) {
-            4 => W.pick,
-            5 => W.ban,
-            6 => W.games,
+            col("pk"), col("bn"), col("gm") => columns[t.table.sort].label,
             else => W.influence,
         };
     }
@@ -847,6 +874,7 @@ pub const css =
     \\  .c-tiers .rb .nm { font-weight: var(--w-m); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-tiers .rb .c-stat { font-weight: var(--w-b); justify-self: end; }
     \\  .c-tiers .rb .sc { text-align: right; font-size: var(--fs-s); color: var(--muted); font-variant-numeric: tabular-nums; }
+    \\  .c-tiers .none { margin: 0; padding: var(--sp-3) var(--sp-4); color: var(--muted); font-size: var(--fs-s); }
     \\  .c-tiers .rb .all { all: unset; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-s); color: var(--accent); cursor: pointer; }
     \\  .c-tiers .rb .all:hover { text-decoration: underline; }
     \\  .c-tiers .rb .all:focus-visible { outline: 2px solid var(--focus); }
