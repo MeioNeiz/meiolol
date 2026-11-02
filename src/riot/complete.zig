@@ -45,8 +45,12 @@ const max_jobs = 4;
 const queue_warn = 20_000;
 /// Queue length past which pushes are dropped (off for long): ~1 GB of gzip bodies
 const queue_drop = 200_000;
-/// Pause after an error before starting again from the spool
+/// Pause after an error before starting again from the spool, doubled for each other
+/// restart in the last backoff_window_s (a lasting error replays the whole spool each
+/// time), at most max_restart_s
 const restart_s = 60;
+const max_restart_s = 60 * 60;
+const backoff_window_s = 6 * 60 * 60;
 /// Unclean runs in a row (complete/starts) before a start sets the spool aside; a run
 /// counts as clean once it closes or has run healthy_s
 const poison_starts = 3;
@@ -73,10 +77,19 @@ pub const Stats = struct {
 
     /// Restarts after an error in the last hour (at most restarts_kept)
     pub fn restartsLastHour(s: *const Stats, io: Io) usize {
-        const now = Io.Clock.awake.now(io).toSeconds();
+        return s.restartsWithin(Io.Clock.awake.now(io).toSeconds(), std.time.s_per_hour);
+    }
+
+    fn restartsWithin(s: *const Stats, now: i64, window_s: i64) usize {
         var n: usize = 0;
-        for (&s.restarts) |*r| n += @intFromBool(now - r.load(.monotonic) < std.time.s_per_hour);
+        for (&s.restarts) |*r| n += @intFromBool(now - r.load(.monotonic) < window_s);
         return n;
+    }
+
+    fn noteRestart(s: *Stats, now: i64) void {
+        const r = &s.restarts;
+        for (r[0 .. r.len - 1], r[1..]) |*a, *b| a.store(b.load(.monotonic), .monotonic);
+        r[r.len - 1].store(now, .monotonic);
     }
 };
 
@@ -108,7 +121,7 @@ pub const Packer = struct {
     /// Set with closing: packing stops at the next document (it is spooled already) and
     /// a wait for the sealer gives up, so a stop takes at most the zstd run in hand
     stopping: std.atomic.Value(bool) = .init(false),
-    /// Between an error and the restart from the spool (restart_s): pushes queue
+    /// Between an error and the restart from the spool (backoff): pushes queue
     off: std.atomic.Value(bool) = .init(false),
     /// Adding a batch taken from the queue
     busy: bool = false,
@@ -222,23 +235,23 @@ pub const Packer = struct {
         p.cond.broadcast(p.io);
     }
 
-    /// On an error (here or in the sealer) the form is off for restart_s, then starts
-    /// again from the spool; the crawl goes on meanwhile and pushes queue
+    /// On an error (here or in the sealer) the form is off for a while (backoff), then
+    /// starts again from the spool; the crawl goes on meanwhile and pushes queue
     fn run(p: *Packer) void {
         while (true) {
             p.loop() catch |err| {
+                const now = Io.Clock.awake.now(p.io).toSeconds();
+                p.stats.noteRestart(now);
+                const wait_s = backoff(p.restart_s, p.stats.restartsWithin(now, backoff_window_s));
                 // A warning: the report line says "complete off" and health.sh alerts
-                log.warn("complete: packer stopped: {t}; off, starting again from the spool in {d} s", .{ err, p.restart_s });
+                log.warn("complete: packer stopped: {t}; off, starting again from the spool in {d} s", .{ err, wait_s });
                 p.off.store(true, .release);
-                const r = &p.stats.restarts;
-                for (r[0 .. r.len - 1], r[1..]) |*a, *b| a.store(b.load(.monotonic), .monotonic);
-                r[r.len - 1].store(Io.Clock.awake.now(p.io).toSeconds(), .monotonic);
                 p.restart() catch |e| {
                     log.err("complete: no restart: {t}; off until the crawler restarts", .{e});
                     p.spoolRest();
                     return;
                 };
-                if (!p.pause()) {
+                if (!p.pause(wait_s)) {
                     p.spoolRest();
                     return;
                 }
@@ -266,9 +279,9 @@ pub const Packer = struct {
         p.sealer_thread = try std.Thread.spawn(.{}, Sealer.run, .{&p.sealer});
     }
 
-    /// restart_s, or until closing; false when closing
-    fn pause(p: *Packer) bool {
-        const until = Io.Clock.awake.now(p.io).toSeconds() + p.restart_s;
+    /// wait_s, or until closing; false when closing
+    fn pause(p: *Packer, wait_s: i64) bool {
+        const until = Io.Clock.awake.now(p.io).toSeconds() + wait_s;
         p.mutex.lockUncancelable(p.io);
         defer p.mutex.unlock(p.io);
         while (!p.closing and Io.Clock.awake.now(p.io).toSeconds() < until) {
@@ -632,6 +645,12 @@ pub const Packer = struct {
     }
 };
 
+/// The pause before a restart: base doubled for each restart in the window but this one
+fn backoff(base: i64, recent: usize) i64 {
+    const doublings: u6 = @intCast(@min(recent -| 1, 12));
+    return @min(base << doublings, max_restart_s);
+}
+
 fn realDay(io: Io) i64 {
     return @divFloor(Io.Clock.real.now(io).toSeconds(), std.time.s_per_day);
 }
@@ -915,7 +934,7 @@ const Sealer = struct {
 
     fn recover(s: *Sealer, f: Io.File, name: []const u8) !u64 {
         return dayfile.recover(s.p.gpa, s.p.io, f) catch |err| {
-            if (err == error.DamagedFrame) log.err("complete: {s} has a damaged frame with whole frames after it: left as it is, the form is off until it is mended", .{name});
+            if (err == error.DamagedFrame) log.err("complete: {s} has a damaged frame with whole frames after it: left as it is; the form restarts, pausing longer each time, until it is mended", .{name});
             return err;
         };
     }
@@ -1228,6 +1247,20 @@ test "after a sealer error the form is off, then starts again from the spool" {
     var seen: std.StringHashMapUnmanaged(void) = .empty;
     for (got) |d| try seen.put(arena, d.key, {});
     for (0..6) |i| try std.testing.expect(seen.contains(try arena.print("K{d}", .{i})));
+}
+
+test "a lasting error pauses longer before each restart, up to an hour" {
+    var s: Stats = .{};
+    const now = 100_000;
+    s.noteRestart(now - backoff_window_s - 1);
+    s.noteRestart(now);
+    try std.testing.expectEqual(restart_s, backoff(restart_s, s.restartsWithin(now, backoff_window_s)));
+    s.noteRestart(now + 70);
+    s.noteRestart(now + 200);
+    try std.testing.expectEqual(4 * restart_s, backoff(restart_s, s.restartsWithin(now + 200, backoff_window_s)));
+    for (0..8) |i| s.noteRestart(now + 300 + @as(i64, @intCast(i)));
+    try std.testing.expectEqual(max_restart_s, backoff(restart_s, s.restartsWithin(now + 400, backoff_window_s)));
+    try std.testing.expectEqual(0, backoff(0, 8));
 }
 
 test "a clock stepped back never reopens a sealed day" {
