@@ -2,7 +2,8 @@
 //! holding filled segments; the chosen one is a solid tinted fill. s fits a row or a
 //! chart head, fill splits a phone pane's width. Buttons with aria-pressed in a group:
 //! choosing one changes what shows here, it doesn't switch tab panels (Tabs does). With
-//! `href` a segment is a link to another page (a view's), the chosen one aria-current
+//! `href` a segment is a link to another page (a view's), the chosen one aria-current;
+//! with `on` too, an island takes the link's click (the page without it still follows)
 const tree = @import("tree.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const phrase = @import("phrase.zig");
@@ -47,6 +48,7 @@ pub fn view(h: *H, o: Opts, items: []const Item) N {
             .aria_current = if (it.selected) "page" else null,
             .aria_disabled = if (it.disabled) true else null,
             .title = it.title,
+            .on_click = if (it.disabled or it.selected) null else it.on,
         }, kids) else h.button(.{
             .key = i,
             .type = "button",

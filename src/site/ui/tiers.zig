@@ -577,9 +577,11 @@ pub const Tiers = struct {
                 t.setRole(roleOf(s));
                 ev.push = true;
             },
+            // A link: the island has it, not the browser
             .view => |v| {
                 t.want_view = if (v == t.view_index) null else v;
                 ev.push = true;
+                ev.handled = true;
             },
             .rank => |r| {
                 t.want = r;
@@ -723,6 +725,20 @@ pub const Tiers = struct {
         };
     }
 
+    /// View `v`'s own page, keeping the fragment: the toolbar's links work without the
+    /// island, which takes the click and switches in place
+    fn viewHref(t: *const T, h: *H, v: usize) []const u8 {
+        var u = t.toUrl();
+        u.region = .euw;
+        u.period = .days30;
+        var w: std.Io.Writer.Allocating = .init(h.mem);
+        url.write(Url, u, &w.writer) catch {
+            h.oom = true;
+        };
+        const frag = w.written();
+        return h.fmt("{s}{s}{s}{s}", .{ t.path, view_queries[v], if (frag.len > 0) "#" else "", frag });
+    }
+
     fn toolbar(t: *T, h: *H) N {
         const region = t.wantView() / 2;
         const period = t.wantView() % 2;
@@ -736,12 +752,12 @@ pub const Tiers = struct {
                 .on_toggle = h.on(t, .filters),
             }, &.{
                 segmented.view(h, .{ .label = W.region }, &.{
-                    .{ .label = W.regions[0], .selected = region == 0, .on = h.on(t, .{ .view = period }) },
-                    .{ .label = W.regions[1], .selected = region == 1, .on = h.on(t, .{ .view = 2 + period }) },
+                    .{ .label = W.regions[0], .selected = region == 0, .href = t.viewHref(h, period), .on = h.on(t, .{ .view = period }) },
+                    .{ .label = W.regions[1], .selected = region == 1, .href = t.viewHref(h, 2 + period), .on = h.on(t, .{ .view = 2 + period }) },
                 }),
                 segmented.view(h, .{ .label = W.period }, &.{
-                    .{ .label = W.days, .selected = period == 0, .on = h.on(t, .{ .view = 2 * region }) },
-                    .{ .label = patch, .selected = period == 1, .on = h.on(t, .{ .view = 2 * region + 1 }) },
+                    .{ .label = W.days, .selected = period == 0, .href = t.viewHref(h, 2 * region), .on = h.on(t, .{ .view = 2 * region }) },
+                    .{ .label = patch, .selected = period == 1, .href = t.viewHref(h, 2 * region + 1), .on = h.on(t, .{ .view = 2 * region + 1 }) },
                 }),
                 segmented.view(h, .{ .label = W.rank_pick }, &ranks),
             }),
