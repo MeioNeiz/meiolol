@@ -102,6 +102,7 @@ pub fn writeIndex(site: *const Site, w: *Writer) !bool {
             try top.append(a, .{ .name = row.name, .src = try a.print(ui.champ.icon_fmt, .{ site.ddragon_version, row.key }), .href = row.href, .role = row.role, .value = row.value, .usual = row.usual, .n = row.n });
             if (top.items.len == rk.card_top) break;
         }
+        shownOrder(top.items);
         try cards.append(a, .{ .stat = s, .href = try site.href(.{ .ranking = .{ .stat = s } }), .top = top.items });
     }
     try cards.append(a, try pickupCard(site));
@@ -126,7 +127,18 @@ fn pickupCard(site: *const Site) !rk.Card {
         try top.append(a, .{ .name = ch.name, .src = try site.icon(ch), .href = try site.champHref(ch), .role = null, .value = @floatCast(g.pp), .usual = @floatCast(l.mean_pp), .n = @min(g.new.games, g.practised.games) });
         if (top.items.len == rk.card_top) break;
     }
+    shownOrder(top.items);
     return .{ .stat = null, .href = try site.href(.{ .pickup = null }), .top = top.items };
+}
+
+/// A card's three, picked by the pulled sort, listed by the figure they show: a pulled
+/// order reads as a bug in three lines (+14.4 above +16.8)
+fn shownOrder(top: []rk.Card.Top) void {
+    std.mem.sort(rk.Card.Top, top, {}, struct {
+        fn f(_: void, x: rk.Card.Top, y: rk.Card.Top) bool {
+            return x.value > y.value;
+        }
+    }.f);
 }
 
 const n_stats = std.enums.values(rk.Stat).len;
