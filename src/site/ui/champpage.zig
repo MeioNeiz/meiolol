@@ -313,6 +313,8 @@ pub const W = struct {
     pub const roles = Phrase("{c:text}'s roles");
     pub const sub = Phrase("{r:text} · {p:text}");
     pub const vs = plain("vs opponent");
+    /// The build panel has no opponent pick: the head's search is it (walk-rivals 6)
+    pub const vs_hint = plain("Against one champion? Pick them in “vs opponent” at the top for their build.");
     pub const won = plain("Win rate");
     pub const rank = Phrase("{n:int}{th:text} of {of:int}");
     pub const pick = plain("Pick");
@@ -1014,6 +1016,7 @@ pub const Build = struct {
             p.head(h),
             note,
             b.view(h),
+            if (p.data.against == null) h.p(.{ .class = "vs-hint" }, .{W.vs_hint}) else .none,
         }) else .none});
     }
 
@@ -1627,6 +1630,7 @@ pub const css =
     \\  .c-cpage > [data-thin] :is(.c-build > .in, .plot, .c-mpick, #trends .c-trend) { opacity: 0.6; }
     \\  .c-cpage .rare { margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .c-champhead > .none { margin: 0 0 0 auto; }
+    \\  .c-cpage .vs-hint { margin: 0; padding: var(--sp-3) var(--card-px); border-top: 1px solid var(--line); font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .from { margin: 0; padding: var(--sp-3) var(--card-px) 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .none { margin: var(--sp-3) 0; color: var(--muted); }
     \\  .c-cpage .note { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }

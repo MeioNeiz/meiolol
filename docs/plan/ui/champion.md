@@ -46,6 +46,9 @@ and TOO MANY WORDS"; "how hard champ is to pickup, why does it take up so much s
   role for {champion}: {n} games." Build pages keep the 10% cut
 - The build page folds into this page (builds.md): every build slot opens in place to
   its full option table. Nothing to go back from
+- Build against one champion: the head's "vs opponent" search opens the matchup page,
+  which leads with the pair's build; the build card's foot says so. In place (a "vs"
+  pick in the panel re-scoping it) waits on ui-champbuild's budget (walk-rivals 6)
 - Most played and highest win rate at once (Jacob 26 Oct): every slot lists its top 3
   by games, each row with pick share, win rate and games. The slot's highest win rate on
   400+ games is marked "best", a 4th row when not in the top 3. A panel-wide Most picked
