@@ -25,6 +25,8 @@ pub const Opts = struct {
     ref: ?[]const u8 = null,
     /// Sends its form
     submit: bool = false,
+    /// Shows or hides more (aria-expanded)
+    expanded: ?bool = null,
 };
 
 pub fn view(h: *H, o: Opts, kids: anytype) N {
@@ -38,6 +40,7 @@ pub fn view(h: *H, o: Opts, kids: anytype) N {
         .data_s = s,
         .disabled = o.disabled,
         .aria_label = o.label,
+        .aria_expanded = o.expanded,
         .data_ref = o.ref,
         .on_click = if (o.disabled) null else o.on,
     }, kids);
