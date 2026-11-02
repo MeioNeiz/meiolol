@@ -52,6 +52,9 @@ const W = struct {
     pub const number = phrase.Phrase("#{n:int}");
     pub const guess = plain("Guess");
     pub const play = plain("Today's Daily Draft");
+    pub const app = plain("Desktop app");
+    pub const app_what = plain("for champ select, in testing");
+    pub const apply = plain("Apply to test");
     pub const yours = plain("Your last game");
     pub const record = phrase.Phrase("{w:int}W {l:int}L");
     pub const form = plain("Newest results, newest first");
@@ -429,15 +432,22 @@ pub fn dailyMarks(json: []const u8, n: u32) ?today.Marks {
     return .{ .pick = m[0], .side = m[1] };
 }
 
-/// The page's grid: the title, lookup and Today cards on the left, the game on the right,
-/// the champions under them
-pub fn page(h: *H, lookup: N, review: N, cards: []const N, champs: N) N {
+/// The desktop app's one line (persona walk: found only in the footer). No date: the
+/// download page's testers' application is the way in
+pub fn app(h: *H, href: []const u8) N {
+    return today.view(h, .{ .title = W.app, .count = W.app_what, .action = W.apply, .href = href }, null, .none);
+}
+
+/// The page's grid: the title, lookup, Today cards and `app` on the left, the game on the
+/// right, the champions under them
+pub fn page(h: *H, lookup: N, review: N, cards: []const N, app_line: N, champs: N) N {
     return h.div(.{ .class = "c-home" }, .{
         h.div(.{ .class = "hero" }, .{
             h.el(.h1, .{}, .{W.title}),
             h.div(.{ .class = "side" }, .{
                 h.div(.{ .class = "look" }, .{lookup}),
                 h.div(.{ .class = "td" }, .{cards}),
+                app_line,
             }),
             h.div(.{ .class = "rv" }, .{review}),
         }),
@@ -556,7 +566,7 @@ pub fn gallery(g: *Gallery) void {
     const dd = h.mem.create(Daily) catch return;
     dd.* = .{ .n = 14, .href = "#", .teams = teams };
     var daily: HomeDaily = .{ .data = dd };
-    g.addFill("first visit", page(h, look.view(h), x[0].view(h), &.{daily.view(h)}, x[1].view(h)));
+    g.addFill("first visit", page(h, look.view(h), x[0].view(h), &.{daily.view(h)}, app(h, "/download#apply"), x[1].view(h)));
     daily.marks = .{ .pick = true, .side = true };
     g.addFill("Daily Draft played", daily.view(h));
     x[0].you = .{ .id = "Agurin#EUW", .open = "#", .wins = 12, .losses = 8, .form = &.{ true, true, false, true, false } };

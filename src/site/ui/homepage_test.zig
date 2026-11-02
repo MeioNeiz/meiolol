@@ -91,10 +91,11 @@ test "the server's home passes the page checks" {
     var look: idlookup.IdLookup = .{ .to = "/your" };
     const d: hp.Daily = .{ .n = 14, .href = "/daily" };
     var daily: hp.HomeDaily = .{ .data = &d };
-    t.root = hp.page(&h, look.view(&h), x[0].view(&h), &.{daily.view(&h)}, x[1].view(&h));
+    t.root = hp.page(&h, look.view(&h), x[0].view(&h), &.{daily.view(&h)}, hp.app(&h, "/download#apply"), x[1].view(&h));
     try testing.expect(!h.oom);
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, t.root, &w.writer);
+    try testing.expect(std.mem.find(u8, w.written(), "href=\"/download#apply\"") != null);
     // Before the island: Review submits the form
     try testing.expect(std.mem.find(u8, w.written(), "<form class=\"box\" method=\"get\" role=\"search\" action=\"/your\">") != null);
     try testing.expect(std.mem.find(u8, w.written(), "<button class=\"c-btn\" type=\"submit\" data-v=\"primary\" data-ref=\"go\">Review</button>") != null);

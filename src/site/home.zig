@@ -53,7 +53,8 @@ pub fn writeIndex(site: *const Site, w: *Writer) !void {
     if (try dailyOf(site, up)) |d| try cards.append(a, d.view(&h));
     if (try patchCard(site, &h, up)) |n| try cards.append(a, n);
     const champs: ui.N = if (try champsOf(site, up)) |c| c.view(&h) else .none;
-    t.root = hp.page(&h, look.view(&h), review, cards.items, champs);
+    const app = hp.app(&h, try std.mem.concat(a, u8, &.{ up, "download#apply" }));
+    t.root = hp.page(&h, look.view(&h), review, cards.items, app, champs);
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
     try html.tpl.render(w,

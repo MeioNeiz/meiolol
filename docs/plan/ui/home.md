@@ -40,6 +40,8 @@ Desktop 1280, a 12-column grid under the site header:
       in one order, biggest rise to biggest fall, a rule where rises turn to falls and
       the bars on one axis down the list (note 43: up then down by size read as random)
     - Learn: today's lesson title and a progress ring of the five
+  - Desktop app: a head-only card, "for champ select, in testing", Apply to test to
+    /download#apply (the testers' application); no date. Footer-only, nobody found it
 - Right (8/12): the review (`game-header`, `timeline-graph` in its compact form,
   game-detail.md: the fight strip above with every objective and a mark per big fight,
   death portraits on the plot's edges (ticks on a phone); the `stat-cell` row; no range
