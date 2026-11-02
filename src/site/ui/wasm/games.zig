@@ -8,7 +8,10 @@ const dom = @import("dom.zig");
 const gamesrc = @import("gamesrc.zig");
 const gp = ui.gamepage;
 
-pub const panic = zjb.panic;
+/// zjb.panic's throw without its console line: the thrown message says it (40 B of budget)
+pub fn panic(msg: []const u8, _: ?*std.lang.StackTrace, _: ?usize) noreturn {
+    zjb.throwAndRelease(zjb.string(msg));
+}
 
 const gpa = std.heap.wasm_allocator;
 const sel = "[data-island=games]";
