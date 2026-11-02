@@ -9,10 +9,10 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 263 | 1248 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 265 | 1269 |
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 172 | 620 |
-| [data](areas/data.md) | what the Riot API serves and how to crawl it | 4 | 179 | 457 |
-| [stats](areas/stats.md) | estimation and recommendation methods | 26 | 340 | 2443 |
+| [data](areas/data.md) | what the Riot API serves and how to crawl it | 4 | 180 | 459 |
+| [stats](areas/stats.md) | estimation and recommendation methods | 27 | 342 | 2454 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 15 | 444 | 2288 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 9 | 179 | 704 |
 | [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 174 | 1966 |
@@ -67,6 +67,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | answered | now | [How do we train neural draft models across patches (which old games to trust, which parts to refit) and evaluate them on the newest patch only?](questions/patch-shift-nets.md): How do we train neural draft models across patches (which old games to trust, which parts to refit) and evaluate them on the newest patch only? | 9 strong, 7 moderate | 15 | 13 (growing) | 7 |
 | answered | now | [How do we train on older patches to predict the newest one, and how should scarce newest-patch games be split between training and evaluation?](questions/patch-transfer.md): How do we train on older patches to predict the newest one, and how should scarce newest-patch games be split between training and evaluation? | 4 strong, 4 moderate | 5 | 7 (growing) | 1 |
 | answered | now | [How do the best systems model a player's pre-game skill?](questions/pregame-player-skill.md): How do the best systems model a player's pre-game skill? | 5 strong, 5 moderate | 10 | 12 (growing) | 4 |
+| answered | soon | [How safe is each champion to blind pick, how should that be measured (matchup spread, chance of a counter, cost of being countered), and does a safety measure pick better than ranking against the average opponent?](questions/blind-pick-safety.md): How safe is each champion to blind pick, how should that be measured (matchup spread, chance of a counter, cost of being countered), and does a safety measure pick better than ranking against the average opponent? | 7 strong, 6 moderate, 1 contested | 3 | 0 | 1 |
 | answered | soon | [Which team-composition features built from champion attributes (damage type mix and balance, frontline/tankiness, crowd control, range/poke vs engage, healing vs anti-heal, scaling) have measured, non-additive effects on win in LoL or Dota 2 data, how big, and how were they built?](questions/comp-attribute-features.md): Which team-composition features built from champion attributes (damage type mix and balance, frontline/tankiness, crowd control, range/poke vs engage, healing vs anti-heal, scaling) have measured, non-additive effects on win in LoL or Dota 2 data, how big, and how were they built? | 2 strong, 3 moderate, 6 weak | 12 | 25 (slowing) | 4 |
 | answered | soon | [How do pick selection and counter-pick response bias champion and matchup win rates in MOBA data, and which causal methods (double ML, pick-order or blind-pick natural experiments, propensity) estimate effects under it?](questions/frontier-causal.md): How do pick selection and counter-pick response bias champion and matchup win rates in MOBA data, and which causal methods (double ML, pick-order or blind-pick natural experiments, propensity) estimate effects under it? | 9 strong, 2 moderate, 2 weak | 15 | 16 (growing) | 3 |
 | answered | soon | [How can we estimate the best achievable accuracy for predicting a ranked game's winner from the draft (and from pre-game info), and how does matchmaking shape that ceiling?](questions/frontier-ceiling.md): How can we estimate the best achievable accuracy for predicting a ranked game's winner from the draft (and from pre-game info), and how does matchmaking shape that ceiling? | 8 strong, 3 moderate, 1 weak | 16 | 14 (growing) | 1 |
@@ -132,6 +133,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 76 questions, 1209 sources, 9125 findings
-- Open leads: 304 (`josearch leads`)
+- 77 questions, 1211 sources, 9154 findings
+- Open leads: 305 (`josearch leads`)
 - Lint: 0 errors, 5 warnings (`josearch lint`)
