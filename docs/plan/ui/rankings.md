@@ -83,7 +83,7 @@ row in the stats pass, then a spec.
    gold); the Lane card's place link
 6. Done: pick-up gap as the index's fifth card, its top three from /pickup (pickup.order:
    per champion, every region, no role icon), linking there; no spec of its own
-7. The rest of the table above
+7. The rest of the table above: not yet approved (Jacob decides)
 
 ## Later (after the production key)
 
