@@ -13,8 +13,8 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 172 | 620 |
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 4 | 179 | 457 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 26 | 340 | 2443 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 14 | 431 | 2200 |
-| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 8 | 179 | 704 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 15 | 444 | 2288 |
+| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 9 | 179 | 704 |
 | [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 174 | 1966 |
 
 ## Questions
@@ -91,7 +91,8 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | answered | now | [Which toolkit should the meiolol desktop app be built on, long term?](questions/desktop-toolkit.md): Which toolkit should the meiolol desktop app be built on, long term? | 9 strong, 1 moderate | 13 | 10 (saturated) | 2 |
 | answered | now | [Per UI element kind, how do other LoL (and Dota, Valorant) sites build it, what works and what doesn't, and which site should meio.lol model each on?](questions/lol-site-ui.md): Per UI element kind, how do other LoL (and Dota, Valorant) sites build it, what works and what doesn't, and which site should meio.lol model each on? | 15 strong, 7 moderate, 2 contested | 70 | 12 (growing) | 1 |
 | answered | now | [What should meiolol's site show first and how should it present numbers so players and Riot reviewers trust and use it?](questions/site-design.md): What the site leads with and how it shows numbers, spread and thin data, for players and for Riot's production key reviewers | 11 strong, 7 moderate | 22 | 0 |  |
-| answered | now | [How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically?](questions/ui-guardrails.md): How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically? | 10 strong, 1 moderate, 1 contested | 37 | 26 (growing) | 10 |
+| answered | now | [How do stats sites present duos, a figure's rank among all, a summary in words from numbers, and dense tables on phones, and which components carry them?](questions/stat-presentation-patterns.md): How do stats sites present duos, a figure's rank among all, a summary in words from numbers, and dense tables on phones, and which components carry them? | 11 strong, 7 moderate | 19 | 12 (growing) | 4 |
+| answered | now | [How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically?](questions/ui-guardrails.md): How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically? | 10 strong, 1 moderate, 1 contested | 37 | 26 (growing) | 9 |
 | answered | now | [What tooling lets meiolol's agents write and check better UI without a Node build step: layout and visual checks, component gallery, design token lints, accessibility?](questions/ui-tooling.md): What tooling lets meiolol's agents write and check better UI without a Node build step: layout and visual checks, component gallery, design token lints, accessibility? | 7 strong, 3 moderate | 21 | 18 (saturated) | 4 |
 | answered | now | [Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break?](questions/zig-only-frontend.md): Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break? | 15 strong, 5 moderate | 36 | 38 (growing) | 16 |
 | answered | soon | [How do CI/CD and hosting products show a single run's steps and its progress while it runs and after?](questions/deploy-progress-ui.md): How do CI/CD and hosting products show a single run's steps and its progress while it runs and after? | 12 strong, 3 moderate | 21 | 13 (growing) | 2 |
@@ -105,6 +106,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
+| active | now | [How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost?](questions/box-disk-headroom.md): How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost? | 4 strong | 4 | 1 (thin) | 1 |
 | answered | now | [What free or very cheap hosting and storage fits meiolol's site, API and data?](questions/free-hosting-storage.md): What free or very cheap hosting and storage fits meiolol's site, API and data? | 13 strong, 4 moderate, 2 unsupported | 34 | 7 (growing) | 4 |
 | answered | now | [Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines?](questions/hybrid-rendering-seo.md): Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines? | 12 strong, 9 moderate | 16 | 9 (growing) | 2 |
 | answered | now | [Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box?](questions/oci-payg-upgrade.md): Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box? | 8 strong, 2 moderate, 1 contested | 7 | 2 (thin) |  |
@@ -130,6 +132,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 74 questions, 1196 sources, 9037 findings
-- Open leads: 300 (`josearch leads`)
+- 76 questions, 1209 sources, 9125 findings
+- Open leads: 304 (`josearch leads`)
 - Lint: 0 errors, 5 warnings (`josearch lint`)

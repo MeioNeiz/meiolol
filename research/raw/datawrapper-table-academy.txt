@@ -1,0 +1,110 @@
+200 | https://www.datawrapper.de/academy/how-to-create-a-table | "How to create a table | Datawrapper Academy"
+text: article, 19325 chars
+# How to create a table | Datawrapper Academy
+
+<https://www.datawrapper.de/academy/how-to-create-a-table>
+
+Tables, despite their seemingly simple nature, can be one of the most effective data visualization tools in your toolbox. Their ability to host a different "data type" – words, specific numbers, images, sparklines, or bar charts – in each cell makes them surprisingly versatile.
+
+This guide will show you how to create and customize a table with Datawrapper. We'll use the following example of life expectancy by country from 1960 to 2024:
+
+Let's start.
+
+## Preparing your data
+
+### Formatting your data
+
+Our tables require at **minimum one column** or **one row** of **any data type (number, text, or date)**.
+
+That's it! Of course, it's likely that you will have more than one column or row of data. You can also choose whether or not to use the first row as a header once you're further in the process.
+
+Here's a small snippet of the data we used. The full dataset has one column for every year from 1960 to 2024:
+
+<table><tbody><tr><td><strong>Country</strong></td><td><strong>1960</strong></td><td><strong>1961</strong></td><td><strong>1962</strong></td><td><strong>…</strong></td><td><strong>2024</strong></td><td><strong>Increase between 1960 and 2024</strong></td><td><strong>Continent</strong></td></tr><tr><td>:zw: Zimbabwe</td><td>53.5</td><td>54.0</td><td>54.5</td><td>…</td><td>63.1</td><td>9.6</td><td>Africa</td></tr><tr><td>:zm: Zambia</td><td>50.6</td><td>51.0</td><td>51.3</td><td>…</td><td>66.5</td><td>15.9</td><td>Africa</td></tr><tr><td>:za: South Africa</td><td>52.6</td><td>53.1</td><td>53.6</td><td>…</td><td>66.3</td><td>13.7</td><td>Africa</td></tr><tr><td>:ye: Yemen</td><td>33.5</td><td>34.1</td><td>33.7</td><td>…</td><td>69.4</td><td>36.0</td><td>Asia</td></tr><tr><td>:ws: Samoa</td><td>55.2</td><td>55.7</td><td>56.3</td><td>…</td><td>71.8</td><td>16.7</td><td>Oceania</td></tr></tbody></table>
+
+You'll notice the codes between colons in the first column, like ":zw:" for Zimbabwe. Datawrapper can turn them into flags (more on that in the **Customize columns** panel below).
+
+### Uploading your data
+
+Once you have prepared your data, **create a new chart in Datawrapper**. You can do so by [going to our homepage and clicking on **Start creating**](https://www.datawrapper.de/). You can then click on **Create new...** in the upper right, and select **Table.**
+
+In **step 1: Upload**, you can copy & paste your dataset, upload it as a .csv or Excel file, or connect to a Google Sheet. It looks like this:
+
+Click on **Proceed** to go to **step 2: Check & Describe**.
+
+### Checking data and units
+
+In **step 2: Check & Describe**, Datawrapper automatically identifies your data columns as either a number, text, or date column. [Learn more about what column formats Datawrapper recognizes](https://www.datawrapper.de/academy/data-column-types).
+
+To add a unit (like km/h, kg, inch, $, etc.) to your numbers, click on a column header and then add the unit of your choice to the **Prepend/append** options on the left. [Learn more about adding units to numbers.](https://www.datawrapper.de/academy/custom-number-formats-that-you-can-display-in-datawrapper#adding-units-to-your-numbers)
+
+If everything looks good, click on **Proceed** at the bottom left to go to **step 3: Visualize**.
+
+## Choosing a table
+
+In **step 3: Visualize**, you will see a table, without a title, description, or customized colors. You will also see lots of options to refine your table – that's because you're in the **Refine** tab:
+
+Datawrapper skipped the **Chart type** tab because you already told it that you want to create a table (and not a bar chart or line chart, etc.). That said, you _can_ choose another visualization type if you go back to **Chart type**. And if you're working on another visualization type and notice that a table would be a better fit, after all, you can also choose **Table** in the **Chart type** tab:
+
+## Resizing
+
+In _any_ tab of **step 3: Visualize**, you can **click, hold, and drag** the arrow in the lower right corner or enter values in the box below the chart (**Size**) to see the table at a different width. Their height depends on how many rows you show, so changing it by hand isn't possible. [Learn more about changing the width and height of your visualizations in this article.](https://www.datawrapper.de/academy/how-to-change-the-size-of-your-visualizations)
+
+We recommend checking what your table looks like on different screen sizes multiple times while designing it, by clicking on the little icons (mobile, tablet, and computer) below the chart.
+
+## Refining your table
+
+Let's continue with the **Refine** tab. Here, we see **five** panels: **Customize table**, **Customize columns**, **Customize rows**, **Customize header**, and **Heatmap**. The first one, **Customize table**, has settings that affect your whole table:
+
+### Showing more or fewer rows
+
+**Rows per page** decides how many rows readers see at once (the default is 20 rows). Consider using fewer rows when the table is in the middle of an article so that readers don't have to scroll past dozens of rows. A longer table may work better at the bottom of an article.
+
+Once your table has more than one page, readers will see the hint **Show \[number of remaining rows\] more** at the bottom of your table:
+
+If you'd rather have pages that readers can flip through, turn on **Show pagination** (it's the first toggle after the check boxes). Pagination shows readers which page they're on, with arrows to go forward or backward, like this:
+
+You can decide if that pagination should be above (**top**) or below (**bottom**) the table, or both (**top and bottom**). If your table only has one page, this option is grayed out.
+
+### Making your table searchable
+
+**Make searchable** adds a search bar to your table, so readers can look for specific information. That's especially useful if your table has more than one page. Note that the search entry **must be an exact match**, or it won't return anything.
+
+Sorry, your browser doesn't support embedded videos.
+
+### Making your table easier to read
+
+You will find more options under **Refine** > **Customize table** that help readers parse your table successfully:
+
+-   **Stripe table**: makes every other row light gray. That makes it easier to see what's in the same row, especially if your table is wide and readers have to scan from left to right.
+-   **Compact layout**: gives your rows less height and less white space. That's a good option if you show a lot of rows.
+-   **Make first column sticky**: keeps the first column in place while readers scroll sideways through a wide table, so they always know which row they're looking at.
+-   **Show ranks**: adds a column on the left that numbers your rows, starting with 1. The ranks don't move, even if readers sort the table in a different way.
+
+Here you can see the striped table, compact layout, and ranks applied:
+
+### Sorting your table
+
+With **Sort table**, you set the order in which your rows appear when readers first see the table. Choose a column under **By column** and decide on a **Direction**: **Ascending** or **Descending**. Depending on the column you choose, Datawrapper sorts your rows by number or alphabetically. If you leave **Sort table** turned off (which is the default), your rows appear in the order of your dataset.
+
+Readers can also sort your table themselves, by clicking on a column header. You can turn that off for single columns with **Make sortable** (see below). [Learn more about customizing the sort order](https://www.datawrapper.de/academy/how-to-customize-the-sort-order-of-tables), or [learn more about disabling sorting for certain columns](https://www.datawrapper.de/academy/how-to-disable-sorting-for-certain-columns).
+
+### Making your table work on mobile
+
+**Mobile fallback** switches your table to a layout where each row becomes a card, on screens narrower than 450px. That way, readers on their phones don't have to scroll sideways:
+
+Sorry, your browser doesn't support embedded videos.
+
+You can also decide to hide some columns on mobile, with **Show on** in the **Customize columns** panel (see below).
+
+### Adding images, links, and merged cells
+
+**Parse markdown** shows markdown formatting in your table, if you wrote markdown in your data. That way, you can add images, links, bold or italic text, and more to your cells. [Learn more about formatting your text with markdown](https://www.datawrapper.de/academy/how-to-format-your-text-with-markdown).
+
+**Merge with empty cells** combines a text cell and the empty cells to its right into one big cell. If you want to center the text in your merged cells, add `~~~` around it (like `~~~ header ~~~`). [Learn more about creating a double-row header](https://www.datawrapper.de/academy/how-to-create-a-double-row-header).
+
+## Customizing columns
+
+Each column in your table can be customized differently, giving you a lot of flexibility with your table design. In the **Customize columns** panel (in **step 2: Check & Describe** > **Refine**), a symbol on the left shows the data type of each column: text or numbers. Click on a column name to customize it. To change several columns at once, select multiple ones with Shift/Ctrl, and use **all**, **none**, or **invert** below the list. The settings will then open below:
+
+[truncated: 10,000 of 19,433 chars shown; full text: /Users/jacobmaschler/personal/browser-tool/out/www.datawrapper.de-academy-how-to-create-a-table-20261102-093904.md]

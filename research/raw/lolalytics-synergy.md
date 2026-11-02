@@ -1,0 +1,5 @@
+# Lolalytics Ahri build page: synergy tab labels and definitions
+
+Tab bar text: 0|4.2|4.4|4.6|4.8|5.0|Counters|Common|Common Matchup|Strong|Strong Against|Weak|Weak Against|Delta|Delta|Synergy|Common|Common Teammates|Good|Good Synergy|Bad|Bad Synergy|Delta|Synergy Delta|Normalised Delta|Normalised Synergy Delta| [img:top lane] |Counter|Win Rate|Delta 1|?|Delta 1 = Counter Matchup Win Rate - (100 - Counter Champions Overall Average Win Rate)|Positive values means the champion wins more against the matchup than the average cha
+
+Definitions: Synergy Delta = Actual Win Rate Together - (Current Champions Win Rate + Paired Champions Win Rate) / 2. The more positive the value the better the pairing performs than their win rates alone would suggest.|","|Normalised Synergy Delta = Actual Win Rate Together - Expected Normalised Champions Win Rate Together. The more positive the value the better the pairing performs than their normalised win rates alone would suggest.|","Exact Item Count. No more, No less are built for this statistic.","A Triples built item se
