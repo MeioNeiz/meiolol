@@ -887,10 +887,23 @@ const Sealer = struct {
         }
         const part = try s.path(kind, day, true);
         defer s.p.gpa.free(part);
-        const f = try Io.Dir.cwd().createFile(s.p.io, part, .{ .read = true, .truncate = false });
-        errdefer f.close(s.p.io);
-        const len = try s.recover(f, part);
-        slot.* = .{ .day = day, .file = f, .len = len };
+        const io = s.p.io;
+        const cwd = Io.Dir.cwd();
+        damaged: {
+            const f = try cwd.createFile(io, part, .{ .read = true, .truncate = false });
+            errdefer f.close(io);
+            const len = dayfile.recover(s.p.gpa, s.p.io, f) catch |err| switch (err) {
+                error.DamagedFrame => {
+                    f.close(io);
+                    break :damaged;
+                },
+                else => return err,
+            };
+            slot.* = .{ .day = day, .file = f, .len = len };
+            return &slot.*.?;
+        }
+        try s.setAside(part);
+        slot.* = .{ .day = day, .file = try cwd.createFile(io, part, .{ .read = true, .truncate = false }), .len = 0 };
         return &slot.*.?;
     }
 
@@ -908,15 +921,20 @@ const Sealer = struct {
         const sealed = try s.path(kind, day, false);
         defer gpa.free(sealed);
         const cwd = Io.Dir.cwd();
-        {
+        const damaged = blk: {
             const f = cwd.openFile(io, part, .{ .mode = .read_write }) catch |err| switch (err) {
                 error.FileNotFound => return,
                 else => return err,
             };
             defer f.close(io);
-            _ = try s.recover(f, part);
+            _ = dayfile.recover(s.p.gpa, s.p.io, f) catch |err| switch (err) {
+                error.DamagedFrame => break :blk true,
+                else => return err,
+            };
             try f.sync(io);
-        }
+            break :blk false;
+        };
+        if (damaged) return s.setAside(part);
         cwd.renamePreserve(part, cwd, sealed, io) catch |err| switch (err) {
             // Never meant to happen (start and rollDay keep to days after the sealed
             // ones): both kept, the newer aside for a hand merge
@@ -932,11 +950,19 @@ const Sealer = struct {
         log.info("complete: sealed {s}", .{std.fs.path.basename(sealed)});
     }
 
-    fn recover(s: *Sealer, f: Io.File, name: []const u8) !u64 {
-        return dayfile.recover(s.p.gpa, s.p.io, f) catch |err| {
-            if (err == error.DamagedFrame) log.err("complete: {s} has a damaged frame with whole frames after it: left as it is; the form restarts, pausing longer each time, until it is mended", .{name});
-            return err;
-        };
+    /// A `.part` with a damaged frame and whole frames after it (dayfile.recover: a disk
+    /// error, not a crash) goes aside as <sealed name>.damaged-<time>, untouched, for a
+    /// hand look (health.sh alerts; docs/data-safety.md); its day goes on in a fresh file
+    fn setAside(s: *Sealer, part: []const u8) !void {
+        const io = s.p.io;
+        const gpa = s.p.gpa;
+        const sealed = part[0 .. part.len - ".part".len];
+        const aside = try std.fmt.allocPrint(gpa, "{s}.damaged-{d}", .{ sealed, Io.Clock.real.now(io).toSeconds() });
+        defer gpa.free(aside);
+        const cwd = Io.Dir.cwd();
+        try cwd.renamePreserve(part, cwd, aside, io);
+        try archive.syncPath(io, s.p.dir, .directory);
+        log.warn("complete: {s} has a damaged frame with whole frames after it: set aside as {s}", .{ std.fs.path.basename(part), std.fs.path.basename(aside) });
     }
 
     /// The newest day with a sealed file
@@ -1304,6 +1330,67 @@ test "a clock stepped back never reopens a sealed day" {
     try std.testing.expectEqualStrings("A", old[0].key);
     const next = try dayfile.readAll(gpa, arena, io, try arena.print("{s}/complete/{f}.summary.cfd.part", .{ data, Date.fromDay(20_001) }));
     try std.testing.expectEqual(3, next.len);
+}
+
+test "a day file with a damaged frame goes aside and the form goes on, at start or later" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const data = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const saved = std.testing.log_level;
+    defer std.testing.log_level = saved;
+    std.testing.log_level = .err;
+    const gz = try store.raw.compress(arena, "[1]");
+
+    // Two frames in a day's file, then a flipped byte in the first: damage, not a tear
+    const damage = struct {
+        fn run(dir: Io.Dir, sub: []const u8) !void {
+            const f = try dir.openFile(std.testing.io, sub, .{ .mode = .read_write });
+            defer f.close(std.testing.io);
+            var b: [1]u8 = undefined;
+            _ = try f.readPositionalAll(std.testing.io, &b, dayfile.header_len + 2);
+            b[0] ^= 0xff;
+            try f.writePositionalAll(std.testing.io, &b, dayfile.header_len + 2);
+        }
+    }.run;
+    for ([_]bool{ true, false }) |at_start| {
+        test_day = if (at_start) 20_000 else 20_010;
+        const part = try arena.print("complete/{f}.summary.cfd.part", .{Date.fromDay(test_day)});
+        var p: Packer = try .init(gpa, io, data);
+        p.clock = testClock;
+        p.block_docs = 1;
+        try p.start();
+        for ([_][]const u8{ "A", "B" }) |k| p.push(.{ .kind = .summary, .key = k, .t = 1, .gz = gz });
+        try settle(&p);
+        p.close();
+        try damage(tmp.dir, part);
+
+        // At start the old day is sealed: its damaged file can't be; later, the day's
+        // file is reopened for the next frame
+        if (at_start) test_day += 1;
+        var p2: Packer = try .init(gpa, io, data);
+        p2.clock = testClock;
+        p2.block_docs = 1;
+        try p2.start();
+        p2.push(.{ .kind = .summary, .key = "C", .t = 2, .gz = gz });
+        try settle(&p2);
+        try std.testing.expect(!p2.isOff());
+        p2.close();
+        const now_part = try arena.print("{s}/complete/{f}.summary.cfd.part", .{ data, Date.fromDay(test_day) });
+        const got = try dayfile.readAll(gpa, arena, io, now_part);
+        try std.testing.expectEqual(1, got.len);
+        try std.testing.expectEqualStrings("C", got[0].key);
+    }
+    var dir = try tmp.dir.openDir(io, "complete", .{ .iterate = true });
+    defer dir.close(io);
+    var aside: usize = 0;
+    var it = dir.iterate();
+    while (try it.next(io)) |e| aside += @intFromBool(std.mem.indexOf(u8, e.name, ".summary.cfd.damaged-") != null);
+    try std.testing.expectEqual(2, aside);
 }
 
 test "a second packer on the same data is refused; after unclean runs the spool is set aside" {

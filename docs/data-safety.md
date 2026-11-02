@@ -226,6 +226,15 @@ move them back to quarantine and open an issue with crawl.log. Delete the files 
 replayed or given up. Erasure reaches them meanwhile (the daily scrub drops records
 naming a forgotten player, below).
 
+### Complete form damaged file
+
+An open day file whose frame fails its crc with whole frames after it (a disk error; a
+crash only tears the tail) is renamed data/complete/<day>.<kind>.cfd.damaged-<unix time>
+(riot/complete.zig) and its day goes on in a fresh `.part`. It holds documents the day's
+sealed file lacks, is neither mirrored to Megatron nor scrubbed. `meiolol complete
+FILE` reads its frames before the damage. Look within the month (erasure): keep
+what you need elsewhere, then delete it.
+
 ### Complete form mirror gap
 
 The Megatron run (deploy/backup-mirror.sh) refuses to mirror day files while C01 holds
