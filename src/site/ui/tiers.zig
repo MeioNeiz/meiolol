@@ -95,8 +95,8 @@ pub const Data = struct {
     /// The patch change: "" without one
     cur_patch: []const u8,
     prev_patch: []const u8,
-    /// "in EUW"
-    region_in: []const u8,
+    /// Where and when: "in EUW, last 30 days, patches 16.19 and 16.20"
+    scope: []const u8,
     ddragon: []const u8,
     /// The view's query, for links to champion pages (html.View.query)
     query: []const u8,
@@ -159,7 +159,6 @@ const board_labels = [_]tree.Text{ W.win, W.influence, W.pick, W.ban, W.games };
 const W = struct {
     pub const title = plain("Champions");
     pub const scope_line = Phrase("{n:count} games {in:text}");
-    pub const versus = Phrase(" · {cur:text} vs {prev:text}");
     pub const role_label = plain("Role");
     pub const region = plain("Region");
     pub const period = plain("Period");
@@ -622,7 +621,6 @@ pub const Tiers = struct {
 
     pub fn view(t: *T, h: *H) N {
         const d = t.data;
-        const vs: ?tree.Text = if (d.cur_patch.len > 0 and d.prev_patch.len > 0) W.versus.with(h, .{ .cur = d.cur_patch, .prev = d.prev_patch }) else null;
         var roles: [1 + Role.names.len]rolepicker.Item = undefined;
         for (&roles, 0..) |*it, k| {
             const s: Shown = @fromBackingInt(@intCast(k));
@@ -643,7 +641,7 @@ pub const Tiers = struct {
                 h.div(.{ .class = "hd" }, .{
                     h.div(.{ .class = "ttl" }, .{
                         h.el(.h1, .{}, .{W.title}),
-                        h.p(.{ .class = "sub" }, .{ W.scope_line.with(h, .{ .n = d.games, .in = d.region_in }), vs }),
+                        h.p(.{ .class = "sub" }, .{W.scope_line.with(h, .{ .n = d.games, .in = d.scope })}),
                     }),
                     rolepicker.view(h, .{ .label = W.role_label }, &roles),
                     t.find(h),

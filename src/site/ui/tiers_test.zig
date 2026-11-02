@@ -44,7 +44,7 @@ const data: tiers.Data = .{
     .spread_min_games = 10,
     .cur_patch = "16.21",
     .prev_patch = "16.20",
-    .region_in = "in EUW",
+    .scope = "in EUW, last 30 days, patches 16.20 and 16.21",
     .ddragon = "15.13.1",
     .query = "",
     .champs = &champs,
@@ -147,7 +147,7 @@ test "the server renders All over 1.5k games as the role board, off-role behind 
     const page = w.written();
     // Kai'Sa under 1.5k games
     try testing.expectEqual(@as(usize, 3), std.mem.count(u8, page, "class=\"nm\""));
-    try testing.expect(std.mem.find(u8, page, "<p class=\"sub\">400,000 games in EUW · 16.21 vs 16.20</p>") != null);
+    try testing.expect(std.mem.find(u8, page, "<p class=\"sub\">400,000 games in EUW, last 30 days, patches 16.20 and 16.21</p>") != null);
     try testing.expect(std.mem.find(u8, page, "href=\"/champions/ahri/mid\"") != null);
     try testing.expect(std.mem.find(u8, page, "Moved in 16.21") != null);
     // All without a search: the role board, not one long table
@@ -255,7 +255,7 @@ test "All as one table: every role's rows, sorted by the head, back to the board
 const all_regions: tiers.Data = blk: {
     var d = data;
     d.games = 900_000;
-    d.region_in = "in all regions";
+    d.scope = "in all regions, last 30 days, patches 16.20 and 16.21";
     d.rows = rows[0..3];
     break :blk d;
 };

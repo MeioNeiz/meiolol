@@ -128,7 +128,7 @@ fn tiersData(site: *const Site) !ui.tiers.Data {
         .spread_min_games = s.min_games,
         .cur_patch = if (site.patchday) |pd| pd.cur_patch else "",
         .prev_patch = if (site.patchday) |pd| pd.prev_patch else "",
-        .region_in = site.view.region.in(),
+        .scope = try a.print("{s}, {s}", .{ site.view.region.in(), site.when }),
         .ddragon = site.ddragon_version,
         .query = site.view.query(),
         .champs = champs,
@@ -168,6 +168,12 @@ pub fn rankFiles(site: *const Site, files: anytype) !void {
     const pd = if (site.patchday) |*pd| pd else null;
     const champs = try a.alloc(ui.tiers.Champ, n_c);
     for (champs, site.champs) |*c, ch| c.* = .{ .name = ch.name, .key = ch.key, .slug = ch.slug, .banned = 0 };
+    // The head says what the games cover, not the patch pair the Moved band compares
+    var scope: [n_v][]const u8 = undefined;
+    for (&scope, html.View.all) |*s, v| s.* = try a.print("{s}, {s}", .{ v.region.in(), switch (v.period) {
+        .patch => try a.print("patch {s}", .{site.patch}),
+        .days30 => if (site.view.period == .days30) site.when else "last 30 days",
+    } });
     for (html.View.all, 0..) |v, vi| {
         var groups: [n_g]ui.tiers.Data = undefined;
         for (&groups, 0..) |*d, g| {
@@ -203,7 +209,7 @@ pub fn rankFiles(site: *const Site, files: anytype) !void {
                 .spread_min_games = site.spread.min_games,
                 .cur_patch = if (pd) |p| p.cur_patch else "",
                 .prev_patch = if (pd) |p| p.prev_patch else "",
-                .region_in = v.region.in(),
+                .scope = scope[vi],
                 .ddragon = site.ddragon_version,
                 .query = v.query(),
                 .rank = @fromBackingInt(@intCast(g + 1)),
