@@ -1,6 +1,6 @@
 //! NotesList: /admin/notes, every note on the site grouped by page or by component, by
-//! status; Done, Reopen and a reply per note, Looks good or Not yet on one a session
-//! fixed, and the tool on or off in this browser. ui-notes.wasm's list mode fetches (again
+//! status; Done, Reopen, a reply and Delete (asked twice) per note, Looks good or Not yet
+//! on one a session fixed, and the tool on or off in this browser. ui-notes.wasm's list mode fetches (again
 //! every 20 s while shown) and saves; the reply's input is uncontrolled and keyed, read by
 //! the glue at Save
 const std = @import("std");
@@ -29,6 +29,7 @@ pub const Want = union(enum) {
     reply: u32,
     /// Open again, the reply input's words as the reply
     reopen: u32,
+    delete: u32,
     tool: bool,
 };
 
@@ -42,11 +43,13 @@ pub const List = struct {
     replying: ?u32 = null,
     /// That reply reopens it (Not yet)
     reopening: bool = false,
+    /// The note whose Delete waits for "Yes, delete"
+    deleting: ?u32 = null,
     /// What the last tool press did, for the line under it
     tool: ?bool = null,
     want: Want = .none,
 
-    pub const Msg = union(enum) { group: Group, filter: Filter, done: u32, reopen: u32, reply: u32, not_yet: u32, send: u32, cancel, tool: bool };
+    pub const Msg = union(enum) { group: Group, filter: Filter, done: u32, reopen: u32, reply: u32, not_yet: u32, send: u32, cancel, delete: u32, confirm: u32, tool: bool };
 
     pub fn update(l: *List, m: Msg, _: *tree.Event) void {
         switch (m) {
@@ -66,6 +69,15 @@ pub const List = struct {
             .cancel => {
                 l.replying = null;
                 l.reopening = false;
+                l.deleting = null;
+            },
+            .delete => |id| {
+                l.replying = null;
+                l.deleting = id;
+            },
+            .confirm => |id| {
+                l.deleting = null;
+                l.want = .{ .delete = id };
             },
             .tool => |on| l.want = .{ .tool = on },
         }
@@ -188,6 +200,10 @@ pub const List = struct {
                 }),
                 button.view(h, .{ .s = .s, .v = .primary, .on = h.on(l, .{ .send = n.id }) }, .{if (l.reopening) "Reopen" else "Save"}),
                 button.view(h, .{ .s = .s, .v = .quiet, .on = h.on(l, .cancel) }, .{"Cancel"}),
+            }) else if (l.deleting == n.id) h.div(.{ .class = "acts" }, .{
+                h.span(.{ .class = "meta" }, .{"Gone for good, no undo."}),
+                button.view(h, .{ .s = .s, .v = .primary, .on = h.on(l, .{ .confirm = n.id }) }, .{"Yes, delete"}),
+                button.view(h, .{ .s = .s, .v = .quiet, .on = h.on(l, .cancel) }, .{"Cancel"}),
             }) else h.div(.{ .class = "acts" }, .{
                 switch (n.status) {
                     .open => button.view(h, .{ .s = .s, .on = h.on(l, .{ .done = n.id }) }, .{"Done"}),
@@ -197,6 +213,7 @@ pub const List = struct {
                 if (n.status == .fixed) button.view(h, .{ .s = .s, .on = h.on(l, .{ .not_yet = n.id }) }, .{"Not yet"}) else null,
                 button.view(h, .{ .s = .s, .v = .quiet, .on = h.on(l, .{ .reply = n.id }) }, .{"Reply"}),
                 button.view(h, .{ .s = .s, .v = .quiet, .href = h.fmt("{s}{s}", .{ n.path, n.hash }) }, .{"Open"}),
+                button.view(h, .{ .s = .s, .v = .quiet, .on = h.on(l, .{ .delete = n.id }) }, .{"Delete"}),
             }),
         });
     }
@@ -265,6 +282,7 @@ pub fn gallery(g: *Gallery) void {
         .{ "by page, open", .{ .loading = false, .notes = &gallery_notes } },
         .{ "by component, all, replying", .{ .loading = false, .notes = &gallery_notes, .group = .component, .filter = .any, .replying = 3, .tool = true } },
         .{ "to check, not yet", .{ .loading = false, .notes = &gallery_notes, .filter = .check, .replying = 4, .reopening = true } },
+        .{ "delete asked", .{ .loading = false, .notes = &gallery_notes, .deleting = 1 } },
         .{ "none, failed", .{ .loading = false, .failed = true } },
     };
     for (states) |s| {
@@ -328,4 +346,11 @@ test "noteslist: groups by page or component, filters by status, asks the glue" 
     l.update(.cancel, &ev);
     try std.testing.expectEqual(null, l.replying);
     try std.testing.expect(!l.reopening);
+    l.notes = &gallery_notes;
+    l.filter = .any;
+    l.update(.{ .delete = 3 }, &ev);
+    try std.testing.expect(std.mem.find(u8, try render(a, &l), "Yes, delete") != null);
+    l.update(.{ .confirm = 3 }, &ev);
+    try std.testing.expectEqual(Want{ .delete = 3 }, l.want);
+    try std.testing.expectEqual(null, l.deleting);
 }

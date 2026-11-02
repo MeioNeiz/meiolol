@@ -135,14 +135,92 @@ pub fn check(n: New) ?[]const u8 {
     const text = std.mem.trim(u8, n.text, " \t\r\n");
     if (text.len == 0) return "empty text";
     if (n.text.len > max_text or !std.unicode.utf8ValidateSlice(n.text)) return "bad text";
+    if (slur(n.text)) return "not allowed";
     return null;
 }
 
 /// Why `c` is refused; null when in bounds
 pub fn checkChange(c: Change) ?[]const u8 {
     if (c.status == null and c.reply == null) return "nothing to change";
-    if (c.reply) |r| if (r.len > max_reply or !std.unicode.utf8ValidateSlice(r)) return "bad reply";
+    if (c.reply) |r| if (r.len > max_reply or !std.unicode.utf8ValidateSlice(r) or slur(r)) return "bad reply";
     return null;
+}
+
+/// The n-word in the spellings that dodge a plain match: any case, digits and symbols for
+/// letters, letters repeated, punctuation or invisible characters between them, or spelt
+/// out one letter at a time. Only at a word's start, with gg and a vowel, h, r or z after,
+/// so Niger, niggle and snigger pass
+pub fn slur(text: []const u8) bool {
+    var word: Slur = .{};
+    var spaced: Slur = .{};
+    var token: usize = 0;
+    for (text) |c| {
+        if (std.ascii.isWhitespace(c)) {
+            word = .{};
+            // Single letters apart ("n i g g a") stay one run
+            if (token > 1) spaced = .{};
+            token = 0;
+            continue;
+        }
+        token += 1;
+        if (word.feed(c) or spaced.feed(c)) return true;
+    }
+    return false;
+}
+
+const Slur = struct {
+    state: enum { start, n, i, g, gg } = .start,
+    /// No letter yet since the last boundary
+    fresh: bool = true,
+
+    fn feed(m: *Slur, raw: u8) bool {
+        const c: u8 = switch (std.ascii.toLower(raw)) {
+            '1', '!', '|', '*' => 'i',
+            '3' => 'e',
+            '4', '@' => 'a',
+            '6', '9' => 'g',
+            'a'...'z' => |l| l,
+            else => {
+                // Between its letters punctuation is skipped; before them it is a boundary
+                if (m.state == .start) m.fresh = true;
+                return false;
+            },
+        };
+        const fresh = m.fresh;
+        m.fresh = false;
+        m.state = switch (m.state) {
+            .start => if (fresh and c == 'n') .n else .start,
+            .n => if (c == 'n') .n else if (c == 'i') .i else .start,
+            .i => if (c == 'i') .i else if (c == 'g') .g else .start,
+            .g => if (c == 'g') .gg else .start,
+            .gg => switch (c) {
+                'g' => .gg,
+                'a', 'e', 'u', 'h', 'r', 'z' => return true,
+                else => .start,
+            },
+        };
+        return false;
+    }
+};
+
+test slur {
+    for ([_][]const u8{
+        "nigga",           "NIGGER",      "Niggas",     "n1gga",
+        "n.i.g.g.a",       "n i g g a",   "lol nigguh", "niiiggaaa",
+        "n!gg@",           "n*gga",       "ni99a",      "n\u{200b}igga",
+        "fix this, nigga", "n-i-g-g-e-r", "(nigga)",    "n i gga",
+    }) |t| std.testing.expect(slur(t)) catch |err| {
+        std.debug.print("missed: {s}\n", .{t});
+        return err;
+    };
+    for ([_][]const u8{
+        "Niger",      "Nigeria",     "snigger",     "niggle",     "mini gg ez",
+        "Ani gg ez",  "running gag", "begin, iggy", "gg wp",      "Zeri gg",
+        "night game", "",            "n",           "Nidalee gg", "a n i gg a",
+    }) |t| std.testing.expect(!slur(t)) catch |err| {
+        std.debug.print("refused: {s}\n", .{t});
+        return err;
+    };
 }
 
 fn checkTarget(t: Target) ?[]const u8 {

@@ -34,7 +34,7 @@ var hover: zjb.Handle = .null;
 var picking = false;
 var what_buf: [160]u8 = undefined;
 
-const Call = enum(i32) { list, save, all, patch, tool_on, tool_off };
+const Call = enum(i32) { list, save, all, patch, delete, tool_on, tool_off };
 
 /// What picking blocks outside the tool: the page's own presses never fire
 const blocked = [_][]const u8{ "pointerdown", "pointerup", "mousedown", "mouseup", "dblclick", "auxclick", "contextmenu", "submit" };
@@ -572,6 +572,14 @@ fn done(ctx: i32, bytes: ?[]u8) void {
             list.replying = null;
             listRender();
         },
+        .delete => {
+            patching -|= 1;
+            // Gone on screen since the press; the list again either way, so a failed one
+            // comes back
+            if (bytes == null) list.failed = true;
+            fetchAll();
+            listRender();
+        },
         .tool_on, .tool_off => {
             if (bytes == null) return listFailed();
             list.tool = ctx == @backingInt(Call.tool_on);
@@ -617,6 +625,13 @@ fn save() void {
         tool.empty = true;
         return focusText();
     }
+    if (nd.slur(text)) {
+        tool.mode = .form;
+        tool.nope +|= 1;
+        clearText();
+        trombone();
+        return focusText();
+    }
     const path = location("pathname");
     defer gpa.free(path);
     const search = location("search");
@@ -646,6 +661,59 @@ fn save() void {
     var body: std.ArrayList(u8) = .empty;
     ui.data.encode(a, nd.New, new, &body) catch return;
     dom.send("POST", "/api/notes", body.items, @backingInt(Call.save), done);
+}
+
+/// Wah wah wah waaah, synthesised: no sound file to ship. Save's press is the gesture
+/// that lets an AudioContext play
+fn trombone() void {
+    // Every browser the site supports has AudioContext (Safari since 14.1)
+    const ctx = zjb.global("AudioContext").new(.{});
+    defer ctx.release();
+    const out = ctx.get("destination", zjb.Handle);
+    defer out.release();
+    const t0 = ctx.get("currentTime", f64) + 0.05;
+    // G4 F#4 F4, then E4 held with a wobble
+    const notes_hz = [_]f64{ 392, 370, 349, 330 };
+    for (notes_hz, 0..) |hz, i| {
+        const last = i == notes_hz.len - 1;
+        const at = t0 + 0.42 * @as(f64, @floatFromInt(i));
+        const len: f64 = if (last) 1.3 else 0.36;
+        const osc = ctx.call("createOscillator", .{}, zjb.Handle);
+        defer osc.release();
+        osc.set("type", zjb.constString("sawtooth"));
+        const freq = osc.get("frequency", zjb.Handle);
+        defer freq.release();
+        freq.call("setValueAtTime", .{ hz, at }, void);
+        if (last) freq.call("linearRampToValueAtTime", .{ hz * 0.94, at + len }, void);
+        const amp = ctx.call("createGain", .{}, zjb.Handle);
+        defer amp.release();
+        const g = amp.get("gain", zjb.Handle);
+        defer g.release();
+        g.call("setValueAtTime", .{ @as(f64, 0), at }, void);
+        g.call("linearRampToValueAtTime", .{ @as(f64, 0.18), at + 0.04 }, void);
+        g.call("setValueAtTime", .{ @as(f64, 0.18), at + len - 0.1 }, void);
+        g.call("linearRampToValueAtTime", .{ @as(f64, 0), at + len }, void);
+        if (last) {
+            const lfo = ctx.call("createOscillator", .{}, zjb.Handle);
+            defer lfo.release();
+            const lf = lfo.get("frequency", zjb.Handle);
+            defer lf.release();
+            lf.set("value", @as(f64, 7));
+            const depth = ctx.call("createGain", .{}, zjb.Handle);
+            defer depth.release();
+            const dg = depth.get("gain", zjb.Handle);
+            defer dg.release();
+            dg.set("value", @as(f64, 9));
+            lfo.call("connect", .{depth}, void);
+            depth.call("connect", .{freq}, void);
+            lfo.call("start", .{at}, void);
+            lfo.call("stop", .{at + len}, void);
+        }
+        osc.call("connect", .{amp}, void);
+        amp.call("connect", .{out}, void);
+        osc.call("start", .{at}, void);
+        osc.call("stop", .{at + len}, void);
+    }
 }
 
 fn textValue(a: std.mem.Allocator) []const u8 {
@@ -743,7 +811,7 @@ var list_island: ?*ui.island.Island(ui.noteslist.List, dom.Dom) = null;
 /// The latest list answer's notes live here, freed when the next one lands
 var list_mem: ?std.heap.ArenaAllocator = null;
 var fetching = false;
-/// PATCHes sent and not answered
+/// PATCHes and DELETEs sent and not answered
 var patching: u32 = 0;
 
 fn listMain() void {
@@ -797,6 +865,17 @@ fn listChanged() void {
             const words = replyValue(arena.allocator());
             patch(id, .{ .status = .open, .reply = if (words.len > 0) words else null });
         },
+        .delete => |id| {
+            var buf: [32]u8 = undefined;
+            const path = idPath(&buf, id) orelse return;
+            for (notes.items, 0..) |x, i| if (x.id == id) {
+                _ = notes.orderedRemove(i);
+                break;
+            };
+            list.notes = notes.items;
+            patching += 1;
+            dom.send("DELETE", path, "", @backingInt(Call.delete), done);
+        },
         .tool => |on| if (on)
             dom.send("POST", "/api/notes/tool?on=1", "", @backingInt(Call.tool_on), done)
         else
@@ -811,9 +890,13 @@ fn patch(id: u32, c: nd.Change) void {
     var body: std.ArrayList(u8) = .empty;
     ui.data.encode(a, nd.Change, c, &body) catch return;
     var buf: [32]u8 = undefined;
-    const path = std.fmt.bufPrint(&buf, "/api/notes?id={d}", .{id}) catch return;
+    const path = idPath(&buf, id) orelse return;
     patching += 1;
     dom.send("PATCH", path, body.items, @backingInt(Call.patch), done);
+}
+
+fn idPath(buf: []u8, id: u32) ?[]const u8 {
+    return std.fmt.bufPrint(buf, "/api/notes?id={d}", .{id}) catch null;
 }
 
 /// The open reply's input, cut on a whole character at max_reply

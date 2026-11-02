@@ -223,8 +223,8 @@ pub fn cmdAccount(c: *Cmd) !u8 {
 pub const usage_notes =
     \\  notes       notes on the live site (src/api/notes.zig) in DIR/api.db; on C01 --data
     \\              /var/lib/meiolol-api (deploy/notes.sh runs it there)
-    \\              list             open notes, one per line: id, status, scope, page,
-    \\                               component, target, viewport, text
+    \\              list             open notes, one per line: id, status, author, scope,
+    \\                               page, component, target, viewport, text
     \\                --status S     open (default), fixed, kept, done or any
     \\                --by page|component  grouped under a heading line each
     \\              show N           every field of note N
@@ -234,6 +234,7 @@ pub const usage_notes =
     \\              done N [REPLY]   Jacob checked it
     \\              reopen N [REPLY]
     \\              reply N TEXT
+    \\              delete N         gone for good (spam, abuse)
     \\              --db FILE        another notes file (the dev server's data/snap/dev-notes.db)
     \\
 ;
@@ -243,7 +244,7 @@ pub fn cmdNotes(c: *Cmd) !u8 {
     const nd = ui.notesdata;
     const arena = c.arena;
     const io = c.init.io;
-    const Verb = enum { list, show, done, fixed, kept, reopen, reply };
+    const Verb = enum { list, show, done, fixed, kept, reopen, reply, delete };
     const v = std.meta.stringToEnum(Verb, c.next() orelse return error.Usage) orelse return error.Usage;
     var db_path: ?[]const u8 = null;
     var status_s: []const u8 = "open";
@@ -263,7 +264,7 @@ pub fn cmdNotes(c: *Cmd) !u8 {
     }
     const max_words: usize = switch (v) {
         .list => 0,
-        .show => 1,
+        .show, .delete => 1,
         .done, .fixed, .kept, .reopen, .reply => 2,
     };
     const needs_reply = v == .reply or v == .fixed or v == .kept;
@@ -284,6 +285,7 @@ pub fn cmdNotes(c: *Cmd) !u8 {
     const r = switch (v) {
         .list => try notes.handle(arena, db, .GET, try arena.print("all=1&status={s}", .{status_s}), "", "", now),
         .show => try notes.handle(arena, db, .GET, "all=1&status=any", "", "", now),
+        .delete => try notes.handle(arena, db, .DELETE, try arena.print("id={d}", .{id}), "", "", now),
         .done, .fixed, .kept, .reopen, .reply => blk: {
             // A deploy marks its commits' notes fixed (deploy/on-push.sh), maybe after
             // Jacob already checked one
@@ -350,15 +352,25 @@ pub fn cmdNotes(c: *Cmd) !u8 {
             return 1;
         },
         .done, .fixed, .kept, .reopen, .reply => try noteLine(out, try ui.data.decode(arena, nd.Note, r.body)),
+        .delete => try out.print("note {d} deleted\n", .{id}),
     }
     return 0;
 }
 
 fn noteLine(out: *std.Io.Writer, n: ui.notesdata.Note) !void {
     const component = n.target.component();
-    try out.print("{d}\t{t}\t{t}\t{s}{s}\t{s}\t{s}\t{d}x{d} {t}\t", .{
-        n.id,                                      n.status,                                                n.scope, n.path, n.hash,
-        if (component.len > 0) component else "-", if (n.target.snippet.len > 0) n.target.snippet else "-", n.vw,    n.vh,   n.theme,
+    try out.print("{d}\t{t}\t{s}\t{t}\t{s}{s}\t{s}\t{s}\t{d}x{d} {t}\t", .{
+        n.id,
+        n.status,
+        n.author,
+        n.scope,
+        n.path,
+        n.hash,
+        if (component.len > 0) component else "-",
+        if (n.target.snippet.len > 0) n.target.snippet else "-",
+        n.vw,
+        n.vh,
+        n.theme,
     });
     // One line: the text's line breaks as spaces, cut at 160 bytes on a whole character
     const text = ui.notesdata.cut(n.text, 160);

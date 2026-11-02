@@ -286,8 +286,13 @@ bytes.
 - Files: private/notes.{css,js,wasm} (fixed names, no-cache) and admin/notes (list mode of
   the same wasm, fetched again every 20 s while shown), written by `meiolol admin`
 - Paths: notesdata.canonical drops a trailing index.html, on POST and GET
-- API: /api/notes GET/POST/PATCH, ui.notesdata binary, bounds in notesdata.check;
-  api.db's notes table. Writes need X-Meiolol-Action. Never cached (nginx or Cloudflare)
+- API: /api/notes GET/POST/PATCH/DELETE, ui.notesdata binary, bounds in
+  notesdata.check; api.db's notes table. Each note keeps its login's username (author,
+  on the pin and the list). Writes need X-Meiolol-Action. Never cached (nginx or
+  Cloudflare). Delete on /admin/notes (asked twice) removes the row
+- Slurs: notesdata.slur (the n-word, leet, spaced and padded spellings) refuses a note or
+  reply in check; the island catches it first: text cleared, a stamp and a synthesised
+  sad trombone
 - A note's element: nearest c-* component or [data-island], its index on the page, a
   child path and a 60-byte text snippet (ties only); "everywhere" notes pin wherever
   their component shows
@@ -298,7 +303,7 @@ bytes.
 - Commits: `deploy/commit.sh --note N` adds a `Note: N` trailer; deploy/on-push.sh marks
   each trailer's note fixed once the deploy succeeds (a done note stays done)
 - Shell: `deploy/notes.sh list [--status S] [--by component] | show N | fixed N REPLY |
-  kept N REPLY | done N [REPLY] | reopen N [REPLY] | reply N TEXT` (C01's api.db over
+  kept N REPLY | done N [REPLY] | reopen N [REPLY] | reply N TEXT | delete N` (C01's api.db over
   ssh, its binary installed by `deploy/jomify.sh install api`; `--dev` the dev file)
 - Dev: `meiolol dev` answers /api/notes into data/snap/dev-notes.db as user "dev";
   /__notes/on|off sets the marker (meiolol_notes, no __Host- on http)

@@ -3,7 +3,7 @@
 # api.db over ssh, as meiolol-api; --dev the dev server's file with this checkout's binary
 #   deploy/notes.sh list [--status open|fixed|kept|done|any] [--by page|component]
 #   deploy/notes.sh show N | fixed N REPLY | kept N REPLY | done N [REPLY]
-#   deploy/notes.sh reopen N [REPLY] | reply N TEXT
+#   deploy/notes.sh reopen N [REPLY] | reply N TEXT | delete N
 #   deploy/notes.sh --dev list
 set -euo pipefail
 cd "$(dirname "$0")/.."

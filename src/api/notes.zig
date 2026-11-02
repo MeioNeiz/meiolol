@@ -6,6 +6,7 @@
 //!   GET   /api/notes?all=1[&status=open|fixed|kept|done|any]  every note, default open
 //!   POST  /api/notes               a ui.notesdata.New; the stored Note
 //!   PATCH /api/notes?id=N          a ui.notesdata.Change; the stored Note
+//!   DELETE /api/notes?id=N         the note gone for good; {"ok":true}
 //!
 //! Bodies and 200s are ui.data binary; errors JSON
 const std = @import("std");
@@ -60,13 +61,14 @@ pub const max_body = 12 * 1024;
 
 pub const Reply = struct { status: Status, body: []const u8, binary: bool = false };
 
-pub const Method = enum { GET, POST, PATCH };
+pub const Method = enum { GET, POST, PATCH, DELETE };
 
 pub fn handle(arena: Allocator, db: store.Db, method: Method, query: []const u8, body: []const u8, author: []const u8, now: i64) !Reply {
     return switch (method) {
         .GET => list(arena, db, query),
         .POST => add(arena, db, body, author, now),
         .PATCH => change(arena, db, query, body, now),
+        .DELETE => remove(arena, db, query),
     };
 }
 
@@ -165,15 +167,26 @@ fn add(arena: Allocator, db: store.Db, body: []const u8, author: []const u8, now
     return one(arena, db, id);
 }
 
+fn idOf(arena: Allocator, query: []const u8) !?u32 {
+    const s = try param(arena, query, "id") orelse return null;
+    return std.fmt.parseInt(u32, s, 10) catch null;
+}
+
 fn change(arena: Allocator, db: store.Db, query: []const u8, body: []const u8, now: i64) !Reply {
-    const id_s = try param(arena, query, "id") orelse return try failed(arena, .bad_request, "expected ?id=N");
-    const id = std.fmt.parseInt(u32, id_s, 10) catch return try failed(arena, .bad_request, "expected ?id=N");
+    const id = try idOf(arena, query) orelse return try failed(arena, .bad_request, "expected ?id=N");
     const c = ui.data.decode(arena, nd.Change, body) catch return try failed(arena, .bad_request, "expected a ui.notesdata.Change");
     if (nd.checkChange(c)) |why| return try failed(arena, .bad_request, why);
     const status: ?i64 = if (c.status) |s| @backingInt(s) else null;
     try db.run("UPDATE notes SET status = coalesce(?, status), reply = coalesce(?, reply), updated = ? WHERE id = ?", .{ status, c.reply, now, id });
     if (db.changes() == 0) return try failed(arena, .not_found, "no such note");
     return one(arena, db, id);
+}
+
+fn remove(arena: Allocator, db: store.Db, query: []const u8) !Reply {
+    const id = try idOf(arena, query) orelse return try failed(arena, .bad_request, "expected ?id=N");
+    try db.run("DELETE FROM notes WHERE id = ?", .{id});
+    if (db.changes() == 0) return try failed(arena, .not_found, "no such note");
+    return .{ .status = .ok, .body = "{\"ok\":true}" };
 }
 
 fn one(arena: Allocator, db: store.Db, id: i64) !Reply {
@@ -266,6 +279,10 @@ test "notes: a page gets its own open notes and every everywhere one; done ones 
     try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "all=1", "", "", 0))).notes.len);
     try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "all=1&status=done", "", "", 0))).notes.len);
     try std.testing.expectEqual(3, (try decoded(a, nd.List, try handle(a, db, .GET, "all=1&status=any", "", "", 0))).notes.len);
+
+    try std.testing.expectEqual(Status.ok, (try handle(a, db, .DELETE, "id=3", "", "", 0)).status);
+    try std.testing.expectEqual(Status.not_found, (try handle(a, db, .DELETE, "id=3", "", "", 0)).status);
+    try std.testing.expectEqual(2, (try decoded(a, nd.List, try handle(a, db, .GET, "all=1&status=any", "", "", 0))).notes.len);
 }
 
 test "notes: refuses bad requests and bodies, and stops at its caps" {
@@ -291,6 +308,11 @@ test "notes: refuses bad requests and bodies, and stops at its caps" {
         .{ .PATCH, "id=1", change_ok, .not_found },
         .{ .PATCH, "id=1", ok, .bad_request },
         .{ .PATCH, "id=1", try encoded(a, nd.Change, .{}), .bad_request },
+        .{ .PATCH, "id=1", try encoded(a, nd.Change, .{ .reply = "n1gga" }), .bad_request },
+        .{ .POST, "", try encoded(a, nd.New, .{ .path = "/a", .text = "ok n i g g a" }), .bad_request },
+        .{ .DELETE, "", "", .bad_request },
+        .{ .DELETE, "id=x", "", .bad_request },
+        .{ .DELETE, "id=1", "", .not_found },
     };
     for (cases) |c| {
         const r = try handle(a, db, c[0], c[1], c[2], "jacob", 1);

@@ -47,6 +47,9 @@ pub const Tool = struct {
     failed: bool = false,
     /// The textarea was empty at Save
     empty: bool = false,
+    /// Saves refused for a slur (nd.slur) since the form opened: each new one keys a new
+    /// stamp, so its animation plays again
+    nope: u16 = 0,
     want: Want = .none,
     /// Laid out in its container, not over the page (the gallery)
     static: bool = false,
@@ -96,6 +99,7 @@ pub const Tool = struct {
         t.scope = .page;
         t.failed = false;
         t.empty = false;
+        t.nope = 0;
         t.want = .stop;
     }
 
@@ -158,6 +162,13 @@ pub const Tool = struct {
             }) else null,
             if (t.failed) h.p(.{ .class = "err" }, .{"Not saved. Try again."}) else null,
             if (t.empty) h.p(.{ .class = "err" }, .{"Write the note first."}) else null,
+            if (t.nope > 0) h.div(.{ .key = t.nope, .class = "nope", .role = "alert" }, .{
+                h.div(.{ .class = "stamp" }, .{
+                    h.span(.{ .class = "big", .aria_hidden = true }, .{"🚫"}),
+                    h.strong(.{}, .{"Absolutely not."}),
+                    h.span(.{}, .{"We don't say that here. Note binned."}),
+                }),
+            }) else null,
             h.div(.{ .class = "row" }, .{
                 button.view(h, .{ .v = .primary, .disabled = saving, .on = h.on(t, .save) }, .{if (saving) "Saving" else "Save"}),
                 button.view(h, .{ .v = .quiet, .on = h.on(t, .cancel) }, .{"Cancel"}),
@@ -218,6 +229,27 @@ pub const css =
     \\  .c-notes .n { margin-left: 6px; min-width: 18px; padding: 0 5px; border-radius: var(--r-pill);
     \\    background: var(--on-brand); color: var(--brand); font-size: var(--fs-xs); line-height: 18px; }
     \\  .c-notes .err { margin: 0; color: var(--bad); }
+    \\  .c-notes .nope { position: fixed; inset: 0; z-index: 1; display: grid; place-items: center; pointer-events: none;
+    \\    animation: c-notes-flash 2.6s ease-out forwards; }
+    \\  .c-notes .stamp { display: grid; justify-items: center; gap: var(--sp-1); padding: var(--sp-4) var(--sp-5);
+    \\    border: 4px solid var(--bad); border-radius: var(--r-l); background: var(--panel-2); color: var(--bad);
+    \\    font-size: var(--fs-m); text-align: center; box-shadow: var(--shadow-pop);
+    \\    animation: c-notes-slam 2.6s cubic-bezier(.2, 1.6, .4, 1) forwards; }
+    \\  .c-notes .stamp strong { font-size: var(--fs-xl); text-transform: uppercase; letter-spacing: .04em; }
+    \\  .c-notes .stamp .big { font-size: var(--fs-xl); scale: 2.5; margin: var(--sp-4); animation: c-notes-spin .5s linear 3; }
+    \\  .c-notes[data-static] .nope { position: absolute; }
+    \\  .c-notes[data-static] :is(.nope, .stamp) { animation: none; }
+    \\  @keyframes c-notes-flash { 0% { background: color-mix(in srgb, var(--bad) 45%, transparent); }
+    \\    10%, 20% { background: color-mix(in srgb, var(--bad) 10%, transparent); }
+    \\    15% { background: color-mix(in srgb, var(--bad) 35%, transparent); }
+    \\    80% { opacity: 1; background: transparent; } 100% { opacity: 0; visibility: hidden; } }
+    \\  @keyframes c-notes-slam { 0% { transform: scale(4) rotate(-30deg); opacity: 0; }
+    \\    12% { transform: scale(1) rotate(-8deg); opacity: 1; }
+    \\    16%, 24%, 32% { transform: translateX(-14px) rotate(-8deg); }
+    \\    20%, 28%, 36% { transform: translateX(14px) rotate(-8deg); }
+    \\    40%, 80% { transform: rotate(-8deg); } 100% { transform: rotate(-8deg) translateY(40vh); opacity: 0; } }
+    \\  @keyframes c-notes-spin { to { transform: rotate(360deg); } }
+    \\  @media (prefers-reduced-motion: reduce) { .c-notes .stamp, .c-notes .stamp .big { animation: none; } }
     \\}
     \\
 ;
@@ -258,6 +290,7 @@ pub fn gallery(g: *Gallery) void {
         .{ "form, whole page", .{ .static = true, .mode = .form } },
         .{ "form, not saved", .{ .static = true, .mode = .form, .what = "[data-island=top] > div", .failed = true } },
         .{ "saving", .{ .static = true, .mode = .saving, .what = "c-card > h2: Builds" } },
+        .{ "a slur refused", .{ .static = true, .mode = .form, .nope = 1 } },
     };
     for (states) |s| {
         const t = h.mem.create(Tool) catch {

@@ -237,6 +237,7 @@ fn devNotes(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
         .GET => .GET,
         .POST => .POST,
         .PATCH => .PATCH,
+        .DELETE => .DELETE,
         else => return request.respond("method not allowed\n", .{ .status = .method_not_allowed, .keep_alive = false }),
     };
     // Reading the body invalidates the head's strings
@@ -251,7 +252,7 @@ fn devNotes(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
         } });
     }
     var body: []const u8 = "";
-    if (method != .GET) {
+    if (method == .POST or method == .PATCH) {
         var body_buf: [1024]u8 = undefined;
         const r = try request.readerExpectContinue(&body_buf);
         body = r.allocRemaining(arena, .limited(notes.max_body)) catch |err| switch (err) {
