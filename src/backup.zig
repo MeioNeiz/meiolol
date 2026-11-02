@@ -490,9 +490,18 @@ pub fn restore(arena: std.mem.Allocator, io: Io, from_dir: []const u8, data_dir:
         error.FileNotFound => {},
         else => return err,
     }
+    // Before anything is made: a wrong --from leaves data_dir as it was
+    const state_dir = try std.fs.path.join(arena, &.{ from_dir, "state" });
+    const seg_dir = try std.fs.path.join(arena, &.{ from_dir, "segments" });
+    const need: []const []const u8 = if (state_file == null) &.{ state_dir, seg_dir } else &.{seg_dir};
+    for (need) |sub| {
+        cwd.access(io, sub, .{}) catch |err| switch (err) {
+            error.FileNotFound => return error.NotABackup,
+            else => return err,
+        };
+    }
     try cwd.createDirPath(io, data_dir);
 
-    const state_dir = try std.fs.path.join(arena, &.{ from_dir, "state" });
     const state = state_file orelse blk: {
         var dir = try cwd.openDir(io, state_dir, .{ .iterate = true });
         defer dir.close(io);
@@ -526,7 +535,6 @@ pub fn restore(arena: std.mem.Allocator, io: Io, from_dir: []const u8, data_dir:
         r.files += 1;
     }
     r.mastery = try db.scalar("SELECT count(*) FROM mastery", .{}) orelse 0;
-    const seg_dir = try std.fs.path.join(arena, &.{ from_dir, "segments" });
     const segs = try listSegments(arena, io, seg_dir);
     // A mirror keeps the segments a --full backup replaced on the box: start at the
     // newest one that copied from the beginning
@@ -864,6 +872,12 @@ test "backup then restore round trip, incremental segments, scrub" {
         try testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT champions FROM mastery WHERE puuid = 'p2'", .{}));
     }
     try testing.expectError(error.TargetNotEmpty, restore(arena, io, out, restored_dir, null, day));
+    // Not a backup (no segments/): said so, and nothing made in the target
+    const no_segs = try arena.print("{s}/no-segments", .{base});
+    try Io.Dir.cwd().createDirPath(io, try arena.print("{s}/state", .{no_segs}));
+    const untouched = try arena.print("{s}/untouched", .{base});
+    try testing.expectError(error.NotABackup, restore(arena, io, no_segs, untouched, null, day));
+    try testing.expectError(error.FileNotFound, Io.Dir.cwd().access(io, untouched, .{}));
 
     // A mirror copies the segments before --full replaces them on the box
     const mirror = try arena.print("{s}/mirror", .{base});

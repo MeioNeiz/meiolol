@@ -11,6 +11,7 @@ const date = @import("date.zig");
 const ep = @import("riot/endpoints.zig");
 const ratelimit = @import("riot/ratelimit.zig");
 const tsvlog = @import("tsvlog.zig");
+const complete_scrub = @import("riot/complete_scrub.zig");
 const status = @import("status.zig");
 const ui = @import("ui");
 const adminmodels = @import("adminmodels.zig");
@@ -104,7 +105,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     const counts = try tableCounts(arena, db);
     const files = try fileSizes(arena, io, o.data_dir);
     const history_path = try std.fs.path.join(arena, &.{ o.data_dir, "admin-history.tsv" });
-    try appendHistory(arena, io, history_path, o, counts, files);
+    try appendHistory(arena, io, history_path, o, counts, files, try completeSize(arena, io, o.data_dir));
     const history = try tail(arena, io, history_path, history_lines);
 
     const window_start = o.now_s - @as(i64, days_shown) * 86400;
@@ -417,12 +418,70 @@ fn fileSizes(arena: std.mem.Allocator, io: Io, data_dir: []const u8) ![]FileSize
     return out;
 }
 
-// WAL columns: growth readable without the WAL's swings (it once reached 57 GB)
+// WAL columns: growth readable without the WAL's swings (it once reached 57 GB). complete,
+// complete_day: data/complete's bytes and its newest whole day's (completeSize), so the
+// disk forecast takes day files at their real size (deploy/health.sh reads them too)
 const history_header = "time\tmeiolol_db\ttimeline_db\traw_db\tdisk_used\tdisk_size\tplayers\tranks" ++
     "\tmatches\ttimelines\tdrafts\tmatch_queue\ttimeline_queue\tmastery" ++
-    "\tmeiolol_wal\ttimeline_wal\traw_wal\n";
+    "\tmeiolol_wal\ttimeline_wal\traw_wal\tcomplete\tcomplete_day\n";
 
-fn appendHistory(arena: std.mem.Allocator, io: Io, path: []const u8, o: Options, counts: []const Count, files: []const FileSize) !void {
+const CompleteSize = struct { total: u64 = 0, day: ?u64 = null };
+
+/// The complete form's bytes on disk (day files, their index, the spool), and its newest
+/// whole day's: its sealed files and their index, for a day whose day before sealed too
+/// (a crawler's first day starts part way through). Zero, null without data/complete
+fn completeSize(arena: std.mem.Allocator, io: Io, data_dir: []const u8) !CompleteSize {
+    var dir = Io.Dir.cwd().openDir(io, try std.fs.path.join(arena, &.{ data_dir, "complete" }), .{ .iterate = true }) catch |err| switch (err) {
+        error.FileNotFound, error.NotDir => return .{},
+        else => return err,
+    };
+    defer dir.close(io);
+    var walker = try dir.walk(arena);
+    defer walker.deinit();
+    var c: CompleteSize = .{};
+    var by_day: std.AutoArrayHashMapUnmanaged(i64, u64) = .empty;
+    while (try walker.next(io)) |e| {
+        if (e.kind != .file) continue;
+        const st = e.dir.statFile(io, e.basename, .{}) catch continue;
+        c.total += st.size;
+        // index/<day file>.ids
+        const name = if (std.mem.endsWith(u8, e.basename, ".ids")) e.basename[0 .. e.basename.len - ".ids".len] else e.basename;
+        const day = complete_scrub.sealedDay(name) orelse continue;
+        (try by_day.getOrPutValue(arena, day, 0)).value_ptr.* += st.size;
+    }
+    var newest: ?i64 = null;
+    for (by_day.keys()) |d| if (by_day.contains(d - 1) and d > (newest orelse d - 1)) {
+        newest = d;
+    };
+    if (newest) |d| c.day = by_day.get(d);
+    return c;
+}
+
+test "complete form size: all of it, and the newest day whose day before sealed too" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const data = try a.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    try std.testing.expectEqual(CompleteSize{}, try completeSize(a, io, data));
+    try tmp.dir.createDirPath(io, "complete/index");
+    for ([_]struct { []const u8, usize }{
+        .{ "complete/2026-11-01.summary.cfd", 100 },
+        .{ "complete/2026-11-02.summary.cfd", 30 },
+        .{ "complete/2026-11-02.timeline.cfd", 10 },
+        .{ "complete/index/2026-11-02.timeline.cfd.ids", 2 },
+        .{ "complete/2026-11-03.mastery.cfd.part", 7 },
+        .{ "complete/2026-11-05.summary.cfd", 50 },
+    }) |f| try tmp.dir.writeFile(io, .{ .sub_path = f[0], .data = try a.alloc(u8, f[1]) });
+    const c = try completeSize(a, io, data);
+    try std.testing.expectEqual(199, c.total);
+    // 5 Nov has no 4 Nov before it, 1 Nov no 31 Oct
+    try std.testing.expectEqual(@as(?u64, 42), c.day);
+}
+
+fn appendHistory(arena: std.mem.Allocator, io: Io, path: []const u8, o: Options, counts: []const Count, files: []const FileSize, cs: CompleteSize) !void {
     var row: Io.Writer.Allocating = .init(arena);
     const w = &row.writer;
     try w.print("{d}", .{o.now_s});
@@ -432,6 +491,8 @@ fn appendHistory(arena: std.mem.Allocator, io: Io, path: []const u8, o: Options,
         try w.print("\t{d}", .{count(counts, t)});
     }
     for (files) |f| try w.print("\t{d}", .{f.wal});
+    try w.print("\t{d}\t", .{cs.total});
+    if (cs.day) |d| try w.print("{d}", .{d});
     try w.writeAll("\n");
     try tsvlog.append(arena, io, path, history_header, row.written());
 }

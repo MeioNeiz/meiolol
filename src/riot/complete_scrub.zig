@@ -291,7 +291,7 @@ fn isSegmentName(name: []const u8) bool {
 /// A sealed day file's UTC day from its name (YYYY-MM-DD.<kind>.cfd)
 /// A seal that found its name taken set its file aside as <name>.clash-<time>
 /// (complete.zig): sealed too
-fn sealedDay(name: []const u8) ?i64 {
+pub fn sealedDay(name: []const u8) ?i64 {
     if (name.len < 12 or name[10] != '.') return null;
     const end = std.mem.indexOfPos(u8, name, 11, ".cfd") orelse return null;
     const rest = name[end + ".cfd".len ..];

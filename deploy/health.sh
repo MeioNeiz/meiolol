@@ -190,6 +190,24 @@ if (( day > 0 && ${free:-0} - ${valve:-0} * (1 << 30) < 3 * day )); then
     (( ${waiting:-0} >= 1 << 30 )) && line+=", $(( waiting >> 30 )) GB of it in exports waiting for the gpu-box"
     problems+=("$line")
 fi
+# Days to a full data disk: its growth over the newest week without the WALs and day files
+# (data/admin-history.tsv, each web round; only rows that measured day files), plus their
+# newest whole day at its real size, as the admin page's "Disk full around"
+read -r left rate files < <(awk -F'\t' -v since=$(( now - 7 * 86400 )) -v free="${free:-0}" '
+    NR == 1 { for (i = 1; i <= NF; i++) c[$i] = i; if (!("complete_day" in c)) exit; next }
+    $1 >= since && $(c["complete"]) != "" && $(c["disk_used"]) != "" {
+        v = $(c["disk_used"]) - $(c["complete"]) - $(c["meiolol_wal"]) - $(c["timeline_wal"]) - $(c["raw_wal"])
+        if (!n++) { t0 = $1; v0 = v }
+        t1 = $1; v1 = v; d = $(c["complete_day"])
+    }
+    END {
+        if (n < 2 || t1 - t0 < 86400 / 5 || d == "") exit
+        r = (v1 - v0) / (t1 - t0) * 86400 + d
+        if (r > 0) printf "%d %.1f %.1f\n", free / r, r / 1e9, d / 1e9
+    }' data/admin-history.tsv 2> /dev/null)
+if [[ -n "${left:-}" ]] && (( left < 30 )); then
+    problems+=("box data disk full in ~$left days: $rate GB a day, day files $files GB of it (docs/data-safety.md Disk)")
+fi
 
 (( ${#problems[@]} == 0 )) && exit 0
 printf '%s\n' "${problems[@]}"

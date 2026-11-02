@@ -373,6 +373,8 @@ pub fn cmdRestore(c: *Cmd) !u8 {
     const r = backup.restore(c.arena, c.init.io, from_dir, c.data_dir, state_file, now) catch |err| {
         switch (err) {
             error.TargetNotEmpty => std.log.err("{s} holds a database: restore only into an empty directory", .{c.data_dir}),
+            error.NotABackup => std.log.err("{s} is not a backup directory: it needs state/ and segments/ (empty for a state snapshot alone)", .{from_dir}),
+            error.NoStateSnapshot => std.log.err("{s}/state holds no state-YYYY-MM-DD.db", .{from_dir}),
             else => {},
         }
         return err;

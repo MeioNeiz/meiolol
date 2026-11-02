@@ -89,6 +89,9 @@ pub const HistoryRow = struct {
     meiolol_wal: ?u64 = null,
     timeline_wal: ?u64 = null,
     raw_wal: ?u64 = null,
+    /// data/complete's bytes, and its newest whole day's (admin.zig completeSize)
+    complete: ?u64 = null,
+    complete_day: ?u64 = null,
 };
 
 /// eval-history.tsv, one line per `meiolol eval --history`; fields named as its columns

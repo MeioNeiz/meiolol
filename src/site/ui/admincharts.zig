@@ -204,7 +204,7 @@ const W = struct {
     pub const c_text = plain("Message");
 
     pub const space = plain("Space");
-    pub const space_sub = plain("Snapshots every 15 min; growth over the newest week, WAL excluded.");
+    pub const space_sub = plain("Snapshots every 15 min; growth over the newest week, WAL excluded; day files at their newest whole day's size.");
     pub const files_n = Phrase("{n:count} files, WAL included");
     pub const growths = Phrase("Growth a day: meiolol {a:text}, timeline {b:text}, raw {c:text}. Files: {f:text}.");
     pub const disk_used = plain("Disk used");
@@ -213,6 +213,7 @@ const W = struct {
     pub const per_day = Phrase("{b:text} / day");
     pub const over = Phrase("over the last {t:text}");
     pub const over_day = Phrase("last 24 h {b:text} / day");
+    pub const day_files = Phrase("day files {d:text} / day of it");
     pub const full_at = plain("Disk full around");
     pub const full_in = Phrase("~{n:count} d at the week's rate");
     pub const full_in2 = Phrase("~{n:count} d at the week's rate, ~{m:count} at the day's");
@@ -447,6 +448,17 @@ fn growth(hist: []const ad.HistoryRow, c: Col, days: f64) ?f64 {
 /// A size's growth without its WAL columns `wal`, and with them on the lower envelope
 /// (points no later point undercuts): a WAL swing would read as growth, then shrinkage
 fn growthLess(hist: []const ad.HistoryRow, c: Col, wal: []const Col, days: f64) ?f64 {
+    return fit(hist, c, wal, null, days);
+}
+
+/// The disk's growth without the WALs and day files, from the rows that measured day files
+/// (older ones counted them in disk_used)
+fn diskBeside(hist: []const ad.HistoryRow, days: f64) ?f64 {
+    return fit(hist, .disk_used, &.{ .meiolol_wal, .timeline_wal, .raw_wal, .complete }, .complete, days);
+}
+
+/// growthLess over the rows with a `need` cell
+fn fit(hist: []const ad.HistoryRow, c: Col, wal: []const Col, need: ?Col, days: f64) ?f64 {
     if (hist.len < 2) return null;
     const end = hist[hist.len - 1].time;
     const from = end - @as(i64, @intFromFloat(days * 86400));
@@ -454,7 +466,7 @@ fn growthLess(hist: []const ad.HistoryRow, c: Col, wal: []const Col, days: f64) 
     var sx: f64 = 0;
     var sy: f64 = 0;
     var t0: i64 = end;
-    var it: Envelope = .{ .hist = hist, .from = from, .c = c, .wal = wal };
+    var it: Envelope = .{ .hist = hist, .from = from, .c = c, .wal = wal, .need = need };
     while (it.next()) |pt| {
         t0 = pt[0];
         k += 1;
@@ -466,7 +478,7 @@ fn growthLess(hist: []const ad.HistoryRow, c: Col, wal: []const Col, days: f64) 
     const my = sy / k;
     var sxy: f64 = 0;
     var sxx: f64 = 0;
-    it = .{ .hist = hist, .from = from, .c = c, .wal = wal };
+    it = .{ .hist = hist, .from = from, .c = c, .wal = wal, .need = need };
     while (it.next()) |pt| {
         const dx = @as(f64, @floatFromInt(pt[0] - end)) - mx;
         sxy += dx * (pt[1] - my);
@@ -482,6 +494,7 @@ const Envelope = struct {
     from: i64,
     c: Col,
     wal: []const Col,
+    need: ?Col = null,
     i: ?usize = null,
     min: f64 = std.math.inf(f64),
 
@@ -492,6 +505,7 @@ const Envelope = struct {
             i -= 1;
             const r = e.hist[i];
             if (r.time < e.from) return null;
+            if (e.need) |nc| if (at(r, nc) == null) continue;
             var v: f64 = @floatFromInt(at(r, e.c) orelse continue);
             for (e.wal) |w| v -= @floatFromInt(at(r, w) orelse 0);
             if (e.wal.len > 0) {
@@ -505,6 +519,10 @@ const Envelope = struct {
 };
 
 const wal_all: []const Col = &.{ .meiolol_wal, .timeline_wal, .raw_wal };
+
+fn plus(a: ?f64, b: f64) ?f64 {
+    return if (a) |x| x + b else null;
+}
 
 fn kilo(h: *H, v: ?f64) Text {
     const x = v orelse return .{ .s = "–" };
@@ -948,12 +966,15 @@ pub fn storage(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
             .ctx = W.of.with(h, .{ .a = bytes(h, @floatFromInt(d.used)).s, .b = bytes(h, @floatFromInt(d.size)).s }),
             .step = if (used > 0.8) bad else if (used > 0.65) warn else null,
         });
-        const g = growthLess(hist, .disk_used, wal_all, 7);
-        const g1 = growthLess(hist, .disk_used, wal_all, 1);
+        // Day files at their newest whole day's size: a week's fit would take them from
+        // the day they started
+        const day_files: ?f64 = if (hist.len > 0) if (hist[hist.len - 1].complete_day) |b| @floatFromInt(b) else null else null;
+        const g = if (day_files) |df| plus(diskBeside(hist, 7), df) else growthLess(hist, .disk_used, wal_all, 7);
+        const g1 = if (day_files) |df| plus(diskBeside(hist, 1), df) else growthLess(hist, .disk_used, wal_all, 1);
         add(h, &tiles, .{
             .label = W.disk_growth,
             .value = if (g) |x| W.per_day.with(h, .{ .b = bytes(h, x).s }) else Text{ .s = "–" },
-            .ctx = if (g1) |x| W.over_day.with(h, .{ .b = bytes(h, x).s }) else W.over.with(h, .{ .t = span(h, span_s).s }),
+            .ctx = if (day_files) |df| W.day_files.with(h, .{ .d = bytes(h, df).s }) else if (g1) |x| W.over_day.with(h, .{ .b = bytes(h, x).s }) else W.over.with(h, .{ .t = span(h, span_s).s }),
         });
         if (g) |x| if (x > 0) {
             const left = @as(f64, @floatFromInt(d.free)) / x;
@@ -1361,4 +1382,16 @@ test "admin charts: growth per day by least squares, WAL swings left out" {
     // Under ~5 h of history: no rate
     try testing.expectEqual(@as(?f64, null), growth(hist[0..2], .matches, 7));
     try testing.expectEqual(@as(?f64, null), growth(&hist, .raw_db, 7));
+
+    // Disk: 1 GB a day of databases; day files 3 GB a day from row 4, measured only from
+    // row 6 (older rows have no complete cell): their growth out of the fit, which starts
+    // at row 6
+    var disk: [12]ad.HistoryRow = undefined;
+    for (&disk, 0..) |*r, i| {
+        const k: u64 = @intCast(i);
+        const files: u64 = if (i >= 4) (k - 4) * 375_000_000 else 0;
+        r.* = .{ .time = @as(i64, @intCast(i)) * 3 * 3600, .disk_used = 100_000_000_000 + k * 125_000_000 + files, .meiolol_wal = 0, .timeline_wal = 0, .raw_wal = 0, .complete = if (i >= 6) files else null };
+    }
+    try testing.expectApproxEqAbs(@as(f64, 1e9), diskBeside(&disk, 7).?, 1);
+    try testing.expectEqual(@as(?f64, null), diskBeside(disk[0..7], 7));
 }

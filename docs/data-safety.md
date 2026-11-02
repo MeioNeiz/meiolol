@@ -14,8 +14,14 @@ pushes from the box.
   raw (Raw archive). More storage: docs/plan/ops.md "Storage and hosts"
 - Off-host: backups mirrored to Megatron outside C01's disk image, the Mac and the
   gpu-box (Backups); raw on the gpu-box's archive partition. The complete form's day
-  files (data/complete, ~3.5 GB a day estimated): sealed ones mirrored to Megatron only
-  (Backups; the gpu-box copy is S5); the raw valve does not see them
+  files (data/complete): sealed ones mirrored to Megatron only (Backups; the gpu-box
+  copy is S5); the raw valve does not see them
+- Complete form day files take ~2.8 GB a day (measured on C01 from 1 Nov, plus ~30 MB of
+  index), kept 730 days: ~2 TB, four times the 492 GB disk. With the databases (~3.6 GB a
+  day on 2 Nov) the disk's 362 GB free then lasts about 8 weeks. Where they go past
+  that is not decided yet. The admin page's "Disk full around" and health's "box data
+  disk full in ~N days" (under 30) take them at their newest whole day's size
+  (admin-history.tsv `complete_day`) on top of the rest of the disk's weekly growth
 - The gpu-box keeps its pre-cloud data and backup in /mnt/d/meiolol-backups
   (restore-tested) as an old restore point. Its disks: docs/compute.md
 
@@ -187,7 +193,7 @@ deploy/health.sh runs on the box and prints one line per problem:
 | complete form quarantine | files in data/complete/spool/quarantine (below) |
 | WAL not checkpointed | a data/*.db-wal over 4 GB (crawler's checkpointer stuck, or a reader holding it) |
 | site | unit `meiolol-web` not active, or last upload in web.log older than 26h |
-| disk | / at 80% not counting C01's fixed 30 GB disk cache file (the rest grows slowly: snaps, nginx's 2 GB cache, /var/www), or the data's disk at 80% |
+| disk | / at 80% not counting C01's fixed 30 GB disk cache file (the rest grows slowly: snaps, nginx's 2 GB cache, /var/www), or the data's disk at 80%; or the data disk under 30 days from full at its weekly growth plus the newest whole day of day files (Disk) |
 | mounts | a path in host.env's MEIOLOL_MOUNTS not mounted (C01: /srv/meiolol, /srv/megatron, /srv/megatron-backups); with the data disk itself down health.sh can't run: mac-watch.sh says "data disk not mounted" (ssh's exit 127) |
 | deploy | the newest finished deploy in data/deploys.tsv failed (the Mac's on-push.sh queues events until the box answers) |
 | backup | unit `meiolol-backup` not active, or newest state snapshot older than 26h |
