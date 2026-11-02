@@ -82,7 +82,7 @@ pub const Row = struct {
     slug: []const u8 = "",
     href: []const u8,
     role: Role,
-    /// The figure (a win rate, %; a gap, points) and the role's
+    /// The figure (a win rate, %; a gap, points) and the role's (a gap: 0)
     value: f32,
     usual: f32,
     /// value - usual pulled toward 0 by how few games it has: the sort
@@ -119,7 +119,7 @@ const W = struct {
     pub const short = plain("Under 25");
     pub const long = plain("35+ min");
     pub const lean = plain("Lean");
-    pub const lean_note = plain("Early or late from gold at 14 and wins from an even game at 20, every region. Blank: neither is clear.");
+    pub const lean_note = plain("Early or late from team gold at 14 and wins from an even game at 20, every region: its strength by phase. Gap counts results by game length, which follows how games go too, so the two can differ. Blank: neither is clear.");
     pub const early = plain("Early");
     pub const late = plain("Late");
     pub const none = plain("More data needed: no champion has games in this spot yet.");

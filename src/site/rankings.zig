@@ -258,13 +258,12 @@ fn usualOf(site: *const Site, s: rk.Stat, r: Role) ?f32 {
     return figure(s, roleCounts(site, s, r) orelse return null);
 }
 
-/// The role's figure in the lead line
+/// The role's figure in the lead line; none for a gap, ~0 by construction (each game
+/// has a winner in the role, long or short)
 fn usualText(site: *const Site, s: rk.Stat, r: Role) ![]const u8 {
+    if (rk.kindOf(s) == .gap) return "";
     const u = usualOf(site, s, r) orelse return "";
-    return switch (rk.kindOf(s)) {
-        .rate => site.arena.print(" {s}: {d:.1}%.", .{ root.roleName(r), u }),
-        .gap => site.arena.print(" {s}: {s}{d:.1} points.", .{ root.roleName(r), if (u >= 0) "+" else "\u{2212}", @abs(u) }),
-    };
+    return site.arena.print(" {s}: {d:.1}%.", .{ root.roleName(r), u });
 }
 
 fn rate(wins: u32, games: u32) f32 {
@@ -306,7 +305,7 @@ pub fn data(site: *const Site, s: rk.Stat, only: ?Role) !rk.Data {
                 .href = try site.href(.{ .champion = .{ .slug = ch.slug, .role = champion.uiRole(r) } }),
                 .role = champion.uiRole(r),
                 .value = figure(s, .{ k0, k1 }).?,
-                .usual = usual,
+                .usual = if (gap) 0 else usual,
                 .pulled = @floatCast(100 * if (gap) priors[1].edge(k1.wins, k1.games) - e0 else e0),
                 .n = if (gap) @min(k0.games, k1.games) else k0.games,
                 .overall = if (cr.games == 0) 0 else rate(cr.wins, cr.games),
