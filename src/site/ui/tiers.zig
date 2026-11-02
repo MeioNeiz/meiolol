@@ -179,7 +179,6 @@ const W = struct {
     pub const ban = plain("Ban");
     pub const games = plain("Games");
     pub const off = plain("off-role");
-    pub const clear = plain("Clear search");
     pub const sort_by = plain("Sort");
     pub const layout = plain("Layout");
     pub const by_role = plain("By role");
@@ -611,14 +610,6 @@ pub const Tiers = struct {
         return std.ascii.eqlIgnoreCase(t.table.q.slice(), n);
     }
 
-    /// The table's search with a × while it has text
-    fn find(t: *T, h: *H) N {
-        return h.span(.{ .class = "find" }, .{
-            t.table.searchBox(h),
-            if (t.table.q.slice().len > 0) h.button(.{ .type = "button", .class = "x", .aria_label = W.clear, .on_click = h.on(t, .clear) }, .{"×"}) else null,
-        });
-    }
-
     pub fn view(t: *T, h: *H) N {
         const d = t.data;
         var roles: [1 + Role.names.len]rolepicker.Item = undefined;
@@ -644,7 +635,7 @@ pub const Tiers = struct {
                         h.p(.{ .class = "sub" }, .{W.scope_line.with(h, .{ .n = d.games, .in = d.scope })}),
                     }),
                     rolepicker.view(h, .{ .label = W.role_label }, &roles),
-                    t.find(h),
+                    filterbar.find(h, t.table.searchBox(h), t.table.q.slice().len > 0, h.on(t, .clear)),
                 }),
                 t.toolbar(h),
             }),
@@ -821,20 +812,11 @@ pub const css =
     \\  .c-tiers .ttl { margin-right: var(--sp-2); }
     \\  .c-tiers h1 { margin: 0; }
     \\  .c-tiers .sub { margin: 0; color: var(--muted); font-size: var(--fs-s); }
-    \\  .c-tiers .find { position: relative; display: flex; flex: 0 1 260px; margin-left: auto; }
-    \\  .c-tiers .find > input { flex: 1; min-width: 0; padding-right: 32px; }
-    \\  .c-tiers .find > input::-webkit-search-cancel-button { display: none; }
-    \\  .c-tiers .find > .x { all: unset; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-    \\    width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; cursor: pointer;
-    \\    color: var(--muted); font-size: var(--fs-l); line-height: 1; }
-    \\  .c-tiers .find > .x:hover { color: var(--text); background: var(--ctl-bg-2); }
-    \\  .c-tiers .find > .x:focus-visible { outline: 2px solid var(--focus); }
     \\  .c-tiers .moved { position: relative; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4);
     \\    border-bottom: 1px solid var(--line); }
     \\  .c-tiers .moved:hover { background: var(--panel-2); }
     \\  .c-tiers .moved .more::after { content: ""; position: absolute; inset: 0; }
-    \\  .c-tiers .moved .chips { position: relative; z-index: 1; }
-    \\  .c-tiers .moved .chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); align-items: center; }
+    \\  .c-tiers .moved .chips { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--sp-1); align-items: center; }
     \\  .c-tiers .moved .sep { width: 1px; height: 20px; margin: 0 var(--sp-1); background: var(--line); }
     \\  .c-tiers .moved > .lab { white-space: nowrap; }
     \\  .c-tiers .moved .more { margin-left: auto; font-size: var(--fs-s); white-space: nowrap; }
@@ -906,7 +888,7 @@ pub const css =
     \\    .c-tiers .c-filters[data-open] { flex-basis: 100%; }
     \\  }
     \\  @media (max-width: 620px) {
-    \\    .c-tiers .hd > .find { flex-basis: 100%; margin-left: 0; }
+    \\    .c-tiers .hd > .c-find { flex-basis: 100%; margin-left: 0; }
     \\    .c-tiers .moved .chips { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
     \\    .c-tiers .moved .more { font-size: 0; }
     \\  }

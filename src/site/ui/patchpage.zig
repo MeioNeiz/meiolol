@@ -23,6 +23,7 @@ const art = @import("art.zig");
 const changeline = @import("changeline.zig");
 const patchhead = @import("patchhead.zig");
 const tiers = @import("tiers.zig");
+const filterbar = @import("filterbar.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
@@ -150,7 +151,6 @@ const W = struct {
     pub const moved_says = Phrase("Moved clearly: win rate {u:count} up, {d:count} down; {o:count} more in lane or matchups");
     pub const all = plain("All");
     pub const find = plain("Find");
-    pub const clear = plain("Clear search");
     pub const role_label = plain("Role");
     pub const show = plain("Show");
     pub const champion = plain("Champion");
@@ -641,19 +641,10 @@ pub const Page = struct {
                         chip.view(h, .{ .pressed = !p.moved and !p.riot, .on = h.on(p, .all) }, .{ W.all, h.span(.{ .class = "n" }, .{phrase.num(h, .count, c.all)}) }),
                     }),
                     rolepicker.view(h, .{ .v = .compact, .label = W.role_label }, &roles),
-                    p.find(h),
+                    filterbar.find(h, h.input(.{ .type = "search", .placeholder = W.find, .aria_label = W.find, .value = p.table.q.slice(), .on_input = h.on(p, .find) }), p.table.q.slice().len > 0, h.on(p, .clear)),
                 }),
                 if (p.table.rows.len > 0) p.table.view(h) else h.p(.{ .class = "empty" }, .{W.none}),
             }),
-        });
-    }
-
-    /// The champions board's Find: a search over every row of the role, × while it has text
-    fn find(p: *P, h: *H) N {
-        const q = p.table.q.slice();
-        return h.span(.{ .class = "find" }, .{
-            h.input(.{ .type = "search", .placeholder = W.find, .aria_label = W.find, .value = q, .on_input = h.on(p, .find) }),
-            if (q.len > 0) h.button(.{ .type = "button", .class = "x", .aria_label = W.clear, .on_click = h.on(p, .clear) }, .{"×"}) else null,
         });
     }
 
@@ -743,16 +734,8 @@ pub const css =
     \\  .c-patch .c-toolbar .n { margin-left: 2px; color: var(--muted); font-variant-numeric: tabular-nums; }
     \\  .c-patch .c-toolbar .n[data-d="up"] { color: var(--hi2); }
     \\  .c-patch .c-toolbar .n[data-d="down"] { color: var(--lo2); }
-    \\  .c-patch .find { position: relative; display: flex; flex: 0 1 220px; margin-left: auto; }
-    \\  .c-patch .find > input { flex: 1; min-width: 0; padding-right: 32px; }
-    \\  .c-patch .find > input::-webkit-search-cancel-button { display: none; }
-    \\  .c-patch .find > .x { all: unset; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-    \\    width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; cursor: pointer;
-    \\    color: var(--muted); font-size: var(--fs-l); line-height: 1; }
-    \\  .c-patch .find > .x:hover { color: var(--text); background: var(--ctl-bg-2); }
-    \\  .c-patch .find > .x:focus-visible { outline: 2px solid var(--focus); }
     \\  @media (max-width: 760px) {
-    \\    .c-patch .find { flex-basis: 100%; margin-left: 0; }
+    \\    .c-patch .c-find { flex-basis: 100%; margin-left: 0; }
     \\  }
     \\  .c-patch .c-table-wrap { overflow-x: clip; }
     \\  .c-patch .c-table thead th { top: var(--header); }
