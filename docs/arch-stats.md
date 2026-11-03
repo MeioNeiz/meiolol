@@ -157,7 +157,9 @@ and icons come from the patch's Data Dragon, so an item removed since has none.
 each view (build/<slug>-<role>.html, patch/build/..., all/...) when the role has 10%+ of
 the champion's games in the file; champion pages carry each view's most played choice
 per kind in each role section (builds.strip, one variant per view, below) and link to
-that view's page. Matchup pages show their region's patch builds.
+that view's page. Matchup pages show their region's patch builds. A panel whose games
+aren't the view's says from which patch (BuildRole.patch): the previous patch's while
+this one's is thin, or a matchup's patch build in a 30-day view.
 Rows most played first, never by win rate, no "best" or "recommended": games and share
 on every row, a win rate only from 100 games and always with its 95% range (±1.96 SE),
 rows under 400 greyed, a "more data needed" note under 400 for the champion-role. Item,

@@ -6,12 +6,8 @@ const std = @import("std");
 const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
-const tpl = html.tpl;
-const plural = @import("text.zig").plural;
 const builds = @import("../builds.zig");
-const filters = @import("filters.zig");
 
-const Writer = std.Io.Writer;
 const Role = core.Role;
 const Site = root.Site;
 const Champ = root.Champ;
@@ -31,14 +27,6 @@ fn patchView(site: *const Site) html.View {
     return .{ .region = site.view.region, .period = .patch };
 }
 
-/// "patch 16.21" or "last 30 days": a builds file's games in a view of `period`
-fn periodText(a: std.mem.Allocator, f: *const File, period: html.Period) ![]const u8 {
-    return switch (period) {
-        .patch => a.print("patch {s}", .{f.label}),
-        .days30 => f.label,
-    };
-}
-
 /// A strip's build: the view's, or in a patch view the previous patch's while the
 /// current one has under solid_games of it and the previous more (a new patch's first
 /// days)
@@ -49,10 +37,10 @@ pub const Picked = struct {
     /// The current patch's games of it when the previous patch's is shown
     newer: ?u64 = null,
 
-    /// "patch 16.21", "patch 16.20 (16.21: 57 games so far)", "last 30 days"
-    fn when(p: Picked, site: *const Site) ![]const u8 {
-        const n = p.newer orelse return periodText(site.arena, p.f, p.period);
-        return site.arena.print("patch {s} ({s}: {f} game{s} so far)", .{ p.f.label, site.patch, root.Thousands{ .n = n }, plural(n) });
+    /// The patch its games are from when they aren't the view's: the previous patch's
+    /// build, or a matchup build (the patch's) in a 30-day view
+    pub fn otherPatch(p: Picked, v: html.View) ?[]const u8 {
+        return if (p.newer != null or p.period != v.period) p.f.label else null;
     }
 };
 

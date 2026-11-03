@@ -115,6 +115,9 @@ pub const Role = struct {
     timing: []const Timed = &.{},
     places: Places = .{},
     build: ?buildpanel.Data = null,
+    /// BuildRole's
+    build_patch: ?[]const u8 = null,
+    build_older: bool = false,
     /// Against or with each role: lane opponents first
     rels: []const Rel,
     by_patch: []const Patch,
@@ -421,6 +424,8 @@ pub const W = struct {
     pub const few = Phrase("Too few games at {r:text}.");
     pub const rare_role = Phrase("A rare role for {c:text}: {n:count} games.");
     pub const from = Phrase("Build from {g:text} games: too few at {r:text}.");
+    pub const from_older = Phrase("Build from patch {p:text} games: too few on this patch yet.");
+    pub const from_patch = Phrase("Build from patch {p:text} games, not the 30 days picked.");
     pub const plat = plain("Plat+");
     pub const picked = Phrase("{r:text} · {p:text} · {k:text}");
     pub const region = plain("Region");
@@ -539,6 +544,10 @@ pub const BuildRole = struct {
     /// A rank file's: the group the build is from (Rank's index), when this one has too
     /// few games
     from: u8 = 0,
+    /// The patch its games are from when not the view's: the previous one's (`older`,
+    /// this patch's too thin) or, on a matchup page in a 30-day view, the patch's
+    patch: ?[]const u8 = null,
+    older: bool = false,
 };
 
 /// ui-champmore.wasm's: the matchups
@@ -700,7 +709,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
     const charts = try a.alloc(ChartsRole, d.roles.len);
     for (d.roles, top, build, more, trends, charts) |x, *t, *b, *m, *tr, *c| {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
-        b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
+        b.* = .{ .role = x.role, .thin = x.thin, .build = x.build, .patch = x.build_patch, .older = x.build_older };
         m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .rels = x.rels };
         tr.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .by_patch = x.by_patch, .by_day = x.by_day, .by_length = x.by_length, .long_games = x.places.long_games, .ranks = x.ranks, .timing = x.timing };
         c.* = .{ .role = x.role, .lane = x.lane, .lanes = try laneEnds(a, x.role, x.rels), .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ahead = x.places.ahead, .behind = x.places.behind, .lane_gold = x.places.lane_gold };
@@ -1020,10 +1029,17 @@ pub const Build = struct {
         return if (p.panels[p.cur]) |*b| b else null;
     }
 
+    /// The shown rank's BuildRole, else the base one
+    fn shownRole(p: *const P) ?*const BuildRole {
+        const own = p.data.roles[p.cur].role;
+        if (p.files.group()) |g| return at(BuildRole, g, own);
+        return if (p.cur < p.data.roles.len) &p.data.roles[p.cur] else null;
+    }
+
     /// Under a rank pick, the group the build is from when another
     fn from(p: *const P) ?u8 {
-        const g = p.files.group() orelse return null;
-        const x = at(BuildRole, g, p.data.roles[p.cur].role) orelse return 0;
+        if (p.files.group() == null) return null;
+        const x = p.shownRole() orelse return 0;
         return if (x.from == @backingInt(p.files.shown.rank)) null else x.from;
     }
 
@@ -1061,6 +1077,7 @@ pub const Build = struct {
 
     pub fn view(p: *P, h: *H) N {
         const note: N = if (p.from()) |g| h.p(.{ .class = "from" }, .{W.from.with(h, .{ .g = W.ranks[g].s, .r = W.ranks[@backingInt(p.files.shown.rank)].s })}) else .none;
+        const when: N = if (p.shownRole()) |x| if (x.patch) |v| h.p(.{ .class = "from" }, .{if (x.older) W.from_older.with(h, .{ .p = v }) else W.from_patch.with(h, .{ .p = v })}) else .none else .none;
         return h.div(.{
             .class = "part",
             .id = "build",
@@ -1076,6 +1093,7 @@ pub const Build = struct {
         }, .{if (p.panel()) |b| card.view(h, .{ .flush = true }, &.{
             p.head(h),
             note,
+            when,
             b.view(h),
             if (p.data.against == null) h.p(.{ .class = "vs-hint" }, .{W.vs_hint}) else .none,
         }) else .none});
@@ -1842,4 +1860,29 @@ test "lane ends: biggest gold leads each way, thin and even lanes out" {
     try testing.expectEqualSlices(LaneOpp, &.{ .{ .champ = 5, .gold = 500 }, .{ .champ = 1, .gold = 300 } }, e[0]);
     try testing.expectEqualSlices(LaneOpp, &.{ .{ .champ = 6, .gold = 700 }, .{ .champ = 2, .gold = 250 } }, e[1]);
     try testing.expectEqual(0, (try laneEnds(arena.allocator(), .mid, &rels))[0].len);
+}
+
+test "a build from another patch than the view's says which" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const b: buildpanel.Data = .{ .runes = .{ .trees = &.{}, .games = 0, .wins = 0 }, .slots = &.{}, .champion = "Darius", .own = 50 };
+    const cases = [_]struct { BuildRole, ?[]const u8 }{
+        .{ .{ .role = .top, .build = b }, null },
+        .{ .{ .role = .top, .build = b, .patch = "16.20", .older = true }, "Build from patch 16.20 games: too few on this patch yet." },
+        .{ .{ .role = .top, .build = b, .patch = "16.21" }, "Build from patch 16.21 games, not the 30 days picked." },
+    };
+    for (cases) |c| {
+        const d: BuildData = .{ .roles = &.{c[0]} };
+        var p: Build = .{ .data = &d, .panels = try panels(a, d.roles) };
+        p.files.base[0] = &d;
+        var t: tree.Tree = .{};
+        var h: H = .init(a, &t);
+        var w: std.Io.Writer.Allocating = .init(a);
+        try html.write(&t, p.view(&h), &w.writer);
+        const got = std.mem.indexOf(u8, w.written(), "<p class=\"from\">");
+        if (c[1]) |want| {
+            try std.testing.expect(std.mem.indexOf(u8, w.written(), want) != null);
+        } else try std.testing.expect(got == null);
+    }
 }

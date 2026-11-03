@@ -159,7 +159,8 @@ confirm): no blind-safe score (J2 measured no win)
   items 4-6 top 3 each; games, share and % won per cell; most played by default, a
   highest win rate toggle only where marked() allows. Builds data has items 4-6,
   skill_path and median minutes (arch-stats.md "Builds"). --max-keys is 1 << 20;
-  matchup keys 1 << 22 (floor 1 after a week: watch at patch end)
+  matchup keys 1 << 22 (floor 1 after a week: watch at patch end). A panel from another patch than the
+  view's (a thin new patch, or a matchup's patch build under 30 days) says which
 - Opponents: 77x134 px tiles with unit words in one key line; tabs Lane, vs Jungle,
   vs Mid, vs Bot, vs Support, Duos (by ally role), vs usual with k per tab
   (champion.Pairs; off-lane pairs pull harder). Under a filter other than the root
@@ -182,7 +183,6 @@ confirm): no blind-safe score (J2 measured no win)
 ### Later
 
 - Influence per opponent (bans into your pool's hard lanes, B3) and per rank filter
-- Grey the builds strip when a filter leaves the patch view's region (filters.js)
 - End-of-game stats ranked in the role (LoLalytics only)
 - Build variants (Kai'Sa AP, U.GG's tabs) as clusters of item paths
 

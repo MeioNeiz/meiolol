@@ -263,6 +263,8 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .timing = if (builds_page.forChampionHere(site, site.view, ch, r)) |b| try timingOf(a, b.first_item, cp.min_games) else &.{},
         .places = try rankings.placesOf(site, ch, r),
         .build = if (picked) |b| try buildblock.data(a, b.f, b.b, ch.name) else null,
+        .build_patch = if (picked) |b| b.otherPatch(site.view) else null,
+        .build_older = if (picked) |b| b.newer != null else false,
         .rels = rels.items,
         .by_patch = by_patch,
         .by_day = by_day,
