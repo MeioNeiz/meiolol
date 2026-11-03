@@ -393,7 +393,11 @@ test "fixture games to stats, curves and the website" {
         // none for Darius top's few games
         const ahri = facts.buildOf(103, .middle).?;
         try testing.expect(ahri.games > 1000);
-        for ([_]u32{ahri.boots} ++ ahri.core) |id| if (id != 0) try testing.expect(facts.itemName(id).len > 0);
+        // Named as the builds file names them; the fixture's item list is short
+        for ([_]u32{ahri.boots} ++ ahri.core) |id| if (id != 0) {
+            const want = if (ddragon.find(build_file.items, id)) |n| n.name else "";
+            try testing.expectEqualStrings(want, facts.itemName(id));
+        };
         try testing.expectEqual(null, facts.buildOf(122, .top));
     }
     // Pool grid: a lanes file per champion and view, the champion page's lane opponents
