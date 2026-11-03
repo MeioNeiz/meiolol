@@ -10,6 +10,7 @@ const fmt = @import("fmt.zig");
 const phrase = @import("phrase.zig");
 const card = @import("card.zig");
 const tabs = @import("tabs.zig");
+const site = @import("site.zig");
 const strip = @import("strip.zig");
 const badge = @import("badge.zig");
 const button = @import("button.zig");
@@ -231,12 +232,12 @@ pub const Page = struct {
     }
 
     pub fn view(p: *Page, h: *H) N {
-        // The page's heading: the shell's tabs show where it is
+        // The page's heading: the header and the tabs show where it is
         return h.div(.{ .class = "c-admin", .data_island = "admin" }, .{
             h.el(.h1, .{ .class = "sr" }, .{W.title}),
-            if (p.snap) |s| body(p, h, s) else h.div(.{ .class = "bar" }, .{
+            if (p.snap) |s| body(p, h, s) else h.div(.{ .class = "body" }, .{
+                bar(p, h),
                 h.p(.{ .class = "wait", .role = "status" }, .{if (p.snap_failed) W.no_snap else W.loading}),
-                tools(p, h),
             }),
         });
     }
@@ -422,14 +423,19 @@ fn tools(p: *Page, h: *H) N {
     });
 }
 
-fn body(p: *Page, h: *H, s: *const ad.Snapshot) N {
+/// The subbar, in place of the private pages' one: the header holds Admin
+fn bar(p: *Page, h: *H) N {
     var items: [tab_names.values.len]tabs.Item = undefined;
     for (&items, 0..) |*it, i| {
         const t: Tab = @fromBackingInt(@intCast(i));
         it.* = .{ .label = tab_names.get(t), .selected = p.tab == t, .on = h.on(p, .{ .tab = t }) };
     }
+    return site.mainbar(h, W.tabs_label, &items, tools(p, h));
+}
+
+fn body(p: *Page, h: *H, s: *const ad.Snapshot) N {
     return h.div(.{ .class = "body" }, .{
-        h.div(.{ .class = "bar" }, .{ tabs.view(h, W.tabs_label, &items, &.{}), tools(p, h) }),
+        bar(p, h),
         switch (p.tab) {
             .overview => overview(p, h, s),
             .ops => controls(p, h, s),
@@ -877,10 +883,7 @@ pub const css =
     \\@layer components {
     \\  .c-admin { display: grid; gap: var(--sp-4); }
     \\  .c-admin .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    \\  .c-admin .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-3); min-width: 0;
-    \\    box-shadow: inset 0 -1px 0 var(--line); }
-    \\  .c-admin .bar > .c-tabs { flex: 0 1 auto; min-width: 0; box-shadow: none; margin-left: calc(-1 * var(--sp-3)); }
-    \\  .c-admin .bar > .wait { margin: 0; }
+    \\  .c-admin .wait { margin: 0; }
     \\  .c-admin .tools { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
     \\  .c-admin .status, .c-admin .note, .c-admin .wait { color: var(--muted); font-size: var(--fs-s); }
     \\  .c-admin .note { margin: 0; }

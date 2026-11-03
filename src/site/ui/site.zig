@@ -7,7 +7,7 @@
 //! menu. From 861 to 1160 px, with a login's private links in the bar, the search folds
 //! to its icon and opens over the links on focus. Also every page's foot (`foot`), the preview strip under the header
 //! (`preview`), on the Champions pages the bar under it (`subbar`: the section's tabs and
-//! the view picks), the page's main column (`main_class`) and a one-line notice in it
+//! the view picks; `mainbar`: one an island draws with its own tabs), the page's main column (`main_class`) and a one-line notice in it
 //! (`note`)
 const tree = @import("tree.zig");
 const tabs = @import("tabs.zig");
@@ -137,6 +137,12 @@ pub fn subbar(h: *H, o: Subbar) N {
         if (o.tabs.len > 0) tabs.view(h, o.label orelse W.champions, items, &.{}) else null,
         if (o.picks) |p| picks(h, p) else null,
     })});
+}
+
+/// The subbar drawn by an island at the top of the main column, with its own tabs (/admin's
+/// sections) and `end` beside them: flush under the header, its line across the page
+pub fn mainbar(h: *H, label: tree.Text, items: []const tabs.Item, end: N) N {
+    return h.div(.{ .class = "c-subbar main" }, .{h.div(.{ .class = "in" }, .{ tabs.view(h, label, items, &.{}), end })});
 }
 
 fn picks(h: *H, p: Picks) N {
@@ -321,6 +327,11 @@ pub const css =
     \\    .c-subbar .c-tabs { margin-left: -6px; }
     \\    .c-subbar .c-tabs > a { padding: 0 6px; }
     \\  }
+    \\  .c-sitemain .c-subbar.main { margin-top: calc(-1 * var(--sp-4)); border-bottom-color: transparent;
+    \\    border-image: linear-gradient(var(--line) 0 0) 0 0 1 / 0 0 1px / 0 100vw; }
+    \\  .c-sitemain .c-subbar.main { min-width: 0; }
+    \\  .c-sitemain .c-subbar.main > .in { padding: 0; }
+    \\  .c-subbar.main .c-tabs { flex: 0 1 auto; min-width: 0; }
     \\  .c-sitemain { max-width: var(--wrap); margin: 0 auto; padding: var(--sp-4) var(--gutter) var(--sp-6); }
     \\  .c-sitenote { margin: var(--sp-2) 0 var(--sp-3); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line);
     \\    border-radius: var(--r-m); background: var(--panel); color: var(--muted); }
@@ -372,6 +383,11 @@ pub fn gallery(g: *Gallery) void {
     };
     g.addFill("the subbar: Champions tabs and the view picks; they wrap under the tabs when narrow", subbar(h, .{ .tabs = o.groups[0].links, .picks = view_picks }));
     g.addFill("the subbar, tabs only", subbar(h, .{ .tabs = o.groups[1].links }));
+    g.addFill("an island's own subbar, a control at its end", mainbar(h, plain("Admin sections"), &.{
+        .{ .label = plain("Overview"), .selected = true },
+        .{ .label = plain("Crawler") },
+        .{ .label = plain("Riot API") },
+    }, h.span(.{ .class = "picks" }, .{plain("Live, updated just now")})));
     g.addFill("the main column, a notice in it", h.div(.{ .class = main_class }, .{note(h, plain("Early data: 1,234 games so far."))}));
     g.addFill("the foot", foot(h, .{
         .data = "in EUW, last 30 days, 23,210 games",

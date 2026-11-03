@@ -55,7 +55,8 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
             null else null,
         .header = SiteHeader{ .p = p },
         .look = tpl.trusted(search_loader),
-        .subbar = tpl.when(p.nav.inChampions() or p.nav.inYour() or p.counterparts != null or p.private != null, Subbar{ .p = p }),
+        // /admin's island draws its own (ui.site.mainbar)
+        .subbar = tpl.when(p.nav.inChampions() or p.nav.inYour() or p.counterparts != null or (p.private != null and p.private != .admin), Subbar{ .p = p }),
         // Remembered so shared pages link back into this view
         .remember = if (p.view) |v| tpl.t("<script data-v=\"{v}\">" ++ remember ++ "</script>\n", .{ .v = v.query() }) else null,
         .meio_view = tpl.when(p.view == null, tpl.trusted(meio_view)),
@@ -93,7 +94,7 @@ const SiteHeader = struct {
         }
         // Public pages get them from admin_link's script
         if (p.private != null) for (header_private, links[nav_items.len..]) |it, *l| {
-            l.* = privateLink(p, it);
+            l.* = privateLink(p, it, true);
         };
         // Each section's first tabs are in the bar already
         var your_more: [your_tabs.len - 1]ui.site.Link = undefined;
@@ -200,16 +201,16 @@ const admin_mark =
 
 const PrivateTab = struct { page: Private, href: []const u8, label: []const u8 };
 
-/// The tabs under the header on private pages
+/// The tabs under the header on the private pages but /admin, whose own sections are its
+/// subbar. Admin is the bar's
 const private_tabs = [_]PrivateTab{
     .{ .page = .index, .href = "/private", .label = "Private" },
     header_private[0],
     .{ .page = .app, .href = "/private/app", .label = "App review" },
     .{ .page = .notes, .href = "/admin/notes", .label = "Notes" },
-    header_private[1],
 };
 
-/// Also in the bar
+/// The bar's: Draft tester stands for the private pages under its tabs, as Champions does
 const header_private = [_]PrivateTab{
     .{ .page = .tester, .href = "/private/tester", .label = "Draft tester" },
     .{ .page = .admin, .href = "/admin", .label = "Admin" },
@@ -221,10 +222,12 @@ fn adminOnly(pr: Private) bool {
 }
 
 /// Admin-only ones hidden on the other private pages until private_mark finds an admin's
-/// browser: a tester gets no link that fails
-fn privateLink(p: Page, it: PrivateTab) ui.site.Link {
+/// browser: a tester gets no link that fails. `section`: Draft tester current on the
+/// pages any private login opens
+fn privateLink(p: Page, it: PrivateTab, section: bool) ui.site.Link {
     const cur = p.private.?;
-    return .{ .label = .{ .s = it.label }, .href = it.href, .current = it.page == cur, .hidden = adminOnly(it.page) and !adminOnly(cur) };
+    const here = it.page == cur or (section and it.page == .tester and !adminOnly(cur));
+    return .{ .label = .{ .s = it.label }, .href = it.href, .current = here, .hidden = adminOnly(it.page) and !adminOnly(cur) };
 }
 
 /// On shared and champion pages: moves data-view links into the last view visited (its
@@ -278,7 +281,7 @@ const Subbar = struct {
         var h: ui.H = .init(a, &t);
         if (p.private != null) {
             var tabs: [private_tabs.len]ui.site.Link = undefined;
-            for (private_tabs, &tabs) |it, *l| l.* = privateLink(p, it);
+            for (private_tabs, &tabs) |it, *l| l.* = privateLink(p, it, false);
             t.root = ui.site.subbar(&h, .{ .tabs = &tabs, .label = .{ .s = "Private" } });
         } else {
             const section: []const NavItem = if (p.nav.inChampions()) &champion_tabs else if (p.nav.inYour()) &your_tabs else &.{};
@@ -356,23 +359,26 @@ test "open: the bar links the private pages on private pages, where admin_link i
         const bar = out.written()[0..std.mem.indexOf(u8, out.written(), "</header>").?];
         const tester = "<a href=\"/private/tester\"";
         try std.testing.expectEqual(pr != null, std.mem.indexOf(u8, bar, tester) != null);
-        try std.testing.expectEqual(pr == .tester, std.mem.indexOf(u8, bar, tester ++ " aria-current=\"page\"") != null);
+        try std.testing.expectEqual(pr != null and pr != .notes, std.mem.indexOf(u8, bar, tester ++ " aria-current=\"page\"") != null);
         try std.testing.expectEqual(pr != null, std.mem.indexOf(u8, bar, "<a href=\"/admin\"") != null);
     }
 }
 
 test "open: a tester's private pages hide the admin links until an admin's browser shows them" {
+    const sub_class = "class=\"c-subbar\"";
     for ([_]Private{ .index, .tester, .app, .notes, .admin }) |pr| {
         var out: Writer.Allocating = .init(std.testing.allocator);
         defer out.deinit();
         try open(&out.writer, .{ .title = "t", .description = "d", .patch = "16.21", .data = "", .public = false, .private = pr });
         const page = out.written();
         const hidden = std.mem.count(u8, page, " hidden=\"\">Admin</a>") + std.mem.count(u8, page, " hidden=\"\">Notes</a>");
-        // The bar's and the menu's Admin, the tabs' Notes and Admin
-        try std.testing.expectEqual(@as(usize, if (adminOnly(pr)) 0 else 4), hidden);
+        // The bar's and the menu's Admin, the tabs' Notes
+        try std.testing.expectEqual(@as(usize, if (adminOnly(pr)) 0 else 3), hidden);
         const mark = if (adminOnly(pr)) admin_mark else private_mark;
         try std.testing.expect(std.mem.indexOf(u8, page, mark) != null);
-        try std.testing.expect(std.mem.indexOf(u8, page, mark).? > std.mem.indexOf(u8, page, "c-subbar").?);
+        // /admin's subbar is its island's
+        if (std.mem.indexOf(u8, page, sub_class)) |sub| try std.testing.expect(std.mem.indexOf(u8, page, mark).? > sub);
+        try std.testing.expectEqual(pr != .admin, std.mem.indexOf(u8, page, sub_class) != null);
     }
 }
 
