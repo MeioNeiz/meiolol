@@ -161,6 +161,25 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   tens; KillerName as the Riot ID game name; position blank in any queue), win chance
   by minute (private, statemodel.zig), builds against their comp, a small hotkey panel
 
+## Jacob's app review (3 Nov)
+
+His notes 94 to 121 by screen: docs/review/app-review-2026-11-03.md. Steps, after APP1:
+- APP13 A whole app: menu and settings in every phase, the site's features inside (draft
+  tester, pick planning, patch, champion pool) in the site's components and style, links
+  to the site for more; fits full screen and small; champ select without scrolling (108)
+- APP14 Pictures over words: download and first start as bars and animation (94, 95),
+  a chip as champion and number (101), fewer words on the board (102), bigger icons (107)
+- APP15 More options: many more picks, each with its effects and why (106); win rate and
+  win chance (110, 116: private %, public words, "Policy line"); win rate by game time and
+  objective value per comp (118, 119); who carries (117: the tally APP6 lacks); runes
+  and summoners (120); global beside EUW (103)
+- APP16 Every phase worth a look: lobby and queue with recent form and best champions
+  (97, 98); in game items, levelling and tips, private first, power spikes only as a
+  sheet the player opens (114, 115); more, shorter, funnier comments (109, 113)
+- APP17 Other seats: enemy seats' perspective too (allies done, APP3); move picks (111);
+  bans to guess roles (112). Players' mains, picks, streaks, comments (100, 121) only
+  where names are visible (APP7). Ban ideas from hovers (99): ally hovers only (APP4)
+
 ## Window layout
 
 Porofessor-style. Research: research/questions/desktop-app-layout.md (17
