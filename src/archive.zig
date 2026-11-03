@@ -122,7 +122,7 @@ pub fn exportNew(arena: std.mem.Allocator, io: Io, db: store.Db, dir: []const u8
         .summaries = counts.summaries,
         .timelines = counts.timelines,
         .mastery = counts.mastery,
-        .pruned = try pruneExported(db, path),
+        .pruned = try pruneExported(db, io, path),
         .more = more,
     };
 }
@@ -150,21 +150,22 @@ pub fn syncPath(io: Io, path: []const u8, kind: enum { file, directory }) !void 
 /// fetch time (a refetch since is newer and waits for the next export). Failed parses
 /// stay, as in the crawler's prune, for a fixed parser to redo. In short chunks by the
 /// file's rowids: the crawler's writer shares raw.db
-fn pruneExported(db: store.Db, path: [:0]const u8) !i64 {
+fn pruneExported(db: store.Db, io: Io, path: [:0]const u8) !i64 {
     try db.run("ATTACH ? AS done", .{path});
     defer db.exec("DETACH done") catch {};
     const last = try int(db, "SELECT coalesce(max(rowid), 0) FROM done.timeline_docs", .{});
     var pruned: i64 = 0;
     var lo: i64 = 0;
-    while (lo < last) : (lo += 500) {
+    while (lo < last) : (lo += prune_timelines) {
+        if (lo > 0) try io.sleep(.fromMilliseconds(chunk_rest_ms), .awake);
         try db.run(
             \\DELETE FROM raw.timeline_docs WHERE match_id IN
             \\    (SELECT d.match_id FROM done.timeline_docs s
             \\     JOIN raw.timeline_docs d ON d.match_id = s.match_id AND d.fetched_at = s.fetched_at
-            \\     WHERE s.rowid > ?1 AND s.rowid <= ?1 + 500 AND NOT EXISTS
+            \\     WHERE s.rowid > ?1 AND s.rowid <= ?1 + ?2 AND NOT EXISTS
             \\         (SELECT 1 FROM timeline_queue q
             \\          WHERE q.match_id = d.match_id AND q.status = 'failed'))
-        , .{lo});
+        , .{ lo, prune_timelines });
         pruned += db.changes();
     }
     return pruned;
@@ -490,24 +491,26 @@ pub fn pruneAcked(db: store.Db, io: Io, keep_days: u32, now_s: i64) !Pruned {
     const acked_until = (try store.schema.archivedUntil(db)) orelse 0;
     const cutoff = @min(acked_until, now_s - @as(i64, keep_days) * std.time.s_per_day);
     var out: Pruned = .{ .summaries = 0, .timelines = 0 };
-    // Short chunks: the crawler's writer shares raw.db
+    // Short chunks with rests: the crawler's writer shares raw.db
     while (true) {
         try db.run(
             \\DELETE FROM raw.raw_docs WHERE source = 'riot_match' AND key IN
-            \\    (SELECT key FROM raw.raw_docs WHERE source = 'riot_match' AND fetched_at < ? LIMIT 1000)
-        , .{cutoff});
+            \\    (SELECT key FROM raw.raw_docs WHERE source = 'riot_match' AND fetched_at < ? LIMIT ?)
+        , .{ cutoff, prune_summaries });
         const n = db.changes();
         out.summaries += n;
-        if (n == 0) break;
+        if (n < prune_summaries) break;
+        try io.sleep(.fromMilliseconds(chunk_rest_ms), .awake);
     }
     while (true) {
         try db.run(
             \\DELETE FROM raw.timeline_docs WHERE rowid IN
-            \\    (SELECT rowid FROM raw.timeline_docs WHERE fetched_at < ? LIMIT 500)
-        , .{cutoff});
+            \\    (SELECT rowid FROM raw.timeline_docs WHERE fetched_at < ? LIMIT ?)
+        , .{ cutoff, prune_timelines });
         const n = db.changes();
         out.timelines += n;
-        if (n == 0) break;
+        if (n < prune_timelines) break;
+        try io.sleep(.fromMilliseconds(chunk_rest_ms), .awake);
     }
     const freed = try returnFree(db, io, prune_keep_free);
     if (freed > 0) log.info("prune: {d} MB of raw.db returned to the disk", .{freed >> 20});
@@ -523,6 +526,14 @@ pub const prune_keep_free = 8 << 30;
 /// rest between transactions so its commits get in
 const vacuum_step = 2560;
 const vacuum_rest_ms = 500;
+/// Prune chunks, ~5 MB of bodies each: a delete reads every overflow page it frees, and
+/// on C01's disk a 1000-summary chunk held raw.db's write lock 10-30 s. Rests between
+/// them: the writer waits in SQLite's busy handler, which looks again only every 100 ms,
+/// so chunks back to back starved it until the loop ended (3 Nov: no commit for 10 min
+/// while a catch-up export pruned)
+const prune_summaries = 200;
+const prune_timelines = 100;
+const chunk_rest_ms = 250;
 
 /// Hands raw.db's free pages past `keep_bytes` back to the disk; bytes returned. Only
 /// with auto_vacuum=INCREMENTAL, which a VACUUM sets (docs/data-safety.md "Raw
