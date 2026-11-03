@@ -293,21 +293,12 @@ pub fn period(arena: std.mem.Allocator, c: *const Curves) ![]const u8 {
 /// pool has fewer than min_options
 fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket) ![]const Option {
     const stats = in.stats;
-    var pool: std.ArrayList(u32) = .empty;
-    for (in.mastery) |m| {
-        if (pool.items.len == pool_size) break;
-        if (m.points == 0) break;
-        const c = stats.index(m.champion) orelse continue;
-        if (stats.champRole(in.role, c).games < in.opts.min_games) continue;
-        if (in.pickable) |p| if (std.mem.findScalar(u32, p, m.champion) == null) continue;
-        try pool.append(arena, m.champion);
-    }
     const draft: core.Draft = .{
         .role = in.role,
         .allies = in.allies,
         .enemies = in.enemies,
         .bans = in.bans,
-        .pool = pool.items,
+        .pool = try poolOf(arena, in),
     };
     var buf: [pool_size]core.Suggestion = undefined;
     var list = core.recommend(stats, draft, in.opts, &buf);
@@ -372,9 +363,23 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
     return out;
 }
 
+/// The most-mastered pickable champions played in the role, up to pool_size
+pub fn poolOf(arena: std.mem.Allocator, in: Input) ![]const u32 {
+    var pool: std.ArrayList(u32) = .empty;
+    for (in.mastery) |m| {
+        if (pool.items.len == pool_size) break;
+        if (m.points == 0) break;
+        const c = in.stats.index(m.champion) orelse continue;
+        if (in.stats.champRole(in.role, c).games < in.opts.min_games) continue;
+        if (in.pickable) |p| if (std.mem.findScalar(u32, p, m.champion) == null) continue;
+        try pool.append(arena, m.champion);
+    }
+    return pool.items;
+}
+
 /// Of `pickable` (every champion when null), those with min_role_share of their games
 /// in `role`
-fn rolePlayers(arena: std.mem.Allocator, stats: *const Stats, role: Role, pickable: ?[]const u32) ![]const u32 {
+pub fn rolePlayers(arena: std.mem.Allocator, stats: *const Stats, role: Role, pickable: ?[]const u32) ![]const u32 {
     var out: std.ArrayList(u32) = .empty;
     for (0..stats.n) |c| {
         const id = stats.ids[c];
@@ -391,16 +396,16 @@ fn isStrong(s: core.Suggestion) bool {
     return false;
 }
 
-fn rankLogit(e: Expertise, in: Input, s: core.Suggestion) f64 {
+pub fn rankLogit(e: Expertise, in: Input, s: core.Suggestion) f64 {
     return @log(s.win / (1 - s.win)) + e.logit(in.role, masteryOf(in.mastery, s.champion));
 }
 
-fn masteryOf(mastery: []const Mastery, champion: u32) u32 {
+pub fn masteryOf(mastery: []const Mastery, champion: u32) u32 {
     for (mastery) |m| if (m.champion == champion) return m.points;
     return 0;
 }
 
-fn laneFact(arena: std.mem.Allocator, in: Input, me: u32, them: u32, bracket: Bracket) !?LaneFact {
+pub fn laneFact(arena: std.mem.Allocator, in: Input, me: u32, them: u32, bracket: Bracket) !?LaneFact {
     const c = in.curves orelse return null;
     const name = in.stats.nameOf(them);
     const f = view(c, in.role, bracket, me, them) orelse return .{
@@ -476,13 +481,21 @@ const test_champions = [_]statsfile.Champion{
     .{ .id = lux, .name = "Lux" },
 };
 
-const Fixture = struct {
+/// The fixture for tests beside the card (picks.zig)
+pub const test_ids = struct {
+    pub const garen = 86;
+    pub const darius = 122;
+    pub const sett = 875;
+};
+pub const testFixture = fixture;
+
+pub const Fixture = struct {
     stats_bytes: []u8,
     stats: Stats,
     curves_bytes: []u8,
     curves: Curves,
 
-    fn deinit(f: *Fixture) void {
+    pub fn deinit(f: *Fixture) void {
         f.stats.deinit(testing.allocator);
         testing.allocator.free(f.stats_bytes);
         f.curves.deinit(testing.allocator);
