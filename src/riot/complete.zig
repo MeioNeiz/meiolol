@@ -1311,16 +1311,24 @@ test "documents a failed spool write leaves out are counted dropped" {
 
     var p: Packer = try .init(gpa, io, data);
     p.clock = testClock;
-    p.restart_s = 0;
+    // Off for long after the failure, so nothing takes the queue while it is counted;
+    // a restart would fail on replay too and leave a later batch queued for ever
+    p.restart_s = 3600;
     try p.start();
+    defer p.close();
     try settle(&p);
     // No spool directory: every spool write fails
     try tmp.dir.deleteTree(io, "complete/spool");
     for ([_][]const u8{ "A", "B", "C" }) |k| p.push(.{ .kind = .summary, .key = k, .t = 1, .gz = gz });
-    try settle(&p);
-    try std.testing.expectEqual(3, p.stats.dropped.load(.monotonic));
+    for (0..2000) |_| {
+        if (p.isOff()) break;
+        try io.sleep(.fromMilliseconds(5), .awake);
+    } else return error.Timeout;
+    // The first batch may hold one, two or all three; the rest wait in the queue
+    const dropped = p.stats.dropped.load(.monotonic);
+    try std.testing.expect(dropped >= 1);
+    try std.testing.expectEqual(3, dropped + p.queued());
     try tmp.dir.createDirPath(io, "complete/spool");
-    p.close();
 }
 
 test "a clock stepped back never reopens a sealed day" {
