@@ -8,6 +8,7 @@ const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const teamrows = @import("teamrows.zig");
 const phrase = @import("phrase.zig");
+const fmt = @import("fmt.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -46,7 +47,27 @@ pub const Team = struct {
     timing: []const Timing = &.{},
     /// A line each, short and neutral ("Lone AP: Ahri")
     tips: []const []const u8 = &.{},
+    /// Its champion with the most damage to champions a minute (learned.md: no carry
+    /// label, who deals the damage is what is true)
+    top: ?Top = null,
 };
+
+pub const Top = struct {
+    champ: champ.Champ,
+    /// Of the team's damage, %; private edition only
+    share: ?f32 = null,
+};
+
+/// Win chance by game length from the champions' tallies (src/comp.zig Length)
+pub const Length = struct {
+    /// My team's, % by bucket (length_labels); private edition only
+    win: ?[length_labels.len]f32 = null,
+    /// More in long games, short ones; null: neither clearly
+    longer: ?bool = null,
+};
+
+/// core.champfacts.length_edges as labels
+const length_labels = [_][]const u8{ "<20", "20-25", "25-30", "30-35", "35+" };
 
 pub const Comp = struct {
     us: Team,
@@ -54,6 +75,7 @@ pub const Comp = struct {
     /// Five rows, a line of words per seat ("ahead in lane, level 6 sooner"); the gap
     /// is the lane's gold at `lane_minute`, private edition only
     lanes: []const teamrows.Row,
+    length: ?Length = null,
     /// The damage facts' patch; "" without them
     patch: []const u8 = "",
     gold_minute: u8,
@@ -67,6 +89,7 @@ pub fn view(h: *H, c: Comp) N {
     return h.section(.{ .class = "c-comp" }, .{
         h.h3(.{}, .{W.comps}),
         h.div(.{ .class = "teams" }, .{ team(h, c.us, .us, c), team(h, c.them, .them, c) }),
+        if (c.length) |l| length(h, l) else null,
         h.h3(.{}, .{W.lanes}),
         teamrows.view(h, c.lanes),
         h.p(.{ .class = "note" }, .{W.lean_note.with(h, .{ .g = @as(u32, c.gold_minute), .w = @as(u32, c.win_minute) })}),
@@ -92,7 +115,30 @@ fn team(h: *H, t: Team, side: Side, c: Comp) N {
         h.el(.h4, .{}, .{if (side == .us) W.us else W.them}),
         if (t.tips.len > 0) h.ul(.{ .class = "tips" }, .{tips.done()}) else null,
         if (t.damage) |d| damage(h, d) else h.p(.{ .class = "none" }, .{W.no_split}),
+        if (t.top) |x| h.p(.{ .class = "top" }, .{
+            champ.view(h, x.champ, .{ .px = .@"20", .named = false }),
+            W.top.with(h, .{ .n = x.champ.name }),
+            if (x.share) |p| W.top_share.with(h, .{ .p = p }) else null,
+        }) else null,
         if (t.timing.len > 0) h.ul(.{}, .{rows.done()}) else h.p(.{ .class = "none" }, .{W.no_lean}),
+    });
+}
+
+/// Words when clear; the tester's bars, a bucket each, whatever they show. Nothing at all
+/// for the public edition without a clear lean
+fn length(h: *H, l: Length) ?N {
+    const words: ?tree.Text = if (l.longer) |x| if (x) W.longer else W.shorter else if (l.win != null) W.no_length else null;
+    if (words == null and l.win == null) return null;
+    var cols = h.list();
+    if (l.win) |win| for (win, length_labels, 0..) |w, label, i| cols.add(h.li(.{ .key = i }, .{
+        h.span(.{ .class = "bar", .aria_hidden = true }, .{h.el(.i, .{ .style = h.vars(.{ .h = @max(0, @min(100, 5 * (w - 30))), .c = fmt.wrColour(w / 100, 0.2) }) }, .{})}),
+        h.b(.{}, .{W.pct.with(h, .{ .p = w })}),
+        h.small(.{}, .{label}),
+    }));
+    return h.div(.{ .class = "len" }, .{
+        h.h3(.{}, .{W.length}),
+        if (l.win != null) h.ul(.{}, .{cols.done()}) else null,
+        if (words) |x| h.p(.{}, .{x}) else null,
     });
 }
 
@@ -132,6 +178,13 @@ const W = struct {
     const late = phrase.Phrase("{n:text} leans late");
     const lean_numbers = phrase.Phrase("{g:signed} gold at {gm:int} min, {w:points} pts at {wm:int}");
     const lean_note = phrase.Phrase("Early: its team is usually ahead at {g:int} min but wins less from an even game at {w:int}; late, the other way round.");
+    const top = phrase.Phrase("Most damage: {n:text}");
+    const top_share = phrase.Phrase(" ({p:rate} of the team's)");
+    const length = plain("Win chance by game length");
+    const longer = plain("Your champions win more in long games.");
+    const shorter = plain("Your champions win more in short games.");
+    const no_length = plain("No clear lean by game length.");
+    const pct = phrase.Phrase("{p:rate}");
     const scope = phrase.Phrase("Champion averages: damage from patch {p:text} in EUW, leans from 30 days, lanes at {l:int} min.");
 };
 
@@ -165,6 +218,15 @@ pub const css =
     \\  .c-comp .tips li { display: block; font-size: var(--fs-s); }
     \\  .c-comp .tips li::before { content: "› "; color: var(--muted); }
     \\  .c-comp .note { font-size: var(--fs-xs); color: var(--faint); }
+    \\  .c-comp .top { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-s); }
+    \\  .c-comp .len { display: flex; flex-direction: column; gap: var(--sp-2); }
+    \\  .c-comp .len > p { font-size: var(--fs-s); }
+    \\  .c-comp .len ul { flex-direction: row; gap: var(--sp-2); }
+    \\  .c-comp .len li { flex: 1 1 0; flex-direction: column; gap: 2px; }
+    \\  .c-comp .len .bar { width: 100%; height: 40px; border-radius: var(--r-s); background: var(--panel-2); }
+    \\  .c-comp .len .bar > i { inset: auto 0 0 0; width: auto; height: calc(var(--h) * 1%); background: var(--c); }
+    \\  .c-comp .len b { font-size: var(--fs-s); font-variant-numeric: tabular-nums; }
+    \\  .c-comp .len small { font-size: var(--fs-xs); color: var(--muted); }
     \\}
     \\
 ;
@@ -187,13 +249,16 @@ pub const sample: Comp = .{
             .{ .champ = demo("Jinx", "Jinx"), .late = true },
         },
         .tips = &.{ "Lone AP: Orianna", "Level 6 first in 3 lanes" },
+        .top = .{ .champ = demo("Jinx", "Jinx") },
     },
     .them = .{
         .damage = .{ .magic = 0.81, .mix = .magic, .wins_less = true },
         .timing = &.{},
         .tips = &.{"All in on AP: magic resist goes a long way"},
+        .top = .{ .champ = demo("Syndra", "Syndra") },
     },
     .lanes = &lanes_public,
+    .length = .{ .longer = true },
     .patch = "15.21",
     .gold_minute = 14,
     .win_minute = 20,
@@ -218,6 +283,9 @@ fn private(h: *H) Comp {
     timing[1].gold = -390;
     timing[1].win = 3.1;
     c.us.timing = timing;
+    c.us.top.?.share = 31;
+    c.them.top.?.share = 34;
+    c.length = .{ .win = .{ 44.8, 48.2, 51.0, 53.6, 56.1 }, .longer = true };
     const rows = h.mem.dupe(teamrows.Row, &lanes_public) catch {
         h.oom = true;
         return sample;

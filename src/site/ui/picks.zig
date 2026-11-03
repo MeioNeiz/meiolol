@@ -53,6 +53,14 @@ pub const Row = struct {
     rest: f32 = 0,
     /// Practice's click (ui/practice.zig Act); "" for none
     act: []const u8 = "",
+    /// Most picked in the role, no win rates (learned.md: what you set doesn't
+    /// detectably change your chance): keystone and second tree ("Electrocute +
+    /// Sorcery") and summoners ("Flash, Ignite"); "" unknown. Shown in the open row
+    runes: []const u8 = "",
+    spells: []const u8 = "",
+    /// Their share of the champion's games in the role, %; private only
+    runes_pct: ?f32 = null,
+    spells_pct: ?f32 = null,
 };
 
 pub const Kind = enum { strength, with, into };
@@ -139,6 +147,7 @@ pub const Picks = struct {
             .mark = if (r.pool and !r.current) W.pool else null,
             .open = open,
             .detail = if (open) breakdown(h, d, r, mode) else null,
+            .note = if (open) build(h, r) else null,
             .label = W.why.with(h, .{ .n = r.champ.name }),
             .on = if (r.act.len > 0) null else h.on(p, .{ .open = r.rank }),
             .act = r.act,
@@ -170,6 +179,16 @@ fn breakdown(h: *H, d: Data, r: Row, mode: candlist.Mode) reasons.Breakdown {
     };
 }
 
+/// "Most picked: Electrocute + Sorcery (58%), Flash, Ignite (91%)"
+fn build(h: *H, r: Row) ?tree.Text {
+    if (r.runes.len == 0 and r.spells.len == 0) return null;
+    const runes = if (r.runes_pct) |p| W.pct.with(h, .{ .t = r.runes, .p = p }).s else r.runes;
+    const spells = if (r.spells_pct) |p| W.pct.with(h, .{ .t = r.spells, .p = p }).s else r.spells;
+    if (r.runes.len == 0) return W.picked.with(h, .{ .x = spells });
+    if (r.spells.len == 0) return W.picked.with(h, .{ .x = runes });
+    return W.picked2.with(h, .{ .x = runes, .y = spells });
+}
+
 const gold_cuts: [4]f32 = .{ 50, 150, 300, 500 };
 
 const W = struct {
@@ -191,6 +210,9 @@ const W = struct {
     const average = plain("Average pick");
     const avg_role = Phrase("Average {r:text} pick");
     const with_you = Phrase("Your team with {n:text}");
+    const picked = Phrase("Most picked: {x:text}");
+    const picked2 = Phrase("Most picked: {x:text}, {y:text}");
+    const pct = Phrase("{t:text} ({p:rate})");
 };
 
 pub const css =
@@ -210,7 +232,7 @@ pub const sample: Data = .{
     .them = "Syndra",
     .scope = "EUW, last 30 days",
     .rows = &.{
-        .{ .champ = champ.demo("Galio", "Galio"), .rank = 1, .win = 54.1, .base = 50.4, .gold = -40, .pool = true, .rest = 0.4, .effects = &.{
+        .{ .champ = champ.demo("Galio", "Galio"), .rank = 1, .win = 54.1, .base = 50.4, .gold = -40, .pool = true, .rest = 0.4, .runes = "Aftershock + Sorcery", .spells = "Flash, Teleport", .runes_pct = 61, .spells_pct = 88, .effects = &.{
             .{ .kind = .into, .other = champ.demo("Syndra", "Syndra"), .pp = 1.6, .games = 1840 },
             .{ .kind = .with, .other = champ.demo("JarvanIV", "Jarvan IV"), .pp = 0.9, .games = 620 },
             .{ .kind = .strength, .pp = 0.8, .games = 21_400 },
@@ -237,6 +259,8 @@ pub fn public(h: *H, d: Data) Data {
         o.win = null;
         o.gold = null;
         o.rest = 0;
+        o.runes_pct = null;
+        o.spells_pct = null;
         const es = h.mem.alloc(Effect, r.effects.len) catch return d;
         for (es, r.effects) |*e, f| e.* = .{ .kind = f.kind, .other = f.other, .pp = if (f.pp > 0) 1 else -1 };
         o.effects = es;
