@@ -56,7 +56,8 @@ first.
   ids, share) from the builds tally; readers skip unknown kinds, no version bump
 - Game length: champ-facts.tsv kind `length CHAMPION ROLE G W ...` from stats.zig's
   length buckets; a team's curve sums its champions' shrunk logit shifts per bucket
-- Main damage: CH10's per-role damage tally when it lands (meiolol-champpages)
+- Main damage: kind `dpm CHAMPION ROLE DPM` from the view's trend end sums (damage to
+  champions a minute); the team's top and its share of the five's sum
 - All regions: a second stats file in the desktop manifest; the poller loads both
 
 ## Slices

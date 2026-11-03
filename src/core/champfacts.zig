@@ -13,6 +13,12 @@
 //!                                        the usual build (Build); 0 for no item, - for
 //!                                        no order or path
 //!   item ID NAME                         a build's item's name
+//!   runes CHAMPION ROLE SHARE KEYSTONE SECOND    the most picked keystone and second
+//!                                        tree together (Runes); SHARE of the role's games
+//!   spells CHAMPION ROLE SHARE A B       the most picked summoner spell pair (Spells)
+//!   rune ID NAME, spell ID NAME          their names (id ranges may clash with items')
+//!   length CHAMPION ROLE G0 W0 ... G4 W4 games and wins by game length (length_edges)
+//!   dpm CHAMPION ROLE DPM                damage to champions a minute
 //! Readers skip kinds they don't know, so a new kind needs no version bump; a changed
 //! kind does.
 
@@ -50,6 +56,10 @@ pub const clear_z = 2.0;
 pub const ban_min_games = 2000;
 
 pub const Lean = enum { early, late, none };
+
+/// Game length bucket edges in minutes, as stats.length_edges
+pub const length_edges = [_]u32{ 20, 25, 30, 35 };
+pub const length_buckets = length_edges.len + 1;
 
 /// One champion-role's lean, in display units
 pub const LeanRow = struct {
@@ -117,10 +127,39 @@ pub const Build = struct {
 
 pub const Item = struct { id: u32, name: []const u8 };
 
-/// The usual builds and their items' names
+/// Most picked, never with a win rate (learned.md: builds' win rates mislead)
+pub const Runes = struct {
+    champion: u32,
+    role: Role,
+    /// Of the champion-role's games, 0..1
+    share: f32,
+    keystone: u32,
+    /// The secondary tree
+    second: u32,
+};
+
+pub const Spells = struct {
+    champion: u32,
+    role: Role,
+    share: f32,
+    /// Lower id first
+    ids: [2]u32,
+};
+
+pub const LengthRow = struct { champion: u32, role: Role, by: [length_buckets]Counts };
+pub const Dpm = struct { champion: u32, role: Role, dpm: f32 };
+
+/// What the app shows beyond the comp view's facts: usual builds, runes and spells with
+/// their names, games by length and damage a minute
 pub const App = struct {
     builds: []const Build = &.{},
     items: []const Item = &.{},
+    runes: []const Runes = &.{},
+    spells: []const Spells = &.{},
+    rune_names: []const Item = &.{},
+    spell_names: []const Item = &.{},
+    lengths: []const LengthRow = &.{},
+    dpm: []const Dpm = &.{},
 };
 
 pub const Damage = struct { champion: u32, magic: f32 };
@@ -136,6 +175,12 @@ pub const Facts = struct {
     bans: []const Ban = &.{},
     builds: []const Build = &.{},
     items: []const Item = &.{},
+    runes: []const Runes = &.{},
+    spells: []const Spells = &.{},
+    rune_names: []const Item = &.{},
+    spell_names: []const Item = &.{},
+    lengths: []const LengthRow = &.{},
+    dpm: []const Dpm = &.{},
 
     /// Magic share of the champion's damage to champions; null when unsampled
     pub fn magicOf(f: *const Facts, champion: u32) ?f32 {
@@ -163,8 +208,40 @@ pub const Facts = struct {
 
     /// "" for an item the file doesn't name
     pub fn itemName(f: *const Facts, id: u32) []const u8 {
-        for (f.items) |it| if (it.id == id) return it.name;
+        return nameIn(f.items, id);
+    }
+
+    pub fn runeName(f: *const Facts, id: u32) []const u8 {
+        return nameIn(f.rune_names, id);
+    }
+
+    pub fn spellName(f: *const Facts, id: u32) []const u8 {
+        return nameIn(f.spell_names, id);
+    }
+
+    fn nameIn(names: []const Item, id: u32) []const u8 {
+        for (names) |it| if (it.id == id) return it.name;
         return "";
+    }
+
+    pub fn runesOf(f: *const Facts, champion: u32, role: Role) ?Runes {
+        for (f.runes) |x| if (x.champion == champion and x.role == role) return x;
+        return null;
+    }
+
+    pub fn spellsOf(f: *const Facts, champion: u32, role: Role) ?Spells {
+        for (f.spells) |x| if (x.champion == champion and x.role == role) return x;
+        return null;
+    }
+
+    pub fn lengthOf(f: *const Facts, champion: u32, role: Role) ?[length_buckets]Counts {
+        for (f.lengths) |x| if (x.champion == champion and x.role == role) return x.by;
+        return null;
+    }
+
+    pub fn dpmOf(f: *const Facts, champion: u32, role: Role) ?f32 {
+        for (f.dpm) |x| if (x.champion == champion and x.role == role) return x.dpm;
+        return null;
     }
 
     /// Allocates in `arena`; the patch borrows `bytes`
@@ -179,6 +256,12 @@ pub const Facts = struct {
         var bans: std.ArrayList(Ban) = .empty;
         var builds: std.ArrayList(Build) = .empty;
         var items: std.ArrayList(Item) = .empty;
+        var runes: std.ArrayList(Runes) = .empty;
+        var spells: std.ArrayList(Spells) = .empty;
+        var rune_names: std.ArrayList(Item) = .empty;
+        var spell_names: std.ArrayList(Item) = .empty;
+        var lengths: std.ArrayList(LengthRow) = .empty;
+        var dpm: std.ArrayList(Dpm) = .empty;
         var rows: usize = 0;
         while (lines.next()) |line| : (rows += 1) {
             if (rows >= max_rows) return error.BadFacts;
@@ -214,9 +297,39 @@ pub const Facts = struct {
             } else if (std.mem.eql(u8, kind, "build")) {
                 try builds.append(arena, try parseBuild(&it));
             } else if (std.mem.eql(u8, kind, "item")) {
-                const id = try int(u32, it.next());
-                const name = it.next() orelse return error.BadFacts;
-                try items.append(arena, .{ .id = id, .name = try arena.dupe(u8, name) });
+                try items.append(arena, try parseName(arena, &it));
+            } else if (std.mem.eql(u8, kind, "rune")) {
+                try rune_names.append(arena, try parseName(arena, &it));
+            } else if (std.mem.eql(u8, kind, "spell")) {
+                try spell_names.append(arena, try parseName(arena, &it));
+            } else if (std.mem.eql(u8, kind, "runes")) {
+                try runes.append(arena, .{
+                    .champion = try int(u32, it.next()),
+                    .role = try roleOf(it.next()),
+                    .share = try share(it.next()),
+                    .keystone = try int(u32, it.next()),
+                    .second = try int(u32, it.next()),
+                });
+            } else if (std.mem.eql(u8, kind, "spells")) {
+                try spells.append(arena, .{
+                    .champion = try int(u32, it.next()),
+                    .role = try roleOf(it.next()),
+                    .share = try share(it.next()),
+                    .ids = .{ try int(u32, it.next()), try int(u32, it.next()) },
+                });
+            } else if (std.mem.eql(u8, kind, "length")) {
+                var x: LengthRow = .{ .champion = try int(u32, it.next()), .role = try roleOf(it.next()), .by = undefined };
+                for (&x.by) |*c| {
+                    c.* = .{ .games = try int(u32, it.next()), .wins = try int(u32, it.next()) };
+                    if (c.wins > c.games) return error.BadFacts;
+                }
+                try lengths.append(arena, x);
+            } else if (std.mem.eql(u8, kind, "dpm")) {
+                const champion = try int(u32, it.next());
+                const r = try roleOf(it.next());
+                const x = try finite(it.next());
+                if (x < 0) return error.BadFacts;
+                try dpm.append(arena, .{ .champion = champion, .role = r, .dpm = @floatCast(x) });
             }
         }
         f.damage = damage.items;
@@ -224,7 +337,28 @@ pub const Facts = struct {
         f.bans = bans.items;
         f.builds = builds.items;
         f.items = items.items;
+        f.runes = runes.items;
+        f.spells = spells.items;
+        f.rune_names = rune_names.items;
+        f.spell_names = spell_names.items;
+        f.lengths = lengths.items;
+        f.dpm = dpm.items;
         return f;
+    }
+
+    fn parseName(arena: std.mem.Allocator, it: *std.mem.SplitIterator(u8, .scalar)) !Item {
+        const id = try int(u32, it.next());
+        const name = it.next() orelse return error.BadFacts;
+        return .{ .id = id, .name = try arena.dupe(u8, name) };
+    }
+
+    fn roleOf(s: ?[]const u8) !Role {
+        return std.meta.stringToEnum(Role, s orelse "") orelse error.BadFacts;
+    }
+
+    fn share(s: ?[]const u8) !f32 {
+        const x = try float(s);
+        return if (x >= 0 and x <= 1) @floatCast(x) else error.BadFacts;
     }
 
     fn parseBuild(it: *std.mem.SplitIterator(u8, .scalar)) !Build {
@@ -287,8 +421,22 @@ pub fn write(w: *std.Io.Writer, patch: []const u8, ids: []const u32, magic_share
             if (b.hasOrder()) &b.order else "-", if (b.hasPath()) &b.path else "-",
         });
     }
+    for (app.runes) |x| try w.print("runes\t{d}\t{t}\t{d:.3}\t{d}\t{d}\n", .{ x.champion, x.role, x.share, x.keystone, x.second });
+    for (app.spells) |x| try w.print("spells\t{d}\t{t}\t{d:.3}\t{d}\t{d}\n", .{ x.champion, x.role, x.share, x.ids[0], x.ids[1] });
+    for (app.lengths) |x| {
+        try w.print("length\t{d}\t{t}", .{ x.champion, x.role });
+        for (x.by) |c| try w.print("\t{d}\t{d}", .{ c.games, c.wins });
+        try w.writeByte('\n');
+    }
+    for (app.dpm) |x| try w.print("dpm\t{d}\t{t}\t{d:.0}\n", .{ x.champion, x.role, x.dpm });
+    try writeNames(w, "item", app.items);
+    try writeNames(w, "rune", app.rune_names);
+    try writeNames(w, "spell", app.spell_names);
+}
+
+fn writeNames(w: *std.Io.Writer, kind: []const u8, list: []const Item) !void {
     // Names are one field: a tab or newline in one would break the line
-    for (app.items) |it| if (std.mem.findAny(u8, it.name, "\t\n") == null) try w.print("item\t{d}\t{s}\n", .{ it.id, it.name });
+    for (list) |it| if (std.mem.findAny(u8, it.name, "\t\n") == null) try w.print("{s}\t{d}\t{s}\n", .{ kind, it.id, it.name });
 }
 
 const testing = std.testing;
@@ -305,7 +453,23 @@ test "facts file round trip, unknown kinds skipped" {
         .{ .champion = 1, .role = .top, .games = 300 },
     };
     const items = [_]Item{ .{ .id = 3020, .name = "Sorcerer's Shoes" }, .{ .id = 1, .name = "bad\tname" } };
-    try write(&aw.writer, "16.21", &.{ 1, 2, 3 }, &.{ 0.9, null, 0.05 }, .{ .{ .games = 10, .wins = 4 }, .{ .games = 20, .wins = 10 }, .{ .games = 5, .wins = 2 } }, &rows, bans, .{ .builds = &builds, .items = &items });
+    const runes = [_]Runes{.{ .champion = 103, .role = .middle, .share = 0.582, .keystone = 8112, .second = 8200 }};
+    const spells = [_]Spells{.{ .champion = 103, .role = .middle, .share = 0.91, .ids = .{ 4, 14 } }};
+    var by: [length_buckets]Counts = undefined;
+    for (&by, 0..) |*c, b| c.* = .{ .games = @intCast(100 * (b + 1)), .wins = @intCast(50 * b) };
+    const lengths = [_]LengthRow{.{ .champion = 103, .role = .middle, .by = by }};
+    const dpm = [_]Dpm{.{ .champion = 103, .role = .middle, .dpm = 812 }};
+    const app: App = .{
+        .builds = &builds,
+        .items = &items,
+        .runes = &runes,
+        .spells = &spells,
+        .rune_names = &.{ .{ .id = 8112, .name = "Electrocute" }, .{ .id = 8200, .name = "Sorcery" } },
+        .spell_names = &.{ .{ .id = 4, .name = "Flash" }, .{ .id = 14, .name = "Ignite" } },
+        .lengths = &lengths,
+        .dpm = &dpm,
+    };
+    try write(&aw.writer, "16.21", &.{ 1, 2, 3 }, &.{ 0.9, null, 0.05 }, .{ .{ .games = 10, .wins = 4 }, .{ .games = 20, .wins = 10 }, .{ .games = 5, .wins = 2 } }, &rows, bans, app);
     try aw.writer.writeAll("someday\t1\t2\n");
     const f = try Facts.parse(arena, aw.written());
     try testing.expectEqualStrings("16.21", f.patch);
@@ -322,6 +486,15 @@ test "facts file round trip, unknown kinds skipped" {
     try testing.expectEqual(null, f.buildOf(103, .top));
     try testing.expectEqualStrings("Sorcerer's Shoes", f.itemName(3020));
     try testing.expectEqualStrings("", f.itemName(1));
+    try testing.expectEqualDeep(runes[0], f.runesOf(103, .middle).?);
+    try testing.expectEqualDeep(spells[0], f.spellsOf(103, .middle).?);
+    try testing.expectEqual(null, f.spellsOf(103, .top));
+    try testing.expectEqualStrings("Sorcery", f.runeName(8200));
+    try testing.expectEqualStrings("Flash", f.spellName(4));
+    try testing.expectEqualStrings("", f.itemName(4));
+    try testing.expectEqualDeep(by, f.lengthOf(103, .middle).?);
+    try testing.expectEqual(812, f.dpmOf(103, .middle).?);
+    try testing.expectEqual(null, f.dpmOf(1, .top));
     // A patch's first hours: too few games for any rate
     var early = f;
     early.games = ban_min_games - 1;
@@ -331,6 +504,9 @@ test "facts file round trip, unknown kinds skipped" {
     try testing.expectError(error.UnsupportedVersion, Facts.parse(arena, "meiolol-champs\t2\t16.21\n"));
     try testing.expectError(error.BadFacts, Facts.parse(arena, "meiolol-champs\t1\t16.21\nbuild\t1\ttop\t9\t0\t0\t0\t0\tQWR\t-\n"));
     try testing.expectError(error.BadFacts, Facts.parse(arena, "meiolol-champs\t1\t16.21\nbuild\t1\ttop\t9\t0\t0\t0\n"));
+    try testing.expectError(error.BadFacts, Facts.parse(arena, "meiolol-champs\t1\t16.21\nrunes\t1\ttop\t1.2\t8112\t8200\n"));
+    try testing.expectError(error.BadFacts, Facts.parse(arena, "meiolol-champs\t1\t16.21\nlength\t1\ttop\t10\t11\t0\t0\t0\t0\t0\t0\t0\t0\n"));
+    try testing.expectError(error.BadFacts, Facts.parse(arena, "meiolol-champs\t1\t16.21\nlength\t1\ttop\t10\t5\n"));
 }
 
 fn fuzzParse(valid: []const u8, s: *testing.Smith) !void {
@@ -342,6 +518,6 @@ fn fuzzParse(valid: []const u8, s: *testing.Smith) !void {
 }
 
 test "fuzz: a damaged facts file is parsed or refused" {
-    const valid: []const u8 = "meiolol-champs\t1\t16.21\ndamage\t1\t0.900\nmix\t0\t10\t4\nlean\t119\tbottom\t900\t900\t100\t-8.00\t1.50\ngames\t4000\nban\t1\t0.2500\nbuild\t103\tmiddle\t5000\t3020\t6655\t3157\t3089\tQWE\tQEWQQRQWQWRWWEEREE\nitem\t3020\tSorcerer's Shoes\n";
+    const valid: []const u8 = "meiolol-champs\t1\t16.21\ndamage\t1\t0.900\nmix\t0\t10\t4\nlean\t119\tbottom\t900\t900\t100\t-8.00\t1.50\ngames\t4000\nban\t1\t0.2500\nbuild\t103\tmiddle\t5000\t3020\t6655\t3157\t3089\tQWE\tQEWQQRQWQWRWWEEREE\nitem\t3020\tSorcerer's Shoes\nrunes\t103\tmiddle\t0.582\t8112\t8200\nspells\t103\tmiddle\t0.910\t4\t14\nlength\t103\tmiddle\t100\t0\t200\t50\t300\t100\t400\t150\t500\t200\ndpm\t103\tmiddle\t812\nrune\t8112\tElectrocute\nspell\t4\tFlash\n";
     try testing.fuzz(valid, fuzzParse, .{});
 }

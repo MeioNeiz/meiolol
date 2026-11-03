@@ -101,6 +101,7 @@ fn build(a: Allocator, live: bool) !?Next {
     defer poller.unlock();
     const c: Ctx = .{
         .stats = s.stats,
+        .facts = s.facts,
         .icons = s.icons,
         .private = s.edition == .private,
         .practice = state.private_code and s.practicing and s.practice.* != null,
@@ -305,6 +306,8 @@ pub const SiteIcons = struct {
 
 pub const Ctx = struct {
     stats: ?*const core.Stats,
+    /// Most picked runes and spells for the Options rows
+    facts: ?*const core.champfacts.Facts = null,
     icons: ?*const desktop.Icons,
     private: bool,
     /// Practice shows: the board's seats and options carry practice's clicks
@@ -435,6 +438,12 @@ fn lockedComp(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
     return v;
 }
 
+fn pct(x: [core.champfacts.length_buckets]f64) [core.champfacts.length_buckets]f32 {
+    var out: [core.champfacts.length_buckets]f32 = undefined;
+    for (&out, x) |*o, w| o.* = @floatCast(100 * w);
+    return out;
+}
+
 pub fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
     var teams: [2]ui.compview.Team = undefined;
     for (&teams, x.teams, 0..) |*out, t, side| {
@@ -452,6 +461,9 @@ pub fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
             });
         }
         out.* = .{ .timing = timing.items, .tips = try comp.tips(a, c.stats.?, x, side) };
+        if (t.top) |top| if (try c.champ(a, top.champion)) |champ| {
+            out.top = .{ .champ = champ, .share = if (c.private) if (top.share) |sh| @floatCast(100 * sh) else null else null };
+        };
         const d = t.damage orelse continue;
         out.damage = .{
             .magic = @floatCast(d.magic),
@@ -488,6 +500,7 @@ pub fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
         .us = teams[0],
         .them = teams[1],
         .lanes = rows,
+        .length = if (x.length) |l| .{ .win = if (c.private) pct(l.win) else null, .longer = l.longer } else null,
         .patch = x.patch,
         .gold_minute = core.champfacts.gold_minute,
         .win_minute = core.champfacts.win_minute,
@@ -602,7 +615,12 @@ pub fn picksOf(a: Allocator, c: Ctx, s: *const state.Select) !?ui.picks.Data {
                 .games = if (c.private) r.games else 0,
             };
         }
+        const pr = try picked(a, c, x.champion, p.role);
         try rows.append(a, .{
+            .runes = pr.runes,
+            .spells = pr.spells,
+            .runes_pct = pr.runes_pct,
+            .spells_pct = pr.spells_pct,
             .champ = me,
             .rank = @intCast(i + 1),
             .win = if (c.private) @floatCast(100 * x.win) else null,
@@ -624,6 +642,34 @@ pub fn picksOf(a: Allocator, c: Ctx, s: *const state.Select) !?ui.picks.Data {
         .rows = rows.items,
         .scope = if (s.card.period.len > 0) try a.print("EUW, {s}", .{s.card.period}) else "EUW",
     };
+}
+
+const Picked = struct { runes: []const u8 = "", spells: []const u8 = "", runes_pct: ?f32 = null, spells_pct: ?f32 = null };
+
+/// "Electrocute + Sorcery" and "Flash, Ignite", most picked; "" unknown or unnamed
+fn picked(a: Allocator, c: Ctx, champion: u32, role: core.Role) !Picked {
+    const f = c.facts orelse return .{};
+    var out: Picked = .{};
+    if (f.runesOf(champion, role)) |r| {
+        const key = f.runeName(r.keystone);
+        const tree = f.runeName(r.second);
+        if (key.len > 0 and tree.len > 0) {
+            out.runes = try a.print("{s} + {s}", .{ key, tree });
+            if (c.private) out.runes_pct = 100 * r.share;
+        }
+    }
+    if (f.spellsOf(champion, role)) |sp| {
+        // Flash first, as players say it
+        const flash = 4;
+        const ids = if (sp.ids[1] == flash) [2]u32{ sp.ids[1], sp.ids[0] } else sp.ids;
+        const x = f.spellName(ids[0]);
+        const y = f.spellName(ids[1]);
+        if (x.len > 0 and y.len > 0) {
+            out.spells = try a.print("{s}, {s}", .{ x, y });
+            if (c.private) out.spells_pct = 100 * sp.share;
+        }
+    }
+    return out;
 }
 
 /// `ally`: an ally's lane, without my pool or mastery (a null `mastery` tells the panel)

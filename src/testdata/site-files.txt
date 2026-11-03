@@ -375,7 +375,7 @@ champions/top.html 233adebef80722a7
 champions/twitch.html ba9356a4b78a791e
 champions/twitch/bot.html 06d080ee36fe4548
 daily.html f58fa691360ef0f7
-data/champ-facts.tsv 408f858f595eff43
+data/champ-facts.tsv b9c69270e50a12fc
 data/champion/ahri-build.bin 0cb05de9988017ad
 data/champion/ahri-charts.bin b9b8de4d2a90be55
 data/champion/ahri-more.bin 56db3f302b614f13

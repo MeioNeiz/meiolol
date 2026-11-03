@@ -50,6 +50,24 @@ pub const Team = struct {
     timing: []const Timing,
     /// The team's only magic or only physical dealer (loading.lone)
     lone: ?Lone = null,
+    /// Its champion with the most damage to champions a minute in its role
+    top: ?Top = null,
+};
+
+pub const Top = struct {
+    champion: u32,
+    /// Of the team's damage a minute, 0..1; null unless every champion's is known
+    share: ?f64,
+};
+
+/// My team's win chance by game length (champfacts.length_edges), from each champion's
+/// win rate in its role per length bucket, shrunk to even and summed as log-odds, mine
+/// minus theirs. A sum of champion averages: lanes and pairs count twice or not at all
+pub const Length = struct {
+    win: [champfacts.length_buckets]f64,
+    /// True: wins more in long games than short ones, false the other way; null unless
+    /// `sure` standard errors apart (games of 30 min and over against under 25)
+    longer: ?bool,
 };
 
 pub const Lone = struct { champion: u32, ap: bool };
@@ -68,6 +86,8 @@ pub const Comp = struct {
     /// Ours, theirs
     teams: [2]Team,
     lanes: [Role.count]Lane,
+    /// Null without length facts or five seats a side
+    length: ?Length = null,
     /// The damage facts' patch; "" without facts
     patch: []const u8,
 };
@@ -94,6 +114,7 @@ pub fn after(arena: std.mem.Allocator, in: Input, b: *const board.Board) !?*cons
 pub fn build(arena: std.mem.Allocator, in: Input, seats: [2][]const loading.Seat) !Comp {
     var out: Comp = .{ .teams = undefined, .lanes = undefined, .patch = if (in.facts) |f| f.patch else "" };
     for (seats, &out.teams) |side, *t| t.* = try team(arena, in, side);
+    if (in.facts) |f| out.length = lengthOf(f, seats);
     for (Role.all, &out.lanes) |r, *l| {
         const ours = inRole(seats[0], r);
         const theirs = inRole(seats[1], r);
@@ -153,7 +174,52 @@ fn team(arena: std.mem.Allocator, in: Input, seats: []const loading.Seat) !Team 
         lone = .{ .champion = s.champion, .ap = kind == .ap };
         break;
     };
-    return .{ .damage = damage, .timing = timing.items, .lone = lone };
+    return .{ .damage = damage, .timing = timing.items, .lone = lone, .top = topOf(facts, seats) };
+}
+
+fn topOf(facts: *const champfacts.Facts, seats: []const loading.Seat) ?Top {
+    var top: ?Top = null;
+    var most: f64 = 0;
+    var sum: f64 = 0;
+    var known: usize = 0;
+    for (seats) |s| {
+        const dpm = facts.dpmOf(s.champion, s.role orelse continue) orelse continue;
+        sum += dpm;
+        known += 1;
+        if (dpm > most) {
+            most = dpm;
+            top = .{ .champion = s.champion, .share = null };
+        }
+    }
+    if (top) |*t| if (known == 5 and seats.len == 5) {
+        t.share = most / sum;
+    };
+    return top;
+}
+
+/// Games a champion-role's bucket is shrunk with towards even
+const length_k = 100;
+
+fn lengthOf(facts: *const champfacts.Facts, seats: [2][]const loading.Seat) ?Length {
+    if (facts.lengths.len == 0 or seats[0].len != 5 or seats[1].len != 5) return null;
+    var x: [champfacts.length_buckets]f64 = @splat(0);
+    var v: [champfacts.length_buckets]f64 = @splat(0);
+    for (seats, [_]f64{ 1, -1 }) |side, sign| for (side) |s| {
+        const none: [champfacts.length_buckets]Counts = @splat(.{ .games = 0, .wins = 0 });
+        const by = if (s.role) |r| facts.lengthOf(s.champion, r) orelse none else none;
+        for (by, &x, &v) |c, *xb, *vb| {
+            const n = @as(f64, @floatFromInt(c.games)) + length_k;
+            const p = (@as(f64, @floatFromInt(c.wins)) + length_k / 2.0) / n;
+            xb.* += sign * @log(p / (1 - p));
+            vb.* += 1 / (n * p * (1 - p));
+        }
+    };
+    var out: Length = .{ .win = undefined, .longer = null };
+    for (&out.win, x) |*w, l| w.* = 1 / (1 + @exp(-l));
+    const d = (x[3] + x[4] - x[0] - x[1]) / 2;
+    const se = @sqrt(v[0] + v[1] + v[3] + v[4]) / 2;
+    if (@abs(d) >= sure * se) out.longer = d > 0;
+    return out;
 }
 
 /// A team's comp as loading screen pills. Picks are locked by then, so neutral facts
@@ -336,4 +402,36 @@ test "comp: a full team's mix and whether such teams win less" {
     const want = try std.fmt.allocPrint(arena, "Lone AP: {s}", .{f.stats.nameOf(f.stats.ids[2])});
     try testing.expectEqualStrings(want, ts[1]);
     try testing.expectEqual(0, (try tips(arena, &f.stats, &one, 1)).len);
+}
+
+test "comp: win chance by game length, the team's top damage" {
+    var f = try cardscenes.fixture();
+    defer f.deinit();
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var seats: [2][5]loading.Seat = undefined;
+    var lengths: [10]champfacts.LengthRow = undefined;
+    var dpm: [5]champfacts.Dpm = undefined;
+    for (0..2) |side| for (&seats[side], Role.all, 0..) |*s, r, i| {
+        const id = f.stats.ids[side * 5 + i];
+        s.* = .{ .champion = id, .role = r };
+        var by: [champfacts.length_buckets]Counts = undefined;
+        // Mine win more the longer the game, theirs even throughout
+        for (&by, 0..) |*c, b| c.* = .{ .games = 1000, .wins = if (side == 0) @intCast(400 + 50 * b) else 500 };
+        lengths[side * 5 + i] = .{ .champion = id, .role = r, .by = by };
+        if (side == 0) dpm[i] = .{ .champion = id, .role = r, .dpm = if (i == 2) 900 else 400 };
+    };
+    const facts: champfacts.Facts = .{ .lengths = &lengths, .dpm = &dpm };
+    const c = try build(arena, .{ .stats = &f.stats, .facts = &facts }, .{ &seats[0], &seats[1] });
+    const l = c.length.?;
+    try testing.expect(l.win[0] < 0.3 and l.win[4] > 0.7);
+    try testing.expectEqual(true, l.longer.?);
+    const top = c.teams[0].top.?;
+    try testing.expectEqual(f.stats.ids[2], top.champion);
+    try testing.expectApproxEqAbs(900.0 / 2500.0, top.share.?, 1e-6);
+    try testing.expectEqual(null, c.teams[1].top);
+    // Even on both sides: no lean either way
+    for (lengths[0..5]) |*x| x.by = lengths[5].by;
+    try testing.expectEqual(null, (try build(arena, .{ .stats = &f.stats, .facts = &facts }, .{ &seats[0], &seats[1] })).length.?.longer);
 }

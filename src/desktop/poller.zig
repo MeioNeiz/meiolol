@@ -387,6 +387,7 @@ pub fn stop() void {
 pub const Shown = struct {
     status: state.Status,
     stats: ?*const core.Stats,
+    facts: ?*const core.champfacts.Facts,
     icons: *const Icons,
     edition: state.Edition,
     note: state.Note,
@@ -410,6 +411,7 @@ pub fn lock() Shown {
     return .{
         .status = shared.status,
         .stats = stats,
+        .facts = if (shared.data) |d| if (d.facts) |*f| f else null else null,
         .icons = &shared.icons.?,
         .edition = edition,
         .note = switch (shared.note) {

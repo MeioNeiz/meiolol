@@ -102,7 +102,9 @@ file and packed rows: docs/architecture.md.
   to the exe (src/datafiles.zig, shared with `meiolol-app`), and champ-facts.tsv when
   there (core/champfacts.zig: damage split, team mix tally, early or late leans and the
   patch's ban rates, which the site's shared view writes as data/champ-facts.tsv; the
-  comp view's, src/comp.zig, and the ban options')
+  comp view's, src/comp.zig, and the ban options'; per champion-role also the usual
+  build, most picked runes and spells with their names, games by length and damage a
+  minute: in-game build, Options rows, comp length and top damage)
 - A detached poller thread does what `watch` does once a second and publishes a
   ui.Status (with the lane card) under a mutex, waking the window with a WM_NULL; the
   UI thread only draws, and sleeps between messages (own main loop: dvui's dx11 App

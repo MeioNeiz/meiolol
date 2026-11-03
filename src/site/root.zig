@@ -110,6 +110,9 @@ pub const Options = struct {
     origin: ?[]const u8 = null,
     /// Matchup pages with fewer games are noindex and left out of the sitemaps
     index_min_games: u32 = 0,
+    /// Champion-roles with fewer of the view's games get no games by length or damage a
+    /// minute in champ-facts.tsv
+    app_trend_min_games: u32 = 100,
     /// The daily eval's TSV (`meiolol eval --history`) for the method page's chart
     eval_history: ?[]const u8 = null,
     /// `meiolol lean`'s file: the champion pages' early or late line where set

@@ -281,6 +281,7 @@ test "fixture games to stats, curves and the website" {
         .builds_prev = .{ null, prev_builds_path, null, prev_builds_path },
         .builds_rank = .{ .{ rank_paths[0], null, rank_paths[1] }, @splat(null), @splat(null), @splat(null) },
         .lean = lean_path,
+        .app_trend_min_games = 1,
     };
     try site.generate(gpa, io, db, opts);
     try expectSiteFiles(arena, io, out);
@@ -399,6 +400,24 @@ test "fixture games to stats, curves and the website" {
             try testing.expectEqualStrings(want, facts.itemName(id));
         };
         try testing.expectEqual(null, facts.buildOf(122, .top));
+        // Most picked runes and spells beside it, named the same way
+        const runes = facts.runesOf(103, .middle).?;
+        try testing.expect(runes.share > 0 and runes.share <= 1);
+        for ([_]u32{ runes.keystone, runes.second }) |id| {
+            const want = if (ddragon.find(build_file.runes, id)) |n| n.name else "";
+            try testing.expectEqualStrings(want, facts.runeName(id));
+        }
+        const spells = facts.spellsOf(103, .middle).?;
+        for (spells.ids) |id| {
+            const want = if (ddragon.find(build_file.spells, id)) |n| n.name else "";
+            try testing.expectEqualStrings(want, facts.spellName(id));
+        }
+        try testing.expectEqual(null, facts.runesOf(122, .top));
+        // Games by length and damage a minute from the view's few games of Darius top
+        var by_length: u32 = 0;
+        for (facts.lengthOf(122, .top).?) |c| by_length += c.games;
+        try testing.expectEqual(games, by_length);
+        try testing.expect(facts.dpmOf(122, .top).? > 0);
     }
     // Pool grid: a lanes file per champion and view, the champion page's lane opponents
     {

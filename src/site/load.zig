@@ -625,17 +625,34 @@ fn champFacts(site: *const Site, facts: learn.Facts) ![]const u8 {
 /// Fewer games of a champion-role and the app shows no usual build for it
 const min_build_games = 100;
 
+comptime {
+    std.debug.assert(std.mem.eql(u32, &core.champfacts.length_edges, &stats.length_edges));
+}
+
 /// Each champion-role's usual build for the app in game: the champion page's build (the
-/// previous patch's while this one's is thin), each kind's most played option, and its
-/// items' names
+/// previous patch's while this one's is thin), each kind's most played option (runes
+/// and spells with their share), and their names; from the view's trend, games by length
+/// and damage a minute
 fn appBuilds(site: *const Site) !core.champfacts.App {
     const a = site.arena;
     var out: std.ArrayList(core.champfacts.Build) = .empty;
+    var runes: std.ArrayList(core.champfacts.Runes) = .empty;
+    var spells: std.ArrayList(core.champfacts.Spells) = .empty;
     var named: std.AutoArrayHashMapUnmanaged(u32, []const u8) = .empty;
+    var rune_named: std.AutoArrayHashMapUnmanaged(u32, []const u8) = .empty;
+    var spell_named: std.AutoArrayHashMapUnmanaged(u32, []const u8) = .empty;
     for (site.champs) |ch| for (core.Role.all) |r| {
         const p = site_builds.forChampion(site, site.view, ch, r) orelse continue;
         const b = p.b;
         if (b.games < min_build_games) continue;
+        if (topShare(b, .runes)) |t| if (t.v.len == 8) {
+            try runes.append(a, .{ .champion = ch.id, .role = r, .share = t.share, .keystone = t.v[1], .second = t.v[5] });
+            for ([_]u32{ t.v[1], t.v[5] }) |id| if (ddragon.find(p.f.runes, id)) |n| try rune_named.put(a, id, n.name);
+        };
+        if (topShare(b, .spells)) |t| if (t.v.len == 2) {
+            try spells.append(a, .{ .champion = ch.id, .role = r, .share = t.share, .ids = t.v[0..2].* });
+            for (t.v) |id| if (ddragon.find(p.f.spells, id)) |n| try spell_named.put(a, id, n.name);
+        };
         var x: core.champfacts.Build = .{ .champion = ch.id, .role = r, .games = b.games };
         if (top(b, .boots)) |v| x.boots = v[0];
         if (top(b, .core3)) |v| for (x.core[0..@min(3, v.len)], v[0..@min(3, v.len)]) |*c, id| {
@@ -651,9 +668,46 @@ fn appBuilds(site: *const Site) !core.champfacts.App {
         for ([_]u32{x.boots} ++ x.core) |id| if (id != 0) if (ddragon.find(p.f.items, id)) |n| try named.put(a, id, n.name);
         try out.append(a, x);
     };
+    var lengths: std.ArrayList(core.champfacts.LengthRow) = .empty;
+    var dpm: std.ArrayList(core.champfacts.Dpm) = .empty;
+    if (site.trend) |*t| for (site.champs) |ch| for (core.Role.all) |r| {
+        var x: core.champfacts.LengthRow = .{ .champion = ch.id, .role = r, .by = undefined };
+        var games: u32 = 0;
+        for (&x.by, 0..) |*c, i| {
+            c.* = t.length(r, ch.c, i);
+            games += c.games;
+        }
+        if (games >= site.opts.app_trend_min_games) try lengths.append(a, x);
+        const e = t.end(r, ch.c);
+        if (e.games >= site.opts.app_trend_min_games and e.seconds > 0) {
+            const damage: f64 = @floatFromInt(e.sums[comptime std.meta.fieldIndex(stats.End, "damage").?]);
+            try dpm.append(a, .{ .champion = ch.id, .role = r, .dpm = @floatCast(damage * 60 / @as(f64, @floatFromInt(e.seconds))) });
+        }
+    };
+    return .{
+        .builds = out.items,
+        .items = try itemsOf(a, named),
+        .runes = runes.items,
+        .spells = spells.items,
+        .rune_names = try itemsOf(a, rune_named),
+        .spell_names = try itemsOf(a, spell_named),
+        .lengths = lengths.items,
+        .dpm = dpm.items,
+    };
+}
+
+fn itemsOf(a: std.mem.Allocator, named: std.AutoArrayHashMapUnmanaged(u32, []const u8)) ![]const core.champfacts.Item {
     const items = try a.alloc(core.champfacts.Item, named.count());
     for (items, named.keys(), named.values()) |*it, id, name| it.* = .{ .id = id, .name = name };
-    return .{ .builds = out.items, .items = items };
+    return items;
+}
+
+/// The most played option of `kind` and its share of the kind's games
+fn topShare(b: builds_file.File.Build, kind: builds_file.Kind) ?struct { v: []const u32, share: f32 } {
+    const rows = b.get(kind) orelse return null;
+    if (rows.options.len == 0 or rows.games == 0) return null;
+    const o = rows.options[0];
+    return .{ .v = o.v, .share = @floatCast(@min(1, @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(rows.games)))) };
 }
 
 /// The most played option of `kind`, null with none
