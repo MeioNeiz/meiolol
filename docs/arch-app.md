@@ -140,7 +140,9 @@ file and packed rows: docs/architecture.md.
   deleted), recent-curves.bin, champ-facts.tsv, meiolol-desktop.exe (names it doesn't
   know are skipped, so a new data file needs no version bump). Each goes to NAME.part (gzip on the
   wire, nginx's .gz copies), is checked against hash and size, then renamed over the
-  old. The running exe is renamed to meiolol-desktop.old.exe (kept for a manual
+  old; with no data yet the window shows their bytes as a bar (Options.progress, the
+  shell woken at each whole percent). The running exe is renamed to
+  meiolol-desktop.old.exe (kept for a manual
   rollback) and the new one takes its name: next start runs it, and the footer says
   so. New data: the poller loads it between ticks, publishes a status built from it,
   then frees the old. The token goes as Authorization: Bearer (the key in
