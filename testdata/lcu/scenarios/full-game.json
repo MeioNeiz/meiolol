@@ -6,6 +6,15 @@
   "mastery": {"Ahri": 212000, "Orianna": 64000, "Syndra": 41000, "Viktor": 30500, "Lux": 12000},
   "pickable": ["Ahri", "Orianna", "Syndra", "Viktor", "Lux", "Annie", "Garen", "Zed", "Galio", "Malzahar"],
   "owned": ["Ahri", "Orianna", "Syndra", "Viktor", "Lux", "Garen", "Zed", "Galio"],
+  "history": [
+    ["Ahri", "w", 9, 2, 11, 27], ["Ahri", "w", 6, 3, 8, 31], ["Syndra", "l", 3, 7, 4, 24],
+    ["Ahri", "w", 11, 4, 6, 29], ["Orianna", "l", 2, 5, 12, 35], ["Ahri", "l", 5, 6, 7, 22],
+    ["Viktor", "w", 8, 1, 9, 26], ["Ahri", "w", 7, 3, 10, 33], ["Syndra", "w", 10, 4, 5, 28],
+    ["Orianna", "w", 4, 2, 18, 30], ["Lux", "l", 1, 8, 9, 19], ["Ahri", "w", 12, 5, 7, 37],
+    ["Viktor", "l", 4, 6, 3, 25], ["Ahri", "l", 3, 4, 8, 32], ["Syndra", "w", 9, 2, 6, 23],
+    ["Ahri", "w", 8, 2, 12, 28], ["Orianna", "w", 3, 3, 15, 34], ["Garen", "l", 2, 6, 1, 21],
+    ["Ahri", "w", 6, 1, 9, 26], ["Viktor", "w", 7, 3, 8, 30]
+  ],
   "steps": [
     {"wait": 1, "phase": "Lobby", "expect": {"phase": "Lobby"}},
     {"wait": 1, "phase": "Matchmaking"},

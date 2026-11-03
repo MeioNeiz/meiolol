@@ -7,7 +7,8 @@
 //!
 //! Scenario keys: queue (420 ranked solo/duo, 430 blind, 450 ARAM), local_cell (0-4),
 //! positions (10 cells, "" hidden), pick_order (cell groups), mastery {name: points},
-//! tier, pickable and owned (names; default every champion), steps. A step: wait
+//! tier, pickable and owned (names; default every champion), history (recent games
+//! newest first, each [name, "w" or "l", kills, deaths, assists, minutes]), steps. A step: wait
 //! (seconds before it), note, phase (gameflow), timer (champ select phase), session
 //! (false: champ select without a session, as between phases), positions, intent,
 //! hover, lock, ban ({cell: name}), swap ([cell, cell]: a trade), game ({time, gold,
@@ -42,6 +43,8 @@ pub const Cell = struct {
     items: i64 = 0,
 };
 
+pub const Played = struct { champion: u32, win: bool, k: u32, d: u32, a: u32, minutes: u32 };
+
 pub const Scenario = struct {
     name: []const u8,
     queue: i64,
@@ -49,6 +52,7 @@ pub const Scenario = struct {
     positions: [10][]const u8,
     pick_order: []const []const u8,
     mastery: []const [2]u32,
+    history: []const Played = &.{},
     tier: []const u8,
     pickable: []const u32,
     owned: []const u32,
@@ -111,6 +115,22 @@ pub const Scenario = struct {
             var m = v.object.iterator();
             while (m.next()) |e| try rows.append(arena, .{ try s.champion(e.key_ptr.*), @intCast(e.value_ptr.integer) });
             s.mastery = rows.items;
+        }
+        if (o.get("history")) |v| {
+            const out = try arena.alloc(Played, v.array.items.len);
+            for (out, v.array.items) |*x, g| {
+                const f = g.array.items;
+                if (f.len != 6) return error.BadHistory;
+                x.* = .{
+                    .champion = try s.champion(f[0].string),
+                    .win = std.mem.eql(u8, f[1].string, "w"),
+                    .k = @intCast(f[2].integer),
+                    .d = @intCast(f[3].integer),
+                    .a = @intCast(f[4].integer),
+                    .minutes = @intCast(f[5].integer),
+                };
+            }
+            s.history = out;
         }
         if (o.get("tier")) |v| s.tier = v.string;
         s.pickable = if (o.get("pickable")) |v| try s.championList(arena, v) else try s.allChampions(arena);
@@ -366,6 +386,24 @@ pub fn lcu(a: std.mem.Allocator, s: *const Scenario, st: *const State, target: [
         const out = try a.alloc(Row, s.mastery.len);
         for (out, s.mastery) |*o, m| o.* = .{ .championId = m[0], .championPoints = m[1], .championLevel = @min(50, m[1] / 12_000 + 1) };
         return json(a, out);
+    }
+    if (eql(u8, path, "/lol-match-history/v1/products/lol/current-summoner/matches")) {
+        const Stats = struct { kills: u32, deaths: u32, assists: u32, win: bool };
+        const Me = struct { participantId: u32 = 1, championId: u32, stats: Stats };
+        const Row = struct { gameId: u64, gameCreation: i64, gameDuration: u32, mapId: u32 = 11, queueId: i64, participants: [1]Me };
+        const out = try a.alloc(Row, s.history.len);
+        // Oldest first, as the client lists them; a game every hour back from now
+        for (out, 0..) |*o, i| {
+            const g = s.history[s.history.len - 1 - i];
+            o.* = .{
+                .gameId = 7_000_000_000 + i,
+                .gameCreation = 1_762_000_000_000 + @as(i64, @intCast(i)) * 3_600_000,
+                .gameDuration = g.minutes * 60 + 17,
+                .queueId = s.queue,
+                .participants = .{.{ .championId = g.champion, .stats = .{ .kills = g.k, .deaths = g.d, .assists = g.a, .win = g.win } }},
+            };
+        }
+        return json(a, .{ .games = .{ .gameCount = out.len, .games = out } });
     }
     if (eql(u8, path, "/lol-ranked/v1/current-ranked-stats")) {
         const tier = if (s.tier.len > 0) s.tier else "NONE";
