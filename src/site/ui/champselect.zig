@@ -45,6 +45,10 @@ pub const Lane = struct {
     mode: Mode = .blind,
     /// One sentence on the matchup; "" before both are known
     sentence: []const u8 = "",
+    /// The matchup as a figure ("-150"), gold at the lane minute, shown in place of the
+    /// sentence, which is then its title; "" for none
+    fig: []const u8 = "",
+    lean: Lean = .none,
     /// Few games behind the sentence
     thin: bool = false,
     /// The matchup's gold by minute (band and line, no `you`) and what it shows
@@ -65,7 +69,7 @@ pub const Option = struct {
     current: bool = false,
     /// Private edition: your team's win chance with it, in %
     win: ?f32 = null,
-    /// "+120 gold at 14 min vs Syndra"; "" without an opponent or curves
+    /// "+120 gold at 14"; "" without an opponent or curves
     lane: []const u8 = "",
     lean: Lean = .none,
     /// Few games behind the lane fact: fainter
@@ -75,7 +79,28 @@ pub const Option = struct {
     act: []const u8 = "",
 };
 
-pub const Reason = struct { text: []const u8, lean: Lean = .none };
+pub const Reason = struct {
+    text: []const u8,
+    lean: Lean = .none,
+    /// Drawn as a picture, `text` then its title: the champion it is about (with, into)
+    /// or the role (strong in)
+    champ: ?champ.Champ = null,
+    role: ?role.Role = null,
+    /// Private edition: the signed points ("+1.4"); "" an arrow by `lean`
+    fig: []const u8 = "",
+};
+
+/// A reason chip: the champion or role and its figure, else the words
+pub fn effect(h: *H, r: Reason) N {
+    const pic: ?N = if (r.champ) |c| champ.view(h, c, .{ .px = .@"20", .named = false }) else if (r.role) |x| role.view(h, x, .{ .s = .s }) else null;
+    if (pic == null) return chip.view(h, .{ .v = .reason }, .{r.text});
+    const fig: []const u8 = if (r.fig.len > 0) r.fig else switch (r.lean) {
+        .good => "▲",
+        .bad => "▼",
+        .none => "",
+    };
+    return chip.view(h, .{ .v = .reason, .title = r.text }, .{ pic, h.b(.{}, .{fig}) });
+}
 
 pub const BanOption = struct {
     champ: champ.Champ,
@@ -129,9 +154,13 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
                     }}),
                 }),
             }),
+            if (l.fig.len > 0) h.span(.{ .class = "fig", .data_lean = if (l.lean == .none) null else l.lean, .data_thin = l.thin, .title = l.sentence }, .{
+                h.b(.{}, .{l.fig}),
+                h.small(.{}, .{W.gold_at}),
+            }) else null,
             if (l.them) |t| champ.view(h, t, .{ .px = .@"48", .side = .them, .state = if (l.guessed) .thin else .normal }) else null,
         }),
-        if (l.sentence.len > 0) h.p(.{ .class = "say", .data_thin = l.thin }, .{l.sentence}) else null,
+        if (l.sentence.len > 0 and l.fig.len == 0) h.p(.{ .class = "say", .data_thin = l.thin }, .{l.sentence}) else null,
         if (l.chart) |c| if (held) |x| x.at(c, W.gold).view(h) else null else null,
         if (l.chart != null and l.caption.len > 0) h.p(.{ .class = "scope" }, .{l.caption}) else null,
         h.div(.{ .class = "opts-head" }, .{
@@ -152,7 +181,7 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
 fn option(h: *H, i: usize, o: Option, locked: bool) N {
     var chips = h.list();
     for (o.reasons, 0..) |r, j| chips.add(h.span(.{ .key = j, .class = "why", .data_lean = if (r.lean == .none) null else r.lean }, .{
-        chip.view(h, .{ .v = .reason }, .{r.text}),
+        effect(h, r),
     }));
     return h.li(.{ .key = i, .data_current = o.current, .data_act = if (o.act.len > 0) o.act else null }, .{
         champ.view(h, o.champ, .{ .px = .@"48", .named = false }),
@@ -197,6 +226,7 @@ const W = struct {
     const team_win = plain("team win");
     const no_pick = plain("No pick yet");
     const gold = plain("Gold");
+    const gold_at = plain("gold at 14");
     const vs = plain(" vs ");
     const guess = plain("?");
     const blind = plain("Safe blind");
@@ -234,6 +264,12 @@ pub const css =
     \\  .c-cs .vs .who { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
     \\  .c-cs .tags { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-cs .say { margin: 0; color: var(--text); }
+    \\  .c-cs .vs .fig { display: flex; flex-direction: column; align-items: flex-end; flex: none; line-height: 1.1; }
+    \\  .c-cs .vs .fig > b { font-size: var(--fs-xl); font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
+    \\  .c-cs .vs .fig > small { font-size: var(--fs-xs); color: var(--muted); }
+    \\  .c-cs .fig[data-lean="good"] > b { color: var(--hi2); }
+    \\  .c-cs .fig[data-lean="bad"] > b { color: var(--lo2); }
+    \\  .c-cs .fig[data-thin] > b { opacity: 0.6; }
     \\  .c-cs .say[data-thin] { color: var(--muted); }
     \\  .c-cs .opts-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
     \\  .c-cs .scope { margin: 0; font-size: var(--fs-xs); color: var(--faint); }
@@ -249,6 +285,8 @@ pub const css =
     \\  .c-cs .fact[data-lean="bad"], .c-cs .why[data-lean="bad"] .c-chip { color: var(--lo2); }
     \\  .c-cs .fact[data-faint] { opacity: 0.6; }
     \\  .c-cs .chips { display: flex; gap: 4px; flex-wrap: wrap; }
+    \\  .c-cs .why .c-chip:has(> b) { gap: 4px; padding-left: 2px; }
+    \\  .c-cs .why .c-chip > b { font-weight: var(--w-m); font-variant-numeric: tabular-nums; }
     \\  .c-cs .win { display: flex; flex-direction: column; align-items: flex-end; flex: none;
     \\    font-weight: var(--w-b); font-variant-numeric: tabular-nums; color: var(--c, var(--text)); }
     \\  .c-cs .win > small { font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
@@ -269,30 +307,37 @@ pub const sample: Screen = .{
         .guessed = true,
         .mode = .counter,
         .sentence = "Ahri usually trails Syndra by about 150 gold at 14 minutes, though 8 games in 10 land between -900 and +700.",
+        .fig = "-150",
+        .lean = .bad,
         .chart = .{
             .a = "Ahri",
             .b = "Syndra",
             .band = &.{ .{ 0, 0 }, .{ -40, 30 }, .{ -90, 60 }, .{ -140, 90 }, .{ -190, 110 }, .{ -240, 140 }, .{ -290, 160 }, .{ -340, 190 }, .{ -390, 210 }, .{ -440, 240 }, .{ -480, 260 }, .{ -530, 280 }, .{ -570, 300 }, .{ -610, 320 }, .{ -650, 340 }, .{ -690, 360 } },
             .line = &.{ 0, -5, -15, -25, -40, -50, -60, -75, -85, -95, -105, -115, -125, -135, -150, -160 },
         },
-        .caption = "Gold, you minus them: the line is the average, the band the middle half of 1,204 games (All games, EUW, last 30 days).",
+        .caption = "1,204 games, all ranks, EUW, last 30 days",
         .options = &.{
             .{
                 .champ = demo("Ahri", "Ahri"),
                 .current = true,
-                .lane = "-150 gold at 14 min vs Syndra",
+                .lane = "-150 gold at 14",
                 .lean = .bad,
                 .reasons = &.{ .{ .text = "your most played" }, .{ .text = "magic damage, your team needs it", .lean = .good } },
             },
             .{
                 .champ = demo("Galio", "Galio"),
-                .lane = "+210 gold at 14 min vs Syndra",
+                .lane = "+210 gold at 14",
                 .lean = .good,
-                .reasons = &.{ .{ .text = "120k mastery" }, .{ .text = "strong in mid now", .lean = .good } },
+                .reasons = &.{
+                    .{ .text = "120k mastery points" },
+                    .{ .text = "strong in mid now", .lean = .good, .role = .mid },
+                    .{ .text = "pairs well with Darius", .lean = .good, .champ = demo("Darius", "Darius") },
+                    .{ .text = "hard into Syndra", .lean = .bad, .champ = demo("Syndra", "Syndra") },
+                },
             },
             .{
                 .champ = demo("Viktor", "Viktor"),
-                .lane = "about even at 14 min vs Syndra",
+                .lane = "even at 14",
                 .faint = true,
                 .reasons = &.{.{ .text = "few games in this matchup", .lean = .bad }},
             },
@@ -311,6 +356,12 @@ fn private(h: *H, s: Screen) Screen {
         return s;
     };
     for (opts, [_]f32{ 52.1, 54.0, 50.6 }) |*o, w| o.win = w;
+    const rs = h.mem.dupe(Reason, opts[1].reasons) catch {
+        h.oom = true;
+        return s;
+    };
+    for (rs[1..], [_][]const u8{ "+0.9", "+1.4", "-1.1" }) |*r, f| r.fig = f;
+    opts[1].reasons = rs;
     p.lane.options = opts;
     return p;
 }
@@ -327,8 +378,10 @@ fn allyLane(h: *H) Screen {
     s.lane = .{
         .role = .top,
         .me = lanes[0].us.champ,
+        .them = lanes[0].them.champ,
         .mode = .locked,
-        .sentence = "",
+        // No matchup curve: the sentence, no figure
+        .sentence = "No top games of Garen against Darius in the last 30 days.",
         .scope = "EUW, last 30 days",
     };
     return s;

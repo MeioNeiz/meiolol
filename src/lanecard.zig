@@ -115,6 +115,17 @@ pub const Option = struct {
     reasons: []const []const u8,
     /// One per reason: how the window colours its pill
     tones: []const Tone = &.{},
+    /// One per reason: what the app draws it as
+    marks: []const Mark = &.{},
+};
+
+/// A reason as a picture: mastery as its words, the role (strong in) or the other
+/// champion (with, into) with the points it moves my team's win chance
+pub const Mark = struct {
+    kind: enum { mastery, base, ally, enemy },
+    /// The other champion; 0 for mastery and base
+    champion: u32 = 0,
+    pp: f32 = 0,
 };
 
 pub const Tone = enum { neutral, good, bad };
@@ -122,6 +133,8 @@ pub const Tone = enum { neutral, good, bad };
 pub const LaneFact = struct {
     /// "vs Syndra: +120 gold at 14 min (1234 games)"
     text: []const u8,
+    /// The estimate at lane_minute, gold; null with no lane games yet
+    gold: ?i32 = null,
     /// Who the estimate puts ahead, whatever the games
     lean: enum { ahead, behind, unclear },
     /// How strongly to show it: curvesfile.fade of the games
@@ -358,6 +371,7 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
             .lane = if (opp) |p| try laneFact(arena, in, s.champion, p.champion, bracket) else null,
             .reasons = rs.text,
             .tones = rs.tones,
+            .marks = rs.marks,
         };
     }
     return out;
@@ -423,17 +437,19 @@ pub fn laneFact(arena: std.mem.Allocator, in: Input, me: u32, them: u32, bracket
             f.view.games(),
             if (thin) ", mostly baseline" else "",
         }),
+        .gold = e.mean,
         .lean = if (e.mean > 0) .ahead else if (e.mean < 0) .behind else .unclear,
         .strength = @floatCast(curvesfile.fade(f.view.games())),
     };
 }
 
-const Reasons = struct { text: []const []const u8, tones: []const Tone };
+const Reasons = struct { text: []const []const u8, tones: []const Tone, marks: []const Mark };
 
 fn reasons(arena: std.mem.Allocator, in: Input, s: core.Suggestion, opp: ?Opponent, show_strong: bool) !Reasons {
     const stats = in.stats;
     var out: std.ArrayList([]const u8) = .empty;
     var tones: std.ArrayList(Tone) = .empty;
+    var marks: std.ArrayList(Mark) = .empty;
     const points = masteryOf(in.mastery, s.champion);
     if (points > 0) {
         var aw: std.Io.Writer.Allocating = .init(arena);
@@ -441,6 +457,7 @@ fn reasons(arena: std.mem.Allocator, in: Input, s: core.Suggestion, opp: ?Oppone
         try aw.writer.writeAll(" mastery points");
         try out.append(arena, aw.written());
         try tones.append(arena, .neutral);
+        try marks.append(arena, .{ .kind = .mastery });
     }
     for (s.reasons()) |r| {
         if (out.items.len == max_reasons) break;
@@ -454,8 +471,17 @@ fn reasons(arena: std.mem.Allocator, in: Input, s: core.Suggestion, opp: ?Oppone
         };
         try out.append(arena, text);
         try tones.append(arena, if (r.pp > 0) .good else .bad);
+        try marks.append(arena, .{
+            .kind = switch (r.kind) {
+                .base => .base,
+                .ally => .ally,
+                .enemy => .enemy,
+            },
+            .champion = if (r.kind == .base) 0 else r.champion,
+            .pp = @floatCast(r.pp),
+        });
     }
-    return .{ .text = out.items, .tones = tones.items };
+    return .{ .text = out.items, .tones = tones.items, .marks = marks.items };
 }
 
 /// 950, 12k, 1.2M

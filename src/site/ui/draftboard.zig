@@ -40,6 +40,9 @@ pub const Seat = struct {
     /// A few words ("strong in top now", "51.2% in top"); "" for none
     fact: []const u8 = "",
     lean: Lean = .none,
+    /// The app: a figure beside the name in place of `fact` ("53.0%", "▲"), which is
+    /// then its title
+    fig: []const u8 = "",
     /// An ally still to pick: options for the role
     ideas: []const champ.Champ = &.{},
     /// A click on the seat and on each idea, "" for none: practice's (ui/practice.zig Act)
@@ -162,9 +165,12 @@ fn seat(h: *H, s: Seat, side: Side) N {
             .label = words.empty,
         }),
         h.span(.{ .class = "who" }, .{
-            if (s.champ) |c| h.b(.{}, .{c.name}) else null,
+            if (s.champ) |c| h.span(.{ .class = "nm" }, .{
+                h.b(.{}, .{c.name}),
+                if (s.fig.len > 0) h.span(.{ .class = "fact", .data_lean = if (s.lean == .none) null else s.lean, .title = s.fact }, .{s.fig}) else null,
+            }) else null,
             line,
-            if (s.fact.len > 0) h.span(.{ .class = "fact", .data_lean = if (s.lean == .none) null else s.lean }, .{s.fact}) else null,
+            if (s.fact.len > 0 and s.fig.len == 0) h.span(.{ .class = "fact", .data_lean = if (s.lean == .none) null else s.lean }, .{s.fact}) else null,
             if (s.ideas.len > 0) h.span(.{ .class = "ideas" }, .{ h.span(.{ .class = "line" }, .{words.ideas}), ideas.done() }) else null,
         }),
     });
@@ -435,6 +441,9 @@ pub const css =
     \\  .c-draft .who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
     \\  .c-draft .seat[data-side="them"] .who { align-items: flex-end; text-align: right; }
     \\  .c-draft .who > b { max-width: 100%; font-weight: var(--w-m); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    \\  .c-draft .nm { display: flex; align-items: baseline; gap: 6px; max-width: 100%; min-width: 0; }
+    \\  .c-draft .seat[data-side="them"] .nm { flex-direction: row-reverse; }
+    \\  .c-draft .nm > b { font-weight: var(--w-m); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-draft .line { font-size: var(--fs-xs); color: var(--muted); }
     \\  .c-draft .fact { font-size: var(--fs-xs); color: var(--t2); max-width: 100%; overflow: hidden;
     \\    text-overflow: ellipsis; white-space: nowrap; }
@@ -571,7 +580,7 @@ pub const sample: Board = .{
     .lanes = &.{
         .{
             .role = .top,
-            .us = .{ .champ = demo("Garen", "Garen"), .state = .locked, .fact = "strong in top now", .lean = .good },
+            .us = .{ .champ = demo("Garen", "Garen"), .state = .locked, .fact = "strong in top now", .lean = .good, .fig = "▲" },
             .them = .{ .champ = demo("Darius", "Darius"), .state = .locked, .guessed = true },
         },
         .{
@@ -582,7 +591,7 @@ pub const sample: Board = .{
         .{
             .role = .mid,
             .us = .{ .champ = demo("Ahri", "Ahri"), .state = .hover, .you = true },
-            .them = .{ .champ = demo("Syndra", "Syndra"), .state = .locked, .guessed = true, .fact = "weak in mid now", .lean = .bad },
+            .them = .{ .champ = demo("Syndra", "Syndra"), .state = .locked, .guessed = true, .fact = "48.1% in mid · 1,204 games", .lean = .bad, .fig = "48.1%" },
         },
         .{
             .role = .bot,

@@ -477,12 +477,15 @@ fn seat(a: Allocator, c: Ctx, s: board.Seat, side: usize, k: usize) !ui.draftboa
     if (sl.champion != 0 and s.games > 0) if (s.role) |r| {
         if (c.private) {
             out.fact = try a.print("{f} in {s} · {f} games", .{ rate(s.win), r.label(), count(s.games) });
+            out.fig = try a.print("{f}", .{rate(s.win)});
             out.lean = if (s.win >= 0.515) .good else if (s.win <= 0.485) .bad else .none;
         } else if (s.win >= 0.515) {
             out.fact = try a.print("strong in {s} now", .{r.label()});
+            out.fig = "▲";
             out.lean = .good;
         } else if (s.win <= 0.485) {
             out.fact = try a.print("weak in {s} now", .{r.label()});
+            out.fig = "▼";
             out.lean = .bad;
         }
     };
@@ -494,19 +497,30 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode, ally
     const options = try a.alloc(ui.champselect.Option, card.options.len);
     for (options, card.options) |*x, o| {
         const reasons = try a.alloc(ui.champselect.Reason, o.reasons.len);
-        for (reasons, o.reasons, 0..) |*r, text, j| r.* = .{
-            .text = text,
-            .lean = if (j < o.tones.len) switch (o.tones[j]) {
-                .neutral => .none,
-                .good => .good,
-                .bad => .bad,
-            } else .none,
-        };
+        for (reasons, o.reasons, 0..) |*r, text, j| {
+            r.* = .{
+                .text = text,
+                .lean = if (j < o.tones.len) switch (o.tones[j]) {
+                    .neutral => .none,
+                    .good => .good,
+                    .bad => .bad,
+                } else .none,
+            };
+            // A champion or the role and its points (testers), the words in the title
+            if (j >= o.marks.len) continue;
+            const m = o.marks[j];
+            switch (m.kind) {
+                .mastery => continue,
+                .base => r.role = uiRole(card.role),
+                .ally, .enemy => r.champ = try c.champ(a, m.champion),
+            }
+            if (c.private) r.fig = try a.print("{f}", .{pp(m.pp)});
+        }
         x.* = .{
             .champ = (try c.champ(a, o.champion)).?,
             .current = o.champion == card.me,
             .win = if (c.private) @floatCast(100 * o.win) else null,
-            .lane = if (o.lane) |l| l.text else "",
+            .lane = if (o.lane) |l| if (l.gold) |g| try a.print("{f} gold at {d}", .{ gold(g), core.curvesfile.lane_minute }) else l.text else "",
             .lean = if (o.lane) |l| switch (l.lean) {
                 .ahead => .good,
                 .behind => .bad,
@@ -535,11 +549,11 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode, ally
             .locked => .locked,
         },
         .sentence = card.sentence,
+        .fig = if (card.matchup) |m| try a.print("{f}", .{gold(m.gold.mean)}) else "",
+        .lean = if (card.matchup) |m| if (m.gold.mean > 0) .good else if (m.gold.mean < 0) .bad else .none else .none,
         .thin = if (card.matchup) |m| m.thin else false,
         .chart = chart,
-        .caption = if (card.matchup) |m| try a.print("Gold, {s} minus them: the line is the average, the band the middle half of {d} games ({s}, EUW, {s}).", .{
-            if (ally) if (me_champ) |x| x.name else "them" else "you", m.games, m.bracket.label(), card.period,
-        }) else "",
+        .caption = if (card.matchup) |m| try a.print("{f} games · {s} · EUW, {s}", .{ count(m.games), m.bracket.label(), card.period }) else "",
         .options = options,
         .mastery = if (ally) null else state.by_mastery.load(.acquire),
         .scope = if (card.period.len > 0) try a.print("EUW, {s}", .{card.period}) else "EUW",
@@ -816,6 +830,20 @@ fn signed(n: i64) Signed {
     return .{ .n = n };
 }
 
+/// Win chance points, one decimal: "+1.4", "−0.8"
+const Points = struct {
+    v: f32,
+
+    pub fn format(p: Points, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        try w.writeAll(if (p.v < 0) "\u{2212}" else "+");
+        try w.print("{d:.1}", .{@abs(p.v)});
+    }
+};
+
+fn pp(v: f32) Points {
+    return .{ .v = v };
+}
+
 fn rate(v: f64) Num {
     return .{ .v = v, .kind = .rate };
 }
@@ -860,7 +888,7 @@ fn testSelect() state.Select {
     const S = struct {
         const options = [_]lanecard.Option{
             .{ .champion = ahri, .mastery = 0, .win = 0.521, .lane = .{ .text = "-150 gold at 14 min vs Syndra", .lean = .behind }, .reasons = &.{"your most played"} },
-            .{ .champion = galio, .mastery = 0, .win = 0.54, .lane = null, .reasons = &.{ "120k mastery", "strong in mid now" }, .tones = &.{ .neutral, .good } },
+            .{ .champion = galio, .mastery = 0, .win = 0.54, .lane = null, .reasons = &.{ "120k mastery", "strong in mid now" }, .tones = &.{ .neutral, .good }, .marks = &.{ .{ .kind = .mastery }, .{ .kind = .base, .pp = 1.4 } } },
         };
         const allies = [_]board.Seat{.{ .slot = .{ .champion = ahri, .role = .middle, .state = .hover, .me = true }, .role = .middle, .guessed = false, .games = 25_551, .win = 0.55 }};
         const enemies = [_]board.Seat{.{ .slot = .{ .champion = syndra, .state = .locked }, .role = null, .guessed = true, .games = 20, .win = 0.45 }};
@@ -908,6 +936,7 @@ test "champ select: the private edition's numbers, the public one's words" {
     try testing.expect(ps.banning);
     try testing.expectEqualStrings("53.0% won, 8.0% of games, +31 wins per 10k", ps.ban_options[0].why);
     try testing.expectEqualStrings("55.0% in mid · 26k games", ps.board.lanes[2].us.fact);
+    try testing.expectEqualStrings("55.0%", ps.board.lanes[2].us.fig);
     // Syndra has no role: she takes the first empty enemy row
     try testing.expectEqualStrings("Syndra", ps.board.lanes[0].them.champ.?.name);
     try testing.expect(ps.board.lanes[2].us.you);
@@ -917,7 +946,12 @@ test "champ select: the private edition's numbers, the public one's words" {
     try testing.expectEqualStrings("", ps.lane.me.?.src);
     try testing.expectEqualSlices([2]f32, &.{ .{ 0, 0 }, .{ -60, 40 }, .{ -100, 70 } }, ps.lane.chart.?.band);
     try testing.expectEqualStrings("Syndra", ps.lane.chart.?.b);
-    try testing.expectEqualStrings("Gold, you minus them: the line is the average, the band the middle half of 1204 games (All games, EUW, last 30 days).", ps.lane.caption);
+    try testing.expectEqualStrings("1.2k games · All games · EUW, last 30 days", ps.lane.caption);
+    try testing.expect(ps.lane.fig.len > 0);
+    // Strong in the role as the role and its points
+    try testing.expectEqual(.mid, ps.lane.options[1].reasons[1].role.?);
+    try testing.expectEqualStrings("+1.4", ps.lane.options[1].reasons[1].fig);
+    try testing.expectEqual(null, ps.lane.options[1].reasons[0].role);
 
     var d = try data(a, .{ .stats = stats, .icons = null, .private = false }, .{ .select = &sel }, .none);
     const s = d.screen.select;
@@ -925,6 +959,9 @@ test "champ select: the private edition's numbers, the public one's words" {
     try testing.expectEqual(null, s.lane.options[0].win);
     try testing.expectEqualStrings("wins often and is picked a lot in mid", s.ban_options[0].why);
     try testing.expectEqualStrings("strong in mid now", s.board.lanes[2].us.fact);
+    try testing.expectEqualStrings("▲", s.board.lanes[2].us.fig);
+    // Public: no points, an arrow by the lean
+    try testing.expectEqualStrings("", s.lane.options[1].reasons[1].fig);
     d.seq = 7;
     const html = try render(a, d, null, null);
     try testing.expect(std.mem.find(u8, html, "data-seq=\"7\"") != null);
@@ -937,7 +974,7 @@ test "champ select: the private edition's numbers, the public one's words" {
     try testing.expectEqualStrings("Syndra", back.screen.select.lane.them.?.name);
 }
 
-test "an ally's lane: their seat marked, no mastery toggle, their name in the caption" {
+test "an ally's lane: their seat marked, no mastery toggle, their name on the chart" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -965,7 +1002,7 @@ test "an ally's lane: their seat marked, no mastery toggle, their name in the ca
     const html = try render(a, try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .select = &sel }, .none), null, null);
     try testing.expect(std.mem.find(u8, html, "data-act=\"lane 1\"") != null);
     try testing.expect(std.mem.find(u8, html, "Your lane</button>") != null);
-    try testing.expect(std.mem.startsWith(u8, s.lane.caption, "Gold, Galio minus them"));
+    try testing.expectEqualStrings("Galio", s.lane.chart.?.a);
     // The board's mode is still mine; the panel's is the card's
     try testing.expectEqual(.counter, s.lane.mode);
     // Still to lock: options as for my lane
