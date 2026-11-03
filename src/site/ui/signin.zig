@@ -101,13 +101,14 @@ const W = struct {
 
 pub const css =
     \\@layer components {
-    \\  .c-signin { display: flex; flex-direction: column; gap: var(--sp-2); width: 100%; max-width: 360px; }
+    \\  .c-signin { display: flex; flex-direction: column; gap: var(--sp-2); width: 100%; max-width: 360px;
+    \\    margin-inline: auto; }
     \\  .c-signin[data-full] { align-self: center; padding-top: var(--sp-6); }
     \\  .c-signin h2 { margin: 0; font-size: var(--fs-l); font-weight: var(--w-b); }
     \\  .c-signin p { margin: 0; color: var(--muted); font-size: var(--fs-s); }
     \\  .c-signin .fail { color: var(--turn); }
     \\  .c-signin > .c-btn { align-self: flex-start; }
-    \\  .c-signin.line { flex-direction: row; align-items: center; max-width: none; color: var(--muted); font-size: var(--fs-s); }
+    \\  .c-signin.line { flex-direction: row; align-items: center; justify-content: center; max-width: none; color: var(--muted); font-size: var(--fs-s); }
     \\}
     \\
 ;
