@@ -1,8 +1,9 @@
 //! The loading screen cards (docs/plan/app.md APP10): ten cards, our row over theirs, from
 //! the last champ select's seats (board.zig: roles given or guessed). Champion facts only,
-//! as pills coloured by meaning (research/questions/desktop-app-layout.md C1-C3): how
-//! the champion does in its role now, its lane against the same role across, and the
-//! lane's level 6 and first item timings. Player scouting is APP7's, private, where names
+//! as short pills coloured by meaning (research/questions/desktop-app-layout.md C1-C3),
+//! some playful (Jacob's note 113): how the champion does in its role now, its lane
+//! against the same role across with level 6 and first item timings, its early or late
+//! lean, lone damage type, ban and pick rates. Player scouting is APP7's, private, where names
 //! are visible. Pure.
 
 const std = @import("std");
@@ -81,13 +82,20 @@ pub fn build(arena: std.mem.Allocator, in: Input) !Loading {
             }
         }.before);
         const cards = try arena.alloc(Card, sorted.len);
-        for (cards, sorted) |*c, s| c.* = try card(arena, in, s, in.seats[1 - side]);
+        for (cards, sorted) |*c, s| c.* = try card(arena, in, s, team, in.seats[1 - side]);
         out.teams[side] = cards;
     }
     return out;
 }
 
-fn card(arena: std.mem.Allocator, in: Input, s: Seat, across: []const Seat) !Card {
+/// Most a card shows, the first found in pillsOf's order
+pub const max_pills = 4;
+/// A role pick share from here up is "crowd favourite"
+const popular_share = 0.10;
+/// A ban rate from here up is "ban magnet"
+const banned_rate = 0.25;
+
+fn card(arena: std.mem.Allocator, in: Input, s: Seat, team: []const Seat, across: []const Seat) !Card {
     var c: Card = .{ .champion = s.champion, .role = s.role, .guessed = s.guessed, .me = s.me, .games = 0, .win = 0.5, .pills = &.{} };
     const stats = in.stats;
     const role = s.role orelse return c;
@@ -96,19 +104,61 @@ fn card(arena: std.mem.Allocator, in: Input, s: Seat, across: []const Seat) !Car
     c.win = core.score.roleWin(stats, in.opts, at, role);
     var pills: std.ArrayList(Pill) = .empty;
     if (c.games < 1000) {
-        try pills.append(arena, .{ .text = "few games", .tone = .caution });
+        try pills.append(arena, .{ .text = "hipster pick", .tone = .caution });
     } else if (c.win >= 0.515) {
-        try pills.append(arena, .{ .text = try std.fmt.allocPrint(arena, "strong in {s}", .{role.label()}), .tone = .good });
+        try pills.append(arena, .{ .text = "strong now", .tone = .good });
     } else if (c.win <= 0.485) {
-        try pills.append(arena, .{ .text = try std.fmt.allocPrint(arena, "weak in {s}", .{role.label()}), .tone = .bad });
+        try pills.append(arena, .{ .text = "weak now", .tone = .bad });
     }
     const opp = for (across) |o| {
         if (o.role == role and o.champion != 0) break o;
     } else null;
     if (opp) |o| if (in.curves) |curves| try lanePills(arena, in, curves, role, s.champion, o.champion, &pills);
-    c.pills = pills.items;
+    if (in.facts) |f| try factPills(arena, f, s, role, team, &pills);
+    // Two players per role a game
+    const share = @as(f64, @floatFromInt(c.games)) / @as(f64, @floatFromInt(@max(1, 2 * @as(u64, stats.games))));
+    if (c.games >= 1000 and share >= popular_share) try pills.append(arena, .{ .text = "crowd favourite", .tone = .neutral });
+    c.pills = pills.items[0..@min(pills.items.len, max_pills)];
     return c;
 }
+
+/// "scales" or "early game", "lone AP", "ban magnet"
+fn factPills(arena: std.mem.Allocator, f: *const core.champfacts.Facts, s: Seat, role: Role, team: []const Seat, pills: *std.ArrayList(Pill)) !void {
+    if (f.leanOf(s.champion, role)) |row| switch (row.lean()) {
+        .early => try pills.append(arena, .{ .text = "early game", .tone = .neutral }),
+        .late => try pills.append(arena, .{ .text = "scales", .tone = .neutral }),
+        .none => {},
+    };
+    if (lone(f, s.champion, team)) |kind| try pills.append(arena, .{ .text = if (kind == .ap) "lone AP" else "lone AD", .tone = .neutral });
+    if (f.banRate(s.champion)) |r| if (r >= banned_rate) try pills.append(arena, .{ .text = "ban magnet", .tone = .neutral });
+}
+
+pub const Kind = enum { ap, ad };
+
+/// .ap when `champion` is its team's only magic dealer, .ad its only physical one; null
+/// unless all five splits are known
+pub fn lone(f: *const core.champfacts.Facts, champion: u32, team: []const Seat) ?Kind {
+    if (team.len != 5) return null;
+    var magic: [5]f32 = undefined;
+    var mine: ?usize = null;
+    for (team, &magic, 0..) |t, *m, i| {
+        m.* = f.magicOf(t.champion) orelse return null;
+        if (t.champion == champion) mine = i;
+    }
+    const at = mine orelse return null;
+    for ([_]bool{ true, false }) |ap| {
+        var dealers: usize = 0;
+        for (magic) |m| {
+            if (if (ap) m >= lone_share else m <= 1 - lone_share) dealers += 1;
+        }
+        const is = if (ap) magic[at] >= lone_share else magic[at] <= 1 - lone_share;
+        if (is and dealers == 1) return if (ap) .ap else .ad;
+    }
+    return null;
+}
+
+/// A champion dealing this share of one kind of damage counts as a dealer of it
+const lone_share = 0.6;
 
 /// A lane matchup's curve as the loading screen and the comp view read it
 pub const LaneFacts = struct {
@@ -153,23 +203,24 @@ pub fn timingWord(gap: ?i32) ?enum { sooner, later } {
     return if (g < 0) .sooner else .later;
 }
 
-/// "ahead in lane vs Syndra", "level 6 sooner", "first item later"
+/// "lane bully" or "tough lane", "6 first", "slow items": no names, the card across
+/// shows who
 fn lanePills(arena: std.mem.Allocator, in: Input, curves: *const curvesfile.Curves, role: Role, me: u32, them: u32, pills: *std.ArrayList(Pill)) !void {
     const f = laneFacts(curves, role, in.tier, me, them) orelse return;
-    const name = in.stats.nameOf(them);
-    const where = if (role == .jungle) "early" else "in lane";
-    if (f.edge()) |e| try pills.append(arena, switch (e) {
-        .ahead => .{ .text = try std.fmt.allocPrint(arena, "ahead {s} vs {s}", .{ where, name }), .tone = .good },
-        .behind => .{ .text = try std.fmt.allocPrint(arena, "behind {s} vs {s}", .{ where, name }), .tone = .bad },
-        .even => .{ .text = try std.fmt.allocPrint(arena, "even {s} vs {s}", .{ where, name }), .tone = .neutral },
-    });
-    for ([_]?i32{ f.level6, f.first_item }, [_][]const u8{ "level 6", "first item" }) |gap, what| {
-        const word = timingWord(gap) orelse continue;
-        try pills.append(arena, .{
-            .text = try std.fmt.allocPrint(arena, "{s} {t}", .{ what, word }),
-            .tone = if (word == .sooner) .good else .caution,
-        });
-    }
+    const jungle = role == .jungle;
+    if (f.edge()) |e| switch (e) {
+        .ahead => try pills.append(arena, .{ .text = if (jungle) "strong start" else "lane bully", .tone = .good }),
+        .behind => try pills.append(arena, .{ .text = if (jungle) "slow start" else "tough lane", .tone = .bad }),
+        .even => {},
+    };
+    if (timingWord(f.level6)) |w| try pills.append(arena, if (w == .sooner)
+        .{ .text = "6 first", .tone = .good }
+    else
+        .{ .text = "6 later", .tone = .caution });
+    if (timingWord(f.first_item)) |w| try pills.append(arena, if (w == .sooner)
+        .{ .text = "items first", .tone = .good }
+    else
+        .{ .text = "slow items", .tone = .caution });
 }
 
 /// The seats of the last champ select as the loading screen keeps them
@@ -221,9 +272,9 @@ test "loading screen: cards by role, lane pills against the same role across" {
             return false;
         }
     }.in;
-    try testing.expect(has(l.teams[0][0], "behind in lane vs Malphite", .bad));
-    try testing.expect(has(l.teams[1][0], "ahead in lane vs Darius", .good));
-    try testing.expect(has(l.teams[1][1], "ahead in lane vs Ahri", .good));
+    try testing.expect(has(l.teams[0][0], "tough lane", .bad));
+    try testing.expect(has(l.teams[1][0], "lane bully", .good));
+    try testing.expect(has(l.teams[1][1], "lane bully", .good));
     // No role: no facts
     try testing.expectEqual(0, l.teams[1][2].pills.len);
 }

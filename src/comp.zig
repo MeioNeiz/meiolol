@@ -48,7 +48,11 @@ pub const Team = struct {
     damage: ?Damage,
     /// Champions with a clear early or late lean in their role, early first
     timing: []const Timing,
+    /// The team's only magic or only physical dealer (loading.lone)
+    lone: ?Lone = null,
 };
+
+pub const Lone = struct { champion: u32, ap: bool };
 
 pub const Lane = struct {
     role: Role,
@@ -144,7 +148,12 @@ fn team(arena: std.mem.Allocator, in: Input, seats: []const loading.Seat) !Team 
             .wins_less = winsLess(teams),
         };
     }
-    return .{ .damage = damage, .timing = timing.items };
+    var lone: ?Lone = null;
+    for (seats) |s| if (loading.lone(facts, s.champion, seats)) |kind| {
+        lone = .{ .champion = s.champion, .ap = kind == .ap };
+        break;
+    };
+    return .{ .damage = damage, .timing = timing.items, .lone = lone };
 }
 
 /// A team's comp as loading screen pills. Picks are locked by then, so neutral facts
@@ -152,17 +161,61 @@ fn team(arena: std.mem.Allocator, in: Input, seats: []const loading.Seat) !Team 
 pub fn pills(arena: std.mem.Allocator, t: Team) ![]const loading.Pill {
     var out: std.ArrayList(loading.Pill) = .empty;
     if (t.damage) |d| try out.append(arena, .{ .text = switch (d.mix) {
-        .physical => "mostly physical",
+        .physical => "AD heavy",
         .mixed => "mixed damage",
-        .magic => "mostly magic",
+        .magic => "AP heavy",
     }, .tone = .neutral });
-    var leans: [2]usize = .{ 0, 0 };
-    for (t.timing) |tm| leans[if (tm.lean == .early) 0 else 1] += 1;
-    for (leans, [_][]const u8{ "early", "late" }) |n, when| {
-        if (n == 0) continue;
-        const text = try std.fmt.allocPrint(arena, "{d} lean{s} {s}", .{ n, if (n == 1) "s" else "", when });
-        try out.append(arena, .{ .text = text, .tone = .neutral });
+    if (timingOf(t)) |w| try out.append(arena, .{ .text = switch (w) {
+        .early => "early team",
+        .late => "late team",
+        .both => "early and late",
+    }, .tone = .neutral });
+    return out.items;
+}
+
+const When = enum { early, late, both };
+
+/// Early or late when the team's clear leans point one way; null with none
+fn timingOf(t: Team) ?When {
+    var n: [2]usize = .{ 0, 0 };
+    for (t.timing) |tm| n[if (tm.lean == .early) 0 else 1] += 1;
+    if (n[0] + n[1] == 0) return null;
+    if (n[1] == 0) return .early;
+    if (n[0] == 0) return .late;
+    return .both;
+}
+
+/// Short tips for one side of the comp view (Jacob's note 109), from the same facts as
+/// the rest of it: damage type, who carries the lone kind, early or late, lanes.
+/// `side` 0 ours, 1 theirs. Neutral: what the comp is, never a rating of a pick
+pub fn tips(arena: std.mem.Allocator, stats: *const Stats, c: *const Comp, side: usize) ![]const []const u8 {
+    const t = c.teams[side];
+    var out: std.ArrayList([]const u8) = .empty;
+    if (t.damage) |d| switch (d.mix) {
+        .physical => try out.append(arena, "All in on AD: armour goes a long way"),
+        .magic => try out.append(arena, "All in on AP: magic resist goes a long way"),
+        .mixed => {},
+    };
+    if (t.lone) |l| try out.append(arena, try std.fmt.allocPrint(arena, "Lone {s}: {s}", .{ if (l.ap) "AP" else "AD", stats.nameOf(l.champion) }));
+    if (timingOf(t)) |w| switch (w) {
+        .early => try out.append(arena, try std.fmt.allocPrint(arena, "Early team: best before {d} min", .{champfacts.win_minute})),
+        .late => try out.append(arena, try std.fmt.allocPrint(arena, "Late team: better after {d} min", .{champfacts.win_minute})),
+        .both => {},
+    };
+    var ahead: usize = 0;
+    var sooner: usize = 0;
+    for (c.lanes) |l| {
+        const f = l.facts orelse continue;
+        const mine = side == 0;
+        if (f.edge()) |e| if ((e == .ahead and mine) or (e == .behind and !mine)) {
+            ahead += 1;
+        };
+        if (loading.timingWord(f.level6)) |w| if ((w == .sooner) == mine) {
+            sooner += 1;
+        };
     }
+    if (ahead >= 3) try out.append(arena, try std.fmt.allocPrint(arena, "Lane kingdom: {d} lanes usually ahead", .{ahead}));
+    if (sooner >= 3) try out.append(arena, try std.fmt.allocPrint(arena, "Level 6 first in {d} lanes", .{sooner}));
     return out.items;
 }
 
@@ -237,9 +290,8 @@ test "comp: damage mix, early and late champions, lanes by role" {
     try testing.expectEqual(champfacts.Lean.late, c.teams[0].timing[1].lean);
     try testing.expectEqual(0, c.teams[1].timing.len);
     const ps = try pills(arena, c.teams[0]);
-    try testing.expectEqual(2, ps.len);
-    try testing.expectEqualStrings("1 leans early", ps[0].text);
-    try testing.expectEqualStrings("1 leans late", ps[1].text);
+    try testing.expectEqual(1, ps.len);
+    try testing.expectEqualStrings("early and late", ps[0].text);
     try testing.expectEqual(0, (try pills(arena, c.teams[1])).len);
     // Planted: Malphite beats Darius in lane, Syndra beats Ahri
     const top = c.lanes[@backingInt(Role.top)];
@@ -269,8 +321,19 @@ test "comp: a full team's mix and whether such teams win less" {
     try testing.expect(d.wins_less);
     // Even so, the pill says what the mix is, never how it does
     const ps = try pills(arena, c.teams[0]);
-    try testing.expectEqualStrings("mostly physical", ps[0].text);
+    try testing.expectEqualStrings("AD heavy", ps[0].text);
     try testing.expectEqual(loading.Tone.neutral, ps[0].tone);
+    try testing.expectEqual(null, c.teams[0].lone);
     facts.mix[0] = .{ .games = 100, .wins = 48 };
     try testing.expect(!(try build(arena, .{ .stats = &f.stats, .facts = &facts }, .{ &seats, &.{} })).teams[0].damage.?.wins_less);
+    // One mage among four physical dealers: still AD heavy, and the tips name the mage
+    damage[2].magic = 0.9;
+    const one = try build(arena, .{ .stats = &f.stats, .facts = &facts }, .{ &seats, &.{} });
+    try testing.expectEqual(Mix.physical, one.teams[0].damage.?.mix);
+    try testing.expectEqual(f.stats.ids[2], one.teams[0].lone.?.champion);
+    const ts = try tips(arena, &f.stats, &one, 0);
+    try testing.expectEqualStrings("All in on AD: armour goes a long way", ts[0]);
+    const want = try std.fmt.allocPrint(arena, "Lone AP: {s}", .{f.stats.nameOf(f.stats.ids[2])});
+    try testing.expectEqualStrings(want, ts[1]);
+    try testing.expectEqual(0, (try tips(arena, &f.stats, &one, 1)).len);
 }

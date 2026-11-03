@@ -44,6 +44,8 @@ pub const Team = struct {
     damage: ?Damage = null,
     /// Early first
     timing: []const Timing = &.{},
+    /// A line each, short and neutral ("Lone AP: Ahri")
+    tips: []const []const u8 = &.{},
 };
 
 pub const Comp = struct {
@@ -84,8 +86,11 @@ fn team(h: *H, t: Team, side: Side, c: Comp) N {
                 null,
         }),
     }));
+    var tips = h.list();
+    for (t.tips, 0..) |x, i| tips.add(h.li(.{ .key = i }, .{x}));
     return h.div(.{ .class = "team", .data_side = side }, .{
         h.el(.h4, .{}, .{if (side == .us) W.us else W.them}),
+        if (t.tips.len > 0) h.ul(.{ .class = "tips" }, .{tips.done()}) else null,
         if (t.damage) |d| damage(h, d) else h.p(.{ .class = "none" }, .{W.no_split}),
         if (t.timing.len > 0) h.ul(.{}, .{rows.done()}) else h.p(.{ .class = "none" }, .{W.no_lean}),
     });
@@ -156,6 +161,9 @@ pub const css =
     \\  .c-comp li { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
     \\  .c-comp .who { display: flex; flex-direction: column; min-width: 0; font-size: var(--fs-s); }
     \\  .c-comp .who > small { font-size: var(--fs-xs); color: var(--t2); font-variant-numeric: tabular-nums; }
+    \\  .c-comp .tips { gap: 2px; }
+    \\  .c-comp .tips li { display: block; font-size: var(--fs-s); }
+    \\  .c-comp .tips li::before { content: "› "; color: var(--muted); }
     \\  .c-comp .note { font-size: var(--fs-xs); color: var(--faint); }
     \\}
     \\
@@ -178,10 +186,12 @@ pub const sample: Comp = .{
             .{ .champ = demo("Darius", "Darius"), .late = false },
             .{ .champ = demo("Jinx", "Jinx"), .late = true },
         },
+        .tips = &.{ "Lone AP: Orianna", "Level 6 first in 3 lanes" },
     },
     .them = .{
         .damage = .{ .magic = 0.81, .mix = .magic, .wins_less = true },
         .timing = &.{},
+        .tips = &.{"All in on AP: magic resist goes a long way"},
     },
     .lanes = &lanes_public,
     .patch = "15.21",

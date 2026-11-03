@@ -129,16 +129,16 @@ const demo = champ.demo;
 
 pub const sample: Screen = .{
     .us = &.{
-        .{ .champ = demo("Garen", "Garen"), .role = .top, .pills = &.{ .{ .text = "strong in top", .tone = .good }, .{ .text = "ahead at 14 min vs Darius", .tone = .good } } },
-        .{ .champ = demo("LeeSin", "Lee Sin"), .role = .jungle, .pills = &.{.{ .text = "level 6 sooner" }} },
-        .{ .champ = demo("Ahri", "Ahri"), .role = .mid, .you = true, .pills = &.{.{ .text = "behind at 14 min vs Syndra", .tone = .bad }} },
-        .{ .champ = demo("Jinx", "Jinx"), .role = .bot, .pills = &.{.{ .text = "few games", .tone = .caution }} },
+        .{ .champ = demo("Garen", "Garen"), .role = .top, .pills = &.{ .{ .text = "strong now", .tone = .good }, .{ .text = "lane bully", .tone = .good }, .{ .text = "6 first", .tone = .good }, .{ .text = "early game" } } },
+        .{ .champ = demo("LeeSin", "Lee Sin"), .role = .jungle, .pills = &.{ .{ .text = "strong start", .tone = .good }, .{ .text = "ban magnet" } } },
+        .{ .champ = demo("Ahri", "Ahri"), .role = .mid, .you = true, .pills = &.{ .{ .text = "tough lane", .tone = .bad }, .{ .text = "lone AP" }, .{ .text = "crowd favourite" } } },
+        .{ .champ = demo("Jinx", "Jinx"), .role = .bot, .pills = &.{ .{ .text = "hipster pick", .tone = .caution }, .{ .text = "scales" } } },
         .{ .champ = demo("Lulu", "Lulu"), .role = .support },
     },
     .them = &.{
         .{ .champ = demo("Darius", "Darius"), .role = .top, .guessed = true },
-        .{ .champ = demo("Vi", "Vi"), .role = .jungle, .guessed = true, .pills = &.{.{ .text = "weak in jungle", .tone = .bad }} },
-        .{ .champ = demo("Syndra", "Syndra"), .role = .mid, .guessed = true, .pills = &.{.{ .text = "ahead at 14 min vs Ahri", .tone = .good }} },
+        .{ .champ = demo("Vi", "Vi"), .role = .jungle, .guessed = true, .pills = &.{ .{ .text = "weak now", .tone = .bad }, .{ .text = "slow start", .tone = .bad } } },
+        .{ .champ = demo("Syndra", "Syndra"), .role = .mid, .guessed = true, .pills = &.{ .{ .text = "lane bully", .tone = .good }, .{ .text = "items first", .tone = .good } } },
         .{ .champ = demo("Caitlyn", "Caitlyn"), .role = .bot, .guessed = true },
         .{ .champ = null, .role = null },
     },
