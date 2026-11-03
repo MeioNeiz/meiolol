@@ -57,6 +57,8 @@ const W = struct {
     const as = plain("Logged in as");
     const apps = plain("Desktop apps");
     const apps_note = plain("Each copy of the meiolol app signed in to this account. Remove one to stop it updating.");
+    const get = plain("Download the app");
+    const get_note = plain("(Windows, a zip: open it and run meiolol-desktop.exe, which installs itself).");
     const no_apps = plain("None yet: sign in from the app.");
     const apps_down = plain("Can't load them right now.");
     const remove = plain("Remove");
@@ -285,7 +287,7 @@ pub const Account = struct {
         };
         return .{
             if (apps) h.h2(.{}, .{W.apps}) else .none,
-            if (apps) h.p(.{ .class = "info" }, .{W.apps_note}) else .none,
+            if (apps) h.p(.{ .class = "info" }, .{ h.a(.{ .href = zip, .download = "" }, .{W.get}), " ", W.get_note, " ", W.apps_note }) else .none,
             if (apps) list else .none,
             h.h2(.{}, .{W.out}),
             h.div(.{ .class = "out" }, .{
@@ -305,6 +307,9 @@ fn field(h: *H, label: tree.Text, hint: ?tree.Text, attrs: anytype) N {
         if (hint) |x| h.span(.{ .class = "hint" }, .{x}) else null,
     });
 }
+
+/// The private edition's zip (hosting.md "Desktop app files"): download_private_app logins
+pub const zip = "/private/desktop/meiolol-desktop.zip";
 
 fn privacy(h: *H) N {
     return h.a(.{ .href = "/privacy#accounts" }, .{W.privacy});
