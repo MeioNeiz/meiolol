@@ -22,6 +22,13 @@ of raw.db's free pages instead of moving pages back to the disk.
   region's minute, WALs 2-60 MB. Still to see: the next gpu-box catch-up (it was off).
   The "time %" report line shows where each region's minute goes (slot wait is
   budget-bound, the rest is lost key use)
+- The 2-3 Nov catch-up (archive ~3 days behind, an export every ~18 min): steady hours
+  97-100%, but 2 Nov 18-19h 66-90% and 3 Nov 19-21h 80-95%. The archive prunes held
+  raw.db's write lock: chunked deletes back to back, which the writer's busy handler
+  (100 ms polls) never got between (3 Nov 19:46-19:56 no commit at all, inside the
+  first export), and 1000-summary chunks holding it 10-30 s each (a delete reads every
+  overflow page it frees). Fixed 3 Nov: ~5 MB chunks, 250 ms apart. Still to see: an
+  hour of catch-up at 97%+, then the learned.md line
 - Dips left: daily jobs and runs of deploys (90-95% for an hour while a job reads
   meiolol.db hard). If they stay: pipelined steps instead of Bucket.flush after each,
   or BFQ (mq-deadline honours ionice -c 3 only partly)
