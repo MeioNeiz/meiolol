@@ -79,7 +79,7 @@ pub const Row = struct {
     /// The row's name when it picks ("Pick Gnar")
     pick_label: ?tree.Text = null,
     /// The keyboard's row (Up and Down in the owner's search): marked, its button
-    /// `data-ref="cur"` for scrolling to it
+    /// `data-ref="cur"` for scrolling to it (an open row's is "open")
     cur: bool = false,
 };
 
@@ -184,7 +184,7 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
                 .aria_controls = if (r.open and r.detail != null and r.id.len > 0) r.id else null,
                 .on_click = r.on,
                 .data_act = if (r.act.len > 0) r.act else null,
-                .data_ref = if (r.cur) "cur" else null,
+                .data_ref = @as(?[:0]const u8, if (r.cur) "cur" else if (r.open) "open" else null),
             }, who) else h.span(.{ .class = "pk" }, who),
             if (r.star) h.span(.{ .class = "star", .role = "img", .aria_label = W.star }, .{"★"}) else null,
             if (r.ref) badge.view(h, .accent, .{l.ref_label}) else null,

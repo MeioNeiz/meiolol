@@ -332,7 +332,7 @@ pub const Panel = struct {
         for (std.meta.fieldNames(tp.Page.Url)) |f| std.debug.assert(@FieldType(Url, f) == @FieldType(tp.Page.Url, f));
     }
 
-    pub const Msg = union(enum) { sort: Sort, open: u32, pick: u32, input, key };
+    pub const Msg = union(enum) { sort: Sort, open: u32, dot: u32, pick: u32, input, key };
 
     pub fn init(head: *const tp.Head) Panel {
         return .{ .head = head };
@@ -373,6 +373,13 @@ pub const Panel = struct {
                 ev.push = true;
             },
             .open => |id| p.open = if (p.open == id) 0 else id,
+            // A dot past the first rows opens a row drawn below them: scrolled to
+            .dot => |id| {
+                p.open = id;
+                p.q.set("");
+                p.unkey();
+                ev.after = .{ .op = .scroll, .ref = "open" };
+            },
             .pick => |id| p.place(id),
             .input => {
                 p.q.set(ev.text);
@@ -524,13 +531,13 @@ pub const Panel = struct {
             .star = i == 0,
             .ref = o.id == in_seat,
             .chosen = o.id == p.open,
-            .on = h.on(p, .{ .open = o.id }),
+            .on = h.on(p, .{ .dot = o.id }),
         };
         return rankstrip.view(h, .{ .dots = dots, .label = W.every.with(h, .{ .side = side.s, .r = r.label().s }) });
     }
 
-    /// The first max_rows and the seat's own champion below them, or every row the search
-    /// keeps
+    /// The first max_rows, the seat's own champion and the open one below them, or every
+    /// row the search keeps
     fn rowsOf(p: *Panel, h: *H, f: *const Feed, all: []const *const Opt, in_seat: u32, live: bool) []const candlist.Row {
         var rows: std.ArrayList(candlist.Row) = .empty;
         const searching = p.q.len > 0;
@@ -573,7 +580,7 @@ pub const Panel = struct {
     }
 
     fn keeps(p: *const Panel, o: *const Opt, i: usize, in_seat: u32) bool {
-        return if (p.q.len > 0) matches(p.nameOf(o.id), p.q.slice()) else i < max_rows or o.id == in_seat;
+        return if (p.q.len > 0) matches(p.nameOf(o.id), p.q.slice()) else i < max_rows or o.id == in_seat or o.id == p.open;
     }
 
     fn row(p: *Panel, h: *H, f: *const Feed, o: *const Opt, i: usize, in_seat: u32, gap: bool, live: bool) candlist.Row {
