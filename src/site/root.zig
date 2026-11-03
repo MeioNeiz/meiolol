@@ -60,6 +60,9 @@ pub const Options = struct {
     since_ms: i64,
     /// Riot platform ids of the EUW views
     platforms: []const []const u8 = &.{"EUW1"},
+    /// The EUW views' first platform, which names them in every view (load.zig makes
+    /// platforms the view's own)
+    home: []const u8 = "EUW1",
     /// Of the all-regions views
     all_platforms: []const []const u8,
     contact: []const u8,
@@ -289,7 +292,7 @@ pub const Site = struct {
             .description = description,
             .nav = nav,
             .patch = s.patch,
-            .home = s.opts.platforms[0],
+            .home = s.opts.home,
             .data = try s.arena.print("{s}, {s}, {f} games{s}", .{
                 s.view.region.in(),
                 s.when,
@@ -318,7 +321,7 @@ pub const Site = struct {
 
     /// Scope chip dimensions in this site's words: EUW is opts' home platform
     pub fn regionDim(s: *const Site, r: html.Region) ScopeDim {
-        const home = s.opts.platforms[0];
+        const home = s.opts.home;
         return switch (r) {
             .euw => .{ .key = home, .text = html.platformName(home) },
             .all => .all_regions,

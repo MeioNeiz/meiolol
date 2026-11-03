@@ -64,6 +64,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
     const arena = owner.allocator();
 
     var opts = all_opts;
+    opts.home = all_opts.platforms[0];
     opts.platforms = switch (view.region) {
         .euw => all_opts.platforms,
         .all => all_opts.all_platforms,
