@@ -258,7 +258,7 @@ fn others(a: Allocator, shots: *std.ArrayList(Shot)) !void {
         .{ .group = 0, .slug = "signin", .short = "Sign in", .title = "First start: sign in, no data yet", .status = .no_data, .signin = .{ .full = true } },
         .{ .group = 0, .slug = "signin-busy", .short = "Signing in", .title = "Signing in", .status = .no_data, .signin = .{ .full = true, .busy = true } },
         .{ .group = 0, .slug = "signin-failed", .short = "Sign in refused", .title = "Sign in refused", .status = .no_data, .signin = .{ .full = true, .message = "Wrong username or password." } },
-        .{ .group = 0, .slug = "downloading", .short = "Downloading the data", .title = "Signed in, downloading the data", .status = .no_data, .note = .downloading },
+        .{ .group = 0, .slug = "downloading", .short = "Downloading the data", .title = "Signed in, downloading the data", .status = .no_data, .note = .{ .downloading = .{ .done = 12_400_000, .total = 38_100_000 } } },
         .{ .group = 0, .slug = "download-failed", .short = "Download failed", .title = "Download failed", .status = .no_data, .note = .{ .failed = .{ .why = "no connection to meio.lol", .minutes = 10 } } },
         .{ .group = 0, .slug = "no-data", .short = "No data", .title = "No data and no sign in offered", .status = .no_data },
         .{ .group = 0, .slug = "no-client", .short = "Client closed", .title = "League client closed", .status = .no_client },

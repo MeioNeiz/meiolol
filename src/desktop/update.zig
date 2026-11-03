@@ -64,6 +64,9 @@ pub const Options = struct {
     keys: sign.Keys = sign.shipped,
     /// For the manifest; downloads get one by their size
     timeout: Io.Duration = .fromSeconds(30),
+    /// Bytes this check has downloaded of the total it fetches, from its thread at each
+    /// 64 KB and once at the start
+    progress: ?*const fn (done: u64, total: u64) void = null,
 };
 
 pub const Auth = union(enum) {
@@ -125,7 +128,9 @@ pub fn run(o: Options) !Result {
     });
     if (!validPatch(manifest.patch)) return error.BadManifest;
 
-    var result: Result = .{};
+    const Fetch = struct { f: Manifest.File, local: []const u8, exe: bool, stats: bool };
+    var fetch: std.ArrayList(Fetch) = .empty;
+    var total: u64 = 0;
     for (manifest.files) |f| {
         const kind: enum { stats, curves, facts, exe } = if (std.mem.eql(u8, f.name, "stats.bin"))
             .stats
@@ -153,15 +158,25 @@ pub fn run(o: Options) !Result {
             error.FileNotFound => {},
             else => return err,
         }
+        try fetch.append(arena, .{ .f = f, .local = local, .exe = kind == .exe, .stats = kind == .stats });
+        total += f.bytes;
+    }
 
+    var result: Result = .{};
+    u.total = total;
+    if (fetch.items.len > 0) if (o.progress) |on| on(0, total);
+    for (fetch.items) |x| {
+        const f = x.f;
+        const local = x.local;
         // After a swap in this session the running image is old_exe, which Windows won't
         // delete or replace: the new exe waits for a restart
-        if (kind == .exe) o.dir.deleteFile(o.io, old_exe) catch |err| switch (err) {
+        if (x.exe) o.dir.deleteFile(o.io, old_exe) catch |err| switch (err) {
             error.FileNotFound => {},
             else => continue,
         };
         const part = try arena.print("{s}.part", .{local});
         try u.download(f.name, part, f.bytes);
+        u.done += f.bytes;
         const got = u.hash(part) catch |err| {
             o.dir.deleteFile(o.io, part) catch {};
             return err;
@@ -170,7 +185,7 @@ pub fn run(o: Options) !Result {
             o.dir.deleteFile(o.io, part) catch {};
             return error.HashMismatch;
         }
-        if (kind == .exe) {
+        if (x.exe) {
             try renameExe(arena, o.io, o.dir, local, old_exe);
             o.dir.rename(part, o.dir, local, o.io) catch |err| {
                 renameExe(arena, o.io, o.dir, old_exe, local) catch {};
@@ -180,7 +195,7 @@ pub fn run(o: Options) !Result {
         } else {
             try o.dir.rename(part, o.dir, local, o.io);
             result.data = true;
-            if (kind == .stats) u.dropOtherStats(local);
+            if (x.stats) u.dropOtherStats(local);
         }
     }
     return result;
@@ -216,6 +231,9 @@ const Updater = struct {
     o: Options,
     http: *std.http.Client,
     headers: []const std.http.Header,
+    /// Bytes of the files done before the one downloading, of all this check fetches
+    done: u64 = 0,
+    total: u64 = 0,
 
     fn get(u: *Updater, name: []const u8, w: *Io.Writer, max_body: u64, timeout: Io.Duration) !void {
         var url_buf: [512]u8 = undefined;
@@ -249,15 +267,37 @@ const Updater = struct {
         const io = u.o.io;
         var file = try u.o.dir.createFile(io, part, .{});
         var buf: [64 * 1024]u8 = undefined;
-        var fw = file.writer(io, &buf);
+        var fw = file.writer(io, &.{});
+        var counted: Counted = .{ .out = &fw.interface, .u = u, .writer = .{ .vtable = &Counted.vtable, .buffer = &buf } };
         const timeout: Io.Duration = .fromSeconds(120 + @as(i64, @intCast(bytes / (64 * 1024))));
-        const ok = if (u.get(name, &fw.interface, bytes, timeout)) fw.interface.flush() else |err| err;
+        const ok = if (u.get(name, &counted.writer, bytes, timeout)) counted.writer.flush() else |err| err;
         file.close(io);
         ok catch |err| {
             u.o.dir.deleteFile(io, part) catch {};
             return err;
         };
     }
+
+    /// Into `out`, telling Options.progress the bytes so far at each full buffer
+    const Counted = struct {
+        writer: Io.Writer,
+        out: *Io.Writer,
+        u: *Updater,
+        count: u64 = 0,
+
+        const vtable: Io.Writer.VTable = .{ .drain = drain };
+
+        fn drain(w: *Io.Writer, data: []const []const u8, splat: usize) Io.Writer.Error!usize {
+            const c: *Counted = @alignCast(@fieldParentPtr("writer", w));
+            const b = w.buffered();
+            try c.out.writeAll(b);
+            w.end = 0;
+            const n = try c.out.writeSplat(data, splat);
+            c.count += b.len + n;
+            if (c.u.o.progress) |on| on(c.u.done + c.count, c.u.total);
+            return n;
+        }
+    };
 
     const Hash = struct { hex: [64]u8, bytes: u64 };
 
@@ -384,6 +424,17 @@ fn testManifest(dir: Io.Dir, files: []const [2][]const u8, version: u64) !void {
     try testFile(dir, sign.manifest_name, signed);
 }
 
+const TestProgress = struct {
+    var last: [2]u64 = .{ 0, 0 };
+    var calls: u32 = 0;
+
+    fn on(done: u64, total: u64) void {
+        std.debug.assert(done <= total);
+        last = .{ done, total };
+        calls += 1;
+    }
+};
+
 test "update fetches changed files, swaps the exe, then has nothing to do" {
     const io = std.testing.io;
     var server_dir = std.testing.tmpDir(.{});
@@ -422,9 +473,13 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
         .auth = .{ .key = "k" },
         .version = 4,
         .keys = sign.testKeys(),
+        .progress = TestProgress.on,
     };
 
     try std.testing.expectEqual(Result{ .data = true, .exe = true }, try run(o));
+    // new stats, facts, new exe
+    try std.testing.expectEqual([2]u64{ 21, 21 }, TestProgress.last);
+    try std.testing.expect(TestProgress.calls >= 4);
     var buf: [64]u8 = undefined;
     try std.testing.expectEqualStrings("new stats", try app.readFile(io, "stats-16.20.bin", &buf));
     try std.testing.expectEqualStrings("facts", try app.readFile(io, "champ-facts.tsv", &buf));

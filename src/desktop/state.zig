@@ -51,13 +51,16 @@ pub const Status = union(enum) {
 pub const Note = union(enum) {
     none,
     /// First start, signed in: fetching the data
-    downloading,
+    downloading: Progress,
     failed: Failed,
     /// The update address answers 404 or moved: only a new version from meio.lol/download
     /// updates again
     moved,
     /// A new version is in place for the next start
     restart,
+
+    /// Bytes of the files this check fetches; total 0 before it knows
+    pub const Progress = struct { done: u64 = 0, total: u64 = 0 };
 
     pub const Failed = struct {
         /// update.why's plain words (static)

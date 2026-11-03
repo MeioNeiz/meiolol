@@ -35,6 +35,8 @@ pub const Note = struct {
     step: Step = .none,
     /// The step failed (its dot red, the text says why)
     failed: bool = false,
+    /// Downloading: the bar's percent, 1 to 100; 0 no bar
+    bar: u8 = 0,
 };
 
 pub const Step = enum(u8) { none, sign_in, download, open_league };
@@ -96,6 +98,7 @@ fn note(h: *H, n: Note) N {
     for (W.steps, 1..) |w, i| l.add(h.li(.{ .class = if (i < at) "done" else null, .aria_current = if (i == at) "step" else null }, .{w}));
     return h.div(.{ .class = "note", .data_first = at > 0, .data_failed = n.failed }, .{
         if (n.title.len > 0) h.el(.h1, .{}, .{n.title}) else null,
+        if (n.bar > 0) h.div(.{ .class = "bar" }, .{h.el(.i, .{ .style = h.vars(.{ .w = n.bar }) }, .{})}) else null,
         if (n.text.len > 0) h.p(.{}, .{n.text}) else null,
         if (at > 0) h.ul(.{ .class = "steps" }, .{l.done()}) else null,
     });
@@ -131,6 +134,11 @@ pub const css =
     \\    background: var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M6 21.5 11.5 14l5 4.5L26 7' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='16.5' cy='18.5' r='2.6' fill='%23f5c451'/%3E%3C/svg%3E") center / 100%;
     \\    animation: c-app-pulse 2.4s ease-in-out infinite; }
     \\  .c-app > .note[data-failed]::before { animation: none; filter: grayscale(1); opacity: 0.6; }
+    \\  .c-app > .note .bar { width: min(320px, 80%); height: 6px; margin: var(--sp-2) auto var(--sp-1); border-radius: 3px;
+    \\    background: var(--bar-track); overflow: hidden; }
+    \\  .c-app > .note .bar i { display: block; height: 100%; width: calc(var(--w) * 1%); border-radius: 3px;
+    \\    background: var(--brand); transition: width 0.4s; }
+    \\  .c-app > .note:has(.bar) p { font-variant-numeric: tabular-nums; }
     \\  @keyframes c-app-pulse { 50% { transform: scale(0.92); opacity: 0.7; } }
     \\  .c-app > .note .steps { display: flex; justify-content: center; margin: var(--sp-4) 0 0; padding: 0; list-style: none;
     \\    font-size: var(--fs-s); color: var(--muted); }
@@ -196,7 +204,9 @@ pub fn gallery(g: *Gallery) void {
     } }, .signin = .{ .full = true } }));
     g.addFill("first start, downloading", page(h, .{ .seq = 8, .private = false, .where = "No data", .screen = .{ .note = .{
         .title = "Downloading stats",
+        .text = "12.4 / 38.1 MB",
         .step = .download,
+        .bar = 33,
     } } }));
     g.addFill("first start, download failed", page(h, .{ .seq = 9, .private = false, .where = "No data", .screen = .{ .note = .{
         .title = "Download failed",

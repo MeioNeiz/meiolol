@@ -118,7 +118,7 @@ pub fn start(init: std.process.Init, opt: Options) !void {
         auth_url = init.environ_map.get("MEIOLOL_AUTH_URL") orelse device.default_url;
         if (update.Auth.find(init.arena.allocator(), io, o.dir)) |a| {
             setAuth(a);
-            if (shared.data == null) shared.note = .downloading;
+            if (shared.data == null) shared.note = .{ .downloading = .{} };
         } else shared.signin.needed = true;
         (try std.Thread.spawn(.{}, updateLoop, .{o})).detach();
     }
@@ -202,7 +202,23 @@ fn updateOptions(init: std.process.Init) ?update.Options {
         .base = init.environ_map.get("MEIOLOL_UPDATE_URL") orelse update.default_base,
         .auth = undefined,
         .version = version,
+        .progress = progress,
     };
+}
+
+/// From the update thread: a first start's bar, the shell woken at each whole percent
+fn progress(done: u64, total: u64) void {
+    const pct = struct {
+        var last: u64 = 101;
+    };
+    shared.mutex.lockUncancelable(io);
+    const shown = shared.data == null and (shared.note == .downloading or shared.note == .failed);
+    if (shown) shared.note = .{ .downloading = .{ .done = done, .total = total } };
+    shared.mutex.unlock(io);
+    const now = if (total > 0) done * 100 / total else 0;
+    if (!shown or now == pct.last) return;
+    pct.last = now;
+    wake();
 }
 
 /// Set when updates can run at all: the exe's folder, for the sign in too
@@ -327,7 +343,7 @@ fn signInThread(c: *Credentials) void {
             setAuth(.{ .device = t });
             shared.signin.needed = false;
             shared.signin.message = "";
-            if (shared.data == null) shared.note = .downloading;
+            if (shared.data == null) shared.note = .{ .downloading = .{} };
             signed_in = true;
         },
         .refused => |m| shared.signin.message = std.fmt.bufPrint(&shared.signin_buf, "{s}", .{m}) catch "Refused.",

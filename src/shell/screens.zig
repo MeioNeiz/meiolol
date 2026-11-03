@@ -345,7 +345,12 @@ pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.D
         .screen = switch (status) {
             .no_data => .{
                 .note = switch (note) {
-                    .downloading => .{ .title = "Downloading stats", .step = .download },
+                    .downloading => |x| .{
+                        .title = "Downloading stats",
+                        .text = if (x.total > 0) try a.print("{d:.1} / {d:.1} MB", .{ mb(x.done), mb(x.total) }) else "",
+                        .step = .download,
+                        .bar = if (x.total > 0) @intCast(@max(1, @min(100, x.done * 100 / x.total))) else 0,
+                    },
                     .failed => |f| .{
                         .title = "Download failed",
                         .text = try a.print("{s}; trying again in {d} minutes.", .{ try upper(a, f.why), f.minutes }),
@@ -377,6 +382,10 @@ pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.D
 
 pub const restart_line = "A new version of meiolol is downloaded: it starts the next time you open the app.";
 pub const moved_line = "This version of meiolol can no longer update itself: get the new one at meio.lol/download.";
+
+fn mb(bytes: u64) f64 {
+    return @as(f64, @floatFromInt(bytes)) / 1e6;
+}
 
 /// `s` with its first letter a capital
 fn upper(a: Allocator, s: []const u8) ![]const u8 {
@@ -1289,6 +1298,10 @@ test "notes while there is no board" {
     try testing.expectEqualStrings("No connection to meio.lol; trying again in 20 minutes.", f.screen.note.text);
     try testing.expect(f.screen.note.step == .download and f.screen.note.failed);
     try testing.expect((try data(a, c, .no_client, .none)).screen.note.step == .open_league);
+    const d = (try data(a, c, .no_data, .{ .downloading = .{ .done = 12_400_000, .total = 38_100_000 } })).screen.note;
+    try testing.expectEqualStrings("12.4 / 38.1 MB", d.text);
+    try testing.expectEqual(32, d.bar);
+    try testing.expectEqual(0, (try data(a, c, .no_data, .{ .downloading = .{} })).screen.note.bar);
     var g = try data(a, c, .no_data, .none);
     withSignIn(&g, .{ .full = true });
     try testing.expect(g.screen.note.step == .sign_in);

@@ -122,7 +122,7 @@ pub fn frame(v: View) void {
 fn message(v: View) void {
     switch (v.status) {
         .no_data => if (v.signin != null and v.signin.?.state.needed) signin.view(v.signin.?, true) else switch (v.note) {
-            .downloading => w.para(@src(), "Downloading champion statistics from meio.lol.", .{}, .{}),
+            .downloading => |x| w.para(@src(), "Downloading champion statistics from meio.lol: {d} of {d} MB.", .{ x.done / 1_000_000, x.total / 1_000_000 }, .{}),
             .failed => |f| w.para(@src(), "Could not download champion statistics from meio.lol ({s}); trying again in {d} minutes.", .{ f.why, f.minutes }, .{}),
             else => w.para(@src(), "No stats file found. Put stats-*.bin and recent-curves.bin next to meiolol-desktop.exe.", .{}, .{}),
         },
