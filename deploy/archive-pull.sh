@@ -10,12 +10,17 @@
 # when it opens; the box keeps everything unacked meanwhile. Each round tells the box
 # how it went (archive-serve.sh report), so its health check names the cause. An export
 # whose archive fails stays here unacked, and no new export is asked for until it goes.
+# Then the complete form's copy (docs/data-safety.md "Complete form copy"): each sealed
+# day file the box lists, fetched once and pseudonymised (meiolol-lab complete-copy); the
+# box keeps its own, so nothing is acked.
 set -euo pipefail
 box=${ARCHIVE_BOX:-meiolol-archive}
 archive=${ARCHIVE_DIR:-/mnt/wsl/archive/meiolol-raw}
 work=${ARCHIVE_WORK:-$HOME/ml/archive-work}
 lab=${LAB:-$HOME/ml/bin/meiolol-lab}
 salt=${SALT:-$HOME/.config/meiolol/snap-salt}
+# Made by deploy/gpu-box.sh install (the archive mount point is root's)
+copy=${COMPLETE_DIR:-/mnt/wsl/archive/meiolol-complete}
 # zstd unpacked from Ubuntu's package (no sudo here)
 export PATH="$HOME/bin:$PATH"
 awake=$HOME/ml/awake.d/archive-pull
@@ -83,6 +88,7 @@ elif [[ -z $(find "$accounts" -maxdepth 1 -name 'accounts-*.db' -mmin -4320 2> /
 fi
 box_ssh disk "c$(use /mnt/c),wsl$(use /),arch$arch,acct$acct" || log "disk report failed"
 [[ -d "$archive" ]] || die "$archive missing: archive disk not attached"
+[[ -d "$copy" ]] || die "$copy missing: deploy/gpu-box.sh install makes it"
 touch "$awake"
 
 box_ssh forgotten > "$work/forgotten.txt"
@@ -91,6 +97,7 @@ comm -13 <(sort -u "$work/forgotten-applied.txt") <(sort -u "$work/forgotten.txt
     > "$work/forgotten-new.txt"
 if [[ -s "$work/forgotten-new.txt" ]]; then
     nice -n 10 "$lab" archive-forget "$archive" "$work/forgotten-new.txt" "$salt"
+    nice -n 10 "$lab" complete-forget "$copy" "$work/forgotten-new.txt" "$salt"
     sort -u "$work/forgotten.txt" > "$work/forgotten-applied.txt"
 fi
 
@@ -181,3 +188,34 @@ done
 
 nice -n 10 "$lab" archive-age "$archive"
 [[ -z "$failed" ]] || die "archive failed for $failed"
+
+# Copied: listed in the copy's index (an aged mastery file is gone from the copy first)
+copied() { grep -q "^$1	" "$copy/index.tsv" 2> /dev/null; }
+fetch_day() {
+    local name=$1 size=$2 got
+    box_ssh day "$name" > "$copy/incoming/$name.part" || return 1
+    got=$(stat -c %s "$copy/incoming/$name.part")
+    [[ "$got" == "$size" ]] || { log "$name: got $got of $size bytes"; return 1; }
+    mv "$copy/incoming/$name.part" "$copy/incoming/$name"
+}
+mkdir -p "$copy/incoming"
+retry box_ssh days > "$work/days.txt" || die "days failed"
+while read -r name size; do
+    copied "$name" && continue
+    if league; then
+        log "League is open: day files next round"
+        break
+    fi
+    touch "$awake"
+    # A size changed since the list (a scrub) fails here and is listed again next round
+    retry fetch_day "$name" "$size" || die "$name: fetch failed"
+    # Its frames' crcs and whole last frame are checked as it is read
+    if ! out=$(nice -n 10 "$lab" complete-copy "$copy/incoming/$name" "$copy" "$salt" "$work/forgotten.txt" \
+        2>&1 < /dev/null); then
+        [[ -n "$out" ]] && echo "$out"
+        die "$name: copy failed: $(tail -n 1 <<< "$out")"
+    fi
+    echo "$out"
+    rm -f "$copy/incoming/$name"
+done < "$work/days.txt"
+nice -n 10 "$lab" complete-age "$copy"

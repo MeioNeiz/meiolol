@@ -2,11 +2,13 @@
 # The gpu-box's standing meiolol pieces, which no push deploys: the League watcher
 # (lab-watch.sh, and a timer for when it is stuck), the raw archive pull (archive-pull.sh),
 # the backup mirror (backup-mirror.sh, with the meiolol it runs `backup --mirror` with),
+# the meiolol-lab the pull runs (archive, complete-copy; lab runs build their own),
 # their systemd user units, and the Windows side (deploy/windows, CRLF, in
 # %USERPROFILE%\.meiolol). Scripts and units install from HEAD's committed copy and
 # meiolol from a clean checkout of HEAD, never the working tree (jomify.sh's rule: 17 Oct,
 # a hand copy ran 3 commits old).
 # Installs are recorded in ~/ml/bin/installed ("meiolol SHA TIME"), which drift reads.
+# The complete form copy's directory on the archive disk is made as root, once.
 # WSL's /etc gets deploy/wsl (the lab disk's writeback and queue limits, earlyoom's
 # thresholds) as root, through wsl.exe -u root, as does apt for earlyoom and the tools ci
 # needs there (deploy/remote-build.sh): zstd, shellcheck, jq; node from nodejs.org into
@@ -44,6 +46,8 @@ NODE=node-$NODE_VERSION-linux-x64
 RECORD=ml/bin/installed
 # What the mirror's meiolol is built from, for drift. Lab and GPU code isn't in it
 MEIOLOL_PATHS=(src build.zig build.zig.zon ':(exclude)src/lab' ':(exclude)src/gpu')
+# archive-pull.sh's COMPLETE_DIR
+COPY=/mnt/wsl/archive/meiolol-complete
 
 # CMD on the host, from its home dir
 on() { if [[ $HOST == local ]]; then (cd && bash -c "$1"); else ssh "$HOST" "$1"; fi; }
@@ -118,14 +122,18 @@ install() {
     "$ROOT/deploy/slots.sh" 1 "$ROOT/deploy/build-tree.sh" gpu-box "$rev" sh -c \
         'zig build backend -Doptimize=ReleaseSafe \
         -Dtarget=x86_64-linux-musl -Dcpu=x86_64_v3 --prefix zig-out/gpu-box \
-        --cache-dir "$1/.zig-cache" && cp zig-out/gpu-box/bin/meiolol "$2/bin/meiolol.new"' \
+        --cache-dir "$1/.zig-cache" && cp zig-out/gpu-box/bin/meiolol "$2/bin/meiolol.new" \
+        && zig build lab-gpu-box --prefix zig-out/gpu-box --cache-dir "$1/.zig-cache" \
+        && cp zig-out/gpu-box/gpu-box/meiolol-lab "$2/bin/meiolol-lab.new"' \
         _ "$ROOT" "$tmp"
     on "mkdir -p ml/bin ml/runs .config/systemd/user"
     put ml/bin/ "$tmp"/bin/*
     # The units' environment drop-ins on the host (*.d/) are kept
     put .config/systemd/user/ "$tmp"/units/*
-    on "mv ml/bin/meiolol.new ml/bin/meiolol \
+    on "mv ml/bin/meiolol.new ml/bin/meiolol && mv ml/bin/meiolol-lab.new ml/bin/meiolol-lab \
         && echo 'meiolol $rev $(date -u +%FT%TZ)' >> $RECORD"
+    on "! mountpoint -q /mnt/wsl/archive || [ -d $COPY ] \
+        || $WSL_ROOT /usr/bin/install -d -m 700 -o \$(id -u) -g \$(id -g) $COPY"
     # WSL can write there, so nothing there runs elevated: the archive mount (admin) is
     # installed once, by hand, by install-watchdog.ps1 (docs/compute.md)
     win=$(win_dir)/.meiolol

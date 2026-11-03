@@ -380,7 +380,7 @@ fn rewrite(gpa: std.mem.Allocator, io: Io, path: []const u8, mode: Mode) !usize 
 }
 
 /// Every PUUID of metadata.participants, wherever it occurs in the document, as ""
-fn blankPuuids(gpa: std.mem.Allocator, json: []const u8) ![]u8 {
+pub fn blankPuuids(gpa: std.mem.Allocator, json: []const u8) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(gpa);
     try out.appendSlice(gpa, json);

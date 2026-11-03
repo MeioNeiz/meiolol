@@ -6,6 +6,7 @@ const std = @import("std");
 const cuda = @import("gpu/cuda.zig");
 const anonymise = @import("lab/anonymise.zig");
 const archive = @import("lab/archive.zig");
+const complete_copy = @import("lab/complete_copy.zig");
 const mastery_pre = @import("lab/mastery_pre.zig");
 const seatstats = @import("lab/seatstats.zig");
 const compstats = @import("lab/compstats.zig");
@@ -63,6 +64,13 @@ const usage =
     \\  archive-forget ARCHIVE FORGOTTEN [SALT_FILE]  drop archived documents naming a
     \\                                  forgotten PUUID (plain, one per line)
     \\  archive-age ARCHIVE [DAYS]      blank hashed PUUIDs in days older than DAYS (730)
+    \\  complete-copy DAYFILE COPY [SALT_FILE] [FORGOTTEN]  pseudonymise one sealed
+    \\                                  complete form day file from the box into COPY
+    \\                                  (lab/complete_copy.zig; zstd on PATH)
+    \\  complete-forget COPY FORGOTTEN [SALT_FILE]  drop copied documents naming a
+    \\                                  forgotten PUUID (plain, one per line)
+    \\  complete-age COPY [DAYS]        blank hashed PUUIDs in files older than DAYS
+    \\                                  (730), mastery files deleted
     \\  mastery-pre SNAP ARCHIVE        each ranked participant's latest archived mastery
     \\                                  fetch before game start: SNAP/mastery_pre.tsv
     \\                                  (lab/mastery_pre.zig; zstd on PATH)
@@ -150,6 +158,31 @@ pub fn main(init: std.process.Init) !u8 {
         const today = @divFloor(std.Io.Clock.real.now(init.io).toSeconds(), std.time.s_per_day);
         const n = try archive.age(init.gpa, init.io, argv[2], today, max_days);
         std.log.info("archive: {d} days aged past {d} days", .{ n, max_days });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "complete-copy") and argv.len >= 4) {
+        const salt = try readSalt(init, arena, if (argv.len >= 5) argv[4] else null) orelse return 1;
+        const n = try complete_copy.run(init.gpa, init.io, argv[2], argv[3], salt, if (argv.len >= 6) argv[5] else null);
+        std.log.info("copied {s}: {d} of {d} documents, {d} forgotten, {d} unreadable left out; {d} to {d} bytes", .{
+            std.fs.path.basename(argv[2]), n.written, n.docs, n.forgotten, n.unreadable, n.bytes_in, n.bytes_out,
+        });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "complete-forget") and argv.len >= 4) {
+        const salt = try readSalt(init, arena, if (argv.len >= 5) argv[4] else null) orelse return 1;
+        const text = try std.Io.Dir.cwd().readFileAlloc(init.io, argv[3], arena, .limited(1 << 30));
+        var list: std.ArrayList([]const u8) = .empty;
+        var lines = std.mem.tokenizeAny(u8, text, " \t\r\n");
+        while (lines.next()) |p| try list.append(arena, p);
+        const n = try complete_copy.forget(init.gpa, init.io, argv[2], salt, list.items);
+        std.log.info("complete copy: {d} documents dropped for {d} forgotten players", .{ n, list.items.len });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "complete-age") and argv.len >= 3) {
+        const max_days = if (argv.len >= 4) try std.fmt.parseInt(u32, argv[3], 10) else 730;
+        const today = @divFloor(std.Io.Clock.real.now(init.io).toSeconds(), std.time.s_per_day);
+        const n = try complete_copy.age(init.gpa, init.io, argv[2], today, max_days);
+        std.log.info("complete copy: {d} files aged past {d} days", .{ n, max_days });
         return 0;
     }
     if (std.mem.eql(u8, cmd, "mastery-pre") and argv.len >= 4) {
@@ -412,6 +445,7 @@ test {
     _ = @import("lab/snapcache.zig");
     _ = stack;
     _ = anonymise;
+    _ = complete_copy;
     _ = curve;
     _ = synth;
     _ = health;

@@ -126,7 +126,7 @@ pub fn tend(gpa: Allocator, io: Io, data_dir: []const u8, forgotten: []const []c
         };
         try m.reset(arena, fresh);
         t.files += 1;
-        const r = scrubFile(gpa, io, dir, dir_path, name, &m) catch |err| {
+        const r = scrubFile(gpa, io, dir, dir_path, name, &m, true) catch |err| {
             log.err("complete: scrubbing {s} failed: {t}; tried again next run", .{ name, err });
             t.failed += 1;
             continue;
@@ -385,10 +385,12 @@ fn replaceFile(io: Io, dir: Io.Dir, name: []const u8, bytes: []const u8) !void {
     try file.replace(io);
 }
 
-/// Finds any of a set of PUUIDs (isPuuid) in bytes: every PUUID-long window of each
-/// base64url run is looked up
-const Matcher = struct {
+/// Finds any of a set of ids in bytes: every id-long window of each base64url run is
+/// looked up. PUUIDs (isPuuid) here; the gpu-box's copy has their 16-hex hashes
+/// (lab/complete_copy.zig), hex being base64url too
+pub const Matcher = struct {
     set: std.StringHashMapUnmanaged(void) = .empty,
+    len: usize = puuid_len,
 
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".*;
     const word = blk: {
@@ -397,21 +399,29 @@ const Matcher = struct {
         break :blk w;
     };
 
-    fn init(arena: Allocator, puuids: []const []const u8) !Matcher {
+    pub fn init(arena: Allocator, ids: []const []const u8) !Matcher {
         var m: Matcher = .{};
-        try m.reset(arena, puuids);
+        try m.reset(arena, ids);
         return m;
     }
 
-    fn reset(m: *Matcher, arena: Allocator, puuids: []const []const u8) !void {
+    /// Ids `len` long (at least 16: shorter would match nearly every document)
+    pub fn initLen(arena: Allocator, ids: []const []const u8, len: usize) !Matcher {
+        std.debug.assert(len >= 16);
+        var m: Matcher = .{ .len = len };
+        try m.reset(arena, ids);
+        return m;
+    }
+
+    fn reset(m: *Matcher, arena: Allocator, ids: []const []const u8) !void {
         m.set.clearRetainingCapacity();
-        for (puuids) |p| {
-            std.debug.assert(isPuuid(p));
+        for (ids) |p| {
+            std.debug.assert(p.len == m.len and std.mem.indexOfNone(u8, p, &chars) == null);
             try m.set.put(arena, p, {});
         }
     }
 
-    fn any(m: *const Matcher, hay: []const u8) bool {
+    pub fn any(m: *const Matcher, hay: []const u8) bool {
         if (m.set.count() == 0) return false;
         var i: usize = 0;
         while (i < hay.len) {
@@ -421,23 +431,24 @@ const Matcher = struct {
             }
             const start = i;
             while (i < hay.len and word[hay[i]]) i += 1;
-            if (i - start < puuid_len) continue;
+            if (i - start < m.len) continue;
             var at = start;
-            while (at + puuid_len <= i) : (at += 1) if (m.set.contains(hay[at..][0..puuid_len])) return true;
+            while (at + m.len <= i) : (at += 1) if (m.set.contains(hay[at..][0..m.len])) return true;
         }
         return false;
     }
 };
 
-const Scrubbed = struct {
+pub const Scrubbed = struct {
     /// Documents dropped; null when no frame names any (the file untouched)
     dropped: ?u64,
     /// The file's index as it is now (sorted, unique; gpa)
     ids: []u64,
 };
 
-/// Rewrites the sealed file `name` without the documents `m` finds
-fn scrubFile(gpa: Allocator, io: Io, dir: Io.Dir, dir_path: []const u8, name: []const u8, m: *const Matcher) !Scrubbed {
+/// Rewrites the sealed file `name` without the documents `m` finds; its PUUID index in
+/// the result when `index`
+pub fn scrubFile(gpa: Allocator, io: Io, dir: Io.Dir, dir_path: []const u8, name: []const u8, m: *const Matcher, index: bool) !Scrubbed {
     const tmp_name = ".scrub.tmp";
     var ids: std.ArrayList(u64) = .empty;
     defer ids.deinit(gpa);
@@ -463,7 +474,7 @@ fn scrubFile(gpa: Allocator, io: Io, dir: Io.Dir, dir_path: []const u8, name: []
         const arena = arena_state.allocator();
         const plain = try dayfile.inflate(gpa, arena, fr.zst);
         const hit = m.any(plain);
-        if (!hit) try collectIds(gpa, &ids, plain);
+        if (!hit and index) try collectIds(gpa, &ids, plain);
         if (hit and out == null) {
             out = try dir.createFile(io, tmp_name, .{ .read = true });
             out_len = try copyRange(io, file, out.?, at);
@@ -476,7 +487,7 @@ fn scrubFile(gpa: Allocator, io: Io, dir: Io.Dir, dir_path: []const u8, name: []
             out_len += h.len + fr.zst.len;
             continue;
         }
-        const r = try repack(gpa, arena, io, zst_tmp, fr, m, &ids);
+        const r = try repack(gpa, arena, io, zst_tmp, fr, m, if (index) &ids else null);
         try o.writePositionalAll(io, r.frames, out_len);
         out_len += r.frames.len;
         dropped += r.dropped;
@@ -505,23 +516,30 @@ fn copyRange(io: Io, from: Io.File, to: Io.File, len: u64) !u64 {
     return pos;
 }
 
-/// A frame's documents but those `m` finds, as zero to two frames (a block and the
-/// documents that do not pack, or raw as before), in `arena`; their index hashes to `ids`
-fn repack(gpa: Allocator, arena: Allocator, io: Io, zst_tmp: []const u8, fr: dayfile.Frame, m: *const Matcher, ids: *std.ArrayList(u64)) !struct { frames: []u8, dropped: u64 } {
+/// A frame's documents but those `m` finds, as packFrames; their index hashes to `ids`
+fn repack(gpa: Allocator, arena: Allocator, io: Io, zst_tmp: []const u8, fr: dayfile.Frame, m: *const Matcher, ids: ?*std.ArrayList(u64)) !struct { frames: []u8, dropped: u64 } {
     const docs = try dayfile.decode(gpa, arena, fr);
+    var kept: std.ArrayList(dayfile.Doc) = .empty;
+    for (docs) |d| if (!m.any(d.key) and !m.any(d.bytes)) try kept.append(arena, d);
+    return .{ .frames = try packFrames(gpa, arena, io, zst_tmp, kept.items, fr.type == .block, ids), .dropped = docs.len - kept.items.len };
+}
+
+/// `docs` as zero to two frames, in `arena`: a block of those that pack (when `block`)
+/// and a raw frame of the rest. A block that does not decode back goes raw whole. Index
+/// hashes of what is written go to `ids` when given
+pub fn packFrames(gpa: Allocator, arena: Allocator, io: Io, zst_tmp: []const u8, docs: []const dayfile.Doc, block: bool, ids: ?*std.ArrayList(u64)) ![]u8 {
     var packs: std.ArrayList(dayfile.Doc) = .empty;
     var raws: std.ArrayList(dayfile.Doc) = .empty;
-    var block: std.ArrayList(u8) = .empty;
-    defer block.deinit(gpa);
+    var packed_block: std.ArrayList(u8) = .empty;
+    defer packed_block.deinit(gpa);
     var b: jsonpack.Block = .init(gpa);
     defer b.deinit();
     for (docs) |d| {
-        if (m.any(d.key) or m.any(d.bytes)) continue;
-        if (fr.type == .block and try b.add(d.bytes)) try packs.append(arena, d) else try raws.append(arena, d);
+        if (block and try b.add(d.bytes)) try packs.append(arena, d) else try raws.append(arena, d);
     }
     if (packs.items.len > 0) {
-        try b.finish(&block);
-        if (!try same(gpa, block.items, packs.items)) {
+        try b.finish(&packed_block);
+        if (!try same(gpa, packed_block.items, packs.items)) {
             log.warn("complete: a repacked block did not decode back: kept raw", .{});
             try raws.insertSlice(arena, 0, packs.items);
             packs.clearRetainingCapacity();
@@ -534,14 +552,14 @@ fn repack(gpa: Allocator, arena: Allocator, io: Io, zst_tmp: []const u8, fr: day
         var plain: std.ArrayList(u8) = .empty;
         defer plain.deinit(gpa);
         try dayfile.keys(gpa, &plain, list);
-        if (t == .block) try plain.appendSlice(gpa, block.items) else try dayfile.rawBody(gpa, &plain, list);
-        try collectIds(gpa, ids, plain.items);
+        if (t == .block) try plain.appendSlice(gpa, packed_block.items) else try dayfile.rawBody(gpa, &plain, list);
+        if (ids) |i| try collectIds(gpa, i, plain.items);
         const zst = try complete.compress(gpa, io, zst_tmp, plain.items);
         defer gpa.free(zst);
         try out.appendSlice(arena, &dayfile.header(t, zst));
         try out.appendSlice(arena, zst);
     }
-    return .{ .frames = out.items, .dropped = docs.len - packs.items.len - raws.items.len };
+    return out.items;
 }
 
 /// Whether `block` decodes to exactly `docs`' bytes

@@ -3,7 +3,8 @@
 # (docs/data-safety.md "Raw archive"), so that key can do only this. The gpu-box runs
 # deploy/archive-pull.sh, which calls: export, list, send NAME, got NAME SHA256, ack NAME,
 # forgotten, disk USE (the gpu-box's disk use and logins backup for deploy/health.sh), report ok|fail
-# MESSAGE (each round's outcome, so health.sh can say why acks stopped)
+# MESSAGE (each round's outcome, so health.sh can say why acks stopped); days and day
+# NAME, the complete form's sealed day files (read only: the box keeps its own)
 set -euo pipefail
 cd "$HOME/ml/meiolol"
 # raw-export at low IO priority: a catch-up's exports, packs and prunes halved the
@@ -86,6 +87,19 @@ case "${cmd:-}" in
         cat "$tmp/list"
         rm -rf "$tmp"
         ;;
+    days)
+        # NAME SIZE, oldest first; a set-aside clash (riot/complete.zig) is sealed too
+        shopt -s nullglob
+        for f in data/complete/????-??-??.*.cfd data/complete/????-??-??.*.cfd.clash-*; do
+            echo "${f##*/} $(stat -c %s "$f")"
+        done
+        ;;
+    day)
+        [[ "$arg" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\.(summary|timeline|mastery)\.cfd(\.clash-[0-9]+)?$ ]] \
+            || { echo "bad day file name" >&2; exit 2; }
+        # A scrub renaming over it meanwhile leaves this read on the old file, whole
+        exec ionice -c 2 -n 7 cat "data/complete/$arg"
+        ;;
     status) exec bin/meiolol raw-export --data data --status ;;
     disk)
         [[ "$arg" =~ ^c[0-9]+,wsl[0-9]+,arch([0-9]+|-)(,acct(ok|fail|off|old))?$ ]] || { echo "bad disk use" >&2; exit 2; }
@@ -110,5 +124,5 @@ case "${cmd:-}" in
             *) echo "bad report" >&2; exit 2 ;;
         esac
         ;;
-    *) echo "archive-serve: export|list|send NAME|got NAME SHA256|ack NAME|forgotten|status|disk USE|report ok|fail MSG" >&2; exit 2 ;;
+    *) echo "archive-serve: export|list|send NAME|got NAME SHA256|ack NAME|forgotten|days|day NAME|status|disk USE|report ok|fail MSG" >&2; exit 2 ;;
 esac

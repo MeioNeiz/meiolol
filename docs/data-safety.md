@@ -268,6 +268,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | backup files | `--backups DIR` scrubs every state and segment file on the box at once (deploy/backup-loop.sh) |
 | backup mirrors (Mac, gpu-box) | each mirror run fetches the box's forgotten list and `meiolol backup --mirror` scrubs the PUUIDs new to it from every file it holds, including segments the box has pruned (applied list: forgotten-applied.txt in the mirror) |
 | raw archive (gpu-box) | ingest leaves out documents naming a forgotten PUUID; each pull runs `meiolol-lab archive-forget` for PUUIDs new on the box's list, which drops every archived summary, timeline and mastery line naming them (hashed with the salt) |
+| complete form copy (gpu-box, /mnt/wsl/archive/meiolol-complete) | a copied file leaves out documents naming a forgotten PUUID; each pull runs `meiolol-lab complete-copy`'s `complete-forget` for PUUIDs new on the box's list, which rewrites every copied file naming one of their hashes without those documents |
 | raw exports (box, data/archive-out) | short-lived: deleted on ack; an export holds what raw.db held when it was made |
 | complete form day files (box, data/complete; Megatron mirror) | a forgotten player's summaries, timelines and mastery are never written; each `forget` and `backup` rewrites every sealed file naming a forgotten PUUID without those documents (whole documents dropped, the rest byte for byte), and `backup` deletes files past 730 days, under complete/scrub.lock (riot/complete_scrub.zig). An index of PUUID hashes per file (complete/index) rules out files unread. Documents in the open `.part` or the spool wait for their seal (within a day) and the next daily run; quarantined spool segments are rewritten without records naming one (or that can't be read to check). Entries that are not 78-character PUUIDs are skipped by `forget` and the scrub (a short string would match every document). `scrubbed.tsv` keeps each file's size and mtime: a file replaced since is read whole again. Aging runs only in the daily `backup` (not `forget`, hourly from the mirrors, nor `restore`), by the newest game start Riot dated, never past the box clock: a box clock jump deletes nothing early, and aging waits while the crawler is down. At most 2 days' files a run. The Megatron copy follows by rsync `--delete` within the hour. Progress: complete/forgotten.txt (applied, in order) and scrubbed.tsv (FILE, how many applied) |
 | Your games (api.db on the web server) | `forget --data /var/lib/meiolol-api` there: `api.cache.forget` deletes the player, their Riot ID in every cached match (`match_names` by PUUID hash) and adds them to `blocked` |
@@ -369,11 +370,8 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   read back whole (zstd's checksum, rawpack's hash, counts against the export) and
   synced before NAME goes. list, send and got then use NAME.zst: the sha256 checked is
   of the bytes sent. A failed pack leaves NAME to go as before (data/archive-pack.err);
-  the gpu-box tells the forms apart by magic bytes. Why a stream: zstd on an export's
-  SQLite file saves 3% (bodies are gzip already); on the stream -3/-6/-9 save 15/30/39%
-  for 12/40/60 s of one core per hour of exports, and a trained dictionary gains
-  nothing.
-  data/archive-sent.log: time, name, export bytes (raw held, for health.sh), bytes sent
+  the gpu-box tells the forms apart by magic bytes (-9: 39% under the export's gzip
+  bodies for 60 s of one core an hour of exports). data/archive-sent.log: time, name, export bytes (raw held, for health.sh), bytes sent
 - gpu-box, per export until caught up (stopping when League opens): fetch to the archive
   partition (ARCHIVE/incoming), check the size, sha256 and fsync it, then `got NAME
   SHA256`: the box deletes its file only if the sha256 matches its own, and records the
@@ -399,12 +397,9 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   auto_vacuum=INCREMENTAL; VACUUM` (~2x live size free; ~25 min at 40 GB, a 10 GB WAL).
   Stop the crawler first (its 60 s busy timeout) and hold data/.archive-prune.lock; Your
   games lookups fail meanwhile (they go through the crawler's proxy)
-- ssh sessions from home kept open for minutes get corrupted packets (sshd: "message
-  authentication code incorrect"), so the ack only marks and deletes (seconds) and the
-  prune runs detached, one at a time (data/archive-prune.log); every box command the
-  pull makes is retried 3 times and is safe to repeat. A failed ack is retried next
-  round: the export stays listed, and is in index.tsv, so it is acked without a new
-  fetch or archive
+- Long ssh sessions from home get corrupted packets, so the ack only marks and deletes
+  and the prune runs detached (data/archive-prune.log); every box command is retried 3
+  times and safe to repeat. A failed ack is retried next round without a new fetch
 - Raw timelines (most of the bytes) are the exception: once an export file
   holds them (file and directory fsynced first) they leave raw.db at once, matched on
   id and fetch time, failed parses kept; the export file is their only box copy until
@@ -414,21 +409,16 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   the data disk's free space (`df`); under N GB it drops the oldest unacked export not
   yet received (file deleted, row marked acked so pruning moves past it), or with no
   export file left the oldest 2,000 raw timelines in raw.db (~180 MB of pages for new
-  raw to reuse). That raw is never archived: uptime of the crawler, site builds and
-  backups over a complete archive (Jacob). Each drop: a warning in
-  crawl.log, a row in raw.archive_dropped, a line in data/raw-dropped.log (unix time,
-  kind export|raw, name, from_s, to_s, documents, bytes, free MB; tab-separated), and
-  `raw-export --status` adds `since_drop_s` (null: never) and `drops_24h`; its
-  `since_ack_s` counts only the gpu-box's acks
+  raw to reuse), never archived: the crawler, site and backups come first (Jacob). Each
+  drop: a crawl.log warning, a row in raw.archive_dropped, a line in
+  data/raw-dropped.log; `raw-export --status` has `since_drop_s` and `drops_24h`
 - An export holds no lock the crawler waits on: each table is copied in one statement
   that reads its own snapshot. Windows go by fetched_at, which the crawler's writer sets
   when it begins the transaction that stores the document, and an export stops 300 s
   short of now, so a document still being written goes in the next one
-- Crash safety: an export is written as raw-FROM-TO.db.tmp, recorded in
-  raw.archive_exports, then renamed. The next export deletes leftover .tmp files and
-  the newest record whose file never got its name and was never received (that window
-  is exported again). An ack of a name with no record deletes the file; a failed ack
-  is logged and the pull carries on with the rest
+- Crash safety: an export is written as raw-FROM-TO.db.tmp, recorded, then renamed;
+  the next export deletes leftover .tmp files and the record of one never renamed nor
+  received (its window is exported again)
 - The crawler treats a body that is not a whole document (empty, cut short, not a
   match) as a failed fetch, tried again later, never kept raw (crawl.zig wholeDoc), and
   the riot client errors on a body shorter than its Content-Length (~1 in 150k bodies
@@ -441,6 +431,17 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
 - ~6.6 GB/day (summaries 4.3 KB, timelines 45 KB each at -15). ARCHIVE is
   /mnt/wsl/archive/meiolol-raw, on the 1 TB partition: full around March 2027 at this
   rate
+
+### Complete form copy
+
+Sealed day files on the gpu-box, pseudonymised (src/lab/complete_copy.zig): after the
+raw archive, deploy/archive-pull.sh fetches each one not in the copy's index.tsv (box:
+archive-serve.sh `days`, `day NAME`, read only) and rewrites its documents as the raw
+archive does (a mastery fetch's key and body get the hashed PUUID), into
+/mnt/wsl/archive/meiolol-complete. Left out: forgotten players, and as unreadable any
+document that does not rewrite or still holds a PUUID-long run. `complete-forget` and
+`complete-age` (730 days: hashed PUUIDs blanked, mastery files deleted) as for the raw
+archive
 
 ### Key switch
 

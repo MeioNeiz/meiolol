@@ -156,7 +156,12 @@ coordinator first):
 - S5 the gpu-box pulls day files instead of raw exports and pseudonymises them as the
   archive does now; lab readers (summaries, mastery-pre, seat-stats, comp-stats) read
   them. With its salt the copy rejoins meiolol.db backups, so it is also the copy off
-  Megatron
+  Megatron. Copy built (src/lab/complete_copy.zig; data-safety.md "Complete form
+  copy"), beside the raw archive: 1 Nov's summaries 245 MB to 174 MB, all 73,975
+  copied, 3.5 CPU minutes. Left: install it (`deploy/gpu-box.sh install`, which now
+  ships meiolol-lab and makes the copy's directory) and watch a round copy 1-3 Nov
+  (timelines and mastery not yet tried on real files); the lab readers; a box health
+  check that the copy keeps up (needed once raw ends); an index so a forget skips files
 - S6 raw ends: no raw docs, raw exports, valve or prune; raw.db goes
 - S7 the gpu-box's raw archive (12 Oct on, pseudonymised) converted there, checked byte
   for byte, then its raw files deleted
