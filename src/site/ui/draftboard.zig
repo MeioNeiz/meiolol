@@ -141,7 +141,7 @@ fn seat(h: *H, s: Seat, side: Side) N {
     for (s.ideas, 0..) |c, i| ideas.add(h.span(.{
         .key = i,
         .data_act = if (i < s.idea_acts.len) s.idea_acts[i] else null,
-    }, .{champ.view(h, c, .{ .px = .@"20" })}));
+    }, .{champ.view(h, c, .{ .px = .@"32" })}));
     return h.div(.{
         .class = "seat",
         .data_side = side,
@@ -151,7 +151,7 @@ fn seat(h: *H, s: Seat, side: Side) N {
         .data_sel = s.sel,
     }, .{
         champ.view(h, s.champ, .{
-            .px = .@"40",
+            .px = .@"48",
             .state = if (s.champ != null and s.state != .locked) .thin else .normal,
             .side = if (s.champ == null or s.state != .locked or s.you) null else switch (side) {
                 .us => .us,
@@ -443,6 +443,7 @@ pub const css =
     \\  .c-draft .ideas { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
     \\  .c-draft .bans > span { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-draft .bans > [data-side="them"] { justify-content: flex-end; }
+    \\  .c-draft:not([data-v]) .bans .c-champ { --sz: 32px; }
     \\  .c-draft[data-v="full"] { max-width: none; gap: 0; }
     \\  .c-draft[data-v="full"] .heads { padding: 0 var(--sp-2) var(--sp-2); font-size: var(--fs-l); }
     \\  .c-draft[data-v="full"] .heads > span { display: flex; align-items: center; gap: var(--sp-2); }

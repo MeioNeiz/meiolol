@@ -113,7 +113,7 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
     for (l.options, 0..) |o, i| opts.add(option(h, i, o, l.mode == .locked));
     return h.section(.{ .class = "lane" }, .{
         h.div(.{ .class = "vs" }, .{
-            champ.view(h, l.me, .{ .px = .@"48", .you = !ally, .named = false, .label = W.no_pick }),
+            champ.view(h, l.me, .{ .px = .@"56", .you = !ally, .named = false, .label = W.no_pick }),
             h.div(.{ .class = "who" }, .{
                 h.h2(.{}, .{
                     if (l.me) |m| m.name else W.no_pick.s,
@@ -129,7 +129,7 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
                     }}),
                 }),
             }),
-            if (l.them) |t| champ.view(h, t, .{ .px = .@"32", .side = .them, .state = if (l.guessed) .thin else .normal }) else null,
+            if (l.them) |t| champ.view(h, t, .{ .px = .@"48", .side = .them, .state = if (l.guessed) .thin else .normal }) else null,
         }),
         if (l.sentence.len > 0) h.p(.{ .class = "say", .data_thin = l.thin }, .{l.sentence}) else null,
         if (l.chart) |c| if (held) |x| x.at(c, W.gold).view(h) else null else null,
@@ -155,7 +155,7 @@ fn option(h: *H, i: usize, o: Option, locked: bool) N {
         chip.view(h, .{ .v = .reason }, .{r.text}),
     }));
     return h.li(.{ .key = i, .data_current = o.current, .data_act = if (o.act.len > 0) o.act else null }, .{
-        champ.view(h, o.champ, .{ .px = .@"40", .named = false }),
+        champ.view(h, o.champ, .{ .px = .@"48", .named = false }),
         h.div(.{ .class = "body" }, .{
             h.div(.{ .class = "name" }, .{
                 h.b(.{}, .{o.champ.name}),
@@ -175,7 +175,7 @@ fn banOptions(h: *H, s: Screen) ?N {
     if (s.ban_options.len == 0) return null;
     var rows = h.list();
     for (s.ban_options, 0..) |o, i| rows.add(h.li(.{ .key = i, .data_act = if (o.act.len > 0) o.act else null }, .{
-        champ.view(h, o.champ, .{ .px = .@"32", .named = false }),
+        champ.view(h, o.champ, .{ .px = .@"40", .named = false }),
         h.div(.{ .class = "body" }, .{
             h.div(.{ .class = "name" }, .{
                 h.b(.{}, .{o.champ.name}),
