@@ -29,6 +29,7 @@ export fn main() void {
     wasm = dom.attrOf(root, "data-wasm");
     const stamp = dom.attrOf(root, "data-stamp");
     want = std.fmt.parseInt(u32, stamp, 10) catch return;
+    gamesrc.follow();
     gamesrc.load("gamemore", sel, src, stamp, want, loaded);
 }
 
@@ -37,6 +38,7 @@ fn loaded(ok: bool) void {
     // Each its own prepared games: the server's stays as rendered for hydration
     server = init(&gamesrc.server) catch return dom.dom.warn("gamemore: out of memory");
     state = init(gamesrc.shown) catch return dom.dom.warn("gamemore: out of memory");
+    state.from = gamesrc.at;
     _ = dom.rt.add(gp.GameMore, &state, &server, sel) catch return dom.dom.warn("gamemore: out of memory");
     gamesrc.ready();
 }

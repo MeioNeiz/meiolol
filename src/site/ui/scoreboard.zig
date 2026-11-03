@@ -4,7 +4,7 @@
 //! then a bar growing towards the middle (damage to champions, taken or gold: the
 //! switch is the card head's). Between them the role and that lane's gold lead at 14.
 //! A team band on top: result, K/D/A, gold, objectives. Narrow: names and CS go, items
-//! move under the seat
+//! move under the seat. Under a lookup another named seat links to the game from there
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
@@ -43,6 +43,7 @@ const W = struct {
     pub const grubs = plain("Grubs");
     pub const ours = plain("Your team");
     pub const theirs = plain("Their team");
+    pub const as = phrase.Phrase("See the game as {id:text}");
 };
 
 const Side = enum { us, them };
@@ -69,7 +70,8 @@ pub const Board = struct {
         });
     }
 
-    pub fn view(b: *const Board, h: *H, g: *const gamedata.Game, d: *const gamedata.Data) N {
+    /// `from`: the looked-up game, for the seat links
+    pub fn view(b: *const Board, h: *H, g: *const gamedata.Game, d: *const gamedata.Data, from: ?gamedata.Lookup) N {
         const lanes = byLane(g);
         var top: u32 = 1;
         for (g.seats) |s| top = @max(top, b.of(s));
@@ -78,12 +80,12 @@ pub const Board = struct {
             const r: role.Role = @fromBackingInt(@intCast(i));
             const lead: ?i32 = if (l[0]) |x| g.seats[x].lane14 else null;
             rows.add(h.div(.{ .key = i, .class = "lr" }, .{
-                b.seat(h, g, d, l[0], .us, top),
+                b.seat(h, g, d, from, l[0], .us, top),
                 h.div(.{ .class = "mid" }, .{
                     role.view(h, r, .{ .s = .s, .named = false }),
                     if (lead) |v| h.span(.{ .class = "ld", .data_side = if (v > 0) Side.us else if (v < 0) Side.them else null }, .{phrase.num(h, .signed, v)}) else null,
                 }),
-                b.seat(h, g, d, l[1], .them, top),
+                b.seat(h, g, d, from, l[1], .them, top),
             }));
         }
         const t = gamedata.teams(g);
@@ -105,14 +107,14 @@ pub const Board = struct {
         };
     }
 
-    fn seat(b: *const Board, h: *H, g: *const gamedata.Game, d: *const gamedata.Data, slot: ?u8, side: Side, top: u32) N {
+    fn seat(b: *const Board, h: *H, g: *const gamedata.Game, d: *const gamedata.Data, from: ?gamedata.Lookup, slot: ?u8, side: Side, top: u32) N {
         const i = slot orelse return h.div(.{ .class = "seat", .data_side = side }, .{});
         const s = g.seats[i];
         const mins: f32 = @as(f32, @floatFromInt(@max(g.dur, 60))) / 60;
         const r: f32 = @as(f32, @floatFromInt(@as(u32, s.k) + s.a)) / @as(f32, @floatFromInt(@max(s.d, 1)));
         const v = b.of(s);
         const c = d.champs[s.champ];
-        return h.div(.{ .class = "seat", .data_side = side, .data_you = i == g.you }, .{
+        const kids = .{
             champ.view(h, c, .{ .px = .@"32", .level = if (s.level > 0) s.level else null, .you = i == g.you, .named = false }),
             h.span(.{ .class = "nm" }, .{ h.b(.{}, .{c.name}), if (s.riot_id.len > 0) h.small(.{}, .{s.riot_id}) else null }),
             h.span(.{ .class = "kd" }, .{
@@ -125,7 +127,14 @@ pub const Board = struct {
                 h.span(.{}, .{phrase.num(h, .kilo, v)}),
                 h.el(.i, .{ .aria_hidden = true, .style = h.vars(.{ .w = @round(@as(f32, @floatFromInt(v)) * 1000 / @as(f32, @floatFromInt(top))) / 10 }) }, .{}),
             }),
-        });
+        };
+        // No Riot ID: an opted-out player's seat (or not yet known), not theirs to see
+        if (from) |l| if (i != g.you and s.riot_id.len > 0) {
+            var buf: [256]u8 = undefined;
+            const href = h.mem.dupe(u8, l.from(&buf, i) orelse "") catch "";
+            return h.a(.{ .class = "seat", .href = href, .data_side = side, .aria_label = W.as.with(h, .{ .id = s.riot_id }) }, kids);
+        };
+        return h.div(.{ .class = "seat", .data_side = side, .data_you = i == g.you }, kids);
     }
 };
 
@@ -212,6 +221,10 @@ pub const css =
     \\    grid-template-areas: "c nm kd cs it bar"; align-items: center; gap: var(--sp-3); min-width: 0; padding: 8px 0; }
     \\  .c-board .seat[data-side="them"] { grid-template-columns: 88px auto 40px 56px minmax(0, 1fr) 32px;
     \\    grid-template-areas: "bar it cs kd nm c"; text-align: right; }
+    \\  .c-board a.seat { color: inherit; text-decoration: none; }
+    \\  .c-board a.seat:hover { background: var(--panel-2); box-shadow: -10px 0 0 var(--panel-2), 10px 0 0 var(--panel-2); text-decoration: none; }
+    \\  .c-board a.seat:hover .nm > b { color: var(--accent); }
+    \\  .c-board a.seat:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     \\  .c-board .seat[data-you] { background: var(--panel-2); box-shadow: -10px 0 0 var(--panel-2), 10px 0 0 var(--panel-2), -12px 0 0 var(--us); }
     \\  .c-board .seat > .c-champ { grid-area: c; }
     \\  .c-board .nm { grid-area: nm; display: flex; flex-direction: column; min-width: 0; }
@@ -254,9 +267,20 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const d = &@import("game_demo.zig").data;
     var b: Board = .{};
-    g.addFill("damage, a win", b.view(h, &d.games[0], d));
+    g.addFill("damage, a win", b.view(h, &d.games[0], d, null));
     b.bar = .gold;
-    g.addFill("gold, a loss", b.view(h, &d.games[1], d));
+    g.addFill("gold, a loss, named seats linked", b.view(h, named(h.mem, &d.games[1]) catch return, d, .{ .id = "A%231", .start = 1 }));
+}
+
+/// `g` with a Riot ID on every seat but one
+fn named(a: std.mem.Allocator, g: *const gamedata.Game) !*gamedata.Game {
+    const seats = try a.dupe(gamedata.Seat, g.seats);
+    const ids = [_][]const u8{ "Ana#EUW", "Bo#EUW", "Cai#EUW", "", "Eli#EUW", "Fay#EUW", "Gus#EUW", "Hal#EUW", "Ivo#EUW", "Jun#EUW" };
+    for (seats, ids) |*s, id| s.riot_id = id;
+    const out = try a.create(gamedata.Game);
+    out.* = g.*;
+    out.seats = seats;
+    return out;
 }
 
 const testing = std.testing;
@@ -271,4 +295,23 @@ test "every seat in its lane, one without a role in a free row" {
     const l = byLane(&g);
     for (l) |row| for (row) |x| try testing.expect(x != null);
     try testing.expectEqual(@as(?u8, 2), l[@backingInt(role.Role.mid)][1]);
+}
+
+test "under a lookup a named seat links to the game from there; yours and the unnamed don't" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d = &@import("game_demo.zig").data;
+    const g = try named(a, &d.games[0]);
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    const b: Board = .{};
+    t.root = b.view(&h, g, d, null);
+    try testing.expectEqual(@as(usize, 0), t.count(t.root, "href"));
+    t.root = b.view(&h, g, d, .{ .id = "A%231", .start = 5 });
+    try testing.expect(!h.oom);
+    try testing.expectEqual(@as(usize, 8), t.count(t.root, "href"));
+    try testing.expect(t.find(t.root, "href", "#id=A%231&game=5&as=0") != null);
+    try testing.expect(t.find(t.root, "href", "#id=A%231&game=5&as=3") == null);
+    try testing.expect(t.find(t.root, "href", "#id=A%231&game=5&as=7") == null);
 }

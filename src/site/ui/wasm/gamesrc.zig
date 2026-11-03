@@ -1,7 +1,9 @@
 //! The game page's data for each of its wasm files: the example's file (the island's
 //! data-src), which the server rendered, and for a looked-up player's game
 //! (gamedata.Lookup) that game from the API too, shown in place of the example. The
-//! island stays hidden until its game is in, so the example never shows under a lookup
+//! island stays hidden until its game is in, so the example never shows under a lookup.
+//! Another lookup in the fragment (a scoreboard seat's link, Back) loads the page again:
+//! ui-gamemore.wasm listens, which holds the links
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -21,9 +23,32 @@ var sel: []const u8 = "";
 var want: u32 = 0;
 var then: *const fn (bool) void = undefined;
 
-pub fn lookup() ?gd.Lookup {
+/// Its id in `buf`
+pub fn lookup(buf: []u8) ?gd.Lookup {
+    return gd.Lookup.ofHash(dom.dom.hash(buf));
+}
+
+/// The page's lookup as it loaded, once `follow` ran
+pub var at: ?gd.Lookup = null;
+var at_buf: [1024]u8 = undefined;
+
+/// Load the page again on another lookup in the fragment
+pub fn follow() void {
+    at = lookup(&at_buf);
+    const f = zjb.fnHandle("gameHash", &onHash);
+    const w = zjb.global("window");
+    w.call("addEventListener", .{ zjb.constString("popstate"), f }, void);
+    w.call("addEventListener", .{ zjb.constString("hashchange"), f }, void);
+}
+
+fn onHash(e: zjb.Handle) callconv(.c) void {
+    const s = zjb.scope();
+    defer s.end();
+    e.release();
     var buf: [1024]u8 = undefined;
-    return gd.Lookup.ofHash(dom.dom.hash(&buf));
+    const now = lookup(&buf);
+    const same = if (now) |n| at != null and n.eql(at.?) else at == null;
+    if (!same) zjb.global("location").call("reload", .{}, void);
 }
 
 /// Hide the island under `selector` while a lookup's game loads; shown again by `ready`
@@ -52,7 +77,8 @@ pub fn load(label: []const u8, selector: []const u8, src: []const u8, stamp: []c
     sel = selector;
     want = stamp_n;
     then = done;
-    if (lookup() != null) hide(sel);
+    var buf: [1024]u8 = undefined;
+    if (lookup(&buf) != null) hide(sel);
     dom.fetchStamped(src, stamp, 0, loaded);
 }
 
@@ -66,7 +92,8 @@ pub fn ready() void {
 fn fail(comptime what: []const u8) void {
     var buf: [1024]u8 = undefined;
     dom.dom.warn(std.fmt.bufPrint(&buf, "{s}: " ++ what, .{name}) catch what);
-    if (lookup()) |l| if (std.fmt.bufPrint(&buf, "{s}#id={s}&game={d}", .{ ui.gamepage.all_games, l.id, l.start })) |to| {
+    var hb: [1024]u8 = undefined;
+    if (lookup(&hb)) |l| if (std.fmt.bufPrint(&buf, "{s}#id={s}&game={d}", .{ ui.gamepage.all_games, l.id, l.start })) |to| {
         const s = zjb.string(to);
         defer s.release();
         zjb.global("location").call("replace", .{s}, void);
@@ -79,7 +106,8 @@ fn loaded(_: i32, bytes: ?[]u8) void {
     // A page cached from an older build than its data: leave it as rendered
     if (gd.stamp(b) != want) return fail("the page and its data differ");
     server = ui.data.decode(gpa, gd.Data, b) catch return fail("bad data");
-    const l = lookup() orelse return then(true);
+    var hb: [1024]u8 = undefined;
+    const l = lookup(&hb) orelse return then(true);
     var buf: [1024]u8 = undefined;
     const url = l.api(&buf) orelse return fail("no looked-up game");
     dom.fetch(url, 1, lookedUp);

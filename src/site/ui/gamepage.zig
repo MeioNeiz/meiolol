@@ -346,6 +346,8 @@ pub const GameMore = struct {
     js: []const u8 = "",
     wasm: []const u8 = "",
     board: scoreboard.Board = .{},
+    /// The looked-up game, for Players' seat links
+    from: ?gamedata.Lookup = null,
 
     const P = @This();
 
@@ -377,7 +379,7 @@ pub const GameMore = struct {
             card.view(h, .{}, &.{versus.split(h, p.objectives(h))}),
             card.view(h, .{ .flush = true }, &.{
                 card.head(h, W.players, null, &.{p.board.switcher(h)}),
-                p.board.view(h, g, d),
+                p.board.view(h, g, d, p.from),
             }),
         });
     }

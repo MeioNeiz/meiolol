@@ -9,6 +9,7 @@ const role = @import("role.zig");
 const data = @import("data.zig");
 const timeline = @import("timeline.zig");
 const art = @import("art.zig");
+const fmt = @import("fmt.zig");
 
 pub const ObjKind = enum { tower, inhibitor, dragon, elder, grubs, herald, baron, atakhan };
 
@@ -154,29 +155,57 @@ pub const Data = struct {
 pub const stamp = @import("tiers.zig").stamp;
 
 /// game.html#id=Name%23TAG&game=ms: a looked-up player's game (its start_ms in the Your
-/// games report), which the API answers in place of the example's
+/// games report), which the API answers in place of the example's; &as=slot: from that
+/// seat
 pub const Lookup = struct {
     /// Percent-encoded as in the fragment
     id: []const u8,
     start: i64,
+    /// 0-9
+    as: ?u8 = null,
 
     pub fn ofHash(hash: []const u8) ?Lookup {
         var id: ?[]const u8 = null;
         var start: ?i64 = null;
+        var as: ?u8 = null;
         var it = std.mem.tokenizeScalar(u8, if (hash.len > 0 and hash[0] == '#') hash[1..] else hash, '&');
         while (it.next()) |kv| {
             const eq = std.mem.findScalar(u8, kv, '=') orelse continue;
             const v = kv[eq + 1 ..];
             if (std.mem.eql(u8, kv[0..eq], "id")) id = v;
             if (std.mem.eql(u8, kv[0..eq], "game")) start = std.fmt.parseInt(i64, v, 10) catch null;
+            // Slots 0-9 by hand: a second parseInt costs ui-games.wasm 250 B
+            if (std.mem.eql(u8, kv[0..eq], "as") and v.len == 1 and std.ascii.isDigit(v[0])) as = v[0] - '0';
         }
         const i = id orelse return null;
         if (i.len == 0 or std.mem.findAny(u8, i, " ?") != null) return null;
-        return .{ .id = i, .start = start orelse return null };
+        return .{ .id = i, .start = start orelse return null, .as = as };
     }
 
     pub fn api(l: Lookup, buf: []u8) ?[]const u8 {
-        return std.fmt.bufPrint(buf, "/api/game?id={s}&start={d}", .{ l.id, l.start }) catch null;
+        const head = std.fmt.bufPrint(buf, "/api/game?id={s}&start={d}", .{ l.id, l.start }) catch return null;
+        const a = l.as orelse return head;
+        return withAs(buf, head.len, a);
+    }
+
+    /// The fragment for the same game from `slot`
+    pub fn from(l: Lookup, buf: []u8, slot: u8) ?[]const u8 {
+        var w: std.Io.Writer = .fixed(buf);
+        w.print("#id={s}&game=", .{l.id}) catch return null;
+        fmt.write(&w, .int, l.start) catch return null;
+        return withAs(buf, w.end, slot);
+    }
+
+    pub fn eql(l: Lookup, o: Lookup) bool {
+        return l.start == o.start and l.as == o.as and std.mem.eql(u8, l.id, o.id);
+    }
+
+    /// buf[0..n] then &as=slot
+    fn withAs(buf: []u8, n: usize, slot: u8) ?[]const u8 {
+        const tail = [_]u8{ '&', 'a', 's', '=', '0' + slot };
+        if (n + tail.len > buf.len) return null;
+        @memcpy(buf[n..][0..tail.len], &tail);
+        return buf[0 .. n + tail.len];
     }
 };
 
@@ -571,6 +600,10 @@ test "lookup: a looked-up game's fragment as its API call" {
     var buf: [128]u8 = undefined;
     const l = Lookup.ofHash("#m=300&id=Hide%20on%20bush%23KR1&game=1791720000000").?;
     try std.testing.expectEqualStrings("/api/game?id=Hide%20on%20bush%23KR1&start=1791720000000", l.api(&buf).?);
+    const as = Lookup.ofHash("#id=A%231&game=5&as=3&g=0").?;
+    try std.testing.expectEqualStrings("/api/game?id=A%231&start=5&as=3", as.api(&buf).?);
+    try std.testing.expectEqualStrings("#id=A%231&game=5&as=7", as.from(&buf, 7).?);
+    try std.testing.expect(!as.eql(l) and as.eql(Lookup.ofHash("#as=3&game=5&id=A%231").?));
     try std.testing.expectEqual(null, Lookup.ofHash("#g=2"));
     try std.testing.expectEqual(null, Lookup.ofHash("#id=A%231"));
     try std.testing.expectEqual(null, Lookup.ofHash("#id=A%231&game=x"));

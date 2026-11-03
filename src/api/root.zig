@@ -8,7 +8,8 @@
 //!   GET  /api/list?id=Name%23TAG    /api/games as your.html's binary data
 //!                                   (ui.yourlist.Lookup); &refresh=1 the same
 //!   GET  /api/game?id=Name%23TAG&start=MS  one of the report's games with its detail, as
-//!                                   the game page's binary data (ui.gamedata.Data)
+//!                                   the game page's binary data (ui.gamedata.Data);
+//!                                   &as=SLOT from another player's seat
 //!   GET  /api/friends?id=Name%23TAG who the player plays with (friends.zig), from the
 //!                                   games /api/games fetched; fetches nothing itself
 //!   GET  /api/friends.bin?id=..     the same as ui.yourfriends.Friends (ui.data)
@@ -876,7 +877,9 @@ fn input(arena: Allocator, db: store.Db, r: GameRow) !?game.Input {
 }
 
 /// One game of a looked-up player's report (by `Game.start_ms`) with its detail, as
-/// game.html reads it. The cache only: the player's lookup fetched it
+/// game.html reads it; `as`: from another seat, one with a kept Riot ID (none for an
+/// opted-out player), ranked as the looked-up player. The cache only: the player's lookup
+/// fetched it
 fn oneGame(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Reply {
     const key = try riotIdParam(arena, query) orelse
         return errorReply(arena, .bad_request, "error", "expected ?id=Name#TAG&start=ms");
@@ -899,6 +902,15 @@ fn oneGame(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Re
     if (!try q.step()) return none;
     var in = try input(arena, db, q.row(GameRow)) orelse return none;
     in.detail = true;
+    if (try param(arena, query, "as")) |v| {
+        const slot = std.fmt.parseInt(u8, v, 10) catch
+            return errorReply(arena, .bad_request, "error", "expected &as=slot");
+        if (slot != in.slot) {
+            if (slot >= in.summary.players.len) return none;
+            if (in.riot_ids[slot] == null) return errorReply(arena, .not_found, "opted_out", "this player opted out");
+            in.slot = slot;
+        }
+    }
     const g = try game.analyse(arena, in, rankOf(player), ctx.curves);
     const d = try pagedata.data(arena, ctx.shown.names, &.{g}, &ctx.shown, Shown.champ);
     if (d.games.len == 0) return errorReply(arena, .not_found, "none", "no timeline for this game");
@@ -1422,6 +1434,16 @@ test "game: one looked-up game with its detail as the game page's data" {
     try std.testing.expectEqual(Status.not_found, (try oneGame(&ctx, arena, db, "id=A%231&start=1")).status);
     try std.testing.expectEqual(Status.not_found, (try oneGame(&ctx, arena, db, "id=B%231&start=1791720000000")).status);
     try std.testing.expectEqual(Status.bad_request, (try oneGame(&ctx, arena, db, "id=A%231")).status);
+    // From C#1's seat; none from a seat without a kept Riot ID
+    const as = try ui.data.decode(arena, ui.gamedata.Data, (try oneGame(&ctx, arena, db, "id=A%231&start=1791720000000&as=2")).body);
+    try std.testing.expectEqual(2, as.games[0].you);
+    try std.testing.expect(as.games[0].seats[2].us and !as.games[0].seats[7].us);
+    try std.testing.expectEqual(7, (try ui.data.decode(arena, ui.gamedata.Data, (try oneGame(&ctx, arena, db, "id=A%231&start=1791720000000&as=7")).body)).games[0].you);
+    const anon = try oneGame(&ctx, arena, db, "id=A%231&start=1791720000000&as=3");
+    try std.testing.expect(!anon.binary and std.mem.find(u8, anon.body, "opted_out") != null);
+    try std.testing.expectEqual(Status.not_found, (try oneGame(&ctx, arena, db, "id=A%231&start=1791720000000&as=10")).status);
+    try std.testing.expectEqual(Status.bad_request, (try oneGame(&ctx, arena, db, "id=A%231&start=1791720000000&as=x")).status);
+
     try db.run("INSERT INTO blocked VALUES ('p', 0)", .{});
     const out = try oneGame(&ctx, arena, db, "id=A%231&start=1791720000000");
     try std.testing.expect(!out.binary and std.mem.find(u8, out.body, "opted_out") != null);

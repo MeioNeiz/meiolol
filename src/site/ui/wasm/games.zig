@@ -26,7 +26,8 @@ export fn main() void {
     dom.start();
     dom.lazyLoad(&lazy);
     // Theirs load later: hidden from now, not from when they start
-    if (gamesrc.lookup() != null) for (lazy) |l| gamesrc.hide(l);
+    var hb: [1024]u8 = undefined;
+    if (gamesrc.lookup(&hb) != null) for (lazy) |l| gamesrc.hide(l);
     const root = zjb.global("document").call("querySelector", .{zjb.constString(sel)}, zjb.Handle);
     if (root == .null) return dom.lazyLater();
     defer root.release();
@@ -43,7 +44,8 @@ fn loaded(ok: bool) void {
     server = init(&gamesrc.server) catch return dom.dom.warn("games: out of memory");
     state = init(gamesrc.shown) catch return dom.dom.warn("games: out of memory");
     // A lookup's "all games" is that player's
-    if (gamesrc.lookup()) |l| state.all = std.fmt.allocPrint(gpa, "{s}#id={s}", .{ gp.all_games, l.id }) catch state.all;
+    var hb: [1024]u8 = undefined;
+    if (gamesrc.lookup(&hb)) |l| state.all = std.mem.concat(gpa, u8, &.{ gp.all_games, "#id=", l.id }) catch state.all;
     _ = dom.rt.add(gp.GamePage, &state, &server, sel) catch return dom.dom.warn("games: out of memory");
     gamesrc.ready();
 }
