@@ -17,11 +17,12 @@ const ingame = desktop.ingame;
 const postgame = desktop.postgame;
 const files = @import("files.zig");
 const practice = @import("practice.zig");
+const lobby = @import("lobby.zig");
 const channel = @import("channel.zig");
 const app = ui.app;
 const Allocator = std.mem.Allocator;
 
-pub const css = ui.css.head ++ ui.css.join(.{ ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.app });
+pub const css = ui.css.head ++ ui.css.join(.{ ui.site, ui.appbar, ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.resultstrip, ui.lobby, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.toggletip, ui.reasons, ui.candlist, ui.picks, ui.app });
 
 const Page = struct {
     arena: std.heap.ArenaAllocator,
@@ -29,8 +30,12 @@ const Page = struct {
     bin: []const u8,
     /// ui-practice.wasm's practice.bin; "" while practice is off
     practice: []const u8,
-    /// A fingerprint of the comp view under the island, 0 for none
+    /// A fingerprint of the static parts: the bar and the comp view under the island
     comp: u32,
+    /// ui-picks.wasm's picks.bin; "" while there is no Options panel
+    picks: []const u8,
+    /// Champ select, the loading screen or a game: the window comes back from the site
+    live: bool,
 };
 
 var page: ?Page = null;
@@ -42,6 +47,7 @@ pub fn get(path: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, path, files.start_page)) return p.html;
     if (std.mem.eql(u8, path, "app.bin")) return p.bin;
     if (std.mem.eql(u8, path, "practice.bin") and p.practice.len > 0) return p.practice;
+    if (std.mem.eql(u8, path, "picks.bin") and p.picks.len > 0) return p.picks;
     return null;
 }
 
@@ -56,8 +62,10 @@ pub fn icon(gpa: Allocator, path: []const u8) ?[]u8 {
 
 pub const Changed = struct {
     seq: u32,
-    /// The comp view came, went or changed: static HTML, so not in app.bin's patches
+    /// The bar or the comp view changed: static HTML, so not in app.bin's patches
     reload: bool,
+    /// The live screen began (champ select, loading, a game)
+    started: bool,
 
     pub fn message(c: Changed) channel.ToPage {
         return if (c.reload) .{ .reload = c.seq } else .{ .app = c.seq };
@@ -72,10 +80,12 @@ pub fn refresh(gpa: Allocator, live: bool) ?Changed {
         arena.deinit();
         return null;
     };
-    const reload = if (page) |old| old.comp != next.comp else false;
+    // The Options panel's island comes or goes with the page
+    const reload = if (page) |old| old.comp != next.comp or (old.picks.len > 0) != (next.picks.len > 0) else false;
+    const started = next.live and !(if (page) |old| old.live else false);
     if (page) |*old| old.arena.deinit();
-    page = .{ .arena = arena, .html = next.html, .bin = next.bin, .practice = next.practice, .comp = next.comp };
-    return .{ .seq = seq, .reload = reload };
+    page = .{ .arena = arena, .html = next.html, .bin = next.bin, .practice = next.practice, .comp = next.comp, .picks = next.picks, .live = next.live };
+    return .{ .seq = seq, .reload = reload, .started = started };
 }
 
 pub fn deinit() void {
@@ -83,10 +93,10 @@ pub fn deinit() void {
     page = null;
 }
 
-const Next = struct { html: []const u8, bin: []const u8, practice: []const u8, comp: u32 };
+const Next = struct { html: []const u8, bin: []const u8, practice: []const u8, comp: u32, picks: []const u8, live: bool };
 
 fn build(a: Allocator, live: bool) !?Next {
-    if (!live) return finish(a, try data(a, .{ .stats = null, .icons = null, .private = false }, .no_client, .none), null, null);
+    if (!live) return finish(a, try data(a, .{ .stats = null, .icons = null, .private = false }, .no_client, .none), null, null, null, null);
     const s = poller.lock();
     defer poller.unlock();
     const c: Ctx = .{
@@ -96,7 +106,7 @@ fn build(a: Allocator, live: bool) !?Next {
         .practice = state.private_code and s.practicing and s.practice.* != null,
     };
     var d = try data(a, c, s.status, s.note);
-    d.signin = signIn(s.signin, s.status);
+    withSignIn(&d, signIn(s.signin, s.status));
     var bar: ?ui.practice.Data = null;
     if (state.private_code and practice.offered(s.edition, s.stats, s.practice.*, s.status)) {
         d.practice = s.practice.* != null;
@@ -107,7 +117,20 @@ fn build(a: Allocator, live: bool) !?Next {
         .loading => |l| if (l.comp) |*cv| try lockedComp(a, c, cv) else null,
         else => null,
     };
-    return finish(a, d, bar, under);
+    const opts: ?ui.picks.Data = switch (s.status) {
+        .select => |x| try picksOf(a, c, x),
+        else => null,
+    };
+    const form: ?ui.lobby.Lobby = if (s.form) |f| try lobby.view(a, c, f) else null;
+    return finish(a, d, bar, under, opts, form);
+}
+
+/// The full form takes the note's place: the first of the first start's steps
+pub fn withSignIn(d: *app.Data, s: ?ui.signin.SignIn) void {
+    d.signin = s;
+    if (s) |x| if (x.full) {
+        d.screen = .{ .note = .{ .title = "", .step = .sign_in } };
+    };
 }
 
 /// The form while there is no working sign-in: the whole screen until there is data
@@ -119,15 +142,16 @@ fn signIn(s: ?*const state.SignIn, status: state.Status) ?ui.signin.SignIn {
 
 /// Encoded and rendered into `a`, so nothing points into the poller's memory once it
 /// unlocks; null when what shows is as before
-fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp) !?Next {
+fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp, opts: ?ui.picks.Data, form: ?ui.lobby.Lobby) !?Next {
     var d = shown;
     d.seq = seq + 1;
-    var comp_id: u32 = 0;
-    if (under) |x| {
-        var cbin: std.ArrayList(u8) = .empty;
-        try ui.data.encode(a, ui.compview.Comp, x, &cbin);
-        comp_id = @as(u32, @truncate(std.hash.Wyhash.hash(0, cbin.items))) | 1;
-    }
+    // The bar and the comp view are static: a change to either reloads the page
+    var cbin: std.ArrayList(u8) = .empty;
+    if (under) |x| try ui.data.encode(a, ui.compview.Comp, x, &cbin);
+    if (form) |x| try ui.data.encode(a, ui.lobby.Lobby, x, &cbin);
+    try cbin.appendSlice(a, phase(d.where));
+    try cbin.appendSlice(a, &.{ @intFromBool(state.by_mastery.load(.acquire)), @intFromBool(d.signin == null) });
+    const comp_id = @as(u32, @truncate(std.hash.Wyhash.hash(0, cbin.items))) | 1;
     var bin: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, app.Data, d, &bin);
     var pbin: std.ArrayList(u8) = .empty;
@@ -136,9 +160,21 @@ fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.comp
         x.seq = d.seq;
         try ui.data.encode(a, ui.practice.Data, x.*, &pbin);
     }
-    if (page) |old| if (std.mem.eql(u8, shows(old.bin), shows(bin.items)) and std.mem.eql(u8, shows(old.practice), shows(pbin.items)) and old.comp == comp_id) return null;
+    var kbin: std.ArrayList(u8) = .empty;
+    var k = opts;
+    if (k) |*x| {
+        x.seq = d.seq;
+        try ui.data.encode(a, ui.picks.Data, x.*, &kbin);
+    }
+    if (page) |old| if (std.mem.eql(u8, shows(old.bin), shows(bin.items)) and std.mem.eql(u8, shows(old.practice), shows(pbin.items)) and
+        std.mem.eql(u8, shows(old.picks), shows(kbin.items)) and old.comp == comp_id) return null;
     seq += 1;
-    return .{ .html = try render(a, d, p, under), .bin = bin.items, .practice = pbin.items, .comp = comp_id };
+    const html = try renderIn(a, d, p, under, .{ .site = files.site, .mastery = state.by_mastery.load(.acquire), .picks = k, .lobby = form });
+    const live = switch (d.screen) {
+        .select, .loading, .game => true,
+        .note, .post => false,
+    };
+    return .{ .html = html, .bin = bin.items, .practice = pbin.items, .comp = comp_id, .picks = kbin.items, .live = live };
 }
 
 /// Past the fingerprint and seq: what shows
@@ -152,9 +188,9 @@ pub fn dump(io: std.Io, gpa: Allocator, dir: []const u8) !void {
     const p = page orelse return;
     const sub = try std.fmt.allocPrint(gpa, "{s}/{d}", .{ dir, seq });
     defer gpa.free(sub);
-    const own = [_]struct { []const u8, []const u8 }{ .{ files.start_page, p.html }, .{ "app.bin", p.bin }, .{ "practice.bin", p.practice } };
+    const own = [_]struct { []const u8, []const u8 }{ .{ files.start_page, p.html }, .{ "app.bin", p.bin }, .{ "practice.bin", p.practice }, .{ "picks.bin", p.picks } };
     for (own) |f| if (f[1].len > 0) try dumpFile(io, gpa, sub, f[0], f[1]);
-    for ([_][]const u8{ "app.css", "ui-app.js", "ui-app.wasm", "ui-practice.js", "ui-practice.wasm" }) |f|
+    for ([_][]const u8{ "app.css", "ui-app.js", "ui-app.wasm", "ui-picks.js", "ui-picks.wasm", "ui-practice.js", "ui-practice.wasm" }) |f|
         if (files.get(f)) |bytes| try dumpFile(io, gpa, sub, f, bytes);
     var rest = p.html;
     while (std.mem.find(u8, rest, "\"icon/")) |i| {
@@ -177,7 +213,12 @@ fn dumpFile(io: std.Io, gpa: Allocator, dir: []const u8, name: []const u8, bytes
 /// With `bar`, practice's island above the app's and its file; with `under`, the comp
 /// view after it
 pub fn render(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp) ![]const u8 {
-    return renderIn(a, d, bar, under, .{});
+    return renderIn(a, d, bar, under, .{ .site = files.site, .mastery = state.by_mastery.load(.acquire) });
+}
+
+/// The live link's label: `where` without the stage or clock ("Champ select · Picks")
+pub fn phase(where: []const u8) []const u8 {
+    return if (std.mem.find(u8, where, " · ")) |i| where[0..i] else where;
 }
 
 /// What the page links and wraps it in: the shell's own files, or the review pages'
@@ -188,16 +229,35 @@ pub const Frame = struct {
     wasm: []const u8 = "ui-app.wasm",
     practice_js: []const u8 = "ui-practice.js",
     practice_wasm: []const u8 = "ui-practice.wasm",
+    picks_js: []const u8 = "ui-picks.js",
+    picks_wasm: []const u8 = "ui-picks.wasm",
+    /// The Options panel's island after the app's (ui/picks.zig); null none
+    picks: ?ui.picks.Data = null,
+    /// The lobby's form panel after the island (ui/lobby.zig); null none
+    lobby: ?ui.lobby.Lobby = null,
     /// Before </head>
     head: []const u8 = "",
     /// After <body> and before the scripts
     top: []const u8 = "",
+    /// The bar's: the site's address, the live screen's, the mastery setting (ui/appbar.zig)
+    site: []const u8 = "https://meio.lol",
+    live: []const u8 = "/",
+    mastery: bool = true,
     end: []const u8 = "",
 };
 
 pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp, f: Frame) ![]const u8 {
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
+    const head = ui.appbar.view(&h, .{
+        .site = f.site,
+        .live = f.live,
+        .phase = phase(d.where),
+        .private = d.private,
+        .practice = d.practice,
+        .mastery = f.mastery,
+        .signed_in = d.signin == null,
+    });
     var island: app.App = .{ .data = d };
     const body = island.view(&h);
     var drill: ui.practice.Practice = undefined;
@@ -205,7 +265,13 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
         drill = .{ .data = x };
         break :blk drill.view(&h);
     } else null;
+    var options: ui.picks.Picks = undefined;
+    const picks_n: ?ui.N = if (f.picks) |x| blk: {
+        options = .{ .data = x };
+        break :blk options.view(&h);
+    } else null;
     const comp_n: ?ui.N = if (under) |x| ui.compview.view(&h, x) else null;
+    const lobby_n: ?ui.N = if (f.lobby) |x| ui.lobby.view(&h, x) else null;
     if (h.oom) return error.OutOfMemory;
     var out: std.Io.Writer.Allocating = .init(a);
     const w = &out.writer;
@@ -215,11 +281,19 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
         \\<title>meiolol</title><link rel="stylesheet" href="{s}">{s}</head>
         \\<body class="ui">{s}
     , .{ f.css, f.head, f.top });
+    // ui/app.zig's page and live area: what lays the islands and panels out together
+    try w.writeAll("<div class=\"c-page\">");
+    try ui.html.write(&t, head, w);
     if (top) |n| try ui.html.write(&t, n, w);
+    try w.writeAll("<main class=\"c-live\">");
     try ui.html.write(&t, body, w);
+    if (picks_n) |n| try ui.html.write(&t, n, w);
     if (comp_n) |n| try ui.html.write(&t, n, w);
+    if (lobby_n) |n| try ui.html.write(&t, n, w);
+    try w.writeAll("</main></div>");
     try w.print("{s}\n<script src=\"{s}\" data-wasm=\"{s}\" defer></script>", .{ f.end, f.js, f.wasm });
     if (top != null) try w.print("<script src=\"{s}\" data-wasm=\"{s}\" defer></script>", .{ f.practice_js, f.practice_wasm });
+    if (picks_n != null) try w.print("<script src=\"{s}\" data-wasm=\"{s}\" defer></script>", .{ f.picks_js, f.picks_wasm });
     try w.writeAll("</body></html>\n");
     return out.written();
 }
@@ -261,7 +335,7 @@ pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.D
             .no_data => "No data",
             .no_client => "Client closed",
             .client_error => "Client error",
-            .waiting => |phase| phase,
+            .waiting => |p| p,
             .no_role => "Champ select",
             .select => |s| try a.print("Champ select · {s}", .{s.board.stage}),
             .loading => "Loading",
@@ -271,17 +345,19 @@ pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.D
         .screen = switch (status) {
             .no_data => .{
                 .note = switch (note) {
-                    .downloading => .{ .title = "Downloading champion statistics from meio.lol" },
+                    .downloading => .{ .title = "Downloading stats", .step = .download },
                     .failed => |f| .{
-                        .title = "Could not download champion statistics from meio.lol",
+                        .title = "Download failed",
                         .text = try a.print("{s}; trying again in {d} minutes.", .{ try upper(a, f.why), f.minutes }),
+                        .step = .download,
+                        .failed = true,
                     },
                     // The foot says how to get the new version
-                    .moved => .{ .title = "Could not download champion statistics from meio.lol" },
-                    .none, .restart => .{ .title = "No stats file found", .text = "Put stats-*.bin and recent-curves.bin next to the app." },
+                    .moved => .{ .title = "Download failed", .step = .download, .failed = true },
+                    .none, .restart => .{ .title = "No stats file found", .text = "Put stats-*.bin and recent-curves.bin next to the app.", .step = .download },
                 },
             },
-            .no_client => .{ .note = .{ .title = "Waiting for the League client to start" } },
+            .no_client => .{ .note = .{ .title = "Waiting for League", .step = .open_league } },
             .client_error => |e| .{ .note = .{ .title = "League client not reachable", .text = try a.print("{s}; retrying.", .{e}) } },
             .waiting => .{ .note = .{ .title = "The board shows in champ select", .text = "Both teams, your lane, options and bans." } },
             .no_role => .{ .note = .{ .title = "No lane to show", .text = "This champ select has no assigned positions." } },
@@ -352,7 +428,7 @@ fn lockedComp(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
 
 pub fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
     var teams: [2]ui.compview.Team = undefined;
-    for (&teams, x.teams) |*out, t| {
+    for (&teams, x.teams, 0..) |*out, t, side| {
         // champ-facts.tsv and the stats file ship apart: a champion only the facts know
         // gets no row
         var timing: std.ArrayList(ui.compview.Timing) = .empty;
@@ -366,7 +442,7 @@ pub fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
                 .win = if (c.private) @floatCast(tm.win) else null,
             });
         }
-        out.* = .{ .timing = timing.items };
+        out.* = .{ .timing = timing.items, .tips = try comp.tips(a, c.stats.?, x, side) };
         const d = t.damage orelse continue;
         out.damage = .{
             .magic = @floatCast(d.magic),
@@ -490,6 +566,55 @@ fn seat(a: Allocator, c: Ctx, s: board.Seat, side: usize, k: usize) !ui.draftboa
         }
     };
     return out;
+}
+
+/// The Options panel (docs/plan/ui/app-options.md): every row in the private edition,
+/// in the public one up to lanecard.max_options past the lane panel's own, effects with
+/// their sign only (product rules: 3 to 5, no numbers)
+pub fn picksOf(a: Allocator, c: Ctx, s: *const state.Select) !?ui.picks.Data {
+    const p = s.picks orelse return null;
+    var rows: std.ArrayList(ui.picks.Row) = .empty;
+    for (p.picks, 0..) |x, i| {
+        if (!c.private and x.shown) continue;
+        if (!c.private and rows.items.len == lanecard.max_options) break;
+        const me = try c.champ(a, x.champion) orelse continue;
+        const effects = try a.alloc(ui.picks.Effect, x.reasons.len);
+        var named: f64 = 0;
+        for (effects, x.reasons) |*e, r| {
+            named += r.pp;
+            e.* = .{
+                .kind = switch (r.kind) {
+                    .base => .strength,
+                    .ally => .with,
+                    .enemy => .into,
+                },
+                .other = if (r.kind == .base) null else try c.champ(a, r.champion),
+                .pp = if (c.private) @floatCast(r.pp) else if (r.pp > 0) 1 else -1,
+                .games = if (c.private) r.games else 0,
+            };
+        }
+        try rows.append(a, .{
+            .champ = me,
+            .rank = @intCast(i + 1),
+            .win = if (c.private) @floatCast(100 * x.win) else null,
+            .base = if (c.private) @floatCast(100 * x.win - x.pp) else 50,
+            .gold = if (c.private) if (x.gold) |g| @floatCast(g) else null else null,
+            .pool = x.pool,
+            .current = x.champion == s.card.me,
+            .effects = effects,
+            .rest = if (c.private) @floatCast(x.pp - named) else 0,
+            .act = if (c.practice) try c.act(a, .{ .take = x.champion }) else "",
+        });
+    }
+    if (rows.items.len == 0) return null;
+    return .{
+        .seq = 0,
+        .private = c.private,
+        .role = uiRole(p.role),
+        .them = if (s.card.opponent) |o| if (c.stats) |st| st.nameOf(o.champion) else "" else "",
+        .rows = rows.items,
+        .scope = if (s.card.period.len > 0) try a.print("EUW, {s}", .{s.card.period}) else "EUW",
+    };
 }
 
 /// `ally`: an ally's lane, without my pool or mastery (a null `mastery` tells the panel)
@@ -1162,6 +1287,11 @@ test "notes while there is no board" {
     try testing.expectEqualStrings("ConnectionRefused; retrying.", e.screen.note.text);
     const f = try data(a, c, .no_data, .{ .failed = .{ .why = "no connection to meio.lol", .minutes = 20 } });
     try testing.expectEqualStrings("No connection to meio.lol; trying again in 20 minutes.", f.screen.note.text);
+    try testing.expect(f.screen.note.step == .download and f.screen.note.failed);
+    try testing.expect((try data(a, c, .no_client, .none)).screen.note.step == .open_league);
+    var g = try data(a, c, .no_data, .none);
+    withSignIn(&g, .{ .full = true });
+    try testing.expect(g.screen.note.step == .sign_in);
     try testing.expectEqualStrings(restart_line, (try data(a, c, .{ .waiting = "Lobby" }, .restart)).foot);
     try testing.expectEqualStrings(moved_line, (try data(a, c, .{ .waiting = "Lobby" }, .moved)).foot);
     try testing.expectEqualStrings(moved_line, (try data(a, c, .no_data, .moved)).foot);

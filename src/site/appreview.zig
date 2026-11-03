@@ -21,6 +21,7 @@ const scenarios = @import("scenarios");
 const screens = @import("../shell/screens.zig");
 const shell_files = @import("../shell/files.zig");
 const shell_practice = @import("../shell/practice.zig");
+const shell_lobby = @import("../shell/lobby.zig");
 const site = @import("root.zig");
 const csp = @import("csp.zig");
 const core = desktop.core;
@@ -60,6 +61,8 @@ const Shot = struct {
     step: u32 = 0,
     /// An ally's lane after a seat click
     lane: bool = false,
+    /// The lobby's form panel beside a waiting status
+    form: ?desktop.lcu.me.Form = null,
 };
 
 const Group = struct {
@@ -154,6 +157,8 @@ pub fn files(a: Allocator, gpa: Allocator, io: Io, in: Inputs) ![]File {
         .{ .path = "app/ui-app.wasm", .data = shell_files.get("ui-app.wasm").? },
         .{ .path = "app/ui-practice.js", .data = shell_files.get("ui-practice.js").? },
         .{ .path = "app/ui-practice.wasm", .data = shell_files.get("ui-practice.wasm").? },
+        .{ .path = "app/ui-picks.js", .data = shell_files.get("ui-picks.js").? },
+        .{ .path = "app/ui-picks.wasm", .data = shell_files.get("ui-picks.wasm").? },
     });
     return out.items;
 }
@@ -309,7 +314,7 @@ fn play(a: Allocator, gpa: Allocator, io: Io, data: *const poller.Data, lock: []
         n += 1;
         const slug = try a.print("{s}-{d:0>2}", .{ prefix, n });
         const title = try describe(a, &sc, step, s);
-        try shots.append(a, .{ .group = p.group, .slug = slug, .title = title, .short = try short(a, title), .status = s, .step = steps });
+        try shots.append(a, .{ .group = p.group, .slug = slug, .title = title, .short = try short(a, title), .status = s, .step = steps, .form = r.form(s) });
         // All ten locked: every ally's lane, as a seat click shows it
         if (lanes_done or p.cell != null or s != .select or s.select.comp == null) continue;
         lanes_done = true;
@@ -410,7 +415,7 @@ fn statusOf(a: Allocator, built: practice.Built) !state.Status {
     return switch (built) {
         .select => |s| blk: {
             const sel = try a.create(state.Select);
-            sel.* = .{ .card = s.card, .board = s.board, .comp = s.comp };
+            sel.* = .{ .card = s.card, .board = s.board, .comp = s.comp, .picks = s.picks };
             break :blk .{ .select = sel };
         },
         .loading => |l| .{ .loading = try dupe(a, l) },
@@ -435,7 +440,7 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
     const s = shots[i];
     var d = try screens.data(a, c, s.status, s.note);
     d.seq = 1;
-    d.signin = s.signin;
+    screens.withSignIn(&d, s.signin);
     if (ed == .private) d.practice = if (s.practice != null) true else if (shell_practice.offered(.private, c.stats, null, s.status)) false else null;
     var bar: ?ui.practice.Data = null;
     if (s.practice) |x| {
@@ -446,6 +451,11 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         .select => |x| if (x.comp) |cv| try screens.compView(a, c, cv) else null,
         else => null,
     };
+    var opts: ?ui.picks.Data = switch (s.status) {
+        .select => |x| try screens.picksOf(a, c, x),
+        else => null,
+    };
+    if (opts) |*x| x.seq = d.seq;
     const dir = try a.print("app/{t}/{s}", .{ ed, s.slug });
     const html = try screens.renderIn(a, d, bar, under, .{
         .css = root ++ "/app.css",
@@ -453,10 +463,16 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         .wasm = root ++ "/ui-app.wasm",
         .practice_js = root ++ "/ui-practice.js",
         .practice_wasm = root ++ "/ui-practice.wasm",
+        .picks_js = root ++ "/ui-picks.js",
+        .picks_wasm = root ++ "/ui-picks.wasm",
+        .picks = opts,
+        .lobby = if (s.form) |*f| try shell_lobby.view(a, c, f) else null,
         .head = try a.print(
             \\{s}<meta name="rv-bin" content="/private/{s}/"><link rel="stylesheet" href="{s}/review.css"><script src="{s}/review.js"></script><script src="{s}/nav.js" defer></script>
         , .{ csp.files_only, dir, root, root, root }),
         .top = try reviewTop(a, ed, groups, shots, i),
+        .site = "",
+        .live = if (as_index) "/private/app" else try url(a, ed, s.slug),
         .end = "</div>",
     });
     if (as_index) return out.append(a, .{ .path = "app.html", .data = html });
@@ -468,6 +484,11 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         var pbin: std.ArrayList(u8) = .empty;
         try ui.data.encode(a, ui.practice.Data, x, &pbin);
         try out.append(a, .{ .path = try a.print("{s}/practice.bin", .{dir}), .data = pbin.items });
+    }
+    if (opts) |x| {
+        var kbin: std.ArrayList(u8) = .empty;
+        try ui.data.encode(a, ui.picks.Data, x, &kbin);
+        try out.append(a, .{ .path = try a.print("{s}/picks.bin", .{dir}), .data = kbin.items });
     }
 }
 
@@ -500,7 +521,7 @@ fn reviewTop(a: Allocator, ed: Edition, groups: []const Group, shots: []const Sh
         } else try x.print("<span class=\"rv-off\" title=\"Private app only\">{s}</span>", .{label(e)});
     }
     try x.writeAll(
-        \\</span><span class="rv-sw"><button type="button" data-rv-width="wide">Window</button><button type="button" data-rv-width="narrow">Narrow</button></span><output id="rv-log"></output></header>
+        \\</span><span class="rv-sw"><button type="button" data-rv-width="wide" title="The window as it opens, 1120 by 720">Window</button><button type="button" data-rv-width="full" title="Full screen: this browser's size">Full</button><button type="button" data-rv-width="narrow" title="420 wide">Narrow</button></span><output id="rv-log"></output></header>
     );
     try x.writeAll("<ol class=\"rv-steps\"><li><span>");
     try escaped(x, groups[s.group].title);
@@ -628,7 +649,7 @@ const review_css =
     \\.rv-off { color: #5d6577; }
     \\.rv-sw { display: inline-flex; gap: 8px; align-items: center; }
     \\.rv-sw button, .rv-menu { font: inherit; color: inherit; background: #1d2330; border: 1px solid #2a3140; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
-    \\html:not(.rv-narrow) [data-rv-width="wide"], .rv-narrow [data-rv-width="narrow"] { border-color: #8ab4ff; color: #fff; }
+    \\html:not(.rv-narrow, .rv-full) [data-rv-width="wide"], .rv-narrow [data-rv-width="narrow"], .rv-full [data-rv-width="full"] { border-color: #8ab4ff; color: #fff; }
     \\#rv-log { flex-basis: 100%; color: #9aa3b5; font-family: ui-monospace, monospace; font-size: 12px; }
     \\#rv-log:empty { display: none; }
     \\.rv-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; list-style: none; max-width: 1120px; margin: 12px auto 0;
@@ -642,8 +663,11 @@ const review_css =
     \\  max-width: 360px; padding: 6px 8px; border: 1px solid #2a3140; border-radius: 4px; background: #1d2330; color: #fff;
     \\  line-height: 1.35; text-align: left; white-space: normal; }
     \\html:not(.rv-drawer) .rv-steps { display: none; }
-    \\.rv-frame { width: 1120px; max-width: 100%; min-height: 720px; margin: 16px auto; outline: 1px dashed #2a3140; }
-    \\.rv-narrow .rv-frame { width: 420px; }
+    \\.rv-frame { --vh: 720px; width: 1120px; max-width: 100%; height: var(--vh); margin: 16px auto; overflow: auto;
+    \\  outline: 1px dashed #2a3140; }
+    \\.rv-narrow .rv-frame { --vh: 760px; width: 420px; }
+    \\.rv-full .rv-frame { --vh: calc(100vh - 53px); width: auto; margin: 0; }
+    \\.rv-full .rv-steps { display: none; }
     \\.rv-narrow .rv-steps { max-width: 452px; }
     \\.rv-nav { position: fixed; z-index: 20; left: 0; top: 0; bottom: 0; width: 240px; box-sizing: border-box; overflow-y: auto;
     \\  padding: 10px 8px 48px; background: #0c1017; border-right: 1px solid #2a3140; font: 13px/1.35 system-ui, sans-serif; color: #c8cdd8; }
@@ -706,15 +730,16 @@ const nav_js =
 
 /// What the shell's webview gives a page (mac.zig's shim), faked, then the shell's own
 /// bridge.js. Messages to the shell show in the bar; a seat click opens that lane's page.
-/// The islands fetch app.bin and practice.bin relative to the page: from the state's
-/// folder (rv-bin; the index is a state's page at another address)
+/// The islands fetch app.bin, practice.bin and picks.bin relative to the page: from the
+/// state's folder (rv-bin; the index is a state's page at another address)
 const review_js =
     \\(() => {
     \\  const dir = document.querySelector('meta[name=rv-bin]').content;
     \\  const get = window.fetch;
-    \\  window.fetch = (u, o) => get(typeof u === 'string' && /^(app|practice)\.bin\b/.test(u) ? dir + u : u, o);
+    \\  window.fetch = (u, o) => get(typeof u === 'string' && /^(app|practice|picks)\.bin\b/.test(u) ? dir + u : u, o);
     \\  const ls = [];
     \\  const show = (m) => { const o = document.getElementById('rv-log'); if (o) o.textContent = 'to the app: ' + m; };
+    \\  window.meiololApp = location.origin + '/private/app';
     \\  window.chrome = window.chrome || {};
     \\  window.chrome.webview = {
     \\    postMessage: (m) => {
@@ -728,14 +753,14 @@ const review_js =
     \\    addEventListener: (t, f) => { if (t === 'message') ls.push(f); },
     \\  };
     \\  const key = 'meiolol-review-width';
-    \\  const set = (narrow) => {
-    \\    document.documentElement.classList.toggle('rv-narrow', narrow);
-    \\    try { localStorage.setItem(key, narrow ? 'narrow' : ''); } catch (e) {}
+    \\  const set = (w) => {
+    \\    for (const k of ['narrow', 'full']) document.documentElement.classList.toggle('rv-' + k, w === k);
+    \\    try { localStorage.setItem(key, w); } catch (e) {}
     \\  };
-    \\  try { set(localStorage.getItem(key) === 'narrow'); } catch (e) {}
+    \\  try { set(localStorage.getItem(key) || 'wide'); } catch (e) {}
     \\  addEventListener('click', (e) => {
     \\    const b = e.target.closest && e.target.closest('[data-rv-width]');
-    \\    if (b) set(b.dataset.rvWidth === 'narrow');
+    \\    if (b) set(b.dataset.rvWidth);
     \\  });
     \\})();
     \\

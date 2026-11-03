@@ -10,17 +10,29 @@ pub const bridge_js = @embedFile("web/bridge.js");
 
 pub const start_page = "index.html";
 
+/// The site the app's bar links to; MEIOLOL_SITE at start points it at a dev server
+pub var site: []const u8 = "https://meio.lol";
+
 /// Beside these, screens.zig serves the page, its data and the champion icons
 const embedded = [_]File{
     .{ "app.css", screens.css },
     .{ "ui-app.js", @embedFile("ui-app.js") },
     .{ "ui-app.wasm", @embedFile("ui-app.wasm") },
+    .{ "ui-picks.js", @embedFile("ui-picks.js") },
+    .{ "ui-picks.wasm", @embedFile("ui-picks.wasm") },
 } ++ if (@import("build_options").public) [_]File{} else [_]File{
     .{ "ui-practice.js", @embedFile("ui-practice.js") },
     .{ "ui-practice.wasm", @embedFile("ui-practice.wasm") },
 };
 
 const File = struct { []const u8, []const u8 };
+
+/// A page of the site, which the app's window opens itself (its bar links there); any
+/// other address goes to the browser
+pub fn onSite(url: []const u8) bool {
+    if (!std.mem.startsWith(u8, url, site)) return false;
+    return url.len == site.len or std.mem.findScalar(u8, "/?#", url[site.len]) != null;
+}
 
 pub fn get(path: []const u8) ?[]const u8 {
     for (embedded) |f| if (std.mem.eql(u8, f[0], path)) return f[1];
@@ -74,6 +86,15 @@ test "clean: plain paths in the folder only" {
         "/a//b",          "/%2e%2e/x",  "/a b",         "/a/",         "/\x00",
         "/icons/.hidden",
     }) |bad| try t.expect(clean(bad) == null);
+}
+
+test "onSite: the site's own pages, not a host that starts with its name" {
+    const t = std.testing;
+    try t.expect(onSite("https://meio.lol"));
+    try t.expect(onSite("https://meio.lol/champions/ahri/mid"));
+    try t.expect(onSite("https://meio.lol?region=all"));
+    for ([_][]const u8{ "https://meio.lol.evil.example/", "https://meio.lolx/", "http://meio.lol/", "https://evil.example/https://meio.lol/" }) |bad|
+        try t.expect(!onSite(bad));
 }
 
 test "embedded: the island and its CSS, mime by extension" {

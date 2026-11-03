@@ -4,6 +4,7 @@ pub const poller = @import("desktop/poller.zig");
 pub const state = @import("desktop/state.zig");
 pub const board = @import("board.zig");
 pub const lanecard = @import("lanecard.zig");
+pub const picks = @import("picks.zig");
 pub const loading = @import("loading.zig");
 pub const comp = @import("comp.zig");
 pub const ingame = @import("ingame.zig");

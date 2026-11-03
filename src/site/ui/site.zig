@@ -49,6 +49,10 @@ pub const Opts = struct {
     /// A private page, so signed in: the chip, as Account until the page's script names it
     signed_in: bool = false,
     menu_id: []const u8 = "site-menu",
+    /// Log in, Sign up and the account chip; the app has its own sign-in
+    account: bool = true,
+    /// After the search, before the menu button (the app's Practice and settings)
+    end: ?N = null,
     acct_menu_id: []const u8 = "acct-menu",
 };
 
@@ -178,10 +182,11 @@ pub fn view(h: *H, o: Opts) N {
         h.a(.{ .class = "logo", .href = o.home, .data_view = o.home_view }, .{ logo(h), W.product }),
         h.el(.nav, .{ .class = "links", .aria_label = W.pages }, .{links(h, o.links)}),
         o.search,
-        h.a(.{ .class = "acct", .href = "/login", .hidden = o.signed_in }, .{W.login}),
-        h.a(.{ .class = "acct join", .href = "/signup", .hidden = o.signed_in }, .{W.signup}),
-        h.button(.{ .class = "acct me", .type = "button", .popovertarget = o.acct_menu_id, .hidden = !o.signed_in }, .{W.account}),
-        acctMenu(h, o, false),
+        if (o.account) h.a(.{ .class = "acct", .href = "/login", .hidden = o.signed_in }, .{W.login}) else null,
+        if (o.account) h.a(.{ .class = "acct join", .href = "/signup", .hidden = o.signed_in }, .{W.signup}) else null,
+        if (o.account) h.button(.{ .class = "acct me", .type = "button", .popovertarget = o.acct_menu_id, .hidden = !o.signed_in }, .{W.account}) else null,
+        if (o.account) acctMenu(h, o, false) else null,
+        o.end,
         h.button(.{ .class = "c-btn menu", .type = "button", .data_v = "icon", .popovertarget = o.menu_id, .aria_label = W.menu }, .{
             h.svg(.{ .viewBox = "0 0 24 24", .aria_hidden = true }, .{h.path(.{ .d = "M4 7h16M4 12h16M4 17h16" }, .{})}),
         }),
@@ -199,7 +204,7 @@ pub fn menu(h: *H, o: Opts, open: bool) N {
     }, .{
         links(h, o.links),
         groups(h, o.groups),
-        h.a(.{ .class = "acct join", .href = "/signup", .hidden = o.signed_in }, .{W.signup}),
+        if (o.account) h.a(.{ .class = "acct join", .href = "/signup", .hidden = o.signed_in }, .{W.signup}) else null,
     });
 }
 

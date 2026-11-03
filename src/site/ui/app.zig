@@ -6,7 +6,6 @@
 //! sign-in under it, or in its place before there is data. The charts' own state (a
 //! tapped minute, a dragged range) and what's typed live in App, past patches
 const tree = @import("tree.zig");
-const badge = @import("badge.zig");
 const champselect = @import("champselect.zig");
 const loadscreen = @import("loadscreen.zig");
 const gamescreen = @import("gamescreen.zig");
@@ -14,10 +13,9 @@ const postgame = @import("postgame.zig");
 const lane = @import("lane.zig");
 const signin = @import("signin.zig");
 const toshell = @import("toshell.zig");
-const chip = @import("chip.zig");
 const compview = @import("compview.zig");
-const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
+const Gallery = @import("gallery.zig").Gallery;
 const H = tree.H;
 const N = tree.N;
 
@@ -33,7 +31,13 @@ pub const Screen = union(enum) {
 pub const Note = struct {
     title: []const u8,
     text: []const u8 = "",
+    /// First start: the app mark over the steps to a first board, this one lit
+    step: Step = .none,
+    /// The step failed (its dot red, the text says why)
+    failed: bool = false,
 };
+
+pub const Step = enum(u8) { none, sign_in, download, open_league };
 
 pub const Data = struct {
     /// The shell's count of changes: a page and a file from different moments differ here
@@ -60,32 +64,20 @@ pub const App = struct {
     team: lane.Held = .{},
     form: signin.Form = .{},
 
-    pub const Msg = enum { mastery, practice };
+    pub const Msg = enum { mastery };
 
     pub fn update(a: *App, m: Msg, _: *tree.Event) void {
         switch (m) {
             .mastery => if (a.data.screen == .select) if (a.data.screen.select.lane.mastery) |on| toshell.send(.mastery, !on),
-            .practice => if (a.data.practice) |on| toshell.practice(.on, !on),
         }
     }
 
     pub fn view(a: *App, h: *H) N {
         const d = a.data;
-        const head = h.el(.header, .{}, .{
-            h.b(.{}, .{"meiolol"}),
-            if (d.private) badge.view(h, .accent, .{W.private}) else null,
-            h.span(.{ .class = "where" }, .{d.where}),
-            if (d.practice) |on| chip.view(h, .{ .pressed = on, .on = h.on(a, .practice) }, .{W.practice}) else null,
-        });
         const attrs = .{ .class = "c-app", .data_island = "app", .data_seq = d.seq };
-        if (d.signin) |s| if (s.full) return h.div(attrs, .{ head, signin.view(h, s, &a.form) });
         return h.div(attrs, .{
-            head,
             switch (d.screen) {
-                .note => |n| h.div(.{ .class = "note" }, .{
-                    h.el(.h1, .{}, .{n.title}),
-                    if (n.text.len > 0) h.p(.{}, .{n.text}) else null,
-                }),
+                .note => |n| note(h, n),
                 .select => |s| champselect.view(h, s, &a.lane, h.on(a, .mastery)),
                 .loading => |s| loadscreen.view(h, s),
                 .game => |s| gamescreen.view(h, s, .{ .lane = &a.lane, .team = &a.team }),
@@ -95,6 +87,22 @@ pub const App = struct {
             if (d.signin) |s| signin.view(h, s, &a.form) else null,
         });
     }
+};
+
+/// With a step: the app mark (CSS), pulsing while it waits, the words, then the steps
+fn note(h: *H, n: Note) N {
+    var l = h.list();
+    const at = @backingInt(n.step);
+    for (W.steps, 1..) |w, i| l.add(h.li(.{ .class = if (i < at) "done" else null, .aria_current = if (i == at) "step" else null }, .{w}));
+    return h.div(.{ .class = "note", .data_first = at > 0, .data_failed = n.failed }, .{
+        if (n.title.len > 0) h.el(.h1, .{}, .{n.title}) else null,
+        if (n.text.len > 0) h.p(.{}, .{n.text}) else null,
+        if (at > 0) h.ul(.{ .class = "steps" }, .{l.done()}) else null,
+    });
+}
+
+const W = struct {
+    const steps = [_]tree.Text{ plain("Sign in"), plain("Download"), plain("Open League") };
 };
 
 /// A fresh App's render (the gallery's states)
@@ -107,26 +115,54 @@ pub fn page(h: *H, d: Data) N {
     return a.view(h);
 }
 
-const W = struct {
-    const private = plain("private");
-    const practice = plain("Practice");
-};
-
 pub const name = "App";
-pub const scope = .{".c-app"};
+pub const scope = .{ ".c-app", ".c-page", ".c-live" };
 
 pub const css =
     \\@layer components {
-    \\  .c-app { container-type: inline-size; display: flex; flex-direction: column; gap: var(--sp-4);
+    \\  .c-page { --vh: 100vh; container: live / inline-size; display: flex; flex-direction: column; min-height: var(--vh); }
+    \\  .c-live { flex: 1; display: flex; flex-direction: column; gap: var(--sp-4);
     \\    padding: var(--sp-3) var(--sp-4) var(--sp-5); min-width: 0; }
-    \\  .c-app > header { display: flex; align-items: center; gap: var(--sp-2); }
-    \\  .c-app > header .where { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-app { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
     \\  .c-app > .note { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-6) 0; text-align: center; }
     \\  .c-app > .note h1 { margin: 0; font-size: var(--fs-l); font-weight: var(--w-b); }
     \\  .c-app > .note p { margin: 0; color: var(--muted); }
+    \\  .c-app > .note[data-first]::before { content: ""; width: 56px; height: 56px; margin: 0 auto var(--sp-3); border-radius: 25%;
+    \\    background: var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M6 21.5 11.5 14l5 4.5L26 7' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='16.5' cy='18.5' r='2.6' fill='%23f5c451'/%3E%3C/svg%3E") center / 100%;
+    \\    animation: c-app-pulse 2.4s ease-in-out infinite; }
+    \\  .c-app > .note[data-failed]::before { animation: none; filter: grayscale(1); opacity: 0.6; }
+    \\  @keyframes c-app-pulse { 50% { transform: scale(0.92); opacity: 0.7; } }
+    \\  .c-app > .note .steps { display: flex; justify-content: center; margin: var(--sp-4) 0 0; padding: 0; list-style: none;
+    \\    font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-app > .note .steps li { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); width: 7.5em; position: relative; }
+    \\  .c-app > .note .steps li::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--line-2); position: relative; z-index: 1; }
+    \\  .c-app > .note .steps li + li::after { content: ""; position: absolute; top: 5px; right: 50%; width: 100%; height: 2px; background: var(--line-2); }
+    \\  .c-app > .note .steps .done::before, .c-app > .note .steps .done + li::after { background: var(--brand); }
+    \\  .c-app > .note .steps [aria-current] { color: var(--text); font-weight: var(--w-b); }
+    \\  .c-app > .note .steps [aria-current]::before { background: var(--brand); box-shadow: 0 0 0 4px var(--accent-bg); animation: c-app-pulse 2.4s ease-in-out infinite; }
+    \\  .c-app > .note[data-failed] .steps [aria-current]::before { background: var(--lo3); box-shadow: none; animation: none; }
+    \\  .c-app > .c-signin[data-full] { padding-top: 0; }
+    \\  @media (prefers-reduced-motion: reduce) { .c-app > .note::before, .c-app > .note .steps li::before { animation: none; } }
     \\  .c-app [data-act] { cursor: pointer; }
     \\  .c-app > .foot { margin: 0; color: var(--muted); font-size: var(--fs-s); }
-    \\  .c-app + .c-comp { padding: 0 var(--sp-4) var(--sp-5); }
+    \\  /* Champ select: the board column (board, bans, then the panels after the island)
+    \\     beside the lane panel, held in view while the board column scrolls; full screen
+    \\     a third column for the Options panel. The island's own boxes step aside
+    \\     (display: contents) so its parts and the panels share one grid */
+    \\  @container live (min-width: 820px) {
+    \\    .c-live:has(.c-cs) { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    \\      grid-auto-rows: min-content; align-items: start; gap: var(--sp-4); }
+    \\    .c-live:has(.c-cs) > .c-app, .c-live .c-cs { display: contents; }
+    \\    .c-live .c-cs > .board, .c-live:has(.c-cs) > :not(.c-app), .c-live:has(.c-cs) > .c-app > :not(.c-cs) { grid-column: 1; }
+    \\    .c-live .c-cs > .side { grid-column: 2; grid-row: 1 / span 30; position: sticky; top: calc(var(--header) + var(--sp-3));
+    \\      max-height: calc(var(--vh) - var(--header) - var(--sp-5)); overflow-y: auto; overscroll-behavior: contain; }
+    \\  }
+    \\  @container live (min-width: 1500px) {
+    \\    .c-live:has(.c-cs):has(> .c-picks) { grid-template-columns: minmax(0, 4fr) minmax(0, 5fr) minmax(0, 4fr); }
+    \\    .c-live:has(.c-cs) > .c-picks { grid-column: 3; grid-row: 1 / span 30; position: sticky; top: calc(var(--header) + var(--sp-3));
+    \\      max-height: calc(var(--vh) - var(--header) - var(--sp-5)); overflow-y: auto; }
+    \\  }
+    \\  .c-live > .c-comp { padding: 0; }
     \\}
     \\
 ;
@@ -144,17 +180,34 @@ pub fn gallery(g: *Gallery) void {
         .screen = .{ .select = champselect.sample },
         .practice = false,
     }));
-    // The shell's page once all ten lock: the comp view after the island
+    // The shell's page (screens.zig renderIn; its <main> a div here) once all ten lock:
+    // the Options panel and comp view after the island
     var locked = champselect.sample;
     locked.lane.mode = .locked;
-    g.addFill("all locked, comp under", h.div(.{}, .{
+    g.addFill("all locked, comp under", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{
         page(h, .{ .seq = 6, .private = false, .where = "Champ select · Finalization", .screen = .{ .select = locked } }),
+        h.div(.{ .class = "c-picks" }, .{}),
         compview.view(h, compview.sample),
-    }));
+    })}));
     g.addFill("in game", page(h, .{ .seq = 3, .private = true, .where = "In game · 14:05", .screen = .{ .game = gamescreen.sample } }));
     g.addFill("first start, sign in", page(h, .{ .seq = 4, .private = false, .where = "No data", .screen = .{ .note = .{
-        .title = "No stats file found",
+        .title = "",
+        .step = .sign_in,
     } }, .signin = .{ .full = true } }));
+    g.addFill("first start, downloading", page(h, .{ .seq = 8, .private = false, .where = "No data", .screen = .{ .note = .{
+        .title = "Downloading stats",
+        .step = .download,
+    } } }));
+    g.addFill("first start, download failed", page(h, .{ .seq = 9, .private = false, .where = "No data", .screen = .{ .note = .{
+        .title = "Download failed",
+        .text = "No connection to meio.lol; trying again in 20 minutes.",
+        .step = .download,
+        .failed = true,
+    } } }));
+    g.addFill("League closed", page(h, .{ .seq = 10, .private = false, .where = "Client closed", .screen = .{ .note = .{
+        .title = "Waiting for League",
+        .step = .open_league,
+    } } }));
     g.addFill("waiting, sign in and restart lines", page(h, .{ .seq = 5, .private = false, .where = "Lobby", .screen = .{ .note = .{
         .title = "The board shows in champ select",
     } }, .signin = .{ .message = "Your sign-in was removed: sign in again." }, .foot = "A new version of meiolol is downloaded: it starts the next time you open the app." }));

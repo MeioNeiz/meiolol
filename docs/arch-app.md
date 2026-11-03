@@ -34,6 +34,18 @@ file and packed rows: docs/architecture.md.
 - Pages are served from memory on https://meiolol.app/ (embedded, or `--dir` on disk);
   navigation stays on that origin, links to meio.lol and Riot open in the browser.
   bridge.js (injected) turns channel.zig messages into `meiolol` events and back
+- Page frame (screens.renderIn): `.c-page` holds the app bar (ui/appbar.zig: the site's
+  header, its first link the live screen named for the phase, the site's pages on
+  files.site, Practice, a settings popover: mastery, sign-in line, site links), then
+  `main.c-live`: the island, Options (ui-picks), comp view, lobby panel. Bar clicks
+  carry their message as `data-shell` JSON, sent by bridge.js; the bar is static, so a
+  change of phase, mastery or sign-in reloads the page. Champ select at 820 px and up
+  (container `live`): board column beside the lane panel, which stays in view; 1500 px
+  and up with Options, a third column
+- Site in the window: files.onSite pages (https://meio.lol, MEIOLOL_SITE for a dev
+  server) load in the window; bridge.js there adds an "App" link to the site's header
+  and menu and opens no channel. When champ select, loading or a game starts
+  (screens Changed.started) and a site page shows, win.zig navigates back to the app
 - screens.zig: the poller's state as ui.app.Data in the edition's words (notes,
   ChampSelect, LoadScreen, GameScreen private only, PostGame), rendered per page load
   and encoded at app.bin; the App island (ui-app.wasm) patches from it on each `app`
@@ -48,9 +60,10 @@ file and packed rows: docs/architecture.md.
   free local ports), a page per change it would publish; full-game's champ select from
   each seat too, each ally's lane once all ten lock, the no-client, sign-in and update
   states, and practice (testers only). Rendered by screens.renderIn in both editions with
-  the site's icons, the island and CSS under /private/app/, at the window's 1120 px or
-  420; a fake bridge shows what the page sends the shell, and a seat click opens that
-  lane's page. URLs /private/app/<edition>/<slug>, app.bin under <slug>/ (review.js
+  the site's icons, the island and CSS under /private/app/, at three widths: Window
+  (1120 x 720, scrolling inside), Full (the browser's) and Narrow (420); a fake bridge
+  shows what the page sends the shell, and a seat click opens that lane's page. URLs
+  /private/app/<edition>/<slug>, app.bin under <slug>/ (review.js
   points the island's relative fetch at the page's rv-bin meta: nginx sends base-uri
   'none'). A navigator of every group and state on the left (a drawer when the frame
   leaves no room, then the group's steps above the frame too), arrow keys between states

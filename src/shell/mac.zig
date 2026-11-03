@@ -49,6 +49,7 @@ const Rect = extern struct { x: f64, y: f64, w: f64, h: f64 };
 const shim =
     \\(() => {
     \\  const ls = [];
+    \\  window.meiololApp = 'meiolol://app/';
     \\  window.chrome = window.chrome || {};
     \\  window.chrome.webview = {
     \\    postMessage: (m) => window.webkit.messageHandlers.meiolol.postMessage(m),
@@ -215,6 +216,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     // The 1 s tick sends what changed
+    if (init.environ_map.get("MEIOLOL_SITE")) |u| files.site = u;
     try client.start(init, init.environ_map.get("MEIOLOL_LOCKFILE"), noWake);
     if (dump) |d| {
         // No window: each change of the page into its own folder until --seconds

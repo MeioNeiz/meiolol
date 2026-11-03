@@ -351,6 +351,18 @@ test "open: its CSP allows each inline script it writes" {
     }
 }
 
+test "the app's bar links the site's pages in the site's order" {
+    const app = ui.appbar;
+    try std.testing.expectEqual(nav_items.len, app.pages.len);
+    for (nav_items, app.pages) |n, p| {
+        try std.testing.expectEqualStrings(n.label, p.label);
+        try std.testing.expectEqualStrings(n.path, p.path);
+    }
+    const more = champion_tabs[2..] ++ your_tabs[1..];
+    try std.testing.expectEqual(more.len, app.more.len);
+    for (more, app.more) |n, p| try std.testing.expectEqualStrings(n.path, p.path);
+}
+
 test "open: the bar links the private pages on private pages, where admin_link isn't" {
     for ([_]?Private{ null, .tester, .notes }) |pr| {
         var out: Writer.Allocating = .init(std.testing.allocator);

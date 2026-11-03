@@ -11,6 +11,7 @@ const std = @import("std");
 const core = @import("core");
 const lcu = @import("../lcu/root.zig");
 const lanecard = @import("../lanecard.zig");
+const picks = @import("../picks.zig");
 const board = @import("../board.zig");
 const ingame = @import("../ingame.zig");
 const postgame = @import("../postgame.zig");
@@ -45,6 +46,8 @@ const Shared = struct {
     practice_gen: std.atomic.Value(u32) = .init(0),
     /// `status` is the practice draft's, under the mutex
     practicing: bool = false,
+    /// The lobby's form panel beside a `waiting` status, under the mutex
+    form: ?lcu.me.Form = null,
     /// The sign-in form's, under the mutex
     signin: state.SignIn = .{},
     /// What update checks send, under the mutex; null until signed in. In auth_buf
@@ -381,6 +384,8 @@ pub const Shown = struct {
     practicing: bool,
     /// The window changed `practice`
     practice_changed: *const fn () void = practiceChanged,
+    /// Recent games and mastery top beside a `waiting` status (the lobby); null without
+    form: ?*const lcu.me.Form = null,
 };
 
 pub fn lock() Shown {
@@ -399,6 +404,7 @@ pub fn lock() Shown {
         .signin = if (updates != null) &shared.signin else null,
         .practice = &shared.practice,
         .practicing = shared.practicing,
+        .form = if (shared.form) |*f| f else null,
     };
 }
 
@@ -412,12 +418,13 @@ fn practiceChanged() void {
     io.futexWake(u32, &shared.practice_gen.raw, 1);
 }
 
-fn publish(status: state.Status, arena: std.heap.ArenaAllocator, practicing: bool) void {
+fn publish(status: state.Status, arena: std.heap.ArenaAllocator, practicing: bool, form: ?lcu.me.Form) void {
     shared.mutex.lockUncancelable(io);
     const old = shared.arena;
     shared.status = status;
     shared.arena = arena;
     shared.practicing = practicing;
+    shared.form = form;
     shared.mutex.unlock(io);
     if (old) |o| o.deinit();
     wake();
@@ -478,7 +485,7 @@ fn poll(gpa: std.mem.Allocator) void {
             const key = p.key(s, practicing);
             if (key != shown) {
                 shown = key;
-                publish(s, arena, practicing);
+                publish(s, arena, practicing, if (practicing) null else p.shownForm(s));
             } else arena.deinit();
         } else arena.deinit();
         if (old) |d| freeData(gpa, d);
@@ -508,6 +515,12 @@ const Poller = struct {
     practice_own: ?Own = null,
     /// Live Client Data's; Replay's mock serves it on a free one
     live_port: u16 = lcu.live.port,
+    /// Recent games and mastery top for the lobby, reloaded every form_ticks
+    form: ?lcu.me.Form = null,
+    form_age: u32 = 0,
+
+    /// The history lists a game a while after it ends: reloads catch it up
+    const form_ticks = 120;
 
     const Own = struct {
         mastery: []lanecard.Mastery,
@@ -530,6 +543,7 @@ const Poller = struct {
     fn disconnect(p: *Poller, err: anyerror) state.Status {
         p.watch.disconnect();
         p.forgetOwn();
+        p.form = null;
         _ = p.practice_arena.reset(.retain_capacity);
         p.practice_own = null;
         return switch (err) {
@@ -544,7 +558,10 @@ const Poller = struct {
         h.update(@tagName(s));
         h.update(&.{@intFromBool(practicing)});
         switch (s) {
-            .waiting => |phase| h.update(phase),
+            .waiting => |phase| {
+                h.update(phase);
+                if (p.shownForm(s)) |f| h.update(std.mem.asBytes(&f.stamp));
+            },
             .client_error => |e| h.update(e),
             .select, .loading, .in_game, .post_game => h.update(std.mem.asBytes(&p.fingerprint)),
             else => {},
@@ -583,6 +600,7 @@ const Poller = struct {
                         return .{ .loading = l };
                     }
                 } else if (!std.mem.eql(u8, phase, "WaitingForStats")) p.forgetOwn();
+                if (lobbyPhase(phase)) p.keepForm();
                 return .{ .waiting = phaseLabel(phase) };
             },
             .between => return .{ .waiting = "Champ select" },
@@ -621,10 +639,13 @@ const Poller = struct {
         };
         sel.card = try lanecard.build(arena, mine);
         sel.board = try board.build(arena, &data.stats, .{}, cs, &sel.card, if (data.facts) |*f| f else null);
+        var used = mine;
         if (shown < core.Role.count) if (try board.allyLane(arena, mine, cs, @fromBackingInt(@intCast(shown)))) |in| {
             sel.card = try lanecard.build(arena, in);
             sel.ally = true;
+            used = in;
         };
+        sel.picks = try picks.build(arena, used, &sel.card);
         sel.comp = try comp.after(arena, .{
             .stats = &data.stats,
             .curves = if (data.curves) |*c| c else null,
@@ -666,7 +687,7 @@ const Poller = struct {
         const status: state.Status = switch (built) {
             .select => |s| blk: {
                 const sel = try arena.create(state.Select);
-                sel.* = .{ .card = s.card, .board = s.board, .comp = s.comp };
+                sel.* = .{ .card = s.card, .board = s.board, .comp = s.comp, .picks = s.picks };
                 want.addSelect(sel);
                 break :blk .{ .select = sel };
             },
@@ -789,6 +810,44 @@ const Poller = struct {
         if (got > 0) p.fingerprint +%= got;
     }
 
+    /// Once loaded, until the client leaves the lobby phases
+    fn shownForm(p: *const Poller, s: state.Status) ?lcu.me.Form {
+        if (s != .waiting) return null;
+        if (!lobbyLabel(s.waiting)) return null;
+        const f = p.form orelse return null;
+        return if (f.empty()) null else f;
+    }
+
+    fn keepForm(p: *Poller) void {
+        p.form_age +|= 1;
+        if (p.form != null and p.form_age < form_ticks) return;
+        p.form_age = 0;
+        const f = loadForm(p.own_arena.child_allocator, p.watch.client.?);
+        p.form = f;
+        var want: Want = .{};
+        for (f.recent()) |g| want.add(g.champion);
+        for (f.mastery()) |m| want.add(m.champion);
+        p.fetchIcons(want.list[0..want.n]);
+    }
+
+    /// Empty when the client has neither yet; a later reload tries again
+    fn loadForm(gpa: std.mem.Allocator, client: lcu.Client) lcu.me.Form {
+        var arena: std.heap.ArenaAllocator = .init(gpa);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var games: []const lcu.me.Game = &.{};
+        if (client.getOk(lcu.me.paths.history)) |body| {
+            defer client.gpa.free(body);
+            games = lcu.me.parseHistory(a, body) catch &.{};
+        } else |_| {}
+        var mastery: []const lcu.me.Mastery = &.{};
+        if (client.getOk(lcu.me.paths.mastery)) |body| {
+            defer client.gpa.free(body);
+            mastery = lcu.me.parseMastery(a, body) catch &.{};
+        } else |_| {}
+        return lcu.me.formOf(games, mastery);
+    }
+
     /// Whatever fails to load is left out: the card works without it
     fn loadOwn(a: std.mem.Allocator, client: lcu.Client) Own {
         var own: Own = .{ .mastery = &.{}, .tier = null };
@@ -825,6 +884,11 @@ pub const Replay = struct {
         r.p.deinit();
     }
 
+    /// What publish would put beside `s`
+    pub fn form(r: *const Replay, s: state.Status) ?lcu.me.Form {
+        return r.p.shownForm(s);
+    }
+
     /// What the client shows now, into `arena`; null when the poller would publish
     /// nothing new
     pub fn tick(r: *Replay, arena: std.mem.Allocator) !?state.Status {
@@ -839,13 +903,27 @@ pub const Replay = struct {
     }
 };
 
+const lobby_phases = [_]struct { []const u8, []const u8 }{
+    .{ "None", "Home" },
+    .{ "Lobby", "Lobby" },
+    .{ "Matchmaking", "In queue" },
+    .{ "ReadyCheck", "Match found" },
+};
+
+/// Before champ select, where the form panel shows
+fn lobbyPhase(phase: []const u8) bool {
+    for (lobby_phases) |n| if (std.mem.eql(u8, phase, n[0])) return true;
+    return false;
+}
+
+fn lobbyLabel(label: []const u8) bool {
+    for (lobby_phases) |n| if (std.mem.eql(u8, label, n[1])) return true;
+    return false;
+}
+
 /// Gameflow phases as the header shows them
 fn phaseLabel(phase: []const u8) []const u8 {
-    const names = [_]struct { []const u8, []const u8 }{
-        .{ "None", "Home" },
-        .{ "Lobby", "Lobby" },
-        .{ "Matchmaking", "In queue" },
-        .{ "ReadyCheck", "Match found" },
+    const names = lobby_phases ++ [_]struct { []const u8, []const u8 }{
         .{ "InProgress", "In game" },
         .{ "WaitingForStats", "Post game" },
         .{ "PreEndOfGame", "Post game" },

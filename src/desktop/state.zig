@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const lanecard = @import("../lanecard.zig");
+const picks = @import("../picks.zig");
 const board = @import("../board.zig");
 const loading = @import("../loading.zig");
 const ingame = @import("../ingame.zig");
@@ -23,6 +24,8 @@ pub const Select = struct {
     comp: ?*const comp.Comp = null,
     /// The card is an ally's lane (lane_role), not mine
     ally: bool = false,
+    /// The Options panel for the card's lane; null for an ally's once they lock
+    picks: ?picks.Picks = null,
 };
 
 pub const Status = union(enum) {

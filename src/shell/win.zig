@@ -467,14 +467,15 @@ fn resize() void {
     _ = com(controller, "put_Bounds", .{r});
 }
 
-/// Our origin stays in the app; a link elsewhere opens in the browser, if allowed
+/// Our origin and the site stay in the app; a link elsewhere opens in the browser, if
+/// allowed
 fn navigationStarting(_: *Handler, _: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2NavigationStartingEventArgs) callconv(.c) c.HRESULT {
     var uri: c.LPWSTR = null;
     if (com(args, "get_Uri", .{&uri}) < 0) return 0;
     defer c.CoTaskMemFree(uri);
     var buf: [2048]u8 = undefined;
     const u = fromWide(&buf, uri) orelse "";
-    if (std.mem.startsWith(u8, u, origin)) return 0;
+    if (std.mem.startsWith(u8, u, origin) or files.onSite(u)) return 0;
     _ = com(args, "put_Cancel", .{@as(c.BOOL, 1)});
     openExternal(u);
     return 0;
@@ -628,13 +629,25 @@ fn painted(page: []const u8) void {
 
 fn clientChanged() void {
     if (opt.self_test) return;
-    if (screens.refresh(std.heap.page_allocator, true)) |changed| send(changed.message());
+    if (screens.refresh(std.heap.page_allocator, true)) |changed| {
+        // Champ select or a game began while a site page shows: back to the app's
+        if (changed.started and !onApp()) navigate(files.start_page) else send(changed.message());
+    }
     const now = client.current();
     if (sent_client != null and now != sent_client.?) {
         sent_client = now;
         log("client: {t}", .{now});
         send(.{ .status = .{ .client = now } });
     }
+}
+
+/// The window shows the app's page, not the site's
+fn onApp() bool {
+    var src: c.LPWSTR = null;
+    if (com(webview, "get_Source", .{&src}) < 0) return true;
+    defer c.CoTaskMemFree(src);
+    var buf: [2048]u8 = undefined;
+    return std.mem.startsWith(u8, fromWide(&buf, src) orelse return true, origin);
 }
 
 /// From the poller's thread
@@ -903,6 +916,7 @@ fn run(init: std.process.Init) !void {
     if (opt.self_test) _ = c.SetTimer(hwnd, timer_watchdog, 30_000, null);
     if (opt.measure) _ = c.SetTimer(hwnd, timer_watchdog, measure.watchdog_ms, null);
     if (opt.measure) measure.start();
+    if (init.environ_map.get("MEIOLOL_SITE")) |site| files.site = site;
     if (!opt.self_test) client.start(init, init.environ_map.get("MEIOLOL_LOCKFILE"), wakeTick) catch |e|
         log("client poller: {t}", .{e});
     _ = screens.refresh(std.heap.page_allocator, !opt.self_test);
