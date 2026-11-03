@@ -75,15 +75,17 @@ pub const Rank = struct { rank: usize, of: usize };
 /// The champion's place in its role's champions table (rare picks left out, as the table
 /// hides them); null when it is one
 pub fn roleRank(site: *const Site, r: Role, id: u32) !?Rank {
-    const rows = try tierRows(site, r);
-    var n: usize = 0;
-    var rank: ?usize = null;
-    for (rows) |row| {
-        if (row.rare) continue;
-        n += 1;
-        if (row.ch.id == id) rank = n;
-    }
-    return if (rank) |k| .{ .rank = k, .of = n } else null;
+    const set = try rankSet(site, r);
+    for (set, 1..) |ch, k| if (ch.id == id) return .{ .rank = k, .of = set.len };
+    return null;
+}
+
+/// The role's champions table in its order, rare picks left out: the set a champion is
+/// ranked in
+pub fn rankSet(site: *const Site, r: Role) ![]Champ {
+    var out: std.ArrayList(Champ) = .empty;
+    for (try tierRows(site, r)) |row| if (!row.rare) try out.append(site.arena, row.ch);
+    return out.items;
 }
 
 pub const table_span = ui.fmt.table_span;

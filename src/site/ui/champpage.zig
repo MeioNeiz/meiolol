@@ -25,6 +25,7 @@ const champ = @import("champ.zig");
 const role = @import("role.zig");
 const card = @import("card.zig");
 const badge = @import("badge.zig");
+const bar = @import("bar.zig");
 const strip = @import("strip.zig");
 const toggletip = @import("toggletip.zig");
 const segmented = @import("segmented.zig");
@@ -112,6 +113,7 @@ pub const Role = struct {
     kills: ?Kills = null,
     objectives: ?Objectives = null,
     ranks: ?Ranks = null,
+    ends: ?Ends = null,
     timing: []const Timed = &.{},
     places: Places = .{},
     build: ?buildpanel.Data = null,
@@ -402,6 +404,11 @@ pub const W = struct {
     pub const rank_tip = Phrase("{r:rate} in {n:count} games · gold at 14 {g:signed}, estimated from common matchups");
     pub const rank_key = plain("dashed: all games");
     pub const rank_note = plain("Games by the middle rank of the players, when 5 or more are known. We crawl from Platinum up, so the lowest bracket is thin and the middle one mostly Platinum and Emerald.");
+    pub const ends_head = plain("End of game");
+    pub const ends_rows = [9]tree.Text{ plain("Kills"), plain("Deaths"), plain("Assists"), plain("Level"), plain("Gold / min"), plain("Damage / min"), plain("Taken / min"), plain("CS / min"), plain("Vision / min") };
+    pub const ends_key = plain("highest first");
+    pub const ends_note = Phrase("Averages over {n:count} games. Each place is among the role's {of:int} champions in the table, highest first, deaths too.");
+    pub const nth_of = Phrase("{n:int}{th:text} of {of:int}");
     pub const first_item = plain("First item done");
     pub const first_item_key = plain("dashed: games with an item");
     pub const first_item_note = Phrase("Win rate by the minute {c:text} finished its first item. Games that ended before one are left out; a quick item partly follows a game already going well. Finished means a legendary that builds into nothing, so tear items such as Manamune never count.");
@@ -597,6 +604,7 @@ pub const TrendsRole = struct {
     by_length: []const Counts,
     long_games: ?Place = null,
     ranks: ?Ranks = null,
+    ends: ?Ends = null,
     /// Platinum+, from the view's builds file
     timing: []const Timed = &.{},
 };
@@ -658,6 +666,25 @@ pub const Ranks = struct {
     all: Counts,
 };
 
+/// End-of-game averages in the role (the view's games, Platinum+), each with its place
+/// among the role's champions table (rare picks left out) that have such games; the
+/// card shows none under min_games
+pub const Ends = struct {
+    games: u32,
+    of: u16,
+    /// W.ends_rows' order: per game to Level, per minute after
+    rows: [9]EndRow,
+};
+
+pub const EndRow = struct {
+    v: f32,
+    /// Highest first; 0: a rare pick in the role, so not placed
+    rank: u16,
+};
+
+/// Ends.rows shown as whole numbers (gold, damage and taken a minute)
+pub const ends_whole = [9]bool{ false, false, false, false, true, true, true, false, false };
+
 pub const Bracket = struct {
     games: u32,
     wins: u32,
@@ -711,7 +738,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build, .patch = x.build_patch, .older = x.build_older };
         m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .rels = x.rels };
-        tr.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .by_patch = x.by_patch, .by_day = x.by_day, .by_length = x.by_length, .long_games = x.places.long_games, .ranks = x.ranks, .timing = x.timing };
+        tr.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .by_patch = x.by_patch, .by_day = x.by_day, .by_length = x.by_length, .long_games = x.places.long_games, .ranks = x.ranks, .ends = x.ends, .timing = x.timing };
         c.* = .{ .role = x.role, .lane = x.lane, .lanes = try laneEnds(a, x.role, x.rels), .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ahead = x.places.ahead, .behind = x.places.behind, .lane_gold = x.places.lane_gold };
     }
     return .{
@@ -1333,7 +1360,7 @@ pub const Trends = struct {
         }, .{
             h.div(.{ .class = "row3", .id = "trends" }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
-            h.div(.{ .class = "row2" }, .{ p.rankCard(h), p.timingCard(h) }),
+            h.div(.{ .class = "row3" }, .{ p.rankCard(h), p.timingCard(h), p.endsCard(h) }),
         });
     }
 
@@ -1431,6 +1458,22 @@ pub const Trends = struct {
         p.ranks.set(pts[0..n]);
         p.ranks.ref = rate(k.all);
         return card.view(h, .{}, &.{ card.head(h, W.by_rank, null, &.{tipNote(h, "cp-rank", W.rank_key, W.by_rank, W.rank_note)}), p.ranks.view(h) });
+    }
+
+    /// End-of-game averages, each beside its place in the role
+    fn endsCard(p: *P, h: *H) N {
+        const e = p.r().ends orelse return noneCard(h, W.ends_head, .none);
+        if (e.games < min_games) return noneCard(h, W.ends_head, .none);
+        var rows = h.list();
+        for (e.rows, W.ends_rows, ends_whole, 0..) |x, l, whole, i| {
+            const v = if (whole) phrase.num(h, .count, @as(u32, @intFromFloat(x.v + 0.5))) else phrase.num(h, .dec, x.v);
+            const place = if (x.rank > 0) bar.view(h, @floatFromInt(e.of + 1 - x.rank), @floatFromInt(e.of), W.nth_of.with(h, .{ .n = x.rank, .th = ordinal(x.rank), .of = e.of })) else N.none;
+            rows.add(h.p(.{ .key = i }, .{ h.span(.{ .class = "k" }, .{l}), h.b(.{}, .{v}), place }));
+        }
+        return card.view(h, .{}, &.{
+            card.head(h, W.ends_head, null, &.{ p.plat(h), tipNote(h, "cp-ends", W.ends_key, W.ends_head, W.ends_note.with(h, .{ .n = e.games, .of = e.of })) }),
+            h.div(.{ .class = "eog" }, .{rows.done()}),
+        });
     }
 
     /// Win rate by the minute the first item was finished, dashed at the rate over every
@@ -1737,6 +1780,10 @@ pub const css =
     \\  .c-cpage .ends .k small { font-size: var(--fs-xs); }
     \\  @media (max-width: 600px) { .c-cpage .ends .k { flex-direction: row; gap: var(--sp-2); flex-basis: 100%; } }
     \\  .c-cpage .ends a { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--ink); font-variant-numeric: tabular-nums; }
+    \\  .c-cpage .eog { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: var(--sp-1) var(--sp-3); }
+    \\  .c-cpage .eog p { display: contents; }
+    \\  .c-cpage .eog .k { color: var(--muted); }
+    \\  .c-cpage .eog b { font-weight: var(--w-m); text-align: right; font-variant-numeric: tabular-nums; }
     \\  .c-cpage .vs-sub { margin: var(--sp-3) 0 var(--sp-1); font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .plot { padding: var(--sp-1) 0 var(--sp-3); }
     \\  .c-cpage .row3, .c-cpage .row2 { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
@@ -1811,6 +1858,38 @@ test "by rank: brackets under min_games left out, no chart under two" {
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "Gold-Emerald") == null);
+}
+
+test "end of game: each figure with its place, none under min_games or for a rare pick" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var rows: [9]EndRow = @splat(.{ .v = 6.25, .rank = 3 });
+    rows[4] = .{ .v = 411.6, .rank = 1 };
+    var roles = [_]TrendsRole{.{ .role = .top, .games = 0, .wins = 0, .by_patch = &.{}, .by_length = &.{}, .ends = .{ .games = 100, .of = 48, .rows = rows } }};
+    const d: TrendsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles, .lengths = &.{} };
+    var p: Trends = .{ .data = &d, .root = "/" };
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, p.view(&h), &w.writer);
+    const got = w.written();
+    try std.testing.expect(std.mem.indexOf(u8, got, "<h2>End of game</h2>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "<b>6.3</b>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "<b>412</b>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "1st of 48") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "3rd of 48") != null);
+
+    roles[0].ends.?.rows[4].rank = 0;
+    w.clearRetainingCapacity();
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "<b>412</b>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "1st of 48") == null);
+
+    roles[0].ends.?.games = 99;
+    w.clearRetainingCapacity();
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "<b>412</b>") == null);
 }
 
 test "first item done: buckets under min_games left out, no chart under two" {

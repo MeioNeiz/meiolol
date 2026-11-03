@@ -322,6 +322,32 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(games, k.all.games);
         try testing.expectEqual([3]u32{ 0, games, 0 }, [3]u32{ k.by[0].games, k.by[1].games, k.by[2].games });
         try testing.expectEqual(k.all.wins, k.by[1].wins);
+
+        // End of game: the fixture's columns (one game again and again) per game, then per
+        // minute; placed against Mordekaiser, the role's other champion in the table
+        const e = trends.roles[0].ends.?;
+        try testing.expectEqual(games, e.games);
+        try testing.expectEqual(2, e.of);
+        const Ends = struct { k: f64, d: f64, a: f64, l: f64, g: f64, dmg: f64, t: f64, cs: f64, v: f64 };
+        var q = try db.prepare(
+            \\SELECT kills, deaths, assists, champ_level, gold * 60.0 / duration_s,
+            \\  damage_to_champions * 60.0 / duration_s, damage_taken * 60.0 / duration_s,
+            \\  cs * 60.0 / duration_s, vision_score * 60.0 / duration_s
+            \\FROM participants JOIN matches USING (match_id)
+            \\WHERE match_id = 'EUW1_1' AND champion_id = ?
+        );
+        defer q.deinit();
+        var both: [2][9]f64 = undefined;
+        for ([_]i64{ 122, 82 }, &both) |id, *v| {
+            try q.bind(.{id});
+            try testing.expect(try q.step());
+            const r = q.row(Ends);
+            v.* = .{ r.k, r.d, r.a, r.l, r.g, r.dmg, r.t, r.cs, r.v };
+        }
+        for (e.rows, both[0], both[1]) |row, mine, morde| {
+            try testing.expectApproxEqAbs(mine, row.v, 1e-3);
+            try testing.expectEqual(@as(u16, if (morde > mine) 2 else 1), row.rank);
+        }
     }
     for ([_][]const u8{
         "index.html",
@@ -415,7 +441,7 @@ test "fixture games to stats, curves and the website" {
         // Champion page: the ui.champpage island from the root view, its data file for
         // the other roles; the head, the build, the matchups with the most met opponent's
         // brief linking to the matchup page from the champion's side
-        .{ "champions/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"/data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"/data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"/data/champion/darius-more.bin\"", "data-js=\"/" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"/matchups/top/darius-vs-mordekaiser\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "data-island=\"champtrends\" data-src=\"/data/champion/darius-trends.bin\"", "data-island=\"champcharts\" data-src=\"/data/champion/darius-charts.bin\"", "<h2>Lane</h2>", "<h2>Won by lane gold</h2>", "<h2>Pick-up</h2>", "<h2>By rank</h2>", "<h2>First item done</h2>", "<script src=\"/" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
+        .{ "champions/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"/data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"/data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"/data/champion/darius-more.bin\"", "data-js=\"/" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"/matchups/top/darius-vs-mordekaiser\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "data-island=\"champtrends\" data-src=\"/data/champion/darius-trends.bin\"", "data-island=\"champcharts\" data-src=\"/data/champion/darius-charts.bin\"", "<h2>Lane</h2>", "<h2>Won by lane gold</h2>", "<h2>Pick-up</h2>", "<h2>By rank</h2>", "<h2>First item done</h2>", "<h2>End of game</h2>", "<script src=\"/" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
         .{ "champions.html", &.{ "<div class=\"c-tiers\" data-island=\"tiers\" data-src=\"/data/tiers.bin\" data-stamp=\"", "data-base=\"/\" data-view=\"0\" data-path=\"/champions\"", "<h1>Champions</h1>", "<linearGradient id=\"c-violin-g\"", "<a href=\"/champions?region=all\">All</a>", "<div class=\"rb\">", "<script src=\"/" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
         // Home: the lookup, each role's most played (the example's game: core_loaded); no
         // clear patch move on a patch's first day, so the Patch card is its link alone

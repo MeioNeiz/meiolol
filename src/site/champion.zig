@@ -259,6 +259,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .kills = try killsOf(site, ch, r),
         .objectives = objectivesOf(site, ch, r),
         .ranks = try ranksOf(site, ch, r),
+        .ends = try endsOf(site, ch, r),
         // The card has no period label: this view's games only, as the head's
         .timing = if (builds_page.forChampionHere(site, site.view, ch, r)) |b| try timingOf(a, b.first_item, cp.min_games) else &.{},
         .places = try rankings.placesOf(site, ch, r),
@@ -424,6 +425,50 @@ fn ranksOf(site: *const Site, ch: Champ, r: Role) !?cp.Ranks {
     for (&out.by, [_]curvesfile.Bracket{ .low, .mid, .high }) |*o, b| {
         const n = t.bracket(r, ch.c, b);
         o.* = .{ .games = n.games, .wins = n.wins, .gold = try goldAt14(site, ch, r, b) };
+    }
+    return out;
+}
+
+/// ch's end-of-game averages in r (stats.Trend.ends: the view's games, as the head's),
+/// each placed among tierlist.rankSet's champions with such games; the card leaves out
+/// a role under cp.min_games of them
+fn endsOf(site: *const Site, ch: Champ, r: Role) !?cp.Ends {
+    const t = if (site.trend) |*t| t else return null;
+    const sum = t.end(r, ch.c);
+    const mine = endAverages(sum) orelse return null;
+    var higher: [mine.len]u16 = @splat(0);
+    var of: u16 = 0;
+    var placed = false;
+    for (try tierlist.rankSet(site, r)) |other| {
+        const theirs = endAverages(t.end(r, other.c)) orelse continue;
+        of += 1;
+        if (other.c == ch.c) placed = true;
+        for (&higher, mine, theirs) |*n, a, b| n.* += @intFromBool(b > a);
+    }
+    var out: cp.Ends = .{ .games = sum.games, .of = of, .rows = undefined };
+    for (&out.rows, mine, higher) |*o, v, n| o.* = .{ .v = @floatCast(v), .rank = if (placed) n + 1 else 0 };
+    return out;
+}
+
+/// stats.End's fields in cp.Ends.rows' order
+const end_fields = [9]usize{ 0, 1, 2, 3, 6, 7, 8, 4, 5 };
+comptime {
+    const names = @typeInfo(stats.End).@"struct".field_names;
+    for (end_fields, [_][]const u8{ "kills", "deaths", "assists", "level", "gold", "damage", "taken", "cs", "vision" }) |f, n| {
+        if (!std.mem.eql(u8, names[f], n)) @compileError("end_fields out of step with stats.End");
+    }
+}
+/// cp.Ends.rows from here on are per minute, so long games don't lead on length alone
+const end_per_minute = 4;
+
+/// In cp.Ends.rows' order; null without games
+fn endAverages(e: stats.Trend.EndSum) ?[9]f64 {
+    if (e.games == 0 or e.seconds == 0) return null;
+    const minutes = @as(f64, @floatFromInt(e.seconds)) / 60;
+    var out: [9]f64 = undefined;
+    for (&out, end_fields, 0..) |*o, f, i| {
+        const x: f64 = @floatFromInt(e.sums[f]);
+        o.* = if (i < end_per_minute) x / @as(f64, @floatFromInt(e.games)) else x / minutes;
     }
     return out;
 }

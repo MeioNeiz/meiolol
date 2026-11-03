@@ -70,6 +70,7 @@ pub const Player = struct {
     gold14: ?i32,
     /// gold15 IS NOT NULL: a frame after minute 14
     gold15: bool,
+    end: ?stats.End,
 };
 
 pub const Ban = struct { team: i16, champion: i32 };
@@ -658,10 +659,20 @@ pub const Store = struct {
         tier: ?[]const u8,
         gold14: ?i64,
         gold15: bool,
+        kills: ?i64,
+        deaths: ?i64,
+        assists: ?i64,
+        level: ?i64,
+        cs: ?i64,
+        vision: ?i64,
+        gold: ?i64,
+        damage: ?i64,
+        taken: ?i64,
     };
 
     const match_cols = "match_id, rowid, platform, queue_id, patch, game_start, duration_s, winning_team, remake";
-    const player_cols = "match_id, slot, team_id, puuid, champion_id, position, win, tier, gold14, gold15 IS NOT NULL";
+    const player_cols = "match_id, slot, team_id, puuid, champion_id, position, win, tier, gold14, gold15 IS NOT NULL, " ++
+        "kills, deaths, assists, champ_level, cs, vision_score, gold, damage_to_champions, damage_taken";
 
     fn player(s: *Store, r: PlayerRow) !Player {
         return .{
@@ -674,6 +685,7 @@ pub const Store = struct {
             .puuid = if (r.puuid) |p| key(p) else null,
             .gold14 = if (r.gold14) |g| std.math.cast(i32, g) orelse return error.Unrepresentable else null,
             .gold15 = r.gold15,
+            .end = stats.End.of(r),
         };
     }
 
@@ -1140,9 +1152,9 @@ pub fn mentions(gpa: Allocator, io: std.Io, dir: []const u8, puuid: []const u8) 
 pub fn dump(s: *const Store, w: *std.Io.Writer) !void {
     for (s.sorted) |g| {
         try w.print("{s} {d} {d} {d} {d} {?d} {?s} {?s}\n", .{ g.id, g.rowid, g.timeline, g.start, g.duration_s, g.winning_team, s.string(g.platform), s.string(g.patch) });
-        for (g.players) |p| try w.print(" {d} {d} {d} {?s} {?s} {} {?x} {?x} {?d} {}\n", .{
+        for (g.players) |p| try w.print(" {d} {d} {d} {?s} {?s} {} {?x} {?x} {?d} {} {any}\n", .{
             p.slot,                          p.team,                          p.champion, s.string(p.position), s.string(p.tier), p.win,
-            if (p.puuid) |k| k.lo else null, if (p.puuid) |k| k.hi else null, p.gold14,   p.gold15,
+            if (p.puuid) |k| k.lo else null, if (p.puuid) |k| k.hi else null, p.gold14,   p.gold15,             p.end,
         });
         for (g.bans) |b| try w.print(" ban {d} {d}\n", .{ b.team, b.champion });
     }

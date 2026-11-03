@@ -113,7 +113,52 @@ pub const Row = struct {
     duration_s: u32 = 0,
     /// As the curves': the median visible tier of its players, null under 5 known
     bracket: ?curvesfile.Bracket = null,
+    /// By side and role; set only for a sink that declares `wants_ends`, and only during
+    /// its add: rows kept in lists (analysis.GameList) stay small
+    ends: ?*const [2][5]?End = null,
 };
+
+/// A player's end-of-game figures, participants' columns
+pub const End = struct {
+    kills: u8,
+    deaths: u8,
+    assists: u8,
+    level: u8,
+    cs: u16,
+    vision: u16,
+    gold: u32,
+    damage: u32,
+    taken: u32,
+
+    pub const count = @typeInfo(End).@"struct".field_names.len;
+
+    /// From a row with End's field names as optional ints; null when any is NULL or out
+    /// of range
+    pub fn of(row: anytype) ?End {
+        var e: End = undefined;
+        const info = @typeInfo(End).@"struct";
+        inline for (info.field_names, info.field_types) |name, T| {
+            const v = @field(row, name) orelse return null;
+            @field(e, name) = std.math.cast(T, v) orelse return null;
+        }
+        return e;
+    }
+
+    /// In field order
+    pub fn values(e: End) [count]u64 {
+        var out: [count]u64 = undefined;
+        inline for (@typeInfo(End).@"struct".field_names, 0..) |name, i| out[i] = @field(e, name);
+        return out;
+    }
+};
+
+fn wantsEnds(comptime Sink: type) bool {
+    const T = switch (@typeInfo(Sink)) {
+        .pointer => |p| p.child,
+        else => Sink,
+    };
+    return @hasDecl(T, "wants_ends");
+}
 
 pub fn matchKey(match_id: []const u8) u64 {
     return std.hash.Wyhash.hash(0, match_id);
@@ -242,7 +287,8 @@ pub fn scan(
         \\
         \\)
         \\SELECT m.match_id, m.winning_team, m.game_start, m.patch, m.platform, m.duration_s,
-        \\  p.team_id, p.position, p.champion_id, p.tier
+        \\  p.team_id, p.position, p.champion_id, p.tier, p.kills, p.deaths, p.assists,
+        \\  p.champ_level, p.cs, p.vision_score, p.gold, p.damage_to_champions, p.damage_taken
         \\FROM m CROSS JOIN participants p USING (match_id)
         \\ORDER BY m.match_id
     );
@@ -270,6 +316,15 @@ pub fn scan(
             position: []const u8,
             champion_id: i64,
             tier: ?[]const u8,
+            kills: ?i64,
+            deaths: ?i64,
+            assists: ?i64,
+            level: ?i64,
+            cs: ?i64,
+            vision: ?i64,
+            gold: ?i64,
+            damage: ?i64,
+            taken: ?i64,
         });
         if (!std.mem.eql(u8, r.match_id, current.items)) {
             if (ahead) |a| a.next();
@@ -285,7 +340,7 @@ pub fn scan(
                 .duration_s = @intCast(r.duration_s),
             };
         }
-        game.add(r.team_id, r.position, r.champion_id, r.tier);
+        game.add(r.team_id, r.position, r.champion_id, r.tier, End.of(r));
     }
     try game.finish(sink, &summary);
     return summary;
@@ -318,7 +373,7 @@ pub fn scanFrom(
             .duration_s = @intCast(g.duration_s),
         };
         // A NULL position reads as "" from SQLite
-        for (g.players) |p| game.add(p.team, games.string(p.position) orelse "", p.champion, games.string(p.tier));
+        for (g.players) |p| game.add(p.team, games.string(p.position) orelse "", p.champion, games.string(p.tier), p.end);
         try game.finish(sink, &summary);
     }
     return summary;
@@ -390,13 +445,14 @@ const Game = struct {
     platform: u8 = 0,
     duration_s: u32 = 0,
     teams: [2][5]u32 = @splat(@splat(0)),
+    ends: [2][5]?End = @splat(@splat(null)),
     rows: u8 = 0,
     bad: bool = false,
     /// curvesfile.tierRank of the players with a known tier
     ranks: [10]usize = undefined,
     n_ranks: u8 = 0,
 
-    fn add(g: *Game, team_id: i64, position: []const u8, champion: i64, tier: ?[]const u8) void {
+    fn add(g: *Game, team_id: i64, position: []const u8, champion: i64, tier: ?[]const u8, end: ?End) void {
         g.rows += 1;
         if (curvesfile.tierRank(tier orelse "")) |rank| if (g.n_ranks < g.ranks.len) {
             g.ranks[g.n_ranks] = rank;
@@ -420,6 +476,7 @@ const Game = struct {
             return;
         }
         slot.* = @intCast(champion);
+        g.ends[side][@backingInt(role)] = end;
     }
 
     fn bracket(g: *const Game) ?curvesfile.Bracket {
@@ -448,6 +505,7 @@ const Game = struct {
             .winner = winner.?,
             .duration_s = g.duration_s,
             .bracket = g.bracket(),
+            .ends = if (comptime wantsEnds(@TypeOf(sink))) &g.ends else null,
         });
         summary.games += 1;
         summary.by_patch.add(g.patch);
@@ -531,6 +589,8 @@ pub const Trend = struct {
     /// The same games by role, champion and rank bracket (Row.bracket), those of none left
     /// out
     brackets: []Counts,
+    /// The same games' end-of-game figures by role, champion
+    ends: []EndSum,
     /// Lane opponents (same role, either side) that met, by key (laneKey) with the lower
     /// index first; wins are the lower index's
     lanes: []Lane,
@@ -550,6 +610,14 @@ pub const Trend = struct {
     pub const max_patches = 6;
     pub const max_days = 28;
 
+    /// Players with every End column, and their sums
+    pub const EndSum = struct {
+        games: u32 = 0,
+        seconds: u64 = 0,
+        /// End's fields in order
+        sums: [End.count]u64 = @splat(0),
+    };
+
     pub const Lane = struct {
         key: u32,
         by: [length_buckets]Counts,
@@ -565,6 +633,10 @@ pub const Trend = struct {
 
     pub fn length(t: *const Trend, r: Role, c: usize, b: usize) Counts {
         return t.lengths[(@as(usize, @backingInt(r)) * t.n + c) * length_buckets + b];
+    }
+
+    pub fn end(t: *const Trend, r: Role, c: usize) EndSum {
+        return t.ends[@as(usize, @backingInt(r)) * t.n + c];
     }
 
     /// b: not .all
@@ -626,6 +698,7 @@ pub fn buildTrend(
         .n = st.n,
         .lengths = try arena.alloc(Counts, Role.count * st.n * length_buckets),
         .brackets = try arena.alloc(Counts, Role.count * st.n * 3),
+        .ends = try arena.alloc(Trend.EndSum, Role.count * st.n),
         .lanes = &.{},
         .patches = undefined,
         .patch_games = try arena.alloc(u32, recent.len),
@@ -636,6 +709,7 @@ pub fn buildTrend(
     t.patches = names;
     @memset(t.lengths, .{ .games = 0, .wins = 0 });
     @memset(t.brackets, .{ .games = 0, .wins = 0 });
+    @memset(t.ends, .{});
     @memset(t.patch_games, 0);
     @memset(t.by_patch, .{ .games = 0, .wins = 0 });
 
@@ -712,6 +786,8 @@ const TrendSink = struct {
     /// The newest patch's games by UTC day: by role, champion
     days: std.AutoArrayHashMapUnmanaged(i32, []Counts) = .empty,
 
+    pub const wants_ends = true;
+
     fn add(s: *TrendSink, r: Row) !void {
         const t = s.t;
         var cs: [2][Role.count]?usize = undefined;
@@ -743,6 +819,12 @@ const TrendSink = struct {
             const c = maybe orelse continue;
             add1(&t.lengths[(role * t.n + c) * length_buckets + b], side == r.winner);
             if (r.bracket) |x| add1(&t.brackets[Trend.bracketIndex(t.n, role, c, x)], side == r.winner);
+            if (r.ends.?[side][role]) |e| {
+                const sum = &t.ends[role * t.n + c];
+                sum.games += 1;
+                sum.seconds += r.duration_s;
+                for (&sum.sums, e.values()) |*x, v| x.* += v;
+            }
         };
         for (cs[0], cs[1], 0..) |a, z, role| {
             const c0 = a orelse continue;
@@ -950,6 +1032,53 @@ test "trend: lengths in the view's window, patch counts over the newest patches"
     // Starts 2000, 2000, 500 ms: one day
     try testing.expectEqualSlices(i32, &.{0}, t.days);
     try testing.expectEqual(c(3, 2), t.onDay(0, .top, a));
+}
+
+test "trend: end-of-game sums over the view's window, a NULL column leaves the player out" {
+    const gpa = testing.allocator;
+    const db = try testDb();
+    defer db.close();
+    for ([_][]const u8{ "EUW1_1", "EUW1_2", "EUW1_3" }, [_]i64{ 2000, 2000, 500 }, [_]i64{ 1200, 1800, 1500 }) |id, start, duration_s| {
+        try addMatch(db, id, "16.20", 420, 100, false, roles_ok);
+        try db.run("UPDATE matches SET game_start = ?, duration_s = ? WHERE match_id = ?", .{ start, duration_s, id });
+    }
+    // Every player: kills slot + 1, deaths 2, assists 3, level 15, cs 200, vision 30, gold
+    // 12000, damage 20000, taken 25000; game 2's top blue without a level; game 3 before
+    // since
+    try db.exec(
+        \\UPDATE participants SET kills = slot + 1, deaths = 2, assists = 3, champ_level = 15,
+        \\  cs = 200, vision_score = 30, gold = 12000, damage_to_champions = 20000,
+        \\  damage_taken = 25000;
+        \\UPDATE participants SET champ_level = NULL WHERE match_id = 'EUW1_2' AND slot = 0;
+    );
+    var built = try build(gpa, db, &.{"16.20"}, euw);
+    defer built.builder.deinit();
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    try built.builder.write(&aw.writer, "16.20");
+    var s: core.Stats = try .parse(gpa, aw.written());
+    defer s.deinit(gpa);
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const t = try buildTrend(gpa, arena.allocator(), db, null, &s, &.{"16.20"}, &.{"16.20"}, euw, 1000);
+
+    const top_blue = t.end(.top, s.index(1).?);
+    try testing.expectEqual(1, top_blue.games);
+    try testing.expectEqual(1200, top_blue.seconds);
+    try testing.expectEqual([End.count]u64{ 1, 2, 3, 15, 200, 30, 12000, 20000, 25000 }, top_blue.sums);
+    const top_red = t.end(.top, s.index(10).?);
+    try testing.expectEqual(2, top_red.games);
+    try testing.expectEqual(3000, top_red.seconds);
+    try testing.expectEqual(20, top_red.sums[0]);
+    try testing.expectEqual(Trend.EndSum{}, t.end(.jungle, s.index(1).?));
+}
+
+test "End.of: null on a NULL or out of range column" {
+    const R = struct { kills: ?i64 = 1, deaths: ?i64 = 2, assists: ?i64 = 3, level: ?i64 = 18, cs: ?i64 = 300, vision: ?i64 = 40, gold: ?i64 = 15000, damage: ?i64 = 30000, taken: ?i64 = 20000 };
+    try testing.expectEqual(18, End.of(R{}).?.level);
+    try testing.expectEqual(null, End.of(R{ .gold = null }));
+    try testing.expectEqual(null, End.of(R{ .kills = 256 }));
+    try testing.expectEqual(null, End.of(R{ .cs = -1 }));
 }
 
 test "trend: the newest patch by day, oldest first, the newest max_days kept" {
