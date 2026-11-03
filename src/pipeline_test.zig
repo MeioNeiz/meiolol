@@ -389,6 +389,12 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(122, facts.bans[0].champion);
         try testing.expectApproxEqAbs(1 / @as(f32, @floatFromInt(facts.games)), facts.bans[0].rate, 1e-4);
         try testing.expectEqualStrings("15.13", facts.patch);
+        // Usual builds: Ahri mid's from the previous patch (its current one is thin),
+        // none for Darius top's few games
+        const ahri = facts.buildOf(103, .middle).?;
+        try testing.expect(ahri.games > 1000);
+        for ([_]u32{ahri.boots} ++ ahri.core) |id| if (id != 0) try testing.expect(facts.itemName(id).len > 0);
+        try testing.expectEqual(null, facts.buildOf(122, .top));
     }
     // Pool grid: a lanes file per champion and view, the champion page's lane opponents
     {

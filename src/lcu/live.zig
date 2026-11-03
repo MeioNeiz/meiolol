@@ -1,6 +1,6 @@
 //! The game's own Live Client Data API (127.0.0.1:2999, no password, Riot's root as the
 //! LCU): what the in-game panel reads. Only what it shows is kept: champions, positions,
-//! scores, items' prices and the objective events. Shapes from Riot's docs and the mock;
+//! scores, items' prices, your own items and ability levels, and the objective events. Shapes from Riot's docs and the mock;
 //! APP1's capture checks them against a real game (docs/plan/app.md)
 
 const std = @import("std");
@@ -59,6 +59,10 @@ pub const Game = struct {
     events: []const Event,
     /// The local player's unspent gold
     gold: f64,
+    /// The local player's item ids, trinket and wards too
+    items: []const u32 = &.{},
+    /// The local player's points in Q, W, E and R
+    skills: [4]u8 = @splat(0),
 
     pub fn me(g: Game) ?Player {
         for (g.players) |p| if (p.me) return p;
@@ -71,11 +75,14 @@ const json_opts: std.json.ParseOptions = .{
     .allocate = .alloc_always,
 };
 
+const Ability = struct { abilityLevel: i64 = 0 };
+
 const Raw = struct {
     activePlayer: struct {
         riotId: []const u8 = "",
         summonerName: []const u8 = "",
         currentGold: f64 = 0,
+        abilities: struct { Q: Ability = .{}, W: Ability = .{}, E: Ability = .{}, R: Ability = .{} } = .{},
     } = .{},
     allPlayers: []const struct {
         championName: []const u8 = "",
@@ -94,7 +101,7 @@ const Raw = struct {
             assists: i64 = 0,
             creepScore: i64 = 0,
         } = .{},
-        items: []const struct { price: i64 = 0, count: i64 = 1 } = &.{},
+        items: []const struct { itemID: i64 = 0, price: i64 = 0, count: i64 = 1 } = &.{},
     } = &.{},
     events: struct { Events: []const std.json.Value = &.{} } = .{},
     gameData: struct { gameTime: f64 = 0, gameMode: []const u8 = "" } = .{},
@@ -107,6 +114,7 @@ pub fn parse(arena: std.mem.Allocator, json: []const u8) !Game {
     // Event killers go by Riot ID game name (summoner name before Riot IDs)
     const names = try arena.alloc([]const u8, raw.allPlayers.len);
     const ap = raw.activePlayer;
+    var items: []const u32 = &.{};
     for (players, names, raw.allPlayers) |*p, *n, r| {
         var gold: u64 = 0;
         for (r.items) |it| gold += clamp(it.price) * @max(1, clamp(it.count));
@@ -126,7 +134,15 @@ pub fn parse(arena: std.mem.Allocator, json: []const u8) !Game {
             .me = same(r.riotId, ap.riotId) or same(r.summonerName, ap.summonerName),
         };
         n.* = if (r.riotIdGameName.len > 0) r.riotIdGameName else r.summonerName;
+        if (p.me and items.len == 0) {
+            const mine = try arena.alloc(u32, r.items.len);
+            for (mine, r.items) |*id, it| id.* = clamp(it.itemID);
+            items = mine;
+        }
     }
+    const ab = ap.abilities;
+    var skills: [4]u8 = undefined;
+    for (&skills, [_]Ability{ ab.Q, ab.W, ab.E, ab.R }) |*k, x| k.* = std.math.lossyCast(u8, @max(0, x.abilityLevel));
     var events: std.ArrayList(Event) = .empty;
     for (raw.events.Events) |v| if (try event(v, players, names)) |e| try events.append(arena, e);
     return .{
@@ -135,6 +151,8 @@ pub fn parse(arena: std.mem.Allocator, json: []const u8) !Game {
         .players = players,
         .events = events.items,
         .gold = @max(0, ap.currentGold),
+        .items = items,
+        .skills = skills,
     };
 }
 
@@ -238,6 +256,8 @@ test "a game's reply: players, gold from items, objectives by team" {
     try testing.expectEqual(Team.order, me.team);
     try testing.expectEqual(Role.middle, me.role.?);
     try testing.expectEqual(2900, me.item_gold);
+    try testing.expectEqualSlices(u32, &.{ 1056, 3802, 1026, 1001, 2055, 3340 }, g.items);
+    try testing.expectEqual([4]u8{ 4, 3, 2, 1 }, g.skills);
     try testing.expectEqualStrings("MonkeyKing", g.players[6].champion);
     var dragons: [2]u32 = .{ 0, 0 };
     var towers: [2]u32 = .{ 0, 0 };

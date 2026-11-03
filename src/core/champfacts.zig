@@ -9,6 +9,10 @@
 //!   lean CHAMPION ROLE GAMES GOLD GOLD_SD WIN_PP WIN_SD    as lean.tsv's rows
 //!   games N                              the patch's games, the ban rates' base
 //!   ban CHAMPION RATE                    share of them it was banned in, 0..1
+//!   build CHAMPION ROLE GAMES BOOTS CORE1 CORE2 CORE3 ORDER PATH
+//!                                        the usual build (Build); 0 for no item, - for
+//!                                        no order or path
+//!   item ID NAME                         a build's item's name
 //! Readers skip kinds they don't know, so a new kind needs no version bump; a changed
 //! kind does.
 
@@ -18,8 +22,9 @@ const Counts = @import("statsfile.zig").Counts;
 
 pub const magic = "meiolol-champs";
 pub const version: u32 = 1;
-/// Far above the ~170 champions times five roles; bounds what a damaged file allocates
-const max_rows = 4096;
+/// Far above the ~170 champions times five roles, a few kinds each; bounds what a
+/// damaged file allocates
+const max_rows = 16384;
 
 /// Team damage mix buckets by the team's average magic share: mostly physical below the
 /// first, mostly magic from the second
@@ -85,6 +90,39 @@ fn clear(b: f64, sd: f64, n: u32) bool {
     return n >= lean_min_games and sd > 0 and @abs(b) >= clear_z * sd;
 }
 
+/// A champion-role's usual build in game: each kind's most played option (builds.zig)
+pub const Build = struct {
+    champion: u32,
+    role: Role,
+    games: u32,
+    /// Tier-2 boots; 0 none or unknown
+    boots: u32 = 0,
+    /// First three finished items in purchase order; 0 unknown
+    core: [3]u32 = @splat(0),
+    /// Basic abilities by points maxed first ("QWE"); 0s unknown
+    order: [3]u8 = @splat(0),
+    /// The ability taken at each level, 'Q' to 'R'; 0s unknown
+    path: [max_level]u8 = @splat(0),
+
+    pub const max_level = 18;
+
+    pub fn hasOrder(b: Build) bool {
+        return b.order[0] != 0;
+    }
+
+    pub fn hasPath(b: Build) bool {
+        return b.path[0] != 0;
+    }
+};
+
+pub const Item = struct { id: u32, name: []const u8 };
+
+/// The usual builds and their items' names
+pub const App = struct {
+    builds: []const Build = &.{},
+    items: []const Item = &.{},
+};
+
 pub const Damage = struct { champion: u32, magic: f32 };
 pub const Ban = struct { champion: u32, rate: f32 };
 
@@ -96,6 +134,8 @@ pub const Facts = struct {
     /// The patch's games and each champion's ban rate on them
     games: u32 = 0,
     bans: []const Ban = &.{},
+    builds: []const Build = &.{},
+    items: []const Item = &.{},
 
     /// Magic share of the champion's damage to champions; null when unsampled
     pub fn magicOf(f: *const Facts, champion: u32) ?f32 {
@@ -116,6 +156,17 @@ pub const Facts = struct {
         return null;
     }
 
+    pub fn buildOf(f: *const Facts, champion: u32, role: Role) ?Build {
+        for (f.builds) |b| if (b.champion == champion and b.role == role) return b;
+        return null;
+    }
+
+    /// "" for an item the file doesn't name
+    pub fn itemName(f: *const Facts, id: u32) []const u8 {
+        for (f.items) |it| if (it.id == id) return it.name;
+        return "";
+    }
+
     /// Allocates in `arena`; the patch borrows `bytes`
     pub fn parse(arena: std.mem.Allocator, bytes: []const u8) !Facts {
         var lines = std.mem.tokenizeScalar(u8, bytes, '\n');
@@ -126,8 +177,11 @@ pub const Facts = struct {
         var damage: std.ArrayList(Damage) = .empty;
         var lean: std.ArrayList(LeanRow) = .empty;
         var bans: std.ArrayList(Ban) = .empty;
-        while (lines.next()) |line| {
-            if (damage.items.len + lean.items.len + bans.items.len >= max_rows) return error.BadFacts;
+        var builds: std.ArrayList(Build) = .empty;
+        var items: std.ArrayList(Item) = .empty;
+        var rows: usize = 0;
+        while (lines.next()) |line| : (rows += 1) {
+            if (rows >= max_rows) return error.BadFacts;
             var it = std.mem.splitScalar(u8, line, '\t');
             const kind = it.next() orelse continue;
             if (std.mem.eql(u8, kind, "damage")) {
@@ -157,12 +211,42 @@ pub const Facts = struct {
                 const r = try float(it.next());
                 if (!(r >= 0 and r <= 1)) return error.BadFacts;
                 try bans.append(arena, .{ .champion = champion, .rate = @floatCast(r) });
+            } else if (std.mem.eql(u8, kind, "build")) {
+                try builds.append(arena, try parseBuild(&it));
+            } else if (std.mem.eql(u8, kind, "item")) {
+                const id = try int(u32, it.next());
+                const name = it.next() orelse return error.BadFacts;
+                try items.append(arena, .{ .id = id, .name = try arena.dupe(u8, name) });
             }
         }
         f.damage = damage.items;
         f.lean = lean.items;
         f.bans = bans.items;
+        f.builds = builds.items;
+        f.items = items.items;
         return f;
+    }
+
+    fn parseBuild(it: *std.mem.SplitIterator(u8, .scalar)) !Build {
+        var b: Build = .{
+            .champion = try int(u32, it.next()),
+            .role = std.meta.stringToEnum(Role, it.next() orelse "") orelse return error.BadFacts,
+            .games = try int(u32, it.next()),
+            .boots = try int(u32, it.next()),
+        };
+        for (&b.core) |*c| c.* = try int(u32, it.next());
+        try keys(it.next(), "QWE", &b.order);
+        try keys(it.next(), "QWER", &b.path);
+        return b;
+    }
+
+    /// "-" leaves `out` all 0s; else exactly out.len letters of `allowed`
+    fn keys(s: ?[]const u8, allowed: []const u8, out: []u8) !void {
+        const x = s orelse return error.BadFacts;
+        if (std.mem.eql(u8, x, "-")) return;
+        if (x.len != out.len) return error.BadFacts;
+        for (x) |ch| if (std.mem.findScalar(u8, allowed, ch) == null) return error.BadFacts;
+        @memcpy(out, x);
     }
 
     fn int(comptime T: type, s: ?[]const u8) !T {
@@ -187,15 +271,24 @@ pub const BanCounts = struct {
 };
 
 /// `magic` indexed as `ids` (null: unsampled)
-pub fn write(w: *std.Io.Writer, patch: []const u8, ids: []const u32, magic_share: []const ?f32, mix: [mixes]Counts, lean: []const LeanRow, bans: BanCounts) !void {
+pub fn write(w: *std.Io.Writer, patch: []const u8, ids: []const u32, magic_share: []const ?f32, mix: [mixes]Counts, lean: []const LeanRow, bans: BanCounts, app: App) !void {
     try w.print("{s}\t{d}\t{s}\n", .{ magic, version, patch });
     for (ids, magic_share) |id, m| if (m) |x| try w.print("damage\t{d}\t{d:.3}\n", .{ id, x });
     for (mix, 0..) |m, b| try w.print("mix\t{d}\t{d}\t{d}\n", .{ b, m.games, m.wins });
     for (lean) |r| try w.print("lean\t{d}\t{t}\t{d}\t{d:.0}\t{d:.0}\t{d:.2}\t{d:.2}\n", .{ r.champion, r.role, r.games, r.gold, r.gold_sd, r.win, r.win_sd });
-    if (bans.games == 0) return;
-    try w.print("games\t{d}\n", .{bans.games});
-    const games: f64 = @floatFromInt(bans.games);
-    for (bans.ids, bans.banned) |id, n| if (n > 0) try w.print("ban\t{d}\t{d:.4}\n", .{ id, @min(1, @as(f64, @floatFromInt(n)) / games) });
+    if (bans.games > 0) {
+        try w.print("games\t{d}\n", .{bans.games});
+        const games: f64 = @floatFromInt(bans.games);
+        for (bans.ids, bans.banned) |id, n| if (n > 0) try w.print("ban\t{d}\t{d:.4}\n", .{ id, @min(1, @as(f64, @floatFromInt(n)) / games) });
+    }
+    for (app.builds) |b| {
+        try w.print("build\t{d}\t{t}\t{d}\t{d}\t{d}\t{d}\t{d}\t{s}\t{s}\n", .{
+            b.champion,                          b.role,                            b.games, b.boots, b.core[0], b.core[1], b.core[2],
+            if (b.hasOrder()) &b.order else "-", if (b.hasPath()) &b.path else "-",
+        });
+    }
+    // Names are one field: a tab or newline in one would break the line
+    for (app.items) |it| if (std.mem.findAny(u8, it.name, "\t\n") == null) try w.print("item\t{d}\t{s}\n", .{ it.id, it.name });
 }
 
 const testing = std.testing;
@@ -207,7 +300,12 @@ test "facts file round trip, unknown kinds skipped" {
     const rows = [_]LeanRow{.{ .champion = 119, .role = .bottom, .games = 900, .gold = 900, .gold_sd = 100, .win = -8, .win_sd = 1.5 }};
     var aw: std.Io.Writer.Allocating = .init(arena);
     const bans: BanCounts = .{ .games = 4000, .ids = &.{ 1, 2, 3 }, .banned = &.{ 1000, 0, 4 } };
-    try write(&aw.writer, "16.21", &.{ 1, 2, 3 }, &.{ 0.9, null, 0.05 }, .{ .{ .games = 10, .wins = 4 }, .{ .games = 20, .wins = 10 }, .{ .games = 5, .wins = 2 } }, &rows, bans);
+    const builds = [_]Build{
+        .{ .champion = 103, .role = .middle, .games = 5000, .boots = 3020, .core = .{ 6655, 3157, 3089 }, .order = "QWE".*, .path = "QEWQQRQWQWRWWEEREE".* },
+        .{ .champion = 1, .role = .top, .games = 300 },
+    };
+    const items = [_]Item{ .{ .id = 3020, .name = "Sorcerer's Shoes" }, .{ .id = 1, .name = "bad\tname" } };
+    try write(&aw.writer, "16.21", &.{ 1, 2, 3 }, &.{ 0.9, null, 0.05 }, .{ .{ .games = 10, .wins = 4 }, .{ .games = 20, .wins = 10 }, .{ .games = 5, .wins = 2 } }, &rows, bans, .{ .builds = &builds, .items = &items });
     try aw.writer.writeAll("someday\t1\t2\n");
     const f = try Facts.parse(arena, aw.written());
     try testing.expectEqualStrings("16.21", f.patch);
@@ -219,6 +317,11 @@ test "facts file round trip, unknown kinds skipped" {
     try testing.expectApproxEqAbs(0.25, f.banRate(1).?, 1e-6);
     try testing.expectEqual(0, f.banRate(2).?);
     try testing.expectApproxEqAbs(0.001, f.banRate(3).?, 1e-6);
+    try testing.expectEqualDeep(builds[0], f.buildOf(103, .middle).?);
+    try testing.expectEqualDeep(builds[1], f.buildOf(1, .top).?);
+    try testing.expectEqual(null, f.buildOf(103, .top));
+    try testing.expectEqualStrings("Sorcerer's Shoes", f.itemName(3020));
+    try testing.expectEqualStrings("", f.itemName(1));
     // A patch's first hours: too few games for any rate
     var early = f;
     early.games = ban_min_games - 1;
@@ -226,6 +329,8 @@ test "facts file round trip, unknown kinds skipped" {
     try testing.expectError(error.BadFacts, Facts.parse(arena, "meiolol-champs\t1\t16.21\nban\t1\t1.5\n"));
     try testing.expectError(error.BadFacts, Facts.parse(arena, "meiolol-champs\t1\t16.21\ndamage\t1\t1.5\n"));
     try testing.expectError(error.UnsupportedVersion, Facts.parse(arena, "meiolol-champs\t2\t16.21\n"));
+    try testing.expectError(error.BadFacts, Facts.parse(arena, "meiolol-champs\t1\t16.21\nbuild\t1\ttop\t9\t0\t0\t0\t0\tQWR\t-\n"));
+    try testing.expectError(error.BadFacts, Facts.parse(arena, "meiolol-champs\t1\t16.21\nbuild\t1\ttop\t9\t0\t0\t0\n"));
 }
 
 fn fuzzParse(valid: []const u8, s: *testing.Smith) !void {
@@ -237,6 +342,6 @@ fn fuzzParse(valid: []const u8, s: *testing.Smith) !void {
 }
 
 test "fuzz: a damaged facts file is parsed or refused" {
-    const valid: []const u8 = "meiolol-champs\t1\t16.21\ndamage\t1\t0.900\nmix\t0\t10\t4\nlean\t119\tbottom\t900\t900\t100\t-8.00\t1.50\ngames\t4000\nban\t1\t0.2500\n";
+    const valid: []const u8 = "meiolol-champs\t1\t16.21\ndamage\t1\t0.900\nmix\t0\t10\t4\nlean\t119\tbottom\t900\t900\t100\t-8.00\t1.50\ngames\t4000\nban\t1\t0.2500\nbuild\t103\tmiddle\t5000\t3020\t6655\t3157\t3089\tQWE\tQEWQQRQWQWRWWEEREE\nitem\t3020\tSorcerer's Shoes\n";
     try testing.fuzz(valid, fuzzParse, .{});
 }

@@ -28,6 +28,9 @@ const champion = @import("champion.zig");
 const champrank = @import("champrank.zig");
 const rankings = @import("rankings.zig");
 const pool_page = @import("pool.zig");
+const site_builds = @import("builds.zig");
+const builds_file = @import("../builds.zig");
+const ddragon = @import("../ddragon.zig");
 const Options = root.Options;
 const Site = root.Site;
 const File = root.File;
@@ -615,8 +618,48 @@ fn champFacts(site: *const Site, facts: learn.Facts) ![]const u8 {
     }
     const bans: core.champfacts.BanCounts = .{ .games = site.games, .ids = ids, .banned = banned };
     var aw: Writer.Allocating = .init(site.arena);
-    try core.champfacts.write(&aw.writer, site.patch, site.stats.ids[0..facts.champs.len], magic, facts.mix, if (site.lean) |l| l.rows else &.{}, bans);
+    try core.champfacts.write(&aw.writer, site.patch, site.stats.ids[0..facts.champs.len], magic, facts.mix, if (site.lean) |l| l.rows else &.{}, bans, try appBuilds(site));
     return aw.written();
+}
+
+/// Fewer games of a champion-role and the app shows no usual build for it
+const min_build_games = 100;
+
+/// Each champion-role's usual build for the app in game: the champion page's build (the
+/// previous patch's while this one's is thin), each kind's most played option, and its
+/// items' names
+fn appBuilds(site: *const Site) !core.champfacts.App {
+    const a = site.arena;
+    var out: std.ArrayList(core.champfacts.Build) = .empty;
+    var named: std.AutoArrayHashMapUnmanaged(u32, []const u8) = .empty;
+    for (site.champs) |ch| for (core.Role.all) |r| {
+        const p = site_builds.forChampion(site, site.view, ch, r) orelse continue;
+        const b = p.b;
+        if (b.games < min_build_games) continue;
+        var x: core.champfacts.Build = .{ .champion = ch.id, .role = r, .games = b.games };
+        if (top(b, .boots)) |v| x.boots = v[0];
+        if (top(b, .core3)) |v| for (x.core[0..@min(3, v.len)], v[0..@min(3, v.len)]) |*c, id| {
+            c.* = id;
+        };
+        if (top(b, .skills)) |v| if (v.len == 3 and std.mem.min(u32, v) >= 1 and std.mem.max(u32, v) <= 3) {
+            for (&x.order, v) |*k, slot| k.* = "QWE"[slot - 1];
+        };
+        // Two bits a level: 1 Q to 4 R
+        if (top(b, .skill_path)) |v| if (v.len * 16 >= builds_file.max_level) {
+            for (&x.path, builds_file.unpackPath(v)) |*k, slot| k.* = "QWER"[slot - 1];
+        };
+        for ([_]u32{x.boots} ++ x.core) |id| if (id != 0) if (ddragon.find(p.f.items, id)) |n| try named.put(a, id, n.name);
+        try out.append(a, x);
+    };
+    const items = try a.alloc(core.champfacts.Item, named.count());
+    for (items, named.keys(), named.values()) |*it, id, name| it.* = .{ .id = id, .name = name };
+    return .{ .builds = out.items, .items = items };
+}
+
+/// The most played option of `kind`, null with none
+fn top(b: builds_file.File.Build, kind: builds_file.Kind) ?[]const u32 {
+    const rows = b.get(kind) orelse return null;
+    return if (rows.options.len > 0) rows.options[0].v else null;
 }
 
 fn eqlStrings(a: []const []const u8, b: []const []const u8) bool {
