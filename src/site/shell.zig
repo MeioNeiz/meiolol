@@ -152,19 +152,22 @@ const search_loader =
 ;
 
 /// Bar and menu links for logins that opened a private page: Draft tester, and Admin
-/// once an admin page has opened. The pages mark it in this origin's localStorage
+/// once an admin page has opened, and on /download the tester zip's link above the
+/// apply form (ui/account.zig zip). The pages mark it in this origin's localStorage
 /// ("login"), so visitors' pages carry neither links nor paths. Those browsers also load
 /// the private numbers (site/pv.zig), which nginx serves to private logins only: for
 /// anyone else they are the login page's HTML, which never runs or styles
 const admin_link =
     \\<script>try{const r=localStorage.getItem("login");if(r=="tester"||r=="admin"){const ls=[["/private/tester","Draft tester"]];if(r=="admin")ls.push(["/admin","Admin"]);
     \\for(const n of document.querySelectorAll("header .links,header .c-sitemenu"))for(const[h,t]of ls){const a=document.createElement("a");a.href=h;a.textContent=t;n.insertBefore(a,n.querySelector(":scope>.lab"))}
+    \\addEventListener("DOMContentLoaded",()=>{const ap=document.querySelector(".c-apply");if(ap){const p=document.createElement("p"),a=document.createElement("a");a.href="/private/desktop/meiolol-desktop.zip";a.textContent="Download the tester build";p.append(a," (Windows, a zip: run meiolol-desktop.exe inside, it installs itself)");ap.before(p)}})
     \\const c=document.createElement("link");c.rel="stylesheet";c.href="/private/pv.css";const s=document.createElement("script");s.src="/private/pv.js";s.dataset.wasm="/private/pv.wasm";document.head.append(c,s)}}catch(e){}</script>
     \\
 ;
 
 /// The header's account slot: the chip named for a browser signed in (the account island
-/// stores the username on sign-in, ui/wasm/account.zig shown_as), else Log in and Sign up;
+/// stores the username on sign-in, ui/wasm/account.zig shown_as; an email shows its part
+/// before @), else Log in and Sign up, which the admin links' unhide skips (:not(.acct));
 /// the chip's Log out; data-in on the root while signed in (the foot, written after this
 /// runs, hides its Log in by CSS). A signed-in browser, and every private page, then asks
 /// /auth/me: the session's name and role ("login": tester or admin, for admin_link and the hidden
@@ -173,19 +176,19 @@ const admin_link =
 /// data-private on private pages
 const account_js =
     \\try{const L=localStorage,q=s=>document.querySelectorAll(s),m=document.getElementById("acct-menu");
-    \\const show=u=>{document.documentElement.toggleAttribute("data-in",!!u);for(const a of q("header a.acct"))a.hidden=!!u;for(const b of q("header .acct.me")){b.hidden=!u;if(u){b.textContent=u;b.title=u}}};
+    \\const show=u=>{document.documentElement.toggleAttribute("data-in",!!u);for(const a of q("header a.acct"))a.hidden=!!u;for(const b of q("header .acct.me")){b.hidden=!u;if(u){b.textContent=u.split("@")[0];b.title=u}}};
     \\const out=()=>{L.removeItem("account");L.removeItem("login");show("")};const u=L.getItem("account");if(u)show(u);
     \\m?.querySelector(".out")?.addEventListener("click",()=>fetch("/auth/logout",{method:"POST",headers:{"X-Meiolol-Action":"1"}}).finally(()=>{out();location.href="/"}));
     \\if(u||document.currentScript.hasAttribute("data-private"))fetch("/auth/me").then(r=>{if(r.status==401)out();return r.ok?r.json():null}).then(me=>{if(!me)return;
     \\const c=me.can||[],r=c.includes("view_admin")?"admin":c.includes("view_private")?"tester":"";L.setItem("account",me.username);if(r)L.setItem("login",r);else L.removeItem("login");show(me.username);
-    \\if(r=="admin")for(const a of q("header a[hidden],.c-subbar a[hidden]"))a.hidden=false}).catch(()=>{})}catch(e){}
+    \\if(r=="admin")for(const a of q("header a[hidden]:not(.acct),.c-subbar a[hidden]"))a.hidden=false}).catch(()=>{})}catch(e){}
 ;
 
 /// On the private pages any private login opens: shows the admin links at once to a
 /// browser marked an admin's (account_js checks the mark with /auth/me), else marks
 /// it a tester's for admin_link
 const private_mark =
-    \\<script>try{if(localStorage.getItem("login")=="admin")for(const a of document.querySelectorAll("header a[hidden],.c-subbar a[hidden]"))a.hidden=false;else localStorage.setItem("login","tester")}catch(e){}</script>
+    \\<script>try{if(localStorage.getItem("login")=="admin")for(const a of document.querySelectorAll("header a[hidden]:not(.acct),.c-subbar a[hidden]"))a.hidden=false;else localStorage.setItem("login","tester")}catch(e){}</script>
     \\
 ;
 

@@ -258,6 +258,7 @@ pub const css =
     \\    background: var(--ctl-bg); color: var(--text); font: inherit; font-weight: var(--w-m); text-decoration: none;
     \\    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
     \\  .c-site .bar > .acct:hover { background: var(--ctl-bg-2); }
+    \\  .c-site .bar > .acct.me { display: block; line-height: calc(var(--ctl) - 2px); text-align: left; }
     \\  .c-site .bar > .acct:not(.join, .me) { border-color: var(--brand); }
     \\  .c-site .bar > .join { margin-left: calc(var(--sp-2) - var(--sp-5)); border-color: var(--brand);
     \\    background: var(--brand); color: var(--on-brand); }
@@ -303,7 +304,9 @@ pub const css =
     \\  .c-sitefoot > .in { max-width: var(--wrap); margin: 0 auto; padding: 20px var(--gutter) 36px; }
     \\  .c-sitefoot p { margin: 0 0 var(--sp-3); }
     \\  .c-sitefoot nav { display: flex; flex-wrap: wrap; margin: 0 0 var(--sp-3); }
-    \\  .c-sitefoot nav > a { color: var(--muted); }
+    \\  .c-sitefoot nav > a { color: var(--t2); text-decoration: underline; text-decoration-color: var(--line-2);
+    \\    text-underline-offset: 3px; }
+    \\  .c-sitefoot nav > a:hover { color: var(--text); text-decoration-color: currentColor; }
     \\  .c-sitefoot:is(:root[data-in] *) a.acct { display: none; }
     \\  .c-sitefoot nav > a + a::before { content: "·"; display: inline-block; padding: 0 0.35em; color: var(--faint); }
     \\  .c-sitefoot .legal { max-width: 720px; margin: 0; }
