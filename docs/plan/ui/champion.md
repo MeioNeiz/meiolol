@@ -149,6 +149,28 @@ its kind. Candidates, data we have first (arch-stats.md):
   the games, 2-minute steps between, at most 7 buckets, under 100 games left out; dashed
   at the rate of the games with an item)
 - Side (blue, red) and games played on it in the last 30 days: new counting
+- End of game (CH10, LoLalytics' "Darius Stats": 13 averages as bars with rank of 112;
+  no other leader): a Trends card, rows Kills, Deaths, Assists, Level (per game), Gold,
+  Damage, Damage taken, CS, Vision (per minute, so long-game champions don't lead on
+  length alone); each row the value and "Nth of M" in the role, highest first (deaths
+  too: the head says so), M the head's rank set (tierRows' non-rare rows). The view's
+  games (30 days or patch, the lengths' window), Platinum+ under a rank pick as the
+  other Trends cards, and says so. Tally plan:
+  - Data: participants' kills, deaths, assists, champ_level, cs, vision_score, gold,
+    damage_to_champions, damage_taken and matches.duration_s; nothing new crawled.
+    NULL columns leave that player out of the tally
+  - stats.End (u8 kills, deaths, assists, level; u16 cs, vision; u32 gold, damage,
+    taken) on stats.Row as ends: [2][5]?End; scan's query reads the columns, scanFrom
+    partials.Player.end (player_cols, PlayerRow, dump). The partials restart on the type
+    change (a routine first build); ~18 B a player, +30% on the box's 2.2 GB, RAM ok
+  - Trend.ends: by role and champion, games with every column and sums (u64) of each
+    stat and of duration_s; TrendSink.add beside lengths, same window check
+  - Site: champion.zig roleData ranks the champion among tierRows' rows in the role on
+    each stat (per game or per minute), TrendsRole.ends: ?Ends { games, of, rows: [9]
+    { v: f32, rank: u16 } }, null under min_games; ui.champpage Trends draws the card
+  - Tests: stats.zig sink test (sums, NULL skipped, window), pipeline_test.zig fixture
+    games set the columns and check one champion's card numbers and rank; partials'
+    views-file check covers scanFrom against scan. ui-champtrends stays under 40 KB
 One chart style for all (Chart frame), two per row as Pick-up and Also play. Islands
 under the build, each loaded as it nears the screen: ui-champmore.wasm the matchups;
 ui-champtrends.wasm By patch, By game length, Players, Pick-up, Also play, By rank and

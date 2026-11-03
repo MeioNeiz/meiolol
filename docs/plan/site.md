@@ -143,8 +143,11 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
 
 ### Steps
 
-None open: the Later list below. CH0 on decisions.md's recommendations (Jacob to
-confirm): no blind-safe score (J2 measured no win)
+- CH10 End-of-game stats ranked in the role (LoLalytics only): plan in
+  docs/plan/ui/champion.md "More charts"; tally, card, tests
+
+CH0 on decisions.md's recommendations (Jacob to confirm): no blind-safe score (J2
+measured no win)
 
 ### Status
 
@@ -183,7 +186,6 @@ confirm): no blind-safe score (J2 measured no win)
 ### Later
 
 - Influence per opponent (bans into your pool's hard lanes, B3) and per rank filter
-- End-of-game stats ranked in the role (LoLalytics only)
 - Build variants (Kai'Sa AP, U.GG's tabs) as clusters of item paths
 
 ## Matchup page
