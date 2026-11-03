@@ -665,7 +665,7 @@ pub const Page = struct {
         const e: ?ds.DraftWhy = if (vs) |x| x.sc.draftWhy(p.teams) else null;
         var buf: [2 * ds.max_draft_parts]Gap = undefined;
         const g = gaps(&d, if (e) |*x| x else null, &buf);
-        std.mem.sort(Gap, g, {}, Gap.larger);
+        std.sort.pdq(Gap, g, {}, Gap.larger);
         var n: usize = 0;
         while (n < @min(g.len, max_lines) and @abs(g[n].pp) >= min_part) n += 1;
         const wa = if (vs != null) infos.get(p.which).word.s else "";

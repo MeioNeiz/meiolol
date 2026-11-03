@@ -436,9 +436,9 @@ const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore
 const ui_budget = 40 * 1024;
 /// -Dwasm-dev
 var wasm_dev = false;
-/// Families only logins load (/admin, /private): 64 KB (Jacob 27 Oct)
+/// Families only logins load (/admin, /private) may be bigger: 80 KB (Jacob 3 Nov)
 const ui_private = [_][]const u8{ "ui-tester", "ui-testercand", "ui-notes", "ui-admin", "ui-admincharts", "ui-admintraffic", "ui-adminops", "ui-adminmodels", "ui-adminlab", "ui-adminruns", "ui-pv" };
-const ui_private_budget = 64 * 1024;
+const ui_private_budget = 80 * 1024;
 
 const UiWasm = struct { name: []const u8, wasm: std.Build.LazyPath, js: std.Build.LazyPath };
 

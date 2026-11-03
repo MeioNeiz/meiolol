@@ -84,7 +84,7 @@ capped at 2 on the machine (MEIOLOL_DEV_MAX), small ones at 3 apart
 
 ## ui.wasm sizes
 
-Each page family's ui.wasm has a gzip budget (40 KB, the login families 64 KB; stack.md),
+Each page family's ui.wasm has a gzip budget (40 KB, the login families 80 KB; stack.md),
 measured as served: the .gz the site writer makes for nginx (std flate at its default
 level, src/store/raw.zig), the same bytes on any host. That runs 60-390 B over GNU gzip
 -9 on our files.

@@ -59,7 +59,7 @@ pub const Form = struct {
 
 pub fn view(h: *H, s: SignIn, f: *Form) N {
     if (!s.full and !f.open) return h.div(.{ .class = "c-signin line" }, .{
-        if (s.message.len > 0) h.span(.{}, .{s.message}) else h.span(.{}, .{W.line}),
+        h.span(.{}, .{if (s.message.len > 0) s.message else W.line.s}),
         button.view(h, .{ .s = .s, .on = h.on(f, .open) }, .{W.sign_in}),
     });
     const ready = !s.busy and f.user.len > 0 and f.pass.len > 0;

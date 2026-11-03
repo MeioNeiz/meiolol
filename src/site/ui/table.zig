@@ -242,7 +242,7 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                 };
                 out.appendAssumeCapacity(@intCast(i));
             }
-            std.sort.pdq(u32, out.items, t, before);
+            std.sort.heap(u32, out.items, t, before);
             return .{ .rows = out.items, .rare = rare };
         }
 
