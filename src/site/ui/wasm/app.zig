@@ -31,7 +31,11 @@ export fn main() void {
     const seq = root.call("getAttribute", .{zjb.constString("data-seq")}, zjb.Handle);
     defer seq.release();
     var buf: [16]u8 = undefined;
-    page_seq = std.fmt.parseInt(u32, seq.readString(&buf) catch return, 10) catch return;
+    // By hand: std.fmt.parseInt is 225 B of the wasm for this one attribute
+    for (seq.readString(&buf) catch return) |c| {
+        if (c < '0' or c > '9') return;
+        page_seq = page_seq *% 10 +% (c - '0');
+    }
     wanted = page_seq;
     zjb.global("window").call("addEventListener", .{ zjb.constString("meiolol"), zjb.fnHandle("appMessage", &onMessage) }, void);
     ui.toshell.out = toShell;
@@ -52,8 +56,12 @@ fn toShell(json: []const u8) void {
 }
 
 fn get() void {
-    var buf: [32]u8 = undefined;
-    dom.fetch(std.fmt.bufPrint(&buf, "app.bin?{d}", .{wanted}) catch return, 0, loaded);
+    var buf: [26]u8 = undefined;
+    const n = ui.fmt.decimal(&buf, wanted, false);
+    var url: [34]u8 = undefined;
+    @memcpy(url[0..8], "app.bin?");
+    @memcpy(url[8..][0..n.len], n);
+    dom.fetch(url[0 .. 8 + n.len], 0, loaded);
 }
 
 /// Other messages (status) carry no `app`: NaN, never newer

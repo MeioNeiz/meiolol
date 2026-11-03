@@ -8,6 +8,7 @@ const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
 const chart = @import("chart.zig");
+const fmt = @import("fmt.zig");
 const segmented = @import("segmented.zig");
 const card = @import("card.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -85,7 +86,7 @@ pub const Lane = struct {
                 const last: f32 = @floatFromInt(n - 1);
                 const at = struct {
                     fn f(x: f32, top: f32) u8 {
-                        return @intFromFloat(@round(x * top));
+                        return @intFromFloat(fmt.round(x * top));
                     }
                 }.f;
                 switch (l.press.pointer(ev)) {
@@ -170,7 +171,7 @@ pub const Lane = struct {
         var ticks: std.ArrayList(chart.Tick) = .empty;
         for ([_]f32{ p.y.hi, p.y.hi / 2, 0, p.y.lo / 2, p.y.lo }) |v| ticks.append(h.mem, .{
             .at = p.py(v),
-            .label = phrase.num(h, .signed, @as(i32, @intFromFloat(@round(v)))),
+            .label = phrase.num(h, .signed, @as(i32, @intFromFloat(fmt.round(v)))),
             .zero = v == 0,
         }) catch {
             h.oom = true;
@@ -246,7 +247,7 @@ pub const Held = struct {
 };
 
 fn round(v: f32) i32 {
-    return @intFromFloat(@round(v));
+    return @intFromFloat(fmt.round(v));
 }
 
 pub const css =

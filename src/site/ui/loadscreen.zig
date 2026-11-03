@@ -54,7 +54,7 @@ fn team(h: *H, cards: []const Card, side: Side, draft: ?f32) N {
     return h.section(.{ .class = "team", .data_side = side }, .{
         h.h2(.{}, .{
             if (side == .us) W.us else W.them,
-            if (draft) |d| h.span(.{ .class = "draft", .style = h.vars(.{ .c = fmt.wrColour(d / 100, 0.2) }) }, .{W.draft.with(h, .{ .p = @as(u32, @intFromFloat(@round(d))) })}) else null,
+            if (draft) |d| h.span(.{ .class = "draft", .style = h.vars(.{ .c = fmt.wrColour(d / 100, 0.2) }) }, .{W.draft.with(h, .{ .p = @as(u32, @intFromFloat(fmt.round(d))) })}) else null,
         }),
         h.el(.ol, .{ .class = "cards" }, .{list.done()}),
     });

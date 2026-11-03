@@ -185,10 +185,8 @@ const Reader = struct {
                     r.fail(error.Truncated);
                     return &.{};
                 }
-                const items = r.a.alloc(p.child, n) catch {
-                    r.fail(error.OutOfMemory);
-                    return &.{};
-                };
+                const raw = r.bytesFor(n, @sizeOf(p.child), .of(p.child)) orelse return &.{};
+                const items: []p.child = @as([*]p.child, @ptrCast(@alignCast(raw)))[0..n];
                 for (items) |*x| x.* = r.read(p.child);
                 return items;
             },
@@ -205,6 +203,20 @@ const Reader = struct {
             },
             else => @compileError("data: can't decode " ++ @typeName(T)),
         }
+    }
+
+    /// One allocation path for every slice type: Allocator.alloc is a copy per element
+    /// size and alignment (ui.wasm size)
+    noinline fn bytesFor(r: *Reader, n: usize, size: usize, a: std.mem.Alignment) ?[*]u8 {
+        const total = std.math.mul(usize, n, size) catch {
+            r.fail(error.OutOfMemory);
+            return null;
+        };
+        if (total == 0) return @ptrFromInt(a.toByteUnits());
+        return r.a.rawAlloc(total, a, @returnAddress()) orelse {
+            r.fail(error.OutOfMemory);
+            return null;
+        };
     }
 
     /// Values 0, 1, 2 ... in order: a range check stands for the lookup

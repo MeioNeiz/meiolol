@@ -61,7 +61,7 @@ pub fn niceCeil(value: f32) f32 {
     var unit: f32 = 1;
     while (true) : (unit *= 10) {
         for ([_]f32{ 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8 }) |k| {
-            if (k * unit != @round(k * unit)) continue;
+            if (k * unit != fmt.round(k * unit)) continue;
             if (k * unit >= value) return k * unit;
         }
     }

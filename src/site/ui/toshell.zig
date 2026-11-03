@@ -3,6 +3,7 @@
 //! `out` at bridge.js's meiolol.send; outside the shell (a dump in a browser, the
 //! gallery) it goes nowhere
 const std = @import("std");
+const fmt = @import("fmt.zig");
 
 pub const Out = union(enum) {
     signin: SignIn,
@@ -67,7 +68,11 @@ fn value(w: *std.Io.Writer, x: anytype) std.Io.Writer.Error!void {
     const T = @TypeOf(x);
     switch (@typeInfo(T)) {
         .bool => try w.writeAll(if (x) "true" else "false"),
-        .int => try w.print("{d}", .{x}),
+        .int => {
+            var buf: [26]u8 = undefined;
+            if (x < 0) try w.writeByte('-');
+            try w.writeAll(fmt.decimal(&buf, @abs(x), false));
+        },
         // As std.json reads a void union field
         .void => try w.writeAll("{}"),
         .pointer => try string(w, x),

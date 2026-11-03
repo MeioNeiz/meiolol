@@ -55,7 +55,7 @@ pub const Dom = struct {
         defer val.release();
         // An input's value is its property: the attribute is only the default. Setting
         // the same text leaves the caret alone
-        if (std.mem.eql(u8, name, "value")) return d.node(id).set("value", val);
+        if (tree.eql(name, "value")) return d.node(id).set("value", val);
         const k = zjb.string(name);
         defer k.release();
         d.node(id).call("setAttribute", .{ k, val }, void);
@@ -360,7 +360,7 @@ fn location(comptime part: []const u8, buf: []u8) []const u8 {
 }
 
 fn mapped(key: []const u8) ?Out {
-    for (outs) |o| if (std.mem.eql(u8, o.key, key)) return o;
+    for (outs) |o| if (tree.eql(o.key, key)) return o;
     return null;
 }
 
@@ -369,7 +369,7 @@ fn param(list: []const u8, key: []const u8) ?[]const u8 {
     var it = std.mem.tokenizeScalar(u8, list, '&');
     while (it.next()) |kv| {
         const eq = std.mem.findScalar(u8, kv, '=') orelse continue;
-        if (std.mem.eql(u8, kv[0..eq], key)) return kv[eq + 1 ..];
+        if (tree.eql(kv[0..eq], key)) return kv[eq + 1 ..];
     }
     return null;
 }
@@ -434,7 +434,7 @@ fn address(w: *std.Io.Writer, s: []const u8) !void {
     while (qs.next()) |kv| {
         const k = kv[0 .. std.mem.findScalar(u8, kv, '=') orelse kv.len];
         if (for (outs) |o| {
-            if (o.to == .query and std.mem.eql(u8, o.as, k)) break true;
+            if (o.to == .query and tree.eql(o.as, k)) break true;
         } else false) continue;
         try w.print("{c}{s}", .{ @as(u8, if (n == 0) '?' else '&'), kv });
         n += 1;

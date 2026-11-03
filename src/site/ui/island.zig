@@ -127,7 +127,7 @@ pub fn Runtime(comptime Dom: type) type {
                 if (w.written().len == mark and before > 1) w.shrinkRetainingCapacity(before);
             }
             const now = w.written();
-            if (std.mem.eql(u8, now, if (live.len == 0) "#" else live)) return;
+            if (tree.eql(now, if (live.len == 0) "#" else live)) return;
             // A bare "#" keeps the page from jumping to its top
             r.dom.setHash(now, push);
         }

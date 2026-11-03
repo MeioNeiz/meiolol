@@ -140,7 +140,7 @@ pub const Event = struct {
     /// toggle: the <details> is open now. The diff setting `open` fires a toggle too, so
     /// a handler sets its state from this and never flips it
     pub fn opened(ev: *const Event) bool {
-        return std.mem.eql(u8, ev.text, "open");
+        return eql(ev.text, "open");
     }
 };
 
@@ -206,7 +206,7 @@ pub const Tree = struct {
     }
 
     pub fn attr(t: *const Tree, n: N, name: []const u8) ?[]const u8 {
-        for (t.attrsOf(n)) |a| if (std.mem.eql(u8, a.name, name)) return a.value;
+        for (t.attrsOf(n)) |a| if (eql(a.name, name)) return a.value;
         return null;
     }
 
@@ -227,7 +227,7 @@ pub const Tree = struct {
 
     /// First node in pre-order whose attribute `name` is `value` (null: present)
     pub fn find(t: *const Tree, from: N, name: []const u8, value: ?[]const u8) ?N {
-        if (t.attr(from, name)) |v| if (value == null or std.mem.eql(u8, v, value.?)) return from;
+        if (t.attr(from, name)) |v| if (value == null or eql(v, value.?)) return from;
         for (t.kidsOf(from)) |k| if (t.find(k, name, value)) |f| return f;
         return null;
     }
@@ -264,6 +264,14 @@ pub const List = struct {
 };
 
 /// The builder. Never fails mid-expression: out of memory is sticky and checked once
+/// Byte strings equal, as a plain loop: std.mem.eql's vector version is 660 B of every
+/// ui.wasm, for strings a few bytes long
+pub fn eql(a: []const u8, b: []const u8) bool {
+    if (a.len != b.len) return false;
+    for (a, b) |x, y| if (x != y) return false;
+    return true;
+}
+
 pub const H = struct {
     mem: Allocator,
     t: *Tree,
@@ -311,7 +319,11 @@ pub const H = struct {
             const name = (if (i == 0) "--" else ";--") ++ f ++ ":";
             const X = @TypeOf(x);
             if (X == figures.WrColour or X == figures.Step or X == figures.Fill) {
-                w.print(h.mem, name ++ "{f}", .{x}) catch {
+                var buf: [64]u8 = undefined;
+                var bw: std.Io.Writer = .fixed(&buf);
+                x.format(&bw) catch {};
+                w.appendSlice(h.mem, name) catch {};
+                w.appendSlice(h.mem, bw.buffered()) catch {
                     h.oom = true;
                 };
             } else {
@@ -505,7 +517,11 @@ pub const H = struct {
                 for (xs) |x| h.kid(x);
             },
             .text => |s| h.run.appendSlice(h.mem, s) catch {},
-            .int => |v| h.run.print(h.mem, "{d}", .{v}) catch {},
+            .int => |v| {
+                var buf: [26]u8 = undefined;
+                if (v < 0) h.run.append(h.mem, '-') catch {};
+                h.run.appendSlice(h.mem, figures.decimal(&buf, @abs(v), false)) catch {};
+            },
             .float => |v| h.number(&h.run, v),
         };
         h.flushRun();

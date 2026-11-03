@@ -53,15 +53,15 @@ pub fn Diff(comptime O: type) type {
             const y = d.new.node(n);
             y.dom = x.dom;
             if (y.tag == .@"#text") {
-                if (!std.mem.eql(u8, x.text, y.text)) d.o.data(y.dom, y.text);
+                if (!tree.eql(x.text, y.text)) d.o.data(y.dom, y.text);
                 return;
             }
             const oa = d.old.attrsOf(o);
             for (d.new.attrsOf(n)) |na| {
                 const was = for (oa) |a| {
-                    if (a.name.ptr == na.name.ptr or std.mem.eql(u8, a.name, na.name)) break a.value;
+                    if (a.name.ptr == na.name.ptr or tree.eql(a.name, na.name)) break a.value;
                 } else null;
-                if (was == null or !std.mem.eql(u8, was.?, na.value)) d.o.attr(y.dom, na.name, na.value);
+                if (was == null or !tree.eql(was.?, na.value)) d.o.attr(y.dom, na.name, na.value);
             }
             for (oa) |a| {
                 if (d.new.attr(n, a.name) == null) d.o.del(y.dom, a.name);
@@ -117,7 +117,7 @@ pub fn Diff(comptime O: type) type {
             }
             // Middle: match by key (unkeyed: by tag and order), keep the longest run already
             // in order, move the rest
-            var map: std.AutoHashMapUnmanaged(u64, u32) = .empty;
+            var map: std.HashMapUnmanaged(u64, u32, KeyHash, 80) = .empty;
             var ord: [64]u32 = @splat(0);
             for (ok[s..oe], s..) |k, j| {
                 map.put(d.a, matchKey(d.old.node(k), &ord), @intCast(j)) catch {};
@@ -185,3 +185,16 @@ fn lis(a: std.mem.Allocator, src: []const i32) ![]bool {
     while (k >= 0) : (k = prev[@intCast(k)]) keep[@intCast(k)] = true;
     return keep;
 }
+
+/// A multiply in place of std's wyhash, which brings a 128-bit multiply into every
+/// ui.wasm. The high half folded down: the map indexes by low bits, and siblings'
+/// matchKeys differ above the tag byte
+const KeyHash = struct {
+    pub fn hash(_: KeyHash, k: u64) u64 {
+        const x = k *% 0x9e3779b97f4a7c15;
+        return x ^ (x >> 32);
+    }
+    pub fn eql(_: KeyHash, a: u64, b: u64) bool {
+        return a == b;
+    }
+};

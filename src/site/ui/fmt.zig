@@ -89,7 +89,7 @@ pub fn fixed(w: *W, x: anytype, comptime places: u4, trim: bool) W.Error!void {
     comptime std.debug.assert(places <= 9);
     const scale: f64 = comptime std.math.pow(f64, 10, places);
     const v: f64 = @floatCast(x);
-    const r = @round(@abs(v) * scale);
+    const r = round(@abs(v) * scale);
     if (!(r < 1e15)) return w.writeAll("0");
     const n: u64 = @intFromFloat(r);
     const unit: u64 = @intFromFloat(scale);
@@ -112,6 +112,12 @@ pub fn fixed(w: *W, x: anytype, comptime places: u4, trim: bool) W.Error!void {
     try w.writeAll(fig[0..len]);
 }
 
+/// @round (halves away from zero) by the float floor wasm has: @round is compiler-rt's
+/// round and round_f32 in every ui.wasm that calls it
+pub fn round(x: f64) f64 {
+    return std.math.copysign(@floor(@abs(x) + 0.5), x);
+}
+
 fn int(w: *W, x: Int, sep: bool) W.Error!void {
     if (x.neg) try w.writeByte('-');
     try digits(w, x.mag, sep);
@@ -121,6 +127,11 @@ fn int(w: *W, x: Int, sep: bool) W.Error!void {
 /// every three digits when `sep`
 fn digits(w: *W, v: u64, sep: bool) W.Error!void {
     var buf: [26]u8 = undefined;
+    return w.writeAll(decimal(&buf, v, sep));
+}
+
+/// `v`'s digits at the end of `buf`, for a caller without a writer
+pub fn decimal(buf: *[26]u8, v: u64, sep: bool) []const u8 {
     var i: usize = buf.len;
     var n = v;
     var k: u8 = 0;
@@ -134,7 +145,7 @@ fn digits(w: *W, v: u64, sep: bool) W.Error!void {
         n /= 10;
         if (n == 0) break;
     }
-    return w.writeAll(buf[i..]);
+    return buf[i..];
 }
 
 fn sign(w: *W, v: anytype) W.Error!void {
@@ -192,7 +203,7 @@ pub const Step = struct {
 
     pub fn format(c: Step, w: *W) W.Error!void {
         if (c.s == 0) return w.writeAll("var(--s0)");
-        try w.print("var(--{s}{d})", .{ if (c.low) "lo" else "hi", c.s });
+        try stop(w, "", if (c.low) "lo" else "hi", c.s);
     }
 
     /// The cell fill for this step (fills stop at step 3)
@@ -207,7 +218,7 @@ pub const Fill = struct {
 
     pub fn format(f: Fill, w: *W) W.Error!void {
         if (f.of.s == 0) return w.writeAll("var(--f-0)");
-        try w.print("var(--f-{s}{d})", .{ if (f.of.low) "lo" else "hi", @min(f.of.s, 3) });
+        try stop(w, "f-", if (f.of.low) "lo" else "hi", @min(f.of.s, 3));
     }
 };
 
@@ -245,16 +256,32 @@ pub const WrColour = struct {
         const side = if (c.pts < 0) "lo" else "hi";
         const x = @abs(c.pts);
         if (x < 0.05) return w.writeAll("var(--s0)");
-        if (x >= wr_stops[wr_stops.len - 1]) return w.print("var(--{s}4)", .{side});
+        if (x >= wr_stops[wr_stops.len - 1]) return stop(w, "", side, 4);
         var i: usize = 1;
         while (x >= wr_stops[i]) i += 1;
         const t = (x - wr_stops[i - 1]) / (wr_stops[i] - wr_stops[i - 1]);
-        const near: u8 = @round(100 * (1 - t));
-        if (near == 100) return w.print("var(--{s}{d})", .{ side, i });
-        if (near == 0) return w.print("var(--{s}{d})", .{ side, i + 1 });
-        try w.print("color-mix(in oklab,var(--{s}{d}) {d}%,var(--{s}{d}))", .{ side, i, near, side, i + 1 });
+        const near: u8 = @intFromFloat(round(100 * (1 - t)));
+        if (near == 100) return stop(w, "", side, i);
+        if (near == 0) return stop(w, "", side, i + 1);
+        try w.writeAll("color-mix(in oklab,");
+        try stop(w, "", side, i);
+        try w.writeByte(' ');
+        try digits(w, near, false);
+        try w.writeAll("%,");
+        try stop(w, "", side, i + 1);
+        try w.writeByte(')');
     }
 };
+
+/// var(--hi2), var(--f-lo3): one of the scale's colours by step 1..4, without std's
+/// print (ui.wasm size)
+fn stop(w: *W, prefix: []const u8, side: []const u8, s: usize) W.Error!void {
+    try w.writeAll("var(--");
+    try w.writeAll(prefix);
+    try w.writeAll(side);
+    try w.writeByte('0' + @as(u8, @intCast(s)));
+    try w.writeByte(')');
+}
 
 /// Civil.month - 1 to its name
 pub const months_short = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };

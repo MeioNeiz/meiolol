@@ -376,7 +376,7 @@ fn pct(x: f32) f32 {
 
 /// `pct` as a whole number
 fn share(x: f32) u32 {
-    return @intFromFloat(@round(pct(x)));
+    return @intFromFloat(fmt.round(pct(x)));
 }
 
 const words = struct {
