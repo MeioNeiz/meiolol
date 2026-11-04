@@ -5666,29 +5666,35 @@ Reading it:
 
 `meiolol truth --data data/cubes-20261104 --patch 16.21` (the box's cubes of 4 Nov, 14
 origins, 33M player rows, 49 s and 5.1 GB on the Mac at 4 threads; meio.zig at
-fad6ef0c, default options). Meio minus the raw 30 days, milli-nats a target game, every
+4402182c, default options). Meio minus the raw 30 days, milli-nats a target game, every
 region, all ranks (negative: Meio better); unseen: Meio minus the champion-role's 30-day
 rate on cells the 30 days has under 10 games for; full tables:
-data/team/2026-11-04-meio/truth-16.21-meio-fad6ef0c.md:
+data/team/2026-11-04-meio/truth-16.21-meio-4402182c.md:
 
 | cell | day 0 | day 1 | days 2-3 | days 4-7 | 8+ | unseen (all days) | in range |
 | --- | --: | --: | --: | --: | --: | --: | --: |
-| champion-role | -0.01 (ns) | -0.03 | -0.03 | -0.01 | -0.01 | | 89% |
-| matchup | -1.17 | -1.13 | -1.00 | -0.82 | -0.67 | -4.97 | 87% |
-| duo | -0.85 | -0.81 | -0.73 | -0.62 | -0.57 | -8.05 | 87% |
-| item win rate | -0.16 | -0.18 | -0.15 | -0.12 | -0.10 | -1.76 | 89% |
-| keystone win rate | -0.12 | -0.13 | -0.12 | -0.08 | -0.06 | +2.08 | 84% |
+| champion-role | -0.02 | -0.04 (ns) | -0.03 | -0.02 | -0.01 | | 89% |
+| matchup | -1.18 | -1.13 | -1.00 | -0.82 | -0.67 | -6.02 | 87% |
+| duo | -0.85 | -0.80 | -0.72 | -0.61 | -0.56 | -8.82 | 87% |
+| item win rate | -0.19 | -0.20 | -0.17 | -0.13 | -0.10 | -2.97 | 88% |
+| keystone win rate | -0.13 | -0.15 | -0.13 | -0.09 | -0.07 | -2.68 | 85% |
 
 Every value beyond 2 se unless marked. Meio beats the raw 30 days for every win-rate kind
-in every bucket, and the raw patch in every row. Champion-role ties at all ranks but
-wins within each bracket (Iron-Silver -1.25, Diamond+ -0.06 over all days). EUW1 alone,
-all days: champion -0.07, matchup -2.66, duo -1.84, item -0.39, keystone -0.33. Unseen
-combos beat the fallback except keystones at all ranks (+2.08 +- 0.76; Gold-Emerald
-+0.50 ns, Diamond+ -3.19, EUW1 -3.54). Ranges hold 84-91%: a little wide, not narrow
-(the check widens by the target's noise approximately). The first read (21fdd222) had
-Meio trailing by ~1 milli-nat on champion-role, duo, item and keystone: rate() at all
-ranks and every region read the unknown-rank, other-region baseline. Item and keystone
-shares and gold at 14 have no Meio number yet.
+in every bucket, and the raw patch in every row. Champion-role nearly ties at all ranks
+but wins within each bracket (Iron-Silver -1.25, Diamond+ -0.06 over all days). EUW1
+alone, all days: champion -0.07, matchup -2.66, duo -1.84, item -0.40, keystone -0.34;
+unseen keystone -5.91, item -5.17. Unseen combos beat the fallback in every kind and
+bracket (keystone: Iron-Silver -10.06, Gold-Emerald -3.67, Diamond+ -4.82). Ranges hold
+85-92%: a little wide, not narrow (the check widens by the target's noise
+approximately). Item and keystone shares and gold at 14 have no Meio number yet.
+
+Two estimator bugs found on the way: rate() at all ranks and every region read the
+unknown-rank, other-region baseline (Meio trailed by ~1 milli-nat; fixed fad6ef0c), and
+rare champion-roles and seldom-taken keystones or items shrank towards 50% or the
+champion's rate, though they win less (off-role champion-roles under 100 games in 30
+days win 34%; a keystone in under 0.1% of a champion's games 43% against 49%): unseen
+keystones were +2.08 worse than the fallback. Both now shrink to a line in their log
+share (5fb861e5, 4402182c).
 
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 

@@ -166,7 +166,7 @@ the default switch (E0b). E10 follows E7; E11 follows each estimate that passes 
 - E2 (meio-truth): `meiolol truth` reads the day cubes, scores Meio as a third mode
   over eight cell kinds (the locks' keystone, item and rank cuts), with unseen-combo and
   range checks and `--tsv` for the method page. 16.20 -> 16.21: Meio beats both raw
-  modes on every win-rate kind, champion-role ties at all ranks; unseen keystones fail
+  modes on every win-rate kind and on unseen combos, champion-role ties at all ranks
   (docs/model.md "Meio in the truth test"). Daily in the box's web loop:
   data/truth-<patch>.md and .tsv. 16.21 -> 16.22 scored as its days arrive
 - Champion page blocks follow the region and period picks: players' win rates, the
