@@ -324,7 +324,8 @@ How to write a line:
   week's shares (EUW1 Diamond+ 75%; raw patch 68-75%), missing above and below about
   equally (8.5 / 10.2%). Rare choices win less than Meio says (under 100 patch games: 16%
   below range, 8% above), unrelated to pick-rate trends. Sure: 16.21, 14 origins. Site:
-  share ranges include both. Evidence: docs/model.md "Which side Meio misses on"
+  share ranges include both. Evidence: docs/model.md "Lock stacks in the truth test",
+  "Which side Meio misses on"
 - (early) An item nerf costs the champions that build it: on 16.21 Riot cut Hubris for
   ranged champions, and those that built it in most games (Graves jungle, Jhin bot,
   Quinn top) fell about 0.3-0.4 points against their role; a full-exposure change is
