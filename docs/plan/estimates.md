@@ -55,7 +55,7 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
 
 ## Steps
 
-- E0 Jacob's choices. (a) Name. Recommended: "Meio", as in meio.lol ("meio": the middle,
+- E0 Jacob's choices. (a) Name: "Meio" (J34), as in meio.lol ("meio": the middle,
   the means). The switch would read `30 days | Patch 16.21 | Meio`, captioned "our
   estimate for today's patch, from every game". Others: "Now", "Best read", "Forecast".
   (b) The default stays 30 days until E2's gate holds for two patches, then becomes Meio

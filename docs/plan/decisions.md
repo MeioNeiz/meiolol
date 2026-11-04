@@ -114,6 +114,11 @@ recommendations"). A later decision that overrides an earlier one says so.
 - nn on the GPU: planned, not now
 - J33 (30 Oct) Squads: yes, a minimal public form (invite-link pages, noindex, Riot IDs
   shown to members only, games together, weekly recap), built later, once a lane frees
+- J34 (4 Nov) Meio, the estimate mode (Jacob's "smart"): named Meio. Previous patches cut the
+  error with fewer games; it predicts combinations with few or no games (another keystone,
+  another matchup) from what it knows. Champion page locks: click almost anything and
+  every other block follows it. Needs experiments, tests, data analysis and UI design,
+  and more components. docs/plan/estimates.md
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built
 - Q3 Ban suggestions in scope: yes, several with games and range, never auto-ban
@@ -156,7 +161,7 @@ Product:
 - Champion page CH0: (d) trends by patch, by day only inside the newest patch; (e) no
   blind-safe score (J2 measured no win), rune rows by melee or ranged opponent yes,
   purchases by gold lead later
-- Estimates E0: name "Meio"; default stays 30 days until E2 holds two patches; EUW and
+- Estimates E0: default stays 30 days until E2 holds two patches; EUW and
   every region now
 - Lab P3 test-look rule (lab-frontier.md): accept as written (2004Z's test, the ladder
   as listed, comp leans on win-draft as declared)
