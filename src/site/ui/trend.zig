@@ -24,7 +24,7 @@ pub const Point = struct {
     sub: ?tree.Text = null,
     /// Win rate in %
     v: f32,
-    /// Half its 80% range, points (fmt.range); past fmt.wide_range the dot is grey and
+    /// Half its 80% range, points (fmt.range); past fmt.wide_range the dot is grey (step 0) and
     /// the scale doesn't stretch to the band
     range: f32 = 0,
     /// The tip's figures after the label ("48.7% of 23,166 · pick 7.6%")
@@ -142,7 +142,7 @@ pub const Trend = struct {
             xs.append(h.mem, .{ .at = p.px(i), .label = pt.label, .sub = pt.sub }) catch {
                 h.oom = true;
             };
-            over.add(chart.dot(h, p, i, pt.v, if (fmt.wide(pt.range)) null else fmt.Step.of(pt.v - t.ref, fmt.win_cuts)));
+            over.add(chart.dot(h, p, i, pt.v, if (fmt.wide(pt.range)) fmt.Step{} else fmt.Step.of(pt.v - t.ref, fmt.win_cuts)));
         }
         if (n > 0) over.add(chart.endLabel(h, p, v[n - 1], phrase.num(h, .rate, v[n - 1])));
         if (t.tip) |i| if (i < n) {
