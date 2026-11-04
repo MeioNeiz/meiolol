@@ -1,4 +1,4 @@
-# Contextual builds (design note; keystone lock built, the rest not)
+# Contextual builds (design note; keystone lock built; the data design moves to champion-locks.md)
 
 Jacob (builds.md answers 2): choosing a rune or one or more items filters the rest of
 the BuildPanel to games with that choice ("with Conqueror, what do people buy"), as
