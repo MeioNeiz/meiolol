@@ -751,6 +751,16 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(null, (try site.ui.data.decode(arena, site.ui.champpage.BuildData, none)).roles[0].build);
         try testing.expectEqual(null, try loaded.get(arena, try lock(arena, "", 1, "build", "nobody", .top, .plat, "ks8010")));
         try testing.expectEqual(null, try loaded.get(arena, try lock(arena, "", 1, "build", "darius", .top, .plat, "vs82,ks8010")));
+        // The page's own lock set rendered in: the LockBar, the answer inline for the
+        // island, the opponent by name; a set not in its one form renders unlocked
+        const page = (try loaded.getLocked(arena, "champions/darius/top.html", "ks8010,vs82")).?;
+        try testing.expect(std.mem.find(u8, page, "data-lk=\"ks8010,vs82\"") != null);
+        try testing.expect(std.mem.find(u8, page, "data-ans=\"") != null);
+        try testing.expect(std.mem.find(u8, page, "class=\"c-lockbar\"") != null);
+        try testing.expect(std.mem.find(u8, page, "vs Mordekaiser") != null);
+        const odd = (try loaded.getLocked(arena, "champions/darius/top.html", "vs82,ks8010")).?;
+        try testing.expect(std.mem.find(u8, odd, "data-lk=") == null);
+        try testing.expect(std.mem.find(u8, odd, "class=\"c-lockbar\"") == null);
     }
     var out_dir = try std.Io.Dir.cwd().openDir(io, out, .{ .iterate = true });
     defer out_dir.close(io);

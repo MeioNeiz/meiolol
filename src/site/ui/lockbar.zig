@@ -117,6 +117,8 @@ pub const LockBar = struct {
     /// The games under every lock and their wins; null while the answer is out
     games: ?u32 = null,
     wins: u32 = 0,
+    /// What follows the locks when not the whole page ("Build only")
+    scope: ?tree.Text = null,
 
     pub const Msg = union(enum) { remove: Kind, clear };
 
@@ -149,6 +151,7 @@ pub const LockBar = struct {
         return h.div(.{ .class = "c-lockbar", .role = "group", .aria_label = W.locks }, .{
             h.div(.{ .class = "chips" }, .{chips.done()}),
             line,
+            if (b.scope) |x| h.span(.{ .class = "s" }, .{x}) else .none,
             button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(b, .clear) }, .{W.clear}),
         });
     }
@@ -164,15 +167,16 @@ fn artKind(k: Kind) art.Kind {
 
 pub const css =
     \\@layer components {
-    \\  .c-lockbar { display: flex; align-items: center; gap: var(--sp-2) var(--sp-3); min-width: 0;
+    \\  .c-lockbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); min-width: 0;
     \\    font-size: var(--fs-s); color: var(--muted); }
-    \\  .c-lockbar > .chips { display: flex; gap: var(--sp-2); min-width: 0; overflow-x: auto; scrollbar-width: none; }
+    \\  .c-lockbar > .chips { display: flex; gap: var(--sp-2); min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
     \\  .c-lockbar > .chips > .c-chip { flex: none; padding-left: 6px; border-color: var(--focus); color: var(--text); }
     \\  .c-lockbar .c-chip .c-art { --sz: 20px; }
     \\  .c-lockbar > .n { white-space: nowrap; font-variant-numeric: tabular-nums; }
     \\  .c-lockbar > .n > .w { font-weight: var(--w-b); color: var(--t2); }
     \\  .c-lockbar > .n > .w > small { margin-left: 3px; font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
     \\  .c-lockbar > .n > .w[data-wide] { opacity: 0.55; }
+    \\  .c-lockbar > .s { white-space: nowrap; color: var(--faint); }
     \\  .c-lockbar > .c-btn { margin-left: auto; }
     \\}
     \\
@@ -192,7 +196,7 @@ pub fn gallery(g: *Gallery) void {
         h.oom = true;
         return;
     };
-    b.* = .{ .set = set, .games = 1284, .wins = 669 };
+    b.* = .{ .set = set, .games = 1284, .wins = 669, .scope = plain("Build only") };
     const core = demo.darius.slots[3].options[0].art;
     g.add("Conqueror and a core path locked: 1,284 games under both", b.view(h, &.{
         .{ .kind = .keystone, .art = &.{.{ .name = "Conqueror", .src = "" }}, .text = "Conqueror" },

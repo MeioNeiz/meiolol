@@ -16,6 +16,7 @@ const lockanswer = @import("../lockanswer.zig");
 const Role = core.Role;
 const cp = ui.champpage;
 const Site = @import("root.zig").Site;
+const Champ = @import("root.zig").Champ;
 
 const log = std.log.scoped(.site);
 
@@ -77,11 +78,27 @@ pub const Answers = struct {
 /// `rest` (a path under the view's directory, after `prefix`) answered from `s`, the
 /// view's site, in `s.arena`; null for a path that names nothing
 pub fn answer(s: *const Site, x: *const Answers, gpa: std.mem.Allocator, rest: []const u8) !?[]const u8 {
-    const a = s.arena;
     const q = parse(rest) orelse return null;
     const ch = s.champBySlug(q.slug) orelse return null;
+    const d = try build(s, x, gpa, ch, q.role, q.rank, &q.locks) orelse return null;
+    var out: std.ArrayList(u8) = .empty;
+    try ui.data.encode(s.arena, cp.BuildData, d, &out);
+    return out.items;
+}
+
+/// The champion page's server-rendered lock set: `lk` (the query's) as Locks.format
+/// writes it, else null (the page renders unlocked and the island asks for its own)
+pub fn pageLocks(lk: []const u8) ?lockanswer.Locks {
+    const locks = canonical(lk) orelse return null;
+    return if (locks.any()) locks else null;
+}
+
+/// `ch`'s build in `r` at rank `k` under `locks`, in `s.arena`; null when the view's
+/// patch or region isn't in the table
+pub fn build(s: *const Site, x: *const Answers, gpa: std.mem.Allocator, ch: Champ, r: Role, k: cp.Rank, locks: *const lockanswer.Locks) !?cp.BuildData {
+    const a = s.arena;
     const t = &x.table;
-    const tier: []const u8 = if (q.rank == .plat) "PLATINUM" else builds.rank_tiers[@backingInt(q.rank) - 1];
+    const tier: []const u8 = if (k == .plat) "PLATINUM" else builds.rank_tiers[@backingInt(k) - 1];
     const f: lockanswer.Filter = .{
         .platform = if (s.view.region == .euw) codeOf(t.dicts.platforms, s.opts.home) orelse return null else null,
         .patch = if (s.view.period == .patch) codeOf(t.dicts.patches, s.opts.patches[0]) orelse return null else null,
@@ -90,12 +107,15 @@ pub fn answer(s: *const Site, x: *const Answers, gpa: std.mem.Allocator, rest: [
     };
     const base = if (s.view_builds[s.view.index()]) |*b| b else null;
     const label = if (base) |b| b.label else "";
-    const file = try lockanswer.file(gpa, a, t, &x.index, @intCast(ch.id), q.role, f, &q.locks, .{}, label, tier) orelse return null;
-    var role: cp.BuildRole = .{ .role = champion.uiRole(q.role) };
-    if (file.get(@intCast(ch.id), q.role)) |b| role.build = try buildblock.data(a, &file, b, ch.name);
-    var out: std.ArrayList(u8) = .empty;
-    try ui.data.encode(a, cp.BuildData, .{ .roles = &.{role} }, &out);
-    return out.items;
+    const file = try lockanswer.file(gpa, a, t, &x.index, @intCast(ch.id), r, f, locks, .{}, label, tier) orelse return null;
+    const role = try a.create(cp.BuildRole);
+    role.* = .{ .role = champion.uiRole(r) };
+    if (file.get(@intCast(ch.id), r)) |b| role.build = try buildblock.data(a, &file, b, ch.name);
+    var d: cp.BuildData = .{ .roles = role[0..1] };
+    if (locks.by.get(.opponent)) |v| for (s.champs) |o| if (o.id == v.v[0]) {
+        d.vs = .{ .id = @intCast(o.id), .name = o.name, .icon = try s.icon(o) };
+    };
+    return d;
 }
 
 const Query = struct { slug: []const u8, role: Role, rank: cp.Rank, locks: lockanswer.Locks };
@@ -110,14 +130,16 @@ fn parse(rest: []const u8) ?Query {
     const rank = std.meta.stringToEnum(cp.Rank, it.next() orelse return null) orelse return null;
     const last = it.next() orelse return null;
     if (it.next() != null or !std.mem.endsWith(u8, last, ".bin")) return null;
-    const lk = last[0 .. last.len - ".bin".len];
+    const locks = pageLocks(last[0 .. last.len - ".bin".len]) orelse return null;
+    return .{ .slug = slug, .role = coreRole(role), .rank = rank, .locks = locks };
+}
+
+fn canonical(lk: []const u8) ?lockanswer.Locks {
     const locks = lockanswer.Locks.parse(lk) orelse return null;
-    if (!locks.any()) return null;
     var buf: [256]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
     locks.format(&w) catch return null;
-    if (!std.mem.eql(u8, w.buffered(), lk)) return null;
-    return .{ .slug = slug, .role = coreRole(role), .rank = rank, .locks = locks };
+    return if (std.mem.eql(u8, w.buffered(), lk)) locks else null;
 }
 
 fn coreRole(r: ui.role.Role) Role {

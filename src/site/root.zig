@@ -51,6 +51,7 @@ const writeIndex = @import("home.zig").writeIndex;
 const writeTierList = @import("tierlist.zig").writeTierList;
 const champion = @import("champion.zig");
 const writeChampion = champion.writeChampion;
+const locks = @import("locks.zig");
 
 pub const Options = struct {
     out_dir: []const u8,
@@ -215,6 +216,10 @@ pub const Site = struct {
     ddragon_version: []const u8,
     /// The view being written; opts.platforms and opts.patches are its own
     view: html.View,
+    /// A rendered request's `lk` query (the champion page's lock set) and the answers to
+    /// render it from (Loaded.getLocked)
+    lk: []const u8 = "",
+    answers: ?*const locks.Answers = null,
     /// Games started from (Unix ms; 0 for any)
     since_ms: i64,
     opts: Options,

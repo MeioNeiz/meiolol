@@ -13,6 +13,7 @@ const tierlist = @import("tierlist.zig");
 const rankings = @import("rankings.zig");
 const builds_page = @import("builds.zig");
 const buildblock = @import("buildblock.zig");
+const locks = @import("locks.zig");
 const stats = @import("../stats.zig");
 const builds = @import("../builds.zig");
 const learning = @import("../learning.zig");
@@ -109,6 +110,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
     var roles: std.ArrayList(u8) = .empty;
     for (d.roles, 0..) |x, i| try roles.print(a, "{s}{s}", .{ if (i > 0) " " else "", @tagName(x.role) });
     build.fromUrl(.{ .role = shown.role });
+    try lockBuild(site, &build, ch, r);
     more.fromUrl(.{ .role = shown.role });
     trends.fromUrl(.{ .role = shown.role });
     charts.fromUrl(.{ .role = shown.role });
@@ -128,6 +130,27 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
         .wasm = assets.champion_wasm.path,
     });
     try shell.close(w, p);
+}
+
+/// The request's lock set (Site.lk) rendered into the build: its answer for the page's
+/// view at Platinum+, as ui-champbuild.wasm would fetch it, inline (data-ans) so the
+/// island hydrates from it. Other rank picks are the fragment's, which the server never sees
+fn lockBuild(site: *const Site, build: *cp.Build, ch: Champ, r: Role) !void {
+    const a = site.arena;
+    const x = site.answers orelse return;
+    const lk = locks.pageLocks(site.lk) orelse return;
+    const d = try a.create(cp.BuildData);
+    d.* = try locks.build(site, x, site.gpa, ch, r, .plat, &lk) orelse return;
+    var u = build.toUrl();
+    u.lk.set(site.lk);
+    build.fromUrl(u);
+    const path = build.lockWant(a) orelse return;
+    build.setAnswer(a, path, d);
+    var bytes: std.ArrayList(u8) = .empty;
+    try ui.data.encode(a, cp.BuildData, d.*, &bytes);
+    const enc = std.base64.standard.Encoder;
+    const out = try a.alloc(u8, enc.calcSize(bytes.items.len));
+    build.ans = enc.encode(out, bytes.items);
 }
 
 /// Each island's data file, in Part order: what the page renders from

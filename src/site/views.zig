@@ -136,10 +136,15 @@ pub const Loaded = struct {
 
     /// The page or file at `path` from the site root, in `arena`; null when there is none
     pub fn get(l: *Loaded, arena: std.mem.Allocator, path: []const u8) !?[]const u8 {
-        return try sheets.deliver(arena, try l.find(arena, path) orelse return null);
+        return l.getLocked(arena, path, "");
     }
 
-    fn find(l: *Loaded, arena: std.mem.Allocator, path: []const u8) !?[]const u8 {
+    /// As get, the request's `lk` query rendered into the champion page
+    pub fn getLocked(l: *Loaded, arena: std.mem.Allocator, path: []const u8, lk: []const u8) !?[]const u8 {
+        return try sheets.deliver(arena, try l.find(arena, path, lk) orelse return null);
+    }
+
+    fn find(l: *Loaded, arena: std.mem.Allocator, path: []const u8, lk: []const u8) !?[]const u8 {
         const view, const rest = for ([_]html.View{ html.View.all[3], html.View.all[2], html.View.all[1] }) |v| {
             if (std.mem.startsWith(u8, path, v.dir())) break .{ v, path[v.dir().len..] };
         } else .{ html.View.all[0], path };
@@ -158,6 +163,10 @@ pub const Loaded = struct {
         }
         var aw: Writer.Allocating = .init(arena);
         const at = try root.pageOf(arena, rest);
+        if (at) |x| if (x == .champion and locks.pageLocks(lk) != null) {
+            s.lk = lk;
+            s.answers = try l.loadLocks();
+        };
         if (at) |x| if (try renderPage(&s, &aw.writer, x)) return aw.written();
         for (s.files) |f| if (std.mem.eql(u8, f.path, rest)) return f.data;
         if (view.index() != 0) return null;

@@ -360,6 +360,9 @@ pub const W = struct {
     pub const build_against = Phrase("Build against {y:text}");
     pub const build_usual = Phrase("{x:text}'s build");
     pub const no_lock_games = plain("No games with these locks.");
+    pub const vs_lock = Phrase("vs {y:text}");
+    /// Until the other blocks follow the locks (champion-locks.md L3)
+    pub const lock_scope = plain("Build only");
     pub const no_answer = plain("These locks can't be counted here yet.");
     pub const few_vs = Phrase("few games vs {y:text}");
     pub const trends = plain("Trends");
@@ -552,7 +555,11 @@ pub const BuildData = struct {
     /// The matchup page's champion when the pair has too few games for its own build: its
     /// usual build instead, headed so
     usual_of: ?[]const u8 = null,
+    /// A lock answer's opponent (`vs`), for the LockBar's chip
+    vs: ?Vs = null,
 };
+
+pub const Vs = struct { id: u16, name: []const u8, icon: []const u8 };
 
 pub const BuildRole = struct {
     role: role.Role,
@@ -1050,6 +1057,9 @@ pub const Build = struct {
     answer: ?*const BuildData = null,
     answer_path: []const u8 = "",
     apanel: ?buildpanel.BuildPanel = null,
+    /// The server's: the answer it rendered under `locks`, base64, for ui-champbuild.wasm
+    /// to hydrate from without asking again
+    ans: ?[]const u8 = null,
 
     const P = @This();
 
@@ -1175,6 +1185,7 @@ pub const Build = struct {
         const waiting = if (want) |w| !std.mem.eql(u8, w, p.answer_path) else false;
         const answer = p.shownAnswer();
         p.bar.set = &p.locks;
+        p.bar.scope = W.lock_scope;
         p.bar.games = null;
         if (!waiting) if (answer) |x| {
             p.bar.games = 0;
@@ -1183,7 +1194,7 @@ pub const Build = struct {
                 p.bar.wins = d.wins;
             };
         };
-        const lock_bar: N = if (p.locked()) h.div(.{ .class = "locks" }, .{p.bar.view(h, p.labels(h))}) else .none;
+        const lock_bar: N = if (p.locked()) p.bar.view(h, p.labels(h)) else .none;
         var empty: N = .none;
         if (b == null) if (answer) |x| {
             empty = h.p(.{ .class = "none" }, .{if (x.roles.len == 0) W.no_answer else W.no_lock_games});
@@ -1201,15 +1212,16 @@ pub const Build = struct {
             .data_js = p.js,
             .data_wasm = p.wasm,
             .data_busy = p.files.busy() or waiting,
-        }, .{if (b != null or answer != null) card.view(h, .{ .flush = true }, &.{
+            .data_lk = if (p.ans != null) p.locks.s.slice() else null,
+            .data_ans = p.ans,
+        }, .{ lock_bar, if (b != null or answer != null) card.view(h, .{ .flush = true }, &.{
             p.head(h),
-            lock_bar,
             empty,
             note,
             when,
             if (b) |x| x.view(h) else .none,
             if (p.data.against == null) h.p(.{ .class = "vs-hint" }, .{W.vs_hint}) else .none,
-        }) else .none});
+        }) else .none });
     }
 
     /// The LockBar's chips: each lock as its option draws it in the shown build or
@@ -1220,13 +1232,23 @@ pub const Build = struct {
         const base = buildOf(p.data.roles, p.cur);
         for (std.enums.values(lockbar.Kind)) |k| {
             const v = p.locks.get(k) orelse continue;
-            const l = (if (shown) |d| lockLabel(h, d, k, v) else null) orelse (if (base) |d| lockLabel(h, d, k, v) else null) orelse lockbar.Label{ .kind = k, .text = v };
+            const l = (if (k == .opponent) p.vsLabel(h, v) else if (shown) |d| lockLabel(h, d, k, v) else null) orelse (if (base) |d| lockLabel(h, d, k, v) else null) orelse lockbar.Label{ .kind = k, .text = v };
             out.append(h.mem, l) catch {
                 h.oom = true;
                 break;
             };
         }
         return out.items;
+    }
+
+    /// The opponent as the last answer names it (kept while the next one is out)
+    fn vsLabel(p: *const P, h: *H, v: []const u8) ?lockbar.Label {
+        const x = (p.answer orelse return null).vs orelse return null;
+        var buf: [lockbar.value_max]u8 = undefined;
+        if (!std.mem.eql(u8, lockbar.text(&buf, &.{x.id}), v)) return null;
+        const a = h.mem.alloc(art.Art, 1) catch return null;
+        a[0] = .{ .name = x.name, .src = x.icon };
+        return .{ .kind = .opponent, .art = a, .text = W.vs_lock.with(h, .{ .y = x.name }).s };
     }
 
     fn head(p: *P, h: *H) N {
@@ -1908,11 +1930,11 @@ pub const css =
     \\      padding-block: 0; background: none; border: 0; justify-content: flex-end; }
     \\    .c-cpage [data-island=champion] .c-toolbar > .c-filters { flex: none; }
     \\  }
-    \\  .c-cpage > [data-busy]:not([data-island=champion]), .c-cpage > [data-busy] .c-champhead { opacity: 0.55; transition: opacity 0.2s; }
+    \\  .c-cpage > [data-busy]:not([data-island=champion]) > :not(.c-lockbar), .c-cpage > [data-busy] .c-champhead { opacity: 0.55; transition: opacity 0.2s; }
     \\  .c-cpage .plot[data-thin] { opacity: 0.6; }
     \\  .c-cpage .rare { margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .c-champhead > .none { margin: 0 0 0 auto; }
-    \\  .c-cpage #build .locks { padding: var(--sp-3) var(--card-px) 0; }
+    \\  .c-cpage #build { gap: var(--sp-3); }
     \\  .c-cpage #build .none { margin: 0; padding: var(--sp-4) var(--card-px); color: var(--muted); }
     \\  .c-cpage .vs-hint { margin: 0; padding: var(--sp-3) var(--card-px); border-top: 1px solid var(--line); font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .from { margin: 0; padding: var(--sp-3) var(--card-px) 0; font-size: var(--fs-s); color: var(--muted); }

@@ -113,8 +113,9 @@ champions board, matchup, Daily Draft, Learn, legal and method pages, the views'
 trees, data/ files, the sitemap, data/your-example.json).
 URLs are clean (docs/plan/urls.md; arch-site.md "Website"): nginx's
 `try_files $meiolol_view$uri.html $uri $uri.html @render`, $meiolol_view mapped from
-?region= and ?period= to the internal view tree (also in both proxy_cache_keys; other
-query keys such as the pool's ?champs= are state and stay out). `location = /` goes
+?region= and ?period= to the internal view tree (also in both proxy_cache_keys, as is
+?lk=, the champion page's locks the renderer draws into its HTML; other query keys such
+as the pool's ?champs= are state and stay out). `location = /` goes
 straight to @render (deploy/cache-warm.sh warms it first). Old URLs get no redirects
 (Jacob, 29 Oct); a trailing slash 301s off. The renderer does the same (serve.zig) and
 gzips what it sends when the client accepts it (nginx compresses only HTML itself;

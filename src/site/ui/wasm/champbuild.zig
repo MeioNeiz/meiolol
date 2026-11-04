@@ -1,7 +1,8 @@
 //! ui-champbuild.wasm: the champion page's build (ui.champpage.Build), and the matchup
 //! page's from its data-bin. ui-champion.wasm (ui-matchup.wasm) adds its loader
 //! (ui-champbuild.js) to the page, which calls `main`. Under locks (`lk`) it fetches the
-//! renderer's answer for the lock set (cp.Build.lockWant), one at a time, kept by path
+//! renderer's answer for the lock set (cp.Build.lockWant), one at a time, kept by path;
+//! the one the server rendered comes inline (data-lk, data-ans)
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -28,6 +29,9 @@ var island: ?*ui.island.Island(cp.Build, dom.Dom) = null;
 var answers: std.ArrayList(Answer) = .empty;
 const Answer = struct { path: []const u8, d: *const cp.BuildData };
 var asked: ?[]const u8 = null;
+/// The server's lock set and its answer, when it rendered one
+var server_lk: []const u8 = "";
+var server_ans: ?[]u8 = null;
 
 const L = dom.Loader(cp.Build, cp.BuildData, ui.champrank.Build);
 
@@ -41,6 +45,8 @@ export fn main() void {
     if (dom.binOf(root, "data-bin")) |b| return inline_(b);
     src = dom.attrOf(root, "data-src");
     root_path = dom.attrOf(root, "data-root");
+    server_lk = dom.attrOf(root, "data-lk");
+    server_ans = dom.binOf(root, "data-ans");
     const stamp = dom.attrOf(root, "data-stamp");
     want = std.fmt.parseInt(u32, stamp, 10) catch return;
     dom.fetchStamped(src, stamp, 0, loaded);
@@ -103,10 +109,25 @@ fn adopt(b: []u8) ?*ui.island.Island(cp.Build, dom.Dom) {
     const pp = cp.panels(gpa, data.roles) catch return oom();
     server = .{ .data = &data, .panels = sp, .root = root_path, .src = src, .stamp = want, .js = js, .wasm = wasm };
     server.files.base[0] = &data;
-    server.fromUrl(.{ .role = dom.pageRole() });
+    var u: cp.Build.Url = .{ .role = dom.pageRole() };
+    u.lk.set(server_lk);
+    server.fromUrl(u);
+    const ans = serverAnswer();
     state = server;
     state.panels = pp;
+    if (ans) |x| state.setAnswer(gpa, x.path, x.d);
     return dom.rt.add(cp.Build, &state, &server, sel) catch oom();
+}
+
+/// The server's answer shown on `server` (and kept by path), so hydration matches its HTML
+fn serverAnswer() ?Answer {
+    const b = server_ans orelse return null;
+    const path = server.lockWant(gpa) orelse return null;
+    const d = gpa.create(cp.BuildData) catch return null;
+    d.* = ui.data.decode(gpa, cp.BuildData, b) catch return null;
+    answers.append(gpa, .{ .path = path, .d = d }) catch return null;
+    server.setAnswer(gpa, path, d);
+    return answers.items[answers.items.len - 1];
 }
 
 fn oom() ?*ui.island.Island(cp.Build, dom.Dom) {

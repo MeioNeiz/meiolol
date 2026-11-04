@@ -416,7 +416,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         const entry = rendered.acquire();
         defer rendered.release(entry);
         for (names) |name| {
-            const got = entry.loaded.get(arena, name) catch |err| switch (err) {
+            const got = entry.loaded.getLocked(arena, name, try param(arena, query, "lk")) catch |err| switch (err) {
                 // `meiolol render` just started: nginx serves its cached copy if it has one
                 error.Loading => return request.respond("This page is being updated. Try again in a minute.\n", .{
                     .status = .service_unavailable,
@@ -520,6 +520,17 @@ fn queryOf(target: []const u8) []const u8 {
     const end = std.mem.findScalar(u8, target, '#') orelse target.len;
     const at = std.mem.findScalar(u8, target[0..end], '?') orelse return "";
     return target[at..end];
+}
+
+/// `key`'s value in `query` ("?a=1&lk=ks8010"), percent-decoded; "" without it
+fn param(arena: std.mem.Allocator, query: []const u8, key: []const u8) ![]const u8 {
+    var it = std.mem.splitScalar(u8, if (query.len > 0) query[1..] else "", '&');
+    while (it.next()) |kv| {
+        if (kv.len > key.len and std.mem.startsWith(u8, kv, key) and kv[key.len] == '=') {
+            return std.Uri.percentDecodeInPlace(try arena.dupe(u8, kv[key.len + 1 ..]));
+        }
+    }
+    return "";
 }
 
 /// The view tree the query picks (html.View.dir): nginx's $meiolol_view
@@ -701,6 +712,8 @@ test "clean URLs: the query's view tree first, then the site root" {
     try eq(@as([]const []const u8, &.{"champions/"}), try candidates(a, "champions/", ""));
     try std.testing.expectEqualStrings("?region=all", queryOf("/x?region=all#role=mid"));
     try std.testing.expectEqualStrings("", queryOf("/x#a?b"));
+    try std.testing.expectEqualStrings("ks8010,vs86", try param(a, "?region=all&lk=ks8010%2Cvs86", "lk"));
+    try std.testing.expectEqualStrings("", try param(a, "?lkx=1", "lk"));
 }
 
 test "Rendered: a swapped-out site is freed after its last request" {
