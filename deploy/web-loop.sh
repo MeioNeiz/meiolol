@@ -453,6 +453,8 @@ while true; do
         # The champion pages' lock answers (site/locks.zig), from the days curves just
         # built and older ones: ~4 min, most of it reading 30 days of cubes
         batch bin/meiolol lockrows 2>&1 || true
+        # Meio for the private locks (data/export/meio.bin): 2.3 min, 2.7 GB on C01
+        batch bin/meiolol meio ${patch:+--patch "$patch"} 2>&1 || true
     fi
     # The core build's and the views file's, so rendered pages match the uploaded ones
     site_args=(--contact "$contact" --origin https://meio.lol)
