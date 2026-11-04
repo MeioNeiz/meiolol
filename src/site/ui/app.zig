@@ -12,7 +12,6 @@ const gamescreen = @import("gamescreen.zig");
 const postgame = @import("postgame.zig");
 const lane = @import("lane.zig");
 const signin = @import("signin.zig");
-const toshell = @import("toshell.zig");
 const compview = @import("compview.zig");
 const lobby = @import("lobby.zig");
 const apphome = @import("apphome.zig");
@@ -68,12 +67,10 @@ pub const App = struct {
     team: lane.Held = .{},
     form: signin.Form = .{},
 
-    pub const Msg = enum { mastery };
+    pub const Msg = enum {};
 
-    pub fn update(a: *App, m: Msg, _: *tree.Event) void {
-        switch (m) {
-            .mastery => if (a.data.screen == .select) if (a.data.screen.select.lane.mastery) |on| toshell.send(.mastery, !on),
-        }
+    pub fn update(_: *App, m: Msg, _: *tree.Event) void {
+        switch (m) {}
     }
 
     pub fn view(a: *App, h: *H) N {
@@ -82,7 +79,7 @@ pub const App = struct {
         return h.div(attrs, .{
             switch (d.screen) {
                 .note => |n| note(h, n),
-                .select => |s| champselect.view(h, s, &a.lane, h.on(a, .mastery)),
+                .select => |s| champselect.view(h, s, &a.lane),
                 .loading => |s| loadscreen.view(h, s),
                 .game => |s| gamescreen.view(h, s, .{ .lane = &a.lane, .team = &a.team }),
                 .post => |s| postgame.view(h, s, &a.team),

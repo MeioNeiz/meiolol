@@ -55,7 +55,7 @@ pub const Lane = struct {
     chart: ?lanechart.Figures = null,
     caption: []const u8 = "",
     options: []const Option = &.{},
-    /// Options weigh your mastery points; null shows no toggle: an ally's lane (a click
+    /// Options weigh your mastery points (the settings toggle); null: an ally's lane (a click
     /// on their seat), `me` theirs, without a pool to weigh; once they lock (mode locked)
     /// the matchup only
     mastery: ?bool = null,
@@ -117,8 +117,8 @@ pub const BanOption = struct {
     act: []const u8 = "",
 };
 
-/// `held`: the island's chart state; null draws no chart. `mastery` flips Lane.mastery
-pub fn view(h: *H, s: Screen, held: ?*lanechart.Held, mastery: ?tree.Handler) N {
+/// `held`: the island's chart state; null draws no chart
+pub fn view(h: *H, s: Screen, held: ?*lanechart.Held) N {
     const bans = banOptions(h, s);
     return h.div(.{ .class = "c-cs" }, .{
         h.div(.{ .class = "board" }, .{
@@ -128,12 +128,12 @@ pub fn view(h: *H, s: Screen, held: ?*lanechart.Held, mastery: ?tree.Handler) N 
         }),
         h.div(.{ .class = "side" }, .{
             if (s.banning) bans else null,
-            lane(h, s.lane, held, mastery),
+            lane(h, s.lane, held),
         }),
     });
 }
 
-fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
+fn lane(h: *H, l: Lane, held: ?*lanechart.Held) N {
     const ally = l.mastery == null;
     // Nothing rates a teammate's pick (docs/production-key.md): their lane once they
     // lock is the matchup only
@@ -173,7 +173,6 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
                 .counter => W.head_counter,
                 .locked => W.head_locked,
             }}) else null,
-            if (l.mastery) |m| chip.view(h, .{ .pressed = m, .on = on_mastery }, .{W.mastery}) else null,
             // bridge.js sends the act: no handler in ui-app.wasm
             if (ally) h.button(.{ .class = "c-btn", .type = "button", .data_s = "s", .data_act = "lane 255" }, .{W.own}) else null,
         }),
@@ -242,7 +241,6 @@ const W = struct {
     const head_blind = plain("Options that hold up blind");
     const head_counter = plain("Options into them");
     const head_locked = plain("Other options");
-    const mastery = plain("Count mastery");
     const ally = plain("Ally");
     const enemy = plain("Enemy");
     const own = plain("Your lane");
@@ -424,10 +422,10 @@ fn chartState(h: *H) ?*lanechart.Held {
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    g.addFill("counter, public", view(h, sample, chartState(h), null));
-    g.addFill("counter, private", view(h, private(h, sample), chartState(h), null));
-    g.addFill("an ally's lane", view(h, allyLane(h), chartState(h), null));
-    g.addFill("an enemy's lane", view(h, enemyLane(h), chartState(h), null));
+    g.addFill("counter, public", view(h, sample, chartState(h)));
+    g.addFill("counter, private", view(h, private(h, sample), chartState(h)));
+    g.addFill("an ally's lane", view(h, allyLane(h), chartState(h)));
+    g.addFill("an enemy's lane", view(h, enemyLane(h), chartState(h)));
     g.addFill("your ban, blind", view(h, .{
         .board = .{ .lanes = draftboard.sample.lanes[0..5], .bans_them = draftboard.sample.bans_them },
         .banning = true,
@@ -442,5 +440,5 @@ pub fn gallery(g: *Gallery) void {
             },
         },
         .lane = .{ .role = .mid, .options = sample.lane.options[1..], .mastery = false, .scope = "EUW, last 30 days" },
-    }, null, null));
+    }, null));
 }
