@@ -131,7 +131,10 @@ What a block needs from a row:
   request (render: before listening beside a running one, and before each swap); the web
   loop writes it after curves. pipeline_test: a keystone lock's answer through
   Loaded.get is the builds file's by_keystone build. Not yet: the island fetching it,
-  LockBar, taps, ±
+  LockBar, taps
+
+- Thin (J35) in the build panel: every rate with its 80% range (fmt.range, Wilson),
+  faded past ±6, whole numbers from ±10, none hidden; counts don't fade
 
 - Keystone lock in the BuildPanel (builds.by_keystone, `k` in the hash); vs melee or
   ranged and gold ahead or behind are precomputed splits of the build file only
