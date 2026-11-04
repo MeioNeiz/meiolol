@@ -38,6 +38,13 @@ How to write a line:
   suggestions; the desktop app still scores with counts until its stats file keeps the
   fitted model. Evidence: docs/model.md "Pair cells that borrow strength (A4)", "A4 on
   the new pin, shipped form"
+- Rare picks lose: a champion in a role it is seldom played in (under 100 games in 30
+  days, every region) won 34% of its next week's games, so shrinking a thin rate to 50%
+  is wrong; shrink it to what equally rare picks win. Sure: Meio's champion-role term
+  centred on a line in log share of its role's games turned unseen keystone cells on
+  16.21 (14 origins, 33k cells) from +2.08 +- 0.76 milli-nats worse than the champion's
+  raw rate to a tie, nothing else worse. Site: not yet (Meio is not shipped). Evidence:
+  src/meio.zig, docs/model.md "Meio in the truth test"
 - Before your lane opponent picks, ranking as if they were average is as good as any
   safer ranking we tried: favouring champions whose estimated matchups vary less is a
   hair better by one measure and a hair worse by another. Sure: 86k held-out games (29

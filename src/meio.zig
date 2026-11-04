@@ -11,7 +11,10 @@
 //! day by day on 16.21"). A champion-role's terms touch only its own games, so each is
 //! a tiny Newton fit (Laplace posterior); the variances couple them. The newest patch's
 //! number is a + d[0]: on day 0 d[0] is 0 and the shared term carries it, and d[0] takes
-//! over as the patch's games arrive. Older games can weigh less (half_life)
+//! over as the patch's games arrive. Older games can weigh less (half_life). a shrinks
+//! to a line in the champion-role's log share of its role's games, not to 50%: rare
+//! (off-role) picks lose, and shrinking them to even cost the unseen keystone cells
+//! ~1.8 milli-nats on 16.21
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -120,6 +123,8 @@ const Counts = struct {
 };
 
 const Fitted = struct {
+    /// The main term's prior mean, from its popularity
+    mu: f64 = 0,
     theta: [max_k]f64 = @splat(0),
     cov: [max_k * max_k]f64 = @splat(0),
 };
@@ -170,6 +175,8 @@ const Pair = struct {
 pub const Model = struct {
     shape: Shape,
     sd: [n_terms]f64,
+    /// The main term's prior mean: pop[0] + pop[1] * log share of its role's games
+    pop: [2]f64 = .{ 0, 0 },
     pair_sd: [n_pair_classes]f64 = @splat(0),
     index: std.AutoHashMapUnmanaged(u16, u32) = .empty,
     counts: []Counts = &.{},
@@ -425,6 +432,8 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     m.fitted = try gpa.alloc(Fitted, m.counts.len);
     @memset(m.fitted, .{});
 
+    const share = try logShares(gpa, &m);
+    defer gpa.free(share);
     var sd: [n_terms]f64 = undefined;
     for (&sd, opts.sd) |*s, o| s.* = if (o > 0) o else 0.1;
     const k = shape.params();
@@ -435,11 +444,13 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
             newton(c, f, shape, sd);
             for (0..k) |j| {
                 const t = @backingInt(shape.term(j));
-                sum_sq[t] += f.theta[j] * f.theta[j];
+                const d = f.theta[j] - (if (j == 0) f.mu else 0);
+                sum_sq[t] += d * d;
                 gamma[t] += 1 - f.cov[j * k + j] / (sd[t] * sd[t]);
             }
         }
-        if (!mackay(&sd, &opts.sd, &sum_sq, &gamma)) break;
+        const pop_moved = fitPopularity(&m, share);
+        if (!mackay(&sd, &opts.sd, &sum_sq, &gamma) and pop_moved < 1e-5) break;
     }
     for (m.counts, m.fitted) |*c, *f| newton(c, f, shape, sd);
     m.sd = sd;
@@ -447,6 +458,58 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     m.keystone = try fitCond(gpa, &m, &keystones, opts.rounds);
     m.item = try fitCond(gpa, &m, &items, opts.rounds);
     return m;
+}
+
+/// Each champion-role's log share of its role's (weighted) games
+fn logShares(gpa: Allocator, m: *const Model) ![]f64 {
+    const out = try gpa.alloc(f64, m.counts.len);
+    var role_n: [n_roles]f64 = @splat(0);
+    var it = m.index.iterator();
+    while (it.next()) |e| {
+        out[e.value_ptr.*] = games(&m.counts[e.value_ptr.*]);
+        role_n[e.key_ptr.* >> 13] += out[e.value_ptr.*];
+    }
+    it = m.index.iterator();
+    while (it.next()) |e| {
+        const i = e.value_ptr.*;
+        out[i] = @log(@max(out[i], 1e-9) / role_n[e.key_ptr.* >> 13]);
+    }
+    return out;
+}
+
+fn games(c: *const Counts) f64 {
+    var n: f64 = 0;
+    for (c.n) |p| for (p) |br| for (br) |x| {
+        n += x;
+    };
+    return n;
+}
+
+/// The main terms' line in log share: least squares of their posterior means (the EM
+/// step for a Gaussian prior's mean), then each prior mean from it; how far pop moved
+fn fitPopularity(m: *Model, share: []const f64) f64 {
+    const n: f64 = @floatFromInt(share.len);
+    var mx: f64 = 0;
+    var my: f64 = 0;
+    for (share, m.fitted) |x, f| {
+        mx += x;
+        my += f.theta[0];
+    }
+    mx /= n;
+    my /= n;
+    var sxx: f64 = 0;
+    var sxy: f64 = 0;
+    for (share, m.fitted) |x, f| {
+        sxx += (x - mx) * (x - mx);
+        sxy += (x - mx) * (f.theta[0] - my);
+    }
+    // Every champion-role equally popular: no slope to see
+    const b = if (sxx > 1e-9 * n) sxy / sxx else 0;
+    const pop: [2]f64 = .{ my - b * mx, b };
+    const moved = @max(@abs(pop[0] - m.pop[0]), @abs(pop[1] - m.pop[1]));
+    m.pop = pop;
+    for (share, m.fitted) |x, *f| f.mu = pop[0] + pop[1] * x;
+    return moved;
 }
 
 /// MacKay's fixed point for each variance not fixed by the options; false once settled
@@ -620,7 +683,7 @@ fn newton(c: *const Counts, f: *Fitted, shape: Shape, sd: [n_terms]f64) void {
         var grad: [max_k]f64 = @splat(0);
         var hess: [max_k * max_k]f64 = @splat(0);
         for (0..k) |j| {
-            grad[j] = -prec[j] * f.theta[j];
+            grad[j] = -prec[j] * (f.theta[j] - (if (j == 0) f.mu else 0));
             hess[j * k + j] = prec[j];
         }
         for (0..shape.patches) |p| for (0..4) |br| for (0..2) |e| {
@@ -850,4 +913,24 @@ test "all ranks is the champion-role's own mix of brackets, not the unknown-rank
     try std.testing.expectApproxEqAbs(k / n, all.p, 0.01);
     try std.testing.expect(all.p > m.rate(.champion, 0, 1, 7, 0).?.p);
     try std.testing.expect(all.p < m.rate(.champion, 0, 3, 7, 0).?.p);
+}
+
+test "a rare champion-role shrinks to what rare picks win, not to 50%" {
+    const gpa = std.testing.allocator;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    // Games from 4000 down to 30; win rate 0.5 + 0.03 * log2(games / 4000): the rarest
+    // win ~29%
+    var prng: std.Random.DefaultPrng = .init(11);
+    const rand = prng.random();
+    for (1..41) |ch| {
+        const n: f64 = 4000 * std.math.pow(f64, 30.0 / 4000.0, @as(f64, @floatFromInt(ch - 1)) / 39);
+        const p = 0.5 + 0.03 * @log2(n / 4000);
+        for (0..@intFromFloat(n)) |_| try rows.append(gpa, testRow(@intCast(ch), -3, 0, 2, rand.float(f64) < p));
+    }
+    var m = try fit(gpa, rows.items, 0, .{});
+    defer m.deinit(gpa);
+    try std.testing.expect(m.pop[1] > 0.05);
+    const rare = m.rate(.champion, 0, 0, 40, 0).?;
+    try std.testing.expect(rare.p < 0.36);
 }
