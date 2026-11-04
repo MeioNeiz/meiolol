@@ -77,7 +77,8 @@ pub fn view(h: *H, s: Stat) N {
 /// A range's half-width: "3.1", whole from 10 ("14"): a wide range's tenths say nothing
 pub fn pm(h: *H, v: f64) tree.Text {
     if (v < 10) return phrase.num(h, .dec, v);
-    return phrase.num(h, .int, @as(u32, @intFromFloat(@min(@round(v), 100))));
+    // Branches, not @round/@min: those pull compiler_rt into every island (ui-games' budget)
+    return phrase.num(h, .int, if (v >= 100) @as(u32, 100) else @as(u32, @intFromFloat(v + 0.5)));
 }
 
 /// `v` as its kind reads: "53.6%", "+2.6", "11:54"
