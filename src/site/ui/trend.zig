@@ -24,8 +24,9 @@ pub const Point = struct {
     sub: ?tree.Text = null,
     /// Win rate in %
     v: f32,
-    /// Half the 95% range, points
-    ci: f32 = 0,
+    /// Half its 80% range, points (fmt.range); past fmt.wide_range the dot is grey and
+    /// the scale doesn't stretch to the band
+    range: f32 = 0,
     /// The tip's figures after the label ("48.7% of 23,166 · pick 7.6%")
     tip: tree.Text = .{ .s = "" },
     /// The tip's name when the label is short or empty ("24 Oct" for "24")
@@ -37,16 +38,9 @@ pub fn rate(games: u32, wins: u32) f32 {
     return 100 * @as(f32, @floatFromInt(wins)) / @as(f32, @floatFromInt(@max(games, 1)));
 }
 
-/// Half the 95% range of a win rate, points
-pub fn ci(games: u32, wins: u32) f32 {
-    if (games == 0) return 0;
-    const p = rate(games, wins) / 100;
-    return 196 * @sqrt(p * (1 - p) / @as(f32, @floatFromInt(games)));
-}
-
 /// A win rate point with its games under the label
 pub fn point(h: *H, label: tree.Text, games: u32, wins: u32, tip: tree.Text) Point {
-    return .{ .label = label, .sub = phrase.num(h, .kilo, games), .v = rate(games, wins), .ci = ci(games, wins), .tip = tip };
+    return .{ .label = label, .sub = phrase.num(h, .kilo, games), .v = rate(games, wins), .range = @floatCast(@min(fmt.range(games, wins), 100)), .tip = tip };
 }
 
 /// Room for n points; null when out of memory
@@ -101,7 +95,10 @@ pub const Trend = struct {
     fn scale(t: *const T) struct { y: chart.Scale, c: f32, step: f32 } {
         const c = @round(t.ref / 2) * 2;
         var dev: f32 = 0;
-        for (t.points) |p| dev = @max(dev, @abs(p.v + p.ci - c), @abs(p.v - p.ci - c));
+        for (t.points) |p| {
+            const r = if (fmt.wide(p.range)) 0 else p.range;
+            dev = @max(dev, @abs(p.v + r - c), @abs(p.v - r - c));
+        }
         for (t.base) |b| dev = @max(dev, @abs(b - c));
         var step: f32 = 4;
         for ([_]f32{ 4, 5, 8, 10, 15, 20, 25 }) |s| {
@@ -129,8 +126,8 @@ pub const Trend = struct {
         const hi = vs[2 * n ..];
         for (t.points, v, lo, hi) |pt, *a, *b, *c| {
             a.* = pt.v;
-            b.* = pt.v - pt.ci;
-            c.* = pt.v + pt.ci;
+            b.* = @max(pt.v - pt.range, p.y.lo);
+            c.* = @min(pt.v + pt.range, p.y.hi);
         }
         var ys: std.ArrayList(chart.Tick) = .empty;
         for ([_]f32{ 1, 0, -1 }) |k| {
@@ -145,7 +142,7 @@ pub const Trend = struct {
             xs.append(h.mem, .{ .at = p.px(i), .label = pt.label, .sub = pt.sub }) catch {
                 h.oom = true;
             };
-            over.add(chart.dot(h, p, i, pt.v, fmt.Step.of(pt.v - t.ref, fmt.win_cuts)));
+            over.add(chart.dot(h, p, i, pt.v, if (fmt.wide(pt.range)) null else fmt.Step.of(pt.v - t.ref, fmt.win_cuts)));
         }
         if (n > 0) over.add(chart.endLabel(h, p, v[n - 1], phrase.num(h, .rate, v[n - 1])));
         if (t.tip) |i| if (i < n) {
@@ -194,23 +191,23 @@ pub const css =
 
 /// Darius top, from the round 4 mock
 pub const demo_patch = [_]Point{
-    .{ .label = plain("16.19"), .sub = plain("32nd"), .v = 49.9, .ci = 2.7, .tip = plain("49.9% · pick 8.0% · 32nd of 61") },
-    .{ .label = plain("16.20"), .sub = plain("49th"), .v = 48.7, .ci = 0.6, .tip = plain("48.7% of 23,166 · pick 7.6% · 49th of 59") },
-    .{ .label = plain("16.21"), .sub = plain("3rd"), .v = 51.3, .ci = 1.2, .tip = plain("51.3% of 6,678 · pick 8.4% · 3rd of 58") },
+    .{ .label = plain("16.19"), .sub = plain("32nd"), .v = 49.9, .range = 2.7, .tip = plain("49.9% · pick 8.0% · 32nd of 61") },
+    .{ .label = plain("16.20"), .sub = plain("49th"), .v = 48.7, .range = 0.6, .tip = plain("48.7% of 23,166 · pick 7.6% · 49th of 59") },
+    .{ .label = plain("16.21"), .sub = plain("3rd"), .v = 51.3, .range = 1.2, .tip = plain("51.3% of 6,678 · pick 8.4% · 3rd of 58") },
 };
 pub const demo_length = [_]Point{
-    .{ .label = plain("<20"), .sub = plain("2.3k"), .v = 49.1, .ci = 2.0, .tip = plain("min 49.1% of 2,299") },
-    .{ .label = plain("20-25"), .sub = plain("4.6k"), .v = 50.6, .ci = 1.4, .tip = plain("min 50.6% of 4,642") },
-    .{ .label = plain("25-30"), .sub = plain("9.9k"), .v = 48.7, .ci = 1.0, .tip = plain("min 48.7% of 9,926") },
-    .{ .label = plain("30-35"), .sub = plain("8.6k"), .v = 50.0, .ci = 1.1, .tip = plain("min 50.0% of 8,607") },
-    .{ .label = plain("35+"), .sub = plain("5.8k"), .v = 48.5, .ci = 1.3, .tip = plain("min 48.5% of 5,783") },
+    .{ .label = plain("<20"), .sub = plain("2.3k"), .v = 49.1, .range = 2.0, .tip = plain("min 49.1% of 2,299") },
+    .{ .label = plain("20-25"), .sub = plain("4.6k"), .v = 50.6, .range = 1.4, .tip = plain("min 50.6% of 4,642") },
+    .{ .label = plain("25-30"), .sub = plain("9.9k"), .v = 48.7, .range = 1.0, .tip = plain("min 48.7% of 9,926") },
+    .{ .label = plain("30-35"), .sub = plain("8.6k"), .v = 50.0, .range = 1.1, .tip = plain("min 50.0% of 8,607") },
+    .{ .label = plain("35+"), .sub = plain("5.8k"), .v = 48.5, .range = 1.3, .tip = plain("min 48.5% of 5,783") },
 };
 pub const demo_mastery = [_]Point{
-    .{ .label = plain("<10k"), .sub = plain("2.2k"), .v = 48.7, .ci = 2.1, .tip = plain("points 48.7% of 2,200") },
-    .{ .label = plain("10k"), .sub = plain("2.8k"), .v = 46.8, .ci = 1.9, .tip = plain("points 46.8% of 2,768") },
-    .{ .label = plain("30k"), .sub = plain("5.5k"), .v = 49.2, .ci = 1.3, .tip = plain("points 49.2% of 5,545") },
-    .{ .label = plain("100k"), .sub = plain("5.9k"), .v = 51.7, .ci = 1.3, .tip = plain("points 51.7% of 5,871") },
-    .{ .label = plain("300k+"), .sub = plain("8.6k"), .v = 53.2, .ci = 1.1, .tip = plain("points 53.2% of 8,636") },
+    .{ .label = plain("<10k"), .sub = plain("2.2k"), .v = 48.7, .range = 2.1, .tip = plain("points 48.7% of 2,200") },
+    .{ .label = plain("10k"), .sub = plain("2.8k"), .v = 46.8, .range = 1.9, .tip = plain("points 46.8% of 2,768") },
+    .{ .label = plain("30k"), .sub = plain("5.5k"), .v = 49.2, .range = 1.3, .tip = plain("points 49.2% of 5,545") },
+    .{ .label = plain("100k"), .sub = plain("5.9k"), .v = 51.7, .range = 1.3, .tip = plain("points 51.7% of 5,871") },
+    .{ .label = plain("300k+"), .sub = plain("8.6k"), .v = 53.2, .range = 1.1, .tip = plain("points 53.2% of 8,636") },
 };
 
 pub fn gallery(g: *Gallery) void {
@@ -239,10 +236,14 @@ test "the scale centres on the reference, whole ticks, at least ±4" {
     try testing.expectEqual(@as(f32, 50), s.c);
     try testing.expectEqual(@as(f32, 4), s.step);
     try testing.expectEqual(@as(f32, 45), s.y.lo);
-    const wide = [_]Point{ .{ .label = plain("a"), .v = 40, .ci = 3 }, .{ .label = plain("b"), .v = 52 } };
+    const wide = [_]Point{ .{ .label = plain("a"), .v = 40, .range = 3 }, .{ .label = plain("b"), .v = 52 } };
     t = .{ .label = plain("x"), .points = &wide, .ref = 49.3 };
     try testing.expectEqual(@as(f32, 50), t.scale().c);
     try testing.expectEqual(@as(f32, 15), t.scale().step);
+    // A wide band (few games) doesn't stretch it
+    const thin = [_]Point{ .{ .label = plain("a"), .v = 48, .range = 30 }, .{ .label = plain("b"), .v = 52 } };
+    t = .{ .label = plain("x"), .points = &thin, .ref = 49.3 };
+    try testing.expectEqual(@as(f32, 4), t.scale().step);
     // A base far off widens the scale too
     t = .{ .label = plain("x"), .points = &demo_patch, .base = &.{ 50, 50, 60 } };
     try testing.expectEqual(@as(f32, 10), t.scale().step);

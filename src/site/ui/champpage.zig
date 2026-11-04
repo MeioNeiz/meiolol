@@ -1442,14 +1442,14 @@ pub const Trends = struct {
             }),
         });
     }
-    /// Win rate by rank bracket, dashed at its rate over every game (the head's); brackets under
-    /// min_games left out
+    /// Win rate by rank bracket, dashed at its rate over every game (the head's); a thin
+    /// bracket shows with its wide range
     fn rankCard(p: *P, h: *H) N {
         const k = p.r().ranks orelse return noneCard(h, W.by_rank, .none);
         const pts = trend.alloc(h, k.by.len) orelse return .none;
         var n: usize = 0;
         for (k.by, W.brackets) |b, l| {
-            if (b.games < min_games) continue;
+            if (b.games == 0) continue;
             const c: Counts = .{ .games = b.games, .wins = b.wins };
             pts[n] = point(h, l, c);
             if (b.gold) |g| pts[n].tip = W.rank_tip.with(h, .{ .r = rate(c), .n = b.games, .g = @as(i32, g) });
@@ -1478,7 +1478,7 @@ pub const Trends = struct {
     }
 
     /// Win rate by the minute the first item was finished, dashed at the rate over every
-    /// bucket; buckets under min_games left out
+    /// bucket; a thin bucket shows with its wide range
     fn timingCard(p: *P, h: *H) N {
         const k = p.r().timing;
         const pts = trend.alloc(h, k.len) orelse return .none;
@@ -1487,7 +1487,7 @@ pub const Trends = struct {
         for (k) |b| {
             all.games += b.games;
             all.wins += b.wins;
-            if (b.games < min_games) continue;
+            if (b.games == 0) continue;
             pts[n] = trend.point(h, .{ .s = b.label }, b.games, b.wins, W.min_tip.with(h, .{ .r = trend.rate(b.games, b.wins), .n = b.games }));
             n += 1;
         }
@@ -1506,7 +1506,7 @@ pub const Trends = struct {
         const pts = trend.alloc(h, k.bins.len) orelse return .none;
         var n: usize = 0;
         for (k.bins, W.bands) |b, l| {
-            if (b.games < k.thin) continue;
+            if (b.games == 0) continue;
             pts[n] = point(h, l, b);
             n += 1;
         }
@@ -1724,7 +1724,7 @@ pub const Charts = struct {
     }
 
     /// How often the champion's team took each objective first and won after it, against
-    /// the role's; win rates under min_games left out
+    /// the role's; a thin win rate faded by its range
     fn objectivesCard(p: *P, h: *H) N {
         const k = p.r().objectives orelse return noneCard(h, W.objectives_head, .none);
         var took: [4]versus.Row = undefined;
@@ -1732,8 +1732,9 @@ pub const Charts = struct {
         var n: usize = 0;
         for (W.firsts, k.mine[1..], k.role[1..], &took) |l, x, y, *t| {
             t.* = rates(h, l, .{ .games = k.mine[0].games, .wins = x.games }, .{ .games = k.role[0].games, .wins = y.games });
-            if (x.games < min_games) continue;
+            if (x.games == 0) continue;
             won[n] = rates(h, l, x, y);
+            won[n].wide = fmt.wide(fmt.range(x.games, x.wins));
             n += 1;
         }
         const names: [2][]const u8 = .{ p.data.name, W.role_average };
@@ -1834,7 +1835,7 @@ test "a rare role is listed and opens with its games, faded only by its range" {
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "<p class=\"rare\">A rare role for Karthus: 60 games.</p>") != null);
 }
 
-test "by rank: brackets under min_games left out, no chart under two" {
+test "by rank: a thin bracket shows, an empty one doesn't, no chart under two" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1849,13 +1850,14 @@ test "by rank: brackets under min_games left out, no chart under two" {
     var h: H = .init(a, &t);
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Iron-Silver") == null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Iron-Silver") != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "Gold-Emerald") != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "Diamond+") != null);
     // Dashed at every game's rate, not the brackets' sum's (50.8%)
     try std.testing.expectEqual(@as(f32, 50), p.ranks.ref);
 
-    roles[0].ranks.?.by[2].games = 99;
+    roles[0].ranks.?.by[1].games = 0;
+    roles[0].ranks.?.by[2].games = 0;
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "Gold-Emerald") == null);
@@ -1893,7 +1895,7 @@ test "end of game: each figure with its place, none under min_games or for a rar
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "<b>412</b>") == null);
 }
 
-test "first item done: buckets under min_games left out, no chart under two" {
+test "first item done: a thin bucket shows, an empty one doesn't, no chart under two" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1909,11 +1911,12 @@ test "first item done: buckets under min_games left out, no chart under two" {
     var h: H = .init(a, &t);
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "&lt;9") == null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "&lt;9") != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "9-11") != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "11+") != null);
 
-    timing[2].games = 99;
+    timing[0].games = 0;
+    timing[2].games = 0;
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "9-11") == null);

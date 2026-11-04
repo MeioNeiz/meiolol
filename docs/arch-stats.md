@@ -96,10 +96,11 @@ role's rate in each tip), by rank and mastery (DataTable: brackets, then either 
 with 100k+ mastery from 10 such games) and, bot and support, both sides' lane partners.
 Champion pages link each lane opponent to its page. Every matchup gets a page, as on
 lolalytics; under 200 games or with own < 0.5 ("mostly the champions' baseline") the
-lane and head to head are faded, and the chart draws minutes with at least min(10,
-games) still going. The method page shows k by role and minute from the view with the
-most games. Size: 13.7k pages in the all-regions 30-day view at
-18.8k games, 252 MB with .gz; raise --min-games if the upload grows too big. The index
+lane (gold, an average) is faded, head to head rows fade by their 80% range (J35), and
+the chart draws minutes with at least min(10, games) still going. The method page shows
+k by role and minute from the view with the most games. Size: 13.7k pages in the
+all-regions 30-day view at 18.8k games, 252 MB with .gz; raise --min-games if the upload
+grows too big. The index
 has a min games selector (html.minGames, static/min-games.js; default 50). Not yet:
 core-item split, older patches, rank filter. deploy/web-loop.sh rebuilds the four
 curves files hourly and on a new patch.
@@ -161,11 +162,11 @@ that view's page. Matchup pages show their region's patch builds. A panel whose 
 aren't the view's says from which patch (BuildRole.patch): the previous patch's while
 this one's is thin, or a matchup's patch build in a 30-day view.
 Rows most played first, never by win rate, no "best" or "recommended": games and share
-on every row, a win rate only from 100 games and always with its 95% range (±1.96 SE),
-rows under 400 greyed, a "more data needed" note under 400 for the champion-role. Item,
-rune and spell icons hotlink Data Dragon like champion icons. Method page section
-`#builds`. Levels 1-3: kind skill_start. Not yet: builds by rank. Box, 16.21 all regions
-with matchups (348k games, 24 Oct): 83 s CPU, 877 MB RSS, 15.0 MB file (11.4 MB before
+on every row, a win rate with its 80% range (Wilson), faded past ±6 and never hidden for
+few games (J35). Item, rune and spell icons hotlink Data Dragon
+like champion icons. Method page section `#builds`. Levels 1-3: kind skill_start. Not
+yet: builds by rank. Box, 16.21 all regions with matchups (348k games, 24 Oct): 83 s
+CPU, 877 MB RSS, 15.0 MB file (11.4 MB before
 items 4-6, skill paths, minutes and the matchups' spells); both key budgets prune at
 floor 1 in the patch's first week.
 

@@ -107,7 +107,7 @@ the first screen, 1,154 on the page (frontend-rework.md).
    support partner's brief has "Lane opponents ›" (Against the lane, whose matchup pages
    list the pair in Lane partners). The pair's own lane (gold, cards): open, for Jacob
 2. Trends row, three Chart cards of one height in one chart style (Chart frame):
-   - By patch: TrendChart, win rate line with ±95% band, pick rate as thin bars on a
+   - By patch: TrendChart, win rate line with its 80% band (J35: a dot past ±6 is grey and the scale ignores its band), pick rate as thin bars on a
      second axis, rank in role as the x-axis label under each patch. No per-point text
      labels; tap a patch for its numbers (Chart tip)
    - By game length: the same TrendChart over 5 buckets, games under each; the early
@@ -141,12 +141,12 @@ its kind. Candidates, data we have first (arch-stats.md):
 - By rank bracket: done ("By rank", beside Lane kills: the view's games (stats.Trend
   brackets) by the curves' Iron-Silver, Gold-Emerald, Diamond+ (median tier of the
   players, 5+ known; the rest in none), dashed at the head's rate over every game, gold
-  at 14 from the bracket's pair curves in the tip; brackets under 100 games left out, so
-  on our Platinum+ crawl mostly two)
+  at 14 from the bracket's pair curves in the tip; a thin bracket shows with its wide band
+  (J35), an empty one is left out)
 - Item timing: done ("First item done": win rate by the minute the first finished item
   was bought, builds' first_item from the view's own builds file (never the previous
   patch's: the card has no period label), Platinum+; tails of at least a twentieth of
-  the games, 2-minute steps between, at most 7 buckets, under 100 games left out; dashed
+  the games, 2-minute steps between, at most 7 buckets, a thin one with its wide band; dashed
   at the rate of the games with an item)
 - Side (blue, red) and games played on it in the last 30 days: new counting
 - End of game: done (CH10, beside First item done): kills, deaths, assists and level a
