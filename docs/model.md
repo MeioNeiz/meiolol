@@ -5758,6 +5758,15 @@ points, in-range, PIT, share solid:
 - Shares under-cover in every mode: Meio PIT 74% (item 75%, keystone 72%), the patch 73%
   and the 30 days 72%; day 0 patch 43%. Meio is narrower than the patch and no worse
   covered, but not yet 80%: the missing piece is within-patch drift (meio-model)
+- Drift and clustered targets (d5cdc6ad, then share targets scored on n / phi in truth):
+  a share target is noisier than binomial too (players repeat picks: phi 1.1 items, 1.2
+  keystones, meio.zig Drift), so every mode's share ranges are scored on n / phi target
+  games. Shares' PIT, all ranks, all days, 30 days / patch / Meio: every region items
+  74 / 74 / 79%, keystones 71 / 73 / 80% (sure targets: Meio 82%, 81%); EUW1 items 76 /
+  78 / 79%, keystones 73 / 77 / 78%. Win rates unchanged. 750 s, 3.8 GB on the Mac
+- Gold at 14 (Gaussian check, target noise per champion-role, region and bracket): Meio
+  PIT 80% solid and faded, 81% on sure targets; half-width ~140 gold against the patch's
+  ~570 and the 30 days' ~370 on paired cells. No model change
 - The raw 30 days runs narrow where the patch moved things: champion-role 76%, shares
   72%; the patch's binomial win-rate ranges hold 80-82%
 - Sure targets only (target noise under the range's claimed variance; Meio's PIT there
