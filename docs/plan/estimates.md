@@ -64,8 +64,9 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
 - E0 Jacob's choices. (a) Name: "Meio" (J34), as in meio.lol ("meio": the middle,
   the means). The switch would read `30 days | Patch 16.21 | Meio`, captioned "our
   estimate for today's patch, from every game". Others: "Now", "Best read", "Forecast".
-  (b) The default stays 30 days until E2's gate holds for two patches, then becomes Meio
-  (Jacob confirms). (c) Regions: EUW and every region now, one region each later
+  (b) The default becomes Meio once E2's gate holds on one patch (Jacob 4 Nov: fix what
+  the next patch shows); the daily truth run keeps checking and the default goes back to
+  a raw mode if Meio stops winning. (c) Regions: EUW and every region now, one region each later
 - E2 The truth test, before anything ships. A rolling origin as in patch-transfer.md:
   for each day d of the newest patch, build each mode from games before d, then score
   its numbers against the next 7 days' games on that patch, per cell kind, by rank
