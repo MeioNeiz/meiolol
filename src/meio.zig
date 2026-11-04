@@ -84,6 +84,8 @@ const max_patches = 6;
 const max_k = 1 + max_patches + 3 + 1;
 /// Pair term classes, one variance each: a matchup per role, then duo
 const n_pair_classes = 6;
+/// Condition term classes (keystone, item), one per role
+const n_roles = 8;
 
 /// 80% interval
 const z80 = 1.2815515655446004;
@@ -174,6 +176,8 @@ pub const Model = struct {
     pair_index: std.AutoHashMapUnmanaged(u64, u32) = .empty,
     pairs: []Pair = &.{},
     pair_cells: []PairCell = &.{},
+    keystone: Cond = .{},
+    item: Cond = .{},
 
     pub fn deinit(m: *Model, gpa: Allocator) void {
         m.index.deinit(gpa);
@@ -182,6 +186,8 @@ pub const Model = struct {
         m.pair_index.deinit(gpa);
         gpa.free(m.pairs);
         gpa.free(m.pair_cells);
+        m.keystone.deinit(gpa);
+        m.item.deinit(gpa);
     }
 
     /// The newest patch's number for a cell; region 1 is EUW1, bracket 0 all ranks. null:
@@ -228,7 +234,33 @@ pub const Model = struct {
                 }
                 return .of(e, v, own);
             },
-            else => return null,
+            .keystone, .item => {
+                const i = m.index.get(a) orelse return null;
+                const x = std.math.cast(u16, b) orelse return null;
+                const t = m.eta(i, 0, bracket, region);
+                const c = if (kind == .keystone) &m.keystone else &m.item;
+                const role = a >> 13;
+                var e = t.eta + c.shift[i];
+                var v = t.v;
+                var own: f64 = 0;
+                // Never seen: no term, the class's spread in the range
+                if (c.main_index.get(@as(u32, role) << 16 | x)) |j| {
+                    e += c.mains[j].i;
+                    v += c.mains[j].v;
+                } else v += c.main_sd[role] * c.main_sd[role];
+                if (c.inter_index.get(@as(u32, a) << 16 | x)) |j| {
+                    const p = &c.inters[j];
+                    e += p.i;
+                    v += p.v;
+                    for (0..4) |br| {
+                        if (bracket != 0 and br != bracket) continue;
+                        own += p.own[br][1];
+                        if (region == 0) own += p.own[br][0];
+                    }
+                } else v += c.inter_sd[role] * c.inter_sd[role];
+                return .of(e, v, own);
+            },
+            .gold14, .build, .rune => return null,
         }
     }
 
@@ -248,6 +280,62 @@ pub const Model = struct {
         return .{ .eta = e, .v = v };
     }
 };
+
+/// A champion-role's win rate under a condition x (a keystone, an item it finished): its
+/// own terms, plus x's role-wide term, plus a shrunk champion-role x condition term. Both
+/// shrunk to 0, one variance per role each; fitted in that order on top of E3. A
+/// champion-role's own rate already holds the conditions it takes, so it is first
+/// shifted by minus their role-wide terms, weighted by its games: one that only takes a
+/// weak keystone gains the full gap on a strong one it never took
+const Cond = struct {
+    /// role << 16 | x -> mains
+    main_index: std.AutoHashMapUnmanaged(u32, u32) = .empty,
+    mains: []Pair = &.{},
+    /// cr << 16 | x -> inters
+    inter_index: std.AutoHashMapUnmanaged(u32, u32) = .empty,
+    inters: []Pair = &.{},
+    /// Sorted by condKey: one main's cells are contiguous, and so are one inter's
+    cells: []PairCell = &.{},
+    /// By champion-role index (Model.index)
+    shift: []f64 = &.{},
+    main_sd: [n_roles]f64 = @splat(0),
+    inter_sd: [n_roles]f64 = @splat(0),
+
+    fn deinit(c: *Cond, gpa: Allocator) void {
+        c.main_index.deinit(gpa);
+        gpa.free(c.mains);
+        c.inter_index.deinit(gpa);
+        gpa.free(c.inters);
+        gpa.free(c.cells);
+        gpa.free(c.shift);
+    }
+
+    /// A cell's own win rate over every slot, for tests
+    fn raw(c: *const Cond, cr: u16, x: u16) f64 {
+        const p = c.inters[c.inter_index.get(@as(u32, cr) << 16 | x).?];
+        var n: f64 = 0;
+        var k: f64 = 0;
+        for (c.cells[p.first..][0..p.len]) |cell| {
+            n += cell.n;
+            k += cell.k;
+        }
+        return k / n;
+    }
+};
+
+/// role | x | champion | patch slot << 3 | bracket << 1 | euw, so that sorting groups by
+/// (role, x) and within it by champion-role
+fn condKey(cr: u16, x: u16, slot: u64) u64 {
+    return @as(u64, cr >> 13) << 37 | @as(u64, x) << 21 | @as(u64, cr & 0x1fff) << 8 | slot;
+}
+
+fn addCell(gpa: Allocator, cells: *std.AutoHashMapUnmanaged(u64, PairCell), key: u64, w: f64, win: f64, own: f64) !void {
+    const pc = try cells.getOrPut(gpa, key);
+    if (!pc.found_existing) pc.value_ptr.* = .{ .n = 0, .k = 0, .own = 0 };
+    pc.value_ptr.n += w;
+    pc.value_ptr.k += win;
+    pc.value_ptr.own += own;
+}
 
 fn pairKey(a: u16, b: u16, duo: bool) u64 {
     return (@as(u64, a) << 16 | b) << 1 | @intFromBool(duo);
@@ -272,6 +360,10 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     // Pair cells by pair key << 8 | patch << 3 | bracket << 1 | euw
     var cells: std.AutoHashMapUnmanaged(u64, PairCell) = .empty;
     defer cells.deinit(gpa);
+    var keystones: std.AutoHashMapUnmanaged(u64, PairCell) = .empty;
+    defer keystones.deinit(gpa);
+    var items: std.AutoHashMapUnmanaged(u64, PairCell) = .empty;
+    defer items.deinit(gpa);
     const ln2 = @log(2.0);
     for (rows) |r| {
         if (r.day >= before_day) continue;
@@ -292,20 +384,11 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
         c.own[r.bracket][euw] += own;
         const slot = @as(u64, p) << 3 | @as(u64, r.bracket) << 1 | euw;
         // A lane counted once, from the lower champion-role's side; mirrors are 50%
-        if (r.opp != 0 and r.cr < r.opp) {
-            const pc = try cells.getOrPut(gpa, pairKey(r.cr, r.opp, false) << 8 | slot);
-            if (!pc.found_existing) pc.value_ptr.* = .{ .n = 0, .k = 0, .own = 0 };
-            pc.value_ptr.n += w;
-            pc.value_ptr.k += win;
-            pc.value_ptr.own += own;
-        }
-        if (r.ally != 0) {
-            const pc = try cells.getOrPut(gpa, pairKey(r.cr, r.ally, true) << 8 | slot);
-            if (!pc.found_existing) pc.value_ptr.* = .{ .n = 0, .k = 0, .own = 0 };
-            pc.value_ptr.n += w;
-            pc.value_ptr.k += win;
-            pc.value_ptr.own += own;
-        }
+        if (r.opp != 0 and r.cr < r.opp) try addCell(gpa, &cells, pairKey(r.cr, r.opp, false) << 8 | slot, w, win, own);
+        if (r.ally != 0) try addCell(gpa, &cells, pairKey(r.cr, r.ally, true) << 8 | slot, w, win, own);
+        if (r.keystone != 0) try addCell(gpa, &keystones, condKey(r.cr, r.keystone, slot), w, win, own);
+        // Items are known only in timelined games, as truth counts them
+        if (r.timeline) for (r.items) |x| if (x != 0) try addCell(gpa, &items, condKey(r.cr, x, slot), w, win, own);
     }
     m.counts = try counts.toOwnedSlice(gpa);
     m.fitted = try gpa.alloc(Fitted, m.counts.len);
@@ -330,6 +413,8 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     for (m.counts, m.fitted) |*c, *f| newton(c, f, shape, sd);
     m.sd = sd;
     try fitPairs(gpa, &m, &cells, opts.rounds);
+    m.keystone = try fitCond(gpa, &m, &keystones, opts.rounds);
+    m.item = try fitCond(gpa, &m, &items, opts.rounds);
     return m;
 }
 
@@ -349,12 +434,8 @@ fn mackay(sd: []f64, fixed: []const f64, sum_sq: []const f64, gamma: []const f64
 /// Pair terms on top of the fitted champion-roles: each pair cell's logit is the two
 /// champion-roles' (matchup: one minus the other; duo: the sum) plus the pair's term
 fn fitPairs(gpa: Allocator, m: *Model, cells: *const std.AutoHashMapUnmanaged(u64, PairCell), rounds: u8) !void {
-    const keys = try gpa.alloc(u64, cells.count());
+    const keys = try sortedKeys(gpa, cells);
     defer gpa.free(keys);
-    var it = cells.keyIterator();
-    var n: usize = 0;
-    while (it.next()) |key| : (n += 1) keys[n] = key.*;
-    std.mem.sortUnstable(u64, keys, {}, std.sort.asc(u64));
 
     m.pair_cells = try gpa.alloc(PairCell, keys.len);
     var pairs: std.ArrayList(Pair) = .empty;
@@ -382,21 +463,100 @@ fn fitPairs(gpa: Allocator, m: *Model, cells: *const std.AutoHashMapUnmanaged(u6
         p.own[bracket][euw] += out.own;
     }
     m.pairs = try pairs.toOwnedSlice(gpa);
+    fitTerms(m.pairs, m.pair_cells, &m.pair_sd, rounds);
+}
 
-    var sd: [n_pair_classes]f64 = @splat(0.1);
-    const fixed: [n_pair_classes]f64 = @splat(0);
+/// Sorted keys of a cell map
+fn sortedKeys(gpa: Allocator, cells: *const std.AutoHashMapUnmanaged(u64, PairCell)) ![]u64 {
+    const keys = try gpa.alloc(u64, cells.count());
+    var it = cells.keyIterator();
+    var n: usize = 0;
+    while (it.next()) |key| : (n += 1) keys[n] = key.*;
+    std.mem.sortUnstable(u64, keys, {}, std.sort.asc(u64));
+    return keys;
+}
+
+fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged(u64, PairCell), rounds: u8) !Cond {
+    var c: Cond = .{};
+    errdefer c.deinit(gpa);
+    const keys = try sortedKeys(gpa, map);
+    defer gpa.free(keys);
+    c.cells = try gpa.alloc(PairCell, keys.len);
+    c.shift = try gpa.alloc(f64, m.counts.len);
+    @memset(c.shift, 0);
+    // Each cell's champion-role index and E3 logit
+    const cri = try gpa.alloc(u32, keys.len);
+    defer gpa.free(cri);
+    const base = try gpa.alloc(f64, keys.len);
+    defer gpa.free(base);
+    const total = try gpa.alloc(f64, m.counts.len);
+    defer gpa.free(total);
+    var mains: std.ArrayList(Pair) = .empty;
+    defer mains.deinit(gpa);
+    var inters: std.ArrayList(Pair) = .empty;
+    defer inters.deinit(gpa);
+    for (keys, c.cells, 0..) |key, *out, j| {
+        const role: u16 = @intCast(key >> 37);
+        const x: u16 = @intCast(key >> 21 & 0xffff);
+        const cr: u16 = role << 13 | @as(u16, @intCast(key >> 8 & 0x1fff));
+        const patch: usize = @intCast(key >> 3 & 0x1f);
+        const bracket: usize = @intCast(key >> 1 & 3);
+        const euw: usize = @intCast(key & 1);
+        out.* = map.get(key).?;
+        cri[j] = m.index.get(cr).?;
+        base[j] = m.eta(cri[j], patch, bracket, euw).eta;
+        if (j == 0 or keys[j - 1] >> 21 != key >> 21) {
+            try c.main_index.put(gpa, @as(u32, role) << 16 | x, @intCast(mains.items.len));
+            try mains.append(gpa, .{ .class = @intCast(role), .first = @intCast(j), .len = 0 });
+        }
+        mains.items[mains.items.len - 1].len += 1;
+        if (j == 0 or keys[j - 1] >> 8 != key >> 8) {
+            try c.inter_index.put(gpa, @as(u32, cr) << 16 | x, @intCast(inters.items.len));
+            try inters.append(gpa, .{ .class = @intCast(role), .first = @intCast(j), .len = 0 });
+        }
+        const p = &inters.items[inters.items.len - 1];
+        p.len += 1;
+        p.own[bracket][euw] += out.own;
+    }
+    c.mains = try mains.toOwnedSlice(gpa);
+    c.inters = try inters.toOwnedSlice(gpa);
+    for (0..10) |_| {
+        for (c.cells, cri, base) |*cell, i, b| cell.off = b + c.shift[i];
+        fitTerms(c.mains, c.cells, &c.main_sd, rounds);
+        @memset(c.shift, 0);
+        @memset(total, 0);
+        for (c.mains) |p| for (c.cells[p.first..][0..p.len], cri[p.first..][0..p.len]) |cell, i| {
+            c.shift[i] -= cell.n * p.i;
+            total[i] += cell.n;
+        };
+        for (c.shift, total) |*sh, t| sh.* = if (t > 0) sh.* / t else 0;
+    }
+    // Two stages, as pairs on top of E3: the interactions see the role-wide terms as fixed
+    for (c.cells, cri, base) |*cell, i, b| cell.off = b + c.shift[i];
+    for (c.mains) |p| for (c.cells[p.first..][0..p.len]) |*cell| {
+        cell.off += p.i;
+    };
+    fitTerms(c.inters, c.cells, &c.inter_sd, rounds);
+    return c;
+}
+
+/// Shrunk single terms on fixed offsets, one variance per class (MacKay)
+fn fitTerms(terms: []Pair, cells: []const PairCell, sd_out: []f64, rounds: u8) void {
+    var sd: [n_roles]f64 = @splat(0.1);
+    const fixed: [n_roles]f64 = @splat(0);
+    const classes = sd_out.len;
     for (0..rounds) |_| {
-        var sum_sq: [n_pair_classes]f64 = @splat(0);
-        var gamma: [n_pair_classes]f64 = @splat(0);
-        for (m.pairs) |*p| {
-            pairNewton(p, m.pair_cells[p.first..][0..p.len], sd[p.class]);
+        var sum_sq: [n_roles]f64 = @splat(0);
+        var gamma: [n_roles]f64 = @splat(0);
+        for (terms) |*p| {
+            pairNewton(p, cells[p.first..][0..p.len], sd[p.class]);
             sum_sq[p.class] += p.i * p.i;
             gamma[p.class] += 1 - p.v / (sd[p.class] * sd[p.class]);
         }
-        if (!mackay(&sd, &fixed, &sum_sq, &gamma)) break;
+        if (!mackay(sd[0..classes], fixed[0..classes], sum_sq[0..classes], gamma[0..classes])) break;
     }
-    for (m.pairs) |*p| pairNewton(p, m.pair_cells[p.first..][0..p.len], sd[p.class]);
-    m.pair_sd = sd;
+    for (terms) |*p| pairNewton(p, cells[p.first..][0..p.len], sd[p.class]);
+    @memcpy(sd_out, sd[0..classes]);
 }
 
 fn pairNewton(p: *Pair, cells: []const PairCell, sd: f64) void {
@@ -529,7 +689,7 @@ test "the newest patch's games pull its number away from the old patch" {
     const new = c20.k[0][2][0] / c20.n[0][2][0];
     const e20 = after.rate(.champion, 0, 2, 20, 0).?.p;
     try std.testing.expect((e20 - old) * (new - e20) > 0);
-    try std.testing.expectEqual(@as(?Estimate, null), after.rate(.item, 0, 0, 1, 2));
+    try std.testing.expectEqual(@as(?Estimate, null), after.rate(.rune, 0, 0, 1, 2));
     try std.testing.expectEqual(@as(?Estimate, null), after.rate(.champion, 0, 0, 99, 0));
     // The planted moves are 0.41 on the logit for a quarter of them: sd about 0.2
     const sd = after.sd[@backingInt(Term.patch)];
@@ -582,4 +742,52 @@ test "a matchup is both champions' strength plus a shrunk pair term" {
     const d = m.rate(.duo, 0, 0, bot, sup).?;
     // One duo among mostly 50% champions: shrunk, but above the bottom's own rate
     try std.testing.expect(d.p > m.rate(.champion, 0, 0, bot, 0).?.p + 0.01);
+}
+
+test "a keystone's rate is the champion-role's plus a role-wide term plus a shrunk pair term" {
+    const gpa = std.testing.allocator;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    var prng: std.Random.DefaultPrng = .init(11);
+    const rand = prng.random();
+    // Twenty top champions split between keystones 8010 and 8437; 8010 is 0.4 better on
+    // the logit everywhere, and on top of that champions 1-10 gain or lose 0.4 with it in
+    // turn. Champion 20 never takes 8010. Item 3071 in timelined games only
+    for (1..21) |ch| {
+        const cr: u16 = @intCast(ch);
+        const extra: f64 = if (ch > 10) 0 else if (ch % 2 == 1) 0.4 else -0.4;
+        for (0..2000) |g| {
+            const ks: u16 = if (ch == 20 or g % 2 == 0) 8437 else 8010;
+            const z: f64 = if (ks == 8010) 0.4 + extra else 0;
+            const win = rand.float(f64) < sigmoid(z - 0.2);
+            try rows.append(gpa, .{ .day = -1, .cr = cr, .keystone = ks, .win = win, .euw = false, .patch = 0, .bracket = 0, .timeline = g % 4 < 2, .items = .{ 3071, 0, 0, 0, 0, 0 } });
+        }
+    }
+    var m = try fit(gpa, rows.items, 0, .{});
+    defer m.deinit(gpa);
+    const one = m.rate(.keystone, 0, 0, 1, 8010).?;
+    const two = m.rate(.keystone, 0, 0, 2, 8010).?;
+    // Near each cell's own 1000 games, a little shrunk
+    try std.testing.expectApproxEqAbs(m.keystone.raw(1, 8010), one.p, 0.015);
+    try std.testing.expectApproxEqAbs(m.keystone.raw(2, 8010), two.p, 0.015);
+    try std.testing.expectApproxEqAbs(sigmoid(0.6), one.p, 0.05);
+    try std.testing.expect(one.lo < one.p and one.p < one.hi);
+    try std.testing.expectEqual(@as(f64, 1000), one.own);
+    // Nobody-played combination: champion 20's own rate moved by 8010's role-wide term
+    const unseen = m.rate(.keystone, 0, 0, 20, 8010).?;
+    const base = m.rate(.champion, 0, 0, 20, 0).?;
+    try std.testing.expect(unseen.p > base.p + 0.05);
+    try std.testing.expect(unseen.hi - unseen.lo > one.hi - one.lo);
+    try std.testing.expectEqual(@as(f64, 0), unseen.own);
+    try std.testing.expectApproxEqAbs(sigmoid(0.2), unseen.p, 0.03);
+    // A keystone nobody in the role took: about the rate of a champion taking both
+    const none = m.rate(.keystone, 0, 0, 15, 8229).?;
+    try std.testing.expectApproxEqAbs(m.rate(.champion, 0, 0, 15, 0).?.p, none.p, 0.02);
+    // Each planted 0.4 splits across a champion's two keystones once it is centred
+    const sd = m.keystone.inter_sd[0];
+    try std.testing.expect(sd > 0.08 and sd < 0.2);
+    // Items count only timelined games: half of champion 3's
+    const it = m.rate(.item, 0, 0, 3, 3071).?;
+    try std.testing.expectApproxEqAbs(m.rate(.champion, 0, 0, 3, 0).?.p, it.p, 0.03);
+    try std.testing.expectEqual(@as(?Estimate, null), m.rate(.rune, 0, 0, 3, 8010));
 }
