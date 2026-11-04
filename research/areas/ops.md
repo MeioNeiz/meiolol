@@ -8,6 +8,7 @@ hosting, storage, rendering and SEO, toolchain
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
+| active | now | [How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost?](../questions/box-disk-headroom.md): How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost? | 4 strong | 4 | 1 (thin) | 1 |
 | answered | now | [What free or very cheap hosting and storage fits meiolol's site, API and data?](../questions/free-hosting-storage.md): What free or very cheap hosting and storage fits meiolol's site, API and data? | 13 strong, 4 moderate, 2 unsupported | 34 | 7 (growing) | 4 |
 | answered | now | [Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines?](../questions/hybrid-rendering-seo.md): Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines? | 12 strong, 9 moderate | 16 | 9 (growing) | 2 |
 | answered | now | [Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box?](../questions/oci-payg-upgrade.md): Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box? | 8 strong, 2 moderate, 1 contested | 7 | 2 (thin) |  |
