@@ -124,7 +124,7 @@ pub const Packer = struct {
     stopping: std.atomic.Value(bool) = .init(false),
     /// Between an error and the restart from the spool (backoff): pushes queue
     off: std.atomic.Value(bool) = .init(false),
-    /// Adding a batch taken from the queue
+    /// Replaying the spool or adding a batch taken from the queue (settle waits on it)
     busy: bool = false,
     block_docs: usize = block_docs,
     restart_s: i64 = restart_s,
@@ -181,6 +181,8 @@ pub const Packer = struct {
         p.started = Io.Clock.awake.now(p.io).toSeconds();
         p.next_seg = try p.lastSegment() + 1;
         p.sealer_thread = try std.Thread.spawn(.{}, Sealer.run, .{&p.sealer});
+        // Before the thread runs, or a settle right after start misses the replay
+        p.busy = true;
         p.thread = try std.Thread.spawn(.{}, run, .{p});
     }
 
@@ -318,7 +320,11 @@ pub const Packer = struct {
     }
 
     fn loop(p: *Packer) !void {
-        try p.replay();
+        p.setBusy(true);
+        {
+            defer p.setBusy(false);
+            try p.replay();
+        }
         var batch: std.ArrayList(Owned) = .empty;
         defer batch.deinit(p.gpa);
         while (true) {
@@ -335,9 +341,7 @@ pub const Packer = struct {
             defer {
                 for (batch.items) |o| p.gpa.free(o.buf);
                 batch.clearRetainingCapacity();
-                p.mutex.lockUncancelable(p.io);
-                p.busy = false;
-                p.mutex.unlock(p.io);
+                p.setBusy(false);
             }
             // The whole batch reaches the spool before anything else: a stop (or a
             // crash) from here on loses none of it
@@ -353,6 +357,12 @@ pub const Packer = struct {
                 return;
             }
         }
+    }
+
+    fn setBusy(p: *Packer, busy: bool) void {
+        p.mutex.lockUncancelable(p.io);
+        defer p.mutex.unlock(p.io);
+        p.busy = busy;
     }
 
     fn packBatch(p: *Packer, batch: []const Owned) !void {
