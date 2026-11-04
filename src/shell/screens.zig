@@ -441,8 +441,8 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
         .act = try c.act(a, .{ .ban = o.champion }),
     };
     return .{
-        .board = .{ .lanes = try lanes(a, c, b, if (s.ally) s.card.role else null), .bans_us = bans_us, .bans_them = bans_them },
-        .lane = try lane(a, c, &s.card, board.modeOf(&s.card), s.ally),
+        .board = .{ .lanes = try lanes(a, c, b, if (s.ally) .{ .role = s.card.role, .enemy = s.enemy } else null), .bans_us = bans_us, .bans_them = bans_them },
+        .lane = try lane(a, c, &s.card, board.modeOf(&s.card), if (s.enemy) .enemy else if (s.ally) .ally else .mine),
         .ban_options = ban_options,
         .banning = b.turn == .ban,
         .draft = if (c.private) if (b.draft) |d| @floatCast(100 * d.win) else null else null,
@@ -533,9 +533,15 @@ pub fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
     };
 }
 
+/// Another seat's lane in the panel
+const Shown = struct { role: core.Role, enemy: bool };
+
+/// Whose lane the panel shows
+const Side = enum { mine, ally, enemy };
+
 /// A row per role in draft order; a seat without a role takes the first row its side
-/// left empty. `shown`: the ally whose lane the panel shows
-fn lanes(a: Allocator, c: Ctx, b: *const board.Board, shown: ?core.Role) ![]const ui.draftboard.Lane {
+/// left empty. `shown`: the seat whose lane the panel shows
+fn lanes(a: Allocator, c: Ctx, b: *const board.Board, shown: ?Shown) ![]const ui.draftboard.Lane {
     var rows: [5]ui.draftboard.Lane = undefined;
     for (&rows, ui.role.Role.all) |*r, role| r.* = .{ .role = role };
     var filled: [2][5]bool = @splat(@splat(false));
@@ -555,13 +561,18 @@ fn lanes(a: Allocator, c: Ctx, b: *const board.Board, shown: ?core.Role) ![]cons
             break;
         };
     }
-    if (shown) |r| rows[@backingInt(r)].us.sel = true;
-    // A click on an ally's seat shows their lane, on mine (while an ally's shows) mine
-    // again (bridge.js sends the act); under practice the seats' clicks place champions
+    if (shown) |x| {
+        const row = &rows[@backingInt(x.role)];
+        if (x.enemy) row.them.sel = true else row.us.sel = true;
+    }
+    // A click on another seat shows their lane, on mine (while another's shows) mine
+    // again (bridge.js sends the act); under practice the seats' clicks place champions.
+    // An enemy row's lane is its role's: board.enemyLane finds the seat placed there
     if (!c.practice) for (&rows, roled, 0..) |*row, by_role, i| {
         if (row.us.you) {
             if (shown != null) row.us.act = try a.print("lane {d}", .{state.own_lane});
         } else if (by_role and !row.us.sel) row.us.act = try a.print("lane {d}", .{i});
+        if (!row.them.sel) row.them.act = try a.print("lane {d}", .{state.enemy_lanes + i});
     };
     return a.dupe(ui.draftboard.Lane, &rows);
 }
@@ -721,7 +732,7 @@ fn picked(a: Allocator, c: Ctx, champion: u32, role: core.Role) !Picked {
 }
 
 /// `ally`: an ally's lane, without my pool or mastery (a null `mastery` tells the panel)
-fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode, ally: bool) !ui.champselect.Lane {
+fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode, side: Side) !ui.champselect.Lane {
     const options = try a.alloc(ui.champselect.Option, card.options.len);
     for (options, card.options) |*x, o| {
         const reasons = try a.alloc(ui.champselect.Reason, o.reasons.len);
@@ -783,7 +794,8 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode, ally
         .chart = chart,
         .caption = if (card.matchup) |m| try a.print("{f} games · {s} · EUW, {s}", .{ count(m.games), m.bracket.label(), card.period }) else "",
         .options = options,
-        .mastery = if (ally) null else state.by_mastery.load(.acquire),
+        .mastery = if (side != .mine) null else state.by_mastery.load(.acquire),
+        .enemy = side == .enemy,
         .scope = try scopeOf(a, c, card.period),
     };
 }

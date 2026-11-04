@@ -22,8 +22,10 @@ pub const Select = struct {
     board: board.Board,
     /// Once every seat is locked
     comp: ?*const comp.Comp = null,
-    /// The card is an ally's lane (lane_role), not mine
+    /// The card is another seat's lane (lane_role), not mine
     ally: bool = false,
+    /// That seat is an enemy's
+    enemy: bool = false,
     /// The Options panel for the card's lane; null for an ally's once they lock
     picks: ?picks.Picks = null,
     /// Stats from every region (all_regions) rather than EUW's; null without the
@@ -76,10 +78,11 @@ pub const Note = union(enum) {
 /// The window's "Count your mastery points" box; the poller reads it each tick
 pub var by_mastery: std.atomic.Value(bool) = .init(true);
 
-/// The lane the card shows (Role's backing int), set by a click on an ally's seat;
-/// `own_lane` shows mine. Back to mine when champ select ends
+/// The lane the card shows, set by a seat click: an ally's role (Role's backing int), an
+/// enemy's (`enemy_lanes` past it), `own_lane` mine. Back to mine when champ select ends
 pub var lane_role: std.atomic.Value(u8) = .init(own_lane);
 pub const own_lane = 255;
+pub const enemy_lanes = 5;
 
 /// The Options panel's region chip: champ select's stats from every region, when the
 /// app has that file (Data.all), else EUW's

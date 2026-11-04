@@ -79,8 +79,11 @@ file and packed rows: docs/architecture.md.
   then builds the card from that ally's side (board.allyLane: their champion, no pool,
   mastery or rank; lanecard.Input.ally: once they lock no options, the matchup only, and
   their hover never gets a forced row) beside my own card's board and bans
-  (state.lane_role, back to mine when champ select ends). Not under practice, whose seat
-  clicks place champions
+  (state.lane_role, back to mine when champ select ends). An enemy row sends "lane
+  5+role" (state.enemy_lanes): board.enemyLane builds the card from their side (the seat
+  the board placed in that role, their team as allies, mine with hovers as enemies,
+  ally semantics: what they could pick into us, the matchup once locked), Lane.enemy
+  badges it. Not under practice, whose seat clicks place champions
 - Region chip: with all-stats.bin loaded (poller Data.all), the Options panel shows "EUW |
   All regions" (ui/segmented.zig Item.shell as data-shell, so no handler in an island);
   the shell's `regions` sets state.all_regions and champ select and practice build from

@@ -667,6 +667,7 @@ const Poller = struct {
 
         const sel = try arena.create(state.Select);
         sel.ally = false;
+        sel.enemy = false;
         sel.all_regions = if (data.all != null) all else null;
         const mine: lanecard.Input = .{
             .stats = stats,
@@ -685,11 +686,19 @@ const Poller = struct {
         sel.card = try lanecard.build(arena, mine);
         sel.board = try board.build(arena, stats, .{}, cs, &sel.card, if (data.facts) |*f| f else null);
         var used = mine;
-        if (shown < core.Role.count) if (try board.allyLane(arena, mine, cs, @fromBackingInt(@intCast(shown)))) |in| {
+        if (shown < core.Role.count) {
+            if (try board.allyLane(arena, mine, cs, @fromBackingInt(@intCast(shown)))) |in| {
+                sel.card = try lanecard.build(arena, in);
+                sel.ally = true;
+                used = in;
+            }
+        } else if (shown >= state.enemy_lanes and shown < state.enemy_lanes + core.Role.count) {
+            const in = try board.enemyLane(arena, mine, &sel.board, @fromBackingInt(@intCast(shown - state.enemy_lanes)));
             sel.card = try lanecard.build(arena, in);
             sel.ally = true;
+            sel.enemy = true;
             used = in;
-        };
+        }
         sel.picks = try picks.build(arena, used, &sel.card);
         sel.comp = try comp.after(arena, .{
             .stats = stats,

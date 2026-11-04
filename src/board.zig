@@ -137,6 +137,39 @@ pub fn allyLane(arena: std.mem.Allocator, mine: lanecard.Input, cs: session.Cham
     return in;
 }
 
+/// The lane card's input seen from the enemy in `role` (the board's roles: given or
+/// guessed): their champion as mine, the rest of their team as allies, my team (hovers
+/// too) as enemies. As an ally's: no pool, mastery or rank, options by the draft alone
+/// (what they could pick into us), none once they lock
+pub fn enemyLane(arena: std.mem.Allocator, mine: lanecard.Input, b: *const Board, role: Role) !lanecard.Input {
+    var in = mine;
+    in.role = role;
+    in.me = 0;
+    in.locked = false;
+    var allies: std.ArrayList(core.Pick) = .empty;
+    for (b.enemies) |s| {
+        if (s.slot.champion == 0) continue;
+        if (in.me == 0 and s.role == role) {
+            in.me = s.slot.champion;
+            in.locked = s.slot.state == .locked;
+        } else try allies.append(arena, .{ .champion = s.slot.champion, .role = s.role });
+    }
+    var enemies: std.ArrayList(core.Pick) = .empty;
+    for (b.allies) |s| if (s.slot.champion != 0) try enemies.append(arena, .{
+        .champion = s.slot.champion,
+        .role = s.role,
+        .hover = s.slot.state != .locked,
+    });
+    in.allies = allies.items;
+    in.enemies = enemies.items;
+    in.pickable = null;
+    in.mastery = &.{};
+    in.tier = null;
+    in.expertise = null;
+    in.ally = true;
+    return in;
+}
+
 fn seat(stats: *const Stats, opts: core.Options, sl: Slot, role: ?Role, guessed: bool) Seat {
     var s: Seat = .{ .slot = sl, .role = role, .guessed = guessed };
     if (sl.champion == 0) return s;
@@ -389,6 +422,14 @@ test "board: seats, guessed enemy roles, ideas, bans, draft" {
     try testing.expectEqual(.{ 2, 2 }, d.picks);
     try testing.expectEqual(1, d.hovers);
     try testing.expect(d.win > 0.3 and d.win < 0.7 and d.se > 0);
+
+    // Their jungle still to pick: what they could pick into my team
+    const mine_in: lanecard.Input = .{ .stats = st, .curves = null, .role = .middle, .me = id(st, "Ahri"), .opts = cardscenes.test_opts };
+    const theirs_in = try enemyLane(arena, mine_in, &b, .jungle);
+    try testing.expectEqual(0, theirs_in.me);
+    const threats = try lanecard.build(arena, theirs_in);
+    try testing.expect(threats.options.len >= lanecard.min_options);
+    for (threats.options) |o| try testing.expect(o.champion != id(st, "Darius") and o.champion != id(st, "Ahri"));
 }
 
 test "board: an ally's lane as the card sees it" {
@@ -426,4 +467,44 @@ test "board: an ally's lane as the card sees it" {
     try testing.expectEqual(2, jungle.allies.len);
     try testing.expectEqual(null, try allyLane(arena, base, cs, .middle));
     try testing.expectEqual(null, try allyLane(arena, base, cs, .bottom));
+}
+
+test "board: an enemy's lane from their side" {
+    var f = try cardscenes.fixture();
+    defer f.deinit();
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const ally_seats = [_]Seat{
+        .{ .slot = .{ .champion = 122, .role = .top, .state = .locked }, .role = .top, .guessed = false },
+        .{ .slot = .{ .champion = 103, .role = .middle, .state = .hover, .me = true }, .role = .middle, .guessed = false },
+        .{ .slot = .{ .role = .jungle }, .role = .jungle, .guessed = false },
+    };
+    const enemy_seats = [_]Seat{
+        .{ .slot = .{ .champion = 86, .state = .locked }, .role = .top, .guessed = true },
+        .{ .slot = .{ .champion = 134, .state = .locked }, .role = .middle, .guessed = true },
+        .{ .slot = .{}, .role = null, .guessed = false },
+    };
+    const b: Board = .{
+        .allies = &ally_seats,
+        .enemies = &enemy_seats,
+        .my_bans = &.{},
+        .their_bans = &.{},
+        .turn = .none,
+        .stage = "",
+        .mode = .blind,
+        .ban_options = &.{},
+        .draft = null,
+    };
+    const base: lanecard.Input = .{ .stats = &f.stats, .curves = null, .role = .middle, .me = 103, .pickable = &.{103}, .tier = "GOLD" };
+    const top = try enemyLane(arena, base, &b, .top);
+    try testing.expectEqual(86, top.me);
+    try testing.expect(top.locked and top.ally);
+    try testing.expectEqual(null, top.pickable);
+    try testing.expectEqualSlices(core.Pick, &.{.{ .champion = 134, .role = .middle }}, top.allies);
+    try testing.expectEqualSlices(core.Pick, &.{ .{ .champion = 122, .role = .top }, .{ .champion = 103, .role = .middle, .hover = true } }, top.enemies);
+    const jungle = try enemyLane(arena, base, &b, .jungle);
+    try testing.expectEqual(0, jungle.me);
+    try testing.expect(!jungle.locked);
+    try testing.expectEqual(2, jungle.allies.len);
 }

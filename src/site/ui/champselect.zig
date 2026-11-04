@@ -59,6 +59,8 @@ pub const Lane = struct {
     /// on their seat), `me` theirs, without a pool to weigh; once they lock (mode locked)
     /// the matchup only
     mastery: ?bool = null,
+    /// That seat is an enemy's: `them` is ours, options what they could pick into us
+    enemy: bool = false,
     /// "EUW, last 30 days"
     scope: []const u8 = "",
 };
@@ -146,7 +148,7 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
                 }),
                 h.span(.{ .class = "tags" }, .{
                     badge.view(h, .us, .{role.Role.label(l.role)}),
-                    if (ally) badge.view(h, .neutral, .{W.ally}) else null,
+                    if (ally) badge.view(h, if (l.enemy) .them else .neutral, .{if (l.enemy) W.enemy else W.ally}) else null,
                     badge.view(h, if (l.mode == .locked) .accent else .neutral, .{switch (l.mode) {
                         .blind => W.blind,
                         .counter => W.counter,
@@ -239,6 +241,7 @@ const W = struct {
     const head_locked = plain("Other options");
     const mastery = plain("Count mastery");
     const ally = plain("Ally");
+    const enemy = plain("Enemy");
     const own = plain("Your lane");
     const none = plain("No champion you can pick has enough games in this role.");
     const none_ally = plain("No champion has enough games in this role.");
@@ -387,6 +390,26 @@ fn allyLane(h: *H) Screen {
     return s;
 }
 
+/// The enemy jungle's seat clicked before they pick: what they could pick into ours
+fn enemyLane(h: *H) Screen {
+    var s = sample;
+    const lanes = h.mem.dupe(draftboard.Lane, sample.board.lanes) catch {
+        h.oom = true;
+        return sample;
+    };
+    lanes[1].them.sel = true;
+    s.board.lanes = lanes;
+    s.lane = .{
+        .role = .jungle,
+        .them = lanes[1].us.champ,
+        .mode = .counter,
+        .enemy = true,
+        .options = sample.lane.options[1..],
+        .scope = "EUW, last 30 days",
+    };
+    return s;
+}
+
 fn chartState(h: *H) ?*lanechart.Held {
     const x = h.mem.create(lanechart.Held) catch {
         h.oom = true;
@@ -401,6 +424,7 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("counter, public", view(h, sample, chartState(h), null));
     g.addFill("counter, private", view(h, private(h, sample), chartState(h), null));
     g.addFill("an ally's lane", view(h, allyLane(h), chartState(h), null));
+    g.addFill("an enemy's lane", view(h, enemyLane(h), chartState(h), null));
     g.addFill("your ban, blind", view(h, .{
         .board = .{ .lanes = draftboard.sample.lanes[0..5], .bans_them = draftboard.sample.bans_them },
         .banning = true,

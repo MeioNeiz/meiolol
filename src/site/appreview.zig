@@ -55,15 +55,18 @@ const Shot = struct {
     signin: ?ui.signin.SignIn = null,
     /// Private edition only, with practice's bar
     practice: ?practice.Setup = null,
-    /// The board's seat clicks (lane N, 255 mine): the slug that lane's page has
-    lanes: [6]?[]const u8 = @splat(null),
+    /// The board's seat clicks (lane N: allies 0-4, enemies 5-9; 255 mine, kept at
+    /// `own_slot`): the slug that lane's page has
+    lanes: [own_slot + 1]?[]const u8 = @splat(null),
     /// The scenario's step it was published on: the same moment from another seat
     step: u32 = 0,
-    /// An ally's lane after a seat click
+    /// Another seat's lane after a click on it
     lane: bool = false,
     /// The lobby's form panel beside a waiting status
     form: ?desktop.lcu.me.Form = null,
 };
+
+const own_slot = state.enemy_lanes + core.Role.count;
 
 const Group = struct {
     title: []const u8,
@@ -307,6 +310,7 @@ fn play(a: Allocator, gpa: Allocator, io: Io, data: *const poller.Data, lock: []
     var n: usize = 0;
     var steps: u32 = 0;
     var lanes_done = false;
+    var picking_done = false;
     while (try m.advance()) |step| {
         steps += 1;
         const s = (try r.tick(a)) orelse continue;
@@ -315,34 +319,53 @@ fn play(a: Allocator, gpa: Allocator, io: Io, data: *const poller.Data, lock: []
         const slug = try a.print("{s}-{d:0>2}", .{ prefix, n });
         const title = try describe(a, &sc, step, s);
         try shots.append(a, .{ .group = p.group, .slug = slug, .title = title, .short = try short(a, title), .status = s, .step = steps, .form = r.form(s) });
-        // All ten locked: every ally's lane, as a seat click shows it
-        if (lanes_done or p.cell != null or s != .select or s.select.comp == null) continue;
-        lanes_done = true;
-        const mine = shots.items.len - 1;
-        for (core.Role.all) |role| {
-            const i = @backingInt(role);
-            state.lane_role.store(i, .release);
-            const ally = (try r.tick(a)) orelse continue;
-            if (ally != .select or !ally.select.ally) continue;
-            const ally_slug = try a.print("{s}-lane-{s}", .{ slug, @tagName(role) });
-            shots.items[mine].lanes[i] = ally_slug;
-            try shots.append(a, .{
-                .group = p.group,
-                .slug = ally_slug,
-                .title = try a.print("{s}: {s}'s lane (their seat clicked)", .{ shots.items[mine].title, role.label() }),
-                .short = try a.print("{c}{s}'s lane", .{ std.ascii.toUpper(role.label()[0]), role.label()[1..] }),
-                .status = ally,
-                .step = steps,
-                .lane = true,
-            });
+        if (p.cell != null or s != .select) continue;
+        // My first pick turn: each enemy's lane, what they could pick into us; all ten
+        // locked: every seat's lane, as a click on it shows it
+        if (!picking_done and s.select.board.turn == .pick) {
+            picking_done = true;
+            try seatLanes(a, &r, shots, p.group, steps, state.enemy_lanes);
+        } else if (!lanes_done and s.select.comp != null) {
+            lanes_done = true;
+            try seatLanes(a, &r, shots, p.group, steps, 0);
         }
-        // Back to mine: that tick's page is the one above
-        state.lane_role.store(state.own_lane, .release);
-        _ = try r.tick(a);
-        for (shots.items[mine + 1 ..]) |*x| {
-            x.lanes = shots.items[mine].lanes;
-            x.lanes[5] = slug;
-        }
+    }
+}
+
+/// The last shot's board clicked seat by seat from `first` (state.lane_role) to the
+/// enemies' last: a shot per lane the poller shows, each linking to the others
+fn seatLanes(a: Allocator, r: *poller.Replay, shots: *std.ArrayList(Shot), group: usize, steps: u32, first: u8) !void {
+    const mine = shots.items.len - 1;
+    const slug = shots.items[mine].slug;
+    var k = first;
+    while (k < own_slot) : (k += 1) {
+        state.lane_role.store(k, .release);
+        const seat = (try r.tick(a)) orelse continue;
+        if (seat != .select or !seat.select.ally) continue;
+        const enemy = k >= state.enemy_lanes;
+        const role: core.Role = @fromBackingInt(@intCast(if (enemy) k - state.enemy_lanes else k));
+        const name = role.label();
+        const lane_slug = try a.print("{s}-lane-{s}{s}", .{ slug, if (enemy) "enemy-" else "", @tagName(role) });
+        shots.items[mine].lanes[k] = lane_slug;
+        try shots.append(a, .{
+            .group = group,
+            .slug = lane_slug,
+            .title = try a.print("{s}: {s}{s}'s lane (their seat clicked)", .{ shots.items[mine].title, if (enemy) "enemy " else "", name }),
+            .short = if (enemy)
+                try a.print("Enemy {s}", .{name})
+            else
+                try a.print("{c}{s}'s lane", .{ std.ascii.toUpper(name[0]), name[1..] }),
+            .status = seat,
+            .step = steps,
+            .lane = true,
+        });
+    }
+    // Back to mine: that tick's page is the one above
+    state.lane_role.store(state.own_lane, .release);
+    _ = try r.tick(a);
+    for (shots.items[mine + 1 ..]) |*x| {
+        x.lanes = shots.items[mine].lanes;
+        x.lanes[own_slot] = slug;
     }
 }
 
@@ -503,7 +526,7 @@ fn reviewTop(a: Allocator, ed: Edition, groups: []const Group, shots: []const Sh
     const x = &w.writer;
     try navigator(x, a, ed, groups, shots, if (base == s.group) i else sameStep(shots, ed, i, base) orelse i);
     try x.print("<header class=\"rv-bar\" data-edition=\"{t}\"", .{ed});
-    for (s.lanes, 0..) |l, k| if (l) |slug| try x.print(" data-lane-{d}=\"{s}\"", .{ if (k == 5) state.own_lane else k, try url(a, ed, slug) });
+    for (s.lanes, 0..) |l, k| if (l) |slug| try x.print(" data-lane-{d}=\"{s}\"", .{ if (k == own_slot) state.own_lane else k, try url(a, ed, slug) });
     if (groupStart(groups, shots, ed, base, false)) |k| try x.print(" data-prev-group=\"{s}\"", .{try url(a, ed, shots[k].slug)});
     if (groupStart(groups, shots, ed, base, true)) |k| try x.print(" data-next-group=\"{s}\"", .{try url(a, ed, shots[k].slug)});
     try x.writeAll("><button type=\"button\" class=\"rv-menu\" aria-controls=\"rv-nav\" aria-expanded=\"false\">States</button><b>");
