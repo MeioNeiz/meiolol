@@ -1,0 +1,2413 @@
+Conformal Prediction Under Covariate Shift
+Ryan J. Tibshirani
+
+Rina Foygel Barber
+
+Emmanuel J. Candès
+
+Aaditya Ramdas
+
+arXiv:1904.06019v3 [stat.ME] 6 Jul 2020
+
+Abstract
+We extend conformal prediction methodology beyond the case of exchangeable data. In particular, we show that a
+weighted version of conformal prediction can be used to compute distribution-free prediction intervals for problems in
+which the test and training covariate distributions differ, but the likelihood ratio between these two distributions is
+known—or, in practice, can be estimated accurately with access to a large set of unlabeled data (test covariate points).
+Our weighted extension of conformal prediction also applies more generally, to settings in which the data satisfies a
+certain weighted notion of exchangeability. We discuss other potential applications of our new conformal methodology,
+including latent variable and missing data problems.
+
+1
+
+Introduction
+
+Let (Xi , Yi ) ∈ Rd × R, i = 1, . . . , n denote training data that is assumed to be i.i.d. from an arbitrary distribution P .
+bn : Rd → {subsets of R},
+Given a desired coverage rate 1 − α ∈ (0, 1), consider the problem of constructing a band C
+based on the training data such that, for a new i.i.d. point (Xn+1 , Yn+1 ),
+n
+o
+bn (Xn+1 ) ≥ 1 − α,
+P Yn+1 ∈ C
+(1)
+where this probability is taken over the n + 1 points (Xi , Yi ), i = 1, . . . , n + 1 (the n training points and the test point).
+Crucially, we will require (1) to hold with no assumptions whatsoever on the common distribution P .
+Conformal prediction, a framework pioneered by Vladimir Vovk and colleagues in the 1990s, provides a means for
+achieving this goal, relying only on exchangeablility of the training and test data. The definitive reference is the book
+by Vovk et al. (2005); see also Shafer and Vovk (2008); Vovk et al. (2009); Vovk (2013); Burnaev and Vovk (2014), and
+http://www.alrw.net for an often-updated list of conformal prediction work by Vovk and colleagues. Moreover,
+we refer to Lei and Wasserman (2014); Lei et al. (2018) for recent developments in the areas of nonparametric and
+high-dimensional regression. In this work, we extend conformal prediction beyond the setting of exchangeable data,
+allowing for provably valid inference even when the training and test data are not drawn from the same distribution.
+We begin by reviewing the basics of conformal prediction, in this section. In Section 2, we describe an extension of
+conformal prediction to the setting of covariate shift, and give supporting empirical results. In Section 3, we cover the
+mathematical details behind our conformal extension. We conclude in Section 4, and discuss several other possible
+applications of our new conformal methodology.
+
+1.1
+
+Quantile lemma
+
+Before explaining the basic ideas behind conformal inference (i.e., conformal prediction, we will use these two terms
+interchangeably), we introduce some notation. We denote by Quantile(β; F ) the level β quantile of a distribution F ,
+i.e., for Z ∼ F ,
+
+Quantile(β; F ) = inf z : P{Z ≤ z} ≥ β .
+In our use of quantiles, we will allow for distributions F on the augmented real line, R ∪ {∞}. For values v1 , . . . , vn ,
+we write v1:n = {v1 , . . . , vn } to denote their multiset. Note that this is unordered, and allows for multiple instances the
+same element; thus in the present case, if vi = vj for i 6= j, then this value appears twice in v1:n . To denote quantiles
+of the empirical distribution of the values v1 , . . . , vn , we abbreviate
+
+
+n
+1X
+Quantile(β; v1:n ) = Quantile β;
+δ vi ,
+n i=1
+1
+
+where δa denotes a point mass at a (i.e., the distribution that places all mass at the value a). The next result is a simple
+but key component underlying conformal prediction.
+Lemma 1. If V1 , . . . , Vn+1 are exchangeable random variables, then for any β ∈ (0, 1), we have
+n
+o
+P Vn+1 ≤ Quantile β; V1:n ∪ {∞} ≥ β.
+Furthermore, if ties between V1 , . . . , Vn+1 occur with probability zero, then the above probability is upper bound by
+β + 1/(n + 1).
+Proof. Consider the following useful fact about quantiles of a discrete distribution F , with support points a1 , . . . , ak ∈
+R: denoting q = Quantile(β; F ), if we reassign the points ai > q to arbitrary values strictly larger than q, yielding a
+new distribution Fe, then the level β quantile remains unchanged, Quantile(β; F ) = Quantile(β; Fe). Using this fact,
+
+
+Vn+1 > Quantile β; V1:n ∪ {∞} ⇐⇒ Vn+1 > Quantile β; V1:(n+1) ,
+or equivalently,
+Vn+1 ≤ Quantile β; V1:n ∪ {∞}
+
+
+
+
+⇐⇒ Vn+1 ≤ Quantile β; V1:(n+1) .
+
+(2)
+
+Moreover, it is straightforward to check that
+
+Vn+1 ≤ Quantile β; V1:(n+1) ⇐⇒ Vn+1 is among the dβ(n + 1)e smallest of V1 , . . . , Vn+1 .
+By exchangeability, the latter event occurs with probability at least dβ(n + 1)e/(n + 1) ≥ β, which proves the lower
+bound; when there are almost surely no ties, it holds with probability exactly dβ(n + 1)e/(n + 1) ≤ β + 1/(n + 1),
+which proves the upper bound.
+
+1.2
+
+Conformal prediction
+
+We now return to the regression setting. Denote Zi = (Xi , Yi ), i = 1, . . . , n, and Z1:n = {Z1 , . . . , Zn }. We will use
+the abbreviation Z−i = Z1:n \ {Zi }. In what follows, we describe the construction of a prediction band satisfying (1),
+using conformal inference, due to Vovk et al. (2005). We first choose a score function S, whose arguments consist of a
+point (x, y), and a multiset Z.1 Informally, a low value of S((x, y), Z) indicates that the point (x, y) “conforms” to Z,
+whereas a high value indicates that (x, y) is atypical relative to the points in Z. For example, we might choose to define
+S by
+
+S (x, y), Z = |y − µ
+b(x)|,
+(3)
+where µ
+b : Rd → R is a regression function that was fitted by running an algorithm A on (x, y) and Z.
+bn (x) by repeating the following procedure for
+Next, at each x ∈ Rd , we define the conformal prediction interval2 C
+each y ∈ R. We calculate the nonconformity scores
+(x,y)
+
+Vi
+
+
+= S Zi , Z−i ∪ {(x, y)} , i = 1, . . . , n,
+
+
+(x,y)
+and Vn+1 = S (x, y), Z1:n ,
+
+(4)
+
+bn (x) if
+and include y in our prediction interval C
+(x,y)
+
+(x,y)
+
+Vn+1 ≤ Quantile 1 − α; V1:n
+(x,y)
+
+(x,y)
+
+
+∪ {∞} ,
+
+(x,y)
+
+where V1:n = {V1
+, . . . , Vn
+}. Importantly, the symmetry in the construction of the nonconformity scores (4)
+guarantees exact coverage in finite samples. The next theorem summarizes this coverage result. The lower bound is a
+standard result in conformal inference, due to Vovk et al. (2005); the upper bound, as far as we know, was first pointed
+out by Lei et al. (2018).
+1 We emphasize that by defining Z to be a multiset, we are treating its points as unordered. Hence, to be perfectly explicit, the score function S
+cannot accept the points in Z in any particular order, and it must take them in as unordered. The same is true of the base algorithm A used to define
+the fitted regression function µ
+b, in the choice of absolute residual score function (3).
+2 For convenience, throughout, we will refer to C
+bn (x) as an “interval”, even though this may actually be a union of multiple nonoverlapping
+bn as a “band”.
+intervals. Similarly, for simplicity, we will refer to C
+
+2
+
+Theorem 1 (Vovk et al. 2005; Lei et al. 2018). Assume that (Xi , Yi ) ∈ Rd × R, i = 1, . . . , n + 1 are exchangeable.
+For any score function S, and any α ∈ (0, 1), define the conformal band (based on the first n samples) at x ∈ Rd by
+n
+o
+bn (x) = y ∈ R : V (x,y) ≤ Quantile 1 − α; V (x,y) ∪ {∞} ,
+C
+(5)
+n+1
+1:n
+(x,y)
+
+where Vi
+
+bn satisfies
+, i = 1, . . . , n + 1 are as defined in (4). Then C
+n
+o
+bn (Xn+1 ) ≥ 1 − α.
+P Yn+1 ∈ C
+(X
+
+Furthermore, if ties between V1 n+1
+bounded by 1 − α + 1/(n + 1).
+
+,Yn+1 )
+
+(X
+
+, . . . , Vn+1n+1
+
+,Yn+1 )
+
+(Xn+1 ,Yn+1 )
+
+Proof. To lighten notation, abbreviate Vi = Vi
+
+occur with probability zero, then this probability is upper
+
+, i = 1, . . . , n + 1. Observe
+
+
+bn (Xn+1 ) ⇐⇒ Vn+1 ≤ Quantile 1 − α; V1:n ∪ {∞} .
+Yn+1 ∈ C
+By the symmetric construction of the nonconformity scores in (4),
+d
+
+d
+
+(Z1 , . . . , Zn+1 ) = (Zσ(1) , . . . , Zσ(n+1) ) ⇐⇒ (V1 , . . . , Vn+1 ) = (Vσ(1) , . . . , Vσ(n+1) ),
+for any permutation σ of the numbers 1, . . . , n + 1. Therefore, as Z1 , . . . , Zn+1 are exchangeable, so are V1 , . . . , Vn+1 ,
+and applying Lemma 1 gives the result.
+Remark 1. Theorem 1 is stated for exchangeable samples (Xi , Yi ), i = 1, . . . , n + 1, which is (significantly) weaker
+than assuming i.i.d. samples. As we will see in what follows, it is furthermore possible to relax the exchangeability
+assumption, under an appropriate modification to the conformal procedure.
+Remark 2. If we use an appropriate random tie-breaking rule (to determine the rank of Vn+1 among V1 , . . . , Vn+1 ),
+then the upper bounds in Lemma 1 and Theorem 1 hold in general (without assuming there are no ties almost surely).
+The result in Theorem 1, albeit very simple to prove, is quite remarkable. It gives us a recipe for distribution-free
+prediction intervals, with nearly exact coverage, starting from an arbitrary score function S; e.g., absolute residuals
+with respect to a fitted regression function from any base algorithm A, as in (3). For more discussion of conformal
+prediction, its properties, and its variants, we refer to Vovk et al. (2005); Lei et al. (2018) and references therein.
+
+2
+
+Covariate shift
+
+In this paper, we are concerned with settings in which the data (Xi , Yi ), i = 1, . . . , n + 1 are no longer exchangeable.
+Our primary focus will be a setting in which we observe data according to
+i.i.d.
+
+(Xi , Yi ) ∼ P = PX × PY |X , i = 1, . . . , n,
+(Xn+1 , Yn+1 ) ∼ Pe = PeX × PY |X , independently.
+
+(6)
+
+Notice that the conditional distribution of Y |X is assumed to be the same for both the training and test data. Such a
+setting is often called covariate shift (e.g., see Shimodaira 2000; Quinonero-Candela et al. 2009; see also Remark 4
+below for more discussion of this literature). The key realization is the following: if we know the ratio of test to training
+covariate likelihoods, dPeX /dPX , then we can still perform a modified of version conformal inference, using a quantile
+of a suitably weighted empirical distribution of nonconformity scores. The next subsection gives the details; following
+this, we describe a more computationally efficient conformal procedure, and give an empirical demonstration.
+
+2.1
+
+Weighted conformal prediction
+
+In conformal prediction, we compare the value of a nonconformity score at a test point to the empirical distribution of
+nonconformity scores at the training points. In the covariate shift case, where the covariate distributions PX , PeX in
+(x,y)
+our training and test sets differ, we will now weight each nonconformity score Vi
+(which measures how well Zi =
+3
+
+(Xi , Yi ) conforms to the other points) by a probability proportional to the likelihood ratio w(Xi ) = dPeX (Xi )/dPX (Xi ).
+Therefore, we will no longer be interested in the empirical distribution
+n
+1
+1 X
+δV (x,y) +
+δ∞ ,
+n + 1 i=1 i
+n+1
+
+as in Theorem 1, but rather, a weighted version
+n
+X
+i=1
+
+w
+pw
+i (x)δV (x,y) + pn+1 (x)δ∞ ,
+i
+
+where the weights are defined by
+w(Xi )
+, i = 1, . . . , n,
+w(X
+j ) + w(x)
+j=1
+
+pw
+i (x) = Pn
+
+and
+
+w(x)
+.
+w(X
+j ) + w(x)
+j=1
+
+pw
+n+1 (x) = Pn
+
+(7)
+
+Due this careful weighting, draws from the discrete distribution in the second to last display resemble nonconformity
+scores computed on the test population, and thus, they “look exchangeable” with the nonconformity score at our test
+point. Our main result below formalizes these claims.
+Corollary 1. Assume data from the model (6). Assume that PeX is absolutely continuous with respect to PX , and denote
+w = dPeX /dPX . For any score function S, and any α ∈ (0, 1), define for x ∈ Rd ,
+
+
+
+n
+X
+(x,y)
+w
+w
+b
+Cn (x) = y ∈ R : Vn+1 ≤ Quantile 1 − α;
+pi (x)δV (x,y) + pn+1 (x)δ∞
+,
+(8)
+i=1
+(x,y)
+
+where Vi
+
+i
+
+b
+, i = 1, . . . , n + 1 are as in (4), and pw
+i (x), i = 1, . . . , n + 1 are as in (7). Then Cn satisfies
+n
+o
+bn (Xn+1 ) ≥ 1 − α.
+P Yn+1 ∈ C
+
+Corollary 1 is a special case of a more general result that we present later in Theorem 2, which extends conformal
+inference to a setting in which the data are what we call weighted exchangeable. The proof is given in Section 3.5.
+Remark 3. The same result as in Corollary 1 holds if w ∝ dPeX /dPX , i.e., with an unknown normalization constant,
+because this normalization constant cancels out in the calculation of probabilities in (7).
+Remark 4. Though the basic premise of covariate shift—and certainly the techniques employed in addressing it—are
+related to much older ideas in statistics, the specific setup (6) has recently generated great interest in machine learning:
+e.g., see Sugiyama and Muller (2005); Sugiyama et al. (2007); Quinonero-Candela et al. (2009); Agarwal et al. (2011);
+Wen et al. (2014); Reddi et al. (2015); Chen et al. (2016) and references therein). The focus is usually on correcting
+estimators, model evaluation, or model selection approaches to account for covariate shift. Correcting distribution-free
+prediction intervals, as we examine in this work, is (as far as we know) a new contribution. As one might expect, the
+likelihood ratio dPeX /dPX , a key component of our conformal construction in Corollary 1, also plays a critical role in
+much of the literature on covariate shift.
+
+2.2
+
+Weighted split conformal
+
+In general, constructing a conformal prediction band can be computationally intensive, though this of course depends
+on the choice of score function. Consider the use of absolute residuals as in (3). To compute the nonconformity scores
+in (4), we must first run our base algorithm A on the data set Z1:n ∪ {(x, y)} to produce a fitted regression function µ
+b,
+and then calculate
+(x,y)
+(x,y)
+Vi
+= |Yi − µ
+b(Xi )|, i = 1, . . . , n, and Vn+1 = |y − µ
+b(x)|.
+As the formation of the conformal set in (5) (ordinary case) or (8) (covariate shift case) requires us to do this for each
+x ∈ Rd and y ∈ R (which requires refitting µ
+b each time), this can clearly become computationally burdernsome.
+A fast alternative, known as split conformal prediction (Papadopoulos et al., 2002; Lei et al., 2015), resolves this
+issue by taking the score function S to be defined using absolute residuals with respect to a fixed regression function,
+4
+
+typically, one that has been trained on an preliminary data set. Denote by (X10 , Y10 ), . . . , (Xn00 , Yn00 ) this preliminary
+data set, used for fitting the regression function µ0 , and consider the score function
+
+S (x, y), Z = |y − µ0 (x)|.
+Given data (X1 , Y1 ), . . . , (Xn , Yn ), independent of (X10 , Y10 ), . . . , (Xn00 , Yn00 ), we calculate
+(x,y)
+
+Vi
+
+= |Yi − µ0 (Xi )|, i = 1, . . . , n,
+
+and
+
+(x,y)
+
+Vn+1 = |y − µ0 (x)|.
+
+The conformal prediction interval (5), defined at a point x ∈ Rd , reduces to
+
+
+
+bn (x) = µ0 (x) ± Quantile 1 − α; |Yi − µ0 (Xi )| n ∪ {∞} ,
+C
+i=1
+
+(9)
+
+and by Theorem 1 it has coverage at least 1 − α, conditional on (X10 , Y10 ), . . . , (Xn00 , Yn00 ). This coverage result holds
+(x,y)
+(x,y)
+because, when we treat µ0 as fixed (meaning, condition on (X10 , Y10 ), . . . , (Xn00 , Yn00 )), the scores V1
+, . . . , Vn+1
+scores are exchangeable for (x, y) = (Xn+1 , Yn+1 ), as (X1 , Y1 ), . . . , (Xn+1 , Yn+1 ) are.
+As split conformal prediction can be seen as a special case of conformal prediction, in which the regression function
+µ0 is treated as fixed, Corollary 1 also applies to the split scenario, and guarantees that the band defined for x ∈ Rd by
+
+
+n
+X
+w
+w
+b
+Cn (x) = µ0 (x) ± Quantile 1 − α;
+pi (x)δ|Yi −µ0 (Xi )| + pn+1 (x)δ∞ ,
+(10)
+i=1
+
+where the probabilities are as in (7), has coverage at least 1 − α, conditional on (X10 , Y10 ), . . . , (Xn00 , Yn00 ).
+
+2.3
+
+Airfoil data example
+
+We demonstrate the use of conformal prediction in the covariate shift setting in an empirical example. We consider the
+airfoil data set from the UCI Machine Learning Repository (Dua and Graff, 2019), which has N = 1503 observations of
+a response Y (scaled sound pressure level of NASA airfoils), and a covariate X with d = 5 dimensions (log frequency,
+angle of attack, chord length, free-stream velocity, and suction side log displacement thickness). For efficiency, we use
+the split conformal prediction methods in (9) and (10) for the unweighted and weighted case, respectively. R code to
+reproduce these simulation results can be found at http://www.github.com/ryantibs/conformal/.
+Creating training data, test data, and covariate shift. We repeated an experiment for 5000 trials, where for each
+trial we randomly partitioned the data {(Xi , Yi )}N
+i=1 into three sets Dpre , Dtrain , Dtest , and also constructed a covariate
+shift test set Dshift , which have the following roles.
+• Dpre , containing 25% of the data, is used to prefit a regression function µ0 via linear regression, to be used in
+constructing split conformal intervals.
+• Dtrain , containing 25% of the data, is our training set, i.e., (Xi , Yi ), i = 1, . . . , n, used to compute the residual
+quantiles in the construction of the split conformal prediction intervals (9) and (10).
+• Dtest , containing 50% of the data, is our test set (as these data points are exchangeable with those in Dtrain , there
+is no covariate shift in this test set).
+• Dshift is a second test set, constructed to simulate covariate shift, by sampling 25% of the points from Dtest with
+replacement, with probabilities proportional to
+w(x) = exp(xT β),
+
+where β = (−1, 0, 0, 0, 1).
+
+(11)
+
+As the original data points Dtrain ∪ Dtest can be seen as draws from the same underlying distribution, we can view
+w(x) as the likelihood ratio of covariate distributions between the test set Dshift and training set Dtrain . Note that the test
+covariate distribution PeX , which satisfies dPeX ∝ exp(xT β)dPX as we have defined it here, is called an exponential
+tilting of the training covariate distribution PX . Figure 1 visualizes the effect of this exponential tilting, in the airfoil
+data set, with our choice β = (−1, 0, 0, 0, 1). Only the 1st and 5th dimensions of the covariate distribution are tilted;
+the bottom row of Figure 1 plots the marginal densities of the 1st and 5th covariates (estimated via kernel smoothing)
+before and after the tilt. The top row plots the response versus the 1st and 5th covariates, simply to highlight the fact
+that there is heteroskedasticity, and thus we might expect the shift in the covariate distribution to have some effect on
+the validity of the ordinary conformal prediction intervals.
+5
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+140
+●
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+●
+●
+●
+●
+
+●
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+● ●
+●
+●
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+● ●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+● ●
+●
+●
+●
+●
+● ●
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+● ●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+●
+
+● ●
+
+●
+
+●
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+●
+●
+
+●
+
+●
+●
+●
+● ●
+●
+●
+●
+●
+●
+●
+● ●
+●
+● ●
+●
+●
+●
+●
+● ●
+●
+●
+●
+●
+● ●
+●
+●
+●
+●
+●
+●
+● ●
+●
+●
+●
+●
+●
+●
+●
+●
+● ●
+●
+●
+●
+● ●
+●
+●
+●
+●
+●
+●
+● ●
+●
+● ●
+●
+●
+● ●
+●
+●
+●
+
+● ●
+
+7
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+●
+●
+●
+●
+●
+
+●
+
+●
+
+●
+
+●
+● ●
+●
+● ●
+● ● ●
+●
+
+●
+●
+
+●
+●
+●
+
+●
+●●
+●
+●
+●
+●●
+●
+●●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+●
+
+● ●
+● ●
+●
+● ●
+●
+●
+●
+● ●
+●
+
+●
+●●
+●
+●
+●
+●●●
+●
+●
+●
+●●
+●
+●●●
+●
+●●
+●
+●●
+●●●●
+●
+● ●
+●●
+●
+●●●
+●●
+●●
+●
+●
+●●
+●
+●
+●
+●
+●
+●
+
+●
+
+● ● ●
+●
+● ●
+
+●
+
+●
+
+● ●
+●
+
+●
+
+6
+
+●
+●
+●
+
+130
+
+●
+
+●
+●
+●
+●
+
+y
+
+● ●
+● ●
+●
+●
+●
+● ●
+● ●
+●
+● ●
+●
+●
+● ●
+●
+●
+●
+●
+● ●
+● ●
+●
+●
+● ●
+
+●
+● ●
+●
+●
+
+120
+
+y
+
+110
+
+120
+
+130
+
+●
+
+●
+●
+
+110
+
+140
+
+●
+
+●
+
+●
+
+●
+●
+●
+●
+●
+●
+●
+●●
+●
+●
+● ●
+●● ●
+●
+●
+●● ●
+● ●
+●
+●●
+● ●
+●●
+●
+● ●● ●
+●
+●
+●
+●
+●●●
+● ●●
+●
+●
+● ●
+●
+●
+●● ●●
+●
+●
+●
+●
+●● ● ●
+●
+●
+●
+●●
+● ●●
+●
+●
+●●
+●
+●
+●
+●
+●
+●
+●
+● ● ●
+●● ●
+● ● ●●●
+●
+● ● ●
+●●
+●
+●●●● ● ● ● ●
+● ●●● ●● ●
+●
+●
+●
+●●
+● ● ● ●●
+●
+●●
+●
+●
+●
+●●
+●●
+●
+●
+●
+●●
+●●
+●
+●
+●
+●
+●●● ●
+●
+●
+●
+●
+●
+●●
+●●●●● ●
+● ●●
+● ●●
+● ●●
+●● ●
+●●
+●
+●
+●
+● ● ●●● ●
+● ● ●●
+●●●●
+● ● ●
+●● ● ●
+●●● ●
+●
+●●
+●
+●●
+●●
+●
+● ●● ●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●●
+● ●●
+● ●
+●●
+●● ●
+●
+● ● ●●
+●● ●●
+●●
+● ●
+● ●
+●●
+●
+●●●● ●
+● ●●● ●
+● ●
+●●●●
+●●
+●
+● ●
+● ●● ●
+●●
+●●
+● ●●
+●
+● ●●●●
+●● ●●
+●
+● ●●
+●● ●
+●●
+● ● ●●● ●●●
+●
+● ● ●
+●●
+● ●●
+●●● ● ●
+●●●
+●
+●
+●
+●
+●
+●
+●
+● ●●●●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●●
+●
+●
+●
+●●
+●
+● ●●●●●●●●● ●●
+● ●
+●● ●
+●
+●
+●
+●●●●●
+●● ●●
+●
+●●
+● ● ●●●
+●
+●●
+●
+●
+●●
+●●●
+● ●
+●
+●
+●●
+●●
+● ● ● ●●
+●
+●
+●●
+● ●●● ● ●●
+●
+●
+●
+●● ●●
+●●
+●
+●
+● ●●● ●● ●● ●
+●
+● ●
+●●●
+●
+● ●●●
+●
+●● ● ●● ●● ●
+●
+● ●● ●●●● ●
+●● ●●
+● ●
+●● ●
+●●
+●
+●
+● ●●●
+●●
+●
+●
+●
+●●
+●●●
+●
+●
+● ●
+● ●
+●●
+●
+●●●
+●● ● ●
+●
+●● ●
+●
+●
+●
+●
+●● ●● ●●
+● ●●● ●
+●
+●
+● ●
+●
+●
+● ● ●
+●
+●
+●
+●
+●
+● ●
+●●
+● ● ●●
+● ●
+●
+●●
+● ●
+●
+●
+●
+● ●
+● ● ●●
+●●
+●● ●
+●●
+●
+● ●
+●
+●●
+● ●●
+●
+●
+●
+●
+●
+
+●
+
+8
+
+9
+
+10
+
+−8
+
+−7
+
+−6
+
+−5
+
+−4
+
+−3
+
+x5
+
+0.4
+0.3
+
+Frequency
+
+0.0
+
+0.0
+
+0.1
+
+0.2
+
+0.3
+0.2
+0.1
+
+Frequency
+
+0.4
+
+0.5
+
+0.5
+
+0.6
+
+x1
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+−8
+
+x1
+
+−7
+
+−6
+
+−5
+
+−4
+
+−3
+
+−2
+
+x5
+
+Figure 1: The top row plots the response in (a randomly chosen half of) the airfoil data set, versus the 1st and 5th covariates. The
+bottom row plots kernel density estimates for the 1st and 5th covariates, in black. Also displayed are kernel density estimates for the
+1st and 5th covariates after exponential tilting (11), in blue.
+
+Loss of coverage of ordinary conformal prediction under covariate shift. First, we examine the performance of
+ordinary split conformal prediction (9). The nominal coverage level was set to be 90% (meaning α = 0.1), here and
+throughout. The results are shown in the top row of Figure 2. In each of the 5000 trials, we computed the empirical
+coverage from the split conformal intervals over points in the test sets, and the histograms show the distribution of these
+empirical coverages over the trials. We see that for the original test data Dtest (no covariate shift, shown in red), split
+conformal works as expected, with the average of the empirical coverages (over the 5000 trials) being 90.2%; but for
+the nonuniformly subsampled test data Dshift (covariate shift, in blue), split conformal considerably undercovers, with
+its average coverage being 82.2%.
+Coverage of weighted conformal prediction with oracle weights. Next, displayed in the middle row of Figure 2,
+we consider weighted split conformal prediction (10), to cover the points in Dshift (shown in orange). At the moment,
+we assume oracle knowledge of the true weight function w in (11) needed to calculate the probabilities in (7). We see
+that this brings the coverage back to the desired level, with the average coverage being 90.8%. However, the histogram
+is more dispersed than it is when there is no covariate shift (compare to the top row, in red). This is because, by using a
+quantile of the weighted empirical distribution of nonconformity scores, we are relying on a reduced “effective sample
+size”. Given training points X1 , . . . , Xn , and a likelihood ratio w of test to training covariate distributions, a popular
+heuristic formula from the covariate shift literature for the effective sample size of X1 , . . . , Xn is (Gretton et al., 2009;
+Reddi et al., 2015):
+Pn
+[ i=1 |w(Xi )|]2
+kw(X1:n )k21
+n = Pn
+b
+=
+,
+2
+kw(X1:n )k22
+i=1 |w(Xi )|
+
+6
+
+700
+300
+0
+
+100
+
+Frequency
+
+500
+
+No covariate shift
+Covariate shift
+
+0.7
+
+0.8
+
+0.9
+
+1.0
+
+0.9
+
+1.0
+
+0.9
+
+1.0
+
+Oracle weights
+No shift, fewer samples
+
+300
+0
+
+100
+
+Frequency
+
+500
+
+700
+
+Coverage
+
+0.7
+
+0.8
+
+Logistic regression weights
+Random forest weights
+
+300
+0
+
+100
+
+Frequency
+
+500
+
+700
+
+Coverage
+
+0.7
+
+0.8
+Coverage
+
+Figure 2: Empirical coverages of conformal prediction intervals, computed using 5000 different random splits of the airfoil data set.
+The averages of empirical coverages in each histogram are marked on the x-axis.
+
+7
+
+where we abbreviate w(X1:n ) = (w(X1 ), . . . , w(Xn )) ∈ Rn . To compare weighted conformal prediction against the
+unweighted method at the same effective sample size, in each trial, we ran unweighted split conformal on the original
+test set Dtest , but we used only n
+b subsampled points from Dtrain to compute the quantile of nonconformity scores, when
+constructing the prediction interval (9). The results (the middle row of Figure 2, in purple) line up very closely with
+those from weighted conformal, which demonstrates that apparent overdispersion in the coverage histogram from the
+latter is fully explained by the reduced effective sample size.
+Coverage of weighted conformal with estimated weights. Denote by X1 , . . . , Xn the covariate points in Dtrain and
+by Xn+1 , . . . , Xn+m the covariate points in Dshift . Here we describe how to estimate w = dPeX /dPX , the likelihood
+ratio of interest, by applying logistic regression or random forests (more generally, any classifier that outputs estimated
+probabilities of class membership) to the feature-class pairs (Xi , Ci ), i = 1, . . . , n + m, where Ci = 0 for i = 1, . . . , n
+and Ci = 1 for i = n + 1, . . . , n + m. Noting that
+P(C = 1|X = x)
+P(C = 1) dPeX
+=
+(x),
+P(C = 0|X = x)
+P(C = 0) dPX
+we can take the conditional odds ratio w(x) = P(C = 1|X = x)/P(C = 0|X = x) as an equivalent representation
+for the oracle weight function (since we only need to know the likelihood ratio up to a proportionality constant, recall
+Remark 3). Therefore, if pb(x) is an estimate of P(C = 1|X = x) obtained by fitting a classifier to the data (Xi , Ci ),
+i = 1, . . . , n + m, then we can use
+pb(x)
+w(x) =
+b
+(12)
+1 − pb(x)
+as our estimated weight function for the calculation of probabilities (7), needed for conformal (8) or split conformal
+(10). There is in fact a sizeable literature on density ratio estimation, and the method just describe falls into a class
+called probabilistic classification approaches; two other classes are based on moment matching, and minimization of
+φ-divergences (e.g., Kullblack-Leibler divergence). For a comprehensive review of these approaches, and supporting
+theory, see Sugiyama et al. (2012).
+The bottom row of Figure 2 shows the results from using weighted split conformal prediction to cover the points
+in Dshift , where the weight function w
+b has been estimated as in (12), using logistic regression (in gray) and random
+forests3 (in green) to fit the class probability function pb. Note that logistic regression is well-specified in this example,
+because it assumes the log odds is a linear function of x, which is exactly as in (11). Random forests, of course, allows
+more flexibility in the fitted model. Both classification approaches deliver weights that translate into good average
+coverage, being 91.0% for each approach. Furthermore, their histograms are only a little more dispersed than that for
+the oracle weights (middle row, in orange).
+Lengths of weighted conformal intervals. Figure 3 conveys the same setup as Figure 2, but displays histograms of
+the median lengths of prediction intervals rather than empirical coverages (meaning, in each of the 5000 trials, we ran
+unweighted or weighted split conformal prediction to cover test points, and report the median length of the prediction
+intervals over the test sets). We see no differences in the lengths of ordinary split conformal intervals (top row) when
+there is or is not covariate shift, as expected since these two settings differ only in the distributions of their test sets,
+but use the same procedure and have the same distribution of the training data. We see that the oracle-weighted split
+conformal intervals are longer than the ordinary split conformal intervals that use an equivalent effective sample size
+(middle row). This is also as expected, since in the former situation, the regression function µ0 was fit on training data
+Dtrain of a different distribution than Dshift , and µ0 itself should ideally be adjusted to account for covariate shift (plenty
+of methods for this are available from the covariate shift literature, but we left it unadjusted for simplicity). Lastly, we
+see that the random forests-weighted split conformal intervals are more variable, and in some cases, much longer, than
+the logistic regression-weighted split conformal intervals (bottom row, difficult to confirm visually because the bars in
+the histogram lie so close to the x-axis).
+3 In the random forests approach, we clipped the estimated test class probability p
+b(x) to lie in between 0.01 and 0.99, to prevent the estimated
+weight (likelihood ratio) b
+w(x) from being infinite. Without clipping, the estimated probability of being in the test class was sometimes exactly 1 (this
+occurred in about 2% of the cases encountered over all 5000 repetitions), resulting in an infinite weight, and causing numerical issues.
+
+8
+
+1500
+1000
+500
+0
+
+Frequency
+
+No covariate shift
+Covariate shift
+
+10
+
+15
+
+20
+
+25
+
+30
+
+35
+
+40
+
+500
+
+1000
+
+Oracle weights
+No shift, fewer samples
+
+0
+
+Frequency
+
+1500
+
+Length
+
+10
+
+15
+
+20
+
+25
+
+30
+
+35
+
+40
+
+500
+
+1000
+
+Logistic regression weights
+Random forest weights
+
+0
+
+Frequency
+
+1500
+
+Length
+
+10
+
+15
+
+20
+
+25
+
+30
+
+35
+
+40
+
+Length
+
+Figure 3: Median lengths of conformal prediction intervals, computed using 5000 different random splits of the airfoil data set. The
+averages of median lengths in each histogram are marked on the x-axis.
+
+9
+
+300
+0 100
+
+Frequency
+
+500
+
+Unity weights
+Logistic regression weights
+Random forest weights
+
+0.80
+
+0.85
+
+0.90
+
+0.95
+
+1.00
+
+600
+400
+0
+
+200
+
+Frequency
+
+800
+
+Coverage
+
+12
+
+14
+
+16
+
+18
+
+20
+
+22
+
+24
+
+Length
+
+Figure 4: Empirical coverages and median lengths from conformal prediction, on the airfoil data set, with no covariate shift.
+Weighted conformal when there is actually no covariate shift. Lastly, Figure 4 compares the empirical coverages
+and median lengths of split conformal intervals to cover points in Dtest (no covariate shift), using the ordinary unweighted
+approach (in red), the logistic regression-weighted approach (in gray), and the random forests-weighted approach (in
+green). The unweighted and logistic regression approaches are very similar. The random forests approach yields slightly
+more dispersed coverages and lengths. This is because random forests are very flexible, and in the present case of
+no covariate shift, the estimated weights from random forests in each repetition are in general further from constant
+(compared to those from logistic regression). Still, random forests must not be overfitting dramatically here, since the
+coverages and lengths are still reasonable.
+
+3
+
+Weighted exchangeability
+
+In this section, we develop a general result on conformal prediction for settings in which the data satisfy what we call
+weighted exchangeability. In the first subsection, we take a look back at the key quantile result in Lemma 1, and present
+an alternative proof from a somewhat different perspective. Then we precisely define weighted exchangeability, extend
+Lemma 1 to this new (and broader) setting, and extend conformal prediction as well. The last subsection provides a
+proof of Corollary 1, as a special case of our general conformal result.
+
+3.1
+
+Alternate proof of Lemma 1
+
+The general strategy we pursue here is to condition on the unlabeled multiset of values obtained by our random variables
+V1 , . . . , Vn+1 , and then inspect the probabilities that the last random variable Vn+1 attains each one of these values. For
+
+10
+
+simplicity, we assume that there are almost surely no ties among the scores V1 , . . . , Vn+1 , so that we can work with sets
+rather than multisets (our arguments apply to the general case as well, but the notation is more cumbersome).
+Denote by Ev the event that {V1 , . . . , Vn+1 } = {v1 , . . . , vn+1 }, and consider
+P{Vn+1 = vi | Ev }, i = 1, . . . , n + 1.
+
+(13)
+
+Denote by f the probability density function4 of the joint distribution V1 , . . . , Vn+1 . Exchangeability implies that
+f (v1 , . . . , vn+1 ) = f (vσ(1) , . . . , vσ(n+1) )
+for any permutation σ of the numbers 1, . . . , n + 1. Thus, for each i, we have
+P
+σ:σ(n+1)=i f (vσ(1) , . . . , vσ(n+1) )
+P
+P{Vn+1 = vi | Ev } =
+σ f (vσ(1) , . . . , vσ(n+1) )
+P
+σ:σ(n+1)=i f (v1 , . . . , vn+1 )
+P
+=
+σ f (v1 , . . . , vn+1 )
+n!
+1
+=
+=
+.
+(n + 1)!
+n+1
+
+(14)
+
+This shows that the distribution of Vn+1 |Ev is uniform on the set {v1 , . . . , vn+1 }, i.e.,
+Vn+1 |Ev ∼
+
+n+1
+1 X
+δv ,
+n + 1 i=1 i
+
+and it follows immediately that
+
+
+P Vn+1 ≤ Quantile β;
+
+
+
+n+1
+1 X
+Ev ≥ β.
+δv
+n + 1 i=1 i
+
+On the event Ev , we have {V1 , . . . , Vn+1 } = {v1 , . . . , vn+1 }, so
+
+
+P Vn+1 ≤ Quantile β;
+
+
+
+n+1
+1 X
+Ev ≥ β.
+δ Vi
+n + 1 i=1
+
+Because this true for any v, we can marginalize to obtain
+
+
+P Vn+1 ≤ Quantile β;
+
+
+n+1
+1 X
+δV
+≥ β,
+n + 1 i=1 i
+
+which, as argued in (2), is equivalent to the desired lower bound in the lemma. (The upper bound follows similarly.)
+
+3.2
+
+Weighted exchangeability
+
+The alternate proof in the last subsection is certainly more complicated than our first proof of Lemma 1. What good
+did it do? Recall, we proceeded as if we had observed the unordered set of nonconformity scores {V1 , . . . , Vn+1 } =
+{v1 , . . . , vn+1 } but had forgotten the labels (as if we forgot which random variable Vi was associated with which value
+vj ). We then reduced the construction of a prediction interval for Vn+1 to the computation of probabilities in (13), that
+the last random variable Vn+1 attains each one of the observed values v1 , . . . , vn+1 . The critical point was that this
+strategy isolated the role of exchangeability: it was used precisely to compute these probabilities, in (14). As we will
+show, the same probabilities in (13) can be calculated in a broader setting of interest, beyond the exchangeable one.
+We first define a generalized notion of exchangeability.
+4 More generally, f may be the Radon-Nikodym derivative with respect to an arbitrary base measure; this measure may be discrete, continuous, or
+neither; henceforth, we will use the term “density” just for simplicity.
+
+11
+
+Definition 1. Random variables V1 , . . . , Vn are said to be weighted exchangeable, with weight functions w1 , . . . , wn ,
+if the density5 f of their joint distribution can be factorized as
+f (v1 , . . . , vn ) =
+
+n
+Y
+
+wi (vi ) · g(v1 , . . . , vn ),
+
+i=1
+
+where g is any function that does not depend on the ordering of its inputs, i.e., g(vσ(1) , . . . , vσ(n) ) = g(v1 , . . . , vn ) for
+any permutation σ of 1, . . . , n.
+Clearly, weighted exchangeability with weight functions wi ≡ 1 for i = 1, . . . , n reduces to ordinary exchangeability. Furthermore, independent draws (where all marginal distributions are absolutely continuous with respect to,
+say, the first one) are always weighted exchangeable, with weight functions given by the appropriate Radon-Nikodym
+derivatives, i.e., likelihood ratios. This is stated next; the proof follows directly from Definition 1 and is omitted.
+Lemma 2. Let Zi ∼ Pi , i = 1, . . . , n be independent draws, where each Pi is absolutely continuous with respect to
+P1 , for i ≥ 2. Then Z1 , . . . , Zn are weighted exchangeable, with weight functions w1 ≡ 1, and wi = dPi /dP1 , i ≥ 2.
+Lemma 2 highlights an important special case (which we note, includes the covariate shift model in (6)). But it is
+worth being clear that our definition of weighted exchangeability encompasses more than independent sampling, and
+allows for a nontrivial dependency structure between the variables, just as exchangeability is broader than the i.i.d. case.
+
+3.3
+
+Weighted quantile lemma
+
+Now we give a weighted generalization of Lemma 1.
+Lemma 3. Let Zi , i = 1, . . . , n + 1 be weighted exchangeable random variables, with weight functions w1 , . . . , wn+1 .
+Let Vi = S(Zi , Z−i ), where Z−i = Z1:(n+1) \ {Zi }, for i = 1, . . . , n + 1, and S is an arbitrary score function. Define
+Qn+1
+σ:σ(n+1)=i
+j=1 wj (zσ(j) )
+, i = 1, . . . , n + 1,
+P Qn+1
+σ
+j=1 wj (zσ(j) )
+
+P
+pw
+i (z1 , . . . , zn+1 ) =
+
+(15)
+
+where the summations are taken over permutations σ of the numbers 1, . . . , n + 1. Then for any β ∈ (0, 1),
+
+ X
+
+n
+w
+pw
+(Z
+,
+.
+.
+.
+,
+Z
+)δ
++
+p
+(Z
+,
+.
+.
+.
+,
+Z
+)δ
+P Vn+1 ≤ Quantile β;
+≥ β.
+1
+n+1
+V
+1
+n+1
+∞
+i
+n+1
+i
+i=1
+
+Proof. We follow the same general strategy in the alternate proof of Lemma 1 in Section 3.1. As before, we assume for
+simplicity that V1 , . . . , Vn+1 are distinct almost surely (but the result holds in the general case as well).
+Let Ez denote the event that {Z1 , . . . , Zn+1 } = {z1 , . . . , zn+1 }, and let vi = S(zi , z−i ), where z−i = z1:(n+1) \
+{zi }, for i = 1, . . . , n + 1. Let f be the density function of the joint sample Z1 , . . . , Zn+1 . For each i,
+P
+σ:σ(n+1)=i f (zσ(1) , . . . , zσ(n+1) )
+P
+P{Vn+1 = vi | Ez } = P{Zn+1 = zi | Ez } =
+,
+σ f (zσ(1) , . . . , zσ(n+1) )
+and as Z1 , . . . , Zn+1 are weighted exchangeable,
+P
+
+σ:σ(n+1)=i f (zσ(1) , . . . , zσ(n+1) )
+
+P
+
+σ f (zσ(1) , . . . , zσ(n+1) )
+
+Qn+1
+σ:σ(n+1)=i
+j=1 wj (zσ(j) ) · g(zσ(1) , . . . , zσ(n+1) )
+=
+P Qn+1
+σ
+j=1 wj (zσ(j) ) · g(zσ(1) , . . . , zσ(n+1) )
+P
+Qn+1
+σ:σ(n+1)=i
+j=1 wj (zσ(j) ) · g(z1 , . . . , zn+1 )
+P
+
+=
+
+P Qn+1
+
+σ
+j=1 wj (zσ(j) ) · g(z1 , . . . , zn+1 )
+w
+= pi (z1 , . . . , zn+1 ).
+5 As before, f may be the Radon-Nikodym derivative with respect to an arbitrary base measure.
+
+12
+
+In other words,
+Vn+1 |Ez ∼
+
+n+1
+X
+
+pw
+i (z1 , . . . , zn+1 )δvi ,
+
+i=1
+
+which implies that
+
+ n+1
+
+
+X
+w
+P Vn+1 ≤ Quantile β;
+pi (z1 , . . . , zn+1 )δvi
+Ez ≥ β.
+i=1
+
+This is equivalent to
+
+ n+1
+
+
+X
+w
+P Vn+1 ≤ Quantile β;
+Ez ≥ β,
+pi (Z1 , . . . , Zn+1 )δVi
+i=1
+
+and after marginalizing,
+
+ n+1
+
+X
+P Vn+1 ≤ Quantile β;
+pw
+(Z
+,
+.
+.
+.
+,
+Z
+)δ
+≥ β.
+1
+n+1 Vi
+i
+i=1
+
+Finally, as in (2), this is equivalent to the claim in the lemma.
+Remark 5. When V1 , . . . , Vn+1 are exchangeable, we have wi ≡ 1 for i = 1, . . . , n, and thus pw
+i ≡ 1 for i = 1, . . . , n
+as well. In this special case, then, the lower bound in Lemma 3 reduces to the ordinary unweighted lower bound in
+Lemma 1. Meanwhile, a obtaining meaningful upper bound on the probability in question in Lemma 3, as was done
+in Lemma 1 (under the assumption of no ties, almost surely), does not seem possible without further conditions on
+the weight functions in consideration. This is because the largest “jump” in the discontinuous cumulative distribution
+function of Vn+1 |Ez is of size maxi=1,...,n+1 pw
+i (z1 , . . . , zn+1 ), which can potentially be very large; by comparison,
+in the unweighted case, this jump is always of size 1/(n + 1).
+
+3.4
+
+Weighted conformal prediction
+
+A weighted version of conformal prediction follows immediately from Lemma 3.
+Theorem 2. Assume that Zi = (Xi , Yi ) ∈ Rd × R, i = 1, . . . , n + 1 are weighted exchangeable with weight functions
+w1 , . . . , wn+1 . For any score function S, and any α ∈ (0, 1), define the weighted conformal band (based on the first n
+samples) at a point x ∈ Rd by
+
+
+
+n
+X
+
+
+(x,y)
+w
+w
+b
+Cn (x) = y ∈ R : Vn+1 ≤ Quantile 1−α;
+pi Z1 , . . . , Zn , (x, y) δV (x,y) + pn+1 Z1 , . . . , Zn , (x, y) δ∞
+,
+i
+
+i=1
+(x,y)
+
+where Vi
+
+(16)
+b
+, i = 1, . . . , n + 1 are as in (4), and pw
+i , i = 1, . . . , n + 1 are as in (15). Then Cn satisfies
+n
+o
+bn (Xn+1 ) ≥ 1 − α.
+P Yn+1 ∈ C
+(Xn+1 ,Yn+1 )
+
+Proof. Abbreviate Vi = Vi
+
+, i = 1, . . . , n + 1. By construction,
+
+
+n
+X
+w
+bn (Xn+1 ) ⇐⇒ Vn+1 ≤ Quantile 1 − α;
+Yn+1 ∈ C
+pw
+(Z
+,
+.
+.
+.
+,
+Z
+)δ
++
+p
+(Z
+,
+.
+.
+.
+,
+Z
+)δ
+1
+n+1 Vi
+1
+n+1 ∞ ,
+i
+n+1
+i=1
+
+and applying Lemma 3 gives the result.
+Remark 6. As explained in Section 2.2, the split conformal method is simply a special case of the conformal prediction
+framework, where we take the score function to be S((x, y), Z) = |y − µ0 (x)|, with µ0 precomputed on a preliminary
+data set (X10 , Y10 ), . . . , (Xn00 , Yn00 ). Hence, the result in Theorem 2 carries over to the split conformal method as well,
+in which case the weighted conformal prediction interval in (16) simplifies to
+
+
+n
+X
+
+
+w
+w
+b
+Cn (x) = µ0 (x) ± Quantile 1 − α;
+pi Z1 , . . . , Zn , (x, y) δ|Yi −µ0 (Xi )| + pn+1 Z1 , . . . , Zn , (x, y) δ∞ .
+i=1
+
+By Theorem 2, this has coverage at least 1 − α, conditional on (X10 , Y10 ), . . . , (Xn00 , Yn00 ).
+13
+
+3.5
+
+Proof of Corollary 1
+
+We return to the case of covariate shift, and show that Corollary 1 follows from the general weighted conformal result.
+By Lemma 2, we know that the independent draws Zi = (Xi , Yi ), i = 1, . . . , n + 1 are weighted exchangeable with
+wi ≡ 1 for i = 1, . . . , n, and wn+1 ((x, y)) = w(x). In this special case, the probabilities in (15) simplify to
+P
+w(xi )
+σ:σ(n+1)=i w(xi )
+w
+= Pn+1
+, i = 1, . . . , n + 1,
+pi (z1 , . . . , zn+1 ) = P
+w(x
+)
+σ(n+1)
+σ
+j=1 w(xj )
+w
+in other words, pw
+i (Z1 , . . . , Zn , (x, y)) = pi (x), i = 1, . . . , n + 1, where the latter are as in (7). Applying Theorem 2
+gives the result.
+
+4
+
+Discussion
+
+We described an extension of conformal prediction to handle weighted exchangeable data. This covers exchangeable
+data, and independent (but not identically distributed) data, as special cases. In general, the new weighted methodology
+requires computing quantiles of a weighted discrete distribution of nonconformity scores, which is combinatorially
+hard. But the computations simplify dramatically for a case of significant practical interest, in which the test covariate
+distribution PeX differs from the training covariate distribution PX by a known likelihood ratio dPeX /dPX (and the
+conditional distribution PY |X remains unchanged). In this case, known as covariate shift, the new weighted conformal
+prediction methodology is just as easy, computationally, as ordinary conformal prediction. When the likelihood ratio
+dPeX /dPX is not known, it can be estimated given access to unlabeled data (test covariate points), which we showed
+empirically, on a low-dimensional example, can still yield correct coverage.
+Beyond the setting of covariate shift that we have focused on (as the main application in this paper), our weighted
+conformal methodology can be applied to several other closely related settings, where ordinary conformal prediction
+will not directly yield correct coverage. We discuss three such settings below.
+Graphical models with covariate shift. Assume that the training data (Z, X, Y ) ∼ P has the Markovian structure
+Z → X → Y . As an example, to make matters concrete, suppose Z is a low-dimensional covariate (such as ancenstry
+information), X is a high-dimensional set of features for a person (such as genetic measurements), and Y is a real-valued
+outcome of interest (such as life expectancy). Suppose that on the test data (Z, X, Y ) ∼ Pe, the distribution of Z has
+changed, causing a change in the distribution of X, and thus causing a change in the distribution of the unobserved Y
+(however the distribution of X|Z is unchanged). One plausible solution to this problem would be to just ignore Z in
+both training and test sets, and run weighted conformal prediction on only (X, Y ), treating this like a usual covariate
+shift problem. But, as X is high-dimensional, this would require estimating a ratio of two high-dimensional densities,
+which would be difficult. As Z is low-dimensional, we can instead estimate the weights by estimating the likelihood
+ratio of Z between test and training sets, which follows because for the joint covariate (Z, X),
+PeZ (z)PX|Z=z (x)
+PeZ,X (z, x)
+PeZ (z)
+=
+=
+.
+PZ,X (z, x)
+PZ (z)PX|Z=z (x)
+PZ (z)
+This may be a more tractable quantity to estimate for the purpose of weighted conformal inference. These ideas may be
+generalized to more complex graphical settings, which we leave to future work.
+Missing covariates with known summaries. As another concrete example, suppose that hospital A has collected a
+private training data set (Z, X, Y ) ∼ P A where Z ∈ {0, 1} is a sensitive patient covariate, X ∈ Rd represents other
+covariates, and Y ∈ R is a response that is expensive to measure. Hospital B also has its own data set, but in order to
+save money and not measure the responses for their patients, it asks hospital A for help to produce prediction intervals
+for these responses. Instead of sharing the collected data (Z, X) ∼ P B for each patient with hospital A, due to privacy
+concerns, hospital B only provides hospital A with the X covariate for each patient, along with a summary statistic
+for Z, representing the fraction of Z values that equal one (more accurately, the probability of drawing a patient with
+A
+B
+= PX|Z
+Z = 1 from their underlying patient population). Assume that PX|Z
+(e.g., if Z is the sex of the patient, then
+this assumes there is one joint distribution on X for males and one for females, which does not depend on the hospital).
+The likelihood ratio of covariate distributions thus again reduces to calculating the likelihood ratio of Z between P B
+and P A , which we can easily do, and use weighted conformal prediction.
+14
+
+Towards local conditional coverage? We finish by describing how the weighted conformal prediction methodology
+can be used to construct prediction bands that satisfy a certain approximate (locally-smoothed) notion of conditional
+coverage. Given i.i.d. points (Xi , Yi ), i = 1, . . . , n + 1, consider instead of our original goal (1),
+n
+o
+bn (x0 ) Xn+1 = x0 ≥ 1 − α.
+P Yn+1 ∈ C
+(17)
+This is (exact) conditional coverage at x0 ∈ Rd . As it turns out, maintaining that (17) hold for almost all6 x0 ∈ Rd
+and all distributions P is far too strong: Vovk (2012); Lei and Wasserman (2014) prove that any method with such a
+bn (x0 ) with infinite expected length at any non-atom point7 x0 , for any underlying
+property must yield an interval C
+distribution P .
+Thus we must relax (17) and seek some notion of approximate conditional coverage, if we hope to achieve it with a
+nontrivial prediction band. Some relaxations were recently considered in Barber et al. (2019), most of which were also
+impossible to achieve in a nontrivial way. A different, but natural relaxation of (17) is
+
+
+R
+bn (x0 ) | Xn+1 = x K x−x0 dPX (x)
+P Yn+1 ∈ C
+h
+
+R
+≥ 1 − α,
+(18)
+0
+K x−x
+dPX (x)
+h
+where K is kernel function and h > 0 is bandwidth parameter. Here we are asking for a prediction band whose average
+conditional coverage, in some locally-weighted sense around x, is at least 1 − α. We can equivalently write (18) as
+n
+o
+bn (x0 ) Xn+1 = x0 + hω ≥ 1 − α,
+P Yn+1 ∈ C
+(19)
+where the probability is taken over the n + 1 data points and an independent draw ω from a distribution whose density is
+proportional to K. (For example, when we take K(x) = exp(−kxk22 /2), the Gaussian kernel, we have ω ∼ N (0, I).)
+As we can see from (18) (or (19)), this kind of locally-weighted guarantee should be close to a guarantee on conditional
+coverage, when the bandwidth h is small.
+In order to achieve (18) in a distribution-free manner, we can invoke the weighted conformal inference methodology.
+In particular, note that we can once more rewrite (19) as
+n
+o
+bn (X
+en+1 ) ≥ 1 − α,
+Px0 Yn+1 ∈ C
+(20)
+where the probability is taken over training points (Xi , Yi ), i = 1, . . . , n, that are i.i.d. from P = PX × PY |X and an
+en+1 , Yn+1 ), from Pe = PeX × PY |X , where dPeX /dPX ∝ K((· − x0 )/h). The subscript x0
+independent test point (X
+on the probability operator in (20) emphasizes the dependence of the test covariate distribution on x0 . Note that this
+precisely fits into the covariate shift setting (6). To be explicit, for any score function S, and any α ∈ (0, 1), given a
+center point x0 ∈ Rd of interest, define
+
+ !)
+Pn
+(
+Xi −x0
+0
+δV (x,y) + K x−x
+δ∞
+i=1 K
+h
+h
+(x,y)
+i
+bn (x) = y ∈ R : V
+
+
+C
+,
+Pn
+n+1 ≤ Quantile 1 − α;
+x−x0
+Xi −x0
++K h
+i=1 K
+h
+(x,y)
+
+where Vi
+
+, i = 1, . . . , n + 1, are as in (4). Then by Corollary 1,
+n
+o
+bn (Xn+1 ; x0 ) ≥ 1 − α.
+Px0 Yn+1 ∈ C
+
+(21)
+
+This is “almost” of the desired form (20) (equivalently (18), or (19)), except for one important caveat. The prediction
+bn ( · ; x0 ) in (21) was constructed based on the center point x0 (as suggested by our notation) to have the property
+band C
+bn (·; x0 ) must change
+in (21). If we were to ask for local conditional coverage at a new point x0 , then the entire band C
+(must be recomputed) in order to accommodate the new guarantee.
+bn based on the training data
+In other words, we have not provided a recipe for the construction of a single band C
+d
+d
+(Xi , Yi ), i = 1, . . . , n that has the property (20) at all x0 ∈ R (or almost all x0 ∈ R ). We have only described a way
+to satisfy such a property if the center point x0 were specified in advance. Combined with our somewhat pessimistic
+results in Barber et al. (2019), many important practical and philosophical problems in assumption-lean conditional
+predictive inference remain open.
+6 This is meant to be interpreted with respect to P
+7 This is a point x
+
+d
+X , i.e., for all x0 ∈ R except on a set whose probability under PX is zero.
+
+0 in the support of PX such that PX {Br (x0 )} → 0 as r → 0, where Br (x0 ) is the ball of radius r centered at x0 .
+
+15
+
+Acknowledgements
+The authors thank the American Institute of Mathematics for supporting and hosting our collaboration. R.F.B. was
+partially supported by the National Science Foundation under grant DMS-1654076 and by an Alfred P. Sloan fellowship.
+E.J.C. was partially supported by the Office of Naval Research under grant N00014-16-1-2712, by the National Science
+Foundation under grant DMS-1712800, and by a generous gift from TwoSigma. R.J.T. was partially supported by the
+National Science Foundation under grant DMS-1554123.
+
+References
+Deepak Agarwal, Lihong Li, and Alex Smola. Linear-time estimators for propensity scores. International Conference
+on Artificial Intelligence and Statistics, 2011.
+Rina Foygel Barber, Emmanuel J. Candes, Aaditya Ramdas, and Ryan J. Tibshirani. The limits of distribution-free
+conditional predictive inference. arXiv preprint arXiv:1903.04684, 2019.
+Evgeny Burnaev and Vladimir Vovk. Efficiency of conformalized ridge regression. Annual Conference on Learning
+Theory, 2014.
+Xiangli Chen, , Mathew Monfort, Anqi Liu, and Brian Da Ziebart. Robust covariate shift regression. International
+Conference on Artificial Intelligence and Statistics, 2016.
+Dheeru Dua and Casey Graff. UCI machine learning repository, 2019. URL http://archive.ics.uci.edu/
+ml.
+Arthur Gretton, Alex Smola, Jiayuan Huang, Marcel Schmittfull, Karsten Borgwardt, and Bernhard Scholkopf. Covariate
+shift by kernel mean matching. In Dataset Shift in Machine Learning, chapter 8, pages 131–160. MIT Press, 2009.
+Jing Lei and Larry Wasserman. Distribution-free prediction bands for non-parametric regression. Journal of the Royal
+Statistical Society: Series B, 76(1):71–96, 2014.
+Jing Lei, Alessandro Rinaldo, and Larry Wasserman. A conformal prediction approach to explore functional data.
+Annals of Mathematics and Artificial Intelligence, 74(1–2):29–43, 2015.
+Jing Lei, Max G’Sell, Alessandro Rinaldo, Ryan J. Tibshirani, and Larry Wasserman. Distribution-free predictive
+inference for regression. Journal of the American Statistical Association, 113(523):1094–1111, 2018.
+Harris Papadopoulos, Kostas Proedrou, Volodya Vovk, and Alex Gammerman. Inductive confidence machines for
+regression. European Conference on Machine Learning, 2002.
+Joaquin Quinonero-Candela, Masashi Sugiyama, Anton Schwaighofer, and Neil D. Lawrence. Dataset Shift in Machine
+Learning. MIT Press, 2009.
+Sashank J. Reddi, Barnabas Poczos, and Alex Smola. Doubly robust covariate shift correction. AAAI Conference on
+Artificial Intelligence, 2015.
+Glenn Shafer and Vladimir Vovk. A tutorial on conformal prediction. Journal of Machine Learning Research, 9:
+371–421, 2008.
+Hidetoshi Shimodaira. Improving predictive inference under covariate shift by weighting the log-likelihood function.
+Journal of Statistical Planning and Inference, 90(2):227–244, 2000.
+Masashi Sugiyama and Klaus-Robert Muller. Input-dependent estimation of generalization error under covariate shift.
+Statistics & Decisions, 23(4):249–279, 2005.
+Masashi Sugiyama, Matthias Krauledat, and Klaus-Robert Muller. Covariate shift adaptation by importance weighted
+cross validation. Journal of Machine Learning Research, 8(985–1005), 2007.
+Masashi Sugiyama, Taiji Suzuki, and Takafumi Kanamori. Density Ratio Estimation in Machine Learning. Cambridge
+University Press, 2012.
+16
+
+Vladimir Vovk. Conditional validity of inductive conformal predictors. Asian Conference on Machine Learning, 2012.
+Vladimir Vovk. Transductive conformal predictors. Symposium on Conformal and Probabilistic Prediction with
+Applications, 2013.
+Vladimir Vovk, Alex Gammerman, and Glenn Shafer. Algorithmic Learning in a Random World. Springer, 2005.
+Vladimir Vovk, Ilia Nouretdinov, and Alex Gammerman. On-line predictive linear regression. Annals of Statistics, 37
+(3):1566–1590, 2009.
+Junfeng Wen, Chun-Nam Yu, and Russell Greiner. Robust learning under uncertain test distributions: Relating covariate
+shift to model misspecification. International Conference on Machine Learning, 2014.
+
+17
+
+

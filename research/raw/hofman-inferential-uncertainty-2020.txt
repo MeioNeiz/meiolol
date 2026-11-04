@@ -1,0 +1,826 @@
+          How Visualizing Inferential Uncertainty Can Mislead
+         Readers About Treatment Effects in Scientific Results
+                 Jake M. Hofman                                                Daniel G. Goldstein                          Jessica Hullman
+                 Microsoft Research                                            Microsoft Research                        Northwestern University
+                jmh@microsoft.com                                              dgg@microsoft.com                       jhullman@northwestern.edu
+
+
+ABSTRACT                                                                                        using standard error, calculated as se = √σn where n is the
+When presenting visualizations of experimental results, sci-                                    sample size. Standard errors can be made arbitrarily small by
+entists often choose to display either inferential uncertainty                                  increasing n, but this does not change the standard deviation σ .
+(e.g., uncertainty in the estimate of a population mean) or
+outcome uncertainty (e.g., variation of outcomes around that                                    For instance, in a study of how heights vary by gender, infer-
+mean) about their estimates. How does this choice impact                                        ential uncertainty captures how precisely one has estimated
+readers’ beliefs about the size of treatment effects? We in-                                    the average height of men and women based on the set of
+vestigate this question in two experiments comparing 95%                                        measurements that were made. With a large enough sample,
+confidence intervals (means and standard errors) to 95% pre-                                    one can very precisely estimate the average height within each
+diction intervals (means and standard deviations). The first                                    group. But this does not change the fact that there is a good
+experiment finds that participants are willing to pay more for                                  deal of outcome uncertainty, as individual heights within each
+and overestimate the effect of a treatment when shown con-                                      group vary substantially around their respective averages.
+fidence intervals relative to prediction intervals. The second                                  This choice of emphasizing either inferential uncertainty or
+experiment evaluates how alternative visualizations compare                                     outcome uncertainty extends to the visualizations that scien-
+to standard visualizations for different effect sizes. We find                                  tists present to their readers. In particular, the distinction be-
+that axis rescaling reduces error, but not as well as prediction                                tween showing inferential uncertainty or outcome uncertainty
+intervals or animated hypothetical outcome plots (HOPs), and                                    produces graphical depictions that look quite different from
+that depicting inferential uncertainty causes participants to                                   one another when plotted in numerous graphics libraries (see
+underestimate variability in individual outcomes.                                               Figures 1a and 1b, which were generated in R). Visualizations
+                                                                                                of inferential uncertainty facilitate comparing the sampling dis-
+Author Keywords                                                                                 tribution of the mean in one group to that of another, as shown
+Uncertainty visualization, effect size, judgment and decision                                   in Figure 1a. A common chart of this type will display the
+making, confidence interval, prediction interval.                                               mean of each group with error bars that extend 1.96 standard
+                                                                                                errors above and below the mean to create a 95% confidence
+INTRODUCTION                                                                                    interval (95% CI), though error bars of one standard error
+Scientists are often faced with the challenge of conveying                                      are also common. Such visualizations convey uncertainty in
+uncertainty to their audiences. Broadly speaking, this informa-                                 estimating the means of each group, and facilitate null hypoth-
+tion can be thought of as belonging to one of two categories:                                   esis significance testing (NHST) and "inference by eye" using
+inferential uncertainty or outcome uncertainty. By inferen-                                     various heuristics [14].
+tial uncertainty, we mean the degree to which a particular
+                                                                                                On the other hand, visualizations of outcome uncertainty
+summary statistic (e.g., a population mean) is known to the
+                                                                                                emphasize the distribution of individual outcomes, such as
+scientist. Outcome uncertainty, in contrast, captures how much
+                                                                                                the 95% prediction intervals (95% PIs) depicted in Figure 1b.
+individual outcomes vary (e.g., around the mean, regardless of
+                                                                                                A 95% PI displays group means accompanied by error bars
+how well it has been estimated).
+                                                                                                that extend 1.96 standard deviations above and below the
+A distinguishing feature between the two is that inferential un-                                mean. Error bars of one standard deviation are also common.
+certainty can be reduced by collecting and analyzing more data,                                 Visualizations of this type facilitate estimation of standardized
+whereas outcome uncertainty cannot. For example, the stan-                                      effect sizes that account for both variance as well as mean
+dard deviation σ is a population parameter that quantifies out-                                 differences. For instance, Cohen’s d is a common measure
+come uncertainty, whereas inferential uncertainty is measured                                   of effect size that normalizes simple mean differences by the
+                                                                                                (pooled) standard deviation in outcomes: µ1 −µ       2
+                                                                                                                                                  σ . One can
+Permission to make digital or hard copies of all or part of this work for personal or           almost directly estimate Cohen’s d from Figure 1b.
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation       Most prior work in uncertainty visualization has sought to
+on the first page. Copyrights for components of this work owned by others than the              determine what visualization technique best facilitates compre-
+author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or
+republish, to post on servers or to redistribute to lists, requires prior specific permission   hension, assuming either outcome or inferential uncertainty
+and/or a fee. Request permissions from permissions@acm.org.                                     is being visualized. In contrast, in this paper we investigate
+CHI ’20, April 25–30, 2020, Honolulu, HI, USA.
+© 2020 Copyright is held by the owner/author(s). Publication rights licensed to ACM.
+                                                                                                how the type of uncertainty that an author chooses to visualize
+ACM ISBN 978-1-4503-6708-0/20/04 ...$15.00.
+https://dx.doi.org/10.1145/3313831.3376454
+                             105
+
+
+
+
+  Average sliding distance                                                                                      Average sliding distance
+                                                                               130                                                         130
+                             104                    ●
+
+
+
+                                                                               120                                                         120
+
+
+
+
+                                                            Sliding distance
+                             103
+                                                                               110                                                         110
+                                                                                                       ●                                                        ●
+
+                             102                                               100        ●
+                                                                                                                                           100       ●
+
+
+
+
+                             101                                               90                                                           90
+
+                             100       ●
+                                                                               80                                                           80
+
+                             99                                                70                                                           70
+                                    Standard     Special                               Standard     Special                                       Standard   Special
+                                     boulder     boulder                                boulder     boulder                                        boulder   boulder
+
+                             (a) 95% confidence intervals                       (b) 95% prediction intervals   (c) Rescaled 95% confidence intervals                       (d) Animated samples (HOPs)
+
+Figure 1: The visualization formats we tested in our experiments. All four present information about the same underlying data, but
+emphasize different aspects of it. Our first experiment compared two conventional visualizations: (a), which focuses on inferential
+uncertainty (uncertainty in predicting the mean), to (b), which presents information about outcome uncertainty (variation in
+individual outcomes). Our second experiment included all four visualizations, adding (c) as a hybrid that contains information
+about both inferential and outcome uncertainty and (d), which presents animated samples of individual outcomes. We find that (a)
+and (c) lead people to overestimate the effectiveness of treatments compared to (b) and (d).
+
+
+affects people’s beliefs about the effectiveness of a treatment.                                                                       Methods in 2012 noted that 49% of error bar uses were to
+To this end, we contribute two large pre-registered randomized                                                                         convey standard error, 42% were used to convey standard de-
+experiments in which we show people different visualizations                                                                           viation, 5% did not specify what they represented, and only 1
+of the same underlying data—some of which focus on infer-                                                                              occurrence conveyed a 95% confidence interval [33]. Other
+ential uncertainty and others on outcome uncertainty—and                                                                               authors publishing in a human computer interaction (HCI)
+query beliefs about the size of treatment effects.                                                                                     venue, however, suggest that 95% CIs are the most common
+                                                                                                                                       type of interval estimate [6]. Further, 95% CIs are presented
+We measure participants’ judgments using three proxies that
+                                                                                                                                       as an exemplary display of effect size in proposed guidelines
+vary predictably with the treatment effects: willingness to pay
+                                                                                                                                       for transparent statistical reporting in HCI [37]. Statistical
+for a treatment, probability of superiority in which we ask par-                                                                       reformers and psychological standards boards have also ad-
+ticipants how often they believe they would win a competition                                                                          vocated for 95% CIs as a more intuitive way of expressing
+with or without the treatment, and belief distributions, that                                                                          uncertainty [2, 12, 13, 38].
+is, subjective probability distributions describing outcomes
+in the treatment and control groups, elicited with a graphical                                                                         Error bars have also been thought to invite confusion due to
+tool called the Distribution Builder [21, 22]. We focus on                                                                             the heuristics people apply to them. For example, readers may
+these measures because they are important for individual-level                                                                         correctly assume that non-overlap of two error bars on inde-
+decision making, where one is concerned with their own in-                                                                             pendent means implies a statistically significant difference but
+dividual outcome as opposed to the average outcome over a                                                                              incorrectly assume that overlap implies no significant differ-
+larger group, as might be the case for policy makers.                                                                                  ence [4, 14, 35]. Even scientists can wrongly apply heuristics
+                                                                                                                                       like judging overlap. A study that asked psychology, neuro-
+Across all measures, we find that visualizations oriented to-                                                                          science, and medical researchers to position error bars repre-
+wards inferential uncertainty (95% CIs) led people to overstate                                                                        senting standard errors or a 95% CI found that the majority
+willingness to pay by the greatest amount, overstate probabil-                                                                         did not understand the relationship between overlap and statis-
+ity of superiority by the greatest amount, and understate the
+                                                                                                                                       tical significance nor the importance of the study design [4],
+variability in outcomes by the greatest amount. Presenting
+                                                                                                                                       while a similar study which posed true/false statements about
+95% CIs on rescaled axes improved answers somewhat, but
+                                                                                                                                       CIs to researchers and graduate students (none of which were
+responses closest to the normatively correct answers across
+                                                                                                                                       true) found that on average, respondents endorsed more than
+all measures were attained by people presented with visualiza-                                                                         half of them [23]. Other misinterpretations include the belief
+tions that encoded information about variation in individual                                                                           that error bars display a region of uniform probability [27]
+outcomes (95% PIs or hypothetical outcome plots (HOPs)).                                                                               and a “within-the-bar bias” that occurs when error bars are
+                                                                                                                                       superimposed on bar charts [11, 34]. Finally, separating the
+VISUALLY COMMUNICATING EXPERIMENT RESULTS                                                                                              visual marks encoding underlying data from those encoding
+An error bar is perhaps the most recognized way of visualizing                                                                         uncertainty may encourage users to underweight probabilistic
+a range of possible values that a statistic might take. One                                                                            information in favor of measures of central tendency [26].
+commonly cited problem with error bars is that they are used
+to convey multiple statistical constructs, such as standard er-                                                                            Despite the wealth of knowledge around biases in reading
+ror, standard deviation, and confidence intervals. Conventions                                                                             error bars, surprisingly little work has directly compared
+concerning the use of error bars vary between and even within                                                                              the use of error bars to show different statistical constructs
+fields. For example, a review of articles published in Nature                                                                              associated with effect size reporting. However, lay people,
+students, and even researchers are often confused by the             and b) means and standard deviations, which present informa-
+critical difference between a sampling distribution, which           tion about variation in individual outcomes around the mean.
+describes variance in a statistic like a mean, and a population      Specifically, we compare error bars that show 95% CIs (using
+distribution, which describes variance in individual measure-        1.96 standard errors), as in Figure 1a, to error bars that show
+ments [4, 9, 23]. For example, a recent crowdsourced study           95% PIs (using 1.96 standard deviations), as in Figure 1b.
+found that when presented with sample statistics from an
+experiment, laypeople greatly overestimated variance in a            In theory these presentations contain the same information
+sampling distribution, though interactive visualizations that        about the underlying data so long as one knows the sample
+enabled them to compare their expectations to the inferred           size, but the former focuses on inferential uncertainty whereas
+distribution could reduce this bias [25]. In contrast to the         the latter emphasizes outcome uncertainty. We are interested
+                                                                     in how people’s perceptions of treatment effectiveness com-
+many prior studies that have examined the effects of showing
+                                                                     pare when they are shown only one of these two graphical
+only one of these two types of distributions, our work directly
+                                                                     formats. In particular, estimating the sample standard devi-
+compares them to each other. Specifically, we compare how
+                                                                     ation from visualizations like Figure 1a requires the reader
+emphasizing the sampling distribution (95% CIs) as opposed
+to the population distribution (95% PIs) impacts judgments,          to inflate the error bars by the (square root of the) sample
+decisions, and perceptions about the size of an effect.              size. As this seems difficult for even sophisticated readers, we
+                                                                     imagined that people would perceive different effect sizes for
+Alternatives to error bars have been proposed and evaluated.         visualizations shown in format a) compared to format b).
+Intrinsic visual encodings of variability use a single retinal
+                                                                     We also used this experiment to investigate whether differ-
+variable to convey a distribution without adding additional
+                                                                     ences between visualization formats can be mitigated by sim-
+marks. For example, density plots use height to convey the
+probability of values, such that the mode appears as the high-       ply adding extra text in the captions that appear alongside a
+est point, while violin plots encode probability as width [3,        given figure. For instance, it is not uncommon for a scientific
+30] and gradient plots encode probability using opacity [28].        paper to summarize both sample statistics as well as inferential
+Other options are based on evidence from research in judg-           statistics in text, but to visualize only one of these. Perhaps
+ment and decision-making [20, 24] that suggests that present-        simply adding information about 95% PIs in the caption for
+ing probabilities using a frequency framing (e.g., 1 out of 10),     a plot showing 95% CIs changes the inferences readers make
+as opposed to a probability framing (e.g., 10%), can improve         about the distribution of outcomes under the treatment while
+                                                                     still communicating information about inferential uncertainty.
+judgments. Experimental tasks used to establish an advantage
+to frequency-based visualizations have targeted Bayesian rea-        Before running the experiment, we formulated and pre-
+soning [32], risk assessment in a health context [18], reporting     registered1 the following hypotheses:
+of subjective probability distributions [25], probability esti-
+mates made from visualizations [26, 31], recall for a visualized   H1. Willingness to pay. Participants who are shown visualiza-
+distribution [25], judgments of which model generated a data           tions with 95% CIs will exhibit different willingness to pay
+sample [29] and incentivized decisions [17].                           for the same treatment compared to those who are shown
+                                                                       95% PIs.
+Drawing on the human capacity for frequency encoding,
+HOPs—animated visualizations in which each frame depicts           H2. Probability of superiority. Participants who are shown
+a random draw from a distribution—have been shown to lead              visualizations with 95% CIs will report different estimates
+to more accurate estimates of probability of superiority than          for the probability that undergoing the treatment provides a
+violin plots and error bars [26], and more accurate judgments          benefit over a control condition.
+of which model produced data samples than error bars or              We examined these hypotheses for two caption alternatives:
+static ensembles [29]. HOPs directly encode probability of           when the figure caption matched the information in the visual-
+superiority, making them useful regardless of dependencies           ization, and when the figure caption contained extra informa-
+between variables, unlike most conventional plots for pre-           tion beyond what is directly shown in the visualization.
+senting distributions [26]. While far from being mainstream,
+researchers have proposed using HOPs in scientific papers,           Experimental Design
+both in Portable Document Format [26] and in online, inter-          To test these hypotheses, we created a scenario that we deemed
+active versions of scientific papers [16]. In Experiment 2, we       would be easily understandable by laypeople and representa-
+compare judgments made from HOPs to those made from                  tive of many situations where one uses analytical results to
+error bars conveying population and sampling distribution            decide whether to make an investment or take a precaution. We
+constructs to gain a better understanding of whether directly        presented the information in this scenario in different formats,
+encoding probability of superiority can help curb biases in          and measured differences in how people perceived the effect of
+estimates of treatment effectiveness.                                the treatment. Specifically, we told participants that they were
+                                                                     athletes competing in a boulder sliding game, playing against
+EXPERIMENT 1                                                         an equally skilled competitor named Blorg. The goal of the
+We designed our first experiment to measure differences in           game is to slide a boulder on ice farther than the opponent’s
+how people perceive the same effect when it is communicated          boulder. There is an all-or-nothing 250 Ice Dollar prize for the
+in one of two conventional formats: a) means and standard            1 Pre-registrations, data, and analysis code for both experiments are
+errors, which focus on uncertainty in measuring the mean             available at https://osf.io/rcfy5/.
+contestant who slides their boulder the farthest. Participants      Procedure
+were given the opportunity to rent a superior boulder (i.e.,        Participants were first presented with the rules of the game
+undergo a treatment) that is expected (but not guaranteed) to       described above, and told that they had the option to rent the
+increase their sliding distance for their next and final compe-     special boulder for a one-time use. The instructions indicated
+tition. They were then shown a visualization that provided          that it was within the rules of the game for them to rent the
+statistics about both the standard and special boulders with an     special boulder, and that they could be assured that their op-
+accompanying caption. Finally, they were asked how much             ponent would not have access to it and would instead use a
+they were willing to pay for the special boulder and to estimate    standard boulder. On the next screen they were shown text
+the probability of winning if they used it.                         with statistics about the standard boulder as per the condition
+                                                                    they were randomly assigned to. They were also told that there
+We manipulated the information shown to participants in a 2 x
+                                                                    was no reason to believe that they would have an advantage
+2 design that varied both the visualization and text that they
+                                                                    over Blorg (or vice versa) if they chose the standard boulder.
+saw. Participants were randomly assigned to see a figure with
+                                                                    Both screens required that they checked a box to confirm that
+either 95% CIs or 95% PIs, and were independently randomly
+                                                                    they understood the information presented to them.
+assigned to see an accompanying caption that was either spe-
+cific to the visualization they were shown or that contained        On the third screen they saw text with statistics about the
+extra information beyond what was directly presented in the         special boulder, along with a visualization that summarized
+visualization. Crossing these two levels of visualization and       the information about the standard and special boulder, as
+accompanying explanation created the four between-subjects          per the condition they had been assigned to. Below this they
+conditions in our experiment. Screenshots of all conditions         were asked for their willingness to pay for the special boulder.
+are provided in the supplemental material.                          Participants responded by moving a slider that ranged from
+                                                                    0 to 250 Ice Dollars and was initialized at the 250 Ice Dollar
+Data & Stimuli                                                      mark to encourage people to respond with the most they were
+We constructed the stimuli in our experiment to correspond          willing to pay. They were required to move the slider from its
+to a Cohen’s d of approximately 0.25 and a probability of           default value before they could submit a response.
+superiority of 57%, typical of the effect sizes observed in
+fields such as psychology, neuroscience, and medicine [5, 7,        After they submitted their response to this question, partic-
+8]. We achieved this using the following parameters for the         ipants were asked to estimate the probability of superiority
+standard and special boulder: slides from the standard boulder      for both the standard and special boulders. Estimating the
+were normally distributed with a mean of 100 meters and a           probability of superiority for the standard boulder served as
+standard deviation of 15.3 meters, whereas slides from the          an attention check, as it should have been clear from the previ-
+special boulder had the same standard deviation but a mean          ous screens that the probability of winning with the standard
+of 104 meters. We chose a standard deviation of 15.3 meters         boulder was 50%. Participants responded to each question by
+so that the 95% PI, derived from 1.96 standard deviations           typing a whole number between 0 and 100, inclusive, for each
+above and below the mean, would span an easily readable,            question. This concluded the experiment.
+round number range of 70 to 130 meters. We then took 1,000
+samples from each of these distributions and used them to           Results
+compute 95% CIs on the mean and 95% PIs on individual               Having collected responses from all participants, we con-
+outcomes for each of the boulders. We plotted the results           ducted the analyses specified in our pre-registration plan. We
+and matched the number of tick marks on the vertical axis,          first removed participants who failed the attention check, in-
+as shown in Figures 1a and 1b. We eschewed bar charts to            dicated by an answer other than 50 out of 100 to the question
+prevent “within-the-bar bias” [11]. We created captions to          about the probability of winning with the standard boulder.2
+explain the mean, 95% PI, and 95% CI, and phrased each of           This left us with 1,743 participants.
+these in terms of what would happen during 1,000 potential          H1. Willingness to pay. We computed the mean willingness
+future slides of each boulder.                                      to pay for the special boulder in each of the four conditions
+                                                                    along with the standard deviation in willingness to pay and the
+Participants
+                                                                    corresponding standard errors. The results are shown in Fig-
+We recruited 2,400 participants from Amazon’s Mechanical            ure 2. The left facet corresponds to the standard setting where
+Turk to take part in the experiment. We chose this sample           the captions matched the information in the visualization peo-
+size based on the results of a previous pilot, so that we had       ple were shown (e.g., those shown the 95% CI visualization
+approximately 80% power in detecting differences between            saw text about 95% CIs), whereas the right shows results when
+conditions at a 5% significance level. Removing the 49              the text contained extra information (e.g., information about
+participants who participated in both the previous pilot and        95% CIs and 95% PIs was shown in captions regardless of the
+this experiment left us with 2,351 participants. All participants   visualization that was shown). In the left facet, we see that
+were located in the U.S. with Mechanical Turk approval              participants were willing to pay substantially more on average
+ratings of 97% or above. Participants were randomly assigned        (80 Ice Dollars compared to 50) for the treatment when the
+to one of the four conditions (95% CI w/ matching text, n           visualization emphasized inferential uncertainty (95% CIs)
+= 569; 95% CI w/ extra text, n = 584; 95% PI w/ matching
+text, n = 647; 95% PI w/ extra text, n = 551). Each participant     2 Repeating the analysis below and including these participants yields
+received a flat payment of $0.75.                                   similar results.
+                      Results with error bars showing one standard error                                          Results with error bars showing one standard error
+
+                          Text matched visualization     Text contained extra information                            Text matched visualization         Text contained extra information
+
+      Visualization                                ●                             ●
+                                                                                                  Visualization                                    ●                                ●
+   showed 95% CI                                                                               showed 95% CI
+
+     Visualization        ●                                       ●
+                                                                                                 Visualization               ●                                            ●
+   showed 95% PI                                                                               showed 95% PI
+
+                          50     60       70        80       50       60    70       80                             0.6          0.7         0.8             0.6     0.7                0.8
+                                               Willingness to pay                                                                       Probability of superiority
+                      The same results with error bars showing one standard deviation                             The same results with error bars showing one standard deviation
+
+                          Text matched visualization     Text contained extra information                            Text matched visualization         Text contained extra information
+
+      Visualization                                                                               Visualization
+   showed 95% CI                                                                               showed 95% CI
+
+     Visualization                                                                               Visualization
+   showed 95% PI                                                                               showed 95% PI
+
+                      0           50        100          0            50      100                             0.5     0.6   0.7        0.8   0.9   1.0 0.5    0.6   0.7       0.8       0.9   1.0
+                                               Willingness to pay                                                                       Probability of superiority
+
+
+Figure 2: Results from our first experiment, visualized two                                 Figure 3: A summary of the estimated probability of superi-
+different ways. In the top row, the black circles show mean                                 ority for the treatment in all four conditions of our first ex-
+willingness to pay for the treatment with error bars that                                   periment. On average, participants estimated the treatment
+correspond to one standard error in estimating the mean. In                                 was more likely to be effective over a control condition when
+the bottom row, the grey triangles also show mean willingness                               the visualization emphasized statistical significance (95% CIs)
+to pay for the treatment, but have error bars that show one                                 compared to effect sizes (95% PIs).
+standard deviation in individual responses. Participants were
+willing to pay more on average for the treatment when the
+visualization emphasized inferential uncertainty (95% CIs)                                  in the bottom row, we show both formats here and throughout
+compared to outcome uncertainty (95% PIs). This difference                                  the rest of the paper for two reasons. First, showing both
+persists even when information about both 95% CIs and 95%                                   versions underscores the point that how we visually present
+PIs is presented in the text accompanying the visualizations                                uncertainty in results can change the way readers perceive
+(right panels). Based on these results, we expect readers who                               reported effects. Second, showing the bottom row alone could
+are shown the plot in the top row to perceive this effect to be                             make it more difficult to assess whether observed differences
+larger than readers who are shown the plot in the bottom row.                               in mean willingness to pay are systematic or specific to the
+                                                                                            responses we analyzed, at least without further information
+                                                                                            about the number of participants involved in the experiment.
+compared to outcome uncertainty (95% PIs). On the right we                                  We discuss this further in Section 5.
+see that this effect persists even when participants are given
+extra information in the text alongside each figure, although                               In all conditions participants were willing to pay substantially
+the difference between groups is somewhat smaller (72 versus                                more for the special boulder than would be expected if they
+54 Ice Dollars).                                                                            were risk-neutral and simply maximizing their expected
+                                                                                            payoff. The risk-neutral willingness to pay is 17.5 Ice Dollars,
+In the spirit of our experiment, we present visualizations of                               calculated as the difference between the expected value of
+these results with two different types of error bars in the top                             winning when competing with the special boulder (250 × .57)
+and bottom rows of Figure 2: in the top row the black circles                               as compared to competing without it (250 × .50). Taking
+show one standard error in estimating the mean willingness                                  expected value maximization as a norm, the PI group was
+to pay, whereas error bars in the grey triangles on the bottom                              closer to the normative answer by around 20 to 30 Ice Dollars.
+row show one standard deviation in individual responses. The
+former most directly communicates that our results are sta-                                 H2. Probability of superiority. We find similar results for
+tistically significant (two-sided t-tests: t(861) = −8.57), p <                             participants’ estimates of the probability of winning if they
+0.001 for matching text, t(836) = −5.17, p < 0.001 for extra                                use the special boulder when playing an opponent who uses
+                                                                                            the standard boulder, with an even larger difference between
+text), whereas the latter affords the reader an estimate of the
+                                                                                            conditions than above. As shown in the left facet of Figure 3,
+standardized effect size we observed (Cohen’s d = 0.57 for
+                                                                                            participants who saw 95% CIs thought that they would win
+matching text, Cohen’s d = 0.36 for extra text).
+                                                                                            86% of the time that they used the special boulder on average,
+These are reasonably large effect sizes, but based on the results                           whereas those who were shown 95% PIs reported an aver-
+of our experiment, we expect that readers of this article would                             age probability of superiority of 67%. These are both higher
+estimate them to be even larger if they were shown only the                                 than the true value of 57%, but the latter is much closer than
+more conventional black circle error bars in the top row instead                            the former, which implies near certainty in winning with the
+of the grey triangle error bars in the bottom. And while we                                 special boulder. These differences are statistically significant
+could have chosen to visualize our results using only the figure                            (two-sided t-tests: t(892) = −19.38, p < 0.001 for matching
+text, t(836) = −5.80, p < 0.001 for extra text) with relatively       the number of times they expected to outperform their op-
+large effect sizes (Cohen’s d = 1.29 for matching text, Cohen’s       ponent if they used the special boulder. Many participants
+d = 0.40 for extra text).                                             responded with numbers such as 75, which could be an arti-
+                                                                      fact of people being anchored on certain salient numbers (e.g.,
+This experiment makes clear that the type of error bars that          multiples of 5). Using the Distribution Builder offered an
+authors use to visualize uncertainty in their results can have a      alternative means of eliciting this information that is unlikely
+substantial impact on how effective readers perceive interven-        to be subject to such effects. It also allowed us to measure peo-
+tions to be. Specifically, focusing on inferential uncertainty        ple’s subjective beliefs about how much variation there was in
+by showing standard errors in visualizations leads laypeople          individual outcomes by computing the standard deviation of
+to overestimate the effectiveness of treatments compared to           the distributions they provided.
+showing standard deviations, at least in the setting we have
+studied here. In our next experiment we extend these results          Finally, we included two different effect sizes in this ex-
+to include other visualizations and an additional effect size,        periment as a robustness check. We considered the same
+and collect further information on how readers perceive the           "small" effect size as in the previous experiment, but added a
+distributions depicted by these visualizations.                       "large" [15] effect size corresponding to a Cohen’s d of 1.0.
+                                                                      This allowed us to check if our previous results were specific
+EXPERIMENT 2                                                          to the stimuli we chose or to round number or ceiling effects.
+Our second experiment serves several purposes. First, having          For instance, it could be the case that when asked for a prob-
+established that conventional representations using either            ability of winning in an uncertain setting, people gravitate
+standard errors (as in Figure 1a) or standard deviations (as in       towards certain salient numbers (e.g., "95%") instead of using
+Figure 1b) both have some shortcomings, we use Experiment             the full range of possible values.
+2 to explore two alternative visualizations. The first is             Before running this experiment, we formulated and pre-
+shown in Figure 1c, where error bars depict 95% CIs, but              registered the following hypotheses:
+the vertical axis has been rescaled to accommodate 95% PIs.
+This relatively simple modification is similar to intentionally     H3. Willingness to pay. Participants will exhibit different will-
+extending the y-axis range to include zero—as visualization             ingness to pay for the same treatment based on the visual-
+experts sometimes advise—but has the benefit of conveying               ization they see.
+information about both inferential uncertainty, through the
+error bars, and outcome uncertainty, through the axis range.        H4. Stated probability of superiority. Participants will report
+                                                                        different estimates for the probability that undergoing the
+The second alternative visualization we consider in Experi-             treatment provides a benefit over a control condition based
+ment 2 is HOPs, which show uncertainty through a series of              on the visualization they see.
+animated frames that depict samples from underlying distri-
+butions [26]. HOPs are an attractive candidate for our task         H5. Implied standard deviation. Participants will report dis-
+because they encode the probability of superiority directly             tributions with different standard deviations based on the
+via frequency, allowing readers to estimate the probability of          visualization they see.
+superiority by counting (or estimating using ensemble pro-
+cessing [1]) the fraction of frames that samples from one           H6. Implied probability of superiority. Participants will re-
+distribution dominate samples from another. In this sense               port distributions that imply different estimates for the prob-
+they are optimized for our task, providing a useful comparison          ability that undergoing the treatment provides a benefit over
+point. While HOPs can be used to show samples from any                  a control condition based on the visualization they see.
+distribution, here we use HOPs for only individual outcomes           We tested each of these hypotheses at two levels of granularity.
+and investigate how participants perceive effect sizes when           First, we compared visualizations that emphasize statistical
+shown HOPs compared to other formats. A static representa-            significance (Figure 1a and Figure 1c) to those that focus on
+tion of frames from one of the HOPs used for this experiment          effect sizes (Figure 1b and Figure 1d). Second, we conducted
+is shown in Figure 1d.                                                a more fine-grained analysis which compared specific pairs
+We also used this experiment to elicit alternative and more fine-     of visualizations to each other: 95% CIs to 95% CIs with
+grained measurements of the distributions and effect sizes that       a rescaled axis, 95% CIs with a rescaled axis to 95% PIs,
+participants perceived from different visualizations. Specif-         95% CIs with a rescaled axis to animated samples (HOPs),
+ically, after participants saw a visualization, we asked them         and HOPs to 95% PIs. We implemented all of these tests as
+to use the Distribution Builder3 tool [21, 22] to specify a full      two-way ANOVAs with planned comparisons.
+distribution of outcomes they could expect under each condi-
+tion. This allowed us to impute alternative measurements for          Experimental Design
+responses collected in our previous experiment and offered            We used a 2 x 4 between-subjects design that varied whether
+more fine-grained information than can be captured by these           people were presented with a small or large effect size and
+responses alone. Take, for instance, the probability of supe-         which of the four visualizations they saw. Participants were
+riority measurements from our previous experiment, where              randomly assigned to an effect size corresponding to either
+participants were asked for an integer between 0 and 100 for          a Cohen’s d of approximately 0.25 or 1.0 and independently
+                                                                      randomly assigned to see one of the four visualizations in
+3 https://quentinandre.github.io/DistributionBuilder/                 Figure 1 (95% CIs, 95% PIs, 95% CI rescaled, or HOPs). This
+created the eight conditions in our experiment. In contrast to     and the special boulder interface shown below it. In each
+our previous experiment, we did not manipulate the captions        interface participants placed 100 balls into 20 equally spaced
+alongside each visualization, but instead followed the con-        bins using the plus and minus buttons in each bin to indicate
+vention that the text next to a figure matches the information     how many out of 100 slides they thought would land at each
+shown in the figure.                                               distance. Once they had placed 100 balls in each interface they
+                                                                   could submit their responses and complete the experiment.
+Data & Stimuli
+We constructed stimuli following the same procedure as in          Results
+the previous experiment, but expanded this to include the          As per our pre-registration plan, we again removed participants
+alternative visualizations and the large effect size. We re-used   who failed the attention check by responding with something
+data from the previous experiment for the small effect size        other than 50 out of 100 for the stated probability of winning
+and added the two alternative visualizations. The 95% CI           with the standard boulder.4 This left us with 1,830 participants.
+visualization was rendered with a vertical axis that matched
+the 95% PI visualization in both its range and the placement       H3. Willingness to pay. The analysis for this experiment
+and labeling of tick marks. The HOPs visualization showed          was similar to the previous one, but with more conditions and
+940 different frames at a rate of 2.5 frames per second, where     comparisons between them. Figure 4 shows the results for
+each frame contained a random sample from the special and          willingness to pay for each condition, where facets indicate the
+standard boulders. (Empty frames where samples fell outside        effect size condition participants were assigned to. As before,
+the 95% PI covered by the vertical axis were removed.) This        we show two types of error bars: the black circles on the top
+corresponded to a total playing time of 6.3 minutes prior to       have error bars corresponding to one standard error in estimat-
+the animation automatically looping back to the first frame.       ing the mean willingness to pay, whereas the grey triangles
+These stimuli are shown in Figures 1c and Figures 1d. The          on bottom have error bars that cover one standard deviation
+latter is represented in static form in this document but was      in individual responses. Looking at the small effect size, we
+shown as an auto-played animated GIF in our experiment.            see similar results to the first experiment: participants were
+                                                                   willing to pay substantially more on average when shown 95%
+For the large effect size, which corresponds to a Cohen’s d        CIs (88 Ice Dollars) compared to 95% PIs (52 Ice Dollars).
+of approximately 1.0 and probability of superiority of 76%,        Looking at the alternative visualizations, we see that rescaling
+we followed the same procedure but shifted the mean of the         the axis on the 95% CI visualizations helps somewhat, with
+special boulder from 104 meters to 116 meters, keeping the         mean willingness to pay falling in between these two extremes
+standard deviation at 15.3 meters, as was the case for the small   (70 Ice Dollars). HOPs performed similarly to 95% PIs (mean
+effect size. We used captions that matched the information         willingness to pay of 49 Ice Dollars).
+shown in each figure (as opposed to including extra informa-
+tion as in two conditions of the previous experiment).             We see similar, but less stark, differences between visualiza-
+                                                                   tion conditions for the large effect size. Comparing results for
+Participants                                                       the same visualization at different effect sizes, we find that
+We recruited 2,400 participants from Amazon’s Mechanical           participants were more sensitive to differences in the underly-
+Turk for the experiment. We set our sample size so that we         ing effect sizes when shown 95% PIs and HOPs compared to
+had approximately 80% power to detect a minimum difference         either of the 95% CI visualizations. This further supports the
+of 5 percentage points in reported probability of superiority      idea that it is difficult to infer effect sizes from visualizations
+between conditions at a 5% significance level. All participants    that focus on statistical significance. Running the two-way
+were located in the U.S. with Mechanical Turk approval ratings     ANOVA specified in our pre-registration plan shows statistical
+of 97% or above. Participants were randomly assigned to one        significance for all planned comparisons between visualiza-
+of eight conditions (95% CIs w/ small effect, n = 299; 95%         tions (t(1825) < −3.5, p < 0.001) with the exception of 95%
+CIs rescaled w/ small effect, n = 314; 95% PIs w/ small effect,    PIs versus HOPs, for which there is no statistically significant
+n = 300; HOPs w/ small effect, n = 278; 95% CIs w/ large           difference in willingness to pay.
+effect, n = 293; 95% CIs rescaled w/ large effect, n = 308; 95%
+PIs w/ large effect, n = 300; HOPs w/ large effect, n = 308 ).     With the small effect size, as in Experiment 1, participants
+Each participant received a flat payment of $1.00.                 in all conditions had a willingness to pay that exceeded the
+                                                                   normative value of 17.5 dollars, especially in the CI conditions.
+Procedure                                                          With the large effect size, the normative value was 65 dollars,
+The procedure for this experiment was identical to the previous    calculated as the difference between the expected value with
+experiment with one addition. Once participants had read the       the special boulder (250 × .76) and that with the standard
+instructions, seen statistics of the standard and special boul-    boulder (250 × .5). Here participants in the PI and HOPs
+ders, provided their willingness to pay for the special boulder,   conditions came quite close to the normative answer, while
+and estimated the probability of winning with each boulder,        those in the CI conditions exceed it.
+they saw one additional screen. This screen did not show
+any of the statistics about the boulders or the visualizations,    H4. Stated probability of superiority. As shown in Figure 5,
+but instead contained two copies of the Distribution Builder       results for stated probability of superiority follow a similar pat-
+interface: one for the standard boulder and one for the special    tern, with even larger and more consistent differences across
+boulder. Each of these was configured to use the available         4 Repeating the analysis below and including these participants yields
+page width, with the standard boulder interface shown first        similar results.
+                             Results with error bars showing one standard error                                                               Results with error bars showing one standard error
+
+                                         Small effect size                      Large effect size                                                       Small effect size                            Large effect size
+
+      Visualization showed                                     ●                                       ●
+                                                                                                                       Visualization showed                                         ●                                       ●
+                    95% CI                                                                                                           95% CI
+      Visualization showed                       ●                                            ●
+                                                                                                                       Visualization showed                                     ●                                          ●
+          95% CI rescaled                                                                                                  95% CI rescaled
+      Visualization showed           ●                                               ●
+                                                                                                                       Visualization showed             ●                                                     ●
+                    95% PI                                                                                                           95% PI
+      Visualization showed       ●                                                       ●
+                                                                                                                       Visualization showed             ●                                                      ●
+  animated samples (HOPs)                                                                                          animated samples (HOPs)
+
+                                 50      60     70      80     90          50   60       70       80       90                                    0.6          0.7         0.8           0.9   0.6       0.7         0.8     0.9
+                                                           Willingness to pay                                                                                       Stated probability of superiority
+                             The same results with error bars showing one standard deviation                                                  The same results with error bars showing one standard deviation
+
+                                         Small effect size                      Large effect size                                                       Small effect size                            Large effect size
+
+      Visualization showed                                                                                             Visualization showed
+                    95% CI                                                                                                           95% CI
+      Visualization showed                                                                                             Visualization showed
+          95% CI rescaled                                                                                                  95% CI rescaled
+      Visualization showed                                                                                             Visualization showed
+                    95% PI                                                                                                           95% PI
+      Visualization showed                                                                                             Visualization showed
+  animated samples (HOPs)                                                                                          animated samples (HOPs)
+
+                             0           50          100           150 0        50            100          150                                    0.6       0.7     0.8   0.9       1.0        0.6    0.7     0.8   0.9   1.0
+                                                           Willingness to pay                                                                                       Stated probability of superiority
+
+
+Figure 4: A summary of the willingness to pay for the treat-                                                     Figure 5: The estimated probability of superiority for our
+ment in our second experiment. Across both small and large                                                       second experiment, which shows similar trends to willingness
+underlying effect sizes, participants were on average willing                                                    to pay. Dashed lines show the true underlying probability of
+to pay the most for the treatment when shown 95% CIs and                                                         superiority for the small and large effect size conditions.
+least when shown 95% PIs or HOPs. 95% CIs with a rescaled
+axis fell between these two extremes.
+
+                                                                                                                 across participants. The aggregate histogram for the standard
+visualization conditions. Participants estimated the probability
+                                                                                                                 boulder in each condition is shown in blue, the histogram for
+of winning with the special boulder to be substantially higher
+                                                                                                                 the special boulder is in red. The solid lines show the true
+when shown 95% CIs compared to 95% PIs or HOPS, and
+were less sensitive to changes in the underlying effect size                                                     distributions for the standard and special boulders for compar-
+when error bars showed 95% CIs. Comparing average proba-                                                         ison, and the dotted vertical lines show the true means of each
+bility of superiority between participants who saw 95% CIs                                                       distribution. Looking across visualizations shows a clear pat-
+between the small and large effect sizes shows an average                                                        tern: the means of each distribution are well estimated across
+increase of only 3 percentage points, whereas participants who                                                   all conditions, but participants who were shown 95% CI visu-
+saw 95% PIs or HOPs show a 10 percentage point difference                                                        alizations (the right two columns) perceived both distributions
+between effect sizes. Looking at the distribution of responses,                                                  to be more concentrated than those who saw 95% PIs or HOPs
+                                                                                                                 (the left two columns).
+we note that the mode of the distribution for CIs was close to
+1.0, even with the small effect size. A ceiling effect limits the                                                These aggregate histograms do, however, hide some variability
+amount the mean can move in the large effect size.                                                               across responses that individual participants gave: some distri-
+As in our previous experiment, we see that participants over-                                                    butions were symmetric and bell-shaped, others not. To better
+estimated the probability of superiority for the small effect                                                    capture this variation across individuals, we first computed the
+size relative to its true value of 57%. The large effect size,                                                   implied standard deviation (SD) for each of the distributions
+                                                                                                                 each participant provided, resulting in 3,660 estimates (two for
+however, was more or less accurately perceived in the 95% PI
+                                                                                                                 each of the 1,830 participants). We then grouped these implied
+and HOPs conditions relative to its true value of 76%, but was
+                                                                                                                 standard deviations by visualization condition and effect size
+still overestimated in both of the 95% CI conditions.
+                                                                                                                 and looked at this measure across participants. This analysis
+As above, a two-way ANOVA shows statistical significance for                                                     confirms that despite variability across participants, the same
+all planned comparisons between visualizations (t(1825) =                                                        pattern as in the aggregate histogram holds: for the small ef-
+−2.24, p = 0.025 for 95% CIs rescaled versus 95% CIs;                                                            fect size, distributions for the 95% PIs and HOPs conditions
+t(1825) < −16.8, p < 0.001 for others) with the exception                                                        have an average implied SD of approximately 17.5 Ice Dollars,
+of 95% PIs versus HOPs, where there is no statistically signif-                                                  which is much closer to the true value of 15.3 Ice Dollars than
+icant difference in stated probability of superiority.                                                           the average implied SD of approximately 11 Ice Dollars for
+                                                                                                                 the 95% CI conditions.
+H5. Implied standard deviation. Our last two analyses lever-
+age responses collected through the Distribution Builder in-                                                     A two-way ANOVA on implied standard deviation across
+terface, which are summarized in Figure 6. This figure con-                                                      participants shows similar results to willingness to pay and
+tains all 366,000 data points gathered through the Distribution                                                  stated probability of superiority. All planned comparisons
+Builder, where we have grouped participants by the effect size                                                   between visualizations are statistically significant (t(3655) =
+and visualization they saw and summed the counts in each bin                                                     2.1, p = 0.04 for 95% CIs rescaled versus 95% CIs, t(3655) >
+                                        Visualization showed    Visualization showed      Visualization showed               Visualization showed
+                                      animated samples (HOPs)          95% PI               95% CI rescaled                         95% CI
+                               0.20
+
+
+
+
+                                                                                                                                                                             Small effect size
+                               0.15
+
+
+
+
+       Fraction of responses
+                               0.10
+                               0.05
+                               0.00                                                                                                                                                                         Standard boulder
+                               0.20                                                                                                                                                                         Special boulder
+
+
+
+
+                                                                                                                                                                             Large effect size
+                               0.15
+                               0.10
+                               0.05
+                               0.00
+                                         75   100   125   150    75   100    125   150        75   100    125    150          75        100       125          150
+                                                                                   Distance
+
+Figure 6: An aggregated view of all 366,000 data points collected through the Distribution Builder interface in our second
+experiment. Solid lines show the true distributions from which the stimuli were generated. The true means, indicated by the dotted
+vertical lines, were well-estimated in all conditions, but participants who saw either of the 95% CI visualizations significantly
+underestimated the variance of each distribution, as shown in the right two columns of the figure.
+
+20, p < 0.001 otherwise) with the exception of 95% CIs versus                                                                          Results with error bars showing one standard error
+
+HOPs, where there is no statistically significant difference.                                                                                         Small effect size                                                   Large effect size
+
+                                                                                                                Visualization showed                               ●                                                                                ●
+                                                                                                                              95% CI
+H6. Implied probability of superiority. Finally, as shown in
+                                                                                                                Visualization showed
+Figure 7, we find that the implied probability of superiority                                                       95% CI rescaled
+                                                                                                                                                               ●                                                                                    ●
+
+
+from the histograms elicited through the Distribution Builder                                                   Visualization showed
+                                                                                                                              95% PI
+                                                                                                                                                 ●                                                                                 ●
+
+match the stated probabilities of superiority from earlier in                                                  Visualization showed              ●                                                                                 ●
+the experiment quite closely, and show nearly identical results                                            animated samples (HOPs)
+
+                                                                                                                                             0.60 0.65 0.70 0.75 0.80 0.85                                       0.60 0.65 0.70 0.75 0.80 0.85
+across conditions. We see the same bias towards the middle of                                                                                                  Implied probability of superiority
+the response range as in the stated probability of superiority,                                                                        The same results with error bars showing one standard deviation
+but in each case responses from 95% PIs and HOPs are both                                                                                             Small effect size                                                   Large effect size
+closer to the truth than the 95% CI visualizations.                                                             Visualization showed
+                                                                                                                              95% CI
+A two-way ANOVA on implied probability of superiority                                                           Visualization showed
+across participants shows no statistically significant difference                                                   95% CI rescaled
+                                                                                                                Visualization showed
+between 95% PIs and HOPs or between 95% CIs rescaled                                                                          95% PI
+and conventional 95% CIs. All other planned comparisons are                                                    Visualization showed
+                                                                                                           animated samples (HOPs)
+statistically significant (t(1825) < −11, p < 0.001).                                                                                  0.5      0.6      0.7           0.8                       0.9   1.0 0.5      0.6      0.7       0.8    0.9       1.0
+                                                                                                                                                               Implied probability of superiority
+We note that a prior study from the literature [26] found dif-
+ferences in accuracy in estimating probability of superiority
+between HOPs and 95% PIs, which we do not observe here.                                                  Figure 7: The probability of superiority implied by the
+Looking into the data from both studies, we noticed that in                                              histograms elicited through the Distribution Builder in
+the present study, very few participants stated probabilities                                            our second experiment, which shows similar trends to the
+of superiority in the wrong direction (i.e., less than .5 for the                                        stated probability of superiority for this and our previous
+superior option), while it happened more often in the prior                                              experiment. Dashed lines show the true underlying probability
+study, impacting accuracy. This is even the case for partici-                                            of superiority for the small and large effect size conditions.
+pants who did not pass the attention check in this study. We
+suspect this difference may be primarily due to participants in
+the present study being asked to state probability of superiority                                        results, and these choices influence how people perceive the
+twice: first for the standard boulder and then for the special                                           effects they investigate. This article investigated four ways
+boulder. Responding to an easier first question with an answer                                           of presenting scientific results (95% confidence intervals, 95%
+of .5 may have made it clear in participants’ minds that the                                             prediction intervals, rescaled 95% confidence intervals, and
+second probability must be greater than 0.5.                                                             HOPs) and their effects on readers’ willingness to pay for a
+                                                                                                         treatment, perceived probability of superiority of a treatment,
+                                                                                                         and beliefs about the distributions of outcomes under the
+DISCUSSION                                                                                               treatment. Across all measures, we find that visualizations
+Responsible authors know that it is important to communicate                                             oriented towards inferential uncertainty (95% CIs) led to the
+uncertainty when making statistical claims. Ideally, authors                                             greatest deviation from normatively correct answers. People
+who use an estimation approach should include both outcome                                               presented with 95% CIs overstated willingness to pay by the
+and inferential uncertainty in reporting a study. However,                                               greatest amount, overstated probability of superiority by the
+scientists face choices about how to graphically present                                                 greatest amount, and understated the variability in outcomes
+by the greatest amount. Presenting 95% CIs on rescaled axes          large.5 To our eyes, the effect seems larger in the top left panel
+improved answers somewhat, but responses closest to the nor-         than in the bottom left panel, even though we know that it
+matively correct answers across all measures were attained by        isn’t. Perhaps this is because we are so accustomed to looking
+people presented with visualizations that encoded information        at confidence intervals that it is hard to interpret error bars dif-
+about variation in individual outcomes (95% PIs or HOPs).            ferently. It would be worth testing whether other researchers
+                                                                     have similar perceptions. Regardless of whether experts show
+These results are important because scientists often display         the same behavior as laypeople, we believe that our results
+their results using 95% CIs, the least accurate format we            have implications for how scientists should communicate their
+tested. Many scientists employ even narrower intervals of plus       own work to laypeople, for example in the popular press.
+or minus one standard error which could lead to even greater
+inaccuracies than those measured here. Another important             We see a few promising directions for future research. The
+finding is that misperceptions were largest for visualizations       first would be finding an ideal visualization for conveying
+depicting smaller effect sizes (Cohen’s d of around .25),            both inferential and outcome uncertainty. While PIs and
+which is concerning because smaller effects tend to be the           HOPs led to greater accuracy than than CIs in our tasks,
+most commonly studied effects [10] Because scientists often          potentially valuable information about inferential uncertainty
+use CIs and publish small effects, many scientific results are       might be lost if CIs were universally replaced by PIs or HOPs.
+likely exaggerated in the minds of some readers. Speculating,        Modifying PIs or HOPs to display inferential uncertainty
+the negative consequences of biased beliefs could be excessive       as well as outcome uncertainty may prevent some readers
+faith in the effectiveness of policy interventions or the            from overestimating effect size, but would require axes to
+reinforcement of stereotypes (e.g., the false conclusion that        be scaled such that small differences in means are hard to
+statistically significant differences in means between groups        read, potentially leading to greater error in some inferences.
+implies that all the members of one group are superior to            One alternative is to show both types of plots as we have
+those in another, when in actuality the distributions overlap        done in most of the figures in this paper, however, doubling
+substantially due to high degrees of variation within groups).       the number of plots for all papers seems excessive and
+Investigating whether visualizing inferential uncertainty            might become burdensome for both authors and readers.
+impacts a reader’s tendency to engage in dichotomous thinking        An innovative representation that does justice to effect size
+about effects (e.g., [6]) is worth exploring in future work.         and sample mean differences would be welcome, and would
+                                                                     require experiments that assess participants on both concepts.
+While the results in this work are rather consistent across stud-
+ies, our experiments were limited to a certain set of tasks, stim-   Second, we note the literature is largely silent on how people
+uli and participants. The questions participants in our studies      process the visualizations we studied to arrive at intuitive
+answered depended on an accurate perception of the distribu-         estimates of probability of superiority and related measures.
+tion of outcomes under the treatment. Future studies might           For HOPs, a plausible mechanism would be frequency
+examine how viewing outcome uncertainty, for example with            encoding [19], which would make a concrete prediction,
+PIs, influences people’s perceptions of sampling distributions.      namely that the frequency of superiority experienced during
+We also investigated only four visualizations out of a large         the time in which the participant is looking at the visualization
+space including boxplots, histograms, densities, violin plots,       would be reflected their response. For error-bar based
+and beyond. It may be the case that some of these alternatives       representations, there are no frequencies to encode but eye
+perform even better under the scenarios we tested in terms of        tracking and think-aloud measures collected during responses
+alignment with normative answers. It would be interesting to         or during the use of the Distribution Builder could give insight
+compare versions of these visualizations that orient readers         into the process [36].
+towards inferential uncertainty with versions that emphasize
+outcome uncertainty. It would also be interesting to consider        Lastly, while this paper studied willingness to pay and per-
+whether transforming the information shown in charts—such            ceptions of differences between distributions, our work would
+as by plotting the distribution of the difference between the two    have greater practical relevance if it studied how different visu-
+                                                                     alizations impacted decision making about policies. It would
+conditions, as some researchers have proposed [37]—reliably
+                                                                     be particularly interesting to identify the types of decisions for
+impacts perceptions for the better or worse.
+                                                                     which each visualization—even those that performed poorly
+In addition, we only studied laypeople, who likely read about        here—is well suited. That said, given the misperceptions that
+scientific studies in the press and are important consumers          we document and the reality that many published effects are
+of statistical information, but may have limited experience          small, it does seem to be the case that putting less emphasis
+with error bars. Despite this, the patterns they created with the    on statistical significance in visualizations and more emphasis
+Distribution Builder for the most part followed symmetrical          on effect sizes would benefit scientists and their audiences.
+bell shaped patterns at the individual level and, as Figure 6
+shows, on the aggregate level. It is an open question as to
+whether these misperceptions of results extend beyond lay            ACKNOWLEDGMENTS
+readers to expert readers such as scientists. Based on our           We thank William Cai and Jennifer Allen for their help in pro-
+own perceptions, we think they might. For example, Figure 2          gramming and running the experiments described in this paper.
+shows a effect size with a Cohen’s d of .57, which is rather
+                                                                     5 To put it in perspective, about 75% of the studies in [10] had smaller
+                                                                     effect sizes than a Cohen’s d of .57 (i.e., correlation of .274).
+REFERENCES                                                            meta-analysis. Australian Journal of Psychology 64, 3
+ [1] Alice R Albrecht and Brian J Scholl. 2010. Perceptually          (2012), 138–146.
+     averaging in a continuous visual world: Extracting
+                                                                 [14] Geoff Cumming and Sue Finch. 2005. Inference by eye:
+     statistical summary representations over time.
+                                                                      confidence intervals and how to read pictures of data.
+     Psychological Science 21, 4 (2010), 560–567.
+                                                                      American Psychologist 60, 2 (2005), 170.
+ [2] American Psychological Association and others. 2001.
+     Publication manual (5th edition). American                  [15] Peter Cummings. 2011. Arguments for and against
+     Psychological Association Washington, DC.                        standardized mean differences (effect sizes). Archives of
+                                                                      pediatrics & adolescent medicine 165, 7 (2011),
+ [3] Nicholas J Barrowman and Ransom A Myers. 2003.                   592–596.
+     Raindrop plots: a new way to display collections of
+     likelihoods and distributions. The American Statistician    [16] Pierre Dragicevic, Yvonne Jansen, Abhraneel Sarma,
+     57, 4 (2003), 268–274.                                           Matthew Kay, and Fanny Chevalier. 2019. Increasing
+                                                                      the Transparency of Research Papers with Explorable
+ [4] Sarah Belia, Fiona Fidler, Jennifer Williams, and Geoff          Multiverse Analyses. In Proceedings of the 2019 CHI
+     Cumming. 2005. Researchers misunderstand confidence              Conference on Human Factors in Computing Systems.
+     intervals and standard error bars. Psychological methods         ACM, 65.
+     10, 4 (2005), 389.
+                                                                 [17] Michael Fernandes, Logan Walls, Sean Munson, Jessica
+ [5] Melanie L Bell, Mallorie H Fiero, Haryana M Dhillon,             Hullman, and Matthew Kay. 2018. Uncertainty Displays
+     Victoria J Bray, and Janette L Vardy. 2017. Statistical          Using Quantile Dotplots or CDFs Improve Transit
+     controversies in cancer research: using standardized             Decision-Making. In Proceedings of the 2018 CHI
+     effect size graphs to enhance interpretability of                Conference on Human Factors in Computing Systems.
+     cancer-related clinical trials with patient-reported             ACM, 144.
+     outcomes. Annals of Oncology 28, 8 (2017), 1730–1733.
+                                                                 [18] Rocio Garcia-Retamero and Edward T Cokely. 2013.
+ [6] Lonni Besançon and Pierre Dragicevic. 2019. The                  Communicating health risks with visual aids. Current
+     Continued Prevalence of Dichotomous Inferences at                Directions in Psychological Science 22, 5 (2013),
+     CHI. (2019).                                                     392–399.
+ [7] Katherine S Button, John PA Ioannidis, Claire Mokrysz,      [19] Gerd Gigerenzer. 1994. Why the distinction between
+     Brian A Nosek, Jonathan Flint, Emma SJ Robinson, and             single-event probabilities and frequencies is important
+     Marcus R Munafò. 2013. Power failure: why small                  for psychology (and vice versa). In Subjective
+     sample size undermines the reliability of neuroscience.          probability. Wiley, 129–161.
+     Nature Reviews Neuroscience 14, 5 (2013), 365.
+                                                                 [20] Gerd Gigerenzer and Ulrich Hoffrage. 1995. How to
+ [8] Colin F Camerer, Anna Dreber, Felix Holzmeister,                 improve Bayesian reasoning without instruction:
+     Teck-Hua Ho, Jürgen Huber, Magnus Johannesson,                   frequency formats. Psychological review 102, 4 (1995),
+     Michael Kirchler, Gideon Nave, Brian A Nosek,                    684.
+     Thomas Pfeiffer, and others. 2018. Evaluating the
+     replicability of social science experiments in Nature and   [21] Daniel G Goldstein, Eric J Johnson, and William F
+     Science between 2010 and 2015. Nature Human                      Sharpe. 2008. Choosing outcomes versus choosing
+     Behaviour 2, 9 (2018), 637.                                      products: Consumer-focused retirement investment
+                                                                      advice. Journal of Consumer Research 35, 3 (2008),
+ [9] Beth Chance, Robert del Mas, and Joan Garfield. 2004.            440–456.
+     Reasoning about sampling distribitions. In The
+     challenge of developing statistical literacy, reasoning     [22] Daniel G Goldstein and David Rothschild. 2014. Lay
+     and thinking. Springer, 295–323.                                 understanding of probability distributions. Judgment &
+                                                                      Decision Making 9, 1 (2014).
+[10] Open Science Collaboration and others. 2015.
+     Estimating the reproducibility of psychological science.    [23] Rink Hoekstra, Richard D Morey, Jeffrey N Rouder, and
+     Science 349, 6251 (2015), aac4716.                               Eric-Jan Wagenmakers. 2014. Robust misinterpretation
+                                                                      of confidence intervals. Psychonomic bulletin & review
+[11] Michael Correll and Michael Gleicher. 2014. Error bars           21, 5 (2014), 1157–1164.
+     considered harmful: Exploring alternate encodings for
+     mean and error. Visualization and Computer Graphics,        [24] Ulrich Hoffrage and Gerd Gigerenzer. 1998. Using
+     IEEE Transactions on 20, 12 (2014), 2142–2151.                   natural frequencies to improve diagnostic inferences.
+                                                                      Academic medicine 73, 5 (1998), 538–540.
+[12] Geoff Cumming. 2013. Understanding the new
+     statistics: Effect sizes, confidence intervals, and         [25] Jessica Hullman, Matthew Kay, Yea-Seul Kim, and
+     meta-analysis. Routledge.                                        Samana Shrestha. 2018. Imagining Replications:
+                                                                      Graphical Prediction & Discrete Visualizations Improve
+[13] Geoff Cumming, Fiona Fidler, Pav Kalinowski, and
+                                                                      Recall & Estimation of Effect Uncertainty. IEEE
+     Jerry Lai. 2012. The statistical recommendations of the
+     American Psychological Association Publication                   transactions on visualization and computer graphics 24,
+     Manual: Effect sizes, confidence intervals, and                  1 (2018), 446–456.
+[26] Jessica Hullman, Paul Resnick, and Eytan Adar. 2015.             CHI Conference on Human Factors in Computing
+     Hypothetical outcome plots outperform error bars and             Systems. ACM.
+     violin plots for inferences about reliability of variable
+                                                                 [33] Martin Krzywinski and Naomi Altman. 2013. Points of
+     ordering. PloS one 10, 11 (2015), e0142444.
+                                                                      significance: error bars. (2013).
+[27] Harald Ibrekk and M Granger Morgan. 1987. Graphical
+     communication of uncertain quantities to nontechnical       [34] George E Newman and Brian J Scholl. 2012. Bar graphs
+     people. Risk analysis 7, 4 (1987), 519–529.                      depicting averages are perceptually misinterpreted: The
+                                                                      within-the-bar bias. Psychonomic bulletin & review 19,
+[28] Christopher H Jackson. 2008. Displaying uncertainty              4 (2012), 601–607.
+     with shading. The American Statistician 62, 4 (2008),
+     340–347.                                                    [35] Nathaniel Schenker and Jane F Gentleman. 2001. On
+                                                                      judging the significance of differences by examining the
+[29] Alex Kale, Francis Nguyen, Matthew Kay, and Jessica              overlap between confidence intervals. The American
+     Hullman. 2018. Hypothetical Outcome Plots Help                   Statistician 55, 3 (2001), 182–186.
+     Untrained Observers Judge Trends in Ambiguous Data.
+     IEEE transactions on visualization and computer             [36] Michael Schulte-Mecklenbeck, Joseph G Johnson, Ulf
+     graphics (2018).                                                 Böckenholt, Daniel G Goldstein, J Edward Russo,
+                                                                      Nicolette J Sullivan, and Martijn C Willemsen. 2017.
+[30] Peter Kampstra and others. 2008. Beanplot: A boxplot             Process-tracing methods in decision making: On
+     alternative for visual comparison of distributions.              growing up in the 70s. Current Directions in
+     (2008).                                                          Psychological Science 26, 5 (2017), 442–450.
+[31] Matthew Kay, Tara Kola, Jessica R Hullman, and
+                                                                 [37] Transparent Statistics in Human–Computer Interaction
+     Sean A Munson. 2016. When (ish) is my bus?:
+                                                                      Working Group. 2019. Transparent Statistics Guidelines.
+     User-centered visualizations of uncertainty in everyday,
+                                                                      (Feb 2019). DOI:
+     mobile predictive systems. In Proceedings of the 2016
+                                                                      http://dx.doi.org/10.5281/zenodo.1186169 (Available at
+     CHI Conference on Human Factors in Computing
+                                                                      https://transparentstats.github.io/guidelines).
+     Systems. ACM, 5092–5103.
+[32] Yea-Seul Kim, Logan Walls, Pete Krafft, and Jessica         [38] Leland Wilkinson. 1999. Statistical methods in
+     Hullman. 2019. A Bayesian Cognition Approach to                  psychology journals: Guidelines and explanations.
+     Improve Data Visualization. In Proceedings of the 2019           American psychologist 54, 8 (1999), 594.
+

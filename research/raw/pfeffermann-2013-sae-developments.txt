@@ -1,0 +1,3531 @@
+Statistical Science
+2013, Vol. 28, No. 1, 40–68
+DOI: 10.1214/12-STS395
+c Institute of Mathematical Statistics, 2013
+
+New Important Developments in Small
+Area Estimation
+arXiv:1302.4907v1 [stat.ME] 20 Feb 2013
+
+Danny Pfeffermann
+
+Abstract. The problem of small area estimation (SAE) is how to produce reliable estimates of characteristics of interest such as means,
+counts, quantiles, etc., for areas or domains for which only small samples or no samples are available, and how to assess their precision. The
+purpose of this paper is to review and discuss some of the new important developments in small area estimation methods. Rao [Small Area
+Estimation (2003)] wrote a very comprehensive book, which covers all
+the main developments in this topic until that time. A few review papers have been written after 2003, but they are limited in scope. Hence,
+the focus of this review is on new developments in the last 7–8 years,
+but to make the review more self-contained, I also mention shortly
+some of the older developments. The review covers both design-based
+and model-dependent methods, with the latter methods further classified into frequentist and Bayesian methods. The style of the paper is
+similar to the style of my previous review on SAE published in 2002,
+explaining the new problems investigated and describing the proposed
+solutions, but without dwelling on theoretical details, which can be
+found in the original articles. I hope that this paper will be useful both
+to researchers who like to learn more on the research carried out in
+SAE and to practitioners who might be interested in the application of
+the new methods.
+Key words and phrases: Benchmarking, calibration, design-based methods, empirical likelihood, informative sampling, matching priors, measurement errors, model checking, M-quantile, ordered means, outliers,
+poverty mapping, prediction intervals, prediction MSE, spline regression, two-part model.
+1. PREFACE
+The problem of small area estimation (SAE) is
+how to produce reliable estimates of characteristics
+Danny Pfeffermann is Professor of Statistics,
+of interest such as means, counts, quantiles, et cetera,
+Southampton Statistical Sciences Research Institute,
+for areas or domains for which only small samples
+University of Southampton, Southampton, SO17 1BJ,
+or no samples are available. Although the point estiUnited Kingdom, and Department of Statistics, Hebrew
+mators are usually of first priority, a related problem
+University of Jerusalem, Jerusalem, 91905, Israel
+is how to assess the estimation (prediction) error.
+e-mail: msdanny@soton.ac.uk.
+The great importance of SAE stems from the fact
+This is an electronic reprint of the original article
+that many new programs, such as fund allocation for
+published by the Institute of Mathematical Statistics in
+needed areas, new educational or health programs
+Statistical Science, 2013, Vol. 28, No. 1, 40–68. This
+and environmental planning rely heavily on these esreprint differs from the original in pagination and
+typographic detail.
+timates. SAE techniques are also used in many coun1
+
+2
+
+D. PFEFFERMANN
+
+tries to test and adjust the counts obtained from
+censuses that use administrative records.
+In 2002 I published a review paper with a similar
+title (Pfeffermann (2002)). In that year small area
+estimation (SAE) was flourishing both in research
+and applications, but my own feeling then was that
+the topic has been more or less exhausted in terms
+of research and that it will just turn into a routine
+application in sample survey practice. As the past 9
+years show, I was completely wrong; not only is the
+research in this area accelerating, but it now involves
+some of the best known statisticians, who otherwise
+are not involved in survey sampling theory or applications. The diversity of new problems investigated
+is overwhelming, and the solutions proposed are not
+only elegant and innovative, but also very practical.
+Rao (2003) published a comprehensive book on
+SAE that covers all the main developments in this
+topic up to that time. The book was written about
+ten years after the review paper of Ghosh and Rao
+(1994), published in Statistical Science, which stimulated much of the early research in SAE. Since
+2003, a few other review papers have been published; see, for example, Rao (2005, 2008), Jiang and
+Lahiri (2006a, 2006b), Datta (2009) and Lehtonen
+and Veiganen (2009). Notwithstanding, SAE is researched and applied so broadly that I decided that
+the time is ripe for a new comprehensive review that
+focuses on the main developments in the last 7–
+8 years that I am aware of, and which are hardly
+covered in the review papers mentioned above. The
+style of the paper is similar to the style of my previous review, explaining the problems investigated
+and describing the proposed solutions, but without
+dwelling on theoretical details, which can be found
+in the original articles. For further clarity and to
+make the paper more self-contained, I start with a
+short background and overview some of the “older”
+developments. I hope that this paper will be useful
+to researchers who wish to learn about the research
+carried out in SAE and to practitioners who might
+be interested in applying the new methods.
+2. SOME BACKGROUND
+The term “SAE” is somewhat confusing, since it
+is the size of the sample in the area that causes
+estimation problems, and not the size of the area.
+Also, the “areas” are not necessarily geographical
+districts and may define another grouping, such as
+socio-demographic groups or types of industry, in
+
+which case they are often referred to as domains.
+Closely related concepts in common use are “poverty
+mapping” or “disease mapping,” which amount to
+SAE of poverty measures or disease incidence and
+then presenting the results on a map, with different
+colors defining different levels (categories) of the estimators. What is common to most small area estimation problems is that point estimators and error
+measures are required for every area separately, and
+not just as an average over all the areas under consideration.
+SAE methods can be divided broadly into “designbased” and “model-based” methods. The latter methods use either the frequentist approach or the full
+Bayesian methodology, and in some cases combine
+the two, known in the SAE literature as “empirical
+Bayes.” Design-based methods often use a model
+for the construction of the estimators (known as
+“model assisted”), but the bias, variance and other
+properties of the estimators are evaluated under the
+randomization (design-based) distribution. The randomization distribution of an estimator is the distribution over all possible samples that could be selected from the target population of interest under
+the sampling design used to select the sample, with
+the population measurements considered as fixed
+values (parameters). Model-based methods on the
+other hand usually condition on the selected sample,
+and the inference is with respect to the underlying
+model.
+A common feature to design- and model-based
+SAE is the use of auxiliary covariate information, as
+obtained from large surveys and/or administrative
+records such as censuses and registers. Some estimators only require knowledge of the covariates for
+the sampled units and the true area means of these
+covariates. Other estimators require knowledge of
+the covariates for every unit in the population. The
+use of auxiliary information for SAE is vital because
+with the small sample sizes often encountered in
+practice, even the most elaborated model can be
+of little help if it does not involve a set of covariates with good predictive power for the small area
+quantities of interest.
+3. NOTATION
+Consider a population U of size N , divided into
+M exclusive and exhaustive
+areas U1 ∪ · · · ∪ UM with
+P
+Ni units in area i, M
+N
+=
+N . Suppose that sami
+i=1
+ples are available for m ≤ M of the areas, and let
+
+3
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+s = s1 ∪ · · · ∪ sm define the overall sample, where si
+of P
+size ni is the sample observed for sampled area
+m
+i,
+i=1 ni = n. Note that ni is random unless a
+planned sample of fixed size is taken in that area.
+Let y define the characteristic of interest, and denote by yij the response value for unit j belonging
+to area i, iP
+= 1, . . . , M , j = 1, . . . , Ni with sample
+i
+means ȳi = nj=1
+yij /ni , where we assume without
+loss of generality that the sample consists of the
+first ni units. We denote by xij = (x1ij , . . . , xpij )′
+the covariate
+Pni values associated with unit (i, j) and
+by x̄i = j=1 xij /ni the column vector of sample
+means. The
+P i corresponding vector of true area means
+is X̄i = N
+j=1 xij /Ni . The area target quantity is deP i
+noted by θi ; for example, θi = Ȳi = N
+j=1 yij /Ni , the
+response area mean. Estimating a proportion is a
+special case where yij is binary. In other applications θi may represent a count or a quantile.
+4. DESIGN-BASED METHODS
+4.1 Design-Based Estimators in Common Use
+A recent comprehensive review of design-based
+methods in SAE is provided by Lehtonen and Veijanen (2009). Here I only overview some of the basic
+ideas. Suppose that the sample is selected by simple
+random sampling without replacement (SRSWOR)
+and that the target quantities of interest are the
+means Ȳi . Estimation of a mean contains as special
+cases the estimation of a proportionP
+and the estimation of the area distribution Fi (t) = j∈Ui vij /Ni , in
+which case vij = I(yij ≤ t), where I(A) is the indicator function. Estimators of the percentiles of the
+area distribution are commonly obtained from the
+estimated distribution.
+If no covariates are available the direct designunbiased estimator of the area mean and its conditional design variance over the randomization distribution for given ni are given by
+ni
+X
+yij /ni ;
+ȳi =
+(4.1)
+
+j=1
+
+VD [ȳi |ni ] = (Si2 /ni )[1 − (ni /Ni )],
+P i
+2
+where Si2 = N
+j=1 (yij − Ȳi ) /(Ni − 1). The term “direct” is used to signify an estimator that only uses
+the data available for the target area at the specific
+time of interest. The variance VD [ȳi |ni ] is O(1/ni ),
+and for small ni it is usually large, unless Si2 is sufficiently small.
+Next suppose that covariates xij are also observed
+with x1ij ≡ 1. An estimator in common use that uti-
+
+lizes the covariate information is the synthetic estimator,
+(4.2)
+
+syn
+1
+Ȳˆ reg,i = X̄i′ B̂ =
+Ni
+
+N
+i
+X
+
+(x′ij B̂),
+
+j=1
+
+P Pn i
+Pm Pn i
+′ −1
+where B̂ = [ m
+i=1
+j=1 xij xij ]
+i=1
+j=1 xij yij is
+the ordinary least square (OLS) estimator. Notice
+that under SRSWOR, B̂ is approximately designunbiased and consistent for the vector B of regression coefficients computed from all the population
+values, irrespective of whether a linear relationship
+between y and x exists in the population. The designunbiasedness and consistency are with respect to
+the randomization distribution, letting N and n increase to infinity in a proper way. An estimator is
+approximately design-unbiased if the randomization
+bias tends to zero as the sample size increases. The
+term “synthetic” refers to the fact that an (approximately) design-unbiased estimator computed from
+all the areas (B̂ in the present case) is used for every
+area separately, assuming that the areas are “homogeneous” with respect to the quantity being estimated. Thus, synthetic estimators borrow information from other “similar areas” and they are therefore indirect estimators.
+The obvious advantage of the synthetic estimator over the simple sample mean or other direct esdir
+timators such as the regression estimator Ȳˆ
+=
+reg,i
+
+ȳi + (X̄i − x̄i )′ B̂i , where B̂i is computed only from
+syn
+the data observedPfor area i, is that VarD (Ȳˆ reg,i ) =
+O(1/n), and n = m
+i=1 ni is usually large. The use of
+the synthetic estimator is motivated (“assisted”) by
+a linear regression model of y on x in the population
+with a common vector of coefficients. However, for
+syn
+x1ij ≡ 1, ED (Ȳˆ reg,i − Ȳi ) ∼
+= −X̄i′ (Bi − B), where Bi
+is the OLS computed from all the population values
+in area i. Thus, if in fact different regression coefficients Bi operate in different areas, the synthetic
+estimator may have a large bias. When the sample is selected with unequal probabilities, the OLS
+estimator B̂ in (4.2) is commonly replaced by the
+probability weighted (PW) estimator
+#−1 m n
+"m n
+i
+i
+XX
+XX
+wij xij yij ,
+B̂pw =
+wij xij x′ij
+i=1 j=1
+
+i=1 j=1
+
+where {wij = 1/ Pr[(i, j) ∈ s]} are the base sampling
+weights.
+In order to deal with the possible large bias of the
+synthetic estimator, it is common to estimate the
+
+4
+
+D. PFEFFERMANN
+
+bias and then subtract it from the synthetic estimator. The resulting survey regression estimator takes
+the form
+ni
+S–R
+1 X
+wij (yij − x′ij B̂pw )
+Ȳˆ i = X̄i′ B̂pw +
+Ni
+j=1
+(4.3)
+′
+ˆ
+= Ȳˆ i,H–T + (X̄i − X̄
+i,H–T ) B̂pw ,
+ˆ
+where (Ȳˆ i,H–T , X̄
+i,H–T ) are the Horvitz–Thompson
+(H–T) estimators of (Ȳi , X̄i ). The estimator (4.3)
+is approximately design-unbiased and performs well
+when the covariates have good predictive power, but
+the variance is back to order O(1/ni ). The variance P
+is often reduced by multiplying the P
+bias correci
+i
+tion nj=1
+wij (yij − x′ij B̂pw )/Ni by Ni / nj=1
+wij =
+Ni /N̂i .
+A compromise between the possibly large bias of
+the synthetic estimator and the possibly large variance of the survey regression estimator is achieved
+by taking a linear combination of the two. The resulting combined (composite) estimator is defined as
+COM
+S–R
+syn
+= δi Ȳˆ i + (1 − δi )Ȳˆ reg,i ; 0 ≤ δi ≤ 1.
+(4.4) Ȳˆ i
+Ideally, the coefficient δi should be chosen to minCOM
+imize the mean square error (MSE) of Ȳˆ
+, but
+i
+
+assessing sufficiently accurately the bias of the synthetic estimator for a given area is usually impossible. Hence, it is common to let δi depend on the
+sample size ni in the area, such that the larger ni ,
+the larger is δi . See Rao (2003) for review of other
+combined estimators, and methods of specifying δi .
+4.2 Some New Developments in Design-Based
+Small Area Estimation
+A general class of estimators is obtained by calibrating the base sampling weights wij . Suppose that
+the population can be partitioned into C calibration groups U = U(1) ∪ · · · ∪ U(C) with known totals
+tx(c) of the auxiliary variables in the groups, such
+that each area Ui belongs to one of the groups. Let
+s = s(1) ∪ · · · ∪ s(C) define the respective partitioning
+of the sample. In a special case C = 1 and U(1) = U .
+The calibrated estimator of the mean Ȳi is computed
+as
+ni
+X
+X
+cal
+c
+c
+ˆ
+(4.5) Ȳ i =
+wij
+xij = tx(c) .
+wij
+yij /Ni ;
+j=1
+
+i,j∈s(c)
+
+c } are chosen so that
+The calibration weights {wij
+they minimize an appropriate distance from the base
+weights {wij }, subject to satisfying the constraints
+
+c
+i,j∈s(c) wij xij = tx(c) . For example, when using the
+P
+c − w )2 /w and x
+distance χ2 = i,j∈s(c) (wij
+ij
+ij
+1ij ≡ 1,
+
+P
+
+the calibrated weights are
+
+(4.6)
+
+c
+wij
+= wij gij ;
+
+gij = 1 + (tx(c) − t̂x(c),H–T )′
+
+·
+
+ X
+
+wij xij x′ij
+
+i,j∈s(c)
+
+−1
+
+
+xij ,
+
+where t̂x(c),H–T is the H–T estimator of the total
+tx(c) . When Uc = Ui (the calibration group is the
+cal
+domain), Ȳˆ
+is the familiar generalized regression
+i
+
+(GREG) estimator in the domain.
+Calibration of the sampling weights is in broad
+use in sample survey practice, not only for SAE.
+See Kott (2009) for a recent comprehensive review
+and discussion. The rationale of the use of calibrated
+estimators in SAE is that if y is approximately a
+∼ ′
+linear combination of x in UP
+(c) , then Ȳi = X̄i B(c)
+c
+for domains i ∈ Uc , and since i,j∈s(c) wij xij = tx(c) ,
+cal
+P
+Ȳˆ = ni wc y /N is expected to be a good esi
+
+j=1
+
+ij ij
+
+i
+
+timator of Ȳi . Indeed, the advantage of estimator
+(4.5) over (4.2) is that it is assisted by a model
+that only assumes common regression coefficients
+within the groups U(c) , and not for all the domains,
+as implicitly assumed by estimator (4.2). Estimator
+(4.5) is approximately design-unbiased irrespective
+cal
+of any model, but Var (Ȳˆ |n ) = O(1/n ), which
+D
+
+i
+
+i
+
+i
+
+may still be large.
+Another way of calibrating the weights is by use of
+instrumental variables (Estevao and Särndal, 2004,
+2006). Denote the vector of instrument values for
+unit (i, j) by hij . The calibrated weights are defined
+as
+(4.7)
+
+ins
+wij
+= wij (1 + gc′ hij );
+
+gc′ = (tx(c) − t̂x(c),H–T )′
+
+ X
+
+i,j∈s(c)
+
+wij hij x′ij
+
+−1
+
+.
+
+Note that the instrument values need only be
+known for the sampled units in s(c) and that
+P
+ins
+i,j∈s(c) wij xij = tcx , thus satisfying the same constraints as before. The calibrated estimator of Ȳi is
+cal
+P
+now Ȳˆ
+= ni wins · y /N . When h = x, wins =
+i,ins
+
+j=1
+
+ij
+
+ij
+
+i
+
+ij
+
+c . The use of instruments replaces the search for
+wij
+an appropriate distance function by imposing a structure on the calibration weights, and it allows one, in
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+principle, to find the best instruments in terms of
+minimizing an approximation to the variance of the
+calibrated estimator. However, as noted by Estevao
+and Särndal (2006), the resulting optimal weights
+depend on unknown population quantities which,
+when estimated from the sample, may yield unstable
+estimators. See Kott (2009) for further discussion.
+The synthetic estimator (4.2), the survey regression estimator (4.3) and the various calibrated estimators considered above are all assisted by models that assume a linear relationship between y and
+x. These estimators only require knowledge of the
+covariates for the sampled units, and the area (or
+group) totals of these covariates. Lehtonen, Särndal
+and Veijanen (2003, 2005) consider the use of generalized linear models (GLM), or even generalized linear mixed models (GLMM) as the assisting models,
+which require knowledge of the covariates for every
+element in the population. Suppose that EM (yij ) =
+f (xij ; ψ) for some nonlinear function f (·) with an
+unknown vector parameter ψ, where EM (·) defines
+the expectation under the model. A simple important example is where f (xij ; ψ) is the logistic function. Estimating ψ by the pseudo-likelihood (PL) approach yields the estimator ψ̂pl and predicted values
+{ŷij = f (xij ; ψ̂pl )}. The PL approach consists of estimating the likelihood equations that would be obtained in case of a census by the corresponding H–T
+estimators (or weighting each score function by its
+sampling weight), and then solving the resulting estimated equations. The synthetic and “generalized
+GREG” estimators are computed as
+syn
+1
+Ȳˆ GLM,i =
+Ni
+
+(4.8)
+
+Ni
+X
+
+f (xij ; ψ̂pl );
+
+j=1
+
+GREG
+syn
+Ȳˆ GLM,i = Ȳˆ GLM,i
+n
+
++
+
+i
+1 X
+wij [yij − f (xij ; ψ̂pl )].
+Ni
+
+j=1
+
+A further extension is to include random area effects in the assisting model, assuming EM (yij |xij ,
+ui ) = f (xij , ui ; ψ ∗ ), EM (ui ) = 0, VarM (ui ) = σu2 . Estimation of the fixed parameters ψ ∗ , σu2 and the random effects ui is now under the model, ignoring the
+sampling weights. The extended synthetic and generalized GREG estimators are defined similarly to
+(4.8), but with f (xij ; ψ̂pl ) replaced by f (xij , ûi ; ψ̂ ∗ ).
+For sufficiently large sample size ni , the extended
+generalized GREG is approximately design-unbiased
+for the true area mean, but it is not clear how to es-
+
+5
+
+timate the design (randomization) variance in this
+case in a way that accounts for the prediction of
+the random effects. Torabi and Rao (2008) compare
+the MSE of model-based predictors and a GREG
+assisted by a linear mixed model (LMM).
+Jiang and Lahiri (2006a) propose the use of modeldependent estimators that are design-consistent under the randomization distribution as the area sample sizes increase. The basic idea is to model the
+P i
+P i
+direct estimators Ȳˆ iw = nj=1
+wij yij / nj=1
+wij instead of the individual observations yij , and then
+employ the empirical best predictor of the area mean
+under the model. The authors consider the general
+ˆ ; ψ),
+two-level model EM [Ȳˆ iw |ui ] = ξi = ξ(ui , X̄
+iw
+where the ui s are independent random area effects
+ˆ = Pn i w x /
+with zero mean and variance σu2 , X̄
+iw
+j=1 ij ij
+Pn i
+w
+,
+and
+ξ(·)
+is
+some
+known
+function
+with unj=1 ij
+known parameters ψ. The empirical best predictor
+is the best predictor under the model (minimum expected quadratic loss), but with the parameters ψ
+EBP
+replaced by model consistent estimators; Ȳˆ i
+=
+ˆ
+ˆ
+E (ξ |Ȳ , X̄ ; ψ̂). The estimator is shown to be
+M
+
+i
+
+iw
+
+iw
+
+model-consistent under correct model specification
+and design-consistent for large ni , even if the model
+is misspecified, thus robustifying the estimation. The
+authors develop estimators of the prediction mean
+squared error (PMSE) for bounded sample sizes ni ,
+with bias of desired order o(1/m), where m is the
+number of sampled areas. The PMSE is computed
+with respect to the model holding for the individual observations and over the randomization distribution. The use of design consistent estimators in
+SAE is somewhat questionable because of the small
+sample sizes in some or all of the areas, but it is
+nonetheless a desirable property. This is so because
+it is often the case that in some of the areas the
+samples are large, and it is essential that an estimator should work well at least in these areas, even
+if the model fails. Estimators with large randomization bias even for large samples do not appeal to
+practitioners.
+Chandra and Chambers (2009) propose the use of
+model-based direct estimators (MBDE). The idea is
+to fit a model for the population values, compute the
+weights defining the Empirical Best Linear Unbiased
+Predictor (EBLUP) of the population total under
+the model and then use the weights associated with
+a given area to compute an almost direct estimator.
+The model fitted for the population values YU is the
+
+6
+
+D. PFEFFERMANN
+
+general linear model,
+YU = XU β + εU ; E(εU ) = 0,
+
+
+Σss Σsr
+′
+E(εU εU ) = Σ =
+,
+Σrs Σrr
+
+(4.9)
+
+where s signifies the sample of size n, and r signifies the sample-complement of size (N − n). As
+seen later, the models in common use for SAE defined by (5.1) and (5.3) below are special cases of
+(4.9). Let ys denote the column vector of sample
+outcomes. For P
+known Σ, the BLUP of the population total ty = N
+k=1 yk under the model is
+t̂BLUP
+= 1′n ys + 1′N −n [Xr β̂GLS
+y
+
++ Σrs Σ−1
+ss (ys − Xs β̂GLS )]
+
+(4.10)
+=
+
+X
+
+wkBLUP yk ,
+
+k∈s
+′
+where 1k is a row vector of ones of length k, Xs (Xr )
+
+is the design matrix corresponding to the sampled
+(nonsampled) units and β̂GLS is the generalized least
+=
+square estimator. The EBLUP is t̂EBLUP
+y
+P
+EBLUP
+yk , where the EBLUP weights are the
+k∈s wk
+same as in (4.10), but with estimated parameters.
+The MBDE of the true mean in area i is
+.X
+X
+MBD
+(4.11)
+wEBLUP .
+Ȳˆ
+=
+wEBLUP y
+i
+
+j
+
+j∈si
+
+j
+
+j
+
+j∈si
+
+The authors derive estimators for the bias and variance of the MBDE and illustrate its robustness to
+certain model misspecifications. Note, however, that
+MBD
+Ȳˆ
+is a ratio estimator and therefore may have a
+i
+
+nonnegligible bias in areas i with small sample size.
+All the estimators considered so far assume a given
+sampling design with random area sample sizes.
+When the target areas are known in advance, considerable gains in efficiency can be achieved by modifying the sampling design and in particular, by controlling the sample sizes within these areas. In a
+recent article, Falrosi and Righi (2008) propose a
+general strategy for multivariate multi-domain estimation that guarantees that the sampling errors of
+the domain estimators are lower than pre-specified
+thresholds. The strategy combines the use of a balanced sampling technique and GREG estimation,
+but extensions to the use of synthetic estimators and
+model-based estimation are also considered. A successful application of this strategy requires good predictions of weighted sums of residuals featuring in
+the variance expressions, and it may happen that
+the resulting overall sample size is far too large, but
+
+this is a promising approach that should be studied
+further.
+4.3 Pros and Cons of Design-Based Small Area
+Estimation
+The apparent advantage of design-based methods
+is that the estimation is less dependent on an assumed model, although models are used (assisted)
+for the construction of the estimators. The estimators are approximately unbiased and consistent under the randomization distribution for large sample
+sizes within the areas, which as discussed before is
+a desirable property that protects against possible
+model misspecification at least in large areas.
+Against this advantage stand many disadvantages.
+Direct estimators generally have large variance due
+to small sample sizes. The survey regression estimator is approximately unbiased but may likewise be
+too variable. Synthetic estimators have small variance but are generally biased. Composite estimators have smaller bias than synthetic estimators but
+larger variance, and it is not obvious how to best
+choose the weights attached to the synthetic estimator and the unbiased estimator. Computation of
+randomization-based confidence intervals generally
+requires large sample normality assumptions, but
+the sample sizes in at least some of the areas may
+be too small to justify asymptotic normality.
+Another limitation of design-based inference (not
+restricted to SAE) is that it does not lend itself to
+conditional inference, for example, conditioning on
+the sampled values of the covariates or the sampled
+clusters in a two-stage sampling design. This again
+inflates the variance of the estimators. Conditional
+inference is in the heart of classical statistical inference under both the frequentist and the Bayesian
+approaches. Last, but not least, an important limitation of design-based SAE is that there is no founded
+theory for estimation in areas with no samples. The
+use of the randomization distribution does not extend to prediction problems, such as the prediction
+of small area means for areas with no samples. It is
+often the case that samples are available for only a
+minority of the areas, but estimators and MSE estimators are required for each of the areas, whether
+sampled or not.
+5. MODEL-BASED METHODS
+5.1 General Formulation
+Model-based methods assume a model for the sample data and use the optimal or approximately optimal predictor of the area characteristic of interest
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+under the model. The MSE of the prediction error
+is likewise defined and estimated with respect to the
+model. Note that I now use the term “prediction”
+rather than estimation because the target characteristics are generally random under the model. The
+use of models overcomes the problems underlying
+the use of design-based methods, but it is important to emphasize again that even the most elaborated model cannot produce sufficiently accurate
+predictors when the area sample size is too small,
+and no covariates with good predictive power are
+available. The use of models raises the question of
+the robustness of the inference to possible model
+misspecification, and Sections 6.3–6.6 review studies that deal with this problem from different perspectives. Section 8 considers model selection and
+diagnostic checking.
+Denote by θi the target quantity in area i (mean,
+proportion, . . .). Let yi define the observed responses
+for area i and xi define the corresponding values of
+the covariates (when available). As becomes evident
+below, yi is either a scalar, in which case xi is a vector, or yi is a vector, in which case xi is usually a
+matrix. A typical small area model consists of two
+parts: The first part models the distribution (or just
+the moments) of yi |θi ; ψ(1) . The second part models the distribution (moments) of θi |xi ; ψ(2) , linking
+the θi s to known covariates and to each other. This
+is achieved by including in the model random effects that account for the variability of the θi s not
+explained by the covariates. The hyper-parameters
+ψ = (ψ(1) , ψ(2) ) are typically unknown and are estimated either under the frequentist approach, or
+under the Bayesian approach by setting appropriate
+prior distributions. In some applications the index i
+may define time, in which case the model for θi |xi ; ψ2
+is a time series model.
+5.2 Models in Common Use
+In this section, I review briefly three models in
+common use, as most of the recent developments in
+SAE relate to these models or extensions of them.
+For more details see Rao (2003), Jiang and Lahiri
+(2006a, 2006b), Datta (2009) and the references
+therein. I assume that the model holding for the
+sample data is the same as the model holding in
+the population, so that there is no sample selection
+bias. The case of informative selection of the areas
+to be sampled or informative sampling within the
+selected areas, whereby the sample selection or response probabilities are related to the response variable even after conditioning on the model covariates
+
+7
+
+is considered in Section 7. Notice that in this case
+the sample model differs from the population model.
+5.2.1 Area level model This model is in broad use
+when the covariate information is only at the area
+level, so that xi is a vector of known area characteristics. The model, studied originally for SAE by Fay
+and Herriot (1979) is defined as
+(5.1)
+
+ỹi = θi + ei ;
+
+θi = x′i β + ui ,
+
+where ỹi denotes the direct sample estimator of θi
+(e.g., the sample mean ȳi when the sample is selected by SRS), and ei represents the sampling error, assumed to have zero mean and known design
+2 . The ran(randomization) variance, VarD (ei ) = σDi
+dom effects ui are assumed to be independent with
+zero mean and variance σu2 . For known σu2 , the best
+linear unbiased predictor (BLUP) of θi under this
+model is
+θ̂i = γi ỹi + (1 − γi )x′i β̂GLS
+(5.2)
+
+= x′i β̂GLS + γi (ỹi − x′i β̂GLS )
+= x′i β̂GLS + ûi .
+
+The BLUP θ̂i is in the form of a composite estimate
+[equation (4.4)], but with a tuning (shrinkage) co2 ), which is a function of
+efficient γi = σu2 /(σu2 + σDi
+2
+2
+the ratio σu /σDi of the variances of the prediction
+errors of x′i β and ỹi , respectively. The coefficient γi
+defines optimally the weights assigned to the synthetic estimator x′i β̂GLS and ỹi , unlike the case of
+design-based estimators where the weight is assigned
+in a more ad hoc manner. See the discussion below
+(4.4). Note that the BLUP property does not require specifying the distribution of the error terms
+beyond the first two moments, and θ̂i is also the linear Bayes predictor in this case. Under normality of
+the error terms and a diffuse uniform prior for β, θ̂i
+is the Bayesian predictor (posterior mean) of θi . For
+a nonsampled area k, the BLUP is now obtained
+optimally as x′k β̂GLS .
+In practice, the variance σu2 is seldom known and is
+replaced in γi and β̂GLS by a sample estimate, yielding what is known as the empirical BLUP (EBLUP)
+under the frequentist approach, or the empirical
+Bayes (EB) predictor when assuming normality. The
+latter predictor is the posterior mean of θi , but with
+σu2 replaced by a sample estimate obtained from the
+marginal distribution of the direct estimators given
+the variance. Alternatively, one may compute the
+Hierarchical Bayes (HB) predictor by assuming prior
+
+8
+
+D. PFEFFERMANN
+
+distributions for β and σu2 and computing the posterior distribution of θi given the available data. The
+posterior distribution can be used for computation
+of the point predictor and a credibility (confidence)
+interval.
+
+where β̂GLS is the GLS
+P i of β computed from2 all 2the
+xij /ni and γi = σu /(σu +
+observations, x̄i = nj=1
+2
+σε /ni ). For area k with no sample (but known X̄k ),
+the BLUP is θ̂k = X̄′k β̂GLS . See Rao (2003) for the
+BLUP of the means Ȳi in sampled areas.
+′
+The BLUP (5.4) is also the Bayesian predictor
+Remark 1. The synthetic estimator xi β̂GLS , and
+(posterior
+mean) under normality of the error terms
+hence the BLUP θ̂i are unbiased predictors under
+and
+a
+diffuse
+uniform prior for β. Replacing the varithe joint distribution of yi and θi in the sense that
+2 and σ 2 in γ and β̂
+ances
+σ
+i
+GLS by sample estimates
+u
+ε
+E(θ̂i − θi ) = 0, but are biased when conditioning on
+yields
+the
+corresponding
+EBLUP
+or EB predictors.
+ui . The predictor θ̂i is biased also under the randomization distribution. Conditioning on ui amounts to Hierarchical Bayes (HB) predictors are obtained by
+assuming different fixed intercepts in different ar- specifying prior distributions for β and the two varieas and the unbiasedness of θ̂i under the model is ances and computing the posterior distribution of θi
+(or Ȳi ) given all the sample observations in all the
+achieved by viewing the intercepts as random.
+areas. Remark 1 applies to the BLUP (EBLUP) unRemark 2. It is often the case that the link- der this model as well.
+ing model is defined for a transformation of θi . For
+5.2.3 Mixed logistic model The previous two modexample, Fay and Herriot (1979) actually assume
+log(θi ) = x′i β + ui in (5.1) and use the direct esti- els assume continuous responses. Suppose now that
+yij is binary, taking the values 1 or 0, in which
+mator ỹi = log(ȳi ), and then predict θi as exp(θ̃i ),
+case the small area quantities of interest are usually
+where θ̃i is the BLUP (EBLUP) of log(θi ) under
+proportions or counts (say, the proportion or total
+the model. However, exp(θ̃i ) is not the BLUP of
+of unemployed persons in the area). The following
+θi = exp[log(θi )]. On the other hand, the EB and HB
+generalized linear mixed model (GLMM) considered
+approaches produce optimal predictors of θi , even if
+originally by MacGibbon and Tomberlin (1989) for
+the linking model uses a transformation of θi , with
+SAE is in broad use for this kind of problems:
+or without the use of a similar transformation for
+Pr(yij = 1|pij ) = pij ;
+the direct estimator. In this respect, the latter two
+approaches are more flexible and with wider applica- (5.5)
+logit(pij ) = x′ij β + ui ; ui ∼ N (0, σu2 ).
+bility, but at the expense of requiring further parametric assumptions.
+The responses yij are assumed to be conditionally
+5.2.2 Nested error unit level model This model independent, given the random effects ui , and likeuses individual observations yij such that yi is now wise for the random effects. The purpose
+PNi is to prea vector, and xi is generally a matrix. The use of dict the true area proportions pi = j=1 yij /Ni . Let
+ψ = (β, σu2 ) denote the model parameters. For this
+this model
+PNi for SAE requires that the area means
+X̄i = j=1 xij /Ni are known. The model, first pro- model, there is no explicit expression for the best
+posed for SAE by Battese, Harter and Fuller (1988) predictor (BP) under a quadratic loss function, that
+is, for p̂BP
+= E(pi |yi , xi ; ψ), but as shown in Jiang
+i
+has the form
+and
+Lahiri
+(2006b), the BP can be computed (ap(5.3)
+yij = x′ij β + ui + εij ,
+proximated) numerically as the ratio of two onewhere the ui s (random effects) and the εij s (residual dimensional integrals. Jiang and Lahiri review methterms) are mutually independent with zero means ods of estimating ψ, yielding the empirical BP (EBP)
+= E(pi |yi , xi ; ψ̂), which is also the EB predicand variances σu2 and σε2 , respectively. Under the p̂EBP
+i
+′
+model, the true small area means are Ȳi = X̄i β + tor under the same assumptions. Application of the
+P i
+∼
+full HB approach under this model consists of the
+ui + ε̄i , but since ε̄i = N
+j=1 εij /Ni = 0 for large Ni ,
+′
+the target means are often defined as θi = X̄i β +ui = following basic steps:
+E(Ȳi |ui ). For known variances (σu2 , σε2 ), the BLUP of
+(1) specify prior distributions for σu2 and β;
+θi is
+(2) generate observations from the posterior distributions
+of β, σu2 and u1 , . . . , um by say, MCMC
+′
+θ̂i = γi [ȳi + (X̄i − x̄i ) β̂GLS ]
+simulations, and draw a large number of realiza(5.4)
+2(r)
+(r)
+′
++ (1 − γi )X̄i β̂GLS ,
+tions (β̂ (r) , σu , {ûi }), r = 1, . . . , R, i = 1, . . . , m,
+
+9
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+(r)
+
+(r)
+
+exp(x′ik β (r) +ui )
+
+(r)
+
+and hence realizations yik ∼ pik =
+
+(r)
+
+1+exp(x′ik β (r) +ui )
+
+for k ∈
+/ si ;
+P
+P
+(3) predict: p̂i = ( j∈si yij + k /∈si ŷik )/Ni ; ŷik =
+PR (r)
+/ si .
+r=1 yik /R, k ∈
+P
+P
+P
+(r)
+Writing p̂i = R1 R
+r=1 ( j∈si yij +
+k/
+∈si yik )/Ni =
+(r)
+1 PR
+r=1 p̂i , the posterior variance is approximated
+R
+PR
+(r)
+1
+2
+as V̂post (p̂i ) = R(R−1)
+r=1 (p̂i − p̂i ) .
+Ghosh et al. (1998) discuss the use of HB SAE for
+GLMM, covering binary, count, multi-category and
+spatial data. In particular, sufficient conditions are
+developed for the joint posterior distribution of the
+parameters of interest to be proper.
+6. NEW DEVELOPMENTS IN MODEL-BASED
+SAE
+6.1 Estimation of Prediction MSE
+
+As stated in the introduction, an important aspect
+of SAE is the assessment of the accuracy of the predictors. This problem is solved “automatically” under the Bayesian paradigm, which produces realizations of the posterior distribution of the target quantities. However, estimation of the prediction MSE
+(PMSE) and the computation of confidence intervals
+(C.I.) under the frequentist approach is complicated
+because of the added variability induced by the estimation of the model hyper-parameters. Prasad and
+Rao (1990) developed PMSE estimators with bias of
+order o(1/m), (m is the number of sampled areas),
+under the linear mixed models (5.1) and (5.2) for the
+case where the random errors have a normal distribution, and the model variances are estimated by
+the ANOVA method of moments. Datta and Lahiri
+(2000) extended the estimation of Prasad and Rao
+to the more general mixed linear model,
+(6.1)
+
+yi = Xi β + Zi ui + ei ,
+
+i = 1, . . . , m,
+
+where Xi and Zi are fixed matrices of order ni × k
+and ni × d, respectively, and ui and ei are independent normally distributed random effects and residual terms of orders d × 1 and ni × 1, respectively,
+ui ∼ Nd (0, Qi ), ei ∼ Nni (0, Ri ). The variance matrices are known functions of variance components
+ζ = (ζ1 , . . . , ζL ). The authors develop PMSE estimators with bias of order o(1/m) for the EBLUP obtained when estimating β and ζ by MLE or REML.
+Das, Jiang and Rao (2004) extend the model of
+Datta and Lahiri (2000) by relaxing the assumption
+
+of independence of the error terms between the areas and likewise develop an estimator for the PMSE
+of the EBLUP when estimating the unknown model
+parameters by MLE or REML, with bias of order
+o(1/m). Datta, Rao and Smith (2005) show that for
+the area level model (5.1), if σu2 is estimated by the
+method proposed by Fay and Herriot (1979), it is required to add an extra term to the PMSE estimator
+to achieve the desired order of bias of o(1/m). See
+Datta (2009) for an extensive review of methods of
+estimating the PMSE of the EBLUP and EB under
+linear mixed models (LMM).
+Estimation of the PMSE under the GLMM is more
+involved, and in what follows, I review resampling
+procedures that can be used in such cases. For convenience, I consider the mixed logistic model (5.5), but
+the procedures are applicable to other models belonging to this class. The first procedure, proposed
+by Jiang, Lahiri and Wan (2002) uses the jackknife
+method. Let λi = E(p̂EBP
+− pi )2 denote the PMSE,
+i
+P Ni
+where pi = j=1 yij /Ni is the true proportion and
+p̂EBP
+= E(pi |yi , xi ; ψ̂) is the EBP. The following dei
+composition holds:
+(BP)
+
+(6.2)
+
+λi = E(p̂i
+
+(EBP)
+
+− pi )2 + E(p̂i
+
+(BP) 2
+
+− p̂i
+
+)
+
+= M1i + M2i ,
+
+where M1i is the PMSE of the BP (assumes known
+parameter values) and M2i is the contribution to
+the PMSE from estimating the model parameters,
+ψ. Denote by λ̂BP
+i (ψ̂) the “naive” estimator of M1i ,
+obtained by setting ψ = ψ̂. Let λ̂BP
+i (ψ̂−l ) denote the
+naive estimator when estimating ψ from all the areas except for area l, and p̂EBP
+(ψ̂−l ) denote the cori
+responding EBP. The jackknife estimator of PMSE
+is
+λ̂JK
+i = M̂1i + M̂2i ;
+(6.3)
+
+M̂1i = λ̂BP
+i (ψ̂)
+m
+
+−
+
+m − 1 X BP
+[λ̂i (ψ̂−l ) − λ̂BP
+i (ψ̂)],
+m
+l=1
+
+M̂2i =
+
+m−1
+m
+
+m
+X
+
+[p̂EBP
+(ψ̂−l ) − p̂EBP
+(ψ̂)]2 .
+i
+i
+
+l=1
+
+Under some regularity conditions, E(λ̂JK
+i ) − λi =
+o(1/m), as desired.
+The jackknife estimator estimates the unconditional PMSE over the joint distribution of the random effects and the responses. Lohr and Rao (2009)
+
+10
+
+D. PFEFFERMANN
+
+proposed a modification of the jackknife, which is
+simpler and estimates the conditional PMSE,
+(EBP)
+E[(p̂i
+−pi )2 |yi ]. Denoting qi (ψ, yi )=Var(pi |yi ; ψ),
+the modification consists of replacing M̂1i in (6.3) by
+P
+M̂1i,c = qi (ψ̂, yi ) − m
+l6=i [qi (ψ̂−l , yi ) − qi (ψ̂, yi )]. The
+modified estimator λ̂JK
+i,c = M̂1i,c + M̂2i has bias of
+order op (1/m) in estimating the conditional PMSE
+and bias of order o(1/m) in estimating the unconditional PMSE.
+Hall and Maiti (2006) propose estimating the
+PMSE by use of double-bootstrap. For model (5.5),
+the procedure consists of the following steps:
+(1) Generate a new population from the model
+(5.5) with parameters ψ̂ and compute the “true”
+area proportions for this population. Compute the
+EBPs based on new sample data and newly estimated parameters. The new population and sample
+use the same covariates as the original population
+and sample. Repeat the process independently B1
+times, with B1 sufficiently large. Denote by pi,b1 (ψ̂)
+(EBP)
+and p̂i,b1 (ψ̂b1 ) the “true” proportions and corresponding EBPs for population and sample b1 , b1 =
+1, . . . , B1 . Compute the first-step bootstrap PMSE
+estimator,
+B1
+1 X
+(EBP)
+BS
+(6.4) λ̂i,1 =
+[p̂i,b1 (ψ̂b1 ) − pi,b1 (ψ̂)]2 .
+B1
+b1 =1
+
+bootstrap estimator has bias of order o(1/m) under
+some regularity conditions.
+Pfeffermann and Correa (2012) develop a general
+method of bias correction, which models the error
+of a target estimator as a function of the corresponding bootstrap estimator, and the original estimators and bootstrap estimators of the parameters
+governing the model fitted to the sample data. This
+is achieved by drawing at random a large number
+of plausible parameters governing the model, generating a pseudo original sample for each parameter
+and bootstrap samples for each pseudo sample, and
+then searching by a cross validation procedure the
+best functional relationship among a set of eligible
+bias correction functions that includes the classical
+bootstrap bias corrections. The use of this method
+produces estimators with bias of correct order and
+under certain conditions it also permits estimating
+the MSE of the bias corrected estimator. Application of the method for estimating the PMSE under
+the model (5.5) in an extensive simulation study outperforms the double-bootstrap and jackknife procedures, with good performance in estimating the
+MSE of the PMSE estimators.
+Remark 3. All the resampling methods considered above are in fact model dependent since they
+require computing repeatedly the empirical best predictors under the model.
+
+(2) For each sample drawn in Step (1), repeat the
+Chambers, Chandra and Tzavidis (2011) develop
+computations of Step (1) B2 times with B2 suffi- conditional bias-robust PMSE estimators for the case
+ciently large, yielding new “true” proportions where the small area estimators can be expressed as
+(EBP)
+pi,b2 (ψ̂b1 ) and EBPs p̂i,b2 (ψ̂b2 ), b2 = 1, . . . , B2 . Com- weighted sums of sample values. The authors assume that for unit j ∈ Ui , yj = x′j βi + ej ; E(ej ) = 0,
+pute the second-step bootstrap PMSE estimator,
+Var(ej ) = σj2 , j = 1, . . . , ni , with βi taken as a fixed
+B1
+1 X
+1
+BS
+vector of coefficients,
+λ̂i,2 =
+P and consider linear estimators
+B1
+B2
+of
+the
+form
+θ̂
+=
+i
+b1
+k∈s wik yk with fixed weights wik .
+(6.5)
+Thus, if θi defines the true area mean,
+B2
+X
+(EBP)
+Biasi = E(θ̂i − θi )
+·
+[p̂i,b2 (ψ̂b2 ) − pi,b2 (ψ̂b1 )]2 .
+!
+m X
+b2 =1
+X
+=
+wij x′j βh − X̄i βi ,
+The double-bootstrap PMSE estimator is obtained (6.7)
+h=1 j∈sh
+by computing one of the classical bias corrected estimators. For example,
+Vari = Var(θ̂i − θi )
+ BS
+!
+BS
+BS
+λ̂i,1 + (λ̂i,1 − λ̂i,2 ),
+m X
+
+X
+X
+
+
+−2
+2
+2
+2
+
+aij σj +
+σj ,
+= Ni
+ if λ̂BS ≥ λ̂BS ,
+i,1
+i,2
+D−BS
+=
+(6.6) λ̂i
+j∈ri
+h=1 j∈sh
+BS
+BS
+BS
+
+λ̂BS
+
+i,1 exp[(λ̂i,1 − λ̂i,2 )/λ̂i,2 ],
+
+where ri = Ui − si and aij = Ni wij − I(j ∈ Ui ), with
+
+
+BS
+if λ̂BS
+I(·) defining the indicator function. Assuming that
+i,1 < λ̂i,2 .
+′
+i , µj = E(yj |xj ) = xj βi is estimated as µ̂j =
+Notice that whereas the first-step bootstrap esti- for j ∈ U
+P
+mator (6.4) has bias of order O(1/m), the double- x′j β̂i = k∈s φkj yk and σj2 ≡ σ 2 , the bias and vari-
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+ance in (6.7) are estimated as
+!
+m X
+X
+X
+ˆ i=
+µ̂j ,
+Bias
+wij µ̂j − N −1
+i
+
+h=1 j∈sh
+
+ˆ i = N −2
+(6.8) Var
+i
+
+X
+
+j∈Ui
+
+[a2ij + (Ni − ni )n−1
+i ]
+
+11
+
+the same for every area i. For given covariates Xi0 ,
+sample size ni0 and known parameters, an α-level
+prediction interval for the corresponding realization
+Θi0 is
+(6.9)
+
+Iα (β, ξ) = [q(1−α)/2 (β, ξ), q(1+α)/2 (β, ξ)],
+
+where qα (β, ξ) defines the α-level quantile of the
+distribution Q{fi (β); ξ}. A naive prediction inter2
+· λ−1
+(y
+−
+µ̂
+)
+,
+j
+j
+j
+val with estimated parameters is Iα (β̂, ξ̂), but this
+P
+2
+2
+where λj = (1 − φjj ) + k∈s(−j) φkj , and s(−j) de- interval has coverage error of order O(1/m), and it
+does not use the area-specific outcome values. To refines the sample without unit j.
+The authors apply the procedure for estimating duce the error, Iα (β̂, ξ̂) is calibrated on α. This is imthe PMSE of the EBLUP and the MBDE estima- plemented by generating parametric bootstrap samtor (4.11) under model (5.3), and for estimating the ples and re-estimating β and ξ similarly to the first
+PMSE of the M-quantile estimator defined in Sec- step of the double-bootstrap procedure for PMSE
+described in Section 6.1. Denote by Iˆα∗ =
+tion 6.6. For the first two applications the authors estimation
+∗ ˆ∗
+condition on the model variance estimators so that Iα (β̂ , ξ ) the bootstrap interval, and let α̂ denote
+∗
+ˆ∗
+the PMSE estimators do not have bias of desired or- the solution of the equation Pr(θi ∈ Iα̂ ) = α, where
+ˆ The bootstrap-calibrated predicder even under correct model specification. On the θi∗ ∼ Q{fi (β̂), ξ}.
+−2
+other hand, the estimators are shown empirically tion interval with coverage error of order O(m ) is
+to have smaller bias than the traditional PMSE es- Iα̂ (β̂, ξ̂).
+Chatterjee, Lahiri and Li (2008) consider the gentimators in the presence of outlying observations,
+although with larger MSEs than the traditional es- eral linear mixed model of Das, Jiang and Rao (2004),
+mentioned in Section 6.1: Y = Xβ + Zu + e, where
+timators in the case of small area sample sizes.
+Y (of dimension n) signifies all the observations in
+6.2 Computation of Prediction Intervals
+all the areas, Xn×p and Zn×q are known matrices
+As in other statistical applications, very often ana- and u and e are independent vector normal errors
+lysts are interested in prediction intervals for the un- of random effects and residual terms with variance
+known area characteristics. Construction of predic- matrices D(ψ) and R(ψ), which are functions of a
+tion intervals under the Bayesian approach, known k-vector parameter ψ. Note that this model and the
+as credibility intervals, is straightforward via the pos- model of Hall and Maiti (2006) include as special
+terior distribution of the predictor. A “natural” pre- cases the mixed linear models defined by (5.1) and
+diction interval under the frequentist approach with (5.3). The present model cannot handle nonlinear
+mixed models [e.g., the GLMM (5.5)], which the
+(·)
+(·)
+desired coverage rate (1 − α) is θ̂i ± zα/2 [ ˆ
+Var(θ̂i −
+Hall
+and Maiti model can, but it does not require
+(·)
+θi )]1/2 , where θ̂i is the EB, EBP or EBLUP pre- conditional independence of the observations given
+ˆ θ̂ (·) − θi ) is an appropriate estimate the random effects, as under the Hall and Maiti
+dictor, and Var(
+i
+of the prediction error variance. However, even un- model.
+The (parametric bootstrap) prediction interval of
+der asymptotic normality of the prediction error, the
+use of this prediction interval has coverage error of Chatterjee, Lahiri and Li (2008) for a univariate
+′
+order O(1/m), which is not sufficiently accurate. Re- linear combination t = c (Xβ + Zu) is obtained by
+cent work in SAE focuses therefore on reducing the the following steps. First compute the conditional
+mean, µt and variance σt2 of t|Y ; β, ψ. Next genercoverage error via parametric bootstrap.
+Hall and Maiti (2006) consider the following gen- ate new observations y ∗ = X β̂ + Zu∗ + e∗ , where
+eral model: for a suitable smooth function fi (β) of u∗ ∼ N (0, D(ψ̂)), e∗ ∼ N (0, R(ψ̂)). From y ∗ , estithe covariates Xi = (xi1 , . . . , xini ) in area i and a vec- mate β̂ ∗ and ψ̂ ∗ using the same method as for β̂
+tor parameter β, random variables Θi = fi (β) + ui ; and ψ̂, and compute µ̂∗t and σ̂t∗ (same as µt and
+E(ui ) = 0 are drawn from a distribution Q{fi (β); ξ}. σt , but with estimated parameters). Denote by L∗n
+The outcome observations yij are drawn indepen- the bootstrap distribution of (σ̂t∗ )−1 (t∗ − µ̂∗t ), where
+dently from a distribution R{l(Θi ); ηi }, where l(·) is t∗ = c′ (X β̂ + Zu∗ ), and let d = (p + k) be the total
+a known link function, and ηi is either known or is number of unknown parameters. Then as d2 /n → 0
+j∈s
+
+12
+
+D. PFEFFERMANN
+
+and under some regularity conditions, if q1 , q2 satisfy L∗n (q2 ) − L∗n (q1 ) = 1 − α,
+(6.10)
+
+Pr(µ̂t + q1 σ̂t ≤ t ≤ µ̂t + q2 σ̂t )
+= 1 − α + O(d3 n−3/2 ).
+
+Note that this theory allows d to grow with n and
+that the coverage error is defined in terms of n rather
+than m, the number of sampled areas, as under the
+Hall and Maiti (2006) approach. The total sample
+size increases also as the sample sizes within the
+areas increase, and not just by increasing m. By
+appropriate choice of t, the interval (6.10) is area
+specific.
+Remark 4. The article by Chatterjee, Lahiri
+and Li (2008) contains a thorough review of many
+other prediction intervals proposed in the literature.
+
+precision of the model-based predictors before benchmarking. As a result, the prorated predictor in a
+given area is not consistent as the sample size in
+that area increases. Additionally, estimation of the
+PMSE of the prorated predictors is not straightforward. Consequently, other procedures have been
+proposed in the literature.
+Wang, Fuller and Qu (2008) derive benchmarked
+BLUP (BBLUP) under the area level model (5.1)
+P
+bench )2
+as the predictors minimizing m
+i=1 ϕi E(θi − θ̂i
+subject to (6.11), where the ϕi s are chosen positive
+weights. The BBLUP is
+bench
+BLUP
+θ̂i,BLUP
+= θ̂i,model
+
++ δi
+
+(6.13)
+
+BLUP
+bj (θj,design − θ̂j,model
+);
+
+j=1
+
+6.3 Benchmarking
+Model-based SAE depends on models that can
+be hard to validate and if the model is misspecified, the resulting predictors may perform poorly.
+Benchmarking robustifies the inference by forcing
+the model-based predictors to agree with a designbased estimator for an aggregate of the areas for
+which the design-based estimator is reliable. Assuming that the aggregation contains all the areas, the
+benchmarking equation takes the general form,
+
+m
+X
+
+δi =
+
+m
+X
+j=1
+
+2
+ϕ−1
+j bj
+
+!−1
+
+ϕ−1
+i bi .
+
+When the variance σu2 is unknown, it is replaced by
+its estimator everywhere in (6.13), yielding the empirical BBLUP. You and Rao (2002) achieve “automatic benchmarking” for the unit level model (5.3)
+by changing the estimator of β. Wang, Fuller and
+Qu (2008) consider a similar procedure for the area
+level model. Alternatively, the authors propose to
+2 ). (The
+m
+m
+X
+X
+augment the covariates x′i to x̃′i = (x′i , bi σDi
+2
+(6.11)
+bi θ̂i,design .
+bi θ̂i,model =
+variances σDi are considered known under the area
+i=1
+i=1
+level model.) The use of the augmented model yields
+The coefficients {bi } are fixed weights, assumed with- a BLUP that likewise satisfies the benchmark conout loss of generality to sum to 1 (e.g., relative area straint (6.11) and is more robust to omission of an
+sizes). Constraint (6.9) has the further advantage of important covariate from xi , provided that the missguaranteeing consistency of publication between the ing covariate is sufficiently correlated with the added
+model-based small area predictors and the design- covariate in x̃i .
+based estimator for the aggregated area, which is
+Pfeffermann and Tiller (2006) add monthly benchoften required by statistical bureaus. For example, mark constraints of the form (6.11) to the measurethe model-based predictors of total unemployment ment (observation) equation of a time series statein counties should add up to the design-based esti- space model fitted jointly to the direct estimates in
+mate of total unemployment in the country, which several areas. Adding benchmark constraints to time
+is deemed accurate.
+series models is particularly important since time
+A benchmarking method in common use, often series models are slow to adapt to abrupt changes.
+referred to as ratio or pro-rata adjustment, is
+The benchmarked predictor obtained under the aug!
+
+m
+m
+mented time series model belongs to the family of
+X
+X
+bench
+bj θ̂j,model
+bj θ̂j,design
+θ̂i,Ratio
+=
+predictors (6.13) proposed by Wang, Fuller and Qu
+j=1
+j=1
+(2008). By adding the constraints to the model equa(6.12)
+tions, the use of this approach permits estimating
+· θ̂i,model .
+the variance of the benchmarked estimators as part
+The use of this procedure, however, applies the same of the model fitting. The variance accounts for the
+ratio correction for all the areas, irrespective of the variances of the model error terms, the variances and
+
+13
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+autocovariances of the sampling errors
+P of the direct
+estimators and of the benchmarks m
+i=1 bi θ̂ti,direct ,
+t = 1, 2, . . . , and the cross-covariances and autocovariances between the sampling errors of the direct
+estimators and the benchmarks.
+Datta et al. (2011) develop Bayesian benchmarking by minimizing
+m
+X
+ϕi E[(θi − θ̂ibench )2 |θ̂design ] s.t.
+(6.14)
+
+i=1
+
+m
+X
+i=1
+
+bi θ̂ibench =
+
+m
+X
+
+bi θ̂i,design ,
+
+i=1
+
+where θ̂design = (θ̂1,design , . . . , θ̂m,design )′ . The solution
+of this minimization problem is the same as (6.13),
+BLUP replaced everywhere by the posbut with θ̂k,model
+terior mean θ̂k,Bayes . Denote the resulting predicbench,1
+tors by θ̂i,Bayes
+. The use of these predictors has the
+drawback of “over shrinkage” in the sense that
+Pm
+Pm
+¯bench,1 2
+bench,1
+2
+i=1 bi E[(θi − θ̄b ) |
+i=1 bi (θ̂i,Bayes − θ̂ b,Bayes ) <
+¯bench,1 P
+bench,1
+θ̂design ], where θ̂b,Bayes = m
+i=1 bi θ̂i,Bayes and θ̄b =
+Pm
+i=1 bi θi . To deal with this problem, Datta et al.
+(2011) propose to consider instead the predictors
+bench,2
+θ̂i,Bayes
+, satisfying the constraints
+
+Nandram and Sayit (2011) likewise consider Bayesian benchmarking, focusing on estimation of area
+proportions. Denoting by ci the number of sample
+units in area i having characteristic C, and by pi the
+probability to have this characteristic, the authors
+assume the beta-binomial hierarchical Bayesian model,
+ci |pi ∼ Binomial(ni , pi );
+(6.17)
+
+pi |µ, τ ∼ Beta[µτ, (1 − µ)τ ],
+2 −1
+
+p(µ, τ ) = (1 + τ )
+
+,
+
+i = 1, . . . , m,
+
+0 < µ < 1, τ ≥ 0.
+
+Let b̃i = ni /n. The benchmark constraint is defined
+as,
+m
+X
+(6.18)
+b̃i pi = θ; θ ∼ Beta[µ0 τ0 , (1 − µ0 )τ0 ].
+i=1
+
+The authors derive the joint posterior distribution
+of the true probabilities {pi , i = 1, . . . , m} under the
+unrestricted model (6.17), and the restricted model
+with (6.18), and prove that it is proper. Computational details are given. Different scenarios are considered regarding the prior distribution of θ. Under the first scenario τ0 → ∞, implying that θ is a
+point mass at µ0 , assumed to be known. Under a
+second scenario µ0 and τ0 are specified by the analyst. In a third scenario µ0 = 0.5, τ0 = 2, implying
+θ ∼ Uniform(0, 1) (noninformative prior). Theoretim
+m
+cal arguments and empirical results show that the
+X
+X bench,2
+bi θ̂i,design ;
+bi θ̂i,Bayes =
+largest gain from using the restricted model is under
+i=1
+i=1
+the first scenario where θ is completely specified, fol(6.15)
+!
+lowed by the second scenario with τ0 ≫ 2. No gain
+2
+m
+m
+X
+X
+bench,2
+in
+precision occurs under the third scenario with a
+bi θ̂i,design = H,
+bi θ̂i,Bayes −
+noninformative
+prior.
+i=1
+i=1
+To
+complete
+this
+section, I mention a different freP
+2
+where H = m
+i=1 bi E[(θi − θ̄b ) |θ̂design ]. The bench- quentist benchmarking procedure applied by Ugarte,
+marked predictors have now the form
+Militino and Goicoa (2009). By this procedure, the
+m
+small area predictors in sampled and nonsampled
+X
+bench,2
+bi θ̂i,design
+θ̂i,Bayes
+=
+areas under the unit level model (5.3) are benchi=1
+marked to a synthetic estimator for a region composed of the areas as obtained under a linear re¯
++ ACB (θ̂i,Bayes − θ̂Bayes );
+(6.16)
+gression model with heterogeneous variances (but no
+m
+.X
+random effects). The benchmarked predictors mini¯
+A2CB = H
+bi (θ̂i,Bayes − θ̂Bayes )2 .
+mize a weighted residual sum of squares (WRSS) uni=1
+der model (5.3) among all the predictors satisfying
+Notice that the development of the Bayesian bench- the benchmark constraint. Notice that the predicmarked predictors is general and not restricted to tors minimizing the WRSS without the constraint
+any particular model. The PMSE of the benchmarked are the optimal predictors (5.4). For known varibench,2
+predictor can be estimated as Ê[(θ̂i,Bayes
+− θi )2 | ances the benchmarked predictors are linear, but in
+bench,2
+θ̂design ] = Var(θ̂i,Bayes |θ̂design ) + (θ̂i,Bayes − θ̂i,Bayes )2 , practice the variances are replaced by sample estimates. The authors estimate the PMSE of the rebench,2
+noting that the cross-product E[(θ̂i,Bayes
+− sulting empirical benchmarked predictors by a singleθ̂i,Bayes )(θ̂i,Bayes − θi )|θdesign ] = 0.
+step parametric bootstrap procedure.
+
+14
+
+D. PFEFFERMANN
+
+6.4 Accounting for Measurement Errors in the
+Covariates
+Ybarra and Lohr (2008) consider the case where
+some or all the covariates xi in the area level model
+(5.1) are unknown, and one uses an estimator x̂i obtained from another independent survey, with
+MSED (x̂i ) = Ci under the sampling design. (For
+known covariates xki , Cki = 0.) Denoting the resulting predictor by θ̂iErr , it follows that for known
+(β, σu2 ),
+(6.19)
+
+PMSE(θ̂iErr ) = PMSE(θ̂i ) + (1 − γi )2 β ′ Ci β,
+
+where PMSE(θ̂i ) is the PMSE if one knew xi . Thus,
+reporting PMSE(θ̂i ) in this case results in underreporting the true PMSE. Moreover, if β ′ Ci β > σu2 +
+2 , MSE(θ̂ Err ) > σ 2 = Var (ỹ ). The authors proσDi
+D i
+i
+Di
+pose therefore to use instead the predictor
+(6.20)
+
+θ̂iMe = γ̃i ỹi + (1 − γ̃i )x̂′i β;
+2
+γ̃i = (σu2 + β ′ Ci β)/(σDi
++ σu2 + β ′ Ci β).
+
+The predictor θ̂iMe minimizes the MSE of linear combinations of ỹi and x̂′i β. Additionally, E(θ̂iMe − θi ) =
+(1 − γ̃i )[ED (x̂i ) − xi ]′ β, implying that the bias vanishes if x̂i is unbiased for xi , and E(θ̂iMe − θi )2 =
+2 ≤ σ 2 . The authors develop estimators for σ 2
+γ̃i σDi
+u
+Di
+and β, which are then substituted in (6.20) to obtain
+the corresponding empirical predictor. The PMSE of
+the empirical predictor is estimated using the jackknife procedure of Jiang, Lahiri and Wan (2002),
+described in Section 6.1.
+Ghosh, Sinha and Kim (2006) and Torabi, Datta
+and Rao (2009) study a different situation of measurement errors. The authors assume that the true
+model is the unit level model (5.3) with a single covariate xi for all the units in the same area, but
+xi is not observed, and instead, different measurements xij are obtained for different sampled units
+j ∈ si . The sample consists therefore of the observations {yij , xij ; i = 1, . . . , m, j = 1, . . . , ni }. An example giving rise to such a scenario is where xi
+defines the true level of air pollution in the area
+and the xij ’s represent pollution measures at different sites in the area. It is assumed that xij =
+xi + ηij ; xi ∼ N (µx , σx2 ), and (ui , εij , ηij ) are independent normally distributed random errors with
+zero means and variances σu2 , σε2 and ση2 , respectively. Since xi is random, this kind of measurement
+error is called structural measurement error. The difference between the two articles is that Ghosh, Sinha
+and Kim (2006) only use the observations {yij } for
+
+predicting the true area means Ȳi , whereas Torabi,
+Datta and Rao (2009) also use the sample observations {xij }.
+Assuming that all the model parameters are known,
+the posterior distribution of the unobserved y-values
+in area i is multivariate normal, which under the approach of Torabi, Datta and Rao (2009) yields the
+following Bayes predictor (also BLUP) for Ȳi :
+B
+Ȳˆ i = E(Ȳi |{yij , xij , j = 1, . . . , ni })
+
+(6.21)
+
+= (1 − fi Ai )ȳi + fi Ai (β0 + β1 µx )
++ fi Ai γxi β1 (x̄i − µx ),
+
+where fi = 1 − (ni /Ni ), γxi = ni σx2 (ση2 + ni σx2 )−1 and
+Ai = [ni β12 σx2 ση2 + (ni σu2 + σε2 )vi ]−1 σε2 vi , with vi =
+(ση2 + ni σx2 ). For large Ni and small (ni /Ni ), the
+B
+B
+PMSE of Ȳˆ is E[(Ȳˆ − Ȳ )2 |{y , x }] = A [β 2 σ 2 +
+i
+
+i
+
+i
+
+ij
+
+ij
+
+i
+
+1 x
+
+σu2 − ni β12 σx4 vi−1 ]. Estimating the model parameters
+ψ = (β0 , β1 , µx , σx2 , σu2 , ση2 , σε2 ) by a method of moments (MOM) proposed by Ghosh, Sinha and Kim
+(2006) and replacing them by their estimates yields
+the EB estimator, which is shown to be asymptotiEB
+P
+cally optimal in the sense that m−1 m E(Ȳˆ −
+i=1
+
+i
+
+B
+Ȳˆ i )2 → 0 as m → ∞. The PMSE of the EB predictor is estimated by a weighted jackknife procedure
+of Chen and Lahiri (2002).
+The Bayes predictor of Ghosh, Sinha and Kim
+(2006) has a similar structure to (6.21), but without
+the correction term fi Ai γxi β1 (x̄i − µx ), and with the
+shrinkage coefficient Ai replaced by Ãi = [ni (β12 σx2 +
+σu2 )+σε2 ]−1 σε2 in the other two terms. As noted above,
+the authors develop a MOM for estimating the unknown model parameters to obtain the EB predictor
+and prove its asymptotic optimality. They also develop an HB predictor with appropriate priors for
+all the parameters. The HB predictor and its PMSE
+are obtained by MCMC simulations.
+Ghosh and Sinha (2007) consider the same unit
+level model as above with sample observations ({yij },
+{xij }), but assume that the true covariate xi is a
+fixed unknown parameter, which is known as functional measurement error. The work by Ybarra and
+Lohr (2008) reviewed before also assumes a functional measurement error, but considers the area
+level model. For known parameters and xi , the Bayes
+predictor takes now the simple form
+B
+Ȳˆ i = E(Ȳi |{yij , j = 1, . . . , ni })
+
+(6.22)
+
+= (1 − fi Bi )ȳi + fi Bi (β0 + β1 xi );
+Bi = (ni σu2 + σε2 )−1 σε2 .
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+A pseudo-Bayes predictor (PB) is obtained by substituting the sample mean x̄i for xi in (6.22). A pseudo-empirical Bayes predictor (PEB) is obtained by
+estimating all the other unknown model parameters
+by the MOM developed in Ghosh, Sinha and Kim
+(2006). The authors P
+show the asymptotic optimalPEB − Ȳ PB )2 → 0 as
+ity of the PEB, m−1 m
+i
+i=1 E(Ȳi
+m → ∞.
+Datta, Rao and Torabi (2010) propose to replace
+the estimator x̄i of xi by its maximum likelihood estimator (MLE) under the model. The corresponding
+PB of Ȳi (assuming that the other model parameters are known) is the same as the PB of Ghosh
+and Sinha (2007), but with Bi replaced by B̃i =
+(ni σu2 + σε2 + β12 ση2 )−1 σε2 . A PEB predictor is obtained by replacing the model parameters by the
+MOM estimators developed in Ghosh, Sinha and
+Kim (2006), and it is shown to be asymptotically optimal under the same optimality criterion as before.
+The PMSE of the PEB is estimated by the jackknife procedures of Jiang, Lahiri and Wan (2002)
+described in Section 6.1 and the weighted jackknife
+procedure of Chen and Lahiri (2002). The authors
+report the results of a simulation study showing that
+their PEB predictor outperforms the PEB of Ghosh
+and Sinha (2007) in terms of PMSE. A modification
+to the predictor of Ybarra and Lohr (2008) is also
+proposed.
+6.5 Treatment of Outliers
+Bell and Huang (2006) consider the area level model (5.1) from a Bayesian perspective, but assume
+that the random effect or the sampling error (but
+not both) have a nonstandardized Student’s t(k) distribution. The t distribution is often used in statistical modeling to account for possible outliers because
+of its long tails. One of the models considered by the
+authors is
+ui |δi , σu2 ∼ N (0, δi σu2 );
+(6.23)
+
+δi−1 ∼ Gamma[k/2, (k − 2)/2],
+2
+ei ∼ N (0, σDi
+),
+
+which implies E(δi ) = 1 and ui |σu2 ∼ t(k) (0, σu2 (k −
+2)/k). The coefficient δi is distributed around 1,
+inflating or deflating the variance of ui = θi − x′i β.
+A large value δi signals the existence of an outlying
+area mean θi . The degrees of freedom parameter,
+k, is taken as known. Setting k = ∞ is equivalent
+to assuming the model (5.1). The authors consider
+
+15
+
+several possible (small) values for k in their application, but the choice of an appropriate value depends
+on data exploration. Alternatively, the authors assume model (6.23) for the sampling error ei (with
+2 instead of σ 2 ), in which case it is assumed that
+σDi
+u
+ui ∼ N (0, σu2 ). The effect of assuming the model for
+the random effects is to push the small area predictor (the posterior mean) toward the direct estimator, whereas the effect of assuming the model for
+the sampling errors is to push the predictor toward
+the synthetic part. The use of either model is shown
+empirically to perform well in identifying outlying
+areas, but at present it is not clear how to choose
+between the two models. Huang and Bell (2006) extend the approach to a bivariate area level model
+where two direct estimates are available for every
+area, with uncorrelated sampling errors but correlated random effects. This model handles a situation
+where estimates are obtained from two different surveys.
+Ghosh, Maiti and Roy (2008) likewise consider
+model (5.1) and follow the EB approach. The starting point in this study is that an outlying direct estimate may arise either from a large sampling error
+or from an outlying random effect. The authors propose therefore to replace the EB predictor obtained
+from (5.2) by the robust EB predictor,
+(6.24)
+
+−1
+θ̂iRob = ỹi − (1 − γ̂i )V̂i ΨG [(ỹi − x′i β̂GLS
+ˆ )V̂i ];
+
+ˆ i − x′i β̂GLS ),
+V̂i2 = Var(ỹ
+
+where β̂GLS
+ˆ is the empirical GLS under the model
+with estimated variance σ̂u2 , and ΨG is the Huber influence function ΨG (t) = sign(t) min(G, |t|) for some
+value G > 0. Thus, for large positive standardized
+−1
+EB
+residuals (ỹi − x′i β̂GLS
+ˆ )V̂i , the EB θ̂i = ỹi − (1 −
+γ̂i )V̂i (ỹi − x′i β̂GLS )V̂i−1 under the model is replaced
+by θ̂iRob = ỹi − (1 − γ̂i )V̂i G, and similarly for large
+negative standardized residuals, whereas in other
+cases the ordinary EB, θ̂iEB , is unchanged. The value
+G may change from one area to the other, and it
+is chosen adaptively in such a way that the excess
+Bayes risk under model (5.1) from using the predictor (6.24) is bounded by some percentage point.
+Alternatively, G may be set to some constant 1 ≤
+G0 ≤ 2, as is often found in the robustness literature. The authors derive the PMSE of θ̂iRob under
+the model (5.1) for the case where σu2 is estimated
+by MLE with bias of order o(1/m), and develop an
+estimator for the PMSE that is correct up to the
+order Op (1/m).
+
+16
+
+D. PFEFFERMANN
+
+Under the approach of Ghosh, Maiti and Roy
+(2008), the EB predictor is replaced by the robust
+predictor (6.24), but the estimation of the unknown
+model parameters and the development of the PMSE
+and its estimator are under the original model (5.1),
+without accounting for possible outliers. Sinha and
+Rao (2009) propose to robustify also the estimation
+of the model parameters. The authors consider the
+mixed linear model (6.1), which when written com′ )′ , has
+pactly for all the observations y = (y1′ , . . . , ym
+the form
+y = Xβ + Zu + e,
+(6.25)
+
+E(u) = 0,
+
+E(uu′ ) = Q;
+
+E(e) = 0,
+
+E(ee′ ) = R,
+
+where u is the vector of random effects, and e is the
+vector of residuals or sampling errors. The matrices
+Q and R are block diagonal with elements that are
+functions of a vector parameter ζ = (ζ1 , . . . , ζL ) of
+variance components such that V (y) = V = ZQZ ′ +
+R = V (ζ). The target is to predict the linear combination τ = l′ β + h′ u by τ̂ = l′ β̂ + h′ û. Under the
+model, the MLE of β and ζ are obtained by solving the normal equations X ′ V −1 (y − Xβ) = 0; (y −
+−1 (y −Xβ)−tr(V −1 ∂V ) = 0, l = 1, . . . ,
+Xβ)′ V −1 ∂V
+∂ζl V
+∂ζl
+L. To account for possible outliers, the authors propose solving instead
+X ′ V −1 U 1/2 ΨG (r) = 0;
+∂V −1 1/2
+V U ΨG (r)
+∂ζl
+
+
+−1 ∂V
+− tr V
+cIn = 0, l = 1, . . . , L,
+∂ζl
+
+(6.26) Ψ′G (r)U 1/2 V −1
+
+where r = U −1/2 (y − Xβ), U = Diag[V ], ΨG (r) =
+[ΨG (r1 ), ΨG (r2 ), . . .]′ with ΨG (rk ) defining the Huber influence function, In is the identity matrix of order n and c = E[Ψ2G (rk )] [rk ∼ N (0, 1)]. Notice that
+since Q and R are block diagonal, the normal equations and the robust estimating equations can be
+written as sums over the m areas.
+Denote by β̂Rob , ζ̂Rob the solutions of (6.26). The
+random effects are predicted by solving
+(6.27)
+
+Z ′ R̂−1/2 ΨG [R̂−1/2 (y − X β̂Rob − Zu)]
+− Q̂−1/2 ΨG (Q̂−1/2 u) = 0,
+
+where R̂ = R(ζ̂Rob ), Q̂ = Q(ζ̂Rob ). Sinha and Rao
+(2009) estimate the PMSE of the robust small area
+predictors by application of the first step of the
+
+double-bootstrap procedure of Hall and Maiti (2006)
+(equation 6.4). The parameter estimates and the
+predictors of the random effects needed for the application of the bootstrap procedure are computed by
+the robust estimating equations (6.26)–(6.27), but
+the generation of the bootstrap samples is under
+the original model with no outliers. The estimation
+of the PMSE can possibly be improved by generating some outlying observations, thus reflecting more
+closely the properties of the original sample.
+6.6 Different Models and Estimators for Further
+Robustification
+In this section I review four different approaches
+proposed in the literature for further robustification of the inference by relaxing some of the model
+assumptions or using different estimators. All four
+studies focus on the commonly used area-level and/or
+unit-level models defined by (5.1) and (5.3), respectively.
+M-quantile estimation Classical model-based SAE
+methods model the expectations E(yi |xi , ui ) and
+E(ui ). Chambers and Tzavidis (2006) and Tzavidis,
+Marchetti and Chambers (2010) propose modeling
+instead the quantiles of the distribution f (yi |xi ),
+where for now yi is a scalar. Assuming a linear model
+for the quantiles, this leads to a family of models indexed by the coefficient q ∈ (0, 1); q = Pr[yi ≤ x′i βq ].
+In quantile regression the vector βq is estimated by
+minimizing
+n
+X
+{|yi − x′i βq |
+min
+βq
+
+i=1
+
+· [(1 − q)I(yi − x′i βq ≤ 0)
+
+(6.28)
+
++ qI(yi − x′i βq > 0)]}.
+M-quantile regression uses influence functions for estimating βq by solving the equations
+n
+X
+
+Ψq (riq )xi = 0;
+
+i=1
+
+(6.29)
+
+riq = (yi − x′i βq ),
+
+Ψq (riq ) = 2Ψ(s−1 riq )[(1 − q)I(riq ≤ 0)
++ qI(riq > 0)],
+
+where s is a robust estimate of scale, and Ψ is an appropriate influence function. The (unique) solution
+β̂q of (6.29) is obtained by an iterative reweighted
+least square algorithm. Note that each sample value
+(yi , xi ) lies on one and only one of the quantiles
+
+17
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+mq (xi ) = x′i βq (which follows from the fact that the
+quantiles are continuous in q).
+How is the M-quantile theory used for SAE? Suppose that the sample consists of unit level observations {yij , xij ; i = 1, . . . , m, j = 1, . . . , ni }. Identify
+for unit (i, j) the value qij such that x′ij β̂qij = yij .
+A predictor of the mean θi in area i is obtained by
+averaging the quantiles qij over the sampled units
+j ∈ si and computing
+X
+
+X
+−1
+′
+M
+yij +
+xik β̂q̄i ;
+θ̂i = Ni
+j∈si
+
+(6.30)
+
+q̄i =
+
+n
+i
+X
+
+spline (P-spline) regression. The idea here is to avoid
+assuming a specific functional form for the expectation of the response variable. Suppose that there is
+a single covariate x. The P-spline model assumes
+y = m0 (x) + ε, E(ε) = 0, Var(ε) = σε2 . The mean
+m0 (x) is taken as unknown and approximated as
+m(x; β, γ) = β0 + β1 x + · · · + βp xp
+
+j=1
+
+Alternatively, one can average the vector coefficients
+¯
+βqij and replace β̂q̄i in (6.30) by the mean β̂ i =
+Pn i
+¯
+j=1 β̂qij /ni . The vectors β̂q̄i or β̂ i account for differences between the areas, similarly to the random
+effects under the unit level model (5.3).
+The use of this approach is not restricted to the estimation of means, although it does assume continuous y-values. For example, the distribution function
+in area i can be estimated as F̂i (t) =
+P
+P
+¯
+Ni−1 [ j∈si I(yij ≤ t) + k /∈si I(x′ik β̂ i ≤ t)]. Chambers and Tzavidis (2006) develop unconditional and
+area specific estimators for the variance of the M¯
+quantile estimators (6.30) assuming β̂q̄i (or β̂ i ) is
+fixed, and estimators for the bias under the linear
+model E(yij |xij ) = x′ij βi .
+The M-quantile approach does not assume a parametric model, although it assumes that the quantiles
+are linear in the covariates in the theory outlined
+above. Clearly, if the unit level model (5.3) holds,
+the use of the model is more efficient, but the authors illustrate that the M-quantile estimators can
+be more robust to model misspecification. Notice in
+this regard that the approach is not restricted to
+a specific definition of the small areas. It accounts
+also for possible outliers by choosing an appropriate
+influence function in the estimating equation (6.29).
+On the other hand, there seems to be no obvious way
+of how to predict the means or other target quantities for nonsampled areas. A possible simple solution
+would be to set q = 0.5 for such areas or weight the
+q-values of neighboring sampled areas, but it raises
+the question of how to estimate the corresponding
+PMSE, unless under a model.
+Use of penalized spline regression Another way
+of robustifying the inference is by use of penalized
+
+K
+X
+
+γk (x − Kk )p+ ;
+
+k=1
+p
+(x − Kk )+ = max[0, (x − Kk )p ],
+
+k/
+∈si
+
+qij /ni .
+
++
+
+(6.31)
+
+where p is the degree of the spline, and K1 < · · · <
+KK are fixed knots. For large K and good spread of
+the knots over the range of x, spline (6.31) approximates well most smooth functions. It uses the basis
+[1, x, . . . , xp , (x − K1 )p+ , . . . , (x − KK )p+ ] to approximate the mean, but other bases can be considered,
+particularly when there are more covariates.
+Opsomer et al. (2008) use P-spline regression for
+SAE by treating the γ-coefficients in (6.31) as additional random effects. Suppose that the data consist
+of unit-level observations, {yij , xij ; i = 1, . . . , m, j =
+1, . . . , ni }. For unit j in area i, the model considered
+is
+(6.32)
+
+yij = β0 + β1 xij + · · · + βp xpij
++
+
+K
+X
+
+γk (xij − Kk )p+ + ui + εij ,
+
+k=1
+
+where the ui s are the usual area random effects
+and εij s are the residuals. Let u = (u1 , . . . , um )′ , γ =
+(γ1 , . . . , γK )′ . Defining dij = 1 (0) if unit j is (is
+not) in area i and denoting dj = (d1j , . . . , dmj )′ and
+D = [d1 , . . . , dn ]′ , the model holding for the vector y
+of all the response values can be written compactly
+as
+y = Xβ + Zγ + Du + ε;
+(6.33)
+
+γ ∼ (0, σγ2 Ik ),
+u ∼ (0, σu2 Im ),
+(p)
+
+(p)
+
+ε ∼ (0, σε2 In ),
+(p)
+
+where X = [x1 , . . . , xn ]′ with xl = (1, xl , . . . , xpl )′ ,
+and Z = [z1 , . . . , zn ]′ with zl = [(xl − K1 )p+ , . . . , (xl −
+KK )p+ )]′ . The model (6.33) looks similar to (6.25)
+but the responses yij are not independent between
+the areas because of the common random effects γ.
+Nonetheless, the BLUP and EBLUP of (β, u, γ) can
+be obtained using standard results; see the article for
+the appropriate expressions. The small area EBLUP
+
+18
+
+D. PFEFFERMANN
+
+
+
+m
+X
+[yi − k(θi )]2
+τi
+− 1 = 0.
+V (θi )
+
+are obtained as
+(p)
+θ̂ P-spline = β̂ ′ X̄ + γ̂ ′ Z̄ + û ;
+(6.34)
+
+(p)
+
+X̄i
+
+i
+
+i
+
+i,EBLUP
+
+=
+
+X
+
+(p)
+
+xl /Ni ,
+
+i
+
+Z̄i =
+
+l∈Ui
+
+i=1
+
+X
+
+zl /Ni .
+
+l∈Ui
+
+The use of this approach requires that the covariates are known for every element in the population. Opsomer et al. (2008) derive the PMSE of
+the EBLUP (6.34) correct to second order for the
+case where the unknown variances are estimated by
+REML, and an estimator of the PMSE with bias
+correct to the same order. The authors develop also
+a nonparametric bootstrap algorithm for estimating
+the PMSE and for testing the hypotheses σu2 = 0
+and σγ2 = 0 of no random effects. Rao, Sinha and
+Roknossadati (2009) use a similar model to (6.33),
+but rather than computing the EBLUP under the
+model, the authors propose predictors that are robust to outliers, similar (but not the same) to the
+methodology developed by Sinha and Rao (2009)
+for the mixed linear model described in Section 6.5.
+Jiang, Nguyen and Rao (2010) show how to select an
+appropriate spline model by use of the fence method
+described in Section 8.
+Use of empirical likelihood in Bayesian inference
+Chaudhuri and Ghosh (2011) consider the use of empirical likelihoods (EL) instead of fully parametric
+likelihoods as another way of robustifying the inference. When combined with appropriate proper priors, it defines a semiparametric Bayesian approach,
+which can handle continuous and discrete outcomes
+in area- and unit-level models, without specifying
+the distribution of the outcomes as under the classical Bayesian approach. Denote by θ = (θ1 , . . . , θm )′
+and y = (y1 , . . . , ym )′ the area parameters and the
+corresponding direct estimators, and by τ = (τ1 , . . . ,
+τm ) the “jumps” defining
+Pm the cumulative distribution
+of
+y
+,
+so
+that
+i
+i=1 τi = 1. The EL is LE =
+Qm
+τ
+and
+for
+given
+moments E(yi |θi ) = k(θi ),
+i=1 i
+Var(yi |θi ) = V (θi ), the estimate τ̂ (θ) is the solution
+of the constrained maximization problem
+max
+
+τ1 ,...,τm
+
+m
+Y
+
+τi ,
+
+i=1
+
+s.t. τi ≥ 0,
+(6.35)
+
+m
+X
+
+τi = 1,
+
+i=1
+
+m
+X
+i=1
+
+τi [yi − k(θi )] = 0,
+
+Under the area model (5.1) k(θi ) = θi = x′i β + ui
+2 . The authors assume proper priors
+and V (θi ) = σDi
+for (β, u1 , . . . , um , σu2 ) and hence for θ, thus guaranteeing that the posterior distribution π(θ|y) is also
+proper. For given θ the constrained maximization
+problem (6.35) is solved by standard methods (see
+the article), and by combining the EL with the prior
+distributions, observations from the posterior distribution π(θ|y) are obtained by MCMC simulations.
+For the unit-level model (5.3), E(yij |θij ) = k(θij ) =
+x′ij β + ui and Var(yij |θij ) = V (θij ) = σε2 . Denoting
+by τij the “jumps” of the cumulative distribution
+in area
+i, the ELQis defined in this case as LE =
+Q
+m Qni
+m
+i=1
+j=1 τij =
+i=1 τ(i) , and for given θ(i) =
+′
+(θi1 , . . . , θi,ni ) , τ̂(i) (θ) = [τ̂i1 (θ), . . . , τ̂ini (θ)]′ is the solution of the area specific maximization problem
+max
+{τij }
+
+ni
+Y
+
+τij ,
+
+j=1
+
+s.t. τij ≥ 0,
+(6.36)
+
+ni
+X
+
+τij = 1,
+
+j=1
+
+ni
+X
+
+τij [yij − k(θij )] = 0,
+
+j=1
+
+n
+i
+X
+j=1
+
+τij
+
+
+
+
+[yij − k(θij )]2
+− 1 = 0.
+V (θij )
+
+The authors applied the procedure for estimating
+state-wise median income of four-person families in
+the USA, using the area-level model. Comparisons
+with the census values for the same year reveal much
+better predictions under the proposed approach compared to the direct survey estimates and the HB
+predictors obtained under normality of the direct
+estimates.
+Best predictive SAE In the three previous approaches reviewed in this section, the intended robustification is achieved by relaxing some of the model
+assumptions. Jiang, Nguyen and Rao (2011) propose instead to change the estimation of the fixed
+model parameters. The idea is simple. In classical
+model-based SAE the EBLUP or EB predictors are
+obtained by replacing the parameters in the expression of the BP by their MLE or REML estimators.
+Noting that in SAE the actual target is the prediction of the area means, and the estimation of model
+
+19
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+parameters is just an intermediate step, the authors
+propose to estimate the fixed parameters in such a
+way that the resulting predictors are optimal under
+some loss function.
+Consider the area-level model (5.1) with normal
+errors, and suppose first that σu2 is known. Under
+the model, E(yi ) = x′i β, but suppose that the model
+is misspecified and E(yi ) = µi , such that θi = µi + ui ,
+i = 1, . . . , m. Let θ̃i be a predictor of θi , and define
+the
+Pmmean square2 prediction error to be MSPE(θ̃) =
+i=1 E(θ̃i − θi ) , where the expectation is under
+the correct model. By (5.2), the MSPE
+of the BP
+P
+for given β is MSPE[θ̃(β)] = E{ m
+[γ
+i=1 i yi + (1 −
+γi )x′i β − θi ]2 }. The authors propose minimizing the
+expression inside the expectation with respect to
+β,
+to bePequivalent to minimizing
+Pmwhich is shown
+m
+2 (x′ β)2 − 2
+2 ′
+[(1
+−
+γ
+)
+i
+i=1
+i
+i=1 (1 − γi ) xi βyi ], yielding the “best predictive estimator” (BPE)
+"m
+#−1 m
+X
+X
+(1 − γi )2 xi x′i
+(6.37) β̃ =
+(1 − γi )2 xi yi .
+i=1
+
+i=1
+
+2 = σ 2 , β̃ differs
+Notice that unless VarD (ei ) = σDi
+D
+from the commonly used
+under the
+Pm GLS estimator
+P
+γ
+model (5.1); β̂GLS = [ i=1 γi xi x′i ]−1 m
+i=1 i xi yi . The
+“observed best predictor” (OBP) of θi is obtained
+by replacing β̂GLS by β̃ in the BP (5.2) under the
+model (5.1).
+The authors derive also the BPE of ψ = (β ′ , σu2 )′
+for the case where σu2 is unknown, in which case
+the OBP is obtained by replacing σu2 and β̂GLS by
+the BPE of ψ in (5.2). Another extension is for the
+unit level model (5.3), with the true area means
+and
+Pm MSPE defined 2as θi = Ȳi and MSPE[θ̃(ψ)] =
+′
+i=1 ED [θ̃i (ψ) − θi ] , respectively, where ψ = (β ,
+σu2 , σε2 )′ and ED (·) is the design (randomization) expectation over all possible sample selections (Section 4.1). The reason for using the design expectation in this case is that it is almost free of model
+assumptions. Theoretical derivations and empirical
+studies using simulated data and a real data set illustrate that the OBP can outperform very significantly the EBLUP in terms of PMSE if the underlying model is misspecified. The two predictors are
+shown to have similar PMSE under correct model
+specification.
+
+6.7 Prediction of Ordered Area Means
+Malinovsky and Rinott (2010) consider the following (hard) problem: predict the ordered area means
+θ(1) ≤ θ(2) ≤ · · · ≤ θ(m) under the area-level model
+
+ỹi = µ + ui + ei = θi + ei [special case of (5.1)], with
+i.i.d.
+
+i.i.d.
+
+ui ∼ H(0, σu2 ), ei ∼ G(0, σe2 ); H and G are general
+distributions with zero means and variances σu2 and
+σe2 . To illustrate the difference between the prediction of ordered and unordered means, consider the
+prediction of θ(m) = maxi {θi }. If θ̂i satisfies E(θ̂i |θi ) =
+θi , i = 1, . . . , m, then E[maxi {θ̂i }|{θj }] ≥ θ(m) so that
+the largest estimator overestimates the true largest
+mean. On the other hand, the Bayesian predictors
+θi∗ = E[θi |{θ̂j }] satisfy E[maxi {θi∗ }] < E(θ(m) ), an
+underestimation in expectation.
+Wright, Stern and Cressie (2003) considered the
+prediction of ordered means from a Bayesian perspective, but their approach requires heavy numerical calculations and is sensitive to the choice of priors. Malinovsky and Rinott (2010) compare three
+predictors of the ordered means under the frequentist approach, using the loss function L(θ̃(·) , θ(·) ) =
+Pm
+2
+i=1 (θ̃(i) − θ(i) ) and the Bayes risk E[L(θ̃(·) , θ(·) )].
+Let θ̂i define the direct estimator of θi and θ̂(i) the
+ith ordered direct estimator (statistic). The predictors compared are
+(1)
+
+θ̃(i) = θ̂(i) ;
+(6.38)
+
+¯
+(2)
+θ̃(i) (δ) = δθ̂(i) + (1 − δ)θ̂,
+
+m
+
+¯ X
+θ̂i /m;
+θ̂ =
+i=1
+
+(3)
+θ̃(i) = E(θ(i) |θ̂),
+
+θ̂ = (θ̂1 , . . . , θ̂m )′ .
+
+The results below assume that σu2 and σe2 are known
+¯
+and that µ is estimated by θ̂.
+[k]
+Denote by θ̃(·) the predictor of the ordered means
+(k)
+
+when using the predictors θ̃(i) , k = 1, 2, 3, and let
+γ = σu2 (σu2 + σe2 )−1 be the shrinkage coefficient when
+predicting the unordered means [equation (5.2)]. The
+authors derive several theoretical comparisons. For
+example, if γ ≤ (m − 1)2 /(m + 1)2 , then
+[2]
+
+(6.39)
+
+E[L(θ̃(·) (δ), θ(·) )]
+[1]
+
+≤ E[L(θ̃(·) , θ(·) )] for all γ ≤ δ ≤ 1.
+Noting that limm→∞ [(m − 1)2 /(m + 1)2 ] = 1, it follows that (6.39) holds asymptotically for all γ, and
+the inequality γ ≤ δ ≤ 1 implies less shrinkage of the
+direct estimators toward the mean. In particular, the
+[2]
+optimal choice of δ for θ̃(·) (δ) satisfies limm→∞ δopt =
+γ 1/2 .
+The results above assume general distributions H
+and G. When these distributions are normal, then
+
+20
+
+D. PFEFFERMANN
+[3]
+
+[2]
+
+for m = 2, E[L(θ̃(·) , θ(·) )] ≤ E[L(θ̃(·) (δ), θ(·) )] for all
+δ. A conjecture supported by simulations is that this
+relationship holds also for m > 2. However, the simulations suggest that for sufficiently large m (e.g.,
+[2]
+[3]
+m ≥ 25), θ̃(·) is efficiently replaced by θ̃(·) (γ 1/2 ). The
+
+last two conclusions are shown empirically to hold
+also in the case where σu2 is unknown and replaced
+by the MOM variance estimator.
+Remark 5. The problem of predicting the ordered means is different from ranking them, one
+of the famous triple-goal estimation objectives in
+SAE. The triple-goal estimation consists of producing “good” area specific estimates, “good” estimates
+of the histogram (distribution) and “good” estimates
+of the ranks. See Rao (2003) for discussion. Judkins
+and Liu (2000) considered another related problem
+of estimating the range of the area means. The authors show theoretically and by simulations that the
+range of the direct estimators overestimates the true
+range, whereas the range of the empirical Bayes estimators underestimates the true range, in line with
+the discussion at the beginning of this section. The
+bias is much reduced by use of a constrained empirical Bayes estimator. For the model considered
+by Malinovsky and Rinott (2010), the constrained
+estimator is obtained by replacing the shrinkage coefficient γ = σu2 (σu2 + σe2 )−1 in (5.2) by γ̃ ∼
+= γ −1/2 ,
+which again shrinkages less the direct estimator.
+6.8 New Developments for Specific Applications
+In this section I review two relatively new applications of SAE; assessment of literacy and poverty
+mapping. The latter application, in particular, received considerable attention in recent years.
+Assessment of literacy The notable feature of assessing literacy from a literacy test is that the possible outcome is either zero, indicating illiteracy, or
+a positive continuous score measuring the level of
+literacy. Another example of this kind of data is the
+consumption of illicit drugs, where the consumption
+is either zero or a continuous measure. In both examples the zero scores are “structural” (true) zeroes. The common models used for SAE are not applicable for this kind of responses if the proportion
+of zeroes is high. Pfeffermann, Terryn and Moura
+(2008) consider the estimation of the average literacy score and the proportion of people with positive
+scores in districts and villages in Cambodia, a study
+sponsored by the UNESCO Institute for Statistics
+(UIS). Denote by yijk the test score of adult k from
+
+village j of district i and by rijk a set of covariates
+and district and village random effects. The following relationship holds:
+(6.40)
+
+E(yijk |rijk ) = E(yijk |rijk , yijk > 0)
+· Pr(yijk > 0|rijk ).
+
+The two parts in the right-hand side of (6.40) are
+modeled as E[yijk |rijk , yijk > 0] = x′ijk β + ui + vij ,
+where (ui , vij ) are district and nested village random
+effects, Pr(yijk > 0|rij ) = pijk ; logit(pijk ) = γ ′ zijk +
+∗ , where z
+u∗i + vij
+ijk defines a set of covariates which
+∗ ) are district and
+may differ from xijk and (u∗i , vij
+nested village random effects, which are correlated
+respectively with (ui , vij ). The village and district
+predictors of the average score and the proportion
+of positive scores are obtained by application of the
+Bayesian approach with noninformative priors, using MCMC simulations. The use of the Bayesian approach enables one to account for the correlations
+between the respective random effects in the two
+models, which is not feasible when fitting the two
+models separately. The area predictors are obtained
+by imputing the responses for nonsampled individuals by sampling from their posterior distribution,
+and adding the imputed responses to the observed
+responses (when observations exist).
+Remark 6. Mohadjer et al. (2007) estimate the
+proportions θij of adults in the lowest level of literacy in counties and states of the USA, by modeling
+the direct estimates p̃ij in county j of state i as p̃ij =
+θij + εij , and modeling logit(θij ) = x′ij β + ui + vij
+with ui and vij defining state and county random
+effects. The state and county estimates are likewise
+obtained by MCMC simulations with noninformative priors. Note that this is not a two-part model.
+Poverty mapping The estimation of poverty indicators in small regions is of major interest in many
+countries across the world, initiated and sponsored
+in many cases by the United Nations and the World
+Bank. In a celebrated article (awarded by the Canadian Statistical Society as the best paper published
+in 2010 in The Candian Journal of Statistics), Molina
+and Rao focus on estimation of area means of nonlinear poverty measures called FGT defined as
+N
+
+(6.41)
+
+i
+1 X
+Fαij ;
+Fαi =
+Ni
+
+j=1
+
+Fαij =
+
+
+
+z − Eij
+z
+
+α
+
+× I(Eij < z),
+α = 0, 1, 2,
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+where Eij is a measure of welfare for unit j in area i
+such as income or expenditure, z is a poverty threshold under which a person is considered “poor” (e.g.,
+60% of the nation median income) and I(·) is the
+indicator function. For α = 0, Fαi is the proportion
+under poverty. For α = 1, Fαi measures the “poverty
+gap,” and for α = 2, Fαi measures “poverty severity.”
+For α = 1, 2 it is practically impossible to assign
+a distribution for the measures Fαij , and in order
+to estimate the means Fαi in sampled and nonsampled areas, Molina and Rao (2010) assume the existence of a one-to-one transformation yij = T (Eij )
+such that the transformed outcomes yij satisfy the
+unit level model (5.3) with normal distribution of
+the random effects and the residuals. Notice that
+Fαij = [1 − 1z T −1 (yij )]α × I[T −1 (yij ) < z] =: hα (yij ).
+For sampled units j ∈ si Fαij is known, and for
+the nonsampled units k ∈ ri , the missing measures
+EBP = Ê[h (y )|y ] =
+are imputed by the EBP Fαik
+α ik
+s
+PL
+(l)
+)/L
+with
+large
+L,
+where
+y
+defines
+all
+h
+(y
+s
+l=1 α ik
+(l)
+the observed outcomes. The predictions yik are obtained by Monte Carlo simulation from the conditional normal distribution of the unobserved outcomes given the observed outcomes under the model
+(5.3), using estimated parameters ψ̂ = (β̂ ′ , σ̂u2 , σ̂ε2 )′ .
+P
+EBP = [
+The PMSE of the EBP F̂αi
+j∈si Fαij +
+P
+EBP
+k∈ri Fαik ]/Ni is estimated similarly to the first
+step of the double-bootstrap procedure described
+in Section 6.1. Model- and design-based simulations
+and application to a real data set from Spain using
+the transformation yij = log(Eij ) demonstrate good
+performance of the area predictors and the PMSE
+estimators.
+Remark 7. The World Bank (WB) is currently
+using a different method, under which all the population values yij are simulated from model (5.3) with
+estimated parameters (including for sampled units),
+but with random effects for design clusters, which
+may be different from the small areas. As discussed
+and illustrated by Molina and Rao (2010), the use
+of this procedure means that all the areas are practically considered as nonsampled, and the resulting
+predictors of the means Fαi in (6.41) are in fact synthetic predictors since the random effects and the
+area means of the residuals cancel out over the L
+simulated populations. Simulation results in Molina
+and Rao (2010) show that the WB method produces
+predictors with much larger PMSE than the PMSE
+of the EBP predictors proposed by them.
+
+21
+
+7. SAE UNDER INFORMATIVE SAMPLING
+AND NONRESPONSE
+All the studies reviewed in this paper assume, at
+least implicitly, that the selection of areas that are
+sampled and the sampling designs within the selected areas are noninformative, implying that the
+model assumed for the population values applies
+also to the sample data with no sampling bias. This,
+however, may not be the case, and as illustrated
+in the literature, ignoring the effects of informative sampling may bias the inference quite severely.
+A similar problem is not missing at random (NMAR)
+nonresponse under which the response probabilities
+depend on the missing data, which again can bias
+the predictions if not accounted for properly. These
+problems received attention under both the frequentist and the Bayesian approaches.
+Pfeffermann and Sverchkov (2007) consider the
+problem of informative sampling of areas and within
+the areas. The basic idea in this article is to fit a
+sample model to the observed data and then exploit the relationship between the sample model,
+the population model and the sample-complement
+model (the model holding for nonsampled units) in
+order to obtain unbiased predictors for the means in
+sampled and nonsampled areas.
+Consider a two-stage sampling design by which m
+out of M areas are selected in the first stage with
+probabilities πi = Pr(i ∈ s), and ni out of Ni units
+are sampled from the ith selected area with probabilities πj|i = Pr(j ∈ si |i ∈ s). Denote by Ii and Iij
+the sample indicator variables for the two stages of
+sampling and by wi = 1/πi and wj|i = 1/πj|i the first
+and second stage sampling weights. Suppose that
+the first level area random effects {u1 , . . . , uM } are
+generated independently from a distribution with
+p.d.f. fp (ui ), and that for given ui the second level
+values {yi1 , . . . , yiNi } are generated independently
+from a distribution with p.d.f. fp (yij |xij , ui ). The
+conditional first-level sample p.d.f. of ui , that is, the
+p.d.f. of ui for area i ∈ s is
+def
+
+fs (ui ) = f (ui |Ii = 1)
+(7.1)
+
+= Pr(Ii = 1|ui )fp (ui )/ Pr(Ii = 1)
+= Es (wi )fp (ui )/Es (wi |ui ).
+
+The conditional first-level sample-complement p.d.f.
+of ui , that is, the p.d.f. for area i ∈
+/ s is
+def
+
+(7.2)
+
+fc (ui ) = f (ui |Ii = 0)
+= Pr(Ii = 0|ui )fp (ui )/ Pr(Ii = 0).
+
+22
+
+D. PFEFFERMANN
+
+Note that the population, sample and sample-complement p.d.f.s are the same if Pr(Ii = 1|ui ) = Pr(Ii =
+1), in which case the area selection is noninformative. Similar relationships hold between the sample p.d.f., population p.d.f. and sample-complement
+p.d.f. of the outcomes yij within the selected areas,
+for given values of the random effects.
+Pfeffermann and Sverchkov (2007) illustrate their
+approach by assuming that the sample model is the
+unit-level model (5.3) with normal random effects
+and residuals, and that the sampling weights within
+the selected areas have sample model expectations,
+Esi (wj|i |xij , yij , ui , Ii = 1)
+(7.3)
+
+= Esi (wj|i |xij , yij , Ii = 1)
+
+= ki exp(a′ xij + byij ),
+P i
+′
+where ki = Ni (ni )−1 N
+j=1 exp(−a xij − byij )/Ni ,
+and a and b are fixed constants. No model is assumed for the relationship between the area selection probabilities and the area means. The authors
+show that under this model and for given parameters {β ′ , b, σu2 , σε2 }, the true mean Ȳi in sampled area
+i can be predicted as
+Ȳˆ i = Ep (Ȳi |Ds , Ii = 1)
+(7.4)
+
+=
+
+1
+{(Ni − ni )θ̂i + ni [ȳi + (X̄i − x̄i )′ β]
+Ni
++ (Ni − ni )bσe2 },
+
+where Ds represents all the known data and θ̂i =
+ûi + X̄i β is the optimal predictor of the sample model
+mean θi = X̄i′ β + ui . The last term in (7.4) corrects
+for the sample selection effect, that is, the difference between the sample-complement expectation
+and the sample expectation in sampled areas.
+The mean Ȳk of area k not in the sample can be
+predicted as
+= X̄k′ β + bσe2
+
+j = 1, . . . , K;
+
+∗
+Pr(π(j)
+= πg∗ |θgy , yj = y) = θgy ,
+
+(7.6)
+
+y = 0, 1; g = 1, . . . , G,
+y
+
+Pr(yj = y|p) = p (1 − p)1−y ,
+0 ≤ p ≤ 1; p(K) = 1.
+
+(7.7)
+
+
+X
+.X
+(wi − 1) .
+(wi − 1)ûi
++
+i∈s
+
+ind
+
+∗
+∗
+∼ Bernoulli(π(j)
+δj |K, π(j)
+),
+
+It follows that
+
+Êp (Ȳk |Ds , Ik = 0)
+(7.5)
+
+PMSE of the empirical predictors obtained by substituting the unknown model parameters by sample
+estimates. The method is applied for predicting the
+mean body mass index (BMI) in counties of the USA
+using data from the third national health and nutrition examination survey (NHANES III).
+Malec, Davis and Cao (1999, hereafter MDC) and
+Nandram and Choi (2010, hereafter NC) likewise
+consider the estimation of county level BMI statistics from NHANES III, with both articles accounting for within-area informative sampling in a similar manner, and the latter article accounting, in addition, for informative nonresponse. Another difference between the two articles is that MDC consider
+binary population outcomes (overweight/normal status), with logistic probabilities that contain fixed
+and multivariate random area effects, whereas NC
+assume a log-normal distribution for the continuous BMI measurement, with linear spline regressions
+containing fixed and random area effects defining
+the means. In order to account for sampling effects,
+both articles assume that each sampled unit represents K − 1 other units (not sampled) within a
+specified group (cluster) of units, with unit j se∗ that can take one of the
+lected with probability π(j)
+∗
+G observed values πg , g = 1, . . . , G in that group.
+The groups are defined by county and demographic
+characteristics. Specifically, let δj = 1 (0) if unit j is
+sampled (not sampled). The MDC model for a given
+group assumes
+
+i∈s
+
+The last term of (7.5) corrects for the fact that the
+mean of the random effects in areas outside the sample is different from zero under informative selection
+of the areas. The authors develop test procedures
+for testing the informativeness of the sample selection and a bootstrap procedure for estimating the
+
+∗
+P(δj = 1, yj = y, π(j)
+= πg∗ , {δk = 0}k6=j |θ, p)
+
+py (1 − p)1−y
+.
+P1
+∗
+y
+1−y
+g=1 πg
+y=0 θgy p (1 − p)
+
+∝ PG
+
+MDC show that the MLE of θgy is θ̂gy = (τgy /πg∗ )/
+PG
+∗
+g∗=1 (τg∗y /πg∗ ) where τgy is the sample frequency
+∗
+of πg in the group for units with overweight status
+y. They plug the estimate into (7.7) and then into
+the full likelihood that includes also the distribution
+of random effects contained in a logit model for p.
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+23
+
+NC generalize model (7.6) by allowing the out∗ = π∗ |
+come to be continuous, assuming Pr(π(j)
+g
+θg (y), y) = θg (y), −∞ < y < ∞ where θg (y) = θgl for
+al−1 < y < al , and replacing the Bernoulli distribution for y by a continuous p.d.f. To account for informative nonresponse, the authors assume that the response probabilities prij are logistic with logit(prij ) =
+v0i + v1i yij , where {(v0i , v1i )} is another set of random effects having a bivariate normal distribution.
+
+model selection criteria such as the AIC do not apply straightforwardly to mixed models because they
+use the likelihood, which requires specification of
+the distribution of the random effects, and because
+of difficulties in determining the effective number
+of parameters. In what follows I review several recent studies devoted to model selection and validation from both a frequentist and Bayesian perspective. These should be considered as supplements to
+“ordinary” checking procedures based on graphical
+Remark 8. As the notation suggests, both MDC displays, significance testing, sensitivity of the comand NC use the full Bayesian approach with appro- puted predictors and their PMSEs to the choice of
+priate prior distributions to obtain the small area the likelihood and the prior distributions, and compredictors under the respective models. See the ar- parison of the model-dependent predictors with the
+ticles for details. The authors do not consider infor- corresponding model free direct estimators in sammative sampling of the areas.
+pled areas. Such model evaluation procedures can
+I conclude this section by describing an article be found in almost every article on SAE; see, for
+by Zhang (2009), which uses a very different model example, Mohadjer et al. (2007) and Nandram and
+from the other models considered in the present pa- Choi (2010) for recent diverse applications.
+Vaida and Blanchard (2005) study the use of the
+per. The article considers the estimation of small
+area compositions in the presence of NMAR nonre- AIC assuming model (6.1) with Var(ui ) = Q,
+sponse. Compositions are the counts or proportions Var(ei ) = σ 2 Ini . The authors distinguish between inin categories of a categorical variable such as types ference on the marginal model with focus on the
+of households, and estimates of the compositions fixed effects, and inference on the model operating
+are required for every area. Zhang deals with this in the small areas with the associated vector random
+problem by assuming that the generalized SPREE effects ui . For the first case, the model can be writmodel (GSPREE) developed in Zhang and Cham- ten as a regression model with correlated residuals:
+bers (2004) holds for the complete data (with no yi = Xi β + vi ; vi = Zi ui + ei ∼ N (0, Zi QZi′ + σ 2 Ini ).
+missingness). In order to account for the nonresponse, For this case, the classical (marginal) AIC, mAIC =
+Zhang assumes that the probability to respond is −2 log g(y|ψ̂MLE ) + 2P applies, where y is the vector
+logistic, with a fixed composition effect ξc and a of all the observations, g(y|ψ̂MLE ) is the marginal
+random area effect ba as the explanatory variables. likelihood evaluated at the MLE of ψ, the vector
+(Same probability for all the units in a given cell de- containing β, σ 2 and the unknown elements of Q
+fined by area × category.) The model depends there- and P = dim(ψ). Gurka (2006) validates by simulafore on two sets of random effects, one set for the un- tions that one can use also in this case the mAIC
+derlying complete data, with a vector of correlated with ψ̂REML , despite the use of different fixed effects
+multivariate normal composition effects in each area design matrices under different models.
+defining the GSPREE model, and the other set for
+For the case where the focus is the model operatthe response probabilities. Zhang (2009) estimates ing at the small areas, Vaida and Blanchard (2005)
+the small area compositions under the extended propose using a conditional AIC, which, for a given
+GSPREE using the EM algorithm, and estimates likelihood g(y|ψ, u), is defined as
+the PMSE under the model, accounting for the fixed
+and random effects estimation. The approach is apcAIC = −2 log g(y|ψ̂MLE , û) + 2P ∗ ;
+(8.1)
+plied to a real data set from Norway.
+n(n − k − 1)(ρ + 1) + n(k + 1)
+P∗ =
+,
+(n − k)(n − k − 2)
+8. MODEL SELECTION AND CHECKING
+
+Model selection and checking is one of the major
+problems in SAE because the models usually contain
+unobservable random effects, with limited or no information on their distribution. Notice that classical
+
+where k is the number of covariates, û = E(u|ψ̂MLE , y)
+is the EBP of u and ρ = tr(H) with H defining the
+matrix mapping the observed vector y into the fitted
+vector ŷ = X β̂ + Z û, such that ŷ = Hy. Notice that
+
+24
+
+D. PFEFFERMANN
+
+under this definition of the cAIC, the ui s are additional parameters. A conditional AIC for the case
+where ψ is estimated by REML is also developed.
+The article contains theoretical results on properties of the cAIC and empirical results illustrating its
+good performance. The use of (8.1) is not restricted
+to mixed linear models with normal distributions of
+the error terms, and it can be used to select the
+design matrices Xi and Zi .
+Pan and Lin (2005) propose alternative goodnessof-fit test statistics for the GLMM, based on estimated cumulative sums of residuals. Utilizing the
+notation for model (6.1), the GLMM assumes the
+existence of a one-to-one link function g(·), satisfying g[E(yij |ui )] = x′ij β + z′ij ui , where xij and zij
+are the rows of the matrices Xi and Zi corresponding to unit (i, j) ∈ si . The unconditional predictor
+of yij is mij (ψ) = E(yij ) = Eui [g−1 (x′ij β + z′ij ui )],
+which is estimated by mij (ψ̂). The estimated model
+residuals are therefore eij = yij − mij (ψ̂), and they
+are computed by numerical integration. The authors
+consider two statistics based on the distributions of
+aggregates of the residuals,
+ni
+m X
+X
+I(xij ≤ x)eij ,
+W (x) = n−1/2
+i=1 j=1
+
+(8.2)
+
+Wg (r) = n−1/2
+
+ni
+m X
+X
+
+I(m̂ij ≤ r)eij ,
+
+i=1 j=1
+
+Q
+where I(xij ≤ x) = kl=1 I(xijl ≤ xl ). In particular,
+for testing the functional form of the lth covariate, one
+may consider the process Wl (x) = n−1/2 ·
+P
+m Pn i
+i=1
+j=1 I(xijl ≤ x)eij , which is a special case
+of W (x). The authors develop a simple approximation for the null distribution of Wl (x) and use it
+for visual inspection by plotting the observed values
+against realizations from the null distributions for
+different values of x, and for a formal test defined by
+the supremum Sl = supx |Wl (x)|. The statistic Sl is
+used for testing the functional form of the deterministic part of the model. To test the appropriateness
+of the link function, the authors follow similar steps,
+using the statistics Wg (r) for visual inspection and
+Sg = supr |Wg (r)| for formal testing. As discussed
+in the article, although different tests are proposed
+for different parts of the model, each test actually
+checks the entire model, including the assumptions
+regarding the random components.
+The goodness-of-fit tests considered so far assume
+a given structure of the random effects, but are random effects actually needed in a SAE model ap-
+
+plied to a given data set? Datta, Hall and Mandal (2011) show that if in fact the random effects
+are not needed and are removed from the model, it
+improves the precision of point and interval estimators. The authors assume the availability of k covariates xi = (x1i , . . . , xki ), i = 1, . . . , m (viewed random for the theoreticalP
+developments)
+weighted
+P and
+i
+i
+area-level means ȳi = nj=1
+wij yij ; nj=1
+wij = 1 of
+the outcome
+known weights and known sums
+P i with
+r , r = 2, . . . , q, q ≤ k. The weights w
+Wir = nj=1
+wij
+ij
+are used for generating new area level means from
+bootstrap samples, and the sums Wir are used for
+estimating model parameters by constructing appropriate estimating equations.
+In order to test for the presence of random effects,
+the authors propose the test statistic
+m
+X
+(8.3) T =
+[Wi2 λ2 (xi , ψ̂)]−1 [ȳi − λ1 (xi , ψ̂)]2 ,
+i=1
+
+where λl (xi , ψ̂), l = 1, 2 define the conditional mean
+and residual variance of y|x under the reduced model
+of no random effects, with estimated (remaining) parameters ψ̂. Critical values of the distribution of T
+under the null hypothesis of no random effects are
+obtained by generating bootstrap samples with new
+outcomes from the conditional distribution of y|x; ψ̂
+for given (original) covariates and weights, and computing the test statistic for each sample. Empirical
+results indicate good powers of the proposed procedure and reduction in PMSE when the null hypothesis is not rejected. The procedure is applicable to
+very general models.
+Jiang et al. (2008) propose a class of strategies for
+mixed model selection called fence methods, which
+apply to LMM and GLMM. The strategies involve
+a procedure to isolate a subgroup of correct models, and then select the optimal model from this
+subgroup according to some criterion. Let QM =
+QM (y, ψM ) define a measure of “lack of fit” of a
+candidate model M with parameters ψM , such that
+E(QM ) is minimized when M is the true model.
+Examples of QM are minus the loglikelihood or the
+residual sum of squares. Define Q̂M = QM (y, ψ̂M ) =
+inf ψM ∈ΨM QM (y, ψM ), and let M̃ ∈ M be such that
+QM̃ = minM ∈M Q̂M where M represents the set of
+candidate models. It is shown that under certain
+conditions, M̃ is a correct model with probability
+tending to one. In practice, there can be more than
+one correct model and a second step of the proposed
+procedure is to select an optimal model among models that are within a fence around QM̃ . Examples of
+optimality criteria are minimal dimension or mini-
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+mum PMSE. The fence is defined as Q̂M ≤ Q̂M̃ +
+cn σ̂M,M̃ , where σ̂M,M̃ is an estimate of the standard
+deviation of Q̂M − Q̂M̃ , and cn is a tuning coefficient that increases with the total sample size. Jiang
+et al. (2008) discuss alternative ways of computing
+σ̂M,M̃ and propose an adaptive procedure for choosing the tuning coefficient. The procedure consists
+of parametric bootstrapping new samples from the
+“full” model, computing for every candidate model
+M ∈ M the empirical proportion p∗ (M, cn ) that it is
+selected by the fence method with a given cn , computing p∗ (cn ) = maxM ∈M p∗ (M, cn ) and choosing cn
+that maximizes p∗ (cn ).
+Jiang et al. (2008) apply the method for selecting the covariates in the area-level model (5.1) and
+the unit level model (5.3). Jiang, Nguyen and Rao
+(2010) apply the method for selecting nonparametric P-spline models of the form (6.31). Selecting a
+model in this case requires selecting the degree of
+the spline p, the number of knots K and a smoothing parameter λ used for estimation of the model
+parameters.
+So far I have considered model selection and diagnostic procedures under the frequentist approach,
+but sound model checking is obviously required also
+under the Bayesian approach. Although this article is concerned with new developments, it is worth
+starting with a simulation procedure proposed by
+Dey et al. (1998) since it highlights a possible advantage of the Bayesian approach in model checking.
+Let d define a discrepancy measure between the assumed model and the data, such as minus the firststage likelihood of a hierarchical model. Denote by
+yobs the observed data and assume an informative
+prior. The procedure consists of generating a large
+(r)
+number R of new data sets yobs , r = 1, . . . , R under
+the presumed model via Monte Carlo simulations
+and comparing the posterior distribution of d|yobs
+(r)
+with the distributions of d|yobs . Specifically, for each
+(r)
+posterior distribution f (d|yobs ) compute the vector
+(r)
+(r)
+of quantiles q (r) = qα1 , . . . , qαQ (say α1 = 0.025, . . . ,
+PR (r)
+αQ = 0.975), compute q̄ = r=1 q /R and the Euclidean distances between q (r) and q̄, and check
+whether the distance of the quantiles of the distribution of d|yobs from q̄ is smaller or larger than, say,
+the 95th percentile of the R distances.
+Remark 9. The procedure is computationally
+intensive, and it requires informative priors to allow generating new data sets, but it is very flexible
+
+25
+
+in terms of the models tested and the discrepancy
+measure(s) used. A frequentist analog via parametric bootstrap would require that the distribution of
+d does not depend on the model parameters, or that
+the sample sizes are sufficiently large to permit ignoring parameter estimation.
+Bayarri and Castellanos (2007) investigate Bayesian methods for objective model checking, which requires noninformative priors for the parameters ψ.
+The authors assume a given diagnostic statistic T
+(not a function of ψ) and consider two “surprise
+measures” of conflict between the observed data and
+the presumed model; the p-value Prh(·) [T (y) ≥
+t(yobs )], and the relative predictive surprise RPS =
+h[t(yobs )]/ supt [h(t)], where h(t) is some specified
+distribution. Denote
+by θ the small area parameters.
+R
+Writing f (y) = f (y|θ)g(θ) dθ, it is clear that defining h(t) requires integrating θ out of f (y|θ) with
+respect to some distribution for θ. The prior g(θ)
+cannot be used since it is also improper and the authors consider three alternative solutions: 1. Set the
+model hyper-parameters ψ at their estimated value
+and integrate with respect to g(θ|ψ̂). This is basically
+an application of empirical Bayes and hEB (t) =
+R
+f (t|θ)g(θ|ψ̂) dθ. 2. Integrate θ out by use of the
+posterior distribution g(θ|yobs ). 3. Noticing that under the above two solutions, the data are used both
+for obtaining a proper distribution for θ and for
+computing the statistic t(yobs ), the third solution removes the information in t(yobs ) from yobs by using
+the conditional likelihood f (yobs |tobs , θ). The resulting posterior distribution for θ is then used to obtain the distribution h(t), similarly to the previous
+cases. The specified distribution h(t) under all three
+cases may not have a closed form, in which case it
+is approximated by MCMC simulations. See the article for details and for illustrations of the approach
+showing, in general, the best performance under the
+third solution.
+Yan and Sedransk (2007) consider a specific model
+inadequacy, namely, fitting models that do not account for all the hierarchical structure present, and,
+like the last article, restrict to noninformative priors. The authors consider two testing procedures,
+both based Ron the predictive posterior distribution
+f (ỹ|yobs ) = f (ỹ|ψ)p(ψ|yobs ) dψ, where ỹ and yobs
+are assumed to be independent given ψ. The first
+procedure uses the posterior predictive p-values, pij =
+Pr(ỹij ≤ yij |yobs ). The second procedure uses the pvalues of a diagnostic statistic t(·) or a discrepancy
+
+26
+
+D. PFEFFERMANN
+
+measure d(·) (see above), for example, the p-values
+Pr[t(ỹ) ≥ t(yobs )|yobs ]. The authors analyze the simple case of a balanced sample where the fitted model
+i.i.d.
+is yij |µ, φ ∼ N (µ, φ), i = 1, . . . , m, j = 1, . . . , n0 . It
+is shown that if the model is correct, then as N =
+n0 m → ∞ the distributions of yobs and ỹ|yobs are the
+same, and the p-values pij are distributed uniformly,
+as revealed in a Q–Q plot. On the other hand, if
+i.i.d.
+the true model is the two-level model yij |θi , φ0 ∼
+i.i.d.
+
+N (θi , φ0 ), θi |µ0 , A0 ∼ N (µ0 , A0 ), then as N → ∞
+the mean and variance of the two models still agree,
+but not the covariances, so that it is the ensemble of the pij s or their Q–Q plot against the uniform distribution, but not individual p-values, that
+permits distinguishing the two models. This, however, is only effective if the intra-cluster correlation
+is sufficiently high, and the number of areas sufficiently small. Similar conclusions hold when comparing a two-stage hierarchical model with a threestage model, and when applying the second testing
+procedure with the classical ANOVA F test statistic
+as the diagnostic statistic, that is, when computing
+Pr[F (ỹ) ≥ F (yobs )|yobs ].
+Yan and Sedransk (2010) consider a third procedure for detecting a missing hierarchical structure,
+which uses Q–Q plots of the predictive standardized
+yij −E(ỹij |yobs )
+residuals rij = [Var(ỹ
+1/2 against the standard
+ij |yobs )]
+normal distribution. The conditions under which the
+procedure performs well in detecting a misspecified
+hierarchy are the same as above.
+Finally, I like to mention two articles that in a certain way bridge between the frequentist and Bayesian
+approaches for model selection. The idea here is to
+set up a noninformative prior under the Bayesian
+approach so that the resulting posterior small area
+predictors have acceptable properties under the frequentist approach. This provides frequentist validation to the Bayesian methodology, and the analyst may then take advantage of the flexibility of
+Bayesian inference by drawing observations from the
+posterior distribution of the area parameters. Both
+articles consider the area-level model (5.1), but the
+idea applies to other models.
+Datta, Rao and Smith (2005) assume a flat prior
+for β and seek a prior p(σu2 ) satisfying E(ViHB ) =
+2
+PMSE[θ̂i (σ̂u,RE
+)] + o(m−1 ),
+where
+ViHB =
+Var(θi |yobs ) is the posterior variance of θi , and
+2
+PMSE[θ̂i (σ̂u,RE
+)] is the frequentist PMSE of the
+EBLUP (or EB) when estimating σu2 by REML.
+The expectation and PMSE are computed under the
+
+joint distribution of θ and y under the model. The
+unique prior satisfying this requirement is shown to
+be
+m
+X
+2
+2
+2
+2 2
+(8.4)
+[1/(σDj
++ σu2 )2 ].
+pi (σu ) ∝ (σDi + σu )
+j=1
+
+The prior is area specific in the sense that different
+priors are required for different areas.
+Ganesh and Lahiri (2008) extend the condition of
+Datta, Rao and Smith (2005) to a weighted combination of the posterior expectations and the PMSEs,
+thus obtaining a single prior for all the areas. The
+authors seek a prior which for a given set of weights
+{ωi } satisfies
+
+(8.5)
+
+m
+X
+
+2
+ωi {E(ViHB ) − PMSE[θ̂i (σ̂u,RE
+)]}
+
+i=1
+
+= o(1/m).
+The prior p(σu2 ) satisfying (8.5) is shown to be
+p(σu2 ) ∝
+(8.6)
+
+m
+X
+2
+[1/(σDi
++ σu2 )2 ]
+i=1
+
+X
+m
+
+2
+2
+ωi [σDi
+/(σDi
++ σu2 )]2 .
+
+i=1
+
+By appropriate choice of the weights {ωi }, prior
+(8.6) contains as special cases the flat prior p(σu2 ) =
+U (0, ∞), the prior developed by Datta, Rao and
+Smith (2005) for a given area and the average moment matching prior (obtained by setting ωi ≡ 1).
+9. CONCLUDING REMARKS
+In this article I reviewed many new important developments in design- and model-based SAE. These
+developments give analysts much richer and more
+versatile tools for their applications. Which approach
+should one follow in practice? Model-based predictors are generally more accurate and, as discussed in
+Section 4.3, the models permit predictions for nonsampled areas for which no design-based theory exists. With everything else that can be done under
+a model, much of which reviewed in Sections 6–8,
+it seems to me that the choice between the two approaches is clear-cut, unless the sample sizes in all
+the areas are sufficiently large, although even in this
+case models have much more to offer like, for example, in the case of measurement errors or NMAR
+nonresponse. This is not to say that design-based
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+
+estimators have no role in model-based prediction.
+To begin with, the design-based estimators are often
+the input data for the model, as under the area-level
+model. Design-based estimators can be used for assessing the model-based predictors or for calibrating
+them via benchmarking, and the sampling weights
+play an important role when accounting for informative sampling.
+Next is the question of whether to follow the Bayesian approach (BA) or the frequentist approach (FA).
+I have to admit that before starting this extensive
+review I was very much in favor of FA, but the BA
+has some clear advantages. This is because one can
+generate as many observations as desired from the
+posterior distributions of the area parameters, and
+hence it is much more flexible in the kind of models and inference possibilities that it can handle, for
+example, when the linking model does not match
+the conditional sampling model (Remark 2). Note
+also that the computation of PMSE (Bayes risk)
+or credibility intervals under BA does not rely on
+asymptotic properties. A common criticism of BA
+is that it requires specification of prior distributions
+but as emphasized in Section 8, Bayesian models
+with proper, or improper priors can be tested in a
+variety of ways. Another criticism is that the application of BA is often very computation intensive
+and requires expert knowledge and computing skills
+even with modern available software. While this criticism may be correct (notably in my experience),
+the use of FA methods when fitting the GLMM is
+also very computation intensive and requires similar skills. Saying all this, it is quite obvious to me
+that the use of FA will continue to be dominant for
+many years to come because, except for few exceptions, official statistical bureaus are very reluctant
+to use Bayesian methods.
+Where do we go from here? Research on SAE continues all over the world, both in terms of new theories and in applications to new intriguing problems,
+and I hope that this review will contribute to this research. The new developments that I have reviewed
+are generally either under BA or FA, and one possible direction that I hope to see is to incorporate
+the new developments under one approach into the
+other. For example, use the EL approach under FA,
+use spline regressions under BA, account for NMAR
+nonresponse in FA or produce poverty mapping with
+BA. Some of these extensions will be simple; other
+may require more extensive research, and some may
+not be feasible, but this will make it easier for analysts to choose between the two approaches.
+
+27
+
+ACKNOWLEDGMENT
+I am very grateful to three reviewers for very constructive comments which enhanced the discussion
+and coverage of this review very significantly.
+REFERENCES
+Battese, G. E., Harter, R. M. and Fuller, W. A. (1988).
+An error components model for prediction of county crop
+area using survey and satellite data. J. Amer. Statist. Assoc. 83 28–36.
+Bayarri, M. J. and Castellanos, M. E. (2007). Bayesian
+checking of the second levels of hierarchical models. Statist.
+Sci. 22 322–343. MR2416808
+Bell, W. R. and Huang, E. T. (2006). Using the tdistribution to deal with outliers in small area estimation.
+In Proceedings of Statistics Canada Symposium on Methodological Issues in Measuring Population Health. Statistics
+Canada, Ottawa, Canada.
+Chambers, R., Chandra, H. and Tzavidis, N. (2011).
+On bias-robust mean squared error estimation for pseudolinear small are estimators. Survey Methodology 37 153–
+170.
+Chambers, R. and Tzavidis, N. (2006). M -quantile models for small area estimation. Biometrika 93 255–268.
+MR2278081
+Chandra, H. and Chambers, R. (2009). Multipurpose small
+area estimation. Journal of Official Statistics 25 379–395.
+Chatterjee, S., Lahiri, P. and Li, H. (2008). Parametric
+bootstrap approximation to the distribution of EBLUP and
+related prediction intervals in linear mixed models. Ann.
+Statist. 36 1221–1245. MR2418655
+Chaudhuri, S. and Ghosh, M. (2011). Empirical likelihood for small area estimation. Biometrika 98 473–480.
+MR2806442
+Chen, S. and Lahiri, P. (2002). On mean squared prediction
+error estimation in small area estimation problems. In Proceedings of the Survey Research Methods Section 473–477.
+American Statistical Association, Alexandria, VA.
+Das, K., Jiang, J. and Rao, J. N. K. (2004). Mean squared
+error of empirical predictor. Ann. Statist. 32 818–840.
+MR2060179
+Datta, G. S. (2009). Model-based approach to small area
+estimation. In Sample Surveys: Inference and Analysis,
+(D. Pfeffermann and C. R. Rao, eds.). Handbook of
+Statistics 29B 251–288. North-Holland, Amsterdam.
+Datta, G. S., Hall, P. and Mandal, A. (2011). Model
+selection by testing for the presence of small-area effects,
+and application to area-level data. J. Amer. Statist. Assoc.
+106 362–374. MR2816727
+Datta, G. S. and Lahiri, P. (2000). A unified measure of
+uncertainty of estimated best linear unbiased predictors in
+small area estimation problems. Statist. Sinica 10 613–627.
+MR1769758
+Datta, G. S., Rao, J. N. K. and Smith, D. D. (2005). On
+measuring the variability of small area estimators under a
+basic area level model. Biometrika 92 183–196. MR2158619
+
+28
+
+D. PFEFFERMANN
+
+Datta, G. S., Rao, J. N. K. and Torabi, M. (2010).
+Pseudo-empirical Bayes estimation of small area means under a nested error linear regression model with functional
+measurement errors. J. Statist. Plann. Inference 140 2952–
+2962. MR2659827
+Datta, G. S., Ghosh, M., Steorts, R. and Maples, J.
+(2011). Bayesian benchmarking with applications to small
+area estimation. Test 20 574–588.
+Dey, D. K., Gelfand, A. E., Swartz, T. B. and Vlachos, A. K. (1998). A simulation-intensive approach for
+checking hierarchical models. Test 7 325–346.
+Estevao, V. M. and Särndal, C. E. (2004). Borrowing
+strength is not the best technique within a wide class of
+design-consistent domain estimators. Journal of Official
+Statistics 20 645–669.
+Estevao, V. M. and Särndal, C. E. (2006). Survey estimates by calibration on complex auxiliary information.
+International Statistical Review 74 127–147.
+Falorsi, P. D. and Righi, P. (2008). A balanced sampling
+approach for multi-way stratification designs for small area
+estimation. Survey Methodology 34 223–234.
+Fay, R. E. and Herriot, R. A. (1979). Estimates of income for small places: An application of James–Stein procedures to census data. J. Amer. Statist. Assoc. 74 269–277.
+MR0548019
+Ganesh, N. and Lahiri, P. (2008). A new class of average moment matching priors. Biometrika 95 514–520.
+MR2521597
+Ghosh, M., Maiti, T. and Roy, A. (2008). Influence functions and robust Bayes and empirical Bayes small area estimation. Biometrika 95 573–585. MR2443176
+Ghosh, M. and Rao, J. N. K. (1994). Small area estimation:
+An appraisal (with discussion). Statist. Sci. 9 65–93.
+Ghosh, M., Sinha, K. and Kim, D. (2006). Empirical and
+hierarchical Bayesian estimation in finite population sampling under structural measurement error models. Scand.
+J. Statist. 33 591–608. MR2298067
+Ghosh, M. and Sinha, K. (2007). Empirical Bayes estimation in finite population sampling under functional measurement error models. J. Statist. Plann. Inference 137
+2759–2773. MR2323789
+Ghosh, M., Natarajan, K., Stroud, T. W. F. and Carlin, B. P. (1998). Generalized linear models for smallarea estimation. J. Amer. Statist. Assoc. 93 273–282.
+MR1614644
+Gurka, M. J. (2006). Selecting the best linear mixed model
+under REML. Amer. Statist. 60 19–26. MR2224133
+Hall, P. and Maiti, T. (2006). On parametric bootstrap
+methods for small area prediction. J. R. Stat. Soc. Ser. B
+Stat. Methodol. 68 221–238. MR2188983
+Huang, E. T. and Bell, W. R. (2006). Using the tdistribution in small area estimation: An application to
+SAIPE state poverty models. In Proceedings of the Survey
+Research Methods Section 3142–3149. American Statistical
+Association, Alexandria, VA.
+Jiang, J., Lahiri, P. and Wan, S. M. (2002). A unified
+jackknife theory for empirical best prediction with M estimation. Ann. Statist. 30 1782–1810. MR1969450
+Jiang, J. and Lahiri, P. (2006a). Estimation of finite population domain means: A model-assisted empirical best pre-
+
+diction approach. J. Amer. Statist. Assoc. 101 301–311.
+MR2268047
+Jiang, J. and Lahiri, P. (2006b). Mixed model prediction
+and small area estimation. Test 15 1–96. MR2252522
+Jiang, J., Nguyen, T. and Rao, J. S. (2010). Fence method
+for non-parametric small area estimation. Survey Methodology 36 3–11.
+Jiang, J., Nguyen, T. and Rao, J. S. (2011). Best predictive
+small area estimation. J. Amer. Statist. Assoc. 106 732–
+745. MR2847987
+Jiang, J., Rao, J. S., Gu, Z. and Nguyen, T. (2008). Fence
+methods for mixed model selection. Ann. Statist. 36 1669–
+1692. MR2435452
+Judkins, D. R. and Liu, J. (2000). Correcting the bias in the
+range of a statistic across small areas. Journal of Official
+Statist. 16 1–13.
+Kott, P. S. (2009). Calibration weighting: Combining probability samples and linear prediction models. In Sample
+Surveys: Inference and Analysis, (D. Pfeffermann and
+C. R. Rao, eds.). Handbook of Statistics 29B 55–82. NorthHolland, Amsterdam.
+Lehtonen, R., Särndal, C. E. and Veijanen, A. (2003).
+The effect of model choice in estimation for domains, including small domains. Survey Methodology 29 33–44.
+Lehtonen, R., Särndal, C. E. and Veijanen, A. (2005).
+Does the model matter? Comparing model-assisted and
+model-dependent estimators of class frequencies for domains. Statistics in Transition 7 649–673.
+Lehtonen, R. and Veijanen, A. (2009). Design-based methods of estimation for domains and small areas. In Sample
+Surveys: Inference and Analysis (D. Pfeffermann and
+C. R. Rao, eds.). Handbook of Statistics 29B 219–249.
+North-Holland, Amsterdam.
+Lohr, S. L. and Rao, J. N. K. (2009). Jackknife estimation
+of mean squared error of small area predictors in nonlinear
+mixed models. Biometrika 96 457–468. MR2507155
+Macgibbon, B. and Tomberlin, T. J. (1989). Small area
+estimates of proportions via empirical Bayes techniques.
+Survey Methodology 15 237–252.
+Malec, D., Davis, W. W. and Cao, X. (1999). Model-based
+small area estimates of overweight prevalence using sample
+selection adjustment. Stat. Med. 18 3189–3200.
+Malinovsky, Y. and Rinott, Y. (2010). Prediction of ordered random effects in a simple small area model. Statist.
+Sinica 20 697–714. MR2682637
+Mohadjer, L., Rao, J. N. K., Liu, B., Krenzke, T. and
+Van De Kerckhove, W. (2007). Hierarchical Bayes small
+area estimates of adult literacy using unmatched sampling
+and linking models. In Proceedings of the Survey Research
+Methods Section 3203–3210. American Statistical Association, Alexandria, VA.
+Molina, I. and Rao, J. N. K. (2010). Small area estimation of poverty indicators. Canad. J. Statist. 38 369–385.
+MR2730115
+Nandram, B. and Choi, J. W. (2010). A Bayesian analysis
+of body mass index data from small domains under nonignorable nonresponse and selection. J. Amer. Statist. Assoc.
+105 120–135.
+
+NEW IMPORTANT DEVELOPMENTS IN SMALL AREA ESTIMATION
+Nandram, B. and Sayit, H. (2011). A Bayesian analysis of
+small area probabilities under a constraint. Survey Methodology 37 137–152.
+Opsomer, J. D., Claeskens, G., Ranalli, M. G., Kauermann, G. and Breidt, F. J. (2008). Non-parametric small
+area estimation using penalized spline regression. J. R.
+Stat. Soc. Ser. B Stat. Methodol. 70 265–286. MR2412642
+Pan, Z. and Lin, D. Y. (2005). Goodness-of-fit methods for
+generalized linear mixed models. Biometrics 61 1000–1009.
+Pfeffermann, D. (2002). Small area estimation—new developments and directions. International Statistical Review 70
+125–143.
+Pfeffermann, D. and Correa, S. (2012). Empirical bootstrap bias correction and estimation of prediction mean
+square error in small area estimation. Biometrika 99 457–
+472.
+Pfeffermann, D. and Sverchkov, M. (2007). Small-area
+estimation under informative probability sampling of areas
+and within the selected areas. J. Amer. Statist. Assoc. 102
+1427–1439. MR2412558
+Pfeffermann, D., Terryn, B. and Moura, F. A. S.
+(2008). Small area estimation under a two-part random
+effects model with application to estimation of literacy in
+developing countries. Survey Methodology 34 235–249.
+Pfeffermann, D. and Tiller, R. (2006). Small-area estimation with state-space models subject to benchmark
+constraints. J. Amer. Statist. Assoc. 101 1387–1397.
+MR2307572
+Prasad, N. G. N. and Rao, J. N. K. (1990). The estimation of the mean squared error of small-area estimators. J.
+Amer. Statist. Assoc. 85 163–171. MR1137362
+Rao, J. N. K. (2003). Small Area Estimation. Wiley, Hoboken, NJ. MR1953089
+Rao, J. N. K. (2005). Inferential issues in small area estimation: Some new developments. Statistics in Transition 7
+513–526.
+Rao, J. N. K. (2008). Some methods for small area estimation. Revista Internazionale di Siencze Sociali 4 387–406.
+Rao, J. N. K., Sinha, S. K. and Roknossadati, M. (2009).
+Robust small area estimation using penalized spline mixed
+models. In Proceedings of the Survey Research Methods
+Section 145-153. American Statistical Association, Alexandria, VA.
+
+29
+
+Sinha, S. K. and Rao, J. N. K. (2009). Robust small area
+estimation. Canad. J. Statist. 37 381–399. MR2547205
+Torabi, M., Datta, G. S. and Rao, J. N. K. (2009). Empirical Bayes estimation of small area means under a nested
+error linear regression model with measurement errors in
+the covariates. Scand. J. Stat. 36 355–368. MR2528989
+Torabi, M. and Rao, J. N. K. (2008). Small area estimation
+under a two-level model. Survey Methodology 34 11–17.
+Tzavidis, N., Marchetti, S. and Chambers, R. (2010).
+Robust estimation of small-area means and quantiles. Aust.
+N. Z. J. Stat. 52 167–186. MR2723026
+Ugarte, M. D., Militino, A. F. and Goicoa, T. (2009).
+Benchmarked estimates in small areas using linear mixed
+models with restrictions. TEST 18 342–364. MR2520341
+Vaida, F. and Blanchard, S. (2005). Conditional Akaike
+information for mixed-effects models. Biometrika 92 351–
+370. MR2201364
+Wang, J., Fuller, W. A. and Qu, Y. (2008). Small area
+estimation under a restriction. Survey Methodology 34 29–
+36.
+Wright, D. L., Stern, H. S. and Cressie, N. (2003).
+Loss functions for estimation of extrema with an application to disease mapping. Canad. J. Statist. 31 251–266.
+MR2030123
+Yan, G. and Sedransk, J. (2007). Bayesian diagnostic techniques for detecting hierarchical structure. Bayesian Anal.
+2 735–760. MR2361973
+Yan, G. and Sedransk, J. (2010). A note on Bayesian residuals as a hierarchical model diagnostic technique. Statist.
+Papers 51 1–10. MR2556583
+Ybarra, L. M. R. and Lohr, S. L. (2008). Small area estimation when auxiliary information is measured with error.
+Biometrika 95 919–931. MR2461220
+You, Y. and Rao, J. N. K. (2002). A pseudo-empirical best
+linear unbiased prediction approach to small area estimation using survey weights. Canad. J. Statist. 30 431–439.
+MR1944372
+Zhang, L. C. (2009). Estimates for small area compositions
+subjected to informative missing data. Survey Methodology
+35 191–201.
+Zhang, L. C. and Chambers, R. L. (2004). Small area estimates for cross-classifications. J. R. Stat. Soc. Ser. B Stat.
+Methodol. 66 479–496. MR2062389
+
+

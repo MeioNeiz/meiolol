@@ -1,0 +1,1872 @@
+Statistical Science
+2014, Vol. 29, No. 2, 285–301
+DOI: 10.1214/13-STS455
+c Institute of Mathematical Statistics, 2014
+
+Two Modeling Strategies for Empirical
+Bayes Estimation
+arXiv:1409.2677v1 [stat.ME] 9 Sep 2014
+
+Bradley Efron
+
+Abstract. Empirical Bayes methods use the data from parallel experiments, for instance, observations Xk ∼ N (Θk , 1) for k = 1, 2, . . . , N , to
+estimate the conditional distributions Θk |Xk . There are two main estimation strategies: modeling on the θ space, called “g-modeling” here,
+and modeling on the x space, called “f -modeling.” The two approaches
+are described and compared. A series of computational formulas are
+developed to assess their frequentist accuracy. Several examples, both
+contrived and genuine, show the strengths and limitations of the two
+strategies.
+Key words and phrases: f -modeling, g-modeling, Bayes rule in terms
+of f , prior exponential families.
+unknown prior distribution g(θ) yields unseen realizations
+
+1. INTRODUCTION
+Empirical Bayes methods, though of increasing
+use, still suffer from an uncertain theoretical basis, enjoying neither the safe haven of Bayes theorem nor the steady support of frequentist optimality.
+Their rationale is often reduced to inserting more
+or less obvious estimates into familiar Bayesian formulas. This conceals the essential empirical Bayes
+task: learning an appropriate prior distribution from
+ongoing statistical experience, rather than knowing
+it by assumption. Efficient learning requires both
+Bayesian and frequentist modeling strategies. My
+plan here is to discuss such strategies in a mathematically simplified framework that, hopefully, renders
+them more transparent. The development proceeds
+with some methodological discussion supplemented
+by numerical examples.
+A wide range of empirical Bayes applications have
+the following structure: repeated sampling from an
+
+(1.1)
+
+Θ1 , Θ2 , . . . , ΘN .
+
+Each Θk in turn provides an observation Xk ∼
+fΘk (·) from a known probability family fθ (x),
+(1.2)
+
+X1 , X2 , . . . , XN .
+
+On the basis of the observed sample (1.2), the statistician wishes to approximate certain Bayesian inferences that would be directly available if g(θ) were
+known. This is the empirical Bayes framework developed and named by Robbins (1956). Both Θ and
+X are usually one-dimensional variates, as they will
+be in our examples, though that is of more applied
+than theoretical necessity.
+A central feature of empirical Bayes estimation is
+that the data arrives on the x scale but inferences
+are calculated on the θ scale. Two main strategies
+have developed: modeling on the θ scale, called gmodeling here, and modeling on the x scale, called
+Bradley Efron is Professor of Statistics and
+f -modeling. G-modeling has predominated in the
+Biostatistics, Department of Statistics, Stanford
+theoretical empirical Bayes literature, as in Laird
+University, Stanford, California 94305-4065, USA
+(1978), Morris (1983), Zhang (1997), and Jiang and
+e-mail: brad@stat.stanford.edu.
+Zhang (2009). Applications, on the other hand, from
+Robbins (1956) onward, have more often relied on
+This is an electronic reprint of the original article
+published by the Institute of Mathematical Statistics in f -modeling, recently as in Efron (2010, 2011) and
+Brown, Greenshtein and Ritov (2013).
+Statistical Science, 2014, Vol. 29, No. 2, 285–301. This
+We begin Section 2 with a discretized statement of
+reprint differs from the original in pagination and
+typographic detail.
+Bayes theorem that simplifies the nonparametric f 1
+
+2
+
+B. EFRON
+
+modeling development of Section 3. Parameterized with m < n. The prior distribution g puts probabilf -modeling, necessary for efficient empirical Bayes ity gj on θj ,
+estimation, is discussed in Section 4. Section 5 in(2.2)
+g = (g1 , g2 , . . . , gj , . . . , gm )′ .
+troduces an exponential family class of g-modeling
+procedures. Classic empirical Bayes applications, an This induces a marginal distribution f on x,
+f -modeling stronghold (including Robbins’ Poisson
+(2.3)
+f = (f1 , f2 , . . . , fi , . . . , fn )′ ,
+formula, the James–Stein estimator and false discovery rate methods), are the subject of Section 6. The with fi = Pr{x = xi }. Letting {pij } represent the
+paper concludes with a brief discussion in Section 7. sampling probabilities
+Several numerical examples, both contrived and (2.4)
+pij = Pr{xi |θj },
+genuine, are carried through in Sections 2 through
+7. The comparison is never one-sided: as one moves the n × m matrix
+away from the classic applications, g-modeling (2.5)
+P = (pij )
+comes into its own. Trying to go backward, from
+observations on the x-space to the unknown prior produces f from g according to
+g(θ), has an ill-posed computational flavor. Empiri- (2.6)
+f = P g.
+cal Bayes calculations are inherently fraught with
+In the example of Figure 1, we have
+difficulties, making both of the modeling strategies useful. An excellent review of empirical Bayes (2.7)
+θ = (−3, −2.8, . . . , 3) (m = 31),
+methodology appears in Chapter 3 of Carlin and
+with g(θ) an equal mixture of a discretized N (0, 0.52 )
+Louis (2000).
+There is an extensive literature, much of it focus- density and a density proportional to |θ|. The saming on rates of convergence, concerning the “decon- pling probabilities pij are obtained from the normal
+volution problem,” that is, estimating the distribu- translation model ϕ(xi − θj ), ϕ the standard normal
+tion g(θ) from the observed X values. A good recent density function, and with
+reference is Butucea and Comte (2009). Empirical (2.8) x = (−4.4, −4.35, . . . , 5.2) (n = 193).
+Bayes inference amounts to estimating certain nonlinear functionals of g(·), whereas linear functionals Then f = P g produces the triangular-shaped marplay a central role for the deconvolution problem, as ginal density f (x) seen in the bottom panel. Looking
+in Cavalier and Hengartner (2009), but the two lit- ahead, we will want to use samples from the bottom
+eratures are related. The development in this paper distribution to estimate functions of the top.
+In the discrete model (2.1)–(2.6), Bayes rule takes
+employs discrete models that avoid rates of converthe
+form
+gence difficulties.
+Empirical Bayes analyses often produce impressive- (2.9)
+Pr{θj |xi } = pij gj /fi .
+looking estimates of posterior θ distributions. The
+main results in what follows are a series of computa- Letting pi represent the ith row of matrix P , the
+tional formulas—Theorems 1 through 4—giving the m-vector of posterior probabilities of θ given x = xi
+accuracy of both f -model and g-model estimates. is given by
+Accuracy can be poor, as some of the examples (2.10)
+diag(pi )g/pi g,
+show, and in any case accuracy assessments are an
+where diag(v) indicates a diagonal matix with diagimportant part of the analysis.
+onal elements taken from the vector v.
+Now suppose t(θ) is a parameter of interest, ex2. A DISCRETE MODEL OF BAYESIAN
+pressed
+in our discrete setting by the vector of values
+INFERENCE
+In order to simplify the f -modeling computations,
+we will assume a model in which both the parameter
+vector θ and the observed data set x are confined to
+finite discrete sets:
+(2.1)
+
+θ ∈ θ = (θ1 , θ2 , . . . , θj , . . . , θm ) and
+x ∈ x = (x1 , x2 , . . . , xi , . . . , xn )
+
+(2.11)
+
+t = (t1 , t2 , . . . , tj , . . . , tm )′ .
+
+The posterior expectation of t(θ) given x = xi is then
+m
+.
+X
+tj pij gj fi
+E{t(θ)|xi } =
+
+(2.12)
+
+j=1
+
+= t′ diag(pi )g/pi g.
+
+3
+
+EB MODELING, COMPUTATION AND ACCURACY
+
+Fig. 1. Top: Discrete model: prior g(θ), θ = seq(−3, 3, 0.2); g is equal mixture of N (0, 0.52 ) and density ∝ |θ|. Bottom:
+Corresponding f (x): assuming N (θ, 1) sampling, x = seq(−4.4, 5.2, 0.05). Note the different scales.
+
+The main role of the discrete model (2.1)–(2.6)
+is to simplify the presentation of f -modeling begun
+in Section 3. Basically, it allows the use of familiar matrix calculations rather than functional equations. G-modeling, Section 5, will be presented in
+both discrete and continuous forms. The prostate
+data example of Section 6 shows our discrete model
+nicely handling continuous data.
+3. BAYES RULE IN TERMS OF f
+Formula (2.12) expresses E{t(θ)|xi } in terms
+of the prior distribution g. This is fine for pure
+Bayesian applications but in empirical Bayes work,
+information arrives on the x scale and we may need
+to express Bayes rule in terms of f . We begin by
+inverting (2.6), f = P g.
+
+For now assume that the n × m matrix P (2.4)–
+(2.5) is of full rank m. Then the m × n matrix
+(3.1)
+
+A = (P ′ P )−1 P ′
+
+carries out the inversion,
+(3.2)
+
+g = Af .
+
+Section 4 discusses the case where rank(P ) is less
+than m. Other definitions of A are possible; see the
+discussion in Section 7.
+With pi denoting the ith row of P as before, let
+(3.3)
+
+u′ = (· · · tj pij · · ·) = t′ diag(pi ),
+
+v ′ = pi
+
+and
+(3.4)
+
+U′ = u′ A,
+
+V′ = v′ A,
+
+U and V being n-vectors. (Here we are suppressing
+the subscript in u = ui , etc.) Using (3.2), the Bayes
+
+4
+
+B. EFRON
+
+posterior expectation E{t|xi } (2.12) becomes
+E{t|xi } =
+
+(3.5)
+
+u′ g U′ f
+=
+,
+v′ g V′ f
+
+i.i.d.
+
+Xk ∼ f (·),
+
+k = 1, 2, . . . , N,
+
+and wish to estimate E = E{t|xi }. For the discrete
+model (2.1), the vector of counts y = (y1 , y2 , . . . , yn )′ ,
+yi = #{Xk = xi },
+
+(3.7)
+
+is a nonparametric sufficient statistic; y follows a
+multinomial distribution on n categories, N draws,
+probability vector f ,
+y ∼ Multn (N, f ),
+
+(3.8)
+
+(3.10)
+
+Ê = U′ f̂ /V′ f̂ .
+
+Using f̂ ∼ (f , D(f )/N ), a standard differential argument yields the approximate “delta method” frequentist standard error of Ê. Define
+Uf =
+
+n
+X
+
+fi Ui ,
+
+W=
+
+(3.13)
+(Notice that
+
+P
+
+Vf =
+
+n
+X
+
+f i Vi
+
+i=1
+
+i=1
+
+and
+
+Ê =
+
+U′ f̂
+
+V′ f̂
+
+
+=E·
+
+ˆU
+1+∆
+1+ ˆ
+∆V
+
+.
+ˆU −∆
+ˆ V ),
+= E · (1 + ∆
+ˆ U = U f̂ − Uf , ∆
+ˆ V = V f̂ − Vf
+∆
+Uf
+Vf
+′
+
+′
+
+
+
+.
+ˆU − ∆
+ˆ V ), which, again usso sd(Ê 2 ) = E 2 var(∆
+ing (3.9), gives Theorem 1. 
+
+gives a nonparametric estimate Ê of E{t|xi } by substitution into (3.5),
+
+(3.12)
+
+Proof. From (3.5) we compute the joint moments of U′ f̂ and V′ f̂ ,
+
+
+U′ f̂
+V′ f̂
+(3.17)
+ 
+ 2
+
+σf (U, V )
+σf (U )
+1
+Uf
+∼
+,
+,
+Vf
+σf2 (V )
+N σf (U, V )
+P
+P
+with σf2 (U ) = fi (Ui − Uf )2 , σf (U, V ) = fi (Ui −
+P
+Uf )(Vi − Vf ), and σf2 (V ) = fi (Vi − Vf )2 . Then
+
+D(f ) ≡ diag(f ) − ff .
+
+f̂ = y/N,
+
+(3.11)
+
+fi Wi2 .
+
+The approximate coefficient of variation sd(Ê)/|E|
+of Ê is
+√
+cv(Ê) = σf (W )/ N .
+(3.16)
+
+′
+
+The unbiased estimate of f ,
+
+n
+X
+i=1
+
+(3.18)
+
+having mean vector and covariance matrix
+(3.9) y ∼ (N f , N D(f )),
+
+σf2 (W ) =
+
+(3.15)
+
+the latter being Bayes rule in terms of f . Notice that
+U and V do not depend on g or f . The denominator
+V′ f equals f (xi ) in (3.5), but not in the regularized
+versions of Section 4.
+In a typical empirical Bayes situation, as in Section 6.1 of Efron (2010), we might observe independent observations X1 , X2 , . . . , XN from the marginal
+density f (x),
+(3.6)
+
+where E = U′ f /V′ f and
+
+U
+V
+− .
+Uf
+Vf
+
+fi Wi = 0.)
+
+The trouble here, as will be shown, is that sd(Ê)
+or cv(Ê) may easily become unmanageably large.
+Empirical Bayes methods require sampling on the x
+scale, which can be grossly inefficient for estimating
+functions of θ.
+Hypothetically, the Xk ’s in (3.6) are the observable halves of pairs (Θ, X),
+(3.19)
+
+ind
+
+(Θk , Xk ) ∼ g(θ)fθ (x),
+
+k = 1, 2, . . . , N.
+
+If the Θk ’s had been observed, we could estimate g
+directly as ḡ = (ḡ1 , ḡ2 , . . . , ḡm )′ ,
+(3.20)
+
+ḡj = #{Θk = θj }/N,
+
+leading to the direct Bayes estimate
+
+Ē = u′ ḡ/v′ ḡ.
+Theorem 1. The delta-method approximate stan- (3.21)
+dard deviation of Ê = U′ f̂ /V′ f̂ is
+Ē would usually be less variable than Ê (3.11)
+(3.14)
+
+1
+sd(Ê) = √ |E| · σf (W ),
+N
+
+(and would automatically enforce possible constraints on E such as monotonicity in xk ). A version
+
+EB MODELING, COMPUTATION AND ACCURACY
+Table 1
+Standard deviation and coefficient of variation of
+E{t(θ)|x = 2.5} (for N = 1); for the three parameters (3.26),
+with g and f as in Figure 1; sdf from Theorem 1 (3.14); sdd
+for direct Bayes estimation, Theorem 2 (3.23); sdx from the
+regularized f -modeling of Section 4, Theorem 3 (4.8)
+N 1/2 sd
+t(θ)
+
+E{t|x = 2.5} sdf
+
+sdd
+
+N 1/2 cv
+sdx
+
+5
+
+cvx is a regularized version of Ê described in the
+next section.
+Suppose we wish to bound cv(Ê) below some prespecified value c0 , perhaps c0 = 0.1. Then according
+to (3.16), we need N to equal
+(3.27)
+
+N = (cv1 /c0 )2 ,
+
+cvf cvd cvx
+
+where cv1 is the numerator σf (W ) of (3.16), for
+Parameter (1)
+2.00
+8.74 3.38 2.83 4.4 1.7 1.4 example, cvf in Table 1. For the three parameters
+Parameter (2)
+4.76
+43.4 13.7 10.4 9.1 2.9 2.2 (3.26) and for c0 = 0.1, we would require N = 1936,
+Parameter (3)
+0.03
+43.9 0.53 1.24 1371 16 39
+8281 and 187 million, respectively.
+The vector W for parameter (3) is seen to take on
+enormous values in Figure 2, resulting in σf (W ) =
+1370.7 for (3.16). The trouble stems from the abrupt
+of Theorem 1 applies here. Now we define
+discontinuity of t3 at θ = 0, which destabilizes U in
+m
+m
+X
+X
+(3.13). Definition (3.4) implies U′ P = u′ . This says
+gj vj and
+gj uj , vg =
+ug =
+that U′ must linearly compose u′ from the rows of
+j=1
+j=1
+P . But in our example the rows of P are smooth
+(3.22)
+w = u/ug − v/vg .
+functions of the form ϕ(xi − θj ), forcing the violent
+cycling of U seen in Figure 2. Section 4 discusses
+Theorem 2. For direct Bayes estimation (3.21),
+a regularization method that greatly improves the
+the delta-method approximate standard deviation of
+accuracy of using “Bayes rule in terms of f .”
+Ē is
+Table 1 shows that if we could sample on the θ
+1
+scale,
+as in (3.20), we would require “only” 25,600
+sd(Ē) = √ |E| · σg (w),
+(3.23)
+N
+Θk observations to achieve coefficient of variation
+0.1 for estimating Pr{θ ≤ 0|x = 2.5}; direct samwhere
+pling is almost always more efficient than f samm
+X
+pling, but that is not the way empirical Bayes situ2
+2
+(3.24)
+gj wj ;
+σg (w) =
+ations present themselves. The efficiency difference
+j=1
+is a factor of 86 for parameter (3), but less than a
+Ē has approximate coefficient of variation
+factor of 3 for parameter (1), t(θ) = θ. The latter
+√
+is a particularly favorable case for empirical Bayes
+(3.25)
+cv(Ē) = σg (w)/ N .
+estimation, as discussed in Section 6.
+The assumption of independent sampling, (3.6)
+The proof of Theorem 2 is the same as that for Theand (3.19), is a crucial element of all our results. Inorem 1.
+Table 1 concerns the estimation of E{t(θ)|x = 2.5} dependence assumptions (often tacitly made) domfor the situation shown in Figure 1. Three different inate the empirical Bayes literature, as in Muralidharan et al. (2012), Zhang (1997), Morris (1983),
+parameters t(θ) are considered:
+and Efron and Morris (1975). Nonindependence ef(1)
+t(θ) = θ,
+fectively reduces the effective sample size N ; see
+2
+Chapter
+8 of Efron (2010). This point is brought
+(3.26)
+(2)
+t(θ) = θ ,
+up
+again
+in Section 6.
+
+1, if θ ≤ 0,
+(3) t(θ) =
+0, if θ > 0.
+4. REGULARIZED f -MODELING
+In
+√ = Pr{θ ≤ 0|x}. Cvf is
+√ the third case, E{t(θ)|x}
+N cv(Ê) (3.16) so cvf/ N is the approximate coefficient of variation of Ê, the nonparametric empirical Bayes estimate of E{t(θ)|x = 2.5}. Cvd is the
+corresponding quantity (3.25), available only if we
+could directly observe the Θk values in (3.19), while
+
+Fully nonparametric estimation of E = E{t(θ)|x}
+is sometimes feasible, but, as seen in Table 1 of Section 3, it can become unacceptably noisy. Some form
+of regularization is usually necessary. A promising
+approach is to estimate f parametrically according
+to a smooth low-dimensional model.
+
+6
+
+B. EFRON
+
+Fig. 2. W vector (3.13) for f -Bayes estimation of Pr{θ ≤ 0|x = 2.5} for the model of Figure 1 (actually W12 as in Section 4;
+dashed curve is W9 ).
+
+Suppose then that we have such a model, yielding
+f̂ as an estimate of f (2.3), with mean vector and
+covariance matrix
+(4.1)
+
+f̂ ∼ (f , ∆(f )/N ).
+
+In the nonparametric case (3.9) ∆(f ) = D(f ), but we
+expect that we can reduce ∆(f ) parametrically. In
+any case, the delta-method approximate coefficient
+of variation for Ê = U′ f̂ /V′ f̂ (3.11) is given in terms
+of W (3.13):
+(4.2)
+
+′
+
+cv(Ê) = {W ∆(f )W/N }
+
+1/2
+
+.
+
+This agrees with (3.16) in the nonparametric situation (3.9) where ∆(f ) = diag(f ) − ff ′ . The verification of (4.2) is almost identical to that for Theorem 1.
+Poisson regression models are convenient for the
+smooth parametric estimation of f . Beginning with
+an n × p structure matrix X, having rows xi for
+i = 1, 2, . . . , n, we assume that the components of
+the count vector y (3.7) are independent Poisson
+observations,
+ind
+
+(4.3)
+
+yi ∼ Poi(µi ),
+
+xi α
+
+µi = e
+
+for i = 1, 2, . . . , n,
+
+where α is an unknown vector of dimension p. Matrix X is assumed to have as its first column a vector
+of 1’s.
+P
+P
+Let µ+ = n1 µi and N = n1 yi , and define
+(4.4)
+
+fi = µi /µ+
+
+for i = 1, 2, . . . , n.
+
+Then a well-known Poisson/multinomial relationship says that the conditional distribution of y given
+N is
+(4.5)
+
+y|N ∼ Multn (N, f )
+
+as in (3.8). Moreover, under mild regularity conditions, the estimate f̂ = y/N has asymptotic mean
+vector and covariance matrix (as µ+ → ∞)
+(4.6)
+
+f̂ ˙
+∼ (f , ∆(f )/N ),
+
+where
+(4.7)
+
+′
+∆(f ) = diag(f )XG−1
+f X diag(f )
+
+[Gf = X′ diag(f )X];
+Equations (4.6)–(4.7) are derived from standard
+generalized linear model calculations. Combining
+(4.2) and (4.6) gives a Poisson regression version of
+Theorem 1.
+
+7
+
+EB MODELING, COMPUTATION AND ACCURACY
+
+Theorem 3. The delta-method coefficient of
+variation for Ê = U′ f̂ /V′ f̂ under Poisson model
+(4.3) is
+′
+1/2
+′
+(4.8) cv(Ê) = {(W′ X)f (X′ X)−1
+,
+f (W X)f /N }
+
+where
+(4.9)
+
+(W′ X)f = W′ diag(f )X
+
+and
+
+(X′ X)f = X′ diag(f )X,
+
+The bracketed term in (4.8), times N , is recognized as the length2 of the projection of W into the
+p-dimensional space spanned by the columns
+P of X,
+carried out using inner product ha, bif = fi ai bi .
+In the nonparametric case, X equals the identity I,
+and (4.8) reduces to (3.16). As in (3.14), sd(Ê) is approximated by |E| cv(Ê). [Note: Theorem 3 remains
+valid as stated if a multinomial model for f̂ replaces
+the Poisson calculations in (4.7).]
+Cvx in Table 1 was calculated as in (4.8), with
+N = 1. The structure matrix X for the example in
+Figure 1 was obtained from the R natural spline
+function ns(x, df = 5); including a column of 1’s
+made X193 × 6. The improvements over cvf, the
+nonparametric coefficients of variation, were by factors of 3, 5 and 100 for the three parameters (3.26).
+The regularization in Theorem 3 takes place with
+respect to f and f̂ . Good performance also requires
+regularization of the inversion process ĝ = Af̂ (3.2).
+Going back to the beginning of Section 3, let
+P = LDR′
+
+represent the singular value decomposition of the
+n × m matrix P , with L the n × m orthonormal
+matrix of left singular vectors, R the m × m orthonormal matrix of right singular vectors, and D
+the m × m diagonal matrix of singular values,
+(4.11)
+
+d1 ≥ d2 ≥ · · · ≥ dm .
+
+In fact, r = 12 was used in Figure 2 and Table 1,
+chosen to make
+m
+X  m
+X
+(4.14)
+d2j
+d2j < 10−10 .
+r+1
+
+A = RD
+
+−1 ′
+
+L
+
+is the pseudo-inverse of P , which is why we could
+go from f = P g to g = Af at (3.2). [Other pseudoinverses exist; see (7.1).]
+Definition (4.12) depends on P being of full
+rank m, equivalently having dm > 0 in (4.11).
+Whether or not this is true, very small values of
+dj will destabilize A. The familiar cure is to trun-
+
+1
+
+As in (3.1)–(3.13), let
+(4.15)
+
+U′r = u′ Ar ,
+
+Vr′ = v′ Ar
+
+[u and v stay the same as in (3.3)],
+(4.16)
+
+Er =
+
+U′r f
+,
+Vr′ f
+
+Êr =
+
+U′r f̂
+Vr′ f̂
+
+and
+(4.17)
+
+Ur
+Vr
+Wr = P
+−P
+.
+fi Uri
+fi Vri
+
+Theorem 3 then remains valid, with Wr replacing W. Note: Another regularization method, which
+will not be pursued here, is the use of ridge regression rather than truncation in the inversion process
+(3.2), as in Hall and Meister (2007).
+Reducing r reduces Wr , hence reducing (4.9) and
+the approximate coefficient of variation of Êr . The
+reduction can be dramatic. W9 almost disappears
+compared to W12 in Figure 2. Table 2 compares various choices of r for parameters (1) and (3) (3.26).
+Table 2
+Coefficient of variation and standard deviation (N = 1), for
+E{t|x = 2.5} as in 1; now using Poisson regression in
+Theorem 3, with X based on a natural spline with 5 degrees
+of freedom. Increasing choice of r, (4.13)–(4.17), decreases
+bias but increases variability of Ê for parameter (3); g error
+from (4.20)
+
+Then it is easy to show that the m × n matrix
+(4.12)
+
+Ar = Rr Dr−1 L′r .
+
+(4.13)
+
+with W as in (3.13).
+
+(4.10)
+
+cate representation (4.12), lopping off the end terms
+of the singular value decomposition. If we wish to
+stop after the first r terms, we define Rr to be the
+first r columns of R, Lr the first r columns of L, Dr
+the r × r diagonal matrix diag(d1 , d2 , . . . , dr ), and
+
+Parameter (1)
+
+Parameter (3)
+
+r
+
+g error
+
+Er
+
+cvx
+
+sdx
+
+Er
+
+cvx
+
+sdx
+
+3
+6
+9
+12
+15
+18
+21
+
+0.464
+0.254
+0.110
+0.067
+0.024
+0.012
+0.006
+
+1.75
+2.00
+2.00
+2.00
+2.00
+2.00
+2.00
+
+1.00
+1.34
+1.36
+1.41
+1.39
+1.39
+1.40
+
+1.75
+2.68
+2.73
+2.83
+2.78
+2.78
+2.80
+
+0.021
+3.6
+0.1
+0.027
+4.6
+0.1
+0.031
+8.2
+0.3
+0.032
+38.6
+1.2
+0.033
+494.0
+16.1
+0.033 23,820.8
+783.8
+0.033 960,036.4 31,688.8
+
+8
+
+B. EFRON
+
+Fig. 3.
+
+Approximation gr (4.18) with r = 6, 9, 12 for g in Figure 1; heavy blue curve is g.
+
+The choice turns out to be unimportant for parameter (1) and crucial for parameter (3).
+Why not always choose a small value of r? The
+trouble lies in possible bias for the estimation of
+E = E{t|x}. Rather than the crucial inverse mapping g = Af (3.2), we get an approximation
+(4.18)
+
+gr = Ar f = Ar P g
+= Rr Dr−1 L′r LDR′ g = Rr Rr′ g
+
+[the last step following from LDR′ = Lr Dr Rr′ +
+′ , with L
+L(r) D(r) R(r)
+(r) indicating the last m − r
+columns of L, etc.; Equation (4.18) says that gr is
+the projection of g into the linear space spanned by
+the first r columns of R]. Then, looking at (4.15)–
+(4.16),
+(4.19)
+
+Er =
+
+U′r f
+u′ gr
+=
+,
+Vr′ f
+v′ gr
+
+possibly making Êr badly biased for estimating E =
+u′ g/v′ g.
+The Er columns of Table 2 show that bias is a
+problem only for quite small values of r. However,
+the example of Figure 1 is “easy” in the sense that
+the true prior g is smooth, which allows gr to rapidly
+approach g as r increases, as pictured in Figure 3.
+The gerror column of Table 2 shows this numerically
+
+in terms of the absolute error
+m
+X
+(4.20)
+|gri − gi |.
+gerror =
+i=1
+
+A more difficult case is illustrated in Figure 4.
+Here g is a mixture: 90% of a delta function at θ =
+0 and 10% of a uniform distribution over the 31
+points θj in θ = (−3, −2.8, . . . , 3); P and x are as
+before. Now gerror exceeds 1.75 even for r = 21; gr
+puts too small a weight on θ = 0, while bouncing
+around erratically for θ 6= 0, often going negative.
+We expect, correctly, that empirical Bayes estimation of E{t(θ)|x} will usually be difficult for the
+situation of Figure 4. This is worrisome since its g is
+a reasonable model for familiar false discovery rate
+analyses, but see Section 6. Section 5 discusses a
+different regularization approach that ameliorates,
+without curing, the difficulties seen here.
+5. MODELING THE PRIOR DISTRIBUTION g
+The regularization methods of Section 4 involved
+modeling f , the marginal distribution (2.3) on the xspace, for example, by Poisson regression in Table 2.
+Here we discuss an alternative strategy: modeling
+g, the prior distribution (2.2) on the θ-space. This
+has both advantages and disadvantages, as will be
+discussed.
+
+EB MODELING, COMPUTATION AND ACCURACY
+
+Fig. 4.
+
+True g = 0.90 · δ(0) + 0.10 uniform (heavy curve); approximation gr (4.18) for r = 6, 9, 12, 15, 18, 21, as labeled.
+
+We begin with an m × q model matrix Q, jth row
+Qj , which determines g according to
+#
+"
+m
+X
+(5.1) g(α) = eQα−1m φ(α)
+eQj α .
+φ(α) = log
+1
+
+[For v = (v1 , v2 , . . . , vm ), ev denotes a vector with
+components evj ; 1m is a vector of m 1’s, indicating in
+(5.1) that φ(α) is subtracted from each component
+of Qα.] Here α is the unknown q-dimensional natural
+parameter of exponential family (5.1), which determines the prior distribution g = g(α). In an empirical Bayes framework, g gives f = P g (2.6), and the
+statistician then observes a multinomial sample y of
+size N from f as in (3.8),
+(5.2)
+
+y ∼ Multn (N, P g(α)),
+
+from which inferences about g are to be drawn.
+Model (5.1)–(5.2) is not an exponential family in
+y, a theoretical disadvantage compared to the Poisson modeling of Theorem 3. [It is a curved exponential family, Efron (1975).] We can still pursue an
+asymptotic analysis of its frequentist accuracy. Let
+(5.3)
+
+9
+
+D(g) ≡ diag(g) − gg′ ,
+
+Lemma 1. The Fisher information matrix for
+estimating α in model (5.1)–(5.2) is
+(5.5)
+
+I = N Q′α P ′ diag(1/f (α))P Qα ,
+
+where P is the sampling density matrix (2.5), and
+f (α) = P g(α).
+Proof. Differentiating log g in (5.1) gives the
+m × q derivative matrix d log gi /dαk ,
+(5.6)
+
+d log g
+= [I − 1m g(α)′ ]Q,
+dα
+
+so
+(5.7)
+
+d log g
+dg
+= diag(g(α))
+dα
+dα
+= D(g(α))Q = Qα .
+
+This yields df /dα = P Qα and
+
+
+d log f
+1
+= diag
+(5.8)
+P Qα .
+dα
+f (α)
+The log likelihood from multinomial sample (5.2)
+is
+(5.9)
+
+lα (y) = y′ log f (α) + constant,
+
+the covariance matrix of a single random draw Θ
+from distribution g, and define
+
+giving score vector
+
+(5.4)
+
+(5.10)
+
+Qα = D(g(α))Q.
+
+d log f
+dlα (y)
+= y′
+.
+dα
+dα
+
+10
+
+B. EFRON
+
+Fig. 5. Top: Standard deviation of E{t|x} as a function of x, for parameter (1) t(θ) = θ (with N = 1); f -modeling (solid),
+g-modeling (dashed). Bottom: Now for parameter (3), t(θ) = 1 or 0 as θ ≤ 0 or > 0; using natural spline models, df = 6, for
+both calculations.
+
+Since y has covariance matrix N (diag f − ff ′ ) (3.9),
+I, the covariance matrix of the score vector, equals
+I = N Q′α P ′ diag(1/f )(diag f − ff ′ )
+· diag(1/f )P Qα
+
+(5.11)
+
+= N Q′α P ′ (diag(1/f ) − 1n 1′n )P Qα .
+Finally,
+(5.12)
+
+1′n P Qα = 1′m D(g(α))Q = 0′ Q = 0
+
+If we are interested in a real-valued parameter
+τ = T (g), the approximate standard deviation of its
+MLE τ̂ = T (g(α̂)) is
+sd(τ̂ ) = [Ṫ ′ cov(ĝ)Ṫ ]1/2 ,
+
+(5.15)
+
+where Ṫ is the gradient vector dT /dg, evaluated at
+ĝ. When T (g) is the conditional expectation of a
+parameter t(θ) (3.5),
+(5.16)
+
+T (g) = E{t(θ)|x = xi } = u′ g/v′ g,
+
+we compute
+
+(using the fact that the columns of P sum to 1), and
+(5.11) yields the lemma. 
+
+(5.17)
+
+Standard sampling theory says that the maximum
+likelihood estimate (MLE) α̂ has approximate covariance matrix I −1 and that ĝ = g(α̂) has approximate covariance, from (5.7),
+
+Theorem 4. Under models (5.1)–(5.2), the
+MLE Ê of E{t(θ)|x = xi } has approximate standard
+deviation
+
+cov(ĝ) = Qα I −1 Q′α .
+
+(5.13)
+
+Lemma 2. The approximate covariance matrix
+for the maximum likelihood estimate g(α̂) of g in
+model (5.1)–(5.2) is
+cov(ĝ)
+(5.14)
+=
+
+1
+Qα [Q′α P ′ diag(1/f (α))P Qα ]−1 Q′α .
+N
+
+Ṫ (g) = w = (u/ug ) − (v/vg )
+
+(3.23), and get the following.
+
+(5.18)
+
+sd(Ê) = |E|[w′ cov(ĝ)w]1/2 ,
+
+with w as in (5.17) and cov(ĝ) from (5.14).
+We can now compare sd(Ê) from g-modeling
+(5.18), with the corresponding f -modeling results of
+Theorem 3. Figure 5 does this with parameters (1)
+and (3) (3.26) for the example of Figure 1. Theorem 3, modified as at (4.17) with r = 12, represents
+f -modeling, now with X based on ns(x, 6), a natural spline with six degrees of freedom. Similarly for
+
+11
+
+EB MODELING, COMPUTATION AND ACCURACY
+
+g-modeling, Q = ns(θ, 6) in (5.1); α was chosen to
+make g(α) very close to the upper curve in Figure 1.
+(Doing so required six rather than five degrees of
+freedom.)
+The upper panel of Figure 5 shows f -modeling
+yielding somewhat smaller standard deviations for
+parameter (1), t(θ) = θ. This is an especially favorable case for f -modeling, as discussed in Section 6.
+However, for parameter (3), E = Pr{t ≤ 0|x}, gmodeling is far superior. Note: in exponential families, curved or not, it can be argued that the effective
+degrees of freedom of a model equals its number of
+free parameters; see Remark D of Efron (2004). The
+models used in Figure 5 each have six parameters,
+so in this sense the comparison is fair.
+Parametric g-space modeling, as in (5.1), has several advantages over the f -space modeling of Section 4:
+Constraints. ĝ = exp(Qα̂−1m φ(α̂)) has all coordinates positive, unlike the estimates seen in Figure 4.
+Other constraints such as monotonicity or convexity
+that may be imposed on f̂ = P ĝ by the structure of
+P are automatically enforced, as discussed in Chapter 3 of Carlin and Louis (2000).
+Accuracy. With some important exceptions, discussed in Section 6, g-modeling often yields smaller
+values of sd(Ê), as typified in the bottom panel of
+Figure 5. This is particularly true for discontinuous
+parameters t(θ), such as parameter (3) in Table 1.
+Simplicity. The bias/variance trade-offs involved
+with the choice of r in Section 4 are avoided and, in
+fact, there is no need for “Bayes rule in terms of f .”
+Continuous formulation. It is straightforward to
+translate g-modeling from the discrete framework
+(2.1)–(2.4) into more familiar continuous language.
+Exponential family model (5.1) now becomes
+(5.19)
+
+gα (θ) = eq(θ)α−φ(α)
+
+
+Z
+q(θ)α
+φ(α) = log e
+dθ ,
+
+where q(θ) is a smoothly defined 1 × q vector function of θ. Letting fθ (x) denote the sampling density
+of x given θ, define
+Z
+h(x) = fθ (x)g(θ)(q(θ) − q̄) dθ
+(5.20)
+
+
+
+q̄ =
+
+Z
+
+
+
+g(θ)q(θ) dθ .
+
+Then the q × q information matrix I (5.5) is
+
+Z 
+h(x)′ h(x)
+I =N
+f (x) dx
+f (x)2
+(5.21)
+
+
+Z
+f (x) = g(θ)fθ (x) dx .
+A posterior expectation E = E{t(θ)|x} has MLE
+Z
+.Z
+(5.22) Ê = t(θ)fθ (x)gα̂ (θ) dθ
+fθ (x)gα̂ (θ) dθ.
+
+An influence function argument shows that E has
+gradient
+Z
+dE
+(5.23)
+= E z(θ)gα (θ)(q(θ) − q̄) dθ,
+dα
+with
+
+(5.24)
+
+z(θ) = R
+
+t(θ)fθ (x)gα (θ)
+t(ϕ)fϕ (x)gα (ϕ) dϕ
+
+−R
+
+fθ (x)gα (θ)
+.
+fϕ (x)gα (ϕ) dϕ
+
+Then the approximate standard deviation of Ê is
+
+
+dE −1 dE ′ 1/2
+(5.25)
+,
+I
+sd(Ê) =
+dα
+dα
+combining (5.21)–(5.24). [Of course, the integrals required in (5.25) would usually be done numerically,
+implicitly returning us to discrete calculations!]
+Modeling the prior. Modeling on the g-scale is
+convenient for situations where the statistician has
+qualitative knowledge concerning the shape of the
+prior g. As a familiar example, large-scale testing
+problems often have a big atom of prior probability
+at θ = 0, corresponding to the null cases. We can
+accommodate this by including in model matrix Q
+(5.1) a column e0 = (0, 0, . . . , 0, 1, 0, . . . , 0)′ , with the
+1 at θ = 0.
+Such an analysis was carried out for the situation
+in Figure 4, where the true g equaled 0.9e0 + 0.1 ·
+uniform. Q was taken to be the natural spline basis
+ns(θ, 5) augmented by column e0 , a 31 × 6 matrix.
+Table 3 shows the results for t = e0 , that is, for
+(5.26)
+
+E = E{t|x} = Pr{θ = 0|x}.
+
+The table gives E and sd(Ê) (5.18) for x = −4, −3,
+. . . , 4 (N = 1), as well as the coefficient of variation
+sd(Ê)/E.
+The results are not particularly encouraging: we
+would need sample sizes N on the order of 10,000
+
+12
+
+B. EFRON
+
+Table 3
+Estimating E = Pr{θ = 0|x} in the situation of Figure 4; using g-modeling (5.1) with Q equal ns(x, 5) augmented with a
+column putting a delta function at θ = 0. Sd is sd(Ê) (5.25), cv is the coefficient of variation sd /E. (For sample size N ,
+divide entries by N 1/2 .)
+x
+E
+1/2
+
+N · sd
+N 1/2 · cv
+
+−4
+
+−3
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+0.04
+
+0.32
+
+0.78
+
+0.94
+
+0.96
+
+0.94
+
+0.78
+
+0.32
+
+0.04
+
+0.95
+24.23
+
+3.28
+10.39
+
+9.77
+12.53
+
+10.64
+11.38
+
+9.70
+10.09
+
+10.48
+11.20
+
+9.92
+12.72
+
+3.36
+10.65
+
+0.75
+19.21
+
+to expect reasonably accurate estimates Ê (3.27).
+On the other hand, f -modeling as in Section 4 is
+hopeless here. Section 6 has more to say about false
+discovery rate estimates (5.26).
+A random sample of N = 5000 X values was
+drawn from the distribution f = P g corresponding
+to the true g in Figure 4 [with P based on the normal density ϕ(xi − θj ) as before], giving count vector y (3.7). Numerical maximization yielded α̂, the
+MLE in model (5.1)–(5.2), Q as in Table 3. The
+estimate ĝ = g(α̂) put probability 0.920 at θ = 0,
+compared to true value 0.903, with nonnull distribution as shown in Figure 6. The nonnull peaks at
+θ = ±2 were artifacts of the estimation procedure.
+On the other hand, ĝ correctly put roughly equal
+nonnull probability above and below 0. This degree
+of useful but crude inference should be kept in mind
+
+for the genuine data examples of Section 6, where
+the truth is unknown.
+Our list of g-modeling advantages raises the question of why f -modeling has dominated empirical
+Bayes applications. The answer—that a certain class
+of important problems is more naturally considered
+in the f domain—is discussed in the next section.
+Theoretically, as opposed to practically, g-modeling
+has played a central role in the empirical Bayes
+literature. Much of that work involves the nonparametric maximum likelihood estimation of the
+prior distribution g(θ), some notable references being Laird (1978), Zhang (1997) and Jiang and Zhang
+(2009). Parametric g-modeling, as discussed in Morris (1983) and Casella (1985), has been less well developed. A large part of the effort has focused on the
+“normal-normal” situation, normal priors with nor-
+
+Fig. 6. MLE nonnull distribution, estimated from a sample of N = 5000 X values from f corresponding to true g in Figure 4;
+estimated atom at θ = 0 was 0.92.
+
+13
+
+EB MODELING, COMPUTATION AND ACCURACY
+
+mal sampling errors, as in Efron and Morris (1975),
+and other conjugate situations. Chapter 3 of Carlin
+and Louis (2000) gives a nice discussion of parametric empirical Bayes methods, including binomial and
+Poisson examples.
+
+Tweedie’s formula (Efron, 2011) extends Robbinstype estimation of E{θ|x} to general exponential
+families. For the normal case
+(6.4)
+
+θ ∼ g(·)
+
+and x|θ ∼ N (θ, 1),
+
+Tweedie’s formula is
+6. CLASSIC EMPIRICAL BAYES
+APPLICATIONS
+Since its post-war emergence (Robbins (1956),
+Good and Toulmin (1956), James and Stein (1961)),
+empirical Bayes methodology has focused on a small
+set of specially structured situations: ones where
+certain Bayesian inferences can be computed simply and directly from the marginal distribution of
+the observations on the x-space. There is no need
+for g-modeling in this framework or, for that matter, any calculation of ĝ at all. False discovery rates
+and the James–Stein estimator fall into this category, along with related methods discussed in what
+follows. Though g-modeling is unnecessary here, it
+will still be interesting to see how it performs on the
+classic problems.
+Robbins’ Poisson estimation example exemplifies
+the classic empirical Bayes approach: independent
+but not identically distributed Poisson variates
+(6.1)
+
+ind
+
+Xk ∼ Poi(Θk ),
+
+k = 1, 2, . . . , N,
+
+are observed, with the Θk ’s notionally drawn from
+some prior g(θ). Applying Bayes rule with the Poisson kernel e−θ θ x /x! shows that
+(6.2)
+
+E{θ|x} = (x + 1)fx+1 /fx ,
+
+where f = (f1 , f2 , . . .) is the marginal distribution of
+the X’s. [This is an example of (3.5), Bayes rule in
+terms of f ; defining ei = (0, 0, . . . , 1, 0, . . . , 0)′ with
+1 in the ith place, U = (x + 1)ex+1 , and V = ex .]
+Letting f̂ = (fˆ1 , fˆ2 , . . .) be the nonparametric MLE
+(3.10), Robbins’ estimate is the “plug-in” choice
+(6.3)
+Ê{θ|x} = (x + 1)fˆx+1 /fˆx
+as in (3.11). Brown, Greenshtein and Ritov (2013)
+use various forms of semiparametric f -modeling to
+improve on (6.3).
+The prehistory of empirical Bayes applications notably includes the missing species problem; see Section 11.5 of Efron (2010). This has the Poisson form
+(6.1), but with an inference different than (6.2) as its
+goal. Fisher, Corbet and Williams (1943) employed
+parameterized f -modeling as in Section 4, with f
+the negative binomial family. Section 3.2.1 of Carlin
+and Louis (2000) follows the same route for improving Robbins’ estimator (6.3).
+
+(6.5)
+
+E{θ|x} = x + l′ (x)
+
+d
+log f (x),
+dx
+with f (x) the marginal distribution of X. As in
+(6.2), the marginal distribution of X determines
+E{θ|x}, without any specific reference to the prior
+g(θ).
+Given observations Xk from model (6.4),
+where l′ (x) =
+
+(6.6)
+
+Xk ∼ N (Θk , 1) for k = 1, 2, . . . , N,
+
+the empirical Bayes estimation of E{θ|x} is conceptually straightforward: a smooth estimate fˆ(x) is
+obtained from the Xk ’s, and its logarithm ˆ
+l(x) differentiated to give
+(6.7)
+Ê{θ|x} = x + ˆl′ (x),
+again without explicit reference to the unknown
+g(θ). Modeling here is naturally done on the x-scale.
+[It is not necessary for the Xk ’s to be independent
+in (6.6), or (6.1), although dependence decreases the
+accuracy of Ê; see Theorem 8.4 of Efron (2010).]
+Figure 7 concerns an application of Tweedie’s formula to the prostate data, the output of a microarray experiment comparing 52 prostate cancer patients with 50 healthy controls (Efron (2010), Section 2.1). The genetic activity of N = 6033 genes was
+measured for each man. Two-sample tests comparing patients with controls yielded z-values for each
+gene, X1 , X2 , . . . , XN , theoretically satisfying
+(6.8)
+
+Xk ∼ N (0, 1)
+
+under the null hypothesis that gene k is equally active in both groups. Of course, the experimenters
+were searching for activity differences, which would
+manifest themselves as unusually large values |Xk |.
+Figure 2.1 of Efron (2010) shows the histogram of
+the Xk values, looking somewhat like a long-tailed
+version of a N (0, 1) density.
+The “smooth estimate” fˆ(x) needed for Tweedie’s
+formula (6.7) was calculated by Poisson regression,
+as in (4.3)–(4.7). The 6033 Xk values were put into
+193 equally spaced bins, centered at x1 , x2 , . . . , x193 ,
+chosen as in (2.8) with yi being the number in bin i.
+A Poisson generalized linear model (4.3) then gave
+
+14
+
+B. EFRON
+
+Fig. 7. Prostate data. Left panel shows estimates of E{θ|x} from Tweedie’s formula (solid curve), f -modeling (circles) and
+g-modeling (dots). Right panel compares standard deviations of Ê{θ|x}, for Tweedie estimates (dots), f -modeling (dashed
+curve) and g-modeling (solid curve); reversals at far right are computational artifacts.
+
+MLE f̂ = (fˆ1 , fˆ2 , . . . , fˆ193 ). Here the structure matrix
+X was the normal spline basis ns(x, df = 5) augmented with a column of 1’s. Finally, the smooth
+curve fˆ(x) was numerically differentiated to give
+ˆl′ (x) = fˆ′ (x)/fˆ(x) and Ê = x + ˆl′ (x).
+Tweedie’s estimate Ê{θ|x} (6.7) appears as the
+solid curve in the left panel of Figure 7. It is nearly
+zero between −2 and 2, indicating that a large majority of genes obey the null hypothesis (6.7) and
+should be estimated to have θ = 0. Gene 610 had
+the largest observed z-value, X610 = 5.29, and corresponding Tweedie estimate 4.09.
+For comparison, Ê{θ|x} was recalculated both
+by f -modeling as in Section 4 and g-modeling as
+in Section 5 [with discrete sampling distributions
+(2.4)–(2.6) obtained from Xk ∼ N (Θk , 1), Θk being
+the “true effect size” for gene k]; f -modeling used
+X and f̂ as just described, giving Êf = Ur′ f̂ /Vr′ f̂ ,
+Ur and Vr as in (4.19), r = 12; g-modeling took
+θ = (−3, −2.8, . . . , 3) and Q = (ns(θ, 5), 1), yielding
+ĝ = g(α̂) as the MLE from (5.1)–(5.2). [The R nonlinear maximizer nlm was used to find α̂; some care
+was needed in choosing the control parameters of
+nlm. We are paying for the fact that the g-modeling
+likelihood (5.2) is not an exponential family.] Then
+the estimated posterior expectation Êg was calculated applying Bayes rule with prior ĝ. Both Êf and
+Êg closely approximated the Tweedie estimate.
+
+Standard deviation estimates for Êf [dashed
+curve, from Theorem 3 with f̂ replacing f in (4.9)]
+and Êg (solid curve, from Theorem 4) appear in the
+right panel of Figure 7; f -modeling gives noticeably
+lower standard deviations for E{θ|x} when |x| is
+large.
+The large dots in the right panel of Figure 7 are
+bootstrap standard deviations for the Tweedie estimates Ê{θ|x}, obtained from B = 200 nonparametric bootstrap replications, resampling the N = 6033
+Xk values. These closely follow the f -modeling standard deviations. In fact, Êf∗ , the bootstrap replications of Êf , closely matched Ê ∗ for the corresponding Tweedie estimates on a case-by-case comparison
+of the 200 simulations. That is, Êf is numerically
+just about the same as the Tweedie estimate, though
+it is difficult to see analytically why this is the case,
+comparing formulas (4.16) and (6.7). Notice that the
+bootstrap results for Êf verify the accuracy of the
+delta-method calculations going into Theorem 3.
+Among empirical Bayes techniques, the James–
+Stein estimator is certainly best known. Its form,
+(6.9)
+
+θ̂ = X̄ + [1 + (N − 3)/S](Xk − X̄)
+#
+"
+N
+X
+(Xk − X̄)2 ,
+S=
+1
+
+15
+
+EB MODELING, COMPUTATION AND ACCURACY
+Table 4
+Local false discovery rate estimates for the prostate data; d
+ufdr and its standard deviation estimates sdf obtained from
+f -modeling; c
+fdr and sdg from g-modeling; sdf is substantially smaller than sdg
+x
+
+−4
+
+−3
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+d
+ufdr
+
+0.060
+
+0.370
+
+0.840
+
+1.030
+
+1.070
+
+1.030
+
+0.860
+
+0.380
+
+0.050
+
+sdf
+sdg
+c
+fdr
+
+0.014
+0.023
+
+0.030
+0.065
+
+0.034
+0.179
+
+0.017
+0.208
+
+0.013
+0.200
+
+0.021
+0.206
+
+0.033
+0.182
+
+0.030
+0.068
+
+0.009
+0.013
+
+0.050
+
+0.320
+
+0.720
+
+0.880
+
+0.910
+
+0.870
+
+0.730
+
+0.320
+
+0.040
+
+again has the “classic” property of being estimated
+directly from the marginal distribution on the xscale, without reference to g(θ). The simplest application of Tweedie’s formula, taking X in our previous discussion to have rows (1, xi , x2i ), leads to formula (6.9); see Section 3 of Efron (2011).
+Perhaps the second most familiar empirical Bayes
+applications relates to Benjamini and Hochberg’s
+(1995) theory of false discovery rates. Here we will
+focus on the local false discovery rate (fdr), which
+best illustrates the Bayesian connection. We assume
+that the marginal density of each observation of Xk
+has the form
+(6.10)
+
+f (x) = π0 ϕ(x) + (1 − π0 )f1 (x),
+
+where π0 is the prior probability that Xk is null,
+ϕ(x) is the standard N (0, 1) density exp(− 21 x2 )/
+√
+2π, and f1 (x) is an unspecified nonnull density,
+presumably yielding values farther away from zero
+than does the null density ϕ.
+Having observed Xk equal to some value x, fdr(x)
+is the probability that Xk represents a null case
+(6.8),
+(6.11)
+
+fdr(x) = Pr{null|x} = π0 ϕ(x)/f (x),
+
+the last equality being a statement of Bayes rule.
+Typically π0 , the prior null probability, is assumed
+to be near 1, reflecting the usual goal of large-scale
+testing: to reduce a vast collection of possible cases
+to a much smaller set of particularly interesting
+ones. In this case, the upper false discovery rate,
+(6.12)
+
+ufdr(x) = ϕ(x)/f (x),
+
+setting π0 = 1 in (6.11), is a satisfactory substitute for fdr(x), requiring only the estimation of the
+marginal density f (x).
+Returning to the discrete setting (2.9), suppose
+we take the parameter of interest t(θ) to be
+(6.13)
+
+t = (0, 0, . . . , 0, 1, 0, . . . , 0)′ ,
+
+with “1” at the index j0 having θj0 = 0 [j0 = 16
+in (2.7)]. Then E{t(θ)|xi } equals fdr(xi ), and we can
+c i ) usassess the accuracy of a g-model estimate fdr(x
+ing (5.18), the corollary to Theorem 4.
+This was done for the prostate data, with the
+data binned as in Figure 7, and Q = (ns(θ, 5), 1)
+as before. Theorem 4 was applied with θ as in (2.7).
+The bottom two lines of Table 4 show the results.
+Even with N = 6033 cases, the standard deviations
+of c
+fdr(x) are considerable, having coefficients of variation in the 25% range.
+F -model estimates of fdr fail here, the bias/variance
+trade-offs of Table 2 being unfavorable for any choice
+of r. However, f -modeling is a natural choice for
+ufdr, where the only task is estimating the marginal
+density f (x). Doing so using Poisson regression
+(4.3), with X = (ns(x, 5), 1), gave the top two lines
+of Table 4. Now the standard deviations are substantially reduced across the entire x-scale. [The
+standard deviation of d
+ufdr can be obtained from
+Theorem 3, with U = ϕ(xi )1 and V the coordinate
+vector having 1 in the ith place.]
+d
+exceeding 1
+The top line of Table 4 shows ufdr(x)
+near x = 0. This is the penalty for taking π0 = 1
+in (6.12). Various methods have been used to correct
+d the simplest being to divide all of its values
+ufdr,
+by their maximum. This amounts to taking π̂0 =
+1/maximum,
+(6.14)
+
+π̂0 = 1/1.070 = 0.935
+
+in Table 4. [The more elaborate f -modeling program
+locfdr, described in Chapter 6 of Efron (2010), gave
+π̂0 = 0.932.] By comparison, the g-model MLE ĝ put
+probability π̂0 = 0.852 on θ = 0.
+7. DISCUSSION
+The observed data X1 , X2 , . . . , XN from the empirical Bayes structure (1.1)–(1.2) arrives on the x
+
+16
+
+B. EFRON
+
+Table 5
+f -modeling permits familiar and straightforward fitting
+methods on the x scale but then requires more complicated
+computations for the posterior distribution of θ; the situation
+is reversed for g-modeling
+
+f -modeling
+g-modeling
+
+Model fitting
+
+Bayesian computations
+
+direct
+indirect
+
+indirect
+direct
+
+scale but the desired Bayesian posterior distribution g(θ|x) requires computations on the θ scale.
+This suggests the two contrasting modeling strategies diagrammed in Table 5: modeling on the x scale,
+“f -modeling,” permits the application of direct fitting methods, usually various forms of regression, to
+the X values, but then pays the price of more intricate and less stable Bayesian computations. We pay
+the price up front with “g-modeling,” where models such as (5.2) require difficult nonconvex maximum likelihood computations, while the subsequent
+Bayesian computations become straightforward.
+The comparative simplicity of model fitting on
+the x scale begins with the nonparametric case: f modeling needs only the usual vector of proportions
+f̂ (3.10), while g-modeling requires Laird’s (1978)
+difficult nonparametric MLE calculations. In general, g-models have a “hidden” quality that puts
+more strain on parametric assumptions; f -modeling
+
+has the advantage of fitting directly to the observed
+data.
+There is a small circle of empirical Bayes situations in which the desired posterior inferences can be
+expressed as simple functions of f (x), the marginal
+distribution of the X observations. These are the
+“classic” situations described in Section 6, and account for the great bulk of empirical Bayes applications. The Bayesian computational difficulties
+of f -modeling disappear here. Not surprisingly, f modeling dominates practice within this special circle.
+“Bayes rule in terms of f ,” Section 2, allows us
+to investigate how well f -modeling performs outside
+the circle. Often not very well seems to be the answer, as seen in the bottom panel of Figure 5, for example. G-modeling comes into its own for more general empirical Bayes inference questions, where the
+advantages listed in Section 5 count more heavily.
+Suppose, for instance, we are interested in estimating Pr{|θ| ≥ 1.5|x} for the prostate data. Figure 8
+shows the g-model estimates and their standard deviations from Theorem 4, with Q = ns(θ, 6) as before. Accuracy is only moderate here, but, nonetheless, some useful information has been extracted
+from the data (while, as usual for problems involving
+discontinuities on the θ scale, f -modeling is ineffective).
+Improved f -modeling strategies may be feasible,
+perhaps making better use of the kinds of infor-
+
+Fig. 8. g-modeling estimates of Pr{|θ| ≥ 1.5|x} for the prostate data. Dashed bars indicate ± one standard deviation, from
+Theorem 4.
+
+EB MODELING, COMPUTATION AND ACCURACY
+
+17
+
+mation in Table 2. A reader has pointed out that
+pseudo-inverses of P other than A (3.1) are available, of the form
+
+Research supported in part by NIH Grant 8R37
+EB002784 and by NSF Grant DMS-12-08787.
+
+(P ′ BP )−1 P ′ B.
+
+REFERENCES
+
+Here the matrix B might be a guess for the inverse
+covariance matrix of f̂ , as motivated by generalized least squares estimation. So far, however, situations like that in Figure 8 seem inappropriate for
+f -modeling, leaving g-modeling as the only game in
+town.
+Theorems 3 and 4 provide accuracy assessments
+for f -modeling and g-modeling estimates. These can
+be dishearteningly broad. In the bottom panel of
+Figure 5, the “good” choice, g-modeling, would still
+require more than N = 20,000 independent observations Xk to get the coefficient of variation down to
+0.1 when x exceeds 2. More aggressive g-modeling,
+reducing the degrees of freedom for Q, improves accuracy, at the risk of increased bias. The theorems
+act as a reminder that, outside of the small circle of
+its traditional applications, empirical Bayes estimation has an ill-posed aspect that may call for draconian model choices. [The ultimate choice is to take
+g(θ) as known, that is, to be Bayesian rather than
+empirical Bayesian. In our framework, this amounts
+to tacitly assuming an enormous amount “N ” of relevant past experience.]
+Practical applications of empirical Bayes methodology have almost always taken Θk and Xk in (1.1)–
+(1.2) to be real-valued, as in all of our examples.
+This is not a necessity of the theory (nor of its discrete implementation in Section 2). Modeling difficulties mount up in higher dimensions, and even
+studies as large as the prostate investigation may
+not carry enough information for accurate empirical
+Bayes estimation.
+There are not many big surprises in the statistics literature, but empirical Bayes theory, emerging in the 1950s, had one of them: that parallel experimental structures like (1.1)–(1.2) carry within
+themselves their own Bayesian priors. Essentially,
+the other N − 1 cases furnish the correct “prior” information for analyzing each (Θk , Xk ) pair. How the
+statistician extracts that information in an efficient
+way, an ongoing area of study, has been the subject
+of this paper.
+
+Benjamini, Y. and Hochberg, Y. (1995). Controlling the
+false discovery rate: A practical and powerful approach to
+multiple testing. J. R. Stat. Soc. Ser. B Stat. Methodol. 57
+289–300. MR1325392
+Brown, L. D., Greenshtein, E. and Ritov, Y. (2013). The
+Poisson compound decision problem revisited. J. Amer.
+Statist. Assoc. 108 741–749.
+Butucea, C. and Comte, F. (2009). Adaptive estimation
+of linear functionals in the convolution model and applications. Bernoulli 15 69–98. MR2546799
+Carlin, B. P. and Louis, T. A. (2000). Bayes and Empirical
+Bayes Methods for Data Analysis, 2nd ed. Texts in Statistical Science. Chapman & Hall, Boca Raton, FL.
+Casella, G. (1985). An introduction to empirical Bayes data
+analysis. Amer. Statist. 39 83–87. MR0789118
+Cavalier, L. and Hengartner, N. W. (2009). Estimating linear functionals in Poisson mixture models. J. Nonparametr. Stat. 21 713–728. MR2549434
+Efron, B. (1975). Defining the curvature of a statistical problem (with applications to second order efficiency). Ann.
+Statist. 3 1189–1242. MR0428531
+Efron, B. (2004). The estimation of prediction error: Covariance penalties and cross-validation. J. Amer. Statist.
+Assoc. 99 619–642. MR2090899
+Efron, B. (2010). Large-Scale Inference: Empirical Bayes
+Methods for Estimation, Testing, and Prediction. IMS 1.
+Cambridge Univ. Press, Cambridge. MR2724758
+Efron, B. (2011). Tweedie’s formula and selection bias. J.
+Amer. Statist. Assoc. 106 1602–1614. MR2896860
+Efron, B. and Morris, C. (1975). Data analysis using
+Stein’s estimator and its generalizations. J. Amer. Statist.
+Assoc. 70 311–319.
+Fisher, R., Corbet, A. and Williams, C. (1943). The relation between the number of species and the number of
+individuals in a random sample of an animal population.
+J. Anim. Ecol. 12 42–58.
+Good, I. J. and Toulmin, G. H. (1956). The number of new
+species, and the increase in population coverage, when a
+sample is increased. Biometrika 43 45–63. MR0077039
+Hall, P. and Meister, A. (2007). A ridge-parameter approach to deconvolution. Ann. Statist. 35 1535–1558.
+MR2351096
+James, W. and Stein, C. (1961). Estimation with quadratic
+loss. In Proc. 4th Berkeley Sympos. Math. Statist. and
+Prob., Vol. I 361–379. Univ. California Press, Berkeley,
+CA. MR0133191
+Jiang, W. and Zhang, C. -H. (2009). General maximum
+likelihood empirical Bayes estimation of normal means.
+Ann. Statist. 37 1647–1684. MR2533467
+Laird, N. (1978). Nonparametric maximum likelihood estimation of a mixed distribution. J. Amer. Statist. Assoc. 73
+805–811. MR0521328
+Morris, C. N. (1983). Parametric empirical Bayes inference:
+Theory and applications. J. Amer. Statist. Assoc. 78 47–65.
+MR0696849
+
+(7.1)
+
+ACKNOWLEDGMENTS
+I am grateful to Omkar Muralidharan, Amir Najmi and Stefan Wager for many helpful discussions.
+
+18
+
+B. EFRON
+
+Muralidharan, O., Natsoulis, G., Bell, J., Ji, H. and
+Zhang, N. R. (2012). Detecting mutations in mixed sample sequencing data using empirical Bayes. Ann. Appl. Stat.
+6 1047–1067. MR3012520
+Robbins, H. (1956). An empirical Bayes approach to statistics. In Proceedings of the Third Berkeley Symposium on
+Mathematical Statistics and Probability, 1954–1955, Vol. I
+
+157–163. Univ. California Press, Berkeley and Los Angeles.
+MR0084919
+Zhang, C. -H. (1997). Empirical Bayes and compound
+estimation of normal means. Statist. Sinica 7 181–193.
+MR1441153
+
+

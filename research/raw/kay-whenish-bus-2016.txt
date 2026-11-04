@@ -1,0 +1,841 @@
+      When (ish) is My Bus? User-centered Visualizations of
+       Uncertainty in Everyday, Mobile Predictive Systems
+     Matthew Kay                                Tara Kola                          Jessica R. Hullman                Sean A. Munson
+       CSE | dub                            Computer Science                          iSchool | dub                     HCDE | dub
+University of Washington                     Tufts University                   University of Washington          University of Washington
+    mjskay@uw.edu                          tara.kola@tufts.edu                     jhullman@uw.edu                   smunson@uw.edu
+ABSTRACT                                                                            constrained (providing little opportunity for training, inter-
+Users often rely on realtime predictions in everyday con-                           pretation, or complex interaction) using interfaces that are
+texts like riding the bus, but may not grasp that such predic-                      space-constrained (due to screen size).
+tions are subject to uncertainty. Existing uncertainty visual-
+izations may not align with user needs or how they natural-                         For example, Susan might refer to a bus’s predicted arrival
+ly reason about probability. We present a novel mobile in-                          time on a smartphone application to check if she has time to
+terface design and visualization of uncertainty for transit                         get coffee before her bus to work arrives. She sees that the
+predictions on mobile phones based on discrete outcomes.                            bus is running a few minutes late and is predicted to arrive
+To develop it, we identified domain specific design re-                             in five minutes. There is no line at the coffee shop, so she
+quirements for visualizing uncertainty in transit prediction                        steps in to order. However, the bus makes up lost time and
+through: 1) a literature review, 2) a large survey of users of                      arrives only two minutes later: Susan, still waiting for cof-
+a popular realtime transit application, and 3) an iterative                         fee, misses her bus and is late for a meeting.
+design process. We present several candidate visualizations                         Susan based her decision on a point estimate of arrival time,
+of uncertainty for realtime transit predictions in a mobile                         as presented in many predictive systems for bus arrival,
+context, and we propose a novel discrete representation of                          flight time, or car travel. Her decision is reasonable given
+continuous outcomes designed for small screens, quantile                            the point prediction she saw, but real-world predictions are
+dotplots. In a controlled experiment we find that quantile                          subject to uncertainty (e.g., her bus is most likely to come
+dotplots reduce the variance of probabilistic estimates by                          in 5 minutes but may come in as little as 1 minute or as
+~1.15 times compared to density plots and facilitate more                           much as 9 minutes). Designers and analysts are responsible
+confident estimation by end-users in the context of realtime                        for reporting uncertainty with predictions to help people
+transit prediction scenarios.                                                       make decisions that align with their goals [5,33], yet most
+Author Keywords                                                                     visualizations of predictions present the data as if it were
+End-user visualization; transit predictions; mobile interfaces;                     true (Finger & Bizantz [10] as cited in Cook & Thomas
+dotplots; uncertainty visualization.                                                [5]). Had Susan’s application presented her with a more
+                                                                                    complete representation of the predicted arrival time—
+ACM Classification Keywords                                                         perhaps noting that arrival times earlier than 5 minutes are
+H.5.m. Information interfaces and presentation (e.g., HCI):                         also quite probable—she may not have risked getting cof-
+Miscellaneous                                                                       fee.
+INTRODUCTION                                                                        Many attempts to communicate uncertainty rely on com-
+Quantitative predictions are increasingly ubiquitous in eve-                        plex visual representations of probability distributions. For
+ryday life. Many such data come in the form of point esti-                          example, error bars and probability densities require prior
+mates designed to aid decision-making, such as when the                             experience with statistical models to correctly interpret
+next bus is going to arrive, how long a road trip will take,                        [2,6]. People can better understand probabilistic infor-
+whether and when it will rain, or what the high temperature                         mation when it is framed in terms of discrete events. For
+will be. Often, people access these predictions on their mo-                        instance, Hoffrage & Gigerenzer [16] found that more med-
+bile phones to make in-the-moment decisions that are time-                          ical experts could accurately estimate the positive predic-
+Permission to make digital or hard copies of all or part of this work for           tive value (precision) of a test when presented with discrete
+personal or classroom use is granted without fee provided that copies are           counts or outcomes. Discrete-event representations have
+not made or distributed for profit or commercial advantage and that copies          been used to improve patient understanding of risk, e.g., by
+bear this notice and the full citation on the first page. Copyrights for
+components of this work owned by others than the author(s) must be
+                                                                                    showing the uncertainty in a medical diagnosis as discrete
+honored. Abstracting with credit is permitted. To copy otherwise, or                possible outcomes (number of true positive, false positives,
+republish, to post on servers or to redistribute to lists, requires prior           false negatives, and true negatives) [11]. However, visualiz-
+specific permission and/or a fee. Request permissions from                          ing discrete approaches to presenting probability distribu-
+Permissions@acm.org.
+CHI'16, May 07 - 12, 2016, San Jose, CA, USA
+                                                                                    tions typically requires a large amount of space or time to
+Copyright is held by the owner/author(s). Publication rights licensed to ACM.       communicate the set of possible outcomes [17]. It is not
+ACM 978-1-4503-3362-7/16/05 $15.00
+DOI: http://dx.doi.org/10.1145/2858036.2858558
+clear how to effectively communicate discrete outcomes on          trust and tend to be interpreted as being more precise than
+small screens such as mobile devices.                              they actually are. Kay et al. suggest avoiding false preci-
+                                                                   sion in single point estimates by displaying the uncertainty
+We study user needs for communicating predictions and
+                                                                   associated with weight data to improve trust. Similarly,
+then design and evaluate novel, goal-directed visualizations
+                                                                   Jung et al. [21] found that displaying the estimated remain-
+of hypothetical outcomes in a time- and space-constrained
+                                                                   ing range of an electric vehicle as a gradient plot (i.e., with
+mobile application, realtime transit prediction. As a setting
+                                                                   uncertainty) reduced range anxiety in a driving task com-
+where users have direct, day-to-day experience with uncer-
+                                                                   pared to a single point estimate.
+tainty, transit prediction provides a representative context in
+which to evaluate how well people can use different uncer-         Joslyn & LeClerc [19] found that displaying uncertainty in
+tainty visualizations. The specific goals of our work are to       weather predictions can lead to more optimal decision-
+see if and for what reasons people want uncertainty infor-         making and trust in a forecast. When asked to make deci-
+mation in a bus setting; to identify effective uncertainty         sions about whether to salt roads (given a virtual budget,
+visualizations for realtime decision-making on a                   cost for salting, and cost for failing to salt when they should
+smartphone; and to test for differences in how precisely and       have), people made more optimal decisions when given
+confidently people extract probabilities from different visu-      point estimates with probabilistic information. Subjects
+alizations of uncertainty.                                         with access to probabilistic information even made more
+                                                                   optimal decisions than subjects who were explicitly told the
+Our three contributions based on these goals are to:
+                                                                   optimal decision based on a cot-benefit analysis. While the
+1. Develop general and domain-specific design require-             decision suggested by a cost-benefit analysis will give the
+   ments and a rich description of user needs for visualiz-        best choice on average, always applying the decision will
+   ing uncertainty in transit arrival times based on (i.) an       sometimes lead people to take precautions that seem unnec-
+   analysis of the literature and (ii.) an initial survey of 172   essary (e.g., salting the roads when the weather ultimately
+   people who use a popular realtime transit application.          does not require it). After experiencing a such few errors,
+                                                                   people may begin to distrust the strategy and ignore the
+2. Propose design layouts and discrete-event visualiza-
+                                                                   suggested course of action. Probabilistic information, on the
+   tions of uncertainty for conveying bus arrival time pre-        other hand, provides a more transparent form of infor-
+   dictions on small screens based on an iterative design          mation for decision making, leading to greater trust. We
+   process. We introduce quantile dotplots, a novel modi-
+                                                                   believe this insight also applies to realtime transit predic-
+   fied dotplot that is a discrete analog to the common prob-      tion: even if we could develop a system to make recom-
+   ability density plot.                                           mendations like “leave now to make your bus on time”, a
+3. Identify through a large user study of transit application      more transparent communication of uncertainty will
+   users how accuracy and precision in estimating probabil-        maintain trust over the long term and leave people the
+   ity compares across several visualizations. Unlike previ-       agency to make mistakes.
+   ous work in communicating uncertainty in continuous             Visualizing uncertainty
+   outcomes [6,14], our study is the first to compare static
+   discrete-outcome visualizations of probability distributions    As extrinsic annotation
+   to continuous representations. We find that a quantile          A common approach to visualizing uncertainty is as an ex-
+   dotplot depicting a small number of outcomes has ~              trinsic annotation to a plot of the distribution’s location
+   1.15 times lower variance than a density plot, making           (mean, median, or mode). For example, error bars represent-
+   probability estimates 1-3 percentage points more precise.       ing confidence intervals or prediction intervals1 can be su-
+                                                                   perimposed on bar charts [2]. These intervals are extrinsic
+Our results further understanding of how to communicate            to other properties like the mean or mode since they are not
+prediction uncertainty to non-experts in everyday, mobile          integrated into the same encoding. By contrast, the proba-
+decision-making contexts. Specifically, we recommend               bility density and mode are intrinsic to each other in a den-
+using low-density dotplots (due to lower variance and high-        sity plot, since the mode is visually encoded as the maximum
+er user confidence) or density plots (which have only slight-      of the density. Other distributional properties may be repre-
+ly higher variance, but were more visually appealing) for          sented in summary plots using a series of marks (e.g., specif-
+visualizing uncertainty in space-constrained environments.         ic quantiles in a boxplot or modified box plot as in [6,18,28]).
+BACKGROUND & MOTIVATION
+In this section, we use prior work to establish baseline re-       1 In contrast to a confidence interval, which describes the precision
+quirements for the effective communication of uncertainty.         of an inferred model parameter (e.g. population mean), a predic-
+                                                                   tion interval is an interval that a given percentage of specific in-
+Improving trust by communicating uncertainty
+                                                                   stances are predicted to fall into. While much of the literature
+Research indicates that displaying uncertainty can improve         focuses on confidence intervals (of interest to scientists using
+trust and decision-making in everyday contexts. Kay et al.         models for inference), we are more concerned with prediction
+[23] studied trust in body weight measurements, arguing            intervals (of interest to an individual who wishes to know how
+that single point estimates without uncertainty decrease           likely their bus is to arrive in a specific instance).
+Extrinsic representation can result in interpretation errors      stract probabilities of events. Discrete approaches were
+because the statistical construct (such as one standard error     initially found to improve reasoning in textual communica-
+or a 95% confidence interval) is poorly understood [2,18],        tion. Gigerenzer and Hoffrage [12] found that statistical
+because individuals apply heuristics that are not correct         word problems described in terms of natural frequencies
+(such as assuming that overlapping confidence intervals           (e.g., 10/100) rather than probabilities (10%) were more
+always indicate a non-significant difference [7]), or because     likely to elicit inferences according to Bayes’ rule in lay-
+the representation is ambiguous (such as an error bar being       people. Past work on visualizing uncertainty through hypo-
+used to encode standard deviation, standard error, or 95%         thetical, discrete outcomes uses spatial or temporal band-
+confidence interval). Finally, individuals tend to under-         width to communicate. For example, Garcia-Retamero and
+weight probabilistic information (such as sample size or          Cokely [11] reviewed studies of several types of visual aids
+variance) when making judgments in favor of heuristic at-         for communicating health risks, including discrete outcome
+tributes like representativeness [35]. By separating the          charts that illustrate treatment risk: they found that display-
+marks encoding underlying data from those encoding un-            ing icon arrays (a grid of pictograms, each representing a
+certainty, extrinsic representations are at risk of being         patient who lived or died) improved the accuracy of peo-
+viewed as peripheral, and consequently discounted when            ple’s risk assessment. Hullman et al. use animation to dis-
+making judgments. Thus, to avoid ambiguity, simplify in-          play discrete outcomes more compactly in space [17], find-
+terpretation, and encourage users not to underweight proba-       ing that animated discrete outcomes (called hypothetical
+bility information, we believe that uncertainty should be         outcome plots, or HOPs) support more accurate probability
+intrinsic to the representation.                                  estimates than static alternatives (violin plots and error
+                                                                  bars) for some tasks. However, by presenting outcomes
+Further, while a given prediction interval corresponds to a
+                                                                  over time, animated techniques bring a time-precision
+specific risk tolerance, a user may have differing risk
+                                                                  trade-off: to make more precise inferences, a user must
+thresholds in different contexts. For example, Susan may be
+                                                                  view more outcomes, taking more time [ibid].
+willing to be late to her meeting 1/20 times, translating to a
+one-sided 95% prediction interval for estimated arrival           From the evidence in both visual communication and statis-
+time, yet she may tolerate more risk in different contexts        tical reasoning, we believe that discrete outcomes can im-
+like social gatherings or less important meetings. Different      prove decision making under uncertainty. However, be-
+individuals are also likely to have different risk tolerances.    cause transit decisions are often made quickly in real time
+Therefore, we believe that effective visualizations of uncer-     we focused on developing non-animated presentations of
+tainty in this context should allow users to apply situa-         discrete outcomes that are glanceable yet compact enough
+tion-dependent risk tolerance.                                    for a mobile phone display, in which it is typical to visual-
+                                                                  ize the upcoming arrival of ~10 buses on one screen [9].
+As abstract, continuous outcomes
+Many other abstract, static representations encode a predic-      Visualization in space-constrained environments
+tive distribution's probability density function (PDF) intrin-    To display many buses simultaneously on a mobile phone
+sically as retinal variables (e.g., color, shape, texture) [3].   screen, we require our visualizations to be compact. Tech-
+For example, density plots encode the PDF as distance from        niques like horizon graphs [15] and sparklines [34] have
+the x-axis, violin plots encode it as width [1,22,31], and        been proposed for visualizing time-series data in space-
+gradient plots encode it as opacity. Several studies that in-     constrained environments. Visualizing uncertainty in transit
+clude variants of density and gradient plots find little evi-     arrival predictions encounters similar issues as these ap-
+dence of a performance difference between the two [6,18].         proaches; for example, a probability density function of
+Opacity is a less effective encoding than height, width, or       predicted arrival time will become quite tall as its variance
+area [26]. As a result, we do not test the gradient plot.         decreases (particularly, close to the predicted arrival time
+                                                                  the prediction will become very precise). Our work demon-
+Not all encodings of continuous outcomes using retinal
+                                                                  strates possible solutions for the specific context of visual-
+variables make distributional properties intrinsic. Ibrekk &
+                                                                  izing PDFs on mobile phone displays.
+Morgan [18] compare density plots to plots of cumulative
+density functions (CDFs), amongst several other encodings.        SURVEY OF EXISTING USERS
+CDFs encode cumulative density as distance from the x-            Our reading of the literature provides an initial grounding
+axis, allowing the probability of intervals to be estimated       for our design work, but to apply these results to a user-
+from height. They found that CDFs were unfamiliar to par-         centered uncertainty visualization we also need to under-
+ticipants and required training. Not surprisingly, people had     stand user goals. To establish design criteria for representa-
+particular difficulty in using CDFs to estimate means, most       tions of uncertainty based on user needs, we surveyed users of
+likely because there is no simple visual variable that corre-     one popular realtime transit application, OneBusAway [9].
+sponds to mean (nor mode) on a CDF.                               Method
+As hypothetical, discrete outcomes                                We conducted a survey to identify 1) how users currently
+We use discrete outcomes to refer to techniques that em-          use realtime bus arrival predictions and 2) their unaddressed
+ploy draws from a probability distribution rather than ab-        needs for goal-oriented uncertainty information. We sur-
+veyed 172 users of OneBusAway, recruited via social me-               mins from my home), but it suddenly came on time and I missed
+dia and department mailing lists.                                     it. Sometimes, it even comes early when it shows delay.
+
+Users’ existing goals                                               Problems with OneBusAway and unaddressed needs
+To identify important user scenarios to address and what            The top three questions users would like to be able to ask,
+types of information are most important to those scenarios,         but which are not well-supported by the current One-
+we asked people about the primary goals they have when              BusAway interface, are:
+using OneBusAway. We developed a set of possible ques-               Status probability: What is the chance OBA is showing
+tions (e.g., “When should I start walking to the bus stop to          the correct arrival status? This problem was also reflected
+catch my bus?”2) that people may ask using the interface              in a commonly-described worst experience, wherein the
+using observations from previous studies of OneBusAway                bus never shows up and people have to make alternative
+[20], our own reflections on using the system, from infor-            plans. For example:
+mal interviews with a small group (~15) of other users at
+our university, and through piloting the survey. We present-          My bus is perpetually 9 minutes away...while I watch alterna-
+                                                                      tive buses pass me thinking that oh, mine is going to be here
+ed participants with a list of 9 such questions, and asked
+                                                                      soon only to eventually see "no information" for my bus. I could
+how often (on a 7-point scale from “never” to “always”)               have been on my backup bus a half hour ago!!!
+they try to answer each question using OneBusAway. We
+also asked them if there are other ways they use One-                 It was common for people to report their worst experi-
+BusAway in an open-ended question.                                    ences were related to status probability: for example,
+                                                                      OneBusAway said “departed”, but the bus had not ar-
+Problems with OneBusAway and unaddressed needs                        rived; it said “arriving” but had already departed. Any
+We similarly presented participants with a list of types of           noisy estimate reduced to a categorical status will exhibit
+information not currently provided by OneBusAway and                  these types of errors which could be mitigated by convey-
+asked them to rate the potential helpfulness of these (on a 5         ing status probabilistically.
+point scale from “not helpful at all” to “very helpful”). We
+also provided an open-ended question asking about needs              Prediction variance: What is the chance the predicted
+for uncertainty information not in this list. Finally, we             arrival time will change unexpectedly?
+asked people to describe the worst experience they have              Schedule frequency: How frequently do buses arrive at
+had using OneBusAway’s predictions.                                   various times in the day?
+Results and Discussion                                              DESIGN REQUIREMENTS
+Users’ existing goals                                               Based on our literature review and user survey, we identi-
+The top 5 highest-rated questions users currently ask are:          fied the following necessary design elements:
+
+ When to leave: When should I start walking to my bus?             Point estimate of time to arrival: To support glanceabil-
+                                                                    ity, we think that the point estimate of arrival time is neces-
+ Wait time: If I leave now, how long will I have to wait at        sary: people often use OneBusAway to make fast decisions
+  the bus stop?                                                     about when to arrive at the bus stop. In addition, previous
+ Time to next bus: I missed my bus, how long will I have           work has found that even when providing probabilistic es-
+  to wait for the next one to come?                                 timates, people still want a point estimate. The existing
+                                                                    point estimate of OneBusAway supports estimation tasks
+ Schedule risk: Will I get to a meeting/event on time de-          from our survey like when to leave, wait time, and time to
+  spite bus delays? This relates to a commonly-described            next bus, though without communicating risk.
+  worst experience of buses coming later than expected.
+  For example:                                                      Probabilistic estimate of time to arrival: While people
+  A more recent bad experience was when I was waiting for the       often want a point estimate of arrival time, a point estimate
+  511 or 512 for over an hour. At least five buses should have      without uncertainty will often convey a false precision. A
+  passed, but they either did not show up or they were full and     probabilistic estimate will help users understand that there
+  didn't let anyone on                                              is a chance the bus will come earlier or later than the point
+                                                                    estimate. This helps people assess schedule risk and sched-
+ Schedule opportunity: Will I have enough time to do
+                                                                    ule opportunities. A probabilistic estimate also allows peo-
+  ____ before the bus arrives? This relates to a commonly-
+                                                                    ple to make conservative estimates while planning for meet-
+  described worst experience of the bus coming earlier than
+                                                                    ings, or less conservative estimates for low risk situations –
+  expected after someone has used the prediction to decide
+                                                                    that is probabilistic estimates allow situation-dependent risk
+  to do something else before going to the bus; e.g.:
+                                                                    tolerance. This will help people better answer questions
+  It showed delays on a bus due to which I didn't leave home as I   about when to leave, wait time, and time to next bus (the
+  didn't want to wait at the bus stop for long (the bus stop is 4   highest rated goals) and prepare people for commonly-
+                                                                    reported worst experiences like a bus coming unexpectedly
+2 The full survey is available in our supplementary material.       early or late.
+Probabilistic estimate of arrival status: For example,                       Bus Timeline                 Route Timeline
+
+what is the chance the bus has already arrived? Among
+questions not currently supported by OneBusAway, survey
+respondents most wanted support for this question (status
+probability), and commonly reported worst experiences
+related to it.
+Data freshness: Because OneBusAway does not currently
+give probabilistic estimates, one of the only available sig-
+nals for expert users to assess risk is the freshness of the
+data: OneBusAway indicates the time of the last update for
+realtime predictions and whether the current prediction is
+based on realtime data (it reflects the scheduled arrival time
+when realtime data is not available). This freshness infor-
+mation should either be provided to users in a redesigned
+interface, or should be incorporated into any models driving     Figure 1. Alternative layouts we developed. (a) Bus Timeline:
+probabilistic estimates.                                         Each row (timeline) shows one predicted bus. (b) Route Time-
+                                                                  line: Each row shows all predicted buses from a given route.
+We believe these design elements will address each goal
+                                                                 navigation, but is less compact in addressing problems like
+identified in the user survey with the exception of the goal
+                                                                 assessing schedule frequency, and, once the probabilistic
+of knowing schedule frequency. We felt that this goal is
+                                                                 visualizations are added, less compact than the current ap-
+better addressed through a separate interface, such as a trip
+                                                                 plication. Route-timeline, by contrast, creates a more com-
+planner or schedule explorer in a mapping application.
+                                                                 plex display and navigation (requiring navigation in two
+Schedule frequency is less relevant to in-the-moment deci-
+                                                                 dimensions), but more easily aids understanding of sched-
+sion-making than it is to long-term planning (can I rely on a
+                                                                 ule frequency (how often is the bus) and schedule oppor-
+bus arriving within some amount of time?). When schedule
+                                                                 tunity (since if one is considering the risk associated with
+frequency is relevant to in-the-moment decisions, it typical-
+                                                                 missing the next bus, it is easier to see how soon the bus
+ly reduces to other goals, like time to next bus.
+                                                                 after that is coming and factor that into one’s decision).
+DESIGN
+                                                                 Point estimates and probabilistic
+We conducted an iterative design process focused on the
+                                                                 estimates should coincide spatially
+design requirements set out above. This process began with       We explored several tradeoffs between prominent point
+a wide exploration of ideas through sketching, followed by       estimates versus probabilistic estimates, what we call the
+paper prototyping in increasing fidelity, and culminated in      glanceability/false precision tradeoff. A too-prominent
+digital mockups. These phases were informed by ongoing           display of the point estimate causes users to ignore the
+user feedback gained through informal down-the-hall test-        probabilistic one, thus still giving a false sense of precision;
+ing with a total of 24 users. During informal testing, we        a less-glanceable point estimate will be difficult to skim and
+presented users with hypothetical scenarios of use and           frustrating to use. We want a display that is glanceable but
+asked them to think aloud as they interpreted the display.       which also does not convey false precision. To resolve this,
+Many of the design issues we encountered are somewhat            we concluded that these two elements should coincide spa-
+orthogonal to specific of encodings of probability: given a      tially: that is, looking at the point estimate should encour-
+particular timeline layout, for example, we could encode         age the user to also be looking at the probabilistic estimate.
+probability in many ways (e.g., as area, discrete events, a      We had considered designs in which the point estimate was
+gradient). We first present our proposed set of designs and      along the right-hand edge of the display (Figure 3), as in the
+their rationale, then discuss possible techniques for encod-     original OneBusAway. We concluded that this facilitated
+ing probability on small screens.                                glanceability, but also allowed users to pay too little atten-
+                                                                 tion to the probabilistic estimates. Moving the point esti-
+Proposed designs and rationale
+                                                                 mate onto the probability distribution resolved this tension.
+Our proposed designs, instantiated with one particular visu-
+alization of uncertainty (density plot) out of several possi-    Annotated timelines give probabilistic
+ble, are shown in Figure 1. Here we describe decisions we        estimates of status “for free”
+made to resolve design tensions and to match user goals.         While we considered designs that more explicitly com-
+                                                                 municate the probability that the bus has arrived, we real-
+Different layouts better serve different use cases               ized that an annotated timeline combined with probabilistic
+We developed two alternative layouts, bus-timeline and           predictions communicates this implicitly. By denoting areas
+route-timeline. The bus-timeline layout gives a timeline for     that correspond to “departed”, “now”, and “on the way” on
+a single bus on each row, similar to how the existing One-       the timeline, users can directly read these probabilities from
+BusAway app displays a single row per bus, sorted by pre-        the distributions depicted; see the timeline annotations
+dicted time to arrival. This simplifies understanding and        across the top of Figure 1.
+When to leave is implicit in time to arrival                              Probability density of Normal distribution
+We considered designs that communicated when someone
+should leave to catch their bus; i.e. designs that directly
+addressed the when to leave goal. However, there are sever-               To generate a discrete plot of this distribution,
+al difficulties with this approach: first, when to leave is not           we could try taking random draws from it.
+                                                                          However, this approach is noisy: it may be
+the only goal for which people use OneBusAway; thus it                    very different from one instance to the next.
+would need to be integrated into displays communicating
+information like time to arrival (or alternate designs devel-
+oped for both goals). This exacerbates space issues. Esti-
+mating when to leave also requires substantial knowledge
+about the users’ plans, and introduces further uncertainty
+(e.g., how long does it take to walk to the stop?).                       Instead, we use the quantile function (inverse CDF)
+                                                                          of the distribution to generate “draws” from
+Data freshness may be subsumed by an improved model                       evenly-spaced quantiles.
+
+OneBusAway often does not have truly realtime infor-
+mation, but instead updates when buses check in. As noted
+previously, expert users often refer to the last check-in time
+as a way to evaluate how much they trust the application’s
+prediction. To facilitate this use, we considered several de-
+                                                                          We plot the quantile “draws” using a
+signs that included indicators of data freshness or last up-              Wilkinsonian dotplot, yielding what we call a
+date times. Ultimately we decided not to include this infor-              quantile dotplot: a consistent discrete
+mation, as the model used to generate the probabilistic arri-             representation of a probability distribution.
+
+val information should take data freshness into account to
+                                                                          By using quantiles we facilitate interval
+provide better estimates to all users, rather than continu-               estimation from frequencies: e.g., knowing there
+ing to support a workaround used by expert users.                         are 50 dots here, if we are willing to miss our
+                                                                          bus 3/50 times, we can count 3 dots from the
+Synchronized timelines allow comparison between buses                     left to get a one-sided 94% (1 − 3/50) prediction
+                                                                          interval corresponding to that risk tolerance.
+In our designs, the axis of the timeline in each row is syn-
+chronized to the other rows, facilitating comparison be-                          Figure 2. Explanation of quantile dotplots.
+tween buses. We considered designs with each row having
+                                                                       Discrete outcome visualizations of continuous variables
+its own time range depending on the prediction (e.g., one              We explored several ways to convey a continuous predic-
+row with low variance might show a density plot covering               tive probability distribution as discrete outcomes. The first
+5-10 minutes from now; another with high variance might                is based on Wilkinson’s dotplots [37], which are typically
+have an axis covering 5-15 minutes from now). However,                 used to communicate the distribution of experimental sam-
+such relative timelines are very difficult to compare be-              ples (e.g., [27]). We instead adopt these plots to display
+tween buses on different rows—buses with different vari-               theoretical quantiles from a predictive distribution. As Wil-
+ance might look similar because the relative timeline would            kinson notes, correctly-produced dotplots have the desirable
+also cause the density to be scaled.                                   property of also conveying the density of the distribution.
+Encoding probability in space-constrained environments                 Our quantile dotplots have this property, as well as the
+Given our chosen design, we need an effective way to en-               additional property of allowing direct estimation of arbi-
+code probability at small sizes. We considered several ap-             trary (to a certain precision) predictive intervals through
+proaches (Figure 4). Most of these are drawn from the liter-           counting (see Figure 2). We believe that this form of natu-
+ature, including density plots, violin plots, and gradient             ral reasoning about predictive intervals—as frequencies—
+plots. We also propose variants of two existing discrete               should allow people to obtain precise estimates of predic-
+plots for visualizing predictive distributions as discrete out-        tive intervals in a way that is easily understood.
+comes, stripeplots and dotplots.
+                                                                       We also use stripeplots [8] of theoretical quantiles to
+                                                                       communicate a continuous probabilistic prediction as hypo-
+                                                                       thetical outcomes. In these, the density of stripes in a region
+                                                                       encodes probability density, and as in quantile dotplots
+                                                                       (though less easily), predictive intervals can be estimated
+                                                                       directly through counting. Where dotplots are a discrete
+                                                                       analog to a density plot, stripeplots can be thought of as the
+                                                                       discrete analog to a gradient plot.
+                                                                       Tight densities require special attention on small screens
+Figure 3. An example of a design we rejected for placing point         Displaying many rows of predictions on a small screen ne-
+predictions (along the right side) outside the context of uncertain-   cessitates relatively small row height. Unfortunately, distri-
+ ty, making it more likely to give users a false sense of precision.   butions with low variance will become very tall, exceeding
+the row height. Traditional solutions include horizon charts                           Density       Stripeplot        Density+
+                                                                                                                       Stripeplot   Dotplot(20)   Dotplot(50) Dotplot(100)
+
+[15] (which we suspect are unfamiliar to lay users), or nor-
+malizing all density plots to the same height (which makes         shows discrete,
+                                                                   countable events
+
+comparison difficult). This problem is most pronounced on            fast counting
+                                                                         in tails
+buses with tight variance, i.e., the most precise predictions.       fast counting
+Consequently, for density plots we adopted the compromise               in body
+
+
+approach of scaling down the max height only when it ex-           directly estimate
+                                                                        density
+
+ceeds the row height. This adjustment affects only the pre-        directly estimate
+                                                                       quantlies
+dictions of which the model is most certain, so fine-grained        tight densities
+
+resolution of probability becomes less important to most          drawn consistently
+
+
+goals. This adjustment is required only for density, dotplot-         project to
+                                                                         axis
+
+50, and dotplot-100 (in the dense dotplots, instead of scal-         easily assess
+                                                                   range (min/max)
+ing we reduce the dot-spacing). Dotplot-20 and stripeplot           easily assess
+
+have the advantage of a consistent representation of proba-             mode
+
+
+bility in tight densities: they need not be modified.             Figure 4. Comparison of various encodings of probability we
+                                                                               considered for use in our designs.
+Countability may vary from tails to body
+Care must be taken in deciding how many hypothetical                                             Bus Timeline                                Route Timeline
+
+draws (quantiles) to include in discrete plots. Figure 4 com-                              10                                                10               38
+pares some of the tradeoffs here: With few draws, as in            Density
+dotplot-20, it is easy to count the dots in the tails and body                         0   10       20    30      40      50            0    10     20   30    40    50
+of the distribution, but the density is less well-resolved.                                10                                               10                38
+With many dots, as in dotplot-100, counting in the tails is        Dotplot
+often still easy, but in the body overwhelming; however,            (20)
+                                                                                       0   10       20    30      40      50            0    10     20   30    40    50
+density is very well-resolved.                                                             10                                               10                38
+                                                                   Dotplot
+Selected encodings                                                  (100)
+To select the encodings to evaluate for our final design, we                           0   10       20    30      40      50            0    10     20   30    40    50
+
+
+constructed the matrix shown in Figure 4 comparing vari-                                   10                                               10                38
+ous properties of the encodings. We selected density,             Stripeplot
+                                                                     (50)              0    10      20    30      40      50           0     10    20    30    40    50
+stripeplot-50, dotplot-20, and dotplot-100 as representing a
+wide range of possible trade-offs suggested by this matrix.
+                                                                  Figure 5. The four types of visualizations selected for evaluation.
+EXPERIMENT
+We conducted an online survey to evaluate the effective-          “20/100, 10/50, 4/20”), so that participants do not have to
+ness of our designs in conveying uncertainty. The goal of         do mental arithmetic in the dotplot and stripeplot condi-
+this survey was to assess how well people can interpret           tions. The predictions in each scenario were generated from
+probabilistic predictions from the visualizations and to elicit   models based on Box-Cox t distributions [29] fit to ~2
+their preferences for how the data should be displayed.           weeks worth of arrival time data for actual buses in Seattle,
+                                                                  but the buses were given fake route names. Participants are
+Method                                                            also asked how confident they are in each probability they
+To assess how well people can judge probability from our          estimate. At the end of the survey they rate the ease of use
+visualizations, we adopted an approach similar to that of         and visual appeal of each visualization. All subjective rat-
+Ibrekk and Morgan [18], who presented various representa-         ings are made on 100-point visual analog scales.
+tions of uncertainty for weather forecasts and asked subjects
+to report probabilities (e.g., snowfall >2 inches, or between     Scenario order was randomized between participants. Each
+2 and 12 inches).                                                 participant saw each visualization type (density, stripeplot,
+                                                                  dotplot-20, or dotplot-100) once. Before each scenario, they
+We created four scenarios based on the goals identified in        were also given a brief tutorial explaining the encoding they
+our user survey, each with two questions about the proba-         were about to use. Pairings between scenario and visualiza-
+bility of bus arrival. For example, in one scenario the re-       tion type were also randomized. Participants were also ran-
+spondent is waiting for a bus, and must decide if they have       domly assigned to see all visualizations in the bus-timeline
+enough time to get coffee before the bus arrives. They are        or route-timeline layout. A full version of the survey can be
+asked what the chance is that the bus will arrive 10 minutes      found in the supplementary material.
+or earlier, and respond using a visual analog scale, a 100-
+point slider from 0/100 to 100/100. We call their response        Participants
+the estimated p (in contrast to the true p, which we calculate    We recruited participants from a variety of locations, in-
+from the underlying probability distribution). A bubble on        cluding department mailing lists, a local transit blog, and a
+the response slider shows this chance expressed in all three      local forum on reddit.com. Participants were entered into a
+denominators used by the various visualization types (e.g.        raffle for 1 $100 Amazon.com gift card and an additional
+$25 gift card per 100 participants. Since our primary re-                been shown to be better-suited to this type of data than line-
+search questions were about the effect of visualization                  ar regression [30].
+types, not layout, we ran the first 100 participants only on
+                                                                         Our regression uses a submodel for the mean (in logit-
+the bus-timeline condition. This threshold was chosen based
+                                                                         space) and the dispersion (proportional to variance, in log-
+on a power analysis of data from Hullman et al. [17], which
+                                                                         space) [30]. This allows us to model the bias of people's
+suggested a power of at least .8 with our design for detect-
+                                                                         estimated p as effects on the mean of their responses, and
+ing similar effect sizes to that study after 100 participants.
+                                                                         the variance as effects on the dispersion of their responses.
+After reaching 100 participants in the bus-timeline layout,
+                                                                         Specifically, we include visualization, logit(true p), and
+the remainder of participants were randomly assigned to
+                                                                         their interaction as fixed effects on mean response. We in-
+either the bus-timeline or route-timeline layout. After re-
+                                                                         clude visualization, layout, and gender as fixed effects on
+moving 9 participants for incomplete data, we had 320 par-
+                                                                         the dispersion (in other words, some visualizations or lay-
+ticipants in the bus-timeline and 221 participants in the
+                                                                         outs may be harder to use, resulting in more variable re-
+route-timeline layouts. Our participants skewed male (71%
+                                                                         sponses; and men may be better or worse at this task). We
+male). 90% were existing OneBusAway users.
+                                                                         also include participant and participant × visualization as
+Results                                                                  random effects (some people may be worse at this task, or
+To understand how well each visualization performs, we                   worse at this task on specific visualizations), and question
+can examine the error in people’s probability estimates. We              as a random effect (some questions may be harder).
+break error into bias (do people over- or under- estimate
+probabilities on average?) and variance (how self-consistent             We use a Bayesian model, which allows us to build on pre-
+are people’s estimates, whether biased or not?). So long as              vious results by specifying prior information for effects,
+the bias is low, we believe that variance is the more im-                and report results primarily as posterior distributions with
+portant component of error in this task: over time people                95% credibility intervals (the Bayesian analog to a confi-
+can adjust their risk tolerance to a small but consistent bias,          dence interval) [24,25]. We derive priors from fitting a sim-
+but they cannot do so if their estimates are not consistent.             ilar model to the data from Hullman et al.[17], which had a
+We consider overall error, bias, and variance in turn.                   similar task (estimating cumulative probabilities on three
+                                                                         visualizations: a violin plot, animated hypothetical out-
+Overall error in participants’ probability estimates                     comes, and error bars). We set Gaussian priors for fixed
+We start by looking at the overall shape of participants’                effects in our model that capture the sizes of effects seen in
+estimation error: logit(estimated p) – logit(true p) for each            the Hullman et al. data within 1-2 standard deviations, with
+question.4 Figure 6A shows the density of those differences,             skeptical means (0 for intercept and 1 for slope in logit-logit
+broken down by visualization type. The bias in responses is              space, corresponding to an unbiased observ`er). We use the
+consistently low and positive across conditions: note that               posterior estimate of the variance of the random effect of
+the error distributions all peak in approximately the same               participant in that model as the prior for the variance of
+place, slightly to the right of 0 (the dashed line). Variance            random effects in our analysis. Full priors and posterior
+appears to be lower in dotplot-20 compared to the other visu-            estimates are available with our data. 6
+alizations: the distribution of error is narrower. However, this
+does not necessarily equate to more self-consistent responses.           Bias in respondent probability estimates
+We therefore use a model to assess bias and variance more                Consistent with Figure 6A, our regression found that esti-
+systematically and to account for within participant effects.            mates were slightly biased on average, and these biases
+                                                                         were similar across conditions (more details in supplemen-
+Regression model for bias and variance                                   tary material). Our beta regression model accounts for this
+We fit a beta regression to participants’ estimated probabili-           bias when estimating the variance of participant responses.
+ties, which assumes responses are distributed according to a             The slight overestimation here may be because all of our
+beta distribution. This distribution is defined on (0, 1) and            distributions are right-tailed (positively skewed). This is
+naturally accounts for the fact that responses on a bounded              generally true of transit arrival time data; thus, if the skew
+interval have non-constant variance.5 In other words, the                is the source of this bias we should expect to see this effect
+variance of estimated p changes with the probability being               in real-world situations in our domain but perhaps not oth-
+estimated. For example, at probability = 0.5 one can guess               ers. Skewness of distributions is known to affect risk aver-
+0.5 + 0.4 = 0.9; at probability = 0.9 one cannot guess 0.9 +
+0.4 = 1.3 (it is greater than 1.0), so responses “bunch up”
+[30] under 1.0 and variance is lower. Beta regression has                6 Note that similar results were obtained using more default priors,
+
+                                                                         showing our results are not highly sensitive to choice of priors
+4 The logit function is an s-shaped function that transforms probabil-
+                                                                         here. The model was fit using Stan [32], with 16 chains having
+                                                                         20,000 iterations each (half warmup), thinned at 8, for a final
+ities into log-odds, often used when to simplify the analysis of prob-   sample size of 20,000. Parameters of interest all had effective
+abilities by transforming them onto the unbounded real line.             sample sizes > 10,000 and potential scale reduction factor < 1.001.
+5 Because 0 and 1 are not defined in the beta distribution, we treat     See https://github.com/mjskay/when-ish-is-my-bus for sur-
+answers of 0 and 1 from our visual analog scales as 0.001 and 0.999.     vey data and code (DOI: 10.6084/m9.figshare.2061876)
+             A. Error in estimated probability:                         We take the log odds ratio of         B. Standard deviation of estimated p                                    Our fitted model can estimate
+                logit(estimated p) − logit(true p)                      estimated p versus true p: the           at p = 0.5 according to the model                                    the standard deviation (SD) of
+                                                                        narrower this distribution is, the                                                                            respondents’ estimated p. This
+                       estimated p                                      more precise respondents were                                                                                 measures how precise people are
+                           = true p
+                                                                        at estimating probabilities, and                                                                              at estimating probability intervals
+Dotplot-20                                                              the lower the dispersion will be                       0.11                                                   with each visualization: lower is
+                                                                        in our model of responses.                                                                                    more precise. An SD of 0.01 means
+                                                                                                                                                                                      the average respondent’s estimates
+                                                                                                                                                 95% credibility
+                                                                        Respondents’ estimates in                                                interval
+                                                                                                                                                                                      have a standard deviation of 1
+                                                                        dotplot-20 are the most precise                                                                               percentage point when p = 0.5.
+Dotplot-100                                                                                                                             0.13
+                                                                                                                                                                                      SD depends on p, so we fix
+                                                                        of all conditions: note the narrow,
+                                                                        peaked distribution.                                                                                          p at 0.5 for these estimates.
+                                                                                                                                                 posterior
+                                                                                                                                                 density                              Our Bayesian model gives a 95%
+                                                                        Dotplot-100 and density perform                                                                               credibility interval and a posterior
+                                                                                                                                      0.13
+Density                                                                 similarly, exhibiting slightly less                                                                           density for each SD, capturing the
+                                                                        precise estimates than dotplot-20.                                                                            estimated SD and the precision
+                                                                                                                                                                                      of our estimate of it.
+                                                                        Respondents’ estimates in
+                                                                                                                                                                                      For example, we estimate the SD
+                                                                        stripeplot are the least precise                                        0.16
+Stripeplot                                                                                                                                                                            of estimated p to be between 13 and
+                                                                        of all conditions: note the wide,
+                                                                                                                                                                                      20 percentage points in stripeplot
+                                                                        diffuse distribution.
+                                                                                                                                                                                      when p = 0.5.
+
+Log odds ratio −2.5 −2.0 −1.5 −1.0 −0.5 0.0 0.5 1.0 1.5 2.0 2.5                                                            0.10           0.15            0.20                 0.25
+Estimated p if                                                                                                   SD of estimated p when p is fixed at 0.5
+               0.08 0.12 0.18 0.27 0.38 0.50 0.62 0.73 0.82 0.88 0.92                                            0.01 = 1 percentage point
+true p was 0.5
+
+          Figure 6. Variance of respondent estimates of probability intervals, (A) as raw data and (B) as estimated by our model.
+
+sion in financial decisions made from density plots [36];                                                                       equal
+these biases may be related.                                                                                  stripeplot                                 1.25×                    To compare how precise people
+                                                                                                               density                                                            are when using each visualization,
+                                                                                                                                                                                  we estimate the ratio of the SD of
+Variance in participant probability estimates                                                                  stripeplot                              1.22×                      estimated p in one visualization
+As noted above, we believe that variance is more important                                                    dotplot-100                                                         compared to another. This tells us
+                                                                                                                                                                                  roughly how many times less precise
+than bias in this task, as low variance would allow people to                                                   density                 0.97×
+                                                                                                                                                                                  people are at estimating probability
+                                                                                                                                                                                  intervals with one visualization type
+adjust their behavior to a consistent bias over long-term                                                     dotplot-100
+                                                                                                                                                                                  compared to another.
+
+usage. We estimate the variance associated with each visu-                                                    stripeplot                                            1.44×
+
+alization as a standard deviation in estimated p if p is fixed                                                dotplot-20
+
+                                                                                                                                                                                  For example, people are between
+at 0.5 (Figure 6B). Figure 7 shows pairwise comparisons of                                                     density
+                                                                                                              dotplot-20
+                                                                                                                                                 1.15×
+                                                                                                                                                                                  1.04 and 1.26 times less precise at
+
+SD for all visualizations (pair specified in left column).                                                                                                                        estimating probability intervals
+                                                                                                                                                                                  using density compared to
+Dotplot-20 has the lowest estimated variance (SD of ~11                                                       dotplot-100
+                                                                                                              dotplot-20
+                                                                                                                                                   1.18×                          dotplot-20.
+
+percentage points), being about 1.15 times more precise
+than density plots. By contrast, dotplot-100 has similar vari-                                                                         1.00×         1.25×
+                                                                                                                            Ratio of SD of estimated p at p = 0.5
+                                                                                                                                                                       1.50×             1.75×
+
+ance to density, consistent with people estimating area in-
+                                                                                                               Figure 7. Differences in variance for each visualization type.
+stead of counting dots, perhaps because there are more dots
+than they may be willing to count.                                                                            ing (mean = 43, 95% CI: [42, 45]). However, despite these
+Confidence                                                                                                    differences, ease of use for all visualizations except stripep-
+Ideally, greater confidence in a given answer would be as-                                                    lot was ~60 (stripeplot mean = 35, 95% CI: [33, 36]), sug-
+sociated with less error, indicating that people are able to                                                  gesting only stripeplot was found consistently difficult to
+self-assess their accuracy. We used a similar beta regression                                                 use. This may reflect stripeplot’s much higher estimation
+to model confidence in estimates depending on visualiza-                                                      variance than the other visualizations (higher standard devi-
+tion. Participants expressed higher confidence in their esti-                                                 ation by about 4-5 percentage points when probability =
+mates on average in the dotplot-20 condition (mean =                                                          0.5—Figure 6B—or about 1.44 times the SD of dotplot-
+81/100, 95% CI: [77, 83]) than the next-most-confident                                                        20—Figure 7).
+condition, dotplot-100 (mean = 73, 95% CI: [71, 76]). At                                                      DISCUSSION
+the same time, confidence in the dotplot-20 condition corre-
+                                                                                                              Discrete outcomes work best in small numbers
+lated negatively with absolute estimation error (Spearman’s
+                                                                                                              Our results suggest that discrete-outcome visualizations of
+ρ = −0.18, 95% CI: [−0.13, −0.25]), an association we did
+                                                                                                              uncertainty can improve probability estimation in space-
+not see in other conditions. At least with dotplot-20, people
+                                                                                                              constrained visualizations of continuous outcomes if care is
+have some ability to assess how good their own estimates
+                                                                                                              taken in their instantiation. While dotplot-20 improved es-
+are. We suspect that this may be due to the fact that with
+                                                                                                              timation variance over density, dotplot-100 performed very
+dotplot-20 one can choose either to be precise (by counting
+                                                                                                              similarly to density. In addition, Stripeplot performed very
+dots) or to give a less precise, less confident answer (by
+                                                                                                              poorly. We believe this may reflect the principle that dis-
+approximating density or area instead of counting).
+                                                                                                              crete plots with too many outcomes converge to continuous
+Ease of use and visual appeal                                                                                 encodings: since counting dots is arduous in dotplot-100
+We also analyzed ease of use and visual appeal using beta                                                     and stripeplot-50, people are more likely to read them like
+regression. Density had the highest visual appeal (mean =                                                     density plots and gradient plots (respectively), nullifying
+66, 95% CI: [64, 67]); dotplot-20 was less visually appeal-
+the value of the discrete outcomes. In dotplot-20, people         sophisticated use of the visualizations may develop over
+can count quickly by using subitizing, the ability to quickly     time, making learning an important component to under-
+recognize rather than count groups of items in number < ~5        stand in this space.
+[4,13]. Since the vertical groups of dots in dotplot-20 are
+                                                                  The designs we evaluated also did not fully exploit interac-
+rarely are over 5 dots high, interval judgements (particular-
+                                                                  tivity, which might enhance the glanceability of the current
+ly close to the tails) are often reduced to quick, accurate
+                                                                  static visualizations while preserving uncertainty infor-
+judgments through subitizing. Thus, we recommend dis-
+                                                                  mation. For example, we prototyped a “risk slider” that lets
+crete outcome plots with few enough outcomes to take
+                                                                  people move the point estimate to match a specific risk
+advantage of subitizing.
+                                                                  threshold; this would allow them to fit the point estimate to
+Implications for design and future work                           their overall preferences or change it to match a specific
+The value of communicating uncertainty                            situation. This feature can be incorporated into any of our
+In the first survey, users described goals and unfortunate        proposed designs and should be evaluated as a technique to
+experiences in OneBusAway that information about uncer-           help resolve the glanceability/false precision tradeoff.
+tainty could help mitigate. In the second survey, most re-        Our research demonstrates that our visualizations can help
+spondents said they appreciated the idea of representing un-      people accurately, precisely, and confidently evaluate un-
+certainty. They said this information could help them make        certainty, laying the groundwork for future studies evaluat-
+better decisions, alleviate their anxiety when the app’s infor-   ing the effects of differences in precision on behavioral
+mation does not match their knowledge, or help them with a        measures.
+problem they commonly experience with OneBusAway.
+                                                                  Visual appeal vs. estimation tradeoff
+A minority of respondents said they did not care about the        Related to the precision/glanceability tradeoff, people were
+uncertainty information: that point estimates are sufficient.     also divided about preferring the dot plots or the density
+In contrast to respondents who said the information could         plots. The dotplots, while ~1.15 times more precise than the
+help, these respondents tended to say the point prediction        density plots and yielding higher confidence, were also rat-
+presented in OneBusAway was consistently accurate. An             ed less visually appealing. We do not know if this is a con-
+additional minority actively did not want to receive any          sequence of unfamiliarity, or if it is because the dotplots are
+information about uncertainty. Several of these people            visually busier. It is worth investigating whether the im-
+compared evaluating probability information in visualiza-         provement from dotplots is worth decreased visual appeal,
+tions to statistics courses. Five feared that, if given uncer-    or if participants might get used to the dotplots over time.
+tainty information, they would become responsible for mak-
+                                                                  CONCLUSION
+ing decisions, and would have to take responsibility for the
+                                                                  In this paper, we identify general design requirements for
+wrong decision: “you're more likely to be unhappy than if
+                                                                  visualizing uncertainty on mobile applications as well as
+you missed the bus and can just blame the app.” While this
+                                                                  domain-specific design requirements for visualizing uncer-
+represents a small number of participants, we believe that
+                                                                  tainty in transit arrival times. From these, we propose a
+future work is necessary to see how widespread such reac-
+                                                                  mobile interface for communicating uncertainty in realtime
+tions may be in real-world deployments.
+                                                                  transit predictions in a way that supports users' goals. We
+Navigating the precision versus glanceability tradeoff            developed and evaluated candidate visualizations, including
+Designers should attend to the balance of precision and           a novel discrete representation of continuous outcomes de-
+glanceability in representing uncertainty. Participants were      signed for small screens, quantile dotplots. In a controlled
+divided over whether our visualizations were appropriately        experiment, quantile dotplots improved probabilistic esti-
+glanceable for a transit mobile app. While some said the          mates over traditional density plots and facilitated more
+new designs were easy and clear, more described feeling           confident estimation by end-users. Researchers and design-
+overwhelmed at least in the context of our experiment and         ers can apply and evaluate these interfaces in the field, with
+the majority of commenters expressed doubts about being           particular attention to opportunities to employ interactivity
+able to use these visualizations while walking to a bus stop.     and other techniques to balance precision and glanceability.
+Despite respondent concerns about whether they or others
+                                                                  ACKNOWLEDGMENTS
+could understand the visualizations, our survey results
+                                                                  This work was supported by a Google Faculty Award, the
+overwhelmingly show that people understood them.
+                                                                  Intel Science and Technology Center for Pervasive Compu-
+The designs presented here should be evaluated in longitu-        ting, the Computing Research Association’s Distributed
+dinal field studies to assess actual acceptability and use. For   Research Experiences for Undergraduates program, and the
+example, survey respondents were concerned that the dot           Robert Wood Johnson Foundation Health Data Exploration
+plots would compel them to count, but in practice they may        program. We especially thank Martin Wattenberg for valu-
+find that they count when they want precise estimates but         able feedback.
+are able to get a good overview from a quick glance. As
+transit prediction is an everyday practice for many, more
+REFERENCES                                                     12. Gerd Gigerenzer and Ulrich Hoffrage. 1995. How to
+1.   Nicholas J Barrowman and Ransom A Myers. 2003.                improve Bayesian reasoning without instruction:
+     Raindrop Plots: A New Way to Display Collections of           Frequency formats. Psychological Review 102, 4: 684–
+     Likelihoods and Distributions. The American                   704. http://doi.org/10.1037//0033-295X.102.4.684
+     Statistician 57, 4: 268–274.
+                                                               13. Ernst von Glasersfeld. 1982. Subitizing: The role of
+     http://doi.org/10.1198/0003130032369
+                                                                   figural patterns in the development of numerical
+2.   Sarah Belia, Fiona Fidler, Jennifer Williams, and Geoff       concepts. Archives de Psychologie 50, 194: 191–218.
+     Cumming. 2005. Researchers misunderstand
+                                                               14. Theresia Gschwandtnei, Markus Bogl, Paolo Federico,
+     confidence intervals and standard error bars.
+                                                                   and Silvia Miksch. 2016. Visual Encodings of
+     Psychological methods 10, 4: 389–96.
+                                                                   Temporal Uncertainty: A Comparative User Study.
+     http://doi.org/10.1037/1082-989X.10.4.389
+                                                                   IEEE Transactions on Visualization and Computer
+3.   Jacques Bertin. 1983. Semiology of Graphics:                  Graphics 22, 1: 539–548. Retrieved January 8, 2016
+     Diagrams, Networks, Maps.                                     from http://www.ncbi.nlm.nih.gov/pubmed/26529717
+4.   H Choo and S L Franconeri. 2014. Enumeration of           15. Jeffrey Heer, Nicholas Kong, and Maneesh Agrawala.
+     small collections violates Weber’s law. Psychonomic           2009. Sizing the horizon: the effects of chart size and
+     bulletin & review 21, 1: 93–9.                                layering on the graphical perception of time series
+     http://doi.org/10.3758/s13423-013-0474-4                      visualizations. Proceedings of the 27th international
+5.   Kristin A Cook and James J Thomas. 2005.                      conference on Human factors in computing systems -
+     Illuminating the path: The research and development           CHI 09, ACM Press, 1303.
+     agenda for visual analytics. Pacific Northwest National       http://doi.org/10.1145/1518701.1518897
+     Laboratory (PNNL), Richland, WA. Retrieved from           16. U Hoffrage and G Gigerenzer. 1998. Using natural
+     http://vis.pnnl.gov/pdf/RD_Agenda_VisualAnalytics.p           frequencies to improve diagnostic inferences.
+     df                                                            Academic medicine : journal of the Association of
+6.   Michael Correll and Michael Gleicher. 2014. Error bars        American Medical Colleges 73, 5: 538–540.
+     considered harmful: Exploring alternate encodings for         http://doi.org/10.1097/00001888-199805000-00024
+     mean and error. IEEE transactions on visualization and    17. Jessica Hullman, Paul Resnick, and Eytan Adar. 2015.
+     computer graphics 20, 12: 2142–2151.                          Hypothetical Outcome Plots Outperform Error Bars
+     http://doi.org/10.1109/TVCG.2014.2346298                      and Violin Plots for Inferences about Reliability of
+7.   Geoff Cumming. 2009. Inference by eye: reading the            Variable Ordering. PloS one 10, 11.
+     overlap of independent confidence intervals. Statistics       http://doi.org/10.1371/journal.pone.0142444
+     in medicine 28, 2: 205–220.                               18. Harald Ibrekk and M.Granger Morgan. 1987. Graphical
+8.   Eric D. Feigelson and G. Jogesh Babu (eds.). 1992.            Communication of Uncertain Quantities to
+     Statistical Challenges in Modern Astronomy. Springer          Nontechnical People. Risk Analysis 7, 4: 519–529.
+     New York, New York, NY. Retrieved September 25,               http://doi.org/10.1111/j.1539-6924.1987.tb00488.x
+     2015 from                                                 19. S. Joslyn and J. LeClerc. 2013. Decisions With
+     http://www.springerlink.com/index/10.1007/978-1-              Uncertainty: The Glass Half Full. Current Directions
+     4613-9290-3                                                   in Psychological Science 22, 4: 308–315.
+9.   Brian Ferris, Kari Watkins, and Alan Borning. 2010.           http://doi.org/10.1177/0963721413481473
+     OneBusAway: results from providing real-time arrival      20. Harshath JR. 2015. Redesigning the OneBusAway
+     information for public transit. Proceedings of the 28th       Mobile Experience.
+     international conference on Human factors in
+                                                               21. Malte F Jung, David Sirkin, and Martin Steinert. 2015.
+     computing systems - CHI ’10, ACM Press, 1807.
+                                                                   Displayed Uncertainty Improves Driving Experience
+     Retrieved July 13, 2015 from
+                                                                   and Behavior : The Case of Range Anxiety in an
+     http://dl.acm.org/citation.cfm?id=1753326.1753597
+                                                                   Electric Car. Proceedings of the 33rd Annual ACM
+10. Richard Finger and Ann M. Bisantz. 2002. Utilizing             Conference on Human Factors in Computing Systems
+    graphical formats to convey uncertainty in a decision-         (CHI ’15): 2201–2210.
+    making task. Theoretical Issues in Ergonomics Science          http://doi.org/10.1145/2702123.2702479
+    3, 1: 1–25. http://doi.org/10.1080/14639220110110324
+                                                               22. Peter Kampstra. 2008. Beanplot: A Boxplot Alternative
+11. R. Garcia-Retamero and E. T. Cokely. 2013.                     for Visual\nComparison of Distributions. Journal of
+    Communicating Health Risks With Visual Aids.                   Statistical Software 28, code snippet 1: 1–9. Retrieved
+    Current Directions in Psychological Science 22, 5:             from http://www.jstatsoft.org/v28/c01/paper
+    392–399. http://doi.org/10.1177/0963721413491570
+                                                               23. Matthew Kay, Dan Morris, Mc Schraefel, and Julie A
+                                                                   Kientz. 2013. There’s No Such Thing as Gaining a
+    Pound: Reconsidering the Bathroom Scale User                      25, 2015 from
+    Interface. Ubicomp ’13: 401–410.                                  http://dl.acm.org/citation.cfm?id=1555872.1555874
+24. John K. Kruschke. 2010. Bayesian data analysis. Wiley         37. Leland Wilkinson. 2012. Dot Plots. The American
+    Interdisciplinary Reviews: Cognitive Science 1, 5: 658–           Statistician. Retrieved September 25, 2015 from
+    676. http://doi.org/10.1002/wcs.72                                http://amstat.tandfonline.com/doi/abs/10.1080/0003130
+25. John K. Kruschke. 2011. Doing Bayesian Data                       5.1999.10474474
+    Analysis. Elsevier Inc.
+26. Jock Mackinlay. 1986. Automating the design of
+    graphical presentations of relational information. ACM
+    Transactions on Graphics 5, 2: 110–141. Retrieved
+    May 26, 2015 from
+    http://dl.acm.org/citation.cfm?id=22949.22950
+27. S. S. Pak, J. B. Hutchinson, and N. B. Turk-Browne.
+    2014. Intuitive statistics from graphical representations
+    of data. Journal of Vision 14, 10: 1361–1361.
+    Retrieved January 8, 2016 from
+    http://jov.arvojournals.org/article.aspx?articleid=21452
+    39
+28. K. Potter, J. Kniss, R. Riesenfeld, and C. R. Johnson.
+    2010. Visualizing summary statistics and uncertainty.
+    Computer Graphics Forum 29, 3: 823–832.
+    http://doi.org/10.1111/j.1467-8659.2009.01677.x
+29. Robert A Rigby and D Mikis Stasinopoulos. 2006.
+    Using the Box–Cox <I>t</I> distribution in GAMLSS
+    to model skewness and kurtosis. Statistical Modelling
+    6, 3: 209–229. Retrieved September 25, 2015 from
+    http://smj.sagepub.com/content/6/3/209.abstract
+30. Michael Smithson and Jay Verkuilen. 2006. A better
+    lemon squeezer? Maximum-likelihood regression with
+    beta-distributed dependent variables. Psychological
+    methods 11, 1: 54–71. Retrieved August 27, 2015 from
+    http://www.ncbi.nlm.nih.gov/pubmed/16594767
+31. David J Spiegelhalter. 1999. Surgical Audit: Statistical
+    Lessons from Nightingale and Codman. Journal of the
+    Royal Statistical Society. Series A (Statistics in Society)
+    162: 45–58. http://doi.org/10.1111/1467-985X.00120
+32. Stan Development Team. 2015. Stan Modeling
+    Language: User’s Guide and Reference Manual.
+33. Barry N. Taylor and Chris E. Kuyatt. 1994. Guidelines
+    for Evaluating and Expressing the Uncertainty of NIST
+    Measurement Results.
+34. Edward R Tufte. 2006. Beautiful Evidence.
+35. Amos Tversky and Daniel Kahneman. 1975. Judgment
+    under uncertainty: Heuristics and biases. Science 185,
+    4157: 1124–1131. Retrieved June 20, 2013 from
+    http://link.springer.com/chapter/10.1007/978-94-010-
+    1834-0_8
+36. Dennis Vrecko, Alexander Klos, and Thomas Langer.
+    2009. Impact of Presentation Format and Self-Reported
+    Risk Aversion on Revealed Skewness Preferences.
+    Decision Analysis 6, 2: 57–74. Retrieved September
+

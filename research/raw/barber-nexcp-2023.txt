@@ -1,0 +1,4968 @@
+Conformal Prediction Beyond Exchangeability
+arXiv:2202.13415v5 [stat.ME] 17 Mar 2023
+
+Rina Foygel Barber∗, Emmanuel J. Candès†,
+Aaditya Ramdas‡, Ryan J. Tibshirani‡
+
+Abstract
+Conformal prediction is a popular, modern technique for providing valid
+predictive inference for arbitrary machine learning models. Its validity relies
+on the assumptions of exchangeability of the data, and symmetry of the given
+model fitting algorithm as a function of the data. However, exchangeability is often violated when predictive models are deployed in practice. For
+example, if the data distribution drifts over time, then the data points are
+no longer exchangeable; moreover, in such settings, we might want to use
+a nonsymmetric algorithm that treats recent observations as more relevant.
+This paper generalizes conformal prediction to deal with both aspects: we
+employ weighted quantiles to introduce robustness against distribution drift,
+and design a new randomization technique to allow for algorithms that do
+not treat data points symmetrically. Our new methods are provably robust,
+with substantially less loss of coverage when exchangeability is violated due to
+distribution drift or other challenging features of real data, while also achieving
+the same coverage guarantees as existing conformal prediction methods if the
+data points are in fact exchangeable. We demonstrate the practical utility of
+these new tools with simulations and real-data experiments on electricity and
+election forecasting.
+
+∗
+
+Department of Statistics, University of Chicago
+Departments of Statistics and Mathematics, Stanford University
+‡
+Departments of Statistics and Machine Learning, Carnegie Mellon University
+†
+
+1
+
+1
+
+Introduction
+
+The field of conformal prediction addresses a challenging modern problem: given a
+“black box” algorithm that fits a predictive model to available training data, how
+can we calibrate prediction intervals around the output of the model so that these
+intervals are guaranteed to achieve some desired coverage level?
+As an example, consider a holdout set approach. Suppose we have a pre-fitted
+model µ
+b mapping features X to a prediction of a real-valued variable Y (e.g., µ
+b is
+the output of some machine learning algorithm trained on a prior data set), and a
+fresh holdout set of data (X1 , Y1 ), . . . , (Xn , Yn ) not used for training. We can then
+use the empirical quantiles of the errors |Yi − µ
+b(Xi )| on the holdout set to compute
+a prediction interval around our prediction µ
+b(Xn+1 ) that aims to cover the unseen
+response Yn+1 . Split conformal prediction [Vovk et al., 2005] formalizes this method,
+and gives guaranteed predictive coverage when the data points (Xi , Yi ) are drawn i.i.d.
+from any distribution (see Section 2). However, the validity of this method hinges
+on the assumption that the data points are drawn independently from the same
+distribution, or more generally, that (X1 , Y1 ), . . . , (Xn+1 , Yn+1 ) are exchangeable.
+In many applied domains, this assumption is often substantially violated, due
+to distribution drift, correlations between data points, or other phenomena. As an
+example, Figure 1 shows results from an experiment on a real data set monitoring
+electricity usage in Australia (the ELEC2 data set [Harries, 1999], which we return to
+in Section 5.2). We see that over a substantial stretch of time, conformal prediction
+loses coverage, its intervals decreasing far below the target 90% coverage level, while
+our proposed method, nonexchangeable conformal prediction, is able to maintain
+approximately the desired coverage level. In this paper, we will see how to quantify
+the loss of coverage due to violations of exchangeability, and how we can modify the
+conformal prediction methodology to regain predictive coverage even in the presence
+of distribution drift or other violations of exchangeability.
+Electricity data
+1.00
+
+Coverage
+
+0.75
+
+Method
+conformal prediction
+
+0.50
+
+proposed method
+0.25
+
+0.00
+1000
+
+2000
+
+3000
+
+Time
+
+Figure 1: Empirical results from a real data set (details will be given in Section 5.2).
+
+2
+
+1.1
+
+Beyond exchangeability
+
+In this paper, we will consider three important classes of methods for distribution-free
+prediction: split conformal, full conformal, and the jackknife+. (We give background
+on split and full conformal in Section 2, and on jackknife+ in Appendix B.) These
+methods rely on exchangeability in two different ways:
+• The data Zi = (Xi , Yi ) are assumed to be exchangeable (for example, i.i.d.).
+• The algorithm A, which maps data to a fitted model µ
+b : X → R, is assumed
+to treat the data points symmetrically, to ensure that exchangeability of the
+data points Zi still holds even after we observe the fitted model(s).
+In this work, we aim to provide distribution-free prediction guarantees when we
+drop both of these assumptions:
+• We may have data points Zi that are not exchangeable—for instance, they may
+be independent but nonidentically distributed (e.g., due to distribution drift),
+or there may be dependence among them that creates nonexchangeability (e.g.,
+correlation over space or time).
+• We may wish to use an algorithm A that does not treat the input data points
+symmetrically—for example, if Zi denotes data collected at time i, we may
+prefer to fit a model µ
+b that places higher weight on more recent data points.
+
+1.2
+
+Our contributions
+
+We generalize the split conformal, full conformal, and jackknife+ methods (detailed
+later) to allow for both of these sources of nonexchangeability. Our procedures can
+recover the original variants if a symmetric algorithm is employed. We will provide
+coverage guarantees that are identical to existing guarantees if the data points are in
+fact exchangeable, and only slightly lower if the deviation from exchangeability is
+mild.
+To elaborate, let us define the coverage gap as the loss in coverage compared to
+what is achieved under exchangeability. For example, in split conformal prediction
+run with a desired coverage level 1 − α, we have
+n
+o
+bn (Xn+1 ) ,
+Coverage gap = (1 − α) − P Yn+1 ∈ C
+since, under exchangeability, the method guarantees coverage with probability 1 − α.
+To give an informal preview of our results, we write Zi = (Xi , Yi ) to denote the ith
+data point and
+Z = (Z1 , . . . , Zn+1 )
+(1)
+3
+
+to denote the full (training and test) data sequence, and let Z i denote this sequence
+after swapping the test point (Xn+1 , Yn+1 ) with the ith training point (Xi , Yi ):
+Z i = (Z1 , . . . , Zi−1 , Zn+1 , Zi+1 , . . . , Zn , Zi ).
+
+(2)
+
+To enable robustness, our methods will allow for weights: let wi ∈ [0, 1] denote a
+prespecified weight placed on data point i. We will see that the coverage gap can be
+bounded as
+Pn
+wi · dTV (Z, Z i )
+,
+(3)
+Coverage gap ≤ i=1 Pn
+1 + i=1 wi
+where dTV denotes the total variation distance between distributions. Notably, we
+do not make any assumption on the joint distribution of the n + 1 points. Of course,
+the result will only be meaningful if we are able to select fixed (non-data-dependent)
+weights wi such that this upper bound is likely to be small. In particular, if we use
+these methods, we are implicitly assuming that this weighted sum of total variation
+terms is small. In contrast, past work on conformal prediction in a model-free setting
+has relied on the assumption that the data are exactly exchangeable, since no prior
+results offered an analysis of the coverage gap under violations of exchangeability.
+See Section 4.3 for further discussion.
+Note that the upper bound in (3) is a far stronger result than simply asking
+whether the data is “nearly exchangeable”. For instance, in a time series, it might be
+the case that dTV (Z, Z i ) is quite small but dTV (Z, Zπ ) ≈ 1 for most permutations π.
+In words, if the observations are noisy, then permuting only two data points might
+not be detectable—but if there is nonstationarity or dependence over time then Z is
+likely to be far from exchangeable.
+Several further remarks are in order. First, for wi ≡ 1 and a symmetric algorithm,
+the proposed weighted methods will reduce to the usual conformal (or jackknife+)
+methods. Thus, the result (3) also quantifies the degradation in coverage of standard
+methods in nonexchangeable settings. Second, this result has new implications in
+exchangeable settings: if the data points are in fact exchangeable (with i.i.d. as a
+d
+special case), then Z = Z i and the coverage gap bound in (3) is equal to zero (here
+d
+we use = for equality in distribution). Therefore, our use of a weighted conformal
+procedure (rather than choosing wi ≡ 1, which is the original unweighted procedure)
+does not hurt coverage if the data are exchangeable. Finally, the result provides
+insights on why one might prefer to use our new weighted procedures in (possibly)
+nonexchangeable settings: it can provide robustness in the case of distribution shift.
+To elaborate, consider a setting where the data points Zi are independent, but are
+not identically distributed due to distribution drift. The following result relates
+dTV (Z, Z i ) to the distributions of the individual data points.
+Lemma 1. If Z1 , . . . , Zn+1 are independent, then
+dTV (Z, Z i ) ≤ 2dTV (Zi , Zn+1 ) − dTV (Zi , Zn+1 )2 ≤ 2dTV (Zi , Zn+1 ).
+4
+
+Combining this lemma with (3), we can see that if we are able to place small weights
+wi on data points Zi with large total variation distance dTV (Zi , Zn+1 ), then the
+coverage gap will be low. For example, under distribution drift, we might have
+dTV (Zi , Zn+1 ) decreasing with i; we can achieve a low coverage gap by using, say,
+weights wi = ρn+1−i for some ρ < 1. We will return to this example in Section 4.4.
+We will also see that the result in (3) actually stems from a stronger result:
+Pn
+wi · dTV (R(Z), R(Z i ))
+P
+Coverage gap ≤ i=1
+.
+(4)
+1 + ni=1 wi
+Here R(Z) denotes a vector of residuals: for split conformal prediction, this is the
+vector with entries R(Z)i = |Yi − µ
+b(Xi )|, where µ
+b is a pre-fitted model, while for
+full conformal the entries are again given by R(Z)i = |Yi − µ
+b(Xi )| but now µ
+b is the
+i
+model obtained by running A on the entire data sequence Z. Now R(Z ) is simply
+the same function applied to the swapped data Z i instead of Z—that is, the residuals
+are computed after swapping data points i and n + 1 in the data set. (We also later
+generalize to any outcome space Y and to other definitions of residuals.)
+Clearly, the bound in (4) is strictly stronger than (3), because the total variation
+distance between any function applied to each of Z and Z i , cannot be larger than
+dTV (Z, Z i ) itself—and in many cases, the bound in (4) may be substantially tighter.
+For example, if the data is high dimensional, with Zi = (Xi , Yi ) ∈ Rp × R for large p,
+then the distance dTV (Z, Z i ) may be extremely large since Z and Z i each contain
+p + 1 dimensions of information about each data point. On the other hand, if we only
+observe the residuals (e.g., R(Z)i = |Yi − µ
+b(Xi )| for each i), then this reveals only
+a one-dimensional summary of each data point; this typically reduces the distance
+between the two distributions, and by a considerable amount if the distribution drift
+occurs in features that happen to be irrelevant for prediction and are thus ignored
+by µ
+b. In Section 4.4, we will see a specific example demonstrating the potentially
+large gap between these two upper bounds.
+
+2
+
+Background and related work
+
+We briefly review several distribution-free prediction methods that offer guarantees
+under an exchangeability assumption on the data and symmetry of the underlying
+algorithm. We also set up notation that will be useful later in the paper.
+Split conformal prediction. Split conformal prediction [Vovk et al., 2005] (also
+called inductive conformal prediction) is a holdout method for constructing prediction intervals around a pre-trained model. Specifically, given a model µ
+b:X →R
+that was fitted on an initial training data set, and given n additional data points
+(X1 , Y1 ), . . . , (Xn , Yn ) (the holdout set), we define residuals
+Ri = |Yi − µ
+b(Xi )|, i = 1, . . . , n,
+5
+
+and then compute the prediction interval at the new feature vector Xn+1 as
+bn (Xn+1 ) = µ
+C
+b(Xn+1 ) ± (the d(1 − α)(n + 1)e-th smallest of R1 , . . . , Rn ).
+Equivalently, we can write
+bn (Xn+1 ) = µ
+C
+b(Xn+1 ) ± Q1−α
+
+n
+X
+
+!
+1
+1
+· δRi + n+1
+· δ+∞
+n+1
+
+,
+
+(5)
+
+i=1
+
+where Qτ (·) denotes the τ -quantile of its argument,1 and δa denotes the point mass
+at a. This method is well-known to guarantee distribution-free predictive coverage
+at the target level 1 − α.
+A drawback of the split conformal method is the loss of accuracy due to sample
+splitting, since the pre-trained model µ
+b needs to be independent from the holdout
+set—in practice, if only n labeled data points are available in total, we might use
+n/2 data points for training µ
+b, and then the procedure defined in (5) above would
+actually be run with a holdout set of size n/2 in place of n. In this paper, however,
+we will continue to write n to denote the holdout set size for the split conformal
+method, in order to allow for universal notation across different methods.
+Full conformal prediction. To avoid the cost of data splitting, an alternative
+is the full conformal method [Vovk et al., 2005], also referred to as transductive
+conformal prediction. Fix any regression algorithm
+A : ∪n≥0 (X × R)n → {measurable functions µ
+b : X → R} ,
+which maps a data set containing any number of pairs (Xi , Yi ), to a fitted regression
+function µ
+b. The algorithm A is required to treat data points symmetrically, i.e.,2
+
+
+A (xπ(1) , yπ(1) ), . . . , (xπ(n) , yπ(n) ) = A (x1 , y1 ), . . . , (xn , yn )
+(6)
+for all n ≥ 1, all permutations π on [n] := {1, . . . , n}, and all {(xi , yi )}i=1,...,n . Next,
+for each y ∈ R, let
+
+µ
+by = A (X1 , Y1 ), . . . , (Xn , Yn ), (Xn+1 , y)
+denote the trained model, fitted to the training data together with a hypothesized
+test point (Xn+1 , y), and let
+(
+|Yi − µ
+by (Xi )|,
+i = 1, . . . , n,
+y
+Ri =
+(7)
+y
+|y − µ
+b (Xn+1 )|, i = n + 1.
+1
+
+If the quantile is not unique, then Qτ (·) denotes the smallest possible τ -quantile, throughout this
+paper.
+2
+If A is a randomized algorithm, then this equality is only required to hold in a distributional sense.
+
+6
+
+The prediction set (which might or might not be an interval) for feature vector Xn+1
+is then defined as
+(
+!)
+n+1
+X
+y
+1
+bn (Xn+1 ) = y ∈ R : Rn+1 ≤ Q1−α
+· δR y
+.
+(8)
+C
+n+1
+
+i
+
+i=1
+
+The full conformal method is known to guarantee distribution-free predictive coverage
+at the target level 1 − α:
+Theorem 1 (Full conformal prediction [Vovk et al., 2005]). If the data points
+(X1 , Y1 ), . . . , (Xn , Yn ), (Xn+1 , Yn+1 ) are i.i.d. (or more generally, exchangeable), and
+the algorithm A treats the input data points symmetrically as in (6), then the full
+conformal prediction set defined in (8) satisfies
+n
+o
+bn (Xn+1 ) ≥ 1 − α.
+P Yn+1 ∈ C
+The same result holds true for split conformal.
+Indeed, since split conformal can be viewed as a special case of full conformal (by
+considering a trivial algorithm A that returns the same fixed pre-fitted function µ
+b
+regardless of the input data), this theorem also implies that the same coverage result
+holds for the split conformal method (5). For completeness, and to set up our proof
+strategy, we will give a succinct proof of this theorem in Section 6.1.
+By avoiding data splitting, full conformal often (but not always) yields more
+precise prediction intervals than split conformal. This potential benefit comes at a
+steep computational cost, since in order to compute the prediction set (8) we need
+to rerun the model training algorithm A for each y ∈ R (or in practice, for each y in
+a fine grid). Luckily, in certain special cases such as ordinary least squares, kernel
+ridge regression [Burnaev and Vovk, 2014], or the Lasso [Lei, 2019], the prediction
+set (8) can be computed more efficiently using specialized techniques.
+As a compromise between the greater computational efficiency of split conformal
+and the greater statistical efficiency of full conformal, the jackknife+ and CV+
+methods [Barber et al., 2021] (closely related to cross-conformal prediction [Vovk,
+2015]) use a cross-validation-style approach for distribution-free predictive inference.
+For example, for jackknife+, the procedure requires fitting n leave-one-out models
+µ
+b−i . Later, in Appendix B, we will give more detailed background on these methods,
+and provide a nonexchangeable version of the jackknife+.
+General nonconformity scores. In the exchangeable setting, conformal prediction (both split and full) was initially proposed in terms of “nonconformity scores”
+b i , Yi ), where Sb is a fitted function that measure the extent to which a data
+S(X
+point (Xi , Yi ) is unusual relative to a training data set [Vovk et al., 2005] (whose
+dependence we make implicit in the notation). For simplicity, so far we have only
+7
+
+presented the most commonly used nonconformity score, which is the residual from
+the fitted model
+b i , Yi ) := |Yi − µ
+S(X
+b(Xi )|
+(9)
+(where µ
+b is pre-trained for split conformal, and µ
+b = A((Xj , Yj ) : j ∈ [n + 1]) for full
+conformal). We will also present our new methods with this particular form of score.
+In many settings, other nonconformity scores can be more effective—for example,
+Romano et al. [2019], Kivaranovic et al. [2020] propose scores based on quantile
+regression that often lead to tighter prediction intervals in practice. Our proposed
+nonexchangeable conformal prediction procedures can also be extended to allow for
+general nonconformity scores—we will return to this generalization in Appendix A.
+Further related work. Conformal prediction was pioneered by Vladimir Vovk
+and various collaborators in the early 2000s; the book by Vovk et al. [2005] details
+their advances and remains a critical resource. The recent spurt of interest in these
+ideas in the field of statistics was catalyzed by Jing Lei, Larry Wasserman, and
+colleagues (see, e.g., Lei et al. [2013], Lei and Wasserman [2014], Lei et al. [2018]).
+For gentle introduction and more history, we refer to the tutorials by Shafer and
+Vovk [2008] and Angelopoulos and Bates [2021].
+Tibshirani et al. [2019] extended conformal prediction to handle nonexchangeable
+data under an assumption called covariate shift, where training and test data can
+have a different X distribution, but are assumed to have an identical distribution of
+Y given X. The data is reweighted using the likelihood ratio to compare the test
+and training covariate distributions (with this likelihood ratio assumed to be known
+or accurately approximable), coverage can be guaranteed via an argument based on
+a concept that they called weighted exchangeability.
+Our current work differs from Tibshirani et al. [2019] in several fundamental
+ways, such that neither work subsumes the other in terms of methodology or theory.
+In their work, the covariate shift assumption must hold, and the aforementioned
+high-dimensional likelihood ratio must be known exactly or well approximated for
+correct coverage. Furthermore, the weights on the data points are then calculated
+as a function of the data point (Xi , Yi ) to compensate for the known distribution
+shift. In the present work, on the other hand, the weights are required to be fixed
+rather than data-dependent, and can compensate for unknown violations of the
+exchangeability assumption, as long as the violations are small (to ensure a low
+coverage gap). Moreover, our theory can handle nonsymmetric algorithms that treat
+different data points differently, and in particular, can depend on their order. Finally,
+and importantly, if there was actually no distribution shift, and the data happened
+to be exchangeable, their weighted algorithm does not have any coverage guarantee,
+while ours retains exact coverage.
+Since its publication, the ideas and methods from Tibshirani et al. [2019] have
+been applied and extended in several ways. For example, Podkopaev and Ramdas
+8
+
+[2021] demonstrate that reweighting can also deal with label shift (the marginal
+distribution of Y changes from training to test, but the conditional distribution of X
+given Y is assumed unchanged). Lei and Candès [2021a] show how reweighting can be
+extended to causal inference setups for predictive inference on individual treatment
+effects, and Candès et al. [2021] show how to apply these ideas in the context of
+censored outcomes in survival analysis. Fannjiang et al. [2022] use reweighting in
+a setup where the test covariate distribution is under the statistician’s control. A
+different weighted approach is taken in Guan [2021], called “localized” conformal
+prediction, where the weight on data point i is determined as a function of the distance
+kXi − Xn+1 k2 , to enable predictive coverage that holds locally (in neighborhoods of
+X space, i.e., an approximation of prediction that holds conditional on the value of
+Xn+1 ). Each of these works also contributes new ideas to problem-specific challenges
+(and differs substantially from the work proposed here, both in terms of methods
+and the nature of the resulting guarantees), but we omit the details for brevity.
+Conformal methods have also be used for sequential tests for exchangeability
+of the underlying data [Vovk, 2021], and these sequential tests can form the basis
+of sequential algorithms for changepoint detection [Volkhonskiy et al., 2017] or
+outlier detection [Bates et al., 2021]. This line of work is differs from ours in that
+they employ conformal prediction for detecting nonexchangeability, but do not
+provide algorithms or guarantees for the use of conformal methods for predictive
+inference on nonexchangeable data. Several other recent works propose conformal
+inference type methods for time series [Chernozhukov et al., 2018, Xu and Xie, 2021,
+Stankeviciute et al., 2021], but these results require exchangeability assumptions or
+other distributional conditions (e.g., assuming a strongly mixing time series), while
+in our present work we aim to avoid these conditions.
+The recent work of Gibbs and Candès [2021] takes a different approach towards
+handling distribution drift in an online manner. Informally, they compare the current
+attained coverage to the target 1 − α level, and if the former is bigger (or smaller)
+than the latter, then they iteratively increase (or decrease) the nominal level αt to
+employ for the next prediction. Zaffran et al. [2022] build further on this approach,
+allowing for adaptivity to the amount of dependence in the time series. An alternative
+approach is that of Cauchois et al. [2020], where robustness is introduced under the
+assumption that the test distribution is bounded in f -divergence from the distribution
+of the training data points.
+For data that is instead drawn from a spatial domain, the recent work of Mao
+et al. [2020] uses weighted conformal prediction with higher weights assigned to data
+points drawn at spatial locations near that of the test point (or, as a special case,
+giving a weight of 1 to the nearest neighbors of the test point, and weight 0 to all
+other points), but their theoretical guarantees require distributional assumptions.
+Finally, we return full circle to the book of Vovk et al. [2005], which has chapters
+that discuss moving beyond exchangeability, for example using Mondrian conformal
+prediction (and its generalization, online compression models). Mondrian methods
+9
+
+informally divide the observations into groups, and assume that the observations
+within each group are still exchangeable (e.g., class-conditional conformal classification). We also note the work of Dunn et al. [2022] that studies the case of two-layer
+hierarchical models (like random effect models) that shares strength across groups.
+These works involve very different ideas from those presented in the current paper.
+
+3
+
+Nonexchangeable conformal prediction
+
+We now present our new nonexchangeable conformal prediction method, in both
+its split and full versions, in this section. For clarity of the exposition, we will use
+|y − µ
+b(x)| as the score used to measure the nonconformity of a point (x, y) in the
+data set, as in (9), but our methods and accompanying theoretical guarantees can
+be extended in a straightforward way to arbitrary nonconformity scores—we give
+details for this extension in Appendix A.
+
+3.1
+
+Robust inference through weighted quantiles
+
+As described above, our new methodology moves beyond the exchangeable setting
+by allowing both for nonexchangeable data, and for nonsymmetric algorithms. For
+simplicity, we will first consider only the first extension—the data points Zi = (Xi , Yi )
+are no longer required to be exchangeable, but the model fitting algorithm A will still
+be assumed to be symmetric for now. The next subsection generalizes the method
+to allow nonsymmetric algorithms as well.
+For our nonexchangeable conformal methods, we choose weights w1 , . . . , wn ∈
+[0, 1], with the intuition that a higher weight wi should be assigned to a data point Zi
+that is “trusted” more, i.e., that we believe comes from (nearly) the same distribution
+as the test point Zn+1 . We assume the weights wi are fixed (see Section 4.5 for
+further discussion on this point). For instance if data point Zi occurs at time i, and
+we are concerned about distribution drift, we might choose weights w1 ≤ · · · ≤ wn
+so that our prediction interval relies mostly on recent data points and places little
+weight on data from the distant past. Alternatively, in a spatial setting, if data point
+i is collected at a (prespecified) location Li , then the weight wi might be chosen as a
+function of the distance dist(Li , Ln+1 ), with the intuition that data points collected
+nearby in the spatial domain are more likely to have similar distributions.
+We now modify the split and full conformal predictive inference methods to use
+weighted quantiles, rather than the original definitions where all data points are
+implicitly given equal weight. To simplify notation, in what follows, given wi ∈ [0, 1],
+i = 1, . . . , n, we will define normalized weights
+w̃i =
+
+wi
+1
+, i = 1, . . . , n, and w̃n+1 =
+.
+w1 + · · · + wn + 1
+w1 + · · · + wn + 1
+10
+
+(10)
+
+Nonexchangeable split conformal with a symmetric algorithm. The prediction interval is given by
+!
+n
+X
+bn (Xn+1 ) = µ
+C
+b(Xn+1 ) ± Q1−α
+w̃i · δRi + w̃n+1 · δ+∞ ,
+(11)
+i=1
+
+where Ri = |Yi − µ
+b(Xi )| for the pre-trained model µ
+b, as before.
+Nonexchangeable full conformal with a symmetric algorithm. The prediction set is given by
+(
+!)
+n+1
+X
+y
+bn (Xn+1 ) = y : Rn+1
+C
+≤ Q1−α
+w̃i · δRy
+,
+(12)
+i
+
+i=1
+
+where as before, we define µ
+by = A((X1 , Y1 ), . . . , (Xn , Yn ), (Xn+1 , y)) by running the
+algorithm A on the training data together with the hypothesized test point (Xn+1 , y),
+and define Riy as in (7) from before.
+Notice that for both methods, their original (unweighted) versions are recovered
+by choosing weights w1 = · · · = wn = 1.
+The theoretical results for this section, which we previewed in (3) and (4), will
+follow as a corollary of more general results that also accommodate nonsymmetric
+algorithms (introduced next); we avoid restating the results here for brevity. In
+addition, the interested reader may already jump forward to Appendix C to examine a different style of result on the robustness of weighted (and unweighted)
+conformal methods—using symmetric algorithms—under a Huber-style adversarial
+contamination model (which relies on stronger assumptions to allow for a tighter
+guarantee).
+
+3.2
+
+Enhanced predictions with nonsymmetric algorithms
+
+Now, we will allow the algorithm A to be an arbitrary function of the data points,
+removing the requirement of a symmetric algorithm. This generalization will require
+only a small modification to the previous conformal method to ensure validity, and
+can result in more accurate predictors and boost efficiency of the resulting prediction
+sets, as we will demonstrate in the experiments (Section 5).
+To begin, let us give some examples of algorithms that do not treat data points
+symmetrically, to see what types of settings we want to handle:
+• Weighted regression. The algorithm A might fit a model µ
+b(x) = x> βb where
+the parameter vector βb is fitted via a weighted regression. Specifically, for
+nonnegative weights ti , consider solving
+(
+)
+X
+βb = arg min
+ti · `(X > β, Yi ) + h(β) ,
+(13)
+β∈Rp
+
+i
+
+i
+
+11
+
+for some loss function ` and penalty function h. For example, weighted least
+squares would be obtained by taking the loss function `(u, y) = (u − y)2 .
+• Adapting to changepoints. In a streaming data setting, if sudden changes
+may occur in the data distribution, then the quality of our predictions will
+suffer if our models are always trained on the full set of available training
+data without accounting for possible changepoints. We might therefore aim to
+improve the model by building in a changepoint detection step. Assume data
+points arrive in an ordered fashion so that i = 1 is the first arrival, i = 2 the
+second, and so on. Then, we might have
+
+
+X
+
+βb = arg minp
+`(Xi> β, Yi ) + h(β) ,
+(14)
+β∈R 
+
+i>Tb
+
+for some loss function ` and penalty function h, where Tb is the time of the
+most recent detected changepoint (or Tb = 0 if no changepoint is detected). To
+be clear, here the algorithm A incorporates estimation of both Tb and of b
+β.
+• Autoregressive models. Suppose that the response Yn+1 is best predicted
+by combining information from the features Xn+1 together with response Yn
+from the previous time point—for example, we might solve for
+(
+)
+X
+
+2
+bγ
+(β,
+b) = arg min
+Yi − (X > β + γYi−1 )
+,
+(15)
+i
+
+(β,γ)∈Rp ×R
+
+i
+
+to return a fitted function of the form µ
+b(x, yprev ) := x> βb + γ
+b · yprev .
+To accommodate these and many other settings, we will now define A as
+A : ∪n≥0 (X × R × T )n → {measurable functions µ
+b : X → R} ,
+
+(16)
+
+mapping a data sequence containing any number of “tagged” data points (Xi , Yi , ti ) ∈
+X × R × T , to a fitted regression function µ
+b. The tag ti associated with data point
+(Xi , Yi ) can play a variety of different roles, depending on the application:
+• ti can provide the weight for data point i in a weighted regression;
+• ti can indicate the time or spatial location at which data point i is sampled;
+• ti can simply indicate the order of the data points (i.e., setting ti = i for each
+i), so that A is “aware” that data point (Xi , Yi ) is the ith data point, and is
+thus able to use the ordering of the data points when fitting the model.
+
+12
+
+In particular, the algorithm A is no longer required to treat the input data points
+(Xi , Yi ) symmetrically, because if we swap (Xi , Yi ) with (Xj , Yj ) (and the algorithm
+receives tagged data points (Xj , Yj , ti ) and (Xi , Yi , tj )), the fitted model may indeed
+change.3 As for the weights wi , we require the tags t1 , . . . , tn+1 to be fixed.
+With the added flexibility of a nonsymmetric regression algorithm, we will need a
+key modification to the methods defined earlier in Section 3.1 to maintain predictive
+coverage. Our modification requires that, before applying the model fitting algorithm
+A, we first randomly swap the tags of two of the data points in the ordering. First,
+draw a random index K ∈ [n + 1] from the multinomial distribution that takes the
+value i with probability w̃i (defined in (10)):
+K∼
+
+n+1
+X
+
+w̃i · δi .
+
+(17)
+
+i=1
+
+Note that K is drawn independently from the data. We will apply our algorithm to
+the data Z K (defined in (2)) in place of Z. In particular, the tagged data points are
+now (Xn+1 , Yn+1 , tK ) and (XK , YK , tn+1 ), i.e., these two data points have swapped
+tags. This modification is carried out as follows.
+Nonexchangeable split conformal with a nonsymmetric algorithm. For
+split conformal, the model µ
+b is pre-fitted on separate data, and does not depend on
+the data points (Xi , Yi ) of the holdout set—in other words, µ
+b is trivially a symmetric
+function of the (Xi , Yi ) points. Thus, no modification is needed, and our prediction
+interval (11) is unaltered.
+Nonexchangeable full conformal with a nonsymmetric algorithm. First,
+for any y ∈ R and any k ∈ [n + 1], define
+
+
+µ
+by,k = A (Xπk (i) , Yπyk (i) , ti ) : i ∈ [n + 1] ,
+where πk is the permutation on [n + 1] swapping indices k and n + 1 (and πn+1 is
+the identity permutation), and where we define
+(
+Yi , i = 1, . . . , n,
+Yiy =
+y, i = n + 1.
+In other words, µ
+by,k is fitted by applying the algorithm A to the training data
+(X1 , Y1 ), . . . , (Xn , Yn ) together with the hypothesized test point (Xn+1 , y), but with
+the kth and (n + 1)st data points swapped (note that the tags tk and tn+1 are now
+assigned to data points (Xn+1 , y) and (Xk , Yk ), respectively, after this swap).
+3
+
+For many common examples, the algorithm A will instead be symmetric as a function of the
+tagged data points (Xi , Yi , ti ), but we do not require this assumption in this work.
+
+13
+
+Define the residuals from this model,
+(
+|Yi − µ
+by,k (Xi )|,
+i = 1, . . . , n,
+Riy,k =
+y,k
+|y − µ
+b (Xn+1 )|, i = n + 1.
+Then, after drawing a random index K as in (17), the prediction set is given by
+!)
+(
+n+1
+X
+y,K
+bn (Xn+1 ) = y : Rn+1
+≤ Q1−α
+w̃i · δ y,K
+.
+(18)
+C
+Ri
+
+i=1
+
+Symmetric algorithms as a special case. The symmetric setting, discussed in
+Section 3.1, is actually a special case of the broader setting defined here. Specifically,
+for any symmetric algorithm A that acts on (untagged) data points (xi , yi ), we can
+trivially regard it as an algorithm A0 that acts on tagged data points (xi , yi , ti ) by
+simply ignoring the tags. For this reason, we will only give theoretical results for the
+general forms of the methods given in this section, but our theorems apply also to
+the symmetric setting considered in Section 3.1.
+The swap step. In the case of a nonsymmetric algorithm, our swap step requires
+that A is run on the swapped data set—that is, with data points (Xn+1 , Yn+1 , tK )
+and (XK , YK , tn+1 ), rather than the original tagged data points (XK , YK , tK ) and
+(Xn+1 , Yn+1 , tn+1 ). This swap step is necessary for our theoretical guarantees to hold
+(in fact, it plays a key role in the theory even for symmetric algorithms, with fixed
+weights wi as in (12), even though the fitted models are unchanged in that case).
+Of course, for nonsymmetric algorithm A, the swap step will alter the fitted
+model µ
+b produced by A and thus may affect the precision of the resulting prediction
+interval. The extent to which this swap will perturb the output of the algorithm A,
+will undoubtedly depend on the nature of the algorithm itself. In many practical
+situations, we would not expect the random swap to have a large impact on the
+output of the method, since many algorithms A applied to a large number of data
+points are often not very sensitive to perturbing the training set in this fashion,
+although interestingly, our theoretical results do not rely on any stability conditions
+or any assumptions of this type. (For comparison, if we were to instead permute
+the data at random before applying the algorithm A—that is, use a permutation π
+chosen uniformly at random, rather than the single swap permutation πK , so that
+the algorithm is now trained on tagged data points (Xπ(i) , Yπ(i) , ti )—then this would
+restore the symmetric algorithm assumption, but could potentially result in a highly
+inaccurate model since the information carried by the tags is now meaningless.)
+However, in certain settings it may be the case that the fitted model µ
+b returns
+predictions that are far less accurate due to the swap. For instance, this may be the
+14
+
+case in an autoregressive setting where the tag tn+1 indicates the most recent data
+point and thus plays a disproportionately large role in the resulting predictions. We
+leave the important question of practical implementation for such settings, and the
+question of how to choose algorithms A that will not be too sensitive to the swap,
+to future work.
+
+4
+
+Theory
+
+In this section, we establish theory on the coverage of our proposed method. Since
+split conformal is a special case of full conformal (even in this nonexchangeable
+setting), we only present theory for the nonexchangeable full conformal method.
+We first need to define the map from a data sequence z = (z1 , . . . , zn+1 ) ∈
+(X × R)n+1 , with entries zi = (xi , yi ), to a vector of residuals R(z). Given z, we first
+define the model
+
+µ
+b = A (xi , yi , ti ) : i ∈ [n + 1] .
+Then define the residual vector R(z) ∈ Rn+1 with entries
+
+R(z) i = |yi − µ
+b(xi )|, i = 1, . . . , n + 1.
+
+4.1
+
+Lower bounds on coverage
+
+Recall the notation Zi , Z, Z i defined in (1) and (2). We now present our coverage
+guarantee for nonexchangeable full conformal (and consequently, the same bound
+holds for nonexchangeable split conformal as a special case). This theorem can be
+viewed as a generalization of Theorem 1.
+Theorem 2 (Nonexchangeable full conformal prediction). Let A be an algorithm
+mapping a sequence of triplets (Xi , Yi , ti ) to a fitted function as in (16). Then the
+nonexchangeable full conformal method defined in (18) satisfies
+n
+n
+o
+X
+
+bn (Xn+1 ) ≥ 1 − α −
+P Yn+1 ∈ C
+w̃i · dTV R(Z), R(Z i ) .
+i=1
+
+The same result holds true for nonexchangeable split conformal.
+P
+To summarize, we see that the coverage gap is bounded by ni=1 w̃i · dTV (R(Z), R(Z i )).
+Since it holds that
+
+dTV R(Z), R(Z i ) ≤ dTV (Z, Z i )
+for each i, we therefore also see that
+Coverage gap ≤
+
+X
+i
+
+15
+
+w̃i · dTV (Z, Z i ).
+
+This last bound is arguably more interpretable, but could also be significantly more
+loose, and we consider it an important point that the coverage gap depends on the
+total variation between swapped residual vectors, and not the swapped raw data
+vectors. Finally, recalling Lemma 1, we see that in the case of independent data
+points, we have
+X
+
+Coverage gap ≤ 2
+w̃i · dTV (Xi , Yi ), (Xn+1 , Yn+1 ) .
+i
+
+4.2
+
+Upper bounds on coverage
+
+To complement the results in the last subsection, it is also possible to verify, for
+the nonexchangeable conformal method, that the procedure does not substantially
+overcover—that is, under mild deviations from exchangeability, our method is not
+overly conservative.
+For the exchangeable setting, Lei et al. [2018, Theorem 2.1] show that, in a setting
+where the residuals Ri (for split conformal) or Riy (for full conformal) are distinct
+with probability 1, conformal prediction satisfies
+n
+o
+1
+b
+1 − α ≤ P Yn+1 ∈ Cn (Xn+1 ) < 1 − α +
+.
+n+1
+Here we give the analogous results for our nonexchangeable methods.
+Y
+
+,K
+
+Y
+
+,K
+
+n+1
+Theorem 3. For any algorithm A as in (16), if R1 n+1 , . . . , RnYn+1 ,K , Rn+1
+are
+distinct with probability 1, then the nonexchangeable full conformal method (18)
+satisfies
+n
+n
+o
+X
+
+b
+P Yn+1 ∈ Cn (Xn+1 ) < 1 − α + w̃n+1 +
+w̃i · dTV R(Z), R(Z i ) .
+
+i=1
+
+The same result holds true for nonexchangeable split conformal.
+Y
+
+,K
+
+(In the split conformal context, since Ri n+1 = |Yi − µ
+b(Xi )| for the pre-fitted function
+µ
+b, the statement becomes simpler—we simply require that the residuals |Yi − µ
+b(Xi )|
+are distinct with probability 1.)
+1
+From this result, we see that if w̃n+1 = w1 +···+w
+is small (which corresponds to
+n +1
+the effective sample size of our weighted method being large), then mild violations
+of exchangeability can only lead to mild undercoverage (as in Theorem 2) or to mild
+overcoverage.
+Of course, when we use these methods in practice, it would be useful to know
+whether overcoverage or undercoverage is to be expected; however, without further
+assumptions, this cannot be determined in advance. As a simple example, if the
+data exhibits mild violations of exchangeability due to the conditional variance of
+Y | X changing over time, then we might see undercoverage if Var(Y | X) increases
+over time (and thus the residual of the test point (Xn+1 , Yn+1 ) is larger than typical
+training residuals), or overcoverage if Var(Y | X) is instead decreasing over time.
+16
+
+4.3
+
+Remarks on the theorems
+
+A few comments are in order to help us further understand the implications of these
+theoretical results.
+New results in the exchangeable setting. We point out that when the data
+happen to be exchangeable, that is, dTV (Z, Z i ) = 0 for all i, then the above results
+are new and cannot be inferred from the existing conformal literature. In particular,
+existing conformal methods are not able to handle nonsymmetric algorithms, which
+limits their applicability in many practical settings (e.g., streaming data, as described
+above). In addition, our results show that, under exchangeability, there is no coverage
+lost by introducing fixed weights wi into the quantile calculations used for constructing
+the prediction interval; this means that we are free to use these weights to help
+ensure robustness against nonexchangeability without sacrificing any guarantees if
+indeed exchangeability happens to hold.
+Robustness results for the original algorithms. Another interesting implication of these new bounds is that they yield robustness results for the original
+algorithms. In more detail, the original split conformal (5) and full conformal (8)
+algorithms presented in Section 2 can be viewed as special cases of our proposed nonexchangeable methods (11) and (18), respectively, by taking weights w1 = · · · = wn = 1
+and using a symmetric A, i.e., without tags. (As we will see in Appendix B below,
+the same is true for viewing jackknife+ as a special case of the nonexchangeable
+jackknife+.) In this setting, our theorems establish a new robustness result,
+Pn
+Pn
+i
+dTV (Z, Z i )
+i=1 dTV (R(Z), R(Z ))
+Coverage gap ≤
+≤ i=1
+.
+n+1
+n+1
+For example, in the case of independent data points, applying Lemma 1 we obtain
+
+P
+2 ni=1 dTV (Xi , Yi ), (Xn+1 , Yn+1 ) )
+Coverage gap ≤
+.
+n+1
+These new bounds ensure robustness of existing methods against mild violations of
+the exchangeability (or i.i.d.) assumption, and thus help explain the success of these
+methods on real data, where the exchangeability assumption may not hold.
+Choosing the weights. Our theoretical results above confirm the intuition that
+we should give higher weights wi to data points (Xi , Yi ) that we believe are drawn
+from a similar distribution as (Xn+1 , Yn+1 ), and lower weights to those that are less
+reliable. As is always the case with inference methods, we are faced with a tradeoff:
+if many weights wi are chosen to be quite low, then this reduces the effective sample
+size of the method (e.g., for split conformal prediction, we are reducing the effective
+17
+
+sample size for estimating the empirical quantile of the residual distribution). Thus,
+overly low weights will often lead to wider prediction intervals—at the extreme,
+if we choose w1 = · · · = wn = 0, this yields a coverage gap of zero but results
+bn (Xn+1 ) ≡ R, a completely uninformative prediction interval. How to choose
+in C
+weights optimally (and, even how to quantify optimality) is an interesting and
+important question that we leave for future work.
+Is the guarantee useful? While the upper bound on the coverage gap holds
+with no assumptions on the distribution of the data, the result is meaningless if
+this upper bound is extremely large. Thus we would ideally use these methods in
+settings where we have some a priori knowledge about the properties of the data
+distribution, so that the weights wi can be chosen in advance in such a way that we
+believe the resulting coverage gap is likely to be small. We emphasize in practice
+we likely only need qualitative (not quantitative) knowledge of the likely deviations
+from exchangeability—for example, under gradual distribution drift, a geometric
+decay as in wi = ρn+1−i will likely lead to a low coverage gap, without requiring
+knowledge of the exact rate or nature of the distribution drift. On the other hand,
+if the test point comes from a new distribution that bears no resemblance to the
+training data, neither our bound nor any other method would be able to guarantee
+valid coverage without further assumptions. An important open question is whether
+it may be possible to determine, in an adaptive way, whether coverage will likely
+hold for a particular data set, or whether that data set exhibits high deviations from
+exchangeability such that the coverage gap may be large.
+
+4.4
+
+Examples
+
+Before turning to our empirical results, we pause to give several examples of settings
+where the coverage gap bound is favorable.
+Bounded distribution drift. First, consider a setting where the data points
+(Xi , Yi ) are independent, but experience distribution drift over time. In this type of
+setting, we would want to choose weights wi that decay as we move into the distant
+past, for example, wi = ρn+1−i for some decay parameter ρ ∈ (0, 1). If we assume
+that the distribution drift is bounded with a Lipschitz-type condition,
+dTV (Zi , Zn+1 ) ≤  · (n + 1 − i), i = 1, . . . , n + 1,
+
+18
+
+for some  > 0, then the coverage gap for our proposed methods is bounded as
+Coverage gap ≤
+
+X
+
+w̃i · dTV (Z, Z i ) ≤
+
+X
+
+i
+
+w̃i · 2dTV (Zi , Zn+1 )
+
+i
+
+≤
+
+n
+X
+
+2
+ρn+1−i
+Pn
+,
+· 2 · (n + 1 − i) ≤
+n+1−j
+1 + j=1 ρ
+1−ρ
+i=1
+
+which is small as long as the distribution drift parameter  is sufficiently small.
+Changepoints. In other settings with independent data points (Xi , Yi ), we might
+have periodic large changes in the distribution rather than the gradual drift studied
+above—that is, we may be faced with a changepoint. Suppose that the most recent
+changepoint occurred k time steps ago, so that dTV (Zi , Zn+1 ) = 0 for i > n − k (but,
+before that time, the distribution might be arbitrarily different from the test point,
+so we might even have dTV (Zi , Zn+1 ) = 1 for i ≤ n − k). In this setting, again taking
+weights wi = ρn+1−i that decay as we move into the past, we have
+n
+X
+
+n−k
+X
+
+Pn−k n+1−i
+i=1 ρ
+P
+≤ ρk .
+Coverage gap ≤
+w̃i · dTV (Z, Z ) ≤
+w̃i =
+n
+n+1−i
+ρ
+1
++
+i=1
+i=1
+i=1
+i
+
+This yields a small coverage gap as long as k is large, i.e., as long as we have plenty
+of data observed after the most recent changepoint.
+Covariate time series. Next, to highlight the distinction between dTV (Z, Z i ) and
+dTV (R(Z), R(Z i )), we will consider a setting where the data points (Xi , Yi ) are no
+iid
+longer independent. Suppose that Yi = Xi> β + i where i ∼ N (0, σ 2 ) but where the
+covariates Xi are not i.i.d. For example, the covariates may be dependent due to a
+time series structure, or may be independent but not identically distributed. Writing
+X ∈ R(n+1)×p to denote the covariate matrix (with ith row Xi ), we will assume that
+vec(X) ∼ N (0, Σ) for some Σ ∈ R(n+1)p×(n+1)p , allowing for both nonindependent
+and/or nonidentically distributed rows Xi . Now consider running full conformal with
+least squares regression as the base algorithm, so that we have residuals
+⊥
+⊥
+R(Z) = Y − X(X > X)−1 X > Y = PX
+(Y ) = PX
+(),
+⊥
+where Y = (Y1 , . . . , Yn+1 ),  = (1 , . . . , n+1 ), and PX
+denotes projection to the
+orthogonal complement of the column span of X. In Appendix E.3 we prove that
+√
+p
+dTV (R(Z), R(Z i )) ≤ 8κΣ · √
+,
+(19)
+n+1−p
+
+where κΣ is the condition number of Σ; if n  p2 while κΣ is bounded, then this
+total variation distance is very small.
+19
+
+On the other hand, it is likely that dTV (Z, Z i ) is very large (it may even be close
+to the largest possible value of 1), unless the covariates are essentially exchangeable.
+For example, in dimension p = 1, we can consider the autoregressive model Xi =
+γXi−1 + N (0, 1 − γ 2 ), with X1 ∼ N (0, 1), so X1 , . . . , Xn+1 are identically distributed.
+Then, for 2 ≤ i ≤ n we have
+dTV (Z, Z i ) ≥ dTV (Xi − γXi−1 , Xn+1 − γXi−1 )
+
+= dTV N (0, 1 − γ 2 ), N (0, 1 + γ 2 − 2γ n+3−i ) ,
+which is proportional to γ 2 . This shows that dTV (R(Z), R(Z i )) can be vanishingly
+small even when dTV (Z, Z i ) is bounded away from zero.
+
+4.5
+
+Extensions and explorations
+
+We now briefly describe several extensions of our general framework.
+Additive versus multiplicative bounds. In our theoretical results above, the
+bn (Xn+1 )} has
+reduction in coverage is additive—that is, the probability P{Yn+1 6∈ C
+the form α + ∆, where the term ∆ reflects the extent to which the exchangeability
+assumption is violated (as measured by total variation distance). If the target
+non-coverage level α is extremely low, then this additive bound may represent a
+substantial increase in the probability of error. In Appendix C, we give an alternative
+bound under a Huber contamination model, which is multiplicative rather than
+additive, but holds only for the symmetric algorithm case.
+Fixed versus data-dependent weights. Throughout this paper, we have worked
+under the assumption that the weights wi on the conformal residuals, as well as the
+tags ti used in model fitting in the nonsymmetric case, are fixed a priori. In contrast,
+when weighted versions of conformal prediction are used for addressing problems
+such as covariate shift [Tibshirani et al., 2019], data censoring [Candès et al., 2021],
+or local coverage [Guan, 2021], the weights are data-dependent, i.e., wi = w(Xi )
+or wi = w(Xi , Xn+1 ), in each of these settings. We pause here to comment on this
+distinction.
+In practical applications of our proposed methods, it may be the case that we
+would like to use weights and/or tags that are somehow random—for example, if
+each data point (Xi , Yi ) is gathered at a random time Ti , the weight wi and tag ti
+might then need to depend on Ti . In the setting where the weights wi and/or tags ti
+may be random or data-dependent, our results will still apply if the terms dTV (Z, Z i )
+appearing in our bounds on the coverage gap are replaced with suitable conditional
+versions,
+" n
+#
+X
+
+Coverage gap ≤ E
+w̃i · dTV Z, Zi | w1 , . . . , wn , t1 , . . . , tn+1 ,
+i=1
+
+20
+
+where now the ith term on the right-hand side is the total variation distance
+between the conditional distributions of Z and Z i , conditioning on the weights and
+tags. We might therefore consider a possible extension that unifies the proposed
+framework with the weighted conformal prediction [Tibshirani et al., 2019] and/or
+localized conformal prediction (LCP) [Guan, 2021] methods, where the weight wi
+(and, potentially, the tag ti ) placed on data point i might now additionally incorporate
+data-dependent information—e.g., the weight wi might depend on both the index i,
+as in our framework, and on kXi − Xn+1 k2 , as in the LCP framework. We leave a
+more detailed investigation of data dependent weights for future work.
+Are these results assuming the data is approximately exchangeable? Finally, we point out that these coverage gap bounds are very different in flavor than
+simply assuming that Z is “nearly exchangeable”. In particular, in a setting where
+dTV (Z, Z̃) is small for some exchangeable Z̃, it follows immediately that the coverage
+gap is bounded by dTV (Z, Z̃) for (unweighted) split or full conformal, since these
+methods are guaranteed to have coverage
+1 − α with exchangeable data Z̃. By
+P
+comparison, our coverage gap bound i w̃i · dTV (Z, Z i ) is substantially stronger.
+To see this through an example, consider a distribution where the covariates Xi
+are i.i.d., and where Yi ∼ Bernoulli(0.5 + (−1)i · ), for some small constant  > 0.
+Suppose that we run conformal prediction without weights, wi ≡ 1. Then we have
+dTV (Zi , Zn+1 ) ≤ 2 for all i, and so our coverage gap bound ensures that conformal
+prediction has coverage at least 1 − α − 4. On the other hand, we have
+dTV (Z, Z̃) ≈ 1 for any exchangeable Z̃.
+To verify the above claim, note that under the distribution of Z, we have
+b n+1
+c
+2
+
+X
+
+1 {Y2i−1 < Y2i } + Bi 1 {Y2i−1 = Y2i } ∼ Binomial b n+1
+c, 0.5 +  ,
+2
+
+
+i=1
+iid
+
+where Bi ∼ Bernoulli(0.5), while under any exchangeable
+distribution, the left
+hand side above is distributed as Binomial b n+1
+c,
+0.5
+,
+and
+these two binomial
+2
+distributions have total variation distance ≈ 1, for large n. Thus, in this example,
+we see that our coverage gap is low even though it is not the case that Z is “nearly
+exchangeable”.
+
+5
+
+Experiments
+
+In this section, we examine the empirical performance of nonexchangeable full conformal prediction, with residual weights and allowing for a nonsymmetric algorithm,
+against the original full conformal method. (Additional experiments that implement
+21
+
+split conformal and jackknife+ can be found in Appendix F.) We will see that adding
+weights enables robustness against changes in the data distribution (i.e., better
+coverage), while moving to a nonsymmetric algorithm enables shorter prediction
+intervals.4
+
+5.1
+
+Simulations
+
+We consider three simulated data distributions:
+• Setting 1: i.i.d. data. We generate N = 2000 i.i.d. data points (Xi , Yi ), with
+iid
+Xi ∼ N (0, I4 ) and Yi ∼ Xi> β + N (0, 1) for a coefficient vector β = (2, 1, 0, 0).
+• Setting 2: changepoints. We generate N = 2000 data points (Xi , Yi ), with
+iid
+Xi ∼ N (0, I4 ) and Yi ∼ Xi> β (i) + N (0, 1). Here β (i) is the coefficient vector at
+time i, and changes two times over the duration of data collection:
+β (1) = · · · = β (500) = (2, 1, 0, 0),
+β (501) = · · · = β (1500) = (0, −2, −1, 0),
+β (1501) = · · · = β (2000) = (0, 0, 2, 1).
+• Setting 3: distribution drift. We generate N = 2000 data points (Xi , Yi ),
+iid
+with Xi ∼ N (0, I4 ) and Yi ∼ Xi> β (i) + N (0, 1). As before, β (i) is the coefficient
+vector at time i; but now we set β (1) = (2, 1, 0, 0), β (N ) = (0, 0, 2, 1), and then
+compute each intermediate β (i) by linear interpolation.
+For each task, we implement the following three methods, with target coverage
+level 1 − α = 0.9.
+• CP+LS: full conformal prediction with least squares. We consider the
+original definition of full conformal prediction (8), with µ
+b the least squares fit,
+5
+i.e., A is the least squares regression algorithm.
+• NexCP+LS: nonexchangeable full conformal with least squares. We
+also run nonexchangeable full conformal prediction (12) using weights wi =
+0.99n+1−i , and with the same algorithm A (least squares regression).
+4
+
+Code for reproducing the experiments in Sections 5.1 and 5.2 is available at https://rinafb.
+github.io/code/nonexchangeable_conformal.zip.
+5
+In principle, full conformal run with A given by least squares may return a prediction set b
+C(Xn+1 )
+that is a disjoint union of intervals, but this is rare in most typical settings. The same is true for
+NexCP and for weighted least squares. For interpretability, we implement each method to always
+return an interval (i.e., if b
+C(Xn+1 ) happens to be a disjoint union of intervals, then we return its
+convex hull).
+
+22
+
+• NexCP+WLS: nonexchangeable full conformal with weighted least
+squares. Lastly we use nonexchangeable full conformal prediction (12) but now
+with a nonsymmetric algorithm, weighted least squares regression. Specifically,
+to fit µ
+b given tagged data points (xi , yi , ti ), the algorithm A will run weighted
+least squares regression placing weight ti on data point (xi , yi ). We implement
+the algorithm with ti = 0.99n+1−i , and again use weights wi = 0.99n+1−i .
+After a burn-in period of the first 100 time points, at each time n = 100, . . . , N −1
+we run the methods with training data i = 1, . . . , n and test point n + 1. The results
+shown are averaged over 200 independent replications of the simulation.
+
+Setting 3 (drift)
+
+Setting 2 (changepoints)
+
+Setting 1 (i.i.d. data)
+
+Coverage
+
+Width
+
+1.00
+
+4
+
+0.75
+
+3
+
+0.50
+
+2
+
+0.25
+
+1
+
+0.00
+
+0
+
+1.00
+
+10.0
+
+0.75
+
+7.5
+
+0.50
+
+5.0
+
+0.25
+
+2.5
+
+0.00
+
+0.0
+
+1.00
+
+6
+
+0.75
+4
+0.50
+2
+0.25
+
+0.00
+
+0
+500
+
+1000
+
+1500
+
+2000
+
+500
+
+Time
+Method
+
+1000
+
+1500
+
+2000
+
+Time
+CP+LS
+
+NexCP+LS
+
+NexCP+WLS
+
+Figure 2: Simulation results showing mean prediction interval coverage and width, averaged
+over 200 independent trials. The displayed curves are smoothed by taking a rolling average
+with a window of 10 time points.
+
+Our results are shown in Figure 2, and are summarized in Table 1. In terms of
+coverage, we see that all three methods have coverage ≈ 90% across the time range
+of the experiment for the i.i.d. data setting (Setting 1), while for the changepoint
+(Setting 2) and distribution drift (Setting 3) experiments, the two proposed methods
+23
+
+achieve approximately the desired coverage level, but the original full conformal
+method CP+LS undercovers. In particular, as expected, CP+LS shows steep drops
+in coverage in Setting 2 after changepoints, while in Setting 3 the coverage for CP+LS
+declines gradually over time as the distribution drift grows. The NexCP+LS and
+NexCP+WLS methods are better able to maintain coverage in these settings. (In
+fact, in Setting 2, we see that NexCP+WLS overcovers for a period of time after each
+changepoint—this is because, a short period of time after the changepoint, the fitted
+weighted least squares model is already quite accurate for the new data distribution,
+but the weights w̃i are still placing some weight on residuals from data points from
+before the changepoint, leading briefly to an overestimate of our model error.)
+
+CP+LS
+NexCP+LS
+NexCP+WLS
+
+Setting 1 (i.i.d. data)
+Coverage
+Width
+0.900
+3.31
+0.907
+3.39
+0.907
+3.42
+
+Setting 2 (changepoints)
+Coverage
+Width
+0.835
+5.99
+0.884
+6.83
+0.906
+4.13
+
+Setting 3 (drift)
+Coverage Width
+0.838
+3.73
+0.888
+4.29
+0.907
+3.45
+
+Table 1: Simulation results showing mean prediction interval coverage and width,
+averaged over all time points and over 200 trials.
+Turning to the prediction interval width, for the i.i.d. data setting (Setting 1),
+the three methods show similar mean widths, although the widths for NexCP+LS
+and NexCP+WLS are very slightly higher than for CP+LS; in addition, variability is
+higher for NexCP+LS and NexCP+WLS than for CP+LS, which is to be expected
+since using decaying weights wi for computing the prediction intervals leads to a
+lower effective sample size. For the changepoint (Setting 2) and distribution drift
+(Setting 3) experiments, we see that NexCP+LS leads to wider prediction intervals
+than the original method CP+LS, which is to be expected since NexCP+LS is using
+the same model fitting algorithm but avoiding the undercoverage issue of CP+LS.
+More importantly, NexCP+WLS is able to construct narrower prediction intervals
+than CP+LS, while avoiding undercoverage. This is due to the fact that weighted
+least squares leads to more accurate fitted models. This highlights the utility of
+nonsymmetric algorithms for settings where data are not exchangeable.
+
+5.2
+
+Electricity data set
+
+We now compare the three methods on a real data set. The ELEC2 data set6 [Harries,
+1999] tracks electricity usage and pricing in the states of New South Wales and
+Victoria in Australia, every 30 minutes over a 2.5 year period in 1996–1999. (This
+data set was previously analyzed by Vovk et al. [2021] in the context of conformal
+prediction, finding distribution drift that violated exchangeability.)
+6
+
+Data was obtained from https://www.kaggle.com/yashsharan/the-elec2-dataset.
+
+24
+
+Permuted electricity
+
+Electricity data
+
+Coverage
+
+Width
+
+1.00
+
+1.00
+
+0.75
+
+0.75
+
+0.50
+
+0.50
+
+0.25
+
+0.25
+
+0.00
+
+0.00
+
+1.00
+
+1.00
+
+0.75
+
+0.75
+
+0.50
+
+0.50
+
+0.25
+
+0.25
+
+0.00
+
+0.00
+1000
+
+2000
+
+3000
+
+1000
+
+Time
+Method
+
+2000
+
+3000
+
+Time
+CP+LS
+
+NexCP+LS
+
+NexCP+WLS
+
+Figure 3: Electricity data results showing coverage and prediction interval width on the
+original data and the permuted data. The displayed curves are smoothed by taking a
+rolling average with a window of 300 time points.
+
+For our experiment, we use four covariates: nswprice and vicprice, the price
+of electricity in each of the two states, and nswdemand and vicdemand, the usage
+demand in each of the two states. Our response variable is transfer, the quantity
+of electricity transferred between the two states. We work with a subset of the data,
+keeping only those observations in the time range 9:00am–12:00pm (aiming to remove
+daily fluctuation effects), and discarding an initial stretch of time during which the
+value transfer is constant. After these steps, we have N = 3444 time points. We
+then implement the same three methods as in the simulations (CP+LS, NexCP+LS,
+and NexCP+WLS), using the exact same definitions and settings as before.
+Our goal is to examine how distribution drift over the duration of this 2.5 year
+period will affect each of the three methods. As a sort of “control group”, we also
+perform the experiment with a permuted version of this same data set—we draw a
+permutation π on [N ] uniformly at random, and then repeat the same experiment on
+the permuted data set (Xπ(1) , Yπ(1) ), . . . , (Xπ(N ) , Yπ(N ) ). The random permutation
+ensures that the distribution of this data set now satisfies exchangeability.
+Our results are shown in Figure 3, and summarized in Table 2. On the original
+data set, we see that the unweighted method CP+LS shows some undercoverage,
+while both NexCP+LS and NexCP+WLS achieve nearly the desired 90% coverage
+level. In particular, CP+LS shows undercoverage during a long range of time around
+the middle of the duration of the experiment, and then recovers, showing the effects
+of distribution drift in this data set—this occurs as the response variable transfer
+
+25
+
+is more noisy during the middle of the time range, as compared to the beginning
+and end of the time range. On the permuted data set, on the other hand, all three
+methods show coverage that is close to 90% throughout the time range, which is
+expected since the permuted data set is exchangeable.
+
+CP+LS
+NexCP+LS
+NexCP+WLS
+
+Electricity data
+Coverage Width
+0.852
+0.565
+0.890
+0.606
+0.893
+0.527
+
+Permuted electricity data
+Coverage
+Width
+0.899
+0.639
+0.908
+0.652
+0.908
+0.663
+
+Table 2: Electricity data results showing coverage and prediction interval width on
+the original data and the permuted data, averaged over all time points.
+Turning now to prediction interval width, on the original data set we see that the
+interval width of NexCP+LS is generally larger than that of NexCP+WLS, again
+demonstrating the advantage of a nonsymmetric algorithm. For the permuted data
+set, on the other hand, the interval widths are similar, although NexCP+LS and
+NexCP+WLS show higher variability; this is explained by the lower effective sample
+size that is introduced by weighting the data points, combined with the heavy-tailed
+nature of the data.
+
+5.3
+
+Election data set
+
+Finally, we apply our weighted methods to predict how Americans voted in the 2020
+U.S. presidential election. Our experiments in this subsection are inspired by the
+work of Cherian and Bronner [2020] for The Washington Post.
+The left map in Figure 4 shows, county by county, the relative change in the
+number of votes for the Democratic Candidate between 2016 and 2020, defined as:
+Y =
+
+Dem2020 − Dem2016
+,
+Dem2016
+
+where Dem2020 is the number of Democratic votes in a given county in 2020 (and
+similarly for 2016). In our experiments, the covariate vector X includes information
+on the makeup of the county population by ethnicity, age, sex, median income and
+education (see Appendix G for details and for information about the data sources),
+given the data that was available in 2020.
+During real-time election forecasting, after observing the response Y for a subset
+of the counties (those counties that have reported), the problem is to predict the
+vote change Y in each of the counties where vote counts are not yet available. If the
+order in which counties report their vote totals were drawn uniformly at random,
+then the exchangeability of the resulting training and test sets would mean that
+26
+
+Figure 4: Left map: relative change in the number of votes for the Democratic presidential
+candidate from 2016 to 2020. Blue colors indicate an increase in Democratic votes and red
+colors indicate a decrease, with the darkest shade of blue (respectively, red) corresponding
+to a 50% increase (respectively, decrease). Right map: the counties that form the training
+set (in green), and all remaining counties are in the test set.
+
+conformal prediction can be applied in a straightforward manner to obtain valid
+predictive intervals for the unobserved counties. In practice, however, the time at
+which a county reports its votes may depend on various factor such as the time zone
+of the county, the size of the county, and so on. Therefore, if at any point in time
+we were to train on counties whose votes have already been reported, then this can
+create a division of training and test sets that violates exchangeability, and can thus
+lead to a failure of the predictive coverage guarantee.
+To mimic this type of biased split, for the current experiment, we use counties
+that fall under the Eastern time zone as our training set, and the remaining counties
+as the test set, as highlighted in the right-hand map in Figure 4. This results in 1119
+training points and 1957 test points.
+To run the experiment, we implement the same three full conformal methods as
+before (CP+LS, NexCP+LS, and NexCP+WLS). To define weights wi for NexCP,
+we will use some available side information—namely, X prev ∈ Rp , which gives the
+2016 measurements for the same set of demographic and socioeconomicprevvariables
+prev
+as contained in X for 2020. The weights are then defined as wi = e−γkXi −Xn+1 k2 ,
+where we choose γ to satisfy
+P
+( ni=1 wi + 1)2
+Pn
+= 100,
+2
+i=1 wi + 1
+essentially corresponding to an effective training sample size of 100 once we use the
+weighted training sample. We note that, since these weights depend only on data from
+27
+
+CP+LS
+NexCP+LS
+NexCP+WLS
+
+Coverage
+0.743
+0.820
+0.840
+
+CP+QR
+NexCP+QR
+NexCP+WQR
+
+Coverage
+0.782
+0.836
+0.835
+
+Table 3: Election data results showing coverage, averaged over all test counties.
+2016, we can treat these weights as fixed (i.e., these weights were determined “earlier”
+than gathering the data set {(Xi , Yi )}3076
+i=1 in 2020). By using these weights within
+nonexchangeable conformal, we are implicitly invoking a hypothesis that counties
+which had similar demographics in 2016 will generate approximately exchangeable
+data in 2020. Finally, for NexCP+WLS, we use the same choice for the tags used
+for running the weighted least squares regression, i.e., setting ti = wi .
+In addition, we also repeat the entire experiment with quantile regression in
+place of linear regression, and use a corresponding choice of the nonconformity
+score function—specifically, after fitting a lower 5% percentile function q̂0.05 (·), and
+an upper 95% percentile function q̂0.95 (·) to the data, the nonconformity score is
+b i , Yi ) = max{q̂0.05 (Xi ) − Yi , Yi − q̂0.95 (Xi )}, as in Romano et al. [2019].
+given by S(X
+This yields three additional methods: conformal prediction with quantile regression
+(CP+QR), nonexchangeable conformal with quantile regression (NexCP+QR), and
+nonexchangeable conformal with weighted quantile regression (NexCP+WQR), where
+the weights wi and the tags ti are defined the same way as in linear regression.
+Table 3 shows the resulting predictive coverage, averaged over the test set, for
+each of the three methods, when they are run with target coverage level 1 − α = 0.9.
+We can see that CP undercovers substantially, particularly when combined with least
+squares, due to the construction of nonexchangeable training and test counties. In
+contrast, NexCP (with or without the nonsymmetric algorithm) is able to achieve a
+coverage level that is much closer to the target level 90%.
+
+6
+
+Proofs
+
+In this section, we give proofs of all theorems presented so far.
+
+6.1
+
+Background: proof of Theorem 1
+
+To help build intuition for the proof techniques we will use later on, we reformulate
+Vovk et al. [2005]’s proofs of these results, and we then explain some of the challenges
+in extending these existing results to our new setting.
+Y
+Let Ri = Ri n+1 denote the ith residual, at the hypothesized value y = Yn+1 . By
+our assumptions, the data points (X1 , Y1 ), . . . , (Xn+1 , Yn+1 ) are i.i.d. (or exchangeable), and the fitted model µ
+b=µ
+bYn+1 = A((X1 , Y1 ), . . . , (Xn+1 , Yn+1 )) is constructed
+28
+
+via an algorithm A that treats these n + 1 data points symmetrically. The residuals
+Ri = |Yi − µ
+b(Xi )| are thus exchangeable.
+Now define the set of “strange” points
+(
+!)
+n+1
+X
+1
+S(R) = i ∈ [n + 1] : Ri > Q1−α
+· δRj
+.
+n
++
+1
+j=1
+That is, an index i corresponds to a “strange” point if its residual Ri is one of the
+bα(n + 1)c largest elements of the list R1 , . . . , Rn+1 . By definition, this can include
+at most α(n + 1) entries of the list, i.e.,
+|S(R)| ≤ α(n + 1).
+b
+Next, by definition of the full conformal predictionPset, we see that
+ Yn+1 6∈ Cn (Xn+1 )
+n+1 1
+(i.e., coverage fails) if and only if Rn+1 > Q1−α
+i=1 n+1 · δRi , or equivalently, if
+and only if the test point n + 1 is “strange”, i.e., n + 1 ∈ S(R). Therefore, we have
+n
+o
+b
+P Yn+1 6∈ Cn (Xn+1 ) = P {n + 1 ∈ S(R)} =
+
+n+1
+1 X
+P {i ∈ S(R)}
+n + 1 i=1
+
+" n+1
+#
+X
+1
+1
+1
+E
+E [|S(R)|] ≤
+· α(n + 1) = α,
+=
+1 {i ∈ S(R)} =
+n+1
+n+1
+n+1
+i=1
+where the second equality holds due to the exchangeability of R1 , . . . , Rn+1 .
+Challenges for the new algorithms. We will now see why the above proof does
+not obviously extend to our nonexchangeable conformal method, even if we were
+to assume that the data points (Xi , Yi ) are exchangeable. First, suppose that A is
+symmetric (i.e., we do not use tags ti ). For the original full conformal prediction
+method, in the proof of Theorem 1, exchangeability of the data points is used to
+verify that P {n + 1 ∈ S(R)} = P {i ∈ S(R)} for each i ∈ [n], or equivalently,
+(
+!)
+(
+!)
+n+1
+n+1
+X
+X
+1
+1
+P Rn+1 > Q1−α
+· δR j
+= P Ri > Q1−α
+· δRj
+.
+n+1
+n+1
+j=1
+
+j=1
+
+This equality holds since
+the residuals Ri are exchangeable (by assumption on the
+Pn+1
+1
+data) and since Q1−α ( j=1 n+1
+· δRj ) is a symmetric function of R1 , . . . , Rn+1 . For
+the nonexchangeable full conformal algorithm proposed in (12), on the other hand,
+we would need to check whether
+(
+!)
+(
+!)
+n+1
+n+1
+X
+X
+?
+P Rn+1 > Q1−α
+w̃j · δRj
+= P Ri > Q1−α
+w̃j · δRj
+.
+j=1
+
+j=1
+
+29
+
+Even when the residuals Ri are exchangeable (i.e., when the data points
+are exchangePn+1
+able and the algorithm is symmetric), the weighted quantile Q1−α ( j=1 w̃j · δRj ) is
+no longer a symmetric function of R1 , . . . , Rn+1 if the weights w̃j are not all equal,
+and therefore, the equality will no longer be true in general.
+Next, if we use nonsymmetric algorithms that take tagged data points (Xi , Yi , ti )
+as input, the situation becomes even more complex—even if the data points (Xi , Yi )
+are exchangeable, the residuals R1 , . . . , Rn+1 may no longer be exchangeable as they
+depend on a fitted model µ
+b that treats the training data points nonsymmetrically.
+Finally, in this paper we are of course primarily interested in the setting where
+the data points are no longer exchangeable, and in bounding the resulting coverage
+gap. This leads to additional challenges, all of which we address in the proofs below.
+
+6.2
+
+Proof of Theorem 2
+
+Since nonexchangeable split conformal is simply a special case of nonexchangeable
+full conformal, we only need to prove the result for full conformal.
+For each k ∈ [n + 1], denote
+
+
+k
+Yn+1 ,k
+µ
+b =µ
+b
+= A (Xπk (1) , Yπk (1) , t1 ), . . . , (Xπk (n+1) , Yπk (n+1) , tn+1 ) ,
+where for any k ∈ [n], as before πk denotes the permutation on [n + 1] that swaps
+indices k and n + 1, while πn+1 is the identity permutation. Then, for any k ∈ [n + 1],
+we can calculate
+
+R(Z k ) i = |Yπk (i) − µ
+bk (Xπk (i) )|,
+and therefore,
+ Y ,K
+n+1
+
+, if i 6= K and i 6= n + 1,
+Ri
+
+Yn+1 ,K
+K
+R(Z ) i = Rn+1 , if i = K,
+
+ Yn+1 ,K
+, if i = n + 1.
+RK
+
+(20)
+
+The definition of the nonexchangeable full conformal prediction set (18) reveals
+!
+n+1
+X
+Y
+,K
+n+1
+bn (Xn+1 ) ⇐⇒ Rn+1 > Q1−α
+Yn+1 6∈ C
+w̃i · δ Yn+1 ,K ,
+i=1
+
+Ri
+
+and we can equivalently write this as
+Yn+1 ,K
+bn (Xn+1 ) ⇐⇒ Rn+1
+Yn+1 6∈ C
+> Q1−α
+
+n
+X
+
+!
+w̃i · δRYn+1 ,K + w̃n+1 · δ+∞ . (21)
+
+i=1
+
+Next, we verify that deterministically (20) implies
+!
+n
+X
+Q1−α
+w̃i · δRYn+1 ,K + w̃n+1 · δ+∞ ≥ Q1−α
+i=1
+
+i
+
+i
+
+n+1
+X
+i=1
+
+30
+
+!
+w̃i · δ(R(Z K ))i
+
+.
+
+(22)
+
+Indeed, if K = n+1, then R(Z K ) = RYn+1 ,K by (20), and so the bound holds trivially.
+If instead K ≤ n, then the distribution on the left-hand side of (22) equals
+n
+X
+
+w̃i · δRYn+1 ,K + w̃n+1 · δ+∞
+i
+
+i=1
+
+X
+
+=
+
+w̃i · δRYn+1 ,K + w̃K (δRYn+1 ,K + δ+∞ ) + (w̃n+1 − w̃K )δ+∞ ,
+i
+
+i=1,...,n;i6=K
+
+K
+
+while the distribution on the right-hand side of (22) can be rewritten as
+n+1
+X
+
+X
+
+w̃i · δ(R(Z K ))i =
+
+i=1
+
+w̃i · δRYn+1 ,K + w̃K δRYn+1 ,K + w̃n+1 δRYn+1 ,K
+
+i=1,...,n;i6=K
+
+=
+
+X
+
+n+1
+
+i
+
+K
+
+w̃i · δRYn+1 ,K + w̃K (δRYn+1 ,K + δRYn+1 ,K ) + (w̃n+1 − w̃K )δRYn+1 ,K ,
+
+i=1,...,n;i6=K
+
+i
+
+K
+
+n+1
+
+K
+
+by applying (20). Since wK ∈ [0, 1] by assumption, we have w̃n+1 ≥ w̃K , which from
+the last two displays verifies that (22) must hold. Combining (21) and (22), we have
+!
+n+1
+X
+Y
+,K
+n+1
+bn (Xn+1 ) =⇒ Rn+1
+Yn+1 6∈ C
+> Q1−α
+w̃i · δ(R(Z K )) ,
+i
+
+i=1
+
+or equivalently by (20),
+K
+
+bn (Xn+1 ) =⇒ (R(Z ))K > Q1−α
+Yn+1 6∈ C
+
+n+1
+X
+
+!
+w̃i · δ(R(Z K ))i
+
+.
+
+(23)
+
+i=1
+
+Next define a function S from Rn+1 to subsets of [n + 1], as follows: for any r ∈ Rn+1 ,
+(
+!)
+n+1
+X
+S(r) = i ∈ [n + 1] : ri > Q1−α
+w̃j · δrj
+.
+(24)
+j=1
+
+These are the “strange” points—indices i for which ri is unusually large, relative to
+the (weighted) empirical distribution of r1 , . . . , rn+1 . A direct argument (see, e.g.,
+the deterministic inequality in [Harrison, 2012, Lemma A.1]) shows that
+X
+w̃i ≤ α for all r ∈ Rn+1 ,
+(25)
+i∈S(r)
+
+that is, the (weighted) fraction of “strange” points cannot exceed α. From (23), we
+have that noncoverage of Yn+1 implies strangeness of point K:
+
+bn (Xn+1 ) =⇒ K ∈ S R(Z K ) .
+Yn+1 6∈ C
+(26)
+31
+
+Finally,
+n+1
+X
+
+
+
+P K ∈ S R(Z ) =
+P K = i and i ∈ S R(Z i )
+
+
+
+K
+
+=
+
+i=1
+n+1
+X
+
+
+
+w̃i · P i ∈ S R(Z i )
+
+(27)
+
+i=1
+
+≤
+
+n+1
+X
+
+
+
+
+w̃i · P i ∈ S R(Z) + dTV R(Z), R(Z i )
+
+i=1
+
+
+= E
+
+
+X
+
+w̃i  +
+
+i∈S(R(Z))
+
+≤α+
+
+n
+X
+
+n
+X
+
+
+w̃i · dTV R(Z), R(Z i )
+
+i=1
+
+
+w̃i · dTV R(Z), R(Z i ) ,
+
+i=1
+
+where the last step holds by (25), whereas step (27) holds because K ⊥
+⊥ Z and
+Z i = πi (Z) is a function of the data Z, and therefore, K ⊥
+⊥ Z i.
+
+7
+
+Discussion
+
+Our main contribution in this paper was to demonstrate how conformal prediction,
+which has crucially relied on exchangeability, can be modified to handle nonsymmetric
+regression algorithms, and utilize weighted residual distributions in order to provide
+robustness against deviations from exchangeability in the data. With no assumptions
+whatsoever on the underlying joint distribution of the data, it is possible to give
+a coverage guarantee for both existing conformal methods, and our new proposed
+nonexchangeable conformal procedures. The coverage gap, expressing the extent to
+which the guaranteed coverage level is lower than what would be guaranteed under
+exchangeability, is bounded by a weighted sum of total variation distances between
+the residual vectors obtained by swapping the ith point with the (n + 1)st point.
+Our work opens the door to applying conformal prediction in applications where
+the data is globally likely far from exchangeable but locally deviates mildly from
+exchangeability. Tags and weights can be prudently used to downweight “far away”
+points during training and calibration, and recover reasonable coverage in practice.
+We hope our work will lead to more targeted methods that focus on custom design of
+nonsymmetric algorithms and weighting schemes to improve efficiency and robustness
+in specific applications, through the lens of nonexchangeable conformal prediction.
+
+32
+
+Acknowledgements
+The authors are grateful to the American Institute of Mathematics for supporting and
+hosting our collaboration. R.F.B. was supported by the National Science Foundation
+via grants DMS-1654076 and DMS-2023109, and by the Office of Naval Research
+via grant N00014-20-1-2337. E.J.C. was supported by the Office of Naval Research
+grant N00014-20-1-2157, the National Science Foundation grant DMS-2032014, the
+Simons Foundation under award 814641, and the ARO grant 2003514594. R.J.T. was
+supported by ONR grant N00014-20-1-2787. The authors are grateful to Vladimir
+Vovk for helpful feedback on an earlier draft of this paper. E.J.C. would like to thank
+John Cherian and Isaac Gibbs for their help with the presidential election data.
+
+References
+Anastasios N. Angelopoulos and Stephen Bates. A gentle introduction to conformal prediction and distribution-free uncertainty quantification. arXiv preprint
+arXiv:2107.07511, 2021.
+Rina Foygel Barber, Emmanuel J. Candès, Aaditya Ramdas, and Ryan J. Tibshirani.
+Predictive inference with the jackknife+. Annals of Statistics, 49(1):486–507, 2021.
+Stephen Bates, Emmanuel J. Candès, Lihua Lei, Yaniv Romano, and Matteo Sesia.
+Testing for outliers with conformal p-values. arXiv preprint arXiv:2104.08279,
+2021.
+Evgeny Burnaev and Vladimir Vovk. Efficiency of conformalized ridge regression. In
+Conference on Learning Theory, pages 605–622, 2014.
+Emmanuel J. Candès, Lihua Lei, and Zhimei Ren. Conformalized survival analysis.
+arXiv preprint arXiv:2103.09763, 2021.
+Maxime Cauchois, Suyash Gupta, Alnur Ali, and John C. Duchi. Robust validation: Confident predictions even when distributions shift. arXiv preprint
+arXiv:2008.04267, 2020.
+John Cherian and Leonard Bronner.
+How The Washington Post estimates outstanding votes for the 2020 presidential election, 2020. URL
+https://s3.us-east-1.amazonaws.com/elex-models-prod/2020-general/
+write-up/election_model_writeup.pdf.
+Victor Chernozhukov, Kaspar Wüthrich, and Zhu Yinchu. Exact and robust conformal inference methods for predictive machine learning with dependent data. In
+Conference On learning theory, pages 732–749. PMLR, 2018.
+
+33
+
+Robin Dunn, Larry Wasserman, and Aaditya Ramdas. Distribution-free prediction sets for two-layer hierarchical models. Journal of the American Statistical
+Association (to appear), 2022.
+Clara Fannjiang, Stephen Bates, Anastasios N. Angelopoulos, Jennifer Listgarten,
+and Michael I. Jordan. Conformal prediction for the design problem. arXiv preprint
+arXiv:2202.03613, 2022.
+Isaac Gibbs and Emmanuel J. Candès. Adaptive conformal inference under distribution shift. Advances in Neural Information Processing Systems, 34, 2021.
+Leying Guan. Localized conformal prediction: A generalized inference framework for
+conformal prediction. arXiv preprint arXiv:2106.08460, 2021.
+Michael Harries. Splice-2 comparative evaluation: Electricity pricing. Technical
+report, University of New South Wales, 1999.
+Matthew T. Harrison. Conservative hypothesis tests and confidence intervals using
+importance sampling. Biometrika, 99(1):57–69, 2012.
+Danijel Kivaranovic, Kory D. Johnson, and Hannes Leeb. Adaptive, distribution-free
+prediction intervals for deep networks. In International Conference on Artificial
+Intelligence and Statistics. PMLR, 2020.
+Hyman G. Landau. On dominance relations and the structure of animal societies:
+III. The condition for a score structure. The Bulletin of Mathematical Biophysics,
+15(2):143–148, 1953.
+Jing Lei. Fast exact conformalization of the lasso using piecewise linear homotopy.
+Biometrika, 106(4):749–764, 2019.
+Jing Lei and Larry Wasserman. Distribution-free prediction bands for non-parametric
+regression. Journal of the Royal Statistical Society: Series B, 76(1):71–96, 2014.
+Jing Lei, James Robins, and Larry Wasserman. Distribution-free prediction sets.
+Journal of the American Statistical Association, 108(501):278–287, 2013.
+Jing Lei, Max G’Sell, Alessandro Rinaldo, Ryan J. Tibshirani, and Larry Wasserman.
+Distribution-free predictive inference for regression. Journal of the American
+Statistical Association, 113(523):1094–1111, 2018.
+Lihua Lei and Emmanuel J. Candès. Conformal inference of counterfactuals and
+individual treatment effects. Journal of the Royal Statistical Society: Series B,
+2021a.
+
+34
+
+Lihua Lei and Emmanuel J. Candès. Theory of weighted conformal inference.
+Technical report, Stanford University, 2021b.
+David Leip. Dave Leip’s atlas of U.S. presidential elections, 2020. URL http:
+//uselectionatlas.org.
+Huiying Mao, Ryan Martin, and Brian Reich. Valid model-free spatial prediction.
+arXiv preprint arXiv:2006.15640, 2020.
+MIT Election Data and Science Lab. County Presidential Election Returns 2000-2016,
+2018. URL https://doi.org/10.7910/DVN/VOQCHQ.
+Aleksandr Podkopaev and Aaditya Ramdas. Distribution-free uncertainty quantification for classification under label shift. In Uncertainty in Artificial Intelligence.
+PMLR, 2021.
+Aaditya Ramdas, Rina Foygel Barber, Martin J. Wainwright, and Michael I. Jordan.
+A unified treatment of multiple testing with prior knowledge using the p-filter.
+Annals of Statistics, 47(5):2790–2821, 2019.
+Yaniv Romano, Evan Patterson, and Emmanuel J. Candès. Conformalized quantile
+regression. Advances in Neural Information Processing Systems, 32, 2019.
+Sheldon M. Ross and Erol A. Peköz. A Second Course in Probability. Probability
+Bookstore, 2007.
+Glenn Shafer and Vladimir Vovk. A tutorial on conformal prediction. Journal of
+Machine Learning Research, 9(3), 2008.
+Kamile Stankeviciute, Ahmed M Alaa, and Mihaela van der Schaar. Conformal
+time-series forecasting. Advances in Neural Information Processing Systems, 34,
+2021.
+John D Storey. A direct approach to false discovery rates. Journal of the Royal
+Statistical Society: Series B, 64(3):479–498, 2002.
+John D. Storey, Jonathan E. Taylor, and David Siegmund. Strong control, conservative point estimation and simultaneous conservative consistency of false discovery
+rates: A unified approach. Journal of the Royal Statistical Society: Series B, 66
+(1):187–205, 2004.
+Ryan J. Tibshirani, Rina Foygel Barber, Emmanuel J. Candès, and Aaditya Ramdas.
+Conformal prediction under covariate shift. Advances in Neural Information
+Processing Systems, 32, 2019.
+
+35
+
+United States Census Bureau. County characteristics resident population estimates, 2019a. Data retrieved from https://www.census.gov/data/tables/
+time-series/demo/popest/2010s-counties-detail.html.
+United States Census Bureau. 2015-2019 american community survey 5-year average
+county-level estimates, 2019b. Data retrieved from https://www.ers.usda.gov/
+data-products/county-level-data-sets/download-data/.
+United States Census Bureau.
+Small area income and poverty estimates:
+2019, 2019c. Data retrieved from https://www.ers.usda.gov/data-products/
+county-level-data-sets/download-data/.
+Denis Volkhonskiy, Evgeny Burnaev, Ilia Nouretdinov, Alexander Gammerman, and
+Vladimir Vovk. Inductive conformal martingales for change-point detection. In
+Conformal and Probabilistic Prediction and Applications, pages 132–153. PMLR,
+2017.
+Vladimir Vovk. Cross-conformal predictors. Annals of Mathematics and Artificial
+Intelligence, 74(1):9–28, 2015.
+Vladimir Vovk. Testing randomness online. Statistical Science, 36(4):595–611, 2021.
+Vladimir Vovk, Alex Gammerman, and Glenn Shafer. Algorithmic Learning in a
+Random World. Springer Science & Business Media, 2005.
+Vladimir Vovk, Ilia Nouretdinov, Valery Manokhin, and Alexander Gammerman.
+Cross-conformal predictive distributions. In Conformal and Probabilistic Prediction
+and Applications, pages 37–51. PMLR, 2018.
+Vladimir Vovk, Ivan Petej, and Alex Gammerman. Protected probabilistic classification. In Conformal and Probabilistic Prediction and Applications, pages 297–299.
+PMLR, 2021.
+Chen Xu and Yao Xie. Conformal prediction interval for dynamic time-series. In
+International Conference on Machine Learning. PMLR, 2021.
+Margaux Zaffran, Olivier Féron, Yannig Goude, Julie Josse, and Aymeric Dieuleveut.
+Adaptive conformal predictions for time series. In International Conference on
+Machine Learning. PMLR, 2022.
+
+36
+
+A
+
+Extension to general nonconformity scores
+
+In this section, we extend our new nonexchangeable inference methods for split and
+full conformal to the setting of general nonconformity scores. The response is no
+longer required to be real-valued, so we will consider the general setting with data
+points (Xi , Yi ) ∈ X × Y.
+For split conformal, as usual, we assume that the nonconformity score function
+b
+S : X × Y → R is pre-fitted. The nonexchangeable split conformal set is given by
+(
+!)
+n
+X
+bn (Xn+1 ) = y ∈ Y : S(X
+b n+1 , y) ≤ Q1−α
+C
+w̃i · δ b
++ w̃n+1 · δ+∞
+.
+S(Xi ,Yi )
+
+i=1
+
+(28)
+For the special case b
+b is a pre-fitted function), note that
+S(x, y) = |y − µ
+b(x)| (where µ
+this reduces to the previous definition (11) from before.
+For full conformal, we now consider algorithms A of the form
+n
+o
+A : ∪n≥0 (X × Y × T )n → measurable functions Sb : X × Y → R .
+(29)
+(As before, the symmetric algorithm setting, with no tags ti , is simply a special case
+of this general formulation.) First, for any y ∈ R and any k ∈ [n + 1], define
+
+
+Sby,k = A (Xπk (i) , Yπyk (i) , ti ) : i ∈ [n + 1] ,
+where the permutation πk is defined as before (that swaps indices k and n + 1), and
+where
+y
+Yiy = Yi , i = 1, . . . , n, Yn+1
+= y,
+as before. Define the scores from this model,
+Siy,k = Sby,k (Xi , Yi ), i = 1, . . . , n,
+
+y,k
+Sn+1
+= Sby,k (Xn+1 , y).
+
+Then, after drawing a random index K as in (17), the prediction set is given by
+(
+!)
+n+1
+X
+y,K
+bn (Xn+1 ) = y ∈ Y : Sn+1 ≤ Q1−α
+C
+w̃i · δ y,K
+.
+(30)
+Si
+
+i=1
+
+b y) = |y − µ
+For the special case S(x,
+b(x)| (where µ
+b is fitted on the same data), this
+again reduces to the previous definition (18) from before.
+Importantly, the same theoretical result (i.e., Theorem 2) holds for these more
+general methods as well. The proof does not fundamentally rely on residual scores,
+and the modifications required for the general case are straightforward, so we omit
+the details here.
+37
+
+B
+
+Nonexchangeable jackknife+
+
+B.1
+
+Background
+
+The jackknife+ [Barber et al., 2021] (closely related to “cross-conformal prediction” [Vovk, 2015]) is a method that offers a compromise between the computational
+and statistical costs of the split and full conformal methods. For each i = 1, . . . , n,
+define the ith leave-one-out model as
+
+µ
+b−i = A (X1 , Y1 ), . . . , (Xi−1 , Yi−1 ), (Xi+1 , Yi+1 ), . . . , (Xn , Yn ) ,
+(31)
+fitted to the training data with ith point removed. Define also the ith leave-one-out
+residual RiLOO = |Yi − µ
+b−i (Xi )|, which avoids overfitting since data point (Xi , Yi ) is
+not used for training µ
+b−i . The jackknife+ prediction interval is then given by7
+"
+Qα
+
+n
+X
+
+!
+1
+1
+· δµb−i (Xn+1 )−RiLOO + n+1
+· δ−∞
+n+1
+
+,
+
+i=1
+
+Q1−α
+
+n
+X
+
+!#
+1
+1
+· δµb−i (Xn+1 )+RiLOO + n+1
+· δ+∞
+n+1
+
+. (32)
+
+i=1
+
+While in practice the jackknife+ generally provides coverage close to the target level
+1 − α (and provably so under a stability assumption on A), its theoretical guarantee
+only ensures 1 − 2α probability of coverage in the worst case:
+Theorem 4 (Jackknife+ [Barber et al., 2021]). If (X1 , Y1 ), . . . , (Xn , Yn ), (Xn+1 , Yn+1 )
+are i.i.d. (or more generally, exchangeable), and the algorithm A treats the input
+data points symmetrically as in (6), then the jackknife+ prediction interval defined
+in (32) satisfies
+n
+o
+b
+P Yn+1 ∈ Cn (Xn+1 ) ≥ 1 − 2α.
+This method can be viewed as a form of n-fold cross-validation; more generally,
+the CV+ method [Barber et al., 2021] uses K-fold cross-validation for any desired
+K, and obtains a similar distribution-free guarantee.
+
+B.2
+
+Methods
+
+We next present the nonexchangeable jackknife+ method.
+7
+
+Abusing notation, here Qα (·) is used to denote the largest possible α-quantile if it is not unique,
+while as before, Q1−α (·) denotes the smallest possible (1 − α)-quantile if not unique.
+
+38
+
+Nonexchangeable jackknife+ with a symmetric algorithm. We first consider the setting where the algorithm A is symmetric. To begin, we choose weights
+wi ∈ [0, 1], i = 1, . . . , n, which are fixed ahead of time, and as before, this gives rise
+to normalized weights as in (10). The prediction interval is then given by
+"
+Qα
+
+n
+X
+
+!
+w̃i · δµb−i (Xn+1 )−RiLOO + w̃n+1 · δ−∞
+
+,
+
+i=1
+
+Q1−α
+
+n
+X
+
+!#
+w̃i · δµb−i (Xn+1 )+RiLOO + w̃n+1 · δ+∞
+
+, (33)
+
+i=1
+
+where µ
+b−i is defined as in (31), and RiLOO = |Yi − µ
+b−i (Xi )| as before.
+Analogous to split and full conformal, here the original (unweighted) version of
+jackknife+ is recovered by choosing weights w1 = · · · = wn = 1 in the new algorithm.
+Nonexchangeable jackknife+ with a nonsymmetric algorithm. We now
+extend the nonexchangeable jackknife+ to allow for a nonsymmetric algorithm A.
+For any k ∈ [n + 1] and any i ∈ [n], define the model µ
+bk−i as
+
+µ
+bk−i = A (Xπk (j) , Yπk (j) , tj ) : j ∈ [n + 1], πk (j) 6∈ {i, n + 1} .
+As before, πk is the permutation on [n + 1] that swaps indices k and n + 1 (or, the
+identity permutation in the case k = n + 1). Equivalently,
+(
+A ((Xj , Yj , tj ) : j ∈ [n]\{i, k}, (Xk , Yk , tn+1 )) , if k ∈ [n] and k 6= i,
+µ
+bk−i =
+A ((Xj , Yj , tj ) : j ∈ [n]\{i}) ,
+if k = n + 1 or k = i.
+In other words, this model is fitted on the training data (X1 , Y1 ), . . . , (Xn , Yn ) but
+with the ith point removed, and furthermore the data point (Xk , Yk ) is given the
+tag tn+1 rather than tk . (We note that computing the fitted model µ
+bk−i does not
+require knowledge of the test point (Xn+1 , Yn+1 ), because πk (j) = n + 1 is excluded
+from the data set when running A.) For the model µ
+bk−i , we define its corresponding
+leave-one-out residuals as
+Rik,LOO = |Yi − µ
+bk−i (Xi )|.
+To run the method, we first draw a random index K as in (17), and then compute
+the nonexchangeable jackknife+ prediction interval as
+"
+Qα
+
+n
+X
+
+!
+w̃i · δµbK (Xn+1 )−RK,LOO + w̃n+1 · δ−∞
+−i
+
+i=1
+
+i
+
+39
+
+,
+
+Q1−α
+
+n
+X
+
+!#
+w̃i · δµbK (Xn+1 )+RK,LOO + w̃n+1 · δ+∞
+−i
+
+i=1
+
+. (34)
+
+i
+
+Again, as was the case for nonexchangeable conformal, this method is a generalization of the symmetric case for nonexchangeable jackknife+, which was presented
+above.
+
+B.3
+
+Theory
+
+As for the proof for nonexchangeable full conformal, we first need to define how we
+map a data sequence z = (z1 , . . . , zn+1 ) ∈ (X × R)n+1 , with entries zi = (xi , yi ), to
+the residuals Rjack+ (z). In the setting of jackknife+, however,
+the residuals are now
+
+a matrix rather than a vector. Given z, we define n+1
+leave-two-out
+models: for
+2
+each i, j ∈ [n + 1] with i 6= j, let
+
+µ
+b−ij = µ
+b−ji = A (xk , yk , tk ) : k ∈ [n + 1]\{i, j} .
+Then define the matrix of residuals Rjack+ (z) ∈ R(n+1)×(n+1) with entries
+
+Rjack+ (z) ij = |yi − µ
+b−ij (xi )|,
+for all i 6= j, and zeros on the diagonal.
+Theorem 5 (Nonexchangeable jackknife+). Let A be an algorithm mapping a sequence of triplets (Xi , Yi , ti ) to a fitted function as in (16). Then the nonexchangeable
+jackknife+ defined in (34) satisfies
+n
+n
+o
+X
+
+b
+P Yn+1 ∈ Cn (Xn+1 ) ≥ 1 − 2α −
+w̃i · dTV Rjack+ (Z), Rjack+ (Z i ) .
+i=1
+
+The proof of this result is given in Appendix E.4 below. To summarize, we see
+that the coverage gap is bounded by
+n
+X
+
+w̃i · dTV (Rjack+ (Z), Rjack+ (Z i )).
+
+i=1
+
+As for
+P the full conformal guarantee, this therefore implies the coverage gap is bounded
+by i w̃i · dTV (Z, Z i ), as well. Again, while this last bound can be viewed as more
+interpretable, in many settings it is substantially more loose.
+While jackknife+ is defined specifically for the residual-based nonconformity score
+(i.e., the score |y − µ
+b(x)| to measure the extent to which a data point (x, y) does
+not conform to observed trends in the data), in other settings we may wish to use
+alternative nonconformity scores. Jackknife+ is closely related to earlier work on the
+cross-conformal method [Vovk, 2015, Vovk et al., 2018]. Unlike jackknife+, the crossconformal method can be applied to arbitrary nonconformity scores. In Appendix D,
+we will present a nonexchangeable version of the cross-conformal algorithm.
+40
+
+C
+
+Huber-robustness of conformal prediction
+
+In this section, we consider an alternative form of robustness, which requires stricter
+assumptions on the distribution drift but will yield a stronger predictive coverage
+guarantee. First, consider a version of the classic Huber contamination model from
+robust statistics, where most of the data is i.i.d. from the target distribution Dtarget ,
+but some fraction  of the data is arbitrarily corrupted. For simplicity, to start we
+consider observing training data point Zi = (Xi , Yi ) from the mixture model
+Di = (1 − )Dtarget + Di0 .
+
+(35)
+
+Here Di0 denotes an arbitrary adversarial distribution, that could potentially corrupt
+the ith training data point. However, we want to ensure coverage with respect to
+the target distribution Dtarget —that is, the test point Zn+1 = (Xn+1 , Yn+1 ) will be
+drawn from Dtarget . Standard conformal prediction assumes  = 0. But, one may ask:
+how badly can such adversarial corruptions hurt coverage? Here, we will answer that
+question, but do so in a slightly more general manner. First, define a new measure
+of distance between distributions,
+dmix (D, D0 ) = inf {t ≥ 0 : D = (1 − t) · D0 + t · D00 for some distribution D00 } .
+(36)
+0
+0
+0
+Abusing notation, we will write dmix (Z, Z ) = dmix (D, D ) if Z ∼ D and Z ∼ D0 .
+This “distance” can be thought of as measuring the contamination of D0 , in the
+Huber sense. Indeed, if the data did indeed come from the mixture model in (35),
+then we would have dmix (Zi , Zn+1 ) ≤ . (We note that dmix is not a metric, and in
+particular, is not symmetric in its two arguments.)
+We now state our theory for our weighted version of split conformal, full conformal,
+and jackknife+, in a more restricted setting where the data points are independent
+and the algorithm is symmetric. From this point on we assume w1 + · · · + wn > 0 to
+avoid a trivial setting. Define
+w̄i =
+
+wi
+, i = 1, . . . , n.
+w1 + · · · + wn
+
+Theorem 6 (Multiplicative bounds). Suppose that Z1 , . . . , Zn+1 are independent.
+For any symmetric algorithm A, the nonexchangeable full conformal method (12)
+satisfies
+n
+o
+α
+bn (Xn+1 ) ≤
+Pn
+P Yn+1 ∈
+/C
+1 − i=1 w̄i · dmix (Zi , Zn+1 )
+(which includes the nonexchangeable split conformal method (11) as a special case),
+and the nonexchangeable jackknife+ method (33) satisfies
+n
+
+o
+b
+P Yn+1 ∈
+/ Cn (Xn+1 ) ≤
+
+1−
+41
+
+2α
+.
+i=1 w̄i · dmix (Zi , Zn+1 )
+
+Pn
+
+In particular, if each Zi follows an -Huber contamination model relative to
+Zn+1 as in (35), then the bound on the noncoverage rate for both unweighted and
+weighted conformal methods inflates by a factor of at most 1/(1 − ), i.e., for split
+or full conformal prediction we get a noncoverage guarantee of α/(1 − ) instead of
+the nominal level α. We note that the coverage gap here is multiplicative—that is,
+α/(1 − ) ≈ α + α, and so the coverage gap is proportional to α. If the target error
+level α is small, then this multiplicative bound can offer much tighter error control,
+as compared to the earlier additive bounds in Theorem 2, if the terms dmix (Zi , Zn+1 )
+are small.
+On the other hand, notice that in general we have dmix (Zi , Zn+1 ) ≥ dTV (Zi , Zn+1 ),
+and furthermore, it is possible to have dmix (Zi , Zn+1 ) = 1 even when dTV (Zi , Zn+1 )
+is arbitrarily small. In a such setting the original additive bounds may give tighter
+results. Of course, an additional restriction is that the multiplicative bounds require
+independent data and symmetric algorithms, whereas the earlier theorems make no
+such assumptions.
+
+D
+
+Nonexchangeable cross-conformal
+
+While jackknife+ is defined specifically for the residual-based nonconformity score
+(i.e., the score |y − µ
+b(x)| to measure the extent to which a data point (x, y) does
+not conform to observed trends in the data), in other settings we may wish to use
+alternative nonconformity scores. Jackknife+ is closely related to earlier work on
+the cross-conformal method [Vovk, 2015, Vovk et al., 2018]. Unlike jackknife+, the
+cross-conformal method can be applied to arbitrary nonconformity scores.
+In this section, we present a nonexchangeable version of the n-fold cross-conformal
+algorithm [Vovk, 2015], which can be implemented with an arbitrary nonconformity
+b y) = |y − µ
+b(x)|, the jackknife+ predicscore. In the case of the regression score S(x,
+tion interval always contains the n-fold cross-conformal prediction set. (See Barber
+et al. [2021] for a more detailed comparison of these methods in the exchangeable
+setting.)
+As for the extension of nonexchangeable full conformal prediction to the setting
+of general nonconformity scores (in Appendix A), the algorithm A is now a function
+mapping tagged data sets to scoring functions, as in (29). For any k ∈ [n + 1] and
+k
+any i ∈ [n], define the ith leave-one-out scoring function Sb−i
+as
+
+
+y
+k
+b
+S−i = A (Xπk (i) , Yπk (i) , ti ) : i ∈ [n + 1], πk (j) 6∈ {i, n + 1} ,
+or equivalently,
+
+( 
+A
+(X
+,
+Y
+,
+t
+)
+:
+j
+∈
+[n]\{i,
+k},
+(X
+,
+Y
+,
+t
+)
+,
+j
+j j
+k
+k n+1
+k
+=
+Sb−i
+A ((Xj , Yj , tj ) : j ∈ [n]\{i}) ,
+42
+
+if k ∈ [n] and k 6= i,
+if k = n + 1 or k = i.
+
+As before, πk is the permutation on [n + 1] that swaps indices k and n + 1 (or, the
+identity permutation in the case k = n + 1). In other words, this scoring function
+is fitted on the training data (X1 , Y1 ), . . . , (Xn , Yn ) but with the ith point removed,
+and furthermore the data point (Xk , Yk ) is given the tag tn+1 rather than tk . We
+then define the corresponding leave-one-out scores as
+k
+Sik,LOO = Sb−i
+(Xi , Yi ).
+
+Finally, to define the prediction set, we first draw a random index K as in (17),
+and then compute the nonexchangeable cross-conformal prediction set as
+(
+!)
+n+1
+X
+K,LOO
+bn (Xn+1 ) = y ∈ Y : Sn+1 ≤ Q1−α
+C
+w̃i · δ K,LOO
+.
+Si
+
+i=1
+
+As for the exchangeable setting, in the special case of the standard nonconformity
+score S(x, y) = |y − µ
+b(x)|, the nonexchangeable n-fold cross-conformal prediction set
+defined here is always contained inside the nonexchangeable jackknife+ prediction
+interval defined in (34).
+Importantly, the same guarantee that holds for jackknife+, i.e., the result of
+Theorem 5, also holds for the n-fold cross-conformal method run with an arbitrary
+nonconformity score. The proof of this coverage guarantee is essentially the same as
+for jackknife+ and so we omit it here for brevity. (For the exchangeable case, the
+connection between the proofs for these two different methods is explained in detail
+in Barber et al. [2021], and extends in a straightforward way to the nonexchangeable
+case considered here.)
+
+E
+
+Additional proofs and calculations
+
+E.1
+
+Proof of Lemma 1
+
+First, by the maximal coupling theorem (e.g., [Ross and Peköz, 2007, Proposition
+0
+2.7]), there exists a distribution D on a pair of random variables (Zi0 , Zn+1
+) such
+d
+d
+0
+0
+that, marginally, Zi = Zi and Zn+1 = Zn+1 , and such that
+
+0
+P Zi0 = Zn+1
+= 1 − dTV (Zi , Zn+1 ).
+Now let Z = (Z1 , . . . , Zn+1 ), with Zj drawn independently for each j ∈ [n + 1], then
+iid
+0
+00
+draw (Zi0 , Zn+1
+), (Zi00 , Zn+1
+) ∼ D, independently from Z. Define
+00
+Z 0 = (Z1 , . . . , Zi−1 , Zi0 , Zi+1 , . . . , Zn , Zn+1
+),
+
+and
+0
+Z 00 = (Z1 , . . . , Zi−1 , Zi00 , Zi+1 , . . . , Zn , Zn+1
+).
+
+43
+
+d
+
+d
+
+Then clearly, Z 0 = Z 00 = Z. In particular, recalling the swapped indices notation (2),
+d
+this implies that (Z 00 )i = Z i , and so
+dTV (Z, Z i ) = dTV (Z 0 , (Z 00 )i ).
+Again applying the maximal coupling theorem, we have
+
+dTV (Z 0 , (Z 00 )i ) ≤ 1 − P Z 0 = (Z 00 )i
+
+0
+00
+= 1 − P Zi0 = Zn+1
+, Zi00 = Zn+1
+ 0
+
+0
+00
+= 1 − P Zi = Zn+1
+· P Zi00 = Zn+1
+= 1 − (1 − dTV (Zi , Zn+1 ))2
+= 2dTV (Zi , Zn+1 ) − dTV (Zi , Zn+1 )2 ,
+completing the proof.
+
+E.2
+
+Proof of Theorem 3
+
+Since nonexchangeable split conformal is simply a special case of nonexchangeable
+full conformal, we only need to prove the result for full conformal. We recall from the
+proof of Theorem 2, found in Section 6.2, that for nonexchangeable full conformal,
+the coverage event can be characterized as
+!
+n+1
+X
+Yn+1 ,K
+bn (Xn+1 ) ⇐⇒ Rn+1
+Yn+1 ∈ C
+≤ Q1−α
+w̃i · δ Yn+1 ,K ,
+i=1
+
+Ri
+
+or equivalently,
+K
+
+bn (Xn+1 ) ⇐⇒ R(Z )K ≤ Q1−α
+Yn+1 ∈ C
+
+n+1
+X
+
+!
+w̃πK (i) · δR(Z K )i
+
+i=1
+
+Therefore,
+n
+o
+bn (Xn+1 )
+P Yn+1 ∈ C
+(
+= P R(Z K )K ≤ Q1−α
+
+n+1
+X
+
+!)
+w̃πK (i) · δR(Z K )i
+
+i=1
+
+=
+
+=
+
+n+1
+X
+k=1
+n+1
+X
+
+(
+P K = k and R(Z k )k ≤ Q1−α
+
+n+1
+X
+
+!)
+w̃πk (i) · δR(Z k )i
+
+i=1
+
+(
+w̃k · P R(Z k )k ≤ Q1−α
+
+n+1
+X
+i=1
+
+k=1
+
+44
+
+!)
+w̃πk (i) · δR(Z k )i
+
+.
+
+≤
+
+n+1
+X
+
+(
+w̃k · P R(Z)k ≤ Q1−α
+
+n+1
+X
+
+k=1
+
++
+
+=E
+
+" n+1
+X
+
+!)
+w̃πk (i) · δR(Z)i
+
+i=1
+n+1
+X
+
+w̃k · dTV (R(Z), R(Z k ))
+
+k=1
+n+1
+X
+
+(
+
+w̃k · 1 R(Z)k ≤ Q1−α
+
+k=1
+
++
+
+!)#
+w̃πk (i) · δR(Z)i
+
+i=1
+n+1
+X
+
+w̃k · dTV (R(Z), R(Z k )).
+
+k=1
+
+Here, as in the proof of Theorem 2, the third equality holds as K is drawn independently from Z. Below, we will show that, for any distinct and fixed r1 , . . . , rn+1 ∈ R,
+it holds that
+(
+!)
+n+1
+n+1
+X
+X
+< 1 − α + w̃n+1 .
+(37)
+w̃k · 1 rk ≤ Q1−α
+w̃πk (i) · δri
+i=1
+
+k=1
+
+Applying this inequality with ri = R(Z)i (and recalling, by assumption in the theorem,
+the values R(Z)1 , . . . , R(Z)n+1 are distinct with probability 1), we obtain
+n+1
+n
+o
+X
+bn (Xn+1 ) ≤ 1 − α + w̃n+1 +
+P Yn+1 ∈ C
+w̃k · dTV (R(Z), R(Z k )),
+k=1
+
+which would complete the proof of the theorem.
+Now we need to verify (37). Define
+(
+!)
+n+1
+X
+K = k ∈ [n + 1] : rk ≤ Q1−α
+w̃πk (i) · δri
+,
+i=1
+
+so that proving (37) is equivalent to proving that
+
+P
+
+k∈K w̃k < 1 − α + w̃n+1 . Let
+
+k∗ = arg max {rk : k ∈ K} ,
+k
+
+indexing the largest value rk over indices k ∈ K. Since k∗ ∈ K by definition,
+!
+n+1
+n+1
+X
+X
+rk∗ ≤ Q1−α
+w̃πk∗ (i) · δri
+=⇒
+w̃πk∗ (i) · 1 {ri < rk∗ } < 1 − α.
+i=1
+
+i=1
+
+As k∗ is defined to attain the maximum, we also have K ⊆ {k ∈ [n + 1] : rk ≤ rk∗ }.
+Therefore,
+X
+k∈K
+
+w̃k ≤
+
+n+1
+X
+
+w̃k · 1 {rk ≤ rk∗ }
+
+k=1
+
+45
+
+= w̃k∗ +
+= w̃k∗ +
+< w̃k∗ +
+
+n+1
+X
+k=1
+n+1
+X
+k=1
+n+1
+X
+
+w̃k · 1 {rk < rk∗ }
+n+1
+X
+
+w̃k − w̃πk∗ (k) · 1 {rk < rk∗ } +
+w̃πk∗ (k) · 1 {rk < rk∗ }
+k=1
+
+
+w̃k − w̃πk∗ (k) · 1 {rk < rk∗ } + (1 − α).
+
+k=1
+
+The second line holds because r1 , . . . , rn+1 are distinct, and the last line holds by the
+calculations above.
+Finally, consider the term (w̃k − w̃πk∗ (k) ) · 1 {rk < rk∗ } in the remaining sum. If
+k = k∗ , then 1 {rk < rk∗ } = 0. If k = n + 1, then
+
+w̃k − w̃πk∗ (k) · 1 {rk < rk∗ } = (w̃n+1 − w̃k∗ ) · 1 {rk < rk∗ } ≤ w̃n+1 − w̃k∗ .
+If k 6∈ {k∗ , n + 1}, then πk∗ (k) = k and so the term is again zero. Therefore, we have
+n+1
+X
+
+
+w̃k − w̃πk∗ (k) · 1 {rk < rk∗ } ≤ w̃n+1 − w̃k∗ ,
+
+k=1
+
+and combining this with the work above, we have shown that
+X
+w̃k < 1 − α + w̃n+1 .
+k∈K
+
+This verifies (37), and therefore we have proved the theorem.
+
+E.3
+
+Calculation for (19)
+
+⊥
+Define R = R(Z) = PX
+(), U = R/kRk2 and L = kRk2 . Then R = U · L. Let
+i
+i
+R = R(Z ), and write U i = Ri /kRi k2 . Note that Ri and U i are obtained from R
+and U , respectively, by swapping the ith and (n + 1)st entries, and note also that
+kRk2 = kRi k2 and so Ri = U i · L. We then have
+
+dTV (R, Ri ) = dTV (U · L, U i · L) ≤ dTV ((U, L), (U i , L)) = dTV (U, U i ),
+where the last step holds because U ⊥
+⊥ L, and consequently, U i ⊥
+⊥ L also. (To see
+⊥
+why U ⊥
+⊥ L holds, we note that R | X ∼ N (0, σ 2 PX
+), and thus U ⊥
+⊥ L | X by
+properties of the normal distribution; moreover, L | X ∼ σ · χn+1−p , meaning that
+L⊥
+⊥ X.) On the other hand, we have
+dTV (U, U i ) = dTV (R/kRk2 , Ri /kRi k2 ) ≤ dTV (R, Ri ),
+46
+
+and so we see that dTV (R, Ri ) = dTV (U, U i ). From this point on, we only need to
+bound dTV (U, U i ).
+Conditional on the subspace span(X)⊥ , the unit vector U is drawn uniformly
+from this subspace intersected with the unit sphere, and therefore the joint density
+of (X, U ) is given by
+f(X,U ) (x, u) ∝
+
+1
+(2π)(n+1)p/2 |Σ|1/2
+
+>
+
+−1 vec(x)/2
+
+e−vec(x) Σ
+
+
+with respect to Lebesgue measure on the manifold (x, u) ∈ R(n+1)×p × Sn : x ⊥ u .
+Therefore the marginal density of u is given by
+Z
+1
+−vec(x)> Σ−1 vec(x)/2
+gU (u) ∝
+e
+dx,
+(n+1)p/2 |Σ|1/2
+x∈R(n+1)×p ;x⊥u (2π)
+where the integral is taken over the np-dimensional subspace of matrices x where
+all columns are orthogonal to u. Equivalently we can take x = Wu y where Wu ∈
+R(n+1)p×np is an orthonormal basis for the subspace orthogonal to u, and so
+Z
+1
+−(Wu vec(y))> Σ−1 (Wu vec(y))/2
+gU (u) ∝
+e
+dy
+(n+1)p/2 |Σ|1/2
+y∈Rn×p (2π)
+=
+
+(2π)np/2 |(Wu> Σ−1 Wu )−1 |1/2
+∝ |(Wu> Σ−1 Wu )−1 |1/2 = |Wu> Σ−1 Wu |−1/2 .
+(2π)(n+1)p/2 |Σ|1/2
+
+Since [Wu | u ⊗ Ip ] is an orthogonal matrix, we can verify through matrix identities
+that
+|Wu> Σ−1 Wu | = |(u ⊗ Ip )> Σ(u ⊗ Ip )| · |Σ|−1 ,
+and therefore,
+1
+.
+gU (u) = g(u) ∝ p
+|(u ⊗ Ip )> Σ(u ⊗ Ip )|
+We can also calculate the marginal density of U i ,
+1
+gU i (u) = g(ui ) ∝ p
+,
+|(ui ⊗ Ip )> Σ(ui ⊗ Ip )|
+and note that these two densities have the same normalizing constant, so we have
+s
+gU i (u)
+g(ui )
+|(u ⊗ Ip )> Σ(u ⊗ Ip )|
+=
+=
+.
+gU (u)
+g(u)
+|(ui ⊗ Ip )> Σ(ui ⊗ Ip )|
+Next, the multiplicative property of the determinant yields
+|(ui ⊗ Ip )> Σ(ui ⊗ Ip )| = |(u ⊗ Ip )> Σ(u ⊗ Ip )|
+47
+
+−1/2
+−1/2
+(u ⊗ Ip )> Σ(u ⊗ Ip )
+· (ui ⊗ Ip )> Σ(ui ⊗ Ip ) · (u ⊗ Ip )> Σ(u ⊗ Ip )
+,
+
+·
+and so
+
+gU i (u)
+=
+gU (u)
+
+−1/2
+(u ⊗ Ip )> Σ(u ⊗ Ip )
+· (ui ⊗ Ip )> Σ(ui ⊗ Ip )
+−1/2
+
+−1/2
+· (u ⊗ Ip ) Σ(u ⊗ Ip )
+>
+
+.
+
+Next, for any positive definite matrices A, B ∈ Rp×p , we calculate
+|A−1/2 · B · A−1/2 | ≤ kA−1/2 · B · A−1/2 kp = kIp + A−1/2 · (B − A) · A−1/2 kp
+p
+p
+≤ 1 + kA−1/2 · (B − A) · A−1/2 k ≤ 1 + kA−1 k · kB − Ak ,
+and so applying this with A = (u ⊗ Ip )> Σ(u ⊗ Ip ) and B = (ui ⊗ Ip )> Σ(ui ⊗ Ip ), we
+have
+−p/2
+gU i (u)
+≥ 1 + kΣ−1 k · (ui ⊗ Ip )> Σ(ui ⊗ Ip ) − (u ⊗ Ip )> Σ(u ⊗ Ip )
+.
+gU (u)
+Now we calculate the remaining matrix norm. Fix any unit vector v ∈ Rp . We
+have
+
+v > (ui ⊗ Ip )> Σ(ui ⊗ Ip ) − (u ⊗ Ip )> Σ(u ⊗ Ip ) v
+= (ui ⊗ v)> Σ(ui ⊗ v) − (u ⊗ v)> Σ(u ⊗ v)
+= (ui ⊗ v)> Σ((ui − u) ⊗ v) + ((ui − u) ⊗ v)> Σ(u ⊗ v)
+≤ kΣk · kui ⊗ vk2 · k(ui − u) ⊗ vk2 + k(ui − u) ⊗ vk2 · ku ⊗ vk2
+
+
+
+= kΣk · kui k2 · kvk2 · kui − uk2 · kvk2 + kui − uk2 · kvk2 · kuk2 · kvk2
+
+
+
+= 2kΣkkui − uk2
+√
+= 8kΣk|ui − un+1 |.
+Combining everything so far, then, we have
+−p/2 
+−p/2
+√
+√
+gU i (u) 
+≥ 1 + 8kΣkkΣ−1 k|ui − un+1 |
+= 1 + 8κΣ |ui − un+1 |
+.
+gU (u)
+In particular, this implies that
+1−
+
+
+−p/2
+√
+√
+gU i (u)
+≤ 1 − 1 + 8κΣ |ui − un+1 |
+≤ p 2κΣ · |ui − un+1 |.
+gU (u)
+48
+
+Next we have
+Z
+
+i
+
+(gU (u) − gU i (u))+ du
+
+
+Z
+gU i (u)
+gU (u) 1 −
+du
+=
+gU (u) +
+u∈Sn
+Z
+√
+gU (u) · p 2κΣ · |ui − un+1 | du
+≤
+u∈Sn
+h √
+i
+= E p 2κΣ · |Ui − Un+1 |
+√
+≤ p 2κΣ · (E [|Ui |] + E [|Un+1 |]) .
+
+dTV (U, U ) =
+
+u∈Sn
+
+Now we need to bound E [|Ui |]. Recall that R = U · L, with U ⊥
+⊥ L | X. We can
+therefore calculate
+
+
+
+
+
+ 
+
+
+
+E Ri2 X = E Ui2 · L2 X = E Ui2 X ·E L2 X = E Ui2 X ·σ 2 (n+1−p),
+since L | X ∼ σ · χn+1−p . Therefore,
+
+E Ui2
+
+
+X =
+
+⊥
+E [Ri2 | X]
+σ 2 (PX
+)ii
+1
+=
+≤
+,
+2
+2
+σ (n + 1 − p)
+σ (n + 1 − p)
+n+1−p
+
+⊥
+where the last equality holds because R | X ∼ N (0, σ 2 PX
+). Therefore,
+q
+1
+E [|Ui |] ≤ E [Ui2 ] ≤ √
+.
+n+1−p
+
+Since this also holds for Un+1 in place of Ui , we therefore have
+√
+dTV (U, U i ) ≤ κΣ 8 · √
+
+p
+,
+n+1−p
+
+which completes the proof.
+
+E.4
+
+Proofs for the jackknife+
+
+E.4.1
+
+Background: proof of Theorem 4
+
+Before proving our new results for nonexchangeable jackknife+, we first recall the
+proof of Theorem 4, from Barber et al. [2021], for the exchangeable case. Denote
+by µ
+b−ijthe model fitted by running the symmetric algorithm A on the n − 1 data
+points (Xk , Yk ) : k ∈ [n + 1]\{i, j} . Let Rjack+ ∈ R(n+1)×(n+1) be the matrix with
+entries
+(Rjack+ )ij = |Yi − µ
+b−ij (Xi )|,
+49
+
+for each i 6= j, and zeros on the diagonal. By exchangeability of the n + 1
+data points, the matrix Rjack+ also satisfies an exchangeability property, namely,
+d
+Π · Rjack+ · Π> = Rjack+ for any fixed permutation matrix Π. Moreover, for each
+i ∈ [n], we have
+µ
+b−i,(n+1) = µ
+b−(n+1),i = µ
+b−i ,
+where µ
+b−i is the usual leave-one-out model defined earlier, and so also
+(Rjack+ )n+1,i = |Yn+1 − µ
+b−i (Xn+1 )| and (Rjack+ )i,n+1 = RiLOO = |Yi − µ
+b−i (Xi )|.
+Next, define the set of “strange” points
+(
+)
+n+1
+X
+S(Rjack+ ) = i ∈ [n + 1] :
+1 {(Rjack+ )ij > (Rjack+ )ji } ≥ (1 − α)(n + 1) .
+j=1
+
+In [Barber et al., 2021, Proof of Theorem 1] it is shown that the bound
+|S(Rjack+ )| ≤ 2α(n + 1)
+must hold deterministically as a consequence of Landau’s theorem for tournaments
+[Landau, 1953]. Furthermore, by definition of the jackknife+ prediction interval,
+Barber et al. [2021, Proof of Theorem 1] verify that failure of coverage, i.e., the event
+bn (Xn+1 ), implies that n + 1 ∈ S(Rjack+ ). Thus, we have
+Yn+1 6∈ C
+n
+o
+bn (Xn+1 ) ≤ P {n + 1 ∈ S(Rjack+ )} =
+P Yn+1 6∈ C
+
+n+1
+1 X
+P {i ∈ S(R)} ≤ 2α,
+n + 1 i=1
+
+where the equality holds due to the exchangeability property of the matrix Rjack+ ,
+while the last step follows the bound on the size of the set of “strange” points.
+E.4.2
+
+Proof of Theorem 5
+
+Observe that, for i ∈ [n],
+
+K,LOO
+Rjack+ (Z K ) π (i),K = |Yi − µ
+bK
+,
+−i (Xi )| = Ri
+K
+
+where πK is the permutation swapping indices K and n + 1 as before, and also
+
+Rjack+ (Z K ) K,π (i) = |Yn+1 − µ
+bK
+−i (Xn+1 )|.
+K
+
+Therefore,
+n
+X
+
+o
+n
+K,LOO
+w̃i · 1 |Yn+1 − µ
+bK
+(X
+)|
+>
+R
+n+1
+−i
+i
+
+i=1
+
+50
+
+=
+
+n
+X
+
+w̃i · 1
+
+n
+
+o
+
+
+K
+Rjack+ (Z ) K,π (i) > Rjack+ (Z ) π (i),K
+K
+
+K
+
+K
+
+i=1
+
+n
+
+w̃i · 1
+
+X
+
+=
+
+o
+
+
+Rjack+ (Z K ) K,π (i) > Rjack+ (Z K ) π (i),K
+K
+
+K
+
+i∈[n+1]\{n+1}
+
+w̃πK (i) · 1
+
+X
+
+=
+
+
+
+
+
+Rjack+ (Z K ) Ki > Rjack+ (Z K ) iK
+
+i∈[n+1]\{K}
+
+w̃i · 1
+
+X
+
+≤
+
+
+
+
+
+Rjack+ (Z K ) Ki > Rjack+ (Z K ) iK
+
+i∈[n+1]\{K}
+
+=
+
+n+1
+X
+
+w̃i · 1
+
+
+
+
+
+Rjack+ (Z K ) Ki > Rjack+ (Z K ) iK ,
+
+i=1
+
+where the third step holds by simply substituting i with πK (i) in the sum indexing,
+and the next step (the inequality) holds since w̃πK (i) ≤ w̃i for all i ∈ [n + 1]\{K}, as
+we either have i = πK (i), or i = n + 1 in which case we have w̃πK (n+1) = w̃K ≤ w̃n+1 ,
+as wK ∈ [0, 1] by assumption.
+Next, by its construction, we can verify that the noncoverage event satisfies
+n
+X
+
+bn (Xn+1 ) =⇒
+Yn+1 6∈ C
+
+n
+o
+K,LOO
+w̃i · 1 |Yn+1 − µ
+bK
+(X
+)|
+>
+R
+≥ 1 − α.
+n+1
+−i
+i
+
+i=1
+
+The proof of this claim in the unweighted case is given in Barber et al. [2021, Proof
+of Theorem 1]; the proof for the weighted case is similar. Combined with the above,
+this gives
+n+1
+X
+
+bn (Xn+1 ) =⇒
+Yn+1 6∈ C
+
+w̃i · 1
+
+
+
+
+
+Rjack+ (Z K ) Ki > Rjack+ (Z K ) iK ≥ 1 − α.
+
+i=1
+
+(38)
+Now for any r ∈ R
+
+(n+1)×(n+1)
+
+, define
+
+(
+S(r) =
+
+i ∈ [n + 1] :
+
+n+1
+X
+
+)
+
+w̃j · 1 {rij > rji } ≥ 1 − α ,
+
+(39)
+
+j=1
+
+a weighted set of “strange” points.
+P The following lemma (proved in Appendix E.4.3
+for completeness) verifies that i∈S(r) w̃i ≤ 2α for any r.
+Pn+1
+Lemma 2 (Lei and Candès [2021b]). Fix w̃1 , . . . , w̃n+1 ≥ 0, with i=1
+w̃n+1 = 1.
+Let S(r) be defined as in (39). Then
+X
+w̃i ≤ 2α for all r ∈ R(n+1)×(n+1) .
+i∈S(r)
+
+51
+
+In words, the above lemma shows that the (weighted) fraction of “strange” points
+cannot exceed 2α. From (38), we see that noncoverage of Yn+1 implies strangeness
+of point K:
+
+bn (Xn+1 ) =⇒ K ∈ S Rjack+ (Z K ) ,
+Yn+1 6∈ C
+(40)
+and finally, following the exact same steps as in the proof of Theorem 2, we have
+K
+
+
+
+P K ∈ S Rjack+ (Z )
+
+
+
+≤ 2α +
+
+n
+X
+
+
+w̃i · dTV Rjack+ (Z), Rjack+ (Z i ) ,
+
+i=1
+
+which completes the proof.
+E.4.3
+
+Proof of Lemma 2
+
+Lemma 2 is stated and proved in Lei and Candès [2021b]; we reproduce the proof
+here for completeness since that paper is currently an unpublished manuscript. For
+each i ∈ S, by definition of S, we have
+1−α≤
+
+n+1
+X
+
+w̃j 1 {rij > rji } ≤
+
+j=1
+
+w̃j 1 {rij > rji } +
+
+X
+j∈S(r)
+
+X
+
+w̃j
+
+j∈[n+1]\S(r)
+
+=
+
+X
+
+w̃j 1 {rij > rji } + 1 −
+
+j∈S(r)
+
+where the last step holds since
+over i ∈ S(r),
+(1 − α)
+
+i∈S(r)
+
+w̃i ≤
+
+X
+i∈S(r)
+
+Pn+1
+
+i=1 w̃i = 1 by definition. Taking a weighted sum
+
+w̃i · 
+
+
+X
+
+w̃j 1 {rij > rji } + 1 −
+
+j∈S(r)
+
+X
+
+w̃j  .
+
+j∈S(r)
+
+Rearranging terms, we have
+
+2
+X
+X
+X
+
+w̃i  ≤
+w̃i w̃j 1 {rij > rji } + α
+w̃i
+i∈S(r)
+
+i,j∈S(r)
+
+i∈S(r)
+
+X
+1 X
+w̃i w̃j (1 {rij > rji } + 1 {rji > rij }) + α
+w̃i
+=
+2
+i,j∈S(r)
+i∈S(r)
+
+2
+X
+X
+X
+X
+1
+1
+≤
+w̃i w̃j + α
+w̃i = 
+w̃i  + α
+w̃i .
+2
+2
+i,j∈S(r)
+
+w̃j ,
+
+j∈S(r)
+
+
+X
+
+X
+
+i∈S(r)
+
+52
+
+i∈S(r)
+
+i∈S(r)
+
+Rearranging terms again we have
+
+2
+
+
+X
+1X 
+w̃i
+≤ α
+w̃i  =⇒
+2
+i∈S(r)
+
+i∈S(r)
+
+X
+
+w̃i ≤ 2α,
+
+i∈S(r)
+
+which proves the lemma.
+
+E.5
+
+Proof of Theorem 6
+
+To prove the theorem, we first need a lemma on weighted sums of Bernoulli random
+variables. Its proof will follow shortly.
+Lemma 3. Fix p1 , . . . , pn , a1 , . . . , an ∈ [0, 1], with a1 + · · · + an > 0. Let B1 , . . . , Bn
+be independent, with Bi ∼ Bernoulli(pi ). Then
+
+
+a1 + · · · + an + 1
+a1 + · · · + an + 1
+a1 + · · · + an
+≤E
+≤
+.
+a1 p 1 + · · · + an p n + 1
+a1 B1 + · · · + an Bn + 1
+a1 p 1 + · · · + an p n
+The lower bound clearly holds by Jensen’s inequality, but the upper bound is
+more challenging to prove. Several special cases of this upper bound are well-known
+in the multiple testing literature. For example, the case where a1 = · · · = an = 1 and
+p1 = · · · = pn is proved in [Storey et al., 2004, Theorem 3] and used for proving FDR
+control of Storey’s modification of the Benjamini-Hochberg procedure [Storey, 2002].
+The case where p1 = · · · = pn (and a1 , . . . , an are arbitrary) can be found in [Ramdas
+et al., 2019, Lemma 3] and is used for proving FDR control for a hierarchical multiple
+testing procedure (the p-filter).
+We are now ready to prove the theorem. By definition of dmix (36), note that we
+can view Z1 , . . . , Zn+1 as being generated by the following procedure.
+• Draw C1 , . . . , Cn independently, with Ci ∼ Bernoulli(dmix (Zi , Zn+1 )).
+• For each i ∈ [n] with Ci = 0, and for i = n + 1, draw Zi i.i.d. from the
+distribution of Zn+1 .
+• For each i ∈ [n] with Ci = 1, draw Zi from the contamination distribution,
+i.e., the distribution D00 achieving the infimum in (36) (applied with D and D0
+equal to the distribution of Zi and of Zn+1 , respectively).
+Below, we will show that for nonexchangeable conformal,
+n
+o
+α
+bn (Xn+1 ) C1 , . . . , Cn ≤ Pn
+,
+P Yn+1 6∈ C
+i=1 w̃i 1 {Ci = 0} + w̃n+1
+while for nonexchangeable jackknife+,
+n
+o
+b
+P Yn+1 6∈ Cn (Xn+1 ) C1 , . . . , Cn ≤ Pn
+
+2α
+.
+i=1 w̃i 1 {Ci = 0} + w̃n+1
+
+53
+
+(41)
+
+(42)
+
+Having shown this, observe that
+Pn
+
+
+
+
+wi + 1
+1
+i=1
+E Pn
+= E Pn
+i=1 w̃i 1 {Ci = 0} + w̃n+1
+i=1 wi 1 {Ci = 0} + 1
+Pn
+1
+i=1 wi
+≤ Pn
+= Pn
+i=1 wi (1 − dmix (Zi , Zn+1 ))
+i=1 w̄i (1 − dmix (Zi , Zn+1 ))
+1
+Pn
+,
+=
+1 − i=1 w̄i dmix (Zi , Zn+1 )
+where the inequality holds by Lemma 3. This implies that
+n
+o
+h n
+oi
+bn (Xn+1 ) = E P Yn+1 6∈ C
+bn (Xn+1 ) C1 , . . . , Cn
+P Yn+1 6∈ C
+≤
+
+1−
+
+α
+,
+i=1 w̄i dmix (Zi , Zn+1 )
+
+Pn
+
+for nonexchangeable conformal prediction, and
+oi
+n
+o
+h n
+b
+b
+P Yn+1 6∈ Cn (Xn+1 ) = E P Yn+1 6∈ Cn (Xn+1 ) C1 , . . . , Cn
+≤
+
+1−
+
+2α
+,
+i=1 w̄i dmix (Zi , Zn+1 )
+
+Pn
+
+for nonexchangeable jackknife+, as desired.
+To complete the proof, we now need to verify the bounds (41) and (42). For the
+bound (41) for conformal prediction, we have
+!
+n+1
+X
+Yn+1 ,K
+bn (Xn+1 ) ⇐⇒ Rn+1
+Yn+1 6∈ C
+> Q1−α
+w̃i δ Yn+1 ,K
+⇐⇒
+
+i=1
+n+1
+X
+
+Ri
+
+n
+o
+Yn+1 ,K
+Y
+,K
+w̃i 1 Rn+1
+≤ Ri n+1
+≤ α.
+
+i=1
+
+Now let wi0 = wi 1 {Ci = 0} and let
+w̃i0 =
+
+1
+wi0
+0
+, i = 1, . . . , n; w̃n+1
+= 0
+.
+0
+0
+w1 + · · · + wn + 1
+w1 + · · · + wn0 + 1
+
+Then, deterministically,
+n+1
+X
+
+n+1
+n
+o X
+n
+o
+Yn+1 ,K
+Yn+1 ,K
+Yn+1 ,K
+Y
+,K
+≥
+≤ Ri n+1
+,
+w̃i 1 Rn+1 ≤ Ri
+w̃i · 1 {Ci = 0} · 1 Rn+1
+
+i=1
+
+i=1
+
+and so we can write
+bn (Xn+1 ) =⇒
+Yn+1 6∈ C
+
+n+1
+X
+
+n
+o
+w1 + · · · + wn + 1
+Yn+1 ,K
+Y
+,K
+w̃i0 1 Rn+1
+≤ Ri n+1
+≤α· 0
+.
+w1 + · · · + wn0 + 1
+i=1
+54
+
+Now suppose we had instead conditioned on C1 , . . . , Cn and we ran nonexchangeable
+full conformal on the same data set Z but with weights wi0 in place of wi , and with a
+1 +···+wn +1
+b0
+level α · w
+0 +1 in place of α. Let Cn (Xn+1 ) be the resulting prediction interval.
+w10 +···+wn
+Then by the same arguments as above, we have
+b0 (Xn+1 ) ⇐⇒
+Yn+1 6∈ C
+n
+
+n+1
+X
+
+n
+o
+w1 + · · · + wn + 1
+Yn+1 ,K
+Y
+,K
+.
+w̃i0 1 Rn+1
+≤ Ri n+1
+≤α· 0
+0 +1
++
+·
+·
+·
++
+w
+w
+1
+n
+i=1
+
+and combining this with the work above, we obtain
+bn (Xn+1 ) =⇒ Yn+1 6∈ C
+bn0 (Xn+1 ).
+Yn+1 6∈ C
+Moreover, Theorem 2 ensures that
+n
+o
+b0 (Xn+1 ) C1 , . . . , Cn ≤ α · w1 + · · · + wn + 1
+P Yn+1 6∈ C
+n
+w10 + · · · + wn0 + 1
+n
+X
++
+w̃i0 · dTV (Z, Z i | C1 , . . . , Cn ),
+i=1
+
+where dTV (Z, Z i | C1 , . . . , Cn ) is the total variation distance between the conditional
+distributions of Z and of Z i conditional on C1 , . . . , Cn . Furthermore, we can see that
+dTV (Z, Z i | C1 , . . . , Cn ) = 0 for all i ∈ [n] with Ci = 0. Since w̃i0 is nonzero only for i
+with Ci = 0, we thus have
+n
+o
+bn0 (Xn+1 ) C1 , . . . , Cn
+P Yn+1 6∈ C
+≤α·
+
+w1 + · · · + wn + 1
+α
+P
+,
+=
+n
+0
+w1 + · · · + wn0 + 1
+i=1 w̃i 1 {Ci = 0} + w̃n+1
+
+where the last step applies the definitions of w̃i (10) and of wi0 . Therefore,
+n
+o
+b
+P Yn+1 6∈ Cn (Xn+1 ) C1 , . . . , Cn
+n
+o
+α
+bn0 (Xn+1 ) C1 , . . . , Cn ≤ Pn
+≤ P Yn+1 6∈ C
+,
+i=1 w̃i 1 {Ci = 0} + w̃n+1
+which verifies (41).
+Finally, the proof of the bound (42) for the jackknife+ is nearly identical. As
+calculated before, we have
+bn (Xn+1 ) =⇒
+Yn+1 6∈ C
+
+n
+X
+
+
+w̃i 1 |Yn+1 − µ
+b−i (Xn+1 )| > RiLOO ≥ 1 − α
+
+i=1
+
+⇐⇒
+
+n
+X
+
+
+w̃i 1 |Yn+1 − µ
+b−i (Xn+1 )| ≤ RiLOO ≤ α.
+
+i=1
+
+55
+
+Define wi0 and w̃i0 as above. Then, deterministically,
+n
+X
+
+
+w̃i 1 |Yn+1 − µ
+b−i (Xn+1 )| ≤ RiLOO
+
+i=1
+
+≥
+
+n
+X
+
+
+w̃i · 1 {Ci = 0} · 1 |Yn+1 − µ
+b−i (Xn+1 )| ≤ RiLOO ,
+
+i=1
+
+and so we can write
+bn (Xn+1 )
+Yn+1 6∈ C
+=⇒
+
+n+1
+X
+
+
+w1 + · · · + wn + 1
+.
+w̃i0 1 |Yn+1 − µ
+b−i (Xn+1 )| ≤ RiLOO ≤ α · 0
+0 +1
+w
++
+·
+·
+·
++
+w
+1
+n
+i=1
+
+As argued before, suppose that we had instead conditioned on C1 , . . . , Cn , then ran
+nonexchangeable jackknife+ on the same data set Z but with weights wi0 in place of
+1 +···+wn +1
+wi , and with a level α · w
+0 +1 in place of α. Then by the same arguments as in
+w10 +···+wn
+the proof of Theorem 5, we have
+n
+o
+b
+P Yn+1 6∈ Cn (Xn+1 ) C1 , . . . , Cn
+)
+( n+1
+X
+
+w
++
+·
+·
+·
++
+w
++
+1
+1
+n
+C1 , . . . , C n
+=P
+w̃i0 1 |Yn+1 − µ
+b−i (Xn+1 )| ≤ RiLOO ≤ α · 0
+w1 + · · · + wn0 + 1
+i=1
+n
+w1 + · · · + wn + 1 X 0
+≤ 2α · 0
++
+w̃i · dTV (Z i , Z | C1 , . . . , Cn )
+0
+w1 + · · · + wn + 1 i=1
+
+= 2α ·
+
+w1 + · · · + wn + 1
+2α
+P
+,
+=
+n
+0
+w1 + · · · + wn0 + 1
+i=1 w̃i 1 {Ci = 0} + w̃n+1
+
+where the next-to-last step is shown exactly as for full conformal. This verifies (42).
+E.5.1
+
+Proof of Lemma 3
+
+The lower bound holds by Jensen’s inequality. For the upper bound, we will instead
+prove the claim
+ >
+
+a 1+c+1
+a> 1 + c
+≤ >
+E >
+,
+(43)
+a B+c+1
+a p+c
+for any c ≥ 0 and any p1 , . . . , pn , a1 , . . . , an ∈ [0, 1] with a1 + · · · + an + c > 0, where
+a = (a1 , . . . , an ), p = (p1 , . . . , pn ), B = (B1 , . . . , Bn ), and as before, the expectation
+is taken with respect to independent Bernoulli random variables Bi ∼ Bernoulli(pi ).
+Initially this appears stronger than the claim in the lemma (i.e., the lemma claims
+this bound only for the case c = 0), but in fact these claims are equivalent.
+56
+
+To see why, suppose that the lemma holds and now we want to prove (43) for
+some p, a ∈ [0, 1]n and some c > 0. Let m ≥ c be any integer, and let p̃, ã ∈ [0, 1]n+m
+be defined as
+p̃ = (p1 , . . . , pn , 1 . . . , 1), ã = (a1 , . . . , an , c/m, . . . , c/m).
+Then writing B̃ = (B̃1 , . . . , B̃n+m ) for independent BernoullisB̃i ∼ Bernoulli(p̃i ), the
+claim (43) is equivalent to
+ >
+
+ã 1 + 1
+ã> 1
+≤ > ,
+E
+ã p̃
+ã> B̃ + 1
+which holds by applying the lemma with p̃, ã, n + m in place of p, a, n.
+Case 1: a1 = · · · = an = 1 and p1 = · · · = pn . Proving that (43) holds for this
+case is equivalent to proving that
+
+
+n+c+1
+n+c
+E
+≤
+A+c+1
+np1 + c
+for A ∼ Binomial(n, p1 ). In particular, if c = 0, then this is the well-known bound
+n+1
+E A+1
+≤ p11 (e.g., [Storey et al., 2004, Theorem 3]), while if p1 = 0 then the result
+is trivial. If instead c > 0 and p1 > 0, then we calculate
+
+
+
+
+n+c+1
+n−A
+E
+=1+E
+A+c+1
+A+c+1
+n−1
+X
+n−k
+P {A = k} ·
+=1+
+k+c+1
+k=0
+n−1
+k+1
+1 − p1 X
+P {A = k + 1} ·
+=1+
+·
+p1
+k+c+1
+k=0
+
+
+1 − p1
+A
+=1+
+·E
+p1
+A+c
+1 − p1
+E [A]
+n+c
+≤1+
+·
+=
+,
+p1
+E [A] + c
+np1 + c
+
+where the inequality holds by Jensen’s inequality.
+Case 2: a1 , . . . , an arbitrary and p1 = · · · = pn . Proving that (43) holds for this
+next case is equivalent to proving that
+ >
+
+a 1+c+1
+a> 1 + c
+E >
+≤ >
+.
+a B+c+1
+a 1 · p1 + c
+57
+
+For the special case c = 0, this result is shown in [Ramdas et al., 2019, Lemma 3]. Let
+A = (A1 , . . . , An ), where Ai ∼ Bernoulli(ai ) are drawn independently for i = 1, . . . , n,
+and A ⊥
+⊥ B. Note that, conditional on B, it holds that A> B ⊥
+⊥ A> (1−B). Therefore,
+ >
+
+ >
+
+A 1+c+1
+A (1 − B)
+E
+B =1+E
+B
+A> B + c + 1
+A> B + c + 1
+
+
+ >
+
+1
+B
+= 1 + E A (1 − B) B · E
+A> B + c + 1
+
+
+E A> (1 − B) B
+(by Jensen’s inequality)
+≥1+
+E [A> B + c + 1 | B]
+a> 1 + c + 1
+a> (1 − B)
+= >
+,
+=1+ >
+a B+c+1
+a B+c+1
+and therefore after marginalizing over B, we obtain
+ >
+
+ >
+
+a 1+c+1
+A 1+c+1
+E >
+≤E
+.
+a B+c+1
+A> B + c + 1
+Next, writing S = A> 1, we see that A> B follows a Binomial(S, p1 ) distribution
+conditional on S, and therefore,
+ >
+
+
+
+A 1+c+1
+S+c+1
+S+c
+E
+S =E
+S ≤
+,
+>
+A B+c+1
+Binomial(S, p1 ) + c + 1
+Sp1 + c
+where the last step holds by case 1. We can also observe that s 7→ sps+c
+is a concave
+1 +c
+function, and so
+ >
+
+ >
+
+a 1+c+1
+A 1+c+1
+E >
+≤E
+a B+c+1
+A> B + c + 1
+
+
+  >
+
+S+c
+A 1+c+1
+E [S] + c
+a> 1 + c
+S
+≤
+E
+=E E
+≤
+=
+,
+A> B + c + 1
+Sp1 + c
+E [S] · p1 + c
+a> 1 · p 1 + c
+as desired.
+Case 3: a1 , . . . , an and p1 , . . . , pn arbitrary. In this final case, we will prove (43),
+proceeding by induction on n. For n = 1, this reduces to case 1, so we can proceed
+to the case n ≥ 2. Without loss of generality, assume p1 ≤ · · · ≤ pn . If pn = 0
+then the claim is trivial. Otherwise, let Ai ∼ Bernoulli(pi /pn ) for i = 1, . . . , n − 1,
+and let Ci ∼ Bernoulli(pn ) for i = 1, . . . , n, with A1 , . . . , An−1 , C1 , . . . , Cn all drawn
+d
+independently. Then a1 B1 + · · · + an Bn = a1 A1 C1 + · · · + an−1 An−1 Cn−1 + an Cn .
+Next, define random weights W = (W1 , . . . , Wn ), where Wi = ai Ai for each
+i = 1, . . . , n − 1 and Wn = an . Then by case 2, we have
+
+
+W1 + · · · + Wn + c + 1
+W >1 + c
+E
+W ≤ >
+.
+W1 C1 + · · · + Wn Cn + c + 1
+W 1 · pn + c
+58
+
+Equivalently, we have shown that
+
+
+ >
+a A + an + c + 1
+E −n >
+a B+c+1
+
+
+A
+
+
+
+c p1n − 1
+a>
+1
+−n A + an + c
+≤ >
+=
+−
+.
+pn (a>
+(a−n A + an ) · pn + c
+−n A + an ) · pn + c
+
+Thus,
+
+
+
+a>
+a> 1 + c + 1
+a> 1 + c + 1
+−n A + an + c + 1
+E >
+·
+=E >
+a B+c+1
+a> B + c + 1
+a−n A + an + c + 1
+
+
+
+a>
+a> 1 + c + 1
+−n A + an + c + 1
+·E
+=E >
+A
+a> B + c + 1
+a−n A + an + c + 1
+
+
+
+
+
+1
+−
+1
+c
+>
+pn
+1
+a 1+c+1
+
+· − >
+≤ E >
+pn (a−n A + an ) · pn + c
+a−n A + an + c + 1
+
+
+
+
+1
+
+
+c
+−
+1
+>
+pn
+a 1+c+1
+1
+,
+≤E >
+· E − >
+pn (a−n A + an ) · pn + c
+a−n A + an + c + 1
+
+
+(44)
+
+where the last step holds since the first quantity is a monotone decreasing function
+>
+of a>
+−n A, and the second quantity is a monotone increasing function of a−n A. By
+induction, we can apply (43) at size n − 1 in place of n to see that the first expected
+value is bounded as
+
+
+a> 1 + c
+a> 1 + c
+a> 1 + c + 1
+= pn · >
+E >
+≤ > −1
+.
+a p + cpn
+a−n A + an + c + 1
+a−n (pn p−n ) + an + c
+Moreover, applying Jensen’s inequality, we calculate
+
+E
+
+c
+
+
+
+
+
+1
+−1
+pn
+
+
+
+
+
+c
+
+
+
+
+
+1
+−1
+pn
+
+
+
+1
+≤1 −
+
+− >
+pn (a−n A + an ) · pn + c
+pn (a>
+E
+[A]
++
+a
+)
+·
+p
++
+c
+n
+n
+−n
+
+
+
+c p1n − 1
+>
+1
+ = a p + cpn .
+= − >
+pn
+a p+c
+pn (a> p + c)
+
+Combining these calculations with (44) above, we have
+
+ >
+a> 1 + c
+a> p + cpn
+a> 1 + c
+a 1+c+1
+≤ pn · >
+E >
+·
+=
+,
+a B+c+1
+a p + cpn pn (a> p + c)
+a> p + c
+which proves that (43) holds as desired.
+
+59
+
+F
+
+Simulations for split conformal and jackknife+
+
+The simulations presented in Section 5.1 used only full conformal methods. In this
+section, we repeat these simulated data experiments with split conformal prediction
+and jackknife+. The same data is used in these experiments as was generated for the
+results in Section 5.1. (Code for reproducing these additional experiments is available
+at https://rinafb.github.io/code/nonexchangeable_conformal.zip.)
+For split conformal prediction, we split the training data indices [n] by assigning
+odd indices to the training set and even indices to the holdout set. The methods
+compared for split conformal are SplitCP+LS, NexSplitCP+LS, NexSplitCP+WLS,
+defined exactly as the full conformal experiments but with split conformal in place
+of full conformal. For jackknife+, the methods compare are Jack+LS, NexJack+LS,
+NexJack+WLS, again defined analogously.
+For both split conformal and jackknife+, the details for defining µ
+b for choosing
+the weights wi and tags ti are exactly the same as for the full conformal experiments
+given in Section 5.1. Also as in the full conformal experiments, after a burn-in period
+of the first 100 time points, at each time n = 100, . . . , N − 1 we run the inference
+methods with training data i = 1, . . . , n and test point n + 1. The results shown are
+averaged over 200 independent replications of the simulation.
+
+SplitCP+LS
+NexSplitCP+LS
+NexSplitCP+WLS
+
+Setting 1 (i.i.d. data)
+Coverage
+Width
+0.902
+3.34
+0.915
+3.51
+0.915
+3.56
+
+Setting 2 (changepts)
+Coverage
+Width
+0.836
+6.04
+0.893
+7.09
+0.914
+4.33
+
+Setting 3 (drift)
+Coverage Width
+0.839
+3.76
+0.896
+4.43
+0.914
+3.59
+
+Table 4: Simulation results showing mean prediction interval coverage and width,
+averaged over all time points and over 200 trials, for split conformal methods.
+
+Jack+LS
+NexJack+LS
+NexJack+WLS
+
+Setting 1 (i.i.d. data)
+Coverage
+Width
+0.899
+3.30
+0.906
+3.38
+0.906
+3.40
+
+Setting 2 (changepoints)
+Coverage
+Width
+0.834
+5.98
+0.881
+6.79
+0.905
+4.11
+
+Setting 3 (drift)
+Coverage Width
+0.837
+3.72
+0.887
+4.27
+0.905
+3.44
+
+Table 5: Simulation results showing mean prediction interval coverage and width,
+averaged over all time points and over 200 trials, for jackknife+ methods.
+Results for split conformal and for jackknife+ are summarized in Tables 4 and 5,
+respectively, while Figures 5 and 6 display the average coverage and the prediction
+interval width over the time range of the simulation. Overall, we see similar trends as
+for the full conformal prediction experiments in Section 5.1, where for the i.i.d. data
+in Setting 1 the performance of all three versions of each method are comparable,
+60
+
+while for the changepoint data in Setting 2 and the distribution drift data in Setting
+3, the original methods lose coverage substantially, while nonexchangeable versions of
+split conformal and of jackknife+ remain closer to the target coverage level, and the
+nonsymmetric algorithm (weighted least squares) allows for a narrower prediction
+interval.
+
+G
+
+Election data set description
+
+To prepare the data, we followed the protocol from Gibbs and Candès [2021] and,
+therefore, quote from the above reference:
+The county-level demographic characteristics used for prediction were the
+proportion of the total population that fell into each of the following race
+categories (either alone or in combination): black or African American,
+American Indian or Alaska Native, Asian, Native Hawaiian or other
+Pacific islander. In addition to this, we also used the proportion of the
+total population that was male, of Hispanic origin and that fell within
+each of the age ranges 20-29, 30-44, 45-64, and 65+. Demographic
+information was obtained from 2019 estimates published by the United
+States Census Bureau and available at [United States Census Bureau,
+2019a]. In addition to these demographic features we also used the median
+household income and the percentage of individuals with a bachelors degree
+or higher as covariates. Data on county-level median household incomes
+was based on 2019 estimates obtained from [United States Census Bureau,
+2019c]. The percentage of individuals with a bachelors degree or higher
+was computed based on data collected during the years 2015-2019 and
+published at [United States Census Bureau, 2019b]. As an aside, we
+remark that we used 2019 estimates because this was the most recent year
+for which data was available.
+For 2016 covariate data, we used the same data sources, subject to the important
+distinction that we—almost exclusively—used published figures available by 2016.
+(The U.S. Census Bureau sometimes updates its figures so we cannot rule out the
+possibility that a few entries were changed post 2016.) Finally, vote counts for the
+2016 election were obtained from MIT Election Data and Science Lab [2018], while
+2020 election data was taken from Leip [2020]. In total, matching covariate and
+election vote count data were obtained for 3111 counties. Merging 2016 and 2020
+data left us with 3076 counties (1119 in the training set and 1957 in the test set).
+
+61
+
+Setting 3 (drift)
+
+Setting 2 (changepoints)
+
+Setting 1 (i.i.d. data)
+
+Coverage
+
+Width
+
+1.00
+
+4
+
+0.75
+
+3
+
+0.50
+
+2
+
+0.25
+
+1
+
+0.00
+
+0
+
+1.00
+
+10.0
+
+0.75
+
+7.5
+
+0.50
+
+5.0
+
+0.25
+
+2.5
+
+0.00
+
+0.0
+
+1.00
+
+6
+
+0.75
+4
+0.50
+2
+0.25
+
+0.00
+
+0
+500
+
+1000
+
+1500
+
+2000
+
+500
+
+Time
+Method
+
+1000
+
+1500
+
+2000
+
+Time
+SplitCP+LS
+
+NexSplitCP+LS
+
+NexSplitCP+WLS
+
+Figure 5: Simulation results showing mean prediction interval coverage and width for split
+conformal methods, averaged over 200 independent trials. The curves are smoothed by
+taking a rolling average with a window of 10 time points.
+
+62
+
+Setting 3 (drift)
+
+Setting 2 (changepoints)
+
+Setting 1 (i.i.d. data)
+
+Coverage
+
+Width
+
+1.00
+
+4
+
+0.75
+
+3
+
+0.50
+
+2
+
+0.25
+
+1
+
+0.00
+
+0
+
+1.00
+
+10.0
+
+0.75
+
+7.5
+
+0.50
+
+5.0
+
+0.25
+
+2.5
+
+0.00
+
+0.0
+
+1.00
+
+6
+
+0.75
+4
+0.50
+2
+0.25
+
+0.00
+
+0
+500
+
+1000
+
+1500
+
+2000
+
+500
+
+Time
+Method
+
+1000
+
+1500
+
+2000
+
+Time
+Jack+LS
+
+NexJack+LS
+
+NexJack+WLS
+
+Figure 6: Simulation results showing mean prediction interval coverage and width for
+jacknife+ methods, averaged over 200 independent trials. The curves are smoothed by
+taking a rolling average with a window of 10 time points.
+
+63
+
+

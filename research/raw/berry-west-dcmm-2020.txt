@@ -1,0 +1,2422 @@
+Bayesian forecasting of many count-valued time series
+Lindsay Berry & Mike West
+
+arXiv:1805.05232v1 [stat.ME] 14 May 2018
+
+May 1, 2018
+
+Abstract
+This paper develops forecasting methodology and application of new classes of dynamic
+models for time series of non-negative counts. Novel univariate models synthesise dynamic
+generalized linear models for binary and conditionally Poisson time series, with dynamic random effects for over-dispersion. These models allow use of dynamic covariates in both binary
+and non-zero count components. Sequential Bayesian analysis allows fast, parallel analysis of
+sets of decoupled time series. New multivariate models then enable information sharing in contexts when data at a more highly aggregated level provide more incisive inferences on shared
+patterns such as trends and seasonality. A novel multi-scale approach– one new example of the
+concept of decouple/recouple in time series– enables information sharing across series. This incorporates cross-series linkages while insulating parallel estimation of univariate models, hence
+enables scalability in the number of series. The major motivating context is supermarket sales
+forecasting. Detailed examples drawn from a case study in multi-step forecasting of sales of
+a number of related items showcase forecasting of multiple series, with discussion of forecast
+accuracy metrics and broader questions of probabilistic forecast accuracy assessment.
+
+Keywords: Bayesian forecasting; decouple/recouple; forecast assessment; low count time series;
+multi-scale dynamic models; multi-step forecasts; on-line forecasting; state-space models; supermarket sales forecasting
+
+Lindsay Berry (corresponding author) is a PhD candidate and Mike West is The Arts & Sciences Professor of Statistics &
+Decision Sciences in the Department of Statistical Science, Duke University, Durham, NC 27708.
+The research reported here was partly supported by 84.51◦ , 100 West 5th Street, Cincinnati, OH 45202. The authors
+acknowledge the input and vision of Dr. Paul Helman, Chief Science Officer at 84.51◦ , and contributions of data sets
+provided by 84.51o .
+Andrew Cron and Natalia Connolly provided useful input on early stages of the R&D reported here.
+Email: Lindsay.Berry@duke.edu, Mike.West@duke.edu
+
+1
+
+Introduction
+
+Modeling and forecasting of multivariate time series of non-negative counts are common interests
+among many companies and research groups. One key area that motivates our work is that of product sales/demand forecasting, exemplified by forecasting sales based on historical data and concomitant information in commercial outlets including supermarkets and e-commerce sites. Forecasts for inventory management, production planning, and marketing decisions are at the heart
+of business analytics in such environments. For large retailers this is a high-dimensional problem
+as forecasts are required for multiple time granularities for many individual products across multiple outlets. To be effective in such settings, models must run efficiently in an on-line manner as
+new data is collected, and do so automatically as a routine while having the ability to flag exceptions and call for intervention as needed. The challenge is to define a flexible class of productlevel models that can be customized to individual products within a general framework. Then,
+forward/sequential analysis and multi-step ahead forecasting must be effective and efficient computationally, and enable integration across potentially many products to share information while
+maintaining scalability to increasingly large-scale problems.
+Our research to address these challenges begins with definition and development of a novel class
+of univariate models for time series of non-negative counts. Anchored in our case-study context of
+forecasting daily sales of products at a large supermarket chain, key questions include accounting
+for various levels of seasonality (weekly, monthly, yearly), holiday effects, price/promotion information, and unpredictable drifts in levels and variability of sales. High-frequency time series like daily
+sales are often characterized by high variability and extreme values, and levels of demand across
+products can vary drastically, with some products selling dozens of units per day, and others having
+many days with zero sales. Time series at the fine-scale resolution of individual item sales typically
+contain many zeros and low counts, so that traditional time series models and methods– such as
+exponential smoothing (Hyndman et al., 2008), ARIMA models (Box et al., 2008), and conditionally Gaussian/linear state-space models (West and Harrison, 1997; Prado and West, 2010)– are not
+appropriate. A number of approaches to forecasting count-valued time series have, of course, been
+developed. The issues of intermittent demand (many zeros in sales) and low counts have been a
+main concern (e.g. Croston, 1972), as has over-dispersion relative to Poisson structures. A range of
+modified Poisson, negative binomial, so-called “hurdle shifted” Poisson and jump-process models
+have been explored with specific applications (e.g. Chen et al., 2016; Chen and Lee, 2017; Snyder
+et al., 2012; McCabe and Martin, 2005). Comparative analyses in Yelland (2009) highlight the
+utility of state-space approaches including the canonical Gamma-Poisson “local level” model (West
+and Harrison, 1997 section 10.8; Prado and West, 2010 section 4.3.7). This and other standard
+Bayesian state-space models have proven utility in a range of discrete-time series contexts including
+dynamic network studies (e.g. Chen et al., 2017) where short-term forecasting and local smoothing
+are primary goals. With a view towards improved predictive ability and– critically– multi-step forecasting, it is perhaps somewhat surprising that more elaborate and predictive Bayesian state-space
+models have not yet become central to the area, especially in the context of some of the key genesis developments in Bayesian forecasting in commercial settings (e.g. West and Harrison, 1997,
+chapter 1, and references therein) and their exploitation over several decades.
+Section 2 defines and develops the new class of dynamic count mixture models (DCMMs),
+coupling Bayesian state-space models for binary time series with conditional count models. We
+build on standard univariate dynamic generalized linear models (DGLMs: West et al., 1985; West
+
+1
+
+and Harrison, 1997 chapter 15; Prado and West, 2010 section 4.4) to define a general and flexible
+class of basic dynamic models that are customizable to individual series. A critical aspect of DCMMs
+is that they inherit the sequential learning and forecasting of Bayesian state-space models, allowing
+fast, parallel processing of decoupled univariate models for individual series. These models allow
+for the incorporation of series-specific predictors for zero-count prediction as well as for forecasting
+levels of non-zero counts, and– critically for many applications– dynamic random effects extensions
+for over-dispersion relative to conditionally Poisson models.
+The motivating application in consumer sales forecasting is introduced in Section 3. The case
+study context is supermarket sales of many individual items, and several examples of item-level
+sales highlight the uses of DCMMs and the flexibility of the new model class to adapt to substantially
+differing features of count time series. As part of this, we discuss and develop a range of metrics
+for forecast assessment, including standard point-forecast measures, probabilistic calibration and
+coverage. The consumer forecasting field has tended to focus on very specific point-forecast metrics,
+and part of our work here is to broaden the perspective on forecast evaluation in response to, and
+enabled by, the availability of fully specific probability forecast distributions.
+Section 4 addresses the interest in multivariate cross-series linkages and borrowing of information on shared characteristics and patterns. Our main focus here is on the potential for multivariate
+models to improve multi-step ahead forecasts at the level of individual series, while maintaining efficiency of the forward/sequential analysis and, critically, enabling scaling to many series.
+Among multivariate approaches, a number of authors have explored models for counts or proportions (e.g. Quintana and West, 1988; West and Harrison, 1997 chapter 16; Da-Silva and Migon,
+2016). However, there do not exist general classes of models addressing our key desiderata of flexibility at the single-series level, analytic tractability and capacity to scale to higher dimensions. Most
+existing models tend to be specific to applications and not easily amenable to integrating covariate information at the individual series level. Further, many require intense computations such as
+Markov chain Monte Carlo or sequential particle methods (e.g. Cargnoni et al., 1997; Aktekin et al.,
+2018), which is antithetical to our concern for fast, sequential analysis and cross-series integration
+with many series. Our work here builds on the flexible class of univariate DCMMs and defines a
+novel multi-scale approach to integrating cross-series information about common patterns, exemplified in terms of time-varying seasonality where a seasonal pattern is evident across series but
+with series-specific random effects. Critically, our new decouple/recouple approach enables information sharing while avoiding intense computations typical of random-effects/hierarchical models.
+The basic idea is of using aggregate level data to inform on micro-level series is one example of
+a decouple/recouple strategy that maximally exploits series-specific customization while enabling
+integration in multivariate models; see Chen et al. (2017); Gruber and West (2016, 2017) for
+models that exploit this strategy in very different contexts. Section 5 revisits application in the consumer sales case study, illustrating the use and impact of the multi-scale framework across several
+products in the context of sales forecasting of multiple related items.
+Additional comments in Section 6 and supporting technical material in the Appendix conclude
+the paper.
+
+2
+
+2
+
+Dynamic Count Mixture Models
+
+2.1
+
+Univariate Time Series and DGLMs
+
+General notation follows that of standard Bayesian dynamic linear models (West and Harrison,
+1997). Denote by yt a univariate time series observed at discrete, equally-space times t = 1, . . . , T .
+At any time t having observed y1:t , available information is denoted– and sequentially updated – by
+Dt = {yt , Dt−1 , It−1 } where It−1 represents any relevant additional information becoming available at time t − 1 in addition to past data (such as information used to define interventions in the
+model). For any vector of time indices t + 1:t + k for k > 0, forecasting yt+1:t+k at time t is based
+on the information set {Dt , It }. Dynamic count mixture models (DCMMs) combine two examples
+of the broader class of dynamic generalized linear models (West et al., 1985; West and Harrison,
+1997 chapter 15; Prado and West, 2010 section 4.4). The full class of DGLMs defines Bayesian
+state-space modeling of data conditionally arising from distributions with exponential family form.
+There are many benefits to Bayesian state-space modeling in this context. Data are modeled on
+their natural scale, and components of state-space models such as levels, trends, seasonality, and
+regression components are easily interpretable by non-statisticians. Time-varying model components allow non-stationarities to be captured and for models to adapt to unpredictable changes.
+Analysis naturally implements sequential learning and forecasting through state evolutions and
+prior-posterior updates at each time t. The Bayesian framework allows incorporation of expert
+information or interventions into the model at any time point via modifications of “current” priors
+over state parameters. Finally, Bayesian forecasting utilizes full predictive distributions rather than
+just point forecasts, and simulation at any time point provide facile access to summary forecasts on
+arbitrary functions of the future data over multiple steps ahead.
+In a specified DGLM, the observation model has p.d.f. of exponential family form p(yt | ηt , φ) =
+b(yt , φ) exp [φ{yt ηt − a(ηt )}] where ηt is the natural parameter that maps to linear predictor λt =
+g(ηt ) via link function g(·). Also φ is a known scale factor (φ = 1 in Bernoulli and Poisson models)
+and b(·, ·) a function specific to the chosen sampling distribution. Often, g(·) is the identity and the
+natural parameter is the linear predictor. Dynamic regression is defined by the state-space form
+λt = F0t θ t
+
+where θ t = Gt θ t−1 + ω t
+
+and ω t ∼ (0, Wt )
+
+(1)
+
+with the following elements:
+• θ t is the latent, time-varying state vector and Ft is a known vector of constants or realized
+values of predictor variables (a.k.a. regressors).
+• The evolution equation specify a conditionally linear Markov process for the state vector
+through time: Gt is a known state matrix specifying structural evolution of the state vector,
+and ω t is a stochastic innovation vector (or evolution “noise”).
+• The notation ω t ∼ (0, Wt ) indicates that E[ω t |Dt−1 , It−1 ] = 0 and V[ω t |Dt−1 , It−1 ] = Wt ,
+the latter variance matrix being known at time t − 1.
+• The ω t are independent over time and, at time t − 1, ω t and θ t−1 are conditionally independent given {Dt−1 , It−1 }.
+Appendix A details forward filtering and forecasting analysis of DGLMs, drawing on West and
+Harrison, 1997 (chapter 15). This evolves information about state vectors over time based on
+partial posterior summaries in terms of mean vectors and variance matrices, with prior-posterior
+3
+
+updates at each time based on linear Bayes’ theory (Goldstein and Wooff, 2007). Further, analysis exploits a variational Bayes method to constrain to conjugate priors for natural parameters
+at each time, so ensuring appropriate forms of implied forecast distributions. The combined linear
+Bayes/variational Bayes strategy avoids the need for additional assumptions and, more importantly,
+enables model analysis without resort to MCMC or other intensive computational approximations.
+DCMMs are based on two key special cases, those of Bernoulli and Poisson DLGMs. For a
+binary time series, changing the data notation to zt we have then zt ∼ Ber(πt ), Bernoulli with
+success probability πt . The traditional logistic DGLM has λt = logit(πt ). A conditionally Poisson
+DGLM for a non-negative count time series yt has yt ∼ P o(µt ) and natural parameter λt = log(µt ).
+Conjugate analysis involves gamma priors for µ∗ , implying forecasts in terms of negative binomial
+distributions. More details of the analysis in these two cases appear in Appendix A, along with
+summary comments on the standard normal dynamic linear model (West and Harrison, 1997,
+chapter 4) that is also of interest in some applications.
+
+2.2
+
+Flexible Mixtures of DGLMs: Dynamic Count Mixture Models
+
+A DCMM combines binary and conditionally Poisson DGLMs in a format similar to various existing
+models for time series of non-negative counts. It is often practically imperative to treat zero-versus
+non-zero outcomes separately from forecasting the integer outcomes conditional on them being
+non-zero. The novelty here is to use the flexible classes of DGLMs for the two components in an
+overall model, with dynamic predictor components in each that can be customized to context. With
+non-negative count time series yt , define the binary series zt = 1(yt > 0) where 1(·) is the indicator
+function. A DCMM for outcomes yt is defined by observation distributions in which
+(
+0,
+if zt = 0,
+zt ∼ Ber(πt ) and yt |zt =
+1 + xt , xt ∼ P o(µt ),
+if zt = 1,
+over all time t. The parameters πt and µt are time-varying according to binary and Poisson DGLMs,
+respectively, i.e.,
+logit(πt ) = F0t ξ t and log(µt ) = F+
+(2)
+t θt
+0
+with latent state vectors ξ t and θ t and known dynamic regression vectors F+
+t and Ft , in an obvious
+notation. The regression vectors can include different model components if we expect different
+factors to impact the probability of a zero count and the size of the non-zero count. The conditional
+model for yt |zt = 1 is a shifted Poisson DGLM. In sequential learning, the positive count model
+component will be updated only when zt = 1. That is, when a zero count is observed, the positive
+count value is implicitly treated as missing. This allows for a range of applications with a substantial
+probability of zeros over time. If, on the other hand, a time series has few or no zeros, the binary
+model will play a relatively limited role in forecasting.
+The forward filtering and forecast analysis evolves and updates prior moments of the state vectors in each of the binary and shifted Poisson model at each step, separately. Then, each forecasts
+one or more steps ahead by evolving state vector moments into the future, then applying the variational Bayes constraint to conditional conjugacy. Thus, the marginal predictive distribution for
+yt+k at any k > 0 steps ahead from time t is the implied mixture of a Bernoulli and shifted Poisson, with the conjugate gamma prior predictive for the Poisson rate µt+k defining a conditional
+shifted negative binomial forecast distribution for that component. In most applications, however,
+
+4
+
+we are interested in full joint forecasts of paths yt+1:t+k over a sequence of future times 1:k from
+the current time t. Looking at these joint predictive distributions provides information on dependencies between time points, and allows for calculation of other forecast quantities. For example,
+in forecasting daily sales of a supermarket item over each of the next k = 14 days we may also be
+interested in quantities such as such the cumulative sales up to each day in that period, or the number of those 14 days with zero sales, or the probability that cumulative sales exceed some specified
+level, and so forth. To adequately (or at all) enable addressing such broader practical forecasting
+questions, we forward-simulate the predictive distributions. That is, generate large Monte Carlo
+samples of the full predictive distribution p(yt+1:t+k |Dt , It ) from the current time t. This is easily
+implemented as noted and detailed in Appendix A.3, and such Monte Carlo samples can be trivially
+manipulated and interrogated to quantify forecast distributions for any function of the series of
+future outcomes of interest.
+
+2.3
+
+DCMM Random Effects Extension
+
+DCMMs can flexibly model time series of counts with many or few zero counts. Another common
+characteristic of non-negative count data– especially at higher levels of counts– is over-dispersion
+relative to conditional Poisson models. The primary contextual development of the shifted Poisson
+DGLM will aim to customize the choice of F+
+t and associated evolution equation to best predict
+non-zero sales. While resulting forecast distributions may be generally accurate in terms of location, they may still turn out to under-estimate uncertainties and, in particular, fail to adequately
+capture infrequent extremes (typically higher, though sometimes also lower values of yt ). Various
+approaches to this appear in the literature, but all essentially come down to adding a representation of this excess and purely unpredictable variation. This is best addressed directly via random
+effects, and this is easily done in the DCMM using a novel random effects extension in the Poisson
+DGLM component.
+Start with the shifted Poisson DGLM with regression vector, Ft,0 , state vector, θ t,0 , and linear
+predictor F0t,0 θ t,0 . Call this the baseline model, i.e., the DGLM with no random effects. The random
+effects extension generalizes to the linear predictor F0t,0 θ t,0 + ζt where the ζt are time t-specific,
+independent, zero-mean random effects. This is trivially implemented as an extended DGLM. That
+is, redefine the state vector as θ t = (ζt , θ 0t,0 )0 and the corresponding dynamic regression vector
+as Ft = (1, F0t,0 )0 , so that the new model has log(µt ) = F0t θ t = F0t,0 θ t,0 + ζt as required; this
+simply defines a different, and more general DGLM that admits time t individual and unpredictable
+variation over and above the baseline. The state evolution equation will be modified to add a first
+row and column to the state evolution matrix with zero elements representing lack of dependence
+of random effects time-to-time as well as independence of other state vector elements. It remains
+to specify levels of expected contributions of random effects, and this is done using a random
+effects discount factor ρ, building on the standard use of discount factors for DGLM evolution
+variance matrices as a routine (Appendix A.2 here; see also West and Harrison, 1997 chapter 6). In
+particular, at each time t−1 suppose that prior uncertainty about the core state vector elements θ t,0
+at time t is reflected in the prior variance matrix Rt,0 , so that the uncertainty about the baseline
+linear predictor is represented by qt,0 ≡ V[F0t,0 θ t,0 |Dt−1 , It−1 ] = F0t,0 Rt,0 Ft,0 . Then, a random
+effects discount factor ρ ∈ (0, 1] defines the conditional variance of ζt by vt ≡ V[ζt |Dt−1 , It−1 ] =
+qt,0 (1 − ρ)/ρ. If ρ is set to one, then this model is simply the Poisson DGLM without the random
+effect. As ρ gets closer to zero, the variance of the random effect increases. Here ρ becomes a model
+hyper-parameter to be explored along with others. For ρ < 1, the additional variance injected into
+5
+
+the time t prior is now relative to the variance of the underlying baseline models, so we have access
+to interpretation of ρ as defining a relative or percentage contribution to predictive uncertainty, as
+with standard discounting in state-space models. Then, the impact is seen in increased dispersion
+of forecast distributions; some aspects of this on increased variance of the predictive negative
+binomials for future non-zero counts are highlighted in further technical details in Appendix A.2.2.
+
+3
+
+Product Sales Forecasting with DCMMs
+
+3.1
+
+Context and Data
+
+Our case study concerns multi-step forecasting of many individual items in each of a large number
+of US supermarkets (or stores). An item is defined by a unique stock keeping unit (SKU) and sales
+forecasts are required to be updated daily for the following 1:14 days. For our examples here we
+extract a very small number of items at one chosen store to provide illustrations and insights into
+the utility of DCMMs. The selected data set records daily sales of 179 SKUs in one particular store
+over the 2,192 days from July 1st 2009 to July 1st 2015. Each of these products is in the pasta
+category, in one of 14 subtypes of pasta. By percentage of unit sales, the primary pasta types are
+spaghetti (25%), macaroni (13%), wholewheat (10%), and penne (9%). The products comprise
+20 brands, and the majority of unit sales (44%) come from the supermarket’s in-house brand.
+Additional information includes the price paid per transaction, and whether or not each SKU was
+on promotion on the date of the transaction. In the contexts of analyses to follow, the data for
+several items are summarized in Table 1 and shown in Figures 1 and 7; these provide some insights
+into heterogeneity of daily sales patterns.
+Item
+A
+B
+C
+D
+E
+F
+
+Mean
+0.9
+9.6
+9.5
+3.2
+2.4
+0.1
+
+Median
+0
+9
+9
+2
+2
+0
+
+Variance
+1.8
+30.2
+27.4
+9.6
+5.5
+0.2
+
+% 0 sales
+52.3
+1.6
+1.2
+15.2
+19.2
+90.7
+
+Table 1: Some summaries of daily pasta sales data by item
+
+3.2
+
+Example Univariate DCMMs
+
+As example series, data in Figure 1 show daily sales of two selected spaghetti items in one store
+over the two year period from July 1st 2010 to July 6th 2011. Item A has relatively low daily
+sales with a mean of 0.9, a median of 0, and zero sales occurring on 52% of days. Based on the
+prevalence of days with zero sales, the binary component of the DCMM will play an important role
+in forecasting item A. Item B is the highest selling spaghetti product in this store, with a median of
+9 sales per day and zero sales occurring on only 1.6% of days. The daily sales of item B appear to
+have high variance, and on some days we see sales spike to above 40 units.
+The same form of DCMM is applied to each item. Each of the Bernoulli and shifted Poisson
+components has a local level, a regression component with scaled log price as predictor, and a
+6
+
+10
+
++
+
++
+
+Observed
+Mean
+95% Interval
+
+8
+
++
+
+6
+
++
+
++
+
+4
+
++
+
+2
+
+Daily Sales
+
++
+
++
+
++
+
++
+
++ +
+
+++ + +
+
++
+
+++ + +
+
++
+
++++ ++
+
++ + +++
+
++
+
+++
+
+++ ++ +
+
++ ++
+
+++
+++ +
+
++ ++ ++ ++ + +++++ ++ + +
+
++++++++ +++ ++++ + +++ ++ + + ++++ + + ++
+
++ +++
+
++
+
+++
+
++
+
+++ +
+
++ + ++
+
++ +++++ ++++ + + +++++ +++ ++
+
+++++
++++ +
+
++++ +
+
++++++++++++ ++ ++++ ++++ ++ +
+
+0
+
++++++ ++++ ++++++ + +++ ++++++ ++ ++++++++++ +++++++++++++++++ + ++++++++ +++++++++++++++++++++++++++++++++++++++ +++++++++++++++ + ++ +++++++++ ++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+2010
+
+2011
+
+Date
+
++
+
+20
+0
+
+10
+
+Daily Sales
+
+30
+
+40
+
++
++
+
+Observed
+Mean
+95% Interval
+
+++
++
++
++
++
++
++ +
++++
++
++
++ +
++
++
++
++ +
++ + +
++
++ + ++
++
++
++
++
++
+++
++
++ +
++
++
++
+++
++
+++
++
++ +
+++++ +
++ + ++ + + +
++
++
++
++
++
++++ ++
++
+++
++
++
++
++
+++ +++ +++ + + ++ ++
++++ + + +
++ +
++ +
++
++ ++
++
+++
+++ + ++ +
+++ + +
++
++ ++
++++
+++ + + +++ + + +
++ + + +++ ++
+++ ++ ++ + + ++ +++ ++
++ ++
++ + + + + + ++
++
++ +++ +
+++ +++
++++ ++++ ++ ++++ ++ +++ + + + ++
++ +++ + ++
++ + ++ ++
++
++ + ++
++
++ + + + + +++ ++ + +++ +++ ++
++ + +
++
+++++ ++++ + ++ + ++ ++ +++ + +
+++++
++++ + + + ++++ + +++ ++++++
++ ++ ++ + + + ++
++ ++
++ + + + ++
++ +++ + + + +++ ++ + + ++++++++ ++++ + +++ ++ +++++ ++ ++ ++ +++ +++ + +++ + +++
++
+++ + ++++ + +++ + +++ + ++ + +++ + +++++ ++ +
+++ + ++++ ++ ++ ++ ++++ ++++ +
+++ +++ + +++++++
++++++ +++++++++++ + + + + ++
+++ + ++ + + +
++ +++ + ++ ++++++ ++++++++ + ++ + +++ + + +
+++ + +
+++ + + +
+++ ++ ++ ++ + ++ + +
+++ + + + + + + + ++ ++ ++++ +++ + +
++ ++ ++ +++++++ + +
++
+++ + +++
++ + +++ + + + ++ ++ + + + + +++ + ++
++
+++ +++ +++ +
+++
++ +++ + ++ + +
+++ ++ ++ +
++ + ++++ +++++ + + +++ +
++ +
++++++ +
++
++
+++
++
++
++ ++ +
++
++ + ++
++
+++
++
++
++++ +
++ ++
++ ++ +
++ + ++
++
++ +
+++ +
++
++
++
++++
++
++ +
++
++
++
+
+2010
+
+Date
+
+2011
+
+Figure 1: Data and aspects of 1−step ahead forecast distributions for items A (upper) and B (lower).
+Shading: 95% predictive credible intervals; full line: predictive mean.
+full Fourier seasonal component of period 7 to reflect the day-of-week effects. All components
+are dynamic, allowing for variation over time in local level, regression coefficient, and Fourier
+coefficients. Thus each of the binary and Poisson DGLMs have regression vector and evolution
+matrix defined by
+
+F0t = 1, log(pricet ), 1, 0, 1, 0, 1, 0
+and
+Gt = blockdiag[1, 1, H1 , H2 , H3 ]
+with
+
+
+Hj =
+
+
+cos(2πj/7) sin(2πj/7)
+,
+− sin(2πj/7) cos(2πj/7)
+7
+
+j = 1:3.
+
+Exploratory analysis of an initial three weeks of data was used to specify prior moments on the
+state vector at t = 1 representing day 22 of the full data set. For the Poisson component, this used
+standard reference Bayesian analysis assuming no time variation in parameters to define “ballpark”
+initial priors. For the Bernoulli component, the level has prior mean log(p/(1 − p)) where p is the
+proportion of the first 21 days on which a sale occurred, with all other prior means set to zero and
+the prior variance matrix set as the identity. Fixed discount factors of 0.999 (Bernoulli) and 0.99
+(Poisson) are used on each of the level, regression and seasonal components; these values were
+chosen based on the results of previous analyses of daily sales data. The DCMM analyses were run
+through the first year of data before forecasting. From the start of the second year, full forecast
+distributions for 1:14 days ahead were computed at each day, updated recursively to the end of the
+year. These define Monte Carlo samples of size 5,000 of synthetic future sales over rolling 14 day
+periods. Some illustration of these forecasts appears in Figure 1.
+
+3.3
+
+Point Forecasts and Metrics
+
+The consumer sales/demand forecasting and other literatures cover a range of metrics for forecast
+evaluation, with variants of traditional loss functions for point forecasts customized to count data
+with concern, particularly, for cases of low counts (e.g., among recent contributions, see Kolassa,
+2016; Hyndman and Koehler, 2006; Fildes and Goodwin, 2007; Yelland, 2009; Gneiting, 2011;
+Morlidge, 2015). As noted in Hyndman and Koehler (2006), simply adopting common measures
+of forecast accuracy can produce “misleading results” when applied to low valued count data.
+Our view is that “a forecast” is the full predictive distribution rather than one or more point
+summaries. For actionable decisions, understanding the potential implications of uncertainty as
+reflected in the full distribution can be key, while also adding significantly to evaluation and comparisons of forecast accuracy. Any point forecast selected should be rationalized and understood
+as a decision made on the basis of utility/loss considerations in the forecasting context, with implicit or explicit derivation from a decision analysis perspective. The predictive mean is optimal
+under squared error loss, the median for absolute error loss, and the mode for the (typically not
+substantively relevant) 0-1 loss. If the loss function is an asymmetric piecewise linear function,
+L(f, y) = (1(f ≥ y) − α)(y − f ) for outcome y with point forecast f , then the α-quantile of the
+predictive distribution is the optimal point forecast. Modifications of the absolute percentage error (APE) loss function L(f, y) = |1 − f /y| are commonly used in consumer demand forecasting
+of strictly positive counts y. Under this loss, the optimal f is the (−1)-median, i.e., the median
+of the p.d.f. g(y) ∝ p(y)/y when p(y) is the forecast p.d.f., although typical application is based
+on sub-optimal choices of f as full forecast distributions are rarely developed. It is also easy to
+explore novel modifications and extensions of loss functions from a decision analysis perspective.
+For example, APE does not allow for zero outcomes, while practical extensions– such as ZAPE, with
+L(f, y) = |1 − f /y|1(y > 0) + l(f )1(y = 0) for some increasing function l(f ) > 0– are amenable to
+simple optimization to define relevant point forecasts if desired. Specific loss functions should be
+chosen in the context of resulting decisions to be made. In inventory control, there are costs associated with missed sales due to stock-outs, as well as the cost of overstocking items. The forecaster
+may be interested in a quantile of the distribution to reflect these utilities.
+To connect with common practice and recent literature, we explore various point forecast metrics in Section 5. First, however, we broaden perspective to evaluation of the full forecast distributions using the practically relevant issues of coverage and calibration of predictive distributions.
+
+8
+
+3.4
+
+Probabilistic Forecast Evaluation: Examples in Sales Forecasting
+
+Figure 1 gives the overall impression that the DCMM forecasts relatively well in the short-term for
+both items A and B, clearly picking-up the seasonal patterns and responding to changes over time.
+Then, the infrequent higher sales levels are better forecast for item A than apparently for item B,
+the latter being a higher-selling item. To explore forecast performance in more detail, Figures 2, 3
+and 4 summarize aspects of the full predictive distributions generated by the DCMMs for item A
+(left frames) and B (right frames).
+Figure 2 displays coverage of forecast distributions for each of 1, 7, and 14−days ahead. These
+graph the empirical coverage obtained over the full year of forecasting for predictive credible (highest predictive density– HPD) intervals in each case. An ideal model would lead to coverage plots
+close to the 45−degree line. For item A, forecast distributions have slight over-coverage. For example, empirical coverage of the 1−day ahead 50% predictive intervals is about 57%. In contrast, for
+item B we see evidence of under-coverage at all horizons, related mainly to the apparent inability
+of the model to adequately forecast the infrequent higher sales values.
+A second probabilistic evaluation uses the probabilistic integral transform (PIT), i.e., a general
+residual plot based on the predictive c.d.f. for each outcome. Since predictive distributions are
+discrete, this involves the randomized PIT (Kolassa, 2016). If sales counts y are forecast with
+predictive c.d.f. P (·), define P (−1) = 0 and draw a random quantity py ∼ U (P (y − 1), P (y))
+given the observed value of y. Over the sequence of repeat forecasting events an ideal model would
+generate realizations py that are approximately uniform. For each item, Figure 3 plots the ordered
+randomized PIT values from the 1−day ahead forecasts distributions versus uniform quantiles. The
+concordance of the outcomes with uniformity is apparently strong for item A. For item B, however,
+we see significant non-uniformity and a shape consistent with forecast distributions that are just
+too light-tailed; that is, the outcome sales data on item B exhibit higher levels of variation than the
+DCMM predictive distributions capture.
+The third probabilistic evaluation focuses on frequency calibration properties of forecasts of
+zero/non-zero sales. Ideal calibration means that, of the days non-zero sales are forecast with
+probability near p, approximately 100p% actually have non-zero sales. In practice, we bin the
+probability scale according to variability in forecast probabilities of non-zero sales across the year,
+and evaluate the realized frequency of non-zero sales on the days within each bin. Figure 4 displays
+the results for 1−step ahead binary predictions. For item A, the predicted probabilities of non-zero
+sales range in 30:80%; these are allocated into ten bins of equal width. The figure displays the
+observed frequency of non-zero sales within each bin and an approximate 95% binomial confidence
+interval based on the number of days within each bin. Horizontal shading displays the width of
+the predicted probability bins. Ideal predictions would lead the observed frequency in each bin to
+fall within the shaded area, while the vertical bars indicate limits based on sample size in each bin.
+For item A, the performance is apparently very good indeed. For item B, predicted probabilities
+of non-zero daily sales range in 90:100% over time; this is a relatively high-selling item. As with
+item A, the vertical calibration intervals intersect the 45−degree line and the horizontal shading,
+indicating that there are no obvious issues with forecasting the zero/non-zero outcome. In terms of
+the full DCMM, the binary component is obviously less important for item B than for item A. Then,
+as noted above, the under-dispersion of forecasts of item B is a clear negative; this is addressed
+with the random effects extension below.
+
+9
+
+0.8
+
+●
+●
+
+●
+
+1
+7
+14
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+0.0
+
+0.0
+
+0.2
+
+0.4
+
+●
+●
+
+0.6
+
+0.6
+
+●
+●
+
+0.2
+
+Coverage
+
+●
+
+Forecast horizon
+
+●
+●
+
+0.4
+
+●
+
+1
+7
+14
+
+●
+
+●
+●
+
+Coverage
+
+0.8
+
+●
+
+1.0
+
+1.0
+
+●
+●
+
+Forecast horizon
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Interval %
+
+0.8
+
+1.0
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Interval %
+
+0.8
+
+1.0
+
+1.0
+0.8
+0.6
+0.0
+
+0.2
+
+0.4
+
+Empirical CDF
+
+0.6
+0.4
+0.0
+
+0.2
+
+Empirical CDF
+
+0.8
+
+1.0
+
+Figure 2: Coverage plots for items A (left) and B (right) from 1−, 7− and 14−day ahead forecasts.
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Uniform
+
+0.8
+
+1.0
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Uniform
+
+0.8
+
+1.0
+
+1.00
+0.95
+0.90
+0.80
+
+0.85
+
+Observed Frequency
+
+0.8
+0.6
+0.4
+0.2
+0.0
+
+Observed Frequency
+
+1.0
+
+Figure 3: Randomized PIT plots from 1−day ahead forecasting of items A (left) and B (right). Full
+line: ordered randomized PIT values; dashed: 45−degree line.
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+Predicted Probability
+
+1.0
+
+0.80
+
+0.85
+
+0.90
+
+0.95
+
+Predicted Probability
+
+1.00
+
+Figure 4: Binary calibration plots from 1−day ahead forecasting of non-zero sales of items A (left)
+and B (right). Crosses mark observed frequencies in each bin, horizontal grey shading indicates
+variation of forecasts in each bin, and vertical bars indicate binomial variation based on the number
+of days in each bin.
+
+10
+
+3.5
+
+Random Effects Extension
+
+We illustrate the potential of the random effects extension of DCMMs introduced in Section 3 to
+adapt to the over-dispersion issues in the basic analysis of item B in the last section. The main details of the analysis remain the same, but now the model is modified to include day-specific random
+effects. The summarized analysis uses a random effects discount factor ρ = 0.2, chosen following
+exploration of the impact of different values across the first year of data. Figure 5 displays the
+updated 1−step forecast means and 95% credible intervals over time, to be compared to Figure 1.
+Note the wider forecast intervals that are to be expected. Figure 6 displays the resulting coverage
+of the 1, 7, and 14−day ahead forecast credible intervals over time, and the calibration plot of
+the randomized PIT values from 1−day ahead forecasts. Coverage has increased and substantially
+improved to conform with the 45−degree line, while PIT values are in much closer concordance
+with uniformity. Overall, the addition of the random effect has accounted for some of the underdispersion of forecast distributions in the baseline DCMM, and these aspects of forecast evaluation
+indicate clear and practical improvements as well as overall accuracy.
++
+
+20
+0
+
+10
+
+Daily Sales
+
+30
+
+40
+
++
++
+
+Observed
+Mean
+95% Interval
+
+++
++
++
++
++
++
++ +
++++
++
++
++ +
++
++
++
++ +
++ + +
++
++ + ++
++
++
++
++
++
+++
++
++ +
++
++
++
+++
++
+++
++
++ +
+++++ +
++ + ++ + + +
++
++
++
++
++
++++ ++
++
+++
++
++
++
++
+++ +++ +++ + + ++ ++
++++ + + +
++ +
++ +
++
++ ++
++
+++
+++ + ++ +
+++ + +
++
++ ++
++++
+++ + + +++ + + +
++ + + +++ ++
+++ ++ ++ + + ++ +++ ++
++ ++
++ + + + + + ++
++
++ +++ +
+++ +++
++++ ++++ ++ ++++ ++ +++ + + + ++
++ +++ + ++
++ + ++ ++
++
++ + ++
++
++ + + + + +++ ++ + +++ +++ ++
++ + +
++
+++++ ++++ + ++ + ++ ++ +++ + +
+++++
++++ + + + ++++ + +++ ++++++
++ ++ ++ + + + ++
++ ++
++ + + + ++
++ +++ + + + +++ ++ + + ++++++++ ++++ + +++ ++ +++++ ++ ++ ++ +++ +++ + +++ + +++
++
+++ + ++++ + +++ + +++ + ++ + +++ + +++++ ++ +
+++ + ++++ ++ ++ ++ ++++ ++++ +
+++ +++ + +++++++
++++++ +++++++++++ + + + + ++
+++ + ++ + + +
++ +++ + ++ ++++++ ++++++++ + ++ + +++ + + +
+++ + +
+++ + + +
+++ ++ ++ ++ + ++ + +
+++ + + + + + + + ++ ++ ++++ +++ + +
++ ++ ++ +++++++ + +
++
+++ + +++
++ + +++ + + + ++ ++ + + + + +++ + ++
++
+++ +++ +++ +
+++
++ +++ + ++ + +
+++ ++ ++ +
++ + ++++ +++++ + + +++ +
++ +
++++++ +
++
++
+++
++
++
++ ++ +
++
++ + ++
++
+++
++
++
++++ +
++ ++
++ ++ +
++ + ++
++
++ +
+++ +
++
++
++
++++
++
++ +
++
++
++
+
+2010
+
+Date
+
+2011
+
+Figure 5: Daily sales of item B, and the 1−day ahead forecast from the DCMM with random effects.
+The blue line indicates the forecast mean, and the gray shading indicates the forecast distribution
+95% credible interval.
+
+4
+
+Multivariate Forecasting Framework
+
+4.1
+
+Decouple/Recouple and Shared Features Across Series
+
+We now turn to recoupling sets of univariate DCMMs in contexts where there may be opportunity
+to improve multi-step forecasts via more accurate assessment of effects and patterns shared across
+the series. That is, we aim to exploit traditional ideas of hierarchical random effects models where
+common features over time are “seen differently” by each univariate series, and where both series11
+
+1.0
+
+1.0
+
+Forecast horizon
+
+0.8
+
+●
+●
+●
+
+0.4
+
+●
+●
+●
+
+0.6
+
+0.6
+
+●
+●
+●
+●
+
+0.0
+
+0.0
+
+0.2
+
+0.2
+
+Coverage
+
+●
+
+1
+7
+14
+
+0.4
+
+●
+
+●
+●
+●
+
+Empirical CDF
+
+0.8
+
+●
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Interval %
+
+0.8
+
+1.0
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Uniform
+
+0.8
+
+1.0
+
+Figure 6: Empirical coverage plot (left) and randomized PIT plot (right) for 1−day ahead forecasting of item B using the DCMM with random effects extension. Compare with the results under the
+basic DCMM in the right-hand frames of Figures 2 and 3.
+specific effects and noise obscure the patterns at the individual series level. This is particularly
+relevant in sales and demand forecasting when items are sporadic, i.e., in our DCMMs in cases of
+non-negligible zero sales and otherwise low count levels. Products can often be grouped hierarchically based on characteristics like product family, brand, or store location. Sales and demand
+patterns within such groups may have similar trends or seasonal patterns due to external factors
+such as marketing, economy, weather, and so forth. Our main example here focuses on the daily
+seasonal pattern over each week, a pattern that is heavily driven by customer traffic through the
+stores related to weekly behavioral factors. This general pattern is naturally shared by many individual series, but at low levels of sales it is substantially obscured by inherent noise so that using
+information from other series distilled through a multivariate approach is of interest. If products
+are grouped we may expect estimates of seasonality at the aggregate level to be more accurate
+and less noisy than at the individual level. Using aggregated seasonality in a model rather than
+individual item seasonality may then improve forecasting for individual items. On the other hand,
+seasonality exhibited by items that sell at higher levels may be much more evident and the potential to gain forecast accuracy there less obvious. Part of our interest is thus to explore the potential
+across a range of items.
+Our desiderata include maintaining flexibility in customizing DCMMs to individual time series
+along with the ability to run fast, sequential Bayesian analysis of inherently decoupled univariate
+analyses of many series. In product demand forecasting, retailers are generally interested in many
+items (often thousands) simultaneously. Due to time and computational constraints, the conventional approach is to rely on univariate methods which forecast independently across SKUs and
+therefore this is a central consideration. That is, we avoid large-scale and complex multivariate
+modeling that would otherwise necessitate the use of intense MCMC (or other) computations that
+would obviate the use of efficient sequential analysis while most seriously limiting the ability to
+scale in the number of time series. To do this, we maximally exploit the univariate framework of
+Section 2 with series decoupled conditional on factors shared in common across series, and then
+recouple by utilizing a separate model to analyze and forecast these common factors.
+
+12
+
+4.2
+
+Multi-Scale Models and Top-Down Recoupling
+
+The essential structure is that of a set of decoupled dynamic latent factor models as relates to traditional Bayesian multivariate approaches for conditionally normal data (e.g. Aguilar et al., 1999;
+Aguilar and West, 2000; Carvalho and West, 2007), but with the major novelty of inferring latent factors externally. The latter draws conceptually on prior work in multi-scale models in time
+series (e.g. Ferreira et al., 2003, 2006) and on “bottom-up/top-down” ideas in Bayesian forecasting (West and Harrison, 1997, section 16.3). The basic idea of top-down forecasting is to forecasting patterns at a highly aggregate level and then somehow disaggregate down to the individual
+series. Practical methods using point forecasts of aggregate sales over a set of items typically use
+some kind of weighting to disaggregate. While our framework is general, we focus on the key example of seasonal patterns, where our work contributes to an existing literature. For example, the
+method of group seasonal indices (GSI: Withycombe, 1989; Chen and Boylan, 2007) aggregates
+series in a defined group and then estimates seasonal factors from the aggregate series. We follow
+this concept, but with an holistic class of Bayesian state-space models– with time-varying patterns
+and full probabilistic specifications– rather than direct data adjustments assuming constant seasonal patterns. The full Bayesian approach was mooted in conditional linear, normal examples
+in (West and Harrison, 1997, section 16.3), and the developments here extend that to a full class of
+multivariate DCMMs for count series. Importantly, we use full simulation of posterior distributions
+of common factor patterns to send to the set of univariate DCMMs, so that all relevant uncertainties
+are quantified and reflected in the resulting forecast distributions of the univariate series.
+
+4.3
+
+Model Structure and Analysis
+
+4.3.1
+
+Notation and Structure
+
+A set of N series yi,t , (i = 1:N ), follow individual DCMMs sharing some common factors of interest.
+Denote these individual models by Mi for i = 1:N. In each of the binary and shifted Poisson DGLM
+components, Mi has both series-specific and common state-space components with latent factor
+predictors shared across the N series. In Mi the time t state and regression vectors for each
+DGLM component have partitioned forms with individual and common predictors. For example,
+the shifted Poisson component has state and regression vectors defined by
+ 
+ 
+γ i,t
+f
+Mi :
+θ i,t =
+, Fi,t = i,t ,
+i = 1:N,
+(3)
+β i,t
+φt
+with subvectors of conformable dimensions; the linear predictor is then λi,t = γ 0i,t fi,t + β 0i,t φt . Here
+fi,t contains constants and series-specific predictors– such as item-specific prices and promotions in
+the sales forecasting context. The latent factor vector φt is common to all series– such as seasonal
+or brand effects in the sales forecasting context. Each series has its own state component β i,t so
+that the impacts of common factors are series-specific as well as time-varying.
+In parallel, a separate model of some form– in our case, a DLM– also depends on φt and possibly
+other factors. Denote this model by M0 . Forward sequential analysis of data relevant to M0 defines
+posterior distributions for φt at any time t that can be used to infer and forecast the φt process as
+desired. These inferences on the common factors are then forwarded to each model Mi to use in
+forecasting the individual series.
+
+13
+
+4.3.2
+
+Summary Analysis
+
+Consider now forecasting and then 1−step updates and evolution from times t − 1 to t. Extend the
+notation for information sets Dt , It to be model specific with model indices i = 0:N.
+Forecasting: This is a direct and full probabilistic extension– enabled by simulation– of the simple theoretical examples of “conditioning on external forecast information” in conditionally linear,
+normal models in examples of West and Harrison, 1997, (section 16.3).
+1. At t − 1 we have conditionally independent prior summaries for the series-specific states i,
+namely (θ i,t |Di,t−1 , Ii,t−1 ) for each i = 1:N, having evolved independently from the θ i,t−1 .
+2. Independently, model M0 simulates the trajectory of the latent factor process into the future,
+i.e., generates independent samples φst:t+k ∼ (φt:t+k |D0,t−1 , I0,t−1 ) at time t − 1 and for any
+k ≥ 0, where s = 1:S indexes S Monte Carlo samples.
+3. Send these synthetic latent factors to each individual model. In Mi , use S parallel DCMM
+analyses to forecast over times t:t + k. Each analysis conditions on one sampled φst:t+k .
+One Monte Carlo draw from the implied predictive distribution of yi,t:t+k |φst:t+k , Di,t−1 , Ii,t−1
+s
+yields a sampled trajectory yi,t:t+k
+, so we create a Monte Carlo sample of size S accounting
+for the inferences on, and uncertainty about, the latent factor process as defined under M0 .
+The last step builds on the fact that the DCMM analysis detailed earlier applies to each series–
+independently across series– conditional on a value of φt . Note also the use of parallelization.
+Updating: Observing the yi,t we now update in each model Mi separately.
+4. For each s, compute the value of the 1−step ahead predictive p.d.f p(yi,t:t+k |φst:t+k , Di,t−1 , Ii,t−1 )
+from the conditionally conjugate DGLM analysis. Use these as marginal likelihoods to evaluate implied posterior probabilities over the s = 1:S latent factor values relative to uniform
+(1/S) prior probabilities.
+5. Apply the standard DGLM updating to compute Monte Carlo sample s−specific posterior
+mean vectors and variance matrices for θ i,t |φst , yi,t , Di,t−1 , Ii,t−1 . Marginalize over the φst with
+respect to the probabilities from 4 above to deduce implied Monte Carlo approximations to
+the posterior mean vector and variance matrix of θ i,t |Di,t , where Di,t now implicitly includes
+information from D0 as well as {yi,t , Di,t−1 , Ii,t−1 }.
+Evolution to time t + 1 now completes the cycle.
+The model provides opportunity to explore differences across series, and over time, in effects
+of latent factors. If the effects on series yi,t are similar to those under M0 , then β i,t will be close to
+one. Inferred trajectories of β i,t over time will capture relevant deviations and allow comparisons
+across series in how strongly they relate to the latent factors.
+
+5
+
+An Example in Multi-Scale Sales Forecasting
+
+5.1
+
+Context, Data and Models
+
+Our case study involves a number of multi-scale features that offer potential for improved forecasting using the multivariate/multi-scale strategy. Items are related in product type categories,
+by brand, and by consumer behavior as evidenced in several ways including, simply, the day-ofweek seasonality related to “store traffic”. We give one example here focused on this latter feature,
+14
+
+C
++
+
++
+
+20
+
+10
+
+0
+
++
+
++
+
+D
+
++
++
+
++
+
+F
+
++
+
++
+++ + +
+++
+++
+++ + +
++
+++ + + + ++
++ + +
+++
++
+++
++++ ++
++++ + +++
++++ + ++
++ +
++
++ + + ++ +
++ + + + ++ + + + + + + + + +
++
+++
+++ + + +++ + ++
++ ++ ++ + ++
++ ++
++ + +++
++ +
+++ + +
++ + ++
++
++ ++ + + +++ ++
++ ++ +
++
++
++++ ++ + ++++++ + + ++
++ +
+++ ++ +++
++++ ++ + +
++
+++
++ +
+++
++ +
+++ +
+++
++
++
++ +
++
+
+Oct
+
+E
+
++
+
+Jan
+
++
++
+
++
+
++
++++
+++
+
++
+
++
+
++ ++ +
++
++
++
++
++
++ +
++
++
++
++ +++ ++++ ++ + + +
+++ +
++
++ + + ++
++ + +++ +++ ++ +++
+++++ ++++ ++ +++++ +
+++++ +++++++ +++++++++++++
+++++ ++ + +++++++
+++++ +++++ ++ +++++ ++ ++ + ++ +++ + +++
++ ++ ++ + ++ +++++ + + ++++
+++ ++++++++++++ +
+
+Oct
+
++
+
++
++ +
+
++
++
++
++ +
++
+++ +
++
++
++
++ + + ++
+++ +
++ +
++++ + + ++++ + ++ +
++ + + +
++
++ ++ ++++ +++ +++ +++ ++++++ +++ +++++ ++ +++
++ ++
+++ ++ +++ ++++ ++++ +++ +++ ++++
+++++ ++ ++++++ ++++++ + + ++++++ ++++
+++ +++++ + ++ ++ ++++++ + + +++ + +
++
+
+Jan
+
+Oct
+
+Jan
+
++
+++ + + +
+++
++
++ + +++ + ++
+++ + +
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Oct
+
+Jan
+
+Date
+
+Figure 7: Daily unit sales (in counts per day) of four spaghetti items C–F in one store from August
+4th 2009 to February 19th 2010.
+comparing forecasting performance of a multi-scale model– based on one specific common pattern
+model M0 – to a set of individual DCMMs. In one selected store, we identify N = 17 spaghetti
+items for the example. Figure 7 plots the daily sales of four of these items over the period August
+2009 to February 2010, giving some indication of the ranges of demand levels and patterns over
+0 = (1, log(price )) and
+time. We take models Mi in which the baseline DCMMs of eqn. (3) have fi,t
+i,t
+φt ≡ φt is a scalar representing “current day-of-week effect”. Further, the state evolution matrix in
+all cases is Gt ≡ G = I. We use the same DGLM specification– but with component-specific state
+vectors– for each of the binary and shifted Poisson components of these DCMMs.
+In principle, model M0 could be any external model used to map and predict patterns of traffic
+in the store impacting spaghetti purchases. Our example uses a simple model based on aggregate
+sales that highlights the relevance of the term multi-scale. This could obviously be modified to
+incorporate additional predictors of day-of-week effects, but serves well to illustrate the analysis
+here. Since pasta sells at high levels, aggregate-level sales of types of pasta such as spaghetti are
+typically high and more clearly reveal the weekly demand patterns as they change day-to-day. So
+a relevant aggregate series would be a natural candidate for M0 . We take yt to be the log of total
+spaghetti sales in this store on day t as our example, and specify M0 as a flexible dynamic linear
+model incorporating time-varying effects and stochastic volatility as in Appendix A.1. This DLM
+M0 has a local linear trend, a regression component with the scaled log average spaghetti price
+as a predictor, the full Fourier seasonal component for the 7−day seasonal pattern over the week,
+and a yearly seasonal effect with the first two harmonics of period 365. Discount factors in this
+DLM were chosen based on previous analyses of aggregate sales, resulting in δ = 0.995 for each
+of the trend and regression components, δ = 0.999 for each of the seasonals, and β = 0.999 for
+the residual stochastic variance process. Note that, at each time, the full posterior for the implied
+“current day effect” φt can be trivially simulated from this model as it is simply one element of a
+linear transformation of the Fourier coefficients to a 7−dimensional seasonal factor vector (West
+and Harrison, 1997, section 8.6.5). In all analyses we used an initial three weeks of training data to
+specify initial priors for DCMM state vectors at the time index t = 1 representing the start of the 200
+day period. Analysis was then run over the first period of 100 days, prior to then forecasting 1:14
+days ahead on each of the following 100 days. Predictive performance is assessed across a range
+
+15
+
+of random effect discount factors ρ ∈ {0.4, 0.6, 0.8, 1.0} in each Mi . Initial priors for the baseline
+and multi-scale DCMMs are matched, adjusting for the use of the single latent seasonal factor φt in
+the latter compared to the individual Fourier models in the former. We use fixed discount factors of
+δ = 0.999 (Bernoulli) and 0.99 (Poisson) for each of the local level, price regression state elements,
+and the state elements corresponding to the seasonal effects (the vector of time-varying Fourier
+coefficients in the baseline DCMMs, and the single φt in the multi-scale model, respectively).
+
+5.2
+
+Forecast Metrics
+
+We have discussed general issues of forecast evaluation and comparison in Sections 3.3 and 3.4,
+stressing the applied need for global probabilistic metrics in general, and particularly in contexts
+of low count time series. That said, for some basic comparisons of the baseline with multi-scale
+DCMMs, it is also of interest to relate to traditional point forecast accuracy measures. We do
+that here with three empirical loss functions from the count forecasting literature (e.g. Fildes and
+Goodwin, 2007), namely scaled mean squared error (sMSE), mean absolute deviation (MAD), and
+mean ranked probability score (MRPS) metrics. Metrics are specific to a chosen lead-time k > 0.
+For any series yt , denote by ft,k a point forecast of yt+k made at time t. The scaled squared error
+(sSE) based on outcome yt+k is sSEt (k) = (yt+k − ft,t+k )2 /(ȳt )2 where ȳt is the mean of y1:t . Then
+the sMSE for forecast horizon k is calculated as the average of the sSEt (k) over all days t. This has
+become of interest in evaluating point forecast accuracy of count data as it is well defined (unless
+all observed values are zero), and it is not as sensitive to high forecast errors as the MSE (Kolassa,
+2016). The optimal point forecast under sMSE is the k−step ahead predictive mean. The MAD
+metric is standard, simply the time average of |yt+k − ft,t+k |, and the optimal point forecast is the
+k−step ahead predictive median. The third metric RPS is a scoring rule related to earlier discussed
+and utilized PIT measures (Snyder et al., 2012;
+t forecast distribution
+P∞Kolassa, 2016). If the time
+2 , and we calculate the
+(P
+(j)
+−
+1(y
+≤
+j))
+for yt+k has c.d.f. Pt,k (·), then RP St (k) =
+t+k
+j=0 t,k
+MRPS for forecast horizon k by averaging RP St (k) across all days t.
+
+5.3
+
+Forecasting Analysis and Comparisons
+
+Metrics from the analyses are shown in Figure 7. These items represent the different levels of
+demand present in this store: high demand (item C), moderate demand (items D, E), and low
+demand (item F). For each of the three metrics, we evaluate forecasts across 1:14 days ahead at each
+day. The baseline and multi-scale models are evaluated across a range of random effects discount
+factors ρ ∈ {0.4, 0.6, 0.8, 1.0}. Since different values of ρ may provide better forecasts across the
+forecasting horizon, we display only the minimum results across each of the four models. That is,
+for illustration here we only present the results from the best baseline and multi-scale model for
+each item, error metric, and forecast horizon.
+Comparisons under sMSE: Figure 8 shows the sMSE versus forecast horizon for each item from
+the best performing multi-scale and baseline DCMMs. Comments by specific items are as follows.
+C: The multi-scale DCMM has lower sMSE across the entire forecasting horizon. The sMSE of
+both models increases as the forecasting horizon gets longer, however the percentage decrease in sMSE of the multi-scale vs baseline DCMM generally increases for longer forecast
+horizons. The greatest percentage decreases in sMSE of 8 − 10% occur when forecasting 10,
+16
+
+C
+
+D
+
+0.7
+
+E
+
+F
+
+0.7
+10
+
+●
+
+0.6
+
+●
+●
+
+●
+
+●
+
+●
+
+0.6
+●
+
+1.2
+
+●
+
+●
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+10
+
+5
+
+10
+
+●
+●
+
+●
+
+●
+●
+
+2
+5
+
+●
+●
+
+●
+●
+
+●
+
+●
+
+5
+
+4
+
+●
+
+1.0
+
+●
+
+●
+
+6
+
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+0.5
+
+●
+
+●
+
+8
+
+●
+
+●
+
+●
+
+●
+
+●
+●
+
+●
+● ●
+
+0.4
+
+1.4
+
+●
+
+●
+●
+
+0.5
+
+●
+
+●
+
+●
+
+10
+
+●
+
+●
+
+5
+
+10
+
+Forecast horizon (days)
+
+Figure 8: Scaled mean squared error (sMSE) vs forecast horizon (days) for items C, D, E, and F
+from the multi-scale (orange circles) and baseline (blue triangles) models.
+C
+
+D
+
+E
+
+F
+● ● ●
+
+1.9
+
+●
+
+2.0
+
+4.5
+
+● ●
+
+0.20
+
+● ●
+
+●
+●
+
+1.8
+
+●
+
+4.3
+●
+
+● ●
+
+●
+
+●
+
+●
+
+●
+●
+
+●
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+1.8
+
+●
+
+0.18
+
+1.7
+
+●
+
+●
+
+1.6
+
+●
+●
+
+●
+
+1.6
+
+●
+
+● ● ●
+●
+
+●
+
+●
+● ●
+
+●
+●
+
+3.9
+5
+
+●
+
+1.4
+
+●
+
+5
+
+0.16
+
+● ●
+
+●
+
+1.5
+
+10
+
+●
+
+●
+
+●
+
+●
+
+4.1
+
+● ●
+
+10
+
+5
+
+● ●
+
+10
+
+5
+
+10
+
+Forecast horizon (days)
+
+Figure 9: Mean absolute deviation (MAD) vs forecast horizon (days) for items C, D, E, and F from
+the multi-scale (orange circles) and baseline (blue triangles) models.
+C
+
+D
+
+E
+
+32.5
+
+F
+
+●
+
+7
+
+●
+
+●
+
+30.0
+
+●
+
+8
+
+●
+
+●
+
+●
+●
+
+●
+
+27.5
+●
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+5
+
+●
+
+●
+
+0.2
+5
+
+●
+
+●
+
+●
+
+● ●
+● ● ● ● ● ● ●
+
+●
+● ● ●
+
+●
+●
+
+10
+
+● ●
+
+0.3
+
+4
+
+● ●
+
+●
+
+6
+
+●
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+5
+
+● ●
+
+25.0
+
+7
+
+●
+
+6
+
+●
+
+●
+
+5
+
+10
+
+● ●
+
+●
+
+4
+5
+
+10
+
+5
+
+10
+
+Forecast horizon (days)
+
+Figure 10: Mean rank probability score (MRPS) vs forecast horizon (days) for items C, D, E, and F
+from the multi-scale (orange circles) and baseline (blue triangles) models.
+
+17
+
+11, 13, and 14 days ahead. For 10 out of the 14 forecast horizons, we see at least a 5%
+decrease in sMSE. Averaging the sMSE across the forecasting horizon, the overall percentage
+decrease of the multi-scale DCMM versus the baseline DCMM is 6%.
+D: The multi-scale DCMM has lower sMSE than the baseline DCMM when forecasting 1 to 13
+days ahead. For this item, the percentage decrease in sMSE of the multi-scale method is
+larger for short- to mid-term forecasting. When forecasting 2, 4, 5, 8, and 9 days ahead, the
+percentage decrease in sMSE is between 9 − 13%. When forecasting 10-13 days ahead, the
+percentage decrease in sMSE drops to between 1 − 5%. When forecasting 14 days ahead, the
+multi-scale DCMM has a 5% decrease in sMSE compared to the baseline DCMM. However,
+averaging the sMSE across the forecasting horizons, the average percent decrease in sMSE of
+the multi-scale DCMM versus the baseline DCMM is 6%.
+E: The multi-scale DCMM has lower sMSE for 12 out of the 14 forecast horizons. The largest
+percentage decreases in sMSE of 4 − 7% occur for mid range forecasting (5 − 9 steps ahead).
+Averaging the sMSE across the forecasting horizon, the multi-scale DCMM decreases sMSE by
+about 3% compared to the baseline DCMM.
+F: The multi-scale DCMM has lower sMSE for 10 out of the 14 forecast horizons. The largest
+percent decreases in sMSE of 9 − 13% occur randomly through the forecasting horizon at 1,
+7, 8, and 14 days ahead. Averaging sMSE across the forecasting horizon, we see an overall
+percent decrease of about 4% with the multi-scale DCMM.
+Comparisons under MAD: Figure 9 shows the mean absolute deviations (MAD) versus forecasting horizon for each item from the best performing multi-scale and baseline DCMMs. Item specific
+differences are now noted.
+C: The multi-scale DCMM has lower MAD than the baseline DCMM for 13 of 14 forecasting
+horizons. When forecasting 13, 14 days ahead, the MAD of multi-scale DCMM is 5-6% lower
+than the baseline DCMM. Averaging across the forecasting horizon, the MAD of the multiscale DCMM is 2.8% less than the MAD of the baseline DCMM.
+D: The multi-scale DCMM has lower MAD for 13 of 14 forecasting horizons. The multi-scale
+approach has the greatest improvement in MAD of 6-11% when forecasting 2 to 5 days ahead.
+Across the entire forecasting horizon, the multi-scale DCMM decreases MAD by about 4%
+compared to the baseline DCMM.
+E: The multi-scale DCMM has lower MAD for 10 of 14 forecasting horizons. The difference in
+MAD between these two approaches seems minimal, although there is a 1.2% decrease in
+MAD across the forecasting horizon.
+F: the multi-scale and standard DCMMs have the exact same MAD across the forecasting horizon. Referring back to Figure 7, we see that item F has zero sales on more than 50% of days.
+Each DCMM predicts a zero response with at least 50% probability, making the median forecast zero over time. Since each method has the same median forecast, the MAD is the same
+at each time point.
+Comparisons under RPS: Figure 10 shows the ranked probability score (RPS) versus the forecasting horizon for each item from the best performing multi-scale and baseline DCMMs. Item
+specific differences are as follows.
+
+18
+
+C: The multi-scale DCMMs have lower RPS than the baseline DCMMs for 14 of 14 forecasting
+horizons. When forecasting 9 to 14 days ahead, the RPS of the multi-scale methods is about
+7 − 11% lower than the standard methods. Averaged across the forecasting horizon, the
+multi-scale models have a 7% decrease in RPS.
+D: The multi-scale DCMMs have lower RPS for 12 of 14 forecasting horizons. When forecasting
+2, 4, 5, and 9 days ahead, the percent decrease in RPS is greater than 10%. Across the entire
+forecasting horizon, the percentage decrease in RPS using the multi-scale method is about
+7%.
+E: The multi-scale DCMMs have lower RPS for all 14 forecasting horizons. We see that the RPS
+actually decreases as the forecasting horizon gets longer, indicating that the performance of
+the predictive intervals may be improving for longer term forecasts. For 8 of the 14 forecasting
+horizons, we see percent decreases of at least 10% in the RPS, including a 17% decrease when
+forecasting 4 days ahead. Across the entire forecasting horizon, the percent decrease in RPS
+under the multi-scale method is about 11%.
+F: the multi-scale DCMMs have lower RPS for 10 of 14 forecasting horizons. Across all forecasting horizons, the percentage decrease in RPS under the multi-scale method is about 3%
+compared to the baseline DCMMs.
+
+6
+
+Summary Comments
+
+In the context of a motivating case study and application in consumer sales and demand forecasting, we have introduced a novel class of dynamic state-space models for time series of non-negative
+counts, and a formal multivariate extension for many related series. The univariate DCMM framework builds on and extends prior approaches to univariate count time series, contributing a flexible,
+customizable class of models. The ability to explore and include covariates as potential predictors
+of both binary and positive count series is of interest in many areas, and the coupling of DGLMs for
+these two components addresses a very common need with count data. Motivated by problems in
+consumer demand and sales forecasting, the opportunity to apply these models and extend their
+use in commercial and socio-scientific forecasting is evident. In addition to the dynamic regression
+components, the time-varying state-space framework allows evaluation of changes over time in regressions, trends, seasonal patterns and other forms of predictor information, and adaptability to
+any such changes. The Bayesian framework defines probabilistic forecasts that, accessed trivially
+computationally through direct, forward simulation of predictive distributions, enables evaluation
+of various summary measures of uncertainty about forecast paths of time series into the future and
+arbitrary functions of sets of future outcomes. This is important in applications as a general matter
+of properly communicating forecast information, and also provides the basis for formal decision
+analysis in decision contexts reliant on forecasts. Our examples developed in consumer sales forecasting highlight the machinery of model fitting and forecasting, and demonstrate the utility of
+DCMMs with series exhibiting quite differing patterns and levels of outcome intensity. This is important in applications involving many series where it is desirable to have a single model class that
+is flexible and adaptable to individual series characteristics. A number of traditional point forecast
+metrics are also discussed, along with the point that they should always be considered so long as
+the background context supports the role of the implicit loss function underlying any specific point
+forecast. More broadly on forecast assessment and evaluation, we have stressed and exemplified
+
+19
+
+the use of analyses addressing the full forecast distributions, to include frequency calibration of
+both binary and positive count models, empirical coverage of nominal forecast intervals.
+The embedding of sets of DCMMs into a multivariate system defines a novel class of statespace models for many related time series of counts. Importantly, this maintains the flexibility of
+modeling at the univariate series level, using individual DCMMs that are linked across series via
+common latent factors. The linkages are series-specific, potentially time-varying random effects,
+so defining an overall, flexible hierarchical dynamic model framework. Also, critically, the new
+multivariate/multi-scale approach maintains the ability to run fast, sequential Bayesian analysis of
+decoupled univariate analyses of many series, with recoupling across series based on information
+about common factors flowing from a parallel external model. This strategy enables analytic computations and trivial forward simulation for sequential analysis and forecasting, and by design is
+scalable to many series (computations grow only linear with the number of series). Our example
+in the motivating consumer sales case study involves a common factor process related to shared
+seasonal patterns and in which the external model generating inferences on the factor process is
+a dynamic model applied to aggregate data in which the pattern is more precisely identified. In
+future applications, the shared latent factor process will be multivariate, with dimensions reflecting
+different ways in which series are conceptually related. In product demand forecasting, for example, products can be grouped by product family, brand, store location and other factors, and both
+aggregate-level and external economic or business models may provide inputs to forecast several
+common factors representing the relevant cross-series linkages. Our pilot example illustrates the
+ability of the multivariate/multi-scale approach to improve forecasts at the individual series level,
+in both short and longer-term forecasting, and across series with intermittent, moderate, and high
+demand patterns. While forecast accuracy improvements cannot be expected for all series all of
+the time, even small increases in forecast accuracy on a number of items can have a profound
+impact on retail decision-making and costs. Further studies to explore the models across a very
+large number of series will improve understanding of pros-and-cons of the multivariate approach
+across a diverse range of applications. One important factor that plays a role here is the length of
+historical data available for each item. It is to be expected that series with shorter histories will
+most immediately benefit from the multivariate approach, as common features impacting demand
+on similar items will feed information relevant to forecasting the newer items, a context of clear
+interest in commercial settings when new or modified products are introduced.
+
+20
+
+A
+
+Appendix: Technical Details of DGLMs and DCMMs
+
+A.1
+
+Sequential Learning in DCCMs from DGLM Components
+
+Consider a DGLM in the general class as discussed and referenced in Section 2.1. The observation
+model has p(yt | ηt , φ) = b(yt , φ) exp [φ{yt ηt − a(ηt )}] with natural parameter ηt and linear predictor
+λt = g(ηt ) based on link function g(·). Also, as in eqn. (1), λt = F0t θ t where θ t = Gt θ t−1 + ω t with
+ω t ∼ (0, Wt ), the latter denoting zero mean vector and variance matrix Wt . The standard DGLM
+analysis (West et al., 1985; West and Harrison, 1997 chapter 15; Prado and West, 2010 section 4.4)
+has the following features.
+1. At any time t − 1, the current information is summarized via the mean vector and variance
+matrix of the posterior for the current state vector, namely (θ t−1 | Dt−1 , It−1 ) ∼ [mt−1 , Ct−1 ].
+2. Through the evolution equation this induces 1−step ahead prior moments on the state vector
+of the form (θ t | Dt−1 , It−1 ) ∼ [at , Rt ] with at = Gt mt−1 and Rt = Gt Ct−1 G0t + Wt .
+3. The variational Bayes concept then applies to choose a conjugate prior for ηt , denoted by
+(ηt | Dt−1 , It−1 ) ∼ CP(αt , βt ) with form p(ηt | Dt−1 , It−1 ) = c(αt , βt ) exp {αt ηt − βt a(ηt )}.
+Here c(·, ·) is a function of the hyper-parameters of known form depending on the specific
+exponential family model.
+4. The hyper-parameters αt and βt are evaluated so that the conjugate prior satisfies the prior
+moment constraints
+E[λt | Dt−1 , It−1 ] = ft = F0t at
+
+and
+
+V[λt | Dt−1 , It−1 ] = qt = F0t Rt Ft .
+
+5. Forecasting yt 1−step ahead uses the conjugacy-induced predictive distribution with p.d.f.
+p(yt | Dt−1 , It−1 ) = b(yt , φ)c(αt , βt )/c(αt + φyt , βt + φ).
+6. On observing yt , the posterior for ηt has the conjugate form of (ηt | Dt ) ∼ CP (αt +φyt , βt +φ).
+7. Under this posterior, mapping back to the linear predictor λt = g(ηt ) implies posterior mean
+and variance gt = E[λt | Dt ] and pt = V[λt | Dt ].
+8. Finally, linear Bayes updating implies posterior mean vector and variance matrix of the state
+vector as (θ t | Dt ) ∼ [mt , Ct ] given by
+mt = at + Rt Ft (gt − ft )/qt
+
+and Ct = Rt − Rt Ft F0t R0t (1 − pt /qt )/qt .
+
+This completes the time t − 1-to-t evolve-predict-update cycle.
+Some of the structure and computations implied require comment and are highlighted in the key
+cases of interest for count data. In each case, the link function g(·) is the identity so that ηt = λt .
+Bernoulli logistic DGLM: Here the series yt is relabelled as zt = 0/1 with zt ∼ Ber(πt ) and
+ηt = logit(πt ). In the exponential family p.d.f. form the terms are φ = 1, b(yt , φ) = 1 and a(ηt ) =
+log(1 + exp(ηt )).
+The conjugate prior in part 4 above is Beta, πt ∼ Be(αt , βt ), with the hyper-parameters defining
+ft = ψ(αt ) − ψ(βt ) and qt = ψ 0 (αt ) + ψ 0 (βt ), where ψ(·) and ψ 0 (·) are the digamma and trigamma
+functions, respectively. The values (αt , βt ) can be trivially computed from (ft , qt ) via iterative numerical solution based on standard Newton-Raphson. The 1−step ahead forecast is Beta-Bernoulli
+with (zt | Dt−1 , It−1 ) ∼ BBer(1, αt , βt ) defined simply by Pr[zt = 1|Dt−1 , It−1 ] = αt /(αt + βt ).
+21
+
+The updated moments of the linear predictor in part 7 above are then trivially computed via the
+equations gt = ψ(αt + zt ) − ψ(βt + 1 − zt ) and pt = ψ 0 (αt + zt ) + ψ 0 (βt + 1 − zt ).
+Poisson loglinear DGLM: Here yt ∼ P o(µt ) with ηt = log(µt ). In the exponential family p.d.f. form
+the terms are φ = 1, b(yt , φ) = 1/yt ! and a(ηt ) = exp(ηt ).
+The conjugate prior in part 4 above is Gamma, µt ∼ Ga(αt , βt ), with the hyper-parameters
+defining ft = ψ(αt ) − log(βt ) and qt = ψ 0 (αt ). The values (αt , βt ) can be trivially computed from
+(ft , qt ) via iterative numerical solution based on standard Newton-Raphson. The 1−step ahead
+forecast is negative binomial, (yt | Dt−1 , It−1 ) ∼ N b(αt , βt /(1 + βt ). The updated moments of the
+linear predictor in part 7 above are trivially computed via the equations gt = ψ(αt + yt ) − log(βt + 1)
+and pt = ψ 0 (αt + yt ).
+Normal DLM: We also note the special case of normal models when the DGLM reduces to a conditionally normal DLM. This is of relevance to count time series in case of large counts where a log
+transform– for example– of the count series can often be well-modeled using a normal DLM as an
+approximation. This also allows for inclusion of volatility via a time-varying conditional variance.
+With yt the logged values of the original count series, a normal model has yt ∼ N (µt , vt ) with
+ηt = µt . In the exponential family p.d.f. form the term φ becomes, generally, a time-dependent
+precision, φt = 1/vt , while b(yt , φt ) = (φt /2π)1/2 exp(−φt yt2 /2) and a(ηt ) = ηt2 /2.
+The conjugate prior in part 4 above is normal, µt ∼ N (at , At vt ) which matches the general
+conjugate form with αt = at /At and βt = 1/At . Prior to posterior updating in part 8 reduces to
+a standard Kalman filter update. When embedded in the DLM, the additional assumption that
+the evolution noise terms ω t in eqn. (1) are also normal implies that DGLM evolution/updating
+equations are exact in this special case. However, for most practical applications it is relevant to also
+estimate the conditional variances vt = 1/φt . The simplest and most widely-used extension is that
+based on a standard Beta-Gamma stochastic volatility model for φt which, is analytically tractable.
+The resulting theory is then based on normal/inverse gamma prior and posterior distributions for
+(µt , vt ). Details of the resulting modifications to forward filtering and forecasting analysis are very
+standard (West and Harrison, 1997 chapter 4 and section 10.8; Prado and West, 2010 section 4.3).
+
+A.2
+
+Discount Factor Model Specifications
+
+A.2.1
+
+Traditional Component Discounting
+
+Specification of the required evolution variance matrices Wt in eqn. (1) uses the standard, parsimonious and effective discount method based on component discounting (West and Harrison,
+1997, chapter 6). In most practical models the state vector is naturally partioned into components
+representing different explanatory effects, such as trends (e.g., local level, local gradient), seasonality (time-varying seasonal factors or Fourier coefficients) and effects of independent predictor
+variables. That is, for some integer J we have θ 0t = (θ 0t1 , . . . , θ 0tJ ). It is natural to define Wt to represent potentially differing degrees of stochastic variation in these components and this is enabled
+using separate discount factors δ1 , . . . , δJ , where each δj ∈ (0, 1]. A high discount factor implies
+a low level of stochastic change in the corresponding elements of the state vector, and vice-versa
+(with δj = 1 implying no stochastic noise at all– obviously desirable but rarely practically relevant).
+The definition of Wt is as follows.
+From Appendix A.1 part 2 above, the time t − 1 prior variance matrix of Gt θ t−1 is Pt =
+Gt Ct−1 G0t ; this represents information levels about the state vector following the deterministic
+22
+
+evolution via Gt but before the impact of the evolution noise that then simply adds Wt . Write Ptj
+for the diagonal block of Pt corresponding to state subvector θ tj and set
+Wt = block diag[Pt1 (1 − δ1 )/δ1 , . . . , PtJ (1 − δJ )/δJ ].
+Then the implied prior variance matrix of θ t following the evolution has corresponding diagonal
+block elements Rtj = Ptj /δj while maintaining off-diagonal blocks from Pt . Thus, the stochastic
+part of the evolution increases uncertainties about state vector elements in each subvector j by
+100(1 − δj )/δj %, maintains the correlations in Ptj for state elements within the subvector j, while
+reduces cross-correlations between state vector elements in differing subvectors. In practice, high
+values of the δj are desirable and typical applications use values in the range 0.97−0.99 with, generally, robustness in terms of forecasting performance with respect to values in the range. Evaluation
+of forecast metrics on training data using different choices of discount factors is a basic strategy in
+model building and tuning.
+A.2.2
+
+Discount Factor Specifications for Random Effects Extensions of DGLMs
+
+We use the random effects extension of Section 2.3 for the shifted Poisson case in evaluating forecasts of non-zero count series. As detailed in that section, this is enabled by extension of the
+state vector to include time-specific zero mean elements defining these random effects. Practically,
+this is defined using a random effects discount factor ρ ∈ (0, 1] whose net impact on the DGLM
+analysis summarized in Appendix A.1 is simply to inflate the prior variance of the linear predictor
+λt = log(µt ). That is, qt = V[λt | Dt−1 , It−1 ] in Appendix A.1 part 4 is modified to qt + vt where
+vt = qt (1 − ρ)/ρ, resulting in qt /ρ. As with the standard discounting on state vectors above, evaluation of forecast metrics on training data using different choices of ρ is a basic strategy for choosing
+values, and these will be specific to each time series.
+More theoretical insight can be gained by considering the impact on the implied 1−step forecast
+distributions. In the standard DGLM with no random effects, recall that the conditional prior for
+the Poisson mean µt is Ga(αt , βt ) where the parameters are chosen to be consistent with the prior
+mean ft and variance qt of λt = log(µt ), namely ft = ψ(αt ) − log(βt ) and qt = ψ 0 (αt ). Suppose we
+have a relatively precise prior– with qt modestly high– so that the approximations ψ(αt ) ≈ log(αt )
+and ψ 0 (αt ) ≈ 1/αt are valid (these are in fact very accurate approximations in many applications).
+Then ft ≈ log(αt /βt ) and qt ≈ 1/αt , resulting in αt = 1/qt and βt = αt exp(−ft ). The implied
+1−step forecast distribution for yt is negative binomial with mean αt /βt = exp(ft ) and variance
+αt /βt + αt /βt2 = exp(ft )(1 + exp(ft )qt ).
+Now consider the impact of the random effects model extension. As noted above, the practical
+impact of the discount factor ρ is that qt is inflated to qt /ρ. The resulting negative binomial forecast
+distribution then has the same mean exp(ft )– not impacted at all by ρ– but now has variance
+exp(ft )(1 + exp(ft )qt /ρ). This has the same base component exp(ft ) (the “Poisson” component) but
+the second term (considered the “extra-Poisson” variation in the negative binomial) increases by
+a factor of 1/ρ. Note that the impact of the random effects extension is then to increase forecast
+variances more at higher levels of the series (higher ft ), consistent with the aim of improving
+forecasts for infrequent higher events.
+
+23
+
+A.3
+
+Forecasting in DCMMs
+
+The compositional nature of the DCMM yields access to a full predictive distribution at a future time
+point that is a mixture of the forecast distributions implied for each of the independent Bernoulli
+and shifted Poisson DGLMs. Forecasting k−steps ahead from time t, the forward evolution of DGLM
+state vectors over times t + 1:t + k and variational Bayes’ constraint to conjugate forms for implied
+Bernoulli and Poisson parameters yields analytic tractability and trivial computation. That is, at
+time t, the k−step ahead forecast distribution has a p.d.f. of the compositional form
+p(yt+k | Dt , It , πt+k ) = (1 − πt+k )δ0 (yt+k ) + πt+k ht,t+k (yt+k )
+where:
+• (πt+k | Dt , It ) ∼ Be(αt0 (k), βt0 (k)) and δ0 (y) is the Dirac delta function at zero.
+• ht,t+k (yt+k ) is the density function of yt+k = 1 + xt+k where xt+k has the negative binomial
+distribution
+
+β0+ (k) 
+(xt+k | Dt , It ) ∼ N b αt+ (k),
+.
+1 + βt+ (k)
+• The defining parameters αt0 (k), βt0 (k), αt+ (k), βt+ (k) are computed from the binary and positive count DGLMs, respectively.
+That is, the mixture places probability 1 − πt+k on yt+k = 0, and probability πt+k on the implied
+shifted negative binomial distribution.
+Depending on the forecasting context, we may be interested in marginal or joint forecasting.
+The above details define the relevant marginal forecast distributions at any time. However, we are
+generally much more interested joint forecasts for yt+1 , . . . , yt+k and, as discussed in Section 2.2, in
+forecasting paths with an opportunity to explore dependencies in outcomes over time as well as to
+predict functions of them. This is trivially– and computationally efficiently– enabled using forward
+simulation, as follows.
+• At time t, propagate the posterior (θ t | Dt ) to the 1−step ahead prior (θ t+1 | Dt , It ).
+• Apply the variational Bayes’ constraint to the implied conjugate prior on ηt+1 , so that the
+implied 1−step ahead forecast distribution is of the form given in part 5 of Appendix A.1;
+that is, Beta-Bernoulli or negative binomial depending on the chosen DGLM.
+∗
+• Simulate an outcome yt+1
+from this 1−step forecast distribution.
+• Treating this synthetic outcome as “data”, perform the time t + 1 update step to revise the
+prior to posterior for the state vector, now based on modified information Dt+1 in which the
+∗ .
+unknown yt+1 is substituted by its synthetic value yt+1
+∗
+• Evolve to time t + 2 and repeat the process to simulate a synthetic yt+2
+and then update based
+the model.
+• Continue this process over lead-times t + 3, . . . , t + k to the chosen forecast horizon.
+∗ , . . . , y∗
+This results in one synthetic path yt+1
+t+k defining a single Monte Carlo sample from the joint
+distribution of yt+1 , . . . , yt+k conditional on {Dt , It }. Repeat this process many times to generate
+a large Monte Carlo sample from this joint predictive distribution. At each marginal time point
+t + j, the corresponding samples give a Monte Carlo representation of the predictive distribution
+at that lead-time, while the full sample provides the required opportunities for inference on paths,
+dependencies of outcomes between time points, and functions (cumulative outcomes, exceedance
+over some specific level, etc) of the path into the future.
+
+24
+
+References
+Aguilar, O., Prado, R., Huerta, G., and West, M. (1999), “Bayesian inference on latent structure in
+time series (with discussion),” in Bayesian Statistics 6, eds. Bernardo, J. M., Berger, J. O., Dawid,
+A. P., and Smith, A. F. M., Oxford: Oxford University Press, pp. 3–26. 13
+Aguilar, O. and West, M. (2000), “Bayesian dynamic factor models and portfolio allocation,” Journal
+of Business and Economic Statistics, 18, 338 – 357. 13
+Aktekin, T., Polson, N. G., and Soyer, R. (2018), “Sequential Bayesian analysis of multivariate count
+data,” Bayesian Analysis, 13, 385–409. 2
+Box, G. E. P., Jenkins, G. M., and Reinsel, G. C. (2008), Time Series Analysis: Forecasting and
+Control, John Wiley & Sons, 4th ed. 1
+Cargnoni, C., Müller, P., and West, M. (1997), “Bayesian forecasting of multinomial time series
+through conditionally Gaussian dynamic models,” Journal of the American Statistical Association,
+92, 640–647. 2
+Carvalho, C. M. and West, M. (2007), “Dynamic matrix-variate graphical models,” Bayesian Analysis, 2, 69–98. 13
+Chen, C. W. S. and Lee, S. (2017), “Bayesian causality test for integer-valued time series models
+with applications to climate and crime data,” Journal of the Royal of Statistical Society (Series C:
+Applied Statistics), 66, 797–814. 1
+Chen, C. W. S., So, M. K. P., Li, J., and Sriboonchitta, S. (2016), “Autoregressive conditional negative binomial model applied to over-dispersed time series of counts,” Statistical Methodology, 31,
+73–90. 1
+Chen, H. and Boylan, J. E. (2007), “Use of individual and group seasonal indices in subaggregate
+demand forecasting,” Journal of the Operational Research Society, 58, 1660 – 1671. 13
+Chen, X., K., Banks, D., Haslinger, R., Thomas, J., and West, M. (2017), “Scalable Bayesian modeling, monitoring and analysis of dynamic network flow data,” Journal of the American Statistical
+Association, published online July 10, arXiv:1607.02655. 1, 2
+Croston, J. D. (1972), “Forecasting and stock control for intermittent demands,” Operational Research Quarterly (1970-1977), 23, 289–303. 1
+Da-Silva, C. Q. and Migon, H. S. (2016), “Hierarchical dynamic beta model,” Revstat, 14, 49–73. 2
+Ferreira, M. A. R., Bi, Z., West, M., Lee, H. K. H., and Higdon, D. M. (2003), “Multiscale modelling
+of 1-D permeability fields,” in Bayesian Statistics 7, eds. Bernardo, J. M., Bayarri, M. J., Berger,
+J. O., David, A. P., Heckerman, D., Smith, A. F. M., and West, M., Oxford University Press. 13
+Ferreira, M. A. R., West, M., Lee, H., and Higdon, D. M. (2006), “Multiscale and hidden resolution
+time series models,” Bayesian Analysis, 2, 294–314. 13
+Fildes, R. and Goodwin, P. (2007), “Against your better judgment? How organizations can improve
+their use of management judgment in forecasting,” Interfaces, 37, 570–576. 8, 16
+25
+
+Gneiting, T. (2011), “Making and evaluating point forecasts,” Journal of the American Statistical
+Association, 106, 746 – 762. 8
+Goldstein, M. and Wooff, D. A. (2007), Bayes Linear Statistics: Theory and Methods, Chichester:
+John Wiley. 4
+Gruber, L. F. and West, M. (2016), “GPU-accelerated Bayesian learning in simultaneous graphical
+dynamic linear models,” Bayesian Analysis, 11, 125–149. 2
+— (2017), “Bayesian forecasting and scalable multivariate volatility analysis using simultaneous
+graphical dynamic linear models,” Econometrics and Statistics, 3, 3–22, arXiv:1606.08291. 2
+Hyndman, R., Koehler, A. B., Ord, J. K., and Snyder, R. D. (2008), Forecasting with Exponential
+Smoothing: the State Space Approach, Springer, Berlin and Heidelberg. 1
+Hyndman, R. J. and Koehler, A. B. (2006), “Another look at measures of forecast accuracy,” International Journal of Forecasting, 22, 679–688. 8
+Kolassa, S. (2016), “Evaluating predictive count data distributions in retail sales forecasting,” International Journal of Forecasting, 32, 788–803. 8, 9, 16
+McCabe, B. P. M. and Martin, G. M. (2005), “Bayesian predictions of low count time series,” International Journal of Forecasting, 21, 315–330. 1
+Morlidge, S. (2015), “Measuring the quality of intermittent-demand forecasts: It’s worse than we’ve
+thought!” Foresight: The International Journal of Applied Forecasting, 37, 37–42. 8
+Prado, R. and West, M. (2010), Time Series: Modelling, Computation & Inference, Chapman &
+Hall/CRC Press. 1, 2, 3, 21, 22
+Quintana, J. M. and West, M. (1988), “Time series analysis of compositional data,” in Bayesian
+Statistics 3, eds. Bernardo, J. M., DeGroot, M. H., Lindley, D. V., and Smith, A. F. M., Oxford
+University press, pp. 747–756. 2
+Snyder, R. D., Ord, J. K., and Beaumont, A. (2012), “Forecasting the intermittent demand for slowmoving inventories: A modelling approach,” International Journal of Forecasting, 28, 485–496.
+1, 16
+West, M. and Harrison, J. (1997), Bayesian Forecasting and Dynamic Models, Springer-Verlag, New
+York, Inc, 2nd ed. 1, 2, 3, 4, 5, 13, 14, 15, 21, 22
+West, M., Harrison, P. J., and Migon, H. S. (1985), “Dynamic generalized linear models and
+Bayesian forecasting,” Journal of the American Statistical Association, 80, 73–83. 1, 3, 21
+Withycombe, R. (1989), “Forecasting with combined seasonal indices,” International Journal of
+Forecasting, 5, 547 – 552. 13
+Yelland, P. M. (2009), “Bayesian forecasting for low-count time series using state-space models: An
+empirical evaluation for inventory management,” International Journal of Production Economics,
+118, 95–103. 1, 8
+
+26
+
+

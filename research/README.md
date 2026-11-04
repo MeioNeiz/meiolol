@@ -76,6 +76,9 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `method/causal` | | selection and confounding in observational game data: pick selection, counter-pick response, double ML, natural experiments |
 | `method/dynamics` | | non-stationary strengths: patches, metas, Kalman and random-walk ratings, change points |
 | `method/ceiling` | | how predictable an outcome can be: irreducible error, noise ceilings, matchmaking's effect on predictability |
+| `stats/scoring` | | judging forecasts: calibration, sharpness, PIT, proper scoring rules, interval score |
+| `stats/eb` | | empirical Bayes and shrinkage priors: robust EB intervals, g-modelling, heavy-tailed and sparse priors, small area estimation |
+| `stats/shares` | | proportions and shares: overdispersion, Dirichlet-multinomial, drifting proportions, conformal ranges |
 
 ## Areas
 

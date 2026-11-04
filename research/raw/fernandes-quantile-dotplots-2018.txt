@@ -1,0 +1,780 @@
+        Uncertainty Displays Using Quantile Dotplots or CDFs
+                  Improve Transit Decision-Making
+       Michael Fernandes1 , Logan Walls1 , Sean Munson1 , Jessica Hullman1 , and Matthew Kay2
+               1 University of Washington                        2 University of Michigan
+
+                   Seattle, WA, USA                                Ann Arbor, MI, USA
+    mfern, logan.w.gm, smunson, jhullman@uw.edu                     mjskay@umich.edu
+
+
+ABSTRACT                                                                                     [20]. However, many domains applications present quantita-
+Everyday predictive systems typically present point predic-                                  tive predictions as point estimates of the most likely outcome,
+tions, making it hard for people to account for uncertainty                                  conﬂicting with users’ expectations and how events unfold in
+when making decisions. Evaluations of uncertainty displays                                   real life. A realtime transit application might predict a bus to
+for transit prediction have assessed people’s ability to extract                             come 10 minutes from now (a point estimate), but in reality
+probabilities, but not the quality of their decisions. In a con-                             there is uncertainty in this prediction: trafﬁc might cause the
+trolled, incentivized experiment, we had subjects decide when                                bus to be late, location sensing error might mean the bus is
+to catch a bus using displays with textual uncertainty, uncer-                               actually closer or further away than predicted, and so on.
+tainty visualizations, or no-uncertainty (control). Frequency-
+                                                                                             Communicating the uncertainty in a prediction–by conveying
+based visualizations previously shown to allow people to bet-
+                                                                                             that outcomes other than the best point estimate are possible–
+ter extract probabilities (quantile dotplots) yielded better deci-
+                                                                                             can help people make better decisions in everyday situations.
+sions. Decisions with quantile dotplots with 50 outcomes were
+                                                                                             For example, when presented with uncertainty in a weather
+(1) better on average, having expected payoffs 97% of optimal
+                                                                                             forecast, people make more economically appropriate deci-
+(95% CI: [95%,98%]), 5 percentage points more than con-
+                                                                                             sions than those who receive weather forecasts alone [16], and
+trol (95% CI: [2,8]); and (2) more consistent, having within-
+                                                                                             a better understanding of uncertainty can also improve trust in
+subject standard deviation of 3 percentage points (95% CI:
+                                                                                             a system [21]. However, for uncertainty information to help in
+[2,4]), 4 percentage points less than control (95% CI: [2,6]).
+                                                                                             everyday circumstances, it must be presented in ways that non-
+Cumulative distribution function plots performed nearly as
+                                                                                             experts can understand. Displaying a probability distribution
+well, and both outperformed textual uncertainty, which was
+                                                                                             over possible bus arrival times may not necessarily improve
+sensitive to the probability interval communicated. We dis-
+                                                                                             people’s decisions, especially if they do not understand what
+cuss implications for realtime transit predictions and possible
+                                                                                             is being represented or do not have time to incorporate it into
+generalization to other domains.
+                                                                                             their decisions. The design of uncertainty representations
+                                                                                             should also account for users’ needs to make quick, in the
+Author Keywords                                                                              moment-decisions, such as when they glance at a mobile dis-
+Uncertainty visualization; transit predictions; mobile                                       play [20]. Presenting too much information risks confusing
+interfaces; dotplots; cumulative distribution plots.                                         people, rather than helping them make better decisions.
+                                                                                             Prior work demonstrates that people can accurately extract
+ACM Classiﬁcation Keywords
+                                                                                             probabilities relevant to realtime transit decisions from discrete
+H.5.m. Information Interfaces and Presentation (e.g. HCI):                                   outcome uncertainty representations called quantile dotplots
+Miscellaneous                                                                                [20, 34]. Quantile dotplots are particularly appropriate for
+                                                                                             space-constrained mobile predictive displays like bus arrival
+INTRODUCTION                                                                                 time applications, because they present an abstraction of a
+Mobile devices provide a way to quickly access quantitative                                  probability density plot that enables thinking about probabil-
+predictions to inform everyday decisions. Predictive appli-                                  ities in terms of counts instead of areas (making it easier to
+cations help people make quick decisions about what outﬁt                                    answer questions like what is the chance the bus will arrive 8
+to wear to suit the weather, how much time to allocate for                                   minutes from now or later?). While extracting probabilities
+a trip, or when to leave to catch a bus. People are aware                                    from these visualizations has been shown to be more precise
+of the potential for uncertainty when interacting with predic-                               [20], it is not known if quantile dotplots enable better decisions
+tions in everyday domains like weather [17, 18, 16] or transit                               when compared to lower-ﬁdelity representations of uncertainty
+Permission to make digital or hard copies of all or part of this work for personal or        such as intervals or text. For example, a simple text description
+classroom use is granted without fee provided that copies are not made or distributed        that a bus has a high (e.g., 80%) chance of arriving 5 minutes
+for proﬁt or commercial advantage and that copies bear this notice and the full citation     from now or later may be all a user needs to make their deci-
+on the ﬁrst page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,      sion. Different display types, which simplify uncertainty to
+to post on servers or to redistribute to lists, requires prior speciﬁc permission and/or a   different degrees, could vary in their effectiveness for support-
+fee. Request permissions from permissions@acm.org.
+CHI’18, April 21–26, 2018, Montreal, QC, Canada. Copyright is held by the
+                                                                                             ing decision-making. Some may also be easier to learn to use
+owner/author(s). Publication rights licensed to ACM © 2018 ACM 978-1-4503-5620-
+6/18/04 $15.00. DOI: http://dx.doi.org/10.1145/3173574.3173718
+or adapt better to a range of circumstances—thereby better          and theoretical estimation accuracy. We ﬁnd that those dis­
+meeting the needs of users who rely on mobile predictions on        plays with the best theoretical estimation accuracy were also
+a daily basis.                                                      the best-performing displays: Decisions with these displays
+                                                                    improved in mean decision quality by about 5 percentage
+To address these questions, we present the results of a large
+                                                                    points over the course of the study; decisions with these dis­
+crowdsourced online experiment in which we evaluated how            plays also became more consistent over time, having a reduc­
+ten different uncertainty representations affected people’s de­     tion in standard deviation of about 4 percentage points.1
+cisions in a realtime bus-catching scenario. Participants were
+given transit predictions and asked to decide when to catch a       Together, our results demonstrate that non-experts can learn to
+bus. The bus’s arrival then was simulated (via a random draw        incorporate uncertainty into bus-catching decisions, making
+from a distribution) and the outcome of their choice displayed.     better decisions from a space-constrained display in a time-
+To simulate decision-making with real-world stakes, we re­          constrained context. We also demonstrate a methodology for
+warded subjects based on events that occurred due to their          assessing decision quality with uncertainty displays. Our re­
+decisions. For example, subjects could earn more money if           sults contribute some of the ﬁrst (to our knowledge) evidence
+they waited less time at the bus stop.                              that displays that allow for accurate extraction of probabilities
+                                                                    in a bus arrival context also lead to more optimal decisions,
+Our ﬁndings extend prior research on presenting uncertainty in      and that people can learn to use such displays over time. We
+everyday predictive systems in multiple ways. By comparing
+                                                                    also demonstrate that, by both raising average decision qual­
+decisions made from various visual and textual representa­
+                                                                    ity and reducing variance, transit uncertainty displays allow
+tions of uncertainty to decisions made without uncertainty
+                                                                    the majority of the population of users (not just the best and
+information, we address the question of whether present­
+                                                                    average users) to make better decisions, a important trait for
+ing uncertainty improves decision making over point esti­           displays designed for lay audiences.
+mates alone in a bus arrival time context. We show that
+uncertainty information can support more rational decisions         BACKGROUND
+despite the space constraints of mobile displays. We ﬁnd that
+                                                                    Prior work has studied both the beneﬁts and challenges to com­
+uncertainty displays outperform no-uncertainty displays, with
+                                                                    municating uncertainty, and has developed various techniques
+expected payoffs that are about 97% of the expected payoff
+                                                                    aimed at communicating uncertainty in everyday contexts.
+under the optimal strategy, about 5 percentage points more
+than displays without uncertainty.                                  Challenges and Beneﬁts of Communicating Uncertainty
+Our experiment included displays with a range of uncertainty        People have well-documented tendencies to misinterpret un­
+representations: discrete outcome uncertainty displays (quan­       certainty in systematic ways. A large body of research in
+tile dotplots), cumulative distribution function (CDF) plots,       judgment under uncertainty and promoted most famously by
+probability density function (PDF) plots, textual uncertainty       Tversky and Kahneman [32] shows, for example, how peo­
+displays, and intervals. This allows us to identify whether         ple have trouble understanding statistical principles that gov­
+higher ﬁdelity uncertainty displays that allow people to            ern uncertainty like the relationship between sample size and
+better estimate probabilities also allow them to make bet­          variance [31]. In the context of presenting predictions for
+ter decisions in a bus arrival time context. We ﬁnd that            everyday decisions, uncertainty contributes ambiguity in pre­
+several types of visualizations previously shown to support         dictions, which designers may perceive as confusing to users.
+more precise probability extraction, including quantile dot-        As a result, designers may view communicating uncertainty in
+plots [20] and CDFs [13], also lead to more optimal (i.e.,          interfaces, especially in systems that are designed to support
+accurate and consistent) decisions: these displays lead to ex­      quick, everyday decisions, as daunting or even undesirable to
+pected payoffs that are higher than lower-ﬁdelity and/or less       users.
+perceptually effective representations, like text, intervals, or
+                                                                    Various studies, however, have shown that communicating
+PDFs, by anywhere from about 1 to 5 percentage points. We
+                                                                    uncertainty can help people make better decisions than those
+ﬁnd that CDFs, which have been suggested to be difﬁcult
+                                                                    made when uncertainty is not communicated (e.g., [18, 24,
+for the public to interpret in past work [20, 13], perform bet­
+                                                                    29, 10, 19, 5]). In a scenario in which people were asked to
+ter than PDFs and interval plots that are often thought to be
+                                                                    make decisions that a city administrator would have to make
+simpler to interpret.
+                                                                    when faced with potential inclement weather, people presented
+Quantile dotplots and CDFs may perform well because they al­        with information about uncertainty in the forecasts made better
+low more accurate estimation of probability intervals [20, 13].     decisions than those not presented with that information [24].
+If people can learn to correctly estimate uncertainty from these
+                                                                    Presenting only point estimates can give people a false sense
+plots and correctly incorporate that uncertainty into their deci­
+                                                                    of precision, leading them to believe an estimate or prediction
+sions, they should be able to make better decisions—but do
+                                                                    is more precise than it truly is. For example, people have been
+they? We investigate how decision quality improves over time
+                                                                    shown to interpret measurements from body weight scales as
+as a user calibrates their usage; that is, if and how well peo­
+                                                                    overly precise [21]. In contrast, when people have a better
+ple learn to more effectively incorporate uncertainty into
+                                                                    1 Since we consider increasing average decision quality and reducing
+their decisions by observing the outcomes of their prior
+decisions. We examine how decision performance with those           variance in decision quality both to be important, we will generally
+                                                                    refer to displays that improve either of these metrics to have better
+displays changes over time with displays of varying ﬁdelity         performance.
+understanding of the uncertainty in their measured weight,          having to carry the umbrella all day and remembering to take
+their trust in the system improves, as users can better account     it home. Additionally, in many real-world decision settings
+for day-to-day ﬂuctuations in weight [21]. In other contexts,       in which people make similar decisions on a regular basis,
+such as transit, people understand that displayed predictions       people have the ability to adapt their decision-making strategy
+are uncertain and may wish they have access to information          based on the outcome of prior decisions. Someone using a
+about that uncertainty to inform their decisions [20].              mobile weather application, for example, may make changes
+                                                                    to how they use uncertainty information based on whether they
+Techniques for Communicating Uncertainty                            were caught without an umbrella in the rain in a prior situation.
+Concerns about overburdening the user have prompted some            Experimental paradigms that do not provide concrete feedback
+science communication experts to develop simpliﬁed, qualita­        on outcomes prevent subjects from such calibration.
+tive descriptions of uncertainty (e.g., using phrases like “very
+likely”, “likely”, “unlikely”, etc to describe how likely an out­   Psychology researchers interested in how individuals make
+come is [1, 10]). However, different people may interpret the       decisions from uncertainty in weather forecasts have applied
+same qualitative expression of uncertainty differently [33], and    a method that uses ﬁnancial incentives (awarded through a
+interpretations may also change depending on context [35].          utility function, as used in experimental economics [4]) to mo­
+                                                                    tivate subjects [26]. When applied to a given decision-making
+More recent research has demonstrated that non-experts can          situation, a properly informed utility function enables evalua­
+understand and beneﬁt from more expressive representations          tion of a decision based on the merits of its outcome relative to
+of uncertainty in the transit domain. One study compared            other decisions and their outcomes. Such an economic frame­
+a point estimate versus a gradient plot to communicate re­          work, in which subjects are informed of monetary rewards and
+maining range for an electric vehicle [19]. The gradient plot       penalties associated with different decision outcomes, also
+reduced driver anxiety about range as they completed a driv­        makes it possible to deﬁne an unambiguously “correct” de­
+ing task. Another study presented people with gradient plots        cision in any given context in the form of the decision that
+depicting train journeys and connections, including alternate       maximizes payoffs. Joslyn and colleagues use this paradigm
+connections [37]. Compared to other journey planning tools,         to evaluate how uncertainty affects the decisions that can be
+users were better able to understand delays and their effects       made around weather forecast [17, 24, 18]. We adapt a sim­
+on the trip.                                                        ilar ﬁnancial incentive framework to explore the effects of
+                                                                    uncertainty displays on decisions around real time bus arrival
+In the work closest to our study, Kay et al. [20] developed
+                                                                    data.
+and evaluated visualizations depicting uncertainty in bus ar­
+rival time predictions. The visualizations were designed to be
+glanceable; in other words, to allow for quick in-the-moment        INTERFACE AND UNCERTAINTY REPRESENTATIONS
+decisions to be made. Inspired by prior work on the beneﬁts of      We adapted the interface of OneBusAway (OBA), a real-time
+frequency framings for improving statistical reasoning from         bus arrival time application, for use in our study. We modiﬁed
+the ﬁelds of cognitive psychology [9] and visualization [8,         the interface to incorporate predictive distributions based on
+12], Kay et al. [20] developted a discrete outcome adaption         Kay et al. [20], represented using uncertainty displays drawn
+of a PDF called a quantile dotplot. They found that dotplots        from the literature.
+had a 1.15x reduction in variance of people’s estimates of
+probability intervals compared to other plots tested (PDFs and
+stripe plots[6]). However, they did not evaluate the effect of      Adapting OneBusAway
+these displays on decision-making (only on uncertainty extrac­      We selected OneBusAway as a model for our experimental in­
+tion), and did not evaluate simpler encodings of uncertainty        terface because of its proven effectiveness [7] and widespread
+like intervals or textual uncertainty. It is possible that simple   use in the real world. OneBusAway is a open-source realtime
+text descriptions of uncertainty, accompanied with numeric es­      transit application used in six US cities or regions and two
+timates to reduce ambiguity, might lead to better outcomes for      other international cities. To use OBA, an individual opens the
+some users. We extend Kay et al. [20] by evaluating a range         application and selects a nearby transit stop. The interface then
+of representations, including no-uncertainty displays, text and     displays predicted departures for that stop, including recent
+interval displays, discrete outcome displays, and continuous        departures (Figure 1.A).
+visualizations; and use incentives to evaluate decision quality.
+                                                                    With the goal of customizing a design to maintain the general
+While a few prior studies on uncertainty visualization designed     look and feel of OBA, we followed an iterative design process.
+realistic tasks in which subjects make decisions (e.g., [5, 23,     We improved our designs to better aid realtime decision-making
+36]), relatively few evaluations of uncertainty visualizations      by integrating feedback gathered from guerrilla usability tests
+take steps to incentivize subject decisions by simulating re­       [15] conducted with colleagues, along with pilot runs of our
+wards and consequences after a decision is made (a few ex­          experimental platform with more than 80 pilot participants. We
+ceptions being [11, 18]). Without these incentives, subject         used a think-aloud protocol during in-person feedback sessions
+decisions may not resemble the decisions that people outside        as well as during in-person pilot runs of our experiment. During
+of a controlled experiment would make. Many real-world              these think-alouds, pilot subjects explained their rationale for
+decisions involving uncertainty include penalties not just for      a decision, often giving insight into how a representation lead
+an “incorrect” decision, but also for precautionary actions.        them to a certain misunderstanding. We revised each represen­
+For example, taking an umbrella to work incurs the “cost” of        tation to minimize common misconceptions.
+                                                                          from Kay et al., already account for uncertainty caused by a
+                                                                          bus being later than its scheduled time). In our pilots, some
+                                                                          participants indicated that they would treat these annotations
+                                                                          as some sort of indicator of uncertainty. Thus we removed the
+                                                                          late annotations to reduce noise in our measurements caused
+                                                                          by some participants misusing this cue.
+
+                                                                          Bus Arrival Time Predictive Distributions
+                                                                          To develop displays of probabilistic predictions of bus arrival
+                                                                          times, we needed a model of probabilistic bus arrival times
+                                                                          to ensure our approach was effective on realistic-looking pre­
+                                                                          dictions.We adopted the model developed by Kay et al. [20]
+                                                                          (described in more detail in their supplemental materials).
+                                                                          They collected bus arrival data and OBA predictions from
+                                                                          the Seattle Metropolitan area, and ﬁt a Box-Cox t regression
+                                                                          model [25] to them. From their model, we generated a set
+Figure 1. (A. left) Build of OneBusAway mobile application used for the   of distributions resembling "typical" bus arrival predictions
+Seattle Metropolitan Area as of September 2017. (B. right) Example of     (not overly narrow or overly wide; see supplemental material).
+interface with a dot50 condition as it would appear to subjects.          Each predictive distribution has a single most probable arrival
+                                                                          time (the mode) a minimum of 5 minutes from “now” (0) a
+We made the necessary modifications which allow for uncer­                maximum of 25 minutes from “now”.
+tainty representations to be displayed while preserving both
+the overall look and feel of the application and information              Uncertainty Displays
+displayed. (Figure 1.B shows how we modified the layout of                We developed a set of experimental conditions representing
+the current OBA build. Figure 2 provides an example of the                different uncertainty displays that allowed us to ask, at a high
+two variations tested in our experiment (arrival and no arrival)).        level, if uncertainty information improves decision-making
+In our observations of how people use OneBusAway, we saw                  about bus arrival times, how expressive should a representation
+that people often scan the different entries, comparing differ­           be, and what framing of uncertainty (e.g., discrete outcome,
+ent buses and deciding which they might take. However, in                 interval, etc.) is most effective. Our no uncertainty condition
+representations that present bus arrivals spatially on a timeline,        represents the status quo point estimate depiction used in many
+this creates a problem: the information for many buses could              current transit systems.
+appear off the screen to the right, and thus be unavailable to            We choose display types based on prior work, described below.
+the viewer. To address this, we implemented a content-aware               Additionally, prior work on communicating uncertainty in OBA
+scroll animation [14] that shifts the time axis of each bus to            found that while bus riders want to see uncertainty information,
+the center of the screen upon scrolling. In other words, as               they also still want to see point estimates [20]—point estimates
+the user scrolls to later buses, the time axis shifts to the left,        may aid glanceability in the quick decision-making context of
+centering predictions that occur further to the right in time             realtime transit. Consequently, we designed two versions of each
+on the timeline. In cases where even this automatic scrolling             representation: one which displayed a point estimate (most prob­
+cannot display a prediction, the label for point predictions of           able arrival time of a bus) and another which did not (Figure 2).
+later busses “stick” to the right edge of the screen(as seen in
+the bottom row of Figure 1.B). This ensures all predictions               We discuss the rationale for the inclusion of each representa­
+are available to the user in some form, and facilitates compar­           tion below, presenting each condition in an order of increasing
+isons among buses without reducing the horizontal scale of                complexity that we believe they present to a real-time transit
+the timeline to unreadable sizes.                                         decision maker.
+From feedback gathered in our pilot experiment, we choose                 No-uncertainty
+to omit annotations informing a rider how late or early a bus                                           This display type represents the sta­
+is relative to its scheduled arrival time. In early runs of our                                          tus quo: it is informationally similar
+pilot experiment, we found pilot subjects were using “late”                                              to the existing OneBusAway app,
+annotations incorrectly in their decision-making process. Late                                           except we did not include annota­
+annotations in OBA inform a rider on how late or early a bus              tions for how late or early a bus’s expected arrival time is relative
+may arrive compared to the original scheduled arrival time                to its scheduled arrival time (for the reasons described above).
+of the bus. However, riders cannot accurately determine if
+a bus will come earlier or later based off the late annotation            Textual Predictive Intervals: 60%, 85%, and 99%
+alone because the factors that make a bus late will differ from                                      Compared to visual representations
+situation to situation. Similar to the real-world, the late annota­                                  of probabilistic estimates, natural
+tions in our interface did not encode any accurate uncertainty                                       language representations provide
+information not already accounted for in the predictive distri­                                      a condensed illustration of a distri­
+bution (the predictive distributions, which are based on models           bution in a possibly easier- (and faster-) to-digest form than
+                                                                            Quantile Dotplots
+                                                                                                          Kay et al. [20] introduced quantile
+                                                                                                         dotplots, which are discrete analogs
+                                                                                                         to the common probability density
+                                                                                                         plot based on Wilkinson dotplots
+                                                                            [34]. They found that quantile dotplots allowed people to more
+                                                                            precisely extract probability intervals than other common un­
+                                                                            certainty visualizations, such as stripe plots and PDFs, and
+Figure 2. Single row of a Dot50 quantitative prediction with a most prob­
+able time to arrival supplied (top) and without (below).
+                                                                            speculated that this was because quantile dotplots allow people
+                                                                            to understand the shape of the distribution while also enabling
+                                                                            them to estimate probability intervals through counting. When
+visualizations. Such representations may also be less suscepti­
+                                                                            the interval of interest is near the edge of a distribution, they
+ble to deterministic construal errors, that is, misinterpreting
+                                                                            speculated that counts are processed quickly through subitizing
+uncertainty as representing some other concept [27]. For ex­
+                                                                            (i.e., quickly recognizing small numbers of items). In previous
+ample, in weather forecasting, misinterpreting the lower end
+                                                                            work, people’s performance degraded to that of PDFs when
+of a predictive interval for a daily high temperature as the
+                                                                            dotplots with higher numbers of dots were used on a space-
+daily low for that day. Reducing an entire distribution to a
+                                                                            constrained screen [20], lending evidence to this speculation.
+single one-sided prediction interval (here, the probability a bus
+                                                                            Our experiment tested low density quantile dotplots, displaying
+arrives at a certain time or later) necessarily reduces the appli­
+                                                                            20 or 50 dots. We refer to quantile dotplots with 20 dots as
+cability of the prediction. From person to person and scenario
+                                                                            dot20 and quantile dotplots with 50 dots as dot50.
+to scenario, a different probability level may represent the more
+optimal decision or more appropriate risk tolerance threshold.              Probability Density and Interval Plot
+Thus, we included three textual displays to test the sensitivity of                                     We include a hybrid PDF-interval
+people’s decisions to the interval used: a 60%, 85%, and 99%                                             plot to provide a condition that al­
+predictive interval. For each textual representation, we choose                                          lows a user to selectively attend to
+not to include the timeline included in visualizations, instead                                          the level of detail appropriate to
+expressing the most probable arrival time in natural language in            their needs for a particular situation. PDF-interval plots com­
+order to match the form of the representation.                              bine the affordances of both probability density functions and
+                                                                            interval plots. Our experiment tested a PDF-interval density
+Interval Plot                                                               function hybrid taking the shape of the density function and
+                             Interval plots are perhaps the most            marking the central 50% interval within the shape.
+                             common uncertainty visualization.
+                            We tested interval plots to see if              Complementary Cumulative Distribution Plot
+                             the familiarity of the visualization                                           Outside of the transit domain, prior
+allowed people to easily understand the representation and                                                  work in uncertainty visualization
+make decisions accurately and efﬁciently. In the use case of                                                found CDFs to be effective for con­
+real-time transit, a predictive interval allows a viewer to un­                                             veying some probabilities to the
+derstand a range of plausible arrival times for a bus and the               public, but could be confusing, particularly if the target at­
+chance it will arrive during this range. Interval plots provide             tribute to be estimated was a mean [13]. Prior work in the bus
+a quick understanding of the shape of a distribution without,               domain has not tested the feasibility of cumulative distribution
+perhaps, giving too much extra information. Our representa­                 functions, but found through interviews that multiple bus riders
+tions plotted the 50% and 95% quantile (equi-tailed) predictive             indicated that there may be value in using CDFs to communicate
+intervals from the most probable time of arrival for a bus.                 uncertainty [20]. We tested both the CDF and the complementary
+                                                                            CDF (CCDF) during our iterative design process. We selected the
+Probability Density Plots                                                   CCDF, since it better corresponds to people’s primary question:
+                            Probability density function (PDF)              if I arrive at the bus stop at a certain time, how much of a chance
+                            plots use an area encoding for prob­            to do I still have of catching the bus? If I delay, how does that
+                            ability that allows people to under­            affect my chances of catching the bus?
+                            stand the shape of a distribution at
+a glance, and to estimate intervals by ratios of areas if desired,          ONLINE EXPERIMENT
+though such estimates are not the most accurate [13, 20]. Al­               To evaluate how well our uncertainty displays support realistic
+though other plots, like quantile dotplots, outperform PDFs for             decision-making from predicted bus arrival times, we conducted
+estimating probability intervals [20], participants in Kay et al.           an online experiment, with the goal of answering three high-
+found PDFs more aesthetically pleasing and some speciﬁcally                 level questions in a mobile bus arrival time prediction context:
+requested PDFs in interviews [20]. PDFs are also a common                   • How do decisions made from uncertainty information com­
+uncertainty visualization used in a wide variety of contexts.                  pare to those made without uncertainty information?
+Following guidelines described in Kay et al. [20], our display              • How do different uncertainty representations (e.g., dis­
+normalized the height of probability density visualizations to                 crete versus continuous representations of probability, dis­
+be at most the height of each prediction’s row, so that very                   plays of varying expressiveness, text, intervals) compare for
+narrow distributions could be viewed without being clipped.                    decision-making?
+• How do different uncertainty representations compare for
+  supporting effective decisions over time?
+Experimental Design and Procedure
+We used a between-subjects repeated measures design. Sub-
+jects in our experiment complete multiple trials, each of which
+represents a single decision about when to arrive at the bus
+stop given a realistic scenario (described below). The scenar-
+ios describe rewards for outcomes like catching the bus or
+spending time on a worthwhile activity rather than waiting for
+the bus, and penalties for wasting time at a bus stop or missing
+the bus (thus missing an important event). After each trial
+decision, the subject is presented with an outcome (e.g., “you
+arrived at the bus stop after 5 minutes; the bus arrived 1 minute
+after you and you caught the bus”) and informed of the rewards
+or penalties for their decision. The experimental procedure is
+depicted in Figure 3. Uncertainty display type and scenario
+were varied between subjects using random assignment.
+To provide realistic bus arrival data for the quantitative pre-
+dictions used, we generated a set of probability distributions        Figure 3. The general flow each subject progressed through when com-
+                                                                      pleting our experiment.
+from the Box-Cox t model described above, presenting them
+randomly in each trial. In our version of the OBA interface,
+the distribution for the trial would appear at the top of the list    Each trial presents a slightly different predictive distribution.
+of possible arriving buses and was highlighted as the route in        Abbreviated versions of the scenarios are:
+question for the trial. Before settling on the final setup for our    1. Brunch With Friends It is Sunday morning and you are
+experiment, we piloted several different experimental setups.         watching your favorite television show before leaving to catch
+In particular, we looked at the effect of trial length on decision    a bus to meet friends for brunch. You earn 8 coins for every
+making, finding that 30-40 trials appeared to allow subjects          minute spent watching TV at home and 14 coins for every
+time to learn how to use the display while not requiring more         minute spent at brunch. You lose 14 coins for every minute
+trials than necessary2 .                                              spent waiting at the bus stop.
+During the experiment, we collected quantitative data including:      2. Sunday Festival It is Sunday evening and you are enjoying
+the time it took to complete each trial, when the subject decided     a festival before catching a bus to return home to rest before
+to arrive at the bus stop, and the reward given for each trial. In    the busy work week. You earn 14 every minute spent at the
+addition, every 9 experimental trials, subjects gave a rationale      festival and 14 coins for every minute spent at home. You lose
+on why they decided to arrive at a bus stop at the specified time.    14 coins for every minute spent waiting at the bus stop.
+We used the rationales mentioned previously to gauge how and
+why each display effectively or ineffectively aided its user at       3. Sunday Museum It is a Sunday evening and you are at a
+making decisions. Upon finishing the experimental phase of our        new museum exhibit. It’s raining and you must catch a bus
+study, subjects filled out surveys gathering demographic data and     to return home to rest before a busy work week. You earn 8
+testing their understanding of their assigned display type.           coins for each minute remaining at the museum and 17 coins
+                                                                      for each minute spent at home. You lose 17 coins for each
+                                                                      minute spent waiting at the bus stop for the bus.
+Bus Arrival Scenarios
+We constructed scenarios with the goal of creating realistic
+decision contexts that bus riders would find familiar. Each           Rewarding Decisions: Utility functions
+scenario describes a situation where subjects make a decision         To improve the likelihood that subjects in our experiments en-
+of when they will arrive at the bus stop in order to maximize         gaged in realistic decision-making, we adapted a paradigm
+the number of “coins” they receive (coins are translated into a       commonly used to study decision-making in behavioral eco-
+bonus in their compensation for participating). Subjects gain         nomics and related fields [4, 29, 10]. In this paradigm, subjects
+coins for every minute they are able to continue an activity          make decisions and are financially rewarded or penalized (as
+that is valuable to them (e.g., watching TV at home) before           they would be in real decision contexts) according to a utility
+going to the bus stop, and gain a bonus for arriving at their         function. For further realism, we derived the utility function that
+intended destination early. Subjects incur a coin penalty for         determines the payoffs and penalties by soliciting valuations of
+time spent waiting at a stop for a bus to arrive. In 40 successive    the costs and penalties of various outcomes from bus riders.
+trials on the same scenario, subjects see an arrival prediction
+                                                                      To assign relative coin values to designated behaviors within
+and then specify in how many minutes from the present mo-
+                                                                      each scenario mentioned previously, a preliminary evaluation
+ment they would choose to arrive at the stop to catch the bus.
+                                                                      survey asked 10 regular bus riders to provide their monetary
+2 Pilot experiment analysis can be found in our supplementary mate-   assessments of how much they would have to be compensated
+rials in “pilot_exploration.pdf”                                      to be increasingly late for an event. In this survey, we used
+similar scenarios as described above and asked subjects how         [30]. Because some values of expected/optimal payoff may
+much they would need to be paid to be a certain number of           be exactly 1 (when the participant makes the optimal choice),
+minutes late for the event. We found that responses were            and beta regression requires outcomes on (0, 1) exclusive, we
+roughly linear: that is, as a subject arrived increasingly late     use a correction for values equal to 1 [3]: we replace those
+(or missed the event altogether), their monetary assessment         values with expected payoff/(optimal expected payoff + 1).
+increased in proportion to the time. Using a linear regression,
+we created normalized values for how an "average" person            After Kay et al. 2016 [22], we use a mixed-effects Bayesian
+valued their time in the survey. 3                                  regression model with weakly-informed priors. We include
+                                                                    display type, trial, and their interaction as ﬁxed effects: this
+                                                                    allows different visualization types to have different learning
+Decision Metric: expected/optimal payoff
+                                                                    curves. We include a random intercept for participant, as well
+We derived two measures from the results of our experiment          as a random slope of trial for each participant: this allows
+to assess decision-making quality on a per-trial basis. The first   different participants to have different learning rates. We also
+measure, expected payoff, is the average payoff a subject could     include a random intercept for each scenario, assuming that
+expect to receive based on their response on a given trial. This    different scenarios have different baseline difﬁculties (we did
+is the expected value of their payoff: the average of the payoff    not ﬁnd evidence for different learning rates by scenario in
+for all possible outcomes given the choice a participant makes,     our pilot data, so we did not also include a random slope by
+weighted by the probability of each outcome. Put another way,       trial here). Finally, we also allowed the precision parameter
+this is the average payoff a participant would get if they always   of the beta distribution, φ , to vary according to ﬁxed effects of
+made that choice under the same circumstances. We use this          display type, trial, and their interaction: in other words, not
+measure in place of the payoff a participant actually receives      only could average performance improve over time, but the
+because actual payoff is affected by the random draw from the       variance of performance could also improve over time. We
+particular distribution for each trial. Using the expected value    developed this model through exploratory analysis of pilot
+avoids measurement error caused by this random draw, allowing       data. We also used pilot data to determine experimental pa­
+us to better assess how well a person’s choices would do on         rameters like number of trials and base pay. We pre-registered
+average.                                                            our Bayesian regression model and priors using AsPredicted
+The second measure we used was optimal payoff : the expected        (https://aspredicted.org/iv7jb.pdf) before collecting and an­
+payoff under an optimal strategy. This was derived by ﬁnding        alyzing our ﬁnal dataset.
+the maximum expected payoff possible for a trial over the           Our experiment was devised in such a way to test not only the
+space of possible response times in the experiment: 0 minutes       effect of each condition but also the effect of including a point
+to 30 minutes.                                                      arrival time next to probabilistic distributions; see Figure 2
+We used the ratio of these measures as a metric of decision         top (with point arrival) and bottom (no arrival). However, in
+quality: expected/optimal payoff. An expected/optimal payoff        our pilot results, we found that the two variants had similar
+that is closer to 1 corresponds to a better decision, or one that   performance and similar learning curves. Therefore, our pre­
+is more rational [28] in terms of the payoffs for that scenario.    registered (and ﬁnal) analysis pools the arrival and no-arrival
+                                                                    variants of each display. We still collected data on these two
+It is worth noting that the expected payoff in our experiment       variants (and include them in our supplemental data) in order
+was not a monotonic function of the time chosen—arriving            to fuel exploratory analysis for future studies.
+as early as possible was not always the correct decision (due
+to penalties for waiting at the stop). As chosen arrival time       Participants and Compensation
+increases, eventually the chance of missing the bus becomes         After multiple rounds of piloting, we deployed our experiment
+so high that expected payoff drops again. For realism, we           on Amazon Mechanical Turk. Our experiment included only
+included a backup bus in each scenario guaranteed to arrive         Master Turkers (i.e., 1,000 HITs completed with a 99.9% ap­
+after any time the user could have chosen, so expected payoff       proval rate) and reside in the United States. Turkers could
+does move upwards again if the user arrives so far after the ﬁrst   complete our experiment once. Each participant was compen­
+bus that they may be close to catching the bus after it without     sated a base rate of $1.25 for completing a HIT as well as a
+waiting long (though never reaches the expected payoff of           bonus compensation proportional to the coins they had earned
+arriving before the ﬁrst bus, since catching the backup bus         throughout their experimental trials, which ranged from $0.96
+guarantees the user to be late to their destination).               - 2.4 per participant depending on the scenario’s conversion
+                                                                    rate. Our ﬁnal analysis included participants who completed at
+Pilot Results, Model, and Pre-registration                          least 31 out of 40 trials, as our pilot analysis showed learning
+To calibrate our experimental parameters and to determine an        curves began to level off around 30 trials.
+analysis plan, we piloted our experiment on Mechanical Turk
+with over 80 pilot participants. We conducted an exploratory        RESULTS
+analysis on those results, and found that expected/optimal          The dataset we used for analysis includes the work of 408
+payoff tended to bunch towards 1 with distributions resembling      individuals 4 . 385 of those subjects submitted complete demo­
+beta distributions. Therefore, we adopted a beta regression         graphic information at the end of the experiment. Participants
+model, which is suitable for outcomes on a scale from 0 to 1
+                                                                    4 See "ﬁnal_analysis.md|Rmd|html" in our supplementary material
+3 See "valuation_analysis.pdf" in our supplementary material.       for the complete ﬁnal analysis, and "data/ﬁnal_trials.csv" for the
+completed the experiment in an average of 10 minutes. 45%               more consistent decisions. Dot50, for example, has a standard
+of participants were women and the median age was 35 years.             deviation in the last trial that is around 4 percentage points or
+                                                                        more less than pdf, pdfinterval, text85, and control (last panel of
+Most Conditions Exhibit Learning                                        Figure 5), combined with a higher mean, this difference drives
+Figure 4 shows the results of our model of expected payoffs             the fact that the spread of predicted decisions in the last trial is
+as a proportion of the optimal payoff (expected/optimal). Our           on the order of 20 percentage points less: compare the extent of
+model allows us to make marginal posterior predictions: pre­            the 95% PPIs in Figure 4.1 between those conditions.
+dictions for how a random subject in a random scenario will             Dot20 did not have as clear a difference in performance against
+perform (Figure 4.1). For example, looking at the posterior             the best-performing text conditions as dot50 did, but still yielded
+predictive intervals (PPIs), the model predicts that by the last        more consistent decisions: e.g., average decision quality in
+trial in dot50, about 50% of decisions will be above 95% of op­         dot20 is similar to text99 (mean difference = -0.1 percentage
+timal (dark blue band), about 80% of decisions will be above            points, 95% CI [-2.2,2.0]), but text99 had higher variance by
+90% of optimal (lighter blue band), and more than 95% of                about 1.3 percentage points (95% CI [0.2,2.6]). In other words,
+decisions will be above 80% of optimal (lightest blue band).            dot20 likely supports better decisions for the worst-performing
+Most other conditions exhibit learning like this, although none         users compared to text99.
+result in as consistent decisions as dot50 does. In some condi­
+tions, such as text85 and no-uncertainty, the learning curve is
+                                                                        DISCUSSION & LIMITATIONS
+quite ﬂat, and many decisions in the ﬁnal trials are still likely
+                                                                        Our work provides evidence that predictions of bus arrival
+to be of lower quality (lower than 70% of optimal in interval,
+                                                                        times with uncertainty can be a more effective form of quan­
+text85, and none, judging by the 95% PPIs).
+                                                                        titative prediction than point estimates alone. Displays with
+While these posterior predictions can be more straightforward           uncertainty generally performed comparably to or better than
+to interpret, it is important to look at the uncertainty in the         our control condition (no uncertainty) in terms of mean de­
+model that drives these predictions. Figures 4.2 and 4.3 do             cision quality and variance in decision quality as measured
+this, showing quantile credible intervals around the condi­             by expected/optimal payoff. Further, our results found that
+tional mean and standard deviation for each trial. In contrast          visualizations that lead to more accurate estimates—CDFs [2,
+to the marginal posterior predictions, which average over the           13] and low-density quantile dotplots [20] with 20 or 50 dots—
+random effects for participant and scenario, these estimates            also lead to the best decisions in a realtime transit prediction
+are conditional: they show the mean and standard deviation              context. Perhaps due to the advantages of frequency-based rep­
+of expected/optimal for a "typical" participant and "typical"           resentations for reasoning about uncertainty [9, 12], quantile
+scenario. These estimates show that learning improves both              dotplots with 50 outcomes led to better decisions than CDFs,
+the average performance and the standard deviation of per­              if slightly.
+formance: people’s decisions are more consistently rational,
+particularly in dot50, cdf, and dot20 conditions, with mean             Sensitivity of Text Displays to Probability Level
+expected/optimal reaching around 95% of optimal (Figure 4.2)            While low density quantile dotplots and CDF plots produced
+and standard deviation of expected/optimal reaching around              the most consistent and accurate decisions, some textual dis­
+4 percentage points (Figure 4.3). Textual uncertainty condi­            plays approached the same performance: text99 and text60
+tions vary: text99 and text60 reach nearly similar performance,         performed nearly as well as dot20 (the lower-performing of
+while text85 exhibits very little learning, and appears more            the two dotplots). Meanwhile, decisions produced by text85
+comparable to the no uncertainty condition, where neither               were poor, and exhibited little learning. In other words, text de­
+average performance nor consistency improves much.                      cision quality was inconsistent (compare the text estimates in
+                                                                        Figure 5): it appears that the effectiveness of textual displays
+Dotplots, CDFs Converge on Better, Consistent Decisions                 is sensitive to the probability level displayed.
+It is difﬁcult from Figures 4.2 and 4.3 to directly compare
+                                                                        We believe this sensitivity is related to text displays’ expressive­
+performance in the ﬁnal trial across conditions. To more
+                                                                        ness. When a visualization is more expressive, allowing accurate
+directly compare performance, we also look at estimated dif­
+                                                                        estimates of various intervals, we expect people are more able
+ferences in the conditional means (Figure 5.1) and standard
+                                                                        to adapt the uncertainty information to new situations as the
+deviations (Figure 5.2) in the last trial. These differences are
+                                                                        predictions (and their priorities) change. For example, the opti­
+shown against control (no uncertainty) and dot50 (the best-
+                                                                        mal choice in some situations may be to arrive at the bus stop
+performing condition).5
+                                                                        at a time with very high probability of catching the bus (say
+By the final trial, dot50, cdf, and dot20 out-perform most other        99%—perhaps in the case of an important meeting). In other
+conditions in both mean and standard deviation by a few per­            cases, where the cost of missing the bus is lower, a reasonable
+centage points (Figure 5). While this may seem a small effect,          gamble on missing the bus may be worth a shorter expected wait
+combining a higher mean with lower variance can result in much          time (say 85%—like in the case of a casual lunch with friends).
+                                                                        Because text intervals show only one interval estimate, people
+data. Our supplement is also available at https://github.com/Michael­
+Fernandes/uncertainty-displays-for-transit (DOI: 10.5281/zen­           cannot adapt their decisions as easily to the costs and benefits
+odo.1136329)                                                            of a particular situation. Thus, we have no reason to believe
+5 The interested reader is referred to "ﬁnal_analysis.md|Rmd|html" in   that text99 or text60 will always yield better performance than
+our supplementary material for a plot of all pairwise comparisons.      text85. This demonstrates a particular difficulty with text displays
+                  1. Posterior predictive intervals and predicted mean for performance in each condition. These intervals are what we
+                     would predict 50%, 80%, or 95% of new observations of performance to fall into. Performance improves with
+                     additional trials, especially for dot50, cdf, and dot20. Meanwhile, performance in text depends on the risk threshold,
+                     with text85 performing similarly to no uncertainty.
+                       dot50        cdf        dot20      text99      text60    pdfinterval    pdf       interval    text85       none
+   optimal     1.00
+
+               0.90                                                                                                                       50% PPI
+
+               0.80
+                                                                                                                                          80% PPI
+               0.70
+                                                                                                                                          95% PPI
+               0.60
+   Predicted
+   expected 0.50
+   payoff /
+   optimal   0.40
+
+
+                  2. Quantile credible intervals (Bayesian analog to confidence intervals) and posterior median of the mean performance
+                     in each condition. These intervals show the uncertainty in the location of the red line in chart #1, above.
+                       dot50        cdf        dot20      text99      text60    pdfinterval    pdf       interval    text85       none
+   optimal     1.00
+
+
+               0.95
+
+                                                                                                                                              50% CI
+               0.90                                                                                                                           80% CI
+                                                                                                                                              95% CI
+
+   Mean     0.85
+   expected
+   payoff /
+   optimal  0.80
+
+
+                  3. Quantile credible intervals and posterior median of the standard deviation of performance in each condition. Not
+                     only does mean performance improve, but variance in performance also improves over time: people get better on
+                     average and more consistent; dot50, the best-performing condition, achieves an SD in performance likely less than
+                     4 percentage points by the final trial.
+                       dot50        cdf        dot20      text99      text60    pdfinterval    pdf       interval    text85       none
+   lower is    0.16
+   better
+
+               0.12
+
+
+               0.08
+                                                                                                                                              50% CI
+                                                                                                                                              80% CI
+                                                                                                                                              95% CI
+   SD of    0.04
+   expected
+   payoff /
+   optimal  0.00
+                     1       40
+                     Trial
+Figure 4. Fit lines from the model of the ratio of participants’ expected payoffs to the expected payoff under an optimal strategy. Performance on
+dotplots and CDFs starts relatively high and becomes even better by the ﬁnal trial: in these conditions, mean performance on the last trial is around
+95% of optimal, and is very consistent: e.g. in dot50, more than 95% of predicted decisions in the last trial are more than 80% of optimal (look at the
+95% PPI in subchart 1). Other conditions showed less consistency, and/or ﬂatter learning curves.
+                 1. Posterior distributions, 95% and 66% CIs of differences          2. Posterior distributions, 95% and 66% CIs of differences
+                    in mean expected payoff / optimal payoff on the last trial.         in SD of expected payoff / optimal payoff on the last trial.
+                    Quantile dotplots and CDFs perform best on average.                 Quantile dotplots and CDFs are the most consistent.
+                    Text performance depends on the prediction interval.                Text again depends on the prediction interval.
+                     mean(x)     mean(x)                           mean(x)                      SD(x)     SD(x)            SD(x)
+                     < control   > control                         < dot50                    < control > control         > dot50
+
+
+           dot50
+             cdf
+           dot20
+          text99
+          text60
+      pdfinterval
+             pdf
+         interval
+          text85
+   none (control)
+                    −0.05 0.00        0.05            −0.08 −0.04       0.00          −0.06 −0.03 0.00 0.03            0.00 0.02 0.04 0.06 0.08
+                     higher is better             higher is better                         lower is better                 lower is better
+                     mean(x) - mean(control)      mean(x) - mean(dot50)                SD(x) - SD(control)             SD(x) - SD(dot50)
+Figure 5. Posterior distributions of differences in mean and standard deviation of expected payoff / optimal payoff in the last trial. For both mean and
+standard deviation, we ﬁrst show differences between each condition and control (no uncertainty), then show differences between each condition and
+the best-performing condition, dot50.
+
+
+
+such as the ones tested: they may be simple but not sufficiently                  situation, though participants should still be motivated in our
+flexible to be adapted to new contexts.                                           experiment to maximize their proﬁt under the utility function
+                                                                                  given to them.
+Based on previous research on how people interpret probabil­
+ities close to 100% [38], people may also interpret 85% and                    In the real world, when making decisions on-the-go, bus riders
+99% intervals as communicating nearly the same thing (‘high                    will have little time to reﬂect on the effectiveness of their deci­
+chance’), possibly leading to overconﬁdence in text85. Mean­                   sions. Thus, although we based our scenarios on real world
+while, the 60% interval was narrow (usually 1-3min left of                     bus-catching situations, there is a need to study the effects of
+the mode), giving less sense of the distribution shape but rep­                uncertainty displays on longitudinal decision-making in the
+resenting low certainty; perhaps users were more conservative                  wild. For example, using displays with well-expressed and
+to compensate for the low probability it represented.                          well-calibrated uncertainty, instead of just point estimates, may
+                                                                               make people feel complicit in bad decisions when they experi­
+Application to Other Domains                                                   ence consequences of their decision like missing the bus [20].
+As previously mentioned, past work has shown that CDFs                         Future real-world deployments could examine the effects of
+[13] and low density quantile dotplots [20] allow for accurate                 uncertainty displays on blame and decision satisfaction, in
+probability interval estimation. Our work expands on these                     addition to decision quality.
+ﬁndings about estimation to show that uncertainty representa­
+tions that allow for more accurate probability estimation also                    CONCLUSION
+produce higher quality (more accurate and consistent) deci­                     In this paper, we demonstrate that including uncertainty dis­
+sions. We believe that this grounding in perceptual work on                    plays in realtime transit decision-making can produce higher
+estimation (which is reasonable to expect to generalize across                 quality decisions. Using a method adapted from experimental
+contexts) suggests that our ﬁndings about decision quality may                 economics, we successfully tracked serial decision making to
+also generalize to other contexts in which probability interval                evaluate what type of uncertainty displays produced the high­
+estimation is important and no single canonical interval is                    est quality decisions. We found that cumulative distribution
+known to represent the best decision.                                          function (CDF) plots and low-density quantile dotplots pro­
+                                                                               duce more accurate and consistent decisions compared to other
+Limitations & Future Work                                                      uncertainty visualizations, textual displays, and displays with
+We designed the decisions that subjects made in our experi­                    no uncertainty. We also found that when using uncertainty
+ment to be similar to those made by bus riders when deciding                   displays, decision quality can improve over time. The types
+to leave for a bus using a realtime transit prediction application.            of displays that we have found to be the best for supporting
+We encouraged subjects to make their decisions quickly, and                    decision-making in the transit have also been shown to be more
+rewarded better decisions using payoffs that were informed by                  accurate at estimating probability intervals more generally, sug­
+real-world incentives. Our experiment used the same utility                    gesting that our results may generalize to similar situations
+function for all participants. In the real world, each rider’s                 where the same type of uncertainty information would help
+utility function will be personal and change according to each                 inform decision-making.
+REFERENCES                                                      12. Jessica Hullman, Paul Resnick, and Eytan Adar. 2015.
+ 1. Jessica S. Ancker, Yalini Senathirajah, Rita Kukafka, and       Hypothetical Outcome Plots Outperform Error Bars and
+    Justin B. Starren. 2006. Design Features of Graphs in           Violin Plots for Inferences About Reliability of Variable
+    Health Risk Communication: A Systematic Review.                 Ordering. PLOS ONE 10, 11 (2015).
+    Journal of the American Medical Informatics Association         http://idl.cs.washington.edu/papers/hops
+    13, 6 (2006), 608–618. DOI:
+                                                                13. Harald Ibrekk and M. Granger Morgan. 1987. Graphical
+    http://dx.doi.org/10.1197/jamia.M2115
+                                                                    Communication of Uncertain Quantities to Nontechnical
+ 2. William S. Cleveland and Robert McGill. 1984.                   People. Risk Analysis 7, 4 (1987), 519–529. DOI:
+    Graphical Perception: Theory, Experimentation, and              http://dx.doi.org/10.1111/j.1539-6924.1987.tb00488.x
+    Application to the Development of Graphical Methods. J.
+    Amer. Statist. Assoc. 79, 387 (1984), 531–554. DOI:         14. Edward W. Ishak and Steven K. Feiner. 2006.
+    http://dx.doi.org/10.1080/01621459.1984.10478080                Content-aware Scrolling. In Proceedings of the 19th
+                                                                    Annual ACM Symposium on User Interface Software and
+ 3. Francisco Cribari-Neto and Achim Zeileis. 2009. Beta            Technology (UIST ’06). ACM, New York, NY, USA,
+    regression in R. (2009).                                        155–158. DOI:
+ 4. Charles Holt D. Davis. 1996. Experimental economics :           http://dx.doi.org/10.1145/1166253.1166277
+    Douglas D. Davis and Charles A. Holt, (Princeton
+                                                                15. James J. Chudley Jesmond J. Allen. 2012. Smashing UX
+    University Press, Princeton, 1993), pp xi+571. Journal of
+                                                                    Design: Foundations for Designing Online User
+    Economic Behavior & Organization 30, 3 (September
+                                                                    Experiences. Vol. 1st edition. Wiley.
+    1996), 411–416. https:
+    //ideas.repec.org/a/eee/jeborg/v30y1996i3p411-416.html      16. Susan Joslyn and Jared LeClerc. 2013. Decisions With
+ 5. Beverley J. Evans. 1997. Dynamic display of spatial             Uncertainty: The Glass Half Full. Current Directions in
+    data-reliability: Does it beneﬁt the map user? Computers        Psychological Science 22, 4 (2013), 308–315. DOI:
+                                                                    http://dx.doi.org/10.1177/0963721413481473
+    & Geosciences 23, 4 (1997), 409–422. DOI:
+    http://dx.doi.org/https:                                    17. Susan Joslyn and Sonia Savelli. 2010. Communicating
+    //doi.org/10.1016/S0098-3004(97)00011-3 Exploratory             forecast uncertainty: public perception of weather
+    Cartograpic Visualisation.                                      forecast uncertainty. Meteorological Applications 17, 2
+ 6. Eric D. Feigelson and G. Jogesh Babu. 1992. Statistical         (2010), 180–195. DOI:
+    Challenges in Modern Astronomy. Springer-Verlag.                http://dx.doi.org/10.1002/met.190
+    155–157 pages.                                              18. S. L. Joslyn and J. E. LeClerc. 2012. Uncertainty
+    http://www.springer.com/us/book/9781461392927                   Forecasts Improve Weather-Related Decisions and
+ 7. Brian Ferris, Kari Watkins, and Alan Borning. 2010.             Attenuate the Effects of Forecast Error. Journal of
+    OneBusAway: Results from Providing Real-time Arrival            Experimental Psychology: Applied 18, 1 (2012),
+    Information for Public Transit. In Proceedings of the           126–140.
+    SIGCHI Conference on Human Factors in Computing             19. Malte F. Jung, David Sirkin, Turgut M. Gür, and Martin
+    Systems (CHI ’10). ACM, New York, NY, USA,                      Steinert. 2015. Displayed Uncertainty Improves Driving
+    1807–1816. DOI:                                                 Experience and Behavior: The Case of Range Anxiety in
+    http://dx.doi.org/10.1145/1753326.1753597
+                                                                    an Electric Car. In Proceedings of the 33rd Annual ACM
+ 8. Rocio Garcia-Retamero, Mirta Galesic, and Gerd                  Conference on Human Factors in Computing Systems
+    Gigerenzer. 2010. Do Icon Arrays Help Reduce                    (CHI ’15). ACM, New York, NY, USA, 2201–2210. DOI:
+    Denominator Neglect? Medical Decision Making 30, 6              http://dx.doi.org/10.1145/2702123.2702479
+    (2010), 672–684. DOI:
+    http://dx.doi.org/10.1177/0272989X10369000 PMID:
+                                                                20. Matthew Kay, Tara Kola, Jessica R. Hullman, and Sean A.
+    20484088.                                                       Munson. 2016. When (Ish) is My Bus?: User-centered
+                                                                    Visualizations of Uncertainty in Everyday, Mobile
+ 9. Gerd Gigerenzer and Ulrich Hoffrage. 1995. How to               Predictive Systems. In Proceedings of the 2016 CHI
+    improve Bayesian reasoning without instruction:                 Conference on Human Factors in Computing Systems
+    Frequency formats. Psychological Review 102 (1995),             (CHI ’16). ACM, New York, NY, USA, 5092–5103. DOI:
+    684–704.                                                        http://dx.doi.org/10.1145/2858036.2858558
+10. Dimitra Gkatzia, Oliver Lemon, and Verena Rieser. 2016.     21. Matthew Kay, Dan Morris, mc schraefel, and Julie A.
+    Natural Language Generation enhances human                      Kientz. 2013. There’s No Such Thing As Gaining a
+    decision-making with uncertain information. CoRR                Pound: Reconsidering the Bathroom Scale User Interface.
+    abs/1606.03254 (2016). http://arxiv.org/abs/1606.03254          In Proceedings of the 2013 ACM International Joint
+11. Miriam Greis, Thorsten Ohler, Niels Henze, and Albrecht         Conference on Pervasive and Ubiquitous Computing
+    Schmidt. 2015. Investigating Representation Alternatives        (UbiComp ’13). ACM, New York, NY, USA, 401–410.
+    for Communicating Uncertainty to Non-experts. Springer          DOI:http://dx.doi.org/10.1145/2493432.2493456
+    International Publishing, Cham, 256–263. DOI:
+    http://dx.doi.org/10.1007/978-3-319-22723-8_21
+22. Matthew Kay, Gregory L. Nelson, and Eric B. Hekler.         30. Michael Smithson and Jay Verkuilen. 2006. A better
+    2016. Researcher-Centered Design of Statistics: Why             lemon squeezer? Maximum-likelihood regression with
+    Bayesian Statistics Better Fit the Culture and Incentives       beta-distributed dependent variables. Psychological
+    of HCI. In Proceedings of the 2016 CHI Conference on            methods 11, 1 (mar 2006), 54–71. DOI:
+    Human Factors in Computing Systems (CHI ’16). ACM,              http://dx.doi.org/10.1037/1082-989X.11.1.54
+    New York, NY, USA, 4521–4532. DOI:
+                                                                31. Amos Tversky and Daniel Kahneman. 1971. Belief in the
+    http://dx.doi.org/10.1145/2858036.2858465
+                                                                    law of small numbers. Psychological bulletin 76, 2
+23. Michael Leitner and Barbara P. Buttenﬁeld. 2000.                (1971), 105.
+    Guidelines for the Display of Attribute Certainty.
+    Cartography and Geographic Information Science, 27, 1       32. Amos Tversky and Daniel Kahneman. 1974. Judgment
+    (January 2000), 3–14.                                           under Uncertainty: Heuristics and Biases. Science 185,
+                                                                    4157 (1974), 1124–1131.
+24. Limor Nadav-Greenberg and Susan L. Joslyn. 2009.                http://www.jstor.org/stable/1738360
+    Uncertainty Forecasts Improve Decision Making Among
+    Nonexperts. Journal of Cognitive Engineering and            33. T.S. Wallsten, R. Zwick, B. Forsyth, D.V. Budescu, A.
+    Decision Making 3, 3 (2009), 209–227. DOI:                      Rappaport, and NORTH CAROLINA UNIV
+    http://dx.doi.org/10.1518/155534309X474460
+                                                                    AT CHAPEL HILL. 1988. Measuring the Vague
+                                                                    Meanings of Probability Terms. Defense Technical
+25. Robert A Rigby and D Mikis Stasinopoulos. 2006. Using           Information Center.
+    the Box-Cox t distribution in GAMLSS to model                   https://books.google.com.fj/books?id=TE6TNwAACAAJ
+    skewness and kurtosis. Statistical Modelling 6, 3 (2006),
+    209–229. DOI:                                               34. Leland Wilkinson. 1999. Dot Plots. The American
+    http://dx.doi.org/10.1191/1471082X06st122oa                     Statistician 53, 3 (August 1999), 276–281.
+26. Mark S. Roulston, Gary E. Bolton, Andrew N. Kleit, and      35. Paul Windschitl and Elke Weber. 1999. The
+    Addison L. Sears-Collins. 2006. A laboratory study of the       Interpretation of ’Likely’ Depends on the Context, But
+    beneﬁts of including uncertainty information in weather         70Perceived Certainty. 25 (12 1999), 1514–33.
+    forecasts. Weather and Forecasting 21, 1 (2 2006),          36. Hao-Che Wu, Michael Lindell, and Carla Prater. 2015.
+    116–122. DOI:http://dx.doi.org/10.1175/WAF887.1                 Strike probability judgments and protective action
+27. Sonia Savelli and Susan Joslyn. 2013. The Advantages of         recommendations in a dynamic hurricane tracking task.
+    Predictive Interval Forecasts for Non-Expert Users and          Natural Hazards: Journal of the International Society for
+    the Impact of Visualizations. Applied Cognitive                 the Prevention and Mitigation of Natural Hazards 79, 1
+    Psychology 27, 4 (2013), 527–541. DOI:                          (2015), 355–380. http://EconPapers.repec.org/RePEc:
+    http://dx.doi.org/10.1002/acp.2932                              spr:nathaz:v:79:y:2015:i:1:p:355-380
+
+28. John Scott. 2000. Understanding Contemporary Society:       37. Marcel Wunderlich, Kathrin Ballweg, Georg Fuchs, and
+    Theories of the Present. (2000). DOI:                           Tatiana von Landesberger. 2017. Visualization of Delay
+    http://dx.doi.org/10.4135/9781446218310                         Uncertainty and its Impact on Train Trip Planning: A
+                                                                    Design Study. Computer Graphics Forum (2017). DOI:
+29. Vlad V. Simianu, Margaret A. Grounds, Susan L. Joslyn,
+                                                                    http://dx.doi.org/10.1111/cgf.13190
+    Jared E. LeClerc, Anne P. Ehlers, Nidhi Agrawal, Rafael
+    Alfonso-Cristancho, Abraham D. Flaxman, and David R.        38. Hang Zhang and Laurence Maloney. 2012. Ubiquitous
+    Flum. 2016. Understanding clinical and non-clinical             Log Odds: A Common Representation of Probability and
+    decisions under uncertainty: a scenario-based survey.           Frequency Distortion in Perception, Action, and
+    BMC Medical Informatics and Decision Making 16, 1 (01           Cognition. Frontiers in Neuroscience 6 (2012), 1. DOI:
+    Dec 2016), 153. DOI:                                            http://dx.doi.org/10.3389/fnins.2012.00001
+    http://dx.doi.org/10.1186/s12911-016-0391-3
+

@@ -1,0 +1,2727 @@
+arXiv:1707.01694v1 [stat.ME] 6 Jul 2017
+
+Sparsity information and regularization
+in the horseshoe and other
+shrinkage priors
+Juho Piironen and Aki Vehtari
+Helsinki Institute for Information Technology, HIIT
+Department of Computer Science, Aalto University
+e-mail: juho.piironen@aalto.fi; aki.vehtari@aalto.fi
+Abstract: The horseshoe prior has proven to be a noteworthy alternative
+for sparse Bayesian estimation, but has previously suffered from two problems. First, there has been no systematic way of specifying a prior for the
+global shrinkage hyperparameter based on the prior information about the
+degree of sparsity in the parameter vector. Second, the horseshoe prior has
+the undesired property that there is no possibility of specifying separately
+information about sparsity and the amount of regularization for the largest
+coefficients, which can be problematic with weakly identified parameters,
+such as the logistic regression coefficients in the case of data separation.
+This paper proposes solutions to both of these problems. We introduce a
+concept of effective number of nonzero parameters, show an intuitive way
+of formulating the prior for the global hyperparameter based on the sparsity assumptions, and argue that the previous default choices are dubious
+based on their tendency to favor solutions with more unshrunk parameters
+than we typically expect a priori. Moreover, we introduce a generalization
+to the horseshoe prior, called the regularized horseshoe, that allows us to
+specify a minimum level of regularization to the largest values. We show
+that the new prior can be considered as the continuous counterpart of the
+spike-and-slab prior with a finite slab width, whereas the original horseshoe resembles the spike-and-slab with an infinitely wide slab. Numerical
+experiments on synthetic and real world data illustrate the benefit of both
+of these theoretical advances.
+MSC 2010 subject classifications: Primary 62F15.
+Keywords and phrases: Bayesian inference, sparse estimation, shrinkage
+priors, horseshoe prior.
+
+1. Introduction
+This paper deals with sparse Bayesian estimation and is an extension to our
+earlier work (Piironen and Vehtari, 2017a). We consider statistical models with
+a large number of parameters θ = (θ1 , . . . , θD ) but so that it is reasonable to
+assume that only some of them are far from zero. A typical example – and also
+the case we will mostly focus in this paper – is a regression or classification
+problem with a large number of predictor variables out of which we expect only
+a few to be relevant and therefore have a regression coefficient distinguishable
+from zero.
+1
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+2
+
+A vast number of different estimators, both Bayesian and non-Bayesian, have
+been proposed for these problems. In the non-Bayesian literature the sparse
+problems are typically handled by Lasso (Tibshirani, 1996) or one of its generalizations (for an overview, see e.g., Hastie, Tibshirani and Wainwright, 2015).
+We focus on the probabilistic approach and carry out full Bayesian inference on
+the problem.
+Two prior choices dominate the Bayesian literature: two component discrete
+mixture priors known as the spike-and-slab (Mitchell and Beauchamp, 1988;
+George and McCulloch, 1993), and a variety of continuous shrinkage priors (see
+e.g., Polson and Scott, 2011, and references therein). The spike-and-slab prior is
+intuitively appealing as when the spike is taken to be a delta-spike in the origin,
+it is equivalent to Bayesian model averaging (BMA) (Hoeting et al., 1999) over
+the variable combinations, and often has good performance in practice. The
+disadvantages are that the results can be sensitive to prior choices (slab width
+and prior inclusion probability) and that the posterior inference can be computationally demanding with a large number of variables, due to the huge model
+space. The inference could be sped up by analytical approximations using either expectation propagation (EP) (Hernández-Lobato, Hernández-Lobato and
+Suárez, 2010, 2015) or variational inference (VI) (Titsias and Lázaro-Gredilla,
+2011), but this comes at the cost of a substantial increase in the amount of
+analytical work needed to derive the equations separately for each model and a
+more complex implementation.
+The continuous shrinkage priors on the other hand are easy to implement, provide convenient computation using generic sampling tools such as Stan (Stan Development Team, 2017), and can yield as good or better results. A particularly
+interesting example is the horseshoe prior (Carvalho, Polson and Scott, 2009,
+2010)
+
+θj | λj , τ ∼ N 0, τ 2 λ2j ,
+(1.1)
+λj ∼ C+ (0, 1) , j = 1, . . . , D,
+which has shown comparable performance to the spike-and-slab prior in a variety
+of examples where a sparsifying prior on the model parameters θj is desirable
+(Carvalho, Polson and Scott, 2009, 2010; Polson and Scott, 2011). The horseshoe
+is one of the so called global-local shrinkage priors, meaning that there is a
+global hyperparameter τ that shrinks all the parameters towards zero, while the
+heavy-tailed half-Cauchy priors for the local hyperparameters λj allow some θj
+to escape the shrinkage (see Sec. 2.1 for more thorough discussion).
+Despite its good performance in many problems, the horseshoe prior has previously suffered from two shortcomings. First, there has been no consensus on
+how to carry out inference for the global hyperparameter τ which determines
+the overall sparsity in the parameter vector θ and therefore has a large impact
+on the results. We prefer full Bayesian inference (see Sec. 3.1) but the existing
+methodology has been lacking a systematic way of placing a prior for τ based
+on the information about the sparsity. Second, the horseshoe prior has the undesired property that the parameters far from zero are not regularized at all
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+3
+
+(see Sec. 2.3). While this is often considered as a key strength of the prior, it
+can be harmful especially when the parameters are only weakly identified by
+the data, for instance in the case of a flat likelihood due to separable data in
+logistic regression.
+We propose a solution to both of these problems. We introduce a concept
+of effective number of nonzero parameters meff (Sec. 3.3), derive analytically
+its relationship between the global shrinkage parameter τ , and show an easy
+and intuitive way of formulating the prior for τ based on the prior information
+about the sparsity of θ. Based on these theoretical considerations, we argue
+that the previously proposed default priors are dubious based on the prior they
+impose on meff , and that they yield good results only when τ (and therefore
+meff ) is strongly identified by the data. Moreover, we introduce a generalization
+of the horseshoe prior, called the regularized horseshoe, that operates otherwise
+similarly as the original horseshoe but allows specifying the regularization to the
+coefficients that are far from zero (see Sec. 2.3). We show that the regularized
+horseshoe can be considered as the continuous counterpart of the spike-and-slab
+prior with a finite slab width, whereas the original horseshoe resembles the spikeand-slab with an infinitely wide slab. The benefit of both of these theoretical
+advances will be illustrated with examples on synthetic and real world data
+(Sec. 4).
+As a final remark, although we focus on the horseshoe in our discussion,
+we want to emphasize that both of these ideas could also be applied to other
+shrinkage priors, and several promising alternatives to the horseshoe have been
+proposed during the recent years (Bhattacharya et al., 2015; Zhang, Reich and
+Bondell, 2016; Ghosh, Li and Mitra, 2017).
+2. Horseshoe prior and its extension
+This section discusses the horseshoe and its connection to the spike-and-slab
+prior (Section 2.2). We also present an extension (Section 2.3) that both helps
+understanding the theoretical properties of the original horseshoe and – as will
+be demonstrated in Section 4 – robustifies the prior and improves its practical
+performance.
+2.1. Horseshoe prior for linear regression
+Consider the single output linear Gaussian regression model with several input
+variables, given by
+
+(2.1)
+yi = β T xi + εi , εi ∼ N 0, σ 2 , i = 1, . . . , n ,
+where x is the D-dimensional vector of inputs, β contains the corresponding
+weights and σ 2 is the noise variance. The horseshoe prior is set for the regression
+coefficients β = (β1 , . . . , βD )
+
+βj | λj , τ ∼ N 0, τ 2 λ2j ,
+(2.2)
+λj ∼ C+ (0, 1) , j = 1, . . . , D.
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+4
+
+If an intercept term β0 is included in model (2.1), we give it a relatively flat prior,
+because there is usually no reason to shrink it towards zero. As discussed in the
+introduction, the horseshoe prior has been shown to possess several desirable
+theoretical properties and good performance in practice (Carvalho, Polson and
+Scott, 2009, 2010; Polson and Scott, 2011; Datta and Ghosh, 2013; van der
+Pas, Kleijn and van der Vaart, 2014). The intuition is the following: the global
+parameter τ pulls all the weights globally towards zero, while the thick halfCauchy tails for the local scales λj allow some of the weights to escape the
+shrinkage. Different levels of sparsity can be accommodated by changing the
+value of τ : with large τ all the variables have very diffuse priors with very little
+shrinkage, but letting τ → 0 will shrink all the weights βj to zero.
+The above can be formulated more formally as follows. Let X denote the
+n-by-D matrix of observed inputs and y the observed targets. The conditional
+posterior for the coefficients β given the hyperparameters and data D = (X, y)
+can be written as
+
+p(β | Λ, τ, σ 2 , D) = N β | β̄, Σ ,
+−1
+β̄ = τ 2 Λ τ 2 Λ + σ 2 (XT X)−1
+β̂,
+1
+Σ = (τ −2 Λ−1 + 2 XT X)−1 ,
+σ
+
+where Λ = diag λ21 , . . . , λ2D and β̂ = (XT X)−1 XT y is the maximum likelihood
+solution (assuming the inverse exists). If the predictors are uncorrelated
+with
+
+zero mean and variances Var(xj ) = s2j , then XT X ≈ n diag s21 , . . . , s2D , and we
+can approximate
+β̄j = (1 − κj )β̂j ,
+
+(2.3)
+
+where
+κj =
+
+1
+1 + nσ −2 τ 2 s2j λ2j
+
+(2.4)
+
+is the shrinkage factor for coefficient βj . The shrinkage factor describes how
+much coefficient βj is shrunk towards zero from the maximum likelihood solution
+(κj = 1 meaning complete shrinkage and κj = 0 no shrinkage). From (2.3)
+and (2.4) it is easy to verify that β̄ → 0 as τ → 0, and β̄ → β̂ as τ → ∞.
+The result (2.4) holds for any prior that can be written as a scale mixture
+of Gaussians like (2.2), regardless of the prior for λj . The horseshoe employs
+independent half-Cauchy priors for all λj , and for this choice one can show that,
+for fixed τ and σ, the shrinkage factor (2.4) follows the prior
+p(κj | τ, σ) =
+
+aj
+1
+1
+,
+√ p
+π (a2j − 1)κj + 1 κj 1 − κj
+
+(2.5)
+
+
+√
+where aj = τ σ −1 n sj . When aj = 1, this reduces to Beta 12 , 12 which looks
+like a horseshoe, see Figure 1. Thus, a priori, we expect to see both relevant
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+0.0
+
+0.5
+
+κj
+
+1.0
+
+0.0
+
+0.5
+
+5
+
+1.0
+
+κj
+
+Fig 1: The continuous curves show the densities
+√ for the shrinkage factor (2.4)
+for the horseshoe prior (2.2) when aj = τ σ −1 n sj = 1 (left) and when aj = 0.1
+(right). The bars denote the corresponding point mass function for the spikeand-slab prior (2.7) with infinite slab width c → ∞, when π/(1 − π) = 1 (left)
+and π/(1 − π) = 0.1 (right). To aid visualization, the bars illustrating the point
+masses are scaled and show only the relative probability masses.
+
+(κj = 0, no shrinkage) and irrelevant (κj = 1, complete shrinkage) variables. By
+changing the value of τ , the prior for κj places more mass either close to 0 or 1.
+For instance, choosing τ so that aj = 0.1 favors complete shrinkage (κ = 1)
+and thus we expect more coefficients to be close to zero a priori. Notice though
+that for a fixed τ , the sparsity assumptions will be dependent on the input
+dimension D, and to get around this issue, we need to consider the values of
+all the shrinkage factors κj together. Using this idea, Section 3 discusses an
+intuitive way of designing a prior distribution for τ based on the assumptions
+about the number of nonzero components in β.
+Notice also that those variables which vary on larger scale sj are treated as
+more relevant a priori, which is the reason why we usually scale all the variables
+to have unit variance s2j = 1, unless the original scales really carry information
+about the relevances. Another way would be to use the original
+ scales but adjust
+scales for the local parameters accordingly λj ∼ C+ 0, s−2
+.
+j
+2.2. Spike-and-slab prior
+The spike-and-slab (Mitchell and Beauchamp, 1988; George and McCulloch,
+1993) is a popular shrinkage prior that is often considered as the “gold standard”
+for sparse Bayesian estimation. The prior is often written as a two-component
+mixture of Gaussians
+
+
+βj | λj , c, ε ∼ λj N 0, c2 + (1 − λj ) N 0, ε2 ,
+(2.6)
+λj ∼ Ber(π),
+j = 1, . . . , D,
+so that ε  c and the indicator variable λj ∈ {0, 1} denotes whether the coefficient βj is close to zero (comes from the “spike”, λj = 0) or nonzero (comes
+from the “slab”, λj = 1). Often we set ε = 0, that is, the spike is taken to
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+6
+
+be a delta spike at the origin δ0 , although also ε > 0 could be used (George
+and McCulloch, 1993). The user then has to specify the values (or priors) for
+the slab width c and the prior inclusion probability π, which encodes the prior
+information about the sparsity of the coefficient vector β. Fixing c is probably
+the most common approach but by giving it a hyperprior, one can obtain a more
+heavy-tailed, such as Laplacian, slab (Johnstone and Silverman, 2004).
+With the choice ε = 0, the prior (2.6) can be written analogous to (2.2) as
+
+βj | λj , c ∼ N 0, c2 λ2j ,
+(2.7)
+λj ∼ Ber(π),
+j = 1, . . . , D,
+so instead of giving continuous priors for λj s as in the horseshoe, here only two
+values (λj = 0, 1) are allowed. Thus also the shrinkage factor κj only has mass at
+1
+and at κj = 1, and the probabilities are π and 1−π, respectively.
+κj = 1+nσ−2
+s2j c2
+Letting c → ∞, all the mass is concentrated at the extremes κj = 0 and κj = 1,
+and the resemblance to the horseshoe becomes obvious, see Figure 1. Given the
+similarity of the shrinkage profiles between the horseshoe and spike-and-slab,
+it is not surprising that the two priors have shown comparable performance
+in a variety of experiments (Carvalho, Polson and Scott, 2009, 2010; Polson
+and Scott, 2011). The next section discusses an extension of the horseshoe that
+closely resembles the spike-and-slab prior with a finite slab width c < ∞.
+2.3. Regularized horseshoe
+As discussed in Section 2.1, the horseshoe prior favors solutions βj ≈ 0 and βj ≈
+β̂j , and it can be shown that under certain conditions, β̄j → β̂j when |β̂j | → ∞
+(Carvalho, Polson and Scott, 2010). While this guarantees that the strong signals
+will not be overshrunk – and is often considered to be one of the key assets of the
+prior – this property can also be harmful, especially when the parameters are
+weakly identified. An example of such case is the flat likelihood arising in logistic
+regression with separable data. As the horseshoe has Cauchy tails, in these
+problems it suffers basically from the same problems as the Cauchy prior, namely
+that the posterior means for the regression coefficients may vanish (Ghosh, Li
+and Mitra, 2017). Therefore it would be very useful to be able to control the
+amount of shrinkage for the largest coefficients, which in spike-and-slab prior
+(Sec. 2.2) is achieved by controlling the slab width.
+To guarantee that the prior always shrinks the coefficients at least by a small
+amount, we introduce the following regularized horseshoe prior
+
+
+βj | λj , τ, c ∼ N 0, τ 2 λ̃2j ,
++
+
+λj ∼ C (0, 1) ,
+
+λ̃2j =
+
+c2 λ2j
+,
+c2 + τ 2 λ2j
+
+(2.8)
+
+j = 1, . . . , D,
+
+where c > 0 is a constant that we assume is given for now. The intuition
+behind this definition is the following. When τ 2 λ2j  c2 , meaning the coefficient
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+0.0
+
+0.5
+
+1.0
+
+0.0
+
+0.5
+
+κj
+
+7
+
+1.0
+
+κj
+
+Fig 2: Shrinkage profiles as in Figure 1 but now for the regularized horseshoe (2.8) and spike-and-slab (2.7) with a finite slab width c = 1. In comparison to Figure 1, for both priors the first mode is shifted from κj = 0 to
+κj = 1/(1 + nσ −2 s2j c2 ) (for the plots we have selected nσ −2 s2j = 10).
+βj is close to zero, then λ̃2j → λ2j and the prior (2.8) approaches the original
+horseshoe. However, when τ 2 λ2j  c2 , meaning the coefficient is far from zero,
+
+then λ̃2j → c2 /τ 2 and the prior (2.8) approaches N 0, c2 . Thus the prior will
+shrink the small signals as the horseshoe but will also regularize even the largest
+coefficients as a Gaussian slab with variance c2 .
+Another way to see this is to notice that the conditional prior for βj can be
+factored as
+
+
+
+
+p(βj | λj , τ, c) ∝ N 0, τ 2 λ2j N 0, c2 ∝ N 0, τ 2 λ̃2j ,
+(2.9)
+from which it is easy to see that depending on the relative magnitudes of τ 2 λ2j
+and c2 , the prior operates 
+(roughly) as the narrower one of the two factors.
+Therefore the role of N 0, c2 is to “soft-truncate” the extreme tails of the
+horseshoe, thereby controlling the magnitude of the largest βj s. Letting c → ∞,
+we recover the original horseshoe.
+The shrinkage profile of the regularized horseshoe is illustrated in Figure 2
+together with the spike-and-slab with the slab width c, which demonstrates the
+similarity of the two priors. Using c < ∞ has the advantage that it regularizes
+the parameters βj when they are weakly identified, and allows us also to specify
+our prior information about the maximum effect βj we expect to see. The benefit
+of the proposed approach is illustrated in Section 4.1.2.
+It must be noted that the shrinkage profile in Figure 2 does not have exactly
+the same shape as the original horseshoe shifted and scaled from interval (0, 1)
+to (b, 0) with b > 0, although it is very close to this. There is slightly more mass
+near the left hand side mode, although the difference is too small to be visible
+in Figure 2. It is possible to retain the exact shape of the horseshoe by defining
+the modified local parameter λ̃2j as
+λ̃2j =
+
+c2 λ2j
+σ2
++ c2 + τ 2 λ2j
+ns2j
+
+.
+
+(2.10)
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+8
+
+The details of this result are spelled out in Appendix A. The reason why we
+define the prior as (2.8) is that unless n or the slab width c2 is very small, the
+σ2
+2
+term ns
+2 is typically small compared to c and leaving it out has little influence
+j
+
+in practice. On the other hand, formulation (2.8) is simpler and has the nice
+interpretation as a product of the original horseshoe and the Gaussian slab (2.9).
+Thus we report the result (2.10) only for completeness.
+Our formulation requires choosing a value or prior for c. Unless substantial
+knowledge about the scale of the relevant coefficients exists, we generally recommend placing a prior for c instead of fixing it. Often a reasonable choice
+is
+c2 ∼ Inv-Gamma(α, β),
+
+α = ν/2,
+
+β = νs2 /2,
+
+(2.11)
+
+which translates to a Student-tν (0, s2 ) slab for the coefficients far from zero
+and is typically a good default choice for a weakly informative prior. Another
+motivation for using inverse-Gamma is that it has a heavy right tail accompanied
+by a light left tail thereby preventing much mass from accumulating near zero.
+This is natural as we do not want to shrink those coefficients heavily towards
+zero that are already deemed to be far from zero. Still, we emphasize that out
+approach is not limited to this choice and also other hyperpriors are possible.
+It would also be possible to use variable specific slab widths ci , but we do not
+explore this further in this paper and leave it for future investigation.
+Finally, we would also like to point out that the tail-cutting idea of Equation (2.9) could be used more generally with other priors when relevant. For
+instance, we expect our idea to be useful with the horseshoe+ prior of Bhadra
+et al. (2017) which also has Cauchy tails and therefore suffers from the same
+problem as the horseshoe.
+2.4. Hierarchical shrinkage
+In addition to the problems with vanishing means, earlier we have also reported sampling issues with the original horseshoe even in simple regression
+problems (Piironen and Vehtari, 2015). Technically speaking, the problem arises
+due to posterior having an extreme funnel shape which is challenging for Markov
+chain Monte Carlo (MCMC) methods. The problem was revealed with the help
+of the divergence diagnostics of the NUTS algorithm (Hoffman and Gelman,
+2014; Betancourt and Girolami, 2015; Betancourt, 2017a,b) when fitting the
+models in Stan.
+The problem is related to the thick Cauchy tails of the prior, and to overcome
+the sampling issues, in our technical report we tentatively proposed replacing
+the half-Cauchy priors for the local parameters λj in (2.2) with half-t priors
+with small degrees of freedom, such as ν = 3, and named this approach the
+“hierarchical shrinkage”. With large enough ν, this seems to help with the sampling issues and remove the divergent transitions produced by NUTS, but the
+drawback is that the prior becomes less sparsifying. This is because when the
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+9
+
+tails of p(λj ) are made slimmer, we need to increase the value for τ to accommodate large signals, and therefore the prior is not able to shrink the small
+coefficients efficiently towards zero. Another limitation of this approach is that
+in order to fight the problems arising from data separation in logistic regression
+(Sec. 2.3), we would also need to refrain from using half-Cauchy prior for the
+global parameter τ (which we might want to use, see Sec. 3) as this would also
+lead to Cauchy tails for p(βj ).
+The less sparsifying nature of the choice ν > 1 will be demonstrated in
+practice in Section 4.1.2, where we also show that the regularized horseshoe
+(Sec. 2.3) clearly outperforms this approach. Thus we no longer recommend
+increasing the local degrees of freedom, but instead of using the regularized
+horseshoe.
+3. The global shrinkage parameter
+This section discusses the prior choice for the global hyperparameter τ . We
+begin with a short note on why we prefer full Bayesian inference for τ over
+point estimation, and then go on to discuss how we propose to set up the prior
+p(τ ).
+3.1. Full Bayes versus point estimation
+In principle, one could use a plug-in estimate for τ , obtained either by crossvalidation or maximum marginal likelihood (sometimes referred to as “empirical
+Bayes”). The maximum marginal likelihood estimate has the drawback that it
+is always in danger of collapsing to τ̂ = 0 if the parameter vector happens
+to be very sparse. Moreover, rather than being computationally convenient,
+this approach might actually complicate matters as the marginal likelihood is
+not analytically available for non-Gaussian likelihoods. While cross-validation
+avoids the latter problem and possibly also the first one, it is computationally
+less efficient than the full Bayesian solution and fails to account for the posterior
+uncertainty. For these reasons we recommend full Bayesian inference for τ , and
+focus on how to specify the prior distribution.
+3.2. Earlier approaches
+Carvalho, Polson and Scott (2009) also recommend full Bayesian inference for
+τ , and following Gelman (2006), they propose prior
+τ ∼ C+ (0, 1),
+
+(3.1)
+
+whereas Polson and Scott (2011) recommend
+
+τ | σ ∼ C+ 0, σ 2 .
+
+(3.2)
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+10
+
+If the target variable y is scaled to have marginal variance of one, unless the
+noise level σ is very small, both of these priors typically lead to quite similar
+posteriors. However, as we argue in Section 3.3, there is a theoretical justification
+for letting τ scale with σ. The main motivation for using a half-Cauchy prior for
+τ is that it evaluates to a finite positive value at the origin, yielding a proper
+posterior and allowing even complete shrinkage τ → 0, while still having a thick
+tail which can accommodate a wide range of values. For these reasons, C+ 0, η 2
+is a desirable choice when there are enough observations to let τ be identified by
+data. Still, we show that in several cases one can clearly benefit by choosing the
+scale η in a more careful manner than simply η = 1 or η = σ, because for most
+applications these choices place far to much mass for implausibly large values
+of τ . This point is discussed in Section 3.3. Moreover, the synthetic example in
+Section 4.1.1 shows that in some cases one could clearly benefit from even more
+informative prior.
+van der Pas, Kleijn and van der Vaart (2014) study the optimal selection of
+τ in model
+
+yi ∼ βi + εi , εi ∼ N 0, σ 2 , i = 1, . . . , n.
+(3.3)
+They prove that in such a setting, the optimal value (up to a log factor) in
+terms of mean squared error and posterior contraction rates in comparison to
+the true β ∗ is
+τ∗ =
+
+p∗
+,
+n
+
+(3.4)
+
+where p∗ denotes the number of nonzeros in the true coefficient vector β ∗
+(assuming such exists). Their proofs assume that n, p∗ → ∞ and p∗ = o(n).
+Model (3.3) corresponds to setting X = I and D = n in the usual regression
+model (2.1). It is unclear whether and how this result could be extended to a
+more general X, and how one should utilize this result when p∗ is unknown (as
+it usually is in practice). In section 3.3, we formulate our method of constructing
+the prior p(τ ) based on the prior information about p∗ , and show that if p∗ was
+known, our method would also give rise to result (3.4), but is more generally
+applicable.
+3.3. Effective number of nonzero coefficients
+Consider the prior distribution for the shrinkage factor of the jth regression
+coefficient for the linear Gaussian model, Eq. (2.5). The mean and variance can
+be shown to be
+1
+,
+1 + aj
+aj
+Var(κj | τ, σ) =
+,
+2(1 + aj )2
+E(κj | τ, σ) =
+
+(3.5)
+(3.6)
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+11
+
+√
+where aj = τ σ −1 n sj as earlier. A given value for the global parameter τ
+can be understood intuitively via the prior distribution that it imposes on the
+effective number of coefficients distinguishable from zero (or effective number of
+nonzero coefficients, for short), which we define as
+meff =
+
+D
+X
+(1 − κj ).
+
+(3.7)
+
+j=1
+
+When the shrinkage factors κj are close to 0 and 1 (as they typically are for
+the horseshoe prior), this quantity describes essentially how many active or
+unshrunk variables we have in the model. It serves therefore as a useful indicator
+of the effective model size.
+Using results (3.5) and (3.6), the mean and variance of meff given τ and σ
+are given by
+E(meff | τ, σ) =
+
+Var(meff | τ, σ) =
+
+D
+X
+
+aj
+1 + aj
+j=1
+
+D
+X
+
+aj
+,
+2(1 + aj )2
+j=1
+
+(3.8)
+
+(3.9)
+
+Let us now assume that, in addition of having a zero mean, each variable also
+has a unit variance s2j = 1. In this case the equations above simplify to
+√
+τ σ −1 n
+√ D,
+1 + τ σ −1 n
+√
+τ σ −1 n
+√
+Var(meff | τ, σ) =
+D.
+2(1 + τ σ −1 n)2
+E(meff | τ, σ) =
+
+(3.10)
+(3.11)
+
+The expression for the mean (3.10) is helpful. First, from this expression it is
+evident
+√ that to keep our prior information about meff consistent, τ must scale
+as σ/ n. Priors that fail to do so, such as (3.1), favor models of varying size
+depending on the noise level σ and the number of data points n. Second, if our
+prior guess for the number of relevant variables is p0 , it is reasonable to choose
+the prior so that most of the prior mass is located near the value
+τ0 =
+
+p0
+σ
+√ ,
+D − p0 n
+
+(3.12)
+
+which is obtained by solving equation E(meff | τ, σ) = p0 . Note that this is
+typically quite far from 1 or σ, which are used as scales for priors (3.1) and (3.2).
+For instance, if D = 1000 and n = 200, then prior guess p0 = 5 gives about
+τ0 = 3.6 · 10−4 σ.
+To further develop the intuition about the connection between τ and meff ,
+it is helpful to visualize the prior imposed on meff for different prior choices
+for τ . This is most conveniently done by drawing samples for meff ; we first
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+12
+
+draw τ ∼ p(τ ) and λ1 , . . . , λD ∼ C+ (0, 1), then compute the shrinkage factors
+κ1 , . . . , κD from (2.4), and finally meff from (3.7).
+Figure 3 shows histograms of prior draws for meff for some different prior
+choices for τ , with total number of variables D = 10 and D = 1000, assuming
+n = 100 observations with σ = 1. The first three priors utilize the value τ0
+which is computed from (3.12) using p0 = 5 as our hypothetical prior guess for
+the number of relevant variables. Fixing τ = τ0 results in a nearly symmetric
+distribution around p0 , while a half-normal prior with scale τ0 yields a skewed
+distribution favoring solutions with meff < p0 but allowing larger values to also
+be accommodated. The half-Cauchy prior behaves similarly to the half-normal,
+but results in a distribution with a much thicker tail giving substantial mass
+also to values much larger than p0 when D is large. Figure 3 also illustrates why
+prior τ ∼ C+ (0, 1) is often a dubious choice: it places far too much mass on
+large values of τ , consequently favoring solutions with most of the coefficients
+unshrunk. Thus when only a small number of the variables are relevant – as we
+typically assume – this prior results in sensible inference only when τ is strongly
+identified by data. Notice also that, if we changed the value of σ or n, the first
+three priors for τ would still impose the same prior for meff , but this is not true
+for τ ∼ C+ (0, 1).
+This way, by studying the prior for meff , one can easily choose the prior for τ
+based on the information about the number of nonzero parameters. Because the
+prior information can vary substantially for different problems and the results
+depend on the information carried by the data, there is no globally optimal prior
+for τ that works for every single problem. Some recommendations, however, will
+be given in Section 5 based on these theoretical considerations and experiments
+presented in Section 4.
+We conclude by pointing out a connection between our reference value (3.12)
+and the oracle result (3.4) for the simplified model (3.3). As pointed out in the
+last section, model (3.3) corresponds to setting X = I (which implies n = D and
+XT X = I) in the usual regression model (2.1). Using this fact and repeating the
+steps needed to arrive at (3.12), we get
+τ0 =
+
+p0
+σ.
+D − p0
+
+(3.13)
+
+Suppose now that we select p0 = p∗ , that is, our prior guess is oracle. Using the
+same assumptions as van der Pas, Kleijn and van der Vaart (2014), namely that
+n, p∗ → ∞ and p∗ = o(n), and additionally that σ = 1, we get τ0 → p∗ /D = τ ∗ .
+This result is natural, as it means it is optimal to choose τ so that the imposed
+prior for the effective number of nonzero coefficients meff is centered at the true
+number of nonzeros p∗ . This further motivates why meff is a useful quantity.
+3.4. Regularized horseshoe and other shrinkage priors
+As discussed in Section 2.3, when we set c < ∞, the shrinkage profile of the
+regularized horseshoe (2.8) becomes approximately equivalent to that of the
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+τ ∼ N+ 0, τ02
+
+D = 10
+
+τ = τ0
+
+2
+
+0
+
+5
+
+4
+
+6
+
+8 10
+
+0
+
+2
+
+15
+
+0
+
+5
+
+4
+
+6
+
+τ ∼ C+ 0, τ02
+
+8 10
+
+0
+
+2
+
+15
+
+0
+
+25
+
+4
+
+6
+
+
+
+τ ∼ C+ (0, 1)
+
+8 10
+
+0
+
+2
+
+4
+
+6
+
+8 10
+
+75 100
+
+0
+
+250 500 750 1000
+
+D = 1000
+
+0
+
+
+
+13
+
+10
+
+meff
+
+20
+
+10
+
+meff
+
+20
+
+50
+
+meff
+
+meff
+
+Fig 3: Histograms of prior draws for meff (effective number of nonzero regression
+coefficients, Eq. (3.7)) imposed by different prior choices for τ , when the total
+number of input variables is D = 10 and D = 1000. τ0 is computed from
+formula (3.12) assuming n = 100 observations with σ = 1 and p0 = 5 as the
+prior guess for the number of relevant variables. Note the varying scales on the
+horizontal axes in the bottom row plots.
+1
+horseshoe shifted from interval (0, 1) to (bj , 1), where bj = 1+nσ−2
+. Thus
+s2j c2
+the shrinkage factor under the regularized horseshoe satisfies approximately
+κ̃j = (1 − bj )κj + bj , where κj denotes the shrinkage factor for the original
+horseshoe. From this we get 1 − κ̃j = (1 − bj )(1 − κj ). Assuming further that
+all the variables have a unit variance s2j = 1 and thus bj = b = 1+nσ1−2 c2 , the
+effective model complexity under the regularized horseshoe satisfies
+
+m̃eff = (1 − b)meff ,
+where meff is the effective number of nonzeros for the original horseshoe. Thus
+with a given τ , the effective complexity for the regularized horseshoe is always
+less than for the pure horseshoe, because those coefficients that are far from
+zero are still affected by the slab. Therefore we can naturally use result (3.12)
+also for the regularized horseshoe with p0 as our prior guess for the number of
+coefficients far from zero, but remembering that those coefficients will experience
+the regularization by the slab.
+The concept of effective number of nonzeros could also be used with shrinkage priors other than the (regularized) horseshoe, as long as the prior can be
+written as a scale mixture of Gaussians like (2.2). Many such alternatives have
+been proposed, including the double-exponential or Laplace (Park and Casella,
+2008), Dirichlet-Laplace (Bhattacharya et al., 2015), R-square induced Dirichlet decomposition (Zhang, Reich and Bondell, 2016), and horseshoe+ (Bhadra
+et al., 2017). For instance, the Dirichlet-Laplace prior has a Dirichlet concentration hyperparameter a that strongly affects the sparsity properties of the prior,
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+14
+
+and based on the experiments of Bhattacharya et al. (2015) has a substantial
+effect on the results. It would therefore be interesting the investigate a prior
+information calibrated selection of a using our framework.
+Depending on the prior, corresponding analytical results like (3.10) and (3.11)
+may or may not be available, but as long as one is able to sample both from
+p(τ ) and p(λj ), it is always easy to draw samples from the prior distribution for
+meff , and therefore investigate the effect of hyperprior or hyperparameter choice
+on the effective model complexity. It must be noted though, that for those prior
+for which the shrinkage factors κ are not near 0 or 1, the values of meff can be
+more difficult to interpret.
+3.5. Non-Gaussian observation models
+When the observation model is non-Gaussian, the exact analysis from Section 3.3
+is analytically intractable. We can, however, perform the analysis using a Gaussian approximation to the likelihood. Using the second order Taylor expansion
+for the log likelihood, the approximate posterior for the regression coefficients
+given the hyperparameters becomes
+
+p(β | Λ, τ, φ, D) ≈ N β | β̄, Σ ,
+
+−1
+−1
+β̄ = τ 2 Λ τ 2 Λ + (XT Σ̃ X)−1
+β̂,
+Σ = (τ −2 Λ−1 + XT Σ̃
+
+−1
+
+X)−1 ,
+−1
+
+−1
+
+where z̃ = (z̃1 , . . . , z̃n ), Σ̃ = diag(σ̃12 , . . . , σ̃n2 ) and β̂ = (XT Σ̃ X)−1 XT Σ̃ z̃
+(assuming the first inverse exists). Here φ denotes the possible dispersion parameter and (z̃i , σ̃i2 ) the location and variance for the ith Gaussian pseudoobservation. These are obtained from the first and second order derivatives of
+the log-likelihood terms Li (fi , φ) with respect to the linear predictor fi = β T xi
+T
+at the posterior mode f¯i = β̄ xi (Gelman et al., 2013, ch. 16.2)
+L0 (f¯i , φ)
+,
+z̃i = f¯i − 00i ¯
+Li (fi , φ)
+
+σ̃i2 = −
+
+1
+L00i (f¯i , φ)
+
+.
+
+The fact that some of the observations are more informative than others –
+meaning σ̃i2 is not constant – makes further simplification somewhat difficult.
+To proceed, we make the rough assumption that we can replace each σ̃i2 by a
+single variance term σ̃ 2 . Assuming further that the covariates are uncorrelated
+with zero mean and variances Var(xj ) = s2j (as in Sec. 3.3), the posterior mean
+for the jth coefficient satisfies β̄j = (1 − κj )β̂j with shrinkage factor given by
+κj =
+
+1
+.
+1 + nσ̃ −2 τ 2 s2j λ2j
+
+(3.14)
+
+The discussion in Section 3.3 therefore also approximately holds for the nonGaussian observation model, except that σ 2 is replaced by σ̃ 2 . Still, this leaves us
+with the question, which value to choose for σ̃ 2 to exploit this result in practice?
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+15
+
+Table 1
+The pseudo variances for the most commonly used generalized linear models to be used as
+approximate plug-in values for σ 2 in equations of Section 3.3. In practice when necessary,
+we usually replace µ by the sample mean ȳ. In the Gamma distribution, α denotes the shape
+parameter so that Var(y) = µ2 /α. In the inverse Gaussian, λ is the shape parameter so that
+Var(y) = µ3 /λ. See McCullagh and Nelder (1989).
+Model
+
+Link
+
+∂µ/∂f
+
+V (µ)
+
+A(φ)
+
+Pseudo variance σ̃ 2
+
+Gaussian
+Binomial
+Poisson
+Gamma
+Inverse Gaussian
+
+Identity
+Logit
+Log
+Inverse
+Inverse squared
+
+1
+µ(1 − µ)
+µ
+−µ2
+−µ3 /2
+
+1
+µ(1 − µ)
+µ
+µ2
+µ3
+
+σ2
+1
+1
+α−1
+λ−1
+
+σ2
+µ−1 (1 − µ)−1
+µ−1
+µ−2 α−1
+4µ−3 λ−1
+
+For the generalized linear models with y having a distribution in the exponential family with natural parameter θ and dispersion φ, the log likelihood for
+a single observation has the form (McCullagh and Nelder, 1989)
+L=
+
+yθ − B(θ)
+− C(y, φ),
+A(φ)
+
+for some specific functions A(·), B(·) and C(·). The pseudo variance for a given
+observation y is then (see Appendix B)
+"
+ 2
+
+#−1
+1
+1
+∂µ
+∂
+1
+∂µ
+σ̃ 2 = − 00 = A(φ)
+− (y − µ)
+,
+L
+V (µ) ∂f
+∂f V (µ) ∂f
+
+(3.15)
+
+where V (µ) = B 00 (θ) is the variance function, µ = E(y) = B 0 (θ) the expected
+value. The simplified expressions for the most commonly used generalized linear
+models with their canonical links are listed in Table 1.
+We observe that σ̃ 2 is a product between A(φ) and a term that in general
+depends on f , µ, and y, although for canonical links the dependence from y
+vanishes because the derivative of ( ∂µ
+∂f )/V (µ) with respect to f is zero (McCullagh and Nelder, 1989, ch. 2). Thus it makes sense that for those non-Gaussian
+models that have a dispersion parameter φ (like Gamma and inverse Gaussian
+models), the pseudo variance and therefore also τ should scale with A(φ). For
+the non-constant multiplier of A(φ) in (3.15) we can use, for example, value
+obtained by setting µ equal to the sample mean of ȳ. This approach, although
+crude, seems to work reasonably well in practice. For instance, in binary classification, if we have the same number of observations from both classes, then
+µ = 0.5, yielding σ̃ 2 = 4 which was observed to give good results in our earlier
+study (Piironen and Vehtari, 2017a).
+3.6. More complex models
+Although we limit our discussion to generalized linear models, different authors
+have employed horseshoe prior in various other models. For instance, Faulkner
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+16
+
+and Minin (2017) consider trend filtering for modelling time series and use
+horseshoe as a sparsifying prior on the kth-order forward differences to express
+prior assumptions about the number of rapid changes in the underlying signal.
+As another example, Ghosh and Doshi-Velez (2017) use horseshoe prior over the
+weights in Bayesian neural networks to effectively turn off some of the nodes in
+the network.
+When the model gets more complicated, one cannot simply use the reference
+result (3.12) to guide the hyperprior choice because it is derived assuming the
+linear model (2.1). Unless similar results can easily be derived for the model
+of interest, we recommend a pragmatic approach of drawing from the prior
+for different values of τ and studying the effect on the sparsity (how many
+coefficients fall below a certain threshold) to get an idea of a reasonable range
+of values. Although this strategy may seem crude, we argue that it should still be
+better than not thinking about the prior at all. Moreover, our results
+(Sec. 4.2)
+
+suggest that with a weakly informative prior such as τ ∼ C+ 0, τ02 , having even
+a rough ballpark figure of the correct magnitude for τ0 can already be a clear
+improvement compared to the simple τ ∼ C+ (0, 1).
+4. Experiments
+This section illustrates the benefit of the theoretical advances on synthetic and
+real world data. All considered models were fitted using Stan1 (codes in the supplementary material) with the default settings unless otherwise stated, running
+4 chains, 2000 samples each, first halves discarded as warmup.
+4.1. Synthetic data
+4.1.1. Toy example
+We first illustrate the impact of the hyperprior choice p(τ ) with a toy example
+similar to the one discussed by van der Pas, Kleijn and van der Vaart (2014).
+Consider model (3.3), where each yi is generated by adding Gaussian noise with
+σ 2 = 1 to the corresponding signal βi . We generated 100 data realizations with
+n = 400 and the true β ∗ having p∗ = 20 nonzero entries equal to A = 1, 2, . . . , 10
+with the rest of the entries being zeros. We then computed the mean squared
+error (MSE) between the estimated posterior mean β̄ and the true β ∗ assuming
+
+the pure horseshoe prior with hyperpriors τ ∼ C+ (0, 1), τ ∼ C+ 0, τ02 and
+τ = τ0 , where τ0 is calculated from Equation (3.13) with the oracle prior guess
+p0 = p∗ . Although the last choice reflects stronger prior information than we
+would typically expect to have in practice, the purpose of this setup is simply
+to demonstrate that one can substantially improve the inferences using our
+framework provided substantial prior knowledge exists. Notice though, that even
+1 The experiments with the original horseshoe on the real world data are taken from Piironen and Vehtari (2017a) and were run using Stan version 2.12.0, whereas the experiments
+with the regularized horseshoe are run using newer version 2.15.1
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+17
+
+MSE
+
+0.25
+0.20
+
+τ = τ0
+
+0.15
+
+τ ∼ C+ 0, τ02
+
+0.10
+
+τ ∼ C+ (0, 1)
+
+
+
+0.05
+2
+
+4
+
+6
+
+8
+
+10
+
+A
+
+Fig 4: Toy example: Mean squared error (MSE) between the estimated and the
+true coefficient vector of length n = 400 on average over 100 different data
+realizations. The true coefficient vector has p∗ = 20 elements with a nonzero
+value equal to A and the rest are zeros.
+
+when we set τ = τ0 , we do not treat τ as completely fixed, because it depends
+on σ which is treated as an unknown parameter with vague prior p(σ 2 ) ∝ σ −2 .
+Figure 4 shows the MSE for the three hyperpriors
+√ for different values of A.
+For each prior, the error is largest close to A = 2 log 400 ≈ 3.5, which is
+called the “universal threshold” for this problem (Johnstone and Silverman,
+2004; van der Pas, Kleijn and van der Vaart, 2014). Below this threshold the
+nonzero components in β are too small to be detected and are thus shrunk too
+heavily towards zero which introduces error. For A = 4 the informative τ = τ0
+actually yields the worst results due to this overshrinkage (see discussion below),
+
+but gives clearly superior results for larger A. The choice τ ∼ C+ 0, τ02 gives
+better results than τ ∼ C+ (0, 1) but is clearly inferior to τ = τ0 .
+Figure 5 illustrates the data y and the estimated coefficients β̄ for one particular data realization when A = 4 and A = 6. In both cases the informative choice
+τ = τ0 helps to shrink the zero components in β towards zero, but for A = 4
+also overshrinks the nonzero components. The reason for the overshrinkage is
+that some observations yi that correspond to zero signal βi = 0 happen to have
+similar magnitude to the observations coming from a nonzero signal βi = A,
+and thus these irrelevant components “steal” from the limited budget for meff .
+For this particular value of A the overshrinkage of the actual signals happens
+to be worse in terms of MSE than undershrinkage of the zero components, and
+thus one would get better results by setting p0 to be slightly above the true
+p∗ (results not shown). For A = 6 the actual signals are large enough to be
+distinguished from zero, and the informative selection of τ yields substantially
+better estimate for β.
+Finally, Figure 6 illustrates the importance of scaling τ with the noise level σ.
+The top row shows one data realization and the posterior mean estimates β̄
+p0
+p0
+or to τ = D−p
+σ. For
+when the global parameter is fixed either to τ = D−p
+0
+0
+these data both yield essentially the same result, since the true noise variance
+σ 2 is one. However, when the observations are scaled by multiplying them by
+0.1 (bottom row), the value for τ that does not scale with σ yields clearly
+
+18
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+A=4
+
+τ ∼ C+ (0, 1)
+
+τ = τ0
+
+4
+
+4
+
+2
+
+2
+
+0
+
+0
+
+-2
+
+-2
+
+A=6
+
+0
+
+100
+
+200
+
+300
+
+400
+
+6
+
+6
+
+4
+
+4
+
+2
+
+2
+
+0
+
+0
+
+-2
+
+-2
+0
+
+100
+
+200
+
+300
+
+400
+
+Entry i
+
+0
+
+100
+
+0
+
+100
+
+200
+
+300
+
+400
+
+200
+
+300
+
+400
+
+Entry i
+
+Fig 5: Toy example: An example data realization y = (y1 , . . . , yn ) (gray crosses),
+posterior mean β̄ = (β̄1 , . . . , β̄n ) (black dots) and the true signal β ∗ (red lines)
+for A = 4 (top row) and A = 6 (bottom row). In both cases the oracle value
+for τ helps to shrink the zero components in β but also overshrinks the actual
+signals in the case A = 4.
+
+worse results than in the first case, while the results for the latter value remain
+practically unchanged. What essentially happens is that when the observations
+p0
+are transformed to a smaller scale, then fixing τ = n−p
+increases the prior
+0
+expectation for meff by the same factor (10 in this case) and thus it will favor
+solutions with many more coefficients far from zero.
+This small experiment has relevance also regarding the more general
+model (2.1) because in the ideal case of uncorrelated predictors with unit variance XT X = nI, we can think that we have a single observation of each βj with
+variance σ 2 /n. In practice these conditions are rarely met but the idea is still
+useful.
+4.1.2. Classification with separable data
+The purpose of this example is to illustrate the problem with the original horseshoe not controlling the magnitude of the largest coefficients and show how the
+regularized horseshoe can solve this issue. We generated n = 30 binary classification observations so that for the instances in the first class, the first two
+features were drawn from a Gaussian with mean 1 and scale 0.5, whereas in the
+other class the mean of the first two features was −1 (the data are visualized in
+Fig. 7). In addition, we generated 98 irrelevant features drawn from the standard Gaussian, so that the total input dimension was D = 100. We then fitted
+
+19
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+p0
+τ = D−p
+
+p0
+τ = D−p
+σ
+
+0
+
+0
+
+12
+
+12
+
+8
+
+8
+
+4
+
+4
+
+0
+
+0
+0
+
+100
+
+200
+
+300
+
+400
+
+1.2
+
+1.2
+
+0.8
+
+0.8
+
+0.4
+
+0.4
+
+0.0
+
+0.0
+0
+
+100
+
+200
+
+Entry i
+
+300
+
+400
+
+0
+
+100
+
+0
+
+100
+
+200
+
+300
+
+400
+
+200
+
+300
+
+400
+
+Entry i
+
+Fig 6: Toy example: Top row: one data realization y (gray crosses), the posterior
+mean estimates β̄ (black dots) and the true signal β ∗ (red lines) when A = 10
+p0
+p0
+or τ = D−p
+σ. Bottom
+and the global parameter is fixed either to τ = D−p
+0
+0
+row: Otherwise the same but now the scale of the observations is changed by
+multiplying them by 0.1.
+
+
+the standard logistic regression model with prior β0 ∼ N 0, 52 for the intercept
+and four different priors for the regression coefficients βj : the original horseshoe,
+hierarchical shrinkage with ν = 3, and regularized horseshoe with slab scales
+2
+c = 2 and
+ c ∼ Inv-Gamma(2, 8), the latter of which corresponds to a Student
+2
+t4 0, 22 slab (see Sec. 2.3). In each case we used hyperprior τ ∼ t+
+3 0, τ0
+(the conclusions of this example are not sensitive to this choice). For consistent
+sparsity assumptions, for the original and the regularized horseshoe, τ0 was calculated from (3.12) using p0 = 2, and for the hierarchical shrinkage by solving
+numerically E(meff | τ = τ0 ) = p0 = 2.
+Figure 7 shows the scatter plots of the posterior draws for β1 and β2 (top row)
+as well as the medians and 80%-intervals for β3 , . . . , β100 (middle row), for the
+four different priors. Because the data are separable using only x2 , this feature
+is a “solitary separator” and thus the mean for β2 does not exist under the
+horseshoe prior due to its Cauchy tails (Ghosh, Li and Mitra, 2017). Although for
+β1 the mean exist (x1 is not a solitary separator), the posterior has substantial
+mass for very large values for this parameter also. Moreover, for the original
+horseshoe the NUTS produces almost 200 divergent transitions after the warmup
+showing clear problems with sampling. Using ν = 3 for the local parameters cuts
+down the tails and reduces the number of divergent transitions to a few, but still
+yields quite fat posterior tails for these two coefficients and results in much less
+shrinkage for the coefficients of the irrelevant features (middle row). Finally, the
+
+20
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+HS, ν = 3
+
+HS
+200
+
+β2
+
+90000
+
+150
+
+60000
+
+100 200 300 400
+
+0
+
+50
+
+β1
+
+10
+0
+
+100
+
+0
+
+2
+
+β1
+
+4
+
+6
+
+8
+
+0
+
+0.2
+
+0.2
+
+0.2
+
+0.0
+
+0.0
+
+0.0
+
+-0.2
+
+-0.2
+
+-0.2
+
+-0.2
+
+50
+
+75
+
+100
+
+0
+
+Variable
+
+25
+
+50
+
+75
+
+100
+
+0
+
+Variable
+
+25
+
+50
+
+75
+
+100
+
+0
+
+Variable
+
+2
+
+2
+
+2
+
+1
+
+1
+
+1
+
+1
+
+0
+
+0
+
+0
+
+0
+
+-1
+
+-1
+
+-1
+
+-1
+
+-2
+-2
+
+-1
+
+0
+
+x1
+
+1
+
+2
+
+-2
+-2
+
+-1
+
+0
+
+x1
+
+1
+
+2
+
+30
+
+25
+
+50
+
+75
+
+100
+
+Variable
+
+2
+
+-2
+
+20
+
+β1
+
+0.0
+
+25
+
+10
+
+β1
+
+0.2
+
+0
+
+x2
+
+20
+
+0
+
+0
+0
+
+30
+
+6
+
+2
+
+50
+
+0
+
+8
+
+4
+
+100
+
+30000
+
+RHS, c2 ∼ IG(2, 8)
+
+RHS, c = 2
+
+-2
+-2
+
+-1
+
+0
+
+x1
+
+1
+
+2
+
+-2
+
+-1
+
+0
+
+1
+
+2
+
+x1
+
+Fig 7: Separable classification. Top row: draws for the regression coefficients of
+the two relevant features. Middle row: median and 80%-interval for the coefficients of the irrelevant features. Bottom row: the observed data (red and green
+denoting the different classes) and the predictive class probabilities for ỹ = 1 as a
+function of the first two inputs, given that the rest of the inputs are set to zero.
+First two columns denote the results for the pure horseshoe and hierarchical
+shrinkage, and the last two columns for the regularized horseshoe.
+
+regularized horseshoe exhibits the most satisfactory performance cutting down
+the tails for β1 and β2 while still being able to shrink the irrelevant coefficients as
+well as the horseshoe. In this case, fixing the scale of the Gaussian slab to c = 2
+results in too strong regularization for the relevant coefficients and generally we
+would prefer a less informative choice such as c ∼ Inv-Gamma(2, 8), but our
+purpose here was to demonstrate how easy it is to specify different levels of
+regularization for largest coefficients using the new prior (2.8).
+The top row of Figure 7 clearly reveals the multimodality of the posterior for
+β1 and β2 . This does not produce marked problems in this case (e.g. MCMC
+convergence problems) but in general the multimodality can be an issue both
+for the original and the regularized horseshoe, and we will discuss this further
+in Sections 4.2 and 6.
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+21
+
+Table 2
+Summary of the real world microarray cancer datasets; number of predictor variables D and
+dataset size n.
+Dataset
+
+Type
+
+D
+
+n
+
+Ovarian
+Colon
+Prostate
+Leukemia (ALL-AML)
+
+Binary classif.
+Binary classif.
+Binary classif.
+Binary classif.
+
+1536
+2000
+5966
+7129
+
+54
+62
+102
+72
+
+4.2. Real world data – microarray cancer classification
+This section further illustrates the important concepts with some real world
+examples. We use the four microarray cancer classification datasets from our
+earlier paper (Piironen and Vehtari, 2017a). The datasets are summarized in
+Table 2 and can be found online.2
+For all the datasets weused the standard logistic regression model with a
+vague prior β0 ∼ N 0, 102 for the intercept, and the original and regularized
+horseshoe priors for the regression coefficients to compare the differences between the two. For these problems, we reduced the number of draws per chain
+to 1000 to reduce the computation time.
+We first consider the Ovarian dataset as a representative example of how the
+prior choice p(τ ) and the use of the regularized horseshoe can affect the results.
+We fitted the model
+to the data with two hyperprior choices, τ ∼ C+ (0, 1)
+
++
+2
+and τ ∼ C 0, τ0 , where τ0 is computed from (3.12) using p0 = 3 as our prior
+guess for the number of relevant variables. For the regularized horseshoe we used
+hyperprior c2 ∼ Inv-Gamma(2, 8) (as with
+the synthetic example, Sec. 4.1.2)
+
+which corresponds to a Student-t4 0, 22 slab (see Sec. 2.3).
+Figure 8 shows prior and posterior draws for τ and meff , and the absolute values of the posterior means for the regression coefficients, for the different prior
+configurations. The results for τ ∼ C+ (0, 1) illustrate how weakly τ is identified by the data: there is very little difference between the prior and posterior
+samples for τ and consequently for meff , and thus this “non-informative” prior
+actually has a strong influence on the posterior. With the pure horseshoe this
+results in severe under-regularization and implausibly large magnitude for the
+regression coefficients. This happens because the effective model complexity is
+so large that the classes become separable, and due to the vanishing maximum
+likelihood estimate also the posterior mean vanishes (as in the synthetic example
+in Sec. 4.1.2). With the regularized horseshoe, even with the complete separation, the magnitude of the coefficients remains sensible due to the regularization
+by the slab.
+Replacing the scale of the half-Cauchy hyperprior with τ0 , reflecting a more
+sensible guess for the number of relevant variables, has a substantial effect on
+the posterior: the posterior mass for meff becomes concentrated on much smaller
+2 Colon, Prostate and Leukemia: http://featureselection.asu.edu/datasets.php; Ovarian data: request from the first author if needed.
+
+22
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+
+
+HS, τ ∼ C+ (0, 1)
+
+RHS, τ ∼ C+ (0, 1)
+
+HS, τ ∼ C+ 0, τ02
+
+0.0
+
+0.0
+
+0.00 0.02 0.04 0.06
+
+0.00 0.02 0.04 0.06
+
+τ
+
+τ
+
+2.5
+
+5.0
+
+7.5 10.0
+
+2.5
+
+5.0
+
+τ
+
+0
+
+500
+
+7.5 10.0
+
+τ
+
+1000
+
+1500
+
+0
+
+meff
+
+500
+
+1000
+
+1500
+
+0
+
+meff
+
+25
+
+50
+
+75
+
+RHS, τ ∼ C+ 0, τ02
+
+100
+
+0
+
+meff
+
+3
+
+3
+
+3
+
+1000
+
+2
+
+2
+
+2
+
+500
+
+1
+
+1
+
+1
+
+0
+0
+
+500
+
+1000
+
+Variable
+
+1500
+
+0
+0
+
+500
+
+1000
+
+Variable
+
+1500
+
+50
+
+75
+
+100
+
+1000
+
+1500
+
+meff
+
+1500
+
+0
+
+25
+
+
+
+0
+0
+
+500
+
+1000
+
+Variable
+
+1500
+
+0
+
+500
+
+Variable
+
+Fig 8: Ovarian dataset : Histograms of prior (grey) and posterior (red) draws for
+τ (top row) and meff (middle row), and absolute values of the posterior means for
+the regression coefficients |β̄j | (bottom row) imposed by different prior choices.
+The first two columns denote the results for the pure and regularized horseshoe
++
+with hyperprior
+ τ ∼ C (0, 1), and the last two columns the same but with
+τ ∼ C+ 0, τ02 , where τ0 is computed from (3.12) with prior guess p0 = 3.
+
+values and the magnitude of the regression coefficients more sensible. For this
+hyperprior choice the difference between the original and regularized horseshoe
+is much less severe, but also in this case the largest coefficients are smaller for the
+regularized horseshoe. How this affects the predictive accuracy will be discussed
+in a moment.
+A potential explanation for why τ and therefore meff are not strongly identified here is that there are a lot of correlations in the data. For instance, the
+predictor j = 1491 which appears relevant based on its regression coefficient,
+has an absolute correlation of at least |ρ| = 0.5 with 314 other variables, out
+of which 65 correlations exceed |ρ| = 0.7. This indicates that there are a lot of
+potentially relevant but redundant predictors in the data, and thus similar fit
+could be obtained by models with varying levels of sparsity.
+Another difficulty with correlating predictors is that they cause the posterior of the regression coefficients to become multimodal, which usually results
+in convergence issues. Figure 9 shows the posterior draws under the regularized
+horseshoe prior for the three coefficients with the largest absolute mean. All
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+-10.0 -7.5 -5.0 -2.5 0.0
+
+-10.0 -7.5 -5.0 -2.5 0.0
+
+-10.0 -7.5 -5.0 -2.5 0.0
+
+β1491
+
+β93
+
+β1483
+
+23
+
+Fig 9: Ovarian dataset : Histograms of the posterior draws under the regularized
+horseshoe prior for the three regression coefficients with the largest absolute
+mean. The histograms highlight the multimodality of the posterior.
+
+three coefficients have most of the draws near zero but some of the draws are far
+from zero, illustrating the multimodality. The R̂-values (potential scale reduction factor, see e.g., Gelman et al., 2013, ch. 11) for these parameters were 1.09,
+1.20 and 1.05 indicating problems with the convergence of the MCMC chains.
+Although these convergence issues do not seem to have a drastic negative impact on the predictive accuracy (see the discussion below), the multimodality
+dramatically reduces the sampling efficiency and is therefore a major practical
+and theoretical concern and deserves more attention in the future research (see
+also the discussion in Section 6).
+To investigate the effect of the prior choices on the prediction accuracy, we
+split each dataset into two halves, using one fifth of the data as a test set. All
+the results were then averaged over 50 such random splits
+ into training and
+test sets. We carried out the tests for priors τ ∼ C+ 0, τ02 and τ ∼ N+ 0, τ02
+with various τ0 . The half-normal prior was included in the tests to investigate
+whether it sometimes could be beneficial to have a strong control over τ by using
+a short-tailed prior. To get a baseline for the comparisons, we also computed the
+prediction accuracies to Lasso with the regularization parameter tuned by 10fold cross-validation. The Lasso results were computed with the default settings
+of the R-package glmnet (Friedman, Hastie and Tibshirani, 2010).
+The top row of Figure 10 shows the effect of the prior choice on the test
+prediction accuracy, and the other two rows the computation time3 and the
+fraction of divergent transitions produced by the NUTS after the warm-up. For
+the original horseshoe (solid lines) the results illustrate a clear benefit from using
+even a crude prior guess for the number of relevant variables p0 : transforming
+any guess between p0 = 1 and p0 = n into a value of τ0 using Equation (3.12)
+(shaded region) and using this as the scale for the half-Cauchy prior instead
+of τ0 = 1 yields improved prediction accuracy and reduced computation time
+in all the datasets. The regularized horseshoe seems in general less sensitive to
+the prior choice for τ (Ovarian and Colon datasets), but in some cases clearly
+benefits from a more carefully chosen prior (Prostate and Leukemia datasets).
+For both priors, using half-Cauchy hyperprior for τ is clearly less sensitive to the
+3 Wall time when the four chains are run in parallel using four cores.
+
+24
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+Ovarian
+
+Colon
+
+Prostate
+
+Leukemia
+
+Time (min)
+
+-0.275
+-0.300
+-0.325
+-0.350
+30
+
+Divergent
+
+MLPD
+
+-0.425
+
+0.20
+0.15
+0.10
+0.05
+0.00
+
+-0.450
+
+-0.24
+
+-0.475
+
+-0.28
+
+-0.500
+
+-0.32
+
+-0.525
+
+-0.36
+300
+
+40
+30
+20
+10
+
+20
+10
+
+10−2
+
+τ0
+
+100
+
+-0.25
+-0.30
+-0.35
+300
+
+200
+
+0.05
+0.04
+0.03
+0.02
+0.01
+0.00
+10−4
+
+-0.20
+
+200
+
+100
+
+100
+
+0.09
+
+0.3
+
+0.06
+
+0.2
+
+0.03
+
+0.1
+0.0
+
+0.00
+10−4
+
+10−2
+
+τ0
+
+100
+
+10−4
+
+10−2
+
+τ0
+
+100
+
+10−4
+
+10−2
+
+100
+
+τ0
+
+Fig 10: Microarray datasets : Mean log predictive density (MLPD) on test data
+(top row), computation time (middle row), and the fraction of divergent transitions 
+after warmup (bottom row) as a function of τ0 for two hyperpriors: τ ∼
+N+ 0, τ02 (red), and τ ∼ C+ 0, τ02 (yellow). Solid lines denote the pure horseshoe and dashed lines the regularized horseshoe with c2 ∼ Inv-Gamma(2, 8).
+The shaded area denotes the values for τ0 that correspond to sparsity guesses
+between p0 = 1 and p0 = n (Eq. (3.12)). The black dotted line in the top row
+plots shows the MLPD for Lasso. All the results are averaged over 50 random
+splits into training and test sets.
+
+prior guess τ0 , and yields better results than the half-normal especially when τ0
+was chosen to be too small.
+In terms of the predictive accuracy, the regularized horseshoe performs overall
+comparably to the original horseshoe: for the Colon dataset it performs slightly
+better, for Leukemia slightly worse, and for Ovarian and Prostate about the
+same as the pure horseshoe. Only for the Colon and Leukemia datasets the
+difference is statistically significant (the errorbars are left out from the plot to
+avoid mess). In Leukemia dataset where the regularized horseshoe loses to the
+pure horseshoe the chosen prior for the slab width c is probably unnecessarily
+restrictive leading to too large regularization for the largest coefficients. It is
+evident that in this case using a looser prior for c could improve the results
+(because when c → ∞ we recover the original horseshoe), but we feel that these
+results are enough to convince the reader that a reasonably chosen hyperprior
+p(c) does not necessarily compromise and in some cases can even improve the
+accuracy compared to the pure horseshoe.
+On the other hand, the regularized horseshoe clearly improves the sampling
+robustness of the posterior. The regularized horseshoe produces only very few
+divergent transitions after the warm-up if any (the fraction is non-negligible
+only for the Prostate dataset with a poorly chosen global prior p(τ )), whereas
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+25
+
+for the original horseshoe the fraction varies between 1–30% which is really a lot.
+With this many divergences, there is always a concern about a biased inference
+and this cannot be taken too lightly (see the next Section for recommendations).
+Moreover, also the computation times are systematically either smaller or similar
+to the original horseshoe, which is due to better behaving posterior.
+For any reasonably selected prior (shaded region), the (regularized) horseshoe
+consistently outperforms Lasso in terms of predictive accuracy, but in some cases
+the difference is not very large. A clear advantage for Lasso, on the other hand,
+is that it is hugely faster, with computation time of less than a second for
+these problems, whereas even for the regularized horseshoe, the computation
+starts to get quite involved for the two biggest problems (around 30–60 minutes
+for Prostate and Leukemia datasets), which is the price for the full Bayesian
+inference.
+5. Recommendations
+Based on the theoretical considerations and the experimental results, instead of
+the original horseshoe, we recommend using the regularized horseshoe with a
+weakly informative prior on c, such as (2.11) with appropriately chosen scale s
+and degrees of freedom ν. As illustrated in Section 4, this does not compromise
+the predictive accuracy but greatly improves the sampling robustness of the
+prior and is resistant to problems originating from weak identifiability of the
+parameters. Still, it is worthwhile to compare the results to a model with a
+relatively loose prior on c using standard model assessment techniques (Vehtari
+and Ojanen, 2012; Vehtari, Gelman and Gabry, 2017) to get an indication if
+the slab width was chosen to be too restrictive. However, even if a very large
+value for c yields better predictive fit, if it produces a large number of divergent
+transitions, it cannot be recommended because in such cases the inference is
+likely to have a bias with an unknown magnitude (Betancourt, 2017a). In our
+experience, for the regularized horseshoe it is often possible to get rid off the
+divergences by tuning Stan’s adaptation routine as explained by Betancourt
+(2017b).
+Also, instead of using the simple τ ∼ C+ (0, 1), for linear regression we generally recommend a weakly informative default choice τ | σ ∼ C+ 0, τ02 , where
+τ0 is computed from (3.12) using the prior guess p0 for the number of relevant
+variables. For the other generalized linear models (GLMs), an approximately
+equivalent choice is obtained by replacing σ with a appropriate plug-in value
+as explained in Section. 3.5. Based on the results on the real world data, this
+choice seems to perform well unless p0 is chosen to be much too large. However,
+the toy example shows that sometimes even better results can be obtained by
+more informative prior.
+6. Discussion
+This paper has discussed the use of the horseshoe prior for sparse Bayesian
+generalized linear models. We considered two methodological advances. First,
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+26
+
+we proposed a generalization of the horseshoe – called the regularized horseshoe
+– that operates otherwise similarly as the horseshoe but allows specifying the
+regularization to the coefficients that are far from zero. Second, we introduced
+a new concept – effective number of nonzero parameters – which is useful for
+guiding the hyperprior choice for the global shrinkage parameter.
+The experiments demonstrated the benefit of both of these approaches. The
+ability to regularize those parameters that are far from zero is useful especially
+when the parameters are only weakly identified by the data. As an example we
+discussed the logistic regression with data separation. Adding a small regularization to the largest coefficients ensures that the posterior mean will exist, leading
+to more reasonable parameter estimates and faster posterior exploration. The
+regularized horseshoe solves also the problems with the divergent transitions
+that have previously been an indication about problems in posterior simulation
+and possibly biased inference (Betancourt, 2017b).
+Regarding the hyperprior choice for the global shrinkage parameter, we argued that the previous default choices are often dubious based on their tendency
+to favor solutions with too many parameters unshrunk. The experiments show
+that for many datasets, one can obtain clear improvements – in terms of better
+parameter estimates, prediction accuracy and faster computation – by coming
+up even with a crude guess for the number of relevant variables and transforming
+this knowledge into a prior for τ using our proposed framework. Based on our
+results, for a reasonably selected global hyperprior, the (regularized) horseshoe
+outperforms Lasso in terms of predictive accuracy. A notable difference is that
+Lasso produces a truly sparse solution with exact zeros for some coefficients,
+whereas horseshoe does not. After fitting the full model, a truly sparse solution without losing predictive accuracy could be obtained using the projective
+variable selection (Piironen and Vehtari, 2017b)4 .
+Although these advances improve the overall performance and applicability of
+the horseshoe prior to various problems, some challenges still persist. When using the horseshoe prior with correlating predictors, the major concern is always
+the multimodality of the posterior, which can lead to difficulties in sampling
+and especially to slow convergence of the MCMC. The experiments indicated
+that the regularized horseshoe can improve the sampling robustness but does
+not remove the multimodality. It must be noted though, that the multimodality
+is a direct consequence of the sparsifying prior assumption that favors solutions
+where only one in a group of correlating predictors would have a nonzero coefficient. Whether this assumption is reasonable in practice is a more fundamental
+question. It could make sense – both computationally and theoretically – to
+employ a horseshoe or other sparsifying prior on some transformed set of features – for instance principal components of the original predictors – instead
+of the original variables themselves. This would yield a unimodal posterior but
+the effects on the other aspects such as the predictive accuracy remain to be
+explored. We leave these ideas for future investigation.
+4 Code available at https://github.com/stan-dev/projpred.
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+27
+
+Appendix A: Derivation of the regularized horseshoe
+The regularized horseshoe from Section 2.3 can be derived by designing a new
+prior with shrinkage profile otherwise similar to the horseshoe, but so that instead of favoring κj = 0 and κj = 1, the prior favors κj = bj and κj = 1. This
+is achieved by defining the shrinkage factor for the new prior as
+κ̃j = (1 − bj )κj + bj ,
+
+(A.1)
+
+where κj is the shrinkage factor for the original horseshoe. Now κ̃j → 1 when
+κj → 1, but κ̃j → bj when κj → 0, so we shift the shrinkage profile of the
+horseshoe from interval (0, 1) to (bj , 0). By plugging in the expression for the
+shrinkage factor κj = 1/(1+a2j λ2j ) where a2j = nσ −2 τ 2 s2j , with a straightforward
+manipulation we get
+κ̃j =
+
+1 + bj a2j λ2j
+.
+1 + a2j λ2j
+
+(A.2)
+
+We want to write this in the form κ̃j = 1/(1 + a2j λ̃2j ). Solving λ̃2j from this
+equation yields
+λ̃2j =
+
+(1 − bj )λ2j
+.
+1 + bj a2j λ2j
+
+(A.3)
+
+1
+which corresponds to shrinkage
+For convenience, we require that bj = 1+nσ−2
+s2 c2
+j
+
+by Gaussian with variance c2 . By plugging this into (A.3), after a few lines of
+straightforward algebra we are left with
+λ̃2j =
+
+c2 λ2j
+σ2
+ns2j
+
++ c2 + τ 2 λ2j
+
+Thus we have shown that the prior
+
+
+βj | λj , τ ∼ N 0, τ 2 λ̃2j ,
+
+.
+
+λj ∼ C+ (0, 1),
+
+(A.4)
+
+(A.5)
+
+with λ̃2j defined by (A.4) has the shrinkage profile of the horseshoe shifted from
+1
+. As discussed in Section 2.3,
+the interval (0, 1) to (bj , 1), where bj = 1+nσ−2
+s2 c2
+j
+
+2
+
+σ
+2
+the term ns
+2 is typically small compared to c so by leaving this out from (A.5),
+j
+
+we get the prior (2.8).
+Appendix B: Pseudo variance for Non-Gaussian observations
+As discussed in Section 3.5, assuming y has a distribution in the exponential
+family with natural parameter θ and dispersion φ, the log likelihood has the
+form
+L=
+
+yθ − B(θ)
+− C(yi , φ),
+A(φ)
+
+28
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+for some specific functions A(·), B(·) and C(·). From the well-known relations
+
+
+ 2 
+
+2 !
+∂L
+∂ L
+∂L
++E
+E
+= 0, and E
+= 0,
+∂θ
+∂θ2
+∂θ
+we can easily derive
+E(y) = B 0 (θ),
+Var(y) = B 00 (θ)A(φ).
+We denote µ = B 0 (θ) and V (µ) = B 00 (θ), from which we can also deduce
+∂µ
+∂θ = V (µ). The first derivative is given by the chain rule
+∂L ∂θ ∂µ
+y − µ 1 ∂µ
+∂L
+=
+=
+.
+∂f
+∂θ ∂µ ∂f
+A(φ) V (µ) ∂f
+The second derivative is then
+"
+
+
+ 2 #
+∂2L
+1
+∂
+1 ∂µ
+1
+∂µ
+=
+(y − µ)
+−
+.
+∂f 2
+A(φ)
+∂f V (µ) ∂f
+V (µ) ∂f
+Thus the pseudo variance becomes
+2
+
+σ̃ = −
+
+
+
+∂2L
+∂f 2
+
+−1
+
+"
+
+1
+= A(φ)
+V (µ)
+
+
+
+∂µ
+∂f
+
+2
+
+∂
+− (y − µ)
+∂f
+
+
+
+1 ∂µ
+V (µ) ∂f
+
+#−1
+.
+
+Appendix C: Stan codes
+C.1. Simple parametrization
+The following shows the Stan code for the linear Gaussian model with the regularized horseshoe prior using a straightforward parametrization. In our experience this code works fine, but in Appendix C.2 we also provide another code
+using different parametrization (with which we generated our results). This is
+worth trying if the simple code has issues with sampling (produces divergences).
+In the code, both τ and λj are given half-t priors with the degrees of freedom
+and the scale defined by the user (the scale can be adjusted only for τ ). Setting
+nu local = 1 corresponds to the horseshoe. nu global = 1 gives τ a halfCauchy prior. The scale for τ is scale global*sigma, so if we want to set this
+p0 √σ
+to be τ0 = D−p
+(Eq. (3.12)), we should set scale global = (D−pp00 )√n . The
+n
+0
+code assumes a Student-t slab for regularizing the largest coefficients, and the
+scale and degrees of freedom can be specified using slab scale and slab df
+arguments.
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+data {
+int < lower =0 > n ;
+int < lower =0 > d ;
+vector [ n ] y ;
+matrix [n , d ] x ;
+real < lower =0 > scale_icept ;
+real < lower =0 > scale_global ;
+real < lower =1 > nu_global ;
+real < lower =1 > nu_local ;
+real < lower =0 > slab_scale ;
+real < lower =0 > slab_df ;
+}
+parameters {
+real logsigma ;
+real beta0 ;
+vector [ d ] z ;
+real < lower =0 > tau ;
+vector < lower =0 >[ d ] lambda ;
+real < lower =0 > caux ;
+}
+
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+
+29
+
+number of observations
+number of predictors
+outputs
+inputs
+prior std for the intercept
+scale for the half - t prior for tau
+degrees of freedom for the half - t priors for tau
+degrees of freedom for the half - t priors for lambdas
+slab scale for the regularized horseshoe
+slab degrees of freedom for the regularized horseshoe
+
+# global shrinkage parameter
+# local shrinkage parameter
+
+transformed parameters {
+real < lower =0 > sigma ;
+# noise std
+vector < lower =0 >[ d ] lambda_tilde ; # ’ truncated ’ local shrinkage parameter
+real < lower =0 > c ;
+# slab scale
+vector [ d ] beta ;
+# regression coefficients
+vector [ n ] f ;
+# latent function values
+sigma = exp ( logsigma );
+c = slab_scale * sqrt ( caux );
+lambda_tilde = sqrt ( c ^2 * square ( lambda ) ./ ( c ^2 + tau ^2* square ( lambda )) );
+beta = z .* lambda_tilde * tau ;
+f = beta0 + x * beta ;
+}
+model {
+# half - t priors for lambdas and tau , and inverse - gamma for c ^2
+z ∼ normal (0 , 1);
+lambda ∼ student_t ( nu_local , 0 , 1);
+tau ∼ student_t ( nu_global , 0 , scale_global * sigma );
+caux ∼ inv_gamma (0.5* slab_df , 0.5* slab_df );
+beta0 ∼ normal (0 , scale_icept );
+y ∼ normal (f , sigma );
+}
+
+The code for the logistic regression model is very similar, we simply remove the lines related to the noise deviation sigma, and change the observation
+model and the type of the target variable data y. Notice also that now the
+scale for τ is simply scale global. Thus, to follow our recommendation, we set
+p0 √σ
+scale global = τ0 = D−p
+(Eq. (3.12)), by using a suitable plug-in value
+n
+0
+for σ (Sec. 3.5). The lines that need to be changed (in addition to removing
+definitions related to sigma) are shown below.
+data {
+...
+int < lower =0 , upper =1 > y [ n ];
+...
+}
+
+# outputs
+
+transformed parameters {
+...
+tau = aux1_global * sqrt ( aux2_global ) * scale_global ;
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+30
+
+...
+}
+model {
+...
+y ∼ b er no ul l i_ lo gi t ( f );
+}
+
+C.2. Alternative parametrization
+This parameterization was proposed by Peltola et al. (2014) (codes at https:
+//github.com/to-mi/stan-survival-shrinkage). In practice we have not
+observed problems with the code presented in Appendix C.1 but if it has issues with sampling, it is worth trying the following code (using which we ran
+our experiments). Below is the code for the Gaussian observation model.
+data {
+int < lower =0 > n ;
+int < lower =0 > d ;
+vector [ n ] y ;
+matrix [n , d ] x ;
+real < lower =0 > scale_icept ;
+real < lower =0 > scale_global ;
+real < lower =1 > nu_global ;
+real < lower =1 > nu_local ;
+real < lower =0 > slab_scale ;
+real < lower =0 > slab_df ;
+}
+
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+
+number of observations
+number of predictors
+outputs
+inputs
+prior std for the intercept
+scale for the half - t prior for tau
+degrees of freedom for the half - t priors for tau
+degrees of freedom for the half - t priors for lambdas
+slab scale for the regularized horseshoe
+slab degrees of freedom for the regularized horseshoe
+
+parameters {
+real logsigma ;
+real beta0 ;
+vector [ d ] z ;
+real < lower =0 > aux1_global ;
+real < lower =0 > aux2_global ;
+vector < lower =0 >[ d ] aux1_local ;
+vector < lower =0 >[ d ] aux2_local ;
+real < lower =0 > caux ;
+}
+transformed parameters {
+real < lower =0 > sigma ;
+# noise std
+real < lower =0 > tau ;
+# global shrinkage parameter
+vector < lower =0 >[ d ] lambda ;
+# local shrinkage parameter
+vector < lower =0 >[ d ] lambda_tilde ; # ’ truncated ’ local shrinkage parameter
+real < lower =0 > c ;
+# slab scale
+vector [ d ] beta ;
+# regression coefficients
+vector [ n ] f ;
+# latent function values
+sigma = exp ( logsigma );
+lambda = aux1_local .* sqrt ( aux2_local );
+tau = aux1_global * sqrt ( aux2_global ) * scale_global * sigma ;
+c = slab_scale * sqrt ( caux );
+lambda_tilde = sqrt ( c ^2 * square ( lambda ) ./ ( c ^2 + tau ^2* square ( lambda )) );
+beta = z .* lambda_tilde * tau ;
+f = beta0 + x * beta ;
+}
+model {
+# half - t priors for lambdas and tau , and inverse - gamma for c ^2
+z ∼ normal (0 , 1);
+aux1_local ∼ normal (0 , 1);
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+31
+
+aux2_local ∼ inv_gamma (0.5* nu_local , 0.5* nu_local );
+aux1_global ∼ normal (0 , 1);
+aux2_global ∼ inv_gamma (0.5* nu_global , 0.5* nu_global );
+caux ∼ inv_gamma (0.5* slab_df , 0.5* slab_df );
+beta0 ∼ normal (0 , scale_icept );
+y ∼ normal (f , sigma );
+}
+
+Again, the code for the logistic regression model is very similar. Below are the
+lines that need to be changed (in addition to removing the definitions related
+to sigma.
+data {
+...
+int < lower =0 , upper =1 > y [ n ];
+...
+}
+
+# outputs
+
+transformed parameters {
+...
+tau = aux1_global * sqrt ( aux2_global ) * scale_global ;
+...
+}
+model {
+...
+y ∼ b er no ul l i_ lo gi t ( f );
+}
+
+Appendix D: rstanarm code
+The horseshoe prior is implemented in the R-package rstanarm, which contains
+a lot of precompiled Stan code and provides an easy-to-use interface to the most
+commonly used regression models. At the time of writing this, the package does
+not implement the regularized horseshoe but we hope it will in the near future.
+Assuming the predictor matrix and the corresponding targets are loaded into
+variables x and y, the linear Gaussian model with the horseshoe prior can be
+fitted as follows:
+# use all available cores
+options ( mc . cores = parallel :: detectCores ())
+# set up the prior
+D <- ncol ( x )
+n <- nrow ( x )
+p0 <- 5 # prior guess for the number of relevant variables
+tau0 <- p0 /( D - p0 ) / sqrt ( n ) # rstanarm will scale this by sigma automatically
+prior_coeff <- hs ( df =1 , global_df =1 , global_scale = tau0 ) # tau ∼
+half - Cauchy (0 , tau0 ^2)
+# fit the model
+fit <- stan_glm ( y ∼ x , family = gaussian () , data = data . frame ( I ( x ) , y ) ,
+prior = prior_coeff )
+
+The other generalized linear models can be fitted in a similar manner. Here is
+an example of fitting a logistic regression model (assume now that values y are
+binary):
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+32
+
+# set up the prior
+D <- ncol ( x )
+n <- nrow ( x )
+p0 <- 5 # prior guess for the number of relevant variables
+sigma <- 1 / sqrt ( mean ( y )*(1 - mean ( y ))) # pseudo sigma
+tau0 <- p0 /( D - p0 ) * sigma / sqrt ( n )
+prior_coeff <- hs ( df =1 , global_df =1 , global_scale = tau0 ) # tau ∼
+half - Cauchy (0 , tau0 ^2)
+# fit the model
+fit <- stan_glm ( y ∼ x , family = binomial () , data = data . frame ( I ( x ) , y ) ,
+prior = prior_coeff )
+
+Acknowledgments
+We thank Andrew Gelman, Michael Betancourt and Daniel Simpson for helpful
+comments for improving the manuscript. We also acknowledge the computational resources provided by the Aalto Science-IT project.
+References
+Betancourt, M. (2017a). A conceptual introduction to Hamiltonian Monte
+Carlo. arXiv:1701.02434.
+Betancourt, M. (2017b). Diagnosing biased inference with divergences. Case study notebook. http://mc-stan.org/users/documentation/
+case-studies/divergences_and_bias.html, accessed 15.6.2017.
+Betancourt, M. and Girolami, M. (2015). Hamiltonian Monte Carlo for
+hierarchical models. In Current trends in Bayesian methodology with applications (S. K. Upadhyay, U. Singh, D. K. Dey and A. Loganathan, eds.) 79–101.
+Chapman & Hall.
+Bhadra, A., Datta, J., Polson, N. G. and Willard, B. (2017). The
+horseshoe+ estimator of ultra-sparse signals. Bayesian Analysis. First Online, DOI: 10.1214/16-BA1028.
+Bhattacharya, A., Pati, D., Pillai, N. S. and Dunson, D. B. (2015).
+Dirichlet-Laplace priors for optimal shrinkage. Journal of the American Statistical Association 110 1479–1490.
+Carvalho, C. M., Polson, N. G. and Scott, J. G. (2009). Handling sparsity
+via the horseshoe. In Proceedings of the 12th International Conference on
+Artificial Intelligence and Statistics (D. van Dyk and M. Welling, eds.).
+Proceedings of Machine Learning Research 5 73–80. PMLR.
+Carvalho, C. M., Polson, N. G. and Scott, J. G. (2010). The horseshoe
+estimator for sparse signals. Biometrika 97 465–480.
+Datta, J. and Ghosh, J. K. (2013). Asymptotic properties of Bayes risk for
+the horseshoe prior. Bayesian Analysis 8 111–132.
+Faulkner, J. R. and Minin, V. N. (2017). Locally adaptive smoothing with
+Markov random fields and shrinkage priors. Bayesian Analysis. First Online,
+DOI: 10.1214/17-BA1050.
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+33
+
+Friedman, J., Hastie, T. and Tibshirani, R. (2010). Regularization Paths
+for Generalized Linear Models via Coordinate Descent. Journal of Statistical
+Software 33.
+Gelman, A. (2006). Prior distributions for variance parameters in hierarchical
+models. Bayesian Analysis 1 515–533.
+Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A.
+and Rubin, D. B. (2013). Bayesian Data Analysis, Third ed. Chapman &
+Hall.
+George, E. I. and McCulloch, R. E. (1993). Variable selection via Gibbs
+sampling. Journal of the American Statistical Association 88 881–889.
+Ghosh, S. and Doshi-Velez, F. (2017). Model selection in Bayesian neural
+networks via horseshoe priors. arXiv:1705.10388.
+Ghosh, J., Li, Y. and Mitra, R. (2017). On the use of Cauchy prior distributions for Bayesian logistic regression. Bayesian Analysis. First Online, DOI:
+10.1214/17-BA1051.
+Hastie, T., Tibshirani, R. and Wainwright, M. (2015). Statistical learning
+with sparsity. Chapman & Hall.
+Hernández-Lobato, D., Hernández-Lobato, J. M. and Suárez, A.
+(2010). Expectation propagation for microarray data classification. Pattern
+Recognition Letters 31 1618–1626.
+Hernández-Lobato, J. M., Hernández-Lobato, D. and Suárez, A.
+(2015). Expectation propagation in linear regresssion models with spike-andslab priors. Machine Learning 99 437–487.
+Hoeting, J. A., Madigan, D., Raftery, A. E. and Volinsky, C. T. (1999).
+Bayesian model averaging: a tutorial. Statistical Science 14 382–417.
+Hoffman, M. D. and Gelman, A. (2014). The No-U-Turn Sampler: adaptively setting path lengths in Hamiltonian Monte Carlo. Journal of Machine
+Learning Research 15 1593–1623.
+Johnstone, I. M. and Silverman, B. W. (2004). Needles and straw in
+haystacks: empirical Bayes estimates of possibly sparse sequences. The Annals
+of Statistics 32 1594–1649.
+McCullagh, P. and Nelder, J. A. (1989). Generalized linear models, second
+ed. Monographs on Statistics and Applied Probability. Chapman & Hall.
+Mitchell, T. J. and Beauchamp, J. J. (1988). Bayesian variable selection
+in linear regression. Journal of the American Statistical Association 83 1023–
+1036.
+Park, T. and Casella, G. (2008). The Bayesian Lasso. Journal of the American Statistical Association 103 681–686.
+Peltola, T., Havulinna, A. S., Salomaa, V. and Vehtari, A. (2014). Hierarchical Bayesian survival analysis and projective covariate selection in cardiovascular event risk prediction. In Proceedings of the Eleventh UAI Bayesian
+Modeling Applications Workshop. CEUR Workshop Proceedings 1218 79–88.
+Piironen, J. and Vehtari, A. (2015). Projection predictive variable selection
+using Stan+R. arXiv:1508.02502.
+Piironen, J. and Vehtari, A. (2017a). On the hyperprior choice for the global
+shrinkage parameter in the horseshoe prior. In Proceedings of the 20th Inter-
+
+J. Piironen and A. Vehtari / Sparsity and regularization in the horseshoe prior
+
+34
+
+national Conference on Artificial Intelligence and Statistics (A. Singh and
+J. Zhu, eds.). Proceedings of Machine Learning Research 54 905–913. PMLR.
+Piironen, J. and Vehtari, A. (2017b). Comparison of Bayesian predictive
+methods for model selection. Statistics and Computing 27 711–735.
+Polson, N. G. and Scott, J. G. (2011). Shrink globally, act locally:
+sparse Bayesian regularization and prediction. In Bayesian statistics 9
+(J. M. Bernardo, M. J. Bayarri, J. O. Berger, A. P. Dawid, D. Heckerman,
+A. F. M. Smith and M. West, eds.) 501–538. Oxford University Press, Oxford.
+Stan Development Team (2017). Stan modeling language users guide and
+reference manual, Version 2.15.0. http://mc-stan.org.
+Tibshirani, R. (1996). Regression shrinkage and selection via the Lasso. Journal of the Royal Statistical Society. Series B (Methodological) 58 267–288.
+Titsias, M. K. and Lázaro-Gredilla, M. (2011). Spike and slab variational
+inference for multi-task and multiple kernel learning. In Advances in Neural
+Information Processing Systems 24 2339–2347.
+van der Pas, S. L., Kleijn, B. J. K. and van der Vaart, A. W. (2014).
+The horseshoe estimator: posterior concentration around nearly black vectors.
+Electronic Journal of Statistics 8 2585–2618.
+Vehtari, A., Gelman, A. and Gabry, J. (2017). Practical Bayesian model
+evaluation using leave-one-out cross-validation and WAIC. Statistics and
+Computing 27 1413–1432.
+Vehtari, A. and Ojanen, J. (2012). A survey of Bayesian predictive methods
+for model assessment, selection and comparison. Statistics Surveys 6 142–228.
+Zhang, Y., Reich, B. J. and Bondell, H. D. (2016). High dimensional linear
+regression via the R2-D2 shrinkage prior. arXiv:1609.00046.
+
+

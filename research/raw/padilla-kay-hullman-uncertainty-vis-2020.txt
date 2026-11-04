@@ -1,0 +1,928 @@
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+
+
+
+
+Chapter 22
+
+Uncertainty Visualization
+
+The Prepress Version
+            While uncertainty is present in most data analysis pipelines, reasoning with uncertainty is challenging
+            for novices and experts alike. Fortunately, researchers are making significant advancements in the com-
+            munication of uncertainty. In this chapter, we detail new visualization methods and emerging cognitive
+            theories that describe how we reason with visual representations of uncertainty. We describe the best
+            practices in uncertainty visualization and the psychology behind how each approach supports viewers’
+            judgments. This chapter begins with a brief overview of conventional and state-of-the-art uncertainty
+            visualization techniques. Then we take an in-depth look at the pros and cons of each technique using
+            cognitive theories that describe why and how the mind processes different types of uncertainty informa-
+            tion.
+
+
+
+22.1     Introduction
+Uncertainty is inherent to most data and can enter the analysis pipeline during the measurement, modeling, and
+forecasting phases [1]. Effectively communicating uncertainty is necessary for establishing scientific transparency.
+Further, people commonly assume that there is uncertainty in data analysis, and they need to know the nature of the
+uncertainty to make informed decisions [2]. However, understanding even the most conventional communications of
+uncertainty is highly challenging for novices and experts alike [3], which is due in part to the abstract nature of prob-
+ability and ineffective communication techniques. Reasoning with uncertainty is unilaterally difficult, but researchers
+are revealing how some types of visualizations can improve decision-making in a variety of diverse contexts, from
+hazard forecasting [4, 5] to healthcare communication [6], to everyday decisions about transit [7].
+     Scholars have distinguished different types of uncertainty, including aleatoric (irreducible randomness inherent in
+a process), epistemic (uncertainty from a lack of knowledge that could theoretically be reduced given more informa-
+tion), and ontological uncertainty (uncertainty about how accurately the modeling describes reality, which can only
+be described subjectively) [8]. The term risk is also used in some decision-making fields to refer to quantified forms
+of aleatoric and epistemic uncertainty, whereas uncertainty is reserved for potential error or bias that remains unquan-
+tified. Here we use the term uncertainty to refer to quantified uncertainty that can be visualized, most commonly a
+probability distribution.
+     This chapter begins with a brief overview of the common uncertainty visualization techniques and then elaborates
+on the cognitive theories that describe how the approaches influence judgments. The goal is to provide readers with
+the necessary theoretical infrastructure to critically evaluate the various visualization techniques in the context of their
+own audience and design constraints. Importantly, there is no one-size-fits-all uncertainty visualization approach guar-
+anteed to improve decisions in all domains, nor even guarantees that presenting uncertainty to readers will necessarily
+improve judgments or trust. Therefore, visualization designers must think carefully about each of their design choices
+or risk adding more confusion to an already difficult decision process.
+
+Uncertainty Visualization Design Space
+There are two broad categories of uncertainty visualization techniques, as shown in Figure 22.1. The first are graphical
+annotations that can be used to show properties of a distribution, such as the mean, confidence/credible intervals, and
+distributional moments. Numerous visualization techniques use the composition of marks (i.e., geometric primitives,
+
+
+                                                                                                                                 1
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+
+
+
+                          Graphical Annotations of Distributional Properties
+
+                  Intervals and Ratios
+
+
+                               error bars                         box plot
+                                                                                             icon array
+                  Distributions
+
+
+
+                              violin plot                      gradient plot
+
+                                    Time
+
+
+
+
+                     hypothetical outcome plot              quantile dot plot              ensemble plot
+
+
+                                       Visual Encodings of Uncertainty
+
+
+
+
+                     fuzziness             location     arrangement             size        transparency
+
+
+                                                      Hybrid Approach
+
+
+
+
+                                 contour boxplot                 probability density and interval plot
+
+Figure 22.1: A subset of the graphical annotations used to show properties of a distribution and mappings of probabil-
+ity/confidence to visual variables. The visual variables that require color printing were excluded (e.g., color hue, color
+value, and color saturation). The examples are adapted from prior work: violin and gradient plots [9], hypothetical
+outcome plots [10], quantile dotplot [11], ensemble plot [12], icon array [13], fuzziness transparency [14], contour
+boxplot [15], and probability density and interval plot [7].
+
+
+
+
+                                                                                                                                 2
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+such as dots, lines, and icons [16]) to display uncertainty directly, as in error bars depicting confidence or credible in-
+tervals. Other approaches use marks to display uncertainty implicitly as an inherent property of the visualization [17].
+For example, hypothetical outcome plots (HOPs) [10] are random draws from a distribution that are presented in
+an animated sequence, allowing viewers to form an intuitive impression of the uncertainty as they watch. The sec-
+ond category of techniques focuses on mapping probability or confidence to a visual encoding channel (for reviews,
+see [14, 18, 19]. Visual encoding channels define the appearance of marks using controls such as color, position, and
+transparency [16]. Techniques that use encoding channels have the added benefit of adjusting a mark that is already in
+use, such as making a mark more transparent if the uncertainty is high. Marks and encodings that both communicate
+uncertainty can be combined to create hybrid approaches, such as in contour box plots [20] and probability density and
+interval plots [7] (see Figure 22.1). In Figure 22.1, the contour box plot shows 95% intervals with greater transparency
+than 50% intervals and includes a mean line (black line) and outliers (dotted lines). Also, the probability density and
+interval plot in Figure 22.1 shows the shape of a density function with 50% intervals in darker gray and a mean line in
+black.
+    Some of the most common techniques in scientific communication are those that display intervals (see Figure 22.1,
+error bars and box plots). Despite their everyday use, visualizations of intervals have widely documented issues
+(e.g., [3, 9, 21], such as provoking viewers to incorrectly think of distributional data as categorical [22]. For example,
+when summary information about the location of a natural disaster is plotted on a map with a contour line, people
+incorrectly interpret the area within the contour as the danger zone and locations just outside as safe [21] (see Sec-
+tion 22.2 Visual Boundaries = Cognitive Categories). Visualizations of intervals are generally hard for both experts
+and novices to use [3], and errors persist even with extensive instructions [23]. Rather than visualizing intervals, some
+research finds that using more expressive visualization techniques (e.g., violin and gradient plots in Figure 22.1 [9])
+can help people understand the uncertainty in the data more effectively. More expressive visualizations provide a
+fuller picture of the data by depicting more properties, such as the nature of the distribution and outliers, which can be
+lost with intervals.
+    Other work proposes that showing distributional information in a frequency format (e.g., 1 out of 10 rather than
+10%) more naturally matches how people think about uncertainty and can improve performance (e.g., quantile dotplot
+and icon arrays in Figure 22.1 [11, 13], see Section 22.2 Frequency Framing). Visualizations that represent frequencies
+tend to be highly effective communication tools, particularly for individuals with low numeracy (e.g., inability to work
+with numbers) [24], and can help people overcome various decision-making biases [6]. Some approaches even require
+viewers to account for the uncertainty in making judgments of summary statistics (e.g., HOPs) [10], which can be
+useful because uncertainty information is commonly ignored or mentally substituted for simpler information (see
+Section 22.2 Attribute Substitution).
+    Researchers have dedicated a significant amount of work to examining which visual encodings are most appro-
+priate for communicating uncertainty, notably in geographic information systems and cartography [14, 18, 19] (see
+Visual Encodings in Figure 22.1 and Section 22.2 Visual Semiotics). One goal of these approaches is to evoke a
+sensation of uncertainty, for example, using fuzziness, fogginess, or blur. Other work that examines uncertainty en-
+codings also seeks to make looking-up values more difficult when the uncertainty is high, such as value-suppressing
+color pallets [25]. Given that there is no one-size-fits-all technique, in the following sections, we detail the emerging
+cognitive theories that describe how and why each visualization technique functions.
+
+22.2     Uncertainty Visualization Theories
+The empirical evaluation of uncertainty visualizations is challenging [26]. Many user experience goals (e.g., memora-
+bility [27], engagement, and enjoyment [28]) and performance metrics (e.g., speed, accuracy, and cognitive load [29])
+can be considered when evaluating uncertainty visualizations [26]. Beyond identifying the metrics of evaluation, even
+the most simple tasks have countless configurations. As a result, it is hard for any single study to sufficiently test the
+effects of a visualization to ensure that it is appropriate to use in all cases. Visualization guidelines based on a single
+or small set of studies are potentially incomplete. Theories can help bridge the gap between visualizations studies
+by identifying and synthesizing converging evidence, with the goal of helping scientists make predictions about how
+a visualization will be used. Understanding foundational theoretical frameworks will empower designers to think
+critically about the design constraints in their work and generate optimal solutions for their unique applications. The
+theories detailed in the next sections are only those that have mounting support from numerous evidence-based studies
+in various contexts. As an overview, Table 1 provides a summary of the dominant theories in uncertainty visualization,
+along with proposed visualization techniques.
+
+
+
+                                                                                                                                 3
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+
+Theory                           Summary                                          Visualization Techniques
+
+                              Uncertainty is more intuitively understood
+Frequency                                                                 icon array [13], quantile dotplot [11],
+                              in a frequency framing (1 out of 10) than
+Framing [30] (Section 22.2)                                               hypothetical outcome plots [10]
+                              in a probabilistic framing (10%)
+                              If given the opportunity, viewers will
+Attribute Substitution [31] -
+                              mentally substitute uncertainty
+Deterministic Construal                                                   hypothetical outcome plots [10]
+                              information for data that are easier to
+Error [32] (Section 22.2)
+                              understand
+                              Ranges that are represented by boundaries
+Visual Boundaries =
+                              lead people to believe that data inside and ensemble display [12], error bar
+Cognitive Categories [21]
+                              outside the boundary are categorically      alternatives [7, 9]
+(Section 22.2)
+                              different
+                                                                          fuzziness, transparency, location,
+Visual Semiotics [14]         Some encoding techniques naturally map
+                                                                          etc. [14], value-suppressing color
+(Section 22.2)                onto uncertainty
+                                                                          pallet [25]
+
+
+                    Table 22.1: Summary of uncertainty visualization theory detailed in this chapter.
+
+
+Frequency Framing
+The frequency framing hypothesis was initially proposed by Gerd Gigerenzer [30] in response to popular theories,
+which argued that human reasoning systematically deviates from rational choice according to mathematical rules
+(e.g., [33]). Gigerenzer hypothesized that our decisions seem flawed when we are provided with confusing informa-
+tion, such as probabilities communicated as percentiles (e.g., 10% chance). However, individuals can make rational
+choices if provided with information in a format they can understand easily, such as in frequencies or ratios (e.g., 1
+out of 10). Gigerenzer argued that percentiles do not match the way people encounter probability in the world, and
+therefore lead to errors. Instead, it is more intuitive to depict probability as a frequency, as we have more exposure
+to these types of ratios (e.g., I hit traffic on this road 7 out of 10 times. I will take a different route tomorrow.) The
+frequentist framing hypothesis has substantial support from studies that find we can relatively automatically and ac-
+curately understand frequency formats, whereas probabilities are time consuming and highly error prone (for review
+and caveats, see [34]).
+    One of the most effective ways to implement frequency framing of uncertainty information is with visualizations,
+and in this section we will detail two promising frequency-framing techniques. Researchers, predominantly in health-
+care communication, have extensively studied the use of icon arrays (see Figure 22.1) to display ratios and have found
+strong evidence that they are useful for communicating forecasted probabilities of event outcomes. The second notable
+use of frequency formats in visualization is within the emerging study of quantile dotplots (see Figure 22.1). Whereas
+quantile dotplots are relatively new and have not received as much examination as icon arrays, they capitalize on the
+theoretical benefits of frequency framing and have demonstrated positive results in laboratory studies.
+
+Icon arrays
+A substantial body of research demonstrates that icon arrays are one of the most effective ways to communicate a
+single probabilistic value and can outperform textual descriptions of probabilities and frequencies [27, 35–42]. One
+of the key benefits of icon arrays is that they offload cognition by allowing a viewers visual system to compare the
+denominator and the numerator in a frequency probability format. Visual comparisons of this nature are easier and
+faster than numerical calculations.
+    The difficulty in comparing ratios can produce common errors, such as individuals focusing on the numerator
+of each ratio and neglecting the denominator, called denominator neglect (for review see [43]). For example, when
+comparing a cancer with a mortality rate of 1,286 of 10,000 people to a cancer with a mortality rate of 24 of 100
+people, participants in a laboratory study incorrectly reported that the former cancer was riskier [44]. Researchers
+propose that individuals pay more attention to the relative differences in numerators (in this case, 1,286 vs. 24 deaths),
+even though they should consider the relative ratios (12.86% vs. 24% mortality) (e.g., [43, 44]). Several studies
+
+
+
+                                                                                                                                 4
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+have found that icon arrays can reduce denominator neglect by allowing people to compare relative ratios visually
+(e.g, [13, 42, 45, 46]). Additionally, other studies have found that people trust icon arrays more than other common
+visualization techniques [35], and they can reduce decision-making biases, including anecdotal evidence bias [27],
+side effect aversion [38, 47], and risk aversion [48].
+    The positive impacts of icon arrays, particularly on medical decision-making, are relatively consistent across
+studies that use various types of icons. However, if designers are interested in optimizing their icon selections, they
+should consider showing part-to-whole comparisons (i.e., both the denominator and the numerator). Designers should
+avoid showing only the numerator with icons and adding the denominator in text because viewers will make their
+judgments by considering the numerator and ignoring the denominator [46]. Icon arrays function by directing the
+viewers attention to the information in the icons, so all the relevant information must be shown. Further, it is important
+to arrange the icons systematically in a grid that is easy to count. Various studies have found that icon arrays that are
+not arranged systematically are challenging to use [37], particularly for those with low numeracy [49, 50]. If two or
+more arrays will be compared, they should use the same denominator for each array, which will make the comparison
+easier.
+
+Quantile dotplots
+Icon arrays may be useful for communicating discrete data where only a small number of outcomes are possible
+(e.g., a positive or negative test result) [51]. When it comes to visualizing continuous variables, common approaches
+include probability density plots, which map probability to height (and by extension, area). However, users may have
+difficulty determining the exact density for any value because they need to visually calculate the integral under the
+curve [11]. Kay et al. [11] created the quantile dotplot as a frequency-framed alternative for displaying uncertainty
+for a continuous variable. As seen in Figure 22.2, a quantile dotplot represents a distribution where dots are sampled
+proportional to the quantiles of the distribution. In this case, each dot depicts a 5% probability. Using this figure as
+an illustration, imagine that the viewers task is to determine if a bus will arrive in 8 mins or later. With the quantile
+dotplot, the viewer can count the dots to determine that there is a 90% chance the bus will in arrive 8 mins or later.
+    Quantile dotplots have been tested in several empirical studies, which have found that they reduce the variance
+of probabilistic estimates compared to density plots [11] and improve recall of distributional data [52]. Other studies
+have found that quantile dotplots are more useful for decisions with risk compared to interval and density plots, and
+are significantly better than textural descriptions of uncertainty [7]. Figure 22.2 illustrates the process of generating a
+quantile dotplot from a log-normal distribution.
+    Note that another way people can interpret both quantile dotplots and icon arrays is to make a visual area judgment.
+If viewers were to make an area judgment, they would not be utilizing the frequency information. Hence, icon arrays
+and quantile dotplots support both frequency- and non-frequency-based inferences. HOPs (see Figure 22.3) are another
+example of visualizations that can use frequency framing in a way that viewers cannot fall back on non-frequency-
+based inferences. HOPS are described in the following section (Attribution Substitution Section 22.2) because they
+have the added benefit of requiring the viewer to consider uncertainty, which is an archetypal example of the theory
+detailed in that section.
+
+Attribute Substitution
+Reasoning with uncertainty is classically challenging, and one strategy that people unconsciously use to deal with
+difficult information is substitution [31]. Individuals will substitute a hard mental computation for an easier one.
+Researchers have studied this process extensively and termed it the attribute substitution heuristic [31]. A heuristic is
+a rule of thumb that people use to make decisions quickly, which can be beneficial if the heuristic produces a correct
+judgment or detrimental [53], as is the case with the deterministic construal error in visualizations [32].
+    The deterministic construal error is when individuals attempt to substitute visual uncertainty information for de-
+terministic information. For example, Joslyn and LeClerc [32] found that when participants viewed mean temperature
+forecasts that included 95% confidence intervals depicted as bars with end caps, they incorrectly believed that the error
+bars represented high and low temperatures. The participants maintained this belief even when Joslyn and LeClerc
+tested a condition where the correct way to interpret the forecast was shown prominently in a key to the side of
+the display [32]. The authors proposed that viewers were substituting the complex uncertainty information for high
+and low temperature forecasts that were easier to understand [22, 32]. Other research with static visualizations has
+reported similar findings in which, if given the opportunity, viewers interpret uncertainty information incorrectly as
+deterministic information[3, 54, 55].
+
+
+                                                                                                                                 5
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+
+
+
+
+                               100%
+                                                                                    Cumulative distribution
+                                                                                    function
+                                75%
+
+                                50%
+
+                              25%
+                  Cumulative
+                  probability 0%
+
+
+
+
+                                                                                           Quantile dotplot
+
+                                      0         5            10         15          20          25          30
+                                      Minutes until
+                                      bus arrives
+
+
+
+                               100%
+                                                                                    Cumulative distribution
+                                75%                                                 function
+
+
+                                50%
+
+                              25%
+                  Cumulative            1-90%
+                  probability 0%
+
+
+
+
+                                                                                           Quantile dotplot
+
+                                      0         5            10         15          20          25          30
+                                      Minutes until
+                                      bus arrives
+                                                            18/20 = 90% chance the bus
+                                                            comes at ~ 8 mins or later
+
+Figure 22.2: Based on figure and description from Kay et al. [11].            Tutorial in R can be found at
+https://github.com/mjskay/when-ish-is-my-bus/blob/master/quantile-dotplots.md
+
+
+
+
+                                                                                                                                 6
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+                             Error Bars                           Hypothetical Outcome Plot
+                   8
+                                                  8
+                                                               8
+                   7                              7
+                                                                             8
+                                                  6            7
+                                                                                          8
+                   6                                           6
+                                                                             7
+                                                  5                                       7
+                                                                             6
+                   5                              4            5
+                                                                                          6
+                                                                             5
+                                                  3            4
+                   4                                                                      5
+                                                                             4
+                                                  2            3
+                                                                                          4
+                                                                             3
+                   3                              1            2
+                                                                                          3
+                                                                             2
+                                                               1
+                   2                              0
+                                                                             1
+                                                                                          2
+                                                 500ms         0
+                                                                                          1
+                   1                                          500ms          0
+                                                                            500ms         0
+                   0                                                    Time              500ms
+
+
+
+
+Figure 22.3: Illustration of HOPs compared to error bars from the same distribution, based on a figure from Hullman,
+Resnick, and Adar [10].
+
+
+    Note that such a deterministic construal error has been found with visualizations and not in textual descriptions
+of the same information [32], meaning that the deterministic construal error might be a visual-spatial bias, which is a
+bias that is produced by the visual system [21]. In a paper that illustrates a cognitive model of decision-making with
+visualizations, Padilla et al. [21] proposed that visual-spatial biases are a unique form of bias that occurs early in the
+decision-making process (during visual encoding), making these type of biases particularly challenging to overcome
+as they influence all the downstream processes. Emerging research supports this hypothesis by demonstrating that
+even with extensive instructions, viewers judgments are still influenced by deterministic construal errors, even though
+they are able to report the correct strategy at the end of the study [4, 23].
+
+Hypothetical outcome plots
+When viewers may be likely to ignore uncertainty in favor of simpler heuristics, any static visualization that encodes
+summary statistics runs the risk of allowing them to discount uncertainty in their judgments. One promising approach
+that can help to reduce the discounting of uncertainty is hypothetical outcome plots (HOPs; [10]). HOPs use random
+draws from a distribution and animate the draws over time. Figure 22.3 presents an example set of frames in which
+each frame is one random pull from the distribution on the left. The frames are shown in a random sequence for a
+short time (i.e., <500ms), which creates an animation that can give viewers an intuitive sense of the uncertainty in the
+true mean.
+    A crucial theoretical contribution of HOPs is that they require viewers to build up a representation of distributional
+information in their mind. This approach has no one outcome that viewers can fixate on. Instead, they are forced by the
+visualization technique to both 1) account for uncertainty in their understanding of the data, and 2) recognize that less
+probable outcomes do fall within the distribution. The second point is vital for hazard forecasting, where members of
+the public may be upset when a less likely event occurs because they failed to understand the full range of forecasted
+outcomes (e.g., Hurricane Katrina or the L’Aquila earthquake [56]). Empirical studies provide some support for the
+benefits of HOPs for lay viewers, finding that they can outperform static error bars [10, 57], icon arrays [58], line
+ensembles [57], and violin plots [10].
+    Another crucial aspect of HOPs compared to static uncertainty displays is that they can be applied to most distri-
+bution data and visual encoding techniques relatively easily, as long as animation is not already used. To create HOPs,
+one must first be able to draw samples from the distribution of interest, whether univariate (as in Figure 3) or multi-
+variate. The draws can be generated via bootstrapping, referring to the large family of statistical techniques, which
+are appropriate for numerous data types. For example, bootstrapping can be used for generating hypothetical samples
+from an observed dataset, including parametric approaches (i.e., a model is fit to observed data and then samples are
+drawn from the model), and non-parametric approaches (i.e., resampling with replacement from observed data, which
+relaxes distributional assumptions). A large number of these samples can then be animated in sequence, with each
+sample appearing for only a short period of time. Research suggests that frame rates of 400 to 500ms tend to perform
+best. HOPs are particularly useful in the case of complex visualizations where the distribution to be conveyed is a joint
+distribution with potential dependencies between variables. When visualizations already use the most accurate visual
+properties to show the data, for example, a choropleth map that uses position to show geographic location and color to
+
+
+                                                                                                                                 7
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+
+
+
+
+Figure 22.4: Example Cone of Uncertainty produced by the National Hurricane Center, originally printed in Padilla et
+al. [5], reprinted with permission.
+
+
+show the value of a variable, conveying uncertainty may be difficult because it requires adding another visual property
+to an already complex visualization. As long as a visualization is not already animated, HOPs can be used without
+requiring the designer to choose another encoding for uncertainty, and naturally display joint probabilities. This abil-
+ity has inspired visualization researchers to use probabilistic animation to show uncertainty in geospatial data [59], as
+well as complex visualizations like parallel coordinates plots [60].
+
+Visual Boundaries = Cognitive Categories
+Padilla et al. [21] proposed the data visualization theory that when visual boundaries, such as isocontours and error
+bars, are used for continuous data, the boundaries lead people to conceptualize the data as categorical. This theory
+is based on work by Barbra Tversky [61], in which she proposed that visual-spatial communications are intrinsically
+related to thought. To illustrate how concepts like containment influence how we understand visual information, she
+writes, Framing a picture is a way of saying that what is inside the picture has a different status from what is outside
+the picture (p. 522 [61]). Padilla et al. [62] demonstrated how people perform the same task differently when presented
+with continuous or categorical depictions of the same data. The authors found that, in some cases, binned 2D scalar
+fields produce faster and more accurate judgments than continuous encodings of the same data, which may lead some
+individuals to conclude that they should always bin continuous data. However, the theory proposed by Padilla et
+al. [21] (visual boundaries = cognitive categories) emphasizes that visual boundaries force people to think differently
+about the data than a continuous encoding, which can be good or bad depending on the nature of their decision.
+     The issue for uncertainty visualization is that most uncertainty data types are continuous. When a designer pro-
+cesses uncertainty data into a categorical format (e.g., mean values, ranges, or intervals), it fundamentally changes
+the way that a user forms an understanding of the data. For example, in hurricane forecasting, the most common
+way to represent the uncertainty in the storm’s path is with the Cone of Uncertainty (see Figure 22.4). The Cone of
+Uncertainty is the current method used by the National Hurricane Center, and the border of the cone represents a 66%
+confidence interval around the mean predicted path. In numerous studies, researchers have found that viewers believe
+areas inside the cone are categorically different from areas outside the cone [5, 23, 55]. When visualized with bound-
+aries, viewers cannot ascertain that there is a distribution of uncertainty in the storm’s path. The cognitive category
+created by the border of the cone makes viewers believe that areas inside the cone are in the danger zone, and areas
+outside are relatively safe [5, 55]. Participants’ decisions are influenced by a subconscious categorical interpretation
+of the cone even when they are given instructions about how to interpret the visualization correctly and they can report
+the correct judgments at the end of the study [23]. The result of this inaccurate and persistent categorization may cause
+some people who reside just outside the cone to believe they are safe and not take preparatory actions.
+     Other researchers also have found evidence that users conceptualize areas inside a boundary differently than areas
+outside [63, 64]. For example, McKenzie et al. [63] examined how users make decisions about the positional uncer-
+tainty in their location using Google Map’s blue dot visualization. When the authors presented viewers with a version
+
+
+                                                                                                                                 8
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+of Google Map’s blue dot with hard boundaries, individuals judgments were based on determining if a location was
+inside or outside the boundary [63]. Newman and Scholl [64] also demonstrated how boundaries produce catego-
+rization with bar charts. Participants in the Newman and Scholl study were shown mean values with bar charts and
+asked to make judgments about if a data point was likely from the population depicted by the bar. If the data point
+fell within the bar, the participants were more likely to believe that it came from the represented population. However,
+they believed that data points that were the same distance from the mean but located just outside the bar were from
+a different population [64]. The authors proposed that this within-the-bar-bias is due to perceptual object grouping,
+where our visual system groups items that are located near one another. The theory proposed in Padilla et al. [21]
+additionally suggests that our cognitive systems attempt to organize information in the world by grouping information
+into cognitive categories, and that this process is not purely a function of the visual system.
+     Cognitive categories have no inherent problem, and in some cases, designers might want their viewers to think
+about data categorically [62]. The concern for uncertainty visualization is that sometimes the boundaries are not well
+considered, and different choices about which boundaries to show result in different judgments. For the Cone of
+Uncertainty, in particular, there is no longer a justification for why the boundary is located at 66% (i.e., Why not 95%
+or 75%?). By plotting a hard boundary, viewers assume that the scientists are suggesting that the specific value of the
+boundary is important. Viewers understandably assume the value of a boundary is meaningful, particularly when the
+information about how the visualization was generated is insufficient, which is the case with hurricane news forecasts.
+In an analysis of the 20 most viewed television forecasts for Hurricane Irma in 2017, Padilla et al. [4] found that zero
+newscasters detailed how the Cone of Uncertainty was created or how to interpret it correctly, and the average length
+of the forecast was merely 1:52 minutes. Viewers have no choice but to assume that the scientists who made the
+forecast are indicating an important distinction with the boundary of the cone.
+
+Ensemble displays
+There are several alternatives to interval displays, such as the previously detailed HOPs. However, animations are not
+feasible in some cases. For example, in hurricane forecasting, static visualizations may be needed for printed reports
+or for regions that might not have access to high-speed Internet. Further, for hurricanes and other hazards, the time
+course of the hazard is uncertain. It is possible that when viewing HOPs of data where time information is critical,
+such as a natural disaster, viewers may incorrectly assume the animation is depicting an event unfolding over time.
+Ensemble displays (see Figure 22.5) are another alternative to summary visualizations that researchers have tested
+extensively in the context of hurricane forecasting [4, 5, 12, 55, 65]. Ensemble displays are traditionally generated
+by making perturbations to a models parameters and plotting the resulting runs on a static display [12]. The result
+is a visualization that intrinsically shows the uncertainty in the storm’s path. Early versions of the ensemble display
+outperformed the Cone of Uncertainty and other visualization techniques of the storm’s path in laboratory studies [5,
+12, 55].
+    Ensemble hurricane paths have received some criticism because older versions can look confusing, like a plate of
+spaghetti (a.k.a., spaghetti plots, see Figure 22.5 right). Researchers have addressed concerns by developing a method
+for reconstructing the predicted paths from runs of the model [65] (see Figure 22.5 left). The paths of the reconstructed
+ensembles have good separation and still communicate the uncertainty in the trajectory of the storm. The other benefit
+of using a path reconstruction procedure is that fewer lines are needed to show the full range of outcomes, which
+declutters the display. In the case of hurricane forecasting, decluttering the display allows researchers to make the
+paths thicker and represent the intensity of the storm in color and the size of the storm with a glyph. Liu at al. [65]
+found that their study participants could effectively make decisions that incorporated the path, size, and intensity of
+the storm when it was visualized as an ensemble display.
+    Ensembles outperform all other versions of hurricane path visualizations, but they have also received significant
+alternative hypothesis testing by their creators, which has produced some caveats [4, 5]. In visualization research,
+alternative hypothesis testing is when researchers attempt to discover cases when their technique is not effective rather
+than focusing on optimal use cases. Researchers have found that people overreact when they see one ensemble member
+impacting their point of interest, such as their town [4, 5]. The same people do not overreact when an ensemble member
+barely misses their point of interest. Further, this effect is influenced by the number of ensemble members shown. For
+example, people overreact more when 1 out of 9 ensembles appear to be hitting their point of interest compared to 1
+out of 33. This effect can be reduced only partially with training on how to interpret the displays correctly [4].
+
+
+
+
+                                                                                                                                 9
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+
+
+
+
+Figure 22.5: Left is an example of an ensemble hurricane path display that utilizes a path reconstruction procedure
+detailed in Liu et al. [65] and that also shows the intensity of the storm in the path color and the size of the storm with
+circle glyphs. Right is an earlier version of the ensemble display examined in [5, 12, 55] that does not use the path
+reconstruction procedure.
+
+
+Error bars
+In cases where researchers are interested in categorical interpretations, the summary statistics should be considered
+because of the difficulty we have interpreting sampling distributions of the mean shown as confidence intervals or
+standard error intervals [52, 66]. The sampling distribution is the distribution of means expected if one were to
+repeatedly draw samples of a given size n for a population. For example, when viewing results of an evaluation
+of a new drug relative to a control, one might wonder how much taking a new drug is likely to help a randomly
+drawn patient. Recent work has shown that when error bars are used to denote a standard error range of a control
+and treatment effect, laypeople are willing to (over)pay more for the treatment and overestimate the size of the effect
+compared to when the error bars show a standard deviation range [67]. Further, the relationship between statistical
+significance and whether or not two error bars overlap is often misunderstood: when two frequentist 95% confidence
+interval error bars do not overlap, it is correct to assume that the difference between the two quantities is significant at
+an alpha level of 0.05. However, when the two intervals do not overlap, it is incorrect to assume, as even researchers
+have been shown to do [3], that the difference between the two quantities is not significant.
+    In contrast to denoting uncertainty through boundary graphical marks meant to separately encode variance from
+central tendency and other distributional moments, approaches that map probability to a visual variable make uncer-
+tainty intrinsic to the presentation of other properties of a distribution like the mean. Correll and Gleicher [9] found
+that violin plots (mapping probability to area or width at a given y position) and gradient plots (mapping probability to
+opacity) lead to more intuitive assessments of value likelihood and ability to surprise, which are more closely aligned
+with statistical definitions of uncertainty. However, the findings of other studies are less clear regarding how violin and
+density plots compare to error bars. Hullman et al. [10] observed little difference between judgments about probabili-
+ties from single distributions and multiple distributions from violin plots and error bars showing a standard deviation
+range. Fernandes et al. [7] found that a density plot leads to better quality decisions in a transportation context than
+in an interval, but users who used a hybrid density plot with overlaid Bayesian 50% and 95% credible intervals made
+better decisions after practice with the display than users of either encoding in isolation.
+
+Visual Semiotics of Uncertainty
+The final theory we detail in this chapter is the proposal that uncertainty encoding techniques that utilize visual
+metaphors for uncertainty, such as graying out using color saturation [68], out of focus using blur [69], fogginess
+using transparency [70, 71], adding noise using texture [72] or sketchiness [73], are a more intuitive ways to commu-
+nicate uncertainty (see Figure 22.1 for examples and [14, 18, 19] for excellent reviews). The theory of visual semiotics
+of uncertainty, proposed by MacEachren et al. [14], suggests that visual encodings that prompt appropriate metaphors
+
+
+                                                                                                                                 10
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+are easier to map onto the corresponding aspects of the information. This theory proposes that features that viewers
+spontaneously interpret as conveying uncertainty will be more effective than features that do not evoke uncertainty
+associations. For example, MacEachren et al. [14] asked viewers to judge the intuitiveness of numerus visual encod-
+ings of uncertainty (see Figure 22.1). They found that fuzziness, location, value, arrangement, size, and transparency
+were rated as highly intuitive. The theory of visual semiotics of uncertainty [14] has inspired numerous applications
+of metaphoric uncertainty visualization from cultural collections [74] to educational reporting systems [75].
+     In addition to the metaphoric association of uncertainty, some of the visualizations in this class of approaches map
+probability to visual properties and are designed to inhibit the viewer from resolving the value of a datum when the
+uncertainty is too high. For example, the location of a point on a map can be blurred proportional to the uncertainty in
+the position, such that the viewer cannot resolve an exact location [63]. Value-suppressing uncertainty palettes [25],
+which similarly attempt to make perception difficult in proportion to uncertainty, attempt to improve upon bivariate
+color maps that plot uncertainty to a separate color dimension from value, by making value judgments more difficult
+for uncertainty values. A viewer may be able to judge the value of a datum separately from its uncertainty using the
+bivariate color map by focusing only on hue, but the value-suppressing palette blends hues denoting value with gray
+proportional to how uncertain they are. As a result, the most uncertain values all appear as the same shade of gray.
+Correll, Moritz, and Heer [25] found that when applied to choropleth maps, users weight uncertainty more heavily
+using the value-suppressing palettes in a decision task compared to the bivariate color map. The two key contributions
+of these approaches are that they elicit metaphoric associations with uncertainty and they restrict viewers from making
+overly precise judgments when uncertainty is high. In the following paragraphs, we will discuss the implications of
+these contributions in turn.
+     The theory for why it is beneficial for uncertainty visualization to metaphorically depict uncertainty has to do with
+the concept of natural mappings [21, 28]. Natural mappings suggest that there are ways to display information that
+closely aligns with how people naturally think about the data. The importance of the alignment between an individuals
+mental representation of the data and the visual depiction of the data was initially described by Pinker [28] and ex-
+panded into a decision-making framework by Padilla et al. [21]. The theory suggests that when a visual representation
+matches how people think about the data, they will use their cognitive effort reserves to complete the task effectively.
+In contrast, if the discrepancy between how the information is presented and how people conceptualize it is large, they
+will first transform the visual variables in their minds to match their mental representation [28]. The transformation
+step uses some of the viewers limited amount of mental effort, and less effort is left for the task. Uncertainty visu-
+alizations that naturally map onto how we conceptualize uncertainty may improve performance because viewers may
+not need to do superfluous mental transformations.
+     The theory of naturalness describes why metaphoric encodings of uncertainty may be helpful, but a variety of open
+questions concerning the exact nature of naturalness remain. Chief among them is the problem of determining how
+people conceptualize data. Without understanding a viewers mental representation of data, attempts to naturally match
+how we think about data are guesses. Although educated guesses about how we mentally represent information are a
+good start, additional research is needed that more scientifically identifies our mental schemas for each type of data
+and context. Additionally, we have no clear way to determine the degree of relatedness between our conceptualization
+and the visual encoding. A range of relatedness likely impacts the extent of mental transformations required.
+     A more concrete contribution of metaphoric uncertainty encodings is that some techniques do not allow viewers
+to precisely look up values when uncertainty is high. Using a visualization technique that nudges viewers toward
+incorporating uncertainty in their decision-making process is a clever way of indirectly requiring them to use the un-
+certainty information. On the other hand, for tasks requiring viewers to look up specific values, metaphoric uncertainty
+can produce worse performance, simply because looking up values can be difficult. We recommend that designers
+think carefully about the nature of the tasks they are working with and weigh the pros and cons of using metaphoric
+encodings. Further, as detailed in Hullman et al. [26], researchers need to test uncertainty visualizations with a variety
+of tasks so that they do not come to incorrect conclusions about the efficacy of a visualization. For example, testing
+the use of blur with only a point-based look-up task might suggest that blur is a poor visualization choice. However,
+if a trend or area task were used, blur might prove to be a highly successful technique.
+
+22.3     General Discussion
+There are no one-size-fits-all uncertainty visualization approaches, which is why visualization designers must think
+carefully about each of their design choices or risk adding more confusion to an already difficult decision process. This
+chapter overviews many of the common uncertainty visualization techniques and the cognitive theory that describes
+
+
+
+                                                                                                                                 11
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+how and why they function, to help designers think critically about their design choices. We focused on the uncertainty
+visualization methods and cognitive theories that have received the most support from converging measures (e.g., the
+practice of testing hypotheses in multiple ways), but there are many approaches not covered in this chapter that will
+likely prove to be exceptional visualization techniques in the future.
+     There is no single visualization technique we endorse, but there are some that should be critically considered before
+employing them. Intervals, such as error bars and the Cone of Uncertainty, can be particularly challenging for viewers.
+If a designer needs to show an interval, we also recommend displaying information that is more representative, such as
+a scatterplot, violin plot, gradient plot, ensemble plot, quantile dotplot, or HOP. Just showing an interval alone could
+lead people to conceptualize the data as categorical.
+     As alluded to in the prior paragraph, combining various uncertainty visualization approaches may be a way to
+overcome issues with one technique or get the best of both worlds. For example, each animated draw in a hypothetical
+outcome plot could leave a trace that slowly builds into a static display such as a gradient plot, or animated draws
+could be used to help explain the creation of a static technique such as a density plot, error bar, or quantile dotplot.
+Media outlets such as the New York Times have presented animated dots in a simulation to show inequalities in wealth
+distribution due to race [76]. More research is needed to understand if and how various uncertainty visualization tech-
+niques function together. It is possible that combining techniques is useful in some cases, but new and undocumented
+issues may arise when approaches are combined.
+     In closing, we stress the importance of empirically testing each uncertainty visualization approach. As noted in
+numerous papers [4, 21–23], the way that people reason with uncertainty is non-intuitive, which can be exacerbated
+when uncertainty information is communicated visually. Evaluating uncertainty visualizations can also be challenging,
+but it is necessary to ensure that people correctly interpret a display [26]. A recent survey of uncertainty visualization
+evaluations offers practical guidance on how to test uncertainty visualization techniques [26].
+
+
+
+
+                                                                                                                                 12
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+
+
+
+
+Bibliography
+
+ [1]   A. T. Pang, C. M. Wittenbrink, S. K. Lodha, et al., “Approaches to uncertainty visualization”, The Visual
+       Computer, vol. 13, no. 8, pp. 370–390, 1997.
+ [2]   S. Joslyn and S. Savelli, “Communicating forecast uncertainty: Public perception of weather forecast uncer-
+       tainty”, Meteorological Applications, vol. 17, no. 2, pp. 180–195, 2010.
+ [3]   S. Belia, F. Fidler, J. Williams, and G. Cumming, “Researchers misunderstand confidence intervals and standard
+       error bars.”, Psychological methods, vol. 10, no. 4, p. 389, 2005.
+ [4]   L. M. Padilla, S. H. Creem-Regehr, and W. Thompson, “The powerful influence of marks: Visual and knowledge-
+       driven processing in hurricane track displays.”, Journal of experimental psychology: Applied, 2019.
+ [5]   L. M. Padilla, I. T. Ruginski, and S. H. Creem-Regehr, “Effects of ensemble and summary displays on interpre-
+       tations of geospatial uncertainty data”, Cognitive research: Principles and implications, vol. 2, no. 1, pp. 1–16,
+       2017.
+ [6]   A. Fagerlin, B. J. Zikmund-Fisher, and P. A. Ubel, “Helping patients decide: Ten steps to better risk communi-
+       cation”, Journal of the National Cancer Institute, vol. 103, no. 19, pp. 1436–1443, 2011.
+ [7]   M. Fernandes, L. Walls, S. Munson, J. Hullman, and M. Kay, “Uncertainty displays using quantile dotplots
+       or cdfs improve transit decision-making”, in Proceedings of the 2018 CHI Conference on Human Factors in
+       Computing Systems, 2018, pp. 1–12.
+ [8]   D. Spiegelhalter, “Risk and uncertainty communication”, Annual Review of Statistics and Its Application, vol.
+       4, pp. 31–60, 2017.
+ [9]   M. Correll and M. Gleicher, “Error bars considered harmful: Exploring alternate encodings for mean and error”,
+       IEEE transactions on visualization and computer graphics, vol. 20, no. 12, pp. 2142–2151, 2014.
+[10] J. Hullman, P. Resnick, and E. Adar, “Hypothetical outcome plots outperform error bars and violin plots for
+     inferences about reliability of variable ordering”, PloS one, vol. 10, no. 11, 2015.
+[11] M. Kay, T. Kola, J. R. Hullman, and S. A. Munson, “When (ish) is my bus? user-centered visualizations of
+     uncertainty in everyday, mobile predictive systems”, in Proceedings of the 2016 CHI Conference on Human
+     Factors in Computing Systems, 2016, pp. 5092–5103.
+[12] L. Liu, A. P. Boone, I. T. Ruginski, L. Padilla, M. Hegarty, S. H. Creem-Regehr, W. B. Thompson, C. Yuksel,
+     and D. H. House, “Uncertainty visualization by representative sampling from prediction ensembles”, IEEE
+     transactions on visualization and computer graphics, vol. 23, no. 9, pp. 2165–2178, 2016.
+[13] B. J. Zikmund-Fisher, H. O. Witteman, M. Dickson, A. Fuhrel-Forbis, V. C. Kahn, N. L. Exe, M. Valerio, L. G.
+     Holtzman, L. D. Scherer, and A. Fagerlin, “Blocks, ovals, or people? icon type affects risk perceptions and
+     recall of pictographs”, Medical decision making, vol. 34, no. 4, pp. 443–453, 2014.
+[14] A. M. MacEachren, R. E. Roth, J. O’Brien, B. Li, D. Swingley, and M. Gahegan, “Visual semiotics & uncer-
+     tainty visualization: An empirical study”, IEEE Transactions on Visualization and Computer Graphics, vol. 18,
+     no. 12, pp. 2496–2505, 2012.
+[15] M. Mirzargar, R. T. Whitaker, and R. M. Kirby, “Curve boxplot: Generalization of boxplot for ensembles of
+     curves”, IEEE transactions on visualization and computer graphics, vol. 20, no. 12, pp. 2654–2663, 2014.
+[16] T. Munzner, Visualization analysis and design. CRC press, 2014.
+[17] S. Deitrick and E. A. Wentz, “Developing implicit uncertainty visualization methods motivated by theories in
+     decision science”, Annals of the Association of American Geographers, vol. 105, no. 3, pp. 531–551, 2015.
+
+
+                                                                                                                                 13
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+[18] C. Kinkeldey, A. M. MacEachren, and J. Schiewe, “How to assess visual communication of uncertainty? a
+     systematic review of geospatial uncertainty visualisation user studies”, The Cartographic Journal, vol. 51, no.
+     4, pp. 372–386, 2014.
+[19] C. Kinkeldey, A. M. MacEachren, M. Riveiro, and J. Schiewe, “Evaluating the effect of visually represented
+     geodata uncertainty on decision-making: Systematic review, lessons learned, and recommendations”, Cartog-
+     raphy and Geographic Information Science, vol. 44, no. 1, pp. 1–21, 2017.
+[20] R. T. Whitaker, M. Mirzargar, and R. M. Kirby, “Contour boxplots: A method for characterizing uncertainty in
+     feature sets from simulation ensembles”, IEEE Transactions on Visualization and Computer Graphics, vol. 19,
+     no. 12, pp. 2713–2722, 2013.
+[21] L. M. Padilla, S. H. Creem-Regehr, M. Hegarty, and J. K. Stefanucci, “Decision making with visualizations: A
+     cognitive framework across disciplines”, Cognitive research: Principles and implications, vol. 3, no. 1, p. 29,
+     2018.
+[22] S. Joslyn and J. LeClerc, “Decisions with uncertainty: The glass half full”, Current Directions in Psychological
+     Science, vol. 22, no. 4, pp. 308–315, 2013.
+[23] A. P. Boone, P. Gunalp, and M. Hegarty, “Explicit versus actionable knowledge: The influence of explaining
+     graphical conventions on interpretation of hurricane forecast visualizations.”, Journal of experimental psychol-
+     ogy: Applied, vol. 24, no. 3, p. 275, 2018.
+[24] M. Galesic, R. Garcia-Retamero, and G. Gigerenzer, “Using icon arrays to communicate medical risks: Over-
+     coming low numeracy.”, Health Psychology, vol. 28, no. 2, p. 210, 2009.
+[25] M. Correll, D. Moritz, and J. Heer, “Value-suppressing uncertainty palettes”, in Proceedings of the 2018 CHI
+     Conference on Human Factors in Computing Systems, 2018, pp. 1–11.
+[26] J. Hullman, X. Qiao, M. Correll, A. Kale, and M. Kay, “In pursuit of error: A survey of uncertainty visualization
+     evaluation”, IEEE transactions on visualization and computer graphics, vol. 25, no. 1, pp. 903–913, 2018.
+[27] A. Fagerlin, C. Wang, and P. A. Ubel, “Reducing the influence of anecdotal reasoning on peoples health care
+     decisions: Is a picture worth a thousand statistics?”, Medical decision making, vol. 25, no. 4, pp. 398–405, 2005.
+[28] S. Pinker, “A theory of graph comprehension”, Artificial intelligence and the future of testing, pp. 73–126,
+     1990.
+[29] L. M. Padilla, S. C. Castro, P. S. Quinan, I. T. Ruginski, and S. H. Creem-Regehr, “Toward objective evalua-
+     tion of working memory in visualizations: A case study using pupillometry and a dual-task paradigm”, IEEE
+     transactions on visualization and computer graphics, vol. 26, no. 1, pp. 332–342, 2019.
+[30] G. Gigerenzer, “The psychology of good judgment: Frequency formats and simple algorithms”, Medical deci-
+     sion making, vol. 16, no. 3, pp. 273–280, 1996.
+[31] D. Kahneman and S. Frederick, “Representativeness revisited: Attribute substitution in intuitive judgment”,
+     Heuristics and biases: The psychology of intuitive judgment, vol. 49, p. 81, 2002.
+[32] S. L. Joslyn and J. E. LeClerc, “Uncertainty forecasts improve weather-related decisions and attenuate the
+     effects of forecast error.”, Journal of experimental psychology: Applied, vol. 18, no. 1, p. 126, 2012.
+[33] A. Tversky and D. Kahneman, “Judgment under uncertainty: Heuristics and biases”, Science, vol. 185, no.
+     4157, pp. 1124–1131, 1974.
+[34] V. H. Visschers, R. M. Meertens, W. W. Passchier, and N. N. De Vries, “Probability information in risk commu-
+     nication: A review of the research literature”, Risk Analysis: An International Journal, vol. 29, no. 2, pp. 267–
+     287, 2009.
+[35] S. T. Hawley, B. Zikmund-Fisher, P. Ubel, A. Jancovic, T. Lucas, and A. Fagerlin, “The impact of the format of
+     graphical presentation on health-related knowledge and treatment choices”, Patient education and counseling,
+     vol. 73, no. 3, pp. 448–455, 2008.
+[36] A. R. Tait, T. Voepel-Lewis, B. J. Zikmund-Fisher, and A. Fagerlin, “The effect of format on parents’ under-
+     standing of the risks and benefits of clinical research: A comparison between text, tables, and graphics”, Journal
+     of health communication, vol. 15, no. 5, pp. 487–501, 2010.
+[37] D. Feldman-Stewart, M. D. Brundage, and V. Zotov, “Further insight into the perception of quantitative infor-
+     mation: Judgments of gist in treatment decisions”, Medical Decision Making, vol. 27, no. 1, pp. 34–43, 2007.
+
+
+                                                                                                                                 14
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+[38] E. A. Waters, N. D. Weinstein, G. A. Colditz, and K. Emmons, “Formats for improving risk communication in
+     medical tradeoff decisions”, Journal of health communication, vol. 11, no. 2, pp. 167–182, 2006.
+[39] E. A. Waters, A. Fagerlin, and B. J. Zikmund-Fisher, “Overcoming the many pitfalls of communicating risk”,
+     in Handbook of health decision science, Springer, 2016, pp. 265–277.
+[40] R. Garcia-Retamero and M. Galesic, “Communicating treatment risk reduction to people with low numeracy
+     skills: A cross-cultural comparison”, American journal of public health, vol. 99, no. 12, pp. 2196–2202, 2009.
+[41] R. García-Retamero and M. Galesic, “Trust in healthcare”, 2009.
+[42] R. Garcia-Retamero, M. Galesic, and G. Gigerenzer, “Do icon arrays help reduce denominator neglect?”, Med-
+     ical Decision Making, vol. 30, no. 6, pp. 672–684, 2010.
+[43] R. Garcia-Retamero, Y. Okan, and E. T. Cokely, “Using visual aids to improve communication of risks about
+     health: A review”, The Scientific World Journal, vol. 2012, 2012.
+[44] K. Yamagishi, “When a 12.86% mortality is more dangerous than 24.14%: Implications for risk communica-
+     tion”, Applied Cognitive Psychology: The Official Journal of the Society for Applied Research in Memory and
+     Cognition, vol. 11, no. 6, pp. 495–506, 1997.
+[45] Y. Okan, R. Garcia-Retamero, E. T. Cokely, and A. Maldonado, “Individual differences in graph literacy: Over-
+     coming denominator neglect in risk comprehension”, Journal of Behavioral Decision Making, vol. 25, no. 4,
+     pp. 390–401, 2012.
+[46] E. R. Stone, W. R. Sieck, B. E. Bull, J. F. Yates, S. C. Parks, and C. J. Rush, “Foreground: Background salience:
+     Explaining the effects of graphical displays on risk avoidance”, Organizational behavior and human decision
+     processes, vol. 90, no. 1, pp. 19–36, 2003.
+[47] E. A. Waters, N. D. Weinstein, G. A. Colditz, and K. M. Emmons, “Reducing aversion to side effects in preven-
+     tive medical treatment decisions.”, Journal of Experimental Psychology: Applied, vol. 13, no. 1, p. 11, 2007.
+[48] J. A. Schirillo and E. R. Stone, “The greater ability of graphical versus numerical displays to increase risk
+     avoidance involves a common mechanism”, Risk Analysis: An International Journal, vol. 25, no. 3, pp. 555–
+     566, 2005.
+[49] J. S. Ancker, E. U. Weber, and R. Kukafka, “Effect of arrangement of stick figures on estimates of proportion
+     in risk graphics”, Medical Decision Making, vol. 31, no. 1, pp. 143–150, 2011.
+[50] B. J. Zikmund-Fisher, H. O. Witteman, A. Fuhrel-Forbis, N. L. Exe, V. C. Kahn, and M. Dickson, “Animated
+     graphics for comparing two risks: A cautionary tale”, Journal of medical Internet research, vol. 14, no. 4, e106,
+     2012.
+[51] M. Kay, D. Morris, M. Schraefel, and J. A. Kientz, “There’s no such thing as gaining a pound: Reconsidering
+     the bathroom scale user interface”, in Proceedings of the 2013 ACM international joint conference on Pervasive
+     and ubiquitous computing, 2013, pp. 401–410.
+[52] J. Hullman, M. Kay, Y.-S. Kim, and S. Shrestha, “Imagining replications: Graphical prediction & discrete visu-
+     alizations improve recall & estimation of effect uncertainty”, IEEE transactions on visualization and computer
+     graphics, vol. 24, no. 1, pp. 446–456, 2017.
+[53] G. Gigerenzer and W. Gaissmaier, “Heuristic decision making”, Annual review of psychology, vol. 62, pp. 451–
+     482, 2011.
+[54] M. A. Grounds, S. Joslyn, and K. Otsuka, “Probabilistic interval forecasts: An individual differences approach
+     to understanding forecast communication”, Advances in Meteorology, vol. 2017, 2017.
+[55] I. T. Ruginski, A. P. Boone, L. M. Padilla, L. Liu, N. Heydari, H. S. Kramer, M. Hegarty, W. B. Thompson, D. H.
+     House, and S. H. Creem-Regehr, “Non-expert interpretations of hurricane forecast uncertainty visualizations”,
+     Spatial Cognition & Computation, vol. 16, no. 2, pp. 154–172, 2016.
+[56] E. Cartlidge, Prison terms for l’aquila experts shock scientists, 2012.
+[57] A. Kale, F. Nguyen, M. Kay, and J. Hullman, “Hypothetical outcome plots help untrained observers judge
+     trends in ambiguous data”, IEEE transactions on visualization and computer graphics, vol. 25, no. 1, pp. 892–
+     902, 2018.
+
+
+
+
+                                                                                                                                 15
+Citation: Padilla, L., Kay, M. and Hullman, J. (2022). Uncertainty Visualization. In W. Piegorsch, R. Levine, H. Zhang, and T.
+Lee (Eds.), Computational Statistics in Data Science (pp. 405-421). Wiley.
+Chapter 22 by Lace Padilla, Matthew Kay, Jessica Hullman
+Circulation limited to personal use, see published chapter for wide circulation and citation:
+https://www.wiley.com/en-us/Computational+Statistics+in+Data+Science-p-9781119561071
+[58] Y.-S. Kim, L. A. Walls, P. Krafft, and J. Hullman, “A bayesian cognition approach to improve data visual-
+     ization”, in Proceedings of the 2019 CHI Conference on Human Factors in Computing Systems, 2019, pp. 1–
+     14.
+[59] C Ehlschlaeger, “Exploring temporal effects in animations depicting spatial data uncertainty”, in Association of
+     American Geographers Annual Conference, Boston, MS, USA, 1998.
+[60] D. Feng, L. Kwock, Y. Lee, and R. Taylor, “Matching visual saliency to confidence in plots of uncertain data”,
+     IEEE Transactions on Visualization and Computer Graphics, vol. 16, no. 6, pp. 980–989, 2010.
+[61] B. Tversky, “Visuospatial reasoning”, The Cambridge handbook of thinking and reasoning, pp. 209–240, 2005.
+[62] L. Padilla, P. S. Quinan, M. Meyer, and S. H. Creem-Regehr, “Evaluating the impact of binning 2d scalar
+     fields”, IEEE transactions on visualization and computer graphics, vol. 23, no. 1, pp. 431–440, 2016.
+[63] G. McKenzie, M. Hegarty, T. Barrett, and M. Goodchild, “Assessing the effectiveness of different visualizations
+     for judgments of positional uncertainty”, International Journal of Geographical Information Science, vol. 30,
+     no. 2, pp. 221–239, 2016.
+[64] G. E. Newman and B. J. Scholl, “Bar graphs depicting averages are perceptually misinterpreted: The within-
+     the-bar bias”, Psychonomic bulletin & review, vol. 19, no. 4, pp. 601–607, 2012.
+[65] L. Liu, L. Padilla, S. H. Creem-Regehr, and D. H. House, “Visualizing uncertain tropical cyclone predictions
+     using representative samples from ensembles of forecast tracks”, IEEE transactions on visualization and com-
+     puter graphics, vol. 25, no. 1, pp. 882–891, 2018.
+[66] B. Chance, R. del Mas, and J. Garfield, “Reasoning about sampling distribitions”, in The challenge of develop-
+     ing statistical literacy, reasoning and thinking, Springer, 2004, pp. 295–323.
+[67] J. M. Hofman, D. G. Goldstein, and J. Hullman, “How visualizing inferential uncertainty can mislead readers
+     about treatment effects in scientific results”, in Proceedings of the 2020 CHI Conference on Human Factors in
+     Computing Systems. ACM, 2020.
+[68] T. Hengl, “Visualisation of uncertainty using the hsi colour model: Computations with colours”, in 7th Interna-
+     tional conference on GeoComputation, 2003.
+[69] B. Jiang, F. Ormeling, and W. Kainz, “Visualization support for fuzzy spatial analysis”, in In Proc,. ACSM/ASPRS
+     Conference, Citeseer, 1995.
+[70] P. J. Rhodes, R. S. Laramee, R. D. Bergeron, T. M. Sparr, et al., “Uncertainty visualization methods in isosurface
+     rendering.”, in Eurographics (Short Papers), 2003.
+[71] A. M. MacEachren, A. Robinson, S. Hopper, S. Gardner, R. Murray, M. Gahegan, and E. Hetzler, “Visualizing
+     geospatial information uncertainty: What we know and what we need to know”, Cartography and Geographic
+     Information Science, vol. 32, no. 3, pp. 139–160, 2005.
+[72] D. Howard and A. M. MacEachren, “Interface design for geographic visualization: Tools for representing reli-
+     ability”, Cartography and Geographic Information Systems, vol. 23, no. 2, pp. 59–77, 1996.
+[73] N. Boukhelifa, A. Bezerianos, T. Isenberg, and J.-D. Fekete, “Evaluating sketchiness as a visual variable for the
+     depiction of qualitative uncertainty”, IEEE Transactions on Visualization and Computer Graphics, vol. 18, no.
+     12, pp. 2769–2778, 2012.
+[74] F. Windhager, S. Salisu, and E. Mayr, “Exhibiting uncertainty: Visualizing data quality indicators for cultural
+     collections”, in Informatics, Multidisciplinary Digital Publishing Institute, vol. 6, 2019, p. 29.
+[75] C. D. Epp and S. Bull, “Uncertainty representation in visualizations of learning analytics for learners: Current
+     approaches and opportunities”, IEEE Transactions on Learning Technologies, vol. 8, no. 3, pp. 242–260, 2015.
+[76] E. Badger, C. C. Miller, A. Pearce, and K. Quealy, “Extensive data shows punishing reach of racism for black
+     boys”, New York Times, vol. 19, 2018.
+
+
+
+
+                                                                                                                                 16
+

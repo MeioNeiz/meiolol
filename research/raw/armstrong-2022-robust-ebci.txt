@@ -1,0 +1,4548 @@
+arXiv:2004.03448v4 [econ.EM] 14 May 2022
+
+Robust Empirical Bayes Confidence Intervals∗
+Timothy B. Armstrong†
+
+Michal Kolesár‡
+
+University of Southern California
+
+Princeton University
+
+Mikkel Plagborg-Møller§
+Princeton University
+May 17, 2022
+
+Abstract
+We construct robust empirical Bayes confidence intervals (EBCIs) in a normal
+means problem. The intervals are centered at the usual linear empirical Bayes estimator, but use a critical value accounting for shrinkage. Parametric EBCIs that assume a
+normal distribution for the means (Morris, 1983b) may substantially undercover when
+this assumption is violated. In contrast, our EBCIs control coverage regardless of the
+means distribution, while remaining close in length to the parametric EBCIs when the
+means are indeed Gaussian. If the means are treated as fixed, our EBCIs have an
+average coverage guarantee: the coverage probability is at least 1 − α on average across
+
+the n EBCIs for each of the means. Our empirical application considers the effects of
+U.S. neighborhoods on intergenerational mobility.
+Keywords: average coverage, empirical Bayes, confidence interval, shrinkage
+JEL codes: C11, C14, C18
+
+∗
+
+This paper is dedicated to the memory of Gary Chamberlain, who had a profound influence on our
+thinking about decision problems in econometrics, and empirical Bayes methods in particular. Luther Yap
+provided excellent research assistance. We received helpful comments from four anonymous referees, Otávio
+Bartalotti, Toru Kitagawa, Laura Liu, Ulrich Müller, Stefan Wager, Mark Watson, Martin Weidner, and
+numerous seminar participants. We are especially indebted to Bruce Hansen and Roger Koenker for inspiring
+our simulation study. Armstrong acknowledges support by the National Science Foundation Grant SES2049765. Kolesár acknowledges support by the Sloan Research Fellowship and by the National Science
+Foundation Grant SES-22049356. Plagborg-Møller acknowledges support by the National Science Foundation
+Grant SES-1851665.
+†
+email: timothy.armstrong@usc.edu
+‡
+email: mkolesar@princeton.edu
+§
+email: mikkelpm@princeton.edu
+
+1
+
+1
+
+Introduction
+
+Empirical researchers in economics are often interested in estimating effects for many individuals or units, such as estimating teacher quality for teachers in a given geographic area.
+In such problems, it is common to shrink unbiased but noisy preliminary estimates of these
+effects toward baseline values, say the average effect for teachers with the same experience.
+In addition to estimating teacher quality (Kane and Staiger, 2008; Jacob and Lefgren, 2008;
+Chetty et al., 2014), shrinkage techniques are used in a wide range of applications including
+estimating school quality (Angrist et al., 2017), hospital quality (Hull, 2020), the effects of
+neighborhoods on intergenerational mobility (Chetty and Hendren, 2018), and patient risk
+scores across regional health care markets (Finkelstein et al., 2017).
+The shrinkage estimators used in these applications can be motivated by an empirical
+Bayes (EB) approach. One imposes a working assumption that the individual effects are
+drawn from a normal distribution (or, more generally, a known family of distributions). The
+mean squared error (MSE) optimal point estimator then has the form of a Bayesian posterior
+mean, treating this distribution as a prior distribution. Rather than specifying the unknown
+parameters in the prior distribution ex ante, the EB estimator replaces them with consistent
+estimates, just as in random effects models. This approach is attractive because one does not
+need to assume that the effects are in fact normally distributed, or even take a “Bayesian” or
+“random effects” view: the EB estimators have lower MSE (averaged across units) than the
+unshrunk unbiased estimators, even when the individual effects are treated as nonrandom
+(James and Stein, 1961).
+In spite of the popularity of EB methods, it is currently not known how to provide uncertainty assessments to accompany the point estimates without imposing strong parametric
+assumptions on the effect distribution. Indeed, Hansen (2016, p. 116) describes inference in
+shrinkage settings as an open problem in econometrics. The natural EB version of a confidence interval (CI) takes the form of a Bayesian credible interval, again using the postulated
+effect distribution as a prior (Morris, 1983b). If the distribution is correctly specified, this
+parametric empirical Bayes confidence interval (EBCI) will cover 95%, say, of the true effect
+parameters, under repeated sampling of the observed data and of the effect parameters. We
+refer to this notion of coverage as “EB coverage”, following the terminology in Morris (1983b).
+Unfortunately, we show that, in the context of a normal means model, the parametric EBCI
+with nominal level 95% can have actual EB coverage as low as 74% for certain non-normal
+effect distributions. The potential undercoverage is increasing in the degree of shrinkage,
+and we derive a simple “rule of thumb” for gauging the potential coverage distortion.
+To allow easy uncertainty assessment in EB applications that is reliable irrespective
+
+2
+
+of the degree of shrinkage, we construct novel robust EBCIs that take a simple form and
+control EB coverage regardless of the true effect distribution. Our baseline model is an
+(approximate) normal means problem Yi ∼ N (θi , σi2 ), i = 1, . . . , n. In applications, Yi
+represents a preliminary estimate of the effect θi for unit i. Like the parametric EBCI that
+assumes a normal distribution for θi , the robust EBCI we propose is centered at the normalitybased EB point estimate θ̂i that shrinks Yi toward some baseline value, but it uses a larger
+critical value to account for bias due to shrinkage.1 EB coverage is controlled in the class of
+all distributions for θi that satisfy certain moment bounds, which we estimate consistently
+from the data (similarly to the parametric EBCI, which uses the second moment). We show
+that the baseline implementation of our robust EBCI is “adaptive”: its length is close to that
+of the parametric EBCI when the θi ’s are in fact normally distributed. Thus, little efficiency
+is lost from using the robust EBCI in place of the non-robust parametric one.2
+In addition to controlling EB coverage, the robust EBCIs with level 1 − α have a frequentist average coverage property: If the means θ1 , . . . , θn are treated as fixed, the coverage
+probability, averaged across the n parameters θi , is at least 1 − α. In fact, under mild conditions, at least a fraction 1 − α of the n EBCIs will contain their respective parameters
+(with high probability as n → ∞). This weakening of the usual requirement of coverage for
+each parameter θi allows our robust EBCI to be shorter than the usual CI centered at the
+unshrunk estimate Yi , and often substantially so.3 Intuitively, the average coverage criterion
+only requires us to guard against the average coverage distortion induced by the biases of the
+individual shrinkage estimators θ̂i , and the data is quite informative about whether most of
+these biases are large, even though individual biases are difficult to estimate. To complement
+the frequentist properties, our EBCIs can be viewed as Bayesian credible sets that are robust
+to the prior on θi , in terms of ex ante coverage.
+The average coverage criterion has the same motivation as the usual frequentist justification of the EB point estimator : the EB point estimator achieves lower MSE on average
+across units at the expense of potentially worse performance for some individual units (see,
+for example, Efron, 2010, Ch. 1.3). Thus, researchers who use EB estimators instead of
+the unshrunk Yi ’s prioritize favorable group performance over protecting individual perfor1
+
+Our methods are implemented in the Stata package ebreg, R package ebci, and Matlab package
+ebci matlab, which are available at SSC, CRAN, and GitHub, respectively.
+2
+If the θi ’s are not normally distributed, our robust EBCIs are valid but may leave room for greater
+efficiency improvement, as we discuss in Section 5.3.
+3
+Relaxing the usual notion of coverage in some way is necessary to obtain intervals that reflect the
+efficiency improvement of the empirical Bayes approach. In particular, the results in Pratt (1961) imply that
+for CIs with coverage 95%, one cannot achieve expected length improvements greater than 15% relative to
+the usual unshrunk CIs, even if one happens to optimize length for the true parameter vector (θ1 , . . . , θn ).
+See, for example, Corollary 3.3 in Armstrong and Kolesár (2018) and the discussion following it.
+
+3
+
+mance. Our average coverage intervals make an analogous tradeoff: they guarantee coverage
+and achieve short length on average across units at the expense of giving up on a coverage
+guarantee for every individual unit. We examine this tradeoff in more detail in Section 5.
+We caution, however, that the average coverage criterion is typically inappropriate in applications where shrinkage point estimation is unattractive. This includes settings where one
+is interested in the magnitude or the identity of the largest θi , or the true effect for the largest
+observed Yi (as in, for example, Hung and Fithian, 2019, or Andrews et al., 2021).4 It also
+includes settings where a particular effect, say θ1 , is of primary interest, or, more generally,
+settings where the effects are not exchangeable, and their ordering is relevant (Greenshtein
+and Ritov, 2019). Our methods are also not applicable if one is interested in functionals
+of the random effects distribution (as in Bonhomme and Weidner, 2021, or Ignatiadis and
+Wager, 2021), rather than in the effects themselves. Finally, the justification for our methods
+is asymptotic in the number of parameters n. In our Monte Carlo simulations, we find that
+our EBCIs have close to nominal coverage over a range of data generating processes (DGPs)
+once n is greater than 100.
+We illustrate our results by computing EBCIs for the causal effects of growing up in different U.S. neighborhoods (specifically commuting zones) on intergenerational mobility. We
+follow Chetty and Hendren (2018), who apply EB shrinkage to initial fixed effects estimates.
+Depending on the specification, we find that the robust EBCIs are on average 12–25% as
+long as the unshrunk CIs.
+Our underlying ideas extend to other linear and non-linear shrinkage settings with possibly non-Gaussian data. For example, our techniques allow for the construction of robust
+EBCIs that contain (nonlinear) soft thresholding estimators, as well as average coverage
+confidence bands for nonparametric regression functions.
+The average coverage criterion was originally introduced in the literature on nonparametric regression (Wahba, 1983; Nychka, 1988; Wasserman, 2006, Ch. 5.8). Cai et al. (2014)
+construct adaptive average coverage confidence bands. These procedures are challenging to
+implement in our EB setting, and lack a clear finite-sample justification, unlike our procedure.
+Liu et al. (2019) construct forecast intervals in a dynamic panel data model that guarantee
+average coverage in a Bayesian sense (for a fixed prior). We discuss alternative approaches
+to inference in EB settings in Section 5.
+The rest of this paper is organized as follows. Section 2 illustrates our methods in the
+context of a simple homoskedastic Gaussian model. Section 3 presents our recommended
+4
+
+As we show in Section 6.2, our methods do extend to settings where we keep a subset of units i that
+exceed a given cutoff. However, we do not allow this cutoff to diverge with the sample size, such as when
+one focuses on the unit i with the single largest observed Yi .
+
+4
+
+baseline procedure and discusses practical implementation issues. Section 4 presents our
+main results on the coverage and efficiency of the robust EBCI, and on the coverage distortions of the parametric EBCI; we also verify the finite-sample coverage accuracy of the
+robust EBCI through extensive simulations. Section 5 compares our EBCI with other inference approaches. Section 6 discusses extensions of the basic framework. Section 7 contains
+an empirical application to inference on neighborhood effects. Appendices A to C give details
+on finite-sample corrections, computational details, and formal asymptotic coverage results.
+The Online Supplement contains proofs as well as further technical results. Applied readers
+are encouraged to focus on Sections 2, 3 and 7.
+
+2
+
+Simple example
+
+This section illustrates the construction of the robust EBCIs that we propose in a simplified
+setting with no covariates and with known, homoskedastic errors. Section 3 relaxes these
+restrictions, and discusses other empirically relevant extensions of the basic framework, as
+well as implementation issues.
+We observe n estimates Yi of elements of the parameter vector θ = (θ1 , . . . , θn )0 . Each
+estimate is normally distributed with common, known variance σ 2 ,
+Yi | θ ∼ N (θi , σ 2 ),
+
+i = 1, . . . , n.
+
+(1)
+
+In many applications, the Yi ’s arise as preliminary least squares estimates of the parameters
+θi . For instance, they may correspond to fixed effect estimates of teacher or school value
+added, neighborhood effects, or firm and worker effects. In such cases, Yi will only be
+approximately normal in large samples by the central limit theorem (CLT); we take this
+explicitly into account in the theory in Appendix C.
+A popular approach to estimation that substantially improves upon the raw estimator
+Pn
+2
+θ̂i = Yi under the compound MSE
+i=1 E[(θ̂i − θi ) ] is based on empirical Bayes (EB)
+shrinkage. In particular, suppose that the θi ’s are themselves normally distributed,
+θi ∼ N (0, µ2 ).
+
+(2)
+
+Our discussion below applies if Eq. (2) is viewed as a subjective Bayesian prior distribution
+for a single parameter θi , but for concreteness we will think of Eq. (2) as a “random effects”
+sampling distribution for the n mean parameters θ1 , . . . , θn . Under Eq. (2), it is optimal
+to estimate θi using the posterior mean θ̂i = wEB Yi , where wEB = 1 − σ 2 /(σ 2 + µ2 ). To
+avoid having to specify the variance µ2 , the EB approach treats it as an unknown parameter,
+5
+
+and replaces the marginal precision of Yi , 1/(σ 2 + µ2 ), with a method of moments estimate
+P
+P
+n/ ni=1 Yi2 , or the degrees-of-freedom adjusted estimate (n − 2)/ ni=1 Yi2 . The latter leads
+P
+to the classic estimator of James and Stein (1961), ŵEB = 1 − σ 2 (n − 2)/ ni=1 Yi2 .
+One can also use Eq. (2) to construct CIs for the θi ’s. In particular, since the marginal
+2
+distribution of wEB Yi − θi is normal with mean zero and variance (1 − wEB )2 µ2 + wEB
+σ2 =
+wEB σ 2 , this leads to the 1 − α CI
+1/2
+
+wEB Yi ± z1−α/2 wEB σ,
+
+(3)
+
+where zα is the α quantile of the standard normal distribution. Since the form of the interval
+is motivated by the parametric assumption (2), we refer to it as a parametric EBCI. With µ2
+unknown, one can replace wEB by ŵEB .5 This is asymptotically equivalent to (3) as n → ∞.
+The coverage of the parametric EBCI in (3) is 1 − α under repeated sampling of (Yi , θi )
+according to Eqs. (1) and (2). To distinguish this notion of coverage from the case with fixed
+θ, we refer to coverage under repeated sampling of (Yi , θi ) as “empirical Bayes coverage”.
+This follows the definition of an empirical Bayes confidence interval (EBCI) in Morris (1983b,
+Eq. 3.6) and Carlin and Louis (2000, Ch. 3.5). Unfortunately, this coverage property relies
+heavily on the parametric assumption (2). We show in Section 4.3 that the actual EB
+coverage of the nominal 1 − α parametric EBCI can be as low as 1 − 1/ max{z1−α/2 , 1} for
+certain non-normal distributions of θi with variance µ2 ; for 95% EBCIs, this evaluates to 74%.
+This contrasts with existing results on estimation: although the EB estimator is motivated
+by the parametric assumption (2), it performs well even if this assumption is dropped, with
+low MSE even if we treat θ as fixed.
+This paper constructs an EBCI with a similar robustness property: the interval will be
+close in length to the parametric EBCI when Eq. (2) holds, but its EB coverage is at least 1−α
+without any parametric assumptions on the distribution of θi . To describe the construction,
+suppose that all that is known is that θi is sampled from a distribution with second moment
+P
+given by µ2 (in practice, we can replace µ2 by the consistent estimate n−1 ni=1 Yi2 − σ 2 ).
+2
+Conditional on θi , the estimator wEB Yi has bias (wEB − 1)θi and variance wEB
+σ 2 , so that the
+t-statistic (wEB Yi − θi )/wEB σ is normally distributed with mean bi = (1 − 1/wEB )θi /σ and
+variance 1. Therefore, if we use a critical value χ, the non-coverage of the CI wEB Yi ±χwEB σ,
+conditional on θi , will be given by the probability
+r(bi , χ) = P (|Z − bi | ≥ χ | θi ) = Φ(−χ − bi ) + Φ(−χ + bi ),
+5
+
+(4)
+
+Alternatively, to account for estimation error in ŵEB , Morris (1983b) suggests adjusting the variance
+estimate ŵEB σ 2 to ŵEB σ 2 + 2Yi2 (1 − ŵEB )2 /(n − 2). The adjustment does not matter asymptotically.
+
+6
+
+where Z denotes a standard normal random variable, and Φ denotes its cdf. Thus, by iterated
+expectations, under repeated sampling of θi , the non-coverage is bounded by
+ρ(σ 2 /µ2 , χ) = sup EF [r(b, χ)] s.t. EF [b2 ] =
+F
+
+(1 − 1/wEB )2
+σ2
+,
+µ
+=
+2
+σ2
+µ2
+
+(5)
+
+where EF denotes expectation under b ∼ F . Although this is an infinite-dimensional optimization problem over the space of distributions, it turns out that it admits a simple
+closed-form solution, which we give in Proposition B.1 in Appendix B. Moreover, because
+the optimization is a linear program, it can be solved even in the more general settings of
+applied relevance that we consider in Section 3.
+Set χ = cvaα (σ 2 /µ2 ), where cvaα (t) = ρ−1 (t, α), and the inverse is with respect to the
+second argument. Then the resulting interval
+wEB Yi ± cvaα (σ 2 /µ2 )wEB σ
+
+(6)
+
+will maintain coverage 1 − α among all distributions of θi with E[θi2 ] = µ2 (recall that we
+estimate µ2 consistently from the data). For this reason, we refer to it as a robust EBCI.
+Figure 1 in Section 3.1 gives a plot of the critical values for α = 0.05. We show in Section 4.2
+below that by also imposing a constraint on the fourth moment of θi , in addition to the
+second moment constraint, one can construct a robust EBCI that “adapts” to the Gaussian
+case in the sense that its length will be close to that of the parametric EBCI in Eq. (3) if
+these moment constraints are compatible with a normal distribution.
+Instead of considering EB coverage, one may alternatively wish to assess uncertainty
+associated with the estimates θ̂i = wEB Yi when θ is treated as fixed. In this case, the EBCI
+in Eq. (6) has an average coverage guarantee that
+n
+
+
+1X
+P θi ∈ [wEB Yi ± cvaα (σ 2 /µ2 )wEB σ] θ ≥ 1 − α,
+n i=1
+
+(7)
+
+provided that the moment constraint can be interpreted as a constraint on the empirical
+P
+second moment on the θi ’s, n−1 ni=1 θi2 = µ2 . In other words, if we condition on θ, then the
+coverage is at least 1 − α on average across the n EBCIs for θ1 , . . . , θn . To see this, note that
+the average non-coverage of the intervals is bounded by (5), except that the supremum is only
+taken over possible empirical distributions for θ1 , . . . , θn satisfying the moment constraint.
+Since this supremum is necessarily smaller than ρ(σ 2 /µ2 , χ), it follows that the average
+coverage is at least 1 − α. In fact, if the Yi ’s exhibit limited dependence across i, a stronger
+property holds: the probability that at least a fraction 1 − α of the n EBCIs contain their
+7
+
+respective true parameters converges to 1 as n → ∞, cf. Remark 4.1 below.
+The usual CIs Yi ± z1−α/2 σ also of course achieve average coverage 1 − α. The robust
+EBCI in Eq. (6) will, however, be shorter, especially when µ2 is small relative to σ 2 —see
+Figure 3 below. The reduction in length is achieved by weakening the requirement that
+each CI covers its true parameter 1 − α percent of the time to the requirement that the
+coverage probability equal 1 − α on average across the CIs. It may seem surprising that
+we can construct a narrower CI by centering it at the shrinkage estimates wEB Yi . The
+intuition for this is that the shrinkage reduces the variability of the estimates, at the expense
+of introducing bias in the estimates. The bias necessitates the use of a larger critical value
+cvaα (σ 2 /µ2 ). Because under the average coverage criterion we only need to control the bias
+on average across i, rather than for each individual θi , this increase in the critical value is
+smaller than the reduction in the standard error.
+
+3
+
+Practical implementation
+
+We now describe how to compute a robust EBCI that allows for heteroskedasticity, shrinks
+towards more general regression estimates rather than towards zero, and exploits higher
+moments of the bias to yield a narrower interval. In Section 3.1, we describe the empirical Bayes model that motivates our baseline approach. Section 3.2 describes the practical
+implementation of our baseline approach.
+
+3.1
+
+Motivating model and robust EBCI
+
+In applied settings, the unshrunk estimates Yi will typically have heteroskedastic variances.
+Furthermore, rather than shrinking towards zero, it is common to shrink toward an estimate
+of θi based on some covariates Xi , such as a regression estimate Xi0 δ̂. We now describe how
+to adapt the ideas in Section 2 to such settings.
+Consider a generalization of the model in Eq. (1) that allows for heteroskedasticity and
+covariates,
+Yi | θi , Xi , σi ∼ N (θi , σi2 ),
+i = 1, . . . , n.
+(8)
+The covariate vector Xi may contain just the intercept, and it may also contain (functions of)
+σi . To construct an EB estimator of θi , consider the working assumption that the sampling
+distribution of the θi ’s is conditionally normal:
+θi | Xi , σi ∼ N (µ1,i , µ2 ),
+
+8
+
+where µ1,i = Xi0 δ.
+
+(9)
+
+The hierarchical model (8)–(9) leads to the Bayes estimate θ̂i = µ1,i + wEB,i (Yi − µ1,i ), where
+0
+2
+wEB,i = µ2µ+σ
+2 . This estimate shrinks the unrestricted estimate Yi of θi toward µ1,i = Xi δ.
+i
+In contrast to (8), the normality assumption (9) typically cannot be justified simply by
+appealing to the CLT; the linearity of the conditional mean µ1,i = Xi0 δ may also be suspect.
+Our robust EBCI will therefore be constructed so that it achieves valid EB coverage even
+if assumption (9) fails. To obtain a narrow robust EBCI, we augment the second moment
+restriction used to compute the critical value in Eq. (5) with restrictions on higher moments
+of the bias of θ̂i . In our baseline specification, we add a restriction on the fourth moment.
+In particular, we replace assumption (9) with the much weaker requirement that the
+conditional second moment and kurtosis of εi = θi − Xi0 δ do not depend on (Xi , σi ):
+E[(θi − Xi0 δ)2 | Xi , σi ] = µ2 ,
+
+E[(θi − Xi0 δ)4 | Xi , σi ]/µ22 = κ,
+
+(10)
+
+where δ is defined as the probability limit of the regression estimate δ̂.6 We discuss this
+requirement further in Remark 3.1 below, and we relax it in Remark 3.2 below.
+We now apply analysis analogous to that in Section 2. Let us suppose for simplicity
+that δ, µ2 , κ, and σi are known; we relax this assumption in Section 3.2 below, and in the
+theory in Section 4. Denote the conditional bias of θ̂i normalized by the standard error by
+bi = (wEB,i − 1)εi /(wEB,i σi ) = −σi εi /µ2 . Under repeated sampling of θi , the non-coverage of
+the CI θ̂i ± χwEB,i σ, conditional on (Xi , σi ), depends on the distribution of the normalized
+bias bi , as in Section 2. Given the moments µ2 and κ, the maximal non-coverage is given by
+ρ(m2,i , κ, χ) = sup EF [r(b, χ)] s.t. EF [b2 ] = m2,i , EF [b4 ] = κm22,i ,
+
+(11)
+
+F
+
+where b is distributed according to the distribution F . Here m2,i = E[b2i | Xi , σi ] = σi2 /µ2 .
+Observe that the kurtosis of bi matches that of εi . Appendix B shows that the infinitedimensional linear program (11) can be reduced to two nested univariate optimizations. We
+also show that the least favorable distribution—the distribution F maximizing (11)—is a
+discrete distribution with up to 4 support points (see Remark B.1).
+Define the critical value cvaα (m2,i , κ) = ρ−1 (m2,i , κ, α), where the inverse is in the last
+argument. Figure 1 plots this function for α = 0.05 and selected values of κ. This leads to
+the robust EBCI
+θ̂i ± cvaα (m2,i , κ)wEB,i σi ,
+(12)
+which, by construction, has coverage at least 1 − α under repeated sampling of (Yi , θi ),
+6
+
+Our framework can be modified to let (Xi , σi ) be fixed, in which case δ depends on n. See the discussion
+following Theorem 4.1 below.
+
+9
+
+cva0.05 (m2 , ∞)
+
+7
+
+Critical value
+
+6
+
+5
+
+cva0.05 (m2 , 3)
+cvaP,0.05 (m2 )
+4
+
+cva0.05 (m2 , 1)
+3
+
+1.96
+
+0
+
+1
+
+2
+
+3
+
+4
+
+m2
+Figure 1: Function cvaα (m2 , κ) for α = 0.05 and selected values of κ. The function cvaα (m2 ),
+defined in Section 2, that only imposes a constraint
+√ on the second moment, corresponds to
+cvaα (m2 , ∞). The function cvaP,α (m2 ) = z1−α/2 1 + m2 corresponds to the critical value
+under the assumption that θi is normally distributed.
+conditional on (Xi , σi ), so long as Eq. (10) holds; it is not required that (9) holds. Note that
+both the critical value and the CI length are increasing in σi .
+
+3.2
+
+Baseline implementation
+
+Our baseline implementation of the robust EBCI plugs in consistent estimates of the unknown
+quantities in Eq. (12), based on the data {Yi , Xi , σ̂i }ni=1 , where σ̂i is a consistent estimate of
+σi (such as the standard error of the preliminary estimate Yi ), and Xi is a vector of covariates
+that are thought to help predict θi .
+P
+P
+1. Regress Yi on Xi to obtain the fitted values Xi0 δ̂, with δ̂ = ( ni=1 ωi Xi Xi0 )−1 ni=1 ωi Xi Yi
+denoting the weighted least squares estimate with precision weights ωi . Two natural
+choices are setting ωi = σ̂i−2 , or setting ωi = 1/n
+unweighted estimates;
+see
+o Apn Pfor
+Pn
+n
+2 σ̂ 4
+2 −σ̂ 2 )
+ω
+ω
+(ε̂
+2
+i=1
+i
+Pni i
+Pni i 2 , and
+, Pn ωi=1
+pendix A.2 for further discussion. Let µ̂2 = max
+i=1 ωi
+i=1 i · i=1 ωi σ̂i
+n Pn
+o
+P
+4 −6σ̂ 2 ε̂2 +3σ̂ 4 )
+32 n ω 2 σ̂ 8
+i=1 ωi (ε̂i
+i
+Pn i i
+Pn i=1Pni i
+, where ε̂i = Yi − Xi0 δ̂.
+κ̂ = max
+,
+1
++
+2
+2
+µ̂
+ωi
+µ̂
+ωi ·
+ωi σ̂ 4
+2
+
+i=1
+
+2
+
+i=1
+
+i=1
+
+i
+
+2. Form the EB estimate
+
+θ̂i = Xi0 δ̂ + ŵEB,i (Yi − Xi0 δ̂),
+10
+
+where ŵEB,i =
+
+µ̂2
+.
+µ̂2 + σ̂i2
+
+3. Compute the critical value cvaα (σ̂i2 /µ̂2 , κ̂) defined below Eq. (11).
+4. Report the robust EBCI
+θ̂i ± cvaα (σ̂i2 /µ̂2 , κ̂)ŵEB,i σ̂i .
+
+(13)
+
+We provide fast and stable software packages that automate these steps (see footnote 1). We
+now discuss the assumptions needed for validity of the robust EBCI.
+Remark 3.1 (Conditional EB coverage and moment independence). A potential concern
+about EB coverage in a heteroskedastic setting is that in order to reduce the length of the
+CI on average, one could choose to overcover parameters θi with small σi and undercover
+parameters θi with large σi . Our robust EBCI ensures that this does not happen by requiring
+EB coverage to hold conditional on (Xi , σi ). This also avoids analogous coverage concerns
+as a result of the value of Xi .
+The key to ensuring this property is assumption (10) that the conditional second moment
+and kurtosis of εi = θi − Xi0 δ do not depend on (Xi , σi ). Conditional moment independence
+assumptions of this form are common in the literature. For instance, it is imposed in the
+analysis of neighborhood effects in Chetty and Hendren (2018) (their approach requires
+independence of the second moment), which is the basis for our empirical application in
+Section 7. Nonetheless, such conditions may be strong in some settings, as argued by Xie et al.
+(2012) in the context of EB point estimation. In Remark 3.2 below, we drop condition (10)
+entirely by replacing µ̂2 and κ̂ with nonparametric estimates of these conditional moments;
+alternatively, one could relax it by using a flexible parametric specification.7
+Remark 3.2 (Nonparametric moment estimates). As a robustness check to guard against
+failure of the moment independence assumption (10), one may replace the critical value
+in Eq. (13) with cvaα ((1−1/ŵEB,i )2 µ̂2i /σ̂i2 , κ̂i ), where µ̂2i and κ̂i are consistent nonparametric
+estimates of µ2i = E[(θi − Xi0 δ)2 | Xi , σi ] and κi = E[(θi − Xi0 δ)4 | Xi , σi ]/µ22i . The resulting
+CI will be asymptotically equivalent to the CI in the baseline implementation if Eq. (10)
+holds, but it will achieve valid EB coverage even if this assumption fails. In our empirical
+application, we use nearest-neighbor estimates, as described in Appendix A.1. As a simple
+diagnostic to gauge how much the second moment of θi − Xi0 δ varies with (Xi , σi ), one can
+report the R2 gain in predicting ε̂2i − σ̂i2 using µ̂2i rather than the baseline estimate µ̂2 , as
+we illustrate in our empirical application.
+7
+
+Another way to drop condition (10) is to base shrinkage on the t-statistics Yi /σi , applying the baseline
+implementation above with Yi /σ̂i in place of Yi and 1 in place of σ̂i . Then the homoskedastic analysis in
+Section 2 applies, leading to valid EBCIs without any assumptions about independence of the moments. See
+Remark 3.8 and Appendix D.1 in Armstrong et al. (2020) for further discussion.
+
+11
+
+Remark 3.3 (Average coverage and non-independent sampling). We show in Section 4 that
+the robust EBCI satisfies an average coverage criterion of the form (7) when the parameters
+θ = (θ1 , . . . , θn ) are considered fixed, in addition to achieving valid EB coverage when the
+θi ’s are viewed as random draws from some underlying distribution. To guarantee average
+coverage or EB coverage, we do not need to assume that the Yi ’s and θi ’s are drawn independently across i. This is because the average coverage and EB coverage criteria only depend
+on the marginal distribution of (Yi , θi ), not the joint distribution. Indeed, in deriving the
+infeasible CI in Eq. (12), we made no assumptions about the dependence structure of (Yi , θi )
+across i. Consequently, to guarantee asymptotic coverage of the feasible interval in Eq. (13)
+as n → ∞, we only need to ensure that the estimates µ̂2 , κ̂, δ̂, σ̂i are consistent for µ2 , κ, δ, σi ,
+which is the case under many forms of weak dependence or clustering. Furthermore, our
+baseline implementation above does not require the researcher to take an explicit stand on
+the dependence of the data; for example, in the case of clustering, the researcher does not
+need to take an explicit stand on how the clusters are defined.
+Remark 3.4 (Estimating moments of the distribution of θi ). The estimators µ̂2 and κ̂ in
+step 1 of our baseline implementation above are based on the moment conditions E[(Yi −
+Xi0 δ)2 − σi2 | Xi , σi ] = µ2 and E[(Yi − Xi0 δ)4 + 3σi4 − 6σi2 (Yi − Xi0 δ)2 | Xi , σi ] = κµ22 , replacing
+population expectations by weighted sample averages. In addition, to avoid small-sample
+coverage issues when µ2 and κ are near their theoretical lower bounds of 0 and 1, respectively,
+these estimates incorporate truncation on µ̂2 and κ̂. These truncated estimates approximate
+the Bayesian posterior means under a flat prior on µ2 and κ, as in Morris (1983a,b). Although
+the resulting EBCIs do not directly account for estimation uncertainty in µ2 and κ, we verify
+their small-sample coverage accuracy via extensive simulations in Section 4.4. Appendix A.1
+discusses the choice of the moment estimates, as well as other ways of performing truncation.
+Remark 3.5 (Using higher moments and other forms of shrinkage). In addition to using
+the second and fourth moment of bias, one may augment (11) with restrictions on higher
+moments of the bias in order to further tighten the critical value. In Section 4.2, we show that
+using other moments in addition to the second and fourth moment does not substantially
+decrease the critical value in the case where θi is normally distributed. Thus, the CI in our
+baseline implementation is robust to failure of the normality assumption (9), while being
+near-optimal when this assumption does hold. Section 4.2 also shows that further efficiency
+gains are possible if one uses the linear estimator θ̃i = µ1,i + wi (Yi − µ1,i ) with the shrinkage
+coefficient wi chosen to optimize CI length, instead of using the MSE-optimal shrinkage
+wEB,i . For efficiency under a non-normal distribution of θi , one needs to consider non-linear
+shrinkage; we discuss this extension in Section 6.1.
+12
+
+4
+
+Main results
+
+This section provides formal statements of the coverage properties of the CIs presented in
+Sections 2 and 3. Furthermore, we show that the CIs presented in Sections 2 and 3 are highly
+efficient when the mean parameters are in fact normally distributed. Next, we calculate the
+maximal coverage distortion of the parametric EBCI, and derive a rule of thumb for gauging
+the potential coverage distortion. Finally, we present a comprehensive simulation study of
+the finite-sample performance of the robust EBCI. Applied readers interested primarily in
+implementation issues may skip ahead to the empirical application in Section 7.
+
+4.1
+
+Coverage under baseline implementation
+
+In order to state the formal result, let us first carefully define the notions of coverage that
+we consider. Consider intervals CI1 , . . . , CIn for elements of the parameter vector θ =
+(θ1 , . . . , θn )0 . The probability measure P denotes the joint distribution of θ and CI1 , . . . , CIn .
+Following Morris (1983b, Eq. 3.6) and Carlin and Louis (2000, Ch. 3.5), we say that the
+interval CIi is an (asymptotic) 1 − α empirical Bayes confidence interval (EBCI) if
+lim inf P (θi ∈ CIi ) ≥ 1 − α.
+n→∞
+
+(14)
+
+We say that the intervals CIi are (asymptotic) 1 − α average coverage intervals (ACIs) under
+the parameter sequence θ1 , . . . , θn if
+n
+
+1X
+P (θi ∈ CIi | θ) ≥ 1 − α.
+lim inf
+n→∞ n
+i=1
+
+(15)
+
+The average coverage property (15) is a property of the distribution of the data conditional
+on θ and therefore does not require that we view the θi ’s as random (as in a Bayesian
+or “random effects” analysis). To maintain consistent notation, we nonetheless use the
+conditional notation P (· | θ) when considering average coverage. See Appendix C for a
+formulation with θ treated as nonrandom.
+Observe that under the exchangeability condition that P (θi ∈ CIi ) = P (θj ∈ CIj ) for all
+i, j, if the ACI property (15) holds almost surely, then the EBCI property (14) holds, since
+then
+n
+1X
+P (θj ∈ CIj ) ≥ 1 − α + o(1) for all i.
+P (θi ∈ CIi ) =
+n j=1
+We now provide coverage results for the baseline implementation described in Section 3.2.
+To keep the statements in the main text as simple as possible, we (i) maintain the assump13
+
+tion that the unshrunk estimates Yi follow an exact normal distribution conditional on the
+parameter θi , (ii) state the results only for the homoskedastic case where the variance σi
+of the unshrunk estimate Yi does not vary across i, and (iii) consider only unconditional
+coverage statements of the form (14) and (15). In Appendix C, we allow the estimates Yi
+to be only approximately normally distributed and allow σi to vary, and we verify that our
+assumptions hold in a linear fixed effects panel data model. We also formalize the statements
+about conditional coverage made in Remark 3.1.
+P
+Theorem 4.1. Suppose Yi | θ ∼ N (θi , σ 2 ). Let µj,n = n1 ni=1 (θi − Xi0 δ)j and let κn =
+µ4,n /µ22,n . Suppose the sequence θ = θ1 , . . . , θn and the conditional distribution P (· | θ)
+satisfy the following conditions with probability one:
+1. µ2,n → µ2 and µ4,n /µ22,n → κ for some µ2 ∈ (0, ∞) and κ ∈ (1, ∞).
+2. Conditional on θ, (δ̂, σ̂, µ̂2 , κ̂) converges in probability to (δ, σ, µ2 , κ).
+Then the CIs in Eq. (13) with σ̂i = σ̂ satisfy the ACI property (15) with probability one.
+Furthermore, if θ1 , . . . , θn follow an exchangeable distribution and the estimators δ̂, σ̂, µ̂2
+and κ̂ are exchangeable functions of the data (X10 , Y1 )0 , . . . , (Xn0 , Yn )0 , then these CIs satisfy
+the EB coverage property (14).
+Theorem 4.1 follows immediately from Theorem C.2 in Appendix C. In order to cover
+both the EB coverage condition (14) and the average coverage condition (15), Theorem 4.1
+considers a random sequence of parameters θ1 , . . . , θn , and shows average coverage conditional
+on these parameters. See Appendix C for a formulation with θ treated as nonrandom.
+The condition on the moments µ2 and κ avoids degenerate cases such as when µ2 = 0,
+in which case the EB point estimator θ̂i shrinks each preliminary estimate Yi all the way to
+Xi0 δ̂. Note also that the theorem does not require that δ̂ be the ordinary least squares (OLS)
+estimate in a regression of Yi onto Xi , and that δ be the population analog; one can define δ
+in other ways, the theorem only requires that δ̂ be a consistent estimate of it. The definition
+of δ does, however, affect the plausibility of the moment independence assumption in Eq. (10)
+needed for conditional coverage results stated in Appendix C.8
+Remark 4.1. As shown in Appendix C, if CIs satisfy the average coverage condition (15)
+given θ1 , . . . , θn , they will typically also satisfy the stronger condition
+n
+
+1X
+I{θi ∈ CIi } ≥ 1 − α + oP (·|θ) (1),
+n i=1
+8
+
+The specification of µ1i = Xi0 δ also affects the EBCI width through its effect on µ2 and κ.
+
+14
+
+(16)
+
+where oP (·|θ) (1) denotes a sequence that converges in probability to zero conditional on θ
+(Eq. (16) implies Eq. (15) since the left-hand side is uniformly bounded). That is, at least
+a fraction 1 − α of the n CIs contain their respective true parameters, asymptotically. This
+is analogous to the result that for estimation, the difference between the squared error
+Pn
+Pn
+1
+1
+2
+2
+i=1 (θ̂i − θi ) and the MSE n
+i=1 E[(θ̂i − θi ) | θ] typically converges to zero.
+n
+
+4.2
+
+Relative efficiency
+
+√
+The robust EBCI in Eq. (12), unlike the parametric EBCI θ̂i ± z1−α/2 σi wEB,i , does not rely
+on the normality assumption in Eq. (9) for its validity. We now show that this robustness
+does not come at a high cost in terms of efficiency: if the normality assumption (9) in fact
+holds, the efficiency loss is limited unless the signal-to-noise ratio µ2 /σi2 is very small.
+There are two reasons for the inefficiency of the robust EBCI. First, the robust EBCI
+only makes use of the second and fourth moment of the conditional distribution of θi − Xi0 δ,
+rather than its full distribution. Second, if we only have knowledge of these two moments, it
+is no longer optimal to center the EBCI at the estimator θ̂i : one may need to consider other,
+perhaps non-linear, shrinkage estimators, as we do below in Section 6.1.
+We decompose the sources of inefficiency by studying the relative length of the robust
+EBCI relative to the EBCI that picks the amount of shrinkage optimally. For the latter, we maintain assumption (10), and consider a more general class of estimators θ̃(wi ) =
+µ1,i + wi (Yi − µ1,i ). For tractability, we focus on fixed-length CIs based on linear shrinkage estimators, but allow the amount of shrinkage wi to be optimally determined. The normalized
+bias of θ̃(wi ) is given by bi = (1/wi − 1)εi /σi , which leads to the EBCI
+µ1,i + wi (Yi − µ1,i ) ± cvaα ((1 − 1/wi )2 µ2 /σi2 , κ)wi σi .
+The half-length of this EBCI, cvaα ((1 − 1/wi )2 µ2 /σi2 , κ)wi σi , can be numerically minimized
+as a function of wi to find the EBCI length-optimal shrinkage. Denote the minimizer by
+wopt (µ2 /σi2 , κ, α). Like wEB,i , the optimal shrinkage depends on µ2 and σi2 only through the
+signal-to-noise ratio µ2 /σi2 . Numerically evaluating the minimizer shows that wopt (·, κ, α) ≥
+wEB,i for κ ≥ 3 and α ∈ {0.05, 0.1}. The resulting EBCI is optimal among all fixed-length
+EBCIs centered at linear estimators under (10), and we call it the optimal robust EBCI.9
+Figure 2 plots the ratio of lengths of the optimal robust EBCI and robust EBCI relative
+to the parametric EBCI, for α = 0.05. The figure shows that to maintain efficiency relative
+to the normal benchmark, it is important to impose the fourth moment constraint. If this
+9
+
+Since the optimal robust EBCI is always shorter than the robust EBCI in Eq. (12), the former is
+preferable on efficiency grounds. It may not contain the MSE-optimal point estimator θ̂i , however.
+
+15
+
+2.25 Rob, κ = ∞
+
+Relative length
+
+2.00
+
+1.75
+
+1.50
+
+Opt, κ = ∞
+Rob, κ = 3
+
+1.25
+
+Opt, κ = 3
+1.00
+
+0
+
+0.25
+
+0.5
+
+0.75
+
+1
+
+wEB,i = µ2 /(µ2 + σi2 )
+Figure 2: Relative efficiency of robust EBCI (Rob) and optimal robust EBCI (Opt) relative to
+the normal benchmark, for α = 0.05. The figure plots ratios of Rob length, 2 cvaα (σi2 /µ2 , κ) ·
+2
+2
+2
+2
+σi µ2 /(µ2 + σi2 ), and Opt length, 2 cvaα ((1−1/wp
+opt (µ2 /σi , κ, α)) µ2 /σi , κ)·σi wopt (µ2 /σi , κ, α),
+relative to the parametric EBCI length 2z1−α/2 µ2 /(µ2 + σi2 )σi as a function of the shrinkage
+factor wEB,i = µ2 /(µ2 + σi2 ), which maps the signal-to-noise ratio µ2 /σi2 to the interval [0, 1].
+constraint is imposed, the efficiency loss of the robust EBCI is modest unless the signal-tonoise ratio is very small: if wEB,i ≥ 0.1 (which is equivalent to µ2 /σi2 ≥ 1/9), the efficiency
+loss is at most 11.4% for α = 0.05; up to half of the efficiency loss is due to not using the
+optimal shrinkage. For α = 0.1 (not plotted), the results are very similar; in particular, if
+wEB,i ≥ 0.1, the efficiency loss is at most 12.9%.
+When the signal-to-noise ratio is very small, so that wEB,i < 0.1, the efficiency loss of
+the robust EBCI is higher (up to 39% for α = 0.05 or 0.1). Using the optimal robust EBCI
+ensures that the efficiency loss is below 20%, irrespective of the signal-to-noise ratio. On
+the other hand, when the signal-to-noise ratio is small, any of these CIs will be significantly
+tighter than the unshrunk CI Yi ± z1−α/2 σi . To illustrate this point, Figure 3 plots the
+efficiency of the robust EBCI that imposes the second moment constraint only, relative to
+this unshrunk CI. It can be seen from the figure that shrinkage methods allow us to tighten
+the CI by 44% or more when µ2 /σi2 ≤ 0.1.
+
+4.3
+
+Undercoverage of parametric EBCI
+1/2
+
+The parametric EBCI θ̂i ± z1−α/2 wEB,i σi is an EB version of a Bayesian credible interval that
+treats (9) as a prior. We now assess its potential undercoverage when Eq. (9) is violated.
+16
+
+1.00
+
+α = 0.05
+
+Relative length
+
+0.75
+
+α = 0.1
+0.50
+
+0.25
+
+0.00
+
+0
+
+0.25
+
+0.5
+
+0.75
+
+1
+
+wEB,i = µ2 /(µ2 + σi2 )
+Figure 3: Efficiency of robust EBCI θ̂i ± cvaα (σi2 /µ2 , κ = ∞) · σµ2 /(µ2 + σi2 ) relative to
+the unshrunk CI Yi ± z1−α/2 σi . The figure plots the ratio of the length of the robust EBCI
+relative to the unshrunk CI as a function of the shrinkage factor wEB,i = µ2 /(µ2 + σi2 ).
+Given knowledge of only the second moment µ2 of εi = Yi − Xi0 δ, the maximal undercoverage of this interval is given by
+√
+ρ(1/wEB,i − 1, z1−α/2 / wEB,i ),
+
+(17)
+
+since wEB,i = µ2 /(µ2 + σi2 ). Here ρ is the non-coverage function defined in Eq. (5). Figure 4
+plots the maximal non-coverage probability as a function of wEB,i , for significance levels
+α = 0.05 and α = 0.10. The figure suggests a simple “rule of thumb”: if wEB,i ≥ 0.3, the
+maximal coverage distortion is less than 5 percentage points for these values of α.
+The following lemma confirms that the maximal non-coverage is decreasing in wEB,i , as
+suggested by the figure. It also gives an expression for the maximal non-coverage across all
+values of wEB,i (which is achieved in the limit wEB,i → 0).
+Lemma 4.1. The non-coverage probability (17) of the parametric EBCI is weakly decreasing
+2
+as a function of wEB,i , with the supremum given by 1/ max{z1−α
+, 1}.
+2
+The maximal non-coverage probability 1/ max{z1−α/2
+, 1} equals 0.260 for α = 0.05 and
+0.370 for α = 0.10. For α > 2Φ(−1) ≈ 0.317, the maximal non-coverage probability is 1.
+If we additionally impose knowledge of the kurtosis of εi , the maximal non-coverage of the
+parametric EBCI can be similarly computed using Eq. (11), as illustrated in the application
+in Section 7.
+
+17
+
+Max. non-coverage probability
+
+0.35
+0.30
+0.25
+0.20
+0.15
+
+α = 0.1
+
+0.10
+
+α = 0.05
+0.05
+0
+
+0.25
+
+0.5
+
+0.75
+
+1
+
+wEB,i = µ2 /(µ2 + σi2 )
+Figure 4: Maximal non-coverage probability of parametric EBCI, α ∈ {0.05, 0.10}. The
+vertical line marks the “rule of thumb” value wEB,i = 0.3, above which the maximal coverage
+distortion is less than 5 percentage points for these two values of α.
+
+4.4
+
+Monte Carlo simulations
+
+Here we show through simulations that the robust EBCI achieves accurate average coverage
+in finite samples.
+4.4.1
+
+Design
+
+The DGP is a simple linear fixed effects panel data model. We first draw θi , i = 1, . . . , n,
+i.i.d. from a random effects distribution specified below. Then we simulate panel data from
+the model
+Wit = θi + Uit , i = 1, . . . , n, t = 1, . . . , T,
+where the errors Uit are mean zero and i.i.d. across (i, t) and independent of the θi ’s. The
+unshrunk estimator of θi is the sample average of Wit for unit i, with standard error obtained
+from the usual unbiased variance estimator:
+v
+u
+T
+T
+u
+X
+1
+1X
+Wit , σ̂i = t
+(Wit − Yi )2 .
+Yi =
+T t=1
+T (T − 1) t=1
+We draw Uit from one of two distributions: (1) a normal distribution and (2) a (shifted)
+chi-squared distribution with 3 degrees of freedom. In case (1), Yi is exactly normal con18
+
+ditional on θi , but σ̂i2 does not exactly equal var(Yi | θi ) for finite T . In case (2), Yi is
+non-normal and positively skewed (conditional on θi ) for finite T .
+We consider six random effects distributions for θi (see Supplemental Appendix E.1 for
+detailed definitions): (i) normal (kurtosis κ = 3); (ii) scaled chi-squared with 1 degree
+of freedom (κ = 15); (iii) two-point distribution (κ ≈ 8.11); (iv) three-point distribution
+(κ = 2); (v) the least favorable distribution for the robust EBCI that exploits only second
+moments (κ depends on µ2 , see Appendix B); and (vi) the least favorable distribution for
+the parametric EBCI.
+Given T , we scale the θi distribution to match one of four signal-to-noise ratios µ2 / var(Yi |
+θi ) ∈ {0.1, 0.5, 1, 2}, for a total of 6 × 4 = 24 DGPs for each distribution of Uit . We shrink
+towards the grand mean (Xi = 1 for all i). We construct the robust EBCIs following the
+baseline implementation in Section 3.2 (with ωi = 1/n), as well as a version that does not
+impose constraints on the kurtosis.
+p
+As T → ∞, we recover the idealized setting in Section 2, with (Yi − θi )/ var(Yi | θi )
+converging in distribution to a standard normal (conditional on θi ), and σ̂i2 / var(Yi | θi )
+converging in probability to 1, for each i.
+4.4.2
+
+Results
+
+Table 1 shows that the 95% robust EBCIs achieve good average coverage when the panel
+errors Uit are normally distributed. This is true for all DGPs, panel dimensions n and
+T , and whether we exploit one or both of the (estimated) moments µ2 and κ. When the
+time dimension T equals 10, the maximal coverage distortion across all DGPs and all crosssectional dimensions n ∈ {100, 200, 500} is 3.2 percentage points. For T ≥ 20, the coverage
+distortion of the robust EBCIs is always below 2.1 percentage points.
+Table 2 shows that coverage distortions are somewhat larger when the panel errors Uit are
+chi-squared distributed and T is small. The robust EBCIs undercover by up to 7.2 percentage
+points when T = 10 due to the pronounced non-normality of Yi given θi . However, the
+distortion is at most 4.3 percentage points when T = 20, and at most 2.4 percentage points
+when T ≥ 50. The coverage distortion due to non-normality when T is small is similar to
+the coverage distortion of the usual unshrunk CI (not reported).
+Importantly, in all cases considered in Tables 1 and 2, the worst-case coverage distortion
+of the parametric EBCI substantially exceeds that of the corresponding robust EBCIs, sometimes by more than 10 percentage points. Nevertheless, the cost of robustness in terms of
+extra CI length is modest and consistent with the theoretical results in Section 4.2.
+Both the estimation of the standard errors σi and the estimation of the moments µ2 and
+κ contribute to the finite-sample coverage distortions. The “ora” columns in Table 1 exploit
+19
+
+Table 1: Monte Carlo simulation results, panel data with normal errors.
+Robust, µ2 only
+
+20
+
+∞
+
+ora
+
+n = 100 92.1 93.7 94.0 95.0 91.8 93.2 93.2 94.6
+n = 200 91.9 93.4 92.9 95.0 91.8 93.3 92.9 94.8
+n = 500 91.9 93.6 94.8 95.0 91.9 93.5 94.3 94.9
+Panel B: Relative average length, average across 24 DGPs
+
+79.2
+80.7
+84.2
+
+79.7
+80.3
+85.1
+
+79.3
+81.0
+85.1
+
+86.9
+86.3
+85.6
+
+n = 100
+n = 200
+n = 500
+
+0.81
+0.81
+0.82
+
+0.82
+0.82
+0.83
+
+0.83
+0.84
+0.84
+
+0.86
+0.86
+0.86
+
+10
+
+20
+
+ora
+
+10
+
+20
+
+∞
+
+Parametric
+10
+
+T
+
+∞
+
+Robust, µ2 & κ
+ora
+
+Panel A: Average coverage (%), minimum across 24 DGPs
+
+1.09
+1.09
+1.10
+
+1.10
+1.10
+1.11
+
+1.11
+1.12
+1.13
+
+1.16
+1.16
+1.16
+
+1.03
+1.02
+1.04
+
+1.02
+1.02
+1.03
+
+1.02
+1.01
+1.01
+
+1.00
+1.00
+1.00
+
+Notes: Normally distributed errors. Nominal average confidence level 1 − α = 95%.
+All EBCI procedures use baseline estimate of µ̂2 and (if applicable) κ̂, except columns
+labeled “ora”, which use oracle values of µ2 and κ. Columns T = ∞ and “ora” use
+oracle standard errors σi . For each DGP, “average coverage” and “average length” refer
+to averages across units i = 1, . . . , n and across 2,000 Monte Carlo repetitions. Average
+CI length is measured relative to the robust EBCI that exploits the oracle values of µ2 ,
+κ, and σi (but not of the grand mean δ = E[θ]).
+Table 2: Monte Carlo simulation results, panel data with chi-squared errors.
+Robust, µ2 only
+T
+
+10
+
+20
+
+50
+
+Robust, µ2 & κ
+ora
+
+10
+
+20
+
+50
+
+Parametric
+ora
+
+10
+
+20
+
+50
+
+ora
+
+n = 100 87.9 90.9 93.1 95.0 87.8 90.8 92.6 94.7
+n = 200 87.9 90.8 93.0 94.9 87.8 90.8 92.8 94.8
+n = 500 87.8 90.8 93.0 95.0 87.8 90.7 92.9 94.9
+Panel B: Relative average length, average across 24 DGPs
+
+79.9
+77.8
+82.0
+
+79.3
+79.8
+84.1
+
+79.3
+80.3
+84.8
+
+87.0
+86.2
+85.6
+
+n = 100
+n = 200
+n = 500
+
+0.79
+0.78
+0.79
+
+0.81
+0.81
+0.82
+
+0.82
+0.82
+0.83
+
+0.86
+0.86
+0.86
+
+Panel A: Average coverage (%), minimum across 24 DGPs
+
+1.05
+1.04
+1.05
+
+1.08
+1.08
+1.09
+
+1.10
+1.10
+1.11
+
+1.16
+1.16
+1.16
+
+1.01
+0.99
+0.99
+
+1.02
+1.00
+1.00
+
+1.02
+1.00
+1.00
+
+1.00
+1.00
+1.00
+
+Notes: Chi-squared distributed errors. See caption for Table 1. Results for T = ∞ are
+by definition the same as in Table 1.
+
+20
+
+p
+the oracle (true) values of µ2 , κ, and σi = var(Yi | θi ), while the T = ∞ columns use
+oracle standard errors but not oracle moments. By comparing these columns, we see that
+estimation of µ2 and κ is responsible for modest coverage distortions when n = 100 or 200.
+However, estimation of the standard errors σi also contributes to the distortions, as can be
+seen by comparing the T = 10 and T = ∞ columns.
+In Supplemental Appendix E.2 we show that the robust EBCI also has good coverage in
+a heteroskedastic design calibrated to the empirical application in Section 7 below.
+
+5
+
+Comparison with other approaches
+
+Here we compare our EBCI procedure with other approaches to confidence interval construction in the normal means model. We also discuss other related inference problems.
+
+5.1
+
+Average coverage vs. alternative coverage concepts
+
+The average coverage requirement in Eq. (15) is less stringent than the usual (pointwise)
+notion of frequentist coverage that P (θi ∈ CIi | θ) ≥ 1 − α for all i. An even stronger
+coverage requirement is that of simultaneous coverage: P (∀i : θi ∈ CIi | θ) ≥ 1 − α. As
+outlined in footnote 3, under the pointwise coverage criterion, one cannot achieve substantial
+reductions in length relative to the unshrunk CI. Under the simultaneous coverage criterion,
+it is likewise impossible to substantially improve upon the usual sup-t confidence band based
+on the unshrunk estimates (Cai et al., 2014). Thus, undercoverage for some θi ’s must be
+tolerated if one wants to use shrinkage to improve CI length.
+The fact that our EBCIs achieve improvements in average length at the expense of
+undercovering for certain units i is analogous to well-known properties of EB point estimators.
+We now show that the units i for which our EBCI undercovers are quantitatively similar to
+the units for which the shrinkage estimator θ̂i has higher MSE than the unshrunk estimator
+Yi . Let εi = θi − Xi0 δ be the “shrinkage error” defined in Section 3.1. The pointwise coverage
+√
+of our EBCI is decreasing in the normalized shrinkage error |εi |/ µ2 , for a fixed signal-tonoise ratio µ2 /σi2 .10 Hence, the units i for which our EBCI undercovers are those whose
+covariate-predicted value Xi0 δ fails to approximate their true effect θi well. The MSE of
+the shrinkage estimator (for an individual unit i), normalized by the MSE of the unshrunk
+√
+estimator, is similarly increasing in |εi |/ µ2 .11
+p
+√
+The pointwise coverage (conditional on Xi ) equals 1 − r( 1/wEB,i − 1 · |εi |/ µ2 , cvaα (1/wEB,i − 1, κ)),
+with r defined in Eq. (4) and wEB,i = µ2 /(µ2 + σi2 ).
+√
+11
+2
+The ratio of MSEs equals E[(θ̂i − θi )2 | θi , Xi ]/σi2 = wEB,i
++ (1 − wEB,i )wEB,i · |εi |/ µ2 .
+10
+
+21
+
+5
+
+4
+
+√
+|εi |/ µ2
+
+3
+
+coverage
+
+2
+
+MSE
+1
+
+0
+
+0
+
+0.25
+
+0.5
+
+0.75
+
+1
+
+wEB,i = µ2 /(µ2 + σi2 )
+
+√
+Figure 5: Value of |εi |/ µ2 , as a function of wEB,i , such that the MSE of the shrinkage
+point estimator equals that of the unshrunk estimator (MSE), and such that the coverage
+of the robust EBCI with κ = ∞ equals the nominal average coverage 1 − α (coverage), for
+α = 0.05.
+√
+Figure 5 shows that the knife-edge value of |εi |/ µ2 for which the pointwise coverage
+√
+of our EBCI equals 1 − α is quantitatively close to the value of |εi |/ µ2 for which the
+MSE of the shrinkage estimator equals that of the unshrunk estimator. In other words, to
+the extent that one worries about undercoverage for certain types of θi values, one should
+simultaneously worry about the relative performance of the shrinkage point estimator for
+those same values.
+We stress that the pointwise coverage depends on the unobservable shrinkage error εi ,
+which cannot be gauged directly from the observables (Yi , Xi ). If one wishes to avoid systematic differences in coverage across units i with different genders, say (i.e., one is worried that
+εi correlates with gender) one can simply add gender to the set of covariates Xi : the baseline
+procedure in Section 3.2 ensures control of average coverage conditional on the covariates Xi .
+In Section 6.2, we show how to adapt our EBCIs to settings where one focuses the analysis
+on a subset of units i based on the values of their unshrunk estimates Yi (e.g., keeping only
+the estimates that exceed a given threshold).
+From a Bayesian point of view, our robust EBCI can be viewed as an uncertainty interval
+that is robust to the choice of prior distribution in the unconditional gamma-minimax sense:
+the coverage probability of this CI is at least 1−α when averaged over the distribution of the
+data and over the prior distribution for θi , for any prior distribution that satisfies the moment
+
+22
+
+bounds. This follows directly from the derivations in Section 2, reinterpreting the random
+effects distribution for θi as a prior distribution. In contrast, conditional gamma-minimax
+credible intervals, discussed recently by Giacomini et al. (2019, p. 6), are too stringent in
+our setting. This notion requires that the posterior credibility of the interval be at least
+1 − α regardless of the choice of prior, in any data sample, which would require reporting
+the entire parameter space (up to the moment bounds).
+
+5.2
+
+Finite-sample vs. asymptotic coverage
+
+Our procedures are asymptotically valid as n → ∞, as proved in Section 4.1. These asymptotics do not capture the impact of estimation error in the “hyper-parameters” σ̂i , δ̂, µ̂2 ,
+and κ̂, or the impact of lack of exact normality of the Yi ’s, on the finite-sample performance
+of the EBCIs. As detailed in Section 3.2 and Appendix A, we do apply a finite-sample
+adjustment to the moments µ̂2 and κ̂, which is motivated by the same heuristic arguments
+that Morris (1983a,b) uses to motivate finite-sample adjustments to the parametric EBCI.12
+The promising simulation results in Section 4.4 notwithstanding, these adjustments do not
+ensure exact average coverage control in finite samples.13
+Our results are thus analogous to standard results on coverage of Eicker-Huber-White
+CIs in cross-sectional OLS: asymptotic validity follows by consistency of the OLS variance
+estimate and asymptotic normality of the outcomes, while adjustments to account for finitesample issues (such as the HC2 or HC3 variance estimators studied in MacKinnon and White,
+1985) are justified heuristically. Deriving EBCIs with finite-sample coverage guarantees is an
+interesting problem that we leave for future research; the problem appears to be challenging
+even in the context of constructing parametric EBCIs.
+
+5.3
+
+Local vs. global optimality
+
+Our EBCIs are designed to provide uncertainty assessments to accompany linear shrinkage estimates that, as the Introduction argues, have been popular in applied work. Our procedure’s
+global validity, as well as local near-optimality when the θi ’s are normal (cf. Section 4.2),
+is analogous to Eicker-Huber-White CIs for OLS estimators: these CIs are optimal under
+normal homoskedastic regression errors, but remain valid when this assumption is dropped.
+12
+
+An alternative approach would be to adapt the bootstrap adjustment proposed by Carlin and Louis
+(2000, Ch. 3.5.3) in the context of parametric EBCI construction (see also Efron, 2019). As with the Morris
+(1983a,b) adjustment, we are not aware of a formal result justifying it.
+13
+One could account for hyperparameter uncertainty by computing the critical value
+supσ̃i ,µ̃2 ,κ̃∈Ĉi cvaα (σ̃i2 /µ̃2 , κ̃) over an initial confidence set Cˆi for the hyper-parameters, coupled with a
+Bonferroni adjustment of the confidence level 1 − α. This approach appears to be highly conservative in
+practice.
+
+23
+
+Similar to the Eicker-Huber-White CIs, our EBCIs are not globally efficient: when the
+θi ’s are not Gaussian, it is generally inefficient to restrict attention to CIs that are centered
+at a linear point estimator and have fixed width. While we expect our EBCIs to remain nearefficient under mild departures from normality, substantial efficiency gains may be possible
+if the effect size distribution is, for example, heavy-tailed or bimodal.14 Section 6.1 shows
+how our method can be adapted to construct EBCIs that are locally near-optimal under
+non-normal baseline priors using non-linear shrinkage, such as soft thresholding. Since the
+distribution of θi is nonparametrically identified under the normal model (8), it is in principle possible to construct EBCIs that are globally efficient using nonparametric methods. In
+the context of the homoskedastic model with no covariates in Eq. (1), various approaches to
+nonparametric point estimation of the θi ’s have been proposed, including kernels (Brown and
+Greenshtein, 2009), splines (Efron, 2019), or nonparametric maximum likelihood (Kiefer and
+Wolfowitz, 1956; Jiang and Zhang, 2009; Koenker and Mizera, 2014). An interesting problem
+for future research is to adapt these methods to EBCI construction, while ensuring asymptotic validity, good finite-sample performance, and allowing for covariates, heteroskedasticity,
+and possible dependence across i.
+
+5.4
+
+Other inference problems
+
+A number of alternative inference procedures have been proposed in the context of the
+normal means model. Efron (2015) develops a formula for the frequentist standard error of
+EB estimators, but this cannot be used to construct CIs without a corresponding estimate
+of the bias. There is a substantial literature on shrinkage confidence balls, i.e., confidence
+Pn
+2
+sets of the form {θ :
+i=1 (θi − θ̂i ) ≤ ĉ} (see Casella and Hwang, 2012, for a review). While
+theoretically interesting, these sets can be difficult to visualize and report in practice.15
+Finally, while we focus on CI length in our relative efficiency comparisons, our approach
+can be fruitfully applied when the goal of CI construction is to discern non-null effects, rather
+than to construct short CIs. In particular, suppose one forms a test of the null hypothesis
+H0,i : θi = θ0 for some null value θ0 by rejecting when θ0 ∈
+/ CIi , where CIi is our robust EBCI
+given in (12). In Supplemental Appendix F, we show that the test based on our EBCI has
+higher average power than the usual z-test based on the unshrunk estimate when Xi0 δ (the
+regression line towards which we shrink) is far enough from the null value θ0 , and that these
+power gains can be substantial. Furthermore, such tests can be combined with corrections
+14
+
+Indeed, if the true effect distribution puts mass 1/2 on θi = K and θi = −K, then, as K gets large, our
+EBCIs become arbitrarily conservative relative to an oracle that reports the highest posterior density set
+under this prior.
+15
+Confidence balls can be translated into average coverage intervals using Chebyshev’s inequality (see
+Wasserman, 2006, Ch. 5.8). However, such intervals are very conservative compared to the ones we construct.
+
+24
+
+from the multiple testing literature to form procedures that asymptotically control the false
+discovery rate (FDR), a commonly used criterion for multiple testing.16
+
+6
+
+Extensions
+
+We now discuss two extensions of our method: adapting our intervals to general, possibly nonlinear shrinkage, and constructing intervals that achieve coverage conditional on Yi falling
+into a pre-specified interval.
+
+6.1
+
+General shrinkage
+
+Our method can be generalized to cover general, possibly non-linear shrinkage based on
+possibly non-Gaussian data. Let S(y; χ, X̃i ) ⊆ R be a family of candidate confidence sets for
+a parameter θi , which depends on the data Yi = y, a tuning parameter χ ∈ R to be selected
+below, and covariates X̃i (that include any known nuisance parameters) that we treat as
+fixed. We assume that S is increasing in χ, in the sense of set containment, and that the
+non-coverage probability conditional on θ satisfies
+P (θi 6∈ S(Yi ; χ, X̃i ) | θ, X̃ (n) ) = r̃(ai , χ),
+
+(18)
+
+where ai is some function of θi , X̃ (n) = (X̃1 , . . . , X̃n ), and r̃ is a known function (perhaps
+computed numerically or through simulation). Similarly to linear shrinkage in the normal
+means model, Eq. (18) may only hold approximately if the set S depends on estimated
+parameters (such as standard error estimates or tuning parameters), or if we use a largesample approximation to the distribution of Yi . We assume that ai satisfies the moment
+constraints EF [g(ai ) | X̃ (n) ] = m, where g is a p-vector of moment functions, and the
+expectation is over the conditional distribution F of ai conditional on X̃ (n) .17 To guarantee
+16
+
+In particular, Storey (2002) shows that the Benjamini and Hochberg (1995) procedure asymptotically
+controls the FDR so long as the p-values do not exhibit too much statistical dependence and the proportion
+of rejected null hypotheses does not converge too quickly to zero. While Storey (2002) assumes that the
+uncorrected tests control size in the classical sense, the argument goes through essentially unchanged so long
+as the tests invert CIs that satisfy (16), which holds so long as the CIs do not exhibit too much statistical
+dependence, as discussed in Remark 4.1. We note, however, that this does not hold for modifications of the
+Benjamini and Hochberg (1995) procedure that use initial estimates of the proportion of true null hypotheses.
+17
+The moment functions g need not be simple moments, and could incorporate constraints used for selection
+of hyper-parameters, such as constraints on the marginal data distribution or, if an unbiased risk criterion
+is used, the constraint that the derivative of the risk equals zero at the selected prior hyper-parameters.
+
+25
+
+EB coverage, we compute the maximal non-coverage
+ρg (m, χ) = sup EF [r̃(a, χ)],
+F
+
+EF [g(a)] = m,
+
+(19)
+
+analogously to Eq. (11). This is a linear program, which can be computed numerically to a
+high degree of precision even with several constraints; see Appendix B for details. Given an
+estimate m̂ of the moment vector m, we form a robust EBCI as
+S(Yi ; χ̂, X̃i ),
+
+where χ̂ = inf{χ : ρg (m̂, χ) ≤ α}.
+
+(20)
+
+Example 6.1 (Linear shrinkage in the normal model). The setting in Section 3.1 obtains
+if we set X̃i = (Xi , σi ) and S(y; χ, X̃i ) = {(1 − wEB,i )Xi0 δ + wEB,i Yi ± χwEB,i σi }. Here ai
+is given by the normalized bias bi = (1/wEB,i − 1)(θi − Xi0 δ)/σi , and the function r̃ is given
+by the function r(b, χ) defined in (4). Our baseline implementation uses constraints on the
+second and fourth moments, g(ai ) = (a2i , a4i ).
+Example 6.2 (Nonlinear soft thresholding). Consider for simplicity the homoskedastic normal model Yi | θi ∼ N (θi , σ 2 ) without covariates. A popular alternative to linear estimators
+p
+is the soft thresholding estimator θ̂ST,i = sign(Yi ) max{|Yi | − 2σ 2 /µ2 , 0} (e.g. Abadie and
+Kasy, 2019). It equals the posterior mode corresponding to a baseline Laplace prior with
+p
+1
+second moment µ2 , which has density π0 (θ) = √2µ
+2/µ2 ) (Johnstone, 2019, Exexp(−|θ|
+2
+ample 2.5). To construct a robust EBCI that always contains the soft thresholding estimator,
+we calibrate the corresponding highest posterior density set:
+S(Yi ; χ) =
+
+(
+
+)
+
+−1
+
+σ φ((Yi − t)/σ)π0 (t)
++χ≥0 ,
+σ −1 φ((Yi − θ̃)/σ)π0 (θ̃) dθ̃
+−∞
+
+t ∈ R : log R ∞
+
+(21)
+
+where φ is the standard normal density. This set is available in closed form and takes the
+form of an interval (see Supplemental Appendix G.1). Here ai = θi , and the function r̃(a, χ)
+in (18) can be computed via numerical integration.
+In contrast to the EBCIs in Example 6.1 (which may be viewed as calibrating the highest
+posterior density set under a normal prior), the Laplace prior π0 leads to nonlinear shrinkage
+and an EBCI whose length depends on the data Yi . This reflects the suboptimality of linear
+shrinkage and fixed-length intervals under the Laplace prior.
+In Supplemental Appendix G.1, we show that the resulting robust EBCI that imposes
+the constraint E[θi2 ] = µ2 not only has robust EB coverage (by definition), it also achieves
+substantial expected length improvements when the θi ’s are in fact Laplace distributed. For
+α = 0.05 and µ2 /σ 2 ≤ 0.2, the expected length under the Laplace distribution of the soft
+26
+
+thresholding EBCI is at least 49% smaller than the length of the unshrunk CI. This exceeds
+the length reduction achieved by the linear robust EBCI shown in Figure 3.
+Example 6.3 (Poisson shrinkage). Supplemental Appendix G.2 constructs a robust EBCI
+for the rate parameter θi in a Poisson model Yi | θi ∼ Poisson(θi ). This example demonstrates
+that our general approach does not require normality of the data.
+Example 6.4 (Linear estimators in other settings). While our focus has been on EB shrinkage, our approach applies to other settings in which an estimator θ̂i is approximately normally distributed with non-negligible bias. In particular, suppose (θ̂i − θi )/ sei is distributed
+N (ai , 1), where sei is the standard deviation of the estimate θ̂i , which for simplicity we take
+to be known. This holds whenever θ̂i is a linear function of jointly normal observations
+PN
+W1 , . . . , WN , i.e., θ̂i =
+j=1 kij Wj for some deterministic weights kij . Examples include
+series, kernel, or local polynomial estimators in a nonparametric regression with fixed covariates and normal errors. We can construct a confidence interval for θi as θ̂i ± χ · sei , in which
+case Eq. (18) holds with r̃ = r given in Eq. (4). It follows from Theorem C.1 in Appendix C
+that if the moment constraints m on the normalized bias in Eq. (19) are replaced by consistent estimates, the resulting robust EBCI will satisfy the average coverage property (15) in
+large samples. We leave a full treatment of these applications for future research.
+
+6.2
+
+Coverage after selection
+
+In some applications, researchers may be primarily interested in parameters corresponding
+to those units i whose initial estimates Yi fall in a given interval [ι1 , ι2 ], where −∞ ≤ ι1 <
+ι2 ≤ ∞. For example, in a teacher value added application, we may only be interested in
+the ability θi of those teachers i whose fixed effect estimates Yi are positive, corresponding
+to setting ι1 = 0 and ι2 = ∞. Because of the selection on outcomes, naı̈vely applying our
+baseline EBCI procedure to the selected sample {i : Yi ∈ [ι1 , ι2 ]} does not yield the desired
+average coverage across the selected units i. We now show how to correct for the selection
+bias in the simple homoskedastic model Yi | θi ∼ N (θi , σ 2 ) without covariates from Section 2
+(reintroducing the extra model features in Section 3.1 only complicates notation).
+We seek a critical value χ such that the average coverage of the CI [θ̂i ± χwEB σ] is at
+least 1 − α conditional on the sample selection, i.e.,
+P (θi ∈ θ̂i ± χwEB σ | Yi ∈ [ι1 , ι2 ]) ≥ 1 − α
+
+(22)
+
+under repeated sampling of (Yi , θi ), regardless of the distribution for θi (we maintain focus
+on linear shrinkage for simplicity, but our approach extends to nonlinear shrinkage using the
+27
+
+ideas in Section 6.1). Straightforward calculations show that the non-coverage, conditional
+on θi and on selection, equals
+r̃ι1 ,ι2 (θi , χ) = P (θi ∈
+/ θ̂i ± χwEB σ | Yi ∈ [ι1 , ι2 ], θi )
+
+
+Φ(min{χ − bi , (ι2 − θi )/σ}) − Φ(max{−χ − bi , (ι1 − θi )/σ})
+= min 1 −
+,1 ,
+Φ((ι2 − θi )/σ) − Φ((ι1 − θi )/σ)
+where bi = (1 − 1/wEB )θi /σ as in Section 2. Among all distributions for θi consistent with
+the conditional moment µ̃2,ι1 ,ι2 = E [θi2 | Yi ∈ [ι1 , ι2 ]], the worst-case non-coverage probability,
+conditional on selection, is given by
+ρ̃ι1 ,ι2 (µ̃2,ι1 ,ι2 , χ) ≡ sup EF [r̃ι1 ,ι2 (θi , χ)] s.t. EF [θi2 ] = µ̃2,ι1 ,ι2 ,
+F
+
+where EF denotes expectation under θi ∼ F . This is an infinite-dimensional linear program
+that can be solved numerically to a high degree of accuracy, cf. Appendix B. To achieve
+robust conditional coverage, we solve numerically for the χ such that ρ̃ι1 ,ι2 (µ̃2,ι1 ,ι2 , χ) = α.
+We can estimate the conditional second moment µ̃2,ι1 ,ι2 as follows. Denote the log
+R
+marginal density of Yi by `(y) ≡ log φ(y − θ) dΓ0 (θ), where Γ0 is the true distribution
+of θi . Tweedie’s formulas (e.g. Efron, 2019, Eq. (26)) imply
+
+
+
+
+µ̃2,ι1 ,ι2 = E θi2 | Yi ∈ [ι1 , ι2 ] = 1 + E (Yi + `0 (Yi ))2 + `00 (Yi ) Yi ∈ [ι1 , ι2 ] .
+
+(23)
+
+Let ˆ
+`(y) be a kernel estimate of the log marginal density function of the data Y1 , . . . , Yn .
+Then the estimate
+b̃2,ι ,ι ≡ 1 +
+µ
+1 2
+
+P
+
+2
+ˆ0
+ˆ00
+i : Yi ∈[ι1 ,ι2 ] {(Yi + ` (Yi )) + ` (Yi )}
+
+#{i : Yi ∈ [ι1 , ι2 ]}
+
+will be consistent as n → ∞ for µ̃2,ι1 ,ι2 in (23) under mild regularity conditions.
+The criterion (22) can be viewed as the EB analogue of the criterion P (θi ∈ CIi |
+Yi ∈ [ι1 , ι2 ], θ) ≥ 1 − α, which requires frequentist coverage conditional on the event {Yi ∈
+[ι1 , ι2 ]}. The latter criterion has been considered in the recent “selective inference” literature
+(Benjamini and Yekutieli, 2005; Lee et al., 2016; Hung and Fithian, 2019; Andrews et al.,
+2021). In contrast to this literature, we cannot allow ι1 to be given by the maximum of
+the initial estimates (as in Andrews et al., 2021), as we require ι1 and ι2 to converge in
+probability to distinct nonrandom limits. On the other hand, weakening the notion of
+frequentist coverage to EB (or average) coverage allows for improvements in the length of
+the intervals, similar to the analysis in Section 4.2 in the absence of selection.
+28
+
+7
+
+Empirical application
+
+We illustrate our methods using the data and model in Chetty and Hendren (2018), who are
+interested in the effect of neighborhoods on intergenerational mobility.
+
+7.1
+
+Framework
+
+We follow Chetty and Hendren (2018) in using two definitions of a “neighborhood effect”
+θi . The first focuses on effects for children growing up in low-income families, and defines
+θi as the effect of spending an additional year of childhood in commuting zone (CZ) i on
+children’s rank in the income distribution at age 26, for children with parents at the 25th
+percentile of the national income distribution. The second definition is analogous, except
+it focuses on children growing up in high-income families, and consequently conditions on
+children with parents at the 75th percentile. Chetty and Hendren (2018) argue that these
+definitions approximately capture the mean rank effects for children in below-median and
+above-median income families. Using de-identified tax returns for all children born between
+1980 and 1986 who move across CZs exactly once as children, Chetty and Hendren (2018)
+exploit variation in the age at which children move between CZs to obtain preliminary fixed
+effect estimates Yi of θi .
+Since these preliminary estimates are measured with noise, to predict θi , Chetty and
+Hendren (2018) shrink Yi towards average outcomes of permanent residents of CZ i (children with parents at the same percentile of the income distribution who spent all of their
+childhood in the CZ). To give a sense of the accuracy of these forecasts, Chetty and Hendren
+(2018) report estimates of their unconditional MSE (i.e., treating θi as random), under the
+implicit assumption that the moment independence assumption in Eq. (10) holds. Here we
+complement their analysis by constructing robust EBCIs associated with these forecasts.
+Our sample consists of 595 U.S. CZs, with population over 25,000 in the 2000 census:
+this is the sample for which Chetty and Hendren (2018) report baseline estimates Yi of the
+effects θi . These baseline estimates are normalized so that their population-weighted mean is
+zero. We may therefore interpret θi as the effect relative to an “average” CZ. We follow the
+baseline implementation from Section 3.2 with standard errors σ̂i reported by Chetty and
+Hendren (2018), and covariates Xi corresponding to a constant and the average outcomes for
+permanent residents. In line with the original analysis, we use precision weights ωi = 1/σ̂i2
+when constructing the estimates δ̂, µ̂2 and κ̂.
+
+29
+
+Table 3: Statistics for 90% EBCIs for neighborhood effects.
+Baseline
+Percentile
+Panel A: Summary statistics
+√
+E[ µ2,i ]
+E[κi ]
+E[µ2i /σi2 ]
+δ̂intercept
+δ̂perm. resident
+E[wEB,i ]
+E[wopt,i ]
+E[non-cov of parametric EBCIi ]
+Panel B: E[half-lengthi ]
+Robust EBCI
+Optimal robust EBCI
+Parametric EBCI
+Unshrunk CI
+
+Nonparametric
+
+(1)
+25th
+
+(2)
+75th
+
+(3)
+25th
+
+(4)
+75th
+
+0.079
+778.5
+0.142
+−1.441
+0.032
+0.093
+0.191
+0.227
+
+0.044
+5948.6
+0.040
+−2.162
+0.038
+0.033
+0.100
+0.278
+
+0.076
+1624.9
+0.139
+−1.441
+0.032
+0.093
+0.191
+0.210
+
+0.042
+43009.9
+0.072
+−2.162
+0.038
+0.033
+0.100
+0.292
+
+0.195
+0.149
+0.123
+0.786
+
+0.122
+0.090
+0.070
+0.993
+
+0.186
+0.145
+0.123
+0.786
+
+0.116
+0.094
+0.070
+0.993
+
+1.312
+1.582
+0.248
+
+1.352
+1.731
+0.123
+
+1.289
+1.509
+0.237
+
+1.238
+1.648
+0.117
+
+Panel C: Efficiency relative to robust EBCI
+Optimal robust EBCI
+Parametric EBCI
+Unshrunk CI
+
+Notes: Columns (1) and (2) correspond to shrinking Yi as in the baseline implementation that imposes Eq. (10), so that µ2i = E[(θi − Xi0 δ)2 | Xi , σi ] and
+κi = E[(θi − Xi0 δ)4 | Xi , σi ]/µ22i do not vary with i. Columns (3) and (4)
+use nonparametric estimates of µ2i and κi , using the nearest neighbor estimator described in Appendix A.1. The number of nearest neighbors J = 422 (column (3)) and J = 525 (column (4)) is selected using cross-validation. For all
+columns, δ̂ = (δ̂intercept , δ̂perm. resident ) is computed by regressing Yi onto a constant and outcomes for permanent residents. “Optimal Robust EBCI” refers to
+a robust EBCI based on length-optimal shrinkage wopt,i , described in Section 4.2.
+“E[non-cov of parametric EBCIi ]”: average of maximal non-coverage probability of
+parametric EBCI, given the estimated moments.
+
+30
+
+7.2
+
+Results
+
+Columns (1) and (2) in Table 3 summarize the main estimation and efficiency results. The
+shrinkage magnitude and relative efficiency results are similar for children with parents at
+the 25th and 75th percentiles of the income distribution. In both columns, the estimate of
+the kurtosis κ is large enough so that it does not affect the critical values or the form of the
+optimal shrinkage: specifications that only impose constraints on the second moment yield
+identical results.18 In line with this finding, a density plot of the t-statistics (reported as
+Figure S2 in Armstrong et al. (2020)) exhibits a fat lower tail. As a robustness check, columns
+(3) and (4) show that results based on nonparametric moment estimates (see Remark 3.2
+and Appendix A.1) are very similar to our baseline specification. Indeed, the R2 gain in
+predicting ε̂2i − σ̂i2 using µ̂2i is less than 0.001 in both specifications, indicating that there is
+little evidence in the data against the moment independence assumption.
+The baseline robust 90% EBCIs are 75.2–87.7% shorter than the usual unshrunk CIs
+Yi ± z1−α/2 σ̂i . To interpret these gains in dollar terms, for children with parents at the 25th
+percentile of the income distribution, a percentile gain corresponds to an annual income gain
+of $818 (Chetty and Hendren, 2018, p. 1183). Thus, the average half-length of the baseline
+robust EBCIs in column (1) implies CIs of the form ±$160 on average, while the unshrunk
+CIs are of the form ±$643 on average. These large gains are a consequence of a low signal-tonoise ratio µ2 /σi2 in this application. Because the shrinkage magnitude is so large on average,
+the tail behavior of the bias matters, and since the kurtosis estimates suggests these tails are
+fat, it is important to use the robust critical value: the parametric EBCI exhibits average
+potential size distortions of 12.7–17.8 percentage points. Indeed, for over 90% of the CIs in
+the specifications in columns (1) and (2), the shrinkage coefficient wEB,i falls below the “rule
+of thumb” threshold of 0.3 derived in Section 4.3.
+To visualize these results, Figure 6 plots the unshrunk 90% CIs based on the preliminary
+estimates, as well as robust EBCIs based on EB estimates for cities in the state of New York
+for children with parents at the 25th percentile. While the EBCIs for large CZs like New
+York City or Buffalo are similar to the unshrunk CIs, they are much tighter for smaller CZs
+like Plattsburgh or Watertown, with point estimates that shrink the preliminary estimates
+Yi most of the way toward the regression line Xi0 δ̂.
+In summary, shrinkage allows us to considerably tighten the CIs based on preliminary
+estimates. This is true even though the CIs effectively only use second moment constraints—
+imposing kurtosis constraints does not affect the critical values in this application.
+18
+
+The truncation in the κ̂ formula in our baseline algorithm in Section 3.2 binds in columns (1) and
+(2), although the non-truncated estimates 345.3 and 5024.9 are similarly large; using these non-truncated
+estimates yields identical results.
+
+31
+
+Effect of 1 year of exposure on income rank
+
+1.5
+
+Plattsburgh Amsterdam
+
+Oneonta
+Watertown
+
+1.0
+
+Elmira
+
+Syracuse
+0.5
+
+Buffalo
+0.0
+
+New York
+-0.5
+
+Poughkeepsie
+
+Olean
+
+Albany
+Union
+
+-1.0
+43
+
+44
+
+45
+
+46
+
+47
+
+Mean rank of children of perm. residents at p = 25
+
+Figure 6: Neighborhood effects for New York and 90% robust EBCIs for children with
+parents at the p = 25 percentile of the national income distribution, plotted against mean
+outcomes of permanent residents. Gray lines correspond to CIs based on unshrunk estimates
+represented by circles, and black lines correspond to robust EBCIs based on EB estimates
+represented by squares that shrink towards a dotted regression line based on permanent
+residents’ outcomes. Baseline implementation as in Section 3.2.
+
+Appendix A
+
+Moment estimates
+
+The EBCI in our baseline implementation has valid EB coverage asymptotically as n → ∞,
+so long as the estimates µ̂2 and κ̂ are consistent. While the particular choice of the estimates
+µ̂2 and κ̂ does not affect the CI asymptotically, finite sample considerations can be important
+for small to moderate values of n. In particular, unrestricted moment-based estimates of µ2
+and κ may fall below their theoretical lower bounds of 0 and 1, in which case it is not clear
+how to define the EBCI.19 To address this issue, in analogy to finite-sample corrections to
+parametric EBCIs proposed in Morris (1983a,b), Appendix A.1 derives two finite-sample
+corrections to the unrestricted estimates that approximate a Bayesian estimate under a flat
+hyperprior on (µ2 , κ). We verify that these corrections give good coverage in an extensive
+set of Monte Carlo designs in Section 4.4. We also discuss implementation of nonparametric
+moment estimates. Appendix A.2 discusses the choice of weights ωi .
+19
+Formally, our results are asymptotic and require µ2 > 0 and κ > 1, so that these issues do not occur
+when n is large enough. We discuss the difficulty of providing finite-sample coverage guarantees in Section 5.
+
+32
+
+A.1
+
+Finite n corrections and nonparametric moment estimates
+
+To derive our estimates of µ2 and κ, we first consider unrestricted estimation under the
+moment independence condition (10). For µ2 , this condition implies the moment condition
+E[(Yi − Xi0 δ)2 − σi2 | Xi , σi ] = µ2 . Replacing Yi − Xi0 δ with the residual ε̂i = Yi − Xi0 δ̂ yields
+the estimate
+Pn
+i=1 ωi W2i
+, W2i = ε̂2i − σ̂i2 ,
+(24)
+µ̂2,UC = P
+n
+ω
+i
+i=1
+
+for any weights ωi = ωi (Xi , σ̂i ). Here, UC stands for “unconstrained,” since the estimate
+µ̂2,UC can be negative. To incorporate the constraint µ2 > 0, we use an approximation
+to a Bayesian approach with a flat prior on the set [0, ∞). A full Bayesian approach to
+estimating µ2 would place a hyperprior on possible joint distributions of Xi , σi , θi , which could
+potentially lead to using complicated functions of the data to estimate µ2 . For simplicity,
+we compute the posterior mean given µ̂2,UC , and we use a normal approximation to the
+likelihood. Since the posterior distribution only uses knowledge of µ̂2,UC , we refer to this as
+a flat prior limited information Bayes (FPLIB) approach.
+To derive this formula, first note that, if m̂ is an estimate of a parameter m with m̂ |
+m ∼ N (m, V ), then under a flat prior for m on [0, ∞), the posterior mean of m is given by
+b(m̂, V ) = m̂ +
+
+√
+
+√
+√
+V φ(m̂/ V )/Φ(m̂/ V ),
+
+where φ and Φ are the standard normal pdf and cdf respectively. Furthermore, if m̂ =
+Pn
+Pn
+i=1 ωi where the Zi ’s are independent with mean m conditional on the weights
+i=1 ωi Zi /
+ω = (ω1 , . . . , ωn )0 , then an unbiased estimate of the variance of m̂ given ω is given by
+Pn
+
+ω 2 (Z 2 − m̂2 )
+V (Z, ω) = Pni=1 i 2 i Pn
+.
+( i=1 ωi ) − i=1 ωi2
+
+Conditioning on the Xi ’s and σi ’s (and ignoring sampling variation in δ̂ and the σ̂i ’s), we
+can then apply this formula to µ̂2,UC , with Zi = W2i , where W2i is given in (24). This gives
+the FPLIB estimate for µ2 :
+µ̂2,FPLIB = b(µ̂2,UC , V (W2 , ω)).
+To derive the FPLIB estimate for κ, we begin with an unconstrained estimate of µ4 =
+E[(θi − Xi0 δ)4 ]. The moment independence condition (10) delivers the moment condition
+µ4 = E[(Yi − Xi0 δ)4 + 3σi4 − 6σi2 (Yi − Xi0 δ)2 | Xi , σi ], which leads to the unconstrained
+
+33
+
+estimate
+
+Pn
+i=1 ωi W4i
+,
+µ̂4,UC = P
+n
+i=1 ωi
+
+W4i = ε̂4i − 6σ̂i2 ε̂2i + 3σ̂i4 .
+
+To avoid issues with small values of estimates of µ2 in the denominator, we apply the FPLIB
+approach to an estimate of µ4 − µ22 , using a flat prior on the parameter space [0, ∞). Using
+the delta method leads to approximating the variance of µ̂4,UC − µ̂22,UC with the variance
+P
+P
+of ni=1 ωi (W4i − 2µ2 W2i )/ ni=1 ωi , so that the FPLIB estimate of µ4 − µ22 is b(µ̂4,UC −
+µ̂22,UC , V (W4 − 2µ̂2,FPLIB W2 , ω)), and the FPLIB estimate of κ is
+κ̂FPLIB = 1 +
+
+b(µ̂4,UC − µ̂22,UC , V (W4 − 2µ̂2,FPLIB W2 , ω))
+.
+µ̂22,FPLIB
+
+As a further simplification, we derive approximations in which the posterior mean formula b(m̂, V ) is replaced by a simple truncation formula. We refer to this approach as
+posterior mean trimming (PMT). In particular, suppose we apply the formula b(m̂, V ) to
+an estimator m̂ such that m̂ ≥ m0 and V ≥ V0 by construction, where m0 < 0. Then the
+posterior mean satisfies b(m̂, V ) ≥ b(m0 , V0 ) (Pinelis, 2002, Proposition 1.2). Thus, a simple
+approximation to the FPLIB estimator is to truncate m̂ from below at b(m0 , V0 ). To ob3/2
+tain an even simpler formula, we use the approximation b(m0 , V0 ) = −V0 /m0 + O(V0 )
+(Pinelis, 2002, Proposition 1.3), which holds as V0 → 0 (or, equivalently, as n → ∞,
+provided the estimator m̂ is consistent). The variance of µ̂2,UC conditional on (Xi , σi ) is
+P
+P
+P
+P
+2
+bounded below by P
+2 ni=1 ωi2 σi4 / ( ni=1 ωi ) , and µ̂2,UC ≥ − ni=1 ωi σi2 / ni=1 ωi , so we can
+2 n ωi2 σi4
+Pn
+use V0 /m0 = − Pn ωi=1
+, which gives the PMT estimator
+2
+ωi
+iσ ·
+i=1
+
+i
+
+i=1
+
+P
+
+
+2 ni=1 ωi2 σi4
+Pn
+.
+µ̂2,PMT = max µ̂2,UC , Pn
+2
+i=1 ωi
+i=1 ωi σi ·
+
+For κ, we simplify our approach to deriving a trimming rulePby treating µ2 as known, and
+n
+ω (ε̂4 −6σ̂ 2 µ −3σ̂ 4 )
+considering the variance of the infeasible estimate κ̂∗UC = i=1 µi 2 iPn iωi2 i . Using the
+
+i=1
+2
+Pn
+ω (−6σ̂ 2 µ −3σ̂ 4 )
+∗
+∗
+above truncation formula for κ̂UC − 1 along with the fact that κ̂UC ≥ i=1 µ2i Pn i ω2i i
+i=1
+2
+P 2
+P
+3 2
+2 4
+6
+8
+4
+2
+and the lower bound
+8
+ω
+(2µ
+σ
++
+21µ
+σ
++
+48µ
+σ
++
+12σ
+)/µ
+(
+ω
+)
+on
+the
+variance
+2
+i
+i
+2
+i
+2
+i
+i
+i
+2
+i
+i
+P
+8 i ωi2 (2µ32 σi2 +21µ22 σi4 +48µ2 σi6 +12σi8 )
+yields V0 /m0 = − µ2 (P ωi ) Pn ωi (µ2 +6σ̂2 µ2 +3σ̂4 ) . To simplify the trimming rule even further,
+i
+i=1
+2
+2
+i
+i
+P 2 8
+32
+ω σ
+we only use the leading term of V0 /m0 as µ2 → 0, V0 /m0 = − µ2 (P ωi )iPin i ωi σ̂4 + o(1/µ22 ).
+i
+i=1
+2
+i
+
+Plugging in µ̂2,PMT in place of the unknown µ2 then gives the PMT estimator
+κ̂PMT = max
+
+(
+
+)
+P
+32 ni=1 ωi2 σ̂i8
+µ̂4,UC
+P
+P
+,1 + 2
+.
+µ̂22,PMT
+µ̂2,PMT ni=1 ωi · ni=1 ωi σ̂i4
+34
+
+The estimators in step 1 of our baseline implementation in Section 3.2 correspond to µ̂2,PMT
+and κ̂PMT , due to their slightly simpler form relative to the FPLIB estimators. In unreported
+simulations based on the designs described in Section 4.4 and Supplemental Appendix E.2,
+we find that EBCIs based on FPLIB lead to even smaller finite-sample coverage distortions
+than those based on the baseline implementation that uses PMT, at the expense of slightly
+longer average length.
+To implement the nonparametric estimates κ̂i and µ̂2i in Remark 3.2, we use the nearestneighbor estimator that for each i computes the PMT estimates µ̂2,PMT and κ̂PMT described
+above, using only the J observations closest to i, rather than the full sample of n observations.
+We define distance as a Euclidean distance on (Xi , σi ), after scaling elements of this vector
+by their standard deviations. Under regularity conditions, the resulting estimates will be
+consistent for µ2i and κi , so long as J → ∞ and J/n → 0. We select J using leave-one-out
+cross-validation, using the squared prediction error in predicting W2i as the criterion. For
+simplicity, we use the same J for estimating the kurtosis as that used for estimating the
+second moment.
+
+A.2
+
+Choice of weighting
+
+Under condition (10), the weights ωi used to estimate µ2 and κ can be any function of Xi , σi .
+Furthermore, while δ̂ can be essentially arbitrary as long as it converges in probability to
+some δ such that Eq. (10) holds, that equation will often be motivated by the assumption
+that the conditional mean of θi is linear in Xi ,
+E[θi − Xi0 δ | Xi , σi ] = 0.
+
+(25)
+
+Under this condition, the weights ωi used to estimate δ can also be any function of Xi , σi .
+Thus, under conditions (10) and (25), the choice of weighting can be guided by efficiency
+concerns. In general, the optimal weights are different for each of the three estimates of
+δ, µ2 , and κ, and implementing them requires first stage estimates of the variances of Yi , W2i
+and W4i , conditional on (Xi , σi ) (with W2i and W4i defined in Appendix A.1). To avoid
+estimation of these variances, consider the limiting case where the signal-to-noise ratio goes
+to 0, µ2 / mini σi2 → 0. The resulting weights will be near-optimal under a low signal-to-noise
+ratio, when precise estimation of these parameters is relatively more important for accurate
+coverage (under a high signal-to-noise ratio, shrinkage is limited, and estimation error in
+these parameters has little effect on coverage). Let us also ignore estimation error in δ for
+simplicity, and suppose that the Yi ’s are independent conditional on (θi , Xi , σi ). Then, as
+µ2 / mini σi2 → 0, the weights σ̂i−2 , σ̂i−4 , and σ̂i−8 , for estimating δ, µ2 , and µ4 , respectively,
+35
+
+become optimal. For simplicity, the baseline implementation in Section 3.2 uses the same
+weights ωi for each of the estimates; the choice ωi = σ̂i−2 targets optimal estimation of δ.
+However, one could relax this constraint, and use the weights σ̂i−4 , and σ̂i−8 for estimating µ2
+and µ4 instead. The choice ωi = 1/n has the advantage of simplicity; one may also motivate
+it by robustness concerns when Eq. (10) fails, though our preferred robustness check is to
+use nonparametric moment estimates, as outlined in Remark 3.2.
+
+Appendix B
+
+Computational details
+
+√
+To simplify the statement of the results below, let r0 (b, χ) = r( b, χ), and put m2 = σ 2 /µ2 .
+The next proposition shows that, if only a second moment constraint is imposed, the maximal
+non-coverage probability ρ(m2 , χ), defined in Eq. (5), has a simple solution:
+Proposition B.1. Consider the problem in Eq. (5). The solution is given by
+
+r (0, χ) + m2 (r (t , χ) − r (0, χ)) if m < t ,
+0 0
+0
+2
+0
+0
+t0
+ρ(m2 , χ) =
+r (m , χ)
+otherwise.
+0
+
+Here t0 = 0 if χ <
+
+2
+
+√
+∂
+3, otherwise t0 is the unique solution to r0 (t, χ) + u ∂u
+r0 (u, χ) = r0 (u, χ).
+
+The proof of Proposition B.1 shows that ρ(m2 , χ) corresponds to the least concave majorant of the function r0 .
+The next result shows that, if in addition to a second moment constraint, we impose
+a constraint on the kurtosis, the maximal non-coverage probability can be computed as a
+solution to two nested univariate optimizations:
+Proposition B.2. Suppose κ > 1 and m2 > 0. Then the solution to the problem
+ρ(m2 , κ, χ) = sup EF [r(b, χ)] s.t.
+F
+
+EF [b2 ] = m2 , EF [b4 ] = κm22 ,
+
+is given by ρ(m2 , κ, χ) = r0 (m2 , χ) if m2 ≥ t0 , with t0 defined in Proposition B.1. If m2 < t0 ,
+then the solution is given by
+inf
+
+0<x0 ≤t0
+
+
+
+r0 (x0 , χ) + (m2 − x0 )r00 (x0 , χ) + ((x0 − m2 )2 + (κ − 1)m22 )
+
+where r00 (x0 , χ) = ∂r0 (x0 , χ)/∂x0 , δ(x; x0 ) =
+∂2
+δ(x0 ; x0 ) = limx→x0 δ(x; x0 ) = 12 ∂x
+2 r0 (x0 , χ).
+0
+
+36
+
+
+
+sup δ(x; x0 ) , (26)
+
+0≤x≤t0
+
+r0 (x,χ)−r0 (x0 ,χ)−(x−x0 )r00 (x0 ,χ)
+(x−x0 )2
+
+if x 6= x0 , and
+
+If m2 ≥ t0 , then imposing a constraint on the kurtosis does not help to reduce the
+maximal non-coverage probability, and ρ(m2 , κ, χ) = ρ(m2 , χ).
+Remark B.1 (Least favorable distributions). It follows from the proof of these propositions
+that distributions maximizing Eq. (5)—the least favorable distributions for the normalized
+√
+√
+bias b—have two support points if m2 ≥ t0 , namely − m2 and m2 (since the rejection
+probability r(b, χ) depends on b only through its absolute value, any distribution with these
+two support points maximizes Eq. (5)). If m2 < t0 , there are three support points, b = 0,
+√
+with probability 1 − m2 /t0 and b = ± t0 with total probability m2 /t0 (again, only the sum
+of the probabilities is uniquely determined). If the kurtosis constraint is also imposed, then
+√
+√
+there are four support points, ± x0 and ± x, where x and x0 optimize Eq. (26).
+Finally, the characterization of the solution to the general program in Eq. (19) depends
+on the form of the constraint function g. To solve the program numerically, discretize the
+support of F to turn the problem into a finite-dimensional linear program, which can be
+solved using a standard linear solver. In particular, we solve the problem
+ρg (m, χ) = sup
+
+p1 ,...,pK
+
+K
+X
+k=1
+
+pk r(xk , χ) s.t.
+
+K
+X
+
+pk g(xk ) = m,
+
+k=1
+
+K
+X
+k=1
+
+pk = 1,
+
+pk ≥ 0.
+
+Here x1 , . . . , xK denote the support points of b, with pk denoting the associated probabilities.
+
+Appendix C
+
+Coverage results
+
+This Appendix provides coverage results that generalize Theorem 4.1. Appendix C.1 introduces the general setup. Appendix C.2 provides results for general shrinkage estimators that
+satisfy an approximate normality assumption. Appendix C.3 considers a generalization of
+our baseline specification in the EB setting, and states a generalization of Theorem 4.1.
+
+C.1
+
+General setup and notation
+
+Let θ̂1 , . . . , θ̂n be estimates of θ1 , . . . , θn , with standard errors se1 , . . . , sen . The standard
+errors may be random variables that depend on the data. We are interested in coverage
+properties of the intervals CIi = {θ̂i ± sei · χi } for some χ1 , . . . , χn , which may be chosen
+based on the data. In some cases, we will condition on some variable X̃i when defining EB
+coverage or average coverage. Let X̃ (n) = (X̃1 , . . . , X̃n )0 and let χ(n) = (χ1 , . . . , χn )0 .
+As discussed in Section 4.1, the average coverage criterion does not require thinking of
+θ as random. To save on notation, we will state most of our average coverage results and
+37
+
+conditions in terms of a general sequence of probability measures P̃ = P̃ (n) and triangular
+arrays θ and X̃ (n) . We will use EP̃ to denote expectation under P̃ . We can then obtain
+EB coverage statements by considering a distribution P for the data and θ, X̃ (n) and an
+additional variable ν such that these conditions hold for the measure P̃ (·) = P (· | θ, ν, X̃ (n) )
+for θ, ν, X̃ (n) in a probability one set. The variable ν is allowed to depend on n, and can
+include nuisance parameters as well as additional variables.
+It will be useful to formulate a conditional version of the average coverage criterion (15),
+to complement the conditional version of EB coverage discussed in the main text. Due to
+discreteness of the empirical measure of the X̃i ’s, we consider coverage conditional on each
+set in some family A of sets. To formalize this, let IX ,n = {i ∈ {1, . . . , n} : X̃i ∈ X }, and let
+NX ,n = #IX ,n . The sample average non-coverage on the set X is then given by
+AN Cn (χ(n) ; X ) =
+
+1 X
+1 X
+I{θi ∈
+/ {θ̂ ± sei · χi }} =
+I{|Zi | > χi },
+NX ,n i∈I
+NX ,n i∈I
+X ,n
+
+X ,n
+
+where Zi = (θ̂i − θi )/sei . We consider two notions of average coverage control, conditional
+on the set X ∈ A:
+(27)
+AN Cn (χ; X ) ≤ α + oP̃ (1),
+and
+lim sup EP̃ [AN Cn (χ; X )] = lim sup
+n
+
+n
+
+1 X
+P̃ (|Zi | > χi ) ≤ α.
+NX ,n i∈I
+
+(28)
+
+X ,n
+
+Since AN Cn (χ; X ) is uniformly bounded, (27) implies (28). Furthermore, if we integrate
+with respect to some distribution on ν, X̃ (n) such that (28) holds with P̃ (·) = P (· | θ, ν, X̃ (n) )
+almost surely, we get (again by uniform boundedness) lim supn E [AN Cn (χ; X ) | θ] ≤ α,
+which, if X contains all X̃i ’s with probability one, is condition (15) from the main text.
+Now consider EB coverage, as defined in Eq. (14) in the main text, but conditioning on
+X̃i . We consider EB coverage under a distribution P for the data, X̃ (n) , θ and ν, where
+ν includes additional nuisance parameters and covariates, and where the average coverage
+condition (28) holds with P (· | θ, ν, X̃ (n) ) playing the role of P̃ with probability one. Suppose
+X̃i is discretely distributed under P , and that the exchangeability condition
+P (θi ∈ CIi | I{x̃},n ) = P (θj ∈ CIj | I{x̃},n ) for all i, j ∈ I{x̃},n
+holds with probability one. Then, for each j,
+
+
+P (θj ∈ CIj | X̃j = x̃) = P (θj ∈ CIj | j ∈ I{x̃},n ) = E P (θj ∈ CIj | I{x̃},n ) | j ∈ I{x̃},n
+38
+
+(29)
+
+=E
+
+h
+
+1
+N{x̃},n
+
+i
+P
+(θ
+∈
+CI
+|
+I
+)
+j
+∈
+I
+.
+i
+i
+{x̃}
+{x̃},n
+i∈I{x̃}
+
+P
+
+Plugging in P (· | θ, ν, X̃ (n) ) for P̃ in the coverage condition (28), taking the expectation
+conditional on I{x̃},n and using uniform boundedness, it follows that the lim inf of the term
+in the conditional expectation is no less than 1 − α. Then, by uniform boundedness of this
+term,
+lim inf P (θj ∈ CIj | X̃j = x̃) ≥ 1 − α.
+(30)
+n→∞
+
+This is a conditional version of the EB coverage condition (14) from the main text.
+
+C.2
+
+Results for general shrinkage estimators
+
+We assume that Zi = (θ̂i − θi )/sei is approximately normal with variance one and mean
+bi under the sequence of probability measures P̃ = P̃ (n) . To formalize this, we consider a
+triangular array of distributions satisfying the following conditions.
+Assumption C.1. For some random variables b̃i and constants bi,n , Zi − b̃i satisfies
+lim max P̃ (Zi − b̃i ≤ t) − Φ(t) = 0
+
+n→∞ 1≤i≤n
+
+for all t ∈ R and, for all X ∈ A and any ε > 0, NX1 ,n
+
+P
+
+i∈IX ,n P̃ (|b̃i − bi,n | ≥ ε) → 0.
+
+Note that, when applying the results with P̃ (·) given by the sequence of measures P (· |
+θ, ν, X̃ (n) ), the constants bi,n will be allowed to depend on θ, ν, X̃ (n) .
+Let g : R → Rp be a vector of moment functions. We consider critical values χ̂(n) =
+(χ̂1 , . . . , χ̂n ) based on an estimate of the conditional expectation of g(bi,n ) given X̃i , where
+the expectation is taken with respect to the empirical distribution of X̃i , bi,n . Due to the
+discreteness of this measure, we consider the behavior of this estimate on average over sets
+X ∈ A. We assume that there exists a function m : X → Rp that plays the role of the
+conditional expectation of g(bi,n ) given X̃i , along with estimates m̂i of m(X̃i ), which satisfy
+the following assumptions.
+P
+Assumption C.2. For all X ∈ A, NX ,n → ∞, NX1 ,n i∈IX ,n (g(bn,i ) − m(X̃i )) → 0, and, for
+P
+all ε > 0, NX1 ,n i∈IX ,n P̃ (km̂i − m(X̃i )k ≥ ε) → 0.
+
+Assumption C.3. For every X ∈ A and every ε > 0, there is a partition X1 , . . . , XJ ∈ A
+of X and m1 , . . . , mJ such that, for each j and all x ∈ Xj , m(x) ∈ Bε (mj ), where Bε (m) =
+{m̃ : km̃ − mk ≤ ε}.
+R
+Assumption C.4. For some compact set M in the interior of the set of values of g(b)dF (b)
+where F ranges over all probability measures on R, we have m(x) ∈ M for all x.
+39
+
+Let ρg (m, χ) and cvaα,g (m) be defined as in Section 6,
+cvaα,g (m) = inf{χ : ρg (m, χ) ≤ α} where ρg (m, χ) = sup EF [r(b, χ)] s.t. EF [g(b)] = m.
+F
+
+Let χ̂i = cvaα,g (m̂i ). We will consider the average non-coverage AN Cn (χ̂(n) ; X ) of the
+collection of intervals {θ̂i ± sei · χ̂i }.
+Theorem C.1. Suppose that Assumptions C.1, C.2, C.3 and C.4 hold, and that, for some
+j, limb→∞ gj (b) = limb→−∞ gj (b) = ∞ and inf b gj (b) ≥ 0. Then, for all X ∈ A,
+EP̃ AN Cn (χ̂(n) ; X ) ≤ α + o(1).
+If, in addition, Zi − b̃i is independent over i under P̃ , then AN Cn (χ̂(n) ; X ) ≤ α + oP̃ (1).
+
+C.3
+
+Empirical Bayes shrinkage toward regression estimate
+
+We now apply the general results in Appendix C.2 to the EB setting. As in Section 3, we
+consider unshrunk estimates Y1 , . . . , Yn of parameters θ = (θ1 , . . . , θn )0 , along with regressors
+X (n) = (X1 , . . . , Xn ) and variables X̃ (n) = (X̃1 , . . . , X̃n )0 , which include σi , and which play
+the role of the conditioning variables (the setting in Section 3 obtains as a special case
+with X̃i = (Xi , σi )). The initial estimate Yi has standard deviation σi , and we observe
+an estimate σ̂i . We obtain average coverage results by considering a triangular array of
+probability distributions P̃ = P̃ (n) , in which the Xi ’s, σi ’s and θi ’s are fixed. EB coverage
+can then be obtained for a distribution P of the data, θ and some nuisance parameter ν̃ such
+that these conditions hold almost surely with P (· | θ, ν̃, X̃ (n) , X (n) ) playing the role of P̃ .
+We generalize the baseline specification in the main text, and consider
+θ̂i = X̂i0 δ̂ + w(γ̂, σ̂i )(Yi − X̂i0 δ̂)
+where X̂i is an estimate of Xi (this allows some elements of Xi to be estimated rather than
+observed directly, such as when σi is included in Xi ), δ̂ is any random vector that depends on
+the data (such as the OLS estimator in a regression of Yi on Xi ), and γ̂ is a tuning parameter
+that determines shrinkage and may depend on the data. This leads to the standard error
+sei = w(γ̂, σ̂i )σ̂i so that the t-statistic is
+Zi =
+
+X̂ 0 δ̂ + w(γ̂, σ̂i )(Yi − X̂i0 δ̂) − θi
+Yi − θi [w(γ̂, σ̂i ) − 1](θi − X̂i0 δ̂)
+θ̂i − θi
+= i
+=
++
+.
+sei
+w(γ̂, σ̂i )σ̂i
+σ̂i
+w(γ̂, σ̂i )σ̂i
+
+We use estimates of moments of the bias of positive integer order `1 < · · · < `p . Let µ̂` be
+40
+
+an estimate of the `th moment of θi − Xi0 δ, and suppose that this moment is independent of
+σi in a sense formalized below. Then an estimate of the `j th moment of the bias is m̂i,j =
+[w(γ̂,σ̂i )−1]`j µ̂`j
+`
+
+w(γ̂,σ̂i )`j σ̂i j
+
+. Let m̂i = (m̂1 , . . . , m̂p )0 . The EBCI is then given by θ̂i ± w(γ̂, σ̂i )σ̂i · cvaα,g (m̂i )
+
+where gj (b) = b`j . We obtain the baseline specification in Section 3.2 when p = 2, `1 = 2,
+`2 = 4, γ̂ = µ̂2 and w(µ̂2 , σ̂i ) = µ̂2 /(µ̂2 + σ̂i2 ).
+We make the following assumptions.
+Assumption C.5. limn→∞ max1≤i≤n |P̃ ((Yi − θi )/σ̂i ≤ t) − Φ(t)| = 0.
+Supplemental Appendix D.1 gives primitive conditions for Assumption C.5, and verifies
+them in a linear fixed effects panel data model. These conditions involve considering a
+triangular array of parameter values such that sampling error and empirical moments of the
+parameter value sequence are of the same order of magnitude, and defining θi to be a scaled
+version of the corresponding parameter.
+Assumption C.6. The standard deviations σi are bounded away from zero. In addition, for
+some δ and γ, δ̂ and γ̂ converge to δ and γ under P̃ , and, for any ε > 0,
+lim max P̃ (|σ̂i − σi | ≥ ε) = 0 and lim max P̃ (|X̂i − Xi | ≥ ε) = 0.
+
+n→∞ 1≤i≤n
+
+n→∞ 1≤i≤n
+
+Assumption C.7. The variable X̃i takes values in S1 × · · · × Ss where, for each k, either
+Sk = [xk , xk ] (with −∞ < xk < xk < ∞) or Sk is a finitely discrete set with minimum
+element xk and maximum element xk . In addition, X̃i1 = σi (the first element of X̃i is given
+by σi ). Furthermore, for some µ0 such that (µ0,`1 , . . . , µ0,`p ) is in the interior of the set of
+R
+values of g(b) dF (b) where F ranges over probability measures on R where gj (b) = b`j and
+some constant K, the following holds. Let A denote the collection of sets Se1 × · · · × Ses where
+Sek is a positive Lebesgue measure interval contained in [xk , xk ] in the case where Sk = [xk , xk ],
+and Sek is a nonempty subset of Sk in the case where Sk is finitely discrete. For any X ∈ A,
+NX ,n → ∞ and
+1 X
+(θi − Xi0 δ)`j → µ0,`j ,
+NX ,n i∈I
+X ,n
+
+1 X
+|θi |`j ≤ K,
+NX ,n i∈I
+X ,n
+
+and
+
+1 X
+kXi k`j ≤ K.
+NX ,n i∈I
+X ,n
+
+In addition, the estimate µ̂`j converges in probability to µ0,`j under P̃ for each j.
+Theorem C.2. Let θ̂i and sei be given above and let χ̂i = cvaα,g (m̂i ) where m̂i is given
+above and g(b) = (b`1 , . . . , b`p ) for some positive integers `1 , . . . , `p , at least one of which is
+even. Suppose that Assumptions C.5, C.6 and C.7 hold, and that w() is continuous in an
+open set containing {γ} × S1 and is bounded away from zero on this set. Let A be as given
+41
+
+in Assumption C.7. Then, for all X ∈ A, EP̃ AN Cn (χ̂(n) ; X ) ≤ α + o(1). If, in addition,
+(Yi , σ̂i ) is independent over i under P̃ , then AN Cn (χ̂(n) ; X ) ≤ α + oP̃ (1).
+As a consequence of Theorem C.2, we obtain, under the exchangeability condition (29),
+conditional EB coverage, as defined in Eq. (30), for any distribution P of the data and
+θ, ν̃ such that the conditions of Theorem C.2 hold with probability one with the sequence
+of probability measures P (· | θ, ν̃, X (n) , X̃ (n) ) playing the role of P̃ . This follows from the
+arguments in Appendix C.1.
+Corollary C.1. Let θ, ν, X (n) , X̃ (n) , Yi follow a sequence of distributions P such that the conditions of Theorem C.2 hold with X̃i taking on finitely many values, and P (· | θ, ν, X (n) , X̃ (n) )
+playing the role of P̃ with probability one, and such that the exchangeability condition (29)
+holds. Then the intervals CIi = {θ̂i ± w(γ̂, σ̂i )σ̂i · cvaα,g (m̂i )} satisfy the conditional EB
+coverage condition (30).
+The first part of Theorem 4.1 (average coverage) follows by applying Theorem C.2 with
+the conditional distribution P (· | θ) playing the role of P̃ . The second part (EB coverage)
+follows immediately from Corollary C.1.
+
+References
+Abadie, A. and Kasy, M. (2019). Choosing among regularized estimators in empirical economics: The risk of machine learning. The Review of Economics and Statistics, 101(5):743–
+762.
+Andrews, I., McCloskey, A., and Kitagawa, T. (2021). Inference on winners. Unpublished
+manuscript, Harvard University.
+Angrist, J. D., Hull, P. D., Pathak, P. A., and Walters, C. R. (2017). Leveraging lotteries
+for school value-added: Testing and estimation. The Quarterly Journal of Economics,
+132(2):871–919.
+Armstrong, T. B., Kolesár, M., and Plagborg-Møller, M. (2020). Robust empirical Bayes
+confidence intervals. arXiv: 2004.03448v2.
+Armstrong, T. B. and Kolesár, M. (2018). Optimal inference in a class of regression models.
+Econometrica, 86(2):655–683.
+Benjamini, Y. and Hochberg, Y. (1995). Controlling the False Discovery Rate: A Practical
+and Powerful Approach to Multiple Testing. Journal of the Royal Statistical Society. Series
+B (Methodological), 57(1):289–300.
+42
+
+Benjamini, Y. and Yekutieli, D. (2005). False discovery rate–adjusted multiple confidence intervals for selected parameters. Journal of the American Statistical Association,
+100(469):71–81.
+Bonhomme, S. and Weidner, M. (2021). Posterior average effects. arXiv: 1906.06360.
+Brown, L. D. and Greenshtein, E. (2009). Nonparametric empirical Bayes and compound
+decision approaches to estimation of a high-dimensional vector of normal means. The
+Annals of Statistics, 37(4):1685–1704.
+Cai, T. T., Low, M., and Ma, Z. (2014). Adaptive confidence bands for nonparametric
+regression functions. Journal of the American Statistical Association, 109(507):1054–1070.
+Carlin, B. P. and Louis, T. A. (2000). Bayes and Empirical Bayes Methods for Data Analysis.
+Chapman & Hall/CRC, New York, NY, 2nd edition.
+Casella, G. and Hwang, J. T. G. (2012). Shrinkage confidence procedures. Statistical Science,
+27(1):51–60.
+Chetty, R., Friedman, J. N., and Rockoff, J. E. (2014). Measuring the impacts of teachers I: Evaluating bias in teacher value-added estimates. American Economic Review,
+104(9):2593–2632.
+Chetty, R. and Hendren, N. (2018). The impacts of neighborhoods on intergenerational
+mobility II: County-level estimates. The Quarterly Journal of Economics, 133(3):1163–
+1228.
+Efron, B. (2010). Large-Scale Inference: Empirical Bayes Methods for Estimation, Testing,
+and Prediction. Cambridge University Press, New York, NY.
+Efron, B. (2015). Frequentist accuracy of Bayesian estimates. Journal of the Royal Statistical
+Society: Series B (Statistical Methodology), 77(3):617–646.
+Efron, B. (2019). Bayes, oracle Bayes and empirical Bayes. Statistical Science, 34(2):177–201.
+Finkelstein, A., Gentzkow, M., Hull, P., and Williams, H. (2017). Adjusting risk adjustment—
+accounting for variation in diagnostic intensity. New England Journal of Medicine,
+376(7):608–610.
+Giacomini, R., Kitagawa, T., and Uhlig, H. (2019). Estimation under ambiguity. Cemmap
+Working Paper 24/19.
+
+43
+
+Greenshtein, E. and Ritov, Y. (2019). Comment: Empirical Bayes, compound decisions and
+exchangeability. Statistical Science, 34(2):224–228.
+Hansen, B. E. (2016). Efficient shrinkage in parametric models. Journal of Econometrics,
+190(1):115–132.
+Hull, P. (2020). Estimating hospital quality with quasi-experimental data. Unpublished
+manuscript, University of Chicago.
+Hung, K. and Fithian, W. (2019). Rank verification for exponential families. The Annals of
+Statistics, 47(2):758–782.
+Ignatiadis, N. and Wager, S. (2021). Confidence intervals for nonparametric empirical Bayes
+analysis. arXiv: 1902.02774.
+Jacob, B. A. and Lefgren, L. (2008). Can principals identify effective teachers? Evidence on
+subjective performance evaluation in education. Journal of Labor Economics, 26(1):101–
+136.
+James, W. and Stein, C. M. (1961). Estimation with quadratic loss. In Neyman, J., editor,
+Proceedings of the Fourth Berkeley Symposium on Mathematical Statistics and Probability,
+volume 1, pages 361–379, Berkeley, CA. University of California Press.
+Jiang, W. and Zhang, C.-H. (2009). General maximum likelihood empirical Bayes estimation
+of normal means. The Annals of Statistics, 37(4):1647–1684.
+Johnstone, I. M. (2019). Gaussian Estimation: Sequence and Multiresolution Models. Book
+draft.
+Kane, T. and Staiger, D. (2008). Estimating teacher impacts on student achievement: An
+experimental evaluation. Technical Report 14607, National Bureau of Economic Research,
+Cambridge, MA.
+Kiefer, J. and Wolfowitz, J. (1956). Consistency of the maximum likelihood estimator in the
+presence of infinitely many incidental parameters. The Annals of Mathematical Statistics,
+27(4):887–906.
+Koenker, R. and Mizera, I. (2014). Convex optimization, shape constraints, compound
+decisions, and empirical Bayes rules. Journal of the American Statistical Association,
+109(506):674–685.
+
+44
+
+Lee, J. D., Sun, D. L., Sun, Y., and Taylor, J. E. (2016). Exact post-selection inference, with
+application to the lasso. The Annals of Statistics, 44(3):907–927.
+Liu, L., Moon, H. R., and Schorfheide, F. (2019). Forecasting with a panel tobit model.
+Unpublished manuscript, University of Pennsylvania.
+MacKinnon, J. G. and White, H. (1985). Some heteroskedasticity-consistent covariance
+matrix estimators with improved finite sample properties. Journal of Econometrics,
+29(3):305–325.
+Morris, C. N. (1983a). Parametric empirical Bayes confidence intervals. In Box, G. E. P.,
+Leonard, T., and Wu, C.-F., editors, Scientific Inference, Data Analysis, and Robustness,
+pages 25–50, New York, NY. Academic Press.
+Morris, C. N. (1983b). Parametric empirical Bayes inference: Theory and applications.
+Journal of the American Statistical Association, 78(381):47–55.
+Nychka, D. (1988). Bayesian confidence intervals for smoothing splines. Journal of the
+American Statistical Association, 83(404):1134–1143.
+Pinelis, I. (2002). Monotonicity properties of the relative error of a Padé approximation for
+Mills’ ratio. Journal of Inequalities in Pure & Applied Mathematics, 3(2).
+Pratt, J. W. (1961). Length of confidence intervals. Journal of the American Statistical
+Association, 56(295):549–567.
+Storey, J. D. (2002). A direct approach to false discovery rates. Journal of the Royal
+Statistical Society: Series B (Statistical Methodology), 64(3):479–498.
+Wahba, G. (1983). Bayesian “confidence intervals” for the cross-validated smoothing spline.
+Journal of the Royal Statistical Society: Series B (Methodological), 45(1):133–150.
+Wasserman, L. (2006). All of Nonparametric Statistics. Springer, New York, NY.
+Xie, X., Kou, S. C., and Brown, L. D. (2012). SURE estimates for a heteroscedastic hierarchical model. Journal of the American Statistical Association, 107(500):1465–1479.
+
+45
+
+arXiv:2004.03448v4 [econ.EM] 14 May 2022
+
+Supplemental Materials for
+“Robust Empirical Bayes Confidence Intervals”
+Timothy B. Armstrong∗
+
+Michal Kolesár†
+
+University of Southern California
+
+Princeton University
+
+Mikkel Plagborg-Møller‡
+Princeton University
+May 17, 2022
+This supplement is organized as follows. Supplemental Appendix D gives proofs of the
+formal results in the main text and details on Assumption C.5. Supplemental Appendix E
+gives details on the simulations. Supplemental Appendix F discusses the power of tests based
+on our empirical Bayes confidence intervals (EBCIs), and Supplemental Appendix G works
+through examples of the general shrinkage estimators in Section 6.1.
+
+Appendix D
+
+Theoretical details and proofs
+
+Supplemental Appendix D.1 gives technical details on Assumption C.5. The remainder of
+this Supplemental Appendix provides the proofs of all results in the main paper and in this
+supplement.
+
+D.1
+
+Primitive conditions for Assumption C.5
+
+To verify Assumption C.5, we will typically have to define θi to be scaled by a rate of
+convergence. Let Ỹi be an estimator of a parameter ϑi,n with rate of convergence κn and
+asymptotic variance estimate σ̂i2 . Suppose that
+lim max sup P
+
+n→∞ 1≤i≤n t∈R
+
+κn (Ỹi − ϑi,n )
+≤t
+σ̂i
+
+∗
+
+email: timothy.armstrong@usc.edu
+email: mkolesar@princeton.edu
+‡
+email: mikkelpm@princeton.edu
+
+†
+
+1
+
+!
+
+− Φ(t) = 0.
+
+(S1)
+
+Then Assumption C.5 holds with θi = κn ϑi,n and Yi = κn Ỹi . Consider an affine estimator
+ϑ̂i = ai /κn + wi Ỹi = (ai + wi Yi )/κn with standard error se
+e i = wi σ̂i /κn . The corresponding
+affine estimator of θi is θ̂i = κn ϑ̂i = ai + wi Yi with standard error sei = κn · se
+e i = wi σ̂i . Then
+ϑi,n ∈ {ϑ̂i ± se
+e i · χ̂i } iff. θi ∈ {θ̂i ± sei · χ̂i }. Thus, Theorem C.2 guarantees average coverage
+of the intervals {ϑ̂i ± se
+e i · χ̂i } for ϑi,n . Note that, in order for the moments of θi to converge
+to a non-degenerate constant, we will need to consider triangular arrays ϑi,n that converge
+to zero at a κn rate.
+As an example, we now verify Assumption C.5 for the linear fixed effects panel data
+model
+Wit = ϑi,n + Xit0 β + uit , i = 1, . . . , n, t = 1, . . . , Ti ,
+where Xit are covariates in the fixed effects regression.1 We assume that the Ti s increase
+P
+at the same rate so that, letting T̄ = n1 ni=1 Ti , we can apply the approach described
+√
+√
+above with κn = T̄ to verify Assumption C.5 with θi = T̄ ϑi,n . We consider the
+fixed effects estimate of ϑi,n formed by regressing Wit on Xit and indicator variables for
+each individual i, along with the heteroskedasticity robust variance estimate from this regression. To give the formulas for these estimates, we first define some notation. Let
+P i
+P i
+PTi
+Wit , X̄i = T1i Tt=1
+Xit , Ẍit = Xit − X̄i , Ẅit = Wit − W̄i , ūi = T1i t=1
+uit
+W̄i = T1i Tt=1
+P
+P
+P
+n
+n
+T
+i
+and T̄ = n1 i=1 Ti . Letting Q̂XX = n1T̄ i=1 t=1
+Ẍit Ẍit0 , the fixed effect estimate of β is
+P
+P
+Ti
+n
+given by β̂ = Q̂−1
+XX
+t=1 Ẍit Wit /(nT̄ ), and the fixed effect estimate of ϑi,n is given by
+i=1
+Ỹi = W̄i − X̄i0 β̂ =
+
+
+Tj 
+n X
+X
+1
+1 0 −1
+I{i = j} −
+X̄ Q̂ Ẍit Wit .
+Ti nT̄ i XX
+j=1 t=1
+
+(S2)
+
+We assume that the Ti s grow at the same rate, so that all Ỹi ’s converge at the same rate
+√
+√
+1/ T̄ . An estimate of the variance of T̄ (Ỹi − ϑi,n ) that is robust to heteroskedasticity in
+uit is given by
+2
+Ti 
+n X
+X
+1
+1 0 −1
+2
+σ̂i = T̄
+I{i = j} −
+X̄i Q̂XX Ẍjt û2jt ,
+(S3)
+T
+n
+T̄
+i
+j=1 t=1
+where ûit = Wit − Xit0 β̂ − Ỹi .
+We consider “large n large T ” asymptotics in which the Ti ’s are implicitly indexed by
+n. We make the following assumptions about the Ti ’s and the distribution P̃ = P̃ (n) of
+{Xit , uit }i=1,...,n, t=1,...,Ti .
+Assumption D.1. For some constants γ > 0 and K > 0,
+1
+
+We note that, despite the similarity in notation, we do not make any assumption about the relation
+between the individual level prediction variables Xi used in the individual level predictive regression and the
+covariates Xit used in the fixed effects regression.
+
+2
+
+1. uit is mean zero and independent across i and t with 1/K ≤ EP̃ u2it and EP̃ |uit |2+γ ≤ K.
+2. |Xit | ≤ K for all i, t.
+3. n → ∞ and min1≤i≤n Ti → ∞ and Ti /Tj ≤ K for all i, j ≤ n.
+√
+4. Under P̃ , nT̄ (β̂ − β) = O(1) and the minimum eigenvalue of Q̂XX is greater than
+1/K with probability approaching one as n → ∞.
+Assumption D.1 is meant to give a simple set of sufficient conditions, and it could be
+modified for other settings, so long as large n and T asymptotics allow for valid inference
+on the individual fixed effects. For example, one could relax the independence assumption
+on the uit ’s and modify the standard errors to take into account dependence, so long as
+one puts enough structure on the dependence that consistent variance estimation is possible
+as n and T increase. The assumption of bounded covariates is made for simplicity, and
+could be relaxed, at the possible expense of strengthening the moment condition on uit .
+The convergence rate assumption on β̂ follows from standard arguments under appropriate
+conditions on uit and Xit (see, e.g., Stock and Watson, 2008).
+Theorem D.1. Consider the fixed effects setting given above, and suppose Assumption D.1
+√
+√
+holds. Then Assumption C.5 holds with θi = T̄ ϑi,n , Yi = T̄ Ỹi where Ỹi is the fixed effects
+estimator defined in Eq. (S2), and σ̂i2 is the variance estimate defined in Eq. (S3).
+To prove Theorem D.1, we first prove a series of lemmas.
+
+√
+T̄ |Ỹi − ϑi,n − ūi | > η → 0.
+Lemma D.1. For any η > 0, max1≤i≤n P̃
+
+Proof. The result is immediate from Assumption D.1 since Ỹi − ϑi,n − ūi = X̄it0 (β − β̂).
+
+ P
+Ti
+1
+2
+2
+Lemma D.2. For any η > 0, max1≤i≤n P̃ Ti t=1 (ûit − uit ) > η → 0. Furthermore, if
+Ait,n is a triangular array of random variables that are bounded almost
+surely uniformly in
+ P
+ n
+Ti
+1
+and i, t, then, for any η > 0, there exists C such that max1≤i≤n P̃ Ti t=1 Ait,n û2it > C <
+
+
+P P i
+η and P̃ n1T̄ ni=1 Tt=1
+Ait,n û2it > C < η for large enough n.
+Proof. Some algebra shows that ûit = Ẍit0 (β − β̂) + uit − ūi . Thus,
+
+û2it = u2it + (β − β̂)0 Ẍit Ẍit0 (β − β̂) + ū2i + 2uit Ẍit0 (β − β̂) − 2ūi Ẍit0 (β − β̂) − 2ūi uit .
+It follows that
+
+1
+nT̄
+
+Pn PTi
+i=1
+
+2
+t=1 Ait,n ûit
+
+is bounded by maxi,t,n |Ait,n | times
+
+Ti
+Ti
+n
+n
+1 XX
+1 XX
+2
+0
+u + (β − β̂) Q̂XX (β − β̂) +
+ū2
+nT̄ i=1 t=1 it
+nT̄ i=1 t=1 i
+
+3
+
+(S4)
+
+Ti
+Ti
+Ti
+n
+n
+n
+1 XX
+1 XX
+1 XX
+0
+0
+2|uit | · |Ẍit (β − β̂)| −
+2|ūi ||Ẍit (β − β̂)| −
+2|ūi uit |.
++
+nT̄ i=1 t=1
+nT̄ i=1 t=1
+nT̄ i=1 t=1
+
+The second term converges in probability to zero by the assumptions on Xit and β̂. The
+P P i
+remaining terms are bounded by a constant times n1T̄ ni=1 Tt=1
+(u2it + ū2i +|uit |+|ūi |+|ūi uit |).
+P
+P
+i
+i
+By Jensen’s inequality, we have ū2i ≤ T1i Ti=1
+u2it , |ūi | ≤ T1i Ti=1
+|uit | and
+"T
+#2
+Ti
+Ti
+i
+X
+1 X
+1 X
+2
+|uit | ≤ Ti
+uit =
+u2it .
+|ūi ||uit | = |ūi |
+|uit | ≤
+Ti t=1
+Ti t=1
+t=1
+t=1
+t=1
+
+Ti
+X
+
+Ti
+X
+
+P P i
+This gives a bound of a constant times n1T̄ ni=1 Tt=1
+(u2it + |uit |). The last statement in the
+lemma then follows by Markov’s inequality. The second statement in the lemma follows from
+similar arguments.
+P i
+(u2it − û2it ) is equal
+For the first statement in the lemma, it follows from (S4) that T1i Tt=1
+to
+!
+Ti
+Ti
+Ti
+X
+1
+ūi X
+1 X
+0
+0
+0
+2
+(β̂ − β)
+Ẍit Ẍit (β̂ − β) − ūi + 2
+uit Ẍit (β − β̂) − 2
+Ẍit0 (β − β̂).
+Ti t=1
+Ti t=1
+Ti t=1
+The first term is bounded by a constant that does not depend on i times |β̂ − β|2 (the
+squared Euclidean norm), which converges in probability to 0 by assumption. The second
+term has expectation bounded by T̄ −1 times a constant that does not depend on i. From
+the bounds on the support of Xit and the first moment of uit it follows that the last two
+terms are bounded by |β̂ − β| times a constant that does not depend on i. This gives the
+first statement of the lemma.
+P i
+EP̃ u2it . For any η > 0, max1≤i≤n P̃ (|σ̂i2 − σi2 | > η) → 0.
+Lemma D.3. Let σi2 = TT̄2 Tt=1
+i
+P i 2
+Proof. We have σ̂i2 = I + II + III where I = TT̄2 Tt=1
+ûit ,
+i
+
+II =
+
+n
+
+T
+
+j=1
+
+PTi
+
+i
+1 0 −1
+1 XX
+−1
+2
+0 −1
+0
+Ẍ
+Ẍ
+Q̂
+X̄
+û
+=
+X̄
+Q̂
+X̄i Q̂XX Q̂XXu Q̂−1
+jt
+i
+jt
+i
+jt
+XX
+XX
+XX X̄i ,
+2
+n
+n T̄ j=1 t=1
+
+where Q̂XXu = n1T̄
+
+Pn
+
+0 2
+t=1 Ẍjt Ẍjt ûit , and
+T
+
+i
+1 X
+1 0 −1
+2
+III = −2
+X̄i0 Q̂−1
+XX Ẍit ûit = −2 X̄i Q̂XX Q̂Xu,i ,
+nTi t=1
+n
+
+where Q̂Xu,i = T1i
+
+Pn
+
+2
+i=1 Ẍit ûit .
+
+By Lemma D.2 and the condition on the minimum eigen4
+
+value of Q̂XX , it follows that max1≤i≤n P̃ (|II + III|> η/3) → 0. It also follows from
+P i 2
+uit > η/3 → 0. It now suffices to show that
+Lemma D.2 that max1≤i≤n P̃ I − TT̄2 Tt=1
+i
+
+
+P
+i
+(u2it − EP̃ u2it ) > η/3 → 0. By von Bahr and Esseen (1965, Theorem
+max1≤i≤n P̃ TT̄2 Tt=1
+i
+3),
+T
+
+EP̃
+
+i
+
+T̄ X
+2
+2
+−
+E
+u
+u
+P̃ it
+Ti2 t=1 it
+
+1+γ/2
+
+≤ 2(T̄ /Ti2 )1+γ/2
+
+Ti
+X
+t=1
+
+EP̃ u2it − EP̃ u2it
+
+1+γ/2
+
+,
+
+which is bounded by a constant times T̄ −γ/2 by the moment bound on uit and the bound on
+Ti /Tj . The result now follows from Markov’s inequality.
+p
+√
+Let Z̃i = T̄ ūi /σi , R1,i = T̄i (Ỹi − ϑi,n − ūi )/σi and R2,i = σ̂i − σi . We have
+√
+
+
+T̄ (Ỹi − ϑi,n ) 
+σi
+R2,i
+σi
+= Z̃i + R1,i
+= Z̃i − Z̃i
++ R1,i
+.
+σ̂i
+σi + R2,i
+σi + R2,i
+σi + R2,i
+
+It follows from the Lyapounov Central Limit
+ Theorem
+ (applied to Zin for arbitrary sequences
+in ≤ n) that limn→∞ max1≤i≤n supt∈R P Z̃i ≤ t − Φ(t) = 0. The conclusion of Theo
+
+R2,i
+σi
+rem D.1 then follows so long as max1≤i≤n P Z̃i σi +R
++
+R
+>
+η
+→ 0 for any
+1,i σi +R2,i
+2,i
+η > 0. But this follows by Lemmas D.1 and D.3 and the fact that σi is bounded from above
+and from below away from zero by the moment assumptions on uit .
+
+D.2
+
+Proof of Lemma 4.1
+
+We first show that the non-coverage probability is weakly decreasing in wEB,i . Let Γ(m)
+denote the space of probability measures on R with second moment bounded above by m > 0.
+√
+Abbreviating z1−α/2 by z, let ρ̃(w) = ρ(1/w − 1, z/ w) denote the maximal undercoverage
+when wEB,i = w. By definition of ρ,
+ρ̃(w) =
+
+sup
+F ∈Γ(1/w−1)
+
+
+
+√
+Eb∼F P (|b − Z| > z/ w | b) =
+
+sup
+F ∈Γ(1/w−1)
+
+Pb∼F
+
+√
+
+
+w|b − Z| > z , (S5)
+
+where Z denotes a N (0, 1) variable that is independent of b.
+Consider any w0 , w1 such that 0 < w0 ≤ w1 < 1. Let F1∗ ∈ Γ(1/w1 − 1) denote the
+least-favorable distribution—i.e., the distribution that achieves the supremum (S5)—when
+w = w1 . (Proposition B.1 implies that the supremum is in fact attained at a particular
+
+5
+
+discrete distribution.) Let F̃0 denote the distribution of the linear combination
+r
+
+w1
+b−
+w0
+
+r
+
+w1 − w0
+Z
+w0
+
+when b ∼ F1∗ and Z ∼ N (0, 1) are independent. Note that the second moment of this
+w1
+1
+0
+0
+distribution is w
+· 1−w
++ w1w−w
+= 1−w
+, so F̃0 ∈ Γ(1/w0 − 1). Thus, if we let Z̃ denote
+w1
+w0
+0
+0
+another N (0, 1) variable that is independent of (b, Z), then
+r
+
+w1
+w1 − w0
+ρ̃(w0 ) ≥ Pb∼F̃0 w0 |b − Z| > z = Pb∼F1∗
+w0
+b−
+Z̃ − Z > z
+w0
+w0
+
+
+√
+√
+√
+√
+w1 b − ( w1 − w0 Z̃ + w0 Z) > z = Pb∼F1∗ ( w1 |b − Z| > z) = ρ̃(w1 ).
+= Pb∼F1∗
+|
+{z
+}
+
+√
+
+
+
+√
+
+r
+
+∼N (0,w1 )
+
+Next, we derive the limit of the non-coverage probability as wEB,i → 0. It follows from
+Proposition B.1 that
+ρ(t, χ) = sup (1 − λ)r(0, χ) + λr((t/λ)1/2 , χ).
+0≤λ≤1
+
+√
+Note that r(0, z/ w) → 0 as w → 0. Thus,
+
+√ 
+lim ρ̃(w) = lim ρ 1/w − 1, z/ w = lim sup λr λ−1/2 (1/w − 1)1/2 , zw−1/2 ,
+
+w→0
+
+w→0
+
+w→0 0≤λ≤1
+
+provided the latter limit exists. We will first show that the supremum above is bounded
+below by an expression that tends to 1/ max{z 2 , 1}. Then we will show that the supremum
+is bounded above by an expression that tends to 1/z 2 (and the supremum is obviously also
+bounded above by 1).
+Let ε(w) ≥ 0 be any function of w such that ε(w) → 0 and ε(w)(1/w − 1)1/2 → ∞ as
+w → 0. Let z̃ = max{z, 1}. Note first that, by setting λ = (z̃(1 − w)−1/2 + ε(w))−2 ∈ [0, 1],
+sup λr λ−1/2 (1/w − 1)1/2 , zw
+
+0≤λ≤1
+
+
+−1/2
+
+
+r (z̃(1 − w)−1/2 + ε(w))(1/w − 1)1/2 , zw−1/2
+1
+≥
+→ 2
+−1/2
+2
+(z̃(1 − w)
++ ε(w))
+z̃
+
+as w → 0, since r(b, χ) → 1 when (b − χ) → ∞, and
+(z̃(1 − w)−1/2 + ε(w))(1/w − 1)1/2 − zw−1/2 ≥ (z(1 − w)−1/2 + ε(w))(1/w − 1)1/2 − zw−1/2
+= ε(w)(1/w − 1)1/2 → ∞.
+
+6
+
+Second,
+sup λr λ−1/2 (1/w − 1)1/2 , zw−1/2
+
+0≤λ≤1
+
+
+
+
+
+≤ Φ −zw−1/2 + sup λΦ λ−1/2 (1/w − 1)1/2 − zw−1/2 .
+0≤λ≤1
+
+The first term above tends to 0 as w → 0. The second term equals
+max
+
+
+
+sup
+0≤λ≤(z−ε(w))−2
+
+
+λΦ λ−1/2 (1/w − 1)1/2 − zw−1/2 ,
+sup
+(z−ε(w))−2 <λ≤1
+
+−1/2
+
+λΦ λ
+
+(1/w − 1)
+
+1/2
+
+− zw
+
+−1/2
+
+
+
+
+
+,
+
+where the first argument is bounded above by sup0≤λ≤(z−ε(w))−2 λ = (z − ε(w))−2 → z12 . The
+second argument tends to 0 as w → 0, since
+λ−1/2 (1/w − 1)1/2 − zw−1/2 ≤ (λ−1/2 − z)(1/w − 1)1/2 ≤ −ε(w)(1/w − 1)1/2
+for all λ > (z − ε(w))−2 , and the far right-hand side above tends to −∞ as w → 0.
+
+D.3
+
+Proof of Proposition B.1
+
+Since r(b, χ) is symmetric in b, Eq. (5) is equivalent to maximizing EF [r0 (t, χ)] over distributions F of t with EF [t] = m2 . Let r(t, χ) denote the least concave majorant of r0 (t, χ). We
+first show that ρ(m2 , χ) = r(m2 , χ).
+Observe that ρ(m2 , χ) ≤ ρ(m2 , χ), where ρ(m2 , χ) denotes the value of the problem
+ρ(m2 , χ) = sup EF [r(t, χ)] s.t. EF [t] = m2 .
+F
+
+Furthermore, since r is concave, by Jensen’s inequality, the optimal solution F ∗ to this
+problem puts point mass on m2 , so that ρ(m2 , χ) = r(m2 , χ), and hence ρ(m2 , χ) ≤ r(m2 , χ).
+Next, we show that the reverse inequality holds, ρ(m2 , χ) ≥ r(m2 , χ). By Corollary 17.1.4
+on page 157 in Rockafellar (1970), the majorant can be written as
+r(t, χ) = sup{λr0 (x1 , χ)+(1−λ)r0 (x2 , χ) : λx1 +(1−λ)x2 = t, 0 ≤ x1 ≤ x2 , λ ∈ [0, 1]}, (S6)
+which corresponds to the problem in Eq. (5), with the distribution F constrained to be a
+discrete distribution with two support points. Since imposing this additional constraint on
+
+7
+
+F must weakly decrease the value of the solution, it follows that ρ(m2 , χ) ≥ r(m2 , χ). Thus,
+ρ(m2 , χ) = r(m2 , χ). The proposition then follows by Lemma D.5 below.
+√
+√
+√
+Lemma D.4. Let r0 (t, χ) = r( t, χ). If χ ≤ 3, then r0 is concave in t. If χ > 3, then
+its second derivative is positive for t small enough, negative for t large enough, and crosses
+zero exactly once, at some t1 ∈ [χ2 − 3, (χ − 1/χ)2 ].
+Proof. Letting φ denote the standard normal density, the first and second derivative of
+r0 (t) = r0 (t, χ) are given by
+i
+√
+1 h √
+r00 (t) = √ φ( t − χ) − φ( t + χ) ≥ 0,
+2 t
+√
+√
+√
+√
+φ(χ − t)(χ t − t − 1) + φ(χ + t)(χ t + t + 1)
+00
+r0 (t) =
+4t3/2
+√ h
+i φ(χ + √t) √
+√
+√
+φ(χ + t) 2χ t √
+=
+(χ t − t − 1) + (χ t + t + 1) =
+f ( t),
+e
+4t3/2
+4t3/2
+where the last line uses φ(a + b)e−2ab = φ(a − b), and
+f (u) = (χu + u2 + 1) − e2χu (u2 − χu + 1).
+√
+√
+Thus, the sign of r000 (t) corresponds to that of f ( t), with r000 (t) = 0 if and only if f ( t) = 0.
+Observe f (0) = 0, and f (u) < 0 is negative for u large enough, since the term −u2 e2χu
+dominates. Furthermore,
+f 0 (u) = 2u + χ − e2χu (2χ(u2 − χu + 1) + 2u − χ)
+
+f 00 (u) = e2χu (4χ3 u − 4χ2 u2 − 8χu − 2) + 2
+
+f (3) (u) = 4χe2χu (2χ3 u + χ2 (1 − 2u2 ) − 6χu − 3)
+
+f 0 (0) = 0
+f 00 (0) = 0
+f (3) (0) = 4χ(χ2 − 3).
+
+Therefore for u > 0 small enough, f (u), and hence r000 (u2 ) is positive if χ2 ≥ 3, and negative
+otherwise.
+Now suppose that f (u0 ) = 0 for some u0 > 0, so that
+χu0 + u20 + 1 = e2χu0 (u20 − χu0 + 1)
+
+(S7)
+
+Since χu + u2 + 1 is strictly positive, it must be the case that u20 − χu0 + 1 > 0. Multiplying
+and dividing the expression for f 0 (u) above by u20 − χu0 + 1 and plugging in the identity in
+
+8
+
+Eq. (S7) and simplifying the expression yields
+(u20 − χu0 + 1)(2u0 + χ) − (χu0 + u20 + 1)(2χ(u20 − χu0 + 1) + 2u0 − χ)
+f (u0 ) =
+u20 − χu0 + 1
+2u2 χ(χ2 − 3 − u20 )
+.
+= 02
+u0 − χu0 + 1
+0
+
+(S8)
+
+Suppose χ2 < 3. Then f 0 (u0 ) < 0 at all positive roots u0 by Eq. (S8). But if χ2 < 3, then
+f (u) is initially negative, so by continuity it must be that f 0 (u1 ) ≥ 0 at the first positive root
+u1 . Therefore, if χ2 ≤ 3, f , and hence r000 , cannot have any positive roots. Thus, if χ2 ≤ 3,
+r0 is concave as claimed.
+Now suppose that χ2 ≥ 3, so that f (u) is initially positive. By continuity, this implies
+p
+that f 0 (u1 ) ≤ 0 at its first positive root u1 . By Eq. (S8), this implies u1 ≥ χ2 − 3. As a
+result, again by Eq. (S8), f (ui ) ≤ 0 for all remaining positive roots. But since by continuity,
+the signs of f 0 must alternate at the roots of f , this implies that f has at most a single
+positive root. Since f is initially positive, and negative for large enough u, it follows that
+p
+it has a single positive root u1 ≥ χ2 − 3. Finally, to obtain an upper bound for t1 = u21 ,
+observe that if f (u1 ) = 0, then, by Taylor expansion of the exponential function,
+1+
+
+2χu1
+= e2χu1 ≥ 1 + 2χu1 + 2(χu1 )2 ,
+χu1 + u21 + 1
+
+which implies that 1 ≥ (1 + χu1 )(χu1 + u21 + 1), so that u1 ≤ χ − 1/χ.
+Lemma D.5. The problem in Eq. (S6) can be written as
+t
+r(t, χ) = sup{(1 − t/u)r0 (0, χ) + r0 (u, χ)}.
+u
+u≥t
+
+(S9)
+
+√
+Let t0 = 0 if χ ≤ 3, and otherwise let t0 > 0 denote the solution to r0 (0, χ) − r0 (u, χ) +
+∂
+u ∂u
+r0 (u, χ) = 0. This solution is unique, and the optimal u solving Eq. (S9) satisfies u = t
+for t > t0 and u = t0 otherwise.
+Proof. If in the optimization problem in Eq. (S6), the constraint on x2 binds, or either
+constraint on λ binds, then the optimum is achieved at r0 (t) = r0 (t, χ), with x1 = t and
+λ = 1 and x2 arbitrary; x2 = t and λ = 0 and x1 arbitrary; or else x1 = x2 and λ arbitrary.
+In any of these cases r takes the form in Eq. (S9) as claimed. If, on the other hand, these
+constraints do not bind, then x2 > t > x1 , and substituting λ = (x2 − t)/(x2 − x1 ) into the
+
+9
+
+objective function yields the first-order conditions
+r0 (x2 ) − (x2 − x1 )r00 (x1 ) − r0 (x1 ) = µ
+
+(x2 − x1 )2
+,
+(x2 − t)
+
+(S10)
+
+r0 (x2 ) + (x1 − x2 )r00 (x2 ) − r0 (x1 ) = 0,
+
+(S11)
+
+where µ ≥ 0 is the Lagrange multiplier on the constraint that x1 ≥ 0. Subtracting Eq. (S11)
+from Eq. (S10) and applying the fundamental theorem of calculus then yields
+x2 − x1
+µ
+= r00 (x2 ) − r00 (x1 ) =
+(x2 − t)
+
+Z x2
+x1
+
+r000 (t) dt > 0,
+
+(S12)
+
+which implies that µ > 0. Here the last inequality follows because by Taylor’s theorem,
+Rx
+Eq. (S11) implies that x12 r000 (t)(t − x1 ) dt = 0. Since r000 is positive for t ≤ t1 and negative
+for t ≥ t1 by Lemma D.4, it follows that x1 ≤ t1 ≤ x2 , and hence that
+0=
+
+Z t1
+x1
+
+r000 (t)(t − x1 ) dt +
+
+Z x2
+t1
+
+< (t1 − x1 )
+
+r000 (t)(t − x1 ) dt
+
+Z t1
+x1
+
+r000 (t) dt + (t1 − x1 )
+
+Z x2
+t1
+
+r000 (t) dt = (t1 − x1 )
+
+Z x2
+x1
+
+r000 (t) dt.
+
+Finally Eq. (S12) implies that µ > 0, so that x1 = 0 at the optimum. Consequently, the
+problem in Eq. (S6) takes the form in Eq. (S9) as claimed.
+√
+To show the second part of Lemma D.5, note that by Lemma D.4, if χ ≤ 3, r0 is
+concave, so that we can put u = t in Eq. (S9). Otherwise, let µ ≥ 0 denote the Lagrange
+multiplier associated with the constraint u ≥ t in the optimization problem in Eq. (S9). The
+first-order condition is then given by
+r0 (0) − r0 (u) + ur00 (u) =
+
+−µu2
+.
+t
+
+Let f (u) = r0 (0) − r0 (u) + ur00 (u). Since f 0 (u) = ur000 (u), it follows from Lemma D.4 that
+f (u) is increasing for u ≤ t1 and decreasing for u ≥ t1 . Since f (0) = 0 and limu→∞ f (u) <
+r0 (0) − 1 < 0, it follows that f (u) has exactly one positive zero, at some t0 > t1 . Thus, if
+t < t0 , u = t0 is the unique solution to the first-order condition. If t > t0 , u = t is the unique
+solution.
+
+10
+
+D.4
+
+Proof of Proposition B.2
+
+Since r(b, χ) is symmetric in b, letting t = b2 , we can equivalently write the optimization
+problem as
+ρ(m2 , κ, χ) = sup EF [r0 (t, χ)] s.t. EF [t] = m2 , EF [t2 ] = κm22 ,
+
+(S13)
+
+F
+
+√
+where r0 (t, χ) = r( t, χ), and the supremum is over all distributions supported on the
+positive part of the real line. The dual of this problem is
+min λ0 + λ1 m2 + λ2 κm22
+
+λ0 ,λ1 ,λ2
+
+s.t. λ0 + λ1 t + λ2 t2 ≥ r0 (t),
+
+0 ≤ t < ∞,
+
+where λ0 the Lagrange multiplier associated with the implicit constraint that EF [1] = 1, and
+r0 (t) = r0 (t, χ). So long as κ > 1 and m2 > 0, so that the moments (m2 , κm22 ) lie in the
+interior of the space of possible moments of F , by the duality theorem in Smith (1995), the
+duality gap is zero, and if F ∗ and λ∗ = (λ∗0 , λ∗1 , λ∗2 ) are optimal solutions to the primal and
+√
+dual problems, then F ∗ has mass points only at those t with λ∗0 + λ∗1 t + λ∗2 t2 = r( t, χ).
+Define t0 as in Lemma D.5. First, we claim that if m2 ≥ t0 , then ρ(m2 , κ, χ) = ρ(m2 , χ),
+the value of the objective function in Proposition B.1. The reason that adding the constraint EF [t2 ] = κm22 does not change the optimum is that it follows from the proof of
+Proposition B.1 that the distribution achieving the rejection probability ρ(m2 , χ) is a point
+√
+mass on m2 . Consider adding another support point x2 = n with probability κm22 /n,
+with the remaining probability on the support point m2 . Then, as n → ∞, the mean of
+this distribution converges to m2 , and its second moment converges to κm22 , so that the
+constraints in Eq. (S13) are satisfied, while the rejection probability converges to ρ(m2 , χ).
+Since imposing the additional constraint EF [t2 ] = κm22 cannot increase optimum, the claim
+follows.
+Suppose that m2 < t0 . At optimum, the majorant g(x) = λ0 + λ1 t + λ2 t2 in the dual
+constraint must satisfy g(x0 ) = r0 (x0 ) for at least one x0 > 0. Otherwise, if the constraint
+never binds, we could lower the value of the objective function by decreasing λ0 ; furthermore,
+x0 = 0 cannot be the unique point at which the constraint binds, since by the duality theorem,
+this would imply that the distribution that puts point mass on 0 maximizes the primal, which
+cannot be the case.
+At such x0 , we must also have g 0 (x0 ) = r00 (x0 ), otherwise the constraint would be locally
+violated. Using this fact together with the equality g(x0 ) = r0 (x0 ), we therefore have that
+λ0 = r0 (x0 ) − λ1 x0 − λ2 x20 and λ1 = r00 (x0 ) − 2λ2 x0 , so that the dual problem may be written
+
+11
+
+as
+min r0 (x0 ) + r00 (x0 )(m2 − x0 ) + λ2 ((x0 − m2 )2 + (κ − 1)m22 )
+
+x0 >0,λ2
+
+s.t. r0 (x0 ) + r00 (x0 )(x − x0 ) + λ2 (x − x0 )2 ≥ r0 (x). (S14)
+Since κ > 1, the objective is increasing in λ2 . Therefore, given x0 , the optimal value of λ2 is
+as small as possible while still satisfying the constraint,
+λ2 = sup δ(x; x0 ),
+x>0
+
+r0 (x) − r0 (x0 ) − r00 (x0 )(x − x0 )
+.
+δ(x; x0 ) =
+(x − x0 )2
+
+Next, we claim that the dual constraint cannot bind for x0 > t0 . Observe that λ2 ≥ 0,
+otherwise the constraint would be violated for t large enough. However, setting λ2 = 0 still
+satisfies the constraint. This is because the function h(x) = r0 (x0 ) + r00 (x0 )(x − x0 ) − r0 (x)
+is minimized at x = x0 , with its value equal to 0. To see this, note that its derivative equals
+zero if r00 (x0 ) = r0 (x). By Lemma D.4, r00 (t) is increasing for t ≤ t0 and decreasing for t > t0 .
+Therefore, if r00 (x0 ) < r00 (0), h0 (x) = 0 has a unique solution, x = x0 . If r00 (x0 ) > r00 (0), there
+is another solution at some x1 ∈ [0, t0 ]. However, h00 (x1 ) = −r000 (x1 ) < 0, so h(x) achieves
+a local maximum here. Since h(0) > 0 by arguments in the proof of Lemma D.4, it follows
+that the maximum of h(x) occurs at x = x0 , and equals 0. However, Eq. (S14) cannot be
+maximized at (x0 , 0), since by Proposition B.1, setting (x2 , λ2 ) = (t0 , 0) achieves a lower
+value of the objective function, which proves the claim.
+Therefore, Eq. (S14) can be written as
+min r0 (x0 ) + r00 (x0 )(m2 − x0 ) + ((x0 − m2 )2 + (κ − 1)m22 ) sup δ(x; x0 ),
+
+0<x0 ≤t0
+
+x≥0
+
+To finish the proof of the proposition, it remains to show that δ cannot be maximized at
+x > t0 . This follows from observing that the dual constraint in Eq. (S14) binds at any x
+that maximizes δ. However, by the claim above, the constraint cannot bind for x > t0 .
+
+D.5
+
+Proof of Theorem C.1
+
+To prove this theorem, we begin with some lemmas.
+Lemma D.6. Under Assumption C.1, we have, for any deterministic χ1 , . . . , χn , and any
+
+12
+
+X ∈ A with NX ,n → ∞,
+1 X
+1 X
+r(bi,n , χi ) = 0.
+P̃ (|Zi | > χi ) −
+n→∞ NX ,n
+N
+X ,n
+i∈I
+i∈I
+lim
+
+X ,n
+
+X ,n
+
+Furthermore, if Zi − b̃i is independent over i under P̃ , then
+1 X
+1 X
+I{|Zi | > χi } −
+r(bi,n , χi ) = oP̃ (1).
+NX ,n i∈I
+NX ,n i∈I
+X ,n
+
+Proof. For any ε > 0, NX1 ,n
+
+X ,n
+
+P
+
+i∈IX ,n I{|Zi | > χi } is bounded from above by
+
+1 X
+1 X
+I{|Zi − b̃i + bi,n | > χi − ε} +
+I{|b̃i − bi,n | ≥ ε}.
+NX ,n i∈I
+NX ,n i∈I
+X ,n
+
+X ,n
+
+The expectation under P̃ of the second term converges to zero by Assumption C.1. The
+P
+expectation under P̃ of the first term is NX1 ,n i∈IX ,n r̃i,n (bi,n , χi − ε) where r̃i,n (b, χ) =
+P̃ (Zi − b̃i < −χ−b)+1− P̃ (Zi − b̃i ≤ χ−b). Note that ri,n (b, χ) converges to r(b, χ) uniformly
+over b, χ under Assumption C.1, using the fact that the convergence in Assumption C.1
+is uniform in t by Lemma 2.11 in van der Vaart (1998), and the fact that P̃ (Zi − b̃i <
+−χ − b) = limt↑−χ−b P (Zi − b̃i ≤ t). It follows that the expectation of the above display
+P
+under P̃ is bounded by NX1 ,n i∈IX ,n r̃(bi,n , χi − ε) + o(1). If Zi − b̃i is independent over i,
+the variance of each term in the above display converges to zero, so that the above display
+P
+equals NX1 ,n i∈IX ,n r̃(bi,n , χi − ε) + oP̃ (1). Taking ε → 0 and noting that r(b, χ) is uniformly
+continuous in both arguments, and using an analogous argument with a lower bound, gives
+the result.
+Lemma D.7. ρg (χ; m) is continuous in χ. Furthermore, for any m∗ in the interior of the
+R
+set of values of g(b) dF (b), where F ranges over all probability measures on R, ρg (χ; m) is
+continuous with respect to m at m∗ .
+Proof. To show continuity with respect to χ, note that
+|ρg (χ; m) − ρg (χ̃; m)| ≤ sup
+F
+
+Z
+
+[r(b, χ) − r(b, χ̃)] dF (b)
+
+s.t.
+
+Z
+
+g(b) dF (b) = m,
+
+where we use the fact that the difference between suprema of two functions over the same
+constraint set is bounded by the supremum of the absolute difference of the two functions.
+The above display is bounded by supb |r(b, χ)−r(b, χ̃)|, which is bounded by a constant times
+|χ̃ − χ| by uniform continuity of the standard normal CDF.
+13
+
+To show continuity with respect to m, note that, by Lemma D.8 below, the conditions
+for the Duality Theorem in Smith (1995, p. 812) hold for m in a small enough neighborhood
+of m∗ , so that
+ρg (χ; m) = inf λ0 + λ0 m s.t. λ0 + λ0 g(b) ≥ r(b, χ) for all b ∈ R
+λ0 ,λ
+
+and the above optimization problem has a finite solution. Thus, for m in this neighborhood
+of m∗ , ρg (χ; m) is the infimum of a collection of affine functions of m, which implies that it
+is concave function of m (Boyd and Vandenberghe, 2004, p. 81). By concavity, ρg (χ; m) is
+also continuous as a function of m in this neighborhood of m∗ .
+R
+Lemma D.8. Suppose that µ is in the interior of the set of values of g(b) dF (b) as F ranges
+over all probability measures with respect to the Borel sigma algebra, where g : R → Rp . Then
+R
+(1, µ0 )0 is in the interior of the set of values of (1, g(b)0 )0 dF (b) as F ranges over all measures
+with respect to the Borel sigma algebra.
+R
+Proof. Let µ be in the interior of the set of values of g(b) dF (b) as F ranges over all
+probability measures with respect to the Borel sigma algebra. We need to show that, for any
+R
+a, µ̃ with (a, µ̃0 )0 close enough to (1, µ0 ), there exists a measure F such that (1, g(b)0 )dF (b) =
+(a, µ̃0 )0 . To this end, note that, µ̃/a can be made arbitrarily close to µ by making (a, µ̃0 )0 close
+to (1, µ0 ). Thus, for (a, µ̃0 )0 close enough to (1, µ0 ), there exists a probability measure F̃ with
+R
+g(b) dF̃ (b) = µ̃/a. Let F be the measure defined by F (A) = aF̃ (A) for any measurable set
+R
+R
+A. Then (1, g(b)0 )0 dF (b) = a (1, g(b)0 )0 dF̃ (b) = (a, µ̃). This completes the proof.
+
+R
+Lemma D.9. Let M be a compact subset of the interior of the set of values of g(b) dF (b),
+where F ranges over all measures on R with the Borel σ-algebra. Suppose limb→∞ gj (b) =
+limb→−∞ gj (b) = ∞ and that inf b gj (b) ≥ 0 for some j. Then limχ→∞ supm∈M ρg (χ; m) = 0
+and ρg (χ; m) is uniformly continuous with respect to (χ, m0 )0 on the set [0, ∞) × M .
+Proof. The first claim (that limχ→∞ supm∈M ρg (χ; m) = 0) follows by Markov’s inequality
+and compactness of M . Given ε > 0, let χ be large enough so that ρg (χ; m) < ε for all
+χ ∈ [χ, ∞) and all m ∈ M . By Lemma D.7, ρg (χ; m) is continuous on [0, χ + 1] × M , so,
+since [0, χ + 1] × M is compact, it is uniformly continuous on this set. Thus, there exists δ
+such that, for any χ, m and χ̃, m̃ with χ, χ̃ ≤ χ + 1 and k(χ̃, m̃0 )0 − (χ, m0 )0 k ≤ δ, we have
+|ρg (χ; m) − ρg (χ̃; m̃)| < ε. If we also set δ < 1, then, if either χ ≥ χ + 1 or χ̃ ≥ χ + 1 we
+must have both χ ≥ χ and χ̃ ≥ χ, so that ρg (χ̃; m̃) < ε and ρg (χ; m) < ε, which also implies
+|ρg (χ; m) − ρg (χ̃; m̃)| < ε. This completes the proof.
+
+14
+
+For any ε > 0, let
+ρg (χ; m, ε) =
+
+sup
+m̃∈Bε (m)
+
+ρg (χ; m̃) and ρg (χ; m, ε) =
+
+inf
+
+m̃∈Bε (m)
+
+ρg (χ; m̃).
+
+R
+Lemma D.10. Let M be a compact subset of the interior of the set of values of g(b) dF (b),
+where F ranges over all measures on R with the Borel σ-algebra. Suppose limb→∞ gj (b) =
+limb→−∞ gj (b) = ∞ and inf b gj (b) ≥ 0 for some j. Then, for ε smaller than a constant that
+depends only on M , the functions ρg (χ; m, ε) and ρg (χ; m, ε) are continuous in χ. Furthermore, we have limε→0 supχ∈[0,∞),m∈M [ρg (χ; m, ε) − ρg (χ; m, ε)] = 0.
+Proof. For ε smaller than a constant that depends only on M , the set ∪m∈M Bε (m) is conR
+tained in another compact subset of the interior of the set of values of g(b) dF (b), where
+F ranges over all measures on R with the Borel σ-algebra. The result then follows from
+Lemma D.9, where, for the first claim, we use the fact that |ρg (χ; m, ε) − ρg (χ̃; m, ε)| ≤
+supm̃∈Bε (m) |ρg (χ; m̃) − ρg (χ̃; m̃)| and similarly for ρg .
+We now prove Theorem C.1. Given X ∈ A and ε > 0, let m1 , . . . , mJ and X1 , . . . , XJ
+be as in Assumption C.3. Let χj = min{χ : ρg (χ; mj , 2ε) ≤ α}. For m̂i ∈ B2ε (mj ), we have
+ρg (χ; mj , 2ε) ≤ ρg (χ; m̂i ) for all χ, so that, using the fact that ρg (χ; mj , 2ε) and ρg (χ; m̂i )
+are weakly decreasing in χ, we have χj ≤ χ̂i . Thus, letting χ̃(n) denote the sequence with
+ith element equal to χj when X̃i ∈ Xj , we have
+AN Cn (χ̂(n) ; X ) ≤ max AN Cn (χ̃(n) ; Xj )
+1≤j≤J
+
+
+X
+X
+1
+1
+≤ max 
+I{m̂i ∈
+/ B2ε (mj )} +
+I{|Zi | > χj } .
+1≤j≤J NXj ,n
+N
+Xj ,n
+i∈I
+i∈I
+Xj ,n
+
+The first term is bounded by NX1 ,n
+j
+
+P
+
+Xj ,n
+
+i∈IXj ,n I{km̂i − m(X̃i )k > ε} since, for i ∈ IXj ,n , we
+
+have km̂i − mj k ≤ ε + km̂i − m(X̃i )k. This converges in probability (and expectation) to
+zero under P̃ by Assumption C.2. By Lemma D.6, the second term is equal to, letting Fj,n
+denote the empirical distribution of the bi,n ’s for i with xi ∈ Xj ,
+Z
+
+r(b, χj ) dFj,n (b) + Rn ≤ ρg (χj ; µj , 2ε) + Rn
+
+where Rn is a term such that EP̃ Rn → 0 and such that, if Zi − b̃i is independent over i
+under P̃ , then Rn converges in probability to zero under P̃ . The result will now follow if we
+can show that max1≤j≤J [ρg (χj ; µj , 2ε) − α] can be made arbitrarily small by making ε small.
+15
+
+This holds by Lemma D.10 and the fact that ρg (χj ; µj , 2ε) ≤ α by construction.
+
+D.6
+
+Proof of Theorem C.2
+
+To prove Theorem C.2, we will verify the conditions of Theorem C.1 with A given in Assumption C.7, mj (X̃i ) = c(γ, σi )`j µ0,`j , b̃i = c(γ̂, σ̂i )(θi − X̂i0 δ̂) and bi,n = c(γ, σi )(θi − X̂i0 δ) where
+. The first part of Assumption C.1 is immediate from Assumption C.5 since
+c(γ, σ) = w(γ,σ)−1
+w(γ,σ)σ
+Zi − b̃i = (Yi − θi )/σ̂i . For the second part, we have
+b̃i − bi,n = c(γ̂, σ̂i )(θi − X̂i0 δ̂) − c(γ, σi )(θi − Xi0 δ)
+
+= [c(γ̂, σ̂i ) − c(γ, σi )](θi − Xi0 δ) + c(γ̂, σ̂i ) · [(X̂i − Xi )0 δ̂ − Xi0 (δ − δ̂)].
+
+For kθi k + kXi k ≤ C, the above expression is bounded by
+
+h
+i
+[c(γ̂, σ̂i ) − c(γ, σi )] · (kδk + 1) · C + c(γ̂, σ̂i ) kδ̂ − δk · C + kX̂i − Xi k · (C + kδ̂ − δk) .
+
+By uniform continuity of c() on an open set containing {γ} × S1 , for every ε > 0 there exists
+η > 0 such that k(σ̂i − σi , γ̂ − γ, δ̂ 0 − δ 0 , X̂i0 − Xi0 )0 k ≤ η implies that the absolute value of the
+above display is less than ε. Thus, for any X ∈ A,
+1 X
+P̃ (|b̃i − bi,n | ≥ ε)
+n→∞ NX ,n
+i∈IX ,n
+1 X
+≤ lim
+P̃ (k(σ̂i − σi , γ̂ − γ, δ̂ 0 − δ 0 , X̂i0 − Xi0 )0 k > η) I{kθi k + kXi k ≤ C}
+n→∞ NX ,n
+i∈IX ,n
+1 X
++ lim sup
+I{kθi k + kXi k > C}.
+n→∞ NX ,n
+i∈I
+lim
+
+X ,n
+
+The first limit is zero by Assumption C.6. The last limit converges to zero as C → ∞ by
+the second part of Assumption C.7 and Markov’s inequality. This completes the verification
+of Assumption C.5.
+We now verify Assumption C.2. Given X ∈ A and given ε > 0, we can partition X into
+sets X1 , . . . , XJ such that, for some c1 , . . . , cJ , we have |c(γ, σi )`k −c`jk | < ε for all k = 1, . . . , p
+whenever i ∈ IXj ,n for some j. Thus, for each j and k,
+1
+
+X
+
+NXj ,n i∈I
+
+Xj ,n
+
+k
+b`i,n
+− mk (X̃i ) =
+
+1
+
+X
+
+NXj ,n i∈I
+
+Xj ,n
+
+
+
+c(γ, σi )`k (θi − Xi0 δ)`k − µ0,`k
+
+16
+
+= c`jk ·
+
+X 
+
+(θi − Xi0 δ)`k − µ0,`k
+
+1
+
+NXj ,n i∈I
++
+
+Xj ,n
+
+1
+
+X
+
+NXj ,n i∈I
+
+Xj ,n
+
+
+
+[c(γ, σi )`k − c`jk ] (θi − Xi0 δ)`k − µ0,`k .
+
+Under Assumption C.7, the first term converges to 0 and the second term is bounded up
+to an o(1) term by ε times a constant that depends only on K. Since the absolute value of
+P
+`k
+1
+i∈IX ,n bi,n − mk (X̃i ) is bounded by the maximum over j of the absolute value of the
+NX ,n
+above display, and since ε can be chosen arbitrarily small, the first part of Assumption C.2
+follows.
+For the second part of Assumption C.2, we have m̂i,k −mk (X̃i ) = c(γ, σi )µ̂`j −c(γ, σi )`j µ0,`j .
+By uniform continuity of (γ̃ 0 , σ, µ`1 , . . . , µ`p )0 7→ (c(γ, σi )`1 µ`1 , . . . , c(γ, σi )`p µ`p )0 in an open
+set containing {γ} × S1 × {(µ0,`1 , . . . , µ0,`p )0 }, for any ε > 0, there exists η > 0 such that
+k(γ̂ 0 − γ 0 , σ̂i − σ, µ̂`1 − µ0,`1 , . . . , µ̂`p − µ0,`p )k < η implies km̂i,k − mk (X̃i )k < ε. Thus,
+max P̃ (km̂i − m(X̃i )k ≥ ε) ≤ max P̃ (k(γ̂ 0 − γ 0 , σ̂i − σ, µ̂`1 − µ0,`1 , . . . , µ̂`p − µ0,`p )k < η),
+
+1≤i≤n
+
+1≤i≤n
+
+which converges to zero by Assumptions C.6 and C.7. This completes the verification of
+Assumption C.2.
+Assumption C.3 follows immediately from compactness of the set S1 × · · · × S1 and
+uniform continuity of m() on this set. Assumption C.4 follows from Assumption C.7 and
+Lemma D.11 below. This completes the proof of Theorem C.2.
+Lemma D.11. Suppose that, as F ranges over all probability measures with respect to the
+R
+Borel sigma algebra, (µ`1 , . . . , µ`p )0 is interior to the set of values of (b`1 , . . . , b`p )0 dF (b).
+Let c ∈ R. Then, as F ranges over all probability measures with respect to the Borel sigma
+R
+algebra, (c`1 µ`1 , . . . , c`p µ`p )0 is also in the interior of the set of values of (b`1 , . . . , b`p )0 dF (b).
+
+Proof. We need to show that, for any vector r with krk small enough, there exists a probR
+ability measure F such that (b`1 , . . . , b`p )0 dF (b) = (c`1 µ`1 + r1 , . . . , c`p µ`p + rp )0 . Let
+µ̃`k = µ`k + rk /c`k . For krk small enough, there exists a probability measure F̃ with
+R `
+b k dF (b) = µ̃`k for each k. Let F denote the probability measure of cB when B is a random
+R
+R
+variable distributed according to F̃ . Then b`k dF (b) = c`k b`k dF̃ = c`k µ̃`k = c`k µ`k + rk
+as required.
+
+17
+
+Appendix E
+
+Details for simulations
+
+Supplemental Appendix E.1 gives details on the Monte Carlo designs in Section 4.4. Supplemental Appendix E.2 considers an additional Monte Carlo exercise calibrated to the empirical
+application in Section 7.
+
+E.1
+
+Details for panel data simulation designs
+
+The simulation results reported in Section 4.4 consider the following six distributions for θi ,
+each of which satisfies var(θi ) = µ2 :
+1. Normal (kurtosis κ = 3): θi ∼ N (0, µ2 ).
+p
+2. Scaled chi-squared (κ = 15): θi ∼ µ2 /2 · χ2 (1).
+
+3. 2-point (κ = 1/(0.9 · 0.1) − 3 ≈ 8.11), with θi = 0 w.p. 0.9 and θi = µ2 /(0.9 · 0.1) w.p.
+0.1.
+4. 3-point (κ = 2):
+
+ p
+
+
+− µ2 /0.5 w.p. 0.25,
+
+
+θi ∼ 0
+w.p. 0.5,
+
+
+p
+
+ µ /0.5
+w.p. 0.25.
+2
+
+5. Least favorable for robust EBCI: The (asymptotically as n, T → ∞) least favorable
+distribution for the robust EBCI that exploits only second moments, i.e.,
+ q
+m2
+m2
+
+− µ2 / min{ t0 (m
+, 1} w.p. 12 min{ t0 (m
+, 1},
+
+
+2 ,α)
+2 ,α)
+
+m2
+θi ∼ 0
+, 1},
+w.p. 1 − min{ t0 (m
+2 ,α)
+
+q
+
+
+m2
+ µ / min{ m2 , 1}
+w.p. 12 min{ t0 (m
+, 1},
+2
+t0 (m2 ,α)
+2 ,α)
+
+where m2 = 1/µ2 , and t0 (m2 , α) is the number defined in Proposition B.1 with χ =
+1/µ2
+, 1} depends on µ2 and α.
+cvaα (m2 ). The kurtosis κ(µ2 , α) = 1/ min{ t0 (1/µ
+2 ,α)
+6. Least favorable for parametric EBCI: The (asymptotically) least favorable distribution
+for the parametric EBCI. This is the same distribution as above, except that now
+p
+t0 (m2 , α) is the number defined in Proposition B.1 with χ = z1−α/2 / µ2 /(1 + µ2 ).
+
+18
+
+E.2
+
+Heteroskedastic design
+
+We now provide average coverage and length results for a heteroskedastic simulation design.
+We base the design on the effect estimates and standard errors obtained in the empirical
+application in Section 7. Because we do not have access to the underlying data set, we
+treat the standard errors as known and impose exact conditional normality of the initial
+estimates. Let (θ̂i , σ̂i ), i = 1, . . . , n, denote the n = 595 baseline shrinkage point estimates
+and associated standard errors from this application. Note for reference that En [θ̂i ] = 0.0602,
+and En [(θ̂i − θ̄)2 ] · En [1/σ̂i2 ] = 0.6698, where En denotes the sample mean.
+The simulation design imposes independence of θi and σi , consistent with the moment
+independence assumption required by our baseline EBCI procedure, see Remark 3.1. We
+calibrate the design to match one of three values for the signal-to-noise ratio E[ε2i /σi2 ] ∈
+{0.1, 0.5, 1}. Specifically, a simulation sample (Yi , θi , σi ), i = 1, . . . , n, is created as follows:
+1. Sample θ̃i , i = 1, . . . , n, with replacement from the empirical distribution {θ̂j }nj=1 .
+2. Sample σi , i = 1, . . . , n, with replacement from the empirical distribution {σ̂j }nj=1 .
+p
+3. Compute θi = θ̄ + m/c · (θ̃i − θ̄), i = 1, . . . , n. Here m is the desired population value
+of E[ε2i /σi2 ] and c = 0.6698.
+indep
+
+4. Draw Yi ∼ N (θi , σi2 ), i = 1, . . . , n.
+The kurtosis of θi equals the sample kurtosis of θ̂i , which is 3.0773. We use precision weights
+ωi = σi−2 when computing the EBCIs, as in Section 7.
+Table S1 shows that our baseline implementation of the 95% robust EBCI achieves average coverage above the nominal confidence level, regardless of the signal-to-noise ratio
+E[ε2i /σi2 ] ∈ {0.1, 0.5, 1}. This contrasts with the feasible version of the parametric EBCI,
+which undercovers by 9.3 percentage points.
+
+Appendix F
+
+Statistical power
+
+The efficiency calculations in Figure 3 of Section 4.2 show that our EBCI is substantially
+shorter than the conventional confidence interval (CI) based on the unshrunk estimate Yi if
+the signal-to-noise ratio is small enough. Here, we perform analogous calculations using the
+statistical power of tests based on a given CI as the measure of efficiency.
+Consider testing H0,i : θi = θ0 for some null value θ0 by rejecting when θ0 ∈
+/ CIi , where
+CIi is our robust EBCI. As with the efficiency calculations in Section 4.2, we consider
+efficiency under the baseline model in Eq. (9), and we consider the asymptotic setting in
+19
+
+Table S1: Monte Carlo simulation results: heteroskedastic design.
+Robust, µ2 only
+n
+
+Oracle
+
+Baseline
+
+Robust, µ2 & κ
+Oracle
+
+Baseline
+
+Parametric
+Oracle
+
+Baseline
+
+595
+98.9
+96.0
+96.1
+96.0
+Panel B: Relative average length, average across 3 DGPs
+
+94.3
+
+85.7
+
+595
+
+0.89
+
+0.86
+
+Panel A: Average coverage (%), minimum across 3 DGPs
+
+1.56
+
+1.51
+
+1.00
+
+1.48
+
+Notes: Nominal average confidence level 1 − α = 95%. Top row: type of EBCI
+procedure. “Oracle”: true µ2 and κ (but not δ) known. “Baseline”: µ̂2 and κ̂
+estimates as in Section 3.2. For each DGP, “average coverage” and “average length”
+refer to averages across observations i = 1, . . . , n and across 5,000 Monte Carlo
+repetitions. Average CI length is measured relative to the oracle robust EBCI that
+exploits µ2 and κ.
+which µ1,i = Xi0 δ, µ2 , σi2 and κ = 3 can be treated as known. We compute the average power
+of this test (averaged over the baseline normal prior, conditional on Xi , σi ), and we compare
+it to the average power of the conventional two-sided z-test based on the unshrunk estimate
+in the same setting. Since the distribution of θi is atomless, the average power is given by
+the rejection probability P (θ0 ∈
+/ CIi | Xi , σi ). Let di = (µ1,i − θ0 )/σi denote the standardized
+average distance between the true parameter θi and the null θ0 . Under the baseline model in
+Eq. (9), the average power of a test based on the robust EBCI given in Eq. (12) with κ = 3
+is thus given by
+P (θi ∈
+/ CIi | Xi , σi ) = P
+
+!
+di σi
+cvaα (σi2 /µ2 , 3)
+Yi − µ1,i
+p
+p
++
+> p
+Xi , σi
+σi2 + µ2 wEB,i σi2 + µ2
+1 + µ2 /σi2
+!
+p
+p
+di 1 − wEB,i
+=r
+, cvaα (1/wEB,i − 1, 3) 1 − wEB,i ,
+wEB,i
+
+with r given in Eq. (4), and we use the fact that Yi −µ1,i | Xi , σi ∼ N (0, σi2 +µ2 ) under Eq. (9).
+The two-sided z-test based on the unshrunk estimate Yi rejects when |Yi − θ0 | > z1−α/2 σi .
+By analogous reasoning, it follows that the average power of this test is given by
+p
+p
+
+
+P |Yi − θ0 | > z1−α/2 σi | Xi , σi = r di 1 − wEB,i , z1−α/2 1 − wEB,i .
+
+Both expressions depend only on di and the shrinkage wEB,i (or, equivalently, since µ2 /σi2 =
+wEB,i /(1 − wEB,i ), the signal-to-noise ratio µ2 /σi2 ).
+20
+
+Figure S1 computes the power of the robust EBCI-based test and the z-test as a function
+of the normalized distance di = (µ1,i − θ0 )/σi and the shrinkage wEB,i for α = 0.05. The
+third panel shows the difference in power, with positive values indicating greater power for
+the EBCI-based test.
+The graphs show that the EBCI-based test is more powerful than the z-test for a given
+shrinkage wEB,i (equivalently, given signal-to-noise ratio) when the normalized distance is
+large enough, while being less powerful when it is small enough. To get some intuition for
+this, note that the EBCI differs from the unshrunk CI in two ways: it is shorter, and it uses
+shrinkage to move the center of the CI toward the regression line µ1,i = Xi0 δ. Shortening the
+CI makes the EBCI more powerful than the test based on the unshrunk CI, but the effect of
+moving the center of the CI is ambiguous: it increases power when the regression line µ1,i is
+far from the null θ0 , while decreasing power when µ1,i is close to θ0 . On net, the graphs show
+that the EBCI-based test displays substantial gains in average power when the amount of
+shrinkage is large, even for small to moderate distances to the null.
+
+Appendix G
+
+Applications of general shrinkage
+
+Here we provide theoretical and numerical results for the soft thresholding EBCI and the
+Poisson EBCI, discussed in Examples 6.2 and 6.3 in Section 6.1.
+
+G.1
+
+Soft thresholding
+
+The soft thresholding EBCI is obtained by calibrating the highest posterior density (HPD)
+set in the homoskedastic normal model with a baseline Laplace prior for θi . The HPD
+set S(Yi ; χ) in Eq. (21) takes the form of an interval, and is available in closed form.
+In particular, it follows by direct
+for θ is given by
+√ calculation that the posterior density
+p
+√
+c(Yi )− 12 θ2 +Yi θ/σ 2 −|θ| 2/µ2
+1
+2
+2σ
+, where c(Y ) = 2 log(2/πσ )−log(q( σ 2 /µ2 −Y /σ 2)+
+p(θ | Yi ) = e
+p
+√
+√
+2
+q( σ 2 /µ2 + Y /σ 2)). Here q(x) = 2ex Φ(−x 2) is the scaled complementary error function. Consequently, S(Y ; χ) equals the intersection of the solution sets for two quadratic
+inequalities,
+n
+
+o n
+
+o
+q 
+q 
+θ2
+Y
+2
+θ2
+Y
+2
+S(Y ; χ) = θ : 2σ2 − σ2 − µ2 θ ≤ χ + c(Y ) ∩ θ : 2σ2 − σ2 + µ2 θ ≤ χ + c(Y ) .
+Since the quadratic term is positive in both inequalities, S(Y ; χ) is given by an intersection
+of two intervals, and is therefore itself an interval. The non-coverage function r̃(θi , χ) in
+Eq. (18) is computed via numerical quadrature. The linear program in Eq. (19) is solved by
+discretizing the support for θi . In addition to computing a robust soft thresholding EBCI, we
+21
+
+Robust EBCI
+
+1.00
+
+0.75
+
+555
+00000.0...5...55
+000000......1.111111
+
+0.25
+
+.2
+.2
+0000000.2
+.2
+.2
+.2
+
+0.50
+
+0000000.......999999
+
+0.00
+z-test
+
+1.00
+
+0.
+0.
+0.555555
+0.
+0.
+0.
+
+wEB,i
+
+0.75
+
+0.50
+
+0.25
+
+0000000......2222
+22
+
+000000.....1..111
+11
+
+0.00
+Power Difference
+
+1.00
+
+0.75
+
+------0000000.......111111
+
+0.50
+
+0000000
+
+111
+0000000.....1.1..1.2.2222
+000000..22
+000000......5.555555
+
+0.25
+
+0.00
+0.0
+
+0.
+0.
+0.999999
+0.
+0.
+0.
+0.5
+
+1.0
+
+1.5
+
+2.0
+
+2.5
+
+(µ1 − θ0 )/σi
+
+Figure S1: Average power of the robust EBCI and the z-test based on the unshrunk estimate
+as a function of the normalized average distance to the null and of the shrinkage wEB,i .
+
+22
+
+Coverage probability
+
+1
+
+0.98
+
+0.8
+
+0.96
+
+0.7
+
+0.94
+
+0.6
+
+0.92
+
+0.5
+
+0.9
+
+0.4
+
+0.88
+
+Normalized exp. length under Laplace distr.
+
+0.9
+
+0.3
+
+Parametric EBCI, worst-case distribution
+Robust EBCI, Laplace distribution
+
+0.86
+
+Parametric EBCI
+Robust EBCI
+
+0.2
+0
+
+0.5
+
+1
+
+1.5
+
+2
+
+0
+
+0.5
+
+1
+
+1.5
+
+2
+
+Figure S2: Soft thresholding EBCIs in the normal means model, α = 0.05. The expected
+length is normalized by the length of the unshrunk CI. The grid for θi for the linear program in Eq. (19) is given by 500 points equally spaced on [−10, 10]. Integrals over the Yi
+distribution are truncated at the endpoints −10 and 10.
+can similarly compute a parametric soft thresholding EBCI, with χ solving EF [r(θi , χ)] = α;
+here F is the Laplace distribution with second moment µ2 .
+We now compute the coverage and expected length of the soft thresholding EBCIs. We
+consider an asymptotic setting where µ2 = E[θ2 ] is known, and this is the only constraint
+imposed when we compute the robust EBCI. Figure S2 shows the coverage and expected
+length of the parametric and robust EBCIs with α = 0.05. The worst-case coverage (over
+all θi -distributions with second moment µ2 ) of the nominal 95% parametric EBCI is below
+88% for small signal-to-noise ratios µ2 /σ 2 . When θi is in fact Laplace-distributed, both the
+parametric and robust soft thresholding EBCIs deliver substantial expected length improvements relative to the unshrunk EBCI Yi ± z1−α/2 σ. For small values of µ2 /σ 2 , the length
+improvement exceeds that of the linear EBCIs shown in Figure 3.
+
+G.2
+
+Poisson data
+
+Suppose now that Yi has a Poisson distribution with rate parameter θi , conditional on θi . As
+a baseline prior for θi , we use the conjugate gamma distribution with shape parameter k and
+scale parameter λ. Let Γ−1 (α; k, λ) denote the α-quantile of this distribution. As candidate
+sets S(y; χ), we use a modification of the equal-tailed posterior credible set for θi under the
+23
+
+Coverage probability
+
+1
+
+1
+
+Normalized exp. length under exponential distr.
+
+0.9
+0.9
+
+0.8
+0.7
+
+0.8
+0.6
+Parametric EBCI, worst-case distribution
+Robust EBCI, exponential distribution
+
+0.7
+
+0.5
+0.4
+
+0.6
+
+0.3
+0.2
+
+0.5
+Parametric EBCI
+Robust EBCI
+
+0.1
+0.4
+
+0
+0
+
+1
+
+2
+
+3
+
+4
+
+0
+
+1
+
+2
+
+3
+
+4
+
+Figure S3: Poisson EBCIs, α = 0.05. The expected length is normalized by that of the
+unshrunk Garwood (1936) CI. The grid for θi for the linear program in Eq. (19) is given by
+500 points equally spaced on [10−6 , Γ−1 (0.999; 1, λ)]. The support for Yi is truncated above
+at 30.
+baseline prior,
+
+
+
+
+
+λ
+λ
+α
+α −χ
+−1
+−χ
+−1
+; e k + y, −χ
+,Γ
+,
+S(y; χ) = Γ
+1 − ; 1 + e (k − 1) + y, −χ
+2
+e +λ
+2
+e +λ
+where 1 − α is the nominal confidence level. For χ = 0, this corresponds to the equal-tailed
+posterior credible interval under the baseline prior; we call this the parametric EBCI. As
+χ → ∞, the interval converges to the “unshrunk” Garwood (1936) confidence interval for the
+Poisson parameter θi , which has coverage at least 1 − α conditional on θi . We compute the
+value χ̂ ∈ (0, ∞) that leads to a robust EBCI numerically as in Supplemental Appendix G.1,
+except that we replace integrals over the distribution of Yi with (truncated) sums.
+Figure S3 displays the coverage and expected length for k = 1, i.e., when the baseline
+θi -distribution is exponential with mean λ. We consider the asymptotic limit where the
+first two moments of θi are known.2 We set α = 0.05. The worst-case coverage (over all
+θi -distributions with the same first and second moments as the exponential distribution) of
+the nominal 95% parametric EBCI is disastrously low for all values of λ considered here. At
+the same time, the robust EBCI is over 50% shorter on average than the unshrunk Garwood
+2
+
+These moments are easily obtained from the first and second marginal moments of the data: E[θ] = E[Y ]
+and E[θ2 ] = E[Y 2 ] − E[Y ]. They equal E[θ] = kλ and E[θ2 ] = k(k + 1)λ2 under the baseline distribution.
+
+24
+
+(1936) CI when λ ≤ 0.3, and more than 25% shorter when λ ≤ 0.85.
+
+References
+Boyd, S. P. and Vandenberghe, L. (2004). Convex Optimization. Cambridge University Press,
+Cambridge, UK.
+Garwood, F. (1936). Fiducial limits for the Poisson distribution. Biometrika, 28(3/4):437–
+442.
+Rockafellar, R. T. (1970). Convex Analysis. Princeton University Press, Princeton, NJ.
+Smith, J. E. (1995). Generalized Chebychev inequalities: Theory and applications in decision
+analysis. Operations Research, 43(5):807–825.
+Stock, J. H. and Watson, M. W. (2008). Heteroskedasticity-robust standard errors for fixed
+effects panel data regression. Econometrica, 76(1):155–174.
+van der Vaart, A. (1998). Asymptotic Statistics. Cambridge University Press, New York,
+NY.
+von Bahr, B. and Esseen, C.-G. (1965). Inequalities for the rth absolute moment of a sum
+of random variables, 1 ≤ r ≤ 2. The Annals of Mathematical Statistics, 36(1):299–303.
+
+25
+
+

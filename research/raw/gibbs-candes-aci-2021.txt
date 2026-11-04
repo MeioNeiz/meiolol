@@ -1,0 +1,2404 @@
+arXiv:2106.00170v3 [stat.ME] 28 Oct 2021
+
+Adaptive Conformal Inference
+Under Distribution Shift
+Emmanuel J. Candès
+Department of Statistics
+Department of Mathematics
+Stanford University
+candes@stanford.edu
+
+Isaac Gibbs
+Department of Statistics
+Stanford University
+igibbs@stanford.edu
+
+Abstract
+We develop methods for forming prediction sets in an online setting where the data
+generating distribution is allowed to vary over time in an unknown fashion. Our
+framework builds on ideas from conformal inference to provide a general wrapper
+that can be combined with any black box method that produces point predictions of
+the unseen label or estimated quantiles of its distribution. While previous conformal
+inference methods rely on the assumption that the data points are exchangeable, our
+adaptive approach provably achieves the desired coverage frequency over long-time
+intervals irrespective of the true data generating process. We accomplish this by
+modelling the distribution shift as a learning problem in a single parameter whose
+optimal value is varying over time and must be continuously re-estimated. We test
+our method, adaptive conformal inference, on two real world datasets and find that
+its predictions are robust to visible and significant distribution shifts.
+
+1
+
+Introduction
+
+Machine learning algorithms are increasingly being employed in high stakes decision making processes. For instance, deep neural networks are currently being used in self-driving cars to detect
+nearby objects [2] and parole decisions are being made with the assistance of complex models that
+combine over a hundred features [1]. As the popularity of black box methods and the cost of making
+wrong decisions grow it is crucial that we develop tools to quantify the uncertainty of their predictions.
+In this paper we develop methods for constructing prediction sets that are guaranteed to contain the
+target label with high probability. We focus specifically on an online learning setting in which we
+observe covariate-response pairs {(Xt , Yt )}t∈N ⊆ Rd × R in a sequential fashion. At each time step
+t ∈ N we are tasked with using the previously observed data {(Xr , Yr )}1≤r≤t−1 along with the new
+covariates, Xt , to form a prediction set Ĉt for Yt . Then, given a target coverage level α ∈ (0, 1) our
+generic goal is to guarantee that Yt belongs to Ĉt at least 100(1 − α)% of the time.
+Perhaps the most powerful and flexible tools for solving this problem come from conformal inference
+[see e.g. 34, 16, 32, 22, 31, 15, 3] . This framework provides a generic methodology for transforming
+the outputs of any black box prediction algorithm into a prediction set. The generality of this approach
+has facilitated the development of a large suite of conformal methods, each specialized to a specific
+prediction problem of interest [e.g. 30, 11, 23, 8, 24, 21]. With only minor exceptions all of these
+algorithms share the same common guarantee that if the training and test data are exchangeable, then
+the prediction set has valid marginal coverage P(Yt ∈ Ĉt ) = 1 − α.
+While exchangeability is a common assumption, there are many real-world applications in which
+we do not expect the marginal distribution of (Xt , Yt ) to be stationary. For example, in finance
+and economics market behaviour can shift drastically in response to new legislation or major world
+Preprint. Under review.
+
+events. Alternatively, the distribution of (Xt , Yt ) may change as we deploy our prediction model in
+new environments. This paper develops adaptive conformal inference (ACI), a method for forming
+prediction sets that are robust to changes in the marginal distribution of the data. Our approach is both
+simple, in that it requires only the tracking of a single parameter that models the shift, and general as
+it can be combined with any modern machine learning algorithm that produces point predictions or
+estimated quantiles for the response. We show that over long time intervals ACI achieves the target
+coverage frequency without any assumptions on the data-generating distribution. Moreover, when the
+distribution shift is small and the prediction algorithm takes a certain simple form we show that ACI
+will additionally obtain approximate marginal coverage at most time steps.
+1.1
+
+Conformal inference
+
+Suppose we are given a fitted regression model for predicting the value of Y from X. Let y be a
+candidate value for Yt . To determine if y is a reasonable estimate of Yt , we define a conformity score
+S(X, Y ) that measures how well the value y conforms with the predictions of our fitted model. For
+example, if our regression model produces point predictions µ̂(X) then we could use a conformity
+score that measures the distance between µ̂(Xt ) and y. One such example is
+S(Xt , y) = |µ̂(Xt ) − y|.
+Alternatively, suppose our regression model outputs estimates q̂(X; p) of the pth quantile of the
+distribution of Y |X. Then, we could use the method of conformal quantile regression (CQR) [28],
+which examines the signed distance between y and fitted upper and lower quantiles through the score
+S(Xt , y) = max{q̂(Xt ; α/2) − y, y − q̂(Xt ; 1 − α/2)}.
+Regardless of what conformity score is chosen the key issue is to determine how small S(Xt , y)
+should be in order to accept y as a reasonable prediction for Yt . Assume we have a calibration set
+Dcal ⊆ {(Xr , Yr )}1≤r≤t−1 that is different from the data that was used to fit the regression model.
+Using this calibration set we define the fitted quantiles of the conformity scores to be
+
+ 
+
+
+
+X
+1
+(1)
+Q̂(p) := inf s : 
+1{S(Xr ,Yr )≤s}  ≥ p ,
+
+
+|Dcal |
+(Xr ,Yr )∈Dcal
+
+and say that y is a reasonable prediction for Yt if S(Xt , y) ≤ Q̂(1 − α).
+The crucial observation is that if the data Dcal ∪ {(Xt , Yt )} are exchangeable and we break ties
+uniformly at random then the rank of S(Xt , Yt ) amongst the points {S(Xr , Yr )}(Xr ,Yr )∈Dcal ∪
+{S(Xt , Yt )} will be uniform. Therefore,
+P(S(Xt , Yt ) ≤ Q̂(1 − α)) =
+
+d|Dcal |(1 − α)e
+.
+|Dcal | + 1
+
+Thus, defining our prediction set to be Ĉt := {y : S(Xt , y) ≤ Q̂(1 − α)} gives the marginal coverage
+guarantee
+d|Dcal |(1 − α)e
+P(Yt ∈ Ĉt ) = P(S(Xt , Yt ) ≤ Q̂(1 − α)) =
+.
+|Dcal | + 1
+By introducing additional randomization this generic procedure can be altered slightly to produce
+a set Ĉt that satisfies the exact marginal coverage guarantee P(Yt ∈ Ĉt ) = 1 − α [34]. For the
+purposes of this paper this adjustment is not critical and so we omit the details here. Additionally, we
+remark that the method outlined above is often referred to as split or inductive conformal inference
+[27, 34, 26]. This refers to the fact that we have split the observed data between a training set used to
+fit the regression model and a withheld calibration set. The adaptive conformal inference method
+developed in this article can also be easily adjusted to work with full conformal inference in which
+data splitting is avoided at the cost of greater computational resources [34].
+
+2
+
+Adapting conformal inference to distribution shifts
+
+Up until this point we have been working with a single score function S(·) and quantile function Q̂(·).
+In the general case where the distribution of the data is shifting over time both these functions should
+2
+
+be regularly re-estimated to align with the most recent observations. Therefore, we assume that at
+each time t we are given a fitted score function St (·) and corresponding quantile function Q̂t (·). We
+define the realized miscoverage rate of the prediction set Ĉt (α) := {y : St (Xt , y) ≤ Q̂t (1 − α)} as
+Mt (α) := P(St (Xt , Yt ) > Q̂t (1 − α)),
+where the probability is over the test point (Xt , Yt ) as well as the data used to fit St (·) and Q̂t (·).
+Now, since the distribution generating the data is non-stationary we do not expect Mt (α) to be equal,
+or even close to, α. Even so, we can still postulate that if the conformity scores used to fit Q̂t (·) cover
+the bulk of the distribution of St (Xt , Yt ) then there may be an alternative value αt∗ ∈ [0, 1] such that
+Mt (αt∗ ) ∼
+= α. More rigorously, assume that with probability one, Q̂t (·) is continuous, non-decreasing
+and such that Q̂t (0) = −∞ and Q̂t (1) = ∞. This does not hold for the split conformal quantile
+functions defined in (1), but in the case where there are no ties amongst the conformity scores we
+can adjust our definition to guarantee this by smoothing over the jump discontinuities in Q̂(·). Then,
+Mt (·) will be non-decreasing on [0, 1] with Mt (0) = 0 and Mt (1) = 1 and so we may define
+αt∗ := sup{β ∈ [0, 1] : Mt (β) ≤ α}.
+Moreover, if we additionally assume that
+P(St (Xt , Yt ) = Q̂t (1 − αt∗ )) = 0,
+then we will have that Mt (αt∗ ) = α. So, in particular we find that by correctly calibrating the
+argument to Q̂t (·) we can achieve either approximate or exact marginal coverage.
+To perform this calibration we will use a simple online update. This update proceeds by examining the
+empirical miscoverage frequency of the previous prediction sets and then decreasing (resp. increasing)
+our estimate of αt∗ if the prediction sets were historically under-covering (resp. over-covering) Yt . In
+particular, let α1 denote our initial estimate (in our experiments we will choose α1 = α). Recursively
+define the sequence of miscoverage events
+
+1, if Yt ∈
+/ Ĉt (αt ),
+errt :=
+where Ĉt (αt ) := {y : St (Xt , y) ≤ Q̂t (1 − αt )}.
+0, otherwise,
+Then, fixing a step size parameter γ > 0 we consider the simple online update
+αt+1 := αt + γ(α − errt ).
+
+(2)
+
+We refer to this algorithm as adaptive conformal inference. Here, errt plays the role of our estimate
+of the historical miscoverage frequency. A natural alternative to this is the update
+!
+t
+X
+αt+1 = αt + γ α −
+ws errs ,
+(3)
+s=1
+
+Pt
+where {ws }1≤s≤t ⊆ [0, 1] is a sequence of increasing weights with s=1 ws = 1. This update has
+the appeal of more directly evaluating the recent empirical miscoverage frequency when deciding
+whether or not to lower or raise αt . In practice, we find that (2) and (3) produce almost identical
+results. For example, in Section A.3 in the Appendix we show some sample trajectories for αt
+obtained using the update (3) with
+0.95t−s
+.
+t−s0
+s0 =1 0.95
+
+ws := Pt
+
+We find that these trajectories are very similar to those produced by (2). The main difference is that
+the trajectories obtained with (3) are smoother with less local variation in αt . In the remainder of this
+article we will focus on (2) for simplicity.
+2.1
+
+Choosing the step size
+
+The choice of γ gives a tradeoff between adaptability and stability. While raising the value of γ will
+make the method more adaptive to observed distribution shifts, it will also induce greater volatility in
+3
+
+the value of αt . In practice, large fluctuations in αt may be undesirable as it allows the method to
+oscillate between outputting small conservative and large anti-conservative prediction sets.
+In Theorem
+give an upper bound on (Mt (αt )−α)2 that is optimized by choosing γ proportional
+p ∗ 4.2 we
+∗
+to |αt+1 − αt |. While not directly applicable in practice, this result supports the intuition that in
+environments with greater distributional shift the algorithm needs to be more adapatable and thus γ
+should be chosen to be larger. In our experiments we will take γ = 0.005. This value was chosen
+because it was found to give relatively stable trajectories for αt while still being sufficiently large as
+to allow αt to adapt to observed shifts. In agreement with the general principles outlined above we
+found that larger values of γ also successfully protect against distribution shifts, while taking γ to be
+too small causes adaptive conformal inference to perform similar to non-adaptive methods that hold
+αt = α constant across time.
+2.2
+
+Real data example: predicting market volatility
+
+We apply ACI to the prediction of market volatility. Let {Pt }1≤t≤T denote a sequence of daily open
+prices for a stock. For all t ≥ 2, define the return Rt := (Pt − Pt−1 )/Pt−1 and realized volatility
+Vt = Rt2 . Our goal is to use the previously observed returns Xt := {Rs }1≤s≤t−1 to form prediction
+sets for Yt := Vt . More sophisticated financial models might augment Xt with additional market
+covariates (available to the analyst at time t − 1). As the primary purpose of this section is to illustrate
+adaptive conformal inference we work with only a simple prediction method.
+We start off by forming point predictions using a GARCH(1,1) model [4]. This method assumes that
+Rt = σt t with 2 , . . . , T taken to be i.i.d. N (0, 1) and σt satisfying the recursive update
+2
+σt2 = ω + τ Vt−1 + βσt−1
+.
+
+This is a common approach used for forecasting volatility in economics. In practice, shifting market
+dynamics can cause the predictions of this model to become inaccurate over large time periods.
+Thus, when forming point predictions we fit the model using only the last 1250 trading days (i.e.
+approximately 5 years) of market data. More precisely, for all times t > 1250 we fit the coefficients
+ω̂t , τ̂t , β̂t as well as the sequence of variances {σ̂st }1≤s≤t−1 using only the data {Rr }t−1250≤r<t .
+Then, our point prediction for the realized volatility at time t is
+t
+(σ̂tt )2 := ω̂t + τ̂t Vt−1 + β̂t (σ̂t−1
+)2 .
+
+To form prediction intervals we define the sequence of conformity scores
+St :=
+
+|Vt − (σ̂tt )2 |
+(σ̂tt )2
+
+and the corresponding quantile function
+(
+Q̂t (p) := inf
+
+)
+t−1
+X
+1
+x:
+1S ≤x ≥ p .
+1250 r=t−1250 r
+
+Then, our prediction set at time t is
+
+Ĉt (αt ) :=
+
+
+|v − (σ̂tt )2 |
+v:
+≤ Q̂t (1 − αt ) ,
+(σ̂tt )2
+
+where {αt } is initialized with α1250 = α = 0.1 and then updated recursively as in (2).
+We compare this algorithm to a non-adaptive alternative that takes αt = α fixed. To measure the
+performance of these methods across time we examine their local coverage frequencies defined as the
+average coverage rate over the most recent two years, i.e.
+localCovt := 1 −
+
+t+250
+X
+1
+errr .
+500 r=t−250+1
+
+(4)
+
+If the methods perform well then we expect the local coverage frequency to stay near the target value
+1 − α across all time points.
+4
+
+Adaptive Alpha
+
+Fixed Alpha
+
+Bernoulli Sequence
+
+Local Coverage Level
+
+Nvidia
+
+AMD
+
+0.95
+
+0.90
+
+0.85
+
+Local Coverage Level
+
+BlackBerry
+
+Fannie Mae
+
+0.95
+
+0.90
+
+0.85
+
+2005
+
+2010
+
+2015
+
+2020
+
+2000
+
+2005
+
+2010
+
+2015
+
+2020
+
+Time
+
+Figure 1: Local coverage frequencies for adaptive conformal (blue), a non-adaptive method that holds
+αt = α fixed (red), and an i.i.d. Bernoulli(0.1) sequence (grey) for the prediction of stock market
+volatility. The coloured dotted lines mark the average coverage obtained across all time points, while
+the black line indicates the target level of 1 − α = 0.9.
+Daily open prices were obtained from publicly available datasets published by The Wall Street Journal.
+The realized local coverage frequencies for the non-adaptive and adaptive conformal methods on four
+different stocks are shown in Figure 1. These stocks were selected out of a total of 12 stocks that
+we examined because they showed a clear failure of the non-adaptive method. Adaptive conformal
+inference was found to perform well in all cases (see Figure 9 in the appendix).
+Pt+250
+1
+As a visual comparator, the grey curves show the moving average 1 − 500
+r=t−250+1 Ir for
+sequences {It }1≤t≤T that are i.i.d. Bernoulli(0.1). We see that the local coverage frequencies
+obtained by adaptive conformal inference (blue lines) always stay within the variation that would be
+expected from an i.i.d. Bernoulli sequence. On the other hand, the non-adaptive method undergoes
+large excursions away from the target level of 1 − α = 0.9 (red lines). For example, in the bottom
+right panel we can see that the non-adaptive method fails to cover the realized volatility of Fannie
+Mae during the 2008 financial crisis, while the adaptive method is robust to this event (see Figure 4
+in the Appendix for a plot of the price of Fannie Mae over this time period).
+
+3
+
+Related Work
+
+Prior work on conformal inference has considered two different types of distribution shift [33, 10]. In
+both cases the focus was on environments in which the calibration data is drawn i.i.d. from a single
+distribution P0 , while the test point comes from a second distribution P1 . In this setting Tibshirani
+et al. [33] showed that valid prediction sets can be obtained by re-weighting the calibration data using
+the likelihood ratio between P1 and P0 . However, this requires the conditional distribution of Y |X to
+be constant between training and testing and the likelihood ratio P1 (X)/P0 (X) to be either known
+or very accurately estimated. On the other hand, Cauchois et al. [10] develop methods for forming
+prediction sets that are valid whenever P1 and P0 are close in f -divergence. Similar to our work, they
+show that if Df (P1 ||P0 ) ≤ ρ then there exists a conservative value αρ ∈ (0, 1) such that
+M (αρ ) := P(S(Xt , Yt ) > Q̂(1 − αρ )) ≤ α.
+The difference between our approach and theirs is twofold. First, while they fix a single conservative
+value αρ our methods aim to estimate the optimal choice α∗ satisfying M (α∗ ) = α. This is not
+possible in the setting of [10] as they do not observe any data from which the size of the distribution
+shift can be estimated. Second, while they consider only one training and one testing distribution we
+work in a fully online setting in which the distribution is allowed to shift continuously over time.
+5
+
+4
+
+Coverage guarantees
+
+4.1
+
+Distribution-free results
+
+In this section we outline the theoretical coverage guarantees of adaptive conformal inference. We will
+assume throughout that with probability one α1 ∈ [0, 1] and Q̂t is non-decreasing with Q̂t (x) = −∞
+for all x < 0 and Q̂t (x) = ∞ for all x > 1. Our first result shows that over long time intervals
+adaptive conformal inference obtains the correct coverage frequency irrespective of any assumptions
+on the data-generating distribution.
+Lemma 4.1 With probability one we have that ∀t ∈ N, αt ∈ [−γ, 1 + γ].
+Proof: Assume by contradiction that with positive probability {αt }t∈N is such that inf t αt < −γ
+(the case where supt αt > 1 + γ is identical). Note that supt |αt+1 − αt | = supt γ|α − errt | < γ.
+Thus, with positive probability we may find t ∈ N such that αt < 0 and αt+1 < αt . However,
+αt < 0 =⇒ Q̂t (1 − αt ) = ∞ =⇒ errt = 0 =⇒ αt+1 = αt + γ(α − errt ) ≥ αt
+and thus P(∃t such that αt+1 < αt < 0) = 0. We have reached a contradiction.
+Proposition 4.1 With probability one we have that for all T ∈ N,
+T
+max{α1 , 1 − α1 } + γ
+1X
+errt − α ≤
+.
+T t=1
+Tγ
+PT
+a.s.
+In particular, limT →∞ T1 t=1 errt = α.
+Proof:
+
+
+
+(5)
+
+By expanding the recursion defined in (2) and applying Lemma 4.1 we find that
+T
+X
+[−γ, 1 + γ] 3 αT +1 = α1 +
+γ(α − errt ).
+t=1
+
+
+
+Rearranging this gives the result.
+
+Proposition 4.1 puts no constraints on the data generating distribution. One may immediately ask
+whether these results can be improved by making mild assumptions on the distribution shifts. We
+argue that without assumptions on the quality of the initialization the answer to this question is
+negative. To understand this, consider a setting in which there is a single fixed optimal target
+α∗ ∈ [0, 1] and assume that
+
+1−α
+∗
+∗
+α + 1−α
+∗ (p − α ), if p > α ,
+Mt (p) = M (p) =
+.
+α
+∗
+∗
+α + α∗ (p − α ) if p ≤ α .
+Suppose additionally that E[errt |αt ] = M (αt ).1 In order to simplify the calculations consider the
+noiseless update αt+1 = αt + γ(α − M (αt )) = αt + γ(α − E[errt |αt ]). Intuitively, the noiseless
+update can be viewed as the average case behaviour of (2). Now, for any initialization α1 and any γ ≤
+∗
+α∗
+1−α
+α
+∗
+min{ 1−α
+1−α , α } there exists a constant c ∈ { 1−α∗ , α∗ } such that for all t, M (αt ) − α = c(αt − α ).
+So, we have that
+E[errt ] − α = cE[αt − α∗ ] = cE[αt−1 + γ(α − Mt−1 (αt−1 )) − α∗ ] = c(1 − cγ)E[αt−1 − α∗ ].
+Repeating this calculation recursively gives that
+E[errt ] − α = c(1 − cγ)t−1 E[α1 − α∗ ] = c(1 − cγ)t−1 (α1 − α∗ ),
+and thus,
+T
+1X
+1 − (1 − cγ)T
+E[errt ] − α =
+|α1 − α∗ |.
+T t=1
+Tγ
+The comparison of this bound to (5) is self-evident. The main difference is that we have replaced
+max{1 − α1 , α1 } with |α1 − α∗ |. This arises from the fact that α∗ ∈ (0, 1) is arbitrary and thus
+max{1 − α1 , α1 } is the best possible upper bound on |α1 − α∗ |. So, we view Proposition 4.1 as
+both an agnostic guarantee that shows that our method gives the correct long-term empirical coverage
+frequency irrespective of the true data generating process, and as an approximately tight bound on
+the worst-case behaviour immediately after initialization.
+1
+
+This last assumption is in general only true if Q̂t (·) and αt are fit independently of one another.
+
+6
+
+4.2
+
+Performance in a hidden Markov model
+
+Although we believe Proposition 4.1 is an approximately tight characterization of the behaviour after
+initialization, we can still ask whether better bounds can be obtained for large time steps. In this
+section we answer this question positively by showing that if α1 is initialized appropriately and the
+distribution shift is small, then tighter coverage guarantees can be given. In order to obtain useful
+results we will make some simplifying assumptions about the data generating process. While we do
+not expect these assumptions to hold exactly in any real-world setting, we do consider our results to
+be representative of the true behaviour of adaptive conformal inference and we expect similar results
+to hold under alternative models.
+4.2.1
+
+Setting
+
+We model the data as coming from a hidden Markov model. In particular, we let {At }t∈N ⊆ A
+denote the underlying Markov chain for the environment and we assume that conditional on {At }t∈N ,
+{(Xt , Yt )}t∈N is an independent sequence with (Xt , Yt ) ∼ PAt for some collection of distributions
+{Pa : a ∈ A}. In order to simplify our calculations, we assume additionally that the estimated
+quantile function Q̂t (·) and score function St (·) do not depend on t and we denote them by Q̂(·) and
+S(·). This occurs for example in the split conformal setting with fixed training and calibration sets.
+In this setting, {(αt , At )}t∈N forms a Markov chain on [−γ, 1 + γ] × A. We assume that this chain
+has a unique stationary distribution π and that (α1 , A1 ) ∼ π. This implies that (αt , At , errt ) is a
+stationary process and thus will greatly simplify our characterization of the behaviour of errt . While
+there is little doubt that the theory can be extended, recall our that main goal is to get useful and
+simple results. That said, what we really have in mind here is that {At }t∈N is sufficiently wellbehaved to guarantee that (αt , At ) has a limiting stationary distribution. In Section A.5 we give
+an example where this is indeed provably the case. Lastly, the assumption that (α1 , A1 ) ∼ π is
+essentially equivalent to assuming that we have been running the algorithm for long enough to exit
+the initialization phase described in Section 4.1.
+4.2.2
+
+Large deviation bound for the errors
+
+Our first observation is that errt has the correct average value. More precisely, by Proposition 4.1 we
+PT
+a.s.
+have that limT →∞ T −1 t=1 errt = α and since errt is stationary it follows that E[errt ] = α. Thus,
+PT
+to understand the deviation of T −1 t=1 errt from α we simply need to characterize the dependence
+structure of {errt }t∈N .
+PT
+We accomplish this in Theorem 4.1, which gives a large deviation bound on |T −1 t=1 errt − α|.
+The idea behind this result is to decompose the dependence in {errt }t∈N into two parts. First, there is
+dependence due to the fact that αt is a function of {errr }1≤r≤t−1 . In Section A.7 in the Appendix
+we argue that this dependence induces a negative correlation and thus the errors concentrate around
+their expectation at a rate no slower than that of an i.i.d. Bernoulli sequence. This gives rise to the
+first term in (6), which is what would be obtained by applying Hoeffding’s inequality to an i.i.d.
+sequence. Second, there is dependence due to the fact that At depends on At−1 . More specifically,
+consider a setting in which the distribution of Y |X has more variability in some states than others.
+The goal of adaptive conformal inference is to adapt to the level of variability and thus return larger
+prediction sets in states where the distribution of Y |X is more spread. However, this algorithm is
+not perfect and as a result there may be some states a ∈ A in which E[errt |At = a] is biased away
+from α. Furthermore, if the environment tends to spend long stretches of time in more variable (or
+PT
+less variable) states this will induce a positive dependence in the errors and cause T −1 t=1 errt
+to deviate from α. To control this dependence we use a Bernstein inequality for Markov chains to
+PT
+bound |T −1 t=1 E[errt |At ] − α|. This gives rise to the second term in (6).
+Theorem 4.1 Assume that {At }t∈N has non-zero absolute spectral gap 1 − η > 0. Let
+B := sup |E[errt |At = a] − α| and
+a∈A
+
+2
+σB
+:= E[(E[errt |At ] − α)2 ].
+
+Then,
+T
+
+P
+
+1X
+errt − α ≥ 
+T t=1
+
+!
+
+T 2
+≤ 2 exp −
+8
+
+
+7
+
+
+
+
++ 2 exp −
+
+T (1 − η)2
+2 + 20B
+8(1 + η)σB
+
+
+.
+
+(6)
+
+A formal proof of this result can be found in Section A.7. The quality of this concentration inequality
+2
+will depend critically on the size of the bias terms B and σB
+. Before proceeding, it is important that
+2
+we emphasize that the definitions of B and σB
+are independent of the choice of t owing to the fact
+that (αt , At , errt ) is assumed stationary. Now, to understand these quantities, let
+M (p|a) := P(S(Xt , Yt ) > Q̂(1 − p)|At = a)
+denote the realized miscoverage level in state a ∈ A obtained by the quantile Q̂(1 − p). Assume that
+M (p|a) is continuous. This will happen for example when Q̂(·) is continuous and S(Xt , Yt )|At = a
+is continuously distributed. Then, there exists an optimal value αa∗ such that M (αa∗ |a) = α. Lemma
+A.4 in the Appendix shows that if in addition M (·|a) admits a second order Taylor expansion, then
+
+
+∗
+∗
+2
+B ≤ C γ + γ −1 sup sup E[|αA
+−
+α
+|
+A
+=
+a]
+and σB
+≤ B2.
+t+k
+At
+t+1
+a∈A k∈N
+
+Here, the constant C will depend on how much M (·|a) differs from the ideal case in which Q̂(·) is
+the true quantile function for S(Xt , Yt )|At = a. In this case we would have that M (·|a) is the linear
+function M (p|a) = p, ∀p ∈ [0, 1] and C ≤ 2.
+∗
+∗
+We remark that the term E[|αA
+− αA
+| At+k = a] can be seen as a quantitative measurement of
+t+1
+t
+the size of the distribution shift in terms of the change in the critical value αa∗ . Thus, we interpret
+these results as showing that if the distribution shift is small and ∀a ∈ A, Q̂(·) gives reasonable
+PT
+coverage of the distribution of S(Xt , Yt )|At = a, then T −1 t=1 errt will concentrate well around
+α.
+
+4.2.3
+
+Achieving approximate marginal coverage
+
+Theorem 4.1 bounds the distance between the average miscoverage rate and the target level over
+long stretches of time. On the other hand, it provides no information about the marginal coverage
+frequency at a single time step. The following result shows that if the distribution shift is small, the
+realized marginal coverage rate M (αt |At ) will be close to α on average.
+Theorem 4.2 Assume that there exists a constant L > 0 such that for all a ∈ A and all α1 , α2 ∈ R,
+|M (α2 |a) − M (α1 |a)| ≤ L|α2 − α1 |.
+Assume additionally that for all a ∈ A there exists αa∗ ∈ (0, 1) such that M (αa∗ |a) = α. Then,
+E[(M (αt |At ) − α)2 ] ≤
+
+L(1 + γ)
+L
+∗
+∗
+E[|αA
+− αA
+|] + γ.
+t+1
+t
+γ
+2
+
+(7)
+
+Once again we emphasize that (7) holds for any choice of t owing to the fact that (αt , At , errt ) is
+assumed stationary and thus the quantities appearing in the bound are invariant across t. Proof of
+this result can be found in Section A.8 of the Appendix. We remark that the right-hand side of (7) is
+∗
+∗
+minimized by choosing γ = (2E[|αA
+− αA
+|])1/2 , which gives the inequality
+t+1
+t
+q
+√
+∗
+∗ |].
+E[(M (αt |At ) − α)2 ] ≤ L( 2 + 1) E[|αA
+− αA
+t+1
+t
+As above we have that in the ideal case Q̂(·) is a perfect estimate of the quantiles of S(Xt , Yt )|At = a
+∗
+and thus M (p|a) = p and L = 1. Moreover, we once again have the interpretation that E[|αA
+−
+t+1
+∗
+αA
+|]
+is
+a
+quantitative
+measurement
+of
+the
+distribution
+shift.
+Thus,
+this
+result
+can
+be
+interpreted
+as
+t
+bounding the average difference between the realized and target marginal coverage in terms of the
+∗
+∗
+size of the underlying distribution shift. Finally, note that the choice γ = (2E[|αA
+− αA
+|])1/2
+t+1
+t
+formalizes our intuition that γ should be chosen to be larger in domains with greater distribution shift,
+while not being so large as to cause αt to be overly volatile.
+
+5
+
+Impact of St (·) on the performance
+
+The performance of all conformal inference methods depends heavily on the design of the conformity
+score. Previous work has shown how carefully chosen scores or even explicit optimization of the
+8
+
+Adaptive Alpha
+
+Local Coverage Level
+
+1.0
+
+Bernoulli Sequence
+
+AMD
+
+0.8
+
+0.6
+
+0.4
+
+1.0
+
+Local Coverage Level
+
+Fixed Alpha
+
+Nvidia
+
+BlackBerry
+
+Fannie Mae
+
+0.8
+
+0.6
+
+0.4
+2005
+
+2010
+
+2015
+
+2020
+
+2000
+
+2005
+
+2010
+
+2015
+
+2020
+
+Time
+
+Figure 2: Local coverage frequencies for adaptive conformal (blue), a non-adaptive method that holds
+αt = α fixed (red), and an i.i.d. Bernoulli(0.1) sequence (grey) for the prediction of stock market
+volatility with conformity score S̃t . The coloured dotted lines mark the average coverage obtained
+across all time points, while the black line indicates the target level of 1 − α = 0.9.
+interval width can be used to obtain smaller prediction sets [e.g. 28, 29, 20, 12]. Adaptive conformal
+inference can work with any conformity score St (·) and quantile function Q̂t (·) and thus can be
+directly combined with other improvements in conformal inference to obtain shorter intervals. One
+important caveat here is that the lengths of conformal prediction sets depend directly on the quality
+of the fitted regression model. Thus, to obtain smaller intervals one should re-fit the model at each
+time step using the most recent data to build the most accurate predictions. This is exactly what we
+have done in our experiments in Sections 2.2 and 6.
+In addition to this, the choice of St (·) can also have a direct effect on the coverage properties of
+adaptive conformal inference. Theorems 4.1 and 4.2 show that the performance of adaptive conformal
+inference is controlled by the size of the shift in the optimal parameter αt∗ across time. Moreover,
+αt∗ itself is in one-to-one correspondence with the 1 − α quantile of St (Xt , Yt ). Thus, the coverage
+properties of adaptive conformal inference depend on how close St (Xt , Yt ) is to being stationary.
+For a simple example illustrating the impact of this dependence, note that in Section 2.2 we formed
+prediction sets using the conformity score
+|Vt − σ̂t2 |
+.
+σ̂t2
+An a priori reasonable alternative to this is the unnormalized score
+St :=
+
+S̃t := |Vt − σ̂t2 |.
+However, after a more careful examination it becomes unsurprising that normalization by σ̂t2 is
+critical for obtaining an approximately stationary conformity score and thus S̃t leads to much worse
+coverage properties. Figure 2 shows the local coverage frequency (see (4)) of adaptive conformal
+inference using S̃t . In comparison to Figure 1 the coverage now undergoes much wider swings away
+from the target level of 0.9. This issue can be partially mitigated by choosing a larger value of γ that
+gives greater adaptivity to the algorithm.
+
+6
+
+Real data example: election night predictions
+
+During the 2020 US presidential election The Washington Post used conformalized quantile regression
+(CQR) (see (1) and Section 1.1) to produce county level predictions of the vote total on election night
+[13]. Here we replicate the core elements of this method using both fixed and adaptive quantiles.
+9
+
+Local Coverage Level
+
+Adaptive Alpha
+
+Fixed Alpha
+
+Bernoulli Sequence
+
+0.900
+
+0.875
+
+0.850
+
+0.825
+500
+
+1000
+
+1500
+
+2000
+
+Time
+Figure 3: Local coverage frequencies of adaptive conformal (blue), a non-adaptive method that holds
+αt = α fixed (red), and an i.i.d. Bernoulli(0.1) sequence (grey) for county-level election predictions.
+Coloured dotted lines show the average coverage across all time points, while the black line indicates
+the target coverage level of 1 − α = 0.9.
+To make the setting precise, let {Yt }1≤t≤T denote the number of votes cast for presidential candidate
+Joe Biden in the 2020 election in each of approximately T = 3000 counties in the United States.
+Let Xt denote a set of demographic covariates associated to the tth county. In our experiment Xt
+will include information on the make-up of the county population by ethnicity, age, sex, median
+income and education (see Section A.6.1 for details). On election night county vote totals were
+observed as soon as the vote count was completed. If the order in which vote counts completed was
+uniformly random {(Xt , Yt )}1≤t≤T would be an exchangeable sequence on which we could run
+standard conformal inference methods. In reality, larger urban counties tend to report results later
+than smaller rural counties and counties on the east coast of the US report earlier than those on the
+west coast. Thus, the distribution of (Xt , Yt ) can be viewed as drifting throughout election night.
+We apply CQR to predict the county-level vote totals (see Section A.6.2 for details). To replicate
+the east to west coast bias observed on election night we order the counties by their time zone with
+eastern time counties appearing first and Hawaiian counties appearing last. Within each time zone
+counties are ordered uniformly at random. Figure 3 shows the realized local coverage frequency over
+the most recent 300 counties (see (4)) for the non-adaptive and adaptive conformal methods. We
+find that the non-adaptive method fails to maintain the desired 90% coverage level, incurring large
+troughs in its coverage frequency during time zone changes. On the other hand, the adaptive method
+maintains approximate 90% coverage across all time points with deviations in its local coverage level
+comparable to what is observed in Bernoulli sequences.
+
+7
+
+Discussion
+
+There are still many open problems in this area. The methods we develop are specific to cases where
+Yt is revealed at each time point. However, there are many settings in which we receive the response
+in a delayed fashion or in large batches. In addition, our theoretical results in Section 4.2 are limited
+to a single model for the data generating distribution and the special case where the quantile function
+Q̂t (·) is fixed across time. It would be interesting to determine if similar results can be obtained in
+settings where Q̂t (·) is fit in an online fashion on the most recent data. Another potential area for
+improvement is in the choice of the step size γ. In Section 2.1 we give some heuristic guidelines
+for choosing γ based on the size of the distribution shift in the environment. Ideally however we
+would like to be able to determine γ adaptively without prior knowledge. Finally, our experimental
+results are limited to just two domains. Additional work is needed to determine if our methods can
+successfully protect against a wider variety of real-world distribution shifts.
+10
+
+8
+
+Acknowledgements
+
+E.C. was supported by Office of Naval Research grant N00014-20-12157, by the National Science
+Foundation grants OAC 1934578 and DMS 2032014, by the Army Research Office (ARO) under
+grant W911NF-17-1-0304, and by the Simons Foundation under award 814641. We thank John
+Cherian for valuable discussions related to Presidential Election Night 2020 and Lihua Lei for helpful
+comments on the relationship to online learning.
+
+References
+[1] Julia Angwin, Jeff Larson, Surya Mattu, and Lauren Kirchner.
+Machine bias:
+There’s software used across the country to predict future criminals. and it’s biased against blacks, 2016.
+URL https://www.propublica.org/article/
+machine-bias-risk-assessments-in-criminal-sentencing.
+[2] Claudine Badue, Rânik Guidolini, Raphael Vivacqua Carneiro, Pedro Azevedo, Vinicius B.
+Cardoso, Avelino Forechi, Luan Jesus, Rodrigo Berriel, Thiago M. Paixão, Filipe Mutz, Lucas
+de Paula Veronese, Thiago Oliveira-Santos, and Alberto F. De Souza. Self-driving cars: A
+survey. Expert Systems with Applications, 165:113816, 2021. ISSN 0957-4174. doi: https:
+//doi.org/10.1016/j.eswa.2020.113816. URL https://www.sciencedirect.com/science/
+article/pii/S095741742030628X.
+[3] Rina Foygel Barber, Emmanuel J. Candès, Aaditya Ramdas, and Ryan J. Tibshirani. Predictive
+inference with the jackknife+. The Annals of Statistics, 49(1):486 – 507, 2021. doi: 10.1214/
+20-AOS1965. URL https://doi.org/10.1214/20-AOS1965.
+[4] Tim Bollerslev. Generalized autoregressive conditional heteroskedasticity. Journal of
+Econometrics, 31(3):307–327, 1986. ISSN 0304-4076. doi: https://doi.org/10.1016/
+0304-4076(86)90063-1. URL https://www.sciencedirect.com/science/article/
+pii/0304407686900631.
+[5] United States Census Bureau. County characteristics resident population estimates, 2019. data
+retrieved from https://www.census.gov/data/tables/time-series/demo/popest/
+2010s-counties-detail.html.
+[6] United States Census Bureau. 2015-2019 american community survey 5-year average countylevel estimates, 2019. data retrieved from https://www.ers.usda.gov/data-products/
+county-level-data-sets/download-data/.
+[7] United States Census Bureau.
+Small area income and poverty estimates: 2019,
+2019.
+data retrieved from https://www.ers.usda.gov/data-products/
+county-level-data-sets/download-data/.
+[8] Emmanuel J. Candès, Lihua Lei, and Zhimei Ren. Conformalized survival analysis. arXiv
+preprint, 2021. arXiv:2103.09763.
+[9] X. Cao, J. Zhang, and H. V. Poor. On the time-varying distributions of online stochastic
+optimization. In 2019 American Control Conference (ACC), pages 1494–1500, 2019. doi:
+10.23919/ACC.2019.8814889.
+[10] Maxime Cauchois, Suyash Gupta, Alnur Ali, and John C. Duchi. Robust validation: Confident
+predictions even when distributions shift. arXiv preprint, 2020. arXiv:2008.04267.
+[11] Maxime Cauchois, Suyash Gupta, and John C. Duchi. Knowing what you know: valid and
+validated confidence sets in multiclass and multilabel prediction. Journal of Machine Learning
+Research, 22(81):1–42, 2021. URL http://jmlr.org/papers/v22/20-753.html.
+[12] Haoxian Chen, Ziyi Huang, Henry Lam, Huajie Qian, and Haofeng Zhang. Learning prediction
+intervals for regression: Generalization and calibration. In Proceedings of The 24th International
+Conference on Artificial Intelligence and Statistics, volume 130 of Proceedings of Machine
+Learning Research, pages 820–828. PMLR, 13–15 Apr 2021.
+[13] John Cherian and Lenny Bronner. How the washington post estimates outstanding votes
+for the 2020 presidential election. https://elex-models-prod.s3.amazonaws.com/
+2020-general/write-up/election_model_writeup.pdf, 2020.
+[14] MIT Election Data and Science Lab. County Presidential Election Returns 2000-2016, 2018.
+URL https://doi.org/10.7910/DVN/VOQCHQ.
+11
+
+[15] Rina Foygel Barber, Emmanuel J Candès, Aaditya Ramdas, and Ryan J Tibshirani. The
+limits of distribution-free conditional predictive inference. Information and Inference: A
+Journal of the IMA, 08 2020. ISSN 2049-8772. doi: 10.1093/imaiai/iaaa017. URL https:
+//doi.org/10.1093/imaiai/iaaa017. iaaa017.
+[16] Alexander Gammerman and Vladimir Vovk. Hedging predictions in machine learning. The
+Computer Journal, 50(2):151–163, 2007. doi: 10.1093/comjnl/bxl065.
+[17] Elad Hazan.
+Introduction to online convex optimization.
+arXiv preprint, 2019.
+arXiv:1909.05207.
+[18] Wassily Hoeffding. Probability inequalities for sums of bounded random variables. Journal
+of the American Statistical Association, 58(301):13–30, 1963. doi: 10.1080/01621459.1963.
+10500830.
+[19] Bai Jiang, Qiang Sun, and Jianqing Fan. Bernstein’s inequality for general markov chains.
+arXiv preprint, 2020. arXiv:1805.10721.
+[20] Danijel Kivaranovic, Kory D. Johnson, and Hannes Leeb. Adaptive, distribution-free prediction
+intervals for deep networks. In Proceedings of the Twenty Third International Conference on
+Artificial Intelligence and Statistics, volume 108 of Proceedings of Machine Learning Research,
+pages 4346–4356. PMLR, 26–28 Aug 2020.
+[21] Danijel Kivaranovic, Robin Ristl, Martin Posch, and Hannes Leeb. Conformal prediction
+intervals for the individual treatment effect. arXiv preprint, 2020. arXiv:2006.01474.
+[22] Jing Lei and Larry Wasserman. Distribution-free prediction bands for non-parametric regression.
+Journal of the Royal Statistical Society: Series B (Statistical Methodology), 76, 01 2014. doi:
+10.1111/rssb.12021.
+[23] Jing Lei, Max G’Sell, Alessandro Rinaldo, Ryan J. Tibshirani, and Larry Wasserman.
+Distribution-free predictive inference for regression. Journal of the American Statistical
+Association, 113(523):1094–1111, 2018. doi: 10.1080/01621459.2017.1307116. URL
+https://doi.org/10.1080/01621459.2017.1307116.
+[24] Lihua Lei and Emmanuel J. Candès. Conformal inference of counterfactuals and individual
+treatment effects. arXiv preprint, 2021. arXiv:2006.06138.
+[25] David Leip. Dave leip’s atlas of u.s. presidential elections., 2020. http://uselectionatlas.
+org.
+[26] Harris Papadopoulos. Inductive conformal prediction: Theory and application to neural networks. In Tools in Artificial Intelligence,, pages 315–330, 2008.
+[27] Harris Papadopoulos, Kostas Proedrou, Volodya Vovk, and Alex Gammerman. Inductive
+confidence machines for regression. In Tapio Elomaa, Heikki Mannila, and Hannu Toivonen,
+editors, Machine Learning: ECML 2002, pages 345–356, Berlin, Heidelberg, 2002. Springer
+Berlin Heidelberg. ISBN 978-3-540-36755-0.
+[28] Yaniv Romano, Evan Patterson, and Emmanuel Candes. Conformalized quantile regression. In H. Wallach, H. Larochelle, A. Beygelzimer, F. d'Alché-Buc, E. Fox, and R. Garnett, editors, Advances in Neural Information Processing Systems, volume 32. Curran
+Associates, Inc., 2019. URL https://proceedings.neurips.cc/paper/2019/file/
+5103c3584b063c431bd1268e9b5e76fb-Paper.pdf.
+[29] Yaniv Romano, Matteo Sesia, and Emmanuel Candes. Classification with valid and
+adaptive coverage. In Advances in Neural Information Processing Systems, volume 33,
+pages 3581–3591, 2020. URL https://proceedings.neurips.cc/paper/2020/file/
+244edd7e85dc81602b7615cd705545f5-Paper.pdf.
+[30] Yaniv Romano, Matteo Sesia, and Emmanuel Candes. Classification with valid and adaptive coverage. In H. Larochelle, M. Ranzato, R. Hadsell, M. F. Balcan, and H. Lin, editors, Advances in Neural Information Processing Systems, volume 33, pages 3581–3591.
+Curran Associates, Inc., 2020. URL https://proceedings.neurips.cc/paper/2020/
+file/244edd7e85dc81602b7615cd705545f5-Paper.pdf.
+[31] Mauricio Sadinle, Jing Lei, and Larry Wasserman. Least ambiguous set-valued classifiers with
+bounded error levels. Journal of the American Statistical Association, 114(525):223–234, 2019.
+doi: 10.1080/01621459.2017.1395341. URL https://doi.org/10.1080/01621459.2017.
+1395341.
+12
+
+[32] Glenn Shafer and Vladimir Vovk. A tutorial on conformal prediction. Journal of Machine
+Learning Research, 9(12):371–421, 2008. URL http://jmlr.org/papers/v9/shafer08a.
+html.
+[33] Ryan J Tibshirani, Rina Foygel Barber, Emmanuel Candes, and Aaditya Ramdas. Conformal
+prediction under covariate shift. In H. Wallach, H. Larochelle, A. Beygelzimer, F. d'Alché-Buc,
+E. Fox, and R. Garnett, editors, Advances in Neural Information Processing Systems, volume 32.
+Curran Associates, Inc., 2019. URL https://proceedings.neurips.cc/paper/2019/
+file/8fb21ee7a2207526da55a679f0332de2-Paper.pdf.
+[34] Vladimir Vovk, Alex Gammerman, and Glenn Shafer. Algorithmic Learning in a Random
+World. Springer-Verlag, Berlin, Heidelberg, 2005. ISBN 0387001522.
+[35] Jingyi Zhu and James Spall. Tracking capability of stochastic gradient algorithm with constant
+gain. In 2016 IEEE 55th Conference on Decision and Control (CDC), pages 4522–4527, 12
+2016. doi: 10.1109/CDC.2016.7798957.
+
+13
+
+A
+
+Appendix
+
+A.1
+
+Connection to online learning
+
+In Section 2 we motivated the update (2) as a way to adjust the size of our prediction sets in response
+to the realized historical miscoverage frequency. Alternatively, one could also derive (2) as an online
+gradient descent algorithm with respect to the pinball loss. To be more precise let
+βt := sup{β : Yt ∈ Ĉt (β)},
+where we remark that Ĉt (βt ) can be thought of as the smallest prediction set containing Yt . Additionally, define the pinball loss
+
+αu, u > 0,
+ρα (u) =
+.
+−(1 − α)u, u ≤ 0.
+and consider the loss `(αt , βt ) = ρα (βt − αt ). Then, one directly computes that
+αt − γ∂αt `(αt , βt ) = αt + γ(α − 1αt >βt ) = αt + γ(α − errt ).
+Because the pinball loss is convex, this gradient descent update falls within a well understood class
+of algorithms that have been extensively studied in the online learning literature (see e.g. [17]). A
+standard analysis may then be to bound the regret of αt defined as
+RegT :=
+
+T
+X
+
+`(αt , βt ) − min
+β
+
+t=1
+
+T
+X
+
+`(β, βt ).
+
+t=1
+
+Unfortunately, this notion of regret fails to capture our intuition that αt is adaptively tracking the
+moving target αt∗ . Thus, we make the connection to online gradient descent only in passing and
+develop alternative theoretical tools in Section 4.
+A.2
+
+Stock prices
+
+Figure 4 shows daily open prices for the four stocks considered in Section 2.2.
+AMD
+
+Nvidia
+
+Open Price
+
+600
+
+100
+400
+
+50
+
+200
+
+0
+150
+
+0
+
+BlackBerry
+
+Fannie Mae
+
+Open Price
+
+75
+100
+50
+
+50
+25
+
+0
+
+0
+2000
+
+2005
+
+2010
+
+2015
+
+2020
+
+2000
+
+2010
+
+2020
+
+Time
+
+Figure 4: Daily open prices for the four stocks considered in Section 2.2.
+A.3
+
+Trajectories of αt
+
+In this section we show the realized trajectories of αt obtained in our experiments from Sections 2.2
+and 6.
+14
+
+Nvidia
+
+AMD
+
+BlackBerry
+
+Fannie Mae
+
+αt
+
+0.15
+
+0.10
+
+0.05
+
+αt
+
+0.15
+
+0.10
+
+0.05
+
+2005
+
+2010
+
+2015
+
+2020
+
+2000
+
+2005
+
+2010
+
+2015
+
+2020
+
+Time
+
+Figure 5: Realized trajectories of αt for predicting stock market volatility as outlined in Section 2.2
+using update (2).
+
+Nvidia
+
+AMD
+
+BlackBerry
+
+Fannie Mae
+
+αt
+
+0.15
+
+0.10
+
+0.05
+
+αt
+
+0.15
+
+0.10
+
+0.05
+
+2005
+
+2010
+
+2015
+
+2020
+
+2000
+
+2005
+
+2010
+
+2015
+
+2020
+
+Time
+
+Figure 6: Realized trajectories of αt for predicting stock market volatility as outlined in Section 2.2
+using update (3) with ws ∝ 0.95t−s .
+15
+
+αt
+
+0.09
+
+0.06
+
+0.03
+
+500
+
+1000
+
+1500
+
+2000
+
+Time
+Figure 7: Realized trajectory of αt for election night forecasting as outlined in Section 6 using update
+(2).
+
+αt
+
+0.09
+
+0.06
+
+0.03
+
+500
+
+1000
+
+1500
+
+2000
+
+Time
+Figure 8: Realized trajectory of αt for election night forecasting as outlined in Section 6 using update
+(3) with ws ∝ 0.95t−s .
+
+A.4
+
+Coverage for additional stocks
+
+Figure 9 shows the local coverage level of adaptive and non-adaptive conformal inference for the
+prediction of market volatility (see Section 2.2) for 8 additional stocks/indices.
+16
+
+Adaptive Alpha
+
+Local Coverage Level
+
+0.96
+
+Fixed Alpha
+
+Bernoulli Sequence
+
+S&P 500
+
+Nasdaq
+
+Dow Jones
+
+Apple
+
+Illumina
+
+Exxon Mobil
+
+Toyota
+
+Goldman Sachs
+
+0.92
+
+0.88
+
+0.84
+
+Local Coverage Level
+
+0.96
+
+0.92
+
+0.88
+
+0.84
+
+Local Coverage Level
+
+0.96
+
+0.92
+
+0.88
+
+0.84
+
+Local Coverage Level
+
+0.96
+
+0.92
+
+0.88
+
+0.84
+
+2010
+
+2015
+
+2020
+
+2010
+
+2015
+
+2020
+
+Time
+
+Figure 9: Local coverage frequencies for adaptive conformal (blue), a non-adaptive method that holds
+αt = α fixed (red), and an i.i.d. Bernoulli(0.1) sequence (grey) for the prediction of market volatility.
+The coloured dotted lines mark the average coverage obtained across all time points, while the black
+line indicates the target level of 1 − α = 0.9.
+17
+
+A.5
+
+Existence of a stationary distribution for (αt , At )
+
+In this section we give one simple example in which the Markov chain {(αt , At )}t∈N will have a
+unique stationary distribution. The setting considered here is the same as the one described in Section
+4.2.
+Let αt be initialized with α1 ∈ {α + kγα : k ∈ Z}. Assume that A is finite. Let P be the transition
+matrix of {At }t∈N and assume that for all a1 , a2 ∈ A, Pa1 ,a2 = P(At+1 = a2 |At = a1 ) > 0.
+Assume that α satisfies α−1 (1 − α) ∈ N. This will hold for common choices of α such as α = 0.1
+and α = 0.05. Finally, assume that for all a ∈ A and all p ∈ (0, 1), P(S(Xt , Yt ) ≤ Q̂(p)|A = a) ∈
+(0, 1). This will occur for example when S(Xt , Yt )|At = a is supported on R and Q̂(·) is finite
+valued for all p ∈ (0, 1).
+We claim that in this case {(αt , At )}t∈N has a unique stationary distribution. To prove this it is
+sufficient to show that this chain is irreducible and has a finite state space. To check that it has a finite
+state space it is sufficient to show that αt has a finite state space. We claim that with probability one
+we have that for all t ∈ N, αt ∈ {α + kγα : k ∈ Z}. To prove this we proceed by induction. The
+base case is given by our choice of α1 . For the inductive step note that
+αt ∈ {α + kγα : k ∈ Z}
+
+=⇒ αt+1 = αt + γ(α − errt ) =
+
+αt + γα, if errt = 0,
+αt − γα(α−1 (1 − α)), if errt = 1,
+
+∈ {α + kγα : k ∈ Z}.
+
+Since αt is also bounded (see Lemma 4.1) this implies that αt has a finite state space.
+Finally, the fact that {(αt , At )}t∈N is irreducible follows easily from our assumptions on {At }t∈N ,
+Q̂(·), and P(S(Xt , Yt ) ≤ Q̂(p)|A = a).
+A.6
+A.6.1
+
+Additional information for Section 6
+Dataset description
+
+The county-level demographic characteristics used for prediction were the proportion of the total
+population that fell into each of the following race categories (either alone or in combination):
+black or African American, American Indian or Alaska Native, Asian, Native Hawaiian or other
+Pacific islander. In addition to this, we also used the proportion of the total population that was
+male, of Hispanic origin, and that fell within each of the age ranges 20-29, 30-44, 45-64, and 65+.
+Demographic information was obtained from 2019 estimates published by the United States Census
+Bureau and available at [5]. To supplement these demographic features we also used the median
+household income and the percentage of individuals with a bachelors degree or higher as covariates.
+Data on county-level median household incomes was based on 2019 estimates obtained from [7]. The
+percentage of individuals with a bachelors degree or higher was computed based on data collected
+during the years 2015-2019 and published at [6]. As an aside, we remark that we used 2019 estimates
+because this was the most recent year for which data was available.
+Vote counts for the 2016 election were obtained from [14], while 2020 election data was taken from
+[25]. In total, matching covariate and election vote count data were obtained for 3111 counties.
+A.6.2
+
+Detailed prediction algorithm
+
+Algorithm 1 below outlines the core conformal inference method used to predict election results. An
+R implementation of this algorithm as well as the core method outlined in Section 2.2 can be found at
+https://github.com/isgibbs/AdaptiveConformal.
+A.7
+
+Large deviation bounds for the error sequence
+
+In this section we prove Theorem 4.1. So, throughout we define the sequences {αt }t∈N , {errt }t∈N ,
+and {At }t∈N as in Section 4.2 and we assume that {(αt , At )}t∈N is a stationary Markov chain from
+which it follows immediately that {(αt , At , errt )}t∈N is also stationary. Additionally, we assume that
+Q̂(·) and S(·) are fixed functions such that Q̂(·) is non-decreasing with Q̂(x) = −∞ for all x < 0
+and Q̂(x) = ∞ for all x > 1. The proof of Theorem 4.1 will rely on the following lemmas.
+18
+
+Algorithm 1: CQR method for election night prediction
+Data: Observed sequence of county-level votes counts and covariates {(Xt , Yt )}1≤t≤T and vote
+counts for the democratic candidate in the previous election {Ytprev }1≤t≤T .
+for t = 1, 2, . . . , T do
+Compute the residual rt = (Yt − Ytprev )/Ytprev
+for t = 501, 502, . . . , T do
+// We start making predictions once 500 counties have been observed.
+Randomly split the data {(Xl , rl )}1≤l≤t−1 into a training set Dtrain and a calibration set Dcal
+with |Dtrain | = b(t − 1) · 0.75c;
+Fit a linear quantile regression model q̂(x; p) on Dtrain ;
+for (Xl , rl ) ∈ Dcal do
+Compute the conformity score Sl = max{q̂(Xl ; α/2) − rl , rl − q̂(Xl ; 1 − α/2)};
+
+o
+n 
+P
+Define the quantile function Q̂t (p) = inf x : |D1cal | (Xl ,rl )∈Dcal 1Sl ≤x ≥ p ;
+Return the prediction set
+y−Ytprev y−Ytprev
+, Y prev − q̂(Xt ; 1 − α/2)} ≤ Q̂t (1 − α)};
+Ĉt (α) := {y : max{q̂(Xt ; α/2) − Y prev
+t
+
+t
+
+Lemma A.1 Let f : R → R and g : R → R be bounded functions such that either
+1. f is non-increasing and g is non-decreasing,
+2. or f is non-decreasing and g is non-increasing.
+Then, for any random variable Y
+E[f (Y )g(Y )] ≤ E[f (Y )]E[g(Y )].
+The proof of this result is straightforward and can be found in Section A.10.
+Lemma A.2 For any λ ∈ R and t ∈ N we have that
+" t
+#
+" t−1
+#
+Y
+Y
+2
+E
+exp(λ(errs − E[errs |As ])) ≤ exp(λ /2)E
+exp(λ(errs − E[errs |As ])) .
+s=1
+
+(8)
+
+s=1
+
+Proof: By conditioning on α1 and A1 , . . . , At on both the left and right-hand side of (8) we may
+view these quantities as fixed. Thus, while for readability we do not denote this conditioning explicitly,
+the following calculations should be read as conditional on α1 and A1 , . . . , At . Then,
+" t
+#
+Y
+E
+exp(λ(errs − E[errs |As ]))
+s=1
+
+=E
+
+" t−1
+Y
+
+
+#
+exp(λ(errs − E[errs |As ]))E exp(λ(errt − E[errt |At ])) err1 , . . . , errt−1 .
+
+s=1
+
+Pt−1
+Pt−1
+Recall that αt = α1 + γ s=1 (α − errs ) is a deterministic function of α1 and s=1 errs . So, we
+Pt−1
+Qt−1
+may define the functions f ( s=1 errs ) = s=1 exp(λ(errs − E[errs |As ])) and
+t−1
+X
+g(
+errs ) := E [exp(λ(errt − E[errt |At ]))|err1 , . . . , errt−1 ]
+s=1
+
+= PAt (S(Xt , Yt ) ≤ Q̂(1 − αt )) exp(−λE[errt |At ])
++ (1 − PAt (S(Xt , Yt ) ≤ Q̂(1 − αt ))) exp(λ(1 − E[errt |At ])),
+where we emphasize that on the last line At and αt should be viewed as fixed quantities. Now, since
+Pt−1
+αt is monotonically decreasing in s=1 errs it should be clear that if λ ≥ 0 then g is non-increasing
+19
+
+(resp. non-decreasing for λ < 0) and f is non-decreasing (resp. non-increasing for λ < 0). So, by
+Lemma A.1 we have that
+" t−1
+
+#
+Y
+E
+exp(λ(errs − E[errs |As ]))E exp(λ(errt − E[errt |At ])) err1 , . . . , errt−1
+s=1
+
+≤E
+
+" t−1
+Y
+
+#
+
+
+ 
+exp(λ(errs − E[errs |As ])) E E exp(λ(errt − E[errt |At ])) err1 , . . . , errt−1
+
+s=1
+
+=E
+
+" t−1
+Y
+
+#
+exp(λ(errs − E[errs |As ])) E[exp(λ(errt − E[errt |At ]))]
+
+s=1
+
+≤E
+
+" t−1
+Y
+
+#
+exp(λ(errs − E[errs |As ])) exp(λ2 /2),
+
+s=1
+
+
+
+where the last inequality follows by Hoeffding’s lemma (see Lemma A.5).
+
+The final result we will need in order to prove Theorem 4.1 is a large deviation bound for Markov
+chains.
+Definition A.1 Let {Xi }i∈N ⊆ X be a Markov chain with transition kernel P and stationary
+distribution π. Define the inner product space
+ Z
+
+L2 (X , π) = h :
+h(x)2 π(dx) < ∞
+X
+
+with inner product
+Z
+hh1 , h2 iπ =
+
+h1 (x)h2 (x)π(dx).
+X
+
+For any h ∈ L2 (X , π), let
+Z
+
+2
+
+L (X , π) 3 P h :=
+
+h(y)P (·, dy).
+
+Then, we say that {Xi }i∈N has non-zero absolute spectral gap 1 − η if
+
+
+Z
+p
+η := sup
+hP h, P hiπ : hh, hiπ = 1,
+h(x)π(dx) = 0 < 1.
+X
+
+Theorem A.1 (Theorem 1 in [19]) Let {Xi }i∈N ⊆ X be a stationary Markov chain with invariant
+distribution π and non-zero absolute spectralP
+gap 1 − η > 0. Let fi : X → [−C, C] be a sequence
+n
+of functions with π(fi ) = 0 and define σ 2 := i=1 π(fi2 )/n. Then, for ∀ > 0,
+!
+
+
+n
+1X
+n(1 − η)2 /2
+Pπ
+fi (Xi ) ≥  ≤ exp −
+.
+n i=1
+(1 + η)σ 2 + 5C
+Finally, we are ready to prove Theorem 4.1.
+Proof:
+
+[Proof of Theorem 4.1.] Write
+!
+T
+1X
+errt − α > 
+P
+T t=1
+≤P
+
+(9)
+
+!
+T
+1X
+errt − E[errt |At ] > /2 + P
+T t=1
+
+T
+
+1X
+E[errt |At ] − α > /2
+T t=1
+
+!
+
+By applying lemma A.2 inductively we have that for all λ > 0,
+!
+"T
+#
+T
+Y
+1X
+P
+errt − E[errt |At ] > /2 ≤ exp(−T λ/2)E
+exp(λ(errt − E[errt |At ]))
+T t=1
+t=1
+≤ exp(−T λ/2) exp(T λ2 /2),
+20
+
+(10)
+
+with an identical bound on the left tail. Choosing λ = /2 gives the bound
+!
+T
+1X
+errt − E[errt |At ] > /2 ≤ 2 exp(−T 2 /8).
+P
+T t=1
+
+
+On the other hand, the second term in (10) can be bounded directly using Theorem A.1.
+A.8
+
+Approximate marginal coverage
+
+In this section we prove Theorem 4.2.
+Proof: [Proof of Theorem 4.2] Our proof follows similar steps to those presented in previous works
+on stochastic gradient descent under distribution shift [9, 35]. First, note that
+∗ 2
+∗ 2
+∗
+(αt+1 − αA
+) = (αt − αA
+) + 2γ(α − errt )(αt − αA
+) + γ 2 (α − errt )2 .
+t
+t
+t
+∗
+Now recalling that M (αA
+|At ) = α, we find that
+t
+∗
+∗
+−E[(α − errt )(αt − αA
+)] = E[E[(errt − α)(αt − αA
+)|At , αt ]]
+t
+t
+∗
+∗
+= E[(M (αt |At ) − M (αA
+|At ))(αt − αA
+)]
+t
+t
+1
+∗
+≥ E[(M (αt |At ) − M (αA
+|At ))2 ]
+t
+L
+1
+= E[(M (αt |At ) − α)2 ].
+L
+
+Thus it follows that
+T
+T
+X
+X
+∗ 2
+∗ 2
+−1
+2
+E[(αt − αA
+) − (αt+1 − αA
+) + γ 2 (α − errt )2 ]
+2γL
+E[(M (αt |At ) − α) ] ≤
+t
+t
+t=1
+
+t=1
+
+≤
+
+T
+X
+
+∗
+∗ 2
+∗ 2
+E[(αt+1 − αA
+)2 − (αt+1 − αA
+) ] + E[(α1 − αA
+) ] + γ2T
+t+1
+t
+1
+
+t=1
+
+≤
+
+T
+X
+
+∗
+∗
+∗
+∗ 2
+E[2αt+1 (αA
+− αA
+)] + (αA
+)2 + E[(α1 − αA
+) ] + γ2T
+t
+t+1
+1
+T +1
+
+t=1
+
+≤
+
+T
+X
+
+∗
+∗
+∗
+∗ 2
+2(1 + γ)E[|αA
+− αA
+|] + (αA
+)2 + E[(α1 − αA
+) ] + γ 2 T,
+t+1
+t
+1
+T +1
+
+t=1
+
+where the last inequality follows from Lemma 4.1. So, re-arranging we get the inequality
+T
+
+1X
+E[(M (αt |At ) − α)2 ]
+T t=1
+L
+≤
+2T γ
+
+T
+X
+
+!
+∗
+∗
+∗
+∗ 2
+2(1 + γ)E[|αA
+− αA
+|] + (αA
+)2 + E[(α1 − αA
+) ] + γ2T
+t+1
+t
+1
+T +1
+
+.
+
+t=1
+
+Finally, since {(At , αt )}t∈N is stationary we may let T → ∞ to get that
+E[(M (αt |At ) − α)2 ] ≤
+
+L(1 + γ)
+Lγ
+∗
+∗
+E[|αA
+− αA
+|] +
+t+1
+t
+γ
+2
+
+
+as claimed.
+A.9
+
+2
+Bounds on B and σB
+
+2
+In this section we bound the constants B and σB
+appearing in the statement of Theorem 4.1. Let
+
+1 =
+
+sup
+
+∗
+∗
+sup E[|αA
+− αA
+||AT = a]
+T −k
+T −k−1
+
+k∈{0,1,2,... } a∈A
+
+and 2 =
+
+sup
+
+∗
+∗
+sup E[(αA
+− αA
+)2 |AT = a].
+T −k
+T −k−1
+
+k∈{0,1,2,... } a∈A
+
+21
+
+Then, our main result is Lemma A.4 which shows that
+B ≤ C(γ + γ −1 (1 + 2 )) and
+
+2
+σB
+≤ B2,
+
+(11)
+
+where the constant C depends on how close M (·|a) is to the ideal linear function M (p|a) = p.
+PT
+Plugging (11) into Theorem 4.1 gives a concentration
+inequality for |T −1 t=1 errt −α|. In particular,
+√
+suppose we use an optimal stepsize of γ ∝ 1 . Then, combining (11) with Theorem 4.1 roughly
+tells us that
+(
+)!
+√
+√
+T
+1
+1
+1
+1X
+,
+.
+(12)
+errt − α ≤ O max √ , p
+T t=1
+T
+T (1 − η) T (1 − η)
+As a comparison it may be instructive to note that the more naive bound given in Proposition 4.1 can
+be written as
+
+
+
+
+T
+1
+1X
+1
+errt − α ≤ O
+=O
+.
+(13)
+√
+T t=1
+Tγ
+T 1
+A sharp reader may notice that the naive bound given in (13) actually goes to 0 faster in T than the
+HMM-based bound shown√in (12). While this is true, the bound (13) has the highly undesirable
+property of increasing in 1/ 1 , i.e. the bound increases as the size of the distribution shift decreases.
+On the other hand, the HMM-based bound has the more intuitive property of decreasing with the
+distribution shift.
+p
+The only remaining issue is to determine the size of 1 /(1 − η). To provide some insight into this
+PT
+quantity note that there are two main regimes in which we expect |T −1 t=1 errt − α| to be small:
+∗
+∗
+1. Environments in which the state At changes frequently, but |αA
+− αA
+| is always small.
+t+1
+t
+In this case it is reasonable to expect 1 − η to not be too small and so we anticipate that (12)
+will give a reasonable bound.
+2. Environments in which the state changes very infrequently. In this case {At }t∈N will
+mix slowly and so we expect 1 − η to be quite small. Additionally, we also have that
+∗
+∗
+αA
+= αA
+a large proportion of the time and thus 1 will also be small. As a result, it
+t+1
+t
+PT
+is not immediately clear what (12) tells us about |T −1 t=1 errt − α|. Below we give one
+simple example that demonstrates that (12) can also be a reasonable bound in this instance.
+
+Example A.1 Let {At }t∈N be the Markov chain with states {1, . . . , n} and transition matrix
+
+
+1−p
+1−p T
+I+
+11 ,
+P = p−
+n−1
+n−1
+where p ∈ [0, 1] is taken to be very close to 1. Let ∆ := maxi6=j |αi∗ − αj∗ |. Then, we have that
+1 , 2 ≤ ∆(1 − p). Moreover, note that this chain has spectral gap 1 − η ∼
+= 1 − p. Thus, (12)
+simplifies to
+)!
+(
+√
+T
+1X
+1
+∆
+errt − α ≤ O max √ , √
+.
+(14)
+T t=1
+T T 1−p
+√
+In particular, for T > ∆/(1 − p) we find that the error sequence concentrates at a rate of O(1/ T ),
+which is consistent with the behaviour of an i.i.d. Bernoulli sequence. Finally, to understand this
+restriction on T note that given a starting state j ∈ {1, . . . , n} we expect αt to contract towards αj∗
+at a rate of (1 − γ) and therefore to have that
+√
+T
+T
+1X
+∆
+∆
+1X
+∗
+t−1
+∗
+|αt − αj | ∝
+(1 − γ) |α1 − αj | ≤
+= √
+,
+T t=1
+T t=1
+Tγ
+T 1−p
+where here we assumed that α1 ∈ {α1∗ , . . . , αn∗ }. Thus, the second term in the maximum in (14) can
+be seen as accounting for the rate of covergence of αt to αj∗ during the time that the Markov chain is
+in state j and given that α1 starts at some αi∗ , 1 ≤ i ≤ n.
+We now derive (11).
+22
+
+Lemma A.3 Assume that ∃0 < c < 1/(2γ) such that for all a ∈ A and all p ∈ [−γ, 1 + γ],
+|M (p|a) − M (αa∗ |a)| ≥ c|p − αa∗ |.
+Then, for all a ∈ A, k ∈ {0, 1, 2, . . . }, and T ∈ N
+∗ 2
+E[(α1 − αA
+) |A1+k = a]
+1
+∗ 2
+≤ (1 − 2cγ)T −1 E[(α1 − αA
+) |AT +k = a]
+1
+
+
+T
+X
+T −t
+2
+∗
+∗
+∗
+∗ 2
++
+(1 − 2cγ)
+γ + 2(1 + γ)E[|αAt−1 − αAt ||AT +k = a] + E[(αAt−1 − αAt ) |AT +k = a] .
+t=2
+
+Furthermore, if we assume that ∀a ∈ A and k ∈ {0, 1, 2, . . . },
+∗
+∗
+∗
+∗
+E[|αA
+− αA
+||At = a] ≤ 1 and E[(αA
+− αA
+)2 |At = a] ≤ 2 ,
+t−k
+t−k−1
+t−k
+t−k−1
+
+then we find that
+∗ 2
+E[(α1 − αA
+) |A1+k = a] ≤
+1
+
+
+1
+γ 2 + 2(1 + γ)1 + 2 .
+2cγ
+
+Fix any T ∈ N. Since {(αt , At )}t∈N is stationary we have that
+
+Proof:
+
+∗ 2
+∗
+E[(α1 − αA
+) |A1+k ] = E[(αT − αA
+)2 |AT +k ].
+1
+T
+
+Now note that
+∗
+∗
+∗
+∗
+∗
+E[(αT − αA
+)2 |AT +k ] = E[(αT − αA
+)2 |AT +k ] + 2E[(αT − αA
+)(αA
+− αA
+)|AT +k ]
+T
+T −1
+T −1
+T −1
+T
+∗
+∗
++ E[(αA
+− αA
+)2 |AT +k ]
+T −1
+T
+∗
+∗
+∗
+≤ E[(αT − αA
+)2 |AT +k ] + 2(1 + γ)E[|αA
+− αA
+||AT +k ]
+T −1
+T −1
+T
+∗
+∗
++ E[(αA
+− αA
+)2 |AT +k ],
+T −1
+T
+
+where on the last line we have applied Lemma 4.1. The first term above can be bounded as
+∗
+E[(αT − αA
+)2 |AT +k ]
+T −1
+∗
+∗
+≤ E[(αT −1 − αA
+)2 |AT +k ] + 2E[γ(α − errT −1 )(αT −1 − αA
+)|AT +k ] + γ 2 ,
+T −1
+T −1
+
+where we additionally have that
+∗
+E[(α − errT )(αT −1 − αA
+)|AT +k ]
+T −1
+∗
+= E[(α − E[errT −1 |AT −1 , αT −1 , AT +k ])(αT −1 − αA
+)|AT +k ]
+T −1
+∗
+∗
+= E[(M (αA
+|AT1 ) − M (αT −1 |AT −1 ))(αT −1 − αA
+)|AT +k ]
+T −1
+T −1
+∗
+≤ −cE[(αT −1 − αA
+)2 |AT +k ].
+T −1
+
+Whence,
+∗
+∗
+E[(αT − αA
+)2 |AT +k ] ≤ (1 − 2cγ)E[(αT −1 − αA
+)2 |AT +k ] + γ 2 ,
+T −1
+T −1
+
+and plugging this into our first inequality yields
+∗
+∗
+E[(αT − αA
+)2 |AT +k ] ≤ (1 − 2cγ)E[(αT −1 − αA
+)2 |AT +k ] + γ 2
+T
+T −1
+∗
+∗
+∗
+∗
++ 2(1 + γ)E[|αA
+− αA
+||AT +k ] + E[(αA
+− αA
+)2 |AT +k ].
+T −1
+T
+T −1
+T
+
+Repeating this argument inductively gives
+∗
+E[(αT − αA
+)2 |AT +k = a]
+T
+∗ 2
+≤ (1 − 2cγ)T −1 E[(α1 − αA
+) |AT +k = a]
+1
+
+
+T
+X
+∗
+∗
+∗ 2
+T −t
+2
+∗
++
+(1 − 2cγ)
+γ + 2(1 + γ)E[|αAt−1 − αAt ||AT +k = a] + E[(αAt−1 − αAt ) |AT +k = a] .
+t=2
+
+The final part of the lemma follows by sending T → ∞.
+23
+
+
+
+Lemma A.4 Assume that for all a ∈ A and p ∈ [−γ, 1 + γ], M (·|a) admits the second order Taylor
+expansion
+2
+M (p|a) − M (αa∗ |a) = Ca1 (p − αa∗ ) + Cp,a
+(p − αa∗ )2 ,
+2
+where 0 < c1 ≤ Ca1 ≤ C1 < 1/γ and |Cp,a
+| ≤ C2 . Then, for all T ∈ N and a ∈ A,
+∗
+|E[err1 |A1 = a] − α| ≤ C1 (1 − γc1 )T −1 E[|α1 − αA
+||AT = a]
+1
+
++
+
+T
+−1
+X
+
+C1 C2 γ(1 − c1 γ)T −t−1 E[(αt − αA∗t )2 |AT = a]
+
+t=1
+
++
+
+T
+−1
+X
+
+∗
+∗
+∗
+C1 (1 − c1 γ)T −t−1 E[|αA
+− αA
+||AT ] + C2 E[(αT − αA
+)2 |AT = a].
+t+1
+t
+T
+
+t=1
+
+Furthermore, suppose the assumptions of Lemma A.3 hold and that ∀a ∈ A and k ∈ {0, 1, 2, . . . },
+∗
+∗
+∗
+∗
+− αA
+)2 |AT = a] ≤ 2 .
+E[|αA
+− αA
+||AT = a] ≤ 1 and E[(αA
+T −k−1
+T −k
+T −k−1
+T −k
+
+Then ∀a ∈ A,
+|E[err1 |A1 = a] − α| ≤
+Proof:
+
+
+
+1
+C1
+1
+C1 C2 + C2
+(γ 2 + 2(1 + γ)1 + 2 ) +
+1 .
+c1
+2cγ
+c1 γ
+
+Fix any T ∈ N. Since {(errt , At )}t∈N is stationary we have that
+E[err1 |A1 = a] = E[errT |AT = a].
+
+Then, by Taylor expanding M (·|AT ) we find that
+∗
+|E[errT |AT = a] − α| = E[M (αT |AT ) − M (αA
+|AT )|AT ]
+T
+1
+∗
+∗
+≤ E[CA
+(αT − αA
+)|AT ] + E[Cα2 T ,AT (αT − αA
+)2 |AT ]
+T
+T
+T
+1
+∗
+∗
+≤ E[CA
+(αT − αA
+)|AT ] + C2 E[(αT − αA
+)2 |AT ].
+T
+T
+T
+
+The first term above can be further bounded as
+1
+∗
+E[CA
+(αT − αA
+)|AT ]
+T
+T
+1
+∗
+1
+∗
+∗
+= E[CA
+(αT −1 + γ(α − errT −1 ) − αA
+)|AT ] + E[CA
+(αA
+− αA
+)|AT ]
+T
+T −1
+T
+T −1
+T
+1
+∗
+1
+∗
+≤ E[CA
+(αT −1 − αA
+)] + γE[CA
+(M (αA
+|AT −1 ) − M (αT −1 |AT −1 ))|AT ]
+T
+T −1
+T
+T −1
+∗
+∗
++ C1 E[|αA
+− αA
+||AT ]
+T −1
+T
+1
+1
+∗
+∗
+= E[CA
+(1 − γCA
+)(αT −1 − αA
+)|AT ] + C1 C2 γE[(αT −1 − αA
+)2 |AT ]
+T
+T −1
+T −1
+T −1
+∗
+∗
++ C1 E[|αA
+− αA
+||AT ].
+T −1
+T
+
+The desired result follows by repeating this process inductively. Finally, the last part of the Lemma
+follows by sending T → ∞ and applying the result of Lemma A.3.
+
+As a final aside we remark that in the main text we claimed that in the ideal case where M (p|a) = p
+for all p ∈ [0, 1] this bound can be replaced by
+|E[err1 |A1 = a] − α| ≤ 2(γ + γ −1 1 ).
+This can be justified by using the fact that in this case we have that for all p ∈ [−γ, 1 + γ]
+2
+M (p|a) − M (αa∗ |a) = (p − αa∗ ) + Cp,a
+2
+with |Cp,a
+| ≤ γ. The desired result then follows by repeating the argument of Lemma A.4.
+
+24
+
+A.10
+
+Technical lemmas
+
+Proof: [Proof of Lemma A.1:] We assume without loss of generality that f is non-decreasing and
+g is non-increasing as otherwise one can simply multiply both f and g by −1.
+Let g U := sup{g(y) : f (y) > E[f (Y )] and g L := inf{g(y) : f (y) ≤ E[f (Y )]. By the monotonicity
+of f and g we clearly have that g L ≥ g U . Therefore,
+E[f (Y )g(Y )] − E[f (Y )]E[g(Y )] = E[(f (Y ) − E[f (Y )])g(Y )]
+≤ E[(f (Y ) − E[f (Y )])g L 1f (Y )≤E[f (Y )] ] + E[(f (Y ) − E[f (Y )])g U 1f (Y )>E[f (Y )] ]
+≤ E[(f (Y ) − E[f (Y )])g L 1f (Y )≤E[f (Y )] ] + E[(f (Y ) − E[f (Y )])g L 1f (Y )>E[f (Y )] ]
+= 0,
+
+
+as desired.
+
+Lemma A.5 [Hoeffding’s Lemma [18]] Let X be a mean 0 random variable such that X ∈ [a, b]
+almost surely. Then, for all λ ∈ R
+
+
+2
+2 (b − a)
+E[exp(λX)] ≤ exp λ
+.
+8
+
+25
+
+

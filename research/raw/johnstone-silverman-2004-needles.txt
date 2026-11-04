@@ -1,0 +1,4216 @@
+arXiv:math/0410088v1 [math.ST] 5 Oct 2004
+
+The Annals of Statistics
+2004, Vol. 32, No. 4, 1594–1649
+DOI: 10.1214/009053604000000030
+c Institute of Mathematical Statistics, 2004
+
+NEEDLES AND STRAW IN HAYSTACKS: EMPIRICAL BAYES
+ESTIMATES OF POSSIBLY SPARSE SEQUENCES
+By Iain M. Johnstone1 and Bernard W. Silverman2
+Stanford University and Oxford University
+An empirical Bayes approach to the estimation of possibly sparse
+sequences observed in Gaussian white noise is set out and investigated. The prior considered is a mixture of an atom of probability
+at zero and a heavy-tailed density γ, with the mixing weight chosen
+by marginal maximum likelihood, in the hope of adapting between
+sparse and dense sequences. If estimation is then carried out using
+the posterior median, this is a random thresholding procedure. Other
+thresholding rules employing the same threshold can also be used.
+Probability bounds on the threshold chosen by the marginal maximum likelihood approach lead to overall risk bounds over classes of
+signal sequences of length n, allowing for sparsity of various kinds and
+degrees. The signal classes considered are “nearly black” sequences
+where only a proportion η is allowed to be nonzero, and sequences
+with normalized ℓp norm bounded by η, for η > 0 and 0 < p ≤ 2. Estimation error is measured by mean qth power loss, for 0 < q ≤ 2. For all
+the classes considered, and for all q in (0, 2], the method achieves the
+optimal estimation rate as n → ∞ and η → 0 at various rates, and in
+this sense adapts automatically to the sparseness or otherwise of the
+underlying signal. In addition the risk is uniformly bounded over all
+signals. If the posterior mean is used as the estimator, the results still
+hold for q > 1. Simulations show excellent performance. For appropriately chosen functions γ, the method is computationally tractable
+and software is available. The extension to a modified thresholding
+method relevant to the estimation of very sparse sequences is also
+considered.
+
+1. Introduction.
+Received August 2002; revised August 2003.
+Supported by NSF Grant DMS-00-72661 and NIH Grants CA 72028 and R01
+EB001988-08.
+2
+Supported by the Engineering and Physical Sciences Research Council.
+AMS 2000 subject classifications. Primary 62C12; secondary 62G08, 62G05.
+Key words and phrases. Adaptivity, empirical Bayes, sequence estimation, sparsity,
+thresholding.
+1
+
+This is an electronic reprint of the original article published by the
+Institute of Mathematical Statistics in The Annals of Statistics,
+2004, Vol. 32, No. 4, 1594–1649. This reprint differs from the original in
+pagination and typographic detail.
+1
+
+2
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+1.1. Thresholding to find needles and straw. There are many statistical
+problems where the object of interest is a high-dimensional parameter on
+which we have a single observation, perhaps after averaging, and subject to
+noise. Specifically, suppose that X = (X1 , . . . , Xn ) are observations satisfying
+(1)
+
+Xi = µi + ǫi ,
+
+where the ǫi are N (0, 1) random variables, not too highly correlated. Let µ
+be the vector of means µ = (µ1 , µ2 , . . . , µn ). Clearly, without some knowledge
+of the µi we are not going to be able to estimate them very effectively, and in
+this paper we consider the advantage that may be taken of possible sparsity
+in the sequence.
+In what contexts do problems of this kind arise? Some examples are the
+following:
+• In astronomical and other image processing contexts, the Xi may be noisy
+observations of the pixels of an image, where it is known that a large
+number of the pixels may be zero.
+• In the model selection context, there may be many different models that
+conceivably contribute to the observed data, but it is of interest to select
+a subset of the possible models. In this case, the individual Xi are the raw
+estimates of the coefficients of the various models, renormalized to have
+variance 1.
+• In data mining, we may observe many different aspects of an individual or
+population, and we are only interested in the possibly small number that
+are “really there”; this is much the same as the model selection situation,
+but couched in different language.
+• In nonparametric function estimation using wavelets, the true wavelet
+coefficients at each level form a possibly sparse sequence, and the discrete wavelet transform yields a sequence of raw coefficients, which are
+observations of these coefficients subject to error. Wavelet approaches in
+nonparametric regression take advantage of this structure in a natural
+way. This context originally motivated the work of this paper but the
+potential applicability of the ideas developed is much wider.
+A natural approach to all these problems is thresholding: if the absolute
+value of a particular Xi exceeds some threshold t, then it is taken to correspond to a nonzero µi which is then estimated, most simply by Xi itself. If
+|Xi | < t, then the coefficient |µi | is estimated to be zero. But how is t to be
+chosen? The importance of choosing t appropriately is illustrated by a simple example. Consider a sequence of 10,000 µi , of which m are nonzero and
+(10,000 − m) zero. The nonzero values are allocated at random and are each
+generated from a uniform distribution on (−5, 5). By varying the number
+m, sequences of different sparsities can be generated, as shown in Figure 1.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+3
+
+Fig. 1. Absolute value of parameter images of various sparsity. Out of 10,000 pixels, the
+number of nonzero parameters is, from left to right: 5, 20, 100 in the top row and 500,
+2000, 10,000 in the bottom row. Each nonzero parameter is chosen independently from a
+uniform distribution on (−5, 5).
+
+In this figure the 10,000 µi are arranged in a 100 × 100 pixel image. The
+absolute value of the image is plotted in gray scale in order to allow white
+to correspond to the value zero. Estimating a sparse signal is like finding
+needles in a haystack; it will be necessary to find which are the very few
+signal values that are nonzero, as well as to estimate them. On the other
+hand, estimating a dense signal is more like finding straw in a haystack; no
+longer will we be surprised if a particular µi is nonzero.
+Independent Gaussian noise of variance 1 is added to the µi to yield
+a sequence Xi . The resulting images are shown in Figure 2. The average
+square estimation error yielded by thresholding Xi with varying thresholds is
+plotted in Figure 3. Ignore the points marked by arrows for the moment. The
+number in the top right of each panel is the value of m, so m = 5 corresponds
+to a very sparse model, while m = 10,000 corresponds to a very dense model,
+with no zero parameter values at all. The naive estimator, estimating each
+µi by the corresponding Xi without performing any thresholding at all, will
+produce an expected mean square error of 1. The
+panel are
+√ scales in each
+.
+the same, and the threshold range is from 0 to 2 log 10,000 = 4.292, the
+so-called universal threshold for a sample of this size.
+
+4
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+Fig. 2. Absolute values of data Xi , result of adding Gaussian white noise to the images
+depicted in Figure 1.
+
+Three things can be seen from this figure. First, the potential gain from
+thresholding is very large if the true parameter space is sparse. For the
+sparsest signals considered in Figures 1 and 3, the minimum average square
+error achieved by a thresholding estimate is 0.01 or even less; see Figure 4
+for a graph of minimum average square error against sparsity. Second, the
+appropriate threshold increases as the signal becomes more sparse. For the
+fully dense signal, no thresholding at all is appropriate, while for the sparsest
+signals, the best results are obtained using the universal threshold. Finally,
+it is important for the threshold to be tuned to the sparsity of the signal; if
+a threshold appropriate for dense signals is used on a sparse signal, or vice
+versa, the results are disastrous.
+Thus, thresholding is a very promising approach, but the crucial aspect
+is the choice of threshold. A good threshold choice method will have several
+properties, as follows:
+• It will be adaptive between sparse and dense signals, between finding
+“needles” and finding “straw.”
+• It will be stable to small changes in the data.
+• It will be tractable to compute, with software available.
+• It will perform well on simulated data and on real data.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+5
+
+Fig. 3. Mean square error of thresholding data obtained from the images in Figure 1 by
+adding Gaussian white noise. In each panel the arrow indicates the threshold chosen by
+the empirical Bayes approach. The prior used for the nonzero part of the distribution was
+a Laplace distribution with scale parameter a = 21 . Each plot is labeled by the number of
+nonzero pixels, out of 10,000, in the underlying signal.
+
+Fig. 4. Left panel: threshold plotted against sparsity. The solid line is the threshold chosen by the empirical Bayes method, while the dashed line is the threshold that yields the
+minimum possible average square error. Right panel: log base 10 of the average square error yielded by the empirical Bayes threshold (solid line) and by the best possible threshold
+(dashed line). The models illustrated in Figure 1, and intermediate models, were used to
+construct these graphs.
+
+6
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+• It will have good theoretical properties.
+
+In this paper we set out and investigate a fully automatic empirical Bayes
+thresholding method, which satisfies all these desiderata. In the example
+the method chooses the threshold values shown by the arrows in Figure
+3. It can be seen that the empirical Bayes method is very good at tracking the minimum of the average square error. More details are given in
+Figure 4. The empirical Bayes thresholds are always close to the optimal
+thresholds, and—right across the range of sparsity considered—the average square error obtained by the empirical Bayes threshold is very close
+indeed to the best attainable average square error. A documented implementation EbayesThresh of our methodology in R and S-PLUS is available.
+See Johnstone and Silverman (2003) for details.
+1.2. Specifying the empirical Bayes method. In the present paper we concentrate attention on the case where the errors ǫi are independent. In some
+contexts this assumption is restrictive. While beyond the scope of the present
+paper, it is of obvious interest to extend our method and the supporting theory to dependent data, and this is a natural topic for future work.
+The notion that many or most of the µi are near zero is captured by
+assuming that the elements µi have independent prior distributions each
+given by the mixture
+(2)
+
+fprior (µ) = (1 − w)δ0 (µ) + wγ(µ).
+
+The nonzero part of the prior, γ, is assumed to be a fixed unimodal symmetric density. In most previous work in the wavelet context mentioned above,
+the density γ is a normal density, but we shall see that there are advantages
+in using a heavier-tailed prior, for example, a double exponential distribution
+or a distribution with tails that decay at polynomial rate.
+For any particular value of the weight w, consider the posterior distribution of µ given X = x under the assumption that X ∼ N (µ, 1). Let µ̂(x; w)
+be the median of this distribution. For fixed w < 1, the function µ̂(x; w)
+will be a monotonic function of x with the thresholding property, in that
+there exists t(w) > 0 such that µ̂(x; w) = 0 if and only if |x| ≤ t(w). Figure 5 shows the prior distribution and the posterior median function µ̂(x; w)
+for the Laplace mixture prior with a = 0.5 and two different values of the
+weight w.
+Let g denote the convolution of the density γ with the standard normal
+density φ. The marginal density of the observations Xi will then be
+(1 − w)φ(x) + wg(x).
+
+We define the marginal maximum likelihood estimator ŵ of w to be the
+maximizer of the marginal log likelihood
+ℓ(w) =
+
+n
+X
+i=1
+
+log{(1 − w)φ(Xi ) + wg(Xi )}
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+7
+
+Fig. 5. First line: Prior distribution for w = 0.4 and w = 0.02, for the mixed Laplace
+prior with a = 0.5. The atom of probability at zero is represented by the solid vertical bar,
+plotted to the scale indicated on the right of the plot; the probability density of the nonzero
+part of the prior is plotted to the scale at the left. Second line: Posterior median functions
+for the same priors. The dotted line is the diagonal y = x. It can be seen that the posterior
+median is a monotonic function of the data value and is zero whenever the absolute value
+of the datum is below the threshold.
+
+√
+subject to the constraint on w that the threshold satisfies t(w) ≤ 2 log n.
+The threshold chosen by the method will then be the value t(w).
+The function ℓ′ (w) is a monotonic function of w, so its root is very easily
+found numerically, provided the function g is tractable; see Section 2.2. Our
+basic approach will then be to plug the value ŵ back into the prior and
+then estimate the parameters µi using this value of w, either using the
+posterior median itself, or by using some other thresholding rule with the
+same threshold t(w). In the example above simple hard thresholding was
+used.
+Another possibility is to use the posterior mean, which we denote µ̃(x; w),
+so that the corresponding estimate is µ̃i = µ̃(Xi ; ŵ). The posterior mean
+rule fails to have the thresholding property, and, hence, produces estimates
+in which, essentially, all the coefficients are nonzero. Nevertheless, it has
+shrinkage properties that allow it to give good results in certain cases. We
+
+8
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+shall see that both in theory and in simulation studies, the performance of
+the posterior mean is good, but not quite as good as the posterior median.
+The empirical Bayes is a fully automatic practical method; intuitively, the
+reason it works well is as follows. If the means µi are all near zero, then ŵ
+will be small, corresponding to a large threshold t(ŵ), so that most of the
+means will be estimated to be zero. On the other hand, if the µi are larger,
+then a small threshold will be chosen, and the data will not be shrunk so
+severely in the estimation of the vector of means.
+1.3. Measures of sparsity and minimax rates. The sparsity of a signal is
+not just a matter of the proportion of µi that are zero or very near zero, but
+also of more subtle ways in which the energy of the signal µ is distributed
+among the various components. Our theory will demonstrate that the empirical Bayes choice of estimated threshold yields a highly adaptive procedure,
+with excellent properties for a wide range of conditions on the underlying
+signal.
+A natural notion of sparsity is the possibility that µ is a nearly black
+signal, in the sense that the number of indices i for which µi is nonzero is
+bounded. We define
+(3)
+
+(
+
+ℓ0 [η] = µ : n
+
+−1
+
+n
+X
+i=1
+
+)
+
+I[µi 6= 0] ≤ η .
+
+With just the knowledge that µ falls in ℓ0 [η], how well can µ be estimated?
+Define the minimax average square error by
+Rn,2 (ℓ0 [η]) = inf sup n−1
+µ̂ µ∈ℓ0 [η]
+
+n
+X
+i=1
+
+E(µ̂i − µi )2 .
+
+Donoho, Johnstone, Hoch and Stern (1992) show that, considering η = ηn →
+0 as n → ∞, Rn,0 is 2η(log η −1 )(1 + o(1)).
+A more subtle characterization of sparsity will not require any µi to be
+exactly zero, but still constrain most of the energy to be concentrated on a
+few of the µi , by placing bounds on the p-norm of µPfor p > 0. There are
+various intuitive ways of understanding why kµkp = ( |µi |p )1/p for small p
+is related to the sparsity of µ. Perhaps the simplest is to consider the energy
+(the sum of squares) of a vector with kµkp = 1 for some small p. If only one
+component of µ is nonzero, then the energy will be 1. If, on the other hand,
+all the components are equal, then the energy is n1−2/p which tends to zero
+as n → ∞ if p < 2, rapidly if p is near zero. By extension of these examples,
+if p is small, the only way for a signal in an ℓp ball with small p to have large
+energy is for it to consist of a few large components, as opposed to many
+small components of roughly equal magnitude. Put another way, among all
+signals with a given energy, the sparse ones are those with small ℓp norm.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+9
+
+In this case we suppose the signal belongs to an ℓp norm ball of small
+radius η,
+(4)
+
+n
+
+ℓp [η] = µ : n−1
+
+and define the minimax square error
+
+X
+
+Rn,2 (ℓ2 [η]) = inf sup n
+µ̂ µ∈ℓ0 [η]
+
+o
+
+|µi |p ≤ η p ,
+
+−1
+
+n
+X
+i=1
+
+E(µ̂i − µi )2 .
+
+Again, considering η → 0 as n → ∞, Donoho and Johnstone (1994) show
+that, for p ≤ 2, Rn,2 (ℓp [η]) is η p (2 log η −p )1−p/2 (1 + o(1)).
+The estimator that attains the ideal performance over a nearly black class,
+or over an ℓp ball for some p > 0, will in general depend on p and on η. The
+minimax rate is a benchmark for the estimation of signals that display the
+sparseness characteristic of membership of an ℓp class. Our main theorem will
+show that, under mild conditions, an empirical Bayes thresholding estimate
+will essentially achieve the minimax rate over η simultaneously for all p in
+[0, 2], including the nearly black class as the case p = 0. In this sense it
+adapts automatically to the degree and character of sparsity of the signal in
+the optimum possible way.
+A particular minimax risk is the risk when there is no constraint at all
+on the underlying signal. In this case the minimax asymptotic risk is a constant 1, for example, achieved by the estimator that simply estimates µi by
+Xi . We show that the maximum possible risk of the empirical Bayes thresholding method, under appropriate conditions, is also uniformly bounded, so
+the adaptivity is not bought at the price of asymptotically unbounded risk
+for signals of certain kinds.
+1.4. Robustness. While adaptivity of an estimator is obviously desirable,
+it is also important that the estimator should be robust to assumptions
+made. There are several aspects of such robustness that we demonstrate for
+the empirical Bayes threshold estimator.
+Assumptions on the signal: Although our procedure is derived from the
+sparse prior model (2), we derive results under the much weaker assumption
+that the underlying signal belongs to an appropriate ℓp ball.
+Assumptions on the noise: For example, in Section 5 we relax the assumption of Gaussian errors in order to investigate the relation between
+tails of the prior and tails of the noise density. While, in their present form,
+some other aspects of our subsequent discussion make use of Gaussian assumptions, the key properties of the posterior median thresholding rule hold
+under considerably weaker assumptions.
+
+10
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+Assumptions on the error measure: Rate-optimal risk bounds are established for mean qth power error measures for all q ∈ (0, 2], not just for the
+standard mean square error. Excessive reliance on mean square error (q = 2)
+is often criticized, for example, as not corresponding to visual assessments
+of error. Choices of q < 2 will give greater (relative) weight to small errors,
+and in some sense, the q → 0 limit corresponds to counting the number of
+errors I{µ̂i 6= µi }.
+Assumptions on the estimator itself : While the posterior median is the
+motivating estimator for our work, the exact form of the thresholding rule
+is not specified in our theoretical discussion. The key point is that the data
+dependent threshold is chosen according to the sparse empirical Bayes prescription. Indeed, the processing rule does not even have to be a strict
+thresholding rule. We obtain good results for the posterior mean, which
+is not a thresholding rule but still possesses an appropriate bounded shrinkage property; however, for full robustness to the choice of error measure,
+strict thresholding rules have to be used.
+1.5. Related work. Abramovich, Benjamini, Donoho and Johnstone (2000)
+show that the false discovery rate approach provides adaptive asymptotic
+minimaxity at the level of exact constants, as well as the rates of convergence
+that we demonstrate for the empirical Bayes method. However, their results
+do not guarantee robustness for denser signals, and there is some evidence
+of this nonrobustness in the simulations we report in Section 3.
+In a more restrictive scenario than ours, and mainly concentrating on
+the application to wavelet smoothing, Zhang (2004) provides an asymptotically more sharply adaptive empirical Bayes analysis. This analysis uses
+much more general families of priors than our simple mixtures, and employs
+nonparametric infinite-order kernel methods to estimate the corresponding
+marginal densities. Such methods are complex to implement in software,
+and their sharp asymptotic properties might not be apparent in moderate
+samples.
+Mixture priors built from models such as (2) are quite common in Bayesian
+variable selection problems: our interest was stimulated in part by analysis
+of a proposal due to George and Foster (1998, 2000) which takes γ to be
+Gaussian. For further references specifically in the wavelet setting, see the
+companion paper Johnstone and Silverman (2004).
+1.6. Outline of the paper. The paper now proceeds as follows. In Section
+2 we set out some key definitions and state the main theorem of the paper. To
+show that the advantages of the estimate are not just theoretical, in Section
+3 a simulation study is presented, comparing the empirical Bayes method
+with a range of other estimators, on cases covering both sparse and dense
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+11
+
+signals. In this study the theoretical adaptivity and robustness properties of
+the empirical Bayes method are clearly borne out. In very sparse cases the
+theory suggests that some asymptotic improvement may be possible for very
+sparse signals, and in Section 4, we set out a modification of our standard
+procedure, whereby the threshold is increased by a suitable factor when the
+signal is estimated to be very sparse. We state a result giving key properties
+of this procedure, and also present some discussion and numerical results
+that suggest that, except when the sample size is very large indeed, the
+modification may be of theoretical interest only.
+We then move to the proofs of the main results. In Section 5 various detailed preliminaries are considered, including the properties of the posterior
+rules under more general noise distributions than the Gaussian. We then
+go on, in Section 6, to consider risk bounds first for fixed thresholds, and
+then for data-dependent thresholds. These bounds depend on tail probabilities for the random thresholds. As a prerequisite to the control of these
+probabilities, Section 7 investigates properties of the moment behavior of
+the marginal likelihood score function. In Section 8 the proof of the main
+theorem is completed: the results of Section 7 yield tail probabilities of the
+prior parameters chosen by the empirical Bayes method, and, hence, of the
+corresponding random thresholds. These are fed into the bounds of Section
+6 to complete the proof. Section 9 then contains the modifications to the
+previous arguments needed to prove Theorem 2.
+The conditions in the main theorem for the posterior mean do not cover as
+wide a range of loss functions as for strict thresholding rules. In Section 10 it
+is shown that this is an essential feature of the use of such a rule; for values
+of q ≤ 1 the posterior mean cannot yield an optimal estimate relative to qth
+power loss under the same broad conditions.
+2. Aspects of the sequence estimation problem. It is convenient to set
+up some notational conventions. Where Ar and Br are numerical quantities depending on a discrete or continuous index r, we write Ar ≍ Br to
+denote 0 < lim inf r Ar /Br ≤ lim supr Ar /Br < ∞, and Ar ∼ Br to denote
+Ar /Br → 1. We use φ and Φ for the standard normal density and cumulative, respectively, and set Φ̃ = 1 − Φ. When there is no confusion about the
+value of the prior weight w, it may be suppressed in our notation. Use c and
+C to denote generic strictly positive constants, not necessarily the same at
+each use, even within a single equation. We adopt the convention that c is
+an absolute constant, while the use of C will indicate a possible dependence
+on the prior density component γ.
+2.1. Assumptions on the prior. When using the mixture prior (2), we
+shall see that there are considerable advantages in using a heavy-tailed density for γ, for example, the Laplace density
+(5)
+
+γ(u) = 21 exp(−|u|)
+
+12
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+or the mixture density given by
+(6)
+
+(µ|Θ = θ) ∼ N (0, θ −1 − 1)
+
+with Θ ∼ Beta(α, 1).
+
+The latter density for µ has tails that decay as µ−2α−1 , so that, in particular,
+if α = 12 , then the tails will have the same weight as those of the Cauchy
+distribution. To be explicit, this has
+γ(u) =
+
+Z 1
+0
+
+
+
+
+
+1
+1
+p
+exp − u2 θ(1 − θ)−1 dθ.
+2
+8π(1 − θ)
+
+In both cases (5) and (6) the posterior distribution of µ given an observed
+X, and the marginal distribution of X, are tractable, so that the choice of
+w by marginal maximum likelihood, and the estimation of µ by posterior
+mean or median, can be performed in practice, using the approach outlined
+in Section 2.2. Details of the relevant calculations for particular priors are
+given by Johnstone and Silverman (2004).
+Throughout the paper we will assume that the nonzero part of the prior,
+γ, has a fixed unimodal symmetric density. In addition, we will assume that
+d
+log γ(u) = Λ < ∞.
+u>0 du
+
+sup
+
+(7)
+
+It follows from this assumption that, for u > 0, log γ(u) ≥ log γ(0) − Λu, so
+that, for all u,
+γ(u) ≥ γ(0)e−Λ|u| .
+
+(8)
+
+Thus, the tails of γ have to be exponential or heavier, and the Gaussian
+model for γ is ruled out. We will also assume that the tails of γ are no
+heavier than Cauchy, in the sense that u2 γ(u) is bounded over all u. Finally,
+we make the mild regularity assumption that, for some κ ∈ [1, 2],
+(9)
+
+−1
+
+γ(y)
+
+Z ∞
+y
+
+γ(u) du ≍ y κ−1
+
+as y → ∞.
+
+If γ has asymptotically exponential tails, then κ = 1. If γ(y) ≍ y −2 for large
+y, then the tail probability is asymptotic to y −1 and κ = 2. Any Pareto tail
+behavior gives the value κ = 2.
+2.2. Finding the estimate. Define the score function S(w) = ℓ′ (w), and
+define
+β(x)
+g(x)
+(10)
+− 1 and β(x, w) =
+,
+β(x) =
+φ(x)
+1 + wβ(x)
+so that
+(11)
+
+S(w) =
+
+n
+X
+
+n
+X
+g(Xi ) − φ(Xi )
+=
+β(Xi , w).
+(1 − w)φ(Xi ) + wg(Xi ) i=1
+i=1
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+13
+
+Since by elementary calculus β(x, w) is a decreasing function of w for each
+x, the function
+S(w) is also decreasing. Let wn be the weight that satisfies
+√
+t(wn ) = 2 log n. If S(wn ) > 0 and S(1) < 0, then the zero of S in the range
+[wn , 1] is the estimated weight ŵ. Furthermore, the sign of S(w) for any
+particular w specifies on which side of w the estimate ŵ lies. [Note that S
+will be strictly decreasing except in the pathological case where β(Xi ) = 0
+for all i, when S(w) = 0 for all w and the likelihood is constant.]
+The marginal maximum likelihood approach can be used to estimate other
+parameters of the prior. In particular, if a scale parameter a is incorporated
+by considering a prior density (1 − w)δ0 (µ) + waγ(aµ), define ga to be the
+convolution of aγ(a ·) with the normal density. Then both a and w can be
+estimated by finding the maximum over both parameters of
+ℓ(w, a) =
+
+n
+X
+i=1
+
+log{(1 − w)φ(Xi ) + wga (Xi )}.
+
+If γ is the Laplace density, the tractability of the procedure is not affected
+by the inclusion of a scale parameter into the prior. In this case if one is
+maximizing over both w and a, then a package numerical maximization
+routine that uses gradients has been found to be an acceptably efficient way
+of maximizing ℓ(w, a).
+In the current paper we will not develop theory for the case where additional parameters of γ are estimated, but we will include the possibility of
+estimating a scale parameter in the simulation study reported in Section 3.
+The R/S-PLUS software package EbayesThresh [Johnstone and Silverman
+(2003)] includes a routine that performs empirical Bayes thresholding on a
+vector of data. It allows the use of either the Laplace or the quasi-Cauchy
+prior, and in the case of the Laplace prior, the scale parameter can if desired
+be chosen by marginal maximum likelihood. Estimation may be carried out
+using the posterior median or posterior mean rule, or by hard or soft thresholding. In addition, there are several routines that will allow users to develop
+other aspects of the general approach.
+2.3. Shrinkage rules. We begin with some definitions, leading up to the
+statement of the main theorem of the paper. A function δ(x, t) will be called
+a shrinkage rule if and only if δ(·, t) is antisymmetric and increasing on
+(−∞, ∞) for each t ≥ 0, and
+(12)
+
+0 ≤ δ(x, t) ≤ x
+
+for all x ≥ 0.
+
+The shrinkage rule δ(x, t) will be a thresholding rule with threshold t if and
+only if
+(13)
+
+δ(x, t) = 0
+
+if and only if |x| ≤ t,
+
+14
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+and will have the bounded shrinkage property relative to the threshold t if,
+for some constant b,
+(14)
+
+|x − δ(x, t)| ≤ t + b
+
+for all x and t.
+
+For any given weight w, the posterior median will be a thresholding rule
+and will have the bounded shrinkage property if |(log γ)′ | is bounded; see
+Lemma 2(v). In Section 5.5 it is demonstrated that the posterior mean for
+the same weight will have the same bounded shrinkage property, but will not
+be a strict thresholding rule. If the hyperparameter w is chosen by marginal
+maximum likelihood, both are examples of rules with random threshold
+t̂ = t(ŵ).
+2.4. Risk measures and the main result. As already mentioned, we do
+not restrict attention to losses based on squared errors, but we measure risk
+by the average expected qth power loss
+(15)
+
+Rq (µ̂, µ) = n
+
+−1
+
+n
+X
+i=1
+
+E|µ̂i − µi |q ,
+
+0 < q ≤ 2.
+
+Note that the posterior median and mean estimators for prior (2) are Bayes
+rules for the q = 1 and q = 2 error measures, respectively.
+We set two goals for estimation using the empirical Bayes threshold: “uniform boundedness of risk” and “flexible adaptation.” To explain what we
+mean by flexible adaptation, suppose that the signal is sparse in the sense
+of belonging to an ℓp norm ball ℓp [η] as defined in (4). As before, we include
+nearly black classes as the case p = 0. If the radius η is small, we would hope
+that the estimation error Rq (µ̂, µ) should be appropriately small. How small
+is benchmarked in terms of the minimax risk
+Rn,q (ℓp [η]) = inf sup Rq (µ̂, µ).
+µ̂ µ∈ℓp [η]
+
+Suppose η = ηn → 0 as n → ∞ but that, in the case q > p > 0,
+n−1/p η −1 (log η −p )1/2 → 0,
+
+(16)
+
+which prevents η from becoming very small too quickly. (For p = 0 we require
+nη → ∞.) Then we have the asymptotic relation
+(17)
+
+Rn,q (ℓp [ηn ]) ∼ rp,q (ηn )
+
+where
+(18)
+
+rp,q (η) =
+
+ q
+η ,
+
+
+η p (2 log η −p )(q−p)/2 ,
+η(2 log η −1 )q/2 ,
+
+as n → ∞,
+0 < q ≤ p,
+0 < p < q,
+p = 0, q > 0.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+15
+
+The relation (17) is proved by Donoho and Johnstone (1994) for the case
+p > 0 and q ≥ 1, but only minor modifications are needed to extend the
+result to all the cases we consider.
+We can now state our main result, which gives comparable bounds on the
+risk function of the empirical Bayes thresholding procedure. Apart from an
+error of order n−1 (log n)2+(q−p)/2 , the procedure uniformly attains the same
+error rate as the minimax estimator for all p in [0, 2] and q in (0, 2].
+Theorem 1. Suppose that X ∼ Nn (µ, I), that δ(x, t) is a thresholding
+rule with the bounded shrinkage property and that 0 ≤ p ≤ 2 and 0 < q ≤ 2.
+Let ŵ be the weight chosen by marginal maximum likelihood for a mixture prior (2) with γ satisfying the assumptions set out in Section 2.1. Let
+t̂ = t(ŵ), where t(w) denotes the threshold of the posterior median rule corresponding to the prior weight w. Then the estimator µ̂i (x) = δ(xi , t(ŵ))
+satisfies:
+(a) ( Uniformly bounded risk) There exists a constant C0 (q, γ) such that
+sup Rq (µ̂, µ) ≤ C0 .
+µ
+
+(b) ( Adaptivity) There exist constants Ci (p, q, γ) such that for η ≤ η0 (p, q, γ)
+and n ≥ n0 (p, q, γ),
+sup Rq (µ̂, µ) ≤ C1 rp,q (η) + C2 n−1 (log n)2+(q−p)/2 .
+
+(19)
+
+µ∈ℓp [η]
+
+When q ∈ (1, 2], these results also hold for the posterior mean estimate µ̃.
+We emphasize that it is not necessary that δ(x, t) be derived from the
+posterior median or mean rule. It might be hard or soft thresholding or some
+other nonlinearity with the stated properties. The point of the theorem is
+that empirical Bayes estimation of the threshold parameter suffices with all
+such methods to achieve both adaptivity and uniformly bounded risk.
+If q > p > 0, then we necessarily have p < 2, and the first term of (19)
+dominates if η p > n−1 log2 n and the second if η p < n−1 log2 n. It follows
+that the result is equivalent to
+(20)
+
+sup Rq (µ̂, µ) ≤
+
+µ∈ℓp [η]
+
+
+
+Crp,q (η),
+Cn−1 (log n)2+(q−p)/2 ,
+
+if η p ≥ n−1 log2 n,
+if η p < n−1 log2 n.
+
+Note that η p ≥ n−1 log2 n is a sufficient condition for (16). For the nearly
+black case p = 0, a similar argument leads to (20) with η p replaced by η.
+If p ≥ q, the bound can be written as
+(21)
+
+sup Rq (µ̂, µ) ≤ C max {η q , n−1 (log n)2+(q−p)/2 }
+
+µ∈ℓp [η]
+
+16
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+and the “break-even” point between the two bounds occurs at a value of
+η bounded above by η p = n−1 log2 n. It remains the case that for η p ≥
+n−1 log2 n the supremum of the risk is bounded by a multiple of rp,q (η).
+Therefore, for every p and q in (0, 2], and for the nearly black case p = 0,
+our estimator attains the optimal q-norm risk (18), up to a constant multiplier, for all sufficiently large n and for η satisfying n−1 log2 n ≤ η p ≤ η0p
+if p > 0 and n−1 log2 n ≤ η ≤ η0 if p = 0.
+3. Some simulation results. In order to investigate the capability of the
+empirical Bayes method to adapt to the degree of sparsity in the true signal, a simulation study was carried out. We approach the issue of sparsity
+directly, by explicitly constructing sequences with a wide range of sparse
+behavior. The S-PLUS code used to carry out the simulations is available
+from the authors’ web sites, enabling the reader both to verify the results
+and to conduct further experiments if desired.
+As an initial range of models for sparse behavior, we fixed the sample size
+n to 1000. We considered the estimation of a sequence µ which has µi = 0
+except in K randomly chosen positions, where it takes a specified value µ0 .
+For each i, a data value Xi ∼ N (µi , 1) is generated, and various methods are
+used to estimate the sequence µ from the sequence of Xi .
+The parameter K controls the sparsity of the signal, and the values for
+which results are reported are 5, 50 and 500—ranging from a very sparse
+signal, indeed, to one in which half the data contain nonzero signal. The
+other parameter µ0 gives the strength of the signal if it is nonzero. The
+values reported were 3, 4, 5 and 7, bearing in mind that the noise is N (0, 1).
+One hundred replications were carried out for each of the values of K and
+µ0 , with the same 100,000 noise variables used for each set of replications.
+The posterior median estimator was used, with the prior parameters chosen by marginal maximum likelihood for two different functions γ for the
+nonzero part of the prior. The double exponential γ(u) = 21 a exp(−a|u|) was
+used with both the parameter a and the prior weight w chosen by marginal
+maximum likelihood. For comparison, the heavy-tailed mixture density with
+Cauchy tails, as defined in (6) with α = 21 , was also considered. For both
+choices of the function γ, the performance of the posterior median as a
+point estimator was studied. For double exponential γ with both parameters
+estimated, two other estimators were also considered, the posterior mean,
+and hard thresholding with threshold equal to that of the posterior median
+function. In addition, the effect of fixing the scale parameter in the double
+exponential was investigated by considering four different values of a; in
+each case w was chosen by marginal maximum likelihood and the posterior
+median estimator used.
+These methods were compared √
+with classical soft and hard universal
+thresholding (using the threshold 2 log n ≈ 3.716) and with three other
+methods intended to be adaptive to different levels of sparsity.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+17
+
+The SURE method [Donoho and Johnstone (1995)] aims to minimize the
+mean squared error of reconstruction, by minimizing Stein’s unbiased risk
+estimate for the mean squared error of soft thresholding.
+Thus, we choose
+√
+t̂SURE as the minimizer (within the range [0, 2 log n ]) of
+Û (t) = n +
+
+n
+X
+1
+
+x2k ∧ t2 − 2
+
+n
+X
+1
+
+I{x2k ≤ t2 }.
+
+This is based on the unbiased risk estimator of Stein (1981) in the estimation of a multivariate normal mean. In addition, a modification proposed by
+Donoho and Johnstone (1995) aimed at gaining greater adaptivity is considered; this chooses between the SURE and universal thresholds according
+to the result of a test for sparsity; see also Section 6.4.2 of Bruce and Gao
+(1996) for details.
+The false discovery rate (FDR) approach is derived from the principle
+of controlling the false discovery rate in simultaneous hypothesis testing
+[Benjamini and Hochberg (1995)] and has been studied in detail in the estimation setting, for example, by Abramovich, Benjamini, Donoho and Johnstone
+(2000). Order the data by decreasing magnitudes:
+|x|(1) ≥ |x|(2) ≥ · · · ≥ |x|(n)
+and compare to a quantile boundary:
+tk = σz(q/2 · k/n),
+where the false discovery rate parameter q ∈ (0, 1/2]. Define a crossing index
+k̂F = max {k : |x|(k) ≥ tk }
+and use this to set the threshold t̂F = tk̂F . Various values for the rate parameter q were used.
+Block thresholding methods are designed to make use of neighboring information in setting the threshold applied to each individual data point. We
+considered the BlockThresh method of Cai (2002) and the hard thresholding
+versions of the NeighBlock and NeighCoeff methods of Cai and Silverman
+(2001). The principle of all these methods is to consider the data in blocks.
+BlockThresh thresholds all the data in each block by reference to the sum
+of squares of the data in the block. The other two methods use overlapping
+blocks and keep or zero the data in the middle of each block according to
+the sum of squares over the whole block. See the original papers for more
+details.
+For each method
+considered, for each replication the total squared error
+P
+of the estimation (µ̂i − µi )2 was recorded, and the average over 100 replications is reported. The square error of every replication is available from
+
+18
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+Table 1
+Average of total squared error of estimation of various methods on a mixed signal of
+length 1000. A given number of the original signal values is set equal to a nonzero value,
+and the remainder are zero. In each column those entries that outperform the
+MML /exponential/posterior median method are underlined. Those that outperform by
+more than about 10% are set in bold type. The row marked “postmean” refers to the
+posterior mean using the double exponential model. The row “exphard ” refers to hard
+thresholding using the threshold given by the posterior median of the marginal maximum
+likelihood choice within the double exponential model. The rows for fixed values of a
+correspond to the posterior median where only the weight w is chosen by MML and the
+scale parameter a is fixed at the given value
+Number nonzero
+
+5
+
+50
+
+500
+
+Value nonzero
+
+3
+
+4
+
+5
+
+7
+
+3
+
+4
+
+5
+
+7
+
+3
+
+4
+
+5
+
+7
+
+Exponential
+
+36
+
+32
+
+17
+
+8
+
+214
+
+156
+
+101
+
+73
+
+857
+
+873
+
+783
+
+658
+
+Cauchy
+Postmean
+Exphard
+
+37
+34
+51
+
+36
+32
+43
+
+18
+21
+22
+
+8
+11
+11
+
+271
+201
+273
+
+176
+169
+189
+
+103
+122
+130
+
+77
+85
+91
+
+922
+860
+998
+
+898
+888
+998
+
+829
+826
+983
+
+743
+708
+817
+
+a=1
+a = 0.5
+a = 0.2
+a = 0.1
+
+36
+37
+38
+38
+
+32
+34
+37
+37
+
+19
+17
+18
+18
+
+15
+10
+7
+6
+
+213
+244
+299
+339
+
+166
+158
+188
+227
+
+142
+105
+95
+102
+
+135
+92
+69
+60
+
+994
+845
+1061
+1496
+
+1099
+878
+730
+798
+
+1126
+884
+665
+609
+
+1130
+884
+656
+579
+
+SURE
+Adapt
+
+38
+42
+
+42
+63
+
+42
+73
+
+43
+76
+
+202
+417
+
+209
+620
+
+210
+210
+
+210
+210
+
+829
+829
+
+835
+835
+
+835
+835
+
+835
+835
+
+FDR q = 0.01
+FDR q = 0.1
+FDR q = 0.4
+
+43
+40
+58
+
+51
+35
+58
+
+26
+19
+53
+
+5
+13
+52
+
+392
+280
+298
+
+299
+175
+265
+
+125
+113
+256
+
+55
+102
+254
+
+2568
+1149
+919
+
+1332
+744
+866
+
+656
+651
+860
+
+524
+644
+860
+
+BlockThresh
+NeighBlock
+NeighCoeff
+
+46
+47
+55
+
+72
+64
+51
+
+72
+51
+38
+
+31
+26
+32
+
+444
+427
+375
+
+635
+543
+343
+
+600
+439
+219
+
+293
+227
+156
+
+1918
+1870
+1890
+
+1276
+1384
+1410
+
+1065
+1148
+1032
+
+983
+972
+870
+
+Universal soft
+Universal hard
+
+42
+39
+
+63
+37
+
+73
+18
+
+76
+7
+
+417
+370
+
+620
+340
+
+720
+163
+
+746
+52
+
+4156
+3672
+
+6168
+3355
+
+7157
+1578
+
+7413
+505
+
+the authors’ web sites for any reader who wishes to examine the results in
+more detail.
+Some results are given in Table 1 and the following conclusions can be
+drawn:
+• The Cauchy method is always nearly, but not quite, as good as the exponential method. Our theory is not sensitive enough to discriminate between the two methods.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+19
+
+• In general, the posterior mean does not perform quite as well as the posterior median.
+• It is better to use the posterior median function itself rather than hard
+thresholding with the resulting threshold.
+• In the case µ0 = 7 where the nonzero signal is very clearly different from
+zero, hard thresholding with the universal threshold performs somewhat
+better than the exponential method, but in other cases, particularly with
+moderate or large amounts of moderate sized signal, it can give disastrous
+results.
+• Estimating the scale parameter a is probably preferable to using a fixed
+value, though it does lead to slower computations. In general, the automatic choice is quite good at tracking the best fixed choice, especially for
+a sparse and weak signal.
+• SURE is a competitor when the signal size is small (µ0 = 3), but performs
+poorly when µ0 is larger, particularly in the sparser cases. The attempt
+to make SURE more adaptive is counterproductive.
+• If q is chosen appropriately, FDR can outperform exponential in some
+cases, but the choice of q is crucial and varies from case to case. With the
+wrong choice of q, the performance of FDR can be poor.
+• The block thresholding methods do not perform very well. In the companion paper [Johnstone and Silverman (2004)] block thresholding methods
+are also compared with empirical Bayes methods for the thresholding of
+wavelet coefficients, and the difference in performance is not so great. This
+is presumably because there is some correlation among the positions in
+which the wavelet coefficients are effectively nonzero. By contrast, in the
+test signals under current consideration, the nonzero positions are chosen
+by uniform random sampling without replacement.
+• The median standard error of the entries of the table with 5 nonzero
+coefficients is around 1, with corresponding figures of about 3 for those
+with 50 nonzero coefficients, and 5 for the entries with 500 nonzero coefficients. Generally speaking, the standard errors tend to be smaller for the
+empirical Bayes methods than for the other methods considered; the false
+discovery rate and block thresholding methods have errors that have variance two to three times as large as the double exponential MML posterior
+median method, and for the universal thresholding methods the variance
+is higher by a factor of about 5. This is an indication of the stability of
+the empirical Bayes methods.
+• Not surprisingly, given that the same data are used for all cases, the
+standard error of the comparison between the first method and the other
+methods in the table is typically smaller than that for individual entries
+taken alone. The comparison standard error has a median value of 0.8 for
+the sparsest signals and about 2 for the signals with 50 and 500 nonzero
+elements. In general, comparisons between empirical Bayes methods have
+
+20
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+somewhat smaller standard errors than those involving other approaches.
+Only about 10% of the comparisons between the top line and other entries
+in the table are within 3 standard errors of zero, and all the comparisons
+that are numerically more than trivial are clearly statistically significant
+on the basis of the study we have carried out.
+The two SURE methods, the FDR method with q = 0.01 or q = 0.4, and
+the two universal thresholding methods all have the property that there is
+a case in which their measured error is around three or more times that of
+the exponential method, while never, or hardly ever offering any substantial
+improvement. Hence, all are much worse at adapting to different patterns
+of sparsity. The FDR method with q = 0.1 is a better competitor, but only
+wins in four of the twelve cases. The best improvement over exponential is
+651/783, a 17% improvement, while the best improvement of the exponential
+over the FDR method is 73/102, nearly 30%. Taking both adaptivity and
+overall performance into account, the exponential is clearly the estimator of
+choice.
+In order to quantify the comparison between the various methods, for
+each of the models considered define the inefficiency of a method A for a
+particular model B to be
+100 ×
+
+
+
+
+
+average error for method A applied to data from model B
+−1 .
+minimum error for any method for model B
+
+Twelve different models are considered in Table 1, and summary statistics
+for the twelve inefficiency values for the various methods are given in Table 2. The posterior median of the exponential model with estimated scale
+parameter is the best on nearly every measure: the maximum inefficiency of
+the Cauchy and exponential (a = 0.2) methods is slightly smaller, but both
+of these methods are decisively beaten on the median inefficiency and are
+also equaled or beaten on the other two measures.
+4. Modifying the threshold for very sparse signal. In this section we
+discuss a possible modification of the estimator, which allows a reduction
+in error in very sparse cases, when the overwhelming majority of components have essentially zero signal. Our original motivation for this arises
+from the use of wavelet methods to estimate derivatives, where it was shown
+by Abramovich
+√ and Silverman (1998) that the appropriate universal threshold is not 2 log n, but is a multiple of this quantity. The basic notion of
+the modified estimator is this: if the threshold t̂ = t(ŵ) estimated by the
+marginal maximum likelihood method is at or near the universal threshold,
+we replace it by a higher threshold.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+21
+
+Table 2
+Comparison of methods: for each method the
+stated median, mean, maximum and tenth
+largest inefficiency is over the twelve cases
+considered in Table 1
+median
+
+mean
+
+10th
+
+max
+
+Exponential
+
+7
+
+17
+
+30
+
+52
+
+Cauchy
+Postmean
+Exphard
+
+19
+22
+37
+
+25
+27
+46
+
+42
+40
+62
+
+47
+95
+93
+
+a=1
+a = 0.5
+a = 0.2
+a = 0.1
+
+35
+15
+18
+14
+
+57
+29
+19
+24
+
+124
+75
+30
+45
+
+165
+84
+48
+80
+
+SURE
+Adapt
+
+35
+103
+
+121
+223
+
+151
+303
+
+676
+1282
+
+FDR q = 0.01
+FDR q = 0.1
+FDR q = 0.4
+
+44
+18
+71
+
+56
+35
+169
+
+91
+39
+214
+
+210
+139
+847
+
+BlockThresh
+NeighBlock
+NeighCoeff
+
+129
+119
+106
+
+228
+181
+136
+
+456
+335
+131
+
+531
+376
+486
+
+Universal soft
+Universal hard
+
+529
+50
+
+643
+100
+
+1282
+159
+
+1367
+359
+
+4.1. Definition of the modified estimator and theoretical discussion. To
+be precise, set t2n = 2 log n − 5 log log n. Let A ≥ 0 be fixed and put tA =
+p
+2(1 + A) log n. Then define
+t̂A =
+
+
+
+t̂,
+tA ,
+
+if t̂ ≤ tn ,
+if t̂ > tn .
+
+With this modification of the threshold, we can reduce the order of magnitude of the part of the error in Theorem 1, as follows.
+Theorem 2. Under the assumptions of Theorem 1, let µ̂A be defined by
+µ̂A,i (x) = δ(xi , t̂A ). Define RA
+p,q (η) = supµ∈ℓp [η] Rq (µ̂A,i , µ). Then, for suitable
+constants C,
+(22)
+
+RA
+p,q (η) ≤ C
+
+for all η
+
+22
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+and, for all sufficiently large n and for suitable η0 ,
+(23)
+
+−1−A
+RA
+(log n)(q−1)/2 }
+p,q (η) ≤ C max {rp,q (η), n
+
+for η ≤ η0 .
+
+For q > p > 0 we also have, for sufficiently large n,
+(24)
+
+(q−p)/p q
+RA
+η , n−1−A (log n)(q−1)/2 }
+p,q (η) ≤ C max {n
+
+for η p < n−1 (log n)p/2 .
+
+The ramifications of this theorem in the wavelet context are explored by
+Johnstone and Silverman (2004), but it has independent interest in exposing
+the different regimes for adaptive estimation, especially in the case q > p.
+Note first that conclusion (22) is the same as for the unmodified estimator,
+and in the range η p ≥ n−1 log2 n for p > 0 (η ≥ n−1 log2 n for p = 0) so is
+(23), because in that range the dominating term in the error is rp,q (η) for
+both estimators.
+For q > p > 0, define η1p = n−1 (log n)p/2 . For η > η1 , rp,q (η) is bounded by
+a multiple of n(q−p)/p η q and so (24), in fact, holds for all η < η0 , but only
+gives a stronger result than (23) if η < η1 . This is not in contradiction with
+the result (17) of Donoho and Johnstone (1994) because the condition (16)
+can be rewritten precisely as
+rp,q (η) = o(n(q−p)/p η q ),
+or equivalently, η/η1 → ∞.
+The three bounds in Theorem 2 may be considered as corresponding to
+three different zones of estimation. If η > η0 , then the signal is insufficiently
+sparse for any order of magnitude advantage to be gained by the use of
+our thresholding method. In the zone η1 ≤ η ≤ η0 , a suitable thresholding
+method allows for considerable improvement over the use of a “classical”
+estimator. Finally, in the extremely sparse zone η < η1 , the η-dependent
+part of the error achieved by our estimator compares to that given by the
+estimator that simply returns the value zero.
+Note finally that for the standard estimator all the η-dependent risks in
+the zone η p < n−1 log2 n (for p > 0) are dominated by the term n−1 (log n)2+(q−p)/2
+in the error bound. Since n−1 log2 n > η1p , the zone where n−1 (log n)2+(q−p)/2
+dominates includes the very sparse zone, and so there is no point in pursuing
+the kind of adaptivity within the very sparse zone achieved asymptotically
+by the modified estimator.
+4.2. Practicalities. Both theory and intuition suggest that the modified estimator may only be advantageous for very large values of n, where
+5 log log n is small relative to 2 log n. Otherwise, data that ought to be thresholded with moderate thresholds will essentially be zeroed instead. For example, for n = 106 , we have 5 log log n = 13.13 and 2 log n = 27.63. Hence, if
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+23
+
+the squared estimated threshold in the standard estimator is any more than
+about half the universal threshold, the modification will use a much larger
+threshold, thereby causing problems for signals that are nowhere near the
+very sparse zone.
+A version of the modified estimator was investigated by simulation on the
+same models as considered in Table 1. The Laplace prior with both parameters estimated by marginal maximum likelihood was used. If the estimated
+threshold was less than 95% of the universal threshold, the posterior median
+√ estimate was used. Otherwise, we used hard thresholding with threshold
+2 log 1000, corresponding to A = 1.
+The only models for which the estimates were affected were those with
+only 5 nonzero entries. In each case the average squared error was increased
+by the use of the modified estimator, respectively to 41, 40, 26 and 13, as
+compared to 36, 32, 17 and 8, for the cases where the nonzero parameter
+value was 3, 4, 5 and 7. Reducing the number of nonzero parameters to
+1 did not change the relative performance of the unmodified and modified
+methods, unless the nonzero parameter value was also increased. The only
+case tested where the modified method improved the performance was where
+there was a single nonzero parameter value with value 10. In this case the
+unmodified estimator has an average squared error (over 100 simulations)
+of about 2.4, while the modified estimator has a mean squared error of
+just over 1. As might be expected, the modified estimator is only clearly
+advantageous in very sparse cases where nonzero values of the parameters
+are well above the universal threshold—and in these cases the error of the
+unmodified method is already very small, so any improvement may be large
+in relative terms but small in absolute terms.
+5. Proofs of results: some detailed preliminaries. The remainder of the
+paper is devoted to the proofs of the theorems stated above. We begin in
+this section with a detailed discussion of a number of topics that will be
+useful later in the proof. In some cases these also cast a broader light on the
+empirical Bayes thresholding procedure. Our proofs cover the cases of nearly
+black and strong ℓp constraints on the underlying parameter vector µ. We
+conjecture that similar arguments can be used for weak ℓp constraints too,
+but the full details are left for future investigation.
+5.1. Properties and definitions for the mixture model. The arguments of
+this section and the next do not strongly depend on the precise assumption
+of Gaussian errors in model (1). Indeed, relaxing this assumption sheds some
+light on the robustness of our results to model formulation; see Remark 1.
+For the moment then, we assume that in model (1) the noise coefficients
+ǫi are i.i.d. from a symmetric Polya frequency PF 3 density ϕ. Polya frequency functions are discussed in detail by Karlin (1968), and from a statistical perspective by Brown, Johnstone and MacGibbon (1981). The defining
+
+24
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+property of a PF 3 function ϕ is that for y1 < y2 < y3 and z1 < z2 < z3 ,
+(25)
+
+det [ϕ(yi − zj )] ≥ 0.
+
+1≤i,j≤3
+
+Examples of such densities include the Gaussian density φ (observe the
+distinction of notation), as well as the somewhat heavier tailed Laplace
+density 12 e−|x| and logistic density e−x /(1 + e−x )2 . The PF 3 assumption
+implies that ϕ is log-concave, and hence there exists ρ > 0 such that
+ϕ(y)eρy is decreasing for sufficiently large y.
+
+(26)
+
+Thus, the tails of ϕ cannot be heavier than exponential.
+For this section only, we also modify assumption (7) on the prior to require
+only that γ(u) > 0 for all u and the existence of positive Λ and M such that
+d
+log γ(u) ≤ Λ < ρ.
+u>M du
+
+(27)
+
+sup
+
+[In the Gaussian error case, ϕ = φ, this places no essential constraint on Λ,
+because we can choose ρ to be arbitrarily large.] Assumptions (26) and (27)
+taken together imply that the tails of the prior γ are heavier than those of
+the noise density.
+The first part of the following lemma shows that the convolution γ ⋆ ϕ
+inherits properties assumed of γ.
+Lemma 1.
+
+Assume (26) and (27), and let g = γ ⋆ ϕ. Then
+
+(28)
+(29)
+(30)
+
+g(x) ≍ γ(x),
+(1 + u2 )g(u) is bounded for all u,
+g(y)−1
+
+Z ∞
+y
+
+(31)
+
+g(u) du ≍ y κ−1 ,
+
+lim sup |(log g)′ (u)| ≤ Λ
+u→∞
+
+and g/ϕ is strictly increasing from (g/ϕ)(0) < 1 to +∞ as x → ∞.
+Proof. It follows from (27) that eΛy γ(y) is an increasing function of y
+for y > M , and since γ is unimodal, that for all x and y in [0, M ],
+eΛx γ(x) ≤ CeΛy γ(y)
+for some C > 1. Combining these two observations implies that, given any
+x > 0 and u > 0,
+(32)
+
+γ(x + u) ≥ C −1 e−Λu γ(x) and
+
+γ(x − u) ≤ CeΛu γ(x).
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+It follows that g(x) ≍ γ(x), since
+Z ∞
+
+g(x) >
+
+0
+
+and
+g(x) =
+
+Z ∞
+0
+
+ϕ(u)γ(x + u) du ≥ C −1 γ(x)
+
+Z ∞
+
+25
+
+e−Λu ϕ(u) du
+
+0
+
+ϕ(u){γ(x + u) + γ(x − u)} du ≤ Cγ(x)
+
+Z ∞
+
+(1 + eΛu )ϕ(u) du,
+
+0
+
+and the right-hand integrals are finite from (26) because Λ < ρ. Properties
+(29) and (30) follow immediately from (28) and the assumptions on γ.
+For (31), setting Λ∞ = sup |(log γ)′ |, we have |γ ′ (u)| ≤ Λγ(u) for u > M
+and |γ ′ (u)| ≤ Λ∞ γ(u) for u < M . Therefore,
+′
+
+′
+
+|(log g) (x)| = |g (x)|/g(x) =
+≤Λ
+
+Z ∞
+M
+
+Z ∞
+
+−∞
+
+ϕ(x − u)γ ′ (u) du
+
+ϕ(x − u)γ(u) du/g(x) + Λ∞
+
+.
+
+Z M
+
+−∞
+
+g(x)
+
+ϕ(x − u)γ(u) du/g(x)
+
+≤ Λ + Λ∞ ρ(x),
+where from (32)
+ρ(x) =
+
+Z ∞
+
+x−M
+
+γ(x − v)ϕ(v) dv/g(x)
+
+≤ C[γ(x)/g(x)]
+
+Z ∞
+
+x−M
+
+eΛv ϕ(v) dv → 0
+
+as x → ∞.
+
+To demonstrate that g(x)/ϕ(x) is increasing on [0, ∞), let ru (x) = [ϕ(x +
+u) + ϕ(x − u)]/ϕ(x). Using the symmetry of γ, we have the representation
+(33)
+
+g(x)
+=
+ϕ(x)
+
+Z ∞
+0
+
+ru (x)γ(u) du,
+
+and so it will suffice to show that, for each u > 0, ru (x) is an increasing
+function of x on [0, ∞). Suppose that x2 > x1 ≥ 0 and consider the defining
+inequality (25), with {yi } = {−x1 , x1 , x2 } and {zi } = {−u, 0, u}. Subtracting
+the second row in the determinant from the first and exploiting symmetry
+of φ gives
+1
+0
+0 ≤ [ϕ(−x1 + u) − ϕ(x1 + u)] ϕ(x1 + u) ϕ(x1 )
+ϕ(x2 + u) ϕ(x2 )
+
+−1
+ϕ(x1 − u)
+ϕ(x2 − u)
+
+= ϕ(x1 )ϕ(x2 )[ϕ(−x1 + u) − ϕ(x1 + u)][ru (x2 ) − ru (x1 )].
+
+Since ϕ > 0 and ϕ(x1 + u) < ϕ(−x1 + u), this implies that ru (x2 ) ≥ ru (x1 ),
+as required.
+
+26
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+Finally, to show that g(x)/φ(x) → ∞ as x → ∞, we have, for any x > 1,
+using the result (8),
+g(x) ≥
+
+Z 1
+0
+
+γ(x − v)φ(v) dv ≥ γ(x)
+
+Z 1
+0
+
+φ(v) dv ≥ Ce−Λ|x|.
+
+
+
+Posterior odds. Write Odds(A|B) for P (A|B)/[1 − P (A|B)]. Given w,
+define w̃(x, w) to be the posterior weight P (µ 6= 0|X = x), so that the posterior odds Odds(µ 6= 0|x) are given by
+Ω(x) = Ω(x, w) =
+
+w̃(x, w)
+w g
+=
+(x).
+1 − w̃(x, w) 1 − w ϕ
+
+Define w0 = (ϕ/g)(0)/[1 + (ϕ/g)(0)], so that Ω(0, w0 ) = 1. For fixed w,
+Lemma 1 shows that Ω(x) increases from 1 to ∞, so that if w < w0 , then
+there exists τ (w) > 0 for which Ω(τ (w), w) = 1. If we define τ (w) = 0 for
+w ≥ w0 , it follows that w → τ (w) is a continuous decreasing function of
+w ∈ [0, 1]. We will repeatedly use the function τ in our subsequent argument.
+A simple consequence of these definitions is that for w1 < w0 ,
+(34)
+
+Ω(τ (w1 ), w) =
+
+w 1 − w1
+≥ 1,
+1 − w w1
+
+if w ≥ w1 .
+
+Finally, for x > τ , we clearly have
+(35)
+
+Ω(x) = Ω(τ ) exp
+
+Z x
+τ
+
+{(log g)′ − (log ϕ)′ }.
+
+5.2. Properties of the posterior median.
+Lemma 2.
+
+Assume (26) and (27). The posterior median µ̂(x; w) is
+
+(i) monotone in x: if x1 ≤ x2 , then µ̂(x1 ) ≤ µ̂(x2 ),
+(ii) antisymmetric: µ̂(−x) = −µ̂(x),
+(iii) a shrinkage rule: 0 ≤ µ̂(x) ≤ x for x ≥ 0,
+(iv) a threshold rule: there exists t(w) > 0 such that µ̂(x) = 0 if and only
+if |x| ≤ t(w),
+(v) bounded shrinkage: there exists a constant b such that for all w, x,
+|µ̂(x; w) − x| ≤ t(w) + b.
+Remark 1. The lemma demonstrates that the posterior median has all
+the properties needed for the estimation error bounds that will be derived for
+Gaussian errors in the subsequent sections. The bounded shrinkage property
+essentially means that rare large observations are more or less reliably assigned to a sparse signal rather than noise in our Bayesian model; conditions
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+27
+
+(26) and (27) indicate that a sufficient condition for this is that the tails of
+the prior be heavier than the tails of the noise distribution. At least in this
+situation, one may expect the qualitative features of our theory to remain
+true; it is left to future work to investigate whether there are differences in
+quantitative thresholds and, perhaps, in rates of convergence.
+Proof of Lemma 2. Suppose that µ has general prior density f , with
+respect to a suitable dominating measure. Then the posterior density
+f (µ|x) = C(x)ϕ(x − µ)f (µ),
+so that, for any u < v and x2 > x1 ,
+
+so that
+
+f (v|x2 )f (u|x1 ) ϕ(x2 − v) ϕ(x1 − u)
+=
+≥ 1,
+f (u|x2 )f (v|x1 ) ϕ(x2 − u) ϕ(x1 − v)
+f (v|x1 )f (u|x2 ) ≤ f (u|x1 )f (v|x2 ).
+
+Now, for any m, integrate with respect to the dominating measure over
+−∞ < u ≤ m and m < v < ∞ to obtain
+P (µ > m|x1 )P (µ ≤ m|x2 ) ≤ P (µ > m|x2 )P (µ ≤ m|x1 ),
+so that the odds that µ ≤ m are greater for X = x1 than for X = x2 . Letting
+µ̂(x) be the posterior median of µ, given X = x, it follows that µ̂(x2 ) ≥ µ̂(x1 ),
+so the posterior median is a monotonic function of x.
+Return now to the mixture prior (2). The antisymmetry of the posterior
+median is immediate from the symmetry of the prior and the error distribution. If w > 0, the probabilities P (µ < 0|X = x) and P (µ = 0|X = x) will be
+nonzero for all x and each will vary continuously as a function of x. By symmetry, P (µ < 0|X = 0) = P (µ > 0|X = 0) < 12 and so there will be a range of
+values of x containing 0 for which the posterior median is 0. By symmetry
+and the monotonicity of µ̂ there will be some threshold t(w) such that the
+posterior median is zero if and only if −t ≤ x ≤ t. The posterior median of µ,
+given X = τ , is necessarily zero, so τ (w) < t(w).
+Suppose x > 0. By the assumption that γ is symmetric and unimodal,
+γ(x − v) ≥ γ(x + v) for all v ≥ 0. Hence, multiplying by ϕ(v)/g(x), if x > 0,
+(36)
+
+f (x − v|X = x, µ 6= 0) ≥ f (x + v|X = x, µ 6= 0)
+
+for all v ≥ 0.
+
+Integrating over 0 < v < ∞,
+P (µ ≤ x|X = x, µ 6= 0) ≥ P (µ > x|X = x, µ 6= 0).
+Therefore,
+P (µ > x|X = x) ≤ P (µ > x|X = x, µ 6= 0) ≤ 12 ,
+
+28
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+and so the posterior median satisfies µ̂(x) ≤ x for all x > 0. By the monotonicity of µ̂ we have the shrinkage property 0 ≤ µ̂(x) ≤ x for all x > 0; by
+symmetry it is also the case that 0 ≥ µ̂(x) ≥ x for x < 0.
+Finally we show that the maximum amount of shrinkage is appropriately
+bounded: the approach is to find a constant a such that for all sufficiently
+large x,
+(37)
+
+P (µ > x − a|X = x)
+
+= P (µ > x − a|X = x, µ 6= 0)P (µ 6= 0|X = x) > 12 .
+
+The term P (µ > x − a|X = x, µ 6= 0) does not depend on w, and we consider it first. Set B = sup|u|≤M γ(u)eΛu /γ(M )eΛM . For u ≤ 0 and for u ≥ M ,
+u → γ(u)eΛu is increasing and so for any c > M we have
+(38)
+
+Odds(µ > c|X = x, µ 6= 0)
+
+R∞
+γ(u)ϕ(x − u) du
+R
+≥
+= cc
+−∞ γ(u)ϕ(x − u) du
+
+Since Λ < ρ, we have
+that
+(39)
+
+Z ∞
+
+R∞
+
+R ∞ −Λu
+e
+ϕ(u − x) du
+Rc c
+.
+−Λu
+
+B −∞ e
+
+ϕ(u − x) du
+
+−Λv ϕ(v) dv < ∞, and so there is a value a such
+−∞ e
+−Λv
+
+e
+
+ϕ(v) dv > 3B
+
+Z −a
+
+e−Λv ϕ(v) dv.
+
+−∞
+
+−a
+
+As long as x > a + M , from (38) and (39) we will then have
+(40)
+
+Odds(µ > x − a|X = x, µ 6= 0) ≥
+
+so that
+(41)
+
+R∞
+
+−Λv ϕ(v) dv
+−a e
+> 3,
+B −∞ e−Λv ϕ(v) dv
+
+R −a
+
+P (µ > x − a|X = x, µ 6= 0) > 43 .
+
+Now set ε = (ρ − Λ)/2. Taking into account (26), (27) and (31), choose
+τ1 ≥ M large enough so that for |u| ≥ τ1 we have
+(42)
+
+(log g)′ (u) ≥ −Λ − ε,
+
+(log ϕ)′ (u) ≤ −ρ.
+
+Choose w1 so that τ (w1 ) = τ1 , and define c1 = 2(ρ − Λ)−1 log 2. Suppose
+w ≤ w1 , so that τ (w) ≥ τ1 . It follows from (35) and (42) that, if x > τ (w)+c1 ,
+then
+(43)
+
+Odds(µ 6= 0|X = x) = Ω(x, w) ≥ Ω(τ (w), w)e(ρ−λ)(x−τ )/2 ≥ 2.
+
+On the other hand, if w > w1 we will have Ω(x, w) > Ω(x, w1 ) ≥ 2 as long as
+x > τ1 + c1 . In either case, it follows that P (µ 6= 0|X = x) ≥ 23 .
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+29
+
+Combining this bound with (41), it follows that (37) is guaranteed whenever x ≥ max{a + M, τ (w) + c1 , τ1 + c1 }; otherwise, all we can say is that
+x − µ̂(x) ≤ x. Hence, for all x > 0 and w ∈ [0, 1],
+x − µ̂(x) ≤ max{a, a + M, τ (w) + c1 , τ1 + c1 } ≤ τ (w) + b
+
+with b = τ1 + a ∨ c1 , which yields the required shrinkage bound since τ (w) ≤
+t(w). 
+5.3. Properties of posterior median for Gaussian errors. For the remainder of the paper we specialize to the Gaussian error density φ in model (1)
+and to the global boundedness assumption (7) on the logarithmic derivative
+of the prior γ. Property (31) is then strengthened to
+d
+(44)
+log g(u) ≤ Λ < ∞.
+sup
+du
+When ϕ = φ, the representation (33) yields
+(45)
+
+1 + β(y) = (g/φ)(y) = 2
+
+Z ∞
+
+2
+
+cosh(yt)e−t /2 γ(t) dt.
+
+0
+
+Since cosh yt is an even convex positive function for each t, it follows that
+1 + β(y) is also. Also, from (45) 0 < 1 + β(0) < 1, so that −1 < β(0) < 0. We
+denote by β −1 the positive inverse of β, defined on the interval [β(0), ∞).
+We also have the following simple bounds:
+(46)
+
+|β(y)| ≤ C(g/φ)(y),
+
+for all y,
+
+1
+2 (g/φ)(y) ≤ β(y) ≤ (g/φ)(y),
+
+(47)
+
+if y > β −1 (1).
+
+For a lower bound on the second derivative of β, from (45) we have, for
+y > 0,
+(48) β ′′ (y) =
+
+Z ∞
+
+2
+
+t2 cosh(yt)e−t /2 γ(t) dt >
+
+−∞
+
+Z ∞
+
+2
+
+t2 e−t /2 γ(t) dt = β ′′ (0) > 0.
+
+−∞
+
+We now develop anR explicit form for the equation defining
+the threshold
+R0
+φ(x − µ)γ(µ) dµ.
+t(w). Define g+ (x) = 0∞ φ(x − µ)γ(µ) dµ and g− (x) = −∞
+Then
+wg+ (x)
+P (µ > 0|X = x) =
+.
+(1 − w)φ(x) + wg(x)
+Therefore, the threshold t satisfies
+(49)
+
+2wg+ (t) = (1 − w)φ(t) + wg(t).
+
+Dividing by wφ(t) and rearranging yields
+(50)
+
+Z
+
+∞
+2
+g+ (t) − g− (t)
+1
+sinh(tµ)e−µ /2 γ(µ) dµ.
+=1+
+=1+2
+w
+φ(t)
+0
+
+This equation shows that the posterior median threshold t(w) is continuous
+and strictly decreasing from ∞ at w = 0 to zero at w = 1.
+
+30
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+5.4. The link between threshold and pseudothreshold. It will be useful to
+find bounds on the threshold of the posterior median function in terms of
+the weight w. It will be convenient to define the pseudothreshold ζ(w) by
+ζ = β −1 (w−1 ).
+The following result sets out relations between the pseudothreshold ζ(w)
+and the true threshold t(w) of the posterior median function. In most of our
+discussion the dependence of t and ζ on w is not expressed explicitly, and,
+indeed, any two of t, ζ and w can be regarded as functions of the third.
+Lemma 3.
+(51)
+
+For all w ∈ (0, 1],
+1 + β{t(w)} < β{ζ(w)} < 2 + β{t(w)}.
+
+Proof. The bounds are a straightforward consequence of (50) defining t(w), which may be rewritten in the form
+β(ζ) = β(t) + 2 − 2g− (t)/φ(t).
+Clearly,
+0 < g− (t) =
+
+Z 0
+
+−∞
+
+φ(t − µ)γ(µ) dµ < φ(t)
+
+Z 0
+
+−∞
+
+γ(µ) dµ = 21 φ(t).
+
+Thus, 0 < 2g− (t)/φ(t) < 1, which establishes (51). 
+From the properties of β we can derive two important corollaries. First,
+we have 0 ≤ t < ζ for all finite t and ζ, so that
+(52)
+
+t2 < ζ 2 .
+
+Second, from the property (48) that β ′′ (y) > C for all y, it follows that, for
+y > 0, β ′ (y) > Cy. Therefore,
+√
+1
+d √
+1
+β( u ) = u−1/2 β ′ ( u ) > C,
+du
+2
+2
+so that
+
+Therefore,
+(53)
+
+p
+√
+β(ζ) − β(t) = β( ζ 2 ) − β( t2 ) > 21 C(ζ 2 − t2 ).
+
+ζ 2 − t2 < 2C −1 {β(ζ) − β(t)} ≤ 4C −1 ,
+
+so (for a different value of C) −t2 < −ζ 2 + C and so finally, for some constant
+C > 0,
+(54)
+
+φ(t) < Cφ(ζ).
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+31
+
+5.5. Properties of the posterior mean. In this section we consider the
+effects of using the posterior mean as an estimate instead of the posterior
+median. We begin by considering the behavior of the posterior distribution
+conditional on µ 6= 0, which is also the unconditional case w = 1. Given any
+x, define
+R∞
+
+uφ(x − u)γ(u) du
+.
+−∞ φ(x − u)γ(u) du
+
+µ̃1 (x) = Epost (µ|X = x, µ 6= 0) = R−∞
+∞
+
+A simple argument using the property φ′ (t) = −tφ(t) shows that µ̃1 (x) =
+x + (log g)′ (x), and, hence, using the bound (44),
+(55)
+
+|µ̃1 (x) − x| ≤ Λ.
+
+Defining µ̃(x, w) to be the posterior mean E(µ|X = x), we then have
+(56)
+
+µ̃(x, w) = P (µ 6= 0|X = x)E(µ|X = x, µ 6= 0) = w̃(x, w)µ̃1 (x).
+
+From (36), if x > 0, the posterior mean µ̃1 (x) ≤ x; by a similar argument,
+for v > 0,
+fµ (v|X = x, µ 6= 0) > fµ (−v|X = x, µ 6= 0)
+
+and so µ̃1 (x) > 0. Also, by a simple extension of the corresponding argument
+at the beginning of Section 5.2, µ̃1 is an increasing function of x. Hence, µ̃1
+is a shrinkage rule, and from (56), so is µ̃(·, w).
+For each x the the posterior weight w̃(x, w) is monotone increasing in w;
+for x > 0 it follows from (56) that so also is the posterior mean µ̃(x, w).
+Bounded shrinkage properties of the posterior mean. From (55) and
+(56) we have
+x − µ̃(x, w) = (1 − w̃)x − w̃(log g)′ (x).
+
+Choose w1 so that τ (w1 ) = Λ, and let τ2 = τ (w ∧ w1 ) ≥ Λ. Using (35) and
+(44), we have
+Ω(x) ≥ exp
+
+Z x
+τ2
+
+
+
+(u − Λ) du ≥ exp
+
+Z x
+τ2
+
+
+
+(u − τ2 ) du = exp { 21 (u − τ2 )2 }.
+
+From (34), Ω(τ2 ) = Ω(τ (w ∧ w1 ), w) ≥ 1 and so for x > τ2 ,
+1 − w̃ ≤ 1/Ω(x) ≤ exp{− 12 (x − τ2 )2 }.
+
+Combining this with bound (44), we obtain for x > τ2 ,
+x − µ̃(x, w) ≤ (x − τ2 )(1 − w̃) + τ2 + |(log g)′ (x)|
+
+≤ (x − τ2 ) exp{− 21 (x − τ2 )2 } + τ2 + Λ ≤ e−1/2 + 2Λ + t(w).
+
+If 0 ≤ x ≤ τ2 , then trivially x − µ̃ ≤ x < τ2 < Λ + t(w), so that we have shown
+that the posterior mean is a bounded shrinkage rule relative to the threshold
+t(w).
+
+32
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+5.6. Bounds for integrals of exponential growth.
+If (log h)′ (z) ≥ (log k)′ (z) for z ∈ [ζ1 , ζ], then
+
+Lemma 4.
+{h(ζ)}−1
+
+Z ζ
+ζ1
+
+h(z) dz ≤ {k(ζ)}−1
+≤
+
+(
+
+Z ζ
+
+k(z) dz
+
+ζ1
+
+γ −1 [1 − e−γ(ζ−ζ1 ) ],
+4(γζ)−1 ,
+
+if k(z) = eγz ,
+2
+if k(z) = eγz −αz ,
+
+where in the second case we require also that ζ1 ≥ 0 and γζ ≥ max(α, 0).
+R
+
+Proof. The first inequality is seen easily by writing h(z)/h(ζ) = exp{− zζ (log h)′ },
+applying the assumed inequality and integrating. The second inquality for
+2
+k(z) = eγz is trivial. For k(z) = eγz −αz , we first note that change of scale
+shows that it suffices to prove the bound for γ = 1/2. Replacing ζ1 by 0 and
+completing the square, we then find that the desired bound is implied by
+Z ζ−α
+
+(57)
+
+−α
+
+4
+2
+2
+ev /2 dv ≤ e(ζ−α) /2 .
+ζ
+
+If ζ > 2 max(α, 0), then α < ζ − α and the integral on the left is bounded by
+R
+2
+2 0ζ−α ev /2 dv. Equation (57) now follows from the inequalities
+2
+
+e−w /2
+
+Z w
+
+2
+
+ev /2 dv =
+≤
+
+(58)
+
+Z ζ
+0
+
+where
+(59)
+
+e−(w−v)(w+v)/2 dv
+
+0
+
+0
+
+Corollary 1.
+
+Z w
+
+Z w
+
+−(w−v)w/2
+
+e
+
+0
+
+dv ≤
+
+Z ∞
+
+e−xw/2 dx = 2/w.
+
+0
+
+
+
+If g = γ ⋆ φ and γ satisfies (7), then
+
+(g/φ)q (x)φ(x − µ) dx ≤ Hq (ζ; Λ, µ)(g/φ)q (ζ)φ(ζ − µ),
+
+Hq (ζ; Λ, µ) =
+
+
+ 8/[(q − 1)ζ],
+
+ζ,
+ Λζ
+(e − 1)/Λ,
+
+if q > 1, ζ > 2qΛ/(q − 1),
+if q = 1, µ > Λ,
+if q = 1, 0 ≤ µ ≤ Λ.
+
+Proof. Let h(x) = (g/φ)q (x)φ(x − µ). Then
+(log h)′ (x) = q(log g)′ (x) + qx − (x − µ) ≥
+
+
+
+µ − Λ,
+(q − 1)x + µ − qΛ,
+
+q = 1,
+q > 1.
+
+If q = 1, we apply the preceding lemma with log k(z) = (µ − Λ)z and ζ1 = 0
+and obtain factor H1 (ζ; Λ, µ) according as µ > Λ or not. For q > 1, we use
+the version with log k quadratic, γ = (q − 1)/2 and α = qΛ − µ, so that
+γζ ≥ max(α, 0) becomes ζ ≥ (2/(q − 1) max(qΛ − µ, 0). 
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+33
+
+6. Risk properties of thresholding procedures. In this section we study
+the risk behavior of thresholding procedures. Because the thresholds obtained by the empirical Bayes procedure are data-dependent, some care is
+appropriate in deriving the risk. We begin with risk bounds for hard thresholding using fixed, nonrandom thresholds. These lead to comparison inequalities and so to bounds for the risk for general random thresholds. The latter
+continue to hold if the threshold is replaced by a pseudothreshold that is
+easier to find for the mixture prior model. Analogs for the posterior mean
+are studied as well.
+6.1. Risk bounds for fixed thresholds. As a tool for later work, we develop
+risk bounds for hard thresholding,
+µ̂HT (x, t) = xI{|x| ≥ t}
+in Lq error for 0 < q ≤ 2. For the posterior mean estimator µ̃(x, w) of (56),
+a bound of similar structure holds for q > 1, based on the pseudothreshold
+ζ = β −1 (w−1 ) in place of t.
+Proposition
+1. (a) Fix q ∈ (0, 2]. There exists a constant cq ≤ 4 such
+√
+that for t ≥ 2 and for all µ,
+E|µ̂HT (X, t) − µ|q ≤ cq [|µ|q + tq−1 φ(t)].
+
+(60)
+
+(b) Now suppose q ∈ (1, 2]. There exists a constant c′q such that for ζ ≥
+ζ(γ) and all µ,
+E|µ̃(X, w) − µ|q ≤ c′q [|µ|q + ζ q−1 φ(ζ)].
+
+(61)
+
+The main use of these bounds is to control risks when µ is not too large,
+and especially when µ → 0. The second term in each bound is, up to constants, a sharp representation of the risk at µ = 0 as a function of t or ζ.
+Remark 2.
+at zero,
+
+If q = 1, it can be shown that the risk for the posterior mean
+E|µ̃(Z, w)| ≥ cw ≥ cφ(ζ)/g(ζ),
+
+is already of larger order than in (61), and so our methods for the analysis of
+the behavior of the posterior mean cannot immediately be extended beyond
+the range 1 < q ≤ 2. More remarks will be made in Section 10.
+Proof of Proposition 1. We begin with a simple bound valid for
+any shrinkage rule µ̂(x). Indeed, for any µ and x,
+(62)
+
+|µ̂(x) − µ|q ≤ max{|µ|q , |x − µ|q } ≤ |µ|q + |x − µ|q .
+
+34
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+Hence, if X ∼ N (µ, 1) and aq = E|Z|q ,
+
+E|µ̂(X) − µ|q ≤ |µ|q + aq .
+
+(63)
+
+From this we immediately have, when |µ| ≥ 1,
+
+E|µ̂(X) − µ|q ≤ (1 + aq )|µ|q ≤ 2|µ|q ,
+
+(64)
+
+and so, for the rest of the proof, we confine attention to |µ| ≤ 1, and, indeed,
+in view of symmetry of the risk functions, to 0 ≤ µ ≤ 1.
+(a) Write rq (µ, t) for the risk E|XI{|X| > t} − µ|q of hard thresholding.
+We have
+rq (µ, t) = µq [Φ(t − µ) − Φ(−t − µ)] +
+
+Z ∞
+
++
+
+Z −t−µ 
+−∞
+
+t−µ
+
+|z|q φ(z) dz.
+
+By partial integration we obtain the upper bound
+rq (0, t) = 2
+
+(65)
+
+Z ∞
+
+z q φ(z) dz ≤ bq tq−1 φ(t),
+
+t
+
+where bq may be taken as 2 for q ≤ 1 and as 4 when 1 < q ≤ 2 and t ≥
+By subtraction,
+(66)
+
+√
+2.
+
+rq (µ, t) − rq (0, t) = µq [Φ(t − µ) − Φ(−t − µ)] + ∆(µ, t),
+
+where
+∆(µ) = ∆(µ, t) =
+
+Z t
+
+t−µ
+
+−
+
+Z t+µ 
+
+z q φ(z) dz.
+
+t
+
+The function φq (t) = tq φ(t) is positive on (0, ∞) for all q, and for q ≥ 0
+√
+attains its maximum value φ∗q = φ(0)(q/e)q/2 at t = q. We remark that
+φ∗q ≤ 1/2 when 0 ≤ q ≤ 3. Set φq (t, µ) = φq (t−µ)+φq (t+µ): some calculation
+then shows that when 0 ≤ µ ≤ t,
+∆′′ (µ) = φq+1 (t, µ) − qφq−1 (t, µ) ≤ φq+1 (t, µ) ≤ 2φ∗q+1 .
+
+Since ∆(0) = ∆′ (0) = 0, we therefore have ∆(µ) ≤ φ∗q+1 µ2 , at least for 0 ≤ µ ≤ t.
+Combining this with (66), we have
+rq (µ, t) ≤ rq (0, t) + µq + φ∗q+1 µ2 .
+If µ ≤ 1, then µ2 ≤ µq , and bringing in (65), we obtain (60) with cq ≤ 4.
+(b) In view of (62) and (65), we have, for 0 ≤ µ ≤ 12 and ζ ≥ 2,
+q
+
+E[|µ̃ − µ| , |X| ≥ ζ] ≤ 2
+(67)
+
+Z ∞
+ζ
+
+[µq + |x − µ|q ]φ(x − µ) dx
+
+≤ 2[µq (ζ − µ)−1 + 2(ζ − µ)q−1 ]φ(ζ − µ)
+≤ 5ζ q−1 φ(ζ − µ).
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+35
+
+On the interval 0 ≤ x ≤ ζ we have here 1/c0 = g(0)/φ(0) ≤ 1 + wβ(x) ≤ 2,
+and so
+wg(x)/φ(x)
+≤ c0 wg(x)/φ(x).
+w̃ =
+1 + wβ(x)
+Together with (55) this shows that µ̃(x, w) ≤ c0 w(ζ + Λ)(g/φ)(x), and so
+(68)
+
+E[|µ̃ − µ|q , |X| ≤ ζ]
+
+≤ 2q−1 µq + [2c0 w(ζ + Λ)]q
+(69)
+
+Z ζ
+0
+
+(g/φ)q (x)φ(x − µ) dx
+
+≤ 2µq + [8/(q − 1)ζ][3c0 wζ(g/φ)(ζ)]q φ(ζ − µ),
+
+using (58) and (59), valid for ζ > 2qΛ/(q − 1), and noting that for such ζ,
+we have also ζ + Λ ≤ 3ζ/2. Since β(ζ) = w−1 ≥ 1, we always have (g/φ)(ζ) =
+β(ζ) + 1 ≤ 2β(ζ) = 2w−1 . Inserting these remarks into (69) and combining
+with (67) yields, for µ ∈ [0, 21 ] and ζ ≥ ζ0 = max{2, β −1 (1), 2qΛ/(q − 1)}, that
+E|µ̃ − µ|q ≤ 2µq + cq ζ q−1 φ(ζ − µ).
+
+For 0 < µ < 1/ζ, one has φ(ζ − µ) ≤ eφ(ζ), while for 1/ζ < µ < 21 , some calculus shows that ζ q−1 φ(ζ − µ) ≤ µ2 ≤ µq . This completes the proof of (61) for
+0 ≤ µ ≤ 21 , while for µ > 21 the bound follows by a simple modification of (64).
+
+6.2. Risk bounds for general random thresholds. We begin with a simple bound. Suppose that δ is a shrinkage rule with the bounded shrinkage
+property, and that t̂ is a random threshold with t̂ ≤ t with probability one
+on the event A. Then
+E|δ(X, t̂ ) − µ|q IA ≤ 2E[|δ(X, t̂ ) − X|q + |X − µ|q ]IA
+(70)
+
+≤ 2{|t + b|q P (A) + [E|X − µ|2q ]1/2 P (A)1/2 }
+≤ 4{tq + bq + 1}P (A)1/2 .
+
+[We have used E|Z|2q ≤ (EZ 4 )2q/4 ≤ 3 for q ≤ 2.]
+We now consider more specific risk bounds for random thresholds. The
+first will be particularly useful for small values of the true mean µ, in conjunction with a constant t which is with high probability a lower bound for
+the threshold t̂.
+Lemma 5. (a) Suppose that 0 < q ≤ 2, that X ∼ N (µ, 1) and that t̂ is a
+random threshold that may depend both on X and on other data. Suppose
+that δ is a thresholding rule with the bounded shrinkage property, and let
+µ̂ = δ(X, t̂ ).
+
+36
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+Suppose that t ≥
+
+(71)
+
+√
+2. Then for all µ,
+
+E|µ̂ − µ|q ≤ cq [|µ|q + tq−1 φ(t) + (tq + bq + 1){P (t̂ < t)}1/2 ].
+
+(b) If 1 < q ≤ 2, a similar result holds for the posterior mean with estimated pseudothreshold ζ. For ζ ≥ ζ0 (q, γ) and for all µ,
+(72)
+
+E|µ̃(x, ŵ) − µ|q ≤ c′q [|µ|q + ζ q−1 φ(ζ) + (ζ q + bq + 1){P (ζ̂ < ζ)}1/2 ].
+
+Proof. The method for both parts is essentially identical, so we concentrate on the thresholding case (a). Denote by µ∗ (X) the effect of applying
+to X the hard thresholding rule with threshold t. If t̂ is a data dependent
+threshold with t̂ ≥ t, then it follows from the shrinkage and thresholding
+properties of µ̂ and µ∗ that both
+(73)
+Hence,
+
+sign(µ̂) = sign(µ∗ ) and 0 ≤ |µ̂| ≤ |µ∗ |.
+|µ̂ − µ|q ≤ max{|µ|q , |µ∗ − µ|q } ≤ |µ|q + |µ∗ − µ|q .
+
+If we remove the overall constraint that t̂ ≥ t, it remains the case that
+|µ̂ − µ|q I[t̂ ≥ t] ≤ |µ|q + |µ∗ − µ|q .
+
+∗
+The inequality (60) for the risk
+√of the hard thresholding rule µ with fixed
+threshold t shows that for t ≥ 2,
+
+(74)
+
+E|µ̂ − µ|q I[t̂ ≥ t] ≤ cq [|µ|q + tq−1 φ(t)].
+
+Now consider the case t̂ < t. By the bounded shrinkage property and (70) it
+follows that
+(75)
+
+E|µ̂ − µ|q I[t̂ < t] ≤ 4(tq + bq + 1){P (t̂ < t)}1/2 .
+
+Putting together the two bounds (74) and (75) completes the proof of (71).
+For the posterior mean, we use the pseudothreshold ζ and set µ̂(x) =
+µ̃(x, w(ζ̂)) and µ∗ (x) = µ̃(x, w(ζ)) in the above argument. The key monotonicity property (73) follows from that of w → µ̃(x, w), and the analog of
+(74) uses (61). Finally, we use the bounded shrinkage property of the posterior mean. 
+The second lemma will be used in practice for larger values of µ.
+Lemma 6. Make the same assumptions as Lemma 5 but relax the condition that δ is necessarily a strict thresholding rule; it is still required that
+δ has the bounded shrinkage property. Suppose that t̂ satisfies the inequality
+√
+(76)
+with probability 1.
+t̂ ≤ d log n
+Let t be a nonrandom threshold, possibly depending on n. Then
+
+(77)
+
+E|µ̂ − µ|q ≤ 8[tq + bq + 1 + (d log n)q/2 {P (t̂ > t)}1/2 ].
+
+37
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+Proof. To prove Lemma 6, suppose first that t̂ ≤ t. From (70) with
+A = {t̂ ≤ t}, we have
+E|µ̂ − µ|q I[t̂ ≤ t] ≤ 4(tq + bq + 1).
+
+(78)
+
+Now use (70) again, now with A = {t̂ > t} and note that t̂ ≤
+on A, so that
+(79)
+
+√
+d log n w.p.1
+
+E|µ̂ − µ|q I[t̂ > t] ≤ 4((d log n)q/2 + bq + 1){P (t̂ > t)}1/2 .
+
+Combining the two results (78) and (79) completes the proof of Lemma 6.
+
+Remark 3. Lemma 6 applies in particular to the posterior mean rule
+µ̂ = µ̂(x, w(ζ̂)) with estimated pseudothreshold ζ̂.
+It also follows from (52) and (54) that the bounds in Lemmas 5 and 6
+remain valid if thresholds t are replaced by pseudothresholds ζ throughout.
+7. Moments of the score function. In this section we derive properties
+of the score function S(w) that will facilitate our detailed consideration of
+the behavior of ŵ. Suppose that Z ∼ N (0, 1) and define m1 (µ, w) = E β(Z +
+µ, w) and m2 (µ, w) = E β(Z + µ, w)2 . We first note that
+∂
+mk (µ, w) =
+∂µ
+
+Z ∞
+0
+
+kβ k−1 (x)β ′ (x)[1 + wβ(x)]−k−1 [φ(x − µ) − φ(x + µ)] dx.
+
+For k = 1, this shows that µ → m1 (µ, w) is increasing for µ ≥ 0.
+7.1. The moments m̃(w) and mk (µ, w) as functions of w. We give a
+special name to the mean zero case and study it first:
+(80)
+
+m̃(w) := −m1 (0, w) = −2
+
+Z ∞
+
+β(z, w)φ(z) dz.
+
+0
+
+Lemma 7. The function w → m̃(w) is nonnegative and increasing in
+w ∈ [0, 1] and satisfies m̃(0) = 0. If ζ = β −1 (w−1 ) is the pseudothreshold
+discussed in Section 5.4, then
+(81)
+
+m̃(w) ≍ ζ κ−1 g(ζ)
+
+as w → 0.
+
+Lemma 8. Fix µ > 0. The function w → m1 (µ, w) is decreasing in w ∈
+[0, 1] and satisfies m1 (µ, 0) > 0. In terms of ζ = β −1 (w−1 ), for sufficiently
+small w < w0 (γ) (not depending on µ) we have
+(82)
+(83)
+while
+(84)
+
+m1 (µ, w) ≥ 12 β(ζ)Φ̃(ζ − µ),
+
+m2 (µ, w) ≤ Cw−1 m1 (µ, w),
+m1 (ζ, w) ∼ 21 w−1
+
+µ ≥ 1,
+
+as w → 0.
+
+38
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+Proof of Lemma 7. For each z 6= β −1 (0), β(z, w) is a decreasing function of w and so m̃(w) is increasing. It follows that, as w ց 0,
+m̃(w) ց m̃(0) = −
+
+Z ∞
+
+β(z)φ(z) dz =
+
+−∞
+
+Z ∞
+
+−∞
+
+{φ(z) − g(z)} dz = 0.
+
+R ∞To study the asymptotic behavior of m̃(w) as w → 0, use the property
+−∞ β(y)φ(y) dy = 0 to obtain
+
+m̃(w) = 2
+
+Z ∞
+0
+
+wβ(z)2
+φ(z) dz.
+1 + wβ(z)
+
+Define ζ = β −1 (w−1 ). On the range z < ζ, we have wβ(z) < 1, so that 1 +
+β(0) ≤ 1 + wβ(z) ≤ 2. On the other hand, for z ≥ ζ we have wβ(z) < 1 +
+wβ(z) < 2wβ(z). It follows that
+(85)
+
+m̃(w) ≍
+
+Z ζ
+
+wβ(z)2 φ(z) dz +
+
+Z ∞
+
+β(z)φ(z) dz.
+
+ζ
+
+0
+
+Appealing to (46), (58) and (59), we then have for ζ ≥ 4Λ,
+(86)
+
+Z ζ
+0
+
+β(u)2 φ(u) du ≤ C
+
+Z ζ
+
+g(u)2 /φ(u) du ≤ 8Cζ −1 g(ζ)2 /φ(ζ)
+
+−1
+
+β(ζ)g(ζ) = Cw−1 ζ −1 g(ζ),
+
+0
+
+∼ Cζ
+
+using (47) and assuming also that ζ ≥ ζ0 . Hence, the first integral in (85) is
+bounded by a term of order ζ −1 g(ζ).
+Because β(u)φ(u) ∼ g(u) as u → ∞, the second integral in (85) is asymptotic, via (30) to
+Z ∞
+ζ
+
+g(u) du ≍ ζ κ−1 g(ζ).
+
+This term strictly dominates the bound ζ −1 g(ζ) and, therefore, we can conclude that m̃(w) is bounded above and below by multiples of ζ κ−1 g(ζ). 
+Proof of Lemma 8.
+
+Note first that the expression
+
+m1 (µ, w) =
+
+Z ∞
+
+−∞
+
+β(t, w)φ(t − µ) dt
+
+shows that m1 (µ, w) increases monotonically as w → 0. The limiting value
+is
+
+Z ∞ 
+Z ∞
+g(t)
+β(t)φ(t − µ) dt =
+m1 (µ, 0) =
+− 1 φ(t − µ) dt
+−∞ φ(t)
+−∞
+=
+
+Z ∞
+
+
+
+
+
+1
+2
+exp µt − µ2 g(t) dt − 1 = e−µ /2 Mg (µ) − 1,
+2
+−∞
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+39
+
+where Mg denotes the moment generating function of g. Since g is the convolution of γ and φ, and γ is symmetric,
+2
+
+2
+
+e−µ /2 Mg (µ) = e−µ /2 Mγ (µ)Mφ (µ) = Mγ (µ)
+=2
+
+Z ∞
+
+cosh(µt)γ(t) dt > 1,
+
+0
+
+so that m1 (µ, 0) > 0. [If g has sufficiently heavy tails, then m1 (µ, 0) may be
+infinite.]
+For sufficiently small w, we have
+Z ζ
+
+(87)
+
+−∞
+
+β(t, w)φ(t − µ) dt ≥ 0,
+
+since the limiting value of this expression is m1 (µ, 0) > 0. It follows that
+m1 (µ, w) ≥
+
+Z ∞
+ζ
+
+Z
+
+∞
+β(t)
+1
+φ(t − µ) dt.
+φ(t − µ) dt ≥ w−1
+1 + wβ(t)
+2
+ζ
+
+We turn to the bound on m2 (µ, w). Notice first that
+(88)
+
+|β(x, w)| ≤
+
+Hence,
+
+
+
+C = |β(0)|/{1 + β(0)},
+w−1 ,
+
+if β(x) < 0,
+if β(x) ≥ 0.
+
+E|β(µ + Z, w)| = m1 (µ, w) + E{|β(µ + Z, w)| − β(µ + Z, w)}
+≤ m1 (µ, w) + 2C ≤ Cm1 (µ, w)
+
+for sufficiently small w and µ ≥ 1, since we then have m1 (µ, w) ≥ m1 (1, w) ≥
+C. It also follows from (88) that, again for sufficiently small w, |β(t, w)| ≤
+w−1 for all t, and so
+m2 (µ, w) ≤ E{β(µ + Z, w)2 } ≤ w−1 E|β(µ + Z, w)| ≤ Cw−1 m1 (µ, w).
+
+Turning finally to the proof of (84), we have
+m1 (ζ, w) =
+
+Z
+
+β(z + ζ)
+φ(z) dz = w−1
+1 + wβ(z + ζ)
+
+Z
+
+r(ζ, z)φ(z) dz,
+
+where
+r(ζ, z) =
+
+β(ζ + z)
+→ I{z > 0}
+β(ζ) + β(ζ + z)
+
+as ζ → ∞, since letting O1 (Λz) denote a quantity bounded in absolute value
+by |Λz|,
+g(ζ) φ(ζ + z)
+β(ζ)
+∼
+β(ζ + z) g(ζ + z) φ(ζ)
+
+= exp{O1 (Λz) − ζz − z 2 /2} →
+
+
+
+0,
+∞,
+
+z > 0,
+z < 0.
+
+40
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+The conclusion (84) follows from the dominated convergence theorem, since
+|r(ζ, z)| < 1 [at least for ζ large enough that β(ζ) > 2|β(0)|]. 
+7.2. The moments mk (µ, w) as functions of µ. We shall need a series of
+bounds for mk (µ, w), each successively more refined as µ is constrained to
+be closer to zero.
+Lemma 9.
+in (88),
+(89)
+
+There are constants Ci such that for all w, defining c as
+
+m1 (µ, w) ≤
+
+and
+(90)
+
+m2 (µ, w) ≤
+
+
+ −m̃(w) + C1 ζ(w)µ2 ,
+
+for |µ| < 1/ζ(w),
+for |µ| ≤ ζ(w)/2,
+for all µ
+
+
+ C3 ζ(w)−κ w−1 m̃(w),
+
+for |µ| < 1/ζ(w),
+for |µ| ≤ ζ(w)/2,
+for all µ.
+
+C φ(ζ/2)w−1 ,
+ 2
+(w ∧ c)−1 ,
+
+C ζ −1 φ(ζ/2)w−2 ,
+ 4
+(w ∧ c)−2 ,
+
+Proof. We first remark that the global bounds mk (µ, w) ≤ (w ∧ c)−k
+follow trivially from (88). We derive a bound on the behavior of m1 (µ, w) −
+m1 (0, w) for small µ 6= 0. Assume that |µ| ≤ ζ −1 and that ζ > 2. Then for
+all y ∈ [−ζ, ζ],
+φ(y − µ) = φ(y) exp (µy − 12 µ2 ) ≤ eφ(y)
+
+(91)
+and
+(92)
+
+|φ′′ (y − µ)| = |(y − µ)2 − 1|φ(y − µ) ≤ c(1 + y 2 )φ(y),
+
+where the absolute constant c′ < 1.25e. Using the property that |β(z, w)| is
+bounded above by min{w−1 , β(z)} if β(z) > 0 and by {1 + β(0)}−1 |β(z)| if
+β(z) < 0, it follows that
+(93)
+
+∂ 2 m1 (µ, w)
+≤
+∂µ2
+
+(94)
+
+Z ∞
+
+−∞
+
+≤C
+
+|β(z, w)φ′′ (z − µ)| dz
+
+Z ζ
+
+−ζ
+
+|β(z)|(1 + z 2 )φ(z) dz + 2w−1
+
+Since g(z) ≤ C(1 + z 2 )−1 for all z, it follows that
+
+Z
+
+|z|>ζ
+
+|β(z)|φ(z) ≤ |g(z) − φ(z)| ≤ C(1 + z 2 )−1
+
+and hence that
+(95)
+
+Z ζ
+
+−ζ
+
+|β(z)|(1 + z 2 )φ(z) dz ≤ Cζ.
+
+φ′′ (z − µ) dz.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+41
+
+For |µ| ≤ ζ −1 and ζ > 2 we have
+w−1
+
+Z
+
+|z|>ζ
+
+≤ 2w
+(96)
+
+φ′′ (z − µ) dz
+−1
+
+Z ∞
+ζ
+
+φ′′ (z − |µ|) dz
+
+= −2w−1 φ′ (ζ − |µ|) = 2w−1 (ζ − |µ|)φ(ζ − |µ|)
+≤ Cζβ(ζ)φ(ζ) ≤ Cζ(1 + ζ 2 )−1 .
+
+Combining (95) and (96), recalling that C can be a different constant in
+different expressions, we can conclude that, for |µ| ≤ ζ −1 and ζ > 2,
+∂ 2 m1 (µ, w)
+≤ Cζ.
+∂µ2
+
+Since by symmetry ∂m1 (µ, w)/∂µ = 0 when µ = 0, it follows that, for µ ≤
+ζ −1 ,
+m1 (µ, w) − m1 (0, w) ≤ Cζµ2 ,
+which completes the proof of (89).
+Turn now to the second moment. Suppose throughout that |µ| ≤ ζ −1 and
+ζ > 2 and, without loss of generality, that µ ≥ 0. By the bounds on |β(z)/{1+
+wβ(z)}| and on φ(z − µ) as above,
+m2 (µ, w) ≤ C
+(97)
+(98)
+
+≤C
+
+Z ζ
+
+−ζ
+
+Z ζ
+0
+
+2
+
+β(z) φ(z − µ) dz +
+
+Z
+
+|z|>ζ
+
+β(ζ)2 φ(z − µ) dz
+
+β(z)2 φ(z) dz + 2β(ζ)2 Φ̃(ζ − µ)
+
+≤ Cw−1 ζ −1 g(ζ) + Cβ(ζ)2 φ(ζ − µ)/(ζ − µ)
+
+by using (86). To deal with the second term in (98), use the bounds on
+φ(ζ − µ) and the property that ζ − µ > ζ/2 to conclude that
+β(ζ)2 φ(ζ − µ)/(ζ − µ) ≤ Cζ −1 β(ζ)2 φ(ζ) ≤ Cζ −1 β(ζ)g(ζ).
+
+It follows that, for |µ| ≤ ζ −1 and ζ > 2,
+
+m2 (µ, w) ≤ Cζ −1 β(ζ)g(ζ).
+
+Now use the property (81) that g(ζ) ≤ Cζ 1−κ m̃(w) to complete the proof
+of (90).
+We now turn to the proof of the intermediate bounds. Note first that
+mk (µ, w) ≤ 2
+
+Z ∞
+0
+
+
+
+k
+β(x)
+φ(x − µ) dx.
+1 + wβ(x)
+
+42
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+On [0, ζ] we have 1 + wβ(x) ≥ 1 + β(0) > 0, so that [1 + wβ]−1 ≤ C, while
+on [ζ, ∞] clearly wβ/(1 + wβ) ≤ 1. Hence
+mk (µ, w) ≤ C
+
+Z ζ
+0
+
+β k (x)φ(x − µ) dx + 2w−k
+
+Z ∞
+ζ
+
+φ(x − µ) dx
+
+′
+= CIk,ζ + 2w−k Ik,ζ
+.
+
+Since β(ζ) = w−1 , we have for |µ| ≤ (1 − a)ζ,
+
+′
+Ik,ζ
+= Φ̃(ζ − µ) ≤ φ(aζ)/aζ.
+
+R
+
+Turning now to Ik,ζ ≤ C 0ζ (g/φ)k (x)φ(x − µ) dx, we apply (58) and (59):
+since (g/φ)(ζ) ≤ 2w−1 and φ(ζ − µ) ≤ exp{−ζ(ζ − 2µ)/4}φ(ζ/2) for 0 ≤ µ ≤
+ζ/2, we have
+Ik,ζ ≤ 2k w−k φ(ζ/2)Hk (ζ; Λ, µ) exp{−ζ(ζ − 2µ)/4}.
+
+The desired conclusion for k = 2 follows. For k = 1 one may check that
+sup
+ζ>8Λ,0≤µ≤ζ/2
+
+H1 (ζ; Λ, µ) exp{−ζ(ζ − 2µ)/4} ≤ C(Λ),
+
+while a direct argument shows that for ζ ≤ 8Λ, regardless of µ, I1,ζ ≤ Cw−1 ≤
+Cφ(ζ/2)w−1 . 
+8. The marginal maximum likelihood weight and its risk properties. The
+marginal maximum likelihood method yields a random weight ŵ, dependent
+on all the data X1 , . . . , Xn , and, hence, to a random threshold and pseudothreshold. In this section we study the properties of ŵ in order to use
+the risk bounds of Section 6.2 to bound the risk for the whole procedure
+and, hence, complete the proof of Theorem 1. The structure of the proof is
+essentially the same for both nearly black and ℓp sparseness classes, and to
+avoid unnecessary repetition of arguments, it is helpful to define
+pe =
+
+(99)
+
+
+
+p,
+1,
+
+if p > 0,
+if p = 0.
+
+The bounds obtained in Theorems 1 and 2 do not change as p increases
+above 2. Furthermore, for p ≥ 2 we have ℓp [η] ⊂ ℓ2 [η] and so demonstrating
+the bounds for p = 2 will imply that they hold for all larger p. Therefore, for
+the whole of the subsequent argument, we assume without loss of generality
+that p ≤ 2.
+The strategy is to consider separately the components of the risk for large
+and small µi . We employ risk decompositions
+Rq (µ̂, µ) = n−1
+
+X
+
+|µi |≤τ
+
+(100)
+
+E|µ̂i − µi |q + n−1
+
+= Rq (τ ) + R̃q (τ ),
+
+X
+
+|µi |>τ
+
+E|µ̂i − µi |q
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+43
+
+say. For “global” risk bounds, we take τ = 1, while for risk bounds over ℓp [η],
+we take τ roughly of order (2 log η −pe)1/2 .
+In each case properties of the estimated weight and corresponding pseudothreshold are derived; these are then substituted into the appropriate
+expression for the risk. We begin by the consideration of the threshold and
+risk for the components with small µi .
+8.1. Small signals: lower bounds for thresholds. Suppose that, for some
+p with 0 < p ≤ 2 and for some η > 0, µ lies in an ℓp ball:
+(
+
+ℓp [η] = µ : n
+
+−1
+
+n
+X
+i=1
+
+p
+
+|µi | ≤ η
+
+p
+
+)
+
+or, if p = 0, that the proportion of µi that are nonzero is at most η. Let Zi
+be independent N (0, 1) random variables, and let ŵ be the weight estimated
+from the data µi + Zi by the marginal maximum likelihood procedure. Define
+the pseudothreshold ζ̂ = β −1 (ŵ−1 ).
+One cannot hope to adapt to signals that are too small relative
+√ to the
+sample size n; this corresponds to restricting t(ŵ) to the range [0, 2 log n ].
+Hence, we set
+η̃ pe = max {η pe, n−1 (log n)2 }
+
+and, with the usual definition ζ = β −1 (w−1 ), define the weight w = w(η, n)
+by
+(101)
+
+ζ p−κ wm̃(w) = η̃ pe.
+
+Writing the left-hand side as the product of ζ p−κ/β(ζ) and m̃(w), both of
+which are increasing in w (for w sufficiently small), shows that w is well
+defined and monotonically increasing in η̃, at least for η̃ small.
+The intent of this definition is to choose a weight w = w(η, n) and pseudo
+threshold ζ = ζ(η, n) which is both a lower bound to ζ̂ = ζ(ŵ) for µ ∈ ℓp [η]
+with high probability (Lemma 10) and is of the right size to yield minimax
+risk bounds [see (103), (104) and Section 8.2].
+Some properties of w and ζ. Using the definition of β and the property
+(81) that m̃(w) ≍ ζ κ−1 g(ζ),
+(102)
+
+η̃ pe ≍ ζ p−κ wζ κ−1 g(ζ) ≍ ζ p−1 [g(ζ)/β(ζ)] ≍ ζ p−1 φ(ζ).
+
+We immediately obtain a bound,
+(103)
+
+ζφ(ζ) ≍ η̃ peζ 2−p .
+
+44
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+Taking logarithms,
+Hence, as η̃ → 0,
+
+| log η̃ −pe − 12 ζ 2 + (p − 1) log ζ| < C.
+ζ 2 ∼ 2 log η̃ −pe.
+
+(104)
+
+More explicitly, there exist constants c such that
+2
+
+(105) ζ ≥
+
+(
+
+2 log η −pe + (p − 1) log log η −pe − c,
+2 log n − (5 − p) log log n − c,
+
+if η pe ≥ n−1 log2 n,
+if η pe ≤ n−1 log2 n.
+
+Approximation (104) shows that our pseudothreshold bound ζ(η, n) has
+the order of the minimax threshold for ℓp [ηn ], and the right-hand side
+of (103) is essentially the asymptotic expression for the normalized minimax
+risk. We now show that ζ(η, n) is typically a lower bound for the estimated
+pseudothreshold when the signal is small.
+Lemma 10. Let the pseudothreshold ζ = ζ(η, n) corresponding to η̃ be
+defined by (101). There exist C = C(γ) and η0 = η0 (γ) such that if η ≤ η0
+and n/ log2 n ≥ η0−pe, then
+sup Pµ (ζ̂ < ζ) ≤ exp{−C(log n)3/2 }.
+
+(106)
+
+µ∈ℓp [η]
+
+It follows from this lemma that if µ is very sparse (η pe ≤ n−1 log2 n), then
+√
+n. On the other hand, if µ is
+t̂ and ζ̂ are, in relative terms, close to 2 log √
+less sparse, then t̂ and ζ̂ are at least about 2 log η −pe. (Recall from (53)
+that the difference ζ̂ − t̂ ∈ [0, C/t̂] is small.)
+Proof of Lemma 10.
+
+This argument leading to (103) also shows that
+
+1 2
+2 ζ − (p − 1) log ζ ≤ log n − 2 log log n + O(1),
+
+√
+and hence that t(w) < ζ(w) ≤ 2 log n for n sufficiently large, so that w ∈
+[wn , 1], the interval over which the likelihood ℓ(w) is maximized. ConseP
+quently, {ζ̂ < ζ} = {ŵ > w} = {S(w) > 0}. The summands in S(w) = ni=1 β(µi +
+Zi , w) are independent, and in view of (88), bounded by c0 w−1 .
+We therefore recall Bernstein’s inequality [e.g., Pollard (1984), page 193],
+which gives exponential bounds on the tail probabilities of the sum of uniformly bounded independent random variables.
+Proposition 2. Suppose that W1 , W2 , . . . , Wn are independent random
+variables
+with EWi = 0 and |Wi | ≤ M for i = 1, . . . , n. Suppose that V ≥
+Pn
+i=1 var Wi . Then, for any A > 0,
+P
+
+n
+X
+i=1
+
+!
+
+Wi > A ≤ exp{− 12 A2 /(V + 13 M A)}.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+We have
+(107)
+
+P (ŵ > w) = P {S(w) > 0} = P
+
+n
+X
+
+45
+
+!
+
+Wi > A ,
+
+i=1
+
+where Wi = β(µi + Zi , w) − m1 (µi , w), M = 2(c ∧ 1)−1 w−1 and
+A=
+
+n
+X
+i=1
+
+−m1 (µi , w).
+
+Define sets of “small,” “medium” and “large” co-ordinates,
+S = {i : |µi | ≤ ζ −1 },
+
+M = {i : ζ −1 < |µi | ≤ ζ/2},
+
+L = {i : |µi | > ζ/2}.
+
+For the nearly black case, it suffices to consider only two classes, coalescing
+M and S, but it is notationally simpler to use the same argument as for ℓp .
+Using the three parts of (89),
+X
+
+m1 (µi , w) ≤
+
+X
+i∈S
+
+[−m̃(w) + C1 ζµ2i ] + C|M|φ(ζ/2)w−1 + |L|w−1 .
+
+On the ℓp -ball ℓp [η], we have #{i : |µi | > t} ≤ nη pet−p and so
+|S| ≥ n − nη peζ p ,
+
+(108)
+
+|M| ≤ nη peζ p ,
+
+|L| ≤ nη pe2p ζ −p .
+
+On the set S, we have µ2i ≤ |µi |p ζ p−2 , and so, on making use of (101),
+X
+
+m1 (µi , w) ≤ −nm̃(w) + Cnη peζ −p w−1
+
+× [wζ 2p m̃(w) + C1 wζ 2p−1 + ζ 2p φ(ζ/2) + 1]
+
+≤ −n[m̃(w) − C η̃ peζ −p w−1 ]
+
+= −nm̃(w)[1 − Cζ −κ] ≤ − 12 nm̃(w)
+for w < w0 . Consequently, A ≥ 12 nm̃(w).
+P
+We now obtain a bound on V = var Wi . Using the same decomposition
+into small, medium and large coordinates, we have from the three parts of
+(90),
+V ≤
+
+X
+
+m2 (µi , w) ≤ C3 |S|ζ −κ w−1 m̃(w) + C|M|w−2 ζ −1 φ(ζ/2) + |L|w−2 .
+
+Using now (108) along with (101), we find that for sufficiently small w,
+V ≤ Cnζ −κw−1 m̃(w) + Cnη peζ p−1 w−2 φ(ζ/2) + Cnη peζ −p w−2
+≤ Cnw−1 m̃(w)[ζ −κ + ζ 2p−κ−1 φ(ζ/2) + ζ −κ ]
+
+≤ Cnw−1 m̃(w)ζ −κ .
+
+46
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+Turning to the exponent in the Bernstein bound, we have for w ≤ w0 ,
+
+
+
+
+−1
+V
+M
+Cnw−1 m̃(w)ζ −κ
+Cw−1
+A2
+= 2+
+≤
++
+V + (1/3)M A
+A
+3A
+n2 m̃(w)2
+nm̃(w)
+
+= C{nwm̃(w)}−1 .
+Therefore, applying the definition of η̃,
+A2
+≥ Cnwm̃(w) ≥ Cnη̃ peζ κ−p ≥ C(log n)2 [ log η̃ −pe](κ−p)/2 .
+V + (1/3)M A
+
+Define n0 (γ) so that n ≥ n0 if and only if n/ log2 n ≥ η0−pe. If κ > p, then for
+η < η0 and n ≥ n0 we have η̃ −pe = min{η −pe, n/ log2 n} ≥ η0−p , while if κ < p,
+then η̃ −p ≤ n and κ−p
+2 > −1/2. In either case we have
+[ log η̃ −pe](κ−p)/2 ≥ C(log n)−1/2 .
+
+Applying the Bernstein inequality to (107) concludes the proof of (106), so
+long as w ≤ w0 (γ). Use (101) to define η̃0 as the value of η̃ corresponding to
+w0 , and then set η0 = η̃0 to arrive at the first statement of Lemma 10. 
+8.2. Small signals: risk behavior. We apply risk bound (71) of Lemma
+5. Bound (54) permits the inequality to be rewritten in terms of the pseudothreshold ζ. We have, for all values of µi ,
+(109)
+
+E|µ̂i − µi |q ≤ C{|µi |q + ζ q−1 φ(ζ) + (1 + ζ q )P (ζ̂ < ζ)1/2 }.
+
+If η̃ is sufficiently small [less than η0 = η0 (γ), say], then we may use bounds
+(104) and (103) along with the probability bound (106) to yield
+E|µ̂i − µi |q ≤ C{|µi |q + η̃ pe( log η̃ −pe)(q−p)/2 + ( log η̃ −pe)q/2 e−C log
+
+3/2
+
+n
+
+}.
+
+If n > n0 (γ), we have exp{−C(log n)3/2 } ≤ n−1 (log n)2−p/2 ≤ η̃ pe(log η̃ −pe)−p/2 ,
+and we finally obtain
+E|µ̂i − µi |q ≤ C{|µi |q + η̃ pe( log η̃ −pe)(q−p)/2 }.
+
+If η̃ pe = n−1 (log n)2 , then log η̃ −pe = log n − 2 log log n ∼ log n so that, in
+general,
+η̃ pe( log η̃ −pe)(q−p)/2 ≤ max {η pe( log η −pe)(q−p)/2 , Cn−1 (log n)2+(q−p)/2 }.
+
+Combining the last two expressions and summing over i yields
+Rq (ζ) = n−1
+
+X
+
+|µi |≤ζ
+
+(
+
+≤ C n−1
+
+E|µ̂i − µi |q
+
+X
+
+|µi |≤ζ
+
+|µi |q + η pe( log η
+
+−p
+e (q−p)/2
+
+)
+
+)
+
++ n−1 (log n)2+(q−p)/2 .
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+If q ≤ p, we have by Hölder’s inequality
+n−1
+
+(110)
+
+X
+
+
+
+|µi |q ≤ n−1
+
+X
+
+|µi |p
+
+q/p
+
+47
+
+≤ ηq ,
+
+and also η p (log η −p )(q−p)/2 ≤ cp,q η q for η < e−1 . If q > p, we have |µi |q ≤
+|µi |p ζ q−p , and so, using the property that if p = 0 at most nη of the terms
+will be nonzero,
+n−1
+
+X
+
+|µi |≤ζ
+
+|µi |q ≤ η peζ q−p ≤ Cη pe( log η −pe)(q−p)/2 .
+
+In every case then, for µ ∈ ℓp [η], η ≤ η0 (γ) and n ≥ n0 (γ), we have
+(111)
+
+Rq (ζ) ≤ C{rp,q (η) + n−1 (log n)2+(q−p)/2 }.
+
+Before leaving the consideration of small µi , consider the case where there
+are no constraints on µ at all. The application of the elementary risk bound
+(63), along with aq ≤ 1, then yields an absolute bound on the average risk
+for small µ:
+(112)
+
+n−1
+
+X
+
+|µi |≤1
+
+E|µ̂i − µi |q ≤ n−1
+
+X
+
+(1 + |µi |q ) ≤ 2.
+
+|µi |≤1
+
+8.3. Large signals: upper bounds for thresholds. Define π̃(τ ; µ) = n−1 #{i :
+|µi | ≥ τ }. We will be interested in deriving upper bounds on the estimated
+pseudothreshold ζ̂ when it is known that π̃(τ ; µ) ≥ π for appropriate choices
+of τ.
+Choose w0 small enough so that both (81) and (83) apply. Define
+(113)
+
+w(τ, π) = sup{w ≤ w0 : πm1 (τ, w) ≥ 2m̃(w)}.
+
+Since m1 (τ, w)/m̃(w) → ∞ as w → 0, certainly w(τ, π) is well defined. On
+the pseudothreshold scale, we write ζτ,π or ζ(τ, π) for β −1 (1/w(τ, π)).
+Lemma 11. There exist C = C(γ) and π0 = π0 (γ) such that if π < π0 ,
+then for all τ ≥ 1,
+(114)
+
+sup
+µ : π̃(τ ;µ)≥π
+
+κ−1
+Pµ (ζ̂ > ζτ,π ) ≤ exp{−Cnζτ,π
+φ(ζτ,π )}.
+
+Proof. If nπ of the µi for which |µi | ≥ τ are shrunk to ±τ , and all
+the other µi are set to zero, then the distribution of each |µi + Zi | will be
+stochastically reduced. Since β(y, w) is an increasing function of |y| for each
+w, it follows that S(w) will be stochastically reduced, and so P (S(w) < 0)
+will be, if anything, increased. Thus, the maximum value of P (ζ̂ > ζ) subject
+to the constraint that at least nπ of the |µi | exceed τ will be taken when
+
+48
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+exactly nπ of the |µi | are equal to τ and the remainder are zero. We shall
+therefore assume that this is the case.
+We now return to the problem of bounding the probability that S(w) is
+negative, for w = w(τ, π). We have, following (107) but changing the sign,
+P (ŵ < w) = P (S(w) < 0) = P
+
+( n
+X
+
+)
+
+Wi > A ,
+
+i=1
+
+where, on this occasion,
+Wi = m1 (µi , w) − β(µi + Zi , w) and
+
+A=
+
+n
+X
+
+m1 (µi , w).
+
+i=1
+
+Just as above, |Wi | ≤ 2c0 w−1 for all i. To obtain a bound on A, we have,
+making use of the definition (113) of w,
+n−1 A = (1 − π)m1 (0, w) + πm1 (τ, w)
+
+≥ − 21 πm1 (τ, w) + πm1 (τ, w) = 12 πm1 (τ, w).
+
+We now seek an upper bound on the sum of the variances of the Wi .
+Making use of the bound (90) for m2 (0, w), bound (83) for m2 (τ, w) and
+(113),
+n−1
+
+n
+X
+i=1
+
+var Wi ≤ m2 (0, w) + πm2 (τ, w)
+
+≤ Cζ(w)−κ w−1 m̃(w) + Cw−1 πm1 (τ, w)
+
+≤ Cw−1 πm1 (τ, w).
+
+Substituting into the expression needed for the application of Bernstein’s
+inequality, we have
+n
+
+
+
+
+
+V
+M
++
+≤ Cw−1 π −1 m−1
+1 (τ, w),
+2
+A
+3A
+
+so that
+A2
+≥ Cnwπm1 (τ, w)
+V + (1/3)M A
+≥ Cnwm̃(w) ≥ Cnζ κ−1β(ζ)−1 g(ζ)
+
+≥ Cnζ κ−1φ(ζ),
+(since w ≤ w0 ). 
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+49
+
+8.4. Large signals: risk behavior. Let ζ = ζ(τ, π̃(τ ; µ)), where τ remains
+unspecified for the moment. For each µi , we have from (77) and (52),
+E|µ̂i − µi |q ≤ C{1 + ζ q + (log n)q/2 P (ζ̂ ≥ ζ)1/2 }.
+We then consider two cases. If ζ 2 > log n, then the right-hand side is bounded
+by C(1 + 2ζ q ). On the other hand, if ζ 2 ≤ log n, then
+nζ κ−1 exp{− 21 ζ 2 } ≥ Cn exp{− 43 ζ 2 } > Cn1/4 ,
+so that from (114),
+(log n)q/2 P (ζ̂ ≥ ζ)1/2 < log n exp(−Cn1/4 ) ≤ 1
+if n ≥ n0 . It follows that, for sufficiently small π and n > n0 , whether or not
+ζ 2 > log n,
+E|µ̂i − µi |q ≤ C{1 + ζ q ).
+
+(115)
+Hence,
+(116)
+
+R̃q (τ ) = n−1
+
+X
+
+|µi |≥τ
+
+E|µ̂i − µi |q ≤ C π̃(τ ; µ)[1 + ζ q (τ, π̃(τ, µ))].
+
+For the global risk bound needed for Theorem 1, we set τ = 1. Let π =
+π̃(1; µ). We seek a bound for ζ = ζ(1, π). Since m̃(w) ≍ ζ κ−1 g(ζ) by (81), it
+follows that for sufficiently small π and, hence, w,
+π −1 =
+
+m1 (1, w)
+≥ Cζ −κ eζ .
+2m̃(w)
+
+Taking logarithms, we have
+log π −1 ≥ c − κ log ζ + ζ
+and, hence, for sufficiently small π,
+(117)
+
+ζ q = ζ(1, π)q ≤ 2q (log π −1 )q .
+
+In combination with (116), this yields, regardless of the value of π = π̃(1; µ),
+(118)
+
+R̃q (1) ≤ Cπ[1 + (log π −1 )2 ] ≤ C.
+
+Write ζ1 for the pseudothreshold ζ(η, n) defined by (101). Our main goal
+now is to establish a large signal complement to inequality (111), namely,
+(119)
+
+R̃q (ζ1 ) ≤ C{rp,q (η) + n−1 (log n)2+(q−p)/2 }.
+
+The approach will be to apply Lemma 11 with τ = ζ2 = ζ2 (µ) defined by
+(120)
+
+ζ2 = ζ(ζ1 , π),
+
+π = π̃(ζ1 ; µ).
+
+50
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+Let us first verify that, as one would expect for µ ∈ ℓp [η], ζ2 > ζ1 . Since
+m̃(w) ≍ ζ κ−1 g(ζ) by (81), and m1 (ζ1 , w1 ) ∼ (2w1 )−1 by (84), we have, using (102),
+m1 (ζ1 , w1 ) 1 β(ζ1 ) 1−κ ζ11−κ
+≍
+ζ
+≍
+≍ η̃ −peζ1p−κ .
+m̃(w1 )
+2 g(ζ1 ) 1
+φ(ζ1 )
+P
+
+For p > 0 we now use the bound
+|µi |p ≤ nη p , while for p = 0 we simply
+use π ≤ η. Both cases are encompassed by the inequality
+π ≤ η peζ1−p ≤ η̃ peζ1−p ,
+
+(121)
+and so
+
+m1 (ζ1 , w1 )
+≤ Cζ1−κπ −1 ≪ 2π −1
+m̃(w1 )
+
+for ζ1 large,
+
+which shows that ζ2 > ζ1 (and, in particular, that ζ2 > 1).
+In this notation the bound (116) becomes
+R̃q (ζ1 ) ≤ Cπ(1 + ζ2q ) ≤ Cπζ2q .
+Although (121) places an upper bound on π, in fact, it may be arbitrarily
+much smaller. The analysis to follow considers separately cases in which π
+is comparable to, or much smaller than, η̃ peζ1−p .
+Recalling the lower bound (82) that m1 (ζ1 , w) ≥ 12 β(ζ)Φ̃(ζ − ζ1 ), it follows
+that ζ2 ≤ ζ3 = ζ(w3 ), where w3 is the solution to
+(122)
+
+Φ̃(ζ(w) − ζ1 ) = 4π −1 wm̃(w).
+
+ζ3 is intended as a more manageable version of ζ2 .
+Suppose first that ζ3 > ζ1 + 1. Then from (122),
+πζ2q ≤ Cζ3q+κ−1
+≤ Cζ3κ+q
+
+g(ζ3 ) ζ3 − ζ1
+β(ζ3 ) φ(ζ3 − ζ1 )
+
+φ(ζ3 )
+= Cζ3κ+q e−(ζ3 −ζ1 )ζ1 φ(ζ1 ).
+φ(ζ3 − ζ1 )
+
+Using (103) and the fact that ζ3 → ζ3κ+q e−(ζ3 −ζ1 )ζ1 is decreasing, at least for
+ζ3 ≥ ζ1 + 1, we get
+πζ2q ≤ C η̃ peζ11−p (ζ1 + 1)κ+q e−ζ1 .
+
+From (104), we then conclude that for ζ1 sufficiently large,
+πζ2q ≤ max {Cη pe(2 log η −pe)−2 ζ1κ+3+q−pe−ζ1 , Cn−1 ζ1κ+7+q−pe−ζ1 }
+≤ C max {η pe(2 log η −pe)−2 , n−1 }.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+51
+
+Now suppose that ζ3 ≤ ζ1 + 1 (and, hence, ζ2 ∈ [ζ1 , ζ1 + 1]). Since Φ̃(ζ3 −
+ζ1 ) ≥ Φ̃(1), it follows that ζ3 is smaller than the solution to
+Φ̃(1) = 4wm̃(w)π −1 ≍ ζ κ−1
+
+g(ζ) −1
+π ≍ ζ κ−1 φ(ζ)π −1 .
+β(ζ)
+
+Taking logarithms, the equation becomes
+ζ 2 /2 − (κ − 1) log ζ + log c = log π −1 ,
+from which it follows that
+ζ22 ≤ 2 log π −1 + log log π −1 + C.
+
+Consequently, since π[2 log π −1 + log log π −1 + C]q/2 is increasing in π for
+sufficiently small π, and π ≤ η peζ1−p , we get
+πζ2q ≤ Cη peζ1−p [2 log (η −peζ1p )]q/2 ≤ Cη pe(2 log η −pe)q/2 (2 log η̃ −pe)−p/2 .
+
+If q < p, the right-hand side may be bounded further by Cη q . If q ≥ p,
+consider separately the two cases η pe > n−1 log2 n and η pe ≤ n−1 log2 n. In all
+cases we obtain (119) for sufficiently small η and n > n0 .
+To complete the proof of Theorem 1, combine the bounds (112) for Rq (1)
+and (118) for R̃q (1). For the adaptivity bound, similarly combine bounds
+(111) for Rq (ζ1 ) and (119) for R̃q (ζ1 ).
+9. Proof of Theorem 2. The proof of Theorem 2 requires small but significant modifications to the proof of Theorem 1.
+Consider first the case η pe > n−1 log2 n, so that η̃ = η. To show that parts
+(a) and (b) of the theorem remain true with µ̂A in place of µ̂, simply observe
+that
+E|δ(X, t̂A ) − µ|q = E{|δ(X, t̂ ) − µ|q , t̂ ≤ tn } + E{|δ(X, tA ) − µ|q , t̂ > tn }.
+Ignoring the event {t̂ ≤ tn } in the first term leads to
+
+Rq (µ̂A , µ) ≤ Rq (µ̂, µ) + Sq (µ̂FA , µ),
+
+where
+(123)
+
+Sq (µ̂FA , µ) = n−1
+
+X
+i
+
+E{|δ(Xi , tA ) − µi |q , t̂ > tn }.
+
+The superscript F emphasizes the fixed threshold tA .
+The bound of Theorem 1 applies to Rq (µ̂, µ), so it remains to consider
+Sq (µ̂FA , µ). Analogously to (100), decompose (123) according to terms with
+large and small values of µi , obtaining
+(124)
+
+Sq (µ̂FA , µ) = Sq (τ ) + S̃q (τ ),
+
+52
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+where, for example,
+S̃q (τ ) = n−1
+
+X
+
+|µi |≥τ
+
+E{|δ(Xi , tA ) − µi |q , t̂ > tn }.
+
+We will need the following risk bounds from Section 6. First, from (71),
+q−1
+φ(tA )},
+E|δ(X, tA ) − µ|q ≤ cq {|µ|q + tA
+
+(125)
+
+while from (70), for any event B,
+E{|δ(X, tA ) − µ|q , B} ≤ 4(tqA + bq + 1)P (B)1/2 .
+
+(126)
+
+Consider first part (a), namely, global boundedness. For small µi one uses
+(125) to obtain
+Sq (1) ≤ n−1
+
+X
+
+|µi |≤1
+
+≤ cq n−1
+
+(127)
+
+E|δ(Xi , tA ) − µi |q
+
+X
+
+q−1
+φ(tA )}
+{|µi |q + tA
+
+|µi |≤1
+
+q−1
+≤ cq {1 + tA
+φ(tA )} ≤ 2cq .
+
+For large µi , as in Section 8.4, introduce π = π̃(1, µ) and ζ(µ) defined as
+ζ(1, π), where ζ(τ, π) is as defined before Lemma 11. Note throughout that
+ζ(µ) ≥ β −1 (1) > 0. Arguing as at (117), we also observe that
+ζ(µ) ≤ 2 log π −1 .
+
+Two cases arise. If ζ(µ) > log1/2 n, then
+√
+tA = 2(1 + A) log n ≤ cζ(µ) ≤ c log π −1 ,
+and so, from (126),
+E|η(Xi , tA ) − µi |q ≤ c(log π −1 )q
+and hence
+S̃q (1) ≤ cπ(log π −1 )q ≤ C.
+In the second case ζ(µ) ≤ log1/2 n ≤ tn and so, using the property ζ̂ =
+ζ(t̂) > t̂ and Lemma 11,
+P (t̂ > tn ) ≤ P (ζ̂ > tn ) ≤ P {ζ̂ > ζ(µ)}
+
+≤ exp[−Cnζ(µ)k−1 φ{ζ(µ)}] ≤ exp(−Cn1/4 ).
+
+Consequently, using (126) with B = {τ̂ > tn },
+
+S̃q (1) ≤ 4π(tqA + bq + 1) exp(−Cn1/4 ) ≤ c exp(−Cn1/4 ) log n ≤ C.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+53
+
+Now turn to part (b), adaptivity over ℓp [η]. The case q ≤ p is simple; from
+(125) and bound (110), we have
+Sq (µ̂FA , µ) ≤ cq n−1
+
+X
+i
+
+q−1
+{|µi |q + tA
+φ(tA )} ≤ cq η q + Cn−(1+A) log1/2 n.
+
+For q > p, we follow a strategy broadly similar to that of Section 8.4.
+In (124) we take τ = ζ1 = ζ(η, n), the pseudothreshold defined by (101).
+Applying (125) in a similar manner to (127), we find that
+Sq (ζ1 ) ≤ cq n−1
+
+X
+
+|µi |≤ζ1
+
+q−1
+q−1
+{|µi |q + tA
+φ(tA )} ≤ cq η peζ1q−p + cq tA
+φ(tA ),
+
+which is bounded by the right-hand side of (19) in view of (104).
+To bound the large signal term S̃q (ζ1 ), we again apply Lemma 11 with
+τ = ζ2 = ζ2 (µ) defined as in (120). We first observe, using (126) with B =
+{t̂ > tn }, that
+(128)
+
+S̃q (ζ1 ) ≤ cπtqA {P (t̂ > tn )}1/2 ≤ cη peζ −p tqA {P (t̂ > tn )}1/2 .
+
+Consider now three cases. First suppose that µ is such that ζ2 (µ) < tn .
+Using initially the property that ζ̂ = ζ(t̂ ) > t̂, and then appealing to Lemma
+11, we have
+P (t̂ > tn ) ≤ P (ζ̂ > tn ) ≤ P (ζ̂ > ζ2 )
+
+≤ exp{−Cnζ2κ−1 φ(ζ2 )} ≤ exp{−Cntκ−1
+n φ(tn )}.
+
+Using the definition of tn , and the fact that tκ−1
+≥ 1 for n ≥ 13,
+n
+5/2
+ntκ−1
+n.
+n φ(tn ) ≥ φ(0) log
+
+Hence, from (128) and using the fact that η ≤ η0 ,
+
+S̃q (ζ1 ) ≤ Cη pe(log n)q/2 exp(−C log5/2 n) ≤ Cη pe ≤ Crp,q (η).
+
+Second, consider µ for which ζ12 ≥ log n. In this case 2 log η −pe ≍ ζ12 ≥ log n,
+and so, from (128)
+S̃q (ζ1 ) ≤ Cη pe(log n)(q−p)/2 ≤ Crp,q (η).
+
+Finally, suppose both ζ12 ≤ log n and ζ2 (µ) ≥ tn . In this case
+ζ3 − ζ1 ≥ ζ2 − ζ1 ≥ tn − log1/2 n ≥ 21 log1/2 n
+
+if n ≥ n0 . We use (122) defining ζ3 to derive an upper bound on π. The
+equation implies
+Φ̃(ζ3 − ζ1 ) = 4π −1 m̃(w3 )/β(ζ3 )
+
+≍ 4π −1 ζ3κ−1 g(ζ3 )/β(ζ3 )
+
+≍ 4π −1 ζ3κ−1 φ(ζ3 ).
+
+54
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+In other words, using (103),
+π ≍ ζ3κ−1 (ζ3 − ζ1 )φ(ζ3 )/φ(ζ3 − ζ1 )
+≤ ζ3κ exp{−(ζ3 − ζ1 )ζ1 }φ(ζ1 )
+
+≍ η p ζ11−p ζ3κ exp{−(ζ3 − ζ1 )ζ1 }.
+
+Using the first inequality of (128), we have
+S̃q (ζ1 ) ≤ Cη petqA ζ3κ+1 exp{−(ζ3 − ζ1 )ζ1 }
+
+≤ Cη petqA (ζ3 − ζ1 )κ+1 exp{−(ζ3 − ζ1 )ζ1 },
+
+where we have used the fact that ζ3 − ζ1 ≥ 12 log1/2 n ≥ 12 ζ1 , so that ζ3 ≤
+3(ζ3 − ζ1 ). Using these properties again, as well as the property that ζ1 ≥
+β −1 (1), we have
+√
+S̃q (ζ1 ) ≤ Cη pe(log n)(κ+1+q)/2 exp(−ζ1 log n ) ≤ Cη pe ≤ Crp,q (η).
+This completes the proof that the results of Theorem 1 continue to hold for
+the modified estimator for η pe > n−1 log2 n.
+Now turn to the case η pe ≤ n−1 log2 n. Reuse decomposition (100) with
+τ = ζ(η, n) defined after (101). First use bound (71) with t = tA :
+(129)
+
+q−1
+E|µ̂A,i − µi |q ≤ cq [|µi |q + tA
+φ(tA ) + (tqA + bq + 1){P (t̂A < tA )}1/2 ].
+
+By the definition of tA , we have
+q−1
+(130) tA
+φ(tA ) = φ(0)n−1−A [2(1 + A) log n](q−1)/2 ≤ Cn−1−A log(q−1)/2 n.
+
+To bound P (t̂A < tA ), observe from (53) that t2 (ζ) ≥ ζ 2 − C. In combination with (105), this implies, for η pe ≤ n−1 log2 n, that
+t2 (ζ) ≥ t2n + p log log n − c − C,
+
+so that t2 (ζ) ≥ t2n for n > n(p, γ). Consequently,
+{t̂A < tA } = {t̂ < tn } ⊂ {t̂ < t(ζ)} = {ζ̂ < ζ}
+and so we conclude from (106) that when η pe ≤ n−1 log2 n and n > n(p, γ),
+
+(131) (tqA + bq + 1)P (t̂A < tA ) ≤ c(log n)q/2 exp{−C(log n)3/2 } = o(n−1−A ).
+We now have
+(132)
+
+n−1
+
+X
+i
+
+|µi |q ≤
+
+
+
+
+
+
+
+
+
+n
+
+−1
+
+X
+
+p
+
+|µi |
+
+!q/p
+
+≤ η q = rp,q (η),
+
+i
+n−1 kµkqp ≤ n(q−p)/p η q ,
+
+for q ≤ p,
+for q > p > 0.
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+55
+
+Averaging (129) over all i and inserting (130)–(132) proves (23) for the case
+q ≤ p and (24) for q > p.
+To prove (23) for q > p, argue as in Section 8.2 to give
+(133)
+
+n−1
+
+X
+
+|µi |≤ζ
+
+|µi |q ≤ Crp,q (η),
+
+so that, summing only over |µi | ≤ ζ,
+(134)
+
+Rq (ζ) ≤ Crp,q (η) + cn−1−A log1/2 n.
+
+For q > p and |µi | > ζ, we apply bound (78), noting that t̂A ≤ tA with
+probability one, to obtain
+E|µ̂A,i − µi |q ≤ 4(tqA + bq + 1) ≤ C(log n)q/2 .
+As in the previous section, comparing (120) and (121), we have
+π = n−1 #{i : |µi | > ζ} ≤ η peζ −p ,
+√
+and so, recalling from (105) that ζ > log n,
+R̃q (ζ) ≤ πC(log n)q/2 ≤ Cη pe(log n)(q−p)/2 .
+
+But η pe ≤ n−1 log2 n implies that log η −pe ≥ log n − 2 log log n and, hence, that
+log n ≤ C log η −pe, so for n large and η pe ≤ n−1 log2 n we have
+R̃q (ζ) ≤ Crp,q (η);
+
+combining this result with (134) completes the proof of Theorem 2. 
+10. Remarks on the posterior mean. In proving results for the posterior mean, we have assumed throughout that q > 1. The failure of the
+posterior mean to be a strict thresholding rule has a substantive effect on
+the overall risk if q ≤ 1. Concentrate attention on the case where
+√ γ is the
+Laplace√distribution with parameter 1, and define ψ(n) = exp( 2 log n ) so
+that g( 2 log n )−1 ≍ ψ(n) as n → ∞.
+√
+An important contributor√to our arguments was t(ŵ) ≤ 2 log n, from
+which it follows that τ (ŵ) ≤ 2 log n. By the definition of τ , we have
+√
+ŵ
+φ( 2 log n )
+≥ Cn−1 ψ(n),
+≥ √
+1 − ŵ g( 2 log n )
+so that ŵ ≥ Cn−1 ψ(n). Since g(x)/φ(x) is bounded below away from zero,
+it follows that, for some constant C and for all x, the posterior weight
+w̃(x, ŵ) ≥ Cn−1 ψ(n).
+
+56
+
+I. M. JOHNSTONE AND B. W. SILVERMAN
+
+On the other hand, the odd function µ̃1 satisfies µ̃′1 (0) > 0 and is strictly
+increasing with µ̃1 (x) ≥ x − Λ for all x; therefore, x−1 µ̃1 (x) is uniformly
+bounded below away from zero for x 6= 0. It follows that, for all x 6= 0,
+|µ̃(x, ŵ)| = w̃(x, ŵ)|µ̃1 (x)| ≥ C|x|n−1 ψ(n).
+
+If µ = 0 and X ∼ N (0, 1), it follows that
+
+E|µ̃(X, ŵ) − µ|q ≥ C q n−q ψ(n)q E|X|q = Cn−q ψ(n)q
+
+so that, however small the value of η, the risk bound cannot be reduced
+below Cn−q ψ(n)q , making it impossible for the estimate to attain the full
+range of adaptivity given by the posterior median. The restrictions become
+more severe the lower the value of q.
+Acknowledgments. I. M. Johnstone is very grateful for the hospitality of
+the University of Bristol, the “Nonparametric Semester” of Institut Henri
+Poincaré, Paris, and the Australian National University, where parts of the
+work on this paper were carried out. B. W. Silverman acknowledges the
+hospitality of the Department of Statistics and the Center for Advanced
+Study in the Behavioral Sciences at Stanford University. An early version
+of this work formed part of his Special Invited Paper presented in 1999. We
+thank Tim Heaton for carefully reading the manuscript and pointing out a
+number of minor errors. We owe a particular debt of gratitude to Ed George
+for his encouragement and generosity over the whole period of this work.
+The careful suggestions of the referees were extremely useful in prompting
+us to improve both the presentation and the results of the paper.
+REFERENCES
+Abramovich, F., Benjamini, Y., Donoho, D. L. and Johnstone, I. M. (2000). Adapting
+to unknown sparsity by controlling the false discovery rate. Technical Report 2000-19,
+Dept. Statistics, Stanford Univ.
+Abramovich, F. and Silverman, B. W. (1998). Wavelet decomposition approaches to
+statistical inverse problems. Biometrika 85 115–129. MR1627226
+Benjamini, Y. and Hochberg, Y. (1995). Controlling the false discovery rate: A practical
+and powerful approach to multiple testing. J. Roy. Statist. Soc. Ser. B 57 289–300.
+MR1325392
+Brown, L. D., Johnstone, I. M. and MacGibbon, K. B. (1981). Variation diminishing
+transformations: A direct approach to total positivity and its statistical applications.
+J. Amer. Statist. Assoc. 76 824–832. MR650893
+Bruce, A. and Gao, H.-Y. (1996). Applied Wavelet Analysis with S-PLUS. Springer, New
+York. MR1466742
+Cai, T. T. (2002). On block thresholding in wavelet regression: Adaptivity, block size, and
+threshold level. Statist. Sinica 12 1241–1273. MR1947074
+Cai, T. T. and Silverman, B. W. (2001). Incorporating information on neighboring coefficients into wavelet estimation. Sankhyā Ser. B 63 127–148. MR1895786
+
+EMPIRICAL BAYES FOR SPARSE SEQUENCES
+
+57
+
+Donoho, D. L. and Johnstone, I. M. (1994). Minimax risk over ℓp -balls for ℓq -error.
+Probab. Theory Related Fields 99 277–303. MR1278886
+Donoho, D. L. and Johnstone, I. M. (1995). Adapting to unknown smoothness via
+wavelet shrinkage. J. Amer. Statist. Assoc. 90 1200–1224. MR1379464
+Donoho, D. L., Johnstone, I. M., Hoch, J. C. and Stern, A. S. (1992). Maximum
+entropy and the nearly black object (with discussion). J. Roy. Statist. Soc. Ser. B 54
+41–81. MR1157714
+George, E. I. and Foster, D. P. (1998). Empirical Bayes variable selection. In Proc.
+Workshop on Model Selection, Special Issue of Rassegna di Metodi Statistici ed Applicazioni (W. Racugno, ed.) 79–108. Pitagora Editrice, Bologna. MR2000752
+George, E. I. and Foster, D. P. (2000). Calibration and empirical Bayes variable selection. Biometrika 87 731–747. MR1813972
+Johnstone, I. M. and Silverman, B. W. (2003). EbayesThresh: R
+and S-PLUS software for Empirical Bayes thresholding. Available at
+www.stats.ox.ac.uk/˜silverma/ebayesthresh.
+Johnstone, I. M. and Silverman, B. W. (2004). Empirical Bayes selection of wavelet
+thresholds. Ann. Statist. To appear. MR2057567
+Karlin, S. (1968). Total Positivity 1. Stanford Univ. Press, Stanford, CA. MR230102
+Pollard, D. (1984). Convergence of Stochastic Processes. Springer, New York. MR762984
+Stein, C. (1981). Estimation of the mean of a multivariate normal distribution. Ann.
+Statist. 9 1135–1151. MR630098
+Zhang, C.-H. (2004). General empirical Bayes wavelet methods and exactly adaptive
+minimax estimation. Ann. Statist. To appear.
+Department of Statistics
+Stanford University
+Stanford, California 94305-4065
+USA
+e-mail: imj@stat.stanford.edu
+
+St. Peter’s College
+Oxford OX1 2DL
+United Kingdom
+e-mail: silverman@stats.ox.ac.uk
+
+

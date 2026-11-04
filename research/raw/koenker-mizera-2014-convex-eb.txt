@@ -1,0 +1,1616 @@
+CONVEX OPTIMIZATION, SHAPE CONSTRAINTS, COMPOUND
+DECISIONS, AND EMPIRICAL BAYES RULES
+ROGER KOENKER AND IVAN MIZERA
+Abstract. Estimation of mixture densities for the classical Gaussian compound decision problem and their associated (empirical) Bayes rules is
+considered from two new perspectives. The first, motivated by Brown
+and Greenshtein (2009), introduces a nonparametric maximum likelihood
+estimator of the mixture density subject to a monotonicity constraint on
+the resulting Bayes rule. The second, motivated by Jiang and Zhang
+(2009), proposes a new approach to computing the Kiefer-Wolfowitz nonparametric maximum likelihood estimator for mixtures. In contrast to
+prior methods for these problems, our new approaches are cast as convex optimization problems that can be efficiently solved by modern interior point methods. In particular, we show that the reformulation of the
+Kiefer-Wolfowitz estimator as a convex optimization problem reduces the
+computational effort by several orders of magnitude for typical problems, by
+comparison to prior EM-algorithm based methods, and thus greatly expands the practical applicability of the resulting methods. Our new procedures are compared with several existing empirical Bayes methods in
+simulations employing the well-established design of Johnstone and Silverman (2004). Some further comparisons are made based on prediction
+of baseball batting averages. A Bernoulli mixture application is briefly
+considered in the penultimate section.
+
+1. Introduction
+The recent revival of interest in empirical Bayes methods for compound
+decision problems, e.g. Brown (2008), Brown and Greenshtein (2009), Efron
+(2010, 2011), and Jiang and Zhang (2009, 2010), has renewed interest in
+computational methods for nonparametric mixture models. Our primary
+objective for this paper is to demonstrate the constructive role that modern
+convex optimization methods can play in this context, both from practical
+and theoretical viewpoints.
+Version: November 20, 2013. Roger Koenker is McKinley Professor of Economics and Professor of Statistics at the University of Illinois, Urbana, IL 61801 (Email:
+rkoenker@uiuc.edu). Ivan Mizera is Professor of Statistics at the University of Alberta, Edmonton, Alberta T6G 2G1, Canada (Email: imizera@ualberta.ca). This research was partially supported by NSF grant SES-11-53548 and the NSERC of Canada. The authors wish
+to thank Larry Brown for pointing out the relevance of shape constrained density estimation to compound decision problems, and Steve Portnoy for extensive related discussions.
+1
+
+2
+
+Convex Optimization and Empirical Bayes
+
+With this objective in mind, we focus primarily on the classical compound decision problem of estimating an n-vector (µ1 , · · · , µn ) of parameters, under squared error loss, based on a conditionally Gaussian random
+sample, Yi ∼ N(µi , 1) i = 1, · · · , n, where the µi ’s are assumed to be
+drawn iid-ly from a distribution F; so that the Yi ’s have the mixture density
+Z
+g(y) = ϕ(y − µ)dF(µ).
+For known F, and hence known g, the optimal prediction of the µ’s, under
+squared error loss, is given by the Bayes rule
+(1)
+
+δ(y) = E(µ|Y = y) = y +
+
+g0 (y)
+.
+g(y)
+
+This formula is generally attributed to Robbins (1956), but Efron (2011)
+notes that Robbins attributes it to M.C.K. Tweedie. Efron’s paper offers
+a broad perspective on the significance, and limitations, of its use in empirical Bayes applications; in particular, it points out that the exponential
+family argument of van Houwelingen and Stijnen (1983) immediately ensures that (1) is nondecreasing in y, not only for the conditional Gaussian
+case, but for more general one-parameter exponential families as well, regardless of the prior distribution F.
+From the practical point of view, Brown and Greenshtein (2009) show
+that simple kernel density estimates of g can be employed to achieve attractive performance relative to some other empirical Bayes procedures.
+However, the monotonicity of the decision rule δ(y) suggests that also its
+estimated version, δ̂(y), be monotone too—or equivalently, that
+(2)
+
+1 2
+y + log ĝ(y)
+2
+
+be convex. As the unconstrained kernel density estimates do not deliver
+this, van Houwelingen and Stijnen (1983) suggest a greatest convex minorant estimator based on a preliminary histogram-type estimate of the density, g. Rather than taking this route and starting from a kernel estimate or
+some form of histogram estimate we consider instead direct nonparametric
+maximum likelihood estimation of the mixture density subject to the constraint (2); this not only ensures monotonicity, but also eliminates a need
+to tune the bandwidth or equivalent quantity. The shape constraint itself
+is a sufficient regularization device. A close link can be traced here to recent work on maximum likelihood estimation of log-concave densities and
+other shape constrained estimation problems.
+While our original intent might have been to explore this idea and its
+consequences for the performance of the associated empirical Bayes rules,
+
+Koenker and Mizera
+
+3
+
+our second and in our view equally promising focus has been motivated
+by the work of Jiang and Zhang (2009), who show that good predictive
+performance for the class of Gaussian compound decision problems can
+be achieved by an implementation of the nonparametric maximum likelihood estimator originally proposed by Kiefer and Wolfowitz (1956). The
+implementation of Jiang and Zhang (2009) employed the EM algorithm,
+a strategy initially proposed by Laird (1978). In place of this, we introduce in Section 3 an alternative computational strategy based on convex
+optimization—which delivers better predictive performance than that observed by Jiang and Zhang (2009) based on EM, at dramatically reduced
+computational cost. Contrary to our first proposal that directly estimates
+the decision rule, the Kiefer-Wolfowitz estimator estimates rather the prior
+F; the implied decision rule, obtained by substituting this estimate for
+F, is automatically monotone—as the latter property holds regardless of
+the form of the prior. Moreover, our new implementation of the KieferWolfowitz estimator applies also to a broad class of mixture problems; it
+includes the standard exponential family problems, but extends well beyond them, thus significantly increasing its appeal.
+2. Shape Constrained Density Estimation
+The recent upsurge in work on shape constrained estimation has explored a wide variety of settings, but work on shape constrained density
+estimation has focused primarily on imposing log concavity and some
+weaker forms of concavity restrictions—see, e.g. Cule, Samworth, and
+Stewart (2010), Dümbgen and Rufibach (2009), Koenker and Mizera (2010),
+and Seregin and Wellner (2010). Monotonicity of the Bayes rule would
+seem to be a rather different constraint, but the essential nature of the
+problems is very similar. As in the development in Koenker and Mizera
+(2010), we consider maximizing the log likelihood,
+n
+X
+
+log g(Yi ),
+
+i=1
+
+over g; to ensure that the result is a probability density, we reparametrize
+the problem in terms of h = log(y), so that g = eh is automatically positive,
+and add a Lagrange term so that g integrates to 1. The whole task then
+involves maximizing
+Z
+n
+X
+h(Yi ) − eh(y) dy
+i=1
+
+under the convexity constraint enforcing 12 y2 + h(y) to be in K, the cone
+of convex functions on R. Evidently, this constraint is equivalent to the
+
+4
+
+Convex Optimization and Empirical Bayes
+
+requirement that
+K(y) = log
+
+√
+2π + 12 y2 + h(y)
+
+is in K. Rewriting in terms of K gives the objective function
+Z
+n
+n
+X
+X
+K(Yi ) +
+log ϕ(Yi ) − eK(y) ϕ(y)dy.
+i=1
+
+i=1
+
+If the optimization task is expressed in the minimization form, we obtain
+after omitting the constant terms the formulation,
+Z
+X
+(3)
+min{−
+K(Yi ) + eK(y) dΦ(y) | K ∈ K},
+K
+
+where Φ denotes the standard Gaussian distribution function. This form
+differs from the prescription of Koenker and Mizera (2010) for the estimation of a log-concave density only in the sign of K, and correspondingly in
+the requirement that K be convex rather than concave; and in that the integration measure is dΦ(y) = ϕ(y)dy rather than dy. While it is fairly wellknown in the literature that this does not necessarily imply the same form
+for the solutions K̂, one might expect at least a similar one; however, the
+following theorem stipulates that although in both instances the solutions
+are piecewise linear, the knots, the breakpoints of linearity in K̂, do not
+necessarily occur at the observed yi , unlike in Theorem 2.1 of Koenker and
+Mizera (2010) for the log concave case. As we are looking rather for a convex interpolant with minimal integral for the concave majorant (and thus
+interpolant) with minimal integral, the results exhibit analogous properties
+to those of Groeneboom, Jongbloed, and Wellner (2001), who considered
+maximum likelihood estimation of a probability density (with respect to
+dy) that is convex and decreasing however, our problem, when recast as
+(3), asks for the convexity of the logarithm of the density (with respect to
+dΦ); so, unfortunately, their results are not directly applicable to our case
+and we have furnished a brief, independent proof.
+The similarity of (3) to the prescription of Koenker and Mizera (2010)
+is advantageous in another respect: since the objective function of (3) is
+convex, and minimized over the convex cone K, the problem is convex,
+enabling us to provide a valuable dual formulation.
+Theorem 1. The solution, K̂, of (3) exists and is piecewise linear. It admits a dual
+characterization: eK̂(y) = f̂, where f̂ is the solution of
+Z
+d(Pn − G)
+(4)
+max{− f(y) log f(y)dΦ(y) | f =
+, G ∈ K− },
+f
+dΦ
+
+Koenker and Mizera
+
+5
+
+where K− denotes the polar cone associated with K, see e.g. Rockafellar (1970).
+The estimated decision rule, δ̂, is piecewise constant and has no jumps at min Yi
+and max Yi .
+Remark 1. Since K̂(y) is piecewise linear and convex, the resulting Bayes
+rule, δ̂(y) = K̂0 (y), is piecewise constant and non-decreasing, yielding an
+“empirical decision rule,” analogous to the empirical distribution function
+and determined by maximum likelihood.
+Remark 2. Note that ĝ(y) = ϕ(y)eK̂(y) = ϕ(y)f̂. In implementations we
+have generally found that it is more numerically stable and computationally efficient to work with the dual formulation and this is true here as
+well. Expressing the negative of the dual objective function in terms of g,
+
+Z
+Z
+g(y)
+g(y)
+g(y)
+log
+ϕ(y)dy = g(y) log
+dy
+ϕ(y)
+ϕ(y)
+ϕ(y)
+reveals that the dual minimizes the Kullback-Leibler divergence between g
+and ϕ, under the constraint
+g=
+
+d(Pn − G)
+,
+dy
+
+G ∈ K− .
+
+This formulation can be further viewed as minimizing
+Z
+Z
+g(y) log g(y) − g(y) log ϕ(y)dy = g(y)K(y)dy
+√
+and after the elimination of the constant log 2π as maximizing
+Z
+Z
+1
+(5)
+− g(y) log g(y)dy − 2 y2 g(y)dy.
+The latter is equivalent, in view of the independence of
+Z
+Z
+Z
+Z
+n
+1X
+yg(y)dy = yd(Pn − G)(y) = ydPn (y) − ydG(y) =
+Yi
+n i=1
+on g (the last term vanishing due to the fact that G ∈ K− ), to the maximization of H(g) − 12 Var(g), where
+Z
+H(g) = − g(y) log g(y)dy
+and
+
+Z
+
+Z
+2
+
+Var(g) = y g(y)dy − ( yg(y)dy)2 .
+
+6
+
+Convex Optimization and Empirical Bayes
+
+Remark 3. The intervals of linearity of K̂ include (−∞, a) and [b, +∞) for
+some a ⩾ min{Yi } and b ⩽ max{Yi }. Thus, unlike the case of log concave density estimators that vanish off the convex hull of the observations,
+solutions, ĝ have exponential tails.
+Remark 4. What do densities, g, such that K(y) = − log ϕ(y) + log g(y)
+is piecewise linear and convex, look like? It is easy to show that such
+densities have the form,
+g(y) = c exp{− 12
+
+m
+X
+(y − µj )2 I(aj ,aj+1 ] (y)}
+j=1
+
+for some choice of constants, c and {(µj , aj ) : j = 1, · · · , m}. Such densities
+may also be expressed as mixtures of truncated normal densities, and as
+such do not fully comply with the features of the Gaussian mixture model.
+A more fully compliant estimator is introduced in the next section.
+We defer further implementation details regarding the discretization of
+the problem to Section 4, and proceed immediately to the discussion of our
+second approach based on the Kiefer-Wolfowitz nonparametric MLE.
+3. Non-Parametric Maximum Likelihood
+Jiang and Zhang (2009) have recently proposed a variant of the classical
+Kiefer and Wolfowitz (1956) nonparametric MLE as another promising approach to estimation of an empirical Bayes rule for the Gaussian compound
+decision problem.
+In its original, infinite-dimensional, formulation the Kiefer and Wolfowitz (1956) nonparametric MLE solves,
+ n
+Z
+
+X
+(6)
+min −
+log
+ϕ(yi − µ)dF(µ)
+,
+i=1
+
+where F runs over all mixing distributions. Once again, the objective function is convex, and is minimized over a convex set of F; hence again we
+have a convex problem, and duality theory is again applicable.
+Theorem 2. The solution, F̂, of (6) exists, and is an atomic probability measure,
+with not more than n atoms. The locations, µ̂j , and the masses, f̂j , at these
+locations can be found via the following dual characterization: the solution, ν̂, of
+(7)
+
+max{
+
+n
+X
+i=1
+
+log νi |
+
+n
+X
+i=1
+
+νi ϕ(Yi − µ) ⩽ n for all µ}
+
+Koenker and Mizera
+
+7
+
+satisfies the extremal equations (n equations in less than n variables)
+X
+1
+ϕ(Yi − µ̂j )f̂j = ,
+(8)
+ν̂i
+j
+and µ̂j are exactly those µ where the dual constraint is active—that is, the constraint function in (7) is equal to n.
+It may be interesting to compare the nonparametric MLE to the shapeconstrained approach proposed the previous section; while the latter results in the piecewise constant “empirical decision rule”, the nonparametric MLE rather comes with an “empirical prior distribution”: a piecewise
+constant cumulative empirical distribution for the estimated prior.
+Despite the number n appearing in the theorem, the atoms of F̂ are not
+necessarily located at the datapoints; this is clear already in the example
+of Laird (1978) (p. 809), whose theoretical underpinning can be derived
+from the facts established in Theorem 2. Note that although the primal formulation is infinite-dimensional in the objective (in F), the objective of the
+dual formulation is finite dimensional (in ν), and infinite-dimensionality
+appears only in the constraint. This offers a potential for certain refinements: instead of a uniformly spaced grid supporting an atomic measure
+meant to approximate F, we could instead work with an adaptive (and not
+necessarily uniformly spaced) collection of test points where the dual constraint is enforced. In fact, if we knew the locations of maxima for the function appearing in the constraint, we could simply select these test points
+at these locations. Such information is typically unavailable, but practical
+implementations may seek to refine the solution in an iterative manner by
+refining the grid in regions identified by preliminary estimation.
+We defer consideration of such refinements for future work since the
+fine grids described in the next section yield sufficient accuracy from most
+practical points of view. It is clear that implementations of the primal
+problem must discretize, thereby restricting F to a finite-dimensional approximation, as in the EM proposals of Laird (1978), and Heckman and
+Singer (1984). Following these earlier authors, Jiang and Zhang (2009) proposed a fixed point EM iteration that requires a grid {u1 , ...um } containing
+the support of the observed sample, yielding a sequence
+(k+1)
+f̂j
+= n−1
+
+n
+X
+i=1
+
+(k)
+
+f̂j ϕ(Yi − uj )
+
+Pm
+
+(k)
+`=1 f̂` ϕ(Yi − u` )
+
+,
+(k)
+
+where ϕ(·) denotes the standard Gaussian density, and f̂j denotes the
+value of the estimated “prior” mixing density on the interval (uj , uj+1 ) at
+
+8
+
+Convex Optimization and Empirical Bayes
+
+the kth iteration. At the conclusion of the iteration, the decision rule is
+again, simply, the conditional expectation of µi given Yi ,
+Pm
+j=1 uj ϕ(Yi − uj )f̂j
+δ̂(Yi ) = Pm
+.
+j=1 ϕ(Yi − uj )f̂j
+Jiang and Zhang (2009) report good performance in their simulations
+employing a design of Johnstone and Silverman (2004), with the sample
+size n = 1000 and the ui ’s equally spaced with m = 1000. However, reproducing their results is not that straightforward: the EM iterations, while
+simple, make very lethargic progress toward their objective of maximizing
+the log likelihood,
+n
+m
+X
+X
+L(f) =
+log(
+ϕ(Yi − uj )fj ),
+i=1
+
+j=1
+
+and the method is quite prohibitively slow even for moderately large sample sizes. To ameliorate the consequences of this slow convergence, Jiang
+and Zhang (2009) suggest starting the iterations with a substantial point
+mass at zero, rather than the perhaps more natural uniform mass points.
+This modification delivers improved performance for the Johnstone and
+Silverman (2004) simulation design by privileging µi = 0 at the expense of
+a lack of equivariance.
+We initially investigated a variety of schemes to accelerate the EM iterations along the lines of Varadhan and Roland (2008) and Berlinet and
+Roland (2007), which while somewhat helpful did not significantly improve the computational speed. The crucial insight came again only with
+the realization that the task of maximizing L(f) is a convex problem.
+4. Implementation
+Both methods of the preceding section require some form of discrete
+implementation to render them practical for data analysis.
+4.1. Shape-constrained density estimator. A discrete formulation of our
+shape-constrained MLE can be obtained by choosing a fine grid of points,
+y1 < y2 , · · · < ym , setting αi = h(yi ) ≡ log g(yi ) to be the unknown
+function values of the mixture density and solving:
+X
+(9)
+max{w> α −
+ci eαi | Dα + 1 ⩾ 0},
+α
+
+The matrix D represents the finite difference version of the second derivative operator that appears in the variational form of the estimation problem. Here, as in Koenker and Mizera (2010), the accuracy of the Riemann
+approximation of the integral is controlled by the fineness the grid, thereby
+
+Koenker and Mizera
+
+9
+
+increasing the number of estimated function values. We have typically
+used equally spaced grids with m ≈ 300. The vector w is an evaluation
+operator that simply allows us to recover and sum up the contributions to
+the likelihood given the expanded vector of function values. In the corresponding finite-dimensional dual problem, we write the diagonal matrix
+of Riemann weights, ci , as C,
+X
+(10)
+min{
+ci gi log gi + 1> ν | g = C−1 (w + D> ν), ν ⩾ 0}.
+ν
+
+In addition to the entropy term, the dual objective function now contains
+a linear contribution not present in the log-concave formulation; nevertheless, the latter is consistent with the objective function of (4), corresponding
+to the second term in (5).
+The dual form of the estimator was implemented using two independent
+convex programming algorithms both employing interior point methods:
+the PDCO algorithm of Saunders (2003) and the Mosek methods of Andersen (2010). In Figure 1 we plot a typical realization of the constrained
+density estimate and its corresponding Bayes rule δ̂(x) = K̂ 0 (x) estimate.
+This example is based on a sample of size 100 from the model described in
+the introduction with the µi ’s drawn from the uniform U[5, 15] distribution.
+The Mosek and PDCO solutions are indistinguishable in such plots. An R
+package REBayes, Koenker (2013), used for all the Mosek computations is
+available from CRAN.
+For those accustomed to looking at conventional kernel density estimates, the density plot of Figure 1 is likely to appear rather bizarre, but
+such are the consequences of the convexity constraint K ∈ K that has been
+imposed. The fitted K̂ is piecewise linear and consequently log ĝ must be
+piecewise quadratic. Careful examination of the piecewise constant Bayes
+rule plot illustrates that, as already remarked, its jumps do not (necessarily)
+occur at the observed data points represented by the “rug plot” appearing
+on the x-axis. As estimates of the mixture density, g, such estimates may
+look a bit strange, but their implied Bayes rules nevertheless conform to
+the monotonicity requirement and perform quite well as we shall see in
+Section 5.
+4.2. Nonparametric maximum likelihood. Although the EM algorithm
+has dominated the literature on nonparametric maximum likelihood estimation of mixture models, others have undoubtedly recognized the advantages that convex optimization brings to such problems. Indeed, Groeneboom, Jongbloed, and Wellner (2008) have introduced an ingenious active
+set method they call the “support reduction algorithm” and have illustrated
+its performance with an application to a quantum non-locality experiment
+
+Convex Optimization and Empirical Bayes
+
+14
+12
+
+0.00
+
+6
+
+8
+
+10
+
+δ(y)
+
+0.08
+0.04
+
+g(x)
+
+0.12
+
+10
+
+0
+
+5
+
+10
+
+15
+
+x
+
+20
+
+0
+
+5
+
+10
+
+15
+
+20
+
+y
+
+Figure 1. Estimated mixture density, ĝ, and corresponding
+Bayes rule, δ̂, for a simple compound decision problem.
+The target Bayes rule and its mixture density are plotted
+as smooth (blue) lines. The local maxima give y for which
+δ̂(y) = y.
+that is closely related to the Gaussian mixture problem. In our experience
+the Mosek implementation of interior point methods for such problems
+has proven to be highly reliable and efficient, but a variety of other methods may eventually prove to be even better. For extremely large problems,
+first order gradient descent methods are likely to dominate. For further
+discussion of these aspects, we refer to Koenker and Mizera (2013).
+The approach we chose to implement proceeds as follows. Let {u1 , ..., um }
+be a fixed grid as above. Let A be the n by m matrix, with the elements
+ϕ(Yi − uj ) in the i-th row and j-th column. Consider the (primal) problem,
+min{−
+
+n
+X
+
+log(gi ) | Af = g, f ∈ S},
+
+i=1
+
+where S denotes the unit simplex in Rm , i.e. S = {s ∈ Rm |1> s = 1, s ⩾ 0}.
+So fj denotes the estimated mixing density estimate f̂ evaluated at the
+grid point uj , and gi denotes the estimated mixture density estimate, ĝ,
+evaluated at Yi . In this case it is again somewhat more efficient to solve the
+corresponding dual problem,
+max{
+
+n
+X
+i=1
+
+log νi | A> ν ⩽ n1m , ν ⩾ 0},
+
+Koenker and Mizera
+
+11
+
+Estimator EM1
+EM2
+EM3
+IP
+Iterations
+100 10, 000 100, 000
+15
+Time
+1
+37
+559
+1
+L(g) - 422 0.9332 1.1120 1.1204 1.1213
+Table 1. Comparison of EM and Interior Point Solutions: Iteration counts, log likelihoods and CPU times (in seconds)
+for three EM variants and the interior point solver.
+
+and subsequently recover the primal solutions. For the present purpose of
+estimating an effective Bayes rule, a relatively fine fixed grid like that used
+for the EM iterations seems entirely satisfactory.
+In Figure 3 we compare the “solutions” produced by the interior point
+algorithm with those of the EM iteration for various limits on the number
+of iterations. For the test problem for this figure we have employed a structure similar to that of the simulations conducted in the following section.
+There is a sample of n = 200 observations, and a grid of m = 300 equally
+spaced points; 15 of the observations have µi = 2, while the remainder
+have µi = 0. It is obviously difficult to distinguish this mixture, yet remarkably the procedure does find, in this particular sample, a mass point
+near 2, as well as much more significant mass point near 0. A spurious
+mass point near -1 is also identified. In Table 1 we report timing information and the values of L(g) achieved for the four procedures illustrated
+in the figure. Although the EM procedure makes steady progress toward
+its goal, it leaves something to be desired even after 100,000 iterations, and
+nearly 10 minutes of computation. By contrast, the interior point algorithm
+as implemented in Mosek is both quicker and more accurate. See Koenker
+and Mizera (2013) for more alternatives.
+As another point of comparison, we illustrate in Figure 2 the KieferWolfowitz estimate of the Bayes rule and the corresponding mixture density ĝ(y) for the example illustrated earlier in Figure 1. The estimated
+mixing density has four points of support in this example, but the resulting Bayes rule illustrated in the left panel of the figure is much smoother
+and somewhat more accurate than the piecewise constant rule produced
+by the shape constrained estimator as we will see in the next section.
+5. Simulation Performance
+To compare performance of the shape constrained estimator with other
+methods we have replicated the experiment described in Johnstone and
+Silverman (2004), and also employed in both Brown and Greenshtein (2009)
+
+10
+6
+
+8
+
+δ(y)
+
+12
+
+0.00 0.02 0.04 0.06 0.08 0.10 0.12
+
+14
+
+Convex Optimization and Empirical Bayes
+
+g(y)
+
+12
+
+0
+
+5
+
+10
+y
+
+15
+
+20
+
+4
+
+6
+
+8
+
+10
+
+12
+
+14
+
+16
+
+y
+
+Figure 2. Estimated mixture density, ĝ, and corresponding
+Bayes rule, δ̂, for a simple compound decision problem. The
+target Bayes rule and its mixture density are again plotted
+in dashed blue. In contrast to the shape constrained estimator shown in Figure 1, the Kiefer-Wolfowitz MLE employed
+for this figure yields a much smoother and somewhat more
+accurate Bayes rule.
+
+and Jiang and Zhang (2009). In this setup the µi ’s have a simple discrete
+structure: there are n = 1000 observations, k of which have µ equal to
+one of the 4 values {3, 4, 5, 7}, the remaining n − k have µ = 0. There are
+three choices of k as indicated in the table. Table 2 reports results of the
+experiment. Each entry in the table is a sum of squared errors over the 1000
+observations, averaged over the number of replications. Johnstone and
+Silverman (2004) evaluated 18 different procedures; the last row of the table
+reports the best performance, from the 18, achieved in their experiment
+for each column setting. The performance of the Brown and Greenshtein
+(2009) kernel based rule is given in the fourth row of the table, taken from
+their Table 1. Two variants of the GMLEB procedure of Jiang and Zhang
+(2009) appear in the second and third rows of the table. GMLEBEM is
+the original proposal as implemented by Jiang and Zhang (2009) using
+100 iterations of the EM fixed point algorithm, GMLEBIP is the interior
+point version iterated to convergence as determined by the Mosek defaults.
+The shape constrained estimator described above, denoted δ̂ in the table,
+is reported in the first row. The δ̂ and GMLEBIP results are based on
+1000 replications. The GMLEB results on 100 replications, the Brown and
+
+13
+
+15
+
+GMLEBIP
+GMLEBEM: m=102
+GMLEBEM: m=104
+GMLEBEM: m=105
+
+0
+
+5
+
+10
+
+g(x)
+
+20
+
+25
+
+Koenker and Mizera
+
+−2
+
+0
+
+2
+
+4
+
+x
+
+Figure 3. Comparison of estimates of the mixing density f:
+The solid black very peaked density is the interior point solution, GMLEBIP, the others as indicated by the legend represent the EM solutions with various iteration limits. After
+100,000 EM iterations the peak near zero is about 8, while after 15 interior point iterations this peak is about 27. See Table
+1 for further details on timings and achieved likelihoods.
+Greenshtein results on 50 replications, and the Johnstone and Silverman
+results on 100 replications, as reported in the respective original sources.
+It seems fair to say that the shape constrained estimator performs competitively in all cases, but is particularly attractive relative to the kernel
+rule and the Johnstone and Silverman procedures in the moderate k and
+large µ settings of the experiment. However, the GMLEB rules have a clear
+advantage when k is 50 and 500.
+To explore performance for smoother mixing distributions F, we briefly
+reconsider a second simulation setting drawn from Brown and Greenshtein
+(2009). The mixture distribution F has a point mass at zero, and a uniform component on the interval [−3, 3]. Two sample sizes are considered,
+n = 10, 000 and n = 100, 000. In the former case we consider 100, 300,
+and 500 uniforms, in the latter case there are 500, 1000, and 5000. In Table
+3 we report performance of the shape constrained estimator and compare
+it with the kernel estimator, now with bandwidth 1.05, taken from Brown
+and Greenshtein (2009). The row labeled “strong oracle,” also taken from
+Brown and Greenshtein (2009), is a hard-thresholding rule which takes
+δ(X) to be either 0 or X depending on whether |X| > C for an optimal
+
+14
+
+Convex Optimization and Empirical Bayes
+
+Estimator
+δ̂
+δ̂GMLEBIP
+δ̂GMLEBEM
+δ̃1.15
+J-S Min
+
+µ =3
+37
+33
+37
+53
+34
+
+k=5
+µ =4 µ =5
+34
+21
+30
+16
+33
+21
+49
+42
+32
+17
+
+µ =7
+11
+8
+11
+27
+7
+
+µ =3
+173
+153
+162
+179
+201
+
+k = 50
+µ =4 µ =5
+121
+63
+107
+51
+111
+56
+136
+81
+156
+95
+
+µ =7
+16
+11
+14
+40
+52
+
+µ =3
+488
+454
+458
+484
+829
+
+k = 500
+µ =4 µ =5
+310
+145
+276
+127
+285
+130
+302
+158
+730
+609
+
+Table 2. Risk of Shape Constrained Rule, δ̂ compared to: two
+versions of Jaing and Zhang’s GMLEB procedure, one using
+100 EM iterations denoted GMLEBEM and the other, GMLEBIP, using the interior point algorithm described in the
+text, the kernel procedure, δ̃1.15 of Brown and Greenshtein,
+and best procedure of Johnstone and Silverman. Sum of
+squared errors in n = 1000 observations. Reported entries
+are based on 1000, 100, 100, 50 and 100 replications, respectively.
+
+Estimator
+δ̂GMLEB
+δ̂
+δ̃1.05
+Oracle
+
+k =100
+268
+282
+306
+295
+
+n = 10,000
+k =300 k =500
+703
+1085
+736
+1136
+748
+1134
+866
+1430
+
+k =500
+1365
+1405
+2410
+3335
+
+n = 100,000
+k =1000 k =5000
+2590
+10709
+2659
+10930
+3810
+10400
+5576
+16994
+
+Table 3. Empirical Risk of a gridded version of the GMLEB
+rule, the Shape Constrained Rule, δ̂, compared to kernel procedure, δ̃1.05 of Brown and Greenshtein, and an oracle hard
+threshholding rule described in the text. The first two rows
+of the table are based on 1000 replications. The last two rows
+are as reported in Brown and Greenshtein and based on 50
+replications.
+
+choice of C. Since the shape constrained estimator is quite quick we have
+done 1000 replications, while the other reported values are based on 50
+replications as reported in Brown and Greenshtein (2009). As in the preceding table the reported values are the sum of squared errors over the n
+observations, averaged over the number of replications. Again, the shape
+constrained estimator performs quite satisfactorily, while circumventing
+difficult questions of bandwidth selection.
+Given the dense form of the constraint matrix A, neither the EM or IP
+forms of the GMLE methods are feasible for sample sizes like those of the
+
+µ =7
+22
+18
+18
+48
+505
+
+Koenker and Mizera
+
+15
+
+experiments reported in Table 3. Solving a single problem with n = 10, 000
+requires about one hour using the Mosek interior point algorithm, so the
+EM implementation would be even more prohibitively time-consuming.
+However, it is possible to bin the observations on a fairly fine grid and
+employ a slight variant of the proposed interior point approach in which
+the likelihood terms are weighted by the relative (multinomial) bin counts.
+This approach, when implemented with a equally spaced grid of 600 points
+yields the results in the first row of Table 3. Not too unexpectedly given
+the earlier results, this procedure performs somewhat better than the shape
+constrained rule, δ̂. Binning the observations for the GMLEB procedure
+makes its computational effort comparable to the shape constrained MLE
+overcoming the latter’s advantage due to the sparsity of its required linear algebra, and enabling us to do 1000 replications for both procedures
+reported in Table 3.
+
+6. Empirical Bayesball
+The ultimate test of any empirical Bayes procedure is known to be: How
+well does it predict second-half-of-the-season baseball batting averages?
+To explore this question we adopt the framework of Brown (2008) and
+Jiang and Zhang (2010), who use data from the 2005 Major League baseball
+season.
+Following prior protocol, we employ midseason batting averages, Ri1 =
+Hi1 /Ni1 , for i = 1, · · · , n1 to predict second half averages, Ri2 = Hi2 /Ni2 ,
+for i = 1, · · · , n2 . All players with more than ten at bats in the first three
+months of the season S1 are used to construct predictions for their second
+half average, provided they also have at least 10 at bats in the second half,
+S1 ∩ S2 . Thus, data on n1 = |S1 | = 567 players in the first half is used to
+predict performance of n2 = |S1 ∩ S2 | = 499 players in the second half. The
+transformation,
+
+s
+Yi = asin
+
+Hi1 + 1/4
+Ni1 + 1/2
+
+!
+
+16
+
+Convex Optimization and Empirical Bayes
+
+is used to induce approximate normality and three measures of quadratic
+loss are employed to judge performance of the predictions:
+P n2
+2
+2
+i=1 [(Yi2 − Ŷi2 ) − σi2 ]
+TSE = Pn
+2
+2
+2
+i=1 [(Yi2 − Ỹi2 ) − σi2 ]
+P n2
+2
+i=1 [(Ri2 − R̂i2 ) − Ri2 (1 − Ri2 )/Ni2 ]
+TSER = Pn
+2
+2
+i=1 [(Ri2 − R̃i2 ) − Ri2 (1 − Ri2 )/Ni2 ]
+P n2
+2
+2
+2
+i=1 [(Yi2 − Ŷi2 ) − σi2 ]/(4σi2 )
+TWSE = Pn
+,
+2
+2
+2
+2
+i=1 [(Yi2 − Ỹi2 ) − σi2 ]/(4σi2 )
+where σ2it = 1/(4Nit ), R̂i2 = sin2 (Ŷi2 ) and Ỹi2 = Yi1 is the naı̈ve predictor.
+We depart from the earlier constant mean, constant variability context to
+consider linear regression models of the form:
+Yi = z>
+i β + ξi + ui ,
+where ui is (approximately) normally distributed with variance σ2i = 1/(4Ni1 ),
+the ξi ’s are iid from the unknown mixing density, f, and zi denotes a vector of covariates intended to capture systematic differences in the central
+tendency of Yi ; these covariates are limited in the present exercise to an
+indicator of whether the player is a pitcher, the number of at bats taken in
+the first half of the season, and possible interactions thereof.
+In this setting, Jiang and Zhang (2010) considered five predictors of the
+second half average, first two of them simply based on regression estimation,
+δ̇i = z>
+i β̇,
+
+(LSE)
+(WLSE)
+
+δ̈i = z>
+i β̈,
+
+β̇ = (Z> Z)−1 Z> y,
+
+β̈ = (Z> Ω−1 Z)−1 Z> Ω−1 y,
+
+Ω = diag(1/σ2i ).
+
+The third estimator is a James-Stein version of the WLSE:
+(EBJS)
+!
+!
+p−2
+n
+−
+p
+−
+2
+δ̌i = 1 − P >
+z>
+1− P
+(yi − z>
+i β̈ +
+i β̈)
+2
+>
+2
+2
+2
+(zi β̈) /σi
+(yi − zi β̈) /σi
+These three procedures were implemented independently in an effort to
+check the sample selection and variable definitions. The remaining two
+estimators are the EM implementations of the GMLEB estimator proposed
+by Jiang and Zhang. The first is:
+R
+ξϕ((yi − z>
+i β̂ − ξ)/σi )dF̂(ξ)
+>
+(GMLEB)
+δ̂i = zi β̂ + R
+ϕ((yi − z>
+i β̂ − ξ)/σi )dF̂(ξ)
+
+Koenker and Mizera
+
+where
+
+X
+
+17
+
+Z
+
+>
+log( σ−1
+i ϕ((yi − zi b − ξ)/σi )dF̂(ξ))
+Z
+X
+>
+F̂ = argmaxF
+log( σ−1
+i ϕ((yi − zi β̂ − ξ)/σi )dF(ξ))
+
+β̂ = argmaxb
+
+The second is a reweighted version of the first:
+R
+ζϕ(yi /σi − z>
+i β̃/σi − ζ)dF̃(ζ)
+R
+(WGMLEB)
+δ̃i = z>
+β̃
++
+σ
+i
+i
+>
+ϕ(yi /σi − zi β̃/σi − ζ)dF̃(ζ)
+where
+
+X
+
+Z
+
+log( ϕ((yi /σi − z>
+i b/σi − ζ))dF̃(ζ)
+Z
+X
+log( ϕ((yi /σi − z>
+F̃ = argmaxF
+i β̃/σi − ζ))dF(ζ)
+
+β̃ = argmaxb
+
+In both cases iteration proceeds by simply alternating between the two
+optimization problems, with the EM fixed point method employed for the
+F̂ or F̃ solution; hence the acronyms GMLEBEM and WGMLEBEM.
+The same strategy can be adapted to find F̂ (or F̃) solutions via our interior point implementation, and thus find predictions that we designate
+as GMLEBIP and WGMLEBIP. We should stress that although the mixture
+likelihood problem is convex for each value of the regression parameter, β,
+the joint problem of optimizing over β and F is not convex, nevertheless
+conventional optimizers can be used to obtain a sequence of alternating
+iterations that improves the likelihood at each step.
+Unfortunately, this is not the case for our shape-constrained Bayes rule,
+for which an analogous strategy for the regression parameter falters on
+the discontinuities of the ĝ influence function. Moreover, it is unclear how
+the shape constrained estimator should be adapted to the variability of the
+variances in the observations: when Yi ∼ N(0, σ2i ) then the Bayes rule 1
+becomes
+g0 (yi )
+.
+(11)
+δ(yi ) = yi + σ2i
+g(yi )
+one must require that the corresponding K in
+(12)
+
+Ki (yi ) = 12 y2i + σ2i log g(yi )
+
+be convex – for every σ2i . While it turns out that enforcing this only for the
+largest σ2i ensures that it holds for all other σ2i , it seems that this is overly
+restrictive for the bulk of the players who have a larger number of at bats,
+and therefore smaller implied variances. In view of all the above, we have
+excluded the shape-constrained Bayes rule from the present competition.
+
+18
+
+Convex Optimization and Empirical Bayes
+
+Our comparison thus pits five estimators considered by Jiang and Zhang
+against two variants of our interior point version of the Kiefer-Wolfowitz
+estimator. Each of the estimators are paired with five different specifications of a regression design. In Table 4 we compare performance of
+five methods for each of the five regression specifications and two interior
+point implementations of the weighted and unweighted GMLEB procedures. The results reported for the five Jiang and Zhang methods match
+those reported in their Table 2. Somewhat surprisingly, however – given
+the results presented in the preceding section – we find that the interior
+point predictive performance is consistently worse than the EM results.
+To explore this further, we report in Table 5 the likelihood values achieved
+by the EM and IP methods for the WGMLEB procedures. Of course there
+is nothing to assure us that estimators with better likelihoods will yield
+better predictions out of sample, and the hubris of expecting it to do so
+probably deserves the comeuppance observed in Table 4.
+There are several tuning parameters that determine the stopping criteria
+of the EM implementation employed. The predictive advantage manifested
+by the EM estimates comes primarily from the effect of “early stopping” on
+the estimated regression parameters. It has been conjectured by some that
+early stopping of EM iterations can sometimes exert a beneficial regularization, or smoothing, effect. This may well be true in some circumstances,
+however we do not view this as very plausible in the present context. Instead, early EM stopping appears simply to produce a fortuitous location
+shift in the regression parameter estimates that mimics a systematic difference between first and second half-season batting.
+7. A Tacky Application
+In a effort to dispel the impression that the applicability of the KieferWolfowitz MLE is confined to Gaussian convolutions, we briefly reconsider
+the following binomial mixture problem.
+The example involves repeated rolls of a common thumbtack. A one was recorded if the tack landed point up and a
+zero was recorded if the tack landed point down. All tacks
+started point down. Each tack was flicked or hit with the
+fingers from where it last rested. A fixed tack was flicked
+9 times. The data are recorded in Table 1. There are 320
+9-tuples. These arose from 16 different tacks, 2 “flickers,”
+and 10 surfaces. The tacks vary considerably in shape and in
+proportion of ones. The surfaces varied from rugs through
+tablecloths through bathroom floors.
+Beckett and Diaconis (1994) p. 108.
+
+Koenker and Mizera
+
+19
+
+Estimator
+TSE TSER TWSE
+y∼1
+LSE
+0.853 0.897 1.116
+WLSE
+1.074 1.129 0.742
+EBJS
+0.534 0.539 0.502
+GMLEBEM
+0.663 0.671 0.547
+WGMLEBEM
+0.306 0.298 0.427
+GMLEBIP
+0.686 0.700 0.593
+WGMLEBIP
+0.334 0.336 0.459
+y ∼ AB
+LSE
+0.518 0.535 0.686
+WLSE
+0.537 0.527 0.545
+EBJS
+0.369 0.351 0.443
+GMLEBEM
+0.410 0.397 0.455
+WGMLEBEM
+0.301 0.291 0.424
+GMLEBIP
+0.424 0.418 0.490
+WGMLEBIP
+0.329 0.330 0.456
+y ∼ Pitcher
+LSE
+0.272 0.283 0.559
+WLSE
+0.324 0.343 0.519
+EBJS
+0.243 0.244 0.426
+GMLEBEM
+0.259 0.266 0.429
+WGMLEBEM
+0.209 0.204 0.401
+GMLEBIP
+0.283 0.295 0.478
+WGMLEBIP
+0.231 0.234 0.426
+y ∼ Pitcher + AB
+LSE
+0.242 0.246 0.477
+WLSE
+0.219 0.215 0.435
+EBJS
+0.183 0.175 0.390
+GMLEBEM
+0.191 0.183 0.387
+WGMLEBEM
+0.184 0.175 0.385
+GMLEBIP
+0.205 0.201 0.419
+WGMLEBIP
+0.203 0.203 0.412
+y ∼ Pitcher ∗ AB
+LSE
+0.240 0.244 0.476
+WLSE
+0.204 0.201 0.429
+EBJS
+0.171 0.162 0.386
+GMLEBEM
+0.178 0.170 0.382
+WGMLEBEM
+0.177 0.167 0.382
+GMLEBIP
+0.194 0.189 0.416
+WGMLEBIP
+0.206 0.206 0.414
+Table 4. Midseason Prediction for all batters, (|S1 |, |S1 ∩ S2 |) = (567, 499)
+
+20
+
+Convex Optimization and Empirical Bayes
+
+Model
+EM
+IP
+y∼1
+−853.801 −851.107
+y ∼ AB
+−854.733 −850.793
+y ∼ Pitcher
+−844.234 −841.548
+y ∼ Pitcher + AB −843.065 −838.970
+y ∼ Pitcher ∗ AB −843.258 −838.957
+Table 5. Loglikelihood Values for the WGMLEBEM and
+WGMLEBIP Estimators
+Liu (1996) provides a Bayesian analysis of this data employing Dirichlet
+process priors, and validates the resulting estimates by a comparison with
+a Kiefer-Wolfowitz estimate again relying on the EM algorithm as a computational device. Following Liu (1996) we focus exclusively on the binomial
+form of the data, so we have n = 320 and ni ≡ 9 in what follows. The
+Kiefer-Wolfowitz estimator for this mixture problem has likelihood,
+
+n Z1 
+Y
+ni yi
+L(F) =
+p (1 − pni −yi )dF(p).
+y
+i
+0
+i=1
+Again it proves convenient to solve the dual problem, which takes the form:
+ 
+n
+n
+X
+X
+ni yi
+max{
+log νi |
+νi
+p (1 − pni −yi ) ⩽ n, for all p ∈ [0, 1]}.
+yi
+i=1
+i=1
+In effect, all that needs to be modified in our earlier formulation is the construction of the A matrix. Indeed, given that the ni ’s are all identical, we
+can concentrate the likelihood into 10 distinct cell counts for the possible
+values of yi , substantially reducing the computational effort per iteration
+for both the interior point and EM procedures.
+In Figure 4 we compare our convex optimization solution with several
+EM solutions with various iteration limits. The point masses identified by
+our convex optimization are, to two significant figures, the same as those
+reported by Liu (1996), but the computational effort required to produce
+them is vastly reduced relative to the EM solutions.
+It is evident from the figure that the EM iterations are eventually moving
+in the right direction, but at a glacial pace. While the convex optimization requires only 0.012 seconds in R, the fixed point EM implementation
+requires 599 seconds for 1,000,000 iterations and, as is clear from the figure, is still not very close to convergence by comparison with the solution provided by the interior point method after only 22 iterations. The
+“accelerated” EM iteration called “squarem” as implemented in Varadhan
+
+21
+
+100
+
+Koenker and Mizera
+
+0
+
+20
+
+40
+
+f(p)
+
+60
+
+80
+
+22 IP
+100 EM
+5,000 EM
+10,000 EM
+100,000 EM
+1,000,000 EM
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+p
+
+Figure 4. Comparison of estimates of the mixing density f:
+The solid black very peaked density is the interior point solution, the others as indicated by the legend represent the EM
+solutions with various iteration limits. Even after 1,000,000
+EM iterations the peak near 0.6 is about 40, while after 22
+interior point iterations this peak is about 110. One million
+EM iterations takes 10 minutes, but is substantially less accurate than the interior point solution that required only 0.012
+seconds.
+
+(2011) yields a somewhat more accurate solution after 1,000,000 iterations,
+although still not quite as precise as the interior point solution, and requires only 138 seconds to compute. However, in our experience differences in computational effort of this magnitude, more than 10,000 to 1,
+often make the difference between effective and ineffective statistical tools.
+It should be stressed in conclusion that the differences in computational
+
+22
+
+Convex Optimization and Empirical Bayes
+
+effort reported here are based on a relatively small problem with only a
+few observations; larger problems yield even more dramatic differences.
+8. Conclusion
+We have seen that empirical Bayes rules based on maximum likelihood
+estimation of Gaussian mixture densities subject to a shape constraint –
+imposed to achieve monotonicity of the Bayes rule – provide some performance improvements over unconstrained kernel based estimation methods. Likewise, Kiefer-Wolfowitz nonparametric maximum likelihood estimation of the mixing distribution offers good performance in our simulation settings. We have also seen that the computational burden of the
+EM implementations of the Kiefer-Wolfowitz estimator can be dramatically
+reduced by reliance on interior point methods for solving convex optimization formulations of the Kiefer-Wolfowitz problem.
+While the Kiefer-Wolfowitz approach seems to be typically preferable to
+the monotonized Bayes rule estimator introduced in Section 2, we would
+like to stress two advantages of the latter approach. First, because its convexity constraint is simpler, involving sparser linear algebra, computation
+is generally quicker. This is usually only noticeable in very large problems, but might be decisive in applications involving very large sample
+sizes. Second, since the monotonized Bayes rule imposes a weaker form of
+convexity constraint, it may have some advantages in misspecified settings
+where the original Gaussian location mixture assumption fails to be satisfied. In Remark 4 following Theorem 1 we have characterized the class of
+densities for which the piecewise constant Bayes rule is optimal and the
+monotonized estimator is particularly appropriate.
+We would like to again stress that our convex optimization formulation
+of the Kiefer-Wolfowitz MLE is applicable to a wide variety of mixture
+problems wherever parameter heterogeneity is plausible. For longitudinal
+data and survival applications this is particularly germane, and we hope
+to pursue such applications in future work. We have focused on settings in
+which both empirical Bayes procedures rely on exclusively on maximum
+likelihood methods, but there is clearly scope for introducing further regularization, other forms of prior information, that might lend additional
+credibility were such information available as for example, in Bunea, Tsybakov, Wegkamp, and Barbu (2010).
+Appendix A
+Proof. [Theorem 1] We start by demonstrating that every candidate solution, K, can be replaced by another piecewise linear one, K̃, with no
+
+Koenker and Mizera
+
+23
+
+larger objective function of (3). By its convexity, K has one-sided derivatives everywhere—in particular, at each Yi ; we denote the latter by K0 (Yi −)
+and K0 (Yi +). Let K̃ be a convex and piecewise linear function such that
+K̃(Yi ) = K(Yi ) for all i, extending linearly left and right from every Yi , with
+slopes (i) at min Yi both equal to K0 (min Yi +); (ii) at max Yi both equal to
+K0 (max Yi −); and (iii) at every other Yi the left one equal to K0 (Yi −) and the
+right one to K0 (Yi +) (thus every Yi is either contained in or borders a linear
+piece.) In the objective function of (3), such a K̃ yields the same summation
+term as K, but as K̃ minorizes K, that is the integral term for K̃ does not
+exceed that for K.
+In view of this it is evident that solutions are restricted to a finitedimensional class of piecewise-linear convex functions parametrized by
+their (finite number of) slopes and an arbitrary function value at some
+point, say, K(0). The proof of existence then proceeds via a standard continuity/compactness argument.
+First, one has to assess continuity: if Km (0) → K(0) (hereafter, we use m
+for the integer index running to infinity) and the value of slopes converge
+as well, then uniform continuity is guaranteed on bounded intervals; but
+the continuity of the integral term in the objective of (3), if the integration
+domain is the whole real line, may be in doubt. Fortunately, the specific
+form of the integrand facilitates the continuity. Given an  > 0, we can
+always select a bounded closed interval that contains all the Yi ’s, so that
+the summation part of the objective is within /4 of its limit for m large
+enough; inside the interval, the convergence is uniform, so for m large
+enough, within /4 of its limit again; finally, on the linear tails one can see
+via direct calculation that
+Z
+Z
+1 2
+1
+2
+am +bm
+am x+bm
+(13)
+e
+dΦ(x) = e 2
+e 2 (x−am ) dx,
+E
+
+E
+
+which shows that such integrals (over various integration domains E) converge whenever am → a and bm → b; hence each tail integral can be made
+within /4 of its limit for m large enough.
+Once continuity of the objective function is established, it is sufficient
+to show the existence of nonempty compact sublevel set. Putting K(y) ≡
+0 yields the objective of (3) equal to 1; hence we will look now at the
+(nonempty) sublevel set of all parameters (that is, all slopes and K(0)) that
+yield the objective function ⩽ 1. We have seen that this set is nonempty; by
+continuity, it is closed; it remains to show that it is also bounded.
+The latter will be accomplished if the following is verified for any sequence of parameter vectors: whenever at least one component of them
+does not stay bounded, then the objective function ultimately exceeds 1.
+
+24
+
+Convex Optimization and Empirical Bayes
+
+One can always pass to subsequences in the process, to assert that bounded
+sequences actually converge, and unbounded diverge either to +∞ or −∞.
+As shown in Section 2, the origin, 0, can be without any loss of generality
+put inside the convex hull of the Yi ’s, say, in the midpoint between min and
+max. Suppose thus we have a sequence Km parametrized by vectors that
+do not stay bounded, and such that Km all yield values of the objective (3)
+not exceeding 1. AsP
+the integral term of this objective is always nonnegative, we have that − Km (Yi ) ⩽ 1. It follows that Km (0) has to be bounded
+from above: as every Km is a convex function, it can be minorized by an
+affine function whose intercept is Km (0); the formula (13) then shows that
+the integral term (integration domain E is the whole real line now) in the
+objective is minorized by
+1
+
+2
+
+e 2 am +Km (0) ,
+which, if Km (0) → +∞, would drive the integral term to +∞ even if am
+stays bounded; at the same time, the summation term stays bounded by 1.
+It is possible for Km (0) to diverge to −∞—but not when the other parameters, slopes, stay bounded, for then one can find C such that for every
+i,
+Km (Yi ) ⩽ Km (0) + C
+and consequently
+−1 ⩾ −
+
+X
+
+Km (Yi ) ⩾ −nKm (0) − nC.
+
+Hence, in any case the slopes must not remain bounded; as they values
+are ordered in the increasing sense, this means that either the maximal
+slope, on the right-hand tail, diverges to +∞, or the minimal slope, on the
+left-hand tail, diverges to −∞; or both.
+Now, let Y1 = Ymin , Yn = Ymax , d = (Yn − Y1 )/2, and consider Km (Y1 )
+and Km (Yn ); one of them must remain bounded from −∞, for if both of
+them
+P would be ⩽ −1/n, then as well Km (Yi ) ⩽ −/n for all i, and then
+− Km (Yi ) ⩾ 1. Suppose that the one bounded from below is Km (Yn ),
+and also that it the right-hand slope that diverges,
+(14)
+
+Km (Yn ) − Km (0)
+→ +∞.
+d
+
+Then the application of the formula (13), with integration domain E =
+[Yn , ∞), yields the integral term in (13) converging to 1; at the same time,
+
+Koenker and Mizera
+
+25
+
+the term in the exponent in front of the integral is
+(Km (Yn ) − Km (0))2
++ Km (0)
+2d2
+(Km (Yn ) − Km (0) − 2d2 )(Km (Yn ) − Km (0))
+=
++ Km (Yn ),
+2d2
+which diverges to +∞, as (14) implies that Km (Yn ) − Km (Y0 ) → +∞, and
+at the same time, Km (Yn ) stays bounded away from −∞.
+If the latter still takes place, but the right-hand slope does not diverge
+to +∞, then, as the line passing through Km (Yn ) minorizes the whole Km ,
+we obtain that Km (Y1 ) must be bounded from below. At the same time,
+it is now the left-hand slope that must diverge to −∞; the proof of the
+divergence of the integral is then analogous.
+Finally, to backtrack in our logical tree, assume now it is not Km (Yn )
+that does not stay bounded from −∞, but rather Km (Y1 ), then we have
+again that left-hand slope must diverge to −∞ (otherwise Km (Yn ) would
+be bounded from −∞ by an analogous argument as above); this situation
+was already encountered. Having exhausted all possibilities, we conclude
+that the sequence of parameter vectors cannot diverge to infinity with m
+when the objective function stays bounded from above by 1; hence the
+sublevel set is nonempty and compact, which yields the existence of the
+solution, K̂, of (3).
+The established form of K̂ implies the form of the estimated density,
+as well as that of the decision rule. The proof of the duality result is a
+straightforward modification of Theorem 3.1 and Corollary 3.1 of Koenker
+and Mizera (2010); in particular, the change of K to −K results in the
+change of the sign at G in the dual constraint, and Corollary 4A from
+Rockafellar (1971) is used in its more general form (already formulated
+there). We omit the details.
+Proof. [Theorem 2] The statements of the theorem can be essentially established by piecing together various results from Lindsay (1983); however,
+some care should be exercised. First of all, Lindsay (1983) assumes that the
+parametric space is compact. Our parametric space is the whole real line,
+R, hence not a compact; nevertheless, adding one point ∞ to it—that is,
+considering the one-point “circular” compactification, Ṙ, instead—makes
+the road passable.
+Lindsay (1983) works with “atomic likelihood vectors” : in our case,
+these are defined for every µ ∈ R as
+(fµ (y1 ), . . . , fµ (yn )) = (φ(y1 − µ), . . . , φ(yn − µ)).
+
+26
+
+Convex Optimization and Empirical Bayes
+
+Compactifying R with ∞, we have to define the atomic likelihood vector
+for µ = ∞; given that the limit of φ(y − µ) for µ going to either −∞ or +∞
+is 0, it is natural to define
+(15)
+
+(f∞ (y1 ), . . . , f∞ (yn )) = (0, . . . , 0).
+
+“Mixture likelihood vectors” then correspond to terms appearing in (6); in
+particular, Theorem 3.1 of Lindsay (1983) asserts that the solution, F̂, and
+is an atomic probability with at most n atoms. To finish the proof of this
+part, we have to show that ∞ will not be one of these atoms. But, if the
+contrary would be true, one could take the mass from ∞, which due to (15)
+contributes nothing to the overall likelihood, and put it instead into some
+other atom of F̂ whose contribution is positive; this would increase the
+value of the overall likelihood, a contradiction with the claim that F̂ is the
+MLE. While this cannot be done if ∞ would be the only atom of F̂ (that is,
+if all the mass will be concentrated in ∞), note that in such case the value
+of the objective function in (6) is +∞, which certainly is not an optimal
+value, as can be demonstrated by taking any other F, say, concentrated in
+some point of R.
+What Lindsay (1983) calls “mixture maximum likelihood” (and denotes
+by f̂) is in our notation, for given locations of the atoms, µ̂j ,
+X
+ϕ(Yi − µ̂j )f̂j .
+j
+
+Theorem 5.1 of Lindsay (1983) asserts that ν̂i , given by (8), are solutions
+for his Problem 2 (page 90)—which is nothing but the dual formulation (7),
+albeit again with a slight difference that it is formulated for the compact
+parameter space. This means that the constraint in (7) is supposed to be
+satisfied for all µ ∈ Ṙ; however, for µ = ∞ it is satisfied automatically,
+due to (15), thus requiring it only for µ ∈ R does not change the problem. Finally, our statement about the locations of the atoms is justified by
+Theorem 4.1.C of Lindsay (1983), in view of his formula (4.1).
+References
+Andersen, E. D. (2010): “The MOSEK Optimization Tools Manual, Version 6.0,” Available
+from http://www.mosek.com.
+Beckett, L., and P. Diaconis (1994): “Spectral analysis for discrete longitudinal data,”
+Advances in Mathematics, 103, 107–128.
+Berlinet, A., and C. Roland (2007): “Acceleration Schemes with Application to the EM
+Algorithm,” Computational Statistics and Data Analysis, 51, 3689–3702.
+Brown, L. (2008): “In-season prediction of batting averages: A field test of empirical Bayes
+and Bayes methodologies,” The Annals of Applied Statistics, 2, 113–152.
+
+Koenker and Mizera
+
+27
+
+Brown, L., and E. Greenshtein (2009): “Non parametric empirical Bayes and compound
+decision approaches to estimation of a high dimensional vector of normal means,” The
+Annals of Statistics, 37(4), 1685–1704.
+Bunea, F., A. B. Tsybakov, M. H. Wegkamp, and A. Barbu (2010): “Spades and mixture
+models,” The Annals of Statistics, 38(4), 2525–2558.
+Cule, M., R. Samworth, and M. Stewart (2010): “Computing the Maximum Likelihood
+Estimator of a Multidimensional Log-Concave Density, with discussion,” Journal of the
+Royal Statistical Society, B., 72, 545–600.
+Dümbgen, L., and K. Rufibach (2009): “Maximum Likelihood Estimation of a LogConcave Density: Basic Properties and Uniform Consistency,” Bernoulli, 15, 40–68.
+Efron, B. (2010): Large-Scale Inference: Empirical Bayes Methods for Estimation, Testing, and
+Prediction. Cambridge U. Press: Cambridge.
+(2011): “Tweedie’s Formula and Selection Bias,” Journal of the American Statistical
+Association, 106, 1602–1614.
+Groeneboom, P., G. Jongbloed, and J. A. Wellner (2001): “Estimation of a convex
+function: Characterization and asymptotic theory,” The Annals of Statistics, 29(6), 1653–
+1698.
+(2008): “The support reduction algorithm for computing non-parametric function
+estimates in mixture models,” Scandinavian Journal of Statistics, 35, 385–399.
+Heckman, J., and B. Singer (1984): “A method for minimizing the impact of distributional assumptions in econometric models for duration data,” Econometrica, 52, 63–132.
+Jiang, W., and C.-H. Zhang (2009): “General maximum likelihood empirical Bayes estimation of normal means,” Annals of Statistics, 37, 1647–1684.
+Jiang, W., and C.-H. Zhang (2010): “Empirical Bayes in-season prediction of baseball
+batting averages,” in Borrowing Strength: Theory Powering Applications: A Festschrift for
+Lawrence D. Brown, vol. 6, pp. 263–273. Institute for Mathematical Statistics.
+Johnstone, I., and B. Silverman (2004): “Needles and straw in haystacks: Empirical
+Bayes estimates of possibly sparse sequences,” Annals of Statistics, pp. 1594–1649.
+Kiefer, J., and J. Wolfowitz (1956): “Consistency of the Maximum Likelihood Estimator
+in the Presence of Infinitely Many Incidental Parameters,” The Annals of Mathematical
+Statistics, 27, 887–906.
+Koenker, R. (2013): REBayes: Empirical Bayes Estimation and Inference in R, R package
+version 0.31, http://CRAN.R-project.org/package=REBayes.
+Koenker, R., and I. Mizera (2010): “Quasi-concave density estimation,” The Annals of
+Statistics, 38(5), 2998–3027.
+(2013): “Convex optimization in R,” preprint.
+Laird, N. (1978): “Nonparametric Maximum Likelihood Estimation of a Mixing Distribution,” Journal of the American Statistical Association, 73, 805–811.
+Lindsay, B. (1983): “The Geometry of Mixture Likelihoods: A General Theory,” Annals of
+Statistics, 11, 86–94.
+Liu, J. (1996): “Nonparametric hierarchical Bayes via sequential imputations,” The Annals
+of Statistics, 24, 911–930.
+Robbins, H. (1956): “An empirical Bayes approach to statistics,” in Proceedings of the Third
+Berkeley Symposium on Mathematical Statistics and Probability, vol. I. University of California Press: Berkeley.
+Rockafellar, R. T. (1970): Convex analysis. Princeton University Press, Princeton.
+(1971): “Integrals which are convex functionals, II,” Pacific Journal of Mathematics,
+39, 439–469.
+
+28
+
+Convex Optimization and Empirical Bayes
+
+Saunders, M. A. (2003): “PDCO: A Primal-Dual interior solver for convex optimization,”
+http://www.stanford.edu/group/SOL/software/pdco.html.
+Seregin, A., and J. A. Wellner (2010): “Nonparametric estimation of multivariate
+convex-transformed densities,” Annals of Statistics, 38, 3751–3781.
+van Houwelingen, J., and T. Stijnen (1983): “Monotone empirical Bayes estimators for
+the continuous one-parameter exponential family,” Statistica Neerlandica, pp. 29–43.
+Varadhan, R. (2011): SQUAREM: Squared extrapolation methods for accelerating fixed-point
+iterations, R package version 2010.12-1, http://CRAN.R-project.org/package=SQUAREM.
+Varadhan, R., and C. Roland (2008): “Simple and Globally Convergent Methods for
+Accelerating the Convergence of any EM Algorithm,” Scandinavian Journal of Statistics,
+35, 335–353.
+
+

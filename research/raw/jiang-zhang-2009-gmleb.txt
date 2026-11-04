@@ -1,0 +1,4312 @@
+arXiv:0908.1709v1 [math.ST] 12 Aug 2009
+
+The Annals of Statistics
+2009, Vol. 37, No. 4, 1647–1684
+DOI: 10.1214/08-AOS638
+c Institute of Mathematical Statistics, 2009
+
+GENERAL MAXIMUM LIKELIHOOD EMPIRICAL BAYES
+ESTIMATION OF NORMAL MEANS
+By Wenhua Jiang and Cun-Hui Zhang1
+Rutgers University
+We propose a general maximum likelihood empirical Bayes (GMLEB) method for the estimation of a mean vector based on observations with i.i.d. normal errors. We prove that under mild moment
+conditions on the unknown means, the average mean squared error (MSE) of the GMLEB is within an infinitesimal fraction of the
+minimum average MSE among all separable estimators which use a
+single deterministic estimating function on individual observations,
+provided that the risk is of greater order than (log n)5 /n. We also
+prove that the GMLEB is uniformly approximately minimax in regular and weak ℓp balls when the order of the length-normalized norm
+of the unknown means is between (log n)κ1 /n1/(p∧2) and n/(log n)κ2 .
+Simulation experiments demonstrate that the GMLEB outperforms
+the James–Stein and several state-of-the-art threshold estimators in
+a wide range of settings without much down side.
+
+1. Introduction. This paper concerns the estimation of a vector with
+i.i.d. normal errors under the average squared loss. The problem, known
+as the compound estimation of normal means, has been considered as the
+canonical model or motivating example in the developments of empirical
+Bayes, admissibility, adaptive nonparametric regression, variable selection,
+multiple testing and many other areas in statistics. It also carries significant
+practical relevance in statistical applications since the observed data are
+often understood, represented or summarized as the sum of a signal vector
+and the white noise.
+There are three main approaches in the compound estimation of normal
+means. The first one is general empirical Bayes (EB) [27, 30], which assumes
+Received December 2007; revised July 2008.
+Supported by NSF Grants DMS-05-04387 and DMS-06-04571 and NSA Grant MDS
+904-02-1-0063.
+AMS 2000 subject classifications. 62C12, 62G05, 62G08, 62G20, 62C25.
+Key words and phrases. Compound estimation, empirical Bayes, adaptive estimation,
+white noise, shrinkage estimator, threshold estimator.
+1
+
+This is an electronic reprint of the original article published by the
+Institute of Mathematical Statistics in The Annals of Statistics,
+2009, Vol. 37, No. 4, 1647–1684. This reprint differs from the original in
+pagination and typographic detail.
+1
+
+2
+
+W. JIANG AND C.-H. ZHANG
+
+essentially no knowledge about the unknown means but still aims to attain
+the performance of the oracle separable estimator based on the knowledge
+of the empirical distribution of the unknowns. Here a separable estimator is
+one that uses a fixed deterministic function of the ith observation to estimate
+the ith mean. This greedy approach, also called nonparametric EB [26], was
+proposed the earliest among the three, but it is also the least understood, in
+spite of [28, 29, 30, 36, 37, 38]. Efron [15] attributed this situation to the lack
+of applications with many unknowns before the information era and pointed
+out that “current scientific trends favor a greatly increased role for empirical Bayes methods” due to the prevalence of large, high-dimensional data
+and the rapid rise of computing power. The methodological and theoretical
+challenge, which we focus on in this paper, is to find the “best” general EB
+estimators and sort out the type and size of problems suitable for them.
+The second approach, conceived with the celebrated Stein’s proof of the
+inadmissibility of the optimal unbiased estimator and the introduction of
+the James–Stein estimator [22, 31], is best understood through its parametric or linear EB interpretations [16, 17, 26]. The James–Stein estimator is
+minimax over the entire space of the unknown mean vector and well approximates the optimal linear separable estimator based on the oracular
+knowledge of the first two empirical moments of the unknown means. Thus,
+it achieves the general EB optimality when the empirical distribution of the
+unknown means are approximately normal. However, the James–Stein estimator does not perform well by design compared with the general EB when
+the minimum risk of linear separable estimators is far different from that of
+all separable estimators [36]. Still, what is the cost of being greedy with the
+general EB when the empirical distribution of the unknown means is indeed
+approximately normal?
+The third approach focuses on unknown mean vectors which are sparse
+in the sense of having many (near) zeros. Such sparse vectors can be treated
+as members of small ℓp balls with p < 2. Examples include the estimation of
+functions with unknown discontinuity or inhomogeneous smoothness across
+different parts of a domain in nonparametric regression or density problems
+[13]. For sparse means, the James–Stein or the oracle linear estimators could
+perform much worse than threshold estimators [12]. Many threshold methods have been proposed and proved to possess (near) optimality properties
+for sparse signals, including the universal [13], SURE [14], FDR [1, 2], the
+generalized Cp [3] and the parametric EB posterior median (EBThresh) [24].
+These estimators can be viewed as approximations of the optimal candidate
+in certain families of separable threshold estimators, so that they do not
+perform well by design compared with the general EB when the minimum
+risk of separable threshold estimators is far different from that of all separable estimators [38]. Again, what is the cost of being greedy with the general
+EB when the unknown means are indeed very sparse?
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+3
+
+Since general EB methods have to spend more “degrees of freedom” for
+nonparametric estimation of its oracle rule, compared with linear and threshold methods, the heart of the question is whether the gain by aiming at the
+smaller general EB benchmark risk is large enough to offset the additional
+cost of the nonparametric estimation.
+We propose a general maximum likelihood EB (GMLEB) in which we first
+estimate the empirical distribution of the unknown means by the generalized
+maximum likelihood estimator (MLE) [25] and then plug the estimator into
+the oracle general EB rule. In other words, we treat the unknown means as
+i.i.d. variables with a completely unknown common “prior” distribution (for
+the purpose of deriving the GMLEB, whether the unknowns are actually
+deterministic or random), estimate the nominal prior with the generalized
+MLE, and then use the Bayes rule for the estimated prior. The basic idea
+was discussed in the last paragraph of [27] as a general way of deriving
+solutions to compound decision problems, although the notion of MLE was
+vague at that time without a parametric model and not much has been done
+since then about using the generalized MLE to estimate the nominal prior
+in compound estimation.
+Our results affirm that by aiming at the minimum risk of all separable
+estimators, the greedier general EB approach realizes significant risk reduction over linear and threshold methods for a wide range of the unknown
+signal vectors for moderate and large samples, and this is especially so for
+the GMLEB. We prove that the risk of the GMLEB estimator is within an
+infinitesimal fraction of the general EB benchmark when the risk is of the
+order n−1 (log n)5 or greater depending on the magnitude of the weak ℓp
+norm of the unknown means, 0 < p ≤ ∞. Such adaptive ratio optimality is
+obtained through a general oracle inequality which also implies the adaptive
+minimaxity of the GMLEB over a broad collection of regular and weak ℓp
+balls. This adaptive minimaxity result unifies and improves upon the adaptive minimaxity of threshold estimators for sparse means [1, 14, 24] and the
+Fourier general EB estimators for moderately sparse and dense means [38].
+We demonstrate the superb risk performance of the GMLEB for moderate
+samples through simulation experiments, and describe algorithms to show
+its computational feasibility.
+The paper is organized as follows. In Section 2, we highlight our results
+and formally introduce certain necessary terminologies and concepts. In Section 3 we provide upper bounds for the regret of a regularized Bayes rule using a predetermined and possibly misspecified prior. In Section 4 we prove an
+oracle inequality for the GMLEB, compared with the general EB benchmark
+risk. The consequences of this oracle inequality, including statements of our
+adaptive ratio optimality and adaptive minimaxity results in full strength,
+are also discussed in Section 4. In Section 5 we present more simulation results. Section 6 contains some discussion. Mathematical proofs of theorems,
+
+4
+
+W. JIANG AND C.-H. ZHANG
+
+propositions and lemmas are given either right after their statements or in
+the Appendix.
+2. Problem formulation and highlight of main results. Let Xi be independent statistics with
+(2.1)
+
+Xi ∼ ϕ(x − θi ) ∼ N (θi , 1),
+
+i = 1, . . . , n,
+
+under a probability measure Pn,θ , where θ = (θ1 , . . . , θn ) is an unknown
+signal vector. Our problem is to estimate θ under the compound loss
+(2.2)
+
+b θ) = n−1 kθ
+b − θk2 =
+Ln (θ,
+
+n
+1X
+(θbi − θi )2
+n i=1
+
+b = (θb1 , . . . , θbn ). Throughout this paper, the unfor any given estimator θ
+known means θi are assumed to be deterministic as in the standard compound decision theory [27]. To avoid confusion, the Greek θ is used only
+with boldface as a deterministic mean vector θ in Rn or with subscripts
+as elements of θ. A random mean is denoted by ξ as in (2.3) below. The
+estimation of i.i.d. random means is discussed in Section 6.3.
+We divide the section into seven subsections to describe (1) the general
+and restricted EB, (2) the GMLEB method, (3) the computation of the
+GMLEB, (4) some simulation results, (5) the adaptive ratio optimality of
+the GMLEB, (6) the adaptive minimaxity of the GMLEB in ℓp balls and
+(7) minimax theory in ℓp balls.
+Throughout the paper, boldface letters denote
+vectors and matrices, for
+√
+2
+example, X = (X1 , . p
+. . , Xn ), ϕ(x) = e−x /2 / 2π denotes the standard nore
+mal density, L(y)
+= − log(2πy 2 ) denotes the inverse of y = ϕ(x) for positive x and y, x ∨ y = max(x, y), x ∧ y = min(x, y), x+ = x ∨ 0 and an ≍ bn
+means 0 < an /bn + bn /an = O(1). In a number of instances, log(x) should be
+viewed as log(x ∨ e). Univariate functions are applied to vectors per comb = t(X) =
+ponent. Thus, an estimator of θ is separable if it is of the form θ
+(t(X1 ), . . . , t(Xn )) with a predetermined Borel function t(·). In the vector
+notation, it is convenient to state (2.1) as X ∼ N (θ, In ) with In being the
+identity matrix in Rn .
+
+2.1. Empirical Bayes. The compound estimation of a vector of determinist normal means is closely related to the Bayes estimation of a single
+random mean. In this Bayes problem, we estimate a univariate random parameter ξ based on a univariate Y such that
+(2.3)
+
+Y |ξ ∼ N (ξ, 1),
+
+ξ ∼ G,
+
+under PG .
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+5
+
+The prior distribution G = Gn which naturally matches the unknown means
+{θi , i ≤ n} in (2.1) is the empirical distribution
+(2.4)
+
+Gn (u) = Gn,θ (u) =
+
+n
+1X
+I{θi ≤ u}.
+n i=1
+
+Here and in the sequel, subscripts n,θ indicate dependence of distribution or
+probability upon n and the unknown deterministic vector θ.
+The fundamental theorem of compound decisions [27] in the context of the
+b = t(X) under
+ℓ2 loss asserts that the compound risk of a separable rule θ
+the probability Pn,θ in the multivariate model (2.1) is identical to the MSE
+of the same rule ξb = t(Y ) under the prior (2.4) in the univariate model (2.3):
+
+(2.5)
+
+En,θ Ln (t(X), θ) = EGn (t(Y ) − ξ)2 .
+
+For any true or nominal priors G, denote the Bayes rule as
+(2.6)
+
+t∗G = arg min EG (t(Y ) − ξ)2 =
+t
+
+and the minimum Bayes risk as
+(2.7)
+
+R
+uϕ(Y − u)G(du)
+R
+
+ϕ(Y − u)G(du)
+
+R∗ (G) = EG (t∗G (Y ) − ξ)2 ,
+
+where the minimum is taken over all Borel functions. It follows from (2.5)
+that among all separable rules, the compound risk is minimized by the Bayes
+rule with prior (2.4), resulting in the general EB benchmark
+(2.8)
+
+R∗ (Gn ) = En,θ Ln (t∗Gn (X), θ) = min En,θ Ln (t(X), θ).
+t(·)
+
+The general EB approach seeks procedures which approximate the Bayes
+rule t∗Gn (X) or approximately achieve the risk benchmark R∗ (Gn ) in (2.8).
+Given a class of functions D, the aim of the restricted EB is to attain
+(2.9)
+
+RD (Gn ) = inf En,θ Ln (t(X), θ) = inf EGn (t(Y ) − ξ)2 ,
+t∈D
+
+t∈D
+
+approximately. This provides EB interpretations for all the adaptive methods discussed in the Introduction, with D being the classes of all linear
+functions for the James–Stein estimator, all soft threshold functions for the
+SURE [14], and all hard threshold functions for the generalized Cp [3] or the
+FDR [1]. For the EBThresh [24], D is the class of all posterior median functions t(y) = median(ξ|Y = y) under the probability PG in (2.3) for priors of
+the form
+(2.10)
+
+G(u) = ω0 I{0 ≤ u} + (1 − ω0 )G0 (u/τ ),
+
+where ω0 and τ are free and G0 is given [e.g., dG0 (u)/du = e−|u| /2].
+
+6
+
+W. JIANG AND C.-H. ZHANG
+
+Compared with linear and threshold methods, the general EB approach
+is greedier since it aims at the smaller benchmark risk: R∗ (Gn ) ≤ RD (Gn )
+for all D. This could still backfire when the regret
+(2.11)
+
+rn,θ (tbn ) = En,θ Ln (tbn (X), θ) − R∗ (Gn )
+
+of using an estimator tbn (·) of the general EB oracle rule t∗Gn (·) is greater
+than the difference RD (Gn ) − R∗ (Gn ) in benchmarks, but our simulation
+and oracle inequalities prove that rn,θ (tbn ) = o(1)R∗ (Gn ) uniformly for a
+wide range of the unknown vector θ and moderate/large samples.
+Zhang [36] proposed a general EB method based on a Fourier infiniteorder smoothing kernel. The Fourier general EB estimator is asymptotically
+minimax over the entire parameter space and approximately reaches the general EB benchmark (2.8) uniformly for dense and moderately sparse signals,
+provided that the oracle Bayes risk is of the order n−1/2 (log n)3/2 or greater
+[36]. Hybrid general EB estimators have been developed [38] to combine the
+features and optimality properties of the Fourier general EB and threshold estimators. Still, the performance of general EB methods is sometimes
+perceived as uncertain in moderate samples [24]. Indeed, the Fourier general
+EB requires selection of certain tuning parameters and its proven theoretical
+properties are not completely satisfying. This motivates our investigation.
+2.2. The GMLEB. The GMLEB method replaces the unknown prior Gn
+of the oracle rule t∗Gn by its generalized MLE [25]
+(2.12)
+
+bn = G
+b n (·; X) = arg max
+G
+G∈G
+
+n
+Y
+
+fG (Xi ),
+
+i=1
+
+where G is the family of all distribution functions and fG is the density
+(2.13)
+
+fG (x) =
+
+Z
+
+ϕ(x − u)G(du)
+
+of the normal location mixture by distribution G.
+The estimator (2.12) is called the generalized MLE since the likelihood is
+used only as a vehicle to generate the estimator. The G here is used only
+as a nominal prior. In our adaptive ratio and minimax optimality theorems
+and oracle inequality, the GMLEB is evaluated under the measures Pn,θ in
+(2.1) where the unknowns θi are assumed to be deterministic parameters.
+Since (2.12) is typically solved by iterative algorithms, we allow approximate solutions to be used. For definiteness and notation simplicity, the
+generalized MLE in the sequel is any solution of
+(2.14)
+
+bn ∈ G ,
+G
+
+n
+Y
+
+i=1
+
+fGb (Xi ) ≥ qn sup
+n
+
+n
+Y
+
+G∈G i=1
+
+fG (Xi )
+
+7
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+√
+with qn = (e 2π/n2 ) ∧ 1, although the theoretical results in this paper all
+hold verbatim for less stringent (2.14) with 0 ≤ log(1/qn ) ≤ c0 (log n) for any
+fixed constant c0 . Formally, the GMLEB estimator is defined as
+(2.15)
+
+θbi = t∗Gb (Xi ),
+
+b = t∗ (X) or equivalently
+θ
+b
+G
+
+n
+
+n
+
+i = 1, . . . , n,
+
+b n is any approximate generalized
+where t∗G is the Bayes rule in (2.6) and G
+MLE (2.14) for the nominal prior (2.4). Clearly, the GMLEB estimator
+(2.15) is completely nonparametric and does not require any restriction,
+regularization, bandwidth selection or other forms of tuning.
+The GMLEB is location equivariant in the sense that
+
+(2.16)
+
+t∗b
+
+Gn (·;X+ce)
+
+(X + ce) = t∗b
+
+Gn (·;X)
+
+(X) + ce
+
+for all real c, where e = (1, . . . , 1) ∈ Rn . This is due to the location equivb n (x; X + ce) = G
+b n (x − c; X). Compared
+ariance of the generalized MLE: G
+with the Fourier general EB estimators [36, 38], the GMLEB (2.15) is more
+appealing since the function t∗b (x) of x enjoys all analytical properties of
+Gn
+Bayes rules: monotonicity, infinite differentiability and more. However, the
+GMLEB is much harder to analyze than the Fourier general EB. We first
+address the computational issues in the next section.
+2.3. Computation of the GMLEB. It follows from the Carathéodory’s
+theorem [9] that there exists a discrete solution of (2.12) with no more than
+b n with m
+n + 1 support points. A discrete approximate generalized MLE G
+support points can be written as
+(2.17)
+
+bn =
+G
+
+m
+X
+
+j=1
+
+bj δuj ,
+w
+
+bj ≥ 0,
+w
+
+m
+X
+
+j=1
+
+bj = 1,
+w
+
+where δu is the probability distribution giving its entire mass to u. Given
+(2.17), the GMLEB estimator can be easily computed as
+(2.18)
+
+Pm
+bj
+j=1 uj ϕ(Xi − uj )w
+∗
+b
+θi = tGb (Xi ) = Pm
+,
+n
+bj
+ϕ(Xi − uj )w
+j=1
+
+since t∗G (x) is the conditional expectation as in (2.6).
+b n is completely nonparametric, the support
+Since the generalized MLE G
+bj , j ≤ m} in (2.17) are selected or compoints {uj , j ≤ m} and weights {w
+puted solely to maximize the likelihood in (2.12). There are quite a few
+possible algorithms for solving (2.14), but all depend on iterative approximations. Due to the monotonicity of ϕ(t) in t2 , the generalized MLE (2.12)
+puts all its mass in the interval I0 = [min1≤i≤n Xi , max1≤i≤n Xi ]. Given a
+fine grid {uj } in I0 , the EM-algorithm [11, 35]
+(k−1)
+
+(2.19)
+
+(k)
+
+bj =
+w
+
+n
+bj
+w
+ϕ(Xi − uj )
+1X
+P
+(k−1)
+n i=1 m w
+b
+ϕ(Xi − uℓ )
+ℓ=1
+
+ℓ
+
+8
+
+W. JIANG AND C.-H. ZHANG
+
+bj }. In Section 6.2, we provide a conservative statisoptimizes the weights {w
+tical criterion on {uj } and an EM-stopping rule to guarantee (2.14).
+We took a simple approach in our simulation experiments. Given {Xi , 1 ≤
+i ≤ n} and with X0 = 0, we chose the grid points {uj } as a set of multipliers
+of ε = max0≤i<j≤n |Xi − Xj |/999 with uj = uj−1 + ε and the range
+
+−j0 ε = u1 − ε < min Xi ≤ u1 ,
+0≤i≤n
+
+um = (m − j0 )ε ≤ max Xi < um + ε
+0≤i≤n
+
+with an integer j0 ∈ [1, m]. This ensures uj0 = 0 as a grid point and 999 ≤
+m ≤ 1000. We ran 100 EM-iterations (2.19) in our simulations. We have
+bj } in the
+tried to optimize both the support points {uj } and weights {w
+EM-algorithm, but gained limited improvements.
+The GMLEB estimator (2.18) depends slightly on the initialization of the
+EM-algorithm due to the nonuniqueness of the GMLEB estimator and the
+fixed number of EM-iterations in our implementation. Since the generalized
+MLE (2.12) is unique only up to the values of {fGb (Xi ), i ≤ n}, different
+n
+
+b n , which then result in difEM-initializations lead to different versions of G
+∗
+ferent values of t b (Xi ) in (2.18). This nonuniqueness persists even when
+Gn
+we run infinitely many EM-iterations. Nevertheless, our theoretical results
+hold for all versions of the GMLEB.
+We consider two options in our simulation experiments. The first option
+bj = 1/m. The secinitializes the weights with the uniform distribution w
+ond option takes into consideration of the possible sparsity of the signal by
+putting a good starting mass at uj0 = 0:
+
+(2.20)
+
+b j0 = ω
+b0,
+w
+
+bj =
+w
+
+b0
+1−ω
+,
+m−1
+
+j 6= j0 .
+
+We estimate the proportion of zeros within the n means by a Fourier method,
+b0 =
+ω
+
+n
+1X
+ψ(Xj ; hn ),
+n j=1
+
+ψ(z; h) =
+
+Z
+
+2
+
+hψ0 (ht)et /2 cos(zt) dt
+
+as in [32, 33], where ψ0 is a density function with support [−1, 1] and hn =
+{κ(log n)}−1/2 is the bandwidth, κ ≤ 1. In our simulation experiments, the
+uniform [−1, 1] density is used as ψ0 and κ = 1/2. To distinguish the two
+options of initializing the EM-algorithm, we reserve the name GMLEB for
+the uniform initialization and call (sparse-) S-GMLEB the estimator with
+the initialization (2.20) when we report simulation results.
+2.4. Some simulation results. Johnstone and Silverman [24] reported results of an extensive simulation study of 18 threshold estimators, including
+eight options of their EBThresh, the SURE and adaptive SURE [14], the
+FDR [1] at three levels, three block threshold methods [7, 8] and the soft and
+
+9
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+Table 1
+Average total squared errors kb
+θ − θk2 for n = 1000 unknown means in various
+binary models where θj is either 0 or µ with the number of nonzero θi = µ being 5, 50 or
+500. The “Best” stands for the best simulation results in Table 1 of Johnstone and
+Silverman [24].
+Each entry is based on 100 replications
+# nonzero
+
+5
+
+50
+
+500
+
+µ
+
+3
+
+4
+
+5
+
+7
+
+3
+
+4
+
+5
+
+7
+
+3
+
+4
+
+5
+
+7
+
+James–Stein
+
+45
+
+76
+
+113
+
+199
+
+312
+
+442
+
+556
+
+716
+
+822
+
+889
+
+933
+
+954
+
+EBThresh
+SURE
+FDR (0.01)
+FDR (0.1)
+
+37
+42
+43
+42
+
+34
+64
+54
+38
+
+20
+73
+29
+21
+
+8
+75
+6
+13
+
+212
+416
+388
+278
+
+151
+609
+299
+163
+
+103
+215
+132
+115
+
+74
+214
+57
+99
+
+862
+835
+2587
+1162
+
+873
+834
+1322
+744
+
+792
+842
+667
+662
+
+653
+828
+520
+640
+
+GMLEB
+S-GMLEB
+
+39
+32
+
+34
+28
+
+23
+17
+
+11
+6
+
+157
+150
+
+105
+99
+
+58
+54
+
+14
+10
+
+459
+454
+
+285
+282
+
+139
+136
+
+18
+15
+
+F-GEB
+HF-GEB
+
+94
+37
+
+94
+34
+
+89
+20
+
+88
+8
+
+223
+197
+
+185
+150
+
+135
+99
+
+103
+72
+
+520
+499
+
+363
+334
+
+237
+192
+
+131
+83
+
+“Best”
+Oracle
+
+34
+27
+
+32
+22
+
+17
+12
+
+5
+0.8
+
+201
+144
+
+156
+93
+
+95
+46
+
+52
+3
+
+829
+443
+
+730
+273
+
+609
+128
+
+505
+8
+
+√
+hard threshold at the universal threshold level 2 log n. In their simulations,
+the overall best performer is the EBThresh using the posterior median for
+the prior (2.10) with the double exponential dG0 (u)/du = e−|u| /2 and the
+MLE of (ω0 , τ ).
+In Table 1, we display our simulation results under exactly the same setting as in [24] for nine estimators: the James–Stein, the EBThresh [24] using
+the double exponential dG0 in (2.10) and the MLE of (ω0 , τ ), the SURE [14],
+the FDR [1] at levels q = 0.01 and q = 0.1, the GMLEB (2.15) with the uniform initialization, the S-GMLEB with the initialization (2.20), the F-GEB
+and HF-GEB as the Fourier general EB [36] and a hybrid [38] of its monotone version with the EBThresh. In each column, boldface entries denote
+the top three performers other than the hybrid estimator. We also display
+as “Best” the best of the simulation results in [24] over the 18 threshold
+estimators and as Oracle the average simulated risk of the oracle Bayes rule
+t∗Gn in (2.8).
+These simulation results can be summarized as follows. The average ℓ2
+loss of the S-GMLEB happens to be the smallest among the nine estimators,
+with the S-GMLEB and GMLEB clearly outperforming all other methods
+by large margins for dense and moderately sparse signals. For very sparse
+signals, the S-GMLEB, the EBThresh, the GMLEB and the FDR estimators
+yield comparable results, and they all outperform the Fourier general EB
+and James–Stein estimators. Compared with the oracle, the regrets of the
+
+10
+
+W. JIANG AND C.-H. ZHANG
+
+S-GMLEB and GMLEB are nearly fixed constants. Since the oracle prior
+(2.4) has a point mass at 0 in all the models used to generate data in
+this simulation experiment, the S-GMLEB yields slightly better results than
+the GMLEB as expected. The hybrid estimator correctly switches to the
+EBThresh for very sparse signals.
+These simulations and more presented in Section 5 demonstrate the computational affordability of the proposed GMLEB. The most surprising aspect
+of the results in Table 1 is the strong performance of the both versions of
+the GMLEB for the most sparse signals with 0.5% of θi being nonzero, since
+the GMLEB is not specially designed to recover such signals (and threshold
+estimators are).
+2.5. Adaptive ratio optimality. Our theoretical results match well with
+the supreme performance of the GMLEB in our simulation experiments. We
+describe here the adaptive ratio optimality of the GMLEB and in the next
+section the adaptive minimaxity of the GMLEB in ℓp balls.
+b : X → Rn if its risk
+The adaptive ratio optimality holds for an estimator θ
+is uniformly within a fraction of the general EB benchmark
+b θ)
+En,θ Ln (θ,
+≤ 1 + o(1)
+∗
+θ∈Θ∗n R (Gn,θ )
+
+(2.21)
+
+sup
+
+in certain classes Θ∗n ⊂ Rn of the unknown vector θ, where Ln (·, ·) is the
+average squared loss (2.2), Gn,θ = Gn is the empirical distribution of the unknowns in (2.4) and R∗ (Gn ) is the general EB benchmark risk (2.8) achieved
+by the oracle Bayes rule t∗Gn (X).
+Theorem 1. Let X ∼ N (θ, In ) under Pn,θ with a deterministic θ ∈ Rn .
+b n satisLet t∗b (·) be the GMLEB in (2.15) with an approximate solution G
+Gn
+fying (2.14). Let Gn = Gn,θ and R∗ (G) be as in (2.4) and (2.7). Then,
+(2.22)
+
+En,θ Ln (t∗b (X), θ)
+Gn
+
+R∗ (Gn )
+
+=
+
+En,θ kt∗b (X) − θk2
+Gn
+
+mint En,θ kt(X) − θk2
+
+≤ 1 + o(1)
+
+for the compound loss (2.2), provided that for certain constants bn
+nR∗ (Gn )
+√
+→ ∞.
+( log n ∨ maxi≤n |θi − bn |)(log n)9/2
+√
+In particular, if maxi≤n |θi − bn | = O( log n) and nR∗ (Gn )/(log n)5 → ∞,
+then (2.22) holds.
+For any sequences of constants Mn → ∞, Theorem 1 provides the adaptive
+ratio optimality (2.21) of the GMLEB in the classes
+p
+
+Θ∗n = {θ ∈ Rn : R∗ (Gn,θ ) ≥ Mn n−1 (log n)9/2 ( log n ∨ kθk∞ )}.
+
+11
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+This is a consequence of an oracle inequality for the GMLEB tbn = t∗b in
+Gn
+Section 4.2, which uniformly bound from the above
+(2.23)
+
+ren,θ (tbn ) =
+
+q
+
+En,θ Ln (tbn (X), θ) −
+
+q
+
+R∗ (Gn )
+
+in terms of the weak ℓp norm of θ. The quantity (2.23) can be viewed
+as the regret for the minimization of the square root ofpthe MSE, instead
+of (2.11). Clearly, rn,θ (tbn )/R∗ (Gn ) ≤ o(1) iff ren,θ (t∗b )/ R∗ (Gn ) ≤ o(1). A
+Gn
+more general version of Theorem 1 is given in Section 4.3.
+b is defined as
+In the EB literature, the asymptotic optimality of θ
+
+(2.24)
+
+D
+
+Gn −→ G
+
+⇒
+
+En,θ Ln ( b
+θ, θ) − R∗ (Gn ) → 0
+
+for deterministic vectors θ ∈ Rn [27, 36]. In the EB model
+(2.25)
+
+(Yi , ξi ) i.i.d.,
+
+Yi |ξi ∼ N (ξi , 1),
+
+ξi ∼ G,
+
+under PG
+
+with data {Yi }, the EB asymptotic optimality is defined as
+(2.26)
+
+lim EG
+
+n→∞
+
+n
+X
+i=1
+
+(ξbi − ξi )2 /n = R∗ (G).
+
+We call (2.21) adaptive ratio optimality since it is much stronger than both
+notions of asymptotic optimality in its uniformity in θ ∈ Θ∗n and its focus on
+the harder standard of the relative error, due to R∗ (Gn ) ≤ En,θ Ln (X, θ) = 1.
+The difference among these optimality properties is significant for moderate
+samples in view of some very small R∗ (Gn ) ≈ Oracle/1000 in Table 1.
+Theorem 1 is location invariant, since the GMLEB is location equivariant
+by (2.16) and R∗ (Gn ) is location invariant by (2.8). Thus, if θi = bn for most
+i ≤ n, the GMLEB performs equally well whether bn = 0 or not. Moreover, if
+θi ∈ B ∀i for a finite set B ⊂ R, the GMLEB adaptively shrinks toward the
+points in B [19]. This is evident in Table 1 for #{i : θi = 7} ∈ {50, 500} with
+B = {0, 7}. In fact, if #{x : x ∈ Bn } = O(1) and minBn ∋x6=y∈Bn |x − y| → ∞,
+then Gn (Bn ) = 1 implies R∗ (Gn ) → 0. Threshold methods certainly do not
+possess these location invariance and multiple shrinkage properties.
+2.6. Adaptive minimaxity in ℓp balls. Minimaxity is commonly used to
+measure the performance of statistical procedures. For Θ ⊂ Rn , the minimax
+risk for the average squared loss (2.2) is
+(2.27)
+
+e θ),
+Rn (Θ) = inf sup En,θ Ln (θ,
+e
+θ θ∈Θ
+
+e : X → Rn . An estimator
+where the infimum is taken over all Borel mappings θ
+is minimax in a specific class Θ of unknown mean vectors if it attains Rn (Θ),
+but this does not guarantee satisfactory performance since the minimax
+
+12
+
+W. JIANG AND C.-H. ZHANG
+
+estimator is typically uniquely tuned to the specific set Θ. For small Θ,
+the minimax estimator has high risk outside Θ. For large Θ, the minimax
+estimator is too conservative by focusing on the worst case scenario within
+Θ. Adaptive minimaxity overcomes this difficulty by requiring
+b θ)
+supθ∈Θn En,θ Ln (θ,
+→1
+Rn (Θn )
+
+(2.28)
+
+uniformly for a wide range of sequences {Θn ⊂ Rn , n ≥ 1} of parameter
+classes. Define (regular or strong) ℓp balls as
+(
+
+Θp,C,n = θ = (θ1 , . . . , θn ) : n
+
+(2.29)
+
+−1
+
+n
+X
+i=1
+
+p
+
+|θi | ≤ C
+
+p
+
+)
+
+.
+
+The quantity C in (2.29), called length-normalized or standardized radius
+of the ℓp ball, is denoted as η in [1, 12, 24], where adaptive minimaxity in
+ℓp balls with C = Cn → 0 and p < 2 is used to measure the performance
+of estimators for sparse θ. The following theorem establishes the adaptive
+minimaxity of the GMLEB in ℓp balls with radii C = Cn in intervals diverging to (0, ∞). This covers sparse and dense θ simultaneously. Adaptive
+minimaxity of the GMLEB in weak ℓp balls is discussed in Section 4.3.
+Theorem 2. Let X ∼ N (θ, In ) under Pn,θ with a deterministic θ ∈ Rn .
+b = t∗ (X) be the GMLEB in (2.15) with an approximate solution G
+bn
+Let θ
+b
+Gn
+
+satisfying (2.14). Let Ln (·, ·) be the average squared loss (2.2) and Rn (Θ) be
+the minimax risk (2.27). Then, as n → ∞, the adaptive minimaxity (2.28)
+holds in ℓp balls (2.29) with Θn = Θp,Cn ,n , provided that
+(2.30)
+
+n1/(p∧2) Cn
+→ ∞,
+(log n)κ1 (p)
+
+Cn
+(log n)κ2 (p) → 0,
+n
+
+where κ1 (p) = 1/2 + 4/p + 3/p2 for p < 2, κ1 (2) = 13/4, κ1 (p) = 5/2 for
+p > 2, and κ2 (p) = 9/2 + 4/p.
+Theorem 2 is a consequence of the oracle inequality in Section 4.2 and
+the minimax theory in [12]. An outline of this argument is given in the next
+section. An alternative statement of the conclusion of Theorem 2 is
+supθ∈Θp,C,n En,θ Ln (t∗b (X), θ)
+Gn
+lim
+sup
+= 1,
+Rn (Θp,C,n )
+(n,M )→(∞,∞) C∈Cp,n (M )
+
+where Cp,n (M ) = [M n−1/(p∧2) (log n)κ1 (p) , n/{M (log n)κ2 (p) }]. In Section 4.3,
+we offer an analogues result for weak ℓp balls. The powers κ1 (p) and κ2 (p) of
+the logarithmic factors in (2.30) and in the definition of Cp,n (M ) are crude.
+This is further discussed in Section 6.
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+13
+
+Adaptive and approximate minimax estimators of the normal means in ℓp
+balls have been considered in [1, 3, 12, 14, 24, 36, 38]. Donoho and Johnstone
+[14] proved that as (n, Cn ) → (∞, 0+), with nCnp /(log n)p/2 → ∞ for p < 2,
+(2.31)
+
+Rn (Θp,Cn ,n ) = (1 + o(1)) min
+
+max
+
+t∈D θ∈Θp,Cn ,n
+
+En,θ Ln (t(X), θ),
+
+where D is the collection of all (soft or hard) threshold rules. Therefore,
+adaptive minimaxity (2.28) in small ℓp balls Θn = Θp,Cn,n can be achieved
+by threshold rules with suitable data-driven threshold levels. This has been
+done using the FDR [1] for (log n)5 /n ≤ Cnp ≤ n−κ with p < 2 and any κ > 0.
+Zhang [38] proved that (2.28)
+√ holds for the Fourier general EB estimator of
+[36] in Θn = Θp,Cn ,n for Cnp n/(log n)1+(p∧2)/2 → ∞.
+A number of estimators have been proven to possess the adaptive rate
+minimaxity in the sense of attaining within a bounded factor of the minimax
+risk. In ℓp balls Θp,Cn,n , the EBThresh is adaptive rate minimax for p ≤ 2 and
+nCnp ≥ (log n)2 [24], while the generalized Cp is adaptive rate minimax for
+p < 2 and 1 ≤ O(1)nCnp [3]. It follows from [3, 38] that a hybrid between the
+Fourier general EB and universal soft threshold estimators is also adaptive
+rate minimax in Θp,Cn,n for 1 ≤ O(1)nCnp .
+The adaptive minimaxity as provided in Theorem 2 unifies the adaptive
+minimaxity of different types estimators in different ranges of the radii Cn
+of the ℓp balls with the exception of the two very extreme ends, due to the
+crude power κ1 (p) of the logarithmic factor for small Cn and the requirement
+of an upper bound for large Cn . The hybrid Fourier general EB estimator
+achieves the adaptive rate minimaxity in a wider range of ℓp balls than what
+we prove here for the GMLEB. However, as we have seen in Table 1, the
+finite sample performance of the GMLEB is much stronger. It seems that
+the less stringent and commonly considered adaptive rate minimaxity leaves
+too much room to provide adequate indication of finite sample performance.
+2.7. Minimax theory in ℓp balls. Instead of the general EB approach,
+adaptive minimax estimation in small ℓp balls can be achieved by threshold
+methods, provided that the radius is not too small. However, since (2.31)
+does not hold for fixed p > 0 and C ∈ (0, ∞), threshold estimators are not
+asymptotically minimax with Θn = Θp,C,n in (2.28) for fixed (p, C). Consequently, adaptive minimax estimations in small, fixed and large ℓp balls are
+often treated separately in the literature. In this section, we explain the general EB approach for adaptive minimax estimation, which provides a unified
+treatment for ℓp balls of different ranges of radii. This provides an outline of
+the proof of Theorem 2. Minimax theory in weak ℓp balls will be discussed
+in Section 4.3.
+We first discuss the relationship between the minimax estimation of a
+deterministic vector θ in ℓp balls and the minimax estimation of a single
+
+14
+
+W. JIANG AND C.-H. ZHANG
+
+random mean under an unknown “prior” in Lp balls. For positive p and C,
+the Lp balls of distribution functions are defined as
+
+
+Gp,C = G :
+
+Z
+
+p
+
+|u| G(du) ≤ C
+
+p
+
+
+
+.
+
+Since Gp,C is a convex class of distributions, the minimax theorem provides
+(2.32)
+
+R(Gp,C ) = min max EG (t(Y ) − ξ)2 = max R∗ (G) ≤ 1
+t
+
+G∈Gp,C
+
+G∈Gp,C
+
+for the estimation of a single real random parameter ξ in the model (2.3),
+where R∗ (G) is the minimum Bayes risk in (2.7). Thus, since Gn = Gn,θ ∈
+Gp,C for θ ∈ Θp,C,n , the fundamental theorem of compound decisions (2.5)
+implies that (2.32) dominates the compound minimax risk (2.27) in ℓp balls:
+(2.33)
+
+Rn (Θp,C,n) ≤ inf
+
+sup
+
+t(x) θ∈Θp,C,n
+
+En,θ Ln (t(X), θ) ≤ R(Gp,C ) ≤ 1.
+
+Donoho and Johnstone [12] proved that as C p∧2 → 0+
+R(Gp,C )
+−1
+p∧2
+C {2 log(1/C p )}(1−p/2)+
+
+(2.34)
+
+→0
+
+and that for either p ≥ 2 with Cn > 0 or p < 2 with nCnp /(log n)p/2 → ∞,
+Rn (Θp,Cn ,n )
+− 1 → 0.
+R(Gp,Cn )
+
+(2.35)
+
+In the general EB approach, the aim is to find an estimator tbn of t∗Gn with
+small regret (2.11) or (2.23). If the approximation to t∗Gn in risk is sufficiently
+accurate and uniformly within a small fraction of R(Gp,Cn ) for θ ∈ Θp,Cn,n ,
+the maximum risk of the general EB estimator in Θp,Cn ,n would be within
+the same small fraction of R(Gp,Cn ), since the risk of t∗Gn is bounded by
+R∗ (Gn,θ ) ≤ R(Gp,Cn ) for θ ∈ Θp,Cn ,n . Thus, (2.35) plays a crucial role in
+general EB.
+It follows from (2.23), (2.32) and (2.29) that
+(2.36)
+
+sup
+θ∈Θp,C,n
+
+q
+
+En,θ Ln (tbn (X), θ) ≤
+
+sup
+θ∈Θp,C,n
+
+ren,θ (tbn ) +
+
+q
+
+R(Gp,C ).
+
+b = tb (X) in
+Thus, by (2.34) and (2.35), the adaptive minimaxity (2.28) of θ
+n
+ℓp balls Θn = Θp,Cn,n is a consequence of an oracle inequality of the form
+
+(2.37)
+
+sup
+
+θ∈Θp,Cn ,n
+
+q
+
+ren,θ (tbn ) = o(1) Jp,Cn
+
+with Jp,C = min{1, C p∧2 {1∨ (2 log(1/C p ))}(1−p/2)+ }. In our proof, (2.34) and
+the upper bound R(Gp,C ) ≤ 1 provide inf C R(Gp,C )/Jp,C > 0. Although Jp,C
+provides the order of R(Gp,C ) for each p via (2.34), explicit expressions of
+the minimax risk Rn (Θp,C,n ) for general fixed (p, C, n) or the minimax risk
+R(Gp,C ) for fixed (p, C) with p 6= 2 are still open problems.
+
+15
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+3. A regularized Bayes estimator with a misspecified prior. In this section, we consider a fixed probability PG0 under which
+(3.1)
+
+Y |ξ ∼ N (ξ, 1),
+
+ξ ∼ G0 .
+
+Recall [5, 28] that for the estimation of a normal mean, the Bayes rule (2.6)
+and its risk (2.7) can be expressed in terms of the mixture density fG (x) as
+t∗G (x) = x +
+
+(3.2)
+
+fG′ (x)
+,
+fG (x)
+
+R
+
+R∗ (G) = 1 −
+
+Z 
+
+fG′
+fG
+
+2
+
+fG ,
+
+in the model (2.3), where fG (x) = ϕ(x − u)G(du) is as in (2.13).
+Suppose the true prior G0 is unknown but a deterministic approximation
+of it, say G, is available. The Bayes formula (3.2) could still be used, but
+we may want to avoid dividing by a near-zero quantity. This leads to the
+following regularized Bayes estimator:
+t∗G (x; ρ) = x +
+
+(3.3)
+
+fG′ (x)
+.
+fG (x) ∨ ρ
+
+For ρ = 0, t∗G (x; 0) = t∗G (x) is the Bayes estimator for the prior G. For ρ = ∞,
+t∗G (x; ∞) = x gives the MLE of ξ which requires no knowledge of the prior.
+The following proposition, proved in the Appendix, describes some analytical
+properties of the regularized Bayes estimator.
+p
+
+e
+Proposition 1. Let L(y)
+= − log(2πy 2 ), y ≥ 0, be the inverse function of y = ϕ(x). Then, the value of the regularized Bayes estimator t∗G (x; ρ)
+in (3.3) is always between those of the Bayes estimator t∗G (x) in (2.6) and
+the MLE t∗G (x; ∞) = x. Moreover, for all real x
+
+(3.4)
+
+
+′
+
+ |x − t∗ (x; ρ)| = |fG (x)| ≤ L(ρ),
+e
+G
+fG (x) ∨ ρ
+
+
+e 2 (ρ),
+0 ≤ (∂/∂x)t∗ (x; ρ) ≤ L
+G
+
+Remark 1.
+(3.5)
+
+
+
+0 < ρ ≤ (2πe)−1/2 ,
+0 < ρ ≤ (2πe3 )−1/2 .
+
+In [36], a slightly different inequality
+
+fG′ (x)
+fG (x)
+
+2
+
+fG (x)
+e 2 (ρ),
+≤L
+fG (x) ∨ ρ
+
+0 ≤ ρ < (2πe2 )−1/2 ,
+
+was used to derive oracle inequalities for Fourier general EB estimators. The
+extension to the derivative of t∗G (x; ρ) here is needed for the application of
+the Gaussian isoperimetric inequality in Proposition 4.
+The next theorem provides oracle inequalities which bound the regret of
+using (3.3) due to the lack of the knowledge of the true G0 . Let
+(3.6)
+
+d(f, g) =
+
+Z
+
+(f 1/2 − g1/2 )2
+
+1/2
+
+16
+
+W. JIANG AND C.-H. ZHANG
+
+denote the Hellinger distance. The upper bounds assert that the regret is
+no greater than the square of the Hellinger distance between the mixture
+densities fG and fG0 up to certain logarithmic factors.
+Theorem 3. Suppose (3.1) holds under PG0 . Let t∗G (x; ρ) be the regularized Bayes rule in (3.3) with 0 < ρ ≤ (2πe2 )−1/2 . Let fG be as in (2.13).
+(i) There exists a universal constant M0 such that
+[EG0 {t∗G (Y ; ρ) − ξ}2 − R∗ (G0 )]1/2
+
+≤ M0 max{| log ρ|3/2 , | log(d(fG , fG0 ))|1/2 }d(fG , fG0 )
+
+(3.7)
+
++
+
+Z 
+
+1−
+
+f G0
+ρ
+
+2
+
+(fG′ 0 )2
++ f G0
+
+1/2
+
+,
+
+where R∗ (G0 ) = EG0 {t∗G0 (Y ) − ξ}2 is the minimum Bayes risk in (2.7).
+R
+(ii) If |u|>x0 G0 (du) ≤ M1 | log ρ|3 ε20 and 2(x0 + 1)ρ ≤ M2 | log ρ|2 ε20 for a
+certain ε0 ≥ d(fG , fG0 ) and finite positive constants {x0 , M1 , M2 }, then
+EG0 {t∗G (Y ; ρ) − ξ}2 − R∗ (G0 )
+
+(3.8)
+
+≤ 2(M0 + M1 + M2 ) max(| log ρ|3 , | log ε0 |)ε20 ,
+
+where M0 is a universal constant.
+
+Remark 2. For G = G0 (3.7) becomes an identity, so that the square
+of the first term on the right-hand side of (3.7) represents an upper bound
+for the regret of using a misspecified G in the regularized Bayes estimator
+(3.3) instead of the true G0 for the same regularization level ρ. Under the
+additional tail probability condition on G0 and for sufficiently small ρ, (3.8)
+provides an upper bound for the regret of not knowing G0 , compared with
+the Bayes estimator (3.2) with the true G = G0 .
+Remark 3. Since the second term on the right-hand side of (3.7) is
+increasing in ρ and the first is logarithmic in 1/ρ, we are allowed to take
+ρ > 0 of much smaller order than d(fG , fG0 ) in (3.7), for example, under
+moment conditions on G0 . Still, the cubic power of the logarithmic factors
+in (3.7) and (3.8) is crude.
+The following lemma plays a crucial role in the proof of Theorem 3.
+Lemma 1.
+(3.9)
+
+Z
+
+e
+=
+Let d(f, g) be as in (3.6) and L(y)
+
+p
+
+− log(2πy 2 ). Then,
+
+(fG′ − fG′ 0 )2
+e 6 (ρ), 2a2 )
+≤ e2 2d2 (fG , fG0 ) max(L
+f G ∨ ρ + f G0 ∨ ρ
+
+√
+e 2 (ρ) + 1, | log d2 (fG , fG )|}.
+for ρ ≤ 1/ 2π, where a2 = max{L
+0
+
+17
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+Proof of Theorem 3.
+
+Let
+
+kgkh =
+
+Z
+
+g2 (x)h(x) dx
+
+1/2
+
+be the L2 (h(x) dx) norm for h ≥ 0. Since t∗G0 is the Bayes rule, by (3.3)
+[EG0 {t∗G (Y ; ρ) − ξ}2 − EG0 {t∗G0 (Y ) − ξ}2 ]1/2
+= kfG′ /(fG ∨ ρ) − fG′ 0 /fG0 kfG0
+
+(3.10)
+
+≤ r(fG , ρ) + k(1 − fG0 /ρ)+ fG′ 0 /fG0 kfG0 ,
+
+where r(fG , ρ) = kfG′ /(fG ∨ ρ) − fG′ 0 /(fG0 ∨ ρ)kfG0 .
+Let w∗ = 1/(fG ∨ ρ + fG0 ∨ ρ). For G1 = G or G1 = G0 ,
+Z 
+
+fG′ 1
+− 2fG′ 1 w∗
+f G1 ∨ ρ
+
+2
+
+f G0 ≤
+
+Z 
+
+fG′ 1
+|fG − fG0 |w∗
+f G1 ∨ ρ
+
+e 2 (ρ)
+≤L
+
+Z
+
+2
+
+f G0
+
+(fG − fG0 )2 w∗2 fG0
+
+p
+√
+e
+due to |fG′ 1 |/(fG1 ∨ ρ) ≤ L(ρ)
+by (3.4). Since ( fG + fG0 )2 w∗ ≤ 2 and
+w∗ fG0 ≤ 1, we find
+e
+r(fG , ρ) ≤ 2k(fG′ − fG′ 0 )w∗ kfG0 + 2L(ρ)k(f
+G − fG0 )w∗ kfG0
+√
+≤ 2kfG′ − fG′ 0 kw∗ + 2 e
+L(ρ) 2d(fG , fG0 ).
+
+Thus, (3.7) follows from (3.10) and (3.9).
+To prove (3.8) we use Lemma 6.1 in [38]:
+Z
+
+fG0 <ρ
+
+≤
+
+
+Z
+
+fG′ 0
+f G0
+
+2
+
+|u|>x0
+
+f G0
+
+q
+2
+e 2 (ρ) + 2
+e
+G0 (du) + 2x0 ρ max{L (ρ), 2} + 2ρ L
+
+≤ (M1 + M2 )| log ρ|3 ε20 ,
+
+e 2 (ρ) ≥ 2. This and (3.7) imply (3.8). 
+due to | log ρ| ≥ L
+
+4. An oracle inequality for the GMLEB. In this section, we provide an
+oracle inequality which bound the regret (2.23) and thus (2.11) of using the
+GMLEB t∗b in (2.15) against the oracle Bayes rule t∗Gn in (2.8). We provide
+Gn
+the main elements leading to the oracle inequality in Section 4.1 before
+presenting the oracle inequality and an outline of its proof in Section 4.2.
+Section 4.3 discusses the consequences of the oracle inequality, including a
+sharper version of Theorem 1 and the adaptive minimaxity in weak ℓp balls.
+
+18
+
+W. JIANG AND C.-H. ZHANG
+
+4.1. Elements leading to the oracle inequality. It follows from the fundamental theorem of compound decisions (2.5) that for separable estimators
+b = t(X), the compound risk is identical to the MSE of ξb = t(Y ) for the
+θ
+estimation of a single real random parameter ξ under PG in (2.3), so that
+Theorem 3 provides an upper bound for the regret of the regularized Bayes
+rule t∗G (X; ρ) in terms of the Hellinger distance d(fG , fGn ) and ρ > 0. We
+have proved in [39] a large deviation upper bound for the Hellinger distance
+d(fGb , fGn ). We will show that the GMLEB estimator t∗b (X) is identical to
+n
+Gn
+its regularized version t∗b (X; ρn ) for certain | log ρn | ≍ log n when the genGn
+eralized MLE (2.12) or its approximation (2.14) are used. Still, t∗b (X; ρn )
+Gn
+
+b n is based on the same data
+is not separable, since the generalized MLE G
+X. A natural approach of deriving oracle inequalities is then to combine
+Theorem 3 with a maximal inequality. This requires in addition an entropy
+bound for the class of regularized Bayes rules t∗G (x; ρ) with given ρ > 0 and
+an exponential inequality for the difference between the loss and risk for each
+regularized Bayes rule. In the rest of this section, we provide these crucial
+components of our theoretical investigation.
+
+4.1.1. A large deviation inequality for the convergence of an approximate
+generalized MLE. Under the i.i.d. assumption of the EB model (2.25),
+Ghosal and van der Vaart [20] obtained an exponential inequality for the
+Hellinger loss of the generalized MLE of a normal mixture density in terms
+of the L∞ norm of θi . This result can be improved upon using their newer
+entropy calculation in [21]. The results in [20, 21] are unified and further improved upon in the i.i.d. case and extended to deterministic θ = (θ1 , . . . , θn )
+in weak ℓp balls for all 0 < p ≤ ∞ in [39]. This latest result, stated below as
+Theorem 4, will be used here in conjunction of Theorem 3 to prove oracle
+inequalities for the GMLEB.
+The pth weak moment of a distribution G is
+(4.1)
+
+µw
+p (G) =
+R
+
+
+
+sup x
+x>0
+
+p
+
+Z
+
+1/p
+
+G(du)
+
+|u|>x
+
+with µw
+∞ (G) = inf{x : |u|>x G(du) = 0}. Define convergence rates
+
+(4.2)
+
+p
+
+ε(n, G, p) = max[ 2 log n, {n
+
+
+s
+
+1/p
+
+
+
+p
+
+s
+
+p/(2+2p)
+log nµw
+]
+p (G)}
+
+
+
+
+
+log n
+n
+
+p/(2+2p) p
+µw
+2 log n p
+p (G)
+log n
+log n
+,
+n
+n
+p
+√
+1/2 (log n)/n.
+with ε(n, G, ∞) = {(2 log n) ∨ ( log nµw
+∞ (G))}
+
+= max
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+19
+
+Theorem 4. Let X ∼ N (θ, In ) under Pn,θ with a deterministic θ ∈ Rn .
+b n be a certain apLet fG and Gn be as in (2.13) and (2.4), respectively. Let G
+proximate generalized MLE satisfying (2.14). Then, there exists a universal
+constant x∗ such that for all x ≥ x∗ and log n ≥ 2/p,
+(4.3)
+
+
+
+
+
+x2 nε2n
+2
+≤ e−x log n ,
+Pn,θ {d(fGb , fGn ) ≥ xεn } ≤ exp −
+n
+2 log n
+
+where εn = ε(n, Gn , p) is as in (4.2) and d(f, g) is the Hellinger distance
+(3.6). In particular, for any sequences of constants Mn → ∞ and fixed positive α and c,
+
+εn ≍
+
+
+
+n−p/(2+2p) (log n)(2+3p)/(4+4p) ,
+
+
+
+
+
+if µw
+
+p (Gn ) = O(1) with a fixed p,
+
+
+
+
+ n−1/2 (log n)3/4 {M 1/2 ∨ (log n)1/4 },
+n
+
+if Gn ([−Mn , Mn ]) = 1 and p = ∞,
+
+
+
+
+−1/2
+
+n
+(log n)1/(2(2∧α))+3/4 ,
+
+
+Z
+
+
+α
+
+
+
+if
+e|cu| Gn (du) = O(1) and p ≍ log n.
+
+Remark 4. Under the condition G([−Mn , Mn ]) = 1 and the i.i.d. assumption (2.25) with G depending on n, the large deviation bound in [20]
+provides the convergence rate εn ≍ n−1/2 (log n)1/2 {Mn ∨ (log n)1/2 }, and√
+the
+−1/2
+entropy calculation in [21] leads to the convergence rate εn ≍ n √ (log n) Mn .
+These rates are slower than the rate in Theorem 4 when Mn / log n → ∞.
+Remark 5. The proof of Theorem 4 is identical for the generalized
+MLE (2.12)
+and its approximation (2.14). The constant x∗ is universal for
+√
+qn = (e 2π/n2 ) ∧ 1 in (2.14) and depends on supn | log qn |/ log n in general.
+4.1.2. Representation of the GMLEB estimator as a regularized one at
+data points. The connection between the GMLEB estimator (2.15) and
+the regularized Bayes rule (3.3) in Theorem 3 is provided by
+√
+ρn = qn /(en 2π),
+t∗Gb (X) = t∗Gb (X; ρn ),
+(4.4)
+n
+
+n
+
+where qn is as in (2.14). This is a consequence of the following proposition.
+
+Proposition 2. Let f (x|u) be a given family of densities and {Xi , i ≤
+b n be an approximate generalized MLE of a mixing
+n} be given data. Let G
+distribution satisfying
+n Z
+Y
+
+i=1
+
+b n (du) ≥ qn sup
+f (Xi |u)G
+
+n Z
+Y
+
+G i=1
+
+f (Xi |u)G(du)
+
+20
+
+W. JIANG AND C.-H. ZHANG
+
+for certain 0 < qn ≤ 1. Then, for all j = 1, . . . , n
+fGb (Xj ) =
+n
+
+Z
+
+b n (du) ≥
+f (Xj |u)G
+
+qn
+sup f (Xj |u).
+en u
+
+In particular, (4.4) holds for f (x|u) = ϕ(x − u).
+b n,j = (1 −
+Proof. Let j be fixed and uj = arg max f (Xj |u). Define G
+b
+ε)Gn + εδuj with ε = 1/n, where δu is the unit mass at u. Since f (x|u) ≥ 0,
+
+fGb
+
+n,j
+
+(Xi ) ≥ (1 − ε)fGb (Xi ) and fGb
+n
+
+n,j
+
+(Xj ) ≥ εf (Xj |uj ), so that
+
+n
+n
+Y
+Y
+1 Y
+fGb (Xi ).
+fGb (Xi ) ≥
+fGb (Xi ) ≥ (1 − ε)n−1 εf (Xj |uj )
+n
+n,j
+qn i=1 n
+i=1
+i6=j
+
+Thus, fGb (Xj ) ≥ qn (1 − ε)n−1 εf (Xj |uj ) with ε = 1/n, after the cancellation
+n
+of fGb(Xi ) for i 6= j. The conclusion follows from (1 − 1/n)n−1 ≥ 1/e. 
+
+4.1.3. An entropy bound for regularized Bayes rules. We now provide an
+entropy bound for collections of regularized Bayes rules. For any family H
+of functions and semidistance d0 , the ε-covering number is
+(4.5)
+
+(
+
+N (ε, H , d0 ) = inf N : H ⊆
+
+N
+[
+
+)
+
+Ball(hj , ε, d0 )
+
+j=1
+
+with Ball(h, ε, d0 ) = {f : d0 (f, h) < ε}. For each fixed ρ > 0 define the complete collection of the regularized Bayes rules t∗G (x; ρ) in (3.3) as
+(4.6)
+
+Tρ = {t∗G (·; ρ) : G ∈ G },
+
+where G is the family of all distribution functions. The following proposition,
+proved in the Appendix, provides an entropy bound for (4.6) under the
+seminorm khk∞,M = sup|x|≤M |h(x)|.
+p
+
+e
+Proposition 3. Let L(y)
+= − log(2πy 2 ) be the inverse of y = ϕ(x) as
+in Proposition 1. Then, for all 0 < η ≤ ρ ≤ (2πe)−1/2 ,
+
+(4.7)
+
+log N (η ∗ , Tρ , k · k∞,M )
+e 2 (η) + 1)(2M/ e
+≤ {4(6L
+L(η) + 3) + 2}| log η|,
+
+e
+where η ∗ = (η/ρ){3L(η)
++ 2}.
+
+21
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+4.1.4. An exponential inequality for the loss of regularized Bayes rules.
+The last element of our proof is an exponential inequality for the difference between the loss and risk of regularized Bayes rules t∗G (X; ρ). For each
+separable rule t(x), the squared loss kt(X) − θk2 is a sum of independent
+variables. However, a direct application of the empirical process theory to
+the loss would yield an oracle inequality of the n−1/2 order, which is inadequate for the sharper convergence rates in this paper. Thus, we use the
+following isoperimetric inequality for the square root of the loss.
+Proposition 4. Suppose X ∼ N (θ, In ) under Pn,θ . Let tG (x; ρ) be the
+with a deterministic distribution G and
+regularized Bayes rule as in (3.3),
+p
+3
+−1/2
+e
+0 < ρ ≤ (2πe )
+. Let L(ρ) = − log(2πρ2 ). Then, for all x > 0
+
+
+Pn,θ {kt∗G (X; ρ) − θk ≥ En,θ kt∗G (X; ρ) − θk + x} ≤ exp
+
+−
+
+x2
+
+e 4 (ρ)
+2L
+
+
+
+.
+
+Proof. Let h(x) = kt∗G (x; ρ) − θk. It follows from Proposition 1 that
+|h(x) − h(y)| ≤ kt∗G (x; ρ) − t∗G (y; ρ)k
+
+e 2 (ρ)kx − yk.
+≤ kx − yk sup |(∂/∂x)t∗G (x; ρ)| ≤ L
+x
+
+e 2 (ρ) has the unit Lipschitz norm. The conclusion follows from
+Thus, h(x)/L
+the Gaussian isoperimetric inequality [4]. See page 439 of [34]. 
+
+4.2. An oracle inequality. Our oracle inequality for the GMLEB, stated
+in Theorem 5 below, is a key result of this paper from a mathematical point
+of view. It builds upon Theorems 3 and 4 and Propositions 2, 3 and 4 (the
+regularized Bayes rules with misspecified prior, generalized MLE of normal
+mixtures, representation of the GMLEB, entropy bounds and Gaussian concentration inequality) and leads to adaptive ratio optimality and minimax
+theorems more general than Theorems 1 and 2.
+Theorem 5. Let X ∼ N (θ, In ) under Pn,θ with a deterministic θ ∈ Rn
+as in (2.1). Let Ln (·, ·) be the average squared loss in (2.2) and 0 < p ≤ ∞.
+Let t∗b (X) be the GMLEB estimator (2.15) with an approximate generalized
+Gn
+
+b n satisfying (2.14). Then, there exists a universal constant M0 such
+MLE G
+that for all log n ≥ 2/p,
+
+(4.8)
+
+ren,θ (t∗Gb (X)) =
+
+q
+
+En,θ Ln (t∗b (X), θ) −
+Gn
+
+≤ M0 εn (log n)3/2 ,
+
+q
+
+R∗ (Gn )
+
+22
+
+W. JIANG AND C.-H. ZHANG
+
+where R∗ (Gn ) is the minimum risk of all separable estimators as in (2.8)
+with Gn = Gn,θ as in (2.4), and εn = ε(n, Gn , p) is as in (4.2). In particular,
+for any sequences of constants Mn → ∞ and fixed positive α and c,
+
+εn ≍
+
+
+
+n−p/(2+2p) (log n)(2+3p)/(4+4p) ,
+
+
+
+
+
+if µw
+
+p (Gn ) = O(1) with a fixed p,
+
+
+
+
+ n−1/2 (log n)3/4 {M 1/2 ∨ (log n)1/4 },
+n
+
+if Gn ([−Mn , Mn ]) = 1 and p = ∞,
+
+
+
+
+−1/2
+
+(log n)1/(2(2∧α))+3/4 ,
+
+n
+
+
+
+
+
+
+Z
+
+if
+
+α
+
+e|cu| Gn (du) = O(1) and p ≍ log n.
+
+Remark 6. In the proof of Theorem 5, applications of Theorems 3 and
+4 resulted in the leading term for the upper bound in (4.18), while the
+contributions of other parts of the proof are of smaller order.
+√
+Remark 7. The M0 in (4.8) is universal for qn = (e 2π/n2 ) ∧ 1 in (2.14)
+and depends on supn | log qn |/ log n in general.
+The consequences of Theorem 5 upon the adaptive ratio optimality and
+minimaxity of the GMLEB are discussed in the next section. Here is an
+outline of its proof. The large deviation inequality in Theorem 4 and the
+representation of the GMLEB in (4.4) imply that
+qn
+(4.9) kt∗Gb (X) − θk ≤ kt∗Gb (X; ρn ) − θkIAn + ζ1n ,
+,
+ρn = √
+n
+n
+e 2πn
+where An = {d(fGb , fGn ) ≤ x∗ εn } and ζ1n = kt∗b (X; ρn ) − θkIAcn with x∗ =
+Gn
+
+n
+
+x∗ ∨ 1. By (3.2) and Proposition 1, |t∗G (Xi ; ρn ) − θi | ≤ e
+L(ρn ) + |N (0, 1)|, so
+2
+that Theorem 4 provides an upper bound for En,θ ζ1n . By the entropy bound
+in Proposition 3, there exists a finite collection of distributions {Hj , j ≤ N }
+of manageable size N such that
+(4.10)
+
+ζ2n =
+
+
+
+
+
+kt∗Gb (X; ρn ) − θkIAn − max kt∗Hj (X; ρn ) − θk
+n
+j≤N
+
++
+
+is small and d(fHj , fGn ) ≤ x∗ εn for all j ≤ N . Since the regularized Bayes
+rules t∗Hj (X; ρn ) are separable and the collection {Hj , j ≤ N } is of manageable size, the large deviation inequality in Proposition 4 implies that
+
+(4.11)
+
+ζ3n = max{kt∗Hj (X; ρn ) − θk − En,θ kt∗Hj (X; ρn ) − θk}+
+j≤N
+
+is small. Since d(fHj , fGn ) ≤ x∗ εn , Theorem 3 implies that
+(4.12)
+
+ζ4n = max
+j≤N
+
+q
+
+En,θ kt∗Hj (X; ρn ) − θk2 −
+
+q
+
+nR∗ (Gn )
+
+23
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+is no greater than O(x∗ εn )(log ρn )3/2 , where R∗ (Gn ) is the general EB bench2 are
+mark risk in (2.8). Finally, upper bounds for individual pieces En,θ ζjn
+put together via
+(4.13)
+
+q
+
+En,θ kt∗b (X) − θk2 ≤
+Gn
+
+v
+u
+!2
+4
+u
+X
+u
+|ζjn | .
+nR∗ (Gn ) + tEn,θ
+
+q
+
+j=1
+
+4.3. Adaptive ratio optimality and minimaxity. We discuss here the optimality properties of the GMLEB as consequences of the oracle inequality
+in Theorem 5.
+Theorem 5 immediately implies the adaptive ratio optimality (2.21) of
+the GMLEB in the classes Θ∗n = Θ∗n (Mn ) for any sequences of constants
+Mn → ∞, where
+(4.14)
+
+Θ∗n (M ) =
+
+
+
+n
+
+∗
+
+3
+
+θ ∈ R : R (Gn,θ ) ≥ M (log n)
+
+inf
+
+p≥2/ log n
+
+
+
+2
+
+ε (n, Gn,θ , p)
+
+with Gn,θ = Gn as in (2.4) and ε(n, G, p) as in (4.2). This is formally stated
+in the theorem below.
+Theorem 6. Let X ∼ N (θ, In ) under Pn,θ with a deterministic θ ∈ Rn .
+bn
+Let t∗b (X) be the GMLEB estimator (2.15) with the approximate MLE G
+Gn
+∗
+in (2.14). Let R (Gn,θ ) be the general EB benchmark in (2.8) with the distribution Gn = Gn,θ in (2.4). Then, for the classes Θ∗n (M ) in (4.14),
+(4.15)
+
+sup {En,θ Ln (t∗Gb (X), θ)/R∗ (Gn,θ )} ≤ 1.
+
+lim
+
+(n,M )→(∞,∞) θ∈Θ∗ (M )
+n
+
+n
+
+Remark 8. Since the minimum of ε(n, Gn,θ , p) is taken in (4.14) over
+p ≥ 2/ log n for each θ, the adaptive ratio optimality (4.15) allows smaller
+R∗ (Gn,θ ) than simply using ε(n, Gn,θ , ∞) does as in Theorem 1. Thus, Theorem 6 implies Theorem 1.
+Another main consequence of the oracle inequality in Theorem 5 is the
+adaptive minimaxity (2.28) of the GMLEB for a broad range of sequences
+Θn ∈ Rn . We have stated our results for regular ℓp balls in Theorem 2. In
+the rest of the section, we consider weak ℓp balls
+n
+w
+Θw
+p,C,n = {θ ∈ R : µp (Gn,θ ) ≤ C},
+
+(4.16)
+
+where Gn,θ is the empirical distribution of the components of θ and the
+functional µw
+p (G) is the weak moment in (4.1). Alternatively,
+(
+
+n
+p
+Θw
+p,C,n = θ ∈ R : max |θi |
+1≤i≤n
+
+n
+X
+
+j=1
+
+)
+
+I{|θj | ≥ |θi |}/n ≤ C p .
+
+24
+
+W. JIANG AND C.-H. ZHANG
+
+Theorem 7. Let X ∼ N (θ, In ) under Pn,θ with a deterministic θ ∈ Rn .
+Let Ln (·, ·) be the average squared loss (2.2) and Rn (Θ) be the minimax
+b n satisfying (2.14), the
+risk (2.27). Then, for all approximate solutions G
+∗
+b
+GMLEB θ = t b (X) is adaptive minimax (2.28) in the weak ℓp balls Θn =
+Gn
+Θw
+p,Cn ,n in (4.16), provided that the radii Cn are within the range (2.30).
+Here is our argument. The weak Lp ball that matches (4.16) is
+R
+
+w
+Gp,C
+= {G : µw
+p (G) ≤ C}.
+
+w (λ) = − ∞ (t2 ∧ λ2 )d{1 ∧ (C/t)p }, which is approximately the Bayes
+Let Jp,C
+0
+risk of the soft-threshold
+estimator for the stochastically largest Pareto prior
+p
+in Gp,C . Let λp,C = 1 ∨ {2 log(1/C p∧2 )}. Johnstone [23] proved that
+
+(4.17)
+
+Rn (Θw
+p,Cn ,n )
+=1
+n→∞ R(G w )
+p,Cn
+lim
+
+for p > 2 with Cn → C+ ≥ 0 and for p ≤ 2 with nCnp /(log n)1+6/p → ∞,
+p∧2 → 0. Abramovich et al. [1]
+w )/J w (λ
+and that R(Gp,C
+p,Cn p,Cn ) → 1 as Cn
+n
+−κ
+w
+5
+p
+proved Rn (Θw
+p,Cn ,n )/Jp,Cn (λp,Cn ) → 1 for p < 2 and (log n) /n ≤ Cn ≤ n
+for all κ > 0. The combination of their results implies (4.17) for p ≤ 2 and
+Cnp ≥ (log n)5 /n. Therefore, (4.17) holds under (2.30) due to pk1 (p) = p/2 +
+4 + 3/p > 5 for p < 2. As in Section 2.7,
+(4.18)
+
+sup
+
+θ∈Θw
+p,Cn ,n
+
+q
+
+ren,θ (tbn ) = o(1) Jp,Cn
+
+w ).
+as in (2.37), due to Jp,Cn ≍ R(Gp,Cn ) ≤ R(Gp,C
+n
+
+5. More simulation results. In addition to the simulation results reported in Section 2.4, we conducted more experiments to explore a larger
+sample size, sparse unknown means without exact zero, and i.i.d. unknown
+means from normal priors. The results for the nine statistical procedures
+and the oracle rule t∗Gn (X) for the general EB are reported in Tables 2–4,
+in the same format as Table 1. Each entry is based on an average of 100
+replications. In each column, boldface entries indicate top three performers
+other than the hybrid estimator or the oracle. Two columns with µ = 4 are
+dropped to fit the tables in.
+In Table 2 we report simulation results for n = 4000. Compared with
+Table 1, F-GEB replaces EBThresh as a distant third top performer in the
+moderately sparse case of #{i : θi = µ} = 200, and almost the same sets of
+estimators prevail as top performers in other columns. Since the collections
+b − θk2 /n
+of Gn are identical in Tables 1 and 2, the average squared loss kθ
+should decrease in n to indicate convergence to the oracle risks for each
+estimator in each model, but this is not the case in entries in italics.
+
+25
+
+GENERAL MAXIMUM LIKELIHOOD EB
+Table 2
+Average of kb
+θ − θk2 : n = 4000, θi ∈ {0, µ}, #{i : θi = µ} = 20, 200 or 2000
+
+# nonzero
+
+20
+
+200
+
+2000
+
+µ
+
+3
+
+4
+
+5
+
+7
+
+3
+
+5
+
+7
+
+3
+
+5
+
+7
+
+James–Stein
+
+175
+
+298
+
+446
+
+790
+
+1243
+
+2229
+
+2846
+
+3261
+
+3689
+
+3829
+
+EBThresh
+SURE
+FDR (0.01)
+FDR (0.1)
+
+145
+174
+175
+161
+
+120
+270
+202
+138
+
+63
+329
+103
+70
+
+377
+355
+26
+48
+
+861
+1725
+1569
+1121
+
+404
+827
+506
+450
+
+290
+827
+231
+409
+
+3411
+3296
+10,230
+4578
+
+3118
+3317
+2607
+2597
+
+2621
+3317
+2090
+2563
+
+GMLEB
+S-GMLEB
+
+141
+116
+
+115
+92
+
+68
+45
+
+30
+10
+
+624
+597
+
+215
+193
+
+43
+23
+
+1808
+1791
+
+489
+479
+
+62
+53
+
+F-GEB
+HF-GEB
+
+243
+145
+
+231
+120
+
+166
+63
+
+156
+377
+
+739
+694
+
+353
+286
+
+229
+159
+
+1907
+1868
+
+641
+576
+
+253
+171
+
+Oracle
+
+110
+
+84
+
+40
+
+3
+
+587
+
+186
+
+16
+
+1771
+
+460
+
+36
+
+In Table 3, we report simulation results for sparse mean vectors without
+exact zero. It turns out that adding uniform [−0.2, 0.2] perturbations to θi
+does not change the results much, compared with Table 1.
+In Table 4, we report simulation results for i.i.d. θi ∼ N (µ, σ 2 ). This is
+the parametric model in which the (oracle) Bayes estimators are linear.
+Indeed, the James–Stein estimator is the top performer throughout all the
+columns and tracks the oracle risk extremely well, while the GMLEB is not
+so far behind. It is interesting that for σ 2 = 40, the EBThresh and SURE
+Table 3
+b − θk2 : n = 1000, θi = µi + unif[−0.2, 0.2], µi ∈ {0, µ}, #{i : µi = µ} =5, 50
+Average of kθ
+or 500
+
+#{µi 6= 0}
+
+5
+
+50
+
+500
+
+µ
+
+3
+
+4
+
+5
+
+7
+
+3
+
+5
+
+7
+
+3
+
+5
+
+7
+
+James–Stein
+
+57
+
+87
+
+124
+
+207
+
+316
+
+559
+
+713
+
+817
+
+932
+
+971
+
+EBThresh
+SURE
+FDR (0.01)
+FDR (0.1)
+
+48
+55
+56
+53
+
+44
+75
+62
+49
+
+31
+84
+37
+34
+
+23
+89
+20
+27
+
+226
+426
+395
+289
+
+115
+221
+137
+130
+
+87
+220
+72
+116
+
+855
+830
+2555
+1152
+
+797
+845
+676
+666
+
+677
+848
+541
+664
+
+GMLEB
+S-GMLEB
+
+49
+45
+
+45
+41
+
+32
+29
+
+23
+19
+
+170
+164
+
+70
+67
+
+27
+24
+
+466
+462
+
+146
+145
+
+32
+31
+
+F-GEB
+HF-GEB
+
+115
+48
+
+108
+44
+
+105
+31
+
+91
+23
+
+238
+210
+
+155
+113
+
+118
+85
+
+534
+509
+
+244
+203
+
+145
+101
+
+Oracle
+
+39
+
+35
+
+23
+
+14
+
+158
+
+61
+
+18
+
+454
+
+135
+
+22
+
+26
+
+W. JIANG AND C.-H. ZHANG
+
+σ2
+
+Table 4
+Average of kb
+θ − θk2 : n = 1000, i.i.d. θj ∼ N (µ, σ 2 )
+0.1
+
+2
+
+40
+
+µ
+
+3
+
+4
+
+5
+
+7
+
+3
+
+5
+
+7
+
+3
+
+5
+
+7
+
+James–Stein
+
+92
+
+92
+
+92
+
+93
+
+665
+
+670
+
+665
+
+970
+
+982
+
+975
+
+EBThresh
+SURE
+FDR (0.01)
+FDR (0.1)
+
+1081
+1006
+3972
+1555
+
+1058
+1505
+2049
+1093
+
+1035
+3622
+1169
+1002
+
+1020
+13,146
+999
+998
+
+1013
+988
+2789
+1455
+
+1032
+1033
+1599
+1096
+
+1014
+3514
+1050
+999
+
+983
+983
+1661
+1184
+
+998
+998
+1566
+1161
+
+997
+996
+1427
+1117
+
+GMLEB
+S-GMLEB
+
+94
+97
+
+94
+98
+
+95
+99
+
+95
+98
+
+675
+678
+
+678
+681
+
+673
+675
+
+1001
+1002
+
+1015
+1015
+
+1009
+1009
+
+F-GEB
+HF-GEB
+
+171
+138
+
+171
+139
+
+175
+143
+
+171
+142
+
+735
+721
+
+743
+726
+
+736
+720
+
+1107
+1067
+
+1130
+1088
+
+1122
+1079
+
+Oracle
+
+91
+
+90
+
+91
+
+90
+
+665
+
+669
+
+664
+
+970
+
+981
+
+975
+
+b = X with diminishing
+outperform GMLEB as they approximate the naive θ
+threshold levels. Another interesting phenomenon is the disappearance of
+the advantage of the S-GMLEB over the GMLEB, as the unknowns are no
+longer sparse.
+
+6. Discussion. In this section, we discuss general EB with kernel estimates of the oracle Bayes rule, sure computation of an approximate generalized MLE and a number of additional issues.
+6.1. Kernel methods. General EB estimators of the mean vector θ can
+be directly derived from the formula (3.2) using the kernel method
+
+(6.1)
+
+b = tbn (X),
+θ
+
+fbn (x) =
+
+tbn (x) = x +
+
+n
+X
+K(an (x − Xi ))
+i=1
+
+nan
+
+.
+
+fbn′ (x)
+
+fbn (x) ∨ ρn
+
+,
+
+This was done √
+in [36] with the Fourier kernel K(x) = (sin x)/(πx) and
+√
+2 log n ≤ an ≍ log n. The main rationale for using
+p the Fourier kernel is the
+bn − fG = O( (log n)/n) and fb′ − f ′ =
+near optimal
+convergence
+rate
+of
+f
+n
+n
+Gn
+√
+O((log n)/ n), uniformly in θ. However, since the relationship between
+fbn′ (x) and fbn (x) is not as trackable as in the case of generalized MLE fGb , a
+n
+p
+much higher regularization level ρn ≍ (log n)/n in (6.1) were used [36, 38]
+to justify the theoretical results. This could be an explanation for the poor
+performance of the Fourier general EB estimator for very sparse θ in our
+
+27
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+simulations. From this point of view, the GMLEB is much more appealing
+since its estimating function retains all analytic properties of the Bayes rule.
+Consequently, the GMLEB requires no regularization for the adaptive ratio
+optimality and adaptive minimaxity in our theorems.
+Brown and Greenshtein [6] have studied (6.1) with the normal kernel
+K(x) = ϕ(x) and possibly different bandwidth 1/an , and have proved the
+adaptive ratio optimality (2.21) of their estimator when kθk∞ and R∗ (Gn,θ )
+have certain different polynomial orders. The estimating function tbn (x) with
+the normal kernel, compared with the Fourier kernel, behaves more like the
+regularized Bayes rule (3.3) analytically with the positivity of fbn (x) and
+more trackable relationship between fbn′ (x) and fbn (x). Still, it is unclear
+without some basic properties of the Bayes rule in Proposition 1 and Theorem 3, it is unclear if the kernel methods of the form (6.1) would possess as
+strong theoretical properties as in Theorems 1, 2, 5, 6 and 7 or perform as
+well as the GMLEB for moderate samples in simulations [6].
+6.2. Sure computation of an approximate general MLE. We present a
+conservative data-driven criterion to guarantee (2.14) with the EM-algorithm.
+b in (2.14)
+This provides a definitive way of computing the map from {Xi } to G
+and then to the GMLEB via (2.18).
+Set u1 = min1≤i≤n Xi , um = max1≤i≤n Xi , and
+(6.2)
+
+ε = (um − u1 )/(m − 1),
+
+Proposition 5.
+
+uj = uj−1 + ε.
+
+Suppose ε2 {(um − u1 )2 /4 + 1/8} ≤ 1/n with a suffi(0)
+
+P
+
+(0)
+
+bj = 1. Suppose
+ciently large m in (6.2). Let wj > 0 ∀j ≤ m with m
+j=1 w
+that the EM-algorithm (2.19) is stopped at or beyond an iteration k > 0 with
+
+(6.3)
+
+(k)
+
+(k−1)
+
+bj /w
+bj
+max log(w
+
+1≤j≤m
+
+bn =
+Then, (2.14) holds for G
+
+Pm
+
+)≤
+
+(k)
+bj δuj .
+j=1 w
+
+
+
+
+
+1
+1
+log
+.
+n
+eqn
+
+(k)
+
+bj and faster convergence
+Heuristically, smaller m provides larger minj w
+of the EM-algorithm, so that the “best choice” of m is
+q
+
+m − 2 < (um − u1 ) n{(um − u1 )2 /4 + 1/8} ≤ m − 1.
+√
+For maxi |X√
+i | ≍ log n, this ensures the first condition of Proposition 5 with
+m ≍ (log n) n and ε ≍ (n log n)−1/2 . Proposition 5 is proved via the smoothness of the normal density and Cover’s upper bound [10, 35] for the maximum likelihood in finite mixture models.
+
+28
+
+W. JIANG AND C.-H. ZHANG
+
+6.3. Additional remarks. A crucial element for the theoretical results in
+this paper is the oracle inequality for the regularized Bayes estimator with
+misspecified prior, as stated in Theorem 3. However, we do not believe that
+mathematical induction is sharp in the argument with higher and higher
+order of differentiation in the proof of Lemma 1. Consequently, the power κ1
+in Theorems 2 and 7 is larger than its counterpart more directly established
+for threshold estimators [1, 24]. Still, the GMLEB performs as well as any
+threshold estimators in our simulations for the most sparse mean vectors. As
+expected, the gain of the GMLEB is huge against the James–Stein estimator
+for sparse means and against threshold estimators for dense means.
+ℓ2 risk for
+It is interesting to observe in Tables 1–3 that the simulated
+P
+the GMLEB sometimes dips well below the benchmark ni=1 θi2 ∧ 1 = #{i ≤
+n : θi 6= 0} for the oracle hard threshold rule θbi = Xi I{|θi | ≤ 1} [18], while the
+simulated ℓ2 risk for threshold estimators is always above that benchmark.
+An important consequence of our results is the adaptive minimaxity and
+other optimality properties of the GMLEB approach to nonparametric regression under suitable smoothness conditions. For example, applications
+of the GMLEB estimator to the observed wavelet coefficients at individual
+resolution levels yield adaptive exact minimaxity in all Basov balls as in [38].
+The adaptive minimaxity (2.28) in Theorems 2 and 7 is uniform in the
+radii C for fixed shape p. A minimax theory for (weak) ℓp balls uniform
+in (p, C) can be developed by careful combination and improvement of the
+proofs in [12, 23, 38]. Since the oracle inequality (4.8) is uniform in p, uniform adaptive minimaxity in both p and C is in principle attainable for the
+GMLEB.
+The theoretical results in this paper are all stated for deterministic θ =
+(θ1 , . . . , θn ). By either mild modifications of the proofs here or conditioning
+on the unknowns, analogues versions of our theorems can be established for
+the estimation of i.i.d. means {ξi } in the EB model (2.25). Other possible
+directions of extension of the results in this paper are the cases of Xi ∼
+N (θi , σn2 ) via scale change, with known σn2 or an independent consistent
+estimate of σn2 , and Xi ∼ N (θi , σi2 ) with known σi2 .
+APPENDIX
+Here we prove Proposition 1, Lemma 1, Proposition 3, Theorems 5, 2
+and 7, and then Proposition 5. We need one more lemma for the proof of
+Proposition 1. Throughout this appendix, ⌊x⌋ denotes the greatest integer
+lower bound of x, and ⌈x⌉ denotes the smallest integer upper bound of x.
+Lemma A.1.
+Then,
+(A.1)
+
+
+
+fG′ (x)
+fG (x)
+
+2
+
+e
+Let fG (x) be as in (2.13) and L(y)
+as in Proposition 1.
+
+
+1
+f ′′ (x)
+e 2 (fG (x)) = log
+≤ G
++1≤L
+fG (x)
+2πfG2 (x)
+
+
+
+∀x.
+
+29
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+Proof. Since Y |ξ ∼ N (ξ, 1) and ξ ∼ G under PG , by (3.2)
+fG′ (x)
+= EG [ξ − Y |Y = x],
+fG (x)
+fG′′ (x)
++ 1 = EG [(ξ − Y )2 |Y = x].
+fG (x)
+This gives the first inequality of (A.1). The second inequality of (A.1) follows
+from Jensen’s inequality: for h(x) = ex/2
+ ′′
+
+fG (x)
+1
+.
+h
++ 1 ≤ EG [h((ξ − Y )2 )|Y = x] = √
+fG (x)
+2πfG (x)
+This completes the proof. 
+R
+
+Proof of Proposition 1. Since fG (x) = ϕ(x − u)G(du) ≥ 0, the
+value of (3.3) is always between t∗G (x) and x. By Lemma A.1
+|x − t∗G (x; ρ)| ≤
+
+fG (x) e
+e
+L(fG (x)) ≤ L(ρ)
+fG (x) ∨ ρ
+
+e 2 (y) is increasing
+e
+for ρ ≤ (2πe)−1/2 , since L(y)
+is decreasing in y 2 and y 2 L
+2
+in y ≤ 1/(2πe). Similarly, the second line of (3.4) follows from Lemma A.1
+and
+(
+∂t∗G (x; ρ)
+1 + fG′′ (x)/fG (x) − {fG′ (x)/fG (x)}2 ,
+fG (x) > ρ,
+=
+′′
+∂x
+1 + fG (x)/ρ,
+fG (x) < ρ.
+e G (x)) ≤ L(ρ)
+e
+Note that L(f
+for fG (x) ≥ ρ, and for fG (x) < ρ ≤ (2πe3 )−1/2
+
+0≤1−
+
+fG (x)
+f ′′ (x)
+fG (x) e 2
+e 2 (ρ)
+≤1+ G
+≤1+
+(L (fG (x)) − 1) ≤ L
+ρ
+ρ
+ρ
+
+e 2 (y) − 1} in 0 ≤ y ≤ (2πe3 )−1/2 . 
+due to the monotonicity of y{L
+
+Proof of Lemma
+1.
+√
+k ≥ 0 and a ≥ 2k − 1,
+
+(A.2)
+
+Z
+
+Let D = d/dx. We first prove that for all integers
+
+4a2k−1 −a2
+4a2k
+e .
+{D k (fG − fG0 )}2 dx ≤ √ d2 (fG , fG0 ) +
+π
+2π
+R
+
+2
+
+Let h∗ (u) = eiux h(x) dx for all integrable h. Since |fG∗ (u)| ≤ ϕ∗ (u) = e−u /2 ,
+it follows from the Plancherel identity that
+Z
+Z
+1
+{D k (fG − fG0 )}2 dx =
+u2k |fG∗ (u) − fG∗ 0 (u)|2 du
+2π
+≤
+
+a2k
+2π
+
+= a2k
+
+Z
+
+Z
+
+|fG∗ (u) − fG∗ 0 (u)|2 du +
+|fG − fG0 |2 dx +
+
+4
+ck ,
+π
+
+4
+2π
+
+Z
+
+2
+
+u2k e−u du
+|u|>a
+
+30
+
+W. JIANG AND C.-H. ZHANG
+
+where ck =
+yields
+
+R
+
+u>a u
+
+2k e−u2 du. Since (k − 1/2) ≤ a2 /2, integrating
+
+by parts
+
+2
+
+ck = 2−1 a2k−1 e−a + {(k − 1/2)/a2 }a2 ck−1
+2
+
+≤ 2−1 a2k−1 e−a (1 + 1/2 + · · · + 1/2k−1 ) + 2−k a2k c0
+2
+
+≤ a2k−1 e−a
+
+√
+R
+2
+2
+due to c0 ≤ a−1 u>a ue−u du = e−a /(2a). Since fG (x) ≤ 1/ 2π,
+Z
+
+p
+
+q
+
+4
+fG0 k2∞ d2 (fG , fG0 ) ≤ √ d2 (fG , fG0 ).
+2π
+The combination of the above inequalities yields (A.2).
+R
+Define w∗ = 1/(fG ∨ ρ + fG0 ∨ ρ) and ∆k = ( {Dk (fG − fG0 )}2 w∗ )1/2 .
+Integrating by parts, we find
+|fG − fG0 |2 dx ≤ k fG +
+
+∆2k = −
+
+Z
+
+{D k−1 (fG − fG0 )}{D k+1 (fG − fG0 )w∗ + (D k (fG − fG0 ))(Dw∗ )}.
+
+e
+Since |(Dw∗ )(x)| ≤ 2L(ρ)w
+∗ (x) by Proposition 1, Cauchy–Schwarz gives
+e
+∆2k ≤ ∆k−1 ∆k+1 + 2L(ρ)∆
+k−1 ∆k .
+
+e 2 (ρ)/2 < k0 + 1. Define k ∗ =
+Let k0 be a nonnegative integer satisfying k0 ≤ L
+∗
+2
+e
+min{k : ∆k+1 ≤ k0 2L(ρ)∆
+k }. For k < k , we have ∆k ≤ (1 + 1/k0 )∆k−1 ∆k+1 ,
+∗
+so that for k ≤ k0 ,
+
+
+
+
+
+
+∆1
+1 ∆2
+1
+≤ 1+
+≤ 1+
+∆0
+k0 ∆1
+k0
+1/2
+
+1/2
+
+k∗
+
+∆k∗ +1
+e
+e 3 (ρ).
+≤ ek0 2L(ρ)
+≤ eL
+∆k ∗
+
+Since (fG + fG0 )2 w∗ ≤ 2, we have ∆20 ≤ 2d2 (fG , fG0 ). Thus, for k∗ ≤ k0
+√
+e 3 (ρ) 2d(fG , fG ).
+(A.3)
+∆1 ≤ eL
+0
+For k0 < k∗ , ∆1 /∆0 ≤ (1 + 1/k0 )k ∆k+1 /∆k for all k ≤ k0 , so that
+"
+
+(A.4)
+
+#
+
+1/(k0 +1)
+k0
+Y
+∆1
+{(1 + 1/k0 )k ∆k+1 /∆k }
+≤
+∆0
+k=0
+
+= (1 + 1/k0 )k0 /2 {∆k0 +1 /∆0 }1/(k0 +1) .
+
+To bound ∆k0 +1 by (A.2), we pick the constant a > 0 with the a2 in (3.9),
+2
+so that a2 ≥ 2(k0 + 1/2) and e−a ≤ d2 (fG , fG0 ). Since w∗ ≤ 1/(2ρ), an application of (A.2) with this a gives
+Z
+1
+∆2k0 +1 ≤
+{Dk0 +1 (fG − fG0 )}2
+2ρ
+≤
+
+q
+2a2(k0 +1) 2
+√
+d (fG , fG0 )(1 + a−1 2/π).
+ρ 2π
+
+31
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+Since ∆20 ≤ 2d2 (fG , fG0 ), inserting the above inequality into (A.4) yields
+k /(k0 +1)
+
+∆1 ≤ (1 + 1/k0 )k0 /2 ∆00
+(A.5)
+
+1/(k +1)
+
+∆k0 +10
+
+
+√
+
+p
+
+1 + 2/π
+√
+2d(fG , fG0 )a
+≤ (1 + 1/k0 )
+ρ 2π
+√
+√
+≤ e2d(fG , fG0 )a 2(2πρ2 )−1/(4k0 +4) .
+k0 /2
+
+1/(2k0 +2)
+
+e 2 (ρ) < 2k0 + 2, (3.9) follows from (A.3) and (A.5). 
+Since | log(2πρ2 )| = L
+
+Proof of Proposition 3. We provide a dense version of the proof
+since it is similar to the entropy calculations in [20, 21, 39].
+It follows from (3.3), (3.4) and Lemma A.1 that
+(A.6)
+
+e
+L(ρ)
+1
+′
+(x)| +
+|fG (x) − fH (x)|,
+|t∗G (x; ρ) − t∗H (x; ρ)| ≤ |fG′ (x) − fH
+ρ
+ρ
+
+so that we need to control the norm of both fG and fG′ .
+Let a = e
+L(η), j ∗ = ⌈2M/a + 2⌉ and k∗ = ⌊6a2 ⌋. Define semiclosed intervals
+Ij = (−M + (j − 2)a, (−M + (j − 1)a) ∧ (M + a)],
+
+j = 1, . . . , j ∗ ,
+
+to form a partition of (−M − a, M + a]. It follows from the Carathéodory’s
+theorem [9] that for each distribution function G there exists a discrete
+distribution function Gm with support [−M − a, M + a] and no more than
+m = (2k∗ + 2)j ∗ + 1 support points such that
+Z
+
+uk G(du) =
+
+Ij
+
+(A.7)
+
+Z
+
+Ij
+
+uk Gm (du),
+k = 0, 1, . . . , 2k∗ + 1, j = 1, . . . , j ∗ .
+
+2
+
+Since the Taylor expansion of e−t /2 has alternating signs, for t2 /2 ≤ k∗ + 2
+k ∗ +1
+
+0 ≤ Rem(t) = (−1)
+
+(
+
+∗
+
+ϕ(t) −
+
+k
+X
+(−t2 /2)k
+
+k=0
+
+√
+k! 2π
+
+)
+
+∗
+
+≤
+
+(t2 /2)k +1
+√ .
+(k∗ + 1)! 2π
+
+Thus, since k∗ + 1 ≥ 6a2 , for x ∈ Ij ∩ [−M, M ], the Stirling formula yields
+|fG′ (x) − fG′ m (x)|
+
+(A.8)
+
+≤
+
+Z
+
+(Ij−1 ∪Ij ∪Ij+1 )c
+
++
+
+Z
+
+(x − u)ϕ(x − u){G(du) − Gm (du)}
+
+Ij−1 ∪Ij ∪Ij+1
+
+(x − u) Rem(x − u){G(du) − Gm (du)}
+∗
+
+∗
+
+4a(e/3)k +1
+4a{(2a)2 /2}k +1
+≤
+aη
++
+≤ max tϕ(t) + √
+t≥a
+2π(k∗ + 1)1/2
+2π(k∗ + 1)!
+
+32
+
+W. JIANG AND C.-H. ZHANG
+
+due to a ≥ 1. Similarly, for |x| ≤ M
+(A.9)
+
+∗
+
+(e/3)k +1
+.
+|fG (x) − fGm (x)| ≤ η +
+2π(k∗ + 1)1/2
+∗
+
+Furthermore,
+since (e/3)6 ≤ e−1/2 and k∗ + 1 ≥ 6a2 ≥ 6, we have (e/3)k +1 ≤
+√
+2
+e−a /2 = 2πη, so that by (A.6), (A.8) and (A.9)
+kt∗G (·; ρ) − t∗Gm (·; ρ)k∞,M
+(A.10)
+
+
+
+2
+
+
+
+
+
+2
+
+e−a /2
+4ae−a /2
+e
+√
+η+ √
++ ρ−1 L(ρ)
+≤ρ
+aη +
+2π 6a2
+2π 6a2
+√
+e
+≤ ρ−1 η(2L(η)
++ 5/ 12π).
+−1
+
+
+
+Let ξ ∼ Gm , ξη = η sgn(ξ)⌊|ξ|/η⌋ and Gm,η ∼ ξη . Since |ξ − ξη | ≤ η,
+kfGm − fGm,η k∞ ≤ C1∗ η,
+
+kfG′ m − fG′ m,η k∞ ≤ C2∗ η,
+
+where C1∗ = supx |ϕ′ (x)| = (2eπ)−1/2 and C2∗ = supx |ϕ′′ (x)| =
+This and (A.6) imply
+η
+e
+(A.11)
+kt∗Gm (·; ρ) − t∗Gm,η (·; ρ)k∞ ≤ {C2∗ + C1∗ L(ρ)}.
+ρ
+
+p
+
+2/πe−3/2 .
+
+Moreover, Gm,η has at most m support points.
+Let P m be the set of all vectors w = (w1 , . . . , wm ) satisfying wj ≥ 0 and
+Pm
+m,η be an η-net of N (η, P m , k · k ) elements in P m :
+1
+j=1 wj = 1. Let P
+inf
+
+wm,η ∈P m,η
+
+kw − wm,η k1 ≤ η
+
+∀w ∈ P m .
+
+Let {uj , j = 1, . . . , m} be the support of Gm,η and wm,η be a vector in P m,η
+Pm
+P
+m,η
+m,η
+e
+with m
+j=1 wj δuj . Then,
+j=1 |Gm,η ({uj }) − wj | ≤ η. Set Gm,η =
+k∞ ≤ C0∗ η,
+
+kfGm,η − fGe
+
+m,η
+
+kfG′ m,η − fG′e
+
+m,η
+
+k∞ ≤ C1∗ η,
+
+√
+where C0∗ = ϕ(0) = 1/ 2π. This and (A.6) imply
+η
+e
+kt∗Gm,η (·; ρ) − t∗e (·; ρ)k∞ ≤ {C1∗ + C0∗ L(ρ)}.
+(A.12)
+Gm,η
+ρ
+
+e m,η is Ωη,M = {0, ±η, ±2η, . . .} ∩ [−M − a, M + a].
+The support of Gm,η and G
+Summing (A.10), (A.11) and (A.12) together, we find
+
+kt∗G (·; ρ) − t∗Ge
+
+m,η
+
+(·; ρ)k∞,M
+
+√
+≤ (η/ρ)[{2 + C1∗ + C0∗ } e
+L(η) + 5/ 12π + C2∗ + C1∗ ]
+≤ (η/ρ){2.65 e
+L(η) + 1.24} ≤ η ∗ .
+
+33
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+Counting the number of ways to realize {uj } and wm,η , we find
+(A.13)
+
+∗
+
+N (η , Tρ , k · k∞,M ) ≤
+
+
+
+
+
+|Ωη,M |
+N (η, P m , k · k1 ),
+m
+
+e
+with m = (2k∗ + 2)j ∗ + 1, |Ωη,M | = 1+ 2⌊(M + a)/η⌋, a = L(η),
+j ∗ = ⌈2M/a+
+∗
+2
+2⌉ and k = ⌊6a ⌋.
+Since P m is in the ℓ1 unit-sphere of Rm , N (η, P m , k · k1 ) is no greater
+than the maximum number of disjoint Ball(vj , η/2, k · k1 ) with centers vj in
+the unit sphere. Since all these balls are inside the (1 + η/2) ℓ1 -ball, volume
+comparison yields N (η, P m , k · k1 ) ≤ (2/η + 1)m . With another application
+of the Stirling formula, this and (A.13) yield
+
+N (η ∗ , Tρ , k · k∞,M ) ≤ (2/η + 1)m |Ωη,M |m /m!
+(A.14)
+
+√
+≤ {(1 + 2/η)(1 + 2(M + a)/η)}m {(m + 1)m+1/2 e−m−1 2π}−1
+≤ [(η + 2)(η + 2(M + a))e/(m + 1)]m η −2m e{2π(m + 1)}−1/2 .
+
+Since m − 1 ≥ 12a2 (2M/a + 2) = 24a(M + a) and a ≥ 1 ≥ 1/2 ≥ η,
+(η + 2)(η + 2(M + a))e ≤ 8{1/2 + 2(M + a)} ≤ m + 1.
+
+Hence, (A.14) is bounded by η −2m with m ≤ 2(6a2 + 1)(2M/a + 3) + 1. 
+Proof of Theorem 5. Throughout the proof, we use M0 to denote a
+universal constant which may take different
+√ values from one appearance to
+another. For simplicity, we take qn = (e 2π/n2 ) ∧ 1 in (2.14) so that (4.4)
+holds with ρn = n−3 .
+p
+e
+Let εn and x∗ be as in Theorem 4 and L(ρ)
+= − log(2πρ2 ) be as in
+Propositions 1 and 4. With ρn = n−3 , set
+(A.15)
+
+η=
+
+1
+ρn
+= 4,
+n
+n
+
+η∗ =
+
+η
+e
+{3L(η)
++ 2},
+ρn
+
+M=
+
+2nε2n
+.
+(log n)3/2
+
+Let x∗ = max(x∗ , 1) and {t∗Hj (·; ρn ), j ≤ N } be a (2η ∗ )-net of
+Tρn ∩ {t∗G : d(fG , fGn ) ≤ x∗ εn }
+
+(A.16)
+
+under the k · k∞,M seminorm as in Proposition 3, with distributions Hj
+satisfying d(fHj , fGn ) ≤ x∗ εn and N = N (η ∗ , Tρn , k · k∞,M ). It is a (2η ∗ )-net
+√
+due to the additional requirements on Hj . Since M ≥ 4 log n and η = 1/n4
+by (4.2) and (A.15), Proposition 3 and (A.15) give
+(A.17)
+
+log N ≤ M0 (log n)3/2 M/2 ≤ M0 nε2n .
+
+We divide the ℓ2 distance of the error into five parts:
+kt∗Gb (X; ρn ) − θk ≤
+n
+
+q
+
+nR∗ (Gn ) +
+
+4
+X
+
+j=1
+
+ζjn ,
+
+34
+
+W. JIANG AND C.-H. ZHANG
+
+where ζjn are as in (4.9), (4.10), (4.11) and (4.12). As we have mentioned
+2 in view of (4.13).
+in the outline, the problem is to bound En,θ ζjn
+Let An and ζ1n be as in (4.9). Since x∗ = 1 ∨ x∗ ≥ 1 and nε2n ≥ 2(log n)2
+by (4.2), Theorem 4 gives Pn,θ {Acn } ≤ exp(−(x∗ )2 nε2n /(2 log n)) ≤ 1/n. Thus,
+e 2 (ρn ) = − log(2π/n6 ) with ρn = n−3 , Proposition 1 gives
+since L
+2
+En,θ ζ1n
+= En,θ
+
+n
+X
+i=1
+
+{(t∗Gb (Xi ; ρn ) − Xi ) + (Xi − θi )}2 IAcn
+
+e 2 (ρn )Pn,θ {Ac } + 2En,θ
+≤ 2nL
+n
+
+≤ M0 log n + 2n
+
+Z ∞
+0
+
+2
+
+Since P {N (0, 1) > x} ≤ e−x /2 and
+
+n
+X
+i=1
+
+(Xi − θi )2 IAcn
+
+min(P {|N (0, 1)| > x}, 1/n) dx2 .
+
+R∞
+0
+
+2
+
+min(ne−x /2 , 1) dx2 /2 = 1 + log n,
+
+2
+En,θ ζ1n
+≤ M0 log n ≤ M0 nε2n .
+
+(A.18)
+
+2 . Since t∗ (·; ρ ) form a (2η ∗ )-net of (A.16) under k · k
+Consider ζ2n
+n
+∞,M
+Hj
+
+e
+and |t∗G (x; ρ) − x| ≤ L(ρ)
+by Proposition 1, it follows from (4.10) that
+2
+ζ2n
+≤ min kt∗Gb (X; ρn ) − t∗Hj (X; ρn )k2 IAn
+j≤N
+
+n
+
+e n )}2 #{i : |Xi | > M }.
+≤ (2η ∗ )2 #{i : |Xi | ≤ M } + {2L(ρ
+√
+p
+By (4.2), (nε2n / log n)p+1 ≥ n{ log nµw
+p (Gn )} , so that by (4.1) and (A.15)
+
+(A.19)
+
+Z
+
+|u|≥M/2
+
+Gn (du) ≤
+≤
+
+
+
+
+
+µw
+p (Gn )
+M/2
+
+p
+
+2nε2n
+M (log n)3/2
+
+p
+
+ε2
+ε2n
+= n .
+log n log n
+
+√
+e −4 ) + 2} and M ≥ 4 log n by (A.15) and (4.2),
+Thus, since η ∗ = n−1 {3L(n
+2
+e 2 (n−4 )En,θ #{i : |Xi | > M }
+En,θ ζ2n
+≤ n(2η ∗ )2 + 4L
+
+
+
+Z
+
+p
+1
+Gn (du) + P {|N (0, 1)| > 2 log n}
+≤ M0 (log n)n 2 +
+n
+|u|≥M/2
+
+
+≤ M0 (log n)
+
+
+
+nε2n
+2
+1
++
++
+.
+n log n n
+
+Since nε2n ≥ 2(log n)2 by (4.2), we find
+(A.20)
+
+2
+En,θ ζ2n
+≤ M0 nε2n .
+
+
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+35
+
+2 . Since L
+e 2 (ρn ) ≤ M0 log n, it follows from (4.11), PropoNow, consider ζ3n
+sition 4 and (A.17) that
+2
+En,θ ζ3n
+=
+
+(A.21)
+
+≤
+
+Z ∞
+0
+
+Z ∞
+0
+
+Pn,θ {ζ3n > x} dx2
+e 4 (ρn )))} dx2
+min{1, N exp(−x2 /(2L
+
+e 4 (ρn )(1 + log N ) ≤ M0 (log n)2 nε2 .
+= 2L
+n
+
+2 , it suffices to apply Theorem 3(ii) with G = G , G = H , ρ =
+For ζ4n
+0
+n
+j
+−3
+ρn = n , x0 = M/2 and ε0 = x∗ εn ≥ d(fHj , fGn ), since
+
+(A.22)
+
+2
+ζ4n
+≤ n max{EGn {t∗Hj (Y ; ρn ) − ξ}2 − R∗ (Gn )}
+j≤N
+
+by (4.12) and (2.5). It follows from (A.19) that the M1 in Theorem 3(ii) is
+no greater than
+R
+
+ε2n / log n
+|u|≥M/2 Gn (du)
+≤
+≤ M0 .
+| log ρn |3 (x∗ εn )2 (log n)3 ε2n
+
+Since M = 2nε2n /(log n)3/2 by (A.15) and nε2n ≥ 2(log n)2 by (4.2), the M2
+in Theorem 3(ii) is no greater than
+√
+log n + 1
+2(M/2 + 1)ρn
+2(nε2n /(log n)3/2 + 1)/n3
+≤
+≤ 2
+≤ M0
+2
+∗
+2
+2
+2
+(log ρn ) (x εn )
+(3 log n) εn
+n (log n)4
+with ρn = n−3 . Thus, by Theorem 3(ii) and (A.22)
+(A.23)
+
+2
+ζ4n
+≤ M0 n|(log ρn )/3|3 ε2n = M0 nε2n (log n)3 .
+
+Adding (A.18), (A.20), (A.21) and (A.23) together, we have
+En,θ
+
+4
+X
+
+j=1
+
+!2
+
+|ζjn |
+
+≤ M0 nε2n (log n)3 .
+
+b θ) = kθ
+b − θk2 /n, this and (4.13) complete the proof. 
+Since Ln (θ,
+
+Proof of Theorem 2. As we have mentioned, by (2.34), (2.35) and
+(2.36), the adaptive minimaxity (2.28) with Θn = Θp,Cn ,n follows from (2.37).
+By (4.1) and (2.29), µw
+p (Gn,θ ) ≤ C for θ ∈ Θp,C,n , so that by (4.2) and Theorem 5, supθ∈Θp,C,n ren,θ (tbn ) ≤ εp,C,n (log n)3/2 with
+(A.24)
+
+ε2p,C,n = max[2 log n, {nC p (log n)p/2 }1/(1+p) ](log n)/n.
+
+Thus, it suffices to verify that for sequences Cn satisfying (2.30),
+(A.25)
+
+ε2p,Cn ,n (log n)3 /Jp,Cn → 0,
+
+36
+
+W. JIANG AND C.-H. ZHANG
+
+where Jp,C = min{1, C p∧2 {1 ∨ (2 log(1/C p ))}(1−p/2)+ } as in (2.37).
+We consider three cases. For Cn2∧p > e−1/2 , Jp,Cn ≥ e−1/2 and
+ε2p,Cn ,n (log n)3 = max
+
+
+
+
+
+2(log n)5
+, {Cn (log n)9/2+4/p /n}p/(1+p) = o(1),
+n
+
+since κ2 (p) = 9/2 + 4/p in (2.30).
+For p < 2 and Cnp ≤ e−1/2 , Jp,Cn = Cnp {2 log(1/Cnp )}1−p/2 , so that by (A.24)
+ε2p,Cn ,n (log n)3 /Jp,Cn
+
+
+
+
+2(log n)5
+(log n)4+p/(2+2p)
+= max
+.
+p
+p 1−p/2 ,
+p p/(1+p)
+nCn {log(1/Cn )}
+(nCn )
+{log(1/Cnp )}1−p/2
+
+Since the case Cnp > n−1/2 is trivial, it suffices to consider the case Cnp ≤ n−1/2
+where
+
+
+
+
+ε2p,Cn ,n (log n)3
+(log n)4+p/2 (log n)3+p/2+p/(2+2p)
+,
+≍ max
+.
+Jp,Cn
+nCnp
+(nCnp )p/(1+p)
+Since 4 + p/2 ≤ pκ1 (p) = 4 + 3/p + p/2 = (1 + 1/p){3 + p/2 + p/(2 + 2p)},
+(2.30) still implies (A.25).
+Finally, for p ≥ 2 and Cn2 ≤ e−1/2 , Jp,Cn = Cn2 , so that
+
+
+
+
+ε2p,Cn ,n (log n)3
+2(log n)5 Cn (log n)9/2+4/p
+= max
+,
+2(1+1/p)
+Jp,Cn
+nCn2
+nCn
+
+p/(1+p) 
+
+.
+
+1+2/p
+
+Since nCn
+= n1/2−1/p (nCn2 )1/2+1/p , we need (log n)5 /(nCn2 ) → 0 for p > 2
+and (log n)13/2 /(nCn2 ) → 0 for p = 2. Again (2.30) implies (A.25). 
+Proof of Theorem 7. Since the oracle inequality (4.8) is based on
+the weak ℓp norm, the proof of Theorem 2 also provides (4.18). 
+b ∗ be the exact generalized MLE as
+Proof of Proposition 5. Let G
+n
+b ∗ ([u1 , um ]) = 1. Let
+in (2.12). Since ϕ(x) is decreasing in |x|, we have G
+n
+∗
+∗
+Ij = (uj−1 , uj ] and Ij = [uj−1 , uj ] for j ≥ 2 and I1 = I1 = {u1 }. Let Hm,j be
+sub-distributions with support {uj−1 , uj } ∩ Ij∗ such that
+
+(A.26)
+
+b ∗ (Ij ),
+Hm,j (Ij∗ ) = G
+n
+
+Z
+
+Ij∗
+
+uHm,j (du) =
+
+Z
+
+Ij
+
+b ∗ (du),
+uG
+n
+
+1 ≤ j ≤ m.
+
+Let j > 1 and x ∈ [u1 , um ] be fixed. Set xj = x − (uj + uj−1 )/2 and t =
+u − (uj + uj−1 )/2 for u ∈ Ij∗ . Since |xj t| ≤ (um − u1 )ε/2 ≤ n−1/2 ≤ 1,
+(A.27)
+
+2
+
+2
+
+2
+
+− (1 − e−t /2 )exj t ≤ exj t−t /2 − (1 + xj t) ≤ x2j t2 exj t−t /2 ,
+
+37
+
+GENERAL MAXIMUM LIKELIHOOD EB
+2
+
+where the second inequality follows from e−t /2 (1 − xj t) ≤ e−xj t . Since ϕ(x −
+u) = ϕ(xj − t) = ϕ(xj ) exp(xj t − t2 /2), (A.26) and (A.27) yield
+Z
+
+Ij
+
+b ∗ (du) −
+ϕ(x − u)G
+n
+
+≤
+
+Z
+
+Ij
+
+Z
+
+Ij∗
+
+ϕ(x − u)Hm,j (du)
+
+b ∗ (du) +
+x2j t2 ϕ(x − u)G
+n
+2
+
+2
+
+≤ (um − u1 ) (ε/2)
+ε2 /8
+
++ (e
+P
+
+− 1)
+
+Z
+
+Ij∗
+
+Z
+
+Ij
+
+Z
+
+2
+
+Ij∗
+
+(et /2 − 1)ϕ(x − u)Hm,j (du)
+
+b ∗ (du)
+ϕ(x − u)G
+n
+
+ϕ(x − u)Hm,j (du).
+
+2
+
+ε /8 ×
+Let Hm = m
+j=1 Hm,j . Summing the above inequality over j, we find e
+fHm (x) ≥ (1 − η)fGb∗ (x) with η = ε2 (um − u1 )2 /4 ≤ 1/n − ε2 /8. Thus,
+
+(A.28)
+
+n
+
+n
+Y
+fHm (Xi )
+
+i=1
+
+fGb∗ (Xi )
+n
+
+2
+
+2
+
+≥ e−nε /8 (1 − η)n ≥ e−n(ε /8+η) ≥ e−1 .
+
+bn =
+Let Hm be the set of all distributions with support {u1 , . . . , um } and G
+Pm
+(k)
+bj δuj . The upper bound in [10, 35] and (6.3) provide
+j=1 w
+
+sup
+
+n
+Y
+fH (Xi )
+
+H∈Hm i=1 fG
+bn (Xi )
+
+This and (A.28) imply
+
+Qn
+
+≤ max
+j≤m
+
+
+
+(k)
+
+wj
+
+(k−1)
+wj
+
+n
+
+≤
+
+1
+.
+eqn
+
+−1 Qn f
+i=1 fG
+i=1 G
+b∗n (Xi ) ≤ qn
+bn (Xi ).
+
+
+
+REFERENCES
+
+[1] Abramovich, F., Benjamini, Y., Donoho, D. L. and Johnstone, I. M. (2006).
+Adapting to unknown sparsity by controlling the false discovery rate. Ann.
+Statist. 34 584–653. MR2281879
+[2] Benjamini, Y. and Hochberg, Y. (1995). Controlling the false discovery rate: A
+practical and powerful approach to multiple testing. J. Roy. Statist. Soc. Ser. B
+57 289–300. MR1325392
+[3] Birgé, L. and Massart, P. (2001). Gaussian model selection. J. Eur. Math. Soc. 3
+203–268. MR1848946
+[4] Borell, C. (1975). The Brunn–Minkowski inequality in Gaussian space. Invent.
+Math. 30 207–216. MR0399402
+[5] Brown, L. D. (1971). Admissible estimators, recurrent diffusions and insoluble
+boundary value problems. Ann. Math. Statist. 42 855–903. MR0286209
+[6] Brown, L. D. and Greenshtein, E. (2007). Empirical Bayes and compound decision
+approaches for estimation of a high-dimensional vector of normal means. Ann.
+Statist. To appear.
+[7] Cai, T. T. (2002). On block thresholding in wavelet regression. Statist. Sinica 12
+1241–1273. MR1947074
+
+38
+
+W. JIANG AND C.-H. ZHANG
+
+[8] Cai, T. T. and Silverman, B. W. (2001). Incorporating information on neighboring
+coefficients into wavelet estimation. Sankhyā Ser. B 63 127–148. MR1895786
+[9] Carathéodory, C. (1911). Über den variabilitätsbereich der fourierschen konstanten von positiven harmonischen funktionen. Rend. Circ. Mat. Palermo 32 193–
+217.
+[10] Cover, T. M. (1984). An algorithm for maximizing expected log investment return.
+IEEE Trans. Inform. Theory 30 369–373. MR0754868
+[11] Dempster, A. P., Laird, N. M. and Rubin, D. B. (1977). Maximum likelihood
+from incomplete data via the EM algorithm (with discussion). J. Roy. Statist.
+Soc. Ser. B 39 1–38. MR0501537
+[12] Donoho, D. L. and Johnstone, I. M. (1994a). Minimax risk over ℓp -balls for ℓq error. Probab. Theory Related Fields 99 277–303. MR1278886
+[13] Donoho, D. L. and Johnstone, I. M. (1994b). Ideal spatial adaptation via wavelet
+shrinkage. Biometrika 81 425–455. MR1311089
+[14] Donoho, D. L. and Johnstone, I. M. (1995). Adapting to unknown smoothness
+via wavelet shrinkage. J. Amer. Statist. Assoc. 90 1200–1224. MR1379464
+[15] Efron, B. (2003). Robbins, empirical Bayes and microarrays. Ann. Statist. 31 366–
+378. MR1983533
+[16] Efron, B. and Morris, C. (1972). Empirical Bayes on vector observations: An
+extension of Stein’s method. Biometrika 59 335–347. MR0334386
+[17] Efron, B. and Morris, C. (1973). Stein’s estimation rule and its competitors—an
+empirical Bayes approach. J. Amer. Statist. Assoc. 68 117–130. MR0388597
+[18] Foster, D. P. and George, E. I. (1994). The risk inflation criterion for multiple
+regression. Ann. Statist. 22 1947–1975. MR1329177
+[19] George, E. (1986). Mimimax multiple shrinkage estimation. Ann. Statist. 14 288–
+305. MR0829562
+[20] Ghosal, S. and van der Vaart, A. W. (2001). Entropy and rates of convergence
+for maximum likelihood and Bayes estimation for mixtures of normal densities.
+Ann. Statist. 29 1233–1263. MR1873329
+[21] Ghosal, S. and van der Vaart, A. W. (2007). Posterior convergence rates for
+Dirichlet mixtures at smooth densities. Ann. Statist. 35 697–723. MR2336864
+[22] James, W. and Stein, C. (1961). Estimation with quadratic loss. In Proc. Fourth
+Berkeley Symp. Math. Statist. and Prob. 1 361–379. Univ. California Press,
+Berkeley. MR0133191
+[23] Johnstone, I. M. (1994). Minimax Bayes, asymptotic minimax and sparse wavelet
+priors. In Statistical Decision Theory and Related Topics V (S. Gupta and J.
+Berger, eds.) 303–326. Springer, New York. MR1286310
+[24] Johnstone, I. M. and Silverman, B. W. (2004). Needles and hay in haystacks:
+Empirical Bayes estimates of possibly sparse sequences. Ann. Statist. 32 1594–
+1649. MR2089135
+[25] Kiefer, J. and Wolfowitz, J. (1956). Consistency of the maximum likelihood
+estimator in the presence of infinitely many incidental parameters. Ann. Math.
+Statist. 27 887–906. MR0086464
+[26] Morris, C. N. (1983). Parametric empirical Bayes inference: Theory and applications. J. Amer. Statist. Assoc. 78 47–55. MR0696849
+[27] Robbins, H. (1951). Asymptotically subminimax solutions of compound statistical
+decision problems. In Proc. Second Berkeley Symp. Math. Statist. Probab. 1 131–
+148. Univ. California Press, Berkeley. MR0044803
+
+GENERAL MAXIMUM LIKELIHOOD EB
+
+39
+
+[28] Robbins, H. (1956). An empirical Bayes approach to statistics. In Proc. Third Berkeley Symp. Math. Statist. Probab. 1 157–163. Univ. California Press, Berkeley.
+MR0084919
+[29] Robbins, H. (1964). The empirical Bayes approach to statistical decision problems.
+Ann. Math. Statist. 35 1–20. MR0163407
+[30] Robbins, H. (1983). Some thoughts on empirical Bayes estimation. Ann. Statist. 11
+713–723. MR0707923
+[31] Stein, C. (1956). Inadmissibility of the usual estimator for the mean of a multivariate
+normal distribution. In Proc. Third Berkeley Symp. Math. Statist. Probab. 1 157–
+163. Univ. California Press, Berkeley. MR0084922
+[32] Tang, W. and Zhang, C.-H. (2005). Bayes and empirical Bayes approaches to controlling the false discovery rate. Technical Report 2005–2004, Dept. Statistics
+and Biostatistics, Rutgers Univ.
+[33] Tang, W. and Zhang, C.-H. (2007). Empirical Bayes methods for controlling the
+false discovery rate with dependent data. In Complex Datasets and Inverse Problems: Tomography, Networks, and Beyond (R. Liu, W. Strawderman and C.-H.
+Zhang, eds.). Lecture Notes—Monograph Series 54 151–160. IMS, Beachwood,
+OH.
+[34] van der Vaart, A. W. and Wellner, J. A. (1996). Weak Convergence and Empirical Processes. Springer, New York. MR1385671
+[35] Vardi, Y. and Lee, D. (1993). From image deblurring to optimal investment: Maximum likelihood solutions for positive linear inverse problem (with discussion).
+J. Roy. Statist. Soc. Ser. B 55 569–612. MR1223930
+[36] Zhang, C.-H. (1997). Empirical Bayes and compound estimation of normal means.
+Statist. Sinica 7 181–193. MR1441153
+[37] Zhang, C.-H. (2003). Compound decision theory and empirical Bayes method. Ann.
+Statist. 31 379–390. MR1983534
+[38] Zhang, C.-H. (2005). General empirical Bayes wavelet methods and exactly adaptive
+minimax estimation. Ann. Statist. 33 54–100. MR2157796
+[39] Zhang, C.-H. (2008). Generalized maximum likelihood estimation of normal mixture
+densities. Statist. Sinica. To appear.
+Department of Statistics
+and Biostatistics
+Hill Center
+Busch Campus
+Rutgers University
+Piscataway, New Jersey 08854
+E-mail: wenhua@eden.rutgers.edu
+czhang@stat.rutgers.edu
+
+
