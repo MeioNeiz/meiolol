@@ -283,3 +283,9 @@ tables and reading: docs/model.md "E2 baseline".
 - Region per region (E3's g term), once Jacob wants it
 - Lean per period, once one patch has enough games past 20 min (today one daily file,
   1.19M games)
+- List floors once Meio is the default (J35 left them, coordinator 4 Nov): floors that
+  decide what qualifies for a claim or a sorted list stay, since a thin raw row tops a
+  list by luck and Meio's shrinkage is the cure. Rankings and index cards (n < 100),
+  tiers min_games, "Best"/highest WR (400), learnbuild counter/reason floors, matchup
+  page and patch page floors, builds.solid_games fallback. Averages' floors (lane ends,
+  by length, gold) wait on M9's ranges for averages
