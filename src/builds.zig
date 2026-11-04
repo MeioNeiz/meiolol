@@ -81,7 +81,7 @@ pub const max_level = 18;
 const max_items = 6;
 /// File.Build.minutes and first_item: a minute bucket each, the last for that minute and
 /// later
-const minute_buckets = 60;
+pub const minute_buckets = 60;
 
 /// Every set's: the sets' slices pick the games
 pub const Options = struct {
@@ -273,7 +273,7 @@ fn leadKey(l: Lead) u16 {
 const Key = struct { champion: u16, role: Role, opponent: u16 = 0, kind: Kind, v: [max_values]u32 };
 const Total = struct { champion: u16, role: Role, opponent: u16 = 0, kind: ?Kind };
 const MinuteKey = struct { champion: u16, role: Role, slot: u8, item: u32 };
-const Minutes = [minute_buckets]u32;
+pub const Minutes = [minute_buckets]u32;
 const RoleKey = struct { champion: u16, role: Role };
 
 pub const Builder = struct {
@@ -459,49 +459,56 @@ pub const Builder = struct {
         };
         if (b.split == .opponent and opp == 0) return;
         try b.total(.{ .champion = c, .role = p.role, .opponent = opp, .kind = null }, p.won);
-        if (p.keystone != 0) {
+        const vals = valuesOf(p, chosen, d);
+        if (vals.get(.runes)) |page| {
             try b.addVs(p.champion, p.role, opp, .keystone, &.{p.keystone}, p.won);
-            try b.addVs(p.champion, p.role, opp, .runes, &.{
-                p.primary,  p.keystone,  p.perks[0],                   p.perks[1],
-                p.perks[2], p.secondary, @min(p.perks[3], p.perks[4]), @max(p.perks[3], p.perks[4]),
-            }, p.won);
+            try b.addVs(p.champion, p.role, opp, .runes, page.slice(), p.won);
             try b.addEach(p.champion, p.role, opp, .rune, &.{
                 &.{p.keystone}, &.{p.perks[0]}, &.{p.perks[1]}, &.{p.perks[2]}, &.{p.perks[3]}, &.{p.perks[4]},
             }, p.won);
         }
-        if (p.shards[0] != 0) {
-            try b.addVs(p.champion, p.role, opp, .shards, &p.shards, p.won);
+        if (vals.get(.shards)) |shards| {
+            try b.addVs(p.champion, p.role, opp, .shards, shards.slice(), p.won);
             try b.addEach(p.champion, p.role, opp, .shard, &.{
                 &.{ 0, p.shards[0] }, &.{ 1, p.shards[1] }, &.{ 2, p.shards[2] },
             }, p.won);
         }
-        if (p.spells[0] != 0) try b.addVs(p.champion, p.role, opp, .spells, &.{
-            @min(p.spells[0], p.spells[1]), @max(p.spells[0], p.spells[1]),
-        }, p.won);
+        if (vals.get(.spells)) |v| try b.addVs(p.champion, p.role, opp, .spells, v.slice(), p.won);
         if (b.split == .reach) return;
         const k = chosen orelse return;
-        if (!k.start_overflow and k.start_len > 0) {
-            var start = k.start;
-            std.mem.sort(u32, start[0..k.start_len], {}, std.sort.asc(u32));
-            try b.addVs(p.champion, p.role, opp, .start, start[0..k.start_len], p.won);
+        for ([_]Kind{ .start, .boots, .core2, .core3, .item4, .item5, .item6, .skills, .skill_start, .skill_path }) |kind| {
+            if (vals.get(kind)) |v| try b.addVs(p.champion, p.role, opp, kind, v.slice(), p.won);
         }
-        if (k.boots != 0 or k.core_len >= 2) {
-            const boots = if (k.boots != 0) d.bootsOf(k.boots) orelse 0 else 0;
-            try b.addVs(p.champion, p.role, opp, .boots, &.{boots}, p.won);
-        }
-        if (k.core_len >= 2) try b.addVs(p.champion, p.role, opp, .core2, k.core[0..2], p.won);
-        if (k.core_len >= 3) try b.addVs(p.champion, p.role, opp, .core3, k.core[0..3], p.won);
-        for ([_]Kind{ .item4, .item5, .item6 }, 3..) |kind, i| {
-            if (k.core_len > i) try b.addVs(p.champion, p.role, opp, kind, &.{k.core[i]}, p.won);
-        }
-        if (k.skillOrder()) |order| try b.addVs(p.champion, p.role, opp, .skills, &order, p.won);
-        if (k.skill_ups >= 3) try b.addVs(p.champion, p.role, opp, .skill_start, &.{ k.first[0], k.first[1], k.first[2] }, p.won);
-        if (k.skillPath()) |path| try b.addVs(p.champion, p.role, opp, .skill_path, &path, p.won);
         if (b.split != .none) return;
         if (k.boots != 0) if (d.bootsOf(k.boots)) |boots| try b.addMinute(c, p.role, 0, boots, k.boots_ms);
         for (k.core[0..k.core_len], k.core_ms[0..k.core_len], 1..) |item, ms, slot| try b.addMinute(c, p.role, @intCast(slot), item, ms);
         if (k.core_len > 0) try b.addFirstItem(c, p.role, k.core_ms[0], p.won);
         try b.addFirsts(c, p.role, k.firsts, p.won);
+    }
+
+    /// Counts made elsewhere (lockanswer.zig): an option's, replacing what was there
+    pub fn putOption(b: *Builder, champion: u32, role: Role, opponent: u16, kind: Kind, v: []const u32, c: Count) !void {
+        var key: Key = .{ .champion = @intCast(champion), .role = role, .opponent = opponent, .kind = kind, .v = @splat(0) };
+        @memcpy(key.v[0..v.len], v);
+        try b.options.put(b.gpa, key, c);
+    }
+
+    /// A group's players (kind null) or those with a value of `kind`
+    pub fn putTotal(b: *Builder, champion: u32, role: Role, opponent: u16, kind: ?Kind, c: Count) !void {
+        try b.totals.put(b.gpa, .{ .champion = @intCast(champion), .role = role, .opponent = opponent, .kind = kind }, c);
+    }
+
+    /// Role-wide only, as addPlayer counts them
+    pub fn putMinutes(b: *Builder, champion: u32, role: Role, slot: u8, item: u32, hist: Minutes) !void {
+        try b.minutes.put(b.gpa, .{ .champion = @intCast(champion), .role = role, .slot = slot, .item = item }, hist);
+    }
+
+    pub fn putFirstItem(b: *Builder, champion: u32, role: Role, hist: [minute_buckets]Count) !void {
+        try b.first_item.put(b.gpa, .{ .champion = @intCast(champion), .role = role }, hist);
+    }
+
+    pub fn putFirsts(b: *Builder, champion: u32, role: Role, firsts: [1 + firsts_len]Count) !void {
+        try b.firsts.put(b.gpa, .{ .champion = @intCast(champion), .role = role }, firsts);
     }
 
     /// The file, in `arena`: `rows` options per champion, role and kind, and the names
@@ -639,7 +646,7 @@ pub const Builder = struct {
     }
 };
 
-fn minuteOf(ms: i64) usize {
+pub fn minuteOf(ms: i64) usize {
     return @intCast(std.math.clamp(@divFloor(ms, std.time.ms_per_min), 0, minute_buckets - 1));
 }
 
@@ -781,6 +788,59 @@ fn valueLen(kind: Kind, v: [max_values]u32) usize {
         .spells, .core2, .shard, .skill_path => 2,
         .start => std.mem.findScalar(u32, &v, 0) orelse max_values,
     };
+}
+
+/// A kind's value, zero-padded as the Builder keys it
+pub const Value = struct {
+    len: u8,
+    v: [max_values]u32,
+
+    pub fn of(v: []const u32) Value {
+        var x: Value = .{ .len = @intCast(v.len), .v = @splat(0) };
+        @memcpy(x.v[0..v.len], v);
+        return x;
+    }
+
+    pub fn slice(x: *const Value) []const u32 {
+        return x.v[0..x.len];
+    }
+};
+
+/// The player's value of each kind, null for none. rune and shard are always null: a
+/// player has several (the runes value's runesIn, the shards value's rows)
+pub fn valuesOf(p: Player, chosen: ?Picks, d: *const ddragon.BuildData) std.EnumArray(Kind, ?Value) {
+    var out: std.EnumArray(Kind, ?Value) = .initFill(null);
+    if (p.keystone != 0) {
+        out.set(.keystone, .of(&.{p.keystone}));
+        out.set(.runes, .of(&.{
+            p.primary,  p.keystone,  p.perks[0],                   p.perks[1],
+            p.perks[2], p.secondary, @min(p.perks[3], p.perks[4]), @max(p.perks[3], p.perks[4]),
+        }));
+    }
+    if (p.shards[0] != 0) out.set(.shards, .of(&p.shards));
+    if (p.spells[0] != 0) out.set(.spells, .of(&.{ @min(p.spells[0], p.spells[1]), @max(p.spells[0], p.spells[1]) }));
+    const k = chosen orelse return out;
+    if (!k.start_overflow and k.start_len > 0) {
+        var start = k.start;
+        std.mem.sort(u32, start[0..k.start_len], {}, std.sort.asc(u32));
+        out.set(.start, .of(start[0..k.start_len]));
+    }
+    if (k.boots != 0 or k.core_len >= 2) out.set(.boots, .of(&.{if (k.boots != 0) d.bootsOf(k.boots) orelse 0 else 0}));
+    if (k.core_len >= 2) out.set(.core2, .of(k.core[0..2]));
+    if (k.core_len >= 3) out.set(.core3, .of(k.core[0..3]));
+    for ([_]Kind{ .item4, .item5, .item6 }, 3..) |kind, i| {
+        if (k.core_len > i) out.set(kind, .of(&.{k.core[i]}));
+    }
+    if (k.skillOrder()) |order| out.set(.skills, .of(&order));
+    if (k.skill_ups >= 3) out.set(.skill_start, .of(&.{ k.first[0], k.first[1], k.first[2] }));
+    if (k.skillPath()) |path| out.set(.skill_path, .of(&path));
+    return out;
+}
+
+/// The rune options of a .runes value: the keystone and the five runes, as addPlayer
+/// counts them
+pub fn runesIn(page: []const u32) [6]u32 {
+    return .{ page[1], page[2], page[3], page[4], page[6], page[7] };
 }
 
 /// A participants row

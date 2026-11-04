@@ -43,8 +43,11 @@ pub const Table = struct {
     build: ddragon.BuildData,
 
     pub fn block(t: *const Table, champion: u32, role: Role) ?*const Block {
-        const i = std.sort.binarySearch(Block, t.blocks, Key{ .champion = champion, .role = role }, Key.order) orelse return null;
-        return &t.blocks[i];
+        return &t.blocks[t.blockIndex(champion, role) orelse return null];
+    }
+
+    pub fn blockIndex(t: *const Table, champion: u32, role: Role) ?usize {
+        return std.sort.binarySearch(Block, t.blocks, Key{ .champion = champion, .role = role }, Key.order);
     }
 };
 

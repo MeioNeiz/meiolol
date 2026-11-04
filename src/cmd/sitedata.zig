@@ -326,7 +326,8 @@ pub const usage_lockrows =
     \\              --days N         default 30
     \\              --out FILE       default DIR/export/lockrows.bin
     \\              --bench FILE     time build answers (lockanswer.zig) on FILE's
-    \\                               largest blocks over a lock mix, write nothing
+    \\                               largest blocks over a lock mix, each checked
+    \\                               against builds.Builder's; write nothing
     \\
 ;
 
@@ -416,6 +417,15 @@ fn benchLocks(c: *Cmd, path: []const u8) !u8 {
         break :blk try lockrows.read(&r.interface, arena) orelse return error.BadLockRows;
     };
     std.log.info("{s}: {d} blocks, read in {d} ms", .{ path, t.blocks.len, t0.durationTo(std.Io.Clock.awake.now(io)).toMilliseconds() });
+    const t1 = std.Io.Clock.awake.now(io);
+    var index: lockanswer.Index = try .init(gpa, io, &t);
+    defer index.deinit();
+    var most: [2]usize = @splat(0);
+    for (index.blocks) |b| for (b.values) |v| {
+        most[0] = @max(most[0], v.len);
+    };
+    for (index.blocks) |b| most[1] = @max(most[1], b.items.len);
+    std.log.info("coded in {d} ms; most values of a kind in a block {d}, items {d}", .{ t1.durationTo(std.Io.Clock.awake.now(io)).toMilliseconds(), most[0], most[1] });
     const order = try arena.alloc(usize, t.blocks.len);
     for (order, 0..) |*x, i| x.* = i;
     std.mem.sort(usize, order, t.blocks, struct {
@@ -434,7 +444,7 @@ fn benchLocks(c: *Cmd, path: []const u8) !u8 {
         var scratch: std.heap.ArenaAllocator = .init(gpa);
         defer scratch.deinit();
         const sa = scratch.allocator();
-        const base = (try lockanswer.file(gpa, sa, &t, b.champion, b.role, .{ .floor = floor }, &.{}, o, "", "")).?;
+        const base = (try lockanswer.file(gpa, sa, &t, &index, b.champion, b.role, .{ .floor = floor }, &.{}, o, "", "")).?;
         const own = base.get(b.champion, b.role) orelse continue;
         var mix: [5]lockanswer.Locks = @splat(.{});
         if (own.get(.keystone)) |x| if (x.options.len > 0) {
@@ -452,8 +462,13 @@ fn benchLocks(c: *Cmd, path: []const u8) !u8 {
         };
         for ([_]lockanswer.Filter{ .{ .platform = euw, .floor = floor }, .{ .floor = floor } }) |filter| for (&mix) |*l| {
             const at = std.Io.Clock.awake.now(io);
-            const f = (try lockanswer.file(gpa, sa, &t, b.champion, b.role, filter, l, o, "", "")).?;
+            const f = (try lockanswer.file(gpa, sa, &t, &index, b.champion, b.role, filter, l, o, "", "")).?;
             const ns: u64 = @intCast(at.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds());
+            const want = (try lockanswer.reference(gpa, sa, &t, b.champion, b.role, filter, l, o, "", "")).?;
+            std.testing.expectEqualDeep(want, f) catch {
+                std.log.err("{d} {s} {f}: answer differs from builds.Builder's", .{ b.champion, @tagName(b.role), l.* });
+                return 1;
+            };
             try times.append(arena, ns);
             const games = if (f.get(b.champion, b.role)) |x| x.games else 0;
             std.log.info("{d} {s}: {d} rows, {s}, {f}: {d} games, {d:.1} ms", .{ b.champion, @tagName(b.role), b.rows, if (filter.platform != null) "EUW" else "all", l.*, games, @as(f64, @floatFromInt(ns)) / 1e6 });

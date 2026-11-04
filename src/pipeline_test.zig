@@ -2102,17 +2102,20 @@ fn buildsOne(dir: []const u8, db: store.Db, o: builds.Options, set: builds.Set) 
 
 /// Lock answers (lockanswer.zig) from the lock rows of `dir`'s cubes, as `f` (Darius top,
 /// EUW, the patch, Platinum+) was counted from them: no lock gives its build and splits,
-/// a keystone lock its by_keystone build, an opponent lock its matchup
+/// a keystone lock its by_keystone build, an opponent lock its matchup. Then every block
+/// under single locks of each kind and a stack of all: answers equal builds.Builder's
 fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds.File) !void {
     const gpa = testing.allocator;
     const t = try lockTable(arena, dir);
+    var x: lockanswer.Index = try .init(gpa, testing.io, &t);
+    defer x.deinit();
     const filter: lockanswer.Filter = .{
         .platform = codeOf(t.dicts.platforms, "EUW1"),
         .patch = codeOf(t.dicts.patches, patch),
         .floor = builds.rankOf("PLATINUM"),
     };
     const o: builds.Options = .{ .min_split_games = 1 };
-    const none = (try lockanswer.file(gpa, arena, &t, 122, .top, filter, &.{}, o, f.label, f.min_tier)).?;
+    const none = (try lockanswer.file(gpa, arena, &t, &x, 122, .top, filter, &.{}, o, f.label, f.min_tier)).?;
     try testing.expectEqualDeep(f.get(122, .top).?, none.get(122, .top).?);
     for ([_][]const builds.File.Build{ f.by_reach, f.by_lead, f.by_keystone }, [_][]const builds.File.Build{ none.by_reach, none.by_lead, none.by_keystone }) |want, got| {
         var own: std.ArrayList(builds.File.Build) = .empty;
@@ -2125,7 +2128,7 @@ fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds
         .{ .lk = "vs82", .want = f.getVs(122, .top, 82).?, .rows = 3 },
     };
     for (cases) |c| {
-        const got = (try lockanswer.file(gpa, arena, &t, 122, .top, filter, &lockanswer.Locks.parse(c.lk).?, o, f.label, f.min_tier)).?.get(122, .top).?;
+        const got = (try lockanswer.file(gpa, arena, &t, &x, 122, .top, filter, &lockanswer.Locks.parse(c.lk).?, o, f.label, f.min_tier)).?.get(122, .top).?;
         try testing.expectEqual(c.want.games, got.games);
         try testing.expectEqual(c.want.wins, got.wins);
         for (c.want.kinds) |want| {
@@ -2137,9 +2140,46 @@ fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds
             try testing.expectEqualDeep(want.options, rows.options[0..n]);
         }
     }
-    const nobody = (try lockanswer.file(gpa, arena, &t, 122, .top, filter, &lockanswer.Locks.parse("ks8005").?, o, f.label, f.min_tier)).?;
+    const nobody = (try lockanswer.file(gpa, arena, &t, &x, 122, .top, filter, &lockanswer.Locks.parse("ks8005").?, o, f.label, f.min_tier)).?;
     try testing.expectEqual(null, nobody.get(122, .top));
-    try testing.expectEqual(null, try lockanswer.file(gpa, arena, &t, 122, .jungle, filter, &.{}, o, f.label, f.min_tier));
+    try testing.expectEqual(null, try lockanswer.file(gpa, arena, &t, &x, 122, .jungle, filter, &.{}, o, f.label, f.min_tier));
+    try expectLocksAsBuilder(arena, &t, &x, filter);
+}
+
+fn expectLocksAsBuilder(arena: std.mem.Allocator, t: *const lockrows.Table, x: *const lockanswer.Index, view: lockanswer.Filter) !void {
+    const gpa = testing.allocator;
+    const o: builds.Options = .{ .min_split_games = 5, .rows = 4 };
+    var stacks: usize = 0;
+    for (t.blocks) |b| for ([_]lockanswer.Filter{ .{}, view }) |filter| {
+        const base = (try lockanswer.reference(gpa, arena, t, b.champion, b.role, filter, &.{}, o, "", "")).?;
+        const own = base.get(b.champion, b.role) orelse continue;
+        var locks: std.ArrayList(lockanswer.Locks) = .empty;
+        try locks.append(arena, .{});
+        var all: lockanswer.Locks = .{};
+        for (std.enums.values(lockanswer.Kind)) |kind| {
+            const v: []const u32 = if (kind == .opponent) blk: {
+                var it: lockrows.Rows = .{ .t = t, .b = &b };
+                while (it.next()) |r| if (r.seat.p.opponent != 0) break :blk &.{r.seat.p.opponent};
+                continue;
+            } else blk: {
+                const rows = own.get(std.meta.stringToEnum(builds.Kind, @tagName(kind)).?) orelse continue;
+                if (rows.options.len == 0) continue;
+                break :blk rows.options[rows.options.len / 2].v;
+            };
+            var one: lockanswer.Locks = .{};
+            one.by.set(kind, .of(v));
+            try locks.append(arena, one);
+            all.by.set(kind, .of(v));
+        }
+        try locks.append(arena, all);
+        for (locks.items) |*l| {
+            const want = try lockanswer.reference(gpa, arena, t, b.champion, b.role, filter, l, o, "", "");
+            const got = try lockanswer.file(gpa, arena, t, x, b.champion, b.role, filter, l, o, "", "");
+            try testing.expectEqualDeep(want, got);
+            stacks += 1;
+        }
+    };
+    try testing.expect(stacks > 100);
 }
 
 fn codeOf(list: []const []const u8, x: []const u8) ?u8 {

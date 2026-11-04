@@ -108,17 +108,19 @@ What a block needs from a row:
   crawl (~33M rows a 30 days, every region) ~2 GB, shared by both renderers if mapped.
   Not yet: duration, end stats, lane minutes (L4, L5)
 
-- L2 counting: src/lockanswer.zig counts a block's rows under a view (platform, patch,
+- L2 counting: src/lockanswer.zig answers a block's rows under a view (platform, patch,
   rank floor) and a lock stack (`lk=ks8010,c23071.6333,vs86`: keystone, rune page, rune,
   shards, shard, spells, start, boots, core 2/3, item 4-6, max order, levels, lane
-  opponent) with builds.Builder; the table carries the patch's Data Dragon data.
-  pipeline_test: no lock equals builds --site's build and splits, a keystone lock its
-  by_keystone build, an opponent lock its matchup. Time (`meiolol lockrows --bench`,
-  Mac, the 20 largest blocks, 5 lock sets): decode ~65 ns a row, Builder ~1.1 us a row
-  counted. EUW Platinum+ locked p50 17 ms, p99 66 ms; every region p50 29 ms, p99 300
-  ms (Jinx bot, 255k rows under her top keystone). Over the 50 ms goal: next is a
-  faster counter (per block, each kind's options coded once at load, counts in arrays)
-  measured against the Builder's answer
+  opponent); the table carries the patch's Data Dragon data. An Index codes each block
+  once at load (builds.valuesOf per row, a u16 code per kind, ~64 B a row in memory;
+  1.0 s for the snapshot's 15.7M rows on the Mac's cores, largest dict 6.2k values);
+  answers count codes in arrays and load each group's top options into builds.Builder
+  for its File. `reference` counts the decoded rows with builds.Builder. pipeline_test:
+  no lock equals builds --site's build and splits, a keystone lock its by_keystone, an
+  opponent lock its matchup, and every fixture block under each lock kind and a full
+  stack equals the reference. `meiolol lockrows --bench` (Mac, the 20 largest blocks, 5
+  lock sets, EUW and every region, each answer checked against the reference): p50 1.5
+  ms, p99 9.3 ms, max 9.8 ms (Builder: p99 300 ms). Not yet measured on C01
 
 - Keystone lock in the BuildPanel (builds.by_keystone, `k` in the hash); vs melee or
   ranged and gold ahead or behind are precomputed splits of the build file only
