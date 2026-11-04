@@ -8,6 +8,8 @@ const std = @import("std");
 const core = @import("core");
 const live = @import("lcu/live.zig");
 const lanecard = @import("lanecard.zig");
+const comp = @import("comp.zig");
+const loading = @import("loading.zig");
 const Role = core.Role;
 const Stats = core.Stats;
 const curvesfile = core.curvesfile;
@@ -102,6 +104,10 @@ pub const Lane = struct {
     cs: ?Compare,
     /// From item prices: nobody's gold but your own is shown in game
     gold: ?Compare,
+    /// The matchup's median seconds to level 6 and to the first item, mine then theirs;
+    /// 0 unknown
+    level6: [2]u16 = .{ 0, 0 },
+    first_item: [2]u16 = .{ 0, 0 },
 };
 
 /// The game so far, one sample per `sample_every` seconds: the poller keeps them
@@ -149,6 +155,10 @@ pub const InGame = struct {
     history: []const Sample = &.{},
     /// My champion-role's usual build against what I have; planOf fills it in
     plan: ?Plan = null,
+    /// Up to max_tips lines from the comp of the ten; addTips fills them in
+    tips: []const []const u8 = &.{},
+    /// The sheet the player opens; addTips fills it in
+    spikes: ?Spikes = null,
 
     /// This moment as a history sample
     pub fn sample(g: *const InGame) Sample {
@@ -213,6 +223,86 @@ pub fn planOf(arena: std.mem.Allocator, facts: *const champfacts.Facts, g: live.
         .next = nextSkill(path, order, g.skills, spent + 1),
         .unspent = seat.level > spent,
     };
+}
+
+/// When my lane opponent and I get stronger: only in a sheet the player opens, never
+/// pushed or timed (docs/plan/app.md "Policy line": no power spike alerts)
+pub const Spikes = struct {
+    opponent: u32,
+    /// The matchup's median seconds, mine then theirs; 0 unknown or too few games
+    level6: [2]u16 = .{ 0, 0 },
+    first_item: [2]u16 = .{ 0, 0 },
+    /// The matchup's games behind the timings
+    games: u32 = 0,
+    /// Each one's clear lean in the role (champfacts), mine then theirs
+    lean: [2]champfacts.Lean = .{ .none, .none },
+
+    fn any(s: Spikes) bool {
+        return s.level6[0] != 0 or s.first_item[0] != 0 or s.lean[0] != .none or s.lean[1] != .none;
+    }
+};
+
+pub const max_tips = 2;
+
+/// Tips from the comp of the ten in game and my lane's spike sheet. Static for the
+/// game: nothing here changes with the clock
+pub fn addTips(arena: std.mem.Allocator, in: comp.Input, g: *InGame) !void {
+    var seats: [2][Role.count]loading.Seat = undefined;
+    var n: [2]usize = .{ 0, 0 };
+    var mine: ?Row = null;
+    for (g.rows) |r| for ([_]?Seat{ r.ours, r.theirs }, 0..) |s_or, side| {
+        const s = s_or orelse continue;
+        if (s.me) mine = r;
+        if (s.champion == 0) continue;
+        seats[side][n[side]] = .{ .champion = s.champion, .role = r.role, .me = s.me };
+        n[side] += 1;
+    };
+    const c = try comp.build(arena, in, .{ seats[0][0..n[0]], seats[1][0..n[1]] });
+    g.tips = try tipsOf(arena, in.stats, &c);
+
+    const row = mine orelse return;
+    const them = row.theirs orelse return;
+    if (row.ours.?.champion == 0 or them.champion == 0) return;
+    var sp: Spikes = .{ .opponent = them.champion };
+    if (g.lane) |l| if (!l.matchup.thin) {
+        sp.level6 = l.level6;
+        sp.first_item = l.first_item;
+        sp.games = l.matchup.games;
+    };
+    if (in.facts) |f| for (&sp.lean, [_]u32{ row.ours.?.champion, them.champion }) |*out, champ| {
+        if (f.leanOf(champ, row.role)) |lr| out.* = lr.lean();
+    };
+    if (sp.any()) g.spikes = sp;
+}
+
+/// What the other team's damage asks of my build first, then which half of the game
+/// suits whom; at most max_tips
+fn tipsOf(arena: std.mem.Allocator, stats: *const Stats, c: *const comp.Comp) ![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    const them = c.teams[1];
+    const mix: comp.Mix = if (them.damage) |d| d.mix else .mixed;
+    switch (mix) {
+        .physical => try out.append(arena, "They're all AD: armour goes a long way"),
+        .magic => try out.append(arena, "They're all AP: magic resist goes a long way"),
+        .mixed => if (them.lone) |l| try out.append(arena, try std.fmt.allocPrint(arena, "Their only {s}: {s}", .{
+            if (l.ap) "AP" else "AD", stats.nameOf(l.champion),
+        })),
+    }
+    const m = champfacts.win_minute;
+    const ours = comp.timingOf(c.teams[0]);
+    const theirs = comp.timingOf(them);
+    const timing: ?[]const u8 = if (ours == .late and theirs != .late)
+        try std.fmt.allocPrint(arena, "You scale better: after {d} min is yours", .{m})
+    else if (ours == .early and theirs != .early)
+        try std.fmt.allocPrint(arena, "You're the early team: best before {d} min", .{m})
+    else if (theirs == .late and ours != .late)
+        try std.fmt.allocPrint(arena, "They scale better: harder after {d} min", .{m})
+    else if (theirs == .early and ours != .early)
+        try std.fmt.allocPrint(arena, "They're the early team: hold on till {d} min", .{m})
+    else
+        null;
+    if (timing) |t| try out.append(arena, t);
+    return out.items[0..@min(out.items.len, max_tips)];
 }
 
 /// The ability for the point taken at `level`: the one furthest behind the usual path
@@ -439,6 +529,8 @@ fn myLane(arena: std.mem.Allocator, stats: *const Stats, curves: ?*const curvesf
         lane.cs = compare(@as(i64, mine.cs) - theirs.cs, m.cs, cs_est);
         lane.gold = compare(row.goldDiff().?, m.gold, gold_est);
     }
+    lane.level6 = v.level6();
+    lane.first_item = v.firstItem();
     out.lane = lane;
 }
 
@@ -509,6 +601,42 @@ test "in game: the plan ticks my items and names my next point" {
     try testing.expect(!p.unspent);
     try testing.expectEqual('R', p.next);
     try testing.expectEqual(null, try planOf(arena, &.{}, g, &ig));
+}
+
+test "in game: tips from the comp of the ten, the sheet from my lane" {
+    var f = try cardscenes.fixture();
+    defer f.deinit();
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const body = try std.Io.Dir.cwd().readFileAlloc(testing.io, live.fixture_path, arena, .limited(1 << 20));
+    const g = try live.parse(arena, body);
+    var ig = try build(arena, &f.stats, &f.curves, g, "GOLD");
+    const syndra = idOf(&f.stats, "Syndra");
+    const leans = [_]champfacts.LeanRow{lateRow(syndra)};
+    try addTips(arena, .{ .stats = &f.stats, .curves = &f.curves, .facts = &.{ .lean = &leans }, .tier = "GOLD" }, &ig);
+    try testing.expect(ig.tips.len <= max_tips);
+    const sp = ig.spikes.?;
+    try testing.expectEqual(syndra, sp.opponent);
+    const want: [2]u16 = if (ig.lane.?.matchup.thin) .{ 0, 0 } else ig.lane.?.level6;
+    try testing.expectEqual(want, sp.level6);
+    try testing.expectEqual([2]champfacts.Lean{ .none, .late }, sp.lean);
+
+    // Their team all magic: the build tip first, then whose half of the game it is
+    var c: comp.Comp = .{ .teams = .{ .{ .damage = null, .timing = &.{} }, .{ .damage = null, .timing = &.{} } }, .lanes = undefined, .patch = "" };
+    c.teams[1].damage = .{ .magic = 0.8, .mix = .magic, .teams = .{ .games = 0, .wins = 0 }, .wins_less = false };
+    c.teams[0].timing = &.{.{ .champion = syndra, .role = .middle, .lean = .late, .gold = 0, .win = 0 }};
+    const t = try tipsOf(arena, &f.stats, &c);
+    try testing.expectEqual(2, t.len);
+    try testing.expectEqualStrings("They're all AP: magic resist goes a long way", t[0]);
+    try testing.expectEqualStrings("You scale better: after 20 min is yours", t[1]);
+    // Both late: nothing to tell apart
+    c.teams[1].timing = c.teams[0].timing;
+    try testing.expectEqual(1, (try tipsOf(arena, &f.stats, &c)).len);
+}
+
+fn lateRow(champion: u32) champfacts.LeanRow {
+    return .{ .champion = champion, .role = .middle, .games = 5000, .gold = -300, .gold_sd = 50, .win = 4, .win_sd = 1 };
 }
 
 const path_qwe = "QWEQQRQWQWRWWEEREE";

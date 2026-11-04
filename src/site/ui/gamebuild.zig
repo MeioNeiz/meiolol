@@ -1,8 +1,11 @@
 //! GameBuild: the desktop app's in-game panel under the island (private edition): my
 //! champion-role's usual boots and core items with those I own ticked and the next one
 //! marked, the ability for my next point and the usual max order, then the usual
-//! levelling path as a skill grid. Static HTML (src/shell/screens.zig builds it from
-//! ingame.Plan): a buy or a level reloads the page
+//! levelling path as a skill grid, a tip or two from the comp, and the power spike sheet:
+//! level 6, first item and the stronger half of the game against my lane opponent, in a
+//! <details> only the player opens (never pushed: docs/plan/app.md "Policy line").
+//! Static HTML (src/shell/screens.zig builds it from ingame.InGame): a buy or a level
+//! reloads the page, and the shell's bridge.js keeps the sheet as the player left it
 const std = @import("std");
 const tree = @import("tree.zig");
 const art = @import("art.zig");
@@ -31,16 +34,90 @@ pub const Build = struct {
     skill: u8 = 0,
     /// A point to spend now; else `skill` is for the next level
     unspent: bool = false,
+    /// 0 without a usual build
     games: u32 = 0,
+    tips: []const []const u8 = &.{},
+    spikes: ?Spikes = null,
+};
+
+pub const Timing = struct {
+    /// Median seconds, mine then theirs; 0 unknown
+    at: [2]u16 = .{ 0, 0 },
+    /// 0 me, 1 them: clearly sooner; null about the same
+    sooner: ?u1 = null,
+
+    fn known(t: Timing) bool {
+        return t.at[0] != 0 and t.at[1] != 0;
+    }
+};
+
+pub const Lean = enum { none, early, late };
+
+pub const Spikes = struct {
+    /// My lane opponent's name
+    opponent: []const u8,
+    level6: Timing = .{},
+    first_item: Timing = .{},
+    /// The matchup's games behind the timings
+    games: u32 = 0,
+    /// Mine then theirs
+    lean: [2]Lean = .{ .none, .none },
 };
 
 pub fn view(h: *H, b: Build) N {
     return h.section(.{ .class = "c-gamebuild" }, .{
-        h.h3(.{}, .{ W.title, h.small(.{}, .{W.games.with(h, .{ .n = b.games })}) }),
+        if (b.games > 0) h.h3(.{}, .{ W.title, h.small(.{}, .{W.games.with(h, .{ .n = b.games })}) }) else null,
         if (b.items.len > 0) items(h, b) else null,
         if (b.skill != 0 or b.order.len == 3) skills(h, b) else null,
         if (b.path.len > 0) skillgrid.order(h, b.path) else null,
+        if (b.tips.len > 0) tips(h, b.tips) else null,
+        if (b.spikes) |sp| sheet(h, sp) else null,
     });
+}
+
+fn tips(h: *H, lines: []const []const u8) N {
+    var list = h.list();
+    for (lines, 0..) |t, i| list.add(h.li(.{ .key = i }, .{t}));
+    return h.ul(.{ .class = "tips" }, .{list.done()});
+}
+
+fn sheet(h: *H, sp: Spikes) N {
+    var rows = h.list();
+    if (sp.level6.known()) rows.add(timingRow(h, 0, W.level6, sp.level6));
+    if (sp.first_item.known()) rows.add(timingRow(h, 1, W.first_item, sp.first_item));
+    if (sp.lean[0] != .none or sp.lean[1] != .none) rows.add(h.tr(.{ .key = 2 }, .{
+        h.th(.{ .scope = "row" }, .{W.strongest}),
+        h.td(.{}, .{leanWord(sp.lean[0])}),
+        h.td(.{}, .{leanWord(sp.lean[1])}),
+    }));
+    return h.el(.details, .{ .class = "spikes", .data_keep = "spikes" }, .{
+        h.el(.summary, .{}, .{ W.spikes, h.b(.{}, .{sp.opponent}) }),
+        h.table(.{}, .{
+            h.thead(.{}, .{h.tr(.{}, .{
+                h.td(.{}, .{}),
+                h.th(.{ .scope = "col", .data_answer = true }, .{W.you}),
+                h.th(.{ .scope = "col" }, .{sp.opponent}),
+            })}),
+            h.tbody(.{}, .{rows.done()}),
+        }),
+        if (sp.games > 0) h.p(.{ .class = "src" }, .{W.median.with(h, .{ .n = sp.games })}) else null,
+    });
+}
+
+fn timingRow(h: *H, key: u32, what: tree.Text, t: Timing) N {
+    var cells: [2]N = undefined;
+    for (&cells, t.at, 0..) |*c, at, i| c.* = h.td(.{
+        .data_state = @as(?[:0]const u8, if (t.sooner != null and t.sooner.? == i) "sooner" else null),
+    }, .{phrase.num(h, .time, at)});
+    return h.tr(.{ .key = key }, .{ h.th(.{ .scope = "row" }, .{what}), cells[0], cells[1] });
+}
+
+fn leanWord(l: Lean) tree.Text {
+    return switch (l) {
+        .none => W.no_lean,
+        .early => W.early,
+        .late => W.late,
+    };
 }
 
 fn items(h: *H, b: Build) N {
@@ -78,6 +155,15 @@ const W = struct {
     const level_up = plain("Level up ");
     const next_level = plain("Next level ");
     const max = plain("Max ");
+    const spikes = plain("Power spikes against ");
+    const you = plain("You");
+    const level6 = plain("Level 6");
+    const first_item = plain("First item");
+    const strongest = plain("Strongest");
+    const early = plain("early game");
+    const late = plain("late game");
+    const no_lean = plain("no lean");
+    const median = phrase.Phrase("Median of {n:count} games of this lane");
 };
 
 pub const css =
@@ -100,6 +186,15 @@ pub const css =
     \\    background: var(--panel-2); font-weight: var(--w-b); text-align: center; }
     \\  .c-gamebuild .lv [data-state="now"] .k { background: var(--accent); color: var(--bg); }
     \\  .c-gamebuild .max { color: var(--t2); }
+    \\  .c-gamebuild .tips { flex-direction: column; gap: var(--sp-1); font-size: var(--fs-s); }
+    \\  .c-gamebuild .tips li::before { content: "›"; margin-right: var(--sp-2); color: var(--accent); }
+    \\  .c-gamebuild .spikes { border-top: 1px solid var(--line); padding-top: var(--sp-2); font-size: var(--fs-s); }
+    \\  .c-gamebuild .spikes summary { cursor: pointer; color: var(--t2); }
+    \\  .c-gamebuild .spikes table { margin-top: var(--sp-2); border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    \\  .c-gamebuild .spikes th, .c-gamebuild .spikes td { padding: 2px var(--sp-3) 2px 0; text-align: left; font-weight: normal; }
+    \\  .c-gamebuild .spikes th { color: var(--t2); }
+    \\  .c-gamebuild .spikes [data-state="sooner"] { font-weight: var(--w-b); color: var(--good); }
+    \\  .c-gamebuild .spikes .src { margin-top: var(--sp-1); font-size: var(--fs-xs); color: var(--faint); }
     \\}
     \\
 ;
@@ -117,6 +212,14 @@ pub const sample: Build = .{
     .skill = 'Q',
     .unspent = true,
     .games = 12_400,
+    .tips = &.{ "They're all AD: armour goes a long way", "You scale better: after 20 min is yours" },
+    .spikes = .{
+        .opponent = "Zed",
+        .level6 = .{ .at = .{ 418, 452 }, .sooner = 0 },
+        .first_item = .{ .at = .{ 655, 610 }, .sooner = 1 },
+        .games = 3_120,
+        .lean = .{ .late, .early },
+    },
 };
 
 pub fn gallery(g: *Gallery) void {
@@ -132,6 +235,10 @@ pub fn gallery(g: *Gallery) void {
     };
     g.add("core done, next level's ability", view(h, later));
     g.add("no levelling path known", view(h, .{ .items = sample.items, .next = 2, .games = 140 }));
+    g.add("no usual build: a tip, leans only", view(h, .{
+        .tips = sample.tips[0..1],
+        .spikes = .{ .opponent = "Zed", .lean = .{ .none, .early } },
+    }));
 }
 
 const testing = std.testing;
@@ -147,9 +254,21 @@ test "items owned and next, the point to spend, the path" {
     try testing.expect(std.mem.find(u8, full, "Level up <b class=\"k\">Q</b>") != null);
     try testing.expect(std.mem.find(u8, full, "Max Q › W › E") != null);
     try testing.expect(std.mem.find(u8, full, "c-skills") != null);
+    try testing.expect(std.mem.find(u8, full, "class=\"tips\"") != null);
+    // The sheet stays closed: the player opens it
+    try testing.expect(std.mem.find(u8, full, "<details class=\"spikes\" data-keep=\"spikes\"><summary>") != null);
+    try testing.expect(std.mem.find(u8, full, "<td data-state=\"sooner\">6:58</td><td>7:32</td>") != null);
+    try testing.expect(std.mem.find(u8, full, "<td>10:55</td><td data-state=\"sooner\">10:10</td>") != null);
+    try testing.expect(std.mem.find(u8, full, "<td>late game</td><td>early game</td>") != null);
     const bare = try render(a, .{ .items = sample.items, .next = 2, .games = 140 });
     try testing.expect(std.mem.find(u8, bare, "c-skills") == null);
     try testing.expect(std.mem.find(u8, bare, "class=\"k\"") == null);
+    try testing.expect(std.mem.find(u8, bare, "<details") == null);
+    const lean_only = try render(a, .{ .spikes = .{ .opponent = "Zed", .lean = .{ .none, .early } } });
+    try testing.expect(std.mem.find(u8, lean_only, "<h3") == null);
+    try testing.expect(std.mem.find(u8, lean_only, "Level 6") == null);
+    try testing.expect(std.mem.find(u8, lean_only, "Median") == null);
+    try testing.expect(std.mem.find(u8, lean_only, "<td>no lean</td><td>early game</td>") != null);
 }
 
 fn render(a: std.mem.Allocator, b: Build) ![]const u8 {

@@ -37,4 +37,24 @@
   addEventListener('DOMContentLoaded', () => {
     requestAnimationFrame(() => requestAnimationFrame(() => meiolol.send({ painted: { page } })));
   });
+  // Sheets the player opens (ui/gamebuild.zig details[data-keep]) stay as they left them
+  // across the page's reloads; a page without one forgets, so the next game starts closed
+  addEventListener('DOMContentLoaded', () => {
+    const key = 'meiolol-open';
+    const keep = document.querySelectorAll('details[data-keep]');
+    try {
+      if (!keep.length) return sessionStorage.removeItem(key);
+      const open = new Set(JSON.parse(sessionStorage.getItem(key) || '[]'));
+      for (const d of keep) {
+        d.open = open.has(d.dataset.keep);
+        d.addEventListener('toggle', () => {
+          if (d.open) open.add(d.dataset.keep);
+          else open.delete(d.dataset.keep);
+          try {
+            sessionStorage.setItem(key, JSON.stringify([...open]));
+          } catch {}
+        });
+      }
+    } catch {}
+  });
 })();

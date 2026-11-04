@@ -320,6 +320,7 @@ pub fn build(arena: std.mem.Allocator, in: Input, s: Setup) !Built {
     const lg = try live.parse(arena, (try mock.live(arena, &sc, &st, live.path)).body);
     var g = try ingame.build(arena, in.stats, in.curves, lg, in.tier);
     if (in.facts) |f| g.plan = try ingame.planOf(arena, f, lg, &g);
+    try ingame.addTips(arena, .{ .stats = in.stats, .curves = in.curves, .facts = in.facts, .tier = in.tier }, &g);
     g.history = try ingame.madeUp(arena, g.sample());
     if (s.screen == .game) return .{ .in_game = g };
 

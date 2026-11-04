@@ -857,28 +857,55 @@ fn loadScreen(a: Allocator, c: Ctx, l: *const loading.Loading) !ui.loadscreen.Sc
     };
 }
 
-/// The private edition's build panel in game: ingame.Plan with icons and names
+/// The private edition's build panel in game: ingame.Plan with icons and names, the
+/// tips and the spike sheet
 pub fn gameBuild(a: Allocator, c: Ctx, status: state.Status) !?ui.gamebuild.Build {
     if (!c.private) return null;
     const g = switch (status) {
         .in_game => |g| g,
         else => return null,
     };
-    const p = g.plan orelse return null;
-    const items = try a.alloc(ui.gamebuild.Item, p.items.len);
-    for (items, p.items) |*out, it| out.* = .{
-        .art = .{ .name = if (c.facts) |f| f.itemName(it.id) else "", .src = try c.item(a, it.id) },
-        .owned = it.owned,
-    };
-    return .{
-        .items = items,
-        .next = if (p.nextItem()) |i| @intCast(i) else null,
-        .order = p.order,
-        .path = p.path,
-        .skill = p.next,
-        .unspent = p.unspent,
-        .games = p.games,
-    };
+    var out: ui.gamebuild.Build = .{ .tips = g.tips };
+    if (g.spikes) |sp| {
+        const lean = struct {
+            fn of(l: core.champfacts.Lean) ui.gamebuild.Lean {
+                return switch (l) {
+                    .early => .early,
+                    .late => .late,
+                    .none => .none,
+                };
+            }
+        }.of;
+        out.spikes = .{
+            .opponent = if (c.stats) |st| st.nameOf(sp.opponent) else "",
+            .level6 = spikeTiming(sp.level6),
+            .first_item = spikeTiming(sp.first_item),
+            .games = sp.games,
+            .lean = .{ lean(sp.lean[0]), lean(sp.lean[1]) },
+        };
+    }
+    if (g.plan) |p| {
+        const items = try a.alloc(ui.gamebuild.Item, p.items.len);
+        for (items, p.items) |*x, it| x.* = .{
+            .art = .{ .name = if (c.facts) |f| f.itemName(it.id) else "", .src = try c.item(a, it.id) },
+            .owned = it.owned,
+        };
+        out.items = items;
+        out.next = if (p.nextItem()) |i| @intCast(i) else null;
+        out.order = p.order;
+        out.path = p.path;
+        out.skill = p.next;
+        out.unspent = p.unspent;
+        out.games = p.games;
+    }
+    if (g.plan == null and out.tips.len == 0 and out.spikes == null) return null;
+    return out;
+}
+
+fn spikeTiming(at: [2]u16) ui.gamebuild.Timing {
+    if (at[0] == 0 or at[1] == 0) return .{};
+    const word = loading.timingWord(@as(i32, at[0]) - at[1]);
+    return .{ .at = at, .sooner = if (word) |w| if (w == .sooner) 0 else 1 else null };
 }
 
 fn game(a: Allocator, c: Ctx, g: *const ingame.InGame) !ui.gamescreen.Screen {
@@ -1643,6 +1670,24 @@ test "in game: the build panel, private edition with a plan only" {
     d.seq = 1;
     const html = try renderIn(a, d, null, null, .{ .build = b });
     try testing.expect(std.mem.find(u8, html, "c-gamebuild") != null and std.mem.find(u8, html, "Level up <b class=\"k\">E</b>") != null);
+}
+
+test "in game: tips and the spike sheet without a build, sooner by a clear gap only" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    var g = testGame(null);
+    const c: Ctx = .{ .stats = &f.stats, .icons = null, .private = true };
+    g.tips = &.{"They're all AP: magic resist goes a long way"};
+    g.spikes = .{ .opponent = ahri, .level6 = .{ 420, 430 }, .first_item = .{ 600, 660 }, .games = 800, .lean = .{ .none, .late } };
+    const b = (try gameBuild(a, c, .{ .in_game = &g })).?;
+    try testing.expectEqual(0, b.games);
+    try testing.expectEqualStrings("Ahri", b.spikes.?.opponent);
+    try testing.expectEqual(null, b.spikes.?.level6.sooner);
+    try testing.expectEqual(@as(?u1, 0), b.spikes.?.first_item.sooner);
+    try testing.expectEqual(.late, b.spikes.?.lean[1]);
 }
 
 test "options: most picked runes and spells, the client's icons once fetched" {

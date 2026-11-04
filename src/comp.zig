@@ -239,10 +239,10 @@ pub fn pills(arena: std.mem.Allocator, t: Team) ![]const loading.Pill {
     return out.items;
 }
 
-const When = enum { early, late, both };
+pub const When = enum { early, late, both };
 
 /// Early or late when the team's clear leans point one way; null with none
-fn timingOf(t: Team) ?When {
+pub fn timingOf(t: Team) ?When {
     var n: [2]usize = .{ 0, 0 };
     for (t.timing) |tm| n[if (tm.lean == .early) 0 else 1] += 1;
     if (n[0] + n[1] == 0) return null;

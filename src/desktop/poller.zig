@@ -772,6 +772,12 @@ const Poller = struct {
         const g = try arena.create(ingame.InGame);
         g.* = try ingame.build(arena, &data.stats, if (data.curves) |*c| c else null, game, p.own.?.tier);
         if (data.facts) |*f| g.plan = try ingame.planOf(arena, f, game, g);
+        try ingame.addTips(arena, .{
+            .stats = &data.stats,
+            .curves = if (data.curves) |*c| c else null,
+            .facts = if (data.facts) |*f| f else null,
+            .tier = p.own.?.tier,
+        }, g);
         p.fingerprint = std.hash.Wyhash.hash(1, resp.body);
         const gpa = p.own_arena.child_allocator;
         const last: ?ingame.Sample = if (p.history.items.len > 0) p.history.items[p.history.items.len - 1] else null;
