@@ -751,11 +751,24 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(null, (try site.ui.data.decode(arena, site.ui.champpage.BuildData, none)).roles[0].build);
         try testing.expectEqual(null, try loaded.get(arena, try lock(arena, "", 1, "build", "nobody", .top, .plat, "ks8010")));
         try testing.expectEqual(null, try loaded.get(arena, try lock(arena, "", 1, "build", "darius", .top, .plat, "vs82,ks8010")));
+        // The matchups' answer counts the same games; a lane opponent's there are what
+        // adding its vs lock leaves
+        const ms = try site.ui.data.decode(arena, site.ui.champpage.MoreData, (try loaded.get(arena, try lock(arena, "", 1, "more", "darius", .top, .plat, "ks8010"))).?);
+        try testing.expectEqual(1, ms.roles.len);
+        try testing.expectEqual(got.roles[0].build.?.games, ms.roles[0].games);
+        try testing.expectEqual(9, ms.roles[0].rels.len);
+        const morde = for (ms.roles[0].rels[0].opps) |o| {
+            if (std.mem.eql(u8, ms.champs[o.champ].slug, "mordekaiser")) break o;
+        } else return error.TestUnexpectedResult;
+        try testing.expectEqual(null, morde.gold);
+        const vs = try site.ui.data.decode(arena, site.ui.champpage.BuildData, (try loaded.get(arena, try lock(arena, "", 1, "build", "darius", .top, .plat, "ks8010,vs82"))).?);
+        try testing.expectEqual(morde.games, vs.roles[0].build.?.games);
+        try testing.expectEqual(morde.wins, vs.roles[0].build.?.wins);
         // The page's own lock set rendered in: the LockBar, the answer inline for the
         // island, the opponent by name; a set not in its one form renders unlocked
         const page = (try loaded.getLocked(arena, "champions/darius/top.html", "ks8010,vs82")).?;
         try testing.expect(std.mem.find(u8, page, "data-lk=\"ks8010,vs82\"") != null);
-        try testing.expect(std.mem.find(u8, page, "data-ans=\"") != null);
+        try testing.expectEqual(2, std.mem.count(u8, page, "data-ans=\""));
         try testing.expect(std.mem.find(u8, page, "class=\"c-lockbar\"") != null);
         try testing.expect(std.mem.find(u8, page, "vs Mordekaiser") != null);
         const odd = (try loaded.getLocked(arena, "champions/darius/top.html", "vs82,ks8010")).?;
@@ -2227,6 +2240,9 @@ fn expectLocksAsBuilder(arena: std.mem.Allocator, t: *const lockrows.Table, x: *
             const want = try lockanswer.reference(gpa, arena, t, b.champion, b.role, filter, l, o, "", "");
             const got = try lockanswer.file(gpa, arena, t, x, b.champion, b.role, filter, l, o, "", "");
             try testing.expectEqualDeep(want, got);
+            const m = (try lockanswer.matchups(arena, t, x, b.champion, b.role, filter, l)).?;
+            const n = if (want) |f| if (f.get(b.champion, b.role)) |own_| own_.games else 0 else 0;
+            try testing.expectEqual(n, m.all.games);
             stacks += 1;
         }
     };

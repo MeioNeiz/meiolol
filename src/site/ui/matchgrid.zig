@@ -78,7 +78,10 @@ pub const MatchupGrid = struct {
     pub fn goldShown(g: *const G, in: *const Input) bool {
         if (in.rels.len == 0) return false;
         const x = in.rels[g.rel];
-        return !x.ally and x.role == in.role;
+        if (x.ally or x.role != in.role) return false;
+        // None under locks: the curves aren't locked
+        for (x.opps) |o| if (o.gold != null) return true;
+        return false;
     }
 
     /// The URL's choice: with or against, the other role, the measure

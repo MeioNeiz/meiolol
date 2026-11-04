@@ -145,8 +145,12 @@ What a block needs from a row:
   renders `?lk=` into the page (site/champion.zig lockBuild: EUW 30 days at Platinum+,
   the rank being the fragment's), with the answer inline (data-ans) so the island
   hydrates without asking; nginx keys its cache by lk (hosting.md). An opponent chip
-  names its champion (BuildData.vs, from the answer). Not yet: StatStrip and Matchups
-  under locks, a matchup dot as its opponent lock
+  names its champion (BuildData.vs, from the answer). Matchups follow the locks: the
+  renderer answers `more/...` with a MoreData of the role (lockanswer.matchups counts
+  each ally and enemy by role from the Index, which codes the nine others per row, +8 B a
+  row; site/champion.zig relsOf with the locked counts, no lane gold as curves aren't
+  locked), rendered into ?lk= pages too and fetched by ui-champmore. Not yet: StatStrip
+  under locks, a matchup dot as its opponent lock, then drop "Build only"
 
 - Thin (J35) in the build panel: every rate with its 80% range (fmt.range, Wilson),
   faded past ±6, whole numbers from ±10, none hidden; counts don't fade

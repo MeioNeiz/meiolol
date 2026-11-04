@@ -185,6 +185,8 @@ const Coded = struct {
     keystone: u8,
     /// Bit i: the team took builds.First i first
     firsts: u8,
+    /// Table.dicts.champions code of each ally (0) and enemy (1) by role, 0 for none
+    others: [2][Role.count]u8,
     code: [coded.len]u16,
     /// Per slot, Block.items index + 1 (0 for none) and the minute bucket it was bought in
     item: [slots]u16,
@@ -214,6 +216,8 @@ pub const Index = struct {
     blocks: []Block,
 
     pub fn init(gpa: Allocator, io: std.Io, t: *const lockrows.Table) !Index {
+        const champs = try champCodes(gpa, t);
+        defer gpa.free(champs);
         const blocks = try gpa.alloc(Block, t.blocks.len);
         errdefer gpa.free(blocks);
         const done = try gpa.alloc(bool, t.blocks.len);
@@ -229,20 +233,21 @@ pub const Index = struct {
                 return bs[a].rows > bs[b].rows;
             }
         }.f);
-        try par.forEach(io, order.len, Ctx{ .gpa = gpa, .t = t, .order = order, .blocks = blocks, .done = done }, Ctx.run);
+        try par.forEach(io, order.len, Ctx{ .gpa = gpa, .t = t, .champs = champs, .order = order, .blocks = blocks, .done = done }, Ctx.run);
         return .{ .gpa = gpa, .blocks = blocks };
     }
 
     const Ctx = struct {
         gpa: Allocator,
         t: *const lockrows.Table,
+        champs: []const u8,
         order: []const usize,
         blocks: []Block,
         done: []bool,
 
         fn run(c: Ctx, i: usize) !void {
             const at = c.order[i];
-            c.blocks[at] = try code(c.gpa, c.t, &c.t.blocks[at]);
+            c.blocks[at] = try code(c.gpa, c.t, c.champs, &c.t.blocks[at]);
             c.done[at] = true;
         }
     };
@@ -269,7 +274,17 @@ fn Dict(comptime T: type) type {
     };
 }
 
-fn code(gpa: Allocator, t: *const lockrows.Table, block: *const lockrows.Block) !Block {
+/// Table.dicts.champions' codes by champion id
+fn champCodes(gpa: Allocator, t: *const lockrows.Table) ![]u8 {
+    var most: u32 = 0;
+    for (t.dicts.champions) |id| most = @max(most, id);
+    const out = try gpa.alloc(u8, @as(usize, most) + 1);
+    @memset(out, 0);
+    for (t.dicts.champions, 1..) |id, c| out[id] = @intCast(c);
+    return out;
+}
+
+fn code(gpa: Allocator, t: *const lockrows.Table, champs: []const u8, block: *const lockrows.Block) !Block {
     const d = &t.build;
     var values: [coded.len]Dict(Value) = @splat(.{});
     var keystones: Dict(u32) = .{};
@@ -298,10 +313,14 @@ fn code(gpa: Allocator, t: *const lockrows.Table, block: *const lockrows.Block) 
             .lead = if (builds.leadOf(p.lead)) |x| @as(u8, @backingInt(x)) + 1 else 0,
             .keystone = if (p.keystone != 0 and p.keystone <= std.math.maxInt(u16)) try keystones.code(gpa, u8, p.keystone) else 0,
             .firsts = 0,
+            .others = undefined,
             .code = @splat(0),
             .item = @splat(0),
             .minute = @splat(0),
         };
+        for (&out.others, [_][Role.count]u32{ r.allies, r.enemies }) |*cs, ids| {
+            for (cs, ids) |*c, id| c.* = if (id < champs.len) champs[id] else 0;
+        }
         for (coded, &out.code, &values) |kind, *c, *dict| {
             if (vals.get(kind)) |v| c.* = try dict.code(gpa, u16, v);
         }
@@ -585,6 +604,34 @@ pub fn file(gpa: Allocator, arena: Allocator, t: *const lockrows.Table, x: *cons
     defer b.deinit();
     try n.fill(arena, &b, champion, role, o.rows);
     return try b.file(arena, &t.build, label, min_tier, o.rows);
+}
+
+/// A champion-role's games under a view and locks, and with each ally (`by[0]`) and
+/// against each enemy (`by[1]`) by role, indexed by Table.dicts.champions code
+pub const Matchups = struct {
+    all: Count = .{},
+    by: [2][Role.count][]Count,
+};
+
+/// `champion` in `role` under `f` and `locks`, its games with and against every other
+/// champion, in `arena`; null when the table has no such block
+pub fn matchups(arena: Allocator, t: *const lockrows.Table, x: *const Index, champion: u32, role: Role, f: Filter, locks: *const Locks) !?Matchups {
+    const bi = t.blockIndex(champion, role) orelse return null;
+    const block = &x.blocks[bi];
+    const m: Match = try .init(arena, block, locks);
+    var out: Matchups = .{ .by = undefined };
+    for (&out.by) |*side| for (side) |*by| {
+        by.* = try arena.alloc(Count, t.dicts.champions.len + 1);
+        @memset(by.*, .{});
+    };
+    for (block.rows) |*r| {
+        if (!f.takes(r.start, r.platform, r.patch, if (r.rank == no_rank) null else r.rank) or !m.takes(r)) continue;
+        Counts.bump(&out.all, r.won);
+        for (r.others, &out.by) |cs, *side| for (cs, side) |c, by| {
+            if (c != 0) Counts.bump(&by[c], r.won);
+        };
+    }
+    return out;
 }
 
 test "locks parse and format back" {

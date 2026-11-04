@@ -14,6 +14,7 @@ const lockrows = @import("../lockrows.zig");
 const lockanswer = @import("../lockanswer.zig");
 
 const Role = core.Role;
+const Counts = core.statsfile.Counts;
 const cp = ui.champpage;
 const Site = @import("root.zig").Site;
 const Champ = @import("root.zig").Champ;
@@ -80,9 +81,11 @@ pub const Answers = struct {
 pub fn answer(s: *const Site, x: *const Answers, gpa: std.mem.Allocator, rest: []const u8) !?[]const u8 {
     const q = parse(rest) orelse return null;
     const ch = s.champBySlug(q.slug) orelse return null;
-    const d = try build(s, x, gpa, ch, q.role, q.rank, &q.locks) orelse return null;
     var out: std.ArrayList(u8) = .empty;
-    try ui.data.encode(s.arena, cp.BuildData, d, &out);
+    switch (q.island) {
+        .build => try ui.data.encode(s.arena, cp.BuildData, try build(s, x, gpa, ch, q.role, q.rank, &q.locks) orelse return null, &out),
+        .more => try ui.data.encode(s.arena, cp.MoreData, try more(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
+    }
     return out.items;
 }
 
@@ -98,13 +101,8 @@ pub fn pageLocks(lk: []const u8) ?lockanswer.Locks {
 pub fn build(s: *const Site, x: *const Answers, gpa: std.mem.Allocator, ch: Champ, r: Role, k: cp.Rank, locks: *const lockanswer.Locks) !?cp.BuildData {
     const a = s.arena;
     const t = &x.table;
-    const tier: []const u8 = if (k == .plat) "PLATINUM" else builds.rank_tiers[@backingInt(k) - 1];
-    const f: lockanswer.Filter = .{
-        .platform = if (s.view.region == .euw) codeOf(t.dicts.platforms, s.opts.home) orelse return null else null,
-        .patch = if (s.view.period == .patch) codeOf(t.dicts.patches, s.opts.patches[0]) orelse return null else null,
-        .since = if (s.view.period == .days30) @intCast(@max(0, @divFloor(s.opts.since_ms, std.time.ms_per_s))) else 0,
-        .floor = builds.rankOf(tier),
-    };
+    const tier = tierOf(k);
+    const f = filterOf(s, t, k) orelse return null;
     const base = if (s.view_builds[s.view.index()]) |*b| b else null;
     const label = if (base) |b| b.label else "";
     const file = try lockanswer.file(gpa, a, t, &x.index, @intCast(ch.id), r, f, locks, .{}, label, tier) orelse return null;
@@ -118,20 +116,66 @@ pub fn build(s: *const Site, x: *const Answers, gpa: std.mem.Allocator, ch: Cham
     return d;
 }
 
-const Query = struct { slug: []const u8, role: Role, rank: cp.Rank, locks: lockanswer.Locks };
+/// `ch`'s matchups in `r` at rank `k` under `locks`, as the champion page's MoreData with
+/// that one role, in `s.arena`; null as `build`
+pub fn more(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, locks: *const lockanswer.Locks) !?cp.MoreData {
+    const a = s.arena;
+    const t = &x.table;
+    const f = filterOf(s, t, k) orelse return null;
+    const m = try lockanswer.matchups(a, t, &x.index, @intCast(ch.id), r, f, locks) orelse return null;
+    // Table codes by stats index
+    const codes = try a.alloc(u8, s.stats.n);
+    @memset(codes, 0);
+    for (s.champs) |o| codes[o.c] = for (t.dicts.champions, 1..) |id, c| {
+        if (id == o.id) break @intCast(c);
+    } else 0;
+    // relsOf's order: the lane, other roles' enemies, then allies
+    var locked: std.ArrayList([]const Counts) = .empty;
+    for ([_]u1{ 1, 1, 0 }, 0..) |side, pass| for (Role.all) |r2| {
+        if ((pass == 0) != (r2 == r)) continue;
+        const by = m.by[side][@backingInt(r2)];
+        const l = try a.alloc(Counts, codes.len);
+        // Code 0 (not in the table) counts nothing
+        for (l, codes) |*o, c| o.* = .{ .games = by[c].games, .wins = by[c].wins };
+        try locked.append(a, l);
+    };
+    const cr: Counts = .{ .games = m.all.games, .wins = m.all.wins };
+    const role = try a.create(cp.MoreRole);
+    role.* = .{ .role = champion.uiRole(r), .games = cr.games, .wins = cr.wins, .rels = try champion.relsOf(s, ch, r, cr, locked.items) };
+    return .{ .name = ch.name, .slug = ch.slug, .ddragon = s.ddragon_version, .champs = try champion.champsOf(s), .roles = role[0..1] };
+}
 
-/// `build/<slug>/<role>/<rank>/<lk>.bin`; the build island's only so far. A lock set
-/// must be as Locks.format writes it: one URL, one cached copy
+fn tierOf(k: cp.Rank) []const u8 {
+    return if (k == .plat) "PLATINUM" else builds.rank_tiers[@backingInt(k) - 1];
+}
+
+/// The rows the view and rank `k` count; null when the view's patch or region isn't in `t`
+fn filterOf(s: *const Site, t: *const lockrows.Table, k: cp.Rank) ?lockanswer.Filter {
+    return .{
+        .platform = if (s.view.region == .euw) codeOf(t.dicts.platforms, s.opts.home) orelse return null else null,
+        .patch = if (s.view.period == .patch) codeOf(t.dicts.patches, s.opts.patches[0]) orelse return null else null,
+        .since = if (s.view.period == .days30) @intCast(@max(0, @divFloor(s.opts.since_ms, std.time.ms_per_s))) else 0,
+        .floor = builds.rankOf(tierOf(k)),
+    };
+}
+
+/// The islands with lock answers
+pub const Island = enum { build, more };
+
+const Query = struct { island: Island, slug: []const u8, role: Role, rank: cp.Rank, locks: lockanswer.Locks };
+
+/// `<island>/<slug>/<role>/<rank>/<lk>.bin`. A lock set must be as Locks.format writes
+/// it: one URL, one cached copy
 fn parse(rest: []const u8) ?Query {
     var it = std.mem.splitScalar(u8, rest, '/');
-    if (!std.mem.eql(u8, it.next() orelse return null, "build")) return null;
+    const island = std.meta.stringToEnum(Island, it.next() orelse return null) orelse return null;
     const slug = it.next() orelse return null;
     const role = std.meta.stringToEnum(ui.role.Role, it.next() orelse return null) orelse return null;
     const rank = std.meta.stringToEnum(cp.Rank, it.next() orelse return null) orelse return null;
     const last = it.next() orelse return null;
     if (it.next() != null or !std.mem.endsWith(u8, last, ".bin")) return null;
     const locks = pageLocks(last[0 .. last.len - ".bin".len]) orelse return null;
-    return .{ .slug = slug, .role = coreRole(role), .rank = rank, .locks = locks };
+    return .{ .island = island, .slug = slug, .role = coreRole(role), .rank = rank, .locks = locks };
 }
 
 fn canonical(lk: []const u8) ?lockanswer.Locks {
@@ -163,12 +207,13 @@ test "lock paths parse only in their one form" {
     try std.testing.expectEqual(.top, q.role);
     try std.testing.expectEqual(.emerald, q.rank);
     try std.testing.expectEqual(86, q.locks.by.get(.opponent).?.v[0]);
+    try std.testing.expectEqual(.more, parse("more/darius/top/plat/ks8010.bin").?.island);
     for ([_][]const u8{
         "build/darius/top/emerald/vs86,ks8010.bin",
         "build/darius/top/emerald/.bin",
         "build/darius/top/gold/ks8010.bin",
         "build/darius/middle/plat/ks8010.bin",
-        "more/darius/top/plat/ks8010.bin",
+        "trends/darius/top/plat/ks8010.bin",
         "build/darius/top/plat/ks8010.bin/x",
         "build/darius/top/plat/ks8010",
     }) |bad| try std.testing.expectEqual(null, parse(bad));

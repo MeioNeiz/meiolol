@@ -1320,6 +1320,14 @@ pub const More = struct {
     /// Data.roles' index
     cur: u8 = 0,
     grid: matchgrid.MatchupGrid = .{},
+    /// The champion page's locks (`lk`): the matchups shown are the renderer's answer
+    /// for them (lockPath), fetched by ui-champmore.wasm
+    locks: lockbar.Set = .{},
+    /// The answer shown and its path; roles empty: none for the path
+    answer: ?*const MoreData = null,
+    answer_path: []const u8 = "",
+    /// The server's answer under `locks`, base64 (Build.ans)
+    ans: ?[]const u8 = null,
 
     const P = @This();
 
@@ -1333,10 +1341,37 @@ pub const More = struct {
         with: bool = false,
         vs: ?role.Role = null,
         by: Measure = .win,
+        lk: url.Str(200) = .{},
     };
 
+    /// The data's role, or under locks the answer's once one is in
     fn r(p: *const P) *const MoreRole {
+        if (p.shownAnswer()) |x| if (x.roles.len > 0) return &x.roles[0];
         return &p.data.roles[p.cur];
+    }
+
+    fn shownAnswer(p: *const P) ?*const MoreData {
+        return if (p.locks.any()) p.answer else null;
+    }
+
+    /// The answer the locks want, null without locks
+    pub fn lockWant(p: *const P, a: std.mem.Allocator) ?[]const u8 {
+        if (!p.locks.any() or p.cur >= p.data.roles.len) return null;
+        const w = p.files.want;
+        return lockPath(a, p.root, w.view, "more", p.data.slug, p.data.roles[p.cur].role, w.rank, p.locks.s.slice()) catch null;
+    }
+
+    /// Shows `d`, the answer at `path`: the grid's rel and measure stay
+    pub fn setAnswer(p: *P, _: std.mem.Allocator, path: []const u8, d: *const MoreData) void {
+        const u = p.toUrl();
+        p.answer = d;
+        p.answer_path = path;
+        p.fromUrl(u);
+    }
+
+    fn waiting(p: *const P, a: std.mem.Allocator) bool {
+        const w = p.lockWant(a) orelse return false;
+        return !std.mem.eql(u8, w, p.answer_path);
     }
 
     pub fn toUrl(p: *const P) Url {
@@ -1351,6 +1386,7 @@ pub const More = struct {
             .with = if (rel) |x| x.ally else false,
             .vs = if (rel) |x| (if (x.role == rl.role) null else x.role) else null,
             .by = p.grid.measure,
+            .lk = p.locks.s,
         };
     }
 
@@ -1358,6 +1394,7 @@ pub const More = struct {
         p.want_role = u.role;
         p.files.want = .of(u);
         p.cur = roleIndex(p.data.roles, u.role);
+        p.locks.s = u.lk;
         p.grid.set(&p.input(), u.with, u.vs, u.by);
     }
 
@@ -1370,17 +1407,18 @@ pub const More = struct {
     }
 
     /// The shown rank's figures of the role, for lane opponents; null at Platinum+
-    /// (Data's), .few without any
+    /// (Data's) and under locks (the answer is the rank's), .few without any
     fn ranked(p: *const P) ?Ranked {
+        if (p.shownAnswer() != null) return null;
         const g = p.files.group() orelse return null;
         return if (at(MoreRole, g, p.r().role)) |x| .{ .role = x } else .few;
     }
 
     const Ranked = union(enum) { role: *const MoreRole, few };
 
-    /// On the cards that stay Platinum+ under a rank pick
+    /// On the cards that stay Platinum+ under a rank pick (an answer is the rank's)
     fn plat(p: *const P, h: *H) N {
-        return if (p.files.shown.rank != .plat) badge.view(h, .neutral, .{W.plat}) else .none;
+        return if (p.files.shown.rank != .plat and p.shownAnswer() == null) badge.view(h, .neutral, .{W.plat}) else .none;
     }
 
     fn few(p: *const P, h: *H) N {
@@ -1407,13 +1445,18 @@ pub const More = struct {
             .data_root = p.root,
             .data_js = p.js,
             .data_wasm = p.wasm,
-            .data_busy = p.files.busy(),
+            .data_busy = p.files.busy() or p.waiting(h.mem),
+            .data_lk = if (p.ans != null) p.locks.s.slice() else null,
+            .data_ans = p.ans,
         }, .{
             p.matchups(h),
         });
     }
 
     fn matchups(p: *P, h: *H) N {
+        if (p.shownAnswer()) |x| if (x.roles.len == 0 or x.roles[0].games == 0) {
+            return card.view(h, .{ .id = "matchups" }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{if (x.roles.len == 0) W.no_answer else W.no_lock_games}) });
+        };
         var in = p.input();
         if (p.ranked()) |x| in.ranked = switch (x) {
             .few => .few,

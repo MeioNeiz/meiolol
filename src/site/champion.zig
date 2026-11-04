@@ -112,6 +112,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
     build.fromUrl(.{ .role = shown.role });
     try lockBuild(site, &build, ch, r);
     more.fromUrl(.{ .role = shown.role });
+    try lockMore(site, &more, ch, r);
     trends.fromUrl(.{ .role = shown.role });
     charts.fromUrl(.{ .role = shown.role });
     var t: ui.Tree = .{};
@@ -146,11 +147,30 @@ fn lockBuild(site: *const Site, build: *cp.Build, ch: Champ, r: Role) !void {
     build.fromUrl(u);
     const path = build.lockWant(a) orelse return;
     build.setAnswer(a, path, d);
+    build.ans = try base64(a, cp.BuildData, d.*);
+}
+
+/// The request's lock set rendered into the matchups, as lockBuild
+fn lockMore(site: *const Site, more: *cp.More, ch: Champ, r: Role) !void {
+    const a = site.arena;
+    const x = site.answers orelse return;
+    const lk = locks.pageLocks(site.lk) orelse return;
+    const d = try a.create(cp.MoreData);
+    d.* = try locks.more(site, x, ch, r, .plat, &lk) orelse return;
+    var u = more.toUrl();
+    u.lk.set(site.lk);
+    more.fromUrl(u);
+    const path = more.lockWant(a) orelse return;
+    more.setAnswer(a, path, d);
+    more.ans = try base64(a, cp.MoreData, d.*);
+}
+
+fn base64(a: std.mem.Allocator, comptime D: type, d: D) ![]const u8 {
     var bytes: std.ArrayList(u8) = .empty;
-    try ui.data.encode(a, cp.BuildData, d.*, &bytes);
+    try ui.data.encode(a, D, d, &bytes);
     const enc = std.base64.standard.Encoder;
     const out = try a.alloc(u8, enc.calcSize(bytes.items.len));
-    build.ans = enc.encode(out, bytes.items);
+    return enc.encode(out, bytes.items);
 }
 
 /// Each island's data file, in Part order: what the page renders from
@@ -190,8 +210,7 @@ fn pct(n: u64, of: u64) f32 {
 pub fn pageData(site: *const Site, ch: Champ) !cp.Data {
     const a = site.arena;
     const st = &site.stats;
-    const champs = try a.alloc(cp.Other, site.champs.len);
-    for (champs, site.champs) |*o, x| o.* = .{ .name = x.name, .key = x.key, .slug = x.slug };
+    const champs = try champsOf(site);
 
     var roles: std.ArrayList(Role) = .empty;
     for (Role.all) |r| {
@@ -260,10 +279,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         }
     }
 
-    var rels: std.ArrayList(cp.Rel) = .empty;
-    try rels.append(a, try relOf(site, ch, cr, .{ .st = st, .r = r, .r2 = r }));
-    for (Role.all) |r2| if (r2 != r) try rels.append(a, try relOf(site, ch, cr, .{ .st = st, .r = r, .r2 = r2 }));
-    for (Role.all) |r2| if (r2 != r) try rels.append(a, try relOf(site, ch, cr, .{ .st = st, .r = r, .r2 = r2, .ally = true }));
+    const rels = try relsOf(site, ch, r, cr, null);
 
     return .{
         .role = uiRole(r),
@@ -289,7 +305,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .build = if (picked) |b| try buildblock.data(a, b.f, b.b, ch.name) else null,
         .build_patch = if (picked) |b| b.otherPatch(site.view) else null,
         .build_older = if (picked) |b| b.newer != null else false,
-        .rels = rels.items,
+        .rels = rels,
         .by_patch = by_patch,
         .by_day = by_day,
         .by_length = by_length,
@@ -300,7 +316,29 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
 /// it (the pool grid's lanes file)
 pub fn laneRel(site: *const Site, ch: Champ, r: Role) !?cp.Rel {
     if (!plays(site, ch, r)) return null;
-    return try relOf(site, ch, site.stats.champRole(r, ch.c), .{ .st = &site.stats, .r = r, .r2 = r });
+    return try relOf(site, ch, site.stats.champRole(r, ch.c), .{ .st = &site.stats, .r = r, .r2 = r }, null);
+}
+
+/// The matchups card's rels: lane opponents, then other roles' enemies, then allies.
+/// `locked`: their games under a lock set instead, by rels' order then stats index
+/// (lockanswer.matchups), with `cr` the locked games
+pub fn relsOf(site: *const Site, ch: Champ, r: Role, cr: Counts, locked: ?[]const []const Counts) ![]cp.Rel {
+    const a = site.arena;
+    const st = &site.stats;
+    var rels: std.ArrayList(cp.Rel) = .empty;
+    for ([_]bool{ false, false, true }, 0..) |ally, pass| for (Role.all) |r2| {
+        if ((pass == 0) != (r2 == r)) continue;
+        const l = if (locked) |x| x[rels.items.len] else null;
+        try rels.append(a, try relOf(site, ch, cr, .{ .st = st, .r = r, .r2 = r2, .ally = ally }, l));
+    };
+    return rels.items;
+}
+
+/// Every champion as the islands name them (Data.champs)
+pub fn champsOf(site: *const Site) ![]cp.Other {
+    const champs = try site.arena.alloc(cp.Other, site.champs.len);
+    for (champs, site.champs) |*o, x| o.* = .{ .name = x.name, .key = x.key, .slug = x.slug };
+    return champs;
 }
 
 /// Games in `r` and not thin there
@@ -309,8 +347,9 @@ pub fn plays(site: *const Site, ch: Champ, r: Role) bool {
     return g > 0 and ratio(g, ch.games) >= tierlist.min_role_share;
 }
 
-/// Those against (or with) ch in 1%+ of its games in the role, most played first
-fn relOf(site: *const Site, ch: Champ, cr: Counts, pairs: Pairs) !cp.Rel {
+/// Those against (or with) ch in 1%+ of its games in the role, most played first;
+/// `locked`: their games under locks, by stats index (no lane gold: curves aren't locked)
+fn relOf(site: *const Site, ch: Champ, cr: Counts, pairs: Pairs, locked: ?[]const Counts) !cp.Rel {
     const a = site.arena;
     const st = pairs.st;
     const floor = @max(1, min_opponent_share * @as(f64, @floatFromInt(cr.games)));
@@ -321,7 +360,7 @@ fn relOf(site: *const Site, ch: Champ, cr: Counts, pairs: Pairs) !cp.Rel {
     var rare: u16 = 0;
     for (site.champs, 0..) |other, i| {
         if (other.c == ch.c) continue;
-        const e = pairs.get(ch.c, other.c);
+        const e = if (locked) |l| l[other.c] else pairs.get(ch.c, other.c);
         if (@as(f64, @floatFromInt(e.games)) < floor) {
             if (e.games > 0) rare += 1;
             continue;
@@ -334,7 +373,7 @@ fn relOf(site: *const Site, ch: Champ, cr: Counts, pairs: Pairs) !cp.Rel {
             .games = e.games,
             .wins = e.wins,
             .usual = @floatCast(100 * u.mean),
-            .gold = if (curve) |v| v.estimate(.gold, core.curvesfile.lane_minute - 1).mean else null,
+            .gold = if (locked != null) null else if (curve) |v| v.estimate(.gold, core.curvesfile.lane_minute - 1).mean else null,
             .page = curve != null,
         });
     }
