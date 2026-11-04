@@ -5616,6 +5616,28 @@ Test look on days 4+ (PT3), declared before it runs; not run: Jacob's call.
   with the snapshot salt (data/team/2026-10-29-next/w6fix/hashex.py); the only
   ledgered looks at these days (data/snap's test-looks.tsv, 29 Oct)
 
+### Meio in the truth test, 16.20 -> 16.21, 2026-11-04 (meio-truth, run 2026-11-04-meio)
+
+`meiolol truth --data data/cubes-20261104 --patch 16.21` (the box's cubes of 4 Nov, 14
+origins, 33M player rows, 49 s and 5.1 GB on the Mac at 4 threads; meio.zig at
+21fdd222, default options). Meio minus the raw 30 days, milli-nats a target game, every
+region, all ranks (negative: Meio better); unseen: Meio minus the champion-role's 30-day
+rate on cells the 30 days has under 10 games for:
+
+| cell | day 0 | day 1 | days 2-3 | days 4-7 | 8+ | unseen (all days) | in range |
+| --- | --: | --: | --: | --: | --: | --: | --: |
+| champion-role | 1.53 | 1.37 | 1.25 | 1.11 | 0.98 | | 74% |
+| matchup | -0.66 | -0.67 | -0.55 | -0.38 | -0.23 | -1.62 | 88% |
+| duo | 4.92 | 4.54 | 4.13 | 3.63 | 3.16 | -7.92 | 84% |
+| item win rate | 1.41 | 1.25 | 1.14 | 0.99 | 0.89 | -0.84 | 86% |
+| keystone win rate | 1.38 | 1.23 | 1.13 | 1.01 | 0.90 | 1.85 | 83% |
+
+Every value is beyond 2 se. Matchups pass the gate against both raw modes in every
+bucket (EUW1 too, by more: -2.2); unseen matchups, duos and items beat the fallback.
+Champion-role, duo, item and keystone trail the 30 days everywhere, by the same ~1
+milli-nat as champion-role, so the champion-role term is the thing to fix first
+(meio-model). Item and keystone shares and gold at 14 have no Meio number yet.
+
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
 data/snap (85,693 ranked solo games, 16.19 + 16.20, all regions), sqlite3 on the Mac;

@@ -2,22 +2,30 @@
 //! the next week's games on the newest patch. Rolling origin: for day d since the patch
 //! went live on EUW1 (T0), every mode is built from games before T0 + d days and scored
 //! on the patch's games of the `horizon` days after, per cell kind, region, rank bracket
-//! and day bucket. Modes so far: the raw 30 days and the raw patch (the site's two); the
-//! estimate (E3) plugs in as a third.
+//! and day bucket. Modes: the raw 30 days and the raw patch (the site's two) and Meio,
+//! the estimate (src/meio.zig, any type with fit and rate: see `run`).
 //!
-//! Scores. Rates (win rates, build shares): binomial log loss of the target games under
-//! the mode's rate, (wins + 0.5) / (games + 1) so a 0 or 100% cell scores finitely; the
-//! same small-sample rule for every mode. Averages (lane gold difference at 14): squared
-//! error against the target cell's mean minus that mean's noise (s^2 / n), so a mode is
-//! not blamed for the target's own luck. A cell is scored only where both modes have
-//! `min_games`; coverage says how much of the target that leaves. Differences are
-//! paired per cell, with a standard error over cells (target games of a cell share its
-//! number; overlapping horizons of nearby origins are not independent, so read it as a
-//! floor)
+//! Reads the day cubes (src/cubes.zig), not the database: no player keys, already built
+//! by the box's web loop, so a daily run there is a pass over ~40 day files. Each day's
+//! cells are summed once and each origin adds up its days.
+//!
+//! Scores. Rates (win rates, shares): binomial log loss of the target games under the
+//! mode's rate, (wins + 0.5) / (games + 1) for raw modes so a 0 or 100% cell scores
+//! finitely. Averages (lane gold difference at 14): squared error against the target
+//! cell's mean minus that mean's noise (s^2 / n), so a mode is not blamed for the
+//! target's own luck. A raw mode has a number from `min_games`. Each comparison is
+//! paired over the cells where both sides have a number, with a standard error over
+//! cells (target games of a cell share its number; overlapping horizons of nearby
+//! origins are not independent, so read it as a floor). "Unseen": win-rate cells the 30
+//! days has too few games for, Meio against the champion-role's 30-day rate, which is
+//! what the site falls back on
 
 const std = @import("std");
 const store = @import("store");
 const core = @import("core");
+const cubes = @import("cubes.zig");
+const par = @import("par.zig");
+const meio = @import("meio.zig");
 const curvesfile = core.curvesfile;
 const Role = core.Role;
 
@@ -28,47 +36,72 @@ pub const Options = struct {
     /// The newest patch ("16.20"); the boundary replayed is the one into it
     patch: []const u8,
     /// Origins d = 0 .. origins-1
-    origins: u8 = 7,
+    origins: u8 = 14,
     /// Target days after each origin
     horizon: u8 = 7,
     /// The raw window's days
     window: u16 = 30,
-    /// A mode has a number for a cell from this many games in its window
+    /// A raw mode has a number for a cell from this many games in its window
     min_games: u32 = 10,
     /// Games from this Unix ms are never read (a held-out test window); 0: none
     until_ms: i64 = 0,
     threads: u8 = 4,
 };
 
-pub const Kind = enum(u3) {
-    /// Champion-role win rate
-    champion,
-    /// Win rate against the lane opponent
-    matchup,
-    /// Bottom with its support, win rate
-    duo,
-    /// Lane gold difference at 14 against the opponent (an average)
-    gold14,
-    /// Share of a champion-role's games with a finished item
-    build,
+pub const Kind = meio.Kind;
 
-    const count = 5;
+fn label(k: Kind) []const u8 {
+    return switch (k) {
+        .champion => "champion-role",
+        .matchup => "matchup",
+        .duo => "duo (bot+sup)",
+        .gold14 => "gold at 14 (matchup)",
+        .build => "item share",
+        .item => "item win rate",
+        .keystone => "keystone win rate",
+        .rune => "keystone share",
+    };
+}
 
-    fn label(k: Kind) []const u8 {
-        return switch (k) {
-            .champion => "champion-role",
-            .matchup => "matchup",
-            .duo => "duo (bot+sup)",
-            .gold14 => "gold at 14 (matchup)",
-            .build => "build share",
-        };
+/// Counted out of the champion-role's games (key b = 0 holds them), not its wins
+fn isShare(k: Kind) bool {
+    return k == .build or k == .rune;
+}
+
+/// Win rates the site falls back to the champion-role for when thin
+fn isChild(k: Kind) bool {
+    return switch (k) {
+        .matchup, .duo, .item, .keystone => true,
+        else => false,
+    };
+}
+
+pub const Estimate = meio.Estimate;
+
+/// The estimate, meio.zig at its default options
+pub const Meio = struct {
+    pub const Model = meio.Model;
+    pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32) !Model {
+        return meio.fit(gpa, rows, before_day, .{});
+    }
+};
+
+/// A third mode with no numbers: the raw modes alone
+pub const NoMeio = struct {
+    pub const Model = struct {
+        pub fn rate(_: *const Model, _: Kind, _: u1, _: u2, _: u16, _: u32) ?Estimate {
+            return null;
+        }
+        pub fn deinit(_: *Model, _: Allocator) void {}
+    };
+    pub fn fit(_: Allocator, _: []const Row, _: i32) !Model {
+        return .{};
     }
 };
 
 const regions = [_][]const u8{ "every region", "EUW1" };
 const brackets = [_][]const u8{ "all ranks", "Iron-Silver", "Gold-Emerald", "Diamond+" };
 const buckets = [_][]const u8{ "0", "1", "2-3", "4-7", "8+" };
-const no_gold = std.math.minInt(i32);
 
 fn bucketOf(d: usize) usize {
     return switch (d) {
@@ -80,28 +113,11 @@ fn bucketOf(d: usize) usize {
     };
 }
 
-/// One player in one game
-pub const Row = struct {
-    /// Days since T0, floored
-    day: i16,
-    /// champion | role << 13
-    cr: u16,
-    /// The lane opponent's cr; 0 none
-    opp: u16 = 0,
-    /// A bottom's support's cr; 0 none
-    ally: u16 = 0,
-    gold: i32 = no_gold,
-    items: [6]u16 = @splat(0),
-    win: bool,
-    euw: bool,
-    /// On the newest patch
-    latest: bool,
-    /// 0 unknown, else curvesfile.Bracket (1 low, 2 mid, 3 high)
-    bracket: u2,
-};
+pub const Row = meio.Row;
+pub const no_gold = meio.no_gold;
 
-fn crOf(champion: i64, role: Role) u16 {
-    return @intCast(@as(u64, @intCast(champion)) | @as(u64, @backingInt(role)) << 13);
+pub fn crOf(champion: u32, role: Role) u16 {
+    return @intCast(champion | @as(u32, @backingInt(role)) << 13);
 }
 
 fn roleOf(cr: u16) Role {
@@ -111,6 +127,24 @@ fn roleOf(cr: u16) Role {
 fn key(kind: Kind, region: usize, bracket: usize, a: u16, b: u32) u64 {
     return @as(u64, @backingInt(kind)) << 61 | @as(u64, region) << 60 | @as(u64, bracket) << 58 |
         @as(u64, a) << 32 | b;
+}
+
+const Key = struct { kind: Kind, region: u1, bracket: u2, a: u16, b: u32 };
+
+fn unkey(k: u64) Key {
+    return .{
+        .kind = @fromBackingInt(@intCast(k >> 61)),
+        .region = @intCast(k >> 60 & 1),
+        .bracket = @intCast(k >> 58 & 3),
+        .a = @intCast(k >> 32 & 0xffff),
+        .b = @truncate(k),
+    };
+}
+
+/// For a share cell, the champion-role's games it counts out of; else the cell itself
+fn anchor(k: u64) u64 {
+    const u = unkey(k);
+    return if (isShare(u.kind)) k & ~@as(u64, 0xffff_ffff) else k;
 }
 
 const Acc = struct {
@@ -123,48 +157,175 @@ const Acc = struct {
         a.s += y;
         a.q += y * y;
     }
+
+    fn merge(a: *Acc, o: Acc) void {
+        a.n += o.n;
+        a.s += o.s;
+        a.q += o.q;
+    }
 };
+
+/// One day's sums: every game, and the newest patch's
+const DayCell = struct { all: Acc = .{}, latest: Acc = .{} };
+const DayCells = std.AutoHashMapUnmanaged(u64, DayCell);
 
 /// The 30-day window, the patch window, the target
 const Cell = struct { w: [2]Acc = .{ .{}, .{} }, t: Acc = .{} };
 const Cells = std.AutoHashMapUnmanaged(u64, Cell);
 
-/// Sums for one (region, kind, bracket, bucket)
-pub const Stat = struct {
-    /// Target observations (games; for build share, champion-role games x items) in
-    /// cells where any mode or the target had something
-    target: f64 = 0,
-    /// Of them, in cells where each mode has a number
-    covered: [2]f64 = .{ 0, 0 },
-    /// Scored: both modes have a number
+/// Adds a row to each cell it counts in, for every region and bracket it falls in
+fn addRow(gpa: Allocator, cells: *DayCells, r: Row) !void {
+    const y: f64 = if (r.win) 1 else 0;
+    for (0..2) |region| {
+        if (region == 1 and !r.euw) continue;
+        for ([_]usize{ 0, r.bracket }, 0..) |bracket, i| {
+            if (i == 1 and bracket == 0) continue;
+            const Add = struct {
+                cells: *DayCells,
+                gpa: Allocator,
+                latest: bool,
+                region: usize,
+                bracket: usize,
+                fn add(s: @This(), kind: Kind, a: u16, b: u32, v: f64) !void {
+                    const e = try s.cells.getOrPut(s.gpa, key(kind, s.region, s.bracket, a, b));
+                    if (!e.found_existing) e.value_ptr.* = .{};
+                    e.value_ptr.all.add(v);
+                    if (s.latest) e.value_ptr.latest.add(v);
+                }
+            };
+            const s: Add = .{ .cells = cells, .gpa = gpa, .latest = r.patch == 0, .region = region, .bracket = bracket };
+            try s.add(.champion, r.cr, 0, y);
+            if (r.opp != 0) try s.add(.matchup, r.cr, r.opp, y);
+            if (r.ally != 0) try s.add(.duo, r.cr, r.ally, y);
+            if (r.gold != no_gold) try s.add(.gold14, r.cr, r.opp, @floatFromInt(r.gold));
+            if (r.timeline) {
+                try s.add(.build, r.cr, 0, 1);
+                for (r.items) |item| if (item != 0) {
+                    try s.add(.build, r.cr, item, 1);
+                    try s.add(.item, r.cr, item, y);
+                };
+            }
+            if (r.keystone != 0) {
+                try s.add(.rune, r.cr, 0, 1);
+                try s.add(.rune, r.cr, r.keystone, 1);
+                try s.add(.keystone, r.cr, r.keystone, y);
+            }
+        }
+    }
+}
+
+/// Days -window .. last, each day's cells
+const Days = struct {
+    first: i32,
+    cells: []DayCells,
+
+    fn deinit(d: *Days, gpa: Allocator) void {
+        for (d.cells) |*c| c.deinit(gpa);
+        gpa.free(d.cells);
+    }
+
+    fn at(d: *const Days, day: i32) ?*const DayCells {
+        const i = day - d.first;
+        if (i < 0 or i >= d.cells.len) return null;
+        return &d.cells[@intCast(i)];
+    }
+};
+
+/// Rows sorted by day: the slice of `day`
+fn daySlice(rows: []const Row, day: i32) []const Row {
+    const lo = lowerBound(rows, day);
+    return rows[lo..lowerBound(rows, day + 1)];
+}
+
+/// The first row on `day` or later
+fn lowerBound(rows: []const Row, day: i32) usize {
+    var lo: usize = 0;
+    var hi = rows.len;
+    while (lo < hi) {
+        const mid = (lo + hi) / 2;
+        if (rows[mid].day < day) lo = mid + 1 else hi = mid;
+    }
+    return lo;
+}
+
+fn sumDays(gpa: Allocator, io: std.Io, rows: []const Row, first: i32, last: i32, threads: u8) !Days {
+    const cells = try gpa.alloc(DayCells, @intCast(last - first + 1));
+    @memset(cells, .empty);
+    var days: Days = .{ .first = first, .cells = cells };
+    errdefer days.deinit(gpa);
+    const Ctx = struct {
+        gpa: Allocator,
+        rows: []const Row,
+        days: *Days,
+        fn body(c: @This(), i: usize) !void {
+            const day = c.days.first + @as(i32, @intCast(i));
+            for (daySlice(c.rows, day)) |r| try addRow(c.gpa, &c.days.cells[i], r);
+        }
+    };
+    try par.forEachUpTo(io, cells.len, @max(threads, 1), Ctx{ .gpa = gpa, .rows = rows, .days = &days }, Ctx.body);
+    return days;
+}
+
+/// Origin d's windows and target, over the cells the target has (a share cell: whose
+/// champion-role the target has)
+fn tally(gpa: Allocator, days: *const Days, opts: Options, d: i32) !Cells {
+    var cells: Cells = .empty;
+    errdefer cells.deinit(gpa);
+    var t = d;
+    while (t < d + @as(i32, opts.horizon)) : (t += 1) {
+        const day = days.at(t) orelse continue;
+        var it = day.iterator();
+        while (it.next()) |e| {
+            if (e.value_ptr.latest.n == 0) continue;
+            const c = try cells.getOrPut(gpa, e.key_ptr.*);
+            if (!c.found_existing) c.value_ptr.* = .{};
+            c.value_ptr.t.merge(e.value_ptr.latest);
+        }
+    }
+    var w = days.first;
+    while (w < d) : (w += 1) {
+        const day = days.at(w) orelse continue;
+        const in30 = w >= d - @as(i32, opts.window);
+        var it = day.iterator();
+        while (it.next()) |e| {
+            const k = e.key_ptr.*;
+            const c = if (cells.getPtr(k)) |c| c else blk: {
+                if (k == anchor(k) or !cells.contains(anchor(k))) continue;
+                const n = try cells.getOrPut(gpa, k);
+                n.value_ptr.* = .{};
+                break :blk n.value_ptr;
+            };
+            if (in30) c.w[0].merge(e.value_ptr.all);
+            c.w[1].merge(e.value_ptr.latest);
+        }
+    }
+    return cells;
+}
+
+/// A comparison of two modes over the cells both have a number for: challenger's loss
+/// minus reference's (negative: the challenger predicted better)
+pub const Pair = struct {
+    /// Target observations (games; for shares, champion-role games x values)
     obs: f64 = 0,
     cells: f64 = 0,
     /// Rates: log loss; averages: noise-corrected squared error times games
-    loss: [2]f64 = .{ 0, 0 },
-    /// Per cell difference (30 days minus patch): sums for its standard error
+    challenger: f64 = 0,
+    reference: f64 = 0,
     d: f64 = 0,
     dd: f64 = 0,
     dn: f64 = 0,
     nn: f64 = 0,
 
-    fn add(s: *Stat, o: Stat) void {
-        inline for (@typeInfo(Stat).@"struct".field_names) |name| {
-            switch (@TypeOf(@field(s, name))) {
-                f64 => @field(s, name) += @field(o, name),
-                [2]f64 => for (0..2) |i| {
-                    @field(s, name)[i] += @field(o, name)[i];
-                },
-                else => comptime unreachable,
-            }
-        }
+    fn add(s: *Pair, o: Pair) void {
+        inline for (@typeInfo(Pair).@"struct".field_names) |name| @field(s, name) += @field(o, name);
     }
 
-    fn cell(s: *Stat, n: f64, l0: f64, l1: f64) void {
+    fn cell(s: *Pair, n: f64, challenger: f64, reference: f64) void {
         s.obs += n;
         s.cells += 1;
-        s.loss[0] += l0;
-        s.loss[1] += l1;
-        const d = l0 - l1;
+        s.challenger += challenger;
+        s.reference += reference;
+        const d = challenger - reference;
         s.d += d;
         s.dd += d * d;
         s.dn += d * n;
@@ -172,11 +333,50 @@ pub const Stat = struct {
     }
 
     /// Mean difference per observation and its standard error, clustered by cell
-    fn diff(s: Stat) struct { mean: f64, se: f64 } {
+    pub fn diff(s: Pair) struct { mean: f64, se: f64 } {
         if (s.obs == 0) return .{ .mean = 0, .se = 0 };
         const m = s.d / s.obs;
         const v = @max(0, s.dd - 2 * m * s.dn + m * m * s.nn);
         return .{ .mean = m, .se = @sqrt(v) / s.obs };
+    }
+};
+
+pub const modes = [_][]const u8{ "30 days", "patch", "Meio" };
+
+pub const Comparison = enum {
+    patch_30,
+    meio_30,
+    meio_patch,
+    /// Win-rate cells the 30 days has too few games for: Meio against the champion-role
+    unseen,
+
+    const count = 4;
+    const sides = [count][2][]const u8{
+        .{ "patch", "30 days" },
+        .{ "Meio", "30 days" },
+        .{ "Meio", "patch" },
+        .{ "Meio", "parent" },
+    };
+};
+
+/// Sums for one (region, kind, bracket, bucket)
+pub const Stat = struct {
+    /// Target observations in cells the target had
+    target: f64 = 0,
+    /// Of them, in cells where each mode has a number
+    covered: [modes.len]f64 = @splat(0),
+    pairs: [Comparison.count]Pair = @splat(.{}),
+    /// Rate cells with a Meio range, and of them those whose target rate falls in it,
+    /// widened by the target's binomial noise (80% each side, so about 80% or more)
+    ranged: f64 = 0,
+    inside: f64 = 0,
+
+    fn add(s: *Stat, o: Stat) void {
+        s.target += o.target;
+        for (&s.covered, o.covered) |*a, b| a.* += b;
+        for (&s.pairs, o.pairs) |*a, b| a.add(b);
+        s.ranged += o.ranged;
+        s.inside += o.inside;
     }
 };
 
@@ -198,226 +398,281 @@ fn avgError(m: f64, t: Acc) f64 {
     return t.n * ((m - mean) * (m - mean) - variance / t.n);
 }
 
-fn tally(gpa: Allocator, rows: []const Row, opts: Options, d: i32) !Cells {
-    var cells: Cells = .empty;
-    errdefer cells.deinit(gpa);
-    for (rows) |r| {
-        const in30 = r.day >= d - @as(i32, opts.window) and r.day < d;
-        const in_patch = r.latest and r.day < d;
-        const in_target = r.latest and r.day >= d and r.day < d + @as(i32, opts.horizon);
-        if (!in30 and !in_target) continue;
-        const y: f64 = if (r.win) 1 else 0;
-        for (0..2) |region| {
-            if (region == 1 and !r.euw) continue;
-            for ([_]usize{ 0, r.bracket }, 0..) |bracket, i| {
-                if (i == 1 and bracket == 0) continue;
-                const Add = struct {
-                    fn add(cs: *Cells, g: Allocator, k: u64, v: f64, slots: [3]bool) !void {
-                        const e = try cs.getOrPut(g, k);
-                        if (!e.found_existing) e.value_ptr.* = .{};
-                        if (slots[0]) e.value_ptr.w[0].add(v);
-                        if (slots[1]) e.value_ptr.w[1].add(v);
-                        if (slots[2]) e.value_ptr.t.add(v);
-                    }
-                };
-                const slots = [3]bool{ in30, in_patch, in_target };
-                try Add.add(&cells, gpa, key(.champion, region, bracket, r.cr, 0), y, slots);
-                if (r.opp != 0) try Add.add(&cells, gpa, key(.matchup, region, bracket, r.cr, r.opp), y, slots);
-                if (r.ally != 0) try Add.add(&cells, gpa, key(.duo, region, bracket, r.cr, r.ally), y, slots);
-                if (r.gold != no_gold) {
-                    try Add.add(&cells, gpa, key(.gold14, region, bracket, r.cr, r.opp), @floatFromInt(r.gold), slots);
-                }
-                for (r.items) |item| {
-                    if (item != 0) try Add.add(&cells, gpa, key(.build, region, bracket, r.cr, item), 1, slots);
-                }
-            }
-        }
-    }
-    return cells;
+/// k of n inside [lo, hi] widened by k/n's noise at 80% each side
+fn inRange(e: Estimate, n: f64, k: f64) bool {
+    const z = 1.2816;
+    const lo = e.lo - z * @sqrt(e.lo * (1 - e.lo) / n);
+    const hi = e.hi + z * @sqrt(e.hi * (1 - e.hi) / n);
+    return k / n >= lo and k / n <= hi;
 }
 
-fn score(cells: *const Cells, opts: Options, bucket: usize, out: *Results) void {
+fn score(comptime Model: type, cells: *const Cells, model: *const Model, opts: Options, bucket: usize, out: *Results) void {
+    const min: f64 = @floatFromInt(opts.min_games);
     var it = cells.iterator();
     while (it.next()) |e| {
         const k = e.key_ptr.*;
-        const kind: Kind = @fromBackingInt(@intCast(k >> 61));
-        const region: usize = @intCast(k >> 60 & 1);
-        const bracket: usize = @intCast(k >> 58 & 3);
-        const s = &out[region][@backingInt(kind)][bracket][bucket];
+        const u = unkey(k);
+        if (isShare(u.kind) and u.b == 0) continue;
+        const s = &out[u.region][@backingInt(u.kind)][u.bracket][bucket];
         const c = e.value_ptr.*;
-        // A build cell counts the item; its games are the champion-role's
-        const games: Cell = if (kind == .build) blk: {
-            const a: u16 = @intCast(k >> 32 & 0xffff);
-            break :blk cells.get(key(.champion, region, bracket, a, 0)) orelse continue;
-        } else c;
+        const games: Cell = if (isShare(u.kind)) cells.get(anchor(k)) orelse continue else c;
         const n = games.t.n;
-        if (n == 0) continue;
+        if (n == 0 or (u.kind == .gold14 and n < 2)) continue;
         s.target += n;
-        var have: [2]bool = undefined;
+        var have: [modes.len]bool = undefined;
+        var loss: [modes.len]f64 = undefined;
         for (0..2) |m| {
-            have[m] = games.w[m].n >= @as(f64, @floatFromInt(opts.min_games));
-            if (have[m]) s.covered[m] += n;
+            have[m] = games.w[m].n >= min;
+            if (!have[m]) continue;
+            loss[m] = if (u.kind == .gold14)
+                avgError(c.w[m].s / c.w[m].n, c.t)
+            else
+                logLoss(rate(games.w[m], c.w[m].s), n, c.t.s);
         }
-        if (!have[0] or !have[1]) continue;
-        switch (kind) {
-            .gold14 => {
-                if (n < 2) continue;
-                s.cell(n, avgError(c.w[0].s / c.w[0].n, c.t), avgError(c.w[1].s / c.w[1].n, c.t));
-            },
-            else => s.cell(
-                n,
-                logLoss(rate(games.w[0], c.w[0].s), n, c.t.s),
-                logLoss(rate(games.w[1], c.w[1].s), n, c.t.s),
-            ),
+        const est: ?Estimate = if (u.kind != .gold14)
+            model.rate(u.kind, u.region, u.bracket, u.a, u.b)
+        else if (@hasDecl(Model, "avg"))
+            model.avg(u.kind, u.region, u.bracket, u.a, u.b)
+        else
+            null;
+        have[2] = est != null;
+        if (est) |m| {
+            loss[2] = if (u.kind == .gold14)
+                avgError(m.p, c.t)
+            else
+                logLoss(std.math.clamp(m.p, 1e-4, 1 - 1e-4), n, c.t.s);
+            if (u.kind != .gold14 and m.hi > m.lo) {
+                s.ranged += 1;
+                if (inRange(m, n, c.t.s)) s.inside += 1;
+            }
+        }
+        for (have, 0..) |h, m| {
+            if (h) s.covered[m] += n;
+        }
+        const pairs = [_][2]usize{ .{ 1, 0 }, .{ 2, 0 }, .{ 2, 1 } };
+        for (pairs, 0..) |p, i| {
+            if (have[p[0]] and have[p[1]]) s.pairs[i].cell(n, loss[p[0]], loss[p[1]]);
+        }
+        if (isChild(u.kind) and !have[0] and have[2]) {
+            const parent = cells.get(key(.champion, u.region, u.bracket, u.a, 0)) orelse continue;
+            if (parent.w[0].n < min) continue;
+            const ref = logLoss(rate(parent.w[0], parent.w[0].s), n, c.t.s);
+            s.pairs[@backingInt(Comparison.unseen)].cell(n, loss[2], ref);
         }
     }
 }
 
-const Job = struct {
-    rows: []const Row,
-    opts: Options,
-    next: std.atomic.Value(usize) = .init(0),
-    mutex: std.Io.Mutex = .init,
-    io: std.Io,
-    results: *Results,
-    failed: ?anyerror = null,
-
-    fn run(j: *Job) void {
-        const gpa = std.heap.smp_allocator;
-        while (true) {
-            const d = j.next.fetchAdd(1, .monotonic);
-            if (d >= j.opts.origins) return;
-            var cells = tally(gpa, j.rows, j.opts, @intCast(d)) catch |err| {
-                j.failed = err;
-                return;
-            };
-            defer cells.deinit(gpa);
-            var part: Results = @splat(@splat(@splat(@splat(.{}))));
-            score(&cells, j.opts, bucketOf(d), &part);
-            j.mutex.lockUncancelable(j.io);
-            defer j.mutex.unlock(j.io);
-            for (j.results, part) |*a, b| for (a, b) |*a2, b2| for (a2, b2) |*a3, b3| for (a3, b3) |*s, o| s.add(o);
+/// Every origin, Meio fitted on each origin's rows before it. `Meio` has
+/// `fit(gpa, rows, before_day) !Model`, and Model `rate(kind, region, bracket, a, b)
+/// ?Estimate`, `deinit(gpa)` and optionally `avg` (same shape, for gold)
+pub fn scoreAll(comptime Mode: type, gpa: Allocator, io: std.Io, rows: []const Row, opts: Options) !Results {
+    const last: i32 = @as(i32, opts.origins) - 1 + opts.horizon - 1;
+    var days = try sumDays(gpa, io, rows, -@as(i32, opts.window), last, opts.threads);
+    defer days.deinit(gpa);
+    const parts = try gpa.alloc(Results, opts.origins);
+    defer gpa.free(parts);
+    @memset(parts, @splat(@splat(@splat(@splat(.{})))));
+    const Ctx = struct {
+        gpa: Allocator,
+        rows: []const Row,
+        days: *const Days,
+        opts: Options,
+        parts: []Results,
+        fn body(c: @This(), i: usize) !void {
+            const d: i32 = @intCast(i);
+            var cells = try tally(c.gpa, c.days, c.opts, d);
+            defer cells.deinit(c.gpa);
+            if (cells.count() == 0) return;
+            var model = try Mode.fit(c.gpa, c.rows[0..lowerBound(c.rows, d)], d);
+            defer model.deinit(c.gpa);
+            score(@TypeOf(model), &cells, &model, c.opts, bucketOf(i), &c.parts[i]);
         }
+    };
+    try par.forEachUpTo(io, opts.origins, @max(opts.threads, 1), Ctx{
+        .gpa = gpa,
+        .rows = rows,
+        .days = &days,
+        .opts = opts,
+        .parts = parts,
+    }, Ctx.body);
+    var results: Results = @splat(@splat(@splat(@splat(.{}))));
+    for (parts) |*part| {
+        for (&results, part) |*a, *b| for (a, b) |*a2, *b2| for (a2, b2) |*a3, *b3| for (a3, b3) |*s, o| s.add(o);
     }
+    return results;
+}
+
+/// "16.21" as 1621
+fn patchNumber(patch: []const u8) ?u16 {
+    const dot = std.mem.findScalar(u8, patch, '.') orelse return null;
+    const major = std.fmt.parseInt(u16, patch[0..dot], 10) catch return null;
+    const minor = std.fmt.parseInt(u16, patch[dot + 1 ..], 10) catch return null;
+    if (minor >= 100) return null;
+    return major * 100 + minor;
+}
+
+/// A row before T0 is known
+const Pending = struct { ms: i64, patch: u16, row: Row };
+
+/// Each seat of a game as a row (day and patch index set later)
+fn gameRows(g: cubes.Game, euw: bool, out: *[10]Row) []Row {
+    var n: usize = 0;
+    for (g.seats) |s| {
+        if (n == out.len or s.p.champion == 0 or s.p.champion >= 1 << 13) continue;
+        const role = s.p.role;
+        var r: Row = .{
+            .day = 0,
+            .patch = 0,
+            .cr = crOf(s.p.champion, role),
+            .win = s.p.won,
+            .euw = euw,
+            .timeline = s.k != null,
+            .gold = s.p.lead orelse no_gold,
+            .keystone = std.math.cast(u16, s.p.keystone) orelse 0,
+            .bracket = if (s.rank) |i| bracketOf(i) else 0,
+        };
+        if (s.p.opponent != 0 and s.p.opponent < 1 << 13) r.opp = crOf(s.p.opponent, role) else r.gold = no_gold;
+        if (role == .bottom) for (g.seats) |o| {
+            if (o.p.role == .utility and o.p.won == s.p.won and o.p.champion < 1 << 13) r.ally = crOf(o.p.champion, .utility);
+        };
+        if (s.k) |k| {
+            var m: usize = 0;
+            for (k.core[0..k.core_len]) |item| {
+                const id = std.math.cast(u16, item) orelse continue;
+                if (id == 0 or std.mem.findScalar(u16, r.items[0..m], id) != null) continue;
+                r.items[m] = id;
+                m += 1;
+            }
+        }
+        out[n] = r;
+        n += 1;
+    }
+    return out[0..n];
+}
+
+/// A seat's stored tier (store.schema.tiers index) as a curves bracket (1 low .. 3 high)
+fn bracketOf(tier: u8) u2 {
+    if (tier >= store.schema.tiers.len) return 0;
+    const rank = curvesfile.tierRank(store.schema.tiers[tier]) orelse return 0;
+    return @intCast(@backingInt(curvesfile.Bracket.ofRank(rank)));
+}
+
+pub const Loaded = struct {
+    /// Sorted by day
+    rows: []Row,
+    /// The patch's first ranked solo game on EUW1, Unix ms
+    t0: i64,
+    /// Cube days read
+    days: usize,
 };
 
-/// T0: the patch's first ranked solo game on EUW1, Unix ms
-pub fn patchStart(db: store.Db, patch: []const u8) !i64 {
-    return try db.scalar(
-        "SELECT min(game_start) FROM matches WHERE patch = ?1 AND platform = 'EUW1' AND queue_id = 420",
-        .{patch},
-    ) orelse error.PatchNotFound;
-}
+/// Every player row of the cubes' games from T0 - window to the last target day, on the
+/// newest patch or older ones
+pub fn load(gpa: Allocator, io: std.Io, cube_dir: []const u8, opts: Options) !Loaded {
+    const newest = patchNumber(opts.patch) orelse return error.Usage;
+    const s = try cubes.Store.open(gpa, io, cube_dir);
+    defer s.deinit();
+    const days = try s.days(gpa, 0);
+    defer gpa.free(days);
+    const per_day = try gpa.alloc(std.ArrayList(Pending), days.len);
+    @memset(per_day, .empty);
+    defer {
+        for (per_day) |*p| p.deinit(gpa);
+        gpa.free(per_day);
+    }
+    const Ctx = struct {
+        gpa: Allocator,
+        s: *cubes.Store,
+        days: []const i64,
+        out: []std.ArrayList(Pending),
+        newest: u16,
+        until_ms: i64,
+        fn body(c: @This(), i: usize) !void {
+            var arena: std.heap.ArenaAllocator = .init(c.gpa);
+            defer arena.deinit();
+            const d = try c.s.read(c.gpa, arena.allocator(), c.days[i]) orelse return error.StaleCube;
+            var buf: [10]Row = undefined;
+            for (d.games) |g| {
+                if (c.until_ms != 0 and g.start >= c.until_ms) continue;
+                const patch = patchNumber(d.string(g.patch)) orelse continue;
+                if (patch > c.newest) continue;
+                const euw = std.mem.eql(u8, d.string(g.platform), "EUW1");
+                for (gameRows(g, euw, &buf)) |r| try c.out[i].append(c.gpa, .{ .ms = g.start, .patch = patch, .row = r });
+            }
+        }
+    };
+    try par.forEachUpTo(io, days.len, @max(opts.threads, 1), Ctx{
+        .gpa = gpa,
+        .s = s,
+        .days = days,
+        .out = per_day,
+        .newest = newest,
+        .until_ms = opts.until_ms,
+    }, Ctx.body);
 
-/// Ranked solo players of games from `from_ms` to `to_ms`, lane opponents, supports and
-/// gold differences paired within each game
-pub fn load(gpa: Allocator, db: store.Db, patch: []const u8, t0: i64, from_ms: i64, to_ms: i64, legendary: ?*const std.AutoHashMapUnmanaged(u32, void)) ![]Row {
+    var t0: i64 = std.math.maxInt(i64);
+    var patches: std.ArrayList(u16) = .empty;
+    defer patches.deinit(gpa);
+    for (per_day) |p| for (p.items) |r| {
+        if (r.patch == newest and r.row.euw) t0 = @min(t0, r.ms);
+        if (std.mem.findScalar(u16, patches.items, r.patch) == null) try patches.append(gpa, r.patch);
+    };
+    if (t0 == std.math.maxInt(i64)) return error.PatchNotFound;
+    std.mem.sort(u16, patches.items, {}, std.sort.desc(u16));
+
+    const from = t0 - @as(i64, opts.window) * day_ms;
+    const to = t0 + (@as(i64, opts.origins) - 1 + opts.horizon) * day_ms;
     var rows: std.ArrayList(Row) = .empty;
     errdefer rows.deinit(gpa);
-    var stmt = try db.prepare(
-        \\SELECT m.rowid, m.game_start, m.platform = 'EUW1', m.patch = ?1, p.team_id, p.position,
-        \\  p.champion_id, p.win, p.tier, p.gold14, p.item0, p.item1, p.item2, p.item3, p.item4,
-        \\  p.item5
-        \\FROM matches m JOIN participants p ON p.match_id = m.match_id
-        \\WHERE m.queue_id = 420 AND m.remake = 0 AND m.game_start >= ?2 AND m.game_start < ?3
-    );
-    defer stmt.deinit();
-    try stmt.bind(.{ patch, from_ms, to_ms });
-    var game: i64 = -1;
-    var first: usize = 0;
-    var teams: [10]i64 = undefined;
-    var golds: [10]?i64 = undefined;
-    while (try stmt.step()) {
-        const id = stmt.int(0);
-        if (id != game) {
-            pair(rows.items[first..], teams[0..@min(10, rows.items.len - first)], golds[0..@min(10, rows.items.len - first)]);
-            game = id;
-            first = rows.items.len;
+    for (per_day) |p| for (p.items) |r| {
+        if (r.ms < from or r.ms >= to) continue;
+        var x = r.row;
+        x.day = @intCast(@divFloor(r.ms - t0, day_ms));
+        x.patch = @intCast(@min(255, std.mem.findScalar(u16, patches.items, r.patch).?));
+        try rows.append(gpa, x);
+    };
+    std.mem.sortUnstable(Row, rows.items, {}, struct {
+        fn less(_: void, a: Row, b: Row) bool {
+            return a.day < b.day;
         }
-        const role = Role.fromLcu(stmt.bytes(5)) orelse continue;
-        const i = rows.items.len - first;
-        if (i >= 10) continue;
-        var r: Row = .{
-            .day = @intCast(@divFloor(stmt.int(1) - t0, day_ms)),
-            .cr = crOf(stmt.int(6), role),
-            .win = stmt.int(7) != 0,
-            .euw = stmt.int(2) != 0,
-            .latest = stmt.int(3) != 0,
-            .bracket = if (curvesfile.tierRank(stmt.bytes(8))) |t| @intCast(@backingInt(curvesfile.Bracket.ofRank(t))) else 0,
-        };
-        var n: usize = 0;
-        for (10..16) |col| {
-            const item = stmt.int(@intCast(col));
-            if (item <= 0 or item > std.math.maxInt(u16)) continue;
-            if (legendary) |l| if (!l.contains(@intCast(item))) continue;
-            if (std.mem.findScalar(u16, r.items[0..n], @intCast(item)) != null) continue;
-            r.items[n] = @intCast(item);
-            n += 1;
-        }
-        teams[i] = stmt.int(4);
-        golds[i] = stmt.optInt(9);
-        try rows.append(gpa, r);
-    }
-    pair(rows.items[first..], teams[0..@min(10, rows.items.len - first)], golds[0..@min(10, rows.items.len - first)]);
-    return rows.toOwnedSlice(gpa);
+    }.less);
+    return .{ .rows = try rows.toOwnedSlice(gpa), .t0 = t0, .days = days.len };
 }
 
-/// Fills each player's lane opponent, a bottom's support and the gold difference at 14
-fn pair(game: []Row, teams: []const i64, golds: []const ?i64) void {
-    for (game, 0..) |*r, i| {
-        for (game, 0..) |o, j| {
-            if (roleOf(o.cr) != roleOf(r.cr)) {
-                if (teams[j] == teams[i] and roleOf(r.cr) == .bottom and roleOf(o.cr) == .utility) r.ally = o.cr;
-                continue;
-            }
-            if (teams[j] == teams[i]) continue;
-            r.opp = o.cr;
-            if (golds[i]) |a| if (golds[j]) |b| {
-                r.gold = @intCast(a - b);
-            };
-        }
-    }
-}
-
-pub fn run(gpa: Allocator, io: std.Io, db: store.Db, opts: Options, legendary: ?*const std.AutoHashMapUnmanaged(u32, void), out: *std.Io.Writer) !void {
-    const t0 = try patchStart(db, opts.patch);
-    const from = t0 - @as(i64, opts.window) * day_ms;
-    var to = t0 + (@as(i64, opts.origins) - 1 + opts.horizon) * day_ms;
-    if (opts.until_ms != 0) to = @min(to, opts.until_ms);
-    const rows = try load(gpa, db, opts.patch, t0, from, to, legendary);
-    defer gpa.free(rows);
-
-    var results: Results = @splat(@splat(@splat(@splat(.{}))));
-    var job: Job = .{ .rows = rows, .opts = opts, .io = io, .results = &results };
-    var threads: [16]std.Thread = undefined;
-    const n = @min(@max(opts.threads, 1), threads.len, opts.origins);
-    for (threads[0..n]) |*t| t.* = try std.Thread.spawn(.{}, Job.run, .{&job});
-    for (threads[0..n]) |t| t.join();
-    if (job.failed) |err| return err;
-
+/// Loads, scores and writes the markdown report to `out` (and the TSV to `tsv`)
+pub fn run(comptime Mode: type, gpa: Allocator, io: std.Io, cube_dir: []const u8, opts: Options, out: *std.Io.Writer, tsv: ?*std.Io.Writer) !void {
+    const loaded = try load(gpa, io, cube_dir, opts);
+    defer gpa.free(loaded.rows);
+    const results = try scoreAll(Mode, gpa, io, loaded.rows, opts);
+    const end = if (loaded.rows.len > 0) loaded.rows[loaded.rows.len - 1].day else 0;
     try out.print("# Truth test into {s}\n\nT0 (first EUW1 game) {d} ms; origins day 0-{d}, " ++
-        "{d}-day targets, {d}-day raw window, a number from {d} games; {d} player rows read" ++
-        "{s}\n\n", .{
-        opts.patch,                                                                                                                                     t0, opts.origins - 1, opts.horizon, opts.window, opts.min_games, rows.len,
-        if (opts.until_ms != 0 and opts.until_ms < t0 + (@as(i64, opts.origins) - 1 + opts.horizon) * day_ms) "; targets cut short by --until" else "",
+        "{d}-day targets, {d}-day raw window, a raw number from {d} games; {d} player rows " ++
+        "from {d} cube days, the last on day {d}{s}\n\n", .{
+        opts.patch,  loaded.t0, opts.origins - 1,                                                 opts.horizon, opts.window, opts.min_games, loaded.rows.len,
+        loaded.days, end,       if (opts.until_ms != 0) " (games from --until left out)" else "",
     });
     try report(&results, out);
+    if (tsv) |w| try writeTsv(&results, opts.patch, loaded.t0, w);
 }
 
 pub fn report(results: *const Results, out: *std.Io.Writer) !void {
-    try out.writeAll("Rates: milli-nats per target observation (lower is better). Gold: noise-" ++
-        "corrected RMSE in gold, the difference in gold^2. Diff: 30 days minus patch, " ++
-        "+- 2 se over cells (negative: the 30 days predicted better)\n");
+    try out.writeAll("Rates: milli-nats per target observation (lower is better). Gold: " ++
+        "noise-corrected RMSE in gold, differences in gold^2. Each difference is the first " ++
+        "mode's loss minus the second's over the cells both have a number for, +- 2 se " ++
+        "over cells (negative: the first predicted better). Unseen: cells the 30 days has " ++
+        "too few games for, Meio against the champion-role's 30-day rate. In range: share " ++
+        "of Meio's ranges holding the target's rate (its noise added; ~80%+ if honest)\n");
     for (results, regions) |by_kind, region| {
-        try out.print("\n## {s}\n\n| cell | ranks | day | cells | covered 30d / patch | 30 days | patch | diff |\n" ++
-            "| --- | --- | --- | --: | --: | --: | --: | --: |\n", .{region});
+        try out.print("\n## {s}\n\n| cell | ranks | day | cells | covered 30d / patch / Meio | " ++
+            "30 days | patch - 30d | Meio - 30d | Meio - patch | unseen cells | Meio - parent | in range |\n" ++
+            "| --- | --- | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: |\n", .{region});
         for (by_kind, 0..) |by_bracket, k| {
             const kind: Kind = @fromBackingInt(@intCast(k));
             for (by_bracket, brackets) |by_bucket, bracket| {
                 var all: Stat = .{};
                 for (by_bucket) |s| all.add(s);
                 for (by_bucket ++ [1]Stat{all}, buckets ++ [1][]const u8{"all"}) |s, bucket| {
-                    if (s.obs == 0) continue;
+                    if (s.target == 0) continue;
                     try row(out, kind, bracket, bucket, s);
                 }
             }
@@ -426,19 +681,52 @@ pub fn report(results: *const Results, out: *std.Io.Writer) !void {
 }
 
 fn row(out: *std.Io.Writer, kind: Kind, bracket: []const u8, bucket: []const u8, s: Stat) !void {
-    const d = s.diff();
-    try out.print("| {s} | {s} | {s} | {d:.0} | {d:.0}% / {d:.0}% | ", .{
-        kind.label(), bracket, bucket, s.cells, 100 * s.covered[0] / s.target, 100 * s.covered[1] / s.target,
+    const base = s.pairs[@backingInt(Comparison.patch_30)];
+    try out.print("| {s} | {s} | {s} | {d:.0} | {d:.0}% / {d:.0}% / {d:.0}% | ", .{
+        label(kind),                   bracket, bucket, base.cells, 100 * s.covered[0] / s.target, 100 * s.covered[1] / s.target,
+        100 * s.covered[2] / s.target,
     });
-    if (kind == .gold14) {
-        try out.print("{d:.0} | {d:.0} | {d:.0} +- {d:.0} |\n", .{
-            @sqrt(@max(0, s.loss[0] / s.obs)), @sqrt(@max(0, s.loss[1] / s.obs)), d.mean, 2 * d.se,
-        });
-    } else {
-        try out.print("{d:.1} | {d:.1} | {d:.2} +- {d:.2} |\n", .{
-            1000 * s.loss[0] / s.obs, 1000 * s.loss[1] / s.obs, 1000 * d.mean, 2000 * d.se,
-        });
+    const gold = kind == .gold14;
+    if (base.obs == 0) {
+        try out.writeAll(" | ");
+    } else if (gold) {
+        try out.print("{d:.0} | ", .{@sqrt(@max(0, base.reference / base.obs))});
+    } else try out.print("{d:.1} | ", .{1000 * base.reference / base.obs});
+    for (s.pairs, 0..) |p, i| {
+        if (i == @backingInt(Comparison.unseen)) try out.print("{d:.0} | ", .{p.cells});
+        if (p.obs == 0) {
+            try out.writeAll(" | ");
+            continue;
+        }
+        const d = p.diff();
+        if (gold) {
+            try out.print("{d:.0} +- {d:.0} | ", .{ d.mean, 2 * d.se });
+        } else try out.print("{d:.2} +- {d:.2} | ", .{ 1000 * d.mean, 2000 * d.se });
     }
+    if (s.ranged > 0) try out.print("{d:.0}% |\n", .{100 * s.inside / s.ranged}) else try out.writeAll(" |\n");
+}
+
+/// One line per (region, kind, bracket, bucket), for the method page (E9)
+pub fn writeTsv(results: *const Results, patch: []const u8, t0: i64, out: *std.Io.Writer) !void {
+    try out.writeAll("patch\tt0_ms\tregion\tkind\tbracket\tday\ttarget\tcovered_30d\tcovered_patch\tcovered_meio");
+    for (Comparison.sides) |s| {
+        inline for (.{ "cells", "obs", "loss_a", "loss_b", "diff", "se" }) |f| try out.print("\t{s}_{s}_{s}", .{ s[0], s[1], f });
+    }
+    try out.writeAll("\tranged\tinside\n");
+    for (results, regions) |by_kind, region| for (by_kind, 0..) |by_bracket, k| {
+        const kind: Kind = @fromBackingInt(@intCast(k));
+        for (by_bracket, brackets) |by_bucket, bracket| for (by_bucket, buckets) |s, bucket| {
+            if (s.target == 0) continue;
+            try out.print("{s}\t{d}\t{s}\t{s}\t{s}\t{s}\t{d}\t{d}\t{d}\t{d}", .{
+                patch, t0, region, @tagName(kind), bracket, bucket, s.target, s.covered[0], s.covered[1], s.covered[2],
+            });
+            for (s.pairs) |p| {
+                const d = p.diff();
+                try out.print("\t{d}\t{d}\t{d:.6}\t{d:.6}\t{e:.4}\t{e:.4}", .{ p.cells, p.obs, p.challenger, p.reference, d.mean, d.se });
+            }
+            try out.print("\t{d}\t{d}\n", .{ s.ranged, s.inside });
+        };
+    };
 }
 
 test "log loss and the noise-corrected squared error" {
@@ -450,17 +738,35 @@ test "log loss and the noise-corrected squared error" {
     try std.testing.expectApproxEqAbs(4 * (100 - 10000.0 / 3.0 / 4.0), avgError(60, t), 1e-9);
 }
 
-test "rolling origin: windows, target and pairing" {
+/// Says 0.5 for every win rate with a range of 0.4-0.6, nothing for shares
+const HalfMeio = struct {
+    const Model = struct {
+        fn rate(_: *const Model, kind: Kind, _: u1, _: u2, _: u16, _: u32) ?Estimate {
+            if (isShare(kind)) return null;
+            return .{ .p = 0.5, .lo = 0.4, .hi = 0.6, .own = 0 };
+        }
+        fn deinit(_: *Model, _: Allocator) void {}
+    };
+    fn fit(_: Allocator, rows: []const Row, before: i32) !Model {
+        for (rows) |r| std.debug.assert(r.day < before);
+        return .{};
+    }
+};
+
+test "rolling origin: windows, target, kinds and Meio" {
     const gpa = std.testing.allocator;
     const top: u16 = crOf(1, .top);
     const opp: u16 = crOf(2, .top);
     // Day -1: champion 1 wins on the old patch; day 0 and 1 on the new: a loss, a win
     const rows = [_]Row{
-        .{ .day = -1, .cr = top, .opp = opp, .win = true, .euw = false, .latest = false, .bracket = 0 },
-        .{ .day = 0, .cr = top, .opp = opp, .win = false, .euw = true, .latest = true, .bracket = 3 },
-        .{ .day = 1, .cr = top, .opp = opp, .win = true, .euw = true, .latest = true, .bracket = 3 },
+        .{ .day = -1, .patch = 1, .cr = top, .opp = opp, .win = true, .euw = false, .bracket = 0, .timeline = true, .items = .{ 3071, 0, 0, 0, 0, 0 }, .keystone = 8010 },
+        .{ .day = 0, .patch = 0, .cr = top, .opp = opp, .win = false, .euw = true, .bracket = 3, .timeline = true, .items = .{ 3071, 0, 0, 0, 0, 0 }, .keystone = 8010 },
+        .{ .day = 1, .patch = 0, .cr = top, .opp = opp, .win = true, .euw = true, .bracket = 3, .timeline = true, .items = .{ 3071, 6610, 0, 0, 0, 0 }, .keystone = 8010 },
     };
-    var cells = try tally(gpa, &rows, .{ .patch = "x", .horizon = 1 }, 1);
+    const opts: Options = .{ .patch = "x", .horizon = 1, .origins = 2, .min_games = 1, .threads = 1 };
+    var days = try sumDays(gpa, std.testing.io, &rows, -30, 1, 1);
+    defer days.deinit(gpa);
+    var cells = try tally(gpa, &days, opts, 1);
     defer cells.deinit(gpa);
     const c = cells.get(key(.champion, 0, 0, top, 0)).?;
     // Before day 1: both games in 30 days, the day-0 loss in the patch; target: day 1
@@ -469,24 +775,95 @@ test "rolling origin: windows, target and pairing" {
     try std.testing.expectEqual(@as(f64, 1), c.w[1].n);
     try std.testing.expectEqual(@as(f64, 0), c.w[1].s);
     try std.testing.expectEqual(@as(f64, 1), c.t.s);
-    const euw = cells.get(key(.matchup, 1, 3, top, opp)).?;
-    try std.testing.expectEqual(@as(f64, 1), euw.w[0].n);
+    try std.testing.expectEqual(@as(f64, 1), cells.get(key(.matchup, 1, 3, top, opp)).?.w[0].n);
+    // Item shares out of timelined games; the target's new item scored, the window's kept
+    try std.testing.expectEqual(@as(f64, 2), cells.get(key(.build, 0, 0, top, 3071)).?.w[0].s);
+    try std.testing.expectEqual(@as(f64, 1), cells.get(key(.build, 0, 0, top, 6610)).?.t.s);
+    try std.testing.expectEqual(@as(f64, 1), cells.get(key(.keystone, 0, 0, top, 8010)).?.w[0].s);
+    try std.testing.expectEqual(@as(f64, 2), cells.get(key(.rune, 0, 0, top, 0)).?.w[0].n);
 
     var results: Results = @splat(@splat(@splat(@splat(.{}))));
-    score(&cells, .{ .patch = "x", .min_games = 1 }, 1, &results);
+    var model: HalfMeio.Model = .{};
+    score(HalfMeio.Model, &cells, &model, opts, 1, &results);
     const s = results[0][@backingInt(Kind.champion)][0][1];
-    try std.testing.expectEqual(@as(f64, 1), s.obs);
+    const base = s.pairs[@backingInt(Comparison.patch_30)];
+    try std.testing.expectEqual(@as(f64, 1), base.obs);
     // 30 days says 0.5 (1.5/3), the patch 0.25 (0.5/2): the win costs more under the patch
-    try std.testing.expectApproxEqAbs(-@log(0.5) + @log(0.25), s.diff().mean, 1e-12);
+    try std.testing.expectApproxEqAbs(-@log(0.25) + @log(0.5), base.diff().mean, 1e-12);
+    // Meio's 0.5 ties the 30 days, beats the patch; its range holds the win
+    try std.testing.expectApproxEqAbs(0, s.pairs[@backingInt(Comparison.meio_30)].diff().mean, 1e-12);
+    try std.testing.expect(s.pairs[@backingInt(Comparison.meio_patch)].diff().mean < 0);
+    try std.testing.expectEqual(@as(f64, 1), s.ranged);
+    try std.testing.expectEqual(@as(f64, 1), s.inside);
+    try std.testing.expectEqual(@as(f64, 0), results[0][@backingInt(Kind.build)][0][1].covered[2]);
 
-    var game = [_]Row{
-        .{ .day = 0, .cr = crOf(1, .bottom), .win = true, .euw = true, .latest = true, .bracket = 0 },
-        .{ .day = 0, .cr = crOf(3, .utility), .win = true, .euw = true, .latest = true, .bracket = 0 },
-        .{ .day = 0, .cr = crOf(4, .bottom), .win = false, .euw = true, .latest = true, .bracket = 0 },
+    // Unseen: with 3 games needed, the matchup's 2 are too few and so are its
+    // champion-role's: nothing. A third game against someone else makes the parent
+    var unseen: Results = @splat(@splat(@splat(@splat(.{}))));
+    const at3: Options = .{ .patch = "x", .horizon = 1, .min_games = 3 };
+    score(HalfMeio.Model, &cells, &model, at3, 1, &unseen);
+    const unseen_i = @backingInt(Comparison.unseen);
+    try std.testing.expectEqual(@as(f64, 0), unseen[0][@backingInt(Kind.matchup)][0][1].pairs[unseen_i].cells);
+    var more = rows ++ [1]Row{.{ .day = -2, .patch = 1, .cr = top, .opp = crOf(5, .top), .win = true, .euw = false, .bracket = 0 }};
+    std.mem.sortUnstable(Row, &more, {}, struct {
+        fn less(_: void, a: Row, b: Row) bool {
+            return a.day < b.day;
+        }
+    }.less);
+    var days3 = try sumDays(gpa, std.testing.io, &more, -30, 1, 1);
+    defer days3.deinit(gpa);
+    var cells3 = try tally(gpa, &days3, at3, 1);
+    defer cells3.deinit(gpa);
+    score(HalfMeio.Model, &cells3, &model, at3, 1, &unseen);
+    const p = unseen[0][@backingInt(Kind.matchup)][0][1].pairs[unseen_i];
+    try std.testing.expectEqual(@as(f64, 1), p.cells);
+    // Parent 30 days: 2 wins of 3, (2.5 / 4); Meio's 0.5 is worse on the win
+    try std.testing.expectApproxEqAbs(-@log(0.5) + @log(2.5 / 4.0), p.diff().mean, 1e-12);
+
+    const all = try scoreAll(HalfMeio, gpa, std.testing.io, &rows, opts);
+    try std.testing.expectEqual(@as(f64, 1), all[0][@backingInt(Kind.champion)][0][0].target);
+    try std.testing.expectEqual(@as(f64, 1), all[0][@backingInt(Kind.champion)][0][1].target);
+}
+
+test "a cube game's seats as rows" {
+    const builds = @import("builds.zig");
+    var k: builds.Picks = .{};
+    k.core[0] = 3071;
+    k.core[1] = 3071;
+    k.core[2] = 6610;
+    k.core_len = 3;
+    const seats = [_]builds.Seat{
+        .{ .p = .{ .champion = 1, .role = .bottom, .won = true, .keystone = 8008, .opponent = 2, .lead = 300 }, .k = k, .rank = 0 },
+        .{ .p = .{ .champion = 3, .role = .utility, .won = true }, .k = null, .rank = null },
+        .{ .p = .{ .champion = 2, .role = .bottom, .won = false, .opponent = 1, .lead = -300 }, .k = null, .rank = 9 },
+        .{ .p = .{ .champion = 4, .role = .utility, .won = false }, .k = null, .rank = 4 },
     };
-    pair(&game, &.{ 100, 100, 200 }, &.{ 5000, null, 4200 });
-    try std.testing.expectEqual(crOf(3, .utility), game[0].ally);
-    try std.testing.expectEqual(crOf(4, .bottom), game[0].opp);
-    try std.testing.expectEqual(@as(i32, 800), game[0].gold);
-    try std.testing.expectEqual(@as(u16, 0), game[2].ally);
+    const g: cubes.Game = .{
+        .start = 0,
+        .rowid = 1,
+        .source = 0,
+        .platform = 0,
+        .patch = 0,
+        .hash = 0,
+        .curves = .none,
+        .lanes = &.{},
+        .timeline = true,
+        .seats = &seats,
+    };
+    var buf: [10]Row = undefined;
+    const rows = gameRows(g, true, &buf);
+    try std.testing.expectEqual(@as(usize, 4), rows.len);
+    try std.testing.expectEqual(crOf(2, .bottom), rows[0].opp);
+    try std.testing.expectEqual(crOf(3, .utility), rows[0].ally);
+    try std.testing.expectEqual(crOf(4, .utility), rows[2].ally);
+    try std.testing.expectEqual(@as(i32, 300), rows[0].gold);
+    try std.testing.expectEqual([6]u16{ 3071, 6610, 0, 0, 0, 0 }, rows[0].items);
+    try std.testing.expect(rows[0].timeline and !rows[2].timeline);
+    try std.testing.expectEqual(@as(u16, 8008), rows[0].keystone);
+    // Challenger, Iron, Emerald
+    try std.testing.expectEqual(@as(u2, 3), rows[0].bracket);
+    try std.testing.expectEqual(@as(u2, 1), rows[2].bracket);
+    try std.testing.expectEqual(@as(u2, 2), rows[3].bracket);
+    try std.testing.expectEqual(@as(u2, 0), rows[1].bracket);
+    try std.testing.expectEqual(@as(?u16, 1621), patchNumber("16.21"));
 }

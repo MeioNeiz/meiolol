@@ -62,13 +62,12 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   (Jacob confirms). (c) Regions: EUW and every region now, one region each later
 - E2 The truth test, before anything ships. A rolling origin as in patch-transfer.md:
   for each day d of the newest patch, build each mode from games before d, then score
-  its numbers against the next 7 days' games on that patch, per cell (champion-role,
-  matchup, duo, gold at 14, build share), by rank bracket and day since the patch.
-  Scores: binomial log loss for rates, squared error with the cell's noise subtracted
-  for averages. Gate: the estimate beats both raw windows in every day-since-patch
-  bucket for that cell kind; a cell kind ships only once it passes. Two boundaries to
-  replay: 16.20 to 16.21 now, 16.21 to 16.22 live. Start: src/eval.zig's split code,
-  patch-transfer Step 2 (day-since-patch scoring), meiolol-lab for anything heavy
+  its numbers against the next 7 days' games on that patch, per cell kind, by rank
+  bracket and day since the patch. Scores: binomial log loss for rates, squared error
+  with the cell's noise subtracted for averages. Gate: Meio beats both raw windows in
+  every day-since-patch bucket for that cell kind; a cell kind ships only once it
+  passes. Plan (E2 below): Meio as a third mode, the locks' cell kinds, read from the
+  cubes, scored daily on the box for the method page
 - E3 Champion-role win rate, the first estimated number. logit p = a[c,r] (shared
   across patches) + d[c,r,patch] (shrunk toward 0, looser for changed champions: the
   winner of patch-transfer's A2-A6) + b[c,r,bracket] (shrunk toward a role-wide rank
@@ -115,12 +114,59 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   the model gains what the windows can't give it. Measured in docs/model.md like any
   model change; lab-frontier.md and patch-transfer.md are where the terms are proved
 
+### Meio model (E3-E6, src/meio.zig)
+
+What Jacob sees: in Meio mode every rate on the champion page is one number with an
+80% range, and every lock (keystone, opponent, item, rank) gives one, even a combination
+nobody played: the parts it is made of plus a shrunk "this pair is special" term, with a
+wider range the fewer games it has. Each says what it leans on (Trust rules).
+
+The model, per champion-role cr on the logit scale; every term a random effect shrunk
+to 0, one variance per term kind, estimated from the fit (MacKay, as patch-transfer A2):
+- E3: a[cr] + d[cr, patch] + b[cr, bracket] + g[cr] on EUW1. Newest patch's number: a +
+  d[0]. Day 0 has no d[0] games, so a carries it; d[0] takes over as games arrive
+- Conditional cells, cr with x: E3(cr) + m[x] + i[cr, x]. Opponent o (matchups, E4):
+  m = minus o's own E3 number (both sides of one lane); duo: plus the support's.
+  Keystone and item: m[x] the x's role-wide effect. i shrunk to 0 with its own sd per
+  kind; an unseen x gets i = 0 and the prior sd in its range. Interaction patch offsets
+  only if E2 shows pair residuals move across a patch (E4's question)
+- Shares (build, rune): multinomial over a champion-role's options, last patch's shares
+  as the prior for options the patch left alone (E6). Averages (gold at 14): the same
+  additive form, Gaussian (E5)
+- Item win rates carry their selection (items finished in longer games); Meio predicts
+  "win rate with the item" as the raw windows do, not the item's effect
+
+Data: truth's rows from the day cubes (meio.Row: champion-role, opponent, support,
+keystone, finished items, gold lead at 14, bracket, EUW1, patch slot, day). Fit per
+origin day; seconds per fit, so the box can refit daily.
+
+Steps, each measured in `meiolol truth` (E2) with Meio as the third mode: per kind,
+day bucket, region and bracket, Meio minus each raw mode paired on cells where both
+have a number, Meio on cells the 30 days can't cover against the parent rate, and the
+share of target rates inside the range (noise widened). A kind passes when Meio beats
+both raw modes in every day bucket; boundaries 16.20 -> 16.21 (snap-2004Z) and
+16.21 -> 16.22 (truth's fresh snapshot)
+- M1 E3 as above: committed (ebb9ebaa), unit tested on planted moves
+- M2 E3 variants: random-walk patches (d[0]'s prior centred on d[1]: last patch's
+  number, not the window's); half-life 7 and 14 days; changed champions looser (A3);
+  bracket sd per role. Keep the simplest that wins
+- M3 Matchups and duos (E4): committed (d30cab86). M4 keystone win rate and M5 item win
+  rate: committed (21fdd222), each champion-role centred by its own mix first (one that
+  only takes a weak keystone gains the full gap on a strong one). Shares (rune, build)
+  and M6 gold at 14 next
+- M7 The locks' wish list (meio-locks): which combinations a page asks for, and which
+  Meio can give (two locks at once: main effects plus both pair terms)
+
 Order: E7 next, as the base: on its own it fixes the matchup builds strip per
 period and rank in every block. Then E2, then E3-E5 as each passes the gate, then E9 and
 the default switch (E0b). E10 follows E7; E11 follows each estimate that passes E2.
 
 ## Status
 
+- E2 (meio-truth): `meiolol truth` reads the day cubes, scores Meio as a third mode
+  over eight cell kinds (the locks' keystone, item and rank cuts), with unseen-combo and
+  range checks and `--tsv` for the method page. First read: Meio passes on matchups,
+  trails on champion-role (docs/model.md "Meio in the truth test"). 16.21 -> 16.22: day 0 only so far
 - Champion page blocks follow the region and period picks: players' win rates, the
   builds strip, how hard to pick up, the pool section and the patch line
 - Scope chips (E1, ui.scopechip) on every block of the champion, matchup, build and
@@ -172,6 +218,34 @@ Snapshot snap-20261023T2004Z on the Mac (M-series, ReleaseFast; 24 days, 1.6M ga
   07:00; 23:30 the night before ~30 min). First cube run: 31 days built in ~17 min
   (2.66M games, 2.85 GB, ~95 MB a 100k-game day), then fit and files ~9 min, ~26 min.
   On C01 the fit, not the read, is the larger part
+
+### E2 plan: Meio in the truth test, daily
+
+What Jacob sees: one table per boundary (and, daily, the live patch) with, per cell kind,
+rank bracket and day since the patch, how much Meio beats or trails each raw mode, how
+it does on combinations the 30 days has too few games for, and whether its ranges are
+honest. The method page (E9) shows the same numbers from a daily file.
+
+- Modes: raw 30 days, raw patch, Meio (src/meio.zig: `fit(rows before d)`, then
+  `rate(kind, region, bracket, a, b) ?Estimate`; interface in the team's common.md).
+  Comparisons, each paired over the cells both sides have a number for: patch - 30d,
+  Meio - 30d, Meio - patch; unseen: win-rate cells the 30 days has under 10 games for,
+  Meio against the champion-role's 30-day rate (the site's fallback); in range: share of
+  Meio's 80% ranges, widened by the target's noise, that hold the target's rate
+- Cell kinds, for the champion page locks: champion-role, matchup (x opponent), duo,
+  gold at 14, item share, item win rate (x item), keystone win rate (x keystone),
+  keystone share; x rank is the bracket dimension of every kind
+- Data: the day cubes (no player keys, kept current by the box's web loop), so a fresh
+  "snapshot" is a copy of data/cubes/days (~3.3 GB); old snapshots need their cubes
+  rebuilt by the same build (formatKey)
+- Cost: each day's cells summed once, then each origin adds up its days; Meio fits once
+  per origin. Daily on the box: `meiolol truth --patch P --tsv FILE` after the web
+  loop's cube refresh, as a box job, while the patch is newest
+- Boundaries: 16.21 -> 16.22 live (EUW1 from 4 Nov 06:40Z), scored as its days arrive;
+  16.20 -> 16.21 (EUW1 from 21 Oct 05:12Z) on the box's cubes, which keep 31 days: its
+  origins before day 15 see a raw window shorter than 30 days
+- Done when: Meio's champion-role passes or fails the gate on 16.21 -> 16.22 with
+  every bucket filled, the daily TSV is on the box, and each kind's verdict is in Status
 
 ### E2 baseline, raw 30 days vs raw patch
 

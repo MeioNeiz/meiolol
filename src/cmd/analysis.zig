@@ -14,6 +14,7 @@ const objectives = @import("../objectives.zig");
 const winchance = @import("../winchance.zig");
 const playstyle = @import("../playstyle.zig");
 const truth = @import("../truth.zig");
+const cubes = @import("../cubes.zig");
 const store = @import("store");
 const Date = @import("../date.zig").Date;
 const main = @import("../main.zig");
@@ -328,19 +329,23 @@ pub fn cmdPlaystyle(c: *Cmd) !u8 {
 pub const usage_truth =
     \\  truth       E2's truth test (docs/plan/estimates.md): each data mode's numbers from
     \\              games before day d of a patch, scored on the patch's next days, per
-    \\              cell kind, region, rank and day (markdown on stdout). Read-only
+    \\              cell kind, region, rank and day (markdown on stdout). Reads DATA/cubes
     \\              --patch P        the newest patch, whose boundary is replayed
-    \\              --origins N      days 0..N-1 since the patch (default 7)
+    \\              --origins N      days 0..N-1 since the patch (default 14)
     \\              --horizon N      target days after each (default 7)
     \\              --window N       the raw window's days (default 30)
-    \\              --min-games N    a mode's number from N games (default 10)
+    \\              --min-games N    a raw number from N games (default 10)
     \\              --until 2026-10-20T14:44Z  never read games from then (a test window)
+    \\              --tsv PATH       also one line per cell kind, region, rank and day
+    \\              --no-meio        the raw modes alone (no estimate fitted)
     \\              --threads N      default 4
     \\
 ;
 
 pub fn cmdTruth(c: *Cmd) !u8 {
     var o: truth.Options = .{ .patch = "" };
+    var tsv_path: ?[]const u8 = null;
+    var with_meio = true;
     while (c.next()) |_| {
         if (c.is("--patch")) {
             o.patch = try c.value();
@@ -354,34 +359,29 @@ pub fn cmdTruth(c: *Cmd) !u8 {
             o.min_games = try c.int(u32);
         } else if (c.is("--until")) {
             o.until_ms = parseUtc(try c.value()) orelse return error.Usage;
+        } else if (c.is("--tsv")) {
+            tsv_path = try c.value();
+        } else if (c.is("--no-meio")) {
+            with_meio = false;
         } else if (c.is("--threads")) {
             o.threads = try c.int(u8);
         } else return error.Usage;
     }
     if (o.patch.len == 0 or o.origins == 0) return error.Usage;
-    const gpa = c.init.gpa;
     const io = c.init.io;
-    const db = try store.schema.openReadOnly(gpa, c.data_dir);
-    defer db.close();
-
-    // Finished items, any patch (DATA/legendaries.tsv); every item when it is missing
-    var legendary: std.AutoHashMapUnmanaged(u32, void) = .empty;
-    const path = try std.fs.path.join(c.arena, &.{ c.data_dir, "legendaries.tsv" });
-    if (std.Io.Dir.cwd().readFileAlloc(io, path, c.arena, .limited(16 << 20))) |text| {
-        var lines = std.mem.tokenizeScalar(u8, text, '\n');
-        while (lines.next()) |line| {
-            const tab = std.mem.findScalar(u8, line, '\t') orelse continue;
-            try legendary.put(c.arena, std.fmt.parseInt(u32, line[tab + 1 ..], 10) catch continue, {});
-        }
-    } else |err| switch (err) {
-        error.FileNotFound => std.log.info("no {s}: build shares count every item", .{path}),
-        else => return err,
-    }
-
+    var tsv_buf: [64 * 1024]u8 = undefined;
+    const tsv_file = if (tsv_path) |p| try std.Io.Dir.cwd().createFile(io, p, .{}) else null;
+    defer if (tsv_file) |f| f.close(io);
+    var tsv = if (tsv_file) |f| f.writer(io, &tsv_buf) else null;
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
-    try truth.run(gpa, io, db, o, if (legendary.count() > 0) &legendary else null, &stdout.interface);
+    const dir = try cubes.dirIn(c.arena, c.data_dir);
+    const tsv_w = if (tsv) |*w| &w.interface else null;
+    if (with_meio) {
+        try truth.run(truth.Meio, c.init.gpa, io, dir, o, &stdout.interface, tsv_w);
+    } else try truth.run(truth.NoMeio, c.init.gpa, io, dir, o, &stdout.interface, tsv_w);
     try stdout.interface.flush();
+    if (tsv) |*w| try w.interface.flush();
     return 0;
 }
 
