@@ -227,7 +227,7 @@ fn runes(a: std.mem.Allocator, f: *const File, b: File.Build, usual: ?File.Rows)
 /// points from its usual in any EUW matchup with a file (16.20, 2,002 pairs)
 const shift_points = 10;
 /// Under this many players a rune's share is left out either way
-const shift_games = bp.rate_games;
+const shift_games = 100;
 
 /// The usual share of rune `id`, %, when the matchup's (`n` of `rune`) is shift_points
 /// or more away

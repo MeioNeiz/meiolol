@@ -35,10 +35,8 @@ const N = tree.N;
 pub const name = "BuildPanel";
 pub const scope = .{".c-build"};
 
-/// Under this many games an option shows no win rate (±10 points at 100 games)
-pub const rate_games = 100;
-/// Under this many games an option fades, can't be "best" and sorts after the others by
-/// win rate
+/// Under this many games an option can't be "best" and sorts after the others by win
+/// rate. Its rate fades by its range instead (win)
 pub const solid_games = 400;
 /// Options in a closed cell
 pub const shown = 3;
@@ -150,11 +148,22 @@ pub fn rate(games: u32, wins: u32) f64 {
     return 100 * @as(f64, @floatFromInt(wins)) / @as(f64, @floatFromInt(@max(games, 1)));
 }
 
-/// "49.7" coloured on the scale around `ref`, or a dot under rate_games
+/// "49.7" coloured on the scale around `ref` with its 80% range ("±3.1"), never hidden
+/// for few games and faded past fmt.wide_range (J35); whole numbers once the range is
+/// 10 or wider ("48 ±14"). A dot with no games
 pub fn win(h: *H, games: u32, wins: u32, ref: f64) N {
-    if (games < rate_games) return h.span(.{ .class = "w" }, .{"·"});
+    if (games == 0) return h.span(.{ .class = "w" }, .{"·"});
     const r = rate(games, wins);
-    return h.span(.{ .class = "w", .style = h.vars(.{ .c = fmt.WrColour{ .pts = r - ref } }) }, .{phrase.num(h, .dec, r)});
+    const pm = fmt.range(games, wins);
+    return h.span(.{ .class = "w", .data_wide = pm > fmt.wide_range, .style = h.vars(.{ .c = fmt.WrColour{ .pts = r - ref } }) }, .{
+        rough(h, r, pm),
+        h.small(.{}, .{ "±", rough(h, pm, pm) }),
+    });
+}
+
+fn rough(h: *H, v: f64, pm: f64) tree.Text {
+    if (pm < 10) return phrase.num(h, .dec, v);
+    return phrase.num(h, .int, @as(u32, @intFromFloat(@round(@max(v, 0)))));
 }
 
 /// "52%", "<1%"
@@ -218,7 +227,7 @@ pub const Row = struct {
         return if (r.o.games < solid_games) -1 else rate(r.o.games, r.o.wins);
     }
     fn ownSort(r: *const Row) f64 {
-        return if (r.o.games < rate_games) -100 else rate(r.o.games, r.o.wins) - r.c.own;
+        return rate(r.o.games, r.o.wins) - r.c.own;
     }
 
     fn what(h: *H, r: *const Row) N {
@@ -273,8 +282,8 @@ pub const Row = struct {
     }
 
     fn ownCell(h: *H, r: *const Row) N {
-        if (r.o.games < rate_games) return h.span(.{ .class = "own" }, .{"·"});
-        return h.span(.{ .class = "own" }, .{phrase.num(h, .points, rate(r.o.games, r.o.wins) - r.c.own)});
+        const wide = fmt.range(r.o.games, r.o.wins) > fmt.wide_range;
+        return h.span(.{ .class = "own", .data_wide = wide }, .{phrase.num(h, .points, rate(r.o.games, r.o.wins) - r.c.own)});
     }
 
     fn gamesCell(h: *H, r: *const Row) N {
@@ -295,7 +304,8 @@ pub const Table = table.DataTable(Row, .{
     },
     .default_sort = 1,
     .games = Row.games,
-    .thin = solid_games,
+    // Each rate fades by its range (win), not the row by its games
+    .thin = 0,
     .compact = true,
 });
 
@@ -640,7 +650,7 @@ pub const BuildPanel = struct {
     /// The level path's grid, then its pick, won and games in the cells' columns
     fn pathRow(p: *BuildPanel, h: *H, r: *const Row) N {
         const ref = p.ctx[@backingInt(Kind.skill_path)].ref;
-        return h.div(.{ .class = "lp", .data_state = if (r.o.games < solid_games) "thin" else null }, .{
+        return h.div(.{ .class = "lp" }, .{
             skillgrid.order(h, r.o.keys),
             h.span(.{ .class = "p" }, .{pickText(h, r.share())}),
             win(h, r.o.games, r.o.wins, ref),
@@ -710,6 +720,9 @@ pub const css =
     \\  .c-build .what > .min, .c-build .own { color: var(--faint); font-size: var(--fs-s); }
     \\  .c-build .what > .min { margin-left: var(--sp-2); }
     \\  .c-build :is(td, .lp) > .w { font-weight: var(--w-b); color: var(--c, var(--faint)); }
+    \\  .c-build .w > small { display: block; margin-top: -1px; font-size: var(--fs-xs); font-weight: var(--w-r);
+    \\    line-height: 1.1; color: var(--faint); }
+    \\  .c-build [data-wide] { opacity: 0.55; }
     \\  .c-build .keys { font-family: ui-monospace, monospace; letter-spacing: 0.06em; color: var(--t2); }
     \\  .c-build .keys > b { color: var(--text); }
     \\  .c-build .keys > .ar { color: var(--faint); margin: 0 4px; font-family: var(--font); }
@@ -724,7 +737,6 @@ pub const css =
     \\  .c-build .lp > .c-skills > .grid { font-size: var(--fs-s); gap: 3px 2px; }
     \\  .c-build .lp > .c-skills > .grid > i { height: 22px; }
     \\  .c-build .lp > .p { color: var(--t2); }
-    \\  .c-build .lp[data-state="thin"] > :not(.c-skills) { opacity: 0.55; }
     \\  .c-build .what > .best { margin-left: 4px; font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--accent); }
     \\  .c-build .what > .usual { margin-left: 4px; font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; }
     \\  .c-build :is(.slot, .levels)[data-usual] > :not(.sh) { opacity: 0.55; }

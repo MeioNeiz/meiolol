@@ -100,7 +100,7 @@ pub const Options = struct {
     /// or more; null for none
     min_matchup_games: ?u32 = null,
     /// By the lane opponent's reach, the gold lead on them or the keystone: groups with
-    /// this many players; under it the panel shows no win rate (ui.buildpanel.rate_games)
+    /// this many players
     min_split_games: u32 = 100,
 };
 

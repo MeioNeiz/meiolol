@@ -45,7 +45,7 @@ fn grid(h: *H, keys: []const u8) N {
 
 /// "39% 50.1 10.4k" under the grid
 fn figures(h: *H, share: f64, games: u32, wins: u32, ref: f64) N {
-    return h.div(.{ .class = "under", .data_state = if (games < bp.solid_games) "thin" else null }, .{
+    return h.div(.{ .class = "under" }, .{
         h.span(.{ .class = "p" }, .{bp.pickText(h, share)}),
         bp.win(h, games, wins, ref),
         h.span(.{ .class = "g" }, .{bp.shortCount(h, games)}),
@@ -67,7 +67,8 @@ pub const css =
     \\  .c-skills > .under > .p { color: var(--t2); }
     \\  .c-skills > .under > .w { font-weight: var(--w-b); color: var(--c, var(--faint)); min-width: 34px; text-align: right; }
     \\  .c-skills > .under > .g { color: var(--faint); font-size: var(--fs-xs); min-width: 30px; text-align: right; }
-    \\  .c-skills > .under[data-state="thin"] > * { opacity: 0.55; }
+    \\  .c-skills > .under > .w > small { margin-left: 3px; font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
+    \\  .c-skills > .under > .w[data-wide] { opacity: 0.55; }
     \\}
     \\
 ;
@@ -75,7 +76,7 @@ pub const css =
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.add("most played order", view(h, .{ .keys = "WQEQQRQEQEREEWWRWW", .games = 10381, .wins = 5200, .share = 39 }, 50.6));
-    g.add("thin: under 400 games", view(h, .{ .keys = "QWEQQRQWQWRWWEEREE", .games = 237, .wins = 106, .share = 0.9 }, 50.6));
+    g.add("few games: a wide range, faded", view(h, .{ .keys = "QWEQQRQWQWRWWEEREE", .games = 237, .wins = 106, .share = 0.9 }, 50.6));
     g.add("one game's order", order(h, "QEWQQRQEQERE"));
     g.add("game ended before 18", view(h, .{ .keys = "QEWQQRQEQER", .games = 1200, .wins = 640, .share = 5 }, 50.6));
 }

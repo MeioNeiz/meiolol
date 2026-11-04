@@ -1,7 +1,7 @@
 //! RuneTree: every rune players took, laid out as in game (trees side by side, keystones
 //! on top, then the stat shards), each with its pick share (bar and %), win rate and
 //! games; the figures' names said once. Win rates are coloured against their row's (a
-//! row is one choice), none under bp.rate_games, faded under bp.solid_games. The top rune
+//! row is one choice), each with its range, faded when wide (bp.win). The top rune
 //! pages sit above as cards; the chosen one lights its runes. In a narrow container the
 //! trees fold to the chosen page's (Every tree opens the rest). A page whose keystone
 //! the host has builds for (locks) locks on tap, and the host shows the rest of the build
@@ -192,7 +192,7 @@ pub const RuneTree = struct {
 
     fn pageCard(t: *RuneTree, h: *H, p: Page, i: u8) N {
         const share = 100 * @as(f64, @floatFromInt(p.games)) / @as(f64, @floatFromInt(@max(t.data.games, 1)));
-        return h.div(.{ .class = "page", .key = i, .data_state = if (p.games < bp.solid_games) "thin" else null, .data_lock = t.lock and t.page == i }, .{
+        return h.div(.{ .class = "page", .key = i, .data_lock = t.lock and t.page == i }, .{
             h.button(.{
                 .type = "button",
                 .class = "ks",
@@ -203,7 +203,7 @@ pub const RuneTree = struct {
                 art.view(h, p.keystone, .{ .k = .rune, .px = .@"28", .named = false }),
                 art.view(h, p.second, .{ .k = .rune, .px = .@"16", .named = false }),
             }),
-            h.span(.{ .class = "fig" }, .{ bp.win(h, p.games, p.wins, bp.rate(t.data.games, t.data.wins)), ci(h, p.games, p.wins) }),
+            h.span(.{ .class = "fig" }, .{bp.win(h, p.games, p.wins, bp.rate(t.data.games, t.data.wins))}),
             h.span(.{ .class = "g" }, .{ bp.shortCount(h, p.games), " · ", bp.pickText(h, share) }),
         });
     }
@@ -246,7 +246,6 @@ pub const RuneTree = struct {
             .key = r.id,
             .data_share = share_attr,
             .data_state = state,
-            .data_thin = r.games < bp.solid_games,
             .on_click = h.on(t, .{ .rune = @bitCast(pos) }),
         }, kids);
     }
@@ -293,14 +292,6 @@ pub const RuneTree = struct {
     }
 };
 
-/// "±1.0": a 95% range, faint, beside a page's rate
-fn ci(h: *H, games: u32, wins: u32) ?N {
-    if (games < bp.rate_games) return null;
-    const n: f64 = @floatFromInt(games);
-    const p = @as(f64, @floatFromInt(wins)) / n;
-    return h.span(.{ .class = "ci" }, .{ "±", phrase.num(h, .dec, 196 * @sqrt(p * (1 - p) / n)) });
-}
-
 pub const css =
     \\@layer components {
     \\  .c-runes { container-type: inline-size; display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
@@ -319,8 +310,10 @@ pub const css =
     \\  .c-runes .page > .ks:focus-visible::after { outline: 2px solid var(--focus); }
     \\  .c-runes .page > .fig { display: flex; align-items: baseline; gap: 3px; }
     \\  .c-runes .page .w { font-weight: var(--w-b); color: var(--c, var(--faint)); }
-    \\  .c-runes .page .ci, .c-runes .page > .g { color: var(--faint); font-size: var(--fs-s); }
-    \\  .c-runes .page[data-state="thin"] > .fig { opacity: 0.55; }
+    \\  .c-runes .page .w > small { margin-left: 3px; }
+    \\  .c-runes .w > small { font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
+    \\  .c-runes .w[data-wide] { opacity: 0.55; }
+    \\  .c-runes .page > .g { color: var(--faint); font-size: var(--fs-s); }
     \\  .c-runes .read { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-s); color: var(--faint);
     \\    font-variant-numeric: tabular-nums; min-height: 18px; }
     \\  .c-runes .read[data-v="rune"] { font-size: var(--fs-m); color: var(--t2); }
@@ -350,8 +343,8 @@ pub const css =
     \\  .c-runes .rune > .pk { font-size: var(--fs-s); color: var(--muted); line-height: 1.25; }
     \\  .c-runes .mv { margin-left: 2px; color: var(--t2); }
     \\  .c-runes .rune > .w { font-size: var(--fs-m); font-weight: var(--w-b); line-height: 1.25; color: var(--c, var(--faint)); }
+    \\  .c-runes .rune > .w > small { display: block; line-height: 1.1; }
     \\  .c-runes .rune > .g { font-size: var(--fs-s); color: var(--faint); line-height: 1.2; }
-    \\  .c-runes .rune[data-thin] > .pk, .c-runes .rune[data-thin] > .w { opacity: 0.55; }
     \\  .c-runes > .c-btn { display: none; align-self: flex-start; }
     \\  @container (min-width: 680px) {
     \\    .c-runes .trees { gap: var(--sp-4); }
