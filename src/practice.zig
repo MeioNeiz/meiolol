@@ -317,7 +317,9 @@ pub fn build(arena: std.mem.Allocator, in: Input, s: Setup) !Built {
     var playing = s;
     playing.screen = .game;
     const st = state(playing);
-    var g = try ingame.build(arena, in.stats, in.curves, try live.parse(arena, (try mock.live(arena, &sc, &st, live.path)).body), in.tier);
+    const lg = try live.parse(arena, (try mock.live(arena, &sc, &st, live.path)).body);
+    var g = try ingame.build(arena, in.stats, in.curves, lg, in.tier);
+    if (in.facts) |f| g.plan = try ingame.planOf(arena, f, lg, &g);
     g.history = try ingame.madeUp(arena, g.sample());
     if (s.screen == .game) return .{ .in_game = g };
 

@@ -11,6 +11,7 @@ const lanecard = @import("lanecard.zig");
 const Role = core.Role;
 const Stats = core.Stats;
 const curvesfile = core.curvesfile;
+const champfacts = core.champfacts;
 
 pub const Seat = struct {
     /// 0 when the stats file doesn't know it
@@ -146,6 +147,8 @@ pub const InGame = struct {
     gold: f64,
     /// Oldest first; the poller fills it in
     history: []const Sample = &.{},
+    /// My champion-role's usual build against what I have; planOf fills it in
+    plan: ?Plan = null,
 
     /// This moment as a history sample
     pub fn sample(g: *const InGame) Sample {
@@ -153,6 +156,106 @@ pub const InGame = struct {
         return .{ .time = @floatCast(g.time), .team = @as(i32, @intCast(g.score[0].item_gold)) - @as(i32, @intCast(g.score[1].item_gold)), .lane = lane };
     }
 };
+
+pub const PlanItem = struct { id: u32, owned: bool };
+
+/// The usual build (champfacts.Build) beside my items and ability points
+pub const Plan = struct {
+    champion: u32,
+    role: Role,
+    games: u32,
+    /// Boots, then the core items in buying order; those the build doesn't know left out
+    items: []const PlanItem,
+    /// "QEW"; "" unknown
+    order: []const u8,
+    /// The usual ability at each level; "" unknown
+    path: []const u8,
+    level: u32,
+    /// Points in Q, W, E, R
+    skills: [4]u8,
+    /// The ability for the next point; 0 none (level 18, or no order known)
+    next: u8,
+    /// A point to spend now; else `next` is for the next level
+    unspent: bool,
+
+    /// The first item not owned
+    pub fn nextItem(p: Plan) ?usize {
+        for (p.items, 0..) |it, i| if (!it.owned) return i;
+        return null;
+    }
+};
+
+/// Null without my seat, my champion in the stats or its build; allocates in `arena`
+pub fn planOf(arena: std.mem.Allocator, facts: *const champfacts.Facts, g: live.Game, ig: *const InGame) !?Plan {
+    const row = for (ig.rows) |r| {
+        if (r.ours) |s| if (s.me) break r;
+    } else return null;
+    const seat = row.ours.?;
+    if (seat.champion == 0) return null;
+    const b = facts.buildOf(seat.champion, row.role) orelse return null;
+    var items: std.ArrayList(PlanItem) = .empty;
+    for ([_]u32{b.boots} ++ b.core) |id| {
+        if (id == 0) continue;
+        try items.append(arena, .{ .id = id, .owned = std.mem.indexOfScalar(u32, g.items, id) != null });
+    }
+    const spent = @as(u32, g.skills[0]) + g.skills[1] + g.skills[2] + g.skills[3];
+    const order: []const u8 = if (b.hasOrder()) try arena.dupe(u8, &b.order) else "";
+    const path: []const u8 = if (b.hasPath()) try arena.dupe(u8, &b.path) else "";
+    return .{
+        .champion = seat.champion,
+        .role = row.role,
+        .games = b.games,
+        .items = items.items,
+        .order = order,
+        .path = path,
+        .level = seat.level,
+        .skills = g.skills,
+        .next = nextSkill(path, order, g.skills, spent + 1),
+        .unspent = seat.level > spent,
+    };
+}
+
+/// The ability for the point taken at `level`: the one furthest behind the usual path
+/// (R first on a tie, then the max order), else R when it opens, else the max order
+/// with one of each first. Only what the game allows: R at 6, 11 and 16, 5 points, and
+/// a basic's nth point at level 2n-1
+pub fn nextSkill(path: []const u8, order: []const u8, have: [4]u8, level: u32) u8 {
+    if (level > champfacts.Build.max_level) return 0;
+    const keys = "QWER";
+    var legal: [4]bool = undefined;
+    const r_max: u32 = if (level >= 16) 3 else if (level >= 11) 2 else if (level >= 6) 1 else 0;
+    for (&legal, have, 0..) |*l, h, k| l.* = if (k == 3) h < r_max else h < 5 and 2 * @as(u32, h) + 1 <= level;
+    if (path.len >= level) {
+        var best: u8 = 0;
+        var best_gap: i32 = std.math.minInt(i32);
+        for (tieOrder(order)) |k| {
+            if (!legal[k]) continue;
+            const gap = @as(i32, @intCast(std.mem.count(u8, path[0..level], keys[k .. k + 1]))) - have[k];
+            if (gap > best_gap) {
+                best = keys[k];
+                best_gap = gap;
+            }
+        }
+        return best;
+    }
+    if (legal[3]) return 'R';
+    if (order.len != 3) return 0;
+    for (order) |key| {
+        const k = std.mem.indexOfScalar(u8, keys, key).?;
+        if (legal[k] and have[k] == 0) return key;
+    }
+    for (order) |key| if (legal[std.mem.indexOfScalar(u8, keys, key).?]) return key;
+    return 0;
+}
+
+/// R, then the basics by max order (QWE without one): ability indexes
+fn tieOrder(order: []const u8) [4]usize {
+    var out: [4]usize = .{ 3, 0, 1, 2 };
+    if (order.len == 3) for (order, 1..) |key, i| {
+        out[i] = std.mem.indexOfScalar(u8, "QWE", key) orelse return .{ 3, 0, 1, 2 };
+    };
+    return out;
+}
 
 /// The curves' frames this sparse are not compared against (lanecard's chart floor)
 const min_minute_games = 10;
@@ -385,6 +488,48 @@ test "in game: lanes by role, score, timers, my lane against the curve" {
     try testing.expectEqual(550, l.gold.?.now);
     try testing.expectEqual(8, l.cs.?.now);
     try testing.expect(l.matchup.points.len > 0);
+}
+
+test "in game: the plan ticks my items and names my next point" {
+    var f = try cardscenes.fixture();
+    defer f.deinit();
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const body = try std.Io.Dir.cwd().readFileAlloc(testing.io, live.fixture_path, arena, .limited(1 << 20));
+    const g = try live.parse(arena, body);
+    const ig = try build(arena, &f.stats, null, g, null);
+    const ori = idOf(&f.stats, "Orianna");
+    const builds = [_]champfacts.Build{.{ .champion = ori, .role = .middle, .games = 4000, .boots = 3020, .core = .{ 3802, 0, 3089 }, .order = "QWE".*, .path = path_qwe.* }};
+    const p = (try planOf(arena, &.{ .builds = &builds }, g, &ig)).?;
+    try testing.expectEqual(3, p.items.len);
+    try testing.expectEqual([_]bool{ false, true, false }, [_]bool{ p.items[0].owned, p.items[1].owned, p.items[2].owned });
+    try testing.expectEqual(0, p.nextItem().?);
+    // Level 10 with 10 points spent: Q4 W3 E2 R1 against the path's Q5 W3 E1 R2 at 11
+    try testing.expect(!p.unspent);
+    try testing.expectEqual('R', p.next);
+    try testing.expectEqual(null, try planOf(arena, &.{}, g, &ig));
+}
+
+const path_qwe = "QWEQQRQWQWRWWEEREE";
+
+test nextSkill {
+    // Following the path, each level's point is the path's
+    var have: [4]u8 = @splat(0);
+    for (path_qwe, 1..) |key, level| {
+        try testing.expectEqual(key, nextSkill(path_qwe, "QWE", have, @intCast(level)));
+        have[std.mem.indexOfScalar(u8, "QWER", key).?] += 1;
+    }
+    try testing.expectEqual(0, nextSkill(path_qwe, "QWE", have, 19));
+    // Without a path: one of each first, R when it opens, then the max order
+    try testing.expectEqual('Q', nextSkill("", "QEW", .{ 0, 0, 0, 0 }, 1));
+    try testing.expectEqual('E', nextSkill("", "QEW", .{ 1, 0, 0, 0 }, 2));
+    try testing.expectEqual('W', nextSkill("", "QEW", .{ 1, 0, 1, 0 }, 3));
+    try testing.expectEqual('Q', nextSkill("", "QEW", .{ 1, 1, 1, 0 }, 4));
+    try testing.expectEqual('R', nextSkill("", "QEW", .{ 2, 1, 2, 0 }, 6));
+    // A basic's second point waits for level 3, whatever the path says
+    try testing.expectEqual('E', nextSkill("QQEWQRQQEEREEWWRWW", "QEW", .{ 1, 0, 0, 0 }, 2));
+    try testing.expectEqual(0, nextSkill("", "", .{ 1, 0, 0, 0 }, 2));
 }
 
 test "in game: blank positions are inferred, inhibitors come back" {

@@ -51,13 +51,13 @@ pub fn get(path: []const u8) ?[]const u8 {
     return null;
 }
 
-/// A champion icon at icon/<id>.png, copied: the poller may drop it
+/// An icon at icon/<id>.png (champions), item/, perk/ or spell/<id>.png, copied: the
+/// poller may drop it
 pub fn icon(gpa: Allocator, path: []const u8) ?[]u8 {
-    if (!std.mem.startsWith(u8, path, "icon/") or !std.mem.endsWith(u8, path, ".png")) return null;
-    const id = std.fmt.parseInt(u32, path["icon/".len .. path.len - ".png".len], 10) catch return null;
+    const k = desktop.icons.keyOf(path) orelse return null;
     const s = poller.lock();
     defer poller.unlock();
-    return gpa.dupe(u8, s.icons.get(id) orelse return null) catch null;
+    return gpa.dupe(u8, s.icons.art(k) orelse return null) catch null;
 }
 
 pub const Changed = struct {
@@ -194,8 +194,8 @@ pub fn dump(io: std.Io, gpa: Allocator, dir: []const u8) !void {
     for ([_][]const u8{ "app.css", "ui-app.js", "ui-app.wasm", "ui-picks.js", "ui-picks.wasm", "ui-practice.js", "ui-practice.wasm" }) |f|
         if (files.get(f)) |bytes| try dumpFile(io, gpa, sub, f, bytes);
     var rest = p.html;
-    while (std.mem.find(u8, rest, "\"icon/")) |i| {
-        rest = rest[i + 1 ..];
+    while (std.mem.find(u8, rest, "src=\"")) |i| {
+        rest = rest[i + "src=\"".len ..];
         const end = std.mem.findScalar(u8, rest, '"') orelse break;
         const png = icon(gpa, rest[0..end]) orelse continue;
         defer gpa.free(png);

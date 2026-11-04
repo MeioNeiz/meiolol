@@ -12,7 +12,8 @@ pub const postgame = @import("postgame.zig");
 pub const practice = @import("practice.zig");
 pub const lcu = @import("lcu/root.zig");
 pub const core = @import("core");
-pub const Icons = @import("desktop/icons.zig").Icons;
+pub const icons = @import("desktop/icons.zig");
+pub const Icons = icons.Icons;
 /// Release and manifest signatures, for the backend's desktop-sign too
 pub const sign = @import("desktop/sign.zig");
 

@@ -18,8 +18,8 @@ const postgame = @import("../postgame.zig");
 const loading = @import("../loading.zig");
 const practice = @import("../practice.zig");
 const comp = @import("../comp.zig");
-const Icons = @import("icons.zig").Icons;
-const icons_path = @import("icons.zig").lcu_path;
+const icons = @import("icons.zig");
+const Icons = icons.Icons;
 const datafiles = @import("../datafiles.zig");
 const state = @import("state.zig");
 const update = @import("update.zig");
@@ -449,7 +449,7 @@ fn publish(status: state.Status, arena: std.heap.ArenaAllocator, practicing: boo
 }
 
 fn poll(gpa: std.mem.Allocator) void {
-    var p: Poller = .{ .watch = .init(gpa, io, lockfile), .own_arena = .init(gpa), .seats_arena = .init(gpa), .practice_arena = .init(gpa) };
+    var p: Poller = .{ .watch = .init(gpa, io, lockfile), .own_arena = .init(gpa), .seats_arena = .init(gpa), .practice_arena = .init(gpa), .art_arena = .init(gpa) };
     defer p.deinit();
     var shown: u64 = 0;
     var seen_gen: u32 = 0;
@@ -536,6 +536,10 @@ const Poller = struct {
     /// Recent games and mastery top for the lobby, reloaded every form_ticks
     form: ?lcu.me.Form = null,
     form_age: u32 = 0,
+    /// Item, rune and spell ids to the client's icon paths, each list fetched once per
+    /// connection, on first need; empty when the client didn't give it
+    art_arena: std.heap.ArenaAllocator,
+    art_paths: [@typeInfo(icons.Kind).@"enum".field_names.len]?std.AutoHashMapUnmanaged(u32, []const u8) = @splat(null),
 
     /// The history lists a game a while after it ends: reloads catch it up
     const form_ticks = 120;
@@ -549,6 +553,7 @@ const Poller = struct {
         p.history.deinit(p.own_arena.child_allocator);
         p.seats_arena.deinit();
         p.practice_arena.deinit();
+        p.art_arena.deinit();
         p.watch.deinit();
         p.own_arena.deinit();
     }
@@ -564,6 +569,8 @@ const Poller = struct {
         p.form = null;
         _ = p.practice_arena.reset(.retain_capacity);
         p.practice_own = null;
+        _ = p.art_arena.reset(.retain_capacity);
+        p.art_paths = @splat(null);
         return switch (err) {
             error.ClientNotRunning => .no_client,
             else => .{ .client_error = @errorName(err) },
@@ -731,6 +738,7 @@ const Poller = struct {
         if (p.own == null) p.own = loadOwn(p.own_arena.allocator(), client);
         const g = try arena.create(ingame.InGame);
         g.* = try ingame.build(arena, &data.stats, if (data.curves) |*c| c else null, game, p.own.?.tier);
+        if (data.facts) |*f| g.plan = try ingame.planOf(arena, f, game, g);
         p.fingerprint = std.hash.Wyhash.hash(1, resp.body);
         const gpa = p.own_arena.child_allocator;
         const last: ?ingame.Sample = if (p.history.items.len > 0) p.history.items[p.history.items.len - 1] else null;
@@ -746,6 +754,7 @@ const Poller = struct {
         };
         var want: Want = .{};
         for (g.rows) |r| for ([_]?ingame.Seat{ r.ours, r.theirs }) |s| if (s) |seat| want.add(seat.champion);
+        if (g.plan) |plan| for (plan.items) |it| want.addArt(.{ .kind = .item, .id = it.id });
         p.fetchIcons(want.list[0..want.n]);
         return g;
     }
@@ -779,15 +788,19 @@ const Poller = struct {
         return pg;
     }
 
-    /// Champions to fetch icons for, each once
+    /// Icons to fetch, each once
     const Want = struct {
-        list: [64]u32 = undefined,
+        list: [64]icons.Key = undefined,
         n: usize = 0,
 
         fn add(w: *Want, c: u32) void {
-            if (c == 0 or w.n == w.list.len) return;
-            if (std.mem.indexOfScalar(u32, w.list[0..w.n], c) != null) return;
-            w.list[w.n] = c;
+            w.addArt(.{ .kind = .champion, .id = c });
+        }
+
+        fn addArt(w: *Want, k: icons.Key) void {
+            if (k.id == 0 or w.n == w.list.len) return;
+            for (w.list[0..w.n]) |x| if (std.meta.eql(x, k)) return;
+            w.list[w.n] = k;
             w.n += 1;
         }
 
@@ -807,25 +820,43 @@ const Poller = struct {
 
     /// Icons from the client. Fetched outside the mutex, added under it; a new icon
     /// changes the fingerprint so the window redraws
-    fn fetchIcons(p: *Poller, want: []const u32) void {
+    fn fetchIcons(p: *Poller, want: []const icons.Key) void {
         const client = p.watch.client orelse return;
         // Replay: no store, the review pages use the site's icons
         if (shared.icons == null) return;
         var got: u32 = 0;
-        for (want) |c| {
+        for (want) |k| {
             shared.mutex.lockUncancelable(io);
-            const wanted = shared.icons.?.wanted(c);
+            const wanted = shared.icons.?.wanted(k);
             shared.mutex.unlock(io);
             if (!wanted) continue;
             var buf: [96]u8 = undefined;
-            const path = std.fmt.bufPrint(&buf, icons_path, .{c}) catch continue;
-            const png: ?[]const u8 = client.getOk(path) catch null;
+            const path: ?[]const u8 = switch (k.kind) {
+                .champion => std.fmt.bufPrint(&buf, icons.lcu_path, .{k.id}) catch continue,
+                else => p.artPaths(client, k.kind).get(k.id),
+            };
+            const png: ?[]const u8 = if (path) |x| client.getOk(x) catch null else null;
             shared.mutex.lockUncancelable(io);
-            shared.icons.?.put(c, png) catch {};
+            shared.icons.?.put(k, png) catch {};
             shared.mutex.unlock(io);
             got += 1;
         }
         if (got > 0) p.fingerprint +%= got;
+    }
+
+    fn artPaths(p: *Poller, client: lcu.Client, kind: icons.Kind) std.AutoHashMapUnmanaged(u32, []const u8) {
+        const slot = &p.art_paths[@backingInt(kind)];
+        if (slot.* == null) slot.* = loadArtPaths(p.art_arena.allocator(), client, kind.list()) catch .empty;
+        return slot.*.?;
+    }
+
+    fn loadArtPaths(arena: std.mem.Allocator, client: lcu.Client, list: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
+        const body = try client.getOk(list);
+        defer client.gpa.free(body);
+        const rows = try std.json.parseFromSliceLeaky([]const struct { id: i64 = 0, iconPath: []const u8 = "" }, arena, body, .{ .ignore_unknown_fields = true, .allocate = .alloc_always });
+        var out: std.AutoHashMapUnmanaged(u32, []const u8) = .empty;
+        for (rows) |r| if (r.id > 0 and r.id <= std.math.maxInt(u32) and r.iconPath.len > 0) try out.put(arena, @intCast(r.id), r.iconPath);
+        return out;
     }
 
     /// Once loaded, until the client leaves the lobby phases
@@ -893,7 +924,7 @@ pub const Replay = struct {
 
     pub fn init(gpa: std.mem.Allocator, io_: std.Io, lock_path: []const u8, live_port: u16, data: *const Data) Replay {
         io = io_;
-        var p: Poller = .{ .watch = .init(gpa, io, lock_path), .own_arena = .init(gpa), .seats_arena = .init(gpa), .practice_arena = .init(gpa) };
+        var p: Poller = .{ .watch = .init(gpa, io, lock_path), .own_arena = .init(gpa), .seats_arena = .init(gpa), .practice_arena = .init(gpa), .art_arena = .init(gpa) };
         p.live_port = live_port;
         return .{ .p = p, .data = data };
     }

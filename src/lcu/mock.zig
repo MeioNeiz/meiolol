@@ -12,8 +12,9 @@
 //! (seconds before it), note, phase (gameflow), timer (champ select phase), session
 //! (false: champ select without a session, as between phases), positions, intent,
 //! hover, lock, ban ({cell: name}), swap ([cell, cell]: a trade), game ({time, gold,
-//! scores {cell: {k, d, a, cs, level, items (their price)}}, events [Live Client
-//! events]}), win, expect
+//! scores {cell: {k, d, a, cs, level, items (their price), ids (item ids held)}}, events
+//! [Live Client events]}), win, expect. The local player's ability points follow
+//! mock_path to its level
 //! (what `zig build test` checks the watch saw, see mock_test in this file).
 
 const std = @import("std");
@@ -41,7 +42,12 @@ pub const Cell = struct {
     level: i64 = 1,
     /// Price of the items held, served as one made-up item
     items: i64 = 0,
+    /// Item ids held, served at no price beside it
+    ids: [6]u32 = @splat(0),
 };
+
+/// The local player's ability per level
+pub const mock_path = "QWEQQRQWQWRWWEEREE";
 
 pub const Played = struct { champion: u32, win: bool, k: u32, d: u32, a: u32, minutes: u32 };
 
@@ -311,6 +317,11 @@ pub const State = struct {
                 if (sc.get("cs")) |x| c.cs = x.integer;
                 if (sc.get("level")) |x| c.level = x.integer;
                 if (sc.get("items")) |x| c.items = x.integer;
+                if (sc.get("ids")) |x| {
+                    if (x.array.items.len > c.ids.len) return error.TooManyItems;
+                    c.ids = @splat(0);
+                    for (c.ids[0..x.array.items.len], x.array.items) |*d, n| d.* = @intCast(n.integer);
+                }
             }
         }
         if (g.get("events")) |v| for (v.array.items) |ev| {
@@ -628,9 +639,19 @@ fn activePlayer(st: *const State, s: *const Scenario) struct {
     level: i64,
     currentGold: f64,
     teamRelativeColors: bool = true,
+    abilities: struct { Q: Ability, W: Ability, E: Ability, R: Ability },
 } {
-    return .{ .level = st.cells[s.local_cell].level, .currentGold = st.gold };
+    const level = st.cells[s.local_cell].level;
+    var points: [4]i64 = @splat(0);
+    for (mock_path[0..@intCast(std.math.clamp(level, 0, mock_path.len))]) |key| points[std.mem.indexOfScalar(u8, "QWER", key).?] += 1;
+    return .{
+        .level = level,
+        .currentGold = st.gold,
+        .abilities = .{ .Q = .{ .abilityLevel = points[0] }, .W = .{ .abilityLevel = points[1] }, .E = .{ .abilityLevel = points[2] }, .R = .{ .abilityLevel = points[3] } },
+    };
 }
+
+const Ability = struct { abilityLevel: i64 };
 
 const LivePlayer = struct {
     championName: []const u8,
@@ -667,10 +688,17 @@ fn playerList(a: std.mem.Allocator, s: *const Scenario, st: *const State) ![]Liv
             .summonerName = try a.print("{s}#{s}", .{ game_name, local_tag }),
             .scores = .{ .assists = c.assists, .creepScore = c.cs, .deaths = c.deaths, .kills = c.kills },
             .team = if (i < 5) "ORDER" else "CHAOS",
-            .items = if (c.items > 0) try a.dupe(LiveItem, &.{.{ .price = c.items }}) else &.{},
+            .items = try items(a, c),
         };
     }
     return out;
+}
+
+fn items(a: std.mem.Allocator, c: Cell) ![]const LiveItem {
+    var out: std.ArrayList(LiveItem) = .empty;
+    if (c.items > 0) try out.append(a, .{ .price = c.items });
+    for (c.ids, 0..) |id, slot| if (id != 0) try out.append(a, .{ .itemID = id, .displayName = "Mock item", .price = 0, .slot = @intCast(slot) });
+    return out.items;
 }
 
 fn json(a: std.mem.Allocator, v: anytype) !Reply {
@@ -929,6 +957,8 @@ fn checkServed(m: *Mock, ex: std.json.ObjectMap, lcu_port: u16, live_port: u16) 
         const parsed = try livedata.parse(a, resp.body);
         if (want.object.get("me")) |n| try testing.expectEqualStrings(n.string, parsed.me().?.champion);
         if (want.object.get("item_gold")) |n| try testing.expectEqual(n.integer, parsed.me().?.item_gold);
+        if (want.object.get("skills")) |v| for (v.array.items, parsed.skills) |n, k| try testing.expectEqual(n.integer, k);
+        if (want.object.get("ids")) |v| for (v.array.items) |n| try testing.expect(std.mem.indexOfScalar(u32, parsed.items, @intCast(n.integer)) != null);
         if (want.object.get("objectives")) |n| try testing.expectEqual(@as(usize, @intCast(n.integer)), parsed.events.len);
     }
     if (ex.get("eog")) |want| {
