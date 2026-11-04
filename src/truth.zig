@@ -224,6 +224,67 @@ const Acc = struct {
 const DayCell = struct { all: Acc = .{}, latest: Acc = .{} };
 const DayCells = std.AutoHashMapUnmanaged(u64, DayCell);
 
+/// A summed day, compact: as maps of Accs the 50 days held ~90M cells in ~10 GB. Every
+/// value but gold's is 0 or 1, so those cells keep counts (sum of squares = sum)
+const Day = struct {
+    counts: []Counted = &.{},
+    gold: []Summed = &.{},
+
+    const Count = struct {
+        n: u32,
+        s: u32,
+
+        fn of(a: Acc) Count {
+            return .{ .n = @intFromFloat(a.n), .s = @intFromFloat(a.s) };
+        }
+
+        fn acc(c: Count) Acc {
+            return .{ .n = @floatFromInt(c.n), .s = @floatFromInt(c.s), .q = @floatFromInt(c.s) };
+        }
+    };
+    const Counted = struct { key: u64, all: Count, latest: Count };
+    const Summed = struct { key: u64, sums: DayCell };
+
+    fn init(gpa: Allocator, cells: *const DayCells) !Day {
+        var n_gold: usize = 0;
+        var it = cells.iterator();
+        while (it.next()) |e| n_gold += @intFromBool(unkey(e.key_ptr.*).kind == .gold14);
+        const counts = try gpa.alloc(Counted, cells.count() - n_gold);
+        errdefer gpa.free(counts);
+        const gold = try gpa.alloc(Summed, n_gold);
+        var c: usize = 0;
+        var g: usize = 0;
+        it = cells.iterator();
+        while (it.next()) |e| {
+            const k = e.key_ptr.*;
+            const v = e.value_ptr.*;
+            if (unkey(k).kind == .gold14) {
+                gold[g] = .{ .key = k, .sums = v };
+                g += 1;
+            } else {
+                counts[c] = .{ .key = k, .all = .of(v.all), .latest = .of(v.latest) };
+                c += 1;
+            }
+        }
+        return .{ .counts = counts, .gold = gold };
+    }
+
+    fn deinit(d: *Day, gpa: Allocator) void {
+        gpa.free(d.counts);
+        gpa.free(d.gold);
+    }
+
+    fn len(d: *const Day) usize {
+        return d.counts.len + d.gold.len;
+    }
+
+    fn get(d: *const Day, i: usize) Summed {
+        if (i >= d.counts.len) return d.gold[i - d.counts.len];
+        const c = d.counts[i];
+        return .{ .key = c.key, .sums = .{ .all = c.all.acc(), .latest = c.latest.acc() } };
+    }
+};
+
 /// The 30-day window, the patch window, the target
 const Cell = struct { w: [2]Acc = .{ .{}, .{} }, t: Acc = .{} };
 const Cells = std.AutoHashMapUnmanaged(u64, Cell);
@@ -276,14 +337,14 @@ fn addRow(gpa: Allocator, cells: *DayCells, r: Row) !void {
 /// Days -window .. last, each day's cells
 const Days = struct {
     first: i32,
-    cells: []DayCells,
+    cells: []Day,
 
     fn deinit(d: *Days, gpa: Allocator) void {
         for (d.cells) |*c| c.deinit(gpa);
         gpa.free(d.cells);
     }
 
-    fn at(d: *const Days, day: i32) ?*const DayCells {
+    fn at(d: *const Days, day: i32) ?*const Day {
         const i = day - d.first;
         if (i < 0 or i >= d.cells.len) return null;
         return &d.cells[@intCast(i)];
@@ -308,8 +369,8 @@ fn lowerBound(rows: []const Row, day: i32) usize {
 }
 
 fn sumDays(gpa: Allocator, io: std.Io, rows: []const Row, first: i32, last: i32, threads: u8) !Days {
-    const cells = try gpa.alloc(DayCells, @intCast(last - first + 1));
-    @memset(cells, .empty);
+    const cells = try gpa.alloc(Day, @intCast(last - first + 1));
+    @memset(cells, .{});
     var days: Days = .{ .first = first, .cells = cells };
     errdefer days.deinit(gpa);
     const Ctx = struct {
@@ -318,7 +379,10 @@ fn sumDays(gpa: Allocator, io: std.Io, rows: []const Row, first: i32, last: i32,
         days: *Days,
         fn body(c: @This(), i: usize) !void {
             const day = c.days.first + @as(i32, @intCast(i));
-            for (daySlice(c.rows, day)) |r| try addRow(c.gpa, &c.days.cells[i], r);
+            var sums: DayCells = .empty;
+            defer sums.deinit(c.gpa);
+            for (daySlice(c.rows, day)) |r| try addRow(c.gpa, &sums, r);
+            c.days.cells[i] = try .init(c.gpa, &sums);
         }
     };
     try par.forEachUpTo(io, cells.len, @max(threads, 1), Ctx{ .gpa = gpa, .rows = rows, .days = &days }, Ctx.body);
@@ -333,29 +397,29 @@ fn tally(gpa: Allocator, days: *const Days, opts: Options, d: i32) !Cells {
     var t = d;
     while (t < d + @as(i32, opts.horizon)) : (t += 1) {
         const day = days.at(t) orelse continue;
-        var it = day.iterator();
-        while (it.next()) |e| {
-            if (e.value_ptr.latest.n == 0) continue;
-            const c = try cells.getOrPut(gpa, e.key_ptr.*);
+        for (0..day.len()) |i| {
+            const e = day.get(i);
+            if (e.sums.latest.n == 0) continue;
+            const c = try cells.getOrPut(gpa, e.key);
             if (!c.found_existing) c.value_ptr.* = .{};
-            c.value_ptr.t.merge(e.value_ptr.latest);
+            c.value_ptr.t.merge(e.sums.latest);
         }
     }
     var w = days.first;
     while (w < d) : (w += 1) {
         const day = days.at(w) orelse continue;
         const in30 = w >= d - @as(i32, opts.window);
-        var it = day.iterator();
-        while (it.next()) |e| {
-            const k = e.key_ptr.*;
+        for (0..day.len()) |i| {
+            const e = day.get(i);
+            const k = e.key;
             const c = if (cells.getPtr(k)) |c| c else blk: {
                 if (k == anchor(k) or !cells.contains(anchor(k))) continue;
                 const n = try cells.getOrPut(gpa, k);
                 n.value_ptr.* = .{};
                 break :blk n.value_ptr;
             };
-            if (in30) c.w[0].merge(e.value_ptr.all);
-            c.w[1].merge(e.value_ptr.latest);
+            if (in30) c.w[0].merge(e.sums.all);
+            c.w[1].merge(e.sums.latest);
         }
     }
     return cells;
