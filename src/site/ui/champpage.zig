@@ -264,9 +264,6 @@ const view_dirs = @import("urls.zig").view_dirs;
 const view_queries = @import("urls.zig").view_queries;
 const rank_suffixes = [n_views][]const u8{ "", "-patch", "-all", "-all-patch" };
 
-/// Figures of a rank group's role under this many games are faded; under min_games, games
-/// only (builds.md)
-pub const solid_games = 400;
 /// The lane chart's scale fits its first minutes, as the matchup page's: the band widens
 /// far past the line later
 const lane_fit = 20;
@@ -896,7 +893,6 @@ pub const Top = struct {
             .data_stamp = p.stamp,
             .data_root = p.root,
             .data_busy = p.files.busy(),
-            .data_thin = rl.thin or if (x) |y| p.files.shown.rank != .plat and y.games < solid_games else false,
         }, .{
             card.view(h, .{}, &.{
                 champhead.view(h, .{
@@ -976,12 +972,12 @@ pub const Top = struct {
     fn headline(p: *P, h: *H, rl: *const TopRole) N {
         const won = rate(.{ .games = rl.games, .wins = rl.wins });
         const games: strip.Item = .{ .label = W.games, .value = phrase.num(h, .count, rl.games) };
-        if (p.files.shown.rank != .plat and rl.games < min_games) return strip.view(h, &.{games});
         var items: [5]strip.Item = undefined;
         var n: usize = 0;
         items[n] = .{
             .label = W.won,
             .value = phrase.num(h, .rate, won),
+            .range = fmt.range(rl.games, rl.wins),
             .ctx = if (rl.rank > 0) W.rank.with(h, .{ .n = rl.rank, .th = ordinal(rl.rank), .of = rl.of, .r = rl.role.label().s }) else null,
             .step = .of(won - 50, fmt.win_cuts),
             .answer = true,
@@ -1125,7 +1121,6 @@ pub const Build = struct {
             .data_js = p.js,
             .data_wasm = p.wasm,
             .data_busy = p.files.busy(),
-            .data_thin = p.data.roles[p.cur].thin,
         }, .{if (p.panel()) |b| card.view(h, .{ .flush = true }, &.{
             p.head(h),
             note,
@@ -1246,7 +1241,6 @@ pub const More = struct {
             .data_js = p.js,
             .data_wasm = p.wasm,
             .data_busy = p.files.busy(),
-            .data_thin = p.r().thin,
         }, .{
             p.matchups(h),
         });
@@ -1260,7 +1254,6 @@ pub const More = struct {
         };
         in.plat = p.plat(h);
         in.few = p.few(h);
-        in.faded = p.files.shown.rank != .plat;
         return p.grid.view(h, p, &in);
     }
 };
@@ -1365,7 +1358,6 @@ pub const Trends = struct {
             .data_js = p.js,
             .data_wasm = p.wasm,
             .data_busy = p.files.busy(),
-            .data_thin = p.r().thin,
         }, .{
             h.div(.{ .class = "row3", .id = "trends" }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
@@ -1771,8 +1763,7 @@ pub const css =
     \\    .c-cpage [data-island=champion] .c-toolbar > .c-filters { flex: none; }
     \\  }
     \\  .c-cpage > [data-busy]:not([data-island=champion]), .c-cpage > [data-busy] .c-champhead { opacity: 0.55; transition: opacity 0.2s; }
-    \\  .c-cpage [data-thin] .c-champhead > .c-strip, .c-cpage .plot[data-thin] { opacity: 0.6; }
-    \\  .c-cpage > [data-thin] :is(.c-build > .in, .plot, .c-mpick, #trends .c-trend) { opacity: 0.6; }
+    \\  .c-cpage .plot[data-thin] { opacity: 0.6; }
     \\  .c-cpage .rare { margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .c-champhead > .none { margin: 0 0 0 auto; }
     \\  .c-cpage .vs-hint { margin: 0; padding: var(--sp-3) var(--card-px); border-top: 1px solid var(--line); font-size: var(--fs-s); color: var(--muted); }
@@ -1819,13 +1810,13 @@ test "a view's files sit beside the page's; rank files at the root" {
     try std.testing.expectEqual(.patch, p.period());
 }
 
-test "a rare role is listed and opens faded, with its games" {
+test "a rare role is listed and opens with its games, faded only by its range" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const d: TopData = .{ .name = "Karthus", .slug = "karthus", .icon = "", .patch = "16.21", .ddragon = "16.21.1", .champs = &.{}, .roles = &.{
         .{ .role = .jungle, .games = 9000, .wins = 4700, .share = 95, .pick = 4, .ban = 2, .lane = &.{} },
-        .{ .role = .top, .games = 120, .wins = 55, .share = 1.3, .thin = true, .pick = 0.1, .ban = 2, .lane = &.{} },
+        .{ .role = .top, .games = 60, .wins = 27, .share = 0.7, .thin = true, .pick = 0.1, .ban = 2, .lane = &.{} },
     } };
     var p: Top = .init(&d, try prepare(a, &d, "/"), "/");
     var t: tree.Tree = .{};
@@ -1838,8 +1829,9 @@ test "a rare role is listed and opens faded, with its games" {
     p.fromUrl(.{ .role = .top });
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "data-thin") != null);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "<p class=\"rare\">A rare role for Karthus: 120 games.</p>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "data-thin") == null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "data-wide") != null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "<p class=\"rare\">A rare role for Karthus: 60 games.</p>") != null);
 }
 
 test "by rank: brackets under min_games left out, no chart under two" {

@@ -133,7 +133,7 @@ const method_md =
     \\  points, so a wide spread is partly luck.
     \\- **Lane opponents**: the champion's win rate against each lane opponent and
     \\  the lane curve's gold difference at 14 minutes. Every opponent is listed, hardest
-    \\  first; those with under 10 games are faded and listed last.
+    \\  first; one whose win rate's 80% range is wider than ±6 points is faded.
     \\
     \\## Early or late {#lean}
     \\
@@ -200,8 +200,8 @@ const method_md =
     \\  range, so a few lucky games can't top it. k comes from how much options of a kind
     \\  really differ across every champion (about 6,000 games for a rune, 600 to 1,000 for
     \\  items); against one lane opponent, from every matchup.
-    \\- **Sample size**: every row shows games and its share. A win rate needs 100
-    \\  games and always comes with its 95% range; rows under 400 games are greyed out.
+    \\- **Sample size**: every row shows games and its share. Every win rate comes with
+    \\  its 80% range; one wider than ±6 points is faded, never hidden.
     \\  Games that reach three finished items run long, so their win rates are for
     \\  comparing with each other.
     \\

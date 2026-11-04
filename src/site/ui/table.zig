@@ -91,16 +91,15 @@ pub fn Spec(comptime Row: type) type {
         default_sort: u8 = 0,
         /// Text the search box matches, ignoring case
         search: ?*const fn (*const Row) []const u8 = null,
-        /// The row's games: under the minimum the row hides, under fmt.thin_games it fades
+        /// The row's games: under the minimum the row hides. Rows never fade by games: a
+        /// rate fades by its range (stat.Stat.range, J35)
         games: ?*const fn (*const Row) u32 = null,
-        /// MinGames choices; 0 is Any (thin rows shown, faded)
+        /// MinGames choices; 0 is Any
         min_games: []const u32 = &.{},
         /// What opens under a row when it is tapped
         detail: ?*const fn (*H, *const Row) N = null,
         /// Two tables on a page: a short name for one, its URL keys' prefix ("opp")
         key: []const u8 = "",
-        /// Under this many games a row fades
-        thin: u32 = fmt.thin_games,
         /// Rows inside another component (a build slot): no card or head band, tighter
         /// rows, columns give way at 200 and 150 px
         compact: bool = false,
@@ -230,8 +229,8 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
         /// The rows shown, in order, and how many rare ones wait behind the chip
         fn ordered(t: *const T, a: std.mem.Allocator) !struct { rows: []u32, rare: usize } {
             var out: std.ArrayList(u32) = try .initCapacity(a, t.rows.len);
-            const q = t.q.slice();
             const min = t.minimum();
+            const q = t.q.slice();
             var rare: usize = 0;
             for (t.rows, 0..) |*r, i| {
                 if (spec.games) |g| if (g(r) < min) continue;
@@ -293,7 +292,6 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
             };
             const tip_id = h.fmt("{s}-rt", .{t.id});
             var trs = h.list();
-            const min = t.minimum();
             for (shown, 1..) |ri, place| {
                 const r = &t.rows[ri];
                 var tds = h.list();
@@ -314,12 +312,10 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                         .on_click = h.on(t, .{ .tip = @as(u32, @intCast(ri * ncols + i)) }),
                     }, .{content}) else content}));
                 }
-                const thin = if (spec.games) |g| min == 0 and g(r) < spec.thin else false;
                 const open = t.open == ri;
                 const on_open: ?tree.Handler = if (spec.detail != null) h.on(t, .{ .open = ri }) else null;
                 trs.add(h.tr(.{
                     .key = ri,
-                    .data_state = if (thin) "thin" else null,
                     .aria_expanded = if (spec.detail != null) open else null,
                     .on_click = on_open,
                 }, .{tds.done()}));
@@ -471,8 +467,6 @@ pub const css =
     \\  .c-table tbody tr[aria-expanded] { cursor: pointer; }
     \\  .c-table tbody tr:hover > td { background: var(--panel-2); }
     \\  .c-table tbody tr[aria-expanded="true"] > td { background: var(--panel-2); border-bottom-color: transparent; }
-    \\  .c-table tr[data-state="thin"] > td { color: var(--muted); }
-    \\  .c-table tr[data-state="thin"] .c-stat > .v { opacity: 0.5; }
     \\  .c-table tr.detail > td { padding: 0 var(--sp-3) var(--sp-3); background: var(--panel-2); height: auto; white-space: normal; }
     \\  .c-table td:first-child, .c-table th:first-child { padding-left: var(--sp-3); }
     \\  .c-table td:last-child, .c-table th:last-child { padding-right: var(--sp-3); }
@@ -550,7 +544,7 @@ pub const Demo = struct {
         return h.span(.{ .class = "muted" }, .{r.role});
     }
     fn rate(h: *H, r: *const Demo) N {
-        return stat.view(h, .{ .value = r.wr, .scale = .aggregate, .ref = 50 });
+        return stat.view(h, .{ .value = r.wr, .scale = .aggregate, .ref = 50, .range = fmt.rangeAt(r.games, r.wr) });
     }
     fn pickBar(h: *H, r: *const Demo) N {
         return bar.view(h, r.pick, 12.8, stat.figure(h, .rate, r.pick));
@@ -598,7 +592,7 @@ pub const Demo = struct {
         .columns = &.{
             .{ .label = plain("Champion"), .cell = who, .name = nameOf, .num = false },
             .{ .label = plain("Role"), .cell = roleCell, .num = false, .priority = 3 },
-            .{ .label = plain("Win rate"), .cell = rate, .sort = wrOf, .answer = true, .tip = plain("Last 30 days. Faint under 100 games: could be luck.") },
+            .{ .label = plain("Win rate"), .cell = rate, .sort = wrOf, .answer = true, .tip = plain("Last 30 days, with its 80% range. Faint when the range is wide: could be luck.") },
             .{ .label = plain("Patch"), .cell = changeCell, .sort = changeOf, .priority = 2, .tip = plain("Change in win rate since the last patch, in points.") },
             .{ .label = plain("Pick"), .cell = pickBar, .sort = pickOf, .priority = 2 },
             .{ .label = plain("Games"), .cell = gamesCell, .sort = gamesF, .priority = 3 },
@@ -614,7 +608,7 @@ pub const Demo = struct {
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const states = [_]struct { []const u8, Demo.Table }{
-        .{ "default: win rate, thin rows faded", .{ .rows = &Demo.rows } },
+        .{ "default: win rate, wide ranges faded", .{ .rows = &Demo.rows } },
         .{ "by games, fewest first", .{ .rows = &Demo.rows, .sort = 5, .desc = false } },
         .{ "searched", .{ .rows = &Demo.rows, .q = blk: {
             var q: url.Str(24) = .{};

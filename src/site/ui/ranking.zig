@@ -174,7 +174,7 @@ pub fn index(h: *H, cards: []const Card) N {
             whoView(h, .{ .name = t.name, .src = t.src }, t.href, t.role, .{ .px = .@"32", .eager = true }),
             switch (c.kind()) {
                 .gold => goldView(h, t.value, t.n),
-                else => |kd| stat.view(h, .{ .value = t.value, .kind = if (kd == .gap) .points else .rate, .scale = .aggregate, .ref = t.usual, .games = t.n }),
+                else => |kd| stat.view(h, .{ .value = t.value, .kind = if (kd == .gap) .points else .rate, .scale = .aggregate, .ref = t.usual, .range = rangeOf(kd, t.value, t.n) }),
             },
         }));
         kids.add(h.div(.{ .key = i }, .{card.view(h, .{}, &.{
@@ -232,8 +232,18 @@ fn who(h: *H, l: *const Line) N {
     return whoView(h, .{ .name = l.r.name, .src = l.icon }, l.r.href, if (l.all) l.r.role else null, .{ .here = l.here });
 }
 
+/// A figure's 80% range: a rate's from its games; a gap's from its thinner side's games
+/// (Row.n) as if both had that many, so at most this wide
+fn rangeOf(k: Kind, v: f32, n: u32) f64 {
+    return switch (k) {
+        .rate => fmt.rangeAt(n, v),
+        .gap => std.math.sqrt2 * fmt.rangeAt(n, 50),
+        .gold => unreachable,
+    };
+}
+
 fn winCell(h: *H, l: *const Line) N {
-    return stat.view(h, .{ .value = l.r.value, .scale = .aggregate, .ref = l.r.usual, .games = l.r.n });
+    return stat.view(h, .{ .value = l.r.value, .scale = .aggregate, .ref = l.r.usual, .range = rangeOf(.rate, l.r.value, l.r.n) });
 }
 
 fn vsCell(h: *H, l: *const Line) N {
@@ -245,11 +255,11 @@ fn gamesCell(h: *H, l: *const Line) N {
 }
 
 fn overallCell(h: *H, l: *const Line) N {
-    return stat.view(h, .{ .value = l.r.overall, .games = l.r.games });
+    return stat.view(h, .{ .value = l.r.overall, .range = fmt.rangeAt(l.r.games, l.r.overall) });
 }
 
 fn gapCell(h: *H, l: *const Line) N {
-    return stat.view(h, .{ .value = l.r.value, .kind = .points, .scale = .aggregate, .ref = l.r.usual, .games = l.r.n });
+    return stat.view(h, .{ .value = l.r.value, .kind = .points, .scale = .aggregate, .ref = l.r.usual, .range = rangeOf(.gap, l.r.value, l.r.n) });
 }
 /// A champion's lead over many lanes: steps out from 0
 const gold_cuts: [4]f32 = .{ 50, 150, 300, 500 };

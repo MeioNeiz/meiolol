@@ -19,6 +19,7 @@ const filterbar = @import("filterbar.zig");
 const rolepicker = @import("rolepicker.zig");
 const chip = @import("chip.zig");
 const stat = @import("stat.zig");
+const fmt = @import("fmt.zig");
 const delta = @import("delta.zig");
 const bar = @import("bar.zig");
 const badge = @import("badge.zig");
@@ -286,7 +287,7 @@ fn who(h: *H, l: *const Line) N {
 }
 
 fn winCell(h: *H, l: *const Line) N {
-    return stat.view(h, .{ .value = l.rate(), .scale = .aggregate, .ref = 50, .games = l.row().games });
+    return stat.view(h, .{ .value = l.rate(), .scale = .aggregate, .ref = 50, .range = fmt.range(l.row().games, l.row().wins) });
 }
 
 /// Whole games, faint below 0 (winning less than the role)

@@ -304,8 +304,6 @@ pub const Table = table.DataTable(Row, .{
     },
     .default_sort = 1,
     .games = Row.games,
-    // Each rate fades by its range (win), not the row by its games
-    .thin = 0,
     .compact = true,
 });
 

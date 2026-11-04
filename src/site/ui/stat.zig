@@ -1,8 +1,8 @@
 //! StatCell: one figure, formatted by its kind through fmt.zig and coloured by how far it
 //! sits from its scale's middle. Ink by default: an aggregate rate mixes continuously
 //! (fmt.WrColour, as the live champions table), so a sorted column reads as a smooth run;
-//! one game's steps (fmt.Step). Fill for heat cells, stepped. Thin data fades; a missing
-//! figure says so
+//! one game's steps (fmt.Step). Fill for heat cells, stepped. A rate carries its 80% range
+//! and fades when it is wide, never hides (J35); a missing figure says so
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -34,12 +34,14 @@ pub const Stat = struct {
     scale: fmt.Scale = .none,
     /// The scale's middle (50, the role's average): the colour reads value − ref
     ref: f64 = 0,
-    /// 95% half-width, in the value's units: "±1.4"
-    ci: ?f64 = null,
+    /// 80% half-width, in the value's units: "±1.4" (fmt.range); past fmt.wide_range the
+    /// figure fades
+    range: ?f64 = null,
     /// The Toggletip the ± opens: its id on the page
-    ci_tip: ?[]const u8 = null,
-    /// Under fmt.thin_games the figure fades
-    games: ?u32 = null,
+    range_tip: ?[]const u8 = null,
+    /// An average's lanes or games (gold): under fmt.thin_games the figure fades. Rates
+    /// fade by range
+    thin: bool = false,
     /// A second line under the figure (last patch, typical)
     ctx: ?tree.Text = null,
     fill: bool = false,
@@ -56,11 +58,11 @@ pub fn view(h: *H, s: Stat) N {
     });
     const d = v - s.ref;
     const step: fmt.Step = if (s.scale == .none) .{} else .of(@floatCast(d), s.scale.cuts());
-    const thin = if (s.games) |g| g < fmt.thin_games else false;
-    const ci: ?N = if (s.ci) |c| (if (s.ci_tip) |id|
-        h.button(.{ .class = "c-tt ci", .type = "button", .popovertarget = id }, .{ "±", phrase.num(h, .dec, c) })
+    const thin = s.thin or if (s.range) |r| fmt.wide(r) else false;
+    const ci: ?N = if (s.range) |c| (if (s.range_tip) |id|
+        h.button(.{ .class = "c-tt ci", .type = "button", .popovertarget = id }, .{ "±", pm(h, c) })
     else
-        h.span(.{ .class = "ci" }, .{ "±", phrase.num(h, .dec, c) })) else null;
+        h.span(.{ .class = "ci" }, .{ "±", pm(h, c) })) else null;
     return h.span(.{
         .class = "c-stat",
         .data_v = if (s.fill) "fill" else null,
@@ -70,6 +72,12 @@ pub fn view(h: *H, s: Stat) N {
         h.span(.{ .class = "v" }, .{ figure(h, s.kind, v), ci }),
         if (s.ctx) |c| h.span(.{ .class = "ctx" }, .{c}) else null,
     });
+}
+
+/// A range's half-width: "3.1", whole from 10 ("14"): a wide range's tenths say nothing
+pub fn pm(h: *H, v: f64) tree.Text {
+    if (v < 10) return phrase.num(h, .dec, v);
+    return phrase.num(h, .int, @as(u32, @intFromFloat(@min(@round(v), 100))));
 }
 
 /// `v` as its kind reads: "53.6%", "+2.6", "11:54"
@@ -102,15 +110,15 @@ pub const css =
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const agg: fmt.Scale = .aggregate;
-    g.add("rate", view(h, .{ .value = 53.6, .scale = agg, .ref = 50, .games = 3143, .ctx = plain("3,143") }));
-    g.add("rate, low", view(h, .{ .value = 47.7, .scale = agg, .ref = 50, .games = 747, .ctx = plain("747") }));
+    g.add("rate", view(h, .{ .value = 53.6, .scale = agg, .ref = 50, .range = fmt.range(3143, 1685), .ctx = plain("3,143") }));
+    g.add("rate, low", view(h, .{ .value = 47.7, .scale = agg, .ref = 50, .range = fmt.range(747, 356), .ctx = plain("747") }));
     g.add("points", view(h, .{ .value = 2.6, .kind = .points, .scale = agg }));
-    g.add("points, ±", view(h, .{ .value = 2.6, .kind = .points, .scale = agg, .ci = 1.4 }));
+    g.add("points, ±", view(h, .{ .value = 2.6, .kind = .points, .scale = agg, .range = 1.4 }));
     g.add("count", view(h, .{ .value = 44935, .kind = .count, .ctx = plain("games") }));
     g.add("time", view(h, .{ .value = 714, .kind = .time }));
     g.add("gold, one game", view(h, .{ .value = 1402, .kind = .gold, .ctx = plain("gold") }));
     g.add("plain", view(h, .{ .value = 11.1 }));
-    g.add("thin", view(h, .{ .value = 38.3, .scale = agg, .ref = 50, .games = 64, .ctx = plain("64") }));
+    g.add("few games: a wide range, faded", view(h, .{ .value = 38.3, .scale = agg, .ref = 50, .range = fmt.range(64, 25), .ctx = plain("64") }));
     g.add("missing", view(h, .{ .value = null, .ctx = plain("few games") }));
     g.add("with context", view(h, .{ .value = 52.2, .scale = agg, .ref = 50, .ctx = plain("16.20 51.1%") }));
     var run = h.list();

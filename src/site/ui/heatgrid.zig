@@ -1,6 +1,6 @@
 //! HeatGrid: champions against champions as a grid of points vs usual. Rows and columns
 //! are champions (icons, a name when there's room); a cell is the column's champion into
-//! the row's, on the fill scale, faded when thin and "·" with no games. A gap can split
+//! the row's, on the fill scale, faded when its 80% range is wide (J35) and "·" with no games. A gap can split
 //! the columns (a pool, then suggestions), a row can be flagged (a lane nothing covers),
 //! a column head can carry a control (Add). Cells can be pressed: both heads light and
 //! the host gives one readout line. Pool's weak lanes first; the draft tester's pair
@@ -11,6 +11,7 @@ const fmt = @import("fmt.zig");
 const champ = @import("champ.zig");
 const button = @import("button.zig");
 const phrase = @import("phrase.zig");
+const stat = @import("stat.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -21,7 +22,7 @@ pub const scope = .{".c-heat"};
 
 const W = struct {
     pub const none = plain("·");
-    pub const cell = phrase.Phrase("{a:text} into {b:text} {v:text}, {g:text} games");
+    pub const cell = phrase.Phrase("{a:text} into {b:text} {v:text} ±{r:text}, {g:text} games");
     pub const empty = phrase.Phrase("{a:text} into {b:text}, no games");
     pub const add = phrase.Phrase("Add {c:text}");
 };
@@ -112,10 +113,11 @@ fn cell(h: *H, g: Grid, i: usize, j: usize) N {
     const x = (if (whole) g.cells[at] else null) orelse
         return h.span(.{ .key = j, .class = "c", .data_k = "none", .role = "img", .aria_label = W.empty.with(h, .{ .a = a, .b = b }) }, .{W.none});
     const num = phrase.num(h, .points, x.pp);
-    const label = W.cell.with(h, .{ .a = a, .b = b, .v = num.s, .g = phrase.num(h, .count, x.games).s });
-    const thin = x.games < fmt.thin_games;
-    const style = if (thin) null else h.vars(.{ .f = fmt.Step.of(x.pp, fmt.win_cuts).fill() });
-    const k: ?[]const u8 = if (thin) "thin" else if (x.best) "best" else null;
+    // Points vs usual carry no wins: the range of a 50% rate on these games, its widest
+    const pm = fmt.rangeAt(x.games, 50);
+    const label = W.cell.with(h, .{ .a = a, .b = b, .v = num.s, .r = stat.pm(h, pm).s, .g = phrase.num(h, .count, x.games).s });
+    const style = h.vars(.{ .f = fmt.Step.of(x.pp, fmt.win_cuts).fill() });
+    const k: ?[]const u8 = if (x.best) "best" else if (fmt.wide(pm)) "wide" else null;
     if (at >= g.on.len) return h.span(.{ .key = j, .class = "c", .data_k = k, .style = style, .role = "img", .aria_label = label }, .{num});
     const pressed = if (g.sel) |s| s[0] == i and s[1] == j else false;
     return h.button(.{ .key = j, .class = "c", .type = "button", .data_k = k, .style = style, .aria_pressed = pressed, .aria_label = label, .on_click = g.on[at] }, .{num});
@@ -143,7 +145,7 @@ pub const css =
     \\    font-variant-numeric: tabular-nums; }
     \\  .c-heat button.c { min-height: 0; cursor: pointer; }
     \\  .c-heat button.c:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-    \\  .c-heat .c[data-k="thin"] { color: var(--muted); }
+    \\  .c-heat .c[data-k="wide"] { opacity: 0.55; }
     \\  .c-heat .c[data-k="best"] { box-shadow: inset 0 0 0 1.5px var(--text); }
     \\  .c-heat .rh > small { margin-left: auto; min-width: 4ch; text-align: right; font-size: var(--fs-xs);
     \\    color: var(--faint); font-variant-numeric: tabular-nums; }
@@ -238,7 +240,7 @@ pub fn gallery(g: *Gallery) void {
 
 const testing = std.testing;
 
-test "heat grid: cells by row and column, thin faded, none dotted, gap before suggestions" {
+test "heat grid: cells by row and column, a wide range faded, none dotted, gap before suggestions" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -257,16 +259,16 @@ test "heat grid: cells by row and column, thin faded, none dotted, gap before su
     try testing.expectEqual(1, std.mem.count(u8, out, "data-k=\"none\""));
     try testing.expect(std.mem.find(u8, out, "Darius into Darius, no games") != null);
     // Sion into Yorick: 80 games
-    try testing.expectEqual(1, std.mem.count(u8, out, "data-k=\"thin\""));
-    try testing.expect(std.mem.find(u8, out, "aria-label=\"Dr. Mundo into Darius +3.2, 402 games\" aria-pressed=\"true\"") != null or
-        std.mem.find(u8, out, "aria-pressed=\"true\" aria-label=\"Dr. Mundo into Darius +3.2, 402 games\"") != null);
+    try testing.expectEqual(1, std.mem.count(u8, out, "data-k=\"wide\""));
+    try testing.expect(std.mem.find(u8, out, "aria-label=\"Dr. Mundo into Darius +3.2 ±3.2, 402 games\" aria-pressed=\"true\"") != null or
+        std.mem.find(u8, out, "aria-pressed=\"true\" aria-label=\"Dr. Mundo into Darius +3.2 ±3.2, 402 games\"") != null);
     // One gap per row and the head row
     try testing.expectEqual(6, std.mem.count(u8, out, "class=\"gap\""));
     try testing.expectEqual(3, std.mem.count(u8, out, "data-flag"));
     try testing.expectEqual(2, std.mem.count(u8, out, "data-lit"));
 }
 
-test "heat grid: inert cells are images with a fill unless thin; a readout; no rows, the head" {
+test "heat grid: inert cells are images with a fill, faded when wide; a readout; no rows, the head" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -288,12 +290,12 @@ test "heat grid: inert cells are images with a fill unless thin; a readout; no r
     try testing.expectEqual(30, std.mem.count(u8, out, "class=\"c\""));
     try testing.expectEqual(30, std.mem.count(u8, out, "role=\"img\""));
     try testing.expect(std.mem.find(u8, out, "<p class=\"read\"><span>Press a cell</span></p>") != null);
-    // Ornn into Fiora: 2,104 games, filled; Sion into Yorick: 80, thin and unfilled
+    // Ornn into Fiora: 2,104 games, filled; Sion into Yorick: 80, filled and faded
     const fiora = std.mem.find(u8, out, "aria-label=\"Ornn into Fiora").?;
     try testing.expect(std.mem.find(u8, cellAt(out, fiora), "--f:") != null);
     const yorick = std.mem.find(u8, out, "aria-label=\"Sion into Yorick").?;
-    try testing.expect(std.mem.find(u8, cellAt(out, yorick), "--f:") == null);
-    try testing.expect(std.mem.find(u8, cellAt(out, yorick), "data-k=\"thin\"") != null);
+    try testing.expect(std.mem.find(u8, cellAt(out, yorick), "--f:") != null);
+    try testing.expect(std.mem.find(u8, cellAt(out, yorick), "data-k=\"wide\"") != null);
 
     // Cells that don't fit the heads: every one none
     w.clearRetainingCapacity();

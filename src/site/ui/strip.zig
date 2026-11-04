@@ -1,11 +1,13 @@
 //! StatStrip: a page's headline figures in one row, plain (no box per figure): a small
 //! label over each value, the answer larger, a value on the scale's colour where it has
-//! one, context after it small ("4th of 53"). Three to a row in a narrow container. A
+//! one, context after it small ("4th of 53"). A rate carries its 80% range ("±1.1") and
+//! fades when it is wide, never hides (J35). Three to a row in a narrow container. A
 //! label can open a Toggletip; a figure can link to where it comes from, or be pressed
 //! (the game page's cells select their span; the selected one shows pressed)
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
 const toggletip = @import("toggletip.zig");
+const stat = @import("stat.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
 const H = tree.H;
@@ -20,6 +22,9 @@ pub const Item = struct {
     value: tree.Text,
     /// After the value, small
     ctx: ?tree.Text = null,
+    /// A rate's 80% half-width (fmt.range): "±1.1" after the value; past fmt.wide_range
+    /// the value fades
+    range: ?f64 = null,
     /// The value's colour; null is plain ink
     step: ?fmt.Step = null,
     /// The figure the page answers with (one per strip)
@@ -42,18 +47,23 @@ pub fn view(h: *H, items: []const Item) N {
         const tip: ?[2]N = if (it.tip) |t| toggletip.view(h, t.id, .{it.label}, it.label, t.note) else null;
         const lab = h.span(.{ .class = "lab" }, .{ if (tip) |*t| t else null, if (tip == null) it.label else null });
         const style = if (it.step) |s| h.vars(.{ .c = s }) else null;
+        const wide = if (it.range) |r| fmt.wide(r) else false;
+        const pm: ?N = if (it.range) |r| h.span(.{ .class = "pm" }, .{ "±", stat.pm(h, r) }) else null;
         const val = if (it.on) |on| h.button(.{
             .class = "val",
             .type = "button",
             .style = style,
+            .data_wide = wide,
             .aria_pressed = it.pressed,
             .aria_label = W.cell.with(h, .{ .l = it.label.s, .v = it.value.s }),
             .on_click = on,
         }, .{
             it.value,
+            pm,
             if (it.ctx) |c| h.small(.{}, .{c}) else null,
-        }) else h.span(.{ .class = "val", .style = style }, .{
+        }) else h.span(.{ .class = "val", .style = style, .data_wide = wide }, .{
             it.value,
+            pm,
             if (it.ctx) |c| h.small(.{}, .{c}) else null,
         });
         const cls = if (it.answer) "answer" else null;
@@ -74,6 +84,8 @@ pub const css =
     \\    font-variant-numeric: tabular-nums; color: var(--c, var(--text)); white-space: nowrap; }
     \\  .c-strip .val > small { font-size: var(--fs-s); font-weight: var(--w-r); color: var(--faint); }
     \\  .c-strip .val > small::before { content: " "; }
+    \\  .c-strip .val > .pm { margin-left: 3px; font-size: var(--fs-s); font-weight: var(--w-r); color: var(--muted); }
+    \\  .c-strip .val[data-wide] { opacity: 0.55; }
     \\  .c-strip > .answer .val { font-size: var(--fs-xl); }
     \\  .c-strip > a:hover { text-decoration: none; }
     \\  .c-strip > a:hover .lab { color: var(--text); }
@@ -102,6 +114,7 @@ pub fn gallery(g: *Gallery) void {
         .{
             .label = plain("Win rate"),
             .value = plain("51.2%"),
+            .range = 0.6,
             .ctx = plain("4th of 53"),
             .step = .of(1.2, agg),
             .answer = true,
@@ -112,7 +125,7 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Games"), .value = plain("44,935") },
     }));
     g.add("six, one links", view(h, &.{
-        .{ .label = plain("Won"), .value = plain("49.3%"), .ctx = plain("44th of 59"), .step = .of(-0.7, agg), .answer = true },
+        .{ .label = plain("Won"), .value = plain("49.3%"), .range = fmt.range(64, 32), .ctx = plain("44th of 59"), .step = .of(-0.7, agg), .answer = true },
         .{ .label = plain("Pick"), .value = plain("7.7%") },
         .{ .label = plain("Ban"), .value = plain("16.5%") },
         .{ .label = plain("Games"), .value = plain("31,257") },

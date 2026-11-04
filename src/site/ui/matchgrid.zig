@@ -25,7 +25,6 @@ const Rel = cp.Rel;
 const Opp = cp.Opp;
 const Counts = cp.Counts;
 const Measure = cp.Measure;
-const thin_games = fmt.thin_games;
 
 pub const Msg = union(enum) { rel: u8, ally: bool, rel_role: role.Role, measure: Measure };
 
@@ -56,9 +55,8 @@ pub const Input = struct {
     ranked: ?Ranked = null,
     /// Beside the controls when it's not the lane: the cards that stay Platinum+
     plat: N = .none,
+    /// A rank pick without the role (Ranked.few)
     few: N = .none,
-    /// The plot faded: a rank pick with few games
-    faded: bool = false,
 };
 
 pub const Ranked = union(enum) { few, lane: struct { counts: Counts, opps: []const Opp, rare: u16 } };
@@ -120,14 +118,13 @@ pub const MatchupGrid = struct {
         var counts = in.counts;
         var opps = rel.opps;
         var rare = rel.rare;
-        var few_games = false;
+        var none = false;
         if (lane) if (in.ranked) |x| switch (x) {
-            .few => few_games = true,
+            .few => none = true,
             .lane => |y| {
                 counts = y.counts;
                 opps = y.opps;
                 rare = y.rare;
-                few_games = y.counts.games < cp.min_games;
             },
         };
         const own = rate(counts);
@@ -152,7 +149,7 @@ pub const MatchupGrid = struct {
                 .x = x,
                 .games = o.games,
                 .fig = g.figure(h, o),
-                .thin = o.games < thin_games,
+                .thin = wide(o),
                 .href = matchHref(h, in, o),
             };
             of[n] = @intCast(k);
@@ -202,9 +199,9 @@ pub const MatchupGrid = struct {
         return card.view(h, .{ .id = "matchups" }, &.{
             card.head(h, W.matchups, if (rare > 0) W.rare.with(h, .{ .n = count, .r = rare }) else phrase.num(h, .count, count), &.{ if (lane) .none else in.plat, controls[0], controls[1], controls[2] }),
             h.div(.{ .class = "c-mgrid" }, .{
-                if (few_games) in.few else h.div(.{ .class = "plot", .data_thin = in.faded and counts.games < cp.solid_games }, .{g.dots.view(h)}),
+                if (none) in.few else h.div(.{ .class = "plot" }, .{g.dots.view(h)}),
                 if (rel.ally) h.p(.{ .class = "alone" }, .{if (chosen) |o| L.alone.with(h, .{ .c = in.name, .p = in.champs[o.champ].name }) else L.alone_any.with(h, .{ .c = in.name })}) else .none,
-                if (chosen) |o| (if (few_games) .none else h.div(.{ .class = "brief" }, .{matchbrief.view(h, b: {
+                if (chosen) |o| (if (none) .none else h.div(.{ .class = "brief" }, .{matchbrief.view(h, b: {
                     var x = brief(h, in, rel, counts, o);
                     if (rel.ally and rel.role == partner(in.role) and (in.role == .bot or in.role == .support))
                         if (g.relOf(in, false, in.role)) |k| {
@@ -232,13 +229,18 @@ pub const MatchupGrid = struct {
     }
 };
 
+/// A matchup's win rate range past fmt.wide_range: its dot, chip and brief fade (J35)
+fn wide(o: Opp) bool {
+    return fmt.wide(fmt.range(o.games, o.wins));
+}
+
 fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief {
     const own = rate(rl);
     const won = rate(.{ .games = o.games, .wins = o.wins });
     const usual_tip = h.fmt("cp-usual-{d}", .{o.champ});
     var items: [4]strip.Item = undefined;
     var n: usize = 0;
-    items[n] = .{ .label = W.wins.with(h, .{ .c = in.name }), .value = phrase.num(h, .rate, won), .ctx = phrase.num(h, .points, won - own), .step = .of(won - own, fmt.win_cuts), .answer = true };
+    items[n] = .{ .label = W.wins.with(h, .{ .c = in.name }), .value = phrase.num(h, .rate, won), .range = fmt.range(o.games, o.wins), .ctx = phrase.num(h, .points, won - own), .step = .of(won - own, fmt.win_cuts), .answer = true };
     n += 1;
     items[n] = .{ .label = W.m_usual, .value = phrase.num(h, .points, o.usual), .ctx = cp.usualSide(o.usual, W.below_usual, W.above_usual), .step = .of(o.usual, fmt.win_cuts), .tip = .{ .id = usual_tip, .note = W.usual_note.with(h, .{ .c = in.name }) } };
     n += 1;
@@ -251,7 +253,7 @@ fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief
     return .{
         .champ = icon(h, in, o.champ),
         .rel = if (rel.ally) W.ally.with(h, .{ .r = rel.role.label().s }) else W.opponent.with(h, .{ .r = rel.role.label().s }),
-        .thin = o.games < thin_games,
+        .thin = wide(o),
         .figures = strip.view(h, items[0..n]),
         .href = matchHref(h, in, o),
     };

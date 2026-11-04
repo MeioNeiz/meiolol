@@ -127,8 +127,10 @@ test "search, minimums and a row's detail" {
     try testing.expectEqual(@as(u32, 1), p.fake.replaces);
     try testing.expect(std.mem.find(u8, try p.shown(), "<span class=\"count\">3</span>") != null);
     _ = p.rt.event(0, .{ .kind = .input, .target = p.id("type", "search"), .text = "" });
-    // Any: Zilean's 61 games show, faded
-    try testing.expect(std.mem.find(u8, try p.shown(), "<tr aria-expanded=\"false\" data-state=\"thin\"><td><b>Zilean") != null);
+    // Any: Zilean's 61 games show, the rate faded by its range, not the row
+    const shown = try p.shown();
+    const zilean = std.mem.find(u8, shown, "<tr aria-expanded=\"false\"><td><b>Zilean").?;
+    try testing.expect(std.mem.find(u8, shown[zilean..], "data-state=\"thin\"") != null);
     _ = p.rt.event(0, .{ .kind = .click, .target = p.byText(.button, "1k") });
     try testing.expectEqualStrings("Kha'Zix,Miss Fortune,Darius,Ahri,Tristana,Viktor,Renata Glasc,Qiyana", try p.names());
     try testing.expectEqualStrings("#min=2", p.fake.fragment.items);

@@ -18,6 +18,7 @@ const role = @import("role.zig");
 const card = @import("card.zig");
 const badge = @import("badge.zig");
 const strip = @import("strip.zig");
+const stat = @import("stat.zig");
 const segmented = @import("segmented.zig");
 const champhead = @import("champhead.zig");
 const matchstrip = @import("matchstrip.zig");
@@ -152,7 +153,7 @@ pub const Head = struct {
                 .colour = .{ .pts = r - 50 },
                 .href = try a.print("/matchups/{t}/{s}-vs-{s}{s}", .{ d.role, d.x.slug, o.o.slug, urls.view_queries[d.view] }),
                 .current = std.mem.eql(u8, o.o.slug, d.y.slug),
-                .thin = o.games < fmt.thin_games,
+                .thin = fmt.wide(fmt.range(o.games, o.wins)),
             };
         }
         const label = try a.print("{s}'s {s} opponents", .{ d.x.name, d.role.label().s });
@@ -188,7 +189,7 @@ pub const Head = struct {
         const won = rate(d.games, d.wins);
         var items: [5]strip.Item = undefined;
         var n: usize = 0;
-        items[n] = .{ .label = W.wins.with(h, .{ .c = d.x.name }), .value = phrase.num(h, .rate, won), .step = .of(won - 50, fmt.win_cuts), .answer = true };
+        items[n] = .{ .label = W.wins.with(h, .{ .c = d.x.name }), .value = phrase.num(h, .rate, won), .range = fmt.range(d.games, d.wins), .step = .of(won - 50, fmt.win_cuts), .answer = true };
         n += 1;
         items[n] = .{
             .label = W.usual,
@@ -329,7 +330,6 @@ const rank_spec: table.Spec(RankRow) = .{
         .{ .label = plain("Games"), .cell = rankGames, .sort = rankGamesOf },
     },
     .games = rankGamesOfN,
-    .thin = thin_games,
     .compact = true,
 };
 
@@ -342,8 +342,7 @@ fn rankOrder(r: *const RankRow) f64 {
 }
 
 fn rankRate(h: *H, r: *const RankRow) N {
-    const v = rate(r.games, r.wins);
-    return h.b(.{ .style = h.vars(.{ .c = fmt.WrColour{ .pts = v - 50 } }) }, .{phrase.num(h, .rate, v)});
+    return stat.view(h, .{ .value = rate(r.games, r.wins), .scale = .aggregate, .ref = 50, .range = fmt.range(r.games, r.wins) });
 }
 
 fn rankRateOf(r: *const RankRow) f64 {
@@ -459,7 +458,7 @@ pub const More = struct {
         n += 2;
         return card.view(h, .{}, &.{
             card.head(h, W.h2h, null, &.{versus.key(h, .{ p.data.x, p.data.y })}),
-            h.div(.{ .data_thin = p.data.thin }, .{versus.rows(h, .{ p.data.x, p.data.y }, rows[0..n])}),
+            versus.rows(h, .{ p.data.x, p.data.y }, rows[0..n]),
         });
     }
 
@@ -662,7 +661,9 @@ fn buckets(h: *H, t: *trend.Trend, bs: []const Bucket, labels: []const tree.Text
 
 /// A share row of head to head: each side's part of its games ([part, of])
 fn share(h: *H, label: tree.Text, a: [2]u32, b: [2]u32) versus.Row {
-    return versus.shares(h, label, rate(a[1], a[0]) / 100, rate(b[1], b[0]) / 100);
+    var r = versus.shares(h, label, rate(a[1], a[0]) / 100, rate(b[1], b[0]) / 100);
+    r.wide = fmt.wide(@max(fmt.range(a[1], a[0]), fmt.range(b[1], b[0])));
+    return r;
 }
 
 /// A timing row: both medians, the earlier bold and the gap under the label
@@ -697,7 +698,6 @@ fn pairs(a: std.mem.Allocator, xs: []const [2]i16) ![]const [2]f32 {
 pub const css =
     \\@layer components {
     \\  .c-mpage .c-mstrip { margin-top: var(--sp-4); }
-    \\  .c-mpage [data-thin] > .c-vs { opacity: 0.6; }
     \\  .c-mpage .partners { display: grid; gap: var(--sp-3) var(--sp-5); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
     \\  .c-mpage .partners h3 { margin: 0 0 var(--sp-1); font-size: var(--fs-s); font-weight: var(--w-m); color: var(--t2); }
     \\  .c-mpage .c-head .lg { font-size: var(--fs-s); color: var(--muted); }

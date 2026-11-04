@@ -165,6 +165,8 @@ pub const Row = struct {
     lead: ?Side = null,
     /// After a timing's two times, small: "8 s apart"
     sub: ?tree.Text = null,
+    /// A share's range past fmt.wide_range: faded (J35)
+    wide: bool = false,
 };
 
 pub const Side = enum { a, b };
@@ -185,7 +187,7 @@ pub fn shares(h: *H, label: tree.Text, pa: f32, pb: f32) Row {
 /// `names`: the two sides, for screen readers (`key` shows them)
 pub fn rows(h: *H, names: [2][]const u8, items: []const Row) N {
     var l = h.list();
-    for (items, 0..) |r, i| l.add(h.div(.{ .key = i, .class = "mr" }, .{
+    for (items, 0..) |r, i| l.add(h.div(.{ .key = i, .class = "mr", .data_thin = r.wide }, .{
         h.span(.{ .class = "lab" }, .{r.label}),
         if (r.bars) |b| dots(h, r, b) else h.span(.{ .class = "tm" }, .{
             h.span(.{ .class = "n us", .data_lead = r.lead == .a }, .{r.a}),
@@ -361,7 +363,7 @@ pub const css =
     \\  .c-vs[data-v="cell"] > .fig { font-size: var(--fs-xs); white-space: nowrap; }
     \\  .c-vs[data-v="bell"] { grid-template-columns: minmax(0, 1fr); gap: 0; }
     \\  .c-vs > .bl { display: grid; grid-template-columns: minmax(0, 10em) minmax(0, 1fr) 3.4em; align-items: center; gap: var(--sp-2); min-height: 32px; }
-    \\  .c-vs > .bl[data-thin] { opacity: 0.55; }
+    \\  .c-vs > .bl[data-thin], .c-vs > .mr[data-thin] > :not(.lab) { opacity: 0.55; }
     \\  .c-vs > .bl + .bl:not(.ax) { border-top: 1px solid var(--line); }
     \\  .c-vs .bl > .hd { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; }
     \\  .c-vs .hd > a { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: inherit; text-decoration: none; }

@@ -359,7 +359,7 @@ pub const HomeChamps = struct {
                         .value = wr,
                         .scale = .aggregate,
                         .ref = 50,
-                        .games = x.games,
+                        .range = fmt.rangeAt(x.games, wr),
                         .ctx = if (x.d) |dd| phrase.num(h, .points, dd) else null,
                     }),
                 })}));

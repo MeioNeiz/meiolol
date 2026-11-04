@@ -187,7 +187,8 @@ pub const Scale = enum {
     }
 };
 
-/// Under this many games a figure fades: it could easily be luck
+/// Under this many games or lanes an average fades (gold at 14): it could easily be luck.
+/// Rates fade by their range instead (wide)
 pub const thin_games = 100;
 
 /// A rate's 80% range from its games, half-width in points: how sure it is (J35,
@@ -195,8 +196,14 @@ pub const thin_games = 100;
 /// with no games
 pub fn range(games: u32, wins: u32) f64 {
     if (games == 0) return std.math.inf(f64);
+    return rangeAt(games, 100 * @as(f64, @floatFromInt(@min(wins, games))) / @as(f64, @floatFromInt(games)));
+}
+
+/// As range, from the rate in % where the wins aren't at hand
+pub fn rangeAt(games: u32, pct: f64) f64 {
+    if (games == 0) return std.math.inf(f64);
     const n: f64 = @floatFromInt(games);
-    const p = @as(f64, @floatFromInt(@min(wins, games))) / n;
+    const p = std.math.clamp(pct / 100, 0, 1);
     const z2 = z80 * z80;
     return 100 * z80 / (1 + z2 / n) * @sqrt(p * (1 - p) / n + z2 / (4 * n * n));
 }
@@ -204,6 +211,11 @@ const z80 = 1.2816;
 
 /// Past this half-width a rate fades, never hides (J35): today's 100 games at 50%
 pub const wide_range = 6;
+
+/// Whether a rate's range is past wide_range
+pub fn wide(pm: f64) bool {
+    return pm > wide_range;
+}
 
 /// A step of the diverging scale as a CSS colour: `h.vars(.{ .c = Step.of(d, cuts) })`
 /// writes var(--hi2)
@@ -348,6 +360,7 @@ test range {
     try std.testing.expect(range(400, 200) < wide_range);
     try std.testing.expect(range(3, 3) > 15);
     try std.testing.expect(std.math.isInf(range(0, 0)));
+    try std.testing.expectApproxEqAbs(range(100, 30), rangeAt(100, 30), 1e-9);
 }
 
 test "numbers read as the mock's" {
