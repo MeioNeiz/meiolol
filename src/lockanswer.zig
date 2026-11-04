@@ -606,6 +606,20 @@ pub fn file(gpa: Allocator, arena: Allocator, t: *const lockrows.Table, x: *cons
     return try b.file(arena, &t.build, label, min_tier, o.rows);
 }
 
+/// `champion` in `role`'s games and wins under `f` and `locks`; null when the table has
+/// no such block
+pub fn count(arena: Allocator, t: *const lockrows.Table, x: *const Index, champion: u32, role: Role, f: Filter, locks: *const Locks) !?Count {
+    const bi = t.blockIndex(champion, role) orelse return null;
+    const block = &x.blocks[bi];
+    const m: Match = try .init(arena, block, locks);
+    var out: Count = .{};
+    for (block.rows) |*r| {
+        if (!f.takes(r.start, r.platform, r.patch, if (r.rank == no_rank) null else r.rank) or !m.takes(r)) continue;
+        Counts.bump(&out, r.won);
+    }
+    return out;
+}
+
 /// A champion-role's games under a view and locks, and with each ally (`by[0]`) and
 /// against each enemy (`by[1]`) by role, indexed by Table.dicts.champions code
 pub const Matchups = struct {

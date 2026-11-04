@@ -83,6 +83,8 @@ pub const Data = struct {
 
 pub const Other = struct {
     name: []const u8,
+    /// Riot's champion id: an opponent lock's value
+    id: u16 = 0,
     /// Data Dragon's
     key: []const u8,
     slug: []const u8,
@@ -324,7 +326,7 @@ pub fn viewPath(a: std.mem.Allocator, src: []const u8, root: []const u8, v: u8, 
 /// Lock answers' directory under a view's (site/locks.zig)
 pub const lock_prefix = "data/lock/";
 
-/// View `v`'s lock answer for `island` (only "build" so far) of `slug` in role `r` at
+/// View `v`'s lock answer for `island` (site/locks.zig Island) of `slug` in role `r` at
 /// rank `k` under `lk`, a lock set as lockanswer.Locks.format writes it
 pub fn lockPath(a: std.mem.Allocator, root: []const u8, v: u8, island: []const u8, slug: []const u8, r: role.Role, k: Rank, lk: []const u8) ![]const u8 {
     return std.mem.concat(a, u8, &.{ root, view_dirs[v], lock_prefix, island, "/", slug, "/", @tagName(r), "/", @tagName(k), "/", lk, ".bin" });
@@ -361,8 +363,10 @@ pub const W = struct {
     pub const build_usual = Phrase("{x:text}'s build");
     pub const no_lock_games = plain("No games with these locks.");
     pub const vs_lock = Phrase("vs {y:text}");
-    /// Until the other blocks follow the locks (champion-locks.md L3)
-    pub const lock_scope = plain("Build only");
+    /// Until Trends and the lane charts follow the locks (champion-locks.md L4, L5)
+    pub const lock_scope = plain("Not Trends yet");
+    /// The StatStrip under locks: their games out of the champion-role's
+    pub const lock_share = plain("Of its games");
     pub const no_answer = plain("These locks can't be counted here yet.");
     pub const few_vs = Phrase("few games vs {y:text}");
     pub const trends = plain("Trends");
@@ -813,6 +817,14 @@ pub const Top = struct {
     open: bool = false,
     search: champsearch.ChampSearch = .{ .index = undefined, .id = "vs", .label = W.vs },
     has_search: bool = false,
+    /// The champion page's locks (`lk`): the StatStrip shows the renderer's answer for
+    /// them (lockPath), fetched by ui-champion.wasm
+    locks: lockbar.Set = .{},
+    /// The answer shown and its path; roles empty: none for the path
+    answer: ?*const TopData = null,
+    answer_path: []const u8 = "",
+    /// The server's answer under `locks`, base64 (Build.ans)
+    ans: ?[]const u8 = null,
 
     const P = @This();
 
@@ -853,20 +865,43 @@ pub const Top = struct {
         region: Region = .euw,
         period: Period = .days30,
         rank: Rank = .plat,
+        lk: url.Str(200) = .{},
     };
 
     fn r(p: *const P) *const TopRole {
         return &p.data.roles[p.cur];
     }
 
+    fn shownAnswer(p: *const P) ?*const TopData {
+        return if (p.locks.any()) p.answer else null;
+    }
+
+    /// The answer the locks want, null without locks
+    pub fn lockWant(p: *const P, a: std.mem.Allocator) ?[]const u8 {
+        if (!p.locks.any() or p.cur >= p.data.roles.len) return null;
+        const w = p.files.want;
+        return lockPath(a, p.root, w.view, "top", p.data.slug, p.data.roles[p.cur].role, w.rank, p.locks.s.slice()) catch null;
+    }
+
+    pub fn setAnswer(p: *P, path: []const u8, d: *const TopData) void {
+        p.answer = d;
+        p.answer_path = path;
+    }
+
+    fn waiting(p: *const P, a: std.mem.Allocator) bool {
+        const w = p.lockWant(a) orelse return false;
+        return !std.mem.eql(u8, w, p.answer_path);
+    }
+
     pub fn toUrl(p: *const P) Url {
         const w = p.files.want;
-        return .{ .role = p.want_role, .region = w.region(), .period = w.period(), .rank = w.rank };
+        return .{ .role = p.want_role, .region = w.region(), .period = w.period(), .rank = w.rank, .lk = p.locks.s };
     }
 
     pub fn fromUrl(p: *P, u: Url) void {
         p.want_role = u.role;
         p.files.want = .of(u);
+        p.locks.s = u.lk;
         p.sync();
     }
 
@@ -903,7 +938,9 @@ pub const Top = struct {
             .data_src = if (p.src.len > 0) p.src else null,
             .data_stamp = p.stamp,
             .data_root = p.root,
-            .data_busy = p.files.busy(),
+            .data_busy = p.files.busy() or p.waiting(h.mem),
+            .data_lk = if (p.ans != null) p.locks.s.slice() else null,
+            .data_ans = p.ans,
         }, .{
             card.view(h, .{}, &.{
                 champhead.view(h, .{
@@ -911,12 +948,12 @@ pub const Top = struct {
                     .sub = W.sub.with(h, .{ .r = rl.role.label().s, .p = d.patch }),
                     .roles = p.roles(h),
                     .vs = if (p.has_search) p.search.view(h) else null,
-                    .strip = if (x) |y| p.headline(h, y) else h.p(.{ .class = "none" }, .{W.few.with(h, .{ .r = W.ranks[@backingInt(p.files.shown.rank)].s })}),
+                    .strip = if (p.shownAnswer()) |y| p.locked(h, y, x) else if (x) |y| p.headline(h, y) else h.p(.{ .class = "none" }, .{W.few.with(h, .{ .r = W.ranks[@backingInt(p.files.shown.rank)].s })}),
                 }),
                 if (rl.thin) h.p(.{ .class = "rare" }, .{W.rare_role.with(h, .{ .c = d.name, .n = rl.games })}) else .none,
                 tabs.view(h, W.sections, &.{
                     .{ .label = W.build, .href = "#build", .on = h.on(p, .{ .jump = .build }) },
-                    .{ .label = W.matchups, .href = "#matchups", .on = h.on(p, .{ .jump = .matchups }), .n = if (p.files.shown.rank == .plat) @intCast(rl.lane.len) else if (x) |y| y.opps else null },
+                    .{ .label = W.matchups, .href = "#matchups", .on = h.on(p, .{ .jump = .matchups }), .n = if (p.shownAnswer() != null) null else if (p.files.shown.rank == .plat) @intCast(rl.lane.len) else if (x) |y| y.opps else null },
                     .{ .label = W.trends, .href = "#trends", .on = h.on(p, .{ .jump = .trends }) },
                 }, &.{}),
                 p.toolbar(h),
@@ -978,6 +1015,28 @@ pub const Top = struct {
             };
         }
         return rolepicker.view(h, .{ .label = W.roles.with(h, .{ .c = p.data.name }) }, &items);
+    }
+
+    /// Under locks: the answer's games and win rate, and their share of the rank's games
+    /// in the role (`all`, null with too few there). Pick, ban, rank and the patch's
+    /// move are the champion's, not the locks'
+    fn locked(_: *P, h: *H, d: *const TopData, all: ?*const TopRole) N {
+        if (d.roles.len == 0 or d.roles[0].games == 0) return h.p(.{ .class = "none" }, .{if (d.roles.len == 0) W.no_answer else W.no_lock_games});
+        const x = d.roles[0];
+        const won = rate(.{ .games = x.games, .wins = x.wins });
+        var items: [3]strip.Item = undefined;
+        var n: usize = 0;
+        items[n] = .{ .label = W.won, .value = phrase.num(h, .rate, won), .range = fmt.range(x.games, x.wins), .step = .of(won - 50, fmt.win_cuts), .answer = true };
+        n += 1;
+        // The two count different tables (lock rows, views): never past all of them
+        if (all) |y| if (y.games > 0) {
+            const share = @min(100, 100 * @as(f32, @floatFromInt(x.games)) / @as(f32, @floatFromInt(y.games)));
+            items[n] = .{ .label = W.lock_share, .value = phrase.num(h, .rate, share) };
+            n += 1;
+        };
+        items[n] = .{ .label = W.games, .value = phrase.num(h, .count, x.games) };
+        n += 1;
+        return strip.view(h, items[0..n]);
     }
 
     fn headline(p: *P, h: *H, rl: *const TopRole) N {
@@ -1426,14 +1485,26 @@ pub const More = struct {
     }
 
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
-        p.grid.update(&p.input(), m);
         ev.push = true;
+        if (m == .lock) {
+            var buf: [lockbar.value_max]u8 = undefined;
+            return p.locks.toggle(.opponent, lockbar.text(&buf, &.{p.data.champs[m.lock].id}));
+        }
+        p.grid.update(&p.input(), m);
+    }
+
+    /// Data.champs' index of the locked opponent
+    fn lockedOpp(p: *const P) ?u16 {
+        const v = p.locks.get(.opponent) orelse return null;
+        const id = std.fmt.parseInt(u16, v, 10) catch return null;
+        for (p.data.champs, 0..) |c, i| if (c.id == id) return @intCast(i);
+        return null;
     }
 
     /// The grid's champion and role
     fn input(p: *const P) matchgrid.Input {
         const rl = p.r();
-        return .{ .name = p.data.name, .slug = p.data.slug, .ddragon = p.data.ddragon, .champs = p.data.champs, .role = rl.role, .counts = .{ .games = rl.games, .wins = rl.wins }, .rels = rl.rels };
+        return .{ .name = p.data.name, .slug = p.data.slug, .ddragon = p.data.ddragon, .champs = p.data.champs, .role = rl.role, .counts = .{ .games = rl.games, .wins = rl.wins }, .rels = rl.rels, .lock = .{ .on = p.lockedOpp() } };
     }
 
     pub fn view(p: *P, h: *H) N {

@@ -764,11 +764,17 @@ test "fixture games to stats, curves and the website" {
         const vs = try site.ui.data.decode(arena, site.ui.champpage.BuildData, (try loaded.get(arena, try lock(arena, "", 1, "build", "darius", .top, .plat, "ks8010,vs82"))).?);
         try testing.expectEqual(morde.games, vs.roles[0].build.?.games);
         try testing.expectEqual(morde.wins, vs.roles[0].build.?.wins);
+        // The StatStrip's answer: the same games and wins, nothing else
+        const top = try site.ui.data.decode(arena, site.ui.champpage.TopData, (try loaded.get(arena, try lock(arena, "", 1, "top", "darius", .top, .plat, "ks8010,vs82"))).?);
+        try testing.expectEqual(1, top.roles.len);
+        try testing.expectEqual(morde.games, top.roles[0].games);
+        try testing.expectEqual(morde.wins, top.roles[0].wins);
         // The page's own lock set rendered in: the LockBar, the answer inline for the
         // island, the opponent by name; a set not in its one form renders unlocked
         const page = (try loaded.getLocked(arena, "champions/darius/top.html", "ks8010,vs82")).?;
         try testing.expect(std.mem.find(u8, page, "data-lk=\"ks8010,vs82\"") != null);
-        try testing.expectEqual(2, std.mem.count(u8, page, "data-ans=\""));
+        try testing.expectEqual(3, std.mem.count(u8, page, "data-ans=\""));
+        try testing.expect(std.mem.find(u8, page, "Of its games") != null);
         try testing.expect(std.mem.find(u8, page, "class=\"c-lockbar\"") != null);
         try testing.expect(std.mem.find(u8, page, "vs Mordekaiser") != null);
         const odd = (try loaded.getLocked(arena, "champions/darius/top.html", "vs82,ks8010")).?;

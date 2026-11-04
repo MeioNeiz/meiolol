@@ -149,8 +149,13 @@ What a block needs from a row:
   renderer answers `more/...` with a MoreData of the role (lockanswer.matchups counts
   each ally and enemy by role from the Index, which codes the nine others per row, +8 B a
   row; site/champion.zig relsOf with the locked counts, no lane gold as curves aren't
-  locked), rendered into ?lk= pages too and fetched by ui-champmore. Not yet: StatStrip
-  under locks, a matchup dot as its opponent lock, then drop "Build only"
+  locked), rendered into ?lk= pages too and fetched by ui-champmore. The StatStrip
+  follows too (`top/...`: a TopData of the role with games and wins only,
+  lockanswer.count): won ±, its share of the champion-role's games, games; pick, ban,
+  rank and the patch's move are the champion's, so hidden. A lane opponent's brief has
+  Lock / Unlock (a button beside "Matchup ›", not tapping the dot: a dot shows its
+  brief first, and locking on every look would refetch the page). The bar says "Not
+  Trends yet" until L4 and L5
 
 - Thin (J35) in the build panel: every rate with its 80% range (fmt.range, Wilson),
   faded past ±6, whole numbers from ±10, none hidden; counts don't fade

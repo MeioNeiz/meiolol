@@ -113,6 +113,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
     try lockBuild(site, &build, ch, r);
     more.fromUrl(.{ .role = shown.role });
     try lockMore(site, &more, ch, r);
+    try lockTop(site, &top, ch, r);
     trends.fromUrl(.{ .role = shown.role });
     charts.fromUrl(.{ .role = shown.role });
     var t: ui.Tree = .{};
@@ -163,6 +164,21 @@ fn lockMore(site: *const Site, more: *cp.More, ch: Champ, r: Role) !void {
     const path = more.lockWant(a) orelse return;
     more.setAnswer(a, path, d);
     more.ans = try base64(a, cp.MoreData, d.*);
+}
+
+/// The request's lock set rendered into the StatStrip, as lockBuild
+fn lockTop(site: *const Site, top: *cp.Top, ch: Champ, r: Role) !void {
+    const a = site.arena;
+    const x = site.answers orelse return;
+    const lk = locks.pageLocks(site.lk) orelse return;
+    const d = try a.create(cp.TopData);
+    d.* = try locks.top(site, x, ch, r, .plat, &lk) orelse return;
+    var u = top.toUrl();
+    u.lk.set(site.lk);
+    top.fromUrl(u);
+    const path = top.lockWant(a) orelse return;
+    top.setAnswer(path, d);
+    top.ans = try base64(a, cp.TopData, d.*);
 }
 
 fn base64(a: std.mem.Allocator, comptime D: type, d: D) ![]const u8 {
@@ -337,7 +353,7 @@ pub fn relsOf(site: *const Site, ch: Champ, r: Role, cr: Counts, locked: ?[]cons
 /// Every champion as the islands name them (Data.champs)
 pub fn champsOf(site: *const Site) ![]cp.Other {
     const champs = try site.arena.alloc(cp.Other, site.champs.len);
-    for (champs, site.champs) |*o, x| o.* = .{ .name = x.name, .key = x.key, .slug = x.slug };
+    for (champs, site.champs) |*o, x| o.* = .{ .name = x.name, .id = @intCast(x.id), .key = x.key, .slug = x.slug };
     return champs;
 }
 

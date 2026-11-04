@@ -1,6 +1,7 @@
 //! ui-champion.wasm: the champion page's head (ui.champpage.Top), and the loader of
 //! ui-champbuild.wasm, ui-champmore.wasm and ui-champcharts.wasm for the rest. zjb's
-//! generated loader (ui-champion.js, `<script src data-wasm>`) calls `main`
+//! generated loader (ui-champion.js, `<script src data-wasm>`) calls `main`. Under locks
+//! (`lk`) it fetches the renderer's answer as ui-champmore.wasm does
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -21,6 +22,12 @@ var server: cp.Top = undefined;
 var src: []const u8 = "";
 var root_path: []const u8 = "";
 var want: u32 = 0;
+var island: ?*ui.island.Island(cp.Top, dom.Dom) = null;
+var answers: std.ArrayList(Answer) = .empty;
+const Answer = struct { path: []const u8, d: *const cp.TopData };
+var asked: ?[]const u8 = null;
+var server_lk: []const u8 = "";
+var server_ans: ?[]u8 = null;
 
 export fn main() void {
     dom.start();
@@ -31,6 +38,8 @@ export fn main() void {
     defer root.release();
     src = dom.attrOf(root, "data-src");
     root_path = dom.attrOf(root, "data-root");
+    server_lk = dom.attrOf(root, "data-lk");
+    server_ans = dom.binOf(root, "data-ans");
     const stamp = dom.attrOf(root, "data-stamp");
     want = std.fmt.parseInt(u32, stamp, 10) catch return dom.lazyLater();
     dom.fetchStamped(src, stamp, 0, loaded);
@@ -47,11 +56,20 @@ fn loaded(_: i32, bytes: ?[]u8) void {
     server = .init(&data, pp, root_path);
     server.src = src;
     server.stamp = want;
-    server.fromUrl(.{ .role = dom.pageRole() });
+    var u: cp.Top.Url = .{ .role = dom.pageRole() };
+    u.lk.set(server_lk);
+    server.fromUrl(u);
+    if (server_ans) |sb| if (server.lockWant(gpa)) |path| {
+        const d = gpa.create(cp.TopData) catch return;
+        d.* = ui.data.decode(gpa, cp.TopData, sb) catch return;
+        answers.append(gpa, .{ .path = path, .d = d }) catch return;
+        server.setAnswer(path, d);
+    };
     state = .init(&data, pp, root_path);
     state.src = src;
     state.stamp = want;
     const i = dom.rt.add(cp.Top, &state, &server, sel) catch return dom.dom.warn("champion: out of memory");
+    island = i;
     loader.start(&state, i);
     dom.rt.changed = changed;
     changed();
@@ -62,6 +80,7 @@ var stored: u8 = 0;
 
 fn changed() void {
     loader.check();
+    locks();
     const v = state.files.want.view;
     if (v == stored) return;
     stored = v;
@@ -73,3 +92,30 @@ fn changed() void {
 }
 
 const loader = dom.Loader(cp.Top, cp.TopData, ui.champrank.Top);
+
+/// The answer the lock set wants, shown once in; one fetch at a time, kept by path
+fn locks() void {
+    const i = island orelse return;
+    const path = state.lockWant(gpa) orelse return;
+    if (std.mem.eql(u8, path, state.answer_path)) return gpa.free(path);
+    for (answers.items) |x| if (std.mem.eql(u8, x.path, path)) {
+        gpa.free(path);
+        state.setAnswer(x.path, x.d);
+        return i.render();
+    };
+    if (asked != null) return gpa.free(path);
+    asked = path;
+    dom.fetch(path, 0, answered);
+}
+
+fn answered(_: i32, bytes: ?[]u8) void {
+    const path = asked.?;
+    asked = null;
+    const d = gpa.create(cp.TopData) catch return;
+    d.* = .{ .name = "", .slug = "", .icon = "", .patch = "", .ddragon = "", .champs = &.{}, .roles = &.{} };
+    if (bytes) |b| {
+        d.* = ui.data.decode(gpa, cp.TopData, b) catch d.*;
+    } else dom.dom.warn("champion: no lock answer");
+    answers.append(gpa, .{ .path = path, .d = d }) catch return;
+    locks();
+}

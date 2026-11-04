@@ -26,7 +26,8 @@ const Opp = cp.Opp;
 const Counts = cp.Counts;
 const Measure = cp.Measure;
 
-pub const Msg = union(enum) { rel: u8, ally: bool, rel_role: role.Role, measure: Measure };
+/// `lock`: the owner's, Input.champs' index as the lane opponent lock
+pub const Msg = union(enum) { rel: u8, ally: bool, rel_role: role.Role, measure: Measure, lock: u16 };
 
 const L = struct {
     /// Under the With plot: the page's lane cards don't follow the partner (walk 1 Nov S2)
@@ -57,7 +58,12 @@ pub const Input = struct {
     plat: N = .none,
     /// A rank pick without the role (Ranked.few)
     few: N = .none,
+    /// The champion page's: a lane opponent's brief locks it (Msg.lock)
+    lock: ?Lock = null,
 };
+
+/// Input.champs' index of the opponent locked
+pub const Lock = struct { on: ?u16 = null };
 
 pub const Ranked = union(enum) { few, lane: struct { counts: Counts, opps: []const Opp, rare: u16 } };
 
@@ -108,6 +114,7 @@ pub const MatchupGrid = struct {
                 g.rel = g.relOf(in, ally, r2) orelse g.rel;
             },
             .measure => |x| g.measure = x,
+            .lock => return,
         }
         if (g.measure == .gold and !g.goldShown(in)) g.measure = .win;
         g.dots.sel = null;
@@ -206,6 +213,9 @@ pub const MatchupGrid = struct {
                 if (rel.ally) h.p(.{ .class = "alone" }, .{if (chosen) |o| L.alone.with(h, .{ .c = in.name, .p = in.champs[o.champ].name }) else L.alone_any.with(h, .{ .c = in.name })}) else .none,
                 if (chosen) |o| (if (none) .none else h.div(.{ .class = "brief" }, .{matchbrief.view(h, b: {
                     var x = brief(h, in, rel, counts, o);
+                    if (in.lock) |l| if (lane) {
+                        x.lock = .{ .on = h.on(owner, .{ .lock = o.champ }), .locked = l.on == o.champ };
+                    };
                     if (rel.ally and rel.role == partner(in.role) and (in.role == .bot or in.role == .support))
                         if (g.relOf(in, false, in.role)) |k| {
                             x.lanes = h.on(owner, .{ .rel = k });

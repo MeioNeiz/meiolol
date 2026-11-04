@@ -85,6 +85,7 @@ pub fn answer(s: *const Site, x: *const Answers, gpa: std.mem.Allocator, rest: [
     switch (q.island) {
         .build => try ui.data.encode(s.arena, cp.BuildData, try build(s, x, gpa, ch, q.role, q.rank, &q.locks) orelse return null, &out),
         .more => try ui.data.encode(s.arena, cp.MoreData, try more(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
+        .top => try ui.data.encode(s.arena, cp.TopData, try top(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
     }
     return out.items;
 }
@@ -145,6 +146,17 @@ pub fn more(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, l
     return .{ .name = ch.name, .slug = ch.slug, .ddragon = s.ddragon_version, .champs = try champion.champsOf(s), .roles = role[0..1] };
 }
 
+/// `ch`'s games and wins in `r` at rank `k` under `locks`, for the champion page's
+/// StatStrip: a TopData of that one role and nothing else, in `s.arena`; null as `build`
+pub fn top(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, locks: *const lockanswer.Locks) !?cp.TopData {
+    const a = s.arena;
+    const f = filterOf(s, &x.table, k) orelse return null;
+    const n = try lockanswer.count(a, &x.table, &x.index, @intCast(ch.id), r, f, locks) orelse return null;
+    const role = try a.create(cp.TopRole);
+    role.* = .{ .role = champion.uiRole(r), .games = n.games, .wins = n.wins, .share = 0, .pick = 0, .ban = 0, .lane = &.{} };
+    return .{ .name = "", .slug = "", .icon = "", .patch = "", .ddragon = "", .champs = &.{}, .roles = role[0..1] };
+}
+
 fn tierOf(k: cp.Rank) []const u8 {
     return if (k == .plat) "PLATINUM" else builds.rank_tiers[@backingInt(k) - 1];
 }
@@ -160,7 +172,7 @@ fn filterOf(s: *const Site, t: *const lockrows.Table, k: cp.Rank) ?lockanswer.Fi
 }
 
 /// The islands with lock answers
-pub const Island = enum { build, more };
+pub const Island = enum { build, more, top };
 
 const Query = struct { island: Island, slug: []const u8, role: Role, rank: cp.Rank, locks: lockanswer.Locks };
 
@@ -208,6 +220,7 @@ test "lock paths parse only in their one form" {
     try std.testing.expectEqual(.emerald, q.rank);
     try std.testing.expectEqual(86, q.locks.by.get(.opponent).?.v[0]);
     try std.testing.expectEqual(.more, parse("more/darius/top/plat/ks8010.bin").?.island);
+    try std.testing.expectEqual(.top, parse("top/darius/top/plat/ks8010.bin").?.island);
     for ([_][]const u8{
         "build/darius/top/emerald/vs86,ks8010.bin",
         "build/darius/top/emerald/.bin",

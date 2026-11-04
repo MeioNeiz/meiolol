@@ -30,7 +30,11 @@ pub const Brief = struct {
     /// A lane partner: to the champion's lane opponents, whose matchup pages show the
     /// pair (Lane partners)
     lanes: ?tree.Handler = null,
+    /// The champion page's opponent lock: every block then counts games against it
+    lock: ?Lock = null,
 };
+
+pub const Lock = struct { on: tree.Handler, locked: bool };
 
 pub const Common = struct {
     champ: champ.Champ,
@@ -45,6 +49,8 @@ pub const Common = struct {
 const W = struct {
     pub const few = plain("few games");
     pub const matchup = plain("Matchup ›");
+    pub const lock = plain("Lock");
+    pub const unlock = plain("Unlock");
     pub const lanes = plain("Lane opponents ›");
     pub const common = plain("Most common");
 };
@@ -68,6 +74,7 @@ pub fn view(h: *H, b: Brief, common: []const Common) N {
                 }),
             }),
             b.figures,
+            if (b.lock) |l| button.view(h, .{ .s = .s, .on = l.on }, .{if (l.locked) W.unlock else W.lock}) else null,
             if (b.href) |href| button.view(h, .{ .s = .s, .href = href }, .{W.matchup}) else null,
             if (b.lanes) |on| button.view(h, .{ .s = .s, .on = on }, .{W.lanes}) else null,
         }),
