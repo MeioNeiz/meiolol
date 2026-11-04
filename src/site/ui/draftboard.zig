@@ -45,6 +45,8 @@ pub const Seat = struct {
     fig: []const u8 = "",
     /// An ally still to pick: options for the role
     ideas: []const champ.Champ = &.{},
+    /// An enemy yet to pick: their ban, a hint at their role
+    ban: ?champ.Champ = null,
     /// A click on the seat and on each idea, "" for none: practice's (ui/practice.zig Act)
     /// or the app's lane panel ("lane <role's backing int>", 255 mine), which bridge.js
     /// sends so ui-app.wasm carries no handler
@@ -168,7 +170,7 @@ fn seat(h: *H, s: Seat, side: Side) N {
             if (s.champ) |c| h.span(.{ .class = "nm" }, .{
                 h.b(.{}, .{c.name}),
                 if (s.fig.len > 0) h.span(.{ .class = "fact", .data_lean = if (s.lean == .none) null else s.lean, .title = s.fact }, .{s.fig}) else null,
-            }) else null,
+            }) else if (s.ban) |c| champ.view(h, c, .{ .px = .@"20", .state = .banned }) else null,
             line,
             if (s.fact.len > 0 and s.fig.len == 0) h.span(.{ .class = "fact", .data_lean = if (s.lean == .none) null else s.lean }, .{s.fact}) else null,
             if (s.ideas.len > 0) h.span(.{ .class = "ideas" }, .{ h.span(.{ .class = "line" }, .{words.ideas}), ideas.done() }) else null,
@@ -587,7 +589,7 @@ pub const sample: Board = .{
         .{
             .role = .jungle,
             .us = .{ .champ = demo("LeeSin", "Lee Sin"), .state = .hover, .picking = true },
-            .them = .{},
+            .them = .{ .ban = demo("Vex", "Vex"), .fact = "their ban" },
         },
         .{
             .role = .mid,

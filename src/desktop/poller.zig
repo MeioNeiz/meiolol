@@ -660,6 +660,11 @@ const Poller = struct {
         const role = cs_given.my_role orelse return .no_role;
         p.takeSwap();
         const cs = try board.withMoves(arena, cs_given, &p.moved);
+        // Enemy bans by seat are a role hint for testers until APP1's capture shows the
+        // client gives their cells (docs/plan/ui/app-seats.md); withMoves copied the seats
+        if (edition != .private) for (cs.their_team) |*sl| {
+            sl.ban = 0;
+        };
 
         if (p.own == null) p.own = loadOwn(p.own_arena.allocator(), p.watch.client.?);
         const own = p.own.?;

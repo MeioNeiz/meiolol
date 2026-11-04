@@ -21,6 +21,8 @@ pub const Slot = struct {
     me: bool = false,
     /// Their pick turn is now
     picking: bool = false,
+    /// Their team: the seat's completed ban, 0 for none (a role hint, board.breakTies)
+    ban: u32 = 0,
 
     pub const State = enum(u8) {
         empty,
@@ -86,6 +88,7 @@ pub const ChampSelect = struct {
             h.update(std.mem.asBytes(&slots.len));
             for (slots) |sl| {
                 h.update(std.mem.asBytes(&sl.champion));
+                h.update(std.mem.asBytes(&sl.ban));
                 h.update(&.{ roleByte(sl.role), @backingInt(sl.state), @intFromBool(sl.picking) });
             }
         }
@@ -233,9 +236,12 @@ fn seats(arena: std.mem.Allocator, s: Session, team: []const Member, mine: bool)
             o.champion = c;
             o.state = .intent;
         };
-        // An enemy's lock can show in the actions before their seat has it
-        if (!mine and o.state == .empty) for (s.actions) |turn| for (turn) |a| {
-            if (a.actorCellId != m.cellId or !a.completed or !std.mem.eql(u8, a.type, "pick")) continue;
+        if (mine) continue;
+        for (s.actions) |turn| for (turn) |a| {
+            if (a.actorCellId != m.cellId or !a.completed) continue;
+            if (std.mem.eql(u8, a.type, "ban")) o.ban = id(a.championId) orelse 0;
+            // An enemy's lock can show in the actions before their seat has it
+            if (o.state != .empty or !std.mem.eql(u8, a.type, "pick")) continue;
             o.champion = id(a.championId) orelse continue;
             o.state = .locked;
         };
@@ -446,8 +452,9 @@ test "synthetic session" {
     try testing.expectEqual(Slot{ .champion = 238, .role = .middle, .state = .intent, .me = true, .picking = true }, cs.my_team[2]);
     try testing.expectEqual(Slot{ .champion = 222, .role = .bottom, .state = .intent }, cs.my_team[3]);
     try testing.expectEqual(Slot{ .role = .utility }, cs.my_team[4]);
-    try testing.expectEqual(Slot{ .champion = 103, .state = .locked }, cs.their_team[0]);
-    try testing.expectEqual(Slot{}, cs.their_team[2]);
+    // Enemies' bans by seat; none on mine
+    try testing.expectEqual(Slot{ .champion = 103, .state = .locked, .ban = 360 }, cs.their_team[0]);
+    try testing.expectEqual(Slot{ .ban = 147 }, cs.their_team[2]);
     try testing.expectEqual(Turn.pick, cs.my_turn);
     try testing.expect(!cs.bans_open);
     try testing.expectEqualSlices(u32, &.{ 157, 555, 875, 84 }, cs.my_bans);
@@ -456,6 +463,10 @@ test "synthetic session" {
     var other = cs;
     try testing.expectEqual(cs.fingerprint(), other.fingerprint());
     other.my_champion = 7;
+    try testing.expect(cs.fingerprint() != other.fingerprint());
+    other = cs;
+    other.their_team = try arena.dupe(Slot, cs.their_team);
+    other.their_team[1].ban = 0;
     try testing.expect(cs.fingerprint() != other.fingerprint());
 }
 

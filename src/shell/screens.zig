@@ -633,6 +633,12 @@ fn seat(a: Allocator, c: Ctx, s: board.Seat, side: usize, k: usize) !ui.draftboa
         else if (ally) |r| try c.act(a, .{ .seat = .{ .ally = r } }) else "",
         .idea_acts = idea_acts,
     };
+    // Testers only until APP1 checks the client gives enemy bans by seat (the poller
+    // clears them in the public edition; the review pages build one board for both)
+    if (c.private and sl.champion == 0 and sl.ban != 0) {
+        out.ban = try c.champ(a, sl.ban);
+        out.fact = "their ban";
+    }
     // How the champion does in the role: a number for testers, words for everyone
     if (sl.champion != 0 and s.games > 0) if (s.role) |r| {
         if (c.private) {
@@ -1208,7 +1214,10 @@ fn testSelect() state.Select {
             .{ .champion = galio, .mastery = 0, .win = 0.54, .lane = null, .reasons = &.{ "120k mastery", "strong in mid now" }, .tones = &.{ .neutral, .good }, .marks = &.{ .{ .kind = .mastery }, .{ .kind = .base, .pp = 1.4 } } },
         };
         const allies = [_]board.Seat{.{ .slot = .{ .champion = ahri, .role = .middle, .state = .hover, .me = true }, .role = .middle, .guessed = false, .games = 25_551, .win = 0.55 }};
-        const enemies = [_]board.Seat{.{ .slot = .{ .champion = syndra, .state = .locked }, .role = null, .guessed = true, .games = 20, .win = 0.45 }};
+        const enemies = [_]board.Seat{
+            .{ .slot = .{ .champion = syndra, .state = .locked }, .role = null, .guessed = true, .games = 20, .win = 0.45 },
+            .{ .slot = .{ .ban = galio }, .role = null, .guessed = false },
+        };
         const points = [_]lanecard.Point{ .{ .minute = 1, .mean = -10, .p25 = -60, .p75 = 40 }, .{ .minute = 2, .mean = -20, .p25 = -100, .p75 = 70 } };
         const ban_options = [_]board.BanOption{
             .{ .champion = galio, .role = .middle, .impact = 31, .pick_rate = 0.08, .win = 0.53, .my_lane = true },
@@ -1264,6 +1273,9 @@ test "champ select: the private edition's numbers, the public one's words" {
     try testing.expectEqualStrings("55.0%", ps.board.lanes[2].us.fig);
     // Syndra has no role: she takes the first empty enemy row
     try testing.expectEqualStrings("Syndra", ps.board.lanes[0].them.champ.?.name);
+    // The next enemy yet to pick shows their ban, testers only
+    try testing.expectEqualStrings("Galio", ps.board.lanes[1].them.ban.?.name);
+    try testing.expectEqualStrings("their ban", ps.board.lanes[1].them.fact);
     try testing.expect(ps.board.lanes[2].us.you);
     try testing.expect(ps.lane.options[0].current and ps.lane.options[0].lean == .bad);
     try testing.expectEqual(.good, ps.lane.options[1].reasons[1].lean);
@@ -1287,6 +1299,7 @@ test "champ select: the private edition's numbers, the public one's words" {
     try testing.expectEqualStrings("", s.ban_options[1].beats.?.fig);
     try testing.expectEqualStrings("strong in mid now", s.board.lanes[2].us.fact);
     try testing.expectEqualStrings("▲", s.board.lanes[2].us.fig);
+    try testing.expectEqual(null, s.board.lanes[1].them.ban);
     // Public: no points, an arrow by the lean
     try testing.expectEqualStrings("", s.lane.options[1].reasons[1].fig);
     d.seq = 7;

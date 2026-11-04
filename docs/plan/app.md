@@ -101,7 +101,7 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   copies the folders to testdata/lcu/, diffs them against the mock, fixes the mock and
   records which identity fields each queue fills in. First real check of Live Client
   Data's certificate: a "live client data: <error>" line in record's output means
-  https.get needs another root for port 2999
+  https.get needs another root for port 2999. Check enemy bans carry actorCellId (APP17)
 - APP3 Every role and pick order (both editions). Done: the board (Window layout
   below) with the mode chip and ideas for allies still to pick; in the webview shell a
   click on an ally's seat switches the lane panel to their role (options from everyone
@@ -176,9 +176,9 @@ His notes 94 to 121 by screen: docs/review/app-review-2026-11-03.md. Steps, afte
 - APP16 Every phase worth a look: lobby and queue with recent form and best champions
   (97, 98); in game items, levelling and tips, private first, power spikes only as a
   sheet the player opens (114, 115); more, shorter, funnier comments (109, 113)
-- APP17 Other seats: enemy seats' perspective too (allies done, APP3); move picks (111);
-  bans to guess roles (112). Players' mains, picks, streaks, comments (100, 121) only
-  where names are visible (APP7). Ban ideas from hovers (99): ally hovers only (APP4)
+- APP17 Other seats, done (docs/plan/ui/app-seats.md; ban role hint private until APP1).
+  Left: players' mains, picks, streaks, comments (100, 121) only where names are visible
+  (APP7)
 
 ## Window layout
 

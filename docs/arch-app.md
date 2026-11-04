@@ -95,6 +95,11 @@ file and packed rows: docs/architecture.md.
   and board.withMoves puts the moved roles on their seats and picks before the card,
   board and draft are built, so everything follows; poller.moved clears when champ
   select ends. Allies' roles stay the client's
+- Enemy ban hint (private until APP1 shows the client gives enemy bans' cells):
+  session.zig keeps each enemy seat's completed ban (Slot.ban); board.breakTies moves a
+  guessed enemy to their ban's main role only when that is at most board.ban_tie less
+  likely by role shares (a swap with the guessed seat there); an empty enemy seat shows
+  the ban's icon (draftboard Seat.ban). The poller clears Slot.ban in the public edition
 - Region chip: with all-stats.bin loaded (poller Data.all), the Options panel shows "EUW |
   All regions" (ui/segmented.zig Item.shell as data-shell, so no handler in an island);
   the shell's `regions` sets state.all_regions and champ select and practice build from

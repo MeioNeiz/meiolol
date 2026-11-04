@@ -87,6 +87,9 @@ pub const my_lane_first = 2;
 pub const max_ideas = 3;
 /// Counter wins per 10,000 games for a ban option to name the ally's champion it beats
 pub const min_counter = 2;
+/// How much less likely by play rates a guessed role may be for an enemy's ban to pick it
+/// (breakTies)
+pub const ban_tie = 1.25;
 
 /// Allocates in `arena`. `card` is the lane card already built for the same select;
 /// `facts` give the ban options their ban rates
@@ -229,11 +232,70 @@ fn placeEnemies(arena: std.mem.Allocator, stats: *const Stats, opts: core.Option
     const n = @min(picks.items.len, 5);
     var roles: [5]?Role = @splat(null);
     core.score.inferRoles(stats, picks.items[0..n], roles[0..n]);
+    var given: [5]bool = undefined;
+    var hints: [5]?Role = undefined;
+    var fit: [5][Role.count]f64 = undefined;
+    for (0..n) |k| {
+        const sl = slots[at.items[k]];
+        given[k] = sl.role != null;
+        hints[k] = if (sl.ban != 0) mainRole(stats, sl.ban) else null;
+        fit[k] = roleFit(stats, sl.champion);
+    }
+    breakTies(roles[0..n], given[0..n], hints[0..n], fit[0..n]);
     for (out, slots) |*o, sl| o.* = seat(stats, opts, sl, sl.role, false);
     for (at.items[0..n], roles[0..n]) |i, r| {
         if (slots[i].role != null) continue;
         out[i] = seat(stats, opts, slots[i], r, r != null);
     }
+}
+
+/// An enemy's ban hints at their role (players ban their lane's threats), but no data
+/// says how strongly: match-v5 bans have a pick turn, not a cell. So it only breaks near
+/// ties: pick k, guessed in `roles[k]` (not `given[k]`), moves to its seat's ban's role
+/// `hints[k]` when that placement is at most `ban_tie` times less likely by the picks'
+/// role shares `fit`, swapping with the guessed pick there (one whose ban hints the same
+/// role keeps it)
+fn breakTies(roles: []?Role, given: []const bool, hints: []const ?Role, fit: []const [Role.count]f64) void {
+    for (roles, given, hints, fit) |*r, g, hint, f| {
+        const want = hint orelse continue;
+        const now = r.* orelse continue;
+        if (g or now == want) continue;
+        var odds = f[@backingInt(want)] / f[@backingInt(now)];
+        const other = std.mem.findScalar(?Role, roles, want);
+        if (other) |j| {
+            if (given[j] or hints[j] == want) continue;
+            odds *= fit[j][@backingInt(now)] / fit[j][@backingInt(want)];
+        }
+        if (odds * ban_tie < 1) continue;
+        if (other) |j| roles[j] = now;
+        r.* = want;
+    }
+}
+
+/// A champion's share of its games in each role, with core.score's floor so a role never
+/// seen is unlikely, not impossible
+fn roleFit(stats: *const Stats, champion: u32) [Role.count]f64 {
+    var out: [Role.count]f64 = @splat(0.2);
+    const c = stats.index(champion) orelse return out;
+    const total: f64 = @floatFromInt(stats.champGames(c));
+    if (total == 0) return out;
+    for (&out, Role.all) |*o, r| o.* = @as(f64, @floatFromInt(stats.champRole(r, c).games)) / total + 1e-4;
+    return out;
+}
+
+/// The role a champion is played in most, null when the stats file has no games of it
+fn mainRole(stats: *const Stats, champion: u32) ?Role {
+    const c = stats.index(champion) orelse return null;
+    var best: ?Role = null;
+    var most: u32 = 0;
+    for (Role.all) |r| {
+        const games = stats.champRole(r, c).games;
+        if (games > most) {
+            best = r;
+            most = games;
+        }
+    }
+    return best;
 }
 
 /// The best champions for an ally's role given the draft, from every champion
@@ -630,4 +692,54 @@ test "board: an enemy moved by hand swaps rows, the rest guessed around them" {
     moveEnemy(&roles, &moved, .jungle, .top);
     moveEnemy(&roles, &moved, .top, .top);
     try testing.expectEqualSlices(?Role, &(@as([5]?Role, @splat(null))), &moved);
+}
+
+test "board: an enemy's ban breaks a near tie in their role guess, no more" {
+    const o = 1e-4;
+    // Top 45%, middle 55%: guessed middle, a top ban moves them
+    var roles = [_]?Role{ .middle, .jungle };
+    const fit = [_][Role.count]f64{ .{ 0.45, o, 0.55, o, o }, .{ o, 1, o, o, o } };
+    breakTies(&roles, &.{ false, false }, &.{ .top, null }, &fit);
+    try testing.expectEqualSlices(?Role, &.{ .top, .jungle }, &roles);
+    // 30% against 70%: the guess stands
+    roles = .{ .middle, .jungle };
+    breakTies(&roles, &.{ false, false }, &.{ .top, null }, &.{ .{ 0.3, o, 0.7, o, o }, fit[1] });
+    try testing.expectEqualSlices(?Role, &.{ .middle, .jungle }, &roles);
+
+    // Both even between top and middle: the ban swaps them
+    const even = [_][Role.count]f64{ .{ 0.5, o, 0.5, o, o }, .{ 0.5, o, 0.5, o, o } };
+    roles = .{ .top, .middle };
+    breakTies(&roles, &.{ false, false }, &.{ .middle, null }, &even);
+    try testing.expectEqualSlices(?Role, &.{ .middle, .top }, &roles);
+    // Not when the other's role is given, nor when their ban hints the same role
+    roles = .{ .top, .middle };
+    breakTies(&roles, &.{ false, true }, &.{ .middle, null }, &even);
+    try testing.expectEqualSlices(?Role, &.{ .top, .middle }, &roles);
+    breakTies(&roles, &.{ false, false }, &.{ .middle, .middle }, &even);
+    try testing.expectEqualSlices(?Role, &.{ .top, .middle }, &roles);
+
+    // On the board: Garen plays only top, so a middle ban leaves him there
+    var f = try cardscenes.fixture();
+    defer f.deinit();
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const st = &f.stats;
+    const garen = st.ids[st.find("Garen").?];
+    const syndra = st.ids[st.find("Syndra").?];
+    try testing.expectEqual(Role.middle, mainRole(st, syndra).?);
+    var mine = [_]Slot{ .{ .role = .top }, .{ .role = .jungle }, .{ .role = .middle, .me = true }, .{ .role = .bottom }, .{ .role = .utility } };
+    var theirs = [_]Slot{ .{ .champion = garen, .state = .locked, .ban = syndra }, .{}, .{}, .{}, .{} };
+    const b = try build(arena_state.allocator(), st, cardscenes.test_opts, .{
+        .my_role = .middle,
+        .my_champion = 0,
+        .my_locked = false,
+        .allies = &.{},
+        .enemies = @constCast(&[_]core.Pick{.{ .champion = garen }}),
+        .bans = @constCast(&[_]u32{syndra}),
+        .phase = "BAN_PICK",
+        .my_team = &mine,
+        .their_team = &theirs,
+    }, null, null);
+    try testing.expectEqual(Role.top, b.enemies[0].role.?);
+    try testing.expect(b.enemies[0].guessed);
 }
