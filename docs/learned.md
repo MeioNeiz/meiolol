@@ -46,6 +46,10 @@ How to write a line:
   region) from +2.08 +- 0.76 milli-nats worse than the champion's raw rate to 2.68 +-
   0.69 better; unseen items, matchups and duos better too, seen cells unchanged. Site: not yet (Meio is not shipped). Evidence:
   src/meio.zig, docs/model.md "Meio in the truth test"
+- No counter or duo stands far out from the rest: pulling thin pairings to the pack
+  loses nothing. Sure: 16.21, room for outliers changed 0.97M matchups' and 0.16M duos'
+  accuracy by under 0.01 milli-nats. Evidence: docs/model.md "Share drift by rank and
+  region, pair mixture prior"
 - Before your lane opponent picks, ranking as if they were average is as good as any
   safer ranking we tried: favouring champions whose estimated matchups vary less is a
   hair better by one measure and a hair worse by another. Sure: 86k held-out games (29
@@ -318,8 +322,9 @@ How to write a line:
   patch's first week to its second, an item's about 2, and a share is as noisy as one
   from 10-20% fewer games. Sure: 16.21, 14 origins, every champion-role, keystone and
   item; with both counted, Meio's share ranges hold 79-80% of next week's shares (were
-  72-75%), the patch's raw ones 68-75%. Site: share ranges include both. Evidence:
-  docs/model.md "Lock stacks in the truth test"
+  72-75%; EUW1 Diamond+ 75% even with drift per rank), the patch's raw ones 68-75%.
+  Site: share ranges include both. Evidence: docs/model.md "Lock stacks in the truth
+  test"
 - (early) An item nerf costs the champions that build it: on 16.21 Riot cut Hubris for
   ranged champions, and those that built it in most games (Graves jungle, Jhin bot,
   Quinn top) fell about 0.3-0.4 points against their role; a full-exposure change is

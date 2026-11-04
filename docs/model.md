@@ -5811,6 +5811,25 @@ points, in-range, PIT, share solid:
   from the prior. Gold+ masked rank set (Plat+ and Emerald+ floors): Meio beats both raw
   modes, PIT 78-80%
 
+### Share drift by rank and region, pair mixture prior, 16.21, 2026-11-04 (meio-model)
+
+`meiolol truth --data data/cubes-20261104 --patch 16.21` as in "Lock stacks in the truth
+test", Meio PIT, all days. Both changes are judged against Meio as it was.
+
+- Share drift (phi, tau2) per rank bracket and region (EUW1 or not), each slot from its
+  own within-patch halves, the pooled fit under 300 cells (d9de418c, kept): EUW1
+  Diamond+ keystone shares 74 -> 75%, item shares 75 -> 75%, every other share row
+  78-81% as before, losses unchanged. D+ EUW1 phi 1.16-1.28 keystones, 1.11-1.20 items;
+  tau2 0.023 and 0.009 logit^2: close to the pooled fit, so drift is not the D+ gap.
+  Next suspect: clustering within a cell (fewer players, more games each at D+), which
+  a per-cell phi from players' game counts would catch; cubes carry no player keys
+- Pair terms (matchup, duo, gold at 14) under a two-part scale mixture prior per class by
+  EM instead of one Gaussian, ranges from the mixture's 10/90% quantiles (Options.pair_mix
+  in d9de418c, dropped after): every win-rate and gold row the same to 0.01 milli-nats,
+  PIT unchanged. Fitted per class: about 82% of terms in a spike of sd 0.03-0.06 logit,
+  the rest in a slab of 0.08-0.14; 9-38 terms of 5.6k-15k per class lean to the slab.
+  Pair effects are close to Gaussian, with no lone outliers for a mixture to free
+
 ### Patches as experiments: item changes, 16.20 -> 16.21, 2026-11-04 (meio-model, M8)
 
 Question (PT7, Meio M8): does a champion-role's win rate move across a patch track its
