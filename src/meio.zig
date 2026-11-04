@@ -423,6 +423,7 @@ const Share = struct {
     /// role << 16 | x -> x's pooled share of the role's games, logit
     pooled: std.AutoHashMapUnmanaged(u32, f64) = .empty,
     role_n: [n_roles]f64 = @splat(0),
+    drift: Drift = .{},
 
     fn deinit(s: *Share, gpa: Allocator) void {
         s.index.deinit(gpa);
@@ -445,7 +446,7 @@ const Share = struct {
         const own = ownOf(&anchor.own, bracket, region);
         if (s.index.get(@as(u32, a) << 16 | x)) |j| {
             const t = newestOf(shape, &s.counts[j], &s.fitted[j], bracket, region);
-            return .of(t.eta, t.v, own);
+            return .of(t.eta, t.v + s.drift.tau2, own);
         }
         // Never seen: its games with none of x, fitted on the spot
         const c: Counts = .{ .n = anchor.n, .own = anchor.own };
@@ -454,7 +455,87 @@ const Share = struct {
         f.theta[0] = mu;
         newton(&c, &f, shape, s.sd, 0);
         const t = newestOf(shape, &c, &f, bracket, region);
-        return .of(t.eta, t.v, own);
+        return .of(t.eta, t.v + s.drift.tau2, own);
+    }
+};
+
+/// A share's spread beyond its fit, from Halves: games cluster (players repeat their
+/// picks), so a share's binomial variance is phi times too small; and a share moves within
+/// a patch, tau2 on the logit scale over about a week
+const Drift = struct { phi: f64 = 1, tau2: f64 = 0, cells: f64 = 0 };
+
+/// Within-patch halves for Drift: games by champion-role << 24 | x << 8 | patch << 1 |
+/// half, x 0 for the games a share is of. Unweighted, the newest three patches, each split
+/// at its middle day when it has four days or more
+const Halves = struct {
+    games: std.AutoHashMapUnmanaged(u64, f64) = .empty,
+
+    fn deinit(h: *Halves, gpa: Allocator) void {
+        h.games.deinit(gpa);
+    }
+
+    fn add(h: *Halves, gpa: Allocator, cr: u16, x: u16, ph: u8) !void {
+        const g = try h.games.getOrPut(gpa, @as(u64, cr) << 24 | @as(u64, x) << 8 | ph);
+        if (!g.found_existing) g.value_ptr.* = 0;
+        g.value_ptr.* += 1;
+    }
+
+    fn get(h: *const Halves, key: u64) f64 {
+        return h.games.get(key) orelse 0;
+    }
+
+    /// Each (champion-role, x, patch): the squared difference d of its two halves'
+    /// shares against b = q(1 - q)(1/n1 + 1/n2), the binomial variance of d, and
+    /// c = (q(1 - q))^2, which turns a logit-scale variance into one of d. E[d^2] =
+    /// phi b + tau2 c, fitted by weighted least squares (Var d^2 = 2 E[d^2]^2)
+    fn drift(h: *const Halves, gpa: Allocator) !Drift {
+        const min_games = 20;
+        var cells: std.ArrayList([3]f64) = .empty;
+        defer cells.deinit(gpa);
+        var it = h.games.iterator();
+        while (it.next()) |e| {
+            const key = e.key_ptr.*;
+            if (key >> 8 & 0xffff == 0 or key & 1 == 1) continue;
+            const anchor = key & ~@as(u64, 0xffff_ff);
+            const n1 = h.get(anchor | (key & 0xff));
+            const n2 = h.get(anchor | (key & 0xff) | 1);
+            if (n1 < min_games or n2 < min_games) continue;
+            const k1 = @min(e.value_ptr.*, n1);
+            const k2 = @min(h.get(key | 1), n2);
+            const q = (k1 + k2) / (n1 + n2);
+            if (q == 0 or q == 1) continue;
+            const d = k1 / n1 - k2 / n2;
+            const qq = q * (1 - q);
+            try cells.append(gpa, .{ d * d, qq * (1 / n1 + 1 / n2), qq * qq });
+        }
+        var out: Drift = .{ .cells = @floatFromInt(cells.items.len) };
+        if (cells.items.len < 30) return out;
+        for (0..20) |_| {
+            var a: [3]f64 = @splat(0);
+            var y: [2]f64 = @splat(0);
+            for (cells.items) |c| {
+                const e = out.phi * c[1] + out.tau2 * c[2];
+                const w = 1 / (e * e);
+                a[0] += w * c[1] * c[1];
+                a[1] += w * c[1] * c[2];
+                a[2] += w * c[2] * c[2];
+                y[0] += w * c[1] * c[0];
+                y[1] += w * c[2] * c[0];
+            }
+            const det = a[0] * a[2] - a[1] * a[1];
+            var phi = (a[2] * y[0] - a[1] * y[1]) / det;
+            var tau2 = (a[0] * y[1] - a[1] * y[0]) / det;
+            // Bounded: no less spread than binomial, no negative drift
+            if (phi < 1 or tau2 < 0) {
+                phi = @max(1, phi);
+                tau2 = @max(0, (y[1] - a[1] * phi) / a[2]);
+            }
+            const moved = @abs(phi - out.phi) + @abs(tau2 - out.tau2);
+            out.phi = phi;
+            out.tau2 = tau2;
+            if (moved < 1e-6) break;
+        }
+        return out;
     }
 };
 
@@ -594,9 +675,31 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     defer keystones.deinit(gpa);
     var items: std.AutoHashMapUnmanaged(u64, PairCell) = .empty;
     defer items.deinit(gpa);
+    var rune_halves: Halves = .{};
+    defer rune_halves.deinit(gpa);
+    var build_halves: Halves = .{};
+    defer build_halves.deinit(gpa);
+    // Each of the newest three patches' first and last day
+    var span: [3][2]i32 = @splat(.{ std.math.maxInt(i32), std.math.minInt(i32) });
+    for (rows) |r| if (r.day < before_day and r.patch < 3) {
+        span[r.patch][0] = @min(span[r.patch][0], r.day);
+        span[r.patch][1] = @max(span[r.patch][1], r.day);
+    };
     const ln2 = @log(2.0);
     for (rows) |r| {
         if (r.day >= before_day) continue;
+        if (r.patch < 3 and span[r.patch][1] - span[r.patch][0] >= 3) {
+            const mid = @divFloor(span[r.patch][0] + span[r.patch][1] + 1, 2);
+            const ph: u8 = r.patch << 1 | @intFromBool(r.day >= mid);
+            if (r.keystone != 0) {
+                try rune_halves.add(gpa, r.cr, 0, ph);
+                try rune_halves.add(gpa, r.cr, r.keystone, ph);
+            }
+            if (r.timeline) {
+                try build_halves.add(gpa, r.cr, 0, ph);
+                for (r.items) |x| if (x != 0) try build_halves.add(gpa, r.cr, x, ph);
+            }
+        }
         const e = try m.index.getOrPut(gpa, r.cr);
         if (!e.found_existing) {
             e.value_ptr.* = @intCast(counts.items.len);
@@ -652,8 +755,8 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     m.pair = try fitPairs(gpa, shape, &m.index, m.fitted, &cells, 0, opts.rounds);
     m.keystone = try fitCond(gpa, &m, &keystones, opts.rounds);
     m.item = try fitCond(gpa, &m, &items, opts.rounds);
-    m.rune = try fitShare(gpa, &m, try rune.toOwnedSlice(gpa), &keystones, opts.rounds);
-    m.build = try fitShare(gpa, &m, try build.toOwnedSlice(gpa), &items, opts.rounds);
+    m.rune = try fitShare(gpa, &m, try rune.toOwnedSlice(gpa), &keystones, try rune_halves.drift(gpa), opts.rounds);
+    m.build = try fitShare(gpa, &m, try build.toOwnedSlice(gpa), &items, try build_halves.drift(gpa), opts.rounds);
     m.gold = try fitGold(gpa, &m, try gold.toOwnedSlice(gpa), gold_sq, &gold_cells, opts.rounds);
     return m;
 }
@@ -687,9 +790,10 @@ fn fitLevels(counts: []const Counts, fitted: []Fitted, shape: Shape, fixed: [n_t
 }
 
 /// Shares from the condition's cells (k: its weighted games with x) and each
-/// champion-role's anchor games (owned by the result)
-fn fitShare(gpa: Allocator, m: *const Model, anchor: []Counts, map: *const std.AutoHashMapUnmanaged(u64, PairCell), rounds: u8) !Share {
-    var s: Share = .{ .anchor = anchor };
+/// champion-role's anchor games (owned by the result). Games count 1 / phi each, so the
+/// fit's variances carry the clustering; the range adds the drift
+fn fitShare(gpa: Allocator, m: *const Model, anchor: []Counts, map: *const std.AutoHashMapUnmanaged(u64, PairCell), drift: Drift, rounds: u8) !Share {
+    var s: Share = .{ .anchor = anchor, .drift = drift };
     errdefer s.deinit(gpa);
     var it = m.index.iterator();
     while (it.next()) |e| s.role_n[e.key_ptr.* >> 13] += games(&anchor[e.value_ptr.*]);
@@ -718,13 +822,19 @@ fn fitShare(gpa: Allocator, m: *const Model, anchor: []Counts, map: *const std.A
     var pooled = with.iterator();
     while (pooled.next()) |e| try s.pooled.put(gpa, e.key_ptr.*, logit((e.value_ptr.* + 0.5) / (s.role_n[e.key_ptr.* >> 16] + 1)));
     s.counts = try counts.toOwnedSlice(gpa);
+    for (anchor) |*a| for (&a.n) |*np| for (np) |*nb| for (nb) |*ne| {
+        ne.* /= drift.phi;
+    };
     s.fitted = try gpa.alloc(Fitted, s.counts.len);
     var keys = s.index.iterator();
     while (keys.next()) |e| {
         const c = &s.counts[e.value_ptr.*];
         // An item twice in one game counts twice, as truth counts it; a share stays <= 1
         for (&c.k, c.n) |*kp, np| for (kp, np) |*kb, nb| for (kb, nb) |*ke, ne| {
-            ke.* = @min(ke.*, ne);
+            ke.* = @min(ke.*, ne) / drift.phi;
+        };
+        for (&c.n) |*np| for (np) |*nb| for (nb) |*ne| {
+            ne.* /= drift.phi;
         };
         const mu = s.prior(@intCast(e.key_ptr.* >> 29), @truncate(e.key_ptr.*));
         s.fitted[e.value_ptr.*] = .{ .mu = mu };
@@ -1450,4 +1560,39 @@ test "a two-lock cell adds both parts' terms to the champion-role" {
     try std.testing.expect(far.hi - far.lo > km.hi - km.lo);
     try std.testing.expectEqual(@as(?Estimate, null), m.rate(.keystone_matchup, 0, 0, 3, @as(u32, 8010) << 16 | 3));
     try std.testing.expectEqual(@as(?Estimate, null), m.rate(.item_matchup, 0, 0, 3, @as(u32, 3071) << 16 | 40));
+}
+
+test "a share that moves within its patch widens its range by the drift" {
+    const gpa = std.testing.allocator;
+    var prng: std.Random.DefaultPrng = .init(9);
+    const rand = prng.random();
+    var steady: std.ArrayList(Row) = .empty;
+    defer steady.deinit(gpa);
+    var moving: std.ArrayList(Row) = .empty;
+    defer moving.deinit(gpa);
+    // 60 top champions, 300 to 1480 games over the patch's first 10 days, keystone 8010
+    // at 20% to 60%; moving: each champion's share steps by +-0.4 logit at day 5
+    for (1..61) |ch| {
+        const base = logit(0.2 + 0.4 * @as(f64, @floatFromInt(ch - 1)) / 60);
+        const step: f64 = if (ch % 2 == 0) 0.4 else -0.4;
+        for (0..280 + 20 * ch) |g| {
+            const day: i16 = @intCast(g % 10);
+            const p_moving = sigmoid(base + if (day >= 5) step / 2 else -step / 2);
+            inline for (.{ &steady, &moving }, .{ sigmoid(base), p_moving }) |rows, p| {
+                const ks: u16 = if (rand.float(f64) < p) 8010 else 8437;
+                try rows.append(gpa, .{ .day = day, .cr = @intCast(ch), .keystone = ks, .win = rand.boolean(), .euw = false, .patch = 0, .bracket = 0 });
+            }
+        }
+    }
+    var a = try fit(gpa, steady.items, 10, .{});
+    defer a.deinit(gpa);
+    var b = try fit(gpa, moving.items, 10, .{});
+    defer b.deinit(gpa);
+    // 60 independent cells: phi's sd is about 0.2
+    try std.testing.expect(a.rune.drift.tau2 < 0.02 and a.rune.drift.phi < 1.5);
+    // Halves 0.4 logit apart: the squared step, 0.16
+    try std.testing.expect(b.rune.drift.tau2 > 0.1 and b.rune.drift.tau2 < 0.25 and b.rune.drift.phi < 1.3);
+    const ea = a.rate(.rune, 0, 0, 30, 8010).?;
+    const eb = b.rate(.rune, 0, 0, 30, 8010).?;
+    try std.testing.expect(eb.hi - eb.lo > 2 * (ea.hi - ea.lo));
 }
