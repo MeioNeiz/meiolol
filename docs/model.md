@@ -5696,6 +5696,57 @@ days win 34%; a keystone in under 0.1% of a champion's games 43% against 49%): u
 keystones were +2.08 worse than the fallback. Both now shrink to a line in their log
 share (5fb861e5, 4402182c).
 
+### Patches as experiments: item changes, 16.20 -> 16.21, 2026-11-04 (meio-model, M8)
+
+Question (PT7, Meio M8): does a champion-role's win rate move across a patch track its
+share of games with an item the patch changed, with unchanged items as the null? If so,
+Meio's patch prior widens by exposure, not only for champions named in the notes.
+
+Data: data/cubes-20261104 through truth's loader (every region, all ranks), 16.20's
+last 7 or 14 days against 16.21's first 7 or 14; champion-roles with 300+ games each
+side and 100+ timelined games on 16.20; the 23 champions Data Dragon shows changed left
+out (448 champion-roles at 7 days, 513 at 14). Move: logit(16.21 rate) minus
+logit(16.20 rate), centred within role. Exposure: share of 16.20 timelined games with
+the finished item (boots and starting items are not in the rows). Weighted least squares
+with role dummies, sandwich se; each changed item's t against the t of every unchanged
+item with 8+ users at 5%+ share (98-99 items). Changes from Riot's 26.21 notes:
+Data Dragon showed Hubris only as blanked numbers, while Riot changed it to 12 => 15 AD
+for melee and 12 => 10 (stacks 3 => 2) for ranged, and Atma's Impaler is missing from
+Data Dragon's diff. Tool: a temporary `truth --dump` (not committed) and
+data/team/2026-11-04-meio/m8.py.
+
+Unchanged items: t sd 1.54-1.59 (|t| > 2 for 16-21%): moves are overdispersed by meta
+drift that follows item groups, so a changed item's t is read against that spread.
+Slope: logit move for a champion-role that builds the item in every game.
+
+| item (change) | users | slope alone, 14 days | t | z vs null | joint slope (2 se) | joint t |
+| --- | --: | --: | --: | --: | --: | --: |
+| Hubris, ranged (nerf) | 27 | -0.021 | -4.9 | -3.2 | -0.029 +- 0.009 | -6.4 |
+| Bastionbreaker (nerf) | 44 | -0.040 | -3.1 | -2.0 | -0.041 +- 0.039 | -2.1 |
+| Hubris, melee (buff) | 56 | -0.037 | -2.2 | -1.4 | +0.007 +- 0.063 | +0.2 |
+| Dawncore (buff) | under 8 | | | | | |
+
+Joint: the three plus Axiom Arc, Youmuu's Ghostblade, The Collector (role dummies).
+7 days: ranged Hubris joint -0.020 +- 0.012, the rest within noise.
+
+Reading:
+- The ranged Hubris nerf shows: ranged champion-roles that built it fell against their
+  role, about 0.3-0.4 pp for the big ones (Graves jungle -1.1%, Jhin bot -1.5%, Quinn
+  top -1.5% logit at 61-78% exposure). Leaving any one champion-role out keeps the slope
+  at -0.015 to -0.024 (t -4.2 to -5.4)
+- Bastionbreaker's nerf points the right way but is not sure (1.4 null sds jointly);
+  melee Hubris users share Bastionbreaker (exposure correlation 0.61), so the melee buff
+  can't be told apart from it: not detected, with a joint range of +-0.06 logit
+- Size: a full-exposure item change moved a champion-role about 0.5-1 pp, against 1.9
+  pp RMS for champions changed themselves and 0.5 pp for the rest (16.21's first day).
+  For a champion-role at 70% exposure that is ~0.5 pp extra spread: worth widening the
+  patch prior, second to the champion's own changes
+- Data Dragon is not enough as the change list: it hid the one item change that showed.
+  Exposure needs Riot's notes (or CommunityDragon's item numbers) for items
+- One patch, two or three usable items: a first look. 16.21 -> 16.22 (Doran's Bow nerf,
+  a start item; Overlord's Bloodmail +10 AD, passive 12% => 10%) needs 16.22's first
+  week and start items in the rows
+
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
 data/snap (85,693 ranked solo games, 16.19 + 16.20, all regions), sqlite3 on the Mac;

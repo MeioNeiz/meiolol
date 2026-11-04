@@ -313,6 +313,13 @@ How to write a line:
   doubles at most for one-tricks, still well short. Site: the rank filter applies to
   builds, a rank under 400 games falling back to the next wider one. Evidence:
   data/team/2026-10-25-ui-build/notes/data.md "G4"
+- (early) An item nerf costs the champions that build it: on 16.21 Riot cut Hubris for
+  ranged champions, and those that built it in most games (Graves jungle, Jhin bot,
+  Quinn top) fell about 0.3-0.4 points against their role; a full-exposure change is
+  worth about 0.5-1 point. Data Dragon's diff hid that change. Sure: one patch, 513
+  champion-roles, ~4x the spread of unchanged items; Bastionbreaker's nerf not sure,
+  Hubris' melee buff not detected. Site: nothing yet; Meio may widen the patch range
+  by exposure once 16.22 agrees. Evidence: docs/model.md "Patches as experiments"
 - (early) Within one champion and role, options differ in win rate far less than raw
   rates suggest: about 0.6 points between runes in a row and stat shards, 0.7 for
   spells, 0.8 starting items, 1.0 skill order, 1.4 rune pages, 1.5-2 boots and first

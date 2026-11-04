@@ -91,6 +91,10 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
 
 ## Status
 
+- PT7 first look (16.20 -> 16.21, docs/model.md "Patches as experiments"): the ranged
+  Hubris nerf moved ranged champion-roles that build it (-0.029 +- 0.009 logit at full
+  exposure, ~4 null sds); Bastionbreaker not sure, melee Hubris tangled with it. Data
+  Dragon missed the Hubris change: exposure needs Riot's notes. 16.22 at its day 7
 - Step 0: 16.21's first day moved champion-role win rates 0.75 pp RMS
   within platform vs 0 for a within-patch control, 1.9 pp for the 12 champions with
   Data Dragon changes vs 0.5 pp for the rest (docs/model.md "Patch 16.21's first day")
