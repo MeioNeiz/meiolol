@@ -118,7 +118,8 @@ recommendations"). A later decision that overrides an earlier one says so.
   error with fewer games; it predicts combinations with few or no games (another keystone,
   another matchup) from what it knows. Champion page locks: click almost anything and
   every other block follows it. Needs experiments, tests, data analysis and UI design,
-  and more components. docs/plan/estimates.md
+  and more components. The estimator behind it is the MeioModel (Jacob, 4 Nov); the
+  switch reads Meio. docs/plan/estimates.md
 - J35 (4 Nov) Uncertainty over game counts: in Meio a game from two patches ago weighs
   far less than one from today, and by how much differs per stat, so games and pick rate
   don't say how sure a number is. Every rate shows its range, and the range (not games)
