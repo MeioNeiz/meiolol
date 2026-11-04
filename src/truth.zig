@@ -19,6 +19,12 @@
 //! origins are not independent, so read it as a floor). "Unseen": win-rate cells the 30
 //! days has too few games for, Meio against the champion-role's 30-day rate, which is
 //! what the site falls back on
+//!
+//! Lock stacks (J35): a champion-role is depth 0, one condition (matchup, item, ...)
+//! depth 1, two (keystone x opponent, item x opponent, keystone x item) depth 2. Ranges,
+//! not games, decide what a rate shows (faded past +-6 points, never hidden), so each
+//! mode's ranges are checked per kind, depth and band: share of cells whose target falls
+//! inside, and the error's spread net of the target's noise
 
 const std = @import("std");
 const store = @import("store");
@@ -48,7 +54,32 @@ pub const Options = struct {
     threads: u8 = 4,
 };
 
-pub const Kind = meio.Kind;
+/// meio.Kind's kinds by name, then the two-lock stacks; the order keeps keys stable
+pub const Kind = enum(u4) {
+    champion,
+    matchup,
+    duo,
+    gold14,
+    build,
+    item,
+    keystone,
+    rune,
+    /// Win rate with a keystone against a lane opponent (b: keystone << 16 | opponent cr)
+    keystone_matchup,
+    /// Win rate with a finished item against a lane opponent (b: item << 16 | opponent cr)
+    item_matchup,
+    /// Win rate with a keystone and a finished item (b: keystone << 16 | item)
+    keystone_item,
+
+    pub const count = @typeInfo(Kind).@"enum".field_names.len;
+};
+
+/// The model's kind of the same name; null: the model has none, so Meio has no number
+fn meioKind(k: Kind) ?meio.Kind {
+    return switch (k) {
+        inline else => |t| if (@hasField(meio.Kind, @tagName(t))) @field(meio.Kind, @tagName(t)) else null,
+    };
+}
 
 fn label(k: Kind) []const u8 {
     return switch (k) {
@@ -60,6 +91,9 @@ fn label(k: Kind) []const u8 {
         .item => "item win rate",
         .keystone => "keystone win rate",
         .rune => "keystone share",
+        .keystone_matchup => "keystone x opponent",
+        .item_matchup => "item x opponent",
+        .keystone_item => "keystone x item",
     };
 }
 
@@ -70,9 +104,15 @@ fn isShare(k: Kind) bool {
 
 /// Win rates the site falls back to the champion-role for when thin
 fn isChild(k: Kind) bool {
+    return depth(k) > 0 and !isShare(k) and k != .gold14;
+}
+
+/// Locks on top of the champion-role
+fn depth(k: Kind) u2 {
     return switch (k) {
-        .matchup, .duo, .item, .keystone => true,
-        else => false,
+        .champion => 0,
+        .keystone_matchup, .item_matchup, .keystone_item => 2,
+        else => 1,
     };
 }
 
@@ -89,7 +129,7 @@ pub const Meio = struct {
 /// A third mode with no numbers: the raw modes alone
 pub const NoMeio = struct {
     pub const Model = struct {
-        pub fn rate(_: *const Model, _: Kind, _: u1, _: u2, _: u16, _: u32) ?Estimate {
+        pub fn rate(_: *const Model, _: meio.Kind, _: u1, _: u2, _: u16, _: u32) ?Estimate {
             return null;
         }
         pub fn deinit(_: *Model, _: Allocator) void {}
@@ -125,7 +165,7 @@ fn roleOf(cr: u16) Role {
 }
 
 fn key(kind: Kind, region: usize, bracket: usize, a: u16, b: u32) u64 {
-    return @as(u64, @backingInt(kind)) << 61 | @as(u64, region) << 60 | @as(u64, bracket) << 58 |
+    return @as(u64, @backingInt(kind)) << 60 | @as(u64, region) << 59 | @as(u64, bracket) << 57 |
         @as(u64, a) << 32 | b;
 }
 
@@ -133,9 +173,9 @@ const Key = struct { kind: Kind, region: u1, bracket: u2, a: u16, b: u32 };
 
 fn unkey(k: u64) Key {
     return .{
-        .kind = @fromBackingInt(@intCast(k >> 61)),
-        .region = @intCast(k >> 60 & 1),
-        .bracket = @intCast(k >> 58 & 3),
+        .kind = @fromBackingInt(@intCast(k >> 60)),
+        .region = @intCast(k >> 59 & 1),
+        .bracket = @intCast(k >> 57 & 3),
         .a = @intCast(k >> 32 & 0xffff),
         .b = @truncate(k),
     };
@@ -203,12 +243,15 @@ fn addRow(gpa: Allocator, cells: *DayCells, r: Row) !void {
                 for (r.items) |item| if (item != 0) {
                     try s.add(.build, r.cr, item, 1);
                     try s.add(.item, r.cr, item, y);
+                    if (r.opp != 0) try s.add(.item_matchup, r.cr, @as(u32, item) << 16 | r.opp, y);
+                    if (r.keystone != 0) try s.add(.keystone_item, r.cr, @as(u32, r.keystone) << 16 | item, y);
                 };
             }
             if (r.keystone != 0) {
                 try s.add(.rune, r.cr, 0, 1);
                 try s.add(.rune, r.cr, r.keystone, 1);
                 try s.add(.keystone, r.cr, r.keystone, y);
+                if (r.opp != 0) try s.add(.keystone_matchup, r.cr, @as(u32, r.keystone) << 16 | r.opp, y);
             }
         }
     }
@@ -342,6 +385,7 @@ pub const Pair = struct {
 };
 
 pub const modes = [_][]const u8{ "30 days", "patch", "Meio" };
+const mode_tags = [modes.len][]const u8{ "30d", "patch", "meio" };
 
 pub const Comparison = enum {
     patch_30,
@@ -366,19 +410,64 @@ pub const Stat = struct {
     /// Of them, in cells where each mode has a number
     covered: [modes.len]f64 = @splat(0),
     pairs: [Comparison.count]Pair = @splat(.{}),
-    /// Rate cells with a Meio range, and of them those whose target rate falls in it,
-    /// widened by the target's binomial noise (80% each side, so about 80% or more)
-    ranged: f64 = 0,
-    inside: f64 = 0,
+    /// Rate cells' ranges per mode and band; raw modes from one game
+    cal: [modes.len][bands.len]Cal = @splat(@splat(.{})),
 
     fn add(s: *Stat, o: Stat) void {
         s.target += o.target;
         for (&s.covered, o.covered) |*a, b| a.* += b;
         for (&s.pairs, o.pairs) |*a, b| a.add(b);
-        s.ranged += o.ranged;
-        s.inside += o.inside;
+        for (&s.cal, o.cal) |*a, b| for (a, b) |*x, y| x.add(y);
+    }
+
+    /// Meio's cells whose range holds the target, over every band
+    fn inRange(s: Stat) ?f64 {
+        var c: Cal = .{};
+        for (s.cal[2]) |b| c.add(b);
+        return if (c.cells > 0) c.inside / c.cells else null;
     }
 };
+
+/// Range bands by 80% half-width (Trust rules): solid under 6 points, faded from 6
+pub const bands = [_][]const u8{ "solid", "faded" };
+
+fn bandOf(half: f64) usize {
+    return if (half < 0.06) 0 else 1;
+}
+
+/// One mode's ranges in one band
+pub const Cal = struct {
+    cells: f64 = 0,
+    /// Cells whose target rate is inside the range, the target's noise added in quadrature
+    inside: f64 = 0,
+    /// (target - p)^2 less the target's binomial noise, summed
+    sq: f64 = 0,
+
+    fn add(c: *Cal, o: Cal) void {
+        c.cells += o.cells;
+        c.inside += o.inside;
+        c.sq += o.sq;
+    }
+
+    /// The error's sd in points, net of the target's noise; an honest range's half-width
+    /// is 1.28 of it, so solid wants under 4.7
+    pub fn sd(c: Cal) f64 {
+        return if (c.cells > 0) 100 * @sqrt(@max(0, c.sq / c.cells)) else 0;
+    }
+
+    /// A rate p with 80% half-width `half` against k of n target games
+    fn cell(c: *[bands.len]Cal, p: f64, half: f64, n: f64, k: f64) void {
+        const gap = k / n - p;
+        const se = half / z80;
+        const noise = p * (1 - p) / n;
+        const b = &c[bandOf(half)];
+        b.cells += 1;
+        if (@abs(gap) <= z80 * @sqrt(se * se + noise)) b.inside += 1;
+        b.sq += gap * gap - noise;
+    }
+};
+
+const z80 = 1.2815515655446004;
 
 pub const Results = [regions.len][Kind.count][brackets.len][buckets.len]Stat;
 
@@ -398,14 +487,6 @@ fn avgError(m: f64, t: Acc) f64 {
     return t.n * ((m - mean) * (m - mean) - variance / t.n);
 }
 
-/// k of n inside [lo, hi] widened by k/n's noise at 80% each side
-fn inRange(e: Estimate, n: f64, k: f64) bool {
-    const z = 1.2816;
-    const lo = e.lo - z * @sqrt(e.lo * (1 - e.lo) / n);
-    const hi = e.hi + z * @sqrt(e.hi * (1 - e.hi) / n);
-    return k / n >= lo and k / n <= hi;
-}
-
 fn score(comptime Model: type, cells: *const Cells, model: *const Model, opts: Options, bucket: usize, out: *Results) void {
     const min: f64 = @floatFromInt(opts.min_games);
     var it = cells.iterator();
@@ -422,17 +503,25 @@ fn score(comptime Model: type, cells: *const Cells, model: *const Model, opts: O
         var have: [modes.len]bool = undefined;
         var loss: [modes.len]f64 = undefined;
         for (0..2) |m| {
-            have[m] = games.w[m].n >= min;
+            const w = games.w[m].n;
+            if (u.kind != .gold14 and w > 0) {
+                const p = rate(games.w[m], c.w[m].s);
+                Cal.cell(&s.cal[m], p, z80 * @sqrt(p * (1 - p) / w), n, c.t.s);
+            }
+            have[m] = w >= min;
             if (!have[m]) continue;
             loss[m] = if (u.kind == .gold14)
                 avgError(c.w[m].s / c.w[m].n, c.t)
             else
                 logLoss(rate(games.w[m], c.w[m].s), n, c.t.s);
         }
-        const est: ?Estimate = if (u.kind != .gold14)
-            model.rate(u.kind, u.region, u.bracket, u.a, u.b)
+        const mk = meioKind(u.kind);
+        const est: ?Estimate = if (mk == null)
+            null
+        else if (u.kind != .gold14)
+            model.rate(mk.?, u.region, u.bracket, u.a, u.b)
         else if (@hasDecl(Model, "avg"))
-            model.avg(u.kind, u.region, u.bracket, u.a, u.b)
+            model.avg(mk.?, u.region, u.bracket, u.a, u.b)
         else
             null;
         have[2] = est != null;
@@ -441,10 +530,7 @@ fn score(comptime Model: type, cells: *const Cells, model: *const Model, opts: O
                 avgError(m.p, c.t)
             else
                 logLoss(std.math.clamp(m.p, 1e-4, 1 - 1e-4), n, c.t.s);
-            if (u.kind != .gold14 and m.hi > m.lo) {
-                s.ranged += 1;
-                if (inRange(m, n, c.t.s)) s.inside += 1;
-            }
+            if (u.kind != .gold14 and m.hi > m.lo) Cal.cell(&s.cal[2], m.p, (m.hi - m.lo) / 2, n, c.t.s);
         }
         for (have, 0..) |h, m| {
             if (h) s.covered[m] += n;
@@ -661,7 +747,8 @@ pub fn report(results: *const Results, out: *std.Io.Writer) !void {
         "mode's loss minus the second's over the cells both have a number for, +- 2 se " ++
         "over cells (negative: the first predicted better). Unseen: cells the 30 days has " ++
         "too few games for, Meio against the champion-role's 30-day rate. In range: share " ++
-        "of Meio's ranges holding the target's rate (its noise added; ~80%+ if honest)\n");
+        "of Meio's ranges holding the target's rate (its noise added in quadrature; ~80% " ++
+        "if honest)\n");
     for (results, regions) |by_kind, region| {
         try out.print("\n## {s}\n\n| cell | ranks | day | cells | covered 30d / patch / Meio | " ++
             "30 days | patch - 30d | Meio - 30d | Meio - patch | unseen cells | Meio - parent | in range |\n" ++
@@ -677,6 +764,52 @@ pub fn report(results: *const Results, out: *std.Io.Writer) !void {
                 }
             }
         }
+        try calibration(out, region, &by_kind);
+    }
+}
+
+/// Ranges per kind and lock depth, all ranks and days: in each band, does a mode's range
+/// hold the target as often as it says?
+fn calibration(out: *std.Io.Writer, region: []const u8, by_kind: *const [Kind.count][brackets.len][buckets.len]Stat) !void {
+    try out.print("\n### Ranges, {s}\n\nAll ranks, every day. Bands by the 80% range's " ++
+        "half-width (raw modes: binomial from their games, from 1 game): solid under 6 " ++
+        "points, faded from 6. Per band: cells, share inside (the target's noise added in " ++
+        "quadrature; 80% if honest), and the error's sd in points net of the target's " ++
+        "noise (honest: solid under 4.7, faded above)\n\n| cell | mode | ", .{region});
+    for (bands) |b| try out.print("{s} cells | in | sd | ", .{b});
+    try out.writeAll("\n| --- | --- |");
+    for (bands) |_| try out.writeAll(" --: | --: | --: |");
+    try out.writeAll("\n");
+    var groups: [4]Stat = @splat(.{});
+    for (by_kind, 0..) |by_bracket, k| {
+        const kind: Kind = @fromBackingInt(@intCast(k));
+        if (kind == .gold14) continue;
+        var all: Stat = .{};
+        for (by_bracket[0]) |s| all.add(s);
+        try calRows(out, label(kind), all);
+        const g: usize = switch (depth(kind)) {
+            0 => 0,
+            1 => if (isShare(kind)) 2 else 1,
+            else => 3,
+        };
+        groups[g].add(all);
+    }
+    const names = [_][]const u8{ "depth 0: champion", "depth 1: win rates", "depth 1: shares", "depth 2: win rates" };
+    for (groups, names) |g, name| try calRows(out, name, g);
+}
+
+fn calRows(out: *std.Io.Writer, name: []const u8, s: Stat) !void {
+    for (s.cal, modes) |by_band, mode| {
+        var cells: f64 = 0;
+        for (by_band) |c| cells += c.cells;
+        if (cells == 0) continue;
+        try out.print("| {s} | {s} |", .{ name, mode });
+        for (by_band) |c| {
+            if (c.cells == 0) {
+                try out.writeAll(" 0 | | |");
+            } else try out.print(" {d:.0} | {d:.0}% | {d:.1} |", .{ c.cells, 100 * c.inside / c.cells, c.sd() });
+        }
+        try out.writeAll("\n");
     }
 }
 
@@ -703,7 +836,7 @@ fn row(out: *std.Io.Writer, kind: Kind, bracket: []const u8, bucket: []const u8,
             try out.print("{d:.0} +- {d:.0} | ", .{ d.mean, 2 * d.se });
         } else try out.print("{d:.2} +- {d:.2} | ", .{ 1000 * d.mean, 2000 * d.se });
     }
-    if (s.ranged > 0) try out.print("{d:.0}% |\n", .{100 * s.inside / s.ranged}) else try out.writeAll(" |\n");
+    if (s.inRange()) |r| try out.print("{d:.0}% |\n", .{100 * r}) else try out.writeAll(" |\n");
 }
 
 /// One line per (region, kind, bracket, bucket), for the method page (E9)
@@ -712,7 +845,10 @@ pub fn writeTsv(results: *const Results, patch: []const u8, t0: i64, out: *std.I
     for (std.enums.values(Comparison)) |c| {
         inline for (.{ "cells", "obs", "loss_a", "loss_b", "diff", "se" }) |f| try out.print("\t{t}_{s}", .{ c, f });
     }
-    try out.writeAll("\tranged\tinside\n");
+    for (mode_tags) |m| for (bands) |b| {
+        inline for (.{ "cells", "inside", "err" }) |f| try out.print("\tcal_{s}_{s}_{s}", .{ m, b, f });
+    };
+    try out.writeAll("\n");
     for (results, regions) |by_kind, region| for (by_kind, 0..) |by_bracket, k| {
         const kind: Kind = @fromBackingInt(@intCast(k));
         for (by_bracket, brackets) |by_bucket, bracket| for (by_bucket, buckets) |s, bucket| {
@@ -724,7 +860,8 @@ pub fn writeTsv(results: *const Results, patch: []const u8, t0: i64, out: *std.I
                 const d = p.diff();
                 try out.print("\t{d}\t{d}\t{d:.6}\t{d:.6}\t{e:.4}\t{e:.4}", .{ p.cells, p.obs, p.challenger, p.reference, d.mean, d.se });
             }
-            try out.print("\t{d}\t{d}\n", .{ s.ranged, s.inside });
+            for (s.cal) |by_band| for (by_band) |c| try out.print("\t{d}\t{d}\t{d:.3}", .{ c.cells, c.inside, c.sd() });
+            try out.writeAll("\n");
         };
     };
 }
@@ -736,8 +873,24 @@ test "TSV header: one name per column, no spaces" {
     try writeTsv(&results, "x", 0, &w.writer);
     const header = w.written();
     try std.testing.expect(std.mem.findScalar(u8, header, ' ') == null);
-    try std.testing.expectEqual(10 + 6 * Comparison.count + 2, std.mem.count(u8, header, "\t") + 1);
+    try std.testing.expectEqual(10 + 6 * Comparison.count + 3 * modes.len * bands.len, std.mem.count(u8, header, "\t") + 1);
+    try std.testing.expect(std.mem.find(u8, header, "\tcal_meio_faded_err") != null);
     try std.testing.expect(std.mem.find(u8, header, "\tmeio_30_diff\t") != null);
+}
+
+test "range bands, inside with the target's noise, error net of it" {
+    var c: [bands.len]Cal = @splat(.{});
+    // 50% +- 3 points against 600 of 1000 games: solid, 10 points off, outside
+    Cal.cell(&c, 0.5, 0.03, 1000, 600);
+    // 50% +- 8 against 52 of 100: faded, inside
+    Cal.cell(&c, 0.5, 0.08, 100, 52);
+    try std.testing.expectEqual(@as(f64, 1), c[0].cells);
+    try std.testing.expectEqual(@as(f64, 0), c[0].inside);
+    try std.testing.expectEqual(@as(f64, 1), c[1].inside);
+    try std.testing.expectApproxEqAbs(100 * @sqrt(0.01 - 0.25 / 1000.0), c[0].sd(), 1e-9);
+    // Error smaller than the target's noise: sd 0, not negative
+    try std.testing.expectEqual(@as(f64, 0), c[1].sd());
+    try std.testing.expectEqual(@as(usize, 1), bandOf(0.4));
 }
 
 test "log loss and the noise-corrected squared error" {
@@ -752,8 +905,8 @@ test "log loss and the noise-corrected squared error" {
 /// Says 0.5 for every win rate with a range of 0.4-0.6, nothing for shares
 const HalfMeio = struct {
     const Model = struct {
-        fn rate(_: *const Model, kind: Kind, _: u1, _: u2, _: u16, _: u32) ?Estimate {
-            if (isShare(kind)) return null;
+        fn rate(_: *const Model, kind: meio.Kind, _: u1, _: u2, _: u16, _: u32) ?Estimate {
+            if (kind == .build or kind == .rune) return null;
             return .{ .p = 0.5, .lo = 0.4, .hi = 0.6, .own = 0 };
         }
         fn deinit(_: *Model, _: Allocator) void {}
@@ -792,6 +945,11 @@ test "rolling origin: windows, target, kinds and Meio" {
     try std.testing.expectEqual(@as(f64, 1), cells.get(key(.build, 0, 0, top, 6610)).?.t.s);
     try std.testing.expectEqual(@as(f64, 1), cells.get(key(.keystone, 0, 0, top, 8010)).?.w[0].s);
     try std.testing.expectEqual(@as(f64, 2), cells.get(key(.rune, 0, 0, top, 0)).?.w[0].n);
+    // Two locks: keystone x opponent, item x opponent, keystone x item
+    try std.testing.expectEqual(@as(f64, 1), cells.get(key(.keystone_matchup, 1, 3, top, @as(u32, 8010) << 16 | opp)).?.w[0].n);
+    try std.testing.expectEqual(@as(f64, 1), cells.get(key(.item_matchup, 0, 0, top, @as(u32, 6610) << 16 | opp)).?.t.s);
+    try std.testing.expectEqual(@as(f64, 2), cells.get(key(.keystone_item, 0, 0, top, @as(u32, 8010) << 16 | 3071)).?.w[0].n);
+    try std.testing.expectEqual(Key{ .kind = .item_matchup, .region = 1, .bracket = 3, .a = top, .b = @as(u32, 6610) << 16 | opp }, unkey(key(.item_matchup, 1, 3, top, @as(u32, 6610) << 16 | opp)));
 
     var results: Results = @splat(@splat(@splat(@splat(.{}))));
     var model: HalfMeio.Model = .{};
@@ -804,9 +962,18 @@ test "rolling origin: windows, target, kinds and Meio" {
     // Meio's 0.5 ties the 30 days, beats the patch; its range holds the win
     try std.testing.expectApproxEqAbs(0, s.pairs[@backingInt(Comparison.meio_30)].diff().mean, 1e-12);
     try std.testing.expect(s.pairs[@backingInt(Comparison.meio_patch)].diff().mean < 0);
-    try std.testing.expectEqual(@as(f64, 1), s.ranged);
-    try std.testing.expectEqual(@as(f64, 1), s.inside);
+    // Its 0.4-0.6 is faded; the win is 0.5 off, inside 1.28 sqrt(0.078^2 + 0.25)
+    try std.testing.expectEqual(@as(f64, 1), s.cal[2][1].cells);
+    try std.testing.expectEqual(@as(f64, 1), s.cal[2][1].inside);
     try std.testing.expectEqual(@as(f64, 0), results[0][@backingInt(Kind.build)][0][1].covered[2]);
+    // Two-lock cells, the target's 8010 x 3071 and 8010 x 6610: Meio asked for both once
+    // the model has the kind's name, raw modes ranged where they have games
+    const ki = results[0][@backingInt(Kind.keystone_item)][0][1];
+    const asked: f64 = if (meioKind(.keystone_item) != null) 2 else 0;
+    try std.testing.expectEqual(asked, ki.covered[2]);
+    try std.testing.expectEqual(asked, ki.cal[2][1].cells);
+    // 30 days on 8010 x 3071: 1.5/3 from 2 games, half 1.28 sqrt(0.25 / 2) = 0.45: faded
+    try std.testing.expectEqual(@as(f64, 1), ki.cal[0][1].cells);
 
     // Unseen: with 3 games needed, the matchup's 2 are too few and so are its
     // champion-role's: nothing. A third game against someone else makes the parent
