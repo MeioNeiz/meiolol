@@ -73,6 +73,11 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
   the pin). Blocked by PT1
 - PT5 Ship: the winning rule on the box (daily update, refit per patch); the daily eval
   (deploy/web-loop.sh, data/eval-history.tsv) scores latest-patch games only
+- PT7 Patches as experiments (Jacob, 4 Nov; Meio M8 in estimates.md): patchnotes.zig's
+  change list as interventions. Does a champion's move across 16.21 -> 16.22 track its
+  prior exposure to a changed item or rune (unchanged ones the null, build mix fixed)?
+  If so, Meio's patch prior widens by exposure, not only for champions named in the
+  notes (A3), and interactions add up patch by patch. Few patches held (J25), small moves
 
 ## Later (only if PT3 shows a real jump the simple arms miss)
 
