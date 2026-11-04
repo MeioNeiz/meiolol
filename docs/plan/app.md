@@ -163,22 +163,22 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
 
 ## Jacob's app review (3 Nov)
 
-His notes 94 to 121 by screen: docs/review/app-review-2026-11-03.md. Steps, after APP1:
-- APP13 A whole app: menu and settings in every phase, the site's features inside (draft
-  tester, pick planning, patch, champion pool) in the site's components and style, links
-  to the site for more; fits full screen and small; champ select without scrolling (108)
-- APP14 Pictures over words: download and first start as bars and animation (94, 95),
-  a chip as champion and number (101), fewer words on the board (102), bigger icons (107)
-- APP15 More options: many more picks, each with its effects and why (106); win rate and
-  win chance (110, 116: private %, public words, "Policy line"); win rate by game time and
-  objective value per comp (118, 119); who carries (117: the tally APP6 lacks); runes
-  and summoners (120); global beside EUW (103)
-- APP16 Every phase worth a look: lobby and queue with recent form and best champions
-  (97, 98); in game items, levelling and tips, private first, power spikes only as a
-  sheet the player opens (114, 115); more, shorter, funnier comments (109, 113)
-- APP17 Other seats, done (docs/plan/ui/app-seats.md; ban role hint private until APP1).
-  Left: players' mains, picks, streaks, comments (100, 121) only where names are visible
-  (APP7)
+Notes 94 to 121: docs/review/app-review-2026-11-03.md; plans docs/plan/ui/app-whole.md,
+app-pictures.md, app-options.md, app-phases.md, app-seats.md. Built on mocks:
+- APP13 A whole app, done: the site's header and settings in every phase, site pages in
+  the window, champ select in columns, lobby tiles into tester, patch, pool, rankings.
+  Left: a real Windows window test of site navigation (gpu-box, deploy/shell.sh)
+- APP14 Pictures over words, done: first start as a pulse, step track and download bar
+  (94, 95), chips as champion or role and a figure (101, 102), bigger icons (107)
+- APP15 More options, done but one: Options panel (many picks, effects, win rate, private
+  team %), runes and summoners (120), win rate by game length and most damage per team
+  (118, 117: no carry label), EUW or all regions (103); objective value (119) barely
+  depends on the draft. Left: public draft words (116) after data-and-model step 1
+- APP16 Every phase, done: lobby and queue form from match history (97, 98), in-game
+  build, levelling, tips and a power spike sheet the player opens (114, 115), shorter
+  playful loading pills and comp tips (109, 113)
+- APP17 Other seats, done (ban role hint private until APP1). Left: players' mains,
+  picks, streaks, comments (100, 121) where names are visible (APP7)
 
 ## Window layout
 
