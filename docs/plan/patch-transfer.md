@@ -78,13 +78,14 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
   prior exposure to a changed item or rune (unchanged ones the null, build mix fixed)?
   If so, Meio's patch prior widens by exposure, not only for champions named in the
   notes (A3), and interactions add up patch by patch. Few patches held (J25), small moves
+- PT8 Shifts learnt from trends, no change list (Jacob, 4 Nov): shared movers through
+  items and keystones, who leads (ranks, KR before EUW), behaviour before win rates,
+  learning curves. Steps TS0-TS5 in meio-middle.md
 
 ## Later (only if PT3 shows a real jump the simple arms miss)
 
 - Which old champion-role data to trust, learnt: a spike-and-slab prior on the offsets
   [psn C15]; never per-game weights or a domain classifier [psn C11]
-- Predicting a champion's jump from what the patch changed (needs 3+ patches: 16.22,
-  16.23; no backfill, J25)
 - A model per region for each region's pages, once A8 shows region terms help EUW
 - Per-block transfer (pairs, matchups, comp terms across patches); the train-vs-eval
   allocation curve for tuned knobs

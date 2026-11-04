@@ -27,7 +27,8 @@ That same understanding feeds the models, so they beat anyone's. It is a lens fo
 step, not one item: a block that ignores its filters, a number from a thin window shown
 as fact, or a model fitted on one window without asking what the others add is a gap.
 Plan: docs/plan/estimates.md (views, estimate, truth test), patch-transfer.md (how a
-patch moves numbers), lab-frontier.md (models); findings land in docs/learned.md
+patch moves numbers), meio-middle.md (no lean, shifts from trends), lab-frontier.md
+(models); findings land in docs/learned.md
 
 ## Now
 

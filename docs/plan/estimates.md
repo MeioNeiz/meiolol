@@ -174,6 +174,9 @@ holding ~80% (so too wide fails as well as too narrow); boundaries 16.20 -> 16.2
   and averages too (build, rune, gold at 14), and E2 per lock stack (one lock, two, the
   wish list's pairs), scored daily like the single kinds. Ranges calibrated per kind and
   stack depth, since the range now decides what is shown
+- M10 No lean (Jacob, 4 Nov): Meio's middle runs neither high nor low for any kind,
+  popularity band, rank or region, rare strong picks included; the lean table as a
+  truth gate. Steps NL0-NL7 in meio-middle.md
 
 Order: E7 next, as the base: on its own it fixes the matchup builds strip per
 period and rank in every block. Then E2, then E3-E5 as each passes the gate, then E9 and
