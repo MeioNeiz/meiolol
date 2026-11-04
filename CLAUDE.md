@@ -90,7 +90,8 @@ docs/plan.md "Now". Read it first.
 - Tests: `deploy/zb.sh test 2>&1 | tee $SCRATCH/t.log | tail -30`, then grep the log
 - Hand over at 25-33% context (a hook reminds; fleet skill); a new topic starts fresh
 - Team runs: shared state in the run's common.md; messages are "done: <path>" or
-  "blocked: <why>, <path>", details in the file
+  "blocked: <why>, <path>", details in the file. Coordinator: docs/plan/how-we-work.md
+  (close sessions past ~30% context and exited panes, gap review, 4-5 agents)
 
 ## Docs (read the one you need, not all)
 
