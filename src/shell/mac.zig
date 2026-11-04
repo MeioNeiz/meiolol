@@ -138,6 +138,7 @@ fn received(_: Id, _: Sel, _: Id, message: Id) callconv(.c) void {
         .signin => |x| client.signIn(x.username, x.password),
         .mastery => |on| client.mastery(on),
         .lane => |r| client.lane(r),
+        .swap => |r| client.swap(r[0], r[1]),
         .regions => |all| client.regions(all),
         .practice => |p| if (!@import("build_options").public) {
             _ = practice.edit(p, @intFromFloat(nowMs() * 1000));

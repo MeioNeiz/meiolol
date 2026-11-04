@@ -54,5 +54,5 @@ option's chip.
 
 1. Enemy seats' lanes (100): poller, board, screens, badge, review pages, done
 2. Counter bans from ally hovers (99), done
-3. Move enemy picks (111): bridge.js drag, swap message, state, poller
+3. Move enemy picks (111), done
 4. Bans as a role hint (112), private until APP1 checks it

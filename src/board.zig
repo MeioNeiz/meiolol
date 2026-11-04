@@ -177,6 +177,35 @@ pub fn enemyLane(arena: std.mem.Allocator, mine: lanecard.Input, b: *const Board
     return in;
 }
 
+/// An enemy's seat dragged from row `from` onto row `to`: it takes `to`, and the seat
+/// placed in `to`, if any, takes `from`. `roles`: the board's enemy roles by cell, as
+/// shown; `moved`: the roles set by hand so far, by cell (withMoves)
+pub fn moveEnemy(roles: []const ?Role, moved: []?Role, from: Role, to: Role) void {
+    if (from == to) return;
+    const a = std.mem.findScalar(?Role, roles, from) orelse return;
+    if (std.mem.findScalar(?Role, roles, to)) |b| moved[b] = from;
+    moved[a] = to;
+}
+
+/// `cs` with enemy roles moved by hand (moveEnemy) in place of the client's or the
+/// guess, on their seats and their picks: the board, the lane card and the draft follow
+pub fn withMoves(arena: std.mem.Allocator, cs: session.ChampSelect, moved: []const ?Role) !session.ChampSelect {
+    var out = cs;
+    const team = try arena.dupe(Slot, cs.their_team);
+    const picks = try arena.dupe(core.Pick, cs.enemies);
+    for (team, 0..) |*sl, i| {
+        const r = (if (i < moved.len) moved[i] else null) orelse continue;
+        sl.role = r;
+        if (sl.champion == 0) continue;
+        for (picks) |*p| if (p.champion == sl.champion) {
+            p.role = r;
+        };
+    }
+    out.their_team = team;
+    out.enemies = picks;
+    return out;
+}
+
 fn seat(stats: *const Stats, opts: core.Options, sl: Slot, role: ?Role, guessed: bool) Seat {
     var s: Seat = .{ .slot = sl, .role = role, .guessed = guessed };
     if (sl.champion == 0) return s;
@@ -551,4 +580,54 @@ test "board: an enemy's lane from their side" {
     try testing.expectEqual(0, jungle.me);
     try testing.expect(!jungle.locked);
     try testing.expectEqual(2, jungle.allies.len);
+}
+
+test "board: an enemy moved by hand swaps rows, the rest guessed around them" {
+    var f = try cardscenes.fixture();
+    defer f.deinit();
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const st = &f.stats;
+    const garen = st.ids[st.find("Garen").?];
+    const syndra = st.ids[st.find("Syndra").?];
+    var mine = [_]Slot{ .{ .role = .top }, .{ .role = .jungle }, .{ .role = .middle, .me = true }, .{ .role = .bottom }, .{ .role = .utility } };
+    var theirs = [_]Slot{ .{ .champion = garen, .state = .locked }, .{ .champion = syndra, .state = .locked }, .{}, .{}, .{} };
+    const cs: session.ChampSelect = .{
+        .my_role = .middle,
+        .my_champion = 0,
+        .my_locked = false,
+        .allies = &.{},
+        .enemies = @constCast(&[_]core.Pick{ .{ .champion = garen }, .{ .champion = syndra } }),
+        .bans = &.{},
+        .phase = "BAN_PICK",
+        .my_team = &mine,
+        .their_team = &theirs,
+    };
+    const before = try build(arena, st, cardscenes.test_opts, cs, null, null);
+    var roles: [5]?Role = undefined;
+    for (&roles, before.enemies) |*r, s| r.* = s.role;
+    try testing.expectEqualSlices(?Role, &.{ .top, .middle, null, null, null }, &roles);
+
+    // Garen dragged onto the middle row: Syndra takes top
+    var moved: [5]?Role = @splat(null);
+    moveEnemy(&roles, &moved, .top, .middle);
+    try testing.expectEqualSlices(?Role, &.{ .middle, .top, null, null, null }, &moved);
+    const swapped = try withMoves(arena, cs, &moved);
+    try testing.expectEqual(null, cs.their_team[0].role);
+    try testing.expectEqual(Role.top, swapped.enemies[1].role.?);
+    const after = try build(arena, st, cardscenes.test_opts, swapped, null, null);
+    try testing.expectEqual(Role.middle, after.enemies[0].role.?);
+    try testing.expectEqual(Role.top, after.enemies[1].role.?);
+    for (after.ban_options) |o| try testing.expect(o.role != .top and o.role != .middle);
+
+    // Onto a row no enemy is placed in: only Syndra moves
+    moved = @splat(null);
+    moveEnemy(&roles, &moved, .middle, .bottom);
+    try testing.expectEqualSlices(?Role, &.{ null, .bottom, null, null, null }, &moved);
+    // From a row with no placed enemy, or onto its own: nothing
+    moved = @splat(null);
+    moveEnemy(&roles, &moved, .jungle, .top);
+    moveEnemy(&roles, &moved, .top, .top);
+    try testing.expectEqualSlices(?Role, &(@as([5]?Role, @splat(null))), &moved);
 }

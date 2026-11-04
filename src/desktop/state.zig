@@ -84,6 +84,11 @@ pub var lane_role: std.atomic.Value(u8) = .init(own_lane);
 pub const own_lane = 255;
 pub const enemy_lanes = 5;
 
+/// An enemy seat dragged onto another row, for the poller's next tick: the two rows'
+/// roles (backing ints) as from << 8 | to, `no_swap` none
+pub var swap: std.atomic.Value(u16) = .init(no_swap);
+pub const no_swap = 0xffff;
+
 /// The Options panel's region chip: champ select's stats from every region, when the
 /// app has that file (Data.all), else EUW's
 pub var all_regions: std.atomic.Value(bool) = .init(false);

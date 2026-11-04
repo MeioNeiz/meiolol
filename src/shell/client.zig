@@ -50,6 +50,14 @@ pub fn lane(role: u8) void {
     s.practice_changed();
 }
 
+/// An enemy seat dropped on another role's row: the two swap from the next build
+pub fn swap(from: u8, to: u8) void {
+    state.swap.store(@as(u16, from) << 8 | to, .release);
+    const s = poller.lock();
+    defer poller.unlock();
+    s.practice_changed();
+}
+
 /// The Options panel's region chip: champ select from every region's stats, else EUW's
 pub fn regions(all: bool) void {
     state.all_regions.store(all, .release);

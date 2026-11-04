@@ -88,6 +88,13 @@ file and packed rows: docs/architecture.md.
   the board placed in that role, their team as allies, mine with hovers as enemies,
   ally semantics: what they could pick into us, the matchup once locked), Lane.enemy
   badges it. Not under practice, whose seat clicks place champions
+- Moved enemy roles: an enemy seat (one with a lane act or the shown one) dragged onto
+  another row: bridge.js's native drag events (no ui-app.wasm bytes) send `swap` with
+  the rows' roles, state.swap carries it to the poller, board.moveEnemy maps it onto the
+  last board's enemy roles by cell (the seat in the target row takes the other's role),
+  and board.withMoves puts the moved roles on their seats and picks before the card,
+  board and draft are built, so everything follows; poller.moved clears when champ
+  select ends. Allies' roles stay the client's
 - Region chip: with all-stats.bin loaded (poller Data.all), the Options panel shows "EUW |
   All regions" (ui/segmented.zig Item.shell as data-shell, so no handler in an island);
   the shell's `regions` sets state.all_regions and champ select and practice build from

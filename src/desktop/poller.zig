@@ -542,6 +542,10 @@ const Poller = struct {
     seats_arena: std.heap.ArenaAllocator,
     seats: ?[2][]const loading.Seat = null,
     draft: ?board.Draft = null,
+    /// Enemy roles by cell: as the last board showed them, and as moved by hand
+    /// (state.swap), kept until champ select ends
+    enemy_roles: [5]?core.Role = @splat(null),
+    moved: [5]?core.Role = @splat(null),
     /// Positions the last in-game tick saw, for the post game
     hints: [10]postgame.Hint = undefined,
     n_hints: usize = 0,
@@ -613,8 +617,12 @@ const Poller = struct {
 
     fn tick(p: *Poller, arena: std.mem.Allocator, data: *const Data) !state.Status {
         const step = try p.watch.step(arena);
-        if (step != .select) state.lane_role.store(state.own_lane, .release);
-        const cs = switch (step) {
+        if (step != .select) {
+            state.lane_role.store(state.own_lane, .release);
+            p.moved = @splat(null);
+            state.swap.store(state.no_swap, .release);
+        }
+        const cs_given = switch (step) {
             .phase => |phase| {
                 // Live Client Data is up once the game has loaded; until then, waiting
                 // After it, the client's end of game block; the game's history stays
@@ -649,7 +657,9 @@ const Poller = struct {
             .bad_session => |err| return .{ .client_error = @errorName(err) },
             .select => |cs| cs,
         };
-        const role = cs.my_role orelse return .no_role;
+        const role = cs_given.my_role orelse return .no_role;
+        p.takeSwap();
+        const cs = try board.withMoves(arena, cs_given, &p.moved);
 
         if (p.own == null) p.own = loadOwn(p.own_arena.allocator(), p.watch.client.?);
         const own = p.own.?;
@@ -662,6 +672,7 @@ const Poller = struct {
         h.update(std.mem.asBytes(&role));
         h.update(std.mem.asBytes(&by_mastery));
         h.update(&.{ shown, @intFromBool(all) });
+        h.update(std.mem.asBytes(&p.moved));
         if (pool) |ids| h.update(std.mem.sliceAsBytes(ids));
         p.fingerprint = h.final();
 
@@ -685,6 +696,10 @@ const Poller = struct {
         };
         sel.card = try lanecard.build(arena, mine);
         sel.board = try board.build(arena, stats, .{}, cs, &sel.card, if (data.facts) |*f| f else null);
+        p.enemy_roles = @splat(null);
+        for (sel.board.enemies, 0..) |e, i| if (i < p.enemy_roles.len) {
+            p.enemy_roles[i] = e.role;
+        };
         var used = mine;
         if (shown < core.Role.count) {
             if (try board.allyLane(arena, mine, cs, @fromBackingInt(@intCast(shown)))) |in| {
@@ -714,6 +729,16 @@ const Poller = struct {
         if (data.facts) |*f| want.addPicked(f, sel);
         p.fetchIcons(want.list[0..want.n]);
         return .{ .select = sel };
+    }
+
+    /// An enemy seat dragged onto another row since the last tick, on the roles that board
+    /// showed
+    fn takeSwap(p: *Poller) void {
+        const x = state.swap.swap(state.no_swap, .acq_rel);
+        if (x == state.no_swap) return;
+        const from = std.enums.fromInt(core.Role, x >> 8) orelse return;
+        const to = std.enums.fromInt(core.Role, x & 0xff) orelse return;
+        board.moveEnemy(&p.enemy_roles, &p.moved, from, to);
     }
 
     /// The practice draft on its screen, built as a real one would be
@@ -984,6 +1009,25 @@ pub const Replay = struct {
     /// What publish would put beside `s`
     pub fn form(r: *const Replay, s: state.Status) ?lcu.me.Form {
         return r.p.shownForm(s);
+    }
+
+    /// An enemy seat dragged onto another row, as bridge.js's `swap`, on the roles the
+    /// last tick's board showed: the first two enemies with a role, null without two
+    pub fn moveEnemy(r: *Replay) ?[2]core.Role {
+        var two: [2]core.Role = undefined;
+        var n: usize = 0;
+        for (r.p.enemy_roles) |x| if (x) |role| if (n < 2) {
+            two[n] = role;
+            n += 1;
+        };
+        if (n < 2) return null;
+        state.swap.store(@as(u16, @backingInt(two[0])) << 8 | @backingInt(two[1]), .release);
+        return two;
+    }
+
+    /// Enemies back in the roles the client and the guess give
+    pub fn unmove(r: *Replay) void {
+        r.p.moved = @splat(null);
     }
 
     /// What the client shows now, into `arena`; null when the poller would publish

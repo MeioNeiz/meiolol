@@ -436,6 +436,7 @@ pub const css =
     \\  .c-draft .seat { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; color: var(--text);
     \\    border-radius: var(--r-s); }
     \\  .c-draft .seat[data-side="them"] { flex-direction: row-reverse; }
+    \\  .c-draft .lane[data-drop] { box-shadow: inset 0 0 0 1px var(--focus); }
     \\  .c-draft .seat[data-turn] { box-shadow: 0 0 0 1px var(--turn-line); background: var(--wash);
     \\    padding: 3px; margin: -3px; }
     \\  .c-draft .who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }

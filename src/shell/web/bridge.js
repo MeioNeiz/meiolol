@@ -33,6 +33,54 @@
     const sh = e.target.closest && e.target.closest('[data-shell]');
     if (sh) meiolol.send(JSON.parse(sh.dataset.shell));
   });
+  // An enemy seat dropped on another row (ui/draftboard.zig rows in role order): the two
+  // swap roles. The live board's seats only (a lane act or the shown one): practice's
+  // carry its own acts
+  const enemy = (el) => el.closest && el.closest('.c-draft .seat[data-side="them"]');
+  const movable = (s) => !!s && (s.matches('[data-act^="lane "]') || s.hasAttribute('data-sel'));
+  const row = (el) => {
+    const l = el.closest('.lane');
+    return l ? Array.prototype.indexOf.call(l.parentNode.children, l) : -1;
+  };
+  let from = -1;
+  let over = null;
+  const target = (e) => {
+    const l = from >= 0 && e.target.closest && e.target.closest('.c-draft .lane');
+    return l && movable(l.querySelector('.seat[data-side="them"]')) ? l : null;
+  };
+  const leave = () => {
+    if (over) delete over.dataset.drop;
+    over = null;
+  };
+  addEventListener('mousedown', (e) => {
+    const s = enemy(e.target);
+    if (movable(s)) s.draggable = true;
+  });
+  addEventListener('dragstart', (e) => {
+    const s = enemy(e.target);
+    if (!movable(s)) return;
+    from = row(s);
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  addEventListener('dragover', (e) => {
+    const l = target(e);
+    if (l !== over) leave();
+    if (!l) return;
+    e.preventDefault();
+    over = l;
+    l.dataset.drop = '';
+  });
+  addEventListener('drop', (e) => {
+    const l = target(e);
+    if (!l) return;
+    e.preventDefault();
+    const to = row(l);
+    if (to !== from) meiolol.send({ swap: [from, to] });
+  });
+  addEventListener('dragend', () => {
+    from = -1;
+    leave();
+  });
   const page = location.pathname.replace(/^\//, '') || 'index.html';
   addEventListener('DOMContentLoaded', () => {
     requestAnimationFrame(() => requestAnimationFrame(() => meiolol.send({ painted: { page } })));

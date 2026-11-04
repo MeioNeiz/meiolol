@@ -326,11 +326,38 @@ fn play(a: Allocator, gpa: Allocator, io: Io, data: *const poller.Data, lock: []
         if (!picking_done and s.select.board.turn == .pick) {
             picking_done = true;
             try seatLanes(a, &r, shots, p.group, steps, state.enemy_lanes);
+            try movedEnemies(a, &r, shots, p.group, steps);
         } else if (!lanes_done and s.select.comp != null) {
             lanes_done = true;
             try seatLanes(a, &r, shots, p.group, steps, 0);
         }
     }
+}
+
+/// The board above with its first enemy seat dragged onto the second's row: a shot with
+/// their roles swapped, then the moves undone for the shots after
+fn movedEnemies(a: Allocator, r: *poller.Replay, shots: *std.ArrayList(Shot), group: usize, steps: u32) !void {
+    const mine = for (0..shots.items.len) |i| {
+        const k = shots.items.len - 1 - i;
+        if (!shots.items[k].lane) break k;
+    } else return;
+    const two = r.moveEnemy() orelse return;
+    const s = (try r.tick(a)) orelse return;
+    // Back as the client has them: that tick's page is the one above
+    defer {
+        r.unmove();
+        _ = r.tick(a) catch {};
+    }
+    if (s != .select) return;
+    try shots.append(a, .{
+        .group = group,
+        .slug = try a.print("{s}-moved", .{shots.items[mine].slug}),
+        .title = try a.print("{s}: enemy {s} dragged onto the {s} row (their roles swap)", .{ shots.items[mine].title, two[0].label(), two[1].label() }),
+        .short = "Enemies moved",
+        .status = s,
+        .step = steps,
+        .lane = true,
+    });
 }
 
 /// The last shot's board clicked seat by seat from `first` (state.lane_role) to the
