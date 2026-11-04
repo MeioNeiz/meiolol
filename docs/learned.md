@@ -40,10 +40,11 @@ How to write a line:
   the new pin, shipped form"
 - Rare picks lose: a champion in a role it is seldom played in (under 100 games in 30
   days, every region) won 34% of its next week's games, so shrinking a thin rate to 50%
-  is wrong; shrink it to what equally rare picks win. Sure: Meio's champion-role term
-  centred on a line in log share of its role's games turned unseen keystone cells on
-  16.21 (14 origins, 33k cells) from +2.08 +- 0.76 milli-nats worse than the champion's
-  raw rate to a tie, nothing else worse. Site: not yet (Meio is not shipped). Evidence:
+  is wrong; shrink it to what equally rare picks win. The same holds for a keystone or
+  item a champion seldom takes. Sure: Meio's champion-role and keystone terms centred on
+  lines in log share turned unseen keystone cells on 16.21 (14 origins, 34k cells, every
+  region) from +2.08 +- 0.76 milli-nats worse than the champion's raw rate to 2.68 +-
+  0.69 better; unseen items, matchups and duos better too, seen cells unchanged. Site: not yet (Meio is not shipped). Evidence:
   src/meio.zig, docs/model.md "Meio in the truth test"
 - Before your lane opponent picks, ranking as if they were average is as good as any
   safer ranking we tried: favouring champions whose estimated matchups vary less is a
