@@ -153,21 +153,26 @@ pub const css =
     \\  @media (prefers-reduced-motion: reduce) { .c-app > .note::before, .c-app > .note .steps li::before { animation: none; } }
     \\  .c-app [data-act] { cursor: pointer; }
     \\  .c-app > .foot { margin: 0; color: var(--muted); font-size: var(--fs-s); }
-    \\  /* Champ select: the board column (board, bans, then the panels after the island)
-    \\     beside the lane panel, held in view while the board column scrolls; full screen
-    \\     a third column for the Options panel. The island's own boxes step aside
-    \\     (display: contents) so its parts and the panels share one grid */
+    \\  /* Champ select and in game: a left column (board and bans, or score and lanes, then
+    \\     the panels after the island) beside a right one (lane panel, or your lane and
+    \\     timers) held in view while the left scrolls; full screen a third column for the
+    \\     Options panel. The island's own boxes step aside (display: contents) so its parts
+    \\     and the panels share one grid. The right columns span every row: only the last,
+    \\     flexible row grows with them, and no row gap, so the left column stays packed */
     \\  @container live (min-width: 820px) {
-    \\    .c-live:has(.c-cs) { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-    \\      grid-auto-rows: min-content; align-items: start; gap: var(--sp-4); }
-    \\    .c-live:has(.c-cs) > .c-app, .c-live .c-cs { display: contents; }
-    \\    .c-live .c-cs > .board, .c-live:has(.c-cs) > :not(.c-app), .c-live:has(.c-cs) > .c-app > :not(.c-cs) { grid-column: 1; }
-    \\    .c-live .c-cs > .side { grid-column: 2; grid-row: 1 / span 30; position: sticky; top: calc(var(--header) + var(--sp-3));
-    \\      max-height: calc(var(--vh) - var(--header) - var(--sp-5)); overflow-y: auto; overscroll-behavior: contain; }
+    \\    .c-live:has(.c-cs, .c-game) { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    \\      grid-template-rows: repeat(8, auto) 1fr; align-items: start; gap: 0 var(--sp-4); }
+    \\    .c-live:has(.c-game) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    \\    .c-live > .c-app:has(.c-cs, .c-game), .c-live .c-cs, .c-live .c-game { display: contents; }
+    \\    .c-live .c-cs > .board, .c-live .c-game > .col:first-child, .c-live:has(.c-cs, .c-game) > :not(.c-app),
+    \\      .c-live:has(.c-cs, .c-game) > .c-app > :not(.c-cs, .c-game) { grid-column: 1; margin-bottom: var(--sp-4); }
+    \\    .c-live .c-cs > .side, .c-live .c-game > .col:last-child { grid-column: 2; grid-row: 1 / -1; position: sticky;
+    \\      top: calc(var(--header) + var(--sp-3)); max-height: calc(var(--vh) - var(--header) - var(--sp-5)); overflow-y: auto;
+    \\      overscroll-behavior: contain; }
     \\  }
     \\  @container live (min-width: 1500px) {
     \\    .c-live:has(.c-cs):has(> .c-picks) { grid-template-columns: minmax(0, 4fr) minmax(0, 5fr) minmax(0, 4fr); }
-    \\    .c-live:has(.c-cs) > .c-picks { grid-column: 3; grid-row: 1 / span 30; position: sticky; top: calc(var(--header) + var(--sp-3));
+    \\    .c-live:has(.c-cs) > .c-picks { grid-column: 3; grid-row: 1 / -1; margin: 0; position: sticky; top: calc(var(--header) + var(--sp-3));
     \\      max-height: calc(var(--vh) - var(--header) - var(--sp-5)); overflow-y: auto; }
     \\  }
     \\  .c-live > .c-comp { padding: 0; }
