@@ -75,6 +75,7 @@ const usage = usage_head ++
     cmd_sitedata.usage_curves ++
     cmd_sitedata.usage_builds ++
     cmd_sitedata.usage_lockrows ++
+    cmd_sitedata.usage_meio ++
     cmd_sitedata.usage_pairlane ++
     cmd_analysis.usage_eval ++
     cmd_analysis.usage_legendaries ++
@@ -148,6 +149,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "curves", cmd_sitedata.cmdCurves },
     .{ "builds", cmd_sitedata.cmdBuilds },
     .{ "lockrows", cmd_sitedata.cmdLockrows },
+    .{ "meio", cmd_sitedata.cmdMeio },
     .{ "pairlane", cmd_sitedata.cmdPairlane },
     .{ "eval", cmd_analysis.cmdEval },
     .{ "legendaries", cmd_analysis.cmdLegendaries },

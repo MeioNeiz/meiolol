@@ -17,6 +17,7 @@
 //! ~1.8 milli-nats on 16.21
 
 const std = @import("std");
+const flat = @import("site/flat.zig");
 const Allocator = std.mem.Allocator;
 
 pub const no_gold = std.math.minInt(i32);
@@ -95,6 +96,22 @@ const max_k = 1 + max_patches + 3 + 1;
 const n_pair_classes = 6;
 /// Condition term classes (keystone, item), one per role
 const n_roles = 8;
+
+/// Rank brackets a number pools: bit br for bracket br (0 unknown, 1 low, 2 mid, 3 high)
+pub const Brackets = struct {
+    mask: u4,
+
+    pub const all: Brackets = .{ .mask = 0xf };
+
+    /// One bracket, or 0 for all ranks (the unknown rank too)
+    pub fn of(bracket: u2) Brackets {
+        return if (bracket == 0) all else .{ .mask = @as(u4, 1) << bracket };
+    }
+
+    fn has(b: Brackets, br: usize) bool {
+        return b.mask >> @intCast(br) & 1 != 0;
+    }
+};
 
 /// 80% interval
 const z80 = 1.2815515655446004;
@@ -221,29 +238,34 @@ pub const Model = struct {
     /// own is the fewer of the two parts' games, an upper bound. A share's own is the
     /// games it is a share of
     pub fn rate(m: *const Model, kind: Kind, region: u1, bracket: u2, a: u16, b: u32) ?Estimate {
+        return m.rateIn(kind, region, .of(bracket), a, b);
+    }
+
+    /// As rate, over a set of brackets pooled by the cell's games (a site rank floor)
+    pub fn rateIn(m: *const Model, kind: Kind, region: u1, brackets: Brackets, a: u16, b: u32) ?Estimate {
         const i = m.index.get(a) orelse return null;
         if (kind == .rune or kind == .build) {
             const x = std.math.cast(u16, b) orelse return null;
-            return (if (kind == .rune) &m.rune else &m.build).rate(m.shape, i, a, x, bracket, region);
+            return (if (kind == .rune) &m.rune else &m.build).rate(m.shape, i, a, x, brackets, region);
         }
-        const t = m.newest(i, bracket, region);
+        const t = m.newest(i, brackets, region);
         const first: u16 = @truncate(b >> 16);
         const second: u16 = @truncate(b);
         const parts: [2]?Part = switch (kind) {
-            .champion => return .of(t.eta, t.v, ownOf(&m.counts[i].own, bracket, region)),
+            .champion => return .of(t.eta, t.v, ownOf(&m.counts[i].own, brackets, region)),
             .matchup, .duo => blk: {
                 const x = std.math.cast(u16, b) orelse return null;
                 if (kind == .matchup and a == x) return .{ .p = 0.5, .lo = 0.5, .hi = 0.5, .own = 0 };
-                break :blk .{ m.pairPart(&m.pair, m.counts, m.fitted, a, x, kind == .duo, bracket, region) orelse return null, null };
+                break :blk .{ m.pairPart(&m.pair, m.counts, m.fitted, a, x, kind == .duo, brackets, region) orelse return null, null };
             },
-            .keystone, .item => .{ m.condPart(if (kind == .keystone) &m.keystone else &m.item, i, a, std.math.cast(u16, b) orelse return null, bracket, region), null },
+            .keystone, .item => .{ m.condPart(if (kind == .keystone) &m.keystone else &m.item, i, a, std.math.cast(u16, b) orelse return null, brackets, region), null },
             .keystone_matchup, .item_matchup => blk: {
                 if (a == second) return null;
                 const c = if (kind == .keystone_matchup) &m.keystone else &m.item;
-                const pair = m.pairPart(&m.pair, m.counts, m.fitted, a, second, false, bracket, region) orelse return null;
-                break :blk .{ m.condPart(c, i, a, first, bracket, region), pair };
+                const pair = m.pairPart(&m.pair, m.counts, m.fitted, a, second, false, brackets, region) orelse return null;
+                break :blk .{ m.condPart(c, i, a, first, brackets, region), pair };
             },
-            .keystone_item => .{ m.condPart(&m.keystone, i, a, first, bracket, region), m.condPart(&m.item, i, a, second, bracket, region) },
+            .keystone_item => .{ m.condPart(&m.keystone, i, a, first, brackets, region), m.condPart(&m.item, i, a, second, brackets, region) },
             .gold14, .build, .rune => return null,
         };
         var e = t.eta;
@@ -260,15 +282,20 @@ pub const Model = struct {
     /// Lane gold difference at 14 (gold14) in gold, newest patch: the champion-role's
     /// against any opponent, or b's lane (b != 0): minus b's, plus the pair's shrunk term
     pub fn avg(m: *const Model, kind: Kind, region: u1, bracket: u2, a: u16, b: u32) ?Estimate {
+        return m.avgIn(kind, region, .of(bracket), a, b);
+    }
+
+    /// As avg, over a set of brackets (rateIn)
+    pub fn avgIn(m: *const Model, kind: Kind, region: u1, brackets: Brackets, a: u16, b: u32) ?Estimate {
         if (kind != .gold14) return null;
         const i = m.index.get(a) orelse return null;
         const g = &m.gold;
         if (games(&g.counts[i]) == 0) return null;
-        const t = newestOf(m.shape, &g.counts[i], &g.fitted[i], bracket, region);
-        if (b == 0) return .ofAvg(t.eta, t.v, ownOf(&g.counts[i].own, bracket, region));
+        const t = newestOf(m.shape, &g.counts[i], &g.fitted[i], brackets, region);
+        if (b == 0) return .ofAvg(t.eta, t.v, ownOf(&g.counts[i].own, brackets, region));
         const x = std.math.cast(u16, b) orelse return null;
         if (x == a) return .{ .p = 0, .lo = 0, .hi = 0, .own = 0 };
-        const q = m.pairPart(&g.pair, g.counts, g.fitted, a, x, false, bracket, region) orelse return null;
+        const q = m.pairPart(&g.pair, g.counts, g.fitted, a, x, false, brackets, region) orelse return null;
         return .ofAvg(t.eta + q.e, t.v + q.v, q.own);
     }
 
@@ -277,10 +304,10 @@ pub const Model = struct {
 
     /// Against a lane opponent (minus its number) or with a support (plus it), and the
     /// pair's shrunk term; null: the other champion-role has no games
-    fn pairPart(m: *const Model, pairs: *const Pairs, counts: []const Counts, fitted: []const Fitted, a: u16, b: u16, duo: bool, bracket: u2, region: u1) ?Part {
+    fn pairPart(m: *const Model, pairs: *const Pairs, counts: []const Counts, fitted: []const Fitted, a: u16, b: u16, duo: bool, brackets: Brackets, region: u1) ?Part {
         const ib = m.index.get(b) orelse return null;
         if (games(&counts[ib]) == 0) return null;
-        const tb = newestOf(m.shape, &counts[ib], &fitted[ib], bracket, region);
+        const tb = newestOf(m.shape, &counts[ib], &fitted[ib], brackets, region);
         const lo: u16 = if (duo) a else @min(a, b);
         const hi: u16 = if (duo) b else @max(a, b);
         const sign: f64 = if (duo or lo == a) 1 else -1;
@@ -289,7 +316,7 @@ pub const Model = struct {
             const p = &pairs.terms[pi];
             q.e += sign * p.i;
             q.v += p.v;
-            q.own = ownOf(&p.own, bracket, region);
+            q.own = ownOf(&p.own, brackets, region);
         } else {
             // Never seen: no pair term, the class's spread in the range
             const s = pairs.sd[pairClass(lo, duo)];
@@ -300,7 +327,7 @@ pub const Model = struct {
 
     /// With a keystone or item x: the champion-role's shift off its own mix, x's
     /// role-wide term and the shrunk champion-role x term (the share line if unseen)
-    fn condPart(m: *const Model, c: *const Cond, i: u32, a: u16, x: u16, bracket: u2, region: u1) Part {
+    fn condPart(m: *const Model, c: *const Cond, i: u32, a: u16, x: u16, brackets: Brackets, region: u1) Part {
         const role = a >> 13;
         var q: Part = .{ .e = c.shift[i], .v = 0, .own = 0 };
         // Never seen: no term, the class's spread in the range
@@ -312,7 +339,7 @@ pub const Model = struct {
             const p = &c.inters[j];
             q.e += p.i;
             q.v += p.v;
-            q.own = ownOf(&p.own, bracket, region);
+            q.own = ownOf(&p.own, brackets, region);
         } else {
             const l = c.line[role];
             q.e += l[0] + l[1] * @max(Cond.shareOf(0, games(&m.counts[i])), c.least[role]);
@@ -326,10 +353,100 @@ pub const Model = struct {
         return etaOf(m.shape, &m.fitted[i], patch, bracket, euw);
     }
 
-    fn newest(m: *const Model, i: u32, bracket: u2, region: u1) Logit {
-        return newestOf(m.shape, &m.counts[i], &m.fitted[i], bracket, region);
+    fn newest(m: *const Model, i: u32, brackets: Brackets, region: u1) Logit {
+        return newestOf(m.shape, &m.counts[i], &m.fitted[i], brackets, region);
     }
 };
+
+/// The fitted model as a file (`meiolol meio`, read by the renderer for the champion page
+/// locks): every field rate() and avg() read, maps as their entries. The same build
+/// writes and reads it; the fingerprint refuses another's
+const file_magic = "MEIOMDL1";
+
+/// Frees the per-slot cells only fitting reads; rate() and avg() answer as before
+pub fn slim(m: *Model, gpa: Allocator) void {
+    inline for (.{ &m.pair, &m.gold.pair, &m.keystone, &m.item }) |x| {
+        gpa.free(x.cells);
+        x.cells = &.{};
+    }
+}
+
+pub fn save(w: *std.Io.Writer, m: *const Model) !void {
+    try w.writeAll(file_magic);
+    try w.writeInt(u64, fingerprint, .little);
+    try putValue(w, m.*);
+}
+
+/// null for another format or build; everything in `arena` (no Model.deinit)
+pub fn load(r: *std.Io.Reader, arena: Allocator) !?Model {
+    var head: [file_magic.len + 8]u8 = undefined;
+    r.readSliceAll(&head) catch return null;
+    if (!std.mem.eql(u8, head[0..file_magic.len], file_magic)) return null;
+    if (std.mem.readInt(u64, head[file_magic.len..][0..8], .little) != fingerprint) return null;
+    return takeValue(Model, r, arena) catch |err| switch (err) {
+        error.OutOfMemory => return err,
+        else => null,
+    };
+}
+
+const fingerprint = std.hash.Wyhash.hash(0, shapeOf(Model));
+
+fn isMap(comptime T: type) bool {
+    if (@typeInfo(T) != .@"struct" or !@hasDecl(T, "KV")) return false;
+    return T == std.AutoHashMapUnmanaged(@FieldType(T.KV, "key"), @FieldType(T.KV, "value"));
+}
+
+fn shapeOf(comptime T: type) []const u8 {
+    @setEvalBranchQuota(100_000);
+    if (comptime isMap(T)) return "map(" ++ shapeOf(@FieldType(T.KV, "key")) ++ "," ++ shapeOf(@FieldType(T.KV, "value")) ++ ")";
+    return switch (@typeInfo(T)) {
+        .@"struct" => |st| blk: {
+            var out: []const u8 = "{";
+            for (st.field_names, st.field_types) |name, F| out = out ++ name ++ ":" ++ shapeOf(F) ++ ",";
+            break :blk out ++ "}";
+        },
+        .pointer => |ptr| "[]" ++ shapeOf(ptr.child),
+        .array => |a| std.fmt.comptimePrint("[{d}]", .{a.len}) ++ shapeOf(a.child),
+        else => std.fmt.comptimePrint("{x}", .{flat.fingerprint(T)}),
+    };
+}
+
+/// flat's encoding, with hash maps as a count and their entries
+fn putValue(w: *std.Io.Writer, value: anytype) !void {
+    const T = @TypeOf(value);
+    if (comptime isMap(T)) {
+        try w.writeInt(u64, value.count(), .little);
+        var it = value.iterator();
+        while (it.next()) |e| {
+            try flat.write(w, e.key_ptr.*);
+            try flat.write(w, e.value_ptr.*);
+        }
+    } else switch (@typeInfo(T)) {
+        .@"struct" => |st| inline for (st.field_names) |name| try putValue(w, @field(value, name)),
+        else => try flat.write(w, value),
+    }
+}
+
+fn takeValue(comptime T: type, r: *std.Io.Reader, arena: Allocator) flat.ReadError!T {
+    if (comptime isMap(T)) {
+        const n = std.math.cast(u32, try r.takeInt(u64, .little)) orelse return error.Corrupt;
+        var map: T = .empty;
+        try map.ensureTotalCapacity(arena, n);
+        for (0..n) |_| {
+            const k = try flat.read(@FieldType(T.KV, "key"), r, arena);
+            map.putAssumeCapacity(k, try flat.read(@FieldType(T.KV, "value"), r, arena));
+        }
+        return map;
+    }
+    switch (@typeInfo(T)) {
+        .@"struct" => |st| {
+            var out: T = undefined;
+            inline for (st.field_names, st.field_types) |name, F| @field(out, name) = try takeValue(F, r, arena);
+            return out;
+        },
+        else => return flat.read(T, r, arena),
+    }
+}
 
 fn etaOf(shape: Shape, f: *const Fitted, patch: usize, bracket: usize, euw: usize) Logit {
     var x: [max_k]f64 = undefined;
@@ -337,16 +454,17 @@ fn etaOf(shape: Shape, f: *const Fitted, patch: usize, bracket: usize, euw: usiz
     return at(shape, f, &x);
 }
 
-/// The newest patch's logit for a bracket and region; all ranks (bracket 0) and every
-/// region average the brackets and regions by the cell's games, as the raw rates pool
-/// them, rather than reading the unknown-rank, other-region baseline
-fn newestOf(shape: Shape, c: *const Counts, f: *const Fitted, bracket: u2, region: u1) Logit {
+/// The newest patch's logit for a set of brackets and a region: brackets and regions
+/// averaged by the cell's games, as the raw rates pool them, rather than reading the
+/// unknown-rank, other-region baseline. The variance is the mixed design's, so shared
+/// terms count once
+fn newestOf(shape: Shape, c: *const Counts, f: *const Fitted, brackets: Brackets, region: u1) Logit {
     const k = shape.params();
     var mix: [max_k]f64 = @splat(0);
     var x: [max_k]f64 = undefined;
     var total: f64 = 0;
     for (0..4) |br| for (0..2) |e| {
-        if (bracket != 0 and br != bracket) continue;
+        if (!brackets.has(br)) continue;
         if (region == 1 and e == 0) continue;
         var n: f64 = 0;
         for (0..shape.patches) |p| n += c.n[p][br][e];
@@ -356,7 +474,14 @@ fn newestOf(shape: Shape, c: *const Counts, f: *const Fitted, bracket: u2, regio
         total += n;
     };
     // No games in the slice: the slice's own terms, all at their prior
-    if (total == 0) return etaOf(shape, f, 0, bracket, region);
+    if (total == 0) {
+        if (brackets.mask == Brackets.all.mask) return etaOf(shape, f, 0, 0, region);
+        for (1..4) |br| if (brackets.has(br)) {
+            shape.design(0, br, region, &x);
+            for (mix[0..k], x[0..k]) |*a, b| a.* += b;
+            total += 1;
+        };
+    }
     for (mix[0..k]) |*a| a.* /= total;
     return at(shape, f, &mix);
 }
@@ -439,13 +564,13 @@ const Share = struct {
         return s.pooled.get(@as(u32, role) << 16 | x) orelse logit(0.5 / (s.role_n[role] + 1));
     }
 
-    fn rate(s: *const Share, shape: Shape, i: u32, a: u16, x: u16, bracket: u2, region: u1) ?Estimate {
+    fn rate(s: *const Share, shape: Shape, i: u32, a: u16, x: u16, brackets: Brackets, region: u1) ?Estimate {
         if (x == 0) return null;
         const anchor = &s.anchor[i];
         if (games(anchor) == 0) return null;
-        const own = ownOf(&anchor.own, bracket, region);
+        const own = ownOf(&anchor.own, brackets, region);
         if (s.index.get(@as(u32, a) << 16 | x)) |j| {
-            const t = newestOf(shape, &s.counts[j], &s.fitted[j], bracket, region);
+            const t = newestOf(shape, &s.counts[j], &s.fitted[j], brackets, region);
             return .of(t.eta, t.v + s.drift.tau2, own);
         }
         // Never seen: its games with none of x, fitted on the spot
@@ -454,7 +579,7 @@ const Share = struct {
         var f: Fitted = .{ .mu = mu };
         f.theta[0] = mu;
         newton(&c, &f, shape, s.sd, 0);
-        const t = newestOf(shape, &c, &f, bracket, region);
+        const t = newestOf(shape, &c, &f, brackets, region);
         return .of(t.eta, t.v + s.drift.tau2, own);
     }
 };
@@ -618,11 +743,11 @@ fn pairClass(a: u16, duo: bool) u8 {
     return if (duo) n_pair_classes - 1 else @intCast(a >> 13);
 }
 
-/// Unweighted newest-patch games of a bracket (0 all) and region (0 every region)
-fn ownOf(own: *const [4][2]f64, bracket: u2, region: u1) f64 {
+/// Unweighted newest-patch games of a set of brackets and region (0 every region)
+fn ownOf(own: *const [4][2]f64, brackets: Brackets, region: u1) f64 {
     var n: f64 = 0;
     for (0..4) |br| {
-        if (bracket != 0 and br != bracket) continue;
+        if (!brackets.has(br)) continue;
         n += own[br][1];
         if (region == 0) n += own[br][0];
     }
@@ -1595,4 +1720,62 @@ test "a share that moves within its patch widens its range by the drift" {
     const ea = a.rate(.rune, 0, 0, 30, 8010).?;
     const eb = b.rate(.rune, 0, 0, 30, 8010).?;
     try std.testing.expect(eb.hi - eb.lo > 2 * (ea.hi - ea.lo));
+}
+
+test "a saved model answers as the fitted one, over any set of brackets" {
+    const gpa = std.testing.allocator;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    var prng: std.Random.DefaultPrng = .init(3);
+    const rand = prng.random();
+    for (1..9) |ch| for (0..800) |g| {
+        const opp: u16 = @intCast(ch % 8 + 1);
+        const br: u2 = @intCast(g % 4);
+        const z = 0.05 * @as(f64, @floatFromInt(ch)) + 0.1 * @as(f64, @floatFromInt(br)) - 0.2;
+        try rows.append(gpa, .{
+            .day = if (g % 5 == 0) -40 else -1,
+            .cr = @intCast(ch),
+            .opp = opp,
+            .keystone = if (g % 3 == 0) 8010 else 8437,
+            .gold = @intFromFloat(@round(1500 * rand.floatNorm(f64))),
+            .items = .{ if (g % 2 == 0) 3071 else 6333, 0, 0, 0, 0, 0 },
+            .timeline = true,
+            .win = rand.float(f64) < sigmoid(z),
+            .euw = g % 7 == 0,
+            .patch = if (g % 5 == 0) 1 else 0,
+            .bracket = br,
+        });
+    };
+    var m = try fit(gpa, rows.items, 0, .{});
+    defer m.deinit(gpa);
+    slim(&m, gpa);
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    try save(&aw.writer, &m);
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    var r: std.Io.Reader = .fixed(aw.written());
+    const got = (try load(&r, arena.allocator())).?;
+    const plat: Brackets = .{ .mask = 0b1100 };
+    const asks = [_]struct { Kind, u32 }{
+        .{ .champion, 0 },                  .{ .matchup, 4 },                       .{ .keystone, 8010 },
+        .{ .item, 3071 },                   .{ .rune, 8010 },                       .{ .build, 6333 },
+        .{ .rune, 8229 },                   .{ .keystone_matchup, 8010 << 16 | 4 }, .{ .keystone_item, 8437 << 16 | 3071 },
+        .{ .item_matchup, 3071 << 16 | 2 },
+    };
+    for (asks) |ask| for ([_]Brackets{ .all, .of(2), plat }) |bs| for (0..2) |region| {
+        const want = m.rateIn(ask[0], @intCast(region), bs, 3, ask[1]).?;
+        try std.testing.expectEqualDeep(want, got.rateIn(ask[0], @intCast(region), bs, 3, ask[1]).?);
+    };
+    try std.testing.expectEqualDeep(m.avgIn(.gold14, 0, plat, 3, 4).?, got.avgIn(.gold14, 0, plat, 3, 4).?);
+    // Gold-Emerald and Diamond+ pooled: between the two, its range no wider than the wider
+    const mid = m.rate(.champion, 0, 2, 5, 0).?;
+    const high = m.rate(.champion, 0, 3, 5, 0).?;
+    const both = m.rateIn(.champion, 0, plat, 5, 0).?;
+    try std.testing.expect(both.p > mid.p and both.p < high.p);
+    try std.testing.expect(both.hi - both.lo <= @max(mid.hi - mid.lo, high.hi - high.lo));
+    try std.testing.expectEqual(mid.own + high.own, both.own);
+
+    var bad: std.Io.Reader = .fixed(aw.written()[0..20]);
+    try std.testing.expectEqual(null, try load(&bad, arena.allocator()));
 }

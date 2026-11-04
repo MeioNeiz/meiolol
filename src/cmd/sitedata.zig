@@ -10,6 +10,8 @@ const builds = @import("../builds.zig");
 const cubes = @import("../cubes.zig");
 const lockrows = @import("../lockrows.zig");
 const lockanswer = @import("../lockanswer.zig");
+const meio = @import("../meio.zig");
+const truth = @import("../truth.zig");
 const lean = @import("../lean.zig");
 const pairlane = @import("../pairlane.zig");
 const draftmodel = @import("../draftmodel.zig");
@@ -338,6 +340,63 @@ pub const usage_lockrows =
     \\                               against builds.Builder's; write nothing
     \\
 ;
+
+pub const usage_meio =
+    \\  meio        fit the MeioModel (meio.zig) on the day cubes' last 30 days, every game
+    \\              up to now, and write it for the champion page locks
+    \\              --patch P        the newest patch (default EUW1's in the database)
+    \\              --out FILE       default DIR/export/meio.bin
+    \\
+;
+
+pub fn cmdMeio(c: *Cmd) !u8 {
+    var patch: ?[]const u8 = null;
+    var out: ?[]const u8 = null;
+    while (c.next()) |_| {
+        if (c.is("--patch")) {
+            patch = try c.value();
+        } else if (c.is("--out")) {
+            out = try c.value();
+        } else return error.Usage;
+    }
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    const arena = c.arena;
+    const t0 = std.Io.Clock.awake.now(io);
+    if (patch == null) {
+        const db = try c.open();
+        defer db.close();
+        patch = (try newestPatch(arena, db, &.{"EUW1"}))[0];
+    }
+    // One origin, its horizon past today: every game from T0 - 30 days to now
+    const loaded = try truth.load(gpa, io, try cubes.dirIn(arena, c.data_dir), .{ .patch = patch.?, .origins = 1, .horizon = 255 });
+    defer gpa.free(loaded.rows);
+    const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
+    const today: i32 = @intCast(@divFloor(now_ms - loaded.t0, std.time.ms_per_day));
+    const t_load = std.Io.Clock.awake.now(io);
+    var m = try meio.fit(gpa, loaded.rows, today + 1, .{});
+    defer m.deinit(gpa);
+    meio.slim(&m, gpa);
+    const t_fit = std.Io.Clock.awake.now(io);
+    const path = out orelse try std.fs.path.join(arena, &.{ c.data_dir, "export", "meio.bin" });
+    var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
+    defer file.deinit(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var fw = file.file.writer(io, &buf);
+    try meio.save(&fw.interface, &m);
+    try fw.interface.flush();
+    const bytes = fw.logicalPos();
+    try file.replace(io);
+    const ms = struct {
+        fn f(a: std.Io.Timestamp, b: std.Io.Timestamp) i64 {
+            return a.durationTo(b).toMilliseconds();
+        }
+    }.f;
+    std.log.info("{s}: patch {s} day {d}, {d} rows, {d} champion-roles, {d} B; load {d} ms, fit {d} ms, write {d} ms", .{
+        path, patch.?, today, loaded.rows.len, m.counts.len, bytes, ms(t0, t_load), ms(t_load, t_fit), ms(t_fit, std.Io.Clock.awake.now(io)),
+    });
+    return 0;
+}
 
 pub fn cmdLockrows(c: *Cmd) !u8 {
     var days: u32 = 30;
