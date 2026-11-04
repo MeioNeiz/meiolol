@@ -450,7 +450,8 @@ while true; do
         [[ -n "$curves_patch" && -n "$patch" && "$patch" != "$curves_patch" ]] && prev_patch=$curves_patch
         last_curves=$now curves_patch=$patch
         push_curves
-        # The champion pages' lock answers (site/locks.zig): ~20 s with the cubes current
+        # The champion pages' lock answers (site/locks.zig), from the days curves just
+        # built and older ones: ~4 min, most of it reading 30 days of cubes
         batch bin/meiolol lockrows 2>&1 || true
     fi
     # The core build's and the views file's, so rendered pages match the uploaded ones

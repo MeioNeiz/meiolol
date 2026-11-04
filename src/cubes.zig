@@ -120,6 +120,9 @@ pub const Counts = struct {
     /// Games decoded from the database; the rest of a built day's were kept from its file
     games_built: usize = 0,
     dropped: usize = 0,
+    /// Days read as they were, their files younger than Store.settle_ms: changed, or in
+    /// the run up to today, not asked
+    young: usize = 0,
     /// Bytes of the files built
     bytes: u64 = 0,
 };
@@ -131,6 +134,10 @@ pub const Store = struct {
     dir: []const u8,
     lock: std.Io.File,
     counts: Counts = .{},
+    /// A changed day whose file is younger than this is read as it is: for a reader of
+    /// many days that a few late games don't move (lockrows), as each day built again
+    /// costs ~35 s and the crawler adds games to the last two weeks' days all the time
+    settle_ms: i64 = 0,
 
     /// Opens (or starts) `dir`, waiting for its lock
     pub fn open(gpa: Allocator, io: std.Io, dir: []const u8) !*Store {
@@ -164,25 +171,46 @@ pub const Store = struct {
         const gpa = s.gpa;
         s.counts = .{};
         const first = @divFloor(from_ms, day_ms);
-        const today = @divFloor(std.Io.Clock.real.now(s.io).toMilliseconds(), day_ms);
+        const now_ms = std.Io.Clock.real.now(s.io).toMilliseconds();
+        const today = @divFloor(now_ms, day_ms);
         const drop_before = @min(first, today - keep_days);
-        var sigs = try daySigs(gpa, db, first * day_ms);
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        // The run of young files up to today is read as it is, unasked: daySigs reads a
+        // page of matches per game, ~2 min over 30 days on the box
+        var young_from = today + 1;
+        while (young_from > first) : (young_from -= 1) {
+            const have = try readSig(s.io, try s.dayPath(&buf, young_from - 1)) orelse break;
+            if (now_ms - have.made_ms >= s.settle_ms) break;
+        }
+        const tail: usize = @intCast(today + 1 - young_from);
+        var sigs = try daySigs(gpa, db, first * day_ms, if (tail == 0) std.math.maxInt(i64) else young_from * day_ms);
         defer sigs.deinit(gpa);
-        s.counts.days = sigs.count();
+        s.counts.days = sigs.count() + tail;
+        s.counts.young = tail;
         var experienced: ?curves.Experienced = null;
         defer if (experienced) |*e| e.deinit(gpa);
         var arena_state: std.heap.ArenaAllocator = .init(gpa);
         defer arena_state.deinit();
         var it = sigs.iterator();
-        var buf: [std.fs.max_path_bytes]u8 = undefined;
         while (it.next()) |e| {
             const day = e.key_ptr.*;
             const path = try s.dayPath(&buf, day);
-            if (try readSig(s.io, path)) |have| if (std.meta.eql(have, e.value_ptr.*)) continue;
-            if (experienced == null) experienced = try .load(gpa, db);
+            if (try readSig(s.io, path)) |have| {
+                if (std.meta.eql(have.sig, e.value_ptr.*)) continue;
+                if (now_ms - have.made_ms < s.settle_ms) {
+                    s.counts.young += 1;
+                    continue;
+                }
+            }
             _ = arena_state.reset(.retain_capacity);
             const arena = arena_state.allocator();
             const old = try s.read(gpa, arena, day);
+            // Lazy while only late games are decoded; a whole day's are too many lookups
+            if (old == null and (experienced == null or experienced.?.looked != null)) {
+                if (experienced) |*x| x.deinit(gpa);
+                experienced = null;
+                experienced = try .load(gpa, db);
+            } else if (experienced == null) experienced = try .lazy(db);
             const r = try buildDay(gpa, s.io, db, day, &experienced.?, items, path, old, arena);
             s.counts.built += 1;
             s.counts.games_built += r.decoded;
@@ -197,7 +225,7 @@ pub const Store = struct {
         while (try files.next(s.io)) |f| {
             const stem = std.mem.cutSuffix(u8, f.name, ".bin") orelse continue;
             const day = std.fmt.parseInt(i64, stem, 10) catch continue;
-            if (day < drop_before or (day >= first and !sigs.contains(day))) try stale.append(gpa, day);
+            if (day < drop_before or (day >= first and day < young_from and !sigs.contains(day))) try stale.append(gpa, day);
         }
         for (stale.items) |day| {
             try std.Io.Dir.cwd().deleteFile(s.io, try s.dayPath(&buf, day));
@@ -258,8 +286,8 @@ fn headerEnd(bytes: []const u8) ?usize {
     return header_len;
 }
 
-/// The Sig a current file was built for; null when missing or of another format
-fn readSig(io: std.Io, path: []const u8) !?Sig {
+/// The Sig a current file was built for and when; null when missing or of another format
+fn readSig(io: std.Io, path: []const u8) !?struct { sig: Sig, made_ms: i64 } {
     var f = std.Io.Dir.cwd().openFile(io, path, .{}) catch |err| switch (err) {
         error.FileNotFound => return null,
         else => return err,
@@ -271,7 +299,7 @@ fn readSig(io: std.Io, path: []const u8) !?Sig {
     _ = headerEnd(&head) orelse return null;
     var sig: Sig = undefined;
     @memcpy(std.mem.asBytes(&sig), head[magic.len + 8 ..]);
-    return sig;
+    return .{ .sig = sig, .made_ms = (try f.stat(io)).mtime.toMilliseconds() };
 }
 
 /// The games curves and builds both count: ranked solo, no remake, a winner
@@ -283,17 +311,17 @@ comptime {
     std.debug.assert(stats.ranked_solo == 420);
 }
 
-fn daySigs(gpa: Allocator, db: store.Db, from_ms: i64) !std.AutoArrayHashMapUnmanaged(i64, Sig) {
+fn daySigs(gpa: Allocator, db: store.Db, from_ms: i64, to_ms: i64) !std.AutoArrayHashMapUnmanaged(i64, Sig) {
     var q = try db.prepare(
         \\SELECT m.game_start / 86400000, count(*), sum(m.rowid), coalesce(sum(t.rowid), 0)
         \\FROM matches m LEFT JOIN timeline.timelines t USING (match_id)
-        \\WHERE m.game_start >= ?
+        \\WHERE m.game_start >= ? AND m.game_start < ?
     ++ where_games ++
         \\
         \\GROUP BY 1 ORDER BY 1
     );
     defer q.deinit();
-    try q.bind(.{from_ms});
+    try q.bind(.{ from_ms, to_ms });
     var out: std.AutoArrayHashMapUnmanaged(i64, Sig) = .empty;
     errdefer out.deinit(gpa);
     while (try q.step()) {
@@ -341,7 +369,8 @@ const MatchRow = struct {
 const DayBuilder = struct {
     gpa: Allocator,
     arena: Allocator,
-    experienced: *const curves.Experienced,
+    db: store.Db,
+    experienced: *curves.Experienced,
     items: Items,
     strings: std.StringArrayHashMapUnmanaged(void) = .empty,
     games: std.ArrayList(Game) = .empty,
@@ -351,12 +380,13 @@ const DayBuilder = struct {
     source: digest.Source,
     game_state: std.heap.ArenaAllocator,
 
-    fn init(gpa: Allocator, arena: Allocator, db: store.Db, experienced: *const curves.Experienced, items: Items) !DayBuilder {
+    fn init(gpa: Allocator, arena: Allocator, db: store.Db, experienced: *curves.Experienced, items: Items) !DayBuilder {
         var players = try db.prepare("SELECT team_id, puuid, " ++ builds.participant_columns ++ " FROM participants WHERE match_id = ?");
         errdefer players.deinit();
         return .{
             .gpa = gpa,
             .arena = arena,
+            .db = db,
             .experienced = experienced,
             .items = items,
             .players = players,
@@ -410,6 +440,7 @@ const DayBuilder = struct {
             const row = b.players.row(ParticipantRow);
             const r = buildsRow(row);
             if (n_lane == lane_seats.len) lane_rows_ok = false else {
+                if (row.puuid) |id| try b.experienced.need(b.gpa, b.db, id);
                 lane_seats[n_lane] = curves.seatOf(.{
                     .slot = @intCast(r.slot),
                     .team = row.team_id,
@@ -461,7 +492,7 @@ fn buildDay(
     io: std.Io,
     db: store.Db,
     day: i64,
-    experienced: *const curves.Experienced,
+    experienced: *curves.Experienced,
     items: Items,
     path: []const u8,
     old: ?Day,

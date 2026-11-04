@@ -322,7 +322,8 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
 pub const usage_lockrows =
     \\  lockrows    write the champion page lock rows (lockrows.zig): every ranked solo
     \\              player and game of the last --days, by champion-role, from the day
-    \\              cubes (made current first)
+    \\              cubes (made current first, but a day built in the last 6 h is read as
+    \\              it is)
     \\              --days N         default 30
     \\              --out FILE       default DIR/export/lockrows.bin
     \\              --bench FILE     time build answers (lockanswer.zig) on FILE's
@@ -357,7 +358,10 @@ pub fn cmdLockrows(c: *Cmd) !u8 {
     {
         const cube = try cubes.Store.open(gpa, io, try cubes.dirIn(arena, c.data_dir));
         defer cube.deinit();
+        // Curves --site builds the patch's days each round, just before
+        cube.settle_ms = 6 * std.time.ms_per_hour;
         logCubes(try cube.refresh(db, from_ms, items.source()));
+        std.log.info("cubes current in {d} ms", .{t0.durationTo(std.Io.Clock.awake.now(io)).toMilliseconds()});
         const ds = try cube.days(gpa, from_ms);
         defer gpa.free(ds);
         var day_arena: std.heap.ArenaAllocator = .init(gpa);
@@ -511,7 +515,7 @@ const CubeItems = struct {
 };
 
 fn logCubes(n: cubes.Counts) void {
-    std.log.info("day cubes: {d} days, {d} built ({d} games, {d} B), {d} dropped", .{ n.days, n.built, n.games_built, n.bytes, n.dropped });
+    std.log.info("day cubes: {d} days, {d} built ({d} games, {d} B), {d} young kept as they were, {d} dropped", .{ n.days, n.built, n.games_built, n.bytes, n.young, n.dropped });
 }
 
 pub const usage_lean =

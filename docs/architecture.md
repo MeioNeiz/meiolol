@@ -231,7 +231,10 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
 - `cubes/` (day cubes, ~115 MB a day at 100k games, ~3.5 GB for 30 days): per game the
   lanes and builds seats `curves` and `builds` read (src/cubes.zig), so they pass over
   days instead of timelines; the last 30 days kept; derived, never backed up, safe to
-  delete (the next curves run rebuilds it, ~15-25 min on the box)
+  delete (the next curves run rebuilds it, ~35 min on the box). A changed day costs ~40 s
+  to build again however few its late games; their players' mastery is looked up one by
+  one (the whole table, ~4 min, only for a day built afresh). `lockrows` reads files
+  built in the last 6 h as they are, as curves just built the patch's days
 - Schema changes: `schema.zig` migrate() alters or rebuilds tables in place (checks
   inside the write lock, so concurrent opens are safe). Back up before a first run
 - Scale at full rate (4 regions, ~135k matches/day): kept forever ~8.6 KB timeline +

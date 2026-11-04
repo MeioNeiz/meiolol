@@ -1443,6 +1443,10 @@ test "day cubes: days built again when their games change, as if built afresh" {
     // An hour apart from start_ms (18:40 UTC): three UTC days
     try fillGames(arena, db, 40, true);
     try db.exec("UPDATE participants SET tier = CASE WHEN slot < 3 THEN 'MASTER' WHEN slot < 6 THEN 'EMERALD' ELSE 'PLATINUM' END");
+    // Some players experienced on some champions: a refresh looks them up one by one,
+    // a fresh build reads mastery whole
+    const puuids = try readStrings(arena, db, "SELECT DISTINCT puuid FROM participants WHERE puuid IS NOT NULL ORDER BY puuid");
+    for (puuids, 0..) |p, i| try putMastery(arena, db, p, "EUW1", @divFloor(start_ms, 1000), i, if (i % 2 == 0) 50_000 else 0);
     const cube = try cubes.Store.open(gpa, io, try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "cubes" }));
     defer cube.deinit();
 
@@ -1473,6 +1477,14 @@ test "day cubes: days built again when their games change, as if built afresh" {
     // Days before the window and older than keep_days go
     n = try cube.refresh(db, start_ms + std.time.ms_per_day, fixture_items);
     try testing.expectEqual(1, n.dropped);
+    // A reader that takes young files as they are (lockrows) builds none again
+    try db.exec("INSERT OR REPLACE INTO matches SELECT * FROM matches WHERE match_id = 'EUW1_10'");
+    cube.settle_ms = std.time.ms_per_hour;
+    n = try cube.refresh(db, start_ms + std.time.ms_per_day, fixture_items);
+    try testing.expectEqual(0, n.built);
+    try testing.expectEqual(1, n.young);
+    cube.settle_ms = 0;
+    try testing.expectEqual(1, (try cube.refresh(db, start_ms + std.time.ms_per_day, fixture_items)).built);
 }
 
 test "day cubes: drop deletes every day, and a missing directory is fine" {
@@ -1943,7 +1955,7 @@ test "views partials: the database's views file, after late, replaced, timelined
     const now_s = @divFloor(start_ms, 1000) + 3600;
     const puuids = try readStrings(arena, db, "SELECT DISTINCT puuid FROM participants WHERE puuid IS NOT NULL ORDER BY puuid");
     try testing.expectEqual(10, puuids.len);
-    for (puuids, 0..) |p, i| try putMastery(arena, db, p, if (i % 4 == 3) "NA1" else "EUW1", now_s, i);
+    for (puuids, 0..) |p, i| try putMastery(arena, db, p, if (i % 4 == 3) "NA1" else "EUW1", now_s, i, 0);
 
     const opts: site.Options = .{
         .out_dir = try std.fs.path.join(arena, &.{ dir, "site" }),
@@ -2009,7 +2021,7 @@ test "views partials: the database's views file, after late, replaced, timelined
         \\DELETE FROM bans WHERE match_id = 'EUW1_5';
         \\DELETE FROM matches WHERE match_id = 'EUW1_5';
     );
-    try putMastery(arena, db, puuids[0], "EUW1", now_s, 7);
+    try putMastery(arena, db, puuids[0], "EUW1", now_s, 7, 0);
     try db.run(raw_docs, .{raw_body});
     var counts: partials.Counts = .{};
     const after = try viewsFile(arena, io, db, opts, null, views_path, null);
@@ -2067,13 +2079,13 @@ fn readStrings(arena: std.mem.Allocator, db: store.Db, sql: []const u8) ![]const
     return out.items;
 }
 
-/// A mastery row over the fixture champions, points varied by `seed`
-fn putMastery(arena: std.mem.Allocator, db: store.Db, puuid: []const u8, platform: []const u8, now_s: i64, seed: usize) !void {
+/// A mastery row over the fixture champions, points varied by `seed`, plus `boost`
+fn putMastery(arena: std.mem.Allocator, db: store.Db, puuid: []const u8, platform: []const u8, now_s: i64, seed: usize, boost: u32) !void {
     var entries: [fixture_champions.len]riot.mastery.Entry = undefined;
     for (&entries, fixture_champions) |*e, c| e.* = .{
         .champion = c.id,
         .level = 5,
-        .points = @intCast((c.id * 7919 + seed * 104_729) % 90_000 + 1000),
+        .points = @intCast((c.id * 7919 + seed * 104_729) % 90_000 + 1000 + boost),
         .last_play = now_s - @as(i64, @intCast((c.id + seed) % 3)) * 200 * std.time.s_per_day,
     };
     std.mem.sort(riot.mastery.Entry, &entries, {}, struct {

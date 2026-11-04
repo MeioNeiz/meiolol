@@ -61,16 +61,57 @@ pub fn gameHash(match_id: []const u8) u32 {
     return @truncate(std.hash.Wyhash.hash(0, match_id));
 }
 
-/// (puuid, champion) pairs with at least curvesfile.experienced_points, from one pass over
-/// mastery: a lookup per player per game was ~4.8M random reads, 45-60 min of the box's
-/// curves pass (15 Oct). Keyed by a hash of both, so a collision (odds ~1e-7 at 2M
+/// (puuid, champion) pairs with at least curvesfile.experienced_points: from one pass over
+/// mastery (load), or per player as games need them (lazy, then need). A lookup per player
+/// per game was ~4.8M random reads, 45-60 min of the box's curves pass (15 Oct); the whole
+/// pass reads ~7.5 GB, ~6 min at idle priority (4 Nov), too much for the few thousand
+/// games a refresh decodes. Keyed by a hash of both, so a collision (odds ~1e-7 at 2M
 /// players) would mark one player wrongly
 pub const Experienced = struct {
     set: std.AutoHashMapUnmanaged(u64, void) = .empty,
+    /// Lazy only: players looked up, by key(puuid, 0); null once whole
+    looked: ?std.AutoHashMapUnmanaged(u64, void) = null,
+    one: ?store.Stmt = null,
+
+    /// Lookups after which the whole pass is cheaper (~0.6 ms each, 15 Oct)
+    pub const whole_after = 200_000;
 
     pub fn load(gpa: std.mem.Allocator, db: store.Db) !Experienced {
         var e: Experienced = .{};
         errdefer e.deinit(gpa);
+        try e.loadWhole(gpa, db);
+        return e;
+    }
+
+    pub fn lazy(db: store.Db) !Experienced {
+        return .{ .looked = .empty, .one = try db.prepare("SELECT data, fetched_at FROM mastery WHERE puuid = ?") };
+    }
+
+    /// Before has(id, ...) on a lazy set: looks the player up once, or reads the whole
+    /// table once whole_after players have been
+    pub fn need(e: *Experienced, gpa: std.mem.Allocator, db: store.Db, puuid: []const u8) !void {
+        const looked = if (e.looked) |*l| l else return;
+        const gop = try looked.getOrPut(gpa, key(puuid, 0));
+        if (gop.found_existing) return;
+        if (looked.count() > whole_after) {
+            looked.deinit(gpa);
+            e.looked = null;
+            e.one.?.deinit();
+            e.one = null;
+            e.set.clearRetainingCapacity();
+            return e.loadWhole(gpa, db);
+        }
+        const q = &e.one.?;
+        try q.bind(.{puuid});
+        defer q.reset();
+        if (!try q.step()) return;
+        var arena_state: std.heap.ArenaAllocator = .init(gpa);
+        defer arena_state.deinit();
+        const r = q.row(struct { data: []const u8, fetched_at: i64 });
+        try e.addPlayer(gpa, arena_state.allocator(), puuid, r.data, r.fetched_at);
+    }
+
+    fn loadWhole(e: *Experienced, gpa: std.mem.Allocator, db: store.Db) !void {
         var q = try db.prepare("SELECT puuid, data, fetched_at FROM mastery");
         defer q.deinit();
         try q.bind(.{});
@@ -79,16 +120,21 @@ pub const Experienced = struct {
         while (try q.step()) {
             _ = arena_state.reset(.retain_capacity);
             const r = q.row(struct { puuid: []const u8, data: []const u8, fetched_at: i64 });
-            const entries = mastery.decode(arena_state.allocator(), r.data, r.fetched_at) catch continue;
-            for (entries) |en| {
-                if (en.points >= curvesfile.experienced_points) try e.set.put(gpa, key(r.puuid, en.champion), {});
-            }
+            try e.addPlayer(gpa, arena_state.allocator(), r.puuid, r.data, r.fetched_at);
         }
-        return e;
+    }
+
+    fn addPlayer(e: *Experienced, gpa: std.mem.Allocator, scratch: std.mem.Allocator, puuid: []const u8, data: []const u8, fetched_at: i64) !void {
+        const entries = mastery.decode(scratch, data, fetched_at) catch return;
+        for (entries) |en| {
+            if (en.points >= curvesfile.experienced_points) try e.set.put(gpa, key(puuid, en.champion), {});
+        }
     }
 
     pub fn deinit(e: *Experienced, gpa: std.mem.Allocator) void {
         e.set.deinit(gpa);
+        if (e.looked) |*l| l.deinit(gpa);
+        if (e.one) |*q| q.deinit();
     }
 
     fn has(e: *const Experienced, puuid: []const u8, champion: u32) bool {
