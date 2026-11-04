@@ -85,6 +85,9 @@ pub const Options = struct {
     /// Prior sds on the logit scale, by term; 0: estimated from the fit
     sd: [n_terms]f64 = @splat(0),
     rounds: u8 = 40,
+    /// Pair terms (matchups, duos, gold's) under a two-part scale mixture prior per
+    /// class rather than one Gaussian, so a lone real outlier is not shrunk to the pack
+    pair_mix: bool = false,
 };
 
 /// Term kinds, one variance each
@@ -141,7 +144,81 @@ pub const Estimate = struct {
         const s = z80 * @sqrt(@max(v, 0));
         return .{ .p = 1000 * mean, .lo = 1000 * (mean - s), .hi = 1000 * (mean + s), .own = own };
     }
+
+    fn ofNormals(n: Normals, own: f64) Estimate {
+        if (n.w == 1) return .of(n.e[0], n.v[0], own);
+        const p0 = meanSigmoid(n.e[0], @sqrt(@max(n.v[0], 0)));
+        const p1 = meanSigmoid(n.e[1], @sqrt(@max(n.v[1], 0)));
+        return .{
+            .p = n.w * p0 + (1 - n.w) * p1,
+            .lo = sigmoid(n.quantile(0.1)),
+            .hi = sigmoid(n.quantile(0.9)),
+            .own = own,
+        };
+    }
+
+    fn ofAvgNormals(n: Normals, own: f64) Estimate {
+        if (n.w == 1) return .ofAvg(n.e[0], n.v[0], own);
+        return .{ .p = 1000 * n.mean(), .lo = 1000 * n.quantile(0.1), .hi = 1000 * n.quantile(0.9), .own = own };
+    }
 };
+
+/// Two normals, weight w on the first; one when w is 1. A pair term under the mixture
+/// prior (Options.pair_mix) has a two-part posterior, so a sum of terms does too; its
+/// range is the mixture's quantiles, as mean +- z sd misplaces a bimodal one
+const Normals = struct {
+    w: f64 = 1,
+    e: [2]f64 = @splat(0),
+    v: [2]f64 = @splat(0),
+
+    fn one(e: f64, v: f64) Normals {
+        return .{ .e = @splat(e), .v = @splat(v) };
+    }
+
+    /// The sum with an independent b; a second split one joins by its moments (no kind
+    /// adds two pair terms)
+    fn add(a: Normals, b: Normals) Normals {
+        if (b.w == 1) return .{
+            .w = a.w,
+            .e = .{ a.e[0] + b.e[0], a.e[1] + b.e[0] },
+            .v = .{ a.v[0] + b.v[0], a.v[1] + b.v[0] },
+        };
+        if (a.w == 1) return b.add(a);
+        return a.add(.one(b.mean(), b.variance()));
+    }
+
+    fn mean(n: Normals) f64 {
+        return n.w * n.e[0] + (1 - n.w) * n.e[1];
+    }
+
+    fn variance(n: Normals) f64 {
+        const m = n.mean();
+        const sq = n.w * (n.v[0] + n.e[0] * n.e[0]) + (1 - n.w) * (n.v[1] + n.e[1] * n.e[1]);
+        return @max(sq - m * m, 0);
+    }
+
+    /// By bisection on the CDF
+    fn quantile(n: Normals, q: f64) f64 {
+        const s: [2]f64 = .{ @sqrt(@max(n.v[0], 1e-300)), @sqrt(@max(n.v[1], 1e-300)) };
+        var lo = @min(n.e[0] - 8 * s[0], n.e[1] - 8 * s[1]);
+        var hi = @max(n.e[0] + 8 * s[0], n.e[1] + 8 * s[1]);
+        for (0..100) |_| {
+            const x = (lo + hi) / 2;
+            const f = n.w * normCdf((x - n.e[0]) / s[0]) + (1 - n.w) * normCdf((x - n.e[1]) / s[1]);
+            if (f < q) lo = x else hi = x;
+        }
+        return (lo + hi) / 2;
+    }
+};
+
+/// Abramowitz and Stegun 7.1.26, error under 1.5e-7
+fn normCdf(x: f64) f64 {
+    const z = @abs(x) / std.math.sqrt2;
+    const t = 1 / (1 + 0.3275911 * z);
+    const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+    const erf = 1 - poly * @exp(-z * z);
+    return if (x >= 0) 0.5 * (1 + erf) else 0.5 * (1 - erf);
+}
 
 /// Weighted games and wins of one champion-role, by patch slot, bracket and EUW1
 const Counts = struct {
@@ -201,6 +278,8 @@ const Pair = struct {
     first: u32,
     len: u32,
     own: [4][2]f64 = @splat(@splat(0)),
+    /// The posterior under the mixture prior (i and v its moments); w 1: Gaussian, i and v
+    mix: Normals = .{},
 };
 
 pub const Model = struct {
@@ -268,15 +347,13 @@ pub const Model = struct {
             .keystone_item => .{ m.condPart(&m.keystone, i, a, first, brackets, region), m.condPart(&m.item, i, a, second, brackets, region) },
             .gold14, .build, .rune => return null,
         };
-        var e = t.eta;
-        var v = t.v;
+        var n: Normals = .one(t.eta, t.v);
         var own: f64 = std.math.inf(f64);
         for (parts) |part| if (part) |q| {
-            e += q.e;
-            v += q.v;
+            n = n.add(q.normals());
             own = @min(own, q.own);
         };
-        return .of(e, v, own);
+        return .ofNormals(n, own);
     }
 
     /// Lane gold difference at 14 (gold14) in gold, newest patch: the champion-role's
@@ -296,11 +373,23 @@ pub const Model = struct {
         const x = std.math.cast(u16, b) orelse return null;
         if (x == a) return .{ .p = 0, .lo = 0, .hi = 0, .own = 0 };
         const q = m.pairPart(&g.pair, g.counts, g.fitted, a, x, false, brackets, region) orelse return null;
-        return .ofAvg(t.eta + q.e, t.v + q.v, q.own);
+        return .ofAvgNormals(Normals.one(t.eta, t.v).add(q.normals()), q.own);
     }
 
     /// A cell's terms on top of its champion-role's own, on the logit scale
-    const Part = struct { e: f64, v: f64, own: f64 };
+    /// w < 1: a pair term's mixture, weight 1 - w on (e2, v2), else (e, v)
+    const Part = struct {
+        e: f64,
+        v: f64,
+        own: f64,
+        w: f64 = 1,
+        e2: f64 = 0,
+        v2: f64 = 0,
+
+        fn normals(q: Part) Normals {
+            return .{ .w = q.w, .e = .{ q.e, q.e2 }, .v = .{ q.v, q.v2 } };
+        }
+    };
 
     /// Against a lane opponent (minus its number) or with a support (plus it), and the
     /// pair's shrunk term; null: the other champion-role has no games
@@ -312,16 +401,20 @@ pub const Model = struct {
         const hi: u16 = if (duo) b else @max(a, b);
         const sign: f64 = if (duo or lo == a) 1 else -1;
         var q: Part = .{ .e = if (duo) tb.eta else -tb.eta, .v = tb.v, .own = 0 };
+        // Never seen: no pair term, the class's prior in the range
+        const c = pairClass(lo, duo);
+        var term: Normals = .one(0, pairs.sd[c] * pairs.sd[c]);
+        if (pairs.prior[c].w < 1) term = pairs.prior[c];
         if (pairs.index.get(pairKey(lo, hi, duo))) |pi| {
             const p = &pairs.terms[pi];
-            q.e += sign * p.i;
-            q.v += p.v;
+            term = if (p.mix.w < 1) p.mix else .one(p.i, p.v);
             q.own = ownOf(&p.own, brackets, region);
-        } else {
-            // Never seen: no pair term, the class's spread in the range
-            const s = pairs.sd[pairClass(lo, duo)];
-            q.v += s * s;
         }
+        q.w = term.w;
+        q.e2 = q.e + sign * term.e[1];
+        q.v2 = q.v + term.v[1];
+        q.e += sign * term.e[0];
+        q.v += term.v[0];
         return q;
     }
 
@@ -505,6 +598,8 @@ const Pairs = struct {
     terms: []Pair = &.{},
     cells: []PairCell = &.{},
     sd: [n_pair_classes]f64 = @splat(0),
+    /// Per class, the mixture prior an unseen pair takes (pair_mix); w 1: N(0, sd^2)
+    prior: [n_pair_classes]Normals = @splat(.{}),
 
     fn deinit(p: *Pairs, gpa: Allocator) void {
         p.index.deinit(gpa);
@@ -571,7 +666,7 @@ const Share = struct {
         const own = ownOf(&anchor.own, brackets, region);
         if (s.index.get(@as(u32, a) << 16 | x)) |j| {
             const t = newestOf(shape, &s.counts[j], &s.fitted[j], brackets, region);
-            return .of(t.eta, t.v + s.drift.tau2, own);
+            return .of(t.eta, t.v + s.drift.tau2In(&anchor.own, brackets, region), own);
         }
         // Never seen: its games with none of x, fitted on the spot
         const c: Counts = .{ .n = anchor.n, .own = anchor.own };
@@ -580,18 +675,40 @@ const Share = struct {
         f.theta[0] = mu;
         newton(&c, &f, shape, s.sd, 0);
         const t = newestOf(shape, &c, &f, brackets, region);
-        return .of(t.eta, t.v + s.drift.tau2, own);
+        return .of(t.eta, t.v + s.drift.tau2In(&anchor.own, brackets, region), own);
     }
 };
 
-/// A share's spread beyond its fit, from Halves: games cluster (players repeat their
-/// picks), so a share's binomial variance is phi times too small; and a share moves within
-/// a patch, tau2 on the logit scale over about a week
-const Drift = struct { phi: f64 = 1, tau2: f64 = 0, cells: f64 = 0 };
+/// A share's spread beyond its fit, from Halves, per rank bracket and region (EUW1 or
+/// not): games cluster (players repeat their picks), so a share's binomial variance is
+/// phi times too small; and a share moves within a patch, tau2 on the logit scale over
+/// about a week. A slot with too few cells takes the pooled fit
+const Drift = struct {
+    phi: [4][2]f64 = @splat(@splat(1)),
+    tau2: [4][2]f64 = @splat(@splat(0)),
+    cells: [4][2]f64 = @splat(@splat(0)),
 
-/// Within-patch halves for Drift: games by champion-role << 24 | x << 8 | patch << 1 |
-/// half, x 0 for the games a share is of. Unweighted, the newest three patches, each split
-/// at its middle day when it has four days or more
+    /// tau2 over a set of brackets, mixed by the newest patch's games
+    fn tau2In(d: *const Drift, own: *const [4][2]f64, brackets: Brackets, region: u1) f64 {
+        var t: f64 = 0;
+        var n: f64 = 0;
+        var plain: f64 = 0;
+        var slots: f64 = 0;
+        for (0..4) |br| for (0..2) |e| {
+            if (!brackets.has(br) or (region == 1 and e == 0)) continue;
+            t += own[br][e] * d.tau2[br][e];
+            n += own[br][e];
+            plain += d.tau2[br][e];
+            slots += 1;
+        };
+        return if (n > 0) t / n else plain / slots;
+    }
+};
+
+/// Within-patch halves for Drift: games by champion-role << 24 | x << 8 | slot, x 0 for
+/// the games a share is of, slot = euw << 5 | bracket << 3 | patch << 1 | half.
+/// Unweighted, the newest three patches, each split at its middle day when it has four
+/// days or more
 const Halves = struct {
     games: std.AutoHashMapUnmanaged(u64, f64) = .empty,
 
@@ -599,8 +716,8 @@ const Halves = struct {
         h.games.deinit(gpa);
     }
 
-    fn add(h: *Halves, gpa: Allocator, cr: u16, x: u16, ph: u8) !void {
-        const g = try h.games.getOrPut(gpa, @as(u64, cr) << 24 | @as(u64, x) << 8 | ph);
+    fn add(h: *Halves, gpa: Allocator, cr: u16, x: u16, slot: u8) !void {
+        const g = try h.games.getOrPut(gpa, @as(u64, cr) << 24 | @as(u64, x) << 8 | slot);
         if (!g.found_existing) g.value_ptr.* = 0;
         g.value_ptr.* += 1;
     }
@@ -609,14 +726,19 @@ const Halves = struct {
         return h.games.get(key) orelse 0;
     }
 
-    /// Each (champion-role, x, patch): the squared difference d of its two halves'
+    /// Each (champion-role, x, slot's patch): the squared difference d of its two halves'
     /// shares against b = q(1 - q)(1/n1 + 1/n2), the binomial variance of d, and
     /// c = (q(1 - q))^2, which turns a logit-scale variance into one of d. E[d^2] =
-    /// phi b + tau2 c, fitted by weighted least squares (Var d^2 = 2 E[d^2]^2)
+    /// phi b + tau2 c, fitted by weighted least squares (Var d^2 = 2 E[d^2]^2), pooled
+    /// and per bracket and region
     fn drift(h: *const Halves, gpa: Allocator) !Drift {
         const min_games = 20;
-        var cells: std.ArrayList([3]f64) = .empty;
-        defer cells.deinit(gpa);
+        // A slot's own fit from this many cells (phi's sd ~0.2 at 60)
+        const min_slot_cells = 300;
+        var by_slot: [4][2]std.ArrayList([3]f64) = @splat(@splat(.empty));
+        defer for (&by_slot) |*b| for (b) |*l| l.deinit(gpa);
+        var all: std.ArrayList([3]f64) = .empty;
+        defer all.deinit(gpa);
         var it = h.games.iterator();
         while (it.next()) |e| {
             const key = e.key_ptr.*;
@@ -631,15 +753,31 @@ const Halves = struct {
             if (q == 0 or q == 1) continue;
             const d = k1 / n1 - k2 / n2;
             const qq = q * (1 - q);
-            try cells.append(gpa, .{ d * d, qq * (1 / n1 + 1 / n2), qq * qq });
+            const c: [3]f64 = .{ d * d, qq * (1 / n1 + 1 / n2), qq * qq };
+            try all.append(gpa, c);
+            try by_slot[key >> 3 & 3][key >> 5 & 1].append(gpa, c);
         }
-        var out: Drift = .{ .cells = @floatFromInt(cells.items.len) };
-        if (cells.items.len < 30) return out;
+        var out: Drift = .{};
+        if (all.items.len < 30) return out;
+        const pooled = phiTau(all.items);
+        for (&out.phi, &out.tau2, &out.cells, by_slot) |*phi, *tau2, *cells, slots| {
+            for (phi, tau2, cells, slots) |*p, *t, *n, l| {
+                const f = if (l.items.len >= min_slot_cells) phiTau(l.items) else pooled;
+                p.* = f[0];
+                t.* = f[1];
+                n.* = @floatFromInt(l.items.len);
+            }
+        }
+        return out;
+    }
+
+    fn phiTau(cells: []const [3]f64) [2]f64 {
+        var out: [2]f64 = .{ 1, 0 };
         for (0..20) |_| {
             var a: [3]f64 = @splat(0);
             var y: [2]f64 = @splat(0);
-            for (cells.items) |c| {
-                const e = out.phi * c[1] + out.tau2 * c[2];
+            for (cells) |c| {
+                const e = out[0] * c[1] + out[1] * c[2];
                 const w = 1 / (e * e);
                 a[0] += w * c[1] * c[1];
                 a[1] += w * c[1] * c[2];
@@ -655,9 +793,8 @@ const Halves = struct {
                 phi = @max(1, phi);
                 tau2 = @max(0, (y[1] - a[1] * phi) / a[2]);
             }
-            const moved = @abs(phi - out.phi) + @abs(tau2 - out.tau2);
-            out.phi = phi;
-            out.tau2 = tau2;
+            const moved = @abs(phi - out[0]) + @abs(tau2 - out[1]);
+            out = .{ phi, tau2 };
             if (moved < 1e-6) break;
         }
         return out;
@@ -815,7 +952,8 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
         if (r.day >= before_day) continue;
         if (r.patch < 3 and span[r.patch][1] - span[r.patch][0] >= 3) {
             const mid = @divFloor(span[r.patch][0] + span[r.patch][1] + 1, 2);
-            const ph: u8 = r.patch << 1 | @intFromBool(r.day >= mid);
+            const slot: u8 = @as(u8, @intFromBool(r.euw)) << 2 | r.bracket;
+            const ph: u8 = slot << 3 | @as(u8, r.patch) << 1 | @intFromBool(r.day >= mid);
             if (r.keystone != 0) {
                 try rune_halves.add(gpa, r.cr, 0, ph);
                 try rune_halves.add(gpa, r.cr, r.keystone, ph);
@@ -877,12 +1015,12 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     const share = try logShares(gpa, &m);
     defer gpa.free(share);
     m.sd = fitLevels(m.counts, m.fitted, shape, opts.sd, 0, opts.rounds, .{ .m = &m, .share = share });
-    m.pair = try fitPairs(gpa, shape, &m.index, m.fitted, &cells, 0, opts.rounds);
+    m.pair = try fitPairs(gpa, shape, &m.index, m.fitted, &cells, 0, opts.rounds, opts.pair_mix);
     m.keystone = try fitCond(gpa, &m, &keystones, opts.rounds);
     m.item = try fitCond(gpa, &m, &items, opts.rounds);
     m.rune = try fitShare(gpa, &m, try rune.toOwnedSlice(gpa), &keystones, try rune_halves.drift(gpa), opts.rounds);
     m.build = try fitShare(gpa, &m, try build.toOwnedSlice(gpa), &items, try build_halves.drift(gpa), opts.rounds);
-    m.gold = try fitGold(gpa, &m, try gold.toOwnedSlice(gpa), gold_sq, &gold_cells, opts.rounds);
+    m.gold = try fitGold(gpa, &m, try gold.toOwnedSlice(gpa), gold_sq, &gold_cells, opts.rounds, opts.pair_mix);
     return m;
 }
 
@@ -947,19 +1085,19 @@ fn fitShare(gpa: Allocator, m: *const Model, anchor: []Counts, map: *const std.A
     var pooled = with.iterator();
     while (pooled.next()) |e| try s.pooled.put(gpa, e.key_ptr.*, logit((e.value_ptr.* + 0.5) / (s.role_n[e.key_ptr.* >> 16] + 1)));
     s.counts = try counts.toOwnedSlice(gpa);
-    for (anchor) |*a| for (&a.n) |*np| for (np) |*nb| for (nb) |*ne| {
-        ne.* /= drift.phi;
+    for (anchor) |*a| for (&a.n) |*np| for (np, drift.phi) |*nb, pb| for (nb, pb) |*ne, phi| {
+        ne.* /= phi;
     };
     s.fitted = try gpa.alloc(Fitted, s.counts.len);
     var keys = s.index.iterator();
     while (keys.next()) |e| {
         const c = &s.counts[e.value_ptr.*];
         // An item twice in one game counts twice, as truth counts it; a share stays <= 1
-        for (&c.k, c.n) |*kp, np| for (kp, np) |*kb, nb| for (kb, nb) |*ke, ne| {
-            ke.* = @min(ke.*, ne) / drift.phi;
+        for (&c.k, c.n) |*kp, np| for (kp, np, drift.phi) |*kb, nb, pb| for (kb, nb, pb) |*ke, ne, phi| {
+            ke.* = @min(ke.*, ne) / phi;
         };
-        for (&c.n) |*np| for (np) |*nb| for (nb) |*ne| {
-            ne.* /= drift.phi;
+        for (&c.n) |*np| for (np, drift.phi) |*nb, pb| for (nb, pb) |*ne, phi| {
+            ne.* /= phi;
         };
         const mu = s.prior(@intCast(e.key_ptr.* >> 29), @truncate(e.key_ptr.*));
         s.fitted[e.value_ptr.*] = .{ .mu = mu };
@@ -970,7 +1108,7 @@ fn fitShare(gpa: Allocator, m: *const Model, anchor: []Counts, map: *const std.A
 }
 
 /// Gold from each champion-role's games (owned by the result) and its lanes' cells
-fn fitGold(gpa: Allocator, m: *const Model, counts: []Counts, sum_sq: f64, cells: *const std.AutoHashMapUnmanaged(u64, PairCell), rounds: u8) !Gold {
+fn fitGold(gpa: Allocator, m: *const Model, counts: []Counts, sum_sq: f64, cells: *const std.AutoHashMapUnmanaged(u64, PairCell), rounds: u8, mix: bool) !Gold {
     var g: Gold = .{ .counts = counts };
     errdefer g.deinit(gpa);
     g.fitted = try gpa.alloc(Fitted, counts.len);
@@ -992,7 +1130,7 @@ fn fitGold(gpa: Allocator, m: *const Model, counts: []Counts, sum_sq: f64, cells
     }
     g.noise = if (n > groups + 1) @max(ss / (n - groups), 1e-6) else 1;
     g.sd = fitLevels(g.counts, g.fitted, m.shape, @splat(0), g.noise, rounds, null);
-    g.pair = try fitPairs(gpa, m.shape, &m.index, g.fitted, cells, g.noise, rounds);
+    g.pair = try fitPairs(gpa, m.shape, &m.index, g.fitted, cells, g.noise, rounds, mix);
     return g;
 }
 
@@ -1063,7 +1201,7 @@ fn mackay(sd: []f64, fixed: []const f64, sum_sq: []const f64, gamma: []const f64
 
 /// Pair terms on top of the fitted champion-roles: each pair cell's logit is the two
 /// champion-roles' (matchup: one minus the other; duo: the sum) plus the pair's term
-fn fitPairs(gpa: Allocator, shape: Shape, index: *const std.AutoHashMapUnmanaged(u16, u32), fitted: []const Fitted, cells: *const std.AutoHashMapUnmanaged(u64, PairCell), noise: f64, rounds: u8) !Pairs {
+fn fitPairs(gpa: Allocator, shape: Shape, index: *const std.AutoHashMapUnmanaged(u16, u32), fitted: []const Fitted, cells: *const std.AutoHashMapUnmanaged(u64, PairCell), noise: f64, rounds: u8, mix: bool) !Pairs {
     const keys = try sortedKeys(gpa, cells);
     defer gpa.free(keys);
 
@@ -1096,6 +1234,7 @@ fn fitPairs(gpa: Allocator, shape: Shape, index: *const std.AutoHashMapUnmanaged
     }
     out_pairs.terms = try pairs.toOwnedSlice(gpa);
     fitTerms(out_pairs.terms, out_pairs.cells, &out_pairs.sd, noise, rounds);
+    if (mix) fitTermsMixed(&out_pairs, noise, rounds);
     return out_pairs;
 }
 
@@ -1238,6 +1377,88 @@ fn fitLines(terms: []Pair, x: []const f64, line: *[n_roles][2]f64) f64 {
     }
     for (terms, x) |*p, xi| p.mu = line[p.class][0] + line[p.class][1] * xi;
     return moved;
+}
+
+/// From fitTerms' Gaussian fit, each class's prior as pi N(mu, s1^2) + (1 - pi) N(mu,
+/// s2^2), s2 >= s1, by EM: a term's posterior is its two parts' Laplace posteriors
+/// weighted by their marginal likelihoods (Pair.mix; i and v its moments). The scales
+/// have a floor (a marginal-likelihood scale can collapse to 0, and a slab started from
+/// a collapsed sd could not grow) and a cap, the widest spread of real pair effects we
+/// believe in. sd becomes the mixture's, prior the one an unseen pair takes
+fn fitTermsMixed(pairs: *Pairs, noise: f64, rounds: u8) void {
+    // Logit, or thousands of gold
+    const floor: f64 = if (noise > 0) 0.01 else 0.02;
+    const cap: f64 = if (noise > 0) 1 else 0.5;
+    const cells = pairs.cells;
+    var s1: [n_pair_classes]f64 = undefined;
+    var s2: [n_pair_classes]f64 = undefined;
+    var pi: [n_pair_classes]f64 = @splat(0.8);
+    for (pairs.sd, &s1, &s2) |sd, *a, *b| {
+        a.* = std.math.clamp(sd * 0.7, floor, cap);
+        b.* = std.math.clamp(sd * 2.5, 4 * floor, cap);
+    }
+    for (0..rounds + 1) |round| {
+        var r_sum: [n_pair_classes]f64 = @splat(0);
+        var n: [n_pair_classes]f64 = @splat(0);
+        var m1: [n_pair_classes]f64 = @splat(0);
+        var m2: [n_pair_classes]f64 = @splat(0);
+        for (pairs.terms) |*p| {
+            const c = p.class;
+            const a = mixPart(p.*, cells[p.first..][0..p.len], s1[c], noise);
+            const b = mixPart(p.*, cells[p.first..][0..p.len], s2[c], noise);
+            const r = sigmoid(@log(pi[c]) + a.ll - @log(1 - pi[c]) - b.ll);
+            p.mix = .{ .w = r, .e = .{ a.i, b.i }, .v = .{ a.v, b.v } };
+            p.i = p.mix.mean();
+            p.v = p.mix.variance();
+            r_sum[c] += r;
+            n[c] += 1;
+            m1[c] += r * ((a.i - p.mu) * (a.i - p.mu) + a.v);
+            m2[c] += (1 - r) * ((b.i - p.mu) * (b.i - p.mu) + b.v);
+        }
+        if (round == rounds) break;
+        var moved: f64 = 0;
+        for (0..n_pair_classes) |c| {
+            if (n[c] == 0 or r_sum[c] <= 0 or r_sum[c] >= n[c]) continue;
+            const new_pi = std.math.clamp(r_sum[c] / n[c], 0.05, 0.99);
+            var a = std.math.clamp(@sqrt(m1[c] / r_sum[c]), floor, cap);
+            var b = std.math.clamp(@sqrt(m2[c] / (n[c] - r_sum[c])), floor, cap);
+            // Keep part 2 the wide one
+            if (b < a) std.mem.swap(f64, &a, &b);
+            moved = @max(moved, @max(@abs(new_pi - pi[c]), @max(@abs(a - s1[c]), @abs(b - s2[c]))));
+            pi[c] = new_pi;
+            s1[c] = a;
+            s2[c] = b;
+        }
+        if (moved < 1e-5) break;
+    }
+    for (&pairs.sd, &pairs.prior, pi, s1, s2) |*sd, *prior, w, a, b| {
+        sd.* = @sqrt(w * a * a + (1 - w) * b * b);
+        prior.* = .{ .w = w, .v = .{ a * a, b * b } };
+    }
+}
+
+/// A term's Laplace posterior under one Gaussian prior part, and its log marginal
+/// likelihood up to a constant shared by the parts
+fn mixPart(p: Pair, cells: []const PairCell, sd: f64, noise: f64) struct { i: f64, v: f64, ll: f64 } {
+    var q = p;
+    pairNewton(&q, cells, sd, noise);
+    var ll: f64 = 0;
+    for (cells) |c| {
+        const eta = c.off + q.i;
+        if (noise > 0) {
+            ll += (c.k * eta - 0.5 * c.n * eta * eta) / noise;
+            continue;
+        }
+        // log sigmoid(eta) k + log sigmoid(-eta) (n - k), stable at large |eta|
+        ll -= c.k * softplus(-eta) + (c.n - c.k) * softplus(eta);
+    }
+    const z = (q.i - p.mu) / sd;
+    ll += -0.5 * z * z - @log(sd) + 0.5 * @log(q.v);
+    return .{ .i = q.i, .v = q.v, .ll = ll };
+}
+
+fn softplus(x: f64) f64 {
+    return if (x > 0) x + std.math.log1p(@exp(-x)) else std.math.log1p(@exp(x));
 }
 
 /// noise as newton's; a Gaussian cell's k is its sum
@@ -1687,6 +1908,50 @@ test "a two-lock cell adds both parts' terms to the champion-role" {
     try std.testing.expectEqual(@as(?Estimate, null), m.rate(.item_matchup, 0, 0, 3, @as(u32, 3071) << 16 | 40));
 }
 
+test "two normals' range is their mixture's quantiles" {
+    const one: Normals = .one(0.3, 0.04);
+    try std.testing.expectApproxEqAbs(0.3 + z80 * 0.2, one.quantile(0.9), 1e-6);
+    // Two equal parts are the one normal
+    const same: Normals = .{ .w = 0.4, .e = @splat(0.3), .v = @splat(0.04) };
+    try std.testing.expectApproxEqAbs(one.quantile(0.1), same.quantile(0.1), 1e-6);
+    // A wide part on one side stretches that side only
+    const split: Normals = .{ .w = 0.7, .e = .{ 0, 1 }, .v = .{ 0.01, 0.04 } };
+    try std.testing.expect(split.quantile(0.9) - split.mean() > split.mean() - split.quantile(0.1));
+    // Adding a normal shifts both parts
+    const sum = split.add(.one(0.5, 0.01));
+    try std.testing.expectApproxEqAbs(split.mean() + 0.5, sum.mean(), 1e-12);
+    try std.testing.expectApproxEqAbs(split.variance() + 0.01, sum.variance(), 1e-12);
+}
+
+test "a mixture prior lets a lone real outlier pair stand out of a tight pack" {
+    const gpa = std.testing.allocator;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    var prng: std.Random.DefaultPrng = .init(5);
+    const rand = prng.random();
+    // Twelve top champions, every pair 600 lanes at 50% but 1 into 2 at 65%
+    for (1..13) |ia| for (ia + 1..13) |ib| {
+        const a: u16 = @intCast(ia);
+        const b: u16 = @intCast(ib);
+        const p: f64 = if (a == 1 and b == 2) 0.65 else 0.5;
+        for (0..600) |_| {
+            const win = rand.float(f64) < p;
+            try rows.append(gpa, .{ .day = -1, .cr = a, .opp = b, .win = win, .euw = false, .patch = 1, .bracket = 0 });
+            try rows.append(gpa, .{ .day = -1, .cr = b, .opp = a, .win = !win, .euw = false, .patch = 1, .bracket = 0 });
+        }
+    };
+    var g = try fit(gpa, rows.items, 0, .{});
+    defer g.deinit(gpa);
+    var x = try fit(gpa, rows.items, 0, .{ .pair_mix = true });
+    defer x.deinit(gpa);
+    const pg = g.rate(.matchup, 0, 0, 1, 2).?;
+    const px = x.rate(.matchup, 0, 0, 1, 2).?;
+    try std.testing.expect(px.p > pg.p + 0.02);
+    try std.testing.expect(px.lo < 0.65 and 0.65 < px.hi);
+    // The pack stays put
+    try std.testing.expectApproxEqAbs(0.5, x.rate(.matchup, 0, 0, 3, 4).?.p, 0.03);
+}
+
 test "a share that moves within its patch widens its range by the drift" {
     const gpa = std.testing.allocator;
     var prng: std.Random.DefaultPrng = .init(9);
@@ -1714,9 +1979,9 @@ test "a share that moves within its patch widens its range by the drift" {
     var b = try fit(gpa, moving.items, 10, .{});
     defer b.deinit(gpa);
     // 60 independent cells: phi's sd is about 0.2
-    try std.testing.expect(a.rune.drift.tau2 < 0.02 and a.rune.drift.phi < 1.5);
+    try std.testing.expect(a.rune.drift.tau2[0][0] < 0.02 and a.rune.drift.phi[0][0] < 1.5);
     // Halves 0.4 logit apart: the squared step, 0.16
-    try std.testing.expect(b.rune.drift.tau2 > 0.1 and b.rune.drift.tau2 < 0.25 and b.rune.drift.phi < 1.3);
+    try std.testing.expect(b.rune.drift.tau2[0][0] > 0.1 and b.rune.drift.tau2[0][0] < 0.25 and b.rune.drift.phi[0][0] < 1.3);
     const ea = a.rate(.rune, 0, 0, 30, 8010).?;
     const eb = b.rate(.rune, 0, 0, 30, 8010).?;
     try std.testing.expect(eb.hi - eb.lo > 2 * (ea.hi - ea.lo));
