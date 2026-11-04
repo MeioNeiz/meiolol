@@ -26,6 +26,9 @@ pub const Select = struct {
     ally: bool = false,
     /// The Options panel for the card's lane; null for an ally's once they lock
     picks: ?picks.Picks = null,
+    /// Stats from every region (all_regions) rather than EUW's; null without the
+    /// all-regions file
+    all_regions: ?bool = null,
 };
 
 pub const Status = union(enum) {
@@ -77,6 +80,10 @@ pub var by_mastery: std.atomic.Value(bool) = .init(true);
 /// `own_lane` shows mine. Back to mine when champ select ends
 pub var lane_role: std.atomic.Value(u8) = .init(own_lane);
 pub const own_lane = 255;
+
+/// The Options panel's region chip: champ select's stats from every region, when the
+/// app has that file (Data.all), else EUW's
+pub var all_regions: std.atomic.Value(bool) = .init(false);
 
 /// The sign-in form's, under the poller's mutex
 pub const SignIn = struct {

@@ -3,7 +3,8 @@
 //! chart head, fill splits a phone pane's width. Buttons with aria-pressed in a group:
 //! choosing one changes what shows here, it doesn't switch tab panels (Tabs does). With
 //! `href` a segment is a link to another page (a view's), the chosen one aria-current;
-//! with `on` too, an island takes the link's click (the page without it still follows)
+//! with `on` too, an island takes the link's click (the page without it still follows).
+//! In the app, `shell` is the message bridge.js sends the shell on a click
 const tree = @import("tree.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const phrase = @import("phrase.zig");
@@ -26,6 +27,8 @@ pub const Item = struct {
     n: ?u32 = null,
     /// A link instead of a button: the page that shows it
     href: ?[]const u8 = null,
+    /// The app's message to its shell, as JSON (data-shell, src/shell/web/bridge.js)
+    shell: ?[]const u8 = null,
 };
 
 pub const Variant = enum { default, fill };
@@ -56,6 +59,7 @@ pub fn view(h: *H, o: Opts, items: []const Item) N {
             .aria_disabled = if (it.disabled) true else null,
             .title = it.title,
             .on_click = if (it.disabled) null else it.on,
+            .data_shell = if (it.disabled or it.selected) null else it.shell,
         }, kids));
     }
     return h.div(.{

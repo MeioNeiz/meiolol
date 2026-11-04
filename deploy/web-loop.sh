@@ -151,12 +151,20 @@ desktop_files() {
         return 1
     fi
     strip_fitted "$d/stats.bin"
+    # Every region's, for champ select's region chip; apps without it show EUW's alone
+    if curl -sf --max-time 120 -o "$d/all-stats.bin" \
+        "http://$(hostname -I | cut -d' ' -f1):8091/_v/all/data/stats.bin"; then
+        strip_fitted "$d/all-stats.bin"
+    else
+        rm -f "$d/all-stats.bin"
+    fi
     # The comp view's champion facts (src/core/champfacts.zig); apps without them still work
     curl -sf --max-time 60 -o "$d/champ-facts.tsv" \
         "http://$(hostname -I | cut -d' ' -f1):8091/data/champ-facts.tsv" \
         || rm -f "$d/champ-facts.tsv"
     hashed=("$d/stats.bin" release/meiolol-desktop.exe release/meiolol-desktop.json desktop.token)
     [[ ! -f $d/champ-facts.tsv ]] || hashed+=("$d/champ-facts.tsv")
+    [[ ! -f $d/all-stats.bin ]] || hashed+=("$d/all-stats.bin")
     # The curves by size and time, not content: 80 MB to read every round
     inputs=$(sha256sum "${hashed[@]}" | cut -d' ' -f1 \
         && stat -c '%s %Y' data/export/recent-curves.bin && echo "$patch")
@@ -188,9 +196,10 @@ d, patch, release_path = sys.argv[1:]
 with open(release_path) as f:
     release = json.load(f)
 files = []
-for name in ("stats.bin", "recent-curves.bin", "champ-facts.tsv", "meiolol-desktop.exe"):
+for name in ("stats.bin", "all-stats.bin", "recent-curves.bin", "champ-facts.tsv",
+             "meiolol-desktop.exe"):
     path = os.path.join(d, name)
-    if name == "champ-facts.tsv" and not os.path.exists(path):
+    if name in ("champ-facts.tsv", "all-stats.bin") and not os.path.exists(path):
         continue
     if not os.path.exists(path + ".gz"):
         with open(path, "rb") as src, gzip.open(path + ".gz", "wb", compresslevel=6) as dst:

@@ -257,7 +257,8 @@ a 301 to it.
   Reinstall: `deploy/jomify.sh install traffic`; units by hand into /etc/systemd/system,
   then `daemon-reload` (`deploy/jomify.sh drift` shows what differs)
 - Desktop app files (/private/desktop/: zip, update.signed, update.json (unsigned, for
-  older apps), stats.bin, recent-curves.bin, champ-facts.tsv, the exe, .gz copies;
+  older apps), stats.bin (EUW's), all-stats.bin (every region's, the view _v/all),
+  recent-curves.bin, champ-facts.tsv, the exe, .gz copies;
   deploy/web-loop.sh desktop_files from the box's release/ (deploy/desktop-release.sh),
   manifest signed with ml/meiolol/desktop-data.key, mode 600, copy in vault
   meiolol/desktop): an auth_request to internal /_meiolol_desktop_key, which answers 204

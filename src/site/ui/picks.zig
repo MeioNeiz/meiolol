@@ -9,6 +9,7 @@ const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const candlist = @import("candlist.zig");
+const segmented = @import("segmented.zig");
 const art = @import("art.zig");
 const reasons = @import("reasons.zig");
 const phrase = @import("phrase.zig");
@@ -31,8 +32,10 @@ pub const Data = struct {
     /// The lane opponent's name, for the gold column; "" none
     them: []const u8 = "",
     rows: []const Row,
-    /// "EUW, last 30 days"
+    /// "EUW, last 30 days"; the period alone beside the region chip
     scope: []const u8 = "",
+    /// The region chip: EUW's stats or every region's; null without the all-regions file
+    all_regions: ?bool = null,
 };
 
 pub const Row = struct {
@@ -113,6 +116,10 @@ pub const Picks = struct {
             h.div(.{ .class = "hd" }, .{
                 h.h3(.{}, .{if (d.private) W.all.with(h, .{ .r = d.role.label().s }) else W.more.with(h, .{ .r = d.role.label().s })}),
                 if (d.scope.len > 0) h.span(.{ .class = "scope" }, .{d.scope}) else null,
+                if (d.all_regions) |all| segmented.view(h, .{ .s = .s, .label = W.region }, &.{
+                    .{ .label = W.euw, .selected = !all, .shell = "{\"regions\":false}" },
+                    .{ .label = W.all_regions, .selected = all, .shell = "{\"regions\":true}" },
+                }) else null,
             }),
             candlist.view(h, .{
                 .rows = rows,
@@ -229,6 +236,9 @@ const W = struct {
     const picked = plain("Most picked: ");
     const comma = plain(", ");
     const pct = Phrase("{t:text} ({p:rate})");
+    const region = plain("Region");
+    const euw = plain("EUW");
+    const all_regions = plain("All regions");
 };
 
 pub const css =
@@ -237,6 +247,7 @@ pub const css =
     \\  .c-picks > .hd { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
     \\  .c-picks h3 { margin: 0; font-size: var(--fs-s); font-weight: var(--w-m); color: var(--t2); }
     \\  .c-picks .scope { font-size: var(--fs-xs); color: var(--faint); }
+    \\  .c-picks > .hd:has(.c-seg) > .scope { margin-right: auto; }
     \\  .c-picks .note .c-art { margin: 0 3px 2px 0; }
     \\  .c-picks .note > span > span { white-space: nowrap; }
     \\}
@@ -248,7 +259,8 @@ pub const sample: Data = .{
     .private = true,
     .role = .mid,
     .them = "Syndra",
-    .scope = "EUW, last 30 days",
+    .scope = "last 30 days",
+    .all_regions = false,
     .rows = &.{
         .{ .champ = champ.demo("Galio", "Galio"), .rank = 1, .win = 54.1, .base = 50.4, .gold = -40, .pool = true, .rest = 0.4, .runes = "Aftershock + Sorcery", .spells = "Flash, Teleport", .runes_pct = 61, .spells_pct = 88, .rune_src = art.rune("Resolve/VeteranAftershock/VeteranAftershock", "").src, .spell_srcs = .{ art.spell("Flash", "").src, art.spell("Teleport", "").src }, .effects = &.{
             .{ .kind = .into, .other = champ.demo("Syndra", "Syndra"), .pp = 1.6, .games = 1840 },

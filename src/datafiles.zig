@@ -8,6 +8,11 @@ pub fn stats(arena: std.mem.Allocator, io: std.Io) !?[]const u8 {
     return find(arena, io, "stats-", ".bin");
 }
 
+/// all-stats.bin: every region's, beside EUW's (champ select's region chip)
+pub fn allStats(arena: std.mem.Allocator, io: std.Io) !?[]const u8 {
+    return find(arena, io, "all-stats", ".bin");
+}
+
 /// recent-curves.bin, else the newest curves-<patch>.bin
 pub fn curves(arena: std.mem.Allocator, io: std.Io) !?[]const u8 {
     if (try find(arena, io, "recent-curves", ".bin")) |p| return p;

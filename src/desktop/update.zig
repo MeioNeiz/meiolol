@@ -24,6 +24,8 @@ pub const old_exe = "meiolol-desktop.old.exe";
 pub const exe_name = "meiolol-desktop.exe";
 /// core/champfacts.zig's; exes from before it skip the entry
 const facts_name = "champ-facts.tsv";
+/// Every region's stats, kept under its own name: stats-*.bin is EUW's, the newest wins
+const all_stats_name = "all-stats.bin";
 const key_header = "x-meiolol-desktop";
 
 const Manifest = struct {
@@ -136,7 +138,7 @@ pub fn run(o: Options) !Result {
             .stats
         else if (std.mem.eql(u8, f.name, "recent-curves.bin"))
             .curves
-        else if (std.mem.eql(u8, f.name, facts_name))
+        else if (std.mem.eql(u8, f.name, facts_name) or std.mem.eql(u8, f.name, all_stats_name))
             .facts
         else if (std.mem.eql(u8, f.name, exe_name) and o.exe != null)
             .exe
@@ -447,11 +449,12 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
         .{ "stats.bin", "new stats" },
         .{ "recent-curves.bin", "curves" },
         .{ "champ-facts.tsv", "facts" },
+        .{ "all-stats.bin", "all" },
         .{ exe_name, "new exe" },
         .{ "later.bin", "ignored" },
     };
     for (files) |f| try testFile(srv, f[0], f[1]);
-    try testManifest(srv, &files, 5);
+    try testManifest(srv, &files, 6);
     try testFile(app, "app.exe", "old exe");
     try testFile(app, "stats-16.19.bin", "old stats");
     try testFile(app, "recent-curves.bin", "curves");
@@ -477,12 +480,13 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
     };
 
     try std.testing.expectEqual(Result{ .data = true, .exe = true }, try run(o));
-    // new stats, facts, new exe
-    try std.testing.expectEqual([2]u64{ 21, 21 }, TestProgress.last);
+    // new stats, facts, all, new exe
+    try std.testing.expectEqual([2]u64{ 24, 24 }, TestProgress.last);
     try std.testing.expect(TestProgress.calls >= 4);
     var buf: [64]u8 = undefined;
     try std.testing.expectEqualStrings("new stats", try app.readFile(io, "stats-16.20.bin", &buf));
     try std.testing.expectEqualStrings("facts", try app.readFile(io, "champ-facts.tsv", &buf));
+    try std.testing.expectEqualStrings("all", try app.readFile(io, "all-stats.bin", &buf));
     try std.testing.expectEqualStrings("new exe", try app.readFile(io, "app.exe", &buf));
     try std.testing.expectEqualStrings("old exe", try app.readFile(io, old_exe, &buf));
     try std.testing.expectError(error.FileNotFound, app.access(io, "stats-16.19.bin", .{}));

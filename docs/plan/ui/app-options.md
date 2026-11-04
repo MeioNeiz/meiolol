@@ -68,4 +68,7 @@ first.
 3. Runes and summoners in an open row (120)
 4. Win rate by game length per team (118)
 5. Main damage per team (117)
-6. All regions (103)
+6. All regions (103): done. The box ships the all-regions 30-day view's stats as
+   all-stats.bin; the Options panel's chip ("EUW | All regions", data-shell `regions`,
+   state.all_regions) swaps champ select's stats (lane card, board, Options, comp);
+   lane gold stays EUW's curves and says so. Loading, in game and post game stay EUW's

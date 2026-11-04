@@ -602,6 +602,7 @@ fn messageReceived(_: *Handler, _: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView
         .signin => |x| client.signIn(x.username, x.password),
         .mastery => |on| client.mastery(on),
         .lane => |r| client.lane(r),
+        .regions => |all| client.regions(all),
         .practice => |p| if (!@import("build_options").public) {
             _ = practice.edit(p, @intFromFloat(nowMs() * 1000));
         },

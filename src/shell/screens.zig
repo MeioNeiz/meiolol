@@ -105,6 +105,10 @@ fn build(a: Allocator, live: bool) !?Next {
         .icons = s.icons,
         .private = s.edition == .private,
         .practice = state.private_code and s.practicing and s.practice.* != null,
+        .region = switch (s.status) {
+            .select => |x| regionOf(x),
+            else => "EUW",
+        },
     };
     var d = try data(a, c, s.status, s.note);
     withSignIn(&d, signIn(s.signin, s.status));
@@ -319,6 +323,8 @@ pub const Ctx = struct {
     practice: bool = false,
     /// The site's icons in place of the client's (the review pages)
     site: ?*const SiteIcons = null,
+    /// Where champ select's stats are from (regionOf); lane gold is EUW's whatever this says
+    region: []const u8 = "EUW",
 
     pub fn champ(c: Ctx, a: Allocator, id: u32) !?ui.champ.Champ {
         if (id == 0) return null;
@@ -661,8 +667,20 @@ pub fn picksOf(a: Allocator, c: Ctx, s: *const state.Select) !?ui.picks.Data {
         .role = uiRole(p.role),
         .them = if (s.card.opponent) |o| if (c.stats) |st| st.nameOf(o.champion) else "" else "",
         .rows = rows.items,
-        .scope = if (s.card.period.len > 0) try a.print("EUW, {s}", .{s.card.period}) else "EUW",
+        // Beside the region chip, the period alone
+        .scope = if (s.all_regions != null) s.card.period else try scopeOf(a, c, s.card.period),
+        .all_regions = s.all_regions,
     };
+}
+
+/// "All regions" once the Options panel's chip chose them, else "EUW"
+fn regionOf(s: *const state.Select) []const u8 {
+    return if (s.all_regions orelse false) "All regions" else "EUW";
+}
+
+/// "EUW, last 30 days"
+fn scopeOf(a: Allocator, c: Ctx, period: []const u8) ![]const u8 {
+    return if (period.len > 0) a.print("{s}, {s}", .{ c.region, period }) else c.region;
 }
 
 const Picked = struct {
@@ -766,7 +784,7 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode, ally
         .caption = if (card.matchup) |m| try a.print("{f} games · {s} · EUW, {s}", .{ count(m.games), m.bracket.label(), card.period }) else "",
         .options = options,
         .mastery = if (ally) null else state.by_mastery.load(.acquire),
-        .scope = if (card.period.len > 0) try a.print("EUW, {s}", .{card.period}) else "EUW",
+        .scope = try scopeOf(a, c, card.period),
     };
 }
 
@@ -1602,6 +1620,32 @@ test "options: most picked runes and spells, the client's icons once fetched" {
     try testing.expectEqualStrings("Flash, Ignite", after.spells);
     try testing.expectEqualStrings("", after.spell_srcs[0]);
     try testing.expectEqualStrings("spell/14.png", after.spell_srcs[1]);
+}
+
+test "options: the region chip once there are every region's stats, the lane panel says which" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    var sel = testSelect();
+    const galio_pick: desktop.picks.Pick = .{ .champion = galio, .win = 0.54, .pp = 1.4, .role = .{ .games = 100, .wins = 54 }, .mastery = 0, .pool = false, .shown = false, .gold = null, .reasons = &.{} };
+    sel.picks = .{ .role = .middle, .picks = &.{galio_pick} };
+    var c: Ctx = .{ .stats = &f.stats, .icons = null, .private = true };
+
+    const euw_only = (try picksOf(a, c, &sel)).?;
+    try testing.expectEqual(null, euw_only.all_regions);
+    try testing.expectEqualStrings("EUW, last 30 days", euw_only.scope);
+
+    sel.all_regions = true;
+    c.region = regionOf(&sel);
+    const all = (try picksOf(a, c, &sel)).?;
+    try testing.expectEqual(true, all.all_regions);
+    try testing.expectEqualStrings("last 30 days", all.scope);
+    const d = try data(a, c, .{ .select = &sel }, .none);
+    try testing.expectEqualStrings("All regions, last 30 days", d.screen.select.lane.scope);
+    const html = try renderIn(a, d, null, null, .{ .picks = all });
+    try testing.expect(std.mem.find(u8, html, "data-shell=\"{&quot;regions&quot;:false}\"") != null);
 }
 
 test "post game: lanes, damage ours then theirs, team gold by minute" {

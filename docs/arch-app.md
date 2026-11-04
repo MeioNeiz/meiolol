@@ -81,6 +81,10 @@ file and packed rows: docs/architecture.md.
   their hover never gets a forced row) beside my own card's board and bans
   (state.lane_role, back to mine when champ select ends). Not under practice, whose seat
   clicks place champions
+- Region chip: with all-stats.bin loaded (poller Data.all), the Options panel shows "EUW |
+  All regions" (ui/segmented.zig Item.shell as data-shell, so no handler in an island);
+  the shell's `regions` sets state.all_regions and champ select and practice build from
+  Data.statsFor. Scope lines name the region; lane gold stays EUW's curves
 - Page to shell: ui/toshell.zig's Out, written by ui-app.wasm through bridge.js. The
   sign-in form (ui/signin.zig: the screen until there is data, else a line under it)
   sends `signin`, which the shell hands to the poller (device.zig); never logged
@@ -139,7 +143,8 @@ file and packed rows: docs/architecture.md.
   at start and every 3 h (MEIOLOL_UPDATE_URL elsewhere), and at once after a sign in,
   checks its signature, and fetches each listed
   file whose SHA-256 differs from the local copy: stats.bin as stats-<patch>.bin (older stats-*.bin
-  deleted), recent-curves.bin, champ-facts.tsv, meiolol-desktop.exe (names it doesn't
+  deleted), all-stats.bin (every region's), recent-curves.bin, champ-facts.tsv,
+  meiolol-desktop.exe (names it doesn't
   know are skipped, so a new data file needs no version bump). Each goes to NAME.part (gzip on the
   wire, nginx's .gz copies), is checked against hash and size, then renamed over the
   old; with no data yet the window shows their bytes as a bar (Options.progress, the

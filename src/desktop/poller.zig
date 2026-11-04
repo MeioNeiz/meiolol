@@ -63,8 +63,16 @@ const Shared = struct {
 pub const Data = struct {
     arena: std.heap.ArenaAllocator,
     stats: core.Stats,
+    /// Every region's (all-stats.bin), for champ select's region chip
+    all: ?core.Stats,
     curves: ?core.curvesfile.Curves,
     facts: ?core.champfacts.Facts,
+
+    /// Champ select's: every region's when chosen and loaded, else EUW's
+    pub fn statsFor(d: *const Data, all_regions: bool) *const core.Stats {
+        if (all_regions) if (d.all) |*a| return a;
+        return &d.stats;
+    }
 };
 
 /// Between checks; after a failure, sooner
@@ -138,12 +146,13 @@ fn loadInto(data: *Data) !void {
     const arena = data.arena.allocator();
     try fill(data, .{
         .stats = try datafiles.stats(arena, io) orelse return error.NoStatsFile,
+        .all = try datafiles.allStats(arena, io),
         .curves = try datafiles.curves(arena, io),
         .facts = try datafiles.facts(arena, io),
     });
 }
 
-pub const Paths = struct { stats: []const u8, curves: ?[]const u8, facts: ?[]const u8 };
+pub const Paths = struct { stats: []const u8, all: ?[]const u8 = null, curves: ?[]const u8, facts: ?[]const u8 };
 
 /// Named files rather than the newest beside the app, for Replay
 pub fn loadPaths(gpa: std.mem.Allocator, io_: std.Io, paths: Paths) !*Data {
@@ -160,6 +169,14 @@ fn fill(data: *Data, paths: Paths) !void {
     const cwd = std.Io.Dir.cwd();
     const limit: std.Io.Limit = .limited(1 << 30);
     data.stats = try core.Stats.parse(arena, try cwd.readFileAlloc(io, paths.stats, arena, limit));
+    // Without it champ select has EUW's alone, and no region chip
+    data.all = null;
+    if (paths.all) |p| {
+        data.all = core.Stats.parse(arena, try cwd.readFileAlloc(io, p, arena, limit)) catch |err| blk: {
+            std.log.err("{s}: {t}", .{ p, err });
+            break :blk null;
+        };
+    }
     data.curves = null;
     // Without curves the card still lists options, without lane gold. Viewed in place, not
     // parsed (a copy): the file is ~100 MB. Not mapped: the update renames a new file
@@ -639,17 +656,20 @@ const Poller = struct {
         const pool = p.watch.pool;
         const by_mastery = state.by_mastery.load(.acquire);
         const shown = state.lane_role.load(.acquire);
+        const all = state.all_regions.load(.acquire) and data.all != null;
+        const stats = data.statsFor(all);
         var h: std.hash.Wyhash = .init(cs.fingerprint());
         h.update(std.mem.asBytes(&role));
         h.update(std.mem.asBytes(&by_mastery));
-        h.update(&.{shown});
+        h.update(&.{ shown, @intFromBool(all) });
         if (pool) |ids| h.update(std.mem.sliceAsBytes(ids));
         p.fingerprint = h.final();
 
         const sel = try arena.create(state.Select);
         sel.ally = false;
+        sel.all_regions = if (data.all != null) all else null;
         const mine: lanecard.Input = .{
-            .stats = &data.stats,
+            .stats = stats,
             .curves = if (data.curves) |*c| c else null,
             .role = role,
             .me = cs.my_champion,
@@ -663,7 +683,7 @@ const Poller = struct {
             .expertise = if (by_mastery) .fitted else null,
         };
         sel.card = try lanecard.build(arena, mine);
-        sel.board = try board.build(arena, &data.stats, .{}, cs, &sel.card, if (data.facts) |*f| f else null);
+        sel.board = try board.build(arena, stats, .{}, cs, &sel.card, if (data.facts) |*f| f else null);
         var used = mine;
         if (shown < core.Role.count) if (try board.allyLane(arena, mine, cs, @fromBackingInt(@intCast(shown)))) |in| {
             sel.card = try lanecard.build(arena, in);
@@ -672,7 +692,7 @@ const Poller = struct {
         };
         sel.picks = try picks.build(arena, used, &sel.card);
         sel.comp = try comp.after(arena, .{
-            .stats = &data.stats,
+            .stats = stats,
             .curves = if (data.curves) |*c| c else null,
             .facts = if (data.facts) |*f| f else null,
             .tier = own.tier,
@@ -694,8 +714,9 @@ const Poller = struct {
         };
         const own: Own = p.practice_own orelse .{ .mastery = &.{}, .tier = null };
         const by_mastery = state.by_mastery.load(.acquire);
+        const all = state.all_regions.load(.acquire) and data.all != null;
         const built = try practice.build(arena, .{
-            .stats = &data.stats,
+            .stats = data.statsFor(all),
             .curves = if (data.curves) |*c| c else null,
             .facts = if (data.facts) |*f| f else null,
             .mastery = own.mastery,
@@ -705,6 +726,7 @@ const Poller = struct {
         var h: std.hash.Wyhash = .init(3);
         h.update(std.mem.asBytes(&gen));
         h.update(std.mem.asBytes(&by_mastery));
+        h.update(&.{@intFromBool(all)});
         p.fingerprint = h.final();
         var want: Want = .{};
         for (setup.mine) |s| want.add(s.champion);
@@ -713,7 +735,7 @@ const Poller = struct {
         const status: state.Status = switch (built) {
             .select => |s| blk: {
                 const sel = try arena.create(state.Select);
-                sel.* = .{ .card = s.card, .board = s.board, .comp = s.comp, .picks = s.picks };
+                sel.* = .{ .card = s.card, .board = s.board, .comp = s.comp, .picks = s.picks, .all_regions = if (data.all != null) all else null };
                 want.addSelect(sel);
                 if (data.facts) |*f| want.addPicked(f, sel);
                 break :blk .{ .select = sel };

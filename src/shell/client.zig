@@ -50,6 +50,14 @@ pub fn lane(role: u8) void {
     s.practice_changed();
 }
 
+/// The Options panel's region chip: champ select from every region's stats, else EUW's
+pub fn regions(all: bool) void {
+    state.all_regions.store(all, .release);
+    const s = poller.lock();
+    defer poller.unlock();
+    s.practice_changed();
+}
+
 pub fn current() Client {
     const s = poller.lock();
     defer poller.unlock();
