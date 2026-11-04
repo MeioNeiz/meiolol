@@ -120,6 +120,20 @@ The lab disk is a Crucial P3 2 TB NVMe with no Windows letter (Disk resets, belo
   --shutdown`, then `wsl --manage <distro from wsl -l -v> --set-sparse true` (or
   diskpart `select vdisk file=<ext4.vhdx>`, `compact vdisk`). Expect ~120 GB back
 
+## Mac memory
+
+The Mac has 24 GB. A truth run on cubes-20261104b takes ~16 GB in its first minute
+(earlier runs 4-5 GB); three at once (4 Nov) swapped 25 of 27 GB at load 75 and the Mac
+was unusable.
+- Runs over ~4 GB (`meiolol truth`, `meiolol meio` fits, evals on full cubes) go
+  through `deploy/heavy.sh CMD`: one at a time across sessions, builds go on beside it;
+  killing the wrapper kills the run. `deploy/heavy.sh status` shows who holds it
+- A heavy run that dies: find out why (its log, `deploy/heavy.sh status`, `vm_stat`,
+  someone else's kill) before starting it again
+- Stress loops (CPU hogs): `trap 'kill 0' EXIT` so no hog outlives the loop, minutes
+  not hours, never beside a heavy run
+- Before a session closes or hands over: stop its dev servers and background runs
+
 ## Mac build cache
 
 The repo's .zig-cache (shared by the working tree and the ci and box build trees) grows

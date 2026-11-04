@@ -18,6 +18,10 @@ runs voided by a mid-run re-cut, the gpu-box overloaded (jobs 5-10x slow), by-pa
 commits sweeping in other sessions' hunks. Fix the split and pin before starting runs
 on a snapshot, not during.
 
+Mac memory (docs/compute.md "Mac memory"): every brief says heavy runs go through
+`deploy/heavy.sh`, and a session stops its dev servers and background runs before it
+closes or hands over.
+
 Unattended runs: start the coordinator under `caffeinate -i` (a sleeping Mac kills
 agents mid-turn; usage limits stop them too), keep team notes in data/team/
 (CLAUDE.md), and long box jobs in systemd units, not a foreground ssh.
