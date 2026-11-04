@@ -116,6 +116,11 @@ before picking up these older ones:
 
 ## Ideas not started
 
+Jungle impact in the game review (a friend's idea, 4 Nov): from timeline.db's minute
+positions and kill events (killer, assisters, position) and monsters, per game: time near
+each lane (proximity), ganks and their result (kills, assists, deaths),
+kill participation before 14, counter-jungle kills, objectives taken; then impact as the
+lane's gold and XP lead change after a visit against that matchup's curve without one.
 Jungle routes and gank timing from positions; region styles (KR vs EUW per matchup);
 Daily Draft modes ("which line is Darius?", "did the lane winner win?"); matchup
 flashcards with spaced repetition; season "lane story" share cards.
