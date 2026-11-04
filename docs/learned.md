@@ -320,11 +320,11 @@ How to write a line:
 - How often a champion takes a keystone or item keeps moving within a patch, and players
   repeat their picks: at a 50% share, a keystone's share moves about 3 points from a
   patch's first week to its second, an item's about 2, and a share is as noisy as one
-  from 10-20% fewer games. Sure: 16.21, 14 origins, every champion-role, keystone and
-  item; with both counted, Meio's share ranges hold 79-80% of next week's shares (were
-  72-75%; EUW1 Diamond+ 75% even with drift per rank), the patch's raw ones 68-75%.
-  Site: share ranges include both. Evidence: docs/model.md "Lock stacks in the truth
-  test"
+  from 10-20% fewer games. With both counted, Meio's share ranges hold 79-80% of next
+  week's shares (EUW1 Diamond+ 75%; raw patch 68-75%), missing above and below about
+  equally (8.5 / 10.2%). Rare choices win less than Meio says (under 100 patch games: 16%
+  below range, 8% above), unrelated to pick-rate trends. Sure: 16.21, 14 origins. Site:
+  share ranges include both. Evidence: docs/model.md "Lock stacks in the truth test"
 - (early) An item nerf costs the champions that build it: on 16.21 Riot cut Hubris for
   ranged champions, and those that built it in most games (Graves jungle, Jhin bot,
   Quinn top) fell about 0.3-0.4 points against their role; a full-exposure change is
