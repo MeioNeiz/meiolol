@@ -5795,6 +5795,21 @@ points, in-range, PIT, share solid:
 - ±6 fade line: raw win rates split cleanly (solid sd ~3, faded ~19-23). Meio shows
   every win rate solid and its few faded cells (shares, some two-lock) are 84-96%
   inside, PIT 76-80%: for Meio the line fades almost nothing. EUW1 alone reads the same
+- Interval scores (a3af4bfd, beside the gate; research/questions/forecast-judging.md):
+  weighted interval score of Meio against each raw mode on cells both range, each cell
+  once, sign test over day origins. Every region, all ranks, all days, skill against
+  30 days / patch: win rates at depths 1-2 10-13% / 19-21%, gold at 14 13% / 31%, item
+  share 4% / 31%, keystone share 3% / 26%, champion-role 2% / 23%. Every kind ahead on
+  14 of 14 days, bar champion-role against 30 days: 10 of 14, p 0.18, level where log
+  loss says ahead (0.02 +- 0.01). EUW1 8-17% / 18-32%, all ahead. Win rates and gold:
+  Meio's width part and both misses under the patch's, missing 9-10% each side. Shares:
+  width under the patch's, misses high 10-12% and low 5-7% (the point sits low; EUW1
+  item share's above part 0.44 -> 0.54). Tables: data/team/2026-11-04-meio/
+  truth-16.21-wis.md; 450 s, 5.0 GB on the Mac (box cubes of 4 Nov 16:50)
+- Meio's PIT where it shrinks: 76-81% in every weight band of over 1k cells and on the
+  cells lists show first (EUW1 keystone share 76%): EB ranges don't miss the cells far
+  from the prior. Gold+ masked rank set (Plat+ and Emerald+ floors): Meio beats both raw
+  modes, PIT 78-80%
 
 ### Patches as experiments: item changes, 16.20 -> 16.21, 2026-11-04 (meio-model, M8)
 
