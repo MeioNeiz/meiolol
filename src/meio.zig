@@ -90,6 +90,8 @@ const n_roles = 8;
 /// 80% interval
 const z80 = 1.2815515655446004;
 
+const Logit = struct { eta: f64, v: f64 };
+
 pub const Estimate = struct {
     p: f64,
     lo: f64,
@@ -196,7 +198,7 @@ pub const Model = struct {
         switch (kind) {
             .champion => {
                 const i = m.index.get(a) orelse return null;
-                const t = m.eta(i, 0, bracket, region);
+                const t = m.newest(i, bracket, region);
                 var own: f64 = 0;
                 for (0..4) |br| {
                     if (bracket != 0 and br != bracket) continue;
@@ -208,8 +210,8 @@ pub const Model = struct {
             .matchup, .duo => {
                 const ia = m.index.get(a) orelse return null;
                 const ib = m.index.get(@intCast(b)) orelse return null;
-                const ta = m.eta(ia, 0, bracket, region);
-                const tb = m.eta(ib, 0, bracket, region);
+                const ta = m.newest(ia, bracket, region);
+                const tb = m.newest(ib, bracket, region);
                 if (kind == .matchup and a == b) return .{ .p = 0.5, .lo = 0.5, .hi = 0.5, .own = 0 };
                 const duo = kind == .duo;
                 const lo: u16 = if (duo) a else @min(a, @as(u16, @intCast(b)));
@@ -237,7 +239,7 @@ pub const Model = struct {
             .keystone, .item => {
                 const i = m.index.get(a) orelse return null;
                 const x = std.math.cast(u16, b) orelse return null;
-                const t = m.eta(i, 0, bracket, region);
+                const t = m.newest(i, bracket, region);
                 const c = if (kind == .keystone) &m.keystone else &m.item;
                 const role = a >> 13;
                 var e = t.eta + c.shift[i];
@@ -265,16 +267,45 @@ pub const Model = struct {
     }
 
     /// A champion-role's logit and its variance in one patch slot, bracket and region
-    fn eta(m: *const Model, i: u32, patch: usize, bracket: usize, euw: usize) struct { eta: f64, v: f64 } {
-        const k = m.shape.params();
+    fn eta(m: *const Model, i: u32, patch: usize, bracket: usize, euw: usize) Logit {
         var x: [max_k]f64 = undefined;
         m.shape.design(patch, bracket, euw, &x);
+        return m.at(i, &x);
+    }
+
+    /// The newest patch's logit for a bracket and region; all ranks (bracket 0) and every
+    /// region average the champion-role's brackets and regions by its games, as the raw
+    /// rates pool them, rather than reading the unknown-rank, other-region baseline
+    fn newest(m: *const Model, i: u32, bracket: u2, region: u1) Logit {
+        const k = m.shape.params();
+        const c = &m.counts[i];
+        var mix: [max_k]f64 = @splat(0);
+        var x: [max_k]f64 = undefined;
+        var total: f64 = 0;
+        for (0..4) |br| for (0..2) |e| {
+            if (bracket != 0 and br != bracket) continue;
+            if (region == 1 and e == 0) continue;
+            var n: f64 = 0;
+            for (0..m.shape.patches) |p| n += c.n[p][br][e];
+            if (n == 0) continue;
+            m.shape.design(0, br, e, &x);
+            for (mix[0..k], x[0..k]) |*a, b| a.* += n * b;
+            total += n;
+        };
+        // No games in the slice: the slice's own terms, all at their prior
+        if (total == 0) return m.eta(i, 0, bracket, region);
+        for (mix[0..k]) |*a| a.* /= total;
+        return m.at(i, &mix);
+    }
+
+    fn at(m: *const Model, i: u32, x: *const [max_k]f64) Logit {
+        const k = m.shape.params();
         const f = &m.fitted[i];
         var e: f64 = 0;
         var v: f64 = 0;
         for (0..k) |r| {
             if (x[r] == 0) continue;
-            e += f.theta[r];
+            e += x[r] * f.theta[r];
             for (0..k) |c| v += x[r] * f.cov[r * k + c] * x[c];
         }
         return .{ .eta = e, .v = v };
@@ -790,4 +821,33 @@ test "a keystone's rate is the champion-role's plus a role-wide term plus a shru
     const it = m.rate(.item, 0, 0, 3, 3071).?;
     try std.testing.expectApproxEqAbs(m.rate(.champion, 0, 0, 3, 0).?.p, it.p, 0.03);
     try std.testing.expectEqual(@as(?Estimate, null), m.rate(.rune, 0, 0, 3, 8010));
+}
+
+test "all ranks is the champion-role's own mix of brackets, not the unknown-rank baseline" {
+    const gpa = std.testing.allocator;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    var prng: std.Random.DefaultPrng = .init(5);
+    const rand = prng.random();
+    // Twenty champions at 50% in low ranks and 58% in high ranks, three in four games high
+    for (1..21) |ch| for (0..4000) |g| {
+        const high = g % 4 != 0;
+        const p: f64 = if (high) 0.58 else 0.5;
+        var r = testRow(@intCast(ch), -1, 0, if (high) 3 else 1, rand.float(f64) < p);
+        r.euw = g % 2 == 0;
+        try rows.append(gpa, r);
+    };
+    var m = try fit(gpa, rows.items, 0, .{});
+    defer m.deinit(gpa);
+    const all = m.rate(.champion, 0, 0, 7, 0).?;
+    const c = m.counts[m.index.get(7).?];
+    var n: f64 = 0;
+    var k: f64 = 0;
+    for (0..4) |br| for (0..2) |e| {
+        n += c.n[0][br][e];
+        k += c.k[0][br][e];
+    };
+    try std.testing.expectApproxEqAbs(k / n, all.p, 0.01);
+    try std.testing.expect(all.p > m.rate(.champion, 0, 1, 7, 0).?.p);
+    try std.testing.expect(all.p < m.rate(.champion, 0, 3, 7, 0).?.p);
 }
