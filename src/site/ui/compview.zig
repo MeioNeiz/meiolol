@@ -124,14 +124,20 @@ fn team(h: *H, t: Team, side: Side, c: Comp) N {
     });
 }
 
-/// Words when clear; the tester's bars, a bucket each, whatever they show. Nothing at all
-/// for the public edition without a clear lean
+/// Words when clear; the tester's bars, a bucket each, whatever they show, and when they
+/// tilt without a clear lean, words that say so (bars alone read as a lean). Nothing at
+/// all for the public edition without a clear lean
 fn length(h: *H, l: Length) ?N {
-    const words: ?tree.Text = if (l.longer) |x| if (x) W.longer else W.shorter else if (l.win != null) W.no_length else null;
+    const words: ?tree.Text = if (l.longer) |x|
+        if (x) W.longer else W.shorter
+    else if (l.win) |win|
+        if (tilt(win)) |x| (if (x) W.tilt_longer else W.tilt_shorter) else W.no_length
+    else
+        null;
     if (words == null and l.win == null) return null;
     var cols = h.list();
     if (l.win) |win| for (win, length_labels, 0..) |w, label, i| cols.add(h.li(.{ .key = i }, .{
-        h.span(.{ .class = "bar", .aria_hidden = true }, .{h.el(.i, .{ .style = h.vars(.{ .h = @max(0, @min(100, 5 * (w - 30))), .c = fmt.wrColour(w / 100, 0.2) }) }, .{})}),
+        h.span(.{ .class = "bar", .aria_hidden = true }, .{h.el(.i, .{ .style = h.vars(.{ .h = barHeight(w), .c = fmt.wrColour(w / 100, 0.2) }) }, .{})}),
         h.b(.{}, .{W.pct.with(h, .{ .p = w })}),
         h.small(.{}, .{label}),
     }));
@@ -140,6 +146,19 @@ fn length(h: *H, l: Length) ?N {
         if (l.win != null) h.ul(.{}, .{cols.done()}) else null,
         if (words) |x| h.p(.{}, .{x}) else null,
     });
+}
+
+/// 50% at half height, 3x so a few points show
+fn barHeight(w: f32) f32 {
+    return @max(0, @min(100, 50 + 3 * (w - 50)));
+}
+
+/// Long games (30+) against short ones (under 25), as comp.zig's lean: true longer;
+/// null under 3 points apart
+fn tilt(win: [length_labels.len]f32) ?bool {
+    const d = (win[3] + win[4] - win[0] - win[1]) / 2;
+    if (@abs(d) < 3) return null;
+    return d > 0;
 }
 
 /// Magic from the left, physical the rest; then the mix in words
@@ -184,6 +203,8 @@ const W = struct {
     const longer = plain("Your champions win more in long games.");
     const shorter = plain("Your champions win more in short games.");
     const no_length = plain("No clear lean by game length.");
+    const tilt_longer = plain("Tilts to long games, too few games to be sure.");
+    const tilt_shorter = plain("Tilts to short games, too few games to be sure.");
     const pct = phrase.Phrase("{p:rate}");
     const scope = phrase.Phrase("Champion averages: damage from patch {p:text} in EUW, leans from 30 days, lanes at {l:int} min.");
 };
@@ -302,6 +323,9 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.addFill("all locked, public", view(h, sample));
     g.addFill("all locked, private", view(h, private(h)));
+    var unsure = private(h);
+    unsure.length = .{ .win = .{ 60.6, 61.9, 46.7, 47.3, 45.5 } };
+    g.addFill("private, length tilts but not sure", view(h, unsure));
     g.addFill("a split unknown", view(h, .{
         .us = .{ .timing = sample.us.timing },
         .them = sample.them,
