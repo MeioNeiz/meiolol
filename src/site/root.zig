@@ -51,7 +51,7 @@ const writeIndex = @import("home.zig").writeIndex;
 const writeTierList = @import("tierlist.zig").writeTierList;
 const champion = @import("champion.zig");
 const writeChampion = champion.writeChampion;
-const locks = @import("locks.zig");
+pub const locks = @import("locks.zig");
 
 pub const Options = struct {
     out_dir: []const u8,
@@ -119,6 +119,9 @@ pub const Options = struct {
     /// `meiolol lockrows`' file: the champion pages' lock answers (site/locks.zig) where
     /// set and present
     lockrows: ?[]const u8 = null,
+    /// `meiolol meio`'s fitted model, loaded beside lockrows: Meio under the locks for
+    /// private logins (locks.meioAnswer)
+    meio: ?[]const u8 = null,
     /// `meiolol lean`'s file: the champion pages' early or late line where set
     lean: ?[]const u8 = null,
     /// `meiolol your-example`'s file: the example's game and list files (yourgame.files)

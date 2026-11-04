@@ -34,6 +34,7 @@ const objectives = @import("objectives.zig");
 const partials = @import("partials.zig");
 const cubes = @import("cubes.zig");
 const lockrows = @import("lockrows.zig");
+const meio = @import("meio.zig");
 const lockanswer = @import("lockanswer.zig");
 const pairlane = @import("pairlane.zig");
 const patchday = @import("patchday.zig");
@@ -174,6 +175,21 @@ test "fixture games to stats, curves and the website" {
         try lockrows.write(&w.interface, t);
         try w.interface.flush();
     }
+    // Meio fitted on the same games, as `meiolol meio` writes it
+    const meio_path = try std.fs.path.join(arena, &.{ dir, "meio.bin" });
+    {
+        const rows = try truth.load(gpa, io, try cubeDir(arena, dir, "builds"), .{ .patch = patch, .origins = 1, .horizon = 255 });
+        defer gpa.free(rows.rows);
+        var m = try meio.fit(gpa, rows.rows, std.math.maxInt(i32), .{});
+        defer m.deinit(gpa);
+        meio.slim(&m, gpa);
+        var file = try std.Io.Dir.cwd().createFile(io, meio_path, .{});
+        defer file.close(io);
+        var buf: [4096]u8 = undefined;
+        var w = file.writer(io, &buf);
+        try meio.save(&w.interface, &m);
+        try w.interface.flush();
+    }
     var panel: site.ui.buildpanel.BuildPanel = undefined;
     try panel.init(arena, &block);
     var panel_tree: site.ui.Tree = .{};
@@ -297,6 +313,7 @@ test "fixture games to stats, curves and the website" {
         .builds_rank = .{ .{ rank_paths[0], null, rank_paths[1] }, @splat(null), @splat(null), @splat(null) },
         .lean = lean_path,
         .lockrows = lockrows_path,
+        .meio = meio_path,
         .app_trend_min_games = 1,
     };
     try site.generate(gpa, io, db, opts);
@@ -771,6 +788,30 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(1, top.roles.len);
         try testing.expectEqual(morde.games, top.roles[0].games);
         try testing.expectEqual(morde.wins, top.roles[0].wins);
+        // Meio under the locks (private, Loaded.meio): the stack's games are the
+        // StatStrip's; no lock gives the champion-role's number and its lane gold
+        const pm = struct {
+            fn get(l: *site.Loaded, a: std.mem.Allocator, path: []const u8) !site.ui.pvdata.Meio {
+                return site.ui.data.decode(a, site.ui.pvdata.Meio, (try l.meio(a, path)) orelse return error.TestUnexpectedResult);
+            }
+        }.get;
+        const mk = try pm(loaded, arena, "private/meio/1/122/top/plat/ks8010,vs82.bin");
+        try testing.expectEqual(.none, mk.gap);
+        try testing.expectEqual(morde.games, mk.games);
+        try testing.expectEqual(morde.wins, mk.wins);
+        try testing.expectEqual(null, mk.gold);
+        try testing.expect(mk.keystones.len > 0 and mk.items.len > 0 and mk.opponents.len > 0);
+        // A third lock: none
+        for (mk.items) |c| try testing.expectEqual(null, c.meio);
+        const m0 = try pm(loaded, arena, "private/meio/1/122/top/plat/none.bin");
+        try testing.expectEqual(.none, m0.gap);
+        try testing.expect(m0.stack != null and m0.games >= mk.games);
+        try testing.expectEqual(.master, (try pm(loaded, arena, "private/meio/1/122/top/master/ks8010.bin")).gap);
+        try testing.expectEqual(.kind, (try pm(loaded, arena, "private/meio/1/122/top/plat/c23071.6333.bin")).gap);
+        try testing.expectEqual(null, try loaded.meio(arena, "private/meio/1/122/top/plat/vs82,ks8010.bin"));
+        try testing.expectEqual(null, try loaded.meio(arena, "private/meio/9/122/top/plat/none.bin"));
+        // Only through serve.zig's gate: never as a page or file
+        try testing.expectEqual(null, try loaded.get(arena, "private/meio/1/122/top/plat/none.bin"));
         // The page's own lock set rendered in: the LockBar, the answer inline for the
         // island, the opponent by name; a set not in its one form renders unlocked
         const page = (try loaded.getLocked(arena, "champions/darius/top.html", "ks8010,vs82")).?;
@@ -2275,6 +2316,18 @@ fn expectLocksAsBuilder(arena: std.mem.Allocator, t: *const lockrows.Table, x: *
             const m = (try lockanswer.matchups(arena, t, x, b.champion, b.role, filter, l)).?;
             const n = if (want) |f| if (f.get(b.champion, b.role)) |own_| own_.games else 0 else 0;
             try testing.expectEqual(n, m.all.games);
+            // Meio's options (site/locks.zig meio): each one's games under the stack are
+            // the stack's with that option locked too
+            const ch = (try lockanswer.choices(arena, t, x, b.champion, b.role, filter, l)).?;
+            try testing.expectEqual(n, ch.locked.games);
+            for ([_]lockanswer.Kind{ .keystone, .opponent }, [_][]const lockanswer.Choice{ ch.keystones, ch.opponents }) |kind, list| {
+                if (l.by.get(kind) != null) continue;
+                for (list) |c| {
+                    var more = l.*;
+                    more.by.set(kind, .of(&.{c.id}));
+                    try testing.expectEqualDeep(c.locked, (try lockanswer.count(arena, t, x, b.champion, b.role, filter, &more)).?);
+                }
+            }
             stacks += 1;
         }
     };

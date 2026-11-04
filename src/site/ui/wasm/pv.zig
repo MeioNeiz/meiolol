@@ -12,6 +12,7 @@ const dom = @import("dom.zig");
 const pv = ui.pv;
 const pd = ui.pvdata;
 const Role = ui.role.Role;
+const cp = ui.champpage;
 
 pub const panic = zjb.panic;
 /// The fragment with the path's role: dom.hash
@@ -26,6 +27,24 @@ var slices: [2]?pd.Slice = .{ null, null };
 var arena: std.heap.ArenaAllocator = .init(gpa);
 var matchup: ?struct { role: Role, vs: u32 } = null;
 var pending: u8 = 0;
+var champ_id: u32 = 0;
+/// Meio under the locks (pd.Meio): the path asked for last, and its answer once in.
+/// Answers to an older path are dropped by their generation
+var meio_want: [320]u8 = undefined;
+var meio_want_len: usize = 0;
+var meio_gen: i32 = 0;
+var meio_bytes: ?[]u8 = null;
+var meio_shown: ?pd.Meio = null;
+var meio_arena: std.heap.ArenaAllocator = .init(gpa);
+
+/// The champion page's pick and locks, as its islands read them from the fragment
+const Url = struct {
+    role: ?Role = null,
+    region: cp.Region = .euw,
+    period: cp.Period = .days30,
+    rank: cp.Rank = .plat,
+    lk: ui.url.Str(200) = .{},
+};
 /// What's drawn: role, brief champion and its relation
 var drawn: [272]u8 = undefined;
 var drawn_len: usize = 0;
@@ -53,6 +72,7 @@ fn start() void {
     page = doc.call("querySelector", .{zjb.constString(".c-cpage[data-id]")}, zjb.Handle).kept();
     if (page == .null) return;
     const id = std.fmt.parseInt(u32, dom.attrOf(page, "data-id"), 10) catch return;
+    champ_id = id;
     const vs = dom.attrOf(page, "data-vs");
     if (vs.len > 0) {
         const r = std.meta.stringToEnum(Role, dom.attrOf(page, "data-role")) orelse return;
@@ -120,9 +140,11 @@ fn draw() void {
         var rb: [128]u8 = undefined;
         const who = text(".c-mpick .t b", &nb);
         const rel = text(".c-mpick .t small", &rb);
-        for ([_][]const u8{ "|", @tagName(r), "|", who, "|", rel }) |part| kw.writeAll(part) catch {};
+        const want = meioWant(r);
+        for ([_][]const u8{ "|", @tagName(r), "|", who, "|", rel, "|", want }) |part| kw.writeAll(part) catch {};
         if (std.mem.eql(u8, kw.buffered(), drawn[0..drawn_len])) return;
         shown = pv.champion(s, r, pv.brief(who, rel), &lines);
+        askMeio(want);
     }
     drawn_len = kw.buffered().len;
     @memcpy(drawn[0..drawn_len], kw.buffered());
@@ -130,12 +152,49 @@ fn draw() void {
     defer a.deinit();
     var t: ui.Tree = .{};
     var h: ui.H = .init(a.allocator(), &t);
-    const n = pv.view(&h, shown, leadingRate(won));
+    const row = pv.view(&h, shown, leadingRate(won));
+    const n = if (matchup == null) if (meio_shown) |*d| h.div(.{}, .{ row, pv.meio(&h, d) }) else row else row;
     if (h.oom) return;
     const el = dom.nodes(&t, n);
     box.call("replaceWith", .{el}, void);
     box.release();
     box = el.kept();
+}
+
+var want_buf: [512]u8 = undefined;
+
+/// Meio's path for the shown role under the fragment's pick and locks
+fn meioWant(r: Role) []const u8 {
+    var frag: [1024]u8 = undefined;
+    const u = ui.url.read(Url, dom.dom.hash(&frag));
+    var fba: std.heap.FixedBufferAllocator = .init(&want_buf);
+    const view: u8 = 2 * @as(u8, @backingInt(u.region)) + @backingInt(u.period);
+    const p = pd.meioPath(fba.allocator(), view, champ_id, r, @tagName(u.rank), u.lk.slice()) catch return meio_want[0..meio_want_len];
+    return if (p.len > meio_want.len) meio_want[0..meio_want_len] else p;
+}
+
+/// Fetches `want` unless it is the path asked for last
+fn askMeio(want: []const u8) void {
+    if (std.mem.eql(u8, want, meio_want[0..meio_want_len])) return;
+    @memcpy(meio_want[0..want.len], want);
+    meio_want_len = want.len;
+    meio_gen += 1;
+    meio_shown = null;
+    dom.fetch(want, meio_gen, meioLoaded);
+}
+
+fn meioLoaded(gen: i32, bytes: ?[]u8) void {
+    if (gen != meio_gen) {
+        if (bytes) |b| gpa.free(b);
+        return;
+    }
+    meio_shown = null;
+    _ = meio_arena.reset(.retain_capacity);
+    if (meio_bytes) |old| gpa.free(old);
+    meio_bytes = bytes;
+    if (bytes) |b| meio_shown = ui.data.decode(meio_arena.allocator(), pd.Meio, b) catch null;
+    drawn_len = 0;
+    draw();
 }
 
 /// The fragment's role (the path's, mapped in), else the one the page was rendered for, else

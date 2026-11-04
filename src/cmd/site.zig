@@ -92,6 +92,7 @@ const SiteFlags = struct {
             .eval_history = try std.fs.path.join(arena, &.{ c.data_dir, "eval-history.tsv" }),
             .lean = try std.fs.path.join(arena, &.{ c.data_dir, "lean.tsv" }),
             .lockrows = try std.fs.path.join(arena, &.{ c.data_dir, "export", "lockrows.bin" }),
+            .meio = try std.fs.path.join(arena, &.{ c.data_dir, "export", "meio.bin" }),
             .your_example = try std.fs.path.join(arena, &.{ c.data_dir, "your-example.json" }),
             .index_min_games = f.index_min_games,
             .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),

@@ -12,10 +12,13 @@ const champion = @import("champion.zig");
 const builds = @import("../builds.zig");
 const lockrows = @import("../lockrows.zig");
 const lockanswer = @import("../lockanswer.zig");
+const meio = @import("../meio.zig");
+const ddragon = @import("../ddragon.zig");
 
 const Role = core.Role;
 const Counts = core.statsfile.Counts;
 const cp = ui.champpage;
+const pd = ui.pvdata;
 const Site = @import("root.zig").Site;
 const Champ = @import("root.zig").Champ;
 
@@ -33,14 +36,17 @@ comptime {
     }
 }
 
-/// The table and its Index, freed together
+/// The table and its Index, and Meio's fitted model (`meiolol meio`) beside them, freed
+/// together
 pub const Answers = struct {
     arena: std.heap.ArenaAllocator,
     table: lockrows.Table,
     index: lockanswer.Index,
+    /// null: no meio_path, its file missing or another build's
+    meio: ?meio.Model = null,
 
     /// null when `path` is missing or another binary's types wrote it
-    pub fn load(gpa: std.mem.Allocator, io: std.Io, path: []const u8) !?*Answers {
+    pub fn load(gpa: std.mem.Allocator, io: std.Io, path: []const u8, meio_path: ?[]const u8) !?*Answers {
         const t0 = std.Io.Clock.awake.now(io);
         const x = try gpa.create(Answers);
         errdefer gpa.destroy(x);
@@ -65,8 +71,27 @@ pub const Answers = struct {
             return null;
         };
         x.index = try .init(gpa, io, &x.table);
+        x.meio = null;
+        errdefer x.index.deinit();
+        if (meio_path) |p| x.meio = try loadMeio(io, p, x.arena.allocator());
         log.info("{s}: {d} champion-roles, lock answers ready in {d} ms", .{ path, x.table.blocks.len, t0.durationTo(std.Io.Clock.awake.now(io)).toMilliseconds() });
         return x;
+    }
+
+    fn loadMeio(io: std.Io, path: []const u8, arena: std.mem.Allocator) !?meio.Model {
+        const f = std.Io.Dir.cwd().openFile(io, path, .{}) catch |err| switch (err) {
+            error.FileNotFound => {
+                log.info("{s}: none, no Meio under locks", .{path});
+                return null;
+            },
+            else => return err,
+        };
+        defer f.close(io);
+        var buf: [1 << 20]u8 = undefined;
+        var r = f.reader(io, &buf);
+        const m = try meio.load(&r.interface, arena);
+        if (m == null) log.warn("{s}: another build's, no Meio under locks", .{path});
+        return m;
     }
 
     pub fn deinit(x: *Answers, gpa: std.mem.Allocator) void {
@@ -155,6 +180,163 @@ pub fn top(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, lo
     const role = try a.create(cp.TopRole);
     role.* = .{ .role = champion.uiRole(r), .games = n.games, .wins = n.wins, .share = 0, .pick = 0, .ban = 0, .lane = &.{} };
     return .{ .name = "", .slug = "", .icon = "", .patch = "", .ddragon = "", .champs = &.{}, .roles = role[0..1] };
+}
+
+/// Where Meio's private numbers are asked for: `<view>/<champion id>/<role>/<rank>/<lk>.bin`
+/// (ui.pvdata.meioPath). The renderer answers it only behind nginx's private login gate
+pub const meio_prefix = "private/meio/";
+
+/// Most choices of each list in a Meio answer
+const meio_choices = 40;
+
+/// The pvdata.Meio at `rest` (a path after `meio_prefix`), in `arena`; null for a path that
+/// names nothing. `l`: site.Loaded, for the view's Site
+pub fn meioAnswer(arena: std.mem.Allocator, x: *const Answers, rest: []const u8, l: anytype) !?[]const u8 {
+    var it = std.mem.splitScalar(u8, rest, '/');
+    const v = std.fmt.parseInt(u8, it.next() orelse return null, 10) catch return null;
+    if (v >= html.View.all.len) return null;
+    const id = std.fmt.parseInt(u32, it.next() orelse return null, 10) catch return null;
+    const role = std.meta.stringToEnum(ui.role.Role, it.next() orelse return null) orelse return null;
+    const rank = std.meta.stringToEnum(cp.Rank, it.next() orelse return null) orelse return null;
+    const last = it.next() orelse return null;
+    if (it.next() != null or !std.mem.endsWith(u8, last, ".bin")) return null;
+    const lk = last[0 .. last.len - ".bin".len];
+    const locks = if (std.mem.eql(u8, lk, pd.no_locks)) lockanswer.Locks{} else pageLocks(lk) orelse return null;
+    var s = (try l.site(html.View.all[v])).*;
+    s.arena = arena;
+    const ch = for (s.champs) |c| {
+        if (c.id == id) break c;
+    } else return null;
+    const d = try meioOf(&s, x, ch, coreRole(role), rank, &locks) orelse return null;
+    var out: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, pd.Meio, d, &out);
+    return out.items;
+}
+
+/// The locks Meio models: one keystone, one finished item (any slot) and one lane
+/// opponent, at most two of them (common.md "model -> locks")
+const Stack = struct {
+    keystone: ?u16 = null,
+    item: ?u16 = null,
+    /// The lane opponent's champion id
+    opponent: ?u16 = null,
+
+    fn of(l: *const lockanswer.Locks, any_slot: *bool) error{ Kind, Deep }!Stack {
+        var st: Stack = .{};
+        for (std.enums.values(lockanswer.Kind)) |kind| {
+            const want = l.by.get(kind) orelse continue;
+            const one = if (want.len == 1) std.math.cast(u16, want.v[0]) else null;
+            switch (kind) {
+                .keystone => st.keystone = one orelse return error.Kind,
+                .opponent => st.opponent = one orelse return error.Kind,
+                .item4, .item5, .item6 => {
+                    if (st.item != null) return error.Deep;
+                    st.item = one orelse return error.Kind;
+                    any_slot.* = true;
+                },
+                else => return error.Kind,
+            }
+        }
+        if (st.depth() > 2) return error.Deep;
+        return st;
+    }
+
+    fn depth(st: Stack) u8 {
+        return @as(u8, @intFromBool(st.keystone != null)) + @intFromBool(st.item != null) + @intFromBool(st.opponent != null);
+    }
+
+    /// Meio's win rate for `cr` under the stack; null deeper than two or where it has none
+    fn rate(st: Stack, m: *const meio.Model, region: u1, br: meio.Brackets, cr: u16) ?meio.Estimate {
+        const opp: ?u16 = if (st.opponent) |o| crOf(o, cr) else null;
+        const ks: u32 = st.keystone orelse 0;
+        const item: u32 = st.item orelse 0;
+        return switch (st.depth()) {
+            0 => m.rateIn(.champion, region, br, cr, 0),
+            1 => if (opp) |o| m.rateIn(.matchup, region, br, cr, o) else if (st.keystone != null) m.rateIn(.keystone, region, br, cr, ks) else m.rateIn(.item, region, br, cr, item),
+            2 => if (opp) |o|
+                if (st.keystone != null) m.rateIn(.keystone_matchup, region, br, cr, ks << 16 | o) else m.rateIn(.item_matchup, region, br, cr, item << 16 | o)
+            else
+                m.rateIn(.keystone_item, region, br, cr, ks << 16 | item),
+            else => null,
+        };
+    }
+};
+
+/// champion | role << 13, as truth.crOf; the role is `cr`'s (a lane opponent's)
+fn crOf(id: u16, cr: u16) u16 {
+    return id | (cr & ~@as(u16, 0x1fff));
+}
+
+/// Meio under `locks` for `ch` in `r` at rank `k`, beside the raw counts of the view
+fn meioOf(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, locks: *const lockanswer.Locks) !?pd.Meio {
+    const a = s.arena;
+    const t = &x.table;
+    const f = filterOf(s, t, k) orelse return null;
+    const c = try lockanswer.choices(a, t, &x.index, @intCast(ch.id), r, f, locks) orelse return null;
+    var d: pd.Meio = .{ .gap = .none, .any_slot = false, .games = c.locked.games, .wins = c.locked.wins, .stack = null, .gold = null, .keystones = &.{}, .items = &.{}, .opponents = &.{} };
+    const st = Stack.of(locks, &d.any_slot) catch |err| switch (err) {
+        error.Kind => blk: {
+            d.gap = .kind;
+            break :blk null;
+        },
+        error.Deep => blk: {
+            d.gap = .deep;
+            break :blk null;
+        },
+    };
+    // Plat+ and Emerald+ pool the mid and high brackets (Gold sits in mid too), Diamond+
+    // the high one; Master+'s pick is narrower than any bracket
+    const br: ?meio.Brackets = switch (k) {
+        .plat, .emerald => .{ .mask = 0b1100 },
+        .diamond => .{ .mask = 0b1000 },
+        .master => null,
+    };
+    if (br == null and d.gap == .none) d.gap = .master;
+    if (x.meio == null and d.gap == .none) d.gap = .no_model;
+    const m: ?*const meio.Model = if (d.gap == .none) &x.meio.? else null;
+    const region: u1 = @intFromBool(s.view.region == .euw);
+    const cr: u16 = @intCast(ch.id | @as(u32, @backingInt(r)) << 13);
+    if (m) |model| {
+        d.stack = est(st.?.rate(model, region, br.?, cr));
+        if (st.?.keystone == null and st.?.item == null) {
+            const o: u32 = if (st.?.opponent) |id| crOf(id, cr) else 0;
+            d.gold = est(model.avgIn(.gold14, region, br.?, cr, o));
+        }
+    }
+    const lists = [_]struct { []const lockanswer.Choice, *[]const pd.Choice, []const ddragon.Named }{
+        .{ c.keystones, &d.keystones, t.build.runes },
+        .{ c.items, &d.items, t.build.items },
+        .{ c.opponents, &d.opponents, &.{} },
+    };
+    for (lists, 0..) |l, i| {
+        const from, const into, const names = l;
+        const out = try a.alloc(pd.Choice, @min(from.len, meio_choices));
+        for (out, from[0..out.len]) |*o, cc| {
+            const name = if (i == 2) champName(s, cc.id) else if (ddragon.find(names, cc.id)) |n| n.name else "";
+            var with = st orelse Stack{};
+            const id16 = std.math.cast(u16, cc.id);
+            switch (i) {
+                0 => with.keystone = id16,
+                1 => with.item = id16,
+                else => with.opponent = id16,
+            }
+            const e = if (m != null and id16 != null and with.depth() <= 2) with.rate(m.?, region, br.?, cr) else null;
+            o.* = .{ .id = cc.id, .name = name, .games = cc.locked.games, .wins = cc.locked.wins, .meio = est(e) };
+        }
+        into.* = out;
+    }
+    return d;
+}
+
+fn champName(s: *const Site, id: u32) []const u8 {
+    for (s.champs) |c| if (c.id == id) return c.name;
+    return "";
+}
+
+fn est(e: ?meio.Estimate) ?pd.Est {
+    const x = e orelse return null;
+    const own = std.math.clamp(@round(x.own), 0, std.math.maxInt(u32));
+    return .{ .p = @floatCast(x.p), .lo = @floatCast(x.lo), .hi = @floatCast(x.hi), .own = @intFromFloat(own) };
 }
 
 fn tierOf(k: cp.Rank) []const u8 {

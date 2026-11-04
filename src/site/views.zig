@@ -123,9 +123,18 @@ pub const Loaded = struct {
         defer l.answers_mutex.unlock(l.io);
         if (!l.answers_tried) {
             l.answers_tried = true;
-            if (l.opts.lockrows) |p| l.answers = try locks.Answers.load(l.gpa, l.io, p);
+            if (l.opts.lockrows) |p| l.answers = try locks.Answers.load(l.gpa, l.io, p, l.opts.meio);
         }
         return l.answers;
+    }
+
+    /// Meio under a champion page's locks at `path` (locks.meio_prefix and on), in
+    /// `arena`; null when it names nothing or there are no lock answers. Private: only
+    /// for requests nginx let through its private login gate (serve.zig)
+    pub fn meio(l: *Loaded, arena: std.mem.Allocator, path: []const u8) !?[]const u8 {
+        if (!std.mem.startsWith(u8, path, locks.meio_prefix)) return null;
+        const x = try l.loadLocks() orelse return null;
+        return locks.meioAnswer(arena, x, path[locks.meio_prefix.len..], l);
     }
 
     fn put(l: *Loaded, v: html.View, s: *Site) void {

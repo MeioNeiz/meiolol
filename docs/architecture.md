@@ -63,6 +63,10 @@ src/
                      candidate panel (ui/testercand.zig, lazy ui-testercand.wasm, no
                      model: the board via the URL, the seat's options handed over as a
                      Feed), beside admin.zig private()'s old page until it reaches parity
+  site/locks.zig     meioAnswer: /private/meio/<view>/<id>/<role>/<rank>/<lk>.bin, Meio
+                     (export/meio.bin) under a champion page's locks beside raw counts
+                     (lockanswer.choices); `meiolol render` answers it only with nginx's
+                     admin token (private login, no-store); ui-pv draws it under its row
   backup.zig         `meiolol backup|restore`: state snapshots + append-only segments
   forget.zig         `meiolol forget`: GDPR erasure, `forgotten` suppression list
                      (both: docs/data-safety.md)

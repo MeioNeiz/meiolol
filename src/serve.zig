@@ -313,6 +313,12 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             request.head.method == .GET and admin_api.allowed(api, request)) return pages(ctx, r, request);
         if (try admin_api.handle(api, request)) return;
     }
+    // Meio under the locks: private numbers, so only with nginx's admin token, which its
+    // /private/meio/ location adds behind the private login (dev: always)
+    if (ctx.opts.render) |r| if (std.mem.startsWith(u8, request.head.target, "/" ++ site.locks.meio_prefix)) {
+        const ok = ctx.opts.dev != null or if (ctx.opts.admin) |api| admin_api.allowed(api, request) else false;
+        return if (ok) privateMeio(ctx, r, request) else notFound(request);
+    };
     if (ctx.opts.dev) |d| if (d.notes_db.len > 0 and isNotes(request.head.target)) return devNotes(ctx, d, request);
     // The admin page's Applications tab on its fixture, as accounts.bin below: no login
     // here to reach the API's
@@ -495,6 +501,24 @@ fn notFoundPage(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Re
             .{ .name = "cache-control", .value = "no-cache" },
         },
     });
+}
+
+/// Loaded.meio: no-store, as nginx's location says
+fn privateMeio(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Request) !void {
+    const entry = rendered.acquire();
+    defer rendered.release(entry);
+    var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+    defer arena_state.deinit();
+    var path_buf: [512]u8 = undefined;
+    const path = resolve(&path_buf, request.head.target) orelse return notFound(request);
+    const body = entry.loaded.meio(arena_state.allocator(), path) catch |err| switch (err) {
+        error.Loading => return request.respond("loading\n", .{ .status = .service_unavailable }),
+        else => return err,
+    } orelse return notFound(request);
+    return request.respond(body, .{ .extra_headers = &.{
+        .{ .name = "content-type", .value = "application/octet-stream" },
+        .{ .name = "cache-control", .value = "no-store" },
+    } });
 }
 
 /// Loaded.pageList, a URL a line

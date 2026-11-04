@@ -648,6 +648,63 @@ pub fn matchups(arena: Allocator, t: *const lockrows.Table, x: *const Index, cha
     return out;
 }
 
+/// A keystone, finished item or lane opponent's games under the view (`all`), and under
+/// the view and the locks too
+pub const Choice = struct { id: u32, all: Count = .{}, locked: Count = .{} };
+
+/// A champion-role's keystones, finished items (any slot, once a game) and lane opponents,
+/// each list by games under the view, most first
+pub const Choices = struct {
+    all: Count = .{},
+    locked: Count = .{},
+    keystones: []Choice,
+    items: []Choice,
+    opponents: []Choice,
+};
+
+/// `champion` in `role`'s Choices under `f` and `locks`, in `arena`; null as `count`
+pub fn choices(arena: Allocator, t: *const lockrows.Table, x: *const Index, champion: u32, role: Role, f: Filter, locks: *const Locks) !?Choices {
+    const bi = t.blockIndex(champion, role) orelse return null;
+    const block = &x.blocks[bi];
+    const m: Match = try .init(arena, block, locks);
+    const keystones = try arena.alloc(Choice, block.keystones.len);
+    for (keystones, block.keystones) |*o, id| o.* = .{ .id = id };
+    const items = try arena.alloc(Choice, block.items.len);
+    for (items, block.items) |*o, id| o.* = .{ .id = id };
+    var opponents: std.AutoArrayHashMapUnmanaged(u16, Choice) = .empty;
+    var out: Choices = .{ .keystones = keystones, .items = items, .opponents = &.{} };
+    for (block.rows) |*r| {
+        if (!f.takes(r.start, r.platform, r.patch, if (r.rank == no_rank) null else r.rank)) continue;
+        const locked = m.takes(r);
+        const bump = struct {
+            fn add(o: *Choice, won: bool, in: bool) void {
+                Counts.bump(&o.all, won);
+                if (in) Counts.bump(&o.locked, won);
+            }
+        }.add;
+        Counts.bump(&out.all, r.won);
+        if (locked) Counts.bump(&out.locked, r.won);
+        if (r.keystone != 0) bump(&keystones[r.keystone - 1], r.won, locked);
+        // Slot 0 is boots
+        for (r.item[1..], 1..) |c, i| {
+            if (c == 0 or std.mem.findScalar(u16, r.item[1..i], c) != null) continue;
+            bump(&items[c - 1], r.won, locked);
+        }
+        if (r.opponent != 0) {
+            const e = try opponents.getOrPut(arena, r.opponent);
+            if (!e.found_existing) e.value_ptr.* = .{ .id = r.opponent };
+            bump(e.value_ptr, r.won, locked);
+        }
+    }
+    out.opponents = opponents.values();
+    for ([_][]Choice{ out.keystones, out.items, out.opponents }) |list| std.mem.sort(Choice, list, {}, struct {
+        fn more(_: void, a: Choice, b: Choice) bool {
+            return if (a.all.games != b.all.games) a.all.games > b.all.games else a.id < b.id;
+        }
+    }.more);
+    return out;
+}
+
 test "locks parse and format back" {
     const l = Locks.parse("vs86,ks8010,c23071.6333").?;
     try std.testing.expectEqual(8010, l.by.get(.keystone).?.v[0]);
