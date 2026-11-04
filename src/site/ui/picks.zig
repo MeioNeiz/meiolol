@@ -102,7 +102,8 @@ pub const Picks = struct {
 
     pub fn view(p: *Picks, h: *H) N {
         const d = p.data;
-        const attrs = .{ .class = "c-picks", .data_island = "picks", .data_seq = d.seq };
+        // data-all: every option, the lane panel's own too (app.zig drops those there)
+        const attrs = .{ .class = "c-picks", .data_island = "picks", .data_seq = d.seq, .data_all = d.private };
         const rows = h.mem.alloc(candlist.Row, d.rows.len) catch {
             h.oom = true;
             return .none;

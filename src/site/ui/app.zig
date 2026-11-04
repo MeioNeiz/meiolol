@@ -175,12 +175,15 @@ pub const css =
     \\    .c-live > .c-apphome { grid-column: 2; grid-row: 1 / -1; }
     \\  }
     \\  /* Full screen: the third column holds Options, or once all ten lock the comp view
-    \\     (Options under the board then), so neither needs a scroll to be seen */
+    \\     (Options under the board then), so neither needs a scroll to be seen. Private
+    \\     Options there list the lane panel's own options too: the lane panel drops its copy */
     \\  @container live (min-width: 1500px) {
     \\    .c-live:has(.c-cs):has(> .c-picks, > .c-comp) { grid-template-columns: minmax(0, 4fr) minmax(0, 5fr) minmax(0, 4fr); }
     \\    .c-live:has(.c-cs) > .c-picks, .c-live:has(.c-cs) > .c-comp { grid-column: 3; grid-row: 1 / -1; margin: 0;
     \\      position: sticky; top: calc(var(--header) + var(--sp-3)); max-height: calc(var(--vh) - var(--header) - var(--sp-5));
     \\      overflow-y: auto; }
+    \\    .c-live:has(> .c-picks[data-all]):not(:has(> .c-comp)) .c-cs .lane > .opts,
+    \\      .c-live:has(> .c-picks[data-all]):not(:has(> .c-comp)) .c-cs .lane > .opts-head > h3 { display: none; }
     \\    .c-live:has(.c-cs):has(> .c-comp) > .c-picks { grid-column: 1; grid-row: auto; margin-bottom: var(--sp-4);
     \\      position: static; max-height: none; overflow-y: visible; }
     \\  }
