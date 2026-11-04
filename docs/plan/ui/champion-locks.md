@@ -22,11 +22,11 @@ data design is replaced here) and the J23 rule that every block follows its filt
   path, one opponent per role)
 - Every block follows the stack, or carries a scope chip saying what it ignores (E1's
   rule). A block's head shows its games when they differ from the page's
-- Thin, by range not games (J35, estimates.md Trust rules): every rate shows its ±. A
-  cell over ±6 points is faded, over ±12 no rate, only "too unsure"; raw modes take the
-  binomial range from their games, Meio its own. Games stay in the leans-on line and the
-  hover, not beside every number ("51.2% ±3.1"). A context whose every cell is over ±12
-  shows only "Too few games: 12" in each block
+- Thin, by range not games (J35, estimates.md Trust rules): every rate shows its ±,
+  however wide, never hidden ("48% ±14" says more than a blank). Over ±6 points it is
+  faded; raw modes take the binomial range from their games, Meio its own. Games stay in
+  the leans-on line and the hover, not beside every number ("51.2% ±3.1"). A context
+  with no games at all says so; a thin one shows its wide ranges
 - URL: `/champions/ornn/top?lk=ks8010,vs86` style query (one key per kind, values by
   id), so a link opens the locked page and nginx caches per lock set. Same in the app's
   "why this pick" links
