@@ -5830,6 +5830,33 @@ test", Meio PIT, all days. Both changes are judged against Meio as it was.
   the rest in a slab of 0.08-0.14; 9-38 terms of 5.6k-15k per class lean to the slab.
   Pair effects are close to Gaussian, with no lone outliers for a mixture to free
 
+### Which side Meio misses on, 16.21, 2026-11-04 (meio-model)
+
+Truth at 1f78a51d on data/cubes-20261104b, with a throwaway dump of every Meio-ranged
+champion-role, keystone and share cell (origins 0-13, brackets all ranks to Diamond+),
+analysed in Python. Every region, all ranks unless named.
+
+- Shares: the interval score's miss split (target outside p +- the normal predictive
+  range) says above 9.6-9.7%, below 5.1-5.8%. Half the share cells expect under 2 target
+  picks, where the range's low end is under 0 and a miss below can't happen (0.2%).
+  Binomial PIT tails on the same cells: items 8.5 above / 10.2 below, keystones 8.3 /
+  10.4. Meio's shares aren't biased low
+- Trends: options rising over the last 3 patch days miss above 11.7% (top fifth) against
+  7.9% (bottom fifth); misses above grow through the patch for the raw patch too (4.4%
+  day 0 to 11.3% day 8+). Moving Meio's logit a fraction f of the way to the raw patch
+  (widths kept) changes the interval score at f 0.1/0.2/0.3 by +0.2/+0.8/+1.8% for item
+  shares and +0.1/+0.6/+1.5% for keystone shares; EUW1 Diamond+ -0.9/-1.2/-1.1% and
+  -1.4/-2.2/-2.5%. No trend term
+- Win rates: misses below by fifth of pick-rate trend are flat (champion-role
+  10.3-12.5%, keystone 10.3-11.4%). They sit on rare cells: champion-roles with under 100
+  own patch games 16.4% below, 7.6% above (over 1,000 games: 10.7 / 11.8); keystones
+  under 1% of their champion-role 12.3 / 7.8 (1-100%: about 10 / 10). Next: the
+  cell's popularity (log share) in the win-rate prior mean
+- EUW1 Diamond+ shares (75% PIT): both tails fat, items 13.7 above / 11.2 below,
+  keystones 13.4 / 11.8; cells expecting 2+ picks miss below 14-21%. Ranges too narrow
+  rather than shifted: a larger Diamond+ variance next, per-cell phi from player keys
+  if that falls short
+
 ### Patches as experiments: item changes, 16.20 -> 16.21, 2026-11-04 (meio-model, M8)
 
 Question (PT7, Meio M8): does a champion-role's win rate move across a patch track its
