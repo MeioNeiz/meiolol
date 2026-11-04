@@ -86,6 +86,8 @@ pub fn dataVs(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []c
         .slots = slots.items,
         .champion = champion,
         .own = bp.rate(b.games, b.wins),
+        .games = b.games,
+        .wins = b.wins,
     };
 }
 
@@ -98,7 +100,7 @@ fn usualOf(rows: File.Rows, usual: ?File.Rows) ?u8 {
 }
 
 fn option(a: std.mem.Allocator, f: *const File, b: File.Build, kind: Kind, x: File.Option) !bp.Option {
-    var o: bp.Option = .{ .games = x.games, .wins = x.wins };
+    var o: bp.Option = .{ .games = x.games, .wins = x.wins, .v = x.v };
     switch (kind) {
         .skills => {
             const keys = try a.alloc(u8, x.v.len);

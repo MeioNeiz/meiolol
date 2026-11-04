@@ -5,7 +5,8 @@
 //! pages sit above as cards; the chosen one lights its runes. In a narrow container the
 //! trees fold to the chosen page's (Every tree opens the rest). A page whose keystone
 //! the host has builds for (locks) locks on tap, and the host shows the rest of the build
-//! for that keystone; a second tap unlocks. Tap a rune: its name and
+//! for that keystone; a second tap unlocks. With the champion page's lock set (`set`) a
+//! page card locks its keystone and a rune tap locks the rune (shard) too. Tap a rune: its name and
 //! figures in the readout line. On a matchup's, ▲▼ after a share the matchup moved from
 //! the champion's usual. An island part: a host embeds it and re-renders on its
 //! events
@@ -16,6 +17,7 @@ const art = @import("art.zig");
 const phrase = @import("phrase.zig");
 const button = @import("button.zig");
 const bp = @import("buildpanel.zig");
+const lockbar = @import("lockbar.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -93,6 +95,8 @@ pub const RuneTree = struct {
     locks: []const u32 = &.{},
     /// The chosen page is locked (its keystone in locks)
     lock: bool = false,
+    /// The champion page's lock set: pages and runes lock through it, `locks` unused
+    set: ?*lockbar.Set = null,
     /// The rune in the readout
     rune: ?Pos = null,
     /// Unique on the page
@@ -103,7 +107,13 @@ pub const RuneTree = struct {
     pub fn update(t: *RuneTree, m: Msg, ev: *tree.Event) void {
         switch (m) {
             .page => |i| {
-                if (i < t.data.pages.len and t.lockable(t.data.pages[i].v[1])) {
+                if (t.set) |s| {
+                    if (i >= t.data.pages.len) return;
+                    var buf: [lockbar.value_max]u8 = undefined;
+                    s.toggle(.keystone, lockbar.text(&buf, &.{t.data.pages[i].v[1]}));
+                    t.page = i;
+                    ev.push = true;
+                } else if (i < t.data.pages.len and t.lockable(t.data.pages[i].v[1])) {
                     t.lock = !(t.page == i and t.lock);
                     t.page = i;
                     ev.push = true;
@@ -117,8 +127,29 @@ pub const RuneTree = struct {
             .rune => |p| {
                 const pos: Pos = @bitCast(p);
                 t.rune = if (t.rune != null and @as(u16, @bitCast(t.rune.?)) == p) null else pos;
+                const s = t.set orelse return;
+                const r = t.at(pos) orelse return;
+                var buf: [lockbar.value_max]u8 = undefined;
+                const l = lockOf(pos, r.id, &buf);
+                s.toggle(l.kind, l.v);
+                ev.push = true;
             },
         }
+    }
+
+    const Lock = struct { kind: lockbar.Kind, v: []const u8 };
+
+    /// A rune's lock: a keystone's is the keystone, a shard's its row and id
+    fn lockOf(pos: Pos, id: u32, buf: []u8) Lock {
+        if (pos.tree == shard_tree) return .{ .kind = .shard, .v = lockbar.text(buf, &.{ pos.row, id }) };
+        return .{ .kind = if (pos.row == 0) .keystone else .rune, .v = lockbar.text(buf, &.{id}) };
+    }
+
+    fn lockedAt(t: *const RuneTree, pos: Pos, id: u32) bool {
+        const s = t.set orelse return false;
+        var buf: [lockbar.value_max]u8 = undefined;
+        const l = lockOf(pos, id, &buf);
+        return s.has(l.kind, l.v);
     }
 
     fn lockable(t: *const RuneTree, keystone: u32) bool {
@@ -192,7 +223,8 @@ pub const RuneTree = struct {
 
     fn pageCard(t: *RuneTree, h: *H, p: Page, i: u8) N {
         const share = 100 * @as(f64, @floatFromInt(p.games)) / @as(f64, @floatFromInt(@max(t.data.games, 1)));
-        return h.div(.{ .class = "page", .key = i, .data_lock = t.lock and t.page == i }, .{
+        const on = if (t.set != null) t.lockedAt(.{ .tree = 0, .row = 0, .col = 0 }, p.v[1]) else t.lock and t.page == i;
+        return h.div(.{ .class = "page", .key = i, .data_lock = on }, .{
             h.button(.{
                 .type = "button",
                 .class = "ks",
@@ -246,6 +278,7 @@ pub const RuneTree = struct {
             .key = r.id,
             .data_share = share_attr,
             .data_state = state,
+            .data_lock = t.lockedAt(pos, r.id),
             .on_click = h.on(t, .{ .rune = @bitCast(pos) }),
         }, kids);
     }
@@ -338,6 +371,7 @@ pub const css =
     \\  .c-runes .rune[data-share="hi"] > .c-art, .c-runes .rune[data-state] > .c-art { opacity: 1; filter: none; }
     \\  .c-runes .rune[data-state="lit"] { background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--sel-line); }
     \\  .c-runes .rune[data-state="sel"] { background: var(--panel-3); box-shadow: inset 0 0 0 1px var(--line-2); }
+    \\  .c-runes .rune[data-lock] { box-shadow: inset 0 0 0 1.5px var(--focus); }
     \\  .c-runes .rune > .sh { width: 100%; max-width: 40px; height: 3px; margin-top: 2px; border-radius: 2px; background: var(--bar-track); }
     \\  .c-runes .rune > .sh > i { display: block; height: 100%; width: calc(var(--w) * 1%); border-radius: 2px; background: var(--bar-hi); }
     \\  .c-runes .rune > .pk { font-size: var(--fs-s); color: var(--muted); line-height: 1.25; }

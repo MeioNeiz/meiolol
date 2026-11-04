@@ -1,6 +1,7 @@
 //! ui-champbuild.wasm: the champion page's build (ui.champpage.Build), and the matchup
 //! page's from its data-bin. ui-champion.wasm (ui-matchup.wasm) adds its loader
-//! (ui-champbuild.js) to the page, which calls `main`
+//! (ui-champbuild.js) to the page, which calls `main`. Under locks (`lk`) it fetches the
+//! renderer's answer for the lock set (cp.Build.lockWant), one at a time, kept by path
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -21,6 +22,14 @@ var root_path: []const u8 = "";
 var js: []const u8 = "";
 var wasm: []const u8 = "";
 var want: u32 = 0;
+var island: ?*ui.island.Island(cp.Build, dom.Dom) = null;
+/// Lock answers by path, a handful a visit: a list, as a hash map's code costs more than
+/// its search saves. A path with no answer holds an empty BuildData
+var answers: std.ArrayList(Answer) = .empty;
+const Answer = struct { path: []const u8, d: *const cp.BuildData };
+var asked: ?[]const u8 = null;
+
+const L = dom.Loader(cp.Build, cp.BuildData, ui.champrank.Build);
 
 export fn main() void {
     dom.start();
@@ -41,7 +50,42 @@ fn loaded(_: i32, bytes: ?[]u8) void {
     const b = bytes orelse return dom.dom.warn("champbuild: no data");
     if (cp.stamp(b) != want) return dom.dom.warn("champbuild: the page and its data differ");
     const i = adopt(b) orelse return;
-    dom.Loader(cp.Build, cp.BuildData, ui.champrank.Build).start(&state, i);
+    island = i;
+    L.start(&state, i);
+    dom.rt.changed = changed;
+    locks();
+}
+
+fn changed() void {
+    L.check();
+    locks();
+}
+
+/// The answer the lock set wants, shown once in
+fn locks() void {
+    const i = island orelse return;
+    const path = state.lockWant(gpa) orelse return;
+    if (std.mem.eql(u8, path, state.answer_path)) return gpa.free(path);
+    for (answers.items) |x| if (std.mem.eql(u8, x.path, path)) {
+        gpa.free(path);
+        state.setAnswer(gpa, x.path, x.d);
+        return i.render();
+    };
+    if (asked != null) return gpa.free(path);
+    asked = path;
+    dom.fetch(path, 0, answered);
+}
+
+fn answered(_: i32, bytes: ?[]u8) void {
+    const path = asked.?;
+    asked = null;
+    const d = gpa.create(cp.BuildData) catch return;
+    d.* = .{ .roles = &.{} };
+    if (bytes) |b| {
+        d.* = ui.data.decode(gpa, cp.BuildData, b) catch .{ .roles = &.{} };
+    } else dom.dom.warn("champbuild: no lock answer");
+    answers.append(gpa, .{ .path = path, .d = d }) catch return;
+    locks();
 }
 
 /// The matchup page's: one view, so no loader

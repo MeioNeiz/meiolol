@@ -1,0 +1,233 @@
+//! LockBar: the champion page's locks (docs/plan/ui/champion-locks.md), one Chip with ×
+//! per lock, then the games under all of them with their win rate and range, then
+//! Clear. Hidden with no lock. The lock set (`Set`) is the `lk` query as text: per kind
+//! its code and the values dot-joined, as lockanswer.Locks.format writes them (kinds in
+//! one order, so one lock set is one URL and one cached answer); no number is parsed
+const std = @import("std");
+const tree = @import("tree.zig");
+const art = @import("art.zig");
+const fmt = @import("fmt.zig");
+const phrase = @import("phrase.zig");
+const chip = @import("chip.zig");
+const button = @import("button.zig");
+const url = @import("url.zig");
+const bp = @import("buildpanel.zig");
+const Gallery = @import("gallery.zig").Gallery;
+const plain = phrase.plain;
+const Phrase = phrase.Phrase;
+const H = tree.H;
+const N = tree.N;
+
+pub const name = "LockBar";
+pub const scope = .{".c-lockbar"};
+
+/// lockanswer.Kind's, in its order (site/locks.zig asserts they agree)
+pub const Kind = enum { keystone, runes, rune, shards, shard, spells, start, boots, core2, core3, item4, item5, item6, skills, skill_path, opponent };
+
+/// Each kind's code in `lk`, in Kind's order
+pub const codes = [_][]const u8{ "ks", "rp", "ru", "sh", "sd", "sp", "st", "bo", "c2", "c3", "i4", "i5", "i6", "mo", "lv", "vs" };
+
+comptime {
+    std.debug.assert(codes.len == std.enums.values(Kind).len);
+}
+
+/// At most one lock per kind: a new value in a kind replaces the old
+pub const Set = struct {
+    s: url.Str(200) = .{},
+
+    pub fn any(set: *const Set) bool {
+        return set.s.len > 0;
+    }
+
+    /// `kind`'s values ("8010", "3071.6333.3053"), null when not locked
+    pub fn get(set: *const Set, kind: Kind) ?[]const u8 {
+        var it = std.mem.tokenizeScalar(u8, set.s.slice(), ',');
+        while (it.next()) |part| if (part.len > 2 and std.mem.eql(u8, part[0..2], codes[@backingInt(kind)])) return part[2..];
+        return null;
+    }
+
+    pub fn has(set: *const Set, kind: Kind, v: []const u8) bool {
+        const now = set.get(kind) orelse return false;
+        return std.mem.eql(u8, now, v);
+    }
+
+    /// Locks `kind` on `v`, or unlocks it when that is its lock. Unchanged when the
+    /// set would outgrow its URL key
+    pub fn toggle(set: *Set, kind: Kind, v: []const u8) void {
+        set.put(kind, if (set.has(kind, v)) null else v);
+    }
+
+    pub fn remove(set: *Set, kind: Kind) void {
+        set.put(kind, null);
+    }
+
+    pub fn clear(set: *Set) void {
+        set.s.len = 0;
+    }
+
+    fn put(set: *Set, kind: Kind, new: ?[]const u8) void {
+        var buf: [200]u8 = undefined;
+        var w: std.Io.Writer = .fixed(&buf);
+        for (std.enums.values(Kind)) |k| {
+            const v = (if (k == kind) new else set.get(k)) orelse continue;
+            if (w.end > 0) w.writeByte(',') catch return;
+            w.writeAll(codes[@backingInt(k)]) catch return;
+            w.writeAll(v) catch return;
+        }
+        set.s.set(w.buffered());
+    }
+};
+
+/// `v` dot-joined into `buf`, as a lock's value ("" when it doesn't fit)
+pub fn text(buf: []u8, v: []const u32) []const u8 {
+    var w: std.Io.Writer = .fixed(buf);
+    for (v, 0..) |x, i| {
+        if (i > 0) w.writeByte('.') catch return "";
+        fmt.write(&w, .int, x) catch return "";
+    }
+    return w.buffered();
+}
+
+/// As text, in `a`
+pub fn value(a: std.mem.Allocator, v: []const u32) []const u8 {
+    var buf: [value_max]u8 = undefined;
+    return a.dupe(u8, text(&buf, v)) catch "";
+}
+
+/// builds.max_values ids of up to 10 digits, dot-joined
+pub const value_max = 96;
+
+/// A lock as its chip shows it: icons, then words (either may be empty)
+pub const Label = struct {
+    kind: Kind,
+    art: []const art.Art = &.{},
+    text: []const u8 = "",
+};
+
+const W = struct {
+    pub const games = Phrase("{n:count} games");
+    pub const none = plain("No games");
+    pub const clear = plain("Clear");
+    pub const remove = Phrase("Unlock {x:text}");
+    pub const locks = plain("Locks");
+};
+
+pub const LockBar = struct {
+    set: *Set,
+    /// The games under every lock and their wins; null while the answer is out
+    games: ?u32 = null,
+    wins: u32 = 0,
+
+    pub const Msg = union(enum) { remove: Kind, clear };
+
+    pub fn update(b: *LockBar, m: Msg, ev: *tree.Event) void {
+        switch (m) {
+            .remove => |k| b.set.remove(k),
+            .clear => b.set.clear(),
+        }
+        ev.push = true;
+    }
+
+    /// `labels`: one per lock in the set, in its order
+    pub fn view(b: *LockBar, h: *H, labels: []const Label) N {
+        if (!b.set.any()) return .none;
+        var chips = h.list();
+        for (labels) |l| {
+            var icons = h.list();
+            for (l.art) |a| icons.add(art.view(h, a, .{ .k = artKind(l.kind), .px = .@"20", .named = false }));
+            const what = if (l.text.len > 0) l.text else if (l.art.len > 0) l.art[0].name else "";
+            chips.add(chip.view(h, .{ .remove = true, .label = W.remove.with(h, .{ .x = what }), .on = h.on(b, .{ .remove = l.kind }) }, .{
+                icons.done(),
+                if (l.text.len > 0) h.span(.{ .class = "t" }, .{l.text}) else null,
+            }));
+        }
+        const line: N = if (b.games) |g| h.span(.{ .class = "n" }, if (g == 0) .{ W.none, null, null } else .{
+            W.games.with(h, .{ .n = g }),
+            " · ",
+            bp.win(h, g, b.wins, 50),
+        }) else .none;
+        return h.div(.{ .class = "c-lockbar", .role = "group", .aria_label = W.locks }, .{
+            h.div(.{ .class = "chips" }, .{chips.done()}),
+            line,
+            button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(b, .clear) }, .{W.clear}),
+        });
+    }
+};
+
+fn artKind(k: Kind) art.Kind {
+    return switch (k) {
+        .keystone, .runes, .rune, .shards, .shard => .rune,
+        .spells => .spell,
+        else => .item,
+    };
+}
+
+pub const css =
+    \\@layer components {
+    \\  .c-lockbar { display: flex; align-items: center; gap: var(--sp-2) var(--sp-3); min-width: 0;
+    \\    font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-lockbar > .chips { display: flex; gap: var(--sp-2); min-width: 0; overflow-x: auto; scrollbar-width: none; }
+    \\  .c-lockbar > .chips > .c-chip { flex: none; padding-left: 6px; border-color: var(--focus); color: var(--text); }
+    \\  .c-lockbar .c-chip .c-art { --sz: 20px; }
+    \\  .c-lockbar > .n { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    \\  .c-lockbar > .n > .w { font-weight: var(--w-b); color: var(--t2); }
+    \\  .c-lockbar > .n > .w > small { margin-left: 3px; font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
+    \\  .c-lockbar > .n > .w[data-wide] { opacity: 0.55; }
+    \\  .c-lockbar > .c-btn { margin-left: auto; }
+    \\}
+    \\
+;
+
+pub fn gallery(g: *Gallery) void {
+    const h = g.h;
+    const demo = @import("build_demo.zig");
+    const set = h.mem.create(Set) catch {
+        h.oom = true;
+        return;
+    };
+    set.* = .{};
+    set.toggle(.keystone, "8010");
+    set.toggle(.core3, "6631.3071.3053");
+    const b = h.mem.create(LockBar) catch {
+        h.oom = true;
+        return;
+    };
+    b.* = .{ .set = set, .games = 1284, .wins = 669 };
+    const core = demo.darius.slots[3].options[0].art;
+    g.add("Conqueror and a core path locked: 1,284 games under both", b.view(h, &.{
+        .{ .kind = .keystone, .art = &.{.{ .name = "Conqueror", .src = "" }}, .text = "Conqueror" },
+        .{ .kind = .core3, .art = core },
+    }));
+    const thin = h.mem.create(LockBar) catch {
+        h.oom = true;
+        return;
+    };
+    thin.* = .{ .set = set, .games = 41, .wins = 25 };
+    g.add("thin: the range is wide, so the rate fades", thin.view(h, &.{
+        .{ .kind = .keystone, .art = &.{.{ .name = "Conqueror", .src = "" }}, .text = "Conqueror" },
+        .{ .kind = .core3, .art = core },
+    }));
+}
+
+test "a lock set keeps one value per kind, in lockanswer's order" {
+    var s: Set = .{};
+    s.toggle(.opponent, "86");
+    s.toggle(.keystone, "8010");
+    try std.testing.expectEqualStrings("ks8010,vs86", s.s.slice());
+    s.toggle(.keystone, "8008");
+    try std.testing.expectEqualStrings("ks8008,vs86", s.s.slice());
+    try std.testing.expectEqualStrings("8008", s.get(.keystone).?);
+    s.toggle(.keystone, "8008");
+    try std.testing.expectEqualStrings("vs86", s.s.slice());
+    s.toggle(.shard, "1.5008");
+    s.toggle(.core3, "6631.3071.3053");
+    try std.testing.expectEqualStrings("sd1.5008,c36631.3071.3053,vs86", s.s.slice());
+    try std.testing.expect(s.has(.core3, "6631.3071.3053"));
+    try std.testing.expectEqual(null, s.get(.core2));
+    s.remove(.opponent);
+    try std.testing.expectEqualStrings("sd1.5008,c36631.3071.3053", s.s.slice());
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    try std.testing.expectEqualStrings("6631.3071.3053", value(arena.allocator(), &.{ 6631, 3071, 3053 }));
+    try std.testing.expectEqualStrings("", value(arena.allocator(), &.{}));
+}

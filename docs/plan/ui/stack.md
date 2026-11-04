@@ -295,8 +295,7 @@ Foundation grows from README's 11-13 days to about 13-16; pages follow as README
    price (recommended), or keep memory low with a second UI?
 2. ui.wasm through zjb calls with no JS beyond the loader (recommended, measured the
    same), or allow the 72-line generic op applier as the one other JS file?
-3. Several ui.wasm files per page family when the 40 KB budget is reached, or a larger
-   budget for one file?
+3. Past the 40 KB budget, several ui.wasm files per page family, or a larger budget?
 
 ## Jacob's answers (25 Oct)
 
@@ -305,7 +304,8 @@ Override the sections above where they differ.
 1. One UI; the extra 200 to 290 MB is acceptable. Efficiency over dev ease otherwise:
    page load and page speed are not traded away
 2. zjb calls, no JS beyond the loader
-3. Several ui.wasm files per page family (each page loads only its code)
+3. Several ui.wasm files per page family (each page loads only its code), unless a split
+   loads more in total (4 Nov: fewer bytes overall; ui-champbuild 48 KB)
 
 ## Jacob's answers (review v6, 25 Oct)
 

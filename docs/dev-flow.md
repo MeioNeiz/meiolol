@@ -84,9 +84,9 @@ capped at 2 on the machine (MEIOLOL_DEV_MAX), small ones at 3 apart
 
 ## ui.wasm sizes
 
-Each page family's ui.wasm has a gzip budget (40 KB, the login families 80 KB; stack.md),
-measured as served: the .gz the site writer makes for nginx (std flate at its default
-level, src/store/raw.zig), the same bytes on any host. That runs 60-390 B over GNU gzip
+Each page family's ui.wasm has a gzip budget (40 KB, ui-champbuild 48 KB, the login
+families 80 KB; stack.md), measured as served: the .gz the site writer makes for nginx
+(std flate at its default level, src/store/raw.zig), the same bytes on any host. That runs 60-390 B over GNU gzip
 -9 on our files.
 `zig build ci` and `zig build ui-sizes` print each family against its budget and the
 last pushed main's size, marked at 90%. On growth over 200 B or a failure they list what

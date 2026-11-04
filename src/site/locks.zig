@@ -21,6 +21,16 @@ const log = std.log.scoped(.site);
 
 pub const prefix = cp.lock_prefix;
 
+// The page writes lock sets with ui.lockbar's kinds and codes: one list
+comptime {
+    const ui_kinds = std.meta.fieldNames(ui.lockbar.Kind);
+    const kinds = std.meta.fieldNames(lockanswer.Kind);
+    std.debug.assert(ui_kinds.len == kinds.len and ui.lockbar.codes.len == lockanswer.codes.len);
+    for (ui_kinds, kinds, ui.lockbar.codes, lockanswer.codes) |a, b, c, d| {
+        std.debug.assert(std.mem.eql(u8, a, b) and std.mem.eql(u8, c, d));
+    }
+}
+
 /// The table and its Index, freed together
 pub const Answers = struct {
     arena: std.heap.ArenaAllocator,

@@ -439,6 +439,9 @@ var wasm_dev = false;
 /// Families only logins load (/admin, /private) may be bigger: 80 KB (Jacob 3 Nov)
 const ui_private = [_][]const u8{ "ui-tester", "ui-testercand", "ui-notes", "ui-admin", "ui-admincharts", "ui-admintraffic", "ui-adminops", "ui-adminmodels", "ui-adminlab", "ui-adminruns", "ui-pv" };
 const ui_private_budget = 80 * 1024;
+/// The champion page's build with its locks: one file loads fewer bytes than a split, which
+/// would decode the build twice (Jacob 4 Nov: fewer bytes overall over the 40 KB rule)
+const ui_champbuild_budget = 48 * 1024;
 
 const UiWasm = struct { name: []const u8, wasm: std.Build.LazyPath, js: std.Build.LazyPath };
 
@@ -508,7 +511,8 @@ fn uiSizes(b: *std.Build, families: []const []const u8) *std.Build.Step.Run {
     if (families.len == ui_families.len and !wasm_dev) run.addArg("--record");
     for (families) |f| {
         const w = uiWasm(b, f);
-        const budget: u32 = if (wasm_dev) std.math.maxInt(u32) else for (ui_private) |p| {
+        const champbuild = std.mem.eql(u8, w.name, "ui-champbuild");
+        const budget: u32 = if (wasm_dev) std.math.maxInt(u32) else if (champbuild) ui_champbuild_budget else for (ui_private) |p| {
             if (std.mem.eql(u8, p, w.name)) break ui_private_budget;
         } else ui_budget;
         run.addArgs(&.{ w.name, b.fmt("{d}", .{budget}) });

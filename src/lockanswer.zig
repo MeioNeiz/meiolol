@@ -22,7 +22,7 @@ const Values = std.EnumArray(builds.Kind, ?Value);
 pub const Kind = enum { keystone, runes, rune, shards, shard, spells, start, boots, core2, core3, item4, item5, item6, skills, skill_path, opponent };
 
 /// Each kind's URL code, in Kind's order (`lk=ks8010,vs86`)
-const codes = [_][]const u8{ "ks", "rp", "ru", "sh", "sd", "sp", "st", "bo", "c2", "c3", "i4", "i5", "i6", "mo", "lv", "vs" };
+pub const codes = [_][]const u8{ "ks", "rp", "ru", "sh", "sd", "sp", "st", "bo", "c2", "c3", "i4", "i5", "i6", "mo", "lv", "vs" };
 
 comptime {
     std.debug.assert(codes.len == std.enums.values(Kind).len);

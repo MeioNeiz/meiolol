@@ -13,7 +13,9 @@
 //! the URL. Each cell's head names its columns over fixed widths, so they line up (one
 //! legend for the panel read as a toggle, Jacob 27 Oct). A rune page card whose keystone
 //! has its own build (Data.keystones) locks on tap: every cell then counts that
-//! keystone's players, a chip with × says so and unlocks, the keystone in the URL (`k`)
+//! keystone's players, a chip with × says so and unlocks, the keystone in the URL (`k`).
+//! With a lock set (the champion page's, ui/lockbar.zig) every option and rune page
+//! locks on tap instead: the host fetches the build under the set and shows it here
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -26,6 +28,7 @@ const runetree = @import("runetree.zig");
 const chip = @import("chip.zig");
 const skillgrid = @import("skillgrid.zig");
 const itempath = @import("itempath.zig");
+const lockbar = @import("lockbar.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
@@ -53,6 +56,14 @@ pub const Kind = enum {
     skills,
     /// Levels 1 to 18: drawn as the SkillGrid in the Skills cell
     skill_path,
+
+    /// The lock a tap on one of its options sets (core shows core3)
+    fn lock(k: Kind) lockbar.Kind {
+        return switch (k) {
+            .core => .core3,
+            inline else => |x| @field(lockbar.Kind, @tagName(x)),
+        };
+    }
 
     fn title(k: Kind) tree.Text {
         return switch (k) {
@@ -85,6 +96,8 @@ pub const Option = struct {
     wins: u32,
     /// Median minute each item was bought, 0 when unknown
     minutes: []const f32 = &.{},
+    /// As the builds file's value (builds.valuesOf): its lock's
+    v: []const u32 = &.{},
 };
 
 pub const Slot = struct {
@@ -119,6 +132,9 @@ pub const Data = struct {
     champion: []const u8,
     /// The champion's win rate in the role, %: the quieter reading's middle
     own: f64,
+    /// The champion-role's games and wins (the LockBar's line under locks)
+    games: u32 = 0,
+    wins: u32 = 0,
 };
 
 const W = struct {
@@ -141,6 +157,7 @@ const W = struct {
     pub const highest = plain("Highest WR");
     pub const lock_games = Phrase("{n:count} games");
     pub const unlock = plain("Every keystone's build");
+    pub const lock = Phrase("Lock {x:text}");
 };
 
 /// Win rate, %
@@ -196,6 +213,10 @@ const Ctx = struct {
     /// The highest win rate of two or more options on solid_games
     best: ?*const Option = null,
     usual: ?*const Option = null,
+    /// The slot's options, which a lock tap indexes
+    options: []const Option = &.{},
+    /// Under a lock set: the panel its options lock through
+    host: ?*BuildPanel = null,
 };
 
 /// The highest win rate on solid_games, when two or more options have that many
@@ -230,7 +251,36 @@ pub const Row = struct {
         return rate(r.o.games, r.o.wins) - r.c.own;
     }
 
+    /// Under a lock set, a button without chrome that locks the option (lock glyph on
+    /// hover, accent outline when locked)
     fn what(h: *H, r: *const Row) N {
+        const inner = r.option(h);
+        const p = r.c.host orelse return inner;
+        const set = p.locks orelse return inner;
+        const i = (@intFromPtr(r.o) - @intFromPtr(r.c.options.ptr)) / @sizeOf(Option);
+        const locked = set.has(r.c.kind.lock(), lockbar.value(h.mem, r.o.v));
+        return h.button(.{
+            .type = "button",
+            .class = "lk",
+            .aria_pressed = locked,
+            .aria_label = W.lock.with(h, .{ .x = r.name(h) }),
+            .data_lock = locked,
+            .on_click = h.on(p, .{ .lock = .{ .kind = r.c.kind, .i = @intCast(i) } }),
+        }, .{inner});
+    }
+
+    /// The option in words: its name, its items', or its keys
+    fn name(r: *const Row, h: *H) []const u8 {
+        const o = r.o;
+        if (o.name.len > 0) return o.name;
+        if (o.art.len == 0) return o.keys;
+        if (o.art.len == 1) return o.art[0].name;
+        const names = h.mem.alloc([]const u8, o.art.len) catch return o.art[0].name;
+        for (names, o.art) |*n, a| n.* = a.name;
+        return std.mem.join(h.mem, ", ", names) catch o.art[0].name;
+    }
+
+    fn option(r: *const Row, h: *H) N {
         const o = r.o;
         const open = r.c.open;
         return switch (r.c.kind) {
@@ -319,6 +369,9 @@ pub const BuildPanel = struct {
     lead: u8 = 0,
     /// Unique on the page: the note's id starts with it
     id: []const u8 = "build",
+    /// The champion page's lock set (its host fetches what it locks); null: the keystone
+    /// locks onto Data.keystones as before (the matchup page)
+    locks: ?*lockbar.Set = null,
     /// Data.slots, then each Data.lead's, then each Data.keystones'
     sets: []Set,
     /// The shown set's: the locked keystone's, else sets[lead]
@@ -328,7 +381,7 @@ pub const BuildPanel = struct {
 
     const Set = struct { ctx: [n_kinds]Ctx, rows: [n_kinds][]Row };
 
-    pub const Msg = union(enum) { open: Kind, key, order: Order, reach: u8, lead: u8, unlock };
+    pub const Msg = union(enum) { open: Kind, key, order: Order, reach: u8, lead: u8, unlock, lock: struct { kind: Kind, i: u16 } };
 
     pub const Url = struct {
         slot: ?Kind = null,
@@ -346,6 +399,12 @@ pub const BuildPanel = struct {
         p.pick();
         p.open = if (u.slot) |k| (if (p.rows[@backingInt(k)].len > 0 and k != .skill_path) k else null) else null;
         p.setOrder(u.order);
+    }
+
+    /// Option and page taps lock through `s` (null: as before)
+    pub fn setLocks(p: *BuildPanel, s: ?*lockbar.Set) void {
+        p.locks = s;
+        p.runes.set = s;
     }
 
     /// Points ctx and rows at the locked keystone's set, else the lead's
@@ -401,6 +460,7 @@ pub const BuildPanel = struct {
                 .top = if (s.options.len > 0) s.options[0].art else &.{},
                 .best = bestOf(s.options),
                 .usual = if (s.usual) |u| (if (u < s.options.len) &s.options[u] else null) else null,
+                .options = s.options,
             };
             const rows = try a.alloc(Row, s.options.len);
             for (rows, s.options) |*r, *o| r.* = .{ .o = o, .c = &set.ctx[i] };
@@ -435,6 +495,16 @@ pub const BuildPanel = struct {
                 p.pick();
                 ev.push = true;
             },
+            .lock => |x| {
+                const set = p.locks orelse return;
+                const rows = p.rows[@backingInt(x.kind)];
+                if (rows.len == 0) return;
+                const options = rows[0].c.options;
+                if (x.i >= options.len) return;
+                var buf: [lockbar.value_max]u8 = undefined;
+                set.toggle(x.kind.lock(), lockbar.text(&buf, options[x.i].v));
+                ev.push = true;
+            },
             // Escape in the open cell closes it, focus back on its "all"
             .key => {
                 const k = p.open orelse return;
@@ -463,7 +533,7 @@ pub const BuildPanel = struct {
                         .{ .label = W.most_picked, .selected = p.order == .pick, .on = h.on(p, .{ .order = .pick }) },
                         .{ .label = W.highest, .selected = p.order == .win, .on = h.on(p, .{ .order = .win }) },
                     }),
-                    if (p.runes.lockedPage() == null) p.leadPick(h) else p.lockChip(h),
+                    if (p.locks != null or p.runes.lockedPage() == null) p.leadPick(h) else p.lockChip(h),
                 }),
                 h.div(.{ .class = "cells" }, .{cells.done()}),
             }),
@@ -543,6 +613,7 @@ pub const BuildPanel = struct {
     fn tableFor(p: *BuildPanel, h: *H, k: Kind, open: bool, max: usize) N {
         const i = @backingInt(k);
         p.ctx[i].open = open;
+        p.ctx[i].host = if (p.locks != null) p else null;
         const t = &p.tables[i];
         if (open) {
             t.rows = p.rows[i];
@@ -711,6 +782,14 @@ pub const css =
     \\  .c-build .slot .c-table td { border-bottom-color: var(--line); }
     \\  .c-build .slot .c-table .g, .c-build .lp > .g { color: var(--muted); }
     \\  .c-build .slot > .c-btn { align-self: flex-start; margin: 2px 0 0 -10px; color: var(--muted); }
+    \\  .c-build .lk { all: unset; position: relative; box-sizing: border-box; display: flex; min-width: 0; max-width: 100%;
+    \\    margin: -3px -4px; padding: 3px 4px; border-radius: var(--r-s); cursor: pointer; }
+    \\  .c-build .lk:focus-visible { outline: 2px solid var(--focus); }
+    \\  .c-build .lk::after { content: ""; position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; opacity: 0;
+    \\    background: var(--muted); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3.75 5.5V4a2.25 2.25 0 0 1 4.5 0v1.5' fill='none' stroke='black' stroke-width='1.5'/%3E%3Crect x='2' y='5.5' width='8' height='5.5' rx='1.2'/%3E%3C/svg%3E") no-repeat center / contain; }
+    \\  .c-build .lk:hover::after, .c-build .lk[data-lock]::after { opacity: 1; }
+    \\  .c-build .lk[data-lock] { box-shadow: inset 0 0 0 1.5px var(--focus); }
+    \\  .c-build .lk[data-lock]::after { background: var(--focus); }
     \\  .c-build .what { display: flex; align-items: center; gap: 4px; min-width: 0; }
     \\  .c-build .what .c-art { --sz: 30px; }
     \\  .c-build .what > .nm { margin-left: 6px; color: var(--t2); overflow: hidden; text-overflow: ellipsis; }
@@ -819,6 +898,24 @@ pub fn gallery(g: *Gallery) void {
     lk.runes.id = lk.id;
     lk.runes.lockOn(8010);
     g.addFill("Conqueror's page locked: its players' spells and boots, the chip unlocks", lk.view(h));
+    const set = h.mem.create(lockbar.Set) catch {
+        h.oom = true;
+        return;
+    };
+    set.* = .{};
+    set.toggle(.keystone, "8010");
+    const ls = h.mem.create(BuildPanel) catch {
+        h.oom = true;
+        return;
+    };
+    ls.init(h.mem, &demo.darius) catch {
+        h.oom = true;
+        return;
+    };
+    ls.id = h.fmt("build-set-{d}", .{g.width}); // fmt-ok: gallery only, never in a wasm
+    ls.runes.id = ls.id;
+    ls.setLocks(set);
+    g.addFill("champion page: every option and page locks on tap (lock glyph on hover), Conqueror locked", ls.view(h));
     const vs = matchup(h, &demo.darius) catch {
         h.oom = true;
         return;

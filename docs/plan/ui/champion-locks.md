@@ -130,8 +130,17 @@ What a block needs from a row:
   floor. site.Loaded loads data/export/lockrows.bin and its Index on the first lock
   request (render: before listening beside a running one, and before each swap); the web
   loop writes it after curves. pipeline_test: a keystone lock's answer through
-  Loaded.get is the builds file's by_keystone build. Not yet: the island fetching it,
-  LockBar, taps
+  Loaded.get is the builds file's by_keystone build
+
+- L2 UI: `lk` in the champion page's query (ui/lockbar.zig Set: one value per kind, in
+  lockanswer's order). Every build option and rune page is a chrome-less button (padlock
+  on hover, accent outline locked); a rune or shard locks too, the keystone row as the
+  keystone; an old `k` link reads as lk's keystone. ui-champbuild fetches the answer
+  (one at a time, kept by path) and shows it in the panel; the LockBar sits in the build
+  card for now: chips with ×, "N games · rate ±", Clear. ui-champbuild's budget is 48 KB
+  for it (stack.md, Jacob 4 Nov). Not yet: the LockBar under the subbar for every block
+  (L3), lock sets in the server HTML (the page renders unlocked, then the island
+  fetches), opponent chips' names
 
 - Thin (J35) in the build panel: every rate with its 80% range (fmt.range, Wilson),
   faded past ±6, whole numbers from ±10, none hidden; counts don't fade

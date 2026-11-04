@@ -334,7 +334,7 @@ fn onEvent(slot: i32, bit: i32, e: zjb.Handle) callconv(.c) void {
 /// Which island keys a page's address bar keeps outside the fragment (docs/plan/urls.md);
 /// the islands still see one fragment (Dom.hash, setHash). A wasm opts in with `pub const
 /// url_map` in its root file, so the others don't grow. champion: role as the path's last
-/// segment (/champions/<c>/<r>), region and period in the query; pool: pool as ?champs=;
+/// segment (/champions/<c>/<r>), region, period and locks (lk) in the query; pool: pool as ?champs=;
 /// learn: p as the bare fragment (#<id>). follow: the page's champion wasm keeps the
 /// address (window.meioFrag, meioSetHash), so the champion page's other wasms don't carry
 /// the mapping; the plain fragment without one (the matchup page's build). views: region
@@ -347,7 +347,7 @@ const Out = struct { key: []const u8, to: enum { path, query, bare }, as: []cons
 
 const outs: []const Out = switch (url_map) {
     .none, .follow => &.{},
-    .champion => &.{ .{ .key = "role", .to = .path }, .{ .key = "region", .to = .query, .as = "region" }, .{ .key = "period", .to = .query, .as = "period" } },
+    .champion => &.{ .{ .key = "role", .to = .path }, .{ .key = "region", .to = .query, .as = "region" }, .{ .key = "period", .to = .query, .as = "period" }, .{ .key = "lk", .to = .query, .as = "lk" } },
     .pool => &.{.{ .key = "pool", .to = .query, .as = "champs" }},
     .views => &.{ .{ .key = "region", .to = .query, .as = "region" }, .{ .key = "period", .to = .query, .as = "period" } },
     .learn => &.{.{ .key = "p", .to = .bare }},

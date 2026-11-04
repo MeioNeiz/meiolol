@@ -121,10 +121,11 @@ fn value(comptime V: type, x: V, w: *Writer) Writer.Error!void {
     }
 }
 
-/// Unreserved characters as they are, the rest as %XX: safe in a fragment and in a link
+/// Unreserved characters and commas (a lock set's, `lk=ks8010,vs86`) as they are, the
+/// rest as %XX: safe in a fragment and in a link
 fn escape(s: []const u8, w: *Writer) Writer.Error!void {
     for (s) |c| switch (c) {
-        'a'...'z', 'A'...'Z', '0'...'9', '-', '.', '_', '~' => try w.writeByte(c),
+        'a'...'z', 'A'...'Z', '0'...'9', '-', '.', '_', '~', ',' => try w.writeByte(c),
         else => try w.print("%{X:0>2}", .{c}),
     };
 }

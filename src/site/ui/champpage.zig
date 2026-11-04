@@ -33,6 +33,8 @@ const rolepicker = @import("rolepicker.zig");
 const champsearch = @import("champsearch.zig");
 const champhead = @import("champhead.zig");
 const buildpanel = @import("buildpanel.zig");
+const lockbar = @import("lockbar.zig");
+const art = @import("art.zig");
 const dotplot = @import("dotplot.zig");
 const matchbrief = @import("matchbrief.zig");
 const matchgrid = @import("matchgrid.zig");
@@ -357,6 +359,8 @@ pub const W = struct {
     pub const build = plain("Build");
     pub const build_against = Phrase("Build against {y:text}");
     pub const build_usual = Phrase("{x:text}'s build");
+    pub const no_lock_games = plain("No games with these locks.");
+    pub const no_answer = plain("These locks can't be counted here yet.");
     pub const few_vs = Phrase("few games vs {y:text}");
     pub const trends = plain("Trends");
     pub const rare = Phrase("{n:count} · +{r:count} rare");
@@ -1037,6 +1041,15 @@ pub const Build = struct {
     order: buildpanel.Order = .pick,
     /// Data.roles' index
     cur: u8 = 0,
+    /// The champion page's locks (`lk`): the build shown is the renderer's answer for
+    /// them (lockPath), fetched by ui-champbuild.wasm
+    locks: lockbar.Set = .{},
+    /// Its `set` points at `locks` from each view
+    bar: lockbar.LockBar = .{ .set = undefined },
+    /// The answer shown and its path; roles empty: none for the path
+    answer: ?*const BuildData = null,
+    answer_path: []const u8 = "",
+    apanel: ?buildpanel.BuildPanel = null,
 
     const P = @This();
 
@@ -1047,12 +1060,50 @@ pub const Build = struct {
         rank: Rank = .plat,
         slot: ?buildpanel.Kind = null,
         order: buildpanel.Order = .pick,
-        /// The locked keystone (BuildPanel's)
+        /// The locked keystone (BuildPanel's): the matchup page's; on the champion
+        /// page an old link's, read as lk's keystone
         k: ?u32 = null,
+        lk: url.Str(200) = .{},
     };
 
-    /// The shown rank's build of the role, else the base one
+    /// The champion page under locks (the matchup page has none)
+    fn locked(p: *const P) bool {
+        return p.bin == null and p.locks.any();
+    }
+
+    /// The answer shown under locks, once one is in
+    fn shownAnswer(p: *const P) ?*const BuildData {
+        return if (p.locked()) p.answer else null;
+    }
+
+    /// The answer the locks want, null without locks
+    pub fn lockWant(p: *const P, a: std.mem.Allocator) ?[]const u8 {
+        if (!p.locked() or p.cur >= p.data.roles.len) return null;
+        const w = p.files.want;
+        return lockPath(a, p.root, w.view, "build", p.slug(), p.data.roles[p.cur].role, w.rank, p.locks.s.slice()) catch null;
+    }
+
+    /// From the page's data file: data/champion/<slug>-build.bin
+    fn slug(p: *const P) []const u8 {
+        const base = p.src[if (std.mem.findScalarLast(u8, p.src, '/')) |i| i + 1 else 0..];
+        return if (std.mem.endsWith(u8, base, "-build.bin")) base[0 .. base.len - "-build.bin".len] else base;
+    }
+
+    /// Shows `d`, the answer at `path`: the open slot and order stay
+    pub fn setAnswer(p: *P, a: std.mem.Allocator, path: []const u8, d: *const BuildData) void {
+        const u = p.toUrl();
+        p.answer = d;
+        p.answer_path = path;
+        p.apanel = null;
+        if (d.roles.len > 0) if (panels(a, d.roles[0..1])) |ps| {
+            p.apanel = ps[0];
+        } else |_| {};
+        p.fromUrl(u);
+    }
+
+    /// The shown rank's build of the role, else the base one; under locks the answer's
     fn panel(p: *P) ?*buildpanel.BuildPanel {
+        if (p.shownAnswer() != null) return if (p.apanel) |*b| b else null;
         const own = p.data.roles[p.cur].role;
         if (p.files.group()) |g| for (g, 0..) |x, i| if (x.role == own) {
             return if (p.rpanels[i]) |*b| b else null;
@@ -1063,6 +1114,7 @@ pub const Build = struct {
 
     /// The shown rank's BuildRole, else the base one
     fn shownRole(p: *const P) ?*const BuildRole {
+        if (p.shownAnswer()) |x| return if (x.roles.len > 0) &x.roles[0] else null;
         const own = p.data.roles[p.cur].role;
         if (p.files.group()) |g| return at(BuildRole, g, own);
         return if (p.cur < p.data.roles.len) &p.data.roles[p.cur] else null;
@@ -1070,7 +1122,7 @@ pub const Build = struct {
 
     /// Under a rank pick, the group the build is from when another
     fn from(p: *const P) ?u8 {
-        if (p.files.group() == null) return null;
+        if (p.files.group() == null or p.shownAnswer() != null) return null;
         const x = p.shownRole() orelse return 0;
         return if (x.from == @backingInt(p.files.shown.rank)) null else x.from;
     }
@@ -1085,7 +1137,8 @@ pub const Build = struct {
             .rank = w.rank,
             .slot = if (b) |x| x.open else null,
             .order = if (b) |x| x.order else p.order,
-            .k = if (b) |x| x.runes.locked() else null,
+            .k = if (p.bin == null) null else if (b) |x| x.runes.locked() else null,
+            .lk = p.locks.s,
         };
     }
 
@@ -1094,7 +1147,15 @@ pub const Build = struct {
         p.files.want = .of(u);
         p.cur = roleIndex(p.data.roles, u.role);
         p.order = u.order;
-        if (p.panel()) |b| b.fromUrl(.{ .slot = u.slot, .order = u.order, .k = u.k });
+        p.locks.s = if (p.bin == null) u.lk else .{};
+        if (p.bin == null) if (u.k) |k| if (p.locks.get(.keystone) == null) {
+            var buf: [lockbar.value_max]u8 = undefined;
+            p.locks.toggle(.keystone, lockbar.text(&buf, &.{k}));
+        };
+        if (p.panel()) |b| {
+            b.setLocks(if (p.bin == null) &p.locks else null);
+            b.fromUrl(.{ .slot = u.slot, .order = u.order, .k = if (p.bin == null) null else u.k });
+        }
     }
 
     /// The loader's, once what files.want needs is in: the open slot stays open
@@ -1108,6 +1169,25 @@ pub const Build = struct {
     }
 
     pub fn view(p: *P, h: *H) N {
+        const b = p.panel();
+        if (b) |x| x.setLocks(if (p.bin == null) &p.locks else null);
+        const want = p.lockWant(h.mem);
+        const waiting = if (want) |w| !std.mem.eql(u8, w, p.answer_path) else false;
+        const answer = p.shownAnswer();
+        p.bar.set = &p.locks;
+        p.bar.games = null;
+        if (!waiting) if (answer) |x| {
+            p.bar.games = 0;
+            if (x.roles.len > 0) if (x.roles[0].build) |d| {
+                p.bar.games = d.games;
+                p.bar.wins = d.wins;
+            };
+        };
+        const lock_bar: N = if (p.locked()) h.div(.{ .class = "locks" }, .{p.bar.view(h, p.labels(h))}) else .none;
+        var empty: N = .none;
+        if (b == null) if (answer) |x| {
+            empty = h.p(.{ .class = "none" }, .{if (x.roles.len == 0) W.no_answer else W.no_lock_games});
+        };
         const note: N = if (p.from()) |g| h.p(.{ .class = "from" }, .{W.from.with(h, .{ .g = W.ranks[g].s, .r = W.ranks[@backingInt(p.files.shown.rank)].s })}) else .none;
         const when: N = if (p.shownRole()) |x| if (x.patch) |v| h.p(.{ .class = "from" }, .{if (x.older) W.from_older.with(h, .{ .p = v }) else W.from_patch.with(h, .{ .p = v })}) else .none else .none;
         return h.div(.{
@@ -1120,14 +1200,33 @@ pub const Build = struct {
             .data_bin = p.bin,
             .data_js = p.js,
             .data_wasm = p.wasm,
-            .data_busy = p.files.busy(),
-        }, .{if (p.panel()) |b| card.view(h, .{ .flush = true }, &.{
+            .data_busy = p.files.busy() or waiting,
+        }, .{if (b != null or answer != null) card.view(h, .{ .flush = true }, &.{
             p.head(h),
+            lock_bar,
+            empty,
             note,
             when,
-            b.view(h),
+            if (b) |x| x.view(h) else .none,
             if (p.data.against == null) h.p(.{ .class = "vs-hint" }, .{W.vs_hint}) else .none,
         }) else .none});
+    }
+
+    /// The LockBar's chips: each lock as its option draws it in the shown build or
+    /// the page's
+    fn labels(p: *P, h: *H) []const lockbar.Label {
+        var out: std.ArrayList(lockbar.Label) = .empty;
+        const shown = if (p.shownAnswer()) |x| buildOf(x.roles, 0) else null;
+        const base = buildOf(p.data.roles, p.cur);
+        for (std.enums.values(lockbar.Kind)) |k| {
+            const v = p.locks.get(k) orelse continue;
+            const l = (if (shown) |d| lockLabel(h, d, k, v) else null) orelse (if (base) |d| lockLabel(h, d, k, v) else null) orelse lockbar.Label{ .kind = k, .text = v };
+            out.append(h.mem, l) catch {
+                h.oom = true;
+                break;
+            };
+        }
+        return out.items;
     }
 
     fn head(p: *P, h: *H) N {
@@ -1136,6 +1235,52 @@ pub const Build = struct {
         return card.head(h, W.build_against.with(h, .{ .y = y }), null, &.{});
     }
 };
+
+fn buildOf(roles: []const BuildRole, i: usize) ?*const buildpanel.Data {
+    if (i >= roles.len) return null;
+    return if (roles[i].build) |*d| d else null;
+}
+
+/// Lock `k` on `v` as `d` draws it: a rune's art, an option's icons or keys
+fn lockLabel(h: *H, d: *const buildpanel.Data, k: lockbar.Kind, v: []const u8) ?lockbar.Label {
+    switch (k) {
+        .keystone, .rune => {
+            const id = std.fmt.parseInt(u32, v, 10) catch return null;
+            for (d.runes.trees) |t| for (t.rows) |row| for (row) |*r| if (r.id == id) {
+                return .{ .kind = k, .art = (&r.art)[0..1], .text = r.art.name };
+            };
+            return null;
+        },
+        .shard => {
+            var it = std.mem.splitScalar(u8, v, '.');
+            const row = std.fmt.parseInt(usize, it.next() orelse return null, 10) catch return null;
+            const id = std.fmt.parseInt(u32, it.next() orelse return null, 10) catch return null;
+            if (row >= d.runes.shards.len) return null;
+            for (d.runes.shards[row]) |*r| if (r.id == id) return .{ .kind = k, .art = (&r.art)[0..1], .text = r.art.name };
+            return null;
+        },
+        .spells, .start, .boots, .core3, .item4, .item5, .item6, .skills, .skill_path => {
+            const want: buildpanel.Kind = switch (k) {
+                .core3 => .core,
+                inline .spells, .start, .boots, .item4, .item5, .item6, .skills, .skill_path => |x| @field(buildpanel.Kind, @tagName(x)),
+                else => unreachable,
+            };
+            for (d.slots) |s| if (s.kind == want) for (s.options) |o| if (std.mem.eql(u8, lockbar.value(h.mem, o.v), v)) {
+                const text: []const u8 = switch (k) {
+                    .skills => h.fmt("Max {s}", .{o.keys}),
+                    .skill_path => "Level path",
+                    .item4 => "Item 4",
+                    .item5 => "Item 5",
+                    .item6 => "Item 6",
+                    else => "",
+                };
+                return .{ .kind = k, .art = o.art, .text = text };
+            };
+            return null;
+        },
+        else => return null,
+    }
+}
 
 /// The matchups (ui-champmore.wasm, loaded by ui-champion.wasm)
 pub const More = struct {
@@ -1767,6 +1912,8 @@ pub const css =
     \\  .c-cpage .plot[data-thin] { opacity: 0.6; }
     \\  .c-cpage .rare { margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .c-champhead > .none { margin: 0 0 0 auto; }
+    \\  .c-cpage #build .locks { padding: var(--sp-3) var(--card-px) 0; }
+    \\  .c-cpage #build .none { margin: 0; padding: var(--sp-4) var(--card-px); color: var(--muted); }
     \\  .c-cpage .vs-hint { margin: 0; padding: var(--sp-3) var(--card-px); border-top: 1px solid var(--line); font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .from { margin: 0; padding: var(--sp-3) var(--card-px) 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .none { margin: var(--sp-3) 0; color: var(--muted); }
