@@ -188,11 +188,12 @@ the default switch (E0b). E10 follows E7; E11 follows each estimate that passes 
   data/truth-<patch>.md and .tsv. 16.21 -> 16.22 scored as its days arrive
 - M9 (meio-truth): truth scores three two-lock kinds (keystone x opponent, item x
   opponent, keystone x item) and checks every mode's 80% ranges per kind, depth and band
-  (solid under ±6, faded), range widths on paired cells and sure targets. 16.21 at
-  1dae7a01: Meio beats both raw modes and the fallback on every win rate at every depth;
-  shares tie the 30 days, beat the patch; gold beats both. Certainty half holds: Meio's
-  range a third to a twelfth of the patch's, ~80% inside. On sure targets win rates are
-  honest, shares too narrow (68%) (docs/model.md "Lock stacks in the truth test")
+  (solid under ±6, faded), range widths on paired cells, sure targets and randomised
+  binomial PIT coverage (exact at any target size). 16.21 at 1dae7a01: Meio beats both
+  raw modes and the fallback on every win rate at every depth; shares tie the 30 days,
+  beat the patch; gold beats both. Certainty half holds for win rates: Meio's range a
+  third to a twelfth of the patch's, PIT 78-80%. Shares under-cover in every mode (Meio
+  74%, patch 73%) (docs/model.md "Lock stacks in the truth test")
 - Champion page blocks follow the region and period picks: players' win rates, the
   builds strip, how hard to pick up, the pool section and the patch line
 - Scope chips (E1, ui.scopechip) on every block of the champion, matchup, build and
@@ -256,8 +257,8 @@ honest. The method page (E9) shows the same numbers from a daily file.
   `rate(kind, region, bracket, a, b) ?Estimate`; interface in the team's common.md).
   Comparisons, each paired over the cells both sides have a number for: patch - 30d,
   Meio - 30d, Meio - patch; unseen: win-rate cells the 30 days has under 10 games for,
-  Meio against the champion-role's 30-day rate (the site's fallback); in range: share of
-  Meio's 80% ranges, widened by the target's noise, that hold the target's rate
+  Meio against the champion-role's 30-day rate (the site's fallback); in range: Meio's
+  randomised binomial PIT coverage (target between its 10th and 90th percentile)
 - Cell kinds, for the champion page locks: champion-role, matchup (x opponent), duo,
   gold at 14, item share, item win rate (x item), keystone win rate (x keystone),
   keystone share; x rank is the bracket dimension of every kind

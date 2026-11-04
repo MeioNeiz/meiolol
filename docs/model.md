@@ -5699,25 +5699,27 @@ share (5fb861e5, 4402182c).
 ### Lock stacks in the truth test, 16.20 -> 16.21, 2026-11-04 (meio-truth, M9)
 
 `meiolol truth` at 1dae7a01 (the MeioModel with two-lock win rates, keystone and item
-shares, gold at 14) with range widths and sure targets, data/cubes-20261104, `--patch
-16.21`: 440-580 s and 5.0 GB on the Mac (49 s before the stacks). Meio minus each raw mode in
+shares, gold at 14) with range widths, sure targets and PIT coverage, data/cubes-20261104,
+`--patch 16.21`: 680 s and 5.0 GB on the Mac (49 s before the stacks; PIT adds ~100 s).
+16.22 day 0 on the box: 7 min, 6.3 GB. Meio minus each raw mode in
 milli-nats a target game (gold: gold^2), paired on cells both have a number; unseen:
 Meio minus the champion-role's 30-day rate where the 30 days has under 10 games. Every
-region, all ranks. Full tables: data/team/2026-11-04-meio/truth-16.21-stacks-1dae7a01.md:
+region, all ranks; PIT: Meio's coverage (below). Full tables:
+data/team/2026-11-04-meio/truth-16.21-pit.md:
 
-| cell | depth | - 30d day 0 | - 30d all | - patch all | unseen | in range |
+| cell | depth | - 30d day 0 | - 30d all | - patch all | unseen | PIT |
 | --- | --: | --: | --: | --: | --: | --: |
 | champion-role | 0 | -0.02 | -0.02 | -0.23 | | 78% |
-| matchup | 1 | -1.18 | -0.89 | -3.41 | -6.02 | 82% |
-| duo | 1 | -0.85 | -0.67 | -2.61 | -8.82 | 82% |
-| item win rate | 1 | -0.19 | -0.15 | -1.18 | -2.98 | 81% |
-| keystone win rate | 1 | -0.13 | -0.10 | -0.63 | -2.67 | 80% |
-| item share | 1 | +0.02 | -0.05 | -0.27 | | 81% |
-| keystone share | 1 | +0.10 | -0.02 | -0.21 | | 76% |
+| matchup | 1 | -1.18 | -0.89 | -3.41 | -6.02 | 80% |
+| duo | 1 | -0.85 | -0.67 | -2.61 | -8.82 | 80% |
+| item win rate | 1 | -0.19 | -0.15 | -1.18 | -2.98 | 79% |
+| keystone win rate | 1 | -0.13 | -0.10 | -0.63 | -2.67 | 78% |
+| item share | 1 | +0.02 | -0.05 | -0.27 | | 75% |
+| keystone share | 1 | +0.10 | -0.02 | -0.21 | | 72% |
 | gold at 14 | 1 | -2955 | -2627 | -12994 | | |
-| keystone x opponent | 2 | -2.34 | -1.91 | -4.58 | -3.12 | 84% |
-| item x opponent | 2 | -3.47 | -2.91 | -6.29 | -5.85 | 85% |
-| keystone x item | 2 | -0.55 | -0.46 | -1.81 | -2.12 | 83% |
+| keystone x opponent | 2 | -2.34 | -1.91 | -4.58 | -3.12 | 80% |
+| item x opponent | 2 | -3.47 | -2.91 | -6.29 | -5.85 | 80% |
+| keystone x item | 2 | -0.55 | -0.46 | -1.81 | -2.12 | 80% |
 
 - Win rates at every depth: Meio beats both raw modes in every day bucket and the
   fallback on unseen combos, beyond 2 se. Unseen pairs are most two-lock cells (1.7M
@@ -5730,31 +5732,37 @@ region, all ranks. Full tables: data/team/2026-11-04-meio/truth-16.21-stacks-1da
   quarter of its square (about 29 gold), and it beats the patch further
 
 Ranges (J35: faded past ±6 points, never hidden; E2's certainty half: Meio's range
-narrower than the patch's on the same cells, still holding ~80%). Cells where Meio and
-the raw mode both give an 80% range (raw: binomial, from 1 game), all days: mean
-half-width in points, share inside (target noise added in quadrature), share solid:
+narrower than the patch's on the same cells, still holding ~80%). Coverage is the
+randomised binomial PIT: the share of cells whose target lands between the 10th and
+90th percentile the range predicts for the target's games, 80% if honest at any target
+size. The plain in-range share (target noise added in quadrature) runs high on thin
+targets: a 1-game target near 50% lands inside any range. Cells where Meio and the raw
+mode both give an 80% range (raw: binomial, from 1 game), all days: mean half-width in
+points, in-range, PIT, share solid:
 
-| depth | vs | cells | raw half | Meio half | raw in | Meio in | raw solid | Meio solid |
-| --- | --- | --: | --: | --: | --: | --: | --: | --: |
-| 0 champion | 30 days | 12.0k | 2.6 | 1.7 | 75% | 78% | 87% | 100% |
-| 0 champion | patch | 11.9k | 5.2 | 1.7 | 79% | 78% | 75% | 100% |
-| 1 win rates | 30 days | 1.59M | 15.9 | 2.6 | 80% | 81% | 29% | 100% |
-| 1 win rates | patch | 1.36M | 20.8 | 2.5 | 81% | 80% | 21% | 100% |
-| 1 shares | 30 days | 799k | 0.8 | 0.8 | 75% | 80% | 98% | 98% |
-| 1 shares | patch | 792k | 2.2 | 0.8 | 82% | 80% | 91% | 98% |
-| 2 win rates | 30 days | 11.4M | 23.0 | 2.6 | 81% | 82% | 13% | 100% |
-| 2 win rates | patch | 8.64M | 28.3 | 2.4 | 82% | 81% | 8% | 100% |
+| depth | vs | cells | raw half | Meio half | raw in | Meio in | raw PIT | Meio PIT | raw solid | Meio solid |
+| --- | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: |
+| 0 champion | 30 days | 12.0k | 2.6 | 1.7 | 75% | 78% | 76% | 78% | 87% | 100% |
+| 0 champion | patch | 11.9k | 5.2 | 1.7 | 79% | 78% | 80% | 78% | 75% | 100% |
+| 1 win rates | 30 days | 1.59M | 15.9 | 2.6 | 80% | 81% | 80% | 80% | 29% | 100% |
+| 1 win rates | patch | 1.36M | 20.8 | 2.5 | 81% | 80% | 82% | 80% | 21% | 100% |
+| 1 shares | 30 days | 799k | 0.8 | 0.8 | 75% | 80% | 72% | 74% | 98% | 98% |
+| 1 shares | patch | 792k | 2.2 | 0.8 | 82% | 80% | 73% | 74% | 91% | 98% |
+| 2 win rates | 30 days | 11.4M | 23.0 | 2.6 | 81% | 82% | 79% | 80% | 13% | 100% |
+| 2 win rates | patch | 8.64M | 28.3 | 2.4 | 82% | 81% | 82% | 80% | 8% | 100% |
 
-- Certainty half holds at every depth and day bucket: Meio's range is a third to a
-  twelfth of the patch's and holds 77-84%. Day 0 at depth 2: patch 44.6 points, 90%
-  inside (wider than honest); Meio 2.3, 80%
-- Per kind, Meio holds 77-83% on paired cells except keystone share (73-77% from day 2:
-  a little narrow) and keystone win rate (77% early)
-- The raw 30 days runs narrow where the patch moved things: champion-role and shares
-  75% (the old patch's games pull it off); the patch's binomial ranges hold 79-82%
-- The in-range share has little power on thin targets: a 1-game target near 50% lands
-  inside any range. Sure targets only (target noise under the range's claimed
-  variance), with the error's sd net of noise against the sd the ranges claim, points:
+- Certainty half holds for win rates at every depth and day bucket: Meio's range is a
+  third to a twelfth of the patch's and its PIT is 80% (champion 78%), faded cells
+  included (in-range 87-96% there, PIT 79-80%). Day 0 at depth 2: patch 44.6 points,
+  PIT 96% (wider than honest); Meio 2.3, 80%
+- Shares under-cover in every mode: Meio PIT 74% (item 75%, keystone 72%), the patch 73%
+  and the 30 days 72%; day 0 patch 43%. Meio is narrower than the patch and no worse
+  covered, but not yet 80%: the missing piece is within-patch drift (meio-model)
+- The raw 30 days runs narrow where the patch moved things: champion-role 76%, shares
+  72%; the patch's binomial win-rate ranges hold 80-82%
+- Sure targets only (target noise under the range's claimed variance; Meio's PIT there
+  matches its in-range), with the error's sd net of noise against the sd the
+  ranges claim, points:
 
 | depth | mode | sure cells | in | sd | claimed |
 | --- | --- | --: | --: | --: | --: |
@@ -5772,12 +5780,12 @@ half-width in points, share inside (target noise added in quadrature), share sol
 - On sure targets Meio's win rates are honest (80-82%, sd within a fifth of claimed) and
   its shares too narrow: 68% inside, sd 2.0 against 1.6 claimed (EUW1 65%, 3.0 against
   1.8; keystone share 67%, item share 68%). The raw modes' binomial ranges claim more
-  than their errors on big targets (82% inside). Meio's all-cell solid sd runs above
+  than their errors on big targets (82% inside, PIT 85-86%). Meio's all-cell solid sd runs above
   claimed for item win rate (4.4 against 2.6) and keystone x item (3.4 against 2.3): a
   tail of thin cells far off that its sure targets don't reach
 - ±6 fade line: raw win rates split cleanly (solid sd ~3, faded ~19-23). Meio shows
   every win rate solid and its few faded cells (shares, some two-lock) are 84-96%
-  inside: for Meio the line fades almost nothing. EUW1 alone reads the same
+  inside, PIT 76-80%: for Meio the line fades almost nothing. EUW1 alone reads the same
 
 ### Patches as experiments: item changes, 16.20 -> 16.21, 2026-11-04 (meio-model, M8)
 
