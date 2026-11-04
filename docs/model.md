@@ -5616,27 +5616,79 @@ Test look on days 4+ (PT3), declared before it runs; not run: Jacob's call.
   with the snapshot salt (data/team/2026-10-29-next/w6fix/hashex.py); the only
   ledgered looks at these days (data/snap's test-looks.tsv, 29 Oct)
 
+### E2 baseline, raw 30 days vs raw patch, 2026-10-24 (truth)
+
+Tool: `meiolol truth --patch P` (src/truth.zig; read-only on a snapshot, ~40 s, 2.8 GB,
+4 threads). Day d counts from the patch's first EUW1 game; at each d both modes are
+built from every game before then, and scored on the patch's games of the next 7 days.
+A cell is scored where both modes have 10 games; win rates and build shares by log loss
+(milli-nats a target game, rate (k + 0.5) / (n + 1) for both), gold at 14 (lane gold
+difference per matchup) by noise-corrected RMSE. Brackets by the stored rank (the
+curves' brackets; E8's rank at start later). Snapshot snap-20261023T2004Z.
+
+How much worse the raw patch predicts than the raw 30 days (every region, all ranks;
+patch coverage in brackets: share of target games whose cell had a patch number):
+
+| cell | day 0 | day 1 | days 2-3 | days 4-7 |
+| --- | --: | --: | --: | --: |
+| 16.20: champion-role | 3.35 (98%) | 0.09 | 0.03 | 0.01 |
+| 16.20: matchup | 21.4 (39%) | 2.85 (90%) | 0.91 | 0.32 |
+| 16.20: duo (bot+sup) | 20.5 (56%) | 2.05 | 0.66 | 0.21 |
+| 16.20: gold at 14, RMSE 30 days / patch | 110 / 347 g | 136 / 175 | 119 / 135 | 103 / 110 |
+| 16.20: build share | 2.61 | 0.06 | 0.01 | 0.00 |
+| 16.21: champion-role | 2.14 (99%) | 0.15 | | |
+| 16.21: matchup | 21.8 (55%) | 4.42 (93%) | | |
+| 16.21: duo | 15.0 (70%) | 3.32 | | |
+| 16.21: gold at 14 | 59 / 321 g | 67 / 166 | | |
+| 16.21: build share | 1.71 | -0.03 | | |
+
+Every gap is the 30 days ahead by more than 2 se, except build share on 16.21's day 1
+and 16.20's days 4-7 (ties). Diamond+ gaps are 2-4x larger (thinner cells); EUW1 alone
+has the same shape, larger (its day 0 has no patch games by definition). Full tables by
+bracket and region: rerun `meiolol truth --data SNAP --patch 16.20 --until
+2026-10-20T14:44Z` (and `--patch 16.21 --origins 2`).
+
+Reading it:
+- The raw 30 days is the bar the estimate has to beat: the raw patch never beat it in
+  any bucket or cell kind. For champion-role win rates and build shares the patch
+  catches up within 2-3 days; for matchups, duos and gold at 14 it still trails after a
+  week, as those cells are thin and a patch's few days are thinner
+- 16.19 -> 16.20 says little about old patches: the crawl was ramping up (16.19 has
+  53k games, 16.20 70-100k a day), so from day 1 the 30 days is mostly 16.20 itself
+- 16.20 -> 16.21 is the real boundary but provisional: 16.21 games are all inside the
+  P3 test window (from 20 Oct 14:44Z; why this look is independent in data/team/2026-10-23-progress/e2-notes.md) and
+  the snapshot ends 23 Oct, so targets are 2.6 days at most and only days 0-1 exist. On
+  day 1, with the 30 days ~90% 16.20 games, it still beats a full day of 16.21 for
+  every cell but builds. Next: the live 16.21 -> 16.22 boundary on a fresh snapshot,
+  and E3's estimate as a third mode
+
 ### Meio in the truth test, 16.20 -> 16.21, 2026-11-04 (meio-truth, run 2026-11-04-meio)
 
 `meiolol truth --data data/cubes-20261104 --patch 16.21` (the box's cubes of 4 Nov, 14
 origins, 33M player rows, 49 s and 5.1 GB on the Mac at 4 threads; meio.zig at
-21fdd222, default options). Meio minus the raw 30 days, milli-nats a target game, every
+fad6ef0c, default options). Meio minus the raw 30 days, milli-nats a target game, every
 region, all ranks (negative: Meio better); unseen: Meio minus the champion-role's 30-day
-rate on cells the 30 days has under 10 games for:
+rate on cells the 30 days has under 10 games for; full tables:
+data/team/2026-11-04-meio/truth-16.21-meio-fad6ef0c.md:
 
 | cell | day 0 | day 1 | days 2-3 | days 4-7 | 8+ | unseen (all days) | in range |
 | --- | --: | --: | --: | --: | --: | --: | --: |
-| champion-role | 1.53 | 1.37 | 1.25 | 1.11 | 0.98 | | 74% |
-| matchup | -0.66 | -0.67 | -0.55 | -0.38 | -0.23 | -1.62 | 88% |
-| duo | 4.92 | 4.54 | 4.13 | 3.63 | 3.16 | -7.92 | 84% |
-| item win rate | 1.41 | 1.25 | 1.14 | 0.99 | 0.89 | -0.84 | 86% |
-| keystone win rate | 1.38 | 1.23 | 1.13 | 1.01 | 0.90 | 1.85 | 83% |
+| champion-role | -0.01 (ns) | -0.03 | -0.03 | -0.01 | -0.01 | | 89% |
+| matchup | -1.17 | -1.13 | -1.00 | -0.82 | -0.67 | -4.97 | 87% |
+| duo | -0.85 | -0.81 | -0.73 | -0.62 | -0.57 | -8.05 | 87% |
+| item win rate | -0.16 | -0.18 | -0.15 | -0.12 | -0.10 | -1.76 | 89% |
+| keystone win rate | -0.12 | -0.13 | -0.12 | -0.08 | -0.06 | +2.08 | 84% |
 
-Every value is beyond 2 se. Matchups pass the gate against both raw modes in every
-bucket (EUW1 too, by more: -2.2); unseen matchups, duos and items beat the fallback.
-Champion-role, duo, item and keystone trail the 30 days everywhere, by the same ~1
-milli-nat as champion-role, so the champion-role term is the thing to fix first
-(meio-model). Item and keystone shares and gold at 14 have no Meio number yet.
+Every value beyond 2 se unless marked. Meio beats the raw 30 days for every win-rate kind
+in every bucket, and the raw patch in every row. Champion-role ties at all ranks but
+wins within each bracket (Iron-Silver -1.25, Diamond+ -0.06 over all days). EUW1 alone,
+all days: champion -0.07, matchup -2.66, duo -1.84, item -0.39, keystone -0.33. Unseen
+combos beat the fallback except keystones at all ranks (+2.08 +- 0.76; Gold-Emerald
++0.50 ns, Diamond+ -3.19, EUW1 -3.54). Ranges hold 84-91%: a little wide, not narrow
+(the check widens by the target's noise approximately). The first read (21fdd222) had
+Meio trailing by ~1 milli-nat on champion-role, duo, item and keystone: rate() at all
+ranks and every region read the unknown-rank, other-region baseline. Item and keystone
+shares and gold at 14 have no Meio number yet.
 
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 

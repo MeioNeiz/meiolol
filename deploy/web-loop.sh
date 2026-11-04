@@ -30,6 +30,10 @@
 # daily; the next site build picks the files up.
 # Daily, `meiolol lean` (every region, last 30 days; docs/model.md "Early and late
 # champions") the same way: data/lean.tsv, the champion pages' early or late line.
+# Daily, `meiolol truth` (E2, docs/plan/estimates.md) scores the raw modes and Meio on the
+# current patch's days so far from the day cubes: data/truth-<patch>.md and .tsv (one
+# line per cell kind, region, rank and day, for the method page), replaced whole; each
+# patch's files stay once a newer one is out. ~5 GB, minutes
 # Daily, the admin Draft tester's models refit on every played game into data/tester/:
 # `meiolol draft-model` (the shipped draft model, seconds after its scan) and `meiolol
 # lane-model` (team2's lane outcomes, every timeline read once; 0.9 GB, ~2 min of CPU on
@@ -251,6 +255,7 @@ mtime() { stat -c %Y "$1" 2> /dev/null || echo 0; }
 # eval.log is truncated as a run starts, the other logs written as each runs
 last_eval=$(mtime data/eval.log) last_example=$(mtime data/your-example.log)
 last_builds=$(mtime data/builds.log) last_lean=$(mtime data/lean.log)
+last_truth=$(mtime data/truth.log)
 # The tester's from its last swap, not its log: a restart mid-run (draft-model and
 # lane-model take over an hour since A4) kills it, and the next start runs it again
 last_tester=$(mtime data/tester/lane-model.json)
@@ -379,6 +384,15 @@ run_daily() {
     elif (( now - last_lean >= 86400 )); then
         last_lean=$now
         batch bin/meiolol lean > data/lean.log 2>&1 &
+    elif [[ -n "$patch" ]] && (( now - last_truth >= 86400 )); then
+        last_truth=$now
+        (if batch bin/meiolol truth --patch "$patch" --tsv "data/truth-$patch.tsv.new" \
+            > "data/truth-$patch.md.new" 2> data/truth.log; then
+            mv "data/truth-$patch.tsv.new" "data/truth-$patch.tsv"
+            mv "data/truth-$patch.md.new" "data/truth-$patch.md"
+        else
+            rm -f "data/truth-$patch.tsv.new" "data/truth-$patch.md.new"
+        fi) &
     elif (( now - last_tester >= 86400 )); then
         last_tester=$now
         (rm -rf data/tester.new

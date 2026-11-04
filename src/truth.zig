@@ -709,8 +709,8 @@ fn row(out: *std.Io.Writer, kind: Kind, bracket: []const u8, bucket: []const u8,
 /// One line per (region, kind, bracket, bucket), for the method page (E9)
 pub fn writeTsv(results: *const Results, patch: []const u8, t0: i64, out: *std.Io.Writer) !void {
     try out.writeAll("patch\tt0_ms\tregion\tkind\tbracket\tday\ttarget\tcovered_30d\tcovered_patch\tcovered_meio");
-    for (Comparison.sides) |s| {
-        inline for (.{ "cells", "obs", "loss_a", "loss_b", "diff", "se" }) |f| try out.print("\t{s}_{s}_{s}", .{ s[0], s[1], f });
+    for (std.enums.values(Comparison)) |c| {
+        inline for (.{ "cells", "obs", "loss_a", "loss_b", "diff", "se" }) |f| try out.print("\t{t}_{s}", .{ c, f });
     }
     try out.writeAll("\tranged\tinside\n");
     for (results, regions) |by_kind, region| for (by_kind, 0..) |by_bracket, k| {
@@ -727,6 +727,17 @@ pub fn writeTsv(results: *const Results, patch: []const u8, t0: i64, out: *std.I
             try out.print("\t{d}\t{d}\n", .{ s.ranged, s.inside });
         };
     };
+}
+
+test "TSV header: one name per column, no spaces" {
+    const results: Results = @splat(@splat(@splat(@splat(.{}))));
+    var w: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer w.deinit();
+    try writeTsv(&results, "x", 0, &w.writer);
+    const header = w.written();
+    try std.testing.expect(std.mem.findScalar(u8, header, ' ') == null);
+    try std.testing.expectEqual(10 + 6 * Comparison.count + 2, std.mem.count(u8, header, "\t") + 1);
+    try std.testing.expect(std.mem.find(u8, header, "\tmeio_30_diff\t") != null);
 }
 
 test "log loss and the noise-corrected squared error" {
