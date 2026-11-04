@@ -362,8 +362,9 @@ fn pitOf(r: Ranges) ?f64 {
     return if (r.cells > 0) r.pit / r.cells else null;
 }
 
+/// Under 100 cells a coverage is noise (±8 points at two standard errors)
 fn coverOf(c: Cover) ?f64 {
-    return if (c.cells > 0) c.pit / c.cells else null;
+    return if (c.cells >= 100) c.pit / c.cells else null;
 }
 
 fn pct(w: *Writer, x: ?f64) !void {
@@ -431,7 +432,8 @@ const intro =
     \\**In range**: how often the next week landed inside each mode's 80% range (80% is
     \\honest; under it the range is too sure). **±**: the median range half-width in points
     \\(gold at 14: gold) on cells Meio ranges too. **Missed low / high**: per 100 of those
-    \\cells, the next week under or over Meio's range (about 10 each is honest).
+    \\cells, the next week under or over Meio's range (about 10 each is honest), counted
+    \\like in range: a thin week's share of its chance to land in the bottom or top 10%.
     \\**Interval score**: Meio's against the raw mode's on the same cells; +12% is a 12%
     \\lower (better) sum; 9/10 days, the days Meio's was lower; ahead or behind when a sign
     \\test over those days says so, else level. **Width / below / above**: the score's parts
@@ -441,7 +443,7 @@ const intro =
     \\30 days has too few games for, against the champion-role's rate. **Every day**: the
     \\days Meio isn't yet ahead of both raw windows. **Weight**: how much Meio's number
     \\rests on the cell's own games (1: all of it); **shown first**: per list, the 5
-    \\highest and 5 lowest win rates, the 5 most taken shares.
+    \\highest and 5 lowest win rates, the 5 most taken shares; - under 100 cells.
     \\
 ;
 
@@ -449,6 +451,8 @@ const changelog =
     \\
     \\## Changelog
     \\
+    \\- 4 Nov: missed low / high counted from the in-range count's tails: a rare share's
+    \\  normal range can't miss low, so shares read as missing high
     \\- 4 Nov: the site's Gold+ rank set (Plat+ and Emerald+ floors) scored; interval
     \\  scores beside the log loss gate; Meio's in range by weight and on the cells shown
     \\  first
@@ -537,7 +541,7 @@ pub fn section(a: Allocator, s: *const Scores) ![]const u8 {
                 if (i > 0) try w.writeAll(" / ");
                 try pct(w, pitOf(m));
             }
-            const prec: usize = if (k == .gold14) 0 else 1;
+            const prec: usize = if (k == .gold14) 0 else if (truth.isShare(k)) 2 else 1;
             if (halves(s, r, k, c)) |x| {
                 try w.print(" | ±{d:.[3]} / ±{d:.[3]} / ±{d:.[3]} |", .{ x[0], x[1], x[2], prec });
             } else try w.writeAll(" | |");
@@ -714,8 +718,10 @@ test "pooled scores per kind from writeTsv's columns, all ranks only" {
         .miss = .{ .{ 1, 1 }, .{ 1, 2 } },
     };
     champ[0][0].blocks[1] = .{ .n = 1, .ahead = 1 };
-    champ[0][0].by_weight[0] = .{ .cells = 4, .pit = 2 };
-    champ[0][0].shown = .{ .cells = 2, .pit = 2 };
+    champ[0][0].by_weight[0] = .{ .cells = 400, .pit = 200 };
+    // Too few cells to read: "-"
+    champ[0][0].by_weight[1] = .{ .cells = 99, .pit = 99 };
+    champ[0][0].shown = .{ .cells = 200, .pit = 200 };
     // A bracket's row: not on the page
     champ[1][0] = champ[0][0];
     champ[1][0].pairs[@backingInt(truth.Comparison.meio_30)].challenger = 9999;

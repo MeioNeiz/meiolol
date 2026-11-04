@@ -106,7 +106,7 @@ pub fn label(k: Kind) []const u8 {
 }
 
 /// Counted out of the champion-role's games (key b = 0 holds them), not its wins
-fn isShare(k: Kind) bool {
+pub fn isShare(k: Kind) bool {
     return k == .build or k == .rune;
 }
 
@@ -486,7 +486,7 @@ pub const Stat = struct {
         if (p * (1 - p) / n < se * se) _ = s.sure[m].cell(p, half, n, k);
         const band = bandOf(half);
         const hit = s.cal[m][band].cell(p, half, n, k);
-        return .{ .half = half, .in = hit.in, .pit = hit.pit, .solid = band == 0, .wis = hit.wis, .n = n };
+        return .{ .half = half, .in = hit.in, .pit = hit.pit, .tails = hit.tails, .solid = band == 0, .wis = hit.wis, .n = n };
     }
 
     /// Mode m's 80% range `half` (gold) around average p against a target mean of n
@@ -498,7 +498,7 @@ pub const Stat = struct {
         if (noise < se * se) _ = s.sure[m].avgCell(p / u, se, noise, mean / u);
         const band: usize = if (half < gold_solid) 0 else 1;
         const hit = s.cal[m][band].avgCell(p / u, se, noise, mean / u);
-        return .{ .half = half / u, .in = hit.in, .pit = hit.pit, .solid = band == 0, .wis = hit.wis, .n = n };
+        return .{ .half = half / u, .in = hit.in, .pit = hit.pit, .tails = hit.tails, .solid = band == 0, .wis = hit.wis, .n = n };
     }
 };
 
@@ -535,7 +535,7 @@ pub const Cal = struct {
     sq: f64 = 0,
     /// The range's claimed variance, (half / 1.28)^2, summed
     claim: f64 = 0,
-    /// pitInside summed: unlike `inside`, 80% for honest ranges at any target size
+    /// pitParts' middle summed: unlike `inside`, 80% for honest ranges at any target size
     pit: f64 = 0,
 
     fn add(c: *Cal, o: Cal) void {
@@ -563,7 +563,8 @@ pub const Cal = struct {
         const se = half / z80;
         const noise = p * (1 - p) / n;
         const pred = z80 * @sqrt(se * se + noise);
-        const hit: Hit = .{ .in = @abs(gap) <= pred, .pit = pitInside(p, se, n, k), .wis = wis(p, pred, pred, k / n) };
+        const pit = pitParts(p, se, n, k);
+        const hit: Hit = .{ .in = @abs(gap) <= pred, .pit = pit[1], .tails = .{ pit[0], pit[2] }, .wis = wis(p, pred, pred, k / n) };
         c.cells += 1;
         if (hit.in) c.inside += 1;
         c.sq += gap * gap - noise;
@@ -583,39 +584,34 @@ pub const Cal = struct {
         c.sq += gap * gap - noise;
         c.claim += se * se;
         if (in) c.pit += 1;
-        return .{ .in = in, .pit = if (in) 1 else 0, .wis = wis(p, pred, pred, mean) };
+        const tails: [2]f64 = .{ if (gap < -pred) 1 else 0, if (gap > pred) 1 else 0 };
+        return .{ .in = in, .pit = if (in) 1 else 0, .tails = tails, .wis = wis(p, pred, pred, mean) };
     }
 };
 
-const Hit = struct { in: bool, pit: f64, wis: Interval };
+/// tails: the PIT's mass under 0.1 and over 0.9, the target below and above the range
+const Hit = struct { in: bool, pit: f64, tails: [2]f64, wis: Parts };
 
 /// One rate's 80% range as scored; n the target's games as scored (shares: n / phi)
-const Ranged = struct { half: f64, in: bool, pit: f64, solid: bool, wis: Interval, n: f64 };
+const Ranged = struct { half: f64, in: bool, pit: f64, tails: [2]f64, solid: bool, wis: Parts, n: f64 };
 
 /// An interval score's parts: width, below (the target under the point or range: the
 /// mode said too high), above
 const Parts = [3]f64;
-
-/// A cell's interval score and the side its target missed the range on (0 below, 1
-/// above)
-const Interval = struct { parts: Parts, miss: ?u1 };
 
 /// Weighted interval score with one 80% interval and the point (Bracher et al 2021),
 /// (2/3)(0.5 |y - p| + 0.1 IS), IS = (u - l) + 10 (l - y)+ + 10 (y - u)+, split into
 /// Parts. y is the target's own value, so the range is the predictive one for it: l =
 /// p - down, u = p + up, each side's half-width with the target's noise added
 /// (`predictive`). Proper: scores the point and the range's width and misses in one
-fn wis(p: f64, down: f64, up: f64, y: f64) Interval {
+fn wis(p: f64, down: f64, up: f64, y: f64) Parts {
     const c = 2.0 / 3.0;
     const l = p - down;
     const u = p + up;
     return .{
-        .parts = .{
-            c * 0.1 * (u - l),
-            c * (@max(0, l - y) + 0.5 * @max(0, p - y)),
-            c * (@max(0, y - u) + 0.5 * @max(0, y - p)),
-        },
-        .miss = if (y < l) 0 else if (y > u) 1 else null,
+        c * 0.1 * (u - l),
+        c * (@max(0, l - y) + 0.5 * @max(0, p - y)),
+        c * (@max(0, y - u) + 0.5 * @max(0, y - p)),
     };
 }
 
@@ -639,7 +635,9 @@ fn sizeOf(n: f64) usize {
 pub const Wis = struct {
     cells: f64 = 0,
     parts: [2]Parts = @splat(@splat(0)),
-    /// Cells whose target fell below, above the predictive range
+    /// Targets below, above the range: the randomised PIT's tails summed (gold: the
+    /// normal range's misses). Not the score's own parts: on a rare share the normal
+    /// range's low end is under 0, so it can't miss low there while the PIT can
     miss: [2][2]f64 = @splat(@splat(0)),
 
     fn add(w: *Wis, o: Wis) void {
@@ -655,8 +653,8 @@ pub const Wis = struct {
     fn cell(w: *Wis, sides: [2]Ranged) void {
         w.cells += 1;
         for (sides, &w.parts, &w.miss) |r, *parts, *miss| {
-            for (parts, r.wis.parts) |*a, b| a.* += b;
-            if (r.wis.miss) |side| miss[side] += 1;
+            for (parts, r.wis) |*a, b| a.* += b;
+            for (miss, r.tails) |*a, b| a.* += b;
         }
     }
 
@@ -719,10 +717,11 @@ pub const Cover = struct {
     }
 };
 
-/// Chance a randomised PIT of k wins in n lands in [0.1, 0.9] (U uniform on P(X < k) to
-/// P(X <= k)), X binomial with the rate logit-normal of sd se (delta method): 0.8 for an
-/// honest range at any n, where a 1-game target near 50% is inside any range
-fn pitInside(p0: f64, se: f64, n: f64, k: f64) f64 {
+/// Chance a randomised PIT of k wins in n lands under 0.1, in [0.1, 0.9], over 0.9 (U
+/// uniform on P(X < k) to P(X <= k)), X binomial with the rate logit-normal of sd se
+/// (delta method): 0.1, 0.8, 0.1 for an honest range at any n, where a 1-game target near
+/// 50% is inside any range
+fn pitParts(p0: f64, se: f64, n: f64, k: f64) [3]f64 {
     const q0 = std.math.clamp(p0, 1e-4, 1 - 1e-4);
     const eta = @log(q0 / (1 - q0));
     const s = se / (q0 * (1 - q0));
@@ -741,8 +740,10 @@ fn pitInside(p0: f64, se: f64, n: f64, k: f64) f64 {
     }
     lo /= weights;
     hi /= weights;
-    if (hi - lo < 1e-12) return if (lo >= 0.1 and lo <= 0.9) 1 else 0;
-    return @max(0, @min(hi, 0.9) - @max(lo, 0.1)) / (hi - lo);
+    if (hi - lo < 1e-12) return if (lo < 0.1) .{ 1, 0, 0 } else if (lo > 0.9) .{ 0, 0, 1 } else .{ 0, 1, 0 };
+    const in = @max(0, @min(hi, 0.9) - @max(lo, 0.1)) / (hi - lo);
+    const below = @max(0, @min(hi, 0.1) - lo) / (hi - lo);
+    return .{ below, in, 1 - in - below };
 }
 
 /// P(X < k), P(X <= k) for X binomial(n, q); normal past 400 games
@@ -822,9 +823,10 @@ pub const Width = struct {
 const z80 = 1.2815515655446004;
 
 /// Bin b holds half-widths from hist_lo * hist_step^b (the first everything under, the
-/// last everything over): 0.5 to ~4,600 points or gold
-const hist_bins = 96;
-const hist_lo = 0.5;
+/// last everything over): 0.01 (share cells' ranges run under half a point) to ~39,000
+/// points or gold
+const hist_bins = 160;
+const hist_lo = 0.01;
 const hist_step = 1.1;
 
 fn histBin(x: f64) usize {
@@ -1264,9 +1266,10 @@ fn intervalScores(out: *std.Io.Writer, region: []const u8, by_kind: *const [Kind
         "(one 80% range and the point, on the target's own rate with its noise added): " ++
         "skill = 1 - Meio's sum / the raw mode's (above 0: Meio better). Parts per cell in " ++
         "points (gold at 14: gold): width, below (target under the point or range), " ++
-        "above; raw mode / Meio. Missed: share of targets below / above the range (10% " ++
-        "each if honest). Days: origins where Meio's sum was lower, of those scored, and " ++
-        "the two-sided sign test's p. Then skill by target games\n\n" ++
+        "above; raw mode / Meio. Missed: targets below / above the range, from the " ++
+        "randomised PIT's tails under 0.1 / over 0.9 (10% each if honest; the score's own " ++
+        "normal range can't miss low on a rare share). Days: origins where Meio's sum was " ++
+        "lower, of those scored, and the two-sided sign test's p. Then skill by target games\n\n" ++
         "| cell | vs | cells | skill | width | below | above | missed | Meio missed | days | p | ", .{region});
     for (sizes) |z| try out.print("{s} | ", .{z});
     try out.writeAll("\n| --- | --- | --: | --: | --: | --: | --: | --: | --: | --: | --: |");
@@ -1489,7 +1492,7 @@ fn tsvRow(out: *std.Io.Writer, s: Stat, patch: []const u8, t0: i64, region: []co
         const x = s.wisAll(m);
         try out.print("\t{d}", .{x.cells});
         for (x.parts) |side| for (side) |v| try out.print("\t{d:.6}", .{v});
-        try out.print("\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}", .{ x.miss[0][0], x.miss[0][1], x.miss[1][0], x.miss[1][1], s.blocks[m].n, s.blocks[m].ahead });
+        try out.print("\t{d:.3}\t{d:.3}\t{d:.3}\t{d:.3}\t{d}\t{d}", .{ x.miss[0][0], x.miss[0][1], x.miss[1][0], x.miss[1][1], s.blocks[m].n, s.blocks[m].ahead });
         for (s.wis[m]) |z| try out.print("\t{d}\t{d:.6}\t{d:.6}", .{ z.cells, z.total(0), z.total(1) });
     }
     for (s.by_weight ++ [1]Cover{s.shown}) |c| try out.print("\t{d}\t{d:.3}", .{ c.cells, c.pit });
@@ -1554,11 +1557,13 @@ test "gold ranges: banded in gold, sd and claimed read in gold" {
 
 test "PIT coverage: 80% for an honest range at any target size" {
     // A sure 50% against 1 game: U uniform on [0, 0.5] or [0.5, 1], 0.4 of each in [0.1, 0.9]
-    try std.testing.expectApproxEqAbs(0.8, pitInside(0.5, 1e-9, 1, 1), 1e-9);
-    try std.testing.expectApproxEqAbs(0.8, pitInside(0.5, 1e-9, 1, 0), 1e-9);
+    // and the rest in its top or bottom tail
+    for ([_][3]f64{ .{ 0, 0.8, 0.2 }, .{ 0.2, 0.8, 0 } }, [_]f64{ 1, 0 }) |want, k| {
+        for (want, pitParts(0.5, 1e-9, 1, k)) |x, y| try std.testing.expectApproxEqAbs(x, y, 1e-9);
+    }
     // 50 of 100 at 50%: the middle, inside; 70 of 100 at 50% +- 2 points: far out
-    try std.testing.expectEqual(@as(f64, 1), pitInside(0.5, 0.02, 100, 50));
-    try std.testing.expectEqual(@as(f64, 0), pitInside(0.5, 0.02, 100, 70));
+    try std.testing.expectEqual(@as(f64, 1), pitParts(0.5, 0.02, 100, 50)[1]);
+    try std.testing.expectEqual([3]f64{ 0, 0, 1 }, pitParts(0.5, 0.02, 100, 70));
     // Exact binomial and the normal past 400 games agree near 400
     const exact = binomCdf(0.52, 400, 210);
     const normal = normCdf((210.5 - 208) / @sqrt(400 * 0.52 * 0.48));
@@ -1568,7 +1573,7 @@ test "PIT coverage: 80% for an honest range at any target size" {
     var pmf = std.math.pow(f64, 0.6, 30);
     for (0..31) |k| {
         const kf: f64 = @floatFromInt(k);
-        cover += pmf * pitInside(0.4, 1e-9, 30, kf);
+        cover += pmf * pitParts(0.4, 1e-9, 30, kf)[1];
         pmf *= (30 - kf) / (kf + 1) * 0.4 / 0.6;
     }
     try std.testing.expectApproxEqAbs(0.8, cover, 1e-6);
@@ -1577,24 +1582,25 @@ test "PIT coverage: 80% for an honest range at any target size" {
 test "interval score: width, misses and the point; sign test; median width; shown cells" {
     const c = 2.0 / 3.0;
     const inside = wis(0.5, 0.1, 0.1, 0.5);
-    try std.testing.expectApproxEqAbs(c * 0.1 * 0.2, inside.parts[0], 1e-12);
-    try std.testing.expectEqual(@as(f64, 0), inside.parts[1] + inside.parts[2]);
-    try std.testing.expectEqual(null, inside.miss);
+    try std.testing.expectApproxEqAbs(c * 0.1 * 0.2, inside[0], 1e-12);
+    try std.testing.expectEqual(@as(f64, 0), inside[1] + inside[2]);
     // 0.1 under the range: 10 x 0.1 of IS, and half of 0.2 from the point
     const low = wis(0.5, 0.1, 0.1, 0.3);
-    try std.testing.expectApproxEqAbs(c * (0.1 + 0.1), low.parts[1], 1e-12);
-    try std.testing.expectEqual(@as(?u1, 0), low.miss);
+    try std.testing.expectApproxEqAbs(c * (0.1 + 0.1), low[1], 1e-12);
     // Asymmetric: up 0.3, so 0.7 is inside, scored on the point only
     const up = wis(0.5, 0.1, 0.3, 0.7);
-    try std.testing.expectEqual(null, up.miss);
-    try std.testing.expectApproxEqAbs(c * 0.5 * 0.2, up.parts[2], 1e-12);
+    try std.testing.expectApproxEqAbs(c * 0.5 * 0.2, up[2], 1e-12);
     try std.testing.expectApproxEqAbs(2 * std.math.pow(f64, 0.5, 14), (Blocks{ .n = 14, .ahead = 14 }).p(), 1e-9);
     try std.testing.expectApproxEqAbs(1, (Blocks{ .n = 14, .ahead = 7 }).p(), 1e-9);
 
     var w: Width = .{};
-    const r: Ranged = .{ .half = 0.03, .in = true, .pit = 1, .solid = true, .wis = inside, .n = 100 };
+    const r: Ranged = .{ .half = 0.03, .in = true, .pit = 0.7, .tails = .{ 0.3, 0 }, .solid = true, .wis = inside, .n = 100 };
     for (0..3) |_| w.cell(.{ r, r });
     try std.testing.expectApproxEqRel(3, w.median(0).?, 0.1);
+    // Misses are the PIT's tails, not the score's range
+    var scored: Wis = .{};
+    scored.cell(.{ r, r });
+    try std.testing.expectEqual([2]f64{ 0.3, 0 }, scored.miss[1]);
 
     // One matchup list of 12 under champion 1: the 5 highest and 5 lowest; a share list
     // of 7: the 5 most taken
