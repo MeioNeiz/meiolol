@@ -14,7 +14,10 @@ patches, or a run's own first day if earlier. By default every patch of the last
 --days (30) to data/export/recent-curves.bin (label "last 30 days"); with --patch,
 those patches to data/export/curves-<patch>.bin (the Your games service reads these per
 patch). `--site` (the web loop) writes the four files the site reads, EUW and every
-platform by last 30 days and --patch, in one pass over their days. Per lane matchup
+platform by last 30 days and --patch, in one pass over their days. Its late games wait
+up to 6 h: a day other than today built in the last 6 h is read as it is (Store.settle_ms
+in cmdCurves; set 0 to undo), as building one again costs ~40 s however few they are,
+~10 min a round over a patch's days. Per lane matchup
 (role, champion pair), bracket (all, Iron-Silver, Gold-Emerald, Diamond+;
 median visible tier of the game's players, never MMR) and experience (all games, or a
 or b with 100k+ mastery): per minute 1..25 the raw p25/p50/p75 of gold, XP and CS (lane

@@ -1483,6 +1483,13 @@ test "day cubes: days built again when their games change, as if built afresh" {
     n = try cube.refresh(db, start_ms + std.time.ms_per_day, fixture_items);
     try testing.expectEqual(0, n.built);
     try testing.expectEqual(1, n.young);
+    // ... but the fresh days (here all), as curves --site does today
+    cube.fresh_days = 100_000;
+    n = try cube.refresh(db, start_ms + std.time.ms_per_day, fixture_items);
+    try testing.expectEqual(1, n.built);
+    try testing.expectEqual(0, n.young);
+    try db.exec("INSERT OR REPLACE INTO matches SELECT * FROM matches WHERE match_id = 'EUW1_10'");
+    cube.fresh_days = 0;
     cube.settle_ms = 0;
     try testing.expectEqual(1, (try cube.refresh(db, start_ms + std.time.ms_per_day, fixture_items)).built);
 }

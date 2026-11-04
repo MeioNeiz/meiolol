@@ -40,6 +40,8 @@ pub const usage_curves =
     \\              --site           the files the site reads, in one pass over the
     \\                               day cubes: EUW and every platform, last --days
     \\                               and (with --patch) that patch, default paths
+    \\                               (a day but today built in the last 6 h is
+    \\                               read as it is)
     \\              --format-version print the file format version this binary writes
     \\                               and reads, then exit (deploy/web-loop.sh)
     \\
@@ -125,6 +127,11 @@ pub fn cmdCurves(c: *Cmd) !u8 {
         var items: CubeItems = .{ .gpa = gpa, .arena = arena, .io = io };
         const cube = try cubes.Store.open(gpa, io, try cubes.dirIn(arena, c.data_dir));
         defer cube.deinit();
+        // Each round's late games wait up to 6 h (docs/arch-stats.md), but today's
+        if (site_files) {
+            cube.settle_ms = 6 * std.time.ms_per_hour;
+            cube.fresh_days = 1;
+        }
         logCubes(try cubes.curvesOf(cube, db, items.source(), specs, builders, summaries));
     }
 

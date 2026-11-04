@@ -135,9 +135,13 @@ pub const Store = struct {
     lock: std.Io.File,
     counts: Counts = .{},
     /// A changed day whose file is younger than this is read as it is: for a reader of
-    /// many days that a few late games don't move (lockrows), as each day built again
-    /// costs ~35 s and the crawler adds games to the last two weeks' days all the time
+    /// many days that a few late games don't move (lockrows, curves --site), as each day
+    /// built again costs ~40 s and the crawler adds games to the last two weeks' days
+    /// all the time
     settle_ms: i64 = 0,
+    /// The newest days (today 1) built whenever they change, settle_ms or not: on a
+    /// patch's first day today's games are all of its curves
+    fresh_days: i64 = 0,
 
     /// Opens (or starts) `dir`, waiting for its lock
     pub fn open(gpa: Allocator, io: std.Io, dir: []const u8) !*Store {
@@ -175,16 +179,23 @@ pub const Store = struct {
         const today = @divFloor(now_ms, day_ms);
         const drop_before = @min(first, today - keep_days);
         var buf: [std.fs.max_path_bytes]u8 = undefined;
-        // The run of young files up to today is read as it is, unasked: daySigs reads a
-        // page of matches per game, ~2 min over 30 days on the box
-        var young_from = today + 1;
+        // The run of young files up to the fresh days is read as it is, unasked: daySigs
+        // reads a page of matches per game, ~2 min over 30 days on the box
+        const fresh_from = @max(first, today + 1 - s.fresh_days);
+        var young_from = fresh_from;
         while (young_from > first) : (young_from -= 1) {
             const have = try readSig(s.io, try s.dayPath(&buf, young_from - 1)) orelse break;
             if (now_ms - have.made_ms >= s.settle_ms) break;
         }
-        const tail: usize = @intCast(today + 1 - young_from);
+        const tail: usize = @intCast(fresh_from - young_from);
         var sigs = try daySigs(gpa, db, first * day_ms, if (tail == 0) std.math.maxInt(i64) else young_from * day_ms);
         defer sigs.deinit(gpa);
+        if (tail > 0) {
+            var fresh = try daySigs(gpa, db, fresh_from * day_ms, std.math.maxInt(i64));
+            defer fresh.deinit(gpa);
+            var f = fresh.iterator();
+            while (f.next()) |e| try sigs.put(gpa, e.key_ptr.*, e.value_ptr.*);
+        }
         s.counts.days = sigs.count() + tail;
         s.counts.young = tail;
         var experienced: ?curves.Experienced = null;
@@ -197,7 +208,7 @@ pub const Store = struct {
             const path = try s.dayPath(&buf, day);
             if (try readSig(s.io, path)) |have| {
                 if (std.meta.eql(have.sig, e.value_ptr.*)) continue;
-                if (now_ms - have.made_ms < s.settle_ms) {
+                if (day < fresh_from and now_ms - have.made_ms < s.settle_ms) {
                     s.counts.young += 1;
                     continue;
                 }
@@ -225,7 +236,7 @@ pub const Store = struct {
         while (try files.next(s.io)) |f| {
             const stem = std.mem.cutSuffix(u8, f.name, ".bin") orelse continue;
             const day = std.fmt.parseInt(i64, stem, 10) catch continue;
-            if (day < drop_before or (day >= first and day < young_from and !sigs.contains(day))) try stale.append(gpa, day);
+            if (day < drop_before or (day >= first and (day < young_from or day >= fresh_from) and !sigs.contains(day))) try stale.append(gpa, day);
         }
         for (stale.items) |day| {
             try std.Io.Dir.cwd().deleteFile(s.io, try s.dayPath(&buf, day));
