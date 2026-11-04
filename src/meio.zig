@@ -165,6 +165,8 @@ const PairCell = struct { n: f64, k: f64, off: f64 = 0, own: f64 };
 const Pair = struct {
     class: u8,
     i: f64 = 0,
+    /// The prior mean
+    mu: f64 = 0,
     v: f64 = 0,
     /// Its cells in Model.pair_cells
     first: u32,
@@ -266,7 +268,11 @@ pub const Model = struct {
                         own += p.own[br][1];
                         if (region == 0) own += p.own[br][0];
                     }
-                } else v += c.inter_sd[role] * c.inter_sd[role];
+                } else {
+                    const l = c.line[role];
+                    e += l[0] + l[1] * @max(Cond.shareOf(0, games(&m.counts[i])), c.least[role]);
+                    v += c.inter_sd[role] * c.inter_sd[role];
+                }
                 return .of(e, v, own);
             },
             .gold14, .build, .rune => return null,
@@ -324,7 +330,9 @@ pub const Model = struct {
 /// shrunk to 0, one variance per role each; fitted in that order on top of E3. A
 /// champion-role's own rate already holds the conditions it takes, so it is first
 /// shifted by minus their role-wide terms, weighted by its games: one that only takes a
-/// weak keystone gains the full gap on a strong one it never took
+/// weak keystone gains the full gap on a strong one it never took. The interaction
+/// shrinks to a line, per role, in the log share of the champion-role's games with x:
+/// an x it seldom takes does worse (16.21: under 0.1% of its games, 43% against its 49%)
 const Cond = struct {
     /// role << 16 | x -> mains
     main_index: std.AutoHashMapUnmanaged(u32, u32) = .empty,
@@ -338,6 +346,15 @@ const Cond = struct {
     shift: []f64 = &.{},
     main_sd: [n_roles]f64 = @splat(0),
     inter_sd: [n_roles]f64 = @splat(0),
+    /// The interactions' prior mean: line[role][0] + line[role][1] * shareOf(cell, games)
+    line: [n_roles][2]f64 = @splat(.{ 0, 0 }),
+    /// The lowest share a fitted interaction has, per role: an unseen x reads the line
+    /// no further out
+    least: [n_roles]f64 = @splat(0),
+
+    fn shareOf(with: f64, games_: f64) f64 {
+        return @log((with + 0.5) / (games_ + 1));
+    }
 
     fn deinit(c: *Cond, gpa: Allocator) void {
         c.main_index.deinit(gpa);
@@ -630,12 +647,26 @@ fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged
     for (c.mains) |p| for (c.cells[p.first..][0..p.len]) |*cell| {
         cell.off += p.i;
     };
-    fitTerms(c.inters, c.cells, &c.inter_sd, rounds);
+    const share = try gpa.alloc(f64, c.inters.len);
+    defer gpa.free(share);
+    for (c.inters, share) |p, *x| {
+        var with: f64 = 0;
+        for (c.cells[p.first..][0..p.len]) |cell| with += cell.n;
+        x.* = Cond.shareOf(with, games(&m.counts[cri[p.first]]));
+        c.least[p.class] = @min(c.least[p.class], x.*);
+    }
+    fitTermsOnLine(c.inters, c.cells, &c.inter_sd, &c.line, share, rounds);
     return c;
 }
 
 /// Shrunk single terms on fixed offsets, one variance per class (MacKay)
 fn fitTerms(terms: []Pair, cells: []const PairCell, sd_out: []f64, rounds: u8) void {
+    fitTermsOnLine(terms, cells, sd_out, null, &.{}, rounds);
+}
+
+/// fitTerms with each class's prior mean a line in x (one per term), fitted as the
+/// champion-roles' popularity line is (fitPopularity)
+fn fitTermsOnLine(terms: []Pair, cells: []const PairCell, sd_out: []f64, line: ?*[n_roles][2]f64, x: []const f64, rounds: u8) void {
     var sd: [n_roles]f64 = @splat(0.1);
     const fixed: [n_roles]f64 = @splat(0);
     const classes = sd_out.len;
@@ -644,19 +675,53 @@ fn fitTerms(terms: []Pair, cells: []const PairCell, sd_out: []f64, rounds: u8) v
         var gamma: [n_roles]f64 = @splat(0);
         for (terms) |*p| {
             pairNewton(p, cells[p.first..][0..p.len], sd[p.class]);
-            sum_sq[p.class] += p.i * p.i;
+            sum_sq[p.class] += (p.i - p.mu) * (p.i - p.mu);
             gamma[p.class] += 1 - p.v / (sd[p.class] * sd[p.class]);
         }
-        if (!mackay(sd[0..classes], fixed[0..classes], sum_sq[0..classes], gamma[0..classes])) break;
+        const moved = if (line) |l| fitLines(terms, x, l) else 0;
+        if (!mackay(sd[0..classes], fixed[0..classes], sum_sq[0..classes], gamma[0..classes]) and moved < 1e-5) break;
     }
     for (terms) |*p| pairNewton(p, cells[p.first..][0..p.len], sd[p.class]);
     @memcpy(sd_out, sd[0..classes]);
 }
 
+/// Per class, least squares of the terms' posterior means on x; sets each prior mean,
+/// returns how far a line moved
+fn fitLines(terms: []Pair, x: []const f64, line: *[n_roles][2]f64) f64 {
+    var n: [n_roles]f64 = @splat(0);
+    var mx: [n_roles]f64 = @splat(0);
+    var my: [n_roles]f64 = @splat(0);
+    for (terms, x) |p, xi| {
+        n[p.class] += 1;
+        mx[p.class] += xi;
+        my[p.class] += p.i;
+    }
+    for (&mx, &my, n) |*a, *b, c| if (c > 0) {
+        a.* /= c;
+        b.* /= c;
+    };
+    var sxx: [n_roles]f64 = @splat(0);
+    var sxy: [n_roles]f64 = @splat(0);
+    for (terms, x) |p, xi| {
+        sxx[p.class] += (xi - mx[p.class]) * (xi - mx[p.class]);
+        sxy[p.class] += (xi - mx[p.class]) * (p.i - my[p.class]);
+    }
+    var moved: f64 = 0;
+    for (line, n, mx, my, sxx, sxy) |*l, c, a, b, xx, xy| {
+        if (c == 0) continue;
+        const slope = if (xx > 1e-9 * c) xy / xx else 0;
+        const new: [2]f64 = .{ b - slope * a, slope };
+        moved = @max(moved, @max(@abs(new[0] - l[0]), @abs(new[1] - l[1])));
+        l.* = new;
+    }
+    for (terms, x) |*p, xi| p.mu = line[p.class][0] + line[p.class][1] * xi;
+    return moved;
+}
+
 fn pairNewton(p: *Pair, cells: []const PairCell, sd: f64) void {
     const prec = 1 / (sd * sd);
     for (0..8) |_| {
-        var g = -prec * p.i;
+        var g = -prec * (p.i - p.mu);
         var h = prec;
         for (cells) |c| {
             const q = sigmoid(c.off + p.i);
@@ -933,4 +998,29 @@ test "a rare champion-role shrinks to what rare picks win, not to 50%" {
     try std.testing.expect(m.pop[1] > 0.05);
     const rare = m.rate(.champion, 0, 0, 40, 0).?;
     try std.testing.expect(rare.p < 0.36);
+}
+
+test "a keystone a champion-role seldom takes does worse with it" {
+    const gpa = std.testing.allocator;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    // 30 top champions, 3000 games each; 8010's share falls from 50% to 0.5%, and with it
+    // the logit 0.3 * ln(share / 0.5); otherwise 8437, even. Champion 31 never takes 8010
+    var prng: std.Random.DefaultPrng = .init(5);
+    const rand = prng.random();
+    for (1..32) |ch| {
+        const s: f64 = if (ch == 31) 0 else 0.5 * std.math.pow(f64, 0.01, @as(f64, @floatFromInt(ch - 1)) / 29);
+        for (0..3000) |_| {
+            const take = rand.float(f64) < s;
+            const z: f64 = if (take) 0.3 * @log(s / 0.5) else 0;
+            const win = rand.float(f64) < sigmoid(z);
+            try rows.append(gpa, .{ .day = -1, .cr = @intCast(ch), .keystone = if (take) 8010 else 8437, .win = win, .euw = false, .patch = 0, .bracket = 0 });
+        }
+    }
+    var m = try fit(gpa, rows.items, 0, .{});
+    defer m.deinit(gpa);
+    // The role-wide term takes part of the slope
+    try std.testing.expect(m.keystone.line[0][1] > 0.03);
+    const unseen = m.rate(.keystone, 0, 0, 31, 8010).?;
+    try std.testing.expect(unseen.p < m.rate(.champion, 0, 0, 31, 0).?.p - 0.1);
 }
