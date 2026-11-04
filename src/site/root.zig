@@ -115,6 +115,9 @@ pub const Options = struct {
     app_trend_min_games: u32 = 100,
     /// The daily eval's TSV (`meiolol eval --history`) for the method page's chart
     eval_history: ?[]const u8 = null,
+    /// `meiolol lockrows`' file: the champion pages' lock answers (site/locks.zig) where
+    /// set and present
+    lockrows: ?[]const u8 = null,
     /// `meiolol lean`'s file: the champion pages' early or late line where set
     lean: ?[]const u8 = null,
     /// `meiolol your-example`'s file: the example's game and list files (yourgame.files)
@@ -482,6 +485,7 @@ test {
     _ = textpages;
     _ = @import("dailydata.zig");
     _ = @import("daily.zig");
+    _ = @import("locks.zig");
 }
 
 test robots {

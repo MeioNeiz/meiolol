@@ -91,6 +91,7 @@ const SiteFlags = struct {
             .origin = f.origin,
             .eval_history = try std.fs.path.join(arena, &.{ c.data_dir, "eval-history.tsv" }),
             .lean = try std.fs.path.join(arena, &.{ c.data_dir, "lean.tsv" }),
+            .lockrows = try std.fs.path.join(arena, &.{ c.data_dir, "export", "lockrows.bin" }),
             .your_example = try std.fs.path.join(arena, &.{ c.data_dir, "your-example.json" }),
             .index_min_games = f.index_min_games,
             .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),
@@ -406,6 +407,8 @@ pub fn cmdRender(c: *Cmd) !u8 {
         first.free(gpa);
         return err;
     };
+    // Beside a running renderer, before listening: alone, on the first lock request
+    if (!alone) preloadLocks(first.loaded);
     const rendered = serve.Rendered.init(gpa, io, first.loaded, first.arena) catch |err| {
         first.free(gpa);
         return err;
@@ -418,6 +421,11 @@ pub fn cmdRender(c: *Cmd) !u8 {
     defer admin_api.deinit();
     try serve.run(gpa, io, .{ .host = host, .port = port, .render = rendered, .ready = if (background_load) null else ready, .admin = &admin_api });
     return 0;
+}
+
+/// Lock answers loaded before serving: a load is seconds. Without them pages still serve
+fn preloadLocks(l: *site.Loaded) void {
+    _ = l.loadLocks() catch |err| std.log.warn("render lock answers: {t}", .{err});
 }
 
 /// Whether something already listens at host:port: an older renderer
@@ -519,6 +527,7 @@ fn reloadOnChange(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u
             std.log.warn("render reload: {t}", .{err});
             continue;
         };
+        preloadLocks(next.loaded);
         rendered.swap(next.loaded, next.arena) catch |err| {
             next.free(c.init.gpa);
             std.log.warn("render reload: {t}", .{err});

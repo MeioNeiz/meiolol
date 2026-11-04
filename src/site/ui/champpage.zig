@@ -322,6 +322,15 @@ pub fn viewPath(a: std.mem.Allocator, src: []const u8, root: []const u8, v: u8, 
     return std.mem.concat(a, u8, &.{ root, view_dirs[v], rest });
 }
 
+/// Lock answers' directory under a view's (site/locks.zig)
+pub const lock_prefix = "data/lock/";
+
+/// View `v`'s lock answer for `island` (only "build" so far) of `slug` in role `r` at
+/// rank `k` under `lk`, a lock set as lockanswer.Locks.format writes it
+pub fn lockPath(a: std.mem.Allocator, root: []const u8, v: u8, island: []const u8, slug: []const u8, r: role.Role, k: Rank, lk: []const u8) ![]const u8 {
+    return std.mem.concat(a, u8, &.{ root, view_dirs[v], lock_prefix, island, "/", slug, "/", @tagName(r), "/", @tagName(k), "/", lk, ".bin" });
+}
+
 fn at(comptime T: type, roles: []const T, r: role.Role) ?*const T {
     for (roles) |*x| if (x.role == r) return x;
     return null;

@@ -123,5 +123,15 @@ What a block needs from a row:
   lock sets, EUW and every region, each answer checked against the reference): p50 1.5
   ms, p99 9.3 ms, max 9.8 ms (Builder: p99 300 ms). Not yet measured on C01
 
+- L2 route: the renderer and `meiolol dev` answer
+  `<view dir>data/lock/build/<slug>/<role>/<rank>/<lk>.bin` (site/locks.zig; path from
+  ui.champpage.lockPath; lock set in the path, as nginx caches by path) with a BuildData
+  of that one role, counted under the view (platform, patch or 30-day window) and the rank
+  floor. site.Loaded loads data/export/lockrows.bin and its Index on the first lock
+  request (render: before listening beside a running one, and before each swap); the web
+  loop writes it after curves. pipeline_test: a keystone lock's answer through
+  Loaded.get is the builds file's by_keystone build. Not yet: the island fetching it,
+  LockBar, taps, ±
+
 - Keystone lock in the BuildPanel (builds.by_keystone, `k` in the hash); vs melee or
   ranged and gold ahead or behind are precomputed splits of the build file only

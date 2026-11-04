@@ -15,6 +15,7 @@ const flat = @import("flat.zig");
 const patchday = @import("../patchday.zig");
 const matchup = @import("matchup.zig");
 const stats = @import("../stats.zig");
+const locks = @import("locks.zig");
 
 const Writer = std.Io.Writer;
 
@@ -50,6 +51,11 @@ pub const Loaded = struct {
     lazy: bool = true,
     /// Parts of an earlier views file the loads take (reuseViews)
     old: ?*const Parts = null,
+    /// Lock answers (Options.lockrows), on the first lock request or loadLocks; their
+    /// own mutex, so pages go on while they load
+    answers: ?*locks.Answers = null,
+    answers_tried: bool = false,
+    answers_mutex: std.Io.Mutex = .init,
 
     pub fn init(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options) !*Loaded {
         const l = try gpa.create(Loaded);
@@ -63,6 +69,7 @@ pub const Loaded = struct {
     pub fn deinit(l: *Loaded) void {
         for (l.sites) |s| if (s) |loaded| unload(loaded);
         l.extras.deinit(l.gpa, l.arena_state.allocator(), l.io);
+        if (l.answers) |x| x.deinit(l.gpa);
         l.arena_state.deinit();
         l.gpa.destroy(l);
     }
@@ -110,6 +117,17 @@ pub const Loaded = struct {
         }
     }
 
+    /// The lock answers, loaded on the first call; null without Options.lockrows' file
+    pub fn loadLocks(l: *Loaded) !?*const locks.Answers {
+        try l.answers_mutex.lock(l.io);
+        defer l.answers_mutex.unlock(l.io);
+        if (!l.answers_tried) {
+            l.answers_tried = true;
+            if (l.opts.lockrows) |p| l.answers = try locks.Answers.load(l.gpa, l.io, p);
+        }
+        return l.answers;
+    }
+
     fn put(l: *Loaded, v: html.View, s: *Site) void {
         l.mutex.lockUncancelable(l.io);
         defer l.mutex.unlock(l.io);
@@ -129,6 +147,10 @@ pub const Loaded = struct {
         if (try asset(arena, l.io, l.opts, rest)) |data| return data;
         var s = (try l.site(view)).*;
         s.arena = arena;
+        if (std.mem.startsWith(u8, rest, locks.prefix)) {
+            const x = try l.loadLocks() orelse return null;
+            return try locks.answer(&s, x, l.gpa, rest[locks.prefix.len..]);
+        }
         // Every view's home shows the shared view's example and Daily Draft, once loaded:
         // one asked for during the shared view's first load goes without them
         if (std.mem.eql(u8, rest, "index.html") and !std.meta.eql(view, html.View.shared)) {

@@ -162,6 +162,16 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(all.options.len, s.options.len);
     };
     try expectLockAnswers(arena, try cubeDir(arena, dir, "builds"), &build_file);
+    const lockrows_path = try std.fs.path.join(arena, &.{ dir, "lockrows.bin" });
+    {
+        const t = try lockTable(arena, try cubeDir(arena, dir, "builds"));
+        var file = try std.Io.Dir.cwd().createFile(io, lockrows_path, .{});
+        defer file.close(io);
+        var buf: [4096]u8 = undefined;
+        var w = file.writer(io, &buf);
+        try lockrows.write(&w.interface, t);
+        try w.interface.flush();
+    }
     var panel: site.ui.buildpanel.BuildPanel = undefined;
     try panel.init(arena, &block);
     var panel_tree: site.ui.Tree = .{};
@@ -284,6 +294,7 @@ test "fixture games to stats, curves and the website" {
         .builds_prev = .{ null, prev_builds_path, null, prev_builds_path },
         .builds_rank = .{ .{ rank_paths[0], null, rank_paths[1] }, @splat(null), @splat(null), @splat(null) },
         .lean = lean_path,
+        .lockrows = lockrows_path,
         .app_trend_min_games = 1,
     };
     try site.generate(gpa, io, db, opts);
@@ -729,6 +740,17 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqualStrings("EMERALD", at.picked.f.min_tier);
         try testing.expectEqual(0, site.builds_page.forRank(s, v, ch, .top, 0).?.rank);
         try testing.expectEqual(0, site.builds_page.forRank(s, .{ .region = .euw, .period = .patch }, ch, .top, 3).?.rank);
+        // Lock answers (site/locks.zig): the patch view's keystone lock is the builds
+        // file's by_keystone build; the path's one form only
+        const lock = site.ui.champpage.lockPath;
+        const ks = try loaded.get(arena, try lock(arena, "", 1, "build", "darius", .top, .plat, "ks8010")) orelse return error.TestUnexpectedResult;
+        const got = try site.ui.data.decode(arena, site.ui.champpage.BuildData, ks);
+        try testing.expectEqual(1, got.roles.len);
+        try testing.expectEqual(build_file.getKeystone(122, .top, 8010).?.games, got.roles[0].build.?.runes.games);
+        const none = try loaded.get(arena, try lock(arena, "", 1, "build", "darius", .top, .plat, "ks8005")) orelse return error.TestUnexpectedResult;
+        try testing.expectEqual(null, (try site.ui.data.decode(arena, site.ui.champpage.BuildData, none)).roles[0].build);
+        try testing.expectEqual(null, try loaded.get(arena, try lock(arena, "", 1, "build", "nobody", .top, .plat, "ks8010")));
+        try testing.expectEqual(null, try loaded.get(arena, try lock(arena, "", 1, "build", "darius", .top, .plat, "vs82,ks8010")));
     }
     var out_dir = try std.Io.Dir.cwd().openDir(io, out, .{ .iterate = true });
     defer out_dir.close(io);
