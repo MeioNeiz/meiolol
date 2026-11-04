@@ -14,6 +14,8 @@ const lane = @import("lane.zig");
 const signin = @import("signin.zig");
 const toshell = @import("toshell.zig");
 const compview = @import("compview.zig");
+const lobby = @import("lobby.zig");
+const apphome = @import("apphome.zig");
 const plain = @import("phrase.zig").plain;
 const Gallery = @import("gallery.zig").Gallery;
 const H = tree.H;
@@ -169,6 +171,11 @@ pub const css =
     \\    .c-live .c-cs > .side, .c-live .c-game > .col:last-child { grid-column: 2; grid-row: 1 / -1; position: sticky;
     \\      top: calc(var(--header) + var(--sp-3)); max-height: calc(var(--vh) - var(--header) - var(--sp-5)); overflow-y: auto;
     \\      overscroll-behavior: contain; }
+    \\    /* Before champ select: the note and form panel beside the tiles */
+    \\    .c-live:has(> .c-apphome) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    \\      grid-template-rows: repeat(4, auto) 1fr; align-items: start; gap: 0 var(--sp-4); }
+    \\    .c-live:has(> .c-apphome) > :not(.c-apphome) { grid-column: 1; margin-bottom: var(--sp-4); }
+    \\    .c-live > .c-apphome { grid-column: 2; grid-row: 1 / -1; }
     \\  }
     \\  @container live (min-width: 1500px) {
     \\    .c-live:has(.c-cs):has(> .c-picks) { grid-template-columns: minmax(0, 4fr) minmax(0, 5fr) minmax(0, 4fr); }
@@ -201,6 +208,12 @@ pub fn gallery(g: *Gallery) void {
         page(h, .{ .seq = 6, .private = false, .where = "Champ select · Finalization", .screen = .{ .select = locked } }),
         h.div(.{ .class = "c-picks" }, .{}),
         compview.view(h, compview.sample),
+    })}));
+    // The shell's page before champ select: the form panel and tiles after the island
+    g.addFill("lobby, form and tiles", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{
+        page(h, .{ .seq = 11, .private = true, .where = "Lobby", .screen = .{ .note = .{ .title = "The board shows in champ select" } } }),
+        lobby.view(h, lobby.sample),
+        apphome.view(h, "https://meio.lol", apphome.sample),
     })}));
     g.addFill("in game", page(h, .{ .seq = 3, .private = true, .where = "In game · 14:05", .screen = .{ .game = gamescreen.sample } }));
     g.addFill("first start, sign in", page(h, .{ .seq = 4, .private = false, .where = "No data", .screen = .{ .note = .{

@@ -49,9 +49,10 @@ bridge.js (`data-shell` JSON on the element, as seat clicks' `lane`)
 2. Built, not yet tried in a real Windows window. Site in the window: shell navigation
    to meio.lol, bridge.js's live link on site pages, back to the app on a phase change,
    message origin check
-3. Champ select grid done; other phases' height still to do. Champ select fit: the
+3. Champ select, in game and lobby grids done; loading and post game fill the window
+   at 1120 x 720 as they are. Champ select fit: the
    column grid (board column scrolls, lane panel sticky, full screen third column), each
    phase's screen using the height
-4. Lobby home: what the live screen shows with no champ select, beside APP16's form
+4. Done. Lobby home: what the live screen shows with no champ select, beside APP16's form
    panel: tiles into the site's features (draft tester, patch, pool) with a line of data
    each from the app's own files

@@ -37,11 +37,15 @@ file and packed rows: docs/architecture.md.
 - Page frame (screens.renderIn): `.c-page` holds the app bar (ui/appbar.zig: the site's
   header, its first link the live screen named for the phase, the site's pages on
   files.site, Practice, a settings popover: mastery, sign-in line, site links), then
-  `main.c-live`: the island, Options (ui-picks), comp view, lobby panel. Bar clicks
-  carry their message as `data-shell` JSON, sent by bridge.js; the bar is static, so a
-  change of phase, mastery or sign-in reloads the page. Champ select at 820 px and up
-  (container `live`): board column beside the lane panel, which stays in view; 1500 px
-  and up with Options, a third column
+  `main.c-live`: the island, Options (ui-picks), comp view, lobby panel, lobby tiles
+  (ui/apphome.zig from shell/home.zig: mastery top's best role and each role's best by
+  smoothed win rate, links to Champion pool, Rankings, Patch changes, Draft tester;
+  every `waiting` phase), in-game build panel. Bar clicks carry their message as
+  `data-shell` JSON, sent by bridge.js; the bar is static, so a change of phase, mastery
+  or sign-in reloads the page. At 820 px and up (container `live`): champ select's board
+  column beside the lane panel, which stays in view (1500 px and up with Options, a third
+  column); in game score and lanes beside your lane; before champ select note and form
+  panel beside the tiles
 - Site in the window: files.onSite pages (https://meio.lol, MEIOLOL_SITE for a dev
   server) load in the window; bridge.js there adds an "App" link to the site's header
   and menu and opens no channel. When champ select, loading or a game starts
