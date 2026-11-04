@@ -5696,6 +5696,56 @@ days win 34%; a keystone in under 0.1% of a champion's games 43% against 49%): u
 keystones were +2.08 worse than the fallback. Both now shrink to a line in their log
 share (5fb861e5, 4402182c).
 
+### Lock stacks in the truth test, 16.20 -> 16.21, 2026-11-04 (meio-truth, M9)
+
+`meiolol truth` at 6f013a22 with meio-model's two-lock meio.zig (uncommitted snapshot,
+10:45), data/cubes-20261104, `--patch 16.21`: 467 s and 4.8 GB on the Mac (raw modes
+alone 304 s, 6.5 GB; was 49 s before the stacks). Three two-lock win rates, depth 2
+(rate() is E3 of the champion-role plus both main effects and both pair terms). Meio
+minus the raw 30 days by day, milli-nats a target game, every region, all ranks; unseen:
+Meio minus the champion-role's 30-day rate where the 30 days has under 10 games. Full
+tables: data/team/2026-11-04-meio/truth-16.21-stacks-6f013a22.md:
+
+| cell | day 0 | 1 | 2-3 | 4-7 | 8+ | Meio - patch | unseen | in range |
+| --- | --: | --: | --: | --: | --: | --: | --: | --: |
+| keystone x opponent | -2.34 | -2.22 | -2.05 | -1.81 | -1.59 | -4.58 | -3.12 | 84% |
+| item x opponent | -3.47 | -3.36 | -3.14 | -2.80 | -2.45 | -6.29 | -5.85 | 85% |
+| keystone x item | -0.55 | -0.54 | -0.51 | -0.44 | -0.38 | -1.81 | -2.12 | 83% |
+
+All beyond 2 se. Meio wins every bucket against both raw modes and on unseen pairs in
+every bracket (keystone x opponent unseen: Iron-Silver -3.04, Gold-Emerald -3.12,
+Diamond+ -1.62) and on EUW1 (unseen -2.97, -5.97, -3.34). Unseen pairs are most cells:
+1.7M keystone x opponent and 5.3M item x opponent against 0.8M and 2.1M seen.
+
+Ranges (J35: faded past ±6 points, never hidden). Every mode's 80% range checked per
+kind, depth and band: inside when |target - p| <= 1.28 sqrt(se^2 + target noise), and the
+error's sd net of the target's noise (an honest solid range wants under 4.7 points).
+Every region, all ranks, all days:
+
+| depth | mode | solid cells | inside | sd | faded cells | inside | sd |
+| --- | --- | --: | --: | --: | --: | --: | --: |
+| 0 champion | 30 days | 10.5k | 75% | 2.4 | 1.5k | 78% | 10.7 |
+| 0 champion | Meio | 12.0k | 78% | 3.3 | 0 | | |
+| 1 win rates | 30 days | 465k | 79% | 3.0 | 1.13M | 81% | 18.9 |
+| 1 win rates | patch | 285k | 80% | 2.9 | 1.07M | 81% | 20.2 |
+| 1 win rates | Meio | 1.69M | 82% | 1.8 | 3.6k | 87% | 6.9 |
+| 1 shares | 30 days | 780k | 75% | 1.6 | 19k | 83% | 8.5 |
+| 1 shares | patch | 723k | 82% | 1.4 | 69k | 89% | 11.5 |
+| 2 win rates | 30 days | 1.51M | 79% | 3.3 | 9.87M | 81% | 22.3 |
+| 2 win rates | patch | 728k | 80% | 3.3 | 7.91M | 82% | 23.4 |
+| 2 win rates | Meio | 13.6M | 84% | 2.4 | 20k | 94% | 4.2 |
+
+- Raw win rates' binomial ranges hold 79-82% at every depth and band, and ±6 splits
+  sure from unsure: solid errors sd ~3 points, faded ~19-23
+- The raw 30 days runs narrow where the patch moved things: champion-role 75%, shares
+  75% solid (the old patch's games pull it off)
+- Meio's ranges run wide: 82-85% solid, and nearly every cell is solid. Its few faded
+  cells are 87-94% inside
+  with sd 4-7: not less sure than solid, so for Meio the ±6 line fades little and what it
+  fades is not unsure. EUW1 alone reads the same
+- Meio shares were mid-edit in the snapshot (+134 milli-nats against the 30 days, 24%
+  in range): left out, rerun once meio.zig's shares are committed
+
 ### Patches as experiments: item changes, 16.20 -> 16.21, 2026-11-04 (meio-model, M8)
 
 Question (PT7, Meio M8): does a champion-role's win rate move across a patch track its
