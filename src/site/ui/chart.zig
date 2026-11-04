@@ -132,7 +132,7 @@ pub fn frame(h: *H, f: Frame) N {
         ys.add(h.span(.{ .class = "yt", .style = h.vars(.{ .y = t.at }) }, .{t.label}));
     }
     var xs = h.list();
-    for (f.x) |t| xs.add(h.span(.{ .class = "xt", .data_minor = t.minor, .style = h.vars(.{ .x = t.at }) }, .{
+    for (f.x) |t| xs.add(h.span(.{ .class = "xt", .data_minor = t.minor, .data_end = t.at >= 99, .style = h.vars(.{ .x = t.at }) }, .{
         t.label,
         if (t.sub) |s| h.small(.{}, .{s}) else null,
     }));
@@ -436,6 +436,7 @@ pub const css =
     \\  .c-chart > .xax { position: relative; height: 18px; }
     \\  .c-chart .xt { position: absolute; top: 4px; left: calc(var(--x) * 1%); transform: translateX(-50%); white-space: nowrap;
     \\    text-align: center; line-height: 1.25; }
+    \\  .c-chart .xt[data-end] { transform: translateX(-100%); text-align: right; }
     \\  .c-chart .xt small { display: block; font-size: inherit; }
     \\  .c-chart > .xax:has(small) { height: 34px; }
     \\  .c-chart .dot { position: absolute; left: calc(var(--x) * 1%); top: calc(var(--y) * 1%); width: 8px; height: 8px;
