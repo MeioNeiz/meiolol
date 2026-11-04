@@ -8,6 +8,7 @@ const stats = @import("../stats.zig");
 const curves = @import("../curves.zig");
 const builds = @import("../builds.zig");
 const cubes = @import("../cubes.zig");
+const lockrows = @import("../lockrows.zig");
 const lean = @import("../lean.zig");
 const pairlane = @import("../pairlane.zig");
 const draftmodel = @import("../draftmodel.zig");
@@ -314,6 +315,81 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
         // docs/learned.md keeps these: how much options of a kind really differ
         if (t.set.min_tier == null) for (f.shrink) |x| std.log.info("{s}: k {d:.0}, in matchups {d:.0}", .{ @tagName(x.kind), x.k, x.vs });
     }
+    return 0;
+}
+
+pub const usage_lockrows =
+    \\  lockrows    write the champion page lock rows (lockrows.zig): every ranked solo
+    \\              player and game of the last --days, by champion-role, from the day
+    \\              cubes (made current first)
+    \\              --days N         default 30
+    \\              --out FILE       default DIR/export/lockrows.bin
+    \\
+;
+
+pub fn cmdLockrows(c: *Cmd) !u8 {
+    var days: u32 = 30;
+    var out: ?[]const u8 = null;
+    while (c.next()) |_| {
+        if (c.is("--days")) {
+            days = try c.int(u32);
+        } else if (c.is("--out")) {
+            out = try c.value();
+        } else return error.Usage;
+    }
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    const arena = c.arena;
+    const db = try c.open();
+    defer db.close();
+    const t0 = std.Io.Clock.awake.now(io);
+    const from_ms = std.Io.Clock.real.now(io).toMilliseconds() - @as(i64, days) * std.time.ms_per_day;
+    var w: lockrows.Writer = .init(gpa, from_ms);
+    defer w.deinit();
+    var games: u64 = 0;
+    {
+        var items: CubeItems = .{ .gpa = gpa, .arena = arena, .io = io };
+        const cube = try cubes.Store.open(gpa, io, try cubes.dirIn(arena, c.data_dir));
+        defer cube.deinit();
+        logCubes(try cube.refresh(db, from_ms, items.source()));
+        const ds = try cube.days(gpa, from_ms);
+        defer gpa.free(ds);
+        var day_arena: std.heap.ArenaAllocator = .init(gpa);
+        defer day_arena.deinit();
+        for (ds) |day| {
+            _ = day_arena.reset(.retain_capacity);
+            const d = try cube.read(gpa, day_arena.allocator(), day) orelse return error.StaleCube;
+            for (d.games) |g| try w.addGame(d, g);
+            games += d.games.len;
+        }
+    }
+    const t = try w.finish(arena);
+    const path = out orelse try std.fs.path.join(arena, &.{ c.data_dir, "export", "lockrows.bin" });
+    var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
+    defer file.deinit(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var fw = file.file.writer(io, &buf);
+    try lockrows.write(&fw.interface, t);
+    try fw.interface.flush();
+    try file.replace(io);
+    var rows: u64 = 0;
+    var bytes: u64 = 0;
+    const per = try arena.alloc(u32, t.blocks.len);
+    for (t.blocks, per) |b, *n| {
+        rows += b.rows;
+        bytes += b.bytes.len;
+        n.* = b.rows;
+    }
+    std.mem.sort(u32, per, {}, std.sort.asc(u32));
+    const at = struct {
+        fn f(xs: []const u32, q: f64) u32 {
+            return if (xs.len == 0) 0 else xs[@min(xs.len - 1, @as(usize, @intFromFloat(q * @as(f64, @floatFromInt(xs.len)))))];
+        }
+    }.f;
+    std.log.info("{s}: {d} games, {d} rows, {d} champion-roles (rows p50 {d}, p90 {d}, p99 {d}, max {d}), {d} B rows ({d:.1} B a row), {d} ms", .{
+        path,  games,                                                                   rows,                                                       t.blocks.len, at(per, 0.5), at(per, 0.9), at(per, 0.99), at(per, 1),
+        bytes, @as(f64, @floatFromInt(bytes)) / @as(f64, @floatFromInt(@max(rows, 1))), t0.durationTo(std.Io.Clock.awake.now(io)).toMilliseconds(),
+    });
     return 0;
 }
 

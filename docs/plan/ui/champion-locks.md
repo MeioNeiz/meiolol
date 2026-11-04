@@ -70,10 +70,8 @@ What a block needs from a row:
 
 ## Steps
 
-- L1 Rows table. `src/lockrows.zig`: build per champion-role columns from cube days
-  and partials for a window, write and read `lockrows.bin`. Done when built on the
-  snapshot with bytes a row, total for EUW and every region (30 days), build time and
-  renderer memory measured here, and pipeline_test builds it from the fixture games
+- L1 Rows table: pipeline_test builds it from the fixture games; the web loop writes it
+  on C01 after curves (cubes current); renderer memory measured there
 - L2 Build panel answers. Count BuildData from rows (shared with builds --site's
   panel or proven equal), the answer route in serve.zig, the LockBar, and lock taps on
   every build cell; the keystone lock moves onto it. Done when any stack of build
@@ -102,6 +100,13 @@ What a block needs from a row:
 - UI: gallery states of every new component, deploy/qa.sh, screenshots at 390 and 1440
 
 ## Status
+
+- L1 rows: `meiolol lockrows` (src/lockrows.zig) writes data/export/lockrows.bin from the
+  cubes. Snapshot snap-20261023T2004Z on the Mac (19 days in the window, 1.57M games):
+  15.7M rows, 60 B a row, 940 MB (456 MB gz), 865 champion-roles, rows p50 1.6k, p90
+  63k, p99 164k, max 302k (all regions); 22 s after the cubes are current. At today's
+  crawl (~33M rows a 30 days, every region) ~2 GB, shared by both renderers if mapped.
+  Not yet: duration, end stats, lane minutes (L4, L5)
 
 - Keystone lock in the BuildPanel (builds.by_keystone, `k` in the hash); vs melee or
   ranged and gold ahead or behind are precomputed splits of the build file only

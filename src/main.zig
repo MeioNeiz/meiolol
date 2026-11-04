@@ -74,6 +74,7 @@ const usage = usage_head ++
     cmd_crawl.usage_stats ++
     cmd_sitedata.usage_curves ++
     cmd_sitedata.usage_builds ++
+    cmd_sitedata.usage_lockrows ++
     cmd_sitedata.usage_pairlane ++
     cmd_analysis.usage_eval ++
     cmd_analysis.usage_legendaries ++
@@ -146,6 +147,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "stats", cmd_crawl.cmdStats },
     .{ "curves", cmd_sitedata.cmdCurves },
     .{ "builds", cmd_sitedata.cmdBuilds },
+    .{ "lockrows", cmd_sitedata.cmdLockrows },
     .{ "pairlane", cmd_sitedata.cmdPairlane },
     .{ "eval", cmd_analysis.cmdEval },
     .{ "legendaries", cmd_analysis.cmdLegendaries },
@@ -461,4 +463,5 @@ fn logFn(
 test {
     std.testing.refAllDecls(@This());
     _ = @import("pipeline_test.zig");
+    _ = @import("lockrows.zig");
 }
