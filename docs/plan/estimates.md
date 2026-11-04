@@ -42,8 +42,13 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
 
 ## Trust rules (for every step)
 
-- Every estimated number is labelled an estimate, with its range. The games behind it
-  are always beside it, and the raw numbers are one click away (the period switch)
+- Every estimated number is labelled an estimate, with its range; the raw numbers are
+  one click away (the period switch)
+- The range is how sure, not the games (J35): old-patch games weigh less, by a
+  different amount per stat, so games and pick rate stay as counts but never decide.
+  Faded or hidden goes by the range's half-width in every mode (raw modes: the binomial
+  range from their games). ±6 points faded and ±12 hidden match today's 100 and 30 games
+  at 50%. The games go in the leans-on line
 - Each number can say what it leans on, in words: "52.3% (±1.1), estimate for 16.21,
   Emerald+. 58% from 4,100 games on 16.21, 34% from 31,000 games on 16.20 moved by the
   patch, 8% from other ranks." That needs no model names or nats
@@ -156,6 +161,13 @@ both raw modes in every day bucket; boundaries 16.20 -> 16.21 (snap-2004Z) and
   and M6 gold at 14 next
 - M7 The locks' wish list (meio-locks): which combinations a page asks for, and which
   Meio can give (two locks at once: main effects plus both pair terms)
+- M8 Patches as experiments (patch-transfer.md PT7): a changed item or rune moves the
+  champions exposed to it, so the patch prior widens by exposure and interactions add up
+  patch by patch
+- M9 Every lock combination (J35): a range for every number a lock can show, shares
+  and averages too (build, rune, gold at 14), and E2 per lock stack (one lock, two, the
+  wish list's pairs), scored daily like the single kinds. Ranges calibrated per kind and
+  stack depth, since the range now decides what is shown
 
 Order: E7 next, as the base: on its own it fixes the matchup builds strip per
 period and rank in every block. Then E2, then E3-E5 as each passes the gate, then E9 and

@@ -119,6 +119,11 @@ recommendations"). A later decision that overrides an earlier one says so.
   another matchup) from what it knows. Champion page locks: click almost anything and
   every other block follows it. Needs experiments, tests, data analysis and UI design,
   and more components. docs/plan/estimates.md
+- J35 (4 Nov) Uncertainty over game counts: in Meio a game from two patches ago weighs
+  far less than one from today, and by how much differs per stat, so games and pick rate
+  don't say how sure a number is. Every rate shows its range, and the range (not games)
+  decides faded or hidden. Much more Meio experimenting over every lock combination, and
+  more locks UI. estimates.md Trust rules, M8-M9; ui/champion-locks.md
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built
 - Q3 Ban suggestions in scope: yes, several with games and range, never auto-ban
