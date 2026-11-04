@@ -12,10 +12,10 @@
 //! (seconds before it), note, phase (gameflow), timer (champ select phase), session
 //! (false: champ select without a session, as between phases), positions, intent,
 //! hover, lock, ban ({cell: name}), swap ([cell, cell]: a trade), game ({time, gold,
-//! scores {cell: {k, d, a, cs, level, items (their price), ids (item ids held)}}, events
-//! [Live Client events]}), win, expect. The local player's ability points follow
-//! mock_path to its level
-//! (what `zig build test` checks the watch saw, see mock_test in this file).
+//! scores {cell: {k, d, a, cs, level, unspent (ability points not yet spent), items
+//! (their price), ids (item ids held)}}, events [Live Client events]}), win, expect
+//! (what `zig build test` checks the watch saw, see mock_test in this file). The local
+//! player's ability points follow mock_path to its level less unspent.
 
 const std = @import("std");
 const httpd = @import("net").server;
@@ -40,6 +40,8 @@ pub const Cell = struct {
     assists: i64 = 0,
     cs: i64 = 0,
     level: i64 = 1,
+    /// Ability points held back from mock_path
+    unspent: i64 = 0,
     /// Price of the items held, served as one made-up item
     items: i64 = 0,
     /// Item ids held, served at no price beside it
@@ -316,6 +318,7 @@ pub const State = struct {
                 if (sc.get("a")) |x| c.assists = x.integer;
                 if (sc.get("cs")) |x| c.cs = x.integer;
                 if (sc.get("level")) |x| c.level = x.integer;
+                c.unspent = if (sc.get("unspent")) |x| x.integer else 0;
                 if (sc.get("items")) |x| c.items = x.integer;
                 if (sc.get("ids")) |x| {
                     if (x.array.items.len > c.ids.len) return error.TooManyItems;
@@ -642,8 +645,9 @@ fn activePlayer(st: *const State, s: *const Scenario) struct {
     abilities: struct { Q: Ability, W: Ability, E: Ability, R: Ability },
 } {
     const level = st.cells[s.local_cell].level;
+    const spent = level - st.cells[s.local_cell].unspent;
     var points: [4]i64 = @splat(0);
-    for (mock_path[0..@intCast(std.math.clamp(level, 0, mock_path.len))]) |key| points[std.mem.indexOfScalar(u8, "QWER", key).?] += 1;
+    for (mock_path[0..@intCast(std.math.clamp(spent, 0, mock_path.len))]) |key| points[std.mem.indexOfScalar(u8, "QWER", key).?] += 1;
     return .{
         .level = level,
         .currentGold = st.gold,

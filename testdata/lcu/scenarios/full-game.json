@@ -46,7 +46,7 @@
                  {"EventName": "ChampionKill", "KillerName": "MockPlayer", "VictimName": "Player7", "Assisters": ["Player1"]}]}},
     {"wait": 2, "game": {"time": 600, "gold": 980,
       "scores": {"0": {"k": 1, "d": 1, "a": 0, "cs": 72, "level": 9, "items": 2400}, "1": {"k": 1, "d": 0, "a": 2, "cs": 50, "level": 8, "items": 2100},
-                 "2": {"k": 2, "d": 1, "a": 1, "cs": 81, "level": 9, "items": 2900, "ids": [1056, 3020, 6655, 3340]}, "3": {"cs": 70, "level": 7, "items": 2300}, "4": {"a": 2, "cs": 10, "level": 6, "items": 1200},
+                 "2": {"k": 2, "d": 1, "a": 1, "cs": 81, "level": 9, "unspent": 1, "items": 2900, "ids": [1056, 3020, 6655, 3340]}, "3": {"cs": 70, "level": 7, "items": 2300}, "4": {"a": 2, "cs": 10, "level": 6, "items": 1200},
                  "5": {"k": 1, "d": 1, "cs": 66, "level": 9, "items": 2500}, "6": {"k": 1, "d": 1, "a": 1, "cs": 48, "level": 8, "items": 1900},
                  "7": {"k": 1, "d": 2, "a": 0, "cs": 70, "level": 8, "items": 2350}, "8": {"cs": 74, "level": 7, "items": 2600}, "9": {"a": 1, "cs": 9, "level": 6, "items": 1100}},
       "events": [{"EventName": "DragonKill", "DragonType": "Fire", "Stolen": "False", "KillerName": "Player1", "Assisters": []},
