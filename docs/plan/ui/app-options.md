@@ -13,7 +13,8 @@ ally's while they pick; nothing once an ally locks).
   win chance % (116), lane gold vs the opponent, and its effects as champion icon +
   signed points (an ally pair, an enemy matchup, strong in the role) (106). Sort by team
   win, win rate or lane gold. A click opens the row: each effect in one line with its
-  games, the most picked rune page and summoners (120)
+  games, the most picked rune page and summoners, keystone and summoner icons from the
+  client (120)
 - Public: 5 more options from everyone who plays the role, past the 5 from your pool
   that the lane panel shows (3 to 5 per list, product rules); effects as champion icon
   with a good or bad colour, no numbers; win rate in the role (an aggregate fact, as the

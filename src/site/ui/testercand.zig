@@ -601,7 +601,7 @@ pub const Panel = struct {
             .b_vs = if (o.b) |b| b - f.b_empty else null,
             .b_top = o.b != null and o.b_rank <= b_top,
             .detail = if (open) p.breakdown(h, f, o) else null,
-            .note = if (open) p.laneLine(h, f, o) else null,
+            .note = if (open) if (p.laneLine(h, f, o)) |t| h.text(t.s) else null else null,
             .label = W.why.with(h, .{ .n = nm }),
             .id = h.fmt("tc-{d}", .{o.id}),
             .on = h.on(p, .{ .open = o.id }),

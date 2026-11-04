@@ -66,7 +66,7 @@ pub const Row = struct {
     /// What opens under the row, in the list's mode
     detail: ?reasons.Breakdown = null,
     /// A line under the open detail: what the breakdown has no term for
-    note: ?tree.Text = null,
+    note: ?N = null,
     /// The button's name when it opens a detail ("Why Gnar"); null: the champion's name
     label: ?tree.Text = null,
     /// Page-unique id of the open detail, for aria-controls; "" for none
@@ -385,7 +385,7 @@ pub fn gallery(g: *Gallery) void {
     };
     for (golds, 0..) |*r, i| {
         r.x = if (i == 1) null else @as(f32, @floatFromInt(i * 230)) - 400;
-        if (r.open) r.note = plain("Lane into Yuumi: +274 gold at 14 (+90 to +458), 82 CS at 10, 1.4 deaths before 15");
+        if (r.open) r.note = h.text("Lane into Yuumi: +274 gold at 14 (+90 to +458), 82 CS at 10, 1.4 deaths before 15");
     }
     gold.rows = golds;
     g.addFill("tester: Gold column, one row without, lane line", view(h, gold));

@@ -340,6 +340,13 @@ pub const Ctx = struct {
         if (!state.private_code or !c.practice) return "";
         return a.print("{f}", .{x});
     }
+
+    /// The client's icon once fetched, else "": the review pages' site art is by path,
+    /// not id
+    fn clientArt(c: Ctx, a: Allocator, kind: desktop.icons.Kind, id: u32) ![]const u8 {
+        const icons = c.icons orelse return "";
+        return if (icons.art(.{ .kind = kind, .id = id }) != null) a.print("{s}/{d}.png", .{ kind.route(), id }) else "";
+    }
 };
 
 pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.Data {
@@ -633,6 +640,8 @@ pub fn picksOf(a: Allocator, c: Ctx, s: *const state.Select) !?ui.picks.Data {
             .spells = pr.spells,
             .runes_pct = pr.runes_pct,
             .spells_pct = pr.spells_pct,
+            .rune_src = pr.rune_src,
+            .spell_srcs = pr.spell_srcs,
             .champ = me,
             .rank = @intCast(i + 1),
             .win = if (c.private) @floatCast(100 * x.win) else null,
@@ -656,7 +665,14 @@ pub fn picksOf(a: Allocator, c: Ctx, s: *const state.Select) !?ui.picks.Data {
     };
 }
 
-const Picked = struct { runes: []const u8 = "", spells: []const u8 = "", runes_pct: ?f32 = null, spells_pct: ?f32 = null };
+const Picked = struct {
+    runes: []const u8 = "",
+    spells: []const u8 = "",
+    runes_pct: ?f32 = null,
+    spells_pct: ?f32 = null,
+    rune_src: []const u8 = "",
+    spell_srcs: [2][]const u8 = .{ "", "" },
+};
 
 /// "Electrocute + Sorcery" and "Flash, Ignite", most picked; "" unknown or unnamed
 fn picked(a: Allocator, c: Ctx, champion: u32, role: core.Role) !Picked {
@@ -667,6 +683,7 @@ fn picked(a: Allocator, c: Ctx, champion: u32, role: core.Role) !Picked {
         const tree = f.runeName(r.second);
         if (key.len > 0 and tree.len > 0) {
             out.runes = try a.print("{s} + {s}", .{ key, tree });
+            out.rune_src = try c.clientArt(a, .perk, r.keystone);
             if (c.private) out.runes_pct = 100 * r.share;
         }
     }
@@ -678,6 +695,7 @@ fn picked(a: Allocator, c: Ctx, champion: u32, role: core.Role) !Picked {
         const y = f.spellName(ids[1]);
         if (x.len > 0 and y.len > 0) {
             out.spells = try a.print("{s}, {s}", .{ x, y });
+            out.spell_srcs = .{ try c.clientArt(a, .spell, ids[0]), try c.clientArt(a, .spell, ids[1]) };
             if (c.private) out.spells_pct = 100 * sp.share;
         }
     }
@@ -1559,6 +1577,31 @@ test "in game: the build panel, private edition with a plan only" {
     d.seq = 1;
     const html = try renderIn(a, d, null, null, .{ .build = b });
     try testing.expect(std.mem.find(u8, html, "c-gamebuild") != null and std.mem.find(u8, html, "Level up <b class=\"k\">E</b>") != null);
+}
+
+test "options: most picked runes and spells, the client's icons once fetched" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const facts: core.champfacts.Facts = .{
+        .runes = &.{.{ .champion = ahri, .role = .middle, .share = 0.6, .keystone = 8112, .second = 8200 }},
+        .spells = &.{.{ .champion = ahri, .role = .middle, .share = 0.9, .ids = .{ 4, 14 } }},
+        .rune_names = &.{ .{ .id = 8112, .name = "Electrocute" }, .{ .id = 8200, .name = "Sorcery" } },
+        .spell_names = &.{ .{ .id = 4, .name = "Flash" }, .{ .id = 14, .name = "Ignite" } },
+    };
+    var icons: desktop.Icons = .{ .gpa = testing.allocator };
+    defer icons.deinit();
+    const c: Ctx = .{ .stats = null, .facts = &facts, .icons = &icons, .private = false };
+    const before = try picked(a, c, ahri, .middle);
+    try testing.expectEqualStrings("Electrocute + Sorcery", before.runes);
+    try testing.expectEqualStrings("", before.rune_src);
+    try icons.put(.{ .kind = .perk, .id = 8112 }, try testing.allocator.dupe(u8, "png"));
+    try icons.put(.{ .kind = .spell, .id = 14 }, try testing.allocator.dupe(u8, "png"));
+    const after = try picked(a, c, ahri, .middle);
+    try testing.expectEqualStrings("perk/8112.png", after.rune_src);
+    try testing.expectEqualStrings("Flash, Ignite", after.spells);
+    try testing.expectEqualStrings("", after.spell_srcs[0]);
+    try testing.expectEqualStrings("spell/14.png", after.spell_srcs[1]);
 }
 
 test "post game: lanes, damage ours then theirs, team gold by minute" {

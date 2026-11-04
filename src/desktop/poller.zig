@@ -682,6 +682,7 @@ const Poller = struct {
         p.draft = sel.board.draft;
         var want: Want = .{};
         want.addSelect(sel);
+        if (data.facts) |*f| want.addPicked(f, sel);
         p.fetchIcons(want.list[0..want.n]);
         return .{ .select = sel };
     }
@@ -714,6 +715,7 @@ const Poller = struct {
                 const sel = try arena.create(state.Select);
                 sel.* = .{ .card = s.card, .board = s.board, .comp = s.comp, .picks = s.picks };
                 want.addSelect(sel);
+                if (data.facts) |*f| want.addPicked(f, sel);
                 break :blk .{ .select = sel };
             },
             .loading => |l| .{ .loading = try dupe(arena, l) },
@@ -790,7 +792,7 @@ const Poller = struct {
 
     /// Icons to fetch, each once
     const Want = struct {
-        list: [64]icons.Key = undefined,
+        list: [96]icons.Key = undefined,
         n: usize = 0,
 
         fn add(w: *Want, c: u32) void {
@@ -815,6 +817,15 @@ const Poller = struct {
             for (sel.card.options) |o| w.add(o.champion);
             if (sel.card.opponent) |o| w.add(o.champion);
             w.add(sel.card.me);
+        }
+
+        /// The Options rows' keystones and summoners
+        fn addPicked(w: *Want, f: *const core.champfacts.Facts, sel: *const state.Select) void {
+            const ps = sel.picks orelse return;
+            for (ps.picks) |x| {
+                if (f.runesOf(x.champion, ps.role)) |r| w.addArt(.{ .kind = .perk, .id = r.keystone });
+                if (f.spellsOf(x.champion, ps.role)) |sp| for (sp.ids) |id| w.addArt(.{ .kind = .spell, .id = id });
+            }
         }
     };
 

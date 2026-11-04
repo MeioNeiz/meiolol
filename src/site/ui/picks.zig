@@ -9,6 +9,7 @@ const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const candlist = @import("candlist.zig");
+const art = @import("art.zig");
 const reasons = @import("reasons.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -61,6 +62,9 @@ pub const Row = struct {
     /// Their share of the champion's games in the role, %; private only
     runes_pct: ?f32 = null,
     spells_pct: ?f32 = null,
+    /// The keystone's and the summoners' icons, in the text's order; "" none
+    rune_src: []const u8 = "",
+    spell_srcs: [2][]const u8 = .{ "", "" },
 };
 
 pub const Kind = enum { strength, with, into };
@@ -179,14 +183,26 @@ fn breakdown(h: *H, d: Data, r: Row, mode: candlist.Mode) reasons.Breakdown {
     };
 }
 
-/// "Most picked: Electrocute + Sorcery (58%), Flash, Ignite (91%)"
-fn build(h: *H, r: Row) ?tree.Text {
+/// "Most picked: [icon] Electrocute + Sorcery (58%), [icons] Flash, Ignite (91%)"
+fn build(h: *H, r: Row) ?N {
     if (r.runes.len == 0 and r.spells.len == 0) return null;
-    const runes = if (r.runes_pct) |p| W.pct.with(h, .{ .t = r.runes, .p = p }).s else r.runes;
-    const spells = if (r.spells_pct) |p| W.pct.with(h, .{ .t = r.spells, .p = p }).s else r.spells;
-    if (r.runes.len == 0) return W.picked.with(h, .{ .x = spells });
-    if (r.spells.len == 0) return W.picked.with(h, .{ .x = runes });
-    return W.picked2.with(h, .{ .x = runes, .y = spells });
+    const runes: ?N = if (r.runes.len > 0) h.span(.{}, .{ icon(h, r.rune_src, .rune), withPct(h, r.runes, r.runes_pct) }) else null;
+    const spells: ?N = if (r.spells.len > 0) h.span(.{}, .{
+        icon(h, r.spell_srcs[0], .spell),
+        icon(h, r.spell_srcs[1], .spell),
+        withPct(h, r.spells, r.spells_pct),
+    }) else null;
+    return h.span(.{}, .{ W.picked, runes, if (runes != null and spells != null) W.comma else null, spells });
+}
+
+fn withPct(h: *H, t: []const u8, pct: ?f32) tree.Text {
+    return if (pct) |p| W.pct.with(h, .{ .t = t, .p = p }) else .{ .s = t };
+}
+
+/// Named in the text beside it; no empty square while the client's icon isn't fetched
+fn icon(h: *H, src: []const u8, k: art.Kind) ?N {
+    if (src.len == 0) return null;
+    return art.view(h, .{ .name = "", .src = src }, .{ .k = k, .px = .@"16", .named = false });
 }
 
 const gold_cuts: [4]f32 = .{ 50, 150, 300, 500 };
@@ -210,8 +226,8 @@ const W = struct {
     const average = plain("Average pick");
     const avg_role = Phrase("Average {r:text} pick");
     const with_you = Phrase("Your team with {n:text}");
-    const picked = Phrase("Most picked: {x:text}");
-    const picked2 = Phrase("Most picked: {x:text}, {y:text}");
+    const picked = plain("Most picked: ");
+    const comma = plain(", ");
     const pct = Phrase("{t:text} ({p:rate})");
 };
 
@@ -221,6 +237,8 @@ pub const css =
     \\  .c-picks > .hd { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
     \\  .c-picks h3 { margin: 0; font-size: var(--fs-s); font-weight: var(--w-m); color: var(--t2); }
     \\  .c-picks .scope { font-size: var(--fs-xs); color: var(--faint); }
+    \\  .c-picks .note .c-art { margin: 0 3px 2px 0; }
+    \\  .c-picks .note > span > span { white-space: nowrap; }
     \\}
     \\
 ;
@@ -232,7 +250,7 @@ pub const sample: Data = .{
     .them = "Syndra",
     .scope = "EUW, last 30 days",
     .rows = &.{
-        .{ .champ = champ.demo("Galio", "Galio"), .rank = 1, .win = 54.1, .base = 50.4, .gold = -40, .pool = true, .rest = 0.4, .runes = "Aftershock + Sorcery", .spells = "Flash, Teleport", .runes_pct = 61, .spells_pct = 88, .effects = &.{
+        .{ .champ = champ.demo("Galio", "Galio"), .rank = 1, .win = 54.1, .base = 50.4, .gold = -40, .pool = true, .rest = 0.4, .runes = "Aftershock + Sorcery", .spells = "Flash, Teleport", .runes_pct = 61, .spells_pct = 88, .rune_src = art.rune("Resolve/VeteranAftershock/VeteranAftershock", "").src, .spell_srcs = .{ art.spell("Flash", "").src, art.spell("Teleport", "").src }, .effects = &.{
             .{ .kind = .into, .other = champ.demo("Syndra", "Syndra"), .pp = 1.6, .games = 1840 },
             .{ .kind = .with, .other = champ.demo("JarvanIV", "Jarvan IV"), .pp = 0.9, .games = 620 },
             .{ .kind = .strength, .pp = 0.8, .games = 21_400 },
