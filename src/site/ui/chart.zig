@@ -415,7 +415,7 @@ pub const Reading = struct {
 pub const css =
     \\@layer components {
     \\  .c-chart { container-type: inline-size; position: relative; display: flex; flex-direction: column; margin: 0;
-    \\    padding: 0 calc(var(--pr) * 1px) 0 40px; font-size: var(--fs-xs); color: var(--faint);
+    \\    padding: 0 calc(var(--pr) * 1px) 0 48px; font-size: var(--fs-xs); color: var(--faint);
     \\    font-variant-numeric: tabular-nums; }
     \\  .c-chart > .plot { position: relative; height: calc(var(--h) * 1px); }
     \\  .c-chart > .plot[data-press] { cursor: crosshair; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
