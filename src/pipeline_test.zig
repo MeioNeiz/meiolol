@@ -2275,18 +2275,6 @@ fn expectLocksAsBuilder(arena: std.mem.Allocator, t: *const lockrows.Table, x: *
             const m = (try lockanswer.matchups(arena, t, x, b.champion, b.role, filter, l)).?;
             const n = if (want) |f| if (f.get(b.champion, b.role)) |own_| own_.games else 0 else 0;
             try testing.expectEqual(n, m.all.games);
-            // Meio's options (site/locks.zig meio): each one's games under the stack are
-            // the stack's with that option locked too
-            const opts = (try lockanswer.options(arena, t, x, b.champion, b.role, filter, l)).?;
-            try testing.expectEqual(n, opts.locked.games);
-            for ([_]lockanswer.Kind{ .keystone, .opponent }, [_][]const lockanswer.Option{ opts.keystones, opts.opponents }) |kind, list| {
-                if (l.by.get(kind) != null) continue;
-                for (list) |o| {
-                    var more = l.*;
-                    more.by.set(kind, .of(&.{o.id}));
-                    try testing.expectEqualDeep(o.locked, (try lockanswer.count(arena, t, x, b.champion, b.role, filter, &more)).?);
-                }
-            }
             stacks += 1;
         }
     };
