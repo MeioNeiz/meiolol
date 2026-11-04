@@ -5857,6 +5857,47 @@ analysed in Python. Every region, all ranks unless named.
   rather than shifted: a larger Diamond+ variance next, per-cell phi from player keys
   if that falls short
 
+### Rare picks in Meio's prior lines, 16.21, 2026-11-04 (meio-model)
+
+Follows "Which side Meio misses on". Meio's main and interaction terms shrink to a line
+in log share (champion-roles: of their role's games; keystones and items: of their
+champion-role's). Residuals of the truth dump on 16.21 (cubes-20261104b, every slot),
+binned by that share:
+
+- Champion-roles: flat above log share -10 (0.005%); below it -1 point (x -10.5), -5
+  (-12), -12 (under -13)
+- Keystones: the lean follows lift = x - xr, xr the keystone's log share of its role's
+  games. All ranks every region: lift above -2 flat, -3..-4 -1.4 points, -4..-5 -3.0,
+  -5..-6 -4.9, -6..-8 -6.7 (16% below range, 6% above); the same in Diamond+, EUW1 and
+  within each band of x. A keystone rare in the role too (xr under -6) doesn't lean
+  when x is above -8. Separately, x under -10 leans about -7 at any lift
+- Not a prior's job: Diamond+ popular champion-roles miss below 15-20% and Iron-Silver
+  the other way, on data-rich cells
+
+Change (src/meio.zig): each line gains a hinge, c0 + c1 x + c2 min(0, h - knot), with h
+log share for champion-roles (knot -10) and lift for keystones and items (knot -2). The
+interaction lines are now fitted Fay-Herriot style (each term unshrunk, mu + (i - mu) /
+gamma, weighted by gamma). The old EM step, least squares through the posterior means,
+has the same fixed point but crept towards it: with the lift hinge it removed about 10%
+of the lean (-6.7 -> -6.0 at lift -6..-8) and left the x slope flatter.
+
+Paired against the straight lines, milli-nats per target game, every region:
+
+| variant | rare champion-roles (x <= -10) | keystones x -10..-8 | x -8..-6 | x < -10 |
+| --- | --: | --: | --: | --: |
+| A: pop knot -10, keystone knot -6 in x | -2.41 +- 0.62 | +0.82 +- 0.06 | +0.06 +- 0.01 | +2.7 +- 0.6 |
+| B: pop knot -11 | -1.65 +- 0.37 | | | |
+| C: pop -11, lift knot -2, EM line | | -0.46 +- 0.07 | -0.25 +- 0.02 | +1.0 +- 0.3 |
+| D: pop -10, lift knot -2, Fay-Herriot | -2.41 +- 0.62 | -3.96 +- 0.41 | -1.30 +- 0.13 | -3.6 +- 1.3 |
+
+D's misses: rare champion-roles below 18.9 -> 12.0%, above 8.0 -> 13.0% (PIT mean
+0.736 -> 0.760); keystones x -10..-8 below 14.5 -> 11.1%, above 6.4 -> 7.5%; at lift
+-6..-8 the residual is -1.8 (was -6.7). Common cells unchanged. Truth's tables: keystone
+unseen cells, Meio - parent, -2.68 -> -5.99 (Gold-Emerald -3.59 -> -6.34, Diamond+
+-4.74 -> -6.22); Meio - 30d and in range unchanged (rare cells carry few games); items
+flat. D is the default. Not tried: Fay-Herriot for the champion-roles' line, and a
+second hinge in x for keystones under -10.
+
 ### Patches as experiments: item changes, 16.20 -> 16.21, 2026-11-04 (meio-model, M8)
 
 Question (PT7, Meio M8): does a champion-role's win rate move across a patch track its

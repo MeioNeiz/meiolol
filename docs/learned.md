@@ -39,13 +39,15 @@ How to write a line:
   fitted model. Evidence: docs/model.md "Pair cells that borrow strength (A4)", "A4 on
   the new pin, shipped form"
 - Rare picks lose: a champion in a role it is seldom played in (under 100 games in 30
-  days, every region) won 34% of its next week's games, so shrinking a thin rate to 50%
-  is wrong; shrink it to what equally rare picks win. The same holds for a keystone or
-  item a champion seldom takes. Sure: Meio's champion-role and keystone terms centred on
-  lines in log share turned unseen keystone cells on 16.21 (14 origins, 34k cells, every
-  region) from +2.08 +- 0.76 milli-nats worse than the champion's raw rate to 2.68 +-
-  0.69 better; unseen items, matchups and duos better too, seen cells unchanged. Site: not yet (Meio is not shipped). Evidence:
-  src/meio.zig, docs/model.md "Meio in the truth test"
+  days, every region) won 34% of its next week's games, so shrinking a thin rate to 50% is
+  wrong; shrink it to what equally rare picks win. Keystones go by lift: one common in the
+  role that this champion seldom takes wins up to 7 points less, one rare in the role too
+  doesn't lean. Sure: Meio's terms centred on popularity lines, hinged below 0.005% of the
+  role for champion-roles and lift -2 for keystones, turned unseen keystone cells on 16.21
+  (14 origins, 34k cells, every region) 5.99 +- 0.76 milli-nats better than the champion's
+  raw rate (straight lines 2.68, none -2.08); unseen items, matchups and duos better too,
+  seen cells unchanged. Site: not yet (Meio is not shipped). Evidence: src/meio.zig,
+  docs/model.md "Meio in the truth test", "Rare picks in Meio's prior lines"
 - No counter or duo stands far out from the rest: pulling thin pairings to the pack
   loses nothing. Sure: 16.21, room for outliers changed 0.97M matchups' and 0.16M duos'
   accuracy by under 0.01 milli-nats. Evidence: docs/model.md "Share drift by rank and
@@ -322,10 +324,8 @@ How to write a line:
   patch's first week to its second, an item's about 2, and a share is as noisy as one
   from 10-20% fewer games. With both counted, Meio's share ranges hold 79-80% of next
   week's shares (EUW1 Diamond+ 75%; raw patch 68-75%), missing above and below about
-  equally (8.5 / 10.2%). Rare choices win less than Meio says (under 100 patch games: 16%
-  below range, 8% above), unrelated to pick-rate trends. Sure: 16.21, 14 origins. Site:
-  share ranges include both. Evidence: docs/model.md "Lock stacks in the truth test",
-  "Which side Meio misses on"
+  equally (8.5 / 10.2%). Sure: 16.21, 14 origins. Site: share ranges include both.
+  Evidence: docs/model.md "Lock stacks in the truth test", "Which side Meio misses on"
 - (early) An item nerf costs the champions that build it: on 16.21 Riot cut Hubris for
   ranged champions, and those that built it in most games (Graves jungle, Jhin bot,
   Quinn top) fell about 0.3-0.4 points against their role; a full-exposure change is

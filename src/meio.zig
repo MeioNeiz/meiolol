@@ -85,6 +85,12 @@ pub const Options = struct {
     /// Prior sds on the logit scale, by term; 0: estimated from the fit
     sd: [n_terms]f64 = @splat(0),
     rounds: u8 = 40,
+    /// Popularity lines' knots (lineAt), -inf: a straight line. The champion-roles' in
+    /// log share; the keystone and item interactions' in lift (Cond.knot). 16.21 truth
+    /// over straight lines: rare champion-roles -2.4 milli-nats per game, keystones under
+    /// 0.25% of their champion-role -1.3 to -4, unseen keystones -6.0 vs parent (was -2.7)
+    pop_knot: f64 = -10,
+    cond_knot: f64 = -2,
 };
 
 /// Term kinds, one variance each
@@ -206,8 +212,10 @@ const Pair = struct {
 pub const Model = struct {
     shape: Shape,
     sd: [n_terms]f64,
-    /// The main term's prior mean: pop[0] + pop[1] * log share of its role's games
-    pop: [2]f64 = .{ 0, 0 },
+    /// The main term's prior mean: lineAt(pop, x, hinge(x, pop_knot)), x the log share of
+    /// its role's games
+    pop: [3]f64 = @splat(0),
+    pop_knot: f64 = -std.math.inf(f64),
     index: std.AutoHashMapUnmanaged(u16, u32) = .empty,
     counts: []Counts = &.{},
     fitted: []Fitted = &.{},
@@ -341,8 +349,10 @@ pub const Model = struct {
             q.v += p.v;
             q.own = ownOf(&p.own, brackets, region);
         } else {
-            const l = c.line[role];
-            q.e += l[0] + l[1] * @max(Cond.shareOf(0, games(&m.counts[i])), c.least[role]);
+            const s = @max(Cond.shareOf(0, games(&m.counts[i])), c.least[role]);
+            // A main never seen: the role never takes it, so no lift to speak of
+            const h = if (c.main_index.get(@as(u32, role) << 16 | x)) |j| hinge(s - c.main_share[j], c.knot) else 0;
+            q.e += lineAt(c.line[role], s, h);
             q.v += c.inter_sd[role] * c.inter_sd[role];
         }
         return q;
@@ -731,8 +741,14 @@ const Cond = struct {
     shift: []f64 = &.{},
     main_sd: [n_roles]f64 = @splat(0),
     inter_sd: [n_roles]f64 = @splat(0),
-    /// The interactions' prior mean: line[role][0] + line[role][1] * shareOf(cell, games)
-    line: [n_roles][2]f64 = @splat(.{ 0, 0 }),
+    /// The interactions' prior mean: lineAt(line[role], x, hinge(lift, knot)), x the
+    /// champion-role's log share (shareOf), lift x less its main's role-wide share. 16.21:
+    /// a keystone common in the role but rare for this champion loses more than x says
+    /// (lift < -2: -1.4 points at -3.5, -6.7 at -7), one rare in the role too doesn't
+    line: [n_roles][3]f64 = @splat(@splat(0)),
+    knot: f64 = -std.math.inf(f64),
+    /// By main: shareOf its games in its role's
+    main_share: []f64 = &.{},
     /// The lowest share a fitted interaction has, per role: an unseen x reads the line
     /// no further out
     least: [n_roles]f64 = @splat(0),
@@ -744,6 +760,7 @@ const Cond = struct {
     fn deinit(c: *Cond, gpa: Allocator) void {
         c.main_index.deinit(gpa);
         gpa.free(c.mains);
+        gpa.free(c.main_share);
         c.inter_index.deinit(gpa);
         gpa.free(c.inters);
         gpa.free(c.cells);
@@ -821,7 +838,7 @@ fn meanSigmoid(eta: f64, s: f64) f64 {
 pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !Model {
     std.debug.assert(opts.patches >= 1 and opts.patches <= max_patches);
     const shape: Shape = .{ .patches = opts.patches, .walk = opts.walk };
-    var m: Model = .{ .shape = shape, .sd = opts.sd };
+    var m: Model = .{ .shape = shape, .sd = opts.sd, .pop_knot = opts.pop_knot };
     errdefer m.deinit(gpa);
     var counts: std.ArrayList(Counts) = .empty;
     defer counts.deinit(gpa);
@@ -921,8 +938,8 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     defer gpa.free(share);
     m.sd = fitLevels(m.counts, m.fitted, shape, opts.sd, 0, opts.rounds, .{ .m = &m, .share = share });
     m.pair = try fitPairs(gpa, shape, &m.index, m.fitted, &cells, 0, opts.rounds);
-    m.keystone = try fitCond(gpa, &m, &keystones, opts.rounds);
-    m.item = try fitCond(gpa, &m, &items, opts.rounds);
+    m.keystone = try fitCond(gpa, &m, &keystones, opts.cond_knot, opts.rounds);
+    m.item = try fitCond(gpa, &m, &items, opts.cond_knot, opts.rounds);
     m.rune = try fitShare(gpa, &m, try rune.toOwnedSlice(gpa), &keystones, try rune_halves.drift(gpa), opts.rounds);
     m.build = try fitShare(gpa, &m, try build.toOwnedSlice(gpa), &items, try build_halves.drift(gpa), opts.rounds);
     m.gold = try fitGold(gpa, &m, try gold.toOwnedSlice(gpa), gold_sq, &gold_cells, opts.rounds);
@@ -1067,29 +1084,59 @@ fn games(c: *const Counts) f64 {
 /// The main terms' line in log share: least squares of their posterior means (the EM
 /// step for a Gaussian prior's mean), then each prior mean from it; how far pop moved
 fn fitPopularity(m: *Model, share: []const f64) f64 {
-    const n: f64 = @floatFromInt(share.len);
-    var mx: f64 = 0;
-    var my: f64 = 0;
-    for (share, m.fitted) |x, f| {
-        mx += x;
-        my += f.theta[0];
-    }
-    mx /= n;
-    my /= n;
-    var sxx: f64 = 0;
-    var sxy: f64 = 0;
-    for (share, m.fitted) |x, f| {
-        sxx += (x - mx) * (x - mx);
-        sxy += (x - mx) * (f.theta[0] - my);
-    }
-    // Every champion-role equally popular: no slope to see
-    const b = if (sxx > 1e-9 * n) sxy / sxx else 0;
-    const pop: [2]f64 = .{ my - b * mx, b };
-    const moved = @max(@abs(pop[0] - m.pop[0]), @abs(pop[1] - m.pop[1]));
+    var f: LineFit = .{};
+    for (share, m.fitted) |x, fi| f.add(x, hinge(x, m.pop_knot), fi.theta[0], 1);
+    const pop = f.solve();
+    var moved: f64 = 0;
+    for (pop, m.pop) |a, b| moved = @max(moved, @abs(a - b));
     m.pop = pop;
-    for (share, m.fitted) |x, *f| f.mu = pop[0] + pop[1] * x;
+    for (share, m.fitted) |x, *fi| fi.mu = lineAt(pop, x, hinge(x, m.pop_knot));
     return moved;
 }
+
+/// A popularity line in x, with a second slope h below a knot (hinge): the rarest picks
+/// lose more than a straight line through the common ones says (16.21: champion-roles
+/// under ~0.005% of their role's games)
+fn lineAt(c: [3]f64, x: f64, h: f64) f64 {
+    return c[0] + c[1] * x + c[2] * h;
+}
+
+fn hinge(z: f64, knot: f64) f64 {
+    return @min(0, z - knot);
+}
+
+/// Weighted least squares of y on x and h
+const LineFit = struct {
+    n: f64 = 0,
+    /// x, hinge, y
+    sum: @Vector(3, f64) = @splat(0),
+    /// xx, xh, hh, xy, hy
+    sq: @Vector(5, f64) = @splat(0),
+
+    fn add(f: *LineFit, x: f64, h: f64, y: f64, w: f64) void {
+        f.n += w;
+        f.sum += @as(@Vector(3, f64), .{ x, h, y }) * @as(@Vector(3, f64), @splat(w));
+        f.sq += @as(@Vector(5, f64), .{ x * x, x * h, h * h, x * y, h * y }) * @as(@Vector(5, f64), @splat(w));
+    }
+
+    fn solve(f: LineFit) [3]f64 {
+        if (f.n == 0) return @splat(0);
+        const mean = f.sum / @as(@Vector(3, f64), @splat(f.n));
+        const xx = f.sq[0] - f.n * mean[0] * mean[0];
+        const xh = f.sq[1] - f.n * mean[0] * mean[1];
+        const hh = f.sq[2] - f.n * mean[1] * mean[1];
+        const xy = f.sq[3] - f.n * mean[0] * mean[2];
+        const hy = f.sq[4] - f.n * mean[1] * mean[2];
+        const det = xx * hh - xh * xh;
+        var b: [2]f64 = .{ 0, 0 };
+        // Too few x under the knot to see a hinge (or none): the straight line; every x
+        // equal: no slope to see
+        if (hh > 1e-9 * f.n and det > 1e-9 * xx * hh) {
+            b = .{ (hh * xy - xh * hy) / det, (xx * hy - xh * xy) / det };
+        } else if (xx > 1e-9 * f.n) b[0] = xy / xx;
+        return .{ mean[2] - b[0] * mean[0] - b[1] * mean[1], b[0], b[1] };
+    }
+};
 
 /// MacKay's fixed point for each variance not fixed by the options; false once settled
 fn mackay(sd: []f64, fixed: []const f64, sum_sq: []const f64, gamma: []const f64) bool {
@@ -1152,8 +1199,8 @@ fn sortedKeys(gpa: Allocator, cells: *const std.AutoHashMapUnmanaged(u64, PairCe
     return keys;
 }
 
-fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged(u64, PairCell), rounds: u8) !Cond {
-    var c: Cond = .{};
+fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged(u64, PairCell), knot: f64, rounds: u8) !Cond {
+    var c: Cond = .{ .knot = knot };
     errdefer c.deinit(gpa);
     const keys = try sortedKeys(gpa, map);
     defer gpa.free(keys);
@@ -1171,6 +1218,8 @@ fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged
     defer mains.deinit(gpa);
     var inters: std.ArrayList(Pair) = .empty;
     defer inters.deinit(gpa);
+    var inter_main: std.ArrayList(u32) = .empty;
+    defer inter_main.deinit(gpa);
     for (keys, c.cells, 0..) |key, *out, j| {
         const role: u16 = @intCast(key >> 37);
         const x: u16 = @intCast(key >> 21 & 0xffff);
@@ -1189,6 +1238,7 @@ fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged
         if (j == 0 or keys[j - 1] >> 8 != key >> 8) {
             try c.inter_index.put(gpa, @as(u32, cr) << 16 | x, @intCast(inters.items.len));
             try inters.append(gpa, .{ .class = @intCast(role), .first = @intCast(j), .len = 0 });
+            try inter_main.append(gpa, @intCast(mains.items.len - 1));
         }
         const p = &inters.items[inters.items.len - 1];
         p.len += 1;
@@ -1212,26 +1262,38 @@ fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged
     for (c.mains) |p| for (c.cells[p.first..][0..p.len]) |*cell| {
         cell.off += p.i;
     };
+    var role_games: [n_roles]f64 = @splat(0);
+    var it = m.index.iterator();
+    while (it.next()) |e| role_games[e.key_ptr.* >> 13] += games(&m.counts[e.value_ptr.*]);
+    c.main_share = try gpa.alloc(f64, c.mains.len);
+    for (c.mains, c.main_share) |p, *x| x.* = Cond.shareOf(withOf(c.cells, p), role_games[p.class]);
     const share = try gpa.alloc(f64, c.inters.len);
     defer gpa.free(share);
-    for (c.inters, share) |p, *x| {
-        var with: f64 = 0;
-        for (c.cells[p.first..][0..p.len]) |cell| with += cell.n;
-        x.* = Cond.shareOf(with, games(&m.counts[cri[p.first]]));
+    const lift = try gpa.alloc(f64, c.inters.len);
+    defer gpa.free(lift);
+    for (c.inters, share, lift, 0..) |p, *x, *h, j| {
+        x.* = Cond.shareOf(withOf(c.cells, p), games(&m.counts[cri[p.first]]));
         c.least[p.class] = @min(c.least[p.class], x.*);
+        h.* = hinge(x.* - c.main_share[inter_main.items[j]], knot);
     }
-    fitTermsOnLine(c.inters, c.cells, &c.inter_sd, &c.line, share, 0, rounds);
+    fitTermsOnLine(c.inters, c.cells, &c.inter_sd, .{ .c = &c.line, .x = share, .h = lift }, 0, rounds);
     return c;
+}
+
+fn withOf(cells: []const PairCell, p: Pair) f64 {
+    var n: f64 = 0;
+    for (cells[p.first..][0..p.len]) |cell| n += cell.n;
+    return n;
 }
 
 /// Shrunk single terms on fixed offsets, one variance per class (MacKay); noise as newton's
 fn fitTerms(terms: []Pair, cells: []const PairCell, sd_out: []f64, noise: f64, rounds: u8) void {
-    fitTermsOnLine(terms, cells, sd_out, null, &.{}, noise, rounds);
+    fitTermsOnLine(terms, cells, sd_out, null, noise, rounds);
 }
 
 /// fitTerms with each class's prior mean a line in x (one per term), fitted as the
 /// champion-roles' popularity line is (fitPopularity)
-fn fitTermsOnLine(terms: []Pair, cells: []const PairCell, sd_out: []f64, line: ?*[n_roles][2]f64, x: []const f64, noise: f64, rounds: u8) void {
+fn fitTermsOnLine(terms: []Pair, cells: []const PairCell, sd_out: []f64, line: ?Lines, noise: f64, rounds: u8) void {
     var sd: [n_roles]f64 = @splat(0.1);
     const fixed: [n_roles]f64 = @splat(0);
     const classes = sd_out.len;
@@ -1243,43 +1305,35 @@ fn fitTermsOnLine(terms: []Pair, cells: []const PairCell, sd_out: []f64, line: ?
             sum_sq[p.class] += (p.i - p.mu) * (p.i - p.mu);
             gamma[p.class] += 1 - p.v / (sd[p.class] * sd[p.class]);
         }
-        const moved = if (line) |l| fitLines(terms, x, l) else 0;
+        const moved = if (line) |l| fitLines(terms, l, sd[0..classes]) else 0;
         if (!mackay(sd[0..classes], fixed[0..classes], sum_sq[0..classes], gamma[0..classes]) and moved < 1e-5) break;
     }
     for (terms) |*p| pairNewton(p, cells[p.first..][0..p.len], sd[p.class], noise);
     @memcpy(sd_out, sd[0..classes]);
 }
 
-/// Per class, least squares of the terms' posterior means on x; sets each prior mean,
-/// returns how far a line moved
-fn fitLines(terms: []Pair, x: []const f64, line: *[n_roles][2]f64) f64 {
-    var n: [n_roles]f64 = @splat(0);
-    var mx: [n_roles]f64 = @splat(0);
-    var my: [n_roles]f64 = @splat(0);
-    for (terms, x) |p, xi| {
-        n[p.class] += 1;
-        mx[p.class] += xi;
-        my[p.class] += p.i;
-    }
-    for (&mx, &my, n) |*a, *b, c| if (c > 0) {
-        a.* /= c;
-        b.* /= c;
-    };
-    var sxx: [n_roles]f64 = @splat(0);
-    var sxy: [n_roles]f64 = @splat(0);
-    for (terms, x) |p, xi| {
-        sxx[p.class] += (xi - mx[p.class]) * (xi - mx[p.class]);
-        sxy[p.class] += (xi - mx[p.class]) * (p.i - my[p.class]);
+/// By term: x and h for lineAt
+const Lines = struct { c: *[n_roles][3]f64, x: []const f64, h: []const f64 };
+
+/// Per class, the terms' line (LineFit); sets each prior mean, returns how far a line
+/// moved. Each term unshrunk, mu + (i - mu) / gamma, weighted by gamma (Fay-Herriot): the
+/// fixed point of a line through the posterior means, but reached at once, where that EM
+/// step creeps when most terms are rare and sit near their prior mean (16.21: it left
+/// most of the lift lean in)
+fn fitLines(terms: []Pair, line: Lines, sd: []const f64) f64 {
+    var fits: [n_roles]LineFit = @splat(.{});
+    for (terms, line.x, line.h) |p, x, h| {
+        const gamma = @max(1 - p.v / (sd[p.class] * sd[p.class]), 1e-3);
+        fits[p.class].add(x, h, p.mu + (p.i - p.mu) / gamma, gamma);
     }
     var moved: f64 = 0;
-    for (line, n, mx, my, sxx, sxy) |*l, c, a, b, xx, xy| {
-        if (c == 0) continue;
-        const slope = if (xx > 1e-9 * c) xy / xx else 0;
-        const new: [2]f64 = .{ b - slope * a, slope };
-        moved = @max(moved, @max(@abs(new[0] - l[0]), @abs(new[1] - l[1])));
+    for (line.c, fits) |*l, f| {
+        if (f.n == 0) continue;
+        const new = f.solve();
+        for (new, l) |a, b| moved = @max(moved, @abs(a - b));
         l.* = new;
     }
-    for (terms, x) |*p, xi| p.mu = line[p.class][0] + line[p.class][1] * xi;
+    for (terms, line.x, line.h) |*p, x, h| p.mu = lineAt(line.c[p.class], x, h);
     return moved;
 }
 
