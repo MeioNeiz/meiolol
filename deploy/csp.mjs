@@ -1,9 +1,9 @@
 // CSP and Trusted Types check (src/site/csp.zig): each page in headless Chrome, scrolled
 // and the header search opened, with every console error and securitypolicyviolation.
 // Exits 1 if any page has one. 404s and 401s for resources are left out (a small dev
-// snapshot lacks data files; /account asks for a session). NOTES=1 sets the dev server's
-// notes cookie (the overlay). LOGIN=1 signs in as meiolol-check first (/private, /admin,
-// the notes overlay), out at the end:
+// snapshot lacks data files; /account asks for a session). MEIONOTES=1 sets the dev server's
+// meionotes cookie (the overlay). LOGIN=1 signs in as meiolol-check first (/private, /admin,
+// the meionotes overlay), out at the end:
 //   LOGIN=1 vault run meiolol/local -- node deploy/csp.mjs BASE
 // Also lists scripts from elsewhere or /cdn-cgi/ (Cloudflare's injections).
 //   node deploy/csp.mjs BASE [PATH...]
@@ -20,7 +20,7 @@ const pages = process.argv.length > 3 ? process.argv.slice(3) : [
   '/matchups/top/darius-vs-garen', '/daily', '/patch', '/patch?region=all', '/pickup', '/pickup/top',
   '/pool', '/learn', '/your', '/your#view=highlights', '/game', '/method', '/download', '/privacy',
   '/terms', '/login', '/account', '/signup', '/join', '/nosuch', '/private', '/private/tester',
-  '/admin', '/admin/notes',
+  '/admin', '/admin/meionotes',
 ];
 const args = process.env.MAP ? [`--host-resolver-rules=MAP ${process.env.MAP}`] : [];
 const browser = await pw.chromium.launch({ channel: 'chrome', headless: true, args });
@@ -38,7 +38,7 @@ if (process.env.LOGIN) {
   const st = await post('/auth/login', JSON.stringify({ username: 'meiolol-check', password: process.env.MEIOLOL_CHECK_PASSWORD }));
   if (st >= 300) { console.log('login failed', st); process.exit(1); }
 }
-if (process.env.NOTES) await ctx.addCookies([{ name: 'meiolol_notes', value: '1', url: base }]);
+if (process.env.MEIONOTES) await ctx.addCookies([{ name: 'meionotes', value: '1', url: base }]);
 await ctx.addInitScript(() => document.addEventListener('securitypolicyviolation', e =>
   console.error(`CSPV ${e.violatedDirective} ${e.blockedURI} ${e.sample || ''}`)));
 let bad = 0;

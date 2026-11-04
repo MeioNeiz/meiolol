@@ -158,7 +158,7 @@ ones by sha256 (`csp.meta(scripts, styles)`; `csp.files_only` for a page without
 a per-page <style> gets its hash at delivery (`csp.withStyle`). Style attributes stay
 allowed (h.vars). Trusted Types: only the default policy (first script in the head),
 which passes same-origin script URLs and blocks every HTML and script sink, so an
-island builds nodes (the notes overlay too), never HTML strings. An inline script or
+island builds nodes (the meionotes overlay too), never HTML strings. An inline script or
 <style> not listed is blocked: `csp.check(page)` in a page's test. Cloudflare's Email
 Obfuscation is off for the zone (30 Oct): its /cdn-cgi/ decoder writes innerHTML, which
 Trusted Types blocks, leaving "[email protected]"; turn on no Cloudflare feature that
@@ -268,46 +268,49 @@ their games together (your-games.md "Squads").
 - Dev: `meiolol dev` answers /api/applications.bin with the admin fixture; /api/apply
   goes to the local API (`meiolol api --fixture`), X-Meiolol-Action passed on
 
-## Notes tool (src/site/notes.zig, ui/notes.zig, ui/noteslist.zig, src/api/notes.zig)
+## meionotes (src/site/meionotes.zig, ui/meionotes.zig, ui/meionoteslist.zig, src/api/meionotes.zig)
 
 Jacob's notes on the live site: tap an element (or the whole page), type, Save; pins
-for a page's open notes. Only for a take_notes login (admin and up); visitors get zero
-bytes.
+for a page's open meionotes. Only for a take_meionotes login (admin and up); visitors
+get zero bytes.
 
-- Gating: an admin's login sets the marker cookie `__Host-meiolol_notes=1` (HttpOnly,
-  30 days; logout clears it; Tool on/off on /admin/notes toggles it). nginx sends a page
-  request carrying it through `@notes` (deploy/nginx/meiolol.conf): the same request to
-  itself without cookies, gzip or validators, then `sub_filter` adds site/notes.zig `tag`
-  (keep the two in step) before `</body>`, private, no-store. Status codes go through;
-  assets skip the hop. /private and /admin pages take `@notes_private`: the cookies stay
-  for their auth_request, an X-Meiolol-Notes-Hop header stops a second hop; not
-  /admin/notes (runs the wasm itself). Not a boundary: /private (view_private) and the
-  API check the login
-- Files: private/notes.{css,js,wasm} (fixed names, no-cache) and admin/notes (list mode of
-  the same wasm, fetched again every 20 s while shown), written by `meiolol admin`
-- Paths: notesdata.canonical drops a trailing index.html, on POST and GET
-- API: /api/notes GET/POST/PATCH/DELETE, ui.notesdata binary, bounds in
-  notesdata.check; api.db's notes table. Each note keeps its login's username (author,
-  on the pin and the list). Writes need X-Meiolol-Action. Never cached (nginx or
-  Cloudflare). Delete (asked twice) is the owner's (delete_notes); an admin's try is
-  refused and recorded (accounts.zig refusals, `meiolol account refusals`)
-- Slurs: notesdata.slur (the n-word, leet, spaced and padded spellings) refuses a note or
-  reply in check; the island catches it first: text cleared, a stamp and a synthesised
-  sad trombone
-- A note's element: nearest c-* component or [data-island], its index on the page, a
-  child path and a 60-byte text snippet (ties only); "everywhere" notes pin wherever
+- Gating: an admin's login sets the marker cookie `__Host-meionotes=1` (HttpOnly,
+  30 days; logout clears it; Tool on/off on /admin/meionotes toggles it). nginx sends a
+  page request carrying it through `@meionotes` (deploy/nginx/meiolol.conf): the same
+  request to itself without cookies, gzip or validators, then `sub_filter` adds
+  site/meionotes.zig `tag` (keep the two in step) before `</body>`, private, no-store.
+  Status codes go through; assets skip the hop. /private and /admin pages take
+  `@meionotes_private`: the cookies stay for their auth_request, an X-Meionotes-Hop
+  header stops a second hop; not /admin/meionotes (runs the wasm itself). Not a
+  boundary: /private (view_private) and the API check the login
+- Files: private/meionotes.{css,js,wasm} (fixed names, no-cache) and admin/meionotes
+  (list mode of the same wasm, fetched again every 20 s while shown), written by
+  `meiolol admin`
+- Paths: meionotesdata.canonical drops a trailing index.html, on POST and GET
+- API: /api/meionotes GET/POST/PATCH/DELETE, ui.meionotesdata binary, bounds in
+  meionotesdata.check; api.db's meionotes table. Each meionote keeps its login's
+  username (author, on the pin and the list). Writes need X-Meiolol-Action. Never cached
+  (nginx or Cloudflare). Delete (asked twice) is the owner's (delete_meionotes); an
+  admin's try is refused and recorded (accounts.zig refusals, `meiolol account refusals`)
+- Slurs: meionotesdata.slur (the n-word, leet, spaced and padded spellings) refuses a
+  meionote or reply in check; the island catches it first: text cleared, a stamp and a
+  synthesised sad trombone
+- A meionote's element: nearest c-* component or [data-island], its index on the page, a
+  child path and a 60-byte text snippet (ties only); "everywhere" meionotes pin wherever
   their component shows
 - Status: open; fixed (a session dealt with it, reply the commit or plan doc; To check
-  on /admin/notes, with Looks good / Not yet; the page GET returns it but pins show
+  on /admin/meionotes, with Looks good / Not yet; the page GET returns it but pins show
   open ones only); kept (nothing to change, reply why); done (Jacob checked). Not yet
   reopens with his words as the reply
-- Commits: `deploy/commit.sh --note N` adds a `Note: N` trailer; deploy/on-push.sh marks
-  each trailer's note fixed once the deploy succeeds (a done note stays done)
-- Shell: `deploy/notes.sh list [--status S] [--by component] | show N | fixed N REPLY |
-  kept N REPLY | done N [REPLY] | reopen N [REPLY] | reply N TEXT | delete N` (C01's api.db over
-  ssh, its binary installed by `deploy/jomify.sh install api`; `--dev` the dev file)
-- Dev: `meiolol dev` answers /api/notes into data/snap/dev-notes.db as user "dev";
-  /__notes/on|off sets the marker (meiolol_notes, no __Host- on http)
+- Commits: `deploy/commit.sh --meionote N` adds a `Meionote: N` trailer;
+  deploy/on-push.sh marks each trailer's meionote fixed once the deploy succeeds (a done
+  one stays done)
+- Shell: `deploy/meionotes.sh list [--status S] [--by component] | show N | fixed N
+  REPLY | kept N REPLY | done N [REPLY] | reopen N [REPLY] | reply N TEXT | delete N`
+  (C01's api.db over ssh, its binary installed by `deploy/jomify.sh install api`;
+  `--dev` the dev file)
+- Dev: `meiolol dev` answers /api/meionotes into data/snap/dev-meionotes.db as user
+  "dev"; /__meionotes/on|off sets the marker (meionotes, no __Host- on http)
 
 ## Patch changes (src/site/patch.zig, src/patchday.zig, src/patchnotes.zig; ui/patchpage.zig)
 

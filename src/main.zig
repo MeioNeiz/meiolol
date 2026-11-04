@@ -98,7 +98,7 @@ const usage = usage_head ++
     cmd_ops.usage_your_example ++
     cmd_ops.usage_status ++
     cmd_ops.usage_admin ++
-    cmd_ops.usage_notes ++
+    cmd_ops.usage_meionotes ++
     cmd_data.usage_rebuild ++
     cmd_data.usage_rekey ++
     cmd_crawl.usage_champions ++
@@ -172,7 +172,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "your-example", cmd_ops.cmdYourExample },
     .{ "status", cmd_ops.cmdStatus },
     .{ "admin", cmd_ops.cmdAdmin },
-    .{ "notes", cmd_ops.cmdNotes },
+    .{ "meionotes", cmd_ops.cmdMeionotes },
     .{ "rebuild", cmd_data.cmdRebuild },
     .{ "rekey", cmd_data.cmdRekey },
     .{ "champions", cmd_crawl.cmdChampions },

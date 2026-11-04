@@ -103,7 +103,7 @@ so no stale example ships (the page then offers none).
 | GET /api/health | {ok, jobs} |
 | POST /api/daily?n=N&pick=0-5&side=0-1 | Daily Draft: one finished puzzle's answers counted (option index in the puzzle's order, side 0 blue); replies as GET |
 | GET /api/daily?n=N | {n, players, picks[6], sides[2]}: counts only, daily_answers in api.db |
-| GET, POST, PATCH /api/notes | notes on the live site for a login with take_notes (src/api/notes.zig; notes in api.db; writes need X-Meiolol-Action: 1); ui.data binary |
+| GET, POST, PATCH /api/meionotes | meionotes for a login with take_meionotes (src/api/meionotes.zig; table meionotes in api.db; writes need X-Meiolol-Action: 1); ui.data binary |
 
 Queue capped at 30 jobs (503 "busy" beyond); objection checks jump the queue.
 

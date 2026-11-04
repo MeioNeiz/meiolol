@@ -355,7 +355,7 @@ const index_md =
     \\- [App review](/private/app): every screen the desktop app can show, public and private app
     \\- [Truth test](/private/truth): each mode scored daily against the next week's games
     \\- [Desktop app](/private/desktop/meiolol-desktop.zip): the Windows app, latest build
-    \\- [Notes](/admin/notes) and [Admin](/admin): admin logins only
+    \\- [meionotes](/admin/meionotes) and [Admin](/admin): admin logins only
     \\- [Your account](/account): password, signed-in apps, log out
 ;
 

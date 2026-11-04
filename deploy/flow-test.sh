@@ -90,7 +90,7 @@ q() { sqlite3 "$small/meiolol.db" "$1"; }
     && ok "snap-small: sampled games and their rows" || bad "snap-small rows"
 [ -L "$small/export" ] && [ -f "$small/daily/1.json" ] && ! [ -L "$small/daily" ] \
     && [ -f "$small/raw.db" ] && ok "snap-small: side files" || bad "snap-small side files"
-touch "$small/daily/mark" "$small/dev-notes.db"
+touch "$small/daily/mark" "$small/dev-meionotes.db"
 "$here/snap-small.sh" "$big" "$small" 2 2> /dev/null
 [ -f "$small/daily/mark" ] && ok "snap-small: kept while built from this source" \
     || bad "snap-small rebuilt"
@@ -99,9 +99,9 @@ cp -p "$big/meiolol.db" "$t/new.db"
 touch -t 200001010000 "$t/new.db"
 mv "$t/new.db" "$big/meiolol.db"
 "$here/snap-small.sh" "$big" "$small" 2 2> /dev/null
-! [ -f "$small/daily/mark" ] && [ -f "$small/dev-notes.db" ] && [ -f "$small/.source" ] \
+! [ -f "$small/daily/mark" ] && [ -f "$small/dev-meionotes.db" ] && [ -f "$small/.source" ] \
     && ! [ -e "$small.tmp" ] && ! [ -e "$small.old" ] \
-    && ok "snap-small: rebuilt for a new source, notes kept" || bad "snap-small stale"
+    && ok "snap-small: rebuilt for a new source, meionotes kept" || bad "snap-small stale"
 sqlite3 "$big/meiolol.db" 'CREATE TABLE newtab (x)'
 "$here/snap-small.sh" "$big" "$small" 2 2>&1 | grep -q 'table newtab is new' \
     && ok "snap-small: an unknown table fails" || bad "snap-small took an unknown table"

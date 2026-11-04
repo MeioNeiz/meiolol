@@ -431,13 +431,13 @@ fn modulesWith(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
 }
 
 /// ui.wasm files, one per page family so each page loads only its islands (Jacob 25 Oct)
-const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "champtrends", "champcharts", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice", "picks", "finder", "findergrid", "learn", "patch", "pool", "poolgrid", "rankings", "daily", "dailyseat", "dailydays", "home", "homegame", "tester", "testercand", "your", "yourviews", "yourtime", "yourlookup", "yourfriends", "forget", "apply", "squad", "account", "sitesearch", "notes", "admin", "admincharts", "admintraffic", "adminops", "adminmodels", "adminlab", "adminruns", "pv" };
+const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "champtrends", "champcharts", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice", "picks", "finder", "findergrid", "learn", "patch", "pool", "poolgrid", "rankings", "daily", "dailyseat", "dailydays", "home", "homegame", "tester", "testercand", "your", "yourviews", "yourtime", "yourlookup", "yourfriends", "forget", "apply", "squad", "account", "sitesearch", "meionotes", "admin", "admincharts", "admintraffic", "adminops", "adminmodels", "adminlab", "adminruns", "pv" };
 /// gzip bytes per family: stack.md's 40 KB
 const ui_budget = 40 * 1024;
 /// -Dwasm-dev
 var wasm_dev = false;
 /// Families only logins load (/admin, /private) may be bigger: 80 KB (Jacob 3 Nov)
-const ui_private = [_][]const u8{ "ui-tester", "ui-testercand", "ui-notes", "ui-admin", "ui-admincharts", "ui-admintraffic", "ui-adminops", "ui-adminmodels", "ui-adminlab", "ui-adminruns", "ui-pv" };
+const ui_private = [_][]const u8{ "ui-tester", "ui-testercand", "ui-meionotes", "ui-admin", "ui-admincharts", "ui-admintraffic", "ui-adminops", "ui-adminmodels", "ui-adminlab", "ui-adminruns", "ui-pv" };
 const ui_private_budget = 80 * 1024;
 /// The champion page's build with its locks: one file loads fewer bytes than a split, which
 /// would decode the build twice (Jacob 4 Nov: fewer bytes overall over the 40 KB rule)

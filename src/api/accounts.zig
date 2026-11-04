@@ -48,7 +48,7 @@ const store = @import("store");
 const core = @import("core");
 const roles = @import("roles.zig");
 const ui = @import("ui");
-const notes_marker = ui.notesdata.marker;
+const notes_marker = ui.meionotesdata.marker;
 const ad = ui.accountsdata;
 
 const Allocator = std.mem.Allocator;
@@ -143,7 +143,7 @@ pub fn open(path: [:0]const u8) !Db {
 
 /// __Host-: the browser keeps it to this exact host, over HTTPS, for every path
 pub const cookie_name = "__Host-meiolol";
-/// The notes tool's marker, as long as a session: nginx adds the tool to pages for it.
+/// meionotes' marker, as long as a session: nginx adds the tool to pages for it.
 /// HttpOnly: only nginx reads it
 pub const marker_on = notes_marker ++ "=1; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax";
 pub const marker_off = notes_marker ++ "=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax";
@@ -246,7 +246,7 @@ const refusal_text = 200;
 /// Records that `a` was refused `what` (a method and path, or a capability) and why
 pub fn refuse(db: Db, now: i64, a: Account, what: []const u8, uri: []const u8, why: []const u8) !void {
     try db.run("INSERT INTO refusals (at, username, role, what, uri, why) VALUES (?, ?, ?, ?, ?, ?)", .{
-        now, a.username, @tagName(a.role), ui.notesdata.cut(what, refusal_text), ui.notesdata.cut(uri, refusal_text), ui.notesdata.cut(why, refusal_text),
+        now, a.username, @tagName(a.role), ui.meionotesdata.cut(what, refusal_text), ui.meionotesdata.cut(uri, refusal_text), ui.meionotesdata.cut(why, refusal_text),
     });
     try db.run("DELETE FROM refusals WHERE id <= (SELECT max(id) FROM refusals) - ?", .{max_refusals});
 }
@@ -588,7 +588,7 @@ pub const Out = struct {
     status: Status,
     body: []const u8 = "",
     set_cookie: ?[]const u8 = null,
-    /// The notes marker's Set-Cookie (marker_on or marker_off)
+    /// The meionotes marker's Set-Cookie (marker_on or marker_off)
     marker: ?[]const u8 = null,
     user: ?[]const u8 = null,
     role: ?Role = null,
@@ -751,7 +751,7 @@ pub const Service = struct {
         };
         const t = try startSession(db, s.io, a.id, now);
         var out = try signedInOut(arena, in, .{ .id = a.id, .username = a.username, .role = a.role }, &t);
-        out.marker = if (a.role.can(.take_notes)) marker_on else null;
+        out.marker = if (a.role.can(.take_meionotes)) marker_on else null;
         return out;
     }
 
@@ -1825,7 +1825,7 @@ test "fuzz: a damaged login body is a 400 or 401, never a crash" {
     try testing.fuzz(&f, fuzzLogin, .{});
 }
 
-test "an admin's login sets the notes marker, a lower role's doesn't; logout clears it" {
+test "an admin's login sets the meionotes marker, a lower role's doesn't; logout clears it" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();

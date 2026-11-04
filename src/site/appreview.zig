@@ -1,5 +1,5 @@
 //! The desktop app's review pages on the private site (/private/app, docs/plan/app.md
-//! "Private site"): every screen the app can show, each at its own URL so the notes tool
+//! "Private site"): every screen the app can show, each at its own URL so meionotes
 //! pins to it. The mock client's scenarios (testdata/lcu/scenarios, embedded) play
 //! through the poller's own tick (poller.Replay against the mock on free local ports), a
 //! page per change it would publish, rendered by the shell's screens.zig in both
@@ -766,7 +766,7 @@ const nav_js =
     \\  });
     \\  const cur = nav.querySelector('[aria-current]');
     \\  if (cur) nav.scrollTop = cur.offsetTop - nav.clientHeight / 2;
-    \\  const typing = (t) => t && t.closest && t.closest('input, textarea, select, [contenteditable], .c-notes');
+    \\  const typing = (t) => t && t.closest && t.closest('input, textarea, select, [contenteditable], .c-meionotes');
     \\  addEventListener('keydown', (e) => {
     \\    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     \\    if (typing(e.target) || typing(document.activeElement)) return;

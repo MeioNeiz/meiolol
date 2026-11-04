@@ -65,8 +65,8 @@ docs/plan.md "Now". Read it first.
   drift`, `install api|traffic|...`. The Mac can't reach meio.lol (Sophos filter
   re-signs TLS): check live pages from C01. Admin pages: `deploy/admin-get.sh
   PATH` (keeps the login off screen). Preview mode until prod key
-- meionotes: Jacob's notes written on live site pages. `deploy/notes.sh list` (open
-  ones), `show N`; a fix commits with `deploy/commit.sh --note N` (marked fixed on deploy)
+- meionotes: Jacob's notes on live site pages. `deploy/meionotes.sh list|show N`; a fix
+  commits with `deploy/commit.sh --meionote N` (marked fixed on deploy)
 - A scripted headed browser visiting meio.lol appends `meiolol-agent` to its user agent,
   so traffic counts it as a bot (deploy/traffic.sh)
 - Heavy model work on the gpu-box (`ssh gpu-box`; 3080, 20 threads) or Mac CPU, never

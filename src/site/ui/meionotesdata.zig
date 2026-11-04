@@ -1,4 +1,4 @@
-//! Notes on the live site (the notes island, /api/notes, src/api/notes.zig): what a note
+//! meionotes (the meionotes island, /api/meionotes, src/api/meionotes.zig): what a note
 //! holds, as ui.data binary both ways, and the bounds the API holds every field to
 const std = @import("std");
 const urls = @import("urls.zig");
@@ -94,9 +94,9 @@ pub const max_steps = 16;
 const max_tag = 16;
 const max_index = 999;
 
-/// The marker cookie: set at an admin's login (or the /admin/notes toggle), it has
-/// nginx add the tool's tag to pages (site/notes.zig)
-pub const marker = "__Host-meiolol_notes";
+/// The marker cookie: set at an admin's login (or the /admin/meionotes toggle), it has
+/// nginx add the tool's tag to pages (site/meionotes.zig)
+pub const marker = "__Host-meionotes";
 
 /// A note's page and state as stored: / and /index.html are one page
 pub fn canonical(path: []const u8, state: []const u8) urls.Located {
@@ -114,7 +114,7 @@ test canonical {
         .{ "/index.html", "/", "" },
         .{ "/champions", "/champions", "" },
         .{ "/admin", "/admin", "" },
-        .{ "/admin/notes", "/admin/notes", "?all=1" },
+        .{ "/admin/meionotes", "/admin/meionotes", "?all=1" },
         .{ "/xindex.html", "/xindex.html", "" },
     };
     for (cases) |c| {

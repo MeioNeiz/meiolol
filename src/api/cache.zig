@@ -1,12 +1,12 @@
 //! api.db: looked-up accounts and players, the refresh queue, matches cached by id, Daily
-//! Draft answer counts, notes on the site (notes.zig), squads (squads.zig) and testers'
+//! Draft answer counts, meionotes (meionotes.zig), squads (squads.zig) and testers'
 //! applications (applications.zig). Own file, separate from the crawler's databases: the
 //! service runs on the web server.
 
 const std = @import("std");
 const store = @import("store");
 const game = @import("game.zig");
-const notes = @import("notes.zig");
+const meionotes = @import("meionotes.zig");
 const applications = @import("applications.zig");
 const squads = @import("squads.zig");
 
@@ -111,7 +111,7 @@ pub const schema =
     \\    PRIMARY KEY (n, pick, side)
     \\) WITHOUT ROWID;
     \\
-++ notes.schema ++ squads.schema ++ applications.schema;
+++ meionotes.schema ++ squads.schema ++ applications.schema;
 
 /// Job keys for a player's backlog: this prefix, then the PUUID
 pub const history_prefix = "history:";
@@ -119,6 +119,7 @@ pub const history_prefix = "history:";
 pub fn open(path: [:0]const u8) !Db {
     const db = try Db.open(path);
     errdefer db.close();
+    try meionotes.migrate(db);
     try db.exec(schema);
     return db;
 }

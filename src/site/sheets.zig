@@ -8,9 +8,9 @@ const root = @import("root.zig");
 const csp = @import("csp.zig");
 const assets = @import("assets.zig");
 
-/// The private pages' (admin, notes list, Draft tester), after the public ones: the
+/// The private pages' (admin, meionotes list, Draft tester), after the public ones: the
 /// cascade they had as a second sheet
-const private = .{ ui.alertband, ui.actionbutton, ui.adminpage, ui.timechart, ui.admincharts, ui.admintraffic, ui.steptimeline, ui.logview, ui.adminops, ui.adminmodels, ui.adminlab, ui.adminruns, ui.select, ui.modelbadge, ui.rankstrip, ui.testerpage, ui.testercand, ui.notes, ui.noteslist };
+const private = .{ ui.alertband, ui.actionbutton, ui.adminpage, ui.timechart, ui.admincharts, ui.admintraffic, ui.steptimeline, ui.logview, ui.adminops, ui.adminmodels, ui.adminlab, ui.adminruns, ui.select, ui.modelbadge, ui.rankstrip, ui.testerpage, ui.testercand, ui.meionotes, ui.meionoteslist };
 const all = ui.components ++ private;
 
 const n = all.len;

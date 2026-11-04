@@ -9,7 +9,7 @@ const admin = @import("../admin.zig");
 const date = @import("../date.zig");
 const adminmodels = @import("../adminmodels.zig");
 const site_tester = @import("../site/tester.zig");
-const site_notes = @import("../site/notes.zig");
+const site_meionotes = @import("../site/meionotes.zig");
 const site_appreview = @import("../site/appreview.zig");
 const site_truthpage = @import("../site/truthpage.zig");
 const site_admin = @import("../site/adminpage.zig");
@@ -228,10 +228,10 @@ pub fn cmdAccount(c: *Cmd) !u8 {
     return 0;
 }
 
-pub const usage_notes =
-    \\  notes       notes on the live site (src/api/notes.zig) in DIR/api.db; on C01 --data
-    \\              /var/lib/meiolol-api (deploy/notes.sh runs it there)
-    \\              list             open notes, one per line: id, status, author, scope,
+pub const usage_meionotes =
+    \\  meionotes   Jacob's notes on the live site (src/api/meionotes.zig) in DIR/api.db;
+    \\              on C01 --data /var/lib/meiolol-api (deploy/meionotes.sh runs it there)
+    \\              list             open meionotes, one per line: id, status, author, scope,
     \\                               page, component, target, viewport, text
     \\                --status S     open (default), fixed, kept, done or any
     \\                --by page|component  grouped under a heading line each
@@ -243,13 +243,13 @@ pub const usage_notes =
     \\              reopen N [REPLY]
     \\              reply N TEXT
     \\              delete N         gone for good (spam, abuse)
-    \\              --db FILE        another notes file (the dev server's data/snap/dev-notes.db)
+    \\              --db FILE        another file (the dev server's data/snap/dev-meionotes.db)
     \\
 ;
 
-pub fn cmdNotes(c: *Cmd) !u8 {
-    const notes = api.notes;
-    const nd = ui.notesdata;
+pub fn cmdMeionotes(c: *Cmd) !u8 {
+    const meionotes = api.meionotes;
+    const nd = ui.meionotesdata;
     const arena = c.arena;
     const io = c.init.io;
     const Verb = enum { list, show, done, fixed, kept, reopen, reply, delete };
@@ -282,7 +282,7 @@ pub fn cmdNotes(c: *Cmd) !u8 {
     const path = if (db_path) |p| try arena.printSentinel("{s}", .{p}, 0) else try arena.printSentinel("{s}/api.db", .{c.data_dir}, 0);
     const db = try store.Db.open(path);
     defer db.close();
-    try notes.setUp(db);
+    try meionotes.setUp(db);
     var buf: [4096]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(io, &buf);
     const out = &stdout.interface;
@@ -291,14 +291,14 @@ pub fn cmdNotes(c: *Cmd) !u8 {
 
     // Through the API's own handler: the same checks and queries as the site
     const r = switch (v) {
-        .list => try notes.handle(arena, db, .GET, try arena.print("all=1&status={s}", .{status_s}), "", "", now),
-        .show => try notes.handle(arena, db, .GET, "all=1&status=any", "", "", now),
-        .delete => try notes.handle(arena, db, .DELETE, try arena.print("id={d}", .{id}), "", "", now),
+        .list => try meionotes.handle(arena, db, .GET, try arena.print("all=1&status={s}", .{status_s}), "", "", now),
+        .show => try meionotes.handle(arena, db, .GET, "all=1&status=any", "", "", now),
+        .delete => try meionotes.handle(arena, db, .DELETE, try arena.print("id={d}", .{id}), "", "", now),
         .done, .fixed, .kept, .reopen, .reply => blk: {
-            // A deploy marks its commits' notes fixed (deploy/on-push.sh), maybe after
+            // A deploy marks its commits' meionotes fixed (deploy/on-push.sh), maybe after
             // Jacob already checked one
-            if (v == .fixed and (try db.scalar("SELECT status FROM notes WHERE id = ?", .{id}) orelse -1) == @backingInt(nd.Status.done)) {
-                try out.print("note {d} is done already: left as it is\n", .{id});
+            if (v == .fixed and (try db.scalar("SELECT status FROM meionotes WHERE id = ?", .{id}) orelse -1) == @backingInt(nd.Status.done)) {
+                try out.print("meionote {d} is done already: left as it is\n", .{id});
                 return 0;
             }
             const reply: ?[]const u8 = if (words.items.len == 2) words.items[1] else null;
@@ -311,7 +311,7 @@ pub fn cmdNotes(c: *Cmd) !u8 {
             };
             var body: std.ArrayList(u8) = .empty;
             try ui.data.encode(arena, nd.Change, change, &body);
-            break :blk try notes.handle(arena, db, .PATCH, try arena.print("id={d}", .{id}), body.items, "", now);
+            break :blk try meionotes.handle(arena, db, .PATCH, try arena.print("id={d}", .{id}), body.items, "", now);
         },
     };
     if (r.status != .ok) {
@@ -356,16 +356,16 @@ pub fn cmdNotes(c: *Cmd) !u8 {
                 try noteFull(out, n);
                 return 0;
             };
-            std.log.err("no note {d}", .{id});
+            std.log.err("no meionote {d}", .{id});
             return 1;
         },
         .done, .fixed, .kept, .reopen, .reply => try noteLine(out, try ui.data.decode(arena, nd.Note, r.body)),
-        .delete => try out.print("note {d} deleted\n", .{id}),
+        .delete => try out.print("meionote {d} deleted\n", .{id}),
     }
     return 0;
 }
 
-fn noteLine(out: *std.Io.Writer, n: ui.notesdata.Note) !void {
+fn noteLine(out: *std.Io.Writer, n: ui.meionotesdata.Note) !void {
     const component = n.target.component();
     try out.print("{d}\t{t}\t{s}\t{t}\t{s}{s}\t{s}\t{s}\t{d}x{d} {t}\t", .{
         n.id,
@@ -381,14 +381,14 @@ fn noteLine(out: *std.Io.Writer, n: ui.notesdata.Note) !void {
         n.theme,
     });
     // One line: the text's line breaks as spaces, cut at 160 bytes on a whole character
-    const text = ui.notesdata.cut(n.text, 160);
+    const text = ui.meionotesdata.cut(n.text, 160);
     for (text) |ch| try out.writeByte(if (ch == '\n' or ch == '\r' or ch == '\t') ' ' else ch);
     if (text.len < n.text.len) try out.writeAll("…");
     if (n.reply.len > 0) try out.print("\t↳ {s}", .{n.reply});
     try out.writeByte('\n');
 }
 
-fn noteFull(out: *std.Io.Writer, n: ui.notesdata.Note) !void {
+fn noteFull(out: *std.Io.Writer, n: ui.meionotesdata.Note) !void {
     const t = n.target;
     try out.print(
         \\id        {d}
@@ -481,8 +481,8 @@ pub const usage_admin =
     \\              --log FILE       crawler log (default DIR/crawl.log)
     \\              --disk "S U A"   data disk size, used, available in bytes
     \\              --health TEXT    deploy/health.sh output
-    \\              --private-out DIR  also the private site's Draft tester, the notes
-    \\                               tool's files, the app review and truth pages
+    \\              --private-out DIR  also the private site's Draft tester, meionotes'
+    \\                               files, the app review and truth pages
     \\              --training DIR   only the Models tab's lab view: DIR/training.bin
     \\                               and runs/*/metrics.bin from the files
     \\                               deploy/lab-push.sh staged there (the Mac)
@@ -519,14 +519,14 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
     const db = try store.open(c.init.gpa, c.data_dir);
     defer db.close();
     try admin.generate(c.init.gpa, c.init.io, db, o);
-    site_notes.writeAdmin(c.init.gpa, c.init.io, o.out_dir) catch |e| std.log.err("notes page: {t}", .{e});
+    site_meionotes.writeAdmin(c.init.gpa, c.init.io, o.out_dir) catch |e| std.log.err("meionotes page: {t}", .{e});
     try site_admin.write(c.init.gpa, c.init.io, o.out_dir);
     if (private_out) |p| {
         try admin.private(c.init.gpa, c.init.io, p);
         // web-loop.sh skips the admin and private uploads when this exits non-zero: the
         // new tester must not freeze the admin page
         site_tester.writeWith(c.init.gpa, c.init.io, p, db, try std.fs.path.join(c.arena, &.{ c.data_dir, "lean.tsv" })) catch |e| std.log.err("tester page: {t}", .{e});
-        site_notes.writeFiles(c.init.gpa, c.init.io, p) catch |e| std.log.err("notes files: {t}", .{e});
+        site_meionotes.writeFiles(c.init.gpa, c.init.io, p) catch |e| std.log.err("meionotes files: {t}", .{e});
         site_appreview.write(c.init.gpa, c.init.io, p, c.data_dir, db) catch |e| std.log.err("app review pages: {t}", .{e});
         site_truthpage.write(c.init.gpa, c.init.io, p, c.data_dir) catch |e| std.log.err("truth page: {t}", .{e});
     }

@@ -207,7 +207,7 @@ const private_tabs = [_]PrivateTab{
     .{ .page = .index, .href = "/private", .label = "Private" },
     header_private[0],
     .{ .page = .app, .href = "/private/app", .label = "App review" },
-    .{ .page = .notes, .href = "/admin/notes", .label = "Notes" },
+    .{ .page = .meionotes, .href = "/admin/meionotes", .label = "meionotes" },
 };
 
 /// The bar's: Draft tester stands for the private pages under its tabs, as Champions does
@@ -218,7 +218,7 @@ const header_private = [_]PrivateTab{
 
 /// nginx keeps these to admin logins
 fn adminOnly(pr: Private) bool {
-    return pr == .notes or pr == .admin;
+    return pr == .meionotes or pr == .admin;
 }
 
 /// Admin-only ones hidden on the other private pages until private_mark finds an admin's
@@ -364,27 +364,27 @@ test "the app's bar links the site's pages in the site's order" {
 }
 
 test "open: the bar links the private pages on private pages, where admin_link isn't" {
-    for ([_]?Private{ null, .tester, .notes }) |pr| {
+    for ([_]?Private{ null, .tester, .meionotes }) |pr| {
         var out: Writer.Allocating = .init(std.testing.allocator);
         defer out.deinit();
         try open(&out.writer, .{ .title = "t", .description = "d", .patch = "16.21", .data = "", .public = false, .private = pr });
         const bar = out.written()[0..std.mem.indexOf(u8, out.written(), "</header>").?];
         const tester = "<a href=\"/private/tester\"";
         try std.testing.expectEqual(pr != null, std.mem.indexOf(u8, bar, tester) != null);
-        try std.testing.expectEqual(pr != null and pr != .notes, std.mem.indexOf(u8, bar, tester ++ " aria-current=\"page\"") != null);
+        try std.testing.expectEqual(pr != null and pr != .meionotes, std.mem.indexOf(u8, bar, tester ++ " aria-current=\"page\"") != null);
         try std.testing.expectEqual(pr != null, std.mem.indexOf(u8, bar, "<a href=\"/admin\"") != null);
     }
 }
 
 test "open: a tester's private pages hide the admin links until an admin's browser shows them" {
     const sub_class = "class=\"c-subbar\"";
-    for ([_]Private{ .index, .tester, .app, .notes, .admin }) |pr| {
+    for ([_]Private{ .index, .tester, .app, .meionotes, .admin }) |pr| {
         var out: Writer.Allocating = .init(std.testing.allocator);
         defer out.deinit();
         try open(&out.writer, .{ .title = "t", .description = "d", .patch = "16.21", .data = "", .public = false, .private = pr });
         const page = out.written();
-        const hidden = std.mem.count(u8, page, " hidden=\"\">Admin</a>") + std.mem.count(u8, page, " hidden=\"\">Notes</a>");
-        // The bar's and the menu's Admin, the tabs' Notes
+        const hidden = std.mem.count(u8, page, " hidden=\"\">Admin</a>") + std.mem.count(u8, page, " hidden=\"\">meionotes</a>");
+        // The bar's and the menu's Admin, the tabs' meionotes
         try std.testing.expectEqual(@as(usize, if (adminOnly(pr)) 0 else 3), hidden);
         const mark = if (adminOnly(pr)) admin_mark else private_mark;
         try std.testing.expect(std.mem.indexOf(u8, page, mark) != null);

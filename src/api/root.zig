@@ -25,9 +25,9 @@
 //!                                   index 0-5, side 0 blue or 1 red), counted; returns
 //!                                   the counts as GET does
 //!   GET  /api/daily?n=N             how many picked each option and each side
-//!   /api/notes                      notes on the live site (notes.zig), for a login with
-//!                                   take_notes
-//!   POST /api/notes/tool?on=0|1     the tool on pages in this browser or not (its marker
+//!   /api/meionotes                  meionotes (meionotes.zig), for a login with
+//!                                   take_meionotes
+//!   POST /api/meionotes/tool?on=0|1 the tool on pages in this browser or not (its marker
 //!                                   cookie), for the same login
 //!   POST /api/apply                 a testers' application (applications.zig), anyone
 //!   /api/applications.bin           the applications, for a login with manage_accounts
@@ -49,7 +49,7 @@ pub const pagedata = @import("pagedata.zig");
 pub const devfixture = @import("devfixture.zig");
 const ui = @import("ui");
 pub const friends = @import("friends.zig");
-pub const notes = @import("notes.zig");
+pub const meionotes = @import("meionotes.zig");
 pub const squads = @import("squads.zig");
 pub const applications = @import("applications.zig");
 
@@ -410,7 +410,7 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
         const r = try daily(arena, db, query, method == .POST, daily_today(ctx.io));
         return send(ctx, request, r);
     }
-    if (std.mem.eql(u8, path, "/api/notes") or std.mem.eql(u8, path, "/api/notes/tool")) return notesRequest(ctx, arena, request, path, query);
+    if (std.mem.eql(u8, path, "/api/meionotes") or std.mem.eql(u8, path, "/api/meionotes/tool")) return meionotesRequest(ctx, arena, request, path, query);
     if (std.mem.eql(u8, path, "/api/apply")) return applyRequest(ctx, arena, request);
     if (std.mem.eql(u8, path, "/api/applications.bin")) return applicationsRequest(ctx, arena, request, query);
     if (std.mem.eql(u8, path, "/api/health") and method == .GET) {
@@ -422,11 +422,11 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
     return send(ctx, request, .{ .status = .not_found, .body = "{\"error\":\"not found\"}" });
 }
 
-/// /api/notes and /api/notes/tool for a login with take_notes; a write also needs
-/// X-Meiolol-Action: 1, which a cross-site form can't send
-fn notesRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Request, path: []const u8, query_head: []const u8) !void {
+/// /api/meionotes and /api/meionotes/tool for a login with take_meionotes; a write also
+/// needs X-Meiolol-Action: 1, which a cross-site form can't send
+fn meionotesRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Request, path: []const u8, query_head: []const u8) !void {
     const tool = std.mem.endsWith(u8, path, "/tool");
-    const method: notes.Method = switch (request.head.method) {
+    const method: meionotes.Method = switch (request.head.method) {
         .GET => if (tool) return send(ctx, request, try errorReply(arena, .method_not_allowed, "error", "method not allowed")) else .GET,
         .POST => .POST,
         .PATCH => .PATCH,
@@ -446,9 +446,9 @@ fn notesRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Reque
             return send(ctx, request, try errorReply(arena, .unauthorized, "error", "not signed in"));
     };
     const what = try arena.print("{t} {s}", .{ request.head.method, path });
-    if (!who.role.can(.take_notes)) return deny(ctx, arena, request, who, what, "your role cannot take notes", now);
+    if (!who.role.can(.take_meionotes)) return deny(ctx, arena, request, who, what, "your role cannot take meionotes", now);
     if (method != .GET and !action) return deny(ctx, arena, request, who, what, "missing X-Meiolol-Action", now);
-    if (method == .DELETE and !who.role.can(.delete_notes)) return deny(ctx, arena, request, who, what, "your role cannot delete notes", now);
+    if (method == .DELETE and !who.role.can(.delete_meionotes)) return deny(ctx, arena, request, who, what, "your role cannot delete meionotes", now);
     if (tool) {
         const on = try param(arena, query, "on") orelse "";
         if (!std.mem.eql(u8, on, "0") and !std.mem.eql(u8, on, "1")) return send(ctx, request, try errorReply(arena, .bad_request, "error", "expected ?on=0|1"));
@@ -462,14 +462,14 @@ fn notesRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Reque
     if (method == .POST or method == .PATCH) {
         var body_buf: [1024]u8 = undefined;
         const r = try request.readerExpectContinue(&body_buf);
-        body = r.allocRemaining(arena, .limited(notes.max_body)) catch |err| switch (err) {
+        body = r.allocRemaining(arena, .limited(meionotes.max_body)) catch |err| switch (err) {
             error.StreamTooLong => return send(ctx, request, try errorReply(arena, .payload_too_large, "error", "too long")),
             else => return err,
         };
     }
     const db = try cache.open(ctx.opts.db_path);
     defer db.close();
-    const r = try notes.handle(arena, db, method, query, body, who.username, now);
+    const r = try meionotes.handle(arena, db, method, query, body, who.username, now);
     return send(ctx, request, .{ .status = r.status, .body = r.body, .binary = r.binary });
 }
 
@@ -491,7 +491,7 @@ fn applyRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Reque
 }
 
 /// The applications for a login with manage_accounts; a change also needs
-/// X-Meiolol-Action, as notes'
+/// X-Meiolol-Action, as meionotes'
 fn applicationsRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Request, query_head: []const u8) !void {
     const post = switch (request.head.method) {
         .GET => false,
@@ -1535,8 +1535,8 @@ test "daily: counts a finished puzzle's answers, refuses junk and puzzles not ou
 }
 
 /// One request on its own connection, as nginx passes it on; the answer's bytes
-fn notesCall(ctx: *Context, arena: Allocator, method: []const u8, query: []const u8, token: ?[]const u8, action: bool, body: []const u8) ![]const u8 {
-    return apiCall(ctx, arena, method, try arena.print("/api/notes{s}", .{query}), token, action, body);
+fn meionotesCall(ctx: *Context, arena: Allocator, method: []const u8, query: []const u8, token: ?[]const u8, action: bool, body: []const u8) ![]const u8 {
+    return apiCall(ctx, arena, method, try arena.print("/api/meionotes{s}", .{query}), token, action, body);
 }
 
 fn apiCall(ctx: *Context, arena: Allocator, method: []const u8, target: []const u8, token: ?[]const u8, action: bool, body: []const u8) ![]const u8 {
@@ -1592,7 +1592,7 @@ test "/api/apply: anyone with X-Meiolol-Action; the list for manage_accounts onl
     try std.testing.expectEqual(ui.applydata.Status.approved, list.applications[0].status);
 }
 
-test "/api/notes: a take_notes login only, and a write needs X-Meiolol-Action" {
+test "/api/meionotes: a take_meionotes login only, and a write needs X-Meiolol-Action" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -1609,8 +1609,8 @@ test "/api/notes: a take_notes login only, and a write needs X-Meiolol-Action" {
     const admin = try accounts.startSession(adb, io, try accounts.create(adb, "jacob", "x", .admin, now), now);
     const private = try accounts.startSession(adb, io, try accounts.create(adb, "friend", "x", .private, now), now);
     var new: std.ArrayList(u8) = .empty;
-    try ui.data.encode(arena, ui.notesdata.New, .{ .path = "/a", .text = "Too wide" }, &new);
-    const big: [notes.max_body + 1]u8 = @splat(0);
+    try ui.data.encode(arena, ui.meionotesdata.New, .{ .path = "/a", .text = "Too wide" }, &new);
+    const big: [meionotes.max_body + 1]u8 = @splat(0);
 
     const refused = [_]struct { []const u8, ?[]const u8, bool, []const u8, []const u8 }{
         .{ "GET", null, false, "", "401" },
@@ -1623,33 +1623,33 @@ test "/api/notes: a take_notes login only, and a write needs X-Meiolol-Action" {
         .{ "POST", &admin, true, &big, "413" },
     };
     for (refused) |c| {
-        const out = try notesCall(&ctx, arena, c[0], "?path=/a", c[1], c[2], c[3]);
+        const out = try meionotesCall(&ctx, arena, c[0], "?path=/a", c[1], c[2], c[3]);
         try std.testing.expectStringStartsWith(out, try arena.print("HTTP/1.1 {s} ", .{c[4]}));
     }
-    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "POST", "", &admin, true, new.items), "HTTP/1.1 200 ");
-    const off = try notesCall(&ctx, arena, "POST", "/tool?on=0", &admin, true, "");
+    try std.testing.expectStringStartsWith(try meionotesCall(&ctx, arena, "POST", "", &admin, true, new.items), "HTTP/1.1 200 ");
+    const off = try meionotesCall(&ctx, arena, "POST", "/tool?on=0", &admin, true, "");
     try std.testing.expectStringStartsWith(off, "HTTP/1.1 200 ");
     try std.testing.expect(std.mem.find(u8, off, accounts.marker_off) != null);
-    try std.testing.expect(std.mem.find(u8, try notesCall(&ctx, arena, "POST", "/tool?on=1", &admin, true, ""), accounts.marker_on) != null);
-    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "POST", "/tool?on=1", &private, true, ""), "HTTP/1.1 403 ");
-    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "POST", "/tool?on=1", &admin, false, ""), "HTTP/1.1 403 ");
-    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "POST", "/tool?on=2", &admin, true, ""), "HTTP/1.1 400 ");
-    const got = try notesCall(&ctx, arena, "GET", "?path=/a", &admin, false, "");
+    try std.testing.expect(std.mem.find(u8, try meionotesCall(&ctx, arena, "POST", "/tool?on=1", &admin, true, ""), accounts.marker_on) != null);
+    try std.testing.expectStringStartsWith(try meionotesCall(&ctx, arena, "POST", "/tool?on=1", &private, true, ""), "HTTP/1.1 403 ");
+    try std.testing.expectStringStartsWith(try meionotesCall(&ctx, arena, "POST", "/tool?on=1", &admin, false, ""), "HTTP/1.1 403 ");
+    try std.testing.expectStringStartsWith(try meionotesCall(&ctx, arena, "POST", "/tool?on=2", &admin, true, ""), "HTTP/1.1 400 ");
+    const got = try meionotesCall(&ctx, arena, "GET", "?path=/a", &admin, false, "");
     try std.testing.expectStringStartsWith(got, "HTTP/1.1 200 ");
     const at = std.mem.find(u8, got, "\r\n\r\n") orelse return error.TestUnexpectedResult;
-    const list = try ui.data.decode(arena, ui.notesdata.List, got[at + 4 ..]);
+    const list = try ui.data.decode(arena, ui.meionotesdata.List, got[at + 4 ..]);
     try std.testing.expectEqual(1, list.notes.len);
     try std.testing.expectEqualStrings("jacob", list.notes[0].author);
     try std.testing.expectEqualStrings("Too wide", list.notes[0].text);
 
     // Deleting is the owner's: an admin's try is refused and recorded
     const owner = try accounts.startSession(adb, io, try accounts.create(adb, "boss", "x", .owner, now), now);
-    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "DELETE", "?id=1", &admin, true, ""), "HTTP/1.1 403 ");
+    try std.testing.expectStringStartsWith(try meionotesCall(&ctx, arena, "DELETE", "?id=1", &admin, true, ""), "HTTP/1.1 403 ");
     const tries = try accounts.refusals(adb, arena, "jacob", 10);
     try std.testing.expect(tries.len > 0);
-    try std.testing.expectEqualStrings("DELETE /api/notes", tries[0].what);
-    try std.testing.expectEqualStrings("your role cannot delete notes", tries[0].why);
-    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "DELETE", "?id=1", &owner, true, ""), "HTTP/1.1 200 ");
+    try std.testing.expectEqualStrings("DELETE /api/meionotes", tries[0].what);
+    try std.testing.expectEqualStrings("your role cannot delete meionotes", tries[0].why);
+    try std.testing.expectStringStartsWith(try meionotesCall(&ctx, arena, "DELETE", "?id=1", &owner, true, ""), "HTTP/1.1 200 ");
     try std.testing.expectEqual(0, (try accounts.refusals(adb, arena, "boss", 10)).len);
 }
 
@@ -1662,8 +1662,8 @@ const fuzz_requests = [_][]const u8{
     "GET /api/forget?id=A%231 HTTP/1.1\r\nHost: x\r\n\r\n",
     "POST /api/daily?n=3&pick=2&side=0 HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n",
     "GET /api/daily?n=3 HTTP/1.1\r\nHost: x\r\n\r\n",
-    "GET /api/notes?path=/a HTTP/1.1\r\nHost: x\r\nCookie: " ++ accounts.cookie_name ++ "=" ++ fuzz_token ++ "\r\n\r\n",
-    "PATCH /api/notes?id=1 HTTP/1.1\r\nHost: x\r\nX-Meiolol-Action: 1\r\nContent-Length: 3\r\n\r\nabc",
+    "GET /api/meionotes?path=/a HTTP/1.1\r\nHost: x\r\nCookie: " ++ accounts.cookie_name ++ "=" ++ fuzz_token ++ "\r\n\r\n",
+    "PATCH /api/meionotes?id=1 HTTP/1.1\r\nHost: x\r\nX-Meiolol-Action: 1\r\nContent-Length: 3\r\n\r\nabc",
     "GET /api/game?id=A%231&start=1791720000000 HTTP/1.1\r\nHost: x\r\n\r\n",
     "GET /api/list?id=A%231&refresh=1 HTTP/1.1\r\nHost: x\r\n\r\n",
     "GET /api/list?id=A%231&cached=1&n=20 HTTP/1.1\r\nHost: x\r\n\r\n",

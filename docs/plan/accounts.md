@@ -19,7 +19,7 @@ Five, in order, each with everything the one before has.
 | owner | Jacob only: everything, plus the admin page's controls (crawl, site build, eval, health check), admins, keys and secrets, billing, data deletion and restores, the Riot application | |
 
 - One capability table in code (src/api/roles.zig: view_paid, view_private,
-  view_admin, take_notes, run_actions, manage_accounts, manage_admins, manage_billing,
+  view_admin, take_meionotes, run_actions, manage_accounts, manage_admins, manage_billing,
   delete_data, download_private_app); every route checks a capability, never a role name. Adding or
   splitting a tier is one row
 - Accounts change only roles below their own: admins can't make, edit or disable

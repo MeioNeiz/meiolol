@@ -440,7 +440,7 @@ const testing = std.testing;
 test next {
     const admin: ac.Me = .{ .username = "a", .role = "admin", .can = &.{ "view_private", "view_admin" } };
     const public: ac.Me = .{ .username = "p", .role = "public", .can = &.{} };
-    try testing.expectEqualStrings("/admin/notes", next("?next=/admin/notes", admin));
+    try testing.expectEqualStrings("/admin/meionotes", next("?next=/admin/meionotes", admin));
     try testing.expectEqualStrings("/admin", next("?x=1", admin));
     try testing.expectEqualStrings("/", next("", public));
     try testing.expectEqualStrings("/private", next("", .{ .username = "f", .role = "private", .can = &.{"view_private"} }));

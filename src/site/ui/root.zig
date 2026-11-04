@@ -105,12 +105,12 @@ pub const adminops = @import("adminops.zig");
 pub const adminmodels = @import("adminmodels.zig");
 pub const adminlab = @import("adminlab.zig");
 pub const adminruns = @import("adminruns.zig");
-pub const notesdata = @import("notesdata.zig");
+pub const meionotesdata = @import("meionotesdata.zig");
 pub const applydata = @import("applydata.zig");
 pub const pv = @import("pv.zig");
 pub const pvdata = @import("pvdata.zig");
-pub const notes = @import("notes.zig");
-pub const noteslist = @import("noteslist.zig");
+pub const meionotes = @import("meionotes.zig");
+pub const meionoteslist = @import("meionoteslist.zig");
 pub const alertband = @import("alertband.zig");
 pub const actionbutton = @import("actionbutton.zig");
 pub const logview = @import("logview.zig");
@@ -172,7 +172,7 @@ pub const ranking = @import("ranking.zig");
 pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, matchstrip, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, lockbar, tabs, site, sitesearch, filterbar, champpage, kda, timeline, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, spark, stat, scoreboard, laneduel, itemrow, gamepage, lane, matchpage, matchgrid, champrolepicker, finder, delta, bar, violin, tiers, guess, puzzle, choice, reasons, candlist, learnpage, split, draftboard, draftflow, dailypage, dailyseat, dailydays, changeline, patchhead, patchpage, poolslots, heatgrid, poolpage, poolgrid, dayhead, resultstrip, playerbar, profilesum, recordtile, highlights, gametrend, yourpage, yourviews, yourtime, yourlookup, yourfriends, forget, apply, squad, idlookup, today, homepage, prose, textpage, aucchart, account, scopechip, ranking };
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, scopechip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, alertband, actionbutton, logview, steptimeline, prose, textpage, modelbadge, role, champ, site, sitesearch, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, compview, lobby, apphome, gamebuild, loadscreen, gamescreen, postgame, signin, practice, picks, app, appbar, table, chart, dotplot, trend, timechart, histogram, aucchart, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, lockbar, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, choice, rankstrip, draftflow, reasons, candlist, champrolepicker, poolslots, heatgrid, matchgrid, finder, violin, ranking, learnpage, dailypage, dailyseat, dailydays, changeline, patchhead, patchpage, poolpage, poolgrid, dayhead, resultstrip, playerbar, profilesum, recordtile, highlights, gametrend, yourpage, yourviews, yourtime, yourlookup, yourfriends, forget, apply, squad, idlookup, today, homepage, account, testerpage, testercand, notes, noteslist, pv, adminpage, admincharts, admintraffic, adminops, adminmodels, adminlab, adminruns };
+pub const all = .{ button, chip, scopechip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, alertband, actionbutton, logview, steptimeline, prose, textpage, modelbadge, role, champ, site, sitesearch, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, compview, lobby, apphome, gamebuild, loadscreen, gamescreen, postgame, signin, practice, picks, app, appbar, table, chart, dotplot, trend, timechart, histogram, aucchart, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, lockbar, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, choice, rankstrip, draftflow, reasons, candlist, champrolepicker, poolslots, heatgrid, matchgrid, finder, violin, ranking, learnpage, dailypage, dailyseat, dailydays, changeline, patchhead, patchpage, poolpage, poolgrid, dayhead, resultstrip, playerbar, profilesum, recordtile, highlights, gametrend, yourpage, yourviews, yourtime, yourlookup, yourfriends, forget, apply, squad, idlookup, today, homepage, account, testerpage, testercand, meionotes, meionoteslist, pv, adminpage, admincharts, admintraffic, adminops, adminmodels, adminlab, adminruns };
 
 pub const H = tree.H;
 pub const N = tree.N;

@@ -15,7 +15,7 @@ const store = @import("store");
 const httpd = @import("net").server;
 const client = @import("net").client;
 pub const admin_api = @import("admin_api.zig");
-const notes = @import("api/notes.zig");
+const meionotes = @import("api/meionotes.zig");
 
 const log = std.log.scoped(.serve);
 
@@ -135,8 +135,8 @@ pub const Dev = struct {
     mtime: i96,
     /// Where /api/ goes, as nginx sends it on the site: `meiolol api --fixture`'s default
     api: []const u8 = "http://127.0.0.1:8090",
-    /// /api/notes answered here (notes.zig) without a login: the notes tool runs on its own
-    notes_db: [:0]const u8 = "",
+    /// /api/meionotes answered here (meionotes.zig) without a login: the tool runs on its own
+    meionotes_db: [:0]const u8 = "",
 
     pub fn init(gpa: std.mem.Allocator, io: Io, argv: []const []const u8, static_dir: []const u8) !Dev {
         const args = try gpa.dupe([]const u8, argv);
@@ -213,28 +213,28 @@ fn proxyApi(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
     });
 }
 
-const dev_marker_on = site.notes.dev_cookie ++ "=1; Path=/; SameSite=Lax";
-const dev_marker_off = site.notes.dev_cookie ++ "=; Path=/; Max-Age=0";
+const dev_marker_on = site.meionotes.dev_cookie ++ "=1; Path=/; SameSite=Lax";
+const dev_marker_off = site.meionotes.dev_cookie ++ "=; Path=/; Max-Age=0";
 
-fn notesMarked(request: *std.http.Server.Request) bool {
+fn meionotesMarked(request: *std.http.Server.Request) bool {
     var it = request.iterateHeaders();
     while (it.next()) |h| {
-        if (std.ascii.eqlIgnoreCase(h.name, "cookie") and site.notes.marked(h.value)) return true;
+        if (std.ascii.eqlIgnoreCase(h.name, "cookie") and site.meionotes.marked(h.value)) return true;
     }
     return false;
 }
 
-fn isNotes(target: []const u8) bool {
+fn isMeionotes(target: []const u8) bool {
     const path = target[0 .. std.mem.findScalar(u8, target, '?') orelse target.len];
-    return std.mem.eql(u8, path, "/api/notes") or std.mem.eql(u8, path, "/api/notes/tool");
+    return std.mem.eql(u8, path, "/api/meionotes") or std.mem.eql(u8, path, "/api/meionotes/tool");
 }
 
-/// The site's /api/notes into the dev file, as user "dev"
-fn devNotes(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
+/// The site's /api/meionotes into the dev file, as user "dev"
+fn devMeionotes(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
     var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    const method: notes.Method = switch (request.head.method) {
+    const method: meionotes.Method = switch (request.head.method) {
         .GET => .GET,
         .POST => .POST,
         .PATCH => .PATCH,
@@ -245,7 +245,7 @@ fn devNotes(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
     const target = try arena.dupe(u8, request.head.target);
     const query = if (std.mem.findScalar(u8, target, '?')) |q| target[q + 1 ..] else "";
     // The site's marker toggle, as the dev server's cookie
-    if (std.mem.startsWith(u8, target, "/api/notes/tool")) {
+    if (std.mem.startsWith(u8, target, "/api/meionotes/tool")) {
         const on = std.mem.eql(u8, query, "on=1");
         return request.respond("{\"ok\":true}", .{ .extra_headers = &.{
             .{ .name = "content-type", .value = "application/json" },
@@ -256,15 +256,15 @@ fn devNotes(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
     if (method == .POST or method == .PATCH) {
         var body_buf: [1024]u8 = undefined;
         const r = try request.readerExpectContinue(&body_buf);
-        body = r.allocRemaining(arena, .limited(notes.max_body)) catch |err| switch (err) {
+        body = r.allocRemaining(arena, .limited(meionotes.max_body)) catch |err| switch (err) {
             error.StreamTooLong => return request.respond("too long\n", .{ .status = .payload_too_large, .keep_alive = false }),
             else => return err,
         };
     }
-    const db = try store.Db.open(d.notes_db);
+    const db = try store.Db.open(d.meionotes_db);
     defer db.close();
-    try notes.setUp(db);
-    const r = try notes.handle(arena, db, method, query, body, "dev", Io.Clock.real.now(ctx.io).toSeconds());
+    try meionotes.setUp(db);
+    const r = try meionotes.handle(arena, db, method, query, body, "dev", Io.Clock.real.now(ctx.io).toSeconds());
     return request.respond(r.body, .{
         .status = r.status,
         .extra_headers = &.{
@@ -274,12 +274,12 @@ fn devNotes(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
     });
 }
 
-test isNotes {
-    try std.testing.expect(isNotes("/api/notes"));
-    try std.testing.expect(isNotes("/api/notes?path=/a"));
-    try std.testing.expect(isNotes("/api/notes/tool?on=1"));
-    try std.testing.expect(!isNotes("/api/notesx"));
-    try std.testing.expect(!isNotes("/api/games?id=a"));
+test isMeionotes {
+    try std.testing.expect(isMeionotes("/api/meionotes"));
+    try std.testing.expect(isMeionotes("/api/meionotes?path=/a"));
+    try std.testing.expect(isMeionotes("/api/meionotes/tool?on=1"));
+    try std.testing.expect(!isMeionotes("/api/meionotesx"));
+    try std.testing.expect(!isMeionotes("/api/games?id=a"));
 }
 
 fn mtime(io: Io, dir: Io.Dir, path: []const u8) i96 {
@@ -319,7 +319,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         const ok = ctx.opts.dev != null or if (ctx.opts.admin) |api| admin_api.allowed(api, request) else false;
         return if (ok) privateMeio(ctx, r, request) else notFound(request);
     };
-    if (ctx.opts.dev) |d| if (d.notes_db.len > 0 and isNotes(request.head.target)) return devNotes(ctx, d, request);
+    if (ctx.opts.dev) |d| if (d.meionotes_db.len > 0 and isMeionotes(request.head.target)) return devMeionotes(ctx, d, request);
     // The admin page's Applications tab on its fixture, as accounts.bin below: no login
     // here to reach the API's
     if (ctx.opts.dev != null and std.mem.startsWith(u8, request.head.target, "/api/applications.bin")) {
@@ -365,9 +365,9 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         if (std.mem.eql(u8, path, "gallery.css")) {
             return request.respond(site.gallery.css, .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/css; charset=utf-8" }} });
         }
-        // The notes tool (site/notes.zig) and the private numbers (site/pv.zig): their
-        // files; the marker that adds the notes tag
-        if (std.mem.startsWith(u8, path, "private/")) if (site.notes.file(path["private/".len..]) orelse site.pv.file(path["private/".len..])) |data| {
+        // meionotes (site/meionotes.zig) and the private numbers (site/pv.zig): their
+        // files; the marker that adds the meionotes tag
+        if (std.mem.startsWith(u8, path, "private/")) if (site.meionotes.file(path["private/".len..]) orelse site.pv.file(path["private/".len..])) |data| {
             return request.respond(data, .{ .extra_headers = &.{
                 .{ .name = "content-type", .value = contentType(path) },
                 .{ .name = "cache-control", .value = "no-cache" },
@@ -382,12 +382,12 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             var body = (try site_appreview.devFile(ctx.gpa, ctx.io, entry.loaded, path["private/".len..])) orelse return notFound(request);
             const page = std.fs.path.extension(path).len == 0;
             if (page) if (std.mem.findLast(u8, body, "</body>")) |at| {
-                const notes_tag = if (notesMarked(request)) site.notes.tag else "";
-                body = try std.mem.concat(arena_state.allocator(), u8, &.{ body[0..at], reload_script, notes_tag, body[at..] });
+                const meionotes_tag = if (meionotesMarked(request)) site.meionotes.tag else "";
+                body = try std.mem.concat(arena_state.allocator(), u8, &.{ body[0..at], reload_script, meionotes_tag, body[at..] });
             };
             return request.respond(body, .{ .extra_headers = &.{.{ .name = "content-type", .value = contentType(if (page) "index.html" else path) }} });
         };
-        if (std.mem.eql(u8, path, "__notes/on") or std.mem.eql(u8, path, "__notes/off")) {
+        if (std.mem.eql(u8, path, "__meionotes/on") or std.mem.eql(u8, path, "__meionotes/off")) {
             const on = std.mem.endsWith(u8, path, "on");
             return request.respond("", .{ .status = .found, .extra_headers = &.{
                 .{ .name = "location", .value = "/" },
@@ -405,10 +405,10 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             const a = arena_state.allocator();
             return request.respond(try site_truthpage.page(a, try site_truthpage.newest(a, ctx.io, "data")), .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/html; charset=utf-8" }} });
         }
-        if (std.mem.eql(u8, path, "admin/notes")) {
+        if (std.mem.eql(u8, path, "admin/meionotes")) {
             var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
             defer arena_state.deinit();
-            return request.respond(try site.notes.adminPage(arena_state.allocator()), .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/html; charset=utf-8" }} });
+            return request.respond(try site.meionotes.adminPage(arena_state.allocator()), .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/html; charset=utf-8" }} });
         }
         if (std.mem.eql(u8, path, "admin") or std.mem.startsWith(u8, path, "admin/") or std.mem.startsWith(u8, path, "auth/")) {
             var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
@@ -443,8 +443,8 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             var body = got orelse continue;
             if (ctx.opts.dev != null and std.mem.endsWith(u8, name, ".html")) {
                 if (std.mem.findLast(u8, body, "</body>")) |at| {
-                    const notes_tag = if (notesMarked(request)) site.notes.tag else "";
-                    body = try std.mem.concat(arena, u8, &.{ body[0..at], reload_script, notes_tag, body[at..] });
+                    const meionotes_tag = if (meionotesMarked(request)) site.meionotes.tag else "";
+                    body = try std.mem.concat(arena, u8, &.{ body[0..at], reload_script, meionotes_tag, body[at..] });
                 }
             }
             // As the static build's .gz twins: jomify's nginx compresses only HTML itself

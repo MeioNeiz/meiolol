@@ -1,5 +1,5 @@
-//! Notes: Jacob's notes on the live site, an island ui-notes.wasm adds to a page for the
-//! admin login only (nothing in the page itself). The Note button, picking an element
+//! meionotes: Jacob's notes on the live site, an island ui-meionotes.wasm adds to a page for
+//! the admin login only (nothing in the page itself). The meionote button, picking an element
 //! (the glue outlines what is under the pointer and blocks the page's own handlers),
 //! the form, and pins for the page's open notes. Every child of the root is keyed: pins
 //! and the outline come and go while the form is open, and its textarea must stay the
@@ -10,16 +10,16 @@ const std = @import("std");
 const tree = @import("tree.zig");
 const button = @import("button.zig");
 const segmented = @import("segmented.zig");
-const nd = @import("notesdata.zig");
+const nd = @import("meionotesdata.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const phrase = @import("phrase.zig");
 const plain = phrase.plain;
 const H = tree.H;
 const N = tree.N;
 
-pub const name = "Notes";
-pub const scope = .{".c-notes"};
-pub const sel = "[data-island=notes]";
+pub const name = "Meionotes";
+pub const scope = .{".c-meionotes"};
+pub const sel = "[data-island=meionotes]";
 
 pub const Rect = struct { x: f32, y: f32, w: f32, h: f32 };
 
@@ -110,20 +110,20 @@ pub const Tool = struct {
             .class = "pin",
             .type = "button",
             .data_moved = p.moved,
-            .aria_label = h.fmt("Note {d}", .{i + 1}),
+            .aria_label = h.fmt("meionote {d}", .{i + 1}),
             .aria_expanded = t.open == @as(u32, @intCast(i)),
             .style = h.vars(.{ .x = p.x, .y = p.y }),
             .on_click = h.on(t, .{ .pin = @intCast(i) }),
         }, .{i + 1}));
-        return h.div(.{ .class = "c-notes", .data_island = "notes", .data_static = t.static }, .{
+        return h.div(.{ .class = "c-meionotes", .data_island = "meionotes", .data_static = t.static }, .{
             if (t.hl) |r| h.div(.{ .key = "hl", .class = "hl", .style = h.vars(.{ .x = r.x, .y = r.y, .w = r.w, .h = r.h }) }, .{}) else null,
             pins.done(),
             if (t.open) |i| if (i < t.pins.len) card(t, h, t.pins[i]) else null else null,
             switch (t.mode) {
                 .idle => h.div(.{ .key = "bar", .class = "bar" }, .{
-                    button.view(h, .{ .s = .s, .v = .quiet, .href = "/admin/notes" }, .{"All notes"}),
+                    button.view(h, .{ .s = .s, .v = .quiet, .href = "/admin/meionotes" }, .{"All meionotes"}),
                     button.view(h, .{ .v = .primary, .on = h.on(t, .note) }, .{
-                        "Note",
+                        "meionote",
                         if (t.pins.len > 0) h.span(.{ .class = "n" }, .{t.pins.len}) else null,
                     }),
                 }),
@@ -140,7 +140,7 @@ pub const Tool = struct {
     fn form(t: *Tool, h: *H) N {
         const saving = t.mode == .saving;
         const picked = t.what.len > 0;
-        return h.div(.{ .key = "form", .class = "form", .role = "dialog", .aria_label = "New note" }, .{
+        return h.div(.{ .key = "form", .class = "form", .role = "dialog", .aria_label = "New meionote" }, .{
             h.div(.{ .class = "row" }, .{
                 h.span(.{ .class = "what" }, .{if (picked) t.what else "Whole page"}),
                 if (picked) button.view(h, .{ .s = .s, .v = .quiet, .on = h.on(t, .wider) }, .{"Wider"}) else null,
@@ -153,7 +153,7 @@ pub const Tool = struct {
                 .rows = 4,
                 .maxlength = nd.max_chars,
                 .placeholder = "What to change",
-                .aria_label = "Note",
+                .aria_label = "meionote",
                 .disabled = saving,
             }, .{}),
             if (t.component) segmented.view(h, .{ .s = .s, .label = plain("Applies to") }, &.{
@@ -161,12 +161,12 @@ pub const Tool = struct {
                 .{ .label = plain("Everywhere"), .selected = t.scope == .everywhere, .on = h.on(t, .{ .scope = .everywhere }) },
             }) else null,
             if (t.failed) h.p(.{ .class = "err" }, .{"Not saved. Try again."}) else null,
-            if (t.empty) h.p(.{ .class = "err" }, .{"Write the note first."}) else null,
+            if (t.empty) h.p(.{ .class = "err" }, .{"Write the meionote first."}) else null,
             if (t.nope > 0) h.div(.{ .key = t.nope, .class = "nope", .role = "alert" }, .{
                 h.div(.{ .class = "stamp" }, .{
                     h.span(.{ .class = "big", .aria_hidden = true }, .{"🚫"}),
                     h.strong(.{}, .{"Absolutely not."}),
-                    h.span(.{}, .{"We don't say that here. Note binned."}),
+                    h.span(.{}, .{"We don't say that here. meionote binned."}),
                 }),
             }) else null,
             h.div(.{ .class = "row" }, .{
@@ -178,7 +178,7 @@ pub const Tool = struct {
 
     fn card(t: *Tool, h: *H, p: Pin) N {
         const n = p.note;
-        return h.div(.{ .key = "card", .class = "card", .role = "dialog", .aria_label = "Note", .style = h.vars(.{ .x = p.x, .y = p.y }) }, .{
+        return h.div(.{ .key = "card", .class = "card", .role = "dialog", .aria_label = "meionote", .style = h.vars(.{ .x = p.x, .y = p.y }) }, .{
             h.p(.{ .class = "text" }, .{n.text}),
             h.p(.{ .class = "meta" }, .{
                 n.author,
@@ -193,63 +193,63 @@ pub const Tool = struct {
 
 pub const css =
     \\@layer components {
-    \\  .c-notes { position: absolute; left: 0; top: 0; width: 100%; height: 0; overflow-x: clip; pointer-events: none;
+    \\  .c-meionotes { position: absolute; left: 0; top: 0; width: 100%; height: 0; overflow-x: clip; pointer-events: none;
     \\    z-index: calc(var(--z-pop) + 10); font-size: var(--fs-s); }
-    \\  .c-notes > * { pointer-events: auto; }
-    \\  .c-notes[data-static] { position: relative; height: auto; min-height: 64px; }
-    \\  .c-notes .hl { position: absolute; left: calc(var(--x) * 1px); top: calc(var(--y) * 1px);
+    \\  .c-meionotes > * { pointer-events: auto; }
+    \\  .c-meionotes[data-static] { position: relative; height: auto; min-height: 64px; }
+    \\  .c-meionotes .hl { position: absolute; left: calc(var(--x) * 1px); top: calc(var(--y) * 1px);
     \\    width: calc(var(--w) * 1px); height: calc(var(--h) * 1px); pointer-events: none; border-radius: var(--r-s);
     \\    outline: 2px solid var(--focus); outline-offset: 1px; background: color-mix(in srgb, var(--focus) 12%, transparent); }
-    \\  .c-notes .pin { position: absolute; left: calc(var(--x) * 1px - 11px); top: calc(var(--y) * 1px - 11px);
+    \\  .c-meionotes .pin { position: absolute; left: calc(var(--x) * 1px - 11px); top: calc(var(--y) * 1px - 11px);
     \\    min-width: 22px; height: 22px; padding: 0 6px; border: 0; border-radius: var(--r-pill); cursor: pointer;
     \\    background: var(--brand); color: var(--on-brand); font: var(--w-b) var(--fs-xs) / 22px var(--font);
     \\    box-shadow: var(--shadow-pop); }
-    \\  .c-notes .pin::after { content: ""; position: absolute; left: 50%; top: 50%; width: var(--hit); height: var(--hit);
+    \\  .c-meionotes .pin::after { content: ""; position: absolute; left: 50%; top: 50%; width: var(--hit); height: var(--hit);
     \\    transform: translate(-50%, -50%); }
-    \\  .c-notes .pin[data-moved] { background: var(--muted); color: var(--bg); }
-    \\  .c-notes .card { position: absolute; top: calc(var(--y) * 1px + 16px);
+    \\  .c-meionotes .pin[data-moved] { background: var(--muted); color: var(--bg); }
+    \\  .c-meionotes .card { position: absolute; top: calc(var(--y) * 1px + 16px);
     \\    left: clamp(8px, calc(var(--x) * 1px - 140px), calc(100vw - 296px)); width: min(280px, calc(100vw - 16px));
     \\    display: grid; gap: var(--sp-2); justify-items: start; padding: var(--sp-3); }
-    \\  .c-notes .card, .c-notes .bar, .c-notes .form { background: var(--panel-2); border: 1px solid var(--line-2);
+    \\  .c-meionotes .card, .c-meionotes .bar, .c-meionotes .form { background: var(--panel-2); border: 1px solid var(--line-2);
     \\    border-radius: var(--r-l); box-shadow: var(--shadow-pop); }
-    \\  .c-notes .text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-    \\  .c-notes .meta, .c-notes .what, .c-notes .hint { margin: 0; color: var(--t2); overflow-wrap: anywhere; }
-    \\  .c-notes .bar, .c-notes .form { position: fixed; right: var(--sp-4); bottom: var(--sp-4); padding: var(--sp-2); }
-    \\  .c-notes .bar { display: flex; align-items: center; gap: var(--sp-2); }
-    \\  .c-notes .hint { padding: 0 var(--sp-1); }
-    \\  .c-notes .form { display: grid; gap: var(--sp-2); width: min(360px, calc(100vw - 2 * var(--sp-4))); box-sizing: border-box; }
-    \\  .c-notes[data-static] .bar, .c-notes[data-static] .form { position: static; width: auto; }
-    \\  .c-notes[data-static]:has(.pin, .hl) { min-height: 112px; }
-    \\  .c-notes[data-static]:has(.card) { min-height: 220px; }
-    \\  .c-notes .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
-    \\  .c-notes .what { flex: 1 1 140px; }
-    \\  .c-notes textarea { box-sizing: border-box; width: 100%; min-height: 96px; resize: vertical; padding: var(--sp-2);
+    \\  .c-meionotes .text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    \\  .c-meionotes .meta, .c-meionotes .what, .c-meionotes .hint { margin: 0; color: var(--t2); overflow-wrap: anywhere; }
+    \\  .c-meionotes .bar, .c-meionotes .form { position: fixed; right: var(--sp-4); bottom: var(--sp-4); padding: var(--sp-2); }
+    \\  .c-meionotes .bar { display: flex; align-items: center; gap: var(--sp-2); }
+    \\  .c-meionotes .hint { padding: 0 var(--sp-1); }
+    \\  .c-meionotes .form { display: grid; gap: var(--sp-2); width: min(360px, calc(100vw - 2 * var(--sp-4))); box-sizing: border-box; }
+    \\  .c-meionotes[data-static] .bar, .c-meionotes[data-static] .form { position: static; width: auto; }
+    \\  .c-meionotes[data-static]:has(.pin, .hl) { min-height: 112px; }
+    \\  .c-meionotes[data-static]:has(.card) { min-height: 220px; }
+    \\  .c-meionotes .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+    \\  .c-meionotes .what { flex: 1 1 140px; }
+    \\  .c-meionotes textarea { box-sizing: border-box; width: 100%; min-height: 96px; resize: vertical; padding: var(--sp-2);
     \\    font: inherit; font-size: var(--fs-m); color: var(--text); background: var(--ctl-bg); border: 1px solid var(--ctl-line);
     \\    border-radius: var(--r-ctl); }
-    \\  .c-notes .n { margin-left: 6px; min-width: 18px; padding: 0 5px; border-radius: var(--r-pill);
+    \\  .c-meionotes .n { margin-left: 6px; min-width: 18px; padding: 0 5px; border-radius: var(--r-pill);
     \\    background: var(--on-brand); color: var(--brand); font-size: var(--fs-xs); line-height: 18px; }
-    \\  .c-notes .err { margin: 0; color: var(--bad); }
-    \\  .c-notes .nope { position: fixed; inset: 0; z-index: 1; display: grid; place-items: center; pointer-events: none;
-    \\    animation: c-notes-flash 2.6s ease-out forwards; }
-    \\  .c-notes .stamp { display: grid; justify-items: center; gap: var(--sp-1); padding: var(--sp-4) var(--sp-5);
+    \\  .c-meionotes .err { margin: 0; color: var(--bad); }
+    \\  .c-meionotes .nope { position: fixed; inset: 0; z-index: 1; display: grid; place-items: center; pointer-events: none;
+    \\    animation: c-meionotes-flash 2.6s ease-out forwards; }
+    \\  .c-meionotes .stamp { display: grid; justify-items: center; gap: var(--sp-1); padding: var(--sp-4) var(--sp-5);
     \\    border: 4px solid var(--bad); border-radius: var(--r-l); background: var(--panel-2); color: var(--bad);
     \\    font-size: var(--fs-m); text-align: center; box-shadow: var(--shadow-pop);
-    \\    animation: c-notes-slam 2.6s cubic-bezier(.2, 1.6, .4, 1) forwards; }
-    \\  .c-notes .stamp strong { font-size: var(--fs-xl); text-transform: uppercase; letter-spacing: .04em; }
-    \\  .c-notes .stamp .big { font-size: var(--fs-xl); scale: 2.5; margin: var(--sp-4); animation: c-notes-spin .5s linear 3; }
-    \\  .c-notes[data-static] .nope { position: absolute; }
-    \\  .c-notes[data-static] :is(.nope, .stamp) { animation: none; }
-    \\  @keyframes c-notes-flash { 0% { background: color-mix(in srgb, var(--bad) 45%, transparent); }
+    \\    animation: c-meionotes-slam 2.6s cubic-bezier(.2, 1.6, .4, 1) forwards; }
+    \\  .c-meionotes .stamp strong { font-size: var(--fs-xl); text-transform: uppercase; letter-spacing: .04em; }
+    \\  .c-meionotes .stamp .big { font-size: var(--fs-xl); scale: 2.5; margin: var(--sp-4); animation: c-meionotes-spin .5s linear 3; }
+    \\  .c-meionotes[data-static] .nope { position: absolute; }
+    \\  .c-meionotes[data-static] :is(.nope, .stamp) { animation: none; }
+    \\  @keyframes c-meionotes-flash { 0% { background: color-mix(in srgb, var(--bad) 45%, transparent); }
     \\    10%, 20% { background: color-mix(in srgb, var(--bad) 10%, transparent); }
     \\    15% { background: color-mix(in srgb, var(--bad) 35%, transparent); }
     \\    80% { opacity: 1; background: transparent; } 100% { opacity: 0; visibility: hidden; } }
-    \\  @keyframes c-notes-slam { 0% { transform: scale(4) rotate(-30deg); opacity: 0; }
+    \\  @keyframes c-meionotes-slam { 0% { transform: scale(4) rotate(-30deg); opacity: 0; }
     \\    12% { transform: scale(1) rotate(-8deg); opacity: 1; }
     \\    16%, 24%, 32% { transform: translateX(-14px) rotate(-8deg); }
     \\    20%, 28%, 36% { transform: translateX(14px) rotate(-8deg); }
     \\    40%, 80% { transform: rotate(-8deg); } 100% { transform: rotate(-8deg) translateY(40vh); opacity: 0; } }
-    \\  @keyframes c-notes-spin { to { transform: rotate(360deg); } }
-    \\  @media (prefers-reduced-motion: reduce) { .c-notes .stamp, .c-notes .stamp .big { animation: none; } }
+    \\  @keyframes c-meionotes-spin { to { transform: rotate(360deg); } }
+    \\  @media (prefers-reduced-motion: reduce) { .c-meionotes .stamp, .c-meionotes .stamp .big { animation: none; } }
     \\}
     \\
 ;
@@ -282,7 +282,7 @@ const gallery_pins = [_]Pin{
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const states = [_]struct { []const u8, Tool }{
-        .{ "no notes", .{ .static = true } },
+        .{ "no meionotes", .{ .static = true } },
         .{ "pins and count", .{ .static = true, .pins = &gallery_pins } },
         .{ "a pin open", .{ .static = true, .pins = &gallery_pins, .open = 1, .hl = .{ .x = 8, .y = 68, .w = 140, .h = 32 } } },
         .{ "picking", .{ .static = true, .mode = .picking, .hl = .{ .x = 8, .y = 64, .w = 160, .h = 40 } } },
@@ -302,7 +302,7 @@ pub fn gallery(g: *Gallery) void {
     }
 }
 
-test "notes: picking, the form and back" {
+test "meionotes: picking, the form and back" {
     var t: Tool = .{};
     var ev: tree.Event = .{ .kind = .click };
     t.update(.note, &ev);

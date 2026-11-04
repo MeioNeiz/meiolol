@@ -115,7 +115,7 @@ pub const Page = struct {
 };
 
 /// The private and admin pages, nginx's view_private and view_admin logins only
-pub const Private = enum { index, tester, app, notes, admin };
+pub const Private = enum { index, tester, app, meionotes, admin };
 
 /// `path` under the site root, root-relative: for href and src holes
 pub const Link = struct {

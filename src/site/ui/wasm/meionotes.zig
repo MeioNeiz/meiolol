@@ -1,18 +1,18 @@
-//! ui-notes.wasm: the notes tool (ui.notes.Tool) on any page, loaded only for the admin
+//! ui-meionotes.wasm: meionotes (ui.meionotes.Tool) on any page, loaded only for the admin
 //! login (nginx, or the dev server, adds its script for a request with the marker
 //! cookie). Its root goes at the end of <body>; the page's open notes come from
-//! /api/notes as pins; picking listens on window in the capture phase, so the page's own
-//! handlers never see the pointer until it ends; Save POSTs a ui.notesdata.New. On
-//! /admin/notes (its server-rendered ui.noteslist) the list instead, fetched again
+//! /api/meionotes as pins; picking listens on window in the capture phase, so the page's own
+//! handlers never see the pointer until it ends; Save POSTs a ui.meionotesdata.New. On
+//! /admin/meionotes (its server-rendered ui.meionoteslist) the list instead, fetched again
 //! every 20 s while the tab shows and when it comes back
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
 const dom = @import("dom.zig");
-const nd = ui.notesdata;
-const Tool = ui.notes.Tool;
-const Pin = ui.notes.Pin;
-const Rect = ui.notes.Rect;
+const nd = ui.meionotesdata;
+const Tool = ui.meionotes.Tool;
+const Pin = ui.meionotes.Pin;
+const Rect = ui.meionotes.Rect;
 
 pub const panic = zjb.panic;
 
@@ -22,7 +22,7 @@ var tool: Tool = .{};
 var server: Tool = .{};
 var island: ?*ui.island.Island(Tool, dom.Dom) = null;
 var root: zjb.Handle = .null;
-/// Notes from /api/notes and Save; strings point into the answers' bytes, kept
+/// Notes from /api/meionotes and Save; strings point into the answers' bytes, kept
 var notes: std.ArrayList(nd.Note) = .empty;
 var pins: std.ArrayList(Pin) = .empty;
 /// Each pin's element; .null for a page-level or moved one
@@ -42,23 +42,23 @@ const blocked = [_][]const u8{ "pointerdown", "pointerup", "mousedown", "mouseup
 export fn main() void {
     dom.start();
     const doc = zjb.global("document");
-    const page = doc.call("querySelector", .{zjb.constString(ui.noteslist.sel)}, zjb.Handle);
+    const page = doc.call("querySelector", .{zjb.constString(ui.meionoteslist.sel)}, zjb.Handle);
     if (page != .null) {
         page.release();
         return listMain();
     }
-    const existing = doc.call("querySelector", .{zjb.constString(ui.notes.sel)}, zjb.Handle);
+    const existing = doc.call("querySelector", .{zjb.constString(ui.meionotes.sel)}, zjb.Handle);
     if (existing != .null) return existing.release();
-    if (!mount()) return dom.dom.warn("notes: no root");
-    island = dom.rt.add(Tool, &tool, &server, ui.notes.sel) catch return dom.dom.warn("notes: out of memory");
+    if (!mount()) return dom.dom.warn("meionotes: no root");
+    island = dom.rt.add(Tool, &tool, &server, ui.meionotes.sel) catch return dom.dom.warn("meionotes: out of memory");
     dom.rt.changed = changed;
-    root = doc.call("querySelector", .{zjb.constString(ui.notes.sel)}, zjb.Handle).kept();
+    root = doc.call("querySelector", .{zjb.constString(ui.meionotes.sel)}, zjb.Handle).kept();
     const w = zjb.global("window");
-    w.call("addEventListener", .{ zjb.constString("keydown"), zjb.fnHandle("notesKey", &onKey), @as(i32, 1) }, void);
-    w.call("addEventListener", .{ zjb.constString("resize"), zjb.fnHandle("notesResize", &onPlace), @as(i32, 0) }, void);
+    w.call("addEventListener", .{ zjb.constString("keydown"), zjb.fnHandle("meionotesKey", &onKey), @as(i32, 1) }, void);
+    w.call("addEventListener", .{ zjb.constString("resize"), zjb.fnHandle("meionotesResize", &onPlace), @as(i32, 0) }, void);
     // The page's islands redraw after a press (a tab, a filter): pins follow a beat later
-    w.call("addEventListener", .{ zjb.constString("click"), zjb.fnHandle("notesClick", &onClick), @as(i32, 0) }, void);
-    const ro = zjb.global("ResizeObserver").new(.{zjb.fnHandle("notesGrew", &onGrew)});
+    w.call("addEventListener", .{ zjb.constString("click"), zjb.fnHandle("meionotesClick", &onClick), @as(i32, 0) }, void);
+    const ro = zjb.global("ResizeObserver").new(.{zjb.fnHandle("meionotesGrew", &onGrew)});
     defer ro.release();
     const body = doc.get("body", zjb.Handle);
     defer body.release();
@@ -113,12 +113,12 @@ fn startPick() void {
     if (picking) return;
     picking = true;
     const w = zjb.global("window");
-    w.call("addEventListener", .{ zjb.constString("pointermove"), zjb.fnHandle("notesMove", &onMove), @as(i32, 1) }, void);
-    w.call("addEventListener", .{ zjb.constString("click"), zjb.fnHandle("notesPick", &onPick), @as(i32, 1) }, void);
+    w.call("addEventListener", .{ zjb.constString("pointermove"), zjb.fnHandle("meionotesMove", &onMove), @as(i32, 1) }, void);
+    w.call("addEventListener", .{ zjb.constString("click"), zjb.fnHandle("meionotesPick", &onPick), @as(i32, 1) }, void);
     for (blocked) |kind| {
         const k = zjb.string(kind);
         defer k.release();
-        w.call("addEventListener", .{ k, zjb.fnHandle("notesBlock", &onBlock), @as(i32, 1) }, void);
+        w.call("addEventListener", .{ k, zjb.fnHandle("meionotesBlock", &onBlock), @as(i32, 1) }, void);
     }
 }
 
@@ -127,12 +127,12 @@ fn stopPick() void {
     if (!picking) return;
     picking = false;
     const w = zjb.global("window");
-    w.call("removeEventListener", .{ zjb.constString("pointermove"), zjb.fnHandle("notesMove", &onMove), @as(i32, 1) }, void);
-    w.call("removeEventListener", .{ zjb.constString("click"), zjb.fnHandle("notesPick", &onPick), @as(i32, 1) }, void);
+    w.call("removeEventListener", .{ zjb.constString("pointermove"), zjb.fnHandle("meionotesMove", &onMove), @as(i32, 1) }, void);
+    w.call("removeEventListener", .{ zjb.constString("click"), zjb.fnHandle("meionotesPick", &onPick), @as(i32, 1) }, void);
     for (blocked) |kind| {
         const k = zjb.string(kind);
         defer k.release();
-        w.call("removeEventListener", .{ k, zjb.fnHandle("notesBlock", &onBlock), @as(i32, 1) }, void);
+        w.call("removeEventListener", .{ k, zjb.fnHandle("meionotesBlock", &onBlock), @as(i32, 1) }, void);
     }
     swap(&hover, .null);
 }
@@ -533,7 +533,7 @@ fn load() void {
     defer enc.release();
     const q = enc.allocString(gpa) catch return;
     defer gpa.free(q);
-    const url = std.mem.concat(gpa, u8, &.{ "/api/notes?path=", q }) catch return;
+    const url = std.mem.concat(gpa, u8, &.{ "/api/meionotes?path=", q }) catch return;
     defer gpa.free(url);
     dom.fetch(url, @backingInt(Call.list), done);
 }
@@ -580,8 +580,8 @@ fn done(ctx: i32, bytes: ?[]u8) void {
             listRender();
         },
         .list => {
-            const b = bytes orelse return dom.dom.warn("notes: no list");
-            const l = ui.data.decode(gpa, nd.List, b) catch return dom.dom.warn("notes: bad list");
+            const b = bytes orelse return dom.dom.warn("meionotes: no list");
+            const l = ui.data.decode(gpa, nd.List, b) catch return dom.dom.warn("meionotes: bad list");
             notes.appendSlice(gpa, l.notes) catch return;
             place();
         },
@@ -654,7 +654,7 @@ fn save() void {
     }
     var body: std.ArrayList(u8) = .empty;
     ui.data.encode(a, nd.New, new, &body) catch return;
-    dom.send("POST", "/api/notes", body.items, @backingInt(Call.save), done);
+    dom.send("POST", "/api/meionotes", body.items, @backingInt(Call.save), done);
 }
 
 /// Wah wah wah waaah, synthesised: no sound file to ship. Save's press is the gesture
@@ -788,7 +788,7 @@ fn onPlace() callconv(.c) void {
 
 fn onClick(e: zjb.Handle) callconv(.c) void {
     e.release();
-    zjb.global("window").call("setTimeout", .{ zjb.fnHandle("notesLater", &onPlace), @as(i32, 80) }, void);
+    zjb.global("window").call("setTimeout", .{ zjb.fnHandle("meionotesLater", &onPlace), @as(i32, 80) }, void);
 }
 
 fn onGrew(entries: zjb.Handle, observer: zjb.Handle) callconv(.c) void {
@@ -797,11 +797,11 @@ fn onGrew(entries: zjb.Handle, observer: zjb.Handle) callconv(.c) void {
     place();
 }
 
-// The list (/admin/notes)
+// The list (/admin/meionotes)
 
-var list: ui.noteslist.List = .{};
-var list_server: ui.noteslist.List = .{};
-var list_island: ?*ui.island.Island(ui.noteslist.List, dom.Dom) = null;
+var list: ui.meionoteslist.List = .{};
+var list_server: ui.meionoteslist.List = .{};
+var list_island: ?*ui.island.Island(ui.meionoteslist.List, dom.Dom) = null;
 /// The latest list answer's notes live here, freed when the next one lands
 var list_mem: ?std.heap.ArenaAllocator = null;
 var fetching = false;
@@ -831,17 +831,17 @@ fn deleted(_: i32, status: u16, bytes: ?[]u8) void {
 }
 
 fn listMain() void {
-    list_island = dom.rt.add(ui.noteslist.List, &list, &list_server, ui.noteslist.sel) catch return dom.dom.warn("notes: out of memory");
+    list_island = dom.rt.add(ui.meionoteslist.List, &list, &list_server, ui.meionoteslist.sel) catch return dom.dom.warn("meionotes: out of memory");
     dom.rt.changed = listChanged;
     fetchAll();
-    zjb.global("window").call("setInterval", .{ zjb.fnHandle("notesPoll", &onPoll), @as(i32, 20_000) }, void);
-    zjb.global("document").call("addEventListener", .{ zjb.constString("visibilitychange"), zjb.fnHandle("notesShown", &onShown), @as(i32, 0) }, void);
+    zjb.global("window").call("setInterval", .{ zjb.fnHandle("meionotesPoll", &onPoll), @as(i32, 20_000) }, void);
+    zjb.global("document").call("addEventListener", .{ zjb.constString("visibilitychange"), zjb.fnHandle("meionotesShown", &onShown), @as(i32, 0) }, void);
 }
 
 fn fetchAll() void {
     if (fetching) return;
     fetching = true;
-    dom.fetch("/api/notes?all=1&status=any", @backingInt(Call.all), done);
+    dom.fetch("/api/meionotes?all=1&status=any", @backingInt(Call.all), done);
 }
 
 /// Only while the tab shows: a hidden one catches up when it comes back
@@ -889,9 +889,9 @@ fn listChanged() void {
             dom.ask("DELETE", path, "", @backingInt(Call.delete), deleted);
         },
         .tool => |on| if (on)
-            dom.send("POST", "/api/notes/tool?on=1", "", @backingInt(Call.tool_on), done)
+            dom.send("POST", "/api/meionotes/tool?on=1", "", @backingInt(Call.tool_on), done)
         else
-            dom.send("POST", "/api/notes/tool?on=0", "", @backingInt(Call.tool_off), done),
+            dom.send("POST", "/api/meionotes/tool?on=0", "", @backingInt(Call.tool_off), done),
     }
 }
 
@@ -908,7 +908,7 @@ fn patch(id: u32, c: nd.Change) void {
 }
 
 fn idPath(buf: []u8, id: u32) ?[]const u8 {
-    return std.fmt.bufPrint(buf, "/api/notes?id={d}", .{id}) catch null;
+    return std.fmt.bufPrint(buf, "/api/meionotes?id={d}", .{id}) catch null;
 }
 
 /// The open reply's input, cut on a whole character at max_reply

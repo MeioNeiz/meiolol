@@ -1,22 +1,22 @@
-//! NotesList: /admin/notes, every note on the site grouped by page or by component, by
-//! status; Done, Reopen, a reply and Delete (asked twice; the owner's, delete_notes) per
+//! MeionotesList: /admin/meionotes, every note on the site grouped by page or by component,
+//! by status; Done, Reopen, a reply and Delete (asked twice; the owner's, delete_meionotes) per
 //! note, Looks good or Not yet on one a session fixed, and the tool
-//! on or off in this browser. ui-notes.wasm's list mode fetches (again every 20 s while
+//! on or off in this browser. ui-meionotes.wasm's list mode fetches (again every 20 s while
 //! shown) and saves; the reply's input is uncontrolled and keyed, read by the glue at Save
 const std = @import("std");
 const tree = @import("tree.zig");
 const button = @import("button.zig");
 const segmented = @import("segmented.zig");
-const nd = @import("notesdata.zig");
+const nd = @import("meionotesdata.zig");
 const fmt = @import("fmt.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
 const H = tree.H;
 const N = tree.N;
 
-pub const name = "NotesList";
-pub const scope = .{".c-noteslist"};
-pub const sel = "[data-island=noteslist]";
+pub const name = "MeionotesList";
+pub const scope = .{".c-meionoteslist"};
+pub const sel = "[data-island=meionoteslist]";
 
 pub const Group = enum { page, component };
 /// check: fixed, waiting for Jacob; done: done or kept
@@ -109,9 +109,9 @@ pub const List = struct {
             open += @intFromBool(n.status == .open);
             check += @intFromBool(n.status == .fixed);
         }
-        return h.div(.{ .class = "c-noteslist", .data_island = "noteslist" }, .{
+        return h.div(.{ .class = "c-meionoteslist", .data_island = "meionoteslist" }, .{
             h.el(.header, .{ .class = "top" }, .{
-                h.el(.h1, .{}, .{"Notes"}),
+                h.el(.h1, .{}, .{"meionotes"}),
                 h.a(.{ .href = "/admin" }, .{"Admin"}),
                 h.a(.{ .href = "/" }, .{"Site"}),
             }),
@@ -134,7 +134,7 @@ pub const List = struct {
             }),
             if (l.loading) h.p(.{ .class = "meta" }, .{"Loading"}) else null,
             if (l.failed) h.p(.{ .class = "err" }, .{"Not loaded or not saved. Tries again in a moment."}) else null,
-            if (l.denied) h.p(.{ .class = "denied", .role = "alert" }, .{"Not allowed: only the owner deletes notes. Your try was logged."}) else null,
+            if (l.denied) h.p(.{ .class = "denied", .role = "alert" }, .{"Not allowed: only the owner deletes meionotes. Your try was logged."}) else null,
             groups(l, h),
         });
     }
@@ -163,7 +163,7 @@ pub const List = struct {
             for (l.notes) |n| if (l.shown(n) and std.mem.eql(u8, l.key(n), k)) rows.add(row(l, h, n));
             secs.add(h.section(.{ .key = k }, .{ h.h2(.{}, .{k}), h.ul(.{}, .{rows.done()}) }));
         }
-        if (keys.items.len == 0 and !l.loading) secs.add(h.p(.{ .class = "meta" }, .{"No notes."}));
+        if (keys.items.len == 0 and !l.loading) secs.add(h.p(.{ .class = "meta" }, .{"No meionotes."}));
         return h.div(.{ .class = "groups" }, .{secs.done()});
     }
 
@@ -224,30 +224,30 @@ pub const List = struct {
 
 pub const css =
     \\@layer components {
-    \\  .c-noteslist { display: grid; gap: var(--sp-3); max-width: 880px; margin: 0 auto; padding: var(--sp-4); }
-    \\  .c-noteslist .top { display: flex; align-items: baseline; gap: var(--sp-3); }
-    \\  .c-noteslist .top h1 { margin: 0 auto 0 0; font-size: var(--fs-l); }
-    \\  .c-noteslist .top a { color: var(--t2); font-size: var(--fs-s); }
-    \\  .c-noteslist .top a:hover { color: var(--text); }
-    \\  .c-noteslist .bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
-    \\  .c-noteslist .tool { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-left: auto; }
-    \\  .c-noteslist h2 { margin: var(--sp-3) 0 var(--sp-1); font-size: var(--fs-m); overflow-wrap: anywhere; }
-    \\  .c-noteslist ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
-    \\  .c-noteslist li { display: grid; gap: var(--sp-1); padding: var(--sp-3); background: var(--panel);
+    \\  .c-meionoteslist { display: grid; gap: var(--sp-3); max-width: 880px; margin: 0 auto; padding: var(--sp-4); }
+    \\  .c-meionoteslist .top { display: flex; align-items: baseline; gap: var(--sp-3); }
+    \\  .c-meionoteslist .top h1 { margin: 0 auto 0 0; font-size: var(--fs-l); }
+    \\  .c-meionoteslist .top a { color: var(--t2); font-size: var(--fs-s); }
+    \\  .c-meionoteslist .top a:hover { color: var(--text); }
+    \\  .c-meionoteslist .bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+    \\  .c-meionoteslist .tool { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-left: auto; }
+    \\  .c-meionoteslist h2 { margin: var(--sp-3) 0 var(--sp-1); font-size: var(--fs-m); overflow-wrap: anywhere; }
+    \\  .c-meionoteslist ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+    \\  .c-meionoteslist li { display: grid; gap: var(--sp-1); padding: var(--sp-3); background: var(--panel);
     \\    border: 1px solid var(--line); border-radius: var(--r-m); }
-    \\  .c-noteslist li:is([data-status=done], [data-status=kept]) .text { color: var(--t2); }
-    \\  .c-noteslist li[data-status=done] .text { text-decoration: line-through; }
-    \\  .c-noteslist li[data-status=fixed] { border-color: var(--brand); }
-    \\  .c-noteslist p { margin: 0; overflow-wrap: anywhere; }
-    \\  .c-noteslist .text { white-space: pre-wrap; }
-    \\  .c-noteslist .meta { color: var(--t2); font-size: var(--fs-s); }
-    \\  .c-noteslist .reply { font-size: var(--fs-s); }
-    \\  .c-noteslist .reply::before { content: "↳ "; color: var(--t2); }
-    \\  .c-noteslist .err { color: var(--bad); }
-    \\  .c-noteslist .denied { padding: var(--sp-3); border: 2px solid var(--bad); border-radius: var(--r-m);
+    \\  .c-meionoteslist li:is([data-status=done], [data-status=kept]) .text { color: var(--t2); }
+    \\  .c-meionoteslist li[data-status=done] .text { text-decoration: line-through; }
+    \\  .c-meionoteslist li[data-status=fixed] { border-color: var(--brand); }
+    \\  .c-meionoteslist p { margin: 0; overflow-wrap: anywhere; }
+    \\  .c-meionoteslist .text { white-space: pre-wrap; }
+    \\  .c-meionoteslist .meta { color: var(--t2); font-size: var(--fs-s); }
+    \\  .c-meionoteslist .reply { font-size: var(--fs-s); }
+    \\  .c-meionoteslist .reply::before { content: "↳ "; color: var(--t2); }
+    \\  .c-meionoteslist .err { color: var(--bad); }
+    \\  .c-meionoteslist .denied { padding: var(--sp-3); border: 2px solid var(--bad); border-radius: var(--r-m);
     \\    color: var(--bad); font-size: var(--fs-l); font-weight: var(--w-b); }
-    \\  .c-noteslist .acts, .c-noteslist .edit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
-    \\  .c-noteslist .edit input { flex: 1 1 160px; min-height: var(--ctl-s); padding: 0 var(--sp-2); font: inherit;
+    \\  .c-meionoteslist .acts, .c-meionoteslist .edit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+    \\  .c-meionoteslist .edit input { flex: 1 1 160px; min-height: var(--ctl-s); padding: 0 var(--sp-2); font: inherit;
     \\    color: var(--text); background: var(--ctl-bg); border: 1px solid var(--ctl-line); border-radius: var(--r-ctl); }
     \\}
     \\
@@ -311,7 +311,7 @@ fn render(a: std.mem.Allocator, l: *List) ![]const u8 {
     return out.written();
 }
 
-test "noteslist: groups by page or component, filters by status, asks the glue" {
+test "meionoteslist: groups by page or component, filters by status, asks the glue" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -337,7 +337,7 @@ test "noteslist: groups by page or component, filters by status, asks the glue" 
     l.filter = .done;
     try std.testing.expect(std.mem.find(u8, try render(a, &l), "Like these chips") != null);
     l.notes = gallery_notes[0..2];
-    try std.testing.expect(std.mem.find(u8, try render(a, &l), "No notes.") != null);
+    try std.testing.expect(std.mem.find(u8, try render(a, &l), "No meionotes.") != null);
 
     var ev: tree.Event = .{ .kind = .click };
     l.update(.{ .done = 2 }, &ev);

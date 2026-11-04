@@ -9,7 +9,7 @@
 #   deploy/snap-small.sh SRC DST [N]   builds DST unless built from this SRC/meiolol.db
 # DST (named *-small) is replaced whole, so it may not be SRC, inside it, around it, or
 # around data/. Built beside it and swapped in: small servers running on the old copy
-# keep its database; dev-notes.db moves over. deploy/dev.sh --small runs it
+# keep its database; dev-meionotes.db moves over. deploy/dev.sh --small runs it
 set -euo pipefail
 usage='usage: snap-small.sh SRC DST [N]'
 src=${1:?$usage}
@@ -115,8 +115,8 @@ for f in "$src"/*; do
     esac
 done
 echo "$want" > "$tmp/.source"
-# A rename keeps a running server's open notes database with it
-for f in "$dst"/dev-notes.db*; do
+# A rename keeps a running server's open meionotes database with it
+for f in "$dst"/dev-meionotes.db*; do
     if [[ -e "$f" ]]; then mv "$f" "$tmp/"; fi
 done
 if [[ -e "$dst" ]]; then mv "$dst" "$old"; fi

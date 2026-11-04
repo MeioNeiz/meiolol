@@ -1,12 +1,12 @@
-//! Notes on the live site (ui.notesdata, the notes island): api.db's notes table behind
-//! /api/notes, for logins with take_notes (root.zig checks), and the dev server's local
-//! file (serve.zig), the same handler without a login.
+//! meionotes (ui.meionotesdata, the meionotes island): api.db's meionotes table behind
+//! /api/meionotes, for logins with take_meionotes (root.zig checks), and the dev server's
+//! local file (serve.zig), the same handler without a login.
 //!
-//!   GET   /api/notes?path=P        open and fixed notes for P and every "everywhere" one
-//!   GET   /api/notes?all=1[&status=open|fixed|kept|done|any]  every note, default open
-//!   POST  /api/notes               a ui.notesdata.New; the stored Note
-//!   PATCH /api/notes?id=N          a ui.notesdata.Change; the stored Note
-//!   DELETE /api/notes?id=N         the note gone for good; {"ok":true}
+//!   GET   /api/meionotes?path=P     open and fixed notes for P, all "everywhere" ones
+//!   GET   /api/meionotes?all=1[&status=open|fixed|kept|done|any]  every note, default open
+//!   POST  /api/meionotes            a ui.meionotesdata.New; the stored Note
+//!   PATCH /api/meionotes?id=N       a ui.meionotesdata.Change; the stored Note
+//!   DELETE /api/meionotes?id=N      the note gone for good; {"ok":true}
 //!
 //! Bodies and 200s are ui.data binary; errors JSON
 const std = @import("std");
@@ -16,12 +16,12 @@ const param = @import("root.zig").param;
 
 const Allocator = std.mem.Allocator;
 const Status = std.http.Status;
-const nd = ui.notesdata;
+const nd = ui.meionotesdata;
 
 pub const schema =
-    \\-- Notes on the live site (notes.zig): ui.notesdata.Note; scope 0 page, 1 everywhere;
+    \\-- meionotes (meionotes.zig): ui.meionotesdata.Note; scope 0 page, 1 everywhere;
     \\-- kind 0 page, 1 component, 2 island; theme 0 light, 1 dark; status nd.Status
-    \\CREATE TABLE IF NOT EXISTS notes (
+    \\CREATE TABLE IF NOT EXISTS meionotes (
     \\    id INTEGER PRIMARY KEY,
     \\    created INTEGER NOT NULL,
     \\    updated INTEGER NOT NULL,
@@ -41,15 +41,24 @@ pub const schema =
     \\    status INTEGER NOT NULL,
     \\    reply TEXT NOT NULL
     \\);
-    \\CREATE INDEX IF NOT EXISTS notes_path ON notes (status, path);
-    \\CREATE INDEX IF NOT EXISTS notes_scope ON notes (status, scope);
+    \\CREATE INDEX IF NOT EXISTS meionotes_path ON meionotes (status, path);
+    \\CREATE INDEX IF NOT EXISTS meionotes_scope ON meionotes (status, scope);
     \\
 ;
 
-/// The schema, then every row's path and state as nd.canonical has them now (rows saved
-/// before a change to it, such as the URL move); after each open
+/// `migrate`, then the schema; after each open
 pub fn setUp(db: store.Db) !void {
+    try migrate(db);
     try db.exec(schema);
+}
+
+/// The table was `notes` before the tool's name; renamed before `schema` runs, which would
+/// otherwise make an empty one beside it. Its old indexes go, `schema` makes them anew
+pub fn migrate(db: store.Db) !void {
+    const has = "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?";
+    if ((try db.scalar(has, .{"notes"}) orelse 0) == 0) return;
+    if ((try db.scalar(has, .{"meionotes"}) orelse 0) > 0) return;
+    try db.exec("ALTER TABLE notes RENAME TO meionotes; DROP INDEX IF EXISTS notes_path; DROP INDEX IF EXISTS notes_scope;");
 }
 
 /// Notes kept; more are refused (507) until some are deleted by hand
@@ -111,7 +120,7 @@ const Row = struct {
 
 /// Notes matching `where`, newest first, at most `cap`
 fn found(arena: Allocator, db: store.Db, comptime where: []const u8, args: anytype, cap: usize) !Reply {
-    var q = try db.prepare("SELECT " ++ columns ++ " FROM notes " ++ where ++ " ORDER BY id DESC LIMIT ?");
+    var q = try db.prepare("SELECT " ++ columns ++ " FROM meionotes " ++ where ++ " ORDER BY id DESC LIMIT ?");
     defer q.deinit();
     try q.bind(args ++ .{cap + 1});
     var notes: std.ArrayList(nd.Note) = .empty;
@@ -154,12 +163,12 @@ fn noteOf(arena: Allocator, r: Row) !nd.Note {
 }
 
 fn add(arena: Allocator, db: store.Db, body: []const u8, author: []const u8, now: i64) !Reply {
-    const n = ui.data.decode(arena, nd.New, body) catch return try failed(arena, .bad_request, "expected a ui.notesdata.New");
+    const n = ui.data.decode(arena, nd.New, body) catch return try failed(arena, .bad_request, "expected a ui.meionotesdata.New");
     if (nd.check(n)) |why| return try failed(arena, .bad_request, why);
-    if ((try db.scalar("SELECT count(*) FROM notes", .{}) orelse 0) >= max_notes) return try failed(arena, .insufficient_storage, "too many notes");
+    if ((try db.scalar("SELECT count(*) FROM meionotes", .{}) orelse 0) >= max_notes) return try failed(arena, .insufficient_storage, "too many meionotes");
     const t = n.target;
     const at = nd.canonical(n.path, n.hash);
-    try db.run("INSERT INTO notes (" ++ columns ++ ") VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '')", .{
+    try db.run("INSERT INTO meionotes (" ++ columns ++ ") VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '')", .{
         now,       now,  author, at.path,              at.state, @backingInt(n.scope), @backingInt(t.kind), t.name, t.nth, t.steps,
         t.snippet, n.vw, n.vh,   @backingInt(n.theme), n.text,
     });
@@ -174,26 +183,26 @@ fn idOf(arena: Allocator, query: []const u8) !?u32 {
 
 fn change(arena: Allocator, db: store.Db, query: []const u8, body: []const u8, now: i64) !Reply {
     const id = try idOf(arena, query) orelse return try failed(arena, .bad_request, "expected ?id=N");
-    const c = ui.data.decode(arena, nd.Change, body) catch return try failed(arena, .bad_request, "expected a ui.notesdata.Change");
+    const c = ui.data.decode(arena, nd.Change, body) catch return try failed(arena, .bad_request, "expected a ui.meionotesdata.Change");
     if (nd.checkChange(c)) |why| return try failed(arena, .bad_request, why);
     const status: ?i64 = if (c.status) |s| @backingInt(s) else null;
-    try db.run("UPDATE notes SET status = coalesce(?, status), reply = coalesce(?, reply), updated = ? WHERE id = ?", .{ status, c.reply, now, id });
-    if (db.changes() == 0) return try failed(arena, .not_found, "no such note");
+    try db.run("UPDATE meionotes SET status = coalesce(?, status), reply = coalesce(?, reply), updated = ? WHERE id = ?", .{ status, c.reply, now, id });
+    if (db.changes() == 0) return try failed(arena, .not_found, "no such meionote");
     return one(arena, db, id);
 }
 
 fn remove(arena: Allocator, db: store.Db, query: []const u8) !Reply {
     const id = try idOf(arena, query) orelse return try failed(arena, .bad_request, "expected ?id=N");
-    try db.run("DELETE FROM notes WHERE id = ?", .{id});
-    if (db.changes() == 0) return try failed(arena, .not_found, "no such note");
+    try db.run("DELETE FROM meionotes WHERE id = ?", .{id});
+    if (db.changes() == 0) return try failed(arena, .not_found, "no such meionote");
     return .{ .status = .ok, .body = "{\"ok\":true}" };
 }
 
 fn one(arena: Allocator, db: store.Db, id: i64) !Reply {
-    var q = try db.prepare("SELECT " ++ columns ++ " FROM notes WHERE id = ?");
+    var q = try db.prepare("SELECT " ++ columns ++ " FROM meionotes WHERE id = ?");
     defer q.deinit();
     try q.bind(.{id});
-    if (!try q.step()) return try failed(arena, .not_found, "no such note");
+    if (!try q.step()) return try failed(arena, .not_found, "no such meionote");
     return binary(arena, nd.Note, try noteOf(arena, q.row(Row)));
 }
 
@@ -227,11 +236,11 @@ fn decoded(arena: Allocator, comptime T: type, r: Reply) !T {
 
 /// `n` rows as `add` writes them, open, on `path`
 fn fill(db: store.Db, n: usize, path: []const u8) !void {
-    try db.run("WITH RECURSIVE c(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM c WHERE i < ?) INSERT INTO notes (" ++ columns ++
+    try db.run("WITH RECURSIVE c(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM c WHERE i < ?) INSERT INTO meionotes (" ++ columns ++
         ") SELECT NULL, i, i, 'a', ?, '', 0, 0, '', 0, '', '', 0, 0, 0, 'x', 0, '' FROM c", .{ n, path });
 }
 
-test "notes: a page gets its own open notes and every everywhere one; done ones leave" {
+test "meionotes: a page gets its own open notes and every everywhere one; done ones leave" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     const a = arena_state.allocator();
@@ -285,7 +294,7 @@ test "notes: a page gets its own open notes and every everywhere one; done ones 
     try std.testing.expectEqual(2, (try decoded(a, nd.List, try handle(a, db, .GET, "all=1&status=any", "", "", 0))).notes.len);
 }
 
-test "notes: refuses bad requests and bodies, and stops at its caps" {
+test "meionotes: refuses bad requests and bodies, and stops at its caps" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     const a = arena_state.allocator();
@@ -320,7 +329,7 @@ test "notes: refuses bad requests and bodies, and stops at its caps" {
         try std.testing.expect(!r.binary);
         try std.testing.expectStringStartsWith(r.body, "{\"error\":\"");
     }
-    try std.testing.expectEqual(0, try db.scalar("SELECT count(*) FROM notes", .{}));
+    try std.testing.expectEqual(0, try db.scalar("SELECT count(*) FROM meionotes", .{}));
 
     try fill(db, max_page + 1, "/a");
     const page = try decoded(a, nd.List, try handle(a, db, .GET, "path=/a", "", "", 0));
@@ -335,18 +344,31 @@ test "notes: refuses bad requests and bodies, and stops at its caps" {
     try std.testing.expect(!all.more);
 }
 
-test "notes: a damaged row is an error, never a bad value" {
+test migrate {
+    const db = try testDb();
+    defer db.close();
+    try fill(db, 2, "/a");
+    try db.exec("ALTER TABLE meionotes RENAME TO notes; DROP INDEX meionotes_path; DROP INDEX meionotes_scope;" ++
+        "CREATE INDEX notes_path ON notes (status, path); CREATE INDEX notes_scope ON notes (status, scope);");
+    try setUp(db);
+    try setUp(db);
+    try std.testing.expectEqual(2, try db.scalar("SELECT count(*) FROM meionotes", .{}));
+    try std.testing.expectEqual(0, try db.scalar("SELECT count(*) FROM sqlite_master WHERE name LIKE 'notes%'", .{}));
+    try std.testing.expectEqual(2, try db.scalar("SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name LIKE 'meionotes%'", .{}));
+}
+
+test "meionotes: a damaged row is an error, never a bad value" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     const a = arena_state.allocator();
     const db = try testDb();
     defer db.close();
     try fill(db, 1, "/a");
-    try db.run("UPDATE notes SET theme = 7", .{});
+    try db.run("UPDATE meionotes SET theme = 7", .{});
     try std.testing.expectError(error.BadNote, handle(a, db, .GET, "path=/a", "", "", 0));
 }
 
-test "notes: a New with every field at its cap fits max_body" {
+test "meionotes: a New with every field at its cap fits max_body" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     const a = arena_state.allocator();
