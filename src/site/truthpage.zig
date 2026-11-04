@@ -655,6 +655,7 @@ pub fn page(a: Allocator, tsv: ?[]const u8) ![]const u8 {
         .title = "Truth test",
         .lead = "How well each mode predicts the next week's games on the newest patch, scored daily.",
         .body = try ui.prose.parse(a, body),
+        .wide = true,
     };
     const n = p.view(&h);
     if (h.oom) return error.OutOfMemory;

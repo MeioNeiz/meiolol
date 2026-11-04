@@ -20,9 +20,11 @@ pub const TextPage = struct {
     body: prose.Doc = .{ .blocks = &.{} },
     /// After the body: what the page writer builds in code (the method page's table)
     extra: N = .none,
+    /// Tables use the page's width; text stays at a reading measure
+    wide: bool = false,
 
     pub fn view(p: TextPage, h: *H) N {
-        return h.div(.{ .class = "c-textpage", .data_prose = {} }, .{
+        return h.div(.{ .class = if (p.wide) "c-textpage wide" else "c-textpage", .data_prose = {} }, .{
             h.el(.h1, .{}, .{p.title}),
             if (p.sub.len > 0) h.p(.{ .class = "sub" }, .{p.sub}) else null,
             if (p.lead.len > 0) h.p(.{ .class = "lead" }, .{p.lead}) else null,
@@ -40,6 +42,9 @@ pub const css =
     \\  .c-textpage > .lead { margin: 0; color: var(--t2); font-size: var(--fs-l); line-height: var(--lh); }
     \\  .c-textpage > .c-prose { font-size: var(--fs-m); }
     \\  .c-textpage > .c-prose > h2 { margin-block-start: var(--sp-5); font-size: var(--fs-l); }
+    \\  .c-textpage.wide, .c-textpage.wide > .c-prose { max-width: none; }
+    \\  .c-textpage.wide .c-prose table { width: auto; }
+    \\  .c-textpage.wide > :is(.sub, .lead), .c-textpage.wide .c-prose :is(p, ul) { max-width: 72ch; }
     \\}
     \\
 ;
@@ -64,6 +69,7 @@ pub fn gallery(g: *Gallery) void {
     demo(g, "terms: date line, bullets, links", .{ .title = "Terms of use", .sub = "Last updated 12 October 2026." }, demo_terms);
     demo(g, "404: lead and links", .{ .title = "Page not found", .lead = "There's no page at this address: it may have moved, or the link has a typo." }, "[Home](/) · [Champions](/champions) · [Matchups](/matchups)");
     demo(g, "title only", .{ .title = "Champ select helper" }, "");
+    demo(g, "wide: tables past the text's measure", .{ .title = "Truth test", .wide = true }, "Each mode against the next week's games.\n\n| Number | In range 30d / patch / Meio | Missed low / high per 100 |\n|---|---:|---:|\n| champion-role | 78% / 80% / 79% | 12 / 9 |\n");
 }
 
 const testing = std.testing;

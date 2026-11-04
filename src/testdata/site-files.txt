@@ -458,7 +458,7 @@ data/tiers-rank-all.bin 0054c6ec6f6c3ba1
 data/tiers-rank-patch.bin 47ee23f21d201476
 data/tiers-rank.bin 951375cae8d1ae1d
 data/tiers.bin 85e03f16fe1a7241
-download.html 7b0e90209a3c19e8
+download.html 004f57cc9c606856
 index.html b3aa1331f9d2dfc7
 learn.html b8ace679b78bc968
 learn/champs.json 7c5a77a4464faa98
@@ -474,7 +474,7 @@ matchups/support/pyke-vs-rakan.html c62e78f0e1b38d67
 matchups/support/rakan-vs-pyke.html 9fc6cb351e4095e6
 matchups/top/darius-vs-mordekaiser.html 87e33d9af22e38cd
 matchups/top/mordekaiser-vs-darius.html f466b52168831c54
-method.html 67f9b95eefc8396b
+method.html 349f9153c1c81adc
 patch.html fe7fe163a3d5df57
 patch/15-12.html 4a918e08d102aff6
 pickup.html 75aa1344c9783e2a
@@ -484,7 +484,7 @@ pickup/mid.html b21949d8c7aa85f3
 pickup/support.html 533e6a0c7d4fa4f1
 pickup/top.html 1914b32d533e0908
 pool.html 65f08aa5ebe6dd96
-privacy.html 64135d0f64a6906f
+privacy.html b8ef3f58b9f48d05
 rankings.html 70fb7332bc2000d3
 rankings/ahead.html 665505a2e498d678
 rankings/ahead/bot.html 46aa95d4bd625af4
@@ -512,4 +512,4 @@ rankings/long-games/support.html 1425b5a209a29611
 rankings/long-games/top.html e7d8cb4ef1fdf7fb
 robots.txt 331ea9090db0c9f6
 squad.html 8fa420381c9745d2
-terms.html 30b44503f244a75e
+terms.html 3f0e589cb7182dde
