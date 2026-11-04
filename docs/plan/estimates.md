@@ -150,7 +150,9 @@ Steps, each measured in `meiolol truth` (E2) with Meio as the third mode: per ki
 day bucket, region and bracket, Meio minus each raw mode paired on cells where both
 have a number, Meio on cells the 30 days can't cover against the parent rate, and the
 share of target rates inside the range (noise widened). A kind passes when Meio beats
-both raw modes in every day bucket; boundaries 16.20 -> 16.21 (snap-2004Z) and
+both raw modes in every day bucket and is surer than the patch mode while as right (Jacob,
+4 Nov): its 80% range narrower than the patch's binomial one on the same cells, still
+holding ~80% (so too wide fails as well as too narrow); boundaries 16.20 -> 16.21 (snap-2004Z) and
 16.21 -> 16.22 (truth's fresh snapshot)
 - M1 E3 as above: committed (ebb9ebaa), unit tested on planted moves
 - M2 E3 variants: random-walk patches (d[0]'s prior centred on d[1]: last patch's
