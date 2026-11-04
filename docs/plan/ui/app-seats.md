@@ -52,7 +52,7 @@ option's chip.
 
 ## Slices
 
-1. Enemy seats' lanes (100): poller, board, screens, badge, review pages
-2. Counter bans from ally hovers (99)
+1. Enemy seats' lanes (100): poller, board, screens, badge, review pages, done
+2. Counter bans from ally hovers (99), done
 3. Move enemy picks (111): bridge.js drag, swap message, state, poller
 4. Bans as a role hint (112), private until APP1 checks it

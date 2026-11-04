@@ -115,8 +115,8 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
 - APP5 Ban options: first pass done (board.zig: ban impact in roles the enemy hasn't
   filled, never an ally's hover, my lane's best two first while my opponent is unknown;
   per games where it was available, by champ-facts.tsv's ban rates from the current
-  patch, per all games under 2,000 patch games). Left: private adds pools where names
-  are visible
+  patch, per all games under 2,000 patch games); plus its lane edge over an ally's
+  champion at its pick rate, a chip from 2 wins per 10k (APP17). Left: pools where names show
 - APP6 After picks: comp view, first pass done (both editions; comp.zig,
   desktop/comp.zig): once all ten are locked, above the lane panel, each team's damage
   split bar and mix (and "teams this one-sided win less often" when Learn's tally is 2

@@ -111,6 +111,8 @@ pub const BanOption = struct {
     mine: bool = false,
     /// Why ("wins often, picked a lot"; numbers in the private edition)
     why: []const u8,
+    /// The ally's champion it beats in their lane
+    beats: ?Reason = null,
     /// Practice's click (ui/practice.zig Act); "" for none
     act: []const u8 = "",
 };
@@ -212,6 +214,7 @@ fn banOptions(h: *H, s: Screen) ?N {
                 h.b(.{}, .{o.champ.name}),
                 role.view(h, o.role, .{ .s = .s }),
                 if (o.mine) badge.view(h, .us, .{W.your_lane}) else null,
+                if (o.beats) |r| effect(h, r) else null,
             }),
             h.span(.{ .class = "fact" }, .{o.why}),
         }),
@@ -431,6 +434,12 @@ pub fn gallery(g: *Gallery) void {
         .ban_options = &.{
             .{ .champ = demo("Yasuo", "Yasuo"), .role = .mid, .mine = true, .why = "wins often and is picked a lot in mid" },
             .{ .champ = demo("Smolder", "Smolder"), .role = .bot, .why = "wins often and is picked a lot in bot" },
+            .{
+                .champ = demo("Malphite", "Malphite"),
+                .role = .top,
+                .why = "beats Darius in lane and is picked a lot in top",
+                .beats = .{ .text = "beats Darius in lane", .lean = .good, .champ = demo("Darius", "Darius") },
+            },
         },
         .lane = .{ .role = .mid, .options = sample.lane.options[1..], .mastery = false, .scope = "EUW, last 30 days" },
     }, null, null));

@@ -434,10 +434,13 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
         .champ = (try c.champ(a, o.champion)).?,
         .role = uiRole(o.role),
         .mine = o.my_lane,
-        .why = if (c.private)
-            try a.print("{f} won, {f} of games, +{d:.0} wins per 10k", .{ rate(o.win), rate(o.pick_rate), o.impact })
-        else
-            try a.print("wins often and is picked a lot in {s}", .{o.role.label()}),
+        .why = try banWhy(a, c, o),
+        .beats = if (o.beats == 0) null else .{
+            .text = try a.print("beats {s} in lane", .{c.stats.?.nameOf(o.beats)}),
+            .lean = .good,
+            .champ = try c.champ(a, o.beats),
+            .fig = if (c.private) try a.print("+{d:.1}", .{o.beats_pp}) else "",
+        },
         .act = try c.act(a, .{ .ban = o.champion }),
     };
     return .{
@@ -447,6 +450,19 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
         .banning = b.turn == .ban,
         .draft = if (c.private) if (b.draft) |d| @floatCast(100 * d.win) else null else null,
     };
+}
+
+/// Words for everyone, numbers for testers
+fn banWhy(a: Allocator, c: Ctx, o: board.BanOption) ![]const u8 {
+    if (c.private) {
+        const base = try a.print("{f} won, {f} of games, +{d:.0} wins per 10k", .{ rate(o.win), rate(o.pick_rate), o.impact });
+        if (o.beats == 0) return base;
+        return a.print("{s}, {d:.0} of them from the matchup", .{ base, o.counter });
+    }
+    // Mostly the matchup: "wins often" may not hold for it alone
+    if (o.beats != 0 and 2 * o.counter >= o.impact)
+        return a.print("beats {s} in lane and is picked a lot in {s}", .{ c.stats.?.nameOf(o.beats), o.role.label() });
+    return a.print("wins often and is picked a lot in {s}", .{o.role.label()});
 }
 
 /// Words for everyone; the share, the mix's record, lean numbers and lane gold for
@@ -1157,7 +1173,10 @@ fn testSelect() state.Select {
         const allies = [_]board.Seat{.{ .slot = .{ .champion = ahri, .role = .middle, .state = .hover, .me = true }, .role = .middle, .guessed = false, .games = 25_551, .win = 0.55 }};
         const enemies = [_]board.Seat{.{ .slot = .{ .champion = syndra, .state = .locked }, .role = null, .guessed = true, .games = 20, .win = 0.45 }};
         const points = [_]lanecard.Point{ .{ .minute = 1, .mean = -10, .p25 = -60, .p75 = 40 }, .{ .minute = 2, .mean = -20, .p25 = -100, .p75 = 70 } };
-        const ban_options = [_]board.BanOption{.{ .champion = galio, .role = .middle, .impact = 31, .pick_rate = 0.08, .win = 0.53, .my_lane = true }};
+        const ban_options = [_]board.BanOption{
+            .{ .champion = galio, .role = .middle, .impact = 31, .pick_rate = 0.08, .win = 0.53, .my_lane = true },
+            .{ .champion = syndra, .role = .middle, .impact = 20, .pick_rate = 0.05, .win = 0.5, .my_lane = true, .beats = ahri, .counter = 12, .beats_pp = 2.4 },
+        };
     };
     return .{
         .card = .{
@@ -1199,6 +1218,11 @@ test "champ select: the private edition's numbers, the public one's words" {
     try testing.expectApproxEqAbs(@as(f32, 53.4), ps.draft.?, 0.01);
     try testing.expect(ps.banning);
     try testing.expectEqualStrings("53.0% won, 8.0% of games, +31 wins per 10k", ps.ban_options[0].why);
+    try testing.expectEqual(null, ps.ban_options[0].beats);
+    // Syndra beats my Ahri: her chip with its points, most of her impact the matchup
+    try testing.expectEqualStrings("50.0% won, 5.0% of games, +20 wins per 10k, 12 of them from the matchup", ps.ban_options[1].why);
+    try testing.expectEqualStrings("Ahri", ps.ban_options[1].beats.?.champ.?.name);
+    try testing.expectEqualStrings("+2.4", ps.ban_options[1].beats.?.fig);
     try testing.expectEqualStrings("55.0% in mid · 26k games", ps.board.lanes[2].us.fact);
     try testing.expectEqualStrings("55.0%", ps.board.lanes[2].us.fig);
     // Syndra has no role: she takes the first empty enemy row
@@ -1222,6 +1246,8 @@ test "champ select: the private edition's numbers, the public one's words" {
     try testing.expectEqual(null, s.draft);
     try testing.expectEqual(null, s.lane.options[0].win);
     try testing.expectEqualStrings("wins often and is picked a lot in mid", s.ban_options[0].why);
+    try testing.expectEqualStrings("beats Ahri in lane and is picked a lot in mid", s.ban_options[1].why);
+    try testing.expectEqualStrings("", s.ban_options[1].beats.?.fig);
     try testing.expectEqualStrings("strong in mid now", s.board.lanes[2].us.fact);
     try testing.expectEqualStrings("▲", s.board.lanes[2].us.fig);
     // Public: no points, an arrow by the lean
