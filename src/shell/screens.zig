@@ -22,7 +22,7 @@ const channel = @import("channel.zig");
 const app = ui.app;
 const Allocator = std.mem.Allocator;
 
-pub const css = ui.css.head ++ ui.css.join(.{ ui.site, ui.appbar, ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.resultstrip, ui.lobby, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.toggletip, ui.reasons, ui.candlist, ui.picks, ui.app });
+pub const css = ui.css.head ++ ui.css.join(.{ ui.site, ui.appbar, ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.resultstrip, ui.lobby, ui.art, ui.skillgrid, ui.gamebuild, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.toggletip, ui.reasons, ui.candlist, ui.picks, ui.app });
 
 const Page = struct {
     arena: std.heap.ArenaAllocator,
@@ -96,7 +96,7 @@ pub fn deinit() void {
 const Next = struct { html: []const u8, bin: []const u8, practice: []const u8, comp: u32, picks: []const u8, live: bool };
 
 fn build(a: Allocator, live: bool) !?Next {
-    if (!live) return finish(a, try data(a, .{ .stats = null, .icons = null, .private = false }, .no_client, .none), null, null, null, null);
+    if (!live) return finish(a, try data(a, .{ .stats = null, .icons = null, .private = false }, .no_client, .none), null, null, null, null, null);
     const s = poller.lock();
     defer poller.unlock();
     const c: Ctx = .{
@@ -123,7 +123,7 @@ fn build(a: Allocator, live: bool) !?Next {
         else => null,
     };
     const form: ?ui.lobby.Lobby = if (s.form) |f| try lobby.view(a, c, f) else null;
-    return finish(a, d, bar, under, opts, form);
+    return finish(a, d, bar, under, opts, form, try gameBuild(a, c, s.status));
 }
 
 /// The full form takes the note's place: the first of the first start's steps
@@ -143,13 +143,14 @@ fn signIn(s: ?*const state.SignIn, status: state.Status) ?ui.signin.SignIn {
 
 /// Encoded and rendered into `a`, so nothing points into the poller's memory once it
 /// unlocks; null when what shows is as before
-fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp, opts: ?ui.picks.Data, form: ?ui.lobby.Lobby) !?Next {
+fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp, opts: ?ui.picks.Data, form: ?ui.lobby.Lobby, panel: ?ui.gamebuild.Build) !?Next {
     var d = shown;
     d.seq = seq + 1;
     // The bar and the comp view are static: a change to either reloads the page
     var cbin: std.ArrayList(u8) = .empty;
     if (under) |x| try ui.data.encode(a, ui.compview.Comp, x, &cbin);
     if (form) |x| try ui.data.encode(a, ui.lobby.Lobby, x, &cbin);
+    if (panel) |x| try ui.data.encode(a, ui.gamebuild.Build, x, &cbin);
     try cbin.appendSlice(a, phase(d.where));
     try cbin.appendSlice(a, &.{ @intFromBool(state.by_mastery.load(.acquire)), @intFromBool(d.signin == null) });
     const comp_id = @as(u32, @truncate(std.hash.Wyhash.hash(0, cbin.items))) | 1;
@@ -170,7 +171,7 @@ fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.comp
     if (page) |old| if (std.mem.eql(u8, shows(old.bin), shows(bin.items)) and std.mem.eql(u8, shows(old.practice), shows(pbin.items)) and
         std.mem.eql(u8, shows(old.picks), shows(kbin.items)) and old.comp == comp_id) return null;
     seq += 1;
-    const html = try renderIn(a, d, p, under, .{ .site = files.site, .mastery = state.by_mastery.load(.acquire), .picks = k, .lobby = form });
+    const html = try renderIn(a, d, p, under, .{ .site = files.site, .mastery = state.by_mastery.load(.acquire), .picks = k, .lobby = form, .build = panel });
     const live = switch (d.screen) {
         .select, .loading, .game => true,
         .note, .post => false,
@@ -236,6 +237,8 @@ pub const Frame = struct {
     picks: ?ui.picks.Data = null,
     /// The lobby's form panel after the island (ui/lobby.zig); null none
     lobby: ?ui.lobby.Lobby = null,
+    /// The in-game build panel after the island (ui/gamebuild.zig); null none
+    build: ?ui.gamebuild.Build = null,
     /// Before </head>
     head: []const u8 = "",
     /// After <body> and before the scripts
@@ -273,6 +276,7 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
     } else null;
     const comp_n: ?ui.N = if (under) |x| ui.compview.view(&h, x) else null;
     const lobby_n: ?ui.N = if (f.lobby) |x| ui.lobby.view(&h, x) else null;
+    const build_n: ?ui.N = if (f.build) |x| ui.gamebuild.view(&h, x) else null;
     if (h.oom) return error.OutOfMemory;
     var out: std.Io.Writer.Allocating = .init(a);
     const w = &out.writer;
@@ -291,6 +295,7 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
     if (picks_n) |n| try ui.html.write(&t, n, w);
     if (comp_n) |n| try ui.html.write(&t, n, w);
     if (lobby_n) |n| try ui.html.write(&t, n, w);
+    if (build_n) |n| try ui.html.write(&t, n, w);
     try w.writeAll("</main></div>");
     try w.print("{s}\n<script src=\"{s}\" data-wasm=\"{s}\" defer></script>", .{ f.end, f.js, f.wasm });
     if (top != null) try w.print("<script src=\"{s}\" data-wasm=\"{s}\" defer></script>", .{ f.practice_js, f.practice_wasm });
@@ -321,6 +326,13 @@ pub const Ctx = struct {
         if (c.site) |s| if (s.keys.get(id)) |key| return .{ .name = stats.nameOf(id), .src = try a.print(ui.champ.icon_fmt, .{ s.ddragon, key }) };
         const has = if (c.icons) |i| i.get(id) != null else false;
         return .{ .name = stats.nameOf(id), .src = if (has) try a.print("icon/{d}.png", .{id}) else "" };
+    }
+
+    /// The site's JPEG, the client's icon once fetched, else "" (an empty square)
+    pub fn item(c: Ctx, a: Allocator, id: u32) ![]const u8 {
+        if (c.site) |s| return a.print("/dd/{s}/img/item/{d}.jpg", .{ s.ddragon, id });
+        const icons = c.icons orelse return "";
+        return if (icons.art(.{ .kind = .item, .id = id }) != null) a.print("item/{d}.png", .{id}) else "";
     }
 
     /// Practice's click on a board element (data-act); "" while practice doesn't show
@@ -768,6 +780,30 @@ fn loadScreen(a: Allocator, c: Ctx, l: *const loading.Loading) !ui.loadscreen.Sc
         .us = teams[0],
         .them = teams[1],
         .draft = if (c.private) if (l.draft) |d| @floatCast(100 * d.win) else null else null,
+    };
+}
+
+/// The private edition's build panel in game: ingame.Plan with icons and names
+pub fn gameBuild(a: Allocator, c: Ctx, status: state.Status) !?ui.gamebuild.Build {
+    if (!c.private) return null;
+    const g = switch (status) {
+        .in_game => |g| g,
+        else => return null,
+    };
+    const p = g.plan orelse return null;
+    const items = try a.alloc(ui.gamebuild.Item, p.items.len);
+    for (items, p.items) |*out, it| out.* = .{
+        .art = .{ .name = if (c.facts) |f| f.itemName(it.id) else "", .src = try c.item(a, it.id) },
+        .owned = it.owned,
+    };
+    return .{
+        .items = items,
+        .next = if (p.nextItem()) |i| @intCast(i) else null,
+        .order = p.order,
+        .path = p.path,
+        .skill = p.next,
+        .unspent = p.unspent,
+        .games = p.games,
     };
 }
 
@@ -1489,6 +1525,40 @@ test "in game: the private panel, a note for the public edition" {
     const p = try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .in_game = &testGame(null) }, .none);
     try testing.expectEqualStrings("In game", p.where);
     try testing.expectEqualStrings("In game", p.screen.note.title);
+}
+
+test "in game: the build panel, private edition with a plan only" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    var g = testGame(null);
+    const c: Ctx = .{ .stats = &f.stats, .icons = null, .private = true };
+    try testing.expectEqual(null, try gameBuild(a, c, .{ .in_game = &g }));
+    g.plan = .{
+        .champion = ahri,
+        .role = .middle,
+        .games = 900,
+        .items = &.{ .{ .id = 3020, .owned = true }, .{ .id = 4645, .owned = false } },
+        .order = "QWE",
+        .path = "",
+        .level = 9,
+        .skills = .{ 4, 3, 1, 0 },
+        .next = 'E',
+        .unspent = true,
+    };
+    var public = c;
+    public.private = false;
+    try testing.expectEqual(null, try gameBuild(a, public, .{ .in_game = &g }));
+    const b = (try gameBuild(a, c, .{ .in_game = &g })).?;
+    try testing.expectEqual(@as(?u8, 1), b.next);
+    // No client icon fetched yet: an empty square
+    try testing.expectEqualStrings("", b.items[0].art.src);
+    var d = try data(a, c, .{ .in_game = &g }, .none);
+    d.seq = 1;
+    const html = try renderIn(a, d, null, null, .{ .build = b });
+    try testing.expect(std.mem.find(u8, html, "c-gamebuild") != null and std.mem.find(u8, html, "Level up <b class=\"k\">E</b>") != null);
 }
 
 test "post game: lanes, damage ours then theirs, team gold by minute" {

@@ -139,7 +139,7 @@ pub fn files(a: Allocator, gpa: Allocator, io: Io, in: Inputs) ![]File {
 
     var out: std.ArrayList(File) = .empty;
     for ([_]Edition{ .public, .private }) |ed| {
-        var c: screens.Ctx = .{ .stats = &data.stats, .icons = null, .private = ed == .private, .site = &in.icons };
+        var c: screens.Ctx = .{ .stats = &data.stats, .facts = if (data.facts) |*f| f else null, .icons = null, .private = ed == .private, .site = &in.icons };
         for (shots.items, 0..) |*s, i| {
             if (s.practice != null and ed == .public) continue;
             c.practice = s.practice != null;
@@ -467,6 +467,7 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         .picks_wasm = root ++ "/ui-picks.wasm",
         .picks = opts,
         .lobby = if (s.form) |*f| try shell_lobby.view(a, c, f) else null,
+        .build = try screens.gameBuild(a, c, s.status),
         .head = try a.print(
             \\{s}<meta name="rv-bin" content="/private/{s}/"><link rel="stylesheet" href="{s}/review.css"><script src="{s}/review.js"></script><script src="{s}/nav.js" defer></script>
         , .{ csp.files_only, dir, root, root, root }),
