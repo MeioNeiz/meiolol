@@ -11,6 +11,7 @@ const adminmodels = @import("../adminmodels.zig");
 const site_tester = @import("../site/tester.zig");
 const site_notes = @import("../site/notes.zig");
 const site_appreview = @import("../site/appreview.zig");
+const site_truthpage = @import("../site/truthpage.zig");
 const site_admin = @import("../site/adminpage.zig");
 const status = @import("../status.zig");
 const main = @import("../main.zig");
@@ -481,7 +482,7 @@ pub const usage_admin =
     \\              --disk "S U A"   data disk size, used, available in bytes
     \\              --health TEXT    deploy/health.sh output
     \\              --private-out DIR  also the private site's Draft tester, the notes
-    \\                               tool's files and the app review pages (/private/)
+    \\                               tool's files, the app review and truth pages
     \\              --training DIR   only the Models tab's lab view: DIR/training.bin
     \\                               and runs/*/metrics.bin from the files
     \\                               deploy/lab-push.sh staged there (the Mac)
@@ -527,6 +528,7 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
         site_tester.writeWith(c.init.gpa, c.init.io, p, db, try std.fs.path.join(c.arena, &.{ c.data_dir, "lean.tsv" })) catch |e| std.log.err("tester page: {t}", .{e});
         site_notes.writeFiles(c.init.gpa, c.init.io, p) catch |e| std.log.err("notes files: {t}", .{e});
         site_appreview.write(c.init.gpa, c.init.io, p, c.data_dir, db) catch |e| std.log.err("app review pages: {t}", .{e});
+        site_truthpage.write(c.init.gpa, c.init.io, p, c.data_dir) catch |e| std.log.err("truth page: {t}", .{e});
     }
     return 0;
 }

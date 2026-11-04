@@ -21,6 +21,8 @@ const csp = @import("site/csp.zig");
 const assets = @import("site/assets.zig");
 const admin = @import("admin.zig");
 const site_tester = @import("site/tester.zig");
+const site_truthpage = @import("site/truthpage.zig");
+const truth = @import("truth.zig");
 const site_admin = @import("site/adminpage.zig");
 const site_champion = @import("site/champion.zig");
 const api = @import("api/root.zig");
@@ -1186,6 +1188,30 @@ test "admin page from the fixture games and a crawl log" {
     for ([_][]const u8{ assets.tester_js.path, assets.tester_wasm.path, assets.testercand_js.path, assets.testercand_wasm.path, "tester.html.gz" }) |f| {
         try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ private, f }), .{});
     }
+    // The truth page: "none yet" before the box's daily truth run, then its newest patch
+    try site_truthpage.write(gpa, io, private, dir);
+    const none_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ private, "truth.html" }), arena, .limited(1 << 20));
+    try std.testing.expect(std.mem.find(u8, none_html, "No truth test yet") != null);
+    {
+        const res = try arena.create(truth.Results);
+        res.* = @splat(@splat(@splat(@splat(.{}))));
+        const st = &res[1][@backingInt(truth.Kind.matchup)][0][2];
+        st.target = 500;
+        st.pairs[@backingInt(truth.Comparison.meio_30)] = .{ .obs = 500, .cells = 40, .challenger = 340, .reference = 346, .d = -6 };
+        var tsv: std.Io.Writer.Allocating = .init(arena);
+        try truth.writeTsv(res, "16.21", 1792559571121, &tsv.writer);
+        try tmp.dir.writeFile(io, .{ .sub_path = "truth-16.21.tsv", .data = tsv.written() });
+    }
+    try site_truthpage.write(gpa, io, private, dir);
+    const tr_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ private, "truth.html" }), arena, .limited(1 << 20));
+    for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "<h1>Truth test</h1>", "patch 16.21", "<td>matchup</td>", "ahead 12.00", "<style>@layer" }) |x| {
+        std.testing.expect(std.mem.find(u8, tr_html, x) != null) catch |e| {
+            std.debug.print("missing {s}\n", .{x});
+            return e;
+        };
+    }
+    try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ private, "truth.html.gz" }), .{});
+    try std.testing.expect(std.mem.find(u8, i_html, "href=\"/private/truth\"") != null);
     // The admin page beside its data: empty islands the wasms fill from admin.bin, the
     // chart tabs' hidden with their code on the root (loaded by ui-admin.wasm)
     try site_admin.write(gpa, io, out);
@@ -2249,6 +2275,18 @@ fn expectLocksAsBuilder(arena: std.mem.Allocator, t: *const lockrows.Table, x: *
             const m = (try lockanswer.matchups(arena, t, x, b.champion, b.role, filter, l)).?;
             const n = if (want) |f| if (f.get(b.champion, b.role)) |own_| own_.games else 0 else 0;
             try testing.expectEqual(n, m.all.games);
+            // Meio's options (site/locks.zig meio): each one's games under the stack are
+            // the stack's with that option locked too
+            const opts = (try lockanswer.options(arena, t, x, b.champion, b.role, filter, l)).?;
+            try testing.expectEqual(n, opts.locked.games);
+            for ([_]lockanswer.Kind{ .keystone, .opponent }, [_][]const lockanswer.Option{ opts.keystones, opts.opponents }) |kind, list| {
+                if (l.by.get(kind) != null) continue;
+                for (list) |o| {
+                    var more = l.*;
+                    more.by.set(kind, .of(&.{o.id}));
+                    try testing.expectEqualDeep(o.locked, (try lockanswer.count(arena, t, x, b.champion, b.role, filter, &more)).?);
+                }
+            }
             stacks += 1;
         }
     };

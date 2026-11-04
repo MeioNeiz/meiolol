@@ -55,6 +55,9 @@ src/
   admin.zig          `meiolol admin`: the private ops page's data (admin.bin, models.bin,
                      live.bin); the page site/adminpage.zig, islands ui/admin*.zig
   admin_api.zig      /admin/api/ in `meiolol render`: live data, logs, actions (hosting.md)
+  site/truthpage.zig /private/truth (`admin --private-out`, dev server): the truth test's
+                     daily scores (data/truth-<patch>.tsv) per kind and mode, written as
+                     the method page's E9 section; private until Meio is a public mode
   site/tester.zig    /private/tester (`admin --private-out`): the new Draft tester island
                      (ui/testerpage.zig, ui-tester.wasm fetches /private model bins) and its
                      candidate panel (ui/testercand.zig, lazy ui-testercand.wasm, no
