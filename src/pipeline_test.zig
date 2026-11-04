@@ -31,6 +31,8 @@ const lab_events = @import("lab/events.zig");
 const objectives = @import("objectives.zig");
 const partials = @import("partials.zig");
 const cubes = @import("cubes.zig");
+const lockrows = @import("lockrows.zig");
+const lockanswer = @import("lockanswer.zig");
 const pairlane = @import("pairlane.zig");
 const patchday = @import("patchday.zig");
 const flat = @import("site/flat.zig");
@@ -159,6 +161,7 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(all.games, s.games);
         try testing.expectEqual(all.options.len, s.options.len);
     };
+    try expectLockAnswers(arena, try cubeDir(arena, dir, "builds"), &build_file);
     var panel: site.ui.buildpanel.BuildPanel = undefined;
     try panel.init(arena, &block);
     var panel_tree: site.ui.Tree = .{};
@@ -2095,6 +2098,69 @@ fn buildsOne(dir: []const u8, db: store.Db, o: builds.Options, set: builds.Set) 
     var b: [1]builds.Builder = undefined;
     _ = try cubes.buildsOf(cube, db, fixture_items, &build_data, o, &.{set}, &b);
     return b[0];
+}
+
+/// Lock answers (lockanswer.zig) from the lock rows of `dir`'s cubes, as `f` (Darius top,
+/// EUW, the patch, Platinum+) was counted from them: no lock gives its build and splits,
+/// a keystone lock its by_keystone build, an opponent lock its matchup
+fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds.File) !void {
+    const gpa = testing.allocator;
+    const t = try lockTable(arena, dir);
+    const filter: lockanswer.Filter = .{
+        .platform = codeOf(t.dicts.platforms, "EUW1"),
+        .patch = codeOf(t.dicts.patches, patch),
+        .floor = builds.rankOf("PLATINUM"),
+    };
+    const o: builds.Options = .{ .min_split_games = 1 };
+    const none = (try lockanswer.file(gpa, arena, &t, 122, .top, filter, &.{}, o, f.label, f.min_tier)).?;
+    try testing.expectEqualDeep(f.get(122, .top).?, none.get(122, .top).?);
+    for ([_][]const builds.File.Build{ f.by_reach, f.by_lead, f.by_keystone }, [_][]const builds.File.Build{ none.by_reach, none.by_lead, none.by_keystone }) |want, got| {
+        var own: std.ArrayList(builds.File.Build) = .empty;
+        for (want) |b| if (b.champion == 122 and b.role == .top) try own.append(arena, b);
+        try testing.expect(own.items.len > 0);
+        try testing.expectEqualDeep(own.items, got);
+    }
+    const cases = [_]struct { lk: []const u8, want: builds.File.Build, rows: usize }{
+        .{ .lk = "ks8010", .want = f.getKeystone(122, .top, 8010).?, .rows = 6 },
+        .{ .lk = "vs82", .want = f.getVs(122, .top, 82).?, .rows = 3 },
+    };
+    for (cases) |c| {
+        const got = (try lockanswer.file(gpa, arena, &t, 122, .top, filter, &lockanswer.Locks.parse(c.lk).?, o, f.label, f.min_tier)).?.get(122, .top).?;
+        try testing.expectEqual(c.want.games, got.games);
+        try testing.expectEqual(c.want.wins, got.wins);
+        for (c.want.kinds) |want| {
+            const rows = got.get(want.kind).?;
+            try testing.expectEqual(want.games, rows.games);
+            try testing.expectEqual(want.wins, rows.wins);
+            // Every rune and shard is kept, not the rows' cap
+            const n = if (want.kind == .rune or want.kind == .shard) want.options.len else @min(rows.options.len, c.rows);
+            try testing.expectEqualDeep(want.options, rows.options[0..n]);
+        }
+    }
+    const nobody = (try lockanswer.file(gpa, arena, &t, 122, .top, filter, &lockanswer.Locks.parse("ks8005").?, o, f.label, f.min_tier)).?;
+    try testing.expectEqual(null, nobody.get(122, .top));
+    try testing.expectEqual(null, try lockanswer.file(gpa, arena, &t, 122, .jungle, filter, &.{}, o, f.label, f.min_tier));
+}
+
+fn codeOf(list: []const []const u8, x: []const u8) ?u8 {
+    for (list, 0..) |y, i| if (std.mem.eql(u8, x, y)) return @intCast(i);
+    return null;
+}
+
+/// The lock rows of every game in `dir`'s day cubes
+fn lockTable(arena: std.mem.Allocator, dir: []const u8) !lockrows.Table {
+    const gpa = testing.allocator;
+    const cube = try cubes.Store.open(gpa, testing.io, dir);
+    defer cube.deinit();
+    var w: lockrows.Writer = .init(gpa, 0);
+    defer w.deinit();
+    const ds = try cube.days(gpa, 0);
+    defer gpa.free(ds);
+    for (ds) |day| {
+        const d = try cube.read(gpa, arena, day) orelse return error.StaleCube;
+        for (d.games) |g| try w.addGame(d, g);
+    }
+    return w.finish(arena, build_data);
 }
 
 const build_data: ddragon.BuildData = .{

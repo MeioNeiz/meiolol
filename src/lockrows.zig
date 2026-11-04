@@ -9,6 +9,7 @@ const std = @import("std");
 const core = @import("core");
 const builds = @import("builds.zig");
 const cubes = @import("cubes.zig");
+const ddragon = @import("ddragon.zig");
 const flat = @import("site/flat.zig");
 
 const Allocator = std.mem.Allocator;
@@ -38,6 +39,8 @@ pub const Table = struct {
     dicts: Dicts,
     /// By champion then role
     blocks: []const Block,
+    /// The newest patch's, as builds --site counts with: answers count without a fetch
+    build: ddragon.BuildData,
 
     pub fn block(t: *const Table, champion: u32, role: Role) ?*const Block {
         const i = std.sort.binarySearch(Block, t.blocks, Key{ .champion = champion, .role = role }, Key.order) orelse return null;
@@ -180,8 +183,8 @@ pub const Writer = struct {
         try out.append(gpa, firsts);
     }
 
-    /// The table, in `arena`, blocks by champion then role
-    pub fn finish(w: *Writer, arena: Allocator) !Table {
+    /// The table, in `arena`, blocks by champion then role; `build` not copied
+    pub fn finish(w: *Writer, arena: Allocator, build: ddragon.BuildData) !Table {
         const Sort = struct {
             keys: []const Key,
             pub fn lessThan(c: @This(), a: usize, b: usize) bool {
@@ -202,16 +205,23 @@ pub const Writer = struct {
         return .{
             .from_ms = w.from_ms,
             .dicts = .{
-                .platforms = try arena.dupe([]const u8, w.platforms.list.items),
-                .patches = try arena.dupe([]const u8, w.patches.list.items),
+                .platforms = try dupeStrings(arena, w.platforms.list.items),
+                .patches = try dupeStrings(arena, w.patches.list.items),
                 .champions = try arena.dupe(u32, w.champions.list.items),
                 .perks = try arena.dupe(u32, w.perks.list.items),
                 .items = try arena.dupe(u32, w.items.list.items),
             },
             .blocks = blocks,
+            .build = build,
         };
     }
 };
+
+fn dupeStrings(arena: Allocator, xs: []const []const u8) ![]const []const u8 {
+    const out = try arena.alloc([]const u8, xs.len);
+    for (out, xs) |*o, x| o.* = try arena.dupe(u8, x);
+    return out;
+}
 
 fn minute(ms: i64) u8 {
     return @intCast(std.math.clamp(@divFloor(ms, std.time.ms_per_min), 0, std.math.maxInt(u8)));
@@ -466,7 +476,7 @@ test "rows decode to the seats builds reads" {
         .timeline = true,
         .seats = &seats,
     });
-    const t = try w.finish(arena.allocator());
+    const t = try w.finish(arena.allocator(), .{ .version = "16.21.1", .legendary = &.{3071}, .trinkets = &.{}, .boots = &.{.{ 3047, 3047 }}, .items = &.{}, .runes = &.{}, .spells = &.{} });
     var buf: std.Io.Writer.Allocating = .init(gpa);
     defer buf.deinit();
     try write(&buf.writer, t);
@@ -474,6 +484,7 @@ test "rows decode to the seats builds reads" {
     const back = (try read(&r, arena.allocator())).?;
     try std.testing.expectEqual(10, back.blocks.len);
     try std.testing.expectEqualStrings("16.21", back.dicts.patches[0]);
+    try std.testing.expectEqualStrings("16.21.1", back.build.version);
     for (seats) |s| {
         var it: Rows = .{ .t = &back, .b = back.block(s.p.champion, s.p.role).? };
         const row = it.next().?;

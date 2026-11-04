@@ -9,6 +9,7 @@ const curves = @import("../curves.zig");
 const builds = @import("../builds.zig");
 const cubes = @import("../cubes.zig");
 const lockrows = @import("../lockrows.zig");
+const lockanswer = @import("../lockanswer.zig");
 const lean = @import("../lean.zig");
 const pairlane = @import("../pairlane.zig");
 const draftmodel = @import("../draftmodel.zig");
@@ -324,6 +325,8 @@ pub const usage_lockrows =
     \\              cubes (made current first)
     \\              --days N         default 30
     \\              --out FILE       default DIR/export/lockrows.bin
+    \\              --bench FILE     time build answers (lockanswer.zig) on FILE's
+    \\                               largest blocks over a lock mix, write nothing
     \\
 ;
 
@@ -335,6 +338,8 @@ pub fn cmdLockrows(c: *Cmd) !u8 {
             days = try c.int(u32);
         } else if (c.is("--out")) {
             out = try c.value();
+        } else if (c.is("--bench")) {
+            return benchLocks(c, try c.value());
         } else return error.Usage;
     }
     const gpa = c.init.gpa;
@@ -347,8 +352,8 @@ pub fn cmdLockrows(c: *Cmd) !u8 {
     var w: lockrows.Writer = .init(gpa, from_ms);
     defer w.deinit();
     var games: u64 = 0;
+    var items: CubeItems = .{ .gpa = gpa, .arena = arena, .io = io };
     {
-        var items: CubeItems = .{ .gpa = gpa, .arena = arena, .io = io };
         const cube = try cubes.Store.open(gpa, io, try cubes.dirIn(arena, c.data_dir));
         defer cube.deinit();
         logCubes(try cube.refresh(db, from_ms, items.source()));
@@ -363,7 +368,9 @@ pub fn cmdLockrows(c: *Cmd) !u8 {
             games += d.games.len;
         }
     }
-    const t = try w.finish(arena);
+    // The patch builds --site names and counts with
+    const patch = (try newestPatch(arena, db, &.{"EUW1"}))[0];
+    const t = try w.finish(arena, (try CubeItems.get(&items, patch)).*);
     const path = out orelse try std.fs.path.join(arena, &.{ c.data_dir, "export", "lockrows.bin" });
     var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
     defer file.deinit(io);
@@ -389,6 +396,76 @@ pub fn cmdLockrows(c: *Cmd) !u8 {
     std.log.info("{s}: {d} games, {d} rows, {d} champion-roles (rows p50 {d}, p90 {d}, p99 {d}, max {d}), {d} B rows ({d:.1} B a row), {d} ms", .{
         path,  games,                                                                   rows,                                                       t.blocks.len, at(per, 0.5), at(per, 0.9), at(per, 0.99), at(per, 1),
         bytes, @as(f64, @floatFromInt(bytes)) / @as(f64, @floatFromInt(@max(rows, 1))), t0.durationTo(std.Io.Clock.awake.now(io)).toMilliseconds(),
+    });
+    return 0;
+}
+
+/// Answer times on the largest blocks: no lock, the top keystone, the top core pair, the
+/// usual lane opponent, and all three, under the default view's filter (EUW, Platinum+)
+/// and every region's
+fn benchLocks(c: *Cmd, path: []const u8) !u8 {
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    const arena = c.arena;
+    const t0 = std.Io.Clock.awake.now(io);
+    const t = blk: {
+        const f = try std.Io.Dir.cwd().openFile(io, path, .{});
+        defer f.close(io);
+        var buf: [1 << 20]u8 = undefined;
+        var r = f.reader(io, &buf);
+        break :blk try lockrows.read(&r.interface, arena) orelse return error.BadLockRows;
+    };
+    std.log.info("{s}: {d} blocks, read in {d} ms", .{ path, t.blocks.len, t0.durationTo(std.Io.Clock.awake.now(io)).toMilliseconds() });
+    const order = try arena.alloc(usize, t.blocks.len);
+    for (order, 0..) |*x, i| x.* = i;
+    std.mem.sort(usize, order, t.blocks, struct {
+        fn f(bs: []const lockrows.Block, a: usize, b: usize) bool {
+            return bs[a].rows > bs[b].rows;
+        }
+    }.f);
+    const euw: ?u8 = for (t.dicts.platforms, 0..) |p, i| {
+        if (std.mem.eql(u8, p, "EUW1")) break @intCast(i);
+    } else null;
+    const floor = builds.rankOf("PLATINUM");
+    const o: builds.Options = .{};
+    var times: std.ArrayList(u64) = .empty;
+    for (order[0..@min(order.len, 20)]) |bi| {
+        const b = &t.blocks[bi];
+        var scratch: std.heap.ArenaAllocator = .init(gpa);
+        defer scratch.deinit();
+        const sa = scratch.allocator();
+        const base = (try lockanswer.file(gpa, sa, &t, b.champion, b.role, .{ .floor = floor }, &.{}, o, "", "")).?;
+        const own = base.get(b.champion, b.role) orelse continue;
+        var mix: [5]lockanswer.Locks = @splat(.{});
+        if (own.get(.keystone)) |x| if (x.options.len > 0) {
+            mix[1].by.set(.keystone, .of(x.options[0].v));
+            mix[4].by.set(.keystone, .of(x.options[0].v));
+        };
+        if (own.get(.core2)) |x| if (x.options.len > 0) {
+            mix[2].by.set(.core2, .of(x.options[0].v));
+            mix[4].by.set(.core2, .of(x.options[0].v));
+        };
+        var it: lockrows.Rows = .{ .t = &t, .b = b };
+        if (it.next()) |r| if (r.seat.p.opponent != 0) {
+            mix[3].by.set(.opponent, .of(&.{r.seat.p.opponent}));
+            mix[4].by.set(.opponent, .of(&.{r.seat.p.opponent}));
+        };
+        for ([_]lockanswer.Filter{ .{ .platform = euw, .floor = floor }, .{ .floor = floor } }) |filter| for (&mix) |*l| {
+            const at = std.Io.Clock.awake.now(io);
+            const f = (try lockanswer.file(gpa, sa, &t, b.champion, b.role, filter, l, o, "", "")).?;
+            const ns: u64 = @intCast(at.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds());
+            try times.append(arena, ns);
+            const games = if (f.get(b.champion, b.role)) |x| x.games else 0;
+            std.log.info("{d} {s}: {d} rows, {s}, {f}: {d} games, {d:.1} ms", .{ b.champion, @tagName(b.role), b.rows, if (filter.platform != null) "EUW" else "all", l.*, games, @as(f64, @floatFromInt(ns)) / 1e6 });
+        };
+    }
+    std.mem.sort(u64, times.items, {}, std.sort.asc(u64));
+    const n = times.items.len;
+    if (n > 0) std.log.info("{d} answers: p50 {d:.1} ms, p99 {d:.1} ms, max {d:.1} ms", .{
+        n,
+        @as(f64, @floatFromInt(times.items[n / 2])) / 1e6,
+        @as(f64, @floatFromInt(times.items[@min(n - 1, n * 99 / 100)])) / 1e6,
+        @as(f64, @floatFromInt(times.items[n - 1])) / 1e6,
     });
     return 0;
 }

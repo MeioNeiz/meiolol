@@ -464,4 +464,5 @@ test {
     std.testing.refAllDecls(@This());
     _ = @import("pipeline_test.zig");
     _ = @import("lockrows.zig");
+    _ = @import("lockanswer.zig");
 }
