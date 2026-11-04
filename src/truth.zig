@@ -412,12 +412,19 @@ pub const Stat = struct {
     pairs: [Comparison.count]Pair = @splat(.{}),
     /// Rate cells' ranges per mode and band; raw modes from one game
     cal: [modes.len][bands.len]Cal = @splat(@splat(.{})),
+    /// The same on sure targets only: target noise under the range's claimed variance
+    /// (a thin target lands inside any range, so the bands' in-range share runs high)
+    sure: [modes.len]Cal = @splat(.{}),
+    /// Meio's ranges against each raw mode's (30 days, patch) on cells both range
+    widths: [2]Width = @splat(.{}),
 
     fn add(s: *Stat, o: Stat) void {
         s.target += o.target;
         for (&s.covered, o.covered) |*a, b| a.* += b;
         for (&s.pairs, o.pairs) |*a, b| a.add(b);
         for (&s.cal, o.cal) |*a, b| for (a, b) |*x, y| x.add(y);
+        for (&s.sure, o.sure) |*a, b| a.add(b);
+        for (&s.widths, o.widths) |*a, b| a.add(b);
     }
 
     /// Meio's cells whose range holds the target, over every band
@@ -425,6 +432,13 @@ pub const Stat = struct {
         var c: Cal = .{};
         for (s.cal[2]) |b| c.add(b);
         return if (c.cells > 0) c.inside / c.cells else null;
+    }
+
+    /// Mode m's 80% range `half` around p against k of n target games
+    fn range(s: *Stat, m: usize, p: f64, half: f64, n: f64, k: f64) Ranged {
+        const se = half / z80;
+        if (p * (1 - p) / n < se * se) _ = s.sure[m].cell(p, half, n, k);
+        return .{ .half = half, .in = s.cal[m][bandOf(half)].cell(p, half, n, k) };
     }
 };
 
@@ -442,11 +456,14 @@ pub const Cal = struct {
     inside: f64 = 0,
     /// (target - p)^2 less the target's binomial noise, summed
     sq: f64 = 0,
+    /// The range's claimed variance, (half / 1.28)^2, summed
+    claim: f64 = 0,
 
     fn add(c: *Cal, o: Cal) void {
         c.cells += o.cells;
         c.inside += o.inside;
         c.sq += o.sq;
+        c.claim += o.claim;
     }
 
     /// The error's sd in points, net of the target's noise; an honest range's half-width
@@ -455,15 +472,52 @@ pub const Cal = struct {
         return if (c.cells > 0) 100 * @sqrt(@max(0, c.sq / c.cells)) else 0;
     }
 
-    /// A rate p with 80% half-width `half` against k of n target games
-    fn cell(c: *[bands.len]Cal, p: f64, half: f64, n: f64, k: f64) void {
+    /// The sd the ranges claim, in points; honest when sd() matches it
+    pub fn claimedSd(c: Cal) f64 {
+        return if (c.cells > 0) 100 * @sqrt(c.claim / c.cells) else 0;
+    }
+
+    /// A rate p with 80% half-width `half` against k of n target games; true if inside
+    fn cell(c: *Cal, p: f64, half: f64, n: f64, k: f64) bool {
         const gap = k / n - p;
         const se = half / z80;
         const noise = p * (1 - p) / n;
-        const b = &c[bandOf(half)];
-        b.cells += 1;
-        if (@abs(gap) <= z80 * @sqrt(se * se + noise)) b.inside += 1;
-        b.sq += gap * gap - noise;
+        const in = @abs(gap) <= z80 * @sqrt(se * se + noise);
+        c.cells += 1;
+        if (in) c.inside += 1;
+        c.sq += gap * gap - noise;
+        c.claim += se * se;
+        return in;
+    }
+};
+
+/// One rate's 80% range as scored
+const Ranged = struct { half: f64, in: bool };
+
+/// Two modes' ranges on the cells both give one (E2 gate's certainty half: Meio surer
+/// than the patch and still right); side 0 the raw mode, 1 Meio
+pub const Width = struct {
+    cells: f64 = 0,
+    /// Half-widths summed
+    half: [2]f64 = @splat(0),
+    inside: [2]f64 = @splat(0),
+    /// Cells shown solid (under 6 points)
+    solid: [2]f64 = @splat(0),
+
+    fn add(w: *Width, o: Width) void {
+        w.cells += o.cells;
+        for (&w.half, o.half) |*a, b| a.* += b;
+        for (&w.inside, o.inside) |*a, b| a.* += b;
+        for (&w.solid, o.solid) |*a, b| a.* += b;
+    }
+
+    fn cell(w: *Width, sides: [2]Ranged) void {
+        w.cells += 1;
+        for (sides, 0..) |r, i| {
+            w.half[i] += r.half;
+            if (r.in) w.inside[i] += 1;
+            if (bandOf(r.half) == 0) w.solid[i] += 1;
+        }
     }
 };
 
@@ -502,11 +556,13 @@ fn score(comptime Model: type, cells: *const Cells, model: *const Model, opts: O
         s.target += n;
         var have: [modes.len]bool = undefined;
         var loss: [modes.len]f64 = undefined;
+        var ranged: [modes.len]?Ranged = @splat(null);
         for (0..2) |m| {
             const w = games.w[m].n;
             if (u.kind != .gold14 and w > 0) {
                 const p = rate(games.w[m], c.w[m].s);
-                Cal.cell(&s.cal[m], p, z80 * @sqrt(p * (1 - p) / w), n, c.t.s);
+                const half = z80 * @sqrt(p * (1 - p) / w);
+                ranged[m] = s.range(m, p, half, n, c.t.s);
             }
             have[m] = w >= min;
             if (!have[m]) continue;
@@ -530,8 +586,13 @@ fn score(comptime Model: type, cells: *const Cells, model: *const Model, opts: O
                 avgError(m.p, c.t)
             else
                 logLoss(std.math.clamp(m.p, 1e-4, 1 - 1e-4), n, c.t.s);
-            if (u.kind != .gold14 and m.hi > m.lo) Cal.cell(&s.cal[2], m.p, (m.hi - m.lo) / 2, n, c.t.s);
+            if (u.kind != .gold14 and m.hi > m.lo) {
+                ranged[2] = s.range(2, m.p, (m.hi - m.lo) / 2, n, c.t.s);
+            }
         }
+        if (ranged[2]) |mr| for (&s.widths, ranged[0..2]) |*w, r| {
+            if (r) |rr| w.cell(.{ rr, mr });
+        };
         for (have, 0..) |h, m| {
             if (h) s.covered[m] += n;
         }
@@ -765,6 +826,7 @@ pub fn report(results: *const Results, out: *std.Io.Writer) !void {
             }
         }
         try calibration(out, region, &by_kind);
+        try rangeWidths(out, region, &by_kind);
     }
 }
 
@@ -774,11 +836,13 @@ fn calibration(out: *std.Io.Writer, region: []const u8, by_kind: *const [Kind.co
     try out.print("\n### Ranges, {s}\n\nAll ranks, every day. Bands by the 80% range's " ++
         "half-width (raw modes: binomial from their games, from 1 game): solid under 6 " ++
         "points, faded from 6. Per band: cells, share inside (the target's noise added in " ++
-        "quadrature; 80% if honest), and the error's sd in points net of the target's " ++
-        "noise (honest: solid under 4.7, faded above)\n\n| cell | mode | ", .{region});
-    for (bands) |b| try out.print("{s} cells | in | sd | ", .{b});
+        "quadrature; 80% if honest), the error's sd in points net of the target's " ++
+        "noise and the sd the ranges claim (honest: equal; solid claims under 4.7). " ++
+        "Sure: cells of any band whose target noise is under the range's claimed " ++
+        "variance (thin targets land inside any range)\n\n| cell | mode | ", .{region});
+    for (bands ++ [1][]const u8{"sure"}) |b| try out.print("{s} cells | in | sd | claimed | ", .{b});
     try out.writeAll("\n| --- | --- |");
-    for (bands) |_| try out.writeAll(" --: | --: | --: |");
+    for (0..bands.len + 1) |_| try out.writeAll(" --: | --: | --: | --: |");
     try out.writeAll("\n");
     var groups: [4]Stat = @splat(.{});
     for (by_kind, 0..) |by_bracket, k| {
@@ -787,27 +851,67 @@ fn calibration(out: *std.Io.Writer, region: []const u8, by_kind: *const [Kind.co
         var all: Stat = .{};
         for (by_bracket[0]) |s| all.add(s);
         try calRows(out, label(kind), all);
-        const g: usize = switch (depth(kind)) {
-            0 => 0,
-            1 => if (isShare(kind)) 2 else 1,
-            else => 3,
-        };
-        groups[g].add(all);
+        groups[group(kind)].add(all);
     }
-    const names = [_][]const u8{ "depth 0: champion", "depth 1: win rates", "depth 1: shares", "depth 2: win rates" };
-    for (groups, names) |g, name| try calRows(out, name, g);
+    for (groups, group_names) |g, name| try calRows(out, name, g);
+}
+
+const group_names = [_][]const u8{ "depth 0: champion", "depth 1: win rates", "depth 1: shares", "depth 2: win rates" };
+
+fn group(kind: Kind) usize {
+    return switch (depth(kind)) {
+        0 => 0,
+        1 => if (isShare(kind)) 2 else 1,
+        else => 3,
+    };
+}
+
+/// Per kind, depth and day, all ranks: Meio's range against each raw mode's on the
+/// cells both range. Meio passes E2's certainty half where its mean half-width is under
+/// the patch's and its in-range share stays near 80%
+fn rangeWidths(out: *std.Io.Writer, region: []const u8, by_kind: *const [Kind.count][brackets.len][buckets.len]Stat) !void {
+    try out.print("\n### Range widths, {s}\n\nAll ranks. Cells where Meio and the raw " ++
+        "mode both give an 80% range (raw: binomial, from 1 game): mean half-width in " ++
+        "points, share inside, share shown solid (under 6 points), raw mode then Meio\n\n" ++
+        "| cell | day | vs | cells | half | Meio half | in | Meio in | solid | Meio solid |\n" ++
+        "| --- | --- | --- | --: | --: | --: | --: | --: | --: | --: |\n", .{region});
+    var groups: [group_names.len][buckets.len]Stat = @splat(@splat(.{}));
+    for (by_kind, 0..) |by_bracket, k| {
+        const kind: Kind = @fromBackingInt(@intCast(k));
+        if (kind == .gold14) continue;
+        try widthRows(out, label(kind), by_bracket[0]);
+        for (&groups[group(kind)], by_bracket[0]) |*g, s| g.add(s);
+    }
+    for (groups, group_names) |g, name| try widthRows(out, name, g);
+}
+
+fn widthRows(out: *std.Io.Writer, name: []const u8, by_bucket: [buckets.len]Stat) !void {
+    var all: Stat = .{};
+    for (by_bucket) |s| all.add(s);
+    for (by_bucket ++ [1]Stat{all}, buckets ++ [1][]const u8{"all"}) |s, bucket| {
+        for (s.widths, modes[0..2]) |w, mode| {
+            if (w.cells == 0) continue;
+            try out.print("| {s} | {s} | {s} | {d:.0} | {d:.1} | {d:.1} | {d:.0}% | {d:.0}% | {d:.0}% | {d:.0}% |\n", .{
+                name,                       bucket,                     mode,                        w.cells,
+                100 * w.half[0] / w.cells,  100 * w.half[1] / w.cells,  100 * w.inside[0] / w.cells, 100 * w.inside[1] / w.cells,
+                100 * w.solid[0] / w.cells, 100 * w.solid[1] / w.cells,
+            });
+        }
+    }
 }
 
 fn calRows(out: *std.Io.Writer, name: []const u8, s: Stat) !void {
-    for (s.cal, modes) |by_band, mode| {
+    for (s.cal, s.sure, modes) |by_band, sure, mode| {
         var cells: f64 = 0;
         for (by_band) |c| cells += c.cells;
         if (cells == 0) continue;
         try out.print("| {s} | {s} |", .{ name, mode });
-        for (by_band) |c| {
+        for (by_band ++ [1]Cal{sure}) |c| {
             if (c.cells == 0) {
-                try out.writeAll(" 0 | | |");
-            } else try out.print(" {d:.0} | {d:.0}% | {d:.1} |", .{ c.cells, 100 * c.inside / c.cells, c.sd() });
+                try out.writeAll(" 0 | | | |");
+            } else try out.print(" {d:.0} | {d:.0}% | {d:.1} | {d:.1} |", .{
+                c.cells, 100 * c.inside / c.cells, c.sd(), c.claimedSd(),
+            });
         }
         try out.writeAll("\n");
     }
@@ -845,9 +949,13 @@ pub fn writeTsv(results: *const Results, patch: []const u8, t0: i64, out: *std.I
     for (std.enums.values(Comparison)) |c| {
         inline for (.{ "cells", "obs", "loss_a", "loss_b", "diff", "se" }) |f| try out.print("\t{t}_{s}", .{ c, f });
     }
-    for (mode_tags) |m| for (bands) |b| {
-        inline for (.{ "cells", "inside", "err" }) |f| try out.print("\tcal_{s}_{s}_{s}", .{ m, b, f });
+    for (mode_tags) |m| for (bands ++ [1][]const u8{"sure"}) |b| {
+        inline for (.{ "cells", "inside", "err", "claim" }) |f| try out.print("\tcal_{s}_{s}_{s}", .{ m, b, f });
     };
+    for (mode_tags[0..2]) |m| {
+        inline for (.{ "cells", "half", "half_meio", "inside", "inside_meio", "solid", "solid_meio" }) |f|
+            try out.print("\twidth_{s}_{s}", .{ m, f });
+    }
     try out.writeAll("\n");
     for (results, regions) |by_kind, region| for (by_kind, 0..) |by_bracket, k| {
         const kind: Kind = @fromBackingInt(@intCast(k));
@@ -860,7 +968,12 @@ pub fn writeTsv(results: *const Results, patch: []const u8, t0: i64, out: *std.I
                 const d = p.diff();
                 try out.print("\t{d}\t{d}\t{d:.6}\t{d:.6}\t{e:.4}\t{e:.4}", .{ p.cells, p.obs, p.challenger, p.reference, d.mean, d.se });
             }
-            for (s.cal) |by_band| for (by_band) |c| try out.print("\t{d}\t{d}\t{d:.3}", .{ c.cells, c.inside, c.sd() });
+            for (s.cal, s.sure) |by_band, sure| for (by_band ++ [1]Cal{sure}) |c| {
+                try out.print("\t{d}\t{d}\t{d:.3}\t{d:.3}", .{ c.cells, c.inside, c.sd(), c.claimedSd() });
+            };
+            for (s.widths) |w| try out.print("\t{d}\t{d:.6}\t{d:.6}\t{d}\t{d}\t{d}\t{d}", .{
+                w.cells, w.half[0], w.half[1], w.inside[0], w.inside[1], w.solid[0], w.solid[1],
+            });
             try out.writeAll("\n");
         };
     };
@@ -873,20 +986,28 @@ test "TSV header: one name per column, no spaces" {
     try writeTsv(&results, "x", 0, &w.writer);
     const header = w.written();
     try std.testing.expect(std.mem.findScalar(u8, header, ' ') == null);
-    try std.testing.expectEqual(10 + 6 * Comparison.count + 3 * modes.len * bands.len, std.mem.count(u8, header, "\t") + 1);
-    try std.testing.expect(std.mem.find(u8, header, "\tcal_meio_faded_err") != null);
+    try std.testing.expectEqual(10 + 6 * Comparison.count + 4 * modes.len * (bands.len + 1) + 7 * 2, std.mem.count(u8, header, "\t") + 1);
+    try std.testing.expect(std.mem.endsWith(u8, header, "\twidth_patch_solid_meio\n"));
+    try std.testing.expect(std.mem.find(u8, header, "\tcal_meio_sure_claim\t") != null);
     try std.testing.expect(std.mem.find(u8, header, "\tmeio_30_diff\t") != null);
 }
 
 test "range bands, inside with the target's noise, error net of it" {
-    var c: [bands.len]Cal = @splat(.{});
-    // 50% +- 3 points against 600 of 1000 games: solid, 10 points off, outside
-    Cal.cell(&c, 0.5, 0.03, 1000, 600);
-    // 50% +- 8 against 52 of 100: faded, inside
-    Cal.cell(&c, 0.5, 0.08, 100, 52);
+    var s: Stat = .{};
+    // 50% +- 3 points against 600 of 1000 games: solid, 10 points off, outside; a sure
+    // target (noise 0.25 / 1000 under (0.03 / 1.28)^2)
+    try std.testing.expect(!s.range(0, 0.5, 0.03, 1000, 600).in);
+    // 50% +- 8 against 52 of 100: faded, inside; target noise 0.0025 over 0.0039: sure
+    try std.testing.expect(s.range(0, 0.5, 0.08, 100, 52).in);
+    // 50% +- 8 against 1 of 1: inside, too thin to be sure
+    try std.testing.expect(s.range(0, 0.5, 0.08, 1, 1).in);
+    const c = s.cal[0];
     try std.testing.expectEqual(@as(f64, 1), c[0].cells);
+    try std.testing.expectEqual(@as(f64, 2), c[1].inside);
+    try std.testing.expectEqual(@as(f64, 2), s.sure[0].cells);
+    try std.testing.expectEqual(@as(f64, 1), s.sure[0].inside);
+    try std.testing.expectApproxEqAbs(100 * @sqrt((0.03 * 0.03 + 0.08 * 0.08) / 2.0) / z80, s.sure[0].claimedSd(), 1e-9);
     try std.testing.expectEqual(@as(f64, 0), c[0].inside);
-    try std.testing.expectEqual(@as(f64, 1), c[1].inside);
     try std.testing.expectApproxEqAbs(100 * @sqrt(0.01 - 0.25 / 1000.0), c[0].sd(), 1e-9);
     // Error smaller than the target's noise: sd 0, not negative
     try std.testing.expectEqual(@as(f64, 0), c[1].sd());
@@ -965,6 +1086,14 @@ test "rolling origin: windows, target, kinds and Meio" {
     // Its 0.4-0.6 is faded; the win is 0.5 off, inside 1.28 sqrt(0.078^2 + 0.25)
     try std.testing.expectEqual(@as(f64, 1), s.cal[2][1].cells);
     try std.testing.expectEqual(@as(f64, 1), s.cal[2][1].inside);
+    // Paired ranges: the 30 days' 0.5 from 2 games, half 1.28 sqrt(0.25 / 2), against
+    // Meio's 0.1; the patch's 0.25 from 1 game, half 1.28 sqrt(0.1875)
+    const w30 = s.widths[0];
+    try std.testing.expectEqual(@as(f64, 1), w30.cells);
+    try std.testing.expectApproxEqAbs(z80 * @sqrt(0.125), w30.half[0], 1e-12);
+    try std.testing.expectApproxEqAbs(0.1, w30.half[1], 1e-12);
+    try std.testing.expectEqual([2]f64{ 0, 0 }, w30.solid);
+    try std.testing.expectApproxEqAbs(z80 * @sqrt(0.1875), s.widths[1].half[0], 1e-12);
     try std.testing.expectEqual(@as(f64, 0), results[0][@backingInt(Kind.build)][0][1].covered[2]);
     // Two-lock cells, the target's 8010 x 3071 and 8010 x 6610: Meio asked for both once
     // the model has the kind's name, raw modes ranged where they have games

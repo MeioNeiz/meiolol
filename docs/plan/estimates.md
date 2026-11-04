@@ -188,9 +188,11 @@ the default switch (E0b). E10 follows E7; E11 follows each estimate that passes 
   data/truth-<patch>.md and .tsv. 16.21 -> 16.22 scored as its days arrive
 - M9 (meio-truth): truth scores three two-lock kinds (keystone x opponent, item x
   opponent, keystone x item) and checks every mode's 80% ranges per kind, depth and band
-  (solid under ±6, faded). Two-lock Meio beats both raw modes and the fallback on 16.21;
-  raw ranges hold 79-82% everywhere and ±6 splits sure from unsure; Meio's ranges run
-  wide, its faded ones as sure as solid (docs/model.md "Lock stacks in the truth test")
+  (solid under ±6, faded), range widths on paired cells and sure targets. 16.21 at
+  1dae7a01: Meio beats both raw modes and the fallback on every win rate at every depth;
+  shares tie the 30 days, beat the patch; gold beats both. Certainty half holds: Meio's
+  range a third to a twelfth of the patch's, ~80% inside. On sure targets win rates are
+  honest, shares too narrow (68%) (docs/model.md "Lock stacks in the truth test")
 - Champion page blocks follow the region and period picks: players' win rates, the
   builds strip, how hard to pick up, the pool section and the patch line
 - Scope chips (E1, ui.scopechip) on every block of the champion, matchup, build and
