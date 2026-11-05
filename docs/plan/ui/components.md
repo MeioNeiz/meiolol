@@ -499,7 +499,7 @@ PostGame: the desktop app after a game. The verdict and kills, the team gold sto
 your lane in a sentence each, award chips; then both teams lane by lane (TeamRows), the
 team gold through the game and damage to champions. Facts, no advice; no dense tables
 (research/questions/desktop-app-layout.md C20)
-States: victory; defeat, no history
+States: victory; defeat, no history; result coming
 Used by: app
 
 ### SignIn

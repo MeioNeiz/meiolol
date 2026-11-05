@@ -205,9 +205,10 @@ pub const css =
     \\    .c-live .c-cs .lane > .scope { grid-row: foot; margin: 0; }
     \\    /* Each view shows its own: Options the lists (the lane panel's own only where the
     \\       Options island lacks them, the public edition's), Lane the matchup, Comps the comp
-    \\       view. No Lane without a matchup chart */
+    \\       view. No Lane without a matchup chart. A lane with no options (an ally's locked
+    \\       seat: no h3) keeps its matchup under Options, else that view is empty */
     \\    .c-live:has(> .c-seg [value="options"]:checked) > .c-comp,
-    \\    .c-live:has(> .c-seg [value="options"]:checked) .c-cs .lane > :is(.vs + p, .c-lane, .c-lane + .scope),
+    \\    .c-live:has(> .c-seg [value="options"]:checked) .c-cs .lane:has(> .opts-head > h3) > :is(.vs + p, .c-lane, .c-lane + .scope),
     \\    .c-live:has(> .c-seg [value="options"]:checked):has(> .c-picks[data-all]) .c-cs .lane > :is(.opts-head, .opts, .scope),
     \\    .c-live:has(> .c-seg [value="lane"]:checked) > :is(.c-picks, .c-comp),
     \\    .c-live:has(> .c-seg [value="lane"]:checked) .c-cs :is(:is(.board, .side) > .bans, .lane > :is(.opts-head, .opts, .scope:last-child)),
