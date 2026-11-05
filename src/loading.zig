@@ -2,9 +2,10 @@
 //! the last champ select's seats (board.zig: roles given or guessed). Champion facts only,
 //! as short pills coloured by meaning (research/questions/desktop-app-layout.md C1-C3),
 //! some playful (Jacob's note 113): how the champion does in its role now, its lane
-//! against the same role across with level 6 and first item timings, its early or late
-//! lean, lone damage type, ban and pick rates. Player scouting is APP7's, private, where names
-//! are visible. Pure.
+//! against the same role across with level 6 and first item timings, lone damage type,
+//! ban and pick rates; at most two, none that half the board shares. Beside them the
+//! lane's facts (the lane strip) and wins by game length (the card's spark). Player
+//! scouting is APP7's, private, where names are visible. Pure.
 
 const std = @import("std");
 const core = @import("core");
@@ -39,7 +40,13 @@ pub const Card = struct {
     games: u32,
     win: f64,
     pills: []const Pill,
+    /// Against the same role across: the lane strip; null without a curve of the pair
+    lane: ?LaneFacts = null,
+    /// Games and wins by game length (champfacts.length_edges): the card's spark
+    lengths: ?Lengths = null,
 };
+
+pub const Lengths = @FieldType(core.champfacts.LengthRow, "by");
 
 pub const Loading = struct {
     /// Ours, theirs; in role order where known
@@ -71,6 +78,7 @@ const timing_gap = 20;
 pub fn build(arena: std.mem.Allocator, in: Input) !Loading {
     const cv = try comp.build(arena, .{ .stats = in.stats, .curves = in.curves, .facts = in.facts, .tier = in.tier }, in.seats);
     var out: Loading = .{ .teams = undefined, .draft = in.draft, .comp = cv };
+    var all: [2][]Card = undefined;
     for (&out.team_pills, cv.teams) |*p, t| p.* = try comp.pills(arena, t);
     for (in.seats, 0..) |team, side| {
         const sorted = try arena.dupe(Seat, team);
@@ -83,15 +91,50 @@ pub fn build(arena: std.mem.Allocator, in: Input) !Loading {
         }.before);
         const cards = try arena.alloc(Card, sorted.len);
         for (cards, sorted) |*c, s| c.* = try card(arena, in, s, team, in.seats[1 - side]);
-        out.teams[side] = cards;
+        all[side] = cards;
     }
+    try cutPills(arena, all);
+    out.teams = .{ all[0], all[1] };
     return out;
 }
 
-/// Most a card shows, the first found in pillsOf's order
-pub const max_pills = 4;
+/// Most a card shows, the first found in card's order
+pub const max_pills = 2;
 /// A role pick share from here up is "crowd favourite"
 const popular_share = 0.10;
+/// Under this role pick share, "hipster pick": about one card a game on the full snap
+/// (2.06M games, 16.21: 9.8% of seats)
+const hipster_share = 0.005;
+
+/// A pill on more than half the cards says nothing about any one of them: it goes, then
+/// each card keeps its first max_pills
+fn cutPills(arena: std.mem.Allocator, teams: [2][]Card) !void {
+    const n = teams[0].len + teams[1].len;
+    var kept: [2][][]const Pill = undefined;
+    for (&kept, teams) |*k, t| {
+        k.* = try arena.alloc([]const Pill, t.len);
+        for (k.*, t) |*ps, c| {
+            var keep: std.ArrayList(Pill) = .empty;
+            for (c.pills) |p| {
+                if (keep.items.len == max_pills) break;
+                if (n >= 6 and 2 * cardsWith(teams, p.text) > n) continue;
+                try keep.append(arena, p);
+            }
+            ps.* = keep.items;
+        }
+    }
+    for (kept, teams) |k, t| for (k, t) |ps, *c| {
+        c.pills = ps;
+    };
+}
+
+fn cardsWith(teams: [2][]Card, text: []const u8) usize {
+    var on: usize = 0;
+    for (teams) |t| for (t) |c| for (c.pills) |q| {
+        if (std.mem.eql(u8, q.text, text)) on += 1;
+    };
+    return on;
+}
 /// A ban rate from here up is "ban magnet"
 const banned_rate = 0.25;
 
@@ -102,8 +145,11 @@ fn card(arena: std.mem.Allocator, in: Input, s: Seat, team: []const Seat, across
     const at = stats.index(s.champion) orelse return c;
     c.games = stats.champRole(role, at).games;
     c.win = core.score.roleWin(stats, in.opts, at, role);
+    if (in.facts) |f| c.lengths = f.lengthOf(s.champion, role);
+    // Two players per role a game
+    const share = @as(f64, @floatFromInt(c.games)) / @as(f64, @floatFromInt(@max(1, 2 * @as(u64, stats.games))));
     var pills: std.ArrayList(Pill) = .empty;
-    if (c.games < 1000) {
+    if (share < hipster_share) {
         try pills.append(arena, .{ .text = "hipster pick", .tone = .caution });
     } else if (c.win >= 0.515) {
         try pills.append(arena, .{ .text = "strong now", .tone = .good });
@@ -113,22 +159,18 @@ fn card(arena: std.mem.Allocator, in: Input, s: Seat, team: []const Seat, across
     const opp = for (across) |o| {
         if (o.role == role and o.champion != 0) break o;
     } else null;
-    if (opp) |o| if (in.curves) |curves| try lanePills(arena, in, curves, role, s.champion, o.champion, &pills);
-    if (in.facts) |f| try factPills(arena, f, s, role, team, &pills);
-    // Two players per role a game
-    const share = @as(f64, @floatFromInt(c.games)) / @as(f64, @floatFromInt(@max(1, 2 * @as(u64, stats.games))));
-    if (c.games >= 1000 and share >= popular_share) try pills.append(arena, .{ .text = "crowd favourite", .tone = .neutral });
-    c.pills = pills.items[0..@min(pills.items.len, max_pills)];
+    if (opp) |o| if (in.curves) |curves| {
+        c.lane = laneFacts(curves, role, in.tier, s.champion, o.champion);
+        if (c.lane) |f| try lanePills(arena, f, role, &pills);
+    };
+    if (in.facts) |f| try factPills(arena, f, s, team, &pills);
+    if (share >= popular_share) try pills.append(arena, .{ .text = "crowd favourite", .tone = .neutral });
+    c.pills = pills.items;
     return c;
 }
 
-/// "scales" or "early game", "lone AP", "ban magnet"
-fn factPills(arena: std.mem.Allocator, f: *const core.champfacts.Facts, s: Seat, role: Role, team: []const Seat, pills: *std.ArrayList(Pill)) !void {
-    if (f.leanOf(s.champion, role)) |row| switch (row.lean()) {
-        .early => try pills.append(arena, .{ .text = "early game", .tone = .neutral }),
-        .late => try pills.append(arena, .{ .text = "scales", .tone = .neutral }),
-        .none => {},
-    };
+/// "lone AP", "ban magnet"; the early or late lean is the card's spark
+fn factPills(arena: std.mem.Allocator, f: *const core.champfacts.Facts, s: Seat, team: []const Seat, pills: *std.ArrayList(Pill)) !void {
     if (lone(f, s.champion, team)) |kind| try pills.append(arena, .{ .text = if (kind == .ap) "lone AP" else "lone AD", .tone = .neutral });
     if (f.banRate(s.champion)) |r| if (r >= banned_rate) try pills.append(arena, .{ .text = "ban magnet", .tone = .neutral });
 }
@@ -204,13 +246,11 @@ pub fn timingWord(gap: ?i32) ?enum { sooner, later } {
 }
 
 /// "lane bully" or "tough lane", "6 first", "slow items": no names, the card across
-/// shows who
-fn lanePills(arena: std.mem.Allocator, in: Input, curves: *const curvesfile.Curves, role: Role, me: u32, them: u32, pills: *std.ArrayList(Pill)) !void {
-    const f = laneFacts(curves, role, in.tier, me, them) orelse return;
-    const jungle = role == .jungle;
-    if (f.edge()) |e| switch (e) {
-        .ahead => try pills.append(arena, .{ .text = if (jungle) "strong start" else "lane bully", .tone = .good }),
-        .behind => try pills.append(arena, .{ .text = if (jungle) "slow start" else "tough lane", .tone = .bad }),
+/// shows who. A jungler's start is the lane strip's alone
+fn lanePills(arena: std.mem.Allocator, f: LaneFacts, role: Role, pills: *std.ArrayList(Pill)) !void {
+    if (role != .jungle) if (f.edge()) |e| switch (e) {
+        .ahead => try pills.append(arena, .{ .text = "lane bully", .tone = .good }),
+        .behind => try pills.append(arena, .{ .text = "tough lane", .tone = .bad }),
         .even => {},
     };
     if (timingWord(f.level6)) |w| try pills.append(arena, if (w == .sooner)
@@ -277,4 +317,21 @@ test "loading screen: cards by role, lane pills against the same role across" {
     try testing.expect(has(l.teams[1][1], "lane bully", .good));
     // No role: no facts
     try testing.expectEqual(0, l.teams[1][2].pills.len);
+}
+
+test "loading screen: a pill on more than half the board goes, then two a card" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const common: Pill = .{ .text = "crowd favourite", .tone = .neutral };
+    const pills = [_]Pill{ common, .{ .text = "lone AP", .tone = .neutral }, .{ .text = "6 first", .tone = .good }, .{ .text = "ban magnet", .tone = .neutral } };
+    var cards: [2][5]Card = undefined;
+    for (&cards) |*t| for (t, 0..) |*c, i| {
+        c.* = .{ .champion = @intCast(i + 1), .role = null, .guessed = false, .me = false, .games = 0, .win = 0.5, .pills = if (i == 0) &pills else &.{common} };
+    };
+    try cutPills(arena, .{ &cards[0], &cards[1] });
+    try testing.expectEqual(2, cards[0][0].pills.len);
+    try testing.expectEqualStrings("lone AP", cards[0][0].pills[0].text);
+    try testing.expectEqualStrings("6 first", cards[0][0].pills[1].text);
+    try testing.expectEqual(0, cards[1][3].pills.len);
 }
