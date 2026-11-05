@@ -9,7 +9,8 @@
 # index of its own, never the working tree's copy, which another session's site-hashes
 # run for its uncommitted work may have rewritten (bcf6dc3 carried such hashes).
 # One touching src/site/ui gets the components register and uilint's debt file
-# regenerated in the same tree and committed with it, the same way.
+# regenerated in the same tree and committed with it, the same way (named in PATHS, the
+# generated one still wins).
 # The subject (first -m) is one short line; detail goes in a second -m, the body: every
 # session's opening context and `git log --oneline` carry subjects. Doc pages in PATHS
 # must not get worse than at HEAD (over budget and growing, or new dated-story lines):
@@ -65,13 +66,30 @@ if [ "${SITE_HASHES:-1}" != 0 ] \
     && git ls-files --cached --others --exclude-standard -- "$@" \
         | grep -vxF "$hashes" | grep -qE '^(src/|build\.zig)'; then
     sources=()
+    genpaths=()
     for p in "$@"; do
-        [ "$p" = "$hashes" ] || sources+=("$p")
+        case "$p" in
+            "$hashes") ;;
+            docs/plan/ui/components.md | src/site/ui/uilint-debt.txt) genpaths+=("$p") ;;
+            *) sources+=("$p") ;;
+        esac
     done
     gen_out=""
     if printf '%s\n' "${sources[@]}" | grep -q '^src/site/ui'; then
         gen_out="$tmp/gen"
         mkdir -p "$gen_out"
+        # The working tree's copy may hold another session's uilint --write: the
+        # generated one goes in instead
+        if [ ${#genpaths[@]} -gt 0 ]; then
+            echo "generated, working tree copy left out: ${genpaths[*]}"
+            keep=()
+            for p in "$@"; do
+                case " ${genpaths[*]} " in *" $p "*) ;; *) keep+=("$p") ;; esac
+            done
+            set -- "${keep[@]}"
+        fi
+    else
+        sources+=(${genpaths[@]+"${genpaths[@]}"})
     fi
     # Another session's commit landing during the ~15 s run changes the base: redo
     for _ in 1 2 3; do
