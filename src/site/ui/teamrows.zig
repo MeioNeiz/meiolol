@@ -112,6 +112,7 @@ pub const css =
     \\  .c-rows .seat[data-side="them"] { flex-direction: row-reverse; }
     \\  .c-rows .who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
     \\  .c-rows .seat[data-side="them"] .who { align-items: flex-end; text-align: right; }
+    \\  .c-rows .who > * { max-width: 100%; }
     \\  .c-rows .who > b { font-weight: var(--w-m); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-rows .line { font-size: var(--fs-xs); color: var(--t2); overflow: hidden; text-overflow: ellipsis;
     \\    white-space: nowrap; }
