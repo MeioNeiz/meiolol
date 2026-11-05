@@ -59,7 +59,9 @@ covered_soon() {
 # A run that answers this request ends the wait, even while others' builds hold the
 # slots; while one that will is running, this request gives up its place in the queue
 asked=$(cat "$dir/seq" 2> /dev/null || echo 0)
-trap slots_release EXIT
+slots_kind=$(_slots_kind zig build "$@")
+slots_cmd="zb.sh $*"
+trap 'slots_done $?' EXIT
 trap 'exit 130' INT TERM HUP
 said=""
 while :; do

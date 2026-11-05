@@ -9,9 +9,13 @@
 # `zig build` as -j: else each build runs a compile per core (load 106 on 29 Oct)
 #   deploy/slots.sh WEIGHT CMD [ARG...]   run CMD holding WEIGHT slots
 #   deploy/slots.sh status                holders and waiters
-# Sourced (zb.sh): slots_enqueue W, slots_take (0 once held, 1 not yet), slots_release.
+#   deploy/slots.sh history [HOURS]       waits, run times and use by hour (default 24)
+# Sourced (zb.sh): slots_enqueue W, slots_take (0 once held, 1 not yet), slots_release;
+# slots_done CODE at exit logs the request (slots_kind, slots_cmd) and releases.
 # State: ~/.cache/meiolol-slots (MEIOLOL_SLOTS_DIR), entries named by pid: a dead
-# holder's or waiter's entry is dropped by the next caller.
+# holder's or waiter's entry is dropped by the next caller. history.tsv there: a line per
+# request, host pid kind weight enqueued started ended code cmd (epoch s; started - for
+# one that never ran: answered by another run, or given up)
 # On the gpu-box (WSL on Jacob's PC) no slot is granted while League's game runs (the
 # client alone doesn't hold builds): the watcher (deploy/lab-watch.sh) writes up, down,
 # unknown or blind (Windows unanswered for minutes: builds go) to
@@ -20,6 +24,7 @@
 slots_dir=${MEIOLOL_SLOTS_DIR:-$HOME/.cache/meiolol-slots}
 slots_n=${MEIOLOL_SLOTS:-3}
 slots_mine=""
+slots_enq="" slots_start="" slots_w="" slots_kind="" slots_cmd=""
 MEIOLOL_LEAGUE_FILE=${MEIOLOL_LEAGUE_FILE-}
 slots_league_file=${MEIOLOL_LEAGUE_FILE:-$HOME/.cache/meiolol-league-game}
 slots_wsl=""
@@ -57,6 +62,9 @@ _slots_prune() {
 slots_enqueue() {
     local w=$1 t
     [ "$w" -le "$slots_n" ] || w=$slots_n
+    slots_w=$w
+    # A request that gives up its place and queues again (zb.sh) keeps its first time
+    [ -n "$slots_enq" ] || slots_enq=$(date +%s)
     _slots_gate
     t=$(($(cat "$slots_dir/ticket" 2> /dev/null || echo 0) + 1))
     echo "$t" > "$slots_dir/ticket"
@@ -99,6 +107,7 @@ slots_take() {
         rm -f "$slots_dir/wait/$slots_mine"
         : > "$slots_dir/held/$$-$w-${slots_mine%%-*}"
         slots_mine=held
+        slots_start=$(date +%s)
         export MEIOLOL_ZIG_JOBS=$((2 * w))
         code=0
     fi
@@ -109,6 +118,92 @@ slots_take() {
 slots_release() {
     rm -f "$slots_dir"/held/"$$"-*
     [ -z "$slots_mine" ] || rm -f "$slots_dir/wait/$slots_mine"
+    slots_start=""
+}
+
+slots_done() {
+    if [ -n "$slots_enq" ]; then
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(hostname -s)" $$ "${slots_kind:-?}" \
+            "$slots_w" "$slots_enq" "${slots_start:--}" "$(date +%s)" "${1:-?}" \
+            "$(printf '%s' "$slots_cmd" | tr '\t\n' '  ' | cut -c1-100)" \
+            >> "$slots_dir/history.tsv" 2> /dev/null
+        slots_enq=""
+    fi
+    slots_release
+}
+
+# A command's kind for the history: its zig build step (~f when test-filtered), else its
+# name
+_slots_kind() {
+    local a st=0 step="" f=""
+    for a in "$@"; do
+        case $a in -Dtest-filter=*) f="~f" ;; esac
+        case $st in
+            0) case $a in
+                   zig | */zig) st=1 ;;
+                   "zig build "*)
+                       step=$(printf '%s\n' "$a" | awk '{for (i = 3; i <= NF; i++) if ($i !~ /^-/) {print $i; exit}}')
+                       st=3
+                       ;;
+               esac ;;
+            1) if [ "$a" = build ]; then st=2; else st=0; fi ;;
+            2) case $a in -*) ;; *) step=$a st=3 ;; esac ;;
+        esac
+    done
+    if [ $st -ge 2 ]; then echo "${step:-install}$f"; else basename "${1:-?}"; fi
+}
+
+_slots_date() { date -r "$1" "$2" 2> /dev/null || date -d "@$1" "$2"; }
+
+# Per kind: requests, those that never ran, wait and run p50/p90/max, failed runs; then
+# slot use per hour (held slot-seconds over all slots' seconds)
+slots_history() {
+    local hours=${1:-24} h=$slots_dir/history.tsv since rows
+    [[ $hours =~ ^[0-9]+$ ]] || { echo "usage: deploy/slots.sh history [HOURS]" >&2; return 2; }
+    since=$(($(date +%s) - hours * 3600))
+    [ -f "$h" ] && rows=$(awk -F'\t' -v s="$since" '$7 >= s' "$h")
+    [ -n "${rows:-}" ] || { echo "slots: no requests in the last $hours h ($h)"; return 0; }
+    echo "slot requests, last $hours h, $slots_n slots ($h)"
+    printf '%-12s %5s %6s  %-17s %-17s %6s\n' kind reqs no-run "wait p50/p90/max" \
+        "run p50/p90/max" failed
+    # One line per kind and measure (w wait, r run), values sorted, then percentiles
+    printf '%s\n' "$rows" | awk -F'\t' '{
+            ran = $6 != "-"
+            print $3 "\tw\t" ((ran ? $6 : $7) - $5)
+            if (ran) print $3 "\tr\t" ($7 - $6)
+            print $3 "\tn\t" (ran ? 0 : 1)
+            if (ran) print $3 "\tf\t" ($8 != 0)
+        }' | sort -t"$(printf '\t')" -k1,1 -k2,2 -k3,3n | awk -F'\t' '
+        function flush_m() {
+            if (m == "") return
+            if (m == "w" || m == "r") {
+                out[k, m] = sprintf("%d/%d/%d", v[int((c - 1) * 0.5) + 1], v[int((c - 1) * 0.9) + 1], v[c])
+                if (m == "w") reqs[k] = c
+            } else out[k, m] = sum
+        }
+        $1 != k || $2 != m { flush_m(); if ($1 != k) kinds[++nk] = $1; k = $1; m = $2; c = 0; sum = 0 }
+        { v[++c] = $3; sum += $3 }
+        END {
+            flush_m()
+            for (i = 1; i <= nk; i++) {
+                k = kinds[i]
+                printf "%-12s %5d %6d  %-17s %-17s %6d\n", k, reqs[k], out[k, "n"], out[k, "w"],
+                    (out[k, "r"] == "" ? "-" : out[k, "r"]), out[k, "f"]
+            }
+        }'
+    echo "use by hour"
+    printf '%s\n' "$rows" | awk -F'\t' -v n="$slots_n" '$6 != "-" {
+            for (t = $6; t < $7; t = e) {
+                hr = int(t / 3600)
+                e = (hr + 1) * 3600
+                if (e > $7) e = $7
+                use[hr] += $4 * (e - t)
+            }
+        }
+        END { for (hr in use) printf "%d %d\n", hr * 3600, 100 * use[hr] / (n * 3600) }' \
+        | sort -n | while read -r t pct; do
+            echo "$(_slots_date "$t" '+%d %b %H:00')  $pct%"
+        done
 }
 
 slots_status() {
@@ -132,12 +227,15 @@ slots_status() {
 set -u
 case ${1-} in
     status) slots_status ;;
+    history) slots_history "${2-}" ;;
     [1-9]*)
-        [ $# -ge 2 ] || { echo "usage: deploy/slots.sh WEIGHT CMD [ARG...] | status" >&2; exit 2; }
+        [ $# -ge 2 ] || { echo "usage: deploy/slots.sh WEIGHT CMD [ARG...] | status | history [HOURS]" >&2; exit 2; }
         w=$1
         shift
+        slots_kind=$(_slots_kind "$@")
+        slots_cmd="$*"
         slots_enqueue "$w"
-        trap slots_release EXIT
+        trap 'slots_done $?' EXIT
         trap 'exit 130' INT TERM HUP
         said=""
         until slots_take; do
@@ -146,5 +244,5 @@ case ${1-} in
         done
         "$@"
         ;;
-    *) echo "usage: deploy/slots.sh WEIGHT CMD [ARG...] | status" >&2; exit 2 ;;
+    *) echo "usage: deploy/slots.sh WEIGHT CMD [ARG...] | status | history [HOURS]" >&2; exit 2 ;;
 esac

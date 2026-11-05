@@ -42,6 +42,24 @@ small=$(awk '$2 == "small" {print $3}' "$t/log")
 mkdir -p "$t/slots/held"
 : > "$t/slots/held/999999-2-000000001"
 timeout 5 "$s" 2 true 2> /dev/null && ok "a dead holder's slots are freed" || bad "dead holder kept its slots"
+# Every request leaves a line: 7 runs above, then a failing one; history sums by kind
+h=$t/slots/history.tsv
+"$s" 1 bash -c 'exit 3'
+[ "$(awk -F'\t' 'NF == 9 && $6 != "-" && $6 >= $5 && $7 >= $6 {n++} END {print n}' "$h")" = 8 ] \
+    && [ "$(tail -n 1 "$h" | cut -f3,4,8)" = "$(printf 'bash\t1\t3')" ] \
+    && ok "history: a line per request" || bad "history: $(cat "$h")"
+awk -F'\t' '$9 ~ / c / && $6 - $5 >= 1' "$h" | grep -q . && ok "history: the wait" \
+    || bad "history: no wait for c"
+"$s" history 1 | grep -Eq '^bash +7 +0 .* 1$' && ok "history: summed by kind" \
+    || bad "history summary: $("$s" history 1)"
+# zb.sh logs its zig build step as the kind
+mkdir -p "$t/zb/deploy" "$t/zb/bin"
+cp "$here/zb.sh" "$here/slots.sh" "$t/zb/deploy/"
+printf '#!/bin/sh\nexit 0\n' > "$t/zb/bin/zig"
+chmod +x "$t/zb/bin/zig"
+HOME=$t/zb PATH=$t/zb/bin:$PATH "$t/zb/deploy/zb.sh" test -Dtest-filter=x > /dev/null 2>&1
+[ "$(tail -n 1 "$h" | cut -f3,8,9)" = "$(printf 'test~f\t0\tzb.sh test -Dtest-filter=x')" ] \
+    && ok "history: zb.sh's step" || bad "history zb: $(tail -n 1 "$h")"
 
 # snap-small.sh: 1 in 2 games with their rows, the small tables whole, side files copied
 # but export linked; not built again while newer than the source
