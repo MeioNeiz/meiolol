@@ -3,7 +3,7 @@
 //! on this device); every option is a link. An ARIA combobox as ChampSearch: arrows move,
 //! Enter takes the active option, Escape closes. Before the island runs, and before its
 //! index is in for a Riot ID, the form is a plain lookup (GET /your?id=). Its file loads
-//! on the form's first focus or pointerdown, or "/" (html.zig's inline script)
+//! on the form's first focus or pointerdown, or "/" (shell.zig's inline script)
 const std = @import("std");
 const tree = @import("tree.zig");
 const url = @import("url.zig");

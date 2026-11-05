@@ -2,7 +2,7 @@
 //! (ui-admintraffic.wasm, which fetches api/traffic.bin only once the tab shows). The
 //! site's nginx log as deploy/traffic.sh counts it: views by people, unconfirmed and bots,
 //! server errors, page time, top pages, referrers, agents, status codes, render cache and
-//! not found. A day or more draws a bar per UK day, else per hour
+//! not found. 7 and 30 days draw a bar per UK day, 24 hours a bar per hour
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");

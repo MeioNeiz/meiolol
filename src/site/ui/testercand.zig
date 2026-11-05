@@ -1,11 +1,12 @@
 //! The Draft tester's candidate panel (docs/plan/ui/draft-tester.md "First screen"):
 //! every champion the shown seat could take under the page's model, as a RankStrip and a
-//! CandidateList in points mode, sorted by Win (the low end of its 95% range) or Fit (the
-//! change less the champion's own strength). A row's chips and, opened, its
-//! ReasonBreakdown are draftscore's Scorer.why parts; Pick fills the seat. The search
-//! keeps the rows whose name holds it, Enter picks the first. With a model compared, a
-//! column of its chance and points over its own average pick: the two models' baselines
-//! can sit points apart, so a raw gap would mostly repeat that Its own island and wasm
+//! CandidateList in points mode, sorted by Win (the low end of its 95% range), Fit (the
+//! change less the champion's own strength) or, where the seat has a lane line, Gold
+//! (lane gold at 14, low end). A row's chips and, opened, its ReasonBreakdown are
+//! draftscore's Scorer.why parts; Pick fills the seat. The search keeps the rows whose
+//! name holds it, Enter picks the first. With a model compared, a column of its rank
+//! there and points over its own average pick: the two models' baselines can sit points
+//! apart, so a raw gap would mostly repeat that Its own island and wasm
 //! (ui-testercand.wasm, which ui-tester.wasm loads) with no model of its own, so it fits
 //! its budget: the two share the board through the URL fragment (testerpage.Page.Url),
 //! and ui-tester.wasm, which holds the model, hands it the seat's options (Feed)
@@ -33,7 +34,8 @@ pub const scope = .{".c-tcand"};
 pub const sel = "[data-island=testercand]";
 
 const n_role = ds.n_role;
-/// Rows shown before a search, the seat's own champion added below them
+/// Rows shown before a search; the seat's own champion goes first, the open one below
+/// them
 const max_rows = 30;
 /// Rows Up, Down and Enter reach: more than a role's options
 const max_ids = 256;
@@ -536,8 +538,8 @@ pub const Panel = struct {
         return rankstrip.view(h, .{ .dots = dots, .label = W.every.with(h, .{ .side = side.s, .r = r.label().s }) });
     }
 
-    /// The first max_rows, the seat's own champion and the open one below them, or every
-    /// row the search keeps
+    /// The seat's own champion first, then the first max_rows and the open one below
+    /// them, or every row the search keeps
     fn rowsOf(p: *Panel, h: *H, f: *const Feed, all: []const *const Opt, in_seat: u32, live: bool) []const candlist.Row {
         var rows: std.ArrayList(candlist.Row) = .empty;
         const searching = p.q.len > 0;

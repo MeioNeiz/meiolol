@@ -1,9 +1,9 @@
-//! AdminCharts: the admin page's chart tabs, Crawler and Riot API, an island of their own
-//! below AdminPage's tabs (ui-admincharts.wasm, which fetches only once one shows). The
-//! tab comes with the URL (#tab=crawler). Crawl charts read live.bin's last 3 h by minute
-//! for the 3-hour range, else the snapshot's 10-minute buckets; readings and the backlog
-//! read the snapshot's history. Each chart's zoom and tip stay in `times`, so a re-fetch
-//! keeps them
+//! AdminCharts: the admin page's chart tabs, Crawler, Riot API, Storage and Ingest, an
+//! island of their own below AdminPage's tabs (ui-admincharts.wasm, which fetches only
+//! once one shows). The tab comes with the URL (#tab=crawler). Crawl charts read
+//! live.bin's last 3 h by minute for the 3-hour range, else the snapshot's 10-minute
+//! buckets; readings and the backlog read the snapshot's history. Each chart's zoom and
+//! tip stay in `times`, so a re-fetch keeps them
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
@@ -293,7 +293,7 @@ const region_names = std.enums.EnumArray(ad.Region, Text).init(.{
     .sea = plain("sea"),
 });
 
-/// Highest jobs the writer queue holds before workers block (crawl.zig)
+/// Highest jobs the writer queue holds before workers block (writer.zig max_pending)
 const writer_cap = 128;
 /// Warn steps for figures, as the old page's warn and bad
 pub const warn: fmt.Step = .{ .s = 2, .low = true };

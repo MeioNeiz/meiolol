@@ -22,7 +22,7 @@ pub const StepState = enum { done, running, waiting, failed, skipped, pending, n
 
 pub const Step = struct {
     name: tree.Text,
-    /// What the step does, its pill's title
+    /// What the step does, its row's title
     what: []const u8 = "",
     state: StepState,
     /// Seconds, when started: the whole step once ended, so far while running

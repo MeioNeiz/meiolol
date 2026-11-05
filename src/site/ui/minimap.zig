@@ -1,6 +1,7 @@
 //! Minimap: Summoner's Rift as a square, lanes and river drawn faintly, with where kills
-//! happened: an enemy down as a dot in --us, one of yours as a cross in --them, yours
-//! ringed. s is a moment row's 16 px dot (no lanes); l the moment card's map
+//! happened: an enemy down as a dot in --us-hot, one of yours as a cross in --them-hot;
+//! your kill ringed in --accent, your death's cross in it. s is a moment row's 16 px dot
+//! (no lanes); l the moment card's map
 const std = @import("std");
 const tree = @import("tree.zig");
 const Gallery = @import("gallery.zig").Gallery;

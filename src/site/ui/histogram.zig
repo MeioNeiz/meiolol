@@ -1,7 +1,7 @@
 //! Histogram: how players' win rates on a champion spread (10+ games each), bars per bin
-//! with the middle half shaded, a marker at 50% and, on Your games, one at your own rate.
-//! The caption ("388 players, middle half 46-63%") is the card head's; the luck sentence
-//! its Toggletip. Plain HTML bars placed by percent, nothing measured
+//! with the middle half shaded, a marker at 50% and, with `you`, one at your own rate (no
+//! page sets it yet). The caption ("388 players, middle half 46-63%") is the card head's;
+//! the luck sentence its Toggletip. Plain HTML bars placed by percent, nothing measured
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");

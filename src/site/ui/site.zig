@@ -28,7 +28,7 @@ pub const Link = struct {
     label: tree.Text,
     href: []const u8,
     current: bool = false,
-    /// Moved into the last view visited by the page's script (html.zig meioView)
+    /// Moved into the last view visited by the page's script (shell.zig meioView)
     view: bool = false,
     /// Until a page script shows it
     hidden: bool = false,

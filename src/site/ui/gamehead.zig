@@ -1,6 +1,6 @@
 //! GameHeader: one game at a glance, no sentence (game-detail.md "First screen"). Who:
 //! your champion with its level, "vs" your lane opponent. Result and score: WIN or LOSS,
-//! K/D/A large, KDA and kill share under it. How: CS, gold, damage and lane gold at 14
+//! K/D/A large, KDA and kill share beside it. How: CS, gold, damage and lane gold at 14
 //! and vision as figures, then your final items, spells and runes; the game's meta beside
 //! the names; the two teams as icon rows, you ringed
 const std = @import("std");

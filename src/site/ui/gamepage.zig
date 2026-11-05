@@ -1,7 +1,8 @@
-//! GamePage: the game page's first screen as one island (game-detail.md): GameStrip,
-//! GameHeader, the game graph with its control row beside RangeInspector, the stat cells
-//! and the objectives row. A game picked in the strip is prepared once (its moments and
-//! graph) and kept. Opens on the turning minute; the URL keeps the game and the selection
+//! GamePage: the game page's first screen, ui-games.wasm's island (game-detail.md):
+//! GameStrip, GameHeader, the game graph card (control row, graph, stat cells). GameMore
+//! beside it holds RangeInspector, the objectives row and Players. A game picked in the
+//! strip is prepared once (its moments and graph) and kept. Opens on the turning minute;
+//! the URL keeps the game and the selection
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");

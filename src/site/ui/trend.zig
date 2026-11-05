@@ -1,5 +1,5 @@
 //! TrendChart: a win rate over a few ordered points (patches, game length buckets,
-//! mastery bands), a line with its ±95% band, each point a dot coloured on the scale
+//! mastery bands), a line with its 80% range band, each point a dot coloured on the scale
 //! against a reference (dashed), the point's name under it with a second line (rank in
 //! role, games), the last figure at the end. No per-point text: a tap or hover shows a
 //! point's numbers (ChartTip). A base line, faint dashed, compares each point with a

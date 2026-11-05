@@ -2,7 +2,8 @@
 //! filtered games add up to: a win ring with the record and KDA, the top champions with
 //! W-L and a win bar, a column per role sized by games. Pressing a champion or a role
 //! sets the list's filter (pressed again: All); the rows ignore their own part of the
-//! filter so the choices stay. Phones: the ring and the top 3 champions in one line
+//! filter so the choices stay. Phones: the ring, the average KDA
+//! and the top 3 champions in one line
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");

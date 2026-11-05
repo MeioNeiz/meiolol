@@ -1,8 +1,8 @@
 //! The Your games lookup (your.html#id=Name%23TAG): the status line above the list, its
-//! Check for new games and Not you?, and when to ask /api/list again. Island YourLookup
-//! (ui-yourlookup.wasm, which ui-your loads once the URL has an id). A list goes to
-//! YourList as its root's data-bin (a List's file, base64; removed for the example
-//! again), then `event` on the window
+//! Refresh (check for new games) and Not you?, and when to ask /api/list again. Island
+//! YourLookup (ui-yourlookup.wasm, which ui-your loads once the URL has an id). A list
+//! goes to YourList as its root's data-bin (a List's file, base64; removed for the
+//! example again), then `event` on the window
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");

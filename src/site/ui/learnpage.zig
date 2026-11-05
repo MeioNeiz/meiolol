@@ -1,7 +1,7 @@
 //! The Learn page (docs/plan/ui/learn.md): one puzzle a screen. ChapterStrip on top
 //! (title, the chapter's question, n/N, stars), the PuzzleCard, and beside it (under it
-//! on a phone) ChapterPath: this chapter's puzzles, the tips earned, every chapter with
-//! its progress. A chapter's end lists its takeaways with their stars. Over it all, today's
+//! on a phone) ChapterPath: the tips earned in this chapter, every chapter with its
+//! progress. A chapter's end lists its takeaways with their stars. Over it all, today's
 //! five: a puzzle of each chapter from `start` on, the same for everyone that day, a slot
 //! open once its chapter is finished. One island (ui-learn.wasm); progress in localStorage
 //! through the page's code (`progress`)

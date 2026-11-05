@@ -28,11 +28,11 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - IdLookup: a Riot ID box and Review as one control, the newest Riot IDs this device...
 
 **Labels and icons**
-- Badge: a flat label (role, result, "few games", a patch note)
+- Badge: a flat label (role, result, "few games", a patch note), not a control: no hover
 - AlertBand: a service's state in one line at the top of a page: ok, warn or down, a...
 - ModelBadge: which model a number comes from
 - RoleIcon: Riot's position icon as a CSS-masked span in currentColor, the lane solid...
-- ChampIcon: a champion's square portrait, 20 to 48 px, with the states a seat or a...
+- ChampIcon: a champion's square portrait, 20 to 56 px, with the states a seat or a...
 - GameArt: an item, rune, rune tree, stat shard or summoner spell icon
 - ObjectiveIcon: a tower, inhibitor or epic monster as a small glyph (a CSS mask, like...
 
@@ -124,8 +124,8 @@ its CSS ships to the site, the gallery's states, and the components importing it
 **Pages and their sections**
 - TextPage: A page of running text: method, download, privacy, terms, the 404
 - SiteHeader: every page's top bar: the logo, the page links, the search
-- GamePage: the game page's first screen as one island (game-detail.md): GameStrip...
-- Finder: The matchup finder (matchup/index.html, docs/plan/ui/matchups.md): a way to...
+- GamePage: the game page's first screen, ui-games.wasm's island (game-detail.md)...
+- Finder: The matchup finder (/matchups, docs/plan/ui/matchups.md): a way to a matchup...
 - StatRanking: StatRanking (docs/plan/ui/rankings.md): every champion in a role ranked...
 - LearnPage: The Learn page (docs/plan/ui/learn.md): one puzzle a screen
 - DailyPage: Daily Draft's page (docs/plan/ui/daily.md, mock round 4): the board with...
@@ -137,7 +137,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - YourTime: The Your games page's Over time view (your-games.md "Over time"): each...
 - YourLookup: The Your games lookup (your.html#id=Name%23TAG): the status line above...
 - YourFriends: The Your games page's Friends view (your-games.md "Friends"): who a...
-- Forget: Remove my data (docs/legal/lia.md "Objection"): anyone, for any Riot ID...
+- Forget: Remove my data (docs/legal/lia.md "3
 - Apply: Apply to test the desktop app, at /download#apply: Riot ID, a contact, role...
 - Squad: Squads (/squad, your-games.md "Squads"): friends who each joined by the...
 - HomePage: The home page (index.html, docs/plan/ui/home.md): a game on the first...
@@ -146,7 +146,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - TesterCand: The Draft tester's candidate panel (docs/plan/ui/draft-tester.md "First...
 - ChampPage: The champion page (/champions/<slug>, /champions/<slug>/<role>): one...
 - MatchPage: The matchup page (/matchups/<role>/<x>-vs-<y>): one lane pair from x's...
-- Champions: Champions (champions.html, role/<slug>.html; docs/plan/ui/champions.md)...
+- Champions: Champions (/champions, /champions/<role>; docs/plan/ui/champions.md)...
 
 **Admin and ops**
 - LogView: the tail of one of the box's logs on an ops page
@@ -155,7 +155,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - MeionotesList: /admin/meionotes, every note on the site grouped by page or by...
 - Pv: the private numbers on public champion and matchup pages (app.md "Private...
 - AdminPage: /admin/ (private) as one island
-- AdminCharts: the admin page's chart tabs, Crawler and Riot API, an island of their...
+- AdminCharts: the admin page's chart tabs, Crawler, Riot API, Storage and Ingest, an...
 - AdminTraffic: the admin page's Traffic tab, an island of its own below AdminCharts...
 - AdminOps: the admin page's Deploys and Logs tabs, an island of its own below...
 - AdminModels: the admin page's Models tab, an island of its own below AdminOps...
@@ -193,10 +193,11 @@ picked
 
 ### Badge
 `badge.zig` `.c-badge` site
-Badge: a flat label (role, result, "few games", a patch note). Never looks pressable: no
-fill or border, no hover. A patch note (`riot`) is ringed in its tone, buff or nerf with
-an arrow as the second cue. `turn` is the attention pill: a moment ("your turn", a swing)
-or a caution about the thing it sits on
+Badge: a flat label (role, result, "few games", a patch note), not a control: no hover. A
+soft fill in its tone (few is bare text). A patch note (`riot`) is ringed in its tone with
+no fill, buff or nerf with an arrow as the second cue. `turn` is the attention badge, turn
+ink on a raised fill: a moment ("your turn", a swing) or a caution about the thing it sits
+on
 States: neutral; accent; us; them; few; patch note; patch buff; patch nerf; moment;
 caution
 Used by: modelbadge, matchbrief, champlist, draftboard, champselect, compview, appbar,
@@ -454,7 +455,7 @@ tiers
 
 ### ChampIcon
 `champ.zig` `.c-champ` site
-ChampIcon: a champion's square portrait, 20 to 48 px, with the states a seat or a row
+ChampIcon: a champion's square portrait, 20 to 56 px, with the states a seat or a row
 needs: thin data faded, banned struck, dead greyed with a cross, an empty seat dashed, a
 suggestion not yet yours (dashed accent ring), a side's ring, the player's own ring with a
 dot on its corner (seen under a turn's outline), a level, and a role badge in the corner
@@ -496,7 +497,7 @@ SiteSearch: the header's search. Finds a champion (ChampSearch's matching), a ma
 this device); every option is a link. An ARIA combobox as ChampSearch: arrows move, Enter
 takes the active option, Escape closes. Before the island runs, and before its index is in
 for a Riot ID, the form is a plain lookup (GET /your?id=). Its file loads on the form's
-first focus or pointerdown, or "/" (html.zig's inline script)
+first focus or pointerdown, or "/" (shell.zig's inline script)
 States: a champion; a matchup; every opponent; a Riot ID; the empty box: Riot IDs looked
 up here; nothing found
 
@@ -529,7 +530,7 @@ of it, then a typo (one, two from 7 letters); case and punctuation ignored. The 
 it is an ARIA combobox: arrows move, Enter takes, Escape closes then clears, focus leaving
 the box closes it. Modes: link (each option is a link: the champion page's "matchup
 with..."), pick (the choice stays as a chip with a clear button: the draft tester) and
-filter (no list: a host reads `q`, e.g. a table)
+filter (no list: a host reads `q`, e.g. MatchupStrip)
 States: empty; typed: prefixes, shortest first; a word of the name; a typo; nothing found;
 pick mode: the chosen one
 Used by: sitesearch, champhead, matchstrip, champrolepicker, finder, poolpage, testerpage,
@@ -541,9 +542,9 @@ ChampHeader: a champion page's first row: the portrait, the name as the page's h
 line under it (role, patch), the role picker, the opponent search and the headline
 figures. Wraps in its container: on a phone each part takes a row, the strip last. With
 `pair` filled it heads the matchup page: both portraits, the swap between them (the other
-side's page) and ⊗ on the opponent back to the champion page (lolalytics' VS slot: the
+side's page) and × on the opponent back to the champion page (lolalytics' VS slot: the
 two pages are one with the slot empty or filled). A champion's P Q W E R icons sit under
-its name, each keyed by its letter
+its name, Q W E R each keyed by its letter
 States: a champion page's head; name only; with its abilities; a matchup page's head: the
 opponent's slot filled
 Used by: champpage, matchpage
@@ -615,8 +616,8 @@ Used by: app
 `teamrows.zig` `.c-rows`
 TeamRows: a game's five lanes as mirrored rows, our player left, theirs right, the role
 and the lane's gold gap between. A seat: portrait (greyed while dead), name, the KDA and a
-line of figures, the respawn while dead. The app's in-game panel and post game screen
-(src/shell/screens.zig). Champions only: no player names (product rules)
+line of figures, the respawn while dead. The app's comp view, in-game panel and post game
+screen (src/shell/screens.zig). Champions only: no player names (product rules)
 States: in game, one dead; a seat unknown
 Used by: compview, gamescreen, postgame
 
@@ -804,7 +805,7 @@ Used by: matchgrid, champpage
 ### TrendChart
 `trend.zig` `.c-trend` site
 TrendChart: a win rate over a few ordered points (patches, game length buckets, mastery
-bands), a line with its ±95% band, each point a dot coloured on the scale against a
+bands), a line with its 80% range band, each point a dot coloured on the scale against a
 reference (dashed), the point's name under it with a second line (rank in role, games),
 the last figure at the end. No per-point text: a tap or hover shows a point's numbers
 (ChartTip). A base line, faint dashed, compares each point with a wider group (the matchup
@@ -831,9 +832,9 @@ Used by: adminpage, admincharts, admintraffic, adminops, adminmodels
 ### Histogram
 `histogram.zig` `.c-hist` site
 Histogram: how players' win rates on a champion spread (10+ games each), bars per bin with
-the middle half shaded, a marker at 50% and, on Your games, one at your own rate. The
-caption ("388 players, middle half 46-63%") is the card head's; the luck sentence its
-Toggletip. Plain HTML bars placed by percent, nothing measured
+the middle half shaded, a marker at 50% and, with `you`, one at your own rate (no page
+sets it yet). The caption ("388 players, middle half 46-63%") is the card head's; the luck
+sentence its Toggletip. Plain HTML bars placed by percent, nothing measured
 States: players on a champion, the middle half shaded; your rate marked, short
 Used by: champpage
 
@@ -850,9 +851,9 @@ States: six runs, three models
 LaneChart: you minus your lane opponent by minute (gold, XP or CS), against the typical
 middle half as a band and its median dashed; a previous patch's median fainter. Each side
 gets its own top, so a one-sided lane uses the room. A Gold | XP | CS switch for the chart
-head, a tap shows the minute's figures (ChartTip), a drag selects minutes (the matchup
-page's Versus reads `range`). lanechart.zig's successor: the matchup pages and Your games
-move here when they are rebuilt
+head, a tap shows the minute's figures (ChartTip), a drag selects minutes into `range`
+(off with `select`, as on the matchup and champion pages). Used by the matchup and
+champion pages, LaneDuel and the app's game screen
 States: gold, a minute tapped; CS, minutes dragged; typical only (the matchup page); marks
 (the matchup page)
 Used by: champselect, gamescreen, app, laneduel, champpage, matchpage
@@ -997,8 +998,9 @@ Used by: versus, inspector, scoreboard, gamepage, champpage
 ### Minimap
 `minimap.zig` `.c-map` site
 Minimap: Summoner's Rift as a square, lanes and river drawn faintly, with where kills
-happened: an enemy down as a dot in --us, one of yours as a cross in --them, yours ringed.
-s is a moment row's 16 px dot (no lanes); l the moment card's map
+happened: an enemy down as a dot in --us-hot, one of yours as a cross in --them-hot; your
+kill ringed in --accent, your death's cross in it. s is a moment row's 16 px dot (no
+lanes); l the moment card's map
 States: a fight mid, you died in it; red side, no kills; side unknown; a moment row's dot
 Used by: inspector
 
@@ -1025,7 +1027,7 @@ Used by: gamepage
 `gamehead.zig` `.c-ghead` site
 GameHeader: one game at a glance, no sentence (game-detail.md "First screen"). Who: your
 champion with its level, "vs" your lane opponent. Result and score: WIN or LOSS, K/D/A
-large, KDA and kill share under it. How: CS, gold, damage and lane gold at 14 and vision
+large, KDA and kill share beside it. How: CS, gold, damage and lane gold at 14 and vision
 as figures, then your final items, spells and runes; the game's meta beside the names; the
 two teams as icon rows, you ringed
 States: a win; a loss
@@ -1075,10 +1077,11 @@ Used by: gamepage
 
 ### GamePage
 `gamepage.zig` `.c-gpage` site
-GamePage: the game page's first screen as one island (game-detail.md): GameStrip,
-GameHeader, the game graph with its control row beside RangeInspector, the stat cells and
-the objectives row. A game picked in the strip is prepared once (its moments and graph)
-and kept. Opens on the turning minute; the URL keeps the game and the selection
+GamePage: the game page's first screen, ui-games.wasm's island (game-detail.md):
+GameStrip, GameHeader, the game graph card (control row, graph, stat cells). GameMore
+beside it holds RangeInspector, the objectives row and Players. A game picked in the strip
+is prepared once (its moments and graph) and kept. Opens on the turning minute; the URL
+keeps the game and the selection
 States: a win, on its turn; the whole game's moments
 Used by: homepage
 
@@ -1127,8 +1130,8 @@ Used by: learnpage, dailypage
 RankStrip: every champion one seat could have played as a dot on one axis, its team's win
 chance with it; the played (or locked) one ringed, the model's pick starred, the chosen
 one lit. A tap chooses a dot (the owner opens it in its CandidateList). The ends carry the
-lowest and highest chance, nothing else: the list beside it names them. Daily's seat
-panel, the draft tester's candidate panel
+lowest and highest chance, nothing else: the list beside it names them. The draft tester's
+candidate panel (private pages only)
 States: seat, read only; one chosen
 Used by: testercand
 
@@ -1157,9 +1160,10 @@ CandidateList: ranked champions for one seat, the core of "select an option to s
 row: rank, icon, name, the model's star, the played (or locked) one marked, the team's win
 chance with it and the gap to the reference row, up to three reason chips; pressing a row
 opens its ReasonBreakdown under it (the owner keeps which, two at most). Chips sit under
-the name in a narrow panel (Daily's seat panel), inline in a wide one (draft tester), a
-Pick button after them when the owner fills the seat from the list. Words mode (the public
-app: product rules, why.md): no numbers, reasons as words with a direction
+the name in a narrow panel (Daily's seat panel), inline in a wide one (draft tester). When
+the owner fills the seat from the list (`withPick`) the whole row picks, and a Why toggle
+after the chips opens the breakdown. Words mode (the public app: product rules, why.md):
+no numbers, reasons as words with a direction
 States: seat panel, played row open; tester: Gold column, one row without, lane line;
 tester: a second model's column, then Gold; average pinned, played far down, a mark by a
 name, Pick; words, public app
@@ -1211,15 +1215,15 @@ Used by: finder, champpage
 
 ### Finder
 `finder.zig` `.c-finder` `.c-fgrid` site
-The matchup finder (matchup/index.html, docs/plan/ui/matchups.md): a way to a matchup
-page, not a list of them. Two islands. Finder: two ChampRolePickers, one lane for both;
-nothing picked, a role (All first) beside them and three short lists of its lane pairs
-(the hardest lanes, the lane bullies, then this patch's movers: noisy, so last), each a
-link to its page. Grid (its own, lazily loaded file): the first pick's MatchupGrid,
-Against its lane, from the champion page's data/champion/<slug>-more.bin; the second pick
-is that opponent's dot, and its page when there is one. Finder writes the picks to the
-URL, Grid reads them (same keys). Pages are rendered on request, so Finder's data rides in
-its data-bin, as the matchup page's do: ui-finder.wasm adopts it
+The matchup finder (/matchups, docs/plan/ui/matchups.md): a way to a matchup page, not a
+list of them. Two islands. Finder: two ChampRolePickers, one lane for both; nothing
+picked, a role (All first) beside them and three short lists of its lane pairs (the
+hardest lanes, the lane bullies, then this patch's movers: noisy, so last), each a link to
+its page. Grid (its own, lazily loaded file): the first pick's MatchupGrid, Against its
+lane, from the champion page's data/champion/<slug>-more.bin; the second pick is that
+opponent's dot, and its page when there is one. Finder writes the picks to the URL, Grid
+reads them (same keys). Pages are rendered on request, so Finder's data rides in its
+data-bin, as the matchup page's do: ui-finder.wasm adopts it
 States: nothing picked: every lane's movers, hardest lanes and bullies, each row's role;
 Top's; a role with no pairs yet; one picked, its matchups on the way; one picked: its lane
 opponents; both picked: the opponent's brief and the way to their page; both picked, too
@@ -1252,10 +1256,10 @@ Used by: champpage
 `learnpage.zig` `.c-learn` site
 The Learn page (docs/plan/ui/learn.md): one puzzle a screen. ChapterStrip on top (title,
 the chapter's question, n/N, stars), the PuzzleCard, and beside it (under it on a phone)
-ChapterPath: this chapter's puzzles, the tips earned, every chapter with its progress. A
-chapter's end lists its takeaways with their stars. Over it all, today's five: a puzzle of
-each chapter from `start` on, the same for everyone that day, a slot open once its chapter
-is finished. One island (ui-learn.wasm); progress in localStorage through the page's code
+ChapterPath: the tips earned in this chapter, every chapter with its progress. A chapter's
+end lists its takeaways with their stars. Over it all, today's five: a puzzle of each
+chapter from `start` on, the same for everyone that day, a slot open once its chapter is
+finished. One island (ui-learn.wasm); progress in localStorage through the page's code
 (`progress`)
 States: first visit: chapter 1, the mastery guess; mastery guess locked in: every band,
 3.3 off; counter duel; counter, a wrong pick revealed: each into Yone and against
@@ -1384,7 +1388,7 @@ ProfileSummary: beside the Your games list (your-games.md "Structure"), what the
 games add up to: a win ring with the record and KDA, the top champions with W-L and a win
 bar, a column per role sized by games. Pressing a champion or a role sets the list's
 filter (pressed again: All); the rows ignore their own part of the filter so the choices
-stay. Phones: the ring and the top 3 champions in one line
+stay. Phones: the ring, the average KDA and the top 3 champions in one line
 States: 13 games, nothing chosen; jungle chosen; no games
 Used by: yourpage
 
@@ -1456,11 +1460,11 @@ Used by: yourviews
 
 ### YourLookup
 `yourlookup.zig` `.c-ylook` site
-The Your games lookup (your.html#id=Name%23TAG): the status line above the list, its Check
-for new games and Not you?, and when to ask /api/list again. Island YourLookup
-(ui-yourlookup.wasm, which ui-your loads once the URL has an id). A list goes to YourList
-as its root's data-bin (a List's file, base64; removed for the example again), then
-`event` on the window
+The Your games lookup (your.html#id=Name%23TAG): the status line above the list, its
+Refresh (check for new games) and Not you?, and when to ask /api/list again. Island
+YourLookup (ui-yourlookup.wasm, which ui-your loads once the URL has an id). A list goes
+to YourList as its root's data-bin (a List's file, base64; removed for the example again),
+then `event` on the window
 States: looking up; queued behind others; fetching; ready after a failed refresh; queued;
 not found; opted out; busy; still working at the cap; ready: check and Not you?; checking,
 nothing new yet; checked, new games; the API down: the example below
@@ -1478,10 +1482,11 @@ loading; failed; opted out
 
 ### Forget
 `forget.zig` `.c-forget` site
-Remove my data (docs/legal/lia.md "Objection"): anyone, for any Riot ID, proves it is
-theirs by setting a profile icon, then the API removes it and never collects it again.
-Island Forget (ui-forget.wasm, lazy at the Your games page's foot); /api/forget does the
-Riot calls (api/root.zig forget) and answers a small JSON object, read by `answer`
+Remove my data (docs/legal/lia.md "3. Balancing test", its objection line): anyone, for
+any Riot ID, proves it is theirs by setting a profile icon, then the API removes it and
+never collects it again. Island Forget (ui-forget.wasm, lazy at the Your games page's
+foot); /api/forget does the Riot calls (api/root.zig forget) and answers a small JSON
+object, read by `answer`
 States: closed; open; contacting Riot; icon issued; icon not set yet; done; not found;
 expired; service down
 Used by: squad
@@ -1529,10 +1534,10 @@ Used by: apphome, homepage
 `homepage.zig` `.c-home` `.c-hrev` `.c-hch` site
 The home page (index.html, docs/plan/ui/home.md): a game on the first screen with the
 lookup and today's things beside it, each role's most played under them. Islands
-(ui-home.wasm): HomeReview (the example's game, its role switch, the stat cells select on
-the graph; a returning visitor's newest game in its place), IdLookup (recent Riot IDs on
-this device), HomeChamps (one role at a time in a narrow card), HomeDaily (this device's
-Daily Draft marks). The patch card is static
+(ui-home.wasm): IdLookup (recent Riot IDs on this device), HomeChamps (one role at a time
+in a narrow card), HomeDaily (this device's Daily Draft marks), and the loader of
+HomeReview (ui-homegame.wasm: the example's game, its role switch, the stat cells select
+on the graph; a returning visitor's newest game in its place). The patch card is static
 States: first visit; Daily Draft played; returning visitor; champions by win rate, a role
 with none
 Used by: yourlookup, yourfriends, squad
@@ -1555,13 +1560,13 @@ account: password changed
 `testerpage.zig` `.c-tester`
 The Draft tester page (docs/plan/ui/draft-tester.md, /private/tester): build a draft, see
 blue's win chance under a named model, each seat's term and the model's checks. A model
-from a Select of ModelBadges, "vs" a second one to compare (a tick on the split, a column
-in the candidate panel); the board is DraftBoard's full variant, a click choosing the seat
-the candidate panel (testercand.zig, its own island and wasm) fills; Random game and Fill
-empty draw seats by play share, Undo takes the last draw back. Board | Terms | Files under
-it. The models, board, seat and tab are the URL fragment's (Url), which the panel shares.
-Models are draft-model.bin files the page's code fetches (testerdata.zig); champion keys
-and names come inline (data-bin)
+from a Select of ModelBadges, "vs" a second one to compare (a second split under the first
+and the gap in points, a column in the candidate panel); the board is DraftBoard's full
+variant, a click choosing the seat the candidate panel (testercand.zig, its own island and
+wasm) fills; Random game and Fill empty draw seats by play share, Undo takes the last draw
+back. Board | Terms | Files under it. The models, board, seat and tab are the URL
+fragment's (Url), which the panel shares. Models are draft-model.bin files the page's code
+fetches (testerdata.zig); champion keys and names come inline (data-bin)
 States: loading; a draft; a seat chosen; terms; files; a ban; every seat picked: why
 blue's chance; Comp model compared: two splits, the gap
 Used by: testercand
@@ -1570,15 +1575,16 @@ Used by: testercand
 `testercand.zig` `.c-tcand`
 The Draft tester's candidate panel (docs/plan/ui/draft-tester.md "First screen"): every
 champion the shown seat could take under the page's model, as a RankStrip and a
-CandidateList in points mode, sorted by Win (the low end of its 95% range) or Fit (the
-change less the champion's own strength). A row's chips and, opened, its ReasonBreakdown
-are draftscore's Scorer.why parts; Pick fills the seat. The search keeps the rows whose
-name holds it, Enter picks the first. With a model compared, a column of its chance and
-points over its own average pick: the two models' baselines can sit points apart, so a raw
-gap would mostly repeat that Its own island and wasm (ui-testercand.wasm, which
-ui-tester.wasm loads) with no model of its own, so it fits its budget: the two share the
-board through the URL fragment (testerpage.Page.Url), and ui-tester.wasm, which holds the
-model, hands it the seat's options (Feed)
+CandidateList in points mode, sorted by Win (the low end of its 95% range), Fit (the
+change less the champion's own strength) or, where the seat has a lane line, Gold (lane
+gold at 14, low end). A row's chips and, opened, its ReasonBreakdown are draftscore's
+Scorer.why parts; Pick fills the seat. The search keeps the rows whose name holds it,
+Enter picks the first. With a model compared, a column of its rank there and points over
+its own average pick: the two models' baselines can sit points apart, so a raw gap would
+mostly repeat that Its own island and wasm (ui-testercand.wasm, which ui-tester.wasm
+loads) with no model of its own, so it fits its budget: the two share the board through
+the URL fragment (testerpage.Page.Url), and ui-tester.wasm, which holds the model, hands
+it the seat's options (Feed)
 States: loading; red top, a row open; searched, nothing
 
 ### Meionotes
@@ -1607,9 +1613,10 @@ asked; delete refused; none, failed
 `pv.zig` `.c-pv`
 Pv: the private numbers on public champion and matchup pages (app.md "Private site"), the
 shipped draft model's win chances, which the public pages never show (production-key.md
-"Product rules"). ui-pv.wasm draws it for admin logins only, from ui.pvdata files under
-/private/: one row of figures under the head, the model's chance beside the games' win
-rate the head shows, then the matchup brief's champion; on a matchup page, the pair
+"Product rules"). ui-pv.wasm draws it for tester and admin logins (view_private) only,
+from ui.pvdata files under /private/: one row of figures under the head, the model's
+chance beside the games' win rate the head shows, then the matchup brief's champion; on a
+matchup page, the pair
 States: Meio under an opponent lock: the stack, then each choice with it; Meio at Master+:
 raw only; champion page, with the brief's opponent; champion page, no brief, no head rate;
 matchup page
@@ -1620,7 +1627,7 @@ AdminPage: /admin/ (private) as one island. The server renders it empty ("Loadin
 wasm/admin.zig fetches admin.bin (the box's snapshot each web round), api/live.bin (the
 last 3 h, polled) and /auth/me.bin, sets `now` from the clock before each draw, and does
 what `want` asks after an update (an action, an account change). Tabs in the URL
-(#tab=ops); the chart, traffic, ops and models tabs are islands of their own
+(#tab=ops); the chart, Traffic, Deploys and Logs, and Models tabs are islands of their own
 States: loading; overview: two problems; controls: a failed build; controls: live API
 down; controls: an admin refused; accounts: a role asked, a link made; applications;
 applications: approved, its invite link; snapshot failed
@@ -1628,11 +1635,12 @@ Used by: admincharts, admintraffic, adminops, adminmodels, adminlab, adminruns
 
 ### AdminCharts
 `admincharts.zig` `.c-adcharts`
-AdminCharts: the admin page's chart tabs, Crawler and Riot API, an island of their own
-below AdminPage's tabs (ui-admincharts.wasm, which fetches only once one shows). The tab
-comes with the URL (#tab=crawler). Crawl charts read live.bin's last 3 h by minute for the
-3-hour range, else the snapshot's 10-minute buckets; readings and the backlog read the
-snapshot's history. Each chart's zoom and tip stay in `times`, so a re-fetch keeps them
+AdminCharts: the admin page's chart tabs, Crawler, Riot API, Storage and Ingest, an island
+of their own below AdminPage's tabs (ui-admincharts.wasm, which fetches only once one
+shows). The tab comes with the URL (#tab=crawler). Crawl charts read live.bin's last 3 h
+by minute for the 3-hour range, else the snapshot's 10-minute buckets; readings and the
+backlog read the snapshot's history. Each chart's zoom and tip stay in `times`, so a
+re-fetch keeps them
 States: crawler: a day, all regions; crawler: 3 hours live, europe and asia; Riot API: a
 key problem, one chart tipped; loading; another tab: hidden; storage; ingest: no sea
 Used by: adminpage, admintraffic, adminops
@@ -1643,7 +1651,7 @@ AdminTraffic: the admin page's Traffic tab, an island of its own below AdminChar
 (ui-admintraffic.wasm, which fetches api/traffic.bin only once the tab shows). The site's
 nginx log as deploy/traffic.sh counts it: views by people, unconfirmed and bots, server
 errors, page time, top pages, referrers, agents, status codes, render cache and not found.
-A day or more draws a bar per UK day, else per hour
+7 and 30 days draw a bar per UK day, 24 hours a bar per hour
 States: 7 days, one chart tipped; 24 hours, top pages of the day; 30 days; loading;
 failed; no traffic yet; another tab: hidden
 
@@ -1729,13 +1737,14 @@ lane part's data-bin and file
 
 ### Champions
 `tiers.zig` `.c-tiers` site
-Champions (champions.html, role/<slug>.html; docs/plan/ui/champions.md): every champion in
+Champions (/champions, /champions/<role>; docs/plan/ui/champions.md): every champion in
 every role on one board, a role at a time, and which way each moved this patch. A head
 card (role picked in place, search, the view's toolbar, the Games floor), then the movers
-band and a DataTable sorted by the rate shown. The server renders the default state from
-the same Data the view's data file (data/tiers.bin) carries; ui-stats.wasm decodes that
-file and adopts the page. A view (region, period; in the query) has its own page, but the
-toolbar picks it in place: its data file is fetched and the board shown faded until it is
-in. A rank above Platinum+ the same way: the view's rank file (rank_paths)
+band and, under All, each role's top ten side by side (or one table); a role or a search:
+a DataTable sorted by the rate shown. The server renders the default state from the same
+Data the view's data file (data/tiers.bin) carries; ui-stats.wasm decodes that file and
+adopts the page. A view (region, period; in the query) has its own page, but the toolbar
+picks it in place: its data file is fetched and the board shown faded until it is in. A
+rank above Platinum+ the same way: the view's rank file (rank_paths)
 Used by: patchpage, champpage
 

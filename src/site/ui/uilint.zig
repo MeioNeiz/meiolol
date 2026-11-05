@@ -29,6 +29,11 @@ pub const Rule = enum {
     pagecss,
     /// A scope class another file declared first: one owner per class
     scope,
+    /// A rate's colour or wide-range fade made by hand outside rate.zig (fmt.wrColour,
+    /// WrColour, win_cuts, data-wide): rates come through rate.view and rate.delta
+    rate,
+    /// An `opacity` other than 0, 1 or var(--fade), the one dimming opacity (tokens.zig)
+    fade,
 };
 
 /// Pages that keep a gallery
@@ -71,6 +76,10 @@ pub fn counts(a: std.mem.Allocator, comptime mods: anytype) ![]const Count {
             try add(a, &out, file, .tip, std.mem.count(u8, C.css, "attr(data-tip)"));
             try add(a, &out, file, .sr, std.mem.count(u8, C.css, "clip-path: inset(50%)"));
         }
+        if (!std.mem.eql(u8, file, "rate")) {
+            try add(a, &out, file, .rate, rates(src) + std.mem.count(u8, C.css, "[data-wide]"));
+        }
+        try add(a, &out, file, .fade, fades(C.css));
         if (!@hasDecl(C, "gallery") or std.mem.endsWith(u8, file, "page") or inList(&more_pages, file)) {
             var rules: css_mod.Rules = .{ .css = C.css };
             var n: usize = 0;
@@ -154,6 +163,28 @@ fn hasWord(text: []const u8, word: []const u8) bool {
     var words = std.mem.tokenizeScalar(u8, text, ' ');
     while (words.next()) |w| if (std.mem.eql(u8, w, word)) return true;
     return false;
+}
+
+/// Hand-made rate colours and fades in code: fmt's rate scale named outside rate.zig
+fn rates(src: []const u8) usize {
+    var n: usize = 0;
+    for ([_][]const u8{ "wrColour(", "WrColour", "win_cuts", "data_wide" }) |w| n += std.mem.count(u8, src, w);
+    return n;
+}
+
+/// `opacity:` declarations set to anything but 0, 1 or var(--fade)
+fn fades(css: []const u8) usize {
+    var n: usize = 0;
+    var i: usize = 0;
+    while (std.mem.findPos(u8, css, i, "opacity:")) |at| {
+        i = at + "opacity:".len;
+        if (at > 0 and isWord(css[at - 1])) continue;
+        const end = std.mem.findAnyPos(u8, css, i, ";}") orelse css.len;
+        const v = std.mem.trim(u8, css[i..end], " \n");
+        if (std.mem.eql(u8, v, "0") or std.mem.eql(u8, v, "1") or std.mem.eql(u8, v, "var(--fade)")) continue;
+        n += 1;
+    }
+    return n;
 }
 
 /// `.title =` set in an element's attributes (`h.span(.{ ... })`), icons left out: a
@@ -340,6 +371,22 @@ test "titles: an element's counts; not an icon's, svg's, field's or a picture's 
         \\h.span(.{ .title = W.towers }, .{objicon.view(h, .tower, .{})}),
     ;
     try testing.expectEqual(4, titles(src));
+}
+
+test "rates and fades: hand-made rate colours and dimming opacities count" {
+    const src =
+        \\h.span(.{ .style = h.vars(.{ .c = fmt.wrColour(p, 0.2) }) }, .{}),
+        \\h.span(.{ .c = fmt.Step.of(d, fmt.win_cuts), .data_wide = w }, .{}),
+        \\colour: fmt.WrColour,
+    ;
+    try testing.expectEqual(4, rates(src));
+    const css =
+        \\  .a { opacity: 0; transition: opacity 0.2s; }
+        \\  .b { opacity: 1 } .c { opacity: var(--fade); }
+        \\  .d { opacity: 0.45; } .e { fill-opacity: 0.3; opacity: .3 }
+        \\  @keyframes k { 50% { opacity: 0.7; } }
+    ;
+    try testing.expectEqual(3, fades(css));
 }
 
 test "debt: over, under and a capped write" {

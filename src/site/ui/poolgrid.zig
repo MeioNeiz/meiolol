@@ -425,7 +425,8 @@ pub const Page = struct {
         return if (pp.indexOf(p.d, id)) |c| p.d.champs[c].slug else "";
     }
 
-    /// What covers the role main's hard lanes (CandidateList), from its pool file
+    /// What to add from the role main's pool file (CandidateList), by the Reason picked:
+    /// its hard lanes covered, stand-ins when it is banned, or what its players also play
     fn what(p: *P, h: *H, r: Role, ids: []const u16) N {
         const main = p.mainFor(r) orelse return p.whatNote(h, if (ids.len > 0 and p.fewMains(ids)) W.few.with(h, .{ .c = pp.iconOf(p.d, h, ids[0]).name }) else W.no_main.with(h, .{ .r = r.label().s }));
         const g = find(pd.File, &p.mains, main) orelse return p.whatNote(h, W.loading);

@@ -1,7 +1,8 @@
-//! Badge: a flat label (role, result, "few games", a patch note). Never looks pressable:
-//! no fill or border, no hover. A patch note (`riot`) is ringed in its tone, buff or
-//! nerf with an arrow as the second cue. `turn` is the attention pill: a moment ("your
-//! turn", a swing) or a caution about the thing it sits on
+//! Badge: a flat label (role, result, "few games", a patch note), not a control: no
+//! hover. A soft fill in its tone (few is bare text). A patch note (`riot`) is ringed in
+//! its tone with no fill, buff or nerf with an arrow as the second cue. `turn` is the
+//! attention badge, turn ink on a raised fill: a moment ("your turn", a swing) or a
+//! caution about the thing it sits on
 const tree = @import("tree.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const H = tree.H;

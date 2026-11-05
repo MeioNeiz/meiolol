@@ -1,7 +1,8 @@
-//! Champions (champions.html, role/<slug>.html; docs/plan/ui/champions.md): every
+//! Champions (/champions, /champions/<role>; docs/plan/ui/champions.md): every
 //! champion in every role on one board, a role at a time, and which way each moved this
 //! patch. A head card (role picked in place, search, the view's toolbar, the Games
-//! floor), then the movers band and a DataTable sorted by the rate shown.
+//! floor), then the movers band and, under All, each role's top ten side by side (or one
+//! table); a role or a search: a DataTable sorted by the rate shown.
 //!
 //! The server renders the default state from the same Data the view's data file
 //! (data/tiers.bin) carries; ui-stats.wasm decodes that file and adopts the page. A view

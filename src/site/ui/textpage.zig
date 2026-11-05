@@ -18,7 +18,8 @@ pub const TextPage = struct {
     /// The page's point in a sentence, bigger than the body
     lead: []const u8 = "",
     body: prose.Doc = .{ .blocks = &.{} },
-    /// After the body: what the page writer builds in code (the method page's table)
+    /// After the body: what the page writer builds in code (the method page's chart,
+    /// download's Apply)
     extra: N = .none,
     /// Tables use the page's width; text stays at a reading measure
     wide: bool = false,

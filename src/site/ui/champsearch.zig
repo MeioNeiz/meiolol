@@ -4,7 +4,7 @@
 //! list under it is an ARIA combobox: arrows move, Enter takes, Escape closes then
 //! clears, focus leaving the box closes it. Modes: link (each option is a link: the
 //! champion page's "matchup with..."), pick (the choice stays as a chip with a clear
-//! button: the draft tester) and filter (no list: a host reads `q`, e.g. a table)
+//! button: the draft tester) and filter (no list: a host reads `q`, e.g. MatchupStrip)
 const std = @import("std");
 const tree = @import("tree.zig");
 const url = @import("url.zig");

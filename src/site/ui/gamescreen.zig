@@ -153,7 +153,7 @@ fn timers(h: *H, ts: []const Timer) N {
     });
 }
 
-/// Item gold, us minus them, by minute: the in-game panel's and the post game screen's
+/// Item gold, us minus them, by minute: the in-game panel's team gold chart
 pub fn teamGold(h: *H, team: []const f32, held: ?*lane.Held) ?N {
     if (team.len < 2) return null;
     const x = held orelse return null;

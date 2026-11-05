@@ -1,9 +1,10 @@
 //! The home page (index.html, docs/plan/ui/home.md): a game on the first screen with the
 //! lookup and today's things beside it, each role's most played under them. Islands
-//! (ui-home.wasm): HomeReview (the example's game, its role switch, the stat cells
-//! select on the graph; a returning visitor's newest game in its place), IdLookup (recent Riot IDs on this device), HomeChamps (one role
-//! at a time in a narrow card), HomeDaily (this device's Daily Draft marks). The patch
-//! card is static
+//! (ui-home.wasm): IdLookup (recent Riot IDs on this device), HomeChamps (one role at a
+//! time in a narrow card), HomeDaily (this device's Daily Draft marks), and the loader of
+//! HomeReview (ui-homegame.wasm: the example's game, its role switch, the stat cells
+//! select on the graph; a returning visitor's newest game in its place). The patch card
+//! is static
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
@@ -68,7 +69,7 @@ const W = struct {
 };
 
 /// The example's game: the data file's first (newest) game. Switching role fetches that
-/// role's file (wasm/home.zig); `want` differs from `shown` until it is in
+/// role's file (wasm/homegame.zig); `want` differs from `shown` until it is in
 pub const HomeReview = struct {
     s: gamepage.GamePage,
     /// Roles with a file in `dir`
@@ -409,8 +410,9 @@ pub const HomeDaily = struct {
     }
 };
 
-/// ui-yourlookup's `your-recent` (`[{"id":"Name#TAG","newest":ms},...]`, newest first) into
-/// `out`; IDs with JSON escapes are skipped (a Riot ID has no quote or backslash)
+/// ui-yourlookup's `your-recent` (`[{"id":"Name#TAG"},...]`, newest first; the old
+/// your.js's `newest` key is ignored) into `out`; IDs with JSON escapes are skipped (a
+/// Riot ID has no quote or backslash)
 pub fn recentIds(json: []const u8, out: []idlookup.Id) []idlookup.Id {
     const key = "\"id\":\"";
     var n: usize = 0;
@@ -442,8 +444,8 @@ pub fn app(h: *H, href: []const u8) N {
     return today.view(h, .{ .title = W.app, .count = W.app_what, .action = W.apply, .href = href }, null, .none);
 }
 
-/// The page's grid: the title, lookup, Today cards and `app` on the left, the game on the
-/// right, the champions under them
+/// The page's grid: the title across the top, the lookup, Today cards and `app` on the
+/// left, the game on the right, the champions under them
 pub fn page(h: *H, lookup: N, review: N, cards: []const N, app_line: N, champs: N) N {
     return h.div(.{ .class = "c-home" }, .{
         h.div(.{ .class = "hero" }, .{

@@ -1,4 +1,4 @@
-//! ChampIcon: a champion's square portrait, 20 to 48 px, with the states a seat or a row
+//! ChampIcon: a champion's square portrait, 20 to 56 px, with the states a seat or a row
 //! needs: thin data faded, banned struck, dead greyed with a cross, an empty seat dashed,
 //! a suggestion not yet yours (dashed accent ring), a side's ring, the player's own ring
 //! with a dot on its corner (seen under a turn's outline), a level, and a role badge in

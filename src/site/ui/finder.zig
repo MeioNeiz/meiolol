@@ -1,4 +1,4 @@
-//! The matchup finder (matchup/index.html, docs/plan/ui/matchups.md): a way to a matchup
+//! The matchup finder (/matchups, docs/plan/ui/matchups.md): a way to a matchup
 //! page, not a list of them. Two islands. Finder: two ChampRolePickers, one lane for both;
 //! nothing picked, a role (All first) beside them and three short lists of its lane pairs
 //! (the hardest lanes, the lane bullies, then this patch's movers: noisy, so last), each a

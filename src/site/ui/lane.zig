@@ -2,8 +2,8 @@
 //! typical middle half as a band and its median dashed; a previous patch's median fainter.
 //! Each side gets its own top, so a one-sided lane uses the room. A Gold | XP | CS switch
 //! for the chart head, a tap shows the minute's figures (ChartTip), a drag selects
-//! minutes (the matchup page's Versus reads `range`). lanechart.zig's successor: the
-//! matchup pages and Your games move here when they are rebuilt
+//! minutes into `range` (off with `select`, as on the matchup and champion pages). Used
+//! by the matchup and champion pages, LaneDuel and the app's game screen
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");

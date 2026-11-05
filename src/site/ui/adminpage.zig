@@ -2,7 +2,8 @@
 //! wasm/admin.zig fetches admin.bin (the box's snapshot each web round), api/live.bin
 //! (the last 3 h, polled) and /auth/me.bin, sets `now` from the clock before each draw,
 //! and does what `want` asks after an update (an action, an account change). Tabs in the
-//! URL (#tab=ops); the chart, traffic, ops and models tabs are islands of their own
+//! URL (#tab=ops); the chart, Traffic, Deploys and Logs, and Models tabs are islands of
+//! their own
 const std = @import("std");
 const tree = @import("tree.zig");
 const url = @import("url.zig");

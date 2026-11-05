@@ -2,9 +2,9 @@
 //! a line under it (role, patch), the role picker, the opponent search and the headline
 //! figures. Wraps in its container: on a phone each part takes a row, the strip last.
 //! With `pair` filled it heads the matchup page: both portraits, the swap between them
-//! (the other side's page) and ⊗ on the opponent back to the champion page (lolalytics'
+//! (the other side's page) and × on the opponent back to the champion page (lolalytics'
 //! VS slot: the two pages are one with the slot empty or filled). A champion's P Q W E R
-//! icons sit under its name, each keyed by its letter
+//! icons sit under its name, Q W E R each keyed by its letter
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const art = @import("art.zig");

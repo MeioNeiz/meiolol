@@ -1,7 +1,8 @@
-//! Remove my data (docs/legal/lia.md "Objection"): anyone, for any Riot ID, proves it is
-//! theirs by setting a profile icon, then the API removes it and never collects it again.
-//! Island Forget (ui-forget.wasm, lazy at the Your games page's foot); /api/forget does the
-//! Riot calls (api/root.zig forget) and answers a small JSON object, read by `answer`
+//! Remove my data (docs/legal/lia.md "3. Balancing test", its objection line): anyone,
+//! for any Riot ID, proves it is theirs by setting a profile icon, then the API removes
+//! it and never collects it again. Island Forget (ui-forget.wasm, lazy at the Your games
+//! page's foot); /api/forget does the Riot calls (api/root.zig forget) and answers a
+//! small JSON object, read by `answer`
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");

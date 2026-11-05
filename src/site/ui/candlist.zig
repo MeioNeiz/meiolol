@@ -2,10 +2,10 @@
 //! why". A row: rank, icon, name, the model's star, the played (or locked) one marked,
 //! the team's win chance with it and the gap to the reference row, up to three reason
 //! chips; pressing a row opens its ReasonBreakdown under it (the owner keeps which, two
-//! at most). Chips sit under the name in a narrow panel (Daily's seat panel), inline in
-//! a wide one (draft tester), a Pick button after them when the owner fills the seat
-//! from the list. Words mode (the public app: product rules, why.md): no
-//! numbers, reasons as words with a direction
+//! at most). Chips sit under the name in a narrow panel (Daily's seat panel), inline in a
+//! wide one (draft tester). When the owner fills the seat from the list (`withPick`) the
+//! whole row picks, and a Why toggle after the chips opens the breakdown. Words mode (the
+//! public app: product rules, why.md): no numbers, reasons as words with a direction
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");

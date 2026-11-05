@@ -1,12 +1,13 @@
-//! The Draft tester page (docs/plan/ui/draft-tester.md, /private/tester): build a
-//! draft, see blue's win chance under a named model, each seat's term and the model's
-//! checks. A model from a Select of ModelBadges, "vs" a second one to compare (a tick on
-//! the split, a column in the candidate panel); the board is DraftBoard's
-//! full variant, a click choosing the seat the candidate panel (testercand.zig, its own
-//! island and wasm) fills; Random game and Fill empty draw seats by play share, Undo
-//! takes the last draw back. Board | Terms | Files under it. The models, board, seat and
-//! tab are the URL fragment's (Url), which the panel shares. Models are draft-model.bin files
-//! the page's code fetches (testerdata.zig); champion keys and names come inline (data-bin)
+//! The Draft tester page (docs/plan/ui/draft-tester.md, /private/tester): build a draft,
+//! see blue's win chance under a named model, each seat's term and the model's checks. A
+//! model from a Select of ModelBadges, "vs" a second one to compare (a second split under
+//! the first and the gap in points, a column in the candidate panel); the board is
+//! DraftBoard's full variant, a click choosing the seat the candidate panel
+//! (testercand.zig, its own island and wasm) fills; Random game and Fill empty draw seats
+//! by play share, Undo takes the last draw back. Board | Terms | Files under it. The
+//! models, board, seat and tab are the URL fragment's (Url), which the panel shares.
+//! Models are draft-model.bin files the page's code fetches (testerdata.zig); champion
+//! keys and names come inline (data-bin)
 const std = @import("std");
 const tree = @import("tree.zig");
 const ds = @import("core").draftscore;

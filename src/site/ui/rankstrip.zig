@@ -2,7 +2,7 @@
 //! win chance with it; the played (or locked) one ringed, the model's pick starred, the
 //! chosen one lit. A tap chooses a dot (the owner opens it in its CandidateList). The
 //! ends carry the lowest and highest chance, nothing else: the list beside it names them.
-//! Daily's seat panel, the draft tester's candidate panel
+//! The draft tester's candidate panel (private pages only)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const phrase = @import("phrase.zig");

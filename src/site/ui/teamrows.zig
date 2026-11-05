@@ -1,7 +1,8 @@
-//! TeamRows: a game's five lanes as mirrored rows, our player left, theirs right, the role
-//! and the lane's gold gap between. A seat: portrait (greyed while dead), name, the KDA
-//! and a line of figures, the respawn while dead. The app's in-game panel and post game
-//! screen (src/shell/screens.zig). Champions only: no player names (product rules)
+//! TeamRows: a game's five lanes as mirrored rows, our player left, theirs right, the
+//! role and the lane's gold gap between. A seat: portrait (greyed while dead), name, the
+//! KDA and a line of figures, the respawn while dead. The app's comp view, in-game panel
+//! and post game screen (src/shell/screens.zig). Champions only: no player names (product
+//! rules)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");

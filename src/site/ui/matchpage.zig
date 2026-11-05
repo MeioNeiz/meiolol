@@ -50,10 +50,10 @@ const rate = trend.rate;
 
 const n_views = 4;
 
-/// ui-matchup.wasm's
 /// A role in a sentence ("84% top"), role.Role's order
 const role_word = [_][]const u8{ "top", "jungle", "mid", "bot", "support" };
 
+/// ui-matchup.wasm's
 pub const HeadData = struct {
     x: Other,
     y: Other,

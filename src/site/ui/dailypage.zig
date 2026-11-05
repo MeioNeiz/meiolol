@@ -374,7 +374,6 @@ pub fn hiddenSeat(p: *const dd.Puzzle) u8 {
     return 5 * @as(u8, @backingInt(p.hidden_side)) + @as(u8, @backingInt(p.hidden_role));
 }
 
-/// The seat's champion's pick number in the draft (1-10); null without the order
 /// Blue's gold lead at 14 in lane `r`; null without both seats' gold
 fn blueLead(p: *const dd.Puzzle, r: usize) ?i32 {
     const blue = p.seats[0][r].gold14 orelse return null;
@@ -382,6 +381,7 @@ fn blueLead(p: *const dd.Puzzle, r: usize) ?i32 {
     return std.math.cast(i32, @as(i64, blue) - red);
 }
 
+/// The seat's champion's pick number in the draft (1-10); null without the order
 pub fn pickOf(p: *const dd.Puzzle, t: usize, c: u16) ?u8 {
     var n: u8 = 0;
     for (p.turns, 0..) |x, i| {

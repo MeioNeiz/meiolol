@@ -1,6 +1,7 @@
 //! Pv: the private numbers on public champion and matchup pages (app.md "Private site"),
 //! the shipped draft model's win chances, which the public pages never show
-//! (production-key.md "Product rules"). ui-pv.wasm draws it for admin logins only, from
+//! (production-key.md "Product rules"). ui-pv.wasm draws it for tester and admin logins
+//! (view_private) only, from
 //! ui.pvdata files under /private/: one row of figures under the head, the model's
 //! chance beside the games' win rate the head shows, then the matchup brief's champion; on
 //! a matchup page, the pair

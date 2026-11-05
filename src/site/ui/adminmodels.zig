@@ -27,7 +27,8 @@ pub const name = "AdminModels";
 pub const scope = .{".c-admodels"};
 pub const sel = "[data-island=adminmodels]";
 
-/// nn and lab: AdminRuns (ui-adminruns.wasm) draws them; this island only the picker
+/// nn and lab: AdminLab (ui-adminlab.wasm) draws them, AdminRuns the lab's runs; this
+/// island only the picker
 pub const View = enum { all, win, draft, nn, early, items, objectives, playstyle, player, data, lab };
 const views = std.enums.values(View);
 const cats = [_]md.Cat{ .win, .early, .items, .objectives, .playstyle, .player, .data };
