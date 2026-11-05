@@ -104,6 +104,10 @@ before picking up these older ones:
   a sliding window; player-history tallies would need per-player state, ~2.7M players),
   and refresh scaled by how much pages change or are visited (Jacob)
 - The core build could need no database if the home page came from the renderer
+- Kept node in island roots: hydration adopts a static server subtree as is, so static
+  parts of a root (ChampHeader's ability row, +550 B gz on ui-champion) cost no island
+  bytes. Costs a few hundred B gz in every island runtime: only when two or more such
+  parts are worth moving
 
 ## Code safety
 
