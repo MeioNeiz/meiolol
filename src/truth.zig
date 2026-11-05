@@ -231,8 +231,13 @@ const Day = struct {
     gold: []Summed = &.{},
 
     const Count = struct {
-        n: u32,
-        s: u32,
+        n: u32 = 0,
+        s: u32 = 0,
+
+        fn merge(a: *Count, o: Count) void {
+            a.n += o.n;
+            a.s += o.s;
+        }
 
         fn of(a: Acc) Count {
             return .{ .n = @intFromFloat(a.n), .s = @intFromFloat(a.s) };
@@ -273,21 +278,54 @@ const Day = struct {
         gpa.free(d.counts);
         gpa.free(d.gold);
     }
-
-    fn len(d: *const Day) usize {
-        return d.counts.len + d.gold.len;
-    }
-
-    fn get(d: *const Day, i: usize) Summed {
-        if (i >= d.counts.len) return d.gold[i - d.counts.len];
-        const c = d.counts[i];
-        return .{ .key = c.key, .sums = .{ .all = c.all.acc(), .latest = c.latest.acc() } };
-    }
 };
 
 /// The 30-day window, the patch window, the target
-const Cell = struct { w: [2]Acc = .{ .{}, .{} }, t: Acc = .{} };
+fn Window(comptime A: type) type {
+    return struct { w: [2]A = @splat(.{}), t: A = .{} };
+}
+const Cell = Window(Acc);
 const Cells = std.AutoHashMapUnmanaged(u64, Cell);
+const Counts = std.AutoHashMapUnmanaged(u64, Window(Day.Count));
+
+/// Origin d's cells, compact like Day: as one map of Cells each thread held ~1.4 GB
+const Tally = struct {
+    counts: Counts = .empty,
+    gold: Cells = .empty,
+
+    fn deinit(t: *Tally, gpa: Allocator) void {
+        t.counts.deinit(gpa);
+        t.gold.deinit(gpa);
+    }
+
+    fn count(t: *const Tally) usize {
+        return t.counts.count() + t.gold.count();
+    }
+
+    fn get(t: *const Tally, k: u64) ?Cell {
+        if (unkey(k).kind == .gold14) return t.gold.get(k);
+        return cellOf(t.counts.get(k) orelse return null);
+    }
+
+    fn cellOf(c: Window(Day.Count)) Cell {
+        return .{ .w = .{ c.w[0].acc(), c.w[1].acc() }, .t = c.t.acc() };
+    }
+
+    const Iterator = struct {
+        counts: Counts.Iterator,
+        gold: Cells.Iterator,
+
+        fn next(it: *Iterator) ?struct { key: u64, cell: Cell } {
+            if (it.counts.next()) |e| return .{ .key = e.key_ptr.*, .cell = cellOf(e.value_ptr.*) };
+            const e = it.gold.next() orelse return null;
+            return .{ .key = e.key_ptr.*, .cell = e.value_ptr.* };
+        }
+    };
+
+    fn iterator(t: *const Tally) Iterator {
+        return .{ .counts = t.counts.iterator(), .gold = t.gold.iterator() };
+    }
+};
 
 /// Adds a row to each cell it counts in, for every region and bracket it falls in
 fn addRow(gpa: Allocator, cells: *DayCells, r: Row) !void {
@@ -391,38 +429,41 @@ fn sumDays(gpa: Allocator, io: std.Io, rows: []const Row, first: i32, last: i32,
 
 /// Origin d's windows and target, over the cells the target has (a share cell: whose
 /// champion-role the target has)
-fn tally(gpa: Allocator, days: *const Days, opts: Options, d: i32) !Cells {
-    var cells: Cells = .empty;
+fn tally(gpa: Allocator, days: *const Days, opts: Options, d: i32) !Tally {
+    var cells: Tally = .{};
     errdefer cells.deinit(gpa);
     var t = d;
     while (t < d + @as(i32, opts.horizon)) : (t += 1) {
         const day = days.at(t) orelse continue;
-        for (0..day.len()) |i| {
-            const e = day.get(i);
-            if (e.sums.latest.n == 0) continue;
-            const c = try cells.getOrPut(gpa, e.key);
-            if (!c.found_existing) c.value_ptr.* = .{};
-            c.value_ptr.t.merge(e.sums.latest);
-        }
+        for (day.counts) |e| try addTarget(gpa, &cells.counts, e.key, e.latest);
+        for (day.gold) |e| try addTarget(gpa, &cells.gold, e.key, e.sums.latest);
     }
     var w = days.first;
     while (w < d) : (w += 1) {
         const day = days.at(w) orelse continue;
         const in30 = w >= d - @as(i32, opts.window);
-        for (0..day.len()) |i| {
-            const e = day.get(i);
-            const k = e.key;
-            const c = if (cells.getPtr(k)) |c| c else blk: {
-                if (k == anchor(k) or !cells.contains(anchor(k))) continue;
-                const n = try cells.getOrPut(gpa, k);
-                n.value_ptr.* = .{};
-                break :blk n.value_ptr;
-            };
-            if (in30) c.w[0].merge(e.sums.all);
-            c.w[1].merge(e.sums.latest);
-        }
+        for (day.counts) |e| try addWindow(gpa, &cells.counts, e.key, in30, e.all, e.latest);
+        for (day.gold) |e| try addWindow(gpa, &cells.gold, e.key, in30, e.sums.all, e.sums.latest);
     }
     return cells;
+}
+
+fn addTarget(gpa: Allocator, map: anytype, k: u64, latest: anytype) !void {
+    if (latest.n == 0) return;
+    const c = try map.getOrPut(gpa, k);
+    if (!c.found_existing) c.value_ptr.* = .{};
+    c.value_ptr.t.merge(latest);
+}
+
+fn addWindow(gpa: Allocator, map: anytype, k: u64, in30: bool, all: anytype, latest: @TypeOf(all)) !void {
+    const c = map.getPtr(k) orelse blk: {
+        if (k == anchor(k) or !map.contains(anchor(k))) return;
+        const n = try map.getOrPut(gpa, k);
+        n.value_ptr.* = .{};
+        break :blk n.value_ptr;
+    };
+    if (in30) c.w[0].merge(all);
+    c.w[1].merge(latest);
 }
 
 /// A comparison of two modes over the cells both have a number for: challenger's loss
@@ -963,19 +1004,19 @@ const GoldVariance = struct {
     }
 };
 
-fn score(comptime Model: type, gpa: Allocator, cells: *const Cells, model: *const Model, opts: Options, bucket: usize, out: *Results) !void {
+fn score(comptime Model: type, gpa: Allocator, cells: *const Tally, model: *const Model, opts: Options, bucket: usize, out: *Results) !void {
     const min: f64 = @floatFromInt(opts.min_games);
-    var gold_vars: GoldVariance = try .init(gpa, cells);
+    var gold_vars: GoldVariance = try .init(gpa, &cells.gold);
     defer gold_vars.deinit(gpa);
     var shown: std.ArrayList(Shown) = .empty;
     defer shown.deinit(gpa);
     var it = cells.iterator();
     while (it.next()) |e| {
-        const k = e.key_ptr.*;
+        const k = e.key;
         const u = unkey(k);
         if (isShare(u.kind) and u.b == 0) continue;
         const s = &out[u.region][@backingInt(u.kind)][u.bracket][bucket];
-        const c = e.value_ptr.*;
+        const c = e.cell;
         const games: Cell = if (isShare(u.kind)) cells.get(anchor(k)) orelse continue else c;
         const n = games.t.n;
         if (n == 0 or (u.kind == .gold14 and n < 2)) continue;
@@ -1722,7 +1763,7 @@ test "masked bracket: Gold and up, pooled; Iron-Silver only in its own" {
     var cells = try tally(gpa, &days, opts, 1);
     defer cells.deinit(gpa);
     const n = struct {
-        fn of(c: *const Cells, bracket: usize, t: u16) f64 {
+        fn of(c: *const Tally, bracket: usize, t: u16) f64 {
             return c.get(key(.champion, 0, bracket, t, 0)).?.w[0].n;
         }
     }.of;

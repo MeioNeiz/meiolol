@@ -122,9 +122,9 @@ The lab disk is a Crucial P3 2 TB NVMe with no Windows letter (Disk resets, belo
 
 ## Mac memory
 
-The Mac has 24 GB. A truth run on cubes-20261104b peaks at ~15 GB footprint (the
-two-lock cells: ~6 GB is 4 threads' tally maps); three at once (4 Nov) swapped 25 of 27 GB
-at load 75 and the Mac was unusable. Measure with `/usr/bin/time -l`: "peak memory
+The Mac has 24 GB. A truth run on cubes-20261104b peaks at ~9 GB footprint. Three
+heavy runs at once (4 Nov, 21 GB each) swapped 25 of 27 GB at load 75 and the Mac was
+unusable. Measure with `/usr/bin/time -l`: "peak memory
 footprint", not max RSS, which drops as pages are compressed or swapped (a 21 GB run
 showed 7.8 GB RSS).
 - Runs over ~4 GB (`meiolol truth`, `meiolol meio` fits, evals on full cubes) go

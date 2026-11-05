@@ -38,7 +38,7 @@ data/team/<run>/, e.g. data/team/2026-11-04-meio/meio-model.md.
 - Trend steps (TS) are scored day by day since the patch (patch-transfer.md "Evaluation
   rule"), days 0-3 first: that is where shifts cost most. Each has a control (shuffled
   exposures, shuffled champions) that must gain nothing
-- One truth run at a time on the Mac (~16 GB of 24): deploy/heavy.sh
+- One truth run at a time on the Mac (~9 GB of 24): deploy/heavy.sh
 - Logging: each experiment is a dated section at the end of docs/model.md, declared
   before the run when it is a test; a learned.md line when final; a Status line here
 
