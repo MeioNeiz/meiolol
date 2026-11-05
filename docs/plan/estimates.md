@@ -62,12 +62,14 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
 ## Steps
 
 - E0 Jacob's choices. (a) Name: "Meio" (J34), as in meio.lol ("meio": the middle,
-  the means). The switch would read `30 days | Patch 16.21 | Meio`, captioned "our
-  estimate for today's patch, from every game". Others: "Now", "Best read", "Forecast".
+  the means). The switch reads `30 days | Patch 16.21 | Meio`, captioned "our estimate
+  for today's patch, from every game".
   (b) The default becomes Meio once E2's gate holds on one patch (Jacob 4 Nov: fix what
   the next patch shows); the daily truth run keeps checking and the default goes back to
   a raw mode if Meio stops winning. (c) Regions: EUW and every region now, one region each later
-- E2 The truth test, before anything ships. A rolling origin as in patch-transfer.md:
+  (d) J36: Meio ships now as a switch option, not the default ((b) still gates that),
+  showing only the kinds that passed truth on 16.20 -> 16.21 (Status)
+- E2 The truth test, before Meio is the default. A rolling origin as in patch-transfer.md:
   for each day d of the newest patch, build each mode from games before d, then score
   its numbers against the next 7 days' games on that patch, per cell kind, by rank
   bracket and day since the patch. Scores: binomial log loss for rates, squared error
@@ -237,10 +239,8 @@ Snapshot snap-20261023T2004Z on the Mac (M-series, ReleaseFast; 24 days, 1.6M ga
 
 - Files: 1.75 GB for 24 days, ~115 MB a day at 100k games (~1.1 KB a game); 30 days
   ~3.5 GB of C01's 405 GB free. Days before the views' first game are dropped
-- Same output: builds patch files byte for byte; curves game counts equal, values
-  equal but the smoothing pick, as split halves now follow a hash of the match id
-  rather than the query order (22 of 60 picks moved one step on the grid, support gold
-  two)
+- Same output: builds byte for byte; curves equal but the smoothing pick (split halves
+  follow a hash of the match id, not the query order)
 - After the change, curves is mostly the fit (~110 s of the 157); builds is decoding
   every day's seats (~100 s)
 - Late timelines: in 6 h on C01, 11.5k timelines for today's games, 1.5k for

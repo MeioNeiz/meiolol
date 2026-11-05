@@ -126,6 +126,10 @@ recommendations"). A later decision that overrides an earlier one says so.
   decides faded; nothing is hidden for being unsure ("hiding it is just less clear").
   Much more Meio experimenting over every lock combination, and
   more locks UI. estimates.md Trust rules, M8-M9; ui/champion-locks.md
+- J36 (5 Nov) Meio ships now as the third period option (`30 days | Patch X | Meio`),
+  without waiting for E2's 16.22 rerun: waiting slows development, no one uses it yet,
+  and it already beats the raw windows. Not the default; E0b's gate still decides that.
+  estimates.md E0d
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built
 - Q3 Ban suggestions in scope: yes, several with games and range, never auto-ban
