@@ -17,7 +17,7 @@ pub const Art = struct {
 };
 
 pub const Kind = enum { item, rune, spell };
-pub const Px = enum { @"16", @"20", @"22", @"28", @"36" };
+pub const Px = enum { @"16", @"20", @"22", @"28", @"32", @"36" };
 
 pub const Opts = struct {
     k: Kind = .item,
@@ -67,6 +67,7 @@ pub const css =
     \\  .c-art[data-s="16"] { --sz: 16px; }
     \\  .c-art[data-s="20"] { --sz: 20px; }
     \\  .c-art[data-s="28"] { --sz: 28px; }
+    \\  .c-art[data-s="32"] { --sz: 32px; }
     \\  .c-art[data-s="36"] { --sz: 36px; }
     \\  .c-art[data-k="rune"] { border-radius: 50%; background: none; }
     \\  .c-art[data-k="spell"] { border-radius: 3px; }

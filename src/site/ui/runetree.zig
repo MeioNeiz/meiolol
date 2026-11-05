@@ -1,9 +1,9 @@
 //! RuneTree: every rune players took, laid out as in game (trees side by side, keystones
 //! on top, then the stat shards), each with its pick share (bar and %), win rate and
-//! games; the figures' names said once. Win rates are coloured against their row's (a
+//! games, unnamed (a tapped rune's readout names them). Win rates are coloured against their row's (a
 //! row is one choice), each with its range, faded when wide (bp.win). The top rune
-//! pages sit above as cards; the chosen one lights its runes. In a narrow container the
-//! trees fold to the chosen page's (Every tree opens the rest). A page whose keystone
+//! pages sit above as cards; the chosen one lights its runes and the trees fold to its
+//! two and the shards, at every width (Every tree opens the rest). A page whose keystone
 //! the host has builds for (locks) locks on tap, and the host shows the rest of the build
 //! for that keystone; a second tap unlocks. With the champion page's lock set (`set`) a
 //! page card locks its keystone and a rune tap locks the rune (shard) too. Tap a rune: its name and
@@ -70,8 +70,6 @@ pub const Data = struct {
 const W = struct {
     pub const pick = plain("pick");
     pub const won = plain("won");
-    pub const games = plain("games");
-    pub const legend = plain("Under each rune: pick, won, games");
     pub const shards = plain("Shards");
     pub const every = plain("Every tree");
     pub const chosen = plain("Chosen page");
@@ -286,7 +284,7 @@ pub const RuneTree = struct {
     /// The chosen rune's name and figures, else the figures' names once, as a caption
     /// in their order under a rune (spaced words with one bold read as tabs)
     fn readout(t: *RuneTree, h: *H) N {
-        const pos = t.rune orelse return h.div(.{ .class = "read", .aria_hidden = true }, .{W.legend});
+        const pos = t.rune orelse return h.div(.{ .class = "read" }, .{});
         const r = t.at(pos) orelse return h.div(.{ .class = "read" }, .{});
         const share = 100 * @as(f64, @floatFromInt(r.games)) / @as(f64, @floatFromInt(@max(t.data.games, 1)));
         return h.div(.{ .class = "read", .data_v = "rune", .aria_live = "polite" }, .{
@@ -374,7 +372,7 @@ pub const css =
     \\  .c-runes .mv { margin-left: 2px; color: var(--t2); }
     \\  .c-runes .rune > .c-rate { font-size: var(--fs-m); line-height: 1.25; }
     \\  .c-runes .rune > .g { font-size: var(--fs-s); color: var(--faint); line-height: 1.2; }
-    \\  .c-runes > .c-btn { display: none; align-self: flex-start; }
+    \\  .c-runes > .c-btn { align-self: flex-start; }
     \\  @container (min-width: 680px) {
     \\    .c-runes .trees { gap: var(--sp-4); }
     \\    .c-runes .rune > .c-art { --sz: 36px; }
@@ -385,10 +383,10 @@ pub const css =
     \\    .c-runes .rune > .g { font-size: var(--fs-m); }
     \\    .c-runes .tree > h4 { font-size: var(--fs-l); height: 24px; }
     \\  }
+    \\  .c-runes[data-fold] .trees { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    \\  .c-runes[data-fold] .tree[data-unlit] { display: none; }
     \\  @container (max-width: 540px) {
-    \\    .c-runes .trees { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    \\    .c-runes[data-fold] .tree[data-unlit] { display: none; }
-    \\    .c-runes > .c-btn { display: inline-flex; }
+    \\    .c-runes .trees, .c-runes[data-fold] .trees { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     \\  }
     \\}
     \\
@@ -398,7 +396,7 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const demo = @import("build_demo.zig");
     const states = [_]struct { []const u8, RuneTree }{
-        .{ "first page lit; folds to its trees when narrow", .{ .data = &demo.runes } },
+        .{ "first page lit: its two trees and the shards", .{ .data = &demo.runes } },
         .{ "second page chosen, a rune tapped", .{ .data = &demo.runes, .page = 1, .rune = .{ .tree = 0, .row = 0, .col = 3 } } },
         .{ "no page chosen: every tree", .{ .data = &demo.runes, .page = null } },
     };

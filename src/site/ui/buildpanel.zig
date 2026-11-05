@@ -10,8 +10,8 @@
 //! by win rate, options under solid_games after. A matchup's marks the champion's usual
 //! choice "as usual" and dims a cell led by it. Tap a cell's "N more" to open it across
 //! the panel: every option, named, sortable. One open at a time; it and the order in
-//! the URL. Each cell's head names its columns over fixed widths, so they line up (one
-//! legend for the panel read as a toggle, Jacob 27 Oct). A rune page card whose keystone
+//! the URL. The first closed cell's head names the columns; every cell keeps their fixed
+//! widths, so the rest line up under it. A rune page card whose keystone
 //! has its own build (Data.keystones) locks on tap: every cell then counts that
 //! keystone's players, a chip with × says so and unlocks, the keystone in the URL (`k`).
 //! With a lock set (the champion page's, ui/lockbar.zig) every option and rune page
@@ -275,14 +275,14 @@ pub const Row = struct {
         const o = r.o;
         const open = r.c.open;
         return switch (r.c.kind) {
-            .core => h.span(.{ .class = "what" }, .{ itempath.view(h, o.art, .{ .minutes = o.minutes, .top = if (r.c.top.ptr == o.art.ptr) null else r.c.top }), bestMark(h, r), usualMark(h, r) }),
+            .core => h.span(.{ .class = "what" }, .{ itempath.view(h, o.art, .{ .minutes = o.minutes, .top = if (r.c.top.ptr == o.art.ptr) null else r.c.top, .px = .@"32" }), bestMark(h, r), usualMark(h, r) }),
             .skills => h.span(.{ .class = "what" }, .{ h.span(.{ .class = "keys", .data_v = "max" }, .{keys(h, o.keys, true)}), bestMark(h, r), usualMark(h, r) }),
             .skill_path => h.span(.{ .class = "what" }, .{ h.span(.{ .class = "keys", .data_v = "path" }, .{keys(h, o.keys, false)}), usualMark(h, r) }),
             else => blk: {
                 // No icon ("No boots"): its name instead of an empty square, open or not
                 const bare = o.art.len == 1 and o.art[0].src.len == 0;
                 var icons = h.list();
-                if (!bare) for (o.art) |a| icons.add(art.view(h, a, .{ .k = if (r.c.kind == .spells) .spell else .item, .named = !open }));
+                if (!bare) for (o.art) |a| icons.add(art.view(h, a, .{ .k = if (r.c.kind == .spells) .spell else .item, .px = .@"32", .named = !open }));
                 const label: ?[]const u8 = if (bare) o.art[0].name else if (!open) null else if (o.name.len > 0) o.name else if (o.art.len == 1) o.art[0].name else null;
                 const minute: ?N = if (open and o.minutes.len == 1 and o.minutes[0] > 0)
                     h.span(.{ .class = "min" }, .{ phrase.num(h, .int, @as(u32, @intFromFloat(@round(o.minutes[0])))), " ", W.min })
@@ -369,6 +369,8 @@ pub const BuildPanel = struct {
     ctx: *[n_kinds]Ctx,
     rows: *[n_kinds][]Row,
     tables: [n_kinds]Table = undefined,
+    /// A view's first closed cell has named the columns: the rest line up under it
+    headed: bool = false,
 
     const Set = struct { ctx: [n_kinds]Ctx, rows: [n_kinds][]Row };
 
@@ -511,6 +513,7 @@ pub const BuildPanel = struct {
     pub fn view(p: *BuildPanel, h: *H) N {
         // A page card tap reaches the RuneTree, which may have locked or unlocked
         p.pick();
+        p.headed = false;
         var cells = h.list();
         for ([_]Kind{ .spells, .start, .boots, .core, .item4, .item5, .item6 }) |k| if (p.cell(h, k)) |c| cells.add(c);
         if (p.skillsCell(h)) |c| cells.add(c);
@@ -577,14 +580,16 @@ pub const BuildPanel = struct {
         };
     }
 
-    /// A cell's head band: its title, then its column heads; open, "fewer" instead (the
-    /// open table heads its own columns)
+    /// A cell's head band: its title, then in the first closed cell the column heads;
+    /// open, "fewer" instead (the open table heads its own columns)
     fn head(p: *BuildPanel, h: *H, k: Kind, title: tree.Text) N {
         if (p.open == k) return h.div(.{ .class = "sh" }, .{
             h.h3(.{}, .{title}),
             button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .{ .open = k }), .ref = allRef(k) }, .{W.fewer}),
         });
-        return h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{title}), heads(h) });
+        const first = !p.headed;
+        p.headed = true;
+        return h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{title}), if (first) heads(h) else null });
     }
 
     fn heads(h: *H) N {
@@ -702,7 +707,7 @@ pub const BuildPanel = struct {
     fn levels(p: *BuildPanel, h: *H) ?N {
         if (p.open == .skills or p.rows[@backingInt(Kind.skill_path)].len == 0) return null;
         return h.div(.{ .class = "levels", .data_usual = p.asUsual(.skill_path) }, .{
-            h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{Kind.skill_path.title()}), heads(h) }),
+            h.div(.{ .class = "sh" }, .{h.h3(.{}, .{Kind.skill_path.title()})}),
             p.pathRow(h, p.shownPath()),
         });
     }
@@ -782,7 +787,6 @@ pub const css =
     \\  .c-build .lk[data-lock] { box-shadow: inset 0 0 0 1.5px var(--focus); }
     \\  .c-build .lk[data-lock]::after { background: var(--focus); }
     \\  .c-build .what { display: flex; align-items: center; gap: 4px; min-width: 0; }
-    \\  .c-build .what .c-art { --sz: 30px; }
     \\  .c-build .what > .nm { margin-left: 6px; color: var(--t2); overflow: hidden; text-overflow: ellipsis; }
     \\  .c-build .what > .nm:first-child { margin-left: 0; white-space: nowrap; }
     \\  .c-build .what > .min, .c-build .own { color: var(--faint); font-size: var(--fs-s); }
@@ -821,7 +825,6 @@ pub const css =
     \\    .c-build .keys[data-v="max"] > .ar { margin: 0 1px; }
     \\  }
     \\  @container (max-width: 170px) { .c-build .hd > .p, .c-build .slot:not([data-open]) .c-table .p { display: none; } }
-    \\  @container (max-width: 420px) { .c-build .what > .c-path > .min { display: none; } }
     \\  @container (max-width: 480px) {
     \\    .c-build .lp { flex-wrap: wrap; }
     \\    .c-build .lp > .c-skills { flex-basis: 100%; margin: 0 0 var(--sp-1); }
