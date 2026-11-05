@@ -88,7 +88,7 @@ const Side = enum { us, them };
 pub fn view(h: *H, c: Comp) N {
     return h.section(.{ .class = "c-comp" }, .{
         h.h3(.{}, .{W.comps}),
-        h.div(.{ .class = "teams" }, .{ team(h, c.us, .us, c), team(h, c.them, .them, c) }),
+        h.div(.{ .class = "teams" }, .{ team(h, c.us, .us), team(h, c.them, .them) }),
         if (c.length) |l| length(h, l) else null,
         h.h3(.{}, .{W.lanes}),
         teamrows.view(h, c.lanes),
@@ -97,17 +97,15 @@ pub fn view(h: *H, c: Comp) N {
     });
 }
 
-fn team(h: *H, t: Team, side: Side, c: Comp) N {
-    var rows = h.list();
-    for (t.timing, 0..) |x, i| rows.add(h.li(.{ .key = i }, .{
-        champ.view(h, x.champ, .{ .px = .@"24", .named = false }),
-        h.span(.{ .class = "who" }, .{
-            if (x.late) W.late.with(h, .{ .n = x.champ.name }) else W.early.with(h, .{ .n = x.champ.name }),
-            if (x.gold != null and x.win != null)
-                h.small(.{}, .{W.lean_numbers.with(h, .{ .g = @as(i32, @intFromFloat(@round(@as(f32, @floatFromInt(x.gold.?)) / 10) * 10)), .gm = @as(u32, c.gold_minute), .w = x.win.?, .wm = @as(u32, c.win_minute) })})
-            else
-                null,
-        }),
+fn team(h: *H, t: Team, side: Side) N {
+    var early = h.list();
+    var late = h.list();
+    for (t.timing, 0..) |x, i| (if (x.late) &late else &early).add(h.li(.{ .key = i, .title = x.champ.name }, .{
+        champ.view(h, x.champ, .{ .px = .@"24" }),
+        if (x.gold != null and x.win != null)
+            h.small(.{}, .{W.lean_numbers.with(h, .{ .g = @as(i32, @intFromFloat(@round(@as(f32, @floatFromInt(x.gold.?)) / 10) * 10)), .w = x.win.? })})
+        else
+            null,
     }));
     var tips = h.list();
     for (t.tips, 0..) |x, i| tips.add(h.li(.{ .key = i }, .{x}));
@@ -120,7 +118,9 @@ fn team(h: *H, t: Team, side: Side, c: Comp) N {
             W.top.with(h, .{ .n = x.champ.name }),
             if (x.share) |p| W.top_share.with(h, .{ .p = p }) else null,
         }) else null,
-        if (t.timing.len > 0) h.ul(.{}, .{rows.done()}) else h.p(.{ .class = "none" }, .{W.no_lean}),
+        if (t.timing.len == 0) h.p(.{ .class = "none" }, .{W.no_lean}) else null,
+        if (early.items.items.len > 0) h.div(.{ .class = "lean" }, .{ h.span(.{}, .{W.early}), h.ul(.{}, .{early.done()}) }) else null,
+        if (late.items.items.len > 0) h.div(.{ .class = "lean" }, .{ h.span(.{}, .{W.late}), h.ul(.{}, .{late.done()}) }) else null,
     });
 }
 
@@ -193,10 +193,10 @@ const W = struct {
     const share = phrase.Phrase(": {p:rate} magic");
     const record = phrase.Phrase("Teams like it won {r:rate} ({n:kilo} teams)");
     const wins_less = plain("Teams this one-sided win less often: one kind of defence blocks most of their damage.");
-    const early = phrase.Phrase("{n:text} leans early");
-    const late = phrase.Phrase("{n:text} leans late");
-    const lean_numbers = phrase.Phrase("{g:signed} gold at {gm:int} min, {w:points} pts at {wm:int}");
-    const lean_note = phrase.Phrase("Early: its team is usually ahead at {g:int} min but wins less from an even game at {w:int}; late, the other way round.");
+    const early = plain("Early");
+    const late = plain("Late");
+    const lean_numbers = phrase.Phrase("{g:signed} g · {w:points} pts");
+    const lean_note = phrase.Phrase("Early: its team is usually ahead at {g:int} min (gold) but wins less from an even game at {w:int} (pts); late, the other way round.");
     const top = phrase.Phrase("Most damage: {n:text}");
     const top_share = phrase.Phrase(" ({p:rate} of the team's)");
     const length = plain("Win chance by game length");
@@ -233,8 +233,11 @@ pub const css =
     \\  .c-comp .less { color: var(--lo2); }
     \\  .c-comp ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
     \\  .c-comp li { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-    \\  .c-comp .who { display: flex; flex-direction: column; min-width: 0; font-size: var(--fs-s); }
-    \\  .c-comp .who > small { font-size: var(--fs-xs); color: var(--t2); font-variant-numeric: tabular-nums; }
+    \\  .c-comp .lean { display: flex; align-items: center; gap: var(--sp-2); }
+    \\  .c-comp .lean > span { width: 3em; flex: none; font-size: var(--fs-xs); color: var(--muted); }
+    \\  .c-comp .lean ul { flex-direction: row; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); }
+    \\  .c-comp .lean li { gap: var(--sp-1); }
+    \\  .c-comp .lean small { font-size: var(--fs-xs); color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; }
     \\  .c-comp .tips { gap: 2px; }
     \\  .c-comp .tips li { display: block; font-size: var(--fs-s); }
     \\  .c-comp .tips li::before { content: "› "; color: var(--muted); }

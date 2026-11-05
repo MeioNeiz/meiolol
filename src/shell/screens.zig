@@ -1459,7 +1459,8 @@ test "comp view: once all ten are locked, words for everyone and numbers for tes
     try testing.expect(std.mem.find(u8, html, "data-island=\"app\"").? < std.mem.find(u8, html, "class=\"c-comp\"").?);
     try testing.expect(std.mem.find(u8, try render(a, d, null, null), "c-comp") == null);
     try testing.expect(std.mem.find(u8, html, "Mostly magic damage") != null);
-    try testing.expect(std.mem.find(u8, html, "Ahri leans late") != null);
+    const late = std.mem.find(u8, html, "<span>Late</span>").?;
+    try testing.expect(std.mem.findPos(u8, html, late, "title=\"Ahri\"") != null);
     try testing.expect(std.mem.find(u8, html, "%") == null);
 }
 
