@@ -24,7 +24,7 @@ pub fn wide(ctx: Ctx, p: *const postgame.PostGame) void {
     var right = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .both, .margin = .{ .x = 10 } });
     defer right.deinit();
     rows.teamGold(p.history);
-    damage(ctx, p);
+    if (!p.pending) damage(ctx, p);
 }
 
 pub fn narrow(ctx: Ctx, p: *const postgame.PostGame) void {
@@ -35,12 +35,14 @@ pub fn narrow(ctx: Ctx, p: *const postgame.PostGame) void {
     summary(ctx, p);
     rows.teamGold(p.history);
     lanes(ctx, p);
-    damage(ctx, p);
+    if (!p.pending) damage(ctx, p);
 }
 
 /// "Victory in 28:42." big, the gold story and my lane in a sentence each, award chips
 fn summary(ctx: Ctx, p: *const postgame.PostGame) void {
-    var box = w.card(@src(), 0, if (p.win) palette.ahead.opacity(0.6) else palette.behind.opacity(0.6), .vertical);
+    // Pending: no result yet, so neither win nor loss colour
+    const tone: ?dvui.Color = if (p.pending) null else if (p.win) palette.ahead else palette.behind;
+    var box = w.card(@src(), 0, if (tone) |t| t.opacity(0.6) else null, .vertical);
     defer box.deinit();
     {
         var head = dvui.box(@src(), .{ .dir = .horizontal }, .{ .expand = .horizontal });
@@ -48,7 +50,7 @@ fn summary(ctx: Ctx, p: *const postgame.PostGame) void {
         const big = dvui.themeGet().font_title;
         dvui.labelNoFmt(@src(), p.verdict, .{}, .{
             .font = big.withSize(big.size + 6),
-            .color_text = .{ .color = if (p.win) palette.ahead else palette.behind },
+            .color_text = .{ .color = tone orelse w.text().opacity(0.75) },
             .padding = .{},
             .gravity_y = 0.5,
         });
@@ -104,14 +106,19 @@ fn lanes(ctx: Ctx, p: *const postgame.PostGame) void {
             const s = s_or orelse continue;
             var dbuf: [16]u8 = undefined;
             const dmg = w.compact(&dbuf, s.damage);
-            const line = if (ctx.wide)
+            // Damage comes with the end of game block
+            const line = if (p.pending)
+                std.fmt.bufPrint(buf, "{d}/{d}/{d} · Lv {d} · {d} cs", .{ s.kills, s.deaths, s.assists, s.level, s.cs })
+            else if (ctx.wide)
                 std.fmt.bufPrint(buf, "{d} / {d} / {d} · {d} cs · {s} dmg", .{ s.kills, s.deaths, s.assists, s.cs, dmg })
             else
                 std.fmt.bufPrint(buf, "{d}/{d}/{d} · {d}", .{ s.kills, s.deaths, s.assists, s.cs });
             v.* = .{ .champion = s.champion, .me = s.me, .line = line catch "" };
         }
-        rows.mirrored(ctx, i, r.role, views[0], views[1], r.goldDiff());
+        // Pending gold is item gold, not gold earned: it would jump when the result lands
+        rows.mirrored(ctx, i, r.role, views[0], views[1], if (p.pending) null else r.goldDiff());
     }
+    if (p.pending) return;
     w.para(@src(), "{s}Between the rows: gold earned over the game, you minus them.", .{
         if (ctx.wide) "" else "Kills/deaths/assists · cs. ",
     }, .{ .muted = true, .small = true });

@@ -73,6 +73,8 @@ const Post = struct {
     team: i32 = 3400,
     lane: i32 = 1100,
     tier: ?[]const u8 = "GOLD",
+    /// Before the end of game block: its rows as the last in-game tick's, no result
+    pending: bool = false,
 };
 
 const mid_mastery = .{ .{ "Ahri", 212_000 }, .{ "Syndra", 64_000 }, .{ "Orianna", 41_000 }, .{ "Viktor", 30_500 }, .{ "Lux", 12_000 } };
@@ -183,6 +185,7 @@ const shots = [_]Shot{
     } } },
     .{ .name = "in-game", .status = .{ .game = .{} } },
     .{ .name = "post-game", .status = .{ .post = .{} } },
+    .{ .name = "post-game-pending", .status = .{ .post = .{ .pending = true } } },
     .{ .name = "practice", .status = .{ .practice = .{ .open = true } } },
     .{ .name = "practice-picker", .status = .{ .practice = .{ .open = true, .picker = .{ .ally = .middle } } } },
     .{ .name = "practice-game", .status = .{ .practice = .{ .screen = .game } } },
@@ -307,6 +310,7 @@ pub fn main(init: std.process.Init) !void {
                     .history = try ingame.madeUp(a, .{ .time = @floatFromInt(e.length), .team = pg.team, .lane = pg.lane }),
                     .tier = pg.tier,
                 });
+                if (pg.pending) p.* = postgame.pending(.{ .time = @floatFromInt(p.length), .rows = p.rows, .kills = p.kills }, p.history);
                 break :blk .{ .post_game = p };
             },
         };

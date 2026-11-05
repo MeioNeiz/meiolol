@@ -1085,7 +1085,8 @@ fn post(a: Allocator, c: Ctx, p: *const postgame.PostGame) !ui.postgame.Screen {
                 .line = if (p.pending) try a.print("Lv {d} · {d} cs", .{ s.level, s.cs }) else try a.print("{d} cs · {f} dmg", .{ s.cs, count(s.damage) }),
             };
         }
-        x.* = try teamRow(a, r.role, seats, r.goldDiff());
+        // Pending gold is item gold, not gold earned: it would jump when the result lands
+        x.* = try teamRow(a, r.role, seats, if (p.pending) null else r.goldDiff());
     }
     // Damage comes with the end of game block
     if (!p.pending) for ([_]bool{ true, false }) |ours| for (p.rows) |r| {
@@ -1852,4 +1853,5 @@ test "post game: lanes, damage ours then theirs, team gold by minute" {
     try testing.expect(c.coming);
     try testing.expectEqualStrings("Lv 16 · 231 cs", c.rows[2].us.?.line);
     try testing.expectEqual(0, c.damage.len);
+    try testing.expectEqualStrings("", c.rows[2].gap);
 }

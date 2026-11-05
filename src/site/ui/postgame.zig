@@ -77,7 +77,7 @@ pub fn view(h: *H, s: Screen, team: ?*lane.Held) N {
         h.div(.{ .class = "col" }, .{
             h.section(.{ .class = "lanes" }, .{
                 teamrows.view(h, s.rows),
-                h.p(.{ .class = "note" }, .{W.rows_note}),
+                if (s.coming) null else h.p(.{ .class = "note" }, .{W.rows_note}),
             }),
         }),
         h.div(.{ .class = "col" }, .{
@@ -219,5 +219,11 @@ pub fn gallery(g: *Gallery) void {
     coming.coming = true;
     coming.verdict = "Result coming";
     coming.damage = &.{};
+    var bare = sample_rows;
+    for (&bare) |*r| {
+        r.gap = "";
+        r.lean = .none;
+    }
+    coming.rows = &bare;
     g.addFill("result coming", view(h, coming, null));
 }
