@@ -157,6 +157,8 @@ const board_rows = 10;
 /// Five board columns need ~60 px names: 5 x (202 px fixed + 60). Narrower: 3, then the
 /// last 2 share the second row
 const board_five = "1320px";
+/// Under this, one column of 5 rows a role
+const board_one = "760px";
 
 const W = struct {
     pub const title = plain("Champions");
@@ -180,6 +182,8 @@ const W = struct {
     pub const pick = plain("Pick");
     pub const ban = plain("Ban");
     pub const off = plain("off-role");
+    pub const said_sep = plain(", ");
+    pub const said_second = Phrase(", {l:text} ");
     pub const sort_by = plain("Sort");
     pub const layout = plain("Layout");
     pub const by_role = plain("By role");
@@ -697,12 +701,13 @@ pub const Tiers = struct {
             for (order[0..@min(order.len, board_rows)], 1..) |i, place| {
                 const l = &tb.rows[i];
                 const c = l.d.champs[l.row().champ];
+                // Read aloud: "Ornn, win rate 52.3%, Influence 10"; the place is the list's own
                 rows.add(h.li(.{ .key = l.i }, .{h.a(.{ .href = l.href }, .{
-                    h.span(.{ .class = "n" }, .{place}),
+                    h.span(.{ .class = "n", .aria_hidden = true }, .{place}),
                     champ.view(h, .{ .name = c.name, .src = l.icon }, .{ .named = false }),
-                    h.span(.{ .class = "nm" }, .{c.name}),
+                    h.span(.{ .class = "nm" }, .{ c.name, h.span(.{ .class = "sr" }, .{W.said_sep}) }),
                     rateCell(h, l, false),
-                    h.span(.{ .class = "sc" }, .{t.second(h, l)}),
+                    h.span(.{ .class = "sc" }, .{ h.span(.{ .class = "sr" }, .{W.said_second.with(h, .{ .l = t.secondLabel().s })}), t.second(h, l) }),
                 })}));
             }
             const to: Shown = @fromBackingInt(@intCast(k + 1));
@@ -886,7 +891,8 @@ pub const css =
 ++ " (max-width: " ++ board_five ++ ") {\n" ++
     \\    .c-tiers .rb .col { flex-basis: 30%; }
     \\  }
-    \\  @container (max-width: 760px) {
+    \\  @container
+++ " (max-width: " ++ board_one ++ ") {\n" ++
     \\    .c-tiers .rb .col { flex-basis: 100%; }
     \\    .c-tiers .rb li:nth-child(n+6) { display: none; }
     \\  }
