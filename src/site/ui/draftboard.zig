@@ -180,7 +180,7 @@ fn seat(h: *H, s: Seat, side: Side, rl: role.Role) N {
         h.span(.{ .class = "who" }, .{
             if (s.champ) |c| h.span(.{ .class = "nm" }, .{
                 h.b(.{}, .{c.name}),
-                if (s.fig.len > 0) h.span(.{ .class = "fact", .data_lean = lean, .style = tint, .data_tip = if (s.fact.len > 0) s.fact else null }, .{s.fig}) else null,
+                if (s.fig.len > 0) h.span(.{ .class = "fact", .data_lean = lean, .style = tint, .data_tip = s.fact }, .{s.fig}) else null,
             }) else if (s.ban) |c| champ.view(h, c, .{ .px = .@"20", .state = .banned }) else null,
             line,
             if (s.fact.len > 0 and s.fig.len == 0) h.span(.{ .class = "fact", .data_lean = lean }, .{s.fact}) else null,
@@ -488,8 +488,8 @@ pub const css =
     \\  .c-draft .fact[data-lean="good"] { color: var(--hi2); }
     \\  .c-draft .fact[data-lean="bad"] { color: var(--lo2); }
     \\  .c-draft .fact[style] { color: var(--c); }
-    \\  .c-draft .nm > .fact[data-tip] { position: relative; overflow: visible; cursor: default; }
-    \\  .c-draft .nm > .fact[data-tip]:hover::after { content: attr(data-tip); position: absolute; left: 0;
+    \\  .c-draft .nm > .fact[data-tip]:not([data-tip=""]) { position: relative; overflow: visible; cursor: default; }
+    \\  .c-draft .nm > .fact[data-tip]:not([data-tip=""]):hover::after { content: attr(data-tip); position: absolute; left: 0;
     \\    bottom: calc(100% + 4px); z-index: 3; padding: 2px var(--sp-2); border-radius: var(--r-m);
     \\    background: var(--panel-3); border: 1px solid var(--line-2); box-shadow: var(--shadow-pop);
     \\    color: var(--text); font-size: var(--fs-s); white-space: nowrap; pointer-events: none; }
