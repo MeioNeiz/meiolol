@@ -153,6 +153,9 @@ pub const off_role = 0.1;
 const movers_each = 5;
 /// Each role's column on the All board
 const board_rows = 10;
+/// Five board columns need ~60 px names: 5 x (202 px fixed + 60). Narrower: 3, then the
+/// last 2 share the second row
+const board_five = "1320px";
 
 const W = struct {
     pub const title = plain("Champions");
@@ -847,16 +850,15 @@ pub const css =
     \\  .c-tiers .key { margin: 0; padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--line); color: var(--muted); font-size: var(--fs-s); }
     \\  .c-tiers .bs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4);
     \\    border-bottom: 1px solid var(--line); }
-    \\  .c-tiers .rb .cols { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    \\  .c-tiers .rb .col { min-width: 0; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
-    \\  .c-tiers .rb .col:last-child { border-right: 0; }
+    \\  .c-tiers .rb .cols { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line); }
+    \\  .c-tiers .rb .col { flex: 1 1 15%; min-width: 0; display: flex; flex-direction: column; background: var(--panel); }
     \\  .c-tiers .rb .rh { all: unset; display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 var(--sp-3);
     \\    background: var(--panel-2); border-bottom: 1px solid var(--line); cursor: pointer; font-size: var(--fs-s); }
     \\  .c-tiers .rb .rh:hover b { color: var(--accent); }
     \\  .c-tiers .rb .rh:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
     \\  .c-tiers .rb .rh > .c-role { color: var(--muted); }
-    \\  .c-tiers .rb :is(.fh, li > a) { display: grid; grid-template-columns: 18px 24px minmax(0, 1fr) 52px 70px; gap: var(--sp-2);
-    \\    align-items: center; padding: 0 var(--sp-3); }
+    \\  .c-tiers .rb :is(.fh, li > a) { display: grid; grid-template-columns: 18px 24px minmax(0, 1fr) 52px 68px; gap: 6px;
+    \\    align-items: center; padding: 0 var(--sp-2); }
     \\  .c-tiers .rb .fh { height: 24px; border-bottom: 1px solid var(--line); font-size: var(--fs-xs); font-weight: var(--w-b);
     \\    color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; text-align: right; }
     \\  .c-tiers .rb .fh > span { justify-self: end; white-space: nowrap; }
@@ -879,9 +881,12 @@ pub const css =
     \\    .c-tiers .rb .bs { padding-inline: var(--sp-3); }
     \\    .c-tiers .rb .bs > .lab { display: none; }
     \\  }
-    \\  @container (max-width: 900px) {
-    \\    .c-tiers .rb .cols { grid-template-columns: minmax(0, 1fr); }
-    \\    .c-tiers .rb .col { border-right: 0; }
+    \\  @container
+++ " (max-width: " ++ board_five ++ ") {\n" ++
+    \\    .c-tiers .rb .col { flex-basis: 30%; }
+    \\  }
+    \\  @container (max-width: 760px) {
+    \\    .c-tiers .rb .col { flex-basis: 100%; }
     \\    .c-tiers .rb li:nth-child(n+6) { display: none; }
     \\  }
     \\  .c-tiers[data-busy] :is(.moved, .c-table, .rb .cols) { opacity: 0.55; transition: opacity 0.2s; }
