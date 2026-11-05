@@ -142,6 +142,10 @@ pub const Store = struct {
     /// The newest days (today 1) built whenever they change, settle_ms or not: on a
     /// patch's first day today's games are all of its curves
     fresh_days: i64 = 0,
+    /// A changed day with more games new or changed than this is built afresh: one by one
+    /// they are cold random reads (~4-30 ms each on the box) against ~40 s for a whole
+    /// 100k-game day read ahead
+    afresh_after: usize = 4000,
 
     /// Opens (or starts) `dir`, waiting for its lock
     pub fn open(gpa: Allocator, io: std.Io, dir: []const u8) !*Store {
@@ -216,13 +220,15 @@ pub const Store = struct {
             _ = arena_state.reset(.retain_capacity);
             const arena = arena_state.allocator();
             const old = try s.read(gpa, arena, day);
+            const listed = if (old != null) try listDay(db, arena, day) else &.{};
+            const afresh = old == null or try changedOf(gpa, old.?, listed) > s.afresh_after;
             // Lazy while only late games are decoded; a whole day's are too many lookups
-            if (old == null and (experienced == null or experienced.?.looked != null)) {
+            if (afresh and (experienced == null or experienced.?.looked != null)) {
                 if (experienced) |*x| x.deinit(gpa);
                 experienced = null;
                 experienced = try .load(gpa, db);
             } else if (experienced == null) experienced = try .lazy(db);
-            const r = try buildDay(gpa, s.io, db, day, &experienced.?, items, path, old, arena);
+            const r = try buildDay(gpa, s.io, db, day, &experienced.?, items, path, if (afresh) null else .{ .day = old.?, .listed = listed }, arena);
             s.counts.built += 1;
             s.counts.games_built += r.decoded;
             s.counts.bytes += r.bytes;
@@ -317,6 +323,9 @@ fn readSig(io: std.Io, path: []const u8) !?struct { sig: Sig, made_ms: i64 } {
 const where_games =
     \\  AND m.queue_id = 420 AND m.remake = 0 AND m.winning_team IS NOT NULL
 ;
+
+/// One UTC day's ranked solo games, bound to its start and end in ms
+const day_where = "WHERE m.game_start >= ?1 AND m.game_start < ?2\n" ++ where_games;
 
 comptime {
     std.debug.assert(stats.ranked_solo == 420);
@@ -496,8 +505,53 @@ const DayBuilder = struct {
     }
 };
 
-/// Builds a day's file. With `old` (its current file, games since changed), decodes only
-/// the games new or changed since: timelines arrive up to 9 days late (ops.md)
+/// A day's games as the database has them now, for comparing with its file
+const Listed = struct { match_id: []const u8, rowid: i64, source: i64 };
+
+/// Read whole before any is decoded: a statement open across the decode holds one read
+/// snapshot, and the WAL can't checkpoint past it (5 Nov: 17 min, then a 187 s checkpoint
+/// stalled the crawler's commits)
+fn listDay(db: store.Db, arena: Allocator, day: i64) ![]const Listed {
+    var list = try db.prepare(
+        \\SELECT m.match_id, m.rowid, coalesce(t.rowid, 0)
+        \\FROM matches m LEFT JOIN timeline.timelines t USING (match_id)
+        \\
+    ++ day_where);
+    defer list.deinit();
+    try list.bind(.{ day * day_ms, (day + 1) * day_ms });
+    var out: std.ArrayList(Listed) = .empty;
+    while (try list.step()) {
+        const r = list.row(Listed);
+        try out.append(arena, .{ .match_id = try arena.dupe(u8, r.match_id), .rowid = r.rowid, .source = r.source });
+    }
+    return out.items;
+}
+
+fn oldIndex(gpa: Allocator, old: Day) !std.AutoHashMapUnmanaged(i64, u32) {
+    var have: std.AutoHashMapUnmanaged(i64, u32) = .empty;
+    try have.ensureTotalCapacity(gpa, @intCast(old.games.len));
+    for (old.games, 0..) |g, i| have.putAssumeCapacity(g.rowid, @intCast(i));
+    return have;
+}
+
+/// Games in `listed` new or changed since `old` was built
+fn changedOf(gpa: Allocator, old: Day, listed: []const Listed) !usize {
+    var have = try oldIndex(gpa, old);
+    defer have.deinit(gpa);
+    var n: usize = 0;
+    for (listed) |r| {
+        const i = have.get(r.rowid) orelse {
+            n += 1;
+            continue;
+        };
+        if (old.games[i].source != r.source) n += 1;
+    }
+    return n;
+}
+
+/// Builds a day's file. With `old` (its current file, and the day's games listed since),
+/// decodes only the games new or changed since: timelines arrive up to 9 days late
+/// (ops.md)
 fn buildDay(
     gpa: Allocator,
     io: std.Io,
@@ -506,29 +560,19 @@ fn buildDay(
     experienced: *curves.Experienced,
     items: Items,
     path: []const u8,
-    old: ?Day,
+    old: ?struct { day: Day, listed: []const Listed },
     arena: Allocator,
 ) !struct { games: usize, decoded: usize, bytes: u64 } {
     var b: DayBuilder = try .init(gpa, arena, db, experienced, items);
     defer b.deinit();
-    const where = "WHERE m.game_start >= ?1 AND m.game_start < ?2\n" ++ where_games;
     const args = .{ day * day_ms, (day + 1) * day_ms };
-    if (old) |o| {
-        var have: std.AutoHashMapUnmanaged(i64, u32) = .empty;
+    if (old) |x| {
+        const o = x.day;
+        var have = try oldIndex(gpa, o);
         defer have.deinit(gpa);
-        try have.ensureTotalCapacity(gpa, @intCast(o.games.len));
-        for (o.games, 0..) |g, i| have.putAssumeCapacity(g.rowid, @intCast(i));
-        var list = try db.prepare(
-            \\SELECT m.match_id, m.rowid, coalesce(t.rowid, 0)
-            \\FROM matches m LEFT JOIN timeline.timelines t USING (match_id)
-            \\
-        ++ where);
-        defer list.deinit();
-        try list.bind(args);
         var one = try db.prepare(game_columns ++ "WHERE m.match_id = ?");
         defer one.deinit();
-        while (try list.step()) {
-            const r = list.row(struct { match_id: []const u8, rowid: i64, source: i64 });
+        for (x.listed) |r| {
             if (have.get(r.rowid)) |i| if (o.games[i].source == r.source) {
                 try b.keep(o, o.games[i]);
                 continue;
@@ -539,11 +583,11 @@ fn buildDay(
             one.reset();
         }
     } else {
-        var q = try db.prepare(game_columns ++ where);
+        var q = try db.prepare(game_columns ++ day_where);
         defer q.deinit();
         try q.bind(args);
         const ahead: *store.Ahead = try .start(gpa, io, db, .{
-            .list = "SELECT m.match_id, t.rowid FROM matches m LEFT JOIN timeline.timelines t USING (match_id)\n" ++ where,
+            .list = "SELECT m.match_id, t.rowid FROM matches m LEFT JOIN timeline.timelines t USING (match_id)\n" ++ day_where,
             .reads = &.{ digest.read_ahead, "SELECT slot FROM participants WHERE match_id = ?1" },
         }, args);
         defer ahead.stop();

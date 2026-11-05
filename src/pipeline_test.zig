@@ -1588,6 +1588,14 @@ test "day cubes: days built again when their games change, as if built afresh" {
     try testing.expectEqual(2, n.built);
     try testing.expectEqual(3, n.games_built);
     try expectCubesMatch(arena, io, db, cube, try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "fresh-changed" }));
+    // Past afresh_after changed games a day is built afresh, every game decoded
+    try db.exec("UPDATE timeline.timelines SET rowid = rowid + 1000 WHERE match_id IN ('EUW1_14', 'EUW1_17')");
+    cube.afresh_after = 1;
+    n = try cube.refresh(db, start_ms, fixture_items);
+    try testing.expectEqual(1, n.built);
+    try testing.expect(n.games_built > 2);
+    cube.afresh_after = 4000;
+    try expectCubesMatch(arena, io, db, cube, try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "fresh-afresh" }));
     try db.run("DELETE FROM matches WHERE game_start >= ?", .{start_ms + 30 * std.time.ms_per_hour});
     n = try cube.refresh(db, start_ms, fixture_items);
     try testing.expectEqual(1, n.dropped);
