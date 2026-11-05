@@ -123,9 +123,12 @@ fn build(a: Allocator, live: bool) !?Next {
         .select => |x| try picksOf(a, c, x),
         else => null,
     };
-    const form: ?ui.lobby.Lobby = if (s.form) |f| try lobby.view(a, c, f) else null;
-    const tiles: ?ui.apphome.Home = if (s.status == .waiting) try home.view(a, c, s.form) else null;
-    return finish(a, d, bar, under, opts, .{ .form = form, .home = tiles }, try gameBuild(a, c, s.status));
+    return finish(a, d, bar, under, opts, .{
+        .form = if (s.form) |f| try lobby.view(a, c, f) else null,
+        .home = if (s.status == .waiting) try home.view(a, c, s.form) else null,
+        .build = try gameBuild(a, c, s.status),
+        .load = try loadUnder(a, c, s.status),
+    });
 }
 
 /// The full form takes the note's place: the first of the first start's steps
@@ -145,18 +148,25 @@ fn signIn(s: ?*const state.SignIn, status: state.Status) ?ui.signin.SignIn {
 
 /// Encoded and rendered into `a`, so nothing points into the poller's memory once it
 /// unlocks; null when what shows is as before
-/// The panels before champ select: the form panel and the tiles beside it
-const Lobby = struct { form: ?ui.lobby.Lobby = null, home: ?ui.apphome.Home = null };
+/// The static panels after the island: before champ select the form panel and the tiles
+/// beside it, the loading screen, the build panel in game
+const Panels = struct {
+    form: ?ui.lobby.Lobby = null,
+    home: ?ui.apphome.Home = null,
+    build: ?ui.gamebuild.Build = null,
+    load: ?ui.loadscreen.Screen = null,
+};
 
-fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp, opts: ?ui.picks.Data, lobby_panels: Lobby, panel: ?ui.gamebuild.Build) !?Next {
+fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp, opts: ?ui.picks.Data, panels: Panels) !?Next {
     var d = shown;
     d.seq = seq + 1;
-    // The bar and the comp view are static: a change to either reloads the page
+    // The comp view and the panels are static: a change to any reloads the page
     var cbin: std.ArrayList(u8) = .empty;
     if (under) |x| try ui.data.encode(a, ui.compview.Comp, x, &cbin);
-    if (lobby_panels.form) |x| try ui.data.encode(a, ui.lobby.Lobby, x, &cbin);
-    if (lobby_panels.home) |x| try ui.data.encode(a, ui.apphome.Home, x, &cbin);
-    if (panel) |x| try ui.data.encode(a, ui.gamebuild.Build, x, &cbin);
+    if (panels.form) |x| try ui.data.encode(a, ui.lobby.Lobby, x, &cbin);
+    if (panels.home) |x| try ui.data.encode(a, ui.apphome.Home, x, &cbin);
+    if (panels.build) |x| try ui.data.encode(a, ui.gamebuild.Build, x, &cbin);
+    if (panels.load) |x| try ui.data.encode(a, ui.loadscreen.Screen, x, &cbin);
     try cbin.appendSlice(a, phase(d.where));
     try cbin.appendSlice(a, &.{ @intFromBool(state.by_mastery.load(.acquire)), @intFromBool(d.signin == null) });
     const comp_id = @as(u32, @truncate(std.hash.Wyhash.hash(0, cbin.items))) | 1;
@@ -177,7 +187,7 @@ fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.comp
     if (page) |old| if (std.mem.eql(u8, shows(old.bin), shows(bin.items)) and std.mem.eql(u8, shows(old.practice), shows(pbin.items)) and
         std.mem.eql(u8, shows(old.picks), shows(kbin.items)) and old.comp == comp_id) return null;
     seq += 1;
-    const html = try renderIn(a, d, p, under, .{ .site = files.site, .mastery = state.by_mastery.load(.acquire), .picks = k, .lobby = lobby_panels.form, .home = lobby_panels.home, .build = panel });
+    const html = try renderIn(a, d, p, under, .{ .site = files.site, .mastery = state.by_mastery.load(.acquire), .picks = k, .lobby = panels.form, .home = panels.home, .build = panels.build, .load = panels.load });
     const live = switch (d.screen) {
         .select, .loading, .game => true,
         .note, .post => false,
@@ -247,6 +257,8 @@ pub const Frame = struct {
     home: ?ui.apphome.Home = null,
     /// The in-game build panel after the island (ui/gamebuild.zig); null none
     build: ?ui.gamebuild.Build = null,
+    /// The loading screen after the island (ui/loadscreen.zig), the comp view under it
+    load: ?ui.loadscreen.Screen = null,
     /// Before </head>
     head: []const u8 = "",
     /// After <body> and before the scripts
@@ -294,6 +306,7 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
     const lobby_n: ?ui.N = if (f.lobby) |x| ui.lobby.view(&h, x) else null;
     const home_n: ?ui.N = if (f.home) |x| ui.apphome.view(&h, f.site, x) else null;
     const build_n: ?ui.N = if (f.build) |x| ui.gamebuild.view(&h, x) else null;
+    const load_n: ?ui.N = if (f.load) |x| ui.loadscreen.view(&h, x) else null;
     if (h.oom) return error.OutOfMemory;
     var out: std.Io.Writer.Allocating = .init(a);
     const w = &out.writer;
@@ -309,6 +322,7 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
     if (top) |n| try ui.html.write(&t, n, w);
     try w.writeAll("<main class=\"c-live\">");
     try ui.html.write(&t, body, w);
+    if (load_n) |n| try ui.html.write(&t, n, w);
     if (tabs_n) |n| try ui.html.write(&t, n, w);
     if (picks_n) |n| try ui.html.write(&t, n, w);
     if (comp_n) |n| try ui.html.write(&t, n, w);
@@ -410,7 +424,7 @@ pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.D
             .waiting => .{ .note = .{ .title = "The board shows in champ select", .text = "Both teams, your lane, options and bans." } },
             .no_role => .{ .note = .{ .title = "No lane to show", .text = "This champ select has no assigned positions." } },
             .select => |s| .{ .select = try select(a, c, s) },
-            .loading => |l| .{ .loading = try loadScreen(a, c, l) },
+            .loading => .loading,
             // The public edition gets the panel once the private one has proved it
             .in_game => |g| if (c.private) .{ .game = try game(a, c, g) } else .{ .note = .{ .title = "In game", .text = "The board comes back in your next champ select." } },
             .post_game => |p| .{ .post = try post(a, c, p) },
@@ -852,6 +866,14 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode, side
         .mastery = if (side != .mine) null else state.by_mastery.load(.acquire),
         .enemy = side == .enemy,
         .scope = try scopeOf(a, c, card.period),
+    };
+}
+
+/// The loading screen's cards, static HTML after the island
+pub fn loadUnder(a: Allocator, c: Ctx, status: state.Status) !?ui.loadscreen.Screen {
+    return switch (status) {
+        .loading => |l| try loadScreen(a, c, l),
+        else => null,
     };
 }
 
@@ -1581,18 +1603,22 @@ test "loading: the role's numbers private only" {
     const theirs = [_]loading.Card{.{ .champion = syndra, .role = .middle, .guessed = true, .me = false, .games = 0, .win = 0, .pills = &.{} }};
     const l: loading.Loading = .{ .teams = .{ &ours, &theirs }, .draft = .{ .win = 0.534, .se = 0.1, .picks = .{ 5, 5 }, .hovers = 0 } };
 
-    const priv = (try data(a, .{ .stats = &f.stats, .icons = null, .private = true }, .{ .loading = &l }, .none)).screen.loading;
+    const priv = try loadScreen(a, .{ .stats = &f.stats, .icons = null, .private = true }, &l);
     try testing.expectEqualStrings("52.1% · 12k games", priv.us[0].fact);
     try testing.expectEqual(.good, priv.us[0].lean);
     try testing.expectEqual(.caution, priv.us[0].pills[0].tone);
     try testing.expect(priv.them[0].guessed and priv.them[0].fact.len == 0);
     try testing.expectApproxEqAbs(@as(f32, 53.4), priv.draft.?, 0.01);
 
-    var d = try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .loading = &l }, .none);
-    try testing.expectEqual(null, d.screen.loading.draft);
-    try testing.expectEqualStrings("", d.screen.loading.us[0].fact);
+    const c: Ctx = .{ .stats = &f.stats, .icons = null, .private = false };
+    const public = try loadScreen(a, c, &l);
+    try testing.expectEqual(null, public.draft);
+    try testing.expectEqualStrings("", public.us[0].fact);
+    var d = try data(a, c, .{ .loading = &l }, .none);
     d.seq = 1;
-    try testing.expect(std.mem.find(u8, try render(a, d, null, null), "%") == null);
+    const html = try renderIn(a, d, null, null, .{ .load = public });
+    try testing.expect(std.mem.find(u8, html, "c-load") != null);
+    try testing.expect(std.mem.find(u8, html, "%") == null);
 }
 
 fn testGame(my_lane: ?ingame.Lane) ingame.InGame {

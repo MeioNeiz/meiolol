@@ -2,13 +2,13 @@
 //! renders it from the poller's state and keeps the same Data encoded (data.zig) at
 //! app.bin; on a change it sends `{"app": seq}` and the island fetches the file and
 //! patches. A screen per client state: a note while there is nothing to show, champ
-//! select's board and options, the loading cards, the in-game panel, the post game; the
-//! sign-in under it, or in its place before there is data. The charts' own state (a
-//! tapped minute, a dragged range) and what's typed live in App, past patches
+//! select's board and options, the in-game panel, the post game; the sign-in under it,
+//! or in its place before there is data. The loading screen has nothing to tap, so the
+//! shell renders it as static HTML after the island (ui/loadscreen.zig). The charts' own
+//! state (a tapped minute, a dragged range) and what's typed live in App, past patches
 const std = @import("std");
 const tree = @import("tree.zig");
 const champselect = @import("champselect.zig");
-const loadscreen = @import("loadscreen.zig");
 const gamescreen = @import("gamescreen.zig");
 const postgame = @import("postgame.zig");
 const lane = @import("lane.zig");
@@ -27,7 +27,8 @@ pub const Screen = union(enum) {
     /// Nothing to show yet: what the app waits for
     note: Note,
     select: champselect.Screen,
-    loading: loadscreen.Screen,
+    /// The shell's static loading screen shows; the island only its foot and sign-in
+    loading,
     game: gamescreen.Screen,
     post: postgame.Screen,
 };
@@ -83,7 +84,7 @@ pub const App = struct {
             switch (d.screen) {
                 .note => |n| note(h, n),
                 .select => |s| champselect.view(h, s, &a.lane),
-                .loading => |s| loadscreen.view(h, s),
+                .loading => null,
                 .game => |s| gamescreen.view(h, s, .{ .lane = &a.lane, .team = &a.team }),
                 .post => |s| postgame.view(h, s, &a.team),
             },
@@ -129,6 +130,7 @@ pub const css =
     \\  .c-live { flex: 1; display: flex; flex-direction: column; gap: var(--sp-4);
     \\    padding: var(--sp-3) var(--sp-4) var(--sp-5); min-width: 0; }
     \\  .c-app { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+    \\  .c-app:empty { display: none; }
     \\  .c-app > .note { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-6) 0; text-align: center; }
     \\  .c-app > .note h1 { margin: 0; font-size: var(--fs-l); font-weight: var(--w-b); }
     \\  .c-app > .note p { margin: 0; color: var(--muted); }
