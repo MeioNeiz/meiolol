@@ -28,7 +28,6 @@ const W = struct {
     pub const said = plain("Meio");
     pub const days = Phrase("30 days {p:rate}, {n:count} games");
     pub const patch = Phrase("Newest patch {p:rate}, {n:count} games");
-    pub const no_model = plain("no model loaded");
     pub const master = plain("raw only at Master+");
     pub const kind = plain("a lock it doesn't model");
     pub const deep = plain("stops at two locks");
@@ -65,16 +64,17 @@ fn worth(e: pd.Est) u32 {
     return if (n > 1e8) 100_000_000 else @intFromFloat(n + 0.5);
 }
 
+/// Nothing with no Meio number and no reason a player can act on (no model loaded is ops')
 pub fn view(h: *H, v: Preview) N {
     const gap: ?tree.Text = switch (v.gap) {
-        .none => null,
-        .no_model => W.no_model,
+        .none, .no_model => null,
         .master => W.master,
         .kind => W.kind,
         .deep => W.deep,
     };
+    if (v.est == null and gap == null) return h.div(.{}, .{});
     const tag = tip.view(h, W.about, .{badge.view(h, .accent, .{W.tag})}, .{ .below = true });
-    const e = v.est orelse return h.div(.{ .class = "c-pv" }, .{ tag, h.small(.{}, .{gap orelse W.no_model}) });
+    const e = v.est orelse return h.div(.{ .class = "c-pv" }, .{ tag, h.small(.{}, .{gap.?}) });
     return h.div(.{ .class = "c-pv" }, .{
         tag,
         rate.view(h, .{ .pct = 100 * e.p, .games = worth(e), .half = 100 * (e.hi - e.lo) / 2 }, .{ .said = W.said.s, .worth = true }),
@@ -194,6 +194,9 @@ test "view: no Meio number, the reason and no scale" {
     try testing.expect(std.mem.find(u8, html, "<small>raw only at Master+</small>") != null);
     try testing.expectEqual(null, std.mem.find(u8, html, "class=\"ax\""));
     try testing.expectEqual(null, std.mem.find(u8, html, "c-rate"));
+    out.clearRetainingCapacity();
+    try @import("html.zig").write(&t, view(&h, .{ .est = null, .gap = .no_model, .days = .{ .games = 812, .wins = 409 } }), &out.writer);
+    try testing.expectEqual(null, std.mem.find(u8, out.written(), "c-pv"));
 }
 
 test "Preview.of: either period's file, raw windows without games dropped" {
