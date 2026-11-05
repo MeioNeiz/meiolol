@@ -882,7 +882,6 @@ pub fn day(h: *H, at: i64) Text {
 pub const css =
     \\@layer components {
     \\  .c-admin { display: grid; gap: var(--sp-4); }
-    \\  .c-admin .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     \\  .c-admin .wait { margin: 0; }
     \\  .c-admin .tools { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
     \\  .c-admin .status, .c-admin .note, .c-admin .wait { color: var(--muted); font-size: var(--fs-s); }

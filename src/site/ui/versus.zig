@@ -423,7 +423,6 @@ pub const css =
     \\  .c-vs .br > .them { --c: var(--them-hot); }
     \\  .c-vs .br > .n { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.8; }
     \\  .c-vs .br > .n[data-lead] { font-weight: var(--w-b); opacity: 1; }
-    \\  .c-vs .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     \\  .c-vs .bnd > .ends { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
     \\}
     \\

@@ -21,7 +21,7 @@ each problem in isolation".
   renders on the server (pages, no-JS, Riot's reviewers) and in `ui.wasm` in the browser
   (sorting, ranges, toggles), so no logic exists twice
 - CSS: tokens (5 type sizes, one colour scale, spacing, control sizes), then `@layer`
-  base, components, pages. Components size to their container, not the screen, so one
+  base, components, pages, utilities. Components size to their container, not the screen, so one
   component works in a phone column, a desktop page and an app panel
 - Words and the other review points are direction, not rules yet (Jacob 24 Oct): the
   measured checks below (word budgets, label length, tap targets, text size) are drafts,
@@ -200,8 +200,10 @@ passes.
 
 ### CSS
 
-- `@layer tokens, base, components, pages`. Every page's body carries class ui, so base's
-  element rules (`:where(.ui)`) apply to all of it; the legacy layer and style.css are gone
+- `@layer tokens, base, components, pages, utilities`. Every page's body carries class ui,
+  so base's element rules (`:where(.ui)`) apply to all of it; the legacy layer and
+  style.css are gone. Utilities (base.css) hold class sr, screen reader only words: no
+  component copies it (uilint `sr`)
 - Tokens (mocks/tokens.css): surfaces, ink, the diverging scale lo4..hi4 and its fills,
   neutral bar, us/them, moment kinds, 5 type sizes (11, 12, 13.5, 16, 22), spacing 2-32,
   radii 4/8/12, control sizes that grow to 44 px tap areas on touch screens

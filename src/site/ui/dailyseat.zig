@@ -427,7 +427,6 @@ pub const css =
     \\    padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
     \\  .c-dseat .sh .sub { display: block; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-dseat .sh .nm { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-    \\  .c-dseat .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     \\  .c-dseat .shares { display: grid; gap: var(--sp-2); padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
     \\  .c-dseat .st { font-size: var(--fs-xs); color: var(--faint); }
     \\  .c-dseat .sg { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: var(--sp-2); }

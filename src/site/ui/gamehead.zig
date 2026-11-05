@@ -137,7 +137,7 @@ fn kit(h: *H, me: gamedata.Seat, arts: []const art.Art) ?N {
     if (!any) return null;
     return h.div(.{ .class = "kit", .role = "group", .aria_label = W.kit }, .{
         h.span(.{ .class = "its" }, .{items.done()}),
-        h.span(.{ .class = "sr" }, .{runes.done()}),
+        h.span(.{ .class = "sk" }, .{runes.done()}),
     });
 }
 

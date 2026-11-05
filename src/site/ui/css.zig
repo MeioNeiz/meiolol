@@ -6,7 +6,7 @@
 const std = @import("std");
 const tokens = @import("tokens.zig");
 
-pub const layers = "@layer tokens, base, components, pages;\n";
+pub const layers = "@layer tokens, base, components, pages, utilities;\n";
 
 pub const base = @embedFile("base.css");
 

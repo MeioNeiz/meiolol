@@ -1,4 +1,4 @@
-/* Base element styles (layer base). Transcribed from the gallery's mocks/tokens.css by
+/* Base element styles (layer base), then utilities. Transcribed from the gallery's mocks/tokens.css by
    data/team/2026-10-25-ui-build/tools/tokens2zig.py. Under :where(.ui) (no added
    specificity): a page's body and an island's root carry class ui */
 @layer base {
@@ -44,4 +44,9 @@
   :where(.ui) .hi2 { color: var(--hi2); }
   :where(.ui) .hi3 { color: var(--hi3); }
   :where(.ui) .hi4 { color: var(--hi4); }
+}
+/* Last layer: no component or page rule outranks it. Class sr: words for screen readers
+   only (a value's unit, a step's state), clipped to 1px rather than display: none */
+@layer utilities {
+  :where(.ui) .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }

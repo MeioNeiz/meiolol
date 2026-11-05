@@ -722,7 +722,6 @@ pub const css =
     \\  .c-time > .note { margin: 0; color: var(--muted); font-size: var(--fs-s); }
     \\  .c-time .kb { position: absolute; inset: 0; pointer-events: none; border-radius: 2px; }
     \\  .c-time .kb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-    \\  .c-time .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     \\}
     \\
 ;

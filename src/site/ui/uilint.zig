@@ -21,6 +21,9 @@ pub const Rule = enum {
     title,
     /// `attr(data-tip)` in CSS outside tip.zig: tips come through Tip
     tip,
+    /// A visually hidden rule (`clip-path: inset(50%)`) outside tip.zig: class "sr" is
+    /// base.css's one copy
+    sr,
     /// A page's CSS rules (no gallery, a name ending "page", or `more_pages`): pages lay
     /// out cards, anything styled is a component or a variant
     pagecss,
@@ -64,7 +67,10 @@ pub fn counts(a: std.mem.Allocator, comptime mods: anytype) ![]const Count {
         const src = try code(a, @embedFile(file ++ ".zig"));
         try add(a, &out, file, .markup, markup(src, file, &C.scope, owners));
         try add(a, &out, file, .title, titles(src));
-        if (!std.mem.eql(u8, file, "tip")) try add(a, &out, file, .tip, std.mem.count(u8, C.css, "attr(data-tip)"));
+        if (!std.mem.eql(u8, file, "tip")) {
+            try add(a, &out, file, .tip, std.mem.count(u8, C.css, "attr(data-tip)"));
+            try add(a, &out, file, .sr, std.mem.count(u8, C.css, "clip-path: inset(50%)"));
+        }
         if (!@hasDecl(C, "gallery") or std.mem.endsWith(u8, file, "page") or inList(&more_pages, file)) {
             var rules: css_mod.Rules = .{ .css = C.css };
             var n: usize = 0;

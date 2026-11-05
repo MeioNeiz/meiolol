@@ -254,7 +254,6 @@ const W = struct {
 
 pub const css =
     \\@layer components {
-    \\  .c-cand .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     \\  .c-cand { container-type: inline-size; display: grid; min-width: 0; font-variant-numeric: tabular-nums; }
     \\  .c-cand .hd { display: grid; grid-template-columns: 22px minmax(0, 1fr) 56px 48px;
     \\    column-gap: var(--sp-2); align-items: center; padding: 0 var(--sp-2); }

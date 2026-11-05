@@ -233,7 +233,6 @@ pub const css =
     \\  .c-steps[data-state="failed"] .st, .c-steps[data-state="refused"] .st { color: var(--lo3); }
     \\  .c-steps .sha { font: var(--fs-xs) ui-monospace, monospace; color: var(--t2); }
     \\  .c-steps .when { flex: 1 0 100%; color: var(--muted); }
-    \\  .c-steps .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     \\  .c-steps .mini { display: inline-flex; align-items: center; gap: var(--sp-2); flex: 0 0 auto; }
     \\  .c-steps .mini .strip { position: relative; display: block; width: calc(var(--w) * 1.2px); min-width: 4px; height: 6px;
     \\    border-radius: 3px; background: var(--bar-track); overflow: hidden; }
