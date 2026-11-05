@@ -136,6 +136,8 @@ pub const Event = struct {
     push: bool = false,
     /// Set by the handler: done to the node marked `data_ref` once the DOM is patched
     after: ?After = null,
+    /// Set by the handler: this node stays where it is on screen (island.zig, pins)
+    keep: bool = false,
 
     /// toggle: the <details> is open now. The diff setting `open` fires a toggle too, so
     /// a handler sets its state from this and never flips it

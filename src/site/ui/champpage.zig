@@ -1136,8 +1136,13 @@ pub const Build = struct {
     /// The server's: the answer it rendered under `locks`, base64, for ui-champbuild.wasm
     /// to hydrate from without asking again
     ans: ?[]const u8 = null,
+    /// The last render showed the answer: on the change, the panel coming in takes the
+    /// other's choices (BuildPanel.keep)
+    showed_answer: bool = false,
 
     const P = @This();
+    /// A lock tap keeps its node on screen while the answer reshapes the panel
+    pub const pins = true;
 
     pub const Url = struct {
         role: ?role.Role = null,
@@ -1175,21 +1180,30 @@ pub const Build = struct {
         return if (std.mem.endsWith(u8, base, "-build.bin")) base[0 .. base.len - "-build.bin".len] else base;
     }
 
-    /// Shows `d`, the answer at `path`: the open slot and order stay
+    /// Shows `d`, the answer at `path`: the panel keeps the shown one's choices and the
+    /// base build's cells; with no build the base panel shows, dimmed (view)
     pub fn setAnswer(p: *P, a: std.mem.Allocator, path: []const u8, d: *const BuildData) void {
         const u = p.toUrl();
+        const was: ?buildpanel.BuildPanel = if (p.panel()) |b| b.* else null;
         p.answer = d;
         p.answer_path = path;
         p.apanel = null;
         if (d.roles.len > 0) if (panels(a, d.roles[0..1])) |ps| {
             p.apanel = ps[0];
         } else |_| {};
+        const base = p.basePanel();
+        if (p.apanel) |*x| x.frame = if (base) |b| b.kinds() else 0;
         p.fromUrl(u);
+        if (was) |w| if (if (p.apanel) |*x| x else base) |to| to.keep(&w);
     }
 
     /// The shown rank's build of the role, else the base one; under locks the answer's
     fn panel(p: *P) ?*buildpanel.BuildPanel {
         if (p.shownAnswer() != null) return if (p.apanel) |*b| b else null;
+        return p.basePanel();
+    }
+
+    fn basePanel(p: *P) ?*buildpanel.BuildPanel {
         const own = p.data.roles[p.cur].role;
         if (p.files.group()) |g| for (g, 0..) |x, i| if (x.role == own) {
             return if (p.rpanels[i]) |*b| b else null;
@@ -1255,8 +1269,19 @@ pub const Build = struct {
     }
 
     pub fn view(p: *P, h: *H) N {
-        const b = p.panel();
-        if (b) |x| x.setLocks(if (p.bin == null) &p.locks else null);
+        const on_answer = p.shownAnswer() != null;
+        if (on_answer != p.showed_answer) {
+            p.showed_answer = on_answer;
+            if (p.apanel) |*x| if (p.basePanel()) |base| if (on_answer) x.keep(base) else base.keep(x);
+        }
+        // No games under the locks: the base panel stays, dimmed, so the page keeps its
+        // shape and its locks unlock in place
+        const nil = on_answer and p.apanel == null;
+        const b = if (nil) p.basePanel() else p.panel();
+        if (b) |x| {
+            x.setLocks(if (p.bin == null) &p.locks else null);
+            x.dim = nil;
+        }
         const want = p.lockWant(h.mem);
         const waiting = if (want) |w| !std.mem.eql(u8, w, p.answer_path) else false;
         const answer = p.shownAnswer();
@@ -1272,7 +1297,7 @@ pub const Build = struct {
         };
         const lock_bar: N = if (p.locked()) p.bar.view(h, p.labels(h)) else .none;
         var empty: N = .none;
-        if (b == null) if (answer) |x| {
+        if (b == null or nil) if (answer) |x| {
             empty = h.p(.{ .class = "none" }, .{if (x.roles.len == 0) W.no_answer else W.no_lock_games});
         };
         const note: N = if (p.from()) |g| h.p(.{ .class = "from" }, .{W.from.with(h, .{ .g = W.ranks[g].s, .r = W.ranks[@backingInt(p.files.shown.rank)].s })}) else .none;

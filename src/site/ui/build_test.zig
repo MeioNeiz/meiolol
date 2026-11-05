@@ -300,3 +300,40 @@ test "a page whose keystone has a build locks on tap: every cell its players', a
     try testing.expect(try p.has("data-lock"));
     try testing.expect(inOrder(cellOf(try p.shown(), "boots"), &.{ "Mercury", "Plated" }));
 }
+
+test "a lock's answer keeps the page, the tapped rune, Every tree and the open cell; the base build's cells stay" {
+    var p: Page = undefined;
+    try p.init("#slot=item4");
+    defer p.deinit();
+    // Sorcery's page first: its trees draw primary then secondary, not in data order
+    const html = try p.shown();
+    try testing.expect(std.mem.find(u8, html, "Sorcery</h4>").? < std.mem.find(u8, html, "Precision</h4>").?);
+    p.click(p.nth("class", "ks", 2));
+    p.click(p.nth("class", "rune", 3));
+    p.click(p.button("Every tree"));
+
+    const a = p.arena.allocator();
+    var d = demo.darius;
+    var slots: std.ArrayList(bp.Slot) = .empty;
+    for (d.slots) |s| if (s.kind != .boots) try slots.append(a, s);
+    d.slots = slots.items;
+    var ans: P = undefined;
+    try ans.init(a, &d);
+    ans.frame = p.state.kinds();
+    ans.keep(&p.state);
+    try testing.expectEqual(p.state.runes.page, ans.runes.page);
+    try testing.expectEqual(p.state.runes.rune, ans.runes.rune);
+    try testing.expect(ans.runes.all);
+    try testing.expectEqual(bp.Kind.item4, ans.open.?);
+
+    const t = try a.create(tree.Tree);
+    t.* = .{};
+    var h: tree.H = .init(a, t);
+    t.root = ans.view(&h);
+    var fake: Fake = .{ .a = a };
+    var w: std.Io.Writer.Allocating = .init(a);
+    try fake.html(fake.mirror(t, t.root), &w.writer);
+    const boots = cellOf(w.written(), "boots");
+    try testing.expect(std.mem.find(u8, boots, "<p class=\"nil\">—</p>") != null);
+    try testing.expect(std.mem.find(u8, boots, "<table") == null);
+}

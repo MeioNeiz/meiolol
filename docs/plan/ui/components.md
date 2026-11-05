@@ -962,7 +962,8 @@ sortable; Skills open: every order and level path; runes by lane opponent (none 
 here), items 500+ gold ahead (none behind); Conqueror's page locked: its players' spells
 and boots, the chip unlocks; champion page: a whole option row or page locks on tap (the
 mark faint on hover), Conqueror and boots locked; a matchup's: spells and skills as usual
-(dimmed), boots' usual second
+(dimmed), boots' usual second; a lock's answer without Boots or Item 6: their cells stay,
+a faint dash; no games under the locks: the build stays, faded, under the host's line
 Used by: skillgrid, runetree, champpage
 
 ### LockBar

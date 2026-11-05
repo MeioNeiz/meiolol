@@ -160,6 +160,7 @@ const W = struct {
     pub const lock_games = Phrase("{n:count} games");
     pub const unlock = plain("Every keystone's build");
     pub const lock = Phrase("Lock {x:text}");
+    pub const nil = plain("—");
 };
 
 /// Win rate, %
@@ -377,6 +378,11 @@ pub const BuildPanel = struct {
     ctx: *[n_kinds]Ctx,
     rows: *[n_kinds][]Row,
     tables: [n_kinds]Table = undefined,
+    /// Bit per Kind drawn even without options, a faint "—" under its title: a lock's
+    /// answer keeps the base build's cells, so the grid doesn't reflow
+    frame: u16 = 0,
+    /// Faded: its host has nothing for the locks, so it shows what they would narrow
+    dim: bool = false,
 
     const Set = struct { ctx: [n_kinds]Ctx, rows: [n_kinds][]Row };
 
@@ -404,6 +410,40 @@ pub const BuildPanel = struct {
     pub fn setLocks(p: *BuildPanel, s: ?*lockbar.Set) void {
         p.locks = s;
         p.runes.set = s;
+    }
+
+    /// The cells with options, as `frame` takes them
+    pub fn kinds(p: *const BuildPanel) u16 {
+        var m: u16 = 0;
+        for (p.sets[0].rows, 0..) |r, i| if (r.len > 0) {
+            m |= @as(u16, 1) << @intCast(i);
+        };
+        return m;
+    }
+
+    /// `old`'s choices on new data (a lock's answer): runes, reach, lead, open cell, order
+    pub fn keep(p: *BuildPanel, old: *const BuildPanel) void {
+        const o = old.*;
+        p.reach = if (o.reach <= p.data.reach.len) o.reach else 0;
+        p.runes.data = if (p.reach == 0) &p.data.runes else &p.data.reach[p.reach - 1];
+        p.runes.keep(&o.runes);
+        p.lead = if (o.lead <= p.data.lead.len) o.lead else 0;
+        p.pick();
+        p.open = if (o.open) |k| (if (p.rows[@backingInt(k)].len > 0) k else null) else null;
+        p.setOrder(o.order);
+    }
+
+    fn framed(p: *const BuildPanel, k: Kind) bool {
+        return p.frame & (@as(u16, 1) << @backingInt(k)) != 0;
+    }
+
+    /// A framed cell without options
+    fn nilCell(p: *const BuildPanel, h: *H, k: Kind) ?N {
+        if (!p.framed(k)) return null;
+        return h.div(.{ .class = "slot", .key = @backingInt(k), .data_k = k }, .{
+            h.div(.{ .class = "sh" }, .{h.h3(.{}, .{k.title()})}),
+            h.p(.{ .class = "nil" }, .{W.nil}),
+        });
     }
 
     /// Points ctx and rows at the locked keystone's set, else the lead's
@@ -503,6 +543,7 @@ pub const BuildPanel = struct {
                 var buf: [lockbar.value_max]u8 = undefined;
                 set.toggle(x.kind.lock(), lockbar.text(&buf, options[x.i].v));
                 ev.push = true;
+                ev.keep = true;
             },
             // Escape in the open cell closes it, focus back on its "all"
             .key => {
@@ -522,7 +563,7 @@ pub const BuildPanel = struct {
         var cells = h.list();
         for ([_]Kind{ .spells, .start, .boots, .core, .item4, .item5, .item6 }) |k| if (p.cell(h, k)) |c| cells.add(c);
         if (p.skillsCell(h)) |c| cells.add(c);
-        return h.div(.{ .class = "c-build" }, .{h.div(.{ .class = "in" }, .{
+        return h.div(.{ .class = "c-build", .data_dim = p.dim }, .{h.div(.{ .class = "in" }, .{
             h.div(.{ .class = "runes" }, .{ p.reachPick(h), p.runes.view(h) }),
             p.levels(h),
             h.div(.{ .class = "slots" }, .{
@@ -674,7 +715,7 @@ pub const BuildPanel = struct {
 
     fn cell(p: *BuildPanel, h: *H, k: Kind) ?N {
         const rows = p.rows[@backingInt(k)];
-        if (rows.len == 0) return null;
+        if (rows.len == 0) return p.nilCell(h, k);
         const t = p.tableFor(h, k, p.open == k, shown);
         return h.div(.{
             .class = "slot",
@@ -692,7 +733,7 @@ pub const BuildPanel = struct {
         const pri = p.rows[@backingInt(Kind.skills)];
         const paths = p.rows[@backingInt(Kind.skill_path)];
         const open = p.open == .skills;
-        if (pri.len == 0 and !(open and paths.len > 0)) return null;
+        if (pri.len == 0 and !(open and paths.len > 0)) return p.nilCell(h, .skills);
         const pri_t: ?N = if (pri.len > 0) p.tableFor(h, .skills, open, shown) else null;
         const attrs = .{ .class = "slot", .key = @backingInt(Kind.skills), .data_k = Kind.skills, .data_open = open, .data_usual = !open and p.asUsual(.skills), .on_keydown = if (open) h.on(p, .key) else null };
         if (open) return h.div(attrs, .{
@@ -780,6 +821,8 @@ pub const css =
     \\  .c-build .slot .c-table[data-v="compact"] td { height: 40px; }
     \\  .c-build .slot .c-table td { border-bottom-color: var(--line); }
     \\  .c-build .slot .c-table .g, .c-build .lp > .g { color: var(--muted); }
+    \\  .c-build[data-dim] { opacity: var(--fade); }
+    \\  .c-build .slot > .nil { margin: 0; padding: var(--sp-2) 0; color: var(--faint); }
     \\  .c-build .slot > .c-btn { align-self: flex-start; margin: 2px 0 0 -10px; color: var(--muted); }
     \\  .c-build .lk { all: unset; position: relative; box-sizing: border-box; display: flex; width: fit-content; min-width: 0; max-width: 100%;
     \\    border-radius: var(--r-s); }
@@ -929,6 +972,43 @@ pub fn gallery(g: *Gallery) void {
     p.id = h.fmt("build-vs-{d}", .{g.width});
     p.runes.id = p.id;
     g.addFill("a matchup's: spells and skills as usual (dimmed), boots' usual second", p.view(h));
+    const ans = h.mem.create(BuildPanel) catch {
+        h.oom = true;
+        return;
+    };
+    ans.init(h.mem, without(h, &demo.darius, &.{ .boots, .item6 }) catch {
+        h.oom = true;
+        return;
+    }) catch {
+        h.oom = true;
+        return;
+    };
+    ans.id = h.fmt("build-ans-{d}", .{g.width}); // fmt-ok: gallery only, never in a wasm
+    ans.runes.id = ans.id;
+    ans.frame = p.kinds();
+    g.addFill("a lock's answer without Boots or Item 6: their cells stay, a faint dash", ans.view(h));
+    const dim = h.mem.create(BuildPanel) catch {
+        h.oom = true;
+        return;
+    };
+    dim.init(h.mem, &demo.darius) catch {
+        h.oom = true;
+        return;
+    };
+    dim.id = h.fmt("build-dim-{d}", .{g.width}); // fmt-ok: gallery only, never in a wasm
+    dim.runes.id = dim.id;
+    dim.dim = true;
+    g.addFill("no games under the locks: the build stays, faded, under the host's line", dim.view(h));
+}
+
+/// `d` without the cells of `kinds`
+fn without(h: *H, d: *const Data, kinds: []const Kind) !*const Data {
+    var slots: std.ArrayList(Slot) = .empty;
+    for (d.slots) |s| if (std.mem.findScalar(Kind, kinds, s.kind) == null) try slots.append(h.mem, s);
+    const out = try h.mem.create(Data);
+    out.* = d.*;
+    out.slots = slots.items;
+    return out;
 }
 
 /// `d` with its top boots' lock value, so the gallery can show a locked row

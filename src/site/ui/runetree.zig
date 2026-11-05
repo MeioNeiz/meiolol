@@ -111,6 +111,7 @@ pub const RuneTree = struct {
                     s.toggle(.keystone, lockbar.text(&buf, &.{t.data.pages[i].v[1]}));
                     t.page = i;
                     ev.push = true;
+                    ev.keep = true;
                 } else if (i < t.data.pages.len and t.lockable(t.data.pages[i].v[1])) {
                     t.lock = !(t.page == i and t.lock);
                     t.page = i;
@@ -131,6 +132,7 @@ pub const RuneTree = struct {
                 const l = lockOf(pos, r.id, &buf);
                 s.toggle(l.kind, l.v);
                 ev.push = true;
+                ev.keep = true;
             },
         }
     }
@@ -175,6 +177,42 @@ pub const RuneTree = struct {
         };
     }
 
+    /// `old`'s state on new data (a lock's answer): the page with the same runes, else
+    /// the same two trees, else the first; Every tree; the tapped rune by its tree and id
+    pub fn keep(t: *RuneTree, old: *const RuneTree) void {
+        const o = old.*;
+        t.all = o.all;
+        t.page = if (o.chosen()) |c| t.like(c.v) else null;
+        t.rune = null;
+        const pos = o.rune orelse return;
+        const r = o.at(pos) orelse return;
+        if (pos.tree == shard_tree) {
+            if (pos.row < t.data.shards.len) t.rune = find(t.data.shards[pos.row..][0..1], r.id, shard_tree, pos.row);
+            return;
+        }
+        if (pos.tree >= o.data.trees.len) return;
+        const id = o.data.trees[pos.tree].id;
+        for (t.data.trees, 0..) |tr, ti| if (tr.id == id) {
+            t.rune = find(tr.rows, r.id, @intCast(ti), 0);
+        };
+    }
+
+    fn like(t: *const RuneTree, v: [8]u32) ?u8 {
+        pages: for (t.data.pages, 0..) |p, i| {
+            for (p.v, v) |x, y| if (x != y) continue :pages;
+            return @intCast(i);
+        }
+        for (t.data.pages, 0..) |p, i| if (p.v[0] == v[0] and p.v[5] == v[5]) return @intCast(i);
+        return if (t.data.pages.len > 0) 0 else null;
+    }
+
+    fn find(rows: []const []const Rune, id: u32, tr: u4, first_row: usize) ?Pos {
+        for (rows, first_row..) |row, ri| for (row, 0..) |r, c| if (r.id == id) {
+            return .{ .tree = tr, .row = @intCast(ri), .col = @intCast(c) };
+        };
+        return null;
+    }
+
     fn chosen(t: *const RuneTree) ?Page {
         const i = t.page orelse return null;
         return if (i < t.data.pages.len) t.data.pages[i] else null;
@@ -195,7 +233,12 @@ pub const RuneTree = struct {
         var pages = h.list();
         for (d.pages, 0..) |p, i| pages.add(t.pageCard(h, p, @intCast(i)));
         var trees = h.list();
-        for (d.trees, 0..) |tr, ti| {
+        // The chosen page's trees first, primary then secondary: a lock's answer with
+        // other trees most played doesn't swap the columns
+        var order: [16]u8 = undefined;
+        const n = t.treeOrder(&order);
+        for (order[0..n]) |ti| {
+            const tr = d.trees[ti];
             var rows = h.list();
             for (tr.rows, 0..) |row, ri| rows.add(t.runeRow(h, row, .{ .tree = @intCast(ti), .row = @intCast(ri), .col = 0 }, ri == 0, false));
             trees.add(h.div(.{ .class = "tree", .key = tr.id, .data_unlit = !t.treeLit(tr.id) }, .{
@@ -217,6 +260,23 @@ pub const RuneTree = struct {
             h.div(.{ .class = "trees" }, .{trees.done()}),
             if (t.chosen() != null) button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(t, .all) }, .{if (t.all) W.chosen else W.every}) else null,
         });
+    }
+
+    fn treeOrder(t: *const RuneTree, out: *[16]u8) usize {
+        const d = t.data;
+        var n: usize = 0;
+        const v = if (t.chosen()) |c| c.v else null;
+        if (v) |x| for ([2]u32{ x[0], x[5] }) |id| for (d.trees, 0..) |tr, ti| if (tr.id == id and n < out.len) {
+            out[n] = @intCast(ti);
+            n += 1;
+        };
+        for (d.trees, 0..) |tr, ti| {
+            if (v) |x| if (tr.id == x[0] or tr.id == x[5]) continue;
+            if (n == out.len) break;
+            out[n] = @intCast(ti);
+            n += 1;
+        }
+        return n;
     }
 
     fn pageCard(t: *RuneTree, h: *H, p: Page, i: u8) N {

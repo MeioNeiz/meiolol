@@ -164,6 +164,10 @@ pub const Dom = struct {
         d.node(id).call("click", .{}, void);
     }
 
+    pub fn scrollBy(_: *Dom, dy: f32) void {
+        zjb.global("window").call("scrollBy", .{ @as(f64, 0), @as(f64, dy) }, void);
+    }
+
     pub fn scroll(d: *Dom, id: u32) void {
         const o = zjb.global("Object").new(.{});
         defer o.release();

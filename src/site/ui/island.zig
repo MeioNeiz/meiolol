@@ -10,10 +10,16 @@
 //! Url)`. A handler sets `ev.push` for a history entry (a sort), else the entry is
 //! replaced (typing a search).
 //!
+//! A root with `pub const pins = true` may set `ev.keep` in a handler: later renders keep
+//! that node where it was on screen (the page scrolls by its shift), until the next act
+//! (a click, a key, an input). For content above it that grows or shrinks, maybe late (an
+//! answer fetched after the tap). Other roots compile none of it
+//!
 //! `Dom` provides the diff's ops (el, text, attr, del, data, ins, rm, forget) and:
 //! adopt(sel, first) -> count, listen(island, sel, mask), rect(id) -> [3]f32 (left, top,
 //! width), capture(id, pointer), active() -> id, focus(id), scroll(id), jump(element
-//! id), popover(id, show), hash(buf) -> []const u8, setHash(s, push), warn(msg).
+//! id), popover(id, show), hash(buf) -> []const u8, setHash(s, push), warn(msg); with
+//! pins scrollBy(dy).
 const std = @import("std");
 const tree = @import("tree.zig");
 const diff = @import("diff.zig");
@@ -146,10 +152,31 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
         /// DOM id -> node index in the current tree
         by_dom: std.ArrayList(u32) = .empty,
         listening: u16 = 0,
+        /// The pinned node's DOM id, 0 none
+        pin: if (pins) u32 else void = if (pins) 0 else {},
 
         const I = @This();
         const none = std.math.maxInt(u32);
         const has_url = @hasDecl(Root, "Url");
+        const pins = @hasDecl(Root, "pins") and Root.pins;
+
+        /// The pinned node before a patch, to find it after (ids are recycled)
+        const Pinned = struct { tag: tree.Tag, key: u32, top: f32 };
+
+        fn pinned(i: *I) ?Pinned {
+            if (i.pin == 0 or i.pin >= i.by_dom.items.len or i.by_dom.items[i.pin] == none) return null;
+            const x = i.trees[i.cur].node(@fromBackingInt(i.by_dom.items[i.pin]));
+            return .{ .tag = x.tag, .key = x.key, .top = i.rt.dom.rect(i.pin)[1] };
+        }
+
+        fn keepPin(i: *I, was: ?Pinned) void {
+            const p = was orelse return;
+            if (i.pin >= i.by_dom.items.len or i.by_dom.items[i.pin] == none) return;
+            const x = i.trees[i.cur].node(@fromBackingInt(i.by_dom.items[i.pin]));
+            if (x.tag != p.tag or x.key != p.key) return;
+            const dy = i.rt.dom.rect(i.pin)[1] - p.top;
+            if (dy != 0) i.rt.dom.scrollBy(dy);
+        }
 
         fn build(i: *I, slot: u1, root: *Root) void {
             _ = i.arenas[slot].reset(.retain_capacity);
@@ -193,6 +220,7 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
             var scratch: std.heap.ArenaAllocator = .init(i.rt.gpa);
             defer scratch.deinit();
             const focused = i.rt.dom.active();
+            const was = if (pins) i.pinned() else {};
             var d: diff.Diff(Dom) = .{
                 .old = &i.trees[i.cur],
                 .new = &i.trees[next],
@@ -205,6 +233,7 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
             d.run();
             i.cur = next;
             i.index();
+            if (pins) i.keepPin(was);
             // Moving a node drops focus inside it: put it back, without scrolling. Not a
             // removed one's: its id may be a new node's now, maybe text (focus throws)
             if (focused != 0 and !d.lost and focused < i.by_dom.items.len and i.by_dom.items[focused] != none and i.rt.dom.active() != focused) {
@@ -246,7 +275,12 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
                 },
                 else => {},
             }
+            if (pins) switch (in.kind) {
+                .click, .dblclick, .input, .change, .keydown, .submit => i.pin = 0,
+                else => {},
+            };
             hd.call(hd.target, &hd.msg, &ev);
+            if (pins and ev.keep) i.pin = target.dom;
             if (ev.capture) i.rt.dom.capture(target.dom, in.pointer);
             i.render();
             if (ev.after) |after| i.apply(after);

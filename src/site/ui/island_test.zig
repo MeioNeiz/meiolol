@@ -327,6 +327,56 @@ const Answer = struct {
     }
 };
 
+/// A tap shows a bar above the buttons at once and lines above them later (an answer)
+const Pinned = struct {
+    bar: bool = false,
+    lines: u8 = 0,
+    keep: bool = true,
+
+    pub const pins = true;
+    pub const Msg = union(enum) { tap };
+    pub fn update(x: *Pinned, _: Msg, ev: *tree.Event) void {
+        x.bar = !x.bar;
+        ev.keep = x.keep;
+    }
+    pub fn view(x: *Pinned, h: *tree.H) tree.N {
+        var above = h.list();
+        if (x.bar) above.add(h.p(.{ .key = 1 }, .{"Locked"}));
+        for (0..x.lines) |k| above.add(h.p(.{ .key = 10 + @as(u32, @intCast(k)) }, .{"line"}));
+        return h.div(.{}, .{
+            above.done(),
+            h.button(.{ .key = 2, .data_k = "a", .on_click = h.on(x, .tap) }, .{"A"}),
+            h.button(.{ .key = 3, .data_k = "b", .on_click = h.on(x, .tap) }, .{"B"}),
+        });
+    }
+};
+
+test "pins: the tapped node stays put through its own patch and later renders" {
+    var p: Page = undefined;
+    p.init("");
+    defer p.arena.deinit();
+    p.fake.layout = true;
+    var state: Pinned = .{};
+    var server: Pinned = .{};
+    const i = p.add(Pinned, &state, &server);
+    const b = Page.id(i, "data-k", "b");
+    const top = p.fake.rect(b)[1];
+    _ = p.rt.event(0, .{ .kind = .click, .target = b });
+    try testing.expectEqual(top, p.fake.rect(b)[1]);
+    try testing.expect(p.fake.scroll_y > 0);
+    state.lines = 3;
+    i.render();
+    try testing.expectEqual(top, p.fake.rect(b)[1]);
+    try p.matches(i);
+    // A tap that doesn't keep ends the pin: what comes later moves the buttons again
+    state.keep = false;
+    _ = p.rt.event(0, .{ .kind = .click, .target = Page.id(i, "data-k", "a") });
+    const y = p.fake.scroll_y;
+    state.lines = 0;
+    i.render();
+    try testing.expectEqual(y, p.fake.scroll_y);
+}
+
 test "a focused node removed: its id may go to a text node, which focus would throw on" {
     var p: Page = undefined;
     p.init("");

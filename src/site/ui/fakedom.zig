@@ -27,6 +27,10 @@ pub const Fake = struct {
     shown: u32 = 0,
     scrolled: u32 = 0,
     clicked: u32 = 0,
+    /// rect's top: each node 10 px down from the one before it in document order, and
+    /// scrollBy moves them all, as a page of one-line nodes would
+    layout: bool = false,
+    scroll_y: f32 = 0,
 
     pub const FNode = struct {
         tag: []const u8,
@@ -151,8 +155,24 @@ pub const Fake = struct {
     pub fn listen(f: *Fake, _: u32, _: []const u8, mask: u16) void {
         f.listened = mask;
     }
-    pub fn rect(f: *Fake, _: u32) [3]f32 {
-        return .{ 0, 0, f.width };
+    pub fn rect(f: *Fake, id: u32) [3]f32 {
+        if (!f.layout) return .{ 0, 0, f.width };
+        const n = f.nodes.get(id) orelse return .{ 0, 0, f.width };
+        var at: f32 = 0;
+        for (f.roots.items) |r| if (countTo(r, n, &at)) break;
+        return .{ 0, at * 10 - f.scroll_y, f.width };
+    }
+
+    /// Counts the nodes before `n` under `r` in document order; true once found
+    fn countTo(r: *FNode, n: *FNode, at: *f32) bool {
+        if (r == n) return true;
+        at.* += 1;
+        for (r.kids.items) |k| if (countTo(k, n, at)) return true;
+        return false;
+    }
+
+    pub fn scrollBy(f: *Fake, dy: f32) void {
+        f.scroll_y += dy;
     }
     pub fn capture(_: *Fake, _: u32, _: i32) void {}
     pub fn active(f: *Fake) u32 {
