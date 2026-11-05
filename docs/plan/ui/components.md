@@ -537,9 +537,10 @@ line under it (role, patch), the role picker, the opponent search and the headli
 figures. Wraps in its container: on a phone each part takes a row, the strip last. With
 `pair` filled it heads the matchup page: both portraits, the swap between them (the other
 side's page) and ⊗ on the opponent back to the champion page (lolalytics' VS slot: the
-two pages are one with the slot empty or filled)
-States: a champion page's head; name only; a matchup page's head: the opponent's slot
-filled
+two pages are one with the slot empty or filled). A champion's P Q W E R icons sit under
+its name, each keyed by its letter
+States: a champion page's head; name only; with its abilities; a matchup page's head: the
+opponent's slot filled
 Used by: champpage, matchpage
 
 ### MatchupBrief
@@ -880,8 +881,8 @@ GameArt: an item, rune, rune tree, stat shard or summoner spell icon. Items and 
 rounded squares, runes and shards round; dim greys an option not taken (a rune page's
 other runes). The name is its alt unless written beside it
 States: item 36, 28, 22, 20, 16; rune, tree, spell; dim, no icon
-Used by: gamebuild, picks, itempath, runetree, buildpanel, lockbar, gamehead, gamerow,
-scoreboard, itemrow, gamepage, patchpage, champpage
+Used by: champhead, gamebuild, picks, itempath, runetree, buildpanel, lockbar, gamehead,
+gamerow, scoreboard, itemrow, gamepage, patchpage, champpage
 
 ### SkillGrid
 `skillgrid.zig` `.c-skills` site

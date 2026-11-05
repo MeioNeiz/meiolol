@@ -286,7 +286,9 @@ test "fixture games to stats, curves and the website" {
         const vdir = try std.fs.path.join(arena, &.{ "ddragon", v });
         try tmp.dir.createDirPath(io, vdir);
         try tmp.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ vdir, "championFull.json" }), .data = try arena.print(
-            \\{{"data":{{"Darius":{{"key":"122","name":"Darius","stats":{{"hp":652}},"spells":[{{"name":"Decimate","cooldown":[{s}],"cost":[25],"range":[425],"tooltip":"x"}}]}}}}}}
+            \\{{"data":{{"Darius":{{"key":"122","name":"Darius","stats":{{"hp":652}},"passive":{{"name":"Hemorrhage","image":{{"full":"Darius_P.png"}}}},
+            \\"spells":[{{"name":"Decimate","cooldown":[{s}],"cost":[25],"range":[425],"tooltip":"x","image":{{"full":"DariusCleave.png"}}}},
+            \\{{"name":"Crippling Strike","image":{{"full":"DariusW.png"}}}},{{"name":"Apprehend","image":{{"full":"DariusE.png"}}}},{{"name":"Noxian Guillotine","image":{{"full":"DariusR.png"}}}}]}}}}}}
         , .{cd}) });
         try tmp.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ vdir, "item.json" }), .data = "{\"data\":{}}" });
         try tmp.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ vdir, "runesReforged.json" }), .data = "[]" });
@@ -415,6 +417,12 @@ test "fixture games to stats, curves and the website" {
             std.debug.print("missing {s}\n", .{page});
             return err;
         };
+    }
+    // The champion head's P Q W E R, from Data Dragon's cached championFull
+    {
+        const html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "champions/darius/top.html" }), arena, .limited(16 << 20));
+        try testing.expect(std.mem.find(u8, html, "/img/passive/Darius_P.jpg") != null);
+        try testing.expect(std.mem.find(u8, html, "Noxian Guillotine") != null);
     }
     // The draft helper's model file carries the fitted draft model (fitted.zig)
     {

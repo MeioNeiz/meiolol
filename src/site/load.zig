@@ -111,6 +111,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
         site.when = b.when;
         site.patch_mix = b.patch_mix;
         site.ddragon_version = b.ddragon_version;
+        site.abilities = b.abilities;
         site.since_ms = b.since_ms;
         site.model = b.model;
         site.stats = try .parse(arena, b.model);

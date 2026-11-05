@@ -3,9 +3,11 @@
 //! figures. Wraps in its container: on a phone each part takes a row, the strip last.
 //! With `pair` filled it heads the matchup page: both portraits, the swap between them
 //! (the other side's page) and ⊗ on the opponent back to the champion page (lolalytics'
-//! VS slot: the two pages are one with the slot empty or filled)
+//! VS slot: the two pages are one with the slot empty or filled). A champion's P Q W E R
+//! icons sit under its name, each keyed by its letter
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
+const art = @import("art.zig");
 const button = @import("button.zig");
 const phrase = @import("phrase.zig");
 const rolepicker = @import("rolepicker.zig");
@@ -24,6 +26,8 @@ pub const Opts = struct {
     champ: champ.Champ,
     /// Under the name: "Top · 16.21"
     sub: ?tree.Text = null,
+    /// P Q W E R, under the line; any other count draws none
+    abilities: []const art.Art = &.{},
     /// RolePicker
     roles: ?N = null,
     /// ChampSearch, link mode: an opponent opens the matchup page
@@ -60,12 +64,23 @@ pub fn view(h: *H, o: Opts) N {
             h.div(.{}, .{
                 if (o.pair) |p| h.el(.h1, .{}, .{ o.champ.name, h.span(.{ .class = "and" }, .{W.vs_word}), p.champ.name }) else h.el(.h1, .{}, .{o.champ.name}),
                 if (o.sub) |s| h.span(.{ .class = "sub" }, .{s}) else null,
+                abilities(h, o.abilities),
             }),
         }),
         o.roles,
         if (o.vs) |v| h.div(.{ .class = "vs" }, .{v}) else null,
         o.strip,
     });
+}
+
+fn abilities(h: *H, list: []const art.Art) ?N {
+    if (list.len != 5) return null;
+    var out = h.list();
+    const keys = "PQWER";
+    for (list, 0..) |a, i| out.add(h.span(.{ .data_k = if (i == 0) null else keys[i..][0..1] }, .{
+        art.view(h, a, .{ .k = .spell, .px = .@"28" }),
+    }));
+    return h.span(.{ .class = "ab" }, .{out.done()});
 }
 
 pub const css =
@@ -87,6 +102,11 @@ pub const css =
     \\  .c-champhead .pair .clear::after { content: ""; position: absolute; inset: calc((20px - var(--hit)) / 2); }
     \\  .c-champhead .pair .clear:hover { background: var(--ctl-bg-2); color: var(--text); }
     \\  .c-champhead > .id .sub { display: block; margin-top: 2px; font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-champhead .ab { display: flex; gap: 4px; margin-top: 6px; }
+    \\  .c-champhead .ab > span { position: relative; display: flex; }
+    \\  .c-champhead .ab > [data-k]::after { content: attr(data-k); position: absolute; right: -3px; bottom: -3px;
+    \\    min-width: 12px; padding: 0 2px; border-radius: 3px; background: var(--panel-3); color: var(--t2);
+    \\    font-size: var(--fs-xs); font-weight: var(--w-b); line-height: 13px; text-align: center; }
     \\  .c-champhead > .vs { flex: 1 1 200px; max-width: 240px; }
     \\  .c-champhead > .c-strip { margin-left: auto; }
     \\  @container champhead (max-width: 1000px) { .c-champhead > .c-strip { margin-left: 0; } }
@@ -97,6 +117,14 @@ pub const css =
     \\}
     \\
 ;
+
+const demo_abilities = [5]art.Art{
+    art.ability("passive", "Darius_Icon_Hemorrhage", "Hemorrhage"),
+    art.ability("spell", "DariusCleave", "Decimate"),
+    art.ability("spell", "DariusNoxianTacticsONH", "Crippling Strike"),
+    art.ability("spell", "DariusAxeGrabCone", "Apprehend"),
+    art.ability("spell", "DariusExecute", "Noxian Guillotine"),
+};
 
 const W = struct {
     pub const swap = phrase.Phrase("From {y:text}'s side: {y:text} vs {x:text}");
@@ -152,6 +180,7 @@ pub fn gallery(g: *Gallery) void {
     };
     g.addFill("a champion page's head", view(h, o));
     g.addFill("name only", view(h, .{ .champ = champ.demo("Ahri", "Ahri") }));
+    g.addFill("with its abilities", view(h, .{ .champ = champ.demo("Darius", "Darius"), .sub = W.sub, .abilities = &demo_abilities }));
     g.addFill("a matchup page's head: the opponent's slot filled", view(h, .{
         .champ = champ.demo("Darius", "Darius"),
         .sub = plain("Top · 16.21"),

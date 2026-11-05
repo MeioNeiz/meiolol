@@ -5,6 +5,7 @@ const store = @import("store");
 const core = @import("core");
 const stats = @import("../stats.zig");
 const partials = @import("../partials.zig");
+const ddragon = @import("../ddragon.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -12,6 +13,7 @@ const Role = core.Role;
 const root = @import("root.zig");
 const Champ = root.Champ;
 const Site = root.Site;
+const log = std.log.scoped(.site);
 
 pub fn loadChamps(site: *Site, db: store.Db, games: ?*const partials.Store) !void {
     const a = site.arena;
@@ -76,6 +78,27 @@ pub fn loadChamps(site: *Site, db: store.Db, games: ?*const partials.Store) !voi
     }
     site.champs = try list.toOwnedSlice(a);
     try indexChamps(site);
+    site.abilities = try loadAbilities(site);
+}
+
+/// From championFull.json at the site's Data Dragon version in Options.ddragon_dir, as
+/// patchnotes caches it (`meiolol site` fetches it when missing); empty without it: the
+/// pages go out without ability art
+fn loadAbilities(site: *const Site) ![]const ddragon.Abilities {
+    const dir = site.opts.ddragon_dir orelse return &.{};
+    if (site.ddragon_version.len == 0) return &.{};
+    const path = try std.fs.path.join(site.arena, &.{ dir, site.ddragon_version, "championFull.json" });
+    const body = std.Io.Dir.cwd().readFileAlloc(site.io, path, site.arena, .limited(1 << 26)) catch |err| {
+        log.info("ability art: {s}: {t}", .{ path, err });
+        return &.{};
+    };
+    return ddragon.abilities(site.arena, site.ddragon_version, body) catch |err| switch (err) {
+        error.OutOfMemory => return err,
+        else => {
+            log.warn("ability art: {s}: {t}", .{ path, err });
+            return &.{};
+        },
+    };
 }
 
 /// by_c and by_slug from champs

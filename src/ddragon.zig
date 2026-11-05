@@ -449,6 +449,39 @@ fn runeIcon(arena: std.mem.Allocator, path: []const u8) ![]const u8 {
     return ui.art.local(arena, try arena.print(base ++ "/cdn/img/{s}", .{path}));
 }
 
+/// A champion's passive and spells, P Q W E R: names and icons (ui.art.local's paths)
+pub const Abilities = struct { id: u32, art: [5]ui.art.Art };
+
+/// championFull.json's abilities at `version`, sorted by id; a champion without all five
+/// left out
+pub fn abilities(arena: std.mem.Allocator, version: []const u8, champion_full: []const u8) ![]const Abilities {
+    const Spell = struct { name: []const u8 = "", image: struct { full: []const u8 = "" } = .{} };
+    const Champ = struct { key: []const u8, passive: Spell = .{}, spells: []const Spell = &.{} };
+    const doc = try std.json.parseFromSliceLeaky(
+        struct { data: std.json.ArrayHashMap(Champ) },
+        arena,
+        champion_full,
+        .{ .ignore_unknown_fields = true },
+    );
+    var out: std.ArrayList(Abilities) = .empty;
+    for (doc.data.map.values()) |c| {
+        if (c.spells.len != 4 or c.passive.image.full.len == 0) continue;
+        var x: Abilities = .{ .id = std.fmt.parseInt(u32, c.key, 10) catch continue, .art = undefined };
+        for (&x.art, 0..) |*a, i| {
+            const s = if (i == 0) c.passive else c.spells[i - 1];
+            const kind = if (i == 0) "passive" else "spell";
+            a.* = .{ .name = s.name, .src = try ui.art.local(arena, try arena.print(base ++ "/cdn/{s}/img/{s}/{s}", .{ version, kind, s.image.full })) };
+        }
+        try out.append(arena, x);
+    }
+    std.mem.sort(Abilities, out.items, {}, struct {
+        fn f(_: void, a: Abilities, b: Abilities) bool {
+            return a.id < b.id;
+        }
+    }.f);
+    return out.items;
+}
+
 /// `id` in a list sorted by id
 pub fn find(list: []const Named, id: u32) ?Named {
     const i = std.sort.binarySearch(Named, list, id, struct {
@@ -457,6 +490,29 @@ pub fn find(list: []const Named, id: u32) ?Named {
         }
     }.f) orelse return null;
     return list[i];
+}
+
+test "abilities: P Q W E R names and site paths by id; incomplete champions left out" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const body =
+        \\{"data": {
+        \\ "Ornn": {"key": "516", "passive": {"name": "Living Forge", "image": {"full": "OrnnP.png"}},
+        \\   "spells": [{"name": "Volcanic Rupture", "image": {"full": "OrnnQ.png"}}, {"name": "Bellows Breath", "image": {"full": "OrnnW.png"}},
+        \\     {"name": "Searing Charge", "image": {"full": "OrnnE.png"}}, {"name": "Call of the Forge God", "image": {"full": "OrnnR.png"}}]},
+        \\ "Anivia": {"key": "34", "passive": {"name": "Rebirth", "image": {"full": "Anivia_P.png"}},
+        \\   "spells": [{"name": "Flash Frost", "image": {"full": "FlashFrost.png"}}, {"name": "Crystallize", "image": {"full": "Crystallize.png"}},
+        \\     {"name": "Frostbite", "image": {"full": "Frostbite.png"}}, {"name": "Glacial Storm", "image": {"full": "GlacialStorm.png"}}]},
+        \\ "Odd": {"key": "9999", "passive": {"name": "x", "image": {"full": "x.png"}}, "spells": []}
+        \\}}
+    ;
+    const list = try abilities(arena.allocator(), "16.22.1", body);
+    try std.testing.expectEqual(2, list.len);
+    try std.testing.expectEqual(34, list[0].id);
+    try std.testing.expectEqualStrings("/dd/16.22.1/img/spell/FlashFrost.jpg", list[0].art[1].src);
+    try std.testing.expectEqualStrings("Living Forge", list[1].art[0].name);
+    try std.testing.expectEqualStrings("/dd/16.22.1/img/passive/OrnnP.jpg", list[1].art[0].src);
+    try std.testing.expectEqualStrings("Call of the Forge God", list[1].art[4].name);
 }
 
 test "legendary items" {

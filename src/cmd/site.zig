@@ -247,6 +247,7 @@ pub fn cmdSite(c: *Cmd) !u8 {
         return 0;
     }
     const opts = try f.options(c, c.arena, db, email);
+    _ = championFull(c, db);
     try site.generate(c.init.gpa, c.init.io, db, opts);
     makeIcons(c, db, opts.out_dir, opts.patches[0]);
     return 0;
@@ -280,6 +281,13 @@ fn makeIcons(c: *Cmd, db: store.Db, out_dir: ?[]const u8, patch: ?[]const u8) vo
         } else patches.append(c.arena, p) catch return;
     };
     var paths: std.ArrayList([]const u8) = .empty;
+    if (championFull(c, db)) |x| {
+        const list = main.ddragon.abilities(c.arena, x.version, x.body) catch |err| blk: {
+            std.log.warn("ability art: {t}", .{err});
+            break :blk &.{};
+        };
+        for (list) |a| for (a.art) |y| paths.append(c.arena, y.src) catch return;
+    }
     for (patches.items) |p| {
         const d = main.ddragon.buildData(gpa, c.arena, io, p) catch |err| {
             std.log.warn("art: {s}: {t}", .{ p, err });
@@ -294,6 +302,33 @@ fn makeIcons(c: *Cmd, db: store.Db, out_dir: ?[]const u8, patch: ?[]const u8) vo
         return;
     };
     report("art", art);
+}
+
+/// Data Dragon's championFull.json at the champions' version (the pages' ability art,
+/// site.champs), fetched into DIR/ddragon when missing; null, warned, failing
+fn championFull(c: *Cmd, db: store.Db) ?struct { version: []const u8, body: []const u8 } {
+    const io = c.init.io;
+    const version = championVersion(c.arena, db) catch |err| {
+        std.log.warn("ability art: {t}", .{err});
+        return null;
+    } orelse return null;
+    var http: std.http.Client = .{ .allocator = c.init.gpa, .io = io };
+    defer http.deinit();
+    const cache = std.fs.path.join(c.arena, &.{ c.data_dir, "ddragon" }) catch return null;
+    const body = main.patchnotes.cached(&http, c.arena, io, cache, version, "championFull") catch |err| {
+        std.log.warn("ability art: championFull {s}: {t}", .{ version, err });
+        return null;
+    };
+    return .{ .version = version, .body = body };
+}
+
+/// As site.champs takes it: the first champion's by name
+fn championVersion(arena: std.mem.Allocator, db: store.Db) !?[]const u8 {
+    var q = try db.prepare("SELECT ddragon_version FROM champions ORDER BY name LIMIT 1");
+    defer q.deinit();
+    try q.bind(.{});
+    if (!try q.step()) return null;
+    return try arena.dupe(u8, q.row(struct { v: []const u8 }).v);
 }
 
 /// A game's page links its own patch's art: the last few cover nearly every game shown;

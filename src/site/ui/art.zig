@@ -82,9 +82,10 @@ pub const demo_patch = demo_version[0..std.mem.findScalarLast(u8, demo_version, 
 const dd = "https://ddragon.leagueoflegends.com/cdn/";
 const site_dd = "/dd/";
 
-/// Where the site serves Data Dragon's item, spell and rune `url` (src/icons.zig makes
-/// them: a rune shrunk, items and spells as JPEG): /dd/ and the path under its cdn/; a
-/// path not made yet redirects to `remote`'s. Any other URL as it is
+/// Where the site serves Data Dragon's item, spell (summoner's and champions'), passive
+/// and rune `url` (src/icons.zig makes them: a rune shrunk, the rest as JPEG): /dd/ and
+/// the path under its cdn/; a path not made yet redirects to `remote`'s. Any other URL
+/// as it is
 pub fn local(a: std.mem.Allocator, url: []const u8) ![]const u8 {
     const rest = if (std.mem.startsWith(u8, url, dd)) url[dd.len..] else return url;
     if (!std.mem.endsWith(u8, rest, ".png")) return url;
@@ -93,7 +94,9 @@ pub fn local(a: std.mem.Allocator, url: []const u8) ![]const u8 {
     const version = parts.next().?;
     if (version.len == 0 or !std.ascii.isDigit(version[0]) or !std.mem.eql(u8, parts.next() orelse "", "img")) return url;
     const kind = parts.next() orelse return url;
-    if (!std.mem.eql(u8, kind, "item") and !std.mem.eql(u8, kind, "spell")) return url;
+    for ([_][]const u8{ "item", "spell", "passive" }) |k| {
+        if (std.mem.eql(u8, kind, k)) break;
+    } else return url;
     return std.mem.concat(a, u8, &.{ site_dd, rest[0 .. rest.len - 4], ".jpg" });
 }
 
@@ -114,6 +117,11 @@ pub fn spell(comptime key: []const u8, comptime shown: []const u8) Art {
     return .{ .name = shown, .src = site_dd ++ demo_version ++ "/img/spell/Summoner" ++ key ++ ".jpg" };
 }
 
+/// A champion's passive (`kind` "passive") or spell ("spell") by its Data Dragon file name
+pub fn ability(comptime kind: []const u8, comptime file: []const u8, comptime shown: []const u8) Art {
+    return .{ .name = shown, .src = site_dd ++ demo_version ++ "/img/" ++ kind ++ "/" ++ file ++ ".jpg" };
+}
+
 /// `path` under perk-images/Styles/
 pub fn rune(comptime path: []const u8, comptime shown: []const u8) Art {
     return .{ .name = shown, .src = site_dd ++ "img/perk-images/Styles/" ++ path ++ ".png" };
@@ -126,6 +134,7 @@ test "local and remote: item, spell and rune art one way and back; others as giv
     const cases = [_][2][]const u8{
         .{ dd ++ "16.21.1/img/item/1058.png", "/dd/16.21.1/img/item/1058.jpg" },
         .{ dd ++ "16.21.1/img/spell/SummonerFlash.png", "/dd/16.21.1/img/spell/SummonerFlash.jpg" },
+        .{ dd ++ "16.21.1/img/passive/OrnnP.png", "/dd/16.21.1/img/passive/OrnnP.jpg" },
         .{ dd ++ "img/perk-images/Styles/Sorcery/DeathfireTouch/DEATHFIRE_TOUCH_KEYSTONE.png", "/dd/img/perk-images/Styles/Sorcery/DeathfireTouch/DEATHFIRE_TOUCH_KEYSTONE.png" },
     };
     for (cases) |c| {

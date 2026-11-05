@@ -245,6 +245,7 @@ pub fn pageData(site: *const Site, ch: Champ) !cp.Data {
         .patch = site.patch,
         .ddragon = site.ddragon_version,
         .champs = champs,
+        .abilities = site.abilitiesOf(ch),
         .roles = out,
         .lengths = &trend.length_labels,
         .spread = spreadOf(site, ch),

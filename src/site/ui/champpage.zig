@@ -75,6 +75,8 @@ pub const Data = struct {
     ddragon: []const u8,
     /// Every champion, for opponents, allies and the search (Opp.champ indexes it)
     champs: []const Other,
+    /// P Q W E R; empty without Data Dragon's file
+    abilities: []const art.Art = &.{},
     /// Most played first; every role with any of its games
     roles: []const Role,
     /// Game length buckets' names: "<20", "20-25" ...
@@ -549,6 +551,7 @@ pub const TopData = struct {
     patch: []const u8,
     ddragon: []const u8,
     champs: []const Other,
+    abilities: []const art.Art = &.{},
     roles: []const TopRole,
 };
 
@@ -783,7 +786,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
         c.* = .{ .role = x.role, .lane = x.lane, .lanes = try laneEnds(a, x.role, x.rels), .comeback = x.comeback, .kills = x.kills, .objectives = x.objectives, .ahead = x.places.ahead, .behind = x.places.behind, .lane_gold = x.places.lane_gold };
     }
     return .{
-        .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
+        .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .abilities = d.abilities, .roles = top },
         .build = .{ .roles = build },
         .more = .{ .name = d.name, .slug = d.slug, .ddragon = d.ddragon, .champs = d.champs, .roles = more },
         .trends = .{ .name = d.name, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = trends, .lengths = d.lengths, .spread = d.spread, .pickup = d.pickup, .also = d.also },
@@ -966,6 +969,7 @@ pub const Top = struct {
                 champhead.view(h, .{
                     .champ = .{ .name = d.name, .src = d.icon },
                     .sub = W.sub.with(h, .{ .r = rl.role.label().s, .p = d.patch }),
+                    .abilities = d.abilities,
                     .roles = p.roles(h),
                     .vs = if (p.has_search) p.search.view(h) else null,
                     .strip = if (p.shownAnswer()) |y| p.locked(h, y, x) else if (x) |y| p.headline(h, y) else h.p(.{ .class = "none" }, .{W.few.with(h, .{ .r = W.ranks[@backingInt(p.files.shown.rank)].s })}),

@@ -180,7 +180,8 @@ pub fn officialUrl(arena: Allocator, patch: []const u8) !?[]const u8 {
     return try arena.print("https://www.leagueoflegends.com/en-gb/news/game-updates/league-of-legends-patch-{d}-{d}-notes/", .{ major + 10, minor });
 }
 
-fn cached(http: *std.http.Client, arena: Allocator, io: std.Io, cache_dir: []const u8, version: []const u8, name: []const u8) ![]const u8 {
+/// `name`.json at `version` from `cache_dir`/<version>/, fetched and kept when missing
+pub fn cached(http: *std.http.Client, arena: Allocator, io: std.Io, cache_dir: []const u8, version: []const u8, name: []const u8) ![]const u8 {
     const cwd = std.Io.Dir.cwd();
     const dir = try std.fs.path.join(arena, &.{ cache_dir, version });
     const path = try arena.print("{s}/{s}.json", .{ dir, name });

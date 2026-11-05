@@ -2,6 +2,7 @@
 //! (data/views.bin) it writes and reads
 
 const std = @import("std");
+const ddragon = @import("../ddragon.zig");
 const store = @import("store");
 const html = @import("html.zig");
 const daily = @import("../daily.zig");
@@ -258,6 +259,7 @@ pub const Loaded = struct {
                 .when = s.when,
                 .patch_mix = s.patch_mix,
                 .ddragon_version = s.ddragon_version,
+                .abilities = s.abilities,
                 .since_ms = s.since_ms,
                 .model = s.model,
             });
@@ -371,6 +373,7 @@ pub const BasePart = struct {
     when: []const u8,
     patch_mix: []const u8,
     ddragon_version: []const u8,
+    abilities: []const ddragon.Abilities,
     since_ms: i64,
     model: []const u8,
 };

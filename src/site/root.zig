@@ -24,6 +24,7 @@ const learning = @import("../learning.zig");
 const spread = @import("../spread.zig");
 pub const builds_page = @import("builds.zig");
 const builds = @import("../builds.zig");
+const ddragon = @import("../ddragon.zig");
 const lean = @import("../lean.zig");
 const filters = @import("filters.zig");
 const evalchart = @import("evalchart.zig");
@@ -217,6 +218,8 @@ pub const Site = struct {
     /// A 30-day view's games by patch: "16.19 9%, 16.20 88%, 16.21 3%"; "" for one patch
     patch_mix: []const u8 = "",
     ddragon_version: []const u8,
+    /// Every champion's P Q W E R at ddragon_version, sorted by id (champs.loadAbilities)
+    abilities: []const ddragon.Abilities = &.{},
     /// The view being written; opts.platforms and opts.patches are its own
     view: html.View,
     /// A rendered request's `lk` query (the champion page's lock set) and the answers to
@@ -360,6 +363,16 @@ pub const Site = struct {
         const n = c.view(&h);
         if (h.oom) return error.OutOfMemory;
         try ui.html.write(&t, n, w);
+    }
+
+    /// The champion's P Q W E R art; empty when Data Dragon's file isn't cached
+    pub fn abilitiesOf(s: *const Site, ch: Champ) []const ui.art.Art {
+        const i = std.sort.binarySearch(ddragon.Abilities, s.abilities, ch.id, struct {
+            fn f(key: u32, x: ddragon.Abilities) std.math.Order {
+                return std.math.order(key, x.id);
+            }
+        }.f) orelse return &.{};
+        return &s.abilities[i].art;
     }
 
     pub fn icon(s: *const Site, ch: Champ) ![]const u8 {
