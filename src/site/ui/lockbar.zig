@@ -19,7 +19,7 @@ const H = tree.H;
 const N = tree.N;
 
 pub const name = "LockBar";
-pub const scope = .{".c-lockbar"};
+pub const scope = .{ ".c-lockbar", ".c-lockmark" };
 
 /// lockanswer.Kind's, in its order (site/locks.zig asserts they agree)
 pub const Kind = enum { keystone, runes, rune, shards, shard, spells, start, boots, core2, core3, item4, item5, item6, skills, skill_path, opponent };
@@ -157,6 +157,13 @@ pub const LockBar = struct {
     }
 };
 
+/// The one "locked" sign, the same on every lockable thing: a lock in a filled accent
+/// circle at its top right corner (the parent is `position: relative`). Unlocked: drawn
+/// but hidden, so a parent's hover can show it faint as a hint (the parent's CSS)
+pub fn mark(h: *H, on: bool) N {
+    return h.span(.{ .class = "c-lockmark", .aria_hidden = true, .data_on = on }, .{});
+}
+
 fn artKind(k: Kind) art.Kind {
     return switch (k) {
         .keystone, .runes, .rune, .shards, .shard => .rune,
@@ -176,6 +183,12 @@ pub const css =
     \\  .c-lockbar > .n > .c-rate > .v { font-weight: var(--w-b); }
     \\  .c-lockbar > .s { white-space: nowrap; color: var(--faint); }
     \\  .c-lockbar > .c-btn { margin-left: auto; }
+    \\  .c-lockmark { position: absolute; top: -5px; right: -5px; z-index: 1; width: 16px; height: 16px; border-radius: 50%;
+    \\    background: var(--ctl-bg-2); box-shadow: 0 0 0 1.5px var(--panel); pointer-events: none; opacity: 0; }
+    \\  .c-lockmark::after { content: ""; position: absolute; inset: 3px; background: var(--muted);
+    \\    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3.75 5.5V4a2.25 2.25 0 0 1 4.5 0v1.5' fill='none' stroke='black' stroke-width='1.5'/%3E%3Crect x='2' y='5.5' width='8' height='5.5' rx='1.2'/%3E%3C/svg%3E") no-repeat center / contain; }
+    \\  .c-lockmark[data-on] { opacity: 1; background: var(--brand); }
+    \\  .c-lockmark[data-on]::after { background: var(--on-brand); }
     \\}
     \\
 ;
@@ -209,6 +222,7 @@ pub fn gallery(g: *Gallery) void {
         .{ .kind = .keystone, .art = &.{.{ .name = "Conqueror", .src = "" }}, .text = "Conqueror" },
         .{ .kind = .core3, .art = core },
     }));
+    g.add("the mark: on a locked rune, page or build row's top right corner", mark(h, true));
 }
 
 test "a lock set keeps one value per kind, in lockanswer's order" {

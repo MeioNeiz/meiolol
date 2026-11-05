@@ -933,7 +933,8 @@ locks its keystone and a rune tap locks the rune (shard) too. Tap a rune: its na
 figures in the readout line. On a matchup's, ▲▼ after a share the matchup moved from
 the champion's usual. An island part: a host embeds it and re-renders on its events
 States: first page lit: its two trees and the shards; second page chosen, a rune tapped;
-no page chosen: every tree; a matchup's: keystones moved from the usual, one tapped
+no page chosen: every tree; a matchup's: keystones moved from the usual, one tapped;
+champion page locks: Conqueror and Last Stand locked (the mark), the rest lock on tap
 Used by: buildpanel
 
 ### BuildPanel
@@ -952,25 +953,26 @@ option, named, sortable. One open at a time; it and the order in the URL. Every 
 cell's head names its columns: the cells sit in a grid, so no one head is over them all. A
 rune page card whose keystone has its own build (Data.keystones) locks on tap: every cell
 then counts that keystone's players, a chip with × says so and unlocks, the keystone in
-the URL (`k`). With a lock set (the champion page's, ui/lockbar.zig) every option and rune
-page locks on tap instead: the host fetches the build under the set and shows it here
+the URL (`k`). With a lock set (the champion page's, ui/lockbar.zig) a tap anywhere on an
+option's row, or on a rune page, locks it instead (lockbar.mark on what is locked): the
+host fetches the build under the set and shows it here
 States: Darius top: whole build, most played first; Item 4 open: every option, named,
 sortable; Skills open: every order and level path; runes by lane opponent (none vs ranged
 here), items 500+ gold ahead (none behind); Conqueror's page locked: its players' spells
-and boots, the chip unlocks; champion page: every option and page locks on tap (lock glyph
-on hover), Conqueror locked; a matchup's: spells and skills as usual (dimmed), boots'
-usual second
+and boots, the chip unlocks; champion page: a whole option row or page locks on tap (the
+mark faint on hover), Conqueror and boots locked; a matchup's: spells and skills as usual
+(dimmed), boots' usual second
 Used by: skillgrid, runetree, champpage
 
 ### LockBar
-`lockbar.zig` `.c-lockbar` site
+`lockbar.zig` `.c-lockbar` `.c-lockmark` site
 LockBar: the champion page's locks (docs/plan/ui/champion-locks.md), one Chip with × per
 lock, then the games under all of them with their win rate and range, then Clear. Hidden
 with no lock. The lock set (`Set`) is the `lk` query as text: per kind its code and the
 values dot-joined, as lockanswer.Locks.format writes them (kinds in one order, so one lock
 set is one URL and one cached answer); no number is parsed
 States: Conqueror and a core path locked: 1,284 games under both; thin: the range is wide,
-so the rate fades
+so the rate fades; the mark: on a locked rune, page or build row's top right corner
 Used by: runetree, buildpanel, champpage
 
 ### Versus

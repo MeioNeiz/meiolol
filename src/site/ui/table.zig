@@ -98,6 +98,9 @@ pub fn Spec(comptime Row: type) type {
         min_games: []const u32 = &.{},
         /// What opens under a row when it is tapped
         detail: ?*const fn (*H, *const Row) N = null,
+        /// Without detail: what a tap anywhere on the row does (null: nothing). A button in
+        /// the row with no handler of its own gives keyboard users the same, by bubbling
+        row_on: ?*const fn (*H, *const Row) ?tree.Handler = null,
         /// Two tables on a page: a short name for one, its URL keys' prefix ("opp")
         key: []const u8 = "",
         /// Rows inside another component (a build slot): no card or head band, tighter
@@ -127,6 +130,7 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
         const d = spec.columns[spec.default_sort];
         if (d.sort == null and d.name == null) @compileError("the default sort column has no sort value");
         if (spec.min_games.len > 0 and spec.games == null) @compileError("min_games needs .games");
+        if (spec.detail != null and spec.row_on != null) @compileError("a row opens its detail or has row_on, not both");
     }
     const ncols = spec.columns.len;
     // Each column's td and th classes, with and without `sorted`, made once at compile time
@@ -313,7 +317,7 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                     }, .{content}) else content}));
                 }
                 const open = t.open == ri;
-                const on_open: ?tree.Handler = if (spec.detail != null) h.on(t, .{ .open = ri }) else null;
+                const on_open: ?tree.Handler = if (spec.detail != null) h.on(t, .{ .open = ri }) else if (spec.row_on) |f| f(h, r) else null;
                 trs.add(h.tr(.{
                     .key = ri,
                     .aria_expanded = if (spec.detail != null) open else null,
@@ -451,6 +455,7 @@ fn minLabel(h: *H, g: u32) tree.Text {
 pub const css =
     \\@layer components {
     \\  .c-table-wrap { container-type: inline-size; overflow-x: auto; }
+    \\  .c-table-wrap:has(> .c-table[data-v="compact"]) { overflow-y: hidden; }
     \\  .c-table { font-size: var(--fs-m); }
     \\  .c-table thead th { position: sticky; top: 0; z-index: 1; background: var(--th-bg); height: 32px;
     \\    border-bottom-color: var(--line-2); }

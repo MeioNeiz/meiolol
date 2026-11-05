@@ -235,6 +235,7 @@ pub const RuneTree = struct {
             }),
             h.span(.{ .class = "fig" }, .{bp.win(h, p.games, p.wins, bp.rate(t.data.games, t.data.wins))}),
             h.span(.{ .class = "g" }, .{ bp.shortCount(h, p.games), " · ", bp.pickText(h, share) }),
+            if (t.set != null or t.lockable(p.v[1])) lockbar.mark(h, on) else null,
         });
     }
 
@@ -260,7 +261,9 @@ pub const RuneTree = struct {
         const share = 100 * @as(f64, @floatFromInt(r.games)) / @as(f64, @floatFromInt(@max(t.data.games, 1)));
         const px: art.Px = if (ks) .@"36" else if (shard) .@"20" else .@"28";
         const tapped = if (t.rune) |x| @as(u16, @bitCast(x)) == @as(u16, @bitCast(pos)) else false;
+        const lock_on = t.lockedAt(pos, r.id);
         const kids = .{
+            if (t.set != null and r.games > 0) lockbar.mark(h, lock_on) else null,
             art.view(h, r.art, .{ .k = .rune, .px = px }),
             h.span(.{ .class = "sh" }, .{h.el(.i, .{ .style = h.vars(.{ .w = @min(share, 100) }) }, .{})}),
             if (r.games > 0 or r.usual != null) h.span(.{ .class = "pk" }, .{ bp.pickText(h, share), t.moved(h, r, share) }) else null,
@@ -276,7 +279,7 @@ pub const RuneTree = struct {
             .key = r.id,
             .data_share = share_attr,
             .data_state = state,
-            .data_lock = t.lockedAt(pos, r.id),
+            .data_lock = lock_on,
             .on_click = h.on(t, .{ .rune = @bitCast(pos) }),
         }, kids);
     }
@@ -335,7 +338,8 @@ pub const css =
     \\  .c-runes .page > .ks > .c-art + .c-art { --sz: 18px; }
     \\  .c-runes .page:hover { background: var(--panel-2); }
     \\  .c-runes .page:has(> .ks[aria-pressed="true"]) { border-color: var(--sel-line); background: var(--accent-bg); }
-    \\  .c-runes .page[data-lock] { border-color: var(--focus); box-shadow: inset 0 0 0 1px var(--focus); }
+    \\  .c-runes .page[data-lock] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+    \\  .c-runes .page:hover > .c-lockmark { opacity: 1; }
     \\  .c-runes .page > .ks { all: unset; display: flex; align-items: center; gap: 2px; grid-row: span 2; cursor: pointer; }
     \\  .c-runes .page > .ks::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
     \\  .c-runes .page > .ks:focus-visible::after { outline: 2px solid var(--focus); }
@@ -353,7 +357,7 @@ pub const css =
     \\  .c-runes .row { display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 2px;
     \\    padding: 3px 0; border-top: 1px solid var(--line); }
     \\  .c-runes .row:first-of-type { border-top: 0; }
-    \\  .c-runes .rune { all: unset; box-sizing: border-box; display: flex; flex-direction: column; align-items: center;
+    \\  .c-runes .rune { all: unset; position: relative; box-sizing: border-box; display: flex; flex-direction: column; align-items: center;
     \\    gap: 1px; padding: 3px 0; border-radius: 6px; min-width: 0; font-variant-numeric: tabular-nums; text-align: center; }
     \\  .c-runes button.rune { cursor: pointer; }
     \\  .c-runes button.rune:hover { background: var(--panel-2); }
@@ -364,8 +368,9 @@ pub const css =
     \\  .c-runes .rune[data-share="mid"] > .c-art { opacity: 0.7; filter: none; }
     \\  .c-runes .rune[data-share="hi"] > .c-art, .c-runes .rune[data-state] > .c-art { opacity: 1; filter: none; }
     \\  .c-runes .rune[data-state="lit"] { background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--sel-line); }
-    \\  .c-runes .rune[data-state="sel"] { background: var(--panel-3); box-shadow: inset 0 0 0 1px var(--line-2); }
-    \\  .c-runes .rune[data-lock] { box-shadow: inset 0 0 0 1.5px var(--focus); }
+    \\  .c-runes .rune[data-state="sel"] { background: var(--panel-3); }
+    \\  .c-runes .rune[data-lock] { box-shadow: inset 0 0 0 2px var(--accent); }
+    \\  .c-runes button.rune:hover > .c-lockmark { opacity: 1; }
     \\  .c-runes .rune > .sh { width: 100%; max-width: 40px; height: 3px; margin-top: 2px; border-radius: 2px; background: var(--bar-track); }
     \\  .c-runes .rune > .sh > i { display: block; height: 100%; width: calc(var(--w) * 1%); border-radius: 2px; background: var(--bar-hi); }
     \\  .c-runes .rune > .pk { font-size: var(--fs-s); color: var(--muted); line-height: 1.25; }
@@ -418,6 +423,19 @@ pub fn gallery(g: *Gallery) void {
     };
     t.* = .{ .data = vs, .rune = .{ .tree = 0, .row = 0, .col = 0 } };
     g.addFill("a matchup's: keystones moved from the usual, one tapped", t.view(h));
+    const set = h.mem.create(lockbar.Set) catch {
+        h.oom = true;
+        return;
+    };
+    set.* = .{};
+    set.toggle(.keystone, "8010");
+    set.toggle(.rune, "8299");
+    const lk = h.mem.create(RuneTree) catch {
+        h.oom = true;
+        return;
+    };
+    lk.* = .{ .data = &demo.runes, .page = 1, .set = set };
+    g.addFill("champion page locks: Conqueror and Last Stand locked (the mark), the rest lock on tap", lk.view(h));
 }
 
 /// `d` with its first tree's first two keystones moved: one taken far more, one less

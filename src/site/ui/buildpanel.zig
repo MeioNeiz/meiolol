@@ -14,8 +14,9 @@
 //! head is over them all. A rune page card whose keystone
 //! has its own build (Data.keystones) locks on tap: every cell then counts that
 //! keystone's players, a chip with × says so and unlocks, the keystone in the URL (`k`).
-//! With a lock set (the champion page's, ui/lockbar.zig) every option and rune page
-//! locks on tap instead: the host fetches the build under the set and shows it here
+//! With a lock set (the champion page's, ui/lockbar.zig) a tap anywhere on an option's
+//! row, or on a rune page, locks it instead (lockbar.mark on what is locked): the host
+//! fetches the build under the set and shows it here
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -242,13 +243,12 @@ pub const Row = struct {
         return rate(r.o.games, r.o.wins) - r.c.own;
     }
 
-    /// Under a lock set, a button without chrome that locks the option (lock glyph on
-    /// hover, accent outline when locked)
+    /// Under a lock set, a button without chrome naming the option's lock, the mark at
+    /// its corner. No handler of its own: its click bubbles to the row's (lockOn)
     fn what(h: *H, r: *const Row) N {
         const inner = r.option(h);
         const p = r.c.host orelse return inner;
         const set = p.locks orelse return inner;
-        const i = (@intFromPtr(r.o) - @intFromPtr(r.c.options.ptr)) / @sizeOf(Option);
         const locked = set.has(r.c.kind.lock(), lockbar.value(h.mem, r.o.v));
         return h.button(.{
             .type = "button",
@@ -256,8 +256,15 @@ pub const Row = struct {
             .aria_pressed = locked,
             .aria_label = W.lock.with(h, .{ .x = r.name(h) }),
             .data_lock = locked,
-            .on_click = h.on(p, .{ .lock = .{ .kind = r.c.kind, .i = @intCast(i) } }),
-        }, .{inner});
+        }, .{ inner, lockbar.mark(h, locked) });
+    }
+
+    /// Under a lock set, a tap anywhere on the row locks the option
+    fn lockOn(h: *H, r: *const Row) ?tree.Handler {
+        const p = r.c.host orelse return null;
+        if (p.locks == null) return null;
+        const i = (@intFromPtr(r.o) - @intFromPtr(r.c.options.ptr)) / @sizeOf(Option);
+        return h.on(p, .{ .lock = .{ .kind = r.c.kind, .i = @intCast(i) } });
     }
 
     /// The option in words: its name, its items', or its keys
@@ -345,6 +352,7 @@ pub const Table = table.DataTable(Row, .{
     },
     .default_sort = 1,
     .games = Row.games,
+    .row_on = Row.lockOn,
     .compact = true,
 });
 
@@ -773,14 +781,13 @@ pub const css =
     \\  .c-build .slot .c-table td { border-bottom-color: var(--line); }
     \\  .c-build .slot .c-table .g, .c-build .lp > .g { color: var(--muted); }
     \\  .c-build .slot > .c-btn { align-self: flex-start; margin: 2px 0 0 -10px; color: var(--muted); }
-    \\  .c-build .lk { all: unset; position: relative; box-sizing: border-box; display: flex; min-width: 0; max-width: 100%;
-    \\    margin: -3px -4px; padding: 3px 4px; border-radius: var(--r-s); cursor: pointer; }
-    \\  .c-build .lk:focus-visible { outline: 2px solid var(--focus); }
-    \\  .c-build .lk::after { content: ""; position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; opacity: 0;
-    \\    background: var(--muted); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3.75 5.5V4a2.25 2.25 0 0 1 4.5 0v1.5' fill='none' stroke='black' stroke-width='1.5'/%3E%3Crect x='2' y='5.5' width='8' height='5.5' rx='1.2'/%3E%3C/svg%3E") no-repeat center / contain; }
-    \\  .c-build .lk:hover::after, .c-build .lk[data-lock]::after { opacity: 1; }
-    \\  .c-build .lk[data-lock] { box-shadow: inset 0 0 0 1.5px var(--focus); }
-    \\  .c-build .lk[data-lock]::after { background: var(--focus); }
+    \\  .c-build .lk { all: unset; position: relative; box-sizing: border-box; display: flex; width: fit-content; min-width: 0; max-width: 100%;
+    \\    border-radius: var(--r-s); }
+    \\  .c-build .lk:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+    \\  .c-build .lk > .c-lockmark { top: -6px; right: -14px; }
+    \\  .c-build tbody tr:has(> td > .lk) { cursor: pointer; }
+    \\  .c-build tbody tr:hover .lk > .c-lockmark { opacity: 1; }
+    \\  .c-build .slot .c-table tr:has(.lk[data-lock]) > td { background: var(--accent-bg); }
     \\  .c-build .what { display: flex; align-items: center; gap: 4px; min-width: 0; }
     \\  .c-build .what > .nm { margin-left: 6px; color: var(--t2); overflow: hidden; text-overflow: ellipsis; }
     \\  .c-build .what > .nm:first-child { margin-left: 0; white-space: nowrap; }
@@ -891,18 +898,22 @@ pub fn gallery(g: *Gallery) void {
     };
     set.* = .{};
     set.toggle(.keystone, "8010");
+    set.toggle(.boots, "3047");
     const ls = h.mem.create(BuildPanel) catch {
         h.oom = true;
         return;
     };
-    ls.init(h.mem, &demo.darius) catch {
+    ls.init(h.mem, withBootsV(h, &demo.darius) catch {
+        h.oom = true;
+        return;
+    }) catch {
         h.oom = true;
         return;
     };
     ls.id = h.fmt("build-set-{d}", .{g.width}); // fmt-ok: gallery only, never in a wasm
     ls.runes.id = ls.id;
     ls.setLocks(set);
-    g.addFill("champion page: every option and page locks on tap (lock glyph on hover), Conqueror locked", ls.view(h));
+    g.addFill("champion page: a whole option row or page locks on tap (the mark faint on hover), Conqueror and boots locked", ls.view(h));
     const vs = matchup(h, &demo.darius) catch {
         h.oom = true;
         return;
@@ -918,6 +929,20 @@ pub fn gallery(g: *Gallery) void {
     p.id = h.fmt("build-vs-{d}", .{g.width});
     p.runes.id = p.id;
     g.addFill("a matchup's: spells and skills as usual (dimmed), boots' usual second", p.view(h));
+}
+
+/// `d` with its top boots' lock value, so the gallery can show a locked row
+fn withBootsV(h: *H, d: *const Data) !*const Data {
+    const slots = try h.mem.dupe(Slot, d.slots);
+    for (slots) |*s| if (s.kind == .boots) {
+        const options = try h.mem.dupe(Option, s.options);
+        options[0].v = &.{3047};
+        s.options = options;
+    };
+    const out = try h.mem.create(Data);
+    out.* = d.*;
+    out.slots = slots;
+    return out;
 }
 
 /// `d` as a matchup's: the usual leads Spells and Skills, Boots' is its second
