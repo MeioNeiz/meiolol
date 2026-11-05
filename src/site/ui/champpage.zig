@@ -1527,10 +1527,11 @@ pub const More = struct {
     const Ranked = union(enum) { role: *const MoreRole, few };
 
     /// Under an opponent lock the answer's lane holds that opponent alone: the lane shows
-    /// the shown rank's, so another can be picked and locked in its place.
-    /// Other locks don't reach it
+    /// the shown rank's, so another can be picked and locked in its place. Not with
+    /// other locks too: the unlocked lane would sit under them
     fn unlockedLane(p: *const P) ?*const MoreRole {
         if (p.shownAnswer() == null or p.locks.get(.opponent) == null) return null;
+        if (std.mem.findScalar(u8, p.locks.s.slice(), ',') != null) return null;
         const rl = &p.data.roles[p.cur];
         const y = if (p.files.group()) |g| at(MoreRole, g, rl.role) orelse return null else rl;
         return if (y.rels.len > 0 and !y.rels[0].ally and y.rels[0].role == rl.role) y else null;
@@ -2188,6 +2189,24 @@ pub const css =
     \\}
     \\
 ;
+
+test "under an opponent lock alone the lane is the unlocked one; with another lock, the answer's" {
+    const testing = std.testing;
+    const opp = [_]Opp{.{ .champ = 1, .games = 500, .wins = 240, .usual = 0 }};
+    const base_rels = [_]Rel{.{ .ally = false, .role = .jungle, .opps = &opp }};
+    const base_role = [_]MoreRole{.{ .role = .jungle, .games = 9000, .wins = 4500, .rels = &base_rels }};
+    const data: MoreData = .{ .name = "Shaco", .slug = "shaco", .ddragon = "", .champs = &.{}, .roles = &base_role };
+    const ans_role = [_]MoreRole{.{ .role = .jungle, .games = 500, .wins = 240, .rels = &base_rels }};
+    const ans: MoreData = .{ .name = "Shaco", .slug = "shaco", .ddragon = "", .champs = &.{}, .roles = &ans_role };
+    var p: More = .{ .data = &data, .root = "", .answer = &ans };
+    try testing.expectEqual(@as(?*const MoreRole, null), p.unlockedLane());
+    p.locks.s.set("vs200");
+    try testing.expectEqual(@as(?*const MoreRole, &base_role[0]), p.unlockedLane());
+    p.locks.s.set("ks8010,vs200");
+    try testing.expectEqual(@as(?*const MoreRole, null), p.unlockedLane());
+    p.locks.s.set("ks8010");
+    try testing.expectEqual(@as(?*const MoreRole, null), p.unlockedLane());
+}
 
 test "a view's files sit beside the page's; rank files at the root" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
