@@ -1082,12 +1082,13 @@ fn post(a: Allocator, c: Ctx, p: *const postgame.PostGame) !ui.postgame.Screen {
                 .champ = try c.champ(a, s.champion),
                 .you = s.me,
                 .kda = kda(s.kills, s.deaths, s.assists),
-                .line = try a.print("{d} cs · {f} dmg", .{ s.cs, count(s.damage) }),
+                .line = if (p.pending) try a.print("Lv {d} · {d} cs", .{ s.level, s.cs }) else try a.print("{d} cs · {f} dmg", .{ s.cs, count(s.damage) }),
             };
         }
         x.* = try teamRow(a, r.role, seats, r.goldDiff());
     }
-    for ([_]bool{ true, false }) |ours| for (p.rows) |r| {
+    // Damage comes with the end of game block
+    if (!p.pending) for ([_]bool{ true, false }) |ours| for (p.rows) |r| {
         const s = (if (ours) r.ours else r.theirs) orelse continue;
         try damage.append(a, .{
             .champ = try c.champ(a, s.champion),
@@ -1099,6 +1100,7 @@ fn post(a: Allocator, c: Ctx, p: *const postgame.PostGame) !ui.postgame.Screen {
     };
     return .{
         .win = p.win,
+        .coming = p.pending,
         .verdict = p.verdict,
         .kills = .{ @intCast(@min(p.kills[0], 9999)), @intCast(@min(p.kills[1], 9999)) },
         .story = p.story,
@@ -1842,4 +1844,12 @@ test "post game: lanes, damage ours then theirs, team gold by minute" {
     d.seq = 1;
     const html = try render(a, d, null, null);
     try testing.expect(std.mem.find(u8, html, "Victory in 28:42.") != null);
+
+    var coming = p;
+    coming.pending = true;
+    coming.verdict = "Result coming";
+    const c = (try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .post_game = &coming }, .none)).screen.post;
+    try testing.expect(c.coming);
+    try testing.expectEqualStrings("Lv 16 · 231 cs", c.rows[2].us.?.line);
+    try testing.expectEqual(0, c.damage.len);
 }

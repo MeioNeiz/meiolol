@@ -549,6 +549,8 @@ const Poller = struct {
     /// Positions the last in-game tick saw, for the post game
     hints: [10]postgame.Hint = undefined,
     n_hints: usize = 0,
+    /// The last in-game tick, shown until the end of game block lands
+    last: ?postgame.Last = null,
     /// Mastery and tier for practice, loaded once per client connection
     practice_arena: std.heap.ArenaAllocator,
     practice_own: ?Own = null,
@@ -634,9 +636,12 @@ const Poller = struct {
                 } else if (std.mem.eql(u8, phase, "PreEndOfGame") or std.mem.eql(u8, phase, "EndOfGame")) {
                     if (p.postGame(arena, data)) |pg| return .{ .post_game = pg } else |err| switch (err) {
                         error.OutOfMemory => return err,
-                        else => {},
+                        else => if (try p.pendingGame(arena)) |pg| return .{ .post_game = pg },
                     }
+                } else if (std.mem.eql(u8, phase, "WaitingForStats")) {
+                    if (try p.pendingGame(arena)) |pg| return .{ .post_game = pg };
                 } else if (std.mem.eql(u8, phase, "GameStart")) {
+                    p.last = null;
                     if (p.seats) |seats| {
                         const l = try arena.create(loading.Loading);
                         l.* = try loading.build(arena, .{
@@ -649,7 +654,10 @@ const Poller = struct {
                         });
                         return .{ .loading = l };
                     }
-                } else if (!std.mem.eql(u8, phase, "WaitingForStats")) p.forgetOwn();
+                } else {
+                    p.forgetOwn();
+                    p.last = null;
+                }
                 if (lobbyPhase(phase)) p.keepForm();
                 return .{ .waiting = phaseLabel(phase) };
             },
@@ -816,6 +824,7 @@ const Poller = struct {
             try p.history.append(gpa, g.sample());
         }
         g.history = try arena.dupe(ingame.Sample, p.history.items);
+        p.last = postgame.Last.of(g);
         p.n_hints = 0;
         for (g.rows) |r| for ([_]?ingame.Seat{ r.ours, r.theirs }, [_]bool{ true, false }) |s, ours| if (s) |seat| {
             p.hints[p.n_hints] = .{ .champion = seat.champion, .role = r.role, .ours = ours };
@@ -832,6 +841,13 @@ const Poller = struct {
         const out = try arena.create(@TypeOf(v));
         out.* = v;
         return out;
+    }
+
+    /// Null without a game seen
+    fn pendingGame(p: *Poller, arena: std.mem.Allocator) !?*const postgame.PostGame {
+        const last = p.last orelse return null;
+        p.fingerprint = std.hash.Wyhash.hash(3, std.mem.asBytes(&last));
+        return try dupe(arena, postgame.pending(last, try arena.dupe(ingame.Sample, p.history.items)));
     }
 
     fn postGame(p: *Poller, arena: std.mem.Allocator, data: *const Data) !*const postgame.PostGame {

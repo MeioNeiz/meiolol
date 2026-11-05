@@ -37,6 +37,8 @@ pub const Damage = struct {
 
 pub const Screen = struct {
     win: bool,
+    /// The client is still counting: the last in-game rows, no verdict yet
+    coming: bool = false,
     /// "Victory in 28:42."
     verdict: []const u8,
     /// Ours, theirs
@@ -63,7 +65,7 @@ pub fn view(h: *H, s: Screen, team: ?*lane.Held) N {
         }),
     }));
     return h.div(.{ .class = "c-post" }, .{
-        h.section(.{ .class = "sum", .data_win = s.win }, .{
+        h.section(.{ .class = "sum", .data_win = s.win, .data_coming = s.coming }, .{
             h.div(.{ .class = "head" }, .{
                 h.h2(.{}, .{s.verdict}),
                 h.span(.{ .class = "kills" }, .{W.kills.with(h, .{ .a = @as(u32, s.kills[0]), .b = @as(u32, s.kills[1]) })}),
@@ -133,6 +135,8 @@ pub const css =
     \\  .c-post .head { display: flex; align-items: baseline; gap: var(--sp-3); }
     \\  .c-post h2 { margin: 0; font-size: var(--fs-xl); font-weight: var(--w-b); color: var(--lo2); }
     \\  .c-post .sum[data-win] h2 { color: var(--hi2); }
+    \\  .c-post .sum[data-coming] { box-shadow: inset 3px 0 0 var(--line); }
+    \\  .c-post .sum[data-coming] h2 { color: var(--t2); }
     \\  .c-post .kills { margin-left: auto; font-size: var(--fs-l); font-weight: var(--w-m); color: var(--t2);
     \\    font-variant-numeric: tabular-nums; }
     \\  .c-post .awards { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
@@ -211,4 +215,9 @@ pub fn gallery(g: *Gallery) void {
     loss.awards = &.{};
     loss.team = &.{};
     g.addFill("defeat, no history", view(h, loss, null));
+    var coming = loss;
+    coming.coming = true;
+    coming.verdict = "Result coming";
+    coming.damage = &.{};
+    g.addFill("result coming", view(h, coming, null));
 }

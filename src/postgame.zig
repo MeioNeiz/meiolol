@@ -47,6 +47,8 @@ pub const Award = struct {
 
 pub const PostGame = struct {
     win: bool,
+    /// Before the client's end of game block: the last in-game rows and kills, no result
+    pending: bool = false,
     /// Seconds
     length: u32,
     /// "Victory in 28:42."
@@ -65,6 +67,54 @@ pub const PostGame = struct {
 
 /// What the last in-game tick knew: positions the end of game block may leave blank
 pub const Hint = struct { champion: u32, role: Role, ours: bool };
+
+/// The last in-game tick, for the post game until the end of game block lands
+pub const Last = struct {
+    /// Seconds
+    time: f64,
+    rows: [Role.count]Row,
+    kills: [2]u32,
+
+    /// Gold is item gold here: the game gives nobody's earned gold
+    pub fn of(g: *const ingame.InGame) Last {
+        var out: Last = .{ .time = g.time, .rows = undefined, .kills = .{ g.score[0].kills, g.score[1].kills } };
+        for (&out.rows, g.rows) |*r, x| r.* = .{ .role = x.role, .ours = seat(x.ours), .theirs = seat(x.theirs) };
+        return out;
+    }
+
+    fn seat(s: ?ingame.Seat) ?Seat {
+        const x = s orelse return null;
+        return .{
+            .champion = x.champion,
+            .kills = x.kills,
+            .deaths = x.deaths,
+            .assists = x.assists,
+            .cs = x.cs,
+            .gold = x.item_gold,
+            .damage = 0,
+            .vision = 0,
+            .level = x.level,
+            .me = x.me,
+        };
+    }
+};
+
+/// The post game while the client is still counting: the last in-game tick, no verdict
+pub fn pending(last: Last, history: []const ingame.Sample) PostGame {
+    return .{
+        .win = false,
+        .pending = true,
+        .length = @intFromFloat(last.time),
+        .verdict = "Result coming",
+        .story = "",
+        .lane = "",
+        .awards = &.{},
+        .rows = last.rows,
+        .kills = last.kills,
+        .gold = .{ 0, 0 },
+        .history = history,
+    };
+}
 
 pub const Input = struct {
     stats: *const Stats,
