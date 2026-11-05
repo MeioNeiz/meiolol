@@ -1767,11 +1767,11 @@ pub const Trends = struct {
         var rs: [9]strip.Row = undefined;
         for (e.rows, W.ends_rows, ends_whole, &rs) |x, l, whole, *row| {
             const v = if (whole) phrase.num(h, .count, @as(u32, @intFromFloat(x.v + 0.5))) else phrase.num(h, .dec, x.v);
-            row.* = .{ .item = .{ .label = l, .value = v } };
+            row.* = .{ .label = l, .value = v };
             if (x.rank == 0) continue;
             const pos: f64 = if (e.of > 1) @as(f64, @floatFromInt(e.of - x.rank)) / @as(f64, @floatFromInt(e.of - 1)) else 1;
             const place = W.ends_place.with(h, .{ .n = x.rank, .th = ordinal(x.rank), .of = e.of });
-            row.bar = bar.track(h, .{ .at = pos, .title = place });
+            row.bar = bar.track(h, .{ .at = pos, .label = place });
         }
         const of = W.ends_of.with(h, .{ .of = e.of });
         return card.view(h, .{}, &.{

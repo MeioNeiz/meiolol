@@ -60,22 +60,29 @@ pub fn view(h: *H, items: []const Item) N {
     return h.div(.{ .class = "c-strip" }, .{l.done()});
 }
 
-/// An Item and what shows its place, the row's third column (bar.track)
+/// A row of `rows`: plain label and value, no tip, link or press (Item's paths cost
+/// bytes in every island that draws rows)
 pub const Row = struct {
-    item: Item,
+    label: tree.Text,
+    value: tree.Text,
+    /// What shows its place, the third column (bar.track)
     bar: N = .none,
+    /// After the bar, small
+    ctx: ?tree.Text = null,
 };
 
 /// One row per item, every row the same columns: label, value, bar, context. In a
-/// taller card the rows grow. `foot`: under the last row's bar (bar.scale). Items'
-/// `href`, `on` and `answer` don't apply
+/// taller card the rows grow. `foot`: under the last row's bar (bar.scale)
 pub fn rows(h: *H, rs: []const Row, foot: N) N {
     var l = h.list();
-    for (rs, 0..) |r, i| {
-        const ctx = if (r.item.ctx) |c| h.small(.{ .class = "c" }, .{c}) else null;
-        l.add(h.div(.{ .key = i }, .{ lab(h, r.item), val(h, r.item, false), h.span(.{ .class = "bar" }, .{r.bar}), ctx }));
-    }
-    return h.div(.{ .class = "c-strip", .data_rows = true, .data_grow = {} }, .{ l.done(), h.span(.{ .class = "foot" }, .{foot}) });
+    for (rs, 0..) |r, i| l.add(h.div(.{ .key = i }, .{
+        h.span(.{ .class = "lab" }, .{r.label}),
+        h.span(.{ .class = "val" }, .{r.value}),
+        h.span(.{ .class = "bar" }, .{r.bar}),
+        if (r.ctx) |c| h.small(.{ .class = "c" }, .{c}) else null,
+    }));
+    const f = if (foot == .none) null else h.span(.{ .class = "foot" }, .{foot});
+    return h.div(.{ .class = "c-strip", .data_rows = true, .data_grow = {} }, .{ l.done(), f });
 }
 
 fn lab(h: *H, it: Item) N {
@@ -199,11 +206,12 @@ pub fn gallery(g: *Gallery) void {
     };
     var rs: [eog.len]Row = undefined;
     inline for (eog, 0..) |x, i| rs[i] = .{
-        .item = .{ .label = plain(x[0]), .value = plain(x[1]) },
-        .bar = bar.track(h, .{ .at = @as(f64, @floatFromInt(60 - @as(u16, x[2]))) / 59, .title = plain(x[3] ++ " highest of 60") }),
+        .label = plain(x[0]),
+        .value = plain(x[1]),
+        .bar = bar.track(h, .{ .at = @as(f64, @floatFromInt(60 - @as(u16, x[2]))) / 59, .label = plain(x[3] ++ " highest of 60") }),
     };
     const body = h.p(.{ .class = "muted" }, .{"Card body"});
-    g.addFill("rows: places on tracks (on hover), the ends named once; grown by a taller card", card.row(h, &.{
+    g.addFill("rows: places on tracks, the ends named once; grown by a taller card", card.row(h, &.{
         card.view(h, .{}, &.{ card.head(h, plain("Taller"), null, &.{}), body, body, body, body, body, body, body, body, body, body, body, body, body }),
         card.view(h, .{}, &.{ card.head(h, plain("End of game"), plain("of 60 champions"), &.{}), rows(h, &rs, bar.scale(h, plain("lowest"), plain("highest"))) }),
     }));

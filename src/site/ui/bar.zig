@@ -37,16 +37,18 @@ pub const Track = struct {
     mark: N = .none,
     /// After the line, in a column of its own
     text: ?tree.Text = null,
-    /// On hover, what the position means ("3rd highest of 59")
-    title: ?tree.Text = null,
+    /// What the position means ("3rd highest of 59"), for screen readers: the line is
+    /// then an image with this label
+    label: ?tree.Text = null,
 };
 
 /// Fills its container's width
 pub fn track(h: *H, t: Track) N {
     const at = 100 * @max(0, @min(1, t.at));
     const style = if (t.ref) |r| h.vars(.{ .at = at, .ref = 100 * @max(0, @min(1, r)) }) else h.vars(.{ .at = at });
-    return h.span(.{ .class = "c-track", .style = style, .title = if (t.title) |x| x.s else null }, .{
-        h.span(.{ .aria_hidden = true }, .{ if (t.ref != null) h.el(.i, .{}, .{}) else null, h.b(.{}, .{t.mark}) }),
+    const label: ?[]const u8 = if (t.label) |x| x.s else null;
+    return h.span(.{ .class = "c-track", .style = style }, .{
+        h.span(.{ .role = if (label != null) "img" else null, .aria_label = label, .aria_hidden = label == null }, .{ if (t.ref != null) h.el(.i, .{}, .{}) else null, h.b(.{}, .{t.mark}) }),
         if (t.text) |x| h.small(.{}, .{x}) else null,
     });
 }

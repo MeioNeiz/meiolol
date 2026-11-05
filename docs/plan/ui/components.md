@@ -314,8 +314,8 @@ context after it small ("4th of 53"). A range shows on hover as its ends, never 
 figure; a rate fades when its range is wide, never hides (J35). Three to a row in a narrow
 container. A label can open a Toggletip; a figure can link to where it comes from, or be
 pressed (the game page's cells select their span; the selected one shows pressed)
-States: with an answer; six, one links; pressable, one pressed; rows: places on tracks (on
-hover), the ends named once; grown by a taller card
+States: with an answer; six, one links; pressable, one pressed; rows: places on tracks,
+the ends named once; grown by a taller card
 Used by: champhead, matchbrief, gamehead, gamepage, matchgrid, playerbar, adminpage,
 admincharts, admintraffic, champpage, matchpage
 
