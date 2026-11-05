@@ -1,7 +1,7 @@
 //! matchup/index.html: the matchup finder (ui.finder). Each champion's roles and, per
-//! role and for all of them together, three short lists of lane pairs with a matchup page: the patch's win rate moves
-//! (clear ones as the patch page picks them, then thinner ones), the hardest lanes and
-//! the lane bullies, in the island's data-bin. A pick's matchups are the champion page's
+//! role and for all of them together, three short lists of lane pairs with a matchup
+//! page: the patch's clear win rate moves (as the patch page picks them), the hardest
+//! lanes and the lane bullies, in the island's data-bin. A pick's matchups are the champion page's
 //! data files (champion.dataFiles), fetched by ui-findergrid.wasm
 const std = @import("std");
 const core = @import("core");
@@ -24,11 +24,8 @@ const tpl = html.tpl;
 
 /// Pairs per role (or All) in each list: the card shows fd.shown, its button the rest
 const kept = 25;
-/// Hardest lanes and lane bullies: fewer games and a pair's luck tops the lists (at 500 a
-/// win rate's 95% range is still about ±4.4 points: Hardest ranks by its edge)
+/// Hardest lanes and lane bullies: fewer games and a pair's luck tops the lists
 const list_games = 500;
-/// The 95% half width of a move: 1.96 standard errors
-const ci_z = 1.96;
 
 pub fn writePage(site: *const Site, w: *Writer) !void {
     const a = site.arena;
@@ -149,8 +146,8 @@ fn lanePairs(site: *const Site, curves: *const Curves, r: Role) ![]const LanePai
     return list.items;
 }
 
-/// From the side that wins less, surest edge first: the lowest upper end of its win
-/// rate's 95% range
+/// From the side that wins less, the lowest win rate first: in the order shown, as on the
+/// champions list (list_games keeps the thin pairs off)
 fn hardest(a: std.mem.Allocator, pairs: []const LanePair) ![]const fd.Pair {
     const list = try a.alloc(fd.Pair, pairs.len);
     for (pairs, list) |p, *o| {
@@ -159,16 +156,10 @@ fn hardest(a: std.mem.Allocator, pairs: []const LanePair) ![]const fd.Pair {
     }
     std.mem.sort(fd.Pair, list, {}, struct {
         fn f(_: void, p: fd.Pair, q: fd.Pair) bool {
-            return upper(p) < upper(q);
+            return @as(u64, p.wins) * q.games < @as(u64, q.wins) * p.games;
         }
     }.f);
     return list[0..@min(list.len, kept)];
-}
-
-fn upper(p: fd.Pair) f64 {
-    const n: f64 = @floatFromInt(p.games);
-    const w = @as(f64, @floatFromInt(p.wins)) / n;
-    return w + ci_z * @sqrt(w * (1 - w) / n);
 }
 
 /// From the side ahead, the biggest gold lead at lane_minute first (the curve's estimate,
@@ -194,8 +185,8 @@ fn bullies(a: std.mem.Allocator, pairs: []const LanePair) ![]const fd.Lead {
     return list[0..@min(list.len, kept)];
 }
 
-/// Per role, then All, the win rate moves too big to be luck (the patch page's test), then
-/// the surest of the rest down to moved_games, each from the side that gained
+/// Per role, then All, the win rate moves too big to be luck (the patch page's test),
+/// biggest first, each from the side that gained
 fn moved(site: *const Site, pd: *const patchday.PatchDay) ![]const []const fd.Move {
     const a = site.arena;
     const out = try a.alloc([]const fd.Move, Role.all.len + 1);
@@ -211,42 +202,30 @@ const SiteIndex = struct {
     }
 };
 
-/// Games on each patch for a move to be listed: early in a patch few pairs pass the
-/// patch page's 400, and an empty card hides what there is (shown faint, with its range)
-const moved_games = 100;
-
 /// `ids.of(id)`: the champion's index in fd.Data.champs, null without a page. `r` null: all
 fn movedIn(a: std.mem.Allocator, pd: *const patchday.PatchDay, r: ?Role, ids: anytype) ![]const fd.Move {
     const o = pd.opts;
-    const Scored = struct { m: fd.Move, z: f64 };
-    var list: std.ArrayList(Scored) = .empty;
+    var list: std.ArrayList(fd.Move) = .empty;
     for (pd.matchups) |m0| {
-        if (r != null and m0.role != r.? or !m0.win.enough(moved_games) or m0.win.z == 0) continue;
+        if (r != null and m0.role != r.? or !m0.win.clear(o.min_pair_games, o.z)) continue;
         const m = if (m0.win.z > 0) m0 else pd.matchup(m0.role, m0.b, m0.a).?;
         const x = ids.of(m.a) orelse continue;
         const y = ids.of(m.b) orelse continue;
-        const rg = m.win.range(ci_z);
-        try list.append(a, .{ .z = m.win.z, .m = .{
+        try list.append(a, .{
             .role = champion.uiRole(m.role),
             .x = x,
             .y = y,
             .d = @floatCast(m.win.delta()),
-            .ci = @floatCast((rg[1] - rg[0]) / 2),
             .games = m.win.cur.games,
             .wins = m.win.cur.wins,
-            .clear = m.win.clear(o.min_pair_games, o.z),
-        } });
+        });
     }
-    // Clear moves first, biggest first; then the rest, surest first
-    std.mem.sort(Scored, list.items, {}, struct {
-        fn f(_: void, p: Scored, q: Scored) bool {
-            if (p.m.clear != q.m.clear) return p.m.clear;
-            return if (p.m.clear) p.m.d > q.m.d else p.z > q.z;
+    std.mem.sort(fd.Move, list.items, {}, struct {
+        fn f(_: void, p: fd.Move, q: fd.Move) bool {
+            return p.d > q.d;
         }
     }.f);
-    const out = try a.alloc(fd.Move, @min(list.items.len, kept));
-    for (out, list.items[0..out.len]) |*v, x| v.* = x.m;
-    return out;
+    return list.items[0..@min(list.items.len, kept)];
 }
 
 /// `v` as ui.data, base64: the island root's data-bin
@@ -258,7 +237,7 @@ fn bin(a: std.mem.Allocator, v: fd.Data) ![]const u8 {
     return e.encode(out, raw.items);
 }
 
-test "moved: clear moves first, biggest first; then the surest others, from the side that gained; All" {
+test "moved: clear moves only, biggest first, from the side that gained; All" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const Counts = core.curvesfile.Counts;
@@ -269,15 +248,15 @@ test "moved: clear moves first, biggest first; then the surest others, from the 
     }.f;
     const pd: patchday.PatchDay = .{
         .matchups = &.{
-            // 1 down from 60 to 45 against 2: listed from 2's side; 150 games, z 2.5, thin
+            // Thin (150 games a patch): out however big
             mv(.top, 1, 2, .{ .games = 150, .wins = 90 }, .{ .games = 150, .wins = 68 }),
             mv(.top, 3, 4, .{ .games = 1000, .wins = 500 }, .{ .games = 1000, .wins = 560 }),
             mv(.top, 5, 6, .{ .games = 2000, .wins = 1000 }, .{ .games = 2000, .wins = 1100 }),
-            // Thin, z 0.8
-            mv(.top, 7, 8, .{ .games = 120, .wins = 60 }, .{ .games = 120, .wins = 66 }),
-            // 90 games on this patch; no move at all; another role; no page for 99
-            mv(.top, 9, 10, .{ .games = 500, .wins = 200 }, .{ .games = 90, .wins = 60 }),
-            mv(.top, 11, 12, .{ .games = 300, .wins = 150 }, .{ .games = 300, .wins = 150 }),
+            // 16 down from 60 to 45 against 17: listed from 17's side, first
+            mv(.top, 16, 17, .{ .games = 1000, .wins = 600 }, .{ .games = 1000, .wins = 450 }),
+            // Not clear (z ~1.3); no move at all; another role; no page for 99
+            mv(.top, 7, 8, .{ .games = 500, .wins = 250 }, .{ .games = 500, .wins = 270 }),
+            mv(.top, 11, 12, .{ .games = 500, .wins = 250 }, .{ .games = 500, .wins = 250 }),
             mv(.middle, 13, 14, .{ .games = 1000, .wins = 500 }, .{ .games = 1000, .wins = 600 }),
             mv(.top, 15, 99, .{ .games = 1000, .wins = 500 }, .{ .games = 1000, .wins = 600 }),
         },
@@ -288,21 +267,32 @@ test "moved: clear moves first, biggest first; then the surest others, from the 
         }
     };
     const got = try movedIn(arena.allocator(), &pd, .top, Ids{});
-    const want = [_]struct { u16, u16, bool }{ .{ 3, 4, true }, .{ 5, 6, true }, .{ 2, 1, false }, .{ 7, 8, false } };
+    const want = [_][2]u16{ .{ 17, 16 }, .{ 3, 4 }, .{ 5, 6 } };
     try std.testing.expectEqual(want.len, got.len);
     for (want, got) |w, g| {
         try std.testing.expectEqual(w[0], g.x);
         try std.testing.expectEqual(w[1], g.y);
-        try std.testing.expectEqual(w[2], g.clear);
-        try std.testing.expect(g.d > 0 and g.ci > 0);
     }
-    try std.testing.expectApproxEqAbs(6, got[0].d, 1e-4);
-    try std.testing.expectApproxEqAbs(@as(f32, 100.0 * 22.0 / 150.0), got[2].d, 1e-4);
-    try std.testing.expectEqual(150, got[2].games);
-    try std.testing.expectEqual(82, got[2].wins);
-    // All: every role's, the biggest clear move first
+    try std.testing.expectApproxEqAbs(15, got[0].d, 1e-4);
+    try std.testing.expectEqual(1000, got[0].games);
+    try std.testing.expectEqual(550, got[0].wins);
+    try std.testing.expectApproxEqAbs(6, got[1].d, 1e-4);
+    // All: every role's, biggest first
     const every = try movedIn(arena.allocator(), &pd, null, Ids{});
-    try std.testing.expectEqual(5, every.len);
-    try std.testing.expectEqual(13, every[0].x);
-    try std.testing.expectEqual(ui.role.Role.mid, every[0].role);
+    try std.testing.expectEqual(4, every.len);
+    try std.testing.expectEqual(13, every[1].x);
+    try std.testing.expectEqual(ui.role.Role.mid, every[1].role);
+}
+
+test "hardest: the lowest win rate first, from the side that wins less" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const got = try hardest(arena.allocator(), &.{
+        // 39.7% on many games, 39.2% on fewer: 39.2 first, as shown
+        .{ .role = .mid, .x = 1, .y = 2, .games = 5000, .wins = 1985, .gold = 0 },
+        .{ .role = .support, .x = 4, .y = 3, .games = 600, .wins = 365, .gold = 0 },
+    });
+    try std.testing.expectEqual(3, got[0].x);
+    try std.testing.expectEqual(235, got[0].wins);
+    try std.testing.expectEqual(1, got[1].x);
 }

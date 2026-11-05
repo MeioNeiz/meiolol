@@ -17,7 +17,6 @@ const champ = @import("champ.zig");
 const role = @import("role.zig");
 const card = @import("card.zig");
 const delta = @import("delta.zig");
-const stat = @import("stat.zig");
 const rolepicker = @import("rolepicker.zig");
 const champlist = @import("champlist.zig");
 const champpage = @import("champpage.zig");
@@ -53,8 +52,8 @@ pub const Data = struct {
     hard: []const []const Pair = &.{},
     /// The biggest gold leads at 14 minutes, from the side ahead
     bully: []const []const Lead = &.{},
-    /// This patch's win rate moves, from the side that gained: clear ones, then the surest
-    /// of the rest
+    /// This patch's clear win rate moves (the patch page's test), biggest first, from the
+    /// side that gained
     moved: []const []const Move = &.{},
     /// "16.21"; "" without an earlier patch to compare with
     patch: []const u8 = "",
@@ -73,14 +72,11 @@ pub const Move = struct {
     role: role.Role,
     x: u16,
     y: u16,
-    /// x's win rate this patch minus the previous one, points, with its 95% half width
+    /// x's win rate this patch minus the previous one, points
     d: f32,
-    ci: f32,
     /// This patch's
     games: u32,
     wins: u32,
-    /// Too big to be luck (the patch page's test); else faint with its range
-    clear: bool = true,
 };
 
 const W = struct {
@@ -264,10 +260,12 @@ pub const Finder = struct {
         };
     }
 
+    /// A role without a clear move drops the card
     fn movedCard(f: *F, h: *H) N {
         const d = f.data;
         if (d.patch.len == 0) return .none;
         const moves = of(Move, d.moved, f.role);
+        if (moves.len == 0) return .none;
         const rows = rowsOf(h, moves.len);
         for (moves[0..rows.len], rows) |m, *row| row.* = .{
             .champ = f.icon(h, m.x),
@@ -275,9 +273,7 @@ pub const Finder = struct {
             .role = f.shownRole(m.role),
             .lane = .{ .win = rate(m.games, m.wins), .ci = ci95(m.games, m.wins), .was = rate(m.games, m.wins) - m.d },
             .href = f.href(h, d.patch_query, m.role, m.x, m.y),
-            .value = if (m.clear) delta.view(h, .{ .d = m.d }) else h.span(.{ .title = stat.ends(h, .points, m.d, m.ci).s }, .{
-                delta.view(h, .{ .d = m.d, .faint = true }),
-            }),
+            .value = delta.view(h, .{ .d = m.d }),
             .note = phrase.num(h, .count, m.games),
         };
         const link = h.a(.{ .class = "more", .href = h.fmt("/patch{s}", .{f.query}) }, .{W.patch.with(h, .{ .p = d.patch })});
@@ -305,11 +301,13 @@ pub const Finder = struct {
     fn bullyCard(f: *F, h: *H) N {
         const leads = of(Lead, f.data.bully, f.role);
         const rows = rowsOf(h, leads.len);
+        // Biggest first: the first row's lead fills the bar
+        const most: f32 = if (leads.len > 0) @floatFromInt(@max(1, leads[0].gold)) else 1;
         for (leads[0..rows.len], rows) |l, *row| row.* = .{
             .champ = f.icon(h, l.x),
             .vs = f.icon(h, l.y),
             .role = f.shownRole(l.role),
-            .lane = .{ .win = rate(l.games, l.wins), .ci = ci95(l.games, l.wins) },
+            .fill = @as(f32, @floatFromInt(l.gold)) / most,
             .href = f.href(h, "", l.role, l.x, l.y),
             .value = h.span(.{}, .{W.gold.with(h, .{ .g = l.gold })}),
             .note = phrase.num(h, .count, l.games),
@@ -520,10 +518,10 @@ pub const Demo = struct {
         .{ .role = .top, .x = 3, .y = 2, .games = 1204, .wins = 655, .gold = 168 },
     };
     const top_moves = [_]Move{
-        .{ .role = .top, .x = 2, .y = 0, .d = 3.4, .ci = 2.1, .games = 1630, .wins = 860 },
-        .{ .role = .top, .x = 1, .y = 3, .d = 12.4, .ci = 11.6, .games = 140, .wins = 84, .clear = false },
+        .{ .role = .top, .x = 2, .y = 0, .d = 3.4, .games = 1630, .wins = 860 },
+        .{ .role = .top, .x = 1, .y = 3, .d = 2.9, .games = 2140, .wins = 1129 },
     };
-    const mid_moves = [_]Move{.{ .role = .mid, .x = 5, .y = 4, .d = 2.8, .ci = 1.9, .games = 1310, .wins = 683 }};
+    const mid_moves = [_]Move{.{ .role = .mid, .x = 5, .y = 4, .d = 2.8, .games = 1310, .wins = 683 }};
     const all_moves = [_]Move{ top_moves[0], mid_moves[0], top_moves[1] };
     const top_only = [_]role.Role{.top};
     const mid_only = [_]role.Role{.mid};
@@ -664,19 +662,28 @@ test "Finder: one lane for both picks; the URL keeps them" {
     try testing.expectEqualStrings("role=mid&vs=zed", w.written());
 }
 
-test "Finder: a thin move is faint, its range on hover, a clear one bright" {
+test "Finder: bullies' bar is the gold lead, the biggest full; a role without moves drops their card" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var t: tree.Tree = .{};
-    var h: H = .init(a, &t);
     var f = try Finder.init(a, &Demo.data, "");
+    const Html = struct {
+        fn of(x: *Finder, al: std.mem.Allocator) ![]const u8 {
+            var t: tree.Tree = .{};
+            var h: H = .init(al, &t);
+            var w: std.Io.Writer.Allocating = .init(al);
+            try @import("html.zig").write(&t, x.view(&h), &w.writer);
+            return w.written();
+        }
+    };
     f.fromUrl(.{ .role = .top });
-    var w: std.Io.Writer.Allocating = .init(a);
-    try @import("html.zig").write(&t, f.view(&h), &w.writer);
-    const s = w.written();
-    try testing.expect(std.mem.find(u8, s, "<span class=\"c-delta\" style=\"--c:var(--hi2)\">+3.4</span></span>") != null);
-    try testing.expect(std.mem.find(u8, s, "<span title=\"+0.8 to +24.0\"><span class=\"c-delta\" data-state=\"unclear\" style=\"--c:var(--hi4)\">+12.4</span></span>") != null);
+    const s = try Html.of(&f, a);
+    const bully = s[std.mem.find(u8, s, "Lane bullies").?..];
+    try testing.expectEqual(2, std.mem.count(u8, bully[0..std.mem.find(u8, bully, "</ul>").?], "data-v=\"wide\""));
+    try testing.expect(std.mem.find(u8, bully, "--w:100") != null);
+    try testing.expect(std.mem.find(u8, s, "<span class=\"c-delta\" style=\"--c:var(--hi2)\">+3.4</span>") != null);
+    f.fromUrl(.{ .role = .jungle });
+    try testing.expect(std.mem.find(u8, try Html.of(&f, a), "Moved this patch") == null);
 }
 
 test "Finder: All by default, every lane's pairs, each row its role and its lane's page" {

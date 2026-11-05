@@ -1,5 +1,6 @@
 //! Bar: a magnitude without good or bad (pick, ban, games), a neutral ink bar beside its
-//! figure. Bars in one column share a scale: `of` is the column's largest. `track`: a
+//! figure. Bars in one column share a scale: `of` is the column's largest. `wide`: the
+//! bar alone across its container, where the row puts the figure elsewhere. `track`: a
 //! position along a full-width line (a place among champions, a rate on 0-100), a mark
 //! at it and an optional reference tick, no good or bad colour
 const tree = @import("tree.zig");
@@ -14,11 +15,17 @@ pub const scope = .{ ".c-bar", ".c-track" };
 
 /// `x` of `of` as the bar's length, `text` the figure beside it
 pub fn view(h: *H, x: f64, of: f64, text: tree.Text) N {
+    return h.span(.{ .class = "c-bar" }, .{ line(h, x, of), text });
+}
+
+/// `x` of `of` across the container's width, no figure
+pub fn wide(h: *H, x: f64, of: f64) N {
+    return h.span(.{ .class = "c-bar", .data_v = "wide" }, .{line(h, x, of)});
+}
+
+fn line(h: *H, x: f64, of: f64) N {
     const w = if (of > 0) @max(0, @min(100, 100 * x / of)) else 0;
-    return h.span(.{ .class = "c-bar" }, .{
-        h.span(.{ .aria_hidden = true }, .{h.el(.i, .{ .style = h.vars(.{ .w = w }) }, .{})}),
-        text,
-    });
+    return h.span(.{ .aria_hidden = true }, .{h.el(.i, .{ .style = h.vars(.{ .w = w }) }, .{})});
 }
 
 pub const Track = struct {
@@ -56,6 +63,8 @@ pub const css =
     \\    background: var(--bar-track); overflow: hidden; flex: none; }
     \\  .c-bar > span > i { position: absolute; inset: 0 auto 0 0; width: calc(var(--w) * 1%); border-radius: 2px;
     \\    background: linear-gradient(90deg, var(--bar-lo), var(--bar-hi)); }
+    \\  .c-bar[data-v="wide"] { display: flex; }
+    \\  .c-bar[data-v="wide"] > span { flex: 1; }
     \\  /* The line sits 10px in from each end, so a 20px mark at either end stays inside */
     \\  .c-track { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
     \\  .c-track > span { position: relative; flex: 1; min-width: 64px; height: 20px; margin: 0 10px; }
@@ -79,6 +88,7 @@ pub fn gallery(g: *Gallery) void {
     g.add("share", view(h, 56, 100, plain("56%")));
     g.add("games, the column's most", view(h, 44935, 44935, plain("44,935")));
     g.add("ban", view(h, 4.1, 100, plain("4.1%")));
+    g.addFill("wide: the bar alone, its figure elsewhere in the row", wide(h, 820, 1227));
     const ornn = champ.view(h, champ.demo("Ornn", "Ornn"), .{ .px = .@"20", .named = false });
     g.addFill("track: a place, portrait at 1st, the middle ticked", track(h, .{ .at = 1, .ref = 0.5, .mark = ornn, .text = plain("1st") }));
     g.addFill("track: the middle", track(h, .{ .at = 0.5, .ref = 0.5, .mark = ornn, .text = plain("30th") }));

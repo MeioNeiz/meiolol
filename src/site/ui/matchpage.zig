@@ -631,8 +631,8 @@ fn round10(v: i32) i32 {
     return @divTrunc(v + if (v < 0) @as(i32, -5) else 5, 10) * 10;
 }
 
-/// `t`'s points from the buckets with games, its base their wider group's rates when
-/// each has games; how many points
+/// `t`'s points from the buckets over the games floor (a thinner one's band drags the line),
+/// its base their wider group's rates when each has games; how many points
 fn buckets(h: *H, t: *trend.Trend, bs: []const Bucket, labels: []const tree.Text, tip: anytype) usize {
     const pts = trend.alloc(h, bs.len) orelse return 0;
     var base: [8]f32 = undefined;
@@ -640,7 +640,7 @@ fn buckets(h: *H, t: *trend.Trend, bs: []const Bucket, labels: []const tree.Text
     var n: usize = 0;
     var all = true;
     for (bs, labels) |b, l| {
-        if (b.games == 0) continue;
+        if (b.games < fmt.floor_games) continue;
         const a = rate(b.all_games, b.all_wins);
         pts[n] = trend.point(h, l, b.games, b.wins, tip.with(h, .{ .r = rate(b.games, b.wins), .n = b.games, .a = a }));
         base[n] = a;
@@ -775,4 +775,14 @@ test "lane lines: the lead by phase and CS, the swing with a spike in it, none w
     d = try testMore(a, .{ 0, 10, 20, 40, 60, 100, 180, 280, 360, 420, 480, 530, 570, 600 }, 2, 12);
     d.thin = true;
     try testing.expectEqual(0, laneLines(&h, &d).len);
+}
+
+test "buckets: one under the games floor isn't drawn" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    var tr: trend.Trend = .{ .label = W.by_length, .points = &.{} };
+    const bs = [3]Bucket{ .{ .games = 120, .wins = 60 }, .{ .games = fmt.floor_games - 1, .wins = 9 }, .{ .games = fmt.floor_games, .wins = 16 } };
+    try testing.expectEqual(2, buckets(&h, &tr, &bs, &W.lengths, W.length_tip));
 }

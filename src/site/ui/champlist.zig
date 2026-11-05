@@ -3,7 +3,8 @@
 //! link to the champion's page. Two columns in a wide card (`cols`). A pair (`vs`): a
 //! duel, the portraits at both ends, the names over the lane's bar (the first's win rate
 //! a tick against the middle's, the bar solid to its 95% range's low end and fading to
-//! the high one, a ring where a patch move started), the figure and its note last.
+//! the high one, a ring where a patch move started) or a Bar of a figure that isn't a
+//! win rate (`fill`), the figure and its note last.
 //! `tiles`: one tile per champion filling the card's width, the portrait large, the
 //! figure under the name, the note over a bar of its share (`fill`)
 const tree = @import("tree.zig");
@@ -12,6 +13,7 @@ const role = @import("role.zig");
 const badge = @import("badge.zig");
 const fmt = @import("fmt.zig");
 const delta = @import("delta.zig");
+const bar = @import("bar.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
 const H = tree.H;
@@ -37,7 +39,8 @@ pub const Row = struct {
     value: ?N = null,
     /// Faint, last
     note: ?tree.Text = null,
-    /// Tiles: the note's share, 0-1, as a bar
+    /// 0-1: tiles' note's share as a bar; a duel's figure as a Bar, for a figure that
+    /// isn't a win rate (in place of the lane's)
     fill: ?f32 = null,
     /// Tiles: the tag's meaning, on hover and for screen readers
     title: ?tree.Text = null,
@@ -103,7 +106,7 @@ fn duel(h: *H, r: Row, y: champ.Champ) []const N {
         champ.view(h, r.champ, .{ .named = false, .px = .@"32" }),
         h.span(.{ .class = "mid" }, .{
             h.span(.{ .class = "nm" }, .{ h.span(.{}, .{ r.champ.name, r.tag }), mid, h.span(.{}, .{y.name}) }),
-            if (r.lane) |x| lane(h, x) else null,
+            if (r.lane) |x| lane(h, x) else if (r.fill) |f| bar.wide(h, f, 1) else null,
         }),
         champ.view(h, y, .{ .named = false, .px = .@"32" }),
         h.span(.{ .class = "fig" }, .{
@@ -226,6 +229,10 @@ pub fn gallery(g: *Gallery) void {
         .{ .champ = champ.demo("Tryndamere", "Tryndamere"), .vs = champ.demo("Malphite", "Malphite"), .href = "#", .lane = .{ .win = 41.6, .ci = 2.8 }, .value = h.span(.{ .style = h.vars(.{ .c = fmt.Step.of(-8.4, fmt.win_cuts) }) }, .{plain("41.6%")}), .note = plain("1,204") },
         .{ .champ = champ.demo("Jax", "Jax"), .vs = champ.demo("Aatrox", "Aatrox"), .role = .top, .href = "#", .lane = .{ .win = 53.9, .ci = 3.2, .was = 50.8 }, .value = delta.view(h, .{ .d = 3.1 }), .note = plain("905") },
         .{ .champ = champ.demo("Ornn", "Ornn"), .vs = champ.demo("Gragas", "Gragas"), .role = .top, .href = "#", .lane = .{ .win = 61.8, .ci = 7.3, .was = 44 }, .value = delta.view(h, .{ .d = 17.8, .faint = true }), .note = plain("170") },
+    }));
+    g.addFill("duels with a Bar: a gold lead, the list's biggest full", view(h, .{}, &.{
+        .{ .champ = champ.demo("Draven", "Draven"), .vs = champ.demo("Jinx", "Jinx"), .href = "#", .fill = 1, .value = h.span(.{}, .{plain("+1,227 gold")}), .note = plain("4,120") },
+        .{ .champ = champ.demo("Renekton", "Renekton"), .vs = champ.demo("Kayle", "Kayle"), .role = .top, .href = "#", .fill = 0.62, .value = h.span(.{}, .{plain("+761 gold")}), .note = plain("2,310") },
     }));
     g.addFill("with roles, no links", view(h, .{}, &.{
         .{ .champ = champ.demo("Ahri", "Ahri"), .role = .mid, .value = h.span(.{}, .{plain("+2.4")}), .note = plain("12,040") },
