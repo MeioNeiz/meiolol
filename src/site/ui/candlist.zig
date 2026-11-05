@@ -132,6 +132,7 @@ fn viewOf(h: *H, l: List, comptime pick: bool) N {
     const bc = l.mode == .points and l.b_head != null;
     return h.div(.{ .class = "c-cand", .data_v = if (l.mode == .points) null else l.mode, .data_x = x, .data_b = bc }, .{
         if (l.head) |hd| h.div(.{ .class = "hd" }, .{
+            h.span(.{ .class = "rk" }, .{}),
             h.span(.{ .class = "nm" }, .{hd[0]}),
             h.span(.{ .class = "v" }, .{hd[1]}),
             h.span(.{ .class = "d" }, .{hd[2]}),

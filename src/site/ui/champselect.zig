@@ -344,7 +344,7 @@ pub const sample: Screen = .{
                 .champ = demo("Viktor", "Viktor"),
                 .lane = "even at 14",
                 .faint = true,
-                .reasons = &.{.{ .text = "few games in this matchup", .lean = .bad }},
+                .reasons = &.{.{ .text = "few games in this matchup" }},
             },
         },
         .mastery = true,
@@ -353,7 +353,7 @@ pub const sample: Screen = .{
 };
 
 /// The tester's numbers beside the public words
-fn private(h: *H, s: Screen) Screen {
+pub fn private(h: *H, s: Screen) Screen {
     var p = s;
     p.draft = 53.4;
     const opts = h.mem.dupe(Option, s.lane.options) catch {
@@ -368,6 +368,17 @@ fn private(h: *H, s: Screen) Screen {
     for (rs[1..], [_][]const u8{ "+0.9", "+1.4", "-1.1" }) |*r, f| r.fig = f;
     opts[1].reasons = rs;
     p.lane.options = opts;
+    const lanes = h.mem.dupe(draftboard.Lane, s.board.lanes) catch {
+        h.oom = true;
+        return s;
+    };
+    lanes[0].us.fig = "52.3%";
+    lanes[0].us.rate = 52.3;
+    lanes[0].us.fact = "52.3% in top · 3,410 games";
+    lanes[2].them.fig = "48.1%";
+    lanes[2].them.rate = 48.1;
+    lanes[2].them.fact = "48.1% in mid · 1,204 games";
+    p.board.lanes = lanes;
     return p;
 }
 

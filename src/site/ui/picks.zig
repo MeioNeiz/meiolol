@@ -278,6 +278,14 @@ pub const sample: Data = .{
             .{ .kind = .into, .other = champ.demo("Zed", "Zed"), .pp = -0.6, .games = 980 },
             .{ .kind = .with, .other = champ.demo("JarvanIV", "Jarvan IV"), .pp = 1.2, .games = 540 },
         } },
+        .{ .champ = champ.demo("Taliyah", "Taliyah"), .rank = 4, .win = 51.2, .base = 50.4, .gold = 60, .effects = &.{
+            .{ .kind = .with, .other = champ.demo("JarvanIV", "Jarvan IV"), .pp = 0.7, .games = 300 },
+            .{ .kind = .into, .other = champ.demo("Syndra", "Syndra"), .pp = 0.4, .games = 760 },
+        } },
+        .{ .champ = champ.demo("Hwei", "Hwei"), .rank = 5, .win = 50.9, .base = 50.4, .gold = -90, .effects = &.{
+            .{ .kind = .strength, .pp = 0.6, .games = 14_200 },
+            .{ .kind = .with, .other = champ.demo("Darius", "Darius"), .pp = -0.3, .games = 280 },
+        } },
     },
 };
 

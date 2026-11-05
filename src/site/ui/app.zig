@@ -5,6 +5,7 @@
 //! select's board and options, the loading cards, the in-game panel, the post game; the
 //! sign-in under it, or in its place before there is data. The charts' own state (a
 //! tapped minute, a dragged range) and what's typed live in App, past patches
+const std = @import("std");
 const tree = @import("tree.zig");
 const champselect = @import("champselect.zig");
 const loadscreen = @import("loadscreen.zig");
@@ -232,6 +233,26 @@ fn views(h: *H, group: []const u8, comp: bool) N {
     return segmented.radios(h, group, .{ .s = .s }, items[0..if (comp) 3 else 2]);
 }
 
+/// The public Options panel: rows past the lane panel's own, as screens.zig picksOf
+fn past(h: *H, d: picks.Data, shown: []const champselect.Option) picks.Data {
+    var x = d;
+    const rows = h.mem.alloc(picks.Row, d.rows.len) catch {
+        h.oom = true;
+        return d;
+    };
+    var n: usize = 0;
+    for (d.rows) |r| {
+        for (shown) |o| {
+            if (std.mem.eql(u8, o.champ.name, r.champ.name)) break;
+        } else {
+            rows[n] = r;
+            n += 1;
+        }
+    }
+    x.rows = rows[0..n];
+    return x;
+}
+
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.addFill("waiting", page(h, .{ .seq = 1, .private = false, .where = "Lobby", .screen = .{ .note = .{
@@ -240,8 +261,7 @@ pub fn gallery(g: *Gallery) void {
     } } }));
     // The shell's page (screens.zig renderIn; its <main> a div here): the view switch,
     // the Options island and, once all ten lock, the comp view after the app's island
-    var priv = champselect.sample;
-    priv.draft = 53.4;
+    const priv = champselect.private(h, champselect.sample);
     g.addFill("champ select, private", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{
         page(h, .{ .seq = 2, .private = true, .where = "Champ select · Picks", .screen = .{ .select = priv }, .practice = false }),
         views(h, "gal-cs-1", false),
@@ -252,7 +272,7 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("all locked, comp under", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{
         page(h, .{ .seq = 6, .private = false, .where = "Champ select · Finalization", .screen = .{ .select = locked } }),
         views(h, "gal-cs-2", true),
-        picks.page(h, picks.public(h, picks.sample), 0),
+        picks.page(h, picks.public(h, past(h, picks.sample, locked.lane.options)), 0),
         compview.view(h, compview.sample),
     })}));
     // The shell's page before champ select: the form panel and tiles after the island
