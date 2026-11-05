@@ -118,11 +118,7 @@ fn build(a: Allocator, live: bool) !?Next {
         d.practice = s.practice.* != null;
         if (s.practice.*) |x| bar = try practice.data(a, c, x, s.practicing);
     }
-    const under: ?ui.compview.Comp = switch (s.status) {
-        .select => |x| if (x.comp) |cv| try compView(a, c, cv) else null,
-        .loading => |l| if (l.comp) |*cv| try lockedComp(a, c, cv) else null,
-        else => null,
-    };
+    const under = try compUnder(a, c, s.status);
     const opts: ?ui.picks.Data = switch (s.status) {
         .select => |x| try picksOf(a, c, x),
         else => null,
@@ -477,6 +473,16 @@ fn banWhy(a: Allocator, c: Ctx, o: board.BanOption) ![]const u8 {
 
 /// Words for everyone; the share, the mix's record, lean numbers and lane gold for
 /// testers
+/// The comp view under the page: champ select's once the comp is known, the loading
+/// screen's locked one
+pub fn compUnder(a: Allocator, c: Ctx, status: state.Status) !?ui.compview.Comp {
+    return switch (status) {
+        .select => |x| if (x.comp) |cv| try compView(a, c, cv) else null,
+        .loading => |l| if (l.comp) |*cv| try lockedComp(a, c, cv) else null,
+        else => null,
+    };
+}
+
 /// The comp view under the loading screen: the island has no room for team pills
 /// (ui-app.wasm at its budget), so this static HTML carries the same facts. Picks are
 /// locked, so no "win less" and no win rates: they would rate teammates' picks

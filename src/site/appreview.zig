@@ -498,10 +498,7 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         bar = try shell_practice.data(a, c, x, true);
         bar.?.seq = d.seq;
     }
-    const under: ?ui.compview.Comp = switch (s.status) {
-        .select => |x| if (x.comp) |cv| try screens.compView(a, c, cv) else null,
-        else => null,
-    };
+    const under = try screens.compUnder(a, c, s.status);
     var opts: ?ui.picks.Data = switch (s.status) {
         .select => |x| try screens.picksOf(a, c, x),
         else => null,
