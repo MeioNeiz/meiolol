@@ -23,7 +23,7 @@ const channel = @import("channel.zig");
 const app = ui.app;
 const Allocator = std.mem.Allocator;
 
-pub const css = ui.css.head ++ ui.css.join(.{ ui.site, ui.appbar, ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.resultstrip, ui.lobby, ui.apphome, ui.today, ui.art, ui.skillgrid, ui.gamebuild, ui.bar, ui.spark, ui.loadscreen, ui.chart, ui.lane, ui.trend, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.toggletip, ui.reasons, ui.candlist, ui.picks, ui.app });
+pub const css = ui.css.head ++ ui.css.join(.{ ui.site, ui.appbar, ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.resultstrip, ui.lobby, ui.apphome, ui.today, ui.art, ui.skillgrid, ui.gamebuild, ui.bar, ui.spark, ui.loadscreen, ui.chart, ui.lane, ui.trend, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.toggletip, ui.reasons, ui.rate, ui.candlist, ui.picks, ui.app });
 
 const Page = struct {
     arena: std.heap.ArenaAllocator,
@@ -2048,4 +2048,34 @@ test "post game: static after the island, award cards, lanes, damage by team" {
     try testing.expectEqualStrings("Lv 16 · 231 cs", pending.rows[2].us.?.line);
     try testing.expectEqual(0, pending.damage[0].players.len + pending.damage[1].players.len);
     try testing.expectEqualStrings("", pending.rows[2].gap);
+}
+
+test "app.css holds every component the app's screens draw" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var t: ui.tree.Tree = .{};
+    var h: ui.tree.H = .init(a, &t);
+    var out: std.Io.Writer.Allocating = .init(a);
+    for (ui.gallery.states(&h, ui.app, 0)) |s| try ui.html.write(&t, s.node, &out.writer);
+    try testing.expect(!h.oom);
+    var rest = out.written();
+    while (std.mem.find(u8, rest, "class=\"")) |i| {
+        rest = rest[i + 7 ..];
+        var it = std.mem.tokenizeScalar(u8, rest[0..std.mem.findScalar(u8, rest, '"').?], ' ');
+        while (it.next()) |c| if (std.mem.startsWith(u8, c, "c-") and !hasCss(c)) {
+            std.debug.print("app.css lacks the component scoped .{s}: add it to screens.css\n", .{c});
+            return error.TestUnexpectedResult;
+        };
+    }
+}
+
+/// Whether app.css holds the rules of the component scoped `.class` (another component's
+/// selector may name the class without it)
+fn hasCss(class: []const u8) bool {
+    @setEvalBranchQuota(20000);
+    inline for (ui.all) |C| inline for (C.scope) |sc| {
+        if (std.mem.eql(u8, sc[1..], class)) return std.mem.find(u8, css, C.css) != null;
+    };
+    return true;
 }
