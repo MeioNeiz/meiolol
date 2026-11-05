@@ -9,11 +9,11 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 266 | 1270 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 268 | 1276 |
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 172 | 620 |
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 4 | 180 | 459 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 30 | 364 | 2687 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 16 | 472 | 2494 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 17 | 474 | 2496 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 9 | 179 | 704 |
 | [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 174 | 1966 |
 
@@ -100,6 +100,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | answered | now | [How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically?](questions/ui-guardrails.md): How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically? | 10 strong, 1 moderate, 1 contested | 37 | 26 (growing) | 9 |
 | answered | now | [What tooling lets meiolol's agents write and check better UI without a Node build step: layout and visual checks, component gallery, design token lints, accessibility?](questions/ui-tooling.md): What tooling lets meiolol's agents write and check better UI without a Node build step: layout and visual checks, component gallery, design token lints, accessibility? | 7 strong, 3 moderate | 21 | 18 (saturated) | 4 |
 | answered | now | [Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break?](questions/zig-only-frontend.md): Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break? | 15 strong, 5 moderate | 36 | 38 (growing) | 16 |
+| answered | soon | [Per phase (champ select, loading, in game, post game), what do Porofessor, Blitz, Mobalytics, OP.GG, U.GG and iTero desktop apps show at a glance, what do players praise or complain about, and what does meiolol's app lack?](questions/app-phase-screens-compare.md): Per phase (champ select, loading, in game, post game), what do Porofessor, Blitz, Mobalytics, OP.GG, U.GG and iTero desktop apps show at a glance, what do players praise or complain about, and what does meiolol's app lack? | 3 moderate, 2 weak | 4 | 6 (slowing) |  |
 | answered | soon | [How do CI/CD and hosting products show a single run's steps and its progress while it runs and after?](questions/deploy-progress-ui.md): How do CI/CD and hosting products show a single run's steps and its progress while it runs and after? | 12 strong, 3 moderate | 21 | 13 (growing) | 2 |
 | answered | soon | [Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS?](questions/zig-gui-options.md): Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS? | 5 strong, 3 moderate | 14 | 10 (saturated) | 4 |
 | answered | soon | [Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us?](questions/zig-web-ui.md): Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us? | 2 strong, 8 moderate, 3 weak | 10 | 4 (growing) |  |
@@ -137,6 +138,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 81 questions, 1257 sources, 9594 findings
+- 82 questions, 1259 sources, 9602 findings
 - Open leads: 328 (`josearch leads`)
 - Lint: 0 errors, 5 warnings (`josearch lint`)

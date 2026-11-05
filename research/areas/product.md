@@ -256,6 +256,7 @@ what to build: existing tools, players' needs, market, fun and learning features
 | [Similarweb: u.gg traffic overview (Sept 2026)](../sources/similarweb-u-gg.md) | Similarweb's free u.gg page, Sept 2026: visits estimate, top traffic channel, top 5 organic keywords (desktop, worldwide) and keyword count | dataset | market seo | docs (free overview page: visits, channels, top 5 keywords) | high | B/weak | 2/4 | 2026-10-12 |
 | [SoloQ Ward Heatmap (r/leagueoflegends, 2025-01-13)](../sources/reddit-soloq-ward-heatmap.md) | Hobby data visualisation of ~42k high-elo ward placements from replays; little traction (15 upvotes) | thread | data learning market needs | listed (post and all comments) | low | C/weak | 2/3 | 2026-10-11 |
 | [STATUP.GG on itch.io: real-time AI voice coach for League](../sources/statup-itch.md) | STATUP.GG (Gamer Republic, Seoul): Windows app that reads the game screen with vision AI and coaches by voice during the game, post-game reports; four modes, Beginner free, higher tiers premium with a one-month trial | project | learning needs policy tools tools/paid tools/phase | docs (whole page) | medium | D/weak | 5/6 | 2026-10-22 |
+| [Stop Looking At Stats In Loading Screen (Aberrant Demon, 2024)](../sources/yt-stop-loading-stats.md) | Short video telling players to stop reading scouting stats on the loading screen; comments say what they do use | video | needs tools/phase | listed (transcript, top comments) | medium | C/fair | 5/5 | 2026-11-05 |
 | [STRATZ: How much does pick phase matter? (Dota 2, 2017)](../sources/stratz-pick-phase-2017.md) | Dota 2 stats site's short post on hero win rate by pick phase in all-pick pubs, and its selection reading of first-pick win rates | article | draft method/causal stats | listed (whole post; tables are images, not read) | medium | C/fair | 3/4 | 2026-10-21 |
 | [Supporting Creators in Riot's Ecosystem: Overwolf's response to Riot's third-party ad ban (2025)](../sources/overwolf-riot-creators-response.md) | Overwolf's public reply to Riot's 29 May 2025 rule that third-party in-game ads (overlays, loading screens, Riot Client) are no longer allowed | article | market policy tools/paid tools/removed | docs (whole post) | high | B/fair | 5/6 | 2026-10-22 |
 | [Team Advisor on the Overwolf app store (v26.10.1, Jun 2026)](../sources/overwolf-team-advisor.md) | Team Advisor (Yiome) Overwolf listing: draft suggestions and AI predictions, auto-hover of bans and picks, one-click accept, phone remote control by QR code; free with ads; reviews mourn removed auto-accept | project | market needs policy tools/paid tools/phase tools/removed ux/features | docs (store listing, whole page) | high | C/fair | 7/9 | 2026-10-22 |
@@ -283,6 +284,7 @@ what to build: existing tools, players' needs, market, fun and learning features
 | [WaveClear privacy policy (15 Jul 2025)](../sources/waveclear-privacy.md) | WaveClear's privacy policy: what game, input and face-video data the Overwolf app collects, from Riot's and Overwolf's APIs and an optional emotion-analysis SDK | docs | policy privacy tools | docs (sections 1-2, 4 sharing, 7 retention; skimmed the rest) | high | B/fair | 6/6 | 2026-10-20 |
 | [WaveClear research page: The Focus Challenge, April 2024](../sources/waveclear-research.md) | WaveClear's own uncontrolled April 2024 experiment (2,047 matches, 513 training loops) behind its 55-58% win-rate and +36% skill claims | article | learning ux/features | docs (whole page) | medium | D/weak | 4/6 | 2026-10-20 |
 | [What Makes a Good Team? Team Composition in Honor of Kings (Cheng et al., WWW 2019 long version)](../sources/hok-team-composition-2019.md) | Zhejiang and Tencent; 54M ranked Honor of Kings games, win rate by role composition (126 role counts), plus XGBoost win prediction with role-combination features over player info; no hero-id baseline | paper | data draft method | docs (sections 1-3, 6; skimmed 4-5) | medium | B/fair | 6/7 | 2026-10-13 |
+| [What Tags do you get on Porofessor.gg? (Oneweek)](../sources/yt-porofessor-tags.md) | Walkthrough of Porofessor live game page tags and team stats (2:39, 22k views) | video | needs ux/desktop | listed (transcript, top comments) | medium | C/fair | 3/3 | 2026-11-05 |
 | [When Problem Solving Followed by Instruction Works: Evidence for Productive Failure (Sinha and Kapur 2021)](../sources/sinha-kapur-2021-ps-i.md) | Review of Educational Research meta-analysis (53 studies, 166 comparisons) of problem solving before instruction (PS-I, productive failure) vs instruction first | paper | fun learning | docs (abstract, intro, PF fidelity criteria, discussion opening) | high | A/strong | 9/10 | 2026-10-20 |
 | [Which adc's do well against tanks? (r/summonerschool, Nov 2022)](../sources/ss-adcs-vs-tanks.md) | 190-upvote, ~210-comment question from a Jhin main on ADCs and builds that work against tanks; answers are memes, picks and item debates, no data | thread | draft learning market needs tools | docs (post, top comment trees; rest grepped for sites and stats) | high | B/fair | 3/4 | 2026-10-12 |
 | [Win Prediction in Multi-Player Esports: Live Professional Match Prediction (IEEE ToG, 2019/2021)](../sources/hodge-2019-win-prediction.md) | Hodge, Devlin, Drachen et al. (York); literature review of Dota 2 win prediction (pre-game, in-game, post-game features) plus live pro prediction; the survey we used for the pre-game field | paper | data draft method stats | docs (abstract, sections III-VI) | medium | B/fair | 12/14 | 2026-10-12 |
@@ -1193,7 +1195,7 @@ what to build: existing tools, players' needs, market, fun and learning features
 - [[waveclear-home#^f4]] [market] Every download button goes to the Overwolf store (utm_campaign=beta); free. (C/weak, verified)
 - [[waveclear-home#^f5]] [market] Team and partners listed: Jake (STRMX) Camilleri as head coach, founder YuvGel (EUW), partners Lundqvist Lightside (ERL), RiftQ and Revealense Behavioral Science. Coach Rogue is not named on the page, though he calls it "my app" in [[coachrogue-moneyball-stats]]. (C/weak, verified)
 
-### needs: what players say they want, pain points, complaints about existing tools (132)
+### needs: what players say they want, pain points, complaints about existing tools (138)
 
 - [[aram-mayhem-informative-ui#^f1]] [needs] [fun] ARAM Mayhem and Arena augment interactions are ambiguous and undocumented; players fear the mode becomes a second-screen wiki memory game. (B/fair, verified)
 - [[aram-mayhem-informative-ui#^f3]] [needs] [learning] Players learn augments by trial and error, wasting games. (B/fair, verified)
@@ -1327,6 +1329,12 @@ what to build: existing tools, players' needs, market, fun and learning features
 - [[ss-tips-in-game#^f7]] [needs] A user recalls another app's in-depth matchup tips disappearing or moving to premium. (B/fair, verified)
 - [[statup-itch#^f4]] [needs] Target: beginners and mid-tier players. (D/weak, verified)
 - [[waveclear-home#^f2]] [needs] (claim) Thesis: climbing needs dying less, not new champions or roles, and that is a matter of focus. (C/weak, verified)
+- [[yt-porofessor-tags#^f3]] [needs] A top comment likens the tags to a coach on hand. (C/fair, verified)
+- [[yt-stop-loading-stats#^f1]] [needs] [tools/phase] Critic view: stats on the loading screen change how players play and do not help them improve; uninstall the apps. @0:00 (C/fair, verified)
+- [[yt-stop-loading-stats#^f2]] [needs] [tools/phase] On the loading screen one player checks only the lane opponent's runes and whether they took MR or armour. (C/fair, verified)
+- [[yt-stop-loading-stats#^f3]] [needs] Off-role or off-main detection is what a high-elo jungler values in scouting. (C/fair, verified)
+- [[yt-stop-loading-stats#^f4]] [needs] Several comments keep the apps for timers (jungle camps, summoner spells) and skip the stats. (C/fair, verified)
+- [[yt-stop-loading-stats#^f5]] [needs] A big CS-versus-elo square on screen is the in-game thing the creator wants gone. @1:30 (C/fair, verified)
 
 ### tools: existing pick and draft tools (sites, overlays, open-source projects) (175)
 
@@ -1618,7 +1626,7 @@ what to build: existing tools, players' needs, market, fun and learning features
 - [[ugg-kaisa-build#^f5]] [tools/paid] The headline strip ends in a U.GG PLUS "Personal Stats" teaser with blurred placeholder numbers (KDA, win rate, pick rate, games). (B/fair, verified)
 - [[ugg-profile#^f2]] [tools/phase] [tools/paid] Profile tabs: Overview, Champion Stats, Live Game and a PLUS Tier List (a paid personal tier list on any profile). (B/fair, unquoted)
 
-### tools/phase: which game phase a feature serves: lobby, champ select, loading, in game, post game, between games (109)
+### tools/phase: which game phase a feature serves: lobby, champ select, loading, in game, post game, between games (111)
 
 - [[ascent-update-2026#^f4]] [tools/phase] [learning] Post game: the AI feature is a game review for League ranked games, opt-in and subscribers only. (B/fair, verified)
 - [[ascent-update-2026#^f5]] [tools/phase] [ux/features] Post game: VODs searchable by champion and role, kills, deaths and objectives marked on the timeline, gold difference and APM graphs on playback; match history shown. (B/fair, verified)
@@ -1729,6 +1737,8 @@ what to build: existing tools, players' needs, market, fun and learning features
 - [[tracker-lol-v2#^f3]] [tools/phase] In game: a live match page appears on your stats page when you enter a match. (C/fair, verified)
 - [[tracker-lol-v2#^f4]] [tools/phase] [policy] Champ select (2022): multi-search pitched for searching the players in your lobby, the scouting Riot's 12.22 anonymity cut for ranked solo/duo that November. (C/fair, verified)
 - [[ugg-profile#^f2]] [tools/phase] [tools/paid] Profile tabs: Overview, Champion Stats, Live Game and a PLUS Tier List (a paid personal tier list on any profile). (B/fair, unquoted)
+- [[yt-stop-loading-stats#^f1]] [needs] [tools/phase] Critic view: stats on the loading screen change how players play and do not help them improve; uninstall the apps. @0:00 (C/fair, verified)
+- [[yt-stop-loading-stats#^f2]] [needs] [tools/phase] On the loading screen one player checks only the lane opponent's runes and whether they took MR or armour. (C/fair, verified)
 
 ### tools/removed: features Riot made tools remove or change, with dates (champ select names, timers, Vanguard, memory) (34)
 
