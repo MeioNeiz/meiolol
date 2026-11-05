@@ -9,6 +9,7 @@
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
+const rate = @import("rate.zig");
 const champ = @import("champ.zig");
 const chip = @import("chip.zig");
 const badge = @import("badge.zig");
@@ -142,7 +143,7 @@ fn viewOf(h: *H, l: List, comptime pick: bool) N {
         if (l.base) |b| h.div(.{ .class = "r base" }, .{
             h.span(.{ .class = "rk" }, .{}),
             h.span(.{ .class = "nm" }, .{b.label}),
-            if (l.mode == .points) h.span(.{ .class = "v" }, .{phrase.num(h, .rate, b.win)}) else null,
+            if (l.mode == .points) h.span(.{ .class = "v" }, .{chance(h, b.win)}) else null,
             if (l.mode == .points) h.span(.{ .class = "d" }, .{}) else null,
             if (bc) h.span(.{ .class = "b" }, .{}) else null,
             if (x) h.span(.{ .class = "x" }, .{}) else null,
@@ -155,7 +156,7 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
     var chips = h.list();
     for (r.reasons[0..@min(3, r.reasons.len)]) |x| {
         const v = if (l.mode == .points)
-            h.b(.{ .style = h.vars(.{ .c = fmt.Step.of(x.pp, fmt.win_cuts) }) }, .{phrase.num(h, .points, x.pp)})
+            rate.delta(h, x.pp, null)
         else
             reasons.arrow(h, x.pp);
         const said = x.tip orelse x.text;
@@ -194,11 +195,8 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
             if (r.ref) badge.view(h, .accent, .{l.ref_label}) else null,
             if (r.mark) |m| badge.view(h, r.mark_k, .{m}) else null,
         }),
-        if (l.mode == .points) h.span(.{ .class = "v" }, .{if (r.win) |w| phrase.num(h, .rate, w) else null}) else null,
-        if (l.mode == .points) h.span(.{
-            .class = "d",
-            .style = if (r.vs) |d| h.vars(.{ .c = fmt.Step.of(d, fmt.win_cuts) }) else null,
-        }, .{if (r.vs) |d| phrase.num(h, .points, d) else null}) else null,
+        if (l.mode == .points) h.span(.{ .class = "v" }, .{if (r.win) |w| chance(h, w) else null}) else null,
+        if (l.mode == .points) h.span(.{ .class = "d" }, .{if (r.vs) |d| rate.delta(h, d, null) else null}) else null,
         if (l.mode == .points and l.b_head != null) h.span(.{ .class = "b" }, .{bCell(h, r)}) else null,
         if (l.mode == .points) if (l.extra) |e| h.span(.{
             .class = "x",
@@ -221,10 +219,15 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
     return h.div(.{ .key = key, .class = "row" }, .{ head, det });
 }
 
+/// A win chance: the model's estimate, named by its column head
+fn chance(h: *H, pct: f32) N {
+    return rate.view(h, .estimate(pct), .{ .said = "" });
+}
+
 /// The second model's rank, then its points in their colour
 fn bCell(h: *H, r: Row) ?N {
     const b = r.b_rank orelse return null;
-    const d: ?N = if (r.b_vs) |x| h.b(.{ .style = h.vars(.{ .c = fmt.Step.of(x, fmt.win_cuts) }) }, .{phrase.num(h, .points, x)}) else null;
+    const d: ?N = if (r.b_vs) |x| rate.delta(h, x, null) else null;
     return h.span(.{ .data_top = r.b_top }, .{ W.nth.with(h, .{ .n = b }), d });
 }
 
@@ -269,19 +272,20 @@ pub const css =
     \\  .c-cand .nm { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; white-space: nowrap; }
     \\  .c-cand .pk > b { font-weight: var(--w-m); overflow: hidden; text-overflow: ellipsis; }
     \\  .c-cand .star { color: var(--turn); }
-    \\  .c-cand .v { text-align: right; font-weight: var(--w-b); }
+    \\  .c-cand :is(.r, .hd) > .v { text-align: right; }
+    \\  .c-cand .r > .v > .c-rate > .v { font-weight: var(--w-b); }
     \\  .c-cand .d, .c-cand .x { text-align: right; font-size: var(--fs-s); font-weight: var(--w-m); color: var(--c, var(--faint)); }
     \\  .c-cand .hd .v, .c-cand .hd .d, .c-cand .hd .x { font-weight: var(--w-r); color: var(--faint); font-size: var(--fs-xs); }
     \\  .c-cand[data-x] .r, .c-cand[data-x] .hd { grid-template-columns: 22px minmax(0, 1fr) 56px 48px 52px; }
     \\  .c-cand[data-b] .r, .c-cand[data-b] .hd { grid-template-columns: 22px minmax(0, 1fr) 56px 48px 96px; }
     \\  .c-cand[data-b][data-x] .r, .c-cand[data-b][data-x] .hd { grid-template-columns: 22px minmax(0, 1fr) 56px 48px 96px 52px; }
     \\  .c-cand .b { text-align: right; font-size: var(--fs-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    \\  .c-cand .b > span > b { margin-left: var(--sp-1); color: var(--c); font-weight: var(--w-m); }
+    \\  .c-cand .b > span > .c-rate { margin-left: var(--sp-1); }
     \\  .c-cand .hd .b { color: var(--faint); font-size: var(--fs-xs); white-space: normal; line-height: 1.2; }
     \\  .c-cand .b > [data-top] { color: var(--accent); font-weight: var(--w-m); }
     \\  .c-cand .det .note { margin: 0 0 var(--sp-1); color: var(--muted); font-size: var(--fs-s); }
     \\  .c-cand .why { grid-column: 2 / -1; display: flex; gap: 4px; flex-wrap: wrap; padding-left: 32px; }
-    \\  .c-cand .why b { color: var(--c); font-weight: var(--w-b); }
+    \\  .c-cand .why b, .c-cand .why .c-rate > .v { font-weight: var(--w-b); }
     \\  .c-cand .go { margin-left: auto; position: relative; z-index: 1; }
     \\  .c-cand .wy { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 2px; min-height: 28px;
     \\    padding: 0 var(--sp-2); border-radius: var(--r-s); color: var(--muted); font-size: var(--fs-s); }
@@ -292,7 +296,7 @@ pub const css =
     \\  .c-cand .why b[data-dir="up"] { color: var(--hi2); }
     \\  .c-cand .why b[data-dir="down"] { color: var(--lo2); }
     \\  .c-cand .base { color: var(--muted); }
-    \\  .c-cand .base .v { font-weight: var(--w-r); }
+    \\  .c-cand .base .c-rate > .v { font-weight: var(--w-r); }
     \\  .c-cand .det { padding: 0 var(--sp-2) var(--sp-1) 38px; background: var(--panel-2); border-bottom: 1px solid var(--line); }
     \\  .c-cand .gap { text-align: center; color: var(--faint); font-size: var(--fs-xs); padding: 2px 0;
     \\    border-bottom: 1px solid var(--line); }

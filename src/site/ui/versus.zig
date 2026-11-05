@@ -134,7 +134,8 @@ pub fn band(h: *H, b: Band) N {
 }
 
 /// `fig` written under the track ("−768 at 14")
-pub fn cell(h: *H, b: Band, fig: tree.Text) N {
+/// `fig`: a Text, or a node (rate.view)
+pub fn cell(h: *H, b: Band, fig: anytype) N {
     return h.span(.{ .class = "c-vs", .data_v = "cell", .title = b.label }, .{
         track(h, b),
         h.span(.{ .class = "fig", .data_side = bandSide(b) }, .{fig}),

@@ -304,7 +304,8 @@ fade; its own ref (BuildPanel: against the slot's 47.2%); no games; a sorted col
 colour mixes, no steps; the same colour however sure: 53.0, 52.6, 50.0 of 20,000, 54.0 of
 400, 54.2 of 120, 65 of 40 (faded); delta: +2.6, −1.4, +0.3; +4.8 with a wide range,
 faded
-Used by: stat, strip, matchbrief, buildpanel, matchgrid, champpage, matchpage
+Used by: stat, strip, matchbrief, buildpanel, lockbar, candlist, matchgrid, champpage,
+matchpage
 
 ### Delta
 `delta.zig` `.c-delta` `.c-dbar` site
@@ -942,7 +943,7 @@ here), items 500+ gold ahead (none behind); Conqueror's page locked: its players
 and boots, the chip unlocks; champion page: every option and page locks on tap (lock glyph
 on hover), Conqueror locked; a matchup's: spells and skills as usual (dimmed), boots'
 usual second
-Used by: skillgrid, runetree, lockbar, champpage
+Used by: skillgrid, runetree, champpage
 
 ### LockBar
 `lockbar.zig` `.c-lockbar` site

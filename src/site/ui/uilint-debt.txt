@@ -12,7 +12,7 @@ app pagecss 53
 appbar markup 4
 appbar title 1
 champpage css 3
-champpage pagecss 47
+champpage pagecss 46
 champrolepicker title 1
 champselect markup 1
 champselect title 1

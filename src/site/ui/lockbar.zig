@@ -11,7 +11,7 @@ const phrase = @import("phrase.zig");
 const chip = @import("chip.zig");
 const button = @import("button.zig");
 const url = @import("url.zig");
-const bp = @import("buildpanel.zig");
+const rate = @import("rate.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
@@ -146,7 +146,7 @@ pub const LockBar = struct {
         const line: N = if (b.games) |g| h.span(.{ .class = "n" }, if (g == 0) .{ W.none, null, null } else .{
             W.games.with(h, .{ .n = g }),
             " · ",
-            bp.win(h, g, b.wins, 50),
+            rate.view(h, .counted(g, b.wins), .{ .count = false }),
         }) else .none;
         return h.div(.{ .class = "c-lockbar", .role = "group", .aria_label = W.locks }, .{
             h.div(.{ .class = "chips" }, .{chips.done()}),

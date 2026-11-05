@@ -2090,8 +2090,8 @@ pub const Charts = struct {
             .tint = false,
         };
         // A share of games whole, a win rate to a tenth as everywhere
-        const c = versus.cell(h, b, if (took) phrase.num(h, .pct, round(v)) else phrase.num(h, .rate, v));
-        return if (took) c else h.span(.{ .class = "won", .style = h.vars(.{ .c = fmt.Step.of(v - 50, fmt.win_cuts) }) }, .{c});
+        if (took) return versus.cell(h, b, phrase.num(h, .pct, round(v)));
+        return versus.cell(h, b, winrate.view(h, .counted(mine.games, mine.wins), .{ .count = false }));
     }
 };
 
@@ -2142,7 +2142,6 @@ pub const css =
     \\  .c-cpage .obj > .rl { font-size: var(--fs-s); color: var(--t2); white-space: nowrap; }
     \\  .c-cpage .obj .c-vs[data-v="cell"] { width: 100%; }
     \\  .c-cpage .obj .c-vs[data-v="cell"] > .fig { order: -1; font-size: var(--fs-l); font-weight: var(--w-b); }
-    \\  .c-cpage .obj .won .fig { color: var(--c); }
     \\  .c-cpage .obj > .fl { font-size: var(--fs-xs); color: var(--faint); text-align: center; }
     \\  @media (max-width: 600px) { .c-cpage .obj { gap: var(--sp-3) var(--sp-2); } .c-cpage .obj .c-vs[data-v="cell"] > .fig { font-size: var(--fs-m); } }
     \\  .c-cpage .plot { padding: var(--sp-1) 0 var(--sp-3); }
