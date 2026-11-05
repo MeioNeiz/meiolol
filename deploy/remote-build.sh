@@ -4,14 +4,26 @@
 # HEAD's commit plus the working tree's changes (a patch and the untracked files, as a
 # local build sees them), or a commit alone. deploy/build-job.sh runs it there; where
 # builds go and why: deploy/place.sh, docs/compute.md "Builds on the gpu-box".
-#   deploy/remote-build.sh [--commit REV] ZIG_BUILD_ARGS...
+# --host box: on the box instead (the pre-push ci, deploy/ci-run.sh): deploy/box-ci-job.sh
+# there, one capped build at a time; docs/hosting.md "Builds on the box"
+#   deploy/remote-build.sh [--host box] [--commit REV] ZIG_BUILD_ARGS...
 # Exit 75: not built there (gpu-box off, asleep or unreachable, League up, no build slot
-# in 60 s, lost for 30 s mid-build): build it on the Mac instead
+# in 60 s, lost for 30 s mid-build; box: no tools, disk short, its build busy 15 min):
+# build it on the Mac instead
 set -uo pipefail
+box=''
+if [[ ${1-} == --host ]]; then
+    [[ ${2-} == box ]] || { echo "remote-build: --host box, or none for the gpu-box" >&2; exit 2; }
+    box=1
+    GPU_HOST=${BOX_HOST:-essex-vm}
+    shift 2
+fi
 HOST=${GPU_HOST:-gpu-box}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/deploy/lib.sh"
 . "$ROOT/deploy/place.sh"
+# Where it builds there: job dirs, the repo pushed to, the job script sent
+if [[ -n $box ]]; then base=meiolol-ci job=box-ci-job.sh; else base=ml/build job=build-job.sh; fi
 
 rev=''
 if [[ ${1-} == --commit ]]; then
@@ -20,10 +32,10 @@ if [[ ${1-} == --commit ]]; then
 fi
 (( $# )) || { usage_of "$0" >&2; exit 2; }
 fail() { echo "remote-build: $*: build it on the Mac" >&2; exit 75; }
-[[ -f $PLACE_OFF ]] && fail "gpu-box builds are off (deploy/place.sh on)"
+[[ -z $box && -f $PLACE_OFF ]] && fail "gpu-box builds are off (deploy/place.sh on)"
 
 id=$(date -u +%Y%m%dT%H%M%SZ)-$$
-jd=ml/build/jobs/$id
+jd=$base/jobs/$id
 in=$(mktemp -d)
 pid='' done=''
 cleanup() {
@@ -34,7 +46,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
 
-cp "$ROOT/deploy/build-job.sh" "$in/job.sh"
+cp "$ROOT/deploy/$job" "$in/job.sh"
 printf '%s\0' "$@" > "$in/args"
 if [[ -n $rev ]]; then
     echo "$rev" > "$in/sha"
@@ -43,9 +55,12 @@ else
     git -C "$ROOT" diff --binary HEAD > "$in/patch"
     (cd "$ROOT" && git ls-files -o --exclude-standard -z | tar --no-mac-metadata --no-xattrs --null -T - -cf "$in/untracked.tar")
 fi
-gpu "mkdir -p $jd ml/build/cache && { [[ -d ml/build/repo.git ]] || git init -q --bare ml/build/repo.git; }" \
+gpu "mkdir -p $jd $base/cache && { [[ -d $base/repo.git ]] || git init -q --bare $base/repo.git; }" \
     || fail "$HOST unreachable"
-git -C "$ROOT" push -q -f "$HOST:ml/build/repo.git" "$(cat "$in/sha"):refs/heads/job-$id" \
+refs=("$(cat "$in/sha"):refs/heads/job-$id")
+# The box's ci compares ui.wasm sizes with origin/main's (wasmsize)
+[[ -n $box ]] && refs+=("$(git -C "$ROOT" rev-parse refs/remotes/origin/main):refs/remotes/origin/main")
+git -C "$ROOT" push -q -f "$HOST:$base/repo.git" "${refs[@]}" \
     || fail "git push to $HOST failed"
 # setsid: its own session and process group (pgid = pid), so it outlives this ssh
 pid=$(tar --no-mac-metadata --no-xattrs -C "$in" -cf - . \
@@ -54,10 +69,10 @@ pid=$(tar --no-mac-metadata --no-xattrs -C "$in" -cf - . \
 
 # Follow the log from the last byte shown; a dropped ssh (sleep, WSL restart, network)
 # gets 30 s to come back. Shown with the tree's paths turned into this checkout's
-rtree=$(gpu 'echo ~/ml/build/tree.')
+if [[ -n $box ]]; then rtree=$(gpu 'echo ~/meiolol-ci/tree'); else rtree=$(gpu 'echo ~/ml/build/tree.'); fi
 show() {
     perl -e '$| = 1; my ($from, $to, $countf) = @ARGV; my $n = 0;
-        while (<STDIN>) { $n += length; s/\Q$from\E\d+/$to/g; print }
+        while (<STDIN>) { $n += length; s/\Q$from\E\d*/$to/g; print }
         open(my $f, ">", $countf) or die; print $f $n' "$rtree" "$ROOT" "$in/n"
 }
 off=0

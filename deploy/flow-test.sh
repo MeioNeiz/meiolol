@@ -268,5 +268,39 @@ $p --flush > "$t/flush2.log" 2>&1
 [ "$($p --status | grep -c '(ci failed)')" = 4 ] && grep -q 'first queued commit whose ci fails' "$t/flush2.log" \
     && ok "flush: the first failing commit named, newer ones left out" \
     || bad "halving left: $($p --status)"
+# ci-run.sh: the box's verdict stands, 75 (not built there) falls back to the Mac's ci,
+# off and MEIOLOL_CI_HOST=mac skip the box; ci-mac's failure fails. Stub builds log a name
+cp "$here/ci-run.sh" "$here/lib.sh" "$here/remote-build.sh" "$here/place.sh" "$here/box-ci-job.sh" deploy/
+for b in box mac maconly; do
+    printf '#!/bin/sh\necho %s >> "%s"\nexit "${%s_RC:-0}"\n' "$b" "$t/ci" "$(echo $b | tr a-z A-Z)" > "$t/$b"
+    chmod +x "$t/$b"
+done
+export MEIOLOL_CI_OFF=$t/ci-off MEIOLOL_CI_MAC=$t/mac MEIOLOL_CI_MACONLY=$t/maconly
+cirun() {
+    : > "$t/ci"
+    MEIOLOL_CI_BOX=$t/box deploy/ci-run.sh HEAD > /dev/null 2>&1
+    echo "$? $(sort "$t/ci" | tr '\n' ' ')"
+}
+[ "$(cirun)" = "0 box maconly " ] && ok "ci-run: box and ci-mac pass" || bad "ci-run pass: $(cirun)"
+[ "$(BOX_RC=1 cirun)" = "1 box maconly " ] && ok "ci-run: a box failure fails, no Mac retry" \
+    || bad "ci-run box fail: $(BOX_RC=1 cirun)"
+[ "$(BOX_RC=75 cirun)" = "0 box mac maconly " ] && ok "ci-run: 75 falls back to the Mac" \
+    || bad "ci-run 75: $(BOX_RC=75 cirun)"
+[ "$(BOX_RC=75 MAC_RC=1 cirun)" = "1 box mac maconly " ] && ok "ci-run: the fallback's failure fails" \
+    || bad "ci-run 75 then fail: $(BOX_RC=75 MAC_RC=1 cirun)"
+[ "$(MACONLY_RC=1 cirun)" = "1 box maconly " ] && ok "ci-run: ci-mac's failure fails" \
+    || bad "ci-run ci-mac fail: $(MACONLY_RC=1 cirun)"
+[ "$(MEIOLOL_CI_HOST=mac cirun)" = "0 mac " ] && ok "ci-run: MEIOLOL_CI_HOST=mac" \
+    || bad "ci-run host mac: $(MEIOLOL_CI_HOST=mac cirun)"
+deploy/ci-run.sh off > /dev/null
+[ "$(cirun)" = "0 mac " ] && deploy/ci-run.sh status | grep -q off && ok "ci-run: off, the Mac's ci" \
+    || bad "ci-run off: $(cirun)"
+deploy/ci-run.sh on > /dev/null
+# The real remote-build.sh to a host that doesn't resolve: 75, then the Mac
+: > "$t/ci"
+BOX_HOST=nohost.invalid deploy/ci-run.sh HEAD > "$t/ci.log" 2>&1
+r=$?
+[ $r = 0 ] && [ "$(sort "$t/ci" | tr '\n' ' ')" = "mac maconly " ] && grep -q "didn't build it" "$t/ci.log" \
+    && ok "ci-run: box unreachable, the Mac's ci" || bad "ci-run unreachable: $r $(cat "$t/ci.log")"
 [ $fails = 0 ] && echo "all pass"
 exit $fails

@@ -208,7 +208,13 @@ pub fn build(b: *std.Build) void {
     };
     if (shot) |exe| ci.dependOn(&exe.step);
     ci.dependOn(&shellExe(b, windows, .Debug, 0, .private).step);
-    if (b.graph.host.result.os.tag == .macos) ci.dependOn(&shellMac(b, target, .Debug).step);
+    // ci-mac: what ci builds only on a Mac host, run beside the box's ci (deploy/ci-run.sh)
+    const ci_mac = b.step("ci-mac", "ci's macOS-only compiles, which a Linux ci skips");
+    if (b.graph.host.result.os.tag == .macos) {
+        const shell_mac = shellMac(b, target, .Debug);
+        ci.dependOn(&shell_mac.step);
+        ci_mac.dependOn(&shell_mac.step);
+    } else ci_mac.dependOn(&b.addFail("ci-mac builds on macOS only").step);
     ci.dependOn(&mock_exe.step);
     // ui.wasm per page family: built, and its size against the budget (stack.md) and the
     // last pushed main's; no number formatting through std.fmt in what compiles to it
