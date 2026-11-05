@@ -628,11 +628,14 @@ Used by: compview, gamescreen, postgame
 CompView: the desktop app's comp view once all ten champions are locked (docs/plan/ app.md
 APP6), under the board. Each team's damage split as a bar, a tag when teams this one-sided
 win less often, its champions with a clear early or late lean; win chance by game length
-as a TrendChart; then the five lanes as TeamRows. Static HTML in the shell, so the chart
-has no hover tip. Champion facts only, never players. The public edition gets words: every
-number here is null there (src/shell/screens.zig, docs/production-key.md)
+as a TrendChart; then the five lanes as TeamRows. The band (under the loading screen,
+whose cards and strips carry the leans and lanes): each team's damage either side of the
+chart. Static HTML in the shell, so the chart has no hover tip. Champion facts only, never
+players. The public edition gets words: every number here is null there
+(src/shell/screens.zig, docs/production-key.md)
 States: all locked, public; all locked, private; private, length tilts but not sure: the
-band says so; a split unknown
+band says so; band under the loading screen, private; band, public: words for the length;
+a split unknown
 Used by: app
 
 ### LobbyForm

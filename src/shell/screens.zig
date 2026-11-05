@@ -513,13 +513,13 @@ pub fn compUnder(a: Allocator, c: Ctx, status: state.Status) !?ui.compview.Comp 
     };
 }
 
-/// The comp view under the loading screen: the island has no room for team pills
-/// (ui-app.wasm at its budget), so this static HTML carries the same facts. Picks are
-/// locked, so no "win less" and no win rates: they would rate teammates' picks
+/// The comp view under the loading screen, as a band: its cards and lane strips carry
+/// the leans and lanes. Picks are locked, so no "win less" and no win rates: they would
+/// rate teammates' picks
 fn lockedComp(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
     var v = try compView(a, c, x);
-    // The loading screen's lane strips show the lanes
     v.lanes = &.{};
+    v.band = true;
     for ([_]*ui.compview.Team{ &v.us, &v.them }) |t| if (t.damage) |*d| {
         d.wins_less = false;
         d.rate = null;

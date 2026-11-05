@@ -1,9 +1,11 @@
 //! CompView: the desktop app's comp view once all ten champions are locked (docs/plan/
 //! app.md APP6), under the board. Each team's damage split as a bar, a tag when teams
-//! this one-sided win less often, its champions with a clear early or late lean; win chance by game length as a TrendChart; then the five lanes as
-//! TeamRows. Static HTML in the shell, so the chart has no hover tip. Champion facts
-//! only, never players. The public edition gets words: every number here is null there
-//! (src/shell/screens.zig, docs/production-key.md)
+//! this one-sided win less often, its champions with a clear early or late lean; win
+//! chance by game length as a TrendChart; then the five lanes as TeamRows. The band
+//! (under the loading screen, whose cards and strips carry the leans and lanes): each
+//! team's damage either side of the chart. Static HTML in the shell, so the chart has
+//! no hover tip. Champion facts only, never players. The public edition gets words:
+//! every number here is null there (src/shell/screens.zig, docs/production-key.md)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const teamrows = @import("teamrows.zig");
@@ -88,6 +90,8 @@ pub const Comp = struct {
     lane_minute: u8,
     /// The notes' toggletip, unique on the page
     notes_id: []const u8 = "comp-notes",
+    /// One row under the loading screen: damage, chart, damage; no tips, leans or lanes
+    band: bool = false,
 };
 
 const Side = enum { us, them };
@@ -99,17 +103,24 @@ pub fn view(h: *H, c: Comp) N {
         .p = if (c.patch.len > 0) c.patch else "?",
         .l = @as(u32, c.lane_minute),
     }));
+    const len: ?N = if (c.length) |l| length(h, l, if (c.band) 80 else 110) else null;
+    // Without the chart the band is the two teams as usual
+    if (c.band) return h.section(.{ .class = "c-comp", .data_v = if (len != null) "band" else null }, .{
+        h.h3(.{}, .{notes[0]}),
+        notes[1],
+        h.div(.{ .class = "teams" }, .{ team(h, c.us, .us, true), len, team(h, c.them, .them, true) }),
+    });
     return h.section(.{ .class = "c-comp" }, .{
         h.h3(.{}, .{notes[0]}),
         notes[1],
-        h.div(.{ .class = "teams" }, .{ team(h, c.us, .us), team(h, c.them, .them) }),
-        if (c.length) |l| length(h, l) else null,
+        h.div(.{ .class = "teams" }, .{ team(h, c.us, .us, false), team(h, c.them, .them, false) }),
+        len,
         if (c.lanes.len > 0) h.h3(.{}, .{W.lanes}) else null,
         if (c.lanes.len > 0) teamrows.view(h, c.lanes) else null,
     });
 }
 
-fn team(h: *H, t: Team, side: Side) N {
+fn team(h: *H, t: Team, side: Side, band: bool) N {
     var early = h.list();
     var late = h.list();
     for (t.timing, 0..) |x, i| (if (x.late) &late else &early).add(h.li(.{ .key = i, .title = x.champ.name }, .{
@@ -123,27 +134,27 @@ fn team(h: *H, t: Team, side: Side) N {
     for (t.tips, 0..) |x, i| tips.add(h.li(.{ .key = i }, .{x}));
     return h.div(.{ .class = "team", .data_side = side }, .{
         h.el(.h4, .{}, .{if (side == .us) W.us else W.them}),
-        if (t.tips.len > 0) h.ul(.{ .class = "tips" }, .{tips.done()}) else null,
+        if (t.tips.len > 0 and !band) h.ul(.{ .class = "tips" }, .{tips.done()}) else null,
         if (t.damage) |d| damage(h, d) else h.p(.{ .class = "none" }, .{W.no_split}),
         if (t.top) |x| h.p(.{ .class = "top" }, .{
             champ.view(h, x.champ, .{ .px = .@"20", .named = false }),
             W.top.with(h, .{ .n = x.champ.name }),
             if (x.share) |p| W.top_share.with(h, .{ .p = whole(p) }) else null,
         }) else null,
-        if (early.items.items.len > 0) h.div(.{ .class = "lean" }, .{ h.span(.{}, .{W.early}), h.ul(.{}, .{early.done()}) }) else null,
-        if (late.items.items.len > 0) h.div(.{ .class = "lean" }, .{ h.span(.{}, .{W.late}), h.ul(.{}, .{late.done()}) }) else null,
+        if (early.items.items.len > 0 and !band) h.div(.{ .class = "lean" }, .{ h.span(.{}, .{W.early}), h.ul(.{}, .{early.done()}) }) else null,
+        if (late.items.items.len > 0 and !band) h.div(.{ .class = "lean" }, .{ h.span(.{}, .{W.late}), h.ul(.{}, .{late.done()}) }) else null,
     });
 }
 
 /// Private: the line with its band against a dashed 50%, the band saying how sure;
 /// words only when the lean is clear. Public: the words alone, nothing without a lean
-fn length(h: *H, l: Length) ?N {
+fn length(h: *H, l: Length, height: u16) ?N {
     const words: ?tree.Text = if (l.longer) |x| (if (x) W.longer else W.shorter) else null;
     const chart: N = if (l.win) |win| blk: {
         const pts = trend.alloc(h, win.len) orelse break :blk .none;
         const range = l.range orelse @as([win.len]f32, @splat(0));
         for (pts, win, range, length_labels) |*p, w, r, label| p.* = .{ .label = .{ .s = label }, .v = w, .range = r };
-        var t: trend.Trend = .{ .label = W.length, .points = pts, .height = 110, .live = false };
+        var t: trend.Trend = .{ .label = W.length, .points = pts, .height = height, .live = false };
         break :blk t.view(h);
     } else .none;
     if (words == null and l.win == null) return null;
@@ -237,6 +248,17 @@ pub const css =
     \\  .c-comp .top { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-s); }
     \\  .c-comp .len { display: flex; flex-direction: column; gap: var(--sp-2); }
     \\  .c-comp .len > p { font-size: var(--fs-s); }
+    \\  .c-comp[data-v="band"] .teams { grid-template-areas: "us" "them" "len"; }
+    \\  .c-comp[data-v="band"] [data-side="us"] { grid-area: us; }
+    \\  .c-comp[data-v="band"] [data-side="them"] { grid-area: them; }
+    \\  .c-comp[data-v="band"] .len { grid-area: len; }
+    \\  .c-comp[data-v="band"] .len h3 { margin: 0; }
+    \\  @container (min-width: 440px) {
+    \\    .c-comp[data-v="band"] .teams { grid-template-areas: "us them" "len len"; }
+    \\  }
+    \\  @container (min-width: 760px) {
+    \\    .c-comp[data-v="band"] .teams { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr); grid-template-areas: "us len them"; }
+    \\  }
     \\}
     \\
 ;
@@ -320,6 +342,22 @@ pub fn gallery(g: *Gallery) void {
     unsure.notes_id = g.id("comp-unsure");
     unsure.length = .{ .win = .{ 53.6, 52.9, 49.7, 48.3, 47.5 }, .range = .{ 4.8, 3.1, 2.9, 3.6, 6.4 } };
     g.addFill("private, length tilts but not sure: the band says so", view(h, unsure));
+    // As the shell's lockedComp: picks locked, so no team record or "wins less"
+    var band = private(h);
+    band.notes_id = g.id("comp-band");
+    band.lanes = &.{};
+    band.band = true;
+    for ([_]*Team{ &band.us, &band.them }) |t| {
+        t.damage.?.rate = null;
+        t.damage.?.wins_less = false;
+    }
+    g.addFill("band under the loading screen, private", view(h, band));
+    var band_public = sample;
+    band_public.notes_id = g.id("comp-band-pub");
+    band_public.lanes = &.{};
+    band_public.band = true;
+    band_public.them.damage.?.wins_less = false;
+    g.addFill("band, public: words for the length", view(h, band_public));
     g.addFill("a split unknown", view(h, .{
         .us = .{ .timing = sample.us.timing },
         .them = sample.them,
