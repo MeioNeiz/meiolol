@@ -73,11 +73,38 @@ tops() {
 }
 
 # One ci: 0 once $1 is on main, else 1 with $1 marked failed
+# git push's own trouble, not the ci's: GitHub refusing after the hook passed (16:13 5 Nov,
+# "fatal error in commit_refs_rules"), or the network. Says nothing about the commit
+transient='\[remote rejected\]|unable to access|Could not resolve host|Connection (reset|refused|timed out)|remote end hung up|early EOF|RPC failed|Operation timed out'
+remote_refused=0
+# One ci: 0 once $1 is on main; else 1, with $1 marked failed, or remote_refused=1 when
+# GitHub or the network refused it twice (it stays queued: no ci verdict)
 try_push() {
-    if git push origin "$1:main"; then
-        echo "$(date -u +%FT%TZ) pushed $(short "$1")" >> "$q/log"
-        return 0
-    fi
+    local out try verify=()
+    out=$(mktemp)
+    for try in 1 2; do
+        git push ${verify[@]+"${verify[@]}"} origin "$1:main" 2>&1 | tee "$out"
+        if [ "${PIPESTATUS[0]}" = 0 ]; then
+            rm -f "$out"
+            echo "$(date -u +%FT%TZ) pushed $(short "$1")" >> "$q/log"
+            return 0
+        fi
+        # The hook's own verdict first: a failing test's log may name a network error
+        grep -q '^pre-push: ci failed' "$out" && break
+        grep -qE "$transient" "$out" || break
+        if [ $try = 2 ]; then
+            rm -f "$out"
+            remote_refused=1
+            echo "$(date -u +%FT%TZ) remote refused $(short "$1") twice, kept queued" >> "$q/log"
+            echo "push: GitHub or the network refused $(short "$1") twice: no ci verdict, it stays queued (bulk) or push it again"
+            return 1
+        fi
+        # Refused after the hook passed: the retry needn't run ci again
+        grep -q '\[remote rejected\]' "$out" && verify=(--no-verify)
+        echo "push: $(short "$1"): $(grep -m 1 -oE "$transient" "$out"): once more in ${MEIOLOL_PUSH_RETRY_S:-30} s"
+        sleep "${MEIOLOL_PUSH_RETRY_S:-30}"
+    done
+    rm -f "$out"
     touch "$q/failed/$1"
     failed_now=1
     echo "$(date -u +%FT%TZ) ci failed $(short "$1") $(git log -1 --format=%s "$1" | cut -c1-80)" >> "$q/log"
@@ -96,18 +123,27 @@ push_best() {
     [ "$n" -gt 0 ] || return 1
     [ -z "$1" ] || [ "${c[0]}" = "$1" ] || echo "push: grouped: $(short "$1") goes with $(short "${c[0]}")"
     try_push "${c[0]}" && return 0
+    [ $remote_refused = 0 ] || return 1
     for ((i = 1; i < n; i++)); do
         git merge-base --is-ancestor "${c[i]}" "${c[i - 1]}" 2> /dev/null || break
     done
     if [ "$i" -lt "$n" ]; then
-        for s in "${c[@]:1}"; do try_push "$s" && return 0; done
+        for s in "${c[@]:1}"; do
+            try_push "$s" && return 0
+            [ $remote_refused = 0 ] || return 1
+        done
         return 1
     fi
     # c[0] newest, each containing the next: c[bad] fails, c[good] passes (n: none tried)
     bad=0 good=$n
     while [ $((good - bad)) -gt 1 ]; do
         i=$(((bad + good) / 2))
-        if try_push "${c[i]}"; then good=$i; else bad=$i; fi
+        if try_push "${c[i]}"; then
+            good=$i
+        else
+            [ $remote_refused = 0 ] || return 1
+            bad=$i
+        fi
     done
     for ((i = 0; i < bad; i++)); do touch "$q/failed/${c[i]}"; done
     echo "$(date -u +%FT%TZ) first failing $(short "${c[bad]}"), $bad newer left out" >> "$q/log"

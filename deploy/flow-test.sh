@@ -268,6 +268,39 @@ $p --flush > "$t/flush2.log" 2>&1
 [ "$($p --status | grep -c '(ci failed)')" = 4 ] && grep -q 'first queued commit whose ci fails' "$t/flush2.log" \
     && ok "flush: the first failing commit named, newer ones left out" \
     || bad "halving left: $($p --status)"
+# GitHub or the network refusing is no ci verdict: retried once (without the hook after a
+# "[remote rejected]", which comes only once it passed), then kept queued, never halved
+export MEIOLOL_PUSH_RETRY_S=0
+grep -vx bad f > f.new; mv f.new f
+cat > hooks/pre-push << EOF
+#!/bin/sh
+echo run >> "$t/runs2"
+while read -r _ sha _ _; do
+    case \$(git log -1 --format=%s "\$sha") in
+        flaky) echo ' ! [remote rejected] x -> main (fatal error in commit_refs_rules)' >&2; exit 1 ;;
+        offline) echo 'fatal: unable to access https://x/: Could not resolve host: x' >&2; exit 1 ;;
+    esac
+done
+exit 0
+EOF
+: > "$t/runs2"
+cf=$(c flaky)
+$p "$cf" > /dev/null
+$p --flush > "$t/flush3.log" 2>&1
+on_main "$cf" && [ ! -f "$t/q/failed/$cf" ] && [ "$(wc -l < "$t/runs2" | tr -d ' ')" = 1 ] \
+    && ok "push: a remote rejection retried without ci, pushed" || bad "remote rejected: $(cat "$t/flush3.log")"
+: > "$t/runs2"
+cg=$(c fine)
+co=$(c offline)
+$p "$cg" > /dev/null
+$p "$co" > /dev/null
+$p --flush > "$t/flush4.log" 2>&1
+! on_main "$cg" && [ ! -f "$t/q/failed/$co" ] && [ ! -f "$t/q/failed/$cg" ] \
+    && [ "$(wc -l < "$t/runs2" | tr -d ' ')" = 2 ] && grep -q "remote refused $(git rev-parse --short "$co")" "$t/q/log" \
+    && $p --status | grep -q 'queued: .* offline$' \
+    && ok "push: the network down twice: kept queued, not failed, not halved" \
+    || bad "network: runs $(wc -l < "$t/runs2"), $(cat "$t/flush4.log")"
+
 # ci-run.sh: the box's verdict stands, 75 (not built there) falls back to the Mac's ci,
 # off and MEIOLOL_CI_HOST=mac skip the box; ci-mac's failure fails. Stub builds log a name
 cp "$here/ci-run.sh" "$here/lib.sh" "$here/remote-build.sh" "$here/place.sh" "$here/box-ci-job.sh" deploy/
