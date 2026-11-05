@@ -920,8 +920,8 @@ fn loadScreen(a: Allocator, c: Ctx, l: *const loading.Loading) !ui.loadscreen.Sc
 
 fn loadLane(a: Allocator, c: Ctx, pair: [2]?*const loading.Card) !ui.loadscreen.Lane {
     var out: ui.loadscreen.Lane = .{};
-    if (pair[0]) |x| out.us = try loadCard(a, c, x);
-    if (pair[1]) |x| out.them = try loadCard(a, c, x);
+    if (pair[0]) |x| out.us = try loadCard(a, c, x, true);
+    if (pair[1]) |x| out.them = try loadCard(a, c, x, false);
     const ours = pair[0] orelse return out;
     if (pair[1] == null) return out;
     const f = ours.lane orelse return out;
@@ -959,9 +959,11 @@ fn loadLane(a: Allocator, c: Ctx, pair: [2]?*const loading.Card) !ui.loadscreen.
     return out;
 }
 
-fn loadCard(a: Allocator, c: Ctx, card: *const loading.Card) !ui.loadscreen.Card {
-    const pills = try a.alloc(ui.loadscreen.Pill, card.pills.len);
-    for (pills, card.pills) |*p, q| p.* = .{ .text = q.text, .tone = loadTone(q.tone) };
+fn loadCard(a: Allocator, c: Ctx, card: *const loading.Card, ours: bool) !ui.loadscreen.Card {
+    var pills: std.ArrayList(ui.loadscreen.Pill) = .empty;
+    for (card.pills) |q| if (loading.shows(q, card.*, ours, c.private)) {
+        try pills.append(a, .{ .text = q.text, .tone = loadTone(q.tone) });
+    };
     const shown = c.private and card.games > 0;
     var x: ui.loadscreen.Card = .{
         .champ = try c.champ(a, card.champion),
@@ -970,7 +972,7 @@ fn loadCard(a: Allocator, c: Ctx, card: *const loading.Card) !ui.loadscreen.Card
         .you = card.me,
         .fact = if (shown) try a.print("{f} · {f} games", .{ rate(card.win), count(card.games) }) else "",
         .lean = if (!shown) .none else if (card.win >= 0.515) .good else if (card.win <= 0.485) .bad else .none,
-        .pills = pills,
+        .pills = pills.items,
     };
     if (card.lengths) |by| {
         x.lengths = try lengthSpark(a, by);
@@ -1757,24 +1759,37 @@ test "loading: the role's numbers private only" {
     const a = arena.allocator();
     var f = try fixture();
     defer f.deinit();
-    const ours = [_]loading.Card{.{ .champion = ahri, .role = .middle, .guessed = false, .me = true, .games = 12_400, .win = 0.521, .pills = &.{.{ .text = "few games", .tone = .caution }} }};
-    const theirs = [_]loading.Card{.{ .champion = syndra, .role = .middle, .guessed = true, .me = false, .games = 0, .win = 0, .pills = &.{} }};
+    const strong: loading.Pill = .{ .text = "strong now", .tone = .good, .patch = true };
+    const ours = [_]loading.Card{
+        .{ .champion = ahri, .role = .middle, .guessed = false, .me = true, .games = 12_400, .win = 0.521, .pills = &.{ .{ .text = "few games", .tone = .caution }, strong } },
+        .{ .champion = galio, .role = .top, .guessed = false, .me = false, .games = 900, .win = 0.53, .pills = &.{ strong, .{ .text = "lone AP", .tone = .neutral } } },
+    };
+    const theirs = [_]loading.Card{
+        .{ .champion = syndra, .role = .middle, .guessed = true, .me = false, .games = 0, .win = 0, .pills = &.{} },
+        .{ .champion = galio, .role = .top, .guessed = false, .me = false, .games = 900, .win = 0.47, .pills = &.{.{ .text = "weak now", .tone = .bad, .patch = true }} },
+    };
     const l: loading.Loading = .{ .teams = .{ &ours, &theirs }, .draft = .{ .win = 0.534, .se = 0.1, .picks = .{ 5, 5 }, .hovers = 0 } };
 
     const priv = try loadScreen(a, .{ .stats = &f.stats, .icons = null, .private = true }, &l);
-    // Both mid: one lane
-    try testing.expectEqual(1, priv.lanes.len);
-    const us = priv.lanes[0].us.?;
+    // Top, then mid
+    try testing.expectEqual(2, priv.lanes.len);
+    const us = priv.lanes[1].us.?;
     try testing.expectEqualStrings("52.1% · 12k games", us.fact);
     try testing.expectEqual(.good, us.lean);
     try testing.expectEqual(.caution, us.pills[0].tone);
-    try testing.expect(priv.lanes[0].them.?.guessed and priv.lanes[0].them.?.fact.len == 0);
+    try testing.expect(priv.lanes[1].them.?.guessed and priv.lanes[1].them.?.fact.len == 0);
     try testing.expectApproxEqAbs(@as(f32, 53.4), priv.draft.?, 0.01);
+    try testing.expectEqualStrings("strong now", priv.lanes[0].us.?.pills[0].text);
 
     const c: Ctx = .{ .stats = &f.stats, .icons = null, .private = false };
     const public = try loadScreen(a, c, &l);
     try testing.expectEqual(null, public.draft);
-    try testing.expectEqualStrings("", public.lanes[0].us.?.fact);
+    try testing.expectEqualStrings("", public.lanes[1].us.?.fact);
+    // No patch pill on a locked teammate; mine and the enemies' keep theirs
+    try testing.expectEqual(1, public.lanes[0].us.?.pills.len);
+    try testing.expectEqualStrings("lone AP", public.lanes[0].us.?.pills[0].text);
+    try testing.expectEqualStrings("strong now", public.lanes[1].us.?.pills[1].text);
+    try testing.expectEqualStrings("weak now", public.lanes[0].them.?.pills[0].text);
     var d = try data(a, c, .{ .loading = &l }, .none);
     d.seq = 1;
     const html = try renderIn(a, d, null, null, .{ .load = public });

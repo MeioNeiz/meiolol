@@ -41,16 +41,16 @@ pub fn view(ctx: Ctx, l: *const loading.Loading) void {
         if (ctx.wide) {
             var row = dvui.box(@src(), .{ .dir = .horizontal, .equal_space = true }, .{ .id_extra = side, .expand = .horizontal });
             defer row.deinit();
-            for (cards, 0..) |c, i| card(ctx, side * 10 + i, c, team);
+            for (cards, 0..) |c, i| card(ctx, side * 10 + i, c, ours, team);
         } else {
-            for (cards, 0..) |c, i| compact(ctx, side * 10 + i, c, team);
+            for (cards, 0..) |c, i| compact(ctx, side * 10 + i, c, ours, team);
         }
     }
     if (!ctx.wide) return;
     w.para(@src(), "Champion facts only: the role, how the champion does in it this period, and its lane against the same role across. Roles with ? are guesses.", .{}, .{ .muted = true, .small = true });
 }
 
-fn card(ctx: Ctx, id: usize, c: loading.Card, team: dvui.Color) void {
+fn card(ctx: Ctx, id: usize, c: loading.Card, ours: bool, team: dvui.Color) void {
     var box = dvui.box(@src(), .{ .dir = .vertical }, .{
         .id_extra = id,
         .expand = .both,
@@ -76,11 +76,11 @@ fn card(ctx: Ctx, id: usize, c: loading.Card, team: dvui.Color) void {
     rate(ctx, c, 0.5);
     var fb = dvui.flexbox(@src(), .{ .justify_content = .center }, .{ .expand = .horizontal, .margin = .{ .y = 6 } });
     defer fb.deinit();
-    for (c.pills, 0..) |p, i| w.pill(@src(), p.text, tone(p.tone), i);
+    pills(ctx, c, ours, c.pills.len);
 }
 
 /// One row: icon, name and role, the rate, the first two pills
-fn compact(ctx: Ctx, id: usize, c: loading.Card, team: dvui.Color) void {
+fn compact(ctx: Ctx, id: usize, c: loading.Card, ours: bool, team: dvui.Color) void {
     var box = w.card(@src(), id, if (c.me) team else null, .horizontal);
     defer box.deinit();
     w.champIcon(@src(), ctx, c.champion, .{ .size = 36, .border = team.opacity(0.7) });
@@ -95,7 +95,17 @@ fn compact(ctx: Ctx, id: usize, c: loading.Card, team: dvui.Color) void {
     rate(ctx, c, 0);
     var fb = w.pills(@src(), 0);
     defer fb.deinit();
-    for (c.pills[0..@min(2, c.pills.len)], 0..) |p, i| w.pill(@src(), p.text, tone(p.tone), i);
+    pills(ctx, c, ours, 2);
+}
+
+fn pills(ctx: Ctx, c: loading.Card, ours: bool, most: usize) void {
+    var i: usize = 0;
+    for (c.pills) |p| {
+        if (i == most) break;
+        if (!loading.shows(p, c, ours, ctx.private())) continue;
+        w.pill(@src(), p.text, tone(p.tone), i);
+        i += 1;
+    }
 }
 
 fn roleLine(c: loading.Card, o: dvui.Options) void {

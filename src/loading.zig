@@ -21,7 +21,15 @@ pub const Tone = enum { neutral, good, bad, caution };
 pub const Pill = struct {
     text: []const u8,
     tone: Tone,
+    /// Rates the pick on today's patch ("strong now", "weak now")
+    patch: bool = false,
 };
+
+/// Public never rates a locked teammate's pick (docs/production-key.md): patch pills only
+/// on my own card and the enemies'
+pub fn shows(p: Pill, c: Card, ours: bool, private: bool) bool {
+    return private or !p.patch or c.me or !ours;
+}
 
 /// A seat as the poller keeps it from champ select
 pub const Seat = struct {
@@ -152,9 +160,9 @@ fn card(arena: std.mem.Allocator, in: Input, s: Seat, team: []const Seat, across
     if (share < hipster_share) {
         try pills.append(arena, .{ .text = "hipster pick", .tone = .caution });
     } else if (c.win >= 0.515) {
-        try pills.append(arena, .{ .text = "strong now", .tone = .good });
+        try pills.append(arena, .{ .text = "strong now", .tone = .good, .patch = true });
     } else if (c.win <= 0.485) {
-        try pills.append(arena, .{ .text = "weak now", .tone = .bad });
+        try pills.append(arena, .{ .text = "weak now", .tone = .bad, .patch = true });
     }
     const opp = for (across) |o| {
         if (o.role == role and o.champion != 0) break o;
