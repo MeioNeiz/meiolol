@@ -45,6 +45,7 @@ profilesum title 2
 pv title 2
 ranking markup 1
 ranking scope 1
+rate title 1
 recordtile title 1
 segmented title 2
 site markup 1
@@ -58,7 +59,7 @@ testerpage title 1
 testerpage pagecss 22
 textpage pagecss 9
 tiers css 2
-tiers pagecss 78
+tiers pagecss 77
 timechart markup 1
 versus title 2
 yourpage pagecss 7

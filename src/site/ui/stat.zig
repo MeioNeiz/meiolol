@@ -1,13 +1,11 @@
 //! StatCell: one figure, formatted by its kind through fmt.zig and coloured by how far it
-//! sits from its scale's middle. Ink by default: an aggregate rate mixes continuously
-//! (fmt.WrColour, as the live champions table), so a sorted column reads as a smooth run;
-//! one game's steps (fmt.Step). Fill for heat cells, stepped. The colour is the value's
-//! alone. How sure it is: its games, small and faint after it in a fixed slot (fmt .kilo,
-//! so a column's figures stay aligned); its 80% range's ends and the full count on hover,
-//! never a ± figure. The figure fades when the range is wide, never hides (J35). A missing
-//! figure says so
+//! sits from its scale's middle. An aggregate rate is a Rate (rate.zig): its colour, games,
+//! hover and fade are the rate view's. Other kinds: ink stepped (fmt.Step), or fill for
+//! heat cells; a range's ends on hover, faded when wide or thin, never hidden (J35). A
+//! missing figure says so
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
+const rate = @import("rate.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const phrase = @import("phrase.zig");
 const plain = phrase.plain;
@@ -54,8 +52,6 @@ pub const Stat = struct {
 
 const W = struct {
     pub const missing = plain("·");
-    pub const rate_ends = phrase.Phrase("{lo:dec}-{hi:rate}");
-    pub const rate_ends_whole = phrase.Phrase("{lo:int}-{hi:pct}");
     pub const ends = phrase.Phrase("{lo:points} to {hi:points}");
     pub const ends_games = phrase.Phrase("{e:text}, {n:count} games");
 };
@@ -64,6 +60,10 @@ pub fn view(h: *H, s: Stat) N {
     const v = s.value orelse return h.span(.{ .class = "c-stat", .data_state = "missing" }, .{
         h.span(.{ .class = "v" }, .{W.missing}),
         if (s.ctx) |c| h.span(.{ .class = "ctx" }, .{c}) else null,
+    });
+    if (s.kind == .rate and s.scale == .aggregate and !s.fill) return h.span(.{ .class = "c-stat" }, .{
+        rate.view(h, .{ .pct = v, .games = s.games, .half = s.range, .ref = s.ref }, .{ .count = s.count }),
+        if (s.ctx) |c| h.span(.{ .class = "ctx" }, .{ h.span(.{ .class = "sr" }, .{", "}), c }) else null,
     });
     const d = v - s.ref;
     const step: fmt.Step = if (s.scale == .none) .{} else .of(@floatCast(d), s.scale.cuts());
@@ -100,16 +100,8 @@ pub fn endsGames(h: *H, k: Kind, v: f64, half: f64, games: u32) tree.Text {
 /// A range's ends, for its hover: "50.2-52.6%", whole once it is ±10 or wider; a change
 /// "−7.7 to +1.5"
 pub fn ends(h: *H, k: Kind, v: f64, half: f64) tree.Text {
-    if (k != .rate) return W.ends.with(h, .{ .lo = v - half, .hi = v + half });
-    if (half < 10) return W.rate_ends.with(h, .{ .lo = if (v < half) 0 else v - half, .hi = if (v + half > 100) 100 else v + half });
-    return W.rate_ends_whole.with(h, .{ .lo = whole(v - half), .hi = whole(v + half) });
-}
-
-// Branches, not @round: it pulls compiler_rt into every island (ui-games' budget)
-fn whole(v: f64) u32 {
-    if (v <= 0) return 0;
-    if (v >= 100) return 100;
-    return @intFromFloat(v + 0.5);
+    if (k == .rate) return rate.ends(h, v, half);
+    return W.ends.with(h, .{ .lo = v - half, .hi = v + half });
 }
 
 /// A range's half-width: "3.1", whole from 10 ("14"): a wide range's tenths say nothing
@@ -137,8 +129,10 @@ pub const css =
     \\  .c-stat > .v { grid-column: 1; color: var(--c, var(--text)); font-weight: var(--w-m); white-space: nowrap; }
     \\  .c-stat > .g { grid-column: 2; justify-self: start; min-width: 2.7em; margin-left: 5px;
     \\    font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; }
+    \\  .c-stat > .c-rate { grid-column: 1 / -1; }
+    \\  .c-stat > .ctx > .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
     \\  .c-stat > .ctx { grid-column: 1 / -1; font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; }
-    \\  .c-stat[data-state="thin"] > .v { opacity: 0.5; }
+    \\  .c-stat[data-state="thin"] > .v { opacity: var(--fade); }
     \\  .c-stat[data-state="missing"] > .v { color: var(--faint); }
     \\  .c-stat[data-v="fill"] { align-items: center; justify-content: center; min-width: 52px;
     \\    padding: 3px 6px; border-radius: var(--r-s); background: var(--f, var(--f-0)); }

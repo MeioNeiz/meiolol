@@ -37,6 +37,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 
 **Figures**
 - StatCell: one figure, formatted by its kind through fmt.zig and coloured by how far...
+- Rate: a win rate, the one way one is shown
 - Delta: a signed change in points, on the scale's colour with its sign (or an arrow)...
 - Bar: a magnitude without good or bad (pick, ban, games), a neutral ink bar beside...
 - Kda: kills / deaths / assists in tabular figures, the slashes faint; optionally the...
@@ -263,13 +264,10 @@ dailyseat, champpage
 ### StatCell
 `stat.zig` `.c-stat` site
 StatCell: one figure, formatted by its kind through fmt.zig and coloured by how far it
-sits from its scale's middle. Ink by default: an aggregate rate mixes continuously
-(fmt.WrColour, as the live champions table), so a sorted column reads as a smooth run; one
-game's steps (fmt.Step). Fill for heat cells, stepped. The colour is the value's alone.
-How sure it is: its games, small and faint after it in a fixed slot (fmt .kilo, so a
-column's figures stay aligned); its 80% range's ends and the full count on hover, never a
-± figure. The figure fades when the range is wide, never hides (J35). A missing figure
-says so
+sits from its scale's middle. An aggregate rate is a Rate (rate.zig): its colour, games,
+hover and fade are the rate view's. Other kinds: ink stepped (fmt.Step), or fill for heat
+cells; a range's ends on hover, faded when wide or thin, never hidden (J35). A missing
+figure says so
 States: rate: its games after it, ends and games on hover; rate, low; points; points, a
 range (on hover); count; time; gold, one game; plain; few games: a wide range, faded;
 missing; with context; a sorted column: the ink mixes, no steps; the same colour however
@@ -277,6 +275,26 @@ sure: 53.0, 52.6, 50.0 of 20,000, 54.0 of 400, 54.2 of 120, 65.0 of 40 (faded); 
 cells
 Used by: strip, table, buildpanel, heatgrid, matchgrid, ranking, homepage, champpage,
 matchpage, tiers
+
+### Rate
+`rate.zig` `.c-rate` site
+Rate: a win rate, the one way one is shown. Its colour is the rate itself on the site's
+diverging scale (fmt.WrColour), read against 50 unless the caller names its own ref
+(BuildPanel: the slot's rate over its options; a ranking: the stat's usual). How sure it
+is: its games, small and faint after it in a fixed slot, so a column's figures stay
+aligned; its 80% range's ends and the full count on hover, never a ± figure; faded
+(var(--fade)) past fmt.wide_range, never hidden (J35); whole once the range is 10 or
+wider, its tenths saying nothing. A model's estimate has none of these. Screen readers get
+words ("win rate 52.3%, 33,108 games"): phones never read a title. `delta`: a difference
+of rates in points, same colour and fade
+States: counted: its games after it, ends and games on hover; low; few games: a wide
+range, faded; very few: whole, faded; no unit, for a build table's narrow column; no
+count: a column holds the games (still on hover); a model's estimate: no count, range or
+fade; its own ref (BuildPanel: against the slot's 47.2%); no games; a sorted column: the
+colour mixes, no steps; the same colour however sure: 53.0, 52.6, 50.0 of 20,000, 54.0 of
+400, 54.2 of 120, 65 of 40 (faded); delta: +2.6, −1.4, +0.3; +4.8 with a wide range,
+faded
+Used by: stat
 
 ### Delta
 `delta.zig` `.c-delta` `.c-dbar` site

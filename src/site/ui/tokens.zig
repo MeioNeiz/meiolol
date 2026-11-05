@@ -21,6 +21,9 @@ pub const root = [_]Token{
     .{ .name = "muted", .value = "#8e939c" },
     // 4.6:1 on --panel: game counts and units must stay readable
     .{ .name = "faint", .value = "#7a7f88" },
+    // A figure we are unsure of (a rate's wide range, an average of few games): faded,
+    // never hidden (J35). The one dimming opacity
+    .{ .name = "fade", .value = "0.55" },
     // Brand/selection only, never data
     .{ .name = "accent", .value = "#a99dff" },
     .{ .name = "brand", .value = "#8b7cf6" },

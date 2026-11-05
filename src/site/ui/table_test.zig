@@ -130,7 +130,7 @@ test "search, minimums and a row's detail" {
     // Any: Zilean's 61 games show, the rate faded by its range, not the row
     const shown = try p.shown();
     const zilean = std.mem.find(u8, shown, "<tr aria-expanded=\"false\"><td><b>Zilean").?;
-    try testing.expect(std.mem.find(u8, shown[zilean..], "data-state=\"thin\"") != null);
+    try testing.expect(std.mem.find(u8, shown[zilean..], "<span class=\"c-rate\" data-wide") != null);
     _ = p.rt.event(0, .{ .kind = .click, .target = p.byText(.button, "1k") });
     try testing.expectEqualStrings("Kha'Zix,Miss Fortune,Darius,Ahri,Tristana,Viktor,Renata Glasc,Qiyana", try p.names());
     try testing.expectEqualStrings("#min=2", p.fake.fragment.items);
