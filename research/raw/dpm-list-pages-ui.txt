@@ -1,0 +1,546 @@
+===== dpm-champions-1440.txt (rendered text at 1440, 5 Nov 2026)
+Search Summoner, Champion, Team, Pro...
+Ctrl+K
+Get Premium
+Sign in
+Tierlist & Builds
+Leaderboards
+Esports
+NEW
+News
+Matchups
+Data Studio
+Rift Legacy
+Tierlist & Builds
+EMERALD+, 16.22
+Explore DPM.LOL’s League of Legends Tierlist, updated live with the best champions for every role. Access pro builds, top-tier runes, item guides, and skill orders based on data-driven insights to boost your rank and dominate your games!
+CHAMPIONS ANALYZED
+1,507,360
+?
+Ranked
+Synergy
+Arena
+ARAM
+DPM APP GET THE BEST PICK IN EVERY DRAFT
+Win the draft with live pick & counter suggestions, directly in game.
+UNLOCK WITH DPM APP
+EMERALD+
+ALL REGIONS
+16.22
+OFF-META
+?
+RANK
+CHAMPION
+LANE
+TIER
+?
+WINRATE
+PICKRATE
+GAMES
+1
+Vel'Koz
+17.4%
+S+
+56.7%
++2.2%
+1.0%
+1,544
+2
+Thresh
+99.5%
+S+
+51.1%
+-0.5%
+13.7%
+20,765
+3
+Darius
+15.0%
+S+
+53.7%
++2.1%
+1.4%
+2,109
+4
+Xayah
+99.6%
+S
+53.1%
++0.9%
+7.7%
+11,628
+5
+Darius
+83.1%
+S
+51.5%
++0.7%
+7.7%
+11,718
+6
+Leona
+99.7%
+S
+51.8%
+-0.1%
+8.6%
+13,069
+7
+Malphite
+78.8%
+S
+51.8%
++0.2%
+6.8%
+10,298
+8
+Lulu
+99.5%
+S
+50.2%
++0.2%
+12.7%
+19,231
+9
+Ahri
+94.8%
+S
+51.4%
+-0.0%
+11.8%
+17,981
+10
+Shyvana
+94.5%
+S
+53.4%
++1.9%
+4.5%
+6,768
+11
+Ekko
+51.8%
+S
+53.1%
++1.6%
+5.5%
+8,325
+12
+Blitzcrank
+99.5%
+S
+51.4%
++0.3%
+7.4%
+11,160
+13
+Janna
+99.3%
+S
+53.1%
++1.5%
+5.7%
+8,594
+14
+Katarina
+84.6%
+S
+51.2%
++0.4%
+6.5%
+9,929
+15
+Jinx
+99.6%
+S
+50.8%
+-0.4%
+10.8%
+16,336
+16
+Nautilus
+98.1%
+S
+49.6%
++0.2%
+11.3%
+17,122
+17
+Zed
+70.9%
+A
+50.4%
++1.0%
+7.8%
+11,786
+18
+Yasuo
+17.5%
+A
+51.9%
+-0.1%
+2.5%
+3,799
+19
+Kassadin
+93.5%
+A
+53.1%
++2.0%
+3.2%
+4,834
+20
+Master Yi
+86.5%
+A
+50.9%
++0.2%
+5.9%
+8,899
+21
+Cho'Gath
+58.6%
+A
+51.6%
+-0.6%
+5.5%
+8,372
+22
+Braum
+99.9%
+A
+51.8%
+-0.2%
+5.5%
+8,300
+23
+LeBlanc
+86.2%
+A
+51.1%
++0.7%
+5.2%
+7,900
+EXPLORE
+Tierlist & Builds
+Leaderboards
+Matchups
+Data Studio
+Team SoloQ
+Esports
+News
+PRODUCT
+Premium
+Roadmap
+Changelog
+NEW!
+Advertise with us
+SUPPORT
+FAQ
+Contact
+Privacy
+Terms of Service
+Legal
+COMMUNITY
+Join our Discord
+DPM.LOL
+© 2026 DPM.LOL — All rights reserved.
+Terms of Service
+Privacy Policy
+
+DPM.LOL is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc. Some content is provided courtesy of Leaguepedia and Liquipedia, under a CC-BY-SA 3.0 license.
+===== dpm-matchup-1440.txt (rendered text at 1440, 5 Nov 2026)
+Search Summoner, Champion, Team, Pro...
+Ctrl+K
+Get Premium
+Sign in
+Tierlist & Builds
+Leaderboards
+Esports
+NEW
+News
+Matchups
+Data Studio
+Rift Legacy
+Ornn
+vs Darius
+P
+Q
+W
+E
+R
+Master every matchup by learning from the best with our videos.
+Build
+Pro Builds
+Matchups
+OTPs
+12d ago
+VS
+Makkro
+Quick Access
+First Kill
+First Death
+First Drake
+Baron
+15m
+25m
+CLICK ON A GAME TO WATCH IT!
+Playing Ornn
+Against Ornn
+Filters
+Streamers
+12d ago
+16.21
+EUW
+VS
+Makkro
+4
+/
+2
+/
+12
+78
+14d ago
+16.21
+EUW
+VS
+Makkro
+2
+/
+5
+/
+7
+33
+19d ago
+16.20
+EUW
+VS
+Weesie
+7
+/
+1
+/
+3
+74
+24d ago
+16.20
+EUW
+VS
+Color
+1
+/
+3
+/
+18
+67
+28d ago
+16.20
+NA
+VS
+Gemi
+0
+/
+4
+/
+3
+19
+30d ago
+16.19
+BR
+VS
+Arthur Lanches
+1
+/
+0
+/
+0
+43
+33d ago
+16.19
+EUW
+VS
+Makkro
+5
+/
+0
+/
+10
+74
+35d ago
+16.19
+EUW
+VS
+Makkro
+2
+/
+1
+/
+2
+72
+36d ago
+16.19
+EUW
+VS
+Makkro
+1
+/
+7
+/
+0
+5
+38d ago
+16.19
+EUW
+VS
+Makkro
+3
+/
+5
+/
+4
+33
+39d ago
+16.19
+EUW
+VS
+Makkro
+4
+/
+4
+/
+17
+50
+42d ago
+16.19
+EUW
+VS
+Makkro
+2
+/
+11
+/
+9
+15
+44d ago
+16.18
+EUW
+VS
+Makkro
+10
+/
+4
+/
+20
+100
+1
+EXPLORE
+Tierlist & Builds
+Leaderboards
+Matchups
+Data Studio
+Team SoloQ
+Esports
+News
+PRODUCT
+Premium
+Roadmap
+Changelog
+NEW!
+Advertise with us
+SUPPORT
+FAQ
+Contact
+Privacy
+Terms of Service
+Legal
+COMMUNITY
+Join our Discord
+DPM.LOL
+© 2026 DPM.LOL — All rights reserved.
+Terms of Service
+Privacy Policy
+
+DPM.LOL is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc. Some content is provided courtesy of Leaguepedia and Liquipedia, under a CC-BY-SA 3.0 license.
+===== dpm-matchups-1440.txt (rendered text at 1440, 5 Nov 2026)
+Search Summoner, Champion, Team, Pro...
+Ctrl+K
+Get Premium
+Sign in
+Tierlist & Builds
+Leaderboards
+Esports
+NEW
+News
+Matchups
+Data Studio
+Rift Legacy
+Get a video for
+every League Matchups!
+
+Master every matchup by learning from the best with our videos.
+
+With over 50K matches available
+VS
+Champion
+?
+Opponent
+?
+Quick Access
+Irelia
+Darius
+Aatrox
+Ambessa
+Fiora
+Camille
+Viego
+Graves
+Lee Sin
+Nocturne
+Kha'Zix
+Rengar
+Viktor
+Ahri
+Syndra
+Sylas
+Yasuo
+Yone
+Jinx
+Corki
+Ashe
+Caitlyn
+Ezreal
+Kai'Sa
+Braum
+Leona
+Lulu
+Pyke
+Thresh
+Nautilus
+EXPLORE
+Tierlist & Builds
+Leaderboards
+Matchups
+Data Studio
+Team SoloQ
+Esports
+News
+PRODUCT
+Premium
+Roadmap
+Changelog
+NEW!
+Advertise with us
+SUPPORT
+FAQ
+Contact
+Privacy
+Terms of Service
+Legal
+COMMUNITY
+Join our Discord
+DPM.LOL
+© 2026 DPM.LOL — All rights reserved.
+Terms of Service
+Privacy Policy
+
+DPM.LOL is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc. Some content is provided courtesy of Leaguepedia and Liquipedia, under a CC-BY-SA 3.0 license.

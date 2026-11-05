@@ -23,8 +23,11 @@ build panel, rune grid and skill grid, with op.gg/dpm fading for thin runes (C8)
 dpm's role picker with shares (C9), and a variant list (name, games, win rate) in place
 of a most-played or highest-win toggle (C7). Tables: lolalytics' sortable headers and
 visible minimums; every other site keeps the role in champion links (C10). Matchups:
-pick a champion, then an opponent (dpm, op.gg) (C11). Patch: nobody joins the change
-text, the stat change and matchup changes (C12). Pool and draft: iTero's pool with a
+pick a champion, then an opponent (dpm, op.gg) (C11). Matchup page: only Mobalytics has a lane duel page; the
+others filter the build page by opponent (C25). Patch: nobody joins the change text, the
+stat change and matchup changes (C12); data-led patch views show the pick-rate change
+beside win rate (lolalytics, League of Graphs) (C23). Rankings: League of Graphs alone,
+panels titled only, value and change as bars (C24). Pool and draft: iTero's pool with a
 shape, coverage as faces and reasons as portrait pairs; nobody shows time to learn
 (C13, C14). Daily games: one sentence on the first screen, then community results
 after the answer (C15). Controls: champion search that knows nicknames (u.gg, dpm),
@@ -51,7 +54,7 @@ Leaguepedia has real order for pro games (C19, C20, C21).
 - C9: The role picker shows the champion's share of games under each role (dpm, lolalytics). for: [[dpm-champion-ui#^f1]], [[lolalytics-darius-build#^f29]]
 - C10: Leading tier lists keep the role in every champion link; meio.lol drops it. for: [[lolalytics-tierlist-top-ui#^f1]], [[dpm-tierlist-ui#^f1]], [[meiolol-champions-list-ui#^f1]]
 - C11: A matchup is found by picking a champion, then an opponent, not from a list of all pairs. for: [[dpm-matchups-finder-ui#^f1]], [[opgg-darius-counters-phone-ui#^f1]]
-- C12: No site shows the patch change text, the win-rate change and matchup changes together. for: [[lolalytics-home-patch-ui#^f5]], [[opgg-patch-notes-ui#^f5]], [[deeplol-darius-patch-history-ui#^f3]]
+- C12: No site shows the patch change text, the win-rate change and matchup changes together. for: [[lolalytics-home-patch-ui#^f5]], [[opgg-patch-notes-ui#^f5]], [[deeplol-darius-patch-history-ui#^f3]], [[opgg-list-pages-ui#^f5]], [[lolalytics-list-pages-ui#^f6]], [[mobalytics-list-pages-ui#^f4]]
 - C13: iTero gives a pool a shape (named slots) and shows coverage and reasons as portraits with scores, not tables or win rates. for: [[itero-pool-builder-ui#^f8]], [[itero-drafting-sim-ui#^f4]]
 - C14: No pool tool shows how hard a champion is to learn. for: [[itero-pool-builder-ui#^f9]]
 - C15: Popular daily games put about one sentence on the first screen and show community results after the answer. for: [[wordle-ui#^f1]], [[framed-ui#^f3]] against: [[loldle-classic-ui#^f5]]
@@ -63,6 +66,9 @@ Leaguepedia has real order for pro games (C19, C20, C21).
 - C21: Pro games' pick order with roles is public in Leaguepedia; in ranked only side order is fixed (blue first, red last). for: [[leaguepedia-picksandbans#^f1]], [[lolwiki-draft-pick#^f4]]
 - C22: Spectator-v5 lists live participants in a per-game non-role order. for: [[meiolol-pick-order-queues#^f3]]
 
+- C23: Data-led patch views put the pick-rate change beside the win-rate change (lolalytics cards; League of Graphs a Popularity Progression list). for: [[lolalytics-list-pages-ui#^f5]], [[leagueofgraphs-rankings-ui#^f1]]
+- C24: Of the sites compared only League of Graphs ranks champions per stat; panels carry only a title, value and change drawn as bars. for: [[leagueofgraphs-rankings-ui#^f1]], [[leagueofgraphs-rankings-ui#^f4]], [[ugg-list-pages-ui#^f7]], [[opgg-list-pages-ui#^f6]]
+- C25: Besides meio.lol only Mobalytics has a lane duel page; u.gg, op.gg and Blitz show the build page filtered by opponent. for: [[mobalytics-list-pages-ui#^f2]], [[ugg-list-pages-ui#^f4]], [[opgg-list-pages-ui#^f3]], [[blitz-list-pages-ui#^f3]]
 ## Disagreements
 
 - Runes: lolalytics (Jacob's reference) shows every rune with numbers but no fading; dpm and op.gg fade thin runes. Take lolalytics' grid with fading (C8).

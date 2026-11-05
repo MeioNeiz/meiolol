@@ -1,0 +1,1071 @@
+===== mobalytics-champions-1440.txt (rendered text at 1440, 5 Nov 2026)
+LoL
+TFT
+Diablo 4
+PoE 2
+PoE
+WoW Forever
+New
+Destiny 2
+Marathon
+STS 2
+Gamebase
+Reviews, Previews, & More
+Download App
+Sign In
+Home
+Summoner
+Game Highlights
+GPI
+Challenges
+Champions
+Tier List
+Guides
+Classic
+League of Legends Tier List for Low ELO. Meta Picks for Every Role in Patch 26.22
+Current patch
+26.22
+Last updated
+2 days ago
+
+In Patch 26.22, based on the assessment of our high elo game experts, the best champions to climb with below low Diamond right now are Darius, Cho'Gath, Ahri, Kai'Sa, and Lulu. Below, you will find a more detailed assessment of their strengths. For the ranks above low Diamond, we recommend checking out our High Elo Tier List instead. If you'd rather explore Mobalytics data instead of our curated expert recommendations, refer to our Champion Stats instead.
+
+LoL Tier List
+
+High Elo
+
+Mayhem
+
+NEW
+
+Stats
+
+ARAM
+
+Arena Champions
+
+Arena Synergies
+
+Top Tier List
+
+Darius takes our Top Lane spot after a buff to his max-rank Q cooldown, giving him more opportunities to deal damage and heal during extended fights. Punish enemies who step too far forward, using W to slow them and landing the outer edge of Q for its heal. In teamfights, build your passive stacks on enemies you can reach, then look for an ultimate kill to start chaining resets.
+
+Darius
+Camille
+Gangplank
+Garen
+Jax
+Malphite
+Nasus
+Yone
+Fiora
+Aatrox
+Irelia
+Mordekaiser
+Gwen
+Ornn
+Ambessa
+Riven
+Jayce
+Renekton
+Sett
+Cho'Gath
+Gragas
+Tryndamere
+Teemo
+Sion
+Singed
+Olaf
+Pantheon
+Yasuo
+Zaahen
+Kayle
+Akali
+Shen
+Urgot
+Gnar
+Illaoi
+K'Sante
+Rumble
+Tahm Kench
+Trundle
+Vladimir
+Dr. Mundo
+Warwick
+Vayne
+Heimerdinger
+Kled
+Varus
+Kennen
+Poppy
+Quinn
+Yorick
+Volibear
+
+Share top tier list with your friends!
+
+Copy link
+Jungle Tier List
+
+Cho’Gath keeps our Jungle spot, bringing plenty of crowd control and a frontline that gets harder to kill as he builds Feast stacks. Keep your farm up and look to follow your teammates’ crowd control with Q, then use W to silence enemies as your team closes in. You can also hold these abilities to protect your carries when enemies dive them. Around Dragon and Baron, having Feast available alongside Smite gives you a strong way to secure the objective.
+
+Sylas
+Lillia
+Briar
+Kayn
+Kha'Zix
+Cho'Gath
+Master Yi
+Shaco
+Wukong
+Graves
+Talon
+Diana
+Nocturne
+Rengar
+Zac
+Rek'Sai
+Qiyana
+Viego
+Ekko
+Naafiri
+Evelynn
+Fiddlesticks
+Warwick
+Jarvan IV
+Lee Sin
+Nidalee
+Bel'Veth
+Shyvana
+Xin Zhao
+Hecarim
+Darius
+Sejuani
+Gwen
+Zyra
+Jayce
+Kindred
+Rumble
+Trundle
+Taliyah
+Ivern
+Amumu
+Skarner
+Nunu & Willump
+Rammus
+Karthus
+Vi
+Aatrox
+Elise
+Volibear
+Udyr
+
+Share jungle tier list with your friends!
+
+Copy link
+Mid Tier List
+
+Ahri takes our Mid Lane spot, bringing a useful mix of mobility, wave clear, and pick potential. Push your wave with Q before looking to move with your jungler, and use Charm to punish enemies who stray too far from their team. Your ultimate helps you find a better angle, dodge an important spell, or escape when a play goes wrong. Once you get a takedown, use the extra dash to chase another target or reposition safely as the fight continues.
+
+Zed
+Lissandra
+Vladimir
+LeBlanc
+Ekko
+Veigar
+Katarina
+Ahri
+Yone
+Yasuo
+Syndra
+Locke
+Xerath
+Diana
+Cassiopeia
+Zoe
+Aurora
+Sylas
+Qiyana
+Hwei
+Vex
+Aurelion Sol
+Anivia
+Annie
+Twisted Fate
+Kassadin
+Lux
+Malzahar
+Vel'Koz
+Viktor
+Akali
+Galio
+Fizz
+Talon
+Mel
+Akshan
+Orianna
+Taliyah
+Naafiri
+Azir
+Brand
+Tristana
+Ryze
+Irelia
+Swain
+
+Share mid tier list with your friends!
+
+Copy link
+Bot Tier List
+
+Kai’Sa takes our ADC spot thanks to her scaling damage and ability to follow up when teammates catch an enemy. Focus on farming towards your item spikes and ability evolutions, then look to punish isolated targets so more of your Q missiles hit the same enemy. In teamfights, attack whoever you can safely reach and use E to reposition.
+
+Jhin
+Kai'Sa
+Miss Fortune
+Jinx
+Caitlyn
+Samira
+Smolder
+Xayah
+Draven
+Aphelios
+Yunara
+Zeri
+Kalista
+Ashe
+Ezreal
+Veigar
+Vayne
+Tristana
+Kog'Maw
+Sivir
+Twitch
+Ziggs
+Viktor
+Yasuo
+Lucian
+Hwei
+Senna
+Nilah
+Brand
+Corki
+Karthus
+Varus
+Syndra
+Swain
+Xerath
+
+Share bot tier list with your friends!
+
+Copy link
+Support Tier List
+
+Lulu takes our Support spot because she makes it so difficult to finish off the teammate she’s protecting. Her E shield helps your ADC trade, while her W can boost an ally’s attack speed or polymorph an enemy who gets too close. Keep an eye on whoever poses the biggest threat to your carry, and use your ultimate’s bonus health and knock-up to turn their engage against them.
+
+Thresh
+Senna
+Pyke
+Alistar
+Blitzcrank
+Leona
+Lulu
+Janna
+Nautilus
+Seraphine
+Zyra
+Bard
+Rell
+Tahm Kench
+Rakan
+Braum
+Brand
+Zilean
+Taric
+Soraka
+Sona
+Lux
+Morgana
+Vel'Koz
+Milio
+Nami
+Karma
+Swain
+Xerath
+Yuumi
+Camille
+Neeko
+Maokai
+Annie
+Pantheon
+Renata Glasc
+Galio
+Poppy
+Elise
+
+Share support tier list with your friends!
+
+Copy link
+
+Our Patch 26.22 Tier List video is coming soon. Stay tuned!
+
+Methodology
+
+Our tier lists are curated our team of challenger experts.
+
+We recommend using the Low ELO list for as long as you can before switching the High ELO list. It usually works until around high Diamond. If a champion isn't on our tier list, it doesn't necessarily mean that you can't climb with them.
+
+ English
+Deutsch
+English
+Español
+Français
+Italiano
+Nederlands
+Polski
+Português
+Limba română
+You control your privacy
+
+We and up to 1233 vendors process, store and/or access personal data from you and your device. This data can include your type of browser, settings, cookies, unique identifiers, IP address, and geo location. Your consent can be updated or withdrawn at any time by clicking the link in our privacy policy or footer.
+
+We're requesting consent to offer: Personalised advertising and content, advertising and content measurement, audience research and services development
+
+Advertising and content can be personalised based on your profile. Your activity on this service can be used to build or improve a profile about you for personalised advertising and content. Advertising and content performance can be measured. Reports can be generated based on your activity and those of others. Your activity on this service can help develop and improve products and services.
+
+Advanced Settings
+Accept
+
+Your consents are specific to this site & device.
+===== mobalytics-matchup-1440.txt (rendered text at 1440, 5 Nov 2026)
+LoL
+TFT
+Diablo 4
+PoE 2
+PoE
+WoW Forever
+New
+Destiny 2
+Marathon
+STS 2
+Gamebase
+Reviews, Previews, & More
+Download App
+Sign In
+Home
+Summoner
+Game Highlights
+GPI
+Challenges
+Champions
+Tier List
+Guides
+Classic
+Ornn
+vs Darius Top
+P
+Q
+W
+E
+R
+Win rate
+51.3%
+Pick rate
+3.7%
+Ban rate
+0.4%
+Matches
+8 349
+-
+Based on the analysis of 329 matches in Emerald + in Patch 16.22, Ornn has a 50.5% win rate against Darius in the Top, which is 0.8% lower than expected win rate of Ornn. This means that Ornn is more likely to lose the game against Darius than on average. Below, you will find a detailed matchup breakdown, including KDA, Gold Difference, XP difference, and more.
+
+Builds
+
+Mayhem
+
+NEW
+
+ARAM
+
+Arena
+
+Counters
+
+Guide
+
+Combos
+
+Emerald +
+All Regions
+Ranked Solo
+16.22
+ORNN MATCHUPS
+Top ∙ Patch
+ 16.22
+ORNN COUNTER TIPS
+Matchup specific advice on how to play against Ornn as Darius
+BEST PICKS
+VS ORNN
+WORST PICKS
+VS ORNN
+These champs are strong against Ornn at most phases of the game. They’re listed based on their win rate against Ornn.
+Champion
+WR
+Matches
+Guide
+
+Overall Average
+
+48.7%
+8 349
+
+Zed
+
+69.2%
+39
+
+Kennen
+
+59.7%
+72
+
+Heimerdinger
+
+55.6%
+36
+
+Vladimir
+
+55.6%
+36
+
+Trundle
+
+55.1%
+107
+
+Olaf
+
+55.1%
+107
+
+Shen
+
+55.1%
+207
+
+Gwen
+
+55.0%
+209
+
+Tryndamere
+
+54.5%
+110
+
+Garen
+
+54.2%
+214
+
+Kayle
+
+54.1%
+122
+
+Quinn
+
+54.1%
+37
+
+Poppy
+
+53.5%
+43
+
+Camille
+
+53.3%
+227
+
+Nasus
+
+52.6%
+154
+For matchups that are not listed above, check the matchups table
+Ornn
+50.5% Win Rate
+Darius
+49.5% Win Rate
+Matchup stats based on the 329 matches
+14.0%
+Level 2
+86.0%
+3.39
+KDA
+2.45
+-765
+GD@15
+765
+-270.1
+XPD@15
+270.1
+-21.1
+CSD@15
+21.1
+6.2
+CS/M
+7.5
+38%
+KP
+35%
+668.2
+DPM
+833.9
+1.9
+Avg. Solo Lane Kills
+2.0
+12 845
+Damage to Structures
+23 096
+UNLOCK MATCHUP-SPECIFIC ADVICES
+Written by one-trick champ experts for your next game!
+VS
+GET PLUS
+ADVERTISEMENT
+FIND THE BEST COUNTERS AGAINST EVERY CHAMPION
+Get in-game tips and counterpick recommendations with our free Desktop App
+USE IN-GAME
+ORNN RELATED CHAMPIONS
+Dr. Mundo
+The Madman of Zaun
+
+Average
+
+Leona
+The Radiant Dawn
+
+Average
+
+Malphite
+Shard of the Monolith
+
+Easy
+
+Nautilus
+The Titan of the Depths
+
+Hard
+
+5
+ English
+Deutsch
+English
+Español
+Français
+Italiano
+Nederlands
+Polski
+Português
+Limba română
+You control your privacy
+
+We and up to 1233 vendors process, store and/or access personal data from you and your device. This data can include your type of browser, settings, cookies, unique identifiers, IP address, and geo location. Your consent can be updated or withdrawn at any time by clicking the link in our privacy policy or footer.
+
+We're requesting consent to offer: Personalised advertising and content, advertising and content measurement, audience research and services development
+
+Advertising and content can be personalised based on your profile. Your activity on this service can be used to build or improve a profile about you for personalised advertising and content. Advertising and content performance can be measured. Reports can be generated based on your activity and those of others. Your activity on this service can help develop and improve products and services.
+
+Advanced Settings
+Accept
+
+Your consents are specific to this site & device.
+===== mobalytics-ornn-matchups-1440.txt (rendered text at 1440, 5 Nov 2026)
+LoL
+TFT
+Diablo 4
+PoE 2
+PoE
+WoW Forever
+New
+Destiny 2
+Marathon
+STS 2
+Gamebase
+Reviews, Previews, & More
+Download App
+Sign In
+Home
+Summoner
+Game Highlights
+GPI
+Challenges
+Champions
+Tier List
+Guides
+Classic
+Ornn
+·Top Counters
+P
+Q
+W
+E
+R
+Win rate
+51.3%
+Pick rate
+3.8%
+Ban rate
+0.4%
+Matches
+8 292
+-
+Ornn Top has a 51.3% win rate and 3.8% pick rate in Emerald + and is currently ranked A tier. Based on our analysis of 8 292 matches, the best counters for Ornn Top are Zed, Kennen, Heimerdinger, Vladimir and Olaf. On the other hand, Ornn Top counters Tahm Kench, Gragas, Teemo, Yorick and Rumble.
+
+Builds
+
+Mayhem
+
+NEW
+
+ARAM
+
+Arena
+
+Counters
+
+Guide
+
+Combos
+
+Emerald +
+All Regions
+Ranked Solo
+16.22
+ORNN MATCHUPS
+Top ∙ Patch
+ 16.22
+ORNN COUNTER TIPS
+General advice on how to play against Ornn
+BEST PICKS
+VS ORNN
+WORST PICKS
+VS ORNN
+These champs are strong against Ornn at most phases of the game. They’re listed based on their win rate against Ornn.
+Champion
+WR
+Matches
+Guide
+
+Overall Average
+
+48.7%
+8 291
+
+Zed
+
+69.2%
+39
+
+Kennen
+
+59.7%
+72
+
+Heimerdinger
+
+57.1%
+35
+
+Vladimir
+
+55.6%
+36
+
+Olaf
+
+55.1%
+107
+
+Shen
+
+54.9%
+206
+
+Gwen
+
+54.8%
+208
+
+Poppy
+
+54.8%
+42
+
+Trundle
+
+54.7%
+106
+
+Kayle
+
+54.5%
+121
+
+Tryndamere
+
+54.5%
+110
+
+Garen
+
+54.2%
+214
+
+Quinn
+
+54.1%
+37
+
+Camille
+
+53.1%
+226
+
+Singed
+
+52.6%
+76
+For matchups that are not listed above, check the matchups table
+Laning Against Ornn
+
+Constantly adapt your positioning in lane so Ornn is unable to knock you up with his 
+E
+. Stand away from walls and his Pillar 
+Q
+ so he is unable to CC.
+
+Refrain from using any major CC abilities on Ornn when his 
+W
+ is off cooldown as he can use it to dodge or escape CC.
+
+Once Ornn hits level 6, his kill pressure in lane will increase and he may start getting ganks from his Jungler. Get vision in the river so you can spot the Jungler early.
+
+Strategy VS Ornn
+
+In team fights, avoid grouping too closely as Ornn can use his Ultimate 
+R
+ to get a multi-person knock up and start the team fight.
+
+Ornn has the ability to knock up enemies that are close to his 
+Q
+, terrain and walls. Avoid fighting inside the jungle as it will allow him to land an easy knockup.
+
+Ornn will tend to stick in a side lane when no team fights are occurring and when there are no major objectives up. Use the numbers advantage to start a team fight while he is away from his team.
+
+Ornn Power Spikes
+
+Once Ornn unlocks his Ultimate 
+R
+, he will have an easier time in lane. He will be able to look for kills and even set his Jungler up once he has it available to him. Expect him to play more aggressive post 6.
+
+Every time Ornn gets an item upgrade, he will be much stronger as each unique upgrade offers him extra stats.
+
+Ornn is good in team fights. Try to fight when he’s not there as it will make team fighting much easier. Also, setting him behind in the early game will make him less strong in team fights.
+
+ADVERTISEMENT
+FIND THE BEST COUNTERS AGAINST EVERY CHAMPION
+Get in-game tips and counterpick recommendations with our free Desktop App
+USE IN-GAME
+ORNN RELATED CHAMPIONS
+Dr. Mundo
+The Madman of Zaun
+
+Average
+
+Leona
+The Radiant Dawn
+
+Average
+
+Malphite
+Shard of the Monolith
+
+Easy
+
+Nautilus
+The Titan of the Depths
+
+Hard
+
+5
+ English
+Deutsch
+English
+Español
+Français
+Italiano
+Nederlands
+Polski
+Português
+Limba română
+You control your privacy
+
+We and up to 1233 vendors process, store and/or access personal data from you and your device. This data can include your type of browser, settings, cookies, unique identifiers, IP address, and geo location. Your consent can be updated or withdrawn at any time by clicking the link in our privacy policy or footer.
+
+We're requesting consent to offer: Personalised advertising and content, advertising and content measurement, audience research and services development
+
+Advertising and content can be personalised based on your profile. Your activity on this service can be used to build or improve a profile about you for personalised advertising and content. Advertising and content performance can be measured. Reports can be generated based on your activity and those of others. Your activity on this service can help develop and improve products and services.
+
+Advanced Settings
+Accept
+
+Your consents are specific to this site & device.
+===== mobalytics-patch-1440.txt (rendered text at 1440, 5 Nov 2026)
+LoL
+TFT
+Diablo 4
+PoE 2
+PoE
+WoW Forever
+New
+Destiny 2
+Marathon
+STS 2
+Gamebase
+Reviews, Previews, & More
+Download App
+Sign In
+Home
+Summoner
+Game Highlights
+GPI
+Challenges
+Champions
+Tier List
+Guides
+Classic
+League of Legends
+Guides
+26.22 Patch Notes Breakdown
+LoL 
+26.22 Patch Notes Breakdown
+News
+Patch Notes
+By
+Mobalytics
+Follow
+Updated on
+Nov 3, 2026
+Share
+League of Legends Patch Notes Breakdown
+
+Welcome to our patch notes breakdown for League of Legends Season 26.22 (Split 3 for LoL)!
+
+Let’s break down all the new changes in LoL coming this week.
+
+We recommend following along with the official patch notes since we won’t be listing all the specific stat changes, but rather focusing on the impact of the changes and the champions updated place in the current meta.
+
+If you’re wondering how these changes will affect the meta, check out our LoL champion tier list!
+
+Buffs, Nerfs, and Changes
+
+
+
+
+Champion Changes
+
+Aurelion Sol (Buff)
+
+Aurelion Sol’s E damage is increased.
+This will help him while trading and pushing the minion wave into the enemy tower.
+On patch 26.21, they had a 53.5% win rate.
+
+
+
+
+Corki (Buff)
+
+His Ultimate damage is increased, and his empowered Ult is increased as well.
+It is going to make Corki’s damage post-6 stronger, but I doubt it is going to increase his popularity in the Mid Lane.
+On patch 26.21, they had a 48.1% win rate.
+
+
+
+
+Kayle (Buff)
+
+Her Q cooldown is reduced. This will help Kayle poke the enemy down or last-hit minions from afar more easily. However, the mana cost isn’t changed, so this buff isn’t ideal.
+Her Ultimate cooldown is also reduced, which is good because it allows her to go for more frequent all-ins, especially in the early game.
+On patch 26.21, they had a 52.7% win rate.
+
+
+
+
+Locke (Nerf)
+
+Locke’s Q stack bonus damage is reduced, which is going to negatively impact his trading and all-in power.
+His W duration is reduced as well.
+These changes will reduce Locke's all-in power and make him weaker in team fights and skirmishes throughout the game.
+On patch 26.21, they had a 48.1% win rate.
+
+
+
+
+Maokai (Buff)
+
+Maokai’s Q damage is increased.
+I think that this change will make him a better Top and Jungler, and we might see him being played in the Support role again soon.
+On patch 26.21, they had a 51% win rate.
+
+
+
+
+Mel (Adjustment)
+
+Mel is receiving a mid-scope update.
+She is getting a variety of base stat changes, most notably her health and mana are lower early, which is not ideal for Mel players.
+Her Passive damage is changed.
+Mel's Q is slower, and the damage has changed, making it weaker overall for poking. However, she can use this spell more often with the cooldown and mana cost changes.
+Her W is the main ability that is reworked. It now destroys projectiles and shields her and her allies, gives her movement speed and will be her main defensive tool.
+For Mel's E, the root duration is changed, the costs are changed, and so is the slow.
+Her Ultimate cooldown is shorter at levels 11 and 16.
+Let’s face it, Mel was in a bad place in the current LoL meta. Let’s see how these changes pan out- they look to be good overall.
+On patch 26.21, they had a 47.6% win rate.
+
+
+
+
+Naafiri (Buff)
+
+Naafiri’s Q healing is increased.
+Her W bonus AD ratio is increased as well.
+I think these changes will help Naafiri during skirmishes and all-ins in both the Mid and Jungle roles.
+On patch 26.21, they had a 50.4% win rate.
+
+
+
+
+Rumble (Buff)
+
+Rumble’s R damage per second AP ratio is increased from 35% to 40%.
+This will increase his ultimate’s damage and make Rumble a bigger threat in team fights.
+I wouldn’t be surprised if Rumble is picked more often in the Top and Jungle roles in this patch.
+On patch 26.21, they had a 46.3% win rate.
+
+
+
+
+Shen (Buff)
+
+Shen’s Q bonus damage against monsters is increased.
+This will improve his jungle clear and help him clear camps more efficiently.
+On patch 26.21, they had a 50.6% win rate.
+
+
+
+
+Smolder (Buff)
+
+Smolder’s W explosion damage is increased.
+This is going to help Smolder poke during the laning phase and also help him push lanes quicker, which will help with early and mid-game wave clears.
+On patch 26.21, they had a 52.2% win rate.
+
+
+
+
+Thresh (Nerf)
+
+Thresh’s base AD is reduced, which will negatively impact his lane trading.
+His Ultimate damage is reduced as well.
+While these changes aren't great for Thresh, they won’t affect his pick or play rate.
+On patch 26.21, they had a 51.1% win rate.
+
+
+
+
+Viktor (Buff)
+
+Viktor’s R AP ratio is increased.
+His health growth is also increased, which will help him throughout the game, especially against strong AP or AD champions in the mid lane.
+On patch 26.21, they had a 49.3% win rate.
+
+
+
+
+Yasuo (Nerf)
+
+Yasuo’s Q total AD ratio is reduced.
+This will negatively impact Yasuo in the Top, Mid and ADC roles.
+On patch 26.21, they had a 52.1% win rate.
+
+
+
+
+Zaahen (Buff)
+
+Zaahen’s Q cooldown is reduced.
+This improves his trading and damage output in the laning phase.
+On patch 26.21, they had a 52.1% win rate.
+
+
+
+
+System Changes
+
+Overlord’s Bloodmail
+
+Overlord’s Bloodmail’s AD is increased from 30 to 40, while its Retribution bonus AD scaling is adjusted based on missing health.
+
+
+
+
+Doran’s Bow
+
+Doran’s Bow AD is reduced from 8 to 7.
+
+
+
+
+Check out other updates coming this patch:
+Upcoming skin releases
+League of Legends Classic patch notes
+ARAM: Mayhem patch notes
+Arena Mode patch notes
+
+Thank you for reading. We hope you enjoyed this patch breakdown. How do you feel about this patch? Let us know in the comments. As always, if you have any questions, find us on our Discord!
+
+Free Champion Rotation
+
+Updates every Patch
+
+ARAM: Mayhem Tier List
+
+Explore
+
+Upcoming Patch Preview
+
+See what the future holds
+ English
+Deutsch
+English
+Español
+Français
+Italiano
+Nederlands
+Polski
+Português
+Limba română
+You control your privacy
+
+We and up to 1233 vendors process, store and/or access personal data from you and your device. This data can include your type of browser, settings, cookies, unique identifiers, IP address, and geo location. Your consent can be updated or withdrawn at any time by clicking the link in our privacy policy or footer.
+
+We're requesting consent to offer: Personalised advertising and content, advertising and content measurement, audience research and services development
+
+Advertising and content can be personalised based on your profile. Your activity on this service can be used to build or improve a profile about you for personalised advertising and content. Advertising and content performance can be measured. Reports can be generated based on your activity and those of others. Your activity on this service can help develop and improve products and services.
+
+Advanced Settings
+Accept
+
+Your consents are specific to this site & device.

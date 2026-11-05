@@ -1,0 +1,2658 @@
+===== blitz-champions-1440.txt (rendered text at 1440, 5 Nov 2026)
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Apex Legends
+Marvel Rivals
+Search Profiles (Name#Tag), Champions, etc.
+⌘
+K
+Go Ad-Free
+Log In
+Download Blitz
+Home
+Champions
+Tier List
+League Classic
+ARAM Mayhem
+Arena
+Articles
+League of Legends
+Tier Lists
+LoL Tier List – Best Champions by Role, Patch 26.22 for Emerald+
+
+Ranked Solo/Duo champion rankings for Patch 26.22, filtered by Emerald+. Compare champion performance and open role-specific build guides.
+
+Data updated 1 minute ago.
+
+Ranked Solo Duo
+ARAM Mayhem
+League Classic
+New
+ARAM
+URF
+Arena
+Arena 3v3
+Emerald+
+World
+Patch: 26.22
+Swain
+53.3%
+Kog'Maw
+53.3%
+Janna
+53.1%
+Zilean
+53.0%
+Darius
+53.0%
+Kayle
+52.9%
+Ekko
+52.8%
+Shyvana
+52.8%
+Singed
+52.7%
+Rell
+52.5%
+Sejuani
+52.5%
+Nunu & Willump
+52.4%
+Briar
+52.4%
+Shen
+52.3%
+Kled
+52.3%
+Rammus
+52.2%
+Fiddlesticks
+52.2%
+Rakan
+52.1%
+Malphite
+52.1%
+Kassadin
+52.1%
+Warwick
+52.1%
+Bel'Veth
+52.0%
+Leona
+51.6%
+Nilah
+52.8%
+Viktor
+52.6%
+Veigar
+52.5%
+Xayah
+52.3%
+Yasuo
+52.2%
+Vex
+51.9%
+Rek'Sai
+51.9%
+Udyr
+51.9%
+Sona
+51.7%
+Lissandra
+51.6%
+Kennen
+51.6%
+Vel'Koz
+51.6%
+Naafiri
+51.5%
+Katarina
+51.4%
+Darius
+51.4%
+Braum
+51.4%
+Senna
+51.4%
+Zyra
+51.4%
+Ornn
+51.3%
+Gangplank
+51.3%
+Hwei
+51.3%
+Aurora
+51.3%
+Wukong
+51.3%
+Vladimir
+51.3%
+Alistar
+51.3%
+Ahri
+51.2%
+Blitzcrank
+51.2%
+Sett
+51.2%
+Heimerdinger
+51.1%
+Kindred
+51.1%
+Illaoi
+51.1%
+Master Yi
+51.0%
+Lillia
+51.0%
+Poppy
+51.0%
+Seraphine
+51.0%
+Volibear
+51.0%
+Anivia
+51.0%
+Zoe
+51.0%
+Diana
+51.0%
+Annie
+50.9%
+Cho'Gath
+50.9%
+Zaahen
+50.9%
+Maokai
+50.9%
+Thresh
+50.9%
+Zac
+50.9%
+Xin Zhao
+50.9%
+Dr. Mundo
+50.9%
+Elise
+50.8%
+Vel'Koz
+50.8%
+Nasus
+50.7%
+Soraka
+50.7%
+LeBlanc
+50.6%
+Maokai
+50.6%
+Nami
+50.4%
+Lulu
+50.0%
+Ziggs
+51.1%
+Smolder
+51.0%
+Jinx
+50.9%
+Miss Fortune
+50.9%
+Warwick
+50.8%
+Twisted Fate
+50.7%
+Ekko
+50.7%
+Sion
+50.7%
+Varus
+50.7%
+Sivir
+50.7%
+Corki
+50.7%
+Twitch
+50.6%
+Naafiri
+50.6%
+Nidalee
+50.6%
+Zeri
+50.6%
+Talon
+50.6%
+Jhin
+50.5%
+Teemo
+50.5%
+Pantheon
+50.5%
+Amumu
+50.4%
+Xerath
+50.4%
+Aurelion Sol
+50.3%
+Hecarim
+50.3%
+Kha'Zix
+50.3%
+Taliyah
+50.3%
+Renekton
+50.3%
+Malzahar
+50.3%
+Gwen
+50.3%
+Kayn
+50.2%
+Camille
+50.2%
+Zyra
+50.2%
+Fizz
+50.2%
+Evelynn
+50.2%
+Tryndamere
+50.2%
+Milio
+50.1%
+Mordekaiser
+50.1%
+Diana
+50.1%
+Irelia
+50.0%
+Garen
+50.0%
+Talon
+50.0%
+Lux
+50.0%
+Sylas
+50.0%
+Fiora
+49.9%
+Vi
+49.9%
+Taric
+49.9%
+Shen
+49.8%
+Aatrox
+49.8%
+Veigar
+49.8%
+Skarner
+49.7%
+Olaf
+49.7%
+Taliyah
+49.7%
+Urgot
+49.7%
+Akshan
+49.7%
+Shaco
+49.6%
+Viego
+49.6%
+Karthus
+49.6%
+Yone
+49.6%
+Zed
+49.5%
+Lux
+49.4%
+Syndra
+49.4%
+Graves
+49.2%
+Pyke
+49.2%
+Nautilus
+49.2%
+Renata Glasc
+49.1%
+Morgana
+49.1%
+Akali
+49.0%
+Bard
+48.9%
+Neeko
+48.7%
+Karma
+48.6%
+Xerath
+48.6%
+Samira
+50.2%
+Tristana
+50.1%
+Yunara
+49.6%
+Ashe
+49.6%
+Aphelios
+49.5%
+Vayne
+49.5%
+Yorick
+49.3%
+Yone
+49.2%
+Cho'Gath
+49.2%
+Sylas
+49.2%
+Jarvan IV
+49.2%
+Lucian
+49.1%
+Vladimir
+49.0%
+Kai'Sa
+49.0%
+Tahm Kench
+49.0%
+Qiyana
+49.0%
+Riven
+49.0%
+Jax
+49.0%
+Gragas
+48.9%
+Galio
+48.9%
+Volibear
+48.9%
+Ambessa
+48.9%
+Orianna
+48.9%
+Yasuo
+48.7%
+Sylas
+48.7%
+Viktor
+48.6%
+Tahm Kench
+48.6%
+Swain
+48.5%
+Brand
+48.3%
+Pantheon
+48.3%
+Locke
+48.3%
+Irelia
+48.3%
+Lee Sin
+48.1%
+Azir
+48.1%
+Yuumi
+47.8%
+Shaco
+47.6%
+Sylas
+47.3%
+Draven
+48.9%
+Akali
+48.5%
+Caitlyn
+48.5%
+Trundle
+48.5%
+Kalista
+48.4%
+Jayce
+48.3%
+Nocturne
+48.1%
+Vayne
+47.9%
+Yasuo
+47.8%
+Ryze
+47.7%
+Gnar
+47.7%
+Pantheon
+47.4%
+Cassiopeia
+47.4%
+Rengar
+47.2%
+Rumble
+47.1%
+Mel
+46.8%
+K'Sante
+46.5%
+Zed
+45.9%
+Ezreal
+45.9%
+Qiyana
+45.8%
+Jayce
+45.6%
+How the LoL Tier List – Best Champions by Role, Patch 26.22 rankings work
+
+These rankings use current-patch Ranked Solo/Duo data for all roles, Emerald+, Worldwide. Champions below a 0.5% pick rate are excluded, and tiers account for champion performance, popularity, and role. Each champion links to the matching role-specific build guide.
+
+Current role leaders: Top: Kayle, Jungle: Darius.
+
+COMPANY
+About Us
+Partnerships
+Careers
+Contact Support
+Privacy Policy
+SOCIALS
+X/Twitter
+Discord
+Facebook
+Instagram
+TikTok
+GAMES
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Apex Legends
+Marvel Rivals
+Made with Lots of Love and Tilt in Brazil
+English
+Terms of Service
+Privacy Policy
+Remove Ads with Premium
+===== blitz-matchup-1440.txt (rendered text at 1440, 5 Nov 2026)
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Apex Legends
+Marvel Rivals
+Search Profiles (Name#Tag), Champions, etc.
+⌘
+K
+Go Ad-Free
+Log In
+Download Blitz
+Home
+Champions
+Tier List
+League Classic
+ARAM Mayhem
+Arena
+Articles
+League of Legends
+Champions
+Ornn Top Build
+Ornn Top Build, Runes, Items, and Stats - Patch 26.22 (Emerald+)
+
+Recommended Ornn Top runes, items, skill order, and build stats for Emerald+ on Patch 26.22.
+
+Data updated 1 minute ago.
+
+Build
+ARAM Mayhem
+ARAM
+URF
+Arena
+Pro Builds
+One Tricks
+Counters
+Synergies
+Abilities
+Emerald+
+World
+Select Matchup
+Patch: 26.22
+Tier
+Win Rate
+51.3%
+Win Rate Change
+-0.3%
+Pick rate
+2.0%
+Ban rate
+0.3%
+Matches
+7,645
+Best
+Win Rate
+Common
+Emerald+ Builds
+
+Tank
+
+8,060 GAMES
+52%
+Ornn OTP Builds
+EUW
+
+ALK Drxgon #EUW
+
+MASTER 610 LP
+Pro Builds
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+BR
+
+Ayel
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Canee
+
+VS
+EUW
+
+Color
+
+VS
+TR
+
+Elramir
+
+VS
+TR
+
+Eden Fox
+
+VS
+TR
+
+Elramir
+
+VS
+EUW
+
+Diplex
+
+VS
+EUW
+
+Color
+
+VS
+TR
+
+Eden Fox
+
+VS
+TR
+
+Eden Fox
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Sinmivak
+
+VS
+KR
+
+Cube
+
+VS
+EUW
+
+Color
+
+VS
+TR
+
+Eden Fox
+
+VS
+EUW
+
+Color
+
+VS
+TR
+
+Eden Fox
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+KR
+
+Cube
+
+VS
+EUW
+
+Sinmivak
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Color
+
+VS
+NA
+
+Topo
+
+VS
+NA
+
+Topo
+
+VS
+NA
+
+Topo
+
+VS
+NA
+
+Topo
+
+VS
+EUW
+
+Skarl
+
+VS
+Patch: 26.22
+Runes
+52%
+7,138 GAMES
+Summoner Spells
+52%
+6,418 GAMES
+52%
+1,387 GAMES
+Items
+Starting Items
+Build Order
+Completed Items
+Situational Items
+Ability Max Order
+67%
+
+2,405 GAMES
+
+W
+Q
+E
+1
+Q
+2
+W
+3
+E
+4
+W
+5
+W
+6
+R
+7
+W
+8
+Q
+9
+W
+10
+Q
+11
+R
+12
+Q
+13
+Q
+14
+E
+15
+E
+16
+R
+17
+E
+18
+E
+Damage Breakdown
+34% AD
+64% AP
+Item Performance
+Item Builder
+Min pick rate
+ITEM	
+WRI
+	PRE-BUY WR	WIN RATE	PICK RATE
+	PURCHASES
+
+Unending Despair
+	
++0.11
+	
+54.8%
+	
+54.9%
+	
+14.9%
+	
+2,856
+
+
+Sunfire Aegis
+	
+-0.08
+	
+52.0%
+	
+52.0%
+	
+14.8%
+	
+2,836
+
+
+Kaenic Rookern
+	
++0.43
+	
+54.3%
+	
+54.7%
+	
+12.6%
+	
+2,403
+
+
+Thornmail
+	
+-0.20
+	
+55.4%
+	
+55.2%
+	
+11.8%
+	
+2,258
+
+
+Jak'Sho, The Protean
+	
+-0.21
+	
+59.1%
+	
+58.9%
+	
+11.6%
+	
+2,214
+
+
+Hollow Radiance
+	
++0.23
+	
+51.4%
+	
+51.6%
+	
+9.2%
+	
+1,753
+
+
+Randuin's Omen
+	
+-0.14
+	
+56.0%
+	
+55.9%
+	
+6.8%
+	
+1,305
+
+
+Frozen Heart
+	
++2.62
+	
+55.5%
+	
+58.1%
+	
+5.5%
+	
+1,043
+
+
+Protoplasm Harness
+	
++3.66
+	
+58.4%
+	
+62.1%
+	
+2.6%
+	
+501
+
+
+Heartsteel
+	
+-0.29
+	
+52.9%
+	
+52.6%
+	
+2.2%
+	
+424
+
+
+Knight's Vow
+	
++3.78
+	
+60.9%
+	
+64.6%
+	
+2.0%
+	
+379
+
+
+Force of Nature
+	
++6.52
+	
+57.8%
+	
+64.3%
+	
+1.3%
+	
+244
+
+
+Zeke's Convergence
+	
++0.86
+	
+56.5%
+	
+57.3%
+	
+0.9%
+	
+164
+
+
+Warmog's Armor
+	
+-0.58
+	
+59.8%
+	
+59.3%
+	
+0.8%
+	
+162
+
+
+Abyssal Mask
+	
+-4.29
+	
+60.9%
+	
+56.6%
+	
+0.8%
+	
+152
+
+
+Winter's Approach
+	
+-2.44
+	
+58.9%
+	
+56.5%
+	
+0.6%
+	
+108
+
+
+Dead Man's Plate
+	
++3.18
+	
+52.3%
+	
+55.4%
+	
+0.5%
+	
+101
+Ornn Top Build Guide
+
+Ornn Top is A Tier with a 51.3% win rate, 2.0% pick rate, and 0.3% ban rate across 7,645 Emerald+ matches in the World region on Patch 26.22.
+
+The recommended core item build is Sunfire Aegis → Plated Steelcaps → Thornmail. Grasp of the Undying is the recommended primary rune keystone. Trundle is one of the more difficult matchups.
+
+Review Ornn counters, synergies, and abilities for more matchup and champion details.
+
+#
+Key Insights
+During 
+W
+'s cast, Ornn cannot be displaced.
+If Ornn collides with terrain during 
+E
+, he knocks up all enemies around him.
+Ornn can buy any non-consumable item outside of his base with 
+P
+.
+E
+ breaks player-made terrain.
+W
+ and both instances of 
+R
+ apply Brittle.
+#
+Strengths
+A well-positioned 
+R
+ can singlehandedly win teamfights.
+Excels with items that enhance his tankiness, crowd control, and durability.
+His gank assist and teamfighting become even stronger after unlocking 
+R
+.
+P
+'s item upgrades give his team "free gold" and better scaling.
+#
+Weaknesses
+Has obvious and telegraphed animations.
+R
+ has a longer cooldown of 140 seconds at rank 1. Once used, his strength diminishes in fights.
+Very reliant on gold and levels.
+While Ornn is Unstoppable during 
+W
+, he will still be affected by CC afterwards.
+Similar Champions
+
+A few champions that are similar playstyle to Ornn.
+
+Alistar
+Sion
+Nunu & Willump
+Cho'Gath
+Amumu
+Rammus
+COMPANY
+About Us
+Partnerships
+Careers
+Contact Support
+Privacy Policy
+SOCIALS
+X/Twitter
+Discord
+Facebook
+Instagram
+TikTok
+GAMES
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Apex Legends
+Marvel Rivals
+Made with Lots of Love and Tilt in Ukraine
+English
+Terms of Service
+Privacy Policy
+Remove Ads with Premium
+===== blitz-ornn-matchups-1440.txt (rendered text at 1440, 5 Nov 2026)
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Apex Legends
+Marvel Rivals
+Search Profiles (Name#Tag), Champions, etc.
+⌘
+K
+Go Ad-Free
+Log In
+Download Blitz
+Home
+Champions
+Tier List
+League Classic
+ARAM Mayhem
+Arena
+Articles
+League of Legends
+Champions
+Ornn Counters
+Ornn Top Counters for Emerald+
+
+Ornn Top Counters, Matchups, Stats, and Head-to-Head Stats.
+
+Data updated 1 minute ago.
+
+Build
+ARAM Mayhem
+ARAM
+URF
+Arena
+Pro Builds
+One Tricks
+Counters
+Synergies
+Abilities
+Emerald+
+World
+Laning Only
+Patch: 26.22
+
+Ornn is strong against Lissandra, Teemo, and Renekton, and weak against Twisted Fate, Ahri, and Gwen.
+
+Ornn is strong against
+CHAMPION	TIER	
+PP
+	WIN RATE	GAMES
+
+Lissandra
+	
+	
++6.7 pp
+	
+56%
+	
+227
+
+
+Teemo
+	
+	
++6.6 pp
+	
+57%
+	
+155
+
+
+Renekton
+	
+	
++5.9 pp
+	
+57%
+	
+244
+
+
+Yunara
+	
+	
++5.9 pp
+	
+63%
+	
+169
+
+
+Zaahen
+	
+	
++5.7 pp
+	
+56%
+	
+146
+
+
+Kalista
+	
+	
++5.7 pp
+	
+59%
+	
+153
+
+
+Galio
+	
+	
++4.5 pp
+	
+56%
+	
+174
+
+
+Varus
+	
+	
++4.1 pp
+	
+58%
+	
+305
+
+
+Malphite
+	
+	
++4.0 pp
+	
+53%
+	
+265
+
+
+Shyvana
+	
+	
++3.9 pp
+	
+60%
+	
+158
+
+
+Malzahar
+	
+	
++3.8 pp
+	
+56%
+	
+238
+
+
+Sett
+	
+	
++3.6 pp
+	
+54%
+	
+266
+
+
+Kennen
+	
+	
++3.3 pp
+	
+55%
+	
+826
+
+
+Master Yi
+	
+	
++3.0 pp
+	
+57%
+	
+247
+
+
+Ryze
+	
+	
++2.6 pp
+	
+55%
+	
+245
+
+
+Anivia
+	
+	
++2.5 pp
+	
+52%
+	
+386
+
+
+Yone
+	
+	
++1.7 pp
+	
+54%
+	
+301
+
+
+Darius
+	
+	
++1.5 pp
+	
+51%
+	
+313
+
+
+Rumble
+	
+	
++1.5 pp
+	
+56%
+	
+1,000
+
+
+Ambessa
+	
+	
++1.4 pp
+	
+54%
+	
+154
+
+
+Corki
+	
+	
++1.4 pp
+	
+58%
+	
+166
+
+
+Heimerdinger
+	
+	
++1.4 pp
+	
+53%
+	
+690
+
+
+Gangplank
+	
+	
++1.2 pp
+	
+51%
+	
+162
+
+
+Tahm Kench
+	
+	
++1.0 pp
+	
+53%
+	
+1,221
+
+
+Quinn
+	
+	
++0.9 pp
+	
+50%
+	
+431
+
+
+Urgot
+	
+	
++0.8 pp
+	
+52%
+	
+1,398
+
+
+Cassiopeia
+	
+	
++0.6 pp
+	
+53%
+	
+207
+
+
+Ekko
+	
+	
++0.2 pp
+	
+52%
+	
+178
+Ornn is weak against
+CHAMPION	TIER	
+PP
+	WIN RATE	GAMES
+
+Twisted Fate
+	
+	
+−5.8 pp
+	
+47%
+	
+167
+
+
+Ahri
+	
+	
+−5.3 pp
+	
+44%
+	
+170
+
+
+Gwen
+	
+	
+−5.2 pp
+	
+46%
+	
+192
+
+
+Camille
+	
+	
+−5.2 pp
+	
+46%
+	
+207
+
+
+Wukong
+	
+	
+−4.9 pp
+	
+46%
+	
+368
+
+
+Jayce
+	
+	
+−4.8 pp
+	
+48%
+	
+261
+
+
+Shen
+	
+	
+−4.7 pp
+	
+44%
+	
+187
+
+
+Mordekaiser
+	
+	
+−4.2 pp
+	
+47%
+	
+240
+
+
+Zed
+	
+	
+−4.1 pp
+	
+46%
+	
+416
+
+
+Sylas
+	
+	
+−3.9 pp
+	
+48%
+	
+594
+
+
+Garen
+	
+	
+−3.8 pp
+	
+48%
+	
+206
+
+
+Kled
+	
+	
+−3.5 pp
+	
+47%
+	
+850
+
+
+Smolder
+	
+	
+−3.1 pp
+	
+55%
+	
+190
+
+
+Singed
+	
+	
+−2.8 pp
+	
+47%
+	
+1,189
+
+
+Warwick
+	
+	
+−2.7 pp
+	
+47%
+	
+757
+
+
+Udyr
+	
+	
+−2.2 pp
+	
+51%
+	
+333
+
+
+Volibear
+	
+	
+−2.1 pp
+	
+50%
+	
+149
+
+
+Vayne
+	
+	
+−2.0 pp
+	
+51%
+	
+913
+
+
+Swain
+	
+	
+−1.9 pp
+	
+50%
+	
+379
+
+
+Fiddlesticks
+	
+	
+−1.7 pp
+	
+50%
+	
+149
+
+
+Maokai
+	
+	
+−1.6 pp
+	
+50%
+	
+210
+
+
+K'Sante
+	
+	
+−1.4 pp
+	
+53%
+	
+148
+
+
+Fiora
+	
+	
+−1.4 pp
+	
+50%
+	
+182
+
+
+Kayn
+	
+	
+−1.4 pp
+	
+54%
+	
+193
+
+
+Riven
+	
+	
+−1.3 pp
+	
+50%
+	
+1,070
+
+
+Aurora
+	
+	
+−1.2 pp
+	
+50%
+	
+320
+
+
+Yasuo
+	
+	
+−0.9 pp
+	
+51%
+	
+1,350
+
+
+Aatrox
+	
+	
+−0.9 pp
+	
+51%
+	
+209
+
+
+Zac
+	
+	
+−0.8 pp
+	
+49%
+	
+255
+
+
+Vladimir
+	
+	
+−0.5 pp
+	
+51%
+	
+620
+
+
+Dr. Mundo
+	
+	
+−0.5 pp
+	
+50%
+	
+156
+
+
+Sejuani
+	
+	
+−0.4 pp
+	
+51%
+	
+158
+
+
+Gnar
+	
+	
+−0.1 pp
+	
+54%
+	
+170
+
+
+Poppy
+	
+	
+0.0 pp
+	
+50%
+	
+576
+COMPANY
+About Us
+Partnerships
+Careers
+Contact Support
+Privacy Policy
+SOCIALS
+X/Twitter
+Discord
+Facebook
+Instagram
+TikTok
+GAMES
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Apex Legends
+Marvel Rivals
+Made with Lots of Love and Tilt in San Francisco
+English
+Terms of Service
+Privacy Policy
+Remove Ads with Premium
+===== blitz-patch-1440.txt (rendered text at 1440, 5 Nov 2026)
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Apex Legends
+Marvel Rivals
+Search Profiles (Name#Tag), Champions, etc.
+⌘
+K
+Go Ad-Free
+Log In
+Download Blitz
+Home
+Champions
+Tier List
+League Classic
+ARAM Mayhem
+Arena
+Articles
+Blitz
+League of Legends
+Articles
+LoL Patch 26.22 Notes
+LoL Patch 26.22 Notes
+Blitz.gg
+•
+03/11/2026
+TFT Standalone Client
+Champions
+Items
+ARAM: Mayhem
+Champions
+Augments
+Systems
+Bugfixes
+Classic
+Champions
+Items
+Classic Pass Progress
+Bugfixes
+Bugfixes & QoL Changes
+TFT Standalone Client
+
+Teamfight Tactics moves to its own standalone client starting November 4th, 2026, so this patch is a larger download than usual. Swapping between League of Legends and Teamfight Tactics will take a single click, and all existing Teamfight Tactics cosmetics remain usable in League. The first TFT-only Little Legends arrive on December 1st, with full separation of TFT cosmetics, including emotes and icons, on December 15th. After this patch, TFT downloads can be fully opted out of in League patches. For more information, read more here.
+
+Champions
+Aurelion Sol
+
+Most Aurelion Sol players prefer maxing Singularity (E) second over Astral Flight (W) despite it being the weaker second max, so Riot is buffing it to make the intuitive choice the right one.
+
+E - Singularity
+
+Total Magic Damage: 50 / 75 / 100 / 125 / 150 (+60% AP) over 5s ⇒ 50 / 80 / 110 / 140 / 170 (+60 / 65 / 70 / 75 / 80% AP) over 5s
+
+Corki
+
+Corki's power was kept in check going into Worlds, and like 
+Azir
+ and 
+Orianna
+, he now has room to be stronger for everyone.
+
+R - Missile Barrage
+
+Damage: 90 / 170 / 250 (+85% bonus AD) ⇒ 100 / 190 / 280 (+90% bonus AD)
+
+Big One Damage: 180 / 340 / 500 (+170% bonus AD) ⇒ 200 / 380 / 560 (+180% bonus AD)
+
+Kayle
+
+Kayle's relevance has steadily declined since the top lane shake up from role quests, so she gets a small early laning buff to add a scaling option to top lane.
+
+Q - Radiant Blast
+
+Cooldown: 12 / 11 / 10 / 9 / 8s ⇒ 10 / 9.5 / 9 / 8.5 / 8s
+
+R - Divine Judgment
+
+Cooldown: 160 / 120 / 80s ⇒ 140 / 110 / 80s
+
+Locke
+
+Locke has proven deeper than expected, and skilled players have shown him to still be too strong, especially in the early game.
+
+Q - Ritual Nails
+
+Stack Bonus Damage: 18 / 26 / 34 / 42 / 50 ⇒ 15 / 22 / 29 / 36 / 43
+
+Maximum Stack Damage: 75.6 / 109.2 / 142.8 / 176.4 / 210 ⇒ 63 / 92.4 / 121.8 / 151.2 / 180.6
+
+W - Soul Ignition
+
+Duration: 6s ⇒ 5s
+
+Maokai
+
+Maokai has been almost entirely stuck in support this year, so his buff targets top lane and jungle.
+
+Q - Bramble Smash
+
+Damage: 75 / 120 / 165 / 210 / 255 (+2 / 2.5 / 3 / 3.5 / 4% Target Maximum Health) (+50% AP) ⇒ 75 / 120 / 165 / 210 / 255 (+2.5 / 3 / 3.5 / 4 / 4.5% Target Maximum Health) (+50% AP)
+
+Mel
+
+Mel gets a midscope update: power moves from early game to scaling, her W is reworked into an area-of-effect missile destruction that retaliates rather than reflects, and her Q and R cooldowns drop later in the game so she can stack her passive higher.
+
+Base Stats
+
+Health: 640 + 99/Level ⇒ 590 + 107/Level
+
+Mana: 480 + 28/Level ⇒ 455 + 38/Level
+
+AR: +5.2/Level ⇒ +5.4/Level
+
+AD: 54 + 3.3/Level ⇒ 52 + 3.3/Level
+
+AS: 2.5%/Level ⇒ 2.75%/Level
+
+Passive - Searing Brilliance
+
+Bonus Damage Per Bolt: 8 - 30 (+4% AP) ⇒ 4 - 30 (+4% AP)
+
+First Stack Damage Against Minions: 50% Less ⇒ 45% Less
+
+Q - Radiant Volley
+
+First Hit Damage: 60 / 85 / 110 / 135 / 160 (+55% AP) ⇒ 60 (+25% AP)
+
+Multi-Hit Damage: 5 / 7 / 9 / 11 / 13 (+5% AP) ⇒ 5 / 10 / 15 / 20 / 25 (+8% AP)
+
+Total Damage: 85 - 277 (+80 - 100% AP) ⇒ 85 - 285 (+65 - 97% AP)
+
+New - Now Refunds CD it hits an enemy champion at least once: 0.5s - 1.0s Refund (scaling with Champion Level)
+
+Mana Cost: 70 / 75 / 80 / 85 / 90 ⇒ 60 / 65 / 70 / 75 / 80
+
+Missile Speed: 3800 ⇒ 3200 (takes .047s longer to travel to max range)
+
+W - Rebuttal - Reworked
+
+Unleashes a nova that expands to 400u Radius over 0.75 seconds. The nova destroys enemy projectiles and shields and grants move speed to 
+Mel
+ and Allies within. Destroyed missiles are retaliated against at the end of the nova.
+
+Retaliation Damage: 35 / 40 / 45 / 50 / 55 (+10% AP), reduced to 5 / 10 / 15 / 20 / 25 (+5% AP) for subsequent hits against the same enemy, up to 7 retaliations per enemy for a total of 65 - 205 (+40% AP)
+
+Shield: 80 / 110 / 140 / 170 / 200 (+70% AP) for 2 seconds
+
+Move Speed: 10 - 30% (scaling with Champion Level) for 2 seconds
+
+Mana Cost: 100 / 80 / 60 / 40 / 0
+
+Cooldown: 30 / 28.5 / 27 / 25.5 / 24
+
+E - Solar Snare
+
+Root Duration: 1.5 seconds ⇒ [0.8 - 1.6] / [0.85 - 1.75] / [0.9 - 1.9] / [0.95 - 2.05] / [1.0 - 2.2] seconds, increasing with distance
+
+Slow Amount: 30% ⇒ 20 / 25 / 30 / 35 / 40%
+
+Mana Cost: 50 / 60 / 70 / 80 / 90 ⇒ 40 / 50 / 60 / 70 / 80
+
+R - Golden Eclipse
+
+Cooldown: 120 / 100 / 80 seconds ⇒ 120 / 90 / 60 seconds
+
+Naafiri
+
+After earlier nerfs, Naafiri has largely fallen out of mid lane and been mediocre in the jungle, so this buff mainly targets mid to bring her roles closer to parity.
+
+Q - Darkin Daggers
+
+Heal: 45 / 60 / 75 / 90 / 105 (+40% bonus AD) ⇒ 55 / 70 / 85 / 100 / 115 (+45% bonus AD)
+
+W - The Call of the Pack
+
+Bonus Attack Damage: 20% ⇒ 22%
+
+Rumble
+
+Like 
+Corki
+, Rumble was tuned for pro play, and this change aims to help average players more than pros.
+
+R - The Equalizer
+
+Damage per Second: 120 / 200 / 280 (+35% AP) ⇒ (+40% AP)
+
+Maximum Damage Ability Power Ratio: 175% AP ⇒ 200% AP
+
+Shen
+
+Along with 
+Maokai
+, Shen jungle has been pushed out of the meta, and earlier jungle tank changes didn't bring him back, so he gets a direct buff.
+
+Q - Twilight Assault
+
+Monster Damage Modifier: 100 / 125 / 150 / 175 / 200 ⇒ 120 / 140 / 160 / 180 / 200
+
+Smolder
+
+Smolder's earlier buffs landed softer than expected but left his Crit and Caster builds balanced, so he gets a more generic buff, with the 
+Doran's Bow
+ nerf also expected to help him.
+
+W - ACHOOO!
+
+Explosion Damage: 10 / 35 / 60 / 85 / 110 (+50% bonus AD) (+80% AP) ⇒ 25 / 50 / 75 / 100 / 125 (+50% bonus AD) (+80% AP)
+
+Thresh
+
+Despite a prior nerf, Thresh remains at the top of the support pecking order for top tier players, so he gets another.
+
+Base Stats
+
+Attack Damage: 56 ⇒ 54
+
+R - The Box
+
+Damage: 250 / 400 / 550 (+100% AP) ⇒ 200 / 350 / 500 (+100% AP)
+
+Viktor
+
+Last patch's Viktor nerf hit harder than expected while having the intended effect on his early game, so he's being buffed back in scaling.
+
+Base Stats
+
+Health Growth: 100/Level ⇒ 105/Level
+
+R - Arcane Storm
+
+Conjure Damage: 100 / 175 / 250 (+50% AP) ⇒ 100 / 175 / 250 (+60% AP)
+
+Yasuo
+
+Yasuo's win rate and ban rate kept climbing as players moved to crit builds, so he gets the same nerf 
+Yone
+ received last patch.
+
+Q - Steel Tempest
+
+Damage: 20 / 45 / 70 / 95 / 120 (+105% total AD) ⇒ 20 / 45 / 70 / 95 / 120 (+100% total AD)
+
+Zaahen
+
+Zaahen delivers on his scaling but hasn't had enough to do in lane, so this change targets his early skirmishing.
+
+Q - The Darkin Glaive
+
+Cooldown: 10 / 9 / 8 / 7 / 6s ⇒ 8 / 7.5 / 7 / 6.5 / 6s
+
+Items
+Doran's Bow
+
+Doran's Bow is slightly but clearly too strong, leading marksmen expected to favor 
+Doran's Blade
+ to almost exclusively use Doran's Bow, so it gets a minor nerf.
+
+Attack Damage: 8 ⇒ 7
+
+Overlord's Bloodmail
+
+Overlord's Bloodmail hasn't carried enough power to justify buying outside of 
+Sett
+, so this change should be a net buff for most users without inflating its power on 
+Sett
+, who benefits most from Retribution through his Haymaker (W).
+
+Attack Damage: 30 ⇒ 40
+
+Retribution: +0 - 12% total AD, based on % Missing Health ⇒ +0 - 10% total AD, based on % Missing Health
+
+ARAM: Mayhem
+
+This patch lowers the power of some new augments, buffs survivability augments and fixes a batch of bugs. Fighters have become very good at closing games and poke dominates early while tanks struggle, so augments that make tanks feel fragile, like 
+Take'em Down Down Down
+ and 
+Weapon of Destiny
+, are toned down, while survivability augments like 
+Soul Eater
+ and 
+Stay Resolute
+ are buffed. Overall burst and game pacing are also being watched. Butcher's Bridge and Koeshin's Crossing return to the rotation with Headliner performances, the last page of the Journey to Stardom is now accessible, and two new augments join, including one based on a classic Worlds anthem.
+
+Champions
+
+Hecarim
+
+Ability Haste: 10 ⇒ 0
+
+Augments
+
+Armored Impact
+
+Damage: 50 - 125 + 250% bonus Armor ⇒ 25 - 125 + 220% bonus Armor
+
+BEES!!!
+
+Base Damage Scaling: 75 - 200 + 150% bonus AD + 70% total AP ⇒ 75 - 140 + 150% bonus AD + 70% total AP
+
+Hive Travel Time: .75s ⇒ 1.1s
+
+Brass Blast
+
+Cooldown: 75s ⇒ 50s
+
+REMOVED Minion Damage: Removed
+
+CRIMSON COBALT
+
+Mark VFX: Visible to all players ⇒ Visible only to the augment owner
+
+One Hit Wonder
+
+NEW Effect: [Ability] gains increased damage based on your Ability Haste but no longer benefits from Ability Haste.
+
+Ravenous Bind
+
+Bonus Health Heal Ratio: .1 ⇒ .12
+
+Base Heal: 50 - 200 ⇒ 75 - 300
+
+RISE
+
+NEW Effect: Killing enemy champions with your Ultimate resets the cooldown, up to 3 times.
+
+Squishy Slappy Grab
+
+Shield per Pulled Target: 50 - 200 + 50% bonus Armor + 50% bonus Magic Resistance ⇒ 100 - 300 + 70% bonus Armor + 70% bonus Magic Resistance
+
+Soul Eater
+
+Health Gain per Stack: 20 ⇒ 30
+
+Stay Resolute
+
+Armor and Magic Resistance per Ability Hit: Level 1 / 7 / 11 - 1 / 2 / 3 ⇒ Level 1 / 11 - 2 / 3
+
+Take'em Down Down Down
+
+Five-Hit Proc Damage: (15 + 5% bonus Attack Speed + 0.15% total Ability Haste)% Missing Health ⇒ 17% Missing Health
+
+Titan's Resolve
+
+Stacks of Juggernauting required for each Juggernauting level: 10 ⇒ 7
+
+Weapon of Destiny
+
+Flat Armor Penetration Scalar: 35 ⇒ 20
+
+Flat Magic Penetration Scalar: 25 ⇒ 15
+
+Percent Armor Penetration Scalar: 0.25 ⇒ 0.15
+
+Percent Magic Penetration Scalar: 0.15 ⇒ 0.09
+
+Systems
+
+Butcher's Bridge and Koeshin's Crossing: Unavailable ⇒ Enabled
+
+Bugfixes
+
+Fixed a bug where using 
+Get Jinxed
+ when killed by the fountain turret caused the player to not be able to move.
+
+Fixed a bug where 
+Jeweled Gauntlet
+ was not giving the correct Critical Strike chance with 
+escAPADe
+ and 
+ADAPt
+.
+
+Fixed the tooltip for the Bee Band headliner to match its effect in game.
+
+Fixed a bug with 
+CRIMSON COBALT
+ where some champion's empowered basic attacks were not consuming the mark.
+
+Fixed a bug where the Pentakill headliner was not offering an upgrade to 
+Udyr
+'s ultimate at level 18.
+
+Fixed a bug where 
+Karma
+'s Mantra empowered abilities were not counting towards damage for the Ultimate Damage K/DA band mission.
+
+Fixed a bug where some Superstar mission descriptions were not properly displaying.
+
+Fixed a bug where 
+Mosh Monster
+'s slowing effect persisted after death.
+
+Fixed a bug where 
+Weapon of Destiny
+ would swap which item is empowered if the empowered item transforms.
+
+Classic
+
+The penultimate Classic content patch adds three returning champions: 
+Volibear
+, winner of Council Vote #2, 
+Swain
+ with his bird-fueled mayhem, and 
+Elise
+ with heavy single-target damage. It also brings a bigger balance patch than usual, aimed at the largest outliers at both the top and bottom, including 
+Janna
+.
+
+Champions
+
+NEW - 
+Volibear
+
+Passive - Chosen of the Storm: When reduced to low health, 
+Volibear
+ heals for a portion of his maximum health over time. This effect has a long cooldown.
+
+Q - Rolling Thunder: 
+Volibear
+ gains bonus movement speed, increased while running toward enemy champions. His next attack deals bonus damage and flips his target over his head.
+
+W - Frenzy: 
+Volibear
+ passively gains stacking bonus attack speed on-attack. While at max stacks, Frenzy can be activated to deal high single-target damage, increased based on their missing health.
+
+E - Majestic Roar: 
+Volibear
+ damages and slows nearby enemies. Minions and monsters are additionally feared.
+
+R - Thunder Claws: 
+Volibear
+ harnesses the power of the storm for several seconds, causing all basic attacks to inflict chain lightning.
+
+NEW - 
+Swain
+
+Passive - Carrion Renewal: 
+Swain
+ recoups some mana every time he kills an enemy.
+
+Q - Decrepify: 
+Swain
+ sics his raven on a target enemy, slowing and dealing damage over time while they remain in range.
+
+W - Nevermove: After a brief delay, 
+Swain
+ damages and roots all enemies in a small area.
+
+E - Torment: 
+Swain
+ afflicts an enemy with Torment, dealing damage over time and causing them to take increased damage from him. Unlike most other damage amps, this also impacts true damage, like Ignite.
+
+R - Ravenous Flock: 
+Swain
+ transforms into a giant raven, consuming increasing amounts of mana while transformed. In this state, he releases lesser ravens to damage enemies and return to heal 
+Swain
+ based on the damage they dealt.
+
+NEW - 
+Elise
+
+Passive - Spider Swarm: While in human form, abilities that hit enemies store a Spiderling, up to a cap. In spider form, 
+Elise
+ releases these Spiderlings to attack nearby enemies.
+
+Q - Neurotoxin / Venomous Bite: In human form, 
+Elise
+ spits neurotoxin that deals bonus damage based on her target's current health. In spider form, 
+Elise
+ and her Spiderlings lunge at an enemy and deal bonus damage based on their target's missing health.
+
+W - Volatile Spiderling / Skittering Frenzy: In human form, 
+Elise
+ releases a volatile spiderling that explodes on the first enemy it hits, dealing damage in an area. In spider form, 
+Elise
+ and her Spiderlings gain bonus attack speed and heal 
+Elise
+ on-hit.
+
+E - Cocoon / Rappel: In human form, 
+Elise
+ fires a cocoon that stuns the first enemy it hits. In spider form, 
+Elise
+ and her Spiderlings rappel into the air, becoming untargetable. She can then re-cast Rappel to descend upon her choice of target.
+
+R - Human Form / Spider Form: 
+Elise
+ transforms back and forth between human form and spider form. In human form she's ranged. In spider form, she is melee and deals bonus damage on-hit.
+
+Aatrox
+
+P - Blood Well
+
+Cooldown: 225 ⇒ 225/200/175/150 (for real this time)
+
+Q - Dark Flight
+
+Failure to Land: Fixed a bug from 2013 where the ability would occasionally fail to affect enemies after max-range casts.
+
+R - Massacre
+
+Attacks: Fixed a bug where 
+Aatrox
+'s basic attacks did nothing during his ultimate. (Fixed in a day-1 micropatch)
+
+Amumu
+
+Passive - Cursed Touch
+
+Magic Resistance Shred: 15 / 25 / 35 ⇒ 15 / 20 / 25 (Levels 1 / 7 / 13)
+
+Q - Bandage Toss
+
+Damage: 80 / 140 / 200 / 260 / 320 ⇒ 80 / 130 / 180 / 230 / 280
+
+R - Curse of the Sad Mummy
+
+Cooldown: 150 / 130 / 110s ⇒ 170 / 145 / 120s
+
+Evelynn
+
+Q - Hate Spike
+
+Base Damage: 40 / 55 / 70 / 85 / 100 ⇒ 40 / 60 / 80 / 100 / 120
+
+Ezreal
+
+W - Essence Flux
+
+Ability Power Ratio: 60% ⇒ 80%
+
+Healing Effectiveness: 50% ⇒ 70%
+
+E - Arcane Shift
+
+Ability Power Ratio: 75% ⇒ 80%
+
+Fiddlesticks
+
+E - Dark Wind
+
+Damage per Bounce: 65 / 85 / 105 / 125 / 145 + 45% AP ⇒ 50 / 75 / 100 / 125 / 150 + 45% AP
+
+Gangplank
+
+Base Stats
+
+Base Health Regeneration: 5 ⇒ 7
+
+Health per Level: 81 ⇒ 89
+
+Passive - Grog-Soaked Blade
+
+Maximum Stacks: 3 ⇒ 4
+
+Q - Parrrley
+
+Mana Cost: 50 / 55 / 60 / 65 / 70 ⇒ 40 / 45 / 50 / 55 / 60
+
+R - Cannon Barrage
+
+Cooldown: 120 / 115 / 110s ⇒ 120 / 110 / 100s
+
+Janna
+
+Passive - Tailwind
+
+Global Bonus Movement Speed: 3% ⇒ 2%
+
+Mordekaiser
+
+Base Stats
+
+Attack Timing: Attacks now come out approximately 70% faster. This was fixed about 1 week after his release
+
+R - Children of the Grave
+
+Pet Bonus Attack Damage: 75% of the target's Attack Damage ⇒ 75% of 
+Mordekaiser
+'s Attack Damage
+
+Structure Crits: Pets no longer can critically strike structures.
+
+Bonus Damage to Inhibitors and the Nexus: 75% (This was true in 2013, too!) ⇒ 0%
+
+Nami
+
+Q - Aqua Prison
+
+Damage: 75 / 130 / 185 / 240 / 295 + 65% AP ⇒ 90 / 145 / 200 / 255 / 310 + 100% AP
+
+W - Ebb and Flow
+
+Damage Reduction per Bounce: 30% ⇒ 15% (Healing reduction unchanged at 15%)
+
+Olaf
+
+W - Vicious Strikes
+
+Bonus Attack Damage: 7 / 14 / 21 / 28 / 35 ⇒ 10 / 17 / 24 / 31 / 38
+
+E - Reckless Swing
+
+Cooldown: 9 / 8 / 7 / 6 / 5s ⇒ 8 / 7 / 6 / 5 / 4s
+
+Rammus
+
+Base Stats
+
+Base Armor: 28.8 ⇒ 25
+
+Attack Damage per Level: 3.5 ⇒ 2.75
+
+Items
+
+Health and Mana Potions
+
+Bug Fix: Fixed a bug where Health and Mana Potions had no buff text.
+
+Shushei's Mana Jug
+
+Bug Fix: Fixed a bug where 
+Shushei's Mana Jug
+ triggered on Clone takedown.
+
+Statikk Shiv
+
+Bug Fix: Fixed a bug where 
+Statikk Shiv
+ no longer procced for 
+Kayle
+ after using Righteous Fury (E).
+
+Wit's End
+
+Bug Fix: Fixed a bug where 
+Wit's End
+ failed to maintain 4 stacks.
+
+Classic Pass Progress
+
+A configuration mistake on this act's Classic Pass made token progress slower than intended. It has been corrected, and per-game token grants are increased by 50% for the remainder of Classic's run.
+
+Bugfixes
+
+Fixed a bug where 
+Aatrox
+'s R attacks did not play a critical strike animation.
+
+Fixed a bug where 
+Aatrox
+'s passive cooldown did not scale with level.
+
+Fixed a bug where 
+Anivia
+'s resistances did not change while she was in Egg Form.
+
+Fixed a bug where 
+Caitlyn
+'s Yordle Snap Trap (W) expiration animation was missing.
+
+Fixed a bug where 
+Master Yi
+'s Double Strike (P) second strike hit through Blind.
+
+Fixed a bug where 
+Sivir
+'s Spell Shield (E) did not block 
+Ezreal
+'s Mystic Shot (Q).
+
+Fixed a bug where Classic 
+Kayle
+ failed to perform the critical hit animation when scoring a critical strike.
+
+Fixed a bug where Classic 
+Miss Fortune
+'s Make It Rain (E) and Basic Attack fire VFX appeared on the ground instead of on the tips of her pistols.
+
+Fixed a bug where 
+Kayle
+'s Holy Fervor (P) tooltip stated that Ability Power was granted by Bonus Attack Damage.
+
+Fixed a bug where Nunu's Absolute Zero (R) was visible to enemies while Nunu was hidden in brush.
+
+Fixed a bug where 
+Yorick
+'s Spectral Ghoul disappeared before the end of its death animation.
+
+Fixed a bug where Oracle Elixir's Sparkle VFX was offset from the icon on multiple champions.
+
+Fixed a bug where Nunu's Absolute Zero (R) displayed both a green and red outline to opponents.
+
+Fixed a bug where 
+Morgana
+'s Black Shield (E) Shield VFX displayed in an offset position.
+
+Fixed a bug where Shield VFX were too large when cast on 
+Shyvana
+'s Dragon Form (R).
+
+Fixed a bug where 
+Janna
+'s Eye of the Storm (E) Shield VFX was positioned too low on certain allied champions.
+
+Fixed a bug where 
+Caitlyn
+'s Oracle Elixir Pink Sparkle VFX was missing.
+
+Fixed a bug where 
+Xin Zhao
+'s Oracle Elixir Pink Sparkle VFX appeared below the character model.
+
+Bugfixes & QoL Changes
+
+Fixed a bug where 
+Aurora
+'s (R) was blockable by 
+Samira
+ (W)
+
+Fixed a bug where 
+Quinn
+'s (R) will deal double the damage when she gains (R) from recalling or respawning.
+
+Fixed a bug where Hail of Blades would be inconsistent on 
+Ekko
+.
+
+Fixed a bug where 
+Viego
+ may miss out on a jungle treat if he transforms into an enemy champion when it's granted.
+
+Fixed a bug where 
+Renekton
+ would cancel abilities after comboing with R by right clicking at the same time.
+
+Fixed a bug where 
+Sion
+'s (R), 
+Briar
+ (R), and 
+Kled
+ (R) SFX were not audible in Spectator Mode.
+
+Fixed a bug where 
+Kog'Maw
+'s (W) ability would deal damage to structures if cast while an auto is midair.
+
+More League of Legends articles
+22 HOURS AGO
+Mel Rework: Reflect Removed and New Kit in Patch 26.22
+
+Mel lost her reflect in patch 26.22. Here's every change to her kit, what our matchup data says about why, and how to play with and against her.
+
+2 DAYS AGO
+Worlds 2026 Quarterfinals: Schedule, Matchups and Preview
+
+The Worlds 2026 quarterfinals run November 3 to 6. Here's the schedule, every matchup, each team's best picks and what the Swiss stage data says.
+
+3 DAYS AGO
+Locke Counters: How to Counter Locke in Mid
+
+The best Locke counters in mid on our data, the picks that struggle into him, and how to beat each of his abilities in lane and in fights.
+
+7 DAYS AGO
+Locke Build Guide
+
+Locke turns every kill into a stronger execute. Here's how his kit works, what he's good and bad at, and how to play him from lane to late game.
+
+7 DAYS AGO
+Azir Build Guide
+
+Azir fights through his Sand Soldiers and wins teamfights with one shuffle. Here's how his kit works, his strengths and weaknesses, and his game plan.
+
+7 DAYS AGO
+Brand Build Guide
+
+Brand sets whole teams on fire and punishes anyone who stands close to a friend. Here's how his burn works, his strengths and weaknesses, and his game plan.
+
+COMPANY
+About Us
+Partnerships
+Careers
+Contact Support
+Privacy Policy
+SOCIALS
+X/Twitter
+Discord
+Facebook
+Instagram
+TikTok
+GAMES
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Apex Legends
+Marvel Rivals
+Made with Lots of Love and Tilt in Los Angeles
+English
+Terms of Service
+Privacy Policy
+Remove Ads with Premium

@@ -1,0 +1,3753 @@
+===== ugg-champions-1440.txt (rendered text at 1440, 5 Nov 2026)
+ARAM: MAYHEM
+NEW
+Augment Tiers Directly In Game
+Download Now
+League of Legends
+Valorant
+Rematch
+Deadlock
+World of Warcraft
+Helldivers 2
+Download Now
+NA
+Log In
+Try
+PLUS
+Free
+Download Now
+Unlock
+U.GG PLUS
+Tier List
+N
+Classic
+NEW
+N
+ARAM Mayhem
+NEW
+Champions
+Multisearch
+Leaderboards
+Live Games
+Items
+N
+Watch
+NEW
+News
+Probuild Stats
+Guest
+Logged Out
+LoL Tier List for All Roles, Emerald +
+Patch 26.22
+View Patch Notes
+Ranked Solo / Last Updated: 5 hours ago / 
+Champions Analyzed: 
+1,732,670
+The only LoL Tier list you need for the newest patch. Always up-to-date, U.GG takes a data science approach to the best champions for Patch 26.22 on every role.
+Tier List
+Classic Tier List
+ARAM Tier List
+ARAM Mayhem
+Duo Tier List
+PLUS
+
+UPGRADE NOW TO UNLOCK YOUR OWN PERSONAL TIER LIST
+
+Start Your Free Trial
+Filters
+Emerald +
+Ranked Solo
+26.22
+World
+Show All
+Tier List
+The best champions for All Roles in patch 26.22
+S+
+Malphite
+51.8%WR
+11.9K games
+Thresh
+51.4%WR
+25.2K games
+LeBlanc
+50.5%WR
+10.0K games
+Blitzcrank
+51.1%WR
+13.5K games
+Gangplank
+51.6%WR
+8.6K games
+Darius
+51.1%WR
+12.9K games
+Katarina
+51.1%WR
+11.4K games
+Leona
+51.6%WR
+14.4K games
+Xayah
+52.5%WR
+14.2K games
+Ahri
+51.4%WR
+18.4K games
+Master Yi
+50.9%WR
+10.1K games
+Braum
+51.6%WR
+9.1K games
+S
+Twitch
+50.8%WR
+9.1K games
+Tristana
+50.8%WR
+11.4K games
+Wukong
+51.0%WR
+10.9K games
+Fizz
+50.6%WR
+8.5K games
+Rell
+52.4%WR
+7.2K games
+Yasuo
+51.8%WR
+3.9K games
+Aatrox
+50.2%WR
+11.3K games
+Nasus
+50.0%WR
+6.0K games
+Bel'Veth
+52.1%WR
+4.5K games
+Mordekaiser
+50.3%WR
+8.9K games
+Jhin
+50.4%WR
+32.3K games
+Kha'Zix
+50.8%WR
+11.0K games
+A
+Kennen
+51.6%WR
+3.1K games
+Malphite
+51.7%WR
+1.3K games
+Zeri
+50.8%WR
+8.2K games
+Heimerdinger
+51.5%WR
+2.0K games
+Warwick
+51.5%WR
+4.7K games
+Zaahen
+50.9%WR
+6.2K games
+Fiddlesticks
+52.3%WR
+3.2K games
+Smolder
+50.6%WR
+8.8K games
+Naafiri
+50.9%WR
+1.7K games
+Swain
+53.6%WR
+1.8K games
+Kayn
+50.0%WR
+11.6K games
+Xerath
+52.6%WR
+1.2K games
+Click to Expand
+Rank
+Role
+Champion
+Tier
+Win Rate
+Pick Rate
+Ban Rate
+Counter Picks
+Matches
+1
+Aurelion Sol
+S
+56.49%
+0.8%
+0.8%
+1,425
+2
+Vel'Koz
+S
+56.18%
+0.9%
+1.8%
+1,522
+3
+Karthus
+A
+54.49%
+0.6%
+1.2%
+991
+4
+Zaahen
+A
+53.92%
+0.7%
+1.1%
+1,250
+5
+Swain
+A
+53.57%
+1.0%
+1.8%
+1,781
+6
+Kog'Maw
+S
+53.38%
+2.2%
+0.6%
+3,741
+7
+Sion
+A
+53.26%
+0.5%
+0.8%
+890
+8
+Veigar
+A
+53.10%
+0.9%
+0.8%
+1,644
+9
+Ekko
+S+
+52.97%
+4.9%
+2.3%
+8,443
+10
+Janna
+S+
+52.94%
+4.8%
+1.0%
+8,370
+11
+Darius
+S
+52.89%
+1.2%
+12.4%
+2,038
+12
+Nilah
+S
+52.76%
+1.1%
+1.8%
+1,829
+13
+Shyvana
+S+
+52.76%
+3.7%
+2.8%
+6,327
+14
+Aatrox
+A
+52.71%
+0.8%
+7.6%
+1,438
+15
+Riven
+A
+52.62%
+0.5%
+1.1%
+916
+16
+Xerath
+A
+52.57%
+0.7%
+10.3%
+1,227
+17
+Xayah
+S+
+52.54%
+8.2%
+4.2%
+14,221
+18
+Rell
+S
+52.44%
+4.1%
+1.5%
+7,157
+19
+Zed
+S
+52.43%
+0.8%
+23.6%
+1,316
+20
+Kassadin
+S+
+52.43%
+2.9%
+2.3%
+5,106
+21
+Zilean
+S
+52.39%
+2.7%
+1.6%
+4,713
+22
+Hwei
+A
+52.35%
+0.8%
+2.2%
+1,465
+23
+Lissandra
+A
+52.31%
+0.6%
+4.7%
+954
+24
+Fiddlesticks
+A
+52.26%
+1.8%
+0.8%
+3,159
+25
+Kled
+S
+52.23%
+1.7%
+1.0%
+3,029
+26
+Singed
+S
+52.20%
+2.1%
+0.6%
+3,711
+27
+Shen
+S
+52.16%
+3.7%
+0.6%
+6,332
+28
+Kayle
+S
+52.15%
+2.6%
+1.3%
+4,533
+29
+Aurora
+S
+52.13%
+2.6%
+1.2%
+4,537
+30
+Rakan
+S
+52.12%
+4.8%
+0.5%
+8,240
+31
+Sion
+A
+52.12%
+0.7%
+0.8%
+1,249
+32
+Rek'Sai
+A
+52.11%
+1.4%
+0.6%
+2,416
+33
+Bel'Veth
+S
+52.11%
+2.6%
+3.2%
+4,485
+34
+Viktor
+S
+52.03%
+1.5%
+10.6%
+2,589
+35
+Wukong
+A
+52.00%
+0.9%
+5.3%
+1,525
+36
+Zac
+A
+51.96%
+0.5%
+1.0%
+893
+37
+Kayle
+A
+51.90%
+0.7%
+1.3%
+1,210
+38
+Quinn
+A
+51.87%
+0.8%
+0.5%
+1,471
+39
+Syndra
+A
+51.85%
+0.8%
+7.9%
+1,375
+40
+Amumu
+A
+51.85%
+0.7%
+0.7%
+1,165
+41
+Yasuo
+S
+51.79%
+2.3%
+24.7%
+3,904
+42
+Ziggs
+A
+51.79%
+1.4%
+0.7%
+2,371
+43
+Nunu & Willump
+A
+51.78%
+2.0%
+0.6%
+3,476
+44
+Sejuani
+A
+51.78%
+2.1%
+0.2%
+3,617
+45
+Malphite
+S+
+51.78%
+6.9%
+17.7%
+11,921
+46
+Udyr
+A
+51.78%
+1.7%
+0.6%
+3,003
+47
+Zyra
+S
+51.78%
+2.0%
+6.4%
+3,488
+48
+Elise
+A
+51.77%
+0.8%
+3.3%
+1,468
+49
+Lux
+A
+51.74%
+0.7%
+3.5%
+1,204
+50
+Malphite
+A
+51.69%
+0.7%
+17.7%
+1,298
+51
+Kennen
+A
+51.63%
+1.8%
+1.4%
+3,122
+52
+Gangplank
+S+
+51.62%
+4.9%
+11.5%
+8,562
+53
+Lissandra
+S+
+51.62%
+5.6%
+4.7%
+9,711
+54
+Gragas
+A
+51.61%
+0.5%
+0.7%
+901
+55
+Leona
+S+
+51.59%
+8.3%
+8.8%
+14,376
+56
+Braum
+S+
+51.58%
+5.2%
+6.9%
+9,077
+57
+Briar
+S+
+51.54%
+4.1%
+6.4%
+7,056
+58
+Rammus
+S
+51.54%
+1.5%
+2.8%
+2,565
+59
+Heimerdinger
+A
+51.53%
+1.1%
+2.3%
+1,956
+60
+Kindred
+S
+51.53%
+2.5%
+2.1%
+4,370
+61
+Ekko
+S
+51.53%
+4.4%
+2.3%
+7,545
+62
+Alistar
+S+
+51.53%
+7.1%
+2.8%
+12,249
+63
+Sett
+S+
+51.51%
+5.9%
+2.3%
+10,214
+64
+Warwick
+A
+51.47%
+2.7%
+1.2%
+4,739
+65
+Ahri
+S+
+51.43%
+10.6%
+2.7%
+18,383
+66
+Pantheon
+A
+51.43%
+0.9%
+4.0%
+1,507
+67
+Senna
+S
+51.42%
+5.5%
+1.1%
+9,478
+68
+Vex
+S+
+51.41%
+2.7%
+4.4%
+4,740
+69
+Thresh
+S+
+51.40%
+14.6%
+13.9%
+25,224
+70
+Vel'Koz
+A
+51.38%
+1.2%
+1.8%
+2,071
+71
+Cho'Gath
+S+
+51.37%
+5.1%
+7.0%
+8,837
+72
+Hwei
+S
+51.36%
+3.6%
+2.2%
+6,197
+73
+Poppy
+A
+51.35%
+0.9%
+4.2%
+1,550
+74
+Vladimir
+S+
+51.26%
+4.0%
+5.0%
+6,960
+75
+Annie
+A
+51.26%
+2.0%
+0.5%
+3,484
+76
+Katarina
+A
+51.23%
+0.9%
+11.7%
+1,507
+77
+Sona
+A
+51.22%
+2.8%
+0.1%
+4,828
+78
+Ornn
+S
+51.21%
+3.9%
+0.5%
+6,764
+79
+Diana
+S
+51.16%
+3.4%
+2.8%
+5,809
+80
+Poppy
+S
+51.15%
+1.6%
+4.2%
+2,817
+81
+Lillia
+S+
+51.15%
+4.7%
+5.4%
+8,163
+82
+Darius
+S+
+51.14%
+7.4%
+12.4%
+12,856
+83
+Maokai
+A
+51.13%
+2.0%
+0.2%
+3,395
+84
+Ryze
+B
+51.13%
+0.6%
+0.4%
+972
+85
+Warwick
+A
+51.13%
+1.4%
+1.2%
+2,392
+86
+Xin Zhao
+A
+51.13%
+3.2%
+0.8%
+5,498
+87
+Blitzcrank
+S+
+51.12%
+7.8%
+17.8%
+13,466
+88
+Katarina
+S+
+51.08%
+6.6%
+11.7%
+11,389
+89
+Zac
+A
+51.06%
+2.4%
+1.0%
+4,107
+90
+Hecarim
+S+
+51.04%
+5.4%
+7.5%
+9,402
+91
+Wukong
+S
+51.00%
+6.3%
+5.3%
+10,878
+92
+Ivern
+A
+51.00%
+1.0%
+0.3%
+1,657
+93
+Elise
+S
+50.98%
+3.2%
+3.3%
+5,485
+94
+Seraphine
+S
+50.97%
+6.3%
+3.0%
+10,873
+95
+Zoe
+S
+50.96%
+2.8%
+4.7%
+4,872
+96
+Evelynn
+S
+50.96%
+3.5%
+2.2%
+6,020
+97
+Anivia
+A
+50.95%
+0.7%
+2.6%
+1,215
+98
+Naafiri
+A
+50.94%
+1.0%
+9.9%
+1,706
+99
+Jinx
+S+
+50.92%
+11.2%
+4.8%
+19,414
+100
+Swain
+A
+50.92%
+0.8%
+1.8%
+1,414
+101
+Nidalee
+S
+50.92%
+2.7%
+4.2%
+4,625
+102
+Zaahen
+A
+50.90%
+3.6%
+1.1%
+6,246
+103
+Dr. Mundo
+S
+50.89%
+3.4%
+1.9%
+5,932
+104
+Master Yi
+S+
+50.87%
+5.8%
+12.2%
+10,115
+105
+Anivia
+S
+50.86%
+2.2%
+2.6%
+3,818
+106
+Pantheon
+S
+50.86%
+3.7%
+4.0%
+6,325
+107
+Miss Fortune
+S
+50.86%
+7.2%
+1.4%
+12,476
+108
+Tristana
+S
+50.83%
+6.6%
+5.4%
+11,385
+109
+Zeri
+A
+50.79%
+4.7%
+1.0%
+8,192
+110
+Illaoi
+S
+50.78%
+2.5%
+4.3%
+4,271
+111
+Twitch
+S
+50.76%
+5.3%
+6.3%
+9,120
+112
+Kha'Zix
+S
+50.76%
+6.3%
+4.1%
+10,982
+113
+Varus
+A
+50.74%
+3.5%
+1.1%
+6,145
+114
+Twisted Fate
+S
+50.71%
+5.2%
+2.3%
+8,979
+115
+Taliyah
+A
+50.68%
+2.3%
+1.5%
+3,942
+116
+Gwen
+A
+50.67%
+2.4%
+2.2%
+4,160
+117
+Swain
+B
+50.66%
+0.7%
+1.8%
+1,129
+118
+Sivir
+S
+50.66%
+4.6%
+1.9%
+8,016
+119
+Naafiri
+S+
+50.64%
+4.2%
+9.9%
+7,350
+120
+Fizz
+S
+50.64%
+4.9%
+5.6%
+8,531
+121
+Corki
+A
+50.61%
+3.6%
+0.6%
+6,321
+122
+Smolder
+A
+50.59%
+5.1%
+1.3%
+8,845
+123
+Samira
+S
+50.59%
+3.5%
+4.4%
+6,070
+124
+Ziggs
+A
+50.56%
+0.6%
+0.7%
+979
+125
+LeBlanc
+S+
+50.53%
+5.8%
+23.2%
+10,013
+126
+Karthus
+A
+50.49%
+1.4%
+1.2%
+2,432
+127
+Maokai
+B
+50.47%
+0.9%
+0.2%
+1,595
+128
+Amumu
+A
+50.45%
+1.7%
+0.7%
+2,995
+129
+Camille
+A
+50.43%
+4.5%
+1.7%
+7,737
+130
+Jhin
+S
+50.40%
+18.6%
+2.7%
+32,293
+131
+Akshan
+A
+50.40%
+2.3%
+1.9%
+3,996
+132
+Mel
+A
+50.32%
+0.7%
+7.4%
+1,238
+133
+Renekton
+S
+50.32%
+6.3%
+4.3%
+10,928
+134
+Aurelion Sol
+A
+50.30%
+2.1%
+0.8%
+3,684
+135
+Milio
+S
+50.28%
+6.3%
+3.2%
+10,888
+136
+Soraka
+A
+50.27%
+4.4%
+1.5%
+7,603
+137
+Mordekaiser
+S
+50.26%
+5.1%
+6.6%
+8,886
+138
+Hwei
+A
+50.25%
+0.6%
+2.2%
+991
+139
+Volibear
+B
+50.24%
+1.0%
+1.5%
+1,656
+140
+Viego
+S
+50.23%
+7.9%
+5.2%
+13,688
+141
+Vladimir
+A
+50.23%
+1.3%
+5.0%
+2,200
+142
+Aatrox
+S
+50.21%
+6.5%
+7.6%
+11,266
+143
+Nami
+A
+50.20%
+8.9%
+0.8%
+15,417
+144
+Sion
+A
+50.15%
+3.8%
+0.8%
+6,503
+145
+Fiora
+S
+50.13%
+4.4%
+5.6%
+7,538
+146
+Kayn
+A
+50.03%
+6.7%
+3.5%
+11,598
+147
+Sylas
+S
+50.02%
+6.2%
+19.4%
+10,701
+148
+Vel'Koz
+A
+50.02%
+3.1%
+1.8%
+5,354
+149
+Nasus
+S
+50.02%
+3.4%
+9.5%
+5,954
+150
+Aurora
+B
+50.00%
+0.6%
+1.2%
+1,018
+151
+Malzahar
+S
+50.00%
+4.7%
+6.8%
+8,148
+152
+Trundle
+B
+50.00%
+0.8%
+0.4%
+1,436
+153
+Taliyah
+B
+49.98%
+3.0%
+1.5%
+5,282
+154
+Xerath
+A
+49.97%
+4.1%
+10.3%
+7,110
+155
+Gragas
+B
+49.96%
+0.8%
+0.7%
+1,329
+156
+Teemo
+B
+49.95%
+3.6%
+6.0%
+6,240
+157
+Talon
+A
+49.94%
+5.1%
+9.0%
+8,820
+158
+Irelia
+A
+49.92%
+4.5%
+14.7%
+7,858
+159
+Talon
+B
+49.91%
+1.6%
+9.0%
+2,711
+160
+Veigar
+B
+49.88%
+3.0%
+0.8%
+5,116
+161
+Ashe
+B
+49.87%
+5.5%
+1.4%
+9,586
+162
+Lulu
+A
+49.87%
+12.9%
+15.2%
+22,362
+163
+Cho'Gath
+B
+49.84%
+0.5%
+7.0%
+911
+164
+Jax
+B
+49.81%
+0.8%
+10.3%
+1,311
+165
+Zoe
+B
+49.80%
+0.9%
+4.7%
+1,526
+166
+Diana
+B
+49.77%
+3.4%
+2.8%
+5,972
+167
+Galio
+B
+49.75%
+4.2%
+2.0%
+7,357
+168
+Lux
+B
+49.73%
+3.7%
+3.5%
+6,409
+169
+Graves
+B
+49.71%
+7.6%
+10.1%
+13,131
+170
+Urgot
+B
+49.70%
+2.0%
+0.7%
+3,521
+171
+Galio
+B
+49.70%
+0.8%
+2.0%
+1,322
+172
+Tryndamere
+B
+49.68%
+2.9%
+2.6%
+4,994
+173
+Vi
+B
+49.67%
+4.8%
+1.9%
+8,249
+174
+Yorick
+B
+49.65%
+2.7%
+5.2%
+4,753
+175
+Gwen
+B
+49.63%
+0.8%
+2.2%
+1,350
+176
+Pyke
+B
+49.62%
+5.8%
+25.9%
+9,982
+177
+Yunara
+C
+49.61%
+10.9%
+4.9%
+18,821
+178
+Zed
+B
+49.61%
+8.2%
+23.6%
+14,216
+179
+Zyra
+B
+49.59%
+2.4%
+6.4%
+4,227
+180
+Teemo
+B
+49.57%
+0.5%
+6.0%
+932
+181
+Yone
+C
+49.56%
+7.6%
+14.3%
+13,193
+182
+Skarner
+B
+49.55%
+1.0%
+0.3%
+1,683
+183
+Garen
+C
+49.53%
+6.0%
+3.8%
+10,326
+184
+Lucian
+C
+49.52%
+8.6%
+3.0%
+14,975
+185
+Shen
+B
+49.48%
+0.9%
+0.6%
+1,637
+186
+Shaco
+B
+49.45%
+4.2%
+17.9%
+7,276
+187
+Syndra
+D
+49.43%
+9.4%
+7.9%
+16,333
+188
+Morgana
+B
+49.43%
+3.9%
+16.0%
+6,830
+189
+Lux
+C
+49.43%
+6.2%
+3.5%
+10,668
+190
+Taric
+B
+49.41%
+1.2%
+0.2%
+2,115
+191
+Jarvan IV
+D
+49.41%
+8.3%
+1.9%
+14,449
+192
+Draven
+B
+49.40%
+4.0%
+13.7%
+6,960
+193
+Yone
+D
+49.39%
+7.5%
+14.3%
+12,986
+194
+Renata Glasc
+B
+49.33%
+2.3%
+0.5%
+4,042
+195
+Vayne
+B
+49.32%
+3.3%
+2.9%
+5,681
+196
+Gragas
+B
+49.28%
+2.5%
+0.7%
+4,302
+197
+Ambessa
+D
+49.27%
+4.8%
+5.1%
+8,356
+198
+Aphelios
+D
+49.23%
+6.6%
+4.2%
+11,393
+199
+Nautilus
+D
+49.20%
+11.6%
+16.9%
+20,176
+200
+Cho'Gath
+C
+49.14%
+2.8%
+7.0%
+4,843
+201
+Qiyana
+C
+49.14%
+2.4%
+16.5%
+4,084
+202
+Riven
+B
+49.14%
+2.3%
+1.1%
+4,060
+203
+Orianna
+D
+49.13%
+5.2%
+0.7%
+8,981
+204
+Shen
+B
+49.12%
+0.7%
+0.6%
+1,199
+205
+Olaf
+C
+49.10%
+2.9%
+4.3%
+5,051
+206
+Neeko
+B
+49.07%
+1.6%
+0.9%
+2,692
+207
+Akali
+D
+49.05%
+7.7%
+17.1%
+13,292
+208
+Jax
+D
+49.05%
+5.8%
+10.3%
+10,082
+209
+Udyr
+B
+49.05%
+0.5%
+0.6%
+944
+210
+Kog'Maw
+B
+48.99%
+0.8%
+0.6%
+1,386
+211
+Kai'Sa
+D
+48.97%
+24.5%
+5.2%
+42,479
+212
+Nasus
+B
+48.92%
+0.6%
+9.5%
+971
+213
+Kalista
+D
+48.88%
+4.9%
+3.0%
+8,564
+214
+Maokai
+B
+48.85%
+0.6%
+0.2%
+1,126
+215
+Pantheon
+C
+48.81%
+3.2%
+4.0%
+5,554
+216
+Quinn
+B
+48.78%
+0.9%
+0.5%
+1,556
+217
+Malphite
+B
+48.78%
+0.8%
+17.7%
+1,390
+218
+Tahm Kench
+B
+48.77%
+2.2%
+1.8%
+3,752
+219
+Vayne
+B
+48.75%
+1.3%
+2.9%
+2,248
+220
+Viktor
+D
+48.74%
+7.1%
+10.6%
+12,293
+221
+Yasuo
+D
+48.71%
+8.4%
+24.7%
+14,615
+222
+Sylas
+D
+48.69%
+6.9%
+19.4%
+11,889
+223
+Akali
+D
+48.63%
+3.5%
+17.1%
+6,007
+224
+Karma
+D
+48.61%
+8.0%
+3.4%
+13,869
+225
+Yasuo
+D
+48.58%
+3.4%
+24.7%
+5,860
+226
+Bard
+D
+48.58%
+4.2%
+2.1%
+7,308
+227
+Tahm Kench
+C
+48.57%
+1.7%
+1.8%
+3,000
+228
+Trundle
+C
+48.55%
+1.7%
+0.4%
+2,974
+229
+Locke
+D
+48.51%
+6.1%
+35.0%
+10,620
+230
+Sylas
+C
+48.43%
+1.2%
+19.4%
+2,032
+231
+Swain
+D
+48.38%
+2.7%
+1.8%
+4,731
+232
+Caitlyn
+D
+48.37%
+12.5%
+18.0%
+21,616
+233
+Azir
+C
+48.28%
+1.7%
+0.3%
+2,943
+234
+Fizz
+B
+48.28%
+0.6%
+5.6%
+1,019
+235
+Yuumi
+D
+48.25%
+5.9%
+11.1%
+10,200
+236
+Nocturne
+D
+48.21%
+4.1%
+8.5%
+7,086
+237
+Volibear
+D
+48.20%
+3.6%
+1.5%
+6,226
+238
+Xerath
+D
+48.13%
+2.7%
+10.3%
+4,610
+239
+Ryze
+D
+48.11%
+2.0%
+0.4%
+3,438
+240
+Lee Sin
+D
+48.01%
+12.6%
+20.9%
+21,900
+241
+Irelia
+D
+47.98%
+2.7%
+14.7%
+4,721
+242
+Brand
+B
+47.95%
+0.6%
+2.4%
+976
+243
+Jayce
+D
+47.80%
+6.3%
+10.6%
+10,967
+244
+Rumble
+D
+47.74%
+1.8%
+0.8%
+3,167
+245
+Shaco
+D
+47.62%
+1.1%
+17.9%
+1,976
+246
+Mel
+D
+47.61%
+1.7%
+7.4%
+3,008
+247
+Varus
+B
+47.59%
+0.6%
+1.1%
+977
+248
+Jayce
+C
+47.41%
+0.8%
+10.6%
+1,312
+249
+Brand
+D
+47.34%
+2.2%
+2.4%
+3,739
+250
+Cassiopeia
+D
+47.28%
+1.3%
+1.3%
+2,208
+251
+Gnar
+D
+47.22%
+3.9%
+1.5%
+6,819
+252
+Rengar
+D
+47.18%
+4.1%
+6.1%
+7,056
+253
+Tristana
+C
+46.99%
+0.7%
+5.4%
+1,181
+254
+K'Sante
+D
+46.87%
+4.2%
+3.0%
+7,363
+255
+Pantheon
+C
+46.82%
+1.0%
+4.0%
+1,728
+256
+Ambessa
+C
+46.80%
+0.8%
+5.1%
+1,470
+257
+Zed
+D
+46.62%
+2.7%
+23.6%
+4,691
+258
+Sylas
+D
+46.57%
+1.2%
+19.4%
+2,085
+259
+Qiyana
+D
+46.44%
+6.9%
+16.5%
+11,965
+260
+Jayce
+D
+46.12%
+3.6%
+10.6%
+6,197
+261
+Camille
+C
+45.91%
+0.9%
+1.7%
+1,627
+262
+LeBlanc
+D
+45.91%
+0.8%
+23.2%
+1,370
+263
+Ezreal
+D
+45.77%
+13.5%
+4.6%
+23,390
+264
+Ashe
+C
+45.62%
+0.7%
+1.4%
+1,243
+265
+Master Yi
+D
+45.61%
+0.7%
+12.2%
+1,138
+266
+Locke
+D
+45.43%
+0.7%
+35.0%
+1,248
+267
+Smolder
+D
+41.86%
+0.5%
+1.3%
+927
+268
+Mel
+D
+39.02%
+0.8%
+7.4%
+1,430
+
+© 2017-2026 Outplayed Inc.
+
+U.GG Stats isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends.
+
+Links
+FAQ
+Careers
+Ads / Partnerships
+Terms
+Privacy Policy
+Terms of Service
+Privacy Preferences
+Socials
+Discord
+Twitter
+YouTube
+Instagram
+Facebook
+Our Brands
+Icy Veins
+The Sims Resource
+Addicting Games
+Fantasy Football Scout
+Pocket Gamer
+===== ugg-champions-top-1440.txt (rendered text at 1440, 5 Nov 2026)
+ARAM: MAYHEM
+NEW
+Augment Tiers Directly In Game
+Download Now
+League of Legends
+Valorant
+Rematch
+Deadlock
+World of Warcraft
+Helldivers 2
+Download Now
+NA
+Log In
+Try
+PLUS
+Free
+Download Now
+Unlock
+U.GG PLUS
+Tier List
+N
+Classic
+NEW
+N
+ARAM Mayhem
+NEW
+Champions
+Multisearch
+Leaderboards
+Live Games
+Items
+N
+Watch
+NEW
+News
+Probuild Stats
+Guest
+Logged Out
+LoL Tier List for Top, Emerald +
+Patch 26.22
+View Patch Notes
+Ranked Solo / Last Updated: 5 hours ago / 
+Champions Analyzed: 
+1,732,670
+The only Top Lane Tier list you need for the newest patch. Always up-to-date, U.GG takes a data science approach to the best top champions for Patch 26.22.
+Tier List
+Classic Tier List
+ARAM Tier List
+ARAM Mayhem
+Duo Tier List
+PLUS
+
+UPGRADE NOW TO UNLOCK YOUR OWN PERSONAL TIER LIST
+
+Start Your Free Trial
+Filters
+Emerald +
+Ranked Solo
+26.22
+World
+Show All
+Tier List
+The best champions for Top in patch 26.22
+S+
+Malphite
+51.8%WR
+11.9K games
+Gangplank
+51.6%WR
+8.6K games
+Darius
+51.1%WR
+12.9K games
+Sett
+51.5%WR
+10.2K games
+S
+Aatrox
+50.2%WR
+11.3K games
+Nasus
+50.0%WR
+6.0K games
+Mordekaiser
+50.3%WR
+8.9K games
+Illaoi
+50.8%WR
+4.3K games
+Shen
+52.2%WR
+6.3K games
+Fiora
+50.1%WR
+7.5K games
+Renekton
+50.3%WR
+10.9K games
+Kayle
+52.2%WR
+4.5K games
+Pantheon
+50.9%WR
+6.3K games
+Dr. Mundo
+50.9%WR
+5.9K games
+Kled
+52.2%WR
+3.0K games
+Singed
+52.2%WR
+3.7K games
+A
+Kennen
+51.6%WR
+3.1K games
+Heimerdinger
+51.5%WR
+2.0K games
+Zaahen
+50.9%WR
+6.2K games
+Gwen
+50.7%WR
+4.2K games
+Camille
+50.4%WR
+7.7K games
+Poppy
+51.4%WR
+1.6K games
+Wukong
+52.0%WR
+1.5K games
+Warwick
+51.1%WR
+2.4K games
+Lissandra
+52.3%WR
+954 games
+Quinn
+51.9%WR
+1.5K games
+Vladimir
+50.2%WR
+2.2K games
+Anivia
+50.9%WR
+1.2K games
+Click to Expand
+Rank
+Role
+Champion
+Tier
+Win Rate
+Pick Rate
+Ban Rate
+Counter Picks
+Matches
+1
+Zed
+S
+52.43%
+0.8%
+23.6%
+1,316
+2
+Lissandra
+A
+52.31%
+0.6%
+4.7%
+954
+3
+Kled
+S
+52.23%
+1.7%
+1.0%
+3,029
+4
+Singed
+S
+52.20%
+2.1%
+0.6%
+3,711
+5
+Shen
+S
+52.16%
+3.7%
+0.6%
+6,332
+6
+Kayle
+S
+52.15%
+2.6%
+1.3%
+4,533
+7
+Wukong
+A
+52.00%
+0.9%
+5.3%
+1,525
+8
+Zac
+A
+51.96%
+0.5%
+1.0%
+893
+9
+Quinn
+A
+51.87%
+0.8%
+0.5%
+1,471
+10
+Malphite
+S+
+51.78%
+6.9%
+17.7%
+11,921
+11
+Kennen
+A
+51.63%
+1.8%
+1.4%
+3,122
+12
+Gangplank
+S+
+51.62%
+4.9%
+11.5%
+8,562
+13
+Heimerdinger
+A
+51.53%
+1.1%
+2.3%
+1,956
+14
+Sett
+S+
+51.51%
+5.9%
+2.3%
+10,214
+15
+Poppy
+A
+51.35%
+0.9%
+4.2%
+1,550
+16
+Ornn
+S
+51.21%
+3.9%
+0.5%
+6,764
+17
+Darius
+S+
+51.14%
+7.4%
+12.4%
+12,856
+18
+Ryze
+B
+51.13%
+0.6%
+0.4%
+972
+19
+Warwick
+A
+51.13%
+1.4%
+1.2%
+2,392
+20
+Anivia
+A
+50.95%
+0.7%
+2.6%
+1,215
+21
+Zaahen
+A
+50.90%
+3.6%
+1.1%
+6,246
+22
+Dr. Mundo
+S
+50.89%
+3.4%
+1.9%
+5,932
+23
+Pantheon
+S
+50.86%
+3.7%
+4.0%
+6,325
+24
+Illaoi
+S
+50.78%
+2.5%
+4.3%
+4,271
+25
+Gwen
+A
+50.67%
+2.4%
+2.2%
+4,160
+26
+Swain
+B
+50.66%
+0.7%
+1.8%
+1,129
+27
+Camille
+A
+50.43%
+4.5%
+1.7%
+7,737
+28
+Renekton
+S
+50.32%
+6.3%
+4.3%
+10,928
+29
+Mordekaiser
+S
+50.26%
+5.1%
+6.6%
+8,886
+30
+Vladimir
+A
+50.23%
+1.3%
+5.0%
+2,200
+31
+Aatrox
+S
+50.21%
+6.5%
+7.6%
+11,266
+32
+Sion
+A
+50.15%
+3.8%
+0.8%
+6,503
+33
+Fiora
+S
+50.13%
+4.4%
+5.6%
+7,538
+34
+Nasus
+S
+50.02%
+3.4%
+9.5%
+5,954
+35
+Aurora
+B
+50.00%
+0.6%
+1.2%
+1,018
+36
+Teemo
+B
+49.95%
+3.6%
+6.0%
+6,240
+37
+Irelia
+A
+49.92%
+4.5%
+14.7%
+7,858
+38
+Urgot
+B
+49.70%
+2.0%
+0.7%
+3,521
+39
+Tryndamere
+B
+49.68%
+2.9%
+2.6%
+4,994
+40
+Yorick
+B
+49.65%
+2.7%
+5.2%
+4,753
+41
+Yone
+C
+49.56%
+7.6%
+14.3%
+13,193
+42
+Garen
+C
+49.53%
+6.0%
+3.8%
+10,326
+43
+Gragas
+B
+49.28%
+2.5%
+0.7%
+4,302
+44
+Ambessa
+D
+49.27%
+4.8%
+5.1%
+8,356
+45
+Cho'Gath
+C
+49.14%
+2.8%
+7.0%
+4,843
+46
+Riven
+B
+49.14%
+2.3%
+1.1%
+4,060
+47
+Olaf
+C
+49.10%
+2.9%
+4.3%
+5,051
+48
+Jax
+D
+49.05%
+5.8%
+10.3%
+10,082
+49
+Udyr
+B
+49.05%
+0.5%
+0.6%
+944
+50
+Maokai
+B
+48.85%
+0.6%
+0.2%
+1,126
+51
+Vayne
+B
+48.75%
+1.3%
+2.9%
+2,248
+52
+Akali
+D
+48.63%
+3.5%
+17.1%
+6,007
+53
+Yasuo
+D
+48.58%
+3.4%
+24.7%
+5,860
+54
+Tahm Kench
+C
+48.57%
+1.7%
+1.8%
+3,000
+55
+Trundle
+C
+48.55%
+1.7%
+0.4%
+2,974
+56
+Sylas
+C
+48.43%
+1.2%
+19.4%
+2,032
+57
+Volibear
+D
+48.20%
+3.6%
+1.5%
+6,226
+58
+Jayce
+D
+47.80%
+6.3%
+10.6%
+10,967
+59
+Rumble
+D
+47.74%
+1.8%
+0.8%
+3,167
+60
+Varus
+B
+47.59%
+0.6%
+1.1%
+977
+61
+Gnar
+D
+47.22%
+3.9%
+1.5%
+6,819
+62
+K'Sante
+D
+46.87%
+4.2%
+3.0%
+7,363
+63
+Master Yi
+D
+45.61%
+0.7%
+12.2%
+1,138
+
+© 2017-2026 Outplayed Inc.
+
+U.GG Stats isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends.
+
+Links
+FAQ
+Careers
+Ads / Partnerships
+Terms
+Privacy Policy
+Terms of Service
+Socials
+Discord
+Twitter
+YouTube
+Instagram
+Facebook
+Our Brands
+Icy Veins
+The Sims Resource
+Addicting Games
+Fantasy Football Scout
+Pocket Gamer
+===== ugg-matchup-1440.txt (rendered text at 1440, 5 Nov 2026)
+ARAM: MAYHEM
+NEW
+Augment Tiers Directly In Game
+Download Now
+League of Legends
+Valorant
+Rematch
+Deadlock
+World of Warcraft
+Helldivers 2
+Download Now
+NA
+Log In
+Try
+PLUS
+Free
+Download Now
+Unlock
+U.GG PLUS
+Tier List
+N
+Classic
+NEW
+N
+ARAM Mayhem
+NEW
+Champions
+Multisearch
+Leaderboards
+Live Games
+Items
+N
+Watch
+NEW
+News
+Probuild Stats
+Guest
+Logged Out
+S
+Ornn
+Top Build, Emerald +
+Patch 26.22
+P
+Q
+W
+E
+R
+Ornn with U.GG's best data for every build. The highest win rate Ornn build, from rune set to skill order to item path, for Top. LoL Patch 26.22
+Build
+ARAM
+ARAM Mayhem
+Counters
+Leaderboards
+Pro Builds
+More Stats
+Filters
+Rec.
+Emerald +
+vs.
+Darius
+More...
+51.3%
+Win Rate
+269
+Matches
+VS.
+Darius
+Auto-import the best builds, get live stat tracking, and scout your enemies.
+Download App
+Recommended
+Recommended
+Ornn Runes
+Ornn Top Build
+58.06% WR (62 Matches)
+Resolve
+Inspiration
+Summoner Spells
+49.48% WR (192 Matches)
+×
+The Icy Veins WoW App is Here!
+Class Guides, Tier Lists, Class Codex & More
+DOWNLOAD NOW
+Toughest Matchups
+These champions counter Ornn
+PLUS
+Personal Counters
+67%
+6 Games
+67%
+12 Games
+67%
+6 Games
+Poppy
+38.9%
+36 Matches
+Kennen
+39.6%
+53 Matches
+Shen
+40.5%
+163 Matches
+Gwen
+43%
+172 Matches
+Singed
+43.1%
+72 Matches
+Camille
+44.7%
+197 Matches
+Olaf
+45.7%
+94 Matches
+Tryndamere
+46.4%
+84 Matches
+Mordekaiser
+47.2%
+212 Matches
+Fiora
+47.9%
+169 Matches
+Skill Priority
+W
+Q
+E
+56% WR
+100 Matches
+Skill PathMost popular ability leveling order
+Q
+Volcanic Rupture
+1
+8
+10
+12
+13
+W
+Bellows Breath
+2
+4
+5
+7
+9
+E
+Searing Charge
+3
+14
+15
+17
+18
+R
+Call of the Forge God
+6
+11
+16
+P
+Living Forge
+Starting Items
+52.6% WR
+173 Matches
+Best for most matchups
+Core Items
+57.14% WR
+14 Matches
+Build this every game
+Fourth Item Options
+62.31% WR
+918 Matches
+57.88% WR
+539 Matches
+Options after core build
+Fifth Item Options
+60.66% WR
+183 Matches
+57.46% WR
+181 Matches
+67.26% WR
+113 Matches
+Sixth Item Options
+55.56% WR
+27 Matches
+75% WR
+20 Matches
+72.22% WR
+18 Matches
+Role Quest
+Extra power for the late game in top lane
+
+Total Points
+
+1200
+
+Kills
+
+15
+
+Minions
+
+1
+
+Plates
+
+20
+
+Towers
+
+25
+
+Epic Monsters
+
+30
+
+Earn more points while in the top lane.
+Role Rewards
+Ornn top quest completion goal: 12:31
+Completing this quest will grant: an upfront flat amount of experience, bonus flat experience on champion takedowns, increased experience gain from all other sources, and increased level cap of up to 20. It will also grant an upgraded version of  Teleport or if it wasn't selected as a Summoner Spell it will grant Teleport as a third Summoner Spell.
+Advertisement
+Go Ad-Free
+
+© 2017-2026 Outplayed Inc.
+
+U.GG Stats isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends.
+
+Links
+FAQ
+Careers
+Ads / Partnerships
+Terms
+Privacy Policy
+Terms of Service
+Socials
+Discord
+Twitter
+YouTube
+Instagram
+Facebook
+Our Brands
+Icy Veins
+The Sims Resource
+Addicting Games
+Fantasy Football Scout
+Pocket Gamer
+===== ugg-ornn-matchups-1440.txt (rendered text at 1440, 5 Nov 2026)
+ARAM: MAYHEM
+NEW
+Augment Tiers Directly In Game
+Download Now
+League of Legends
+Valorant
+Rematch
+Deadlock
+World of Warcraft
+Helldivers 2
+Download Now
+NA
+Log In
+Try
+PLUS
+Free
+Download Now
+Unlock
+U.GG PLUS
+Tier List
+N
+Classic
+NEW
+N
+ARAM Mayhem
+NEW
+Champions
+Multisearch
+Leaderboards
+Live Games
+Items
+N
+Watch
+NEW
+News
+Probuild Stats
+Guest
+Logged Out
+S
+Ornn
+Counter for Top
+Patch 26.22
+P
+Q
+W
+E
+R
+Use win rate and GD15 to find the best Top Lane champion who counters Ornn. Win Champion Select with Ornn counters for LoL S16 Patch 26.22. Main Role Order: Top Lane > Support > Mid Lane > Jungle > ADC
+Build
+ARAM
+ARAM Mayhem
+Counters
+Leaderboards
+Pro Builds
+More Stats
+Filters
+Emerald +
+Ranked Solo
+26.22
+World
+Best Picks vs Ornn
+These picks are strong against Ornn at many stages of the game. Champs listed by highest win rate matchups vs Ornn in World Emerald +.
+Poppy
+61.11% WR
+36 games
+Kennen
+60.38% WR
+53 games
+Shen
+59.51% WR
+163 games
+Gwen
+56.98% WR
+172 games
+Singed
+56.94% WR
+72 games
+Camille
+55.33% WR
+197 games
+Olaf
+54.26% WR
+94 games
+Tryndamere
+53.57% WR
+84 games
+Mordekaiser
+52.83% WR
+212 games
+Fiora
+52.07% WR
+169 games
+Aatrox
+51.96% WR
+179 games
+Dr. Mundo
+51.88% WR
+133 games
+Garen
+51.37% WR
+183 games
+Trundle
+51.02% WR
+98 games
+Kayle
+51% WR
+100 games
+Nasus
+50% WR
+118 games
+Jax
+50% WR
+126 games
+Riven
+50% WR
+68 games
+Warwick
+50% WR
+48 games
+Jayce
+49.77% WR
+217 games
+Illaoi
+49.5% WR
+101 games
+Volibear
+48.87% WR
+133 games
+Sion
+48.74% WR
+119 games
+Darius
+48.7% WR
+269 games
+Irelia
+48.08% WR
+104 games
+K'Sante
+48.03% WR
+127 games
+Gangplank
+47.62% WR
+147 games
+Kled
+47.54% WR
+61 games
+Rumble
+47.44% WR
+78 games
+Vayne
+47.37% WR
+57 games
+Yone
+47.29% WR
+277 games
+Gnar
+47.22% WR
+144 games
+Sett
+47.19% WR
+231 games
+Akali
+46.73% WR
+107 games
+Ambessa
+46.48% WR
+142 games
+Malphite
+46.12% WR
+232 games
+Zaahen
+45.16% WR
+124 games
+Sylas
+44.12% WR
+34 games
+Cho'Gath
+44.09% WR
+93 games
+Pantheon
+44.07% WR
+118 games
+Yasuo
+43.75% WR
+80 games
+Urgot
+42.65% WR
+68 games
+Teemo
+41.38% WR
+145 games
+Renekton
+41.31% WR
+213 games
+Yorick
+40.38% WR
+104 games
+Gragas
+38.38% WR
+99 games
+Tahm Kench
+32.31% WR
+65 games
+Worst Picks vs Ornn
+These picks are weak against Ornn at many stages of the game. Champs listed by lowest win rate matchups vs Ornn in World Emerald +.
+Tahm Kench
+32.31% WR
+65 games
+Gragas
+38.38% WR
+99 games
+Yorick
+40.38% WR
+104 games
+Renekton
+41.31% WR
+213 games
+Teemo
+41.38% WR
+145 games
+Urgot
+42.65% WR
+68 games
+Yasuo
+43.75% WR
+80 games
+Pantheon
+44.07% WR
+118 games
+Cho'Gath
+44.09% WR
+93 games
+Sylas
+44.12% WR
+34 games
+Zaahen
+45.16% WR
+124 games
+Malphite
+46.12% WR
+232 games
+Ambessa
+46.48% WR
+142 games
+Akali
+46.73% WR
+107 games
+Sett
+47.19% WR
+231 games
+Gnar
+47.22% WR
+144 games
+Yone
+47.29% WR
+277 games
+Vayne
+47.37% WR
+57 games
+Rumble
+47.44% WR
+78 games
+Kled
+47.54% WR
+61 games
+Gangplank
+47.62% WR
+147 games
+K'Sante
+48.03% WR
+127 games
+Irelia
+48.08% WR
+104 games
+Darius
+48.7% WR
+269 games
+Sion
+48.74% WR
+119 games
+Volibear
+48.87% WR
+133 games
+Illaoi
+49.5% WR
+101 games
+Jayce
+49.77% WR
+217 games
+Nasus
+50% WR
+118 games
+Jax
+50% WR
+126 games
+Riven
+50% WR
+68 games
+Warwick
+50% WR
+48 games
+Kayle
+51% WR
+100 games
+Trundle
+51.02% WR
+98 games
+Garen
+51.37% WR
+183 games
+Dr. Mundo
+51.88% WR
+133 games
+Aatrox
+51.96% WR
+179 games
+Fiora
+52.07% WR
+169 games
+Mordekaiser
+52.83% WR
+212 games
+Tryndamere
+53.57% WR
+84 games
+Olaf
+54.26% WR
+94 games
+Camille
+55.33% WR
+197 games
+Singed
+56.94% WR
+72 games
+Gwen
+56.98% WR
+172 games
+Shen
+59.51% WR
+163 games
+Kennen
+60.38% WR
+53 games
+Poppy
+61.11% WR
+36 games
+Best Lane Counters vs Ornn
+These picks counter Ornn during early game laning phase. Highest gold differential at 15 (GD@15) vs Ornn in World Emerald +.
+Illaoi
++1475 GD15
+101 games
+Irelia
++1318 GD15
+104 games
+Tryndamere
++857 GD15
+84 games
+Yorick
++806 GD15
+104 games
+Mordekaiser
++758 GD15
+212 games
+Fiora
++753 GD15
+169 games
+Volibear
++750 GD15
+133 games
+K'Sante
++698 GD15
+127 games
+Darius
++659 GD15
+269 games
+Warwick
++635 GD15
+48 games
+Aatrox
++628 GD15
+179 games
+Kled
++626 GD15
+61 games
+Yone
++606 GD15
+277 games
+Ambessa
++579 GD15
+142 games
+Gnar
++541 GD15
+144 games
+Garen
++501 GD15
+183 games
+Poppy
++496 GD15
+36 games
+Jax
++496 GD15
+126 games
+Gangplank
++434 GD15
+147 games
+Zaahen
++432 GD15
+124 games
+Sett
++427 GD15
+231 games
+Riven
++403 GD15
+68 games
+Olaf
++399 GD15
+94 games
+Jayce
++389 GD15
+217 games
+Gwen
++386 GD15
+172 games
+Pantheon
++365 GD15
+118 games
+Camille
++360 GD15
+197 games
+Yasuo
++353 GD15
+80 games
+Akali
++330 GD15
+107 games
+Sion
++327 GD15
+119 games
+Renekton
++318 GD15
+213 games
+Urgot
++306 GD15
+68 games
+Kennen
++299 GD15
+53 games
+Tahm Kench
++247 GD15
+65 games
+Trundle
++246 GD15
+98 games
+Teemo
++172 GD15
+145 games
+Sylas
++151 GD15
+34 games
+Singed
++127 GD15
+72 games
+Rumble
++99 GD15
+78 games
+Cho'Gath
++86 GD15
+93 games
+Dr. Mundo
++25 GD15
+133 games
+Gragas
+-20 GD15
+99 games
+Vayne
+-25 GD15
+57 games
+Kayle
+-60 GD15
+100 games
+Nasus
+-93 GD15
+118 games
+Shen
+-176 GD15
+163 games
+Malphite
+-397 GD15
+232 games
+
+© 2017-2026 Outplayed Inc.
+
+U.GG Stats isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends.
+
+Links
+FAQ
+Careers
+Ads / Partnerships
+Terms
+Privacy Policy
+Terms of Service
+Socials
+Discord
+Twitter
+YouTube
+Instagram
+Facebook
+Our Brands
+Icy Veins
+The Sims Resource
+Addicting Games
+Fantasy Football Scout
+Pocket Gamer
+===== ugg-patch-1440.txt (rendered text at 1440, 5 Nov 2026)
+ARAM: MAYHEM
+NEW
+Augment Tiers Directly In Game
+Download Now
+League of Legends
+Valorant
+Rematch
+Deadlock
+World of Warcraft
+Helldivers 2
+Back to News
+Patch 26.22 Notes – League of Legends
+
+Looks like Mel is getting another kit overhaul, and three Champions are being added to Classic!
+
+U.GG
+
+Posted Tuesday, November 3 2026
+
+Patch 26.22 notes for League of Legends are here. (Source)
+
+TFT Standalone Client
+
+Hooray! TFT is all grown up! They’re officially moving to their own standalone client starting on November 4th, 2026. To accommodate their new home, you can expect this patch to be larger than usual. We are making sure that it’s as easy as clicking a button to swap between League of Legends and Teamfight Tactics whenever you want. 
+
+Despite this upcoming separation, all existing Teamfight Tactics cosmetics will remain usable in League. The first batch of TFT-only Little Legends will arrive on December 1st, with December 15th marking the date of full separation for TFT cosmetics including emotes and icons. 
+
+After this patch, you’ll be able to fully opt out of TFT downloads in League patches. To make this possible, 26.22 will be a larger download than usual. For more information, read more here and we’ll see (some of) you on the Convergence!
+
+Champions
+Aurelion Sol
+See Highest Win Rate Aurelion Sol Builds
+The majority of Aurelion Sol players have made it pretty clear that they would much rather rank up his Singularity (E) second over his Astral Flight (W) even though it’s a much weaker second max. We agree that his (E) is a very cool signature spell, so we’re giving him a buff there to help make doing the intuitive fun thing the right thing.
+E – Singularity
+Total Magic Damage: 50 / 75 / 100 / 125 / 150 (+60% AP) over 5s ⇒ 50 / 80 / 110 / 140 / 170 (+60 / 65 / 70 / 75 / 80% AP) over 5s
+Corki
+See Highest Win Rate Corki Builds
+We were cautious about Corki’s power level going into Worlds, but now (like Azir and Orianna), he has some more space to be better for everyone.
+R – Missile Barrage
+Damage: 90 / 170 / 250 (+85% bonus AD) ⇒ 100 / 190 / 280 (+90% bonus AD)
+Big One Damage: 180 / 340 / 500 (+170% bonus AD) ⇒ 200 / 380 / 560 (+180% bonus AD)
+Kayle
+See Highest Win Rate Kayle Builds
+We’ve seen Kayle’s relevance decrease steadily from earlier this year as the game’s moved past the top lane shake up from role quests. We’re giving her a small bump to help out her early laning since we believe that top lane could use some more scaling options.
+Q – Radiant Blast
+Cooldown: 12 / 11 / 10 / 9 / 8s ⇒ 10 / 9.5 / 9 / 8.5 / 8s
+R – Divine Judgment
+Cooldown: 160 / 120 / 80s ⇒ 140 / 110 / 80s
+Locke
+While Locke’s performance in general is within reason, he’s proven to be a much deeper champion than we initially expected and players who have reached that level of Locke play have shown him to still be clearly too strong, especially early game.
+Q – Ritual Nails
+Stack Bonus Damage: 18 / 26 / 34 / 42 / 50 ⇒ 15 / 22 / 29 / 36 / 43
+Maximum Stack Damage: 75.6 / 109.2 / 142.8 / 176.4 / 210 ⇒ 63 / 92.4 / 121.8 / 151.2 / 180.6
+W – Soul Ignition
+Duration: 6s ⇒ 5s
+Maokai
+See Highest Win Rate Maokai Builds
+Maokai has remained a very still tree this year, and has been almost entirely stuck in support. We’re buffing him in a way that helps out his top and jungle more.
+Q – Bramble Smash
+Damage: 75 / 120 / 165 / 210 / 255 (+2 / 2.5 / 3 / 3.5 / 4% Target Maximum Health) (+50% AP) ⇒ 75 / 120 / 165 / 210 / 255 (+2.5 / 3 / 3.5 / 4 / 4.5% Target Maximum Health) (+50% AP)
+Mel
+See Highest Win Rate Mel Builds
+This patch, Mel is getting a midscope adjustment. You can read more about it here. For the spark notes version, she is having some power moved from early game to scaling, her W is being reworked into an Area-of-Effect missile destruction that retaliates rather than reflects effects, and her Q and R are getting adjustments to lower their cooldowns later on in the game so she can stack her passive to ever higher amounts.
+Base Stats
+Health: 640 + 99/Level ⇒ 590 + 107/Level
+Mana: 480 + 28/Level ⇒ 455 + 38/Level
+AR: +5.2/Level ⇒ +5.4/Level
+AD: 54 + 3.3/Level ⇒ 52 + 3.3/Level
+AS: 2.5%/Level ⇒ 2.75%/Level
+Passive – Searing Brilliance
+Bonus Damage Per Bolt: 8 – 30 (+4% AP) ⇒ 4 – 30 (+4% AP)
+First Stack Damage Against Minions: 50% Less ⇒ 45% Less
+Q – Radiant Volley
+First Hit Damage: 60 / 85 / 110 / 135 / 160 (+55% AP) ⇒ 60 (+25% AP)
+Multi-Hit Damage: 5 / 7 / 9 / 11 / 13 (+5% AP) ⇒ 5 / 10 / 15 / 20 / 25 (+8% AP)
+Total Damage: 85 – 277 (+80 – 100% AP) ⇒ 85 – 285 (+65 – 97% AP)
+New – Now Refunds CD it hits an enemy champion at least once: 0.5s – 1.0s Refund (scaling with Champion Level)
+Mana Cost: 70 / 75 / 80 / 85 / 90 ⇒ 60 / 65 / 70 / 75 / 80
+Missile Speed: 3800 ⇒ 3200 (takes .047s longer to travel to max range)
+W – Rebuttal – Reworked
+Unleashes a nova that expands to 400u Radius over 0.75 seconds. The nova destroys enemy projectiles and shields and grants move speed to Mel and Allies within. Destroyed missiles are retaliated against at the end of the nova.
+Retaliation Damage: 35 / 40 / 45 / 50 / 55 (+10% AP), reduced to 5 / 10 / 15 / 20 / 25 (+5% AP) for subsequent hits against the same enemy, up to 7 retaliations per enemy for a total of 65 – 205 (+40% AP)
+Shield: 80 / 110 / 140 / 170 / 200 (+70% AP) for 2 seconds
+Move Speed: 10 – 30% (scaling with Champion Level) for 2 seconds
+Mana Cost: 100 / 80 / 60 / 40 / 0
+Cooldown: 30 / 28.5 / 27 / 25.5 / 24
+E – Solar Snare
+Root Duration: 1.5 seconds ⇒ [0.8 – 1.6] / [0.85 – 1.75] / [0.9 – 1.9] / [0.95 – 2.05] / [1.0 – 2.2] seconds, increasing with distance
+Slow Amount: 30% ⇒ 20 / 25 / 30 / 35 / 40%
+Mana Cost: 50 / 60 / 70 / 80 / 90 ⇒ 40 / 50 / 60 / 70 / 80
+R – Golden Eclipse
+Cooldown: 120 / 100 / 80 seconds ⇒ 120 / 90 / 60 seconds
+Naafiri
+See Highest Win Rate Naafiri Builds
+After a series of nerfs earlier this year, Naafiri has largely fallen out of mid lane entirely and has been pretty mediocre in the jungle. We’re giving her a buff that should primarily help out her mid, bringing her role power closer to parity.
+Q – Darkin Daggers
+Heal: 45 / 60 / 75 / 90 / 105 (+40% bonus AD) ⇒ 55 / 70 / 85 / 100 / 115 (+45% bonus AD)
+W – The Call of the Pack
+Bonus Attack Damage: 20% ⇒ 22%
+Rumble
+See Highest Win Rate Rumble Builds
+Similar to Corki, Rumble was tuned for pro play. This change should help out the average rumble a bit more than pros when they catch back up to the patch cycle.
+R – The Equalizer
+Damage per Second: 120 / 200 / 280 (+35% AP) ⇒ (+40% AP)
+Maximum Damage Ability Power Ratio: 175% AP ⇒ 200% AP
+Shen
+See Highest Win Rate Shen Builds
+Along with Maokai, Shen jungle has been pushed too far out of the meta. We were watching to see if some of the previous patches’ changes to help jungle tanks would bring him back up, but now we’re confident we can just buff him .
+Q – Twilight Assault
+Monster Damage Modifier: 100 / 125 / 150 / 175 / 200 ⇒ 120 / 140 / 160 / 180 / 200
+Smolder
+See Highest Win Rate Smolder Builds
+Our buffs a few patches ago landed a bit softer than we expected, but he’s ended up with a good balance between his Crit and Caster builds, so we’re giving him a more generic buff this time. We also expect the Doran’s Bow nerf in this patch to help him out a bit.
+W – ACHOOO!
+Explosion Damage: 10 / 35 / 60 / 85 / 110 (+50% bonus AD) (+80% AP) ⇒ 25 / 50 / 75 / 100 / 125 (+50% bonus AD) (+80% AP)
+Thresh
+See Highest Win Rate Thresh Builds
+Despite our prior nerf, Thresh has remained at the very top of the support pecking order for top tier players, so it’s time for another.
+Base Stats
+Attack Damage: 56 ⇒ 54
+R – The Box
+Damage: 250 / 400 / 550 (+100% AP) ⇒ 200 / 350 / 500 (+100% AP)
+Viktor
+See Highest Win Rate Viktor Builds
+Last patch’s nerf to Viktor hit him harder than we expected – but we are happy about the impact it had on his early game bullying, so we are buffing him back in scaling.
+Base Stats
+Health Growth: 100/Level ⇒ 105/Level
+R – Arcane Storm
+Conjure Damage: 100 / 175 / 250 (+50% AP) ⇒ 100 / 175 / 250 (+60% AP)
+Yasuo
+See Highest Win Rate Yasuo Builds
+We were on the fence last patch with whether Yasuo would also need a nerf like Yone, but he’s also continued growing in winrate as players migrate to crit builds and banrate reflecting that so he’s getting the same treatment.
+Q – Steel Tempest
+Damage: 20 / 45 / 70 / 95 / 120 (+105% total AD) ⇒ 20 / 45 / 70 / 95 / 120 (+100% total AD)
+Zaahen
+See Highest Win Rate Zaahen Builds
+Zaahen is living up to his scaling fantasies, but hasn’t had enough to do in lane. This should make his early scrapping and skirmishing much more satisfying.
+Q – The Darkin Glaive
+Cooldown: 10 / 9 / 8 / 7 / 6s
+⇒ 8 / 7.5 / 7 / 6.5 / 6s
+Items
+Doran’s Bow
+
+We’re nerfing Doran’s Bow by a minor amount, as it’s settled into a spot that is slightly but clearly too strong, resulting in marksmen that we expect to be leaning towards Doran’s Blade instead being almost purely Doran’s Bow users.
+
+Attack Damage: 8 ⇒ 7
+Overlord’s Bloodmail
+
+Overlord’s should be one of the premier juggernaut capstone items, but outside of Sett hasn’t been able to carry enough power to justify greeding for. We are adjusting Overlords in a way that should be a net buff for most other users while hopefully not ballooning its power level too far on Sett, who benefits the most from the Retribution passive because of synergy with his Haymaker (W).
+
+Attack Damage: 30 ⇒ 40
+Retribution: +0 – 12% total AD, based on % Missing Health ⇒ +0 – 10% total AD, based on % Missing Health
+Classic Patch Notes
+
+Our penultimate content patch arrives with three new old champions to play. Up first, winner of Council Vote #2, Volibear! Run down your enemies, fear nearby minions, and take a bite out of crime. Swain also makes his re-entrance, full of bird-fueled mayhem. And finally, Elise, while not particularly different, has a lot of single-target damage with which to lay waste to her opposition. 
+
+We’ve also got a bigger balance patch than usual, taking aim at some of the game’s largest outliers on both the top and bottom end. Yes, Janna, your time has come.
+
+NEWVolibear
+This version of Volibear was active from 2011 to 2018, before his E got the knock-back and anti-dash synergy. He’s a tanky melee fighter who excels in sustained combat before finally dealing a significant burst of damage to low-health enemies.
+Passive – Chosen of the Storm: When reduced to low health, Volibear heals for a portion of his maximum health over time. This effect has a long cooldown.
+Q – Rolling Thunder: Volibear gains bonus movement speed, increased while running toward enemy champions. His next attack deals bonus damage and flips his target over his head.
+W – Frenzy: Volibear passively gains stacking bonus attack speed on-attack. While at max stacks, Frenzy can be activated to deal high single-target damage, increased based on their missing health.
+E – Majestic Roar: Volibear damages and slows nearby enemies. Minions and monsters are additionally feared.
+R – Thunder Claws: Volibear harnesses the power of the storm for several seconds, causing all basic attacks to inflict chain lightning.
+NEWSwain
+This version of Swain was active from 2010-2016, where he received a minor rework. If you never experienced the glory of the Laser Bird, now is your time!
+Passive – Carrion Renewal: Swain recoups some mana every time he kills an enemy.
+Q – Decrepify: Swain sics his raven on a target enemy, slowing and dealing damage over time while they remain in range.
+W – Nevermove: After a brief delay, Swain damages and roots all enemies in a small area.
+E – Torment: Swain afflicts an enemy with Torment, dealing damage over time and causing them to take increased damage from him. Unlike most other damage amps, this also impacts true damage, like Ignite.
+R – Ravenous Flock: Swain transforms into a giant raven, consuming increasing amounts of mana while transformed. In this state, he releases lesser ravens to damage enemies and return to heal Swain based on the damage they dealt.
+NEWElise
+Elise hasn’t changed too much over the years, but this older version put a lot more power into her Q spells. She is seriously bursty and an incredibly potent top laner with all her health-based damage. Make sure to stack some magic pen!
+Passive – Spider Swarm: While in human form, abilities that hit enemies store a Spiderling, up to a cap. In spider form, Elise releases these Spiderlings to attack nearby enemies.
+Q – Neurotoxin / Venomous Bite: In human form, Elise spits neurotoxin that deals bonus damage based on her target’s current health. In spider form, Elise and her Spiderlings lunge at an enemy and deal bonus damage based on their target’s missing health.
+W – Volatile Spiderling / Skittering Frenzy: In human form, Elise releases a volatile spiderling that explodes on the first enemy it hits, dealing damage in an area. In spider form, Elise and her Spiderlings gain bonus attack speed and heal Elise on-hit.
+E – Cocoon / Rappel: In human form, Elise fires a cocoon that stuns the first enemy it hits. In spider form, Elise and her Spiderlings rappel into the air, becoming untargetable. She can then re-cast Rappel to descend upon her choice of target.
+R – Human Form / Spider Form: Elise transforms back and forth between human form and spider form. In human form she’s ranged. In spider form, she is melee and deals bonus damage on-hit.
+Aatrox
+We didn’t update Aatrox’s passive cooldown properly in the last patch and an unrelated bug slipped in that prevented him from doing anything with his ultimate-empowered attacks. We fixed the auto-attack bug with a day-1 micropatch but the cooldown change was tooltip only until now.
+P – Blood Well
+Cooldown: 225 ⇒ 225/200/175/150 (for real this time)
+Q – Dark Flight
+Failure to Land: Fixed a bug from 2013 where the ability would occasionally fail to affect enemies after max-range casts.
+R – Massacre
+Attacks: Fixed a bug where Aatrox’s basic attacks did nothing during his ultimate. (Fixed in a day-1 micropatch)
+Amumu
+With bug fixes and balance changes combined, Amumu has wound up as one of the game’s strongest junglers. We’re here to tap him back down to where a straightforward fast-farming jungler is meant to rest. We’re reverting some of our earlier buffs and pulling another one from history to bring down his team-wiping AoE power.
+Passive – Cursed Touch
+Magic Resistance Shred: 15 / 25 / 35 ⇒ 15 / 20 / 25 (Levels 1 / 7 / 13)
+Q – Bandage Toss
+Damage: 80 / 140 / 200 / 260 / 320 ⇒ 80 / 130 / 180 / 230 / 280
+R – Curse of the Sad Mummy
+Cooldown: 150 / 130 / 110s ⇒ 170 / 145 / 120s
+Evelynn
+Evelynn has fallen off as time went on and now looks like one of the weaker junglers, so we’re here to give her a boost. We’re undoing her Hate Spike damage nerf to ensure she can keep up with everyone else.
+Q – Hate Spike
+Base Damage: 40 / 55 / 70 / 85 / 100 ⇒ 40 / 60 / 80 / 100 / 120
+Ezreal
+AP Ezreal has never quite hit the mark so it’s time for buffs. As AD Ezreal is doing just fine, we’re delivering simple AP ratio buffs and playing up his healer alternate playstyle since it’s so unique to this version of the champion.
+W – Essence Flux
+Ability Power Ratio: 60% ⇒ 80%
+Healing Effectiveness: 50% ⇒ 70%
+E – Arcane Shift
+Ability Power Ratio: 75% ⇒ 80%
+Fiddlesticks
+Fiddlesticks, like any good scarecrow, is outstanding in his field. Well, fields. He’s a great jungler and support, so we’re going to prune some power from both. With how much his E’s mana cost goes up with rank, we want to make sure ranking it is valuable, but he otherwise outputs too much damage too quickly.
+E – Dark Wind
+Damage per Bounce: 65 / 85 / 105 / 125 / 145 + 45% AP ⇒ 50 / 75 / 100 / 125 / 150 + 45% AP
+Gangplank
+Gangplank is still one of the game’s weakest top laners and junglers, so we’re back for more buffs. While some of these may feel a little scattershot, they’re all period-accurate buffs and reverted-nerfs from before his subsequent 2015 rework. The only novel changes here are to his base stats, where we hope to make him more resilient and allow him to play bruiser builds in addition to crit burst.
+Base Stats
+Base Health Regeneration: 5 ⇒ 7
+Health per Level: 81 ⇒ 89
+Passive – Grog-Soaked Blade
+Maximum Stacks: 3 ⇒ 4
+Q – Parrrley
+Mana Cost: 50 / 55 / 60 / 65 / 70 ⇒ 40 / 45 / 50 / 55 / 60
+R – Cannon Barrage
+Cooldown: 120 / 115 / 110s ⇒ 120 / 110 / 100s
+Janna
+Janna has been an extreme top performer for a while so it’s time to bring her down to size. We aim to keep her global passive intact, but want to make sure it’s not so dominant that it crushes other lanes’ interactions.
+Passive – Tailwind
+Global Bonus Movement Speed: 3% ⇒ 2%
+Mordekaiser
+Mordekaiser had a few bugs when he came out last patch, and while we fixed many of them in a micropatch, some of them took a while. Here’s a full recounting of bugfixes from our micropatches and the ones coming out today.
+Base Stats
+Attack Timing: Attacks now come out approximately 70% faster. This was fixed about 1 week after his release
+R – Children of the Grave
+Pet Bonus Attack Damage: 75% of the target’s Attack Damage ⇒ 75% of Mordekaiser’s Attack Damage
+Structure Crits: Pets no longer can critically strike structures.
+Bonus Damage to Inhibitors and the Nexus: 75% (This was true in 2013, too!) ⇒ 0%
+Nami
+Nami didn’t make the cut for buffs in her initial patch but as time has gone on, she’s floundering. She doesn’t have any historical buffs or nerfs to key into before the Preseason Four support update, so we’re creating some novel changes. In the interest of experimentation, we’re playing up her ability to deal a lot of damage if she can land everything and optimize for it. And hey, how about Mid Nami?
+Q – Aqua Prison
+Damage: 75 / 130 / 185 / 240 / 295 + 65% AP ⇒ 90 / 145 / 200 / 255 / 310 + 100% AP
+W – Ebb and Flow
+Damage Reduction per Bounce: 30% ⇒ 15% (Healing reduction unchanged at 15%)
+Olaf
+Olaf hasn’t quite kept up with other top laners or junglers so we want to play up his strong sustained damage. As with most of our balance changes, we’re digging up changes from his 2011 and 2012 history.
+W – Vicious Strikes
+Bonus Attack Damage: 7 / 14 / 21 / 28 / 35 ⇒ 10 / 17 / 24 / 31 / 38
+E – Reckless Swing
+Cooldown: 9 / 8 / 7 / 6 / 5s ⇒ 8 / 7 / 6 / 5 / 4s
+Rammus
+Rammus is the third of the top-performing junglers, so we’re digging up his past to bring him down to size. The armor nerf should do most of the heavy lifting here, as it impacts both his attack damage and W return damage.
+Base Stats
+Base Armor: 28.8 ⇒ 25
+Attack Damage per Level: 3.5 ⇒ 2.75
+Items
+Health and Mana Potions
+Bug Fix: Fixed a bug where Health and Mana Potions had no buff text.
+Shushei’s Mana Jug
+Bug Fix: Fixed a bug where Shushei’s Mana Jug triggered on Clone takedown.
+Statikk Shiv
+Bug Fix: Fixed a bug where Statikk Shiv no longer procced for Kayle after using Righteous Fury (E).
+Wit’s End
+Bug Fix: Fixed a bug where Wit’s End failed to maintain 4 stacks.
+
+© 2017-2026 Outplayed Inc.
+
+U.GG Stats isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot products.
+
+Links
+FAQ
+Careers
+Ads / Partnerships
+Terms
+Privacy Policy
+Terms of Service
+Socials
+Discord
+Twitter
+YouTube
+Instagram
+Facebook
+Our Brands
+Icy Veins
+The Sims Resource
+Addicting Games
+Fantasy Football Scout
+Pocket Gamer

@@ -1,0 +1,4333 @@
+===== opgg-champions-1440.txt (rendered text at 1440, 5 Nov 2026)
+Privacy
+Stats
+League of Legends
+Desktop
+Games
+New
+Duo
+TalkG
+Esports
+Gigs
+Streamer Overlay
+New
+EN
+Sign in
+EUW
+Search a summoner
+Game name + #EUW
+🏆 Rank Up in 3 Days! Challenger Coaching
+🏆 Rank Up in 3 Days! Challenger Coaching
+Home
+Champions
+N
+Game modes
+Leaderboards
+N
+Spectate
+Stats
+Multi-search
+Information
+Media
+N
+Lessons
+Download app
+Ranked Solo/Duo Champion Tier List for all roles,  Emerald +, Patch 16.22
+
+Ranked Solo/Duo tier information for LoL patch 16.22 is updated in real-time. Champion analysis provides you with builds, runes, items, and skill tips to help you improve your win rate!
+
+Last updated:
+15 minutes ago
+Total analyzed samples :
+1,610,269
+Search a champion
+Recent champions
+All Servers
+North America Server (NA)
+Middle East Server (ME)
+Europe West Server (EUW)
+Europe Nordic & East Server (EUNE)
+Oceania Server (OCE)
+Korea Server (KR)
+Japan Server (JP)
+Brazil Server (BR)
+Latin America South Server (LAS)
+Latin America North Server (LAN)
+Russia Server (RU)
+Türkiye Server (TR)
+Southeast Asia Server (SEA)
+Taiwan Server (TW)
+Vietnam Server (VN)
+All Servers
+All tiers
+Challenger
+Grandmaster
+Master +
+Master
+Diamond +
+Diamond
+Emerald +
+Emerald
+Platinum +
+Platinum
+Gold +
+Gold
+Silver
+Bronze
+Iron
+Emerald +
+Patch 16.22
+Patch 16.21
+Patch 16.22
+Ranked Solo/Duo
+ARAM: Mayhem
+Classic
+N
+Arena
+Today's hot
+Show more
+Like this feature?
+What is the champion with the highest win rate?
+What is the champion with the highest pick rate?
+How is Warwick doing?
+All
+Top
+Jungle
+Middle
+Bottom
+Support
+Rank
+	
+Champion
+	Tier	Role	Win rate	Pick rate	
+Ban rate
+Weak against
+
+
+1
+	
+Aurelion Sol
+	
+	
+	56.84%	0.83%	0.76%	
+
+
+2
+	
+Vel'Koz
+	
+	
+	56.49%	0.86%	1.83%	
+
+
+3
+	
+Ekko
+	
+	
+	53.29%	4.82%	2.84%	
+
+
+4
+	
+Shen
+	
+	
+	52.73%	3.57%	0.70%	
+
+
+5
+	
+Rell
+	
+	
+	52.61%	4.20%	1.47%	
+
+
+6
+	
+Janna
+	
+	
+	52.47%	4.61%	1.17%	
+
+
+7
+	
+Shyvana
+	
+	
+	52.45%	3.52%	3.86%	
+
+
+8
+	
+Rakan
+	
+	
+	52.37%	4.82%	0.41%	
+
+
+9
+	
+Briar
+	
+	
+	52.36%	4.07%	8.02%	
+
+
+10
+	
+Malphite
+	
+	
+	52.35%	6.88%	17.91%	
+
+
+11
+	
+Warwick
+	
+	
+	52.17%	2.75%	1.49%	
+
+
+12
+	
+Leona
+	
+	
+	52.04%	8.34%	9.34%	
+
+
+13
+	
+Xayah
+	
+	
+	52.00%	8.41%	3.70%	
+
+
+14
+	
+Bel'Veth
+	
+	
+	51.93%	2.59%	3.94%	
+
+
+15
+	
+Vladimir
+	
+	
+	51.85%	3.84%	6.18%	
+
+
+16
+	
+Blitzcrank
+	
+	
+	51.73%	7.80%	16.11%	
+
+
+17
+	
+Katarina
+	
+	
+	51.70%	6.47%	12.08%	
+
+
+18
+	
+Lissandra
+	
+	
+	51.66%	5.61%	4.62%	
+
+
+19
+	
+Elise
+	
+	
+	51.51%	3.17%	2.58%	
+
+
+20
+	
+Darius
+	
+	
+	51.51%	7.18%	13.72%	
+
+
+21
+	
+Alistar
+	
+	
+	51.49%	7.25%	2.67%	
+
+
+22
+	
+Sett
+	
+	
+	51.30%	5.80%	2.73%	
+
+
+23
+	
+Wukong
+	
+	
+	51.24%	6.34%	5.74%	
+
+
+24
+	
+Thresh
+	
+	
+	51.14%	14.35%	13.20%	
+
+
+25
+	
+Lillia
+	
+	
+	51.13%	4.88%	5.38%	
+
+
+26
+	
+Ahri
+	
+	
+	51.12%	10.59%	3.17%	
+
+
+27
+	
+Master Yi
+	
+	
+	50.94%	5.78%	14.78%	
+
+
+28
+	
+Kha'Zix
+	
+	
+	50.91%	6.14%	4.22%	
+
+
+29
+	
+Jinx
+	
+	
+	50.80%	11.05%	5.85%	
+
+
+30
+	
+Cho'Gath
+	
+	
+	50.77%	4.93%	7.93%	
+
+
+31
+	
+Ekko
+	
+	
+	50.72%	4.27%	2.84%	
+
+
+32
+	
+Hecarim
+	
+	
+	50.67%	5.33%	8.31%	
+
+
+33
+	
+Naafiri
+	
+	
+	50.64%	4.34%	8.83%	
+
+
+34
+	
+Jhin
+	
+	
+	50.36%	19.17%	2.67%	
+
+
+35
+	
+Sylas
+	
+	
+	50.24%	6.28%	17.89%	
+
+
+36
+	
+Lulu
+	
+	
+	49.90%	12.74%	15.05%	
+
+
+37
+	
+Kayn
+	
+	
+	49.85%	6.42%	5.11%	
+
+
+38
+	
+Graves
+	
+	
+	49.76%	7.64%	8.94%	
+
+
+39
+	
+Viego
+	
+	
+	49.15%	7.75%	5.93%	
+
+
+40
+	
+Kai'Sa
+	
+	
+	49.02%	24.85%	4.80%	
+
+
+41
+	
+Lee Sin
+	
+	
+	48.07%	13.04%	16.93%	
+
+
+42
+	
+Swain
+	
+	
+	54.33%	1.04%	1.78%	
+
+
+43
+	
+Sion
+	
+	
+	53.88%	0.52%	0.62%	
+Insufficient data
+
+
+44
+	
+Aatrox
+	
+	
+	53.17%	0.84%	6.48%	
+
+
+45
+	
+Kog'Maw
+	
+	
+	53.08%	2.17%	0.69%	
+
+
+46
+	
+Singed
+	
+	
+	52.92%	2.15%	0.70%	
+
+
+47
+	
+Yasuo
+	
+	
+	52.75%	2.24%	25.45%	
+
+
+48
+	
+Darius
+	
+	
+	52.66%	1.18%	13.15%	
+
+
+49
+	
+Rek'Sai
+	
+	
+	52.58%	1.45%	0.59%	
+
+
+50
+	
+Zilean
+	
+	
+	52.40%	2.66%	1.80%	
+
+
+51
+	
+Fiddlesticks
+	
+	
+	52.39%	1.84%	0.99%	
+
+
+52
+	
+Nunu & Willump
+	
+	
+	52.24%	2.02%	0.53%	
+
+
+53
+	
+Aurora
+	
+	
+	52.20%	2.67%	1.28%	
+
+
+54
+	
+Sejuani
+	
+	
+	52.04%	1.97%	0.25%	
+
+
+55
+	
+Kayle
+	
+	
+	51.71%	2.59%	1.64%	
+
+
+56
+	
+Kassadin
+	
+	
+	51.69%	2.81%	2.54%	
+
+
+57
+	
+Udyr
+	
+	
+	51.56%	1.69%	0.85%	
+
+
+58
+	
+Hwei
+	
+	
+	51.52%	3.57%	2.31%	
+
+
+59
+	
+Braum
+	
+	
+	51.50%	5.16%	6.87%	
+
+
+60
+	
+Annie
+	
+	
+	51.45%	1.96%	0.53%	
+
+
+61
+	
+Vex
+	
+	
+	51.36%	2.85%	4.32%	
+
+
+62
+	
+Zac
+	
+	
+	51.33%	2.43%	0.99%	
+
+
+63
+	
+Nidalee
+	
+	
+	51.26%	2.81%	3.11%	
+
+
+64
+	
+Zoe
+	
+	
+	51.23%	2.78%	3.99%	
+
+
+65
+	
+Senna
+	
+	
+	51.21%	5.53%	1.26%	
+
+
+66
+	
+Ornn
+	
+	
+	51.06%	3.77%	0.58%	
+
+
+67
+	
+Smolder
+	
+	
+	51.05%	5.13%	1.52%	
+
+
+68
+	
+Sona
+	
+	
+	51.05%	2.88%	0.19%	
+
+
+69
+	
+Gangplank
+	
+	
+	51.02%	4.98%	9.50%	
+
+
+70
+	
+Zyra
+	
+	
+	50.94%	2.14%	5.24%	
+
+
+71
+	
+Diana
+	
+	
+	50.86%	3.34%	3.20%	
+
+
+72
+	
+Vel'Koz
+	
+	
+	50.84%	3.13%	1.96%	
+
+
+73
+	
+Kindred
+	
+	
+	50.79%	2.58%	1.83%	
+
+
+74
+	
+Twitch
+	
+	
+	50.79%	5.07%	7.66%	
+
+
+75
+	
+Xin Zhao
+	
+	
+	50.77%	3.29%	0.76%	
+
+
+76
+	
+Twisted Fate
+	
+	
+	50.67%	5.38%	1.81%	
+
+
+77
+	
+Malzahar
+	
+	
+	50.59%	4.64%	8.10%	
+
+
+78
+	
+Camille
+	
+	
+	50.57%	4.47%	1.84%	
+
+
+79
+	
+Soraka
+	
+	
+	50.53%	4.36%	2.00%	
+
+
+80
+	
+Taliyah
+	
+	
+	50.52%	3.16%	1.30%	
+
+
+81
+	
+Seraphine
+	
+	
+	50.51%	6.26%	4.06%	
+
+
+82
+	
+Miss Fortune
+	
+	
+	50.48%	7.30%	1.42%	
+
+
+83
+	
+LeBlanc
+	
+	
+	50.45%	5.84%	20.01%	
+
+
+84
+	
+Fizz
+	
+	
+	50.44%	4.72%	6.34%	
+
+
+85
+	
+Garen
+	
+	
+	50.37%	5.83%	4.28%	
+
+
+86
+	
+Diana
+	
+	
+	50.34%	3.20%	3.19%	
+
+
+87
+	
+Irelia
+	
+	
+	50.33%	4.58%	13.60%	
+
+
+88
+	
+Nami
+	
+	
+	50.32%	8.50%	1.02%	
+
+
+89
+	
+Tristana
+	
+	
+	50.32%	6.34%	5.67%	
+
+
+90
+	
+Mordekaiser
+	
+	
+	50.32%	5.02%	7.65%	
+
+
+91
+	
+Evelynn
+	
+	
+	50.31%	3.47%	2.22%	
+
+
+92
+	
+Renekton
+	
+	
+	50.27%	6.35%	4.58%	
+
+
+93
+	
+Lux
+	
+	
+	50.20%	3.66%	3.69%	
+
+
+94
+	
+Milio
+	
+	
+	50.18%	6.08%	4.03%	
+
+
+95
+	
+Xerath
+	
+	
+	50.17%	4.02%	7.84%	
+
+
+96
+	
+Talon
+	
+	
+	49.93%	5.06%	9.18%	
+
+
+97
+	
+Yunara
+	
+	
+	49.81%	10.96%	5.19%	
+
+
+98
+	
+Yone
+	
+	
+	49.79%	7.55%	14.45%	
+
+
+99
+	
+Aatrox
+	
+	
+	49.70%	6.53%	6.96%	
+
+
+100
+	
+Shaco
+	
+	
+	49.53%	4.13%	17.14%	
+
+
+101
+	
+Zed
+	
+	
+	49.40%	8.00%	23.81%	
+
+
+102
+	
+Vi
+	
+	
+	49.31%	4.84%	1.68%	
+
+
+103
+	
+Lux
+	
+	
+	49.31%	6.16%	3.71%	
+
+
+104
+	
+Yone
+	
+	
+	49.27%	7.68%	14.46%	
+
+
+105
+	
+Nautilus
+	
+	
+	49.18%	11.87%	16.34%	
+
+
+106
+	
+Syndra
+	
+	
+	49.10%	9.41%	8.78%	
+
+
+107
+	
+Pyke
+	
+	
+	48.86%	5.80%	25.05%	
+
+
+108
+	
+Karma
+	
+	
+	48.67%	7.92%	3.31%	
+
+
+109
+	
+Yasuo
+	
+	
+	48.66%	8.20%	25.92%	
+
+
+110
+	
+Viktor
+	
+	
+	48.66%	7.27%	9.73%	
+
+
+111
+	
+Akali
+	
+	
+	48.61%	7.90%	17.81%	
+
+
+112
+	
+Jarvan IV
+	
+	
+	48.58%	8.33%	1.91%	
+
+
+113
+	
+Sylas
+	
+	
+	48.47%	6.97%	17.89%	
+
+
+114
+	
+Karthus
+	
+	
+	54.05%	0.57%	0.90%	
+
+
+115
+	
+Riven
+	
+	
+	53.19%	0.51%	1.34%	
+
+
+116
+	
+Viktor
+	
+	
+	52.64%	1.51%	9.54%	
+
+
+117
+	
+Nilah
+	
+	
+	52.57%	1.04%	1.64%	
+
+
+118
+	
+Zaahen
+	
+	
+	52.52%	0.75%	0.98%	
+
+
+119
+	
+Veigar
+	
+	
+	52.41%	0.94%	0.84%	
+
+
+120
+	
+Ziggs
+	
+	
+	52.29%	0.55%	0.63%	
+
+
+121
+	
+Kled
+	
+	
+	52.06%	1.77%	0.94%	
+
+
+122
+	
+Gragas
+	
+	
+	51.79%	0.52%	0.65%	
+
+
+123
+	
+Sion
+	
+	
+	51.78%	0.75%	0.70%	
+
+
+124
+	
+Malphite
+	
+	
+	51.53%	0.75%	16.72%	
+
+
+125
+	
+Vel'Koz
+	
+	
+	51.47%	1.12%	1.86%	
+
+
+126
+	
+Poppy
+	
+	
+	51.22%	1.68%	3.52%	
+
+
+127
+	
+Varus
+	
+	
+	51.19%	3.59%	0.97%	
+
+
+128
+	
+Rammus
+	
+	
+	51.18%	1.44%	3.52%	
+
+
+129
+	
+Swain
+	
+	
+	51.14%	0.81%	1.79%	
+
+
+130
+	
+Pantheon
+	
+	
+	51.01%	0.95%	3.29%	
+
+
+131
+	
+Ivern
+	
+	
+	51.01%	0.96%	0.31%	
+
+
+132
+	
+Trundle
+	
+	
+	50.98%	0.82%	0.43%	
+
+
+133
+	
+Taric
+	
+	
+	50.86%	1.17%	0.19%	
+
+
+134
+	
+Gwen
+	
+	
+	50.77%	2.39%	3.08%	
+
+
+135
+	
+Zaahen
+	
+	
+	50.73%	3.66%	1.11%	
+
+
+136
+	
+Maokai
+	
+	
+	50.73%	2.01%	0.19%	
+
+
+137
+	
+Sion
+	
+	
+	50.73%	3.77%	0.76%	
+
+
+138
+	
+Dr. Mundo
+	
+	
+	50.68%	3.40%	2.05%	
+
+
+139
+	
+Pantheon
+	
+	
+	50.67%	3.65%	3.50%	
+
+
+140
+	
+Illaoi
+	
+	
+	50.66%	2.44%	5.20%	
+
+
+141
+	
+Nasus
+	
+	
+	50.63%	3.44%	9.32%	
+
+
+142
+	
+Corki
+	
+	
+	50.61%	3.70%	0.60%	
+
+
+143
+	
+Sivir
+	
+	
+	50.51%	4.59%	1.79%	
+
+
+144
+	
+Naafiri
+	
+	
+	50.45%	0.96%	8.53%	
+
+
+145
+	
+Anivia
+	
+	
+	50.31%	2.22%	2.42%	
+
+
+146
+	
+Zeri
+	
+	
+	50.24%	4.76%	1.04%	
+
+
+147
+	
+Maokai
+	
+	
+	50.22%	0.99%	0.18%	
+
+
+148
+	
+Samira
+	
+	
+	50.19%	3.39%	4.73%	
+
+
+149
+	
+Volibear
+	
+	
+	50.16%	0.98%	1.72%	
+
+
+150
+	
+Taliyah
+	
+	
+	50.15%	2.29%	1.29%	
+
+
+151
+	
+Renata Glasc
+	
+	
+	50.12%	2.32%	0.51%	
+
+
+152
+	
+Teemo
+	
+	
+	50.03%	3.70%	6.33%	
+
+
+153
+	
+Talon
+	
+	
+	50.02%	1.66%	8.90%	
+
+
+154
+	
+Aurelion Sol
+	
+	
+	49.99%	2.10%	0.81%	
+
+
+155
+	
+Fiora
+	
+	
+	49.91%	4.30%	6.13%	
+
+
+156
+	
+Akshan
+	
+	
+	49.87%	2.32%	1.98%	
+
+
+157
+	
+Veigar
+	
+	
+	49.81%	2.91%	0.91%	
+
+
+158
+	
+Karthus
+	
+	
+	49.78%	1.39%	1.03%	
+
+
+159
+	
+Amumu
+	
+	
+	49.74%	1.66%	0.81%	
+
+
+160
+	
+Zyra
+	
+	
+	49.70%	2.43%	5.28%	
+
+
+161
+	
+Ashe
+	
+	
+	49.59%	5.61%	1.58%	
+
+
+162
+	
+Qiyana
+	
+	
+	49.24%	2.29%	15.96%	
+
+
+163
+	
+Aphelios
+	
+	
+	49.24%	6.90%	3.76%	
+
+
+164
+	
+Jax
+	
+	
+	49.12%	5.90%	10.16%	
+
+
+165
+	
+Orianna
+	
+	
+	49.02%	5.29%	0.64%	
+
+
+166
+	
+Morgana
+	
+	
+	48.96%	3.91%	16.43%	
+
+
+167
+	
+Galio
+	
+	
+	48.70%	4.40%	2.14%	
+
+
+168
+	
+Lucian
+	
+	
+	48.63%	8.50%	2.56%	
+
+
+169
+	
+Bard
+	
+	
+	48.57%	4.36%	1.93%	
+
+
+170
+	
+Caitlyn
+	
+	
+	48.29%	12.25%	20.22%	
+
+
+171
+	
+Locke
+	
+	
+	48.28%	5.99%	32.80%	
+
+
+172
+	
+Jayce
+	
+	
+	48.25%	6.50%	8.54%	
+
+
+173
+	
+Irelia
+	
+	
+	48.16%	2.73%	13.56%	
+
+
+174
+	
+Yuumi
+	
+	
+	47.94%	5.78%	9.06%	
+
+
+175
+	
+Nocturne
+	
+	
+	47.85%	4.09%	8.21%	
+
+
+176
+	
+Rengar
+	
+	
+	47.15%	4.01%	7.55%	
+
+
+177
+	
+Qiyana
+	
+	
+	45.76%	6.89%	16.18%	
+
+
+178
+	
+Lissandra
+	
+	
+	53.73%	0.56%	4.01%	
+Insufficient data
+
+
+179
+	
+Quinn
+	
+	
+	52.85%	0.82%	0.69%	
+
+
+180
+	
+Xerath
+	
+	
+	52.71%	0.70%	7.06%	
+
+
+181
+	
+Hwei
+	
+	
+	52.35%	0.85%	2.12%	
+
+
+182
+	
+Syndra
+	
+	
+	52.25%	0.78%	8.39%	
+
+
+183
+	
+Warwick
+	
+	
+	51.49%	1.36%	1.40%	
+
+
+184
+	
+Wukong
+	
+	
+	51.43%	0.92%	5.39%	
+
+
+185
+	
+Ziggs
+	
+	
+	51.40%	1.38%	0.71%	
+
+
+186
+	
+Elise
+	
+	
+	51.09%	0.86%	2.42%	
+
+
+187
+	
+Teemo
+	
+	
+	50.98%	0.54%	5.52%	
+Insufficient data
+
+
+188
+	
+Galio
+	
+	
+	50.87%	0.82%	1.90%	
+
+
+189
+	
+Heimerdinger
+	
+	
+	50.80%	1.13%	2.01%	
+
+
+190
+	
+Amumu
+	
+	
+	50.71%	0.71%	0.71%	
+
+
+191
+	
+Kennen
+	
+	
+	50.60%	1.81%	1.34%	
+
+
+192
+	
+Brand
+	
+	
+	50.55%	0.56%	2.11%	
+Insufficient data
+
+
+193
+	
+Fiddlesticks
+	
+	
+	50.44%	0.50%	0.86%	
+
+
+194
+	
+Kayle
+	
+	
+	50.17%	0.72%	1.49%	
+
+
+195
+	
+Tryndamere
+	
+	
+	50.07%	2.79%	2.78%	
+
+
+196
+	
+Shen
+	
+	
+	49.78%	0.72%	0.62%	
+
+
+197
+	
+Zoe
+	
+	
+	49.67%	0.86%	3.74%	
+
+
+198
+	
+Kog'Maw
+	
+	
+	49.63%	0.76%	0.64%	
+
+
+199
+	
+Urgot
+	
+	
+	49.61%	2.00%	0.80%	
+
+
+200
+	
+Gwen
+	
+	
+	49.57%	0.79%	2.95%	
+
+
+201
+	
+Gragas
+	
+	
+	49.47%	2.45%	0.72%	
+
+
+202
+	
+Cho'Gath
+	
+	
+	49.43%	2.76%	7.87%	
+
+
+203
+	
+Hwei
+	
+	
+	49.37%	0.60%	2.10%	
+
+
+204
+	
+Shen
+	
+	
+	49.37%	0.98%	0.66%	
+
+
+205
+	
+Draven
+	
+	
+	49.36%	3.82%	14.80%	
+
+
+206
+	
+Riven
+	
+	
+	49.27%	2.31%	1.46%	
+
+
+207
+	
+Vayne
+	
+	
+	49.20%	3.17%	3.47%	
+
+
+208
+	
+Yorick
+	
+	
+	49.14%	2.81%	5.50%	
+
+
+209
+	
+Olaf
+	
+	
+	49.13%	3.00%	3.93%	
+
+
+210
+	
+Gragas
+	
+	
+	49.08%	0.74%	0.66%	
+
+
+211
+	
+Shaco
+	
+	
+	48.96%	1.20%	16.50%	
+
+
+212
+	
+Tristana
+	
+	
+	48.90%	0.70%	5.24%	
+
+
+213
+	
+Akali
+	
+	
+	48.88%	3.58%	17.70%	
+
+
+214
+	
+Ambessa
+	
+	
+	48.85%	4.84%	4.97%	
+
+
+215
+	
+Jax
+	
+	
+	48.69%	0.76%	9.64%	
+
+
+216
+	
+Swain
+	
+	
+	48.67%	2.75%	1.93%	
+
+
+217
+	
+Neeko
+	
+	
+	48.66%	1.66%	0.79%	
+
+
+218
+	
+Quinn
+	
+	
+	48.57%	0.84%	0.70%	
+
+
+219
+	
+Volibear
+	
+	
+	48.44%	3.53%	1.81%	
+
+
+220
+	
+Jayce
+	
+	
+	48.31%	0.80%	8.20%	
+
+
+221
+	
+Skarner
+	
+	
+	48.30%	0.97%	0.25%	
+
+
+222
+	
+Brand
+	
+	
+	48.28%	2.12%	2.31%	
+
+
+223
+	
+Nasus
+	
+	
+	48.28%	0.59%	8.39%	
+
+
+224
+	
+Xerath
+	
+	
+	48.14%	2.83%	7.80%	
+
+
+225
+	
+Pantheon
+	
+	
+	48.12%	3.25%	3.50%	
+
+
+226
+	
+Malphite
+	
+	
+	48.10%	0.77%	16.62%	
+
+
+227
+	
+Kalista
+	
+	
+	48.02%	4.84%	2.77%	
+
+
+228
+	
+Tahm Kench
+	
+	
+	48.00%	2.24%	2.10%	
+
+
+229
+	
+Yasuo
+	
+	
+	47.92%	3.24%	25.55%	
+
+
+230
+	
+Pantheon
+	
+	
+	47.88%	1.03%	3.24%	
+
+
+231
+	
+Mel
+	
+	
+	47.84%	1.75%	6.89%	
+
+
+232
+	
+Azir
+	
+	
+	47.83%	1.74%	0.26%	
+
+
+233
+	
+Gnar
+	
+	
+	47.83%	3.88%	1.38%	
+
+
+234
+	
+Ryze
+	
+	
+	47.58%	2.02%	0.39%	
+
+
+235
+	
+Sylas
+	
+	
+	47.38%	1.23%	16.98%	
+
+
+236
+	
+Cassiopeia
+	
+	
+	46.89%	1.26%	1.33%	
+
+
+237
+	
+Ezreal
+	
+	
+	46.12%	13.64%	4.29%	
+
+
+238
+	
+Zed
+	
+	
+	45.55%	2.53%	23.13%	
+
+
+239
+	
+Jayce
+	
+	
+	45.43%	3.68%	8.50%	
+
+
+240
+	
+Ryze
+	
+	
+	51.64%	0.59%	0.35%	
+
+
+241
+	
+Swain
+	
+	
+	51.33%	0.66%	1.67%	
+
+
+242
+	
+Zac
+	
+	
+	50.98%	0.54%	0.89%	
+Insufficient data
+
+
+243
+	
+Anivia
+	
+	
+	50.84%	0.71%	2.19%	
+
+
+244
+	
+Poppy
+	
+	
+	50.17%	0.94%	3.41%	
+
+
+245
+	
+Mel
+	
+	
+	49.37%	0.73%	6.24%	
+
+
+246
+	
+Aurora
+	
+	
+	49.33%	0.61%	1.12%	
+
+
+247
+	
+Katarina
+	
+	
+	49.19%	0.83%	11.23%	
+
+
+248
+	
+Vladimir
+	
+	
+	49.15%	1.21%	5.94%	
+
+
+249
+	
+Sylas
+	
+	
+	48.75%	1.19%	17.01%	
+
+
+250
+	
+Tahm Kench
+	
+	
+	48.70%	1.61%	2.08%	
+
+
+251
+	
+Trundle
+	
+	
+	48.70%	1.63%	0.44%	
+
+
+252
+	
+Vayne
+	
+	
+	48.59%	1.33%	3.39%	
+
+
+253
+	
+Udyr
+	
+	
+	48.56%	0.58%	0.78%	
+
+
+254
+	
+Maokai
+	
+	
+	48.41%	0.67%	0.17%	
+
+
+255
+	
+Fizz
+	
+	
+	47.99%	0.59%	5.51%	
+
+
+256
+	
+Varus
+	
+	
+	47.59%	0.60%	0.81%	
+
+
+257
+	
+Rumble
+	
+	
+	47.30%	1.93%	0.67%	
+
+
+258
+	
+Camille
+	
+	
+	46.51%	0.97%	1.71%	
+
+
+259
+	
+K'Sante
+	
+	
+	46.40%	4.49%	2.67%	
+
+
+260
+	
+Ambessa
+	
+	
+	45.99%	0.82%	4.62%	
+
+
+261
+	
+Master Yi
+	
+	
+	45.89%	0.64%	12.93%	
+
+
+262
+	
+LeBlanc
+	
+	
+	45.84%	0.83%	18.74%	
+
+
+263
+	
+Ashe
+	
+	
+	45.34%	0.71%	1.44%	
+
+
+264
+	
+Locke
+	
+	
+	44.14%	0.73%	29.75%	
+
+
+265
+	
+Smolder
+	
+	
+	41.69%	0.53%	1.37%	
+
+
+266
+	
+Mel
+	
+	
+	38.59%	0.86%	6.53%	
+Search a champion
+Aatrox
+Ahri
+Akali
+Akshan
+Alistar
+Ambessa
+Amumu
+Anivia
+Annie
+Aphelios
+Ashe
+Aurelion Sol
+Aurora
+Azir
+Bard
+Bel'Veth
+Blitzcrank
+Brand
+Braum
+Briar
+Caitlyn
+Camille
+Cassiopeia
+Cho'Gath
+Corki
+Darius
+Diana
+Dr. Mundo
+Draven
+Ekko
+Elise
+Evelynn
+Ezreal
+Fiddlesticks
+Fiora
+Fizz
+Galio
+Gangplank
+Garen
+Gnar
+Gragas
+Graves
+Gwen
+Hecarim
+Heimerdinger
+Hwei
+Illaoi
+Irelia
+Ivern
+Janna
+Jarvan IV
+Jax
+Jayce
+Jhin
+Jinx
+K'Sante
+Kai'Sa
+Kalista
+Karma
+Karthus
+Kassadin
+Katarina
+Kayle
+Kayn
+Kennen
+Kha'Zix
+Kindred
+Kled
+Kog'Maw
+LeBlanc
+Lee Sin
+Leona
+Lillia
+Lissandra
+Locke
+Lucian
+Lulu
+Lux
+Malphite
+Malzahar
+Maokai
+Master Yi
+Mel
+Milio
+Miss Fortune
+Mordekaiser
+Morgana
+Naafiri
+Nami
+Nasus
+Nautilus
+Neeko
+Nidalee
+Nilah
+Nocturne
+Nunu & Willump
+Olaf
+Orianna
+Ornn
+Pantheon
+Poppy
+Pyke
+Qiyana
+Quinn
+Rakan
+Rammus
+Rek'Sai
+Rell
+Renata Glasc
+Renekton
+Rengar
+Riven
+Rumble
+Ryze
+Samira
+Sejuani
+Senna
+Seraphine
+Sett
+Shaco
+Shen
+Shyvana
+Singed
+Sion
+Sivir
+Skarner
+Smolder
+Sona
+Soraka
+Swain
+Sylas
+Syndra
+Tahm Kench
+Taliyah
+Talon
+Taric
+Teemo
+Thresh
+Tristana
+Trundle
+Tryndamere
+Twisted Fate
+Twitch
+Udyr
+Urgot
+Varus
+Vayne
+Veigar
+Vel'Koz
+Vex
+Vi
+Viego
+Viktor
+Vladimir
+Volibear
+Warwick
+Wukong
+Xayah
+Xerath
+Xin Zhao
+Yasuo
+Yone
+Yorick
+Yunara
+Yuumi
+Zaahen
+Zac
+Zed
+Zeri
+Ziggs
+Zilean
+Zoe
+Zyra
+ADVERTISEMENT
+REMOVE ADS
+OP.GG
+OP.GG
+About OP.GG
+Company
+Blog
+Logo history
+Products
+League of Legends
+Teamfight Tactics
+Palworld
+Pokémon Champions
+Valorant
+PUBG
+ROBLOX
+OVERWATCH
+Pokémon Pokopia
+Marvel Rivals
+Arc Raiders
+Slay The Spire 2
+Counter Strike 2
+Fortnite
+Diablo 4
+2XKO
+Time Takers
+GTA 6
+Desktop
+Games
+Duo
+TalkG
+Esports
+Gigs
+Streamer Overlay
+Apps
+OP.GG for Mobile Android
+OP.GG for Mobile iOS
+AllT Android
+AllT iOS
+Valorant Android
+Valorant iOS
+Gigs Android
+Gigs iOS
+TalkG Android
+TalkG iOS
+Esports Android
+Esports iOS
+Resources
+Privacy policy
+Terms of use
+Help
+Email inquiry
+Contact us
+More
+Business
+Advertise with us
+Recruit
+
+© 2012-2026 OP.GG. OP.GG is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends © Riot Games, Inc.
+
+Unmute
+===== opgg-matchup-1440.txt (rendered text at 1440, 5 Nov 2026)
+Privacy
+Stats
+League of Legends
+Desktop
+Games
+New
+Duo
+TalkG
+Esports
+Gigs
+Streamer Overlay
+New
+EN
+Sign in
+EUW
+Search a summoner
+Game name + #EUW
+🏆 Rank Up in 3 Days! Challenger Coaching
+🏆 Rank Up in 3 Days! Challenger Coaching
+Home
+Champions
+N
+Game modes
+Leaderboards
+N
+Spectate
+Stats
+Multi-search
+Information
+Media
+N
+Lessons
+Download app
+100%
+All tiers
+Challenger
+Grandmaster
+Master +
+Master
+Diamond +
+Diamond
+Emerald +
+Emerald
+Platinum +
+Platinum
+Gold +
+Gold
+Silver
+Bronze
+Iron
+Emerald +
+Class
+Tank
+Class
+vs.
+All Servers
+North America Server (NA)
+Middle East Server (ME)
+Europe West Server (EUW)
+Europe Nordic & East Server (EUNE)
+Oceania Server (OCE)
+Korea Server (KR)
+Japan Server (JP)
+Brazil Server (BR)
+Latin America South Server (LAS)
+Latin America North Server (LAN)
+Russia Server (RU)
+Türkiye Server (TR)
+Southeast Asia Server (SEA)
+Taiwan Server (TW)
+Vietnam Server (VN)
+All Servers
+Patch 16.22
+Patch 16.21
+Patch 16.22
+Ornn
+Build For Top, Patch 16.22
+2 Tier
+Q
+W
+E
+R
+VS.
+Darius
+Games
+197
+Win rate
+48.73%
+User-written champion tips
+Beta
+Use the S key effectively to maximise Ornn's potential.
+Focus on precise timing of your abilities during combat.
+Build
+Counters
+Items
+Champion synergies
+Runes
+Masters build
+Skills
+Tips
+Trends
+Pro builds
+ADVERTISEMENT
+REMOVE ADS
+Ranked Solo/Duo
+ARAM: Mayhem
+Classic
+N
+Arena
+Today's hot
+Show more
+Auto rune setting
+Automatically set your runes to the highest win-rate configuration!
+Download desktop
+How difficult is this champion?
+What is the ranking of this champion?
+What is the skill combo?
+Are there any Ornn skins on sale?
+Ornn runes
+Like this feature?
+32.51%
+79 Games
+Pick rate
+53.16%
+Win rate
+25.93%
+63 Games
+Pick rate
+50.79%
+Win rate
+50.8%
+76.1%
+185
+50%
+0.8%
+2
+0%
+0%
+0
+51%
+58.9%
+143
+50%
+17.3%
+42
+50%
+0.8%
+2
+53.7%
+22.2%
+54
+52.3%
+18.1%
+44
+48.3%
+36.6%
+89
+52.8%
+74.1%
+180
+0%
+0%
+0
+0%
+2.9%
+7
+Resolve
+0%
+0%
+0
+55.6%
+29.6%
+72
+40%
+2.1%
+5
+0%
+0%
+0
+0%
+0%
+0
+54.1%
+30.5%
+74
+25%
+3.3%
+8
+66.7%
+1.2%
+3
+0%
+0%
+0
+Inspiration
+14.3%
+2.9%
+7
+51.5%
+80.7%
+196
+45%
+16.5%
+40
+46.2%
+5.4%
+13
+38.9%
+7.4%
+18
+50.5%
+87.2%
+212
+35.3%
+7%
+17
+50%
+3.3%
+8
+50.5%
+89.7%
+218
+Shards
+Ornn
+Summoner spells
+	
+72.84%
+177 Games
+	
+49.72%
+	
+24.69%
+60 Games
+	
+51.67%
+Ornn Skill order
+W
+Q
+E
+Q
+W
+E
+W
+W
+R
+W
+Q
+W
+Q
+R
+Q
+Q
+E
+E
+	
+62.86%
+66 Games
+	
+56.06%
+Ornn Item builds
+Starter items
+
+	
+63.39%
+142 Games
+	
+52.82%
+
+
+	
+23.66%
+53 Games
+	
+45.28%
+Boots
+
+	
+83.56%
+183 Games
+	
+46.99%
+
+
+	
+14.61%
+32 Games
+	
+53.13%
+Core builds
+
+	
+7.95%
+7 Games
+	
+57.14%
+
+
+	
+5.68%
+5 Games
+	
+20.00%
+
+
+	
+3.41%
+3 Games
+	
+100.00%
+
+
+	
+3.41%
+3 Games
+	
+66.67%
+
+
+	
+3.41%
+3 Games
+	
+66.67%
+Fourth Item
+
+
+	
+57.14%
+7 Games
+
+
+	
+83.33%
+6 Games
+
+
+	
+80.00%
+5 Games
+
+
+	
+50.00%
+4 Games
+
+
+	
+75.00%
+4 Games
+Fifth Item
+
+
+	
+100.00%
+1 Games
+
+
+	
+100.00%
+1 Games
+
+
+	
+0.00%
+1 Games
+
+
+	
+100.00%
+1 Games
+
+	
+Ornn Counter
+Weak against
+40.00%
+70
+Games
+42.40%
+125
+Games
+43.55%
+62
+Games
+43.68%
+87
+Games
+43.75%
+32
+Games
+Strong against
+73.91%
+46
+Games
+63.08%
+65
+Games
+61.02%
+59
+Games
+58.90%
+73
+Games
+58.75%
+80
+Games
+Top Ornn Synergies
+jungle
+mid
+adc
+support
+5.86%
+366 Games
+48.36%
+4.69%
+293 Games
+51.54%
+4.64%
+290 Games
+50.34%
+Ornn mastery ranking
+· EUW
+1
+Bekind18
+#EUW
+1,073 Games
+2
+Forge God
+#22233
+965 Games
+3
+Makkor
+#EUW
+939 Games
+4
+KiLliP0
+#Smog
+907 Games
+5
+Leopardo Peleon
+#iTrox
+801 Games
+Ornn Skins ranking
+1
+Thunder Lord Ornn
+2
+Elderwood Ornn
+3
+Choo-Choo Ornn
+4
+Space Groove Ornn
+5
+Aegis Frame Ornn
+ADVERTISEMENT
+REMOVE ADS
+Ornn combos
+Basic
+R + Flash
+Medium
+Fake Ult
+Medium
+Q + W + E
+Medium
+W + Q + E
+Medium
+Q + W + E + AA
+Hard
+Q + R + W + E
+Hard
+QWRAEARA
+Ornn
+Laning tips (1)
+Submit
+Popular
+Recent
+Show my language only
+Show patch 16.22 only
+0
+어보이
+한국어
+7 days ago
+Version: 16.21
+오른 최대 카운터 : 우리 바텀
+Translate
+Report
+ADVERTISEMENT
+REMOVE ADS
+OP.GG
+OP.GG
+About OP.GG
+Company
+Blog
+Logo history
+Products
+League of Legends
+Teamfight Tactics
+Palworld
+Pokémon Champions
+Valorant
+PUBG
+ROBLOX
+OVERWATCH
+Pokémon Pokopia
+Marvel Rivals
+Arc Raiders
+Slay The Spire 2
+Counter Strike 2
+Fortnite
+Diablo 4
+2XKO
+Time Takers
+GTA 6
+Desktop
+Games
+Duo
+TalkG
+Esports
+Gigs
+Streamer Overlay
+Apps
+OP.GG for Mobile Android
+OP.GG for Mobile iOS
+AllT Android
+AllT iOS
+Valorant Android
+Valorant iOS
+Gigs Android
+Gigs iOS
+TalkG Android
+TalkG iOS
+Esports Android
+Esports iOS
+Resources
+Privacy policy
+Terms of use
+Help
+Email inquiry
+Contact us
+More
+Business
+Advertise with us
+Recruit
+
+© 2012-2026 OP.GG. OP.GG is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends © Riot Games, Inc.
+===== opgg-ornn-matchups-1440.txt (rendered text at 1440, 5 Nov 2026)
+Privacy
+Stats
+League of Legends
+Desktop
+Games
+New
+Duo
+TalkG
+Esports
+Gigs
+Streamer Overlay
+New
+EN
+Sign in
+EUW
+Search a summoner
+Game name + #EUW
+🏆 Rank Up in 3 Days! Challenger Coaching
+🏆 Rank Up in 3 Days! Challenger Coaching
+Home
+Champions
+N
+Game modes
+Leaderboards
+N
+Spectate
+Stats
+Multi-search
+Information
+Media
+N
+Lessons
+Download app
+100%
+All tiers
+Challenger
+Grandmaster
+Master +
+Master
+Diamond +
+Diamond
+Emerald +
+Emerald
+Platinum +
+Platinum
+Gold +
+Gold
+Silver
+Bronze
+Iron
+Emerald +
+Class
+Tank
+Class
+vs.
+Counter
+All Servers
+North America Server (NA)
+Middle East Server (ME)
+Europe West Server (EUW)
+Europe Nordic & East Server (EUNE)
+Oceania Server (OCE)
+Korea Server (KR)
+Japan Server (JP)
+Brazil Server (BR)
+Latin America South Server (LAS)
+Latin America North Server (LAN)
+Russia Server (RU)
+Türkiye Server (TR)
+Southeast Asia Server (SEA)
+Taiwan Server (TW)
+Vietnam Server (VN)
+All Servers
+Patch 16.22
+Patch 16.21
+Patch 16.22
+Ornn
+Counters For Top, Patch 16.22
+2 Tier
+Q
+W
+E
+R
+Win rate
+51.06% 
+Pick rate
+3.77% 
+Ban rate
+0.58% 
+User-written champion tips
+Beta
+Use the S key effectively to maximise Ornn's potential.
+Focus on precise timing of your abilities during combat.
+Build
+Counters
+Items
+Champion synergies
+Runes
+Masters build
+Skills
+Tips
+Trends
+Pro builds
+ADVERTISEMENT
+REMOVE ADS
+Ranked Solo/Duo
+ARAM: Mayhem
+Classic
+N
+Arena
+Today's hot
+Show more
+Auto rune setting
+Automatically set your runes to the highest win-rate configuration!
+Download desktop
+Tip
+
+Yone is not strong during early game, so avoid his two stacked (Q) with your [W] and follow up with [Q] - [E] combo to lure his (E) before using [R]. Close in on where he will return to using (E) and use [R] to target both Yone’s current and returning position.
+
+Ornn vs Yone
+54.93%
+45.07%
+Ornn
+Yone
+53.19%
+Lane kill rate
+46.81%
+2.46 : 1
+KDA
+1.53 : 1
+38.48%
+Kill participation
+34.28%
+17,328
+Damage dealt to champions
+29,273
+18'6"
+First tower kill
+15'57"
+54.93%
+Win rate
+45.07%
+51.06%
+Lane win rate
+49.27%
+3.77%
+Lane pick rate
+7.68%
+0.58%
+Ban rate
+14.46%
+vs
+Yone
+Counter tips (0)
+Submit
+Popular
+Recent
+Show my language only
+Show patch 16.22 only
+
+There are currently no tips for this champion.
+
+Search a champion
+Win rate
+Games
+Yone
+54.93%
+213
+Darius
+48.73%
+197
+Jayce
+48.37%
+184
+Malphite
+52.75%
+182
+Sett
+54.27%
+164
+Renekton
+57.69%
+156
+Mordekaiser
+50.69%
+144
+Garen
+47.18%
+142
+Camille
+45.77%
+142
+Aatrox
+54.01%
+137
+Shen
+44.19%
+129
+Fiora
+47.20%
+125
+Gwen
+42.40%
+125
+Gangplank
+50.85%
+118
+Gnar
+50.43%
+117
+Ambessa
+56.41%
+117
+K'Sante
+50.46%
+109
+Dr. Mundo
+50.00%
+106
+Teemo
+52.43%
+103
+Zaahen
+55.21%
+96
+Sion
+50.00%
+94
+Volibear
+48.91%
+92
+Nasus
+47.19%
+89
+Jax
+43.68%
+87
+Pantheon
+56.98%
+86
+Irelia
+49.41%
+85
+Cho'Gath
+55.00%
+80
+Yorick
+58.75%
+80
+Akali
+52.50%
+80
+Olaf
+49.33%
+75
+Gragas
+58.90%
+73
+Illaoi
+53.42%
+73
+Kayle
+48.61%
+72
+Tryndamere
+40.00%
+70
+Yasuo
+63.08%
+65
+Rumble
+50.79%
+63
+Trundle
+43.55%
+62
+Urgot
+61.02%
+59
+Riven
+54.39%
+57
+Singed
+47.06%
+51
+Vayne
+52.00%
+50
+Kennen
+45.65%
+46
+Tahm Kench
+73.91%
+46
+Kled
+55.56%
+45
+Poppy
+47.06%
+34
+Sylas
+55.88%
+34
+Warwick
+43.75%
+32
+ADVERTISEMENT
+REMOVE ADS
+OP.GG
+OP.GG
+About OP.GG
+Company
+Blog
+Logo history
+Products
+League of Legends
+Teamfight Tactics
+Palworld
+Pokémon Champions
+Valorant
+PUBG
+ROBLOX
+OVERWATCH
+Pokémon Pokopia
+Marvel Rivals
+Arc Raiders
+Slay The Spire 2
+Counter Strike 2
+Fortnite
+Diablo 4
+2XKO
+Time Takers
+GTA 6
+Desktop
+Games
+Duo
+TalkG
+Esports
+Gigs
+Streamer Overlay
+Apps
+OP.GG for Mobile Android
+OP.GG for Mobile iOS
+AllT Android
+AllT iOS
+Valorant Android
+Valorant iOS
+Gigs Android
+Gigs iOS
+TalkG Android
+TalkG iOS
+Esports Android
+Esports iOS
+Resources
+Privacy policy
+Terms of use
+Help
+Email inquiry
+Contact us
+More
+Business
+Advertise with us
+Recruit
+
+© 2012-2026 OP.GG. OP.GG is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends © Riot Games, Inc.
+===== opgg-patch-1440.txt (rendered text at 1440, 5 Nov 2026)
+Privacy
+Stats
+League of Legends
+Desktop
+Games
+New
+Duo
+TalkG
+Esports
+Gigs
+Streamer Overlay
+New
+EN
+Sign in
+EUW
+Search a summoner
+Game name + #EUW
+🏆 Rank Up in 3 Days! Challenger Coaching
+🏆 Rank Up in 3 Days! Challenger Coaching
+Home
+Champions
+N
+Game modes
+Leaderboards
+N
+Spectate
+Stats
+Multi-search
+Information
+Media
+N
+Lessons
+Download app
+v16.22
+View official patch notes
+Patch notes
+
+See the latest champion, item, rune, spell, augment, and system changes in one place.
+
+55 changes
+
+Champion changes
+14
+Item, rune, and spell changes
+2
+Other changes to watch
+39
+Champion changes
+Aurelion Sol
+Buff
+
+E deals more damage at later ranks and gains stronger AP scaling.
+
+Confidence 96%
+E - Singularity · Total Magic Damage: 50 / 75 / 100 / 125 / 150 (+60% AP) over 5s → 50 / 80 / 110 / 140 / 170 (+60 / 65 / 70 / 75 / 80% AP) over 5s
+When playing
+
+E grows stronger as you rank it up.
+
+When facing
+
+Higher-rank E deals more damage.
+
+Corki
+Buff
+
+R and the Big One deal more damage and scale better with bonus AD.
+
+Confidence 96%
+R - Missile Barrage · Damage: 90 / 170 / 250 (+85% bonus AD) → 100 / 190 / 280 (+90% bonus AD)
+R - Missile Barrage · Big One Damage: 180 / 340 / 500 (+170% bonus AD) → 200 / 380 / 560 (+180% bonus AD)
+When playing
+
+Missiles reward bonus AD more.
+
+When facing
+
+Both missile sizes hit harder.
+
+Kayle
+Buff
+
+Q and R return sooner at earlier ranks.
+
+Confidence 96%
+Q - Radiant Blast · Cooldown: 12 / 11 / 10 / 9 / 8s → 10 / 9.5 / 9 / 8.5 / 8s
+R - Divine Judgment · Cooldown: 160 / 120 / 80s → 140 / 110 / 80s
+When playing
+
+Q and R are available more often early.
+
+When facing
+
+Track the shorter early cooldowns.
+
+Locke
+Nerf
+
+Q stack damage falls, and W lasts one second less.
+
+Confidence 96%
+Q - Ritual Nails · Stack Bonus Damage: 18 / 26 / 34 / 42 / 50 → 15 / 22 / 29 / 36 / 43
+Q - Ritual Nails · Maximum Stack Damage: 75.6 / 109.2 / 142.8 / 176.4 / 210 → 63 / 92.4 / 121.8 / 151.2 / 180.6
+W - Soul Ignition · Duration: 6s → 5s
+When playing
+
+Q stacks deal less damage and W expires sooner.
+
+When facing
+
+W provides a shorter threat window.
+
+Maokai
+Buff
+
+Q gains target-maximum-health damage.
+
+Confidence 96%
+Q - Bramble Smash · Damage: 75 / 120 / 165 / 210 / 255 (+2 / 2.5 / 3 / 3.5 / 4% Target Maximum Health) (+50% AP) → 75 / 120 / 165 / 210 / 255 (+2.5 / 3 / 3.5 / 4 / 4.5% Target Maximum Health) (+50% AP)
+When playing
+
+Q is stronger against health-heavy targets.
+
+When facing
+
+Q deals more damage based on your maximum health.
+
+Mel
+Adjustment
+
+Base stats and spell scaling shift, while W is rebuilt around projectile destruction, shields and retaliation.
+
+Confidence 96%
+Base Stats · Health: 640 + 99/Level → 590 + 107/Level
+Base Stats · Mana: 480 + 28/Level → 455 + 38/Level
+Base Stats · AR: +5.2/Level → +5.4/Level
+Base Stats · AD: 54 + 3.3/Level → 52 + 3.3/Level
+Base Stats · AS: 2.5%/Level → 2.75%/Level
+Passive - Searing Brilliance · Bonus Damage Per Bolt: 8 - 30 (+4% AP) → 4 - 30 (+4% AP)
+Passive - Searing Brilliance · First Stack Damage Against Minions: 50% Less → 45% Less
+Q - Radiant Volley · First Hit Damage: 60 / 85 / 110 / 135 / 160 (+55% AP) → 60 (+25% AP)
+Q - Radiant Volley · Multi-Hit Damage: 5 / 7 / 9 / 11 / 13 (+5% AP) → 5 / 10 / 15 / 20 / 25 (+8% AP)
+Q - Radiant Volley · Total Damage: 85 - 277 (+80 - 100% AP) → 85 - 285 (+65 - 97% AP)
+At least one champion hit refunds 0.5–1.0 seconds of Q cooldown, based on champion level.
+Q - Radiant Volley · Mana Cost: 70 / 75 / 80 / 85 / 90 → 60 / 65 / 70 / 75 / 80
+Q - Radiant Volley · Missile Speed: 3800 → 3200 (takes .047s longer to travel to max range)
+The nova expands to 400 units over 0.75 seconds and destroys enemy projectiles. Mel and allies inside gain a shield and movement speed; destroyed projectiles trigger retaliation when the nova ends.
+Retaliation deals 35/40/45/50/55 (+10% AP), then 5/10/15/20/25 (+5% AP) on further hits against that enemy. Up to 7 hits deal 65–205 (+40% AP) in total.
+The shield absorbs 80/110/140/170/200 (+70% AP) for 2 seconds.
+Movement speed increases by 10–30% for 2 seconds, based on champion level.
+W costs 100/80/60/40/0 mana.
+W has a 30/28.5/27/25.5/24-second cooldown.
+E - Solar Snare · Root Duration: 1.5 seconds → [0.8 - 1.6] / [0.85 - 1.75] / [0.9 - 1.9] / [0.95 - 2.05] / [1.0 - 2.2] seconds, increasing with distance
+E - Solar Snare · Slow Amount: 30% → 20 / 25 / 30 / 35 / 40%
+E - Solar Snare · Mana Cost: 50 / 60 / 70 / 80 / 90 → 40 / 50 / 60 / 70 / 80
+R - Golden Eclipse · Cooldown: 120 / 100 / 80 seconds → 120 / 90 / 60 seconds
+When playing
+
+Land Q for cooldown refunds and use W’s new protection window.
+
+When facing
+
+Mel’s W and distance-scaled E root require new timing.
+
+Naafiri
+Buff
+
+Q healing and W bonus AD increase.
+
+Confidence 96%
+Q - Darkin Daggers · Heal: 45 / 60 / 75 / 90 / 105 (+40% bonus AD) → 55 / 70 / 85 / 100 / 115 (+45% bonus AD)
+W - The Call of the Pack · Bonus Attack Damage: 20% → 22%
+When playing
+
+Q restores more health and W adds more attack damage.
+
+When facing
+
+Expect stronger healing and W damage.
+
+Rumble
+Buff
+
+R gains AP scaling.
+
+Confidence 96%
+R - The Equalizer · AP ratio for damage per second: 35% → 40%.
+R - The Equalizer · Maximum Damage Ability Power Ratio: 175% AP → 200% AP
+When playing
+
+AP contributes more damage to R.
+
+When facing
+
+R damage scales more strongly as Rumble gains AP.
+
+Shen
+Buff
+
+Q’s monster damage modifier rises at earlier ranks.
+
+Confidence 96%
+Q - Twilight Assault · Monster Damage Modifier: 100 / 125 / 150 / 175 / 200 → 120 / 140 / 160 / 180 / 200
+When playing
+
+Q offers more early monster damage.
+
+When facing
+
+This change affects monster damage.
+
+Smolder
+Buff
+
+W explosion base damage increases by 15.
+
+Confidence 96%
+W - ACHOOO! · Explosion Damage: 10 / 35 / 60 / 85 / 110 (+50% bonus AD) (+80% AP) → 25 / 50 / 75 / 100 / 125 (+50% bonus AD) (+80% AP)
+When playing
+
+W explosions deal more damage at every rank.
+
+When facing
+
+Avoid W explosions with their higher base damage.
+
+Thresh
+Nerf
+
+Base AD and R damage decrease.
+
+Confidence 96%
+Base Stats · Attack Damage: 56 → 54
+R - The Box · Damage: 250 / 400 / 550 (+100% AP) → 200 / 350 / 500 (+100% AP)
+When playing
+
+Attacks and R deal less damage.
+
+When facing
+
+Thresh’s damage is lower.
+
+Viktor
+Buff
+
+Health growth and R’s initial AP scaling increase.
+
+Confidence 96%
+Base Stats · Health Growth: 100/Level → 105/Level
+R - Arcane Storm · Conjure Damage: 100 / 175 / 250 (+50% AP) → 100 / 175 / 250 (+60% AP)
+When playing
+
+You gain more health per level and stronger initial R damage.
+
+When facing
+
+Viktor grows tougher and R hits harder initially.
+
+Yasuo
+Nerf
+
+Q’s total-AD scaling decreases.
+
+Confidence 96%
+Q - Steel Tempest · Damage: 20 / 45 / 70 / 95 / 120 (+105% total AD) → 20 / 45 / 70 / 95 / 120 (+100% total AD)
+When playing
+
+Attack damage contributes slightly less to Q.
+
+When facing
+
+Yasuo’s Q deals less AD-scaled damage.
+
+Zaahen
+Buff
+
+Q’s cooldown decreases before max rank.
+
+Confidence 96%
+Q - The Darkin Glaive · Cooldown: 10 / 9 / 8 / 7 / 6s → 8 / 7.5 / 7 / 6.5 / 6s
+When playing
+
+Q is available more often while ranking up.
+
+When facing
+
+Expect shorter Q windows before max rank.
+
+Item, rune, and spell changes
+Overlord's Bloodmail
+Adjustment
+
+Flat AD rises, but missing-health total-AD amplification falls.
+
+Confidence 96%
+Attack Damage: 30 → 40
+Retribution: +0 - 12% total AD, based on % Missing Health → +0 - 10% total AD, based on % Missing Health
+When playing
+
+You gain more flat AD but less low-health amplification.
+
+When facing
+
+The item’s damage profile shifts toward flat AD.
+
+Doran's Bow
+Nerf
+
+Attack damage decreases by 1.
+
+Confidence 96%
+Attack Damage: 8 → 7
+When playing
+
+The item grants less attack damage.
+
+When facing
+
+Its user has one less attack damage.
+
+Other changes to watch
+ARAM: Mayhem
+Hecarim
+Nerf
+Mode limited
+
+The ARAM: Mayhem ability-haste bonus is removed.
+
+Confidence 96%
+Ability Haste: 10 → 0
+When playing
+
+Your Mayhem ability-haste bonus is 0.
+
+When facing
+
+Hecarim loses 10 Mayhem ability haste.
+
+Armored Impact
+Nerf
+Mode limited
+
+Damage falls, including bonus-armor scaling.
+
+Confidence 96%
+Damage: 50 - 125 + 250% bonus Armor → 25 - 125 + 220% bonus Armor
+When playing
+
+Armor contributes less damage.
+
+When facing
+
+The augment deals less damage.
+
+BEES!!!
+Nerf
+Mode limited
+
+Top-end base damage falls and hives travel more slowly.
+
+Confidence 96%
+Base Damage Scaling: 75 - 200 + 150% bonus AD + 70% total AP → 75 - 140 + 150% bonus AD + 70% total AP
+Hive Travel Time: .75s → 1.1s
+When playing
+
+Hive travel takes 1.1 seconds.
+
+When facing
+
+You have more time before hive impact.
+
+Brass Blast
+Adjustment
+Mode limited
+
+Cooldown decreases, but minion damage is removed.
+
+Confidence 96%
+Cooldown: 75s → 50s
+Brass Blast no longer damages minions.
+When playing
+
+You can trigger the effect more often, without damaging minions.
+
+When facing
+
+The shorter cooldown increases its availability.
+
+CRIMSON COBALT
+Adjustment
+Mode limited
+
+Only the owner can see the mark effect.
+
+Confidence 96%
+Mark VFX: Visible to all players → Visible only to the augment owner
+When playing
+
+Your mark is no longer visible to everyone.
+
+When facing
+
+The owner’s mark is hidden from your view.
+
+One Hit Wonder
+New
+Mode limited
+
+Ability haste boosts one ability’s damage instead of its cooldown.
+
+Confidence 96%
+The affected ability gains damage based on ability haste, but ability haste no longer reduces its cooldown.
+When playing
+
+Ability haste increases the affected ability’s damage.
+
+When facing
+
+The affected ability no longer gains cooldown reduction from haste.
+
+Ravenous Bind
+Buff
+Mode limited
+
+Base healing and bonus-health healing scaling increase.
+
+Confidence 96%
+Bonus Health Heal Ratio: .1 → .12
+Base Heal: 50 - 200 → 75 - 300
+When playing
+
+The effect restores more health.
+
+When facing
+
+The owner heals more.
+
+RISE
+New
+Mode limited
+
+Ultimate kills reset its cooldown up to 3 times.
+
+Confidence 96%
+An ultimate kill on an enemy champion resets the ultimate cooldown, up to 3 times.
+When playing
+
+Secure a champion kill with R to reset its cooldown.
+
+When facing
+
+An ultimate kill can enable another cast.
+
+Squishy Slappy Grab
+Buff
+Mode limited
+
+The shield per pulled target and its resistance scaling increase.
+
+Confidence 96%
+Shield per Pulled Target: 50 - 200 + 50% bonus Armor + 50% bonus Magic Resistance → 100 - 300 + 70% bonus Armor + 70% bonus Magic Resistance
+When playing
+
+Pulling targets grants a stronger shield.
+
+When facing
+
+The owner gains more protection after pulling a target.
+
+Soul Eater
+Buff
+Mode limited
+
+Each stack grants 30 health instead of 20.
+
+Confidence 96%
+Health Gain per Stack: 20 → 30
+When playing
+
+Each stack grants 10 more health.
+
+When facing
+
+The owner gains more health per stack.
+
+Stay Resolute
+Buff
+Mode limited
+
+Resistance gains start higher and reach 3 at level 11.
+
+Confidence 96%
+Armor and Magic Resistance per Ability Hit: Level 1 / 7 / 11 - 1 / 2 / 3 → Level 1 / 11 - 2 / 3
+When playing
+
+Ability hits grant more early resistances.
+
+When facing
+
+The owner gains stronger early resistance stacks.
+
+Take'em Down Down Down
+Adjustment
+Mode limited
+
+The five-hit proc now deals a fixed 17% missing-health damage.
+
+Confidence 96%
+Five-Hit Proc Damage: (15 + 5% bonus Attack Speed + 0.15% total Ability Haste)% Missing Health → 17% Missing Health
+When playing
+
+Attack speed and haste no longer raise this damage ratio.
+
+When facing
+
+The proc uses a fixed missing-health ratio.
+
+Titan's Resolve
+Buff
+Mode limited
+
+Each Juggernauting level requires fewer stacks.
+
+Confidence 96%
+Stacks of Juggernauting required for each Juggernauting level: 10 → 7
+When playing
+
+A level now takes 7 stacks instead of 10.
+
+When facing
+
+The owner reaches each Juggernauting level sooner.
+
+Weapon of Destiny
+Nerf
+Mode limited
+
+All four penetration scalars decrease.
+
+Confidence 96%
+Flat Armor Penetration Scalar: 35 → 20
+Flat Magic Penetration Scalar: 25 → 15
+Percent Armor Penetration Scalar: 0.25 → 0.15
+Percent Magic Penetration Scalar: 0.15 → 0.09
+When playing
+
+The empowered item gains less penetration.
+
+When facing
+
+The empowered item bypasses less defense.
+
+ARAM maps
+System
+Mode limited
+
+Butcher’s Bridge and Koeshin’s Crossing are enabled.
+
+Confidence 96%
+Systems · Butcher's Bridge and Koeshin's Crossing: Unavailable → Enabled
+ARAM bugfixes
+Bugfix
+Mode limited
+
+Several augment, headliner and mission bugs are fixed.
+
+Confidence 96%
+View details (9)
+Classic
+Volibear
+New
+Mode limited
+
+Classic Volibear joins with a healing passive, a flip, Frenzy and chain lightning.
+
+Confidence 96%
+At low health, Volibear regenerates part of his maximum health over time; the passive has a long cooldown.
+Q grants movement speed, increased toward enemy champions; the next attack adds damage and flips its target behind Volibear.
+Attacks stack bonus attack speed. At full stacks, W can damage one target, with more damage against a target missing health.
+E damages and slows nearby enemies, and also fears minions and monsters.
+For several seconds after R, basic attacks release chain lightning.
+When playing
+
+Stack attacks for Frenzy and use Q to flip a target.
+
+When facing
+
+Watch for the flip and low-health regeneration.
+
+Swain
+New
+Mode limited
+
+Classic Swain joins with damage-over-time spells and a healing raven transformation.
+
+Confidence 96%
+Killing an enemy restores some mana.
+Q sends a raven to slow a target and deal damage over time while it stays in range.
+After a delay, W damages and roots enemies in a small area.
+E deals damage over time and increases damage that Swain deals to the target, including true damage such as Ignite.
+R transforms Swain into a raven, with increasing mana cost over time. Smaller ravens damage enemies and heal him according to damage dealt.
+When playing
+
+Keep targets in Q range and manage R’s increasing mana cost.
+
+When facing
+
+Leave Q range and respect E’s damage amplification.
+
+Elise
+New
+Mode limited
+
+Classic Elise joins with human and spider forms and stored Spiderlings.
+
+Confidence 96%
+Human-form ability hits store Spiderlings up to a cap; spider form releases them to attack nearby enemies.
+Human Q adds damage based on the target’s current health. Spider Q makes Elise and her Spiderlings leap at a target, adding damage based on its missing health.
+Human W releases an explosive Spiderling that detonates on the first enemy and deals area damage. Spider W grants attack speed to Elise and her Spiderlings and heals her on hit.
+Human E stuns the first enemy hit. Spider E lifts Elise and her Spiderlings into the air, making them untargetable; a recast selects their descent target.
+R swaps between ranged human form and melee spider form; spider form adds on-hit damage.
+When playing
+
+Human-form hits prepare Spiderlings for spider form.
+
+When facing
+
+The two forms use current-health and missing-health damage differently.
+
+Aatrox
+Adjustment
+Mode limited
+
+The passive cooldown now scales, and Q and R attack bugs are fixed.
+
+Confidence 96%
+P - Blood Well · Cooldown: 225 → 225/200/175/150 (for real this time)
+Max-range Q casts now affect enemies consistently; this fixes a bug dating to 2013.
+Aatrox’s attacks work during R; the fix was delivered in the day-one micropatch.
+When playing
+
+The passive returns sooner at later levels.
+
+When facing
+
+Account for the scaling passive cooldown.
+
+Amumu
+Nerf
+Mode limited
+
+Passive shred, Q damage and R availability decrease.
+
+Confidence 96%
+Passive - Cursed Touch · Magic Resistance Shred: 15 / 25 / 35 → 15 / 20 / 25 (Levels 1 / 7 / 13)
+Q - Bandage Toss · Damage: 80 / 140 / 200 / 260 / 320 → 80 / 130 / 180 / 230 / 280
+R - Curse of the Sad Mummy · Cooldown: 150 / 130 / 110s → 170 / 145 / 120s
+When playing
+
+Q and passive shred are weaker while R takes longer to return.
+
+When facing
+
+Amumu’s R has a longer cooldown.
+
+Evelynn
+Buff
+Mode limited
+
+Q gains base damage after rank 1.
+
+Confidence 96%
+Q - Hate Spike · Base Damage: 40 / 55 / 70 / 85 / 100 → 40 / 60 / 80 / 100 / 120
+When playing
+
+Ranking Q adds more damage.
+
+When facing
+
+Higher-rank Q hits harder.
+
+Ezreal
+Buff
+Mode limited
+
+W and E gain AP scaling, and W heals more effectively.
+
+Confidence 96%
+W - Essence Flux · Ability Power Ratio: 60% → 80%
+W - Essence Flux · Healing Effectiveness: 50% → 70%
+E - Arcane Shift · Ability Power Ratio: 75% → 80%
+When playing
+
+AP strengthens both W and E.
+
+When facing
+
+Expect stronger AP damage and W healing.
+
+Fiddlesticks
+Adjustment
+Mode limited
+
+E base damage shifts from earlier ranks to later ranks.
+
+Confidence 96%
+E - Dark Wind · Damage per Bounce: 65 / 85 / 105 / 125 / 145 + 45% AP → 50 / 75 / 100 / 125 / 150 + 45% AP
+When playing
+
+Rank 1 E loses damage while rank 5 gains damage.
+
+When facing
+
+E’s damage profile changes as it ranks up.
+
+Gangplank
+Buff
+Mode limited
+
+Durability and passive stacks improve, while Q and R become easier to reuse.
+
+Confidence 96%
+Base Stats · Base Health Regeneration: 5 → 7
+Base Stats · Health per Level: 81 → 89
+Passive - Grog-Soaked Blade · Maximum Stacks: 3 → 4
+Q - Parrrley · Mana Cost: 50 / 55 / 60 / 65 / 70 → 40 / 45 / 50 / 55 / 60
+R - Cannon Barrage · Cooldown: 120 / 115 / 110s → 120 / 110 / 100s
+When playing
+
+You gain more health and regeneration, with cheaper Q and shorter later R cooldowns.
+
+When facing
+
+Track the extra passive stack and stronger durability.
+
+Janna
+Nerf
+Mode limited
+
+The global movement-speed bonus falls to 2%.
+
+Confidence 96%
+Passive - Tailwind · Global Bonus Movement Speed: 3% → 2%
+When playing
+
+Your team gains less movement speed from the passive.
+
+When facing
+
+The team-wide speed bonus is smaller.
+
+Mordekaiser
+Adjustment
+Mode limited
+
+Attack timing and R pet damage rules are corrected.
+
+Confidence 96%
+Mordekaiser’s attacks come out about 70% faster; this was corrected about a week after release.
+R - Children of the Grave · Pet Bonus Attack Damage: 75% of the target’s Attack Damage → 75% of Mordekaiser’s Attack Damage
+Mordekaiser’s pets can no longer critically strike structures.
+R - Children of the Grave · Bonus Damage to Inhibitors and the Nexus: 75% (This was true in 2013, too!) → 0%
+When playing
+
+R pet bonus AD now uses your AD, without structure crits or extra inhibitor/Nexus damage.
+
+When facing
+
+R pets no longer gain those extra structure-damage effects.
+
+Nami
+Buff
+Mode limited
+
+Q damage and AP scaling rise, and W loses less damage per bounce.
+
+Confidence 96%
+Q - Aqua Prison · Damage: 75 / 130 / 185 / 240 / 295 + 65% AP → 90 / 145 / 200 / 255 / 310 + 100% AP
+W - Ebb and Flow · Damage Reduction per Bounce: 30% → 15% (Healing reduction unchanged at 15%)
+When playing
+
+Later W bounces retain more damage; healing reduction stays unchanged.
+
+When facing
+
+Q and later W bounces hit harder.
+
+Olaf
+Buff
+Mode limited
+
+W grants more AD and E has a shorter cooldown.
+
+Confidence 96%
+W - Vicious Strikes · Bonus Attack Damage: 7 / 14 / 21 / 28 / 35 → 10 / 17 / 24 / 31 / 38
+E - Reckless Swing · Cooldown: 9 / 8 / 7 / 6 / 5s → 8 / 7 / 6 / 5 / 4s
+When playing
+
+W adds more damage and E is available sooner.
+
+When facing
+
+Olaf’s damage and E availability improve.
+
+Rammus
+Nerf
+Mode limited
+
+Base armor and attack-damage growth decrease.
+
+Confidence 96%
+Base Stats · Base Armor: 28.8 → 25
+Base Stats · Attack Damage per Level: 3.5 → 2.75
+When playing
+
+You start with less armor and gain less AD per level.
+
+When facing
+
+Rammus has lower armor early and less AD growth.
+
+Shushei's Mana Jug
+Bugfix
+Mode limited
+
+Clone takedowns no longer trigger the item.
+
+Confidence 96%
+Clone takedowns no longer trigger Shushei’s Mana Jug.
+Statikk Shiv
+Bugfix
+Mode limited
+
+The item triggers correctly with Classic Kayle E.
+
+Confidence 96%
+Statikk Shiv can trigger correctly after Kayle activates Righteous Fury.
+Wit's End
+Bugfix
+Mode limited
+
+The item maintains its 4 stacks.
+
+Confidence 96%
+Wit’s End correctly maintains its 4 stacks.
+Health and Mana Potions
+Bugfix
+Mode limited
+
+Potion buff text is restored.
+
+Confidence 96%
+Items
+772003
+Health Potion now shows its buff description.
+Mana Potion
+Mana Potion now shows its buff description.
+Health Potion
+Health Potion now shows its buff description.
+Classic bugfixes
+Bugfix
+Mode limited
+
+Classic spell, animation and visual bugs are corrected.
+
+Confidence 96%
+View details (17)
+Other changes
+TFT standalone client
+System
+
+TFT moves to its standalone client on November 4. Existing TFT cosmetics remain usable in League; new TFT-exclusive Little Legends begin December 1, with full cosmetic separation on December 15.
+
+Confidence 96%
+Classic Pass progress
+System
+
+The pass-token progression error is fixed, and tokens per game increase by 50% for the rest of Classic.
+
+Confidence 96%
+Upcoming skins and chromas
+System
+
+Upcoming cosmetics include K/DA Firestarter skins, K/DA Hitmaker Evelynn, Prestige Classic Baron Kog’Maw and the listed chromas.
+
+Confidence 96%
+General bugfixes
+Bugfix
+
+Champion interactions and Spectator Mode sound bugs are corrected.
+
+Confidence 96%
+View details (7)
+OP.GG
+OP.GG
+About OP.GG
+Company
+Blog
+Logo history
+Products
+League of Legends
+Teamfight Tactics
+Palworld
+Pokémon Champions
+Valorant
+PUBG
+ROBLOX
+OVERWATCH
+Pokémon Pokopia
+Marvel Rivals
+Arc Raiders
+Slay The Spire 2
+Counter Strike 2
+Fortnite
+Diablo 4
+2XKO
+Time Takers
+GTA 6
+Desktop
+Games
+Duo
+TalkG
+Esports
+Gigs
+Streamer Overlay
+Apps
+OP.GG for Mobile Android
+OP.GG for Mobile iOS
+AllT Android
+AllT iOS
+Valorant Android
+Valorant iOS
+Gigs Android
+Gigs iOS
+TalkG Android
+TalkG iOS
+Esports Android
+Esports iOS
+Resources
+Privacy policy
+Terms of use
+Help
+Email inquiry
+Contact us
+More
+Business
+Advertise with us
+Recruit
+
+© 2012-2026 OP.GG. OP.GG is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends © Riot Games, Inc.
