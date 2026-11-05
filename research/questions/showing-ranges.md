@@ -29,7 +29,10 @@ often the better option wins, worst for small effects, which is every League gap
 C10). Counts ("8 in 10") beat percentages and a 20-dot quantile dotplot beats a density
 (C11). A lone interval in words is fragile, and hard-edged bars are read as categories
 and their ends as real values; colour fading to grey as uncertainty grows makes readers
-weigh it (C12, C13).
+weigh it (C12, C13). Capped bars are read as in or out and inflate gaps; gradients
+remove that bias (C16). Readers compare centres and underestimate how often A wins
+whatever the display (C18). Products that keep thin numbers in view hatch, wash or count
+them and keep the raw value (C19); motion with no explanation reads as a fault (C20).
 
 So, for the site (C14): keep the number, fade it towards grey by range width (J35's
 solid and faded already do this), and put the 80% range and games in a plain tooltip
@@ -79,6 +82,22 @@ and a dated changelog of range changes.
 - C15 (inferred): The method page leads with per-kind coverage beside median width against
   both named raw modes, then rules, sources of spread, half-weight curves and a changelog.
   from: C3, C5, C6, C7
+- C16: Capped range bars are read as in or out and inflate gaps between values, even by
+  researchers; gradient and violin shapes remove that bias for a small gain in right calls.
+  for: [[correll-gleicher-error-bars-2014#^f1]], [[correll-gleicher-error-bars-2014#^f2]], [[correll-gleicher-error-bars-2014#^f3]], [[correll-gleicher-error-bars-2014#^f4]], [[belia-ci-se-misunderstood-2005#^f2]] against: [[kale-hops-trends-2019#^f4]]
+- C17: With a value-suppressing palette readers find values as accurately as with a plain
+  two-variable map and avoid the least sure cells; a few discrete steps beat a smooth blend.
+  for: [[correll-moritz-heer-vsup-2018#^f4]], [[correll-moritz-heer-vsup-2018#^f5]], [[correll-moritz-heer-vsup-2018#^f6]]
+- C18: Lay readers judge A against B by the distance between centres and underestimate
+  how often A wins with every display; dotplots err least, animated draws no better than
+  intervals. for: [[kale-effect-size-strategies-2020#^f1]], [[kale-effect-size-strategies-2020#^f2]], [[kale-effect-size-strategies-2020#^f3]]
+- C19: Products that keep thin numbers in view keep the raw value and mark the thinness
+  by texture or wash (Savant's hatched bar) or a grey count and a word tag (Porofessor).
+  for: [[savant-comparison-tool#^f2]], [[savant-comparison-tool#^f4]], [[porofessor-live-ui#^f8]], [[porofessor-live-ui#^f10]]
+- C20: Uncertainty shown as motion, with no line saying what the motion means, is read as
+  a trend or a fault. for: [[aisch-jittery-gauges-2016#^f4]], [[flowingdata-nyt-needle-2016#^f1]]
+- C21: With thin data the NYT needle shows the prior estimate, and the widget is withheld
+  where data is too thin. for: [[reuters-institute-nyt-needle-2024#^f1]], [[reuters-institute-nyt-needle-2024#^f2]]
 
 ## Disagreements
 
@@ -90,6 +109,9 @@ swarm and The Economist's bands were not user-tested (fivethirtyeight-2020-desig
 ## Open
 
 - Which sure / not sure cut-off for comparisons, and is it the chance A is better or a
-  minimum edge in games? Kale, Kay, Hullman 2020 (2007.14516) is the next read.
+  minimum edge in games? Kale 2020 measures the misjudgement (C18) but proposes no cut-off.
+- Display options weighed side by side for Jacob (5 Nov):
+  data/team/2026-11-05-meionotes/uncertainty-options.html; decision goes in
+  docs/frontend.md "Good UI here".
 - Words for confidence beside dotplots: Padilla et al 2021 (Frontiers).
 - Stratz is behind a login (skipped).

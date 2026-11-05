@@ -3,7 +3,7 @@ title: 'Porofessor: live game player cards (Wayback, Apr 2026)'
 url: https://web.archive.org/web/20260412131641/https://porofessor.gg/partial/live-partial/euw/
 kind: project
 commit: 
-for: [lol-site-ui]
+for: [lol-site-ui, showing-ranges]
 looked: 2026-10-24
 depth: skimmed (one archived Normal Draft live game: ten player cards)
 relevance: high
@@ -35,6 +35,22 @@ Why: player cards and tags (kind 2) from the leading scouting tool; the brief na
 - [ux/controls] Two dropdowns scope every card: which queues the stats count and the time window. ^f6
   > NORMAL & RANKED STATS LAST 30 DAYS
 - [policy] (inferred) These cards show other players' names and stats before and during a game, the thing meio.lol's product rules forbid in champ select; for meio.lol the card and tag design is reusable only for the player's own profile or a post-game page. ^f7
+
+- [ux/uncertainty] The champion win rate on a card is shown however few the games,
+  in the same dark text whether it rests on 1 game or 18; only the count after it, in
+  lighter grey brackets, tells them apart. (style seen in screenshot) ^f8
+  > "100% Win (1 Played)"
+  > "72% Win (18 Played)"
+- [ux/uncertainty] With no games on the champion in the window the card drops the rate
+  and shows only the count, with dashes for K/D/A. ^f9
+  > "0 Played - / - / -"
+- [ux/uncertainty] Thin experience is also put in words as a red tag on the champion
+  (Shyvana newbie on 2 games, Morgana casual on 2, LeBlanc newbie on 0, Ashe casual on
+  0 with mastery 441); the rule behind newbie versus casual is not stated (mastery
+  level appears to play a part, inferred). ^f10
+  > "Hot Streak AutoFilled? Shyvana newbie"
+- [ux/uncertainty] Checked, not there: no floor, fading or range on the champion win
+  rate; a 0% on 2 games and a 100% on 1 game sit in the same style as the rest. ^f11
 
 ## Read
 

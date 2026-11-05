@@ -13,7 +13,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 172 | 620 |
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 4 | 180 | 459 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 30 | 364 | 2687 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 16 | 462 | 2428 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 16 | 472 | 2494 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 9 | 179 | 704 |
 | [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 174 | 1966 |
 
@@ -94,7 +94,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | answered | now | [How do the best dense stat sites lay out many numbers readably, and what should meio.lol steal?](questions/dense-stat-layout.md): How dense stat sites (League and outside) lay out many numbers readably, and which ideas fit meio.lol's pages | 10 strong, 5 moderate, 1 contested | 36 | 4 (growing) | 7 |
 | answered | now | [Which toolkit should the meiolol desktop app be built on, long term?](questions/desktop-toolkit.md): Which toolkit should the meiolol desktop app be built on, long term? | 9 strong, 1 moderate | 13 | 10 (saturated) | 2 |
 | answered | now | [Per UI element kind, how do other LoL (and Dota, Valorant) sites build it, what works and what doesn't, and which site should meio.lol model each on?](questions/lol-site-ui.md): Per UI element kind, how do other LoL (and Dota, Valorant) sites build it, what works and what doesn't, and which site should meio.lol model each on? | 15 strong, 7 moderate, 2 contested | 70 | 12 (growing) | 1 |
-| answered | now | [How do stat sites, forecasters and experiment tools show uncertainty and thin data to lay readers, and what does research say works?](questions/showing-ranges.md): How do stat sites, forecasters and experiment tools show uncertainty and thin data to lay readers, and what does research say works? | 12 strong, 3 moderate | 24 | 10 (growing) | 8 |
+| answered | now | [How do stat sites, forecasters and experiment tools show uncertainty and thin data to lay readers, and what does research say works?](questions/showing-ranges.md): How do stat sites, forecasters and experiment tools show uncertainty and thin data to lay readers, and what does research say works? | 15 strong, 6 moderate, 1 contested | 35 | 18 (saturated) | 8 |
 | answered | now | [What should meiolol's site show first and how should it present numbers so players and Riot reviewers trust and use it?](questions/site-design.md): What the site leads with and how it shows numbers, spread and thin data, for players and for Riot's production key reviewers | 11 strong, 7 moderate | 22 | 0 |  |
 | answered | now | [How do stats sites present duos, a figure's rank among all, a summary in words from numbers, and dense tables on phones, and which components carry them?](questions/stat-presentation-patterns.md): How do stats sites present duos, a figure's rank among all, a summary in words from numbers, and dense tables on phones, and which components carry them? | 11 strong, 7 moderate | 19 | 12 (growing) | 4 |
 | answered | now | [How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically?](questions/ui-guardrails.md): How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically? | 10 strong, 1 moderate, 1 contested | 37 | 26 (growing) | 9 |
@@ -137,6 +137,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 81 questions, 1247 sources, 9528 findings
+- 81 questions, 1257 sources, 9594 findings
 - Open leads: 328 (`josearch leads`)
 - Lint: 0 errors, 5 warnings (`josearch lint`)
