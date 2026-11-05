@@ -187,12 +187,17 @@ pub const Dom = struct {
         p.set("scrollLeft", p.get("scrollLeft", f64) + mid - pmid);
     }
 
+    /// Focuses it too if it can take focus (a section tab's target: tabindex -1), so
+    /// the next Tab starts in it. Focus first: its own scroll is then overridden,
+    /// smaller than passing preventScroll
     pub fn jump(_: *Dom, id: []const u8) void {
         const s = zjb.string(id);
         defer s.release();
         const t = zjb.global("document").call("getElementById", .{s}, zjb.Handle);
         defer t.release();
-        if (t != .null) t.call("scrollIntoView", .{}, void);
+        if (t == .null) return;
+        t.call("focus", .{}, void);
+        t.call("scrollIntoView", .{}, void);
     }
 
     pub fn popover(d: *Dom, id: u32, show: bool) void {

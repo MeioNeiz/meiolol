@@ -229,9 +229,9 @@ pub fn bars(h: *H, names: [2][]const u8, items: []const Row) N {
         l.add(h.div(.{ .key = i, .class = "br" }, .{
             h.span(.{ .class = "lab" }, .{r.label}),
             h.span(.{ .class = "us", .aria_hidden = true, .style = h.vars(.{ .x = pct(b[0]) }) }, .{}),
-            h.span(.{ .class = "n", .data_lead = r.lead == .a }, .{r.a}),
+            h.span(.{ .class = "n", .data_lead = r.lead == .a }, .{ h.span(.{ .class = "sr" }, .{ names[0], " " }), r.a }),
             h.span(.{ .class = "them", .aria_hidden = true, .style = h.vars(.{ .x = pct(b[1]) }) }, .{}),
-            h.span(.{ .class = "n", .data_lead = r.lead == .b }, .{r.b}),
+            h.span(.{ .class = "n", .data_lead = r.lead == .b }, .{ h.span(.{ .class = "sr" }, .{ names[1], " " }), r.b }),
         }));
     }
     return h.div(.{ .class = "c-vs", .data_v = "bars", .data_grow = {}, .role = "group", .aria_label = W.rows.with(h, .{ .a = names[0], .b = names[1] }) }, .{l.done()});
@@ -422,6 +422,7 @@ pub const css =
     \\  .c-vs .br > .them { --c: var(--them-hot); }
     \\  .c-vs .br > .n { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.8; }
     \\  .c-vs .br > .n[data-lead] { font-weight: var(--w-b); opacity: 1; }
+    \\  .c-vs .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     \\  .c-vs .bnd > .ends { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
     \\}
     \\

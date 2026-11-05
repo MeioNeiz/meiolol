@@ -453,10 +453,10 @@ pub const W = struct {
     pub const hard = plain("hard");
     pub const easier = plain("easier to pick up");
     pub const also = Phrase("{c:text} mains also play");
-    pub const lift = Phrase("×{x:dec}");
+    pub const lift = Phrase("{x:dec}× as often");
     pub const share = Phrase("{s:pct}");
-    pub const also_tip = Phrase("{c:text} mains play {d:text} {x:dec}× as often as other players; {s:pct} of them play it");
-    pub const also_tip_hard = Phrase("{c:text} mains play {d:text} {x:dec}× as often as other players; {s:pct} of them play it. Harder to pick up");
+    pub const also_tip = Phrase("{d:text}: {s:pct} of {c:text} mains play it, {x:dec}× as often as other players");
+    pub const also_tip_hard = Phrase("{d:text}: {s:pct} of {c:text} mains play it, {x:dec}× as often as other players. Harder to pick up");
     pub const pool = plain("Pool");
     /// A chart point's tip, after its name
     pub const rate_tip = Phrase("{r:rate} in {n:count} games");
@@ -1282,6 +1282,7 @@ pub const Build = struct {
         return h.div(.{
             .class = "part",
             .id = "build",
+            .tabindex = @as(i8, -1),
             .data_island = "champbuild",
             .data_src = if (p.src.len > 0) p.src else null,
             .data_stamp = if (p.bin == null) p.stamp else null,
@@ -1545,7 +1546,7 @@ pub const More = struct {
 
     fn matchups(p: *P, h: *H) N {
         if (p.shownAnswer()) |x| if (x.roles.len == 0 or x.roles[0].games == 0) {
-            return card.view(h, .{ .id = "matchups" }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{if (x.roles.len == 0) W.no_answer else W.no_lock_games}) });
+            return card.view(h, .{ .id = "matchups", .target = true }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{if (x.roles.len == 0) W.no_answer else W.no_lock_games}) });
         };
         var in = p.input();
         if (p.ranked()) |x| in.ranked = switch (x) {
@@ -1659,7 +1660,7 @@ pub const Trends = struct {
             .data_wasm = p.wasm,
             .data_busy = p.files.busy(),
         }, .{
-            h.div(.{ .class = "row3", .id = "trends" }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
+            h.div(.{ .class = "row3", .id = "trends", .tabindex = @as(i8, -1) }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
             h.div(.{ .class = "row3" }, .{ p.rankCard(h), p.timingCard(h), p.endsCard(h) }),
         });
@@ -1847,10 +1848,9 @@ pub const Trends = struct {
                 .champ = icon(h, d.ddragon, c),
                 .href = h.fmt("{s}champions/{s}", .{ p.root, c.slug }),
                 .tag = if (a.harder) badge.view(h, .neutral, .{W.hard}) else null,
-                .title = if (a.harder) W.also_tip_hard.with(h, tip) else W.also_tip.with(h, tip),
-                .value = h.span(.{}, .{W.lift.with(h, .{ .x = a.lift })}),
-                .note = W.share.with(h, .{ .s = s }),
-                .fill = a.share / 100,
+                .label = if (a.harder) W.also_tip_hard.with(h, tip) else W.also_tip.with(h, tip),
+                .value = h.span(.{}, .{W.share.with(h, .{ .s = s })}),
+                .note = W.lift.with(h, .{ .x = a.lift }),
             };
         }
         const title = W.also.with(h, .{ .c = d.name });
@@ -2271,6 +2271,7 @@ test "lane kills: each side's share of lanes on its own bar, first blood only wh
     const got = w.written();
     try std.testing.expect(std.mem.indexOf(u8, got, "data-v=\"bars\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, got, "Kill by 6:00") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "<span class=\"sr\">Opponent </span>46%") != null);
     try std.testing.expect(std.mem.indexOf(u8, got, "--x:12") != null);
     try std.testing.expectEqual(4, std.mem.count(u8, got, "class=\"br\""));
 

@@ -123,7 +123,7 @@ pub const MatchupGrid = struct {
 
     /// `owner`'s Msg wraps Msg's tags with the same payloads
     pub fn view(g: *G, h: *H, owner: anytype, in: *const Input) N {
-        if (in.rels.len == 0) return card.view(h, .{ .id = "matchups" }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        if (in.rels.len == 0) return card.view(h, .{ .id = "matchups", .target = true }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
         const rel = in.rels[g.rel];
         const lane = !rel.ally and rel.role == in.role;
         var counts = in.counts;
@@ -206,7 +206,7 @@ pub const MatchupGrid = struct {
             }),
         };
         const count: u32 = @intCast(opps.len);
-        return card.view(h, .{ .id = "matchups" }, &.{
+        return card.view(h, .{ .id = "matchups", .target = true }, &.{
             card.head(h, W.matchups, if (rare > 0) W.rare.with(h, .{ .n = count, .r = rare }) else phrase.num(h, .count, count), &.{ if (lane) .none else in.plat, controls[0], controls[1], controls[2] }),
             h.div(.{ .class = "c-mgrid" }, .{
                 if (none) in.few else h.div(.{ .class = "plot" }, .{g.dots.view(h)}),

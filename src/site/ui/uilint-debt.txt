@@ -12,7 +12,6 @@ app pagecss 53
 appbar markup 4
 appbar title 1
 buildpanel title 1
-champlist title 2
 champpage css 3
 champpage pagecss 47
 champrolepicker title 1

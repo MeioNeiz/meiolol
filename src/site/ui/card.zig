@@ -21,10 +21,12 @@ pub const Opts = struct {
     label: ?tree.Text = null,
     /// A link's target (Tabs to the page's sections)
     id: ?[]const u8 = null,
+    /// A section tab's target: focusable, so after the jump the next Tab starts in it
+    target: bool = false,
 };
 
 pub fn view(h: *H, o: Opts, kids: []const N) N {
-    return h.section(.{ .class = "c-card", .data_v = if (o.flush) "flush" else null, .aria_label = o.label, .id = o.id }, .{kids});
+    return h.section(.{ .class = "c-card", .data_v = if (o.flush) "flush" else null, .aria_label = o.label, .id = o.id, .tabindex = if (o.target) @as(?i8, -1) else null }, .{kids});
 }
 
 /// The card's head band: its title, a count, then its own controls at the end

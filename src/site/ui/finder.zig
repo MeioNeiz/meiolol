@@ -459,7 +459,7 @@ pub const Grid = struct {
 };
 
 fn cardWith(h: *H, body: N) N {
-    return card.view(h, .{ .id = "matchups" }, &.{ card.head(h, champpage.W.matchups, null, &.{}), body });
+    return card.view(h, .{ .id = "matchups", .target = true }, &.{ card.head(h, champpage.W.matchups, null, &.{}), body });
 }
 
 fn pageOf(a: std.mem.Allocator, in: *const matchgrid.Input, o: champpage.Opp) !?[]const u8 {

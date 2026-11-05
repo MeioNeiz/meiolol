@@ -571,10 +571,10 @@ at both ends, the names over the lane's bar (the first's win rate a tick against
 middle's, the bar solid to its 95% range's low end and fading to the high one, a ring
 where a patch move started) or a Bar of a figure that isn't a win rate (`fill`), the
 figure and its note last. `tiles`: one tile per champion filling the card's width, the
-portrait large, the figure under the name, the note over a bar of its share (`fill`)
-States: mains also play: links, a badge; tiles: share bars, a harder mark; two columns;
-matchups: duels, the lane's bar and range; a role; where a move started; duels with a Bar:
-a gold lead, the list's biggest full; with roles, no links
+portrait large, the figure under the name, the note small under it
+States: mains also play: links, a badge; tiles: the share, how much more often, a harder
+mark; two columns; matchups: duels, the lane's bar and range; a role; where a move
+started; duels with a Bar: a gold lead, the list's biggest full; with roles, no links
 Used by: finder, champpage, matchpage
 
 ### DraftBoard
