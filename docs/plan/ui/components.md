@@ -41,8 +41,8 @@ Badge: a flat label (role, result, "few games", a patch note). Never looks press
 fill or border, no hover. A patch note (`riot`) is ringed in its tone, buff or nerf with
 an arrow as the second cue
 States: neutral; accent; us; them; few; patch note; patch buff; patch nerf; moment
-Used by: modelbadge, matchbrief, champlist, draftboard, champselect, appbar, versus,
-inspector, gamehead, gamerow, scoreboard, puzzle, candlist, learnpage, dailypage,
+Used by: modelbadge, matchbrief, champlist, draftboard, champselect, compview, appbar,
+versus, inspector, gamehead, gamerow, scoreboard, puzzle, candlist, learnpage, dailypage,
 dailyseat, dailydays, patchpage, homepage, pv, adminpage, adminlab, adminruns, champpage,
 matchpage, tiers
 
@@ -80,10 +80,10 @@ toolbar (the page's filters) run edge to edge as bands built into the card, not 
 above it. SectionHead titles a run of content outside a card
 States: plain; head with a control; a row stretched taller: the chart grows into it; tabs
 and toolbar bands; flush; SectionHead
-Used by: filterbar, champselect, table, lane, timeline, gamepage, puzzle, matchgrid,
-finder, ranking, learnpage, dailypage, dailyseat, patchpage, poolpage, poolgrid, yourtime,
-today, homepage, adminpage, admincharts, admintraffic, adminops, adminmodels, adminlab,
-adminruns, champpage, matchpage, tiers
+Used by: strip, filterbar, champselect, table, lane, timeline, gamepage, puzzle,
+matchgrid, finder, ranking, learnpage, dailypage, dailyseat, patchpage, poolpage,
+poolgrid, yourtime, today, homepage, adminpage, admincharts, admintraffic, adminops,
+adminmodels, adminlab, adminruns, champpage, matchpage, tiers
 
 ### Select
 `select.zig` `.c-select` `.c-menu`
@@ -134,11 +134,14 @@ Used by: champlist, table, finder, ranking, patchpage, yourtime, yourfriends, to
 adminmodels, tiers
 
 ### Bar
-`bar.zig` `.c-bar` site
+`bar.zig` `.c-bar` `.c-track` site
 Bar: a magnitude without good or bad (pick, ban, games), a neutral ink bar beside its
-figure. Bars in one column share a scale: `of` is the column's largest
-States: share; games, the column's most; ban
-Used by: table, yourfriends, homepage, admincharts, champpage, tiers
+figure. Bars in one column share a scale: `of` is the column's largest. `track`: a
+position along a full-width line (a place among champions, a rate on 0-100), a mark at it
+and an optional reference tick, no good or bad colour
+States: share; games, the column's most; ban; track: a place, portrait at 1st, the middle
+ticked; track: the middle; track: last; track: a rate, a dot, the average ticked
+Used by: strip, table, yourfriends, homepage, admincharts, champpage, tiers
 
 ### Kda
 `kda.zig` `.c-kda` site
@@ -155,7 +158,8 @@ context after it small ("4th of 53"). A range shows on hover as its ends, never 
 figure; a rate fades when its range is wide, never hides (J35). Three to a row in a narrow
 container. A label can open a Toggletip; a figure can link to where it comes from, or be
 pressed (the game page's cells select their span; the selected one shows pressed)
-States: with an answer; six, one links; pressable, one pressed
+States: with an answer; six, one links; pressable, one pressed; rows: places on tracks,
+the ends named once; stretched by a taller card
 Used by: champhead, matchbrief, gamehead, gamepage, matchgrid, playerbar, adminpage,
 admincharts, admintraffic, champpage, matchpage
 
@@ -264,13 +268,14 @@ suggestion not yet yours (dashed accent ring), a side's ring, the player's own r
 level, and a role badge in the corner
 States: 56, 48, 40, 32, 24, 20; role, sides, you and level; thin, banned, dead; empty
 seat, a suggestion; beside its name
-Used by: sitesearch, champsearch, champhead, matchbrief, matchstrip, champlist,
-draftboard, champselect, teamrows, compview, lobby, apphome, loadscreen, gamescreen,
-postgame, practice, picks, dotplot, timeline, versus, gamestrip, inspector, gamehead,
-gamerow, scoreboard, laneduel, choice, rankstrip, draftflow, candlist, poolslots,
-heatgrid, matchgrid, finder, ranking, learnpage, dailypage, dailyseat, patchpage,
-poolpage, poolgrid, resultstrip, playerbar, profilesum, recordtile, yourpage, yourtime,
-yourfriends, squad, today, homepage, testerpage, testercand, champpage, matchpage, tiers
+Used by: bar, strip, sitesearch, champsearch, champhead, matchbrief, matchstrip,
+champlist, draftboard, champselect, teamrows, compview, lobby, apphome, loadscreen,
+gamescreen, postgame, practice, picks, dotplot, timeline, versus, gamestrip, inspector,
+gamehead, gamerow, scoreboard, laneduel, choice, rankstrip, draftflow, candlist,
+poolslots, heatgrid, matchgrid, finder, ranking, learnpage, dailypage, dailyseat,
+patchpage, poolpage, poolgrid, resultstrip, playerbar, profilesum, recordtile, yourpage,
+yourtime, yourfriends, squad, today, homepage, testerpage, testercand, champpage,
+matchpage, tiers
 
 ### SiteHeader
 `site.zig` `.c-site` `.c-sitemenu` `.c-sitefoot` `.c-preview` `.c-subbar` `.c-sitemain`
@@ -426,12 +431,11 @@ Used by: compview, gamescreen, postgame
 ### CompView
 `compview.zig` `.c-comp`
 CompView: the desktop app's comp view once all ten champions are locked (docs/plan/ app.md
-APP6), under the board. Each team's damage split as a bar and its mix in words, a warning
-when teams this one-sided win less often, its champions with a clear early or late lean;
-win chance by game length as a TrendChart; then the five lanes as TeamRows. Static HTML in
-the shell, so the chart has no hover tip. Champion facts only, never players. The public
-edition gets words: every number here is null there (src/shell/screens.zig,
-docs/production-key.md)
+APP6), under the board. Each team's damage split as a bar, a tag when teams this one-sided
+win less often, its champions with a clear early or late lean; win chance by game length
+as a TrendChart; then the five lanes as TeamRows. Static HTML in the shell, so the chart
+has no hover tip. Champion facts only, never players. The public edition gets words: every
+number here is null there (src/shell/screens.zig, docs/production-key.md)
 States: all locked, public; all locked, private; private, length tilts but not sure: the
 band says so; a split unknown
 Used by: app
@@ -477,7 +481,6 @@ order per card: portrait, name, role (? when guessed), how the champion does in 
 per seat. Champion facts only: no player names or ranks
 (research/questions/desktop-app-layout.md C1-C3)
 States: public; private
-Used by: app
 
 ### GameScreen
 `gamescreen.zig` `.c-game`
@@ -538,9 +541,10 @@ The desktop app's page as one island (ui-app.wasm). The shell (src/shell/screens
 renders it from the poller's state and keeps the same Data encoded (data.zig) at app.bin;
 on a change it sends `{"app": seq}` and the island fetches the file and patches. A screen
 per client state: a note while there is nothing to show, champ select's board and options,
-the loading cards, the in-game panel, the post game; the sign-in under it, or in its place
-before there is data. The charts' own state (a tapped minute, a dragged range) and what's
-typed live in App, past patches
+the in-game panel, the post game; the sign-in under it, or in its place before there is
+data. The loading screen has nothing to tap, so the shell renders it as static HTML after
+the island (ui/loadscreen.zig). The charts' own state (a tapped minute, a dragged range)
+and what's typed live in App, past patches
 States: waiting; champ select, private; all locked, comp under; all locked, comp under,
 private; lobby, form and tiles; in game; first start, sign in; first start, downloading;
 first start, download failed; League closed; waiting, sign in and restart lines; waiting,
