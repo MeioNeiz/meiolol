@@ -8,8 +8,8 @@
 # - bulk: REV is queued and this returns at once; the timer (or --flush) pushes every
 #   queued commit together: one ci, one deploy, one live check. A commit whose ci fails is
 #   left out with those after it, and the older ones go
-# Only commits a session asked to push go out. Pushes take their own lock and the ci 3
-# build slots (deploy/slots.sh), so builds and tests carry on beside them.
+# Only commits a session asked to push go out. Pushes take their own lock and ci's 2 of
+# the 3 build slots (deploy/slots.sh), so builds and tests carry on beside them.
 #   deploy/push.sh [REV]                  push REV (default HEAD), or queue it in bulk mode
 #   deploy/push.sh --flush                push everything queued now
 #   deploy/push.sh --mode fast|bulk [MIN] set the mode; bulk pushes every MIN minutes

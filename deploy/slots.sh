@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Build slots on the Mac, shared by every session: a zig compile runs on one core, so
 # several builds run at once instead of one behind a single lock. A run takes WEIGHT
-# slots, about the cores it keeps busy (zb.sh: ci 3, the rest 1; measured 26 Oct: test
-# 152 s on 1.1 cores, 1.7 GB; ci after it 97 s on 3.8), MEIOLOL_SLOTS in all (default 3
-# of the 10 cores, the rest for sessions and browsers). First come first served, but a
-# smaller run starts beside a waiting bigger one when it leaves that one's slots free.
+# slots, about the cores it keeps busy (measured 26 Oct: test 152 s on 1.1 cores, 1.7 GB;
+# ci after it 97 s on 3.8), MEIOLOL_SLOTS in all (default 3 of the 10 cores, the rest for
+# sessions and browsers). ci takes 2 (WEIGHT ci), the rest 1: with all 3 a 30 s check
+# waited 4-10 min behind it (5 Nov: 7 queued behind one ci). First come first served,
+# but a smaller run starts beside a waiting bigger one when it leaves that one's slots
+# free.
 # A held run gets MEIOLOL_ZIG_JOBS=2*WEIGHT, which the ~/.local/bin/zig shim passes to
 # `zig build` as -j: else each build runs a compile per core (load 106 on 29 Oct)
-#   deploy/slots.sh WEIGHT CMD [ARG...]   run CMD holding WEIGHT slots
+#   deploy/slots.sh WEIGHT|ci CMD [ARG...] run CMD holding WEIGHT slots, or ci's
 #   deploy/slots.sh status                holders and waiters
 #   deploy/slots.sh history [HOURS]       waits, run times and use by hour (default 24)
 # Sourced (zb.sh): slots_enqueue W, slots_take (0 once held, 1 not yet), slots_release;
@@ -23,6 +25,7 @@
 # no watcher: builds go); slots wait on up and unknown
 slots_dir=${MEIOLOL_SLOTS_DIR:-$HOME/.cache/meiolol-slots}
 slots_n=${MEIOLOL_SLOTS:-3}
+slots_ci=2
 slots_mine=""
 slots_enq="" slots_start="" slots_w="" slots_kind="" slots_cmd=""
 MEIOLOL_LEAGUE_FILE=${MEIOLOL_LEAGUE_FILE-}
@@ -228,9 +231,10 @@ set -u
 case ${1-} in
     status) slots_status ;;
     history) slots_history "${2-}" ;;
-    [1-9]*)
-        [ $# -ge 2 ] || { echo "usage: deploy/slots.sh WEIGHT CMD [ARG...] | status | history [HOURS]" >&2; exit 2; }
+    [1-9]* | ci)
+        [ $# -ge 2 ] || { echo "usage: deploy/slots.sh WEIGHT|ci CMD [ARG...] | status | history [HOURS]" >&2; exit 2; }
         w=$1
+        [ "$w" != ci ] || w=$slots_ci
         shift
         slots_kind=$(_slots_kind "$@")
         slots_cmd="$*"
@@ -244,5 +248,5 @@ case ${1-} in
         done
         "$@"
         ;;
-    *) echo "usage: deploy/slots.sh WEIGHT CMD [ARG...] | status | history [HOURS]" >&2; exit 2 ;;
+    *) echo "usage: deploy/slots.sh WEIGHT|ci CMD [ARG...] | status | history [HOURS]" >&2; exit 2 ;;
 esac

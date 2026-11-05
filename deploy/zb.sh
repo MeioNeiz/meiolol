@@ -1,6 +1,6 @@
 #!/bin/bash
 # zig build for sessions sharing this checkout: each run holds build slots
-# (deploy/slots.sh: ci 3, anything else 1), so several run at once,
+# (deploy/slots.sh: ci 2, anything else 1), so several run at once,
 # and a check (test, test-ui, ci) that a run started after this request already covered
 # is answered from that run instead of building again: that run saw this session's saved
 # files, so its result is this one's too. Anything else just builds.
@@ -29,7 +29,8 @@ if [ $plain = 1 ]; then
     esac
 fi
 weight=1
-[ "$step" != ci ] || weight=3
+# shellcheck disable=SC2154 # slots_ci: deploy/slots.sh
+[ "$step" != ci ] || weight=$slots_ci
 
 answer() {
     local k n code started

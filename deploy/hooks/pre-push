@@ -19,10 +19,10 @@ while read -r _ sha remote_ref remote_sha; do
     fi
     echo "pre-push: zig build ci on $(git -C "$root" rev-parse --short "$sha")"
     "$events" add "$sha" ci start "zig build ci on $("$events" where)"
-    # 3 of the Mac's build slots (deploy/slots.sh), as zb.sh's ci. Its own cache, not the
+    # ci's build slots (deploy/slots.sh), as zb.sh's ci. Its own cache, not the
     # working tree's: zig-cache-prune.sh empties that one about daily, then ci went cold,
     # and could empty it under a ci starting just then; this one only under the tree's lock
-    if ! "$root/deploy/slots.sh" 3 "$root/deploy/build-tree.sh" ci "$sha" \
+    if ! "$root/deploy/slots.sh" ci "$root/deploy/build-tree.sh" ci "$sha" \
         zig build ci --cache-dir "$common/meiolol-build/ci.cache"; then
         # on-push.sh names deployed commits; a refused one would show with no message
         "$events" add "$sha" commit info "$(git -C "$root" log -1 --format='%h %s' "$sha")"

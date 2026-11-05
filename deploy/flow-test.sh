@@ -38,19 +38,29 @@ big=$(awk '$2 == "big" {print $3}' "$t/log")
 small=$(awk '$2 == "small" {print $3}' "$t/log")
 [ "${small:-0}" -ge "${big:-9}" ] && ok "first come first served for a bigger run" \
     || bad "small started at $small, before big at $big"
+# Of 3 slots, ci takes 2 and leaves one for a short run beside it
+: > "$t/log"
+t0=$(date +%s)
+MEIOLOL_SLOTS=3 run ci ci 2 & sleep 0.3
+MEIOLOL_SLOTS=3 run 1 short 1 2> /dev/null &
+wait
+ci=$(awk '$2 == "ci" {print $3}' "$t/log")
+short=$(awk '$2 == "short" {print $3}' "$t/log")
+[ -n "$ci" ] && [ "${short:-9}" -le $((ci + 1)) ] && ok "ci leaves a slot free" \
+    || bad "short started at ${short:-?}, ci at ${ci:-?}"
 # A dead holder's slot is freed
 mkdir -p "$t/slots/held"
 : > "$t/slots/held/999999-2-000000001"
 timeout 5 "$s" 2 true 2> /dev/null && ok "a dead holder's slots are freed" || bad "dead holder kept its slots"
-# Every request leaves a line: 7 runs above, then a failing one; history sums by kind
+# Every request leaves a line: 9 runs above, then a failing one; history sums by kind
 h=$t/slots/history.tsv
 "$s" 1 bash -c 'exit 3'
-[ "$(awk -F'\t' 'NF == 9 && $6 != "-" && $6 >= $5 && $7 >= $6 {n++} END {print n}' "$h")" = 8 ] \
+[ "$(awk -F'\t' 'NF == 9 && $6 != "-" && $6 >= $5 && $7 >= $6 {n++} END {print n}' "$h")" = 10 ] \
     && [ "$(tail -n 1 "$h" | cut -f3,4,8)" = "$(printf 'bash\t1\t3')" ] \
     && ok "history: a line per request" || bad "history: $(cat "$h")"
 awk -F'\t' '$9 ~ / c / && $6 - $5 >= 1' "$h" | grep -q . && ok "history: the wait" \
     || bad "history: no wait for c"
-"$s" history 1 | grep -Eq '^bash +7 +0 .* 1$' && ok "history: summed by kind" \
+"$s" history 1 | grep -Eq '^bash +9 +0 .* 1$' && ok "history: summed by kind" \
     || bad "history summary: $("$s" history 1)"
 # zb.sh logs its zig build step as the kind
 mkdir -p "$t/zb/deploy" "$t/zb/bin"
