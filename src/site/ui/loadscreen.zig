@@ -1,11 +1,11 @@
 //! LoadScreen: the desktop app while the game loads. A column per lane: our card, the
 //! lane strip (gold at 14 from even, who reaches level 6 and the first item sooner), their
-//! card. A card in one fixed order: portrait, name, role (? when guessed), the
-//! champion's win rate in the role (private edition only), wins by game length as a
-//! spark with its word where the tilt is clear, then at most two pills coloured by
-//! meaning. Above, "your game": my lane and the enemy
-//! jungler and team in a word each. Narrow windows get one row per lane. Champion facts
-//! only: no player names or ranks (research/questions/desktop-app-layout.md C1-C3)
+//! card. A card is as tall as what it says: the portrait beside name and role (? when
+//! guessed), then the champion's win rate in the role (private edition only), wins by
+//! game length as a spark with its word where the tilt is clear, and at most two pills
+//! coloured by meaning. Above, "your game": my lane and the enemy jungler and team in
+//! plain words. Narrow windows get one row per lane. Champion facts only: no player
+//! names or ranks (research/questions/desktop-app-layout.md C1-C3)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
@@ -142,7 +142,7 @@ fn card(h: *H, c: Card, side: TeamSide) N {
     var pills = h.list();
     for (c.pills, 0..) |p, j| pills.add(h.span(.{ .key = j, .class = "pill", .data_tone = if (p.tone == .none) null else p.tone }, .{p.text}));
     return h.div(.{ .class = "card", .data_side = side, .data_you = c.you }, .{
-        champ.view(h, c.champ, .{ .px = .@"56", .side = if (side == .us) .us else .them, .you = c.you, .named = false, .label = W.unknown }),
+        champ.view(h, c.champ, .{ .px = .@"48", .side = if (side == .us) .us else .them, .you = c.you, .named = false, .label = W.unknown }),
         h.div(.{ .class = "body" }, .{
             h.b(.{}, .{if (c.champ) |x| x.name else W.unknown.s}),
             h.span(.{ .class = "role" }, .{
@@ -201,18 +201,20 @@ pub const css =
     \\  .c-load .lanes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
     \\    gap: 6px var(--sp-2); }
     \\  .c-load .lanes > li { display: grid; grid-row: span 3; grid-template-rows: subgrid; gap: 6px; min-width: 0; }
-    \\  .c-load .card { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); min-width: 0;
-    \\    padding: var(--sp-3) var(--sp-2); border-radius: var(--r-m); background: var(--panel-2); text-align: center; }
+    \\  .c-load .card { display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; align-items: start;
+    \\    gap: 3px var(--sp-2); min-width: 0; padding: var(--sp-2); border-radius: var(--r-m); background: var(--panel-2); }
+    \\  .c-load .card > .c-champ { grid-row: span 3; }
     \\  .c-load .card[data-you] { box-shadow: inset 0 0 0 2px var(--us); }
-    \\  .c-load .card[data-empty] { justify-content: center; background: none; box-shadow: inset 0 0 0 1px var(--line);
+    \\  .c-load .card[data-empty] { display: flex; align-items: center; justify-content: center; background: none; box-shadow: inset 0 0 0 1px var(--line);
     \\    font-size: var(--fs-xs); color: var(--faint); }
-    \\  .c-load .body { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; max-width: 100%; }
+    \\  .c-load .body { display: contents; }
+    \\  .c-load .body > * { grid-column: 2; justify-self: start; max-width: 100%; }
     \\  .c-load .body > b { font-size: var(--fs-m); font-weight: var(--w-b); overflow: hidden; text-overflow: ellipsis;
     \\    white-space: nowrap; max-width: 100%; }
     \\  .c-load .role { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--muted); }
     \\  .c-load .fact { font-size: var(--fs-m); font-weight: var(--w-b); }
     \\  .c-load .len { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--t2); }
-    \\  .c-load .pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+    \\  .c-load .pills { display: flex; flex-wrap: wrap; gap: 4px; }
     \\  .c-load .pill { padding: 1px 6px; border-radius: var(--r-s); font-size: var(--fs-xs); background: var(--wash); color: var(--t2); }
     \\  .c-load [data-tone="good"] { color: var(--hi2); }
     \\  .c-load [data-tone="bad"] { color: var(--lo2); }
@@ -226,6 +228,7 @@ pub const css =
     \\    .c-load .lanes { grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
     \\    .c-load .lanes > li { grid-row: auto; grid-template-rows: none; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     \\    .c-load .strip { grid-column: 1 / -1; grid-row: 2; }
+    \\    .c-load .body > .len, .c-load .body > .pills { grid-column: 1 / -1; }
     \\  }
     \\}
     \\
@@ -239,9 +242,9 @@ const flat: []const f32 = &.{ 49.8, 50.4, 49.7, 50.3, 49.8 };
 
 pub const sample: Screen = .{
     .yours = &.{
-        .{ .champ = demo("Ahri", "Ahri"), .text = "tough lane", .tone = .bad },
-        .{ .champ = demo("Vi", "Vi"), .text = "early jungler" },
-        .{ .who = "Enemy team", .text = "late team" },
+        .{ .champ = demo("Ahri", "Ahri"), .text = "Tough lane vs Syndra", .tone = .bad },
+        .{ .champ = demo("Vi", "Vi"), .text = "Vi strong early" },
+        .{ .who = "Enemy team", .text = "strong late" },
     },
     .lanes = &.{
         .{
@@ -250,17 +253,17 @@ pub const sample: Screen = .{
             .strip = .{ .gold = 410, .lead = .us, .text = "ahead", .level6 = .us, .label = "Garen ahead in lane, level 6 first" },
         },
         .{
-            .us = .{ .champ = demo("LeeSin", "Lee Sin"), .role = .jungle, .lengths = short, .long = false, .pills = &.{.{ .text = "ban magnet" }} },
+            .us = .{ .champ = demo("LeeSin", "Lee Sin"), .role = .jungle, .lengths = short, .long = false },
             .them = .{ .champ = demo("Vi", "Vi"), .role = .jungle, .guessed = true, .lengths = flat, .pills = &.{.{ .text = "weak now", .tone = .bad }} },
             .strip = .{ .gold = 60, .lead = .even, .text = "even", .item = .them, .label = "Lee Sin even early, slow items" },
         },
         .{
-            .us = .{ .champ = demo("Ahri", "Ahri"), .role = .mid, .you = true, .lengths = flat, .pills = &.{ .{ .text = "lone AP" }, .{ .text = "crowd favourite" } } },
+            .us = .{ .champ = demo("Ahri", "Ahri"), .role = .mid, .you = true, .lengths = flat, .pills = &.{.{ .text = "weak now", .tone = .bad }} },
             .them = .{ .champ = demo("Syndra", "Syndra"), .role = .mid, .guessed = true, .lengths = long, .long = true },
             .strip = .{ .gold = -520, .lead = .them, .text = "behind", .level6 = .them, .item = .them, .label = "Ahri behind in lane, level 6 later, slow items" },
         },
         .{
-            .us = .{ .champ = demo("Jinx", "Jinx"), .role = .bot, .lengths = long, .long = true, .pills = &.{.{ .text = "hipster pick", .tone = .caution }} },
+            .us = .{ .champ = demo("Jinx", "Jinx"), .role = .bot, .lengths = long, .long = true },
             .them = .{ .champ = demo("Caitlyn", "Caitlyn"), .role = .bot, .guessed = true, .lengths = short, .long = false },
         },
         .{
@@ -273,13 +276,23 @@ pub const sample: Screen = .{
 fn private(h: *H, s: Screen) Screen {
     var p = s;
     p.draft = 53.4;
+    const yrs = h.mem.dupe(Fact, s.yours) catch {
+        h.oom = true;
+        return s;
+    };
+    yrs[0].text = "−520 gold at 14 in lane";
+    p.yours = yrs;
     const lanes = h.mem.dupe(Lane, s.lanes) catch {
         h.oom = true;
         return s;
     };
     const rates = [_]rate.Rate{ .at(41_200, 52.8), .at(88_000, 50.1), .at(120_400, 49.2), .at(210, 48.6), .at(35_100, 51.0) };
-    for (lanes, rates) |*l, r| {
-        if (l.us) |*c| c.rate = r;
+    const all = [_][]const Pill{ &.{}, &.{.{ .text = "ban magnet" }}, &.{ .{ .text = "weak now", .tone = .bad }, .{ .text = "lone AP" } }, &.{.{ .text = "hipster pick", .tone = .caution }}, &.{} };
+    for (lanes, rates, all) |*l, r, j| {
+        if (l.us) |*c| {
+            c.rate = r;
+            if (j.len > 0) c.pills = j;
+        }
         if (l.strip) |*x| x.text = switch (x.lead) {
             .us => "+410",
             .even => "+60",
@@ -293,5 +306,5 @@ fn private(h: *H, s: Screen) Screen {
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.addFill("public: bot with too few games of the lane, no enemy support yet", view(h, sample));
-    g.addFill("private", view(h, private(h, sample)));
+    g.addFill("private: numbers and every pill", view(h, private(h, sample)));
 }

@@ -1048,37 +1048,42 @@ fn loadTone(t: loading.Tone) ui.loadscreen.Tone {
     };
 }
 
-/// My lane, the enemy jungler's lean and the enemy team's, in the words their pills use
+/// My lane, the enemy jungler's lean and the enemy team's, in plain words ("Tough lane vs
+/// Syndra", "Lee Sin strong early"); private names my lane's gold
 fn yourGame(a: Allocator, c: Ctx, l: *const loading.Loading, shown: []const ui.loadscreen.Lane) ![]const ui.loadscreen.Fact {
     var out: std.ArrayList(ui.loadscreen.Fact) = .empty;
     for (shown) |ln| {
         const me = ln.us orelse continue;
         if (!me.you) continue;
         const s = ln.strip orelse break;
-        try out.append(a, .{
-            .champ = me.champ,
-            .text = if (c.private) try a.print("{s} gold at {d}", .{ s.text, core.curvesfile.lane_minute }) else switch (s.lead) {
-                .us => "lane bully",
-                .them => "tough lane",
-                .even => "even lane",
-            },
-            .tone = switch (s.lead) {
-                .us => .good,
-                .them => .bad,
-                .even => .none,
-            },
-        });
+        const vs = if (ln.them) |t| if (t.champ) |x| x.name else null else null;
+        const word = switch (s.lead) {
+            .us => "Winning lane",
+            .them => "Tough lane",
+            .even => "Even lane",
+        };
+        const text = if (c.private)
+            try a.print("{s} gold at {d} in lane", .{ s.text, core.curvesfile.lane_minute })
+        else if (vs) |v| try a.print("{s} vs {s}", .{ word, v }) else word;
+        try out.append(a, .{ .champ = me.champ, .text = text, .tone = switch (s.lead) {
+            .us => .good,
+            .them => .bad,
+            .even => .none,
+        } });
         break;
     }
     const cv = l.comp orelse return out.items;
     for (cv.teams[1].timing) |tm| if (tm.role == .jungle) {
-        if (try c.champ(a, tm.champion)) |x| try out.append(a, .{ .champ = x, .text = if (tm.lean == .early) "early game" else "scales" });
+        if (try c.champ(a, tm.champion)) |x| try out.append(a, .{
+            .champ = x,
+            .text = try a.print("{s} strong {s}", .{ x.name, if (tm.lean == .early) "early" else "late" }),
+        });
         break;
     };
     if (comp.timingOf(cv.teams[1])) |w| try out.append(a, .{ .who = "Enemy team", .text = switch (w) {
-        .early => "early team",
-        .late => "late team",
-        .both => "early and late",
+        .early => "strong early",
+        .late => "strong late",
+        .both => "strong early and late",
     } });
     return out.items;
 }
@@ -1845,10 +1850,10 @@ test "loading: the role's numbers private only" {
     const public = try loadScreen(a, c, &l);
     try testing.expectEqual(null, public.draft);
     try testing.expectEqual(null, public.lanes[1].us.?.rate);
-    // No patch pill on a locked teammate; mine and the enemies' keep theirs
-    try testing.expectEqual(1, public.lanes[0].us.?.pills.len);
-    try testing.expectEqualStrings("lone AP", public.lanes[0].us.?.pills[0].text);
-    try testing.expectEqualStrings("strong now", public.lanes[1].us.?.pills[1].text);
+    // Patch pills only, none on a locked teammate; mine and the enemies' keep theirs
+    try testing.expectEqual(0, public.lanes[0].us.?.pills.len);
+    try testing.expectEqual(1, public.lanes[1].us.?.pills.len);
+    try testing.expectEqualStrings("strong now", public.lanes[1].us.?.pills[0].text);
     try testing.expectEqualStrings("weak now", public.lanes[0].them.?.pills[0].text);
     var d = try data(a, c, .{ .loading = &l }, .none);
     d.seq = 1;
@@ -1880,7 +1885,7 @@ test "loading: a lane per role, the strip's words and figure, the spark about it
     try testing.expectEqualStrings("behind", s.text);
     try testing.expectEqual(.them, s.level6.?);
     try testing.expectEqual(null, s.item);
-    try testing.expectEqualStrings("tough lane", public.yours[0].text);
+    try testing.expectEqualStrings("Tough lane vs Syndra", public.yours[0].text);
     const spark = public.lanes[0].us.?.lengths;
     var sum: f32 = 0;
     for (spark) |v| sum += v;
@@ -1889,6 +1894,7 @@ test "loading: a lane per role, the strip's words and figure, the spark about it
     try testing.expectEqual(false, public.lanes[0].us.?.long.?);
     const priv = try loadScreen(a, .{ .stats = &f.stats, .icons = null, .private = true }, &l);
     try testing.expectEqualStrings("−520", priv.lanes[0].strip.?.text);
+    try testing.expectEqualStrings("−520 gold at 14 in lane", priv.yours[0].text);
 }
 
 fn testGame(my_lane: ?ingame.Lane) ingame.InGame {

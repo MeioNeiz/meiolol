@@ -7,7 +7,11 @@ Nov 2026, team run 2026-11-03-app. Rules: docs/plan/app.md "Policy line".
 
 - Loading cards (113): two to four short pills per card, a few of them playful, all
   from data: "lane bully", "6 first", "scales", "ban magnet", "hipster pick", "lone AP".
-  No champion name inside a pill (the card across shows it); no sentence pills
+  No champion name inside a pill (the card across shows it); no sentence pills. Public
+  (137): the playful ones read as jargon there, so it shows only "strong now" / "weak
+  now" (never on a locked teammate) and the spark's "wins long/short"; cards as tall as
+  what they say; "Your game" in plain words ("Tough lane vs Syndra", "Lee Sin strong
+  early", "Enemy team strong late")
 - Comps (109): tips under each team in the comp view, a line each: "All AD: armour
   stacks well", "Late team: get to 30 min", "Lone AP: Ahri"; team pills on the loading
   screen short ("AD heavy", "late team")

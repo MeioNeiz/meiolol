@@ -25,10 +25,11 @@ pub const Pill = struct {
     patch: bool = false,
 };
 
-/// Public never rates a locked teammate's pick (docs/production-key.md): patch pills only
-/// on my own card and the enemies'
+/// Public shows only the patch pills, which read plainly ("hipster pick", "ban magnet",
+/// "lone AP" are jargon there), and never rates a locked teammate's pick
+/// (docs/production-key.md): on my own card and the enemies'
 pub fn shows(p: Pill, c: Card, ours: bool, private: bool) bool {
-    return private or !p.patch or c.me or !ours;
+    return private or (p.patch and (c.me or !ours));
 }
 
 /// A seat as the poller keeps it from champ select

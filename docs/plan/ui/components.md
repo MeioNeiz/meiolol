@@ -679,12 +679,14 @@ path known; no usual build: a tip, leans only
 `loadscreen.zig` `.c-load`
 LoadScreen: the desktop app while the game loads. A column per lane: our card, the lane
 strip (gold at 14 from even, who reaches level 6 and the first item sooner), their card. A
-card in one fixed order: portrait, name, role (? when guessed), the champion's win rate in
-the role (private edition only), wins by game length as a spark with its word where the
-tilt is clear, then at most two pills coloured by meaning. Above, "your game": my lane and
-the enemy jungler and team in a word each. Narrow windows get one row per lane. Champion
-facts only: no player names or ranks (research/questions/desktop-app-layout.md C1-C3)
-States: public: bot with too few games of the lane, no enemy support yet; private
+card is as tall as what it says: the portrait beside name and role (? when guessed), then
+the champion's win rate in the role (private edition only), wins by game length as a spark
+with its word where the tilt is clear, and at most two pills coloured by meaning. Above,
+"your game": my lane and the enemy jungler and team in plain words. Narrow windows get one
+row per lane. Champion facts only: no player names or ranks
+(research/questions/desktop-app-layout.md C1-C3)
+States: public: bot with too few games of the lane, no enemy support yet; private: numbers
+and every pill
 
 ### GameScreen
 `gamescreen.zig` `.c-game`
