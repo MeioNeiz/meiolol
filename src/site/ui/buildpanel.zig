@@ -10,8 +10,8 @@
 //! by win rate, options under solid_games after. A matchup's marks the champion's usual
 //! choice "as usual" and dims a cell led by it. Tap a cell's "N more" to open it across
 //! the panel: every option, named, sortable. One open at a time; it and the order in
-//! the URL. The first closed cell's head names the columns; every cell keeps their fixed
-//! widths, so the rest line up under it. A rune page card whose keystone
+//! the URL. Every closed cell's head names its columns: the cells sit in a grid, so no one
+//! head is over them all. A rune page card whose keystone
 //! has its own build (Data.keystones) locks on tap: every cell then counts that
 //! keystone's players, a chip with × says so and unlocks, the keystone in the URL (`k`).
 //! With a lock set (the champion page's, ui/lockbar.zig) every option and rune page
@@ -369,8 +369,6 @@ pub const BuildPanel = struct {
     ctx: *[n_kinds]Ctx,
     rows: *[n_kinds][]Row,
     tables: [n_kinds]Table = undefined,
-    /// A view's first closed cell has named the columns: the rest line up under it
-    headed: bool = false,
 
     const Set = struct { ctx: [n_kinds]Ctx, rows: [n_kinds][]Row };
 
@@ -513,7 +511,6 @@ pub const BuildPanel = struct {
     pub fn view(p: *BuildPanel, h: *H) N {
         // A page card tap reaches the RuneTree, which may have locked or unlocked
         p.pick();
-        p.headed = false;
         var cells = h.list();
         for ([_]Kind{ .spells, .start, .boots, .core, .item4, .item5, .item6 }) |k| if (p.cell(h, k)) |c| cells.add(c);
         if (p.skillsCell(h)) |c| cells.add(c);
@@ -580,16 +577,14 @@ pub const BuildPanel = struct {
         };
     }
 
-    /// A cell's head band: its title, then in the first closed cell the column heads;
+    /// A cell's head band: its title, then closed the column heads;
     /// open, "fewer" instead (the open table heads its own columns)
     fn head(p: *BuildPanel, h: *H, k: Kind, title: tree.Text) N {
         if (p.open == k) return h.div(.{ .class = "sh" }, .{
             h.h3(.{}, .{title}),
             button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .{ .open = k }), .ref = allRef(k) }, .{W.fewer}),
         });
-        const first = !p.headed;
-        p.headed = true;
-        return h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{title}), if (first) heads(h) else null });
+        return h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{title}), heads(h) });
     }
 
     fn heads(h: *H) N {
