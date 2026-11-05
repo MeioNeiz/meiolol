@@ -65,6 +65,8 @@ pub const Top = struct {
 /// minus theirs. A sum of champion averages: lanes and pairs count twice or not at all
 pub const Length = struct {
     win: [champfacts.length_buckets]f64,
+    /// Half each bucket's 80% range, same units as `win` (delta method on the log-odds)
+    range: [champfacts.length_buckets]f64,
     /// True: wins more in long games than short ones, false the other way; null unless
     /// `sure` standard errors apart (games of 30 min and over against under 25)
     longer: ?bool,
@@ -199,6 +201,7 @@ fn topOf(facts: *const champfacts.Facts, seats: []const loading.Seat) ?Top {
 
 /// Games a champion-role's bucket is shrunk with towards even
 const length_k = 100;
+const z80 = 1.2816;
 
 fn lengthOf(facts: *const champfacts.Facts, seats: [2][]const loading.Seat) ?Length {
     if (facts.lengths.len == 0 or seats[0].len != 5 or seats[1].len != 5) return null;
@@ -214,8 +217,11 @@ fn lengthOf(facts: *const champfacts.Facts, seats: [2][]const loading.Seat) ?Len
             vb.* += 1 / (n * p * (1 - p));
         }
     };
-    var out: Length = .{ .win = undefined, .longer = null };
-    for (&out.win, x) |*w, l| w.* = 1 / (1 + @exp(-l));
+    var out: Length = .{ .win = undefined, .range = undefined, .longer = null };
+    for (&out.win, &out.range, x, v) |*w, *r, l, vb| {
+        w.* = 1 / (1 + @exp(-l));
+        r.* = z80 * w.* * (1 - w.*) * @sqrt(vb);
+    }
     const d = (x[3] + x[4] - x[0] - x[1]) / 2;
     const se = @sqrt(v[0] + v[1] + v[3] + v[4]) / 2;
     if (@abs(d) >= sure * se) out.longer = d > 0;
@@ -431,7 +437,10 @@ test "comp: win chance by game length, the team's top damage" {
     try testing.expectEqual(f.stats.ids[2], top.champion);
     try testing.expectApproxEqAbs(900.0 / 2500.0, top.share.?, 1e-6);
     try testing.expectEqual(null, c.teams[1].top);
-    // Even on both sides: no lean either way
+    // Even on both sides: no lean either way. Ten champions of 1000 games (+100 shrink)
+    // at even: 1.2816 * 0.25 * sqrt(10 / 275)
     for (lengths[0..5]) |*x| x.by = lengths[5].by;
-    try testing.expectEqual(null, (try build(arena, .{ .stats = &f.stats, .facts = &facts }, .{ &seats[0], &seats[1] })).length.?.longer);
+    const even = (try build(arena, .{ .stats = &f.stats, .facts = &facts }, .{ &seats[0], &seats[1] })).length.?;
+    try testing.expectEqual(null, even.longer);
+    try testing.expectApproxEqAbs(0.0611, even.range[2], 1e-4);
 }

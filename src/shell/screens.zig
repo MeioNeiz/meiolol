@@ -23,7 +23,7 @@ const channel = @import("channel.zig");
 const app = ui.app;
 const Allocator = std.mem.Allocator;
 
-pub const css = ui.css.head ++ ui.css.join(.{ ui.site, ui.appbar, ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.resultstrip, ui.lobby, ui.apphome, ui.today, ui.art, ui.skillgrid, ui.gamebuild, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.toggletip, ui.reasons, ui.candlist, ui.picks, ui.app });
+pub const css = ui.css.head ++ ui.css.join(.{ ui.site, ui.appbar, ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.resultstrip, ui.lobby, ui.apphome, ui.today, ui.art, ui.skillgrid, ui.gamebuild, ui.loadscreen, ui.chart, ui.lane, ui.trend, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.toggletip, ui.reasons, ui.candlist, ui.picks, ui.app });
 
 const Page = struct {
     arena: std.heap.ArenaAllocator,
@@ -566,7 +566,11 @@ pub fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
         .us = teams[0],
         .them = teams[1],
         .lanes = rows,
-        .length = if (x.length) |l| .{ .win = if (c.private) pct(l.win) else null, .longer = l.longer } else null,
+        .length = if (x.length) |l| .{
+            .win = if (c.private) pct(l.win) else null,
+            .range = if (c.private) pct(l.range) else null,
+            .longer = l.longer,
+        } else null,
         .patch = x.patch,
         .gold_minute = core.champfacts.gold_minute,
         .win_minute = core.champfacts.win_minute,

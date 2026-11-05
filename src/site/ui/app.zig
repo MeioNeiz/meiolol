@@ -275,6 +275,14 @@ pub fn gallery(g: *Gallery) void {
         picks.page(h, picks.public(h, past(h, picks.sample, locked.lane.options)), 0),
         compview.view(h, compview.sample),
     })}));
+    // The comp's numbers in the window; no picks table (the state's word budget)
+    var locked_priv = champselect.private(h, locked);
+    locked_priv.lane.mode = .locked;
+    g.addFill("all locked, comp under, private", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{
+        page(h, .{ .seq = 12, .private = true, .where = "Champ select · Finalization", .screen = .{ .select = locked_priv }, .practice = false }),
+        views(h, "gal-cs-3", true),
+        compview.view(h, compview.private(h)),
+    })}));
     // The shell's page before champ select: the form panel and tiles after the island
     g.addFill("lobby, form and tiles", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{
         page(h, .{ .seq = 11, .private = true, .where = "Lobby", .screen = .{ .note = .{ .title = "The board shows in champ select" } } }),

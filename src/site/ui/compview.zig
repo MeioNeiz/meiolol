@@ -1,14 +1,16 @@
 //! CompView: the desktop app's comp view once all ten champions are locked (docs/plan/
 //! app.md APP6), under the board. Each team's damage split as a bar and its mix in
 //! words, a warning when teams this one-sided win less often, its champions with a clear
-//! early or late lean; then the five lanes as TeamRows. Champion facts only, never
-//! players. The public edition gets words: every number here is null there
+//! early or late lean; win chance by game length as a TrendChart; then the five lanes as
+//! TeamRows. Static HTML in the shell, so the chart has no hover tip. Champion facts
+//! only, never players. The public edition gets words: every number here is null there
 //! (src/shell/screens.zig, docs/production-key.md)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const teamrows = @import("teamrows.zig");
 const phrase = @import("phrase.zig");
-const fmt = @import("fmt.zig");
+const trend = @import("trend.zig");
+const toggletip = @import("toggletip.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -62,6 +64,8 @@ pub const Top = struct {
 pub const Length = struct {
     /// My team's, % by bucket (length_labels); private edition only
     win: ?[length_labels.len]f32 = null,
+    /// Half each bucket's 80% range, points; private edition only
+    range: ?[length_labels.len]f32 = null,
     /// More in long games, short ones; null: neither clearly
     longer: ?bool = null,
 };
@@ -81,19 +85,26 @@ pub const Comp = struct {
     gold_minute: u8,
     win_minute: u8,
     lane_minute: u8,
+    /// The notes' toggletip, unique on the page
+    notes_id: []const u8 = "comp-notes",
 };
 
 const Side = enum { us, them };
 
 pub fn view(h: *H, c: Comp) N {
+    const notes = toggletip.view(h, c.notes_id, .{W.comps}, W.comps, W.notes.with(h, .{
+        .g = @as(u32, c.gold_minute),
+        .w = @as(u32, c.win_minute),
+        .p = if (c.patch.len > 0) c.patch else "?",
+        .l = @as(u32, c.lane_minute),
+    }));
     return h.section(.{ .class = "c-comp" }, .{
-        h.h3(.{}, .{W.comps}),
+        h.h3(.{}, .{notes[0]}),
+        notes[1],
         h.div(.{ .class = "teams" }, .{ team(h, c.us, .us), team(h, c.them, .them) }),
         if (c.length) |l| length(h, l) else null,
         h.h3(.{}, .{W.lanes}),
         teamrows.view(h, c.lanes),
-        h.p(.{ .class = "note" }, .{W.lean_note.with(h, .{ .g = @as(u32, c.gold_minute), .w = @as(u32, c.win_minute) })}),
-        h.p(.{ .class = "note" }, .{W.scope.with(h, .{ .p = if (c.patch.len > 0) c.patch else "?", .l = @as(u32, c.lane_minute) })}),
     });
 }
 
@@ -124,41 +135,28 @@ fn team(h: *H, t: Team, side: Side) N {
     });
 }
 
-/// Words when clear; the tester's bars, a bucket each, whatever they show, and when they
-/// tilt without a clear lean, words that say so (bars alone read as a lean). Nothing at
-/// all for the public edition without a clear lean
+/// Private: the line with its band against a dashed 50%, the band saying how sure;
+/// words only when the lean is clear. Public: the words alone, nothing without a lean
 fn length(h: *H, l: Length) ?N {
-    const words: ?tree.Text = if (l.longer) |x|
-        if (x) W.longer else W.shorter
-    else if (l.win) |win|
-        if (tilt(win)) |x| (if (x) W.tilt_longer else W.tilt_shorter) else W.no_length
-    else
-        null;
+    const words: ?tree.Text = if (l.longer) |x| (if (x) W.longer else W.shorter) else null;
+    const chart: N = if (l.win) |win| blk: {
+        const pts = trend.alloc(h, win.len) orelse break :blk .none;
+        const range = l.range orelse @as([win.len]f32, @splat(0));
+        for (pts, win, range, length_labels) |*p, w, r, label| p.* = .{ .label = .{ .s = label }, .v = w, .range = r };
+        // Static: nothing calls its handlers, but they point at it
+        const t = h.mem.create(trend.Trend) catch {
+            h.oom = true;
+            break :blk .none;
+        };
+        t.* = .{ .label = W.length, .points = pts, .height = 110 };
+        break :blk t.view(h);
+    } else .none;
     if (words == null and l.win == null) return null;
-    var cols = h.list();
-    if (l.win) |win| for (win, length_labels, 0..) |w, label, i| cols.add(h.li(.{ .key = i }, .{
-        h.span(.{ .class = "bar", .aria_hidden = true }, .{h.el(.i, .{ .style = h.vars(.{ .h = barHeight(w), .c = fmt.wrColour(w / 100, 0.2) }) }, .{})}),
-        h.b(.{}, .{W.pct.with(h, .{ .p = w })}),
-        h.small(.{}, .{label}),
-    }));
     return h.div(.{ .class = "len" }, .{
         h.h3(.{}, .{W.length}),
-        if (l.win != null) h.ul(.{}, .{cols.done()}) else null,
+        chart,
         if (words) |x| h.p(.{}, .{x}) else null,
     });
-}
-
-/// 50% at half height, 3x so a few points show
-fn barHeight(w: f32) f32 {
-    return @max(0, @min(100, 50 + 3 * (w - 50)));
-}
-
-/// Long games (30+) against short ones (under 25), as comp.zig's lean: true longer;
-/// null under 3 points apart
-fn tilt(win: [length_labels.len]f32) ?bool {
-    const d = (win[3] + win[4] - win[0] - win[1]) / 2;
-    if (@abs(d) < 3) return null;
-    return d > 0;
 }
 
 /// Magic from the left, physical the rest; then the mix in words
@@ -196,17 +194,12 @@ const W = struct {
     const early = plain("Early");
     const late = plain("Late");
     const lean_numbers = phrase.Phrase("{g:signed} g · {w:points} pts");
-    const lean_note = phrase.Phrase("Early: its team is usually ahead at {g:int} min (gold) but wins less from an even game at {w:int} (pts); late, the other way round.");
     const top = phrase.Phrase("Most damage: {n:text}");
     const top_share = phrase.Phrase(" ({p:rate} of the team's)");
     const length = plain("Win chance by game length");
     const longer = plain("Your champions win more in long games.");
     const shorter = plain("Your champions win more in short games.");
-    const no_length = plain("No clear lean by game length.");
-    const tilt_longer = plain("Tilts to long games, too few games to be sure.");
-    const tilt_shorter = plain("Tilts to short games, too few games to be sure.");
-    const pct = phrase.Phrase("{p:rate}");
-    const scope = phrase.Phrase("Champion averages: damage from patch {p:text} in EUW, leans from 30 days, lanes at {l:int} min.");
+    const notes = phrase.Phrase("Champion averages: damage from patch {p:text} in EUW, leans from 30 days, lanes at {l:int} min. Early: its team is usually ahead at {g:int} min (gold) but wins less from an even game at {w:int} (pts); late, the other way round.");
 };
 
 pub const css =
@@ -241,16 +234,10 @@ pub const css =
     \\  .c-comp .tips { gap: 2px; }
     \\  .c-comp .tips li { display: block; font-size: var(--fs-s); }
     \\  .c-comp .tips li::before { content: "› "; color: var(--muted); }
-    \\  .c-comp .note { font-size: var(--fs-xs); color: var(--faint); }
     \\  .c-comp .top { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-s); }
     \\  .c-comp .len { display: flex; flex-direction: column; gap: var(--sp-2); }
     \\  .c-comp .len > p { font-size: var(--fs-s); }
-    \\  .c-comp .len ul { flex-direction: row; gap: var(--sp-2); }
-    \\  .c-comp .len li { flex: 1 1 0; flex-direction: column; gap: 2px; }
-    \\  .c-comp .len .bar { width: 100%; height: 40px; border-radius: var(--r-s); background: var(--panel-2); }
-    \\  .c-comp .len .bar > i { inset: auto 0 0 0; width: auto; height: calc(var(--h) * 1%); background: var(--c); }
-    \\  .c-comp .len b { font-size: var(--fs-s); font-variant-numeric: tabular-nums; }
-    \\  .c-comp .len small { font-size: var(--fs-xs); color: var(--muted); }
+    \\  .c-comp .c-trend .plot { cursor: auto; }
     \\}
     \\
 ;
@@ -290,7 +277,7 @@ pub const sample: Comp = .{
 };
 
 /// The tester's numbers beside the public words
-fn private(h: *H) Comp {
+pub fn private(h: *H) Comp {
     var c = sample;
     c.us.damage.?.share = true;
     c.us.damage.?.rate = 50.4;
@@ -309,7 +296,7 @@ fn private(h: *H) Comp {
     c.us.timing = timing;
     c.us.top.?.share = 31;
     c.them.top.?.share = 34;
-    c.length = .{ .win = .{ 44.8, 48.2, 51.0, 53.6, 56.1 }, .longer = true };
+    c.length = .{ .win = .{ 44.8, 48.2, 51.0, 53.6, 56.1 }, .range = .{ 2.1, 1.6, 1.5, 1.8, 2.6 }, .longer = true };
     const rows = h.mem.dupe(teamrows.Row, &lanes_public) catch {
         h.oom = true;
         return sample;
@@ -324,11 +311,16 @@ fn private(h: *H) Comp {
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    g.addFill("all locked, public", view(h, sample));
-    g.addFill("all locked, private", view(h, private(h)));
+    var public = sample;
+    public.notes_id = g.id("comp-pub");
+    g.addFill("all locked, public", view(h, public));
+    var priv = private(h);
+    priv.notes_id = g.id("comp-priv");
+    g.addFill("all locked, private", view(h, priv));
     var unsure = private(h);
-    unsure.length = .{ .win = .{ 60.6, 61.9, 46.7, 47.3, 45.5 } };
-    g.addFill("private, length tilts but not sure", view(h, unsure));
+    unsure.notes_id = g.id("comp-unsure");
+    unsure.length = .{ .win = .{ 53.6, 52.9, 49.7, 48.3, 47.5 }, .range = .{ 4.8, 3.1, 2.9, 3.6, 6.4 } };
+    g.addFill("private, length tilts but not sure: the band says so", view(h, unsure));
     g.addFill("a split unknown", view(h, .{
         .us = .{ .timing = sample.us.timing },
         .them = sample.them,
@@ -336,5 +328,6 @@ pub fn gallery(g: *Gallery) void {
         .gold_minute = 14,
         .win_minute = 20,
         .lane_minute = 14,
+        .notes_id = g.id("comp-split"),
     }));
 }
