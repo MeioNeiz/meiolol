@@ -16,12 +16,15 @@ Jacob's notes 97, 104, 105, 108 (docs/review/app-review-2026-11-03.md). Plan 3 N
   style, logged in as in a browser); the site's header there gains the live link first,
   back to the app. When champ select, the loading screen or a game starts, the window
   goes back to the live screen
-- Champ select fits: at the window's 1120 x 720 the board column and the lane panel sit
-  side by side, the lane panel held in view (sticky, its own scroll) while the board
-  column (board, bans, then the comp view and other panels) scrolls; full screen (1500
-  px and up) a third column for the panels after the board, so nothing is below the
-  fold; narrow one column. Every phase uses the full height, nothing in a dashed box
-  with empty space under it
+- Champ select fits the window, no page scroll: our team's column, the centre, theirs
+  (ui/app.zig grid). Each column heads with its team's draft win chance (private); seats
+  are cards whose portrait ring is the state (hovered dashed, picking amber, locked the
+  team's colour), no state words. The centre: your lane's head (you vs them, lane gold),
+  a switch (Options | Lane | Comps, radios in the shell's static HTML, no island byte),
+  then that view with its own scroll: Options the picks table (private: one list, pool
+  rows marked; public: the lane panel's 5 and 5 more, two lists per product rules), Lane
+  the gold chart, Comps the comp view once all ten lock. Full screen widens the centre;
+  under 820 px one column, everything stacked
 - Review pages: a third width, Full (the browser's width and height), and the window
   frame at its real 720 px height, scrolling inside, so what fits shows
 
@@ -49,10 +52,8 @@ bridge.js (`data-shell` JSON on the element, as seat clicks' `lane`)
 2. Built, not yet tried in a real Windows window. Site in the window: shell navigation
    to meio.lol, bridge.js's live link on site pages, back to the app on a phase change,
    message origin check
-3. Champ select, in game and lobby grids done; loading and post game fill the window
-   at 1120 x 720 as they are. Champ select fit: the
-   column grid (board column scrolls, lane panel sticky, full screen third column), each
-   phase's screen using the height
+3. Champ select three columns (meionotes 132-135); in game and lobby grids done;
+   loading and post game fill the window at 1120 x 720 as they are
 4. Done. Lobby home: what the live screen shows with no champ select, beside APP16's form
    panel: tiles into the site's features (draft tester, patch, pool) with a line of data
    each from the app's own files

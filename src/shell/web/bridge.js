@@ -33,20 +33,17 @@
     const sh = e.target.closest && e.target.closest('[data-shell]');
     if (sh) meiolol.send(JSON.parse(sh.dataset.shell));
   });
-  // An enemy seat dropped on another row (ui/draftboard.zig rows in role order): the two
-  // swap roles. The live board's seats only (a lane act or the shown one): practice's
-  // carry its own acts
+  // An enemy seat dropped on another (ui/draftboard.zig: a team's seats in role order):
+  // the two swap roles. The live board's seats only (a lane act or the shown one):
+  // practice's carry its own acts
   const enemy = (el) => el.closest && el.closest('.c-draft .seat[data-side="them"]');
   const movable = (s) => !!s && (s.matches('[data-act^="lane "]') || s.hasAttribute('data-sel'));
-  const row = (el) => {
-    const l = el.closest('.lane');
-    return l ? Array.prototype.indexOf.call(l.parentNode.children, l) : -1;
-  };
+  const row = (s) => Array.prototype.indexOf.call(s.parentNode.querySelectorAll(':scope > .seat'), s);
   let from = -1;
   let over = null;
   const target = (e) => {
-    const l = from >= 0 && e.target.closest && e.target.closest('.c-draft .lane');
-    return l && movable(l.querySelector('.seat[data-side="them"]')) ? l : null;
+    const s = from >= 0 && enemy(e.target);
+    return movable(s) ? s : null;
   };
   const leave = () => {
     if (over) delete over.dataset.drop;

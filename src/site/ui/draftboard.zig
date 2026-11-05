@@ -43,6 +43,8 @@ pub const Seat = struct {
     /// The app: a figure beside the name in place of `fact` ("53.0%", "▲"), which is
     /// then its title
     fig: []const u8 = "",
+    /// Private edition: the rate `fig` shows, in %, which colours it
+    rate: ?f32 = null,
     /// An ally still to pick: options for the role
     ideas: []const champ.Champ = &.{},
     /// An enemy yet to pick: their ban, a hint at their role
@@ -109,32 +111,36 @@ pub const Board = struct {
     heads: [2]tree.Text = .{ words.blue, words.red },
     won: ?Side = null,
     mix: ?[2]Mix = null,
+    /// The app, private edition: our team's draft win chance in %, theirs the rest
+    draft: ?f32 = null,
 };
 
 pub const Side = enum { us, them };
 
-/// The app's board; the full variant is fullOn's (kept apart so ui-app.wasm doesn't carry it)
+/// The app's board: a column per team, its seats in role order, then its bans, so a
+/// page can set the centre between them (app.zig); narrow, the columns pair up by row.
+/// The full variant is fullOn's (kept apart so ui-app.wasm doesn't carry it)
 pub fn view(h: *H, b: Board) N {
-    var rows = h.list();
-    for (b.lanes) |l| rows.add(h.div(.{ .key = @as(u32, @backingInt(l.role)), .class = "lane" }, .{
-        seat(h, l.us, .us),
-        h.span(.{ .class = "mid" }, .{
-            role.view(h, l.role, .{ .s = .s }),
-            if (l.them.guessed and l.them.champ != null) h.span(.{ .class = "q", .role = "img", .aria_label = words.guessed }, .{"?"}) else null,
+    return h.div(.{ .class = "c-draft" }, .{ team(h, b, .us), team(h, b, .them) });
+}
+
+fn team(h: *H, b: Board, side: Side) N {
+    var seats = h.list();
+    for (b.lanes) |l| seats.add(seat(h, if (side == .us) l.us else l.them, side, l.role));
+    var banned = h.list();
+    for (if (side == .us) b.bans_us else b.bans_them, 0..) |c, i| banned.add(h.span(.{ .key = i }, .{champ.view(h, c, .{ .px = .@"20", .state = .banned })}));
+    const draft: ?f32 = if (b.draft) |d| if (side == .us) d else 100 - d else null;
+    return h.div(.{ .class = "team", .data_side = side }, .{
+        h.div(.{ .class = "hd" }, .{
+            h.span(.{}, .{if (side == .us) words.us else words.them}),
+            if (draft) |d| h.b(.{ .style = h.vars(.{ .c = fmt.wrColour(d / 100, 0.2) }) }, .{words.rate.with(h, .{ .p = d })}) else null,
         }),
-        seat(h, l.them, .them),
-    }));
-    return h.div(.{ .class = "c-draft" }, .{
-        h.div(.{ .class = "heads" }, .{
-            h.span(.{ .data_side = Side.us }, .{words.us}),
-            h.span(.{ .data_side = Side.them }, .{words.them}),
-        }),
-        h.div(.{ .class = "lanes" }, .{rows.done()}),
-        bans(h, b),
+        seats.done(),
+        h.div(.{ .class = "bans", .aria_label = words.bans }, .{banned.done()}),
     });
 }
 
-fn seat(h: *H, s: Seat, side: Side) N {
+fn seat(h: *H, s: Seat, side: Side, rl: role.Role) N {
     const line: ?N = if (s.picking)
         badge.view(h, .turn, .{words.picking})
     else switch (s.state) {
@@ -147,9 +153,14 @@ fn seat(h: *H, s: Seat, side: Side) N {
         .key = i,
         .data_act = if (i < s.idea_acts.len) s.idea_acts[i] else null,
     }, .{champ.view(h, c, .{ .px = .@"32" })}));
+    const lean = if (s.lean == .none) null else s.lean;
+    // A rate's colour is the rate's own (fmt.wrColour); a word's, its lean
+    const tint = if (s.rate) |r| h.vars(.{ .c = fmt.wrColour(r / 100, fmt.table_span) }) else null;
     return h.div(.{
+        .key = @as(u32, @backingInt(rl)),
         .class = "seat",
         .data_side = side,
+        .data_state = s.state,
         .data_turn = s.picking,
         .data_you = s.you,
         .data_act = if (s.act.len > 0) s.act else null,
@@ -169,11 +180,15 @@ fn seat(h: *H, s: Seat, side: Side) N {
         h.span(.{ .class = "who" }, .{
             if (s.champ) |c| h.span(.{ .class = "nm" }, .{
                 h.b(.{}, .{c.name}),
-                if (s.fig.len > 0) h.span(.{ .class = "fact", .data_lean = if (s.lean == .none) null else s.lean, .title = s.fact }, .{s.fig}) else null,
+                if (s.fig.len > 0) h.span(.{ .class = "fact", .data_lean = lean, .style = tint, .title = s.fact }, .{s.fig}) else null,
             }) else if (s.ban) |c| champ.view(h, c, .{ .px = .@"20", .state = .banned }) else null,
             line,
-            if (s.fact.len > 0 and s.fig.len == 0) h.span(.{ .class = "fact", .data_lean = if (s.lean == .none) null else s.lean }, .{s.fact}) else null,
+            if (s.fact.len > 0 and s.fig.len == 0) h.span(.{ .class = "fact", .data_lean = lean }, .{s.fact}) else null,
             if (s.ideas.len > 0) h.span(.{ .class = "ideas" }, .{ h.span(.{ .class = "line" }, .{words.ideas}), ideas.done() }) else null,
+        }),
+        h.span(.{ .class = "rl" }, .{
+            role.view(h, rl, .{ .s = .s }),
+            if (s.guessed and s.champ != null) h.span(.{ .class = "q", .role = "img", .aria_label = words.guessed }, .{"?"}) else null,
         }),
     });
 }
@@ -395,6 +410,7 @@ const words = struct {
     const hover = plain("hovering");
     const ideas = plain("ideas");
     const bans = plain("Bans");
+    const rate = phrase.Phrase("{p:rate}");
     const empty = plain("Empty seat");
     const guessed = plain("Role guessed");
     const blue = plain("Blue");
@@ -438,9 +454,28 @@ pub const css =
     \\  .c-draft .seat { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; color: var(--text);
     \\    border-radius: var(--r-s); }
     \\  .c-draft .seat[data-side="them"] { flex-direction: row-reverse; }
-    \\  .c-draft .lane[data-drop] { box-shadow: inset 0 0 0 1px var(--focus); }
-    \\  .c-draft .seat[data-turn] { box-shadow: 0 0 0 1px var(--turn-line); background: var(--wash);
-    \\    padding: 3px; margin: -3px; }
+    \\  /* The app's: a column per team, paired up by row (7 each: head, 5 seats, bans) */
+    \\  .c-draft:not([data-v]) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    \\    grid-template-rows: repeat(7, auto); grid-auto-flow: column; gap: 2px var(--sp-2); }
+    \\  .c-draft:not([data-v]) > .team { display: contents; }
+    \\  .c-draft .team > .hd { display: flex; align-items: baseline; gap: var(--sp-2); padding: 0 var(--sp-2) var(--sp-1);
+    \\    font-size: var(--fs-xs); font-weight: var(--w-m); }
+    \\  .c-draft .team[data-side="them"] > .hd { flex-direction: row-reverse; }
+    \\  .c-draft .team > .hd > b { font-size: var(--fs-l); font-weight: var(--w-b); line-height: 1; color: var(--c);
+    \\    font-variant-numeric: tabular-nums; }
+    \\  .c-draft:not([data-v]) .team > .bans { display: flex; flex-wrap: wrap; gap: 4px; padding: var(--sp-1) var(--sp-2) 0; }
+    \\  .c-draft .team[data-side="them"] > .bans { justify-content: flex-end; }
+    \\  .c-draft:not([data-v]) .seat { padding: 6px var(--sp-2); background: var(--panel-2); }
+    \\  .c-draft .seat > .rl { display: flex; flex-direction: column; align-items: center; margin-left: auto; color: var(--muted); }
+    \\  .c-draft .seat[data-side="them"] > .rl { margin: 0 auto 0 0; }
+    \\  .c-draft .seat[data-drop] { box-shadow: inset 0 0 0 1px var(--focus); }
+    \\  .c-draft .seat[data-turn] { box-shadow: inset 0 0 0 1px var(--turn-line); background: var(--wash); }
+    \\  /* A seat's state is its portrait's ring, no words: hovered or wanted dashed, picking now
+    \\     amber (the card too), locked the team's colour (ChampIcon's side) */
+    \\  .c-draft:not([data-v]) .who > :is(.line, .c-badge, .c-champ + .fact) { display: none; }
+    \\  .c-draft .seat:is([data-state="hover"], [data-state="intent"]) > .c-champ { outline: 2px dashed var(--line-2);
+    \\    outline-offset: 2px; }
+    \\  .c-draft .seat[data-turn] > .c-champ { outline: 2px solid var(--turn); outline-offset: 2px; }
     \\  .c-draft .who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
     \\  .c-draft .seat[data-side="them"] .who { align-items: flex-end; text-align: right; }
     \\  .c-draft .who > b { max-width: 100%; font-weight: var(--w-m); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -452,6 +487,7 @@ pub const css =
     \\    text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-draft .fact[data-lean="good"] { color: var(--hi2); }
     \\  .c-draft .fact[data-lean="bad"] { color: var(--lo2); }
+    \\  .c-draft .fact[style] { color: var(--c); }
     \\  .c-draft .ideas { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
     \\  .c-draft .bans > span { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-draft .bans > [data-side="them"] { justify-content: flex-end; }

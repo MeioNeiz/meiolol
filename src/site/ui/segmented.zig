@@ -4,7 +4,9 @@
 //! choosing one changes what shows here, it doesn't switch tab panels (Tabs does). With
 //! `href` a segment is a link to another page (a view's), the chosen one aria-current;
 //! with `on` too, an island takes the link's click (the page without it still follows).
-//! In the app, `shell` is the message bridge.js sends the shell on a click
+//! In the app, `shell` is the message bridge.js sends the shell on a click. `radios`:
+//! for static HTML with no island to switch views (the app's champ select): radios whose
+//! checked one the page's CSS reads (:has([value=..]:checked))
 const tree = @import("tree.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const phrase = @import("phrase.zig");
@@ -29,6 +31,8 @@ pub const Item = struct {
     href: ?[]const u8 = null,
     /// The app's message to its shell, as JSON (data-shell, src/shell/web/bridge.js)
     shell: ?[]const u8 = null,
+    /// radios: the input's value
+    value: []const u8 = "",
 };
 
 pub const Variant = enum { default, fill };
@@ -71,29 +75,47 @@ pub fn view(h: *H, o: Opts, items: []const Item) N {
     }, .{l.done()});
 }
 
+/// Radios named `group`, the selected one checked: the page's CSS shows what it chooses
+pub fn radios(h: *H, group: []const u8, o: Opts, items: []const Item) N {
+    var l = h.list();
+    for (items, 0..) |it, i| l.add(h.el(.label, .{ .key = i, .title = it.title }, .{
+        h.input(.{ .type = "radio", .name = group, .value = it.value, .checked = it.selected }),
+        it.label,
+        if (it.n) |n| h.span(.{ .class = "n" }, .{phrase.num(h, .count, n)}) else null,
+    }));
+    return h.div(.{
+        .class = "c-seg",
+        .role = "radiogroup",
+        .aria_label = o.label,
+        .data_v = if (o.v == .default) null else o.v,
+        .data_s = if (o.s == .m) null else o.s,
+    }, .{l.done()});
+}
+
 pub const css =
     \\@layer components {
     \\  .c-seg { display: inline-flex; gap: 2px; padding: 3px; height: var(--ctl); flex: none;
     \\    border-radius: calc(var(--r-ctl) + 3px); background: var(--bg);
     \\    box-shadow: inset 0 0 0 1px var(--ctl-line); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
-    \\  .c-seg > :is(button, a) { all: unset; position: relative; display: inline-flex; align-items: center;
+    \\  .c-seg > :is(button, a, label) { all: unset; position: relative; display: inline-flex; align-items: center;
     \\    justify-content: center; gap: 6px; height: 100%; padding: 0 12px; border-radius: var(--r-ctl);
     \\    color: var(--t2); font-size: var(--fs-m); font-weight: var(--w-m); white-space: nowrap;
     \\    cursor: pointer; box-sizing: border-box;
     \\    transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
-    \\  .c-seg > :is(button, a[href]):hover { color: var(--text); background: var(--ctl-bg-2); }
-    \\  .c-seg > :is([aria-pressed="true"], [aria-current="page"]) { background: var(--sel-bg); color: var(--sel-ink);
+    \\  .c-seg > :is(button, a[href], label):hover { color: var(--text); background: var(--ctl-bg-2); }
+    \\  .c-seg > :is([aria-pressed="true"], [aria-current="page"], :has(> :checked)) { background: var(--sel-bg); color: var(--sel-ink);
     \\    box-shadow: inset 0 0 0 1px var(--sel-line), var(--shadow-ctl); }
     \\  .c-seg > [aria-disabled="true"] { color: var(--faint); cursor: default; background: none; }
-    \\  .c-seg > :is(button, a):focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+    \\  .c-seg > :is(button, a):focus-visible, .c-seg > :has(> :focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+    \\  .c-seg > label > input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
     \\  .c-seg > :is(button, a)::after { content: ""; position: absolute; left: 0; right: 0; top: 50%;
     \\    height: max(100%, var(--hit)); transform: translateY(-50%); }
     \\  .c-seg .n { color: var(--muted); font-weight: var(--w-r); font-size: var(--fs-s); font-variant-numeric: tabular-nums; }
-    \\  .c-seg > :is([aria-pressed="true"], [aria-current="page"]) .n { color: var(--accent); }
+    \\  .c-seg > :is([aria-pressed="true"], [aria-current="page"], :has(> :checked)) .n { color: var(--accent); }
     \\  .c-seg[data-s="s"] { height: var(--ctl-s); padding: 2px; border-radius: calc(var(--r-ctl) + 2px); }
-    \\  .c-seg[data-s="s"] > :is(button, a) { padding: 0 10px; font-size: var(--fs-s); border-radius: var(--r-s); }
+    \\  .c-seg[data-s="s"] > :is(button, a, label) { padding: 0 10px; font-size: var(--fs-s); border-radius: var(--r-s); }
     \\  .c-seg[data-v="fill"] { display: flex; }
-    \\  .c-seg[data-v="fill"] > :is(button, a) { flex: 1; }
+    \\  .c-seg[data-v="fill"] > :is(button, a, label) { flex: 1; }
     \\}
     \\
 ;
@@ -124,6 +146,11 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Plat+"), .selected = true, .href = "#" },
         .{ .label = plain("Emerald+"), .disabled = true, .href = "#" },
         .{ .label = plain("All regions"), .href = "#" },
+    }));
+    g.add("radios, static HTML", radios(h, "seg-demo", .{ .s = .s, .label = plain("View") }, &.{
+        .{ .label = plain("Options"), .value = "options", .selected = true },
+        .{ .label = plain("Lane"), .value = "lane" },
+        .{ .label = plain("Comps"), .value = "comp" },
     }));
     g.add("counts", view(h, .{ .label = plain("Min games") }, &.{
         .{ .label = plain("Any"), .n = 862 },

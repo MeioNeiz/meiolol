@@ -122,10 +122,11 @@ pub const BanOption = struct {
 /// `held`: the island's chart state; null draws no chart
 pub fn view(h: *H, s: Screen, held: ?*lanechart.Held) N {
     const bans = banOptions(h, s);
+    var b = s.board;
+    b.draft = s.draft;
     return h.div(.{ .class = "c-cs" }, .{
         h.div(.{ .class = "board" }, .{
-            if (s.draft) |d| h.p(.{ .class = "draft", .style = h.vars(.{ .c = fmt.wrColour(d / 100, 0.2) }) }, .{W.draft.with(h, .{ .p = d })}) else null,
-            draftboard.view(h, s.board),
+            draftboard.view(h, b),
             if (!s.banning) bans else null,
         }),
         h.div(.{ .class = "side" }, .{
@@ -227,7 +228,6 @@ fn banOptions(h: *H, s: Screen) ?N {
 }
 
 const W = struct {
-    const draft = phrase.Phrase("Draft so far: {p:rate} for your team");
     const win = phrase.Phrase("{p:rate}");
     const team_win = plain("team win");
     const no_pick = plain("No pick yet");
@@ -261,7 +261,6 @@ pub const css =
     \\    .c-cs { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); align-items: start; }
     \\  }
     \\  .c-cs > div { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
-    \\  .c-cs .draft { margin: 0; font-weight: var(--w-m); color: var(--c, var(--text)); }
     \\  .c-cs section { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
     \\  .c-cs h2 { margin: 0; font-size: var(--fs-l); font-weight: var(--w-b); line-height: var(--lh-tight); }
     \\  .c-cs h2 .them { font-weight: var(--w-r); color: var(--t2); }

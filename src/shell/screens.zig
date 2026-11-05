@@ -283,6 +283,14 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
         break :blk options.view(&h);
     } else null;
     const comp_n: ?ui.N = if (under) |x| ui.compview.view(&h, x) else null;
+    // Champ select's views (ui/app.zig): CSS reads the checked radio, so no island byte;
+    // a page reload (the comp view coming) starts on Options again
+    const views = [_]ui.segmented.Item{
+        .{ .label = .{ .s = "Options" }, .value = "options", .selected = true },
+        .{ .label = .{ .s = "Lane" }, .value = "lane" },
+        .{ .label = .{ .s = "Comps" }, .value = "comp" },
+    };
+    const tabs_n: ?ui.N = if (d.screen == .select) ui.segmented.radios(&h, "cs-view", .{ .s = .s, .label = .{ .s = "View" } }, views[0..if (under != null) 3 else 2]) else null;
     const lobby_n: ?ui.N = if (f.lobby) |x| ui.lobby.view(&h, x) else null;
     const home_n: ?ui.N = if (f.home) |x| ui.apphome.view(&h, f.site, x) else null;
     const build_n: ?ui.N = if (f.build) |x| ui.gamebuild.view(&h, x) else null;
@@ -301,6 +309,7 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
     if (top) |n| try ui.html.write(&t, n, w);
     try w.writeAll("<main class=\"c-live\">");
     try ui.html.write(&t, body, w);
+    if (tabs_n) |n| try ui.html.write(&t, n, w);
     if (picks_n) |n| try ui.html.write(&t, n, w);
     if (comp_n) |n| try ui.html.write(&t, n, w);
     if (lobby_n) |n| try ui.html.write(&t, n, w);
@@ -650,6 +659,7 @@ fn seat(a: Allocator, c: Ctx, s: board.Seat, side: usize, k: usize) !ui.draftboa
         if (c.private) {
             out.fact = try a.print("{f} in {s} · {f} games", .{ rate(s.win), r.label(), count(s.games) });
             out.fig = try a.print("{f}", .{rate(s.win)});
+            out.rate = @floatCast(100 * s.win);
             out.lean = if (s.win >= 0.515) .good else if (s.win <= 0.485) .bad else .none;
         } else if (s.win >= 0.515) {
             out.fact = try a.print("strong in {s} now", .{r.label()});
