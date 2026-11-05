@@ -49,7 +49,8 @@ pub const Look = struct {
     /// The games after the figure; false where a column holds them (still on hover)
     count: bool = true,
     /// What a screen reader hears before the figure: "win chance" for a model's estimate;
-    /// whose rate, where the place doesn't say: "Ornn wins"
+    /// whose rate, where the place doesn't say: "Ornn wins"; empty where a label says it
+    /// (StatStrip)
     said: []const u8 = "win rate",
 };
 

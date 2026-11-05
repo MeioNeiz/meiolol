@@ -6,7 +6,7 @@
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
-const stat = @import("stat.zig");
+const winrate = @import("rate.zig");
 const phrase = @import("phrase.zig");
 const Phrase = phrase.Phrase;
 const champ = @import("champ.zig");
@@ -180,9 +180,8 @@ pub const MatchupGrid = struct {
             const o = opps[of[i]];
             chips[nc] = .{
                 .champ = x.champ,
-                .fig = phrase.num(h, .rate, rate(.{ .games = o.games, .wins = o.wins })),
-                .colour = .{ .pts = rate(.{ .games = o.games, .wins = o.wins }) - own },
-                .thin = x.thin,
+                .rate = .counted(o.games, o.wins),
+                .who = in.name,
                 .pressed = g.dots.chosen() == @as(u16, @intCast(i)),
                 .on = h.on(&g.dots, .{ .pick = @intCast(i) }),
             };
@@ -249,14 +248,12 @@ fn wide(o: Opp) bool {
 }
 
 fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief {
-    const own = rate(rl);
-    const won = rate(.{ .games = o.games, .wins = o.wins });
     const usual_tip = h.fmt("cp-usual-{d}", .{o.champ});
     var items: [4]strip.Item = undefined;
     var n: usize = 0;
-    items[n] = .{ .label = W.wins.with(h, .{ .c = in.name }), .value = phrase.num(h, .rate, won), .range = fmt.range(o.games, o.wins), .ends = stat.endsGames(h, .rate, won, fmt.range(o.games, o.wins), o.games), .games = phrase.num(h, .kilo, o.games), .ctx = phrase.num(h, .points, won - own), .step = .of(won - own, fmt.win_cuts), .answer = true };
+    items[n] = .{ .label = W.wins.with(h, .{ .c = in.name }), .rate = winrate.view(h, .counted(o.games, o.wins), .{ .said = "" }), .answer = true };
     n += 1;
-    items[n] = .{ .label = W.m_usual, .value = phrase.num(h, .points, o.usual), .ctx = cp.usualSide(o.usual, W.below_usual, W.above_usual), .step = .of(o.usual, fmt.win_cuts), .tip = .{ .id = usual_tip, .note = W.usual_note.with(h, .{ .c = in.name }) } };
+    items[n] = .{ .label = W.m_usual, .rate = winrate.delta(h, o.usual, null), .ctx = cp.usualSide(o.usual, W.below_usual, W.above_usual), .tip = .{ .id = usual_tip, .note = W.usual_note.with(h, .{ .c = in.name }) } };
     n += 1;
     if (o.gold) |gd| {
         items[n] = goldItem(h, in, o.champ, gd);

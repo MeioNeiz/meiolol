@@ -60,6 +60,14 @@ fn textOf(r: *Report, t: *const tree.Tree, n: tree.N) []const u8 {
     return std.mem.trim(u8, w.written(), " ");
 }
 
+/// The text a sighted visitor sees: no visually hidden words (class "sr")
+fn shownText(t: *const tree.Tree, n: tree.N, w: *std.Io.Writer) void {
+    const x = t.node(n);
+    if (x.tag == .@"#text") return w.writeAll(x.text) catch {};
+    if (t.attr(n, "class")) |c| if (std.mem.eql(u8, c, "sr")) return;
+    for (t.kidsOf(n)) |k| shownText(t, k, w);
+}
+
 /// The words' length, the spaces between them included: a badge's figures ("▲7 ▼10")
 /// don't count, as in countWords
 fn labelChars(s: []const u8) usize {
@@ -122,7 +130,9 @@ fn walk(r: *Report, t: *const tree.Tree, n: tree.N, rules: Rules) void {
             const row = if (t.attr(n, "role")) |v| std.mem.eql(u8, v, "option") else false;
             if (!row and (labelChars(label) > rules.label_chars or countWords(label) > rules.label_words)) {
                 // An aria-label may be longer than what shows; the visible text is the label
-                const shown = textOf(r, t, n);
+                var w: std.Io.Writer.Allocating = .init(r.a);
+                shownText(t, n, &w.writer);
+                const shown = std.mem.trim(u8, w.written(), " ");
                 if (labelChars(shown) > rules.label_chars or countWords(shown) > rules.label_words) {
                     r.add(rules.label, "label \"{s}\" over {d} chars or {d} words", .{ shown, rules.label_chars, rules.label_words });
                 }
@@ -171,6 +181,15 @@ test "a label's figures don't count toward its budget" {
     var t: tree.Tree = .{};
     var h: tree.H = .init(arena.allocator(), &t);
     t.root = h.button(.{ .aria_label = "Moved clearly: win rate 12 up, 10 down" }, .{ "Moved clearly", " ", "▲12", " ", "▼10", " ", "+21" });
+    try testing.expectEqual(@as(usize, 0), (try run(arena.allocator(), &t, .{ .label = .err })).findings.items.len);
+}
+
+test "a label's visually hidden words don't count toward its budget" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: tree.H = .init(arena.allocator(), &t);
+    t.root = h.button(.{ .aria_label = "Ornn wins 49.5% vs Yone, 200 games" }, .{ h.span(.{ .class = "v" }, .{"49.5%"}), h.span(.{ .class = "sr" }, .{"win rate 49.5%, 200 games"}) });
     try testing.expectEqual(@as(usize, 0), (try run(arena.allocator(), &t, .{ .label = .err })).findings.items.len);
 }
 

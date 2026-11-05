@@ -21,6 +21,7 @@ const card = @import("card.zig");
 const badge = @import("badge.zig");
 const strip = @import("strip.zig");
 const stat = @import("stat.zig");
+const winrate = @import("rate.zig");
 const segmented = @import("segmented.zig");
 const champhead = @import("champhead.zig");
 const matchstrip = @import("matchstrip.zig");
@@ -199,16 +200,14 @@ pub const Head = struct {
 
     fn headline(p: *P, h: *H) N {
         const d = p.data;
-        const won = rate(d.games, d.wins);
         var items: [4]strip.Item = undefined;
         var n: usize = 0;
-        items[n] = .{ .label = W.wins.with(h, .{ .c = d.x.name }), .value = phrase.num(h, .rate, won), .range = fmt.range(d.games, d.wins), .ends = stat.endsGames(h, .rate, won, fmt.range(d.games, d.wins), d.games), .games = phrase.num(h, .kilo, d.games), .step = .of(won - 50, fmt.win_cuts), .answer = true };
+        items[n] = .{ .label = W.wins.with(h, .{ .c = d.x.name }), .rate = winrate.view(h, .counted(d.games, d.wins), .{ .said = "" }), .answer = true };
         n += 1;
         items[n] = .{
             .label = W.usual,
-            .value = phrase.num(h, .points, d.vs_usual),
+            .rate = winrate.delta(h, d.vs_usual, null),
             .ctx = W.usually.with(h, .{ .r = d.usual }),
-            .step = .of(d.vs_usual, fmt.win_cuts),
             .tip = .{ .id = "mu-usual", .note = champpage.usual_note.with(h, .{ .c = d.x.name }) },
         };
         n += 1;

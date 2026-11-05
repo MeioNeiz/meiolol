@@ -38,8 +38,8 @@ pub const Stat = struct {
     /// 80% half-width, in the value's units (fmt.range): its ends on hover; past
     /// fmt.wide_range the figure fades
     range: ?f64 = null,
-    /// An average's lanes or games (gold): under fmt.thin_games the figure fades. Rates
-    /// fade by range
+    /// An average's lanes or games (gold): under fmt.thin_games the figure fades. Not a
+    /// rate's (.rate, .aggregate): Rate fades by its range alone
     thin: bool = false,
     /// Games behind the figure: after it, and in its hover
     games: ?u32 = null,
@@ -89,12 +89,7 @@ pub fn count(h: *H, n: u32) N {
 /// A figure's hover: its range's ends, with its games when known; null with no range
 fn tip(h: *H, k: Kind, v: f64, half: ?f64, games: ?u32) ?[]const u8 {
     const r = half orelse return null;
-    return if (games) |n| endsGames(h, k, v, r, n).s else ends(h, k, v, r).s;
-}
-
-/// A strip value's hover: "50.2-52.6%, 33,108 games"
-pub fn endsGames(h: *H, k: Kind, v: f64, half: f64, games: u32) tree.Text {
-    return W.ends_games.with(h, .{ .e = ends(h, k, v, half).s, .n = games });
+    return if (games) |n| W.ends_games.with(h, .{ .e = ends(h, k, v, r).s, .n = n }).s else ends(h, k, v, r).s;
 }
 
 /// A range's ends, for its hover: "50.2-52.6%", whole once it is ±10 or wider; a change

@@ -21,6 +21,7 @@ const tree = @import("tree.zig");
 const html = @import("html.zig");
 const fmt = @import("fmt.zig");
 const stat = @import("stat.zig");
+const winrate = @import("rate.zig");
 const phrase = @import("phrase.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
@@ -1047,10 +1048,9 @@ pub const Top = struct {
     fn locked(_: *P, h: *H, d: *const TopData, all: ?*const TopRole) N {
         if (d.roles.len == 0 or d.roles[0].games == 0) return h.p(.{ .class = "none" }, .{if (d.roles.len == 0) W.no_answer else W.no_lock_games});
         const x = d.roles[0];
-        const won = rate(.{ .games = x.games, .wins = x.wins });
         var items: [2]strip.Item = undefined;
         var n: usize = 0;
-        items[n] = .{ .label = W.won, .value = phrase.num(h, .rate, won), .range = fmt.range(x.games, x.wins), .ends = stat.endsGames(h, .rate, won, fmt.range(x.games, x.wins), x.games), .games = phrase.num(h, .kilo, x.games), .step = .of(won - 50, fmt.win_cuts), .answer = true };
+        items[n] = .{ .label = W.won, .rate = winrate.view(h, .counted(x.games, x.wins), .{ .said = "" }), .answer = true };
         n += 1;
         // The two count different tables (lock rows, views): never past all of them
         if (all) |y| if (y.games > 0) {
@@ -1062,26 +1062,19 @@ pub const Top = struct {
     }
 
     fn headline(p: *P, h: *H, rl: *const TopRole) N {
-        const won = rate(.{ .games = rl.games, .wins = rl.wins });
         var items: [4]strip.Item = undefined;
         var n: usize = 0;
         items[n] = .{
             .label = W.won,
-            .value = phrase.num(h, .rate, won),
-            .range = fmt.range(rl.games, rl.wins),
-            .ends = stat.endsGames(h, .rate, won, fmt.range(rl.games, rl.wins), rl.games),
-            .games = phrase.num(h, .kilo, rl.games),
+            .rate = winrate.view(h, .counted(rl.games, rl.wins), .{ .said = "" }),
             .ctx = if (rl.rank > 0) W.rank.with(h, .{ .n = rl.rank, .th = ordinal(rl.rank), .of = rl.of, .r = rl.role.label().s }) else null,
-            .step = .of(won - 50, fmt.win_cuts),
             .answer = true,
         };
         n += 1;
         if (rl.patch_move) |m| {
             items[n] = .{
                 .label = W.move.with(h, .{ .p = p.data.patch }),
-                .value = phrase.num(h, .points, m[0]),
-                .ends = stat.ends(h, .points, m[0], m[1]),
-                .step = .of(m[0], fmt.win_cuts),
+                .rate = winrate.delta(h, m[0], m[1]),
                 .tip = .{ .id = "cp-move", .note = W.move_note },
             };
             n += 1;

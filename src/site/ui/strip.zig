@@ -1,12 +1,12 @@
 //! StatStrip: a page's headline figures in one row, plain (no box per figure): a small
 //! label over each value, the answer larger, a value on the scale's colour where it has
-//! one, context after it small ("4th of 53"). A range shows on hover as its ends, never as
-//! a ± figure; a rate fades when its range is wide, never hides (J35). Three to a row in a
+//! one, context after it small ("4th of 53"). A rate is a Rate: its count, range on hover
+//! and fade are the rate view's. Three to a row in a
 //! narrow container. A label can open a Toggletip; a figure can link to where it comes from, or be pressed
 //! (the game page's cells select their span; the selected one shows pressed)
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
-const stat = @import("stat.zig");
+const rate = @import("rate.zig");
 const toggletip = @import("toggletip.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
@@ -20,17 +20,14 @@ pub const scope = .{".c-strip"};
 
 pub const Item = struct {
     label: tree.Text,
-    /// Formatted by its kind (stat.figure, phrase.num)
-    value: tree.Text,
+    /// Formatted by its kind (stat.figure, phrase.num); a pressable cell's spoken figure
+    value: tree.Text = .{ .s = "" },
+    /// A rate or a difference of rates in place of value (rate.view with `.said = ""`, the
+    /// label says it; rate.delta): its colour, count, hover and fade are the rate's. Made
+    /// by the caller, so families without rates (ui-games) don't carry the rate scale
+    rate: N = .none,
     /// After the value, small
     ctx: ?tree.Text = null,
-    /// A rate's 80% half-width (fmt.range): past fmt.wide_range the value fades
-    range: ?f64 = null,
-    /// The value's hover: its range's ends (stat.ends), with its games (stat.endsGames)
-    ends: ?tree.Text = null,
-    /// Games behind the value, faint after it: phrase.num .kilo. Made by the caller, so
-    /// families without counts don't carry the code
-    games: ?tree.Text = null,
     /// The value's colour; null is plain ink
     step: ?fmt.Step = null,
     /// The figure the page answers with (one per strip)
@@ -90,27 +87,19 @@ fn lab(h: *H, it: Item) N {
     return h.span(.{ .class = "lab" }, .{ if (tip) |*t| t else null, if (tip == null) it.label else null });
 }
 
-/// The value with its count; `with_ctx`: the context inside it too (view's), else the
-/// caller places it
+/// The value; `with_ctx`: the context inside it too (view's), else the caller places it
 fn val(h: *H, it: Item, with_ctx: bool) N {
     const style = if (it.step) |s| h.vars(.{ .c = s }) else null;
-    const wide = if (it.range) |r| fmt.wide(r) else false;
-    const ends: ?[]const u8 = if (it.ends) |e| e.s else null;
-    // Count and context share one element shape (class of one letter): one tree
-    // builder in every family, which matters to ui-games at its budget
-    const games = if (it.games) |t| h.small(.{ .class = "g" }, .{t}) else null;
     const ctx = if (with_ctx) if (it.ctx) |c| h.small(.{ .class = "c" }, .{c}) else null else null;
-    const kids = .{ it.value, games, ctx };
+    const kids = .{ if (it.rate == .none) it.value else null, if (it.rate == .none) null else it.rate, ctx };
     return if (it.on) |on| h.button(.{
         .class = "val",
         .type = "button",
         .style = style,
-        .data_wide = wide,
         .aria_pressed = it.pressed,
-        .title = ends,
         .aria_label = W.cell.with(h, .{ .l = it.label.s, .v = it.value.s }),
         .on_click = on,
-    }, kids) else h.span(.{ .class = "val", .style = style, .data_wide = wide, .title = ends }, kids);
+    }, kids) else h.span(.{ .class = "val", .style = style }, kids);
 }
 
 pub const css =
@@ -122,9 +111,9 @@ pub const css =
     \\    font-variant-numeric: tabular-nums; color: var(--c, var(--text)); white-space: nowrap; }
     \\  .c-strip .val > small { font-size: var(--fs-s); font-weight: var(--w-r); color: var(--faint); }
     \\  .c-strip .val > .c::before { content: " "; }
-    \\  .c-strip .val > .g { margin-left: 6px; }
-    \\  .c-strip .val > .g + .c { display: block; line-height: 1.2; }
-    \\  .c-strip .val[data-wide] { opacity: 0.55; }
+    \\  .c-strip .val > .c-rate > .v { font-weight: inherit; }
+    \\  .c-strip .val > .c-rate > .g { margin-left: 6px; font-size: var(--fs-s); }
+    \\  .c-strip .val > .c-rate + .c { display: block; line-height: 1.2; }
     \\  .c-strip > .answer .val { font-size: var(--fs-xl); }
     \\  .c-strip > a:hover { text-decoration: none; }
     \\  .c-strip > a:hover .lab { color: var(--text); }
@@ -156,16 +145,11 @@ pub const css =
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    const agg = fmt.win_cuts;
     g.add("with an answer", view(h, &.{
         .{
             .label = plain("Win rate"),
-            .value = plain("51.2%"),
-            .range = 0.6,
-            .ends = plain("50.6-51.8%, 44,935 games"),
-            .games = plain("45k"),
+            .rate = rate.view(h, .counted(44935, 23007), .{ .said = "" }),
             .ctx = plain("4th of 53"),
-            .step = .of(1.2, agg),
             .answer = true,
             .tip = .{ .id = g.id("strip-wr"), .note = plain("Ahri's games won in mid: EUW, last 30 days, Platinum and up.") },
         },
@@ -174,7 +158,8 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Games"), .value = plain("44,935") },
     }));
     g.add("six, one links", view(h, &.{
-        .{ .label = plain("Won"), .value = plain("49.3%"), .range = fmt.range(64, 32), .ends = plain("41.4-57.2%, 64 games"), .games = plain("64"), .ctx = plain("44th of 59"), .step = .of(-0.7, agg), .answer = true },
+        .{ .label = plain("Won"), .rate = rate.view(h, .counted(64, 32), .{ .said = "" }), .ctx = plain("44th of 59"), .answer = true },
+        .{ .label = plain("Vs usual"), .rate = rate.delta(h, 1.2, null) },
         .{ .label = plain("Pick"), .value = plain("7.7%") },
         .{ .label = plain("Ban"), .value = plain("16.5%") },
         .{ .label = plain("Games"), .value = plain("31,257") },

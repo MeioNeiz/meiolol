@@ -9,9 +9,10 @@ const chip = @import("chip.zig");
 const badge = @import("badge.zig");
 const button = @import("button.zig");
 const strip = @import("strip.zig");
-const fmt = @import("fmt.zig");
+const rate = @import("rate.zig");
+const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
-const plain = @import("phrase.zig").plain;
+const plain = phrase.plain;
 const H = tree.H;
 const N = tree.N;
 
@@ -22,6 +23,7 @@ pub const Brief = struct {
     champ: champ.Champ,
     /// "Top opponent", "Jungle ally"
     rel: tree.Text,
+    /// Few games: a badge says so (the figures' rate fades by itself)
     thin: bool = false,
     /// StatStrip: the champion's rate in it, vs usual, gold at 14, games
     figures: N,
@@ -39,9 +41,9 @@ pub const Lock = struct { on: tree.Handler, locked: bool };
 pub const Common = struct {
     champ: champ.Champ,
     /// The champion's rate against it
-    fig: tree.Text,
-    colour: fmt.WrColour,
-    thin: bool = false,
+    rate: rate.Rate,
+    /// Whose rate it is: the chip reads "Ornn wins 49.5% vs Yone, 200 games"
+    who: []const u8,
     pressed: bool = false,
     on: ?tree.Handler = null,
 };
@@ -53,15 +55,19 @@ const W = struct {
     pub const unlock = plain("Unlock");
     pub const lanes = plain("Lane opponents ›");
     pub const common = plain("Most common");
+    pub const chip = phrase.Phrase("{c:text} wins {v:rate} vs {o:text}, {n:count} games");
 };
 
 pub fn view(h: *H, b: Brief, common: []const Common) N {
     var chips = h.list();
-    for (common, 0..) |c, i| chips.add(h.div(.{ .key = i, .data_state = if (c.thin) "thin" else null }, .{
-        chip.view(h, .{ .pressed = c.pressed, .on = c.on }, .{
-            // Named: the portrait's alt is the chip's name with its rate
-            champ.view(h, c.champ, .{ .px = .@"20" }),
-            h.span(.{ .class = "v", .style = h.vars(.{ .c = c.colour }) }, .{c.fig}),
+    for (common, 0..) |c, i| chips.add(h.div(.{ .key = i }, .{
+        chip.view(h, .{
+            .pressed = c.pressed,
+            .on = c.on,
+            .label = W.chip.with(h, .{ .c = c.who, .v = c.rate.pct, .o = c.champ.name, .n = c.rate.games orelse 0 }),
+        }, .{
+            champ.view(h, c.champ, .{ .px = .@"20", .named = false }),
+            rate.view(h, c.rate, .{ .count = false }),
         }),
     }));
     return h.div(.{ .class = "c-mpick", .data_state = if (b.thin) "thin" else null }, .{
@@ -94,17 +100,15 @@ pub const css =
     \\  .c-mpick .who .t { display: flex; flex-direction: column; min-width: 0; }
     \\  .c-mpick .who b { font-size: var(--fs-l); font-weight: var(--w-b); }
     \\  .c-mpick .who small { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-2); font-size: var(--fs-s); color: var(--faint); }
-    \\  .c-mpick[data-state="thin"] .c-strip .val { opacity: 0.55; }
     \\  .c-mpick .met { display: flex; flex-direction: column; gap: var(--sp-1); padding-left: var(--sp-5);
     \\    border-left: 1px solid var(--line); }
     \\  .c-mpick .sh { font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--faint); text-transform: uppercase;
     \\    letter-spacing: 0.06em; }
     \\  .c-mpick .chips { display: grid; grid-template-columns: repeat(3, auto); gap: var(--sp-1); }
     \\  .c-mpick .chips > div { display: flex; }
-    \\  .c-mpick .chips > [data-state="thin"] { opacity: 0.6; }
     \\  .c-mpick .chips .c-chip { flex: 1; height: 30px; padding: 0 10px 0 4px; gap: 6px; border-radius: var(--r-ctl); }
     \\  .c-mpick .chips .c-champ { border-radius: var(--r-s); }
-    \\  .c-mpick .chips .v { color: var(--c); font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
+    \\  .c-mpick .chips .c-rate > .v { font-weight: var(--w-b); }
     \\  @container (max-width: 719px) {
     \\    .c-mpick { grid-template-columns: minmax(0, 1fr); }
     \\    .c-mpick .met { padding-left: 0; border-left: 0; }
@@ -130,18 +134,17 @@ const G = struct {
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    const agg = fmt.win_cuts;
     const common = [_]Common{
-        .{ .champ = champ.demo("Garen", "Garen"), .fig = plain("49.9%"), .colour = .{ .pts = -0.1 }, .pressed = true },
-        .{ .champ = champ.demo("Sett", "Sett"), .fig = plain("47.4%"), .colour = .{ .pts = -2.6 } },
-        .{ .champ = champ.demo("Jayce", "Jayce"), .fig = plain("51.8%"), .colour = .{ .pts = 1.8 } },
-        .{ .champ = champ.demo("Mordekaiser", "Mordekaiser"), .fig = plain("50.2%"), .colour = .{ .pts = 0.2 } },
-        .{ .champ = champ.demo("Aatrox", "Aatrox"), .fig = plain("45.9%"), .colour = .{ .pts = -4.1 } },
-        .{ .champ = champ.demo("Olaf", "Olaf"), .fig = plain("48.0%"), .colour = .{ .pts = -2 }, .thin = true },
+        .{ .champ = champ.demo("Garen", "Garen"), .rate = .at(1788, 49.9), .who = "Darius", .pressed = true },
+        .{ .champ = champ.demo("Sett", "Sett"), .rate = .at(1412, 47.4), .who = "Darius" },
+        .{ .champ = champ.demo("Jayce", "Jayce"), .rate = .at(1190, 51.8), .who = "Darius" },
+        .{ .champ = champ.demo("Mordekaiser", "Mordekaiser"), .rate = .at(1022, 50.2), .who = "Darius" },
+        .{ .champ = champ.demo("Aatrox", "Aatrox"), .rate = .at(870, 45.9), .who = "Darius" },
+        .{ .champ = champ.demo("Olaf", "Olaf"), .rate = .at(52, 48.0), .who = "Darius" },
     };
     const figures = strip.view(h, &.{
-        .{ .label = G.darius_wins, .value = plain("49.9%"), .ctx = plain("+0.6"), .step = .of(0.6, agg), .answer = true },
-        .{ .label = G.usual, .value = plain("+1.2"), .step = .of(1.2, agg) },
+        .{ .label = G.darius_wins, .rate = rate.view(h, .at(1788, 49.9), .{ .said = "" }), .answer = true },
+        .{ .label = G.usual, .rate = rate.delta(h, 1.2, null) },
         .{ .label = G.gold, .value = plain("+382") },
         .{ .label = G.games, .value = plain("1,788"), .ctx = plain("5.7%") },
     });
@@ -151,7 +154,7 @@ pub fn gallery(g: *Gallery) void {
         .rel = G.top,
         .thin = true,
         .figures = strip.view(h, &.{
-            .{ .label = G.darius_wins, .value = plain("58.1%"), .ctx = plain("+8.8"), .step = .of(8.8, agg), .answer = true },
+            .{ .label = G.darius_wins, .rate = rate.view(h, .at(43, 58.1), .{ .said = "" }), .answer = true },
             .{ .label = G.games, .value = plain("43"), .ctx = plain("0.1%") },
         }),
         .href = "#",

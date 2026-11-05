@@ -284,8 +284,7 @@ range (on hover); count; time; gold, one game; plain; few games: a wide range, f
 missing; with context; a sorted column: the ink mixes, no steps; the same colour however
 sure: 53.0, 52.6, 50.0 of 20,000, 54.0 of 400, 54.2 of 120, 65.0 of 40 (faded); fill, heat
 cells
-Used by: strip, table, buildpanel, heatgrid, matchgrid, ranking, homepage, champpage,
-matchpage, tiers
+Used by: table, buildpanel, heatgrid, ranking, homepage, champpage, matchpage, tiers
 
 ### Rate
 `rate.zig` `.c-rate` site
@@ -305,7 +304,7 @@ fade; its own ref (BuildPanel: against the slot's 47.2%); no games; a sorted col
 colour mixes, no steps; the same colour however sure: 53.0, 52.6, 50.0 of 20,000, 54.0 of
 400, 54.2 of 120, 65 of 40 (faded); delta: +2.6, −1.4, +0.3; +4.8 with a wide range,
 faded
-Used by: stat
+Used by: stat, strip, matchbrief, matchgrid, champpage, matchpage
 
 ### Delta
 `delta.zig` `.c-delta` `.c-dbar` site
@@ -341,10 +340,10 @@ Used by: draftboard, teamrows, lobby, gamehead, gamerow, scoreboard, profilesum,
 `strip.zig` `.c-strip` site
 StatStrip: a page's headline figures in one row, plain (no box per figure): a small label
 over each value, the answer larger, a value on the scale's colour where it has one,
-context after it small ("4th of 53"). A range shows on hover as its ends, never as a ±
-figure; a rate fades when its range is wide, never hides (J35). Three to a row in a narrow
-container. A label can open a Toggletip; a figure can link to where it comes from, or be
-pressed (the game page's cells select their span; the selected one shows pressed)
+context after it small ("4th of 53"). A rate is a Rate: its count, range on hover and fade
+are the rate view's. Three to a row in a narrow container. A label can open a Toggletip; a
+figure can link to where it comes from, or be pressed (the game page's cells select their
+span; the selected one shows pressed)
 States: with an answer; six, one links; pressable, one pressed; rows: places on tracks,
 the ends named once; grown by a taller card
 Used by: champhead, matchbrief, gamehead, gamepage, matchgrid, playerbar, adminpage,
