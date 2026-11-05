@@ -416,6 +416,7 @@ pub const W = struct {
     pub const all_lanes = plain("dashed: all lanes");
     pub const kills_head = plain("Lane kills");
     pub const kills_them = plain("Opponent");
+    pub const kills_y = plain("lanes with a kill");
     pub const lanes_n = Phrase("{n:count} lanes");
     pub const first_blood = plain("First blood");
     pub const kills = [3]tree.Text{ plain("by 6 min"), plain("6-14 min"), plain("14+ min") };
@@ -2039,7 +2040,7 @@ pub const Charts = struct {
             versus.timeline(h, .{ p.data.name, W.kills_them.s }, .{
                 champ.view(h, .{ .name = p.data.name, .src = p.data.icon }, .{ .px = .@"32", .named = false }),
                 role.view(h, p.r().role, .{ .s = .l, .named = false }),
-            }, rows[0..n]),
+            }, W.kills_y, rows[0..n]),
         });
     }
 
@@ -2267,6 +2268,7 @@ test "lane kills: a timeline of each side's share of lanes, first blood only whe
     const got = w.written();
     try std.testing.expect(std.mem.indexOf(u8, got, "data-v=\"time\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, got, "by 6 min") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "<span class=\"y\">lanes with a kill</span>") != null);
     try std.testing.expect(std.mem.indexOf(u8, got, "<span class=\"sr\">Opponent </span>46%") != null);
     try std.testing.expect(std.mem.indexOf(u8, got, "--x:12") != null);
     try std.testing.expectEqual(4, std.mem.count(u8, got, "class=\"tc\""));

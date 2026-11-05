@@ -225,12 +225,14 @@ fn dots(h: *H, r: Row, b: [2]f32) N {
 /// Two sides' shares (`shares` rows) through the phases of a game, left to right in
 /// time: the first side's columns rise from a centre line, the second's hang under it,
 /// each to its own 0-100, its figure at the tip, the larger bold. `sides`: what stands
-/// left of each half (a portrait, a role icon), named under it
-pub fn timeline(h: *H, names: [2][]const u8, sides: [2]N, items: []const Row) N {
+/// left of each half (a portrait, a role icon), named under it. `y`: what the shares
+/// count ("lanes with a kill"), once, in the label row under the sides, read first
+pub fn timeline(h: *H, names: [2][]const u8, sides: [2]N, y: tree.Text, items: []const Row) N {
     var l = h.list();
-    l.add(h.span(.{ .key = items.len, .class = "sd", .aria_hidden = true }, .{
-        h.span(.{ .class = "us" }, .{ sides[0], h.small(.{}, .{names[0]}) }),
-        h.span(.{ .class = "them" }, .{ sides[1], h.small(.{}, .{names[1]}) }),
+    l.add(h.span(.{ .key = items.len, .class = "sd" }, .{
+        h.span(.{ .class = "us", .aria_hidden = true }, .{ sides[0], h.small(.{}, .{names[0]}) }),
+        h.span(.{ .class = "them", .aria_hidden = true }, .{ sides[1], h.small(.{}, .{names[1]}) }),
+        h.span(.{ .class = "y" }, .{y}),
     }));
     for (items, 0..) |r, i| {
         const b = r.bars orelse continue;
@@ -429,6 +431,8 @@ pub const css =
     \\  .c-vs .sd small { font-size: var(--fs-xs); font-weight: var(--w-b); }
     \\  .c-vs .sd > .us small { color: var(--us-hot); }
     \\  .c-vs .sd > .them small { color: var(--them-hot); }
+    \\  .c-vs .sd > .y { justify-content: flex-start; contain: inline-size; padding-top: var(--sp-1); text-align: center;
+    \\    font-size: var(--fs-xs); color: var(--faint); }
     \\  .c-vs .tc > .lab { grid-row: 3; padding-top: var(--sp-1); text-align: center; font-size: var(--fs-xs); color: var(--t2); }
     \\  .c-vs .tc > :is(.up, .dn) { display: flex; justify-content: center; }
     \\  .c-vs .tc > .up { grid-row: 1; align-items: flex-end; padding-top: 1.6em; border-bottom: 1px solid var(--line-2); }
@@ -480,12 +484,12 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Level 6"), .a = plain("5:19"), .b = plain("5:28"), .lead = .a, .sub = plain("9 s apart") },
         .{ .label = plain("First item"), .a = plain("12:04"), .b = plain("–") },
     }));
-    g.addFill("timeline: lane kills by phase, Ornn above, the opponent under", timeline(h, .{ "Ornn", "Opponent" }, .{ champ.view(h, champ.demo("Ornn", "Ornn"), .{ .px = .@"32", .named = false }), role.view(h, .top, .{ .s = .l, .named = false }) }, &.{
+    g.addFill("timeline: lane kills by phase, Ornn above, the opponent under", timeline(h, .{ "Ornn", "Opponent" }, .{ champ.view(h, champ.demo("Ornn", "Ornn"), .{ .px = .@"32", .named = false }), role.view(h, .top, .{ .s = .l, .named = false }) }, plain("lanes with a kill"), &.{
         shares(h, plain("by 6 min"), 0.49, 0.46),
         shares(h, plain("6-14 min"), 0.71, 0.74),
         shares(h, plain("14+ min"), 0.87, 0.82),
     }));
-    g.addFill("timeline: first blood ahead; one side at 0", timeline(h, .{ "Ornn", "Opponent" }, .{ champ.view(h, champ.demo("Ornn", "Ornn"), .{ .px = .@"32", .named = false }), role.view(h, .top, .{ .s = .l, .named = false }) }, &.{
+    g.addFill("timeline: first blood ahead; one side at 0", timeline(h, .{ "Ornn", "Opponent" }, .{ champ.view(h, champ.demo("Ornn", "Ornn"), .{ .px = .@"32", .named = false }), role.view(h, .top, .{ .s = .l, .named = false }) }, plain("lanes with a kill"), &.{
         shares(h, plain("First blood"), 0.10, 0.12),
         shares(h, plain("by 6 min"), 0.49, 0.46),
         shares(h, plain("6-14 min"), 0.71, 0.74),
