@@ -125,7 +125,7 @@ pub const Picks = struct {
             candlist.view(h, .{
                 .rows = rows,
                 .mode = mode,
-                .head = if (d.private) .{ W.team, W.with_, if (ref != null) W.vs_yours else W.vs_first } else null,
+                .head = if (d.private) .{ W.none, W.team, if (ref != null) W.vs_yours else W.vs_first } else null,
                 .ref_label = W.yours,
                 .extra = if (d.private and d.them.len > 0) .{ .head = W.gold_h, .cuts = gold_cuts } else null,
             }),
@@ -220,7 +220,7 @@ const W = struct {
     const all = Phrase("Every {r:text} option");
     const more = Phrase("More {r:text} options");
     const team = plain("Team win");
-    const with_ = plain("with");
+    const none = plain("");
     const vs_yours = plain("vs yours");
     const vs_first = plain("vs first");
     const yours = plain("yours");

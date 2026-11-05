@@ -154,11 +154,6 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held) N {
                 h.span(.{ .class = "tags" }, .{
                     badge.view(h, .us, .{role.Role.label(l.role)}),
                     if (ally) badge.view(h, if (l.enemy) .them else .neutral, .{if (l.enemy) W.enemy else W.ally}) else null,
-                    badge.view(h, if (l.mode == .locked) .accent else .neutral, .{switch (l.mode) {
-                        .blind => W.blind,
-                        .counter => W.counter,
-                        .locked => W.locked,
-                    }}),
                 }),
             }),
             if (l.fig.len > 0) h.span(.{ .class = "fig", .data_lean = if (l.lean == .none) null else l.lean, .data_thin = l.thin, .title = l.sentence }, .{
@@ -236,9 +231,6 @@ const W = struct {
     const gold_at = plain("gold at 14");
     const vs = plain(" vs ");
     const guess = plain("?");
-    const blind = plain("Safe blind");
-    const counter = plain("Counter");
-    const locked = plain("Locked in");
     const locked_in = plain("locked");
     const hovering = plain("hovering");
     const head_blind = plain("Options that hold up blind");
@@ -298,6 +290,7 @@ pub const css =
     \\    font-weight: var(--w-b); font-variant-numeric: tabular-nums; color: var(--c, var(--text)); }
     \\  .c-cs .win > small { font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
     \\  .c-cs .bans[data-turn] h3 { color: var(--turn); }
+    \\  .c-cs:has(.seat[data-you][data-turn]) .vs > .c-champ[data-you] { outline: 2px solid var(--turn); outline-offset: 2px; }
     \\  .c-cs .c-draft .seat[data-sel] { box-shadow: inset 0 0 0 1px var(--sel-line); border-radius: var(--r-s); }
     \\}
     \\
@@ -432,7 +425,8 @@ fn enemyAlone(h: *H) Screen {
         h.oom = true;
         return sample;
     };
-    lanes[1].them.sel = true;
+    // The sample's enemy jungle holds only a ban: it takes our jungler
+    lanes[1].them = .{ .champ = lanes[1].us.champ, .state = .locked, .sel = true };
     lanes[1].us = .{};
     s.board.lanes = lanes;
     s.lane = .{ .role = .jungle, .me = lanes[1].them.champ, .mode = .locked, .enemy = true };

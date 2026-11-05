@@ -1,7 +1,8 @@
 //! DraftBoard: a draft as lane rows, our seat on the left, theirs mirrored on the right,
 //! the role between; both teams' bans under. A seat: portrait, name, a line for its
 //! state (hovering, picking) and an optional short fact coloured by its lean; an ally
-//! still to pick can carry ideas for the role. The desktop's champ select first, then
+//! still to pick can carry ideas for the role; an enemy's guessed role is dashed with a
+//! grip (the app's seats swap roles by drag). The desktop's champ select first, then
 //! the draft tester and Daily Draft (draft-tester.md). Champions and roles only: no
 //! player names or ranks (product rules). The full variant (Daily, the tester): 48 px
 //! seats with their pick number, the hidden seat asked about, a chosen answer previewed
@@ -154,6 +155,7 @@ fn seat(h: *H, s: Seat, side: Side, rl: role.Role) N {
         .data_act = if (i < s.idea_acts.len) s.idea_acts[i] else null,
     }, .{champ.view(h, c, .{ .px = .@"32" })}));
     const lean = if (s.lean == .none) null else s.lean;
+    const guessed = s.guessed and s.champ != null;
     // A rate's colour is the rate's own (fmt.wrColour); a word's, its lean
     const tint = if (s.rate) |r| h.vars(.{ .c = fmt.wrColour(r / 100, fmt.table_span) }) else null;
     return h.div(.{
@@ -186,10 +188,14 @@ fn seat(h: *H, s: Seat, side: Side, rl: role.Role) N {
             if (s.fact.len > 0 and s.fig.len == 0) h.span(.{ .class = "fact", .data_lean = lean }, .{s.fact}) else null,
             if (s.ideas.len > 0) h.span(.{ .class = "ideas" }, .{ h.span(.{ .class = "line" }, .{words.ideas}), ideas.done() }) else null,
         }),
-        h.span(.{ .class = "rl" }, .{
-            role.view(h, rl, .{ .s = .s }),
-            if (s.guessed and s.champ != null) h.span(.{ .class = "q", .role = "img", .aria_label = words.guessed }, .{"?"}) else null,
-        }),
+        // A guessed role is dashed with a grip: the live board's enemy seats swap by drag
+        // (bridge.js)
+        h.span(.{
+            .class = "rl",
+            .data_guessed = guessed,
+            .role = if (guessed) "img" else null,
+            .aria_label = if (guessed) words.guessed.with(h, .{ .r = rl.label().s }) else null,
+        }, .{role.view(h, rl, .{ .s = .s, .named = !guessed })}),
     });
 }
 
@@ -412,7 +418,7 @@ const words = struct {
     const bans = plain("Bans");
     const rate = phrase.Phrase("{p:rate}");
     const empty = plain("Empty seat");
-    const guessed = plain("Role guessed");
+    const guessed = phrase.Phrase("{r:text}, role guessed");
     const blue = plain("Blue");
     const red = plain("Red");
     const won = plain("Won");
@@ -450,7 +456,6 @@ pub const css =
     \\  .c-draft .lane { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr); align-items: center;
     \\    gap: var(--sp-2); padding: 6px var(--sp-2); border-radius: var(--r-s); background: var(--panel-2); }
     \\  .c-draft .mid { display: flex; flex-direction: column; align-items: center; color: var(--muted); }
-    \\  .c-draft .q { font-size: var(--fs-xs); color: var(--faint); line-height: 1; }
     \\  .c-draft .seat { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; color: var(--text);
     \\    border-radius: var(--r-s); }
     \\  .c-draft .seat[data-side="them"] { flex-direction: row-reverse; }
@@ -468,6 +473,11 @@ pub const css =
     \\  .c-draft:not([data-v]) .seat { padding: 6px var(--sp-2); background: var(--panel-2); }
     \\  .c-draft .seat > .rl { display: flex; flex-direction: column; align-items: center; margin-left: auto; color: var(--muted); }
     \\  .c-draft .seat[data-side="them"] > .rl { margin: 0 auto 0 0; }
+    \\  .c-draft .seat > .rl[data-guessed] { gap: 3px; padding: 3px; border: 1px dashed var(--line-2);
+    \\    border-radius: var(--r-s); }
+    \\  .c-draft .seat > .rl[data-guessed]::after { content: ""; width: 12px; height: 8px;
+    \\    background: radial-gradient(circle, currentColor 1px, transparent 1.5px) 0 0 / 4px 4px; }
+    \\  .c-draft .seat[data-act]:has(> .rl[data-guessed]) { cursor: grab; }
     \\  .c-draft .seat[data-drop] { box-shadow: inset 0 0 0 1px var(--focus); }
     \\  .c-draft .seat[data-turn] { box-shadow: inset 0 0 0 1px var(--turn-line); background: var(--wash); }
     \\  /* A seat's state is its portrait's ring, no words: hovered or wanted dashed, picking now

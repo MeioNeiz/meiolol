@@ -1,7 +1,8 @@
 //! ChampIcon: a champion's square portrait, 20 to 48 px, with the states a seat or a row
 //! needs: thin data faded, banned struck, dead greyed with a cross, an empty seat dashed,
-//! a suggestion not yet yours (dashed accent ring), a side's ring, the player's own ring,
-//! a level, and a role badge in the corner
+//! a suggestion not yet yours (dashed accent ring), a side's ring, the player's own ring
+//! with a dot on its corner (seen under a turn's outline), a level, and a role badge in
+//! the corner
 const std = @import("std");
 const tree = @import("tree.zig");
 const role = @import("role.zig");
@@ -121,6 +122,9 @@ pub const css =
     \\  .c-champ[data-side="us"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--us); }
     \\  .c-champ[data-side="them"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--them); }
     \\  .c-champ[data-you] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--accent); }
+    \\  .c-champ[data-you]::before { content: ""; position: absolute; left: -4px; top: -4px; z-index: 1;
+    \\    width: max(8px, calc(var(--sz) / 5)); aspect-ratio: 1; border-radius: 50%;
+    \\    background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
     \\  .c-champ > .c-role { position: absolute; right: -3px; bottom: -3px; width: 45%; height: 45%;
     \\    min-width: 12px; min-height: 12px; border-radius: 3px; color: var(--text);
     \\    background: var(--bg); mask: none; }

@@ -440,8 +440,8 @@ tiers
 `champ.zig` `.c-champ` site
 ChampIcon: a champion's square portrait, 20 to 48 px, with the states a seat or a row
 needs: thin data faded, banned struck, dead greyed with a cross, an empty seat dashed, a
-suggestion not yet yours (dashed accent ring), a side's ring, the player's own ring, a
-level, and a role badge in the corner
+suggestion not yet yours (dashed accent ring), a side's ring, the player's own ring with a
+dot on its corner (seen under a turn's outline), a level, and a role badge in the corner
 States: 56, 48, 40, 32, 24, 20; role, sides, you and level; thin, banned, dead; empty
 seat, a suggestion; beside its name
 Used by: bar, sitesearch, champsearch, champhead, matchbrief, matchstrip, champlist,
@@ -571,7 +571,8 @@ Used by: finder, champpage, matchpage
 DraftBoard: a draft as lane rows, our seat on the left, theirs mirrored on the right, the
 role between; both teams' bans under. A seat: portrait, name, a line for its state
 (hovering, picking) and an optional short fact coloured by its lean; an ally still to pick
-can carry ideas for the role. The desktop's champ select first, then the draft tester and
+can carry ideas for the role; an enemy's guessed role is dashed with a grip (the app's
+seats swap roles by drag). The desktop's champ select first, then the draft tester and
 Daily Draft (draft-tester.md). Champions and roles only: no player names or ranks (product
 rules). The full variant (Daily, the tester): 48 px seats with their pick number, the
 hidden seat asked about, a chosen answer previewed dashed, seats selectable, the game's
