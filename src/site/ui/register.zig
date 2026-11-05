@@ -17,9 +17,9 @@ const Group = struct { name: []const u8, files: []const u8 };
 const groups = [_]Group{
     .{
         .name = "Controls",
-        .files = "button chip scopechip segmented tabs select toggletip rolepicker " ++
-            "filterbar champsearch sitesearch champrolepicker lockbar idlookup guess " ++
-            "actionbutton",
+        .files = "button chip scopechip segmented tabs select toggletip tip " ++
+            "rolepicker filterbar champsearch sitesearch champrolepicker lockbar " ++
+            "idlookup guess actionbutton",
     },
     .{
         .name = "Labels and icons",

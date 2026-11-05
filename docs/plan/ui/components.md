@@ -16,6 +16,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - Tabs: a card's or page's sections, on the panel's edge
 - Select: a button showing its value and a chevron, Segmented's height, that opens a...
 - Toggletip: a dotted term that opens a short note on tap (popovertarget: no script...
+- Tip: a short line about what it wraps (a range's ends, a full count, a place's...
 - ActionButton: a Button that runs something on the server (restart the crawler, build...
 - SiteSearch: the header's search
 - RolePicker: the role a page shows, in Segmented's well: each role's icon with its...
@@ -260,6 +261,16 @@ by CSS anchor positioning where supported, else centred
 States: closed: tap; a column head's term; open
 Used by: strip, draftboard, compview, table, laneduel, puzzle, reasons, learnpage,
 dailyseat, champpage
+
+### Tip
+`tip.zig` `.c-hint` `.c-hintb`
+Tip: a short line about what it wraps (a range's ends, a full count, a place's name),
+shown at once on hover, on keyboard focus and on a tap, so phones see it too (a title
+never shows there). The line is in the page, after the wrapped content: screen readers
+read it inline, with no attr() or id. A note with a heading, or long enough to want a tap
+to open, is a Toggletip. The native title and attr(data-tip) are uilint debt that moves
+here
+States: closed: hover, focus or tap; open, above; open, end; open, below; open, wraps
 
 ### StatCell
 `stat.zig` `.c-stat` site
