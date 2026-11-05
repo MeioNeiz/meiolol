@@ -47,7 +47,7 @@ host_target() {
 # Only commits on origin/main: those passed the pre-push ci and are what DEPLOYED and the
 # Deploys tab name; a by-hand start from an unpushed HEAD skipped both
 sync() {
-    local rev tree t target cpu
+    local rev tree t target cpu cache
     rev=$(git -C "$ROOT" rev-parse "${REV:-HEAD}")
     git -C "$ROOT" merge-base --is-ancestor "$rev" origin/main \
         || { echo "box.sh: ${rev:0:7} is not on origin/main: push it first (the pre-push ci)"; exit 1; }
@@ -56,11 +56,13 @@ sync() {
     tree=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now: tree is local to sync
     trap "rm -rf '$tree'" EXIT
-    # Not the Windows desktop app: only deploy/desktop-release.sh puts a new one on the box
+    # Not the Windows desktop app: only deploy/desktop-release.sh puts a new one on the box.
+    # The tree's own cache, as the pre-push ci's (zig-cache-prune.sh)
+    cache=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)/meiolol-build/box.cache
     "$HERE/build-tree.sh" box "$rev" sh -c 'zig build backend -Dtarget="$1" -Dcpu="$4" \
-        -Doptimize=ReleaseSafe --prefix zig-out/box --cache-dir "$2/.zig-cache" \
+        -Doptimize=ReleaseSafe --prefix zig-out/box --cache-dir "$2" \
         && mkdir "$3/zig-out" && cp -R zig-out/box "$3/zig-out/" && cp -R deploy "$3/"' \
-        _ "$target" "$ROOT" "$tree" "$cpu"
+        _ "$target" "$cache" "$tree" "$cpu"
     # check-deploy.sh (zig build ci) reads both lists: each committed, every unit that runs
     # in ~/ml/meiolol listed, every script a unit or listed script runs listed
     local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh backup-mirror.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh box-lib.sh" s

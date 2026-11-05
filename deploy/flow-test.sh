@@ -61,6 +61,24 @@ HOME=$t/zb PATH=$t/zb/bin:$PATH "$t/zb/deploy/zb.sh" test -Dtest-filter=x > /dev
 [ "$(tail -n 1 "$h" | cut -f3,8,9)" = "$(printf 'test~f\t0\tzb.sh test -Dtest-filter=x')" ] \
     && ok "history: zb.sh's step" || bad "history zb: $(tail -n 1 "$h")"
 
+# zig-cache-prune.sh: the shared cache, and each tree's own unless its tree is locked
+pr=$t/pr
+git init -q "$pr"
+for c in "$pr/.zig-cache" "$pr/.git/meiolol-build/ci.cache" "$pr/.git/meiolol-build/box.cache"; do
+    mkdir -p "$c/o/1" "$c/h"
+    echo x > "$c/o/1/f"
+    echo log > "$c/keep.log"
+done
+mkdir "$pr/.git/meiolol-build/box.lock"
+echo $$ > "$pr/.git/meiolol-build/box.lock/pid"
+MEIOLOL_ROOT=$pr "$here/zig-cache-prune.sh" 0 0 > "$t/prune.log"
+! [ -e "$pr/.zig-cache/o" ] && ! [ -e "$pr/.git/meiolol-build/ci.cache/o" ] \
+    && [ -f "$pr/.git/meiolol-build/ci.cache/keep.log" ] && ! [ -e "$pr/.git/meiolol-build/ci.lock" ] \
+    && ok "prune: the shared cache and a free tree's" || bad "prune: $(cat "$t/prune.log")"
+[ -f "$pr/.git/meiolol-build/box.cache/o/1/f" ] && [ -d "$pr/.git/meiolol-build/box.lock" ] \
+    && grep -q 'box tree .* in use' "$t/prune.log" && ok "prune: a locked tree's kept" \
+    || bad "prune took a locked tree's cache: $(cat "$t/prune.log")"
+
 # snap-small.sh: 1 in 2 games with their rows, the small tables whole, side files copied
 # but export linked; not built again while newer than the source
 big=$t/snap small=$t/snap-small

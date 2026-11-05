@@ -138,9 +138,13 @@ showed 7.8 GB RSS).
 
 ## Mac build cache
 
-The repo's .zig-cache (shared by the working tree and the ci and box build trees) grows
-~17 GB a day. on-push.sh empties it after a deploy once past 40 GB and
-no zig runs (deploy/zig-cache-prune.sh); the next builds start cold.
+The repo's .zig-cache (the working tree's and most build trees') grows ~40 GB a day.
+on-push.sh empties it after a deploy once past 40 GB and no zig runs
+(deploy/zig-cache-prune.sh); the next builds start cold. The pre-push ci and box.sh's
+build each keep their own (.git/meiolol-build/ci.cache, box.cache), emptied past 20 GB
+under the tree's lock, so a prune never runs under them. Zig's cache keys the main
+compile on the checkout's path (5 Nov: same files at another path rebuilt it, 63 s of
+113), so another tree never shares those entries anyway.
 
 ## WSL memory
 
