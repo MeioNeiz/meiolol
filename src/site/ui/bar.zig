@@ -30,16 +30,23 @@ pub const Track = struct {
     mark: N = .none,
     /// After the line, in a column of its own
     text: ?tree.Text = null,
+    /// On hover, what the position means ("3rd highest of 59")
+    title: ?tree.Text = null,
 };
 
 /// Fills its container's width
 pub fn track(h: *H, t: Track) N {
     const at = 100 * @max(0, @min(1, t.at));
     const style = if (t.ref) |r| h.vars(.{ .at = at, .ref = 100 * @max(0, @min(1, r)) }) else h.vars(.{ .at = at });
-    return h.span(.{ .class = "c-track", .style = style }, .{
+    return h.span(.{ .class = "c-track", .style = style, .title = if (t.title) |x| x.s else null }, .{
         h.span(.{ .aria_hidden = true }, .{ if (t.ref != null) h.el(.i, .{}, .{}) else null, h.b(.{}, .{t.mark}) }),
         if (t.text) |x| h.small(.{}, .{x}) else null,
     });
+}
+
+/// The two ends of the tracks above it named once, inset as the line is
+pub fn scale(h: *H, lo: tree.Text, hi: tree.Text) N {
+    return h.span(.{ .class = "c-track", .data_scale = true, .aria_hidden = true }, .{ h.small(.{}, .{lo}), h.small(.{}, .{hi}) });
 }
 
 pub const css =
@@ -61,6 +68,8 @@ pub const css =
     \\  .c-track > span > b:empty { width: 10px; height: 10px; border-radius: 50%; background: var(--text); }
     \\  .c-track > small { flex: none; min-width: 3.5em; font-size: var(--fs-s); color: var(--muted);
     \\    font-variant-numeric: tabular-nums; }
+    \\  .c-track[data-scale] { justify-content: space-between; padding: 0 10px; }
+    \\  .c-track[data-scale] > small { min-width: 0; font-size: var(--fs-xs); color: var(--faint); }
     \\}
     \\
 ;
@@ -74,5 +83,6 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("track: a place, portrait at 1st, the middle ticked", track(h, .{ .at = 1, .ref = 0.5, .mark = ornn, .text = plain("1st") }));
     g.addFill("track: the middle", track(h, .{ .at = 0.5, .ref = 0.5, .mark = ornn, .text = plain("30th") }));
     g.addFill("track: last", track(h, .{ .at = 0, .ref = 0.5, .mark = ornn, .text = plain("60th") }));
+    g.addFill("scale: the ends named once", scale(h, plain("lowest"), plain("highest")));
     g.addFill("track: a rate, a dot, the average ticked", track(h, .{ .at = 0.733, .ref = 0.684, .text = plain("73.3%") }));
 }

@@ -431,9 +431,11 @@ pub const W = struct {
     pub const rank_note = plain("Games by the middle rank of the players, when 5 or more are known. We crawl from Platinum up, so the lowest bracket is thin and the middle one mostly Platinum and Emerald.");
     pub const ends_head = plain("End of game");
     pub const ends_rows = [9]tree.Text{ plain("Kills"), plain("Deaths"), plain("Assists"), plain("Level"), plain("Gold / min"), plain("Damage / min"), plain("Taken / min"), plain("CS / min"), plain("Vision / min") };
-    pub const ends_key = plain("highest first");
+    pub const ends_of = Phrase("of {of:int} champions");
     pub const ends_note = Phrase("Averages over {n:count} games. Each place is among the role's {of:int} champions in the table, highest first, deaths too.");
-    pub const nth_of = Phrase("{n:int}{th:text} of {of:int}");
+    pub const ends_lo = plain("lowest");
+    pub const ends_hi = plain("highest");
+    pub const ends_place = Phrase("{n:int}{th:text} highest of {of:int}");
     pub const first_item = plain("First item done");
     pub const first_item_key = plain("dashed: games with an item");
     pub const first_item_note = Phrase("Win rate by the minute {c:text} finished its first item. Games that ended before one are left out; a quick item partly follows a game already going well. Finished means a legendary that builds into nothing, so tear items such as Manamune never count.");
@@ -1757,19 +1759,24 @@ pub const Trends = struct {
         return card.view(h, .{}, &.{ card.head(h, W.by_rank, null, &.{tipNote(h, "cp-rank", W.rank_key, W.by_rank, W.rank_note)}), p.ranks.view(h) });
     }
 
-    /// End-of-game averages, each beside its place in the role
+    /// End-of-game averages, each with its place in the role as a dot on a track, lowest
+    /// left; the place in words on hover
     fn endsCard(p: *P, h: *H) N {
         const e = p.r().ends orelse return noneCard(h, W.ends_head, .none);
         if (e.games < min_games) return noneCard(h, W.ends_head, .none);
-        var rows = h.list();
-        for (e.rows, W.ends_rows, ends_whole, 0..) |x, l, whole, i| {
+        var rs: [9]strip.Row = undefined;
+        for (e.rows, W.ends_rows, ends_whole, &rs) |x, l, whole, *row| {
             const v = if (whole) phrase.num(h, .count, @as(u32, @intFromFloat(x.v + 0.5))) else phrase.num(h, .dec, x.v);
-            const place = if (x.rank > 0) bar.view(h, @floatFromInt(e.of + 1 - x.rank), @floatFromInt(e.of), W.nth_of.with(h, .{ .n = x.rank, .th = ordinal(x.rank), .of = e.of })) else N.none;
-            rows.add(h.p(.{ .key = i }, .{ h.span(.{ .class = "k" }, .{l}), h.b(.{}, .{v}), place }));
+            row.* = .{ .item = .{ .label = l, .value = v } };
+            if (x.rank == 0) continue;
+            const pos: f64 = if (e.of > 1) @as(f64, @floatFromInt(e.of - x.rank)) / @as(f64, @floatFromInt(e.of - 1)) else 1;
+            const place = W.ends_place.with(h, .{ .n = x.rank, .th = ordinal(x.rank), .of = e.of });
+            row.bar = bar.track(h, .{ .at = pos, .title = place });
         }
+        const of = W.ends_of.with(h, .{ .of = e.of });
         return card.view(h, .{}, &.{
-            card.head(h, W.ends_head, null, &.{ p.plat(h), tipNote(h, "cp-ends", W.ends_key, W.ends_head, W.ends_note.with(h, .{ .n = e.games, .of = e.of })) }),
-            h.div(.{ .class = "eog" }, .{rows.done()}),
+            card.head(h, W.ends_head, null, &.{ p.plat(h), tipNote(h, "cp-ends", of, W.ends_head, W.ends_note.with(h, .{ .n = e.games, .of = e.of })) }),
+            strip.rows(h, &rs, bar.scale(h, W.ends_lo, W.ends_hi)),
         });
     }
 
@@ -2127,10 +2134,6 @@ pub const css =
     \\  .c-cpage .ends .k small { font-size: var(--fs-xs); }
     \\  @media (max-width: 600px) { .c-cpage .ends .k { flex-direction: row; gap: var(--sp-2); flex-basis: 100%; } }
     \\  .c-cpage .ends a { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--ink); font-variant-numeric: tabular-nums; }
-    \\  .c-cpage .eog { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: var(--sp-1) var(--sp-3); }
-    \\  .c-cpage .eog p { display: contents; }
-    \\  .c-cpage .eog .k { color: var(--muted); }
-    \\  .c-cpage .eog b { font-weight: var(--w-m); text-align: right; font-variant-numeric: tabular-nums; }
     \\  .c-cpage .kv { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-s); }
     \\  .c-cpage .kv > .us { color: var(--us-hot); }
     \\  .c-cpage .kv > .them { color: var(--them-hot); }
@@ -2243,21 +2246,24 @@ test "end of game: each figure with its place, none under min_games or for a rar
     try html.write(&t, p.view(&h), &w.writer);
     const got = w.written();
     try std.testing.expect(std.mem.indexOf(u8, got, "<h2>End of game</h2>") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "<b>6.3</b>") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "<b>412</b>") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "1st of 48") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "3rd of 48") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "of 48 champions") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, ">6.3<") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, ">412<") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "1st highest of 48") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "3rd highest of 48") != null);
+    try std.testing.expectEqual(9 + 1, std.mem.count(u8, got, "c-track"));
 
     roles[0].ends.?.rows[4].rank = 0;
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "<b>412</b>") != null);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "1st of 48") == null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), ">412<") != null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "1st highest") == null);
+    try std.testing.expectEqual(8 + 1, std.mem.count(u8, w.written(), "c-track"));
 
     roles[0].ends.?.games = 99;
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "<b>412</b>") == null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), ">412<") == null);
 }
 
 test "first item done: a thin bucket shows, an empty one doesn't, no chart under two" {

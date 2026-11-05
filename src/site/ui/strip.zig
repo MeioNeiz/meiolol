@@ -12,7 +12,6 @@ const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
 const bar = @import("bar.zig");
 const card = @import("card.zig");
-const champ = @import("champ.zig");
 const H = tree.H;
 const N = tree.N;
 
@@ -68,16 +67,15 @@ pub const Row = struct {
 };
 
 /// One row per item, every row the same columns: label, value, bar, context. In a
-/// taller card the rows spread out. `ends`: under the last row, the bars' two ends named
-/// once ("lowest", "highest"). Items' `href`, `on` and `answer` don't apply
-pub fn rows(h: *H, rs: []const Row, ends: ?[2]tree.Text) N {
+/// taller card the rows grow. `foot`: under the last row's bar (bar.scale). Items'
+/// `href`, `on` and `answer` don't apply
+pub fn rows(h: *H, rs: []const Row, foot: N) N {
     var l = h.list();
     for (rs, 0..) |r, i| {
         const ctx = if (r.item.ctx) |c| h.small(.{ .class = "c" }, .{c}) else null;
         l.add(h.div(.{ .key = i }, .{ lab(h, r.item), val(h, r.item, false), h.span(.{ .class = "bar" }, .{r.bar}), ctx }));
     }
-    const foot = if (ends) |e| h.p(.{ .class = "ends", .aria_hidden = true }, .{ h.span(.{}, .{e[0]}), h.span(.{}, .{e[1]}) }) else null;
-    return h.div(.{ .class = "c-strip", .data_rows = true, .data_grow = {} }, .{ l.done(), foot });
+    return h.div(.{ .class = "c-strip", .data_rows = true, .data_grow = {} }, .{ l.done(), h.span(.{ .class = "foot" }, .{foot}) });
 }
 
 fn lab(h: *H, it: Item) N {
@@ -132,14 +130,13 @@ pub const css =
     \\  .c-strip button.val:focus-visible::after { outline: 2px solid var(--focus); outline-offset: -2px; }
     \\  .c-strip > [data-press]:has(> [aria-pressed="true"]) { background: var(--sel-bg); box-shadow: inset 0 0 0 1px var(--sel-line); }
     \\  .c-strip[data-rows] { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto;
-    \\    align-content: space-evenly; gap: var(--sp-1) var(--sp-3); }
+    \\    gap: var(--sp-1) var(--sp-3); }
     \\  .c-strip[data-rows] > div { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; }
     \\  .c-strip[data-rows] .lab { font-size: var(--fs-s); }
     \\  .c-strip[data-rows] .val { font-size: var(--fs-m); font-weight: var(--w-m); text-align: right; }
     \\  .c-strip[data-rows] > div > .c { font-size: var(--fs-s); color: var(--muted); font-variant-numeric: tabular-nums;
     \\    min-width: 3.5em; }
-    \\  .c-strip[data-rows] > .ends { grid-column: 3; display: flex; flex-direction: row; justify-content: space-between;
-    \\    gap: var(--sp-2); margin: 0 10px; font-size: var(--fs-xs); color: var(--faint); }
+    \\  .c-strip[data-rows] > .foot { grid-column: 3; }
     \\  @container (max-width: 440px) {
     \\    .c-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
     \\    .c-strip .val > .c { display: block; line-height: 1.2; }
@@ -200,15 +197,14 @@ pub fn gallery(g: *Gallery) void {
         .{ "CS / min", "6.5", 31, "31st" },
         .{ "Vision / min", "0.9", 22, "22nd" },
     };
-    const ornn = champ.demo("Ornn", "Ornn");
     var rs: [eog.len]Row = undefined;
     inline for (eog, 0..) |x, i| rs[i] = .{
-        .item = .{ .label = plain(x[0]), .value = plain(x[1]), .ctx = plain(x[3]) },
-        .bar = bar.track(h, .{ .at = @as(f64, @floatFromInt(60 - @as(u16, x[2]))) / 59, .ref = 0.5, .mark = champ.view(h, ornn, .{ .px = .@"20", .named = false }) }),
+        .item = .{ .label = plain(x[0]), .value = plain(x[1]) },
+        .bar = bar.track(h, .{ .at = @as(f64, @floatFromInt(60 - @as(u16, x[2]))) / 59, .title = plain(x[3] ++ " highest of 60") }),
     };
     const body = h.p(.{ .class = "muted" }, .{"Card body"});
-    g.addFill("rows: places on tracks, the ends named once; stretched by a taller card", card.row(h, &.{
+    g.addFill("rows: places on tracks (on hover), the ends named once; grown by a taller card", card.row(h, &.{
         card.view(h, .{}, &.{ card.head(h, plain("Taller"), null, &.{}), body, body, body, body, body, body, body, body, body, body, body, body, body }),
-        card.view(h, .{}, &.{ card.head(h, plain("End of game"), plain("of 60 champions"), &.{}), rows(h, &rs, .{ plain("lowest"), plain("highest") }) }),
+        card.view(h, .{}, &.{ card.head(h, plain("End of game"), plain("of 60 champions"), &.{}), rows(h, &rs, bar.scale(h, plain("lowest"), plain("highest"))) }),
     }));
 }
