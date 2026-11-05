@@ -1,13 +1,15 @@
 //! The matchup page (/matchups/<role>/<x>-vs-<y>): one lane pair from x's side
 //! (docs/plan/ui/matchup.md), the champion page with its opponent slot filled, as three
-//! islands. Head: ChampHeader's pair with the headline figures, x's other lane opponents
-//! and the view links. Build: the champion page's Build island on the pair's build (its
-//! usual one when the pair is thin). More: head to head beside the lane by minute, won by
-//! gold at 10, by game length, by rank and mastery, and bot lane partners.
+//! islands, lane first. Head: ChampHeader's pair with the headline figures, x's other lane
+//! opponents and the view links. More's lane part: head to head beside the lane by
+//! minute. Build: the champion page's Build island on the pair's build (its usual one when
+//! the pair is thin). More's outcome part: won by gold at 10, by game length, by rank and
+//! mastery, and bot lane partners.
 //!
 //! Pages are rendered on request, so each island's data rides in its root's data-bin
 //! (base64 of ui.data) rather than a file: ui-matchup.wasm adopts Head and loads
-//! ui-champbuild.wasm and ui-matchmore.wasm for the others
+//! ui-champbuild.wasm and ui-matchmore.wasm for the others. More's two parts share the
+//! lane part's data-bin and file
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -48,6 +50,9 @@ const rate = trend.rate;
 const n_views = 4;
 
 /// ui-matchup.wasm's
+/// A role in a sentence ("84% top"), role.Role's order
+const role_word = [_][]const u8{ "top", "jungle", "mid", "bot", "support" };
+
 pub const HeadData = struct {
     x: Other,
     y: Other,
@@ -63,6 +68,8 @@ pub const HeadData = struct {
     usual: f32,
     /// x's win rate here minus usual, pulled toward 0 the fewer the games, points
     vs_usual: f32,
+    /// y's games in this role, % of all its games, when an off-role pick
+    y_share: ?f32 = null,
     /// Lane gold at 14, x minus y, estimated; about this much of it from CS
     gold: ?i16 = null,
     cs_gold: ?i16 = null,
@@ -82,6 +89,7 @@ pub const Opp = struct { o: Other, games: u32, wins: u32 };
 
 const W = struct {
     pub const sub = Phrase("{r:text} · {p:text}");
+    pub const y_share = Phrase("{s:pct} {r:text}");
     pub const wins = Phrase("{c:text} wins");
     pub const usual = plain("Vs usual");
     pub const usually = Phrase("{r:rate} usually");
@@ -108,7 +116,7 @@ const W = struct {
     pub const won = plain("Wins");
     pub const won_ahead = plain("Wins from ahead");
     pub const first_blood = plain("First blood");
-    pub const kills = [3]tree.Text{ plain("Kills to 6 min"), plain("Kills 6-14 min"), plain("Kills after 14") };
+    pub const kills = [3]tree.Text{ plain("Kill by 6:00"), plain("Kill 6-14"), plain("Kill after 14") };
     pub const level2 = plain("Level 2");
     pub const level6 = plain("Level 6");
     pub const first_item = plain("First item");
@@ -127,6 +135,11 @@ const W = struct {
     pub const with = Phrase("{x:text} with");
     pub const partners = plain("Lane partners");
     pub const partners_key = plain("vs usual · games");
+    pub const cs_from = Phrase("{c:count} from CS");
+    pub const cs_all = Phrase("CS worth {c:count}");
+    pub const swing = Phrase("{g:signed} in 3 min");
+    pub const lead6 = Phrase("{n:text} level 6");
+    pub const lead_item = Phrase("{n:text} first item");
 };
 
 /// The head (ui-matchup.wasm), with the opponents and the view links
@@ -175,6 +188,7 @@ pub const Head = struct {
                     .champ = .{ .name = d.y.name, .src = h.fmt(champ.icon_fmt, .{ d.ddragon, d.y.key }) },
                     .swap = d.swap,
                     .clear = d.clear,
+                    .note = if (d.y_share) |s| W.y_share.with(h, .{ .s = @as(u32, @intFromFloat(@round(s))), .r = role_word[@backingInt(d.role)] }) else null,
                 },
                 .strip = p.headline(h),
             }),
@@ -266,6 +280,7 @@ pub const MoreData = struct {
     ranks: []const RankRow,
     /// Bot and support: each side's lane partners, from all their games in the role
     duos: []const DuoSide = &.{},
+    marks: LaneMarks = .{},
 };
 
 pub const Curve = struct {
@@ -370,9 +385,10 @@ fn rankGamesOfN(r: *const RankRow) u32 {
 /// (site/matchup.zig thin_games)
 pub const thin_games = 200;
 
-/// The lane row, outcome row and partners (ui-matchmore.wasm, loaded after Head)
+/// The lane row, or the outcome row and partners (ui-matchmore.wasm, loaded after Head)
 pub const More = struct {
     data: *const MoreData,
+    part: Part = .lane,
     chart: lane.Lane,
     gold10: trend.Trend = .{ .label = W.gold10, .points = &.{} },
     by_length: trend.Trend = .{ .label = W.by_length, .points = &.{} },
@@ -383,6 +399,9 @@ pub const More = struct {
     wasm: ?[]const u8 = null,
 
     const P = @This();
+
+    /// Each its own island root, so the build can sit between them in the page's order
+    pub const Part = enum { lane, outcome };
 
     /// The chart's measures as floats, allocated: the server's and the island's copies
     /// share them
@@ -401,11 +420,15 @@ pub const More = struct {
     }
 
     pub fn view(p: *P, h: *H) N {
-        return h.div(.{ .class = "part", .data_island = "matchmore", .data_bin = if (p.bin.len > 0) p.bin else null, .data_js = p.js, .data_wasm = p.wasm }, .{
-            h.div(.{ .class = "lanerow" }, .{ p.h2hCard(h), p.laneCard(h) }),
-            h.div(.{ .class = "row3" }, .{ p.gold10Card(h), p.lengthCard(h), p.rankCard(h) }),
-            p.duos(h),
-        });
+        return switch (p.part) {
+            .lane => h.div(.{ .class = "part", .data_island = "matchmore", .data_bin = if (p.bin.len > 0) p.bin else null, .data_js = p.js, .data_wasm = p.wasm }, .{
+                h.div(.{ .class = "lanerow" }, .{ p.h2hCard(h), p.laneCard(h) }),
+            }),
+            .outcome => h.div(.{ .class = "part", .data_island = "matchout" }, .{
+                h.div(.{ .class = "row3" }, .{ p.gold10Card(h), p.lengthCard(h), p.rankCard(h) }),
+                p.duos(h),
+            }),
+        };
     }
 
     fn laneCard(p: *P, h: *H) N {
@@ -414,16 +437,8 @@ pub const More = struct {
         if (d.games.len < 2) return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{few}), h.p(.{ .class = "none" }, .{W.none}) });
         return card.view(h, .{}, &.{
             card.head(h, W.lane_head, null, &.{ few, p.chart.switcher(h) }),
-            h.div(.{ .class = "plot", .data_thin = d.thin }, .{p.chart.view(h)}),
-            lines(h, laneLines(h, d)),
+            h.div(.{ .class = "plot", .data_thin = d.thin }, .{p.chart.viewMarked(h, .none, marks(h, d))}),
         });
-    }
-
-    fn lines(h: *H, ts: []const tree.Text) N {
-        if (ts.len == 0) return .none;
-        var l = h.list();
-        for (ts) |t| l.add(h.li(.{}, .{t}));
-        return h.ul(.{ .class = "lines" }, .{l.done()});
     }
 
     fn h2hCard(p: *P, h: *H) N {
@@ -503,132 +518,138 @@ pub const More = struct {
 /// CS differ, so those roles get no split
 pub const gold_per_cs = 20;
 
-/// Under these a gap gets no line. The curves are already shrunk toward the champions'
+/// Under these a gap gets no mark. The curves are already shrunk toward the champions'
 /// baseline, so a small estimate is noise or the baseline, not this pair
 const close_gold = 150;
-/// Under this a phase reads as level
 const level_gold = 50;
 const swing_gold = 100;
+/// A swing is an event only this far over the line's mean 3 min move; under it, it's
+/// the ordinary slope
+const swing_over_mean = 1.5;
 const level6_gap = 10;
 const item_gap = 20;
 
-const L = struct {
-    pub const phases = Phrase("{p:text}, then {q:text}.");
-    pub const level_at6 = plain("Level at 6 min");
-    pub const ahead_at6 = Phrase("{a:text} {e:count} gold ahead at 6 min{c:text}");
-    pub const even_6to14 = plain("even from 6 to 14 min");
-    pub const gains_6to14 = Phrase("{a:text} gains {f:count} from 6 to 14 min{c:text}");
-    pub const cs_part = Phrase(" ({c:count} of it from CS)");
-    pub const cs_all = Phrase(" (CS alone worth {c:count})");
-    pub const flip = Phrase("{b:text} leads until {m:int} min ({e:count} gold at 6), {a:text} from {n:int} min on ({g:count} at 14).");
-    pub const fades = Phrase("{a:text} is {e:count} gold ahead at 6 min, level by 14.");
-    pub const swing = Phrase("{a:text} gains most from {m:int} to {n:int} min: {g:count} gold");
-    pub const level6 = Phrase("{l:text}, around reaching level 6 at {t:time}, {s:text} before {b:text}.");
-    pub const item = Phrase("{l:text}, around finishing a first item at {t:time}, {s:text} before {b:text}.");
-    pub const end = Phrase("{l:text}.");
-    pub const secs = Phrase("{s:int} s");
-    pub const mins = Phrase("{t:time}");
+/// What the lane chart marks on its Gold line, the facts its line alone doesn't say:
+/// the gap at 6 and 14 min with its CS part, the three minutes where gold moves most and
+/// a level 6 or first item lead inside them (site.md "Matchup page")
+pub const LaneMarks = struct {
+    /// gold 0: none
+    at: [2]Gap = @splat(.{}),
+    /// From minute m to m + 3
+    swing: Gap = .{},
+    lead: ?Lead = null,
 };
 
-/// Up to two facts on how the lane goes that the page's figures don't say, each with its
-/// numbers (site.md "Matchup page"): how the gold at 14 splits by phase and CS, and the
-/// three minutes where gold moves most, with a level 6 or first item lead inside them.
-/// None on a thin pair: the page greys its figures as the champions' baseline
-pub fn laneLines(h: *H, d: *const MoreData) []const tree.Text {
-    const out = h.mem.alloc(tree.Text, 2) catch {
-        h.oom = true;
-        return &.{};
-    };
-    const k14 = 13;
+/// The gap's size at minute m, y's side when `y`, and the gold its CS gap is worth when
+/// on the same side
+pub const Gap = struct { m: u8 = 0, gold: u16 = 0, y: bool = false, cs: u16 = 0 };
+
+/// The side gaining the swing (y's when `y`) got there at t s, clearly before the other
+pub const Lead = struct { what: enum(u8) { level6, item }, y: bool, t: u16 };
+
+/// None on a thin pair: the page greys its figures as the champions' baseline. Curves
+/// index i is minute i
+pub fn laneMarks(d: *const MoreData) LaneMarks {
+    var out: LaneMarks = .{};
     const gold = d.curves[0].line;
-    if (d.thin or gold.len <= k14) return out[0..0];
-    var n: usize = 0;
-    const names = [2][]const u8{ d.x, d.y };
-    const g: i32 = gold[k14];
-    const e: i32 = gold[5];
-    const up: usize = @intFromBool(g < 0);
-    const s: i32 = if (g < 0) -1 else 1;
-    if (@abs(g) < close_gold) {
-        if (@abs(e) >= close_gold) {
-            out[n] = L.fades.with(h, .{ .a = names[@intFromBool(e < 0)], .e = @abs(e) });
+    const end = 14;
+    if (d.thin or gold.len <= end) return out;
+    const cs = d.curves[2].line;
+    const has_cs = !(d.role == .jungle or d.role == .support or cs.len <= end);
+    if (@abs(gold[6]) >= close_gold or @abs(gold[end]) >= close_gold) {
+        var n: usize = 0;
+        for ([2]u8{ 6, end }) |m| {
+            const g: i32 = gold[m];
+            if (@abs(g) < level_gold) continue;
+            out.at[n] = .{ .m = m, .gold = size(g), .y = g < 0, .cs = if (has_cs) csWorth(g, cs[m]) else 0 };
             n += 1;
         }
-    } else if (s * e <= -close_gold / 2) {
-        var m: usize = 5;
-        while (m < k14 and s * @as(i32, gold[m + 1]) < 0) m += 1;
-        out[n] = L.flip.with(h, .{ .a = names[up], .b = names[1 - up], .m = m + 1, .e = @abs(e), .n = m + 2, .g = @abs(g) });
-        n += 1;
-    } else {
-        const cs = d.curves[2].line;
-        const has_cs = !(d.role == .jungle or d.role == .support or cs.len <= k14);
-        // Each phase names the side that gains in it: a signed "lead" read as the other
-        // side ahead (walk 1 Nov S1)
-        const p = if (@abs(e) < level_gold) L.level_at6 else L.ahead_at6.with(h, .{
-            .a = names[@intFromBool(e < 0)],
-            .e = @abs(e),
-            .c = if (has_cs) csPart(h, e, cs[5]).s else "",
-        });
-        const f = g - e;
-        const q = if (@abs(f) < level_gold) L.even_6to14 else L.gains_6to14.with(h, .{
-            .a = names[@intFromBool(f < 0)],
-            .f = @abs(f),
-            .c = if (has_cs) csPart(h, f, @as(i32, cs[k14]) - cs[5]).s else "",
-        });
-        out[n] = L.phases.with(h, .{ .p = p.s, .q = q.s });
-        n += 1;
     }
-    if (swing(h, d, gold[0 .. k14 + 1])) |t| {
-        out[n] = t;
-        n += 1;
-    }
-    return out[0..n];
-}
-
-/// How much of a phase's `gold` (x minus y) came from its `cs` gap, for the side gaining
-/// it; nothing when CS went the other way or is too small to say
-fn csPart(h: *H, gold: i32, cs: i32) tree.Text {
-    const c = round10(std.math.sign(gold) * cs * gold_per_cs);
-    if (c < 10) return plain("");
-    return if (c > @abs(gold)) L.cs_all.with(h, .{ .c = c }) else L.cs_part.with(h, .{ .c = c });
-}
-
-/// The three minutes where gold moves most, and a level 6 or first item lead of the side
-/// gaining that falls in them
-fn swing(h: *H, d: *const MoreData, gold: []const i16) ?tree.Text {
-    var best: usize = 0;
+    var best: u8 = 0;
     var gain: i32 = 0;
-    for (0..gold.len - 3) |i| {
+    var sum: u32 = 0;
+    for (0..end - 2) |i| {
         const v = @as(i32, gold[i + 3]) - gold[i];
+        sum += @abs(v);
         if (@abs(v) > @abs(gain)) {
-            best = i;
+            best = @intCast(i);
             gain = v;
         }
     }
-    if (@abs(gain) < swing_gold) return null;
-    const names = [2][]const u8{ d.x, d.y };
+    const mean = @as(f32, @floatFromInt(sum)) / (end - 2);
+    if (@abs(gain) < swing_gold or @as(f32, @floatFromInt(@abs(gain))) < swing_over_mean * mean) return out;
+    out.swing = .{ .m = best, .gold = size(gain), .y = gain < 0 };
     const side: usize = @intFromBool(gain < 0);
-    const from: u32 = @intCast(best + 1);
-    const l = L.swing.with(h, .{ .a = names[side], .m = from, .n = from + 3, .g = @abs(gain) });
-    const lo = (from - 1) * 60;
-    const hi = (from + 3) * 60;
-    if (lead(h, d.h2h.level6, side, level6_gap, lo, hi)) |x| return L.level6.with(h, .{ .l = l.s, .t = x.t, .s = x.gap.s, .b = names[1 - side] });
-    if (lead(h, d.h2h.first_item, side, item_gap, lo, hi)) |x| return L.item.with(h, .{ .l = l.s, .t = x.t, .s = x.gap.s, .b = names[1 - side] });
-    return L.end.with(h, .{ .l = l.s });
+    const lo = @as(u32, best) * 60;
+    const hi = lo + 180;
+    if (lead(d.h2h.level6, side, level6_gap, lo, hi)) |t| {
+        out.lead = .{ .what = .level6, .y = side == 1, .t = t };
+    } else if (lead(d.h2h.first_item, side, item_gap, lo, hi)) |t| {
+        out.lead = .{ .what = .item, .y = side == 1, .t = t };
+    }
+    return out;
 }
 
-const Lead = struct { t: u32, gap: tree.Text };
+fn size(v: i32) u16 {
+    return @intCast(@min(@abs(v), std.math.maxInt(u16)));
+}
 
-/// `side`'s median when it comes at least `min_gap` s before the other's, inside [lo, hi]
-fn lead(h: *H, t: [2]u16, side: usize, min_gap: u32, lo: u32, hi: u32) ?Lead {
+/// What `cs` (x minus y) is worth in gold, for the side `gold` leans to; 0 when CS went
+/// the other way or is too small to say
+fn csWorth(gold: i32, cs: i32) u16 {
+    const c = round10(std.math.sign(gold) * cs * gold_per_cs);
+    return if (c < 10) 0 else size(c);
+}
+
+/// `side`'s median when at least `min_gap` s before the other's, inside [lo, hi]
+fn lead(t: [2]u16, side: usize, min_gap: u32, lo: u32, hi: u32) ?u16 {
     const mine: u32 = t[side];
     const theirs: u32 = t[1 - side];
     if (mine == 0 or theirs < mine + min_gap or mine < lo or mine > hi) return null;
-    const gap = theirs - mine;
-    return .{ .t = mine, .gap = if (gap < 60) L.secs.with(h, .{ .s = gap }) else L.mins.with(h, .{ .t = gap }) };
+    return t[side];
 }
 
 fn round10(v: i32) i32 {
     return @divTrunc(v + if (v < 0) @as(i32, -5) else 5, 10) * 10;
+}
+
+/// The chart's sign: y's side is below 0
+fn signed(g: Gap) i32 {
+    return if (g.y) -@as(i32, g.gold) else g.gold;
+}
+
+/// `d.marks` for the chart, in words
+fn marks(h: *H, d: *const MoreData) lane.Marks {
+    const m = d.marks;
+    const notes = h.mem.alloc(lane.Note, 2) catch {
+        h.oom = true;
+        return .{};
+    };
+    var n: usize = 0;
+    for (m.at) |g| {
+        if (g.gold == 0) continue;
+        notes[n] = .{
+            .m = g.m,
+            .label = phrase.num(h, .signed, signed(g)),
+            .sub = if (g.cs == 0) null else if (g.cs > g.gold) W.cs_all.with(h, .{ .c = g.cs }) else W.cs_from.with(h, .{ .c = g.cs }),
+        };
+        n += 1;
+    }
+    var out: lane.Marks = .{ .notes = notes[0..n] };
+    if (m.swing.gold > 0) out.span = .{ .a = m.swing.m, .b = m.swing.m + 3, .label = W.swing.with(h, .{ .g = signed(m.swing) }) };
+    if (m.lead) |l| {
+        const who = if (l.y) d.y else d.x;
+        const one = h.mem.alloc(lane.AxisNote, 1) catch {
+            h.oom = true;
+            return out;
+        };
+        one[0] = .{ .t = l.t, .label = switch (l.what) {
+            .level6 => W.lead6.with(h, .{ .n = who }),
+            .item => W.lead_item.with(h, .{ .n = who }),
+        } };
+        out.axis = one;
+    }
+    return out;
 }
 
 /// `t`'s points from the buckets over the games floor (a thinner one's band drags the line),
@@ -698,7 +719,6 @@ pub const css =
     \\  .c-mpage .partners { display: grid; gap: var(--sp-3) var(--sp-5); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
     \\  .c-mpage .partners h3 { margin: 0 0 var(--sp-1); font-size: var(--fs-s); font-weight: var(--w-m); color: var(--t2); }
     \\  .c-mpage .c-head .lg { font-size: var(--fs-s); color: var(--muted); }
-    \\  .c-mpage .lines { margin: var(--sp-3) 0 0; padding-left: var(--sp-4); font-size: var(--fs-s); color: var(--t2); }
     \\  .c-mpage .lanerow { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
     \\  @media (min-width: 1000px) {
     \\    .c-mpage .lanerow { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
@@ -709,12 +729,12 @@ pub const css =
 
 const testing = std.testing;
 
-/// Gold by minute 1 to 14; CS 0 to 6 min then a straight line to `cs14`
-fn testMore(a: std.mem.Allocator, gold: [14]i16, cs6: i16, cs14: i16) !MoreData {
-    const cs = try a.alloc(i16, 14);
+/// Gold by minute 0 to 14; CS 0 to 6 min then a straight line to `cs14`
+fn testMore(a: std.mem.Allocator, gold: [15]i16, cs6: i16, cs14: i16) !MoreData {
+    const cs = try a.alloc(i16, 15);
     for (cs, 0..) |*c, i| {
         const t: i16 = @intCast(i);
-        c.* = if (i <= 5) @divTrunc(cs6 * t, 5) else cs6 + @divTrunc((cs14 - cs6) * (t - 5), 8);
+        c.* = if (i <= 6) @divTrunc(cs6 * t, 6) else cs6 + @divTrunc((cs14 - cs6) * (t - 6), 8);
     }
     return .{
         .x = "Darius",
@@ -729,52 +749,51 @@ fn testMore(a: std.mem.Allocator, gold: [14]i16, cs6: i16, cs14: i16) !MoreData 
     };
 }
 
-test "lane lines: the lead by phase and CS, the swing with a spike in it, none when thin" {
+test "lane marks: the gap at 6 and 14 with CS, a swing over the slope with a lead in it, none when thin" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var t: tree.Tree = .{};
-    var h: H = .init(a, &t);
-    const eq = testing.expectEqualStrings;
+    const eq = testing.expectEqualDeep;
 
-    var d = try testMore(a, .{ 0, 10, 20, 40, 60, 100, 180, 280, 360, 420, 480, 530, 570, 600 }, 2, 12);
-    var ls = laneLines(&h, &d);
-    try testing.expectEqual(2, ls.len);
-    try eq("Darius 100 gold ahead at 6 min (40 of it from CS), then Darius gains 500 from 6 to 14 min (200 of it from CS).", ls[0].s);
-    try eq("Darius gains most from 6 to 9 min: 260 gold, around reaching level 6 at 6:05, 25 s before Garen.", ls[1].s);
+    var d = try testMore(a, .{ 0, 0, 10, 20, 40, 60, 100, 180, 280, 360, 420, 480, 530, 570, 600 }, 2, 12);
+    var m = laneMarks(&d);
+    try eq([2]Gap{ .{ .m = 6, .gold = 100, .cs = 40 }, .{ .m = 14, .gold = 600, .cs = 240 } }, m.at);
+    // 260 against a mean 3 min move of 141
+    try eq(Gap{ .m = 6, .gold = 260 }, m.swing);
+    try eq(Lead{ .what = .level6, .y = false, .t = 365 }, m.lead.?);
 
     d.role = .jungle;
-    try eq("Darius 100 gold ahead at 6 min, then Darius gains 500 from 6 to 14 min.", laneLines(&h, &d)[0].s);
+    try testing.expectEqual(0, laneMarks(&d).at[0].cs);
 
-    // A small early lead the other way: named, never a negative lead (Fiora vs Darius, -23 at 6)
-    d = try testMore(a, .{ 0, -5, -10, -15, -20, -60, 0, 60, 120, 180, 240, 300, 360, 420 }, -1, 6);
-    try eq("Garen 60 gold ahead at 6 min (20 of it from CS), then Darius gains 480 from 6 to 14 min (140 of it from CS).", laneLines(&h, &d)[0].s);
-    d = try testMore(a, .{ 0, -5, -10, -15, -20, -23, 0, 60, 120, 180, 240, 300, 360, 420 }, 0, 6);
-    try eq("Level at 6 min, then Darius gains 443 from 6 to 14 min (120 of it from CS).", laneLines(&h, &d)[0].s);
-    // CS more than the whole gain
-    d = try testMore(a, .{ 0, 10, 20, 40, 60, 100, 120, 140, 160, 180, 200, 220, 240, 260 }, 1, 20);
-    try eq("Darius 100 gold ahead at 6 min (20 of it from CS), then Darius gains 160 from 6 to 14 min (CS alone worth 380).", laneLines(&h, &d)[0].s);
+    // A small early lead the other way: its size, CS only on the side it leans to
+    d = try testMore(a, .{ 0, 0, -5, -10, -15, -20, -60, 0, 60, 120, 180, 240, 300, 360, 420 }, 1, 6);
+    try eq([2]Gap{ .{ .m = 6, .gold = 60, .y = true }, .{ .m = 14, .gold = 420, .cs = 120 } }, laneMarks(&d).at);
+    // Level at 6: no dot there
+    d = try testMore(a, .{ 0, 0, -5, -10, -15, -20, -23, 0, 60, 120, 180, 240, 300, 360, 420 }, 0, 6);
+    try eq([2]Gap{ .{ .m = 14, .gold = 420, .cs = 120 }, .{} }, laneMarks(&d).at);
 
     // An early Darius lead turned; Garen's first item inside the swing
-    d = try testMore(a, .{ 0, 50, 100, 150, 200, 200, 120, 40, -40, -120, -200, -280, -340, -400 }, 0, -20);
+    d = try testMore(a, .{ 0, 0, 50, 100, 150, 200, 200, 100, -50, -150, -200, -240, -280, -320, -360 }, 0, -20);
     d.h2h.first_item = .{ 700, 520 };
-    ls = laneLines(&h, &d);
-    try testing.expectEqual(2, ls.len);
-    try eq("Darius leads until 8 min (200 gold at 6), Garen from 9 min on (400 at 14).", ls[0].s);
-    try eq("Garen gains most from 6 to 9 min: 240 gold, around finishing a first item at 8:40, 3:00 before Darius.", ls[1].s);
+    m = laneMarks(&d);
+    try eq([2]Gap{ .{ .m = 6, .gold = 200 }, .{ .m = 14, .gold = 360, .y = true, .cs = 400 } }, m.at);
+    try eq(Gap{ .m = 6, .gold = 350, .y = true }, m.swing);
+    try eq(Lead{ .what = .item, .y = true, .t = 520 }, m.lead.?);
 
-    d = try testMore(a, .{ 0, -50, -100, -150, -200, -300, -280, -250, -200, -150, -100, -50, 0, 60 }, 0, 0);
-    ls = laneLines(&h, &d);
-    try testing.expectEqual(2, ls.len);
-    try eq("Garen is 300 gold ahead at 6 min, level by 14.", ls[0].s);
-    try eq("Garen gains most from 3 to 6 min: 200 gold.", ls[1].s);
+    // Faded by 14: the 6 min dot alone. Its biggest move, 160, is the ordinary slope
+    // (mean 127): no swing, so no lead either
+    d = try testMore(a, .{ 0, 0, -50, -100, -150, -200, -260, -280, -250, -200, -150, -100, -50, 0, 40 }, 0, 0);
+    m = laneMarks(&d);
+    try eq([2]Gap{ .{ .m = 6, .gold = 260, .y = true }, .{} }, m.at);
+    try eq(Gap{}, m.swing);
+    try testing.expect(m.lead == null);
 
     d = try testMore(a, @splat(20), 0, 0);
-    try testing.expectEqual(0, laneLines(&h, &d).len);
+    try eq(LaneMarks{}, laneMarks(&d));
 
-    d = try testMore(a, .{ 0, 10, 20, 40, 60, 100, 180, 280, 360, 420, 480, 530, 570, 600 }, 2, 12);
+    d = try testMore(a, .{ 0, 0, 10, 20, 40, 60, 100, 180, 280, 360, 420, 480, 530, 570, 600 }, 2, 12);
     d.thin = true;
-    try testing.expectEqual(0, laneLines(&h, &d).len);
+    try eq(LaneMarks{}, laneMarks(&d));
 }
 
 test "buckets: one under the games floor isn't drawn" {

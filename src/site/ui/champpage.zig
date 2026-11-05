@@ -26,6 +26,7 @@ const champ = @import("champ.zig");
 const role = @import("role.zig");
 const card = @import("card.zig");
 const badge = @import("badge.zig");
+const chip = @import("chip.zig");
 const bar = @import("bar.zig");
 const strip = @import("strip.zig");
 const toggletip = @import("toggletip.zig");
@@ -460,8 +461,9 @@ pub const W = struct {
     pub const few = Phrase("Too few games at {r:text}.");
     pub const rare_role = Phrase("A rare role for {c:text}: {n:count} games.");
     pub const from = Phrase("Build from {g:text} games: too few at {r:text}.");
-    pub const from_older = Phrase("Build from patch {p:text} games: too few on this patch yet.");
-    pub const from_patch = Phrase("Build from patch {p:text} games, not the 30 days picked.");
+    pub const build_patch = Phrase("Patch {p:text}");
+    pub const from_older = plain("Too few games on this patch yet");
+    pub const from_patch = plain("From this patch, not the 30 days picked");
     pub const plat = plain("Plat+");
     pub const picked = Phrase("{r:text} · {p:text} · {k:text}");
     pub const region = plain("Region");
@@ -1275,7 +1277,11 @@ pub const Build = struct {
             empty = h.p(.{ .class = "none" }, .{if (x.roles.len == 0) W.no_answer else W.no_lock_games});
         };
         const note: N = if (p.from()) |g| h.p(.{ .class = "from" }, .{W.from.with(h, .{ .g = W.ranks[g].s, .r = W.ranks[@backingInt(p.files.shown.rank)].s })}) else .none;
-        const when: N = if (p.shownRole()) |x| if (x.patch) |v| h.p(.{ .class = "from" }, .{if (x.older) W.from_older.with(h, .{ .p = v }) else W.from_patch.with(h, .{ .p = v })}) else .none else .none;
+        const patch: N = if (p.shownRole()) |x| if (x.patch) |v| chip.view(h, .{
+            .v = .scope,
+            .tip = (if (x.older) W.from_older else W.from_patch).s,
+            .tip_at = if (p.data.against == null) .start else .end,
+        }, .{W.build_patch.with(h, .{ .p = v })}) else .none else .none;
         return h.div(.{
             .class = "part",
             .id = "build",
@@ -1290,10 +1296,10 @@ pub const Build = struct {
             .data_lk = if (p.ans != null) p.locks.s.slice() else null,
             .data_ans = p.ans,
         }, .{ lock_bar, if (b != null or answer != null) card.view(h, .{ .flush = true }, &.{
-            p.head(h),
+            p.head(h, patch),
             empty,
             note,
-            when,
+            if (p.data.against == null and patch != .none) h.div(.{ .class = "from" }, .{patch}) else .none,
             if (b) |x| x.view(h) else .none,
             if (p.data.against == null) h.p(.{ .class = "vs-hint" }, .{W.vs_hint}) else .none,
         }) else .none });
@@ -1326,10 +1332,10 @@ pub const Build = struct {
         return .{ .kind = .opponent, .art = a, .text = W.vs_lock.with(h, .{ .y = x.name }).s };
     }
 
-    fn head(p: *P, h: *H) N {
+    fn head(p: *P, h: *H, patch: N) N {
         const y = p.data.against orelse return .none;
-        if (p.data.usual_of) |x| return card.head(h, W.build_usual.with(h, .{ .x = x }), null, &.{badge.view(h, .few, .{W.few_vs.with(h, .{ .y = y })})});
-        return card.head(h, W.build_against.with(h, .{ .y = y }), null, &.{});
+        if (p.data.usual_of) |x| return card.head(h, W.build_usual.with(h, .{ .x = x }), null, &.{ badge.view(h, .few, .{W.few_vs.with(h, .{ .y = y })}), patch });
+        return card.head(h, W.build_against.with(h, .{ .y = y }), null, &.{patch});
     }
 };
 
@@ -2328,15 +2334,15 @@ test "lane ends: biggest gold leads each way, thin and even lanes out" {
     try testing.expectEqual(0, (try laneEnds(arena.allocator(), .mid, &rels))[0].len);
 }
 
-test "a build from another patch than the view's says which" {
+test "a build from another patch than the view's has its patch chip" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const b: buildpanel.Data = .{ .runes = .{ .trees = &.{}, .games = 0, .wins = 0 }, .slots = &.{}, .champion = "Darius", .own = 50 };
     const cases = [_]struct { BuildRole, ?[]const u8 }{
         .{ .{ .role = .top, .build = b }, null },
-        .{ .{ .role = .top, .build = b, .patch = "16.20", .older = true }, "Build from patch 16.20 games: too few on this patch yet." },
-        .{ .{ .role = .top, .build = b, .patch = "16.21" }, "Build from patch 16.21 games, not the 30 days picked." },
+        .{ .{ .role = .top, .build = b, .patch = "16.20", .older = true }, "<div class=\"from\"><span class=\"c-chip\" data-v=\"scope\" data-tip=\"Too few games on this patch yet\" data-at=\"start\">Patch 16.20</span></div>" },
+        .{ .{ .role = .top, .build = b, .patch = "16.21" }, "data-tip=\"From this patch, not the 30 days picked\" data-at=\"start\">Patch 16.21</span>" },
     };
     for (cases) |c| {
         const d: BuildData = .{ .roles = &.{c[0]} };
@@ -2346,9 +2352,11 @@ test "a build from another patch than the view's says which" {
         var h: H = .init(a, &t);
         var w: std.Io.Writer.Allocating = .init(a);
         try html.write(&t, p.view(&h), &w.writer);
-        const got = std.mem.indexOf(u8, w.written(), "<p class=\"from\">");
         if (c[1]) |want| {
-            try std.testing.expect(std.mem.indexOf(u8, w.written(), want) != null);
-        } else try std.testing.expect(got == null);
+            std.testing.expect(std.mem.indexOf(u8, w.written(), want) != null) catch |e| {
+                std.debug.print("{s}\n", .{w.written()});
+                return e;
+            };
+        } else try std.testing.expect(std.mem.indexOf(u8, w.written(), "data-v=\"scope\"") == null);
     }
 }

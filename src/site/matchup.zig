@@ -157,8 +157,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     var head: mp.Head = try .init(a, head_data);
     head.bin = try bin(a, mp.HeadData, head_data.*);
 
-    // A pair too thin for its own build gets x's usual one: the build is what the page is
-    // read for, before the lane
+    // A pair too thin for its own build gets x's usual one
     const build_data: ?*cp.BuildData = if (builds.forVs(site, r, x, y)) |b| blk: {
         const d = try a.create(cp.BuildData);
         const roles = try a.alloc(cp.BuildRole, 1);
@@ -183,14 +182,18 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
 
     const more_data = try a.create(mp.MoreData);
     more_data.* = try moreData(site, curves, r, x, y);
+    more_data.marks = mp.laneMarks(more_data);
     var more: mp.More = try .init(a, more_data);
     more.bin = try bin(a, mp.MoreData, more_data.*);
     more.js = "/" ++ assets.matchmore_js.path;
     more.wasm = assets.matchmore_wasm.path;
+    var out: mp.More = try .init(a, more_data);
+    out.part = .outcome;
 
+    // Lane first: the page's own answer, which no build page has; the build after it
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
-    t.root = h.div(.{ .class = "c-cpage c-mpage", .data_id = x.id, .data_vs = y.id, .data_role = champion.uiRole(r) }, .{ head.view(&h), if (build) |*b| b.view(&h) else ui.N.none, more.view(&h) });
+    t.root = h.div(.{ .class = "c-cpage c-mpage", .data_id = x.id, .data_vs = y.id, .data_role = champion.uiRole(r) }, .{ head.view(&h), more.view(&h), if (build) |*b| b.view(&h) else ui.N.none, out.view(&h) });
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
     try tpl.render(w,
@@ -253,6 +256,7 @@ fn headData(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cham
         .vs_usual = @floatCast(100 * o.d.mean),
         .gold = if (has_gold) v.estimate(.gold, i).mean else null,
         .cs_gold = if (has_gold and r != .jungle and r != .utility) @intCast(round10(@as(i32, v.estimate(.cs, i).mean) * mp.gold_per_cs)) else null,
+        .y_share = offRole(site.stats.champRole(r, y.c).games, y.games),
         .lane_games = lane.games,
         .ahead = lane.ahead,
         .thin = thin(v),
@@ -266,23 +270,28 @@ fn moreData(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cham
     const a = site.arena;
     const v = curves.get(r, .all, x.id, y.id).?;
     const base = curves.baseline(r, .all);
+    // The page's index i is minute i: the curves' start at the 1 minute frame, so 0:00
+    // (level, every game going) goes first
     const last = reach(v);
-    const games = try a.alloc(u32, last);
-    for (games, 0..) |*g, i| g.* = v.minute(i).n;
+    const games = try a.alloc(u32, last + 1);
+    for (games, 0..) |*g, i| g.* = v.minute(i -| 1).n;
     var out: [3]mp.Curve = undefined;
     const prev = prevLine(site, r, x, y);
     for (&out, [_]curvesfile.Metric{ .gold, .xp, .cs }) |*c, m| {
-        const line = try a.alloc(i16, last);
-        const bands = try a.alloc([2]i16, last);
-        for (line, bands, 0..) |*l, *b, i| {
+        const line = try a.alloc(i16, last + 1);
+        const bands = try a.alloc([2]i16, last + 1);
+        line[0] = 0;
+        bands[0] = .{ 0, 0 };
+        for (line[1..], bands[1..], 0..) |*l, *b, i| {
             l.* = v.estimate(m, i).mean;
             const q = band(v, base, m, i);
             b.* = .{ clamp16(q[0]), clamp16(q[1]) };
         }
         var pl: []i16 = &.{};
         if (m == .gold) if (prev) |pv| {
-            pl = try a.alloc(i16, @min(last, reach(pv.v)));
-            for (pl, 0..) |*l, i| l.* = pv.v.estimate(m, i).mean;
+            pl = try a.alloc(i16, @min(last, reach(pv.v)) + 1);
+            pl[0] = 0;
+            for (pl[1..], 0..) |*l, i| l.* = pv.v.estimate(m, i).mean;
         };
         c.* = .{ .line = line, .band = bands, .prev = pl };
     }
@@ -421,6 +430,17 @@ fn odds(st: *const core.Stats, r: Role, x: Champ, y: Champ, ka: f64) Odds {
     return .{ .wins = e.wins, .games = e.games, .base = base, .usual = u, .d = champion.VsUsual.of(e.wins, e.games, u, ka) };
 }
 
+/// Under this share of its games in the role, the opponent's head says so: an off-role
+/// pick, its figures mixed with its main role's. Over it, it'd read as another rate
+const off_role_pct = 60;
+
+/// The share of `all` games that `in_role` is, in %, when under off_role_pct
+fn offRole(in_role: u64, all: u64) ?f32 {
+    if (all == 0) return null;
+    const p = 100 * @as(f64, @floatFromInt(in_role)) / @as(f64, @floatFromInt(all));
+    return if (p < off_role_pct) @floatCast(p) else null;
+}
+
 fn round10(v: i32) i32 {
     return @divTrunc(v + if (v < 0) @as(i32, -5) else 5, 10) * 10;
 }
@@ -499,4 +519,10 @@ test "one page per matchup, though experienced players' curves share its pair" {
     }
     try std.testing.expectEqual(3, all_ranks);
     try std.testing.expectEqual(1, pages);
+}
+
+test "off role: the opponent's share of games in the role only when under 60%" {
+    try std.testing.expectEqual(@as(?f32, 25), offRole(1, 4));
+    try std.testing.expectEqual(@as(?f32, null), offRole(3, 5));
+    try std.testing.expectEqual(@as(?f32, null), offRole(0, 0));
 }

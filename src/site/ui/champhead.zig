@@ -40,18 +40,21 @@ pub const Pair = struct {
     swap: []const u8,
     /// The champion page, same role
     clear: []const u8,
+    /// Faint, under the other's portrait: "84% top"
+    note: ?tree.Text = null,
 };
 
 pub fn view(h: *H, o: Opts) N {
     const pic = champ.view(h, o.champ, .{ .px = .@"56", .named = false, .eager = true });
     return h.div(.{ .class = "c-champhead" }, .{
         h.div(.{ .class = "id" }, .{
-            if (o.pair) |p| h.div(.{ .class = "pair" }, .{
+            if (o.pair) |p| h.div(.{ .class = "pair", .data_note = if (p.note != null) true else null }, .{
                 pic,
                 button.view(h, .{ .s = .s, .v = .icon, .href = p.swap, .label = W.swap.with(h, .{ .y = p.champ.name, .x = o.champ.name }) }, .{"⇄"}),
                 h.span(.{ .class = "y" }, .{
                     champ.view(h, p.champ, .{ .px = .@"56", .named = false, .eager = true }),
                     h.a(.{ .class = "clear", .href = p.clear, .aria_label = W.clear.with(h, .{ .y = p.champ.name }) }, .{"×"}),
+                    if (p.note) |t| h.span(.{ .class = "note" }, .{t}) else null,
                 }),
             }) else pic,
             h.div(.{}, .{
@@ -75,6 +78,9 @@ pub const css =
     \\  .c-champhead h1 > .and { margin: 0 0.3em; font-weight: var(--w-m); color: var(--muted); }
     \\  .c-champhead .pair { display: flex; align-items: center; gap: var(--sp-2); flex: none; }
     \\  .c-champhead .pair > .y { position: relative; display: flex; }
+    \\  .c-champhead .pair[data-note] { padding-bottom: 14px; }
+    \\  .c-champhead .pair > .y > .note { position: absolute; top: calc(100% + 1px); left: 50%;
+    \\    transform: translateX(-50%); font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; }
     \\  .c-champhead .pair .clear { position: absolute; top: -6px; right: -6px; display: grid; place-items: center;
     \\    width: 20px; height: 20px; border-radius: 50%; background: var(--panel-3); color: var(--t2);
     \\    box-shadow: 0 0 0 2px var(--panel); font-size: var(--fs-m); line-height: 1; text-decoration: none; }
@@ -149,7 +155,7 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("a matchup page's head: the opponent's slot filled", view(h, .{
         .champ = champ.demo("Darius", "Darius"),
         .sub = plain("Top · 16.21"),
-        .pair = .{ .champ = champ.demo("Garen", "Garen"), .swap = "#", .clear = "#" },
+        .pair = .{ .champ = champ.demo("Garen", "Garen"), .swap = "#", .clear = "#", .note = plain("84% top") },
         .strip = strip.view(h, &.{
             .{ .label = plain("Darius wins"), .value = plain("49.9%"), .step = .of(-0.1, agg), .answer = true },
             .{ .label = plain("Vs usual"), .value = plain("+1.2"), .ctx = plain("48.2% usually"), .step = .of(1.2, agg) },

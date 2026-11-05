@@ -35,7 +35,7 @@ laneduel markup 2
 learnpage pagecss 61
 logview markup 2
 logview title 2
-matchpage pagecss 7
+matchpage pagecss 6
 patchpage markup 3
 patchpage pagecss 59
 playerbar markup 1

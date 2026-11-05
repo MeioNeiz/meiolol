@@ -177,10 +177,10 @@ account, testerpage, meionotes, meionoteslist, adminpage
 Chip: a small pill that toggles a filter (pressed or not), removes a choice, or opens the
 rest of a list (expand). Scope and reason chips are labels, not controls: flat, no hover
 (Badge's family)
-States: toggle; pressed; disabled; removable; expand; link; scope; reason; reason, hover
-tip; a filter row
+States: toggle; pressed; disabled; removable; expand; link; scope; scope, hover tip at its
+end; reason; reason, hover tip; a filter row
 Used by: scopechip, card, matchbrief, champselect, practice, table, buildpanel, lockbar,
-inspector, gamepage, candlist, patchpage, idlookup, admincharts, tiers
+inspector, gamepage, candlist, patchpage, idlookup, admincharts, champpage, tiers
 
 ### ScopeChip
 `scopechip.zig` `.c-scope` site
@@ -834,7 +834,8 @@ gets its own top, so a one-sided lane uses the room. A Gold | XP | CS switch for
 head, a tap shows the minute's figures (ChartTip), a drag selects minutes (the matchup
 page's Versus reads `range`). lanechart.zig's successor: the matchup pages and Your games
 move here when they are rebuilt
-States: gold, a minute tapped; CS, minutes dragged; typical only (the matchup page)
+States: gold, a minute tapped; CS, minutes dragged; typical only (the matchup page); marks
+(the matchup page)
 Used by: champselect, gamescreen, app, laneduel, champpage, matchpage
 
 ### TimelineChart
@@ -1696,13 +1697,14 @@ Used by: matchgrid, finder, matchpage, tiers
 `matchpage.zig` `.c-mpage` site
 The matchup page (/matchups/<role>/<x>-vs-<y>): one lane pair from x's side
 (docs/plan/ui/matchup.md), the champion page with its opponent slot filled, as three
-islands. Head: ChampHeader's pair with the headline figures, x's other lane opponents and
-the view links. Build: the champion page's Build island on the pair's build (its usual one
-when the pair is thin). More: head to head beside the lane by minute, won by gold at 10,
-by game length, by rank and mastery, and bot lane partners. Pages are rendered on request,
-so each island's data rides in its root's data-bin (base64 of ui.data) rather than a file:
-ui-matchup.wasm adopts Head and loads ui-champbuild.wasm and ui-matchmore.wasm for the
-others
+islands, lane first. Head: ChampHeader's pair with the headline figures, x's other lane
+opponents and the view links. More's lane part: head to head beside the lane by minute.
+Build: the champion page's Build island on the pair's build (its usual one when the pair
+is thin). More's outcome part: won by gold at 10, by game length, by rank and mastery, and
+bot lane partners. Pages are rendered on request, so each island's data rides in its
+root's data-bin (base64 of ui.data) rather than a file: ui-matchup.wasm adopts Head and
+loads ui-champbuild.wasm and ui-matchmore.wasm for the others. More's two parts share the
+lane part's data-bin and file
 
 ### Champions
 `tiers.zig` `.c-tiers` site

@@ -356,6 +356,17 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(games, k.all.games);
         try testing.expectEqual([3]u32{ 0, games, 0 }, [3]u32{ k.by[0].games, k.by[1].games, k.by[2].games });
         try testing.expectEqual(k.all.wins, k.by[1].wins);
+        // Lane charts start at 0:00, level, so index i is minute i (the curves' first
+        // frame is at 1:00). The fixture's lanes are under the card's floor: pinned on the
+        // matchup page below, here once the fixture grows
+        const charts = try site.ui.data.decode(arena, site.ui.champpage.ChartsData, try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/champion/darius-charts.bin" }), arena, .limited(1 << 22)));
+        if (charts.roles[0].lane) |cl| {
+            try testing.expectEqual(cl.games[1], cl.games[0]);
+            for (cl.metrics) |m| {
+                try testing.expectEqual(@as(f32, 0), m.line[0]);
+                try testing.expectEqual([2]f32{ 0, 0 }, m.band[0]);
+            }
+        } else try testing.expect(games < site.ui.champpage.min_games);
 
         // End of game: the fixture's columns (one game again and again) per game, then per
         // minute; placed against Mordekaiser, the role's other champion in the table
@@ -524,7 +535,7 @@ test "fixture games to stats, curves and the website" {
         // with both portraits, the swap and the headline figures, the lane by minute beside
         // head to head, won by gold at 10 and by game length (their fixture buckets are under
         // fmt.floor_games: not enough games, no dashed key), by rank and mastery
-        .{ "matchups/top/mordekaiser-vs-darius.html", &.{ "<div class=\"c-cpage c-mpage\" data-id=\"", "data-role=\"top\"><div class=\"part\" data-island=\"matchup\" data-bin=\"", "<h1>Mordekaiser<span class=\"and\">vs</span>Darius</h1>", "href=\"/matchups/top/darius-vs-mordekaiser\"", "Mordekaiser wins", "Vs usual", "data-island=\"matchmore\" data-bin=\"", "data-js=\"/" ++ assets.matchmore_js.path ++ "\" data-wasm=\"" ++ assets.matchmore_wasm.path ++ "\"", "<h2>Lane</h2>", "class=\"c-chart c-lane\"", "<h2>Head to head</h2>", "Kills to 6 min", "Level 6", "First item", "<h2>Won by gold at 10</h2>", "Not enough games yet.", "<h2>By game length</h2>", "<h2>By rank and mastery</h2>", "All games", "<script src=\"/" ++ assets.matchup_js.path ++ "\" data-wasm=\"" ++ assets.matchup_wasm.path ++ "\" defer></script>" } },
+        .{ "matchups/top/mordekaiser-vs-darius.html", &.{ "<div class=\"c-cpage c-mpage\" data-id=\"", "data-role=\"top\"><div class=\"part\" data-island=\"matchup\" data-bin=\"", "<h1>Mordekaiser<span class=\"and\">vs</span>Darius</h1>", "href=\"/matchups/top/darius-vs-mordekaiser\"", "Mordekaiser wins", "Vs usual", "data-island=\"matchmore\" data-bin=\"", "data-js=\"/" ++ assets.matchmore_js.path ++ "\" data-wasm=\"" ++ assets.matchmore_wasm.path ++ "\"", "<h2>Lane</h2>", "class=\"c-chart c-lane\"", "<h2>Head to head</h2>", "Kill by 6:00", "Level 6", "First item", "<h2>Won by gold at 10</h2>", "Not enough games yet.", "<h2>By game length</h2>", "<h2>By rank and mastery</h2>", "All games", "<script src=\"/" ++ assets.matchup_js.path ++ "\" data-wasm=\"" ++ assets.matchup_wasm.path ++ "\" defer></script>" } },
         // Bot lane partners (MU4): each side's supports, and a support matchup's bot laners
         .{ "matchups/bot/kaisa-vs-twitch.html", &.{ "First blood", "<h2>Lane partners</h2>", "<h3>Twitch with</h3>" } },
         .{ "matchups/support/pyke-vs-rakan.html", &.{"<h3>Rakan with</h3>"} },
@@ -576,13 +587,13 @@ test "fixture games to stats, curves and the website" {
         try testing.expect(std.mem.find(u8, pair_page, "/patch/15-12?period=patch") == null);
         try testing.expect(std.mem.find(u8, pair_page, "so far") == null);
     }
-    // Matchup first screen: the numbers and opponents, the pair's build, then head to head
-    // beside the lane, the outcome cards last
+    // Matchup first screen: the numbers and opponents, head to head beside the lane, then
+    // the pair's build, the outcome cards last
     {
         const path = try std.fs.path.join(arena, &.{ out, "matchups/top/darius-vs-mordekaiser.html" });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         var at: usize = 0;
-        for ([_][]const u8{ "<nav class=\"c-mstrip\"", "<h2>Build against Mordekaiser", "<h2>Head to head</h2>", "<h2>Lane</h2>", "<h2>Won by gold at 10</h2>" }) |want| {
+        for ([_][]const u8{ "<nav class=\"c-mstrip\"", "<h2>Head to head</h2>", "<h2>Lane</h2>", "<h2>Build against Mordekaiser", "<h2>Won by gold at 10</h2>" }) |want| {
             at = (std.mem.findPos(u8, html, at, want) orelse {
                 std.debug.print("darius-vs-mordekaiser: {s} missing or out of order\n", .{want});
                 return error.TestUnexpectedResult;
@@ -614,11 +625,18 @@ test "fixture games to stats, curves and the website" {
         const mb = try dataBin(arena, page, "matchmore");
         const md = try arena.create(mp.MoreData);
         md.* = try site.ui.data.decode(arena, mp.MoreData, mb[1]);
+        try testing.expectEqual(md.games[1], md.games[0]);
+        for (md.curves) |c| {
+            try testing.expectEqual(@as(i16, 0), c.line[0]);
+            try testing.expectEqual([2]i16{ 0, 0 }, c.band[0]);
+        }
         var mo: mp.More = try .init(arena, md);
         mo.bin = mb[0];
         mo.js = "/" ++ assets.matchmore_js.path;
         mo.wasm = assets.matchmore_wasm.path;
-        for ([_]site.ui.N{ head.view(&h), mo.view(&h) }, [_][]const u8{ "matchup", "matchmore" }) |n, name| {
+        var out_part = mo;
+        out_part.part = .outcome;
+        for ([_]site.ui.N{ head.view(&h), mo.view(&h), out_part.view(&h) }, [_][]const u8{ "matchup", "matchmore", "matchout" }) |n, name| {
             var w: std.Io.Writer.Allocating = .init(arena);
             try site.ui.html.write(&t, n, &w.writer);
             if (std.mem.find(u8, page, w.written()) == null) {

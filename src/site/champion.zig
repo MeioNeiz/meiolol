@@ -419,11 +419,16 @@ fn laneOf(site: *const Site, ch: Champ, r: Role) !?cp.LaneCurves {
         try games.append(a, n);
     }
     if (games.items.len < 2 or games.items[0] < cp.min_games) return null;
+    // The chart's index i is minute i: the curves' start at the 1 minute frame, so 0:00
+    // (level, every lane going) goes first
+    try games.insert(a, 0, games.items[0]);
     var out: cp.LaneCurves = .{ .games = games.items, .metrics = undefined };
     for (&out.metrics, [_]curvesfile.Metric{ .gold, .xp, .cs }) |*o, m| {
         const line = try a.alloc(f32, games.items.len);
         const band = try a.alloc([2]f32, games.items.len);
-        for (line, band, games.items, 0..) |*l, *b, n, i| {
+        line[0] = 0;
+        band[0] = .{ 0, 0 };
+        for (line[1..], band[1..], games.items[1..], 0..) |*l, *b, n, i| {
             var sum: f64 = 0;
             for (pairs.items) |v| if (i < v.minutes()) {
                 const x = v.minute(i);

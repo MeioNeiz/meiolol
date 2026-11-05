@@ -37,6 +37,23 @@ pub const Metric = struct {
     fit: usize = 0,
 };
 
+/// Marks on the first measure (the matchup page's facts about its lane)
+pub const Marks = struct {
+    notes: []const Note = &.{},
+    span: ?Span = null,
+    /// Under the time axis; they take the foot row's place
+    axis: []const AxisNote = &.{},
+};
+
+/// A dot on the line at minute `m` with its label; `sub` faint after it
+pub const Note = struct { m: u8, label: tree.Text, sub: ?tree.Text = null };
+
+/// Minutes a..b shaded, its label at the top
+pub const Span = struct { a: u8, b: u8, label: tree.Text };
+
+/// A label under the time axis at second `t`
+pub const AxisNote = struct { t: u16, label: tree.Text };
+
 const W = struct {
     pub const label = phrase.Phrase("{a:text} minus {b:text} by minute");
     pub const ahead = phrase.Phrase("{n:text} ahead");
@@ -154,6 +171,10 @@ pub const Lane = struct {
 
     /// `foot`: a row under the time axis, as wide as the plot (marks placed by minute)
     pub fn viewWith(l: *L, h: *H, foot: N) N {
+        return l.viewMarked(h, foot, .{});
+    }
+
+    pub fn viewMarked(l: *L, h: *H, foot: N, mk: Marks) N {
         const s = l.cur();
         const p = l.plane();
         const lo = h.mem.alloc(f32, s.band.len) catch {
@@ -182,6 +203,8 @@ pub const Lane = struct {
             h.oom = true;
         };
         var over = h.list();
+        var axis: N = .none;
+        if (l.k == 0) axis = marks(h, p, s, mk, &over);
         if (l.range) |r| over.add(chart.range(h, p.px(r[0]), p.px(r[1])));
         if (s.you.len >= 2) over.add(h.el(.i, .{ .class = "dot", .data_k = "you", .style = h.vars(.{ .x = p.px(s.you.len - 1), .y = p.py(s.you[s.you.len - 1]) }) }, .{}));
         if (l.tip) |i| {
@@ -207,7 +230,7 @@ pub const Lane = struct {
             .above = &.{h.div(.{ .class = "side" }, .{W.ahead.with(h, .{ .n = l.a })})},
             .below = &.{h.div(.{ .class = "side" }, .{W.ahead.with(h, .{ .n = l.b })})},
             .over = over.done(),
-            .foot = foot,
+            .foot = if (axis != .none) axis else foot,
             .press = true,
             .on = .{
                 .down = h.on(l, .plot),
@@ -219,6 +242,28 @@ pub const Lane = struct {
         });
     }
 };
+
+/// Draws `mk` into `over`; the axis row, if any
+fn marks(h: *H, p: chart.Plane, s: Series, mk: Marks, over: *tree.List) N {
+    if (mk.span) |x| over.add(h.div(.{ .class = "span", .style = h.vars(.{ .a = p.px(x.a), .b = p.px(x.b) }) }, .{h.span(.{}, .{x.label})}));
+    const ys = if (s.you.len > 0) s.you else s.line;
+    for (mk.notes, 0..) |n, i| {
+        if (n.m >= ys.len) continue;
+        const v = ys[n.m];
+        const st = h.vars(.{ .x = p.px(n.m), .y = p.py(v) });
+        over.add(h.el(.i, .{ .key = i, .class = "dot", .data_k = "note", .style = st }, .{}));
+        // On the 0 side of its dot: a lead mostly grows away from 0, so the line doesn't
+        // run through it
+        over.add(h.span(.{ .key = i, .class = "note", .data_up = v < 0, .data_end = p.px(n.m) > 80, .style = st }, .{
+            n.label,
+            if (n.sub) |x| h.small(.{}, .{x}) else null,
+        }));
+    }
+    if (mk.axis.len == 0) return .none;
+    var row = h.list();
+    for (mk.axis, 0..) |a, i| row.add(h.span(.{ .key = i, .style = h.vars(.{ .x = p.x.at(@as(f32, @floatFromInt(a.t)) / 60) }) }, .{a.label}));
+    return h.div(.{ .class = "axn" }, .{row.done()});
+}
 
 /// One measure's figures as plain data a data file can carry (the app's app.bin); the
 /// chart's own state (tip, range) stays in the island (Held). Index i is minute i
@@ -254,6 +299,21 @@ pub const css =
     \\@layer components {
     \\  .c-lane > .side { padding: 0 0 6px 6px; line-height: 1.2; }
     \\  .c-lane > .plot + .side { padding: 6px 0 0 6px; }
+    \\  .c-lane .note { position: absolute; left: calc(var(--x) * 1%); top: calc(var(--y) * 1%); transform: translate(6px, 3px);
+    \\    font-size: var(--fs-xs); font-weight: var(--w-m); color: var(--text); white-space: nowrap; pointer-events: none; }
+    \\  .c-lane .note[data-up] { transform: translate(6px, calc(-100% - 3px)); }
+    \\  .c-lane .note[data-end] { transform: translate(calc(-100% - 6px), 3px); }
+    \\  .c-lane .note[data-up][data-end] { transform: translate(calc(-100% - 6px), calc(-100% - 3px)); }
+    \\  .c-lane .note small { margin-left: 4px; font-size: inherit; font-weight: var(--w-r); color: var(--muted); }
+    \\  .c-lane .span { position: absolute; top: 0; bottom: 0; left: calc(var(--a) * 1%); width: calc((var(--b) - var(--a)) * 1%);
+    \\    background: var(--wash); pointer-events: none; }
+    \\  .c-lane .span > span { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); font-size: var(--fs-xs);
+    \\    color: var(--t2); white-space: nowrap; }
+    \\  .c-lane > .axn { position: relative; height: 18px; font-size: var(--fs-xs); color: var(--muted); }
+    \\  .c-lane > .axn > span { position: absolute; top: 2px; left: calc(var(--x) * 1%); transform: translateX(calc(var(--x) * -1%));
+    \\    white-space: nowrap; }
+    \\  .c-lane > .axn > span::before { content: ""; position: absolute; top: -22px; left: calc(var(--x) * 1%); width: 1px; height: 6px;
+    \\    background: var(--muted); }
     \\  .c-lane .dot[data-k="you"] { width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; background: var(--us); box-shadow: none; }
     \\}
     \\
@@ -300,6 +360,17 @@ pub fn gallery(g: *Gallery) void {
         l.* = s[1];
         g.addFill(s[0], card.view(h, .{}, &.{ card.head(h, plain("Lane"), null, &.{l.switcher(h)}), l.view(h) }));
     }
+    const l = h.mem.create(Lane) catch {
+        h.oom = true;
+        return;
+    };
+    l.* = .{ .a = "LeBlanc", .b = "Yasuo", .metrics = &.{.{ .label = plain("Gold"), .s = .{ .band = lane_gold.band, .line = lane_gold.line } }} };
+    const mk: Marks = .{
+        .notes = &.{ .{ .m = 6, .label = plain("+129") }, .{ .m = 14, .label = plain("+77"), .sub = plain("CS worth 160") } },
+        .span = .{ .a = 3, .b = 6, .label = plain("+140 in 3 min") },
+        .axis = &.{.{ .t = 330, .label = plain("LeBlanc level 6") }},
+    };
+    g.addFill("marks (the matchup page)", card.view(h, .{}, &.{ card.head(h, plain("Lane"), null, &.{}), l.viewMarked(h, .none, mk) }));
 }
 
 const testing = std.testing;
