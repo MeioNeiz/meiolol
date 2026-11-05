@@ -417,7 +417,8 @@ pub const css =
     \\  .c-chart { container-type: inline-size; position: relative; display: flex; flex-direction: column; margin: 0;
     \\    padding: 0 calc(var(--pr) * 1px) 0 48px; font-size: var(--fs-xs); color: var(--faint);
     \\    font-variant-numeric: tabular-nums; }
-    \\  .c-chart > .plot { position: relative; height: calc(var(--h) * 1px); }
+    \\  .c-chart > .plot { position: relative; flex: 1 0 auto; height: calc(var(--h) * 1px);
+    \\    max-height: calc(var(--h) * 1.6px); }
     \\  .c-chart > .plot[data-press] { cursor: crosshair; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
     \\  .c-chart svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
     \\  .c-chart svg * { vector-effect: non-scaling-stroke; }

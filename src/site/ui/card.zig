@@ -8,11 +8,12 @@ const plain = phrase.plain;
 const segmented = @import("segmented.zig");
 const tabs = @import("tabs.zig");
 const chip = @import("chip.zig");
+const trend = @import("trend.zig");
 const H = tree.H;
 const N = tree.N;
 
 pub const name = "Card";
-pub const scope = .{ ".c-card", ".c-head", ".c-toolbar", ".c-sechead" };
+pub const scope = .{ ".c-card", ".c-head", ".c-toolbar", ".c-sechead", ".c-cards" };
 
 pub const Opts = struct {
     /// No padding: a table or chart fills it to the edges
@@ -33,6 +34,11 @@ pub fn head(h: *H, title: tree.Text, count: ?tree.Text, controls: []const N) N {
         if (count) |c| h.span(.{ .class = "count" }, .{c}) else null,
         controls,
     });
+}
+
+/// Cards side by side, one height: the tallest's
+pub fn row(h: *H, kids: []const N) N {
+    return h.div(.{ .class = "c-cards" }, .{kids});
 }
 
 /// The filters band: groups of controls, `spacer()` pushes the rest to the end
@@ -67,6 +73,10 @@ pub const css =
     \\  .c-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m);
     \\    padding: var(--card-pad); min-width: 0; }
     \\  .c-card[data-v="flush"] { padding: 0; overflow: clip; display: flow-root; }
+    \\  /* A row of cards stretches to its tallest: a chart's plot takes the spare height */
+    \\  .c-card:has(> .c-chart) { display: flex; flex-direction: column; }
+    \\  .c-card > .c-chart { flex: 1 0 auto; }
+    \\  .c-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--sp-4); }
     \\  .c-card > :is(.c-head, .c-tabs, .c-toolbar) { margin-inline: calc(-1 * var(--card-px)); padding-inline: var(--card-px); }
     \\  .c-card > :is(.c-head, .c-tabs, .c-toolbar):first-child { margin-top: calc(-1 * var(--card-py)); }
     \\  .c-card > :is(.c-head, .c-tabs, .c-toolbar) + :not(.c-tabs, .c-toolbar, .c-head) { margin-top: var(--card-py); }
@@ -104,6 +114,15 @@ pub fn gallery(g: *Gallery) void {
             .{ .label = plain("XP") },
         })}),
         h.p(.{ .class = "muted" }, .{"Chart"}),
+    }));
+    const t = h.mem.create(trend.Trend) catch {
+        h.oom = true;
+        return;
+    };
+    t.* = .{ .label = plain("By patch"), .points = &trend.demo_patch };
+    g.addFill("a row stretched taller: the chart grows into it", row(h, &.{
+        view(h, .{}, &.{ head(h, plain("By patch"), null, &.{}), t.view(h) }),
+        view(h, .{}, &.{ head(h, plain("End of game"), null, &.{}), body, body, body, body, body, body, body, body }),
     }));
     g.addFill("tabs and toolbar bands", view(h, .{}, &.{
         tabs.view(h, null, &.{
