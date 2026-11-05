@@ -77,7 +77,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - MatchupStrip: a champion's lane opponents in one row that scrolls sideways, most...
 - ChampList: a short list of champions, one line each: portrait, name (a badge after...
 - SkillGrid: a skill order as the 4 x 18 grid of levels (Q, W, E, R rows, the level's...
-- ItemPath: the first finished items in the order bought, as icons with arrows, then...
+- ItemPath: the first finished items in the order bought, as icons with arrows, each...
 - RuneTree: every rune players took, laid out as in game (trees side by side...
 - BuildPanel: the champion's whole build in one panel, as an island
 - CandidateList: ranked champions for one seat, the core of "select an option to see why"
@@ -905,26 +905,28 @@ Used by: gamebuild, buildpanel, gamepage
 
 ### ItemPath
 `itempath.zig` `.c-path` site
-ItemPath: the first finished items in the order bought, as icons with arrows, then the
-median minute of each. In a list of paths, items a path shares with the most played one in
-the same place are dimmed, so the eye goes to where it branches
-States: most played, minutes; a branch: shared items dim; no minutes
+ItemPath: the first finished items in the order bought, as icons with arrows, each item's
+median minute under it ("min" once, after the last). In a list of paths, items a path
+shares with the most played one in the same place are dimmed, so the eye goes to where it
+branches
+States: most played, minutes; a branch: shared items dim; no minutes; the build panel's:
+32 px, one minute unknown
 Used by: buildpanel
 
 ### RuneTree
 `runetree.zig` `.c-runes` site
 RuneTree: every rune players took, laid out as in game (trees side by side, keystones on
-top, then the stat shards), each with its pick share (bar and %), win rate and games; the
-figures' names said once. Win rates are coloured against their row's (a row is one
-choice), each with its range, faded when wide (bp.win). The top rune pages sit above as
-cards; the chosen one lights its runes. In a narrow container the trees fold to the chosen
-page's (Every tree opens the rest). A page whose keystone the host has builds for (locks)
-locks on tap, and the host shows the rest of the build for that keystone; a second tap
-unlocks. With the champion page's lock set (`set`) a page card locks its keystone and a
-rune tap locks the rune (shard) too. Tap a rune: its name and figures in the readout line.
-On a matchup's, ▲▼ after a share the matchup moved from the champion's usual. An
-island part: a host embeds it and re-renders on its events
-States: first page lit; folds to its trees when narrow; second page chosen, a rune tapped;
+top, then the stat shards), each with its pick share (bar and %), win rate and games,
+unnamed (a tapped rune's readout names them). Win rates are coloured against their row's
+(a row is one choice), each with its range, faded when wide (bp.win). The top rune pages
+sit above as cards; the chosen one lights its runes and the trees fold to its two and the
+shards, at every width (Every tree opens the rest). A page whose keystone the host has
+builds for (locks) locks on tap, and the host shows the rest of the build for that
+keystone; a second tap unlocks. With the champion page's lock set (`set`) a page card
+locks its keystone and a rune tap locks the rune (shard) too. Tap a rune: its name and
+figures in the readout line. On a matchup's, ▲▼ after a share the matchup moved from
+the champion's usual. An island part: a host embeds it and re-renders on its events
+States: first page lit: its two trees and the shards; second page chosen, a rune tapped;
 no page chosen: every tree; a matchup's: keystones moved from the usual, one tapped
 Used by: buildpanel
 
@@ -940,13 +942,13 @@ highest win rate on solid_games is marked "best", a 4th row when not in the top 
 picked | Highest WR (lolalytics' build toggle, Jacob 26 Oct) re-sorts every cell by win
 rate, options under solid_games after. A matchup's marks the champion's usual choice "as
 usual" and dims a cell led by it. Tap a cell's "N more" to open it across the panel: every
-option, named, sortable. One open at a time; it and the order in the URL. Each cell's head
-names its columns over fixed widths, so they line up (one legend for the panel read as a
-toggle, Jacob 27 Oct). A rune page card whose keystone has its own build (Data.keystones)
-locks on tap: every cell then counts that keystone's players, a chip with × says so and
-unlocks, the keystone in the URL (`k`). With a lock set (the champion page's,
-ui/lockbar.zig) every option and rune page locks on tap instead: the host fetches the
-build under the set and shows it here
+option, named, sortable. One open at a time; it and the order in the URL. The first closed
+cell's head names the columns; every cell keeps their fixed widths, so the rest line up
+under it. A rune page card whose keystone has its own build (Data.keystones) locks on tap:
+every cell then counts that keystone's players, a chip with × says so and unlocks, the
+keystone in the URL (`k`). With a lock set (the champion page's, ui/lockbar.zig) every
+option and rune page locks on tap instead: the host fetches the build under the set and
+shows it here
 States: Darius top: whole build, most played first; Item 4 open: every option, named,
 sortable; Skills open: every order and level path; runes by lane opponent (none vs ranged
 here), items 500+ gold ahead (none behind); Conqueror's page locked: its players' spells

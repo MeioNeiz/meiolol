@@ -47,7 +47,13 @@ const L = struct {
     pub const easier = Phrase("Easier for {c:text}");
     pub const tile_win = Phrase("{o:text}: {c:text} wins {v:text} in {n:count} games");
     pub const tile_usual = Phrase("{o:text}: {c:text} {v:text} vs usual in {n:count} games");
-    pub const tile_gold = Phrase("{o:text}: {c:text} {v:text} at 14 in {n:count} games");
+    /// The gold tile is the face's, as its dot: a direction word reads as the name above it
+    pub const tile_gold_ahead = Phrase("{o:text}: {g:count} gold ahead of {c:text} at 14 in {n:count} games");
+    pub const tile_gold_behind = Phrase("{o:text}: {g:count} gold behind {c:text} at 14 in {n:count} games");
+    pub const tile_gold_level = Phrase("{o:text}: level with {c:text} at 14 in {n:count} games");
+    pub const ahead = phrase.plain("ahead");
+    pub const all = Phrase("All {n:count} matchups ›");
+    pub const behind = phrase.plain("behind");
 };
 
 /// Tiles per row
@@ -72,6 +78,9 @@ pub const Input = struct {
     few: N = .none,
     /// The champion page's: a lane opponent's brief locks it (Msg.lock)
     lock: ?Lock = null,
+    /// A link under the tile rows to the finder with the champion picked: on a phone the
+    /// plot hides, so the middle and rare opponents are picked there
+    finder: bool = false,
 };
 
 /// Input.champs' index of the opponent locked
@@ -216,6 +225,10 @@ pub const MatchupGrid = struct {
                     g.tiles(h, in, L.harder.with(h, .{ .c = in.name }), e.lo, opps, of),
                     g.tiles(h, in, L.easier.with(h, .{ .c = in.name }), e.hi, opps, of),
                 }),
+                if (in.finder and lane and !none and e.lo.len > 0) h.a(.{
+                    .class = "all",
+                    .href = h.fmt("/matchups#role={s}&c={s}", .{ @tagName(in.role), in.slug }),
+                }, .{L.all.with(h, .{ .n = count + rare })}) else .none,
                 if (rel.ally) h.p(.{ .class = "alone" }, .{if (chosen) |o| L.alone.with(h, .{ .c = in.name, .p = in.champs[o.champ].name }) else L.alone_any.with(h, .{ .c = in.name })}) else .none,
                 if (chosen) |o| (if (none) .none else h.div(.{ .class = "brief" }, .{matchbrief.view(h, b: {
                     var x = brief(h, in, rel, counts, o);
@@ -245,19 +258,31 @@ pub const MatchupGrid = struct {
             const d = g.dots.dots[k];
             const r: winrate.Rate = .counted(o.games, o.wins);
             const v = g.tileFigure(h, o);
+            // The dot's champion minus the page's: the face's own lead
+            const gd = -(o.gold orelse 0);
             row.* = .{
                 .champ = d.champ,
                 .value = switch (g.measure) {
                     .win => winrate.view(h, r, .{ .count = false, .said = "" }),
                     .usual => winrate.delta(h, o.usual, r.half),
-                    .gold => h.span(.{}, .{v}),
+                    // The number at the tile's size, its word small under it: "210 behind"
+                    // whole overruns a 3x2 tile at 320
+                    .gold => if (gd == 0) h.span(.{}, .{L.level}) else h.span(.{}, .{
+                        phrase.num(h, .count, @abs(gd)),
+                        h.span(.{ .class = "w" }, .{if (gd > 0) L.ahead else L.behind}),
+                    }),
                 },
-                // The count alone: a button's shown text stays 2 words (check), its label says games
+                // The count alone: its label says games
                 .note = phrase.num(h, .count, o.games),
                 .label = switch (g.measure) {
                     .win => L.tile_win.with(h, .{ .o = d.champ.name, .c = in.name, .v = v.s, .n = o.games }),
                     .usual => L.tile_usual.with(h, .{ .o = d.champ.name, .c = in.name, .v = v.s, .n = o.games }),
-                    .gold => L.tile_gold.with(h, .{ .o = d.champ.name, .c = in.name, .v = v.s, .n = o.games }),
+                    .gold => if (gd > 0)
+                        L.tile_gold_ahead.with(h, .{ .o = d.champ.name, .g = @abs(gd), .c = in.name, .n = o.games })
+                    else if (gd < 0)
+                        L.tile_gold_behind.with(h, .{ .o = d.champ.name, .g = @abs(gd), .c = in.name, .n = o.games })
+                    else
+                        L.tile_gold_level.with(h, .{ .o = d.champ.name, .c = in.name, .n = o.games }),
                 },
                 .pressed = g.dots.chosen() == k,
                 .on = h.on(&g.dots, .{ .pick = k }),
@@ -266,18 +291,12 @@ pub const MatchupGrid = struct {
         return h.div(.{ .class = "end" }, .{ h.h3(.{}, .{head}), champlist.view(h, .{ .tiles = true }, rows) });
     }
 
-    /// A tile's figure, the champion its subject as everywhere on the page: gold "380
-    /// behind" is the champion's (a dot's readout is its own champion's)
+    /// A tile's figure for its label: win rate and vs usual are the page champion's (no
+    /// direction word); gold is the face's, as its dot
     fn tileFigure(g: *const G, h: *H, o: Opp) tree.Text {
         return switch (g.measure) {
             .win => winrate.shown(h, .counted(o.games, o.wins)),
-            .usual => phrase.num(h, .points, o.usual),
-            .gold => {
-                const gd: i32 = o.gold orelse 0;
-                if (gd == 0) return L.level;
-                if (gd > 0) return L.dot_ahead.with(h, .{ .g = @abs(gd) });
-                return L.dot_behind.with(h, .{ .g = @abs(gd) });
-            },
+            .usual, .gold => g.figure(h, o),
         };
     }
 
@@ -391,6 +410,8 @@ pub const css =
     \\  .c-mgrid .plot { padding: var(--sp-3) 0; }
     \\  .c-mgrid .ends { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
     \\    gap: var(--sp-3) var(--sp-5); margin-bottom: var(--sp-4); }
+    \\  .c-mgrid > .all { display: block; margin: calc(-1 * var(--sp-2)) 0 var(--sp-4); font-size: var(--fs-s); }
+    \\  .c-mgrid .end .v .w { display: block; font-size: var(--fs-xs); color: var(--muted); }
     \\  .c-mgrid .end > h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-s); font-weight: var(--w-b); color: var(--t2); }
     \\  @container (max-width: 559px) { .c-mgrid:has(.ends) .plot { display: none; } }
     \\  .c-mgrid .brief { container-type: inline-size; }
@@ -453,6 +474,7 @@ pub fn gallery(g: *Gallery) void {
         .role = .top,
         .counts = .{ .games = 20412, .wins = 10063 },
         .rels = &demo_rels,
+        .finder = true,
     };
     const states = [_]struct { []const u8, u8, Measure, ?u16 }{
         .{ "lane opponents by win rate", 0, .win, null },
@@ -545,4 +567,23 @@ test "on the fake DOM: tiles name the champion's figure, a tap picks one and ope
     try testing.expect(now.find(now.root, "class", "c-mpick") != null);
     try testing.expectEqualStrings("true", now.attr(now.find(now.root, "aria-label", "Dr. Mundo: Darius wins 43.2% in 859 games").?, "aria-pressed").?);
     try testing.expectEqual(@as(u32, 0), fake.warnings);
+}
+
+test "gold tiles are the face's: its lead in its label, the number shown with its word under" {
+    const testing = std.testing;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var d: Demo = .{ .grid = .{ .measure = .gold }, .in = .{ .name = "Darius", .slug = "darius", .ddragon = champ.demo_version, .champs = &demo_champs, .role = .top, .counts = .{ .games = 20412, .wins = 10063 }, .rels = &demo_rels, .finder = true } };
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    t.root = d.view(&h);
+    var out: std.Io.Writer.Allocating = .init(a);
+    try @import("html.zig").write(&t, t.root, &out.writer);
+    const html = out.written();
+    // Darius minus Dr. Mundo -150: Mundo ahead
+    try testing.expect(std.mem.find(u8, html, "aria-label=\"Dr. Mundo: 150 gold ahead of Darius at 14 in 859 games\"") != null);
+    try testing.expect(std.mem.find(u8, html, "<span>150<span class=\"w\">ahead</span></span>") != null);
+    // The rest are in the finder, the champion and its role picked
+    try testing.expect(std.mem.find(u8, html, "href=\"/matchups#role=top&amp;c=darius\"") != null);
 }

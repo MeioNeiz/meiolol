@@ -1529,7 +1529,7 @@ pub const More = struct {
     /// The grid's champion and role
     fn input(p: *const P) matchgrid.Input {
         const rl = p.r();
-        return .{ .name = p.data.name, .slug = p.data.slug, .ddragon = p.data.ddragon, .champs = p.data.champs, .role = rl.role, .counts = .{ .games = rl.games, .wins = rl.wins }, .rels = rl.rels, .lock = .{ .on = p.lockedOpp() } };
+        return .{ .name = p.data.name, .slug = p.data.slug, .ddragon = p.data.ddragon, .champs = p.data.champs, .role = rl.role, .counts = .{ .games = rl.games, .wins = rl.wins }, .rels = rl.rels, .lock = .{ .on = p.lockedOpp() }, .finder = true };
     }
 
     pub fn view(p: *P, h: *H) N {
