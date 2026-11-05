@@ -92,7 +92,6 @@ const W = struct {
     pub const cs_other = Phrase("At 14 minutes, estimated from games of every length; {c:text} about {g:count} gold ahead on CS.");
     pub const gold_note = plain("At 14 minutes, estimated from games of every length.");
     pub const ahead = plain("Ahead at 14");
-    pub const games = plain("Games");
     pub const opps = Phrase("{x:text}'s {r:text} opponents");
     pub const picked = Phrase("{r:text} · {p:text} · {k:text}");
     pub const region = plain("Region");
@@ -187,9 +186,9 @@ pub const Head = struct {
     fn headline(p: *P, h: *H) N {
         const d = p.data;
         const won = rate(d.games, d.wins);
-        var items: [5]strip.Item = undefined;
+        var items: [4]strip.Item = undefined;
         var n: usize = 0;
-        items[n] = .{ .label = W.wins.with(h, .{ .c = d.x.name }), .value = phrase.num(h, .rate, won), .range = fmt.range(d.games, d.wins), .step = .of(won - 50, fmt.win_cuts), .answer = true };
+        items[n] = .{ .label = W.wins.with(h, .{ .c = d.x.name }), .value = phrase.num(h, .rate, won), .range = fmt.range(d.games, d.wins), .ends = stat.ends(h, .rate, won, fmt.range(d.games, d.wins)), .games = d.games, .step = .of(won - 50, fmt.win_cuts), .answer = true };
         n += 1;
         items[n] = .{
             .label = W.usual,
@@ -212,8 +211,6 @@ pub const Head = struct {
             items[n] = .{ .label = W.ahead, .value = phrase.num(h, .pct, @as(u32, @intFromFloat(@round(rate(d.lane_games, d.ahead))))) };
             n += 1;
         }
-        items[n] = .{ .label = W.games, .value = phrase.num(h, .count, d.games) };
-        n += 1;
         return strip.view(h, items[0..n]);
     }
 

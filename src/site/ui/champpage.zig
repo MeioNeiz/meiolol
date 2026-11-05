@@ -20,6 +20,7 @@ const std = @import("std");
 const tree = @import("tree.zig");
 const html = @import("html.zig");
 const fmt = @import("fmt.zig");
+const stat = @import("stat.zig");
 const phrase = @import("phrase.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
@@ -353,9 +354,8 @@ pub const W = struct {
     pub const ban = plain("Ban");
     pub const games = plain("Games");
     pub const move = Phrase("{p:text} change");
-    pub const pm = Phrase("give or take {v:dec}");
     pub const nth = Phrase("{n:int}{th:text}");
-    pub const move_note = plain("Its win rate on this patch minus the previous one, and how far it may be off either way (95%).");
+    pub const move_note = plain("Its win rate on this patch minus the previous one.");
     pub const matchups = plain("Matchups");
     pub const sections = plain("Sections");
     pub const build = plain("Build");
@@ -1027,9 +1027,9 @@ pub const Top = struct {
         if (d.roles.len == 0 or d.roles[0].games == 0) return h.p(.{ .class = "none" }, .{if (d.roles.len == 0) W.no_answer else W.no_lock_games});
         const x = d.roles[0];
         const won = rate(.{ .games = x.games, .wins = x.wins });
-        var items: [3]strip.Item = undefined;
+        var items: [2]strip.Item = undefined;
         var n: usize = 0;
-        items[n] = .{ .label = W.won, .value = phrase.num(h, .rate, won), .range = fmt.range(x.games, x.wins), .step = .of(won - 50, fmt.win_cuts), .answer = true };
+        items[n] = .{ .label = W.won, .value = phrase.num(h, .rate, won), .range = fmt.range(x.games, x.wins), .ends = stat.ends(h, .rate, won, fmt.range(x.games, x.wins)), .games = x.games, .step = .of(won - 50, fmt.win_cuts), .answer = true };
         n += 1;
         // The two count different tables (lock rows, views): never past all of them
         if (all) |y| if (y.games > 0) {
@@ -1037,20 +1037,19 @@ pub const Top = struct {
             items[n] = .{ .label = W.lock_share, .value = phrase.num(h, .rate, share) };
             n += 1;
         };
-        items[n] = .{ .label = W.games, .value = phrase.num(h, .count, x.games) };
-        n += 1;
         return strip.view(h, items[0..n]);
     }
 
     fn headline(p: *P, h: *H, rl: *const TopRole) N {
         const won = rate(.{ .games = rl.games, .wins = rl.wins });
-        const games: strip.Item = .{ .label = W.games, .value = phrase.num(h, .count, rl.games) };
-        var items: [5]strip.Item = undefined;
+        var items: [4]strip.Item = undefined;
         var n: usize = 0;
         items[n] = .{
             .label = W.won,
             .value = phrase.num(h, .rate, won),
             .range = fmt.range(rl.games, rl.wins),
+            .ends = stat.ends(h, .rate, won, fmt.range(rl.games, rl.wins)),
+            .games = rl.games,
             .ctx = if (rl.rank > 0) W.rank.with(h, .{ .n = rl.rank, .th = ordinal(rl.rank), .of = rl.of, .r = rl.role.label().s }) else null,
             .step = .of(won - 50, fmt.win_cuts),
             .answer = true,
@@ -1060,7 +1059,7 @@ pub const Top = struct {
             items[n] = .{
                 .label = W.move.with(h, .{ .p = p.data.patch }),
                 .value = phrase.num(h, .points, m[0]),
-                .ctx = W.pm.with(h, .{ .v = m[1] }),
+                .ends = stat.ends(h, .points, m[0], m[1]),
                 .step = .of(m[0], fmt.win_cuts),
                 .tip = .{ .id = "cp-move", .note = W.move_note },
             };
@@ -1068,8 +1067,7 @@ pub const Top = struct {
         }
         items[n] = .{ .label = W.pick, .value = phrase.num(h, .rate, rl.pick) };
         items[n + 1] = .{ .label = W.ban, .value = phrase.num(h, .rate, rl.ban) };
-        items[n + 2] = games;
-        return strip.view(h, items[0 .. n + 3]);
+        return strip.view(h, items[0 .. n + 2]);
     }
 };
 

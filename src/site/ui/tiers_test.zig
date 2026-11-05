@@ -167,11 +167,11 @@ test "hydration takes the URL's state; sorting pushes history; back restores" {
     // Role by role: mid, bot, support
     try testing.expectEqualStrings("Ahri,Zed,Kai'Sa,Lux", try p.names());
     // The board's sort: no table head under All
-    _ = p.rt.event(0, .{ .kind = .click, .target = p.by(.button, "Games") });
-    try testing.expectEqualStrings("#sort=6&min=0", p.fake.fragment.items);
+    _ = p.rt.event(0, .{ .kind = .click, .target = p.by(.button, "Pick") });
+    try testing.expectEqualStrings("#sort=4&min=0", p.fake.fragment.items);
     try testing.expectEqualStrings("Zed,Ahri,Kai'Sa,Lux", try p.names());
     // Each column's head names its figures, the second the sorted one
-    try testing.expect(std.mem.find(u8, try p.shown(), "<div class=\"fh\"><span>Win rate</span><span>Games</span></div>") != null);
+    try testing.expect(std.mem.find(u8, try p.shown(), "<div class=\"fh\"><span>Win rate</span><span>Pick</span></div>") != null);
     p.fake.fragment.clearRetainingCapacity();
     p.rt.popstate();
     try testing.expectEqualStrings("Ahri,Zed,Lux", try p.names());

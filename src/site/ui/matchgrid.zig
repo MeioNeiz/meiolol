@@ -6,6 +6,7 @@
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
+const stat = @import("stat.zig");
 const phrase = @import("phrase.zig");
 const Phrase = phrase.Phrase;
 const champ = @import("champ.zig");
@@ -253,7 +254,7 @@ fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief
     const usual_tip = h.fmt("cp-usual-{d}", .{o.champ});
     var items: [4]strip.Item = undefined;
     var n: usize = 0;
-    items[n] = .{ .label = W.wins.with(h, .{ .c = in.name }), .value = phrase.num(h, .rate, won), .range = fmt.range(o.games, o.wins), .ctx = phrase.num(h, .points, won - own), .step = .of(won - own, fmt.win_cuts), .answer = true };
+    items[n] = .{ .label = W.wins.with(h, .{ .c = in.name }), .value = phrase.num(h, .rate, won), .range = fmt.range(o.games, o.wins), .ends = stat.ends(h, .rate, won, fmt.range(o.games, o.wins)), .games = o.games, .ctx = phrase.num(h, .points, won - own), .step = .of(won - own, fmt.win_cuts), .answer = true };
     n += 1;
     items[n] = .{ .label = W.m_usual, .value = phrase.num(h, .points, o.usual), .ctx = cp.usualSide(o.usual, W.below_usual, W.above_usual), .step = .of(o.usual, fmt.win_cuts), .tip = .{ .id = usual_tip, .note = W.usual_note.with(h, .{ .c = in.name }) } };
     n += 1;
@@ -261,7 +262,7 @@ fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief
         items[n] = goldItem(h, in, o.champ, gd);
         n += 1;
     }
-    items[n] = .{ .label = W.games, .value = phrase.num(h, .count, o.games), .ctx = phrase.num(h, .pct, @as(u32, @intFromFloat(@round(100 * @as(f32, @floatFromInt(o.games)) / @as(f32, @floatFromInt(@max(rl.games, 1))))))) };
+    items[n] = .{ .label = W.lock_share, .value = phrase.num(h, .pct, @as(u32, @intFromFloat(@round(100 * @as(f32, @floatFromInt(o.games)) / @as(f32, @floatFromInt(@max(rl.games, 1))))))) };
     n += 1;
     return .{
         .champ = icon(h, in, o.champ),

@@ -6,6 +6,7 @@
 //! (the game page's cells select their span; the selected one shows pressed)
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
+const stat = @import("stat.zig");
 const toggletip = @import("toggletip.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
@@ -25,6 +26,8 @@ pub const Item = struct {
     range: ?f64 = null,
     /// The value's range as its ends (stat.ends), on hover
     ends: ?tree.Text = null,
+    /// Games behind the value: faint after it (stat.count), the full count on hover
+    games: ?u32 = null,
     /// The value's colour; null is plain ink
     step: ?fmt.Step = null,
     /// The figure the page answers with (one per strip)
@@ -48,7 +51,7 @@ pub fn view(h: *H, items: []const Item) N {
         const lab = h.span(.{ .class = "lab" }, .{ if (tip) |*t| t else null, if (tip == null) it.label else null });
         const style = if (it.step) |s| h.vars(.{ .c = s }) else null;
         const wide = if (it.range) |r| fmt.wide(r) else false;
-        const ends: ?[]const u8 = if (it.ends) |e| e.s else null;
+        const ends = stat.withGames(h, it.ends, it.games);
         const val = if (it.on) |on| h.button(.{
             .class = "val",
             .type = "button",
@@ -60,9 +63,11 @@ pub fn view(h: *H, items: []const Item) N {
             .on_click = on,
         }, .{
             it.value,
+            if (it.games) |n| stat.count(h, n) else null,
             if (it.ctx) |c| h.small(.{}, .{c}) else null,
         }) else h.span(.{ .class = "val", .style = style, .data_wide = wide, .title = ends }, .{
             it.value,
+            if (it.games) |n| stat.count(h, n) else null,
             if (it.ctx) |c| h.small(.{}, .{c}) else null,
         });
         const cls = if (it.answer) "answer" else null;
@@ -83,6 +88,8 @@ pub const css =
     \\    font-variant-numeric: tabular-nums; color: var(--c, var(--text)); white-space: nowrap; }
     \\  .c-strip .val > small { font-size: var(--fs-s); font-weight: var(--w-r); color: var(--faint); }
     \\  .c-strip .val > small::before { content: " "; }
+    \\  .c-strip .val > .g { margin-left: 6px; font-size: var(--fs-s); font-weight: var(--w-r); color: var(--faint); }
+    \\  .c-strip .val > .g + small { display: block; line-height: 1.2; }
     \\  .c-strip .val[data-wide] { opacity: 0.55; }
     \\  .c-strip > .answer .val { font-size: var(--fs-xl); }
     \\  .c-strip > a:hover { text-decoration: none; }
@@ -114,6 +121,7 @@ pub fn gallery(g: *Gallery) void {
             .value = plain("51.2%"),
             .range = 0.6,
             .ends = plain("50.6-51.8%"),
+            .games = 44935,
             .ctx = plain("4th of 53"),
             .step = .of(1.2, agg),
             .answer = true,
@@ -124,7 +132,7 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Games"), .value = plain("44,935") },
     }));
     g.add("six, one links", view(h, &.{
-        .{ .label = plain("Won"), .value = plain("49.3%"), .range = fmt.range(64, 32), .ends = plain("41.4-57.2%"), .ctx = plain("44th of 59"), .step = .of(-0.7, agg), .answer = true },
+        .{ .label = plain("Won"), .value = plain("49.3%"), .range = fmt.range(64, 32), .ends = plain("41.4-57.2%"), .games = 64, .ctx = plain("44th of 59"), .step = .of(-0.7, agg), .answer = true },
         .{ .label = plain("Pick"), .value = plain("7.7%") },
         .{ .label = plain("Ban"), .value = plain("16.5%") },
         .{ .label = plain("Games"), .value = plain("31,257") },

@@ -175,7 +175,6 @@ const W = struct {
     pub const players = plain("Players");
     pub const pick = plain("Pick");
     pub const ban = plain("Ban");
-    pub const games = plain("Games");
     pub const off = plain("off-role");
     pub const sort_by = plain("Sort");
     pub const layout = plain("Layout");
@@ -271,10 +270,6 @@ fn banOf(l: *const Line) f64 {
     if (l.row().rates) |r| return r[1];
     return pctOf(l.d.champs[l.row().champ].banned, l.d.games);
 }
-fn gamesF(l: *const Line) f64 {
-    return @floatFromInt(l.row().games);
-}
-
 fn who(h: *H, l: *const Line) N {
     const r = l.row();
     const c = l.d.champs[r.champ];
@@ -287,7 +282,7 @@ fn who(h: *H, l: *const Line) N {
 }
 
 fn winCell(h: *H, l: *const Line) N {
-    return stat.view(h, .{ .value = l.rate(), .scale = .aggregate, .ref = 50, .range = fmt.range(l.row().games, l.row().wins) });
+    return stat.view(h, .{ .value = l.rate(), .scale = .aggregate, .ref = 50, .range = fmt.range(l.row().games, l.row().wins), .games = l.row().games });
 }
 
 /// Whole games, faint below 0 (winning less than the role)
@@ -334,10 +329,6 @@ fn banCell(h: *H, l: *const Line) N {
     return bar.view(h, v, 40, stat.figure(h, .rate, v));
 }
 
-fn gamesCell(h: *H, l: *const Line) N {
-    return h.span(.{ .class = "gm" }, .{phrase.num(h, .count, l.row().games)});
-}
-
 pub const min_games = [_]u32{ 500, 1500, 5000 };
 
 /// The highest floor under 0.4% of the view's games (as many as the old minimum games)
@@ -356,7 +347,6 @@ const columns = [_]table.Column(Line){
     .{ .label = W.players, .cell = playersCell, .sort = middleOf, .num = false, .tip = W.players_note, .row_tip = playersTip, .wordless = true, .pick = true, .key = "pl" },
     .{ .label = W.pick, .cell = pickCell, .sort = pickOf, .pick = true, .key = "pk" },
     .{ .label = W.ban, .cell = banCell, .sort = banOf, .pick = true, .key = "bn" },
-    .{ .label = W.games, .cell = gamesCell, .sort = gamesF, .pick = true, .key = "gm" },
 };
 
 /// A column's index by its key
@@ -367,7 +357,7 @@ fn col(comptime key: []const u8) u8 {
 }
 
 /// The board's sort choices
-const board_sorts = [_]u8{ col("wr"), col("in"), col("pk"), col("bn"), col("gm") };
+const board_sorts = [_]u8{ col("wr"), col("in"), col("pk"), col("bn") };
 
 pub const Table = table.DataTable(Line, .{
     .title = W.title,
@@ -739,14 +729,13 @@ pub const Tiers = struct {
         return switch (t.table.sort) {
             col("pk") => h.text(stat.figure(h, .rate, pickOf(l)).s),
             col("bn") => h.text(stat.figure(h, .rate, banOf(l)).s),
-            col("gm") => gamesCell(h, l),
             else => influenceCell(h, l),
         };
     }
 
     fn secondLabel(t: *const T) tree.Text {
         return switch (t.table.sort) {
-            col("pk"), col("bn"), col("gm") => columns[t.table.sort].label,
+            col("pk"), col("bn") => columns[t.table.sort].label,
             else => W.influence,
         };
     }
@@ -899,7 +888,6 @@ pub const css =
     \\  .c-tiers .who .nm { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-tiers .who .c-role { margin-left: auto; color: var(--muted); }
     \\  .c-tiers .wr .c-stat { font-size: var(--fs-l); }
-    \\  .c-tiers .gm { color: var(--muted); }
     \\  .c-tiers td.num.p3 { color: var(--faint); }
     \\  .c-tiers .num.p3 { width: 44px; }
     \\  .c-tiers .wr { width: 96px; }
@@ -911,7 +899,6 @@ pub const css =
     \\  .c-tiers td:is(.pk, .bn) .c-bar { display: flex; }
     \\  .c-tiers td:is(.pk, .bn) .c-bar > span { flex: 1; width: auto; height: 6px; border-radius: 3px; }
     \\  .c-tiers td:is(.pk, .bn) .c-bar > span > i { border-radius: 3px; }
-    \\  .c-tiers .gm { width: 88px; }
     \\  @container (max-width: 520px) {
     \\    .c-tiers .c-toolbar > .grp > .lab { display: none; }
     \\    .c-tiers .c-filters[data-open] { flex-basis: 100%; }
@@ -925,7 +912,7 @@ pub const css =
     \\    .c-tiers .ch { width: auto; }
     \\    .c-tiers .wr { width: 66px; }
     \\    .c-tiers .in { width: 52px; }
-    \\    .c-tiers .pl, .c-tiers .pk, .c-tiers .bn, .c-tiers .gm { width: 92px; }
+    \\    .c-tiers .pl, .c-tiers .pk, .c-tiers .bn { width: 92px; }
     \\    .c-tiers .c-violin { min-width: 0; }
     \\    .c-tiers .who .c-badge { display: none; }
     \\    .c-tiers td.ch { max-width: 120px; }

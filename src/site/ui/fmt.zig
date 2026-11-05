@@ -191,6 +191,10 @@ pub const Scale = enum {
 /// Rates fade by their range instead (wide)
 pub const thin_games = 100;
 
+/// Under this many games a figure is not drawn (a chart point, a cell): its label and
+/// games count stay, faint. Every page's floor for "too few to show"
+pub const floor_games = 30;
+
 /// A rate's 80% range from its games, half-width in points: how sure it is (J35,
 /// docs/plan/estimates.md Trust rules). Wilson's, so 3 wins in 3 games is not ±0. inf
 /// with no games

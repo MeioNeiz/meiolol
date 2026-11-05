@@ -2,8 +2,10 @@
 //! sits from its scale's middle. Ink by default: an aggregate rate mixes continuously
 //! (fmt.WrColour, as the live champions table), so a sorted column reads as a smooth run;
 //! one game's steps (fmt.Step). Fill for heat cells, stepped. The colour is the value's
-//! alone; a rate's 80% range shows on hover as its ends, never as a ± figure, and the
-//! figure fades when it is wide, never hides (J35). A missing figure says so
+//! alone. How sure it is: its games, small and faint after it in a fixed slot (fmt .kilo,
+//! so a column's figures stay aligned); its 80% range's ends and the full count on hover,
+//! never a ± figure. The figure fades when the range is wide, never hides (J35). A missing
+//! figure says so
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -41,6 +43,8 @@ pub const Stat = struct {
     /// An average's lanes or games (gold): under fmt.thin_games the figure fades. Rates
     /// fade by range
     thin: bool = false,
+    /// Games behind the figure: after it, and in its hover
+    games: ?u32 = null,
     /// A second line under the figure (last patch, typical)
     ctx: ?tree.Text = null,
     fill: bool = false,
@@ -51,6 +55,8 @@ const W = struct {
     pub const rate_ends = phrase.Phrase("{lo:dec}-{hi:rate}");
     pub const rate_ends_whole = phrase.Phrase("{lo:int}-{hi:pct}");
     pub const ends = phrase.Phrase("{lo:points} to {hi:points}");
+    pub const of_games = phrase.Phrase("{n:count} games");
+    pub const ends_games = phrase.Phrase("{e:text}, {n:count} games");
 };
 
 pub fn view(h: *H, s: Stat) N {
@@ -66,11 +72,28 @@ pub fn view(h: *H, s: Stat) N {
         .data_v = if (s.fill) "fill" else null,
         .data_state = if (thin) "thin" else null,
         .style = if (s.scale == .none) null else if (s.fill) h.vars(.{ .f = step.fill() }) else if (s.scale == .aggregate) h.vars(.{ .c = fmt.WrColour{ .pts = d } }) else h.vars(.{ .c = step }),
-        .title = if (s.range) |r| ends(h, s.kind, v, r).s else null,
+        .title = tip(h, s.kind, v, s.range, s.games),
     }, .{
         h.span(.{ .class = "v" }, .{figure(h, s.kind, v)}),
+        if (s.games) |n| count(h, n) else null,
         if (s.ctx) |c| h.span(.{ .class = "ctx" }, .{c}) else null,
     });
+}
+
+/// A figure's games, faint after it: "940", "2.3k", "34k"
+pub fn count(h: *H, n: u32) N {
+    return h.span(.{ .class = "g" }, .{phrase.num(h, .kilo, n)});
+}
+
+/// A figure's hover: its range's ends and its games, either alone; null with neither
+pub fn tip(h: *H, k: Kind, v: f64, half: ?f64, games: ?u32) ?[]const u8 {
+    return withGames(h, if (half) |r| ends(h, k, v, r) else null, games);
+}
+
+/// "50.2-52.6%, 33,108 games"
+pub fn withGames(h: *H, e: ?tree.Text, games: ?u32) ?[]const u8 {
+    const n = games orelse return if (e) |x| x.s else null;
+    return if (e) |x| W.ends_games.with(h, .{ .e = x.s, .n = n }).s else W.of_games.with(h, .{ .n = n }).s;
 }
 
 /// A range's ends, for its hover: "50.2-52.6%", whole once it is ±10 or wider; a change
@@ -108,10 +131,12 @@ pub fn figure(h: *H, k: Kind, v: f64) tree.Text {
 
 pub const css =
     \\@layer components {
-    \\  .c-stat { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.15;
-    \\    font-variant-numeric: tabular-nums; }
-    \\  .c-stat > .v { color: var(--c, var(--text)); font-weight: var(--w-m); white-space: nowrap; }
-    \\  .c-stat > .ctx { font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; }
+    \\  .c-stat { display: inline-grid; grid-template-columns: auto auto; align-items: baseline;
+    \\    justify-items: end; line-height: 1.15; font-variant-numeric: tabular-nums; }
+    \\  .c-stat > .v { grid-column: 1; color: var(--c, var(--text)); font-weight: var(--w-m); white-space: nowrap; }
+    \\  .c-stat > .g { grid-column: 2; justify-self: start; min-width: 2.7em; margin-left: 5px;
+    \\    font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; }
+    \\  .c-stat > .ctx { grid-column: 1 / -1; font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; }
     \\  .c-stat[data-state="thin"] > .v { opacity: 0.5; }
     \\  .c-stat[data-state="missing"] > .v { color: var(--faint); }
     \\  .c-stat[data-v="fill"] { align-items: center; justify-content: center; min-width: 52px;
@@ -124,15 +149,15 @@ pub const css =
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const agg: fmt.Scale = .aggregate;
-    g.add("rate", view(h, .{ .value = 53.6, .scale = agg, .ref = 50, .range = fmt.range(3143, 1685), .ctx = plain("3,143") }));
-    g.add("rate, low", view(h, .{ .value = 47.7, .scale = agg, .ref = 50, .range = fmt.range(747, 356), .ctx = plain("747") }));
+    g.add("rate: its games after it, ends and games on hover", view(h, .{ .value = 53.6, .scale = agg, .ref = 50, .range = fmt.range(3143, 1685), .games = 3143 }));
+    g.add("rate, low", view(h, .{ .value = 47.7, .scale = agg, .ref = 50, .range = fmt.range(747, 356), .games = 747 }));
     g.add("points", view(h, .{ .value = 2.6, .kind = .points, .scale = agg }));
     g.add("points, a range (on hover)", view(h, .{ .value = 2.6, .kind = .points, .scale = agg, .range = 1.4 }));
     g.add("count", view(h, .{ .value = 44935, .kind = .count, .ctx = plain("games") }));
     g.add("time", view(h, .{ .value = 714, .kind = .time }));
     g.add("gold, one game", view(h, .{ .value = 1402, .kind = .gold, .ctx = plain("gold") }));
     g.add("plain", view(h, .{ .value = 11.1 }));
-    g.add("few games: a wide range, faded", view(h, .{ .value = 38.3, .scale = agg, .ref = 50, .range = fmt.range(64, 25), .ctx = plain("64") }));
+    g.add("few games: a wide range, faded", view(h, .{ .value = 38.3, .scale = agg, .ref = 50, .range = fmt.range(64, 25), .games = 64 }));
     g.add("missing", view(h, .{ .value = null, .ctx = plain("few games") }));
     g.add("with context", view(h, .{ .value = 52.2, .scale = agg, .ref = 50, .ctx = plain("16.20 51.1%") }));
     var run = h.list();
@@ -143,7 +168,7 @@ pub fn gallery(g: *Gallery) void {
     var sure = h.list();
     for ([_][2]u32{ .{ 20000, 10600 }, .{ 20000, 10520 }, .{ 20000, 10000 }, .{ 400, 216 }, .{ 120, 65 }, .{ 40, 26 } }) |x| {
         const v = 100 * @as(f64, @floatFromInt(x[1])) / @as(f64, @floatFromInt(x[0]));
-        sure.add(view(h, .{ .value = v, .scale = agg, .ref = 50, .range = fmt.range(x[0], x[1]), .ctx = phrase.num(h, .count, x[0]) }));
+        sure.add(view(h, .{ .value = v, .scale = agg, .ref = 50, .range = fmt.range(x[0], x[1]), .games = x[0] }));
     }
     g.add("the same colour however sure: 53.0, 52.6, 50.0 of 20,000, 54.0 of 400, 54.2 of 120, 65.0 of 40 (faded)", h.div(.{ .class = "g-row" }, .{sure.done()}));
     g.add("fill, heat cells", h.div(.{ .class = "g-row" }, .{fills.done()}));

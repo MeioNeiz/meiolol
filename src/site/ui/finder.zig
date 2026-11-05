@@ -17,6 +17,7 @@ const champ = @import("champ.zig");
 const role = @import("role.zig");
 const card = @import("card.zig");
 const delta = @import("delta.zig");
+const stat = @import("stat.zig");
 const rolepicker = @import("rolepicker.zig");
 const champlist = @import("champlist.zig");
 const champpage = @import("champpage.zig");
@@ -93,7 +94,6 @@ const W = struct {
     pub const none = plain("Not enough games yet.");
     pub const more = Phrase("{n:int} more");
     pub const fewer = plain("Fewer");
-    pub const pm = Phrase("±{ci:dec}");
     pub const yours = plain("Your champion");
     pub const opponent = plain("Opponent");
     pub const go = plain("Matchup ›");
@@ -275,9 +275,8 @@ pub const Finder = struct {
             .role = f.shownRole(m.role),
             .lane = .{ .win = rate(m.games, m.wins), .ci = ci95(m.games, m.wins), .was = rate(m.games, m.wins) - m.d },
             .href = f.href(h, d.patch_query, m.role, m.x, m.y),
-            .value = if (m.clear) delta.view(h, .{ .d = m.d }) else h.span(.{}, .{
+            .value = if (m.clear) delta.view(h, .{ .d = m.d }) else h.span(.{ .title = stat.ends(h, .points, m.d, m.ci).s }, .{
                 delta.view(h, .{ .d = m.d, .faint = true }),
-                h.span(.{ .class = "pm" }, .{W.pm.with(h, .{ .ci = m.ci })}),
             }),
             .note = phrase.num(h, .count, m.games),
         };
@@ -492,7 +491,6 @@ pub const css =
     \\  .c-finder .c-card > .all { all: unset; display: inline-flex; align-items: center; min-height: 32px; margin-top: var(--sp-1); font-size: var(--fs-s); color: var(--accent); cursor: pointer; }
     \\  .c-finder .c-card > .all:hover { text-decoration: underline; }
     \\  .c-finder .c-card > .all:focus-visible { outline: 2px solid var(--focus); }
-    \\  .c-finder .pm { margin-left: 4px; color: var(--faint); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
     \\  .c-fgrid:not(:empty) { display: grid; gap: var(--sp-4); margin-top: var(--sp-4); }
     \\  .c-fgrid > .go, .c-fgrid > .none { margin: 0; }
     \\  .c-fgrid > .none { color: var(--faint); }
@@ -666,7 +664,7 @@ test "Finder: one lane for both picks; the URL keeps them" {
     try testing.expectEqualStrings("role=mid&vs=zed", w.written());
 }
 
-test "Finder: a thin move is faint with its range however big, a clear one bright" {
+test "Finder: a thin move is faint, its range on hover, a clear one bright" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -678,7 +676,7 @@ test "Finder: a thin move is faint with its range however big, a clear one brigh
     try @import("html.zig").write(&t, f.view(&h), &w.writer);
     const s = w.written();
     try testing.expect(std.mem.find(u8, s, "<span class=\"c-delta\" style=\"--c:var(--hi2)\">+3.4</span></span>") != null);
-    try testing.expect(std.mem.find(u8, s, "<span class=\"c-delta\" data-state=\"unclear\" style=\"--c:var(--hi4)\">+12.4</span><span class=\"pm\">±11.6</span>") != null);
+    try testing.expect(std.mem.find(u8, s, "<span title=\"+0.8 to +24.0\"><span class=\"c-delta\" data-state=\"unclear\" style=\"--c:var(--hi4)\">+12.4</span></span>") != null);
 }
 
 test "Finder: All by default, every lane's pairs, each row its role and its lane's page" {

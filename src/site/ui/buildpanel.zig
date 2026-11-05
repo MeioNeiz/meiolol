@@ -19,6 +19,7 @@
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
+const stat = @import("stat.zig");
 const phrase = @import("phrase.zig");
 const art = @import("art.zig");
 const button = @import("button.zig");
@@ -165,17 +166,19 @@ pub fn rate(games: u32, wins: u32) f64 {
     return 100 * @as(f64, @floatFromInt(wins)) / @as(f64, @floatFromInt(@max(games, 1)));
 }
 
-/// "49.7" coloured on the scale around `ref` with its 80% range ("±3.1"), never hidden
+/// "49.7" coloured on the scale around `ref`, its 80% range's ends on hover, never hidden
 /// for few games and faded past fmt.wide_range (J35); whole numbers once the range is
-/// 10 or wider ("48 ±14"). A dot with no games
+/// 10 or wider ("48"). A dot with no games
 pub fn win(h: *H, games: u32, wins: u32, ref: f64) N {
     if (games == 0) return h.span(.{ .class = "w" }, .{"·"});
     const r = rate(games, wins);
     const pm = fmt.range(games, wins);
-    return h.span(.{ .class = "w", .data_wide = pm > fmt.wide_range, .style = h.vars(.{ .c = fmt.WrColour{ .pts = r - ref } }) }, .{
-        rough(h, r, pm),
-        h.small(.{}, .{ "±", rough(h, pm, pm) }),
-    });
+    return h.span(.{
+        .class = "w",
+        .data_wide = pm > fmt.wide_range,
+        .style = h.vars(.{ .c = fmt.WrColour{ .pts = r - ref } }),
+        .title = stat.ends(h, .rate, r, pm).s,
+    }, .{rough(h, r, pm)});
 }
 
 fn rough(h: *H, v: f64, pm: f64) tree.Text {
