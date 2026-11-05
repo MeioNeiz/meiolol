@@ -1,8 +1,10 @@
 //! MatchupGrid: a champion's matchups in one role as a dot plot, against or with each
-//! role (RelationPicker), placed by win rate, vs usual or gold at 14, and the chosen
-//! opponent's brief under it. The champion page's matchups card; the matchup finder
-//! shows it for the first champion picked. The owner's Msg carries `rel`, `ally`,
-//! `rel_role` and `measure` and hands them to `update`
+//! role (RelationPicker), placed by win rate, vs usual or gold at 14; under it the ends as
+//! two rows of tiles, the hardest and the easiest among the sure ones, so the card reads
+//! without a click (the plot hides in a narrow card); the picked opponent's brief last.
+//! Every figure is the champion's ("Ornn wins"). The champion page's matchups card; the
+//! matchup finder shows it for the first champion picked. The owner's Msg carries `rel`,
+//! `ally`, `rel_role` and `measure` and hands them to `update`
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -17,6 +19,7 @@ const segmented = @import("segmented.zig");
 const rolepicker = @import("rolepicker.zig");
 const dotplot = @import("dotplot.zig");
 const matchbrief = @import("matchbrief.zig");
+const champlist = @import("champlist.zig");
 const cp = @import("champpage.zig");
 const H = tree.H;
 const N = tree.N;
@@ -40,7 +43,15 @@ const L = struct {
     /// A dot's readout, its champion the subject: "Caitlyn 380 ahead"
     pub const dot_ahead = Phrase("{g:count} ahead");
     pub const dot_behind = Phrase("{g:count} behind");
+    pub const harder = Phrase("Harder for {c:text}");
+    pub const easier = Phrase("Easier for {c:text}");
+    pub const tile_win = Phrase("{o:text}: {c:text} wins {v:text} in {n:count} games");
+    pub const tile_usual = Phrase("{o:text}: {c:text} {v:text} vs usual in {n:count} games");
+    pub const tile_gold = Phrase("{o:text}: {c:text} {v:text} at 14 in {n:count} games");
 };
+
+/// Tiles per row
+const tiles_max = 6;
 
 /// What the grid shows: the champion in one role
 pub const Input = struct {
@@ -123,7 +134,7 @@ pub const MatchupGrid = struct {
 
     /// `owner`'s Msg wraps Msg's tags with the same payloads
     pub fn view(g: *G, h: *H, owner: anytype, in: *const Input) N {
-        if (in.rels.len == 0) return card.view(h, .{ .id = "matchups", .target = true }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        if (in.rels.len == 0) return card.view(h, .{ .id = "matchups", .target = true, .label = W.matchups }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
         const rel = in.rels[g.rel];
         const lane = !rel.ally and rel.role == in.role;
         var counts = in.counts;
@@ -173,20 +184,11 @@ pub const MatchupGrid = struct {
             .gold => .{ .label = W.matchups, .bin = 100, .reach = 200 },
         };
         const chosen: ?Opp = if (g.dots.chosen()) |i| opps[of[i]] else null;
-        var chips: [6]matchbrief.Common = undefined;
-        var nc: usize = 0;
-        for (dots[0..n], 0..) |x, i| {
-            if (nc == chips.len) break;
-            const o = opps[of[i]];
-            chips[nc] = .{
-                .champ = x.champ,
-                .rate = .counted(o.games, o.wins),
-                .who = in.name,
-                .pressed = g.dots.chosen() == @as(u16, @intCast(i)),
-                .on = h.on(&g.dots, .{ .pick = @intCast(i) }),
-            };
-            nc += 1;
-        }
+        const buf = h.mem.alloc(u16, n) catch {
+            h.oom = true;
+            return .none;
+        };
+        const e = ends(buf, dots[0..n]);
 
         var rels: [role.Role.all.len]rolepicker.Item = undefined;
         for (role.Role.all, &rels) |x, *it| {
@@ -206,10 +208,14 @@ pub const MatchupGrid = struct {
             }),
         };
         const count: u32 = @intCast(opps.len);
-        return card.view(h, .{ .id = "matchups", .target = true }, &.{
+        return card.view(h, .{ .id = "matchups", .target = true, .label = W.matchups }, &.{
             card.head(h, W.matchups, if (rare > 0) W.rare.with(h, .{ .n = count, .r = rare }) else phrase.num(h, .count, count), &.{ if (lane) .none else in.plat, controls[0], controls[1], controls[2] }),
             h.div(.{ .class = "c-mgrid" }, .{
                 if (none) in.few else h.div(.{ .class = "plot" }, .{g.dots.view(h)}),
+                if (none or e.lo.len == 0) .none else h.div(.{ .class = "ends" }, .{
+                    g.tiles(h, in, L.harder.with(h, .{ .c = in.name }), e.lo, opps, of),
+                    g.tiles(h, in, L.easier.with(h, .{ .c = in.name }), e.hi, opps, of),
+                }),
                 if (rel.ally) h.p(.{ .class = "alone" }, .{if (chosen) |o| L.alone.with(h, .{ .c = in.name, .p = in.champs[o.champ].name }) else L.alone_any.with(h, .{ .c = in.name })}) else .none,
                 if (chosen) |o| (if (none) .none else h.div(.{ .class = "brief" }, .{matchbrief.view(h, b: {
                     var x = brief(h, in, rel, counts, o);
@@ -221,9 +227,58 @@ pub const MatchupGrid = struct {
                             x.lanes = h.on(owner, .{ .rel = k });
                         };
                     break :b x;
-                }, chips[0..nc])})) else .none,
+                })})) else .none,
             }),
         });
+    }
+
+    /// A row of ends: `ks` the dots' indexes, `of` theirs into `opps`. A tap picks, as a
+    /// dot does
+    fn tiles(g: *G, h: *H, in: *const Input, head: tree.Text, ks: []const u16, opps: []const Opp, of: []const u16) N {
+        if (ks.len == 0) return .none;
+        const rows = h.mem.alloc(champlist.Row, ks.len) catch {
+            h.oom = true;
+            return .none;
+        };
+        for (ks, rows) |k, *row| {
+            const o = opps[of[k]];
+            const d = g.dots.dots[k];
+            const r: winrate.Rate = .counted(o.games, o.wins);
+            const v = g.tileFigure(h, o);
+            row.* = .{
+                .champ = d.champ,
+                .value = switch (g.measure) {
+                    .win => winrate.view(h, r, .{ .count = false, .said = "" }),
+                    .usual => winrate.delta(h, o.usual, r.half),
+                    .gold => h.span(.{}, .{v}),
+                },
+                // The count alone: a button's shown text stays 2 words (check), its label says games
+                .note = phrase.num(h, .count, o.games),
+                .label = switch (g.measure) {
+                    .win => L.tile_win.with(h, .{ .o = d.champ.name, .c = in.name, .v = v.s, .n = o.games }),
+                    .usual => L.tile_usual.with(h, .{ .o = d.champ.name, .c = in.name, .v = v.s, .n = o.games }),
+                    .gold => L.tile_gold.with(h, .{ .o = d.champ.name, .c = in.name, .v = v.s, .n = o.games }),
+                },
+                .pressed = g.dots.chosen() == k,
+                .on = h.on(&g.dots, .{ .pick = k }),
+            };
+        }
+        return h.div(.{ .class = "end" }, .{ h.h3(.{}, .{head}), champlist.view(h, .{ .tiles = true }, rows) });
+    }
+
+    /// A tile's figure, the champion its subject as everywhere on the page: gold "380
+    /// behind" is the champion's (a dot's readout is its own champion's)
+    fn tileFigure(g: *const G, h: *H, o: Opp) tree.Text {
+        return switch (g.measure) {
+            .win => winrate.shown(h, .counted(o.games, o.wins)),
+            .usual => phrase.num(h, .points, o.usual),
+            .gold => {
+                const gd: i32 = o.gold orelse 0;
+                if (gd == 0) return L.level;
+                if (gd > 0) return L.dot_ahead.with(h, .{ .g = @abs(gd) });
+                return L.dot_behind.with(h, .{ .g = @abs(gd) });
+            },
+        };
     }
 
     /// The figure a dot reads out with its name, in the measure's units
@@ -242,7 +297,33 @@ pub const MatchupGrid = struct {
     }
 };
 
-/// A matchup's win rate range past fmt.wide_range: its dot, chip and brief fade (J35)
+const Ends = struct { lo: []const u16, hi: []const u16 };
+
+/// The tile rows' dots, `buf` one slot per dot: the lowest and the highest by the measure
+/// among the sure ones, hardest and easiest first; fewer than two rows' worth split, the
+/// harder half the larger. None sure: no rows, the plot stays in a narrow card too
+fn ends(buf: []u16, dots: []const dotplot.Dot) Ends {
+    var n: usize = 0;
+    for (dots, 0..) |d, i| if (!d.thin) {
+        buf[n] = @intCast(i);
+        n += 1;
+    };
+    const s = buf[0..n];
+    const Ctx = struct {
+        fn less(ds: []const dotplot.Dot, a: u16, b: u16) bool {
+            if (ds[a].x != ds[b].x) return ds[a].x < ds[b].x;
+            return ds[a].games > ds[b].games;
+        }
+    };
+    // Insertion, as DotPlot's order: std.mem.sort's block sort costs ~9 KB of wasm
+    std.sort.insertion(u16, s, dots, Ctx.less);
+    const lo = @min(tiles_max, (n + 1) / 2);
+    const hi = @min(tiles_max, n - lo);
+    std.mem.reverse(u16, s[n - hi ..]);
+    return .{ .lo = s[0..lo], .hi = s[n - hi ..] };
+}
+
+/// A matchup's win rate range past fmt.wide_range: its dot, tile and brief fade (J35)
 fn wide(o: Opp) bool {
     return fmt.wide(fmt.range(o.games, o.wins));
 }
@@ -306,8 +387,12 @@ pub const scope = .{".c-mgrid"};
 
 pub const css =
     \\@layer components {
-    \\  .c-mgrid { display: contents; }
+    \\  .c-mgrid { container-type: inline-size; }
     \\  .c-mgrid .plot { padding: var(--sp-3) 0; }
+    \\  .c-mgrid .ends { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
+    \\    gap: var(--sp-3) var(--sp-5); margin-bottom: var(--sp-4); }
+    \\  .c-mgrid .end > h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-s); font-weight: var(--w-b); color: var(--t2); }
+    \\  @container (max-width: 559px) { .c-mgrid:has(.ends) .plot { display: none; } }
     \\  .c-mgrid .brief { container-type: inline-size; }
     \\  .c-mgrid .alone { margin: 0 0 var(--sp-3); font-size: var(--fs-s); color: var(--muted); }
     \\}
@@ -352,6 +437,10 @@ const Demo = struct {
     pub fn update(d: *Demo, m: GridMsg, _: *tree.Event) void {
         d.grid.update(&d.in, m);
     }
+
+    pub fn view(d: *Demo, h: *H) N {
+        return d.grid.view(h, d, &d.in);
+    }
 };
 
 pub fn gallery(g: *Gallery) void {
@@ -367,7 +456,7 @@ pub fn gallery(g: *Gallery) void {
     };
     const states = [_]struct { []const u8, u8, Measure, ?u16 }{
         .{ "lane opponents by win rate", 0, .win, null },
-        .{ "one chosen: its brief under the plot", 0, .win, 3 },
+        .{ "one chosen: its brief under the tiles", 0, .win, 3 },
         .{ "by gold at 14", 0, .gold, null },
         .{ "with the jungler", 1, .win, null },
     };
@@ -399,4 +488,61 @@ test "gold at 14 names the side ahead, never a signed lead" {
     try testing.expectEqualStrings("384", it.value.s);
     try testing.expectEqualStrings("Fiora ahead", it.ctx.?.s);
     try testing.expectEqualStrings("Darius ahead", goldItem(&h, &in, o.champ, 90).ctx.?.s);
+}
+
+fn testDot(x: f32, thin: bool) dotplot.Dot {
+    return .{ .champ = .{ .name = "", .src = "" }, .x = x, .games = 100, .fig = phrase.plain(""), .thin = thin };
+}
+
+test "the tile rows: the sure ends, hardest and easiest first; few split, the harder half larger; none sure, none" {
+    const testing = std.testing;
+    var buf: [16]u16 = undefined;
+    var ds: [14]dotplot.Dot = undefined;
+    for (&ds, 0..) |*d, i| d.* = testDot(@as(f32, @floatFromInt(i)) - 7, false);
+    // The hardest and the easiest are wide: the next ones stand in
+    ds[0].thin = true;
+    ds[13].thin = true;
+    const e = ends(&buf, &ds);
+    try testing.expectEqualSlices(u16, &.{ 1, 2, 3, 4, 5, 6 }, e.lo);
+    try testing.expectEqualSlices(u16, &.{ 12, 11, 10, 9, 8, 7 }, e.hi);
+    // 5 sure: 3 harder, 2 easier, by x whatever the order given
+    const few = [_]dotplot.Dot{ testDot(2, false), testDot(-1, false), testDot(9, true), testDot(0.5, false), testDot(-3, false), testDot(1, false) };
+    const f = ends(&buf, &few);
+    try testing.expectEqualSlices(u16, &.{ 4, 1, 3 }, f.lo);
+    try testing.expectEqualSlices(u16, &.{ 0, 5 }, f.hi);
+    // None sure: no rows
+    const thin = [_]dotplot.Dot{ testDot(1, true), testDot(-1, true) };
+    try testing.expectEqual(@as(usize, 0), ends(&buf, &thin).lo.len);
+    try testing.expectEqual(@as(usize, 0), ends(&buf, &.{}).lo.len);
+}
+
+test "on the fake DOM: tiles name the champion's figure, a tap picks one and opens its brief" {
+    const testing = std.testing;
+    const island = @import("island.zig");
+    const Fake = @import("fakedom.zig").Fake;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fake: Fake = .{ .a = a };
+    var rt: island.Runtime(Fake) = .init(a, &fake);
+    var server: Demo = .{ .in = .{ .name = "Darius", .slug = "darius", .ddragon = champ.demo_version, .champs = &demo_champs, .role = .top, .counts = .{ .games = 20412, .wins = 10063 }, .rels = &demo_rels } };
+    var state = server;
+    const t = try a.create(tree.Tree);
+    t.* = .{};
+    var h: H = .init(a, t);
+    t.root = server.view(&h);
+    fake.server = t;
+    const i = try rt.add(Demo, &state, &server, "#matchups");
+    const cur = i.current();
+    // No brief until a pick
+    try testing.expect(cur.find(cur.root, "class", "c-mpick") == null);
+    // Dr. Mundo is the hardest: the first tile of the first row
+    const mundo = cur.find(cur.root, "aria-label", "Dr. Mundo: Darius wins 43.2% in 859 games").?;
+    try testing.expect(cur.find(cur.root, "aria-label", "K'Sante: Darius wins 60.3% in 353 games") != null);
+    _ = rt.event(0, .{ .kind = .click, .target = cur.node(mundo).dom });
+    try testing.expectEqual(@as(?u16, 4), state.grid.dots.sel);
+    const now = i.current();
+    try testing.expect(now.find(now.root, "class", "c-mpick") != null);
+    try testing.expectEqualStrings("true", now.attr(now.find(now.root, "aria-label", "Dr. Mundo: Darius wins 43.2% in 859 games").?, "aria-pressed").?);
+    try testing.expectEqual(@as(u32, 0), fake.warnings);
 }

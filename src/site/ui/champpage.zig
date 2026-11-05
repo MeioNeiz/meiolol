@@ -1283,6 +1283,8 @@ pub const Build = struct {
             .class = "part",
             .id = "build",
             .tabindex = @as(i8, -1),
+            .role = "region",
+            .aria_label = W.build,
             .data_island = "champbuild",
             .data_src = if (p.src.len > 0) p.src else null,
             .data_stamp = if (p.bin == null) p.stamp else null,
@@ -1546,7 +1548,7 @@ pub const More = struct {
 
     fn matchups(p: *P, h: *H) N {
         if (p.shownAnswer()) |x| if (x.roles.len == 0 or x.roles[0].games == 0) {
-            return card.view(h, .{ .id = "matchups", .target = true }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{if (x.roles.len == 0) W.no_answer else W.no_lock_games}) });
+            return card.view(h, .{ .id = "matchups", .target = true, .label = W.matchups }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{if (x.roles.len == 0) W.no_answer else W.no_lock_games}) });
         };
         var in = p.input();
         if (p.ranked()) |x| in.ranked = switch (x) {
@@ -1660,7 +1662,7 @@ pub const Trends = struct {
             .data_wasm = p.wasm,
             .data_busy = p.files.busy(),
         }, .{
-            h.div(.{ .class = "row3", .id = "trends", .tabindex = @as(i8, -1) }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
+            h.div(.{ .class = "row3", .id = "trends", .tabindex = @as(i8, -1), .role = "region", .aria_label = W.trends }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
             h.div(.{ .class = "row3" }, .{ p.rankCard(h), p.timingCard(h), p.endsCard(h) }),
         });

@@ -4,7 +4,8 @@
 //! option C). The centre line carries no label; "harder" and "easier" sit at the ends.
 //! Pure CSS layout: bins are grid columns, icons wrap upward, their size follows the
 //! container, so nothing is measured. A tap or ← → chooses a dot; the page shows its
-//! figures (`chosen`). A mouse hover shows name, rate and games (Jacob v9: no more)
+//! figures (`chosen`), none until then. A mouse hover shows name, rate and games (Jacob
+//! v9: no more). A face's hit area is 24 px at least, --hit on touch
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -65,16 +66,23 @@ pub fn bins(dots: []const Dot, m: Measure) u16 {
 pub const DotPlot = struct {
     dots: []const Dot,
     m: Measure,
-    /// The chosen dot; null: the most played
+    /// The chosen dot
     sel: ?u16 = null,
 
     const D = @This();
 
     pub const Msg = union(enum) { pick: u16, open: u16, key };
 
-    /// The dot the page shows figures for
+    /// The dot the page shows figures for: none until one is picked (persona 2: the most
+    /// played by default answered a question nobody asked)
     pub fn chosen(d: *const D) ?u16 {
         if (d.sel) |s| if (s < d.dots.len) return s;
+        return null;
+    }
+
+    /// Where Tab lands and the arrows start: the chosen dot, else the most played
+    fn start(d: *const D) ?u16 {
+        if (d.chosen()) |s| return s;
         var best: ?u16 = null;
         for (d.dots, 0..) |x, i| {
             if (best == null or x.games > d.dots[best.?].games) best = @intCast(i);
@@ -118,7 +126,7 @@ pub const DotPlot = struct {
                 var buf: [256]u16 = undefined;
                 const o = buf[0..@min(d.dots.len, buf.len)];
                 d.order(o, bins(d.dots, d.m));
-                const at = std.mem.findScalar(u16, o, d.chosen() orelse return) orelse return;
+                const at = std.mem.findScalar(u16, o, d.start() orelse return) orelse return;
                 const next = std.math.clamp(@as(i32, @intCast(at)) + step, 0, @as(i32, @intCast(o.len)) - 1);
                 d.sel = o[@intCast(next)];
                 ev.handled = true;
@@ -137,6 +145,7 @@ pub const DotPlot = struct {
         };
         d.order(o, nb);
         const ch = d.chosen();
+        const st = d.start();
         var cols = h.list();
         var i: usize = 0;
         while (i < o.len) {
@@ -152,9 +161,9 @@ pub const DotPlot = struct {
                     h.button(.{
                         .class = "m",
                         .type = "button",
-                        .tabindex = if (on) @as(i8, 0) else -1,
+                        .tabindex = if (st == k) @as(i8, 0) else -1,
                         .data_thin = x.thin,
-                        .data_ref = if (on) "dot" else null,
+                        .data_ref = if (st == k) "dot" else null,
                         .data_opens = opens,
                         .aria_pressed = on,
                         .aria_label = if (opens) W.open_dot.with(h, .{ .n = x.champ.name, .v = x.fig.s }) else W.dot.with(h, .{ .n = x.champ.name, .v = x.fig.s }),
@@ -203,7 +212,7 @@ pub const css =
     \\@layer components {
     \\  .c-dots { container-type: inline-size; margin: 0; font-size: var(--fs-xs); color: var(--faint);
     \\    font-variant-numeric: tabular-nums;
-    \\    --sz: clamp(12px, 100cqw / var(--n) - 3px, 28px); }
+    \\    --sz: clamp(16px, 100cqw / var(--n) - 3px, 32px); }
     \\  .c-dots > .cols { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr));
     \\    align-items: end; min-height: 64px; padding: 12px 0 2px; border-bottom: 1px solid var(--axis); }
     \\  .c-dots .ctr { position: absolute; top: 0; bottom: -6px; left: calc((var(--nb) + 0.5) / var(--n) * 100%);
@@ -213,6 +222,8 @@ pub const css =
     \\  .c-dots .d { position: relative; flex: none; }
     \\  .c-dots .m { all: unset; position: relative; z-index: 1; display: block; width: var(--sz); height: var(--sz);
     \\    border-radius: calc(var(--sz) / 6); cursor: pointer; transition: transform var(--dur) var(--ease); }
+    \\  .c-dots .m::before { content: ""; position: absolute; inset: calc(min(0px, var(--sz) - 24px) / 2); }
+    \\  @media (pointer: coarse) { .c-dots .m::before { inset: calc(min(0px, var(--sz) - var(--hit)) / 2); } }
     \\  .c-dots .m img { display: block; width: 100%; height: 100%; border-radius: inherit; }
     \\  .c-dots .m[data-thin] { opacity: 0.4; }
     \\  .c-dots .m:hover { z-index: 2; opacity: 1; transform: scale(1.3); box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--text); }
@@ -285,7 +296,7 @@ const demo_label = plain("Matchups");
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const states = [_]struct { []const u8, DotPlot }{
-        .{ "win rate against, the most met chosen", .{ .dots = &demo_dots, .m = .{ .label = demo_label } } },
+        .{ "win rate against, none chosen", .{ .dots = &demo_dots, .m = .{ .label = demo_label } } },
         .{ "a hard one chosen", .{ .dots = &demo_dots, .m = .{ .label = demo_label }, .sel = 0 } },
         .{ "few dots", .{ .dots = demo_dots[20..26], .m = .{ .label = demo_label } } },
     };
@@ -307,9 +318,10 @@ test "bins reach the farthest well-played dot, at least 4 and the scale's cut" {
     try testing.expectEqual(@as(u16, 6), bins(demo_dots[20..26], .{ .label = demo_label, .reach = 6 }));
 }
 
-test "the most played is chosen first; arrows walk bins left to right" {
+test "none is chosen first; arrows walk bins left to right from the most played" {
     var d: DotPlot = .{ .dots = &demo_dots, .m = .{ .label = demo_label } };
-    try testing.expectEqual(@as(?u16, 24), d.chosen());
+    try testing.expectEqual(@as(?u16, null), d.chosen());
+    try testing.expectEqual(@as(?u16, 24), d.start());
     var ev: tree.Event = .{ .kind = .keydown, .text = "ArrowRight" };
     d.update(.key, &ev);
     // Garen (+0.6) sits in bin +1 with Tryndamere, Irelia, Mordekaiser...: the next most played is Mordekaiser

@@ -180,8 +180,8 @@ rest of a list (expand). Scope and reason chips are labels, not controls: flat, 
 (Badge's family)
 States: toggle; pressed; disabled; removable; expand; link; scope; scope, hover tip at its
 end; reason; reason, hover tip; a filter row
-Used by: scopechip, card, matchbrief, champselect, practice, table, buildpanel, lockbar,
-inspector, gamepage, candlist, patchpage, idlookup, admincharts, champpage, tiers
+Used by: scopechip, card, champselect, practice, table, buildpanel, lockbar, inspector,
+gamepage, candlist, patchpage, idlookup, admincharts, champpage, tiers
 
 ### ScopeChip
 `scopechip.zig` `.c-scope` site
@@ -549,11 +549,9 @@ Used by: champpage, matchpage
 ### MatchupBrief
 `matchbrief.zig` `.c-mpick` site
 MatchupBrief: under the champion page's matchup chart, the chosen opponent (or ally) in
-brief: portrait, name, relation, the figures, a button into the matchup page; beside it
-the most met as chips to jump between (Jacob v9: one tap shows the brief, an obvious way
-into the matchup). The page's island owns the choice: chips carry its handlers, as
-DotPlot's dots do
-States: an opponent chosen, the most met beside; few games, no chips
+brief: portrait, name, relation, the figures, a button into the matchup page (Jacob v9:
+one tap shows the brief, an obvious way into the matchup)
+States: an opponent chosen; few games
 Used by: matchgrid, champpage
 
 ### MatchupStrip
@@ -575,11 +573,12 @@ at both ends, the names over the lane's bar (the first's win rate a tick against
 middle's, the bar solid to its 95% range's low end and fading to the high one, a ring
 where a patch move started) or a Bar of a figure that isn't a win rate (`fill`), the
 figure and its note last. `tiles`: one tile per champion filling the card's width, the
-portrait large, the figure under the name, the note small under it
+portrait large, the figure under the name, the note small under it; a link, or a pick (the
+name a button)
 States: mains also play: links, a badge; tiles: the share, how much more often, a harder
 mark; two columns; matchups: duels, the lane's bar and range; a role; where a move
 started; duels with a Bar: a gold lead, the list's biggest full; with roles, no links
-Used by: finder, champpage, matchpage
+Used by: matchgrid, finder, champpage, matchpage
 
 ### DraftBoard
 `draftboard.zig` `.c-draft` site
@@ -794,9 +793,10 @@ usual and gold), each dot a champion's icon in its bin, a bin's icons stacked so
 only a count, the most played nearest the axis (champion.md, Jacob v7: matchups option C).
 The centre line carries no label; "harder" and "easier" sit at the ends. Pure CSS layout:
 bins are grid columns, icons wrap upward, their size follows the container, so nothing is
-measured. A tap or ← → chooses a dot; the page shows its figures (`chosen`). A mouse
-hover shows name, rate and games (Jacob v9: no more)
-States: win rate against, the most met chosen; a hard one chosen; few dots
+measured. A tap or ← → chooses a dot; the page shows its figures (`chosen`), none
+until then. A mouse hover shows name, rate and games (Jacob v9: no more). A face's hit
+area is 24 px at least, --hit on touch
+States: win rate against, none chosen; a hard one chosen; few dots
 Used by: matchgrid, champpage
 
 ### TrendChart
@@ -1197,11 +1197,13 @@ Used by: poolgrid
 ### MatchupGrid
 `matchgrid.zig` `.c-mgrid` site
 MatchupGrid: a champion's matchups in one role as a dot plot, against or with each role
-(RelationPicker), placed by win rate, vs usual or gold at 14, and the chosen opponent's
-brief under it. The champion page's matchups card; the matchup finder shows it for the
-first champion picked. The owner's Msg carries `rel`, `ally`, `rel_role` and `measure` and
-hands them to `update`
-States: lane opponents by win rate; one chosen: its brief under the plot; by gold at 14;
+(RelationPicker), placed by win rate, vs usual or gold at 14; under it the ends as two
+rows of tiles, the hardest and the easiest among the sure ones, so the card reads without
+a click (the plot hides in a narrow card); the picked opponent's brief last. Every figure
+is the champion's ("Ornn wins"). The champion page's matchups card; the matchup finder
+shows it for the first champion picked. The owner's Msg carries `rel`, `ally`, `rel_role`
+and `measure` and hands them to `update`
+States: lane opponents by win rate; one chosen: its brief under the tiles; by gold at 14;
 with the jungler
 Used by: finder, champpage
 

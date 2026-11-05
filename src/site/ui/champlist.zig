@@ -6,7 +6,7 @@
 //! the high one, a ring where a patch move started) or a Bar of a figure that isn't a
 //! win rate (`fill`), the figure and its note last.
 //! `tiles`: one tile per champion filling the card's width, the portrait large, the
-//! figure under the name, the note small under it
+//! figure under the name, the note small under it; a link, or a pick (the name a button)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
@@ -44,6 +44,9 @@ pub const Row = struct {
     fill: ?f32 = null,
     /// Tiles: the whole tile for screen readers, what its figures and tag mean
     label: ?tree.Text = null,
+    /// Tiles: a tap picks it (MatchupGrid: the brief), in place of a link
+    on: ?tree.Handler = null,
+    pressed: bool = false,
 };
 
 pub const Opts = struct {
@@ -82,12 +85,19 @@ fn tiles(h: *H, o: Opts, rows: []const Row) N {
                 champ.view(h, r.champ, .{ .named = false, .px = .@"56" }),
                 if (r.tag) |t| h.span(.{ .class = "tag" }, .{t}) else null,
             }),
-            h.span(.{ .class = "nm" }, .{r.champ.name}),
+            // A pick: the name is the button, stretched over the tile, so its shown label
+            // stays the name (check) and a tap anywhere picks
+            if (r.on) |on| h.button(.{ .class = "nm", .type = "button", .aria_pressed = r.pressed, .aria_label = if (r.label) |x| x.s else null, .on_click = on }, .{r.champ.name}) else h.span(.{ .class = "nm" }, .{r.champ.name}),
             if (r.value) |v| h.span(.{ .class = "v" }, .{v}) else null,
             if (r.note) |n| h.span(.{ .class = "g" }, .{n}) else null,
         });
         const lab: ?[]const u8 = if (r.label) |x| x.s else null;
-        l.add(h.li(.{ .key = i }, .{if (r.href) |href| h.a(.{ .href = href, .aria_label = lab }, .{kids}) else h.div(.{ .role = if (lab != null) "group" else null, .aria_label = lab }, .{kids})}));
+        l.add(h.li(.{ .key = i }, .{if (r.href) |href|
+            h.a(.{ .href = href, .aria_label = lab }, .{kids})
+        else if (r.on != null)
+            h.div(.{}, .{kids})
+        else
+            h.div(.{ .role = if (lab != null) "group" else null, .aria_label = lab }, .{kids})}));
     }
     // One row where all fit, else two (3x2 for 6)
     const n = rows.len;
@@ -153,7 +163,13 @@ pub const css =
     \\  @container (min-width: 560px) { .c-clist[data-v="tiles"] > ul { grid-template-columns: repeat(var(--n), minmax(0, 1fr)); } }
     \\  .c-clist[data-v="tiles"] li > * { display: grid; justify-items: center; align-content: center; gap: 2px; height: 100%;
     \\    padding: var(--sp-3) var(--sp-2); border-radius: var(--r-m); background: var(--panel-2); }
-    \\  .c-clist[data-v="tiles"] li > a:hover { background: var(--panel-3); }
+    \\  .c-clist[data-v="tiles"] li > :is(a, :has(> button)):hover { background: var(--panel-3); }
+    \\  .c-clist[data-v="tiles"] li > :has(> button) { position: relative; }
+    \\  .c-clist[data-v="tiles"] button.nm { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer;
+    \\    outline: none; }
+    \\  .c-clist[data-v="tiles"] button.nm::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+    \\  .c-clist[data-v="tiles"] li > :has(> [aria-pressed="true"]) { box-shadow: inset 0 0 0 2px var(--accent); }
+    \\  .c-clist[data-v="tiles"] li > :has(> button:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
     \\  .c-clist[data-v="tiles"] .pic { position: relative; margin-bottom: 10px; }
     \\  .c-clist[data-v="tiles"] .pic > .c-champ { --sz: 64px; }
     \\  .c-clist[data-v="tiles"] .tag { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); line-height: 1; }
