@@ -2,7 +2,8 @@
 //! figure. Bars in one column share a scale: `of` is the column's largest. `wide`: the
 //! bar alone across its container, where the row puts the figure elsewhere. `track`: a
 //! position along a full-width line (a place among champions, a rate on 0-100), a mark
-//! at it and an optional reference tick, no good or bad colour
+//! at it and an optional reference tick, no good or bad colour. A track with `side`: a
+//! lead for one side from the reference (lane gold from even), filled in that side's colour
 const tree = @import("tree.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
@@ -40,15 +41,29 @@ pub const Track = struct {
     /// What the position means ("3rd highest of 59"), for screen readers: the line is
     /// then an image with this label
     label: ?tree.Text = null,
+    /// Fill from `ref` to `at` in the leader's colour, ours right of the reference;
+    /// .even: grey, a lead inside the noise. No mark unless one is given
+    side: ?Side = null,
 };
+
+pub const Side = enum { us, them, even };
 
 /// Fills its container's width
 pub fn track(h: *H, t: Track) N {
     const at = 100 * @max(0, @min(1, t.at));
-    const style = if (t.ref) |r| h.vars(.{ .at = at, .ref = 100 * @max(0, @min(1, r)) }) else h.vars(.{ .at = at });
+    const ref = if (t.ref) |r| 100 * @max(0, @min(1, r)) else null;
+    const style = if (ref) |r|
+        if (t.side != null) h.vars(.{ .at = at, .ref = r, .lo = @min(at, r), .hi = @max(at, r) }) else h.vars(.{ .at = at, .ref = r })
+    else
+        h.vars(.{ .at = at });
     const label: ?[]const u8 = if (t.label) |x| x.s else null;
-    return h.span(.{ .class = "c-track", .style = style }, .{
-        h.span(.{ .role = if (label != null) "img" else null, .aria_label = label, .aria_hidden = label == null }, .{ if (t.ref != null) h.el(.i, .{}, .{}) else null, h.b(.{}, .{t.mark}) }),
+    const dot = t.side == null or t.mark != .none;
+    return h.span(.{ .class = "c-track", .style = style, .data_side = t.side }, .{
+        h.span(.{ .role = if (label != null) "img" else null, .aria_label = label, .aria_hidden = label == null }, .{
+            if (t.side != null and ref != null) h.el(.s, .{}, .{}) else null,
+            if (ref != null) h.el(.i, .{}, .{}) else null,
+            if (dot) h.b(.{}, .{t.mark}) else null,
+        }),
         if (t.text) |x| h.small(.{}, .{x}) else null,
     });
 }
@@ -77,6 +92,10 @@ pub const css =
     \\  .c-track > span > b { position: absolute; left: calc(var(--at) * 1%); top: 50%; transform: translate(-50%, -50%);
     \\    display: flex; }
     \\  .c-track > span > b:empty { width: 10px; height: 10px; border-radius: 50%; background: var(--text); }
+    \\  .c-track > span > s { position: absolute; left: calc(var(--lo) * 1%); top: 7px; height: 6px;
+    \\    width: calc((var(--hi) - var(--lo)) * 1%); border-radius: 1px; background: var(--faint); }
+    \\  .c-track[data-side="us"] > span > s { background: var(--us-hot); }
+    \\  .c-track[data-side="them"] > span > s { background: var(--them-hot); }
     \\  .c-track > small { flex: none; min-width: 3.5em; font-size: var(--fs-s); color: var(--muted);
     \\    font-variant-numeric: tabular-nums; }
     \\  .c-track[data-scale] { justify-content: space-between; padding: 0 10px; }
@@ -97,4 +116,7 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("track: last", track(h, .{ .at = 0, .ref = 0.5, .mark = ornn, .text = plain("60th") }));
     g.addFill("scale: the ends named once", scale(h, plain("lowest"), plain("highest")));
     g.addFill("track: a rate, a dot, the average ticked", track(h, .{ .at = 0.733, .ref = 0.684, .text = plain("73.3%") }));
+    g.addFill("sides: our lead from even", track(h, .{ .at = 0.83, .ref = 0.5, .side = .us, .text = plain("+664") }));
+    g.addFill("sides: their lead from even", track(h, .{ .at = 0.36, .ref = 0.5, .side = .them, .text = plain("−286") }));
+    g.addFill("sides: a lead inside the noise, grey", track(h, .{ .at = 0.54, .ref = 0.5, .side = .even, .text = plain("+80") }));
 }

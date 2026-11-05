@@ -1,10 +1,10 @@
 //! The loading screen cards (docs/plan/app.md APP10): ten cards, our row over theirs, from
 //! the last champ select's seats (board.zig: roles given or guessed). Champion facts only,
 //! as short pills coloured by meaning (research/questions/desktop-app-layout.md C1-C3),
-//! some playful (Jacob's note 113): how the champion does in its role now, its lane
-//! against the same role across with level 6 and first item timings, lone damage type,
-//! ban and pick rates; at most two, none that half the board shares. Beside them the
-//! lane's facts (the lane strip) and wins by game length (the card's spark). Player
+//! some playful (Jacob's note 113): how the champion does in its role now, lone damage
+//! type, ban and pick rates; at most two, none that half the board shares. Beside them
+//! the lane against the same role across (the lane strip: gold, level 6 and first item
+//! timings) and wins by game length (the card's spark). Player
 //! scouting is APP7's, private, where names are visible. Pure.
 
 const std = @import("std");
@@ -161,7 +161,6 @@ fn card(arena: std.mem.Allocator, in: Input, s: Seat, team: []const Seat, across
     } else null;
     if (opp) |o| if (in.curves) |curves| {
         c.lane = laneFacts(curves, role, in.tier, s.champion, o.champion);
-        if (c.lane) |f| try lanePills(arena, f, role, &pills);
     };
     if (in.facts) |f| try factPills(arena, f, s, team, &pills);
     if (share >= popular_share) try pills.append(arena, .{ .text = "crowd favourite", .tone = .neutral });
@@ -245,24 +244,6 @@ pub fn timingWord(gap: ?i32) ?enum { sooner, later } {
     return if (g < 0) .sooner else .later;
 }
 
-/// "lane bully" or "tough lane", "6 first", "slow items": no names, the card across
-/// shows who. A jungler's start is the lane strip's alone
-fn lanePills(arena: std.mem.Allocator, f: LaneFacts, role: Role, pills: *std.ArrayList(Pill)) !void {
-    if (role != .jungle) if (f.edge()) |e| switch (e) {
-        .ahead => try pills.append(arena, .{ .text = "lane bully", .tone = .good }),
-        .behind => try pills.append(arena, .{ .text = "tough lane", .tone = .bad }),
-        .even => {},
-    };
-    if (timingWord(f.level6)) |w| try pills.append(arena, if (w == .sooner)
-        .{ .text = "6 first", .tone = .good }
-    else
-        .{ .text = "6 later", .tone = .caution });
-    if (timingWord(f.first_item)) |w| try pills.append(arena, if (w == .sooner)
-        .{ .text = "items first", .tone = .good }
-    else
-        .{ .text = "slow items", .tone = .caution });
-}
-
 /// The seats of the last champ select as the loading screen keeps them
 pub fn seatsOf(arena: std.mem.Allocator, b: *const board.Board) ![2][]const Seat {
     var out: [2][]const Seat = undefined;
@@ -280,7 +261,7 @@ pub fn seatsOf(arena: std.mem.Allocator, b: *const board.Board) ![2][]const Seat
 const testing = std.testing;
 const cardscenes = @import("cardscenes.zig");
 
-test "loading screen: cards by role, lane pills against the same role across" {
+test "loading screen: cards by role, lane facts against the same role across" {
     var f = try cardscenes.fixture();
     defer f.deinit();
     var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
@@ -306,17 +287,12 @@ test "loading screen: cards by role, lane pills against the same role across" {
     try testing.expectEqual(id(st, "Darius"), l.teams[0][0].champion);
     try testing.expect(l.teams[0][1].me);
     // Planted: Malphite beats Darius in lane, Syndra beats Ahri
-    const has = struct {
-        fn in(c: Card, text: []const u8, tone: Tone) bool {
-            for (c.pills) |p| if (std.mem.eql(u8, p.text, text) and p.tone == tone) return true;
-            return false;
-        }
-    }.in;
-    try testing.expect(has(l.teams[0][0], "tough lane", .bad));
-    try testing.expect(has(l.teams[1][0], "lane bully", .good));
-    try testing.expect(has(l.teams[1][1], "lane bully", .good));
+    try testing.expectEqual(.behind, l.teams[0][0].lane.?.edge().?);
+    try testing.expectEqual(.ahead, l.teams[1][0].lane.?.edge().?);
+    try testing.expectEqual(.ahead, l.teams[1][1].lane.?.edge().?);
     // No role: no facts
     try testing.expectEqual(0, l.teams[1][2].pills.len);
+    try testing.expectEqual(null, l.teams[1][2].lane);
 }
 
 test "loading screen: a pill on more than half the board goes, then two a card" {

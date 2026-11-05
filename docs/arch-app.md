@@ -212,7 +212,9 @@ file and packed rows: docs/architecture.md.
   last champ select's seats and draft (seats_arena) and in GameStart builds ten cards
   from them, and the comp of the same ten (comp.build): each team's pills, damage mix
   and early or late lean counts, neutral (comp.pills); nothing shows when it saw no
-  champ select
+  champ select. The shell (screens.zig loadScreen) pairs the cards into a lane per role
+  with the lane strip between (Card.lane: gold, level 6, first item) and gives each card
+  a spark of wins by length about its own average, so no locked teammate gets a rating
 - Post game (APP11; postgame.zig, desktop/post.zig, rows.zig as in game): in
   PreEndOfGame and EndOfGame the poller reads the end of game block (lcu/eog.zig) and
   builds the view with the game's gold samples and the positions the last in-game tick

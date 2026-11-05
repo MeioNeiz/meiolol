@@ -23,7 +23,7 @@ const channel = @import("channel.zig");
 const app = ui.app;
 const Allocator = std.mem.Allocator;
 
-pub const css = ui.css.head ++ ui.css.join(.{ ui.site, ui.appbar, ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.resultstrip, ui.lobby, ui.apphome, ui.today, ui.art, ui.skillgrid, ui.gamebuild, ui.loadscreen, ui.chart, ui.lane, ui.trend, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.toggletip, ui.reasons, ui.candlist, ui.picks, ui.app });
+pub const css = ui.css.head ++ ui.css.join(.{ ui.site, ui.appbar, ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.resultstrip, ui.lobby, ui.apphome, ui.today, ui.art, ui.skillgrid, ui.gamebuild, ui.bar, ui.spark, ui.loadscreen, ui.chart, ui.lane, ui.trend, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.toggletip, ui.reasons, ui.candlist, ui.picks, ui.app });
 
 const Page = struct {
     arena: std.heap.ArenaAllocator,
@@ -518,6 +518,8 @@ pub fn compUnder(a: Allocator, c: Ctx, status: state.Status) !?ui.compview.Comp 
 /// locked, so no "win less" and no win rates: they would rate teammates' picks
 fn lockedComp(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
     var v = try compView(a, c, x);
+    // The loading screen's lane strips show the lanes
+    v.lanes = &.{};
     for ([_]*ui.compview.Team{ &v.us, &v.them }) |t| if (t.damage) |*d| {
         d.wins_less = false;
         d.rate = null;
@@ -885,34 +887,160 @@ pub fn loadUnder(a: Allocator, c: Ctx, status: state.Status) !?ui.loadscreen.Scr
 }
 
 fn loadScreen(a: Allocator, c: Ctx, l: *const loading.Loading) !ui.loadscreen.Screen {
-    var teams: [2][]ui.loadscreen.Card = undefined;
-    for (&teams, l.teams) |*out, cards| {
-        out.* = try a.alloc(ui.loadscreen.Card, cards.len);
-        for (out.*, cards) |*x, card| {
-            const pills = try a.alloc(ui.loadscreen.Pill, card.pills.len);
-            for (pills, card.pills) |*p, q| p.* = .{ .text = q.text, .tone = switch (q.tone) {
-                .neutral => .none,
-                .good => .good,
-                .bad => .bad,
-                .caution => .caution,
-            } };
-            const shown = c.private and card.games > 0;
-            x.* = .{
-                .champ = try c.champ(a, card.champion),
-                .role = if (card.role) |r| uiRole(r) else null,
-                .guessed = card.guessed,
-                .you = card.me,
-                .fact = if (shown) try a.print("{f} · {f} games", .{ rate(card.win), count(card.games) }) else "",
-                .lean = if (!shown) .none else if (card.win >= 0.515) .good else if (card.win <= 0.485) .bad else .none,
-                .pills = pills,
-            };
-        }
+    var rows: std.ArrayList(ui.loadscreen.Lane) = .empty;
+    var used: [2][]bool = undefined;
+    for (&used, l.teams) |*u, t| u.* = try a.alloc(bool, t.len);
+    for (used) |u| @memset(u, false);
+    // A lane per role, then seats without one (or a second of a role) paired in order
+    for (core.Role.all) |r| {
+        var pair: [2]?*const loading.Card = .{ null, null };
+        for (&pair, l.teams, used) |*p, t, u| for (t, u) |*x, *seen| {
+            if (seen.* or x.role != r) continue;
+            seen.* = true;
+            p.* = x;
+            break;
+        };
+        if (pair[0] != null or pair[1] != null) try rows.append(a, try loadLane(a, c, pair));
+    }
+    var rest: [2]std.ArrayList(*const loading.Card) = .{ .empty, .empty };
+    for (&rest, l.teams, used) |*o, t, u| for (t, u) |*x, seen| if (!seen) try o.append(a, x);
+    for (0..@max(rest[0].items.len, rest[1].items.len)) |i| {
+        var pair: [2]?*const loading.Card = .{ null, null };
+        for (&pair, rest) |*p, r| if (i < r.items.len) {
+            p.* = r.items[i];
+        };
+        try rows.append(a, try loadLane(a, c, pair));
     }
     return .{
-        .us = teams[0],
-        .them = teams[1],
+        .lanes = rows.items,
         .draft = if (c.private) if (l.draft) |d| @floatCast(100 * d.win) else null else null,
+        .yours = try yourGame(a, c, l, rows.items),
     };
+}
+
+fn loadLane(a: Allocator, c: Ctx, pair: [2]?*const loading.Card) !ui.loadscreen.Lane {
+    var out: ui.loadscreen.Lane = .{};
+    if (pair[0]) |x| out.us = try loadCard(a, c, x);
+    if (pair[1]) |x| out.them = try loadCard(a, c, x);
+    const ours = pair[0] orelse return out;
+    if (pair[1] == null) return out;
+    const f = ours.lane orelse return out;
+    const g = f.gold orelse return out;
+    const lead: ui.loadscreen.Side = switch (f.edge().?) {
+        .ahead => .us,
+        .behind => .them,
+        .even => .even,
+    };
+    const side = struct {
+        fn of(gap: ?i32) ?ui.loadscreen.Side {
+            const w = loading.timingWord(gap) orelse return null;
+            return if (w == .sooner) .us else .them;
+        }
+    }.of;
+    const word = switch (lead) {
+        .us => "ahead",
+        .them => "behind",
+        .even => "even",
+    };
+    var label: std.Io.Writer.Allocating = .init(a);
+    const w = &label.writer;
+    try w.print("{s} {s} in lane", .{ if (out.us.?.champ) |x| x.name else "Unknown", word });
+    if (c.private) try w.print(", {f} gold at {d}", .{ gold(g.mean), core.curvesfile.lane_minute });
+    if (side(f.level6)) |x| try w.print(", level 6 {s}", .{if (x == .us) "first" else "later"});
+    if (side(f.first_item)) |x| try w.print(", first item {s}", .{if (x == .us) "sooner" else "later"});
+    out.strip = .{
+        .gold = g.mean,
+        .lead = lead,
+        .text = if (c.private) try a.print("{f}", .{gold(g.mean)}) else word,
+        .level6 = side(f.level6),
+        .item = side(f.first_item),
+        .label = label.written(),
+    };
+    return out;
+}
+
+fn loadCard(a: Allocator, c: Ctx, card: *const loading.Card) !ui.loadscreen.Card {
+    const pills = try a.alloc(ui.loadscreen.Pill, card.pills.len);
+    for (pills, card.pills) |*p, q| p.* = .{ .text = q.text, .tone = loadTone(q.tone) };
+    const shown = c.private and card.games > 0;
+    var x: ui.loadscreen.Card = .{
+        .champ = try c.champ(a, card.champion),
+        .role = if (card.role) |r| uiRole(r) else null,
+        .guessed = card.guessed,
+        .you = card.me,
+        .fact = if (shown) try a.print("{f} · {f} games", .{ rate(card.win), count(card.games) }) else "",
+        .lean = if (!shown) .none else if (card.win >= 0.515) .good else if (card.win <= 0.485) .bad else .none,
+        .pills = pills,
+    };
+    if (card.lengths) |by| {
+        x.lengths = try lengthSpark(a, by);
+        const d = x.lengths[x.lengths.len - 1] - x.lengths[0];
+        x.lengths_label = if (d >= spark_lean) "Wins more in long games" else if (d <= -spark_lean) "Wins more in short games" else "About the same at any length";
+    }
+    return x;
+}
+
+/// Points of win rate between the shortest and longest games that make a lean
+const spark_lean = 2;
+
+/// Win % by length about the champion's own average, shrunk to even as the comp's team
+/// curve is: when it wins more, not how much. A locked teammate's pick gets no rating
+/// on the loading screen (comp.pills)
+fn lengthSpark(a: Allocator, by: loading.Lengths) ![]const f32 {
+    const out = try a.alloc(f32, by.len);
+    var sum: f64 = 0;
+    var p: [by.len]f64 = undefined;
+    for (&p, by) |*x, b| {
+        x.* = (@as(f64, @floatFromInt(b.wins)) + comp.length_k / 2.0) / (@as(f64, @floatFromInt(b.games)) + comp.length_k);
+        sum += x.*;
+    }
+    const mean = sum / @as(f64, @floatFromInt(by.len));
+    for (out, p) |*o, x| o.* = @floatCast(50 + 100 * (x - mean));
+    return out;
+}
+
+fn loadTone(t: loading.Tone) ui.loadscreen.Tone {
+    return switch (t) {
+        .neutral => .none,
+        .good => .good,
+        .bad => .bad,
+        .caution => .caution,
+    };
+}
+
+/// My lane, the enemy jungler's lean and the enemy team's, in the words their pills use
+fn yourGame(a: Allocator, c: Ctx, l: *const loading.Loading, shown: []const ui.loadscreen.Lane) ![]const ui.loadscreen.Fact {
+    var out: std.ArrayList(ui.loadscreen.Fact) = .empty;
+    for (shown) |ln| {
+        const me = ln.us orelse continue;
+        if (!me.you) continue;
+        const s = ln.strip orelse break;
+        try out.append(a, .{
+            .champ = me.champ,
+            .text = if (c.private) try a.print("{s} gold at {d}", .{ s.text, core.curvesfile.lane_minute }) else switch (s.lead) {
+                .us => "lane bully",
+                .them => "tough lane",
+                .even => "even lane",
+            },
+            .tone = switch (s.lead) {
+                .us => .good,
+                .them => .bad,
+                .even => .none,
+            },
+        });
+        break;
+    }
+    const cv = l.comp orelse return out.items;
+    for (cv.teams[1].timing) |tm| if (tm.role == .jungle) {
+        if (try c.champ(a, tm.champion)) |x| try out.append(a, .{ .champ = x, .text = if (tm.lean == .early) "early game" else "scales" });
+        break;
+    };
+    if (comp.timingOf(cv.teams[1])) |w| try out.append(a, .{ .who = "Enemy team", .text = switch (w) {
+        .early => "early team",
+        .late => "late team",
+        .both => "early and late",
+    } });
+    return out.items;
 }
 
 /// The private edition's build panel in game: ingame.Plan with icons and names, the
@@ -1634,21 +1762,58 @@ test "loading: the role's numbers private only" {
     const l: loading.Loading = .{ .teams = .{ &ours, &theirs }, .draft = .{ .win = 0.534, .se = 0.1, .picks = .{ 5, 5 }, .hovers = 0 } };
 
     const priv = try loadScreen(a, .{ .stats = &f.stats, .icons = null, .private = true }, &l);
-    try testing.expectEqualStrings("52.1% · 12k games", priv.us[0].fact);
-    try testing.expectEqual(.good, priv.us[0].lean);
-    try testing.expectEqual(.caution, priv.us[0].pills[0].tone);
-    try testing.expect(priv.them[0].guessed and priv.them[0].fact.len == 0);
+    // Both mid: one lane
+    try testing.expectEqual(1, priv.lanes.len);
+    const us = priv.lanes[0].us.?;
+    try testing.expectEqualStrings("52.1% · 12k games", us.fact);
+    try testing.expectEqual(.good, us.lean);
+    try testing.expectEqual(.caution, us.pills[0].tone);
+    try testing.expect(priv.lanes[0].them.?.guessed and priv.lanes[0].them.?.fact.len == 0);
     try testing.expectApproxEqAbs(@as(f32, 53.4), priv.draft.?, 0.01);
 
     const c: Ctx = .{ .stats = &f.stats, .icons = null, .private = false };
     const public = try loadScreen(a, c, &l);
     try testing.expectEqual(null, public.draft);
-    try testing.expectEqualStrings("", public.us[0].fact);
+    try testing.expectEqualStrings("", public.lanes[0].us.?.fact);
     var d = try data(a, c, .{ .loading = &l }, .none);
     d.seq = 1;
     const html = try renderIn(a, d, null, null, .{ .load = public });
     try testing.expect(std.mem.find(u8, html, "c-load") != null);
     try testing.expect(std.mem.find(u8, html, "%") == null);
+}
+
+test "loading: a lane per role, the strip's words and figure, the spark about its average" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    const by: loading.Lengths = .{ .{ .games = 900, .wins = 500 }, .{ .games = 900, .wins = 470 }, .{ .games = 900, .wins = 450 }, .{ .games = 900, .wins = 430 }, .{ .games = 900, .wins = 400 } };
+    const facts: loading.LaneFacts = .{ .games = 800, .gold = .{ .mean = -520, .se = 100 }, .level6 = 40, .first_item = 5 };
+    const ours = [_]loading.Card{
+        .{ .champion = ahri, .role = .middle, .guessed = false, .me = true, .games = 12_400, .win = 0.521, .pills = &.{}, .lane = facts, .lengths = by },
+        .{ .champion = syndra, .role = null, .guessed = false, .me = false, .games = 0, .win = 0.5, .pills = &.{} },
+    };
+    const theirs = [_]loading.Card{.{ .champion = syndra, .role = .middle, .guessed = true, .me = false, .games = 0, .win = 0, .pills = &.{} }};
+    const l: loading.Loading = .{ .teams = .{ &ours, &theirs }, .draft = null };
+    const public = try loadScreen(a, .{ .stats = &f.stats, .icons = null, .private = false }, &l);
+    // Mid, then the seat without a role alone
+    try testing.expectEqual(2, public.lanes.len);
+    try testing.expectEqual(null, public.lanes[1].them);
+    const s = public.lanes[0].strip.?;
+    try testing.expectEqual(.them, s.lead);
+    try testing.expectEqualStrings("behind", s.text);
+    try testing.expectEqual(.them, s.level6.?);
+    try testing.expectEqual(null, s.item);
+    try testing.expectEqualStrings("tough lane", public.yours[0].text);
+    const spark = public.lanes[0].us.?.lengths;
+    var sum: f32 = 0;
+    for (spark) |v| sum += v;
+    try testing.expectApproxEqAbs(@as(f32, 250), sum, 0.01);
+    try testing.expect(spark[0] > 50 and spark[4] < 50);
+    try testing.expectEqualStrings("Wins more in short games", public.lanes[0].us.?.lengths_label);
+    const priv = try loadScreen(a, .{ .stats = &f.stats, .icons = null, .private = true }, &l);
+    try testing.expectEqualStrings("−520", priv.lanes[0].strip.?.text);
 }
 
 fn testGame(my_lane: ?ingame.Lane) ingame.InGame {

@@ -77,7 +77,8 @@ pub const Comp = struct {
     us: Team,
     them: Team,
     /// Five rows, a line of words per seat ("ahead in lane, level 6 sooner"); the gap
-    /// is the lane's gold at `lane_minute`, private edition only
+    /// is the lane's gold at `lane_minute`, private edition only. None: no Lanes part
+    /// (the loading screen's lane strips show them)
     lanes: []const teamrows.Row,
     length: ?Length = null,
     /// The damage facts' patch; "" without them
@@ -103,8 +104,8 @@ pub fn view(h: *H, c: Comp) N {
         notes[1],
         h.div(.{ .class = "teams" }, .{ team(h, c.us, .us), team(h, c.them, .them) }),
         if (c.length) |l| length(h, l) else null,
-        h.h3(.{}, .{W.lanes}),
-        teamrows.view(h, c.lanes),
+        if (c.lanes.len > 0) h.h3(.{}, .{W.lanes}) else null,
+        if (c.lanes.len > 0) teamrows.view(h, c.lanes) else null,
     });
 }
 

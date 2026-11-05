@@ -200,7 +200,7 @@ fn topOf(facts: *const champfacts.Facts, seats: []const loading.Seat) ?Top {
 }
 
 /// Games a champion-role's bucket is shrunk with towards even
-const length_k = 100;
+pub const length_k = 100;
 const z80 = 1.2816;
 
 fn lengthOf(facts: *const champfacts.Facts, seats: [2][]const loading.Seat) ?Length {

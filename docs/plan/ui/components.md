@@ -324,11 +324,14 @@ Bar: a magnitude without good or bad (pick, ban, games), a neutral ink bar besid
 figure. Bars in one column share a scale: `of` is the column's largest. `wide`: the bar
 alone across its container, where the row puts the figure elsewhere. `track`: a position
 along a full-width line (a place among champions, a rate on 0-100), a mark at it and an
-optional reference tick, no good or bad colour
+optional reference tick, no good or bad colour. A track with `side`: a lead for one side
+from the reference (lane gold from even), filled in that side's colour
 States: share; games, the column's most; ban; wide: the bar alone, its figure elsewhere in
 the row; track: a place, portrait at 1st, the middle ticked; track: the middle; track:
-last; scale: the ends named once; track: a rate, a dot, the average ticked
-Used by: strip, champlist, table, yourfriends, homepage, admincharts, champpage, tiers
+last; scale: the ends named once; track: a rate, a dot, the average ticked; sides: our
+lead from even; sides: their lead from even; sides: a lead inside the noise, grey
+Used by: strip, champlist, loadscreen, table, yourfriends, homepage, admincharts,
+champpage, tiers
 
 ### Kda
 `kda.zig` `.c-kda` site
@@ -663,12 +666,14 @@ path known; no usual build: a tip, leans only
 
 ### LoadScreen
 `loadscreen.zig` `.c-load`
-LoadScreen: the desktop app while the game loads. Our five cards over theirs, one fixed
-order per card: portrait, name, role (? when guessed), how the champion does in the role
-(private edition only), then pills coloured by meaning. Narrow windows get one compact row
-per seat. Champion facts only: no player names or ranks
+LoadScreen: the desktop app while the game loads. A column per lane: our card, the lane
+strip (gold at 14 from even, who reaches level 6 and the first item sooner), their card. A
+card in one fixed order: portrait, name, role (? when guessed), how the champion does in
+the role (private edition only), wins by game length as a spark, then at most two pills
+coloured by meaning. Above, "your game": my lane and the enemy jungler and team in a word
+each. Narrow windows get one row per lane. Champion facts only: no player names or ranks
 (research/questions/desktop-app-layout.md C1-C3)
-States: public; private
+States: public: bot with too few games of the lane, no enemy support yet; private
 
 ### GameScreen
 `gamescreen.zig` `.c-game`
@@ -779,8 +784,8 @@ bars, dots) and the parts presets share (ChartTip, the crosshair, RangeSelect an
 pointer handling). Presets: timeline.zig, lane.zig, trend.zig, spark.zig, dotplot.zig
 States: area split at 50%, a line; band, typical and your line; tip, cursor, range; dots,
 bars, a reference, an end label
-Used by: trend, timechart, aucchart, lane, timeline, spark, laneduel, gametrend, yourtime,
-adminruns
+Used by: loadscreen, trend, timechart, aucchart, lane, timeline, spark, laneduel,
+gametrend, yourtime, adminruns
 
 ### DotPlot
 `dotplot.zig` `.c-dots` site
@@ -873,7 +878,7 @@ Built as the chart system: lines in a stretched SVG, the dot and the star HTML p
 percent; the figures are the row's, so the label is optional
 States: patches: flat, up, down (the change's colour); a game's win chance, even and the
 turning minute
-Used by: gamerow, yourtime
+Used by: loadscreen, gamerow, yourtime
 
 ### GameArt
 `art.zig` `.c-art` site
