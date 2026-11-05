@@ -8,7 +8,9 @@
 //! the track and the label only for screen readers (GameRow's lane at 14). `rows`: one
 //! side against the other, a row per figure: both rates as dots on one 0-100% track, each
 //! number beside its dot, the larger bold; a timing as both times and the gap (matchup.md
-//! "Versus"); `key` names the sides, for the card head. `dumbbell`: a row per item,
+//! "Versus"); `bars`: the same rows, each side's rate its own bar on a 0-100 track, so
+//! the share with neither shows (champion.md "Lane kills"); `key` names the sides, for
+//! the card head. `dumbbell`: a row per item,
 //! two rates on a shared axis as dots, the line between them the gap, the gap a figure
 //! (pool.md "How hard to pick up": new against practised players)
 const std = @import("std");
@@ -218,7 +220,24 @@ fn dots(h: *H, r: Row, b: [2]f32) N {
     });
 }
 
-/// The two sides' names in their colours, for a card head over `rows`
+/// `names`: the two sides, for screen readers (`key` shows them). A row without `bars`
+/// shows nothing; data-grow: the rows stretch in a taller card
+pub fn bars(h: *H, names: [2][]const u8, items: []const Row) N {
+    var l = h.list();
+    for (items, 0..) |r, i| {
+        const b = r.bars orelse continue;
+        l.add(h.div(.{ .key = i, .class = "br" }, .{
+            h.span(.{ .class = "lab" }, .{r.label}),
+            h.span(.{ .class = "us", .aria_hidden = true, .style = h.vars(.{ .x = pct(b[0]) }) }, .{}),
+            h.span(.{ .class = "n", .data_lead = r.lead == .a }, .{r.a}),
+            h.span(.{ .class = "them", .aria_hidden = true, .style = h.vars(.{ .x = pct(b[1]) }) }, .{}),
+            h.span(.{ .class = "n", .data_lead = r.lead == .b }, .{r.b}),
+        }));
+    }
+    return h.div(.{ .class = "c-vs", .data_v = "bars", .data_grow = {}, .role = "group", .aria_label = W.rows.with(h, .{ .a = names[0], .b = names[1] }) }, .{l.done()});
+}
+
+/// The two sides' names in their colours, for a card head over `rows` or `bars`
 pub fn key(h: *H, names: [2][]const u8) N {
     return h.span(.{ .class = "c-vs", .data_v = "key", .aria_hidden = true }, .{ h.span(.{ .class = "us" }, .{names[0]}), h.span(.{ .class = "them" }, .{names[1]}) });
 }
@@ -393,6 +412,16 @@ pub const css =
     \\  .c-vs .tk > .b { left: calc(var(--b) * 1%); }
     \\  .c-vs .key > .a, .c-vs .tk > .a { border: 2px solid var(--t2); background: var(--panel); }
     \\  .c-vs .key > .b, .c-vs .tk > .b { background: var(--brand-dot); }
+    \\  .c-vs[data-v="bars"] { grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: 0; }
+    \\  .c-vs > .br { display: grid; grid-template-columns: minmax(0, 7em) minmax(0, 1fr) 3em; align-items: center;
+    \\    align-content: center; gap: 3px var(--sp-3); padding: var(--sp-2) 0; }
+    \\  .c-vs > .br + .br { border-top: 1px solid var(--line); }
+    \\  .c-vs .br > .lab { grid-column: 1; grid-row: span 2; justify-self: start; color: var(--t2); font-size: var(--fs-s); white-space: normal; }
+    \\  .c-vs .br > :is(.us, .them) { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--c) calc(var(--x) * 1%), var(--bar-track) 0); }
+    \\  .c-vs .br > .us { --c: var(--us-hot); }
+    \\  .c-vs .br > .them { --c: var(--them-hot); }
+    \\  .c-vs .br > .n { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.8; }
+    \\  .c-vs .br > .n[data-lead] { font-weight: var(--w-b); opacity: 1; }
     \\  .c-vs .bnd > .ends { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
     \\}
     \\
@@ -427,6 +456,12 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Kills after 14"), .a = plain("98%"), .b = plain("3%"), .bars = .{ 0.98, 0.03 }, .lead = .a },
         .{ .label = plain("Level 6"), .a = plain("5:19"), .b = plain("5:28"), .lead = .a, .sub = plain("9 s apart") },
         .{ .label = plain("First item"), .a = plain("12:04"), .b = plain("–") },
+    }));
+    g.addFill("bars: lane kills, each rate on its own 0-100 track", bars(h, .{ "Ornn", "Opponent" }, &.{
+        shares(h, plain("First blood"), 0.10, 0.12),
+        shares(h, plain("Kill by 6:00"), 0.49, 0.46),
+        shares(h, plain("Kill 6-14"), 0.71, 0.74),
+        shares(h, plain("Kill after 14"), 0.03, 0.04),
     }));
     g.addFill("dumbbell: new against practised players, a gap each; a thin row", dumbbell(h, .{ .names = .{ "New", "Practised" }, .fig = plain("Gap"), .lo = 40, .hi = 56, .ticks = &.{ 40, 45, 50, 55 } }, &.{
         .{ .head = bellHead(h, "Rengar"), .a = 41.2, .b = 52.2, .fig = plain("+11.0"), .tag = badge.view(h, .neutral, .{plain("Harder")}) },

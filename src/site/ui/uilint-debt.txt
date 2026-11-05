@@ -14,7 +14,7 @@ appbar title 1
 buildpanel title 1
 champlist title 2
 champpage css 3
-champpage pagecss 52
+champpage pagecss 47
 champrolepicker title 1
 champselect markup 1
 champselect title 1
@@ -58,7 +58,7 @@ testerpage title 1
 testerpage pagecss 22
 textpage pagecss 9
 tiers css 2
-tiers pagecss 77
+tiers pagecss 78
 timechart markup 1
 versus title 2
 yourpage pagecss 7

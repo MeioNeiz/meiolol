@@ -936,14 +936,16 @@ somewhere, the typical time a tick, the gap to typical a signed figure (later is
 (game-detail.md "Lane"); `cell` the same at a list row's size, the figure under the track
 and the label only for screen readers (GameRow's lane at 14). `rows`: one side against the
 other, a row per figure: both rates as dots on one 0-100% track, each number beside its
-dot, the larger bold; a timing as both times and the gap (matchup.md "Versus"); `key`
-names the sides, for the card head. `dumbbell`: a row per item, two rates on a shared axis
-as dots, the line between them the gap, the gap a figure (pool.md "How hard to pick up":
-new against practised players)
+dot, the larger bold; a timing as both times and the gap (matchup.md "Versus"); `bars`:
+the same rows, each side's rate its own bar on a 0-100 track, so the share with neither
+shows (champion.md "Lane kills"); `key` names the sides, for the card head. `dumbbell`: a
+row per item, two rates on a shared axis as dots, the line between them the gap, the gap a
+figure (pool.md "How hard to pick up": new against practised players)
 States: objectives and firsts; two; plain ink: rates, not sides; races: level 6 later than
-typical, first item earlier; key: the sides' names; rows: a matchup's head to head;
-dumbbell: new against practised players, a gap each; a thin row; bands: below typical,
-above, no typical; cells: below typical, above, no typical
+typical, first item earlier; key: the sides' names; rows: a matchup's head to head; bars:
+lane kills, each rate on its own 0-100 track; dumbbell: new against practised players, a
+gap each; a thin row; bands: below typical, above, no typical; cells: below typical,
+above, no typical
 Used by: gamerow, laneduel, gamepage, champpage, matchpage
 
 ### ObjectiveIcon
