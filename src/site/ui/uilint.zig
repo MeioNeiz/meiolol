@@ -13,6 +13,15 @@ pub const register_path = "docs/plan/ui/components.md";
 pub const Rule = enum {
     /// css.unscoped and css.lint, on pages too (expectSound covers gallery components)
     css,
+    /// Another component's scope class written outside CSS: use its view or extend it
+    markup,
+    /// A `title` attribute on an element that isn't an icon: phones never show it, Tip does
+    title,
+    /// `attr(data-tip)` in CSS outside tip.zig: tips come through Tip
+    tip,
+    /// A page's CSS rules (no gallery, or a name ending "page"): pages lay out cards,
+    /// anything styled is a component or a variant
+    pagecss,
 };
 
 pub const Count = struct { file: []const u8, rule: Rule, n: u32 };
@@ -21,11 +30,23 @@ pub const Count = struct { file: []const u8, rule: Rule, n: u32 };
 pub fn counts(a: std.mem.Allocator, comptime mods: anytype) ![]const Count {
     @setEvalBranchQuota(100_000);
     var out: std.ArrayList(Count) = .empty;
+    var owners: std.StringHashMapUnmanaged([]const u8) = .empty;
+    inline for (mods) |C| inline for (C.scope) |s| try owners.put(a, s[1..], comptime register.fileName(C));
     inline for (mods) |C| {
         const file = comptime register.fileName(C);
         const unscoped = try css_mod.unscoped(a, C.css, &C.scope);
         const found = try css_mod.lint(a, C.css, .{});
         try add(a, &out, file, .css, unscoped.len + found.len);
+        const src = try code(a, @embedFile(file ++ ".zig"));
+        try add(a, &out, file, .markup, markup(src, file, owners));
+        try add(a, &out, file, .title, titles(src));
+        if (!std.mem.eql(u8, file, "tip")) try add(a, &out, file, .tip, std.mem.count(u8, C.css, "attr(data-tip)"));
+        if (!@hasDecl(C, "gallery") or std.mem.endsWith(u8, file, "page")) {
+            var rules: css_mod.Rules = .{ .css = C.css };
+            var n: usize = 0;
+            while (rules.next()) |_| n += 1;
+            try add(a, &out, file, .pagecss, n);
+        }
     }
     std.mem.sort(Count, out.items, {}, lessThan);
     return out.items;
@@ -33,6 +54,93 @@ pub fn counts(a: std.mem.Allocator, comptime mods: anytype) ![]const Count {
 
 fn add(a: std.mem.Allocator, out: *std.ArrayList(Count), file: []const u8, rule: Rule, n: usize) !void {
     if (n > 0) try out.append(a, .{ .file = file, .rule = rule, .n = @intCast(n) });
+}
+
+/// `src` up to its first test, without comment lines or multiline strings (its CSS)
+fn code(a: std.mem.Allocator, src: []const u8) ![]const u8 {
+    const end = std.mem.find(u8, src, "\ntest \"") orelse src.len;
+    var out: std.ArrayList(u8) = .empty;
+    var lines = std.mem.splitScalar(u8, src[0..end], '\n');
+    while (lines.next()) |l| {
+        const t = std.mem.trimStart(u8, l, " ");
+        if (std.mem.startsWith(u8, t, "//") or std.mem.startsWith(u8, t, "\\\\")) continue;
+        try out.appendSlice(a, l);
+        try out.append(a, '\n');
+    }
+    return out.items;
+}
+
+fn isWord(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == '-' or c == '_';
+}
+
+/// Classes `c-x` in `src` that another file's scope owns
+fn markup(src: []const u8, file: []const u8, owners: std.StringHashMapUnmanaged([]const u8)) usize {
+    var n: usize = 0;
+    var i: usize = 0;
+    while (std.mem.findPos(u8, src, i, "c-")) |at| {
+        var e = at + 2;
+        while (e < src.len and isWord(src[e])) e += 1;
+        i = e;
+        if (at > 0 and isWord(src[at - 1])) continue;
+        const owner = owners.get(src[at..e]) orelse continue;
+        if (!std.mem.eql(u8, owner, file)) n += 1;
+    }
+    return n;
+}
+
+/// `.title =` set in an element's attributes (`h.span(.{ ... })`), icons left out: a
+/// literal naming "icon", or an svg or img element
+fn titles(src: []const u8) usize {
+    var n: usize = 0;
+    var i: usize = 0;
+    while (std.mem.findPos(u8, src, i, ".title =")) |at| {
+        i = at + 1;
+        const open = enclosing(src, at) orelse continue;
+        if (open == 0 or src[open - 1] != '.') continue;
+        const before = std.mem.trimEnd(u8, src[0 .. open - 1], " \n");
+        if (before.len == 0 or before[before.len - 1] != '(') continue;
+        const call = before[0 .. before.len - 1];
+        var s = call.len;
+        while (s > 0 and (std.ascii.isAlphanumeric(call[s - 1]) or call[s - 1] == '_')) s -= 1;
+        if (s < 2 or !std.mem.eql(u8, call[s - 2 .. s], "h.")) continue;
+        const tag = call[s..];
+        if (std.mem.eql(u8, tag, "svg") or std.mem.eql(u8, tag, "img")) continue;
+        const close = closing(src, open + 1) orelse continue;
+        if (std.mem.find(u8, src[open..close], "icon") != null) continue;
+        n += 1;
+    }
+    return n;
+}
+
+/// The `{` of the literal `at` sits in
+fn enclosing(src: []const u8, at: usize) ?usize {
+    var depth: usize = 0;
+    var j = at;
+    while (j > 0) {
+        j -= 1;
+        switch (src[j]) {
+            '}', ')', ']' => depth += 1,
+            '{', '(', '[' => if (depth == 0) return if (src[j] == '{') j else null else {
+                depth -= 1;
+            },
+            else => {},
+        }
+    }
+    return null;
+}
+
+/// The bracket closing the one open before `from`
+fn closing(src: []const u8, from: usize) ?usize {
+    var depth: usize = 0;
+    for (src[from..], from..) |c, j| switch (c) {
+        '{', '(', '[' => depth += 1,
+        '}', ')', ']' => if (depth == 0) return j else {
+            depth -= 1;
+        },
+        else => {},
+    };
+    return null;
 }
 
 fn lessThan(_: void, x: Count, y: Count) bool {
@@ -110,6 +218,38 @@ pub fn registerText(a: std.mem.Allocator, comptime comps: anytype, comptime page
 }
 
 const testing = std.testing;
+
+test "markup: another file's class outside CSS counts, its own and lookalikes don't" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var owners: std.StringHashMapUnmanaged([]const u8) = .empty;
+    try owners.put(a, "c-btn", "button");
+    try owners.put(a, "c-pg", "page");
+    const src = try code(a,
+        \\// c-btn in a comment
+        \\h.a(.{ .class = "c-btn go" }, .{}), h.div(.{ .class = "c-pg abc-btn c-btnx" }, .{});
+        \\pub const css =
+        \\    \\.c-pg .c-btn { gap: 0 }
+        \\;
+        \\test "x" { "c-btn" }
+    );
+    try testing.expectEqual(1, markup(src, "page", owners));
+}
+
+test "titles: an element's title counts; an icon's, an svg's and a struct field's don't" {
+    const src =
+        \\h.span(.{ .class = "t", .title = a }, .{x}),
+        \\h.button(.{ .data_v = "icon", .title = W.set }, .{}),
+        \\h.svg(.{ .title = n }, .{}),
+        \\Bar.track(h, .{ .title = s }),
+        \\h.td(.{
+        \\    .class = h.cls("n", .{ .on = f(x) }),
+        \\    .title = W.games,
+        \\}, .{}),
+    ;
+    try testing.expectEqual(2, titles(src));
+}
 
 test "debt: over, under and a capped write" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);

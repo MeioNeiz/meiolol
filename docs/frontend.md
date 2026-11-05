@@ -37,10 +37,12 @@ into its own design trap. Use judgement per case.
   one rather than build a page-local copy
 - uilint (src/site/ui/uilint.zig) guards what one component's tests can't see, against
   src/site/ui/uilint-debt.txt: counts per file that only go down. A line raised or added
-  needs Jacob's ok. Today it catches unscoped selectors and token breaks (colour, font
-  size, breakpoint, !important, popover, unknown token), pages included. It does not yet
-  catch reaching into another component or page-local copies: checks 2 and 3 below are
-  by eye
+  needs Jacob's ok. Rules: `css` unscoped selectors and token breaks (colour, font size,
+  breakpoint, !important, popover, unknown token), pages included; `markup` another
+  component's class written by hand; `title` on an element that isn't an icon; `tip`
+  attr(data-tip) outside Tip; `pagecss` each page's CSS rule count. It does not yet catch
+  CSS reaching into another component or a copy under another name: checks 2 and 3 below
+  are by eye
 - Product rules bind every screen: docs/production-key.md "Product rules"
 - Measured guardrails (word budgets, label lengths, tap targets) in docs/plan/ui/README.md
   are drafts to test on the first rebuilt page, not settled rules
