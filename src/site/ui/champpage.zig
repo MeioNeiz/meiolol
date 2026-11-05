@@ -2066,8 +2066,8 @@ pub const Charts = struct {
         });
     }
 
-    /// A won-after cell is coloured by its win rate, a taken-first one by the side of
-    /// the role's rate it falls on
+    /// A won-after cell is coloured by its win rate; a taken-first one, not a win rate,
+    /// keeps its ink
     fn objCell(p: *const P, h: *H, l: tree.Text, took: bool, mine: Counts, all: Counts) N {
         if (mine.games < fmt.floor_games) return h.span(.{ .class = "fl" }, .{W.games_n.with(h, .{ .n = mine.games })});
         const v = rate(mine);
@@ -2083,7 +2083,7 @@ pub const Charts = struct {
             .you = on(v),
             .typ = if (all.games > 0) .{ on(a), on(a), on(a) } else null,
             .dom = 500,
-            .tint = took,
+            .tint = false,
         };
         // A share of games whole, a win rate to a tenth as everywhere
         const c = versus.cell(h, b, if (took) phrase.num(h, .pct, round(v)) else phrase.num(h, .rate, v));
@@ -2140,6 +2140,7 @@ pub const css =
     \\    align-items: center; gap: var(--sp-5) var(--sp-6); }
     \\  .c-cpage .lk .lab { font-size: var(--fs-s); }
     \\  .c-cpage .lk .n { font-size: var(--fs-xl); }
+    \\  .c-cpage .lk .n:is(.us, .them) { color: var(--text); }
     \\  .c-cpage .lk .bar { height: 6px; border-radius: 3px; }
     \\  .c-cpage .obj { display: grid; grid-template-columns: auto repeat(4, minmax(0, 1fr)); align-items: center;
     \\    align-content: space-evenly; gap: var(--sp-4) var(--sp-4); padding: var(--sp-2) 0; }
