@@ -45,6 +45,8 @@ pub const Stat = struct {
     thin: bool = false,
     /// Games behind the figure: after it, and in its hover
     games: ?u32 = null,
+    /// False: the games on hover only, where the row has no room for them
+    count: bool = true,
     /// A second line under the figure (last patch, typical)
     ctx: ?tree.Text = null,
     fill: bool = false,
@@ -74,7 +76,7 @@ pub fn view(h: *H, s: Stat) N {
         .title = tip(h, s.kind, v, s.range, s.games),
     }, .{
         h.span(.{ .class = "v" }, .{figure(h, s.kind, v)}),
-        if (s.games) |n| count(h, n) else null,
+        if (!s.count) null else if (s.games) |n| count(h, n) else null,
         if (s.ctx) |c| h.span(.{ .class = "ctx" }, .{c}) else null,
     });
 }

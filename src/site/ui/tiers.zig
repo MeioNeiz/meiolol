@@ -282,7 +282,12 @@ fn who(h: *H, l: *const Line) N {
 }
 
 fn winCell(h: *H, l: *const Line) N {
-    return stat.view(h, .{ .value = l.rate(), .scale = .aggregate, .ref = 50, .range = fmt.range(l.row().games, l.row().wins), .games = l.row().games });
+    return rateCell(h, l, true);
+}
+
+/// The board's columns are too narrow for the count: its games on hover only
+fn rateCell(h: *H, l: *const Line, count: bool) N {
+    return stat.view(h, .{ .value = l.rate(), .scale = .aggregate, .ref = 50, .range = fmt.range(l.row().games, l.row().wins), .games = l.row().games, .count = count });
 }
 
 /// Whole games, faint below 0 (winning less than the role)
@@ -692,7 +697,7 @@ pub const Tiers = struct {
                     h.span(.{ .class = "n" }, .{place}),
                     champ.view(h, .{ .name = c.name, .src = l.icon }, .{ .named = false }),
                     h.span(.{ .class = "nm" }, .{c.name}),
-                    winCell(h, l),
+                    rateCell(h, l, false),
                     h.span(.{ .class = "sc" }, .{t.second(h, l)}),
                 })}));
             }
