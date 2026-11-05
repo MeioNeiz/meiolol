@@ -190,7 +190,7 @@ pub const css =
     \\      gap: var(--sp-1); min-height: 0; }
     \\    .c-live .c-cs .c-draft > .team[data-side="them"] { grid-column: 3; }
     \\    .c-live .c-cs .team > .hd { padding: 0 var(--sp-1) var(--sp-1); font-size: var(--fs-s); }
-    \\    .c-live .c-cs .team > .hd > b { font-size: var(--fs-xl); }
+    \\    .c-live .c-cs .team > .hd > .c-rate { font-size: var(--fs-xl); }
     \\    .c-live .c-cs .team > .seat { flex: 1 1 0; min-height: 60px; max-height: 108px; gap: var(--sp-3); }
     \\    .c-live .c-cs .team > .seat > .c-champ { --sz: 64px; }
     \\    .c-live .c-cs .team > .seat .nm { flex-direction: column; align-items: flex-start; gap: 0; }

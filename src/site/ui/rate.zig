@@ -4,8 +4,9 @@
 //! sure it is: its games, small and faint after it in a fixed slot, so a column's figures
 //! stay aligned; its 80% range's ends and the full count on hover, never a ± figure;
 //! faded (var(--fade)) past fmt.wide_range, never hidden (J35); whole once the range is
-//! 10 or wider, its tenths saying nothing. A model's estimate has none of these. Screen
-//! readers get words ("win rate 52.3%, 33,108 games"): phones never read a title.
+//! 10 or wider, its tenths saying nothing. A model's estimate has none of these, nor a
+//! colour: it isn't the win rate itself; its list's order and vs carry the ranking.
+//! Screen readers get words ("win rate 52.3%, 33,108 games"): phones never read a title.
 //! `delta`: a difference of rates in points, same colour and fade
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -21,7 +22,8 @@ pub const scope = .{".c-rate"};
 pub const Rate = struct {
     /// %
     pct: f64,
-    /// Null: a model's estimate (draft win chance): no count, range or fade. 0: no figure
+    /// Null: a model's estimate (draft win chance): no count, range, fade or colour. 0: no
+    /// figure
     games: ?u32 = null,
     /// 80% half-width in points (fmt.range)
     half: ?f64 = null,
@@ -72,7 +74,7 @@ pub fn view(h: *H, r: Rate, look: Look) N {
     if ((r.games orelse 1) == 0) return h.span(.{ .class = "c-rate", .data_state = "missing" }, .{W.missing});
     const v = figure(h, r, look.unit);
     const sv = if (look.unit) v else figure(h, r, true);
-    return cell(h, r.pct - r.ref, r.half, tip(h, r), .{
+    return cell(h, if (r.games == null) null else r.pct - r.ref, r.half, tip(h, r), .{
         h.span(.{ .class = "v", .aria_hidden = true }, .{v}),
         if (!look.count) null else if (r.games) |n| h.span(.{ .class = "g", .aria_hidden = true }, .{phrase.num(h, .kilo, n)}) else null,
         h.span(.{ .class = "sr" }, .{if (r.games != null and look.count) W.said_games.with(h, .{ .w = look.said, .v = sv.s, .n = r.games.? }) else W.said.with(h, .{ .w = look.said, .v = sv.s })}),
@@ -87,11 +89,11 @@ pub fn delta(h: *H, pts: f64, half: ?f64) N {
 }
 
 // The hover is a title until Tip lands: this is the one place to swap it
-fn cell(h: *H, pts: f64, half: ?f64, title: ?[]const u8, kids: anytype) N {
+fn cell(h: *H, pts: ?f64, half: ?f64, title: ?[]const u8, kids: anytype) N {
     return h.span(.{
         .class = "c-rate",
         .data_wide = if (half) |x| fmt.wide(x) else false,
-        .style = h.vars(.{ .c = colour(pts) }),
+        .style = if (pts) |x| h.vars(.{ .c = colour(x) }) else null,
         .title = title,
     }, kids);
 }
@@ -154,7 +156,7 @@ pub fn gallery(g: *Gallery) void {
     g.add("very few: whole, faded", view(h, .counted(12, 8), .{}));
     g.add("no unit, for a build table's narrow column", view(h, .counted(3143, 1562), .{ .unit = false }));
     g.add("no count: a column holds the games (still on hover)", view(h, .counted(3143, 1685), .{ .count = false }));
-    g.add("a model's estimate: no count, range or fade", view(h, .estimate(54.3), .{ .said = "win chance" }));
+    g.add("a model's estimate: no count, range, fade or colour", view(h, .estimate(54.3), .{ .said = "win chance" }));
     var own = Rate.counted(2210, 1083);
     own.ref = 47.2;
     g.add("its own ref (BuildPanel: against the slot's 47.2%)", view(h, own, .{ .unit = false }));
@@ -181,7 +183,7 @@ test view {
         .{ .counted(12, 8), .{}, &.{ "data-wide", ">67%<" }, &.{} },
         .{ .counted(3143, 1562), .{ .unit = false, .count = false }, &.{ ">49.7<", ">win rate 49.7%<" }, &.{ ">49.7%<", "class=\"g\"" } },
         .{ .counted(3143, 1562), .{ .unit = false, .count = false, .said = "" }, &.{"49.7%<"}, &.{ "rate 49", "games<" } },
-        .{ .estimate(54.3), .{ .said = "win chance" }, &.{ ">54.3%<", ">win chance 54.3%<" }, &.{ "title=", "class=\"g\"", "data-wide" } },
+        .{ .estimate(54.3), .{ .said = "win chance" }, &.{ ">54.3%<", ">win chance 54.3%<" }, &.{ "title=", "class=\"g\"", "data-wide", "--c" } },
         .{ .counted(200, 99), .{ .said = "Ornn wins" }, &.{">Ornn wins 49.5%, 200 games<"}, &.{} },
         .{ .counted(0, 0), .{}, &.{"missing"}, &.{"class=\"v\""} },
     };

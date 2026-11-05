@@ -17,6 +17,7 @@ const role = @import("role.zig");
 const badge = @import("badge.zig");
 const kda = @import("kda.zig");
 const fmt = @import("fmt.zig");
+const rate = @import("rate.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
@@ -134,7 +135,7 @@ fn team(h: *H, b: Board, side: Side) N {
     return h.div(.{ .class = "team", .data_side = side }, .{
         h.div(.{ .class = "hd" }, .{
             h.span(.{}, .{if (side == .us) words.us else words.them}),
-            if (draft) |d| h.b(.{ .style = h.vars(.{ .c = fmt.wrColour(d / 100, 0.2) }) }, .{words.rate.with(h, .{ .p = d })}) else null,
+            if (draft) |d| rate.view(h, .estimate(d), .{ .said = "win chance" }) else null,
         }),
         seats.done(),
         h.div(.{ .class = "bans", .aria_label = words.bans }, .{banned.done()}),
@@ -416,7 +417,6 @@ const words = struct {
     const hover = plain("hovering");
     const ideas = plain("ideas");
     const bans = plain("Bans");
-    const rate = phrase.Phrase("{p:rate}");
     const empty = plain("Empty seat");
     const guessed = phrase.Phrase("{r:text}, role guessed");
     const blue = plain("Blue");
@@ -466,8 +466,8 @@ pub const css =
     \\  .c-draft .team > .hd { display: flex; align-items: baseline; gap: var(--sp-2); padding: 0 var(--sp-2) var(--sp-1);
     \\    font-size: var(--fs-xs); font-weight: var(--w-m); }
     \\  .c-draft .team[data-side="them"] > .hd { flex-direction: row-reverse; }
-    \\  .c-draft .team > .hd > b { font-size: var(--fs-l); font-weight: var(--w-b); line-height: 1; color: var(--c);
-    \\    font-variant-numeric: tabular-nums; }
+    \\  .c-draft .team > .hd > .c-rate { font-size: var(--fs-l); line-height: 1; }
+    \\  .c-draft .team > .hd > .c-rate > .v { font-weight: var(--w-b); }
     \\  .c-draft:not([data-v]) .team > .bans { display: flex; flex-wrap: wrap; gap: 4px; padding: var(--sp-1) var(--sp-2) 0; }
     \\  .c-draft .team[data-side="them"] > .bans { justify-content: flex-end; }
     \\  .c-draft:not([data-v]) .seat { padding: 6px var(--sp-2); background: var(--panel-2); }
@@ -708,6 +708,9 @@ fn revealed(h: *H) Board {
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.addFill("mid draft", view(h, sample));
+    var rated = sample;
+    rated.draft = 52.3;
+    g.addFill("the app: our draft win chance in the heads, uncoloured", view(h, rated));
     g.addFill("planning, nothing shown", view(h, .{ .lanes = &.{
         .{ .role = .top },
         .{ .role = .jungle },

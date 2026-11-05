@@ -10,8 +10,8 @@ const role = @import("role.zig");
 const badge = @import("badge.zig");
 const chip = @import("chip.zig");
 const card = @import("card.zig");
-const fmt = @import("fmt.zig");
 const draftboard = @import("draftboard.zig");
+const rate = @import("rate.zig");
 const lanechart = @import("lane.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -195,8 +195,8 @@ fn option(h: *H, i: usize, o: Option, locked: bool) N {
             if (o.lane.len > 0) h.span(.{ .class = "fact", .data_lean = if (o.lean == .none) null else o.lean, .data_faint = o.faint }, .{o.lane}) else null,
             if (o.reasons.len > 0) h.span(.{ .class = "chips" }, .{chips.done()}) else null,
         }),
-        if (o.win) |w| h.span(.{ .class = "win", .style = h.vars(.{ .c = fmt.wrColour(w / 100, 0.2) }) }, .{
-            W.win.with(h, .{ .p = w }),
+        if (o.win) |w| h.span(.{ .class = "win" }, .{
+            rate.view(h, .estimate(w), .{ .said = "" }),
             h.small(.{}, .{W.team_win}),
         }) else null,
     });
@@ -224,7 +224,6 @@ fn banOptions(h: *H, s: Screen) ?N {
 }
 
 const W = struct {
-    const win = phrase.Phrase("{p:rate}");
     const team_win = plain("team win");
     const no_pick = plain("No pick yet");
     const gold = plain("Gold");
@@ -286,8 +285,8 @@ pub const css =
     \\  .c-cs .chips { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-cs .why .c-chip:has(> b) { gap: 4px; padding-left: 2px; }
     \\  .c-cs .why .c-chip > b { font-weight: var(--w-m); font-variant-numeric: tabular-nums; }
-    \\  .c-cs .win { display: flex; flex-direction: column; align-items: flex-end; flex: none;
-    \\    font-weight: var(--w-b); font-variant-numeric: tabular-nums; color: var(--c, var(--text)); }
+    \\  .c-cs .win { display: flex; flex-direction: column; align-items: flex-end; flex: none; }
+    \\  .c-cs .win > .c-rate > .v { font-weight: var(--w-b); }
     \\  .c-cs .win > small { font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
     \\  .c-cs .bans[data-turn] h3 { color: var(--turn); }
     \\  .c-cs:has(.seat[data-you][data-turn]) .vs > .c-champ[data-you] { outline: 2px solid var(--turn); outline-offset: 2px; }

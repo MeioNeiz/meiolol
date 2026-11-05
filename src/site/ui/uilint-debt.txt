@@ -26,7 +26,6 @@ champrolepicker title 1
 champrolepicker fade 1
 champselect markup 1
 champselect title 1
-champselect rate 1
 champselect fade 2
 chart rate 1
 chart fade 4
@@ -43,7 +42,7 @@ delta fade 3
 dotplot fade 1
 draftboard title 1
 draftboard tip 1
-draftboard rate 2
+draftboard rate 1
 draftboard fade 1
 draftflow fade 2
 filterbar markup 1

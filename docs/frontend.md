@@ -21,6 +21,8 @@ into its own design trap. Use judgement per case.
 - No colour key where the number describes itself (a win rate's colour is read from the
   win rate); a key can earn its place where colour encodes something the reader can't
   see otherwise
+- Colour is for win rates counted from games; a model's estimate (a draft win chance)
+  stays plain ink: it isn't the win rate itself, and its list's order carries the ranking
 - Tooltips sparingly: for a term or an uncertainty that needs a line, not as a place to
   park words an unclear UI couldn't carry
 - Purpose-built components for the data, not generic tables and lists; a real
