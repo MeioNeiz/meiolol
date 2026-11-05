@@ -140,7 +140,8 @@ figure. Bars in one column share a scale: `of` is the column's largest. `track`:
 position along a full-width line (a place among champions, a rate on 0-100), a mark at it
 and an optional reference tick, no good or bad colour
 States: share; games, the column's most; ban; track: a place, portrait at 1st, the middle
-ticked; track: the middle; track: last; track: a rate, a dot, the average ticked
+ticked; track: the middle; track: last; scale: the ends named once; track: a rate, a dot,
+the average ticked
 Used by: strip, table, yourfriends, homepage, admincharts, champpage, tiers
 
 ### Kda
@@ -158,8 +159,8 @@ context after it small ("4th of 53"). A range shows on hover as its ends, never 
 figure; a rate fades when its range is wide, never hides (J35). Three to a row in a narrow
 container. A label can open a Toggletip; a figure can link to where it comes from, or be
 pressed (the game page's cells select their span; the selected one shows pressed)
-States: with an answer; six, one links; pressable, one pressed; rows: places on tracks,
-the ends named once; stretched by a taller card
+States: with an answer; six, one links; pressable, one pressed; rows: places on tracks (on
+hover), the ends named once; grown by a taller card
 Used by: champhead, matchbrief, gamehead, gamepage, matchgrid, playerbar, adminpage,
 admincharts, admintraffic, champpage, matchpage
 
@@ -268,14 +269,13 @@ suggestion not yet yours (dashed accent ring), a side's ring, the player's own r
 level, and a role badge in the corner
 States: 56, 48, 40, 32, 24, 20; role, sides, you and level; thin, banned, dead; empty
 seat, a suggestion; beside its name
-Used by: bar, strip, sitesearch, champsearch, champhead, matchbrief, matchstrip,
-champlist, draftboard, champselect, teamrows, compview, lobby, apphome, loadscreen,
-gamescreen, postgame, practice, picks, dotplot, timeline, versus, gamestrip, inspector,
-gamehead, gamerow, scoreboard, laneduel, choice, rankstrip, draftflow, candlist,
-poolslots, heatgrid, matchgrid, finder, ranking, learnpage, dailypage, dailyseat,
-patchpage, poolpage, poolgrid, resultstrip, playerbar, profilesum, recordtile, yourpage,
-yourtime, yourfriends, squad, today, homepage, testerpage, testercand, champpage,
-matchpage, tiers
+Used by: bar, sitesearch, champsearch, champhead, matchbrief, matchstrip, champlist,
+draftboard, champselect, teamrows, compview, lobby, apphome, loadscreen, gamescreen,
+postgame, practice, picks, dotplot, timeline, versus, gamestrip, inspector, gamehead,
+gamerow, scoreboard, laneduel, choice, rankstrip, draftflow, candlist, poolslots,
+heatgrid, matchgrid, finder, ranking, learnpage, dailypage, dailyseat, patchpage,
+poolpage, poolgrid, resultstrip, playerbar, profilesum, recordtile, yourpage, yourtime,
+yourfriends, squad, today, homepage, testerpage, testercand, champpage, matchpage, tiers
 
 ### SiteHeader
 `site.zig` `.c-site` `.c-sitemenu` `.c-sitefoot` `.c-preview` `.c-subbar` `.c-sitemain`
