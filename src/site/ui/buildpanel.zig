@@ -577,7 +577,7 @@ pub const BuildPanel = struct {
         };
     }
 
-    /// A cell's head band: its title, then closed the column heads;
+    /// A cell's head band: its title, then when closed its column heads;
     /// open, "fewer" instead (the open table heads its own columns)
     fn head(p: *BuildPanel, h: *H, k: Kind, title: tree.Text) N {
         if (p.open == k) return h.div(.{ .class = "sh" }, .{
@@ -702,7 +702,7 @@ pub const BuildPanel = struct {
     fn levels(p: *BuildPanel, h: *H) ?N {
         if (p.open == .skills or p.rows[@backingInt(Kind.skill_path)].len == 0) return null;
         return h.div(.{ .class = "levels", .data_usual = p.asUsual(.skill_path) }, .{
-            h.div(.{ .class = "sh" }, .{h.h3(.{}, .{Kind.skill_path.title()})}),
+            h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{Kind.skill_path.title()}), heads(h) }),
             p.pathRow(h, p.shownPath()),
         });
     }
