@@ -8,7 +8,6 @@
 
 const std = @import("std");
 const store = @import("store");
-const ui = @import("ui");
 const core = @import("core");
 const stats = @import("stats.zig");
 const eval = @import("eval.zig");
@@ -85,71 +84,6 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
         .dev = dev,
         .tests = tests.items,
     }, dir, w);
-    try writeSlices(arena, io, &sc, &info, dir, w);
-}
-
-/// DIR/champ/<id>.bin (ui.pvdata.Slice) for the private numbers on the public champion and
-/// matchup pages (ui.pv, site/pv.zig): per role the champion plays, its team's chance
-/// against an average draft (95% range) and with each opponent ("vs") or ally ("with") it
-/// has games beside, every other slot its role's average pick. Numbers the public pages
-/// never show
-fn writeSlices(arena: std.mem.Allocator, io: std.Io, sc: *const df.Scorer, info: *const df.Champions, dir: []const u8, w: *std.Io.Writer) !void {
-    const pd = ui.pvdata;
-    const Lists = struct { vs: std.ArrayList(pd.Pair) = .empty, with: std.ArrayList(pd.Pair) = .empty };
-    var by: std.AutoHashMapUnmanaged(u64, Lists) = .empty;
-    const pairs = sc.e.pairs orelse return;
-    for (pairs.cells) |c| {
-        const g = pairs.groups[c.group];
-        const ally = std.mem.eql(u8, g.kind, "ally");
-        for ([2]struct { u32, u8, u32, u8 }{ .{ c.a, g.r, c.b, g.q }, .{ c.b, g.q, c.a, g.r } }) |side| {
-            const me, const r, const other, const q = side;
-            if (sc.terms.get(df.Champions.key(me, r)) == null) continue;
-            var teams: [2][n_role]u32 = @splat(@splat(0));
-            teams[0][r] = me;
-            teams[if (ally) 0 else 1][q] = other;
-            const e = try by.getOrPut(arena, df.Champions.key(me, r));
-            if (!e.found_existing) e.value_ptr.* = .{};
-            const list = if (ally) &e.value_ptr.with else &e.value_ptr.vs;
-            try list.append(arena, .{ .role = @fromBackingInt(@intCast(q)), .champion = other, .p = @floatCast(sc.blue(teams).p), .games = c.games });
-        }
-    }
-    const out_dir = try std.fs.path.join(arena, &.{ dir, "champ" });
-    try std.Io.Dir.cwd().createDirPath(io, out_dir);
-    var files: usize = 0;
-    const window = try arena.alloc(u8, store.raw.window_len);
-    var it = info.names.iterator();
-    while (it.next()) |kv| {
-        const id = kv.key_ptr.*;
-        var lines: std.ArrayList(pd.Line) = .empty;
-        var named: std.AutoArrayHashMapUnmanaged(u32, void) = .empty;
-        for (0..n_role) |r| {
-            if (sc.terms.get(df.Champions.key(id, r)) == null) continue;
-            var teams: [2][n_role]u32 = @splat(@splat(0));
-            teams[0][r] = id;
-            const ch = sc.blue(teams);
-            const lists = by.get(df.Champions.key(id, r)) orelse Lists{};
-            for ([2][]const pd.Pair{ lists.vs.items, lists.with.items }) |list| for (list) |x| try named.put(arena, x.champion, {});
-            try lines.append(arena, .{
-                .role = @fromBackingInt(@intCast(r)),
-                .games = info.gamesIn(id, r),
-                .win = .{ @floatCast(ch.p), @floatCast(ch.lo), @floatCast(ch.hi) },
-                .vs = lists.vs.items,
-                .with = lists.with.items,
-            });
-        }
-        if (lines.items.len == 0) continue;
-        const names = try arena.alloc(pd.Name, named.count());
-        for (names, named.keys()) |*n, other| n.* = .{ .id = other, .name = info.names.get(other) orelse "" };
-        var out: std.ArrayList(u8) = .empty;
-        try ui.data.encode(arena, pd.Slice, .{ .id = id, .name = kv.value_ptr.*, .names = names, .roles = lines.items }, &out);
-        var buf: [32]u8 = undefined;
-        const path = try std.fs.path.join(arena, &.{ out_dir, try std.fmt.bufPrint(&buf, "{d}.bin", .{id}) });
-        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = out.items });
-        // For nginx's gzip_static: /private/ compresses nothing itself
-        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = try arena.print("{s}.gz", .{path}), .data = try store.raw.compressWith(arena, window, out.items) });
-        files += 1;
-    }
-    try w.print("wrote {d} champion slices to {s}\n", .{ files, out_dir });
 }
 
 /// Names, games in each role and the share patch's play rates (the empty slot's average)
@@ -291,59 +225,6 @@ test "the file scores fixture drafts as core.score" {
     for (games[0..100]) |g| {
         try std.testing.expectApproxEqAbs(score.draftWin(&m.stats, opts, g.teams), sc.blue(g.teams).p, 1e-6);
     }
-}
-
-test "champion slices give the scorer's chances" {
-    const testing = std.testing;
-    const gpa = testing.allocator;
-    const io = testing.io;
-    var arena_state: std.heap.ArenaAllocator = .init(gpa);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-    var rng: std.Random.DefaultPrng = .init(11);
-    const rnd = rng.random();
-    const champs = [_]core.statsfile.Champion{ .{ .id = 1, .name = "A" }, .{ .id = 2, .name = "B" }, .{ .id = 3, .name = "C" } };
-    const games = try arena.alloc(Game, 300);
-    for (games, 0..) |*g, i| {
-        g.* = .{ .id = i, .start = @intCast(i), .patch = 16020, .platform = 0, .teams = undefined, .winner = rnd.int(u1) };
-        for (0..2) |side| for (0..n_role) |r| {
-            g.teams[side][r] = champs[rnd.uintLessThan(usize, champs.len)].id;
-        };
-    }
-    var m = try eval.Model.buildShipped(gpa, &champs, games, &.{});
-    defer m.deinit(gpa);
-    const info = try champions(arena, &m.stats, games);
-    const sc = try df.Scorer.init(arena, try params(arena, &m.stats), 0, &info);
-    var tmp = testing.tmpDir(.{});
-    defer tmp.cleanup();
-    const dir = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
-    var discard: std.Io.Writer.Discarding = .init(&.{});
-    try writeSlices(arena, io, &sc, &info, dir, &discard.writer);
-
-    const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try arena.print("{s}/champ/2.bin", .{dir}), arena, .limited(1 << 20));
-    const slice = try ui.data.decode(arena, ui.pvdata.Slice, bytes);
-    try testing.expectEqual(2, slice.id);
-    try testing.expectEqualStrings("B", slice.name);
-    try testing.expectEqual(n_role, slice.roles.len);
-    const top = slice.roles[0];
-    var alone: [2][n_role]u32 = @splat(@splat(0));
-    alone[0][0] = 2;
-    try testing.expectApproxEqAbs(sc.blue(alone).p, top.win[0], 1e-4);
-    // Each opponent and ally as the scorer has it, and named
-    for (top.vs) |x| {
-        var t = alone;
-        t[1][@backingInt(x.role)] = x.champion;
-        try testing.expectApproxEqAbs(sc.blue(t).p, x.p, 1e-4);
-        try testing.expect(slice.nameOf(x.champion) != null);
-    }
-    for (top.with) |x| {
-        var t = alone;
-        t[0][@backingInt(x.role)] = x.champion;
-        try testing.expectApproxEqAbs(sc.blue(t).p, x.p, 1e-4);
-    }
-    // Lane: the two others (no mirror cell); the other roles' opponents and allies: all three
-    try testing.expectEqual(2 + 3 * (n_role - 1), top.vs.len);
-    try testing.expectEqual(3 * (n_role - 1), top.with.len);
 }
 
 test {
