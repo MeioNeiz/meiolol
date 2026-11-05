@@ -146,7 +146,9 @@ coordinator first):
   crawler writes every stored summary, timeline and mastery body to sealed per-day
   files on the data disk (outside SQLite, so the writer's WAL doesn't carry the
   bytes); a document that fails its block check goes in a raw frame. Raw keeps going
-  beside it until S6. Not yet measured on the box: sizes, zstd CPU, raw frame share
+  beside it until S6. Measured on the box, 2-4 Nov: 2.9-3.5 GB a day; per document
+  summary 3.3 KB (120-153k a day), timeline 21.7 KB (88-113k), mastery 1.5 KB
+  (324-408k); 0 raw frames; zstd -19 ~6% of one core (~85 CPU min a day)
 - S4 built (src/riot/complete_scrub.zig; data-safety.md "Erasure"): forget and the daily
   backup rewrite sealed day files without documents naming a forgotten PUUID (a per-file
   PUUID hash index skips files that hold none) and delete days past 730; Megatron

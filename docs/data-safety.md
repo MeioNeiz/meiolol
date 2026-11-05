@@ -16,9 +16,9 @@ pushes from the box.
   gpu-box (Backups); raw on the gpu-box's archive partition. The complete form's day
   files (data/complete): sealed ones mirrored to Megatron only (Backups; the gpu-box
   copy is S5); the raw valve does not see them
-- Complete form day files take ~2.8 GB a day (measured on C01 from 1 Nov, plus ~30 MB of
-  index), kept 730 days: ~2 TB, four times the 492 GB disk. With the databases (~3.6 GB a
-  day on 2 Nov) the disk's 362 GB free then lasts about 8 weeks. Where they go past
+- Complete form day files take 2.9-3.5 GB a day (C01, 2-4 Nov; timelines two thirds;
+  plus ~30 MB of index), kept 730 days: ~2.4 TB, five times the 492 GB disk. With the
+  databases (~3.6 GB a day on 2 Nov) the disk's 329 GB free (5 Nov) lasts about 7 weeks. Where they go past
   that is not decided yet. The admin page's "Disk full around" and health's "box data
   disk full in ~N days" (under 30) take them at their newest whole day's size
   (admin-history.tsv `complete_day`) on top of the rest of the disk's weekly growth
