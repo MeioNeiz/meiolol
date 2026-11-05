@@ -119,8 +119,8 @@ range (on hover); count; time; gold, one game; plain; few games: a wide range, f
 missing; with context; a sorted column: the ink mixes, no steps; the same colour however
 sure: 53.0, 52.6, 50.0 of 20,000, 54.0 of 400, 54.2 of 120, 65.0 of 40 (faded); fill, heat
 cells
-Used by: strip, table, buildpanel, heatgrid, matchgrid, finder, ranking, homepage,
-champpage, matchpage, tiers
+Used by: strip, table, buildpanel, heatgrid, matchgrid, ranking, homepage, champpage,
+matchpage, tiers
 
 ### Delta
 `delta.zig` `.c-delta` `.c-dbar` site
@@ -136,13 +136,14 @@ adminmodels, tiers
 ### Bar
 `bar.zig` `.c-bar` `.c-track` site
 Bar: a magnitude without good or bad (pick, ban, games), a neutral ink bar beside its
-figure. Bars in one column share a scale: `of` is the column's largest. `track`: a
-position along a full-width line (a place among champions, a rate on 0-100), a mark at it
-and an optional reference tick, no good or bad colour
-States: share; games, the column's most; ban; track: a place, portrait at 1st, the middle
-ticked; track: the middle; track: last; scale: the ends named once; track: a rate, a dot,
-the average ticked
-Used by: strip, table, yourfriends, homepage, admincharts, champpage, tiers
+figure. Bars in one column share a scale: `of` is the column's largest. `wide`: the bar
+alone across its container, where the row puts the figure elsewhere. `track`: a position
+along a full-width line (a place among champions, a rate on 0-100), a mark at it and an
+optional reference tick, no good or bad colour
+States: share; games, the column's most; ban; wide: the bar alone, its figure elsewhere in
+the row; track: a place, portrait at 1st, the middle ticked; track: the middle; track:
+last; scale: the ends named once; track: a rate, a dot, the average ticked
+Used by: strip, champlist, table, yourfriends, homepage, admincharts, champpage, tiers
 
 ### Kda
 `kda.zig` `.c-kda` site
@@ -383,12 +384,12 @@ the figure the list is ordered by, a faint note last (share, games). A row can l
 champion's page. Two columns in a wide card (`cols`). A pair (`vs`): a duel, the portraits
 at both ends, the names over the lane's bar (the first's win rate a tick against the
 middle's, the bar solid to its 95% range's low end and fading to the high one, a ring
-where a patch move started), the figure and its note last. `tiles`: one tile per champion
-filling the card's width, the portrait large, the figure under the name, the note over a
-bar of its share (`fill`)
+where a patch move started) or a Bar of a figure that isn't a win rate (`fill`), the
+figure and its note last. `tiles`: one tile per champion filling the card's width, the
+portrait large, the figure under the name, the note over a bar of its share (`fill`)
 States: mains also play: links, a badge; tiles: share bars, a harder mark; two columns;
-matchups: duels, the lane's bar and range; a role; where a move started; with roles, no
-links
+matchups: duels, the lane's bar and range; a role; where a move started; duels with a Bar:
+a gold lead, the list's biggest full; with roles, no links
 Used by: finder, champpage, matchpage
 
 ### DraftBoard
