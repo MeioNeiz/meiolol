@@ -37,7 +37,10 @@ into its own design trap. Use judgement per case.
   one rather than build a page-local copy
 - uilint (src/site/ui/uilint.zig) guards what one component's tests can't see, against
   src/site/ui/uilint-debt.txt: counts per file that only go down. A line raised or added
-  needs Jacob's ok
+  needs Jacob's ok. Today it catches unscoped selectors and token breaks (colour, font
+  size, breakpoint, !important, popover, unknown token), pages included. It does not yet
+  catch reaching into another component or page-local copies: checks 2 and 3 below are
+  by eye
 - Product rules bind every screen: docs/production-key.md "Product rules"
 - Measured guardrails (word budgets, label lengths, tap targets) in docs/plan/ui/README.md
   are drafts to test on the first rebuilt page, not settled rules
@@ -49,8 +52,9 @@ the page that uses it.
 Coordinator "review:" checks, a no on any = not ok to push:
 1. uilint-debt.txt didn't grow
 2. The change reached every user the register lists for that component (a rule changed
-   in one caller is the smell)
-3. Page CSS only lays out cards; anything styled is a component or a variant
+   in one caller is the smell). By eye: no guard yet
+3. Page CSS only lays out cards; anything styled is a component or a variant. By eye: a
+   page selector that starts with its own scope and styles `.c-x` inside passes uilint
 4. Rates, their colour and fade, and tips came through the rate view and Tip
 5. ui-sizes before and after on a structural change, per page
 6. Shots at 390 and wide, gallery states included
