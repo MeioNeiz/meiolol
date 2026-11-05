@@ -2,15 +2,15 @@
 //! renders it from the poller's state and keeps the same Data encoded (data.zig) at
 //! app.bin; on a change it sends `{"app": seq}` and the island fetches the file and
 //! patches. A screen per client state: a note while there is nothing to show, champ
-//! select's board and options, the in-game panel, the post game; the sign-in under it,
-//! or in its place before there is data. The loading screen has nothing to tap, so the
-//! shell renders it as static HTML after the island (ui/loadscreen.zig). The charts' own
-//! state (a tapped minute, a dragged range) and what's typed live in App, past patches
+//! select's board and options, the in-game panel; the sign-in under it, or in its place
+//! before there is data. The loading screen and the post game have nothing to tap, so
+//! the shell renders them as static HTML after the island (ui/loadscreen.zig,
+//! ui/postgame.zig). The charts' own state (a tapped minute, a dragged range) and what's
+//! typed live in App, past patches
 const std = @import("std");
 const tree = @import("tree.zig");
 const champselect = @import("champselect.zig");
 const gamescreen = @import("gamescreen.zig");
-const postgame = @import("postgame.zig");
 const lane = @import("lane.zig");
 const signin = @import("signin.zig");
 const compview = @import("compview.zig");
@@ -30,7 +30,8 @@ pub const Screen = union(enum) {
     /// The shell's static loading screen shows; the island only its foot and sign-in
     loading,
     game: gamescreen.Screen,
-    post: postgame.Screen,
+    /// As loading: the shell's static post game shows
+    post,
 };
 
 pub const Note = struct {
@@ -86,7 +87,7 @@ pub const App = struct {
                 .select => |s| champselect.view(h, s, &a.lane),
                 .loading => null,
                 .game => |s| gamescreen.view(h, s, .{ .lane = &a.lane, .team = &a.team }),
-                .post => |s| postgame.view(h, s, &a.team),
+                .post => null,
             },
             if (d.foot.len > 0) h.p(.{ .class = "foot" }, .{d.foot}) else null,
             if (d.signin) |s| signin.view(h, s, &a.form) else null,

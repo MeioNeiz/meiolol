@@ -128,6 +128,7 @@ fn build(a: Allocator, live: bool) !?Next {
         .home = if (s.status == .waiting) try home.view(a, c, s.form) else null,
         .build = try gameBuild(a, c, s.status),
         .load = try loadUnder(a, c, s.status),
+        .post = try postUnder(a, c, s.status),
     });
 }
 
@@ -149,12 +150,13 @@ fn signIn(s: ?*const state.SignIn, status: state.Status) ?ui.signin.SignIn {
 /// Encoded and rendered into `a`, so nothing points into the poller's memory once it
 /// unlocks; null when what shows is as before
 /// The static panels after the island: before champ select the form panel and the tiles
-/// beside it, the loading screen, the build panel in game
+/// beside it, the loading screen, the build panel in game, the post game
 const Panels = struct {
     form: ?ui.lobby.Lobby = null,
     home: ?ui.apphome.Home = null,
     build: ?ui.gamebuild.Build = null,
     load: ?ui.loadscreen.Screen = null,
+    post: ?ui.postgame.Screen = null,
 };
 
 fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp, opts: ?ui.picks.Data, panels: Panels) !?Next {
@@ -167,6 +169,7 @@ fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.comp
     if (panels.home) |x| try ui.data.encode(a, ui.apphome.Home, x, &cbin);
     if (panels.build) |x| try ui.data.encode(a, ui.gamebuild.Build, x, &cbin);
     if (panels.load) |x| try ui.data.encode(a, ui.loadscreen.Screen, x, &cbin);
+    if (panels.post) |x| try ui.data.encode(a, ui.postgame.Screen, x, &cbin);
     try cbin.appendSlice(a, phase(d.where));
     try cbin.appendSlice(a, &.{ @intFromBool(state.by_mastery.load(.acquire)), @intFromBool(d.signin == null) });
     const comp_id = @as(u32, @truncate(std.hash.Wyhash.hash(0, cbin.items))) | 1;
@@ -187,7 +190,7 @@ fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.comp
     if (page) |old| if (std.mem.eql(u8, shows(old.bin), shows(bin.items)) and std.mem.eql(u8, shows(old.practice), shows(pbin.items)) and
         std.mem.eql(u8, shows(old.picks), shows(kbin.items)) and old.comp == comp_id) return null;
     seq += 1;
-    const html = try renderIn(a, d, p, under, .{ .site = files.site, .mastery = state.by_mastery.load(.acquire), .picks = k, .lobby = panels.form, .home = panels.home, .build = panels.build, .load = panels.load });
+    const html = try renderIn(a, d, p, under, .{ .site = files.site, .mastery = state.by_mastery.load(.acquire), .picks = k, .lobby = panels.form, .home = panels.home, .build = panels.build, .load = panels.load, .post = panels.post });
     const live = switch (d.screen) {
         .select, .loading, .game => true,
         .note, .post => false,
@@ -259,6 +262,8 @@ pub const Frame = struct {
     build: ?ui.gamebuild.Build = null,
     /// The loading screen after the island (ui/loadscreen.zig), the comp view under it
     load: ?ui.loadscreen.Screen = null,
+    /// The post game after the island (ui/postgame.zig)
+    post: ?ui.postgame.Screen = null,
     /// Before </head>
     head: []const u8 = "",
     /// After <body> and before the scripts
@@ -307,6 +312,7 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
     const home_n: ?ui.N = if (f.home) |x| ui.apphome.view(&h, f.site, x) else null;
     const build_n: ?ui.N = if (f.build) |x| ui.gamebuild.view(&h, x) else null;
     const load_n: ?ui.N = if (f.load) |x| ui.loadscreen.view(&h, x) else null;
+    const post_n: ?ui.N = if (f.post) |x| ui.postgame.view(&h, x) else null;
     if (h.oom) return error.OutOfMemory;
     var out: std.Io.Writer.Allocating = .init(a);
     const w = &out.writer;
@@ -323,6 +329,7 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
     try w.writeAll("<main class=\"c-live\">");
     try ui.html.write(&t, body, w);
     if (load_n) |n| try ui.html.write(&t, n, w);
+    if (post_n) |n| try ui.html.write(&t, n, w);
     if (tabs_n) |n| try ui.html.write(&t, n, w);
     if (picks_n) |n| try ui.html.write(&t, n, w);
     if (comp_n) |n| try ui.html.write(&t, n, w);
@@ -427,7 +434,7 @@ pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.D
             .loading => .loading,
             // The public edition gets the panel once the private one has proved it
             .in_game => |g| if (c.private) .{ .game = try game(a, c, g) } else .{ .note = .{ .title = "In game", .text = "The board comes back in your next champ select." } },
-            .post_game => |p| .{ .post = try post(a, c, p) },
+            .post_game => .post,
         },
         .foot = switch (note) {
             .restart => restart_line,
@@ -1069,11 +1076,28 @@ fn curve(a: Allocator, mu: lanecard.Matchup) !struct { band: [][2]f32, line: []f
     return .{ .band = band, .line = line };
 }
 
+/// The post game, static HTML after the island
+pub fn postUnder(a: Allocator, c: Ctx, status: state.Status) !?ui.postgame.Screen {
+    return switch (status) {
+        .post_game => |p| try post(a, c, p),
+        else => null,
+    };
+}
+
 fn post(a: Allocator, c: Ctx, p: *const postgame.PostGame) !ui.postgame.Screen {
     const awards = try a.alloc(ui.postgame.Award, p.awards.len);
-    for (awards, p.awards) |*x, w| x.* = .{ .what = w.what, .champ = try c.champ(a, w.champion), .side = if (w.ours) .us else .them };
+    for (awards, p.awards) |*x, w| {
+        const figures = try a.alloc([]const u8, w.figures.len);
+        for (figures, w.figures) |*out, f| out.* = switch (f.kind) {
+            .damage => try a.print("{f} dmg", .{count(@intFromFloat(f.value))}),
+            .kda => try a.print("{d:.1} KDA", .{f.value}),
+            .gold => try a.print("{f} gold", .{count(@intFromFloat(f.value))}),
+            .cs => try a.print("{d} cs", .{@as(u32, @intFromFloat(f.value))}),
+            .vision => try a.print("{d} vision", .{@as(u32, @intFromFloat(f.value))}),
+        };
+        x.* = .{ .champ = try c.champ(a, w.champion), .side = if (w.ours) .us else .them, .figures = figures };
+    }
     var rows: [5]ui.teamrows.Row = undefined;
-    var damage: std.ArrayList(ui.postgame.Damage) = .empty;
     for (&rows, p.rows) |*x, r| {
         var seats: [2]?ui.teamrows.Seat = .{ null, null };
         for (&seats, [_]?postgame.Seat{ r.ours, r.theirs }) |*out, seat_or| {
@@ -1089,27 +1113,30 @@ fn post(a: Allocator, c: Ctx, p: *const postgame.PostGame) !ui.postgame.Screen {
         x.* = try teamRow(a, r.role, seats, if (p.pending) null else r.goldDiff());
     }
     // Damage comes with the end of game block
-    if (!p.pending) for ([_]bool{ true, false }) |ours| for (p.rows) |r| {
-        const s = (if (ours) r.ours else r.theirs) orelse continue;
-        try damage.append(a, .{
-            .champ = try c.champ(a, s.champion),
-            .side = if (ours) .us else .them,
-            .you = s.me,
-            .value = s.damage,
-            .text = try a.print("{f}", .{count(s.damage)}),
-        });
+    var damage: [2]ui.postgame.Team = .{ .{}, .{} };
+    if (!p.pending) for (&damage, [_]bool{ true, false }) |*team, ours| {
+        var players: std.ArrayList(ui.postgame.Damage) = .empty;
+        var total: u32 = 0;
+        for (p.rows) |r| {
+            const s = (if (ours) r.ours else r.theirs) orelse continue;
+            total +|= s.damage;
+            try players.append(a, .{
+                .champ = try c.champ(a, s.champion),
+                .you = s.me,
+                .value = s.damage,
+                .text = try a.print("{f}", .{count(s.damage)}),
+            });
+        }
+        team.* = .{ .total = try a.print("{f}", .{count(total)}), .players = players.items };
     };
     return .{
         .win = p.win,
         .coming = p.pending,
         .verdict = p.verdict,
         .kills = .{ @intCast(@min(p.kills[0], 9999)), @intCast(@min(p.kills[1], 9999)) },
-        .story = p.story,
-        .lane = p.lane,
         .awards = awards,
         .rows = try a.dupe(ui.teamrows.Row, &rows),
-        .damage = damage.items,
-        .team = if (p.history.len > 0) try perMinute(a, p.history, p.history[p.history.len - 1], .team) else &.{},
+        .damage = damage,
     };
 }
 
@@ -1807,7 +1834,7 @@ test "options: the region chip once there are every region's stats, the lane pan
     try testing.expect(std.mem.find(u8, html, "data-shell=\"{&quot;regions&quot;:false}\"") != null);
 }
 
-test "post game: lanes, damage ours then theirs, team gold by minute" {
+test "post game: static after the island, award cards, lanes, damage by team" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1820,38 +1847,40 @@ test "post game: lanes, damage ours then theirs, team gold by minute" {
         .ours = .{ .champion = ahri, .kills = 7, .deaths = 2, .assists = 9, .cs = 231, .gold = 13_000, .damage = 24_600, .vision = 20, .level = 16, .me = true },
         .theirs = .{ .champion = syndra, .kills = 2, .deaths = 7, .assists = 3, .cs = 214, .gold = 13_200, .damage = 950, .vision = 12, .level = 15, .me = false },
     };
-    const history = [_]ingame.Sample{ .{ .time = 0, .team = 0, .lane = 0 }, .{ .time = 60, .team = -100, .lane = 0 }, .{ .time = 120, .team = 400, .lane = 0 } };
     const p: postgame.PostGame = .{
         .win = true,
         .length = 1722,
-        .verdict = "Victory in 28:42.",
-        .story = "",
-        .lane = "",
-        .awards = &.{.{ .what = "Most damage", .champion = ahri, .ours = true }},
+        .verdict = "Victory 28:42",
+        .awards = &.{.{ .champion = ahri, .ours = true, .figures = &.{ .{ .kind = .damage, .value = 24_600 }, .{ .kind = .kda, .value = 8 }, .{ .kind = .cs, .value = 231 } } }},
         .rows = rows,
         .kills = .{ 24, 17 },
         .gold = .{ 60_000, 52_000 },
-        .history = &history,
+        .history = &.{},
     };
-    var d = try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .post_game = &p }, .none);
-    const s = d.screen.post;
+    const c: Ctx = .{ .stats = &f.stats, .icons = null, .private = false };
+    const s = (try postUnder(a, c, .{ .post_game = &p })).?;
     try testing.expectEqualStrings("231 cs · 25k dmg", s.rows[2].us.?.line);
     try testing.expectEqualStrings("\u{2212}200", s.rows[2].gap);
     try testing.expectEqual(.none, s.rows[2].lean);
-    try testing.expectEqual(.us, s.damage[0].side);
-    try testing.expectEqualStrings("950", s.damage[1].text);
+    try testing.expectEqualStrings("950", s.damage[1].players[0].text);
+    try testing.expectEqualStrings("25k", s.damage[0].total);
     try testing.expectEqualStrings("Ahri", s.awards[0].champ.?.name);
-    try testing.expectEqualSlices(f32, &.{ 0, -100, 400 }, s.team);
+    try testing.expectEqualStrings("25k dmg", s.awards[0].figures[0]);
+    try testing.expectEqualStrings("8.0 KDA", s.awards[0].figures[1]);
+    try testing.expectEqualStrings("231 cs", s.awards[0].figures[2]);
+    var d = try data(a, c, .{ .post_game = &p }, .none);
+    try testing.expectEqual(.post, d.screen);
     d.seq = 1;
-    const html = try render(a, d, null, null);
-    try testing.expect(std.mem.find(u8, html, "Victory in 28:42.") != null);
+    const html = try renderIn(a, d, null, null, .{ .post = s });
+    try testing.expect(std.mem.find(u8, html, "Victory 28:42") != null);
+    try testing.expect(std.mem.find(u8, html, "c-post") != null);
 
     var coming = p;
     coming.pending = true;
     coming.verdict = "Result coming";
-    const c = (try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .post_game = &coming }, .none)).screen.post;
-    try testing.expect(c.coming);
-    try testing.expectEqualStrings("Lv 16 · 231 cs", c.rows[2].us.?.line);
-    try testing.expectEqual(0, c.damage.len);
-    try testing.expectEqualStrings("", c.rows[2].gap);
+    const pending = (try postUnder(a, c, .{ .post_game = &coming })).?;
+    try testing.expect(pending.coming);
+    try testing.expectEqualStrings("Lv 16 · 231 cs", pending.rows[2].us.?.line);
+    try testing.expectEqual(0, pending.damage[0].players.len + pending.damage[1].players.len);
+    try testing.expectEqualStrings("", pending.rows[2].gap);
 }

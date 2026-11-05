@@ -113,7 +113,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - GameBuild: the desktop app's in-game panel under the island (private edition): my...
 - LoadScreen: the desktop app while the game loads
 - GameScreen: the desktop app's in-game panel, private edition only (the public one...
-- PostGame: the desktop app after a game
+- PostGame: the desktop app after a game, static HTML after the island (nothing to tap)
 - SignIn: the app's sign-in to meio.lol (the poller's device.zig does the request)
 - Practice: Practice (private edition): a champ select set up by hand in the app...
 - Picks: the app's Options panel in champ select (docs/plan/ui/app-options.md), its...
@@ -667,16 +667,15 @@ gold through the game. Only what the scoreboard shows anyway: a panel to look at
 alert (docs/plan/app.md "In-game companion"). Wide: lanes left, your lane right; narrow:
 one column, your lane after the score
 States: minute 14; early, no opponent; no lane
-Used by: postgame, app
+Used by: app
 
 ### PostGame
 `postgame.zig` `.c-post`
-PostGame: the desktop app after a game. The verdict and kills, the team gold story and
-your lane in a sentence each, award chips; then both teams lane by lane (TeamRows), the
-team gold through the game and damage to champions. Facts, no advice; no dense tables
-(research/questions/desktop-app-layout.md C20)
-States: victory; defeat, no history; result coming
-Used by: app
+PostGame: the desktop app after a game, static HTML after the island (nothing to tap). The
+verdict and kills over award cards (a champion's best figures, one card each); then both
+teams lane by lane (TeamRows) beside damage to champions, each team with its total. Facts,
+no advice, no sentences (research/questions/desktop-app-layout.md C20)
+States: victory; defeat; result coming
 
 ### SignIn
 `signin.zig` `.c-signin`
@@ -717,10 +716,10 @@ The desktop app's page as one island (ui-app.wasm). The shell (src/shell/screens
 renders it from the poller's state and keeps the same Data encoded (data.zig) at app.bin;
 on a change it sends `{"app": seq}` and the island fetches the file and patches. A screen
 per client state: a note while there is nothing to show, champ select's board and options,
-the in-game panel, the post game; the sign-in under it, or in its place before there is
-data. The loading screen has nothing to tap, so the shell renders it as static HTML after
-the island (ui/loadscreen.zig). The charts' own state (a tapped minute, a dragged range)
-and what's typed live in App, past patches
+the in-game panel; the sign-in under it, or in its place before there is data. The loading
+screen and the post game have nothing to tap, so the shell renders them as static HTML
+after the island (ui/loadscreen.zig, ui/postgame.zig). The charts' own state (a tapped
+minute, a dragged range) and what's typed live in App, past patches
 States: waiting; champ select, private; all locked, comp under; all locked, comp under,
 private; lobby, form and tiles; in game; first start, sign in; first start, downloading;
 first start, download failed; League closed; waiting, sign in and restart lines; waiting,
@@ -836,7 +835,7 @@ head, a tap shows the minute's figures (ChartTip), a drag selects minutes (the m
 page's Versus reads `range`). lanechart.zig's successor: the matchup pages and Your games
 move here when they are rebuilt
 States: gold, a minute tapped; CS, minutes dragged; typical only (the matchup page)
-Used by: champselect, gamescreen, postgame, app, laneduel, champpage, matchpage
+Used by: champselect, gamescreen, app, laneduel, champpage, matchpage
 
 ### TimelineChart
 `timeline.zig` `.c-tl` site

@@ -38,7 +38,7 @@ pub fn narrow(ctx: Ctx, p: *const postgame.PostGame) void {
     if (!p.pending) damage(ctx, p);
 }
 
-/// "Victory in 28:42." big, the gold story and my lane in a sentence each, award chips
+/// "Victory 28:42" big, then a chip per champion holding the game's best figures
 fn summary(ctx: Ctx, p: *const postgame.PostGame) void {
     // Pending: no result yet, so neither win nor loss colour
     const tone: ?dvui.Color = if (p.pending) null else if (p.win) palette.ahead else palette.behind;
@@ -63,15 +63,13 @@ fn summary(ctx: Ctx, p: *const postgame.PostGame) void {
             .padding = .{},
         });
     }
-    if (p.story.len > 0) w.para(@src(), "{s}", .{p.story}, .{ .id_extra = 0 });
-    if (p.lane.len > 0) w.para(@src(), "{s}", .{p.lane}, .{ .id_extra = 1 });
     if (p.awards.len == 0) return;
     var fb = w.pills(@src(), 0);
     defer fb.deinit();
     for (p.awards, 0..) |a, i| award(ctx, i, a);
 }
 
-/// "Most damage" over the champion's icon and name, in its team's colour
+/// The champion's name in its team's colour over its figures ("25k dmg · 6.3 KDA")
 fn award(ctx: Ctx, i: usize, a: postgame.Award) void {
     const team = if (a.ours) palette.ally else palette.enemy;
     var box = dvui.box(@src(), .{ .dir = .horizontal }, .{
@@ -88,8 +86,23 @@ fn award(ctx: Ctx, i: usize, a: postgame.Award) void {
     w.champIcon(@src(), ctx, a.champion, .{ .size = 24 });
     var col = dvui.box(@src(), .{ .dir = .vertical }, .{ .gravity_y = 0.5, .margin = .{ .x = 6 } });
     defer col.deinit();
-    dvui.labelNoFmt(@src(), a.what, .{}, .{ .font = w.tiny(), .color_text = .{ .color = w.text().opacity(0.65) }, .padding = .{} });
     dvui.labelNoFmt(@src(), ctx.stats.nameOf(a.champion), .{}, .{ .font = w.small(), .color_text = .{ .color = team.lighten(10) }, .padding = .{} });
+    var buf: [96]u8 = undefined;
+    var out: std.Io.Writer = .fixed(&buf);
+    for (a.figures, 0..) |f, j| figure(&out, f, j > 0) catch break;
+    dvui.labelNoFmt(@src(), out.buffered(), .{}, .{ .font = w.tiny(), .color_text = .{ .color = w.text().opacity(0.75) }, .padding = .{} });
+}
+
+fn figure(out: *std.Io.Writer, f: postgame.Figure, sep: bool) !void {
+    if (sep) try out.writeAll(" · ");
+    var buf: [16]u8 = undefined;
+    switch (f.kind) {
+        .damage => try out.print("{s} dmg", .{w.compact(&buf, @intFromFloat(f.value))}),
+        .kda => try out.print("{d:.1} KDA", .{f.value}),
+        .gold => try out.print("{s} gold", .{w.compact(&buf, @intFromFloat(f.value))}),
+        .cs => try out.print("{d} cs", .{@as(u32, @intFromFloat(f.value))}),
+        .vision => try out.print("{d} vision", .{@as(u32, @intFromFloat(f.value))}),
+    }
 }
 
 fn lanes(ctx: Ctx, p: *const postgame.PostGame) void {

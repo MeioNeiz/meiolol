@@ -519,6 +519,7 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         .home = if (s.status == .waiting) try shell_home.view(a, c, if (s.form) |*f| f else null) else null,
         .build = try screens.gameBuild(a, c, s.status),
         .load = try screens.loadUnder(a, c, s.status),
+        .post = try screens.postUnder(a, c, s.status),
         .head = try a.print(
             \\{s}<meta name="rv-bin" content="/private/{s}/"><link rel="stylesheet" href="{s}/review.css"><script src="{s}/review.js"></script><script src="{s}/nav.js" defer></script>
         , .{ csp.files_only, dir, root, root, root }),

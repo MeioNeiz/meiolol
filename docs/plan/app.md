@@ -142,10 +142,10 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   late: Live Client Data or the gameflow session), team comp pills; private adds player
   scouting (APP7)
 - APP11 Post game view, first pass done (both editions: facts the client's own
-  screen shows): verdict and kills, the team gold story in a sentence, my lane at 14 min
-  against the matchup and gold earned over the game, award chips (damage, KDA, gold, CS,
-  vision), mirrored lane rows with gold earned between, team gold chart (from the
-  in-game samples; none when the app missed the game), damage bars. From
+  screen shows): verdict and kills, award cards (the game's best damage, KDA, gold, CS
+  and vision, one card per champion holding any, at most 4, ours first), mirrored lane
+  rows with gold earned between, damage bars by team with each team's total; no
+  sentences. "Result coming" with the last in-game rows until the block lands. From
   /lol-end-of-game/v1/eog-stats-block (lcu/eog.zig; positions from detectedTeamPosition,
   else the last in-game tick, else inferred). Left: check APP1's real block; tabs
   (fighting, farming, vision); our draft call against the result
@@ -204,9 +204,9 @@ CommunityDragon champion-icons/<id>.png into data/icons, gitignored).
   and team item gold bar, five mirrored lane rows (our icon, gold delta, their icon)
   left; your lane against the curve, respawns and team gold through the game right.
   Narrow: one column, rows without names. Later a small panel, hidden by default, hotkey
-- Post game (APP11, built: desktop/post.zig): verdict card with the gold story, my lane
-  and award chips on top; mirrored lane rows left; team gold area (blue over red) and
-  damage bars right; detail behind tabs later; no dense tables
+- Post game (APP11, built: ui/postgame.zig, static after the island): verdict and award
+  cards on top; lane rows left; damage by team right; detail behind tabs later; no dense
+  tables (dvui desktop/post.zig keeps its team gold area)
 
 ## In-game companion
 
