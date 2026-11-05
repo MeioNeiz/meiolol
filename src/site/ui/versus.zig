@@ -18,6 +18,7 @@ const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
 const objicon = @import("objicon.zig");
 const champ = @import("champ.zig");
+const role = @import("role.zig");
 const badge = @import("badge.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
@@ -221,24 +222,32 @@ fn dots(h: *H, r: Row, b: [2]f32) N {
     });
 }
 
-/// `names`: the two sides, for screen readers (`key` shows them). A row without `bars`
-/// shows nothing; data-grow: the rows stretch in a taller card
-pub fn bars(h: *H, names: [2][]const u8, items: []const Row) N {
+/// Two sides' shares (`shares` rows) through the phases of a game, left to right in
+/// time: the first side's columns rise from a centre line, the second's hang under it,
+/// each to its own 0-100, its figure at the tip, the larger bold. `sides`: what stands
+/// left of each half (a portrait, a role icon), named under it
+pub fn timeline(h: *H, names: [2][]const u8, sides: [2]N, items: []const Row) N {
     var l = h.list();
+    l.add(h.span(.{ .key = items.len, .class = "sd", .aria_hidden = true }, .{
+        h.span(.{ .class = "us" }, .{ sides[0], h.small(.{}, .{names[0]}) }),
+        h.span(.{ .class = "them" }, .{ sides[1], h.small(.{}, .{names[1]}) }),
+    }));
     for (items, 0..) |r, i| {
         const b = r.bars orelse continue;
-        l.add(h.div(.{ .key = i, .class = "br" }, .{
+        l.add(h.div(.{ .key = i, .class = "tc", .data_thin = r.wide }, .{
             h.span(.{ .class = "lab" }, .{r.label}),
-            h.span(.{ .class = "us", .aria_hidden = true, .style = h.vars(.{ .x = pct(b[0]) }) }, .{}),
-            h.span(.{ .class = "n", .data_lead = r.lead == .a }, .{ h.span(.{ .class = "sr" }, .{ names[0], " " }), r.a }),
-            h.span(.{ .class = "them", .aria_hidden = true, .style = h.vars(.{ .x = pct(b[1]) }) }, .{}),
-            h.span(.{ .class = "n", .data_lead = r.lead == .b }, .{ h.span(.{ .class = "sr" }, .{ names[1], " " }), r.b }),
+            h.span(.{ .class = "up" }, .{h.span(.{ .class = "t" }, .{h.span(.{ .class = "b", .style = h.vars(.{ .x = pct(b[0]) }) }, .{
+                h.span(.{ .class = "n", .data_lead = r.lead == .a }, .{ h.span(.{ .class = "sr" }, .{ names[0], " " }), r.a }),
+            })})}),
+            h.span(.{ .class = "dn" }, .{h.span(.{ .class = "t" }, .{h.span(.{ .class = "b", .style = h.vars(.{ .x = pct(b[1]) }) }, .{
+                h.span(.{ .class = "n", .data_lead = r.lead == .b }, .{ h.span(.{ .class = "sr" }, .{ names[1], " " }), r.b }),
+            })})}),
         }));
     }
-    return h.div(.{ .class = "c-vs", .data_v = "bars", .data_grow = {}, .role = "group", .aria_label = W.rows.with(h, .{ .a = names[0], .b = names[1] }) }, .{l.done()});
+    return h.div(.{ .class = "c-vs", .data_v = "time", .data_grow = {}, .role = "group", .aria_label = W.rows.with(h, .{ .a = names[0], .b = names[1] }) }, .{l.done()});
 }
 
-/// The two sides' names in their colours, for a card head over `rows` or `bars`
+/// The two sides' names in their colours, for a card head over `rows`
 pub fn key(h: *H, names: [2][]const u8) N {
     return h.span(.{ .class = "c-vs", .data_v = "key", .aria_hidden = true }, .{ h.span(.{ .class = "us" }, .{names[0]}), h.span(.{ .class = "them" }, .{names[1]}) });
 }
@@ -361,7 +370,7 @@ pub const css =
     \\  .c-vs .tr { height: 14px; margin-top: 4px; border-radius: 3px; background: var(--bar-track); }
     \\  .c-vs .tr::before { content: ""; position: absolute; top: -3px; bottom: -3px; left: 50%; width: 1px; background: var(--line-2); }
     \\  .c-vs .tr > .q { position: absolute; inset: 0 auto; left: calc(var(--a) * 1%); width: calc((var(--b) - var(--a)) * 1%); background: var(--wash); box-shadow: inset 0 0 0 1px var(--line-2); }
-    \\  .c-vs .tr > .typ { top: 0; bottom: 0; }
+    \\  .c-vs .tr > .typ { z-index: 1; top: -5px; bottom: -5px; box-shadow: 0 0 0 1px var(--panel); border-radius: 1px; }
     \\  .c-vs .tr > .you { position: absolute; top: -4px; bottom: -4px; left: calc(var(--x) * 1%); width: 8px; margin-left: -4px; border-radius: 3px; background: var(--us); box-shadow: 0 0 0 2px var(--panel); }
     \\  .c-vs[data-v="rows"] { grid-template-columns: minmax(0, 1fr); gap: 0; }
     \\  .c-vs[data-v="key"] { display: inline-flex; gap: var(--sp-3); font-size: var(--fs-s); font-weight: var(--w-b); }
@@ -413,16 +422,29 @@ pub const css =
     \\  .c-vs .tk > .b { left: calc(var(--b) * 1%); }
     \\  .c-vs .key > .a, .c-vs .tk > .a { border: 2px solid var(--t2); background: var(--panel); }
     \\  .c-vs .key > .b, .c-vs .tk > .b { background: var(--brand-dot); }
-    \\  .c-vs[data-v="bars"] { grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: 0; }
-    \\  .c-vs > .br { display: grid; grid-template-columns: minmax(0, 7em) minmax(0, 1fr) 3em; align-items: center;
-    \\    align-content: center; gap: 3px var(--sp-3); padding: var(--sp-2) 0; }
-    \\  .c-vs > .br + .br { border-top: 1px solid var(--line); }
-    \\  .c-vs .br > .lab { grid-column: 1; grid-row: span 2; justify-self: start; color: var(--t2); font-size: var(--fs-s); white-space: normal; }
-    \\  .c-vs .br > :is(.us, .them) { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--c) calc(var(--x) * 1%), var(--bar-track) 0); }
-    \\  .c-vs .br > .us { --c: var(--us-hot); }
-    \\  .c-vs .br > .them { --c: var(--them-hot); }
-    \\  .c-vs .br > .n { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.8; }
-    \\  .c-vs .br > .n[data-lead] { font-weight: var(--w-b); opacity: 1; }
+    \\  .c-vs[data-v="time"] { grid-template-columns: auto; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column;
+    \\    grid-template-rows: minmax(64px, 1fr) minmax(64px, 1fr) auto; gap: 0 var(--sp-2); min-height: 200px; }
+    \\  .c-vs > .sd, .c-vs > .tc { grid-row: 1 / -1; display: grid; grid-template-rows: subgrid; }
+    \\  .c-vs .sd > span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding-right: var(--sp-2); }
+    \\  .c-vs .sd small { font-size: var(--fs-xs); font-weight: var(--w-b); }
+    \\  .c-vs .sd > .us small { color: var(--us-hot); }
+    \\  .c-vs .sd > .them small { color: var(--them-hot); }
+    \\  .c-vs .tc > .lab { grid-row: 3; padding-top: var(--sp-1); text-align: center; font-size: var(--fs-xs); color: var(--t2); }
+    \\  .c-vs .tc > :is(.up, .dn) { display: flex; justify-content: center; }
+    \\  .c-vs .tc > .up { grid-row: 1; align-items: flex-end; padding-top: 1.6em; border-bottom: 1px solid var(--line-2); }
+    \\  .c-vs .tc > .dn { grid-row: 2; align-items: flex-start; padding-bottom: 1.6em; }
+    \\  .c-vs .tc .t { display: flex; flex-direction: column; justify-content: flex-end; width: min(48px, 60%); height: 100%; background: var(--bar-track); }
+    \\  .c-vs .tc > .up .t { border-radius: 4px 4px 0 0; }
+    \\  .c-vs .tc > .dn .t { justify-content: flex-start; border-radius: 0 0 4px 4px; }
+    \\  .c-vs .tc .b { position: relative; height: calc(var(--x) * 1%); background: var(--c); border-radius: inherit; }
+    \\  .c-vs .tc > .up .b { --c: var(--us-hot); }
+    \\  .c-vs .tc > .dn .b { --c: var(--them-hot); }
+    \\  .c-vs .tc .n { position: absolute; left: 50%; transform: translateX(-50%); font-size: var(--fs-m); font-variant-numeric: tabular-nums;
+    \\    white-space: nowrap; opacity: 0.8; }
+    \\  .c-vs .tc > .up .n { bottom: 100%; padding-bottom: 2px; }
+    \\  .c-vs .tc > .dn .n { top: 100%; padding-top: 2px; }
+    \\  .c-vs .tc .n[data-lead] { font-weight: var(--w-b); opacity: 1; }
+    \\  .c-vs .tc[data-thin] { opacity: var(--fade); }
     \\  .c-vs .bnd > .ends { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
     \\}
     \\
@@ -458,11 +480,16 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Level 6"), .a = plain("5:19"), .b = plain("5:28"), .lead = .a, .sub = plain("9 s apart") },
         .{ .label = plain("First item"), .a = plain("12:04"), .b = plain("–") },
     }));
-    g.addFill("bars: lane kills, each rate on its own 0-100 track", bars(h, .{ "Ornn", "Opponent" }, &.{
+    g.addFill("timeline: lane kills by phase, Ornn above, the opponent under", timeline(h, .{ "Ornn", "Opponent" }, .{ champ.view(h, champ.demo("Ornn", "Ornn"), .{ .px = .@"32", .named = false }), role.view(h, .top, .{ .s = .l, .named = false }) }, &.{
+        shares(h, plain("by 6 min"), 0.49, 0.46),
+        shares(h, plain("6-14 min"), 0.71, 0.74),
+        shares(h, plain("14+ min"), 0.87, 0.82),
+    }));
+    g.addFill("timeline: first blood ahead; one side at 0", timeline(h, .{ "Ornn", "Opponent" }, .{ champ.view(h, champ.demo("Ornn", "Ornn"), .{ .px = .@"32", .named = false }), role.view(h, .top, .{ .s = .l, .named = false }) }, &.{
         shares(h, plain("First blood"), 0.10, 0.12),
-        shares(h, plain("Kill by 6:00"), 0.49, 0.46),
-        shares(h, plain("Kill 6-14"), 0.71, 0.74),
-        shares(h, plain("Kill after 14"), 0.03, 0.04),
+        shares(h, plain("by 6 min"), 0.49, 0.46),
+        shares(h, plain("6-14 min"), 0.71, 0.74),
+        shares(h, plain("14+ min"), 0.03, 0),
     }));
     g.addFill("dumbbell: new against practised players, a gap each; a thin row", dumbbell(h, .{ .names = .{ "New", "Practised" }, .fig = plain("Gap"), .lo = 40, .hi = 56, .ticks = &.{ 40, 45, 50, 55 } }, &.{
         .{ .head = bellHead(h, "Rengar"), .a = 41.2, .b = 52.2, .fig = plain("+11.0"), .tag = badge.view(h, .neutral, .{plain("Harder")}) },

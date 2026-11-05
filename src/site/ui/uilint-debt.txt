@@ -20,7 +20,7 @@ champ fade 2
 champhead rate 1
 champlist rate 3
 champpage css 3
-champpage pagecss 46
+champpage pagecss 42
 champpage fade 2
 champrolepicker title 1
 champrolepicker fade 1

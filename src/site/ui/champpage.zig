@@ -416,17 +416,16 @@ pub const W = struct {
     pub const all_lanes = plain("dashed: all lanes");
     pub const kills_head = plain("Lane kills");
     pub const kills_them = plain("Opponent");
-    pub const kills_vs = plain("vs");
     pub const lanes_n = Phrase("{n:count} lanes");
     pub const first_blood = plain("First blood");
-    pub const kills = [3]tree.Text{ plain("Kill by 6:00"), plain("Kill 6-14"), plain("Kill after 14") };
+    pub const kills = [3]tree.Text{ plain("by 6 min"), plain("6-14 min"), plain("14+ min") };
     pub const objectives_head = plain("Objectives");
     pub const firsts = [4]tree.Text{ plain("First tower"), plain("First dragon"), plain("First Voidgrubs"), plain("First Rift Herald") };
     pub const obj_kinds = [4]objicon.Kind{ .tower, .dragon, .grubs, .herald };
-    pub const obj_rows = [2]tree.Text{ plain("Taken first"), plain("Won after") };
+    pub const obj_rows = [2]tree.Text{ plain("Took it first"), plain("Win rate if first") };
     pub const games_n = Phrase("{n:count} games");
     pub const took_tip = Phrase("{l:text}: {c:text}'s team took it in {r:rate} of {n:count} games; role average {a:rate}");
-    pub const obj_key = plain("tick: role average");
+    pub const obj_key = plain("│ role average");
     pub const won_tip = Phrase("{l:text}: {c:text}'s team won {r:rate} of {n:count} games after taking it; role average {a:rate}");
     pub const by_rank = plain("By rank");
     pub const brackets = [3]tree.Text{ plain("Iron-Silver"), plain("Gold-Emerald"), plain("Diamond+") };
@@ -442,6 +441,7 @@ pub const W = struct {
     pub const ends_place = Phrase("{n:int}{th:text} highest of {of:int}");
     pub const first_item = plain("First item done");
     pub const first_item_key = plain("dashed: games with an item");
+    pub const win_rate_y = plain("win rate");
     pub const first_item_note = Phrase("Win rate by the minute {c:text} finished its first item. Games that ended before one are left out; a quick item partly follows a game already going well. Finished means a legendary that builds into nothing, so tear items such as Manamune never count.");
     pub const players = plain("Players");
     pub const spread_head = Phrase("{n:count} · middle half {lo:pct}-{hi:pct}");
@@ -1585,7 +1585,7 @@ pub const Trends = struct {
     span: Span = .{},
     by_length: trend.Trend = .{ .label = W.by_length, .points = &.{} },
     ranks: trend.Trend = .{ .label = W.by_rank, .points = &.{} },
-    timing: trend.Trend = .{ .label = W.first_item, .points = &.{} },
+    timing: trend.Trend = .{ .label = W.first_item, .points = &.{}, .y_name = W.win_rate_y },
     pickup: trend.Trend = .{ .label = W.pickup, .points = &.{}, .height = 110 },
 
     const P = @This();
@@ -2019,8 +2019,8 @@ pub const Charts = struct {
         });
     }
 
-    /// Share of lanes with each, the champion's and its lane opponent's, each on its own
-    /// 0-100 bar
+    /// Share of lanes with a kill in each phase, the champion's above the line and its lane
+    /// opponent's under it
     fn killsCard(p: *P, h: *H) N {
         const k = p.r().kills orelse return noneCard(h, W.kills_head, .none);
         var rows: [4]versus.Row = undefined;
@@ -2034,16 +2034,12 @@ pub const Charts = struct {
             rows[n] = killRow(h, k.games, l, x, y);
             n += 1;
         }
-        const kv = h.span(.{ .class = "kv" }, .{
-            champ.view(h, .{ .name = p.data.name, .src = p.data.icon }, .{ .px = .@"20", .named = false }),
-            h.b(.{ .class = "us" }, .{p.data.name}),
-            h.span(.{ .class = "vs" }, .{W.kills_vs}),
-            role.view(h, p.r().role, .{ .named = false }),
-            h.b(.{ .class = "them" }, .{W.kills_them}),
-        });
         return card.view(h, .{}, &.{
-            card.head(h, W.kills_head, W.lanes_n.with(h, .{ .n = k.games }), &.{kv}),
-            versus.bars(h, .{ p.data.name, W.kills_them.s }, rows[0..n]),
+            card.head(h, W.kills_head, W.lanes_n.with(h, .{ .n = k.games }), &.{}),
+            versus.timeline(h, .{ p.data.name, W.kills_them.s }, .{
+                champ.view(h, .{ .name = p.data.name, .src = p.data.icon }, .{ .px = .@"32", .named = false }),
+                role.view(h, p.r().role, .{ .s = .l, .named = false }),
+            }, rows[0..n]),
         });
     }
 
@@ -2059,7 +2055,7 @@ pub const Charts = struct {
         const k = p.r().objectives orelse return noneCard(h, W.objectives_head, .none);
         var l = h.list();
         l.add(h.span(.{}, .{}));
-        for (W.obj_kinds) |o| l.add(h.span(.{ .class = "oh" }, .{ objicon.view(h, o, .{ .s = .l, .named = false }), objicon.label(o) }));
+        for (W.obj_kinds) |o| l.add(h.span(.{ .class = "oh" }, .{ objicon.view(h, o, .{ .s = .xl, .named = false }), objicon.label(o) }));
         for (W.obj_rows, 0..) |rl, row| {
             l.add(h.span(.{ .class = "rl" }, .{rl}));
             for (W.firsts, k.mine[1..], k.role[1..]) |fl, x, y| {
@@ -2136,10 +2132,6 @@ pub const css =
     \\  .c-cpage .ends .k small { font-size: var(--fs-xs); }
     \\  @media (max-width: 600px) { .c-cpage .ends .k { flex-direction: row; gap: var(--sp-2); flex-basis: 100%; } }
     \\  .c-cpage .ends a { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--ink); font-variant-numeric: tabular-nums; }
-    \\  .c-cpage .kv { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-s); }
-    \\  .c-cpage .kv > .us { color: var(--us-hot); }
-    \\  .c-cpage .kv > .them { color: var(--them-hot); }
-    \\  .c-cpage .kv > .vs { margin: 0 2px; color: var(--muted); }
     \\  .c-cpage .obj { display: grid; grid-template-columns: auto repeat(4, minmax(0, 1fr)); align-items: center;
     \\    align-content: space-evenly; gap: var(--sp-4) var(--sp-4); padding: var(--sp-2) 0; }
     \\  .c-cpage .obj > .oh { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: var(--fs-xs);
@@ -2261,7 +2253,7 @@ test "end of game: each figure with its place, none under min_games or for a rar
     try std.testing.expect(std.mem.indexOf(u8, w.written(), ">412<") == null);
 }
 
-test "lane kills: each side's share of lanes on its own bar, first blood only when counted" {
+test "lane kills: a timeline of each side's share of lanes, first blood only when counted" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -2273,17 +2265,17 @@ test "lane kills: each side's share of lanes on its own bar, first blood only wh
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, p.view(&h), &w.writer);
     const got = w.written();
-    try std.testing.expect(std.mem.indexOf(u8, got, "data-v=\"bars\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "Kill by 6:00") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "data-v=\"time\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "by 6 min") != null);
     try std.testing.expect(std.mem.indexOf(u8, got, "<span class=\"sr\">Opponent </span>46%") != null);
     try std.testing.expect(std.mem.indexOf(u8, got, "--x:12") != null);
-    try std.testing.expectEqual(4, std.mem.count(u8, got, "class=\"br\""));
+    try std.testing.expectEqual(4, std.mem.count(u8, got, "class=\"tc\""));
 
     roles[0].kills.?.first_blood = .{ 0, 0 };
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "First blood") == null);
-    try std.testing.expectEqual(3, std.mem.count(u8, w.written(), "class=\"br\""));
+    try std.testing.expectEqual(3, std.mem.count(u8, w.written(), "class=\"tc\""));
 }
 
 test "first item done: a thin bucket shows, an empty one doesn't, no chart under two" {

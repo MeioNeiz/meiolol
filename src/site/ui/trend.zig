@@ -60,6 +60,8 @@ pub const Trend = struct {
     /// none
     base: []const f32 = &.{},
     height: u16 = 130,
+    /// What the y axis counts ("win rate"), over its ticks
+    y_name: ?tree.Text = null,
     /// ChartTip on this point
     tip: ?u8 = null,
     /// False in static HTML (no island to answer a press): no crosshair, no handlers
@@ -157,6 +159,7 @@ pub const Trend = struct {
             .height = t.height,
             .right = 48,
             .y = ys.items,
+            .y_name = t.y_name,
             .x = xs.items,
             .marks = &.{
                 // The base alone is dashed: the grid already marks 50%
@@ -216,7 +219,7 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const states = [_]struct { []const u8, Trend }{
         .{ "by patch, rank in role under each", .{ .label = plain("By patch"), .points = &demo_patch } },
-        .{ "by game length, games under each; a point tapped", .{ .label = plain("By game length"), .points = &demo_length, .tip = 2 } },
+        .{ "by game length, games under each; a point tapped; y axis named", .{ .label = plain("By game length"), .points = &demo_length, .tip = 2, .y_name = plain("win rate") } },
         .{ "against a base, faint dashed (all lanes)", .{ .label = plain("Won by gold at 10"), .points = &demo_length, .base = &.{ 46, 48.5, 50, 51.5, 54 } } },
         .{ "OutcomeCurve: by mastery, against his own rate", .{ .label = plain("Pick-up"), .points = &demo_mastery, .ref = 49.3, .height = 110 } },
     };

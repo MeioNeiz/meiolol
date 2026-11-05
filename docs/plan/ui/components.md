@@ -34,7 +34,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - RoleIcon: Riot's position icon as a CSS-masked span in currentColor, the lane solid...
 - ChampIcon: a champion's square portrait, 20 to 56 px, with the states a seat or a...
 - GameArt: an item, rune, rune tree, stat shard or summoner spell icon
-- ObjectiveIcon: a tower, inhibitor or epic monster as a small glyph (a CSS mask, like...
+- ObjectiveIcon: a tower, inhibitor or epic monster as the game's own silhouette...
 
 **Figures**
 - StatCell: one figure, formatted by its kind through fmt.zig and coloured by how far...
@@ -448,11 +448,11 @@ default, `on` for the role in force; named for screen readers unless the control
 names it
 States: muted, the one in force; 16, 20, 24; beside its name
 Used by: champ, sitesearch, rolepicker, champsearch, champlist, draftboard, champselect,
-teamrows, apphome, loadscreen, practice, picks, gamehead, gamerow, scoreboard, candlist,
-champrolepicker, poolslots, matchgrid, finder, ranking, learnpage, dailypage, dailyseat,
-dailydays, patchpage, poolpage, poolgrid, profilesum, yourpage, yourviews, yourtime,
-yourfriends, squad, today, homepage, testerpage, testercand, pv, champpage, matchpage,
-tiers
+teamrows, apphome, loadscreen, practice, picks, versus, gamehead, gamerow, scoreboard,
+candlist, champrolepicker, poolslots, matchgrid, finder, ranking, learnpage, dailypage,
+dailyseat, dailydays, patchpage, poolpage, poolgrid, profilesum, yourpage, yourviews,
+yourtime, yourfriends, squad, today, homepage, testerpage, testercand, pv, champpage,
+matchpage, tiers
 
 ### ChampIcon
 `champ.zig` `.c-champ` site
@@ -790,7 +790,7 @@ they never stretch. Here: scales, the frame, marks (line, area split at a base, 
 bars, dots) and the parts presets share (ChartTip, the crosshair, RangeSelect and its
 pointer handling). Presets: timeline.zig, lane.zig, trend.zig, spark.zig, dotplot.zig
 States: area split at 50%, a line; band, typical and your line; tip, cursor, range; dots,
-bars, a reference, an end label
+bars, a reference, an end label; y axis named
 Used by: loadscreen, trend, timechart, aucchart, lane, timeline, spark, laneduel,
 gametrend, yourtime, adminruns
 
@@ -817,8 +817,8 @@ the last figure at the end. No per-point text: a tap or hover shows a point's nu
 page's all lanes) and takes the reference's place. OutcomeCurve (Pick-up) is the same
 preset over mastery bands
 States: by patch, rank in role under each; by game length, games under each; a point
-tapped; against a base, faint dashed (all lanes); OutcomeCurve: by mastery, against his
-own rate
+tapped; y axis named; against a base, faint dashed (all lanes); OutcomeCurve: by mastery,
+against his own rate
 Used by: card, compview, champpage, matchpage
 
 ### TimeChart
@@ -987,17 +987,17 @@ shows (champion.md "Lane kills"); `key` names the sides, for the card head. `dum
 row per item, two rates on a shared axis as dots, the line between them the gap, the gap a
 figure (pool.md "How hard to pick up": new against practised players)
 States: objectives and firsts; two; plain ink: rates, not sides; races: level 6 later than
-typical, first item earlier; key: the sides' names; rows: a matchup's head to head; bars:
-lane kills, each rate on its own 0-100 track; dumbbell: new against practised players, a
-gap each; a thin row; bands: below typical, above, no typical; cells: below typical,
-above, no typical
+typical, first item earlier; key: the sides' names; rows: a matchup's head to head;
+timeline: lane kills by phase, Ornn above, the opponent under; timeline: first blood
+ahead; one side at 0; dumbbell: new against practised players, a gap each; a thin row;
+bands: below typical, above, no typical; cells: below typical, above, no typical
 Used by: gamerow, laneduel, gamepage, champpage, matchpage
 
 ### ObjectiveIcon
 `objicon.zig` `.c-obj` site
-ObjectiveIcon: a tower, inhibitor or epic monster as a small glyph (a CSS mask, like
-RoleIcon), in the taking team's colour. Named for screen readers unless the row around it
-says what it is
+ObjectiveIcon: a tower, inhibitor or epic monster as the game's own silhouette (match
+history art via CommunityDragon, traced to paths; a CSS mask, like RoleIcon), in the
+taking team's colour. Named for screen readers unless the row around it says what it is
 States: each kind; by side, sizes
 Used by: versus, inspector, scoreboard, gamepage, champpage
 

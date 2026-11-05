@@ -606,93 +606,89 @@ fn objectivesIn(all: []const builds.File.Build, b: builds.File.Build, r: Role) ?
 }
 
 /// Games by the minute the first item was finished (builds.File.Build.first_item) in
-/// buckets: the minutes between two tails in steps of 2 or wider, at most 7 buckets, the
-/// steps' remainder split between the tails. Each tail holds at least a twentieth of the
-/// games and `thin`, but the late one less when they meet (most games in a minute or
-/// two). Empty under two tails' worth
+/// buckets of near equal games cut at whole minutes, one per `timing_per` games (3 to
+/// 5, none under `thin`; more crowd the labels at 390), so a thin view gets few steady
+/// points, not many noisy ones. Empty under two buckets of `thin`
 pub fn timingOf(a: std.mem.Allocator, hist: []const builds.Count, thin: u32) ![]const cp.Timed {
     var total: u32 = 0;
     for (hist) |x| total += x.games;
-    const tail = @max(thin, total / 20);
-    if (tail == 0 or total < 2 * tail) return &.{};
-    var lo: usize = 0;
-    var below: u32 = 0;
-    while (below < tail) : (lo += 1) below += hist[lo].games;
-    var hi: usize = hist.len;
-    var above: u32 = 0;
-    while (above < tail) {
-        hi -= 1;
-        above += hist[hi].games;
-    }
-    hi = @max(hi, lo);
-    var step: usize = 2;
-    while ((hi - lo + step - 1) / step > 5) step += 1;
-    const steps = (hi - lo) / step;
-    lo += (hi - lo - steps * step) / 2;
-    hi = lo + steps * step;
-
-    var out: std.ArrayList(cp.Timed) = .empty;
-    const sum = struct {
-        fn f(xs: []const builds.Count) builds.Count {
-            var c: builds.Count = .{};
-            for (xs) |x| {
-                c.games += x.games;
-                c.wins += x.wins;
-            }
-            return c;
+    if (thin == 0 or total < 2 * thin) return &.{};
+    const n = @max(2, @min(@min(5, @max(3, total / timing_per)), total / thin));
+    // cum[m]: games before minute m
+    const cum = try a.alloc(u32, hist.len + 1);
+    cum[0] = 0;
+    for (hist, 1..) |x, i| cum[i] = cum[i - 1] + x.games;
+    var cuts: std.ArrayList(usize) = .empty;
+    var prev: usize = 0;
+    for (1..n) |k| {
+        const goal = @as(u64, total) * k / n;
+        var best: ?usize = null;
+        for (prev + 1..hist.len) |m| {
+            if (cum[m] == cum[prev] or cum[m] == total) continue;
+            const d = @abs(@as(i64, cum[m]) - @as(i64, @intCast(goal)));
+            if (best == null or d < @abs(@as(i64, cum[best.?]) - @as(i64, @intCast(goal)))) best = m;
         }
-    }.f;
-    const first = sum(hist[0..lo]);
-    try out.append(a, .{ .label = try a.print("<{d}", .{lo}), .games = first.games, .wins = first.wins });
-    var m = lo;
-    while (m < hi) : (m += step) {
-        const c = sum(hist[m .. m + step]);
-        try out.append(a, .{ .label = try a.print("{d}-{d}", .{ m, m + step }), .games = c.games, .wins = c.wins });
+        const m = best orelse break;
+        try cuts.append(a, m);
+        prev = m;
     }
-    const last = sum(hist[hi..]);
-    try out.append(a, .{ .label = try a.print("{d}+", .{hi}), .games = last.games, .wins = last.wins });
+    var out: std.ArrayList(cp.Timed) = .empty;
+    var lo: usize = 0;
+    for (0..cuts.items.len + 1) |i| {
+        const hi = if (i < cuts.items.len) cuts.items[i] else hist.len;
+        const label = if (i == 0)
+            try a.print("<{d}", .{hi})
+        else if (i == cuts.items.len)
+            try a.print("{d}+ min", .{lo})
+        else
+            try a.print("{d}-{d}", .{ lo, hi });
+        var c: builds.Count = .{};
+        for (hist[lo..hi]) |x| {
+            c.games += x.games;
+            c.wins += x.wins;
+        }
+        try out.append(a, .{ .label = label, .games = c.games, .wins = c.wins });
+        lo = hi;
+    }
     return out.items;
 }
 
-test "first item timing: tails of a twentieth, two-minute steps between" {
+/// Games a First item done point holds: its 80% range about ±3 points
+const timing_per = 400;
+
+test "first item timing: near equal games a bucket, cut at whole minutes" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    // 2,000 games: 100 by minute 8, 1,800 over minutes 8-15, 100 at 16 and later
+    // 2,000 games: 100 at minute 6, 225 a minute over 8-15, 100 at 17: five buckets,
+    // cut nearest each fifth
     var hist: [20]builds.Count = @splat(.{});
     hist[6] = .{ .games = 100, .wins = 40 };
     for (8..16) |m| hist[m] = .{ .games = 225, .wins = 120 };
     hist[17] = .{ .games = 100, .wins = 60 };
     const t = try timingOf(a, &hist, 100);
-    try std.testing.expectEqual(7, t.len);
-    try std.testing.expectEqualStrings("<7", t[0].label);
-    try std.testing.expectEqual(100, t[0].games);
-    try std.testing.expectEqualStrings("7-9", t[1].label);
-    try std.testing.expectEqual(225, t[1].games);
-    try std.testing.expectEqualStrings("15-17", t[5].label);
-    try std.testing.expectEqualStrings("17+", t[6].label);
-    try std.testing.expectEqual(100, t[6].games);
-    var games: u32 = 0;
-    for (t) |x| games += x.games;
-    try std.testing.expectEqual(2000, games);
-    // Under two tails: nothing
+    try std.testing.expectEqual(5, t.len);
+    try std.testing.expectEqualStrings("<9", t[0].label);
+    try std.testing.expectEqual(325, t[0].games);
+    try std.testing.expectEqualStrings("9-11", t[1].label);
+    try std.testing.expectEqual(450, t[1].games);
+    try std.testing.expectEqualStrings("15+ min", t[4].label);
+    try std.testing.expectEqual(325, t[4].games);
+    // Under two buckets of `thin`: nothing
     try std.testing.expectEqual(0, (try timingOf(a, hist[0..8], 100)).len);
-    // Spread over 20 minutes: steps of 4 from 1 to 19, the 2 left over one to each tail
-    for (&hist) |*x| x.* = .{ .games = 100, .wins = 50 };
-    const wide = try timingOf(a, &hist, 100);
-    try std.testing.expectEqual(6, wide.len);
-    try std.testing.expectEqual(200, wide[0].games);
-    try std.testing.expectEqualStrings("2-6", wide[1].label);
-    try std.testing.expectEqualStrings("18+", wide[5].label);
-    try std.testing.expectEqual(200, wide[5].games);
-    // Every game in minute 10: the tails meet, the late one empty, every game kept
+    // A thin view: 900 games over 20 minutes, three points, not seven
+    for (&hist) |*x| x.* = .{ .games = 45, .wins = 22 };
+    const thin = try timingOf(a, &hist, 100);
+    try std.testing.expectEqual(3, thin.len);
+    try std.testing.expectEqualStrings("<7", thin[0].label);
+    try std.testing.expectEqualStrings("7-13", thin[1].label);
+    try std.testing.expectEqualStrings("13+ min", thin[2].label);
+    // Every game in minute 10: one bucket, every game kept
     var one: [11]builds.Count = @splat(.{});
     one[10] = .{ .games = 2000, .wins = 1000 };
     const met = try timingOf(a, &one, 100);
-    try std.testing.expectEqual(2, met.len);
-    try std.testing.expectEqualStrings("<11", met[0].label);
+    try std.testing.expectEqual(1, met.len);
     try std.testing.expectEqual(2000, met[0].games);
-    try std.testing.expectEqual(0, met[1].games);
 }
 
 test "first item done: players counted by the builder to a drawn card" {
@@ -716,13 +712,12 @@ test "first item done: players counted by the builder to a drawn card" {
     }
     const f = try b.file(a, &d, "16.21", "PLATINUM", 3);
     const timing = try timingOf(a, f.get(122, .top).?.first_item, cp.min_games);
-    // Tails of 100 (minutes 6 and 17), 2-minute steps between
-    try std.testing.expectEqual(7, timing.len);
-    try std.testing.expectEqualStrings("<7", timing[0].label);
-    try std.testing.expectEqual(100, timing[0].games);
-    try std.testing.expectEqualStrings("7-9", timing[1].label);
-    try std.testing.expectEqual(200, timing[1].games);
-    try std.testing.expectEqualStrings("17+", timing[6].label);
+    // 1,200 games: three buckets of 400
+    try std.testing.expectEqual(3, timing.len);
+    try std.testing.expectEqualStrings("<10", timing[0].label);
+    try std.testing.expectEqual(400, timing[0].games);
+    try std.testing.expectEqualStrings("10-14", timing[1].label);
+    try std.testing.expectEqualStrings("14+ min", timing[2].label);
 
     var roles = [_]cp.TrendsRole{.{ .role = .top, .games = 0, .wins = 0, .by_patch = &.{}, .by_length = &.{}, .timing = timing }};
     const data: cp.TrendsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles, .lengths = &.{} };
@@ -731,7 +726,7 @@ test "first item done: players counted by the builder to a drawn card" {
     var h: ui.H = .init(a, &t);
     var w: std.Io.Writer.Allocating = .init(a);
     try ui.html.write(&t, p.view(&h), &w.writer);
-    for ([_][]const u8{ "First item done", "&lt;7", "7-9", "15-17", "17+", "dashed: games with an item" }) |s|
+    for ([_][]const u8{ "First item done", "&lt;10", "10-14", "14+ min", "dashed: games with an item" }) |s|
         try std.testing.expect(std.mem.indexOf(u8, w.written(), s) != null);
     // Dashed at the 1,200 players' rate, the 100 without an item out
     var wins: u32 = 0;
@@ -777,7 +772,7 @@ test "objectives: firsts counted by the builder, against the role, to a drawn ca
     try ui.html.write(&t, p.view(&h), &w.writer);
     // Took first dragon 75% against 50%; won after it 66.7% against 50%. Herald has no
     // takes: its games, no figure
-    for ([_][]const u8{ "Objectives", "tick: role average", "Rift Herald", "75%", "Won after", "66.7%", "0 games" }) |x|
+    for ([_][]const u8{ "Objectives", "│ role average", "Rift Herald", "75%", "Win rate if first", "66.7%", "0 games" }) |x|
         try std.testing.expect(std.mem.indexOf(u8, w.written(), x) != null);
 }
 

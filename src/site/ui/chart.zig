@@ -106,6 +106,8 @@ pub const Frame = struct {
     /// Plot height in px; a chart under 480 px wide takes 80% of it
     height: u16 = 190,
     y: []const Tick = &.{},
+    /// What the y axis counts, faint over its ticks ("win rate")
+    y_name: ?tree.Text = null,
     x: []const Tick = &.{},
     /// Room for figures right of the plot (an end label), px
     right: u16 = 8,
@@ -143,6 +145,7 @@ pub fn frame(h: *H, f: Frame) N {
         .style = h.vars(.{ .h = f.height, .pr = f.right }),
         .on_keydown = f.on_key,
     }, .{
+        if (f.y_name) |n| h.span(.{ .class = "yn", .aria_hidden = true }, .{n}) else null,
         f.above,
         h.div(.{
             .class = "plot",
@@ -433,6 +436,7 @@ pub const css =
     \\  .c-chart .dn { fill: var(--them); opacity: 0.26; }
     \\  .c-chart .band { fill: var(--text); opacity: 0.08; }
     \\  .c-chart .yax { position: absolute; inset: 0 auto 0 0; }
+    \\  .c-chart > .yn { margin: 0 0 4px -48px; line-height: 1.2; white-space: nowrap; }
     \\  .c-chart .yt { position: absolute; right: 6px; top: calc(var(--y) * 1%); transform: translateY(-50%); white-space: nowrap; }
     \\  .c-chart > .xax { position: relative; height: 18px; }
     \\  .c-chart .xt { position: absolute; top: 4px; left: calc(var(--x) * 1%); transform: translateX(-50%); white-space: nowrap;
@@ -533,9 +537,10 @@ pub fn gallery(g: *Gallery) void {
     }));
     const tp: Plane = .{ .x = .{ .lo = -0.5, .hi = 2.5 }, .y = .{ .lo = 47, .hi = 57 } };
     const vs = [_]f32{ 52.2, 51.1, 51.3 };
-    g.add("dots, bars, a reference, an end label", frame(h, .{
+    g.add("dots, bars, a reference, an end label; y axis named", frame(h, .{
         .label = W.label,
         .height = 120,
+        .y_name = plain("win rate"),
         .right = 48,
         .marks = &.{ level(h, tp, 51.3), line(h, tp, &vs, .prev), span(h, tp, 0.5, 1.5, "band") },
         .over = &.{ bars(h, tp, &.{ 1731, 33830, 9374 }), dot(h, tp, 0, vs[0], fmt.Step.of(1.6, fmt.win_cuts)), dot(h, tp, 1, vs[1], null), dot(h, tp, 2, vs[2], null), endLabel(h, tp, vs[2], phrase.num(h, .rate, vs[2])) },
