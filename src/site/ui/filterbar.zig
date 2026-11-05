@@ -2,7 +2,9 @@
 //! container under 520 px one Filters button stands in for them, with the choices in
 //! force beside it ("EUW · Plat+"); it opens them under it (island state: `open`). The
 //! controls sit in one wrapper, so hiding them never sets display on a Select's popover.
-//! Also the table's Find box (`find`), which sits in the page's head beside them
+//! Also the table's Find box (`find`), which sits in the page's head beside them; `fold`:
+//! in a container under 520 px it is its magnifier alone until focused or holding text,
+//! then takes the row. The box itself is the icon, so it keeps its label and tab stop
 const tree = @import("tree.zig");
 const segmented = @import("segmented.zig");
 const select = @import("select.zig");
@@ -40,10 +42,18 @@ pub fn group(h: *H, t: tree.Text, control: N) N {
     return h.span(.{ .class = "grp" }, .{ h.span(.{ .class = "lab", .aria_hidden = true }, .{t}), control });
 }
 
+pub const Find = struct {
+    has_text: bool = false,
+    on_clear: ?tree.Handler = null,
+    fold: bool = false,
+};
+
 /// A search box (DataTable.searchBox or the page's own) with a × while it has text, the
 /// browser's own × hidden so it isn't drawn twice
-pub fn find(h: *H, input: ?N, has_text: bool, on_clear: ?tree.Handler) N {
-    return h.span(.{ .class = "c-find" }, .{
+pub fn find(h: *H, input: ?N, o: Find) N {
+    const has_text = o.has_text;
+    const on_clear = o.on_clear;
+    return h.span(.{ .class = "c-find", .data_v = if (o.fold) "fold" else null, .data_q = has_text }, .{
         input,
         if (has_text) h.button(.{ .type = "button", .class = "x", .aria_label = W.clear, .on_click = on_clear }, .{"×"}) else null,
     });
@@ -60,7 +70,9 @@ pub const css =
     \\  .c-filters > .sum { flex: 1; min-width: 0; color: var(--muted); font-size: var(--fs-s);
     \\    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     \\  .c-find { position: relative; display: flex; flex: 0 1 260px; margin-left: auto; }
-    \\  .c-find > input { flex: 1; min-width: 0; padding-right: 32px; }
+    \\  .c-find::before { content: ""; position: absolute; left: calc((var(--ctl) - 15px) / 2); top: 50%; width: 15px; height: 15px;
+    \\    transform: translateY(-50%); background: var(--muted); pointer-events: none; mask: var(--mag) center / contain no-repeat; }
+    \\  .c-find > input { flex: 1; min-width: 0; padding-left: var(--ctl); padding-right: 32px; }
     \\  .c-find > input::-webkit-search-cancel-button { display: none; }
     \\  .c-find > .x { all: unset; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
     \\    width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; cursor: pointer;
@@ -68,6 +80,10 @@ pub const css =
     \\  .c-find > .x:hover { color: var(--text); background: var(--ctl-bg-2); }
     \\  .c-find > .x:focus-visible { outline: 2px solid var(--focus); }
     \\  @container (max-width: 520px) {
+    \\    .c-find[data-v="fold"]:not(:focus-within, [data-q]) { flex: none; width: var(--ctl); }
+    \\    .c-find[data-v="fold"]:not(:focus-within, [data-q]) > input { padding: 0; cursor: pointer; }
+    \\    .c-find[data-v="fold"]:not(:focus-within, [data-q]) > input::placeholder { color: transparent; }
+    \\    .c-find[data-v="fold"]:is(:focus-within, [data-q]) { flex-basis: 100%; margin-left: 0; }
     \\    .c-filters > .toggle { display: inline-flex; flex: none; gap: 10px; }
     \\    .c-filters > .toggle::after { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--muted);
     \\      border-bottom: 1.5px solid var(--muted); transform: translateY(-2px) rotate(45deg); }
@@ -88,7 +104,9 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("in a toolbar band; one button when narrow", card.toolbar(h, &.{view(h, .{ .summary = sum }, &demo(g, "fb-a"))}));
     g.addFill("narrow, opened", card.toolbar(h, &.{view(h, .{ .summary = sum, .open = true }, &demo(g, "fb-b"))}));
     const find_in = h.input(.{ .type = "search", .placeholder = plain("Find"), .aria_label = plain("Find"), .value = "Ahri" });
-    g.add("Find, with text: its ×", find(h, find_in, true, null));
+    g.add("Find, with text: its ×", find(h, find_in, .{ .has_text = true }));
+    const fold_in = h.input(.{ .type = "search", .placeholder = plain("Find"), .aria_label = plain("Find") });
+    g.add("Find, fold: its magnifier alone under 520 px until focused", find(h, fold_in, .{ .fold = true }));
 }
 
 fn demo(g: *Gallery, comptime id: []const u8) [5]N {

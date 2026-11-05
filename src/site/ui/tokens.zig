@@ -112,6 +112,8 @@ pub const root = [_]Token{
     .{ .name = "ctl-s", .value = "28px" },
     .{ .name = "ctl-l", .value = "44px" },
     .{ .name = "hit", .value = "32px" },
+    // Every search box's magnifier (ChampSearch, FilterBar's Find), drawn as a mask
+    .{ .name = "mag", .value = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M15.5 15.5 21 21'/%3E%3C/svg%3E\")" },
     // Control surfaces: filled, a step above the card; selected is a solid tinted fill,
     // not an outline, so it reads at a glance and stays inside its group
     .{ .name = "ctl-bg", .value = "#1c1d21" },

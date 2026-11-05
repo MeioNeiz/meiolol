@@ -641,7 +641,7 @@ pub const Page = struct {
                         chip.view(h, .{ .pressed = !p.moved and !p.riot, .on = h.on(p, .all) }, .{ W.all, h.span(.{ .class = "n" }, .{phrase.num(h, .count, c.all)}) }),
                     }),
                     rolepicker.view(h, .{ .v = .compact, .label = W.role_label }, &roles),
-                    filterbar.find(h, h.input(.{ .type = "search", .placeholder = W.find, .aria_label = W.find, .value = p.table.q.slice(), .on_input = h.on(p, .find) }), p.table.q.slice().len > 0, h.on(p, .clear)),
+                    filterbar.find(h, h.input(.{ .type = "search", .placeholder = W.find, .aria_label = W.find, .value = p.table.q.slice(), .on_input = h.on(p, .find) }), .{ .has_text = p.table.q.slice().len > 0, .on_clear = h.on(p, .clear) }),
                 }),
                 if (p.table.rows.len > 0) p.table.view(h) else h.p(.{ .class = "empty" }, .{W.none}),
             }),

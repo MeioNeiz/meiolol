@@ -147,7 +147,7 @@ test "the server renders All over 1.5k games as the role board, off-role behind 
     const page = w.written();
     // Kai'Sa under 1.5k games
     try testing.expectEqual(@as(usize, 3), std.mem.count(u8, page, "class=\"nm\""));
-    try testing.expect(std.mem.find(u8, page, "<p class=\"sub\">400,000 games in EUW, last 30 days, patches 16.20 and 16.21</p>") != null);
+    try testing.expect(std.mem.find(u8, page, "<p class=\"sub\">400,000 games<span class=\"in\"> in EUW, last 30 days, patches 16.20 and 16.21</span></p>") != null);
     try testing.expect(std.mem.find(u8, page, "href=\"/champions/ahri/mid\"") != null);
     try testing.expect(std.mem.find(u8, page, "Moved in 16.21") != null);
     // All without a search: the role board, not one long table
@@ -171,7 +171,7 @@ test "hydration takes the URL's state; sorting pushes history; back restores" {
     try testing.expectEqualStrings("#sort=4&min=0", p.fake.fragment.items);
     try testing.expectEqualStrings("Zed,Ahri,Kai'Sa,Lux", try p.names());
     // Each column's head names its figures, the second the sorted one
-    try testing.expect(std.mem.find(u8, try p.shown(), "<div class=\"fh\"><span>Win rate</span><span>Pick</span></div>") != null);
+    try testing.expect(std.mem.find(u8, try p.shown(), "<div aria-hidden=\"true\" class=\"fh\"><span>Win rate</span><span>Pick</span></div>") != null);
     p.fake.fragment.clearRetainingCapacity();
     p.rt.popstate();
     try testing.expectEqualStrings("Ahri,Zed,Lux", try p.names());
@@ -213,7 +213,7 @@ test "influence: a column and the board's second figure, named in its head; the 
     try p.init("#min=0", null);
     defer p.deinit();
     var page = try p.shown();
-    try testing.expect(std.mem.find(u8, page, "<div class=\"fh\"><span>Win rate</span><span>Influence</span></div>") != null);
+    try testing.expect(std.mem.find(u8, page, "<div aria-hidden=\"true\" class=\"fh\"><span>Win rate</span><span>Influence</span></div>") != null);
     try testing.expect(std.mem.find(u8, page, "<span class=\"iv\">13</span>") != null);
     try testing.expect(std.mem.find(u8, page, "<span class=\"iv\" data-low=\"\">\u{2212}3</span>") != null);
     _ = p.rt.event(0, .{ .kind = .click, .target = p.id("aria-label", "Mid") });
@@ -223,6 +223,28 @@ test "influence: a column and the board's second figure, named in its head; the 
     _ = p.rt.event(0, .{ .kind = .click, .target = p.by(.button, "51.9%") });
     page = try p.shown();
     try testing.expect(std.mem.find(u8, page, "<b>+0.9 ±3.0 points</b>16.20 51.0% of 3,000 → 16.21 51.9% of 1,600 Could be luck.") != null);
+}
+
+test "a board row reads as one line: name, win rate, the second figure, not its place" {
+    var p: Page = undefined;
+    try p.init("#min=0", null);
+    defer p.deinit();
+    _ = try p.shown();
+    const t = p.i.current();
+    const a = p.arena.allocator();
+    const link = for (t.nodes.items, 0..) |n, k| {
+        if (n.tag == .li) break t.kidsOf(@fromBackingInt(@intCast(k)))[0];
+    } else unreachable;
+    var heard: std.ArrayList(u8) = .empty;
+    try spoken(a, t, link, &heard);
+    try testing.expectEqualStrings("Ahri, win rate 51.9%, Influence \u{2212}3", heard.items);
+}
+
+/// What a screen reader hears under `n`: its text, aria-hidden subtrees left out
+fn spoken(a: std.mem.Allocator, t: *const tree.Tree, n: tree.N, out: *std.ArrayList(u8)) !void {
+    if (t.attr(n, "aria-hidden") != null) return;
+    try out.appendSlice(a, t.node(n).text);
+    for (t.kidsOf(n)) |k| try spoken(a, t, k, out);
 }
 
 test "the key line: Influence on the board, Players too on a role's table" {
@@ -275,7 +297,7 @@ test "a view picked in place: faded until its file is in, then its board; back t
     p.i.render();
     try testing.expectEqual(@as(u8, 2), p.state.view_index);
     var page = try p.shown();
-    try testing.expect(std.mem.find(u8, page, "900,000 games in all regions") != null);
+    try testing.expect(std.mem.find(u8, page, "900,000 games<span class=\"in\"> in all regions") != null);
     try testing.expect(std.mem.find(u8, page, "data-busy") == null);
     try testing.expectEqualStrings("Ahri,Zed,Kai'Sa", try p.names());
     // Back: the page's own view is kept, no fetch
@@ -286,6 +308,6 @@ test "a view picked in place: faded until its file is in, then its board; back t
     try p.state.show(p.arena.allocator());
     p.i.render();
     page = try p.shown();
-    try testing.expect(std.mem.find(u8, page, "400,000 games in EUW") != null);
+    try testing.expect(std.mem.find(u8, page, "400,000 games<span class=\"in\"> in EUW") != null);
     try testing.expectEqualStrings("Ahri,Zed,Kai'Sa,Lux", try p.names());
 }

@@ -370,8 +370,7 @@ pub const css =
     \\@layer components {
     \\  .c-search { position: relative; width: 100%; max-width: 320px; }
     \\  .c-search::before { content: ""; position: absolute; left: 12px; top: calc(var(--ctl) / 2); width: 15px; height: 15px;
-    \\    transform: translateY(-50%); background: var(--muted); pointer-events: none; mask: var(--mag) center / contain no-repeat;
-    \\    --mag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M15.5 15.5 21 21'/%3E%3C/svg%3E"); }
+    \\    transform: translateY(-50%); background: var(--muted); pointer-events: none; mask: var(--mag) center / contain no-repeat; }
     \\  .c-search:has(> .c-chosen)::before { display: none; }
     \\  .c-search > input { width: 100%; padding-left: 34px; box-sizing: border-box; }
     \\  .c-search > ul { list-style: none; margin: 4px 0 0; padding: 4px; position: absolute; left: 0; right: 0;

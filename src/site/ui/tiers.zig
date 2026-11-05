@@ -162,7 +162,8 @@ const board_one = "760px";
 
 const W = struct {
     pub const title = plain("Champions");
-    pub const scope_line = Phrase("{n:count} games {in:text}");
+    pub const games_n = Phrase("{n:count} games");
+    pub const scope_in = Phrase(" {in:text}");
     pub const role_label = plain("Role");
     pub const region = plain("Region");
     pub const period = plain("Period");
@@ -170,7 +171,9 @@ const W = struct {
     pub const regions = [_]tree.Text{ plain("EUW"), plain("All") };
     pub const days = plain("30 days");
     pub const ranks = [_]tree.Text{ plain("Plat+"), plain("Emerald+"), plain("Diamond+"), plain("Master+") };
-    pub const picked = Phrase("{r:text} · {p:text} · {k:text}");
+    /// The rank first: the summary is cut at its end on a phone, and the rank is the
+    /// filter most often changed
+    pub const picked = Phrase("{k:text} · {r:text} · {p:text}");
     pub const min_games = plain("Min games");
     pub const moved = Phrase("Moved in {p:text}");
     pub const patch_link = plain("Patch changes ›");
@@ -356,7 +359,7 @@ pub fn defaultMin(games: u32) u8 {
 const columns = [_]table.Column(Line){
     .{ .label = W.champion, .cell = who, .name = nameOf, .num = false, .key = "ch" },
     .{ .label = W.win, .cell = winCell, .sort = rateOf, .answer = true, .tip = W.win_note, .row_tip = patchTip, .key = "wr" },
-    .{ .label = W.influence, .cell = influenceCell, .sort = influenceOf, .tip = W.influence_note, .key = "in" },
+    .{ .label = W.influence, .cell = influenceCell, .sort = influenceOf, .tip = W.influence_note, .pick = true, .key = "in" },
     .{ .label = W.players, .cell = playersCell, .sort = middleOf, .num = false, .tip = W.players_note, .row_tip = playersTip, .wordless = true, .pick = true, .key = "pl" },
     .{ .label = W.pick, .cell = pickCell, .sort = pickOf, .pick = true, .key = "pk" },
     .{ .label = W.ban, .cell = banCell, .sort = banOf, .pick = true, .key = "bn" },
@@ -647,21 +650,23 @@ pub const Tiers = struct {
                 h.div(.{ .class = "hd" }, .{
                     h.div(.{ .class = "ttl" }, .{
                         h.el(.h1, .{}, .{W.title}),
-                        h.p(.{ .class = "sub" }, .{W.scope_line.with(h, .{ .n = d.games, .in = d.scope })}),
+                        // Narrow: the count alone, the Filters summary under it says where and when
+                        h.p(.{ .class = "sub" }, .{ W.games_n.with(h, .{ .n = d.games }), h.span(.{ .class = "in" }, .{W.scope_in.with(h, .{ .in = d.scope })}) }),
                     }),
                     rolepicker.view(h, .{ .label = W.role_label }, &roles),
-                    filterbar.find(h, t.table.searchBox(h), t.table.q.slice().len > 0, h.on(t, .clear)),
+                    filterbar.find(h, t.table.searchBox(h), .{ .has_text = t.table.q.slice().len > 0, .on_clear = h.on(t, .clear), .fold = true }),
                 }),
                 t.toolbar(h),
             }),
             card.view(h, .{ .flush = true }, &.{
                 t.movers(h),
-                t.key(h),
+                if (t.onBoard()) .none else t.key(h),
                 if (t.onBoard()) t.board(h) else h.div(.{}, .{
-                    if (t.role == null and t.table.q.slice().len == 0) h.div(.{ .class = "bs" }, .{t.layout(h)}) else null,
                     t.table.view(h),
                     ifEmpty(h, t.table),
                 }),
+                // Under the board: ten rows a role, so it is still in sight
+                if (t.onBoard()) t.key(h) else .none,
             }),
             violin.defs(h),
         });
@@ -679,7 +684,7 @@ pub const Tiers = struct {
     }
 
     fn layout(t: *T, h: *H) N {
-        return h.span(.{ .class = "ly" }, .{segmented.view(h, .{ .s = .s, .label = W.layout }, &.{
+        return h.span(.{ .class = "ly" }, .{segmented.view(h, .{ .label = W.layout }, &.{
             .{ .label = W.by_role, .selected = !t.whole, .on = h.on(t, .{ .whole = false }) },
             .{ .label = W.one_table, .selected = t.whole, .on = h.on(t, .{ .whole = true }) },
         })});
@@ -713,14 +718,14 @@ pub const Tiers = struct {
             const to: Shown = @fromBackingInt(@intCast(k + 1));
             cols.add(h.div(.{ .key = k, .class = "col" }, .{
                 h.button(.{ .type = "button", .class = "rh", .on_click = h.on(t, .{ .role = to }) }, .{ role.view(h, r.ui(), .{ .s = .s }), h.b(.{}, .{r.name()}) }),
-                h.div(.{ .class = "fh" }, .{ h.span(.{}, .{W.win}), h.span(.{}, .{t.secondLabel()}) }),
+                h.div(.{ .class = "fh", .aria_hidden = true }, .{ h.span(.{}, .{W.win}), h.span(.{}, .{t.secondLabel()}) }),
                 h.el(.ol, .{}, .{rows.done()}),
                 if (order.len == 0) ifEmpty(h, tb) else null,
                 if (order.len > board_rows) h.button(.{ .type = "button", .class = "all", .on_click = h.on(t, .{ .role = to }) }, .{W.all_n.with(h, .{ .n = order.len })}) else null,
             }));
         }
         return h.div(.{ .class = "rb" }, .{
-            h.div(.{ .class = "bs" }, .{ card.label(h, W.sort_by), segmented.view(h, .{ .s = .s, .label = W.sort_by }, &sorts), t.layout(h) }),
+            h.div(.{ .class = "bs" }, .{ card.label(h, W.sort_by), segmented.view(h, .{ .s = .s, .label = W.sort_by }, &sorts) }),
             h.div(.{ .class = "cols" }, .{cols.done()}),
         });
     }
@@ -789,6 +794,7 @@ pub const Tiers = struct {
                     .{ .label = patch, .selected = period == 1, .href = t.viewHref(h, 2 * region + 1), .on = h.on(t, .{ .view = 2 * region + 1 }) },
                 }),
                 segmented.view(h, .{ .label = W.rank_pick }, &ranks),
+                if (t.role == null and t.table.q.slice().len == 0) t.layout(h) else .none,
             }),
             filterbar.group(h, W.min_games, t.table.minPick(h).?),
         });
@@ -839,8 +845,7 @@ pub const Tiers = struct {
 pub const css =
     \\@layer components {
     \\  .c-tiers { display: grid; gap: var(--sp-4); }
-    \\  .c-tiers .hd { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3) var(--sp-5); }
-    \\  .c-tiers .ttl { margin-right: var(--sp-2); }
+    \\  .c-tiers .hd { container-type: inline-size; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3) var(--sp-5); }
     \\  .c-tiers h1 { margin: 0; }
     \\  .c-tiers .sub { margin: 0; color: var(--muted); font-size: var(--fs-s); }
     \\  .c-tiers .moved { position: relative; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4);
@@ -882,7 +887,10 @@ pub const css =
     \\  .c-tiers .rb .all:hover { text-decoration: underline; }
     \\  .c-tiers .rb .all:focus-visible { outline: 2px solid var(--focus); }
     \\  .c-tiers .rb .bs > .c-seg { min-width: 0; overflow-x: auto; scrollbar-width: none; }
-    \\  .c-tiers .bs > .ly { margin-left: auto; flex: none; }
+    \\  @container (max-width: 520px) {
+    \\    .c-tiers .sub > .in { display: none; }
+    \\    .c-tiers .hd > .c-roles { order: 1; }
+    \\  }
     \\  @container (max-width: 420px) {
     \\    .c-tiers .rb .bs { padding-inline: var(--sp-3); }
     \\    .c-tiers .rb .bs > .lab { display: none; }
@@ -921,7 +929,6 @@ pub const css =
     \\    .c-tiers .c-filters[data-open] { flex-basis: 100%; }
     \\  }
     \\  @media (max-width: 620px) {
-    \\    .c-tiers .hd > .c-find { flex-basis: 100%; margin-left: 0; }
     \\    .c-tiers .moved .chips { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
     \\    .c-tiers .moved .more { font-size: 0; }
     \\  }
