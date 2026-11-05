@@ -27,11 +27,6 @@ layout, colour by impact, build order).
   filters button); Your games' game scale (2.5, 5, 10, 15 points) not wired; whole-box
   links on Your games lists, the home record book and Learn lesson cards
 - Not now: players behind a matchup's games (curves format)
-- Fix (Jacob, 4 Nov): the header's private link reads "Draft tester" but stands for every
-  private page (tabs Private, Draft tester, App review, meionotes; shell.zig
-  header_private): unintuitive. Call it "Private" (to /private), Draft tester a tab
-  like the rest. Also: the links appear only once the browser has opened a private
-  page (localStorage "login"), so a fresh browser after sign-in has none
 
 ## Your games (home)
 

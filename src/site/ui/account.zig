@@ -346,6 +346,12 @@ pub fn next(query: []const u8, m: ac.Me) []const u8 {
     return if (can(m, "view_admin")) "/admin" else if (can(m, "view_private")) "/private" else "/";
 }
 
+/// The browser's private-login mark (localStorage "login", site/shell.zig admin_link):
+/// stored at sign-in, so the header's private links show from the first page after it
+pub fn loginMark(m: ac.Me) []const u8 {
+    return if (can(m, "view_admin")) "admin" else if (can(m, "view_private")) "tester" else "";
+}
+
 /// An error answer's {"error":"..."}: its messages hold nothing JSON escapes
 fn errorOf(body: []const u8) ?[]const u8 {
     const k = "\"error\":\"";
@@ -447,6 +453,12 @@ test next {
     for ([_][]const u8{ "?next=//evil.example", "?next=https://evil.example", "?next=/\\evil.example", "?next=" }) |q| {
         try testing.expectEqualStrings("/", next(q, public));
     }
+}
+
+test loginMark {
+    try testing.expectEqualStrings("admin", loginMark(.{ .username = "a", .role = "admin", .can = &.{ "view_private", "view_admin" } }));
+    try testing.expectEqualStrings("tester", loginMark(.{ .username = "f", .role = "private", .can = &.{"view_private"} }));
+    try testing.expectEqualStrings("", loginMark(.{ .username = "p", .role = "public", .can = &.{} }));
 }
 
 test "answers: signed in, the API's error as a sentence, too many tries in minutes" {

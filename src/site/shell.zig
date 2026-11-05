@@ -160,14 +160,14 @@ const tip_esc =
     \\
 ;
 
-/// Bar and menu links for logins that opened a private page: Draft tester, and Admin
-/// once an admin page has opened, and on /download the tester zip's link above the
-/// apply form (ui/account.zig zip). The pages mark it in this origin's localStorage
-/// ("login"), so visitors' pages carry neither links nor paths. Those browsers also load
-/// the private numbers (site/pv.zig), which nginx serves to private logins only: for
-/// anyone else they are the login page's HTML, which never runs or styles
+/// Bar and menu links for private logins: Private, and Admin for an admin's; on /download
+/// the tester zip's link above the apply form (ui/account.zig zip). Sign-in and the
+/// private pages mark the login in this origin's localStorage ("login"), so visitors'
+/// pages carry neither links nor paths. Those browsers also load the private numbers
+/// (site/pv.zig), which nginx serves to private logins only: for anyone else they are the
+/// login page's HTML, which never runs or styles
 const admin_link =
-    \\<script>try{const r=localStorage.getItem("login");if(r=="tester"||r=="admin"){const ls=[["/private/tester","Draft tester"]];if(r=="admin")ls.push(["/admin","Admin"]);
+    \\<script>try{const r=localStorage.getItem("login");if(r=="tester"||r=="admin"){const ls=[["/private","Private"]];if(r=="admin")ls.push(["/admin","Admin"]);
     \\for(const n of document.querySelectorAll("header .links,header .c-sitemenu"))for(const[h,t]of ls){const a=document.createElement("a");a.href=h;a.textContent=t;n.insertBefore(a,n.querySelector(":scope>.lab"))}
     \\addEventListener("DOMContentLoaded",()=>{const ap=document.querySelector(".c-apply");if(ap){const p=document.createElement("p"),a=document.createElement("a");a.href="/private/desktop/meiolol-desktop.zip";a.textContent="Download the tester build";p.append(a," (Windows, a zip: run meiolol-desktop.exe inside, it installs itself)");ap.before(p)}})
     \\const c=document.createElement("link");c.rel="stylesheet";c.href="/private/pv.css";const s=document.createElement("script");s.src="/private/pv.js";s.dataset.wasm="/private/pv.wasm";document.head.append(c,s)}}catch(e){}</script>
@@ -212,15 +212,15 @@ const PrivateTab = struct { page: Private, href: []const u8, label: []const u8 }
 /// The tabs under the header on the private pages but /admin, whose own sections are its
 /// subbar. Admin is the bar's
 const private_tabs = [_]PrivateTab{
-    .{ .page = .index, .href = "/private", .label = "Private" },
     header_private[0],
+    .{ .page = .tester, .href = "/private/tester", .label = "Draft tester" },
     .{ .page = .app, .href = "/private/app", .label = "App review" },
     .{ .page = .meionotes, .href = "/admin/meionotes", .label = "meionotes" },
 };
 
-/// The bar's: Draft tester stands for the private pages under its tabs, as Champions does
+/// The bar's: Private stands for the pages under its tabs, as Champions does
 const header_private = [_]PrivateTab{
-    .{ .page = .tester, .href = "/private/tester", .label = "Draft tester" },
+    .{ .page = .index, .href = "/private", .label = "Private" },
     .{ .page = .admin, .href = "/admin", .label = "Admin" },
 };
 
@@ -230,11 +230,11 @@ fn adminOnly(pr: Private) bool {
 }
 
 /// Admin-only ones hidden on the other private pages until private_mark finds an admin's
-/// browser: a tester gets no link that fails. `section`: Draft tester current on the
-/// pages any private login opens
+/// browser: a tester gets no link that fails. `section`: Private current on the pages
+/// under its tabs
 fn privateLink(p: Page, it: PrivateTab, section: bool) ui.site.Link {
     const cur = p.private.?;
-    const here = it.page == cur or (section and it.page == .tester and !adminOnly(cur));
+    const here = it.page == cur or (section and it.page == .index and cur != .admin);
     return .{ .label = .{ .s = it.label }, .href = it.href, .current = here, .hidden = adminOnly(it.page) and !adminOnly(cur) };
 }
 
@@ -372,14 +372,15 @@ test "the app's bar links the site's pages in the site's order" {
 }
 
 test "open: the bar links the private pages on private pages, where admin_link isn't" {
-    for ([_]?Private{ null, .tester, .meionotes }) |pr| {
+    for ([_]?Private{ null, .tester, .meionotes, .admin }) |pr| {
         var out: Writer.Allocating = .init(std.testing.allocator);
         defer out.deinit();
         try open(&out.writer, .{ .title = "t", .description = "d", .patch = "16.21", .data = "", .public = false, .private = pr });
         const bar = out.written()[0..std.mem.indexOf(u8, out.written(), "</header>").?];
-        const tester = "<a href=\"/private/tester\"";
-        try std.testing.expectEqual(pr != null, std.mem.indexOf(u8, bar, tester) != null);
-        try std.testing.expectEqual(pr != null and pr != .meionotes, std.mem.indexOf(u8, bar, tester ++ " aria-current=\"page\"") != null);
+        const private = "<a href=\"/private\"";
+        try std.testing.expectEqual(pr != null, std.mem.indexOf(u8, bar, private) != null);
+        try std.testing.expectEqual(pr != null and pr != .admin, std.mem.indexOf(u8, bar, private ++ " aria-current=\"page\">Private</a>") != null);
+        try std.testing.expect(std.mem.indexOf(u8, bar, "Draft tester") == null);
         try std.testing.expectEqual(pr != null, std.mem.indexOf(u8, bar, "<a href=\"/admin\"") != null);
     }
 }

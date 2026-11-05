@@ -29,6 +29,12 @@ const login_again = "/login?next=/account";
 /// The session cookie is HttpOnly, so pages can't see it
 const shown_as = "account";
 
+/// The username and private-login mark ui.account.loginMark (both empty: signed out)
+fn signedIn(m: ?ac.Me) void {
+    dom.store(shown_as, if (m) |x| x.username else "");
+    dom.store("login", if (m) |x| acct.loginMark(x) else "");
+}
+
 export fn main() void {
     dom.start();
     const root = zjb.global("document").call("querySelector", .{zjb.constString(acct.sel)}, zjb.Handle);
@@ -165,20 +171,20 @@ fn done(ctx: i32, status: u16, bytes: ?[]u8) void {
     defer if (!kept and b.len > 0) gpa.free(b);
     if (status == 401 and page.kind == .account) {
         go(login_again);
-        return dom.store(shown_as, "");
+        return signedIn(null);
     }
     switch (c) {
         .send => {
             if (page.answered(status, b)) {
                 if (page.sent == .delete) {
                     go("/");
-                    return dom.store(shown_as, "");
+                    return signedIn(null);
                 }
                 kept = true;
                 var q: [512]u8 = undefined;
                 const m = me.set(b) orelse return go("/");
                 go(acct.next(location("search", &q), m.*));
-                return dom.store(shown_as, m.username);
+                return signedIn(m.*);
             }
         },
         .me => if (status == 200) {
@@ -200,9 +206,9 @@ fn done(ctx: i32, status: u16, bytes: ?[]u8) void {
         .revoke => get(.devices, "/auth/devices.bin"),
         .logout => {
             go("/login");
-            return dom.store(shown_as, "");
+            return signedIn(null);
         },
     }
     render();
-    if (c == .me) if (page.me) |m| dom.store(shown_as, m.username);
+    if (c == .me) if (page.me) |m| signedIn(m);
 }
