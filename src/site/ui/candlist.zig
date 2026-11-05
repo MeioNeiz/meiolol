@@ -158,7 +158,7 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
         else
             reasons.arrow(h, x.pp);
         const said = x.tip orelse x.text;
-        chips.add(chip.view(h, .{ .v = .reason, .tip = if (x.pic != null) said.s else null }, .{
+        chips.add(chip.view(h, .{ .v = .reason, .tip = if (x.pic != null or x.tip != null) said.s else null }, .{
             x.pic orelse h.text(x.text.s),
             if (x.pic != null) h.span(.{ .class = "sr" }, .{said}) else h.text(" "),
             v,
