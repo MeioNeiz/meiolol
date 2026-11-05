@@ -837,6 +837,24 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(null, try loaded.meio(arena, "private/meio/9/122/top/plat/none.bin"));
         // Only through serve.zig's gate: never as a page or file
         try testing.expectEqual(null, try loaded.get(arena, "private/meio/1/122/top/plat/none.bin"));
+        // The Meio period's public island: the private answer byte for byte, no lock too,
+        // in each period; every role the model has, every opponent with its lane gold
+        for ([_]u8{ 0, 1 }) |vi| for ([_][]const u8{ "none", "ks8010,vs82", "ks8010" }) |lk| {
+            const public = (try loaded.get(arena, try lock(arena, "", vi, "meio", "darius", .top, .plat, lk))).?;
+            const private = (try loaded.meio(arena, try std.fmt.allocPrint(arena, "private/meio/{d}/122/top/plat/{s}.bin", .{ vi, lk }))).?;
+            try testing.expectEqualSlices(u8, private, public);
+        };
+        const pub0 = try site.ui.data.decode(arena, site.ui.pvdata.Meio, (try loaded.get(arena, try lock(arena, "", 0, "meio", "darius", .top, .plat, "none"))).?);
+        try testing.expect(for (pub0.roles) |r| {
+            if (r.role == .top) break r.meio.lo <= r.meio.p and r.meio.p <= r.meio.hi;
+        } else false);
+        try testing.expect(pub0.opponents.len > 0);
+        for (pub0.opponents) |o| try testing.expect(o.meio == null or o.gold != null);
+        try testing.expectEqual(0, (try site.ui.data.decode(arena, site.ui.pvdata.Meio, (try loaded.get(arena, try lock(arena, "", 0, "meio", "darius", .top, .master, "none"))).?)).roles.len);
+        // Locked opponent lists keep no lane gold under a keystone
+        for (mk.opponents) |o| try testing.expectEqual(null, o.gold);
+        // Other islands still need a lock set
+        try testing.expectEqual(null, try loaded.get(arena, try lock(arena, "", 0, "build", "darius", .top, .plat, "none")));
         // The page's own lock set rendered in: the LockBar, the answer inline for the
         // island, the opponent by name; a set not in its one form renders unlocked
         const page = (try loaded.getLocked(arena, "champions/darius/top.html", "ks8010,vs82")).?;

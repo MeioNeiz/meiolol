@@ -111,6 +111,8 @@ pub fn answer(s: *const Site, x: *const Answers, gpa: std.mem.Allocator, rest: [
         .build => try ui.data.encode(s.arena, cp.BuildData, try build(s, x, gpa, ch, q.role, q.rank, &q.locks) orelse return null, &out),
         .more => try ui.data.encode(s.arena, cp.MoreData, try more(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
         .top => try ui.data.encode(s.arena, cp.TopData, try top(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
+        // The Meio period: public, as the view's numbers are (estimates.md E0d)
+        .meio => try ui.data.encode(s.arena, pd.Meio, try meioOf(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
     }
     return out.items;
 }
@@ -186,7 +188,7 @@ pub fn top(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, lo
 /// (ui.pvdata.meioPath). The renderer answers it only behind nginx's private login gate
 pub const meio_prefix = "private/meio/";
 
-/// Most choices of each list in a Meio answer
+/// Most keystones and items in a Meio answer; opponents are all listed (Matchups)
 const meio_choices = 40;
 
 /// The pvdata.Meio at `rest` (a path after `meio_prefix`), in `arena`; null for a path that
@@ -296,12 +298,20 @@ fn meioOf(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, loc
     const m: ?*const meio.Model = if (d.gap == .none) &x.meio.? else null;
     const region: u1 = @intFromBool(s.view.region == .euw);
     const cr: u16 = @intCast(ch.id | @as(u32, @backingInt(r)) << 13);
+    const lane_gold = st != null and st.?.keystone == null and st.?.item == null;
     if (m) |model| {
         d.stack = est(st.?.rate(model, region, br.?, cr));
-        if (st.?.keystone == null and st.?.item == null) {
+        if (lane_gold) {
             const o: u32 = if (st.?.opponent) |id| crOf(id, cr) else 0;
             d.gold = est(model.avgIn(.gold14, region, br.?, cr, o));
         }
+        var roles: std.ArrayList(pd.RoleEst) = .empty;
+        for (Role.all) |r2| {
+            const cr2: u16 = @intCast(ch.id | @as(u32, @backingInt(r2)) << 13);
+            const e = est(model.rateIn(.champion, region, br.?, cr2, 0)) orelse continue;
+            try roles.append(a, .{ .role = champion.uiRole(r2), .meio = e });
+        }
+        d.roles = roles.items;
     }
     const lists = [_]struct { []const lockanswer.Choice, *[]const pd.Choice, []const ddragon.Named }{
         .{ c.keystones, &d.keystones, t.build.runes },
@@ -310,7 +320,7 @@ fn meioOf(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, loc
     };
     for (lists, 0..) |l, i| {
         const from, const into, const names = l;
-        const out = try a.alloc(pd.Choice, @min(from.len, meio_choices));
+        const out = try a.alloc(pd.Choice, if (i == 2) from.len else @min(from.len, meio_choices));
         for (out, from[0..out.len]) |*o, cc| {
             const name = if (i == 2) champName(s, cc.id) else if (ddragon.find(names, cc.id)) |n| n.name else "";
             var with = st orelse Stack{};
@@ -321,7 +331,9 @@ fn meioOf(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, loc
                 else => with.opponent = id16,
             }
             const e = if (m != null and id16 != null and with.depth() <= 2) with.rate(m.?, region, br.?, cr) else null;
-            o.* = .{ .id = cc.id, .name = name, .games = cc.locked.games, .wins = cc.locked.wins, .meio = est(e) };
+            // Lane gold against the opponent: only where the stack has no keystone or item
+            const gold = if (i == 2 and lane_gold and m != null and id16 != null) est(m.?.avgIn(.gold14, region, br.?, cr, crOf(id16.?, cr))) else null;
+            o.* = .{ .id = cc.id, .name = name, .games = cc.locked.games, .wins = cc.locked.wins, .meio = est(e), .gold = gold };
         }
         into.* = out;
     }
@@ -354,12 +366,12 @@ fn filterOf(s: *const Site, t: *const lockrows.Table, k: cp.Rank) ?lockanswer.Fi
 }
 
 /// The islands with lock answers
-pub const Island = enum { build, more, top };
+pub const Island = enum { build, more, top, meio };
 
 const Query = struct { island: Island, slug: []const u8, role: Role, rank: cp.Rank, locks: lockanswer.Locks };
 
 /// `<island>/<slug>/<role>/<rank>/<lk>.bin`. A lock set must be as Locks.format writes
-/// it: one URL, one cached copy
+/// it: one URL, one cached copy. Meio's no lock set is pd.no_locks
 fn parse(rest: []const u8) ?Query {
     var it = std.mem.splitScalar(u8, rest, '/');
     const island = std.meta.stringToEnum(Island, it.next() orelse return null) orelse return null;
@@ -368,7 +380,9 @@ fn parse(rest: []const u8) ?Query {
     const rank = std.meta.stringToEnum(cp.Rank, it.next() orelse return null) orelse return null;
     const last = it.next() orelse return null;
     if (it.next() != null or !std.mem.endsWith(u8, last, ".bin")) return null;
-    const locks = pageLocks(last[0 .. last.len - ".bin".len]) orelse return null;
+    const lk = last[0 .. last.len - ".bin".len];
+    // The other islands' unlocked numbers are the view's files; Meio has none
+    const locks = if (island == .meio and std.mem.eql(u8, lk, pd.no_locks)) lockanswer.Locks{} else pageLocks(lk) orelse return null;
     return .{ .island = island, .slug = slug, .role = coreRole(role), .rank = rank, .locks = locks };
 }
 

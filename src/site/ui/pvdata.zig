@@ -1,5 +1,6 @@
-//! Meio's preview data (ui.pv): Meio under a champion page's lock stack, from the lock
-//! server (site/locks.zig meioAnswer) at meioPath
+//! Meio under a champion page's lock stack, from the lock server (site/locks.zig): the
+//! champion page's Meio period at champpage.lockPath's "meio" island, and ui.pv's private
+//! preview at meioPath
 const std = @import("std");
 const fmt = @import("fmt.zig");
 const Role = @import("role.zig").Role;
@@ -9,8 +10,12 @@ const Role = @import("role.zig").Role;
 pub const Est = struct { p: f32, lo: f32, hi: f32, own: u32 };
 
 /// A keystone, finished item or lane opponent beside the lock stack: its games and wins
-/// under the stack and the page's view, Meio's number for the stack with it
-pub const Choice = struct { id: u32, name: []const u8, games: u32, wins: u32, meio: ?Est };
+/// under the stack and the page's view, Meio's number for the stack with it. `gold`:
+/// lane gold at 14 against an opponent, under no lock or an opponent lock only
+pub const Choice = struct { id: u32, name: []const u8, games: u32, wins: u32, meio: ?Est, gold: ?Est = null };
+
+/// The champion's Meio win rate in a role, no locks (the role tiles)
+pub const RoleEst = struct { role: Role, meio: Est };
 
 /// Why Meio has no number for the stack
 pub const Gap = enum {
@@ -38,7 +43,10 @@ pub const Meio = struct {
     gold: ?Est,
     keystones: []const Choice,
     items: []const Choice,
+    /// Every lane opponent in the view, not cut to the others' length (Matchups)
     opponents: []const Choice,
+    /// Each role the model has the champion in; empty with a gap
+    roles: []const RoleEst = &.{},
 };
 
 /// `lk` as lockanswer.Locks.format writes it, "" for none; `view` html.View's index
