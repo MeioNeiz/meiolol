@@ -1,7 +1,6 @@
 //! CompView: the desktop app's comp view once all ten champions are locked (docs/plan/
-//! app.md APP6), under the board. Each team's damage split as a bar and its mix in
-//! words, a warning when teams this one-sided win less often, its champions with a clear
-//! early or late lean; win chance by game length as a TrendChart; then the five lanes as
+//! app.md APP6), under the board. Each team's damage split as a bar, a tag when teams
+//! this one-sided win less often, its champions with a clear early or late lean; win chance by game length as a TrendChart; then the five lanes as
 //! TeamRows. Static HTML in the shell, so the chart has no hover tip. Champion facts
 //! only, never players. The public edition gets words: every number here is null there
 //! (src/shell/screens.zig, docs/production-key.md)
@@ -11,6 +10,7 @@ const teamrows = @import("teamrows.zig");
 const phrase = @import("phrase.zig");
 const trend = @import("trend.zig");
 const toggletip = @import("toggletip.zig");
+const badge = @import("badge.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -129,7 +129,6 @@ fn team(h: *H, t: Team, side: Side) N {
             W.top.with(h, .{ .n = x.champ.name }),
             if (x.share) |p| W.top_share.with(h, .{ .p = p }) else null,
         }) else null,
-        if (t.timing.len == 0) h.p(.{ .class = "none" }, .{W.no_lean}) else null,
         if (early.items.items.len > 0) h.div(.{ .class = "lean" }, .{ h.span(.{}, .{W.early}), h.ul(.{}, .{early.done()}) }) else null,
         if (late.items.items.len > 0) h.div(.{ .class = "lean" }, .{ h.span(.{}, .{W.late}), h.ul(.{}, .{late.done()}) }) else null,
     });
@@ -154,7 +153,8 @@ fn length(h: *H, l: Length) ?N {
     });
 }
 
-/// Magic from the left, physical the rest; then the mix in words
+/// Magic from the left, physical the rest, the mix in words for a screen reader; the
+/// shares on the ends in the private edition
 fn damage(h: *H, d: Damage) N {
     const pct = 100 * @max(0, @min(1, d.magic));
     const words = switch (d.mix) {
@@ -163,11 +163,13 @@ fn damage(h: *H, d: Damage) N {
         .magic => W.magic,
     };
     return h.div(.{ .class = "dmg" }, .{
-        h.span(.{ .class = "bar", .aria_hidden = true }, .{h.el(.i, .{ .style = h.vars(.{ .w = pct }) }, .{})}),
-        h.span(.{ .class = "ends", .aria_hidden = true }, .{ h.span(.{}, .{W.magic_end}), h.span(.{}, .{W.physical_end}) }),
-        h.p(.{}, .{ words, if (d.share) W.share.with(h, .{ .p = pct }) else null }),
+        h.span(.{ .class = "bar", .role = "img", .aria_label = words }, .{h.el(.i, .{ .style = h.vars(.{ .w = pct }) }, .{})}),
+        h.span(.{ .class = "ends", .aria_hidden = true }, .{
+            h.span(.{}, .{if (d.share) W.magic_share.with(h, .{ .p = pct }) else W.magic_end}),
+            h.span(.{}, .{if (d.share) W.physical_share.with(h, .{ .p = 100 - pct }) else W.physical_end}),
+        }),
         if (d.rate) |r| h.p(.{ .class = "rec" }, .{W.record.with(h, .{ .r = r, .n = d.teams })}) else null,
-        if (d.wins_less) h.p(.{ .class = "less" }, .{W.wins_less}) else null,
+        if (d.wins_less) h.p(.{}, .{badge.view(h, .turn, .{W.one_sided})}) else null,
     });
 }
 
@@ -177,15 +179,15 @@ const W = struct {
     const us = plain("Your team");
     const them = plain("Enemy team");
     const no_split = plain("Damage split not known for every champion yet.");
-    const no_lean = plain("No champion with a clear early or late lean.");
     const physical = plain("Mostly physical damage");
     const mixed = plain("Mixed damage");
     const magic = plain("Mostly magic damage");
     const magic_end = plain("magic");
     const physical_end = plain("physical");
-    const share = phrase.Phrase(": {p:rate} magic");
+    const magic_share = phrase.Phrase("{p:rate} magic");
+    const physical_share = phrase.Phrase("{p:rate} physical");
     const record = phrase.Phrase("Teams like it won {r:rate} ({n:kilo} teams)");
-    const wins_less = plain("Teams this one-sided win less often: one kind of defence blocks most of their damage.");
+    const one_sided = plain("One-sided: wins less");
     const early = plain("Early");
     const late = plain("Late");
     const lean_numbers = phrase.Phrase("{g:signed} g · {w:points} pts");
@@ -194,7 +196,7 @@ const W = struct {
     const length = plain("Win chance by game length");
     const longer = plain("Your champions win more in long games.");
     const shorter = plain("Your champions win more in short games.");
-    const notes = phrase.Phrase("Champion averages: damage from patch {p:text} in EUW, leans from 30 days, lanes at {l:int} min. Early: its team is usually ahead at {g:int} min (gold) but wins less from an even game at {w:int} (pts); late, the other way round.");
+    const notes = phrase.Phrase("Champion averages: damage from patch {p:text} in EUW, leans from 30 days, lanes at {l:int} min. Early: its team is usually ahead at {g:int} min (gold) but wins less from an even game at {w:int} (pts); late, the other way round. One-sided: teams with one kind of damage win less often, as one kind of defence blocks most of it.");
 };
 
 pub const css =
@@ -216,9 +218,7 @@ pub const css =
     \\  .c-comp .bar { position: relative; height: 8px; border-radius: 4px; background: var(--bar-lo); overflow: hidden; }
     \\  .c-comp .bar > i { position: absolute; inset: 0 auto 0 0; width: calc(var(--w) * 1%); background: var(--bar-hi); }
     \\  .c-comp .ends { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--muted); }
-    \\  .c-comp .dmg > p { font-size: var(--fs-s); }
-    \\  .c-comp .rec { color: var(--t2); }
-    \\  .c-comp .less { color: var(--lo2); }
+    \\  .c-comp .rec { font-size: var(--fs-s); color: var(--t2); }
     \\  .c-comp ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
     \\  .c-comp li { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
     \\  .c-comp .lean { display: flex; align-items: center; gap: var(--sp-2); }
