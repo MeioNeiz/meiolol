@@ -170,6 +170,7 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held) N {
         if (l.sentence.len > 0 and l.fig.len == 0) h.p(.{ .class = "say", .data_thin = l.thin }, .{l.sentence}) else null,
         if (l.chart) |c| if (held) |x| x.at(c, W.gold).view(h) else null else null,
         if (l.chart != null and l.caption.len > 0) h.p(.{ .class = "scope" }, .{l.caption}) else null,
+        if (!rated and l.them == null) h.p(.{ .class = "say" }, .{W.no_them}) else null,
         h.div(.{ .class = "opts-head" }, .{
             if (rated) h.h3(.{}, .{switch (l.mode) {
                 .blind => W.head_blind,
@@ -248,6 +249,7 @@ const W = struct {
     const own = plain("Your lane");
     const none = plain("No champion you can pick has enough games in this role.");
     const none_ally = plain("No champion has enough games in this role.");
+    const no_them = plain("The matchup shows once both sides pick this lane.");
     const your_lane = plain("your lane");
     const ban_now = plain("Your ban");
     const ban_options = plain("Ban options");
@@ -423,6 +425,20 @@ fn enemyLane(h: *H) Screen {
     return s;
 }
 
+/// The enemy jungle locked in with ours still empty: no matchup yet
+fn enemyAlone(h: *H) Screen {
+    var s = sample;
+    const lanes = h.mem.dupe(draftboard.Lane, sample.board.lanes) catch {
+        h.oom = true;
+        return sample;
+    };
+    lanes[1].them.sel = true;
+    lanes[1].us = .{};
+    s.board.lanes = lanes;
+    s.lane = .{ .role = .jungle, .me = lanes[1].them.champ, .mode = .locked, .enemy = true };
+    return s;
+}
+
 fn chartState(h: *H) ?*lanechart.Held {
     const x = h.mem.create(lanechart.Held) catch {
         h.oom = true;
@@ -438,6 +454,7 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("counter, private", view(h, private(h, sample), chartState(h)));
     g.addFill("an ally's lane", view(h, allyLane(h), chartState(h)));
     g.addFill("an enemy's lane", view(h, enemyLane(h), chartState(h)));
+    g.addFill("an enemy's lane, ours empty", view(h, enemyAlone(h), chartState(h)));
     g.addFill("your ban, blind", view(h, .{
         .board = .{ .lanes = draftboard.sample.lanes[0..5], .bans_them = draftboard.sample.bans_them },
         .banning = true,

@@ -127,7 +127,7 @@ fn team(h: *H, t: Team, side: Side) N {
         if (t.top) |x| h.p(.{ .class = "top" }, .{
             champ.view(h, x.champ, .{ .px = .@"20", .named = false }),
             W.top.with(h, .{ .n = x.champ.name }),
-            if (x.share) |p| W.top_share.with(h, .{ .p = p }) else null,
+            if (x.share) |p| W.top_share.with(h, .{ .p = whole(p) }) else null,
         }) else null,
         if (early.items.items.len > 0) h.div(.{ .class = "lean" }, .{ h.span(.{}, .{W.early}), h.ul(.{}, .{early.done()}) }) else null,
         if (late.items.items.len > 0) h.div(.{ .class = "lean" }, .{ h.span(.{}, .{W.late}), h.ul(.{}, .{late.done()}) }) else null,
@@ -153,8 +153,13 @@ fn length(h: *H, l: Length) ?N {
     });
 }
 
+/// A share of champion averages isn't known to 0.1
+fn whole(p: f32) u32 {
+    return @intFromFloat(@round(@max(0, @min(100, p))));
+}
+
 /// Magic from the left, physical the rest, the mix in words for a screen reader; the
-/// shares on the ends in the private edition
+/// magic share on its end in the private edition (physical is the rest)
 fn damage(h: *H, d: Damage) N {
     const pct = 100 * @max(0, @min(1, d.magic));
     const words = switch (d.mix) {
@@ -165,8 +170,8 @@ fn damage(h: *H, d: Damage) N {
     return h.div(.{ .class = "dmg" }, .{
         h.span(.{ .class = "bar", .role = "img", .aria_label = words }, .{h.el(.i, .{ .style = h.vars(.{ .w = pct }) }, .{})}),
         h.span(.{ .class = "ends", .aria_hidden = true }, .{
-            h.span(.{}, .{if (d.share) W.magic_share.with(h, .{ .p = pct }) else W.magic_end}),
-            h.span(.{}, .{if (d.share) W.physical_share.with(h, .{ .p = 100 - pct }) else W.physical_end}),
+            h.span(.{}, .{if (d.share) W.magic_share.with(h, .{ .p = whole(pct) }) else W.magic_end}),
+            h.span(.{}, .{W.physical_end}),
         }),
         if (d.rate) |r| h.p(.{ .class = "rec" }, .{W.record.with(h, .{ .r = r, .n = d.teams })}) else null,
         if (d.wins_less) h.p(.{}, .{badge.view(h, .turn, .{W.one_sided})}) else null,
@@ -184,19 +189,18 @@ const W = struct {
     const magic = plain("Mostly magic damage");
     const magic_end = plain("magic");
     const physical_end = plain("physical");
-    const magic_share = phrase.Phrase("{p:rate} magic");
-    const physical_share = phrase.Phrase("{p:rate} physical");
+    const magic_share = phrase.Phrase("{p:pct} magic");
     const record = phrase.Phrase("Teams like it won {r:rate} ({n:kilo} teams)");
-    const one_sided = plain("One-sided: wins less");
+    const one_sided = plain("One damage type: wins less");
     const early = plain("Early");
     const late = plain("Late");
     const lean_numbers = phrase.Phrase("{g:signed} g · {w:points} pts");
     const top = phrase.Phrase("Most damage: {n:text}");
-    const top_share = phrase.Phrase(" ({p:rate} of the team's)");
+    const top_share = phrase.Phrase(" ({p:pct} of the team's)");
     const length = plain("Win chance by game length");
     const longer = plain("Your champions win more in long games.");
     const shorter = plain("Your champions win more in short games.");
-    const notes = phrase.Phrase("Champion averages: damage from patch {p:text} in EUW, leans from 30 days, lanes at {l:int} min. Early: its team is usually ahead at {g:int} min (gold) but wins less from an even game at {w:int} (pts); late, the other way round. One-sided: teams with one kind of damage win less often, as one kind of defence blocks most of it.");
+    const notes = phrase.Phrase("Champion averages: damage from patch {p:text} in EUW, leans from 30 days, lanes at {l:int} min. Early: its team is usually ahead at {g:int} min (gold) but wins less from an even game at {w:int} (pts); late, the other way round. One damage type: teams with only one kind of damage win less often, as one kind of defence blocks most of it.");
 };
 
 pub const css =

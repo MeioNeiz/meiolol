@@ -193,8 +193,10 @@ picked
 `badge.zig` `.c-badge` site
 Badge: a flat label (role, result, "few games", a patch note). Never looks pressable: no
 fill or border, no hover. A patch note (`riot`) is ringed in its tone, buff or nerf with
-an arrow as the second cue
-States: neutral; accent; us; them; few; patch note; patch buff; patch nerf; moment
+an arrow as the second cue. `turn` is the attention pill: a moment ("your turn", a swing)
+or a caution about the thing it sits on
+States: neutral; accent; us; them; few; patch note; patch buff; patch nerf; moment;
+caution
 Used by: modelbadge, matchbrief, champlist, draftboard, champselect, compview, appbar,
 versus, inspector, gamehead, gamerow, scoreboard, puzzle, candlist, learnpage, dailypage,
 dailyseat, dailydays, patchpage, homepage, pv, adminpage, adminlab, adminruns, champpage,
@@ -570,8 +572,8 @@ pool, each with its lane fact and reasons as chips; ban options under while bans
 The shell writes every word for its edition (src/shell/screens.zig): the public one gets
 no win chances (`win` and `draft` stay null, product rules). The options list is the seed
 of CandidateList (draft-tester.md)
-States: counter, public; counter, private; an ally's lane; an enemy's lane; your ban,
-blind
+States: counter, public; counter, private; an ally's lane; an enemy's lane; an enemy's
+lane, ours empty; your ban, blind
 Used by: app
 
 ### TeamRows

@@ -1,6 +1,7 @@
 //! Badge: a flat label (role, result, "few games", a patch note). Never looks pressable:
 //! no fill or border, no hover. A patch note (`riot`) is ringed in its tone, buff or
-//! nerf with an arrow as the second cue
+//! nerf with an arrow as the second cue. `turn` is the attention pill: a moment ("your
+//! turn", a swing) or a caution about the thing it sits on
 const tree = @import("tree.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const H = tree.H;
@@ -55,4 +56,5 @@ pub fn gallery(g: *Gallery) void {
     g.add("patch buff", riot(h, .buff, "Q"));
     g.add("patch nerf", riot(h, .nerf, "W, stats"));
     g.add("moment", view(h, .turn, .{"★ Swing"}));
+    g.add("caution", view(h, .turn, .{"One damage type: wins less"}));
 }
