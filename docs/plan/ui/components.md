@@ -1630,7 +1630,7 @@ number, its count as the games its range is worth (an estimate, not games played
 scale with Meio's 80% band and dot beside the two raw windows' ticks, which say their
 names on hover only
 States: below both raw windows (Ornn top, 149); under a lock, wide band, near 50; the
-patch file not in yet; Master+: raw only, reason on hover
+patch file not in yet; Master+: no Meio, its reason, no scale
 
 ### AdminPage
 `adminpage.zig` `.c-admin`
