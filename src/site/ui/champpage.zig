@@ -437,10 +437,13 @@ pub const W = struct {
     pub const pickup_head = Phrase("{a:rate} new → {b:rate} practised · gap {g:dec}, usual {u:dec}");
     pub const pickup_note = plain("New: under 30k mastery points; practised: 100k+. Every champion rises with practice: the usual gap is the average.");
     pub const harder = plain("harder to pick up");
+    pub const hard = plain("hard");
     pub const easier = plain("easier to pick up");
     pub const also = Phrase("{c:text} mains also play");
     pub const lift = Phrase("×{x:dec}");
     pub const share = Phrase("{s:pct}");
+    pub const also_tip = Phrase("{c:text} mains play {d:text} {x:dec}× as often as other players; {s:pct} of them play it");
+    pub const also_tip_hard = Phrase("{c:text} mains play {d:text} {x:dec}× as often as other players; {s:pct} of them play it. Harder to pick up");
     pub const pool = plain("Pool");
     /// A chart point's tip, after its name
     pub const rate_tip = Phrase("{r:rate} in {n:count} games");
@@ -1817,18 +1820,22 @@ pub const Trends = struct {
         };
         for (rows, d.also) |*x, a| {
             const c = d.champs[a.champ];
+            const s: u32 = @intFromFloat(@round(a.share));
+            const tip = .{ .c = d.name, .d = c.name, .x = a.lift, .s = s };
             x.* = .{
                 .champ = icon(h, d.ddragon, c),
                 .href = h.fmt("{s}champions/{s}", .{ p.root, c.slug }),
-                .tag = if (a.harder) badge.view(h, .neutral, .{W.harder}) else null,
+                .tag = if (a.harder) badge.view(h, .neutral, .{W.hard}) else null,
+                .title = if (a.harder) W.also_tip_hard.with(h, tip) else W.also_tip.with(h, tip),
                 .value = h.span(.{}, .{W.lift.with(h, .{ .x = a.lift })}),
-                .note = W.share.with(h, .{ .s = @as(u32, @intFromFloat(@round(a.share))) }),
+                .note = W.share.with(h, .{ .s = s }),
+                .fill = a.share / 100,
             };
         }
         const title = W.also.with(h, .{ .c = d.name });
         return card.view(h, .{}, &.{
             card.head(h, title, null, &.{ p.plat(h), h.a(.{ .class = "more", .href = h.fmt("{s}pool?champs={d}", .{ p.root, d.id }) }, .{W.pool}) }),
-            if (rows.len > 0) champlist.view(h, .{ .label = title }, rows) else h.p(.{ .class = "none" }, .{W.none}),
+            if (rows.len > 0) champlist.view(h, .{ .tiles = true, .label = title }, rows) else h.p(.{ .class = "none" }, .{W.none}),
         });
     }
 };

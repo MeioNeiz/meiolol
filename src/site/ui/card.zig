@@ -73,9 +73,10 @@ pub const css =
     \\  .c-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m);
     \\    padding: var(--card-pad); min-width: 0; }
     \\  .c-card[data-v="flush"] { padding: 0; overflow: clip; display: flow-root; }
-    \\  /* A row of cards stretches to its tallest: a chart's plot takes the spare height */
-    \\  .c-card:has(> .c-chart) { display: flex; flex-direction: column; }
-    \\  .c-card > .c-chart { flex: 1 0 auto; }
+    \\  /* A row of cards stretches to its tallest: a chart's plot, or a body marked data-grow,
+    \\     takes the spare height */
+    \\  .c-card:has(> :is(.c-chart, [data-grow])) { display: flex; flex-direction: column; }
+    \\  .c-card > :is(.c-chart, [data-grow]) { flex: 1 0 auto; }
     \\  .c-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--sp-4); }
     \\  .c-card > :is(.c-head, .c-tabs, .c-toolbar) { margin-inline: calc(-1 * var(--card-px)); padding-inline: var(--card-px); }
     \\  .c-card > :is(.c-head, .c-tabs, .c-toolbar):first-child { margin-top: calc(-1 * var(--card-py)); }

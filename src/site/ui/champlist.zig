@@ -3,7 +3,9 @@
 //! link to the champion's page. Two columns in a wide card (`cols`). A pair (`vs`): a
 //! duel, the portraits at both ends, the names over the lane's bar (the first's win rate
 //! a tick against the middle's, the bar solid to its 95% range's low end and fading to
-//! the high one, a ring where a patch move started), the figure and its note last
+//! the high one, a ring where a patch move started), the figure and its note last.
+//! `tiles`: one tile per champion filling the card's width, the portrait large, the
+//! figure under the name, the note over a bar of its share (`fill`)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
@@ -35,11 +37,16 @@ pub const Row = struct {
     value: ?N = null,
     /// Faint, last
     note: ?tree.Text = null,
+    /// Tiles: the note's share, 0-1, as a bar
+    fill: ?f32 = null,
+    /// Tiles: the tag's meaning, on hover and for screen readers
+    title: ?tree.Text = null,
 };
 
 pub const Opts = struct {
     /// Two columns where they fit
     cols: bool = false,
+    tiles: bool = false,
     label: ?tree.Text = null,
 };
 
@@ -48,6 +55,7 @@ const W = struct {
 };
 
 pub fn view(h: *H, o: Opts, rows: []const Row) N {
+    if (o.tiles) return tiles(h, o, rows);
     var l = h.list();
     for (rows, 0..) |r, i| {
         const kids = if (r.vs) |y| duel(h, r, y) else nodes(h, .{
@@ -61,6 +69,26 @@ pub fn view(h: *H, o: Opts, rows: []const Row) N {
         l.add(h.li(.{ .key = i }, .{if (r.href) |href| h.a(.{ .href = href, .class = if (duo) "duel" else null }, .{kids}) else h.div(.{ .class = if (duo) "duel" else null }, .{kids})}));
     }
     return h.ul(.{ .class = "c-clist", .data_v = if (o.cols) "2" else null, .aria_label = o.label }, .{l.done()});
+}
+
+fn tiles(h: *H, o: Opts, rows: []const Row) N {
+    var l = h.list();
+    for (rows, 0..) |r, i| {
+        const kids = nodes(h, .{
+            h.span(.{ .class = "pic" }, .{
+                champ.view(h, r.champ, .{ .named = false, .px = .@"48" }),
+                if (r.tag) |t| h.span(.{ .class = "tag" }, .{t}) else null,
+            }),
+            h.span(.{ .class = "nm" }, .{r.champ.name}),
+            if (r.value) |v| h.span(.{ .class = "v" }, .{v}) else null,
+            if (r.note) |n| h.span(.{ .class = "g" }, .{ n, if (r.fill) |f| h.el(.i, .{ .style = h.vars(.{ .f = @round(@max(0, @min(1, f)) * 1000) / 10 }) }, .{}) else null }) else null,
+        });
+        l.add(h.li(.{ .key = i }, .{if (r.href) |href| h.a(.{ .href = href, .title = r.title }, .{kids}) else h.div(.{ .title = r.title }, .{kids})}));
+    }
+    // One row where all fit, else two (3x2 for 6)
+    const n = rows.len;
+    const cols = h.vars(.{ .n = n, .m = if (n <= 3) n else (n + 1) / 2 });
+    return h.div(.{ .class = "c-clist", .data_v = "tiles", .data_grow = {} }, .{h.ul(.{ .style = cols, .aria_label = o.label }, .{l.done()})});
 }
 
 fn nodes(h: *H, kids: anytype) []const N {
@@ -115,6 +143,23 @@ pub const css =
     \\  .c-clist[data-v="2"] { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); column-gap: var(--sp-5); }
     \\  .c-clist[data-v="2"]:has(.duel) { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
     \\  .c-clist[data-v="2"] li > * { height: 36px; border-bottom: 1px solid var(--line); }
+    \\  .c-clist[data-v="tiles"] { container-type: inline-size; }
+    \\  .c-clist[data-v="tiles"] > ul { list-style: none; margin: 0; padding: 0; display: grid; height: 100%;
+    \\    grid-template-columns: repeat(var(--m), minmax(0, 1fr)); grid-auto-rows: 1fr; gap: var(--sp-2); }
+    \\  @container (min-width: 560px) { .c-clist[data-v="tiles"] > ul { grid-template-columns: repeat(var(--n), minmax(0, 1fr)); } }
+    \\  .c-clist[data-v="tiles"] li > * { display: grid; justify-items: center; align-content: center; gap: 2px; height: 100%;
+    \\    padding: var(--sp-3) var(--sp-2); border-radius: var(--r-m); background: var(--panel-2); }
+    \\  .c-clist[data-v="tiles"] li > a:hover { background: var(--panel-3); }
+    \\  .c-clist[data-v="tiles"] .pic { position: relative; margin-bottom: 10px; }
+    \\  .c-clist[data-v="tiles"] .tag { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); line-height: 1; }
+    \\  .c-clist[data-v="tiles"] .tag > * { padding: 2px 5px; font-size: var(--fs-xs);
+    \\    background: var(--panel); box-shadow: 0 0 0 1px var(--line-2); }
+    \\  .c-clist[data-v="tiles"] .nm { display: block; flex: none; max-width: 100%; text-overflow: ellipsis; font-size: var(--fs-s); }
+    \\  .c-clist[data-v="tiles"] .v { font-size: var(--fs-l); }
+    \\  .c-clist[data-v="tiles"] .g { display: grid; gap: 3px; width: 100%; min-width: 0; text-align: center; }
+    \\  .c-clist[data-v="tiles"] .g > i { position: relative; height: 4px; border-radius: 2px; background: var(--bar-track); overflow: hidden; }
+    \\  .c-clist[data-v="tiles"] .g > i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--f) * 1%);
+    \\    background: var(--bar-lo); }
     \\  .c-clist li > .duel { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; column-gap: var(--sp-3);
     \\    height: 52px; }
     \\  .c-clist .duel > .mid { display: grid; gap: 6px; min-width: 0; }
@@ -141,6 +186,7 @@ pub const css =
 const G = struct {
     pub const harder = plain("harder to pick up");
     pub const also = plain("Darius mains also play");
+    pub const hard = plain("hard");
 };
 
 pub fn gallery(g: *Gallery) void {
@@ -151,6 +197,7 @@ pub fn gallery(g: *Gallery) void {
         .{ champ.demo("Mordekaiser", "Mordekaiser"), plain("×3.0"), plain("45%"), false },
         .{ champ.demo("Garen", "Garen"), plain("×2.9"), plain("49%"), true },
         .{ champ.demo("Aatrox", "Aatrox"), plain("×2.9"), plain("30%"), false },
+        .{ champ.demo("Malphite", "Malphite"), plain("×2.8"), plain("7%"), false },
     };
     var rows: [also.len]Row = undefined;
     for (also, 0..) |x, i| rows[i] = .{
@@ -161,6 +208,18 @@ pub fn gallery(g: *Gallery) void {
         .note = x[2],
     };
     g.addFill("mains also play: links, a badge", view(h, .{ .label = G.also }, &rows));
+    const fills = [_]f32{ 0.44, 0.22, 0.45, 0.49, 0.30, 0.07 };
+    var tl: [also.len]Row = undefined;
+    for (also, 0..) |x, i| tl[i] = .{
+        .champ = x[0],
+        .href = "#",
+        .tag = if (x[3]) badge.view(h, .neutral, .{G.hard}) else null,
+        .title = if (x[3]) G.harder else null,
+        .value = h.span(.{}, .{x[1]}),
+        .note = x[2],
+        .fill = fills[i],
+    };
+    g.addFill("tiles: share bars, a harder mark", view(h, .{ .tiles = true, .label = G.also }, &tl));
     g.addFill("two columns", view(h, .{ .cols = true, .label = G.also }, &rows));
     g.addFill("matchups: duels, the lane's bar and range; a role; where a move started", view(h, .{}, &.{
         .{ .champ = champ.demo("Darius", "Darius"), .vs = champ.demo("Garen", "Garen"), .href = "#", .lane = .{ .win = 51.2, .ci = 2.3 }, .value = h.span(.{ .style = h.vars(.{ .c = fmt.Step.of(1.2, fmt.win_cuts) }) }, .{plain("51.2%")}), .note = plain("1,788") },
