@@ -177,6 +177,10 @@ holding ~80% (so too wide fails as well as too narrow); boundaries 16.20 -> 16.2
 - M10 No lean (Jacob, 4 Nov): Meio's middle runs neither high nor low for any kind,
   popularity band, rank or region, rare strong picks included; the lean table as a
   truth gate. Steps NL0-NL7 in meio-middle.md
+- M11 Regions as neighbours (Jacob, 5 Nov): one EUW1 term against a pooled rest today.
+  Measure: per region pair, how alike champion-roles' patch moves are; whether a region's
+  (KR's?) days 0-3 predict EUW1's days 4-10 better than its own. Then a term per region
+  with a learnt covariance, or the leading region's early move in the patch prior
 
 Order: E7 next, as the base: on its own it fixes the matchup builds strip per
 period and rank in every block. Then E2, then E3-E5 as each passes the gate, then E9 and
