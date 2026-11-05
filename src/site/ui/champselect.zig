@@ -30,6 +30,9 @@ pub const Screen = struct {
     ban_options: []const BanOption = &.{},
     /// Your turn to ban: the ban options lead
     banning: bool = false,
+    /// Beside the ban head, said once for every row: the figure's unit (private) or the
+    /// reason they share (public)
+    ban_note: []const u8 = "",
     /// Private edition: your team's draft win chance in %
     draft: ?f32 = null,
 };
@@ -111,8 +114,10 @@ pub const BanOption = struct {
     role: role.Role,
     /// Your lane opponent's role
     mine: bool = false,
-    /// Why ("wins often, picked a lot"; numbers in the private edition)
-    why: []const u8,
+    /// Private edition: the one figure (wins above the role per 10k games), its unit in
+    /// Screen.ban_note; "" leaves the order to carry it
+    fig: []const u8 = "",
+    lean: Lean = .none,
     /// The ally's champion it beats in their lane
     beats: ?Reason = null,
     /// Practice's click (ui/practice.zig Act); "" for none
@@ -141,6 +146,8 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held) N {
     // Nothing rates a teammate's pick (docs/production-key.md): their lane once they
     // lock is the matchup only
     const rated = !(ally and l.mode == .locked);
+    // No options: no head either, nothing stands in for them
+    const listed = rated and l.options.len > 0;
     var opts = h.list();
     for (l.options, 0..) |o, i| opts.add(option(h, i, o, l.mode == .locked));
     return h.section(.{ .class = "lane" }, .{
@@ -167,7 +174,7 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held) N {
         if (l.chart != null and l.caption.len > 0) h.p(.{ .class = "scope" }, .{l.caption}) else null,
         if (!rated and l.them == null) h.p(.{ .class = "say" }, .{W.no_them}) else null,
         h.div(.{ .class = "opts-head" }, .{
-            if (rated) h.h3(.{}, .{switch (l.mode) {
+            if (listed) h.h3(.{}, .{switch (l.mode) {
                 .blind => W.head_blind,
                 .counter => W.head_counter,
                 .locked => W.head_locked,
@@ -175,8 +182,9 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held) N {
             // bridge.js sends the act: no handler in ui-app.wasm
             if (ally) h.button(.{ .class = "c-btn", .type = "button", .data_s = "s", .data_act = "lane 255" }, .{W.own}) else null,
         }),
-        if (!rated) null else if (l.options.len == 0) h.p(.{ .class = "say" }, .{if (ally) W.none_ally else W.none}) else h.el(.ol, .{ .class = "opts" }, .{opts.done()}),
-        if (l.scope.len > 0) h.p(.{ .class = "scope" }, .{l.scope}) else null,
+        if (listed) h.el(.ol, .{ .class = "opts" }, .{opts.done()}) else null,
+        // With no list the chart stays under Options, and its caption names the scope
+        if (l.scope.len > 0 and (listed or l.chart == null or l.caption.len == 0)) h.p(.{ .class = "scope" }, .{l.scope}) else null,
     });
 }
 
@@ -214,11 +222,14 @@ fn banOptions(h: *H, s: Screen) ?N {
                 if (o.mine) badge.view(h, .us, .{W.your_lane}) else null,
                 if (o.beats) |r| effect(h, r) else null,
             }),
-            h.span(.{ .class = "fact" }, .{o.why}),
         }),
+        if (o.fig.len > 0) h.b(.{ .class = "bfig", .data_lean = if (o.lean == .none) null else o.lean }, .{o.fig}) else null,
     }));
     return h.section(.{ .class = "bans", .data_turn = s.banning }, .{
-        h.h3(.{}, .{if (s.banning) W.ban_now else W.ban_options}),
+        h.div(.{ .class = "opts-head" }, .{
+            h.h3(.{}, .{if (s.banning) W.ban_now else W.ban_options}),
+            if (s.ban_note.len > 0) h.small(.{}, .{s.ban_note}) else null,
+        }),
         h.el(.ol, .{ .class = "opts" }, .{rows.done()}),
     });
 }
@@ -238,8 +249,6 @@ const W = struct {
     const ally = plain("Ally");
     const enemy = plain("Enemy");
     const own = plain("Your lane");
-    const none = plain("No champion you can pick has enough games in this role.");
-    const none_ally = plain("No champion has enough games in this role.");
     const no_them = plain("The matchup shows once both sides pick this lane.");
     const your_lane = plain("your lane");
     const ban_now = plain("Your ban");
@@ -289,6 +298,11 @@ pub const css =
     \\  .c-cs .win > .c-rate > .v { font-weight: var(--w-b); }
     \\  .c-cs .win > small { font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
     \\  .c-cs .bans[data-turn] h3 { color: var(--turn); }
+    \\  .c-cs .bans .opts-head > small { font-size: var(--fs-xs); color: var(--faint); }
+    \\  .c-cs .bans .opts > li { padding: var(--sp-1) var(--sp-2); }
+    \\  .c-cs .bfig { flex: none; font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
+    \\  .c-cs .bfig[data-lean="good"] { color: var(--hi2); }
+    \\  .c-cs .bfig[data-lean="bad"] { color: var(--lo2); }
     \\  .c-cs:has(.seat[data-you][data-turn]) .vs > .c-champ[data-you] { outline: 2px solid var(--turn); outline-offset: 2px; }
     \\  .c-cs .c-draft .seat[data-sel] { box-shadow: inset 0 0 0 1px var(--sel-line); border-radius: var(--r-s); }
     \\}
@@ -451,13 +465,15 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("your ban, blind", view(h, .{
         .board = .{ .lanes = draftboard.sample.lanes[0..5], .bans_them = draftboard.sample.bans_them },
         .banning = true,
+        .ban_note = "wins per 10k games",
         .ban_options = &.{
-            .{ .champ = demo("Yasuo", "Yasuo"), .role = .mid, .mine = true, .why = "wins often and is picked a lot in mid" },
-            .{ .champ = demo("Smolder", "Smolder"), .role = .bot, .why = "wins often and is picked a lot in bot" },
+            .{ .champ = demo("Yasuo", "Yasuo"), .role = .mid, .mine = true, .fig = "+31", .lean = .good },
+            .{ .champ = demo("Smolder", "Smolder"), .role = .bot, .fig = "+26", .lean = .good },
             .{
                 .champ = demo("Malphite", "Malphite"),
                 .role = .top,
-                .why = "beats Darius in lane and is picked a lot in top",
+                .fig = "+20",
+                .lean = .good,
                 .beats = .{ .text = "beats Darius in lane", .lean = .good, .champ = demo("Darius", "Darius") },
             },
         },

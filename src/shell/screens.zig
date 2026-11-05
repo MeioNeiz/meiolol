@@ -470,12 +470,12 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
         .champ = (try c.champ(a, o.champion)).?,
         .role = uiRole(o.role),
         .mine = o.my_lane,
-        .why = try banWhy(a, c, o),
+        .fig = if (c.private) try a.print("{s}{d:.0}", .{ if (o.impact >= 0) "+" else "", o.impact }) else "",
+        .lean = if (!c.private or @round(o.impact) == 0) .none else if (o.impact > 0) .good else .bad,
         .beats = if (o.beats == 0) null else .{
             .text = try a.print("beats {s} in lane", .{c.stats.?.nameOf(o.beats)}),
             .lean = .good,
             .champ = try c.champ(a, o.beats),
-            .fig = if (c.private) try a.print("+{d:.1}", .{o.beats_pp}) else "",
         },
         .act = try c.act(a, .{ .ban = o.champion }),
     };
@@ -483,22 +483,10 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
         .board = .{ .lanes = try lanes(a, c, b, if (s.ally) .{ .role = s.card.role, .enemy = s.enemy } else null), .bans_us = bans_us, .bans_them = bans_them },
         .lane = try lane(a, c, &s.card, board.modeOf(&s.card), if (s.enemy) .enemy else if (s.ally) .ally else .mine),
         .ban_options = ban_options,
+        .ban_note = if (ban_options.len == 0) "" else if (c.private) "wins per 10k games" else "win often, picked a lot",
         .banning = b.turn == .ban,
         .draft = if (c.private) if (b.draft) |d| @floatCast(100 * d.win) else null else null,
     };
-}
-
-/// Words for everyone, numbers for testers
-fn banWhy(a: Allocator, c: Ctx, o: board.BanOption) ![]const u8 {
-    if (c.private) {
-        const base = try a.print("{f} won, {f} of games, +{d:.0} wins per 10k", .{ rate(o.win), rate(o.pick_rate), o.impact });
-        if (o.beats == 0) return base;
-        return a.print("{s}, {d:.0} of them from the matchup", .{ base, o.counter });
-    }
-    // Mostly the matchup: "wins often" may not hold for it alone
-    if (o.beats != 0 and 2 * o.counter >= o.impact)
-        return a.print("beats {s} in lane and is picked a lot in {s}", .{ c.stats.?.nameOf(o.beats), o.role.label() });
-    return a.print("wins often and is picked a lot in {s}", .{o.role.label()});
 }
 
 /// Words for everyone; the share, the mix's record, lean numbers and lane gold for
@@ -1506,12 +1494,15 @@ test "champ select: the private edition's numbers, the public one's words" {
     const ps = priv.screen.select;
     try testing.expectApproxEqAbs(@as(f32, 53.4), ps.draft.?, 0.01);
     try testing.expect(ps.banning);
-    try testing.expectEqualStrings("53.0% won, 8.0% of games, +31 wins per 10k", ps.ban_options[0].why);
+    // One figure per ban row, its unit once in the head
+    try testing.expectEqualStrings("+31", ps.ban_options[0].fig);
+    try testing.expectEqual(.good, ps.ban_options[0].lean);
+    try testing.expectEqualStrings("wins per 10k games", ps.ban_note);
     try testing.expectEqual(null, ps.ban_options[0].beats);
-    // Syndra beats my Ahri: her chip with its points, most of her impact the matchup
-    try testing.expectEqualStrings("50.0% won, 5.0% of games, +20 wins per 10k, 12 of them from the matchup", ps.ban_options[1].why);
+    // Syndra beats my Ahri: her chip, no second figure
+    try testing.expectEqualStrings("+20", ps.ban_options[1].fig);
     try testing.expectEqualStrings("Ahri", ps.ban_options[1].beats.?.champ.?.name);
-    try testing.expectEqualStrings("+2.4", ps.ban_options[1].beats.?.fig);
+    try testing.expectEqualStrings("", ps.ban_options[1].beats.?.fig);
     try testing.expectEqualStrings("55.0% in mid · 26k games", ps.board.lanes[2].us.fact);
     try testing.expectEqualStrings("55.0%", ps.board.lanes[2].us.fig);
     // Syndra has no role: she takes the first empty enemy row
@@ -1537,9 +1528,10 @@ test "champ select: the private edition's numbers, the public one's words" {
     const s = d.screen.select;
     try testing.expectEqual(null, s.draft);
     try testing.expectEqual(null, s.lane.options[0].win);
-    try testing.expectEqualStrings("wins often and is picked a lot in mid", s.ban_options[0].why);
-    try testing.expectEqualStrings("beats Ahri in lane and is picked a lot in mid", s.ban_options[1].why);
-    try testing.expectEqualStrings("", s.ban_options[1].beats.?.fig);
+    // No figure: the order carries it, the shared reason heads the list
+    try testing.expectEqualStrings("", s.ban_options[0].fig);
+    try testing.expectEqualStrings("win often, picked a lot", s.ban_note);
+    try testing.expectEqualStrings("beats Ahri in lane", s.ban_options[1].beats.?.text);
     try testing.expectEqualStrings("strong in mid now", s.board.lanes[2].us.fact);
     try testing.expectEqualStrings("▲", s.board.lanes[2].us.fig);
     try testing.expectEqual(null, s.board.lanes[1].them.ban);
@@ -1625,11 +1617,12 @@ test "an ally's lane: once they lock the matchup only, nothing rates their pick"
         for ([_][]const u8{ "Other options", "<ol class=\"opts\"", "enough games", "team win" }) |no|
             try testing.expect(std.mem.find(u8, html, no) == null);
     }
-    // Still to pick, nothing with enough games: not "you can pick"
+    // Still to pick, nothing with enough games: no head, no sentence in its place
     sel.card.locked = false;
     sel.card.me = 0;
     const html = try render(a, try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .select = &sel }, .none), null, null);
-    try testing.expect(std.mem.find(u8, html, "No champion has enough games in this role.") != null);
+    for ([_][]const u8{ "Options into", "hold up blind", "enough games", "<ol class=\"opts\"" }) |no|
+        try testing.expect(std.mem.find(u8, html, no) == null);
 }
 
 test "role-less seats: no lane click (an ally's lane is found by role)" {
