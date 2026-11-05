@@ -20,7 +20,8 @@ pub const scope = .{".c-strip"};
 
 pub const Item = struct {
     label: tree.Text,
-    /// Formatted by its kind (stat.figure, phrase.num); a pressable cell's spoken figure
+    /// Formatted by its kind (stat.figure, phrase.num); a pressable cell's spoken figure,
+    /// so a pressable cell takes value, not rate
     value: tree.Text = .{ .s = "" },
     /// A rate or a difference of rates in place of value (rate.view with `.said = ""`, the
     /// label says it; rate.delta): its colour, count, hover and fade are the rate's. Made
@@ -136,6 +137,8 @@ pub const css =
     \\  @container (max-width: 440px) {
     \\    .c-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
     \\    .c-strip .val > .c { display: block; line-height: 1.2; }
+    \\    .c-strip .val > .c-rate { grid-template-columns: auto; justify-items: start; }
+    \\    .c-strip .val > .c-rate > .g { margin-left: 0; line-height: 1.2; }
     \\    .c-strip > [data-press] { margin: 0; }
     \\    .c-strip:has(> [data-press]) > :not([data-press]) { padding: 4px var(--sp-2); }
     \\  }

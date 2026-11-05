@@ -253,7 +253,7 @@ fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief
     var n: usize = 0;
     items[n] = .{ .label = W.wins.with(h, .{ .c = in.name }), .rate = winrate.view(h, .counted(o.games, o.wins), .{ .said = "" }), .answer = true };
     n += 1;
-    items[n] = .{ .label = W.m_usual, .rate = winrate.delta(h, o.usual, null), .ctx = cp.usualSide(o.usual, W.below_usual, W.above_usual), .tip = .{ .id = usual_tip, .note = W.usual_note.with(h, .{ .c = in.name }) } };
+    items[n] = .{ .label = W.m_usual, .rate = winrate.delta(h, o.usual, fmt.range(o.games, o.wins)), .ctx = cp.usualSide(o.usual, W.below_usual, W.above_usual), .tip = .{ .id = usual_tip, .note = W.usual_note.with(h, .{ .c = in.name }) } };
     n += 1;
     if (o.gold) |gd| {
         items[n] = goldItem(h, in, o.champ, gd);

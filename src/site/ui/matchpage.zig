@@ -206,7 +206,7 @@ pub const Head = struct {
         n += 1;
         items[n] = .{
             .label = W.usual,
-            .rate = winrate.delta(h, d.vs_usual, null),
+            .rate = winrate.delta(h, d.vs_usual, fmt.range(d.games, d.wins)),
             .ctx = W.usually.with(h, .{ .r = d.usual }),
             .tip = .{ .id = "mu-usual", .note = champpage.usual_note.with(h, .{ .c = d.x.name }) },
         };

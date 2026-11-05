@@ -55,7 +55,7 @@ const W = struct {
     pub const unlock = plain("Unlock");
     pub const lanes = plain("Lane opponents ›");
     pub const common = plain("Most common");
-    pub const chip = phrase.Phrase("{c:text} wins {v:rate} vs {o:text}, {n:count} games");
+    pub const chip = phrase.Phrase("{c:text} wins {v:text} vs {o:text}, {n:count} games");
 };
 
 pub fn view(h: *H, b: Brief, common: []const Common) N {
@@ -64,7 +64,7 @@ pub fn view(h: *H, b: Brief, common: []const Common) N {
         chip.view(h, .{
             .pressed = c.pressed,
             .on = c.on,
-            .label = W.chip.with(h, .{ .c = c.who, .v = c.rate.pct, .o = c.champ.name, .n = c.rate.games orelse 0 }),
+            .label = W.chip.with(h, .{ .c = c.who, .v = rate.shown(h, c.rate).s, .o = c.champ.name, .n = c.rate.games orelse 0 }),
         }, .{
             champ.view(h, c.champ, .{ .px = .@"20", .named = false }),
             rate.view(h, c.rate, .{ .count = false }),

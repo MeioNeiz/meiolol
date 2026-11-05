@@ -69,7 +69,7 @@ const W = struct {
 /// <span class="sr">win rate 51.2%, 44,935 games</span></span>
 pub fn view(h: *H, r: Rate, look: Look) N {
     if ((r.games orelse 1) == 0) return h.span(.{ .class = "c-rate", .data_state = "missing" }, .{W.missing});
-    const v = figure(h, r.pct, r.half orelse 0, look.unit);
+    const v = figure(h, r, look.unit);
     return cell(h, r.pct - r.ref, r.half, tip(h, r), .{
         h.span(.{ .class = "v", .aria_hidden = true }, .{v}),
         if (!look.count) null else if (r.games) |n| h.span(.{ .class = "g", .aria_hidden = true }, .{phrase.num(h, .kilo, n)}) else null,
@@ -99,8 +99,14 @@ fn colour(pts: f64) fmt.WrColour {
     return .{ .pts = pts };
 }
 
-fn figure(h: *H, pct: f64, half: f64, unit: bool) tree.Text {
-    if (half >= 10) return if (unit) phrase.num(h, .pct, whole(pct)) else phrase.num(h, .int, whole(pct));
+/// The figure as it shows, for a label that must say the same ("50%", not "50.0%")
+pub fn shown(h: *H, r: Rate) tree.Text {
+    return figure(h, r, true);
+}
+
+fn figure(h: *H, r: Rate, unit: bool) tree.Text {
+    const pct = r.pct;
+    if ((r.half orelse 0) >= 10) return if (unit) phrase.num(h, .pct, whole(pct)) else phrase.num(h, .int, whole(pct));
     return if (unit) phrase.num(h, .rate, pct) else phrase.num(h, .dec, pct);
 }
 
