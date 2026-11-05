@@ -284,7 +284,13 @@ fn pct(f: f32) f32 {
     return @round(std.math.clamp(f, 0, 1) * 1000) / 10;
 }
 
-pub fn split(h: *H, items: []const Item) N {
+pub const SplitOpts = struct {
+    /// Figures in the side colours; false: plain ink, where side colours would read as
+    /// good and bad (rates beside win rates), the bar keeping the sides
+    sides: bool = true,
+};
+
+pub fn split(h: *H, o: SplitOpts, items: []const Item) N {
     var l = h.list();
     for (items, 0..) |it, i| {
         const mark = struct {
@@ -302,7 +308,7 @@ pub fn split(h: *H, items: []const Item) N {
             h.span(.{ .class = "bar", .aria_hidden = true, .style = if (it.share) |s| h.vars(.{ .s = @round(s * 1000) / 10 }) else null, .data_none = it.share == null }, .{}),
         }));
     }
-    return h.div(.{ .class = "c-vs", .role = "group", .aria_label = W.label }, .{l.done()});
+    return h.div(.{ .class = "c-vs", .role = "group", .aria_label = W.label, .data_ink = !o.sides }, .{l.done()});
 }
 
 pub const css =
@@ -315,6 +321,7 @@ pub const css =
     \\    display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
     \\  .c-vs .n.us { color: var(--us-hot); }
     \\  .c-vs .n.them { color: var(--them-hot); justify-content: flex-end; }
+    \\  .c-vs[data-ink] .n { color: var(--text); }
     \\  .c-vs .first { font-size: var(--fs-xs); font-weight: var(--w-m); color: var(--brand-dot); text-decoration: none;
     \\    border-bottom: 1px solid currentColor; line-height: 1.1; cursor: help; }
     \\  .c-vs .bar { grid-column: 1 / -1; height: 4px; border-radius: 2px;
@@ -402,8 +409,9 @@ pub const demo = [_]Item{
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    g.addFill("objectives and firsts", split(h, &demo));
-    g.add("two", split(h, demo[0..2]));
+    g.addFill("objectives and firsts", split(h, .{}, &demo));
+    g.add("two", split(h, .{}, demo[0..2]));
+    g.add("plain ink: rates, not sides", split(h, .{ .sides = false }, demo[0..2]));
     const a = champ.demo("Katarina", "Katarina");
     const b = champ.demo("Annie", "Annie");
     g.add("races: level 6 later than typical, first item earlier", h.div(.{ .class = "c-vs" }, .{

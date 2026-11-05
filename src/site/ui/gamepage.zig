@@ -376,7 +376,7 @@ pub const GameMore = struct {
             .data_wasm = if (p.wasm.len > 0) p.wasm else null,
         }, .{
             card.view(h, .{}, &.{p.s.insp.view(h)}),
-            card.view(h, .{}, &.{versus.split(h, p.objectives(h))}),
+            card.view(h, .{}, &.{versus.split(h, .{}, p.objectives(h))}),
             card.view(h, .{ .flush = true }, &.{
                 card.head(h, W.players, null, &.{p.board.switcher(h)}),
                 p.board.view(h, g, d, p.from),

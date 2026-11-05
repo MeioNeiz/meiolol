@@ -2028,7 +2028,7 @@ pub const Charts = struct {
         });
         return card.view(h, .{}, &.{
             card.head(h, W.kills_head, W.lanes_n.with(h, .{ .n = k.games }), &.{kv}),
-            h.div(.{ .class = "lk", .data_grow = {} }, .{versus.split(h, items[0..n])}),
+            h.div(.{ .class = "lk", .data_grow = {} }, .{versus.split(h, .{ .sides = false }, items[0..n])}),
         });
     }
 
@@ -2140,7 +2140,6 @@ pub const css =
     \\    align-items: center; gap: var(--sp-5) var(--sp-6); }
     \\  .c-cpage .lk .lab { font-size: var(--fs-s); }
     \\  .c-cpage .lk .n { font-size: var(--fs-xl); }
-    \\  .c-cpage .lk .n:is(.us, .them) { color: var(--text); }
     \\  .c-cpage .lk .bar { height: 6px; border-radius: 3px; }
     \\  .c-cpage .obj { display: grid; grid-template-columns: auto repeat(4, minmax(0, 1fr)); align-items: center;
     \\    align-content: space-evenly; gap: var(--sp-4) var(--sp-4); padding: var(--sp-2) 0; }
