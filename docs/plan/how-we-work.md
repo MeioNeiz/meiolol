@@ -18,6 +18,11 @@ runs voided by a mid-run re-cut, the gpu-box overloaded (jobs 5-10x slow), by-pa
 commits sweeping in other sessions' hunks. Fix the split and pin before starting runs
 on a snapshot, not during.
 
+Four or more builders pushing: bulk push mode (`deploy/push.sh --mode bulk 30`;
+docs/dev-flow.md), one ci per batch instead of each push's ci taking all 3 build slots;
+builders run one full test per commit, ui-sizes only near a budget. `--mode fast` when
+the run ends.
+
 Mac memory (docs/compute.md "Mac memory"): every brief says heavy runs go through
 `deploy/heavy.sh`, and a session stops its dev servers and background runs before it
 closes or hands over.
