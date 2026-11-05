@@ -465,8 +465,16 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
     for (bans_us, b.my_bans) |*x, id| x.* = (try c.champ(a, id)) orelse .{ .name = "", .src = "" };
     const bans_them = try a.alloc(ui.champ.Champ, b.their_bans.len);
     for (bans_them, b.their_bans) |*x, id| x.* = (try c.champ(a, id)) orelse .{ .name = "", .src = "" };
-    const ban_options = try a.alloc(ui.champselect.BanOption, b.ban_options.len);
-    for (ban_options, b.ban_options) |*x, o| x.* = .{
+    // The board leads with my lane's; shown by impact, so the figures run down (the
+    // badge still says which are my lane's)
+    const by_impact = try a.dupe(board.BanOption, b.ban_options);
+    std.mem.sort(board.BanOption, by_impact, {}, struct {
+        fn more(_: void, x: board.BanOption, y: board.BanOption) bool {
+            return x.impact > y.impact;
+        }
+    }.more);
+    const ban_options = try a.alloc(ui.champselect.BanOption, by_impact.len);
+    for (ban_options, by_impact) |*x, o| x.* = .{
         .champ = (try c.champ(a, o.champion)).?,
         .role = uiRole(o.role),
         .mine = o.my_lane,
@@ -496,7 +504,11 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
 pub fn compUnder(a: Allocator, c: Ctx, status: state.Status) !?ui.compview.Comp {
     return switch (status) {
         .select => |x| if (x.comp) |cv| try compView(a, c, cv) else null,
-        .loading => |l| if (l.comp) |*cv| try lockedComp(a, c, cv) else null,
+        .loading => |l| if (l.comp) |*cv| blk: {
+            const v = try lockedComp(a, c, cv);
+            // No split on either side and no length: the band would be two empty boxes
+            break :blk if (v.length == null and v.us.damage == null and v.them.damage == null) null else v;
+        } else null,
         else => null,
     };
 }

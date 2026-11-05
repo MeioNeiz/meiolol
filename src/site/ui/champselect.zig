@@ -299,6 +299,7 @@ pub const css =
     \\  .c-cs .win > small { font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
     \\  .c-cs .bans[data-turn] h3 { color: var(--turn); }
     \\  .c-cs .bans .opts-head > small { font-size: var(--fs-xs); color: var(--faint); }
+    \\  .c-cs .bans { max-width: 26rem; }
     \\  .c-cs .bans .opts > li { padding: var(--sp-1) var(--sp-2); }
     \\  .c-cs .bfig { flex: none; font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
     \\  .c-cs .bfig[data-lean="good"] { color: var(--hi2); }

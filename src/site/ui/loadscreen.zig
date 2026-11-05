@@ -111,7 +111,7 @@ fn yours(h: *H, facts: []const Fact) N {
 fn head(h: *H, side: TeamSide, draft: ?f32) N {
     return h.h2(.{ .data_side = side }, .{
         if (side == .us) W.us else W.them,
-        if (draft) |d| h.span(.{ .class = "draft" }, .{ rate.view(h, .estimate(d), .{ .said = "draft win chance" }), h.small(.{}, .{W.draft}) }) else null,
+        if (draft) |d| h.span(.{ .class = "draft" }, .{ rate.view(h, .estimate(d), .{ .said = "win chance" }), h.small(.{}, .{W.draft}) }) else null,
     });
 }
 
@@ -217,7 +217,7 @@ pub const css =
     \\  .c-load [data-tone="good"] { color: var(--hi2); }
     \\  .c-load [data-tone="bad"] { color: var(--lo2); }
     \\  .c-load [data-tone="caution"] { color: var(--turn); }
-    \\  .c-load .strip { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; min-height: 28px; }
+    \\  .c-load .strip { display: flex; flex-direction: column; justify-content: flex-start; gap: 2px; min-width: 0; min-height: 28px; }
     \\  .c-load .strip > small { font-size: var(--fs-xs); color: var(--faint); text-align: center; }
     \\  .c-load .ticks { display: flex; justify-content: center; gap: var(--sp-2); font-size: var(--fs-xs); }
     \\  .c-load .ticks > [data-side="us"] { color: var(--us-hot); }
