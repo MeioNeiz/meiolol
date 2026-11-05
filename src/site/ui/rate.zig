@@ -44,13 +44,14 @@ pub const Rate = struct {
 };
 
 pub const Look = struct {
-    /// "51.2%"; false "51.2" for a build table's narrow columns
+    /// "51.2%"; false "51.2" for a build table's narrow columns (screen readers still hear %)
     unit: bool = true,
-    /// The games after the figure; false where a column holds them (still on hover)
+    /// The games after the figure; false where a column holds them (still on hover; screen
+    /// readers hear them in the column)
     count: bool = true,
     /// What a screen reader hears before the figure: "win chance" for a model's estimate;
-    /// whose rate, where the place doesn't say: "Ornn wins"; empty where a label says it
-    /// (StatStrip)
+    /// whose rate, where the place doesn't say: "Ornn wins"; empty where a label or column
+    /// head says it (StatStrip, BuildPanel)
     said: []const u8 = "win rate",
 };
 
@@ -70,10 +71,11 @@ const W = struct {
 pub fn view(h: *H, r: Rate, look: Look) N {
     if ((r.games orelse 1) == 0) return h.span(.{ .class = "c-rate", .data_state = "missing" }, .{W.missing});
     const v = figure(h, r, look.unit);
+    const sv = if (look.unit) v else figure(h, r, true);
     return cell(h, r.pct - r.ref, r.half, tip(h, r), .{
         h.span(.{ .class = "v", .aria_hidden = true }, .{v}),
         if (!look.count) null else if (r.games) |n| h.span(.{ .class = "g", .aria_hidden = true }, .{phrase.num(h, .kilo, n)}) else null,
-        h.span(.{ .class = "sr" }, .{if (r.games) |n| W.said_games.with(h, .{ .w = look.said, .v = v.s, .n = n }) else W.said.with(h, .{ .w = look.said, .v = v.s })}),
+        h.span(.{ .class = "sr" }, .{if (r.games != null and look.count) W.said_games.with(h, .{ .w = look.said, .v = sv.s, .n = r.games.? }) else W.said.with(h, .{ .w = look.said, .v = sv.s })}),
     });
 }
 
@@ -177,7 +179,8 @@ test view {
         .{ .counted(44935, 23007), .{}, &.{ ">51.2%<", ">45k<", " games\"", ">win rate 51.2%, 44,935 games<" }, &.{"data-wide"} },
         .{ .counted(64, 25), .{}, &.{ "data-wide", ">39.1%<" }, &.{} },
         .{ .counted(12, 8), .{}, &.{ "data-wide", ">67%<" }, &.{} },
-        .{ .counted(3143, 1562), .{ .unit = false, .count = false }, &.{">49.7<"}, &.{ "%<", "class=\"g\"" } },
+        .{ .counted(3143, 1562), .{ .unit = false, .count = false }, &.{ ">49.7<", ">win rate 49.7%<" }, &.{ ">49.7%<", "class=\"g\"" } },
+        .{ .counted(3143, 1562), .{ .unit = false, .count = false, .said = "" }, &.{"49.7%<"}, &.{ "rate 49", "games<" } },
         .{ .estimate(54.3), .{ .said = "win chance" }, &.{ ">54.3%<", ">win chance 54.3%<" }, &.{ "title=", "class=\"g\"", "data-wide" } },
         .{ .counted(200, 99), .{ .said = "Ornn wins" }, &.{">Ornn wins 49.5%, 200 games<"}, &.{} },
         .{ .counted(0, 0), .{}, &.{"missing"}, &.{"class=\"v\""} },

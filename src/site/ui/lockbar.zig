@@ -173,9 +173,7 @@ pub const css =
     \\  .c-lockbar > .chips > .c-chip { flex: none; padding-left: 6px; border-color: var(--focus); color: var(--text); }
     \\  .c-lockbar .c-chip .c-art { --sz: 20px; }
     \\  .c-lockbar > .n { white-space: nowrap; font-variant-numeric: tabular-nums; }
-    \\  .c-lockbar > .n > .w { font-weight: var(--w-b); color: var(--t2); }
-    \\  .c-lockbar > .n > .w > small { margin-left: 3px; font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
-    \\  .c-lockbar > .n > .w[data-wide] { opacity: 0.55; }
+    \\  .c-lockbar > .n > .c-rate > .v { font-weight: var(--w-b); }
     \\  .c-lockbar > .s { white-space: nowrap; color: var(--faint); }
     \\  .c-lockbar > .c-btn { margin-left: auto; }
     \\}

@@ -19,7 +19,7 @@
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
-const stat = @import("stat.zig");
+const winrate = @import("rate.zig");
 const phrase = @import("phrase.zig");
 const art = @import("art.zig");
 const button = @import("button.zig");
@@ -166,24 +166,12 @@ pub fn rate(games: u32, wins: u32) f64 {
     return 100 * @as(f64, @floatFromInt(wins)) / @as(f64, @floatFromInt(@max(games, 1)));
 }
 
-/// "49.7" coloured on the scale around `ref`, its 80% range's ends on hover, never hidden
-/// for few games and faded past fmt.wide_range (J35); whole numbers once the range is
-/// 10 or wider ("48"). A dot with no games
+/// "49.7": the rate view coloured around `ref`; no unit, count or words (columns and
+/// their heads hold them)
 pub fn win(h: *H, games: u32, wins: u32, ref: f64) N {
-    if (games == 0) return h.span(.{ .class = "w" }, .{"·"});
-    const r = rate(games, wins);
-    const pm = fmt.range(games, wins);
-    return h.span(.{
-        .class = "w",
-        .data_wide = pm > fmt.wide_range,
-        .style = h.vars(.{ .c = fmt.WrColour{ .pts = r - ref } }),
-        .title = stat.ends(h, .rate, r, pm).s,
-    }, .{rough(h, r, pm)});
-}
-
-fn rough(h: *H, v: f64, pm: f64) tree.Text {
-    if (pm < 10) return phrase.num(h, .dec, v);
-    return phrase.num(h, .int, @as(u32, @intFromFloat(@round(@max(v, 0)))));
+    var r = winrate.Rate.counted(games, wins);
+    r.ref = ref;
+    return winrate.view(h, r, .{ .unit = false, .count = false, .said = "" });
 }
 
 /// "52%", "<1%"
@@ -776,7 +764,7 @@ pub const css =
     \\  .c-build :is(.slots, .levels) .sh > .hd { display: flex; font-size: var(--fs-xs); color: var(--faint); }
     \\  .c-build .hd > *, .c-build .lp > :not(.c-skills) { box-sizing: border-box; text-align: right; padding: 0 3px; }
     \\  .c-build :is(.hd, .lp) > .p, .c-build .slot:not([data-open]) .c-table .p { width: var(--cwp); }
-    \\  .c-build :is(.hd, .lp) > .w, .c-build .slot:not([data-open]) .c-table .w { width: var(--cww); }
+    \\  .c-build .hd > .w, .c-build .lp > .c-rate, .c-build .slot:not([data-open]) .c-table .w { width: var(--cww); }
     \\  .c-build :is(.hd, .lp) > .g, .c-build .slot:not([data-open]) .c-table .g { width: var(--cwg); padding-right: 0; }
     \\  .c-build .slot:not([data-open]) .c-table { table-layout: fixed; width: 100%; }
     \\  .c-build .slot:not([data-open]) .c-table .o { display: none; }
@@ -799,10 +787,8 @@ pub const css =
     \\  .c-build .what > .nm:first-child { margin-left: 0; white-space: nowrap; }
     \\  .c-build .what > .min, .c-build .own { color: var(--faint); font-size: var(--fs-s); }
     \\  .c-build .what > .min { margin-left: var(--sp-2); }
-    \\  .c-build :is(td, .lp) > .w { font-weight: var(--w-b); color: var(--c, var(--faint)); }
-    \\  .c-build .w > small { display: block; margin-top: -1px; font-size: var(--fs-xs); font-weight: var(--w-r);
-    \\    line-height: 1.1; color: var(--faint); }
-    \\  .c-build [data-wide] { opacity: 0.55; }
+    \\  .c-build .c-rate > .v { font-weight: var(--w-b); }
+    \\  .c-build .own[data-wide] { opacity: var(--fade); }
     \\  .c-build .keys { font-family: ui-monospace, monospace; letter-spacing: 0.06em; color: var(--t2); }
     \\  .c-build .keys > b { color: var(--text); }
     \\  .c-build .keys > .ar { color: var(--faint); margin: 0 4px; font-family: var(--font); }

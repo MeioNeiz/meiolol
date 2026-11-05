@@ -65,10 +65,9 @@ pub const css =
     \\  .c-skills > .under { display: flex; justify-content: flex-end; align-items: baseline; gap: var(--sp-2);
     \\    font-size: var(--fs-s); font-variant-numeric: tabular-nums; }
     \\  .c-skills > .under > .p { color: var(--t2); }
-    \\  .c-skills > .under > .w { font-weight: var(--w-b); color: var(--c, var(--faint)); min-width: 34px; text-align: right; }
+    \\  .c-skills > .under > .c-rate { min-width: 34px; }
+    \\  .c-skills > .under > .c-rate > .v { font-weight: var(--w-b); }
     \\  .c-skills > .under > .g { color: var(--faint); font-size: var(--fs-xs); min-width: 30px; text-align: right; }
-    \\  .c-skills > .under > .w > small { margin-left: 3px; font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
-    \\  .c-skills > .under > .w[data-wide] { opacity: 0.55; }
     \\}
     \\
 ;

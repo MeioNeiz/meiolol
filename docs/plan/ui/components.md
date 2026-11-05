@@ -284,7 +284,7 @@ range (on hover); count; time; gold, one game; plain; few games: a wide range, f
 missing; with context; a sorted column: the ink mixes, no steps; the same colour however
 sure: 53.0, 52.6, 50.0 of 20,000, 54.0 of 400, 54.2 of 120, 65.0 of 40 (faded); fill, heat
 cells
-Used by: table, buildpanel, heatgrid, ranking, homepage, champpage, matchpage, tiers
+Used by: table, heatgrid, ranking, homepage, champpage, matchpage, tiers
 
 ### Rate
 `rate.zig` `.c-rate` site
@@ -304,7 +304,7 @@ fade; its own ref (BuildPanel: against the slot's 47.2%); no games; a sorted col
 colour mixes, no steps; the same colour however sure: 53.0, 52.6, 50.0 of 20,000, 54.0 of
 400, 54.2 of 120, 65 of 40 (faded); delta: +2.6, −1.4, +0.3; +4.8 with a wide range,
 faded
-Used by: stat, strip, matchbrief, matchgrid, champpage, matchpage
+Used by: stat, strip, matchbrief, buildpanel, matchgrid, champpage, matchpage
 
 ### Delta
 `delta.zig` `.c-delta` `.c-dbar` site

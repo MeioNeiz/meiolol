@@ -342,16 +342,12 @@ pub const css =
     \\  .c-runes .page > .ks::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
     \\  .c-runes .page > .ks:focus-visible::after { outline: 2px solid var(--focus); }
     \\  .c-runes .page > .fig { display: flex; align-items: baseline; gap: 3px; }
-    \\  .c-runes .page .w { font-weight: var(--w-b); color: var(--c, var(--faint)); }
-    \\  .c-runes .page .w > small { margin-left: 3px; }
-    \\  .c-runes .w > small { font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
-    \\  .c-runes .w[data-wide] { opacity: 0.55; }
+    \\  .c-runes .c-rate > .v { font-weight: var(--w-b); }
     \\  .c-runes .page > .g { color: var(--faint); font-size: var(--fs-s); }
     \\  .c-runes .read { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-s); color: var(--faint);
     \\    font-variant-numeric: tabular-nums; min-height: 18px; }
     \\  .c-runes .read[data-v="rune"] { font-size: var(--fs-m); color: var(--t2); }
     \\  .c-runes .read[data-v="rune"] > b { color: var(--text); font-weight: var(--w-m); }
-    \\  .c-runes .read[data-v="rune"] .w { font-weight: var(--w-b); color: var(--c, var(--faint)); }
     \\  .c-runes .trees { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--sp-3); }
     \\  .c-runes .tree { min-width: 0; }
     \\  .c-runes .tree > h4 { display: flex; align-items: center; gap: 6px; height: 20px; margin: 0 0 4px;
@@ -376,8 +372,7 @@ pub const css =
     \\  .c-runes .rune > .sh > i { display: block; height: 100%; width: calc(var(--w) * 1%); border-radius: 2px; background: var(--bar-hi); }
     \\  .c-runes .rune > .pk { font-size: var(--fs-s); color: var(--muted); line-height: 1.25; }
     \\  .c-runes .mv { margin-left: 2px; color: var(--t2); }
-    \\  .c-runes .rune > .w { font-size: var(--fs-m); font-weight: var(--w-b); line-height: 1.25; color: var(--c, var(--faint)); }
-    \\  .c-runes .rune > .w > small { display: block; line-height: 1.1; }
+    \\  .c-runes .rune > .c-rate { font-size: var(--fs-m); line-height: 1.25; }
     \\  .c-runes .rune > .g { font-size: var(--fs-s); color: var(--faint); line-height: 1.2; }
     \\  .c-runes > .c-btn { display: none; align-self: flex-start; }
     \\  @container (min-width: 680px) {
@@ -386,7 +381,7 @@ pub const css =
     \\    .c-runes .row[data-v="ks"] .rune > .c-art { --sz: 44px; }
     \\    .c-runes .tree[data-v="shards"] .rune > .c-art { --sz: 28px; }
     \\    .c-runes .rune > .pk { font-size: var(--fs-m); }
-    \\    .c-runes .rune > .w { font-size: var(--fs-l); }
+    \\    .c-runes .rune > .c-rate { font-size: var(--fs-l); }
     \\    .c-runes .rune > .g { font-size: var(--fs-m); }
     \\    .c-runes .tree > h4 { font-size: var(--fs-l); height: 24px; }
     \\  }
