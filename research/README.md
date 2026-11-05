@@ -69,6 +69,11 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `gui/webview` | | embedded web views for the app: WebView2, webview/webview, Tauri, Electron, CEF; process model, footprint, runtime distribution |
 | `gui/a11y` | | accessibility of desktop GUIs: screen readers, UI Automation, AccessKit |
 | `ops/io` | | disk IO on the box: schedulers, ionice, cgroup io controls, block volume limits |
+| `devflow` | ops | build, test and push capacity for parallel sessions: see devflow/* |
+| `devflow/queue` | | merge queues and batching: bors, GitHub merge queue, Zuul, SubmitQueue, bisection on failure |
+| `devflow/select` | | affected-test selection, build-graph impact analysis, predictive test selection |
+| `devflow/cache` | | shared and remote build caches, remote execution, offloading builds to other hosts |
+| `devflow/agents` | | many parallel coding agents: team size, throughput, contention, isolation |
 | `method/tabular` | | modern tabular learners: tabular foundation models, TabM, RealMLP, GBDT, factorisation machines |
 | `method/ensemble` | | ensembles and stacking: seeds, bagging, snapshot, hyper-ensembles, ensemble selection, stacked generalisation |
 | `method/interpret` | | explaining a model: GA2M/EBM, neural additive models, functional ANOVA, interaction detection, Shapley interactions |

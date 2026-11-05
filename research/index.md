@@ -14,8 +14,8 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 4 | 180 | 459 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 30 | 364 | 2687 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 17 | 481 | 2531 |
-| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 9 | 179 | 704 |
-| [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 174 | 1966 |
+| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 10 | 202 | 888 |
+| [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 176 | 1981 |
 
 ## Questions
 
@@ -116,6 +116,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | answered | now | [What free or very cheap hosting and storage fits meiolol's site, API and data?](questions/free-hosting-storage.md): What free or very cheap hosting and storage fits meiolol's site, API and data? | 13 strong, 4 moderate, 2 unsupported | 34 | 7 (growing) | 4 |
 | answered | now | [Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines?](questions/hybrid-rendering-seo.md): Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines? | 12 strong, 9 moderate | 16 | 9 (growing) | 2 |
 | answered | now | [Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box?](questions/oci-payg-upgrade.md): Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box? | 8 strong, 2 moderate, 1 contested | 7 | 2 (thin) |  |
+| answered | soon | [What is the best way to run many parallel coding agents against limited build and CI capacity on one Mac (merge queues, batching, test selection, caches and offloading, slot scheduling, team size)?](questions/parallel-build-capacity.md): What is the best way to run many parallel coding agents against limited build and CI capacity on one Mac (merge queues, batching, test selection, caches and offloading, slot scheduling, team size)? | 12 strong, 6 moderate, 1 contested | 23 | 18 (slowing) | 13 |
 | answered | soon | [What in Zig 0.17 breaks meiolol, and how much work is the move from 0.16?](questions/zig-017-migration.md): What in Zig 0.17 breaks meiolol, and how much work is the move from 0.16? | 4 strong, 3 moderate | 2 | 0 |  |
 | decided | now | [How should a small cloud VM prioritise IO between a latency-sensitive writer, a web renderer and heavy batch readers: scheduler, ionice, cgroup io controls, or memory?](questions/box-io-priority.md): How should a small cloud VM prioritise IO between a latency-sensitive writer, a web renderer and heavy batch readers: scheduler, ionice, cgroup io controls, or memory? | 6 strong, 2 moderate, 1 contested | 10 | 5 (growing) | 2 |
 | decided | now | [How do servers that hold large in-memory data built from a database deploy new code quickly, without rebuilding that data on every restart?](questions/fast-deploy-data-servers.md): How do servers that hold large in-memory data built from a database deploy new code quickly, without rebuilding that data on every restart? | 7 strong, 1 moderate, 1 contested | 7 | 8 (growing) | 5 |
@@ -138,6 +139,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 82 questions, 1266 sources, 9637 findings
-- Open leads: 328 (`josearch leads`)
+- 83 questions, 1289 sources, 9821 findings
+- Open leads: 341 (`josearch leads`)
 - Lint: 0 errors, 5 warnings (`josearch lint`)

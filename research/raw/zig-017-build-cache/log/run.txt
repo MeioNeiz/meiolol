@@ -1,0 +1,27 @@
+zig cache sharing test, zig 0.17.0, macOS arm64, 2026-11-05
+two copies of one project, trees a/ and b/, one --cache-dir shared/
+$ (cd a) zig build test --summary all --cache-dir ../shared   # 1: a cold
++- run test 1 pass (1 total) 298ms MaxRSS:2M
+   +- compile test debug native success 2s MaxRSS:258M
+$ (cd b) zig build test --summary all --cache-dir ../shared   # 2: b identical content, other path
++- run test cached
+   +- compile test debug native cached 137ms MaxRSS:31M
+$ (cd b) zig build test --summary all --cache-dir ../shared   # 3: b edited, now differs from a
++- run test 2 pass (2 total) 226ms MaxRSS:2M
+   +- compile test debug native success 1s MaxRSS:224M
+$ (cd a) zig build test --summary all --cache-dir ../shared   # 4: a unchanged since its hit in 1
++- run test 1 pass (1 total) 227ms MaxRSS:2M
+   +- compile test debug native success 1s MaxRSS:220M
+$ (cd b) zig build test --summary all --cache-dir ../shared   # 5: b unchanged
++- run test 2 pass (2 total) 256ms MaxRSS:2M
+   +- compile test debug native success 1s MaxRSS:212M
+$ (cd a) zig build test --summary all --cache-dir ../shared   # 6: a unchanged
++- run test 1 pass (1 total) 234ms MaxRSS:2M
+   +- compile test debug native success 1s MaxRSS:219M
+# 7: a and b given the same new content, built at the same time
+a:
+   +- compile test debug native success 1s MaxRSS:215M
+b:
+   +- compile test debug native cached 1s MaxRSS:30M
+$ (cd c) zig build test --summary all   # 8: copy of b, own default .zig-cache
+   +- compile test debug native success 2s MaxRSS:175M
