@@ -76,7 +76,7 @@ pub const Effect = struct {
     kind: Kind,
     /// The other champion; null for strength in the role
     other: ?champ.Champ = null,
-    /// Points it gives my team; the public edition only its sign (+1, -1)
+    /// Points it gives my team; the public edition only its size (reasons.sized)
     pp: f32,
     games: u32 = 0,
 };
@@ -140,6 +140,7 @@ pub const Picks = struct {
         for (chips, r.effects) |*c, e| c.* = .{
             .pp = e.pp,
             .text = label(h, d.role, e, false),
+            .tip = reasons.effectTip(h, label(h, d.role, e, false).s, e.pp, mode, e.games),
             .pic = if (e.other) |o|
                 champ.view(h, o, .{ .px = .@"20", .side = if (e.kind == .with) .us else .them, .named = false })
             else
@@ -293,7 +294,7 @@ pub fn public(h: *H, d: Data) Data {
         o.runes_pct = null;
         o.spells_pct = null;
         const es = h.mem.alloc(Effect, r.effects.len) catch return d;
-        for (es, r.effects) |*e, f| e.* = .{ .kind = f.kind, .other = f.other, .pp = if (f.pp > 0) 1 else -1 };
+        for (es, r.effects) |*e, f| e.* = .{ .kind = f.kind, .other = f.other, .pp = reasons.sized(f.pp) };
         o.effects = es;
     }
     x.rows = rows;

@@ -30,6 +30,8 @@ pub const Reason = struct {
     text: tree.Text,
     /// Points it gives the row's team (points mode shows them, words the direction)
     pp: f32,
+    /// On hover, in place of `text`: the words with the size or points
+    tip: ?tree.Text = null,
     /// Drawn in place of the words, which move to the chip's title and a screen reader:
     /// the other champion in its team's ring (champ.view 20 px), or the role (strength)
     pic: ?N = null,
@@ -155,9 +157,10 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
             h.b(.{ .style = h.vars(.{ .c = fmt.Step.of(x.pp, fmt.win_cuts) }) }, .{phrase.num(h, .points, x.pp)})
         else
             reasons.arrow(h, x.pp);
-        chips.add(chip.view(h, .{ .v = .reason, .title = if (x.pic != null) x.text.s else null }, .{
+        const said = x.tip orelse x.text;
+        chips.add(chip.view(h, .{ .v = .reason, .tip = if (x.pic != null) said.s else null }, .{
             x.pic orelse h.text(x.text.s),
-            if (x.pic != null) h.span(.{ .class = "sr" }, .{x.text}) else h.text(" "),
+            if (x.pic != null) h.span(.{ .class = "sr" }, .{said}) else h.text(" "),
             v,
         }));
     }

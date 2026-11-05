@@ -58,6 +58,30 @@ pub fn dir(pp: f32) Dir {
     return if (pp > 0) .up else if (pp < 0) .down else .none;
 }
 
+/// The public edition's size of an effect, as it shows no points: 1 to 3 with pp's
+/// sign, so a public pp stays a direction for `dir` and `arrow`
+pub fn sized(pp: f32) f32 {
+    const a = @abs(pp);
+    const s: f32 = if (a >= 1.5) 3 else if (a >= 0.5) 2 else 1;
+    return if (pp < 0) -s else s;
+}
+
+/// What hovering an effect shows: public "into Syndra · big effect" from `sized`,
+/// private "into Syndra · +1.6 pts · 1.8k games" (games 0: none)
+pub fn effectTip(h: *H, text: []const u8, pp: f32, mode: Mode, games: u32) tree.Text {
+    if (mode == .points) {
+        if (games == 0) return W.tip_pts.with(h, .{ .t = text, .p = pp });
+        return W.tip_games.with(h, .{ .t = text, .p = pp, .g = games });
+    }
+    return W.tip_size.with(h, .{ .t = text, .s = sizeWord(pp) });
+}
+
+/// "big effect" for a `sized` 3
+pub fn sizeWord(sized_pp: f32) []const u8 {
+    const a = @abs(sized_pp);
+    return if (a >= 3) W.big.s else if (a >= 2) W.clear.s else W.small.s;
+}
+
 /// ▲ or ▼ with "helps" or "hurts" for screen readers; null for no direction. Colour it by
 /// [data-dir]
 pub fn arrow(h: *H, pp: f32) ?N {
@@ -165,6 +189,12 @@ const Scale = struct {
 
 const W = struct {
     const games = phrase.Phrase("{n:kilo} games");
+    const tip_pts = phrase.Phrase("{t:text} · {p:points} pts");
+    const tip_games = phrase.Phrase("{t:text} · {p:points} pts · {g:kilo} games");
+    const tip_size = phrase.Phrase("{t:text} · {s:text}");
+    const small = plain("small effect");
+    const clear = plain("clear effect");
+    const big = plain("big effect");
     const rest = plain("Rest");
     const rest_note = plain("Every other pairing in the draft, summed.");
     const range = phrase.Phrase("{lo:dec}–{hi:dec}");

@@ -90,6 +90,8 @@ pub const Reason = struct {
     role: ?role.Role = null,
     /// Private edition: the signed points ("+1.4"); "" an arrow by `lean`
     fig: []const u8 = "",
+    /// On hover in place of `text`: the words with the size or points
+    tip: []const u8 = "",
 };
 
 /// A reason chip: the champion or role and its figure, else the words
@@ -101,7 +103,7 @@ pub fn effect(h: *H, r: Reason) N {
         .bad => "▼",
         .none => "",
     };
-    return chip.view(h, .{ .v = .reason, .title = r.text }, .{ pic, h.b(.{}, .{fig}) });
+    return chip.view(h, .{ .v = .reason, .tip = if (r.tip.len > 0) r.tip else r.text }, .{ pic, h.b(.{}, .{fig}) });
 }
 
 pub const BanOption = struct {

@@ -685,7 +685,7 @@ pub fn picksOf(a: Allocator, c: Ctx, s: *const state.Select) !?ui.picks.Data {
                     .enemy => .into,
                 },
                 .other = if (r.kind == .base) null else try c.champ(a, r.champion),
-                .pp = if (c.private) @floatCast(r.pp) else if (r.pp > 0) 1 else -1,
+                .pp = if (c.private) @floatCast(r.pp) else ui.reasons.sized(@floatCast(r.pp)),
                 .games = if (c.private) r.games else 0,
             };
         }
@@ -791,7 +791,10 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode, side
                 .base => r.role = uiRole(card.role),
                 .ally, .enemy => r.champ = try c.champ(a, m.champion),
             }
-            if (c.private) r.fig = try a.print("{f}", .{pp(m.pp)});
+            if (c.private) {
+                r.fig = try a.print("{f}", .{pp(m.pp)});
+                r.tip = try a.print("{s} · {f} pts", .{ text, pp(m.pp) });
+            } else r.tip = try a.print("{s} · {s}", .{ text, ui.reasons.sizeWord(ui.reasons.sized(m.pp)) });
         }
         x.* = .{
             .champ = (try c.champ(a, o.champion)).?,

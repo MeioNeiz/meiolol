@@ -28,8 +28,11 @@ pub const Opts = struct {
     /// A × after the content: pressing removes it
     remove: bool = false,
     label: ?tree.Text = null,
-    /// A reason chip drawn as a picture: its words, on hover
+    /// Native title (a scope chip's source)
     title: ?[]const u8 = null,
+    /// A reason chip's words and size, shown at once on hover (a picture chip says
+    /// nothing else)
+    tip: ?[]const u8 = null,
     on: ?tree.Handler = null,
     /// A link (recent Riot IDs): goes there, not pressed
     href: ?[]const u8 = null,
@@ -38,7 +41,7 @@ pub const Opts = struct {
 pub fn view(h: *H, o: Opts, kids: anytype) N {
     const x: ?N = if (o.remove) h.span(.{ .class = "x", .aria_hidden = true }, .{"×"}) else null;
     if (o.v == .scope or o.v == .reason or o.disabled) {
-        return h.span(.{ .class = "c-chip", .data_v = if (o.disabled) null else o.v, .aria_disabled = if (o.disabled) true else null, .title = o.title }, kids ++ .{x});
+        return h.span(.{ .class = "c-chip", .data_v = if (o.disabled) null else o.v, .aria_disabled = if (o.disabled) true else null, .title = o.title, .data_tip = o.tip }, kids ++ .{x});
     }
     if (o.href) |href| return h.a(.{ .class = "c-chip", .href = href, .aria_label = o.label }, kids ++ .{x});
     return h.button(.{
@@ -71,6 +74,11 @@ pub const css =
     \\  .c-chip::after { content: ""; position: absolute; left: 0; right: 0; top: 50%;
     \\    height: max(100%, var(--hit)); transform: translateY(-50%); }
     \\  .c-chip:is(span)::after { content: none; }
+    \\  .c-chip[data-tip]:hover::after { content: attr(data-tip); left: 50%; right: auto; top: auto;
+    \\    bottom: calc(100% + 4px); height: auto; transform: translateX(-50%); z-index: 3;
+    \\    padding: 2px var(--sp-2); border-radius: var(--r-m); background: var(--panel-3);
+    \\    border: 1px solid var(--line-2); box-shadow: var(--shadow-pop); color: var(--text);
+    \\    font-size: var(--fs-s); font-weight: var(--w-r); white-space: nowrap; pointer-events: none; }
     \\}
     \\
 ;
@@ -85,6 +93,7 @@ pub fn gallery(g: *Gallery) void {
     g.add("link", view(h, .{ .href = "#" }, .{"Faker#KR1"}));
     g.add("scope", view(h, .{ .v = .scope }, .{"Patch 16.21"}));
     g.add("reason", view(h, .{ .v = .reason }, .{ "strong bot ", h.b(.{ .class = "hi1" }, .{"+1.7"}) }));
+    g.add("reason, hover tip", view(h, .{ .v = .reason, .tip = "into Syndra · big effect" }, .{"▲"}));
     g.add("a filter row", h.div(.{ .class = "g-row" }, .{
         view(h, .{ .pressed = true }, .{"All"}),
         view(h, .{}, .{"Yours"}),
