@@ -99,6 +99,8 @@ pub const Data = struct {
     prev_patch: []const u8,
     /// Where and when: "in EUW, last 30 days, patches 16.19 and 16.20"
     scope: []const u8,
+    /// This build's day ("5 November"); "" when not known
+    updated: []const u8 = "",
     ddragon: []const u8,
     /// The view's query, for links to champion pages (html.View.query)
     query: []const u8,
@@ -164,6 +166,7 @@ const W = struct {
     pub const title = plain("Champions");
     pub const games_n = Phrase("{n:count} games");
     pub const scope_in = Phrase(" {in:text}");
+    pub const updated = Phrase(" · updated {day:text}");
     pub const role_label = plain("Role");
     pub const region = plain("Region");
     pub const period = plain("Period");
@@ -650,8 +653,12 @@ pub const Tiers = struct {
                 h.div(.{ .class = "hd" }, .{
                     h.div(.{ .class = "ttl" }, .{
                         h.el(.h1, .{}, .{W.title}),
-                        // Narrow: the count alone, the Filters summary under it says where and when
-                        h.p(.{ .class = "sub" }, .{ W.games_n.with(h, .{ .n = d.games }), h.span(.{ .class = "in" }, .{W.scope_in.with(h, .{ .in = d.scope })}) }),
+                        // Narrow: the count and date, the Filters summary under it says where and when
+                        h.p(.{ .class = "sub" }, .{
+                            W.games_n.with(h, .{ .n = d.games }),
+                            h.span(.{ .class = "in" }, .{W.scope_in.with(h, .{ .in = d.scope })}),
+                            if (d.updated.len > 0) W.updated.with(h, .{ .day = d.updated }) else null,
+                        }),
                     }),
                     rolepicker.view(h, .{ .label = W.role_label }, &roles),
                     filterbar.find(h, t.table.searchBox(h), .{ .has_text = t.table.q.slice().len > 0, .on_clear = h.on(t, .clear), .fold = true }),

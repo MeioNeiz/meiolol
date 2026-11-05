@@ -3,8 +3,9 @@
 //! force beside it ("EUW · Plat+"); it opens them under it (island state: `open`). The
 //! controls sit in one wrapper, so hiding them never sets display on a Select's popover.
 //! Also the table's Find box (`find`), which sits in the page's head beside them; `fold`:
-//! in a container under 520 px it is its magnifier alone until focused or holding text,
-//! then takes the row. The box itself is the icon, so it keeps its label and tab stop
+//! in a container under 520 px it is a small box reading Find (no magnifier: the site's
+//! Search beside it has one) until focused or holding text, then takes the row. The box
+//! is the input itself, so it keeps its label and tab stop
 const tree = @import("tree.zig");
 const segmented = @import("segmented.zig");
 const select = @import("select.zig");
@@ -80,9 +81,10 @@ pub const css =
     \\  .c-find > .x:hover { color: var(--text); background: var(--ctl-bg-2); }
     \\  .c-find > .x:focus-visible { outline: 2px solid var(--focus); }
     \\  @container (max-width: 520px) {
-    \\    .c-find[data-v="fold"]:not(:focus-within, [data-q]) { flex: none; width: var(--ctl); }
-    \\    .c-find[data-v="fold"]:not(:focus-within, [data-q]) > input { padding: 0; cursor: pointer; }
-    \\    .c-find[data-v="fold"]:not(:focus-within, [data-q]) > input::placeholder { color: transparent; }
+    \\    .c-find[data-v="fold"]:not(:focus-within, [data-q]) { flex: none; width: 64px; }
+    \\    .c-find[data-v="fold"]:not(:focus-within, [data-q])::before { display: none; }
+    \\    .c-find[data-v="fold"]:not(:focus-within, [data-q]) > input { padding: 0; text-align: center; cursor: pointer; }
+    \\    .c-find[data-v="fold"]:not(:focus-within, [data-q]) > input::placeholder { color: var(--text); }
     \\    .c-find[data-v="fold"]:is(:focus-within, [data-q]) { flex-basis: 100%; margin-left: 0; }
     \\    .c-filters > .toggle { display: inline-flex; flex: none; gap: 10px; }
     \\    .c-filters > .toggle::after { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--muted);
@@ -106,7 +108,7 @@ pub fn gallery(g: *Gallery) void {
     const find_in = h.input(.{ .type = "search", .placeholder = plain("Find"), .aria_label = plain("Find"), .value = "Ahri" });
     g.add("Find, with text: its ×", find(h, find_in, .{ .has_text = true }));
     const fold_in = h.input(.{ .type = "search", .placeholder = plain("Find"), .aria_label = plain("Find") });
-    g.add("Find, fold: its magnifier alone under 520 px until focused", find(h, fold_in, .{ .fold = true }));
+    g.add("Find, fold: a small Find box under 520 px until focused", find(h, fold_in, .{ .fold = true }));
 }
 
 fn demo(g: *Gallery, comptime id: []const u8) [5]N {

@@ -520,10 +520,11 @@ under 520 px one Filters button stands in for them, with the choices in force be
 ("EUW · Plat+"); it opens them under it (island state: `open`). The controls sit in one
 wrapper, so hiding them never sets display on a Select's popover. Also the table's Find
 box (`find`), which sits in the page's head beside them; `fold`: in a container under 520
-px it is its magnifier alone until focused or holding text, then takes the row. The box
-itself is the icon, so it keeps its label and tab stop
+px it is a small box reading Find (no magnifier: the site's Search beside it has one)
+until focused or holding text, then takes the row. The box is the input itself, so it
+keeps its label and tab stop
 States: in a toolbar band; one button when narrow; narrow, opened; Find, with text: its
-×; Find, fold: its magnifier alone under 520 px until focused
+×; Find, fold: a small Find box under 520 px until focused
 Used by: patchpage, champpage, matchpage, tiers
 
 ### ChampSearch
