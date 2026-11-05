@@ -49,6 +49,7 @@ const url = @import("url.zig");
 const champrank = @import("champrank.zig");
 const lane = @import("lane.zig");
 const versus = @import("versus.zig");
+const objicon = @import("objicon.zig");
 const ranking = @import("ranking.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
@@ -409,13 +410,20 @@ pub const W = struct {
     pub const comeback_tip = Phrase("at {m:text}: {r:rate} in {n:count} games, all lanes {a:rate}");
     pub const all_lanes = plain("dashed: all lanes");
     pub const kills_head = plain("Lane kills");
-    pub const kills_them = "Opponent";
+    pub const kills_them = plain("Opponent");
+    pub const kills_vs = plain("vs");
+    pub const lanes_n = Phrase("{n:count} lanes");
+    pub const kills_tip = Phrase("{l:text}: {c:text} {a:rate} of {n:count} lanes, the opponent {b:rate}");
     pub const first_blood = plain("First blood");
     pub const kills = [3]tree.Text{ plain("Kills to 6 min"), plain("Kills 6-14 min"), plain("Kills after 14") };
     pub const objectives_head = plain("Objectives");
-    pub const role_average = "Role average";
     pub const firsts = [4]tree.Text{ plain("First tower"), plain("First dragon"), plain("First Voidgrubs"), plain("First Rift Herald") };
-    pub const won_after = plain("Win rate after taking it first");
+    pub const obj_kinds = [4]objicon.Kind{ .tower, .dragon, .grubs, .herald };
+    pub const obj_rows = [2]tree.Text{ plain("Taken first"), plain("Won after") };
+    pub const games_n = Phrase("{n:count} games");
+    pub const took_tip = Phrase("{l:text}: {c:text}'s team took it in {r:rate} of {n:count} games; role average {a:rate}");
+    pub const obj_key = plain("tick: role average");
+    pub const won_tip = Phrase("{l:text}: {c:text}'s team won {r:rate} of {n:count} games after taking it; role average {a:rate}");
     pub const by_rank = plain("By rank");
     pub const brackets = [3]tree.Text{ plain("Iron-Silver"), plain("Gold-Emerald"), plain("Diamond+") };
     pub const rank_tip = Phrase("{r:rate} in {n:count} games · gold at 14 {g:signed}, estimated from common matchups");
@@ -471,6 +479,10 @@ pub const usual_note = W.usual_note;
 pub fn usualSide(v: f32, below: tree.Text, above: tree.Text) ?tree.Text {
     if (@abs(v) < 0.05) return null;
     return if (v < 0) below else above;
+}
+
+fn round(pct: f32) u32 {
+    return @intFromFloat(@round(pct));
 }
 
 fn rate(c: Counts) f32 {
@@ -637,6 +649,8 @@ pub const TrendsRole = struct {
 /// from every rank, objectives from Platinum+ (whatever the rank pick)
 pub const ChartsData = struct {
     name: []const u8,
+    /// The portrait's URL
+    icon: []const u8 = "",
     /// The matchup links'
     slug: []const u8 = "",
     ddragon: []const u8,
@@ -770,7 +784,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
         .build = .{ .roles = build },
         .more = .{ .name = d.name, .slug = d.slug, .ddragon = d.ddragon, .champs = d.champs, .roles = more },
         .trends = .{ .name = d.name, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = trends, .lengths = d.lengths, .spread = d.spread, .pickup = d.pickup, .also = d.also },
-        .charts = .{ .name = d.name, .slug = d.slug, .ddragon = d.ddragon, .champs = d.champs, .roles = charts },
+        .charts = .{ .name = d.name, .icon = d.icon, .slug = d.slug, .ddragon = d.ddragon, .champs = d.champs, .roles = charts },
     };
 }
 
@@ -1991,45 +2005,89 @@ pub const Charts = struct {
         });
     }
 
-    /// Share of lanes with each, the champion against the average opponent
+    /// Share of lanes with each, the champion's left and its lane opponent's right
     fn killsCard(p: *P, h: *H) N {
         const k = p.r().kills orelse return noneCard(h, W.kills_head, .none);
-        var rows: [4]versus.Row = undefined;
+        var items: [4]versus.Item = undefined;
         var n: usize = 0;
-        // Curves files from before v6 have none: no row rather than 0%
+        // Curves files from before v6 have none: no tile rather than 0%
         if (k.first_blood[0] + k.first_blood[1] > 0) {
-            rows[n] = rates(h, W.first_blood, .{ .games = k.games, .wins = k.first_blood[0] }, .{ .games = k.games, .wins = k.first_blood[1] });
+            items[n] = p.killTile(h, k.games, W.first_blood, k.first_blood[0], k.first_blood[1]);
             n += 1;
         }
         for (W.kills, k.kills, k.deaths) |l, x, y| {
-            rows[n] = rates(h, l, .{ .games = k.games, .wins = x }, .{ .games = k.games, .wins = y });
+            items[n] = p.killTile(h, k.games, l, x, y);
             n += 1;
         }
-        const names: [2][]const u8 = .{ p.data.name, W.kills_them };
-        return card.view(h, .{}, &.{ card.head(h, W.kills_head, null, &.{versus.key(h, names)}), versus.rows(h, names, rows[0..n]) });
+        const kv = h.span(.{ .class = "kv" }, .{
+            champ.view(h, .{ .name = p.data.name, .src = p.data.icon }, .{ .px = .@"20", .named = false }),
+            h.b(.{ .class = "us" }, .{p.data.name}),
+            h.span(.{ .class = "vs" }, .{W.kills_vs}),
+            role.view(h, p.r().role, .{ .named = false }),
+            h.b(.{ .class = "them" }, .{W.kills_them}),
+        });
+        return card.view(h, .{}, &.{
+            card.head(h, W.kills_head, W.lanes_n.with(h, .{ .n = k.games }), &.{kv}),
+            h.div(.{ .class = "lk", .data_grow = {} }, .{versus.split(h, items[0..n])}),
+        });
     }
 
-    /// How often the champion's team took each objective first and won after it, against
-    /// the role's; a thin win rate faded by its range
+    fn killTile(p: *const P, h: *H, games: u32, l: tree.Text, us: u32, them: u32) versus.Item {
+        const a = rate(.{ .games = games, .wins = us });
+        const b = rate(.{ .games = games, .wins = them });
+        return .{
+            .label = l,
+            .us = phrase.num(h, .pct, round(a)),
+            .them = phrase.num(h, .pct, round(b)),
+            .share = if (us + them > 0) @as(f32, @floatFromInt(us)) / @as(f32, @floatFromInt(us + them)) else null,
+            .title = W.kills_tip.with(h, .{ .l = l.s, .c = p.data.name, .a = a, .b = b, .n = games }),
+        };
+    }
+
+    /// How often the champion's team took each objective first, and won after it, each
+    /// on a 0-100 track with the role's rate its tick
     fn objectivesCard(p: *P, h: *H) N {
         const k = p.r().objectives orelse return noneCard(h, W.objectives_head, .none);
-        var took: [4]versus.Row = undefined;
-        var won: [4]versus.Row = undefined;
-        var n: usize = 0;
-        for (W.firsts, k.mine[1..], k.role[1..], &took) |l, x, y, *t| {
-            t.* = rates(h, l, .{ .games = k.mine[0].games, .wins = x.games }, .{ .games = k.role[0].games, .wins = y.games });
-            if (x.games == 0) continue;
-            won[n] = rates(h, l, x, y);
-            won[n].wide = fmt.wide(fmt.range(x.games, x.wins));
-            n += 1;
+        var l = h.list();
+        l.add(h.span(.{}, .{}));
+        for (W.obj_kinds) |o| l.add(h.span(.{ .class = "oh" }, .{ objicon.view(h, o, .{ .s = .l, .named = false }), objicon.label(o) }));
+        for (W.obj_rows, 0..) |rl, row| {
+            l.add(h.span(.{ .class = "rl" }, .{rl}));
+            for (W.firsts, k.mine[1..], k.role[1..]) |fl, x, y| {
+                const took = row == 0;
+                const mine: Counts = if (took) .{ .games = k.mine[0].games, .wins = x.games } else x;
+                const all: Counts = if (took) .{ .games = k.role[0].games, .wins = y.games } else y;
+                l.add(p.objCell(h, fl, took, mine, all));
+            }
         }
-        const names: [2][]const u8 = .{ p.data.name, W.role_average };
         return card.view(h, .{}, &.{
-            card.head(h, W.objectives_head, null, &.{ p.plat(h), versus.key(h, names) }),
-            versus.rows(h, names, &took),
-            if (n > 0) h.p(.{ .class = "vs-sub" }, .{W.won_after}) else .none,
-            if (n > 0) versus.rows(h, names, won[0..n]) else .none,
+            card.head(h, W.objectives_head, W.games_n.with(h, .{ .n = k.mine[0].games }), &.{ p.plat(h), h.span(.{ .class = "lg" }, .{W.obj_key}) }),
+            h.div(.{ .class = "obj", .data_grow = {} }, .{l.done()}),
         });
+    }
+
+    /// A won-after cell is coloured by its win rate, a taken-first one by the side of
+    /// the role's rate it falls on
+    fn objCell(p: *const P, h: *H, l: tree.Text, took: bool, mine: Counts, all: Counts) N {
+        if (mine.games < fmt.floor_games) return h.span(.{ .class = "fl" }, .{W.games_n.with(h, .{ .n = mine.games })});
+        const v = rate(mine);
+        const a = rate(all);
+        const tip = .{ .l = l.s, .c = p.data.name, .r = v, .n = mine.games, .a = a };
+        const on = struct {
+            fn f(x: f32) i32 {
+                return @intFromFloat(@round(x * 10 - 500));
+            }
+        }.f;
+        const b: versus.Band = .{
+            .label = if (took) W.took_tip.with(h, tip) else W.won_tip.with(h, tip),
+            .you = on(v),
+            .typ = if (all.games > 0) .{ on(a), on(a), on(a) } else null,
+            .dom = 500,
+            .tint = took,
+        };
+        // A share of games whole, a win rate to a tenth as everywhere
+        const c = versus.cell(h, b, if (took) phrase.num(h, .pct, round(v)) else phrase.num(h, .rate, v));
+        return if (took) c else h.span(.{ .class = "won", .style = h.vars(.{ .c = fmt.Step.of(v - 50, fmt.win_cuts) }) }, .{c});
     }
 };
 
@@ -2073,7 +2131,26 @@ pub const css =
     \\  .c-cpage .eog p { display: contents; }
     \\  .c-cpage .eog .k { color: var(--muted); }
     \\  .c-cpage .eog b { font-weight: var(--w-m); text-align: right; font-variant-numeric: tabular-nums; }
-    \\  .c-cpage .vs-sub { margin: var(--sp-3) 0 var(--sp-1); font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-cpage .kv { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-s); }
+    \\  .c-cpage .kv > .us { color: var(--us-hot); }
+    \\  .c-cpage .kv > .them { color: var(--them-hot); }
+    \\  .c-cpage .kv > .vs { margin: 0 2px; color: var(--muted); }
+    \\  .c-cpage .lk { display: flex; flex-direction: column; padding: var(--sp-2) 0; }
+    \\  .c-cpage .lk > .c-vs { flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr;
+    \\    align-items: center; gap: var(--sp-5) var(--sp-6); }
+    \\  .c-cpage .lk .lab { font-size: var(--fs-s); }
+    \\  .c-cpage .lk .n { font-size: var(--fs-xl); }
+    \\  .c-cpage .lk .bar { height: 6px; border-radius: 3px; }
+    \\  .c-cpage .obj { display: grid; grid-template-columns: auto repeat(4, minmax(0, 1fr)); align-items: center;
+    \\    align-content: space-evenly; gap: var(--sp-4) var(--sp-4); padding: var(--sp-2) 0; }
+    \\  .c-cpage .obj > .oh { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: var(--fs-xs);
+    \\    color: var(--muted); text-align: center; }
+    \\  .c-cpage .obj > .rl { font-size: var(--fs-s); color: var(--t2); white-space: nowrap; }
+    \\  .c-cpage .obj .c-vs[data-v="cell"] { width: 100%; }
+    \\  .c-cpage .obj .c-vs[data-v="cell"] > .fig { order: -1; font-size: var(--fs-l); font-weight: var(--w-b); }
+    \\  .c-cpage .obj .won .fig { color: var(--c); }
+    \\  .c-cpage .obj > .fl { font-size: var(--fs-xs); color: var(--faint); text-align: center; }
+    \\  @media (max-width: 600px) { .c-cpage .obj { gap: var(--sp-3) var(--sp-2); } .c-cpage .obj .c-vs[data-v="cell"] > .fig { font-size: var(--fs-m); } }
     \\  .c-cpage .plot { padding: var(--sp-1) 0 var(--sp-3); }
     \\  .c-cpage .row3, .c-cpage .row2 { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
     \\  @media (min-width: 1000px) {

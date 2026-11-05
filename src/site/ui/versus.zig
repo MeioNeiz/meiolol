@@ -33,6 +33,8 @@ pub const Item = struct {
     /// The bar's share: us / (us + them); null when both are 0
     share: ?f32,
     first: ?struct { ours: bool, t: u16 } = null,
+    /// The tile's hover
+    title: ?tree.Text = null,
 };
 
 const W = struct {
@@ -111,6 +113,8 @@ pub const Band = struct {
     typ: ?[3]i32 = null,
     /// The track runs -dom to +dom
     dom: i32,
+    /// False: the figure keeps its ink, not the side's colour (the caller colours it)
+    tint: bool = true,
 };
 
 pub fn band(h: *H, b: Band) N {
@@ -137,6 +141,7 @@ pub fn cell(h: *H, b: Band, fig: tree.Text) N {
 
 /// Against the typical median: better is ours
 fn bandSide(b: Band) ?[]const u8 {
+    if (!b.tint) return null;
     const q = b.typ orelse return null;
     return side(b.you > q[1], b.you < q[1]);
 }
@@ -290,7 +295,7 @@ pub fn split(h: *H, items: []const Item) N {
                 return hh.el(.abbr, .{ .class = "first", .title = at, .aria_label = at }, .{W.first});
             }
         }.f;
-        l.add(h.div(.{ .key = i, .class = "it" }, .{
+        l.add(h.div(.{ .key = i, .class = "it", .title = it.title }, .{
             h.span(.{ .class = "lab" }, .{ if (it.icon) |k| objicon.view(h, k, .{ .s = .s, .named = false }) else null, it.label }),
             h.span(.{ .class = "n us" }, .{ it.us, mark(h, it, true) }),
             h.span(.{ .class = "n them" }, .{ mark(h, it, false), it.them }),

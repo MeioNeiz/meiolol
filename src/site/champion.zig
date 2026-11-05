@@ -769,9 +769,9 @@ test "objectives: firsts counted by the builder, against the role, to a drawn ca
     var h: ui.H = .init(a, &t);
     var w: std.Io.Writer.Allocating = .init(a);
     try ui.html.write(&t, p.view(&h), &w.writer);
-    // Took first dragon 75% against 50%; won after it 67% against 50%. Only dragon has
-    // 100+ takes for a win rate
-    for ([_][]const u8{ "Objectives", "Role average", "First Rift Herald", "75%", "Win rate after taking it first", "67%" }) |x|
+    // Took first dragon 75% against 50%; won after it 66.7% against 50%. Herald has no
+    // takes: its games, no figure
+    for ([_][]const u8{ "Objectives", "tick: role average", "Rift Herald", "75%", "Won after", "66.7%", "0 games" }) |x|
         try std.testing.expect(std.mem.indexOf(u8, w.written(), x) != null);
 }
 
