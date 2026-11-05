@@ -161,14 +161,14 @@ fn team(h: *H, g: *const gamedata.Game, t: gamedata.Teams, side: Side) N {
     };
     const won = g.win == us;
     var objs = h.list();
-    for ([_]struct { objicon.Kind, gamedata.Tally, tree.Text }{
-        .{ .tower, t.towers, W.towers },
-        .{ .dragon, t.dragons, W.dragons },
-        .{ .baron, t.baron, W.baron },
-        .{ .grubs, t.grubs, W.grubs },
-    }) |x| objs.add(h.span(.{ .title = x[2] }, .{
-        objicon.view(h, x[0], .{ .s = .s, .named = false }),
-        h.b(.{}, .{if (us) x[1].us else x[1].them}),
+    for ([_]struct { kind: objicon.Kind, n: gamedata.Tally, name: tree.Text }{
+        .{ .kind = .tower, .n = t.towers, .name = W.towers },
+        .{ .kind = .dragon, .n = t.dragons, .name = W.dragons },
+        .{ .kind = .baron, .n = t.baron, .name = W.baron },
+        .{ .kind = .grubs, .n = t.grubs, .name = W.grubs },
+    }) |x| objs.add(h.span(.{ .title = x.name }, .{
+        objicon.view(h, x.kind, .{ .s = .s, .named = false }),
+        h.b(.{}, .{if (us) x.n.us else x.n.them}),
     }));
     return h.div(.{ .class = "tm", .data_side = side, .role = "group", .aria_label = if (us) W.ours else W.theirs }, .{
         badge.view(h, if (won) .us else .them, .{if (won) W.win else W.loss}),

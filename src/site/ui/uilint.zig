@@ -175,16 +175,15 @@ fn titles(src: []const u8) usize {
     return n;
 }
 
-/// The title names the picture its element starts with: an objective icon's, or a
+/// The title names the picture its element starts with: an objective icon's, a
 /// champion's, item's or role's `.name`
 fn names(value: []const u8, rest: []const u8) bool {
     var r = std.mem.trimStart(u8, rest, " \n,");
     if (!std.mem.startsWith(u8, r, ".{")) return false;
     r = std.mem.trimStart(u8, r[2..], " \n");
-    if (std.mem.startsWith(u8, r, "objicon.")) return true;
     const v = std.mem.trim(u8, value[0 .. std.mem.findScalar(u8, value, ',') orelse value.len], " \n");
     if (!std.mem.endsWith(u8, v, "name")) return false;
-    for ([_][]const u8{ "champ.", "art.", "role." }) |p| if (std.mem.startsWith(u8, r, p)) return true;
+    for ([_][]const u8{ "objicon.", "champ.", "art.", "role." }) |p| if (std.mem.startsWith(u8, r, p)) return true;
     return false;
 }
 
@@ -317,7 +316,7 @@ test "markup: another file's class in a class value counts; its own, a frame and
     try testing.expectEqual(3, markup(src, "page", &.{".c-pg"}, owners));
 }
 
-test "titles: an element's title counts; an icon's, an svg's and a struct field's don't" {
+test "titles: an element's counts; not an icon's, svg's, field's or a picture's name" {
     const src =
         \\h.span(.{ .class = "t", .title = a }, .{x}),
         \\h.button(.{ .data_v = "icon", .title = W.set }, .{}),
@@ -331,8 +330,10 @@ test "titles: an element's title counts; an icon's, an svg's and a struct field'
         \\    .class = h.cls("n", .{ .on = f(x) }),
         \\    .title = W.games,
         \\}, .{}),
+        \\h.span(.{ .title = o.name }, .{objicon.view(h, o.kind, .{})}),
+        \\h.span(.{ .title = W.towers }, .{objicon.view(h, .tower, .{})}),
     ;
-    try testing.expectEqual(3, titles(src));
+    try testing.expectEqual(4, titles(src));
 }
 
 test "debt: over, under and a capped write" {
