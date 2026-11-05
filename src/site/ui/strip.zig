@@ -139,7 +139,7 @@ pub const css =
     \\  .c-strip[data-rows] > div > .c { font-size: var(--fs-s); color: var(--muted); font-variant-numeric: tabular-nums;
     \\    min-width: 3.5em; }
     \\  .c-strip[data-rows] > .ends { grid-column: 3; display: flex; flex-direction: row; justify-content: space-between;
-    \\    margin: 0 10px; font-size: var(--fs-xs); color: var(--faint); }
+    \\    gap: var(--sp-2); margin: 0 10px; font-size: var(--fs-xs); color: var(--faint); }
     \\  @container (max-width: 440px) {
     \\    .c-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
     \\    .c-strip .val > .c { display: block; line-height: 1.2; }

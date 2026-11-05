@@ -51,7 +51,7 @@ pub const css =
     \\    background: linear-gradient(90deg, var(--bar-lo), var(--bar-hi)); }
     \\  /* The line sits 10px in from each end, so a 20px mark at either end stays inside */
     \\  .c-track { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-    \\  .c-track > span { position: relative; flex: 1; height: 20px; margin: 0 10px; }
+    \\  .c-track > span { position: relative; flex: 1; min-width: 64px; height: 20px; margin: 0 10px; }
     \\  .c-track > span::before { content: ""; position: absolute; inset: 9px 0 auto; height: 2px; border-radius: 1px;
     \\    background: var(--bar-track); }
     \\  .c-track > span > i { position: absolute; left: calc(var(--ref) * 1%); top: 4px; width: 2px; height: 12px;
@@ -71,8 +71,8 @@ pub fn gallery(g: *Gallery) void {
     g.add("games, the column's most", view(h, 44935, 44935, plain("44,935")));
     g.add("ban", view(h, 4.1, 100, plain("4.1%")));
     const ornn = champ.view(h, champ.demo("Ornn", "Ornn"), .{ .px = .@"20", .named = false });
-    g.add("track: a place, portrait at 1st, the middle ticked", track(h, .{ .at = 1, .ref = 0.5, .mark = ornn, .text = plain("1st") }));
-    g.add("track: the middle", track(h, .{ .at = 0.5, .ref = 0.5, .mark = ornn, .text = plain("30th") }));
-    g.add("track: last", track(h, .{ .at = 0, .ref = 0.5, .mark = ornn, .text = plain("60th") }));
-    g.add("track: a rate, a dot, the average ticked", track(h, .{ .at = 0.733, .ref = 0.684, .text = plain("73.3%") }));
+    g.addFill("track: a place, portrait at 1st, the middle ticked", track(h, .{ .at = 1, .ref = 0.5, .mark = ornn, .text = plain("1st") }));
+    g.addFill("track: the middle", track(h, .{ .at = 0.5, .ref = 0.5, .mark = ornn, .text = plain("30th") }));
+    g.addFill("track: last", track(h, .{ .at = 0, .ref = 0.5, .mark = ornn, .text = plain("60th") }));
+    g.addFill("track: a rate, a dot, the average ticked", track(h, .{ .at = 0.733, .ref = 0.684, .text = plain("73.3%") }));
 }
