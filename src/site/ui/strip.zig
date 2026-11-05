@@ -10,6 +10,9 @@ const stat = @import("stat.zig");
 const toggletip = @import("toggletip.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
+const bar = @import("bar.zig");
+const card = @import("card.zig");
+const champ = @import("champ.zig");
 const H = tree.H;
 const N = tree.N;
 
@@ -48,33 +51,61 @@ const W = struct {
 pub fn view(h: *H, items: []const Item) N {
     var l = h.list();
     for (items, 0..) |it, i| {
-        const tip: ?[2]N = if (it.tip) |t| toggletip.view(h, t.id, .{it.label}, it.label, t.note) else null;
-        const lab = h.span(.{ .class = "lab" }, .{ if (tip) |*t| t else null, if (tip == null) it.label else null });
-        const style = if (it.step) |s| h.vars(.{ .c = s }) else null;
-        const wide = if (it.range) |r| fmt.wide(r) else false;
-        const ends: ?[]const u8 = if (it.ends) |e| e.s else null;
-        // Count and context share one element shape (class of one letter): one tree
-        // builder in every family, which matters to ui-games at its budget
-        const games = if (it.games) |t| h.small(.{ .class = "g" }, .{t}) else null;
-        const ctx = if (it.ctx) |c| h.small(.{ .class = "c" }, .{c}) else null;
-        const kids = .{ it.value, games, ctx };
-        const val = if (it.on) |on| h.button(.{
-            .class = "val",
-            .type = "button",
-            .style = style,
-            .data_wide = wide,
-            .aria_pressed = it.pressed,
-            .title = ends,
-            .aria_label = W.cell.with(h, .{ .l = it.label.s, .v = it.value.s }),
-            .on_click = on,
-        }, kids) else h.span(.{ .class = "val", .style = style, .data_wide = wide, .title = ends }, kids);
+        const kids = .{ lab(h, it), val(h, it, true) };
         const cls = if (it.answer) "answer" else null;
         l.add(if (it.href) |href|
-            h.a(.{ .key = i, .class = cls, .href = href }, .{ lab, val })
+            h.a(.{ .key = i, .class = cls, .href = href }, kids)
         else
-            h.div(.{ .key = i, .class = cls, .data_press = it.on != null }, .{ lab, val }));
+            h.div(.{ .key = i, .class = cls, .data_press = it.on != null }, kids));
     }
     return h.div(.{ .class = "c-strip" }, .{l.done()});
+}
+
+/// An Item and what shows its place, the row's third column (bar.track)
+pub const Row = struct {
+    item: Item,
+    bar: N = .none,
+};
+
+/// One row per item, every row the same columns: label, value, bar, context. In a
+/// taller card the rows spread out. `ends`: under the last row, the bars' two ends named
+/// once ("lowest", "highest"). Items' `href`, `on` and `answer` don't apply
+pub fn rows(h: *H, rs: []const Row, ends: ?[2]tree.Text) N {
+    var l = h.list();
+    for (rs, 0..) |r, i| {
+        const ctx = if (r.item.ctx) |c| h.small(.{ .class = "c" }, .{c}) else null;
+        l.add(h.div(.{ .key = i }, .{ lab(h, r.item), val(h, r.item, false), h.span(.{ .class = "bar" }, .{r.bar}), ctx }));
+    }
+    const foot = if (ends) |e| h.p(.{ .class = "ends", .aria_hidden = true }, .{ h.span(.{}, .{e[0]}), h.span(.{}, .{e[1]}) }) else null;
+    return h.div(.{ .class = "c-strip", .data_rows = true, .data_grow = {} }, .{ l.done(), foot });
+}
+
+fn lab(h: *H, it: Item) N {
+    const tip: ?[2]N = if (it.tip) |t| toggletip.view(h, t.id, .{it.label}, it.label, t.note) else null;
+    return h.span(.{ .class = "lab" }, .{ if (tip) |*t| t else null, if (tip == null) it.label else null });
+}
+
+/// The value with its count; `with_ctx`: the context inside it too (view's), else the
+/// caller places it
+fn val(h: *H, it: Item, with_ctx: bool) N {
+    const style = if (it.step) |s| h.vars(.{ .c = s }) else null;
+    const wide = if (it.range) |r| fmt.wide(r) else false;
+    const ends: ?[]const u8 = if (it.ends) |e| e.s else null;
+    // Count and context share one element shape (class of one letter): one tree
+    // builder in every family, which matters to ui-games at its budget
+    const games = if (it.games) |t| h.small(.{ .class = "g" }, .{t}) else null;
+    const ctx = if (with_ctx) if (it.ctx) |c| h.small(.{ .class = "c" }, .{c}) else null else null;
+    const kids = .{ it.value, games, ctx };
+    return if (it.on) |on| h.button(.{
+        .class = "val",
+        .type = "button",
+        .style = style,
+        .data_wide = wide,
+        .aria_pressed = it.pressed,
+        .title = ends,
+        .aria_label = W.cell.with(h, .{ .l = it.label.s, .v = it.value.s }),
+        .on_click = on,
+    }, kids) else h.span(.{ .class = "val", .style = style, .data_wide = wide, .title = ends }, kids);
 }
 
 pub const css =
@@ -100,6 +131,15 @@ pub const css =
     \\  .c-strip button.val::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
     \\  .c-strip button.val:focus-visible::after { outline: 2px solid var(--focus); outline-offset: -2px; }
     \\  .c-strip > [data-press]:has(> [aria-pressed="true"]) { background: var(--sel-bg); box-shadow: inset 0 0 0 1px var(--sel-line); }
+    \\  .c-strip[data-rows] { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto;
+    \\    align-content: space-evenly; gap: var(--sp-1) var(--sp-3); }
+    \\  .c-strip[data-rows] > div { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; }
+    \\  .c-strip[data-rows] .lab { font-size: var(--fs-s); }
+    \\  .c-strip[data-rows] .val { font-size: var(--fs-m); font-weight: var(--w-m); text-align: right; }
+    \\  .c-strip[data-rows] > div > .c { font-size: var(--fs-s); color: var(--muted); font-variant-numeric: tabular-nums;
+    \\    min-width: 3.5em; }
+    \\  .c-strip[data-rows] > .ends { grid-column: 3; display: flex; flex-direction: row; justify-content: space-between;
+    \\    margin: 0 10px; font-size: var(--fs-xs); color: var(--faint); }
     \\  @container (max-width: 440px) {
     \\    .c-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
     \\    .c-strip .val > .c { display: block; line-height: 1.2; }
@@ -148,5 +188,27 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Swing"), .value = plain("+38"), .ctx = plain("32–33"), .step = .of(38, fmt.game_cuts), .on = on, .pressed = true },
         .{ .label = plain("Biggest drop"), .value = plain("−19"), .ctx = plain("12–13"), .step = .of(-19, fmt.game_cuts), .on = on },
         .{ .label = plain("Ahead"), .value = plain("13"), .ctx = plain("of 33 min") },
+    }));
+    const eog = [_]struct { []const u8, []const u8, u8, []const u8 }{
+        .{ "Kills", "3.1", 59, "59th" },
+        .{ "Deaths", "5.0", 37, "37th" },
+        .{ "Assists", "8.2", 6, "6th" },
+        .{ "Level", "15.2", 41, "41st" },
+        .{ "Gold / min", "388", 52, "52nd" },
+        .{ "Damage / min", "655", 47, "47th" },
+        .{ "Taken / min", "1,302", 1, "1st" },
+        .{ "CS / min", "6.5", 31, "31st" },
+        .{ "Vision / min", "0.9", 22, "22nd" },
+    };
+    const ornn = champ.demo("Ornn", "Ornn");
+    var rs: [eog.len]Row = undefined;
+    inline for (eog, 0..) |x, i| rs[i] = .{
+        .item = .{ .label = plain(x[0]), .value = plain(x[1]), .ctx = plain(x[3]) },
+        .bar = bar.track(h, .{ .at = @as(f64, @floatFromInt(60 - @as(u16, x[2]))) / 59, .ref = 0.5, .mark = champ.view(h, ornn, .{ .px = .@"20", .named = false }) }),
+    };
+    const body = h.p(.{ .class = "muted" }, .{"Card body"});
+    g.addFill("rows: places on tracks, the ends named once; stretched by a taller card", card.row(h, &.{
+        card.view(h, .{}, &.{ card.head(h, plain("Taller"), null, &.{}), body, body, body, body, body, body, body, body, body, body, body, body, body }),
+        card.view(h, .{}, &.{ card.head(h, plain("End of game"), plain("of 60 champions"), &.{}), rows(h, &rs, .{ plain("lowest"), plain("highest") }) }),
     }));
 }
