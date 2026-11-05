@@ -43,11 +43,11 @@ How to write a line:
   wrong; shrink it to what equally rare picks win. Keystones go by lift: one common in the
   role that this champion seldom takes wins up to 7 points less, one rare in the role too
   doesn't lean. Sure: Meio's terms centred on popularity lines, hinged below 0.005% of the
-  role for champion-roles and lift -2 for keystones, turned unseen keystone cells on 16.21
-  (14 origins, 34k cells, every region) 5.99 +- 0.76 milli-nats better than the champion's
-  raw rate (straight lines 2.68, none -2.08); unseen items, matchups and duos better too,
-  seen cells unchanged. Site: not yet (Meio is not shipped). Evidence: src/meio.zig,
-  docs/model.md "Meio in the truth test", "Rare picks in Meio's prior lines"
+  role for champion-roles, lift -2 and 0.03-0.005% of the champion's games for keystones,
+  made unseen keystone cells on 16.21 (14 origins, 34k cells, every region) 6.45 +- 0.87
+  milli-nats better than the champion's raw rate (straight lines 2.68, none -2.08);
+  unseen items, matchups and duos better too, seen cells unchanged. Site: not yet (Meio
+  unshipped). Evidence: src/meio.zig, docs/model.md "Rare picks in Meio's prior lines"
 - No counter or duo stands far out from the rest: pulling thin pairings to the pack
   loses nothing. Sure: 16.21, room for outliers changed 0.97M matchups' and 0.16M duos'
   accuracy by under 0.01 milli-nats. Evidence: docs/model.md "Share drift by rank and

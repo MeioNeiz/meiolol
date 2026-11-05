@@ -91,6 +91,11 @@ pub const Options = struct {
     /// 0.25% of their champion-role -1.3 to -4, unseen keystones -6.0 vs parent (was -2.7)
     pop_knot: f64 = -10,
     cond_knot: f64 = -2,
+    /// The keystone and item interactions' second knot, in x, and where its lean stops
+    /// growing (Cond.x_knot, x_floor). 16.21: keystones x -10..-8 -0.6 milli-nats, under
+    /// -10 -6.8, unseen -6.45 vs parent; a plain hinge below -8 overshot under -10
+    cond_x_knot: f64 = -8,
+    cond_x_floor: f64 = -10,
 };
 
 /// Term kinds, one variance each
@@ -212,9 +217,9 @@ const Pair = struct {
 pub const Model = struct {
     shape: Shape,
     sd: [n_terms]f64,
-    /// The main term's prior mean: lineAt(pop, x, hinge(x, pop_knot)), x the log share of
-    /// its role's games
-    pop: [3]f64 = @splat(0),
+    /// The main term's prior mean: lineAt(pop, .{ x, hinge(x, pop_knot), 0 }), x the log
+    /// share of its role's games
+    pop: Line = @splat(0),
     pop_knot: f64 = -std.math.inf(f64),
     index: std.AutoHashMapUnmanaged(u16, u32) = .empty,
     counts: []Counts = &.{},
@@ -352,7 +357,7 @@ pub const Model = struct {
             const s = @max(Cond.shareOf(0, games(&m.counts[i])), c.least[role]);
             // A main never seen: the role never takes it, so no lift to speak of
             const h = if (c.main_index.get(@as(u32, role) << 16 | x)) |j| hinge(s - c.main_share[j], c.knot) else 0;
-            q.e += lineAt(c.line[role], s, h);
+            q.e += lineAt(c.line[role], .{ s, h, hinge(@max(s, c.x_floor), c.x_knot) });
             q.v += c.inter_sd[role] * c.inter_sd[role];
         }
         return q;
@@ -741,12 +746,15 @@ const Cond = struct {
     shift: []f64 = &.{},
     main_sd: [n_roles]f64 = @splat(0),
     inter_sd: [n_roles]f64 = @splat(0),
-    /// The interactions' prior mean: lineAt(line[role], x, hinge(lift, knot)), x the
+    /// The interactions' prior mean: lineAt(line[role], .{ x, hinge(lift, knot),
+    /// hinge(max(x, x_floor), x_knot) }), x the
     /// champion-role's log share (shareOf), lift x less its main's role-wide share. 16.21:
     /// a keystone common in the role but rare for this champion loses more than x says
     /// (lift < -2: -1.4 points at -3.5, -6.7 at -7), one rare in the role too doesn't
-    line: [n_roles][3]f64 = @splat(@splat(0)),
+    line: [n_roles]Line = @splat(@splat(0)),
     knot: f64 = -std.math.inf(f64),
+    x_knot: f64 = -std.math.inf(f64),
+    x_floor: f64 = -std.math.inf(f64),
     /// By main: shareOf its games in its role's
     main_share: []f64 = &.{},
     /// The lowest share a fitted interaction has, per role: an unseen x reads the line
@@ -938,8 +946,8 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     defer gpa.free(share);
     m.sd = fitLevels(m.counts, m.fitted, shape, opts.sd, 0, opts.rounds, .{ .m = &m, .share = share });
     m.pair = try fitPairs(gpa, shape, &m.index, m.fitted, &cells, 0, opts.rounds);
-    m.keystone = try fitCond(gpa, &m, &keystones, opts.cond_knot, opts.rounds);
-    m.item = try fitCond(gpa, &m, &items, opts.cond_knot, opts.rounds);
+    m.keystone = try fitCond(gpa, &m, &keystones, opts, opts.rounds);
+    m.item = try fitCond(gpa, &m, &items, opts, opts.rounds);
     m.rune = try fitShare(gpa, &m, try rune.toOwnedSlice(gpa), &keystones, try rune_halves.drift(gpa), opts.rounds);
     m.build = try fitShare(gpa, &m, try build.toOwnedSlice(gpa), &items, try build_halves.drift(gpa), opts.rounds);
     m.gold = try fitGold(gpa, &m, try gold.toOwnedSlice(gpa), gold_sq, &gold_cells, opts.rounds);
@@ -1082,59 +1090,82 @@ fn games(c: *const Counts) f64 {
 }
 
 /// The main terms' line in log share: least squares of their posterior means (the EM
-/// step for a Gaussian prior's mean), then each prior mean from it; how far pop moved
+/// step for a Gaussian prior's mean), then each prior mean from it; how far pop moved.
+/// Not Fay-Herriot as fitLines: on 16.21 that overshot the rare champion-roles (misses
+/// above 13.0 -> 13.8%, +0.2 +- 0.24 milli-nats)
 fn fitPopularity(m: *Model, share: []const f64) f64 {
     var f: LineFit = .{};
-    for (share, m.fitted) |x, fi| f.add(x, hinge(x, m.pop_knot), fi.theta[0], 1);
+    for (share, m.fitted) |x, fi| f.add(.{ x, hinge(x, m.pop_knot), 0 }, fi.theta[0], 1);
     const pop = f.solve();
     var moved: f64 = 0;
     for (pop, m.pop) |a, b| moved = @max(moved, @abs(a - b));
     m.pop = pop;
-    for (share, m.fitted) |x, *fi| fi.mu = lineAt(pop, x, hinge(x, m.pop_knot));
+    for (share, m.fitted) |x, *fi| fi.mu = lineAt(pop, .{ x, hinge(x, m.pop_knot), 0 });
     return moved;
 }
 
-/// A popularity line in x, with a second slope h below a knot (hinge): the rarest picks
+/// A popularity line in x, with more slope below each knot (hinges): the rarest picks
 /// lose more than a straight line through the common ones says (16.21: champion-roles
 /// under ~0.005% of their role's games)
-fn lineAt(c: [3]f64, x: f64, h: f64) f64 {
-    return c[0] + c[1] * x + c[2] * h;
+const Line = [4]f64;
+
+/// x, then each hinge
+const Regs = [3]f64;
+
+fn lineAt(c: Line, r: Regs) f64 {
+    return c[0] + c[1] * r[0] + c[2] * r[1] + c[3] * r[2];
 }
 
 fn hinge(z: f64, knot: f64) f64 {
     return @min(0, z - knot);
 }
 
-/// Weighted least squares of y on x and h
+/// Weighted least squares of y on Regs
 const LineFit = struct {
     n: f64 = 0,
-    /// x, hinge, y
-    sum: @Vector(3, f64) = @splat(0),
-    /// xx, xh, hh, xy, hy
-    sq: @Vector(5, f64) = @splat(0),
+    /// Regs, then y
+    sum: [4]f64 = @splat(0),
+    sq: [4][4]f64 = @splat(@splat(0)),
 
-    fn add(f: *LineFit, x: f64, h: f64, y: f64, w: f64) void {
+    fn add(f: *LineFit, r: Regs, y: f64, w: f64) void {
+        const z: [4]f64 = .{ r[0], r[1], r[2], y };
         f.n += w;
-        f.sum += @as(@Vector(3, f64), .{ x, h, y }) * @as(@Vector(3, f64), @splat(w));
-        f.sq += @as(@Vector(5, f64), .{ x * x, x * h, h * h, x * y, h * y }) * @as(@Vector(5, f64), @splat(w));
+        for (&f.sum, &f.sq, z) |*s, *row, a| {
+            s.* += w * a;
+            for (row, z) |*q, b| q.* += w * a * b;
+        }
     }
 
-    fn solve(f: LineFit) [3]f64 {
+    fn solve(f: LineFit) Line {
         if (f.n == 0) return @splat(0);
-        const mean = f.sum / @as(@Vector(3, f64), @splat(f.n));
-        const xx = f.sq[0] - f.n * mean[0] * mean[0];
-        const xh = f.sq[1] - f.n * mean[0] * mean[1];
-        const hh = f.sq[2] - f.n * mean[1] * mean[1];
-        const xy = f.sq[3] - f.n * mean[0] * mean[2];
-        const hy = f.sq[4] - f.n * mean[1] * mean[2];
-        const det = xx * hh - xh * xh;
-        var b: [2]f64 = .{ 0, 0 };
-        // Too few x under the knot to see a hinge (or none): the straight line; every x
-        // equal: no slope to see
-        if (hh > 1e-9 * f.n and det > 1e-9 * xx * hh) {
-            b = .{ (hh * xy - xh * hy) / det, (xx * hy - xh * xy) / det };
-        } else if (xx > 1e-9 * f.n) b[0] = xy / xx;
-        return .{ mean[2] - b[0] * mean[0] - b[1] * mean[1], b[0], b[1] };
+        var a: [4][4]f64 = undefined;
+        for (&a, f.sq, f.sum) |*row, sq, sa| for (row, sq, f.sum) |*q, s, sb| {
+            q.* = s - sa * sb / f.n;
+        };
+        // Elimination in order, a slope dropped once its pivot is gone: too few x under a
+        // knot to see a hinge (or none), or every x equal
+        const centred = a;
+        var keep: [3]bool = @splat(false);
+        for (0..3) |j| {
+            keep[j] = centred[j][j] > 1e-9 * f.n and a[j][j] > 1e-9 * centred[j][j];
+            if (!keep[j]) continue;
+            for (j + 1..3) |i| {
+                const factor = a[i][j] / a[j][j];
+                for (j..4) |l| a[i][l] -= factor * a[j][l];
+            }
+        }
+        var b: [3]f64 = @splat(0);
+        var j: usize = 3;
+        while (j > 0) {
+            j -= 1;
+            if (!keep[j]) continue;
+            var rhs = a[j][3];
+            for (j + 1..3) |l| rhs -= a[j][l] * b[l];
+            b[j] = rhs / a[j][j];
+        }
+        var c0 = f.sum[3] / f.n;
+        for (b, f.sum[0..3]) |bj, s| c0 -= bj * s / f.n;
+        return .{ c0, b[0], b[1], b[2] };
     }
 };
 
@@ -1199,8 +1230,8 @@ fn sortedKeys(gpa: Allocator, cells: *const std.AutoHashMapUnmanaged(u64, PairCe
     return keys;
 }
 
-fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged(u64, PairCell), knot: f64, rounds: u8) !Cond {
-    var c: Cond = .{ .knot = knot };
+fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged(u64, PairCell), opts: Options, rounds: u8) !Cond {
+    var c: Cond = .{ .knot = opts.cond_knot, .x_knot = opts.cond_x_knot, .x_floor = opts.cond_x_floor };
     errdefer c.deinit(gpa);
     const keys = try sortedKeys(gpa, map);
     defer gpa.free(keys);
@@ -1267,16 +1298,14 @@ fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged
     while (it.next()) |e| role_games[e.key_ptr.* >> 13] += games(&m.counts[e.value_ptr.*]);
     c.main_share = try gpa.alloc(f64, c.mains.len);
     for (c.mains, c.main_share) |p, *x| x.* = Cond.shareOf(withOf(c.cells, p), role_games[p.class]);
-    const share = try gpa.alloc(f64, c.inters.len);
-    defer gpa.free(share);
-    const lift = try gpa.alloc(f64, c.inters.len);
-    defer gpa.free(lift);
-    for (c.inters, share, lift, 0..) |p, *x, *h, j| {
-        x.* = Cond.shareOf(withOf(c.cells, p), games(&m.counts[cri[p.first]]));
-        c.least[p.class] = @min(c.least[p.class], x.*);
-        h.* = hinge(x.* - c.main_share[inter_main.items[j]], knot);
+    const regs = try gpa.alloc(Regs, c.inters.len);
+    defer gpa.free(regs);
+    for (c.inters, regs, 0..) |p, *r, j| {
+        const x = Cond.shareOf(withOf(c.cells, p), games(&m.counts[cri[p.first]]));
+        c.least[p.class] = @min(c.least[p.class], x);
+        r.* = .{ x, hinge(x - c.main_share[inter_main.items[j]], c.knot), hinge(@max(x, c.x_floor), c.x_knot) };
     }
-    fitTermsOnLine(c.inters, c.cells, &c.inter_sd, .{ .c = &c.line, .x = share, .h = lift }, 0, rounds);
+    fitTermsOnLine(c.inters, c.cells, &c.inter_sd, .{ .c = &c.line, .r = regs }, 0, rounds);
     return c;
 }
 
@@ -1312,8 +1341,8 @@ fn fitTermsOnLine(terms: []Pair, cells: []const PairCell, sd_out: []f64, line: ?
     @memcpy(sd_out, sd[0..classes]);
 }
 
-/// By term: x and h for lineAt
-const Lines = struct { c: *[n_roles][3]f64, x: []const f64, h: []const f64 };
+/// By term: its Regs for lineAt
+const Lines = struct { c: *[n_roles]Line, r: []const Regs };
 
 /// Per class, the terms' line (LineFit); sets each prior mean, returns how far a line
 /// moved. Each term unshrunk, mu + (i - mu) / gamma, weighted by gamma (Fay-Herriot): the
@@ -1322,9 +1351,9 @@ const Lines = struct { c: *[n_roles][3]f64, x: []const f64, h: []const f64 };
 /// most of the lift lean in)
 fn fitLines(terms: []Pair, line: Lines, sd: []const f64) f64 {
     var fits: [n_roles]LineFit = @splat(.{});
-    for (terms, line.x, line.h) |p, x, h| {
+    for (terms, line.r) |p, r| {
         const gamma = @max(1 - p.v / (sd[p.class] * sd[p.class]), 1e-3);
-        fits[p.class].add(x, h, p.mu + (p.i - p.mu) / gamma, gamma);
+        fits[p.class].add(r, p.mu + (p.i - p.mu) / gamma, gamma);
     }
     var moved: f64 = 0;
     for (line.c, fits) |*l, f| {
@@ -1333,7 +1362,7 @@ fn fitLines(terms: []Pair, line: Lines, sd: []const f64) f64 {
         for (new, l) |a, b| moved = @max(moved, @abs(a - b));
         l.* = new;
     }
-    for (terms, line.x, line.h) |*p, x, h| p.mu = lineAt(line.c[p.class], x, h);
+    for (terms, line.r) |*p, r| p.mu = lineAt(line.c[p.class], r);
     return moved;
 }
 
@@ -1738,6 +1767,19 @@ test "a keystone a champion-role seldom takes does worse with it" {
     try std.testing.expect(m.keystone.line[0][1] > 0.03);
     const unseen = m.rate(.keystone, 0, 0, 31, 8010).?;
     try std.testing.expect(unseen.p < m.rate(.champion, 0, 0, 31, 0).?.p - 0.1);
+}
+
+test "a line fit finds each hinge's slope, and none below a knot nothing reaches" {
+    var f: LineFit = .{};
+    var g: LineFit = .{};
+    for (0..200) |i| {
+        const x = -12 + 0.06 * @as(f64, @floatFromInt(i));
+        const r: Regs = .{ x, hinge(x, -4), hinge(x, -9) };
+        f.add(r, lineAt(.{ 0.1, 0.02, 0.3, 0.5 }, r), 1);
+        g.add(.{ x, hinge(x, -4), hinge(x, -20) }, 0.1 + 0.02 * x, 1);
+    }
+    for (f.solve(), [_]f64{ 0.1, 0.02, 0.3, 0.5 }) |got, want| try std.testing.expectApproxEqAbs(want, got, 1e-9);
+    for (g.solve(), [_]f64{ 0.1, 0.02, 0, 0 }) |got, want| try std.testing.expectApproxEqAbs(want, got, 1e-9);
 }
 
 test "a two-lock cell adds both parts' terms to the champion-role" {

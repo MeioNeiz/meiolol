@@ -5890,13 +5890,26 @@ Paired against the straight lines, milli-nats per target game, every region:
 | C: pop -11, lift knot -2, EM line | | -0.46 +- 0.07 | -0.25 +- 0.02 | +1.0 +- 0.3 |
 | D: pop -10, lift knot -2, Fay-Herriot | -2.41 +- 0.62 | -3.96 +- 0.41 | -1.30 +- 0.13 | -3.6 +- 1.3 |
 
+Then, paired against D:
+
+| variant | rare champion-roles (x <= -10) | keystones x -10..-8 | x -8..-6 | x < -10 |
+| --- | --: | --: | --: | --: |
+| E: D, champion-roles' line Fay-Herriot | +0.20 +- 0.24 | 0.00 | 0.00 | +0.02 +- 0.01 |
+| F: D, second keystone hinge in x at -8 | | -0.59 +- 0.26 | +0.01 +- 0.01 | -6.9 +- 4.3 |
+| G: F, its lean flat under x -10 | | -0.60 +- 0.28 | +0.01 +- 0.01 | -6.8 +- 3.5 |
+
 D's misses: rare champion-roles below 18.9 -> 12.0%, above 8.0 -> 13.0% (PIT mean
 0.736 -> 0.760); keystones x -10..-8 below 14.5 -> 11.1%, above 6.4 -> 7.5%; at lift
 -6..-8 the residual is -1.8 (was -6.7). Common cells unchanged. Truth's tables: keystone
 unseen cells, Meio - parent, -2.68 -> -5.99 (Gold-Emerald -3.59 -> -6.34, Diamond+
 -4.74 -> -6.22); Meio - 30d and in range unchanged (rare cells carry few games); items
-flat. D is the default. Not tried: Fay-Herriot for the champion-roles' line, and a
-second hinge in x for keystones under -10.
+flat. E overshoots the rare champion-roles further (misses above 13.0 -> 13.8%): their
+line stays the EM step. F and G, the interactions' line c0 + c1 x + c2 min(0, lift + 2)
++ c3 min(0, max(x, floor) + 8): the x < -10 residual -4 to -6 points at every lift goes
+to +0.2..+3.8 under F (misses above 3.3 -> 12.9%, Diamond+ +15 +- 11), to -0.5..+2.5
+under G (above 10.4%, Diamond+ +10.7 +- 9.5, 506 cells); x -10..-8 below 11.1 -> 9.1%.
+Truth's unseen keystones, Meio - parent, -5.99 -> -6.45 (both); items flat. G (floor
+-10) is the default.
 
 ### Patches as experiments: item changes, 16.20 -> 16.21, 2026-11-04 (meio-model, M8)
 
