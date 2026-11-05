@@ -7,7 +7,8 @@
 # controller). One fixed tree ~/meiolol-ci/tree: zig's cache is keyed by path.
 # Each run appends a line to ~/meiolol-ci/runs.tsv (deploy/box-ci.sh runs).
 # exit: the build's code, 75 when not built here (no tools, waited 15 min for the
-# running build, disk short, stopped): the Mac builds it instead
+# running build, disk short, stopped, the scope didn't start, the build killed: OOM at
+# MemoryMax is no verdict on the commit): the Mac builds it instead
 set -u
 jd=$(cd "$(dirname "$0")" && pwd) || exit 1
 cd "$jd" || exit 1
@@ -84,7 +85,7 @@ cd "$tree" || finish 1
 # shellcheck disable=SC2016 # the scope's bash expands them
 systemd-run --user --scope --quiet --collect --unit "meiolol-ci-$id" \
     -p CPUQuota=1000% -p MemoryMax=12G -p MemoryHigh=10G \
-    nice -n 10 bash -c 'zig build -j10 "$@"; rc=$?
+    nice -n 10 bash -c ': > "$0/started"; zig build -j10 "$@"; rc=$?
         cg=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)
         cat "$cg/cpu.stat" > "$0/cpu.stat"; cat "$cg/memory.peak" > "$0/memory.peak"
         exit $rc' "$jd" "${args[@]}" --cache-dir "$c/cache" &
@@ -92,6 +93,15 @@ wait $!
 code=$?
 end=$(date +%s)
 kill "$sampler" 2> /dev/null
+# Not a ci failure: push.sh would leave good commits out. runs.tsv's exit shows why
+note=$code
+if [[ ! -f $jd/started ]]; then
+    say "box: the build's scope didn't start (systemd-run exit $code)"
+    code=75 note=75:noscope
+elif (( code >= 128 )); then
+    say "box: the build was killed (exit $code: OOM at 12 GB, or stopped)"
+    code=75 note=75:killed$((note))
+fi
 
 wall=$((end - start))
 cpu=$(awk '$1 == "usage_usec" { printf "%d", $2 / 1e6 }' "$jd/cpu.stat" 2> /dev/null)
@@ -106,7 +116,7 @@ for u in crawl web; do for r in io cpu; do
 done; done
 web=$(awk '{ s += $1 } END { printf "%d/%d", s, NR }' "$jd/web.samples" 2> /dev/null)
 [[ -s $c/runs.tsv ]] || printf '%s\n' "start	sha	exit	wall_s	cpu_s	throttled_s	mem_peak_gb	crawl_io	crawl_cpu	web_io	web_cpu	web_round	free_gb	cache_gb	args" > "$c/runs.tsv"
-printf '%s\t' "$(date -d "@$start" +%FT%T)" "${sha:0:8}" "$code" "$wall" "${cpu:-?}" "${thr:-?}" \
+printf '%s\t' "$(date -d "@$start" +%FT%T)" "${sha:0:8}" "$note" "$wall" "${cpu:-?}" "${thr:-?}" \
     "${peak:-?}" "${p[@]}" "${web:-?}" "$(gb "$(df -k --output=avail / | tail -n 1)")" \
     "$(gb "$(du -sk "$c/cache" | cut -f1)")" >> "$c/runs.tsv"
 echo "${args[*]}" >> "$c/runs.tsv"
