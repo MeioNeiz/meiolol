@@ -97,7 +97,7 @@ pub fn deinit() void {
 const Next = struct { html: []const u8, bin: []const u8, practice: []const u8, comp: u32, picks: []const u8, live: bool };
 
 fn build(a: Allocator, live: bool) !?Next {
-    if (!live) return finish(a, try data(a, .{ .stats = null, .icons = null, .private = false }, .no_client, .none), null, null, null, .{}, null);
+    if (!live) return finish(a, try data(a, .{ .stats = null, .icons = null, .private = false }, .no_client, .none), null, null, null, .{});
     const s = poller.lock();
     defer poller.unlock();
     const c: Ctx = .{
