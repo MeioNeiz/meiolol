@@ -338,7 +338,7 @@ pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
 pub fn privateIndex(a: std.mem.Allocator) ![]const u8 {
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
-    const p: ui.textpage.TextPage = .{ .title = "Private", .lead = "Tools for private logins: never on the public site.", .body = try ui.prose.parse(a, index_md) };
+    const p: ui.textpage.TextPage = .{ .title = "Tools for private logins", .lead = "Never on the public site.", .body = try ui.prose.parse(a, index_md) };
     const n = p.view(&h);
     if (h.oom) return error.OutOfMemory;
     var out: Io.Writer.Allocating = .init(a);
