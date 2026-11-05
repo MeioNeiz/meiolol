@@ -1526,6 +1526,16 @@ pub const More = struct {
 
     const Ranked = union(enum) { role: *const MoreRole, few };
 
+    /// Under an opponent lock the answer's lane holds that opponent alone: the lane shows
+    /// the shown rank's, so another can be picked and locked in its place.
+    /// Other locks don't reach it
+    fn unlockedLane(p: *const P) ?*const MoreRole {
+        if (p.shownAnswer() == null or p.locks.get(.opponent) == null) return null;
+        const rl = &p.data.roles[p.cur];
+        const y = if (p.files.group()) |g| at(MoreRole, g, rl.role) orelse return null else rl;
+        return if (y.rels.len > 0 and !y.rels[0].ally and y.rels[0].role == rl.role) y else null;
+    }
+
     /// On the cards that stay Platinum+ under a rank pick (an answer is the rank's)
     fn plat(p: *const P, h: *H) N {
         return if (p.files.shown.rank != .plat and p.shownAnswer() == null) badge.view(h, .neutral, .{W.plat}) else .none;
@@ -1580,7 +1590,9 @@ pub const More = struct {
             return card.view(h, .{ .id = "matchups", .target = true, .label = W.matchups }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{if (x.roles.len == 0) W.no_answer else W.no_lock_games}) });
         };
         var in = p.input();
-        if (p.ranked()) |x| in.ranked = switch (x) {
+        if (p.unlockedLane()) |y| {
+            in.ranked = .{ .lane = .{ .counts = .{ .games = y.games, .wins = y.wins }, .opps = y.rels[0].opps, .rare = y.rels[0].rare } };
+        } else if (p.ranked()) |x| in.ranked = switch (x) {
             .few => .few,
             .role => |y| .{ .lane = .{ .counts = .{ .games = y.games, .wins = y.wins }, .opps = if (y.rels.len > 0) y.rels[0].opps else &.{}, .rare = if (y.rels.len > 0) y.rels[0].rare else 0 } },
         };

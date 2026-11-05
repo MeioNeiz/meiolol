@@ -187,6 +187,13 @@ pub const MatchupGrid = struct {
             n += 1;
         }
         g.dots.dots = dots[0..n];
+        // The locked lane opponent is chosen until another is: its brief holds Unlock
+        if (lane and g.dots.sel == null) if (in.lock) |l| if (l.on) |c| {
+            for (of[0..n], 0..) |k, i| if (opps[k].champ == c) {
+                g.dots.sel = @intCast(i);
+                break;
+            };
+        };
         g.dots.m = switch (g.measure) {
             .win => .{ .label = W.matchups },
             .usual => .{ .label = W.matchups, .bin = 0.5, .reach = 1 },
@@ -566,6 +573,43 @@ test "on the fake DOM: tiles name the champion's figure, a tap picks one and ope
     const now = i.current();
     try testing.expect(now.find(now.root, "class", "c-mpick") != null);
     try testing.expectEqualStrings("true", now.attr(now.find(now.root, "aria-label", "Dr. Mundo: Darius wins 43.2% in 859 games").?, "aria-pressed").?);
+    try testing.expectEqual(@as(u32, 0), fake.warnings);
+}
+
+/// The brief's lock button's word
+fn lockWord(a: std.mem.Allocator, t: *const tree.Tree) ![]const u8 {
+    const b = t.find(t.root, "class", "brief") orelse return "";
+    var w: std.Io.Writer.Allocating = .init(a);
+    try t.textOf(b, &w.writer);
+    const s = w.written();
+    return if (std.mem.find(u8, s, "Unlock") != null) "Unlock" else if (std.mem.find(u8, s, "Lock") != null) "Lock" else "";
+}
+
+test "on the fake DOM: the locked opponent is chosen, Unlock in its brief; another tile offers Lock" {
+    const testing = std.testing;
+    const island = @import("island.zig");
+    const Fake = @import("fakedom.zig").Fake;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fake: Fake = .{ .a = a };
+    var rt: island.Runtime(Fake) = .init(a, &fake);
+    var server: Demo = .{ .in = .{ .name = "Darius", .slug = "darius", .ddragon = champ.demo_version, .champs = &demo_champs, .role = .top, .counts = .{ .games = 20412, .wins = 10063 }, .rels = &demo_rels, .lock = .{ .on = 4 } } };
+    var state = server;
+    const t = try a.create(tree.Tree);
+    t.* = .{};
+    var h: H = .init(a, t);
+    t.root = server.view(&h);
+    fake.server = t;
+    const i = try rt.add(Demo, &state, &server, "#matchups");
+    const cur = i.current();
+    const mundo = cur.find(cur.root, "aria-label", "Dr. Mundo: Darius wins 43.2% in 859 games").?;
+    try testing.expectEqualStrings("true", cur.attr(mundo, "aria-pressed").?);
+    try testing.expectEqualStrings("Unlock", try lockWord(a, cur));
+    _ = rt.event(0, .{ .kind = .click, .target = cur.node(cur.find(cur.root, "aria-label", "K'Sante: Darius wins 60.3% in 353 games").?).dom });
+    const now = i.current();
+    try testing.expectEqualStrings("false", now.attr(now.find(now.root, "aria-label", "Dr. Mundo: Darius wins 43.2% in 859 games").?, "aria-pressed").?);
+    try testing.expectEqualStrings("Lock", try lockWord(a, now));
     try testing.expectEqual(@as(u32, 0), fake.warnings);
 }
 
