@@ -287,11 +287,15 @@ fn banOf(l: *const Line) f64 {
 fn who(h: *H, l: *const Line) N {
     const r = l.row();
     const c = l.d.champs[r.champ];
+    // One table: the role on the portrait's corner
+    const ro = r.role.ui();
     return h.a(.{ .class = "who", .href = l.href }, .{
-        champ.view(h, .{ .name = c.name, .src = l.icon }, .{ .named = false }),
-        h.span(.{ .class = "nm" }, .{c.name}),
+        champ.view(h, .{ .name = c.name, .src = l.icon }, .{
+            .named = false,
+            .role = if (l.all) ro else null,
+        }),
+        h.span(.{ .class = "nm" }, .{ c.name, if (l.all) h.span(.{ .class = "sr" }, .{ W.said_sep, ro.label() }) else null }),
         if (r.share < off_role) badge.view(h, .few, .{W.off}) else null,
-        if (l.all) role.view(h, r.role.ui(), .{}) else null,
     });
 }
 
@@ -918,7 +922,6 @@ pub const css =
     \\  .c-tiers .c-table thead th { top: var(--header); }
     \\  .c-tiers .who { display: flex; align-items: center; gap: var(--sp-2); color: inherit; text-decoration: none; }
     \\  .c-tiers .who .nm { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    \\  .c-tiers .who .c-role { margin-left: auto; color: var(--muted); }
     \\  .c-tiers .wr .c-stat { font-size: var(--fs-l); }
     \\  .c-tiers td.num.p3 { color: var(--faint); }
     \\  .c-tiers .num.p3 { width: 44px; }

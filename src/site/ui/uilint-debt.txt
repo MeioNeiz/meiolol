@@ -103,7 +103,7 @@ testerpage title 1
 testerpage pagecss 22
 textpage pagecss 9
 tiers css 2
-tiers pagecss 76
+tiers pagecss 75
 tiers fade 1
 timechart markup 1
 timechart fade 2
