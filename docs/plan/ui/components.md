@@ -178,8 +178,8 @@ account, testerpage, meionotes, meionoteslist, adminpage
 Chip: a small pill that toggles a filter (pressed or not), removes a choice, or opens the
 rest of a list (expand). Scope and reason chips are labels, not controls: flat, no hover
 (Badge's family)
-States: toggle; pressed; disabled; removable; expand; link; scope; scope, hover tip at its
-end; reason; reason, hover tip; a filter row
+States: toggle; pressed; disabled; removable; expand; link; scope; reason; reason, hover
+tip; a filter row
 Used by: scopechip, card, champselect, practice, table, buildpanel, lockbar, inspector,
 gamepage, candlist, patchpage, idlookup, admincharts, champpage, tiers
 
@@ -263,14 +263,16 @@ Used by: strip, draftboard, compview, table, laneduel, puzzle, reasons, learnpag
 dailyseat, champpage
 
 ### Tip
-`tip.zig` `.c-hint` `.c-hintb`
+`tip.zig` `.c-hint` `.c-hintb` site
 Tip: a short line about what it wraps (a range's ends, a full count, a place's name),
 shown at once on hover, on keyboard focus and on a tap, so phones see it too (a title
 never shows there). The line is in the page, after the wrapped content: screen readers
 read it inline, with no attr() or id. A note with a heading, or long enough to want a tap
 to open, is a Toggletip. The native title and attr(data-tip) are uilint debt that moves
 here
-States: closed: hover, focus or tap; open, above; open, end; open, below; open, wraps
+States: closed: hover, focus or tap; open, above; open, end; open, below; hover, then
+Escape: shut until the pointer leaves; open, wraps
+Used by: champpage
 
 ### StatCell
 `stat.zig` `.c-stat` site

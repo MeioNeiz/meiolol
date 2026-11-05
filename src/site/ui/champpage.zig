@@ -31,6 +31,7 @@ const chip = @import("chip.zig");
 const bar = @import("bar.zig");
 const strip = @import("strip.zig");
 const toggletip = @import("toggletip.zig");
+const hint = @import("tip.zig");
 const segmented = @import("segmented.zig");
 const rolepicker = @import("rolepicker.zig");
 const champsearch = @import("champsearch.zig");
@@ -1274,11 +1275,13 @@ pub const Build = struct {
             empty = h.p(.{ .class = "none" }, .{if (x.roles.len == 0) W.no_answer else W.no_lock_games});
         };
         const note: N = if (p.from()) |g| h.p(.{ .class = "from" }, .{W.from.with(h, .{ .g = W.ranks[g].s, .r = W.ranks[@backingInt(p.files.shown.rank)].s })}) else .none;
-        const patch: N = if (p.shownRole()) |x| if (x.patch) |v| chip.view(h, .{
-            .v = .scope,
-            .tip = (if (x.older) W.from_older else W.from_patch).s,
-            .tip_at = if (p.data.against == null) .start else .end,
-        }, .{W.build_patch.with(h, .{ .p = v })}) else .none else .none;
+        // Opens below: the card clips above its top edge
+        const patch: N = if (p.shownRole()) |x| if (x.patch) |v| hint.view(
+            h,
+            if (x.older) W.from_older else W.from_patch,
+            .{chip.view(h, .{ .v = .scope }, .{W.build_patch.with(h, .{ .p = v })})},
+            .{ .below = true, .end = p.data.against != null },
+        ) else .none else .none;
         return h.div(.{
             .class = "part",
             .id = "build",
@@ -2340,8 +2343,8 @@ test "a build from another patch than the view's has its patch chip" {
     const b: buildpanel.Data = .{ .runes = .{ .trees = &.{}, .games = 0, .wins = 0 }, .slots = &.{}, .champion = "Darius", .own = 50 };
     const cases = [_]struct { BuildRole, ?[]const u8 }{
         .{ .{ .role = .top, .build = b }, null },
-        .{ .{ .role = .top, .build = b, .patch = "16.20", .older = true }, "<div class=\"from\"><span class=\"c-chip\" data-v=\"scope\" data-tip=\"Too few games on this patch yet\" data-at=\"start\">Patch 16.20</span></div>" },
-        .{ .{ .role = .top, .build = b, .patch = "16.21" }, "data-tip=\"From this patch, not the 30 days picked\" data-at=\"start\">Patch 16.21</span>" },
+        .{ .{ .role = .top, .build = b, .patch = "16.20", .older = true }, "<div class=\"from\"><span class=\"c-hint\" tabindex=\"0\" data-at=\"below\"><span class=\"c-chip\" data-v=\"scope\">Patch 16.20</span><span class=\"c-hintb\">Too few games on this patch yet</span></span></div>" },
+        .{ .{ .role = .top, .build = b, .patch = "16.21" }, "Patch 16.21</span><span class=\"c-hintb\">From this patch, not the 30 days picked</span>" },
     };
     for (cases) |c| {
         const d: BuildData = .{ .roles = &.{c[0]} };

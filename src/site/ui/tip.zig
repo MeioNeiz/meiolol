@@ -18,19 +18,22 @@ pub const Opts = struct {
     below: bool = false,
     /// Aligned to its content's end: a right-hand column or seat
     end: bool = false,
-    /// A tab stop of its own. Off for dense cells (a rate in every row): a tap or a
-    /// click still opens it, Tab passes by
-    stop: bool = true,
+    /// A tab stop of its own; null: when `said` (a stop that adds nothing to hear is
+    /// noise). Off for dense cells (a rate in every row): a tap or a click still opens
+    /// it, Tab passes by
+    stop: ?bool = null,
     /// Read by screen readers after the content. Off when the content already says it
     said: bool = true,
     /// Drawn open, for the gallery
     open: bool = false,
+    /// Drawn as Escape leaves it under the pointer (shut), for the gallery
+    shut: bool = false,
 };
 
 pub fn view(h: *H, text: tree.Text, kids: anytype, o: Opts) N {
     return h.span(.{
-        .class = if (o.open) "c-hint open" else "c-hint",
-        .tabindex = @as(i8, if (o.stop) 0 else -1),
+        .class = if (o.shut) "c-hint esc" else if (o.open) "c-hint open" else "c-hint",
+        .tabindex = @as(i8, if (o.stop orelse o.said) 0 else -1),
         .data_at = if (o.below) "below" else null,
         .data_end = o.end,
     }, kids ++ .{h.span(.{ .class = "c-hintb", .aria_hidden = if (o.said) null else true }, .{text})});
@@ -38,7 +41,10 @@ pub fn view(h: *H, text: tree.Text, kids: anytype, o: Opts) N {
 
 // Closed, the line is visually hidden (clipped to 1px), not display: none, so screen
 // readers still read it. Focus opens it for keyboards everywhere and for taps where
-// nothing hovers; a mouse click that focuses it leaves it to hover
+// nothing hovers; a mouse click that focuses it leaves it to hover. Open, the line takes
+// the pointer and ::before bridges the 4px gap, so moving onto it to read keeps it open
+// (WCAG 1.4.13); closed, its clipped padding box stays no hit area. Escape shuts it (class
+// esc, the site shell's script), last so it outranks the open rules
 pub const css =
     \\@layer components {
     \\  .c-hint { position: relative; outline: none; }
@@ -50,17 +56,21 @@ pub const css =
     \\    box-shadow: var(--shadow-pop); color: var(--text); font-size: var(--fs-s); font-weight: var(--w-r);
     \\    line-height: 1.4; text-align: left; text-transform: none; letter-spacing: 0; }
     \\  .c-hint:is(.open, :focus-visible) > .c-hintb { width: max-content; height: auto; overflow: visible;
-    \\    clip-path: none; white-space: normal; }
+    \\    clip-path: none; white-space: normal; pointer-events: auto; }
     \\  @media (hover: hover) {
     \\    .c-hint:hover > .c-hintb { width: max-content; height: auto; overflow: visible; clip-path: none;
-    \\      white-space: normal; }
+    \\      white-space: normal; pointer-events: auto; }
     \\  }
     \\  @media (hover: none) {
     \\    .c-hint:focus > .c-hintb { width: max-content; height: auto; overflow: visible; clip-path: none;
-    \\      white-space: normal; }
+    \\      white-space: normal; pointer-events: auto; }
     \\  }
+    \\  .c-hintb::before { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 6px; }
     \\  .c-hint[data-at="below"] > .c-hintb { bottom: auto; top: calc(100% + 4px); }
+    \\  .c-hint[data-at="below"] > .c-hintb::before { top: auto; bottom: 100%; }
     \\  .c-hint[data-end] > .c-hintb { left: auto; right: 0; }
+    \\  .c-hint.esc > .c-hintb { width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
+    \\    white-space: nowrap; pointer-events: none; }
     \\}
     \\
 ;
@@ -71,6 +81,7 @@ pub fn gallery(g: *Gallery) void {
     g.add("open, above", room(h, .above, view(h, plain("50.6-51.8%, 44,935 games"), .{"51.2%"}, .{ .open = true })));
     g.add("open, end", room(h, .end, view(h, plain("Darius into Syndra: big effect"), .{"▲"}, .{ .end = true, .open = true })));
     g.add("open, below", room(h, .below, view(h, plain("Patch 25.21, from 4 Nov"), .{"25.21"}, .{ .below = true, .open = true })));
+    g.add("hover, then Escape: shut until the pointer leaves", h.span(.{}, .{ "Win rate ", view(h, plain("50.6-51.8%, 44,935 games"), .{"51.2%"}, .{ .shut = true }) }));
     g.add("open, wraps", room(h, .above, view(h, plain("Ended the game in 3rd place for damage dealt to champions, behind both carries and ahead of the support"), .{"3rd"}, .{ .open = true })));
 }
 

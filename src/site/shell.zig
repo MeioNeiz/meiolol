@@ -37,7 +37,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
         \\{robots}{canonical}</head>
         \\<body class="ui">
         \\{header}
-        \\{look}{remember}{meio_view}{admin}
+        \\{look}{tip_esc}{remember}{meio_view}{admin}
         \\{subbar}{login}{account}{banner}<main class="{main}">
         \\
     , .{
@@ -55,6 +55,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
             null else null,
         .header = SiteHeader{ .p = p },
         .look = tpl.trusted(search_loader),
+        .tip_esc = tpl.trusted(tip_esc),
         // /admin's island draws its own (ui.site.mainbar)
         .subbar = tpl.when(p.nav.inChampions() or p.nav.inYour() or p.counterparts != null or (p.private != null and p.private != .admin), Subbar{ .p = p }),
         // Remembered so shared pages link back into this view
@@ -70,7 +71,7 @@ pub fn open(w: *Writer, p: Page) Writer.Error!void {
 }
 
 /// The page's CSP (csp.zig): the inline scripts here; its <style> is added at delivery
-const csp_meta = csp.meta(&.{ search_loader, admin_link, "<script>" ++ account_js ++ "</script>", private_mark, admin_mark, meio_view, "<script>" ++ remember ++ "</script>" }, &.{});
+const csp_meta = csp.meta(&.{ search_loader, tip_esc, admin_link, "<script>" ++ account_js ++ "</script>", private_mark, admin_mark, meio_view, "<script>" ++ remember ++ "</script>" }, &.{});
 
 /// Its view (data-v): the hash is one for every view
 const remember = "try{localStorage.setItem(\"view\",document.currentScript.dataset.v)}catch(e){}";
@@ -149,6 +150,13 @@ const search_loader =
     \\s.src=f.dataset.js;s.dataset.wasm=f.dataset.wasm;s.onerror=()=>{bad=true;if(window.meioSearchGo)own()};document.head.append(s)};f?.addEventListener("focusin",go);f?.addEventListener("pointerdown",go);
     \\f?.addEventListener("submit",e=>{if(window.meioSearch||bad||f.querySelector("input").value.includes("#"))return;e.preventDefault();window.meioSearchGo=1;go();clearTimeout(t);t=setTimeout(()=>{if(!window.meioSearch)own()},8000)});addEventListener("pagehide",()=>clearTimeout(t));
     \\addEventListener("keydown",e=>{if(!f||e.key!="/"||e.ctrlKey||e.metaKey||e.altKey||e.target.closest?.("input,textarea,select,[contenteditable]"))return;e.preventDefault();go();f.querySelector("input").focus()})}</script>
+    \\
+;
+
+/// Escape shuts an open Tip (ui/tip.zig, class esc) where the pointer or focus has it,
+/// without moving either (WCAG 1.4.13); leaving it lets it open again
+const tip_esc =
+    \\<script>addEventListener("keydown",e=>{if(e.key=="Escape")for(const t of document.querySelectorAll(".c-hint:is(:hover,:focus)")){t.classList.add("esc");const c=new AbortController,o=()=>{t.classList.remove("esc");c.abort()};t.addEventListener("pointerleave",o,c);t.addEventListener("focusout",o,c)}})</script>
     \\
 ;
 
