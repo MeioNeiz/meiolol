@@ -89,9 +89,11 @@ pub fn view(h: *H, s: Screen) N {
     for (s.lanes, 0..) |l, i| lanes.add(lane(h, i, l));
     return h.div(.{ .class = "c-load" }, .{
         yours(h, s.yours),
-        head(h, .us, s.draft),
-        h.el(.ol, .{ .class = "lanes" }, .{lanes.done()}),
-        head(h, .them, if (s.draft) |d| 100 - d else null),
+        h.div(.{ .class = "teams" }, .{
+            head(h, .us, s.draft),
+            h.el(.ol, .{ .class = "lanes" }, .{lanes.done()}),
+            head(h, .them, if (s.draft) |d| 100 - d else null),
+        }),
     });
 }
 
@@ -189,7 +191,7 @@ pub const css =
     \\  .c-load h2 { display: flex; align-items: baseline; gap: var(--sp-2); margin: 0; padding-bottom: 4px;
     \\    border-bottom: 3px solid currentColor; font-size: var(--fs-m); font-weight: var(--w-b); }
     \\  .c-load h2[data-side="us"] { color: var(--us); }
-    \\  .c-load h2[data-side="them"] { color: var(--them); padding: 4px 0 0; border-bottom: 0; border-top: 3px solid currentColor; }
+    \\  .c-load h2[data-side="them"] { color: var(--them); }
     \\  .c-load .draft { display: inline-flex; align-items: baseline; gap: 4px; margin-left: auto; font-size: var(--fs-l);
     \\    color: var(--text); }
     \\  .c-load .draft > small { font-size: var(--fs-s); color: var(--muted); }
@@ -198,9 +200,17 @@ pub const css =
     \\  .c-load .yours > ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
     \\  .c-load .yours li { display: flex; align-items: center; gap: 6px; font-size: var(--fs-s); }
     \\  .c-load .yours li > b { font-weight: var(--w-m); color: var(--muted); }
-    \\  .c-load .lanes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
-    \\    gap: 6px var(--sp-2); }
-    \\  .c-load .lanes > li { display: grid; grid-row: span 3; grid-template-rows: subgrid; gap: 6px; min-width: 0; }
+    \\  .c-load .teams { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px var(--sp-2); }
+    \\  .c-load .teams > h2 { grid-column: 1 / -1; }
+    \\  .c-load .teams > h2[data-side="them"] { grid-row: 4; }
+    \\  .c-load .lanes { list-style: none; margin: 0; padding: 0; display: contents; }
+    \\  .c-load .lanes > li { display: grid; grid-row: 2 / span 4; grid-column: 1; grid-template-rows: subgrid; gap: 6px; min-width: 0; }
+    \\  .c-load .lanes > li > :last-child { grid-row: 4; }
+    \\  .c-load .lanes > li:nth-child(5n+2) { grid-column: 2; }
+    \\  .c-load .lanes > li:nth-child(5n+3) { grid-column: 3; }
+    \\  .c-load .lanes > li:nth-child(5n+4) { grid-column: 4; }
+    \\  .c-load .lanes > li:nth-child(5n) { grid-column: 5; }
+    \\  .c-load .lanes > li:nth-child(n+6) { grid-row: 6 / span 4; }
     \\  .c-load .card { display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; align-items: start;
     \\    gap: 3px var(--sp-2); min-width: 0; padding: var(--sp-2); border-radius: var(--r-m); background: var(--panel-2); }
     \\  .c-load .card > .c-champ { grid-row: span 3; }
@@ -225,8 +235,12 @@ pub const css =
     \\  .c-load .ticks > [data-side="us"] { color: var(--us-hot); }
     \\  .c-load .ticks > [data-side="them"] { color: var(--them-hot); }
     \\  @container (max-width: 760px) {
-    \\    .c-load .lanes { grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
-    \\    .c-load .lanes > li { grid-row: auto; grid-template-rows: none; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    \\    .c-load .teams { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: var(--sp-3); }
+    \\    .c-load .teams > h2, .c-load .teams > h2[data-side="them"] { grid-column: auto; grid-row: 1; flex-wrap: wrap; }
+    \\    .c-load .lanes { display: grid; grid-column: 1 / -1; gap: var(--sp-3); }
+    \\    .c-load .lanes > li, .c-load .lanes > li:nth-child(n) { grid-row: auto; grid-column: auto; grid-template-rows: none;
+    \\      grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    \\    .c-load .lanes > li > :last-child { grid-row: auto; }
     \\    .c-load .strip { grid-column: 1 / -1; grid-row: 2; }
     \\    .c-load .body > .len, .c-load .body > .pills { grid-column: 1 / -1; }
     \\  }
@@ -243,7 +257,7 @@ const flat: []const f32 = &.{ 49.8, 50.4, 49.7, 50.3, 49.8 };
 pub const sample: Screen = .{
     .yours = &.{
         .{ .champ = demo("Ahri", "Ahri"), .text = "Tough lane vs Syndra", .tone = .bad },
-        .{ .champ = demo("Vi", "Vi"), .text = "Vi strong early" },
+        .{ .champ = demo("Vi", "Vi"), .text = "Their Vi strong early" },
         .{ .who = "Enemy team", .text = "strong late" },
     },
     .lanes = &.{

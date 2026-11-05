@@ -1049,7 +1049,7 @@ fn loadTone(t: loading.Tone) ui.loadscreen.Tone {
 }
 
 /// My lane, the enemy jungler's lean and the enemy team's, in plain words ("Tough lane vs
-/// Syndra", "Lee Sin strong early"); private names my lane's gold
+/// Syndra", "Their Lee Sin strong early"); private names my lane's gold
 fn yourGame(a: Allocator, c: Ctx, l: *const loading.Loading, shown: []const ui.loadscreen.Lane) ![]const ui.loadscreen.Fact {
     var out: std.ArrayList(ui.loadscreen.Fact) = .empty;
     for (shown) |ln| {
@@ -1076,7 +1076,7 @@ fn yourGame(a: Allocator, c: Ctx, l: *const loading.Loading, shown: []const ui.l
     for (cv.teams[1].timing) |tm| if (tm.role == .jungle) {
         if (try c.champ(a, tm.champion)) |x| try out.append(a, .{
             .champ = x,
-            .text = try a.print("{s} strong {s}", .{ x.name, if (tm.lean == .early) "early" else "late" }),
+            .text = try a.print("Their {s} strong {s}", .{ x.name, if (tm.lean == .early) "early" else "late" }),
         });
         break;
     };
