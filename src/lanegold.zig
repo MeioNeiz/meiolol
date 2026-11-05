@@ -12,6 +12,7 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
+const digest = @import("riot/digest.zig");
 const stats = @import("stats.zig");
 const analysis = @import("analysis.zig");
 const Role = core.Role;
@@ -27,12 +28,21 @@ pub const Map = std.AutoHashMapUnmanaged(u64, Lanes);
 /// enough, keyed by stats.matchKey. Caller deinits
 pub fn load(
     gpa: std.mem.Allocator,
+    io: std.Io,
     db: store.Db,
     chosen: []const []const u8,
     platforms: []const []const u8,
 ) !Map {
-    var games: analysis.TimelineGames = try .init(gpa, db, chosen, platforms);
+    // Digests keep frame `minute`'s total gold and fall back to the stored timeline, so
+    // the same games and values as full timelines, for a fraction of the reads: the
+    // full pass held one read open for an hour, pinning the crawler's WAL
+    var games: analysis.TimelineGames = try .initDigests(gpa, io, db, chosen, platforms, 0);
     defer games.deinit();
+    return fill(gpa, &games);
+}
+
+fn fill(gpa: std.mem.Allocator, games: *analysis.TimelineGames) !Map {
+    comptime std.debug.assert(minute + 2 <= digest.max_frames);
     var map: Map = .empty;
     errdefer map.deinit(gpa);
     while (try games.next()) |g| {
@@ -196,7 +206,7 @@ const Moments = struct {
 
 const testing = std.testing;
 
-test "lane gold from a real timeline" {
+test "lane gold: digests give the full timelines' games and values" {
     const gpa = testing.allocator;
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -207,23 +217,45 @@ test "lane gold from a real timeline" {
 
     const db = try store.schema.memory();
     defer db.close();
-    try db.run("INSERT INTO matches VALUES ('EUW1_1','t','EUW1',420,'16.20','',0,1600,100,0)", .{});
-    try db.run("INSERT INTO timeline.timelines VALUES ('EUW1_1',26,0,?)", .{store.Blob{ .bytes = blob }});
-    for (0..10) |slot| {
-        try db.run(
-            \\INSERT INTO participants (match_id, slot, team_id, champion_id, position, win)
-            \\VALUES ('EUW1_1',?,?,?,?,0)
-        , .{ slot, @as(i64, if (slot < 5) 100 else 200), slot + 1, Role.positions[slot % 5] });
+    // 1 keeps its digest, 2 gets none (made before it was stored), 3's is damaged, 4's
+    // timeline is too short for minute 14
+    for (1..5) |i| {
+        const id = try arena.print("EUW1_{d}", .{i});
+        try db.run("INSERT INTO matches VALUES (?,'t','EUW1',420,'16.20','',0,1600,100,0)", .{id});
+        for (0..10) |slot| {
+            try db.run(
+                \\INSERT INTO participants (match_id, slot, team_id, champion_id, position, win)
+                \\VALUES (?,?,?,?,?,0)
+            , .{ id, slot, @as(i64, if (slot < 5) 100 else 200), slot + 1, Role.positions[slot % 5] });
+        }
     }
+    const short = try store.raw.compress(arena, try timeline.encode(arena, .{
+        .participants = t.participants,
+        .frames = t.frames[0..minute],
+        .events = &.{},
+    }));
+    try db.run("INSERT INTO timeline.timelines VALUES ('EUW1_1',26,0,?)", .{store.Blob{ .bytes = blob }});
+    try db.run("INSERT INTO timeline.timelines VALUES ('EUW1_3',26,0,?)", .{store.Blob{ .bytes = blob }});
+    try db.run("INSERT INTO timeline.timelines VALUES ('EUW1_4',13,0,?)", .{store.Blob{ .bytes = short }});
+    _ = try @import("digests.zig").catchUp(gpa, testing.io, db, .{});
+    try db.run("INSERT INTO timeline.timelines VALUES ('EUW1_2',26,0,?)", .{store.Blob{ .bytes = blob }});
+    try db.exec("UPDATE timeline.digests SET data = x'00' WHERE match_id = 'EUW1_3'");
 
-    var map = try load(gpa, db, &.{"16.20"}, &.{"EUW1"});
+    var map = try load(gpa, testing.io, db, &.{"16.20"}, &.{"EUW1"});
     defer map.deinit(gpa);
-    try testing.expectEqual(1, map.count());
-    const lanes = map.get(stats.matchKey("EUW1_1")).?;
+    var full_games: analysis.TimelineGames = try .init(gpa, db, &.{"16.20"}, &.{"EUW1"});
+    defer full_games.deinit();
+    var full = try fill(gpa, &full_games);
+    defer full.deinit(gpa);
+
+    try testing.expectEqual(3, full.count());
+    try testing.expectEqual(full.count(), map.count());
+    var it = full.iterator();
+    while (it.next()) |e| try testing.expectEqual(e.value_ptr.*, map.get(e.key_ptr.*).?);
     const f = t.frames[minute];
     // Mid: participant 3 (blue) against 8 (red)
     const want: f32 = @floatFromInt(f.get(3, .total_gold) - f.get(8, .total_gold));
-    try testing.expectEqual(want, lanes[@backingInt(Role.middle)]);
+    try testing.expectEqual(want, map.get(stats.matchKey("EUW1_2")).?[@backingInt(Role.middle)]);
 }
 
 test "champion gold shrinks toward zero" {

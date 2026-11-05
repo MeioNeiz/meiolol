@@ -355,7 +355,7 @@ fn laneGoldSection(
     others: []const Predictor,
     w: *std.Io.Writer,
 ) !?GoldResult {
-    var map = try lanegold.load(gpa, db, patches, platforms);
+    var map = try lanegold.load(gpa, io, db, patches, platforms);
     defer map.deinit(gpa);
     var train_gold: usize = 0;
     for (train) |g| train_gold += @intFromBool(map.contains(g.id));
