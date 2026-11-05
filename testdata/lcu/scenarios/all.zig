@@ -5,6 +5,7 @@ pub const champions = @embedFile("champions.json");
 
 pub const list = [_]struct { []const u8, []const u8 }{
     .{ "full-game", @embedFile("full-game.json") },
+    .{ "lost-lead", @embedFile("lost-lead.json") },
     .{ "laner-locked-first", @embedFile("laner-locked-first.json") },
     .{ "trade", @embedFile("trade.json") },
     .{ "dodge", @embedFile("dodge.json") },
