@@ -71,6 +71,9 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
   curve by day vs A1, and lab-frontier.md's pass rule says EUW1 decides (today per
   platform is reported, never deciding). Start: patchdays.zig (platform per game is in
   the pin). Blocked by PT1
+- PT9 A second patch: replay 16.22's days 0-3 as PT3 did 16.21 (A0, A1, A2, C) on a new
+  pin once 16.22 has ~7 days, then its own declared test look. With 16.21's look, two
+  patches decide PT5, not one
 - PT5 Ship: the winning rule on the box (daily update, refit per patch); the daily eval
   (deploy/web-loop.sh, data/eval-history.tsv) scores latest-patch games only
 - PT7 Patches as experiments (Jacob, 4 Nov; Meio M8 in estimates.md): patchnotes.zig's

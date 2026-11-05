@@ -56,8 +56,8 @@ back. Jacob's open decisions: decisions.md "Open decisions".
 6. Accounts and the desktop app (J21; app.md, accounts.md): AC4 sign-in cut-over and
    APP1 real capture (Jacob's; also the app's screenshots for the application and
    /download), then APP4-APP6's left items. Owner W4
-7. The latest patch (J25, J27, J28; patch-transfer.md): the frozen 16.21 test look,
-   then PT4 and PT6 on A2. Blocked on Jacob's go and the gpu-box
+7. The latest patch (J25, J27, J28; patch-transfer.md): the frozen 16.21 test look and
+   16.22's replay (PT9), then PT4 and PT6 on A2. Blocked on Jacob's go and the gpu-box
 8. Comp leans (data-and-model.md): the held-out look, then champion pages and reasons.
    Blocked on the per-seat stats decision and the gpu-box
 9. Build speed (build-speed.md): BS3 waits Jacob. Owner W5

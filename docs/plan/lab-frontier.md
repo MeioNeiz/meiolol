@@ -146,6 +146,18 @@ Done: B1, E1, A1, A2, B4 (Results so far). Left:
 - D1 refit: strength with seat log mastery as a covariate in the model, reported at
   50k points, and the slope's own interval [causal C2, C3]. Rankings that move -> tier
   list and "safe blind" show strength at the user's mastery
+- A1 at today's size: the daily eval has been flat since ~2.4M games (0.6826 at 3.4M),
+  but its test set moves (newest 15%, now across 16.22). Rerun A1 on a new pin with
+  fixed held-out games, v2 and the set net, sizes to 3.5M+. Done when each has its
+  gain per doubling past 1.2M, and whether the net now beats v2
+- A10 Meio's lessons in v2 (estimates.md): (a) champion-role strength shrinks to a line
+  in its log share of the role, not 0 (Meio: off-role picks under 100 games win 34%);
+  (b) champion-role x rank bracket terms, rank at game start, never the stored rank;
+  (c) region terms are PT6's A8; (d) day 0 of a patch is E3/W4 with Meio's M8 exposure.
+  Scored overall and per slice: Iron-Silver, Gold-Emerald, Diamond+, EUW1, patch days
+  0-3, rare champion-roles, plus the pick metric; slices matter more than the overall,
+  since the ceiling (B1) leaves ~0.8 points of accuracy. Done when (a) and (b) each have
+  a paired difference vs v2 per slice
 
 ## Wave 2: the teacher (gpu-box)
 
