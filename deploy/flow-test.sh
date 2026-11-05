@@ -246,5 +246,27 @@ after=$(sed "1,/pushed $(git rev-parse --short "$c7")/d" "$t/q/log")
 on_main "$c9" && [ "$(echo "$after" | grep -c pushed)" = 1 ] \
     && echo "$after" | grep -q "pushed $(git rev-parse --short "$c9")" \
     && ok "fast: queued pushes grouped" || bad "grouping: $(tail -n 3 "$t/q/log")"
+# A failing batch of 8, the 5th bad: halving tries the 8th, 4th, 6th and 5th (4 cis, not
+# 5), pushes the first 4 and leaves out the bad one and those after it
+cat > hooks/pre-push << EOF
+#!/bin/sh
+echo run >> "$t/runs"
+while read -r _ sha _ _; do
+    git show "\$sha:f" | grep -qx bad && exit 1
+done
+exit 0
+EOF
+$p --mode bulk 60 > /dev/null
+batch=()
+for x in b1 b2 b3 b4 bad b6 b7 b8; do
+    batch+=("$(c "$x")")
+    $p "${batch[${#batch[@]} - 1]}" > /dev/null
+done
+$p --flush > "$t/flush2.log" 2>&1
+[ "$(wc -l < "$t/runs" | tr -d ' ')" = 4 ] && on_main "${batch[3]}" && ! on_main "${batch[4]}" \
+    && ok "flush: a failing batch halved" || bad "halving: $(cat "$t/flush2.log")"
+[ "$($p --status | grep -c '(ci failed)')" = 4 ] && grep -q 'first queued commit whose ci fails' "$t/flush2.log" \
+    && ok "flush: the first failing commit named, newer ones left out" \
+    || bad "halving left: $($p --status)"
 [ $fails = 0 ] && echo "all pass"
 exit $fails

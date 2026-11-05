@@ -3,11 +3,11 @@
 # sessions (~/.cache/meiolol-push/mode):
 # - fast: push REV now, grouped with the other queued pushes: the pre-push ci (~2-3 min)
 #   runs once, on the newest queued commit that contains REV, and a push that lands REV
-#   ends the wait. If the group's ci fails, the next newest is tried, down to REV alone,
-#   and the failed commit is left out of later groups
+#   ends the wait. If the group's ci fails, the newest passing one down to REV alone is
+#   found by halving, and the first failing commit is left out of later groups
 # - bulk: REV is queued and this returns at once; the timer (or --flush) pushes every
 #   queued commit together: one ci, one deploy, one live check. A commit whose ci fails is
-#   left out with those after it, and the older ones go
+#   left out with those after it, and the older ones go (found by halving the batch)
 # Only commits a session asked to push go out. Pushes take their own lock and ci's 2 of
 # the 3 build slots (deploy/slots.sh), so builds and tests carry on beside them.
 #   deploy/push.sh [REV]                  push REV (default HEAD), or queue it in bulk mode
@@ -72,21 +72,47 @@ tops() {
     done | sort -rn | cut -d' ' -f2
 }
 
-# Under the lock: push the best candidate containing $1 (any if empty); 0 once one went
-push_best() {
-    local top
-    for top in $(tops "$1"); do
-        [ -z "$1" ] || [ "$top" = "$1" ] || echo "push: grouped: $(short "$1") goes with $(short "$top")"
-        if git push origin "$top:main"; then
-            echo "$(date -u +%FT%TZ) pushed $(short "$top")" >> "$q/log"
-            return 0
-        fi
-        touch "$q/failed/$top"
-        failed_now=1
-        echo "$(date -u +%FT%TZ) ci failed $(short "$top") $(git log -1 --format=%s "$top" | cut -c1-80)" >> "$q/log"
-        echo "push: $(short "$top") refused (its ci failed, or main moved): left out"
-    done
+# One ci: 0 once $1 is on main, else 1 with $1 marked failed
+try_push() {
+    if git push origin "$1:main"; then
+        echo "$(date -u +%FT%TZ) pushed $(short "$1")" >> "$q/log"
+        return 0
+    fi
+    touch "$q/failed/$1"
+    failed_now=1
+    echo "$(date -u +%FT%TZ) ci failed $(short "$1") $(git log -1 --format=%s "$1" | cut -c1-80)" >> "$q/log"
+    echo "push: $(short "$1") refused (its ci failed, or main moved): left out"
     return 1
+}
+
+# Under the lock: push the best candidate containing $1 (any if empty); 0 once one went.
+# When the newest fails and the candidates are one line of history (main is linear),
+# the newest passing one is found by halving: a culprit at the bottom of n costs about
+# log2 n + 1 cis, not n. The first failing one and every newer one are left out
+push_best() {
+    local c=() s i bad good n
+    for s in $(tops "$1"); do c+=("$s"); done
+    n=${#c[@]}
+    [ "$n" -gt 0 ] || return 1
+    [ -z "$1" ] || [ "${c[0]}" = "$1" ] || echo "push: grouped: $(short "$1") goes with $(short "${c[0]}")"
+    try_push "${c[0]}" && return 0
+    for ((i = 1; i < n; i++)); do
+        git merge-base --is-ancestor "${c[i]}" "${c[i - 1]}" 2> /dev/null || break
+    done
+    if [ "$i" -lt "$n" ]; then
+        for s in "${c[@]:1}"; do try_push "$s" && return 0; done
+        return 1
+    fi
+    # c[0] newest, each containing the next: c[bad] fails, c[good] passes (n: none tried)
+    bad=0 good=$n
+    while [ $((good - bad)) -gt 1 ]; do
+        i=$(((bad + good) / 2))
+        if try_push "${c[i]}"; then good=$i; else bad=$i; fi
+    done
+    for ((i = 0; i < bad; i++)); do touch "$q/failed/${c[i]}"; done
+    echo "$(date -u +%FT%TZ) first failing $(short "${c[bad]}"), $bad newer left out" >> "$q/log"
+    echo "push: $(short "${c[bad]}") is the first queued commit whose ci fails; $bad newer left out"
+    [ "$good" -lt "$n" ]
 }
 
 failed_now=0
