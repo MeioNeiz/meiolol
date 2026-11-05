@@ -177,10 +177,10 @@ pub const RuneTree = struct {
         };
     }
 
-    /// `old`'s state on new data (a lock's answer): the page with the same runes, else
-    /// the same two trees, else the first; Every tree; the tapped rune by its tree and id
-    pub fn keep(t: *RuneTree, old: *const RuneTree) void {
-        const o = old.*;
+    /// `o`'s state on new data (a lock's answer): the page with the same runes, else the
+    /// same two trees, else the first; Every tree; the tapped rune by its id (a rune is in
+    /// one tree; a shard's id repeats across rows, so its row stays)
+    pub fn keep(t: *RuneTree, o: *const RuneTree) void {
         t.all = o.all;
         t.page = if (o.chosen()) |c| t.like(c.v) else null;
         t.rune = null;
@@ -190,10 +190,8 @@ pub const RuneTree = struct {
             if (pos.row < t.data.shards.len) t.rune = find(t.data.shards[pos.row..][0..1], r.id, shard_tree, pos.row);
             return;
         }
-        if (pos.tree >= o.data.trees.len) return;
-        const id = o.data.trees[pos.tree].id;
-        for (t.data.trees, 0..) |tr, ti| if (tr.id == id) {
-            t.rune = find(tr.rows, r.id, @intCast(ti), 0);
+        for (t.data.trees, 0..) |tr, ti| if (find(tr.rows, r.id, @intCast(ti), 0)) |x| {
+            t.rune = x;
         };
     }
 

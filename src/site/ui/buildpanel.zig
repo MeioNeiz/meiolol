@@ -401,9 +401,13 @@ pub const BuildPanel = struct {
 
     pub fn fromUrl(p: *BuildPanel, u: Url) void {
         p.runes.lockOn(u.k);
+        p.show(u.slot, u.order);
+    }
+
+    fn show(p: *BuildPanel, open: ?Kind, o: Order) void {
         p.pick();
-        p.open = if (u.slot) |k| (if (p.rows[@backingInt(k)].len > 0 and k != .skill_path) k else null) else null;
-        p.setOrder(u.order);
+        p.open = if (open) |k| (if (p.rows[@backingInt(k)].len > 0 and k != .skill_path) k else null) else null;
+        p.setOrder(o);
     }
 
     /// Option and page taps lock through `s` (null: as before)
@@ -422,15 +426,12 @@ pub const BuildPanel = struct {
     }
 
     /// `old`'s choices on new data (a lock's answer): runes, reach, lead, open cell, order
-    pub fn keep(p: *BuildPanel, old: *const BuildPanel) void {
-        const o = old.*;
+    pub fn keep(p: *BuildPanel, o: *const BuildPanel) void {
         p.reach = if (o.reach <= p.data.reach.len) o.reach else 0;
         p.runes.data = if (p.reach == 0) &p.data.runes else &p.data.reach[p.reach - 1];
         p.runes.keep(&o.runes);
         p.lead = if (o.lead <= p.data.lead.len) o.lead else 0;
-        p.pick();
-        p.open = if (o.open) |k| (if (p.rows[@backingInt(k)].len > 0) k else null) else null;
-        p.setOrder(o.order);
+        p.show(o.open, o.order);
     }
 
     fn framed(p: *const BuildPanel, k: Kind) bool {
