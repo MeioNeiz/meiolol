@@ -21,6 +21,7 @@ docs/plan/vm.md.
   once per ssh command, then plain sudo (sudo -S per call eats the stdin of what it runs)
 - Builds for x86_64_v3 (box.sh's host_target). Lingering, unattended upgrades, UTC,
   journald 1 GB, ufw (everything on tailscale0; ssh from 192.168.18.0/24 for Ethan)
+- apt beyond the image: git (the ci's, deploy/box-ci.sh install)
 - Ethan has admin on C01 and the shares; his VM host and Megatron reboot when they like
 - Network shares, CIFS: Ethan's /mnt/storage (Essex Storage, 192.168.18.12, 14.5 TB
   free) and /mnt/jacob (Megatron, `soft`); ours on Megatron (192.168.18.54, 3.1 TB
@@ -90,6 +91,22 @@ Megatron's pace. Without the cache, measured 26 Oct (Python, O_DIRECT, 2 GB file
   Oracle box trialled mq-deadline: research/questions/box-io-priority.md). Under
   mq-deadline an idle-class read waits up to 10 s behind the crawler's, so nothing
   holding a database write lock runs idle class; those use `ionice -c 2 -n 7`
+
+### Builds on the box
+
+The pre-push ci runs here (deploy/ci-run.sh, remote-build.sh --host box), the Mac's ci
+only when the box can't (exit 75). Everything in ~/meiolol-ci on / (not ~/ml: Megatron):
+tools (zig, node 24, shellcheck 0.11 as the Mac's; `deploy/box-ci.sh install`), repo.git
+(with meiolol-wasm-sizes, synced both ways each run), the one fixed tree, cache, global
+(zig's), jobs/ID. deploy/box-ci-job.sh runs each build:
+- One at a time (flock, 15 min wait, then 75), in a user scope: CPUQuota=1000%,
+  MemoryMax=12G, MemoryHigh=10G, nice 10, `-j10`. No io shield: the user cgroup has no io
+  controller (cpu, memory, pids delegated) and ionice is moot under `none`
+- Disk: tools 0.65 GB, tree ~0.4, cache emptied whole past 5 GB, so up to ~6.5 GB of /'s
+  ~9.5 free; a run refused (75) under 3 GB free on /
+- Cost to production per run in ~/meiolol-ci/runs.tsv: `deploy/box-ci.sh runs` (CPU,
+  throttling, memory peak, crawler and web pressure before and during, site round
+  overlap), `report` (crawler matches/min, slot %, commit time before and during), `disk`
 - crawl.args: `--proxy 127.0.0.1:8092 --timelines 50 --timelines-priority 100
   --timeline-min-s 900 --raw-timeline-days 3650
   --raw-match-days 0 --raw-valve-free-gb 10 --keep-days 0 --ladder-per-hour 500
