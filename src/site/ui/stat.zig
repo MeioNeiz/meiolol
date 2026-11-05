@@ -55,7 +55,6 @@ const W = struct {
     pub const rate_ends = phrase.Phrase("{lo:dec}-{hi:rate}");
     pub const rate_ends_whole = phrase.Phrase("{lo:int}-{hi:pct}");
     pub const ends = phrase.Phrase("{lo:points} to {hi:points}");
-    pub const of_games = phrase.Phrase("{n:count} games");
     pub const ends_games = phrase.Phrase("{e:text}, {n:count} games");
 };
 
@@ -85,15 +84,15 @@ pub fn count(h: *H, n: u32) N {
     return h.span(.{ .class = "g" }, .{phrase.num(h, .kilo, n)});
 }
 
-/// A figure's hover: its range's ends and its games, either alone; null with neither
-pub fn tip(h: *H, k: Kind, v: f64, half: ?f64, games: ?u32) ?[]const u8 {
-    return withGames(h, if (half) |r| ends(h, k, v, r) else null, games);
+/// A figure's hover: its range's ends, with its games when known; null with no range
+fn tip(h: *H, k: Kind, v: f64, half: ?f64, games: ?u32) ?[]const u8 {
+    const r = half orelse return null;
+    return if (games) |n| endsGames(h, k, v, r, n).s else ends(h, k, v, r).s;
 }
 
-/// "50.2-52.6%, 33,108 games"
-pub fn withGames(h: *H, e: ?tree.Text, games: ?u32) ?[]const u8 {
-    const n = games orelse return if (e) |x| x.s else null;
-    return if (e) |x| W.ends_games.with(h, .{ .e = x.s, .n = n }).s else W.of_games.with(h, .{ .n = n }).s;
+/// A strip value's hover: "50.2-52.6%, 33,108 games"
+pub fn endsGames(h: *H, k: Kind, v: f64, half: f64, games: u32) tree.Text {
+    return W.ends_games.with(h, .{ .e = ends(h, k, v, half).s, .n = games });
 }
 
 /// A range's ends, for its hover: "50.2-52.6%", whole once it is ±10 or wider; a change

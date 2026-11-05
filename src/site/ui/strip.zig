@@ -24,10 +24,11 @@ pub const Item = struct {
     ctx: ?tree.Text = null,
     /// A rate's 80% half-width (fmt.range): past fmt.wide_range the value fades
     range: ?f64 = null,
-    /// The value's range as its ends (stat.ends), on hover
+    /// The value's hover: its range's ends (stat.ends), with its games (stat.endsGames)
     ends: ?tree.Text = null,
-    /// Games behind the value: faint after it (stat.count), the full count on hover
-    games: ?u32 = null,
+    /// Games behind the value, faint after it: phrase.num .kilo. Made by the caller, so
+    /// families without counts don't carry the code
+    games: ?tree.Text = null,
     /// The value's colour; null is plain ink
     step: ?fmt.Step = null,
     /// The figure the page answers with (one per strip)
@@ -51,7 +52,12 @@ pub fn view(h: *H, items: []const Item) N {
         const lab = h.span(.{ .class = "lab" }, .{ if (tip) |*t| t else null, if (tip == null) it.label else null });
         const style = if (it.step) |s| h.vars(.{ .c = s }) else null;
         const wide = if (it.range) |r| fmt.wide(r) else false;
-        const ends = stat.withGames(h, it.ends, it.games);
+        const ends: ?[]const u8 = if (it.ends) |e| e.s else null;
+        // Count and context share one element shape (class of one letter): one tree
+        // builder in every family, which matters to ui-games at its budget
+        const games = if (it.games) |t| h.small(.{ .class = "g" }, .{t}) else null;
+        const ctx = if (it.ctx) |c| h.small(.{ .class = "c" }, .{c}) else null;
+        const kids = .{ it.value, games, ctx };
         const val = if (it.on) |on| h.button(.{
             .class = "val",
             .type = "button",
@@ -61,15 +67,7 @@ pub fn view(h: *H, items: []const Item) N {
             .title = ends,
             .aria_label = W.cell.with(h, .{ .l = it.label.s, .v = it.value.s }),
             .on_click = on,
-        }, .{
-            it.value,
-            if (it.games) |n| stat.count(h, n) else null,
-            if (it.ctx) |c| h.small(.{}, .{c}) else null,
-        }) else h.span(.{ .class = "val", .style = style, .data_wide = wide, .title = ends }, .{
-            it.value,
-            if (it.games) |n| stat.count(h, n) else null,
-            if (it.ctx) |c| h.small(.{}, .{c}) else null,
-        });
+        }, kids) else h.span(.{ .class = "val", .style = style, .data_wide = wide, .title = ends }, kids);
         const cls = if (it.answer) "answer" else null;
         l.add(if (it.href) |href|
             h.a(.{ .key = i, .class = cls, .href = href }, .{ lab, val })
@@ -87,9 +85,9 @@ pub const css =
     \\  .c-strip .val { font-size: var(--fs-l); font-weight: var(--w-b); line-height: 1.25;
     \\    font-variant-numeric: tabular-nums; color: var(--c, var(--text)); white-space: nowrap; }
     \\  .c-strip .val > small { font-size: var(--fs-s); font-weight: var(--w-r); color: var(--faint); }
-    \\  .c-strip .val > small::before { content: " "; }
-    \\  .c-strip .val > .g { margin-left: 6px; font-size: var(--fs-s); font-weight: var(--w-r); color: var(--faint); }
-    \\  .c-strip .val > .g + small { display: block; line-height: 1.2; }
+    \\  .c-strip .val > .c::before { content: " "; }
+    \\  .c-strip .val > .g { margin-left: 6px; }
+    \\  .c-strip .val > .g + .c { display: block; line-height: 1.2; }
     \\  .c-strip .val[data-wide] { opacity: 0.55; }
     \\  .c-strip > .answer .val { font-size: var(--fs-xl); }
     \\  .c-strip > a:hover { text-decoration: none; }
@@ -104,7 +102,7 @@ pub const css =
     \\  .c-strip > [data-press]:has(> [aria-pressed="true"]) { background: var(--sel-bg); box-shadow: inset 0 0 0 1px var(--sel-line); }
     \\  @container (max-width: 440px) {
     \\    .c-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
-    \\    .c-strip .val > small { display: block; line-height: 1.2; }
+    \\    .c-strip .val > .c { display: block; line-height: 1.2; }
     \\    .c-strip > [data-press] { margin: 0; }
     \\    .c-strip:has(> [data-press]) > :not([data-press]) { padding: 4px var(--sp-2); }
     \\  }
@@ -120,8 +118,8 @@ pub fn gallery(g: *Gallery) void {
             .label = plain("Win rate"),
             .value = plain("51.2%"),
             .range = 0.6,
-            .ends = plain("50.6-51.8%"),
-            .games = 44935,
+            .ends = plain("50.6-51.8%, 44,935 games"),
+            .games = plain("45k"),
             .ctx = plain("4th of 53"),
             .step = .of(1.2, agg),
             .answer = true,
@@ -132,7 +130,7 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Games"), .value = plain("44,935") },
     }));
     g.add("six, one links", view(h, &.{
-        .{ .label = plain("Won"), .value = plain("49.3%"), .range = fmt.range(64, 32), .ends = plain("41.4-57.2%"), .games = 64, .ctx = plain("44th of 59"), .step = .of(-0.7, agg), .answer = true },
+        .{ .label = plain("Won"), .value = plain("49.3%"), .range = fmt.range(64, 32), .ends = plain("41.4-57.2%, 64 games"), .games = plain("64"), .ctx = plain("44th of 59"), .step = .of(-0.7, agg), .answer = true },
         .{ .label = plain("Pick"), .value = plain("7.7%") },
         .{ .label = plain("Ban"), .value = plain("16.5%") },
         .{ .label = plain("Games"), .value = plain("31,257") },

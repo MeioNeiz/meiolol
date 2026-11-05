@@ -1043,7 +1043,7 @@ pub const Top = struct {
         const won = rate(.{ .games = x.games, .wins = x.wins });
         var items: [2]strip.Item = undefined;
         var n: usize = 0;
-        items[n] = .{ .label = W.won, .value = phrase.num(h, .rate, won), .range = fmt.range(x.games, x.wins), .ends = stat.ends(h, .rate, won, fmt.range(x.games, x.wins)), .games = x.games, .step = .of(won - 50, fmt.win_cuts), .answer = true };
+        items[n] = .{ .label = W.won, .value = phrase.num(h, .rate, won), .range = fmt.range(x.games, x.wins), .ends = stat.endsGames(h, .rate, won, fmt.range(x.games, x.wins), x.games), .games = phrase.num(h, .kilo, x.games), .step = .of(won - 50, fmt.win_cuts), .answer = true };
         n += 1;
         // The two count different tables (lock rows, views): never past all of them
         if (all) |y| if (y.games > 0) {
@@ -1062,8 +1062,8 @@ pub const Top = struct {
             .label = W.won,
             .value = phrase.num(h, .rate, won),
             .range = fmt.range(rl.games, rl.wins),
-            .ends = stat.ends(h, .rate, won, fmt.range(rl.games, rl.wins)),
-            .games = rl.games,
+            .ends = stat.endsGames(h, .rate, won, fmt.range(rl.games, rl.wins), rl.games),
+            .games = phrase.num(h, .kilo, rl.games),
             .ctx = if (rl.rank > 0) W.rank.with(h, .{ .n = rl.rank, .th = ordinal(rl.rank), .of = rl.of, .r = rl.role.label().s }) else null,
             .step = .of(won - 50, fmt.win_cuts),
             .answer = true,

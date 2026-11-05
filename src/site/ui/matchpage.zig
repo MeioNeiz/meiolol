@@ -188,7 +188,7 @@ pub const Head = struct {
         const won = rate(d.games, d.wins);
         var items: [4]strip.Item = undefined;
         var n: usize = 0;
-        items[n] = .{ .label = W.wins.with(h, .{ .c = d.x.name }), .value = phrase.num(h, .rate, won), .range = fmt.range(d.games, d.wins), .ends = stat.ends(h, .rate, won, fmt.range(d.games, d.wins)), .games = d.games, .step = .of(won - 50, fmt.win_cuts), .answer = true };
+        items[n] = .{ .label = W.wins.with(h, .{ .c = d.x.name }), .value = phrase.num(h, .rate, won), .range = fmt.range(d.games, d.wins), .ends = stat.endsGames(h, .rate, won, fmt.range(d.games, d.wins), d.games), .games = phrase.num(h, .kilo, d.games), .step = .of(won - 50, fmt.win_cuts), .answer = true };
         n += 1;
         items[n] = .{
             .label = W.usual,
