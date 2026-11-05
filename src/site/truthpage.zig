@@ -647,10 +647,14 @@ fn patchOf(s: []const u8) ?[2]u32 {
 
 /// The page's HTML, in the site shell with its CSS inline
 pub fn page(a: Allocator, tsv: ?[]const u8) ![]const u8 {
-    const s = if (tsv) |t| parse(t) else null;
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
-    const body = if (s) |x| try section(a, &x) else "No truth test yet: the box writes it once a day for the newest patch.";
+    const body = if (tsv == null)
+        "No truth test yet: the box writes it once a day for the newest patch."
+    else if (parse(tsv.?)) |x|
+        try section(a, &x)
+    else
+        "The truth test on file is in an old format, without columns this page reads: the box rewrites it at its next daily run.";
     const p: ui.textpage.TextPage = .{
         .title = "Truth test",
         .lead = "How well each mode predicts the next week's games on the newest patch, scored daily.",
@@ -771,4 +775,14 @@ test "a TSV without the newer columns: none; the newest patch's file" {
     const dir = try std.fs.path.join(a, &.{ ".zig-cache", "tmp", &tmp.sub_path });
     try std.testing.expectEqualStrings("21", (try newest(a, io, dir)).?);
     try std.testing.expectEqual(null, try newest(a, io, try std.fs.path.join(a, &.{ dir, "none" })));
+}
+
+test "an old-format TSV says so, no TSV says none yet" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const old = try page(a, "patch\tt0_ms\tregion\tkind\tbracket\tday\ttarget\n");
+    try std.testing.expect(std.mem.find(u8, old, "old format") != null);
+    try std.testing.expect(std.mem.find(u8, old, "No truth test yet") == null);
+    try std.testing.expect(std.mem.find(u8, try page(a, null), "No truth test yet") != null);
 }
