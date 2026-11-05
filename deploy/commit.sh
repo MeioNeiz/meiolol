@@ -8,6 +8,8 @@
 # never needs a hand step; skip with SITE_HASHES=0. That file goes in through a commit
 # index of its own, never the working tree's copy, which another session's site-hashes
 # run for its uncommitted work may have rewritten (bcf6dc3 carried such hashes).
+# One touching src/site/ui gets the components register and uilint's debt file
+# regenerated in the same tree and committed with it, the same way.
 # The subject (first -m) is one short line; detail goes in a second -m, the body: every
 # session's opening context and `git log --oneline` carry subjects. Doc pages in PATHS
 # must not get worse than at HEAD (over budget and growing, or new dated-story lines):
@@ -58,6 +60,7 @@ hashes=src/testdata/site-files.txt
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 made=""
+gens=()
 if [ "${SITE_HASHES:-1}" != 0 ] \
     && git ls-files --cached --others --exclude-standard -- "$@" \
         | grep -vxF "$hashes" | grep -qE '^(src/|build\.zig)'; then
@@ -65,10 +68,15 @@ if [ "${SITE_HASHES:-1}" != 0 ] \
     for p in "$@"; do
         [ "$p" = "$hashes" ] || sources+=("$p")
     done
+    gen_out=""
+    if printf '%s\n' "${sources[@]}" | grep -q '^src/site/ui'; then
+        gen_out="$tmp/gen"
+        mkdir -p "$gen_out"
+    fi
     # Another session's commit landing during the ~15 s run changes the base: redo
     for _ in 1 2 3; do
         head=$(git rev-parse HEAD)
-        SITE_HASHES_OUT="$tmp/site-files.txt" deploy/site-hashes.sh "${sources[@]}" || {
+        SITE_HASHES_OUT="$tmp/site-files.txt" GEN_OUT="$gen_out" deploy/site-hashes.sh "${sources[@]}" || {
             [ ${#new[@]} -eq 0 ] || git reset -q -- "${new[@]}"
             echo "site-hashes failed; fix it, or SITE_HASHES=0 to commit anyway" >&2
             exit 1
@@ -76,8 +84,13 @@ if [ "${SITE_HASHES:-1}" != 0 ] \
         [ "$(git rev-parse HEAD)" = "$head" ] && break
     done
     git show "HEAD:$hashes" | cmp -s - "$tmp/site-files.txt" || made="$tmp/site-files.txt"
+    if [ -n "$gen_out" ]; then
+        for g in docs/plan/ui/components.md src/site/ui/uilint-debt.txt; do
+            git show "HEAD:$g" 2> /dev/null | cmp -s - "$gen_out/${g##*/}" || gens+=("$g")
+        done
+    fi
 fi
-if [ -z "$made" ]; then
+if [ -z "$made" ] && [ ${#gens[@]} -eq 0 ]; then
     if ! git commit ${opts[@]+"${opts[@]}"} -- "$@"; then
         [ ${#new[@]} -eq 0 ] || git reset -q -- "${new[@]}"
         exit 1
@@ -86,12 +99,19 @@ if [ -z "$made" ]; then
 fi
 clean=0
 git diff --quiet HEAD -- "$hashes" && clean=1
+clean_gens=()
+for g in ${gens[@]+"${gens[@]}"}; do
+    git diff --quiet HEAD -- "$g" && clean_gens+=("$g")
+done
 # HEAD, PATHS as in the working tree, and the made hashes. git commit's own ref update
 # fails if HEAD moves meanwhile, and the hooks read this index (":path")
 export GIT_INDEX_FILE="$tmp/index"
 git read-tree HEAD
 git add -A -- "${sources[@]}"
-git update-index --add --cacheinfo "100644,$(git hash-object -w "$made"),$hashes"
+[ -z "$made" ] || git update-index --add --cacheinfo "100644,$(git hash-object -w "$made"),$hashes"
+for g in ${gens[@]+"${gens[@]}"}; do
+    git update-index --add --cacheinfo "100644,$(git hash-object -w "$gen_out/${g##*/}"),$g"
+done
 if ! git commit ${opts[@]+"${opts[@]}"}; then
     unset GIT_INDEX_FILE
     [ ${#new[@]} -eq 0 ] || git reset -q -- "${new[@]}"
@@ -100,5 +120,8 @@ fi
 unset GIT_INDEX_FILE
 # The shared index follows the new HEAD for these paths. The working tree's
 # site-files.txt follows too if it was clean, else keeps what another session wrote
-git reset -q -- "${sources[@]}" "$hashes"
-[ "$clean" = 0 ] || cp "$made" "$hashes"
+git reset -q -- "${sources[@]}" "$hashes" ${gens[@]+"${gens[@]}"}
+[ "$clean" = 0 ] || [ -z "$made" ] || cp "$made" "$hashes"
+for g in ${clean_gens[@]+"${clean_gens[@]}"}; do
+    cp "$gen_out/${g##*/}" "$g"
+done
