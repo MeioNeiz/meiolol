@@ -761,7 +761,7 @@ test "fixture games to stats, curves and the website" {
         t.root = state.view(&h);
         var w: std.Io.Writer.Allocating = .init(arena);
         try site.ui.html.write(&t, t.root, &w.writer);
-        try testing.expect(std.mem.find(u8, w.written(), " · Emerald+") != null);
+        try testing.expect(std.mem.find(u8, w.written(), "Emerald+ · ") != null);
         // Under the Games floor here, so off the table, but its link carries the rank
         const line = for (state.lines[1]) |*l| {
             if (std.mem.find(u8, l.href, "/champions/darius/") != null) break l;
