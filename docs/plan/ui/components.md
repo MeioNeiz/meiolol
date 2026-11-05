@@ -153,7 +153,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - StepTimeline: one deploy (a push to main) as a folding row
 - Meionotes: meionotes: Jacob's notes on the live site, an island ui-meionotes.wasm...
 - MeionotesList: /admin/meionotes, every note on the site grouped by page or by...
-- Pv: the private numbers on public champion and matchup pages (app.md "Private...
+- Pv: Meio's preview on public champion pages, for tester and admin logins only...
 - AdminPage: /admin/ (private) as one island
 - AdminCharts: the admin page's chart tabs, Crawler, Riot API, Storage and Ingest, an...
 - AdminTraffic: the admin page's Traffic tab, an island of its own below AdminCharts...
@@ -273,7 +273,7 @@ to open, is a Toggletip. The native title and attr(data-tip) are uilint debt tha
 here
 States: closed: hover, focus or tap; open, above; open, end; open, below; hover, then
 Escape: shut until the pointer leaves; open, wraps
-Used by: champpage
+Used by: pv, champpage
 
 ### StatCell
 `stat.zig` `.c-stat` site
@@ -309,7 +309,7 @@ column: the colour mixes, no steps; the same colour however sure: 53.0, 52.6, 50
 20,000, 54.0 of 400, 54.2 of 120, 65 of 40 (faded); delta: +2.6, −1.4, +0.3; +4.8 with a
 wide range, faded
 Used by: stat, strip, matchbrief, draftboard, champselect, loadscreen, buildpanel,
-lockbar, candlist, matchgrid, champpage, matchpage
+lockbar, candlist, matchgrid, pv, champpage, matchpage
 
 ### Delta
 `delta.zig` `.c-delta` `.c-dbar` site
@@ -451,7 +451,7 @@ Used by: champ, sitesearch, rolepicker, champsearch, champlist, draftboard, cham
 teamrows, apphome, loadscreen, practice, picks, versus, gamehead, gamerow, scoreboard,
 candlist, champrolepicker, poolslots, matchgrid, finder, ranking, learnpage, dailypage,
 dailyseat, dailydays, patchpage, poolpage, poolgrid, profilesum, yourpage, yourviews,
-yourtime, yourfriends, squad, today, homepage, testerpage, testercand, pv, champpage,
+yourtime, yourfriends, squad, today, homepage, testerpage, testercand, champpage,
 matchpage, tiers
 
 ### ChampIcon
@@ -1617,15 +1617,15 @@ asked; delete refused; none, failed
 
 ### Pv
 `pv.zig` `.c-pv`
-Pv: the private numbers on public champion and matchup pages (app.md "Private site"), the
-shipped draft model's win chances, which the public pages never show (production-key.md
-"Product rules"). ui-pv.wasm draws it for tester and admin logins (view_private) only,
-from ui.pvdata files under /private/: one row of figures under the head, the model's
-chance beside the games' win rate the head shows, then the matchup brief's champion; on a
-matchup page, the pair
-States: Meio under an opponent lock: the stack, then each choice with it; Meio at Master+:
-raw only; champion page, with the brief's opponent; champion page, no brief, no head rate;
-matchup page
+Pv: Meio's preview on public champion pages, for tester and admin logins only (app.md
+"Private site"): Meio's estimate for the newest patch under the page's locks, before it
+becomes the third period option (estimates.md E0) and the public pages show it. ui-pv.wasm
+draws it under the head from ui.pvdata.Meio, one file per period. One figure: Meio's
+number, its count as the games its range is worth (an estimate, not games played), then a
+scale with Meio's 80% band and dot beside the two raw windows' ticks, which say their
+names on hover only
+States: below both raw windows (Ornn top, 149); under a lock, wide band, near 50; the
+patch file not in yet; Master+: raw only, reason on hover
 
 ### AdminPage
 `adminpage.zig` `.c-admin`

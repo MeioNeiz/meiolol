@@ -3,8 +3,9 @@
 //! on public pages for browsers that opened /admin or /private; admin.zig writes them
 const ui = @import("ui");
 
-/// After the page's inline CSS: the badge again (same rules, same layer) and the box's
-pub const css = ui.css.join(.{ ui.badge, ui.pv });
+/// After the page's inline CSS: the badge, tip and rate again (same rules, same layer) and the
+/// box's
+pub const css = ui.css.join(.{ ui.badge, ui.tip, ui.rate, ui.pv });
 
 pub const files = [_]struct { []const u8, []const u8 }{
     .{ "pv.css", css },

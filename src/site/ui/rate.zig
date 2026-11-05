@@ -55,6 +55,9 @@ pub const Look = struct {
     /// whose rate, where the place doesn't say: "Ornn wins"; empty where a label or column
     /// head says it (StatStrip, BuildPanel)
     said: []const u8 = "win rate",
+    /// An estimate's games are the games its range is worth, not games played: hover and
+    /// screen readers say "worth N games"
+    worth: bool = false,
 };
 
 const W = struct {
@@ -65,6 +68,8 @@ const W = struct {
     pub const delta_ends = phrase.Phrase("{lo:points} to {hi:points}");
     pub const said = phrase.Phrase("{w:text} {v:text}");
     pub const said_games = phrase.Phrase("{w:text} {v:text}, {n:count} games");
+    pub const ends_worth = phrase.Phrase("{e:text}, worth {n:count} games");
+    pub const said_worth = phrase.Phrase("{w:text} {v:text}, worth {n:count} games");
 };
 
 /// <span class="c-rate" style="--c:…" title="50.6-51.8%, 44,935 games">
@@ -74,11 +79,16 @@ pub fn view(h: *H, r: Rate, look: Look) N {
     if ((r.games orelse 1) == 0) return h.span(.{ .class = "c-rate", .data_state = "missing" }, .{W.missing});
     const v = figure(h, r, look.unit);
     const sv = if (look.unit) v else figure(h, r, true);
-    return cell(h, if (r.games == null) null else r.pct - r.ref, r.half, tip(h, r), .{
+    return cell(h, if (r.games == null) null else r.pct - r.ref, r.half, tip(h, r, look.worth), .{
         h.span(.{ .class = "v", .aria_hidden = true }, .{v}),
         if (!look.count) null else if (r.games) |n| h.span(.{ .class = "g", .aria_hidden = true }, .{phrase.num(h, .kilo, n)}) else null,
-        h.span(.{ .class = "sr" }, .{if (r.games != null and look.count) W.said_games.with(h, .{ .w = look.said, .v = sv.s, .n = r.games.? }) else W.said.with(h, .{ .w = look.said, .v = sv.s })}),
+        h.span(.{ .class = "sr" }, .{if (r.games != null and look.count) said(h, look, sv, r.games.?) else W.said.with(h, .{ .w = look.said, .v = sv.s })}),
     });
+}
+
+fn said(h: *H, look: Look, v: tree.Text, n: u32) tree.Text {
+    const args = .{ .w = look.said, .v = v.s, .n = n };
+    return if (look.worth) W.said_worth.with(h, args) else W.said_games.with(h, args);
 }
 
 /// "+2.6": a difference of rates (vs usual, won − own), on the rates' colour and fade;
@@ -114,10 +124,11 @@ fn figure(h: *H, r: Rate, unit: bool) tree.Text {
     return if (unit) phrase.num(h, .rate, pct) else phrase.num(h, .dec, pct);
 }
 
-fn tip(h: *H, r: Rate) ?[]const u8 {
+fn tip(h: *H, r: Rate, worth: bool) ?[]const u8 {
     const x = r.half orelse return null;
     const e = ends(h, r.pct, x);
-    return if (r.games) |n| W.ends_games.with(h, .{ .e = e.s, .n = n }).s else e.s;
+    const n = r.games orelse return e.s;
+    return if (worth) W.ends_worth.with(h, .{ .e = e.s, .n = n }).s else W.ends_games.with(h, .{ .e = e.s, .n = n }).s;
 }
 
 /// A rate's range as its ends, for a hover: "50.2-52.6%", whole once it is ±10 or wider

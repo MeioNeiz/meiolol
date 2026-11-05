@@ -1,16 +1,17 @@
-//! Pv: the private numbers on public champion and matchup pages (app.md "Private site"),
-//! the shipped draft model's win chances, which the public pages never show
-//! (production-key.md "Product rules"). ui-pv.wasm draws it for tester and admin logins
-//! (view_private) only, from
-//! ui.pvdata files under /private/: one row of figures under the head, the model's
-//! chance beside the games' win rate the head shows, then the matchup brief's champion; on
-//! a matchup page, the pair
+//! Pv: Meio's preview on public champion pages, for tester and admin logins only (app.md
+//! "Private site"): Meio's estimate for the newest patch under the page's locks, before
+//! it becomes the third period option (estimates.md E0) and the public pages show it.
+//! ui-pv.wasm draws it under the head from ui.pvdata.Meio, one file per period. One
+//! figure: Meio's number, its count as the games its range is worth (an estimate, not
+//! games played), then a scale with Meio's 80% band and dot beside the two raw windows'
+//! ticks, which say their names on hover only
 const std = @import("std");
 const tree = @import("tree.zig");
 const badge = @import("badge.zig");
+const tip = @import("tip.zig");
 const phrase = @import("phrase.zig");
+const rate = @import("rate.zig");
 const pd = @import("pvdata.zig");
-const Role = @import("role.zig").Role;
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
@@ -22,269 +23,167 @@ pub const scope = .{".c-pv"};
 pub const sel = ".c-pv";
 
 const W = struct {
-    pub const tag = plain("Private");
-    pub const about = plain("Private, for admin logins only: the shipped draft model's estimate (every region and patch, refitted daily) of the team's win chance, every other pick its role's average, beside the games' win rate for the filters shown. The public site never shows it.");
-    pub const model = plain("Model");
-    pub const games = plain("Games");
-    pub const alone = plain("Alone");
-    pub const range = Phrase("{lo:dec}-{hi:dec}");
-    pub const with = Phrase("With {c:text}");
-    pub const against = Phrase("Vs {c:text}");
-    pub const together = Phrase("{n:count} together");
-    pub const pair = Phrase("{a:text} vs {b:text}");
-    pub const each = Phrase("{a:text} {pa:rate}");
-    pub const each_b = Phrase(" · {b:text} {pb:rate}");
-};
-
-/// Meio under the champion page's locks (pd.Meio)
-const M = struct {
-    pub const tag = plain("Meio");
-    pub const about = plain("Private: Meio's estimate for the newest patch in this region (Platinum+ and Emerald+ pool Gold and up, Diamond+ the top bracket) under the locks, and for each choice beside them, with its 80% range and its own games there. Games: the page's games under the locks.");
-    pub const est = Phrase("{lo:dec}-{hi:dec} · {n:count} own");
-    pub const raw = Phrase("{p:rate} of {n:count}");
-    pub const gold = Phrase("{g:signed} gold at 14");
-    pub const games = plain("Games");
-    pub const keystone = plain("Keystone");
-    pub const item = plain("Item, any slot");
-    pub const opponent = plain("Lane opponent");
+    pub const tag = plain("Meio preview");
+    pub const about = plain("Our estimate for the newest patch, beside the raw 30 days and patch rates. Admins only until it beats both");
+    pub const said = plain("Meio");
+    pub const days = Phrase("30 days {p:rate}, {n:count} games");
+    pub const patch = Phrase("Newest patch {p:rate}, {n:count} games");
     pub const no_model = plain("No Meio model loaded");
-    pub const master = plain("Master+: raw only, Meio's top bracket is wider");
+    pub const master = plain("Master+: Meio's top bracket is wider, raw only");
     pub const kind = plain("A lock Meio doesn't model: raw only");
     pub const deep = plain("More than two locks: Meio stops at two");
-    pub const any_slot = plain("The item lock counts as built in any slot");
 };
 
-pub const Line = union(enum) {
-    alone: struct { role: Role, win: [3]f32 },
-    pair: struct { ally: bool, name: []const u8, role: Role, p: f32, games: u32, alone: f32 },
-    matchup: struct { a: []const u8, b: []const u8, role: Role, p: f32, a_alone: f32, b_alone: ?f32 },
-};
+/// A raw window's games and wins under the locks
+pub const Raw = struct { games: u32, wins: u32 };
 
-/// The matchup brief's champion: its name, and its role and side from "Top opponent" or
-/// "Mid ally"
-pub const Brief = struct { name: []const u8, role: Role, ally: bool };
+/// What the figure draws: Meio's number (null with `gap`'s reason) and the raw windows,
+/// each null until its file is in or with no games
+pub const Preview = struct {
+    est: ?pd.Est,
+    gap: pd.Gap = .none,
+    days: ?Raw = null,
+    patch: ?Raw = null,
 
-pub fn brief(champ: []const u8, rel: []const u8) ?Brief {
-    var it = std.mem.tokenizeScalar(u8, rel, ' ');
-    const word = it.next() orelse return null;
-    const side = it.next() orelse return null;
-    const r = for (Role.all) |r| {
-        if (std.mem.eql(u8, r.label().s, word)) break r;
-    } else return null;
-    const ally = if (std.mem.startsWith(u8, side, "ally")) true else if (std.mem.startsWith(u8, side, "opponent")) false else return null;
-    if (champ.len == 0) return null;
-    return .{ .name = champ, .role = r, .ally = ally };
-}
-
-/// A champion page's lines: the role's own, then the brief's champion beside it
-pub fn champion(s: *const pd.Slice, r: Role, b: ?Brief, out: *[2]Line) []const Line {
-    const l = s.line(r) orelse return out[0..0];
-    out[0] = .{ .alone = .{ .role = r, .win = l.win } };
-    const x = b orelse return out[0..1];
-    const id = s.idOf(x.name) orelse return out[0..1];
-    const p = pd.find(if (x.ally) l.with else l.vs, x.role, id) orelse return out[0..1];
-    out[1] = .{ .pair = .{ .ally = x.ally, .name = x.name, .role = x.role, .p = p.p, .games = p.games, .alone = l.win[0] } };
-    return out[0..2];
-}
-
-/// A matchup page's line: `a` against `vs` in `r`, `b` its slice when it came
-pub fn matchup(a: *const pd.Slice, b: ?*const pd.Slice, r: Role, vs: u32) ?Line {
-    const l = a.line(r) orelse return null;
-    const p = pd.find(l.vs, r, vs) orelse return null;
-    const b_name = a.nameOf(vs) orelse return null;
-    const b_alone = if (b) |s| if (s.line(r)) |x| x.win[0] else null else null;
-    return .{ .matchup = .{ .a = a.name, .b = b_name, .role = r, .p = p.p, .a_alone = l.win[0], .b_alone = b_alone } };
-}
-
-fn rate(p: f32) f32 {
-    return 100 * p;
-}
-
-/// `games`: the head's win rate as it shows it ("46.2%"), when the page has one
-pub fn view(h: *H, lines: []const Line, games: ?[]const u8) N {
-    var l = h.list();
-    l.add(h.span(.{ .class = "tag", .title = W.about }, .{badge.view(h, .accent, .{W.tag})}));
-    for (lines) |x| switch (x) {
-        .alone => |v| {
-            l.add(cell(h, W.model, phrase.num(h, .rate, rate(v.win[0])), W.range.with(h, .{ .lo = rate(v.win[1]), .hi = rate(v.win[2]) })));
-            if (games) |g| l.add(cell(h, W.games, phrase.num(h, .text, g), null));
-        },
-        .pair => |v| l.add(cell(
-            h,
-            if (v.ally) W.with.with(h, .{ .c = v.name }) else W.against.with(h, .{ .c = v.name }),
-            phrase.num(h, .rate, rate(v.p)),
-            W.together.with(h, .{ .n = v.games }),
-        )),
-        .matchup => |v| {
-            l.add(cell(h, W.model, phrase.num(h, .rate, rate(v.p)), W.pair.with(h, .{ .a = v.a, .b = v.b })));
-            if (games) |g| l.add(cell(h, W.games, phrase.num(h, .text, g), null));
-            l.add(h.span(.{ .class = "f" }, .{
-                h.span(.{ .class = "l" }, .{W.alone}),
-                h.small(.{}, .{
-                    W.each.with(h, .{ .a = v.a, .pa = rate(v.a_alone) }),
-                    if (v.b_alone) |pb| W.each_b.with(h, .{ .b = v.b, .pb = rate(pb) }) else null,
-                }),
-            }));
-        },
-    };
-    return h.div(.{ .class = "c-pv" }, .{l.done()});
-}
-
-/// Meio's box under the locks: the stack's line, then a table per choice list
-pub fn meio(h: *H, d: *const pd.Meio) N {
-    var top = h.list();
-    top.add(h.span(.{ .class = "tag", .title = M.about }, .{badge.view(h, .accent, .{M.tag})}));
-    if (d.stack) |e| top.add(cell(h, M.tag, phrase.num(h, .rate, rate(e.p)), estNote(h, e)));
-    top.add(cell(h, M.games, if (d.games > 0) M.raw.with(h, .{ .p = rate(winRate(d.games, d.wins)), .n = d.games }) else phrase.num(h, .count, @as(u32, 0)), null));
-    if (d.gold) |g| top.add(cell(h, M.tag, M.gold.with(h, .{ .g = @as(i32, @intFromFloat(@round(g.p))) }), null));
-    const gap: ?tree.Text = switch (d.gap) {
-        .none => null,
-        .no_model => M.no_model,
-        .master => M.master,
-        .kind => M.kind,
-        .deep => M.deep,
-    };
-    if (gap) |g| top.add(h.small(.{}, .{g}));
-    if (d.any_slot) top.add(h.small(.{}, .{M.any_slot}));
-    var lists = h.list();
-    for ([_]tree.Text{ M.keystone, M.item, M.opponent }, [_][]const pd.Choice{ d.keystones, d.items, d.opponents }) |title, list| {
-        if (list.len == 0) continue;
-        var rows = h.list();
-        for (list) |c| rows.add(h.tr(.{}, .{
-            h.td(.{}, .{h.text(c.name)}),
-            h.td(.{ .class = if (thin(c.games, c.wins)) "n thin" else "n" }, .{if (c.games > 0) M.raw.with(h, .{ .p = rate(winRate(c.games, c.wins)), .n = c.games }) else null}),
-            h.td(.{ .class = "n" }, .{if (c.meio) |e| h.b(.{}, .{phrase.num(h, .rate, rate(e.p))}) else null}),
-            h.td(.{ .class = "n" }, .{if (c.meio) |e| h.small(.{}, .{estNote(h, e)}) else null}),
-        }));
-        lists.add(h.table(.{}, .{
-            h.thead(.{}, .{h.tr(.{}, .{ h.th(.{}, .{title}), h.th(.{ .class = "n" }, .{M.games}), h.th(.{ .class = "n", .data_answer = true }, .{M.tag}), h.th(.{}, .{}) })}),
-            h.tbody(.{}, .{rows.done()}),
-        }));
+    /// From the two periods' files (either may be missing); null when neither is in
+    pub fn of(days: ?*const pd.Meio, patch: ?*const pd.Meio) ?Preview {
+        const any = days orelse patch orelse return null;
+        return .{ .est = any.stack, .gap = any.gap, .days = raw(days), .patch = raw(patch) };
     }
-    return h.div(.{ .class = "c-pv meio" }, .{ h.div(.{ .class = "top" }, .{top.done()}), h.div(.{ .class = "lists" }, .{lists.done()}) });
+
+    fn raw(m: ?*const pd.Meio) ?Raw {
+        const x = m orelse return null;
+        return if (x.games == 0) null else .{ .games = x.games, .wins = x.wins };
+    }
+};
+
+/// The games a binomial rate at `p` needs for an 80% range as narrow as Meio's
+fn worth(e: pd.Est) u32 {
+    const half: f64 = @max(0.0005, (e.hi - e.lo) / 2);
+    const p: f64 = e.p;
+    const n = p * (1 - p) * std.math.pow(f64, 1.2816 / half, 2);
+    return if (n > 1e8) 100_000_000 else @intFromFloat(n + 0.5);
 }
 
-fn estNote(h: *H, e: pd.Est) tree.Text {
-    return M.est.with(h, .{ .lo = rate(e.lo), .hi = rate(e.hi), .n = e.own });
-}
-
-fn winRate(games: u32, wins: u32) f32 {
-    return @as(f32, @floatFromInt(wins)) / @as(f32, @floatFromInt(@max(games, 1)));
-}
-
-/// Its 80% range wider than ±6 points (Trust rules)
-fn thin(games: u32, wins: u32) bool {
-    const p = winRate(games, wins);
-    return 1.2816 * @sqrt(p * (1 - p) / @as(f32, @floatFromInt(@max(games, 1)))) > 0.06;
-}
-
-fn cell(h: *H, label: tree.Text, value: tree.Text, ctx: ?tree.Text) N {
-    return h.span(.{ .class = "f" }, .{
-        h.span(.{ .class = "l" }, .{label}),
-        h.b(.{}, .{value}),
-        if (ctx) |c| h.small(.{}, .{c}) else null,
+pub fn view(h: *H, v: Preview) N {
+    const gap: ?tree.Text = switch (v.gap) {
+        .none => null,
+        .no_model => W.no_model,
+        .master => W.master,
+        .kind => W.kind,
+        .deep => W.deep,
+    };
+    const fig = if (v.est) |e|
+        rate.view(h, .{ .pct = 100 * e.p, .games = worth(e), .half = 100 * (e.hi - e.lo) / 2 }, .{ .said = W.said.s, .worth = true })
+    else
+        tip.view(h, gap orelse W.no_model, .{rate.view(h, .{ .pct = 0, .games = 0 }, .{})}, .{});
+    return h.div(.{ .class = "c-pv" }, .{
+        tip.view(h, W.about, .{badge.view(h, .accent, .{W.tag})}, .{ .below = true }),
+        fig,
+        scale(h, v),
     });
+}
+
+/// Meio's band and dot, the raw windows' ticks, 50 when near, on one axis fitted to them
+fn scale(h: *H, v: Preview) N {
+    var lo: f64 = 100;
+    var hi: f64 = 0;
+    const d = if (v.days) |r| pct(r) else null;
+    const p = if (v.patch) |r| pct(r) else null;
+    if (v.est) |e| {
+        lo = 100 * e.lo;
+        hi = 100 * e.hi;
+    }
+    for ([_]?f64{ d, p }) |x| if (x) |y| {
+        lo = @min(lo, y);
+        hi = @max(hi, y);
+    };
+    if (lo > hi) return h.span(.{}, .{});
+    const pad = @max(1, (hi - lo) * 0.15);
+    lo -= pad;
+    hi += pad;
+    const fifty = lo - 2 < 50 and hi + 2 > 50;
+    if (fifty) {
+        lo = @min(lo, 49);
+        hi = @max(hi, 51);
+    }
+    const at = struct {
+        fn f(x: f64, a: f64, b: f64) f64 {
+            return 100 * (x - a) / (b - a);
+        }
+    }.f;
+    var marks = h.list();
+    if (fifty) marks.add(h.span(.{ .class = "m", .style = h.vars(.{ .x = at(50, lo, hi) }) }, .{}));
+    if (v.est) |e| {
+        marks.add(h.span(.{ .class = "b", .style = h.vars(.{ .x = at(100 * e.lo, lo, hi), .w = at(100 * e.hi, lo, hi) - at(100 * e.lo, lo, hi) }) }, .{}));
+    }
+    if (v.est) |e| marks.add(h.span(.{ .class = "o", .style = h.vars(.{ .x = at(100 * e.p, lo, hi) }) }, .{}));
+    if (v.days) |r| marks.add(tick(h, "t d", at(d.?, lo, hi), W.days.with(h, .{ .p = d.?, .n = r.games })));
+    if (v.patch) |r| marks.add(tick(h, "t p", at(p.?, lo, hi), W.patch.with(h, .{ .p = p.?, .n = r.games })));
+    return h.span(.{ .class = "ax" }, .{marks.done()});
+}
+
+/// A raw window's tick at `x` % along, its name and rate in a Tip
+fn tick(h: *H, comptime class: []const u8, x: f64, said: tree.Text) N {
+    return h.span(.{ .class = class, .style = h.vars(.{ .x = x }) }, .{tip.view(h, said, .{h.span(.{ .class = "k" }, .{})}, .{})});
+}
+
+fn pct(r: Raw) f64 {
+    return 100 * @as(f64, @floatFromInt(@min(r.wins, r.games))) / @as(f64, @floatFromInt(@max(r.games, 1)));
 }
 
 pub const css =
     \\@layer components {
-    \\  .c-pv { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-5);
-    \\    padding: 0 var(--card-px); margin-bottom: var(--sp-2); font-variant-numeric: tabular-nums; }
-    \\  .c-pv > .tag { cursor: help; }
-    \\  .c-pv > .f { display: inline-flex; align-items: baseline; gap: var(--sp-2); white-space: nowrap; }
-    \\  .c-pv .l { font-size: var(--fs-xs); color: var(--muted); }
-    \\  .c-pv b { color: var(--accent); font-weight: var(--w-b); }
-    \\  .c-pv small { font-size: var(--fs-xs); color: var(--faint); }
-    \\  .c-pv.meio { display: block; }
-    \\  .c-pv.meio > .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-5); }
-    \\  .c-pv.meio > .top > .f { display: inline-flex; align-items: baseline; gap: var(--sp-2); white-space: nowrap; }
-    \\  .c-pv.meio > .lists { display: flex; flex-wrap: wrap; align-items: start; gap: var(--sp-2) var(--sp-5); margin-top: var(--sp-2); }
-    \\  .c-pv.meio table { border-collapse: collapse; font-size: var(--fs-xs); }
-    \\  .c-pv.meio th { text-align: left; font-weight: var(--w-m); color: var(--muted); padding: 0 var(--sp-2) var(--sp-1) 0; }
-    \\  .c-pv.meio td { padding: 0 var(--sp-2) 0 0; white-space: nowrap; }
-    \\  .c-pv.meio .n { text-align: right; }
-    \\  .c-pv.meio .thin { color: var(--faint); }
+    \\  .c-pv { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3);
+    \\    padding: 0 var(--card-px); margin-bottom: var(--sp-2); }
+    \\  .c-pv > .c-rate > .v { font-size: var(--fs-l); font-weight: var(--w-b); }
+    \\  .c-pv .ax { position: relative; display: inline-block; width: 160px; height: 16px; }
+    \\  .c-pv .ax::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--line); }
+    \\  .c-pv .ax > span { position: absolute; left: calc(var(--x) * 1%); top: 50%; translate: -50% -50%; }
+    \\  .c-pv .ax > .m { height: 10px; border-left: 1px dashed var(--faint); translate: 0 -50%; }
+    \\  .c-pv .ax > .b { width: calc(var(--w) * 1%); height: 8px; translate: 0 -50%; border-radius: 4px;
+    \\    background: color-mix(in srgb, var(--accent) 30%, transparent); }
+    \\  .c-pv .ax > .t { z-index: 1; }
+    \\  .c-pv .ax > .t .k { display: block; width: 9px; height: 9px; border-radius: 50%;
+    \\    border: 1.5px solid var(--muted); background: var(--bg); }
+    \\  .c-pv .ax > .t.p .k { border-radius: 1px; rotate: 45deg; }
+    \\  .c-pv .ax > .o { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
     \\}
     \\
 ;
 
-const demo_lines = [_]Line{
-    .{ .alone = .{ .role = .mid, .win = .{ 0.512, 0.503, 0.521 } } },
-    .{ .pair = .{ .ally = false, .name = "Zed", .role = .mid, .p = 0.497, .games = 8068, .alone = 0.512 } },
-};
-
-const demo_meio: pd.Meio = .{
-    .gap = .none,
-    .any_slot = false,
-    .games = 312,
-    .wins = 160,
-    .stack = .{ .p = 0.521, .lo = 0.48, .hi = 0.563, .own = 41 },
-    .gold = null,
-    .keystones = &.{
-        .{ .id = 8010, .name = "Conqueror", .games = 290, .wins = 151, .meio = .{ .p = 0.524, .lo = 0.49, .hi = 0.558, .own = 38 } },
-        .{ .id = 8437, .name = "Grasp of the Undying", .games = 4, .wins = 1, .meio = .{ .p = 0.506, .lo = 0.452, .hi = 0.561, .own = 0 } },
-    },
-    .items = &.{.{ .id = 6333, .name = "Death's Dance", .games = 120, .wins = 66, .meio = null }},
-    .opponents = &.{.{ .id = 86, .name = "Garen", .games = 0, .wins = 0, .meio = .{ .p = 0.47, .lo = 0.41, .hi = 0.53, .own = 0 } }},
-};
+const demo_est: pd.Est = .{ .p = 0.522, .lo = 0.516, .hi = 0.528, .own = 972 };
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    g.add("Meio under an opponent lock: the stack, then each choice with it", meio(h, &demo_meio));
-    var master = demo_meio;
-    master.gap = .master;
-    master.stack = null;
-    g.add("Meio at Master+: raw only", meio(h, &master));
-    g.add("champion page, with the brief's opponent", view(h, &demo_lines, "49.1%"));
-    g.add("champion page, no brief, no head rate", view(h, demo_lines[0..1], null));
-    g.add("matchup page", view(h, &.{.{ .matchup = .{ .a = "Ahri", .b = "Zed", .role = .mid, .p = 0.497, .a_alone = 0.512, .b_alone = 0.505 } }}, "48.6%"));
+    g.add("below both raw windows (Ornn top, 149)", view(h, .{ .est = demo_est, .days = .{ .games = 26994, .wins = 14227 }, .patch = .{ .games = 972, .wins = 536 } }));
+    g.add("under a lock, wide band, near 50", view(h, .{ .est = .{ .p = 0.497, .lo = 0.452, .hi = 0.541, .own = 4 }, .days = .{ .games = 290, .wins = 151 }, .patch = .{ .games = 40, .wins = 18 } }));
+    g.add("the patch file not in yet", view(h, .{ .est = demo_est, .days = .{ .games = 26994, .wins = 14227 } }));
+    g.add("Master+: raw only, reason on hover", view(h, .{ .est = null, .gap = .master, .days = .{ .games = 812, .wins = 409 }, .patch = .{ .games = 70, .wins = 33 } }));
 }
 
 const testing = std.testing;
 
-const demo: pd.Slice = .{
-    .id = 103,
-    .name = "Ahri",
-    .names = &.{ .{ .id = 238, .name = "Zed" }, .{ .id = 412, .name = "Thresh" } },
-    .roles = &.{.{
-        .role = .mid,
-        .games = 20_000,
-        .win = .{ 0.512, 0.503, 0.521 },
-        .vs = &.{.{ .role = .mid, .champion = 238, .p = 0.497, .games = 8068 }},
-        .with = &.{.{ .role = .support, .champion = 412, .p = 0.523, .games = 900 }},
-    }},
-};
-
-test brief {
-    try testing.expectEqualDeep(Brief{ .name = "Zed", .role = .mid, .ally = false }, brief("Zed", "Mid opponent").?);
-    try testing.expectEqualDeep(Brief{ .name = "Thresh", .role = .support, .ally = true }, brief("Thresh", "Support ally · few games").?);
-    try testing.expectEqual(null, brief("Zed", "Most played"));
-    try testing.expectEqual(null, brief("", "Mid opponent"));
-}
-
-test "champion: the role's line, then the brief's champion in its list" {
-    var out: [2]Line = undefined;
-    try testing.expectEqual(0, champion(&demo, .top, null, &out).len);
-    const opp = champion(&demo, .mid, brief("Zed", "Mid opponent"), &out);
-    try testing.expectEqual(2, opp.len);
-    try testing.expectEqual(0.497, opp[1].pair.p);
-    try testing.expect(!opp[1].pair.ally);
-    try testing.expectEqual(0.523, champion(&demo, .mid, brief("Thresh", "Support ally"), &out)[1].pair.p);
-    // Zed as an ally has no cell: the role's line alone
-    try testing.expectEqual(1, champion(&demo, .mid, brief("Zed", "Mid ally"), &out).len);
-}
-
-test "view: the matchup line, and without the other's slice" {
+test "view: Meio's figure with its worth, the windows on hover and in sr text" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     var t: tree.Tree = .{};
     var h: H = .init(arena.allocator(), &t);
-    const line = matchup(&demo, null, .mid, 238).?;
-    try testing.expectEqual(null, matchup(&demo, null, .mid, 412));
+    const v: Preview = .{ .est = demo_est, .days = .{ .games = 26994, .wins = 14227 }, .patch = .{ .games = 972, .wins = 536 } };
     var out: std.Io.Writer.Allocating = .init(arena.allocator());
-    try @import("html.zig").write(&t, view(&h, &.{line}, "48.6%"), &out.writer);
+    try @import("html.zig").write(&t, view(&h, v), &out.writer);
     const html = out.written();
-    try testing.expect(std.mem.find(u8, html, "<b>49.7%</b><small>Ahri vs Zed</small>") != null);
-    try testing.expect(std.mem.find(u8, html, "<b>48.6%</b>") != null);
-    try testing.expect(std.mem.find(u8, html, "<small>Ahri 51.2%</small>") != null);
+    try testing.expect(std.mem.find(u8, html, ">52.2%<") != null);
+    try testing.expect(std.mem.find(u8, html, "worth 11,") != null);
+    try testing.expect(std.mem.find(u8, html, "30 days 52.7%, 26,994 games") != null);
+    try testing.expect(std.mem.find(u8, html, "Newest patch 55.1%, 972 games") != null);
+    try testing.expectEqual(null, std.mem.find(u8, html, "own"));
+}
+
+test "Preview.of: either period's file, raw windows without games dropped" {
+    const m: pd.Meio = .{ .gap = .none, .any_slot = false, .games = 0, .wins = 0, .stack = demo_est, .gold = null, .keystones = &.{}, .items = &.{}, .opponents = &.{} };
+    try testing.expectEqual(null, Preview.of(null, null));
+    const v = Preview.of(null, &m).?;
+    try testing.expectEqual(null, v.patch);
+    try testing.expectEqual(0.522, v.est.?.p);
 }

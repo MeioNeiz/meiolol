@@ -77,7 +77,6 @@ profilesum title 2
 profilesum rate 1
 profilesum fade 1
 puzzle rate 1
-pv title 2
 ranking markup 1
 ranking scope 1
 rankstrip fade 1
