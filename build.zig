@@ -229,6 +229,16 @@ pub fn build(b: *std.Build) void {
     for (ui_families) |f| {
         b.step(b.fmt("ui-{s}-size", .{f}), b.fmt("Size of ui-{s}.wasm", .{f})).dependOn(&uiSizes(b, &.{f}).step);
     }
+    // `zig build uilint -- --write` rewrites the register and shrinks the debt file
+    const uilint = b.addRunArtifact(b.addExecutable(.{ .name = "uilint", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/tools/uilint.zig"),
+        .target = target,
+        .imports = &.{.{ .name = "ui", .module = m.ui }},
+    }) }));
+    uilint.addPassthruArgs();
+    uilint.setCwd(b.path("."));
+    uilint.has_side_effects = true;
+    b.step("uilint", "UI guards against uilint-debt.txt; --write rewrites the register").dependOn(&uilint.step);
     // `zig build fmtlint -- --write-allow` rewrites the allow file after a review
     const lint_step = fmtLint(b);
     lint_step.addPassthruArgs();
@@ -327,6 +337,8 @@ fn modulesWith(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
         .optimize = optimize,
         .imports = &.{ .{ .name = "tpl", .module = tpl }, .{ .name = "core", .module = core } },
     });
+    // The register uilint writes: a ui test fails when it is stale
+    ui.addAnonymousImport("components.md", .{ .root_source_file = b.path("docs/plan/ui/components.md") });
 
     // HTTP pieces std leaves out (rate limits, signatures): std only, library-grade (src/net/root.zig)
     const net = b.createModule(.{

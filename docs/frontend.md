@@ -31,14 +31,37 @@ into its own design trap. Use judgement per case.
 - Learn from other LoL sites (lolalytics for champion pages, runes, builds), then make
   our own
 
-## Working agreements (while planning)
-- Components come from the register (docs/plan/ui/components.md; until run
-  2026-10-24-ui ends, data/team/2026-10-24-ui/components.md): extend it rather than build
-  a page-local copy
-- New features wait for or are built in the new way; the old UI gets fixes and data
+## Working agreements
+- Components come from the register, docs/plan/ui/components.md (generated from
+  src/site/ui by `zig build uilint -- --write`; a test fails when it is stale): extend
+  one rather than build a page-local copy
+- uilint (src/site/ui/uilint.zig) guards what one component's tests can't see, against
+  src/site/ui/uilint-debt.txt: counts per file that only go down. A line raised or added
+  needs Jacob's ok
 - Product rules bind every screen: docs/production-key.md "Product rules"
 - Measured guardrails (word budgets, label lengths, tap targets) in docs/plan/ui/README.md
   are drafts to test on the first rebuilt page, not settled rules
+
+Worker brief: names the register components the work uses or extends, and each file's
+owner. Something new: its doc comment and gallery states first, in its own commit, then
+the page that uses it.
+
+Coordinator "review:" checks, a no on any = not ok to push:
+1. uilint-debt.txt didn't grow
+2. The change reached every user the register lists for that component (a rule changed
+   in one caller is the smell)
+3. Page CSS only lays out cards; anything styled is a component or a variant
+4. Rates, their colour and fade, and tips came through the rate view and Tip
+5. ui-sizes before and after on a structural change, per page
+6. Shots at 390 and wide, gallery states included
+7. Jacob's design rules, which no guard sees: a sentence needed to read it = build a
+   graphical component; no half-empty cards, charts fill their card; one clear number,
+   not a run of figures; images (champions, items, runes) over plain lists
+
+Re-run a review like data/team/2026-11-05-meionotes/ui-review.md at the end of each team
+run that touched the UI, every ~150 UI commits otherwise, and whenever the debt file had
+to grow: debt trend first, then what the guards can't see (design, two components for
+one purpose, options piling up on one component).
 
 ## Where things are
 - Jacob's review: docs/review/page-review-2026-10-24.md
@@ -50,7 +73,7 @@ into its own design trap. Use judgement per case.
 - The code before the rebuild, surveyed: docs/frontend-rework.md; every script and where
   its work goes in Zig: docs/js-inventory.md
 - Components: src/site/ui/<name>.zig (view, css and gallery states in one file), listed
-  in ui.all. Gallery: /gallery on `meiolol dev` (deploy/dev.sh), every state at 320, 390
+  in ui.all (ui.pages: the pages with no gallery). Gallery: /gallery on `meiolol dev` (deploy/dev.sh), every state at 320, 390
   and wide. Sweep: deploy/qa.sh (overflow, text under 11 px, tap targets, console
   errors, failed requests; warnings only; --webkit, --shots DIR). Its own build is
   -Dwasm-dev: ui.wasm with safety checks, and zjb handles neither kept nor released

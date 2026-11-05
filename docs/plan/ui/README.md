@@ -3,8 +3,8 @@
 Plan (team run 2026-10-24-ui, foundation session). Source: Jacob's review
 (docs/review/page-review-2026-10-24.md). Background and options: docs/frontend-rework.md
 (Option A, 22 and 23 Oct updates). Page plans: the other files in this folder. Register of
-every component: data/team/2026-10-24-ui/components.md (moves to docs/plan/ui/
-components.md when building starts). Gallery mock: data/team/2026-10-24-ui/mocks/
+every component: docs/plan/ui/components.md, generated from the code (`zig build uilint
+-- --write`). Gallery mock: data/team/2026-10-24-ui/mocks/
 components.html (tokens.css and components.css beside it are the prototype CSS).
 
 Jacob: "developing our frontend tools libraries and such so we can actually make good
@@ -265,9 +265,9 @@ code opens a WKWebView window on the Mac for development.
   for byte, ui.wasm size budget
 - Review: a session that did not write the page scores qa.sh screenshots against a short
   rubric (answer first, said twice, colour meaning, words)
-- Adding a component: register entry (name, states, data, words) → struct in
-  `src/site/ui/` with a fixture → gallery shows its states → qa.sh clean → then pages
-  use it. A page never grows its own copy
+- Adding a component: struct in `src/site/ui/` with its doc comment (the register's
+  entry) and gallery states → qa.sh clean → then pages use it. A page never grows its
+  own copy
 
 ## Build order and sizes
 

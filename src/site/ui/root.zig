@@ -18,6 +18,8 @@ pub const diff = @import("diff.zig");
 pub const island = @import("island.zig");
 pub const tiers = @import("tiers.zig");
 pub const gallery = @import("gallery.zig");
+pub const register = @import("register.zig");
+pub const uilint = @import("uilint.zig");
 
 pub const button = @import("button.zig");
 pub const chip = @import("chip.zig");
@@ -174,6 +176,9 @@ pub const components = .{ button, chip, badge, segmented, card, toggletip, strip
 /// Every component, in the gallery's order
 pub const all = .{ button, chip, scopechip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, alertband, actionbutton, logview, steptimeline, prose, textpage, modelbadge, role, champ, site, sitesearch, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, compview, lobby, apphome, gamebuild, loadscreen, gamescreen, postgame, signin, practice, picks, app, appbar, table, chart, dotplot, trend, timechart, histogram, aucchart, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, lockbar, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, choice, rankstrip, draftflow, reasons, candlist, champrolepicker, poolslots, heatgrid, matchgrid, finder, violin, ranking, learnpage, dailypage, dailyseat, dailydays, changeline, patchhead, patchpage, poolpage, poolgrid, dayhead, resultstrip, playerbar, profilesum, recordtile, highlights, gametrend, yourpage, yourviews, yourtime, yourlookup, yourfriends, forget, apply, squad, idlookup, today, homepage, account, testerpage, testercand, meionotes, meionoteslist, pv, adminpage, admincharts, admintraffic, adminops, adminmodels, adminlab, adminruns };
 
+/// Page modules with no gallery: uilint lints their CSS, the register lists them
+pub const pages = .{ champpage, matchpage, tiers };
+
 pub const H = tree.H;
 pub const N = tree.N;
 pub const Tree = tree.Tree;
@@ -225,7 +230,37 @@ test "site components: one a site component imports is one too, so its CSS ships
     }
 }
 
-fn fileName(comptime C: type) []const u8 {
-    const t = @typeName(C);
-    return t[(std.mem.findScalarLast(u8, t, '.') orelse return t) + 1 ..];
+const fileName = register.fileName;
+
+test "every module with CSS is in all or pages, so uilint and the register see it" {
+    @setEvalBranchQuota(100_000);
+    inline for (comptime std.meta.declarations(@This())) |decl| {
+        const D = @field(@This(), decl);
+        if (@TypeOf(D) != type) continue;
+        if (@typeInfo(D) != .@"struct" or !@hasDecl(D, "css") or !@hasDecl(D, "scope")) continue;
+        inline for (all ++ pages) |C| {
+            if (C == D) break;
+        } else {
+            std.debug.print("{s}: CSS, in neither ui.all nor ui.pages\n", .{decl});
+            return error.TestUnexpectedResult;
+        }
+    }
+}
+
+test "uilint: no file breaks more or less than uilint-debt.txt; the register is current" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var msg: std.Io.Writer.Allocating = .init(a);
+    const have = try uilint.counts(a, all ++ pages);
+    const ok = try uilint.compare(have, try uilint.parse(a, @embedFile("uilint-debt.txt")), &msg.writer);
+    const reg = try uilint.registerText(a, all, pages, components);
+    if (!std.mem.eql(u8, reg, @embedFile("components.md"))) {
+        try msg.writer.writeAll(uilint.register_path ++ " is stale: `zig build uilint -- --write`\n");
+    }
+    if (msg.written().len > 0) {
+        std.debug.print("{s}", .{msg.written()});
+        return error.TestUnexpectedResult;
+    }
+    try std.testing.expect(ok);
 }
