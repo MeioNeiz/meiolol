@@ -59,7 +59,6 @@ itempath fade 1
 kda title 1
 laneduel markup 2
 learnpage pagecss 61
-loadscreen rate 1
 logview markup 2
 logview title 2
 matchpage pagecss 6

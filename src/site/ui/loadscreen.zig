@@ -1,17 +1,18 @@
 //! LoadScreen: the desktop app while the game loads. A column per lane: our card, the
 //! lane strip (gold at 14 from even, who reaches level 6 and the first item sooner), their
-//! card. A card in one fixed order: portrait, name, role (? when guessed), how the
-//! champion does in the role (private edition only), wins by game length as a spark,
-//! then at most two pills coloured by meaning. Above, "your game": my lane and the enemy
+//! card. A card in one fixed order: portrait, name, role (? when guessed), the
+//! champion's win rate in the role (private edition only), wins by game length as a
+//! spark with its word where the tilt is clear, then at most two pills coloured by
+//! meaning. Above, "your game": my lane and the enemy
 //! jungler and team in a word each. Narrow windows get one row per lane. Champion facts
 //! only: no player names or ranks (research/questions/desktop-app-layout.md C1-C3)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
-const fmt = @import("fmt.zig");
 const phrase = @import("phrase.zig");
 const bar = @import("bar.zig");
 const spark = @import("spark.zig");
+const rate = @import("rate.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -29,14 +30,14 @@ pub const Card = struct {
     role: ?role.Role,
     guessed: bool = false,
     you: bool = false,
-    /// Private edition: "52.1% · 12k games"; "" otherwise
-    fact: []const u8 = "",
-    lean: Tone = .none,
+    /// Private edition: the champion's win rate in the role
+    rate: ?rate.Rate = null,
     pills: []const Pill = &.{},
     /// Win % by game length, shortest first (champfacts.length_edges): the spark
     lengths: []const f32 = &.{},
-    /// The spark in words, for screen readers
-    lengths_label: []const u8 = "",
+    /// Wins more in long games (true) or short; null: the tilt is inside its noise, so
+    /// no spark
+    long: ?bool = null,
 };
 
 pub const Side = bar.Side;
@@ -110,7 +111,7 @@ fn yours(h: *H, facts: []const Fact) N {
 fn head(h: *H, side: TeamSide, draft: ?f32) N {
     return h.h2(.{ .data_side = side }, .{
         if (side == .us) W.us else W.them,
-        if (draft) |d| h.span(.{ .class = "draft", .style = h.vars(.{ .c = fmt.wrColour(d / 100, 0.2) }) }, .{W.draft.with(h, .{ .p = @as(u32, @intFromFloat(fmt.round(d))) })}) else null,
+        if (draft) |d| h.span(.{ .class = "draft" }, .{ rate.view(h, .estimate(d), .{ .said = "draft win chance" }), h.small(.{}, .{W.draft}) }) else null,
     });
 }
 
@@ -149,8 +150,11 @@ fn card(h: *H, c: Card, side: TeamSide) N {
                 if (c.role) |r| r.label() else W.no_role,
                 if (c.guessed) W.guess else null,
             }),
-            if (c.fact.len > 0) h.span(.{ .class = "fact", .data_tone = if (c.lean == .none) null else c.lean }, .{c.fact}) else null,
-            spark.view(h, .{ .vs = c.lengths, .y = spark_y, .mid = 50, .label = .{ .s = c.lengths_label }, .w = 80, .h = 20 }),
+            if (c.rate) |r| h.span(.{ .class = "fact" }, .{rate.view(h, r, .{})}) else null,
+            if (c.long) |l| h.span(.{ .class = "len" }, .{
+                spark.view(h, .{ .vs = c.lengths, .y = spark_y, .mid = 50, .w = 64, .h = 18 }),
+                if (l) W.long else W.short,
+            }) else null,
             if (c.pills.len > 0) h.span(.{ .class = "pills" }, .{pills.done()}) else null,
         }),
     });
@@ -164,7 +168,9 @@ const W = struct {
     const yours = plain("Your game");
     const us = plain("Your team");
     const them = plain("Enemy team");
-    const draft = phrase.Phrase("{p:pct} draft");
+    const draft = plain("draft");
+    const long = plain("wins long");
+    const short = plain("wins short");
     const unknown = plain("Unknown");
     const no_role = plain("Role unknown");
     const guess = plain("?");
@@ -184,7 +190,9 @@ pub const css =
     \\    border-bottom: 3px solid currentColor; font-size: var(--fs-m); font-weight: var(--w-b); }
     \\  .c-load h2[data-side="us"] { color: var(--us); }
     \\  .c-load h2[data-side="them"] { color: var(--them); padding: 4px 0 0; border-bottom: 0; border-top: 3px solid currentColor; }
-    \\  .c-load .draft { margin-left: auto; font-size: var(--fs-l); color: var(--c, var(--text)); font-variant-numeric: tabular-nums; }
+    \\  .c-load .draft { display: inline-flex; align-items: baseline; gap: 4px; margin-left: auto; font-size: var(--fs-l);
+    \\    color: var(--text); }
+    \\  .c-load .draft > small { font-size: var(--fs-s); color: var(--muted); }
     \\  .c-load .yours { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
     \\  .c-load .yours > h2 { padding: 0; border: 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-load .yours > ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
@@ -202,7 +210,8 @@ pub const css =
     \\  .c-load .body > b { font-size: var(--fs-m); font-weight: var(--w-b); overflow: hidden; text-overflow: ellipsis;
     \\    white-space: nowrap; max-width: 100%; }
     \\  .c-load .role { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--muted); }
-    \\  .c-load .fact { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; color: var(--t2); }
+    \\  .c-load .fact { font-size: var(--fs-m); font-weight: var(--w-b); }
+    \\  .c-load .len { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--t2); }
     \\  .c-load .pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
     \\  .c-load .pill { padding: 1px 6px; border-radius: var(--r-s); font-size: var(--fs-xs); background: var(--wash); color: var(--t2); }
     \\  .c-load [data-tone="good"] { color: var(--hi2); }
@@ -236,26 +245,26 @@ pub const sample: Screen = .{
     },
     .lanes = &.{
         .{
-            .us = .{ .champ = demo("Garen", "Garen"), .role = .top, .lengths = short, .lengths_label = "Wins more in short games", .pills = &.{.{ .text = "strong now", .tone = .good }} },
-            .them = .{ .champ = demo("Darius", "Darius"), .role = .top, .guessed = true, .lengths = short, .lengths_label = "Wins more in short games" },
+            .us = .{ .champ = demo("Garen", "Garen"), .role = .top, .lengths = short, .long = false, .pills = &.{.{ .text = "strong now", .tone = .good }} },
+            .them = .{ .champ = demo("Darius", "Darius"), .role = .top, .guessed = true, .lengths = short, .long = false },
             .strip = .{ .gold = 410, .lead = .us, .text = "ahead", .level6 = .us, .label = "Garen ahead in lane, level 6 first" },
         },
         .{
-            .us = .{ .champ = demo("LeeSin", "Lee Sin"), .role = .jungle, .lengths = short, .lengths_label = "Wins more in short games", .pills = &.{.{ .text = "ban magnet" }} },
-            .them = .{ .champ = demo("Vi", "Vi"), .role = .jungle, .guessed = true, .lengths = flat, .lengths_label = "About the same at any length", .pills = &.{.{ .text = "weak now", .tone = .bad }} },
+            .us = .{ .champ = demo("LeeSin", "Lee Sin"), .role = .jungle, .lengths = short, .long = false, .pills = &.{.{ .text = "ban magnet" }} },
+            .them = .{ .champ = demo("Vi", "Vi"), .role = .jungle, .guessed = true, .lengths = flat, .pills = &.{.{ .text = "weak now", .tone = .bad }} },
             .strip = .{ .gold = 60, .lead = .even, .text = "even", .item = .them, .label = "Lee Sin even early, slow items" },
         },
         .{
-            .us = .{ .champ = demo("Ahri", "Ahri"), .role = .mid, .you = true, .lengths = flat, .lengths_label = "About the same at any length", .pills = &.{ .{ .text = "lone AP" }, .{ .text = "crowd favourite" } } },
-            .them = .{ .champ = demo("Syndra", "Syndra"), .role = .mid, .guessed = true, .lengths = long, .lengths_label = "Wins more in long games" },
+            .us = .{ .champ = demo("Ahri", "Ahri"), .role = .mid, .you = true, .lengths = flat, .pills = &.{ .{ .text = "lone AP" }, .{ .text = "crowd favourite" } } },
+            .them = .{ .champ = demo("Syndra", "Syndra"), .role = .mid, .guessed = true, .lengths = long, .long = true },
             .strip = .{ .gold = -520, .lead = .them, .text = "behind", .level6 = .them, .item = .them, .label = "Ahri behind in lane, level 6 later, slow items" },
         },
         .{
-            .us = .{ .champ = demo("Jinx", "Jinx"), .role = .bot, .lengths = long, .lengths_label = "Wins more in long games", .pills = &.{.{ .text = "hipster pick", .tone = .caution }} },
-            .them = .{ .champ = demo("Caitlyn", "Caitlyn"), .role = .bot, .guessed = true, .lengths = short, .lengths_label = "Wins more in short games" },
+            .us = .{ .champ = demo("Jinx", "Jinx"), .role = .bot, .lengths = long, .long = true, .pills = &.{.{ .text = "hipster pick", .tone = .caution }} },
+            .them = .{ .champ = demo("Caitlyn", "Caitlyn"), .role = .bot, .guessed = true, .lengths = short, .long = false },
         },
         .{
-            .us = .{ .champ = demo("Lulu", "Lulu"), .role = .support, .lengths = long, .lengths_label = "Wins more in long games" },
+            .us = .{ .champ = demo("Lulu", "Lulu"), .role = .support, .lengths = long, .long = true },
         },
     },
 };
@@ -268,12 +277,9 @@ fn private(h: *H, s: Screen) Screen {
         h.oom = true;
         return s;
     };
-    const facts = [_][]const u8{ "52.8% · 41k games", "50.1% · 88k games", "49.2% · 120k games", "48.6% · 210 games", "51.0% · 35k games" };
-    for (lanes, facts, [_]Tone{ .good, .none, .none, .bad, .none }) |*l, f, t| {
-        if (l.us) |*c| {
-            c.fact = f;
-            c.lean = t;
-        }
+    const rates = [_]rate.Rate{ .at(41_200, 52.8), .at(88_000, 50.1), .at(120_400, 49.2), .at(210, 48.6), .at(35_100, 51.0) };
+    for (lanes, rates) |*l, r| {
+        if (l.us) |*c| c.rate = r;
         if (l.strip) |*x| x.text = switch (x.lead) {
             .us => "+410",
             .even => "+60",

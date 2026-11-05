@@ -970,32 +970,70 @@ fn loadCard(a: Allocator, c: Ctx, card: *const loading.Card, ours: bool) !ui.loa
         .role = if (card.role) |r| uiRole(r) else null,
         .guessed = card.guessed,
         .you = card.me,
-        .fact = if (shown) try a.print("{f} · {f} games", .{ rate(card.win), count(card.games) }) else "",
-        .lean = if (!shown) .none else if (card.win >= 0.515) .good else if (card.win <= 0.485) .bad else .none,
+        .rate = if (shown) .at(card.games, 100 * card.win) else null,
         .pills = pills.items,
     };
-    if (card.lengths) |by| {
+    if (card.lengths) |by| if (lengthTilt(by)) |long| {
         x.lengths = try lengthSpark(a, by);
-        const d = x.lengths[x.lengths.len - 1] - x.lengths[0];
-        x.lengths_label = if (d >= spark_lean) "Wins more in long games" else if (d <= -spark_lean) "Wins more in short games" else "About the same at any length";
-    }
+        x.long = long;
+    };
     return x;
 }
 
-/// Points of win rate between the shortest and longest games that make a lean
+/// Shrunk win share per length bucket and its standard error
+fn lengthShares(by: loading.Lengths) struct { p: [buckets]f64, se: [buckets]f64 } {
+    var p: [buckets]f64 = undefined;
+    var se: [buckets]f64 = undefined;
+    for (&p, &se, by) |*x, *e, b| {
+        const n = @as(f64, @floatFromInt(b.games)) + comp.length_k;
+        x.* = (@as(f64, @floatFromInt(b.wins)) + comp.length_k / 2.0) / n;
+        e.* = @sqrt(x.* * (1 - x.*) / n);
+    }
+    return .{ .p = p, .se = se };
+}
+
+const buckets = @typeInfo(loading.Lengths).array.len;
+
+/// Points of win rate across the buckets, shortest to longest, that make a lean
 const spark_lean = 2;
+
+/// Wins more in long games (true) or short: the weighted slope over the buckets is past
+/// 2 standard errors and spans spark_lean points; null otherwise
+fn lengthTilt(by: loading.Lengths) ?bool {
+    const s = lengthShares(by);
+    var sw: f64 = 0;
+    var sx: f64 = 0;
+    var sy: f64 = 0;
+    for (s.p, s.se, 0..) |p, e, i| {
+        const w = 1 / @max(e * e, 1e-12);
+        sw += w;
+        sx += w * @as(f64, @floatFromInt(i));
+        sy += w * p;
+    }
+    const mx = sx / sw;
+    const my = sy / sw;
+    var sxx: f64 = 0;
+    var sxy: f64 = 0;
+    for (s.p, s.se, 0..) |p, e, i| {
+        const w = 1 / @max(e * e, 1e-12);
+        const dx = @as(f64, @floatFromInt(i)) - mx;
+        sxx += w * dx * dx;
+        sxy += w * dx * (p - my);
+    }
+    const slope = sxy / sxx;
+    const span = 100 * slope * (buckets - 1);
+    if (@abs(slope) * @sqrt(sxx) < 2 or @abs(span) < spark_lean) return null;
+    return slope > 0;
+}
 
 /// Win % by length about the champion's own average, shrunk to even as the comp's team
 /// curve is: when it wins more, not how much. A locked teammate's pick gets no rating
 /// on the loading screen (comp.pills)
 fn lengthSpark(a: Allocator, by: loading.Lengths) ![]const f32 {
     const out = try a.alloc(f32, by.len);
+    const p = lengthShares(by).p;
     var sum: f64 = 0;
-    var p: [by.len]f64 = undefined;
-    for (&p, by) |*x, b| {
-        x.* = (@as(f64, @floatFromInt(b.wins)) + comp.length_k / 2.0) / (@as(f64, @floatFromInt(b.games)) + comp.length_k);
-        sum += x.*;
-    }
+    for (p) |x| sum += x;
     const mean = sum / @as(f64, @floatFromInt(by.len));
     for (out, p) |*o, x| o.* = @floatCast(50 + 100 * (x - mean));
     return out;
@@ -1753,6 +1791,23 @@ fn hear(s: []const u8) void {
     heard_len = s.len;
 }
 
+test "loading: a spark only where the tilt beats its noise" {
+    const at = struct {
+        fn f(games: u32, by: [buckets]f64) loading.Lengths {
+            var out: loading.Lengths = undefined;
+            for (&out, by) |*o, p| o.* = .{ .games = games, .wins = @intFromFloat(p / 100 * @as(f64, @floatFromInt(games))) };
+            return out;
+        }
+    }.f;
+    // Four points from short to long on 20k games a bucket: clear
+    try testing.expectEqual(true, lengthTilt(at(20_000, .{ 48, 49, 50, 51, 52 })));
+    try testing.expectEqual(false, lengthTilt(at(20_000, .{ 52, 51, 50, 49, 48 })));
+    // The same tilt on 300 games a bucket is noise
+    try testing.expectEqual(null, lengthTilt(at(300, .{ 48, 49, 50, 51, 52 })));
+    // Sure but under spark_lean points across
+    try testing.expectEqual(null, lengthTilt(at(500_000, .{ 49.7, 49.9, 50, 50.1, 50.3 })));
+}
+
 test "loading: the role's numbers private only" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
@@ -1774,17 +1829,17 @@ test "loading: the role's numbers private only" {
     // Top, then mid
     try testing.expectEqual(2, priv.lanes.len);
     const us = priv.lanes[1].us.?;
-    try testing.expectEqualStrings("52.1% · 12k games", us.fact);
-    try testing.expectEqual(.good, us.lean);
+    try testing.expectApproxEqAbs(52.1, us.rate.?.pct, 0.01);
+    try testing.expectEqual(12_400, us.rate.?.games.?);
     try testing.expectEqual(.caution, us.pills[0].tone);
-    try testing.expect(priv.lanes[1].them.?.guessed and priv.lanes[1].them.?.fact.len == 0);
+    try testing.expect(priv.lanes[1].them.?.guessed and priv.lanes[1].them.?.rate == null);
     try testing.expectApproxEqAbs(@as(f32, 53.4), priv.draft.?, 0.01);
     try testing.expectEqualStrings("strong now", priv.lanes[0].us.?.pills[0].text);
 
     const c: Ctx = .{ .stats = &f.stats, .icons = null, .private = false };
     const public = try loadScreen(a, c, &l);
     try testing.expectEqual(null, public.draft);
-    try testing.expectEqualStrings("", public.lanes[1].us.?.fact);
+    try testing.expectEqual(null, public.lanes[1].us.?.rate);
     // No patch pill on a locked teammate; mine and the enemies' keep theirs
     try testing.expectEqual(1, public.lanes[0].us.?.pills.len);
     try testing.expectEqualStrings("lone AP", public.lanes[0].us.?.pills[0].text);
@@ -1826,7 +1881,7 @@ test "loading: a lane per role, the strip's words and figure, the spark about it
     for (spark) |v| sum += v;
     try testing.expectApproxEqAbs(@as(f32, 250), sum, 0.01);
     try testing.expect(spark[0] > 50 and spark[4] < 50);
-    try testing.expectEqualStrings("Wins more in short games", public.lanes[0].us.?.lengths_label);
+    try testing.expectEqual(false, public.lanes[0].us.?.long.?);
     const priv = try loadScreen(a, .{ .stats = &f.stats, .icons = null, .private = true }, &l);
     try testing.expectEqualStrings("−520", priv.lanes[0].strip.?.text);
 }

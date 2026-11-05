@@ -308,8 +308,8 @@ fade or colour; its own ref (BuildPanel: against the slot's 47.2%); no games; a 
 column: the colour mixes, no steps; the same colour however sure: 53.0, 52.6, 50.0 of
 20,000, 54.0 of 400, 54.2 of 120, 65 of 40 (faded); delta: +2.6, −1.4, +0.3; +4.8 with a
 wide range, faded
-Used by: stat, strip, matchbrief, draftboard, champselect, buildpanel, lockbar, candlist,
-matchgrid, champpage, matchpage
+Used by: stat, strip, matchbrief, draftboard, champselect, loadscreen, buildpanel,
+lockbar, candlist, matchgrid, champpage, matchpage
 
 ### Delta
 `delta.zig` `.c-delta` `.c-dbar` site
@@ -675,11 +675,11 @@ path known; no usual build: a tip, leans only
 `loadscreen.zig` `.c-load`
 LoadScreen: the desktop app while the game loads. A column per lane: our card, the lane
 strip (gold at 14 from even, who reaches level 6 and the first item sooner), their card. A
-card in one fixed order: portrait, name, role (? when guessed), how the champion does in
-the role (private edition only), wins by game length as a spark, then at most two pills
-coloured by meaning. Above, "your game": my lane and the enemy jungler and team in a word
-each. Narrow windows get one row per lane. Champion facts only: no player names or ranks
-(research/questions/desktop-app-layout.md C1-C3)
+card in one fixed order: portrait, name, role (? when guessed), the champion's win rate in
+the role (private edition only), wins by game length as a spark with its word where the
+tilt is clear, then at most two pills coloured by meaning. Above, "your game": my lane and
+the enemy jungler and team in a word each. Narrow windows get one row per lane. Champion
+facts only: no player names or ranks (research/questions/desktop-app-layout.md C1-C3)
 States: public: bot with too few games of the lane, no enemy support yet; private
 
 ### GameScreen
