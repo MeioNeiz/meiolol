@@ -143,12 +143,7 @@ fn length(h: *H, l: Length) ?N {
         const pts = trend.alloc(h, win.len) orelse break :blk .none;
         const range = l.range orelse @as([win.len]f32, @splat(0));
         for (pts, win, range, length_labels) |*p, w, r, label| p.* = .{ .label = .{ .s = label }, .v = w, .range = r };
-        // Static: nothing calls its handlers, but they point at it
-        const t = h.mem.create(trend.Trend) catch {
-            h.oom = true;
-            break :blk .none;
-        };
-        t.* = .{ .label = W.length, .points = pts, .height = 110 };
+        var t: trend.Trend = .{ .label = W.length, .points = pts, .height = 110, .live = false };
         break :blk t.view(h);
     } else .none;
     if (words == null and l.win == null) return null;
@@ -237,7 +232,6 @@ pub const css =
     \\  .c-comp .top { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-s); }
     \\  .c-comp .len { display: flex; flex-direction: column; gap: var(--sp-2); }
     \\  .c-comp .len > p { font-size: var(--fs-s); }
-    \\  .c-comp .c-trend .plot { cursor: auto; }
     \\}
     \\
 ;

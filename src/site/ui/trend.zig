@@ -62,6 +62,8 @@ pub const Trend = struct {
     height: u16 = 130,
     /// ChartTip on this point
     tip: ?u8 = null,
+    /// False in static HTML (no island to answer a press): no crosshair, no handlers
+    live: bool = true,
     press: chart.Press = .{},
 
     const T = @This();
@@ -164,14 +166,14 @@ pub const Trend = struct {
                 chart.line(h, p, v, .typ),
             },
             .over = over.done(),
-            .press = true,
-            .on = .{
+            .press = t.live,
+            .on = if (t.live) .{
                 .down = h.on(t, .plot),
                 .move = h.on(t, .plot),
                 .up = h.on(t, .plot),
                 .leave = h.on(t, .plot),
                 .cancel = h.on(t, .plot),
-            },
+            } else .{},
         });
     }
 };
