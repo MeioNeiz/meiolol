@@ -227,15 +227,72 @@ pub const luck: ld.Puzzle = .{
     .from = "Ranked solo, Platinum IV and up, EUW, every patch crawled",
 };
 
+pub const sample: ld.Puzzle = .{
+    .id = "matchup-n",
+    .q = "How much of that gap is real?",
+    .setup = .{ .facts = &.{ .{ .v = "80 games", .label = "one lane matchup, 30 days" }, .{ .v = "Above usual", .label = "its win rate" } } },
+    .answer = .{ .guess = .{ .lo = 0, .hi = 100, .step = 1, .real = 33, .tol = 5 } },
+    .why = "At 80 games a matchup's gap is a third real; it takes about 300 to be half.",
+    .tip = "Few games in a matchup? Lean on the champions' own rates.",
+    .games = 800_354,
+    .from = "Ranked solo, Platinum IV and up, every region, 800,354 games " ++
+        "(snapshot of 17 Oct), split in halves",
+};
+
+pub const item_wr: ld.Puzzle = .{
+    .id = "item-wr",
+    .q = "Why do its buyers win more?",
+    .setup = .{ .facts = &.{ .{ .v = "Higher", .label = "win rate, one finished item" }, .{ .v = "2.9M", .label = "items finished" } } },
+    .answer = .{ .pick = .{ .right = 1, .choices = &.{
+        .{ .text = "The item", .shown = "Almost nothing" },
+        .{ .text = "When, and how far ahead", .shown = "Most of it" },
+        .{ .text = "The item on that champion", .shown = "Not detected" },
+    } } },
+    .why = "Once the minute and the lead at purchase are known, which item adds almost nothing.",
+    .tip = "An item's win rate mostly says who was ahead when they bought it.",
+    .games = 117_806,
+    .from = held_from ++ ", 2.94M finished items",
+};
+
+pub const gold_nudge: ld.Puzzle = .{
+    .id = "gold-nudge",
+    .q = "How hard does their laner's champion pull it?",
+    .setup = .{ .facts = &.{ .{ .v = "270-360 gold", .label = "your champion's pull on your gold at 14" }, .{ .v = "?", .label = "their laner's champion" } } },
+    // Any guess in the measured 75-200 range gets three stars
+    .answer = .{ .guess = .{ .lo = 0, .hi = 400, .step = 10, .unit = .gold, .real = 140, .tol = 65 } },
+    .why = "Their laner's champion moves your gold at 14 by 75 to 200; a jungler by 20 to 65.",
+    .tip = "Judge your lane against your champion's usual, then the matchup.",
+    .games = 117_806,
+    .from = held_from,
+};
+
+pub const team_counter: ld.Puzzle = .{
+    .id = "team-counter",
+    .q = "Who can your pick counter?",
+    .setup = .{ .chips = .{ .champs = &.{ ch("Malphite", "Malphite"), ch("LeeSin", "Lee Sin"), ch("Ahri", "Ahri"), ch("Jinx", "Jinx"), ch("Thresh", "Thresh") }, .chips = &.{"Gold at 14"} } },
+    .answer = .{ .pick = .{ .right = 0, .choices = &.{
+        .{ .text = "Your laner", .shown = "Clear" },
+        .{ .text = "Their team", .shown = "Not found" },
+    } } },
+    .why = "Beyond your lane opponent, no pick's early game was found to suit an enemy team.",
+    .tip = "Pick into your laner, not into their whole team.",
+    .games = 117_806,
+    .from = held_from,
+};
+
 pub const chapter1 = [_]ld.Puzzle{ know, newcomer };
 pub const chapter2 = [_]ld.Puzzle{ fed, fed_role, surrender, bounty };
+/// After the generated ones (learnbuild.zig)
+pub const chapter3 = [_]ld.Puzzle{gold_nudge};
+pub const chapter4 = [_]ld.Puzzle{team_counter};
 pub const chapter5 = [_]ld.Puzzle{
-    splitpush, wincon, support_gold, scaling, comeback, runes, skillshots, luck,
+    splitpush, wincon, sample, item_wr, support_gold, scaling, comeback, runes, skillshots,
+    luck,
 };
 
 test "fixed puzzles: answers in range, games on every bar, no pick advice" {
     const std = @import("std");
-    for ([_][]const ld.Puzzle{ &chapter1, &chapter2, &chapter5 }) |chapter| for (chapter) |p| {
+    for ([_][]const ld.Puzzle{ &chapter1, &chapter2, &chapter3, &chapter4, &chapter5 }) |chapter| for (chapter) |p| {
         switch (p.answer) {
             .guess => |g| try std.testing.expect(g.lo <= g.real and g.real <= g.hi),
             .pick => |k| try std.testing.expect(k.right < k.choices.len),

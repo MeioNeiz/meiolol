@@ -138,7 +138,7 @@ pub const css =
     \\  .c-choice:has(> .c-champ) > .c-champ { --sz: 40px; grid-row: 1 / span 2; }
     \\  .c-choice:has(> .c-champ) > .nm { grid-column: 2; grid-row: 1 / span 2; }
     \\  .c-choice:has(> .c-champ) > :is(.kn, .mk) { position: static; grid-column: 3; grid-row: 1 / span 2; }
-    \\  .c-choice:has(> .sub) > .nm { grid-row: 1; align-self: end; }
+    \\  .c-choice:has(> .c-champ):has(> .sub) > .nm { grid-row: 1; align-self: end; }
     \\  .c-choice:has(> .c-champ) > .sub { grid-column: 2; grid-row: 2; align-self: start; }
     \\  @media (pointer: coarse) { .c-choice .kn { display: none; } }
     \\  @container (max-width: 600px) {

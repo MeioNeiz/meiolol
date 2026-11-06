@@ -31,8 +31,8 @@ pub fn data(site: *const Site) !ld.Data {
         .{ .title = "The basics", .puzzles = try starter(site) },
         .{ .title = "Does knowing your champion matter?", .puzzles = &fixed.chapter1 },
         .{ .title = "Whose lead wins games?", .puzzles = &fixed.chapter2 },
-        .{ .title = "Does winning lane win the game?", .puzzles = try lane(site) },
-        .{ .title = "Counter, or just strong?", .puzzles = try counters(site) },
+        .{ .title = "Does winning lane win the game?", .puzzles = try std.mem.concat(a, ld.Puzzle, &.{ try lane(site), &fixed.chapter3 }) },
+        .{ .title = "Counter, or just strong?", .puzzles = try std.mem.concat(a, ld.Puzzle, &.{ try counters(site), &fixed.chapter4 }) },
         .{ .title = "Myth or measured", .puzzles = &fixed.chapter5 },
     };
     const ends = try drafts(site, all.len);
