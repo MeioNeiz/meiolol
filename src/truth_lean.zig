@@ -2,11 +2,11 @@
 //! high or low over a group of cells? Lean = the later rate minus Meio's middle, target
 //! games weighted (sum (k - n p) / sum n), in points (gold at 14: gold). Groups: kind x
 //! region x rank set, then all cells, popularity band, Meio's own games, the gem check
-//! and day bucket. se over day origins (one origin's cells share a fit, so aren't
-//! independent; overlapping horizons make it a floor); under 4 origins (day buckets
-//! 0-3) over cells. A group fails beyond 2 se and over a floor; with ~2,500 groups
-//! some fail by chance, so the gate also counts how many would (Student t over origins)
-//! and fails when the count is beyond that
+//! and day bucket. se: the larger of over day origins (one origin's cells share a fit)
+//! and over cells times the horizon overlap (a cell repeats its target games at nearby
+//! origins); groups under a minimum size aren't judged. A group fails beyond 2 se and
+//! over a floor; with ~2,500 groups some fail by chance, so the gate also counts how
+//! many would and fails when the count is beyond that
 //!
 //! Also the per-cell dump (`truth --cells`): every Meio-estimated cell of the chosen
 //! kinds at every origin, so each analysis reads the same cells
@@ -47,7 +47,7 @@ pub const Moments = struct {
     }
 };
 
-/// Origins needed for the se over origins; fewer: over cells
+/// Origins needed for the se over origins to count
 const min_blocks = 4;
 
 pub const Group = struct {
@@ -70,13 +70,21 @@ pub const Group = struct {
         return if (g.cells.n > 0) g.cells.r / g.cells.n else null;
     }
 
-    /// The mean's se and its t's degrees of freedom (0: normal, se over cells)
-    pub fn se(g: Group) ?struct { se: f64, df: f64 } {
+    /// The mean's se and its t's degrees of freedom. Over origins alone runs at a third
+    /// of the se clustered by cell (nearby origins share 6 of 7 target days, so blocks
+    /// barely differ); over cells times the overlap c (each target game is counted at c
+    /// origins on average) comes to 0.93 of it (m10 baseline 16.21, champion and
+    /// keystone). df: cells per origin, about the distinct cells
+    pub fn se(g: Group, horizon: f64) ?struct { se: f64, df: f64 } {
         const m = g.mean() orelse return null;
-        const by_blocks = g.blocks.count >= min_blocks;
-        const v = if (by_blocks) g.blocks.variance(m) else g.cells.variance(m);
+        const b = @max(1, g.blocks.count);
+        const c = b * horizon / (b + horizon - 1);
+        const by_cells = c * g.cells.variance(m);
+        const by_blocks = if (g.blocks.count >= min_blocks) g.blocks.variance(m) else 0;
+        const v = @max(by_cells, by_blocks);
         if (!std.math.isFinite(v)) return null;
-        return .{ .se = @sqrt(v), .df = if (by_blocks) g.blocks.count - 1 else 0 };
+        const df = if (by_blocks > by_cells) g.blocks.count - 1 else @max(1, g.cells.count / b - 1);
+        return .{ .se = @sqrt(v), .df = df };
     }
 };
 
@@ -150,8 +158,15 @@ pub const Lean = struct {
 
 pub const Cell = struct { n: f64, k: f64, p: f64, x: f64, own: f64, raw: ?f64 };
 
-/// The gate's floors: a lean under them is harmless however sure (Jacob's call)
-pub const Floors = struct { points: f64 = 0.5, gold: f64 = 25 };
+/// The gate's floors: a lean under them is harmless however sure (Jacob's call). Groups
+/// under min_cells cells or min_games target games aren't judged: a few cells repeating
+/// one game at every origin give a lean of 60 points with no spread at all
+pub const Floors = struct {
+    points: f64 = 0.5,
+    gold: f64 = 25,
+    min_cells: f64 = 50,
+    min_games: f64 = 500,
+};
 
 /// Points or gold per unit of a kind's lean
 fn scale(kind: Kind) f64 {
@@ -191,9 +206,10 @@ pub const Judged = struct {
         };
     }
 
-    fn of(region: usize, kind: Kind, bracket: usize, family: Family, index: usize, g: Group, floors: Floors) ?Judged {
+    fn of(region: usize, kind: Kind, bracket: usize, family: Family, index: usize, g: Group, floors: Floors, horizon: f64) ?Judged {
+        if (g.cells.count < floors.min_cells or g.cells.n < floors.min_games) return null;
         const m = g.mean() orelse return null;
-        const s = g.se() orelse return null;
+        const s = g.se(horizon) orelse return null;
         const k = scale(kind);
         const lean = k * m;
         const se = k * s.se;
@@ -224,8 +240,8 @@ pub const Judged = struct {
 const per_set = 1 + pop_bands + own_labels.len + gem_labels.len + truth.buckets.len;
 pub const max_judged = truth.regions.len * Kind.count * truth.brackets.len * per_set;
 
-/// Every group with a mean and se, into `out` (max_judged long)
-pub fn judge(results: *const truth.Results, floors: Floors, out: []Judged) []Judged {
+/// Every group big enough, into `out` (max_judged long); horizon in days
+pub fn judge(results: *const truth.Results, floors: Floors, horizon: f64, out: []Judged) []Judged {
     var n: usize = 0;
     for (results, 0..) |by_kind, region| for (by_kind, 0..) |by_bracket, k| {
         const kind: Kind = @fromBackingInt(@intCast(k));
@@ -239,13 +255,14 @@ pub fn judge(results: *const truth.Results, floors: Floors, out: []Judged) []Jud
                 kind: Kind,
                 bracket: usize,
                 floors: Floors,
+                horizon: f64,
                 fn put(p: @This(), family: Family, index: usize, g: Group) void {
-                    const j = Judged.of(p.region, p.kind, p.bracket, family, index, g, p.floors) orelse return;
+                    const j = Judged.of(p.region, p.kind, p.bracket, family, index, g, p.floors, p.horizon) orelse return;
                     p.out[p.n.*] = j;
                     p.n.* += 1;
                 }
             };
-            const p: Put = .{ .out = out, .n = &n, .region = region, .kind = kind, .bracket = bracket, .floors = floors };
+            const p: Put = .{ .out = out, .n = &n, .region = region, .kind = kind, .bracket = bracket, .floors = floors, .horizon = horizon };
             p.put(.all, 0, days.all);
             for (days.pop, 0..) |g, i| p.put(.pop, i, g);
             for (days.own, 0..) |g, i| p.put(.own, i, g);
@@ -303,24 +320,24 @@ pub fn twoTail(x: f64, df: f64) f64 {
 /// Failing rows listed in the report, the surest first; every group is in --lean
 const listed = 60;
 
-pub fn report(gpa: Allocator, results: *const truth.Results, floors: Floors, out: *std.Io.Writer) !void {
+pub fn report(gpa: Allocator, results: *const truth.Results, floors: Floors, horizon: f64, out: *std.Io.Writer) !void {
     const buf = try gpa.alloc(Judged, max_judged);
     defer gpa.free(buf);
-    const list = judge(results, floors, buf);
+    const list = judge(results, floors, horizon, buf);
     const gate = Gate.of(list);
     try out.print("\n## Lean (the M10 gate)\n\nLater rate minus Meio's middle, in points (gold " ++
-        "at 14: gold), target games weighted; +- 2 se over day origins (day buckets 0-3: over " ++
-        "cells). A group fails beyond 2 se and over {d} points ({d} gold). Groups per " ++
+        "at 14: gold), target games weighted; +- 2 se, the larger of over day origins and over " ++
+        "cells times the horizon overlap. Groups from {d} cells and {d} target games; one " ++
+        "fails beyond 2 se and over {d} points ({d} gold). Groups per " ++
         "kind, region and rank set: all cells, popularity band (log share of the parent's " ++
         "games in the cell's region, rank set and 30 days: champion-roles of their role, the " ++
         "rest of their champion-role), Meio's own games, the gem check (the 3 rarest bands by " ++
         "raw 30 days above or below Meio's middle) and day bucket. Chance: failures expected " ++
-        "with no lean anywhere (Student t over origins); the gate fails beyond expected + 2 " ++
+        "with no lean anywhere (Student t); the gate fails beyond expected + 2 " ++
         "sqrt(expected)\n\n**Gate: {s}.** {d} groups judged, {d} failing, {d:.1} expected by " ++
         "chance (limit {d:.1})\n", .{
-        floors.points, floors.gold,  if (gate.beyondChance()) "FAILS beyond chance" else "passes",
-        gate.judged,   gate.failing, gate.expected,
-        gate.limit(),
+        floors.min_cells, floors.min_games, floors.points, floors.gold,  if (gate.beyondChance()) "FAILS beyond chance" else "passes",
+        gate.judged,      gate.failing,     gate.expected, gate.limit(),
     });
     for ([_]bool{ false, true }) |shares| try bandTable(out, list, shares);
     try summary(out, list);
@@ -393,11 +410,11 @@ fn failing(gpa: Allocator, out: *std.Io.Writer, list: []const Judged) !void {
 }
 
 /// Every judged group, one line each
-pub fn writeTsv(gpa: Allocator, results: *const truth.Results, floors: Floors, patch: []const u8, out: *std.Io.Writer) !void {
+pub fn writeTsv(gpa: Allocator, results: *const truth.Results, floors: Floors, horizon: f64, patch: []const u8, out: *std.Io.Writer) !void {
     const buf = try gpa.alloc(Judged, max_judged);
     defer gpa.free(buf);
     try out.writeAll("patch\tregion\tkind\tbracket\tfamily\tgroup\tcells\tgames\tlean\tse\tdf\tfails\tchance\n");
-    for (judge(results, floors, buf)) |j| {
+    for (judge(results, floors, horizon, buf)) |j| {
         try out.print("{s}\t{s}\t{t}\t{s}\t{t}\t{s}\t{d}\t{d}\t{d:.4}\t{d:.4}\t{d}\t{d}\t{d:.5}\n", .{
             patch, truth.regions[j.region], j.kind, truth.brackets[j.bracket], j.family, j.name(), j.cells, j.games, j.lean, j.se, j.df, @intFromBool(j.fails), j.chance,
         });
@@ -494,8 +511,13 @@ test "a planted lean fails, a clean group doesn't; merging origins equals one pa
     // Against one pass over the cells and its own origin sums
     try std.testing.expectApproxEqAbs(one_pass.mean().?, planted.mean().?, 1e-12);
     try std.testing.expectEqual(one_pass.cells.count, planted.cells.count);
-    try std.testing.expectApproxEqAbs(@sqrt(by_origin.variance(planted.mean().?)), planted.se().?.se, 1e-12);
-    try std.testing.expectEqual(@as(f64, 13), planted.se().?.df);
+    // se: over cells times the overlap of 14 origins' 7-day horizons (98 / 20) beats
+    // over origins here (each origin's 40 cells average their spread away)
+    const m = planted.mean().?;
+    const by_cells = @sqrt(98.0 / 20.0 * one_pass.cells.variance(m));
+    try std.testing.expect(by_cells > @sqrt(by_origin.variance(m)));
+    try std.testing.expectApproxEqAbs(by_cells, planted.se(7).?.se, 1e-12);
+    try std.testing.expectEqual(@as(f64, 39), planted.se(7).?.df);
 
     const results = try gpa.create(truth.Results);
     defer gpa.destroy(results);
@@ -503,7 +525,7 @@ test "a planted lean fails, a clean group doesn't; merging origins equals one pa
     results[0][@backingInt(Kind.champion)][0][4].lean = merged;
     const buf = try gpa.alloc(Judged, max_judged);
     defer gpa.free(buf);
-    const list = judge(results, .{}, buf);
+    const list = judge(results, .{}, 7, buf);
     var planted_fails = false;
     var clean_fails = false;
     for (list) |j| if (j.family == .pop) {
@@ -515,9 +537,22 @@ test "a planted lean fails, a clean group doesn't; merging origins equals one pa
     // Band -6..-7 isn't one of the rarest: no gem cells
     try std.testing.expectEqual(@as(f64, 0), merged.gem[0].cells.count);
     // Under a 2-point floor nothing fails
-    for (judge(results, .{ .points = 2 }, buf)) |j| try std.testing.expect(!j.fails);
+    for (judge(results, .{ .points = 2 }, 7, buf)) |j| try std.testing.expect(!j.fails);
     var w: std.Io.Writer.Allocating = .init(gpa);
     defer w.deinit();
-    try report(gpa, results, .{}, &w.writer);
+    try report(gpa, results, .{}, 7, &w.writer);
     try std.testing.expect(std.mem.find(u8, w.written(), "FAILS beyond chance") != null);
+}
+
+test "a small group isn't judged however sure its lean" {
+    // 4 cells, one game each, the same win at every origin: lean +60 points, no spread
+    var l: Lean = .{};
+    for (0..14) |_| {
+        var part: Lean = .{};
+        for (0..4) |_| part.cell(.matchup, .{ .n = 1, .k = 1, .p = 0.4, .x = -0.2, .own = 1, .raw = 1 });
+        part.block();
+        l.add(part);
+    }
+    try std.testing.expect(Judged.of(0, .matchup, 0, .pop, 0, l.pop[0], .{}, 7) == null);
+    try std.testing.expect(Judged.of(0, .matchup, 0, .pop, 0, l.pop[0], .{ .min_cells = 50, .min_games = 50 }, 7) != null);
 }

@@ -1382,9 +1382,9 @@ pub fn run(comptime Mode: type, gpa: Allocator, io: std.Io, cube_dir: []const u8
         loaded.days, end,       if (opts.until_ms != 0) " (games from --until left out)" else "",
     });
     try report(results, out);
-    try lean.report(gpa, results, opts.floors, out);
+    try lean.report(gpa, results, opts.floors, @floatFromInt(opts.horizon), out);
     if (tsv) |w| try writeTsv(results, opts.patch, loaded.t0, w);
-    if (lean_tsv) |w| try lean.writeTsv(gpa, results, opts.floors, opts.patch, w);
+    if (lean_tsv) |w| try lean.writeTsv(gpa, results, opts.floors, @floatFromInt(opts.horizon), opts.patch, w);
 }
 
 pub fn report(results: *const Results, out: *std.Io.Writer) !void {

@@ -5968,8 +5968,12 @@ Reading:
 run high or low over a group of cells (docs/plan/meio-middle.md NL0)?
 
 - Lean: later rate minus Meio's middle, target games weighted (sum (k - n p) / sum n),
-  points (gold at 14: gold). se over day origins (one origin's cells share a fit);
-  under 4 origins (day buckets 0-3) over cells
+  points (gold at 14: gold). se: the larger of over day origins and over cells times
+  the horizon overlap c = B h / (B + h - 1) (B origins, h = 7 days: each target game
+  counts at c origins). Over origins alone ran at a third of the se clustered by cell
+  (nearby origins share 6 of 7 target days), cells times c at 0.93 of it (baseline
+  16.21, champion and keystone). Groups under 50 cells or 500 target games aren't
+  judged: a few cells repeating one game gave leans of 65 points with no spread
 - Groups per kind, region and rank set: all cells; popularity band, x = log((games +
   0.5) / (parent games + 1)) in the cell's region, rank set and 30 days, 10 fixed bands 1
   log unit wide (champion-roles of their role's games, > -3 .. < -11; other kinds of
@@ -5978,7 +5982,7 @@ run high or low over a group of cells (docs/plan/meio-middle.md NL0)?
   unseen); day bucket
 - A group fails beyond 2 se and over 0.5 points or 25 gold (`--lean-floor`,
   `--lean-gold`). Chance: failures expected with no lean, P(|T| > max(2, floor / se)),
-  Student t over origins, summed; the gate fails when failures pass expected + 2
+  Student t, summed; the gate fails when failures pass expected + 2
   sqrt(expected), and lists the surest 60. Every group: `--lean PATH`
 - Per-cell dump for analyses: `--cells PATH` (`--cells-kinds`, default champion,
   keystone, item, rune, build)
