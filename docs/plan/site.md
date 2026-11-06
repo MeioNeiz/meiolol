@@ -172,8 +172,8 @@ measured no win)
   vs Mid, vs Bot, vs Support, Duos (by ally role), vs usual with k per tab
   (champion.Pairs; off-lane pairs pull harder). Under a filter other than the root
   view, filters.js reuses the root view's opponent strengths
-- Rune panel: All | vs melee | vs ranged (the lane opponent's base attack range under
-  300), ▲▼ on runes the reach moves from all; builds files' by_reach, groups of 100+
+- Build panel Lane opponent row: All | Melee | Ranged | AD | AP (base attack range under
+  300; 65%+ of damage physical or magic), a pick locks the whole panel (vr/vd)
 - Item cells: All | Ahead | Behind (500+ gold on the lane opponent at 14 minutes; about
   two in three lanes are that far apart), builds files' by_lead, groups of 100+
 - End of game (CH10): per game and per minute figures, each "Nth of M" in the role,

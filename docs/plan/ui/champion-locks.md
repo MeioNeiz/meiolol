@@ -123,8 +123,8 @@ What a block needs from a row:
   answers count codes in arrays and load each group's top options into builds.Builder
   for its File. `reference` counts the decoded rows with builds.Builder. pipeline_test: no
   lock equals builds --site's build and splits, a keystone lock its by_keystone, an
-  opponent lock its matchup, a reach lock its by_reach pages, and every fixture block
-  under each lock kind and a full stack equals the reference. `meiolol lockrows --bench`
+  opponent lock its matchup, and every fixture block under each lock kind and a full
+  stack equals the reference. `meiolol lockrows --bench`
   (Mac, the 20 largest blocks, 5 lock sets, EUW and every region, each answer checked
   against the reference): p50 1.5 ms, p99 9.3 ms, max 9.8 ms (Builder: p99 300 ms). Not
   yet measured on C01

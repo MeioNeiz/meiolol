@@ -2328,9 +2328,8 @@ fn buildsOne(dir: []const u8, db: store.Db, o: builds.Options, set: builds.Set) 
 
 /// Lock answers (lockanswer.zig) from the lock rows of `dir`'s cubes, as `f` (Darius top,
 /// EUW, the patch, Platinum+) was counted from them: no lock gives its build and splits,
-/// a keystone lock its by_keystone build, an opponent lock its matchup, a reach lock its
-/// by_reach rune pages. Then every block under single locks of each kind and a stack of
-/// all: answers equal builds.Builder's
+/// a keystone lock its by_keystone build, an opponent lock its matchup. Then every block
+/// under single locks of each kind and a stack of all: answers equal builds.Builder's
 fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds.File) !void {
     const gpa = testing.allocator;
     const t = try lockTable(arena, dir);
@@ -2344,7 +2343,7 @@ fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds
     const o: builds.Options = .{ .min_split_games = 1 };
     const none = (try lockanswer.file(gpa, arena, &t, &x, 122, .top, filter, &.{}, o, f.label, f.min_tier)).?;
     try testing.expectEqualDeep(f.get(122, .top).?, none.get(122, .top).?);
-    for ([_][]const builds.File.Build{ f.by_reach, f.by_lead, f.by_keystone }, [_][]const builds.File.Build{ none.by_reach, none.by_lead, none.by_keystone }) |want, got| {
+    for ([_][]const builds.File.Build{ f.by_lead, f.by_keystone }, [_][]const builds.File.Build{ none.by_lead, none.by_keystone }) |want, got| {
         var own: std.ArrayList(builds.File.Build) = .empty;
         for (want) |b| if (b.champion == 122 and b.role == .top) try own.append(arena, b);
         try testing.expect(own.items.len > 0);
@@ -2353,7 +2352,6 @@ fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds
     const cases = [_]struct { lk: []const u8, want: builds.File.Build, rows: usize }{
         .{ .lk = "ks8010", .want = f.getKeystone(122, .top, 8010).?, .rows = 6 },
         .{ .lk = "vs82", .want = f.getVs(122, .top, 82).?, .rows = 3 },
-        .{ .lk = "vr1", .want = f.getReach(122, .top, .melee).?, .rows = 4 },
     };
     for (cases) |c| {
         const got = (try lockanswer.file(gpa, arena, &t, &x, 122, .top, filter, &lockanswer.Locks.parse(c.lk).?, o, f.label, f.min_tier)).?.get(122, .top).?;
@@ -2372,8 +2370,8 @@ fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds
     const melee = (try lockanswer.file(gpa, arena, &t, &x, 122, .top, filter, &lockanswer.Locks.parse("vr1").?, o, f.label, f.min_tier)).?;
     try testing.expectEqualSlices(builds.File.Opponent, none.get(122, .top).?.opponents, melee.get(122, .top).?.opponents);
     const vs = (try buildblock.data(arena, &none, none.get(122, .top).?, "Darius", &.{})).vs;
-    try testing.expectEqual(f.getReach(122, .top, .melee).?.games, vs[0].games);
-    try testing.expectEqual(f.getReach(122, .top, .melee).?.wins, vs[0].wins);
+    try testing.expectEqual(melee.get(122, .top).?.games, vs[0].games);
+    try testing.expectEqual(melee.get(122, .top).?.wins, vs[0].wins);
     const nobody = (try lockanswer.file(gpa, arena, &t, &x, 122, .top, filter, &lockanswer.Locks.parse("ks8005").?, o, f.label, f.min_tier)).?;
     try testing.expectEqual(null, nobody.get(122, .top));
     try testing.expectEqual(null, try lockanswer.file(gpa, arena, &t, &x, 122, .jungle, filter, &.{}, o, f.label, f.min_tier));

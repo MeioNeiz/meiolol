@@ -135,13 +135,11 @@ with a timeline, then those whose team took first tower, dragon, Voidgrubs and R
 champion page's Objectives card, against the role's sum); role-wide only. Per build
 `opponents`: every lane opponent's players and wins, [id, games, wins] (the champion
 page groups them by reach and damage for the lane opponent locks); role-wide only.
-`ranges`: Data Dragon base attack ranges by champion id, for File.reachOf. Matchups count
-every kind but keystone and skill_start. `by_reach`: the rune kinds (runes, shards, rune,
-shard) by the lane opponent's reach, melee under 300 base attack range (Data Dragon
-champion.json), groups of 100+ players (Options.min_split_games), 4 pages each; no
-page reads it since the lane opponent locks (to drop).
+`ranges`: Data Dragon base attack ranges by champion id, for File.reachOf (melee under
+300). Matchups count every kind but keystone and skill_start.
 `by_lead`: the item kinds (boots, core2, core3, item4-6) of players 500+ gold ahead of or
-behind their lane opponent at 14 minutes (participants.gold14), groups of 100+, 6 options
+behind their lane opponent at 14 minutes (participants.gold14), groups of 100+ players
+(Options.min_split_games), 6 options
 each. `by_keystone`: every kind but the rune ones per keystone (the champion page's
 locked rune page), groups of 100+, 6 options each. Needs Data Dragon's item.json,
 runesReforged.json and summoner.json for the patch (ddragon.buildData); stat shard names

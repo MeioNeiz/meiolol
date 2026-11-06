@@ -164,8 +164,7 @@ pub fn reference(gpa: Allocator, arena: Allocator, t: *const lockrows.Table, cha
     return try b.file(arena, &t.build, label, min_tier, o.rows);
 }
 
-/// With its rune pages by reach, items by lead and builds by keystone, as builds --site
-/// counts (no matchups)
+/// With its items by lead and builds by keystone, as builds --site counts (no matchups)
 fn builder(gpa: Allocator, o: builds.Options) !builds.Builder {
     var b: builds.Builder = .{ .gpa = gpa, .max_keys = @max(o.max_keys, 2) };
     errdefer b.deinit();
@@ -423,17 +422,16 @@ const Match = struct {
     }
 };
 
-/// What builds.Builder splits a player's counts by: Split.none role-wide, then reach,
-/// lead and keystone groups
-const Split = enum { none, reach, lead, keystone };
+/// What builds.Builder splits a player's counts by: Split.none role-wide, then lead and
+/// keystone groups
+const Split = enum { none, lead, keystone };
 
 /// The coded kinds each split counts, as builds.Builder.counts
 const split_kinds = blk: {
-    var out: [4][]const usize = undefined;
+    var out: [std.enums.values(Split).len][]const usize = undefined;
     for (std.enums.values(Split), &out) |split, *o| {
         const list: []const builds.Kind = switch (split) {
             .none => &coded,
-            .reach => &builds.reach_kinds,
             .lead => &builds.lead_kinds,
             .keystone => &builds.keystone_kinds,
         };
@@ -448,8 +446,7 @@ const split_kinds = blk: {
 };
 
 /// A block's counts under one answer's view and locks: per group (0 role-wide, 1 and 2
-/// by reach, 3 and 4 by lead, then one per keystone) its players and each counted coded
-/// kind's codes
+/// by lead, then one per keystone) its players and each counted coded kind's codes
 const Counts = struct {
     b: *const Block,
     games: u32 = 0,
@@ -465,13 +462,12 @@ const Counts = struct {
     first_item: [builds.minute_buckets]Count = @splat(.{}),
     firsts: [1 + builds.firsts_len]Count = @splat(.{}),
 
-    const first_keystone = 5;
+    const first_keystone = 3;
 
     fn splitOf(g: usize) Split {
         return switch (g) {
             0 => .none,
-            1, 2 => .reach,
-            3, 4 => .lead,
+            1, 2 => .lead,
             else => .keystone,
         };
     }
@@ -502,8 +498,7 @@ const Counts = struct {
         n.games += 1;
         n.timelines += @intFromBool(r.picks);
         n.group(0, .none, r);
-        if (r.opponent != 0 and r.reach != 0) n.group(r.reach, .reach, r);
-        if (r.lead != 0) n.group(2 + r.lead, .lead, r);
+        if (r.lead != 0) n.group(r.lead, .lead, r);
         if (r.keystone != 0) n.group(first_keystone - 1 + @as(usize, r.keystone), .keystone, r);
         if (!r.picks) return;
         for (r.item, r.minute, 0..) |item, minute, slot| {
@@ -542,8 +537,7 @@ const Counts = struct {
             const split = splitOf(g);
             const into, const opp: u16 = switch (split) {
                 .none => .{ b, 0 },
-                .reach => .{ b.reach.?, @intCast(g) },
-                .lead => .{ b.lead.?, @intCast(g - 2) },
+                .lead => .{ b.lead.?, @intCast(g) },
                 .keystone => .{ b.keystone.?, @intCast(n.b.keystones[g - first_keystone]) },
             };
             try into.putTotal(champion, role, opp, null, all);
@@ -640,9 +634,8 @@ const Top = struct {
     }
 };
 
-/// `champion` in `role` under `f` and `locks` as a builds File in `arena`, with its rune
-/// pages by reach, items by lead and builds by keystone as builds --site makes them (no
-/// matchups); null when the table has no such block. Equal to `reference`'s
+/// `champion` in `role` under `f` and `locks` as a builds File in `arena`, with its items
+/// by lead and builds by keystone as builds --site makes them (no matchups); null when the table has no such block. Equal to `reference`'s
 pub fn file(gpa: Allocator, arena: Allocator, t: *const lockrows.Table, x: *const Index, champion: u32, role: Role, f: Filter, locks: *const Locks, o: builds.Options, label: []const u8, min_tier: []const u8) !?builds.File {
     const bi = t.blockIndex(champion, role) orelse return null;
     const block = &x.blocks[bi];
