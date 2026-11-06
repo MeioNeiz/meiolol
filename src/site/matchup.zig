@@ -196,7 +196,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     // Lane first: the page's own answer, which no build page has; the build after it
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
-    t.root = h.div(.{ .class = "c-cpage c-mpage", .data_id = x.id, .data_vs = y.id, .data_role = champion.uiRole(r) }, .{ head.view(&h), more.view(&h), if (build) |*b| b.view(&h) else ui.N.none, out.view(&h) });
+    t.root = h.div(.{ .class = "c-cpage c-mpage", .data_role = champion.uiRole(r) }, .{ head.view(&h), more.view(&h), if (build) |*b| b.view(&h) else ui.N.none, out.view(&h) });
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
     try tpl.render(w,

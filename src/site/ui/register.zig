@@ -63,7 +63,7 @@ const groups = [_]Group{
     },
     .{
         .name = "Admin and ops",
-        .files = "pv meionotes meionoteslist adminpage admincharts admintraffic adminops " ++
+        .files = "meionotes meionoteslist adminpage admincharts admintraffic adminops " ++
             "adminmodels adminlab adminruns logview steptimeline",
     },
 };

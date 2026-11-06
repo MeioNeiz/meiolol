@@ -1,6 +1,5 @@
 //! Meio under a champion page's lock stack, from the lock server (site/locks.zig): the
-//! champion page's Meio period at champpage.lockPath's "meio" island, and ui.pv's private
-//! preview at meioPath
+//! champion page's Meio period at champpage.lockPath's "meio" island
 const std = @import("std");
 const fmt = @import("fmt.zig");
 const Role = @import("role.zig").Role;

@@ -17,7 +17,6 @@ const ui = @import("ui");
 const adminmodels = @import("adminmodels.zig");
 const csp = @import("site/csp.zig");
 const sheets = @import("site/sheets.zig");
-const site_pv = @import("site/pv.zig");
 const site_shell = @import("site/shell.zig");
 const site_html = @import("site/html.zig");
 const ad = ui.admindata;
@@ -319,8 +318,7 @@ test "tsv rows by column name: optional cells null, rows short of a required cel
     try std.testing.expectEqual(@as(?f32, 0.5), e[1].ll_tunedw);
 }
 
-/// The private site's index (/private) and pv's files, the public pages' private numbers
-/// (site/pv.zig). nginx serves it to view_private logins
+/// The private site's index (/private). nginx serves it to view_private logins
 pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
     const cwd = Io.Dir.cwd();
     try cwd.createDirPath(io, out_dir);
@@ -329,12 +327,10 @@ pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     try writeGz(gpa, io, dir, "index.html", try privateIndex(arena.allocator()));
-    for (site_pv.files) |f| try writeGz(gpa, io, dir, f[0], f[1]);
 }
 
 /// /private: the private pages, on ui.textpage in the site shell (site/shell.zig), its CSS
-/// inline (site/sheets.zig). The shell sets the site menu's link (shell.zig admin_link),
-/// which also loads the private numbers (site/pv.zig)
+/// inline (site/sheets.zig). The shell sets the site menu's link (shell.zig admin_link)
 pub fn privateIndex(a: std.mem.Allocator) ![]const u8 {
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);

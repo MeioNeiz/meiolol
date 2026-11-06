@@ -367,9 +367,8 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         if (std.mem.eql(u8, path, "gallery.css")) {
             return request.respond(site.gallery.css, .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/css; charset=utf-8" }} });
         }
-        // meionotes (site/meionotes.zig) and the private numbers (site/pv.zig): their
-        // files; the marker that adds the meionotes tag
-        if (std.mem.startsWith(u8, path, "private/")) if (site.meionotes.file(path["private/".len..]) orelse site.pv.file(path["private/".len..])) |data| {
+        // meionotes (site/meionotes.zig): its files; the marker that adds its tag
+        if (std.mem.startsWith(u8, path, "private/")) if (site.meionotes.file(path["private/".len..])) |data| {
             return request.respond(data, .{ .extra_headers = &.{
                 .{ .name = "content-type", .value = contentType(path) },
                 .{ .name = "cache-control", .value = "no-cache" },

@@ -32,7 +32,6 @@ const flat = @import("flat.zig");
 pub const assets = @import("assets.zig");
 pub const gallery = @import("gallery.zig");
 pub const meionotes = @import("meionotes.zig");
-pub const pv = @import("pv.zig");
 pub const ui = @import("ui");
 const ScopeDim = ui.scopechip.Dim;
 const patchday = @import("../patchday.zig");

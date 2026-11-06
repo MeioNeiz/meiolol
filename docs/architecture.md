@@ -67,7 +67,7 @@ src/
                      counts (lockanswer.choices): public as the lock island "meio"
                      (<view dir>data/lock/meio/..., `none` for no lock; the Meio period),
                      private at /private/meio/<view>/<id>/<role>/<rank>/<lk>.bin (admin
-                     token, no-store) for ui-pv until the strip goes
+                     token, no-store), unread since the preview went
   backup.zig         `meiolol backup|restore`: state snapshots + append-only segments
   forget.zig         `meiolol forget`: GDPR erasure, `forgotten` suppression list
                      (both: docs/data-safety.md)

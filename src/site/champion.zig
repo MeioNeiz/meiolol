@@ -105,10 +105,6 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
         .js = "/" ++ assets.champcharts_js.path,
         .wasm = assets.champcharts_wasm.path,
     };
-    // The champion and its roles, most played first, for /private/pv.js (no island's root, so
-    // no wasm reads or writes them)
-    var roles: std.ArrayList(u8) = .empty;
-    for (d.roles, 0..) |x, i| try roles.print(a, "{s}{s}", .{ if (i > 0) " " else "", @tagName(x.role) });
     build.fromUrl(.{ .role = shown.role });
     try lockBuild(site, &build, ch, r);
     more.fromUrl(.{ .role = shown.role });
@@ -119,7 +115,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
     // The role rendered for, when the path names it: the wasms' server state (dom.pageRole)
-    t.root = h.div(.{ .class = "c-cpage", .data_id = ch.id, .data_roles = roles.items, .data_role = shown.role }, .{ top.view(&h), build.view(&h), more.view(&h), trends.view(&h), charts.view(&h) });
+    t.root = h.div(.{ .class = "c-cpage", .data_role = shown.role }, .{ top.view(&h), build.view(&h), more.view(&h), trends.view(&h), charts.view(&h) });
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
     // Only Top's: it loads the others' (ui/wasm/champion.zig)

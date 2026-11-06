@@ -163,14 +163,11 @@ const tip_esc =
 /// Bar and menu links for private logins: Private, and Admin for an admin's; on /download
 /// the tester zip's link above the apply form (ui/account.zig zip). Sign-in and the
 /// private pages mark the login in this origin's localStorage ("login"), so visitors'
-/// pages carry neither links nor paths. Those browsers also load the private numbers
-/// (site/pv.zig), which nginx serves to private logins only: for anyone else they are the
-/// login page's HTML, which never runs or styles
+/// pages carry neither links nor paths
 const admin_link =
     \\<script>try{const r=localStorage.getItem("login");if(r=="tester"||r=="admin"){const ls=[["/private","Private"]];if(r=="admin")ls.push(["/admin","Admin"]);
     \\for(const n of document.querySelectorAll("header .links,header .c-sitemenu"))for(const[h,t]of ls){const a=document.createElement("a");a.href=h;a.textContent=t;n.insertBefore(a,n.querySelector(":scope>.lab"))}
-    \\addEventListener("DOMContentLoaded",()=>{const ap=document.querySelector(".c-apply");if(ap){const p=document.createElement("p"),a=document.createElement("a");a.href="/private/desktop/meiolol-desktop.zip";a.textContent="Download the tester build";p.append(a," (Windows, a zip: run meiolol-desktop.exe inside, it installs itself)");ap.before(p)}})
-    \\const c=document.createElement("link");c.rel="stylesheet";c.href="/private/pv.css";const s=document.createElement("script");s.src="/private/pv.js";s.dataset.wasm="/private/pv.wasm";document.head.append(c,s)}}catch(e){}</script>
+    \\addEventListener("DOMContentLoaded",()=>{const ap=document.querySelector(".c-apply");if(ap){const p=document.createElement("p"),a=document.createElement("a");a.href="/private/desktop/meiolol-desktop.zip";a.textContent="Download the tester build";p.append(a," (Windows, a zip: run meiolol-desktop.exe inside, it installs itself)");ap.before(p)}})}}catch(e){}</script>
     \\
 ;
 

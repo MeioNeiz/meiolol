@@ -155,7 +155,6 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - StepTimeline: one deploy (a push to main) as a folding row
 - Meionotes: meionotes: Jacob's notes on the live site, an island ui-meionotes.wasm...
 - MeionotesList: /admin/meionotes, every note on the site grouped by page or by...
-- Pv: Meio's preview on public champion pages, for tester and admin logins only...
 - AdminPage: /admin/ (private) as one island
 - AdminCharts: the admin page's chart tabs, Crawler, Riot API, Storage and Ingest, an...
 - AdminTraffic: the admin page's Traffic tab, an island of its own below AdminCharts...
@@ -204,7 +203,7 @@ States: neutral; accent; us; them; few; patch note; patch buff; patch nerf; mome
 caution
 Used by: modelbadge, matchbrief, champlist, draftboard, champselect, compview, appbar,
 versus, inspector, gamehead, gamerow, scoreboard, puzzle, candlist, learnpage, dailypage,
-dailyseat, dailydays, patchpage, homepage, pv, adminpage, adminlab, adminruns, champpage,
+dailyseat, dailydays, patchpage, homepage, adminpage, adminlab, adminruns, champpage,
 matchpage, tiers
 
 ### Segmented
@@ -276,7 +275,7 @@ to open, is a Toggletip. The native title and attr(data-tip) are uilint debt tha
 here
 States: closed: hover, focus or tap; open, above; open, end; open, below; hover, then
 Escape: shut until the pointer leaves; open, wraps
-Used by: chip, draftboard, versus, pv, champpage
+Used by: chip, draftboard, versus, champpage
 
 ### StatCell
 `stat.zig` `.c-stat` site
@@ -312,7 +311,7 @@ column: the colour mixes, no steps; the same colour however sure: 53.0, 52.6, 50
 20,000, 54.0 of 400, 54.2 of 120, 65 of 40 (faded); delta: +2.6, −1.4, +0.3; +4.8 with a
 wide range, faded
 Used by: stat, strip, matchbrief, draftboard, champselect, loadscreen, buildpanel,
-lockbar, candlist, matchgrid, pv, champpage, matchpage
+lockbar, candlist, matchgrid, champpage, matchpage
 
 ### Delta
 `delta.zig` `.c-delta` `.c-dbar` site
@@ -1659,18 +1658,6 @@ browser. ui-meionotes.wasm's list mode fetches (again every 20 s while shown) an
 the reply's input is uncontrolled and keyed, read by the glue at Save
 States: loading; by page, open; by component, all, replying; to check, not yet; delete
 asked; delete refused; none, failed
-
-### Pv
-`pv.zig` `.c-pv`
-Pv: Meio's preview on public champion pages, for tester and admin logins only (app.md
-"Private site"): Meio's estimate for the newest patch under the page's locks, before it
-becomes the third period option (estimates.md E0) and the public pages show it. ui-pv.wasm
-draws it under the head from ui.pvdata.Meio, one file per period. One figure: Meio's
-number, its count as the games its range is worth (an estimate, not games played), then a
-scale with Meio's 80% band and dot beside the two raw windows' ticks, which say their
-names on hover only
-States: below both raw windows (Ornn top, 149); under a lock, wide band, near 50; the
-patch file not in yet; Master+: no Meio, its reason, no scale
 
 ### AdminPage
 `adminpage.zig` `.c-admin`
