@@ -1,5 +1,5 @@
-//! `meiolol eval`, `legendaries`, `objectives`, `winchance`, `playstyle`, `truth`: model
-//! checks and analyses on held-out games
+//! `meiolol eval`, `legendaries`, `objectives`, `winchance`, `playstyle`, `truth`,
+//! `daycells`: model checks and analyses on held-out games
 
 const std = @import("std");
 const stats = @import("../stats.zig");
@@ -16,6 +16,7 @@ const playstyle = @import("../playstyle.zig");
 const truth = @import("../truth.zig");
 const truth_lean = @import("../truth_lean.zig");
 const cubes = @import("../cubes.zig");
+const daycells = @import("../daycells.zig");
 const store = @import("store");
 const Date = @import("../date.zig").Date;
 const main = @import("../main.zig");
@@ -450,4 +451,34 @@ fn parseUtc(s: []const u8) ?i64 {
 test parseUtc {
     try std.testing.expectEqual(1760971440000, parseUtc("2025-10-20T14:44Z").?);
     try std.testing.expectEqual(null, parseUtc("2025-10-20"));
+}
+
+pub const usage_daycells =
+    \\  daycells    the day cubes summed per patch, day since its first EUW1 game, platform,
+    \\              rank bracket and champion-role (TSV; docs/plan/meio-middle.md TS2).
+    \\              Reads DATA/cubes as it is
+    \\              --out PATH       the TSV (required)
+    \\              --threads N      default 4
+    \\
+;
+
+pub fn cmdDaycells(c: *Cmd) !u8 {
+    var out_path: ?[]const u8 = null;
+    var threads: u8 = 4;
+    while (c.next()) |_| {
+        if (c.is("--out")) {
+            out_path = try c.value();
+        } else if (c.is("--threads")) {
+            threads = try c.int(u8);
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const r = try daycells.collect(c.init.gpa, c.arena, io, try cubes.dirIn(c.arena, c.data_dir), threads);
+    const file = try std.Io.Dir.cwd().createFile(io, out_path orelse return error.Usage, .{});
+    defer file.close(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var w = file.writer(io, &buf);
+    try daycells.write(&w.interface, r);
+    try w.interface.flush();
+    return 0;
 }

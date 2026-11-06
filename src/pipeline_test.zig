@@ -35,6 +35,7 @@ const lab_events = @import("lab/events.zig");
 const objectives = @import("objectives.zig");
 const partials = @import("partials.zig");
 const cubes = @import("cubes.zig");
+const daycells = @import("daycells.zig");
 const lockrows = @import("lockrows.zig");
 const meio = @import("meio.zig");
 const lockanswer = @import("lockanswer.zig");
@@ -181,6 +182,7 @@ test "fixture games to stats, curves and the website" {
     {
         const rows = try truth.load(gpa, io, try cubeDir(arena, dir, "builds"), .{ .patch = patch, .origins = 1, .horizon = 255 });
         defer gpa.free(rows.rows);
+        try expectDaycells(arena, try cubeDir(arena, dir, "builds"), rows);
         try expectTruthRefreshes(arena, db, try cubeDir(arena, dir, "builds"), rows.rows.len);
         var m = try meio.fit(gpa, rows.rows, std.math.maxInt(i32), .{});
         defer m.deinit(gpa);
@@ -2457,6 +2459,32 @@ fn codeOf(list: []const []const u8, x: []const u8) ?u8 {
 
 /// A day file another binary built (its format key) is no current file; truth --refresh's
 /// refreshHeld builds it again and truth reads the same rows
+/// daycells against truth's rows: the newest patch's EUW1 seats from its first game, per
+/// bracket
+fn expectDaycells(arena: std.mem.Allocator, dir: []const u8, loaded: truth.Loaded) !void {
+    const r = try daycells.collect(testing.allocator, arena, testing.io, dir, 2);
+    const newest = daycells.patchNumber(patch).?;
+    try testing.expectEqual(loaded.t0, for (r.firsts) |f| {
+        if (f.patch == newest) break f.ms;
+    } else 0);
+    var want: [4]daycells.Count = @splat(.{});
+    for (loaded.rows) |x| if (x.patch == 0 and x.day >= 0 and x.euw) {
+        want[x.bracket].games += 1;
+        want[x.bracket].wins += @intFromBool(x.win);
+    };
+    var got: [4]daycells.Count = @splat(.{});
+    const euw = daycells.platformIndex("EUW1").?;
+    var it = r.cells.iterator();
+    while (it.next()) |e| {
+        const c = daycells.unpack(e.key_ptr.*);
+        if (c.patch != newest or c.day < 0 or c.platform != euw) continue;
+        got[c.bracket].games += e.value_ptr.games;
+        got[c.bracket].wins += e.value_ptr.wins;
+    }
+    try testing.expectEqual(want, got);
+    try testing.expect(want[2].games > 0);
+}
+
 fn expectTruthRefreshes(arena: std.mem.Allocator, db: store.Db, dir: []const u8, rows: usize) !void {
     const gpa = testing.allocator;
     const io = testing.io;
