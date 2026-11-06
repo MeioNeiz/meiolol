@@ -69,6 +69,17 @@ pub const Db = struct {
         return std.mem.span(p);
     }
 
+    /// fsync the file behind schema `name` without taking any SQLite lock
+    pub fn syncFile(db: Db, name: [:0]const u8) Error!void {
+        var file: ?*c.sqlite3_file = null;
+        const rc = c.sqlite3_file_control(db.handle, name.ptr, c.SQLITE_FCNTL_FILE_POINTER, @ptrCast(&file));
+        if (rc != c.SQLITE_OK) return failure(db.handle, rc, "file pointer");
+        const f = file orelse return;
+        const methods = f.pMethods orelse return;
+        const synced = methods.*.xSync.?(f, c.SQLITE_SYNC_NORMAL);
+        if (synced != c.SQLITE_OK) return failure(null, synced, "sync");
+    }
+
     pub fn setBusyTimeout(db: Db, ms: c_int) void {
         _ = c.sqlite3_busy_timeout(db.handle, ms);
     }

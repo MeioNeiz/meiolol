@@ -548,7 +548,7 @@ fn nowNs(io: std.Io) u64 {
 /// it copies, and the writer's own (autocheckpoint, its truncate) did it in its thread:
 /// a GB of WAL left by the archive prune or behind a long reader stopped commits for
 /// minutes and with them every region (29-30 Oct). PASSIVE copies beside commits; the
-/// truncate runs only on a WAL already copied, so it holds commits for a moment
+/// truncate runs only on a WAL already copied and synced: it holds commits a moment
 pub fn checkpoints(wr: *Writer) void {
     const c = wr.c;
     var wait_s: i64 = 5;
@@ -603,6 +603,14 @@ fn checkpoint(db: store.Db, schema: [:0]const u8, truncate: bool) !?bool {
     const left = frames - s.int(2);
     s.reset();
     if (!truncate or frames <= 0 or left > truncate_left_frames) return null;
+    // PASSIVE syncs the database only when it copied up to the WAL's end, which a commit
+    // during its copy prevents. The truncate then synced all it had copied while holding
+    // commits: 9 min after eval let go of a 2.4 GB WAL (5 Nov). So sync beside commits,
+    // then copy what came meanwhile; the truncate syncs only that
+    try db.syncFile(schema);
+    if (!try s.step()) return null;
+    if (s.int(1) - s.int(2) > truncate_left_frames) return false;
+    s.reset();
     // Short: commits wait while the truncate waits on readers
     db.setBusyTimeout(wal_truncate_busy_ms);
     defer db.setBusyTimeout(store.sqlite.busy_timeout_ms);
@@ -1204,6 +1212,100 @@ test "the checkpointer copies the writer's WAL and truncates it once copied" {
         try std.testing.expectEqual(0, s.int(1));
     }
     try std.testing.expectEqual(@as(?bool, null), try checkpoint(db, "main", true));
+}
+
+/// C01's disk for the test below: a sync of the checkpointer's database file costs time
+/// per byte written to it since the last sync (random writes, ~10 MB/s here)
+const SlowSync = struct {
+    const c = store.sqlite.c;
+    const ns_per_byte = 100;
+    var orig: *const c.sqlite3_io_methods = undefined;
+    var methods: c.sqlite3_io_methods = undefined;
+    var unsynced: std.atomic.Value(u64) = .init(0);
+    /// What the newest sync flushed: the truncate's, the one commits wait on
+    var last: u64 = 0;
+
+    fn install(db: store.Db) !void {
+        var file: ?*c.sqlite3_file = null;
+        if (c.sqlite3_file_control(db.handle, "main", c.SQLITE_FCNTL_FILE_POINTER, @ptrCast(&file)) != c.SQLITE_OK)
+            return error.Sqlite;
+        const f = file.?;
+        orig = f.pMethods;
+        methods = orig.*;
+        methods.xWrite = write;
+        methods.xSync = sync;
+        f.pMethods = &methods;
+    }
+
+    fn write(f: [*c]c.sqlite3_file, buf: ?*const anyopaque, n: c_int, off: c.sqlite3_int64) callconv(.c) c_int {
+        _ = unsynced.fetchAdd(@intCast(n), .monotonic);
+        return orig.xWrite.?(f, buf, n, off);
+    }
+
+    fn sync(f: [*c]c.sqlite3_file, flags: c_int) callconv(.c) c_int {
+        const bytes = unsynced.swap(0, .monotonic);
+        last = bytes;
+        std.testing.io.sleep(.fromNanoseconds(bytes * ns_per_byte), .awake) catch {};
+        return orig.xSync.?(f, flags);
+    }
+};
+
+/// Commits nonstop as the crawler does, so a PASSIVE copy rarely ends at the WAL's end
+const Committer = struct {
+    db: store.Db,
+    stop: std.atomic.Value(bool) = .init(false),
+    commits: u32 = 0,
+
+    fn run(self: *Committer) void {
+        while (!self.stop.load(.monotonic)) {
+            self.db.exec("INSERT INTO t VALUES (randomblob(3000))") catch return;
+            self.commits += 1;
+            std.testing.io.sleep(.fromMilliseconds(10), .awake) catch return;
+        }
+    }
+};
+
+test "a truncate after a reader held the WAL back holds commits only briefly" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [256]u8 = undefined;
+    const path = try std.mem.printSentinel(&path_buf, ".zig-cache/tmp/{s}/t.db", .{&tmp.sub_path}, 0);
+    const writer_db = try store.Db.open(path);
+    defer writer_db.close();
+    try writer_db.exec(
+        \\PRAGMA journal_mode = WAL;
+        \\PRAGMA synchronous = NORMAL;
+        \\PRAGMA wal_autocheckpoint = 0;
+        \\CREATE TABLE t (x);
+    );
+    // A long reader (eval on 5 Nov) pins the WAL while ~10 MB of commits pile up
+    const reader = try store.Db.open(path);
+    defer reader.close();
+    try reader.exec("BEGIN");
+    _ = try reader.scalar("SELECT count(*) FROM t", .{});
+    try writer_db.exec("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3000)" ++
+        " INSERT INTO t SELECT randomblob(3000) FROM n");
+    const db = try store.Db.open(path);
+    defer db.close();
+    try db.exec("PRAGMA synchronous = NORMAL");
+    _ = try db.scalar("SELECT count(*) FROM t", .{});
+    try SlowSync.install(db);
+    try std.testing.expectEqual(@as(?bool, null), try checkpoint(db, "main", false));
+    reader.rollback();
+
+    // The PASSIVE copies ~10 MB (~1 s to sync). The truncate holds commits through its
+    // sync, so that must flush only what came while the rest synced (~1 MB), not it all.
+    // Bytes, not commit times: ci load would make those flaky
+    var committer: Committer = .{ .db = writer_db };
+    const thread = try std.Thread.spawn(.{}, Committer.run, .{&committer});
+    std.testing.io.sleep(.fromMilliseconds(30), .awake) catch {};
+    const done = checkpoint(db, "main", true);
+    std.testing.io.sleep(.fromMilliseconds(30), .awake) catch {};
+    committer.stop.store(true, .monotonic);
+    thread.join();
+    try std.testing.expectEqual(@as(?bool, true), try done);
+    try std.testing.expect(committer.commits > 10);
+    try std.testing.expect(SlowSync.last < 3 << 20);
 }
 
 test "rolling window prunes old matches with their rows" {
