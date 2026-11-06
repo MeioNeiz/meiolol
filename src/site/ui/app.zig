@@ -179,7 +179,7 @@ pub const css =
     \\       own scroll. The islands' boxes step aside so the lane panel's parts, the Options
     \\       island and the comp view share the right column. flex: none, else the page's
     \\       flex column grows it to its content and the flexible row never scrolls */
-    \\    .c-live:has(.c-cs) { display: grid; grid-template-columns: minmax(0, min(56%, 42rem)) minmax(0, 1fr);
+    \\    .c-live:has(.c-cs) { display: grid; grid-template-columns: minmax(0, 58%) minmax(0, 1fr);
     \\      grid-template-rows: [head] auto [tabs] auto repeat(6, auto) [main] minmax(0, 1fr) [foot] auto;
     \\      gap: 0 var(--sp-4); height: calc(var(--vh) - var(--header)); flex: none; box-sizing: border-box; position: relative;
     \\      isolation: isolate; }

@@ -444,8 +444,7 @@ const words = struct {
 
 pub const css =
     \\@layer components {
-    \\  .c-draft { container-type: inline-size; display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0;
-    \\    max-width: 640px; }
+    \\  .c-draft { container-type: inline-size; display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
     \\  .c-draft .heads, .c-draft .bans { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     \\    align-items: center; gap: var(--sp-2); padding: 0 var(--sp-2); }
     \\  .c-draft .heads { grid-template-columns: 1fr 1fr; font-size: var(--fs-xs); font-weight: var(--w-m); }
@@ -459,7 +458,7 @@ pub const css =
     \\    border-radius: var(--r-s); }
     \\  .c-draft .seat[data-side="them"] { flex-direction: row-reverse; }
     \\  /* The app's: a column per team, paired up by row (7 each: head, 5 seats, bans), so
-    \\     each lane is one row: the two seats meet, the enemy's role (dashed when guessed)
+    \\     each lane is one row: the two seats meet, the enemy's role (faint when guessed)
     \\     on the seam stands for the row's, ours known so hidden */
     \\  .c-draft:not([data-v]) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     \\    grid-template-rows: repeat(7, auto); grid-auto-flow: column; gap: 0; }
@@ -479,8 +478,8 @@ pub const css =
     \\  .c-draft:not([data-v]) .seat[data-side="them"] { padding: 6px var(--sp-2) 6px 0; }
     \\  .c-draft:not([data-v]) .seat[data-side="us"] > .rl { display: none; }
     \\  .c-draft:not([data-v]) .seat[data-side="them"] > .rl { transform: translateX(-50%); }
-    \\  /* The seat's edge would cross the role on the seam: the portrait's ring marks the turn */
-    \\  .c-draft:not([data-v]) .seat[data-turn] { box-shadow: none; }
+    \\  /* A box or tint on one seat reads as half a row: the portrait's ring alone marks the turn */
+    \\  .c-draft:not([data-v]) .seat[data-turn] { box-shadow: none; background: none; }
     \\  .c-draft:not([data-v]) .seat[data-sel] { box-shadow: inset 0 0 0 1px var(--sel-line); }
     \\  .c-draft:not([data-v]) .nm .fact { font-size: var(--fs-s); font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
     \\  .c-draft .seat > .rl { display: flex; flex-direction: column; align-items: center; margin-left: auto; color: var(--muted); }
@@ -516,7 +515,7 @@ pub const css =
     \\  .c-draft .bans > span { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-draft .bans > [data-side="them"] { justify-content: flex-end; }
     \\  .c-draft:not([data-v]) .bans .c-champ { --sz: 32px; }
-    \\  .c-draft[data-v="full"] { max-width: none; gap: 0; }
+    \\  .c-draft[data-v="full"] { gap: 0; }
     \\  .c-draft[data-v="full"] .heads { padding: 0 var(--sp-2) var(--sp-2); font-size: var(--fs-l); }
     \\  .c-draft[data-v="full"] .heads > span { display: flex; align-items: center; gap: var(--sp-2); }
     \\  .c-draft[data-v="full"] .heads > [data-side="them"] { justify-content: flex-end; }
@@ -615,6 +614,8 @@ pub const css =
     \\    .c-draft:not([data-v]) .nm, .c-draft:not([data-v]) .seat[data-side="them"] .nm { flex-direction: column; gap: 0; }
     \\    .c-draft:not([data-v]) .seat[data-side="them"] .nm { align-items: flex-end; }
     \\    .c-draft:not([data-v]) .bans .c-champ { --sz: 24px; }
+    \\    .c-draft:not([data-v]) .who { gap: 0; line-height: 1.2; }
+    \\    .c-draft:not([data-v]) .ideas .c-champ { --sz: 20px; }
     \\  }
     \\  @container (max-width: 360px) {
     \\    .c-draft .seat > .c-champ { --sz: var(--icon-m); }
