@@ -102,6 +102,10 @@ pub const Options = struct {
     /// 1.2-3.7x too narrow)
     keystone_bands: bool = true,
     item_bands: bool = true,
+    /// The champion-role main term's variance per popularity band (mainBand) rather than
+    /// one: NL1, 16.21: true spread 1.2 points at x -3..-4 to 4.6-6.5 under -9; Meio's
+    /// rare ranges 1.2-2x too narrow
+    main_bands: bool = true,
 };
 
 /// Term kinds, one variance each
@@ -231,6 +235,9 @@ pub const Model = struct {
     /// share of its role's games
     pop: Line = @splat(0),
     pop_knot: f64 = -std.math.inf(f64),
+    /// The main term's sd per popularity band (mainBand; Options.main_bands), else each
+    /// band sd[main]
+    main_sd: [n_bands]f64 = @splat(0),
     index: std.AutoHashMapUnmanaged(u16, u32) = .empty,
     counts: []Counts = &.{},
     fitted: []Fitted = &.{},
@@ -984,7 +991,7 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
 
     const share = try logShares(gpa, &m);
     defer gpa.free(share);
-    m.sd = fitLevels(m.counts, m.fitted, shape, opts.sd, 0, opts.rounds, .{ .m = &m, .share = share });
+    m.sd = fitLevels(m.counts, m.fitted, shape, opts.sd, 0, opts.rounds, .{ .m = &m, .share = share, .bands = opts.main_bands });
     m.pair = try fitPairs(gpa, shape, &m.index, m.counts, m.fitted, &cells, 0, opts.rounds);
     m.keystone = try fitCond(gpa, &m, &keystones, opts, opts.keystone_bands, opts.rounds);
     m.item = try fitCond(gpa, &m, &items, opts, opts.item_bands, opts.rounds);
@@ -994,32 +1001,85 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     return m;
 }
 
-/// The champion-role's main term's popularity line, refitted each round (E3 only)
-const Pop = struct { m: *Model, share: []const f64 };
+/// The champion-role's main term's popularity line, refitted each round, and its
+/// variance per popularity band (E3 only; writes m.main_sd)
+const Pop = struct { m: *Model, share: []const f64, bands: bool = false };
 
 /// E3's terms for each cell, its variances by MacKay; noise 0: binomial, else Gaussian
-/// with that variance per game. Returns the variances
+/// with that variance per game. Returns the variances; the main term's is per pooled band
+/// group with pop.bands (sd[main] then the commonest band's), else one
 fn fitLevels(counts: []const Counts, fitted: []Fitted, shape: Shape, fixed: [n_terms]f64, noise: f64, rounds: u8, pop: ?Pop) [n_terms]f64 {
     var sd: [n_terms]f64 = undefined;
     for (&sd, fixed) |*s, o| s.* = if (o > 0) o else 0.1;
+    var group: [n_bands]u8 = @splat(0);
+    if (pop) |q| if (q.bands) {
+        var in_band: [n_bands]u32 = @splat(0);
+        for (q.share) |x| in_band[mainBand(x)] += 1;
+        group = bandGroups(in_band);
+    };
+    const groupOf = struct {
+        fn f(p: ?Pop, g: [n_bands]u8, i: usize) u8 {
+            return if (p) |q| g[mainBand(q.share[i])] else 0;
+        }
+    }.f;
+    var main_sd: [n_bands]f64 = @splat(sd[0]);
+    const main_fixed: [n_bands]f64 = @splat(fixed[0]);
     const k = shape.params();
     for (0..rounds) |_| {
         var sum_sq: [n_terms]f64 = @splat(0);
         var gamma: [n_terms]f64 = @splat(0);
-        for (counts, fitted) |*c, *f| {
-            newton(c, f, shape, sd, noise);
+        var main_sq: [n_bands]f64 = @splat(0);
+        var main_gamma: [n_bands]f64 = @splat(0);
+        for (counts, fitted, 0..) |*c, *f, i| {
+            const g = groupOf(pop, group, i);
+            var s = sd;
+            s[0] = main_sd[g];
+            newton(c, f, shape, s, noise);
             for (0..k) |j| {
                 const t = @backingInt(shape.term(j));
                 const d = f.theta[j] - (if (j == 0) f.mu else 0);
-                sum_sq[t] += d * d;
-                gamma[t] += 1 - f.cov[j * k + j] / (sd[t] * sd[t]);
+                const used = 1 - f.cov[j * k + j] / (s[t] * s[t]);
+                if (t == 0) {
+                    main_sq[g] += d * d;
+                    main_gamma[g] += used;
+                } else {
+                    sum_sq[t] += d * d;
+                    gamma[t] += used;
+                }
             }
         }
         const pop_moved = if (pop) |q| fitPopularity(q.m, q.share) else 0;
-        if (!mackay(&sd, &fixed, &sum_sq, &gamma) and pop_moved < 1e-5) break;
+        const main_moved = mackayGroups(&main_sd, &main_fixed, &main_sq, &main_gamma, group);
+        const rest_moved = mackay(sd[1..], fixed[1..], sum_sq[1..], gamma[1..]);
+        sd[0] = main_sd[group[0]];
+        if (!main_moved and !rest_moved and pop_moved < 1e-5) break;
     }
-    for (counts, fitted) |*c, *f| newton(c, f, shape, sd, noise);
+    for (counts, fitted, 0..) |*c, *f, i| {
+        var s = sd;
+        s[0] = main_sd[groupOf(pop, group, i)];
+        newton(c, f, shape, s, noise);
+    }
+    if (pop) |q| for (&q.m.main_sd, group) |*o, g| {
+        o.* = main_sd[g];
+    };
     return sd;
+}
+
+/// MacKay on the groups bandGroups made, each group's sd at its own band
+fn mackayGroups(sd: *[n_bands]f64, fixed: *const [n_bands]f64, sum_sq: *const [n_bands]f64, gamma: *const [n_bands]f64, group: [n_bands]u8) bool {
+    var moved = false;
+    for (0..n_bands) |b| {
+        if (group[b] != b) continue;
+        if (mackay(sd[b..][0..1], fixed[b..][0..1], sum_sq[b..][0..1], gamma[b..][0..1])) moved = true;
+    }
+    return moved;
+}
+
+/// A champion-role's popularity band by its log share of its role's games, as truth's
+/// lean table: > -3, -3..-4, ..., -10..-11, < -11
+fn mainBand(x: f64) usize {
+    if (!(x <= -3)) return 0;
+    return @intFromFloat(@min(n_bands - 1, @floor(-x) - 2));
 }
 
 /// Shares from the condition's cells (k: its weighted games with x) and each
@@ -1787,6 +1847,46 @@ test "rare keystones get their own band's spread, so their ranges hold the truth
         try std.testing.expect(common > 0.04 and common < 0.13);
     }
     // One sd per role is mostly the common keystones': rare ranges far too narrow
+    try std.testing.expect(cover[0] < 0.7);
+    try std.testing.expect(cover[1] > 0.7 and cover[1] < 0.9);
+}
+
+test "rare champion-roles get their own spread with main bands" {
+    const gpa = std.testing.allocator;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    var prng: std.Random.DefaultPrng = .init(11);
+    const rand = prng.random();
+    // One role: 150 common champion-roles (2000 games, x ~ -5) off the line by sd 0.05,
+    // 300 rare ones (60 games, x ~ -8.6) by sd 0.3; patch, bracket and EUW1 terms held off
+    const common = 150;
+    const rare = 300;
+    var truth: [common + rare]f64 = undefined;
+    for (&truth, 0..) |*t, i| {
+        t.* = (if (i < common) @as(f64, 0.05) else 0.3) * rand.floatNorm(f64);
+        const cr: u16 = @intCast(i + 1);
+        for (0..if (i < common) @as(usize, 2000) else 60) |_| {
+            try rows.append(gpa, testRow(cr, -1, 0, 0, rand.float(f64) < sigmoid(t.*)));
+        }
+    }
+    const off: [n_terms]f64 = .{ 0, 1e-3, 1e-3, 1e-3 };
+    var cover: [2]f64 = undefined;
+    for (&cover, [2]bool{ false, true }) |*share, bands| {
+        var m = try fit(gpa, rows.items, 0, .{ .sd = off, .main_bands = bands });
+        defer m.deinit(gpa);
+        var in: f64 = 0;
+        for (truth[common..], common..) |t, i| {
+            const r = m.rate(.champion, 0, 0, @intCast(i + 1), 0).?;
+            if (r.lo <= sigmoid(t) and sigmoid(t) <= r.hi) in += 1;
+        }
+        share.* = in / rare;
+        if (!bands) continue;
+        const total: f64 = common * 2000 + rare * 60;
+        const sd_rare = m.main_sd[mainBand(@log(60 / total))];
+        const sd_common = m.main_sd[mainBand(@log(2000 / total))];
+        try std.testing.expect(sd_rare > 0.2 and sd_rare < 0.45);
+        try std.testing.expect(sd_common > 0.02 and sd_common < 0.09);
+    }
     try std.testing.expect(cover[0] < 0.7);
     try std.testing.expect(cover[1] > 0.7 and cover[1] < 0.9);
 }

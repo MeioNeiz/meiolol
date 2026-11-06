@@ -6061,6 +6061,26 @@ Step 2, items, 16.21 dev (m10-nl3it-16.21.md, against m10-nl3ks-16.21): kept,
   48.0% [44.6, 51.3]); half-widths +0.02 on average, at most +1.1; cells with no own
   games +1.8
 
+Step 3, the champion-role's main term, 16.21 dev (m10-nl3cr-16.21.md, against
+m10-nl3it-16.21): kept, `main_bands` on. Every pair and cond kind reads E3's logit, so
+the whole table can move; rune, build and gold14 don't and stay identical.
+- Gate 297 -> 286 failing: 17 groups clear (9 champion-role, 4 matchup, 2 duo, 2 item x
+  opponent), among them rare raw below -1.18 -> +0.20 (well inside 2 se, not narrow)
+  and -9..-10 -0.75 -> -0.23; rare raw above +0.38 -> -0.31; the rarest bands drift
+  up within 1 se (-10..-11 -0.32 -> +0.55, < -11 +0.04 -> +0.88 +- 0.92). 6 new, own 0
+  and day groups, each under 0.1 past 0.5
+- Log loss: no row worse beyond 2 se (keystone x item 8+ -0.39 -> -0.38 on 2 se 0.01,
+  at the print's rounding). Champion-role by band, from the cells: under -8 0.08 better
+  pooled; < -11 +0.83 +- 1.86 (15.6k games), -10..-11 -0.56 +- 0.76
+- Moves only where a side is under -8: middles under -7 move under 0.05 points on
+  average in every kind; under -11 about 2 points, half-widths +1.5 to +1.8
+- Miss sd over Meio's sd, champion-role: under -9 1.21-2.05 -> 1.02-1.65; common bands
+  0.84-1.01 -> 0.89-1.10. PIT by band: -10..-11 73.0 -> 75.5%, < -11 78.4 -> 81.0,
+  -9..-10 78.7 -> 80.4, -8..-9 82.9 stays; -6..-7 75.1 -> 74.7 (se ~1.1)
+- Live, origin 13: champion-role middles move 0.08 points on average where the cell
+  has 100+ own games, at most 3.1 (Thresh bottom, 170 games: 34.9% [32.2, 37.6] ->
+  31.8% [28.8, 34.8]); keystones at most 2.3, items 1.5, matchups 0.18
+
 ### The patch's games from before EUW1, 16.21 and 16.22, 2026-11-06 (meio, M6b1)
 
 Why Meio's day-0 shares lost to the raw 30 days on 16.22 (items +0.05 ± 0.03, keystones
