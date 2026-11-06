@@ -403,7 +403,7 @@ test "the reveal's views: result line, seat panel parts, On paper and the mix" {
     // Blue: 0.08 0.21 0.93 0.04 0.47 magic, so 35% AP
     try testing.expect(std.mem.find(u8, before, "AP <b>35%</b>") != null);
 
-    // No paper, no damage kinds: neither part drawn
+    // No paper: no On paper; no damage kinds: each side's bar says so
     var bare = dd.sample;
     bare.paper = null;
     var seats = bare.seats;
@@ -414,7 +414,7 @@ test "the reveal's views: result line, seat panel parts, On paper and the mix" {
     var b = answered(a, &bare, 0, .red);
     out = try render(a, &b);
     try testing.expect(std.mem.find(u8, out, "On paper") == null);
-    try testing.expect(std.mem.find(u8, out, "class=\"mix\"") == null);
+    try testing.expectEqual(2, std.mem.count(u8, out, "aria-label=\"Damage not known yet\""));
     try testing.expect(std.mem.find(u8, out, "Your pick") == null);
 }
 

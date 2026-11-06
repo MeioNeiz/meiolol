@@ -379,7 +379,7 @@ hatches after both; all of it unknown, the bar is the hatch alone. Without share
 app's public edition) the ends and the label carry no %
 States: AD; AD and AP; AP; a share unknown; all unknown; no shares, a tally's kind: 0.33
 AP in a 30-70 bucket
-Used by: compview, champpage
+Used by: draftboard, compview, champpage
 
 ### AlertBand
 `alertband.zig` `.c-alert`

@@ -459,7 +459,7 @@ pub const Page = struct {
             .guess => return .none,
         };
         var lanes: [5]draftboard.Lane = undefined;
-        var mix: [2]draftboard.Mix = .{ .{ .phys = 0, .magic = 0 }, .{ .phys = 0, .magic = 0 } };
+        var mix: [2]draftboard.Mix = .{ .{ .ap = 0 }, .{ .ap = 0 } };
         for (&lanes, role.Role.all, 0..) |*l, r, i| {
             var seats: [2]draftboard.Seat = undefined;
             for (&seats, [2][5]ld.Champ{ d.us, d.them }, d.magic, &mix, 0..) |*st, side, m, *mx, si| {
@@ -475,8 +475,7 @@ pub const Page = struct {
                     mx.unknown += 0.2;
                 } else {
                     const v: f32 = @floatFromInt(m[i].?);
-                    mx.magic += v / 500;
-                    mx.phys += (100 - v) / 500;
+                    mx.ap += v / 500;
                 }
             }
             l.* = .{ .role = r, .us = seats[0], .them = seats[1], .ask = r == d.role and !p.revealed };

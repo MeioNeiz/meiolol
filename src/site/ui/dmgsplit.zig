@@ -29,6 +29,8 @@ pub const Split = struct {
     kind: ?Kind = null,
     /// False: no % on the ends nor in the label
     shares: bool = true,
+    /// False: the caller names the bar (DraftBoard's middle column), no "Damage" before AD
+    named: bool = true,
 };
 
 const W = struct {
@@ -83,7 +85,7 @@ pub fn view(h: *H, x: Split) N {
             hatch,
         }),
         h.span(.{ .class = "sh", .aria_hidden = true }, .{
-            h.span(.{}, .{ h.span(.{ .class = "k" }, .{W.damage}), " ", W.ad, " ", if (x.shares) h.b(.{}, .{phrase.num(h, .pct, n.ad)}) else null }),
+            h.span(.{}, .{ if (x.named) h.span(.{ .class = "k" }, .{W.damage}) else null, if (x.named) " " else null, W.ad, " ", if (x.shares) h.b(.{}, .{phrase.num(h, .pct, n.ad)}) else null }),
             h.span(.{}, .{ W.ap, " ", if (x.shares) h.b(.{}, .{phrase.num(h, .pct, n.ap)}) else null }),
         }),
     });
@@ -140,4 +142,5 @@ test "the kind and shares said once, adding up to 100; an unknown share hatches,
     var w: std.Io.Writer = .fixed(&buf);
     try t.textOf(tally, &w);
     try testing.expectEqualStrings("Damage AD AP ", w.buffered());
+    try testing.expectEqual(null, t.find(view(&h, .{ .ap = 0.4, .named = false }), "class", "k"));
 }

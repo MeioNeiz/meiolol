@@ -240,23 +240,17 @@ pub const Page = struct {
     }
 
     /// Each side's damage mix: a fifth a seat, split by its champion's usual magic share;
-    /// the hidden seat and unsampled champions unknown. Null when none is sampled
-    fn mix(s: *const Page) ?[2]draftboard.Mix {
+    /// the hidden seat and unsampled champions unknown
+    fn mix(s: *const Page) [2]draftboard.Mix {
         const p = s.p;
-        var any = false;
-        for (p.seats) |side| for (side) |x| {
-            any = any or x.magic != null;
-        };
-        if (!any) return null;
-        var out: [2]draftboard.Mix = .{ .{ .phys = 0, .magic = 0 }, .{ .phys = 0, .magic = 0 } };
+        var out: [2]draftboard.Mix = .{ .{ .ap = 0 }, .{ .ap = 0 } };
         for (p.seats, &out, 0..) |side, *m, t| for (side, 0..) |x, r| {
             const hid = s.phase() != .done and t == @backingInt(p.hidden_side) and r == @backingInt(p.hidden_role);
             const g = (if (hid) null else x.magic) orelse {
                 m.unknown += 0.2;
                 continue;
             };
-            m.magic += 0.2 * g;
-            m.phys += 0.2 * (1 - g);
+            m.ap += 0.2 * g;
         };
         return out;
     }

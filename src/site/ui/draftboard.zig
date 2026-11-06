@@ -19,6 +19,7 @@ const kda = @import("kda.zig");
 const fmt = @import("fmt.zig");
 const rate = @import("rate.zig");
 const phrase = @import("phrase.zig");
+const dmgsplit = @import("dmgsplit.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
 const H = tree.H;
@@ -99,9 +100,9 @@ pub const Lane = struct {
 
 pub const Variant = enum { app, full };
 
-/// A side's damage to champions: physical and magic shares (the rest true damage), and
-/// the share of the hidden seat, unknown until answered
-pub const Mix = struct { phys: f32, magic: f32, unknown: f32 = 0 };
+/// A side's damage to champions: the magic share, and the hidden seat's and unsampled
+/// champions' as unknown
+pub const Mix = dmgsplit.Split;
 
 pub const Board = struct {
     /// Role order, five in a normal draft
@@ -254,7 +255,7 @@ fn full(h: *H, b: Board, on: []const [2]?tree.Handler, comptime game: bool) N {
             statHead(h, .them),
         }) else null,
         h.div(.{ .class = "lanes" }, .{rows.done()}),
-        if (b.mix) |m| h.div(.{ .class = "mix" }, .{ mixBar(h, m[0], .us), h.span(.{ .class = "line" }, .{words.damage}), mixBar(h, m[1], .them) }) else null,
+        if (b.mix) |m| h.div(.{ .class = "mix" }, .{ mixBar(h, m[0]), h.span(.{ .class = "line" }, .{words.damage}), mixBar(h, m[1]) }) else null,
         bans(h, b),
     });
 }
@@ -385,28 +386,15 @@ fn bareMid(h: *H, l: Lane) N {
     return h.span(.{ .class = "mid" }, .{role.view(h, l.role, .{ .s = .s })});
 }
 
-fn mixBar(h: *H, m: Mix, side: Side) N {
-    return h.span(.{ .class = "mx", .data_side = side }, .{
-        h.span(.{ .class = "bar", .aria_hidden = true }, .{
-            h.el(.i, .{ .class = "ph", .style = h.vars(.{ .w = pct(m.phys) }) }, .{}),
-            h.el(.i, .{ .class = "mg", .style = h.vars(.{ .w = pct(m.magic) }) }, .{}),
-            if (m.unknown > 0) h.el(.i, .{ .class = "uk", .style = h.vars(.{ .w = pct(m.unknown) }) }, .{}) else null,
-        }),
-        h.span(.{ .class = "ends" }, .{
-            h.span(.{}, .{ words.ad, " ", h.b(.{}, .{phrase.num(h, .pct, share(m.phys))}) }),
-            h.span(.{}, .{ words.ap, " ", h.b(.{}, .{phrase.num(h, .pct, share(m.magic))}) }),
-        }),
-    });
+fn mixBar(h: *H, m: Mix) N {
+    var x = m;
+    x.named = false;
+    return dmgsplit.view(h, x);
 }
 
 /// A 0-1 share from the data as a percent for a width; NaN or out of range clamps
 fn pct(x: f32) f32 {
     return @min(@max(100 * x, 0), 100);
-}
-
-/// `pct` as a whole number
-fn share(x: f32) u32 {
-    return @intFromFloat(fmt.round(pct(x)));
 }
 
 const words = struct {
@@ -417,6 +405,7 @@ const words = struct {
     const hover = plain("hovering");
     const ideas = plain("ideas");
     const bans = plain("Bans");
+    const damage = plain("Damage");
     const empty = plain("Empty seat");
     const guessed = phrase.Phrase("{r:text}, role guessed");
     const blue = plain("Blue");
@@ -432,9 +421,6 @@ const words = struct {
     const lane_head = plain("Odds, gold at 14");
     const led = phrase.Phrase("{o:text}; {s:text} {g:kilo} gold ahead at 14");
     const led_even = phrase.Phrase("{o:text}; even in gold at 14");
-    const damage = plain("Damage");
-    const ad = plain("AD");
-    const ap = plain("AP");
     const kda_h = plain("K/D/A");
     const cs = plain("CS");
     const gold = plain("Gold");
@@ -584,17 +570,7 @@ pub const css =
     \\    padding: var(--sp-3) 0 var(--sp-2); }
     \\  .c-draft .mix > .line { text-align: center; text-transform: uppercase; letter-spacing: 0.06em; font-weight: var(--w-b);
     \\    color: var(--faint); }
-    \\  .c-draft .mx { display: grid; gap: 4px; padding: 0 var(--sp-2); min-width: 0; }
-    \\  .c-draft .mx .bar { display: flex; height: 10px; border-radius: 3px; overflow: hidden; background: var(--bar-track); }
-    \\  .c-draft .mx .bar > i { display: block; height: 100%; width: calc(var(--w) * 1%); }
-    \\  .c-draft .mx[data-side="them"] .bar { flex-direction: row-reverse; }
-    \\  .c-draft .mx .ph { background: var(--bar-hi); }
-    \\  .c-draft .mx .mg { background: var(--bar-lo); }
-    \\  .c-draft .mx .uk { background: repeating-linear-gradient(135deg, var(--accent-bg) 0 4px, transparent 4px 8px);
-    \\    box-shadow: inset 0 0 0 1px var(--sel-line); }
-    \\  .c-draft .mx .ends { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--muted);
-    \\    font-variant-numeric: tabular-nums; }
-    \\  .c-draft .mx .ends b { color: var(--text); }
+    \\  .c-draft .mix > .c-dmg { padding: 0 var(--sp-2); }
     \\  .c-draft[data-v="full"] .bans { padding-top: var(--sp-2); }
     \\  .c-draft[data-v="full"] .bans .c-champ { --sz: var(--icon-m); }
     \\  .c-draft[data-v="full"] .bans .c-champ > img { opacity: 1; filter: none; }
@@ -682,7 +658,7 @@ pub const daily_before: Board = .{
         .{ .role = .bot, .win = 50.9, .us = .{ .champ = demo("Kalista", "Kalista"), .pick = 1, .sub = plain("AD") }, .them = .{ .champ = demo("Caitlyn", "Caitlyn"), .pick = 6, .sub = plain("AD") } },
         .{ .role = .support, .win = 51.3, .us = .{ .champ = demo("Renata", "Renata"), .pick = 4, .sub = plain("AD and AP") }, .them = .{ .champ = demo("Neeko", "Neeko"), .pick = 3, .sub = plain("AP") } },
     },
-    .mix = .{ .{ .phys = 0.61, .magic = 0.39 }, .{ .phys = 0.44, .magic = 0.36, .unknown = 0.2 } },
+    .mix = .{ .{ .ap = 0.39 }, .{ .ap = 0.36, .unknown = 0.2 } },
     .bans_us = &.{ demo("Yasuo", "Yasuo"), demo("Zed", "Zed") },
     .bans_them = &.{ demo("Vex", "Vex"), demo("Aurora", "Aurora") },
 };
@@ -712,7 +688,7 @@ fn revealed(h: *H) Board {
     var b = daily_before;
     b.lanes = lanes;
     b.won = .us;
-    b.mix = .{ .{ .phys = 0.61, .magic = 0.39 }, .{ .phys = 0.6, .magic = 0.4 } };
+    b.mix = .{ .{ .ap = 0.39 }, .{ .ap = 0.4 } };
     return b;
 }
 
@@ -771,8 +747,12 @@ test "full variant: pick numbers, the hidden seat, seats as buttons only with a 
     try std.testing.expectEqual(1, std.mem.count(u8, s, "data-sel"));
     try std.testing.expect(std.mem.find(u8, s, "class=\"lane hd\"") != null);
     try std.testing.expect(std.mem.find(u8, s, "4th") != null);
-    try std.testing.expectEqual(0, share(std.math.nan(f32)));
-    try std.testing.expectEqual(100, share(3));
+    try std.testing.expectEqual(2, std.mem.count(u8, s, "class=\"c-dmg\""));
+    var blind = daily_before;
+    blind.mix = .{ .{ .ap = 0, .unknown = 1 }, .{ .ap = 0, .unknown = 1 } };
+    out = .init(a);
+    try html.write(&t, fullOn(&h, blind, &.{}), &out.writer);
+    try std.testing.expectEqual(2, std.mem.count(u8, out.written(), "aria-label=\"Damage not known yet\""));
 }
 
 var gallery_tap: Tap = .{};
@@ -795,7 +775,7 @@ test "full variant by hand: buttons from a short `on`, lane middles, a red win, 
         .v = .full,
         .heads = .{ plain("Blue"), plain("Red") },
         .won = .them,
-        .mix = .{ .{ .phys = 0.5, .magic = 0.5 }, .{ .phys = 1.4, .magic = std.math.nan(f32), .unknown = 0.2 } },
+        .mix = .{ .{ .ap = 0.5 }, .{ .ap = std.math.nan(f32), .unknown = 0.2 } },
         .lanes = &.{
             .{ .role = .top, .win = 47.9, .lead = 600, .us = .{ .champ = demo("Gnar", "Gnar"), .sel = true }, .them = .{ .hidden = true, .preview = demo("Jax", "Jax") } },
             .{ .role = .jungle, .win = 130, .lead = -150, .us = .{ .game = game }, .them = .{ .hidden = true, .pick = 10 } },
