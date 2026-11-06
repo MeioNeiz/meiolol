@@ -5986,6 +5986,15 @@ run high or low over a group of cells (docs/plan/meio-middle.md NL0)?
   sqrt(expected), and lists the surest 60. Every group: `--lean PATH`
 - Per-cell dump for analyses: `--cells PATH` (`--cells-kinds`, default champion,
   keystone, item, rune, build)
+- Baseline 16.21 (dev set, HEAD Meio, -10 hinge on; data/team/2026-11-05-notes2/
+  m10-gate-16.21.md): FAILS beyond chance, 491 of 2,313 groups vs 28 expected. By rank:
+  Diamond+ 198 and Iron-Silver 171 failing, lane-opponent kinds leaning by bracket and
+  0 over all ranks (matchup +1.47 Diamond+, -1.29 Iron-Silver; keystone and item x
+  opponent alike; gold at 14 +14 and -77 gold; duo -2.1 and +3.5). All ranks alone: 34
+  of 502 vs 4 expected: rare champion-roles (x -9..-10) -0.75; rare cells whose 30 days
+  looked bad run lower still (champion-role -1.18, item -1.07, keystone -1.29), rare
+  items and keystone x item that looked good higher (+0.76, +0.78); rare unseen item
+  -2.8, keystone -3.2; keystone x -4..-6 +0.6, x under -7 -1.0 to -1.2
 
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
