@@ -8,7 +8,7 @@ adminpage markup 1
 adminpage pagecss 24
 adminruns markup 2
 alertband title 1
-app pagecss 53
+app pagecss 44
 app fade 2
 appbar markup 4
 appbar title 1

@@ -724,6 +724,8 @@ const review_css =
     \\  outline: 1px dashed #2a3140; }
     \\.rv-narrow .rv-frame { --vh: 760px; width: 420px; }
     \\.rv-full .rv-frame { --vh: calc(100vh - 53px); width: auto; margin: 0; }
+    \\/* The app's page sets its window height to 100vh; in the frame, the frame's */
+    \\.rv-frame .c-page { --vh: inherit; }
     \\.rv-full .rv-steps { display: none; }
     \\.rv-narrow .rv-steps { max-width: 452px; }
     \\.rv-nav { position: fixed; z-index: 20; left: 0; top: 0; bottom: 0; width: 240px; box-sizing: border-box; overflow-y: auto;

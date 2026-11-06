@@ -459,18 +459,29 @@ pub const css =
     \\  .c-draft .seat { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; color: var(--text);
     \\    border-radius: var(--r-s); }
     \\  .c-draft .seat[data-side="them"] { flex-direction: row-reverse; }
-    \\  /* The app's: a column per team, paired up by row (7 each: head, 5 seats, bans) */
+    \\  /* The app's: a column per team, paired up by row (7 each: head, 5 seats, bans), so
+    \\     each lane is one row: the two seats meet, the enemy's role (dashed when guessed)
+    \\     on the seam stands for the row's, ours known so hidden */
     \\  .c-draft:not([data-v]) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    \\    grid-template-rows: repeat(7, auto); grid-auto-flow: column; gap: 2px var(--sp-2); }
+    \\    grid-template-rows: repeat(7, auto); grid-auto-flow: column; gap: 2px 0; }
     \\  .c-draft:not([data-v]) > .team { display: contents; }
     \\  .c-draft .team > .hd { display: flex; align-items: baseline; gap: var(--sp-2); padding: 0 var(--sp-2) var(--sp-1);
     \\    font-size: var(--fs-xs); font-weight: var(--w-m); }
     \\  .c-draft .team[data-side="them"] > .hd { flex-direction: row-reverse; }
     \\  .c-draft .team > .hd > .c-rate { font-size: var(--fs-l); line-height: 1; }
     \\  .c-draft .team > .hd > .c-rate > .v { font-weight: var(--w-b); }
-    \\  .c-draft:not([data-v]) .team > .bans { display: flex; flex-wrap: wrap; gap: 4px; padding: var(--sp-1) var(--sp-2) 0; }
+    \\  .c-draft:not([data-v]) .team > .bans { display: flex; flex-wrap: wrap; gap: 4px; padding: var(--sp-1) 0 0; }
     \\  .c-draft .team[data-side="them"] > .bans { justify-content: flex-end; }
-    \\  .c-draft:not([data-v]) .seat { padding: 6px var(--sp-2); background: var(--panel-2); }
+    \\  .c-draft:not([data-v]) .seat { min-height: 48px; padding: 6px var(--sp-5) 6px var(--sp-2); background: var(--panel-2);
+    \\    border-radius: var(--r-s) 0 0 var(--r-s); }
+    \\  .c-draft:not([data-v]) .seat[data-side="them"] { padding: 6px var(--sp-2) 6px 0; border-radius: 0 var(--r-s) var(--r-s) 0; }
+    \\  .c-draft:not([data-v]) .seat[data-side="us"] > .rl { display: none; }
+    \\  .c-draft:not([data-v]) .seat[data-side="them"] > .rl { transform: translateX(-50%); }
+    \\  .c-draft:not([data-v]) .nm { flex-direction: column; align-items: flex-start; gap: 0; }
+    \\  .c-draft:not([data-v]) .seat[data-side="them"] .nm { flex-direction: column; align-items: flex-end; }
+    \\  /* The seat's edge would cross the role on the seam: the portrait's ring marks the turn */
+    \\  .c-draft:not([data-v]) .seat[data-turn] { box-shadow: none; }
+    \\  .c-draft:not([data-v]) .nm > .fact { font-size: var(--fs-m); font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
     \\  .c-draft .seat > .rl { display: flex; flex-direction: column; align-items: center; margin-left: auto; color: var(--muted); }
     \\  .c-draft .seat[data-side="them"] > .rl { margin: 0 auto 0 0; }
     \\  .c-draft .seat > .rl[data-guessed] { gap: 3px; padding: 3px; border: 1px dashed var(--line-2);

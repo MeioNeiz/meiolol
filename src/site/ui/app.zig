@@ -173,38 +173,27 @@ pub const css =
     \\    .c-live .c-game > .col:last-child { grid-column: 2; grid-row: 1 / -1; position: sticky;
     \\      top: calc(var(--header) + var(--sp-3)); max-height: calc(var(--vh) - var(--header) - var(--sp-5)); overflow-y: auto;
     \\      overscroll-behavior: contain; }
-    \\    /* Champ select fits the window: our team, the centre, theirs. The centre: the lane
-    \\       head, the view switch (radios in the shell's static HTML), then that view, its
-    \\       main part in the flexible row with its own scroll. The islands' boxes step
-    \\       aside so the board's teams, the lane panel's parts, the Options island and the
-    \\       comp view share one grid */
-    \\    .c-live:has(.c-cs) { --side: clamp(200px, 21cqw, 280px); display: grid;
-    \\      grid-template-columns: var(--side) minmax(0, 1fr) var(--side);
+    \\    /* Champ select fits the window: the board card on the left, your pick on the right
+    \\       (Card's look drawn behind it): the lane head, the view switch (radios in the
+    \\       shell's static HTML), then that view, its main part in the flexible row with its
+    \\       own scroll. The islands' boxes step aside so the lane panel's parts, the Options
+    \\       island and the comp view share the right column */
+    \\    .c-live:has(.c-cs) { display: grid; grid-template-columns: minmax(0, min(56%, 42rem)) minmax(0, 1fr);
     \\      grid-template-rows: [head] auto [tabs] auto repeat(6, auto) [main] minmax(0, 1fr) [foot] auto;
-    \\      gap: 0 var(--sp-4); height: calc(var(--vh) - var(--header)); box-sizing: border-box; }
-    \\    .c-live > .c-app:has(.c-cs), .c-live .c-cs, .c-live .c-cs > div, .c-live .c-cs .c-draft,
-    \\      .c-live .c-cs .side > .lane { display: contents; }
-    \\    .c-live:has(.c-cs) > :not(.c-app), .c-live:has(.c-cs) > .c-app > :not(.c-cs), .c-live .c-cs > div > :not(.c-draft),
-    \\      .c-live .c-cs .side > .lane > * { grid-column: 2; min-width: 0; margin: 0 0 var(--sp-3); }
-    \\    .c-live .c-cs .c-draft > .team { grid-column: 1; grid-row: 1 / -1; display: flex; flex-direction: column;
-    \\      gap: var(--sp-1); min-height: 0; }
-    \\    .c-live .c-cs .c-draft > .team[data-side="them"] { grid-column: 3; }
-    \\    .c-live .c-cs .team > .hd { padding: 0 var(--sp-1) var(--sp-1); font-size: var(--fs-s); }
-    \\    .c-live .c-cs .team > .hd > .c-rate { font-size: var(--fs-xl); }
-    \\    /* A seat with no one in it yet, not picking, stays a slim role row */
-    \\    .c-live .c-cs .team > .seat:not([data-state="empty"]:not([data-turn])) { flex: 1 1 0; min-height: 60px; max-height: 108px; gap: var(--sp-3); }
-    \\    .c-live .c-cs .team > .seat:not([data-state="empty"]:not([data-turn])) > .c-champ { --sz: 64px; }
-    \\    .c-live .c-cs .team > .seat .nm { flex-direction: column; align-items: flex-start; gap: 0; }
-    \\    .c-live .c-cs .team > .seat[data-side="them"] .nm { align-items: flex-end; }
-    \\    .c-live .c-cs .team > .seat .nm > b { font-size: var(--fs-m); }
-    \\    .c-live .c-cs .team > .seat .nm > .fact { font-size: var(--fs-m); font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
-    \\    .c-live .c-cs .team > .bans { padding: var(--sp-1) var(--sp-1) 0; }
-    \\    .c-live .c-cs .lane > .vs { grid-row: head; }
+    \\      gap: 0 var(--sp-4); height: calc(var(--vh) - var(--header)); box-sizing: border-box; position: relative;
+    \\      isolation: isolate; }
+    \\    .c-live:has(.c-cs)::before { content: ""; position: absolute; inset: 0; grid-column: 2; grid-row: 1 / -1; z-index: -1;
+    \\      background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); }
+    \\    .c-live > .c-app:has(.c-cs), .c-live .c-cs, .c-live .c-cs > .side, .c-live .c-cs .side > .lane { display: contents; }
+    \\    .c-live .c-cs > .c-card { grid-column: 1; grid-row: 1 / -1; align-self: start; max-height: 100%; overflow-y: auto; }
+    \\    .c-live:has(.c-cs) > :not(.c-app), .c-live:has(.c-cs) > .c-app > :not(.c-cs), .c-live .c-cs .side > :not(.lane),
+    \\      .c-live .c-cs .side > .lane > * { grid-column: 2; min-width: 0; margin: 0 var(--card-px) var(--sp-3); }
+    \\    .c-live .c-cs .lane > .vs { grid-row: head; padding-top: var(--card-py); }
     \\    .c-live:has(.c-cs) > .c-seg { display: inline-flex; grid-row: tabs; justify-self: start; }
     \\    .c-live:has(.c-cs) > :is(.c-picks, .c-comp), .c-live .c-cs .lane > .c-lane { grid-row: main; align-self: stretch;
     \\      min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
     \\    .c-live:has(.c-cs) > .c-picks { padding: 0; }
-    \\    .c-live .c-cs .lane > .scope { grid-row: foot; margin: 0; }
+    \\    .c-live .c-cs .lane > .scope { grid-row: foot; margin: 0 var(--card-px) var(--card-py); }
     \\    /* Each view shows its own: Options the lists (the lane panel's own only where the
     \\       Options island lacks them, the public edition's), Lane the matchup, Comps the comp
     \\       view. No Lane without a matchup chart. A lane with no options (an ally's locked
@@ -213,9 +202,9 @@ pub const css =
     \\    .c-live:has(> .c-seg [value="options"]:checked) .c-cs .lane:has(> .opts-head > h3) > :is(.vs + p, .c-lane, .c-lane + .scope),
     \\    .c-live:has(> .c-seg [value="options"]:checked):has(> .c-picks[data-all]) .c-cs .lane > :is(.opts-head, .opts, .scope),
     \\    .c-live:has(> .c-seg [value="lane"]:checked) > :is(.c-picks, .c-comp),
-    \\    .c-live:has(> .c-seg [value="lane"]:checked) .c-cs :is(:is(.board, .side) > .bans, .lane > :is(.opts-head, .opts, .scope:last-child)),
+    \\    .c-live:has(> .c-seg [value="lane"]:checked) .c-cs :is(.side > .bans, .lane > :is(.opts-head, .opts, .scope:last-child)),
     \\    .c-live:has(> .c-seg [value="comp"]:checked) > .c-picks,
-    \\    .c-live:has(> .c-seg [value="comp"]:checked) .c-cs :is(:is(.board, .side) > .bans, .lane > :not(.vs)),
+    \\    .c-live:has(> .c-seg [value="comp"]:checked) .c-cs :is(.side > .bans, .lane > :not(.vs)),
     \\    .c-live:not(:has(.c-cs .c-lane)) > .c-seg > label:has([value="lane"]) { display: none; }
     \\    /* Before champ select: the note and form panel beside the tiles */
     \\    .c-live:has(> .c-apphome) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

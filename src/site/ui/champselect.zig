@@ -130,12 +130,9 @@ pub fn view(h: *H, s: Screen, held: ?*lanechart.Held) N {
     var b = s.board;
     b.draft = s.draft;
     return h.div(.{ .class = "c-cs" }, .{
-        h.div(.{ .class = "board" }, .{
-            draftboard.view(h, b),
-            if (!s.banning) bans else null,
-        }),
+        card.view(h, .{}, &.{draftboard.view(h, b)}),
         h.div(.{ .class = "side" }, .{
-            if (s.banning) bans else null,
+            bans,
             lane(h, s.lane, held),
         }),
     });

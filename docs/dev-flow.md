@@ -83,6 +83,11 @@ zig-out/dev-PORT, and serves, so edits meanwhile don't restart the load. Full se
 capped at 2 on the machine (MEIOLOL_DEV_MAX), small ones at 3 apart
 (MEIOLOL_DEV_MAX_SMALL).
 
+App screens: the review pages under /private/app (docs/arch-app.md). A scripted shot picks
+the frame through localStorage `meiolol-review-width`: `narrow` (420 x 760) or `full`
+(the browser window less the 53 px bar); any other value is Window, 1120 x 720, whatever
+the viewport. Step URLs (`full-game-04`) count pages, not the navigator's state numbers.
+
 ## ui.wasm sizes
 
 Each page family's ui.wasm has a gzip budget (40 KB, ui-champbuild 48 KB, the login
