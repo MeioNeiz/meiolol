@@ -951,15 +951,16 @@ the quieter reading (the rate minus the champion's) only in an open cell. The sl
 highest win rate on solid_games is marked "best", a 4th row when not in the top 3. Most
 picked | Highest WR (lolalytics' build toggle, Jacob 26 Oct) re-sorts every cell by win
 rate, options under solid_games after. A matchup's marks the champion's usual choice "as
-usual" and dims a cell led by it. Tap a cell's "N more" to open it across the panel: every
-option, named, sortable. One open at a time; it and the order in the URL. Every closed
-cell's head names its columns: the cells sit in a grid, so no one head is over them all. A
-rune page card whose keystone has its own build (Data.keystones) locks on tap: every cell
-then counts that keystone's players, a chip with × says so and unlocks, the keystone in
-the URL (`k`). With a lock set (the champion page's, ui/lockbar.zig) a tap anywhere on an
-option's row, or on a rune page, locks it instead (lockbar.mark on what is locked): the
-host fetches the build under the set and shows it here
-States: Darius top: whole build, most played first; Item 4 open: every option, named,
+usual" and dims a cell led by it. Tap a cell's "N more" to open it in place: it grows
+down, every option, sortable, named where the cell is wide enough; "fewer" where "N more"
+was. One open at a time; it and the order in the URL. Every closed cell's head names its
+columns: the cells sit in a grid, so no one head is over them all. A rune page card whose
+keystone has its own build (Data.keystones) locks on tap: every cell then counts that
+keystone's players, a chip with × says so and unlocks, the keystone in the URL (`k`).
+With a lock set (the champion page's, ui/lockbar.zig) a tap anywhere on an option's row,
+or on a rune page, locks it instead (lockbar.mark on what is locked): the host fetches the
+build under the set and shows it here
+States: Darius top: whole build, most played first; Item 4 open in place: every option,
 sortable; Skills open: every order and level path; runes by lane opponent (none vs ranged
 here), items 500+ gold ahead (none behind); Conqueror's page locked: its players' spells
 and boots, the chip unlocks; champion page: a whole option row or page locks on tap (the

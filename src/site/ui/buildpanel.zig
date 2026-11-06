@@ -8,10 +8,11 @@
 //! 4th row when not in the top 3.
 //! Most picked | Highest WR (lolalytics' build toggle, Jacob 26 Oct) re-sorts every cell
 //! by win rate, options under solid_games after. A matchup's marks the champion's usual
-//! choice "as usual" and dims a cell led by it. Tap a cell's "N more" to open it across
-//! the panel: every option, named, sortable. One open at a time; it and the order in
-//! the URL. Every closed cell's head names its columns: the cells sit in a grid, so no one
-//! head is over them all. A rune page card whose keystone
+//! choice "as usual" and dims a cell led by it. Tap a cell's "N more" to open it in
+//! place: it grows down, every option, sortable, named where the cell is wide enough;
+//! "fewer" where "N more" was. One open at a time; it and the order in the URL. Every
+//! closed cell's head names its columns: the cells sit in a grid, so no one head is
+//! over them all. A rune page card whose keystone
 //! has its own build (Data.keystones) locks on tap: every cell then counts that
 //! keystone's players, a chip with × says so and unlocks, the keystone in the URL (`k`).
 //! With a lock set (the champion page's, ui/lockbar.zig) a tap anywhere on an option's
@@ -360,7 +361,7 @@ pub const Table = table.DataTable(Row, .{
 pub const BuildPanel = struct {
     data: *const Data,
     runes: runetree.RuneTree,
-    /// The cell open across the panel
+    /// The cell open in place
     open: ?Kind = null,
     order: Order = .pick,
     /// The runes shown: 0 all, then Data.reach's
@@ -511,6 +512,8 @@ pub const BuildPanel = struct {
     pub fn update(p: *BuildPanel, m: Msg, ev: *tree.Event) void {
         switch (m) {
             .open => |k| {
+                // Closing keeps "fewer" under the pointer: the cell shrinks up to it
+                ev.keep = p.open == k;
                 p.open = if (p.open == k) null else k;
                 const t = &p.tables[@backingInt(k)];
                 t.sort = column(p.order);
@@ -627,14 +630,10 @@ pub const BuildPanel = struct {
         };
     }
 
-    /// A cell's head band: its title, then when closed its column heads;
-    /// open, "fewer" instead (the open table heads its own columns)
+    /// A cell's head band: its title, then when closed its column heads (the open
+    /// table heads its own, sortable)
     fn head(p: *BuildPanel, h: *H, k: Kind, title: tree.Text) N {
-        if (p.open == k) return h.div(.{ .class = "sh" }, .{
-            h.h3(.{}, .{title}),
-            button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .{ .open = k }), .ref = allRef(k) }, .{W.fewer}),
-        });
-        return h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{title}), heads(h) });
+        return h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{title}), if (p.open == k) null else heads(h) });
     }
 
     fn heads(h: *H) N {
@@ -645,10 +644,12 @@ pub const BuildPanel = struct {
         });
     }
 
-    /// Under a closed cell with options it doesn't show: "7 more", which opens it
+    /// Under a closed cell with options it doesn't show: "7 more", which opens it;
+    /// under the open cell "fewer"
     fn more(p: *BuildPanel, h: *H, k: Kind, hidden: usize) ?N {
-        if (p.open == k or hidden == 0) return null;
-        return button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .{ .open = k }), .ref = allRef(k) }, .{W.more.with(h, .{ .n = hidden })});
+        const open = p.open == k;
+        if (!open and hidden == 0) return null;
+        return button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .{ .open = k }), .ref = allRef(k) }, .{if (open) W.fewer else W.more.with(h, .{ .n = hidden })});
     }
 
     fn tableFor(p: *BuildPanel, h: *H, k: Kind, open: bool, max: usize) N {
@@ -742,6 +743,7 @@ pub const BuildPanel = struct {
             pri_t,
             if (paths.len > 0) p.pathRow(h, p.shownPath()) else null,
             if (paths.len > 0) p.tableFor(h, .skill_path, true, paths.len) else null,
+            p.more(h, .skills, 0),
         });
         const hidden = @max(pri.len -| p.tables[@backingInt(Kind.skills)].rows.len, paths.len -| 1);
         return h.div(attrs, .{ p.head(h, .skills, Kind.skills.title()), pri_t, p.more(h, .skills, hidden) });
@@ -801,11 +803,10 @@ pub const css =
     \\  @container (max-width: 300px) { .c-build .sort > .lead { margin-left: 0; } .c-build .sort > .lead > span { display: none; } }
     \\  .c-build .slots > .cells { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-flow: dense;
     \\    gap: var(--sp-4) var(--sp-5); }
-    \\  .c-build .slots > .cells:has(> [data-open]) { grid-auto-flow: row; }
     \\  @container (max-width: 520px) { .c-build .slots > .cells { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-3); } }
     \\  .c-build .slot, .c-build .levels { container-type: inline-size; display: flex; flex-direction: column; min-width: 0; }
     \\  .c-build .slot[data-k="core"] { grid-column: span 2; }
-    \\  .c-build .slot[data-open] { grid-column: 1 / -1; }
+    \\  .c-build .slot[data-k="skills"][data-open] { grid-column: 1 / -1; }
     \\  .c-build :is(.slots, .levels) .sh { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
     \\    height: var(--ctl-s); border-bottom: 1px solid var(--line); }
     \\  .c-build :is(.slots, .levels) .sh > h3 { margin: 0; font-size: var(--fs-s); font-weight: var(--w-b); color: var(--t2);
@@ -813,11 +814,18 @@ pub const css =
     \\  .c-build :is(.slots, .levels) .sh > .c-btn { margin-right: -10px; }
     \\  .c-build :is(.slots, .levels) .sh > .hd { display: flex; font-size: var(--fs-xs); color: var(--faint); }
     \\  .c-build .hd > *, .c-build .lp > :not(.c-skills) { box-sizing: border-box; text-align: right; padding: 0 3px; }
-    \\  .c-build :is(.hd, .lp) > .p, .c-build .slot:not([data-open]) .c-table .p { width: var(--cwp); }
-    \\  .c-build .hd > .w, .c-build .lp > .c-rate, .c-build .slot:not([data-open]) .c-table .w { width: var(--cww); }
-    \\  .c-build :is(.hd, .lp) > .g, .c-build .slot:not([data-open]) .c-table .g { width: var(--cwg); padding-right: 0; }
-    \\  .c-build .slot:not([data-open]) .c-table { table-layout: fixed; width: 100%; }
+    \\  .c-build :is(.hd, .lp) > .p, .c-build .slot .c-table .p { width: var(--cwp); }
+    \\  .c-build .hd > .w, .c-build .lp > .c-rate, .c-build .slot .c-table .w { width: var(--cww); }
+    \\  .c-build :is(.hd, .lp) > .g, .c-build .slot .c-table .g { width: var(--cwg); padding-right: 0; }
+    \\  .c-build .slot .c-table .o { width: 52px; }
+    \\  .c-build .slot .c-table { table-layout: fixed; width: 100%; }
+    \\  .c-build .slot .c-table thead th { font-size: var(--fs-xs); font-weight: var(--w-r); text-transform: lowercase; letter-spacing: 0; }
+    \\  .c-build .slot .c-table th > button { position: relative; }
+    \\  .c-build .slot .c-table-wrap { overflow: visible; }
+    \\  .c-build .slot .c-table th > button::after { position: absolute; right: 100%; margin: 0 2px 0 0; }
     \\  .c-build .slot:not([data-open]) .c-table .o { display: none; }
+    \\  @container (max-width: 359px) { .c-build .slot .c-table .o { display: none; } }
+    \\  @container (max-width: 259px) { .c-build .slot .what > .nm:not(:first-child) { display: none; } }
     \\  .c-build .slot .c-table[data-v="compact"] { font-size: var(--fs-m); }
     \\  .c-build .slot .c-table[data-v="compact"] td { height: 40px; }
     \\  .c-build .slot .c-table td { border-bottom-color: var(--line); }
@@ -870,7 +878,7 @@ pub const css =
     \\    .c-build .keys[data-v="max"] > i { width: 20px; height: 20px; }
     \\    .c-build .keys[data-v="max"] > .ar { margin: 0 1px; }
     \\  }
-    \\  @container (max-width: 170px) { .c-build .hd > .p, .c-build .slot:not([data-open]) .c-table .p { display: none; } }
+    \\  @container (max-width: 170px) { .c-build .hd > .p, .c-build .slot .c-table .p { display: none; } }
     \\  @container (max-width: 480px) {
     \\    .c-build .lp { flex-wrap: wrap; }
     \\    .c-build .lp > .c-skills { flex-basis: 100%; margin: 0 0 var(--sp-1); }
@@ -887,7 +895,7 @@ pub fn gallery(g: *Gallery) void {
     const demo = @import("build_demo.zig");
     const states = [_]struct { []const u8, ?Kind }{
         .{ "Darius top: whole build, most played first", null },
-        .{ "Item 4 open: every option, named, sortable", .item4 },
+        .{ "Item 4 open in place: every option, sortable", .item4 },
         .{ "Skills open: every order and level path", .skills },
     };
     for (states) |s| {
