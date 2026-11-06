@@ -273,10 +273,11 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
             const shown = o.rows;
             var ths = h.list();
             if (t.head and spec.numbered) ths.add(h.th(.{ .class = "num p3" }, .{W.rank}));
-            if (t.head) inline for (spec.columns, 0..) |col, i| {
+            if (t.head) for (spec.columns, 0..) |col, ix| {
+                const i: u8 = @intCast(ix);
                 const sorted = t.sort == i;
                 const cls = if (sorted) classes[1][i] else classes[0][i];
-                const can = comptime col.sort != null or col.name != null;
+                const can = col.sort != null or col.name != null;
                 const tip: ?[2]N = if (col.tip) |note| toggletip.view(h, h.fmt("{s}-tip-{d}", .{ t.id, i }), .{col.label}, col.label, note) else null;
                 const term: ?*const [2]N = if (tip) |*x| x else null;
                 const on_sort: ?tree.Handler = if (can) h.on(t, .{ .sort = i }) else null;
@@ -300,7 +301,8 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                 const r = &t.rows[ri];
                 var tds = h.list();
                 if (spec.numbered) tds.add(h.td(.{ .class = "num p3" }, .{place}));
-                inline for (spec.columns, 0..) |col, i| {
+                for (spec.columns, 0..) |col, ix| {
+                    const i: u8 = @intCast(ix);
                     const cls = if (t.sort == i) classes[1][i] else classes[0][i];
                     const content = col.cell(h, r);
                     // Without heads the answer column is marked on its cells
