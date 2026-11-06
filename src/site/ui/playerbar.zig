@@ -59,14 +59,14 @@ const tiers = [_]Tier{
 
 fn tierOf(riot: ?[]const u8) ?Tier {
     const t = riot orelse return null;
-    for (tiers) |x| if (std.mem.eql(u8, x.riot, t)) return x;
+    for (tiers) |x| if (tree.eql(x.riot, t)) return x;
     return null;
 }
 
 /// "II" -> 2; 0 for anything else
 fn division(d: ?[]const u8) u8 {
     const romans = [_][]const u8{ "I", "II", "III", "IV" };
-    for (romans, 1..) |r, i| if (d != null and std.mem.eql(u8, d.?, r)) return @intCast(i);
+    for (romans, 1..) |r, i| if (d != null and tree.eql(d.?, r)) return @intCast(i);
     return 0;
 }
 
@@ -208,11 +208,11 @@ test "rank words and the figures the games make" {
     var buf: std.Io.Writer.Allocating = .init(arena.allocator());
     try t.textOf(n, &buf.writer);
     const s = buf.written();
-    try testing.expect(std.mem.find(u8, s, "Platinum II · 2 LP") != null);
-    try testing.expect(std.mem.find(u8, s, "16–8") != null);
-    try testing.expect(std.mem.find(u8, s, "66%") != null);
-    try testing.expect(std.mem.find(u8, s, "5W") != null);
-    try testing.expect(std.mem.find(u8, s, "Last 20") != null);
+    try testing.expect(tree.find(s, "Platinum II · 2 LP") != null);
+    try testing.expect(tree.find(s, "16–8") != null);
+    try testing.expect(tree.find(s, "66%") != null);
+    try testing.expect(tree.find(s, "5W") != null);
+    try testing.expect(tree.find(s, "Last 20") != null);
     try testing.expectEqual(20, t.count(n, "data-r"));
 
     // No games: no figures, no form

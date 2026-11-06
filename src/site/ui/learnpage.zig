@@ -260,7 +260,7 @@ pub const Page = struct {
     }
 
     pub fn fromUrl(p: *Page, u: Url) void {
-        for (p.d.chapters, 0..) |ch, ci| for (ch.puzzles, 0..) |z, zi| if (std.mem.eql(u8, z.id, u.p.slice())) {
+        for (p.d.chapters, 0..) |ch, ci| for (ch.puzzles, 0..) |z, zi| if (tree.eql(z.id, u.p.slice())) {
             p.c = @intCast(ci);
             p.p = @intCast(zi);
             p.day = null;
@@ -339,7 +339,7 @@ pub const Page = struct {
     /// The question, its term (if any) a Toggletip with the term's note
     fn question(h: *H, z: *const ld.Puzzle) N {
         const t = z.term orelse return h.span(.{}, .{z.q});
-        const i = std.mem.find(u8, z.q, t.word) orelse return h.span(.{}, .{z.q});
+        const i = tree.find(z.q, t.word) orelse return h.span(.{}, .{z.q});
         const tt = toggletip.view(h, "lp-term", .{t.word}, .{ .s = t.word }, .{ .s = t.note });
         return h.span(.{}, .{ z.q[0..i], &tt, z.q[i + t.word.len ..] });
     }
@@ -890,11 +890,11 @@ test "a chapter end draft: the open seat stays hidden, then the right pick fills
     try html.write(&t, shown(a, &draft_demo, 0, 0, null).?.view(&h), &out.writer);
     const before = std.mem.count(u8, out.written(), "/Lux.jpg");
     const ap_before = std.mem.count(u8, out.written(), ">AP<");
-    try testing.expect(std.mem.find(u8, out.written(), "Adds the magic your team lacks") == null);
+    try testing.expect(tree.find(out.written(), "Adds the magic your team lacks") == null);
     out = .init(a);
     try html.write(&t, shown(a, &draft_demo, 0, 0, 0).?.view(&h), &out.writer);
     try testing.expect(!h.oom);
-    try testing.expect(std.mem.find(u8, out.written(), "Adds the magic your team lacks") != null);
+    try testing.expect(tree.find(out.written(), "Adds the magic your team lacks") != null);
     // On its card as before, now also in the open seat and the reasons list
     try testing.expect(std.mem.count(u8, out.written(), "/Lux.jpg") > before);
     // The filled seat gets its damage word

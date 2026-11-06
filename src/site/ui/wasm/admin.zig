@@ -321,7 +321,7 @@ fn done(ctx: i32, bytes: ?[]u8) void {
 fn newest(a: ap.Act) ?i64 {
     const l = page.live orelse return null;
     var t: ?i64 = null;
-    for (l.actions) |x| if (std.mem.eql(u8, x.name, a.path())) {
+    for (l.actions) |x| if (ui.tree.eql(x.name, a.path())) {
         t = x.time;
     };
     return t;
@@ -336,7 +336,7 @@ fn settle() void {
     page.running = null;
     var line: ?ad.Action = null;
     if (page.live) |l| if (!page.live_down) for (l.actions) |x| {
-        if (x.time > a.before and std.mem.eql(u8, x.name, a.act.path())) line = x;
+        if (x.time > a.before and ui.tree.eql(x.name, a.act.path())) line = x;
     };
     const x = line orelse {
         page.ran = .{ .act = a.act, .ok = false, .output = "" };
@@ -344,5 +344,5 @@ fn settle() void {
     };
     if (ran_out.len > 0) gpa.free(ran_out);
     ran_out = gpa.dupe(u8, x.output) catch &.{};
-    page.ran = .{ .act = a.act, .ok = std.mem.eql(u8, x.result, "ok"), .output = ran_out };
+    page.ran = .{ .act = a.act, .ok = ui.tree.eql(x.result, "ok"), .output = ran_out };
 }

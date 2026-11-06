@@ -42,13 +42,13 @@ pub const Set = struct {
     /// `kind`'s values ("8010", "3071.6333.3053"), null when not locked
     pub fn get(set: *const Set, kind: Kind) ?[]const u8 {
         var it = std.mem.tokenizeScalar(u8, set.s.slice(), ',');
-        while (it.next()) |part| if (part.len > 2 and std.mem.eql(u8, part[0..2], codes[@backingInt(kind)])) return part[2..];
+        while (it.next()) |part| if (part.len > 2 and tree.eql(part[0..2], codes[@backingInt(kind)])) return part[2..];
         return null;
     }
 
     pub fn has(set: *const Set, kind: Kind, v: []const u8) bool {
         const now = set.get(kind) orelse return false;
-        return std.mem.eql(u8, now, v);
+        return tree.eql(now, v);
     }
 
     /// Locks `kind` on `v`, or unlocks it when that is its lock. Unchanged when the

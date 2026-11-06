@@ -198,7 +198,7 @@ pub const Timeline = struct {
             },
             .key => {
                 const k = ev.text;
-                if (std.mem.eql(u8, k, "ArrowRight")) t.step(1) else if (std.mem.eql(u8, k, "ArrowLeft")) t.step(-1) else if (std.mem.eql(u8, k, "Escape")) {
+                if (tree.eql(k, "ArrowRight")) t.step(1) else if (tree.eql(k, "ArrowLeft")) t.step(-1) else if (tree.eql(k, "Escape")) {
                     if (t.cur != null) t.cur = null else if (t.range != null) t.range = null else return;
                 } else return;
                 ev.handled = true;

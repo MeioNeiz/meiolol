@@ -66,7 +66,7 @@ pub const Seat = struct {
     /// The page island's root attributes: data-phase, data-seat and data-guess (the
     /// option index); a new seat closes the open rows
     pub fn read(s: *Seat, phase: []const u8, seat: []const u8, guess: []const u8) void {
-        s.done = std.mem.eql(u8, phase, "done");
+        s.done = tree.eql(phase, "done");
         s.guess = if (digit(guess)) |g| (if (g < s.p.options.len) g else null) else null;
         const to = digit(seat) orelse dp.hiddenSeat(s.p);
         if (to != s.seat) {

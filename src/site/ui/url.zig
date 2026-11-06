@@ -12,6 +12,8 @@
 //! unsigned int arrays (`r=1200-1800`) and `Str(n)` for typed text. Two islands with the
 //! same field names tell them apart by `pub const prefix = "opp-"` on one's struct.
 const std = @import("std");
+const tree = @import("tree.zig");
+const fmt = @import("fmt.zig");
 const Writer = std.Io.Writer;
 
 /// Text up to `cap` bytes, kept inline so a state struct stays plain data
@@ -38,7 +40,7 @@ pub fn Str(comptime cap: u8) type {
         }
 
         pub fn eql(s: *const S, o: *const S) bool {
-            return std.mem.eql(u8, s.slice(), o.slice());
+            return tree.eql(s.slice(), o.slice());
         }
     };
 }
@@ -62,7 +64,7 @@ fn keys(comptime T: type) []const []const u8 {
 /// `s`'s index in `names`: one loop shared by every struct and enum (unrolled compares
 /// per name cost each ui.wasm a few hundred bytes gz)
 fn find(names: []const []const u8, s: []const u8) ?usize {
-    for (names, 0..) |x, i| if (std.mem.eql(u8, x, s)) return i;
+    for (names, 0..) |x, i| if (tree.eql(x, s)) return i;
     return null;
 }
 
@@ -94,7 +96,6 @@ fn pair(w: *Writer, first: *bool, k: []const u8) Writer.Error!void {
 fn same(comptime V: type, a: V, b: V) bool {
     if (comptime isStr(V)) return a.eql(&b);
     return switch (@typeInfo(V)) {
-        .array => std.mem.eql(@typeInfo(V).array.child, &a, &b),
         // Str's bytes past its length are undefined: compare what it holds
         .optional => |o| if (a == null or b == null) a == null and b == null else same(o.child, a.?, b.?),
         else => std.meta.eql(a, b),
@@ -104,7 +105,7 @@ fn same(comptime V: type, a: V, b: V) bool {
 fn value(comptime V: type, x: V, w: *Writer) Writer.Error!void {
     if (comptime isStr(V)) return escape(x.slice(), w);
     switch (@typeInfo(V)) {
-        .int => try w.print("{d}", .{x}),
+        .int => try fmt.whole(w, .int, .of(x)),
         .bool => try w.writeByte(if (x) '1' else '0'),
         .@"enum" => try w.writeAll(@tagName(x)),
         .optional => |o| if (x) |y| try value(o.child, y, w),
@@ -114,19 +115,21 @@ fn value(comptime V: type, x: V, w: *Writer) Writer.Error!void {
             };
             for (x, 0..) |y, i| {
                 if (i > 0) try w.writeByte('-');
-                try w.print("{d}", .{y});
+                try fmt.whole(w, .int, .of(y));
             }
         },
         else => @compileError("url: can't write " ++ @typeName(V)),
     }
 }
 
+const digits = "0123456789ABCDEF";
+
 /// Unreserved characters and commas (a lock set's, `lk=ks8010,vs86`) as they are, the
 /// rest as %XX: safe in a fragment and in a link
 fn escape(s: []const u8, w: *Writer) Writer.Error!void {
     for (s) |c| switch (c) {
         'a'...'z', 'A'...'Z', '0'...'9', '-', '.', '_', '~', ',' => try w.writeByte(c),
-        else => try w.print("%{X:0>2}", .{c}),
+        else => try w.writeAll(&.{ '%', digits[c >> 4], digits[c & 15] }),
     };
 }
 
@@ -156,7 +159,7 @@ fn parse(comptime V: type, s: []const u8) ?V {
     }
     return switch (@typeInfo(V)) {
         .int => std.fmt.parseInt(V, s, 10) catch null,
-        .bool => if (std.mem.eql(u8, s, "1")) true else if (std.mem.eql(u8, s, "0")) false else null,
+        .bool => if (tree.eql(s, "1")) true else if (tree.eql(s, "0")) false else null,
         .@"enum" => std.enums.values(V)[find(std.meta.fieldNames(V), s) orelse return null],
         .optional => |o| if (s.len == 0) @as(V, null) else if (parse(o.child, s)) |y| @as(V, y) else null,
         .array => |a| blk: {

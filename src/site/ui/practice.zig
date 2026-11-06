@@ -83,17 +83,17 @@ pub const Act = union(enum) {
         const verb = it.next() orelse return null;
         const a = it.next() orelse return null;
         const b = it.next();
-        if (std.mem.eql(u8, verb, "seat")) {
+        if (tree.eql(verb, "seat")) {
             const tag = std.meta.stringToEnum(std.meta.Tag(Target), a) orelse return null;
             const i = place(b orelse return null) orelse return null;
             return .{ .seat = switch (tag) {
                 inline else => |t| @unionInit(Target, @tagName(t), i),
             } };
         }
-        if (std.mem.eql(u8, verb, "fill")) return .{ .fill = .{ place(a) orelse return null, id(b orelse return null) orelse return null } };
+        if (tree.eql(verb, "fill")) return .{ .fill = .{ place(a) orelse return null, id(b orelse return null) orelse return null } };
         const c = id(a) orelse return null;
-        if (std.mem.eql(u8, verb, "take")) return .{ .take = c };
-        if (std.mem.eql(u8, verb, "ban")) return .{ .ban = c };
+        if (tree.eql(verb, "take")) return .{ .take = c };
+        if (tree.eql(verb, "ban")) return .{ .ban = c };
         return null;
     }
 
@@ -127,11 +127,11 @@ pub const Practice = struct {
             },
             .close => p.target = null,
             .query => p.query.set(ev.text),
-            .key => if (std.mem.eql(u8, ev.text, "Enter")) {
+            .key => if (tree.eql(ev.text, "Enter")) {
                 var buf: [1]u16 = undefined;
                 const found = p.matches(&buf);
                 if (found.len > 0) p.place(p.data.champs[found[0]].id);
-            } else if (std.mem.eql(u8, ev.text, "Escape")) {
+            } else if (tree.eql(ev.text, "Escape")) {
                 p.target = null;
             },
             .lock => p.lock_in = !p.lock_in,

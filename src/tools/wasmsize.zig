@@ -1,6 +1,7 @@
 //! wasmsize: each ui.wasm family's gzip size against the last pushed main's and its
 //! budget; on growth over a threshold or a failure, which functions grew, the source
-//! files they come from and, for std code, which of ours calls it.
+//! files they come from and, for std code, which of ours calls it. Fails a family that
+//! has std.mem.eql's vector version (vectorEql).
 //!
 //! The baseline is a store of earlier runs, one file per commit
 //! (<git common dir>/meiolol-wasm-sizes/<sha>), written by --record when the tree is
@@ -99,12 +100,31 @@ pub fn main(init: std.process.Init) !void {
     const out = &out_file.interface;
     var res: Resolver = .{ .io = io, .arena = arena, .tree = tree, .std_dir = std_dir orelse stdDir(io, arena) };
     try report(arena, out, fams.items, base, threshold, &res);
+    var vector_eql = false;
+    for (fams.items) |*f| vector_eql = try vectorEql(arena, out, f, &res) or vector_eql;
     try out.flush();
 
     for (fams.items) |f| if (f.gz > f.budget) std.process.exit(1);
+    if (vector_eql) std.process.exit(1);
     // Only sizes within budget become a baseline; the sizes are checked either way
     if (record) if (try cleanHead(io, arena, tree)) |sha| save(io, arena, store_dir, sha, fams.items) catch |err|
         std.debug.print("wasmsize: baseline for {s} not saved in {s}: {t}\n", .{ sha[0..8], store_dir, err });
+}
+
+/// std.mem.eql's vector version, which std's startsWith, endsWith, find and string maps
+/// call too: 660 B raw in each family that has it, and three times slower in wasm than
+/// tree.eql's loop on the short strings we compare
+fn vectorEql(arena: Allocator, out: *Io.Writer, f: *const Family, res: *Resolver) !bool {
+    const m = f.module orelse return false;
+    for (m.funcs) |func| {
+        const is_eql = std.mem.eql(u8, func.key, "mem.eql") or std.mem.eql(u8, func.key, "mem.eqlBytes");
+        if (!is_eql or func.size <= 200) continue;
+        try out.print("  {s}: std.mem.eql's vector version ({d} B raw); tree.eql, startsWith, endsWith, find or StrCtx instead in", .{ f.name, func.size });
+        for (try ourCallers(arena, m, func.key, res)) |c| try out.print(" {s}", .{c});
+        try out.writeAll("\n");
+        return true;
+    }
+    return false;
 }
 
 /// Every function, biggest first, with the file it comes from

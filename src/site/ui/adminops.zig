@@ -120,7 +120,7 @@ pub const Ops = struct {
     }
 
     fn setFold(o: *Ops, sha: Short, open: bool) void {
-        for (o.folds[0..o.n_folds]) |*f| if (std.mem.eql(u8, &f.sha, &sha)) {
+        for (o.folds[0..o.n_folds]) |*f| if (tree.eql(&f.sha, &sha)) {
             f.open = open;
             return;
         };
@@ -133,7 +133,7 @@ pub const Ops = struct {
     }
 
     fn foldOf(o: *const Ops, sha: Short) ?bool {
-        for (o.folds[0..o.n_folds]) |f| if (std.mem.eql(u8, &f.sha, &sha)) return f.open;
+        for (o.folds[0..o.n_folds]) |f| if (tree.eql(&f.sha, &sha)) return f.open;
         return null;
     }
 
@@ -469,7 +469,7 @@ fn render(a: std.mem.Allocator, o: *Ops) ![]const u8 {
 }
 
 fn expectHas(s: []const u8, wants: []const []const u8) !void {
-    for (wants) |w| if (std.mem.find(u8, s, w) == null) {
+    for (wants) |w| if (tree.find(s, w) == null) {
         std.debug.print("missing {s} in {s}\n", .{ w, s });
         return error.TestExpectedEqual;
     };
@@ -501,7 +501,7 @@ test "admin deploys: newest and running open, a fold kept, the running one timed
     try expectHas(s, &.{ "data-state=\"running\">", "data-state=\"live\" open" });
     // Failed before the page opened: not announced
     o.opened = Demo.now;
-    try testing.expect(std.mem.find(u8, try render(a, &o), "role=\"alert\"") == null);
+    try testing.expect(tree.find(try render(a, &o), "role=\"alert\"") == null);
     o.tab = .crawler;
     try expectHas(try render(a, &o), &.{" hidden"});
 }

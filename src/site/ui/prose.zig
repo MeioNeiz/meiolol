@@ -56,7 +56,7 @@ pub fn parse(a: Allocator, src: []const u8) Allocator.Error!Doc {
         const t = l[lead..];
         if (t.len == 0) {
             p.skip();
-        } else if (std.mem.startsWith(u8, t, "```")) {
+        } else if (tree.startsWith(t, "```")) {
             try blocks.append(a, .{ .code = try p.fence() });
         } else if (headingLevel(t)) |n| {
             p.skip();
@@ -76,7 +76,7 @@ pub fn parse(a: Allocator, src: []const u8) Allocator.Error!Doc {
 
 /// `Early or late {#lean}`: the text and its own id, kept when the text changes
 fn explicitId(t: []const u8) struct { []const u8, []const u8 } {
-    if (!std.mem.endsWith(u8, t, "}")) return .{ t, "" };
+    if (!tree.endsWith(t, "}")) return .{ t, "" };
     const at = std.mem.findLast(u8, t, " {#") orelse return .{ t, "" };
     const id = t[at + 3 .. t.len - 1];
     for (id) |c| if (!std.ascii.isAlphanumeric(c) and c != '-') return .{ t, "" };
@@ -122,7 +122,7 @@ const Parser = struct {
         var w: std.ArrayList(u8) = .empty;
         while (p.lines.next()) |raw| {
             const l = std.mem.trimEnd(u8, raw, "\r");
-            if (std.mem.startsWith(u8, std.mem.trimStart(u8, l, " "), "```")) break;
+            if (tree.startsWith(std.mem.trimStart(u8, l, " "), "```")) break;
             if (w.items.len > 0) try w.append(p.a, '\n');
             try w.appendSlice(p.a, l);
         }
@@ -180,7 +180,7 @@ const Parser = struct {
 
     fn cell(p: *Parser, raw: []const u8) !Line {
         const t = std.mem.trim(u8, raw, ws);
-        if (std.mem.find(u8, t, "\\|") == null) return inline_(p.a, t);
+        if (tree.find(t, "\\|") == null) return inline_(p.a, t);
         return inline_(p.a, try std.mem.replaceOwned(u8, p.a, t, "\\|", "|"));
     }
 
@@ -195,7 +195,7 @@ const Parser = struct {
     }
 
     fn interrupts(p: *const Parser, t: []const u8) bool {
-        return std.mem.startsWith(u8, t, "```") or p.tableAhead(t);
+        return tree.startsWith(t, "```") or p.tableAhead(t);
     }
 
     /// Items start at "- " or "* "; indented ones nest under the item before; any
@@ -294,7 +294,7 @@ fn inline_(a: Allocator, s: []const u8) Allocator.Error!Line {
             start = i;
             continue;
         };
-        const mark: []const u8 = if (s[i] == '`') "`" else if (std.mem.startsWith(u8, s[i..], "**")) "**" else {
+        const mark: []const u8 = if (s[i] == '`') "`" else if (tree.startsWith(s[i..], "**")) "**" else {
             i += 1;
             continue;
         };
@@ -319,7 +319,7 @@ fn inline_(a: Allocator, s: []const u8) Allocator.Error!Line {
 /// anchors, https and mailto: the docs' relative links (`docs/model.md`) stay literal, and
 /// `//host` and `/\host` (browsers read both as another site)
 fn link(s: []const u8) ?struct { run: Run, len: usize } {
-    const mid = std.mem.find(u8, s, "](") orelse return null;
+    const mid = tree.find(s, "](") orelse return null;
     const end = std.mem.findScalarPos(u8, s, mid + 2, ')') orelse return null;
     const text = s[1..mid];
     const href = s[mid + 2 .. end];
@@ -327,7 +327,7 @@ fn link(s: []const u8) ?struct { run: Run, len: usize } {
     if (href.len == 0 or std.mem.findAny(u8, href, " \t<>\"'") != null) return null;
     if (href.len > 1 and href[0] == '/' and (href[1] == '/' or href[1] == '\\')) return null;
     for ([_][]const u8{ "/", "#", "https://", "mailto:" }) |p| {
-        if (std.mem.startsWith(u8, href, p)) return .{ .run = .{ .kind = .link, .s = text, .href = href }, .len = end + 1 };
+        if (tree.startsWith(href, p)) return .{ .run = .{ .kind = .link, .s = text, .href = href }, .len = end + 1 };
     }
     return null;
 }
@@ -373,7 +373,7 @@ fn folds(a: Allocator, secs: []const Section, o: Opts) Allocator.Error![]const F
 
 /// The hash (`o.open`) names this heading: the page's prefix, then the id
 pub fn named(o: Opts, id: []const u8) bool {
-    return o.open.len > 0 and id.len > 0 and std.mem.startsWith(u8, o.open, o.id_prefix) and std.mem.eql(u8, o.open[o.id_prefix.len..], id);
+    return o.open.len > 0 and id.len > 0 and tree.startsWith(o.open, o.id_prefix) and tree.eql(o.open[o.id_prefix.len..], id);
 }
 
 /// A doc cut at its `##` headings: the intro before the first, then each section
@@ -565,7 +565,7 @@ fn runs(h: *H, line: Line) []const N {
 fn isNum(line: Line) bool {
     if (line.len != 1 or line[0].kind != .plain) return false;
     const s = line[0].s;
-    if (std.mem.eql(u8, s, "-")) return true;
+    if (tree.eql(s, "-")) return true;
     const d = if (s.len > 1 and (s[0] == '-' or s[0] == '+')) s[1..] else s;
     return d.len > 0 and std.ascii.isDigit(d[0]);
 }
@@ -797,8 +797,8 @@ test "links: on this site, anchors, https and mailto; anything else stays text" 
     }, d.blocks[0].para);
     try testing.expectEqualStrings("mailto:a@b.c", d.blocks[0].para[5].href);
     const out = try render(a, "[ICO](https://ico.org.uk), `[not](/a)`", .{ .id_prefix = "" });
-    try testing.expect(std.mem.find(u8, out, "<a href=\"https://ico.org.uk\">ICO</a>") != null);
-    try testing.expect(std.mem.find(u8, out, "<span class=\"c\">[not](/a)</span>") != null);
+    try testing.expect(tree.find(out, "<a href=\"https://ico.org.uk\">ICO</a>") != null);
+    try testing.expect(tree.find(out, "<span class=\"c\">[not](/a)</span>") != null);
 }
 
 test "parse: empty and odd input" {
@@ -844,15 +844,15 @@ test "view: heading tags from top, figures right, text escaped, sections folded"
         "<h4 id=\"deep\">Deep</h4>",
         "<td>x</td><td class=\"num\">2</td><td class=\"num\">-0.1</td><td class=\"num\">-</td><td class=\"num\">+3</td><td>-x</td>",
         "w[&lt;role&gt;] &amp; co",
-    }) |w| if (std.mem.find(u8, s, w) == null) {
+    }) |w| if (tree.find(s, w) == null) {
         std.debug.print("missing {s} in {s}\n", .{ w, s });
         return error.TestExpectedEqual;
     };
     try testing.expectEqual(@as(usize, 3), std.mem.count(u8, s, "<details"));
     const flat = try render(a, "# T\n\n## S\n", .{ .id_prefix = "" });
-    try testing.expect(std.mem.find(u8, flat, "<h1 id=\"t\">T</h1><h2 id=\"s\">S</h2>") != null);
-    try testing.expect(std.mem.find(u8, flat, "details") == null);
-    try testing.expect(std.mem.find(u8, try render(a, "", .{ .id_prefix = "" }), "Nothing written yet") != null);
+    try testing.expect(tree.find(flat, "<h1 id=\"t\">T</h1><h2 id=\"s\">S</h2>") != null);
+    try testing.expect(tree.find(flat, "details") == null);
+    try testing.expect(tree.find(try render(a, "", .{ .id_prefix = "" }), "Nothing written yet") != null);
 }
 
 test "parse: wrapped lines stay text; \\| stays in its cell; a row of dashes is data" {
@@ -904,7 +904,7 @@ test "parse the real docs: fences paired, no row cut, no open section over the b
         const d = try parse(a, src);
         var fences: usize = 0;
         var lines = std.mem.splitScalar(u8, src, '\n');
-        while (lines.next()) |l| fences += @intFromBool(std.mem.startsWith(u8, l, "```"));
+        while (lines.next()) |l| fences += @intFromBool(tree.startsWith(l, "```"));
         var code: usize = 0;
         var heads: usize = 0;
         for (d.blocks) |b| switch (b) {
@@ -977,11 +977,11 @@ test "heading ids: slugs, unique in the doc; split cuts at ##; a section builds 
         "<p>intro</p><details class=\"sec\"><summary><h2 id=\"m-lane-model-gold14\">Lane model: <span class=\"c\">gold14</span></h2></summary></details>",
         "<details class=\"sec\" open=\"\"><summary><h2 id=\"m-lane-model-gold14-3\">Lane model -- gold14!</h2></summary><p class=\"empty\" role=\"status\">Loading</p></details>",
         "<summary><h2 id=\"m-s\">***</h2></summary></details>",
-    }) |w| if (std.mem.find(u8, s, w) == null) {
+    }) |w| if (tree.find(s, w) == null) {
         std.debug.print("missing {s} in {s}\n", .{ w, s });
         return error.TestExpectedEqual;
     };
-    try testing.expect(std.mem.find(u8, s, "<p>x</p>") == null);
+    try testing.expect(tree.find(s, "<p>x</p>") == null);
 }
 
 test "heading ids: {#name} sets one, and a slug steps around it" {
@@ -1030,7 +1030,7 @@ test "split: a level 1 heading starts a section; a big one is cut at its next le
     // The hash naming a part opens it and the section around it, prefix and all
     const s = try render(a, src.written(), .{ .fold = true, .id_prefix = "m-", .open = "m-two" });
     try testing.expectEqual(@as(usize, 2), std.mem.count(u8, s, "<details class=\"sec\" open=\"\">"));
-    try testing.expect(std.mem.find(u8, s, "open=\"\"><summary><h3 id=\"m-two\">Two</h3>") != null);
+    try testing.expect(tree.find(s, "open=\"\"><summary><h3 id=\"m-two\">Two</h3>") != null);
     // A heading inside a part's body opens the part, and the section around it, unfetched
     const deep: Opts = .{ .id_prefix = "m-", .open = "m-deep" };
     try testing.expect(big.holds(deep) and big.parts[1].holds(deep));
@@ -1074,8 +1074,8 @@ test "two docs on one page: the same heading, two ids; a hash opens only its own
     const a = arena.allocator();
     const one = try render(a, demo_folded, .{ .fold = true, .id_prefix = "a-", .open = "b-features" });
     const two = try render(a, demo_folded, .{ .fold = true, .id_prefix = "b-", .open = "b-features" });
-    try testing.expect(std.mem.find(u8, one, "id=\"a-features\"") != null and std.mem.find(u8, one, "open=\"\"") == null);
-    try testing.expect(std.mem.find(u8, two, "id=\"b-features\"") != null and std.mem.find(u8, two, "open=\"\"") != null);
+    try testing.expect(tree.find(one, "id=\"a-features\"") != null and tree.find(one, "open=\"\"") == null);
+    try testing.expect(tree.find(two, "id=\"b-features\"") != null and tree.find(two, "open=\"\"") != null);
 }
 
 test "a table without a head keeps each row's cells, none cut" {
@@ -1149,18 +1149,18 @@ test "on the fake DOM: open fetches, close drops the body's nodes, re-open rebui
     const body = "The draft model ranks picks";
     const sec = i.current().node(i.current().find(i.current().root, "class", "sec").?).dom;
     _ = rt.event(0, .{ .kind = .toggle, .target = sec, .text = "open" });
-    try testing.expect(std.mem.find(u8, try html(&fake, a), "Could not load") != null);
+    try testing.expect(tree.find(try html(&fake, a), "Could not load") != null);
     _ = rt.event(0, .{ .kind = .toggle, .target = sec, .text = "" });
     state.fail = false;
     _ = rt.event(0, .{ .kind = .toggle, .target = sec, .text = "open" });
     try testing.expectEqual(@as(usize, 2), state.fetches);
     var s = try html(&fake, a);
-    try testing.expect(std.mem.find(u8, s, body) != null and std.mem.find(u8, s, "Could not load") == null);
+    try testing.expect(tree.find(s, body) != null and tree.find(s, "Could not load") == null);
     _ = rt.event(0, .{ .kind = .toggle, .target = sec, .text = "" });
-    try testing.expect(std.mem.find(u8, try html(&fake, a), body) == null);
+    try testing.expect(tree.find(try html(&fake, a), body) == null);
     _ = rt.event(0, .{ .kind = .toggle, .target = sec, .text = "open" });
     s = try html(&fake, a);
-    try testing.expect(std.mem.find(u8, s, body) != null);
+    try testing.expect(tree.find(s, body) != null);
     try testing.expectEqual(@as(usize, 2), state.fetches);
     try testing.expectEqual(@as(u32, 0), fake.warnings);
 }

@@ -164,7 +164,7 @@ pub const Finder = struct {
 
     fn find(f: *const F, slug: []const u8) ?u16 {
         if (slug.len == 0) return null;
-        for (f.data.champs, 0..) |c, i| if (std.mem.eql(u8, c.slug, slug)) return @intCast(i);
+        for (f.data.champs, 0..) |c, i| if (tree.eql(c.slug, slug)) return @intCast(i);
         return null;
     }
 
@@ -420,7 +420,7 @@ pub const Grid = struct {
         const rel = in.rels[g.grid.rel];
         if (rel.ally or rel.role != in.role) return null;
         for (rel.opps, 0..) |o, k| {
-            if (o.champ < in.champs.len and std.mem.eql(u8, in.champs[o.champ].slug, g.u.vs.slice())) return @intCast(k);
+            if (o.champ < in.champs.len and tree.eql(in.champs[o.champ].slug, g.u.vs.slice())) return @intCast(k);
         }
         return null;
     }
@@ -446,7 +446,7 @@ pub const Grid = struct {
             if (href) |x| return h.p(.{ .class = "go", .role = "status" }, .{button.view(h, .{ .v = .primary, .href = x, .ref = "go" }, .{W.go})});
         }
         const b_name = for (in.champs) |c| {
-            if (std.mem.eql(u8, c.slug, b)) break c.name;
+            if (tree.eql(c.slug, b)) break c.name;
         } else return .none;
         return h.p(.{ .class = "none", .role = "status" }, .{W.no_page.with(h, .{ .a = in.name, .b = b_name, .r = in.role.label().s })});
     }
@@ -678,12 +678,12 @@ test "Finder: bullies' bar is the gold lead, the biggest full; a role without mo
     };
     f.fromUrl(.{ .role = .top });
     const s = try Html.of(&f, a);
-    const bully = s[std.mem.find(u8, s, "Lane bullies").?..];
-    try testing.expectEqual(2, std.mem.count(u8, bully[0..std.mem.find(u8, bully, "</ul>").?], "data-v=\"wide\""));
-    try testing.expect(std.mem.find(u8, bully, "--w:100") != null);
-    try testing.expect(std.mem.find(u8, s, "<span class=\"c-delta\" style=\"--c:var(--hi2)\">+3.4</span>") != null);
+    const bully = s[tree.find(s, "Lane bullies").?..];
+    try testing.expectEqual(2, std.mem.count(u8, bully[0..tree.find(bully, "</ul>").?], "data-v=\"wide\""));
+    try testing.expect(tree.find(bully, "--w:100") != null);
+    try testing.expect(tree.find(s, "<span class=\"c-delta\" style=\"--c:var(--hi2)\">+3.4</span>") != null);
     f.fromUrl(.{ .role = .jungle });
-    try testing.expect(std.mem.find(u8, try Html.of(&f, a), "Moved this patch") == null);
+    try testing.expect(tree.find(try Html.of(&f, a), "Moved this patch") == null);
 }
 
 test "Finder: the champion page's link to the rest opens on its champion and role" {
@@ -709,17 +709,17 @@ test "Finder: All by default, every lane's pairs, each row its role and its lane
     w.clearRetainingCapacity();
     try @import("html.zig").write(&t, f.view(&h), &w.writer);
     const s = w.written();
-    try testing.expect(std.mem.find(u8, s, "<button type=\"button\" aria-pressed=\"true\">All</button>") != null);
-    const ahri = std.mem.find(u8, s, "href=\"/matchups/mid/ahri-vs-zed\"").?;
-    try testing.expect(std.mem.find(u8, s[ahri..], "data-r=\"mid\"") != null);
+    try testing.expect(tree.find(s, "<button type=\"button\" aria-pressed=\"true\">All</button>") != null);
+    const ahri = tree.find(s, "href=\"/matchups/mid/ahri-vs-zed\"").?;
+    try testing.expect(tree.find(s[ahri..], "data-r=\"mid\"") != null);
 
     f.fromUrl(url.read(Finder.Url, "role=top"));
     t = .{};
     h = .init(a, &t);
     w.clearRetainingCapacity();
     try @import("html.zig").write(&t, f.view(&h), &w.writer);
-    try testing.expect(std.mem.find(u8, w.written(), "ahri-vs-zed") == null);
-    try testing.expect(std.mem.find(u8, w.written(), "<span class=\"vs\">vs </span>") != null);
+    try testing.expect(tree.find(w.written(), "ahri-vs-zed") == null);
+    try testing.expect(tree.find(w.written(), "<span class=\"vs\">vs </span>") != null);
 }
 
 test "Finder: a list shows 8 rows, its button the rest the server kept, open across roles" {
@@ -741,14 +741,14 @@ test "Finder: a list shows 8 rows, its button the rest the server kept, open acr
         }
         /// Rows in the list labelled `label`
         fn rows(s: []const u8, label: []const u8) usize {
-            const at = std.mem.find(u8, s, label).?;
-            const end = std.mem.find(u8, s[at..], "</ul>").?;
+            const at = tree.find(s, label).?;
+            const end = tree.find(s[at..], "</ul>").?;
             return std.mem.count(u8, s[at..][0..end], "<li");
         }
     };
     var s = try Html.of(&f, a);
     try testing.expectEqual(shown, Html.rows(s, "aria-label=\"Hardest lanes\""));
-    try testing.expect(std.mem.find(u8, s, "aria-expanded=\"false\">3 more</button>") != null);
+    try testing.expect(tree.find(s, "aria-expanded=\"false\">3 more</button>") != null);
     // Short lists: no button
     try testing.expectEqual(1, std.mem.count(u8, s, "class=\"all\""));
 
@@ -756,7 +756,7 @@ test "Finder: a list shows 8 rows, its button the rest the server kept, open acr
     f.update(.{ .more = .hard }, &ev);
     s = try Html.of(&f, a);
     try testing.expectEqual(pairs.len, Html.rows(s, "aria-label=\"Hardest lanes\""));
-    try testing.expect(std.mem.find(u8, s, "aria-expanded=\"true\">Fewer</button>") != null);
+    try testing.expect(tree.find(s, "aria-expanded=\"true\">Fewer</button>") != null);
     f.update(.{ .role = .top }, &ev);
     s = try Html.of(&f, a);
     try testing.expectEqual(pairs.len, Html.rows(s, "aria-label=\"Hardest lanes\""));
@@ -789,7 +789,7 @@ test "Grid: the first pick's file, the second its dot and once its page" {
     t.root = g.view(&h);
     var out: std.Io.Writer.Allocating = .init(a);
     try @import("html.zig").write(&t, t.root, &out.writer);
-    try testing.expect(std.mem.find(u8, out.written(), "<p class=\"go\" role=\"status\"><a class=\"c-btn\" href=\"/matchups/top/darius-vs-garen\"") != null);
+    try testing.expect(tree.find(out.written(), "<p class=\"go\" role=\"status\"><a class=\"c-btn\" href=\"/matchups/top/darius-vs-garen\"") != null);
 
     // A new second pick: its page, once; a role change meanwhile keeps it
     g.got("ahri", null);
@@ -813,7 +813,7 @@ test "Grid: the first pick's file, the second its dot and once its page" {
     t.root = g.view(&h);
     out.clearRetainingCapacity();
     try @import("html.zig").write(&t, t.root, &out.writer);
-    try testing.expect(std.mem.find(u8, out.written(), "Too few Darius vs Lee Sin games in Top") != null);
+    try testing.expect(tree.find(out.written(), "Too few Darius vs Lee Sin games in Top") != null);
     g.fromUrl(url.read(Finder.Url, "c=darius&vs=darius"));
     try testing.expectEqual(0, g.u.vs.len);
 

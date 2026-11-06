@@ -56,7 +56,7 @@ pub fn urlOf(l: *const yl.List, f: yl.Filter) FilterUrl {
 pub fn filterOf(l: *const yl.List, u: FilterUrl) yl.Filter {
     var f: yl.Filter = .{ .role = u.role };
     if (std.mem.findScalar(?yl.Queue, &queues, u.q) != null) f.queue = u.q;
-    for (l.champs, 0..) |c, i| if (std.mem.eql(u8, c.name, u.champ.slice())) {
+    for (l.champs, 0..) |c, i| if (tree.eql(c.name, u.champ.slice())) {
         f.champ = @intCast(i);
     };
     if (f.champ != null and !any(l.games, f)) f.champ = null;
@@ -221,7 +221,7 @@ pub fn gallery(g: *Gallery) void {
 const testing = std.testing;
 
 fn rowCount(t: *const tree.Tree, n: N) usize {
-    var c: usize = @intFromBool(std.mem.eql(u8, t.attr(n, "class") orelse "", "c-grow"));
+    var c: usize = @intFromBool(tree.eql(t.attr(n, "class") orelse "", "c-grow"));
     for (t.kidsOf(n)) |k| c += rowCount(t, k);
     return c;
 }
@@ -241,12 +241,12 @@ test "the URL's filter, day groups and Show older" {
     try testing.expectEqualStrings("/game#g=0", t.attr(t.find(n, "class", "c-grow").?, "href").?);
     var text: std.Io.Writer.Allocating = .init(a);
     try t.textOf(n, &text.writer);
-    try testing.expect(std.mem.find(u8, text.written(), "Today") != null);
+    try testing.expect(tree.find(text.written(), "Today") != null);
     // The server's: no clock, so dates only
     var server: YourList = .{ .l = &demo.list };
     text.clearRetainingCapacity();
     try t.textOf(server.view(&h), &text.writer);
-    try testing.expect(std.mem.find(u8, text.written(), "Today") == null);
+    try testing.expect(tree.find(text.written(), "Today") == null);
 
     // Flex, from the URL: games 3 and 7, on two days
     p.fromUrl(.{ .q = .flex });

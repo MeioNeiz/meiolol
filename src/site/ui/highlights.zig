@@ -327,7 +327,7 @@ test "records: runs, the lane, the fights, the games" {
 }
 
 fn count(t: *const tree.Tree, n: N, class: []const u8) usize {
-    var c: usize = @intFromBool(std.mem.eql(u8, t.attr(n, "class") orelse "", class));
+    var c: usize = @intFromBool(tree.eql(t.attr(n, "class") orelse "", class));
     for (t.kidsOf(n)) |k| c += count(t, k, class);
     return c;
 }

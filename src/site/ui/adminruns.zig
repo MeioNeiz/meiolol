@@ -88,7 +88,7 @@ pub const Runs = struct {
         var first: ?*const md.Run = null;
         for (t.runs) |*r| {
             if (!inView(m.cat, r) or isCheck(r)) continue;
-            if (std.mem.eql(u8, r.run, m.run)) return r;
+            if (tree.eql(r.run, m.run)) return r;
             if (first == null) first = r;
         }
         return first;
@@ -193,7 +193,7 @@ pub fn sentence(h: *H, r: *const md.Run) []const u8 {
     if (r.synthetic) return "Synthetic: random curves from a test script, not a model.";
     const what = if (r.target.len > 0) am.lowerFirst(h, am.outcomeLabel(r.target)) else "the outcome";
     if (r.result) |rt| if (rt.removed) |rm| {
-        const unit = if (rt.unit.len > 0 and !std.mem.eql(u8, rt.unit, "-")) rt.unit else "";
+        const unit = if (rt.unit.len > 0 and !tree.eql(rt.unit, "-")) rt.unit else "";
         const miss = if (rt.err_base != null and rt.err_cand != null and unit.len > 0)
             h.fmt(" Typical miss {s} → {s} {s}.", .{ num(h, rt.err_base.?), num(h, rt.err_cand.?), unit })
         else
@@ -301,11 +301,11 @@ fn effects(h: *H, r: *const md.Run) N {
 
 /// The run's health: when and what it ran, its curves, the metrics behind them, its log
 fn detail(m: *Runs, h: *H, r: *const md.Run) N {
-    const mine = std.mem.eql(u8, m.files, r.run);
+    const mine = tree.eql(m.files, r.run);
     const mt = if (mine) m.metrics else null;
     const log = if (mine) m.log else null;
     const commit = r.head.len > 0 and r.head[0] != '-';
-    const dirty = commit and r.dirty.len > 0 and !std.mem.startsWith(u8, std.mem.trim(u8, r.dirty, " "), "0 files") and r.dirty[0] != '-';
+    const dirty = commit and r.dirty.len > 0 and !tree.startsWith(std.mem.trim(u8, r.dirty, " "), "0 files") and r.dirty[0] != '-';
     const rows = if (mt) |x| x.rows.len else 0;
     return card.view(h, .{}, &.{
         card.head(h, .{ .s = am.shortRun(r.run) }, null, &.{stateBadge(h, r)}),
@@ -343,7 +343,7 @@ fn curves(h: *H, mt: *const md.Metrics) N {
         var lines: std.ArrayList(Line) = .empty;
         var only: []const u8 = g;
         for (mt.cols[1..], 1..) |c, k| {
-            if (!std.mem.eql(u8, suffix(c), g)) continue;
+            if (!tree.eql(suffix(c), g)) continue;
             const ys = h.mem.alloc(f32, mt.rows.len) catch return oom(h);
             for (ys, mt.rows) |*y, r| y.* = if (k < r.len) r[k] else std.math.nan(f32);
             lines.append(h.mem, .{ .name = c, .ys = ys, .s = @intCast(@min(indexOf(prefixes.items, prefix(c)).?, 5)) }) catch {};
@@ -365,7 +365,7 @@ fn prefix(c: []const u8) []const u8 {
 }
 
 pub fn indexOf(xs: []const []const u8, s: []const u8) ?usize {
-    for (xs, 0..) |x, i| if (std.mem.eql(u8, x, s)) return i;
+    for (xs, 0..) |x, i| if (tree.eql(x, s)) return i;
     return null;
 }
 
@@ -510,7 +510,7 @@ pub const Demo = struct {
         var runs: [t.runs.len + 1]md.Run = undefined;
         @memcpy(runs[0..t.runs.len], t.runs);
         // The run metrics.bin and log.txt are for has curves
-        for (runs[0..t.runs.len]) |*r| if (std.mem.eql(u8, r.run, run)) {
+        for (runs[0..t.runs.len]) |*r| if (tree.eql(r.run, run)) {
             r.metrics = true;
         };
         runs[t.runs.len] = .{ .run = "20261027T080000Z-gold14-screen", .state = .finished, .started = now - 120_000, .cat = .early, .target = "gold14", .lab = true, .res = .{ .kind = .screen, .features = 40, .clear = 3 } };
@@ -576,7 +576,7 @@ fn render(a: std.mem.Allocator, m: *Runs) ![]const u8 {
 }
 
 fn expectHas(s: []const u8, wants: []const []const u8) !void {
-    for (wants) |w| if (std.mem.find(u8, s, w) == null) {
+    for (wants) |w| if (tree.find(s, w) == null) {
         std.debug.print("missing {s} in {s}\n", .{ w, s });
         return error.TestExpectedEqual;
     };

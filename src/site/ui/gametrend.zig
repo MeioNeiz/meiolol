@@ -95,7 +95,7 @@ pub fn view(h: *H, t: Trend) N {
     var over = h.list();
     var xs = h.list();
     for (t.points, 0..) |pt, i| {
-        if (i > 0 and !std.mem.eql(u8, pt.patch, t.points[i - 1].patch)) {
+        if (i > 0 and !tree.eql(pt.patch, t.points[i - 1].patch)) {
             const x = p.px(i) - (p.px(i) - p.px(i - 1)) / 2;
             marks.add(h.line(.{ .class = "pd", .x1 = x, .x2 = x, .y1 = 0, .y2 = 100 }, .{}));
             over.add(h.span(.{ .class = "pl", .style = h.vars(.{ .x = x }) }, .{pt.patch}));

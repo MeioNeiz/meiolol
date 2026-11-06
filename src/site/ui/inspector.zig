@@ -77,9 +77,9 @@ pub const Inspector = struct {
             // From a row's button: the arrows step through the list, as the graph's do
             .key => {
                 const k = ev.text;
-                const eql = std.mem.eql;
-                if (eql(u8, k, "Escape")) return i.update(.clear, ev);
-                const d: i32 = if (eql(u8, k, "ArrowDown") or eql(u8, k, "ArrowRight")) 1 else if (eql(u8, k, "ArrowUp") or eql(u8, k, "ArrowLeft")) -1 else return;
+                const eql = tree.eql;
+                if (eql(k, "Escape")) return i.update(.clear, ev);
+                const d: i32 = if (eql(k, "ArrowDown") or eql(k, "ArrowRight")) 1 else if (eql(k, "ArrowUp") or eql(k, "ArrowLeft")) -1 else return;
                 i.tl.cur = i.next(d) orelse return;
                 ev.handled = true;
                 ev.push = true;

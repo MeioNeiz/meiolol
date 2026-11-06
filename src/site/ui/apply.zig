@@ -169,7 +169,7 @@ pub fn enumOf(comptime E: type, s: []const u8) E {
 /// {"error":"..."}'s message
 fn errorOf(json: []const u8) ?[]const u8 {
     const k = "\"error\":\"";
-    const at = std.mem.find(u8, json, k) orelse return null;
+    const at = tree.find(json, k) orelse return null;
     const rest = json[at + k.len ..];
     return rest[0 .. std.mem.findScalar(u8, rest, '"') orelse return null];
 }

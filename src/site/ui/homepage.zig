@@ -418,7 +418,7 @@ pub fn recentIds(json: []const u8, out: []idlookup.Id) []idlookup.Id {
     var n: usize = 0;
     var rest = json;
     while (n < out.len) {
-        const at = std.mem.find(u8, rest, key) orelse break;
+        const at = tree.find(rest, key) orelse break;
         rest = rest[at + key.len ..];
         const end = std.mem.findAny(u8, rest, "\"\\") orelse break;
         if (rest[end] == '"' and end > 0) {

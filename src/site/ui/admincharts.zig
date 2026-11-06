@@ -533,7 +533,7 @@ fn kilo(h: *H, v: ?f64) Text {
 /// A `--name value` of the crawler's arguments
 fn flag(args: []const u8, comptime key: []const u8) ?[]const u8 {
     var it = std.mem.tokenizeAny(u8, args, " \t\n");
-    while (it.next()) |a| if (std.mem.eql(u8, a, "--" ++ key)) return it.next();
+    while (it.next()) |a| if (tree.eql(a, "--" ++ key)) return it.next();
     return null;
 }
 
@@ -594,7 +594,7 @@ fn readings(h: *H, s: *const ad.Snapshot) N {
         const keep = struct {
             fn f(hh: *H, v: ?[]const u8) []const u8 {
                 const x = v orelse return "?";
-                return if (std.mem.eql(u8, x, "0")) W.forever.s else W.keep_days.with(hh, .{ .n = x }).s;
+                return if (tree.eql(x, "0")) W.forever.s else W.keep_days.with(hh, .{ .n = x }).s;
             }
         }.f;
         lines.add(h.li(.{}, .{W.keep.with(h, .{
@@ -951,7 +951,7 @@ pub fn bytes(h: *H, v: ?f64) Text {
 
 /// A history column named as the counts' table (timeline.timelines is timelines)
 fn colOf(table: []const u8) ?Col {
-    return std.meta.stringToEnum(Col, if (std.mem.eql(u8, table, "timeline.timelines")) "timelines" else table);
+    return std.meta.stringToEnum(Col, if (tree.eql(table, "timeline.timelines")) "timelines" else table);
 }
 
 pub fn storage(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
@@ -993,13 +993,13 @@ pub fn storage(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
     var parts: std.Io.Writer.Allocating = .init(h.mem);
     for (s.files, 0..) |f, i| {
         total += @floatFromInt(f.bytes);
-        const nm = if (std.mem.endsWith(u8, f.name, ".db")) f.name[0 .. f.name.len - 3] else f.name;
+        const nm = if (tree.endsWith(f.name, ".db")) f.name[0 .. f.name.len - 3] else f.name;
         parts.writer.print("{s}{s} {s}", .{ if (i > 0) ", " else "", nm, bytes(h, @floatFromInt(f.bytes)).s }) catch {
             h.oom = true;
         };
     }
     add(h, &tiles, .{ .label = W.databases, .value = bytes(h, total), .ctx = W.files_n.with(h, .{ .n = s.files.len }) });
-    for (s.counts) |c| if (std.mem.eql(u8, c.name, "matches") and c.rows > 0) {
+    for (s.counts) |c| if (tree.eql(c.name, "matches") and c.rows > 0) {
         add(h, &tiles, .{ .label = W.per_stored, .value = bytes(h, total / @as(f64, @floatFromInt(c.rows))), .ctx = W.all_dbs });
     };
     const gm = growthLess(hist, .meiolol_db, &.{.meiolol_wal}, 7);
@@ -1064,7 +1064,7 @@ fn space(h: *H, s: *const ad.Snapshot) N {
     var dbs: std.ArrayList([]const u8) = .empty;
     for (rows) |x| {
         for (dbs.items) |d| {
-            if (std.mem.eql(u8, d, x.db)) break;
+            if (tree.eql(d, x.db)) break;
         } else dbs.append(h.mem, x.db) catch return oom(h);
     }
     const totals = h.mem.alloc(f64, dbs.items.len) catch return oom(h);
@@ -1077,15 +1077,15 @@ fn space(h: *H, s: *const ad.Snapshot) N {
         var rest: f64 = 0;
         var restn: usize = 0;
         var list = h.list();
-        for (rows) |x| if (std.mem.eql(u8, x.db, d)) {
+        for (rows) |x| if (tree.eql(x.db, d)) {
             const b: f64 = @floatFromInt(x.bytes);
             sum += b;
-            if (std.mem.eql(u8, x.kind, "index")) idx += b;
-            if (std.mem.eql(u8, x.kind, "used")) used = true;
+            if (tree.eql(x.kind, "index")) idx += b;
+            if (tree.eql(x.kind, "used")) used = true;
             most = @max(most, b);
         };
         t.* = sum;
-        for (rows) |x| if (std.mem.eql(u8, x.db, d)) {
+        for (rows) |x| if (tree.eql(x.db, d)) {
             const b: f64 = @floatFromInt(x.bytes);
             if (listed == 8) {
                 rest += b;
@@ -1094,7 +1094,7 @@ fn space(h: *H, s: *const ad.Snapshot) N {
             }
             listed += 1;
             list.add(h.tr(.{}, .{
-                h.th(.{ .scope = "row" }, .{ x.name, if (std.mem.eql(u8, x.kind, "index")) h.small(.{}, .{ " ", W.index }) else null }),
+                h.th(.{ .scope = "row" }, .{ x.name, if (tree.eql(x.kind, "index")) h.small(.{}, .{ " ", W.index }) else null }),
                 h.td(.{ .class = "barcell" }, .{bar.view(h, b, most, bytes(h, b))}),
             }));
         };
@@ -1114,7 +1114,7 @@ fn space(h: *H, s: *const ad.Snapshot) N {
     var all = h.list();
     for (rows) |x| {
         var t: f64 = 0;
-        for (dbs.items, totals) |d, v| if (std.mem.eql(u8, d, x.db)) {
+        for (dbs.items, totals) |d, v| if (tree.eql(d, x.db)) {
             t = v;
         };
         const b: f64 = @floatFromInt(x.bytes);
@@ -1204,7 +1204,7 @@ fn rowsOf(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
 // Ingest
 
 fn regionOf(s: *const ad.Snapshot, platform: []const u8) ?ad.Region {
-    for (s.platforms) |p| if (std.mem.eql(u8, p.id, platform)) return p.region;
+    for (s.platforms) |p| if (tree.eql(p.id, platform)) return p.region;
     return null;
 }
 

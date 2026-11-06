@@ -2,6 +2,7 @@
 //! grouped by commit into one deploy each, its steps' times and results, its state, when
 //! it went live, and the usual times a running one is measured by
 const std = @import("std");
+const tree = @import("tree.zig");
 const ad = @import("admindata.zig");
 const st = @import("steptimeline.zig");
 
@@ -102,13 +103,13 @@ pub const Deploy = struct {
 };
 
 fn is(e: ad.DeployEvent, step: []const u8, status: []const u8) bool {
-    return std.mem.eql(u8, e.step, step) and std.mem.eql(u8, e.status, status);
+    return tree.eql(e.step, step) and tree.eql(e.status, status);
 }
 
 fn ended(status: []const u8) ?st.StepState {
-    if (std.mem.eql(u8, status, "ok")) return .done;
-    if (std.mem.eql(u8, status, "failed")) return .failed;
-    if (std.mem.eql(u8, status, "skipped")) return .skipped;
+    if (tree.eql(status, "ok")) return .done;
+    if (tree.eql(status, "failed")) return .failed;
+    if (tree.eql(status, "skipped")) return .skipped;
     return null;
 }
 
@@ -130,16 +131,16 @@ const Group = struct {
         var end: ?ad.DeployEvent = null;
         var last: ?ad.DeployEvent = null;
         for (g.evs) |e| {
-            if (e.time < from or !std.mem.eql(u8, e.step, @tagName(k))) continue;
+            if (e.time < from or !tree.eql(e.step, @tagName(k))) continue;
             last = e;
             if (end == null and ended(e.status) != null) end = e;
-            if (begin == null and (std.mem.eql(u8, e.status, "start") or std.mem.eql(u8, e.status, "waiting"))) begin = e;
+            if (begin == null and (tree.eql(e.status, "start") or tree.eql(e.status, "waiting"))) begin = e;
         }
         const s0 = if (begin) |b| b.time else start_of;
         const s: ?Step = if (end) |e|
             .{ .state = ended(e.status).?, .start = s0, .end = e.time, .detail = e.detail }
         else if (begin) |b|
-            .{ .state = if (std.mem.eql(u8, b.status, "waiting")) .waiting else .running, .start = s0, .detail = last.?.detail }
+            .{ .state = if (tree.eql(b.status, "waiting")) .waiting else .running, .start = s0, .detail = last.?.detail }
         else if (begun and start_of != null)
             .{ .state = .running, .start = start_of }
         else
@@ -164,7 +165,7 @@ pub fn list(a: std.mem.Allocator, evs: []const ad.DeployEvent) ![]Deploy {
     // swap (14 Oct), before that the upload
     const cache_from = since(evs, "cache");
     const swap_from = since(evs, "swap");
-    var shas: std.StringArrayHashMapUnmanaged(std.ArrayList(ad.DeployEvent)) = .empty;
+    var shas: std.ArrayHashMapUnmanaged([]const u8, std.ArrayList(ad.DeployEvent), tree.StrArrayCtx, true) = .empty;
     for (evs) |e| {
         const g = try shas.getOrPut(a, e.sha);
         if (!g.found_existing) g.value_ptr.* = .empty;
@@ -181,13 +182,13 @@ pub fn list(a: std.mem.Allocator, evs: []const ad.DeployEvent) ![]Deploy {
         var ci: ?ad.DeployEvent = null;
         var ci_failed = false;
         for (xs) |e| {
-            if (std.mem.eql(u8, e.step, "ci")) {
+            if (tree.eql(e.step, "ci")) {
                 if (ci == null) ci = e;
-                ci_failed = ci_failed or std.mem.eql(u8, e.status, "failed");
+                ci_failed = ci_failed or tree.eql(e.status, "failed");
             }
-            if (!std.mem.eql(u8, e.step, "deploy")) continue;
+            if (!tree.eql(e.step, "deploy")) continue;
             if (first_dep == null) first_dep = e;
-            if (std.mem.eql(u8, e.status, "start")) {
+            if (tree.eql(e.status, "start")) {
                 if (dep) |d| prev_start = d.time;
                 dep = e;
             }
@@ -207,7 +208,7 @@ pub fn list(a: std.mem.Allocator, evs: []const ad.DeployEvent) ![]Deploy {
             _ = g.step(.web, start, Group.endOf(build), false);
             _ = g.step(.crawl, start, null, false);
             // The deploy's round: the first forced round after the deploy began
-            for (xs) |e| if (std.mem.eql(u8, e.step, "round") and e.time >= start) {
+            for (xs) |e| if (tree.eql(e.step, "round") and e.time >= start) {
                 const site = g.step(.site, e.time, e.time, true);
                 _ = g.step(.upload, e.time, Group.endOf(site), true);
                 const views = g.step(.views, e.time, null, false);
@@ -219,11 +220,11 @@ pub fn list(a: std.mem.Allocator, evs: []const ad.DeployEvent) ![]Deploy {
             };
         }
         var commits: std.ArrayList([]const u8) = .empty;
-        for (xs) |e| if (std.mem.eql(u8, e.step, "commit") and e.time > after) {
+        for (xs) |e| if (tree.eql(e.step, "commit") and e.time > after) {
             try commits.append(a, if (cut(e.detail)) try std.mem.concat(a, u8, &.{ e.detail, "…" }) else e.detail);
         };
         d.commits = commits.items;
-        for (xs) |e| if (std.mem.eql(u8, e.status, "start") and (std.mem.eql(u8, e.step, "ci") or std.mem.eql(u8, e.step, "deploy"))) {
+        for (xs) |e| if (tree.eql(e.status, "start") and (tree.eql(e.step, "ci") or tree.eql(e.step, "deploy"))) {
             const at = std.mem.findLast(u8, e.detail, " on ") orelse continue;
             d.host = e.detail[at + 4 ..];
             break;
@@ -245,8 +246,8 @@ pub fn list(a: std.mem.Allocator, evs: []const ad.DeployEvent) ![]Deploy {
         else
             .running;
         // Known once the swap has begun
-        for (xs) |e| if (std.mem.eql(u8, e.step, "swap")) {
-            d.waited = (d.waited orelse false) or std.mem.eql(u8, e.status, "waiting");
+        for (xs) |e| if (tree.eql(e.step, "swap")) {
+            d.waited = (d.waited orelse false) or tree.eql(e.status, "waiting");
         };
         if (cache) |c| d.live = @max(c, d.doneAt(.upload) orelse 0);
     }
@@ -483,7 +484,7 @@ test "list: running with usual times; a newer build supersedes; refused and skip
     try testing.expectEqual(100, u.total.?);
     try testing.expectEqual(10, u.step.get(.site).?);
     const ps = try steps(a, &l[0], 4045, u);
-    for (ps) |p| if (std.mem.eql(u8, p.name.s, "Site build")) {
+    for (ps) |p| if (tree.eql(p.name.s, "Site build")) {
         try testing.expectEqual(15, p.took.?);
         try testing.expectEqual(10, p.usual.?);
         try testing.expectEqual(30, p.at.?);
@@ -491,7 +492,7 @@ test "list: running with usual times; a newer build supersedes; refused and skip
     try testing.expectEqual(45, l[0].took(4045).?);
     try testing.expectEqual(l[1].live.? - l[1].start, l[1].took(9999).?);
     try testing.expectEqual(st.StepState.pending, ps[ps.len - 1].state);
-    try testing.expect(ps[0].state == .running and std.mem.eql(u8, ps[0].name.s, "Deploy"));
+    try testing.expect(ps[0].state == .running and tree.eql(ps[0].name.s, "Deploy"));
 
     // s5's build lands while s4 still runs: s4 superseded. s6 skipped, s7's push refused
     try evs.appendSlice(a, &.{

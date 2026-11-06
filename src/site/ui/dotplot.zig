@@ -122,7 +122,7 @@ pub const DotPlot = struct {
                 ev.after = .{ .op = .click, .ref = "dot-go" };
             },
             .key => {
-                const step: i32 = if (std.mem.eql(u8, ev.text, "ArrowRight")) 1 else if (std.mem.eql(u8, ev.text, "ArrowLeft")) -1 else return;
+                const step: i32 = if (tree.eql(ev.text, "ArrowRight")) 1 else if (tree.eql(ev.text, "ArrowLeft")) -1 else return;
                 var buf: [256]u16 = undefined;
                 const o = buf[0..@min(d.dots.len, buf.len)];
                 d.order(o, bins(d.dots, d.m));

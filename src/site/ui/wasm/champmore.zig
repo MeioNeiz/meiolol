@@ -79,8 +79,8 @@ fn changed() void {
 fn locks() void {
     const i = island orelse return;
     const path = state.lockWant(gpa) orelse return;
-    if (std.mem.eql(u8, path, state.answer_path)) return gpa.free(path);
-    for (answers.items) |x| if (std.mem.eql(u8, x.path, path)) {
+    if (ui.tree.eql(path, state.answer_path)) return gpa.free(path);
+    for (answers.items) |x| if (ui.tree.eql(x.path, path)) {
         gpa.free(path);
         state.setAnswer(gpa, x.path, x.d);
         return i.render();

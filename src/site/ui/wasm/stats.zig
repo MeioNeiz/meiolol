@@ -35,7 +35,7 @@ export fn main() void {
     defer root.release();
     const role = dom.attrOf(root, "data-role");
     page_role = for (std.enums.values(tiers.Role)) |r| {
-        if (std.mem.eql(u8, tiers.Role.slugs[@backingInt(r)], role)) break r;
+        if (ui.tree.eql(tiers.Role.slugs[@backingInt(r)], role)) break r;
     } else null;
     base = dom.attrOf(root, "data-base");
     view_index = std.fmt.parseInt(u8, dom.attrOf(root, "data-view"), 10) catch return;

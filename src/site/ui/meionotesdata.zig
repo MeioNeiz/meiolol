@@ -1,6 +1,7 @@
 //! meionotes (the meionotes island, /api/meionotes, src/api/meionotes.zig): what a note
 //! holds, as ui.data binary both ways, and the bounds the API holds every field to
 const std = @import("std");
+const tree = @import("tree.zig");
 const urls = @import("urls.zig");
 
 pub const Scope = enum(u8) { page, everywhere };
@@ -106,7 +107,7 @@ pub fn canonical(path: []const u8, state: []const u8) urls.Located {
 /// / and /index.html are one page
 pub fn stripIndex(path: []const u8) []const u8 {
     const index = "index.html";
-    return if (std.mem.endsWith(u8, path, "/" ++ index)) path[0 .. path.len - index.len] else path;
+    return if (tree.endsWith(path, "/" ++ index)) path[0 .. path.len - index.len] else path;
 }
 
 test canonical {
@@ -128,7 +129,7 @@ test canonical {
 pub fn check(n: New) ?[]const u8 {
     // The list links path ++ hash: "//host" or "/\\host" would be another site
     if (n.path.len == 0 or n.path.len > max_path or n.path[0] != '/' or !urlish(n.path) or
-        std.mem.startsWith(u8, n.path, "//") or std.mem.findAny(u8, n.path, "?#\\") != null) return "bad path";
+        tree.startsWith(n.path, "//") or std.mem.findAny(u8, n.path, "?#\\") != null) return "bad path";
     if (n.hash.len > max_hash or !urlish(n.hash) or (n.hash.len > 0 and n.hash[0] != '?' and n.hash[0] != '#')) return "bad hash";
     if (checkTarget(n.target)) |why| return why;
     if (n.scope == .everywhere and n.target.kind != .component) return "everywhere needs a component";
@@ -229,7 +230,7 @@ fn checkTarget(t: Target) ?[]const u8 {
     } else {
         if (t.name.len == 0 or t.name.len > max_name) return "bad target name";
         for (t.name) |ch| if (!std.ascii.isAlphanumeric(ch) and ch != '-' and ch != '_') return "bad target name";
-        if (t.kind == .component and !std.mem.startsWith(u8, t.name, "c-")) return "bad target name";
+        if (t.kind == .component and !tree.startsWith(t.name, "c-")) return "bad target name";
     }
     if (!stepsOk(t.steps)) return "bad steps";
     if (t.snippet.len > max_snippet or !std.unicode.utf8ValidateSlice(t.snippet)) return "bad snippet";

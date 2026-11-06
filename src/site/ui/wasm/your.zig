@@ -47,7 +47,7 @@ export fn main() void {
 fn reopen() void {
     var buf: [1024]u8 = undefined;
     const h = dom.dom.hash(&buf);
-    if (yk.idOf(h) != null or std.mem.find(u8, h, "example") != null) return;
+    if (yk.idOf(h) != null or ui.tree.find(h, "example") != null) return;
     const s = dom.stored(yk.last_key) orelse return;
     defer gpa.free(s);
     var ids: [1]ui.idlookup.Id = undefined;

@@ -45,7 +45,7 @@ pub const IdLookup = struct {
     pub fn update(l: *L, m: Msg, ev: *tree.Event) void {
         switch (m) {
             .input => l.q.set(ev.text),
-            .key => if (std.mem.eql(u8, ev.text, "Enter")) {
+            .key => if (tree.eql(ev.text, "Enter")) {
                 if (trimmed(&l.q).len == 0) return;
                 ev.handled = true;
                 ev.after = .{ .op = .click, .ref = "go" };

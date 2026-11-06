@@ -225,7 +225,7 @@ pub const Account = struct {
     /// Not for the owner, deleted only over ssh; the password again, as the API asks
     fn deleteForm(p: *P, h: *H) N {
         const m = p.me orelse return .none;
-        if (std.mem.eql(u8, m.role, "owner")) return .none;
+        if (tree.eql(m.role, "owner")) return .none;
         return h.div(.{ .class = "del" }, .{
             h.h2(.{}, .{W.del_h}),
             h.p(.{ .class = "info" }, .{W.del_note}),
@@ -316,7 +316,7 @@ fn privacy(h: *H) N {
 }
 
 pub fn can(m: ac.Me, cap: []const u8) bool {
-    for (m.can) |c| if (std.mem.eql(u8, c, cap)) return true;
+    for (m.can) |c| if (tree.eql(c, cap)) return true;
     return false;
 }
 
@@ -339,9 +339,9 @@ const Day = struct {
 pub fn next(query: []const u8, m: ac.Me) []const u8 {
     var it = std.mem.tokenizeScalar(u8, if (query.len > 0 and query[0] == '?') query[1..] else query, '&');
     while (it.next()) |kv| {
-        if (!std.mem.startsWith(u8, kv, "next=")) continue;
+        if (!tree.startsWith(kv, "next=")) continue;
         const v = kv["next=".len..];
-        if (v.len > 0 and v[0] == '/' and !std.mem.startsWith(u8, v, "//") and std.mem.findScalar(u8, v, '\\') == null) return v;
+        if (v.len > 0 and v[0] == '/' and !tree.startsWith(v, "//") and std.mem.findScalar(u8, v, '\\') == null) return v;
     }
     return if (can(m, "view_admin")) "/admin" else if (can(m, "view_private")) "/private" else "/";
 }
@@ -355,14 +355,14 @@ pub fn loginMark(m: ac.Me) []const u8 {
 /// An error answer's {"error":"..."}: its messages hold nothing JSON escapes
 fn errorOf(body: []const u8) ?[]const u8 {
     const k = "\"error\":\"";
-    const at = std.mem.find(u8, body, k) orelse return null;
+    const at = tree.find(body, k) orelse return null;
     const s = body[at + k.len ..];
     return s[0 .. std.mem.findScalar(u8, s, '"') orelse return null];
 }
 
 fn retryOf(body: []const u8) ?u32 {
     const k = "\"retry_s\":";
-    const at = std.mem.find(u8, body, k) orelse return null;
+    const at = tree.find(body, k) orelse return null;
     const s = body[at + k.len ..];
     var n: usize = 0;
     while (n < s.len and std.ascii.isDigit(s[n])) n += 1;
@@ -506,8 +506,8 @@ test "the form's fields by kind, and a removed app by its id" {
         var out: std.Io.Writer.Allocating = .init(a);
         try @import("html.zig").write(&t, p.view(&h), &out.writer);
         try testing.expect(!h.oom);
-        try testing.expect(std.mem.find(u8, out.written(), "<form method=\"post\" action=\"/auth/") != null);
-        for (w[2]) |s| if (std.mem.find(u8, out.written(), s) == null) {
+        try testing.expect(tree.find(out.written(), "<form method=\"post\" action=\"/auth/") != null);
+        for (w[2]) |s| if (tree.find(out.written(), s) == null) {
             std.debug.print("{t}: no {s}\n", .{ w[0], s });
             return error.TestUnexpectedResult;
         };

@@ -146,7 +146,7 @@ pub const List = struct {
             if (!l.shown(n)) continue;
             const k = l.key(n);
             for (keys.items) |x| {
-                if (std.mem.eql(u8, x, k)) break;
+                if (tree.eql(x, k)) break;
             } else keys.append(h.mem, k) catch {
                 h.oom = true;
                 return .none;
@@ -160,7 +160,7 @@ pub const List = struct {
         var secs = h.list();
         for (keys.items) |k| {
             var rows = h.list();
-            for (l.notes) |n| if (l.shown(n) and std.mem.eql(u8, l.key(n), k)) rows.add(row(l, h, n));
+            for (l.notes) |n| if (l.shown(n) and tree.eql(l.key(n), k)) rows.add(row(l, h, n));
             secs.add(h.section(.{ .key = k }, .{ h.h2(.{}, .{k}), h.ul(.{}, .{rows.done()}) }));
         }
         if (keys.items.len == 0 and !l.loading) secs.add(h.p(.{ .class = "meta" }, .{"No meionotes."}));
@@ -318,26 +318,26 @@ test "meionoteslist: groups by page or component, filters by status, asks the gl
     var l: List = .{ .loading = false, .notes = &gallery_notes };
     // Open by page: /champion/ahri before /tier/, the done one hidden
     var s = try render(a, &l);
-    const ahri = std.mem.find(u8, s, "<h2>/champion/ahri</h2>") orelse return error.TestUnexpectedResult;
-    const tier = std.mem.find(u8, s, "<h2>/tier/</h2>") orelse return error.TestUnexpectedResult;
+    const ahri = tree.find(s, "<h2>/champion/ahri</h2>") orelse return error.TestUnexpectedResult;
+    const tier = tree.find(s, "<h2>/tier/</h2>") orelse return error.TestUnexpectedResult;
     try std.testing.expect(ahri < tier);
-    try std.testing.expect(std.mem.find(u8, s, "Header overlaps") == null);
-    try std.testing.expect(std.mem.find(u8, s, " · jacob · ") != null);
+    try std.testing.expect(tree.find(s, "Header overlaps") == null);
+    try std.testing.expect(tree.find(s, " · jacob · ") != null);
     l.group = .component;
     l.filter = .any;
     s = try render(a, &l);
-    try std.testing.expect(std.mem.find(u8, s, "<h2>c-tierrow</h2>") != null);
-    try std.testing.expect(std.mem.find(u8, s, "<h2>(no component)</h2>") != null);
-    try std.testing.expect(std.mem.find(u8, s, "fixed in 1a2b3c4d") != null);
+    try std.testing.expect(tree.find(s, "<h2>c-tierrow</h2>") != null);
+    try std.testing.expect(tree.find(s, "<h2>(no component)</h2>") != null);
+    try std.testing.expect(tree.find(s, "fixed in 1a2b3c4d") != null);
     l.filter = .check;
     s = try render(a, &l);
-    try std.testing.expect(std.mem.find(u8, s, "Looks good") != null);
-    try std.testing.expect(std.mem.find(u8, s, "Filters wrap") != null);
-    try std.testing.expect(std.mem.find(u8, s, "Like these chips") == null);
+    try std.testing.expect(tree.find(s, "Looks good") != null);
+    try std.testing.expect(tree.find(s, "Filters wrap") != null);
+    try std.testing.expect(tree.find(s, "Like these chips") == null);
     l.filter = .done;
-    try std.testing.expect(std.mem.find(u8, try render(a, &l), "Like these chips") != null);
+    try std.testing.expect(tree.find(try render(a, &l), "Like these chips") != null);
     l.notes = gallery_notes[0..2];
-    try std.testing.expect(std.mem.find(u8, try render(a, &l), "No meionotes.") != null);
+    try std.testing.expect(tree.find(try render(a, &l), "No meionotes.") != null);
 
     var ev: tree.Event = .{ .kind = .click };
     l.update(.{ .done = 2 }, &ev);
@@ -354,9 +354,9 @@ test "meionoteslist: groups by page or component, filters by status, asks the gl
     try std.testing.expect(!l.reopening);
     l.notes = &gallery_notes;
     l.filter = .any;
-    try std.testing.expect(std.mem.find(u8, try render(a, &l), ">Delete<") != null);
+    try std.testing.expect(tree.find(try render(a, &l), ">Delete<") != null);
     l.update(.{ .delete = 3 }, &ev);
-    try std.testing.expect(std.mem.find(u8, try render(a, &l), "Yes, delete") != null);
+    try std.testing.expect(tree.find(try render(a, &l), "Yes, delete") != null);
     l.update(.{ .confirm = 3 }, &ev);
     try std.testing.expectEqual(Want{ .delete = 3 }, l.want);
     try std.testing.expectEqual(null, l.deleting);

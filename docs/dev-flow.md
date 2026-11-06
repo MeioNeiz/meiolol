@@ -111,3 +111,8 @@ import. Each call site is code in every family it reaches, and each int type std
 phrase.num or fmt.write; old ones are counted per file in src/tools/fmtlint-allow.txt (the
 follow-up list; one more copy in that file fails), a line that never reaches wasm says
 `// fmt-ok: <why>`.
+
+Byte compares in wasm: ui-sizes fails a family that has std.mem.eql's vector version
+(660 B raw; std's startsWith, endsWith, find and string maps call it) and names our
+functions that reach it. tree.eql, startsWith, endsWith, find and StrCtx are plain loops
+instead, and about three times faster in wasm on the short strings we compare.

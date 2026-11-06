@@ -167,13 +167,13 @@ fn nnRank(k: []const u8) usize {
 
 fn vsName(vs: []const u8) []const u8 {
     const names = [_][2][]const u8{ .{ "win-draft", "today's model" }, .{ "ratings", "ratings" }, .{ "win-comp", "win-comp" }, .{ "base", "champion win rates" } };
-    for (names) |x| if (std.mem.eql(u8, x[0], vs)) return x[1];
+    for (names) |x| if (tree.eql(x[0], vs)) return x[1];
     return vs;
 }
 
 fn blockName(b: []const u8) []const u8 {
     const names = [_][2][]const u8{ .{ "folds", "5 forward rounds" }, .{ "dev-val", "newest dev games" }, .{ "test", "test look" }, .{ "random", "random split" }, .{ "projection", "projection" } };
-    for (names) |x| if (std.mem.eql(u8, x[0], b)) return x[1];
+    for (names) |x| if (tree.eql(x[0], b)) return x[1];
     return if (b.len > 0) b else "–";
 }
 
@@ -204,9 +204,9 @@ fn headline(f: md.NnFile) ?md.NnRow {
     var best: ?md.NnRow = null;
     var best_rank: usize = 99;
     for (f.rows) |r| {
-        if (std.mem.eql(u8, r.vs, "-")) continue;
+        if (tree.eql(r.vs, "-")) continue;
         const b = ar.indexOf(&ranks, r.block) orelse continue;
-        const rank = b * 2 + @intFromBool(!std.mem.eql(u8, r.vs, "win-draft"));
+        const rank = b * 2 + @intFromBool(!tree.eql(r.vs, "win-draft"));
         if (rank < best_rank) {
             best = r;
             best_rank = rank;
@@ -233,11 +233,11 @@ fn sortedFiles(h: *H, t: *const md.Training) []const md.NnFile {
 fn headlines(h: *H, t: *const md.Training, full: bool) N {
     var l = h.list();
     for (sortedFiles(h, t), 0..) |f, i| {
-        if (std.mem.eql(u8, f.key, "scaling")) continue;
+        if (tree.eql(f.key, "scaling")) continue;
         const r = headline(f) orelse continue;
         const v = verdict(h, r);
-        const look = if (std.mem.eql(u8, r.block, "test")) badge.view(h, .few, .{W.test_look}) else N.none;
-        const size: ?[]const u8 = if (std.mem.eql(u8, r.vs, "win-draft") and r.ci != null and @abs(r.diff) > r.ci.?)
+        const look = if (tree.eql(r.block, "test")) badge.view(h, .few, .{W.test_look}) else N.none;
+        const size: ?[]const u8 = if (tree.eql(r.vs, "win-draft") and r.ci != null and @abs(r.diff) > r.ci.?)
             h.fmt(" (log loss {s} {s} a game, {s}% of its edge over a coin flip)", .{ dec(h, @abs(r.diff), 4), if (r.diff < 0) "lower" else "higher", dec(h, 100 * @abs(r.diff) / nn_edge, 0) })
         else
             null;
@@ -273,7 +273,7 @@ fn nnView(m: *Lab, h: *H, t: *const md.Training) N {
     if (files.len == 0) return h.div(.{ .class = "tab" }, .{intro});
     const learnt = nnLearned(h, t, files);
     var secs = h.list();
-    for (files, 0..) |f, i| secs.add(h.div(.{ .key = i, .class = "tab" }, .{if (std.mem.eql(u8, f.key, "scaling")) scaling(h, f) else question(h, t, f)}));
+    for (files, 0..) |f, i| secs.add(h.div(.{ .key = i, .class = "tab" }, .{if (tree.eql(f.key, "scaling")) scaling(h, f) else question(h, t, f)}));
     return h.div(.{ .class = "tab" }, .{
         intro,
         card.view(h, .{}, &.{
@@ -291,7 +291,7 @@ fn question(h: *H, t: *const md.Training, f: md.NnFile) N {
     var forest: std.ArrayList(am.FRow) = .empty;
     for (f.rows, 0..) |r, i| {
         const v = verdict(h, r);
-        const test_ = std.mem.eql(u8, r.block, "test");
+        const test_ = tree.eql(r.block, "test");
         rows.add(h.tr(.{ .key = i }, .{
             h.th(.{}, .{ r.model, if (r.note.len > 0) h.span(.{ .class = "sub" }, .{h.fmt(" {s}", .{r.note})}) else null }),
             h.td(.{}, .{vsName(r.vs)}),
@@ -302,7 +302,7 @@ fn question(h: *H, t: *const md.Training, f: md.NnFile) N {
             h.td(.{ .class = "num" }, .{if (r.games) |g| count(h, g) else "–"}),
             h.td(.{ .class = "src" }, .{if (r.source.len > 0) r.source else "–"}),
         }));
-        if (!std.mem.eql(u8, r.vs, "-") and !std.mem.eql(u8, r.block, "projection")) forest.append(h.mem, .{
+        if (!tree.eql(r.vs, "-") and !tree.eql(r.block, "projection")) forest.append(h.mem, .{
             .label = h.fmt("{s} vs {s}, {s}", .{ r.model, vsName(r.vs), r.block }),
             .v = r.diff,
             .ci = r.ci orelse 0,
@@ -340,7 +340,7 @@ fn scaling(h: *H, f: md.NnFile) N {
         var xs: std.ArrayList(f32) = .empty;
         var names: std.ArrayList([]const u8) = .empty;
         for (f.rows) |r| {
-            if (!std.mem.eql(u8, r.vs, "-")) continue;
+            if (!tree.eql(r.vs, "-")) continue;
             const x = fitGames(r.fit_games, share) orelse continue;
             if (std.mem.findScalar(f32, xs.items, x) == null) xs.append(h.mem, x) catch {};
             const n = lineName(h, r);
@@ -356,7 +356,7 @@ fn scaling(h: *H, f: md.NnFile) N {
             const ys = h.mem.alloc(f32, xs.items.len) catch return ar.oom(h);
             @memset(ys, std.math.nan(f32));
             for (f.rows) |r| {
-                if (!std.mem.eql(u8, r.vs, "-") or !std.mem.eql(u8, lineName(h, r), n)) continue;
+                if (!tree.eql(r.vs, "-") or !tree.eql(lineName(h, r), n)) continue;
                 const x = fitGames(r.fit_games, share) orelse continue;
                 ys[std.mem.findScalar(f32, xs.items, x).?] = r.diff;
             }
@@ -365,7 +365,7 @@ fn scaling(h: *H, f: md.NnFile) N {
         charts.add(ar.lineChart(h, if (share) W.by_share else W.by_games, xs.items, lines.items, .{ .share = share }));
     }
     var rel: std.ArrayList(am.FRow) = .empty;
-    for (f.rows) |r| if (!std.mem.eql(u8, r.vs, "-")) rel.append(h.mem, .{
+    for (f.rows) |r| if (!tree.eql(r.vs, "-")) rel.append(h.mem, .{
         .label = h.fmt("{s} vs {s}, {s}", .{ r.model, vsName(r.vs), if (r.fit_games.len > 0) r.fit_games else "?" }),
         .v = r.diff,
         .ci = r.ci orelse 0,
@@ -379,13 +379,13 @@ fn scaling(h: *H, f: md.NnFile) N {
 }
 
 fn lineName(h: *H, r: md.NnRow) []const u8 {
-    return if (std.mem.eql(u8, r.block, "projection")) h.fmt("{s}{s}", .{ r.model, W.projected.s }) else r.model;
+    return if (tree.eql(r.block, "projection")) h.fmt("{s}{s}", .{ r.model, W.projected.s }) else r.model;
 }
 
 /// "25%" when share, "400000" else; null for the other kind or no number
 fn fitGames(s: []const u8, share: bool) ?f32 {
     const t = std.mem.trim(u8, s, " ");
-    const pct = std.mem.endsWith(u8, t, "%");
+    const pct = tree.endsWith(t, "%");
     if (pct != share) return null;
     const v = std.fmt.parseFloat(f32, if (pct) t[0 .. t.len - 1] else t) catch return null;
     return if (ar.finite(v)) v else null;
@@ -510,7 +510,7 @@ fn render(a: std.mem.Allocator, m: *Lab) ![]const u8 {
 }
 
 fn expectHas(s: []const u8, wants: []const []const u8) !void {
-    for (wants) |w| if (std.mem.find(u8, s, w) == null) {
+    for (wants) |w| if (tree.find(s, w) == null) {
         std.debug.print("missing {s} in {s}\n", .{ w, s });
         return error.TestExpectedEqual;
     };

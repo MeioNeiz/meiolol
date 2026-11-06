@@ -267,11 +267,47 @@ pub const List = struct {
 
 /// The builder. Never fails mid-expression: out of memory is sticky and checked once
 /// Byte strings equal, as a plain loop: std.mem.eql's vector version is 660 B of every
-/// ui.wasm, for strings a few bytes long
+/// ui.wasm that reaches it (std's startsWith, endsWith and find call it too), and three
+/// times slower in wasm than this on strings a few bytes long
 pub fn eql(a: []const u8, b: []const u8) bool {
     if (a.len != b.len) return false;
     for (a, b) |x, y| if (x != y) return false;
     return true;
+}
+
+pub fn startsWith(s: []const u8, prefix: []const u8) bool {
+    return s.len >= prefix.len and eql(s[0..prefix.len], prefix);
+}
+
+pub fn endsWith(s: []const u8, suffix: []const u8) bool {
+    return s.len >= suffix.len and eql(s[s.len - suffix.len ..], suffix);
+}
+
+/// std.StringHashMap's and StringArrayHashMap's contexts with eql as above
+pub const StrCtx = struct {
+    pub fn hash(_: StrCtx, s: []const u8) u64 {
+        return std.hash.Wyhash.hash(0, s);
+    }
+    pub fn eql(_: StrCtx, a: []const u8, b: []const u8) bool {
+        return bytesEql(a, b);
+    }
+};
+pub const StrArrayCtx = struct {
+    pub fn hash(_: StrArrayCtx, s: []const u8) u32 {
+        return @truncate(std.hash.Wyhash.hash(0, s));
+    }
+    pub fn eql(_: StrArrayCtx, a: []const u8, b: []const u8, _: usize) bool {
+        return bytesEql(a, b);
+    }
+};
+const bytesEql = eql;
+
+/// Where `needle` first starts in `s`, by a plain scan: std.mem.find's skip table is
+/// 320 B more and pays off only on long haystacks
+pub fn find(s: []const u8, needle: []const u8) ?usize {
+    if (needle.len > s.len) return null;
+    for (0..s.len - needle.len + 1) |i| if (eql(s[i..][0..needle.len], needle)) return i;
+    return null;
 }
 
 pub const H = struct {
@@ -420,7 +456,7 @@ pub const H = struct {
         const static = comptime blk: {
             var arr: []const Attr = &.{};
             for (fields, 0..) |f, i| {
-                if (!info.field_attrs[i].@"comptime" or std.mem.eql(u8, f, "key") or std.mem.startsWith(u8, f, "on_")) continue;
+                if (!info.field_attrs[i].@"comptime" or eql(f, "key") or startsWith(f, "on_")) continue;
                 const name = attrName(f);
                 const v = @field(attrs, f);
                 if (staticValue(attrKind(name), v)) |val| arr = arr ++ [_]Attr{.{ .name = name, .value = val }};
@@ -430,11 +466,11 @@ pub const H = struct {
         const names = comptime blk: {
             var arr: []const []const u8 = &.{};
             for (fields, 0..) |f, fi| {
-                if (std.mem.startsWith(u8, f, "on_")) {
+                if (startsWith(f, "on_")) {
                     if (!@hasField(Ev, f[3..])) @compileError("no event " ++ f[3..]);
                     continue;
                 }
-                if (std.mem.eql(u8, f, "key") or info.field_attrs[fi].@"comptime") continue;
+                if (eql(f, "key") or info.field_attrs[fi].@"comptime") continue;
                 arr = arr ++ [_][]const u8{attrName(f)};
             }
             break :blk arr;
@@ -443,8 +479,8 @@ pub const H = struct {
         var key: u32 = 0;
         comptime var vi = 0;
         inline for (fields, 0..) |f, fi| {
-            if (comptime std.mem.startsWith(u8, f, "on_")) continue;
-            if (comptime std.mem.eql(u8, f, "key")) {
+            if (comptime startsWith(f, "on_")) continue;
+            if (comptime eql(f, "key")) {
                 key = keyOf(@field(attrs, f));
                 continue;
             }
@@ -556,10 +592,10 @@ pub const H = struct {
     const AttrKind = enum { plain, url, aria, style, class };
 
     fn attrKind(comptime name: []const u8) AttrKind {
-        if (std.mem.eql(u8, name, "style")) return .style;
-        if (std.mem.eql(u8, name, "class")) return .class;
+        if (eql(name, "style")) return .style;
+        if (eql(name, "class")) return .class;
         if (tpl.isUrlAttr(name)) return .url;
-        if (std.mem.startsWith(u8, name, "aria-")) return .aria;
+        if (startsWith(name, "aria-")) return .aria;
         return .plain;
     }
 
@@ -711,14 +747,14 @@ const svg_camel = [_][]const u8{ "viewBox", "preserveAspectRatio", "gradientUnit
 
 fn attrName(comptime f: []const u8) []const u8 {
     comptime {
-        if (std.mem.eql(u8, f, "srcdoc")) @compileError("srcdoc is HTML: not in the tree");
-        if (std.mem.eql(u8, f, "style")) return f;
+        if (eql(f, "srcdoc")) @compileError("srcdoc is HTML: not in the tree");
+        if (eql(f, "style")) return f;
         if (tpl.isCodeAttr(f)) @compileError("." ++ f ++ ": events go in .on_<event> = h.on(component, msg)");
         var out: [f.len]u8 = undefined;
         for (f, 0..) |c, i| {
             if (!(std.ascii.isLower(c) or std.ascii.isDigit(c) or c == '_')) {
                 for (svg_camel) |ok| {
-                    if (std.mem.eql(u8, ok, f)) break;
+                    if (eql(ok, f)) break;
                 } else @compileError("attribute ." ++ f ++ ": lower case, digits and _ only");
             }
             out[i] = if (c == '_') '-' else c;

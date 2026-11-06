@@ -167,7 +167,7 @@ pub const Head = struct {
                 .fig = .{ .s = try a.print("{d:.1}", .{r}) },
                 .colour = .{ .pts = r - 50 },
                 .href = try a.print("/matchups/{t}/{s}-vs-{s}{s}", .{ d.role, d.x.slug, o.o.slug, urls.view_queries[d.view] }),
-                .current = std.mem.eql(u8, o.o.slug, d.y.slug),
+                .current = tree.eql(o.o.slug, d.y.slug),
                 .thin = fmt.wide(fmt.range(o.games, o.wins)),
             };
         }

@@ -74,7 +74,7 @@ const outcomes = [_]Outcome{
 };
 
 fn outcomeOf(key: []const u8) ?Outcome {
-    for (outcomes) |o| if (std.mem.eql(u8, o.key, key)) return o;
+    for (outcomes) |o| if (tree.eql(o.key, key)) return o;
     return null;
 }
 
@@ -393,7 +393,7 @@ fn winReadings(h: *H, mo: *const md.Models, w: md.Win) []const Text {
     var winners: std.ArrayList(u8) = .empty;
     for (w.models, 0..) |x, i| {
         const d = x.d orelse continue;
-        if (d.mean + d.ci >= 0 or is(w.base, i) or std.mem.find(u8, x.label, "coin") != null or std.mem.find(u8, x.label, "blue side") != null) continue;
+        if (d.mean + d.ci >= 0 or is(w.base, i) or tree.find(x.label, "coin") != null or tree.find(x.label, "blue side") != null) continue;
         if (winners.items.len > 0) winners.appendSlice(h.mem, ", ") catch {};
         winners.print(h.mem, "{s} ({s})", .{ x.label, pm(h, d, .ll) }) catch {};
     }
@@ -602,7 +602,7 @@ fn is(x: ?u16, i: usize) bool {
 }
 
 fn outcomeIndex(te: md.TeamEffects, key: []const u8) ?usize {
-    for (te.outcomes, 0..) |o, i| if (std.mem.eql(u8, o, key)) return i;
+    for (te.outcomes, 0..) |o, i| if (tree.eql(o, key)) return i;
     return null;
 }
 
@@ -666,7 +666,7 @@ fn labBest(h: *H, t: *const md.Training, c: md.Cat) N {
             const res = r.res orelse continue;
             const dev = res.dev orelse continue;
             // ci 0: a reference run scoring the baseline against itself
-            if (res.kind != .run or dev.ci == 0 or !std.mem.eql(u8, r.target, o.key)) continue;
+            if (res.kind != .run or dev.ci == 0 or !tree.eql(r.target, o.key)) continue;
             if (best == null or dev.mean < best.?.res.?.dev.?.mean) best = r;
         }
         const b = best orelse continue;
@@ -749,12 +749,12 @@ pub fn effectForest(h: *H, e: md.Effect) N {
         h.oom = true;
         return .none;
     };
-    const unit = if (std.mem.eql(u8, e.unit, "-")) "" else e.unit;
+    const unit = if (tree.eql(e.unit, "-")) "" else e.unit;
     return forest(h, .{ .s = e.title }, if (cut) W.effect_cut.with(h, .{ .n = all.len }) else W.effect_cap, rows, .{
         .num = .sig,
         .unit = unit,
         .better = .higher,
-        .right = if (e.higher.len > 0 and !std.mem.eql(u8, e.higher, "-")) Text{ .s = e.higher } else null,
+        .right = if (e.higher.len > 0 and !tree.eql(e.higher, "-")) Text{ .s = e.higher } else null,
     });
 }
 
@@ -877,7 +877,7 @@ pub fn lowerFirst(h: *H, s: []const u8) []const u8 {
 
 /// "20261024T001511Z-golden" as "golden"
 pub fn shortRun(run: []const u8) []const u8 {
-    const z = std.mem.find(u8, run, "Z-") orelse return run;
+    const z = tree.find(run, "Z-") orelse return run;
     if (z < 13 or z > 15 or run[8] != 'T') return run;
     for (run[0..8]) |c| if (!std.ascii.isDigit(c)) return run;
     return run[z + 2 ..];
@@ -1068,7 +1068,7 @@ fn render(a: std.mem.Allocator, m: *Models) ![]const u8 {
 }
 
 fn expectHas(s: []const u8, wants: []const []const u8) !void {
-    for (wants) |w| if (std.mem.find(u8, s, w) == null) {
+    for (wants) |w| if (tree.find(s, w) == null) {
         std.debug.print("missing {s} in {s}\n", .{ w, s });
         return error.TestExpectedEqual;
     };
@@ -1149,7 +1149,7 @@ test "admin models: early outcomes, the best lab run, loading and failures" {
     const s = try render(a, &m);
     try expectHas(s, &.{"differences in CS at 10 min beyond"});
     // The reference run (ci 0) is never the best
-    try testing.expect(std.mem.find(u8, s, "gold14-a") == null);
+    try testing.expect(tree.find(s, "gold14-a") == null);
 
     var w: Models = .{ .tab = .models, .cat = .win };
     try expectHas(try render(a, &w), &.{"Loading"});
@@ -1157,7 +1157,7 @@ test "admin models: early outcomes, the best lab run, loading and failures" {
     w.training_failed = true;
     try expectHas(try render(a, &w), &.{ "models.bin) didn&#39;t load", "training/training.bin) didn&#39;t load" });
     w.cat = .draft;
-    try testing.expect(std.mem.find(u8, try render(a, &w), "didn't load") == null);
+    try testing.expect(tree.find(try render(a, &w), "didn't load") == null);
 }
 
 test "admin models: short run names" {
@@ -1192,7 +1192,7 @@ test "admin models: a curve past published accuracy, a team table with no total 
     m.models = &mo;
     const s = try render(a, &m);
     try expectHas(s, &.{"already reach published accuracy"});
-    try testing.expect(std.mem.find(u8, s, "more doublings") == null);
+    try testing.expect(tree.find(s, "more doublings") == null);
 
     var t = Demo.training;
     var te = t.team.?;
@@ -1200,5 +1200,5 @@ test "admin models: a curve past published accuracy, a team table with no total 
     t.team = te;
     var all = Demo.island(.all);
     all.training = &t;
-    try testing.expect(std.mem.find(u8, try render(a, &all), "of lane gold leads") == null);
+    try testing.expect(tree.find(try render(a, &all), "of lane gold leads") == null);
 }

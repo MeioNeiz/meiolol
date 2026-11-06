@@ -4,6 +4,7 @@
 //! ui-games.wasm share it, so a game picked in the strip derives the same as the first
 //! render. Slots index `Game.seats`; seconds are game time
 const std = @import("std");
+const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const data = @import("data.zig");
@@ -172,10 +173,10 @@ pub const Lookup = struct {
         while (it.next()) |kv| {
             const eq = std.mem.findScalar(u8, kv, '=') orelse continue;
             const v = kv[eq + 1 ..];
-            if (std.mem.eql(u8, kv[0..eq], "id")) id = v;
-            if (std.mem.eql(u8, kv[0..eq], "game")) start = std.fmt.parseInt(i64, v, 10) catch null;
+            if (tree.eql(kv[0..eq], "id")) id = v;
+            if (tree.eql(kv[0..eq], "game")) start = std.fmt.parseInt(i64, v, 10) catch null;
             // Slots 0-9 by hand: a second parseInt costs ui-games.wasm 250 B
-            if (std.mem.eql(u8, kv[0..eq], "as") and v.len == 1 and std.ascii.isDigit(v[0])) as = v[0] - '0';
+            if (tree.eql(kv[0..eq], "as") and v.len == 1 and std.ascii.isDigit(v[0])) as = v[0] - '0';
         }
         const i = id orelse return null;
         if (i.len == 0 or std.mem.findAny(u8, i, " ?") != null) return null;
@@ -197,7 +198,7 @@ pub const Lookup = struct {
     }
 
     pub fn eql(l: Lookup, o: Lookup) bool {
-        return l.start == o.start and l.as == o.as and std.mem.eql(u8, l.id, o.id);
+        return l.start == o.start and l.as == o.as and tree.eql(l.id, o.id);
     }
 
     /// buf[0..n] then &as=slot

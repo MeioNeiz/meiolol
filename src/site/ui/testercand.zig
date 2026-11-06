@@ -276,7 +276,7 @@ pub fn sorted(a: std.mem.Allocator, f: *const Feed, sort: Sort) ![]*const Opt {
 pub fn matches(champion: []const u8, q: []const u8) bool {
     var nb: [32]u8 = undefined;
     var qb: [32]u8 = undefined;
-    return std.mem.find(u8, fold(&nb, champion), fold(&qb, q)) != null;
+    return tree.find(fold(&nb, champion), fold(&qb, q)) != null;
 }
 
 fn fold(buf: []u8, s: []const u8) []const u8 {
@@ -391,14 +391,14 @@ pub const Panel = struct {
             },
             .key => {
                 const k = ev.text;
-                if (std.mem.eql(u8, k, "Escape") and p.q.len > 0) {
+                if (tree.eql(k, "Escape") and p.q.len > 0) {
                     p.q.set("");
                     p.unkey();
                     ev.handled = true;
-                } else if (std.mem.eql(u8, k, "Enter")) {
+                } else if (tree.eql(k, "Enter")) {
                     ev.handled = true;
                     if (p.n_ids > 0) p.place(p.ids[@min(p.cur, p.n_ids - 1)]);
-                } else if (std.mem.eql(u8, k, "ArrowDown") or std.mem.eql(u8, k, "ArrowUp")) {
+                } else if (tree.eql(k, "ArrowDown") or tree.eql(k, "ArrowUp")) {
                     ev.handled = true;
                     if (p.n_ids == 0) return;
                     const down = k[5] == 'D';

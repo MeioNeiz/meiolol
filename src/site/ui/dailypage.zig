@@ -432,7 +432,7 @@ pub const Saved = struct {
 fn entry(json: []const u8, n: u32) ?[]const u8 {
     var buf: [14]u8 = undefined;
     const k = keyOf(&buf, n);
-    const at = std.mem.find(u8, json, k) orelse return null;
+    const at = tree.find(json, k) orelse return null;
     const start = at + k.len - 1;
     const end = std.mem.findScalarPos(u8, json, start, '}') orelse return null;
     return json[start .. end + 1];
@@ -457,7 +457,7 @@ fn keyOf(buf: *[14]u8, n: u32) []const u8 {
 /// A field's raw value in a flat entry: up to the next comma or brace
 fn field(e: []const u8, comptime f: []const u8) ?[]const u8 {
     const k = "\"" ++ f ++ "\":";
-    const at = std.mem.find(u8, e, k) orelse return null;
+    const at = tree.find(e, k) orelse return null;
     const v = e[at + k.len ..];
     return v[0 .. std.mem.findAny(u8, v, ",}") orelse v.len];
 }
@@ -467,11 +467,11 @@ pub fn read(json: []const u8, n: u32) ?Saved {
     var s: Saved = .{};
     // An option's index: one digit, as there are never ten
     if (field(e, "opt")) |v| s.opt = if (v.len == 1 and v[0] >= '0' and v[0] <= '9') v[0] - '0' else null;
-    if (field(e, "side")) |v| s.side = if (std.mem.eql(u8, v, "0")) .blue else if (std.mem.eql(u8, v, "1")) .red else null;
+    if (field(e, "side")) |v| s.side = if (tree.eql(v, "0")) .blue else if (tree.eql(v, "1")) .red else null;
     if (field(e, "marks")) |v| if (v.len == 4 and v[0] == '"' and v[3] == '"' and bit(v[1]) and bit(v[2])) {
         s.marks = .{ v[1] == '1', v[2] == '1' };
     };
-    if (field(e, "hint")) |v| s.hint = std.mem.eql(u8, v, "1");
+    if (field(e, "hint")) |v| s.hint = tree.eql(v, "1");
     return s;
 }
 
@@ -693,9 +693,9 @@ test "choose, lock in, then the winner: marks, the saved answers, the seat panel
     t.root = s.view(&h);
     try testing.expect(!h.oom);
     const out = try render(a, &t);
-    try testing.expect(std.mem.find(u8, out, "data-phase=\"done\"") != null);
-    try testing.expect(std.mem.find(u8, out, "Red won") == null);
-    try testing.expect(std.mem.find(u8, out, "Blue won") != null);
+    try testing.expect(tree.find(out, "data-phase=\"done\"") != null);
+    try testing.expect(tree.find(out, "Red won") == null);
+    try testing.expect(tree.find(out, "Blue won") != null);
 }
 
 test "before the reveal no page text names the played pick" {
@@ -717,7 +717,7 @@ test "before the reveal no page text names the played pick" {
         var t: tree.Tree = .{};
         var h: H = .init(a, &t);
         t.root = s.view(&h);
-        try testing.expect(std.mem.find(u8, try render(a, &t), "Jayce") == null);
+        try testing.expect(tree.find(try render(a, &t), "Jayce") == null);
     }
 }
 

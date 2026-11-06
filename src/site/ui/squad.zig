@@ -136,7 +136,7 @@ pub fn answer(json: []const u8) ?Answer {
 
 fn field(json: []const u8, comptime key: []const u8) ?[]const u8 {
     const k = "\"" ++ key ++ "\":";
-    const at = std.mem.find(u8, json, k) orelse return null;
+    const at = tree.find(json, k) orelse return null;
     return json[at + k.len ..];
 }
 
@@ -207,7 +207,7 @@ pub const Squad = struct {
             },
             .input => p.q.set(ev.text),
             .name_input => p.sname.set(ev.text),
-            .key => if (std.mem.eql(u8, ev.text, "Enter")) {
+            .key => if (tree.eql(ev.text, "Enter")) {
                 ev.handled = true;
                 p.begin();
             },

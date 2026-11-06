@@ -5,6 +5,7 @@
 //! (ui.data), as the matchup page's. Progress (stars per puzzle) stays in the browser:
 //! `Progress` reads and writes it as a short string for localStorage
 const std = @import("std");
+const tree = @import("tree.zig");
 const role = @import("role.zig");
 const guess = @import("guess.zig");
 
@@ -169,13 +170,13 @@ pub const Progress = struct {
     }
 
     pub fn get(p: *const Progress, id: []const u8) ?u2 {
-        for (p.all.items) |e| if (std.mem.eql(u8, e.id, id)) return e.n;
+        for (p.all.items) |e| if (tree.eql(e.id, id)) return e.n;
         return null;
     }
 
     /// Keeps the best try
     pub fn set(p: *Progress, a: std.mem.Allocator, id: []const u8, n: u2) !void {
-        for (p.all.items) |*e| if (std.mem.eql(u8, e.id, id)) {
+        for (p.all.items) |*e| if (tree.eql(e.id, id)) {
             e.n = @max(e.n, n);
             return;
         };
@@ -359,7 +360,7 @@ test "day marks: the oldest dropped past keep_marks; a chapter's end opens its s
     for (0..Progress.keep_marks) |i| try p.set(a, try std.fmt.allocPrint(a, "@x.{d}", .{i}), 2);
     var out: std.Io.Writer.Allocating = .init(a);
     try p.write(&out.writer);
-    try testing.expect(std.mem.startsWith(u8, out.written(), "know:3,@x.0:2,"));
+    try testing.expect(tree.startsWith(out.written(), "know:3,@x.0:2,"));
     const q = try Progress.parse(a, out.written());
     try testing.expectEqual(Progress.keep_marks + 1, q.all.items.len);
     try testing.expect(!p.finished(demo.chapters[1]));

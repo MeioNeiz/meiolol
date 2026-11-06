@@ -42,7 +42,7 @@ pub const Form = struct {
             },
             .user => f.user.set(ev.text),
             .pass => f.pass.set(ev.text),
-            .key => if (std.mem.eql(u8, ev.text, "Enter")) f.submit(),
+            .key => if (tree.eql(ev.text, "Enter")) f.submit(),
             .submit => f.submit(),
         }
     }

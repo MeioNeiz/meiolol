@@ -427,7 +427,7 @@ fn matches(s: []const u8, q: []const u8) bool {
     var qb: [24]u8 = undefined;
     const b = squeeze(&qb, q);
     if (b.len == 0) return true;
-    return std.mem.find(u8, a, b) != null;
+    return tree.find(a, b) != null;
 }
 
 fn squeeze(buf: []u8, s: []const u8) []const u8 {

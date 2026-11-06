@@ -957,7 +957,7 @@ pub fn restoreSaved(p: *Page, server: *const Page, fragment: []const u8, s: []co
 /// The fragment names a model, the default one too
 fn linksModel(fragment: []const u8) bool {
     var it = std.mem.tokenizeScalar(u8, std.mem.trimStart(u8, fragment, "#"), '&');
-    while (it.next()) |kv| if (std.mem.startsWith(u8, kv, "m=")) return true;
+    while (it.next()) |kv| if (tree.startsWith(kv, "m=")) return true;
     return false;
 }
 
@@ -1182,10 +1182,10 @@ test "timing: blue's gold and points summed with their ranges, a lean only when 
     try @import("html.zig").write(&t, p.view(&h), &w.writer);
     const s = w.written();
     // Gold +240 clears 2 x 45 and 200; win -3.2 clears 2 x 0.61 and 3
-    try testing.expect(std.mem.find(u8, s, "Blue ahead at 14, Red stronger from 20") != null);
-    try testing.expect(std.mem.find(u8, s, "Blue +240 gold (+149 to +331)") != null);
-    try testing.expect(std.mem.find(u8, s, "· early") != null);
-    try testing.expect(std.mem.find(u8, s, "· late") != null);
+    try testing.expect(tree.find(s, "Blue ahead at 14, Red stronger from 20") != null);
+    try testing.expect(tree.find(s, "Blue +240 gold (+149 to +331)") != null);
+    try testing.expect(tree.find(s, "· early") != null);
+    try testing.expect(tree.find(s, "· late") != null);
     const t2 = teamLean(&Demo.full_head, .{ .{ 266, 64, 0, 0, 0 }, @splat(0) }).?;
     try testing.expectEqual(0, edge(t2.gold, t2.gold_sd, 200, 2));
     try testing.expectEqual(1, edge(t2.win, t2.win_sd, 3, 2));
@@ -1197,7 +1197,7 @@ test "timing: blue's gold and points summed with their ranges, a lean only when 
     p.teams = .{ @splat(0), .{ 122, 0, 0, 0, 0 } };
     w.clearRetainingCapacity();
     try @import("html.zig").write(&t, p.view(&h), &w.writer);
-    try testing.expect(std.mem.find(u8, w.written(), "class=\"lean\"") == null);
+    try testing.expect(tree.find(w.written(), "class=\"lean\"") == null);
 }
 
 test "gaps: two models' parts matched by pick or pair, adding up exactly to one chance less the other" {

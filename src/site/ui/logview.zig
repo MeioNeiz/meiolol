@@ -59,10 +59,10 @@ const W = struct {
 /// info line that says "rms error" is neither
 pub fn level(line: []const u8) Level {
     const rest = std.mem.trimStart(u8, line[stampLen(line)..], " ");
-    if (std.mem.startsWith(u8, rest, "error(") or std.mem.startsWith(u8, rest, "error:")) return .err;
-    if (std.mem.find(u8, rest, "FAILED") != null) return .err;
-    if (std.mem.startsWith(u8, rest, "warning(") or std.mem.startsWith(u8, rest, "warning:")) return .warn;
-    if (std.mem.find(u8, rest, " problem:") != null) return .warn;
+    if (tree.startsWith(rest, "error(") or tree.startsWith(rest, "error:")) return .err;
+    if (tree.find(rest, "FAILED") != null) return .err;
+    if (tree.startsWith(rest, "warning(") or tree.startsWith(rest, "warning:")) return .warn;
+    if (tree.find(rest, " problem:") != null) return .warn;
     return .none;
 }
 
@@ -266,31 +266,31 @@ test "view: filter marks matches, counts, colours by level; states" {
     const files = [_]File{ .{ .name = "crawl", .errors = 1, .warnings = 12 }, .{ .name = "web" }, .{ .name = "api", .warnings = 1 }, .{ .name = "backup", .errors = 2 } };
     var s = try x.html(.{ .files = &files, .lines = &demo_lines, .filter = "EUW1" });
     try testing.expectEqual(2, std.mem.count(u8, s, "<mark>EUW1</mark>"));
-    try testing.expect(std.mem.find(u8, s, "2 of 6 lines") != null);
-    try testing.expect(std.mem.find(u8, s, "aria-pressed=\"true\" aria-label=\"crawl,") != null);
-    try testing.expect(std.mem.find(u8, s, "title=\"12 warnings\"") != null);
-    try testing.expect(std.mem.find(u8, s, "title=\"1 error\"") != null);
-    try testing.expect(std.mem.find(u8, s, "aria-label=\"crawl, 1 error, 12 warnings\"") != null);
+    try testing.expect(tree.find(s, "2 of 6 lines") != null);
+    try testing.expect(tree.find(s, "aria-pressed=\"true\" aria-label=\"crawl,") != null);
+    try testing.expect(tree.find(s, "title=\"12 warnings\"") != null);
+    try testing.expect(tree.find(s, "title=\"1 error\"") != null);
+    try testing.expect(tree.find(s, "aria-label=\"crawl, 1 error, 12 warnings\"") != null);
     try testing.expectEqual(1, std.mem.count(u8, s, "aria-label=\"crawl,"));
-    try testing.expect(std.mem.find(u8, s, "aria-label=\"web") == null);
-    try testing.expect(std.mem.find(u8, s, "aria-label=\"api, 1 warning\"") != null);
-    try testing.expect(std.mem.find(u8, s, "aria-label=\"backup, 2 errors\"") != null);
+    try testing.expect(tree.find(s, "aria-label=\"web") == null);
+    try testing.expect(tree.find(s, "aria-label=\"api, 1 warning\"") != null);
+    try testing.expect(tree.find(s, "aria-label=\"backup, 2 errors\"") != null);
     s = try x.html(.{ .files = &files, .lines = &demo_lines, .filter = "euw1 18" });
     try testing.expectEqual(1, std.mem.count(u8, s, "<mark>EUW1 18</mark>2"));
     s = try x.html(.{ .files = &files, .lines = &demo_lines });
-    try testing.expect(std.mem.find(u8, s, "6 of 6 lines") != null);
+    try testing.expect(tree.find(s, "6 of 6 lines") != null);
     try testing.expectEqual(1, std.mem.count(u8, s, "data-k=\"err\">2026"));
     try testing.expectEqual(1, std.mem.count(u8, s, "data-k=\"warn\">2026"));
-    try testing.expect(std.mem.find(u8, s, "<mark>") == null);
+    try testing.expect(tree.find(s, "<mark>") == null);
     s = try x.html(.{ .files = &files, .lines = &demo_lines, .filter = "zzz" });
-    try testing.expect(std.mem.find(u8, s, "No lines match") != null);
+    try testing.expect(tree.find(s, "No lines match") != null);
     s = try x.html(.{ .files = &files, .shown = 1, .state = .failed });
-    try testing.expect(std.mem.find(u8, s, "Could not load web") != null);
-    try testing.expect(std.mem.find(u8, s, " of ") == null);
+    try testing.expect(tree.find(s, "Could not load web") != null);
+    try testing.expect(tree.find(s, " of ") == null);
     s = try x.html(.{ .files = &files, .state = .loading });
-    try testing.expect(std.mem.find(u8, s, "Loading") != null);
-    try testing.expect(std.mem.find(u8, s, "disabled") != null);
+    try testing.expect(tree.find(s, "Loading") != null);
+    try testing.expect(tree.find(s, "disabled") != null);
     s = try x.html(.{ .files = &files, .shown = 9 });
-    try testing.expect(std.mem.find(u8, s, "Empty") != null);
-    try testing.expect(std.mem.find(u8, s, " of ") == null);
+    try testing.expect(tree.find(s, "Empty") != null);
+    try testing.expect(tree.find(s, " of ") == null);
 }

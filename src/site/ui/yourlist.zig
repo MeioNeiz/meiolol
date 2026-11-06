@@ -3,6 +3,7 @@
 //! the filter, day groups with W-L and time played, per champion and per role totals,
 //! the streak. Remakes show as rows but count in no record
 const std = @import("std");
+const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const art = @import("art.zig");
@@ -121,7 +122,7 @@ pub const Head = struct {
 pub fn split(a: std.mem.Allocator, bytes: []const u8) data.Error!struct { head: Head, list: ?[]u8 } {
     comptime {
         const lf = std.meta.fieldNames(Lookup);
-        if (lf.len != std.meta.fieldNames(Head).len + 1 or !std.mem.eql(u8, lf[lf.len - 1], "list"))
+        if (lf.len != std.meta.fieldNames(Head).len + 1 or !tree.eql(lf[lf.len - 1], "list"))
             @compileError("yourlist: Head must be every Lookup field but a last `list`");
     }
     const got = try data.decodeHead(Lookup, Head, bytes);
@@ -321,7 +322,7 @@ test "split: a cut, stale or damaged answer fails" {
     try testing.expectError(error.WrongType, split(a, bad));
     // failed's length past the end
     bad = try a.dupe(u8, ok);
-    const at = std.mem.find(u8, bad, "Timeout").?;
+    const at = tree.find(bad, "Timeout").?;
     @memset(bad[at - 4 .. at], 0xff);
     try testing.expectError(error.Truncated, split(a, bad));
     // The list's presence byte: 0 with bytes after it, or neither 0 nor 1

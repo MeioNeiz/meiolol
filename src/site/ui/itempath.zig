@@ -32,7 +32,7 @@ pub fn view(h: *H, items: []const art.Art, o: Opts) N {
     var kids = h.list();
     for (items, 0..) |it, i| {
         if (i > 0) kids.add(h.span(.{ .class = "ar", .aria_hidden = true }, .{"›"}));
-        const same = if (o.top) |t| i < t.len and std.mem.eql(u8, t[i].src, it.src) else false;
+        const same = if (o.top) |t| i < t.len and tree.eql(t[i].src, it.src) else false;
         const m: f32 = if (known and i < o.minutes.len) o.minutes[i] else 0;
         const minute: ?N = if (!known) null else h.small(.{}, .{
             if (m > 0) phrase.num(h, .int, @as(u32, @intFromFloat(@round(m)))) else W.none,

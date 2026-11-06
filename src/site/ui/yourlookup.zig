@@ -268,7 +268,7 @@ pub fn idOf(hash: []const u8) ?[]const u8 {
     var id: []const u8 = "";
     var it = std.mem.tokenizeScalar(u8, if (hash.len > 0 and (hash[0] == '#' or hash[0] == '?')) hash[1..] else hash, '&');
     while (it.next()) |kv| {
-        if (std.mem.startsWith(u8, kv, "id=")) id = kv[3..];
+        if (tree.startsWith(kv, "id=")) id = kv[3..];
     }
     return if (id.len > 0) id else null;
 }

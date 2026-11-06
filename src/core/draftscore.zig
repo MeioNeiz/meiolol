@@ -7,6 +7,13 @@ const std = @import("std");
 pub const n_role = 5;
 pub const z95 = 1.96;
 
+/// A plain loop: std.mem.eql's vector version is 660 B of the tester page's ui.wasm
+fn eql(a: []const u8, b: []const u8) bool {
+    if (a.len != b.len) return false;
+    for (a, b) |x, y| if (x != y) return false;
+    return true;
+}
+
 fn sigmoid(x: f64) f64 {
     return 1 / (1 + @exp(-x));
 }
@@ -198,7 +205,7 @@ pub const Scorer = struct {
             if (kinds.len > 0) for (e.terms) |t| if (t.raw.len != raw_len) return error.BadCompShape;
         } else for (e.terms) |t| if (t.p.len != 0) return error.BadCompShape;
         if (e.pairs) |pr| {
-            for (pr.groups) |g| if (g.r >= n_role or g.q >= n_role or (!std.mem.eql(u8, g.kind, "ally") and !std.mem.eql(u8, g.kind, "matchup"))) return error.BadPairGroup;
+            for (pr.groups) |g| if (g.r >= n_role or g.q >= n_role or (!eql(g.kind, "ally") and !eql(g.kind, "matchup"))) return error.BadPairGroup;
             for (pr.cells, 0..) |c, i| {
                 if (c.group >= pr.groups.len) return error.BadPairGroup;
                 try sc.cells.put(arena, pairKey(c.group, c.a, c.b), @intCast(i));
@@ -233,7 +240,7 @@ pub const Scorer = struct {
                 .sd = 0,
                 .u = vecs[0..e.dim],
                 .v = vecs[e.dim .. 2 * e.dim],
-                .s = if (std.mem.eql(u8, e.kind, "full")) vecs[2 * e.dim .. 3 * e.dim] else &.{},
+                .s = if (eql(e.kind, "full")) vecs[2 * e.dim .. 3 * e.dim] else &.{},
                 .p = vecs[3 * e.dim ..][0..sc.k],
                 .raw = vecs[3 * e.dim + sc.k ..],
             };
@@ -315,7 +322,7 @@ pub const Scorer = struct {
         for (pr.groups, 0..) |g, gi| {
             const r = g.r;
             const q = g.q;
-            if (std.mem.eql(u8, g.kind, "ally")) {
+            if (eql(g.kind, "ally")) {
                 out += sc.cell(gi, t[0][r], t[0][q]) - sc.cell(gi, t[1][r], t[1][q]);
             } else if (r != q) {
                 out += sc.cell(gi, t[0][r], t[1][q]) - sc.cell(gi, t[1][r], t[0][q]);
@@ -377,7 +384,7 @@ pub const Scorer = struct {
         const theirs = t[1 - side];
         if (sc.e.pairs) |pr| for (pr.groups, 0..) |g, gi| {
             if (g.r != r and g.q != r) continue;
-            const ally = std.mem.eql(u8, g.kind, "ally");
+            const ally = eql(g.kind, "ally");
             const bot = g.r != g.q and g.r >= 3 and g.q >= 3;
             if (!bot and (ally or g.r != g.q)) continue;
             const o: u8 = if (g.r == r) g.q else g.r;
@@ -425,7 +432,7 @@ pub const Scorer = struct {
         if (sc.e.pairs) |pr| for (pr.groups, 0..) |g, gi| {
             const r = g.r;
             const q = g.q;
-            if (std.mem.eql(u8, g.kind, "ally")) {
+            if (eql(g.kind, "ally")) {
                 for (0..2) |side| if (sc.cellOf(gi, t[side][r], t[side][q])) |c| {
                     const x = k * c.theta;
                     w.add(.{ .kind = .ally, .side = @intCast(side), .a = t[side][r], .b = t[side][q], .ra = r, .rb = q, .pp = if (side == 0) x else -x, .games = c.games });

@@ -138,7 +138,7 @@ pub const SiteSearch = struct {
 
     fn key(s: *S, ev: *tree.Event) void {
         const k = ev.text;
-        if (std.mem.eql(u8, k, "Escape")) {
+        if (tree.eql(k, "Escape")) {
             if (!s.open) return;
             s.open = false;
             ev.handled = true;
@@ -146,15 +146,15 @@ pub const SiteSearch = struct {
         }
         var buf: [max_opts]Opt = undefined;
         const shown = s.options(&buf);
-        const down = std.mem.eql(u8, k, "ArrowDown");
-        if (down or std.mem.eql(u8, k, "ArrowUp")) {
+        const down = tree.eql(k, "ArrowDown");
+        if (down or tree.eql(k, "ArrowUp")) {
             ev.handled = true;
             s.open = true;
             if (shown.len == 0) return;
             const n: u8 = @intCast(shown.len);
             s.active = if (s.active) |at| (if (down) (at + 1) % n else (at + n - 1) % n) else if (down) 0 else n - 1;
             ev.after = .{ .op = .scroll, .ref = "active" };
-        } else if (std.mem.eql(u8, k, "Enter")) {
+        } else if (tree.eql(k, "Enter")) {
             if (s.text().len == 0) {
                 ev.handled = true;
                 return;

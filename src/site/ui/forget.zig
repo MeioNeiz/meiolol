@@ -57,7 +57,7 @@ pub fn answer(json: []const u8) ?Answer {
 /// What follows `"key":`
 fn field(json: []const u8, comptime key: []const u8) ?[]const u8 {
     const k = "\"" ++ key ++ "\":";
-    const at = std.mem.find(u8, json, k) orelse return null;
+    const at = tree.find(json, k) orelse return null;
     return json[at + k.len ..];
 }
 
@@ -100,7 +100,7 @@ pub const Forget = struct {
         switch (m) {
             .open => p.open = ev.opened(),
             .input => p.q.set(ev.text),
-            .key => if (std.mem.eql(u8, ev.text, "Enter")) {
+            .key => if (tree.eql(ev.text, "Enter")) {
                 ev.handled = true;
                 p.begin();
             },

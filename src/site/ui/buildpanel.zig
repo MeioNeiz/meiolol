@@ -559,7 +559,7 @@ pub const BuildPanel = struct {
             // Escape in the open cell closes it, focus back on its "all"
             .key => {
                 const k = p.open orelse return;
-                if (!std.mem.eql(u8, ev.text, "Escape")) return;
+                if (!tree.eql(ev.text, "Escape")) return;
                 p.open = null;
                 ev.push = true;
                 ev.handled = true;

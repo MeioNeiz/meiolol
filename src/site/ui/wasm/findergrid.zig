@@ -17,7 +17,7 @@ var state: fd.Grid = undefined;
 var server: fd.Grid = undefined;
 var island: *ui.island.Island(fd.Grid, dom.Dom) = undefined;
 /// Each fetched champion's matchups by slug (null: its file failed)
-var cache: std.StringHashMapUnmanaged(?*const MoreData) = .empty;
+var cache: std.HashMapUnmanaged([]const u8, ?*const MoreData, ui.tree.StrCtx, 80) = .empty;
 /// The slug being fetched
 var asked: ?[]const u8 = null;
 
@@ -93,7 +93,7 @@ fn loaded(_: i32, bytes: ?[]u8) void {
     if (d == null) dom.dom.warn("findergrid: no matchups for the pick");
     const kept = bytes != null and if (cache.put(gpa, slug, d)) true else |_| false;
     defer if (!kept) gpa.free(slug);
-    if (std.mem.eql(u8, state.want() orelse "", slug)) {
+    if (ui.tree.eql(state.want() orelse "", slug)) {
         state.got(slug, d);
         island.render();
     }

@@ -93,7 +93,7 @@ pub const Page = struct {
         const days = s.live();
         const from = days.len -| on_time.len;
         for (days[from..], 0..) |x, i| on_time[i] = if (dp.finishedOn(s.saved, x.n)) |on|
-            std.mem.eql(u8, on, x.date)
+            tree.eql(on, x.date)
         else if (dp.read(s.saved, x.n)) |m|
             // Finished before `on` was saved: taken as on time, not a lost streak
             m.marks != null
@@ -117,7 +117,7 @@ pub const Page = struct {
             l.* = h.a(.{
                 .href = h.fmt("{s}daily/{d}", .{ s.d.root, x.n }),
                 .data_r = if (right) |r| "012"[r .. r + 1] else null,
-                .aria_current = if (x.n == s.d.n) "page" else if (std.mem.eql(u8, x.date, s.date)) "date" else null,
+                .aria_current = if (x.n == s.d.n) "page" else if (tree.eql(x.date, s.date)) "date" else null,
                 .aria_label = label,
                 .title = label,
             }, .{});
@@ -241,7 +241,7 @@ pub fn crowdOf(json: []const u8, d: *const Data) ?Crowd {
 
 /// The `i`th whole number after `key` (a list's items comma-separated)
 fn numAt(json: []const u8, key: []const u8, i: usize) ?u32 {
-    var rest = json[(std.mem.find(u8, json, key) orelse return null) + key.len ..];
+    var rest = json[(tree.find(json, key) orelse return null) + key.len ..];
     for (0..i) |_| rest = rest[(std.mem.findScalar(u8, rest, ',') orelse return null) + 1 ..];
     return std.fmt.parseInt(u32, rest[0 .. std.mem.findAny(u8, rest, ",]}") orelse return null], 10) catch null;
 }
@@ -251,7 +251,7 @@ pub fn sent(list: []const u8, n: u32) bool {
     var it = std.mem.splitScalar(u8, list, ',');
     var buf: [10]u8 = undefined;
     const k = std.fmt.bufPrint(&buf, "{d}", .{n}) catch return false;
-    while (it.next()) |x| if (std.mem.eql(u8, x, k)) return true;
+    while (it.next()) |x| if (tree.eql(x, k)) return true;
     return false;
 }
 
@@ -283,7 +283,7 @@ pub fn withSent(buf: []u8, list: []const u8, n: u32) ?[]const u8 {
 fn isNum(x: []const u8) bool {
     const v = std.fmt.parseInt(u32, x, 10) catch return false;
     var b: [10]u8 = undefined;
-    return std.mem.eql(u8, x, std.fmt.bufPrint(&b, "{d}", .{v}) catch return false);
+    return tree.eql(x, std.fmt.bufPrint(&b, "{d}", .{v}) catch return false);
 }
 
 /// `list` without n: its answers were not counted after all; `list` when it doesn't fit
@@ -293,7 +293,7 @@ pub fn unsent(buf: []u8, list: []const u8, n: u32) []const u8 {
     var num: [10]u8 = undefined;
     const k = std.fmt.bufPrint(&num, "{d}", .{n}) catch return list;
     while (it.next()) |x| {
-        if (x.len == 0 or std.mem.eql(u8, x, k)) continue;
+        if (x.len == 0 or tree.eql(x, k)) continue;
         w.print("{s}{s}", .{ if (w.end > 0) "," else "", x }) catch return list;
     }
     return w.buffered();
@@ -301,8 +301,8 @@ pub fn unsent(buf: []u8, list: []const u8, n: u32) []const u8 {
 
 /// ?n= of a location.search ("?n=5&x"): an old link to a puzzle
 pub fn wantedOf(search: []const u8) ?u32 {
-    var it = std.mem.splitScalar(u8, if (std.mem.startsWith(u8, search, "?")) search[1..] else search, '&');
-    while (it.next()) |kv| if (std.mem.startsWith(u8, kv, "n=")) return std.fmt.parseInt(u32, kv[2..], 10) catch null;
+    var it = std.mem.splitScalar(u8, if (tree.startsWith(search, "?")) search[1..] else search, '&');
+    while (it.next()) |kv| if (tree.startsWith(kv, "n=")) return std.fmt.parseInt(u32, kv[2..], 10) catch null;
     return null;
 }
 
@@ -654,8 +654,8 @@ test "the crowd: sent once finished, read back for the page's puzzle only" {
     var next: [4096]u8 = undefined;
     const kept = withSent(&next, full.buffered(), 999).?;
     try testing.expectEqual(keep_sent, std.mem.countScalar(u8, kept, ',') + 1);
-    try testing.expect(std.mem.startsWith(u8, kept, "2,3,"));
-    try testing.expect(std.mem.endsWith(u8, kept, ",200,999"));
+    try testing.expect(tree.startsWith(kept, "2,3,"));
+    try testing.expect(tree.endsWith(kept, ",200,999"));
     // Too long for the buffer: not marked (crowd() then only GETs)
     try testing.expectEqual(null, withSent(list[0..3], "15", 12345));
 }
@@ -693,7 +693,7 @@ test "share: the marks on the hidden seat, the model's ranks, the streak; once f
     var bare = demo_archive;
     bare.ranks = &.{};
     sp.d = &bare;
-    try testing.expect(std.mem.find(u8, shareText(&buf, &sp).?, "model") == null);
+    try testing.expect(tree.find(shareText(&buf, &sp).?, "model") == null);
     // A hint taken, nothing finished
     sp.saved = "{\"12\":{\"hint\":1}}";
     try testing.expectEqual(null, shareText(&buf, &sp));

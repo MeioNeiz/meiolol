@@ -126,7 +126,7 @@ pub const Dom = struct {
         inline for (@typeInfo(tree.Ev).@"enum".field_names, 0..) |name, bit| {
             const b: u16 = 1 << bit;
             if (mask & b != 0 and was & b == 0) {
-                const kind = comptime if (std.mem.eql(u8, name, "pointerleave")) "pointerout" else name;
+                const kind = comptime if (ui.tree.eql(name, "pointerleave")) "pointerout" else name;
                 const f = zjb.fnHandle("uiEvent", &onEvent).bind(.{ @as(i32, @intCast(slot)), @as(i32, bit) });
                 root.call("addEventListener", .{ zjb.constString(kind), f, @as(i32, 1) }, void);
                 f.release();

@@ -52,7 +52,7 @@ export fn main() void {
     const state = doc.get("readyState", zjb.Handle);
     defer state.release();
     var buf: [16]u8 = undefined;
-    if (std.mem.eql(u8, state.readString(&buf) catch "", "loading")) {
+    if (ui.tree.eql(state.readString(&buf) catch "", "loading")) {
         doc.call("addEventListener", .{ zjb.constString("DOMContentLoaded"), zjb.fnHandle("pvStart", &onReady) }, void);
         return;
     }
@@ -103,7 +103,7 @@ fn draw() void {
     var fresh = false;
     for (&slots, 0..) |*s, i| {
         const want = meioWant(r, @fromBackingInt(@intCast(i))) orelse continue;
-        if (std.mem.eql(u8, want, s.want[0..s.want_len])) continue;
+        if (ui.tree.eql(want, s.want[0..s.want_len])) continue;
         ask(s, @intCast(i), want);
         fresh = true;
     }
@@ -167,7 +167,7 @@ fn shownRole() Role {
     const frag = dom.dom.hash(&buf);
     var it = std.mem.tokenizeAny(u8, frag, "#&");
     while (it.next()) |kv| {
-        if (std.mem.startsWith(u8, kv, "role=")) if (std.meta.stringToEnum(Role, kv["role=".len..])) |r| return r;
+        if (ui.tree.startsWith(kv, "role=")) if (std.meta.stringToEnum(Role, kv["role=".len..])) |r| return r;
     }
     if (dom.pageRole()) |r| return r;
     const roles = dom.attrOf(page, "data-roles");

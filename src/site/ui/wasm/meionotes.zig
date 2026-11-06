@@ -208,7 +208,7 @@ fn onKey(e: zjb.Handle) callconv(.c) void {
     defer k.release();
     var buf: [16]u8 = undefined;
     const key = k.readString(&buf) catch return;
-    if (tool.mode == .form and std.mem.eql(u8, key, "Enter")) {
+    if (tool.mode == .form and ui.tree.eql(key, "Enter")) {
         if (e.get("shiftKey", bool) or composing(e) or !inText(e)) return;
         swallow(e);
         var ev: ui.tree.Event = .{ .kind = .keydown, .text = key };
@@ -216,14 +216,14 @@ fn onKey(e: zjb.Handle) callconv(.c) void {
         return changed();
     }
     if (tool.mode == .idle and tool.open == null) {
-        if (!std.mem.eql(u8, key, "n") or !plainKey(e)) return;
+        if (!ui.tree.eql(key, "n") or !plainKey(e)) return;
         swallow(e);
         tool.open = null;
         tool.mode = .picking;
         tool.want = .pick;
         return changed();
     }
-    if (!std.mem.eql(u8, key, "Escape") or composing(e)) return;
+    if (!ui.tree.eql(key, "Escape") or composing(e)) return;
     swallow(e);
     tool.reset();
     changed();
@@ -253,7 +253,7 @@ fn plainKey(e: zjb.Handle) bool {
     defer name.release();
     var buf: [8]u8 = undefined;
     const tag = name.readString(&buf) catch return true;
-    inline for (.{ "input", "textarea", "select" }) |f| if (std.mem.eql(u8, tag, f)) return false;
+    inline for (.{ "input", "textarea", "select" }) |f| if (ui.tree.eql(tag, f)) return false;
     return true;
 }
 
@@ -265,7 +265,7 @@ fn wider() void {
     defer name.release();
     var buf: [8]u8 = undefined;
     const tag = name.readString(&buf) catch "";
-    if (std.mem.eql(u8, tag, "body") or std.mem.eql(u8, tag, "html")) return p.release();
+    if (ui.tree.eql(tag, "body") or ui.tree.eql(tag, "html")) return p.release();
     below.append(gpa, picked) catch return p.release();
     picked = p.kept();
     describe();
@@ -329,7 +329,7 @@ fn anchorOf(a: std.mem.Allocator, el: zjb.Handle) ?Anchor {
     const class = dom.attrOf(el, "class");
     defer if (class.len > 0) gpa.free(class);
     var it = std.mem.tokenizeAny(u8, class, " \t\n");
-    while (it.next()) |c| if (std.mem.startsWith(u8, c, "c-") and validName(c))
+    while (it.next()) |c| if (ui.tree.startsWith(c, "c-") and validName(c))
         return .{ .kind = .component, .name = a.dupe(u8, c) catch return null };
     const island_name = dom.attrOf(el, "data-island");
     defer if (island_name.len > 0) gpa.free(island_name);
@@ -382,7 +382,7 @@ fn targetOf(a: std.mem.Allocator, el: zjb.Handle) !nd.Target {
         }
         var tbuf: [16]u8 = undefined;
         const tag = tagOf(&tbuf, cur);
-        if (std.mem.eql(u8, tag, "body") or std.mem.eql(u8, tag, "html")) break;
+        if (ui.tree.eql(tag, "body") or ui.tree.eql(tag, "html")) break;
         const parent = cur.get("parentElement", zjb.Handle);
         if (tag.len == 0 or parent == .null) {
             if (parent != .null) parent.release();
@@ -429,7 +429,7 @@ fn sameTagBefore(el: zjb.Handle, tag: []const u8) u16 {
     var s = el.get("previousElementSibling", zjb.Handle);
     while (s != .null) {
         var buf: [16]u8 = undefined;
-        if (std.mem.eql(u8, tagOf(&buf, s), tag)) n +|= 1;
+        if (ui.tree.eql(tagOf(&buf, s), tag)) n +|= 1;
         const prev = s.get("previousElementSibling", zjb.Handle);
         s.release();
         s = prev;
@@ -480,7 +480,7 @@ fn resolve(a: std.mem.Allocator, t: nd.Target) ?zjb.Handle {
 }
 
 fn sameText(a: std.mem.Allocator, el: zjb.Handle, snippet: []const u8) bool {
-    return std.mem.eql(u8, snippetOf(a, el) catch return false, snippet);
+    return ui.tree.eql(snippetOf(a, el) catch return false, snippet);
 }
 
 /// `from` down "tag:i>..." (a new handle); as far as it gets when a step is missing
@@ -505,7 +505,7 @@ fn child(el: zjb.Handle, tag: []const u8, want: u16) ?zjb.Handle {
     var c = el.get("firstElementChild", zjb.Handle);
     while (c != .null) {
         var buf: [16]u8 = undefined;
-        if (std.mem.eql(u8, tagOf(&buf, c), tag)) {
+        if (ui.tree.eql(tagOf(&buf, c), tag)) {
             if (seen == want) return c;
             seen += 1;
         }
@@ -746,7 +746,7 @@ fn place() void {
     for (notes.items) |n| {
         if (n.status != .open) continue;
         const here = switch (n.scope) {
-            .page => std.mem.eql(u8, n.path, nd.stripIndex(path)),
+            .page => ui.tree.eql(n.path, nd.stripIndex(path)),
             .everywhere => onPage(a, n.target.component()),
         };
         if (!here) continue;

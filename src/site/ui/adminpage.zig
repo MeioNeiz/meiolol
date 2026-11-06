@@ -45,7 +45,7 @@ pub fn legacyHash(buf: []u8, h: []const u8) ?[]const u8 {
     if (h.len < 2 or h[0] != '#' or std.mem.findScalar(u8, h, '=') != null) return null;
     const slash = std.mem.findScalar(u8, h, '/');
     const key = h[1 .. slash orelse h.len];
-    const tab = if (std.mem.eql(u8, key, "model") or std.mem.eql(u8, key, "training")) "models" else key;
+    const tab = if (tree.eql(key, "model") or tree.eql(key, "training")) "models" else key;
     _ = std.meta.stringToEnum(Tab, tab) orelse return null;
     const cat = if (slash) |i| h[i + 1 ..] else "";
     return (if (cat.len > 0)
@@ -186,7 +186,7 @@ pub const Page = struct {
             .invite => p.want = .{ .invite = p.giveOf() orelse return },
             .pick => |row| {
                 const l = p.accounts orelse return;
-                for (l.roles, 0..) |r, i| if (std.mem.eql(u8, r, ev.text)) {
+                for (l.roles, 0..) |r, i| if (tree.eql(r, ev.text)) {
                     p.pending = .{ row, @intCast(i) };
                 };
             },
@@ -215,7 +215,7 @@ pub const Page = struct {
     /// The signed-in role has `cap` (roles.zig Capability's name)
     pub fn can(p: *const Page, cap: []const u8) bool {
         const me = p.me orelse return false;
-        for (me.can) |c| if (std.mem.eql(u8, c, cap)) return true;
+        for (me.can) |c| if (tree.eql(c, cap)) return true;
         return false;
     }
 
@@ -223,11 +223,11 @@ pub const Page = struct {
     /// lowest; never public
     pub fn giveOf(p: *const Page) ?u8 {
         const l = p.accounts orelse return null;
-        if (p.give) |g| if (g < l.roles.len and !std.mem.eql(u8, l.roles[g], "public")) return g;
+        if (p.give) |g| if (g < l.roles.len and !tree.eql(l.roles[g], "public")) return g;
         var first: ?u8 = null;
         for (l.roles, 0..) |r, i| {
-            if (std.mem.eql(u8, r, "private")) return @intCast(i);
-            if (first == null and !std.mem.eql(u8, r, "public")) first = @intCast(i);
+            if (tree.eql(r, "private")) return @intCast(i);
+            if (first == null and !tree.eql(r, "public")) first = @intCast(i);
         }
         return first;
     }
@@ -488,7 +488,7 @@ fn healthOf(p: *const Page, s: *const ad.Snapshot) []const u8 {
 
 fn pending(gs: []const ad.Group) i64 {
     var n: i64 = 0;
-    for (gs) |g| if (std.mem.endsWith(u8, g.key, "pending")) {
+    for (gs) |g| if (tree.endsWith(g.key, "pending")) {
         n += g.n;
     };
     return n;
@@ -496,7 +496,7 @@ fn pending(gs: []const ad.Group) i64 {
 
 fn serviceState(p: *const Page, unit: []const u8) ?[]const u8 {
     const l = p.live orelse return null;
-    for (l.services) |sv| if (std.mem.eql(u8, sv.unit, unit)) return sv.state;
+    for (l.services) |sv| if (tree.eql(sv.unit, unit)) return sv.state;
     return null;
 }
 
@@ -557,7 +557,7 @@ fn overview(p: *Page, h: *H, s: *const ad.Snapshot) N {
     }.f;
     add(h, &tiles, .{
         .label = W.crawler,
-        .value = if (crawl_state) |st| (if (std.mem.eql(u8, st, "active")) W.running else Text{ .s = st }) else if (silent) W.silent else W.reporting,
+        .value = if (crawl_state) |st| (if (tree.eql(st, "active")) W.running else Text{ .s = st }) else if (silent) W.silent else W.reporting,
         .ctx = if (report_age) |a| W.last_report.with(h, .{ .t = ago(h, a).s }) else null,
         .answer = true,
         .href = "#tab=crawler",
@@ -609,13 +609,13 @@ fn controls(p: *Page, h: *H, s: *const ad.Snapshot) N {
     var rows = h.list();
     for (units, 0..) |u, i| {
         const st = serviceState(p, u[0]);
-        const k: badge.Kind = if (st) |x| (if (std.mem.eql(u8, x, "active")) .us else if (std.mem.eql(u8, x, "inactive") and std.mem.startsWith(u8, u[0], "meiolol-render")) .neutral else .them) else .neutral;
+        const k: badge.Kind = if (st) |x| (if (tree.eql(x, "active")) .us else if (tree.eql(x, "inactive") and tree.startsWith(u[0], "meiolol-render")) .neutral else .them) else .neutral;
         rows.add(h.tr(.{}, .{
             h.th(.{ .scope = "row" }, .{u[1]}),
             h.td(.{ .data_answer = i == 0 }, .{badge.view(h, k, .{if (st) |x| Text{ .s = x } else W.unknown})}),
         }));
     }
-    const crawling = if (serviceState(p, "meiolol-crawl")) |x| std.mem.eql(u8, x, "active") else false;
+    const crawling = if (serviceState(p, "meiolol-crawl")) |x| tree.eql(x, "active") else false;
     const eval_on = if (live) |l| l.eval_since != null else false;
     const held = if (live) |l| l.action else null;
     var btns = h.list();
@@ -676,7 +676,7 @@ fn actionTable(h: *H, now: i64, acts: []const ad.Action) N {
     while (i > 0) {
         i -= 1;
         const a = acts[i];
-        const k: badge.Kind = if (std.mem.eql(u8, a.result, "ok")) .us else if (std.mem.eql(u8, a.result, "refused")) .neutral else .them;
+        const k: badge.Kind = if (tree.eql(a.result, "ok")) .us else if (tree.eql(a.result, "refused")) .neutral else .them;
         rows.add(h.tr(.{}, .{
             h.td(.{ .class = "nw" }, .{ when(h, a.time), " ", h.small(.{}, .{ago(h, now - a.time)}) }),
             h.td(.{}, .{actLabel(a.name)}),
@@ -691,7 +691,7 @@ fn actionTable(h: *H, now: i64, acts: []const ad.Action) N {
 }
 
 fn actLabel(path: []const u8) Text {
-    for (std.enums.values(Act)) |a| if (std.mem.eql(u8, a.path(), path)) return act_names.get(a);
+    for (std.enums.values(Act)) |a| if (tree.eql(a.path(), path)) return act_names.get(a);
     return .{ .s = path };
 }
 
@@ -701,7 +701,7 @@ fn accountsTab(p: *Page, h: *H) N {
     var give: std.ArrayList(segmented.Item) = .empty;
     const chosen = p.giveOf();
     for (l.roles, 0..) |r, i| {
-        if (std.mem.eql(u8, r, "public")) continue;
+        if (tree.eql(r, "public")) continue;
         give.append(h.mem, .{ .label = .{ .s = r }, .selected = chosen != null and chosen.? == i, .on = h.on(p, .{ .give = @intCast(i) }) }) catch {
             h.oom = true;
         };
@@ -710,7 +710,7 @@ fn accountsTab(p: *Page, h: *H) N {
     for (l.accounts, 0..) |a, i| {
         const row: u16 = @intCast(i);
         var opts = h.list();
-        if (a.manage) for (l.roles) |r| opts.add(h.el(.option, .{ .value = r, .selected = std.mem.eql(u8, r, a.role) }, .{r}));
+        if (a.manage) for (l.roles) |r| opts.add(h.el(.option, .{ .value = r, .selected = tree.eql(r, a.role) }, .{r}));
         const asked = if (p.pending) |x| x[0] == row else false;
         rows.add(h.tr(.{ .key = a.username }, .{
             h.th(.{ .scope = "row" }, .{a.username}),
@@ -1108,7 +1108,7 @@ fn render(a: std.mem.Allocator, p: *Page) ![]const u8 {
 }
 
 fn expectHas(s: []const u8, wants: []const []const u8) !void {
-    for (wants) |w| if (std.mem.find(u8, s, w) == null) {
+    for (wants) |w| if (tree.find(s, w) == null) {
         std.debug.print("missing {s} in {s}\n", .{ w, s });
         return error.TestExpectedEqual;
     };
@@ -1141,7 +1141,7 @@ test "admin controls: shown to every admin, off while one runs, the crawler's pa
     var p = Demo.page(.ops);
     var s = try render(a, &p);
     try expectHas(s, &.{ "Restart crawler", "Stop crawler", "Renderer b", "failed", "Action history (3)", "c9e836bf23" });
-    try testing.expect(std.mem.find(u8, s, "Start crawler") == null);
+    try testing.expect(tree.find(s, "Start crawler") == null);
     var ev: tree.Event = .{ .kind = .click };
     p.update(.{ .run = .site_build }, &ev);
     try testing.expectEqual(Want{ .run = .site_build }, p.want);
@@ -1151,7 +1151,7 @@ test "admin controls: shown to every admin, off while one runs, the crawler's pa
     p.me = &me;
     p.running = null;
     // An admin sees them too; a press the API refuses says so, big
-    try testing.expect(std.mem.find(u8, try render(a, &p), "act-crawl-restart") != null);
+    try testing.expect(tree.find(try render(a, &p), "act-crawl-restart") != null);
     p.denied = true;
     try expectHas(try render(a, &p), &.{"Your try was logged."});
 }

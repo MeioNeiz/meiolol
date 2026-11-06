@@ -64,12 +64,12 @@ fn ask() void {
             break :v dom.stored("view") orelse "";
         };
         page.query = for (ui.urls.view_queries) |q| {
-            if (std.mem.eql(u8, q, v)) break q;
+            if (ui.tree.eql(q, v)) break q;
         } else "";
     }
     asked = true;
     const at = for (ui.urls.view_queries, 0..) |q, i| {
-        if (std.mem.eql(u8, q, page.query)) break i;
+        if (ui.tree.eql(q, page.query)) break i;
     } else 0;
     const path = std.mem.concat(gpa, u8, &.{ "/", ui.urls.view_dirs[at], ss.data_path }) catch return;
     defer gpa.free(path);

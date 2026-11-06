@@ -147,7 +147,7 @@ fn onShown(e: zjb.Handle) callconv(.c) void {
 /// A List's file onto the list's root, or the example again (null), then the event
 fn hand(l: ?[]u8) void {
     if (l) |b| {
-        if (std.mem.eql(u8, b, handed)) return gpa.free(b);
+        if (ui.tree.eql(b, handed)) return gpa.free(b);
     } else if (handed.len == 0) return;
     gpa.free(handed);
     handed = l orelse &.{};

@@ -75,7 +75,7 @@ pub const Index = struct {
             }
             if (start) |s| try words.append(a, .{ .at = @intCast(s), .len = @intCast(n.items.len - s) });
             var al: std.ArrayList([]const u8) = .empty;
-            for (aliases) |x| if (std.mem.eql(u8, x[1], n.items)) try al.append(a, x[0]);
+            for (aliases) |x| if (tree.eql(x[1], n.items)) try al.append(a, x[0]);
             k.* = .{ .n = n.items, .words = words.items, .aliases = al.items };
         }
         return .{ .entries = entries, .keys = keys };
@@ -128,12 +128,12 @@ fn fold(buf: []u8, s: []const u8) []const u8 {
 fn score(q: []const u8, k: *const Index.Key) Hit {
     const n = k.n;
     const len: u8 = @intCast(q.len);
-    if (std.mem.eql(u8, n, q)) return .{ .e = 0, .score = 100, .len = len };
-    for (k.aliases) |a| if (std.mem.eql(u8, a, q)) return .{ .e = 0, .score = 100 };
-    if (std.mem.startsWith(u8, n, q)) return .{ .e = 0, .score = 80, .len = len };
-    for (k.words) |w| if (std.mem.startsWith(u8, n[w.at..][0..w.len], q)) return .{ .e = 0, .score = 70, .at = w.at, .len = len };
-    if (q.len >= 2) for (k.aliases) |a| if (std.mem.startsWith(u8, a, q)) return .{ .e = 0, .score = 65 };
-    if (q.len >= 3) if (std.mem.find(u8, n, q)) |at| return .{ .e = 0, .score = 50, .at = @intCast(at), .len = len };
+    if (tree.eql(n, q)) return .{ .e = 0, .score = 100, .len = len };
+    for (k.aliases) |a| if (tree.eql(a, q)) return .{ .e = 0, .score = 100 };
+    if (tree.startsWith(n, q)) return .{ .e = 0, .score = 80, .len = len };
+    for (k.words) |w| if (tree.startsWith(n[w.at..][0..w.len], q)) return .{ .e = 0, .score = 70, .at = w.at, .len = len };
+    if (q.len >= 2) for (k.aliases) |a| if (tree.startsWith(a, q)) return .{ .e = 0, .score = 65 };
+    if (q.len >= 3) if (tree.find(n, q)) |at| return .{ .e = 0, .score = 50, .at = @intCast(at), .len = len };
     if (q.len < 4) return .{ .e = 0, .score = 0 };
     const max: u8 = if (q.len >= 7) 2 else 1;
     var d = @min(distance(q, n, max), distance(q, n[0..@min(q.len, n.len)], max), distance(q, n[0..@min(q.len + 1, n.len)], max));
@@ -234,7 +234,7 @@ pub const ChampSearch = struct {
 
     fn key(s: *S, ev: *tree.Event) void {
         const k = ev.text;
-        if (std.mem.eql(u8, k, "Escape")) {
+        if (tree.eql(k, "Escape")) {
             if (s.open and s.q.len > 0) {
                 s.open = false;
             } else if (s.q.len > 0) {
@@ -247,15 +247,15 @@ pub const ChampSearch = struct {
         var buf: [max_hits]Hit = undefined;
         const shown = s.index.match(s.q.slice(), &buf);
         if (shown.len == 0) return;
-        const down = std.mem.eql(u8, k, "ArrowDown");
-        if (down or std.mem.eql(u8, k, "ArrowUp")) {
+        const down = tree.eql(k, "ArrowDown");
+        if (down or tree.eql(k, "ArrowUp")) {
             const n: u8 = @intCast(shown.len);
             const at = @min(s.active, n - 1);
             s.active = if (!s.open) (if (down) 0 else n - 1) else if (down) (at + 1) % n else (at + n - 1) % n;
             s.open = true;
             ev.handled = true;
             ev.after = .{ .op = .scroll, .ref = "active" };
-        } else if (std.mem.eql(u8, k, "Enter") and s.open) {
+        } else if (tree.eql(k, "Enter") and s.open) {
             const hit = shown[@min(s.active, shown.len - 1)];
             ev.handled = true;
             switch (s.mode) {

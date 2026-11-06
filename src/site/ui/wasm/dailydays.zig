@@ -149,7 +149,7 @@ fn onShared(e: zjb.Handle) callconv(.c) void {
     const name = e.get("name", zjb.Handle);
     defer name.release();
     var nb: [32]u8 = undefined;
-    if (std.mem.eql(u8, name.readString(&nb) catch "", "AbortError")) return;
+    if (ui.tree.eql(name.readString(&nb) catch "", "AbortError")) return;
     var buf: [512]u8 = undefined;
     const text = zjb.string(ds.shareText(&buf, &state) orelse return);
     defer text.release();

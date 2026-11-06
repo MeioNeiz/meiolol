@@ -107,7 +107,7 @@ fn keyOf(r: *const md.Run) u64 {
 fn files() void {
     const r = state.shown() orelse return;
     const k = keyOf(r);
-    if (std.mem.eql(u8, state.files, r.run) and files_key == k) return;
+    if (ui.tree.eql(state.files, r.run) and files_key == k) return;
     files_key = k;
     gen += 1;
     state.files = "";

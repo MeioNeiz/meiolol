@@ -347,7 +347,7 @@ pub fn viewPath(a: std.mem.Allocator, src: []const u8, root: []const u8, v: u8, 
     const rest = src[root.len..];
     if (rank) {
         var stem = rest[0 .. rest.len - ".bin".len];
-        const more = std.mem.endsWith(u8, stem, "-trends");
+        const more = tree.endsWith(stem, "-trends");
         if (more) stem = stem[0 .. stem.len - "-trends".len];
         return std.mem.concat(a, u8, &.{ root, stem, if (more) "-more" else "", "-rank", rank_suffixes[v], ".bin" });
     }
@@ -954,7 +954,7 @@ pub const Top = struct {
 
     fn waiting(p: *const P, a: std.mem.Allocator) bool {
         const w = p.lockWant(a) orelse return false;
-        return !std.mem.eql(u8, w, p.answer_path);
+        return !tree.eql(w, p.answer_path);
     }
 
     pub fn toUrl(p: *const P) Url {
@@ -1220,7 +1220,7 @@ pub const Build = struct {
     /// From the page's data file: data/champion/<slug>-build.bin
     fn slug(p: *const P) []const u8 {
         const base = p.src[if (std.mem.findScalarLast(u8, p.src, '/')) |i| i + 1 else 0..];
-        return if (std.mem.endsWith(u8, base, "-build.bin")) base[0 .. base.len - "-build.bin".len] else base;
+        return if (tree.endsWith(base, "-build.bin")) base[0 .. base.len - "-build.bin".len] else base;
     }
 
     /// Shows `d`, the answer at `path`: the panel keeps the shown one's choices and the
@@ -1326,7 +1326,7 @@ pub const Build = struct {
             x.dim = nil;
         }
         const want = p.lockWant(h.mem);
-        const waiting = if (want) |w| !std.mem.eql(u8, w, p.answer_path) else false;
+        const waiting = if (want) |w| !tree.eql(w, p.answer_path) else false;
         const answer = p.shownAnswer();
         p.bar.set = &p.locks;
         p.bar.scope = W.lock_scope;
@@ -1398,7 +1398,7 @@ pub const Build = struct {
     fn vsLabel(p: *const P, h: *H, v: []const u8) ?lockbar.Label {
         const x = (p.answer orelse return null).vs orelse return null;
         var buf: [lockbar.value_max]u8 = undefined;
-        if (!std.mem.eql(u8, lockbar.text(&buf, &.{x.id}), v)) return null;
+        if (!tree.eql(lockbar.text(&buf, &.{x.id}), v)) return null;
         const a = h.mem.alloc(art.Art, 1) catch return null;
         a[0] = .{ .name = x.name, .src = x.icon };
         return .{ .kind = .opponent, .art = a, .text = W.vs_lock.with(h, .{ .y = x.name }).s };
@@ -1440,7 +1440,7 @@ fn lockLabel(h: *H, d: *const buildpanel.Data, k: lockbar.Kind, v: []const u8) ?
                 inline .spells, .start, .boots, .item4, .item5, .item6, .skills, .skill_path => |x| @field(buildpanel.Kind, @tagName(x)),
                 else => unreachable,
             };
-            for (d.slots) |s| if (s.kind == want) for (s.options) |o| if (std.mem.eql(u8, lockbar.value(h.mem, o.v), v)) {
+            for (d.slots) |s| if (s.kind == want) for (s.options) |o| if (tree.eql(lockbar.value(h.mem, o.v), v)) {
                 const text: []const u8 = switch (k) {
                     .skills => h.fmt("Max {s}", .{o.keys}),
                     .skill_path => "Level path",
@@ -1524,7 +1524,7 @@ pub const More = struct {
 
     fn waiting(p: *const P, a: std.mem.Allocator) bool {
         const w = p.lockWant(a) orelse return false;
-        return !std.mem.eql(u8, w, p.answer_path);
+        return !tree.eql(w, p.answer_path);
     }
 
     pub fn toUrl(p: *const P) Url {
@@ -1953,8 +1953,9 @@ pub const Trends = struct {
             };
         }
         const title = W.also.with(h, .{ .c = d.name });
+        var id: [26]u8 = undefined;
         return card.view(h, .{}, &.{
-            card.head(h, title, null, &.{ p.plat(h), h.a(.{ .class = "more", .href = h.fmt("{s}pool?champs={d}", .{ p.root, d.id }) }, .{W.pool}) }),
+            card.head(h, title, null, &.{ p.plat(h), h.a(.{ .class = "more", .href = h.fmt("{s}pool?champs={s}", .{ p.root, fmt.decimal(&id, d.id, false) }) }, .{W.pool}) }),
             if (rows.len > 0) champlist.view(h, .{ .tiles = true, .label = title }, rows) else h.p(.{ .class = "none" }, .{W.none}),
         });
     }
@@ -2329,15 +2330,15 @@ test "a rare role is listed and opens with its games, faded only by its range" {
     var h: H = .init(a, &t);
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "data-thin") == null);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Top") != null);
+    try std.testing.expect(tree.find(w.written(), "data-thin") == null);
+    try std.testing.expect(tree.find(w.written(), "Top") != null);
 
     p.fromUrl(.{ .role = .top });
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "data-thin") == null);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "data-wide") != null);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "<p class=\"rare\">A rare role for Karthus: 60 games.</p>") != null);
+    try std.testing.expect(tree.find(w.written(), "data-thin") == null);
+    try std.testing.expect(tree.find(w.written(), "data-wide") != null);
+    try std.testing.expect(tree.find(w.written(), "<p class=\"rare\">A rare role for Karthus: 60 games.</p>") != null);
 }
 
 test "by rank: a thin bracket shows, an empty one doesn't, no chart under two" {
@@ -2355,9 +2356,9 @@ test "by rank: a thin bracket shows, an empty one doesn't, no chart under two" {
     var h: H = .init(a, &t);
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Iron-Silver") != null);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Gold-Emerald") != null);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Diamond+") != null);
+    try std.testing.expect(tree.find(w.written(), "Iron-Silver") != null);
+    try std.testing.expect(tree.find(w.written(), "Gold-Emerald") != null);
+    try std.testing.expect(tree.find(w.written(), "Diamond+") != null);
     // Dashed at every game's rate, not the brackets' sum's (50.8%)
     try std.testing.expectEqual(@as(f32, 50), p.ranks.ref);
 
@@ -2365,7 +2366,7 @@ test "by rank: a thin bracket shows, an empty one doesn't, no chart under two" {
     roles[0].ranks.?.by[2].games = 0;
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Gold-Emerald") == null);
+    try std.testing.expect(tree.find(w.written(), "Gold-Emerald") == null);
 }
 
 test "end of game: each figure with its place and the damage split, none under min_games or for a rare pick" {
@@ -2382,12 +2383,12 @@ test "end of game: each figure with its place and the damage split, none under m
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, p.view(&h), &w.writer);
     const got = w.written();
-    try std.testing.expect(std.mem.indexOf(u8, got, "<h2>End of game</h2>") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "of 48 champions") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, ">6.3<") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, ">412<") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "1st highest of 48") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "3rd highest of 48") != null);
+    try std.testing.expect(tree.find(got, "<h2>End of game</h2>") != null);
+    try std.testing.expect(tree.find(got, "of 48 champions") != null);
+    try std.testing.expect(tree.find(got, ">6.3<") != null);
+    try std.testing.expect(tree.find(got, ">412<") != null);
+    try std.testing.expect(tree.find(got, "1st highest of 48") != null);
+    try std.testing.expect(tree.find(got, "3rd highest of 48") != null);
     try std.testing.expectEqual(9 + 1, std.mem.count(u8, got, "c-track"));
     // Each place shown on hover or tap, not only to screen readers
     try std.testing.expectEqual(9, std.mem.count(u8, got, "data-block"));
@@ -2405,7 +2406,7 @@ test "end of game: each figure with its place and the damage split, none under m
     roles[0].ends.?.games = 99;
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), ">412<") == null);
+    try std.testing.expect(tree.find(w.written(), ">412<") == null);
 }
 
 test "lane kills: a timeline of each side's share of lanes, first blood only when counted" {
@@ -2420,17 +2421,17 @@ test "lane kills: a timeline of each side's share of lanes, first blood only whe
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, p.view(&h), &w.writer);
     const got = w.written();
-    try std.testing.expect(std.mem.indexOf(u8, got, "data-v=\"time\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "by 6 min") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "<span class=\"y\">lanes with a kill</span>") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "<span class=\"sr\">Opponent </span>46%") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "--x:12") != null);
+    try std.testing.expect(tree.find(got, "data-v=\"time\"") != null);
+    try std.testing.expect(tree.find(got, "by 6 min") != null);
+    try std.testing.expect(tree.find(got, "<span class=\"y\">lanes with a kill</span>") != null);
+    try std.testing.expect(tree.find(got, "<span class=\"sr\">Opponent </span>46%") != null);
+    try std.testing.expect(tree.find(got, "--x:12") != null);
     try std.testing.expectEqual(4, std.mem.count(u8, got, "class=\"tc\""));
 
     roles[0].kills.?.first_blood = .{ 0, 0 };
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "First blood") == null);
+    try std.testing.expect(tree.find(w.written(), "First blood") == null);
     try std.testing.expectEqual(3, std.mem.count(u8, w.written(), "class=\"tc\""));
 }
 
@@ -2456,17 +2457,17 @@ test "objectives: won after taking it first joined to won otherwise, the role's 
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, p.view(&h), &w.writer);
     const got = w.written();
-    try std.testing.expect(std.mem.indexOf(u8, got, "First tower: Ornn&#39;s team won 73.3% of 600 games after taking it, 20.0% of 400 otherwise; role average 70.0% and 30.0%") != null);
+    try std.testing.expect(tree.find(got, "First tower: Ornn&#39;s team won 73.3% of 600 games after taking it, 20.0% of 400 otherwise; role average 70.0% and 30.0%") != null);
     // Hollow at 20%, joined to 73.3%; role's lost-first tick at 30%
-    try std.testing.expect(std.mem.indexOf(u8, got, "class=\"fr\" style=\"--x:20\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got, "class=\"typ\" style=\"--x:30\"") != null);
+    try std.testing.expect(tree.find(got, "class=\"fr\" style=\"--x:20\"") != null);
+    try std.testing.expect(tree.find(got, "class=\"typ\" style=\"--x:30\"") != null);
     try std.testing.expectEqual(3, std.mem.count(u8, got, "class=\"fr\" style"));
     // Every cell's tip narrow; all but the first column's open at their end
     try std.testing.expectEqual(8, std.mem.count(u8, got, "data-narrow"));
     try std.testing.expectEqual(6, std.mem.count(u8, got, "data-end"));
-    try std.testing.expect(std.mem.indexOf(u8, got, "First Voidgrubs: Ornn&#39;s team won 52.5% of 990 games after taking it; role average 58.0%") != null);
+    try std.testing.expect(tree.find(got, "First Voidgrubs: Ornn&#39;s team won 52.5% of 990 games after taking it; role average 58.0%") != null);
     // The label as a Tip, not a native title
-    try std.testing.expect(std.mem.indexOf(u8, got, "title=\"First") == null);
+    try std.testing.expect(tree.find(got, "title=\"First") == null);
 }
 
 test "first item done: a thin bucket shows, an empty one doesn't, no chart under two" {
@@ -2485,15 +2486,15 @@ test "first item done: a thin bucket shows, an empty one doesn't, no chart under
     var h: H = .init(a, &t);
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "&lt;9") != null);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "9-11") != null);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "11+") != null);
+    try std.testing.expect(tree.find(w.written(), "&lt;9") != null);
+    try std.testing.expect(tree.find(w.written(), "9-11") != null);
+    try std.testing.expect(tree.find(w.written(), "11+") != null);
 
     timing[0].games = 0;
     timing[2].games = 0;
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "9-11") == null);
+    try std.testing.expect(tree.find(w.written(), "9-11") == null);
 }
 
 test "pick-up: the gap one figure with the usual, the two rates under it, a loss keeps its minus" {
@@ -2515,12 +2516,12 @@ test "pick-up: the gap one figure with the usual, the two rates under it, a loss
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, p.view(&h), &w.writer);
     for ([_][]const u8{ ">Gap</button>", "3.7<small class=\"c\">usual 3.6</small>", "49.8% under 30k mastery points → 53.5% at 100k+", "Every role and region" }) |want|
-        try std.testing.expect(std.mem.indexOf(u8, w.written(), want) != null);
+        try std.testing.expect(tree.find(w.written(), want) != null);
 
     d.pickup.?.gap = -0.4;
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "−0.4<small") != null);
+    try std.testing.expect(tree.find(w.written(), "−0.4<small") != null);
 }
 
 test "lane ends: biggest gold leads each way, thin and even lanes out" {
@@ -2565,10 +2566,10 @@ test "a build from another patch than the view's has its patch chip" {
         var w: std.Io.Writer.Allocating = .init(a);
         try html.write(&t, p.view(&h), &w.writer);
         if (c[1]) |want| {
-            std.testing.expect(std.mem.indexOf(u8, w.written(), want) != null) catch |e| {
+            std.testing.expect(tree.find(w.written(), want) != null) catch |e| {
                 std.debug.print("{s}\n", .{w.written()});
                 return e;
             };
-        } else try std.testing.expect(std.mem.indexOf(u8, w.written(), "data-v=\"scope\"") == null);
+        } else try std.testing.expect(tree.find(w.written(), "data-v=\"scope\"") == null);
     }
 }
