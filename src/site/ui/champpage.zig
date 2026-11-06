@@ -1348,6 +1348,28 @@ pub const Build = struct {
         }
     }
 
+    /// ui-champbuild's Build as the server rendered it, for hydration: from the island
+    /// root's attributes (`attrs.get(attr)`, "" when missing), so what it reads is tested
+    /// against the server's HTML
+    pub fn served(d: *const BuildData, ps: []?buildpanel.BuildPanel, data_stamp: u32, page_role: ?role.Role, attrs: anytype) P {
+        const bin = attrs.get("data-bin");
+        var p: P = .{
+            .data = d,
+            .panels = ps,
+            .bin = if (bin.len > 0) bin else null,
+            .root = attrs.get("data-root"),
+            .src = attrs.get("data-src"),
+            .stamp = data_stamp,
+            .js = attrs.get("data-js"),
+            .wasm = attrs.get("data-wasm"),
+        };
+        p.files.base[0] = d;
+        var u: Url = .{ .role = page_role };
+        u.lk.set(attrs.get("data-lk"));
+        p.fromUrl(u);
+        return p;
+    }
+
     /// The loader's, once what files.want needs is in: the open slot stays open
     pub fn show(p: *P, a: std.mem.Allocator) void {
         const u = p.toUrl();
@@ -2665,4 +2687,36 @@ test "a build from another patch than the view's has its patch chip" {
             };
         } else try std.testing.expect(tree.find(w.written(), "data-v=\"scope\"") == null);
     }
+}
+
+test "the matchup page's build hydrates: the island's Build from the served HTML renders it" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d: BuildData = .{ .roles = &.{.{ .role = .top, .build = @import("build_demo.zig").darius }}, .against = "Sion" };
+    // As site/matchup.zig: data inline, no locks
+    var site: Build = .{ .data = &d, .panels = try panels(a, d.roles), .bin = "QUJD", .js = "/b.js", .wasm = "/b.wasm" };
+    site.files.base[0] = &d;
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, site.view(&h), &w.writer);
+    const served_html = try a.dupe(u8, w.written());
+    const Attrs = struct {
+        s: []const u8,
+        pub fn get(x: @This(), attr: []const u8) []const u8 {
+            const tag = x.s[0..tree.find(x.s, ">").?];
+            var key: [32]u8 = undefined;
+            const k = std.fmt.bufPrint(&key, " {s}=\"", .{attr}) catch unreachable;
+            const i = (tree.find(tag, k) orelse return "") + k.len;
+            return tag[i..][0..tree.find(tag[i..], "\"").?];
+        }
+    };
+    var island: Build = .served(&d, try panels(a, d.roles), 0, .top, Attrs{ .s = served_html });
+    w.clearRetainingCapacity();
+    try html.write(&t, island.view(&h), &w.writer);
+    // No lock taps: the champion page's lock wiring stays off the matchup page
+    try std.testing.expect(tree.find(served_html, "c-lockmark") == null);
+    try std.testing.expect(tree.find(w.written(), "c-lockmark") == null);
+    try std.testing.expectEqualStrings(served_html, w.written());
 }

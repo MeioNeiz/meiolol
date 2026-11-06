@@ -19,21 +19,16 @@ var data: cp.BuildData = undefined;
 var state: cp.Build = undefined;
 var server: cp.Build = undefined;
 var src: []const u8 = "";
-/// The matchup page's data-bin as served: with it set, Build renders no locks, as the
-/// server did
-var bin: ?[]const u8 = null;
-var root_path: []const u8 = "";
-var js: []const u8 = "";
-var wasm: []const u8 = "";
 var want: u32 = 0;
 var island: ?*ui.island.Island(cp.Build, dom.Dom) = null;
+/// The island root: cp.Build.served reads it
+var root_el: zjb.Handle = .null;
 /// Lock answers by path, a handful a visit: a list, as a hash map's code costs more than
 /// its search saves. A path with no answer holds an empty BuildData
 var answers: std.ArrayList(Answer) = .empty;
 const Answer = struct { path: []const u8, d: *const cp.BuildData };
 var asked: ?[]const u8 = null;
-/// The server's lock set and its answer, when it rendered one
-var server_lk: []const u8 = "";
+/// The server's answer under its lock set (data-lk), when it rendered one
 var server_ans: ?[]u8 = null;
 
 const L = dom.Loader(cp.Build, cp.BuildData, ui.champrank.Build);
@@ -42,17 +37,9 @@ export fn main() void {
     dom.start();
     const root = zjb.global("document").call("querySelector", .{zjb.constString(sel)}, zjb.Handle);
     if (root == .null) return;
-    defer root.release();
-    js = dom.attrOf(root, "data-js");
-    wasm = dom.attrOf(root, "data-wasm");
-    const b64 = dom.attrOf(root, "data-bin");
-    if (dom.unbase64(b64)) |b| {
-        bin = b64;
-        return inline_(b);
-    }
+    root_el = root;
+    if (dom.binOf(root, "data-bin")) |b| return inline_(b);
     src = dom.attrOf(root, "data-src");
-    root_path = dom.attrOf(root, "data-root");
-    server_lk = dom.attrOf(root, "data-lk");
     server_ans = dom.binOf(root, "data-ans");
     const stamp = dom.attrOf(root, "data-stamp");
     if (stamp.len == 0) return;
@@ -119,11 +106,7 @@ fn adopt(b: []u8) ?*ui.island.Island(cp.Build, dom.Dom) {
     // Each its own panels: the server's stay as rendered for hydration
     const sp = cp.panels(gpa, data.roles) catch return oom();
     const pp = cp.panels(gpa, data.roles) catch return oom();
-    server = .{ .data = &data, .panels = sp, .bin = bin, .root = root_path, .src = src, .stamp = want, .js = js, .wasm = wasm };
-    server.files.base[0] = &data;
-    var u: cp.Build.Url = .{ .role = dom.pageRole() };
-    u.lk.set(server_lk);
-    server.fromUrl(u);
+    server = .served(&data, sp, want, dom.pageRole(), Attrs{});
     const ans = serverAnswer();
     state = server;
     state.panels = pp;
@@ -146,3 +129,9 @@ fn oom() ?*ui.island.Island(cp.Build, dom.Dom) {
     dom.dom.warn("champbuild: out of memory");
     return null;
 }
+
+const Attrs = struct {
+    pub fn get(_: Attrs, attr: []const u8) []const u8 {
+        return dom.attrOf(root_el, attr);
+    }
+};
