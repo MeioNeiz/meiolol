@@ -112,16 +112,21 @@ What a block needs from a row:
 - L2 counting: src/lockanswer.zig answers a block's rows under a view (platform, patch,
   rank floor) and a lock stack (`lk=ks8010,c23071.6333,vs86`: keystone, rune page, rune,
   shards, shard, spells, start, boots, core 2/3, item 4-6, max order, levels, lane
-  opponent); the table carries the patch's Data Dragon data. An Index codes each block
+  opponent, its reach `vr` 1 melee 2 ranged, its damage `vd` 1 AD 2 AP); the table
+  carries the patch's Data Dragon data. Damage is Learn's magic share through
+  ui.dailydata.dmgOf (under 0.35 AD, over 0.65 AP, else neither), the shared view's
+  (site/locks.zig lendLearn); an answer carries per lane opponent players and wins
+  (Build.opponents) for the panel's group counts. An Index codes each block
   once at load (builds.valuesOf per row, a u16 code per kind, ~64 B a row in memory;
   1.0 s for the snapshot's 15.7M rows on the Mac's cores, largest dict 6.2k values);
   answers count codes in arrays and load each group's top options into builds.Builder
-  for its File. `reference` counts the decoded rows with builds.Builder. pipeline_test:
-  no lock equals builds --site's build and splits, a keystone lock its by_keystone, an
-  opponent lock its matchup, and every fixture block under each lock kind and a full
-  stack equals the reference. `meiolol lockrows --bench` (Mac, the 20 largest blocks, 5
-  lock sets, EUW and every region, each answer checked against the reference): p50 1.5
-  ms, p99 9.3 ms, max 9.8 ms (Builder: p99 300 ms). Not yet measured on C01
+  for its File. `reference` counts the decoded rows with builds.Builder. pipeline_test: no
+  lock equals builds --site's build and splits, a keystone lock its by_keystone, an
+  opponent lock its matchup, a reach lock its by_reach pages, and every fixture block
+  under each lock kind and a full stack equals the reference. `meiolol lockrows --bench`
+  (Mac, the 20 largest blocks, 5 lock sets, EUW and every region, each answer checked
+  against the reference): p50 1.5 ms, p99 9.3 ms, max 9.8 ms (Builder: p99 300 ms). Not
+  yet measured on C01
 
 - L2 route: the renderer and `meiolol dev` answer
   `<view dir>data/lock/build/<slug>/<role>/<rank>/<lk>.bin` (site/locks.zig; path from

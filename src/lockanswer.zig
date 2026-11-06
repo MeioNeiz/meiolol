@@ -17,12 +17,13 @@ const Count = builds.Count;
 const Value = builds.Value;
 const Values = std.EnumArray(builds.Kind, ?Value);
 
-/// What a lock holds to, as the build file's kinds plus the lane opponent. `rune` and
-/// `shard` hold when any of the page's runes (shard rows) is the value
-pub const Kind = enum { keystone, runes, rune, shards, shard, spells, start, boots, core2, core3, item4, item5, item6, skills, skill_path, opponent };
+/// What a lock holds to, as the build file's kinds plus the lane opponent, its reach (1
+/// melee, 2 ranged: ddragon Reach + 1) and its damage (1 AD, 2 AP: Filter.damage). `rune`
+/// and `shard` hold when any of the page's runes (shard rows) is the value
+pub const Kind = enum { keystone, runes, rune, shards, shard, spells, start, boots, core2, core3, item4, item5, item6, skills, skill_path, opponent, reach, damage };
 
 /// Each kind's URL code, in Kind's order (`lk=ks8010,vs86`)
-pub const codes = [_][]const u8{ "ks", "rp", "ru", "sh", "sd", "sp", "st", "bo", "c2", "c3", "i4", "i5", "i6", "mo", "lv", "vs" };
+pub const codes = [_][]const u8{ "ks", "rp", "ru", "sh", "sd", "sp", "st", "bo", "c2", "c3", "i4", "i5", "i6", "mo", "lv", "vs", "vr", "vd" };
 
 comptime {
     std.debug.assert(codes.len == std.enums.values(Kind).len);
@@ -73,12 +74,16 @@ pub const Locks = struct {
         }
     }
 
-    /// Whether the row holds to every lock
-    pub fn match(l: *const Locks, r: *const lockrows.Row, vals: *const Values) bool {
+    /// Whether the row holds to every lock, `d` its table's
+    pub fn match(l: *const Locks, r: *const lockrows.Row, vals: *const Values, d: *const ddragon.BuildData, f: *const Filter) bool {
+        const opp = r.seat.p.opponent;
         for (std.enums.values(Kind)) |kind| {
             const want = l.by.get(kind) orelse continue;
+            const one = want.len == 1 and opp != 0;
             const ok = switch (kind) {
-                .opponent => want.len == 1 and r.seat.p.opponent != 0 and r.seat.p.opponent == want.v[0],
+                .opponent => one and opp == want.v[0],
+                .reach => one and if (d.reachOf(opp)) |x| @as(u32, @backingInt(x)) + 1 == want.v[0] else false,
+                .damage => one and want.v[0] != 0 and f.damageOf(opp) == want.v[0],
                 else => if (vals.get(source(kind))) |v| holds(kind, want.slice(), &v) else false,
             };
             if (!ok) return false;
@@ -87,12 +92,12 @@ pub const Locks = struct {
     }
 };
 
-/// The builds kind whose value a lock of `kind` reads (not .opponent)
+/// The builds kind whose value a lock of `kind` reads (none for the lane opponent's)
 fn source(kind: Kind) builds.Kind {
     return switch (kind) {
         .keystone, .rune => .runes,
         .shard => .shards,
-        .opponent => unreachable,
+        .opponent, .reach, .damage => unreachable,
         inline else => |k| @field(builds.Kind, @tagName(k)),
     };
 }
@@ -117,6 +122,13 @@ pub const Filter = struct {
     patch: ?u8 = null,
     /// Lowest Seat.rank counted (a store.schema.tiers index); null counts every row
     floor: ?u8 = null,
+    /// Per champion id its damage for Kind.damage: 0 neither or unknown, 1 AD, 2 AP. Empty:
+    /// no row holds a damage lock
+    damage: []const u8 = &.{},
+
+    fn damageOf(f: *const Filter, champion: u32) u8 {
+        return if (champion < f.damage.len) f.damage[champion] else 0;
+    }
 
     fn takes(f: Filter, start: u32, platform: u8, patch: u8, rank: ?u8) bool {
         if (f.platform) |x| if (platform != x) return false;
@@ -137,7 +149,7 @@ pub fn reference(gpa: Allocator, arena: Allocator, t: *const lockrows.Table, cha
     while (it.next()) |r| {
         if (!f.takes(r.start, r.platform, r.patch, r.seat.rank)) continue;
         const vals = builds.valuesOf(r.seat.p, r.seat.k, &t.build);
-        if (!locks.match(&r, &vals)) continue;
+        if (!locks.match(&r, &vals, &t.build, &f)) continue;
         b.games += 1;
         b.timelines += @intFromBool(r.seat.k != null);
         try b.addPlayer(r.seat.p, r.seat.k, &t.build);
@@ -200,6 +212,8 @@ const Block = struct {
     values: [coded.len][]const Value,
     keystones: []const u32,
     items: []const u32,
+    /// Past the highest lane opponent's id
+    opponents: u32 = 0,
 
     fn deinit(b: *Block, gpa: Allocator) void {
         gpa.free(b.rows);
@@ -337,6 +351,7 @@ fn code(gpa: Allocator, t: *const lockrows.Table, champs: []const u8, block: *co
     }
     std.debug.assert(it.next() == null);
     var b: Block = .{ .rows = rows, .values = undefined, .keystones = &.{}, .items = &.{} };
+    for (rows) |r| b.opponents = @max(b.opponents, @as(u32, r.opponent) + 1);
     var n: usize = 0;
     errdefer for (b.values[0..n]) |v| gpa.free(v);
     for (&b.values, &values) |*out, *dict| {
@@ -353,16 +368,24 @@ fn code(gpa: Allocator, t: *const lockrows.Table, champs: []const u8, block: *co
 const Match = struct {
     allow: [coded.len]?std.DynamicBitSetUnmanaged = @splat(null),
     opponent: ?u32 = null,
+    reach: ?u32 = null,
+    /// Filter.damage's value the lane opponent must have
+    damage: ?u32 = null,
+    table: []const u8 = &.{},
 
-    fn init(arena: Allocator, b: *const Block, locks: *const Locks) !Match {
-        var m: Match = .{};
+    fn init(arena: Allocator, b: *const Block, locks: *const Locks, f: *const Filter) !Match {
+        var m: Match = .{ .table = f.damage };
         for (std.enums.values(Kind)) |kind| {
             const want = locks.by.get(kind) orelse continue;
-            if (kind == .opponent) {
-                // No row holds an opponent of 0 or a lock of two
-                m.opponent = if (want.len == 1 and want.v[0] != 0) want.v[0] else std.math.maxInt(u32);
-                continue;
+            // No row holds a value of 0 here (no opponent, reach or damage) or a lock of two
+            const one = if (want.len == 1 and want.v[0] != 0) want.v[0] else std.math.maxInt(u32);
+            switch (kind) {
+                .opponent => m.opponent = one,
+                .reach => m.reach = one,
+                .damage => m.damage = one,
+                else => {},
             }
+            if (kind == .opponent or kind == .reach or kind == .damage) continue;
             const j = codedAt(source(kind)).?;
             const vs = b.values[j];
             if (m.allow[j] == null) {
@@ -376,6 +399,8 @@ const Match = struct {
 
     fn takes(m: *const Match, r: *const Coded) bool {
         if (m.opponent) |x| if (r.opponent != x) return false;
+        if (m.reach) |x| if (r.reach != x) return false;
+        if (m.damage) |x| if (r.opponent == 0 or r.opponent >= m.table.len or m.table[r.opponent] != x) return false;
         for (m.allow, r.code) |a, c| if (a) |set| if (!set.isSet(c)) return false;
         return true;
     }
@@ -418,6 +443,8 @@ const Counts = struct {
     at: [][coded.len]?u32,
     counts: []Count,
     minutes: []builds.Minutes,
+    /// Role-wide, by lane opponent id
+    opponents: []Count,
     first_item: [builds.minute_buckets]Count = @splat(.{}),
     firsts: [1 + builds.firsts_len]Count = @splat(.{}),
 
@@ -449,13 +476,16 @@ const Counts = struct {
         @memset(counts, .{});
         const minutes = try arena.alloc(builds.Minutes, slots * (b.items.len + 1));
         @memset(minutes, @splat(0));
-        return .{ .b = b, .totals = totals, .at = at, .counts = counts, .minutes = minutes };
+        const opponents = try arena.alloc(Count, b.opponents);
+        @memset(opponents, .{});
+        return .{ .b = b, .totals = totals, .at = at, .counts = counts, .minutes = minutes, .opponents = opponents };
     }
 
     fn add(n: *Counts, r: *const Coded) void {
         n.games += 1;
         n.timelines += @intFromBool(r.picks);
         n.group(0, .none, r);
+        if (r.opponent != 0) bump(&n.opponents[r.opponent], r.won);
         if (r.opponent != 0 and r.reach != 0) n.group(r.reach, .reach, r);
         if (r.lead != 0) n.group(2 + r.lead, .lead, r);
         if (r.keystone != 0) n.group(first_keystone - 1 + @as(usize, r.keystone), .keystone, r);
@@ -515,6 +545,7 @@ const Counts = struct {
                 } else if (kind == .shards) try putEach(arena, into, champion, role, opp, .shard, sum, counts[1..], n.b.values[j]);
             }
         }
+        for (n.opponents, 0..) |c, opp| if (c.games > 0) try b.putOpponent(champion, role, @intCast(opp), c);
         if (n.timelines == 0) return;
         for (0..slots) |slot| for (n.b.items, 1..) |item, c| {
             const hist = n.minutes[slot * (n.b.items.len + 1) + c];
@@ -594,7 +625,7 @@ const Top = struct {
 pub fn file(gpa: Allocator, arena: Allocator, t: *const lockrows.Table, x: *const Index, champion: u32, role: Role, f: Filter, locks: *const Locks, o: builds.Options, label: []const u8, min_tier: []const u8) !?builds.File {
     const bi = t.blockIndex(champion, role) orelse return null;
     const block = &x.blocks[bi];
-    const m: Match = try .init(arena, block, locks);
+    const m: Match = try .init(arena, block, locks, &f);
     var n: Counts = try .init(arena, block);
     for (block.rows) |*r| {
         if (!f.takes(r.start, r.platform, r.patch, if (r.rank == no_rank) null else r.rank) or !m.takes(r)) continue;
@@ -611,7 +642,7 @@ pub fn file(gpa: Allocator, arena: Allocator, t: *const lockrows.Table, x: *cons
 pub fn count(arena: Allocator, t: *const lockrows.Table, x: *const Index, champion: u32, role: Role, f: Filter, locks: *const Locks) !?Count {
     const bi = t.blockIndex(champion, role) orelse return null;
     const block = &x.blocks[bi];
-    const m: Match = try .init(arena, block, locks);
+    const m: Match = try .init(arena, block, locks, &f);
     var out: Count = .{};
     for (block.rows) |*r| {
         if (!f.takes(r.start, r.platform, r.patch, if (r.rank == no_rank) null else r.rank) or !m.takes(r)) continue;
@@ -632,7 +663,7 @@ pub const Matchups = struct {
 pub fn matchups(arena: Allocator, t: *const lockrows.Table, x: *const Index, champion: u32, role: Role, f: Filter, locks: *const Locks) !?Matchups {
     const bi = t.blockIndex(champion, role) orelse return null;
     const block = &x.blocks[bi];
-    const m: Match = try .init(arena, block, locks);
+    const m: Match = try .init(arena, block, locks, &f);
     var out: Matchups = .{ .by = undefined };
     for (&out.by) |*side| for (side) |*by| {
         by.* = try arena.alloc(Count, t.dicts.champions.len + 1);
@@ -666,7 +697,7 @@ pub const Choices = struct {
 pub fn choices(arena: Allocator, t: *const lockrows.Table, x: *const Index, champion: u32, role: Role, f: Filter, locks: *const Locks) !?Choices {
     const bi = t.blockIndex(champion, role) orelse return null;
     const block = &x.blocks[bi];
-    const m: Match = try .init(arena, block, locks);
+    const m: Match = try .init(arena, block, locks, &f);
     const keystones = try arena.alloc(Choice, block.keystones.len);
     for (keystones, block.keystones) |*o, id| o.* = .{ .id = id };
     const items = try arena.alloc(Choice, block.items.len);
@@ -714,5 +745,6 @@ test "locks parse and format back" {
     try l.format(&w);
     try std.testing.expectEqualStrings("ks8010,c23071.6333,vs86", w.buffered());
     try std.testing.expect(Locks.parse("").?.any() == false);
+    try std.testing.expectEqual(2, Locks.parse("vr2,vd1").?.by.get(.reach).?.v[0]);
     for ([_][]const u8{ "ks", "xx1", "ks1,ks2", "ks1.", "ksa", "lv1.2.3.4.5.6.7.8.9" }) |bad| try std.testing.expectEqual(null, Locks.parse(bad));
 }

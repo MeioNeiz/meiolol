@@ -2298,8 +2298,9 @@ fn buildsOne(dir: []const u8, db: store.Db, o: builds.Options, set: builds.Set) 
 
 /// Lock answers (lockanswer.zig) from the lock rows of `dir`'s cubes, as `f` (Darius top,
 /// EUW, the patch, Platinum+) was counted from them: no lock gives its build and splits,
-/// a keystone lock its by_keystone build, an opponent lock its matchup. Then every block
-/// under single locks of each kind and a stack of all: answers equal builds.Builder's
+/// a keystone lock its by_keystone build, an opponent lock its matchup, a reach lock its
+/// by_reach rune pages. Then every block under single locks of each kind and a stack of
+/// all: answers equal builds.Builder's
 fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds.File) !void {
     const gpa = testing.allocator;
     const t = try lockTable(arena, dir);
@@ -2322,6 +2323,7 @@ fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds
     const cases = [_]struct { lk: []const u8, want: builds.File.Build, rows: usize }{
         .{ .lk = "ks8010", .want = f.getKeystone(122, .top, 8010).?, .rows = 6 },
         .{ .lk = "vs82", .want = f.getVs(122, .top, 82).?, .rows = 3 },
+        .{ .lk = "vr1", .want = f.getReach(122, .top, .melee).?, .rows = 4 },
     };
     for (cases) |c| {
         const got = (try lockanswer.file(gpa, arena, &t, &x, 122, .top, filter, &lockanswer.Locks.parse(c.lk).?, o, f.label, f.min_tier)).?.get(122, .top).?;
@@ -2342,20 +2344,35 @@ fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds
     try expectLocksAsBuilder(arena, &t, &x, filter);
 }
 
-fn expectLocksAsBuilder(arena: std.mem.Allocator, t: *const lockrows.Table, x: *const lockanswer.Index, view: lockanswer.Filter) !void {
+fn expectLocksAsBuilder(arena: std.mem.Allocator, t: *const lockrows.Table, x: *const lockanswer.Index, view_: lockanswer.Filter) !void {
     const gpa = testing.allocator;
     const o: builds.Options = .{ .min_split_games = 5, .rows = 4 };
+    // A made-up damage per champion (neither, AD, AP) for the damage lock
+    var most: u32 = 0;
+    for (t.dicts.champions) |id| most = @max(most, id);
+    const damage = try arena.alloc(u8, most + 1);
+    for (damage, 0..) |*d, id| d.* = @intCast(id % 3);
+    var view = view_;
+    view.damage = damage;
     var stacks: usize = 0;
-    for (t.blocks) |b| for ([_]lockanswer.Filter{ .{}, view }) |filter| {
+    for (t.blocks) |b| for ([_]lockanswer.Filter{ .{ .damage = damage }, view }) |filter| {
         const base = (try lockanswer.reference(gpa, arena, t, b.champion, b.role, filter, &.{}, o, "", "")).?;
         const own = base.get(b.champion, b.role) orelse continue;
         var locks: std.ArrayList(lockanswer.Locks) = .empty;
         try locks.append(arena, .{});
         var all: lockanswer.Locks = .{};
         for (std.enums.values(lockanswer.Kind)) |kind| {
-            const v: []const u32 = if (kind == .opponent) blk: {
+            const v: []const u32 = if (kind == .opponent or kind == .reach or kind == .damage) blk: {
                 var it: lockrows.Rows = .{ .t = t, .b = &b };
-                while (it.next()) |r| if (r.seat.p.opponent != 0) break :blk &.{r.seat.p.opponent};
+                while (it.next()) |r| {
+                    const opp = r.seat.p.opponent;
+                    if (opp == 0) continue;
+                    switch (kind) {
+                        .opponent => break :blk try arena.dupe(u32, &.{opp}),
+                        .reach => if (t.build.reachOf(opp)) |reach| break :blk try arena.dupe(u32, &.{@as(u32, @backingInt(reach)) + 1}),
+                        else => if (damage[opp] != 0) break :blk try arena.dupe(u32, &.{damage[opp]}),
+                    }
+                }
                 continue;
             } else blk: {
                 const rows = own.get(std.meta.stringToEnum(builds.Kind, @tagName(kind)).?) orelse continue;

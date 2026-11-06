@@ -22,10 +22,10 @@ pub const name = "LockBar";
 pub const scope = .{ ".c-lockbar", ".c-lockmark" };
 
 /// lockanswer.Kind's, in its order (site/locks.zig asserts they agree)
-pub const Kind = enum { keystone, runes, rune, shards, shard, spells, start, boots, core2, core3, item4, item5, item6, skills, skill_path, opponent };
+pub const Kind = enum { keystone, runes, rune, shards, shard, spells, start, boots, core2, core3, item4, item5, item6, skills, skill_path, opponent, reach, damage };
 
 /// Each kind's code in `lk`, in Kind's order
-pub const codes = [_][]const u8{ "ks", "rp", "ru", "sh", "sd", "sp", "st", "bo", "c2", "c3", "i4", "i5", "i6", "mo", "lv", "vs" };
+pub const codes = [_][]const u8{ "ks", "rp", "ru", "sh", "sd", "sp", "st", "bo", "c2", "c3", "i4", "i5", "i6", "mo", "lv", "vs", "vr", "vd" };
 
 comptime {
     std.debug.assert(codes.len == std.enums.values(Kind).len);

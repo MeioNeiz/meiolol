@@ -164,7 +164,7 @@ pub const Loaded = struct {
         s.arena = arena;
         if (std.mem.startsWith(u8, rest, locks.prefix)) {
             const x = try l.loadLocks() orelse return null;
-            return try locks.answer(&s, x, l.gpa, rest[locks.prefix.len..]);
+            return try locks.answer(&s, x, l.gpa, rest[locks.prefix.len..], l);
         }
         // Every view's home shows the shared view's example and Daily Draft, once loaded:
         // one asked for during the shared view's first load goes without them
@@ -173,9 +173,10 @@ pub const Loaded = struct {
         }
         var aw: Writer.Allocating = .init(arena);
         const at = try root.pageOf(arena, rest);
-        if (at) |x| if (x == .champion and locks.pageLocks(lk) != null) {
+        if (at) |x| if (x == .champion) if (locks.pageLocks(lk)) |page| {
             s.lk = lk;
             s.answers = try l.loadLocks();
+            try locks.lendLearn(&s, &page, l);
         };
         if (at) |x| if (try renderPage(&s, &aw.writer, x)) return aw.written();
         for (s.files) |f| if (std.mem.eql(u8, f.path, rest)) return f.data;
