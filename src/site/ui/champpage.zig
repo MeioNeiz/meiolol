@@ -2148,12 +2148,13 @@ pub const Charts = struct {
         for (W.obj_rows, 0..) |rl, row| {
             const took = row == 0;
             l.add(h.span(.{ .class = "rl" }, .{ rl, if (took) null else versus.cellKey(h, W.obj_lost, W.obj_took) }));
-            for (W.firsts, k.mine[1..], k.role[1..]) |fl, x, y| {
+            for (W.firsts, k.mine[1..], k.role[1..], 0..) |fl, x, y, i| {
                 const mine: Counts = if (took) .{ .games = k.mine[0].games, .wins = x.games } else x;
                 const all: Counts = if (took) .{ .games = k.role[0].games, .wins = y.games } else y;
                 // Lost first counts games nobody took it in
                 const lost: ?[2]Counts = if (took) null else .{ minus(k.mine[0], x), minus(k.role[0], y) };
-                l.add(p.objCell(h, fl, mine, all, lost));
+                // Only the first column's tip opens rightward: the rest would run off a phone
+                l.add(p.objCell(h, fl, mine, all, lost, i > 0));
             }
         }
         return card.view(h, .{}, &.{
@@ -2164,8 +2165,9 @@ pub const Charts = struct {
 
     /// A won-after cell is coloured by its win rate, the win rate after losing it first a
     /// hollow dot joined to it; a taken-first one, not a win rate, keeps its ink.
-    /// `lost`: its and the role's games where the other team took it first (won-after only)
-    fn objCell(p: *const P, h: *H, l: tree.Text, mine: Counts, all: Counts, lost: ?[2]Counts) N {
+    /// `lost`: its and the role's games where the other team took it first (won-after only);
+    /// `end`: its tip opens at its end
+    fn objCell(p: *const P, h: *H, l: tree.Text, mine: Counts, all: Counts, lost: ?[2]Counts, end: bool) N {
         const took = lost == null;
         if (mine.games < fmt.floor_games) return h.span(.{ .class = "fl" }, .{W.games_n.with(h, .{ .n = mine.games })});
         const v = rate(mine);
@@ -2183,6 +2185,7 @@ pub const Charts = struct {
             .dom = 500,
             .tint = false,
             .tip = true,
+            .tip_end = end,
         };
         if (lost) |ls| if (ls[0].games >= fmt.floor_games) {
             const x = rate(ls[0]);
@@ -2448,6 +2451,9 @@ test "objectives: won after taking it first joined to won after losing it, the r
     try std.testing.expect(std.mem.indexOf(u8, got, "class=\"fr\" style=\"--x:20\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, got, "class=\"typ\" style=\"--x:30\"") != null);
     try std.testing.expectEqual(3, std.mem.count(u8, got, "class=\"fr\" style"));
+    // Every cell's tip narrow; all but the first column's open at their end
+    try std.testing.expectEqual(8, std.mem.count(u8, got, "data-narrow"));
+    try std.testing.expectEqual(6, std.mem.count(u8, got, "data-end"));
     try std.testing.expect(std.mem.indexOf(u8, got, "First Voidgrubs: Ornn&#39;s team won 52.5% of 990 games after taking it; role average 58.0%") != null);
     // The label as a Tip, not a native title
     try std.testing.expect(std.mem.indexOf(u8, got, "title=\"First") == null);

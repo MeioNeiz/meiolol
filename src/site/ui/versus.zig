@@ -124,8 +124,10 @@ pub const Band = struct {
     /// A second value, hollow and joined to `you`, and its typical (cell only)
     from: ?i32 = null,
     from_typ: ?i32 = null,
-    /// The label as a Tip (hover, focus, tap), not a title (cell only)
+    /// The label as a Tip (hover, focus, tap), not a title (cell only); narrow, opening
+    /// at the cell's end with `tip_end` (a grid's right-hand columns)
     tip: bool = false,
+    tip_end: bool = false,
 };
 
 pub fn band(h: *H, b: Band) N {
@@ -146,7 +148,7 @@ pub fn band(h: *H, b: Band) N {
 /// `fig`: a Text, or a node (rate.view)
 pub fn cell(h: *H, b: Band, fig: anytype) N {
     const kids = .{ track(h, b), h.span(.{ .class = "fig", .data_side = bandSide(b) }, .{fig}) };
-    if (b.tip) return h.span(.{ .class = "c-vs", .data_v = "cell" }, .{hint.view(h, b.label, kids, .{ .block = true, .stop = false })});
+    if (b.tip) return h.span(.{ .class = "c-vs", .data_v = "cell" }, .{hint.view(h, b.label, kids, .{ .block = true, .narrow = true, .end = b.tip_end, .stop = false })});
     return h.span(.{ .class = "c-vs", .data_v = "cell", .title = b.label }, kids);
 }
 

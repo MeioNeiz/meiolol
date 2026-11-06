@@ -20,6 +20,9 @@ pub const Opts = struct {
     end: bool = false,
     /// As wide as its container: a line that fills a cell (Bar.track)
     block: bool = false,
+    /// Wraps at 200px, not 260: a column in a dense grid, where a wide line runs off a
+    /// phone's screen whichever end it opens from
+    narrow: bool = false,
     /// A tab stop of its own; null: when `said` (a stop that adds nothing to hear is
     /// noise). Off for dense cells (a rate in every row): a tap or a click still opens
     /// it, Tab passes by
@@ -39,6 +42,7 @@ pub fn view(h: *H, text: tree.Text, kids: anytype, o: Opts) N {
         .data_at = if (o.below) "below" else null,
         .data_end = o.end,
         .data_block = o.block,
+        .data_narrow = o.narrow,
     }, kids ++ .{h.span(.{ .class = "c-hintb", .aria_hidden = if (o.said) null else true }, .{text})});
 }
 
@@ -73,6 +77,7 @@ pub const css =
     \\  .c-hint[data-at="below"] > .c-hintb { bottom: auto; top: calc(100% + 4px); }
     \\  .c-hint[data-at="below"] > .c-hintb::before { top: auto; bottom: 100%; }
     \\  .c-hint[data-end] > .c-hintb { left: auto; right: 0; }
+    \\  .c-hint[data-narrow] > .c-hintb { max-width: min(200px, calc(100vw - 32px)); }
     \\  .c-hint.esc > .c-hintb { width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
     \\    white-space: nowrap; pointer-events: none; }
     \\}
