@@ -617,14 +617,14 @@ Used by: tiers
 DraftBoard: a draft as lane rows, our seat on the left, theirs mirrored on the right, the
 role between; both teams' bans under. A seat: portrait, name, a line for its state
 (hovering, picking) and an optional short fact coloured by its lean; an ally still to pick
-can carry ideas for the role; an enemy's guessed role is dashed with a grip (the app's
-seats swap roles by drag). The desktop's champ select first, then the draft tester and
-Daily Draft (draft-tester.md). Champions and roles only: no player names or ranks (product
-rules). The full variant (Daily, the tester): 48 px seats with their pick number, the
-hidden seat asked about, a chosen answer previewed dashed, seats selectable, the game's
-line grown under each name after a reveal, each lane's middle its win chance from the
-matchup and who led it at 14, and each side's damage mix. Learn's `question`: the full
-variant with none of the game's parts
+can carry ideas for the role; an enemy's guessed role is faint, dashed with a grip on
+hover (the app's seats swap roles by drag). The desktop's champ select first, then the
+draft tester and Daily Draft (draft-tester.md). Champions and roles only: no player names
+or ranks (product rules). The full variant (Daily, the tester): 48 px seats with their
+pick number, the hidden seat asked about, a chosen answer previewed dashed, seats
+selectable, the game's line grown under each name after a reveal, each lane's middle its
+win chance from the matchup and who led it at 14, and each side's damage mix. Learn's
+`question`: the full variant with none of the game's parts
 States: mid draft; the app: our draft win chance in the heads, uncoloured; planning,
 nothing shown; full: hidden pick asked; full: an answer chosen; full: after the reveal, a
 seat selected; full: after the reveal, seats as buttons

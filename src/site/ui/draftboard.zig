@@ -1,9 +1,9 @@
 //! DraftBoard: a draft as lane rows, our seat on the left, theirs mirrored on the right,
-//! the role between; both teams' bans under. A seat: portrait, name, a line for its
-//! state (hovering, picking) and an optional short fact coloured by its lean; an ally
-//! still to pick can carry ideas for the role; an enemy's guessed role is dashed with a
-//! grip (the app's seats swap roles by drag). The desktop's champ select first, then
-//! the draft tester and Daily Draft (draft-tester.md). Champions and roles only: no
+//! the role between; both teams' bans under. A seat: portrait, name, a line for its state
+//! (hovering, picking) and an optional short fact coloured by its lean; an ally still to
+//! pick can carry ideas for the role; an enemy's guessed role is faint, dashed with a
+//! grip on hover (the app's seats swap roles by drag). The desktop's champ select first,
+//! then the draft tester and Daily Draft (draft-tester.md). Champions and roles only: no
 //! player names or ranks (product rules). The full variant (Daily, the tester): 48 px
 //! seats with their pick number, the hidden seat asked about, a chosen answer previewed
 //! dashed, seats selectable, the game's line grown under each name after a reveal, each
@@ -134,13 +134,18 @@ fn team(h: *H, b: Board, side: Side) N {
     var banned = h.list();
     for (if (side == .us) b.bans_us else b.bans_them, 0..) |c, i| banned.add(h.span(.{ .key = i }, .{champ.view(h, c, .{ .px = .@"20", .state = .banned })}));
     const draft: ?f32 = if (b.draft) |d| if (side == .us) d else 100 - d else null;
+    // Their bans carry the row's label, set on the seam as the lanes' roles are
+    const label = side == .them and b.bans_us.len + b.bans_them.len > 0;
     return h.div(.{ .class = "team", .data_side = side }, .{
         h.div(.{ .class = "hd" }, .{
             h.span(.{}, .{if (side == .us) words.us else words.them}),
             if (draft) |d| rate.view(h, .estimate(d), .{ .said = "win chance" }) else null,
         }),
         seats.done(),
-        h.div(.{ .class = "bans", .aria_label = words.bans }, .{banned.done()}),
+        h.div(.{ .class = "bans", .aria_label = words.bans }, .{
+            if (label) h.span(.{ .class = "line", .aria_hidden = true }, .{words.bans}) else null,
+            banned.done(),
+        }),
     });
 }
 
@@ -164,7 +169,7 @@ fn seat(h: *H, s: Seat, side: Side, rl: role.Role) N {
     for (s.ideas, 0..) |c, i| ideas.add(h.span(.{
         .key = i,
         .data_act = if (i < s.idea_acts.len) s.idea_acts[i] else null,
-    }, .{champ.view(h, c, .{ .px = .@"32" })}));
+    }, .{champ.view(h, c, .{})}));
     const lean = if (s.lean == .none) null else s.lean;
     const guessed = s.guessed and s.champ != null;
     // A rate's colour is the rate's own (fmt.wrColour); a word's, its lean
@@ -197,10 +202,10 @@ fn seat(h: *H, s: Seat, side: Side, rl: role.Role) N {
             }) else if (s.ban) |c| champ.view(h, c, .{ .px = .@"20", .state = .banned }) else null,
             line,
             if (s.fact.len > 0 and s.fig.len == 0) h.span(.{ .class = "fact", .data_lean = lean }, .{s.fact}) else null,
-            if (s.ideas.len > 0) h.span(.{ .class = "ideas" }, .{ h.span(.{ .class = "line" }, .{words.ideas}), ideas.done() }) else null,
+            if (s.ideas.len > 0) h.span(.{ .class = "ideas" }, .{ideas.done()}) else null,
         }),
-        // A guessed role is dashed with a grip: the live board's enemy seats swap by drag
-        // (bridge.js)
+        // A guessed role is faint, dashed with a grip on hover: the live board's enemy
+        // seats swap by drag (bridge.js)
         h.span(.{
             .class = "rl",
             .data_guessed = guessed,
@@ -412,7 +417,6 @@ const words = struct {
     const picking = plain("Picking");
     const intent = plain("wants it");
     const hover = plain("hovering");
-    const ideas = plain("ideas");
     const bans = plain("Bans");
     const damage = plain("Damage");
     const empty = plain("Empty seat");
@@ -458,30 +462,34 @@ pub const css =
     \\     each lane is one row: the two seats meet, the enemy's role (dashed when guessed)
     \\     on the seam stands for the row's, ours known so hidden */
     \\  .c-draft:not([data-v]) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    \\    grid-template-rows: repeat(7, auto); grid-auto-flow: column; gap: 2px 0; }
+    \\    grid-template-rows: repeat(7, auto); grid-auto-flow: column; gap: 0; }
     \\  .c-draft:not([data-v]) > .team { display: contents; }
     \\  .c-draft .team > .hd { display: flex; align-items: baseline; gap: var(--sp-2); padding: 0 var(--sp-2) var(--sp-1);
     \\    font-size: var(--fs-xs); font-weight: var(--w-m); }
     \\  .c-draft .team[data-side="them"] > .hd { flex-direction: row-reverse; }
     \\  .c-draft .team > .hd > .c-rate { font-size: var(--fs-l); line-height: 1; }
     \\  .c-draft .team > .hd > .c-rate > .v { font-weight: var(--w-b); }
-    \\  .c-draft:not([data-v]) .team > .bans { display: flex; flex-wrap: wrap; gap: 4px; padding: var(--sp-1) 0 0; }
+    \\  .c-draft:not([data-v]) .team > .hd { border-bottom: 1px solid var(--line); }
+    \\  .c-draft:not([data-v]) .team > .bans { position: relative; display: flex; flex-wrap: wrap; gap: 4px; padding: var(--sp-2); }
+    \\  .c-draft:not([data-v]) .team > .bans:empty { padding: 0; }
+    \\  .c-draft:not([data-v]) .team > .bans > .line { position: absolute; left: 0; top: 50%; transform: translate(-50%, -50%); }
     \\  .c-draft .team[data-side="them"] > .bans { justify-content: flex-end; }
-    \\  .c-draft:not([data-v]) .seat { min-height: 48px; padding: 6px var(--sp-5) 6px var(--sp-2); background: var(--panel-2);
-    \\    border-radius: var(--r-s) 0 0 var(--r-s); }
-    \\  .c-draft:not([data-v]) .seat[data-side="them"] { padding: 6px var(--sp-2) 6px 0; border-radius: 0 var(--r-s) var(--r-s) 0; }
+    \\  .c-draft:not([data-v]) .seat { box-sizing: border-box; min-height: 60px; padding: 6px var(--sp-5) 6px var(--sp-2);
+    \\    border-bottom: 1px solid var(--line); border-radius: 0; }
+    \\  .c-draft:not([data-v]) .seat[data-side="them"] { padding: 6px var(--sp-2) 6px 0; }
     \\  .c-draft:not([data-v]) .seat[data-side="us"] > .rl { display: none; }
     \\  .c-draft:not([data-v]) .seat[data-side="them"] > .rl { transform: translateX(-50%); }
-    \\  .c-draft:not([data-v]) .nm { flex-direction: column; align-items: flex-start; gap: 0; }
-    \\  .c-draft:not([data-v]) .seat[data-side="them"] .nm { flex-direction: column; align-items: flex-end; }
     \\  /* The seat's edge would cross the role on the seam: the portrait's ring marks the turn */
     \\  .c-draft:not([data-v]) .seat[data-turn] { box-shadow: none; }
-    \\  .c-draft:not([data-v]) .nm .fact { font-size: var(--fs-m); font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
+    \\  .c-draft:not([data-v]) .seat[data-sel] { box-shadow: inset 0 0 0 1px var(--sel-line); }
+    \\  .c-draft:not([data-v]) .nm .fact { font-size: var(--fs-s); font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
     \\  .c-draft .seat > .rl { display: flex; flex-direction: column; align-items: center; margin-left: auto; color: var(--muted); }
     \\  .c-draft .seat[data-side="them"] > .rl { margin: 0 auto 0 0; }
-    \\  .c-draft .seat > .rl[data-guessed] { gap: 3px; padding: 3px; border: 1px dashed var(--line-2);
-    \\    border-radius: var(--r-s); }
-    \\  .c-draft .seat > .rl[data-guessed]::after { content: ""; width: 12px; height: 8px;
+    \\  .c-draft .seat > .rl[data-guessed] { position: relative; padding: 3px; border: 1px dashed transparent;
+    \\    border-radius: var(--r-s); color: var(--faint); }
+    \\  .c-draft .seat:is(:hover, [data-drop]) > .rl[data-guessed] { border-color: var(--line-2); color: var(--muted); }
+    \\  .c-draft .seat:is(:hover, [data-drop]) > .rl[data-guessed]::after { content: ""; position: absolute; top: 100%; left: 50%;
+    \\    width: 12px; height: 8px; margin: 2px 0 0 -6px;
     \\    background: radial-gradient(circle, currentColor 1px, transparent 1.5px) 0 0 / 4px 4px; }
     \\  .c-draft .seat[data-act]:has(> .rl[data-guessed]) { cursor: grab; }
     \\  .c-draft .seat[data-drop] { box-shadow: inset 0 0 0 1px var(--focus); }
@@ -504,7 +512,7 @@ pub const css =
     \\  .c-draft .fact[data-lean="good"] { color: var(--hi2); }
     \\  .c-draft .fact[data-lean="bad"] { color: var(--lo2); }
     \\  .c-draft .fact[style] { color: var(--c); }
-    \\  .c-draft .ideas { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    \\  .c-draft .ideas { display: flex; align-items: center; gap: 4px; overflow: hidden; }
     \\  .c-draft .bans > span { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-draft .bans > [data-side="them"] { justify-content: flex-end; }
     \\  .c-draft:not([data-v]) .bans .c-champ { --sz: 32px; }
@@ -601,6 +609,12 @@ pub const css =
     \\    .c-draft[data-v="full"] .lane, .c-draft .mix { grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); }
     \\    .c-draft[data-v="full"] .heads { font-size: var(--fs-m); }
     \\    .c-draft[data-v="full"] .bans .c-champ { --sz: var(--icon); }
+    \\  }
+    \\  /* The app's board narrow: name over its figure, so neither is cut */
+    \\  @container (max-width: 480px) {
+    \\    .c-draft:not([data-v]) .nm, .c-draft:not([data-v]) .seat[data-side="them"] .nm { flex-direction: column; gap: 0; }
+    \\    .c-draft:not([data-v]) .seat[data-side="them"] .nm { align-items: flex-end; }
+    \\    .c-draft:not([data-v]) .bans .c-champ { --sz: 24px; }
     \\  }
     \\  @container (max-width: 360px) {
     \\    .c-draft .seat > .c-champ { --sz: var(--icon-m); }

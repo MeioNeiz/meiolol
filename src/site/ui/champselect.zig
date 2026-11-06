@@ -315,7 +315,6 @@ pub const css =
     \\  .c-cs .bfig[data-lean="good"] { color: var(--hi2); }
     \\  .c-cs .bfig[data-lean="bad"] { color: var(--lo2); }
     \\  .c-cs:has(.seat[data-you][data-turn]) .vs > .c-champ[data-you] { outline: 2px solid var(--turn); outline-offset: 2px; }
-    \\  .c-cs .c-draft .seat[data-sel] { box-shadow: inset 0 0 0 1px var(--sel-line); border-radius: var(--r-s); }
     \\}
     \\
 ;
