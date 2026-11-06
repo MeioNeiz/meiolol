@@ -108,6 +108,8 @@ const W = struct {
     pub const rank = plain("Rank");
     pub const regions = [2]tree.Text{ plain("EUW"), plain("All regions") };
     pub const days = plain("30 days");
+    pub const meio = plain("Meio");
+    pub const meio_off = "Meio's estimates are on champion pages so far";
     pub const ranks = [4]tree.Text{ plain("Plat+"), plain("Emerald+"), plain("Diamond+"), plain("Master+") };
     pub const lane_head = plain("Lane");
     pub const h2h = plain("Head to head");
@@ -254,7 +256,7 @@ pub const Head = struct {
             .on_toggle = h.on(p, .filters),
         }, &.{
             segmented.view(h, .{ .label = W.region }, &.{ at(d, period, W.regions[0]), at(d, 2 + period, W.regions[1]) }),
-            segmented.view(h, .{ .label = W.period }, &.{ at(d, 2 * region, W.days), at(d, 2 * region + 1, .{ .s = d.patch }) }),
+            segmented.view(h, .{ .label = W.period }, &.{ at(d, 2 * region, W.days), at(d, 2 * region + 1, .{ .s = d.patch }), .{ .label = W.meio, .href = "", .disabled = true, .title = W.meio_off } }),
             segmented.view(h, .{ .label = W.rank }, &ranks),
         })});
     }

@@ -244,28 +244,45 @@ pub const Measure = enum { win, usual, gold };
 
 pub const Region = enum { euw, all };
 pub const Period = enum { days30, patch };
+/// The period switch: a view's period, or Meio's estimate over the region's 30 days
+pub const PeriodPick = enum { days30, patch, meio };
 /// Platinum+ (the base files), then ui.champrank's groups
 pub const Rank = enum { plat, emerald, diamond, master };
 
-/// The toolbar's: html.View.all's index (region, period) and the rank
+/// The toolbar's: html.View.all's index (region, period) and the rank. Meio: the view is
+/// the region's 30 days, the files every count and every block Meio doesn't estimate
+/// comes from
 pub const Pick = struct {
     view: u8 = 0,
     rank: Rank = .plat,
+    meio: bool = false,
 
     fn of(u: anytype) Pick {
-        return .{ .view = 2 * @as(u8, @backingInt(u.region)) + @backingInt(u.period), .rank = u.rank };
+        const meio = u.period == .meio;
+        const days: u8 = if (meio) 0 else @backingInt(u.period);
+        return .{ .view = 2 * @as(u8, @backingInt(u.region)) + days, .rank = u.rank, .meio = meio };
     }
 
     fn eql(a: Pick, b: Pick) bool {
-        return a.view == b.view and a.rank == b.rank;
+        return a.view == b.view and a.rank == b.rank and a.meio == b.meio;
+    }
+
+    fn setPeriod(p: *Pick, x: PeriodPick) void {
+        p.meio = x == .meio;
+        p.view = p.view / 2 * 2 + @intFromBool(x == .patch);
+    }
+
+    /// The address bar's query for the pick (urls.view_queries, Meio's beside them)
+    fn query(p: Pick) []const u8 {
+        return if (p.meio) meio_queries[p.view / 2] else view_queries[p.view];
     }
 
     fn region(p: Pick) Region {
         return @fromBackingInt(@intCast(p.view / 2));
     }
 
-    fn period(p: Pick) Period {
-        return @fromBackingInt(@intCast(p.view % 2));
+    fn period(p: Pick) PeriodPick {
+        return if (p.meio) .meio else @fromBackingInt(@intCast(p.view % 2));
     }
 };
 
@@ -273,6 +290,7 @@ const n_views = 4;
 /// site/champrank.zig's suffixes, by view
 const view_dirs = @import("urls.zig").view_dirs;
 const view_queries = @import("urls.zig").view_queries;
+const meio_queries = [2][]const u8{ "?period=meio", "?region=all&period=meio" };
 const rank_suffixes = [n_views][]const u8{ "", "-patch", "-all", "-all-patch" };
 
 /// The lane chart's scale fits its first minutes, as the matchup page's: the band widens
@@ -476,6 +494,9 @@ pub const W = struct {
     pub const rank_pick = plain("Rank");
     pub const regions = [2]tree.Text{ plain("EUW"), plain("All regions") };
     pub const days = plain("30 days");
+    pub const meio = plain("Meio");
+    pub const meio_tip = Phrase("Our estimate for patch {p:text} from every game, not only this patch's");
+    pub const sub_meio = Phrase("{r:text} · Meio's estimate for {p:text}");
     pub const ranks = [4]tree.Text{ plain("Plat+"), plain("Emerald+"), plain("Diamond+"), plain("Master+") };
     pub const bands = [5]tree.Text{ plain("<10k"), plain("10k"), plain("30k"), plain("100k"), plain("300k+") };
 };
@@ -855,7 +876,7 @@ pub const Top = struct {
     const P = @This();
 
     /// The section links: a plain `#build` would clear the fragment's role
-    pub const Msg = union(enum) { jump: Section, region: Region, period: Period, rank: Rank, filters };
+    pub const Msg = union(enum) { jump: Section, region: Region, period: PeriodPick, rank: Rank, filters };
     pub const Section = enum { build, matchups, trends };
 
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
@@ -867,7 +888,7 @@ pub const Top = struct {
                 return;
             },
             .region => |x| w.view = 2 * @as(u8, @backingInt(x)) + w.view % 2,
-            .period => |x| w.view = w.view / 2 * 2 + @backingInt(x),
+            .period => |x| w.setPeriod(x),
             .rank => |x| w.rank = x,
             .filters => {
                 p.open = !p.open;
@@ -889,7 +910,7 @@ pub const Top = struct {
     pub const Url = struct {
         role: ?role.Role = null,
         region: Region = .euw,
-        period: Period = .days30,
+        period: PeriodPick = .days30,
         rank: Rank = .plat,
         lk: url.Str(200) = .{},
     };
@@ -971,7 +992,7 @@ pub const Top = struct {
             card.view(h, .{}, &.{
                 champhead.view(h, .{
                     .champ = .{ .name = d.name, .src = d.icon },
-                    .sub = W.sub.with(h, .{ .r = rl.role.label().s, .p = d.patch }),
+                    .sub = if (p.files.want.meio) W.sub_meio.with(h, .{ .r = rl.role.label().s, .p = d.patch }) else W.sub.with(h, .{ .r = rl.role.label().s, .p = d.patch }),
                     .abilities = d.abilities,
                     .roles = p.roles(h),
                     .vs = if (p.has_search) p.search.view(h) else null,
@@ -990,7 +1011,11 @@ pub const Top = struct {
 
     fn toolbar(p: *P, h: *H) N {
         const w = p.files.want;
-        const period = if (w.period() == .patch) tree.Text{ .s = p.data.patch } else W.days;
+        const period = switch (w.period()) {
+            .days30 => W.days,
+            .patch => tree.Text{ .s = p.data.patch },
+            .meio => W.meio,
+        };
         var ranks: [W.ranks.len]segmented.Item = undefined;
         for (&ranks, W.ranks, 0..) |*it, l, i| it.* = .{ .label = l, .selected = @backingInt(w.rank) == i, .on = h.on(p, .{ .rank = @fromBackingInt(@intCast(i)) }) };
         return card.toolbar(h, &.{filterbar.view(h, .{
@@ -1005,6 +1030,7 @@ pub const Top = struct {
             segmented.view(h, .{ .label = W.period }, &.{
                 .{ .label = W.days, .selected = w.period() == .days30, .on = h.on(p, .{ .period = .days30 }) },
                 .{ .label = .{ .s = p.data.patch }, .selected = w.period() == .patch, .on = h.on(p, .{ .period = .patch }) },
+                .{ .label = W.meio, .selected = w.period() == .meio, .on = h.on(p, .{ .period = .meio }), .title = W.meio_tip.with(h, .{ .p = p.data.patch }).s },
             }),
             segmented.view(h, .{ .label = W.rank_pick }, &ranks),
         })});
@@ -1020,7 +1046,7 @@ pub const Top = struct {
         pub fn format(l: RoleHref, w: *std.Io.Writer) std.Io.Writer.Error!void {
             try w.print("{s}champions/{s}", .{ l.root, l.slug });
             if (l.role) |x| try w.print("/{t}", .{x});
-            try w.writeAll(view_queries[Pick.of(l.u).view]);
+            try w.writeAll(Pick.of(l.u).query());
             if (l.u.rank == .plat) return;
             try w.writeByte('#');
             try url.write(Url, .{ .rank = l.u.rank }, w);
@@ -1147,7 +1173,7 @@ pub const Build = struct {
     pub const Url = struct {
         role: ?role.Role = null,
         region: Region = .euw,
-        period: Period = .days30,
+        period: PeriodPick = .days30,
         rank: Rank = .plat,
         slot: ?buildpanel.Kind = null,
         order: buildpanel.Order = .pick,
@@ -1446,7 +1472,7 @@ pub const More = struct {
     pub const Url = struct {
         role: ?role.Role = null,
         region: Region = .euw,
-        period: Period = .days30,
+        period: PeriodPick = .days30,
         rank: Rank = .plat,
         with: bool = false,
         vs: ?role.Role = null,
@@ -1645,7 +1671,7 @@ pub const Trends = struct {
     pub const Url = struct {
         role: ?role.Role = null,
         region: Region = .euw,
-        period: Period = .days30,
+        period: PeriodPick = .days30,
         rank: Rank = .plat,
     };
 
@@ -1937,7 +1963,7 @@ pub const Charts = struct {
     pub const Url = struct {
         role: ?role.Role = null,
         region: Region = .euw,
-        period: Period = .days30,
+        period: PeriodPick = .days30,
         rank: Rank = .plat,
     };
 
@@ -1953,7 +1979,8 @@ pub const Charts = struct {
     pub fn fromUrl(p: *P, u: Url) void {
         p.want_role = u.role;
         p.rank = u.rank;
-        p.files.want = .{ .view = Pick.of(u).view };
+        const k = Pick.of(u);
+        p.files.want = .{ .view = k.view, .meio = k.meio };
         p.cur = roleIndex(p.data.roles, u.role);
     }
 
@@ -2221,6 +2248,18 @@ test "a view's files sit beside the page's; rank files at the root" {
     try std.testing.expectEqual(3, p.view);
     try std.testing.expectEqual(.all, p.region());
     try std.testing.expectEqual(.patch, p.period());
+}
+
+test "Meio reads the region's 30 days and keeps its own query" {
+    var p: Pick = .of(Top.Url{ .region = .all, .period = .meio });
+    try std.testing.expectEqual(2, p.view);
+    try std.testing.expectEqual(.meio, p.period());
+    try std.testing.expectEqualStrings("?region=all&period=meio", p.query());
+    p.setPeriod(.patch);
+    try std.testing.expectEqual(Pick{ .view = 3 }, p);
+    p.setPeriod(.meio);
+    try std.testing.expect(p.eql(.of(Top.Url{ .region = .all, .period = .meio })));
+    try std.testing.expectEqualStrings("?region=all", (Pick{ .view = 2 }).query());
 }
 
 test "a rare role is listed and opens with its games, faded only by its range" {

@@ -82,6 +82,8 @@ const W = struct {
     pub const rank = plain("Rank");
     pub const ranks = [_]tree.Text{ plain("Plat+"), plain("Emerald+"), plain("Diamond+"), plain("Master+") };
     pub const plat = "Every game we crawl: Platinum IV+ players' lobbies";
+    pub const meio = plain("Meio");
+    pub const meio_off = "Meio's estimates are on champion pages so far";
 };
 
 pub const Foot = struct {
@@ -163,6 +165,7 @@ fn picks(h: *H, p: Picks) N {
         segmented.view(h, .{ .s = .s, .label = W.period }, &.{
             .{ .label = W.days, .href = p.period[0].href, .selected = p.period[0].current },
             .{ .label = W.patch.with(h, .{ .p = p.patch }), .href = p.period[1].href, .selected = p.period[1].current },
+            .{ .label = W.meio, .disabled = true, .href = "", .title = W.meio_off },
         }),
         segmented.view(h, .{ .s = .s, .label = W.rank }, &ranks),
     });
