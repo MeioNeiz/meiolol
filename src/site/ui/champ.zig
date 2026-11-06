@@ -20,7 +20,7 @@ pub const Champ = struct {
     src: []const u8,
 };
 
-pub const Px = enum { @"20", @"24", @"32", @"40", @"48", @"56" };
+pub const Px = enum { @"20", @"24", @"26", @"32", @"40", @"48", @"56" };
 
 pub const State = enum { normal, thin, banned, dead, empty, add };
 
@@ -102,6 +102,7 @@ pub const css =
     \\    width: var(--sz); height: var(--sz); border-radius: calc(var(--sz) / 6); background: var(--panel-3); }
     \\  .c-champ > img { display: block; width: 100%; height: 100%; border-radius: inherit; }
     \\  .c-champ[data-s="20"] { --sz: var(--icon-s); }
+    \\  .c-champ[data-s="26"] { --sz: 26px; }
     \\  .c-champ[data-s="32"] { --sz: var(--icon-m); }
     \\  .c-champ[data-s="40"] { --sz: 40px; }
     \\  .c-champ[data-s="48"] { --sz: var(--icon-l); }

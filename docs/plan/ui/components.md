@@ -76,6 +76,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - MatchupBrief: under the champion page's matchup chart, the chosen opponent (or ally)...
 - MatchupStrip: a champion's lane opponents in one row that scrolls sideways, most...
 - ChampList: a short list of champions, one line each: portrait, name (a badge after...
+- HardAgainst: the lane opponents a champion loses to most, up to three portraits in a...
 - SkillGrid: a skill order as the 4 x 18 grid of levels (Q, W, E, R rows, the level's...
 - ItemPath: the first finished items in the order bought, as icons with arrows, each...
 - RuneTree: every rune players took, laid out as in game (trees side by side...
@@ -463,12 +464,13 @@ dot on its corner (seen under a turn's outline), a level, and a role badge in th
 States: 56, 48, 40, 32, 24, 20; role, sides, you and level; thin, banned, dead; empty
 seat, a suggestion; beside its name
 Used by: bar, sitesearch, champsearch, champhead, matchbrief, matchstrip, champlist,
-draftboard, champselect, teamrows, compview, lobby, apphome, loadscreen, gamescreen,
-postgame, practice, picks, dotplot, timeline, versus, gamestrip, inspector, gamehead,
-gamerow, scoreboard, laneduel, choice, rankstrip, draftflow, candlist, poolslots,
-heatgrid, matchgrid, finder, ranking, learnpage, dailypage, dailyseat, patchpage,
-poolpage, poolgrid, resultstrip, playerbar, profilesum, recordtile, yourpage, yourtime,
-yourfriends, squad, today, homepage, testerpage, testercand, champpage, matchpage, tiers
+hardagainst, draftboard, champselect, teamrows, compview, lobby, apphome, loadscreen,
+gamescreen, postgame, practice, picks, dotplot, timeline, versus, gamestrip, inspector,
+gamehead, gamerow, scoreboard, laneduel, choice, rankstrip, draftflow, candlist,
+poolslots, heatgrid, matchgrid, finder, ranking, learnpage, dailypage, dailyseat,
+patchpage, poolpage, poolgrid, resultstrip, playerbar, profilesum, recordtile, yourpage,
+yourtime, yourfriends, squad, today, homepage, testerpage, testercand, champpage,
+matchpage, tiers
 
 ### SiteHeader
 `site.zig` `.c-site` `.c-sitemenu` `.c-sitefoot` `.c-preview` `.c-subbar` `.c-sitemain`
@@ -587,6 +589,15 @@ States: mains also play: links, a badge; tiles: the share, how much more often, 
 mark; two columns; matchups: duels, the lane's bar and range; a role; where a move
 started; duels with a Bar: a gold lead, the list's biggest full; with roles, no links
 Used by: matchgrid, finder, champpage, matchpage
+
+### HardAgainst
+`hardagainst.zig` `.c-hard` site
+HardAgainst: the lane opponents a champion loses to most, up to three portraits in a row,
+each a link to that matchup's page. Who they are is the server's rule (site/champion.zig
+hardAgainst: under 50% only, as the faces show no rate). A /champions column; the champion
+head next
+States: three, hardest first; fewer sure ones: fewer faces
+Used by: tiers
 
 ### DraftBoard
 `draftboard.zig` `.c-draft` site

@@ -336,6 +336,44 @@ pub fn laneRel(site: *const Site, ch: Champ, r: Role) !?cp.Rel {
     return try relOf(site, ch, site.stats.champRole(r, ch.c), .{ .st = &site.stats, .r = r, .r2 = r }, null);
 }
 
+pub const hard_max = 3;
+
+/// "Hard against": the sure lane opponents in `r` with a matchup page that ch loses to
+/// most, under 50% only: a face with no figure must not name a matchup ch wins. The
+/// champion page's "Harder for" tiles show their rates, so they keep the lowest even
+/// above 50%. Ids into champsOf; empty when ch is thin in `r` or wins every sure one
+pub fn hardAgainst(site: *const Site, ch: Champ, r: Role) ![]const u16 {
+    const rel = try laneRel(site, ch, r) orelse return &.{};
+    var buf: [hard_max]u16 = undefined;
+    return site.arena.dupe(u16, hardest(rel.opps, &buf));
+}
+
+/// The lowest win rates under 50% among `opps` not past fmt.wide_range and with a page,
+/// ties most games first
+fn hardest(opps: []const cp.Opp, buf: *[hard_max]u16) []const u16 {
+    var top: [hard_max]cp.Opp = undefined;
+    var n: usize = 0;
+    for (opps) |o| {
+        if (!o.page or 2 * @as(u64, o.wins) >= o.games or ui.fmt.wide(ui.fmt.range(o.games, o.wins))) continue;
+        var at = n;
+        while (at > 0 and tougher(o, top[at - 1])) at -= 1;
+        if (at == hard_max) continue;
+        if (n < hard_max) n += 1;
+        var i = n - 1;
+        while (i > at) : (i -= 1) top[i] = top[i - 1];
+        top[at] = o;
+    }
+    for (top[0..n], buf[0..n]) |o, *b| b.* = o.champ;
+    return buf[0..n];
+}
+
+fn tougher(a: cp.Opp, b: cp.Opp) bool {
+    const ra = @as(u64, a.wins) * b.games;
+    const rb = @as(u64, b.wins) * a.games;
+    if (ra != rb) return ra < rb;
+    return a.games > b.games;
+}
+
 /// The matchups card's rels: lane opponents, then other roles' enemies, then allies.
 /// `locked`: their games under a lock set instead, by rels' order then stats index
 /// (lockanswer.matchups), with `cr` the locked games
@@ -920,6 +958,27 @@ pub const Points = struct {
         try w.print("{d:.1}", .{x});
     }
 };
+
+test "hard against: the lowest sure rates under 50% with a page, ties most games first, at most 3" {
+    const O = cp.Opp;
+    const opps = [_]O{
+        .{ .champ = 0, .games = 400, .wins = 220, .usual = 0, .page = true },
+        // Lowest, but no page
+        .{ .champ = 1, .games = 400, .wins = 120, .usual = 0 },
+        // Low, but past the wide range
+        .{ .champ = 2, .games = 40, .wins = 10, .usual = 0, .page = true },
+        .{ .champ = 3, .games = 400, .wins = 180, .usual = 0, .page = true },
+        .{ .champ = 4, .games = 800, .wins = 360, .usual = 0, .page = true },
+        .{ .champ = 5, .games = 400, .wins = 160, .usual = 0, .page = true },
+        .{ .champ = 6, .games = 400, .wins = 200, .usual = 0, .page = true },
+    };
+    var buf: [hard_max]u16 = undefined;
+    // 40%, then 45% twice with the more played first; 50% and 55% left out
+    try std.testing.expectEqualSlices(u16, &.{ 5, 4, 3 }, hardest(&opps, &buf));
+    // 50% and over: none, however low among them
+    try std.testing.expectEqual(0, hardest(&.{ opps[0], opps[6], opps[1] }, &buf).len);
+    try std.testing.expectEqual(0, hardest(&.{opps[2]}, &buf).len);
+}
 
 test "usual and vs usual" {
     try std.testing.expectApproxEqAbs(0.5, usual(0.5, 0.5), 1e-9);

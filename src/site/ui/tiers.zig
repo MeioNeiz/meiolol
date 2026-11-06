@@ -28,6 +28,7 @@ const champ = @import("champ.zig");
 const role = @import("role.zig");
 const violin = @import("violin.zig");
 const champpage = @import("champpage.zig");
+const hardagainst = @import("hardagainst.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
 const H = tree.H;
@@ -133,6 +134,8 @@ pub const Row = struct {
     /// Pick and ban %, a rank group's (filters.Ranked's, as the champion page shows);
     /// null: from games and the champion's bans
     rates: ?[2]f32 = null,
+    /// site/champion.zig hardAgainst: ids into Data.champs; rank files have none
+    hard: []const u16 = &.{},
 };
 
 pub const Spread = struct {
@@ -185,6 +188,8 @@ const W = struct {
     pub const patch = plain("Patch");
     pub const influence = plain("Influence");
     pub const players = plain("Players");
+    pub const hard = plain("Hard against");
+    pub const hard_note = plain("The lane opponents it loses to most, among matchups with enough games to be sure. Under 50% only, so a champion that wins every lane has none. Plat+ only.");
     pub const pick = plain("Pick");
     pub const ban = plain("Ban");
     pub const off = plain("off-role");
@@ -223,6 +228,7 @@ pub const Line = struct {
     shape: ?[]const u8,
     /// Under All: the role icon beside the name
     all: bool,
+    hard: []const hardagainst.Face,
 
     fn row(l: *const Line) *const Row {
         return &l.d.rows[l.i];
@@ -291,6 +297,7 @@ fn who(h: *H, l: *const Line) N {
     const ro = r.role.ui();
     return h.a(.{ .class = "who", .href = l.href }, .{
         champ.view(h, .{ .name = c.name, .src = l.icon }, .{
+            .px = .@"26",
             .named = false,
             .role = if (l.all) ro else null,
         }),
@@ -370,6 +377,7 @@ const columns = [_]table.Column(Line){
     .{ .label = W.players, .cell = playersCell, .sort = middleOf, .num = false, .tip = W.players_note, .row_tip = playersTip, .wordless = true, .pick = true, .key = "pl" },
     .{ .label = W.pick, .cell = pickCell, .sort = pickOf, .pick = true, .key = "pk" },
     .{ .label = W.ban, .cell = banCell, .sort = banOf, .pick = true, .key = "bn" },
+    .{ .label = W.hard, .cell = hardCell, .num = false, .tip = W.hard_note, .pick = true, .key = "ha" },
 };
 
 /// A column's index by its key
@@ -398,9 +406,27 @@ pub const Table = table.DataTable(Line, .{
 /// The board's lines: All's (index 0), then each role's in Role's order
 pub const Lines = [1 + Role.names.len][]const Line;
 
+fn hardFaces(a: std.mem.Allocator, d: *const Data, x: Row, base: []const u8, icons: []const []const u8) ![]const hardagainst.Face {
+    const out = try a.alloc(hardagainst.Face, x.hard.len);
+    for (out, x.hard) |*f, o| {
+        const c = d.champs[o];
+        f.* = .{
+            .champ = .{ .name = c.name, .src = icons[o] },
+            .href = try std.mem.concat(a, u8, &.{ base, "matchups/", Role.slugs[@backingInt(x.role)], "/", d.champs[x.champ].slug, "-vs-", c.slug, d.query }),
+        };
+    }
+    return out;
+}
+
+fn hardCell(h: *H, l: *const Line) N {
+    return hardagainst.view(h, l.hard);
+}
+
 /// Every row's Line, made once: `base` from the page to the site root
 pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
     var out: Lines = undefined;
+    const icons = try a.alloc([]const u8, d.champs.len);
+    for (d.champs, icons) |c, *s| s.* = try a.print(champ.icon_fmt, .{ d.ddragon, c.key });
     const all = try a.alloc(Line, d.rows.len);
     var n: [Role.names.len]usize = @splat(0);
     for (d.rows, all, 0..) |x, *l, i| {
@@ -408,11 +434,12 @@ pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
         l.* = .{
             .d = d,
             .i = @intCast(i),
-            .icon = try a.print(champ.icon_fmt, .{ d.ddragon, c.key }),
+            .icon = icons[x.champ],
             // The row's role and rank: the champion page opens on them
             .href = try a.print("{s}champions/{s}/{s}{s}{s}{s}", .{ base, c.slug, Role.slugs[@backingInt(x.role)], d.query, if (d.rank == .plat) "" else "#rank=", if (d.rank == .plat) "" else @tagName(d.rank) }),
             .shape = if (x.spread) |s| try violin.path(a, &s.shape, 100 * share(.{ x.games, x.wins }) - shape_reach, shape_step) else null,
             .all = true,
+            .hard = try hardFaces(a, d, x, base, icons),
         };
         n[@backingInt(x.role)] += 1;
     }
@@ -920,7 +947,7 @@ pub const css =
     \\  .c-tiers .c-toolbar > .grp { margin-left: auto; }
     \\  .c-tiers .pl .rt { display: block; width: 100%; }
     \\  .c-tiers .c-table thead th { top: var(--header); }
-    \\  .c-tiers .who { --icon: 26px; display: flex; align-items: center; gap: var(--sp-2); color: inherit; text-decoration: none; }
+    \\  .c-tiers .who { display: flex; align-items: center; gap: var(--sp-2); color: inherit; text-decoration: none; }
     \\  .c-tiers .who .nm { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-tiers .wr .c-stat { font-size: var(--fs-l); }
     \\  .c-tiers td.num.p3 { color: var(--faint); }

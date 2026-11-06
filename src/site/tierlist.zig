@@ -9,6 +9,7 @@ const assets = @import("assets.zig");
 const spread = @import("../spread.zig");
 const patchday = @import("../patchday.zig");
 const filters = @import("filters.zig");
+const hardAgainst = @import("champion.zig").hardAgainst;
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -140,6 +141,7 @@ fn tiersData(site: *const Site) !ui.tiers.Data {
                 .cur = .{ m.win.cur.games, m.win.cur.wins },
                 .clear = m.win.clear(pd.?.opts.min_role_games, pd.?.opts.z),
             } else null,
+            .hard = try hardAgainst(site, row.ch, row.role),
         };
     }
     return .{

@@ -40,7 +40,7 @@ const groups = [_]Group{
     },
     .{
         .name = "Champions and builds",
-        .files = "champhead matchbrief matchstrip champlist skillgrid itempath runetree " ++
+        .files = "champhead matchbrief matchstrip champlist hardagainst skillgrid itempath runetree " ++
             "buildpanel candlist poolslots changeline patchhead",
     },
     .{
