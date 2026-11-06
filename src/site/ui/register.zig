@@ -27,7 +27,7 @@ const groups = [_]Group{
     },
     .{
         .name = "Figures",
-        .files = "stat rate delta bar kda strip split versus resultstrip spark",
+        .files = "stat rate delta bar kda strip split dmgsplit versus resultstrip spark",
     },
     .{
         .name = "Charts",

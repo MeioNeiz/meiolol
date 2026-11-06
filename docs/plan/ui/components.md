@@ -44,6 +44,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - Kda: kills / deaths / assists in tabular figures, the slashes faint; optionally the...
 - StatStrip: a page's headline figures in one row, plain (no box per figure): a small...
 - WinSplit: a game's win chance as one bar, blue's share from the left in blue and...
+- DamageSplit: a champion's or a team's damage to champions as one bar, AD (physical...
 - PatchSpark: a win rate over the last few patches in a fixed-size cell (a table's...
 - Versus: your team against theirs, one figure at a time
 - ResultStrip: recent form as a tick per game, oldest on the left; a win full height...
@@ -366,6 +367,14 @@ the split. l is a page's answer (draft tester, Daily's on paper): there the bar 
 own row in a narrow container
 States: plain; range; on paper, red won; the page's answer
 Used by: dailyseat, testerpage
+
+### DamageSplit
+`dmgsplit.zig` `.c-dmg`
+DamageSplit: a champion's or a team's damage to champions as one bar, AD (physical, true
+damage with it) from the left and AP the rest, each share at its end. Under 35% AP reads
+AD, over 65% AP, else AD and AP (dailydata.dmgOf), said once for a screen reader. A share
+whose champions are unknown hatches after both
+States: AD; AD and AP; AP; a share unknown
 
 ### AlertBand
 `alertband.zig` `.c-alert`
