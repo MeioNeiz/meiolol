@@ -5911,6 +5911,14 @@ under G (above 10.4%, Diamond+ +10.7 +- 9.5, 506 cells); x -10..-8 below 11.1 ->
 Truth's unseen keystones, Meio - parent, -5.99 -> -6.45 (both); items flat. G (floor
 -10) is the default.
 
+Recheck of "rare champion-roles win 34%", 2026-11-06 (learncards): the 34% came from the
+4 Nov temporary dump (cubes-20261104b) with no count kept, and doesn't reproduce. On
+data/team/2026-11-05-notes2/m10-cells-base-16.21.tsv (`truth --cells`, HEAD Meio, 6 Nov),
+champion-roles every region, all ranks, under 100 games in the 30 days: origin 0, 147
+champion-roles won 38.9% of 4,810 next-week games (Meio's middle 39.7%); all 14 origins
+37.5% of 28,534 (horizons overlap, games repeat), falling to 34-35% at origins 8-13 on
+under 1,300 games each. Brackets left out: the stored rank knows the result.
+
 ### Patches as experiments: item changes, 16.20 -> 16.21, 2026-11-04 (meio-model, M8)
 
 Question (PT7, Meio M8): does a champion-role's win rate move across a patch track its
@@ -6187,6 +6195,65 @@ Meio wins too. The loss is small moves on unchanged champions, so a looser sd fo
 changed champions or options has nothing to take: not built. Bloodmail cells: usage
 +0.69 logit (median), Meio minus 30 days +45 nats over 914 cells. Script and output:
 data/team/2026-11-05-notes2/m6b1/m8c.py, m8c.out.
+
+### Regions as neighbours: how alike patch moves are, 16.21 and 16.22, 2026-11-06 (meio, M11)
+
+Question (M11): do champion-roles move alike at a patch in every region, or do region
+pairs differ, so a term per region with a learnt covariance would borrow better than
+Meio's one EUW1 level against a pooled rest? Measurement only, rule declared before the
+look (data/team/2026-11-05-notes2/meio.md, 17:58Z).
+
+Data: data/lab-cubes/daycells-20261106.tsv, all ranks, days since EUW1's first game
+(before it left out). Units: EUW1, KR, VN2, NA1, BR1, LAT (LA1 + LA2), ASIA4 (JP1 SG2
+TW2 OC1); EUN1, TR1, RU, ME1 too small. Move per champion-role: logit(after) minus
+logit(before), centred within role. B1 16.20 days 7-14 -> 16.21 days 0-6; B2 16.21 days
+7-14 -> 16.22 days 0-2; control C, no patch: days 0-6 -> 7-13 of 16.20 (C1) and 16.21
+(C2). Per pair, champion-roles with 300+ games in all four cells (180-340), weighted by
+inverse noise; true-move correlation rho = cov / sqrt((var - noise) (var - noise)), the
+noise binomial and independent between regions; se from 400 resamples of champions, one
+resample shared by every pair. Tool: data/team/2026-11-05-notes2/m11/pairs.py (out:
+pairs.out win rate, pairs-share.out pick share).
+
+Win rate (declared): the true move's sd is 0.015-0.03 logit per region against ~0.16
+of noise for a champion-role, so rho's se runs 0.4-6 a pair. EUW1 against the rest:
+B1 1.13 +- 0.43, B2 0.27 +- 1.24; within groups minus across 0.18 +- 1.23. Neither rule
+holds: one patch can't tell region pairs apart on win rate, nor EUW1 from the rest.
+Control C has a true sd near 0 (0.000-0.015), so the patch moves are real, just not
+measurable per region.
+
+Pick share of the role (added after the look, not declared): true sd 0.08-0.16 logit,
+se 0.02-0.15.
+
+| | B1 rho | B2 rho | C1 rho | C2 rho |
+| --- | --: | --: | --: | --: |
+| EUW1 vs the rest pooled | 0.88 +- 0.03 | 0.85 +- 0.04 | 0.69 +- 0.06 | 0.80 +- 0.04 |
+| EUW1-NA1 | 0.89 | 0.90 | 0.71 | 0.87 |
+| EUW1-ASIA4 | 0.90 | 0.76 | 0.64 | 0.81 |
+| EUW1-KR | 0.78 | 0.67 | 0.36 | 0.58 |
+| EUW1-VN2 | 0.62 | 0.57 | 0.42 | 0.63 |
+| within West or Asia minus across | +0.04 +- 0.02 | +0.16 +- 0.03 | +0.07 +- 0.04 | +0.07 +- 0.02 |
+
+Mean rho with the other units, B1 / B2: EUW1 0.80 / 0.77, NA1 0.77 / 0.72, LAT 0.75 /
+0.73, ASIA4 0.78 / 0.63, KR 0.71 / 0.63, BR1 0.68 / 0.69, VN2 0.60 / 0.55.
+
+Reading:
+- A patch moves pick shares alike everywhere but not as one move: EUW1 against the rest
+  0.85-0.88, below 1 by 4-5 se on both patches. With EUW1's sd 0.13, EUW1 keeps an own
+  patch move of 0.06-0.07 logit sd that the pooled rest can't give
+- The split is not Asia against the West: VN2 and KR are the least alike with everyone
+  (VN2 0.55-0.63), while JP1 SG2 TW2 OC1 move with EUW1 and NA1. So the early platforms
+  are not one taste: "An early-platforms term" (above) lumped KR and VN2 with
+  ASIA4
+- The control has the same order at lower amplitude (VN2 lowest, EUW1-NA1 highest):
+  much of the region likeness is ongoing drift in each region, not the patch
+- Item and keystone shares, the ones Meio's shares model (checked after, on the 16.22
+  day-0 cells dump of "The patch's games from before EUW1": all ranks, 16.22's first
+  days against the raw 30 days, EUW1 against every region minus EUW1, cells with 30+
+  picks and 30+ non-picks each side; m11/optshare.py): items rho 0.80 +- 0.04 (3,689
+  cells), keystones 0.64 +- 0.05 (883), EUW1 sd 0.15 both. EUW1's own move is larger
+  there: ~0.09 logit sd for items, ~0.11 for keystones, which Meio's one EUW1 level,
+  shared across patches, can't follow
+- Two patches, one window each; option shares on 16.22 only
 
 ### The stored rank knows the result: the bracket lean, 2026-11-06 (m10, NL6)
 
