@@ -85,9 +85,14 @@ pub fn view(h: *H, r: Rate, look: Look) N {
     const v: tree.Text = if (look.unit) sv else .{ .s = sv.s[0 .. sv.s.len - 1] };
     return cell(h, if (r.games == null) null else r.pct - r.ref, r.half, tip(h, r, look.worth), .{
         h.span(.{ .class = "v", .aria_hidden = true }, .{v}),
-        if (!look.count) null else if (r.games) |n| h.span(.{ .class = "g", .aria_hidden = true }, .{if (look.worth) W.about.with(h, .{ .n = n }) else phrase.num(h, .kilo, n)}) else null,
+        if (!look.count) null else if (r.games) |n| h.span(.{ .class = "g", .aria_hidden = true }, .{if (look.worth) about(h, n) else phrase.num(h, .kilo, n)}) else null,
         h.span(.{ .class = "sr" }, .{if (r.games != null and look.count) said(h, look, sv, r.games.?) else W.said.with(h, .{ .w = look.said, .v = sv.s })}),
     });
+}
+
+/// An estimate's worth as its count shows: "~13k"
+pub fn about(h: *H, n: u32) tree.Text {
+    return W.about.with(h, .{ .n = n });
 }
 
 fn said(h: *H, look: Look, v: tree.Text, n: u32) tree.Text {

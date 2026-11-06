@@ -125,7 +125,7 @@ pub fn split(a: std.mem.Allocator, bytes: []const u8) data.Error!struct { head: 
         if (lf.len != std.meta.fieldNames(Head).len + 1 or !tree.eql(lf[lf.len - 1], "list"))
             @compileError("yourlist: Head must be every Lookup field but a last `list`");
     }
-    const got = try data.decodeHead(Lookup, Head, bytes);
+    const got = try data.decodeHead(.failing, Lookup, Head, bytes);
     // The list's presence byte, then all the rest is the list
     const rest = got.rest;
     if (rest.len == 0) return error.Truncated;

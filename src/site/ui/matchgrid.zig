@@ -21,6 +21,7 @@ const dotplot = @import("dotplot.zig");
 const matchbrief = @import("matchbrief.zig");
 const champlist = @import("champlist.zig");
 const cp = @import("champpage.zig");
+const pd = @import("pvdata.zig");
 const H = tree.H;
 const N = tree.N;
 
@@ -45,12 +46,15 @@ const L = struct {
     pub const dot_behind = Phrase("{g:count} behind");
     pub const harder = Phrase("Harder for {c:text}");
     pub const easier = Phrase("Easier for {c:text}");
-    pub const tile_win = Phrase("{o:text}: {c:text} wins {v:text} in {n:count} games");
-    pub const tile_usual = Phrase("{o:text}: {c:text} {v:text} vs usual in {n:count} games");
+    /// `x`: in_games, worth_games for Meio's rate, empty for Meio's gold (no count)
+    pub const tile_win = Phrase("{o:text}: {c:text} wins {v:text}{x:text}");
+    pub const tile_usual = Phrase("{o:text}: {c:text} {v:text} vs usual{x:text}");
     /// The gold tile is the face's, as its dot: a direction word reads as the name above it
-    pub const tile_gold_ahead = Phrase("{o:text}: {g:count} gold ahead of {c:text} at 14 in {n:count} games");
-    pub const tile_gold_behind = Phrase("{o:text}: {g:count} gold behind {c:text} at 14 in {n:count} games");
-    pub const tile_gold_level = Phrase("{o:text}: level with {c:text} at 14 in {n:count} games");
+    pub const tile_gold_ahead = Phrase("{o:text}: {g:count} gold ahead of {c:text} at 14{x:text}");
+    pub const tile_gold_behind = Phrase("{o:text}: {g:count} gold behind {c:text} at 14{x:text}");
+    pub const tile_gold_level = Phrase("{o:text}: level with {c:text} at 14{x:text}");
+    pub const in_games = Phrase(" in {n:count} games");
+    pub const worth_games = Phrase(", worth {n:count} games");
     pub const ahead = phrase.plain("ahead");
     pub const all = Phrase("All {n:count} matchups ›");
     pub const behind = phrase.plain("behind");
@@ -81,7 +85,36 @@ pub const Input = struct {
     /// A link under the tile rows to the finder with the champion picked: on a phone the
     /// plot hides, so the middle and rare opponents are picked there
     finder: bool = false,
+    /// The champion page's Meio period: the lane's win rates and gold at 14
+    meio: ?Meio = null,
 };
+
+/// Meio's answer under the page's locks (pd.Meio): the stack's rate and each lane
+/// opponent's. The lane's dots, tiles and brief show them; an opponent without one, and
+/// vs usual, stay the games'. pvdata.Meio's head (data.decodeHead)
+pub const Meio = struct { stack: ?pd.Est, opponents: []const pd.Choice };
+
+fn meioOf(in: *const Input, o: Opp) ?*const pd.Choice {
+    const m = in.meio orelse return null;
+    const id = in.champs[o.champ].id;
+    for (m.opponents) |*c| if (c.id == id) return c;
+    return null;
+}
+
+/// The rate the champion wins against `o` at: Meio's (`meio`, its games are its worth) or
+/// the games'
+const Win = struct { rate: winrate.Rate, meio: bool = false };
+
+fn winOf(in: *const Input, o: Opp) Win {
+    if (meioOf(in, o)) |c| if (c.meio) |e| return .{ .rate = .{ .pct = 100 * e.p, .games = e.worth(), .half = 100 * (e.hi - e.lo) / 2 }, .meio = true };
+    return .{ .rate = .counted(o.games, o.wins) };
+}
+
+/// Lane gold at 14, the champion minus `o`: Meio's or the curves'
+fn goldOf(in: *const Input, o: Opp) ?i16 {
+    if (meioOf(in, o)) |c| if (c.gold) |e| return @intFromFloat(@round(std.math.clamp(e.p, -9999, 9999)));
+    return o.gold;
+}
 
 /// Input.champs' index of the opponent locked
 pub const Lock = struct { on: ?u16 = null };
@@ -107,7 +140,7 @@ pub const MatchupGrid = struct {
         const x = in.rels[g.rel];
         if (x.ally or x.role != in.role) return false;
         // None under locks: the curves aren't locked
-        for (x.opps) |o| if (o.gold != null) return true;
+        for (x.opps) |o| if (goldOf(in, o) != null) return true;
         return false;
     }
 
@@ -142,10 +175,14 @@ pub const MatchupGrid = struct {
     }
 
     /// `owner`'s Msg wraps Msg's tags with the same payloads
-    pub fn view(g: *G, h: *H, owner: anytype, in: *const Input) N {
-        if (in.rels.len == 0) return card.view(h, .{ .id = "matchups", .target = true, .label = W.matchups }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
-        const rel = in.rels[g.rel];
-        const lane = !rel.ally and rel.role == in.role;
+    pub fn view(g: *G, h: *H, owner: anytype, page: *const Input) N {
+        if (page.rels.len == 0) return card.view(h, .{ .id = "matchups", .target = true, .label = W.matchups }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        const rel = page.rels[g.rel];
+        const lane = !rel.ally and rel.role == page.role;
+        // Meio's opponents are the lane's
+        var lin = page.*;
+        if (!lane) lin.meio = null;
+        const in = &lin;
         var counts = in.counts;
         var opps = rel.opps;
         var rare = rel.rare;
@@ -158,7 +195,8 @@ pub const MatchupGrid = struct {
                 rare = y.rare;
             },
         };
-        const own = rate(counts);
+        const own = if (in.meio) |m| (if (m.stack) |e| 100 * e.p else rate(counts)) else rate(counts);
+        const raw_own = rate(counts);
         const dots = h.mem.alloc(dotplot.Dot, opps.len) catch {
             h.oom = true;
             return .none;
@@ -170,17 +208,23 @@ pub const MatchupGrid = struct {
         };
         var n: usize = 0;
         for (opps, 0..) |o, k| {
+            const wo = winOf(in, o);
+            const est = wo.meio;
+            const w = wo.rate;
+            // Each dot against the own rate of its kind: an estimate against Meio's stack
+            // rate, an opponent left to the games against the games' own rate
             const x: f32 = switch (g.measure) {
-                .win => rate(.{ .games = o.games, .wins = o.wins }) - own,
+                .win => @floatCast(w.pct - (if (est) own else raw_own)),
                 .usual => o.usual,
-                .gold => @floatFromInt(o.gold orelse continue),
+                .gold => @floatFromInt(goldOf(in, o) orelse continue),
             };
             dots[n] = .{
                 .champ = icon(h, in, o.champ),
                 .x = x,
-                .games = o.games,
-                .fig = g.figure(h, o),
-                .thin = wide(o),
+                .games = if (est and g.measure == .win) w.games.? else o.games,
+                .worth = est and g.measure == .win,
+                .fig = g.figure(h, in, o),
+                .thin = faded(in, o),
                 .href = matchHref(h, in, o),
             };
             of[n] = @intCast(k);
@@ -263,14 +307,19 @@ pub const MatchupGrid = struct {
         for (ks, rows) |k, *row| {
             const o = opps[of[k]];
             const d = g.dots.dots[k];
-            const r: winrate.Rate = .counted(o.games, o.wins);
-            const v = g.tileFigure(h, o);
+            const wo = winOf(in, o);
+            const r = wo.rate;
+            const est = wo.meio;
+            const v = g.tileFigure(h, in, o);
             // The dot's champion minus the page's: the face's own lead
-            const gd = -(o.gold orelse 0);
+            const gd = -(goldOf(in, o) orelse 0);
+            const meio_gold = g.measure == .gold and est;
+            // Meio's gold has no count to give: its worth is the win rate's
+            const x = if (meio_gold) "" else if (est and g.measure == .win) L.worth_games.with(h, .{ .n = r.games.? }).s else L.in_games.with(h, .{ .n = o.games }).s;
             row.* = .{
                 .champ = d.champ,
                 .value = switch (g.measure) {
-                    .win => winrate.view(h, r, .{ .count = false, .said = "" }),
+                    .win => winrate.view(h, r, .{ .count = false, .said = "", .worth = est }),
                     .usual => winrate.delta(h, o.usual, r.half),
                     // The number at the tile's size, its word small under it: "210 behind"
                     // whole overruns a 3x2 tile at 320
@@ -279,17 +328,17 @@ pub const MatchupGrid = struct {
                         h.span(.{ .class = "w" }, .{if (gd > 0) L.ahead else L.behind}),
                     }),
                 },
-                // The count alone: its label says games
-                .note = phrase.num(h, .count, o.games),
+                // The count alone: its label says games. An estimate's worth as "~13k"
+                .note = if (meio_gold) null else if (est and g.measure == .win) winrate.about(h, r.games.?) else phrase.num(h, .count, o.games),
                 .label = switch (g.measure) {
-                    .win => L.tile_win.with(h, .{ .o = d.champ.name, .c = in.name, .v = v.s, .n = o.games }),
-                    .usual => L.tile_usual.with(h, .{ .o = d.champ.name, .c = in.name, .v = v.s, .n = o.games }),
+                    .win => L.tile_win.with(h, .{ .o = d.champ.name, .c = in.name, .v = v.s, .x = x }),
+                    .usual => L.tile_usual.with(h, .{ .o = d.champ.name, .c = in.name, .v = v.s, .x = x }),
                     .gold => if (gd > 0)
-                        L.tile_gold_ahead.with(h, .{ .o = d.champ.name, .g = @abs(gd), .c = in.name, .n = o.games })
+                        L.tile_gold_ahead.with(h, .{ .o = d.champ.name, .g = @abs(gd), .c = in.name, .x = x })
                     else if (gd < 0)
-                        L.tile_gold_behind.with(h, .{ .o = d.champ.name, .g = @abs(gd), .c = in.name, .n = o.games })
+                        L.tile_gold_behind.with(h, .{ .o = d.champ.name, .g = @abs(gd), .c = in.name, .x = x })
                     else
-                        L.tile_gold_level.with(h, .{ .o = d.champ.name, .c = in.name, .n = o.games }),
+                        L.tile_gold_level.with(h, .{ .o = d.champ.name, .c = in.name, .x = x }),
                 },
                 .pressed = g.dots.chosen() == k,
                 .on = h.on(&g.dots, .{ .pick = k }),
@@ -300,21 +349,21 @@ pub const MatchupGrid = struct {
 
     /// A tile's figure for its label: win rate and vs usual are the page champion's (no
     /// direction word); gold is the face's, as its dot
-    fn tileFigure(g: *const G, h: *H, o: Opp) tree.Text {
+    fn tileFigure(g: *const G, h: *H, in: *const Input, o: Opp) tree.Text {
         return switch (g.measure) {
-            .win => winrate.shown(h, .counted(o.games, o.wins)),
-            .usual, .gold => g.figure(h, o),
+            .win => winrate.shown(h, winOf(in, o).rate),
+            .usual, .gold => g.figure(h, in, o),
         };
     }
 
     /// The figure a dot reads out with its name, in the measure's units
-    fn figure(g: *const G, h: *H, o: Opp) tree.Text {
+    fn figure(g: *const G, h: *H, in: *const Input, o: Opp) tree.Text {
         return switch (g.measure) {
-            .win => phrase.num(h, .rate, rate(.{ .games = o.games, .wins = o.wins })),
+            .win => phrase.num(h, .rate, @as(f32, @floatCast(winOf(in, o).rate.pct))),
             .usual => phrase.num(h, .points, o.usual),
             .gold => {
                 // x minus the dot's champion: the dot's champion is ahead when negative
-                const gd: i32 = o.gold orelse 0;
+                const gd: i32 = goldOf(in, o) orelse 0;
                 if (gd == 0) return L.level;
                 if (gd < 0) return L.dot_ahead.with(h, .{ .g = @abs(gd) });
                 return L.dot_behind.with(h, .{ .g = @abs(gd) });
@@ -350,19 +399,20 @@ fn ends(buf: []u16, dots: []const dotplot.Dot) Ends {
 }
 
 /// A matchup's win rate range past fmt.wide_range: its dot, tile and brief fade (J35)
-fn wide(o: Opp) bool {
-    return fmt.wide(fmt.range(o.games, o.wins));
+fn faded(in: *const Input, o: Opp) bool {
+    return fmt.wide(winOf(in, o).rate.half.?);
 }
 
 fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief {
     const usual_tip = h.fmt("cp-usual-{d}", .{o.champ});
+    const w = winOf(in, o);
     var items: [4]strip.Item = undefined;
     var n: usize = 0;
-    items[n] = .{ .label = W.wins.with(h, .{ .c = in.name }), .rate = winrate.view(h, .counted(o.games, o.wins), .{ .said = "" }), .answer = true };
+    items[n] = .{ .label = W.wins.with(h, .{ .c = in.name }), .rate = winrate.view(h, w.rate, .{ .said = "", .worth = w.meio }), .answer = true };
     n += 1;
     items[n] = .{ .label = W.m_usual, .rate = winrate.delta(h, o.usual, fmt.range(o.games, o.wins)), .ctx = cp.usualSide(o.usual, W.below_usual, W.above_usual), .tip = .{ .id = usual_tip, .note = W.usual_note.with(h, .{ .c = in.name }) } };
     n += 1;
-    if (o.gold) |gd| {
+    if (goldOf(in, o)) |gd| {
         items[n] = goldItem(h, in, o.champ, gd);
         n += 1;
     }
@@ -371,7 +421,7 @@ fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief
     return .{
         .champ = icon(h, in, o.champ),
         .rel = if (rel.ally) W.ally.with(h, .{ .r = rel.role.label().s }) else W.opponent.with(h, .{ .r = rel.role.label().s }),
-        .thin = wide(o),
+        .thin = fmt.wide(w.rate.half.?),
         .figures = strip.view(h, items[0..n]),
         .href = matchHref(h, in, o),
     };
@@ -434,14 +484,14 @@ const Gallery = @import("gallery.zig").Gallery;
 pub const finder_href = "/matchups#role={s}&c={s}";
 
 pub const demo_champs = [_]cp.Other{
-    .{ .name = "Garen", .key = "Garen", .slug = "garen" },                   .{ .name = "Sett", .key = "Sett", .slug = "sett" },
-    .{ .name = "Mordekaiser", .key = "Mordekaiser", .slug = "mordekaiser" }, .{ .name = "Yone", .key = "Yone", .slug = "yone" },
-    .{ .name = "Dr. Mundo", .key = "DrMundo", .slug = "drmundo" },           .{ .name = "Volibear", .key = "Volibear", .slug = "volibear" },
-    .{ .name = "Teemo", .key = "Teemo", .slug = "teemo" },                   .{ .name = "Malphite", .key = "Malphite", .slug = "malphite" },
-    .{ .name = "Jax", .key = "Jax", .slug = "jax" },                         .{ .name = "Aatrox", .key = "Aatrox", .slug = "aatrox" },
-    .{ .name = "Fiora", .key = "Fiora", .slug = "fiora" },                   .{ .name = "K'Sante", .key = "KSante", .slug = "ksante" },
-    .{ .name = "Lee Sin", .key = "LeeSin", .slug = "leesin" },               .{ .name = "Viego", .key = "Viego", .slug = "viego" },
-    .{ .name = "Graves", .key = "Graves", .slug = "graves" },
+    .{ .name = "Garen", .id = 86, .key = "Garen", .slug = "garen" },                   .{ .name = "Sett", .id = 875, .key = "Sett", .slug = "sett" },
+    .{ .name = "Mordekaiser", .id = 82, .key = "Mordekaiser", .slug = "mordekaiser" }, .{ .name = "Yone", .id = 777, .key = "Yone", .slug = "yone" },
+    .{ .name = "Dr. Mundo", .id = 36, .key = "DrMundo", .slug = "drmundo" },           .{ .name = "Volibear", .id = 106, .key = "Volibear", .slug = "volibear" },
+    .{ .name = "Teemo", .id = 17, .key = "Teemo", .slug = "teemo" },                   .{ .name = "Malphite", .id = 54, .key = "Malphite", .slug = "malphite" },
+    .{ .name = "Jax", .id = 24, .key = "Jax", .slug = "jax" },                         .{ .name = "Aatrox", .id = 266, .key = "Aatrox", .slug = "aatrox" },
+    .{ .name = "Fiora", .id = 114, .key = "Fiora", .slug = "fiora" },                  .{ .name = "K'Sante", .id = 897, .key = "KSante", .slug = "ksante" },
+    .{ .name = "Lee Sin", .id = 64, .key = "LeeSin", .slug = "leesin" },               .{ .name = "Viego", .id = 234, .key = "Viego", .slug = "viego" },
+    .{ .name = "Graves", .id = 104, .key = "Graves", .slug = "graves" },
 };
 
 fn demoOpp(comptime i: u16, comptime games: u32, comptime won: f32, comptime usual: f32, comptime gold: ?i16) Opp {
@@ -455,6 +505,22 @@ const demo_lane = [_]Opp{
     demoOpp(9, 747, 49.9, 0.3, 70),    demoOpp(10, 798, 53.3, 3.2, 180),  demoOpp(11, 353, 60.3, 9.1, 240),
 };
 const demo_with = [_]Opp{ demoOpp(12, 2104, 50.8, 0.6, null), demoOpp(13, 1530, 48.9, -0.7, null), demoOpp(14, 1122, 51.6, 1.1, null) };
+/// Meio's lane under no locks: Teemo has no estimate, so stays the games'
+const demo_meio: Meio = .{ .stack = demoEst(0.496, 0.004), .opponents = &.{
+    demoChoice(86, 0.502, 0.012, 30),   demoChoice(875, 0.478, 0.012, -45), demoChoice(82, 0.505, 0.015, null),
+    demoChoice(777, 0.512, 0.014, 95),  demoChoice(36, 0.441, 0.02, -130),  demoChoice(106, 0.462, 0.016, -35),
+    demoChoice(54, 0.483, 0.016, -10),  demoChoice(24, 0.484, 0.016, 0),    demoChoice(266, 0.497, 0.018, 60),
+    demoChoice(114, 0.527, 0.017, 160), demoChoice(897, 0.571, 0.025, 210),
+} };
+
+fn demoEst(p: f32, half: f32) pd.Est {
+    return .{ .p = p, .lo = p - half, .hi = p + half, .own = 0 };
+}
+
+fn demoChoice(id: u32, p: f32, half: f32, gold: ?f32) pd.Choice {
+    return .{ .id = id, .name = "", .games = 0, .wins = 0, .meio = demoEst(p, half), .gold = if (gold) |g| demoEst(g, 40) else null };
+}
+
 pub const demo_rels = [_]Rel{ .{ .ally = false, .role = .top, .opps = &demo_lane, .rare = 31 }, .{ .ally = true, .role = .jungle, .opps = &demo_with } };
 
 const GridMsg = Msg;
@@ -487,11 +553,13 @@ pub fn gallery(g: *Gallery) void {
         .rels = &demo_rels,
         .finder = true,
     };
-    const states = [_]struct { []const u8, u8, Measure, ?u16 }{
-        .{ "lane opponents by win rate", 0, .win, null },
-        .{ "one chosen: its brief under the tiles", 0, .win, 3 },
-        .{ "by gold at 14", 0, .gold, null },
-        .{ "with the jungler", 1, .win, null },
+    const states = [_]struct { []const u8, u8, Measure, ?u16, ?Meio }{
+        .{ "lane opponents by win rate", 0, .win, null, null },
+        .{ "one chosen: its brief under the tiles", 0, .win, 3, null },
+        .{ "by gold at 14", 0, .gold, null, null },
+        .{ "with the jungler", 1, .win, null, null },
+        .{ "Meio's lane: estimates worth games, Teemo the games'", 0, .win, 4, demo_meio },
+        .{ "Meio's gold at 14", 0, .gold, null, demo_meio },
     };
     for (states) |s| {
         const d = h.mem.create(Demo) catch {
@@ -499,6 +567,7 @@ pub fn gallery(g: *Gallery) void {
             return;
         };
         d.* = .{ .in = in, .grid = .{ .rel = s[1], .measure = s[2] } };
+        d.in.meio = s[4];
         d.grid.dots.sel = s[3];
         g.addFill(s[0], d.grid.view(h, d, &d.in));
     }
@@ -514,9 +583,9 @@ test "gold at 14 names the side ahead, never a signed lead" {
     const g: MatchupGrid = .{ .measure = .gold };
     // Darius minus Fiora -384: Fiora ahead
     const o = demoOpp(10, 400, 48, -1, -384);
-    try testing.expectEqualStrings("384 ahead", g.figure(&h, o).s);
-    try testing.expectEqualStrings("level", g.figure(&h, demoOpp(10, 400, 48, -1, 0)).s);
-    try testing.expectEqualStrings("120 behind", g.figure(&h, demoOpp(10, 400, 48, -1, 120)).s);
+    try testing.expectEqualStrings("384 ahead", g.figure(&h, &in, o).s);
+    try testing.expectEqualStrings("level", g.figure(&h, &in, demoOpp(10, 400, 48, -1, 0)).s);
+    try testing.expectEqualStrings("120 behind", g.figure(&h, &in, demoOpp(10, 400, 48, -1, 120)).s);
     const it = goldItem(&h, &in, o.champ, -384);
     try testing.expectEqualStrings("384", it.value.s);
     try testing.expectEqualStrings("Fiora ahead", it.ctx.?.s);
@@ -634,4 +703,52 @@ test "gold tiles are the face's: its lead in its label, the number shown with it
     try testing.expect(std.mem.find(u8, html, "<span>150<span class=\"w\">ahead</span></span>") != null);
     // The rest are in the finder, the champion and its role picked
     try testing.expect(std.mem.find(u8, html, "href=\"/matchups#role=top&amp;c=darius\"") != null);
+}
+
+fn demoHtml(a: std.mem.Allocator, d: *Demo) ![]const u8 {
+    const t = try a.create(tree.Tree);
+    t.* = .{};
+    var h: H = .init(a, t);
+    t.root = d.view(&h);
+    var out: std.Io.Writer.Allocating = .init(a);
+    try @import("html.zig").write(t, t.root, &out.writer);
+    return out.written();
+}
+
+test "Meio's lane: tiles and brief show its rates worth games, its gold no count; one without stays the games'" {
+    const testing = std.testing;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const in: Input = .{ .name = "Darius", .slug = "darius", .ddragon = champ.demo_version, .champs = &demo_champs, .role = .top, .counts = .{ .games = 20412, .wins = 10063 }, .rels = &demo_rels, .meio = demo_meio };
+    var d: Demo = .{ .in = in };
+    d.grid.dots.sel = 4;
+    const html = try demoHtml(a, &d);
+    // 44.1% +-2: worth 1,012 games
+    try testing.expect(std.mem.find(u8, html, "aria-label=\"Dr. Mundo: Darius wins 44.1%, worth 1,012 games\"") != null);
+    try testing.expect(std.mem.find(u8, html, "aria-label=\"Teemo: Darius wins 47.1% in 930 games\"") != null);
+    try testing.expect(std.mem.find(u8, html, "in 859 games") == null);
+    // The dot's tip says what its count is
+    try testing.expect(std.mem.find(u8, html, "worth 1,012 games</span>") != null);
+
+    var gd: Demo = .{ .in = in, .grid = .{ .measure = .gold } };
+    const gold = try demoHtml(a, &gd);
+    // Meio's -130: Mundo ahead, no count; Teemo has no Meio, so the curves' -210 in games
+    try testing.expect(std.mem.find(u8, gold, "aria-label=\"Dr. Mundo: 130 gold ahead of Darius at 14\"") != null);
+    try testing.expect(std.mem.find(u8, gold, "aria-label=\"Teemo: 210 gold ahead of Darius at 14 in 930 games\"") != null);
+    // Mordekaiser has Meio's rate but no gold: the curves' 20
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    try testing.expectEqualStrings("20 behind", gd.grid.figure(&h, &in, demo_lane[2]).s);
+}
+
+test "Meio stays out of the other relations: the jungler's tiles are the games'" {
+    const testing = std.testing;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var d: Demo = .{ .grid = .{ .rel = 1 }, .in = .{ .name = "Darius", .slug = "darius", .ddragon = champ.demo_version, .champs = &demo_champs, .role = .top, .counts = .{ .games = 20412, .wins = 10063 }, .rels = &demo_rels, .meio = demo_meio } };
+    const html = try demoHtml(a, &d);
+    try testing.expect(std.mem.find(u8, html, "aria-label=\"Lee Sin: Darius wins 50.8% in 2,104 games\"") != null);
+    try testing.expect(std.mem.find(u8, html, "worth") == null);
 }

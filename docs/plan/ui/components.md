@@ -1260,7 +1260,7 @@ is the champion's ("Ornn wins"). The champion page's matchups card; the matchup 
 shows it for the first champion picked. The owner's Msg carries `rel`, `ally`, `rel_role`
 and `measure` and hands them to `update`
 States: lane opponents by win rate; one chosen: its brief under the tiles; by gold at 14;
-with the jungler
+with the jungler; Meio's lane: estimates worth games, Teemo the games'; Meio's gold at 14
 Used by: finder, champpage
 
 ### Finder

@@ -63,15 +63,15 @@ pub fn decode(a: Allocator, comptime T: type, bytes: []const u8) Error!T {
 
 /// The first fields of a `T` written by `encode`, as `Head` (the same names and types in
 /// order), and the bytes after them: a reader of the head alone needs no decoder for the
-/// rest. Slices point into `bytes`; `Head` holds no other slices
-pub fn decodeHead(comptime T: type, comptime Head: type, bytes: []const u8) Error!struct { head: Head, rest: []const u8 } {
+/// rest. Slices as in `decode`
+pub fn decodeHead(a: Allocator, comptime T: type, comptime Head: type, bytes: []const u8) Error!struct { head: Head, rest: []const u8 } {
     comptime {
         const tf = std.meta.fieldNames(T);
         for (std.meta.fieldNames(Head), 0..) |f, i| {
             if (!std.mem.eql(u8, f, tf[i]) or @FieldType(Head, f) != @FieldType(T, f)) @compileError("data: " ++ @typeName(Head) ++ " isn't the start of " ++ @typeName(T));
         }
     }
-    var r: Reader = .{ .bytes = bytes, .a = std.mem.Allocator.failing };
+    var r: Reader = .{ .bytes = bytes, .a = a };
     if (r.read(u32) != fingerprint(T)) return r.err orelse error.WrongType;
     const v = r.read(Head);
     if (r.err) |e| return e;
@@ -301,11 +301,11 @@ test "a head without the rest's decoder" {
     var out: std.ArrayList(u8) = .empty;
     defer out.deinit(testing.allocator);
     try encode(testing.allocator, T, .{ .n = 3, .name = "Ahri", .rest = &.{ 1, 2 } }, &out);
-    const got = try decodeHead(T, struct { n: u8, name: []const u8 }, out.items);
+    const got = try decodeHead(.failing, T, struct { n: u8, name: []const u8 }, out.items);
     try testing.expectEqual(3, got.head.n);
     try testing.expectEqualStrings("Ahri", got.head.name);
     try testing.expectEqualSlices(u8, &.{ 2, 0, 0, 0, 1, 0, 2, 0 }, got.rest);
-    try testing.expectError(error.WrongType, decodeHead(struct { n: u8 }, struct { n: u8 }, out.items));
+    try testing.expectError(error.WrongType, decodeHead(.failing, struct { n: u8 }, struct { n: u8 }, out.items));
 }
 
 test "one field read where it lies, past fixed-size ones" {

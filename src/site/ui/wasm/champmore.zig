@@ -1,7 +1,7 @@
 //! ui-champmore.wasm: the champion page's matchups and the cards under them
 //! (ui.champpage.More). ui-champion.wasm adds its loader (ui-champmore.js) to the page,
 //! which calls `main`. Under locks (`lk`) it fetches the renderer's answer as
-//! ui-champbuild.wasm does
+//! ui-champbuild.wasm does; in Meio, Meio's answer as ui-champion.wasm does
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -24,7 +24,9 @@ var wasm: []const u8 = "";
 var want: u32 = 0;
 var island: ?*ui.island.Island(cp.More, dom.Dom) = null;
 var answers: std.ArrayList(Answer) = .empty;
-const Answer = struct { path: []const u8, d: *const cp.MoreData };
+/// A lock answer (`d`) or Meio's (`meio`, null for none)
+const Answer = struct { path: []const u8, d: *const cp.MoreData = &empty, meio: ?ui.matchgrid.Meio = null };
+const empty: cp.MoreData = .{ .name = "", .slug = "", .ddragon = "", .champs = &.{}, .roles = &.{} };
 var asked: ?[]const u8 = null;
 var server_lk: []const u8 = "";
 var server_ans: ?[]u8 = null;
@@ -75,29 +77,49 @@ fn changed() void {
     locks();
 }
 
-/// The answer the lock set wants, shown once in; one fetch at a time, kept by path
+/// The answers the lock set and Meio want, Meio's first, each shown once in; one fetch at
+/// a time for both, kept by path (a Meio path never matches a lock's)
 fn locks() void {
-    const i = island orelse return;
-    const path = state.lockWant(gpa) orelse return;
-    if (ui.tree.eql(path, state.answer_path)) return gpa.free(path);
-    for (answers.items) |x| if (ui.tree.eql(x.path, path)) {
-        gpa.free(path);
-        state.setAnswer(gpa, x.path, x.d);
-        return i.render();
-    };
-    if (asked != null) return gpa.free(path);
-    asked = path;
-    dom.fetch(path, 0, answered);
+    if (state.meioWant(gpa)) |path| if (show(.meio, path)) return;
+    if (state.lockWant(gpa)) |path| _ = show(.lock, path);
 }
 
-fn answered(_: i32, bytes: ?[]u8) void {
-    const path = asked.?;
+const Kind = enum(i32) { lock, meio };
+
+/// Shows the answer at `path`, kept or fetched; false when it's already in
+fn show(k: Kind, path: []const u8) bool {
+    const i = island orelse return true;
+    if (ui.tree.eql(path, if (k == .meio) state.meio_path else state.answer_path)) {
+        gpa.free(path);
+        return false;
+    }
+    for (answers.items) |x| if (ui.tree.eql(x.path, path)) {
+        gpa.free(path);
+        if (k == .meio) state.setMeio(x.path, x.meio) else state.setAnswer(gpa, x.path, x.d);
+        i.render();
+        return true;
+    };
+    if (asked != null) {
+        gpa.free(path);
+        return true;
+    }
+    asked = path;
+    dom.fetch(path, @backingInt(k), answered);
+    return true;
+}
+
+fn answered(k: i32, bytes: ?[]u8) void {
+    var x: Answer = .{ .path = asked.? };
     asked = null;
-    const d = gpa.create(cp.MoreData) catch return;
-    d.* = .{ .name = "", .slug = "", .ddragon = "", .champs = &.{}, .roles = &.{} };
-    if (bytes) |b| {
-        d.* = ui.data.decode(gpa, cp.MoreData, b) catch d.*;
-    } else dom.dom.warn("champmore: no lock answer");
-    answers.append(gpa, .{ .path = path, .d = d }) catch return;
+    const b = bytes orelse "";
+    if (bytes == null) dom.dom.warn("champmore: no answer");
+    if (k == @backingInt(Kind.meio)) {
+        if (ui.data.decodeHead(gpa, ui.pvdata.Meio, ui.matchgrid.Meio, b)) |m| x.meio = m.head else |_| {}
+    } else {
+        const d = gpa.create(cp.MoreData) catch return;
+        d.* = ui.data.decode(gpa, cp.MoreData, b) catch empty;
+        x.d = d;
+    }
+    answers.append(gpa, x) catch return;
     locks();
 }

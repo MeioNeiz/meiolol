@@ -23,7 +23,9 @@ pub const Dot = struct {
     champ: champ.Champ,
     /// From the centre, in the measure's units (win rate minus his own, gold at 14)
     x: f32,
+    /// Games played, or with `worth` the games an estimate's range is worth (rate.Look)
     games: u32,
+    worth: bool = false,
     /// The figure read out with the name ("49.9%")
     fig: tree.Text,
     thin: bool = false,
@@ -51,7 +53,9 @@ const W = struct {
     pub const dot = phrase.Phrase("{n:text} {v:text}");
     pub const open_dot = phrase.Phrase("{n:text} {v:text}, open matchup");
     pub const open = plain(" · open ›");
-    pub const games = phrase.Phrase("{n:count} games");
+    /// `x`: "worth " for an estimate, else empty
+    pub const games = phrase.Phrase("{x:text}{n:count} games");
+    pub const worth = plain("worth ");
 };
 
 /// Bins each side of the centre: at least 4, the farthest dot with enough games inside
@@ -169,7 +173,7 @@ pub const DotPlot = struct {
                         .aria_label = if (opens) W.open_dot.with(h, .{ .n = x.champ.name, .v = x.fig.s }) else W.dot.with(h, .{ .n = x.champ.name, .v = x.fig.s }),
                         .on_click = if (opens) h.on(d, .{ .open = k }) else h.on(d, .{ .pick = k }),
                     }, .{h.img(.{ .src = x.champ.src, .alt = "" })}),
-                    h.span(.{ .class = "tt", .aria_hidden = true }, .{ h.b(.{}, .{x.champ.name}), " ", x.fig, " · ", W.games.with(h, .{ .n = x.games }), if (opens) h.span(.{ .class = "go" }, .{W.open}) else null }),
+                    h.span(.{ .class = "tt", .aria_hidden = true }, .{ h.b(.{}, .{x.champ.name}), " ", x.fig, " · ", W.games.with(h, .{ .x = if (x.worth) W.worth.s else "", .n = x.games }), if (opens) h.span(.{ .class = "go" }, .{W.open}) else null }),
                 }));
             }
             // A tip opens toward the middle, so it never leaves the chart

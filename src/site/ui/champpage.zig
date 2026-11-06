@@ -1565,6 +1565,9 @@ pub const More = struct {
     answer_path: []const u8 = "",
     /// The server's answer under `locks`, base64 (Build.ans)
     ans: ?[]const u8 = null,
+    /// Meio's lane under the locks and its answer's path (meioWant); null without one
+    meio: ?matchgrid.Meio = null,
+    meio_path: []const u8 = "",
 
     const P = @This();
 
@@ -1606,7 +1609,23 @@ pub const More = struct {
         p.fromUrl(u);
     }
 
+    /// Meio's answer the pick wants (Top.meioWant's path), null outside Meio
+    pub fn meioWant(p: *const P, a: std.mem.Allocator) ?[]const u8 {
+        const w = p.files.want;
+        if (!w.meio or p.cur >= p.data.roles.len) return null;
+        return lockPath(a, p.root, w.view, "meio", p.data.slug, p.data.roles[p.cur].role, w.rank, if (p.locks.any()) p.locks.s.slice() else pd.no_locks) catch null;
+    }
+
+    /// Shows Meio's lane `m`, the answer at `path`: the grid's rel and measure stay
+    pub fn setMeio(p: *P, path: []const u8, m: ?matchgrid.Meio) void {
+        const u = p.toUrl();
+        p.meio = m;
+        p.meio_path = path;
+        p.fromUrl(u);
+    }
+
     fn waiting(p: *const P, a: std.mem.Allocator) bool {
+        if (p.meioWant(a)) |w| if (!tree.eql(w, p.meio_path)) return true;
         const w = p.lockWant(a) orelse return false;
         return !tree.eql(w, p.answer_path);
     }
@@ -1693,7 +1712,7 @@ pub const More = struct {
     /// The grid's champion and role
     fn input(p: *const P) matchgrid.Input {
         const rl = p.r();
-        return .{ .name = p.data.name, .slug = p.data.slug, .ddragon = p.data.ddragon, .champs = p.data.champs, .role = rl.role, .counts = .{ .games = rl.games, .wins = rl.wins }, .rels = rl.rels, .lock = .{ .on = p.lockedOpp() }, .finder = true };
+        return .{ .name = p.data.name, .slug = p.data.slug, .ddragon = p.data.ddragon, .champs = p.data.champs, .role = rl.role, .counts = .{ .games = rl.games, .wins = rl.wins }, .rels = rl.rels, .lock = .{ .on = p.lockedOpp() }, .finder = true, .meio = if (p.files.shown.meio) p.meio else null };
     }
 
     pub fn view(p: *P, h: *H) N {
@@ -1724,7 +1743,8 @@ pub const More = struct {
             .few => .few,
             .role => |y| .{ .lane = .{ .counts = .{ .games = y.games, .wins = y.wins }, .opps = if (y.rels.len > 0) y.rels[0].opps else &.{}, .rare = if (y.rels.len > 0) y.rels[0].rare else 0 } },
         };
-        in.plat = p.plat(h);
+        // In Meio the lane is Meio's; the other relations are the 30 days'
+        in.plat = if (p.files.shown.meio) h.span(.{}, .{ p.plat(h), badge.view(h, .neutral, .{W.days}) }) else p.plat(h);
         in.few = p.few(h);
         return p.grid.view(h, p, &in);
     }
@@ -2411,6 +2431,38 @@ test "under an opponent lock alone the lane is the unlocked one; with another lo
     try testing.expectEqual(@as(?*const MoreRole, null), p.unlockedLane());
     p.locks.s.set("ks8010");
     try testing.expectEqual(@as(?*const MoreRole, null), p.unlockedLane());
+}
+
+test "Meio's matchups: the lane's rates are Meio's; another relation is the 30 days', badged" {
+    const testing = std.testing;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const champs = [_]Other{.{ .name = "Garen", .id = 86, .key = "Garen", .slug = "garen" }};
+    const opp = [_]Opp{.{ .champ = 0, .games = 900, .wins = 450, .usual = 0, .gold = 40 }};
+    const rels = [_]Rel{ .{ .ally = false, .role = .top, .opps = &opp }, .{ .ally = true, .role = .jungle, .opps = &opp } };
+    const roles = [_]MoreRole{.{ .role = .top, .games = 9000, .wins = 4500, .rels = &rels }};
+    const data: MoreData = .{ .name = "Ornn", .slug = "ornn", .ddragon = "", .champs = &champs, .roles = &roles };
+    var p: More = .{ .data = &data, .root = "../../" };
+    for (&p.files.base) |*b| b.* = &data;
+    p.fromUrl(.{ .role = .top, .period = .meio });
+    p.show(a);
+    try testing.expectEqualStrings("../../data/lock/meio/ornn/top/plat/none.bin", p.meioWant(a).?);
+    const garen = [_]pd.Choice{.{ .id = 86, .name = "Garen", .games = 0, .wins = 0, .meio = .{ .p = 0.47, .lo = 0.45, .hi = 0.49, .own = 0 } }};
+    p.setMeio(p.meioWant(a).?, .{ .stack = .{ .p = 0.5, .lo = 0.495, .hi = 0.505, .own = 0 }, .opponents = &garen });
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, p.view(&h), &w.writer);
+    try testing.expect(std.mem.indexOf(u8, w.written(), "Garen: Ornn wins 47.0%, worth ") != null);
+    try testing.expect(std.mem.indexOf(u8, w.written(), ">30 days<") == null);
+
+    p.fromUrl(.{ .role = .top, .period = .meio, .with = true, .vs = .jungle });
+    try testing.expectEqual(1, p.grid.rel);
+    w.clearRetainingCapacity();
+    try html.write(&t, p.view(&h), &w.writer);
+    try testing.expect(std.mem.indexOf(u8, w.written(), "Garen: Ornn wins 50.0% in 900 games") != null);
+    try testing.expect(std.mem.indexOf(u8, w.written(), ">30 days<") != null);
 }
 
 test "a view's files sit beside the page's; rank files at the root" {

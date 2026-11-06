@@ -460,6 +460,9 @@ const ui_private_budget = 80 * 1024;
 /// The champion page's build with its locks: one file loads fewer bytes than a split, which
 /// would decode the build twice (Jacob 4 Nov: fewer bytes overall over the 40 KB rule)
 const ui_champbuild_budget = 48 * 1024;
+/// The champion page's matchups with Meio's lane: loads lazily after first paint, and the
+/// Meio period added +0.7% to the page's islands with no run-time change (Jacob 6 Nov)
+const ui_champmore_budget = 41 * 1024;
 
 const UiWasm = struct { name: []const u8, wasm: std.Build.LazyPath, js: std.Build.LazyPath };
 
@@ -530,7 +533,8 @@ fn uiSizes(b: *std.Build, families: []const []const u8) *std.Build.Step.Run {
     for (families) |f| {
         const w = uiWasm(b, f);
         const champbuild = std.mem.eql(u8, w.name, "ui-champbuild");
-        const budget: u32 = if (wasm_dev) std.math.maxInt(u32) else if (champbuild) ui_champbuild_budget else for (ui_private) |p| {
+        const champmore = std.mem.eql(u8, w.name, "ui-champmore");
+        const budget: u32 = if (wasm_dev) std.math.maxInt(u32) else if (champbuild) ui_champbuild_budget else if (champmore) ui_champmore_budget else for (ui_private) |p| {
             if (std.mem.eql(u8, p, w.name)) break ui_private_budget;
         } else ui_budget;
         run.addArgs(&.{ w.name, b.fmt("{d}", .{budget}) });

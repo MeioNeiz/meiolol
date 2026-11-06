@@ -46,20 +46,22 @@ pub const Gap = enum {
 };
 
 /// Meio under a champion page's lock stack (site/locks.zig meio), at meioPath
+/// `stack` and `opponents` lead: ui-champion reads `stack` alone (data.decodeField) and
+/// ui-champmore both (data.decodeHead), neither decoding the rest
 pub const Meio = struct {
+    stack: ?Est,
+    /// Every lane opponent in the view, not cut to the others' length (Matchups)
+    opponents: []const Choice,
     gap: Gap,
     /// An item lock counts as built in any slot: the slot isn't modelled
     any_slot: bool,
     /// The stack's games and wins under the page's view
     games: u32,
     wins: u32,
-    stack: ?Est,
     /// Lane gold at 14, in gold: under no lock or an opponent lock only
     gold: ?Est,
     keystones: []const Choice,
     items: []const Choice,
-    /// Every lane opponent in the view, not cut to the others' length (Matchups)
-    opponents: []const Choice,
     /// Each role the model has the champion in; empty with a gap
     roles: []const RoleEst = &.{},
 };
