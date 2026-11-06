@@ -276,7 +276,7 @@ to open, is a Toggletip. The native title and attr(data-tip) are uilint debt tha
 here
 States: closed: hover, focus or tap; open, above; open, end; open, below; hover, then
 Escape: shut until the pointer leaves; open, wraps
-Used by: versus, pv, champpage
+Used by: chip, draftboard, versus, pv, champpage
 
 ### StatCell
 `stat.zig` `.c-stat` site

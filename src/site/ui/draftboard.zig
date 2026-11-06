@@ -12,6 +12,7 @@
 const std = @import("std");
 const tree = @import("tree.zig");
 const toggletip = @import("toggletip.zig");
+const tip = @import("tip.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const badge = @import("badge.zig");
@@ -143,6 +144,14 @@ fn team(h: *H, b: Board, side: Side) N {
     });
 }
 
+/// The app's figure beside the name, its `fact` through Tip (opening from the seat's
+/// outer edge); dense, so no tab stop
+fn figure(h: *H, s: Seat, side: Side, lean: ?Lean, tint: anytype) N {
+    const fig = h.span(.{ .class = "fact", .data_lean = lean, .style = tint }, .{s.fig});
+    if (s.fact.len == 0) return fig;
+    return tip.view(h, .{ .s = s.fact }, .{fig}, .{ .end = side == .them, .stop = false });
+}
+
 fn seat(h: *H, s: Seat, side: Side, rl: role.Role) N {
     const line: ?N = if (s.picking)
         badge.view(h, .turn, .{words.picking})
@@ -184,7 +193,7 @@ fn seat(h: *H, s: Seat, side: Side, rl: role.Role) N {
         h.span(.{ .class = "who" }, .{
             if (s.champ) |c| h.span(.{ .class = "nm" }, .{
                 h.b(.{}, .{c.name}),
-                if (s.fig.len > 0) h.span(.{ .class = "fact", .data_lean = lean, .style = tint, .data_tip = s.fact }, .{s.fig}) else null,
+                if (s.fig.len > 0) figure(h, s, side, lean, tint) else null,
             }) else if (s.ban) |c| champ.view(h, c, .{ .px = .@"20", .state = .banned }) else null,
             line,
             if (s.fact.len > 0 and s.fig.len == 0) h.span(.{ .class = "fact", .data_lean = lean }, .{s.fact}) else null,
@@ -261,13 +270,13 @@ fn full(h: *H, b: Board, on: []const [2]?tree.Handler, comptime game: bool) N {
 }
 
 fn statHead(h: *H, side: Side) N {
-    const tip = toggletip.view(h, if (side == .us) "db-rated-us" else "db-rated-them", .{words.rated}, words.rated, words.rated_note);
+    const rated = toggletip.view(h, if (side == .us) "db-rated-us" else "db-rated-them", .{words.rated}, words.rated, words.rated_note);
     return h.span(.{ .class = "st", .data_side = side }, .{
         h.span(.{}, .{words.kda_h}),
         h.span(.{}, .{words.cs}),
         h.span(.{}, .{words.gold}),
         h.span(.{}, .{words.dmg}),
-        h.span(.{}, .{&tip}),
+        h.span(.{}, .{&rated}),
     });
 }
 
@@ -467,7 +476,7 @@ pub const css =
     \\  .c-draft:not([data-v]) .seat[data-side="them"] .nm { flex-direction: column; align-items: flex-end; }
     \\  /* The seat's edge would cross the role on the seam: the portrait's ring marks the turn */
     \\  .c-draft:not([data-v]) .seat[data-turn] { box-shadow: none; }
-    \\  .c-draft:not([data-v]) .nm > .fact { font-size: var(--fs-m); font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
+    \\  .c-draft:not([data-v]) .nm .fact { font-size: var(--fs-m); font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
     \\  .c-draft .seat > .rl { display: flex; flex-direction: column; align-items: center; margin-left: auto; color: var(--muted); }
     \\  .c-draft .seat[data-side="them"] > .rl { margin: 0 auto 0 0; }
     \\  .c-draft .seat > .rl[data-guessed] { gap: 3px; padding: 3px; border: 1px dashed var(--line-2);
@@ -495,12 +504,6 @@ pub const css =
     \\  .c-draft .fact[data-lean="good"] { color: var(--hi2); }
     \\  .c-draft .fact[data-lean="bad"] { color: var(--lo2); }
     \\  .c-draft .fact[style] { color: var(--c); }
-    \\  .c-draft .nm > .fact[data-tip]:not([data-tip=""]) { position: relative; overflow: visible; cursor: default; }
-    \\  .c-draft .nm > .fact[data-tip]:not([data-tip=""]):hover::after { content: attr(data-tip); position: absolute; left: 0;
-    \\    bottom: calc(100% + 4px); z-index: 3; padding: 2px var(--sp-2); border-radius: var(--r-m);
-    \\    background: var(--panel-3); border: 1px solid var(--line-2); box-shadow: var(--shadow-pop);
-    \\    color: var(--text); font-size: var(--fs-s); white-space: nowrap; pointer-events: none; }
-    \\  .c-draft .seat[data-side="them"] .nm > .fact[data-tip]:hover::after { left: auto; right: 0; }
     \\  .c-draft .ideas { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
     \\  .c-draft .bans > span { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-draft .bans > [data-side="them"] { justify-content: flex-end; }

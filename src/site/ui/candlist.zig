@@ -162,7 +162,7 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
         const said = x.tip orelse x.text;
         chips.add(chip.view(h, .{ .v = .reason, .tip = if (x.pic != null or x.tip != null) said.s else null }, .{
             x.pic orelse h.text(x.text.s),
-            if (x.pic != null) h.span(.{ .class = "sr" }, .{said}) else h.text(" "),
+            if (x.pic != null) null else h.text(" "),
             v,
         }));
     }
@@ -290,7 +290,7 @@ pub const css =
     \\    padding: 0 var(--sp-2); border-radius: var(--r-s); color: var(--muted); font-size: var(--fs-s); }
     \\  .c-cand .wy:hover, .c-cand .wy[aria-expanded="true"] { color: var(--text); background: var(--panel-3); }
     \\  .c-cand .wy:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-    \\  .c-cand .r:has(.wy) .c-chip { pointer-events: none; }
+    \\  .c-cand .r:has(.wy) :is(.c-chip, .c-hint) { pointer-events: none; }
     \\  .c-cand .r[data-cur] { background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--focus); }
     \\  .c-cand .why b[data-dir="up"] { color: var(--hi2); }
     \\  .c-cand .why b[data-dir="down"] { color: var(--lo2); }

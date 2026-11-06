@@ -20,6 +20,9 @@ pub const Opts = struct {
     end: bool = false,
     /// As wide as its container: a line that fills a cell (Bar.track)
     block: bool = false,
+    /// Hugs one box (a chip): the line opens 4px off its edge, and in a flex row the
+    /// wrapper adds no line box's height
+    hug: bool = false,
     /// Wraps at 200px, not 260: a column in a dense grid, where a wide line runs off a
     /// phone's screen whichever end it opens from
     narrow: bool = false,
@@ -38,10 +41,11 @@ pub const Opts = struct {
 pub fn view(h: *H, text: tree.Text, kids: anytype, o: Opts) N {
     return h.span(.{
         .class = if (o.shut) "c-hint esc" else if (o.open) "c-hint open" else "c-hint",
-        .tabindex = @as(i8, if (o.stop orelse o.said) 0 else -1),
+        .tabindex = if (o.stop orelse o.said) "0" else "-1",
         .data_at = if (o.below) "below" else null,
         .data_end = o.end,
         .data_block = o.block,
+        .data_hug = o.hug,
         .data_narrow = o.narrow,
     }, kids ++ .{h.span(.{ .class = "c-hintb", .aria_hidden = if (o.said) null else true }, .{text})});
 }
@@ -56,6 +60,7 @@ pub const css =
     \\@layer components {
     \\  .c-hint { position: relative; outline: none; }
     \\  .c-hint[data-block] { display: block; }
+    \\  .c-hint[data-hug] { display: inline-flex; }
     \\  .c-hint:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
     \\  .c-hintb { position: absolute; left: 0; bottom: calc(100% + 4px); z-index: 3;
     \\    width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
