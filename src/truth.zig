@@ -40,6 +40,7 @@ const core = @import("core");
 const cubes = @import("cubes.zig");
 const par = @import("par.zig");
 const meio = @import("meio.zig");
+const lean = @import("truth_lean.zig");
 const curvesfile = core.curvesfile;
 const Role = core.Role;
 
@@ -60,6 +61,10 @@ pub const Options = struct {
     /// Games from this Unix ms are never read (a held-out test window); 0: none
     until_ms: i64 = 0,
     threads: u8 = 4,
+    /// The lean gate's floors (truth_lean.zig)
+    floors: lean.Floors = .{},
+    /// Per-cell dump (`--cells`)
+    dump: ?*lean.Dump = null,
 };
 
 /// meio.Kind's kinds by name, then the two-lock stacks; the order keeps keys stable
@@ -547,6 +552,8 @@ pub const Stat = struct {
     /// by the estimate shows first (EB ranges promise average coverage only)
     by_weight: [weight_bands.len]Cover = @splat(.{}),
     shown: Cover = .{},
+    /// Meio's middle against the target (truth_lean.zig, the M10 gate)
+    lean: lean.Lean = .{},
 
     fn add(s: *Stat, o: Stat) void {
         s.target += o.target;
@@ -559,6 +566,7 @@ pub const Stat = struct {
         for (&s.blocks, o.blocks) |*a, b| a.add(b);
         for (&s.by_weight, o.by_weight) |*a, b| a.add(b);
         s.shown.add(o.shown);
+        s.lean.add(o.lean);
     }
 
     /// Interval scores against raw mode m over every target size
@@ -568,8 +576,9 @@ pub const Stat = struct {
         return w;
     }
 
-    /// One origin's Stat as a sign-test block per raw mode
+    /// One origin's Stat as a sign-test block per raw mode and a lean block
     fn block(s: *Stat) void {
+        s.lean.block();
         for (&s.blocks, 0..) |*b, m| {
             const w = s.wisAll(m);
             if (w.cells == 0 or w.total(0) == w.total(1)) continue;
@@ -870,7 +879,7 @@ fn binomCdf(q: f64, n_: f64, k_: f64) [2]f64 {
 }
 
 /// Abramowitz and Stegun 7.1.26, error under 1.5e-7
-fn normCdf(x: f64) f64 {
+pub fn normCdf(x: f64) f64 {
     const z = @abs(x) / std.math.sqrt2;
     const t = 1 / (1 + 0.3275911 * z);
     const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
@@ -1004,10 +1013,14 @@ const GoldVariance = struct {
     }
 };
 
-fn score(comptime Model: type, gpa: Allocator, cells: *const Tally, model: *const Model, opts: Options, bucket: usize, out: *Results) !void {
+fn score(comptime Model: type, gpa: Allocator, cells: *const Tally, model: *const Model, opts: Options, origin: usize, out: *Results) !void {
+    const bucket = bucketOf(origin);
     const min: f64 = @floatFromInt(opts.min_games);
     var gold_vars: GoldVariance = try .init(gpa, &cells.gold);
     defer gold_vars.deinit(gpa);
+    const roles = roleGames(cells);
+    var dump_buf: std.ArrayList(u8) = .empty;
+    defer dump_buf.deinit(gpa);
     var shown: std.ArrayList(Shown) = .empty;
     defer shown.deinit(gpa);
     var it = cells.iterator();
@@ -1054,6 +1067,9 @@ fn score(comptime Model: type, gpa: Allocator, cells: *const Tally, model: *cons
             null;
         have[2] = est != null;
         if (est) |m| {
+            const x = popularity(cells, &roles, k, c);
+            const raw: ?f64 = if (games.w[0].n > 0) c.w[0].s / games.w[0].n else null;
+            s.lean.cell(u.kind, .{ .n = n, .k = c.t.s, .p = m.p, .x = x, .own = m.own, .raw = raw });
             loss[2] = if (u.kind == .gold14)
                 avgError(m.p, c.t)
             else
@@ -1070,6 +1086,13 @@ fn score(comptime Model: type, gpa: Allocator, cells: *const Tally, model: *cons
                 r.wis = wis(m.p / gu, predictive((m.p - m.lo) / gu, noise), predictive((m.hi - m.p) / gu, noise), c.t.s / n / gu);
                 ranged[2] = r;
             }
+            if (opts.dump) |d| if (d.kinds.contains(u.kind) and u.bracket != masked) {
+                try dump_buf.print(gpa, "{d}\t{t}\t{d}\t{d}\t{d}\t{d}\t{d:.4}\t{d:.6}\t{d:.6}\t{d:.6}\t{d:.1}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d:.4}\n", .{
+                    origin,    u.kind, u.region,     u.bracket, u.a,          u.b,      x,                                m.p, m.lo, m.hi, m.own,
+                    games.t.n, c.t.s,  games.w[0].n, c.w[0].s,  games.w[1].n, c.w[1].s, if (ranged[2]) |r| r.pit else -1,
+                });
+                if (dump_buf.items.len > 4 << 20) try d.flush(&dump_buf);
+            };
         }
         if (ranged[2]) |mr| {
             for (&s.widths, &s.wis, ranged[0..2]) |*w, *by_size, r| if (r) |rr| {
@@ -1100,6 +1123,43 @@ fn score(comptime Model: type, gpa: Allocator, cells: *const Tally, model: *cons
         }
     }
     markShown(shown.items, bucket, out);
+    if (opts.dump) |d| try d.flush(&dump_buf);
+}
+
+const RoleGames = [regions.len][brackets.len][Role.count]f64;
+
+/// Each role's games in the 30-day window, per region and rank set: what a
+/// champion-role's popularity counts out of
+fn roleGames(cells: *const Tally) RoleGames {
+    var g: RoleGames = @splat(@splat(@splat(0)));
+    var it = cells.counts.iterator();
+    while (it.next()) |e| {
+        const u = unkey(e.key_ptr.*);
+        if (u.kind != .champion) continue;
+        g[u.region][u.bracket][@backingInt(roleOf(u.a))] += @floatFromInt(e.value_ptr.w[0].n);
+    }
+    return g;
+}
+
+/// log((games + 0.5) / (parent games + 1)) in the cell's region, rank set and 30 days:
+/// a champion-role out of its role's games, a share out of its champion-role's (timelined
+/// or keystone-known), a lock's win rate likewise, a matchup, duo or gold cell out of the
+/// champion-role's games
+fn popularity(cells: *const Tally, roles: *const RoleGames, k: u64, c: Cell) f64 {
+    const u = unkey(k);
+    const parent: f64 = switch (u.kind) {
+        .champion => roles[u.region][u.bracket][@backingInt(roleOf(u.a))],
+        else => blk: {
+            const of: Kind = switch (u.kind) {
+                .build, .item, .item_matchup, .keystone_item => .build,
+                .rune, .keystone, .keystone_matchup => .rune,
+                else => .champion,
+            };
+            const p = cells.get(key(of, u.region, u.bracket, u.a, 0)) orelse break :blk 0;
+            break :blk p.w[0].n;
+        },
+    };
+    return @log((c.w[0].n + 0.5) / (parent + 1));
 }
 
 /// A Meio-ranged cell under one champion-role and lock (its key less the listed value)
@@ -1152,7 +1212,7 @@ pub fn scoreAll(comptime Mode: type, gpa: Allocator, io: std.Io, rows: []const R
             if (cells.count() == 0) return;
             var model = try Mode.fit(c.gpa, c.rows[0..lowerBound(c.rows, d)], d);
             defer model.deinit(c.gpa);
-            try score(@TypeOf(model), c.gpa, &cells, &model, c.opts, bucketOf(i), &c.parts[i]);
+            try score(@TypeOf(model), c.gpa, &cells, &model, c.opts, i, &c.parts[i]);
         }
     };
     try par.forEachUpTo(io, opts.origins, @max(opts.threads, 1), Ctx{
@@ -1309,7 +1369,7 @@ pub fn load(gpa: Allocator, io: std.Io, cube_dir: []const u8, opts: Options) !Lo
 }
 
 /// Loads, scores and writes the markdown report to `out` (and the TSV to `tsv`)
-pub fn run(comptime Mode: type, gpa: Allocator, io: std.Io, cube_dir: []const u8, opts: Options, out: *std.Io.Writer, tsv: ?*std.Io.Writer) !void {
+pub fn run(comptime Mode: type, gpa: Allocator, io: std.Io, cube_dir: []const u8, opts: Options, out: *std.Io.Writer, tsv: ?*std.Io.Writer, lean_tsv: ?*std.Io.Writer) !void {
     const loaded = try load(gpa, io, cube_dir, opts);
     defer gpa.free(loaded.rows);
     const results = try scoreAll(Mode, gpa, io, loaded.rows, opts);
@@ -1322,7 +1382,9 @@ pub fn run(comptime Mode: type, gpa: Allocator, io: std.Io, cube_dir: []const u8
         loaded.days, end,       if (opts.until_ms != 0) " (games from --until left out)" else "",
     });
     try report(results, out);
+    try lean.report(gpa, results, opts.floors, out);
     if (tsv) |w| try writeTsv(results, opts.patch, loaded.t0, w);
+    if (lean_tsv) |w| try lean.writeTsv(gpa, results, opts.floors, opts.patch, w);
 }
 
 pub fn report(results: *const Results, out: *std.Io.Writer) !void {
@@ -1825,6 +1887,10 @@ test "rolling origin: windows, target, kinds and Meio" {
     // Its 0.4-0.6 is faded; the win is 0.5 off, inside 1.28 sqrt(0.078^2 + 0.25)
     try std.testing.expectEqual(@as(f64, 1), s.cal[2][1].cells);
     try std.testing.expectEqual(@as(f64, 1), s.cal[2][1].inside);
+    // Lean: the win against Meio's 0.5; its 2 of the role's 2 games, the top band
+    try std.testing.expectEqual(@as(f64, 0.5), s.lean.all.cells.r);
+    try std.testing.expectEqual(@as(f64, 1), s.lean.pop[0].cells.count);
+    try std.testing.expectEqual(@as(f64, 1), s.lean.own[0].cells.count);
     // Paired ranges: the 30 days' 0.5 from 2 games, half 1.28 sqrt(0.25 / 2), against
     // Meio's 0.1; the patch's 0.25 from 1 game, half 1.28 sqrt(0.1875)
     const w30 = s.widths[0];

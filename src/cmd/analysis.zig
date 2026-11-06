@@ -14,6 +14,7 @@ const objectives = @import("../objectives.zig");
 const winchance = @import("../winchance.zig");
 const playstyle = @import("../playstyle.zig");
 const truth = @import("../truth.zig");
+const truth_lean = @import("../truth_lean.zig");
 const cubes = @import("../cubes.zig");
 const store = @import("store");
 const Date = @import("../date.zig").Date;
@@ -337,6 +338,11 @@ pub const usage_truth =
     \\              --min-games N    a raw number from N games (default 10)
     \\              --until 2026-10-20T14:44Z  never read games from then (a test window)
     \\              --tsv PATH       also one line per cell kind, region, rank and day
+    \\              --lean PATH      also the lean table's every group (the M10 gate)
+    \\              --lean-floor X   a lean fails from X points (default 0.5) ...
+    \\              --lean-gold X    ... or X gold at 14 (default 25), beyond 2 se
+    \\              --cells PATH     also every Meio-estimated cell per origin (tsv)
+    \\              --cells-kinds K,K  its kinds (default champion,keystone,item,rune,build)
     \\              --no-meio        the raw modes alone (no estimate fitted)
     \\              --threads N      default 4
     \\
@@ -345,6 +351,9 @@ pub const usage_truth =
 pub fn cmdTruth(c: *Cmd) !u8 {
     var o: truth.Options = .{ .patch = "" };
     var tsv_path: ?[]const u8 = null;
+    var lean_path: ?[]const u8 = null;
+    var cells_path: ?[]const u8 = null;
+    var cells_kinds: []const u8 = truth_lean.Dump.default_kinds;
     var with_meio = true;
     while (c.next()) |_| {
         if (c.is("--patch")) {
@@ -361,6 +370,16 @@ pub fn cmdTruth(c: *Cmd) !u8 {
             o.until_ms = parseUtc(try c.value()) orelse return error.Usage;
         } else if (c.is("--tsv")) {
             tsv_path = try c.value();
+        } else if (c.is("--lean")) {
+            lean_path = try c.value();
+        } else if (c.is("--lean-floor")) {
+            o.floors.points = std.fmt.parseFloat(f64, try c.value()) catch return error.Usage;
+        } else if (c.is("--lean-gold")) {
+            o.floors.gold = std.fmt.parseFloat(f64, try c.value()) catch return error.Usage;
+        } else if (c.is("--cells")) {
+            cells_path = try c.value();
+        } else if (c.is("--cells-kinds")) {
+            cells_kinds = try c.value();
         } else if (c.is("--no-meio")) {
             with_meio = false;
         } else if (c.is("--threads")) {
@@ -373,15 +392,32 @@ pub fn cmdTruth(c: *Cmd) !u8 {
     const tsv_file = if (tsv_path) |p| try std.Io.Dir.cwd().createFile(io, p, .{}) else null;
     defer if (tsv_file) |f| f.close(io);
     var tsv = if (tsv_file) |f| f.writer(io, &tsv_buf) else null;
+    var lean_buf: [64 * 1024]u8 = undefined;
+    const lean_file = if (lean_path) |p| try std.Io.Dir.cwd().createFile(io, p, .{}) else null;
+    defer if (lean_file) |f| f.close(io);
+    var lean_w = if (lean_file) |f| f.writer(io, &lean_buf) else null;
+    var cells_buf: [64 * 1024]u8 = undefined;
+    const cells_file = if (cells_path) |p| try std.Io.Dir.cwd().createFile(io, p, .{}) else null;
+    defer if (cells_file) |f| f.close(io);
+    var cells_w = if (cells_file) |f| f.writer(io, &cells_buf) else null;
+    var dump: truth_lean.Dump = undefined;
+    if (cells_w) |*w| {
+        dump = .{ .io = io, .out = &w.interface, .kinds = truth_lean.Dump.parseKinds(cells_kinds) orelse return error.Usage };
+        try w.interface.writeAll(truth_lean.Dump.header);
+        o.dump = &dump;
+    }
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
     const dir = try cubes.dirIn(c.arena, c.data_dir);
     const tsv_w = if (tsv) |*w| &w.interface else null;
+    const lean_tw = if (lean_w) |*w| &w.interface else null;
     if (with_meio) {
-        try truth.run(truth.Meio, c.init.gpa, io, dir, o, &stdout.interface, tsv_w);
-    } else try truth.run(truth.NoMeio, c.init.gpa, io, dir, o, &stdout.interface, tsv_w);
+        try truth.run(truth.Meio, c.init.gpa, io, dir, o, &stdout.interface, tsv_w, lean_tw);
+    } else try truth.run(truth.NoMeio, c.init.gpa, io, dir, o, &stdout.interface, tsv_w, lean_tw);
     try stdout.interface.flush();
     if (tsv) |*w| try w.interface.flush();
+    if (lean_w) |*w| try w.interface.flush();
+    if (cells_w) |*w| try w.interface.flush();
     return 0;
 }
 

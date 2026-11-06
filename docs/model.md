@@ -5962,6 +5962,27 @@ Reading:
   a start item; Overlord's Bloodmail +10 AD, passive 12% => 10%) needs 16.22's first
   week and start items in the rows
 
+### The lean table, truth's M10 gate, 2026-11-06 (m10, NL0)
+
+`meiolol truth` ends with "Lean (the M10 gate)" (src/truth_lean.zig): does Meio's middle
+run high or low over a group of cells (docs/plan/meio-middle.md NL0)?
+
+- Lean: later rate minus Meio's middle, target games weighted (sum (k - n p) / sum n),
+  points (gold at 14: gold). se over day origins (one origin's cells share a fit);
+  under 4 origins (day buckets 0-3) over cells
+- Groups per kind, region and rank set: all cells; popularity band, x = log((games +
+  0.5) / (parent games + 1)) in the cell's region, rank set and 30 days, 10 fixed bands 1
+  log unit wide (champion-roles of their role's games, > -3 .. < -11; other kinds of
+  their champion-role's, > -0.5 .. < -8); Meio's own games (0, 1-9, ..., 1000+); the gem
+  check (the 3 rarest bands by raw 30-day number above or below Meio's middle, or
+  unseen); day bucket
+- A group fails beyond 2 se and over 0.5 points or 25 gold (`--lean-floor`,
+  `--lean-gold`). Chance: failures expected with no lean, P(|T| > max(2, floor / se)),
+  Student t over origins, summed; the gate fails when failures pass expected + 2
+  sqrt(expected), and lists the surest 60. Every group: `--lean PATH`
+- Per-cell dump for analyses: `--cells PATH` (`--cells-kinds`, default champion,
+  keystone, item, rune, build)
+
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
 data/snap (85,693 ranked solo games, 16.19 + 16.20, all regions), sqlite3 on the Mac;
