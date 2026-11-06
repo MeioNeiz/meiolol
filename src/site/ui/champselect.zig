@@ -66,6 +66,17 @@ pub const Lane = struct {
     enemy: bool = false,
     /// "EUW, last 30 days"
     scope: []const u8 = "",
+
+    /// Nothing rates a teammate's pick (docs/production-key.md): their lane once they
+    /// lock is the matchup only
+    pub fn rated(l: Lane) bool {
+        return !(l.mastery == null and l.mode == .locked);
+    }
+
+    /// No options: no head either, nothing stands in for them
+    pub fn listed(l: Lane) bool {
+        return l.rated() and l.options.len > 0;
+    }
 };
 
 pub const Option = struct {
@@ -140,11 +151,8 @@ pub fn view(h: *H, s: Screen, held: ?*lanechart.Held) N {
 
 fn lane(h: *H, l: Lane, held: ?*lanechart.Held) N {
     const ally = l.mastery == null;
-    // Nothing rates a teammate's pick (docs/production-key.md): their lane once they
-    // lock is the matchup only
-    const rated = !(ally and l.mode == .locked);
-    // No options: no head either, nothing stands in for them
-    const listed = rated and l.options.len > 0;
+    const rated = l.rated();
+    const listed = l.listed();
     var opts = h.list();
     for (l.options, 0..) |o, i| opts.add(option(h, i, o, l.mode == .locked));
     return h.section(.{ .class = "lane" }, .{

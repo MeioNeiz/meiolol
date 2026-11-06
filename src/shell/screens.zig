@@ -171,7 +171,7 @@ fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.comp
     if (panels.load) |x| try ui.data.encode(a, ui.loadscreen.Screen, x, &cbin);
     if (panels.post) |x| try ui.data.encode(a, ui.postgame.Screen, x, &cbin);
     try cbin.appendSlice(a, phase(d.where));
-    try cbin.appendSlice(a, &.{ @intFromBool(state.by_mastery.load(.acquire)), @intFromBool(d.signin == null) });
+    try cbin.appendSlice(a, &.{ @intFromBool(state.by_mastery.load(.acquire)), @intFromBool(d.signin == null), @intFromBool(laneOnly(d, opts)) });
     const comp_id = @as(u32, @truncate(std.hash.Wyhash.hash(0, cbin.items))) | 1;
     var bin: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, app.Data, d, &bin);
@@ -301,13 +301,15 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
     } else null;
     const comp_n: ?ui.N = if (under) |x| ui.compview.view(&h, x) else null;
     // Champ select's views (ui/app.zig): CSS reads the checked radio, so no island byte;
-    // a page reload (the comp view coming) starts on Options again
+    // a page reload (the comp view coming, laneOnly changing) starts on the first again
+    const lane_only = laneOnly(d, f.picks);
     const views = [_]ui.segmented.Item{
         .{ .label = .{ .s = "Options" }, .value = "options", .selected = true },
-        .{ .label = .{ .s = "Lane" }, .value = "lane" },
+        .{ .label = .{ .s = "Lane" }, .value = "lane", .selected = lane_only },
         .{ .label = .{ .s = "Comps" }, .value = "comp" },
     };
-    const tabs_n: ?ui.N = if (d.screen == .select) ui.segmented.radios(&h, "cs-view", .{ .s = .s, .label = .{ .s = "View" } }, views[0..if (under != null) 3 else 2]) else null;
+    const shown = views[@intFromBool(lane_only)..if (under != null) 3 else 2];
+    const tabs_n: ?ui.N = if (d.screen == .select and shown.len > 1) ui.segmented.radios(&h, "cs-view", .{ .s = .s, .label = .{ .s = "View" } }, shown) else null;
     const lobby_n: ?ui.N = if (f.lobby) |x| ui.lobby.view(&h, x) else null;
     const home_n: ?ui.N = if (f.home) |x| ui.apphome.view(&h, f.site, x) else null;
     const build_n: ?ui.N = if (f.build) |x| ui.gamebuild.view(&h, x) else null;
@@ -701,6 +703,17 @@ fn seat(a: Allocator, c: Ctx, s: board.Seat, side: usize, k: usize) !ui.draftboa
     return out;
 }
 
+/// The lane shown is its matchup alone (an ally's locked seat) and no Options panel lists
+/// every option: Options would hold just that matchup, so Lane is its view instead
+fn laneOnly(d: app.Data, picks: ?ui.picks.Data) bool {
+    const s = switch (d.screen) {
+        .select => |x| x,
+        else => return false,
+    };
+    if (picks) |p| if (p.private) return false;
+    return s.lane.chart != null and !s.lane.listed();
+}
+
 /// The Options panel (docs/plan/ui/app-options.md): every row in the private edition,
 /// in the public one up to lanecard.max_options past the lane panel's own, effects with
 /// their sign only (product rules: 3 to 5, no numbers)
@@ -753,8 +766,9 @@ pub fn picksOf(a: Allocator, c: Ctx, s: *const state.Select) !?ui.picks.Data {
         .role = uiRole(p.role),
         .them = if (s.card.opponent) |o| if (c.stats) |st| st.nameOf(o.champion) else "" else "",
         .rows = rows.items,
-        // Beside the region chip, the period alone
-        .scope = if (s.all_regions != null) s.card.period else try scopeOf(a, c, s.card.period),
+        // Beside the region chip, the period alone; the public edition's lane panel says
+        // it under its own list
+        .scope = if (s.all_regions != null) s.card.period else if (c.private) try scopeOf(a, c, s.card.period) else "",
         .all_regions = s.all_regions,
     };
 }
@@ -1653,6 +1667,17 @@ test "an ally's lane: once they lock the matchup only, nothing rates their pick"
         for ([_][]const u8{ "Other options", "<ol class=\"opts\"", "enough games", "team win" }) |no|
             try testing.expect(std.mem.find(u8, html, no) == null);
     }
+    // With its chart that matchup is Lane's: the shell checks it and leaves Options out,
+    // and a switch of one view isn't drawn
+    var d = try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .select = &sel }, .none);
+    d.screen.select.lane.chart = ui.champselect.sample.lane.chart;
+    try testing.expect(laneOnly(d, null));
+    const comps = try render(a, d, null, ui.compview.sample);
+    try testing.expect(std.mem.find(u8, comps, "value=\"lane\" checked") != null);
+    try testing.expect(std.mem.find(u8, comps, "value=\"options\"") == null);
+    try testing.expect(std.mem.find(u8, comps, "value=\"comp\"") != null);
+    try testing.expect(std.mem.find(u8, try render(a, d, null, null), "name=\"cs-view\"") == null);
+    try testing.expect(!laneOnly(d, .{ .seq = 0, .private = true, .role = .mid, .rows = &.{} }));
     // Still to pick, nothing with enough games: no head, no sentence in its place
     sel.card.locked = false;
     sel.card.me = 0;
@@ -2087,6 +2112,8 @@ test "options: the region chip once there are every region's stats, the lane pan
     const euw_only = (try picksOf(a, c, &sel)).?;
     try testing.expectEqual(null, euw_only.all_regions);
     try testing.expectEqualStrings("EUW, last 30 days", euw_only.scope);
+    // The public lane panel says it under its own list
+    try testing.expectEqualStrings("", (try picksOf(a, .{ .stats = &f.stats, .icons = null, .private = false }, &sel)).?.scope);
 
     sel.all_regions = true;
     c.region = regionOf(&sel);

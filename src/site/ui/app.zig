@@ -197,8 +197,9 @@ pub const css =
     \\    .c-live .c-cs .lane > .scope { grid-row: foot; margin: 0 var(--card-px) var(--card-py); }
     \\    /* Each view shows its own: Options the lists (the lane panel's own only where the
     \\       Options island lacks them, the public edition's), Lane the matchup, Comps the comp
-    \\       view. No Lane without a matchup chart. A lane with no options (an ally's locked
-    \\       seat: no h3) keeps its matchup under Options, else that view is empty */
+    \\       view. No Lane without a matchup chart, no switch of one view. A lane with no
+    \\       options (an ally's locked seat: no h3) keeps its matchup under Options; the
+    \\       shell checks Lane for it and leaves Options out (screens.zig laneOnly) */
     \\    .c-live:has(> .c-seg [value="options"]:checked) > .c-comp,
     \\    .c-live:has(> .c-seg [value="options"]:checked) .c-cs .lane:has(> .opts-head > h3) > :is(.vs + p, .c-lane, .c-lane + .scope),
     \\    .c-live:has(> .c-seg [value="options"]:checked):has(> .c-picks[data-all]) .c-cs .lane > :not(.vs),
@@ -207,10 +208,7 @@ pub const css =
     \\    .c-live:has(> .c-seg [value="comp"]:checked) > .c-picks,
     \\    .c-live:has(> .c-seg [value="comp"]:checked) .c-cs :is(.side > .bans, .lane > :not(.vs)),
     \\    .c-live:not(:has(.c-cs .c-lane)) > .c-seg > label:has([value="lane"]),
-    \\    .c-live:has(.c-cs .lane > .c-lane):not(:has(.c-cs .lane > .opts-head > h3, > .c-picks[data-all])) > .c-seg > label:has([value="options"]) { display: none; }
-    \\    /* That matchup under Options is the lane: one tab for it, Lane, shown selected */
-    \\    .c-live:has(.c-cs .lane > .c-lane):not(:has(.c-cs .lane > .opts-head > h3, > .c-picks[data-all])):has(> .c-seg [value="options"]:checked) > .c-seg > label:has([value="lane"]) {
-    \\      background: var(--sel-bg); color: var(--sel-ink); box-shadow: inset 0 0 0 1px var(--sel-line), var(--shadow-ctl); }
+    \\    .c-live:not(:has(.c-cs .c-lane, > .c-seg [value="comp"])) > .c-seg { display: none; }
     \\    /* Before champ select: the note and form panel beside the tiles */
     \\    .c-live:has(> .c-apphome) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     \\      grid-template-rows: repeat(4, auto) 1fr; align-items: start; gap: 0 var(--sp-4); }
