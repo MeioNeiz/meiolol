@@ -840,7 +840,7 @@ pub const css =
     \\  @container (min-width: 481px) {
     \\    .c-build .levels > .lp { padding-block: var(--sp-1); }
     \\    .c-build .levels > .lp > .c-skills > .grid { gap: 2px; }
-    \\    .c-build .levels > .lp > .c-skills > .grid > i { height: 20px; }
+    \\    .c-build .levels > .lp > .c-skills > .grid i { height: 20px; }
     \\  }
     \\  @container (min-width: 1400px) { .c-build > .in { grid-template-columns: minmax(0, 660px) minmax(0, 1fr); } }
     \\  @container (min-width: 1500px) {
@@ -861,7 +861,10 @@ pub const css =
     \\  @container (max-width: 300px) { .c-build .sort > .lead { margin-left: 0; } .c-build .sort > .lead > span { display: none; } }
     \\  .c-build .slots > .cells { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-flow: dense;
     \\    gap: var(--sp-4) var(--sp-5); }
-    \\  @container (max-width: 520px) { .c-build .slots > .cells { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-3); } }
+    \\  @container (max-width: 520px) {
+    \\    .c-build .slots > .cells { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-3); }
+    \\    .c-build .slot[data-k="skills"] { grid-column: 1 / -1; }
+    \\  }
     \\  .c-build .slot, .c-build .levels { container-type: inline-size; display: flex; flex-direction: column; min-width: 0; }
     \\  .c-build .slot[data-k="core"] { grid-column: span 2; }
     \\  .c-build .slot[data-k="skills"][data-open] { grid-column: 1 / -1; }
@@ -917,7 +920,7 @@ pub const css =
     \\    font-size: var(--fs-m); font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--line); }
     \\  .c-build .lp > .c-skills { flex: 1; min-width: 0; margin-right: var(--sp-2); }
     \\  .c-build .lp > .c-skills > .grid { font-size: var(--fs-s); gap: 3px 2px; }
-    \\  .c-build .lp > .c-skills > .grid > i { height: 22px; }
+    \\  .c-build .lp > .c-skills > .grid i { height: 22px; }
     \\  .c-build .lp > .p { color: var(--t2); }
     \\  .c-build .what > .best { margin-left: 4px; font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--accent); }
     \\  .c-build .what > .usual { margin-left: 4px; font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; }
@@ -941,7 +944,7 @@ pub const css =
     \\    .c-build .lp { flex-wrap: wrap; }
     \\    .c-build .lp > .c-skills { flex-basis: 100%; margin: 0 0 var(--sp-1); }
     \\    .c-build .lp > .c-skills > .grid { font-size: var(--fs-xs); gap: 2px 1px; }
-    \\    .c-build .lp > .c-skills > .grid > i { height: 18px; }
+    \\    .c-build .lp > .c-skills > .grid i { height: 18px; }
     \\    .c-build .lp > .p { margin-left: auto; }
     \\  }
     \\}

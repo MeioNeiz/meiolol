@@ -936,7 +936,8 @@ gamerow, scoreboard, itemrow, gamepage, patchpage, champpage
 `skillgrid.zig` `.c-skills` site
 SkillGrid: a skill order as the 4 x 18 grid of levels (Q, W, E, R rows, the level's number
 lit in the row of the ability taken), with the order's pick share, win rate and games
-under it. All 18 levels at any width: cells shrink to 13 px, never cut to 8
+under it. All 18 levels at any width: two halves of 9, side by side, levels 10 to 18 under
+1 to 9 under 330 px
 States: most played order; few games: a wide range, faded; one game's order; game ended
 before 18
 Used by: gamebuild, buildpanel, gamepage

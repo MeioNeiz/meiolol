@@ -102,7 +102,7 @@ pub const Trend = struct {
     }
 
     /// Ticks every `step` points around the even number nearest the reference (50 for
-    /// 49.3), at least ±4 so a flat champion stays flat
+    /// 49.3), at least ±4 so a flat champion stays flat; with bars, the lowest point above their quarter
     fn scale(t: *const T) struct { y: chart.Scale, c: f32, step: f32 } {
         if (t.plain) {
             var top: f32 = 0;
@@ -122,7 +122,13 @@ pub const Trend = struct {
             step = s;
             if (s * 1.2 >= dev) break;
         }
-        return .{ .y = .{ .lo = c - step * 1.25, .hi = c + step * 1.25 }, .c = c, .step = step };
+        const hi = c + step * 1.25;
+        var lo = c - step * 1.25;
+        // Bars take the plot's bottom quarter: the floor drops till the lowest point clears it
+        if (t.bars.len > 0) for (t.points) |p| {
+            lo = @min(lo, (p.v - 0.25 * hi) / 0.75);
+        };
+        return .{ .y = .{ .lo = lo, .hi = hi }, .c = c, .step = step };
     }
 
     fn plane(t: *const T) chart.Plane {
@@ -275,6 +281,16 @@ test "the scale centres on the reference, whole ticks, at least ±4" {
     // A base far off widens the scale too
     t = .{ .label = plain("x"), .points = &demo_patch, .base = &.{ 50, 50, 60 } };
     try testing.expectEqual(@as(f32, 10), t.scale().step);
+}
+
+test "with bars the floor drops till the lowest point clears their quarter" {
+    const low = [_]Point{ .{ .label = plain("a"), .v = 30 }, .{ .label = plain("b"), .v = 52 } };
+    var t: Trend = .{ .label = plain("x"), .points = &low };
+    try testing.expectEqual(@as(f32, 25), t.scale().y.lo);
+    t.bars = &.{ 10, 20 };
+    const y = t.scale().y;
+    try testing.expectEqual(@as(f32, 75), y.hi);
+    try testing.expectApproxEqAbs(@as(f32, 0.25), (30 - y.lo) / (y.hi - y.lo), 1e-4);
 }
 
 test "a plain rate's scale runs from 0 to a nice top, the middle tick only when whole" {

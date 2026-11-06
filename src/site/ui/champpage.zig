@@ -192,7 +192,7 @@ pub const Patch = struct {
     wins: u32,
     /// Its place in the role on that patch; 0: rare
     rank: u16 = 0,
-    /// %: of the patch's games with the role filled, of its games
+    /// %: of the patch's games
     pick: f32 = 0,
     ban: f32 = 0,
 };

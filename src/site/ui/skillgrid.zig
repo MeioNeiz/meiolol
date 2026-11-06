@@ -1,6 +1,7 @@
 //! SkillGrid: a skill order as the 4 x 18 grid of levels (Q, W, E, R rows, the level's
 //! number lit in the row of the ability taken), with the order's pick share, win rate and
-//! games under it. All 18 levels at any width: cells shrink to 13 px, never cut to 8
+//! games under it. All 18 levels at any width: two halves of 9, side by side, levels 10
+//! to 18 under 1 to 9 under 330 px
 const tree = @import("tree.zig");
 const bp = @import("buildpanel.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -32,15 +33,23 @@ pub fn order(h: *H, keys: []const u8) N {
 }
 
 fn grid(h: *H, keys: []const u8) N {
+    return h.div(.{ .class = "grid", .role = "img", .aria_label = keys }, .{ half(h, keys, 0), half(h, keys, 9) });
+}
+
+/// Levels from+1 to from+9 by ability: side by side, or the second under the first in a
+/// narrow container, where 18 cells can't hold two digits
+fn half(h: *H, keys: []const u8, from: usize) N {
     var cells = h.list();
-    for (rows) |key| {
-        cells.add(h.b(.{}, .{h.fmt("{c}", .{key})}));
-        for (0..18) |i| {
+    for (rows, 0..) |key, r| {
+        // The second half's keys from CSS: words only once
+        const k = rows[r..][0..1];
+        cells.add(if (from == 0) h.b(.{}, .{k}) else h.b(.{ .data_k = k }, .{}));
+        for (from..from + 9) |i| {
             const on = i < keys.len and keys[i] == key;
             cells.add(h.el(.i, .{ .data_on = if (!on) null else if (key == 'R') "r" else "" }, .{if (on) @as(?u64, i + 1) else null}));
         }
     }
-    return h.div(.{ .class = "grid", .role = "img", .aria_label = keys }, .{cells.done()});
+    return h.div(.{ .class = "h" }, .{cells.done()});
 }
 
 /// "39% 50.1 10.4k" under the grid
@@ -55,13 +64,24 @@ fn figures(h: *H, share: f64, games: u32, wins: u32, ref: f64) N {
 pub const css =
     \\@layer components {
     \\  .c-skills { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
-    \\  .c-skills > .grid { display: grid; grid-template-columns: 14px repeat(18, minmax(0, 1fr)); gap: 2px 1px;
-    \\    font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
-    \\  .c-skills > .grid > b { color: var(--t2); font-weight: var(--w-b); display: flex; align-items: center; }
-    \\  .c-skills > .grid > i { min-width: 13px; height: 18px; border-radius: 3px; background: var(--panel-2); font-style: normal;
+    \\  .c-skills > .grid { display: flex; gap: 2px 1px; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+    \\  .c-skills > .grid > .h { display: grid; grid-template-columns: 14px repeat(9, minmax(0, 1fr)); gap: inherit;
+    \\    flex: 9 1 14px; min-width: 0; }
+    \\  .c-skills > .grid > .h + .h { grid-template-columns: repeat(9, minmax(0, 1fr)); flex-basis: 0; }
+    \\  .c-skills > .grid > .h + .h > b { display: none; }
+    \\  .c-skills > .grid > .h + .h > b::before { content: attr(data-k); }
+    \\  @container (max-width: 330px) {
+    \\    .c-skills > .grid { flex-direction: column; }
+    \\    .c-skills > .grid > .h { flex: none; }
+    \\    .c-skills > .grid > .h + .h { grid-template-columns: 14px repeat(9, minmax(0, 1fr));
+    \\      margin-top: var(--sp-1); }
+    \\    .c-skills > .grid > .h + .h > b { display: flex; }
+    \\  }
+    \\  .c-skills .grid b { color: var(--t2); font-weight: var(--w-b); display: flex; align-items: center; }
+    \\  .c-skills .grid i { min-width: 13px; height: 18px; border-radius: 3px; background: var(--panel-2); font-style: normal;
     \\    display: flex; align-items: center; justify-content: center; color: var(--text); overflow: hidden; }
-    \\  .c-skills > .grid > i[data-on] { background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--focus); }
-    \\  .c-skills > .grid > i[data-on="r"] { background: color-mix(in oklab, var(--turn) 18%, transparent); box-shadow: inset 0 0 0 1px var(--turn-line); }
+    \\  .c-skills .grid i[data-on] { background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--focus); }
+    \\  .c-skills .grid i[data-on="r"] { background: color-mix(in oklab, var(--turn) 18%, transparent); box-shadow: inset 0 0 0 1px var(--turn-line); }
     \\  .c-skills > .under { display: flex; justify-content: flex-end; align-items: baseline; gap: var(--sp-2);
     \\    font-size: var(--fs-s); font-variant-numeric: tabular-nums; }
     \\  .c-skills > .under > .p { color: var(--t2); }
