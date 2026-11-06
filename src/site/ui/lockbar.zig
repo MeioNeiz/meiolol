@@ -134,7 +134,8 @@ pub const LockBar = struct {
     pub fn view(b: *LockBar, h: *H, labels: []const Label) N {
         if (!b.set.any()) return .none;
         var chips = h.list();
-        for (labels) |l| {
+        for (labels) |label| {
+            const l = named(label);
             var icons = h.list();
             for (l.art) |a| icons.add(art.view(h, a, .{ .k = artKind(l.kind), .px = .@"20", .named = false }));
             const what = if (l.text.len > 0) l.text else if (l.art.len > 0) l.art[0].name else "";
@@ -162,6 +163,19 @@ pub const LockBar = struct {
 /// but hidden, so a parent's hover can show it faint as a hint (the parent's CSS)
 pub fn mark(h: *H, on: bool) N {
     return h.span(.{ .class = "c-lockmark", .aria_hidden = true, .data_on = on }, .{});
+}
+
+/// The lane opponent locks' values are BuildPanel's groups, so the bar names them
+/// itself: no data needed
+fn named(l: Label) Label {
+    const words: [2][]const u8 = switch (l.kind) {
+        .reach => .{ "vs melee", "vs ranged" },
+        .damage => .{ "vs AD", "vs AP" },
+        else => return l,
+    };
+    if (std.mem.eql(u8, l.text, "1")) return .{ .kind = l.kind, .text = words[0] };
+    if (std.mem.eql(u8, l.text, "2")) return .{ .kind = l.kind, .text = words[1] };
+    return l;
 }
 
 fn artKind(k: Kind) art.Kind {
@@ -221,6 +235,22 @@ pub fn gallery(g: *Gallery) void {
     g.add("thin: the range is wide, so the rate fades", thin.view(h, &.{
         .{ .kind = .keystone, .art = &.{.{ .name = "Conqueror", .src = "" }}, .text = "Conqueror" },
         .{ .kind = .core3, .art = core },
+    }));
+    const vs = h.mem.create(Set) catch {
+        h.oom = true;
+        return;
+    };
+    vs.* = .{};
+    vs.toggle(.keystone, "8010");
+    vs.toggle(.reach, "2");
+    const lane = h.mem.create(LockBar) catch {
+        h.oom = true;
+        return;
+    };
+    lane.* = .{ .set = vs, .games = 1630, .wins = 812 };
+    g.add("Conqueror against ranged lane opponents: the build panel's row names its chip", lane.view(h, &.{
+        .{ .kind = .keystone, .art = &.{.{ .name = "Conqueror", .src = "" }}, .text = "Conqueror" },
+        .{ .kind = .reach, .text = "2" },
     }));
     g.add("the mark: on a locked rune, page or build row's top right corner", mark(h, true));
 }

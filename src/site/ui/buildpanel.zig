@@ -17,7 +17,9 @@
 //! keystone's players, a chip with × says so and unlocks, the keystone in the URL (`k`).
 //! With a lock set (the champion page's, ui/lockbar.zig) a tap anywhere on an option's
 //! row, or on a rune page, locks it instead (lockbar.mark on what is locked): the host
-//! fetches the build under the set and shows it here
+//! fetches the build under the set and shows it here. There a row over the panel, Lane
+//! opponent All | Melee | Ranged | AD | AP with each group's games, locks the whole panel
+//! on one group
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -124,9 +126,6 @@ pub const Lock = struct { keystone: u32, slots: []const Slot, games: u32, wins: 
 
 pub const Data = struct {
     runes: runetree.Data,
-    /// The runes against melee, then ranged lane opponents (moves from `runes` marked),
-    /// or none
-    reach: []const runetree.Data = &.{},
     /// Any order; a kind with no options draws no cell
     slots: []const Slot,
     /// `slots` with the items of players ahead, then behind their lane opponent on gold
@@ -158,8 +157,9 @@ const W = struct {
     pub const as_usual = plain("as usual");
     pub const sort = plain("Sort");
     pub const most_picked = plain("Most picked");
-    pub const reach = plain("Lane opponent");
-    pub const reaches = [3]tree.Text{ plain("All"), plain("vs melee"), plain("vs ranged") };
+    pub const vs = plain("Lane opponent");
+    pub const groups = [5]tree.Text{ plain("All"), plain("Melee"), plain("Ranged"), plain("AD"), plain("AP") };
+    pub const group_notes = [5]?[]const u8{ null, null, null, "Lane opponents who deal 65% or more of their damage as physical", "Lane opponents who deal 65% or more of their damage as magic" };
     pub const gold = plain("Gold at 14 min");
     pub const leads = [3]tree.Text{ plain("All"), plain("Ahead"), plain("Behind") };
     pub const lead_note = "500 or more gold ahead of or behind the lane opponent at 14 minutes";
@@ -370,8 +370,6 @@ pub const BuildPanel = struct {
     /// The cell open in place
     open: ?Kind = null,
     order: Order = .pick,
-    /// The runes shown: 0 all, then Data.reach's
-    reach: u8 = 0,
     /// The cells shown: 0 all, then Data.lead's
     lead: u8 = 0,
     /// Unique on the page: the note's id starts with it
@@ -393,7 +391,7 @@ pub const BuildPanel = struct {
 
     const Set = struct { ctx: [n_kinds]Ctx, rows: [n_kinds][]Row };
 
-    pub const Msg = union(enum) { open: Kind, key, order: Order, reach: u8, lead: u8, unlock, lock: struct { kind: Kind, i: u16 } };
+    pub const Msg = union(enum) { open: Kind, key, order: Order, vs: u8, lead: u8, unlock, lock: struct { kind: Kind, i: u16 } };
 
     pub const Url = struct {
         slot: ?Kind = null,
@@ -432,10 +430,8 @@ pub const BuildPanel = struct {
         return m;
     }
 
-    /// `old`'s choices on new data (a lock's answer): runes, reach, lead, open cell, order
+    /// `old`'s choices on new data (a lock's answer): runes, lead, open cell, order
     pub fn keep(p: *BuildPanel, o: *const BuildPanel) void {
-        p.reach = if (o.reach <= p.data.reach.len) o.reach else 0;
-        p.runes.data = if (p.reach == 0) &p.data.runes else &p.data.reach[p.reach - 1];
         p.runes.keep(&o.runes);
         p.lead = if (o.lead <= p.data.lead.len) o.lead else 0;
         p.show(o.open, o.order);
@@ -531,9 +527,14 @@ pub const BuildPanel = struct {
                 p.setOrder(o);
                 ev.push = true;
             },
-            .reach => |i| {
-                p.reach = if (i <= p.data.reach.len) i else 0;
-                p.runes.data = if (p.reach == 0) &p.data.runes else &p.data.reach[p.reach - 1];
+            .vs => |i| {
+                const set = p.locks orelse return;
+                const again = i != 0 and groupOn(set, i);
+                set.remove(.reach);
+                set.remove(.damage);
+                if (i != 0 and !again) set.toggle(if (i <= 2) .reach else .damage, if (i % 2 == 1) "1" else "2");
+                ev.push = true;
+                ev.keep = true;
             },
             .lead => |i| {
                 p.lead = if (i <= p.data.lead.len) i else 0;
@@ -573,8 +574,8 @@ pub const BuildPanel = struct {
         var cells = h.list();
         for ([_]Kind{ .spells, .start, .boots, .core, .item4, .item5, .item6 }) |k| if (p.cell(h, k)) |c| cells.add(c);
         if (p.skillsCell(h)) |c| cells.add(c);
-        return h.div(.{ .class = "c-build", .data_dim = p.dim }, .{h.div(.{ .class = "in" }, .{
-            h.div(.{ .class = "runes" }, .{ p.reachPick(h), p.runes.view(h) }),
+        return h.div(.{ .class = "c-build", .data_dim = p.dim }, .{ p.vsPick(h), h.div(.{ .class = "in" }, .{
+            h.div(.{ .class = "runes" }, .{p.runes.view(h)}),
             p.levels(h),
             h.div(.{ .class = "slots" }, .{
                 h.div(.{ .class = "sort" }, .{
@@ -587,18 +588,32 @@ pub const BuildPanel = struct {
                 }),
                 h.div(.{ .class = "cells" }, .{cells.done()}),
             }),
-        })});
+        }) });
     }
 
-    /// All runes, or those against melee or ranged lane opponents
-    fn reachPick(p: *BuildPanel, h: *H) N {
-        if (p.data.reach.len == 0) return .none;
-        var items: [W.reaches.len]segmented.Item = undefined;
-        for (&items, W.reaches, 0..) |*it, label, i| {
-            const games = if (i == 0) p.data.runes.games else if (i <= p.data.reach.len) p.data.reach[i - 1].games else 0;
-            it.* = .{ .label = label, .n = games, .selected = p.reach == i, .disabled = games == 0, .on = h.on(p, .{ .reach = @intCast(i) }) };
+    /// Group `i` of the row (1 melee, 2 ranged, 3 AD, 4 AP) is locked in `set`
+    fn groupOn(set: *const lockbar.Set, i: u8) bool {
+        return set.has(if (i <= 2) .reach else .damage, if (i % 2 == 1) "1" else "2");
+    }
+
+    /// Every lane opponent, or one group's: a pick locks the whole panel on it (vr or
+    /// vd, one at a time). Each with its games under the other locks
+    fn vsPick(p: *BuildPanel, h: *H) N {
+        const set = p.locks orelse return .none;
+        if (p.data.vs.len + 1 != W.groups.len) return .none;
+        var items: [W.groups.len]segmented.Item = undefined;
+        var any = false;
+        for (items[1..], p.data.vs, 1..) |*it, g, i| {
+            const on = groupOn(set, @intCast(i));
+            any = any or on;
+            it.* = .{ .label = W.groups[i], .n = g.games, .selected = on, .disabled = g.games == 0 and !on, .title = W.group_notes[i], .on = h.on(p, .{ .vs = @intCast(i) }) };
         }
-        return h.div(.{ .class = "reach" }, .{segmented.view(h, .{ .s = .s, .label = W.reach }, items[0 .. p.data.reach.len + 1])});
+        // Melee and ranged split every opponent
+        items[0] = .{ .label = W.groups[0], .n = p.data.vs[0].games + p.data.vs[1].games, .selected = !any, .on = h.on(p, .{ .vs = 0 }) };
+        return h.div(.{ .class = "vs" }, .{
+            h.span(.{ .aria_hidden = true }, .{W.vs}),
+            segmented.view(h, .{ .s = .s, .label = W.vs }, &items),
+        });
     }
 
     /// The locked keystone, its players and a × that unlocks
@@ -799,8 +814,10 @@ pub const css =
     \\    .c-build .slots > .cells { column-gap: var(--sp-4); }
     \\  }
     \\  .c-build > .in > * { min-width: 0; }
+    \\  .c-build > .vs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2);
+    \\    padding: var(--sp-3) var(--card-px) 0; font-size: var(--fs-s); color: var(--muted); white-space: nowrap; }
+    \\  @container (min-width: 900px) { .c-build > .vs { padding: var(--sp-4) var(--sp-5) 0; } }
     \\  .c-build > .in > .levels { order: 1; }
-    \\  .c-build .runes > .reach { margin-bottom: var(--sp-3); }
     \\  .c-build .slots { container-type: inline-size; display: flex; flex-direction: column; }
     \\  .c-build .slots > .sort { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3);
     \\    font-size: var(--fs-s); color: var(--muted); }
@@ -923,7 +940,7 @@ pub fn gallery(g: *Gallery) void {
         return;
     };
     reach.* = demo.darius;
-    reach.reach = &.{ demo.darius.runes, .{ .trees = &.{}, .games = 0, .wins = 0 } };
+    reach.vs = &.{ .{ .games = 5210, .wins = 2810 }, .{ .games = 2140, .wins = 1050 }, .{ .games = 4890, .wins = 2620 }, .{} };
     reach.lead = &.{ .{ .slots = demo.darius.slots, .games = 4120, .wins = 2580 }, .{ .slots = &.{}, .games = 0, .wins = 0 } };
     const pr = h.mem.create(BuildPanel) catch {
         h.oom = true;
@@ -935,9 +952,16 @@ pub fn gallery(g: *Gallery) void {
     };
     pr.id = h.fmt("build-reach-{d}", .{g.width});
     pr.runes.id = pr.id;
+    const vr = h.mem.create(lockbar.Set) catch {
+        h.oom = true;
+        return;
+    };
+    vr.* = .{};
+    vr.toggle(.reach, "2");
+    pr.setLocks(vr);
     var ev: tree.Event = .{ .kind = .click };
     pr.update(.{ .lead = 1 }, &ev);
-    g.addFill("runes by lane opponent (none vs ranged here), items 500+ gold ahead (none behind)", pr.view(h));
+    g.addFill("lane opponent row: Ranged locked, no AP opponents here; items 500+ gold ahead (none behind)", pr.view(h));
     const lk = h.mem.create(BuildPanel) catch {
         h.oom = true;
         return;

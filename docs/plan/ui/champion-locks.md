@@ -166,5 +166,10 @@ What a block needs from a row:
 - Thin (J35) in the build panel: every rate with its 80% range (fmt.range, Wilson),
   faded past ±6, whole numbers from ±10, none hidden; counts don't fade
 
-- Keystone lock in the BuildPanel (builds.by_keystone, `k` in the hash); vs melee or
-  ranged and gold ahead or behind are precomputed splits of the build file only
+- Keystone lock in the BuildPanel (builds.by_keystone, `k` in the hash); gold ahead or
+  behind is a precomputed split of the build file's items only
+- Lane opponent row at the BuildPanel's top: All | Melee | Ranged | AD | AP, each with
+  its games under the other locks (bp.Data.vs from Build.opponents; empty disabled). A
+  pick is a `vr` or `vd` lock, one at a time (a second tap or All unlocks); the LockBar
+  names their chips (vs melee, vs ranged, vs AD, vs AP). Not on a matchup page; none on
+  a base page until its builds file carries `opponents`

@@ -154,10 +154,9 @@ test "fixture games to stats, curves and the website" {
     try testing.expectEqualStrings("Resolve", block.runes.pages[0].second.name);
     try testing.expectEqual(3, block.runes.shards.len);
     // Against Mordekaiser, melee, every game; none against a ranged opponent
-    try testing.expectEqual(2, block.reach.len);
-    try testing.expectEqual(games, block.reach[0].games);
-    try testing.expectEqualStrings("Conqueror", block.reach[0].pages[0].keystone.name);
-    try testing.expectEqual(0, block.reach[1].games);
+    try testing.expectEqual(4, block.vs.len);
+    try testing.expectEqual(games, block.vs[0].games);
+    try testing.expectEqual(0, block.vs[1].games);
     try testing.expectEqual(2, block.lead.len);
     try testing.expectEqual(games, block.lead[0].games);
     try testing.expectEqual(0, block.lead[1].games);

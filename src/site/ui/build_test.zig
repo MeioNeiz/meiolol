@@ -337,3 +337,26 @@ test "a lock's answer keeps the page, the tapped rune, Every tree and the open c
     try testing.expect(std.mem.find(u8, boots, "<p class=\"nil\">—</p>") != null);
     try testing.expect(std.mem.find(u8, boots, "<table") == null);
 }
+
+test "the lane opponent row locks one group at a time; its pick again, or All, unlocks" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var d = demo.darius;
+    d.vs = &.{ .{ .games = 30, .wins = 16 }, .{ .games = 20, .wins = 9 }, .{ .games = 25, .wins = 13 }, .{} };
+    var p: P = undefined;
+    try p.init(arena.allocator(), &d);
+    var set: @import("lockbar.zig").Set = .{};
+    set.toggle(.keystone, "8010");
+    p.setLocks(&set);
+    var ev: tree.Event = .{ .kind = .click };
+    p.update(.{ .vs = 2 }, &ev);
+    try testing.expect(ev.push);
+    try testing.expectEqualStrings("ks8010,vr2", set.s.slice());
+    p.update(.{ .vs = 3 }, &ev);
+    try testing.expectEqualStrings("ks8010,vd1", set.s.slice());
+    p.update(.{ .vs = 3 }, &ev);
+    try testing.expectEqualStrings("ks8010", set.s.slice());
+    p.update(.{ .vs = 4 }, &ev);
+    p.update(.{ .vs = 0 }, &ev);
+    try testing.expectEqualStrings("ks8010", set.s.slice());
+}

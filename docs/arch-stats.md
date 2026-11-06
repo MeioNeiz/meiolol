@@ -138,7 +138,8 @@ page groups them by reach and damage for the lane opponent locks); role-wide onl
 `ranges`: Data Dragon base attack ranges by champion id, for File.reachOf. Matchups count
 every kind but keystone and skill_start. `by_reach`: the rune kinds (runes, shards, rune,
 shard) by the lane opponent's reach, melee under 300 base attack range (Data Dragon
-champion.json), groups of 100+ players (Options.min_split_games), 4 pages each.
+champion.json), groups of 100+ players (Options.min_split_games), 4 pages each; no
+page reads it since the lane opponent locks (to drop).
 `by_lead`: the item kinds (boots, core2, core3, item4-6) of players 500+ gold ahead of or
 behind their lane opponent at 14 minutes (participants.gold14), groups of 100+, 6 options
 each. `by_keystone`: every kind but the rune ones per keystone (the champion page's

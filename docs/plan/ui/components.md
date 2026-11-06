@@ -980,14 +980,16 @@ keystone has its own build (Data.keystones) locks on tap: every cell then counts
 keystone's players, a chip with × says so and unlocks, the keystone in the URL (`k`).
 With a lock set (the champion page's, ui/lockbar.zig) a tap anywhere on an option's row,
 or on a rune page, locks it instead (lockbar.mark on what is locked): the host fetches the
-build under the set and shows it here
+build under the set and shows it here. There a row over the panel, Lane opponent All |
+Melee | Ranged | AD | AP with each group's games, locks the whole panel on one group
 States: Darius top: whole build, most played first; Item 4 open in place: every option,
-sortable; Skills open: every order and level path; runes by lane opponent (none vs ranged
-here), items 500+ gold ahead (none behind); Conqueror's page locked: its players' spells
-and boots, the chip unlocks; champion page: a whole option row or page locks on tap (the
-mark faint on hover), Conqueror and boots locked; a matchup's: spells and skills as usual
-(dimmed), boots' usual second; a lock's answer without Boots or Item 6: their cells stay,
-a faint dash; no games under the locks: the build stays, faded, under the host's line
+sortable; Skills open: every order and level path; lane opponent row: Ranged locked, no AP
+opponents here; items 500+ gold ahead (none behind); Conqueror's page locked: its players'
+spells and boots, the chip unlocks; champion page: a whole option row or page locks on tap
+(the mark faint on hover), Conqueror and boots locked; a matchup's: spells and skills as
+usual (dimmed), boots' usual second; a lock's answer without Boots or Item 6: their cells
+stay, a faint dash; no games under the locks: the build stays, faded, under the host's
+line
 Used by: skillgrid, runetree, champpage
 
 ### LockBar
@@ -998,7 +1000,8 @@ with no lock. The lock set (`Set`) is the `lk` query as text: per kind its code 
 values dot-joined, as lockanswer.Locks.format writes them (kinds in one order, so one lock
 set is one URL and one cached answer); no number is parsed
 States: Conqueror and a core path locked: 1,284 games under both; thin: the range is wide,
-so the rate fades; the mark: on a locked rune, page or build row's top right corner
+so the rate fades; Conqueror against ranged lane opponents: the build panel's row names
+its chip; the mark: on a locked rune, page or build row's top right corner
 Used by: runetree, buildpanel, champpage
 
 ### Versus
