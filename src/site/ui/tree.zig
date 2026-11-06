@@ -328,6 +328,14 @@ pub const H = struct {
         };
     }
 
+    /// Joined strings: std's print would pull its whole formatter into ui.wasm
+    pub fn cat(h: *H, parts: []const []const u8) []const u8 {
+        return std.mem.concat(h.mem, u8, parts) catch {
+            h.oom = true;
+            return "";
+        };
+    }
+
     pub fn list(h: *H) List {
         return .{ .h = h };
     }

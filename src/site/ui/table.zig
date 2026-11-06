@@ -278,7 +278,8 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                 const sorted = t.sort == i;
                 const cls = if (sorted) classes[1][i] else classes[0][i];
                 const can = col.sort != null or col.name != null;
-                const tip: ?[2]N = if (col.tip) |note| toggletip.view(h, h.fmt("{s}-tip-{d}", .{ t.id, i }), .{col.label}, col.label, note) else null;
+                var nb: [26]u8 = undefined;
+                const tip: ?[2]N = if (col.tip) |note| toggletip.view(h, h.cat(&.{ t.id, "-tip-", fmt.decimal(&nb, i, false) }), .{col.label}, col.label, note) else null;
                 const term: ?*const [2]N = if (tip) |*x| x else null;
                 const on_sort: ?tree.Handler = if (can) h.on(t, .{ .sort = i }) else null;
                 const arrow: ?N = if (can and tip != null) h.button(.{ .class = "s", .type = "button", .aria_label = W.sort }, .{}) else null;
@@ -295,7 +296,7 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                     arrow,
                 }));
             };
-            const tip_id = h.fmt("{s}-rt", .{t.id});
+            const tip_id = h.cat(&.{ t.id, "-rt" });
             var trs = h.list();
             for (shown, 1..) |ri, place| {
                 const r = &t.rows[ri];

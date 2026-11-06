@@ -285,7 +285,7 @@ pub const RuneTree = struct {
                 .type = "button",
                 .class = "ks",
                 .aria_pressed = t.page == i,
-                .aria_label = h.fmt("{s}, {s}", .{ p.keystone.name, p.second.name }),
+                .aria_label = h.cat(&.{ p.keystone.name, ", ", p.second.name }),
                 .on_click = h.on(t, .{ .page = i }),
             }, .{
                 art.view(h, p.keystone, .{ .k = .rune, .px = .@"28", .named = false }),

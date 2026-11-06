@@ -48,7 +48,12 @@ export fn main() void {
     server_lk = dom.attrOf(root, "data-lk");
     server_ans = dom.binOf(root, "data-ans");
     const stamp = dom.attrOf(root, "data-stamp");
-    want = std.fmt.parseInt(u32, stamp, 10) catch return;
+    if (stamp.len == 0) return;
+    // By hand: std's parseInt is ~150 B gz here
+    for (stamp) |c| {
+        if (c < '0' or c > '9') return;
+        want = want *% 10 +% (c - '0');
+    }
     dom.fetchStamped(src, stamp, 0, loaded);
 }
 

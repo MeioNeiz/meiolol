@@ -191,13 +191,7 @@ pub fn pickText(h: *H, share: f64) tree.Text {
 
 /// A count in a narrow column: 950, 9.5k, 14k
 pub fn shortCount(h: *H, n: u32) tree.Text {
-    if (n < 1000) return phrase.num(h, .int, n);
-    var out: std.Io.Writer.Allocating = .init(h.mem);
-    if (n < 10_000) fmt.fixed(&out.writer, @as(f64, @floatFromInt(n)) / 1000, 1, true) catch {} else out.writer.print("{d}", .{n / 1000}) catch {};
-    out.writer.writeByte('k') catch {
-        h.oom = true;
-    };
-    return .{ .s = out.written() };
+    return phrase.num(h, .kilo, n);
 }
 
 /// A cell's rows share their slot's figures
@@ -320,7 +314,7 @@ pub const Row = struct {
     fn keys(h: *H, s: []const u8, arrows: bool) []const N {
         var out = h.list();
         for (s, 0..) |k, i| {
-            const t = h.fmt("{c}", .{k});
+            const t = s[i..][0..1];
             if (arrows) {
                 if (i > 0) out.add(h.span(.{ .class = "ar", .aria_hidden = true }, .{"›"}));
                 out.add(h.el(.i, .{}, .{t}));
@@ -686,7 +680,7 @@ pub const BuildPanel = struct {
             t.desc = true;
         }
         t.head = open;
-        t.id = h.fmt("{s}-{s}", .{ p.id, @tagName(k) });
+        t.id = h.cat(&.{ p.id, "-", @tagName(k) });
         return t.view(h);
     }
 

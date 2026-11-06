@@ -83,7 +83,7 @@ Matchup page (Kai'Sa vs Jinx):
 
 ## What the leaders have, by section
 
-Y: shown; f: as a filter of the build page; -: not there. "Us" is the live site, 29 Oct.
+Y: shown; f: as a filter of the build page; -: not there. "Us" is the live site, 6 Nov.
 
 | Section | LoLalytics | U.GG | OP.GG | Others | Us |
 | --- | --- | --- | --- | --- | --- |
@@ -96,16 +96,16 @@ Y: shown; f: as a filter of the build page; -: not there. "Us" is the live site,
 | Full skill order, levels 1-18 | Y (4x18 grid) | Y (grid) | Y (15 squares) | LoG | Y (4x18 grid) |
 | Items 4, 5, 6 options by slot | Y (2-3 each) | Y (5-7 columns) | Y (5 rows each) | Blitz | Y (3 each, all when opened) |
 | Item purchase minute | Y | - | - | - | Y (core path) |
-| Item win rate before buying (WRI) | - | - | - | Blitz | - |
+| Item win rate before buying (WRI) | - | - | - | Blitz | - (no signal: learned.md Items) |
 | Every rune with win rate and pick | Y | - | Y | | Y (in the panel) |
-| Lane opponents, all on screen | strips by role | 8-card strip, counters tab | 5+5 sidebar icons | | dot plot by win rate, first at y 1,059 |
+| Lane opponents, all on screen | strips by role | 8-card strip, counters tab | 5+5 sidebar icons | | tiles, Lane and vs role tabs |
 | Counters against every enemy role | Y (5 strips) | - | - | | Y (Against + role) |
 | Lane result per opponent (gold at 15) | - | Y (GD@15 list, table) | - | Blitz lane WR | Y (gold at 14 in the brief) |
 | Duos by ally role | Y (synergy tabs) | - | Y (4 tables) | DeepLoL | Y (With + role) |
 | Win rate, pick, ban over time | Y (by day, per rank) | - | Y (by patch, with rank) | | Y (by patch: win, pick, rank) |
 | Win rate by game length | Y | - | Y (5 buckets) | LoG graphs | Y (5 buckets, early lean) |
-| Objectives secured and won | Y | - | - | | - |
-| End-of-game stats ranked in role | Y | - | - | | - |
+| Objectives secured and won | Y | - | - | | Y |
+| End-of-game stats ranked in role | Y | - | - | | Y |
 | Players' win rate spread | - | - | - | | Y (histogram) |
 | Lane curves, early/late lean, vs usual, pick-up difficulty | - | - | - | | Y, ours alone (curves on the matchup page) |
 

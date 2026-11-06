@@ -143,8 +143,12 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
 
 ### Steps
 
-- CH10 End-of-game stats ranked in the role (LoLalytics only): plan in
-  docs/plan/ui/champion.md "More charts"; tally, card, tests
+- CH11 Build styles: a first finished item lock (lockanswer kind item1, `i1`) and a
+  Builds row under the lane opponent row (options on 15%+ and 100+ games, at most 3,
+  hidden with one); fits 320 and 390. 53% of champion-roles with 1k+ games have a second
+  first item on 15%+, 8% of another damage class
+- CH12 By patch: Win | Pick | Ban and a line per rank bracket (Trend by bracket, bans
+  by patch and day); By game length: each bucket's share of games as bars
 
 CH0 on decisions.md's recommendations (Jacob to confirm): no blind-safe score (J2
 measured no win)
@@ -172,6 +176,9 @@ measured no win)
   300), ▲▼ on runes the reach moves from all; builds files' by_reach, groups of 100+
 - Item cells: All | Ahead | Behind (500+ gold on the lane opponent at 14 minutes; about
   two in three lanes are that far apart), builds files' by_lead, groups of 100+
+- End of game (CH10): per game and per minute figures, each "Nth of M" in the role,
+  the damage split under its head; Objectives: first tower, dragon, grubs and herald
+  taken, and the win rate after each
 - By patch (win line, pick bars, rank in role; Patches | Days: the newest patch by UTC
   day, stats.Trend.days) and by game length (5 buckets) cards
   after the opponents, from stats.Trend per view

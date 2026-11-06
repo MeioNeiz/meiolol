@@ -1462,22 +1462,21 @@ fn buildOf(roles: []const BuildRole, i: usize) ?*const buildpanel.Data {
     return if (roles[i].build) |*d| d else null;
 }
 
-/// Lock `k` on `v` as `d` draws it: a rune's art, an option's icons or keys
+/// Lock `k` on `v` as `d` draws it: a rune's art, an option's icons or keys. Compared
+/// as text, as std's parseInt costs ui-champbuild ~150 B gz
 fn lockLabel(h: *H, d: *const buildpanel.Data, k: lockbar.Kind, v: []const u8) ?lockbar.Label {
+    var buf: [lockbar.value_max]u8 = undefined;
     switch (k) {
         .keystone, .rune => {
-            const id = std.fmt.parseInt(u32, v, 10) catch return null;
-            for (d.runes.trees) |t| for (t.rows) |row| for (row) |*r| if (r.id == id) {
+            for (d.runes.trees) |t| for (t.rows) |row| for (row) |*r| if (tree.eql(lockbar.text(&buf, &.{r.id}), v)) {
                 return .{ .kind = k, .art = (&r.art)[0..1], .text = r.art.name };
             };
             return null;
         },
         .shard => {
-            var it = std.mem.splitScalar(u8, v, '.');
-            const row = std.fmt.parseInt(usize, it.next() orelse return null, 10) catch return null;
-            const id = std.fmt.parseInt(u32, it.next() orelse return null, 10) catch return null;
-            if (row >= d.runes.shards.len) return null;
-            for (d.runes.shards[row]) |*r| if (r.id == id) return .{ .kind = k, .art = (&r.art)[0..1], .text = r.art.name };
+            for (d.runes.shards, 0..) |row, ri| for (row) |*r| if (tree.eql(lockbar.text(&buf, &.{ @intCast(ri), r.id }), v)) {
+                return .{ .kind = k, .art = (&r.art)[0..1], .text = r.art.name };
+            };
             return null;
         },
         .spells, .start, .boots, .core3, .item4, .item5, .item6, .skills, .skill_path => {
@@ -1488,7 +1487,7 @@ fn lockLabel(h: *H, d: *const buildpanel.Data, k: lockbar.Kind, v: []const u8) ?
             };
             for (d.slots) |s| if (s.kind == want) for (s.options) |o| if (tree.eql(lockbar.value(h.mem, o.v), v)) {
                 const text: []const u8 = switch (k) {
-                    .skills => h.fmt("Max {s}", .{o.keys}),
+                    .skills => h.cat(&.{ "Max ", o.keys }),
                     .skill_path => "Level path",
                     .item4 => "Item 4",
                     .item5 => "Item 5",
