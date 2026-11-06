@@ -6125,6 +6125,46 @@ group's usual level (lab TS2b, a shrunk lead term, the alternative). What's left
 (data/cubes-20261106); tables, cell dumps and scripts in
 data/team/2026-11-05-notes2/m6b1/.
 
+### An early-platforms term, 16.21 and 16.22, 2026-11-06 (meio, M6b1 b)
+
+The follow-up to "The patch's games from before EUW1": the platforms that get a patch
+first (KR, JP1, OC1, SG2, TW2, VN2; every pre-T0 newest-patch game of 16.21 and 16.22
+but 6 EUN1) as their own group beside EUW1. E3 becomes a + d[patch] + b + g(EUW1) +
+e(early), e a random effect shared across patches with its own MacKay variance, in every
+E3-shaped fit (champion, gold, shares, so pairs and conds too), so pre-T0 games move d[0]
+only net of the group's usual level. Every region mixes the three groups by the window's
+games (b, preliminary), then (b2, final) splits each bracket as its newest-patch games
+from EUW1's first on do, the window's on day 0. Keep rule declared before the look
+(data/team/2026-11-05-notes2/meio.md, 16:00Z).
+
+Truth, base a38b45d4 against base + term (b2), origins 0-2, cubes of 6 Nov. Meio minus
+the raw 30 days, milli-nats a target game, all ranks, every region unless EUW1:
+
+| cell | 16.21 base | term | 16.22 base | term |
+| --- | --: | --: | --: | --: |
+| item share, day 0 | +0.01 ± 0.02 | -0.00 ± 0.01 | +0.05 ± 0.03 | -0.01 ± 0.03 |
+| keystone share, day 0 | +0.05 ± 0.07 | +0.02 ± 0.06 | +0.08 ± 0.05 | +0.00 ± 0.04 |
+| EUW1 item share, day 0 | -0.04 ± 0.03 | -0.06 ± 0.02 | +0.08 ± 0.04 | -0.02 ± 0.03 |
+| EUW1 keystone share, day 0 | +0.04 ± 0.10 | -0.04 ± 0.07 | +0.09 ± 0.07 | -0.04 ± 0.05 |
+| keystone share, day 1 | -0.07 ± 0.04 | -0.04 ± 0.04 | -0.13 ± 0.04 | -0.10 ± 0.04 |
+| keystone share, days 2-3 | -0.05 ± 0.02 | -0.02 ± 0.03 | -0.20 ± 0.05 | -0.18 ± 0.06 |
+| item share, days 2-3 | -0.07 ± 0.03 | -0.07 ± 0.02 | -0.19 ± 0.04 | -0.17 ± 0.04 |
+
+Win rates, matchups, duos and gold within 0.01 everywhere; EUW1 rows 0.01-0.03 better on
+every kind. Rule: (1) day-0 share gain 0.37 (needed 0.10), pass; (2) worse beyond 2 se:
+one row, 16.22 item share days 2-3 Meio minus patch -0.05 ± 0.01 -> -0.03 ± 0.01, beside
+9 EUW1 Iron-Silver rows with no cells (se 0, degenerate, not counted), fail; (3)
+every-region shares on days 1+ 0.02-0.03 worse on both patches, fail; (4) day-0 share
+PIT 78-83%, pass; (5) meio.bin 135.0 -> 178.3 MB (1.32x), fit 14.9 -> 15.9 s, pass. Not
+shipped.
+
+b2 left days 1+ where b had them (keystone share day 1 +0.03 on both patches in each), so
+the every-region mix is not the cause: the early platforms are 49% of the window's games
+(16.20 day 4 on), 55-58% of the newest patch's day 0 and 53-56% of days 1-3
+(data/lab-cubes/daycells-20261106.tsv). Cause of the days 1+ loss open. Next: lab TS2b's
+shrunk lead term, then M8 for the cells that really moved. Tables, comparisons and the
+diff: data/team/2026-11-05-notes2/early/ (t2?-b2 files the final pair).
+
 ### The stored rank knows the result: the bracket lean, 2026-11-06 (m10, NL6)
 
 After NL3 most of the M10 gate's failures (~140 Iron-Silver, ~80 Diamond+ of 286) were a
