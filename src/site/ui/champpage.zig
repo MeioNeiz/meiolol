@@ -30,6 +30,7 @@ const badge = @import("badge.zig");
 const chip = @import("chip.zig");
 const bar = @import("bar.zig");
 const strip = @import("strip.zig");
+const dmgsplit = @import("dmgsplit.zig");
 const toggletip = @import("toggletip.zig");
 const hint = @import("tip.zig");
 const segmented = @import("segmented.zig");
@@ -86,6 +87,9 @@ pub const Data = struct {
     spread: ?Spread = null,
     pickup: ?Pickup = null,
     also: []const Also = &.{},
+    /// Magic share of its damage to champions, every role (Site.magic); null when too few
+    /// sampled
+    magic: ?f32 = null,
 };
 
 pub const Other = struct {
@@ -459,7 +463,7 @@ pub const W = struct {
     pub const ends_head = plain("End of game");
     pub const ends_rows = [9]tree.Text{ plain("Kills"), plain("Deaths"), plain("Assists"), plain("Level"), plain("Gold / min"), plain("Damage / min"), plain("Taken / min"), plain("CS / min"), plain("Vision / min") };
     pub const ends_of = Phrase("of {of:int} champions");
-    pub const ends_note = Phrase("Averages over {n:count} games. Each place is among the role's {of:int} champions in the table, highest first, deaths too.");
+    pub const ends_note = Phrase("Averages over {n:count} games. Each place is among the role's {of:int} champions in the table, highest first, deaths too. AD and AP: its damage to champions in every role.");
     pub const ends_lo = plain("lowest");
     pub const ends_hi = plain("highest");
     pub const ends_place = Phrase("{n:int}{th:text} highest of {of:int}");
@@ -669,6 +673,7 @@ pub const TrendsData = struct {
     spread: ?Spread = null,
     pickup: ?Pickup = null,
     also: []const Also = &.{},
+    magic: ?f32 = null,
 };
 
 pub const TrendsRole = struct {
@@ -825,7 +830,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .abilities = d.abilities, .roles = top },
         .build = .{ .roles = build },
         .more = .{ .name = d.name, .slug = d.slug, .ddragon = d.ddragon, .champs = d.champs, .roles = more },
-        .trends = .{ .name = d.name, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = trends, .lengths = d.lengths, .spread = d.spread, .pickup = d.pickup, .also = d.also },
+        .trends = .{ .name = d.name, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = trends, .lengths = d.lengths, .spread = d.spread, .pickup = d.pickup, .also = d.also, .magic = d.magic },
         .charts = .{ .name = d.name, .icon = d.icon, .slug = d.slug, .ddragon = d.ddragon, .champs = d.champs, .roles = charts },
     };
 }
@@ -1862,6 +1867,7 @@ pub const Trends = struct {
         const of = W.ends_of.with(h, .{ .of = e.of });
         return card.view(h, .{}, &.{
             card.head(h, W.ends_head, null, &.{ p.plat(h), tipNote(h, "cp-ends", of, W.ends_head, W.ends_note.with(h, .{ .n = e.games, .of = e.of })) }),
+            if (p.data.magic) |m| dmgsplit.view(h, .{ .ap = m }) else .none,
             strip.rows(h, &rs, bar.scale(h, W.ends_lo, W.ends_hi)),
         });
     }
@@ -2204,7 +2210,7 @@ pub const css =
     \\@layer components {
     \\  .c-cpage, .c-cpage > .part { display: flex; flex-direction: column; gap: var(--sp-4); }
     \\  .c-cpage > .part:empty { display: none; }
-    \\  .c-cpage .c-card > .c-tabs { margin-top: var(--sp-4); }
+    \\  .c-cpage .c-card > :is(.c-tabs, .c-dmg + .c-strip) { margin-top: var(--sp-4); }
     \\  .c-cpage [id] { scroll-margin-top: calc(var(--header) + var(--sp-3)); }
     \\  .c-cpage .c-toolbar { container-type: inline-size; margin-top: var(--sp-3); }
     \\  @media (min-width: 1100px) {
@@ -2362,14 +2368,14 @@ test "by rank: a thin bracket shows, an empty one doesn't, no chart under two" {
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "Gold-Emerald") == null);
 }
 
-test "end of game: each figure with its place, none under min_games or for a rare pick" {
+test "end of game: each figure with its place and the damage split, none under min_games or for a rare pick" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var rows: [9]EndRow = @splat(.{ .v = 6.25, .rank = 3 });
     rows[4] = .{ .v = 411.6, .rank = 1 };
     var roles = [_]TrendsRole{.{ .role = .top, .games = 0, .wins = 0, .by_patch = &.{}, .by_length = &.{}, .ends = .{ .games = 100, .of = 48, .rows = rows } }};
-    const d: TrendsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles, .lengths = &.{} };
+    var d: TrendsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles, .lengths = &.{}, .magic = 0.04 };
     var p: Trends = .{ .data = &d, .root = "/" };
     var t: tree.Tree = .{};
     var h: H = .init(a, &t);
@@ -2385,10 +2391,13 @@ test "end of game: each figure with its place, none under min_games or for a rar
     try std.testing.expectEqual(9 + 1, std.mem.count(u8, got, "c-track"));
     // Each place shown on hover or tap, not only to screen readers
     try std.testing.expectEqual(9, std.mem.count(u8, got, "data-block"));
+    try std.testing.expect(std.mem.indexOf(u8, got, "aria-label=\"AD damage: 96% AD, 4% AP\"") != null);
 
     roles[0].ends.?.rows[4].rank = 0;
+    d.magic = null;
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "c-dmg") == null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), ">412<") != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "1st highest") == null);
     try std.testing.expectEqual(8 + 1, std.mem.count(u8, w.written(), "c-track"));

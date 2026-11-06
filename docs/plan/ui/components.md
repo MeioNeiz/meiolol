@@ -369,12 +369,14 @@ States: plain; range; on paper, red won; the page's answer
 Used by: dailyseat, testerpage
 
 ### DamageSplit
-`dmgsplit.zig` `.c-dmg`
+`dmgsplit.zig` `.c-dmg` site
 DamageSplit: a champion's or a team's damage to champions as one bar, AD (physical, true
 damage with it) from the left and AP the rest, each share at its end. Under 35% AP reads
-AD, over 65% AP, else AD and AP (dailydata.dmgOf), said once for a screen reader. A share
-whose champions are unknown hatches after both
-States: AD; AD and AP; AP; a share unknown
+AD, over 65% AP, else AD and AP (dailydata.dmgOf), said once for a screen reader, an
+unknown share too. A share whose champions are unknown hatches after both; all of it
+unknown, the bar is the hatch alone
+States: AD; AD and AP; AP; a share unknown; all unknown
+Used by: champpage
 
 ### AlertBand
 `alertband.zig` `.c-alert`

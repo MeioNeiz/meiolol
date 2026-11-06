@@ -251,6 +251,7 @@ pub fn pageData(site: *const Site, ch: Champ) !cp.Data {
         .spread = spreadOf(site, ch),
         .pickup = pickupOf(site, ch),
         .also = try alsoOf(site, ch),
+        .magic = if (ch.id < site.magic.len) site.magic[ch.id] else null,
     };
 }
 

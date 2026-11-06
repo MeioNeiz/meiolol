@@ -276,6 +276,8 @@ pub const Site = struct {
     /// Per champion id its damage, as lockanswer.Filter.damage: 0 mixed or unknown, 1 AD,
     /// 2 AP; from Extras.damageFor, so every view's the same
     damage: []const u8 = &.{},
+    /// Per champion id its magic share of damage to champions (learn.Shares.magic)
+    magic: []const ?f32 = &.{},
     /// The method page's accuracy chart (Options.eval_history)
     eval: []const evalchart.Point = &.{},
     /// Champion page filter data; the root view's only, as the champion pages

@@ -183,6 +183,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
     }
     const shares = try extras.damageFor(io, db, all_opts, &phases);
     site.damage = try damageTable(arena, site.champs, shares);
+    site.magic = try arena.dupe(?f32, shares.magic);
     if (shared) {
         site.daily_inputs = dailyInputs(io, opts);
         const kept = try Parts.ofFor(old, DailyPart, .daily, view, arena, champs_key);
