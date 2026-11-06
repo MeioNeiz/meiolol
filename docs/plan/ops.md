@@ -100,6 +100,9 @@ tab shows people, unconfirmed and bots. Next, only if needed:
   key over the record types plus a small file holding only the decode code would spare
   most of those, at the risk of keeping old days after a decode change that changes no
   type (wrong data, no error)
+  Such a deploy that also changes meio.bin's fingerprint fails the web loop's meio refit
+  (StaleCube, logged FAILED; meio reads cubes without a refresh) unless lockrows was
+  refit first: Meio waits for the curves pass. Accepted, rare; `meio --refresh` if not
 
 ## Complete form
 
