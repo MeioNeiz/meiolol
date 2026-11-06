@@ -184,36 +184,8 @@ pub fn top(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, lo
     return .{ .name = "", .slug = "", .icon = "", .patch = "", .ddragon = "", .champs = &.{}, .roles = role[0..1] };
 }
 
-/// Where Meio's private numbers are asked for: `<view>/<champion id>/<role>/<rank>/<lk>.bin`
-/// (ui.pvdata.meioPath). The renderer answers it only behind nginx's private login gate
-pub const meio_prefix = "private/meio/";
-
 /// Most keystones and items in a Meio answer; opponents are all listed (Matchups)
 const meio_choices = 40;
-
-/// The pvdata.Meio at `rest` (a path after `meio_prefix`), in `arena`; null for a path that
-/// names nothing. `l`: site.Loaded, for the view's Site
-pub fn meioAnswer(arena: std.mem.Allocator, x: *const Answers, rest: []const u8, l: anytype) !?[]const u8 {
-    var it = std.mem.splitScalar(u8, rest, '/');
-    const v = std.fmt.parseInt(u8, it.next() orelse return null, 10) catch return null;
-    if (v >= html.View.all.len) return null;
-    const id = std.fmt.parseInt(u32, it.next() orelse return null, 10) catch return null;
-    const role = std.meta.stringToEnum(ui.role.Role, it.next() orelse return null) orelse return null;
-    const rank = std.meta.stringToEnum(cp.Rank, it.next() orelse return null) orelse return null;
-    const last = it.next() orelse return null;
-    if (it.next() != null or !std.mem.endsWith(u8, last, ".bin")) return null;
-    const lk = last[0 .. last.len - ".bin".len];
-    const locks = if (std.mem.eql(u8, lk, pd.no_locks)) lockanswer.Locks{} else pageLocks(lk) orelse return null;
-    var s = (try l.site(html.View.all[v])).*;
-    s.arena = arena;
-    const ch = for (s.champs) |c| {
-        if (c.id == id) break c;
-    } else return null;
-    const d = try meioOf(&s, x, ch, coreRole(role), rank, &locks) orelse return null;
-    var out: std.ArrayList(u8) = .empty;
-    try ui.data.encode(arena, pd.Meio, d, &out);
-    return out.items;
-}
 
 /// The locks Meio models: one keystone, one finished item (any slot) and one lane
 /// opponent, at most two of them (common.md "model -> locks")

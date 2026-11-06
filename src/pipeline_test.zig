@@ -823,14 +823,15 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(1, top.roles.len);
         try testing.expectEqual(morde.games, top.roles[0].games);
         try testing.expectEqual(morde.wins, top.roles[0].wins);
-        // Meio under the locks (private, Loaded.meio): the stack's games are the
+        // Meio under the locks (the lock island "meio"): the stack's games are the
         // StatStrip's; no lock gives the champion-role's number and its lane gold
         const pm = struct {
-            fn get(l: *site.Loaded, a: std.mem.Allocator, path: []const u8) !site.ui.pvdata.Meio {
-                return site.ui.data.decode(a, site.ui.pvdata.Meio, (try l.meio(a, path)) orelse return error.TestUnexpectedResult);
+            fn get(l: *site.Loaded, a: std.mem.Allocator, k: site.ui.champpage.Rank, lk: []const u8) !site.ui.pvdata.Meio {
+                const path = try site.ui.champpage.lockPath(a, "", 1, "meio", "darius", .top, k, lk);
+                return site.ui.data.decode(a, site.ui.pvdata.Meio, (try l.get(a, path)) orelse return error.TestUnexpectedResult);
             }
         }.get;
-        const mk = try pm(loaded, arena, "private/meio/1/122/top/plat/ks8010,vs82.bin");
+        const mk = try pm(loaded, arena, .plat, "ks8010,vs82");
         try testing.expectEqual(.none, mk.gap);
         try testing.expectEqual(morde.games, mk.games);
         try testing.expectEqual(morde.wins, mk.wins);
@@ -838,22 +839,14 @@ test "fixture games to stats, curves and the website" {
         try testing.expect(mk.keystones.len > 0 and mk.items.len > 0 and mk.opponents.len > 0);
         // A third lock: none
         for (mk.items) |c| try testing.expectEqual(null, c.meio);
-        const m0 = try pm(loaded, arena, "private/meio/1/122/top/plat/none.bin");
+        const m0 = try pm(loaded, arena, .plat, "none");
         try testing.expectEqual(.none, m0.gap);
         try testing.expect(m0.stack != null and m0.games >= mk.games);
-        try testing.expectEqual(.master, (try pm(loaded, arena, "private/meio/1/122/top/master/ks8010.bin")).gap);
-        try testing.expectEqual(.kind, (try pm(loaded, arena, "private/meio/1/122/top/plat/c23071.6333.bin")).gap);
-        try testing.expectEqual(null, try loaded.meio(arena, "private/meio/1/122/top/plat/vs82,ks8010.bin"));
-        try testing.expectEqual(null, try loaded.meio(arena, "private/meio/9/122/top/plat/none.bin"));
-        // Only through serve.zig's gate: never as a page or file
-        try testing.expectEqual(null, try loaded.get(arena, "private/meio/1/122/top/plat/none.bin"));
-        // The Meio period's public island: the private answer byte for byte, no lock too,
-        // in each period; every role the model has, every opponent with its lane gold
-        for ([_]u8{ 0, 1 }) |vi| for ([_][]const u8{ "none", "ks8010,vs82", "ks8010" }) |lk| {
-            const public = (try loaded.get(arena, try lock(arena, "", vi, "meio", "darius", .top, .plat, lk))).?;
-            const private = (try loaded.meio(arena, try std.fmt.allocPrint(arena, "private/meio/{d}/122/top/plat/{s}.bin", .{ vi, lk }))).?;
-            try testing.expectEqualSlices(u8, private, public);
-        };
+        try testing.expectEqual(.master, (try pm(loaded, arena, .master, "ks8010")).gap);
+        try testing.expectEqual(.kind, (try pm(loaded, arena, .plat, "c23071.6333")).gap);
+        // A lock set not in its one form names nothing
+        try testing.expectEqual(null, try loaded.get(arena, try lock(arena, "", 1, "meio", "darius", .top, .plat, "vs82,ks8010")));
+        // Every role the model has, every opponent with its lane gold
         const pub0 = try site.ui.data.decode(arena, site.ui.pvdata.Meio, (try loaded.get(arena, try lock(arena, "", 0, "meio", "darius", .top, .plat, "none"))).?);
         try testing.expect(for (pub0.roles) |r| {
             if (r.role == .top) break r.meio.lo <= r.meio.p and r.meio.p <= r.meio.hi;

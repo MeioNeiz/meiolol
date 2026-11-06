@@ -65,9 +65,7 @@ src/
                      Feed), beside admin.zig private()'s old page until it reaches parity
   site/locks.zig     Meio (export/meio.bin) under a champion page's locks beside raw
                      counts (lockanswer.choices): public as the lock island "meio"
-                     (<view dir>data/lock/meio/..., `none` for no lock; the Meio period),
-                     private at /private/meio/<view>/<id>/<role>/<rank>/<lk>.bin (admin
-                     token, no-store), unread since the preview went
+                     (<view dir>data/lock/meio/..., `none` for no lock; the Meio period)
   backup.zig         `meiolol backup|restore`: state snapshots + append-only segments
   forget.zig         `meiolol forget`: GDPR erasure, `forgotten` suppression list
                      (both: docs/data-safety.md)

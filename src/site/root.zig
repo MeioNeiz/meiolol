@@ -119,8 +119,8 @@ pub const Options = struct {
     /// `meiolol lockrows`' file: the champion pages' lock answers (site/locks.zig) where
     /// set and present
     lockrows: ?[]const u8 = null,
-    /// `meiolol meio`'s fitted model, loaded beside lockrows: Meio under the locks for
-    /// private logins (locks.meioAnswer)
+    /// `meiolol meio`'s fitted model, loaded beside lockrows: Meio under the locks, the
+    /// lock island "meio" (locks.zig)
     meio: ?[]const u8 = null,
     /// `meiolol lean`'s file: the champion pages' early or late line where set
     lean: ?[]const u8 = null,

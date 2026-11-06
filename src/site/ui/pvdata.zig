@@ -1,7 +1,6 @@
 //! Meio under a champion page's lock stack, from the lock server (site/locks.zig): the
 //! champion page's Meio period at champpage.lockPath's "meio" island
 const std = @import("std");
-const fmt = @import("fmt.zig");
 const Role = @import("role.zig").Role;
 
 /// Meio's number for a cell (src/meio.zig Estimate): p, its 80% range, and the games in
@@ -45,7 +44,7 @@ pub const Gap = enum {
     deep,
 };
 
-/// Meio under a champion page's lock stack (site/locks.zig meio), at meioPath
+/// Meio under a champion page's lock stack (site/locks.zig meioOf), the lock island "meio"
 /// `stack` and `opponents` lead: ui-champion reads `stack` alone (data.decodeField) and
 /// ui-champmore both (data.decodeHead), neither decoding the rest
 pub const Meio = struct {
@@ -65,17 +64,5 @@ pub const Meio = struct {
     /// Each role the model has the champion in; empty with a gap
     roles: []const RoleEst = &.{},
 };
-
-/// `lk` as lockanswer.Locks.format writes it, "" for none; `view` html.View's index
-pub fn meioPath(a: std.mem.Allocator, view: u8, id: u32, r: Role, rank: []const u8, lk: []const u8) ![]const u8 {
-    var out: std.Io.Writer.Allocating = .init(a);
-    const w = &out.writer;
-    try w.writeAll("/private/meio/");
-    try fmt.write(w, .int, view);
-    try w.writeByte('/');
-    try fmt.write(w, .int, id);
-    try w.print("/{t}/{s}/{s}.bin", .{ r, rank, if (lk.len == 0) no_locks else lk });
-    return out.toOwnedSlice();
-}
 
 pub const no_locks = "none";
