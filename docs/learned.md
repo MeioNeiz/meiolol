@@ -46,21 +46,21 @@ How to write a line:
   role for champion-roles, lift -2 and 0.03-0.005% of the champion's games for keystones,
   made unseen keystone cells on 16.21 (14 origins, 34k cells, every region) 6.45 +- 0.87
   milli-nats better than the champion's raw rate (straight lines 2.68, none -2.08);
-  unseen items, matchups and duos better too, seen cells unchanged. Site: not yet (Meio
-  unshipped). Evidence: src/meio.zig, docs/model.md "Rare picks in Meio's prior lines"
+  unseen items, matchups and duos better too, seen cells unchanged. Site: the Meio
+  period. Evidence: src/meio.zig, docs/model.md "Rare picks in Meio's prior lines"
 - No counter or duo stands far out from the rest: pulling thin pairings to the pack
-  loses nothing. Sure: 16.21, room for outliers changed 0.97M matchups' and 0.16M duos'
-  accuracy by under 0.01 milli-nats. Evidence: docs/model.md "Share drift by rank and
-  region, pair mixture prior"
+  loses nothing. Rare picks differ far more than common ones, but symmetrically: no
+  hidden gems. Meio's ranges are too narrow on them (misses 1.2-2x its sd for rare
+  champion-roles and items, 2-3.7x for keystones). Sure: 16.21, outlier room moved 0.97M
+  matchups' and 0.16M duos' accuracy under 0.01 milli-nats; rare spreads by noise-free
+  moments per band. Evidence: docs/model.md "pair mixture prior", "The lean table"
 - Before your lane opponent picks, ranking as if they were average is as good as any
-  safer ranking we tried: favouring champions whose estimated matchups vary less is a
-  hair better by one measure and a hair worse by another. Sure: 86k held-out games (29
-  Oct snap), no enemy known: winners' picks rank a little higher (at most 7% of the
-  ranking's link to winning; not seen on 57k dev games), winner-loser pairs are ordered
-  slightly worse on dev and held-out games alike. The safer lists push popular champions
-  down, so they partly measure popularity, not safety. Site: the app keeps its blind
-  ranking; "safe blind" stays a label, not a different list. Evidence: docs/model.md
-  "Blind pick ranking (J2)"
+  safer ranking we tried. Sure: 86k held-out games (29 Oct snap), no enemy known:
+  favouring champions whose matchups vary less ranks winners' picks a little higher (at
+  most 7% of the ranking's link to winning; not on 57k dev games) but orders
+  winner-loser pairs slightly worse, and partly measures popularity. Site: the app keeps
+  its blind ranking; "safe blind" stays a label. Evidence: docs/model.md "Blind pick
+  ranking (J2)"
 - (early) The draft alone has a little more to give than our best model takes: knowing
   exactly how every pair of champions does together and against each other would call
   about 56.5% of games right, against about 55.4% now. Most of what is left sits in
