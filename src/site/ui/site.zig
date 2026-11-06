@@ -12,6 +12,7 @@
 const tree = @import("tree.zig");
 const tabs = @import("tabs.zig");
 const segmented = @import("segmented.zig");
+const urls = @import("urls.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const phrase = @import("phrase.zig");
 const plain = phrase.plain;
@@ -83,7 +84,7 @@ const W = struct {
     pub const ranks = [_]tree.Text{ plain("Plat+"), plain("Emerald+"), plain("Diamond+"), plain("Master+") };
     pub const plat = "Every game we crawl: Platinum IV+ players' lobbies";
     pub const meio = plain("Meio");
-    pub const meio_off = "Meio's estimates are on champion pages so far";
+    pub const meio_off = "Meio's estimates are on champion pages";
 };
 
 pub const Foot = struct {
@@ -162,11 +163,11 @@ fn picks(h: *H, p: Picks) N {
             .{ .label = .{ .s = p.home }, .href = p.region[0].href, .selected = p.region[0].current },
             .{ .label = W.all_regions, .href = p.region[1].href, .selected = p.region[1].current },
         }),
-        segmented.view(h, .{ .s = .s, .label = W.period }, &.{
+        segmented.view(h, .{ .s = .s, .label = W.period }, (&[_]segmented.Item{
             .{ .label = W.days, .href = p.period[0].href, .selected = p.period[0].current },
             .{ .label = W.patch.with(h, .{ .p = p.patch }), .href = p.period[1].href, .selected = p.period[1].current },
             .{ .label = W.meio, .disabled = true, .href = "", .title = W.meio_off },
-        }),
+        })[0..if (urls.meio_period) 3 else 2]),
         segmented.view(h, .{ .s = .s, .label = W.rank }, &ranks),
     });
 }

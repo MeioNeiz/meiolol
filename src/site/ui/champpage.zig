@@ -258,7 +258,7 @@ pub const Pick = struct {
     meio: bool = false,
 
     fn of(u: anytype) Pick {
-        const meio = u.period == .meio;
+        const meio = urls.meio_period and u.period == .meio;
         const days: u8 = if (meio) 0 else @backingInt(u.period);
         return .{ .view = 2 * @as(u8, @backingInt(u.region)) + days, .rank = u.rank, .meio = meio };
     }
@@ -288,7 +288,9 @@ pub const Pick = struct {
 
 const n_views = 4;
 /// site/champrank.zig's suffixes, by view
-const view_dirs = @import("urls.zig").view_dirs;
+const urls = @import("urls.zig");
+const view_dirs = urls.view_dirs;
+const periods: usize = if (urls.meio_period) 3 else 2;
 const view_queries = @import("urls.zig").view_queries;
 const meio_queries = [2][]const u8{ "?period=meio", "?region=all&period=meio" };
 const rank_suffixes = [n_views][]const u8{ "", "-patch", "-all", "-all-patch" };
@@ -1029,11 +1031,11 @@ pub const Top = struct {
                 .{ .label = W.regions[0], .selected = w.region() == .euw, .on = h.on(p, .{ .region = .euw }) },
                 .{ .label = W.regions[1], .selected = w.region() == .all, .on = h.on(p, .{ .region = .all }) },
             }),
-            segmented.view(h, .{ .label = W.period }, &.{
+            segmented.view(h, .{ .label = W.period }, (&[_]segmented.Item{
                 .{ .label = W.days, .selected = w.period() == .days30, .on = h.on(p, .{ .period = .days30 }) },
                 .{ .label = .{ .s = p.data.patch }, .selected = w.period() == .patch, .on = h.on(p, .{ .period = .patch }) },
                 .{ .label = W.meio, .selected = w.period() == .meio, .on = h.on(p, .{ .period = .meio }), .title = W.meio_tip.with(h, .{ .p = p.data.patch }).s },
-            }),
+            })[0..periods]),
             segmented.view(h, .{ .label = W.rank_pick }, &ranks),
         })});
     }
@@ -2263,6 +2265,7 @@ test "a view's files sit beside the page's; rank files at the root" {
 }
 
 test "Meio reads the region's 30 days and keeps its own query" {
+    if (!urls.meio_period) return error.SkipZigTest;
     var p: Pick = .of(Top.Url{ .region = .all, .period = .meio });
     try std.testing.expectEqual(2, p.view);
     try std.testing.expectEqual(.meio, p.period());
