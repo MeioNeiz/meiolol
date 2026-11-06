@@ -340,21 +340,41 @@ pub const Swings = struct {
     other: ?Move,
     peak: ?Extreme,
     low: ?Extreme,
-    /// Minutes your team was over 50%, of the minutes played
-    ahead: u16,
-    minutes: u16,
+    /// The longest unbroken run of minutes over 50%, as its last minute (`Move.minute`'s
+    /// sense: minute m is m - 1 to m) and length
+    lead: Run = .{},
 };
+
+pub const Run = struct { end: u8 = 0, len: u8 = 0 };
 
 pub fn swings(g: *const Game) Swings {
     const turn, const other = turns(g.wc);
-    var s: Swings = .{ .turn = turn, .other = other, .peak = null, .low = null, .ahead = 0, .minutes = @intCast(g.wc.len -| 1) };
-    for (g.wc, 0..) |v, i| {
+    var s: Swings = .{ .turn = turn, .other = other, .peak = null, .low = null };
+    var run: u8 = 0;
+    // 0:00 is the draft, before anything happened: not a peak, low or lead
+    for (g.wc[@min(1, g.wc.len)..], 1..) |v, i| {
         const m: u8 = @intCast(i);
         if (s.peak == null or v > s.peak.?.v) s.peak = .{ .minute = m, .v = v };
         if (s.low == null or v < s.low.?.v) s.low = .{ .minute = m, .v = v };
-        if (i > 0 and v > 50) s.ahead += 1;
+        run = if (v > 50) run + 1 else 0;
+        if (run > s.lead.len) s.lead = .{ .end = m, .len = run };
     }
     return s;
+}
+
+/// The fight with most deaths, the bigger gold swing on a tie; null under two deaths
+pub fn biggestFight(ms: []const Moment) ?u8 {
+    var best: ?u8 = null;
+    for (ms, 0..) |m, i| {
+        if (m.fight == null or m.us + m.them < 2) continue;
+        if (best) |b| {
+            const o = ms[b];
+            const n = m.us + m.them;
+            if (n < o.us + o.them or (n == o.us + o.them and @abs(m.gold) <= @abs(o.gold))) continue;
+        }
+        best = @intCast(i);
+    }
+    return best;
 }
 
 /// One objective kind's count per side and who took the first
@@ -552,8 +572,22 @@ test "turns: the biggest move and the biggest the other way" {
     const s = swings(&demo);
     try testing.expectEqual(@as(u8, 90), s.peak.?.v);
     try testing.expectEqual(@as(u8, 3), s.low.?.minute);
-    try testing.expectEqual(@as(u16, 6), s.ahead);
-    try testing.expectEqual(@as(u16, 10), s.minutes);
+    try testing.expectEqual(Run{ .end = 10, .len = 6 }, s.lead);
+    // A run broken at 50 restarts; the start's 60% is the draft, neither lead nor peak
+    const g: Game = .{ .day = "", .patch = "", .queue = "", .dur = 360, .win = false, .you = 0, .seats = &.{}, .wc = &.{ 60, 55, 56, 50, 51, 52, 53 } };
+    const b = swings(&g);
+    try testing.expectEqual(Run{ .end = 6, .len = 3 }, b.lead);
+    try testing.expectEqual(Extreme{ .minute = 3, .v = 50 }, b.low.?);
+    try testing.expectEqual(Extreme{ .minute = 2, .v = 56 }, swings(&.{ .day = "", .patch = "", .queue = "", .dur = 120, .win = false, .you = 0, .seats = &.{}, .wc = &.{ 60, 55, 56 } }).peak.?);
+}
+
+test "biggestFight: most deaths, a lone kill is no fight" {
+    const ms = try moments(testing.allocator, &demo);
+    defer testing.allocator.free(ms);
+    try testing.expectEqual(@as(?u8, 1), biggestFight(ms));
+    try testing.expectEqual(@as(?u8, null), biggestFight(ms[0..1]));
+    const tie = [_]Moment{ .{ .t = 0, .end = 0, .us = 1, .them = 1, .fight = 0, .gold = 100 }, .{ .t = 9, .end = 9, .us = 0, .them = 2, .fight = 1, .gold = -600 }, .{ .t = 20, .end = 20, .us = 2, .fight = 2, .gold = 600 } };
+    try testing.expectEqual(@as(?u8, 1), biggestFight(&tie));
 }
 
 test "teams count each side and the firsts" {

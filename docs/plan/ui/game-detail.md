@@ -71,13 +71,13 @@ Desktop 1280 (content 1232), top to bottom:
      win chance 52 → 90 as a delta bar, kills per side as champion icons (crossed when
      they died), your K/D/A in the range, gold earned, objectives as icons, and below,
      the moments in the range as rows (component `moment-row`), scrolling
-4. Under the graph, the stat cells (component `stat-cell`, one row of 6 at desktop):
-   Swing +38% (52→90), Biggest drop −25%, Best minute +1,402, Peak 98%, Low 20%, Ahead
-   17/41. The swing is the biggest one-minute change, so the second cell is the biggest
-   move the other way (drop after a rising turn, rise after a falling one), never a
-   repeat of the turn.
-   Each cell's sub line is its time ("35-36"). Pressing a cell selects its range or
-   minute on the graph; the cell stays pressed while it is the selection
+4. Under the graph, the stat cells (StatStrip, up to 6, 3 by 2 at 390): Swing +38
+   (35-36), Drop -25 (the biggest move the other way, never a repeat of the turn), Best
+   minute +1,402, Fight 3-1 (most deaths, gold on a tie; two or more), Low 20% in a win
+   or Peak 60% in a loss (the other end is the result; 0:00, the draft, skipped),
+   Longest lead 15 min (8-22, unbroken over 50%; the time ahead in all is the fill).
+   One-word labels where they can: the page's gallery state is at the 400 word budget.
+   Pressing a cell selects its span or fight; it stays pressed while selected
 
 Below the fold at 1280 (~730 px fold, the header bar included; the stat cells now sit
 at ~740-800, the strip and portraits take ~80 px): the objectives row, players, lane,
@@ -96,7 +96,7 @@ the graph (not beside), its moment list capped at 5 rows with "All 26".
 
 Words on the first screen, labels only (data, champion names and times not counted):
 All games, WIN, KDA, KP, CS, Gold, Damage, Vision, Win chance, Gold, Game, Swing,
-Swing, Best minute, Biggest rise, Peak, Low, Ahead, Kills, Gold, plus the inspector's
+Swing, Drop, Best minute, Fight, Low, Longest lead, Kills, Gold, plus the inspector's
 row labels (none: rows are icons and figures). About 22 words. Today's first screen has
 ~95 (the turning sentence, the chart caption, the stat line, the moments header).
 

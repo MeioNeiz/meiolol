@@ -45,15 +45,14 @@ down, who killed you, gold swung, where, objectives within a minute, win chance 
 objectives you took part in, towers in your lane, every Baron, Elder and Atakhan), named
 by size (small under 5 points, medium, big 10+, huge 20+), small ones folded when over
 two, dots on the chart with the biggest five labelled. The win chance chart is filled
-in team colours (cyan past 80%, hot pink below 20%); records under it (biggest rise,
-high, low, minutes ahead, your best minute, the game's firsts as chips). The lane's gold
+in team colours (cyan past 80%, hot pink below 20%); records under it (swing, drop or
+rise, best minute, biggest fight, a win's low or a loss's peak, longest lead), the
+game's firsts as "1st" in the objectives row (checked on 50 live example games). The lane's gold
 at 14 says where it sits among the matchup's games. Views are kept in this browser (URL
 picks always win): no Riot ID in the URL opens this tab's last place, else the last
 player looked up, from the report as last shown; "Not you?" by the name.
 
 Next:
-- Check firsts on a real report once the API serves them and the example file is
-  regenerated; more records (biggest fight, longest time ahead)
 - A minute's win chance change is the whole minute, not the fight alone; map areas are
   rough, check a few against real positions; level 6 and first item have only a median
   (spread needs curvesfile percentiles)

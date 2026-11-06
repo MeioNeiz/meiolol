@@ -51,15 +51,19 @@ const W = struct {
     pub const of = phrase.Phrase("{i:int} of {n:int}");
     pub const count = phrase.Phrase("{n:count} moments");
     pub const one = plain("1 moment");
-    pub const minutes = phrase.Phrase("{a:int}–{b:int}");
-    pub const drop = plain("Biggest drop");
-    pub const rise = plain("Biggest rise");
+    /// Minutes 4–5, a fight's 3–1
+    pub const pair = phrase.Phrase("{a:int}–{b:int}");
+    pub const drop = plain("Drop");
+    pub const rise = plain("Rise");
     pub const best = plain("Best minute");
     pub const peak = plain("Peak");
     pub const low = plain("Low");
     pub const at = phrase.Phrase("at {t:time}");
-    pub const ahead = plain("Ahead");
-    pub const ahead_ctx = phrase.Phrase("of {n:int} min");
+    pub const lead = plain("Longest lead");
+    pub const min = plain("min");
+    pub const run = phrase.Phrase("min, {a:int}–{b:int}");
+    /// The biggest fight
+    pub const fight = plain("Fight");
     pub const kills = plain("Kills");
     pub const gold = plain("Gold");
     pub const towers = plain("Towers");
@@ -283,7 +287,7 @@ pub const GamePage = struct {
                 return .{
                     .label = label,
                     .value = phrase.num(hh, .signed, d),
-                    .ctx = W.minutes.with(hh, .{ .a = mv.minute - 1, .b = mv.minute }),
+                    .ctx = W.pair.with(hh, .{ .a = mv.minute - 1, .b = mv.minute }),
                     .step = .of(@floatFromInt(d), fmt.game_cuts),
                     .on = hh.on(pp, .{ .sel = .{ ms.a, ms.b } }),
                     .pressed = pp.selected(ms),
@@ -303,24 +307,45 @@ pub const GamePage = struct {
             items[n] = .{
                 .label = W.best,
                 .value = phrase.num(h, .signed, b.gold),
-                .ctx = W.minutes.with(h, .{ .a = b.minute - 1, .b = b.minute }),
+                .ctx = W.pair.with(h, .{ .a = b.minute - 1, .b = b.minute }),
                 .on = h.on(p, .{ .sel = .{ ms.a, ms.b } }),
                 .pressed = p.selected(ms),
             };
             n += 1;
         };
-        for ([_]struct { tree.Text, ?gamedata.Extreme }{ .{ W.peak, sw.peak }, .{ W.low, sw.low } }) |x| if (x[1]) |e| {
-            const ms = gamedata.minuteSpan(@max(e.minute, 1));
+        if (gamedata.biggestFight(p.insp.moments)) |i| {
+            const m = p.insp.moments[i];
             items[n] = .{
-                .label = x[0],
+                .label = W.fight,
+                .value = W.pair.with(h, .{ .a = m.us, .b = m.them }),
+                .ctx = W.at.with(h, .{ .t = m.t }),
+                .step = .of(@as(f32, @floatFromInt(@as(i16, m.us) - m.them)), .{ 0.5, 1.5, 2.5, 3.5 }),
+                .on = h.on(&p.tl, .{ .mark = i }),
+                .pressed = p.tl.cur == i,
+            };
+            n += 1;
+        }
+        // A win's peak and a loss's low are its result: the other end is the record
+        if (if (g.win) sw.low else sw.peak) |e| {
+            const ms = gamedata.minuteSpan(e.minute);
+            items[n] = .{
+                .label = if (g.win) W.low else W.peak,
                 .value = phrase.num(h, .pct, e.v),
                 .ctx = W.at.with(h, .{ .t = @as(u32, e.minute) * 60 }),
                 .on = h.on(p, .{ .sel = .{ ms.a, ms.b } }),
                 .pressed = p.selected(ms),
             };
             n += 1;
+        }
+        const a = sw.lead.end - sw.lead.len;
+        const ms: gamedata.Span = .{ .a = @as(u16, a) * 60, .b = @as(u16, sw.lead.end) * 60 };
+        items[n] = .{
+            .label = W.lead,
+            .value = phrase.num(h, .count, sw.lead.len),
+            .ctx = if (sw.lead.len == 0) W.min else W.run.with(h, .{ .a = a, .b = sw.lead.end }),
+            .on = if (sw.lead.len > 0) h.on(p, .{ .sel = .{ ms.a, ms.b } }) else null,
+            .pressed = sw.lead.len > 0 and p.selected(ms),
         };
-        items[n] = .{ .label = W.ahead, .value = phrase.num(h, .count, sw.ahead), .ctx = W.ahead_ctx.with(h, .{ .n = sw.minutes }) };
         n += 1;
         return h.div(.{ .class = "cells" }, .{strip.view(h, items[0..n])});
     }
