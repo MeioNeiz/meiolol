@@ -169,9 +169,9 @@ holding ~80% (so too wide fails as well as too narrow); boundaries 16.20 -> 16.2
   Meio can give (two locks at once: main effects plus both pair terms)
 - M8 Patches as experiments (patch-transfer.md PT7): a changed item or rune moves the
   champions exposed to it, so the patch prior widens by exposure and interactions add up
-  patch by patch. First look on 16.21: one item change shows (ranged Hubris, ~0.5 pp at
-  full exposure), the change list must come from Riot's notes (docs/model.md "Patches as
-  experiments"); widen by exposure after 16.22 confirms
+  patch by patch. 16.21: ranged Hubris shows (~0.5 pp at full exposure; change list from
+  Riot's notes, docs/model.md "Patches as experiments"). Parked: PT7 confirm on Bloodmail
+  (16.22's one usable change), 7 days, needs 11 Nov cubes; confirmed if slope > 0, z >= 2
 - M9 Every lock combination (J35): a range for every number a lock can show, shares
   and averages too (build, rune, gold at 14), and E2 per lock stack (one lock, two, the
   wish list's pairs), scored daily like the single kinds. Ranges calibrated per kind and

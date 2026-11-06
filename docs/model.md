@@ -6165,6 +6165,29 @@ the every-region mix is not the cause: the early platforms are 49% of the window
 shrunk lead term, then M8 for the cells that really moved. Tables, comparisons and the
 diff: data/team/2026-11-05-notes2/early/ (t2?-b2 files the final pair).
 
+### Day-0 shares on the changed champions, 16.22, 2026-11-06 (meio, M8)
+
+Could a looser patch sd for what Riot changed fix Meio's 16.22 day-0 share loss against
+the raw 30 days? Same cells dump as "The patch's games from before EUW1" (base 1c06bb73,
+origin 0, cells with 10+ games in 30 days); changed = the 14 champions in Riot's 26.22
+notes (no runes, two items: Doran's Bow and Overlord's Bloodmail). Nats over target
+games, phi-scaled as truth, Meio minus 30 days:
+
+| region | kind | loss, all cells | changed: cells, share of games | changed share of loss | big movers (abs z > 5) |
+| --- | --- | --: | --- | --: | --: |
+| every | build | +8.6k | 11.1k, 8.3% | 9.6% | -15.0k |
+| every | keystone | +5.0k | 3.0k, 8.3% | -1.9% | -2.8k |
+| EUW1 | build | +4.6k | 7.4k, 8.4% | 3.5% | -3.5k |
+| EUW1 | keystone | +1.1k | 2.0k, 8.4% | -6.9% | -0.5k |
+
+Changed champions carry about their games' share of the build loss (every region 9.6%
+on 8.3%) or less, and Meio already
+wins on their keystones; on the cells that really moved (big movers, every champion)
+Meio wins too. The loss is small moves on unchanged champions, so a looser sd for
+changed champions or options has nothing to take: not built. Bloodmail cells: usage
++0.69 logit (median), Meio minus 30 days +45 nats over 914 cells. Script and output:
+data/team/2026-11-05-notes2/m6b1/m8c.py, m8c.out.
+
 ### The stored rank knows the result: the bracket lean, 2026-11-06 (m10, NL6)
 
 After NL3 most of the M10 gate's failures (~140 Iron-Silver, ~80 Diamond+ of 286) were a
