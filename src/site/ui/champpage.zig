@@ -259,7 +259,7 @@ pub const Pick = struct {
 
     fn of(u: anytype) Pick {
         const meio = urls.meio_period and u.period == .meio;
-        const days: u8 = if (meio) 0 else @backingInt(u.period);
+        const days: u8 = if (u.period == .meio) 0 else @backingInt(u.period);
         return .{ .view = 2 * @as(u8, @backingInt(u.region)) + days, .rank = u.rank, .meio = meio };
     }
 
@@ -268,7 +268,7 @@ pub const Pick = struct {
     }
 
     fn setPeriod(p: *Pick, x: PeriodPick) void {
-        p.meio = x == .meio;
+        p.meio = urls.meio_period and x == .meio;
         p.view = p.view / 2 * 2 + @intFromBool(x == .patch);
     }
 
@@ -2275,6 +2275,15 @@ test "Meio reads the region's 30 days and keeps its own query" {
     p.setPeriod(.meio);
     try std.testing.expect(p.eql(.of(Top.Url{ .region = .all, .period = .meio })));
     try std.testing.expectEqualStrings("?region=all", (Pick{ .view = 2 }).query());
+}
+
+test "Meio switched off reads as the region's 30 days" {
+    if (urls.meio_period) return error.SkipZigTest;
+    var p: Pick = .of(Top.Url{ .region = .all, .period = .meio });
+    try std.testing.expectEqual(Pick{ .view = 2 }, p);
+    try std.testing.expectEqual(Pick{ .view = 0 }, Pick.of(Top.Url{ .period = .meio }));
+    p.setPeriod(.meio);
+    try std.testing.expectEqual(Pick{ .view = 2 }, p);
 }
 
 test "a rare role is listed and opens with its games, faded only by its range" {
