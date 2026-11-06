@@ -517,11 +517,13 @@ pub fn pruneAcked(db: store.Db, io: Io, keep_days: u32, now_s: i64) !Pruned {
     return out;
 }
 
-/// Free raw.db pages an ack's prune leaves for new raw to reuse: about a day of raw at
-/// the key's rate. Handing pages back moves pages from the file's end, a GB of writes an
-/// ack, which on C01's disk held the crawler's commits for minutes on end through a
-/// catch-up (29-30 Oct); the data disk has room for raw.db at its high-water mark
-pub const prune_keep_free = 8 << 30;
+/// Free raw.db pages an ack's prune leaves for new raw to reuse: more than a multi-day
+/// catch-up frees (~4 days behind: free list peaks ~17 GB; raw ~5.4 GB a day at the key's
+/// rate), so a catch-up hands nothing back. Handing pages back moves pages from the
+/// file's end, ~400 MB of writes an ack, which on C01's disk held the crawler's commits
+/// for minutes (29-30 Oct) or raised its commit share to 15-30% for ~15 min an ack (5
+/// Nov); the data disk has room for raw.db at its high-water mark
+pub const prune_keep_free = 20 << 30;
 /// Pages a write transaction hands back (the crawler's writer shares raw.db), and the
 /// rest between transactions so its commits get in
 const vacuum_step = 2560;
