@@ -116,6 +116,9 @@ pub const Slot = struct {
 
 pub const Lead = struct { slots: []const Slot, games: u32, wins: u32 };
 
+/// Players and their wins against one group of lane opponents (Data.vs)
+pub const Group = struct { games: u32 = 0, wins: u32 = 0 };
+
 /// The build of the players who took one keystone
 pub const Lock = struct { keystone: u32, slots: []const Slot, games: u32, wins: u32 };
 
@@ -138,6 +141,9 @@ pub const Data = struct {
     /// The champion-role's games and wins (the LockBar's line under locks)
     games: u32 = 0,
     wins: u32 = 0,
+    /// Against melee, ranged, AD and AP lane opponents (the vr and vd locks' groups),
+    /// under every lock but those two; none on a matchup
+    vs: []const Group = &.{},
 };
 
 const W = struct {

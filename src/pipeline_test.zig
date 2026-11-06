@@ -17,6 +17,8 @@ const testerbin = @import("testerbin.zig");
 const digests = @import("digests.zig");
 const ddragon = @import("ddragon.zig");
 const site = @import("site/root.zig");
+const site_load = @import("site/load.zig");
+const site_extras = @import("site/extras.zig");
 const csp = @import("site/csp.zig");
 const assets = @import("site/assets.zig");
 const admin = @import("admin.zig");
@@ -139,7 +141,7 @@ test "fixture games to stats, curves and the website" {
     for (darius.firsts[1..]) |x| took += x.games;
     try testing.expect(took > 0);
     // The champion page's build block: the file as BuildPanel's data, drawn
-    const block = try buildblock.data(arena, &build_file, darius, "Darius");
+    const block = try buildblock.data(arena, &build_file, darius, "Darius", &.{});
     try testing.expectEqual(.spells, block.slots[0].kind);
     try testing.expectEqualStrings("Flash Ghost", block.slots[0].options[0].name);
     for (block.slots) |s| if (s.kind == .skill_path) try testing.expectEqual(18, s.options[0].keys.len);
@@ -2286,6 +2288,35 @@ fn curvesOne(dir: []const u8, db: store.Db, spec: curves.Spec) !struct { builder
     return .{ .builder = b[0], .summary = sum[0] };
 }
 
+test "damage split: once per Extras, read again by a new round's" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const db = try store.schema.memory();
+    defer db.close();
+    try fillGames(arena, db, 14, true);
+    const raw_body = store.Blob{ .bytes = try store.raw.compress(arena, @embedFile("riot/testdata/match.json")) };
+    try db.run("INSERT INTO raw.raw_docs SELECT 'riot_match', match_id, 0, ? FROM matches", .{raw_body});
+    const opts: site.Options = .{ .out_dir = "", .patches = &.{patch}, .since_ms = 0, .all_platforms = &.{"EUW1"}, .contact = "", .updated = "" };
+    var phases: site_load.Phases = .init(io, .cpu_process);
+
+    var round: site_extras.Extras = .{ .arena = arena };
+    const first = try round.damageFor(io, db, opts, &phases);
+    // The patch's games without remakes
+    try testing.expectEqual(11, first.games);
+    // Darius all physical, Ahri mostly magic
+    try testing.expectEqual(ui.dailydata.Dmg.ad, ui.dailydata.dmgOf(first.of(122)).?);
+    try testing.expectEqual(ui.dailydata.Dmg.ap, ui.dailydata.dmgOf(first.of(103)).?);
+    try db.exec("DELETE FROM raw.raw_docs");
+    try testing.expectEqual(first, try round.damageFor(io, db, opts, &phases));
+    var next: site_extras.Extras = .{ .arena = arena };
+    const again = try next.damageFor(io, db, opts, &phases);
+    try testing.expectEqual(0, again.games);
+    try testing.expectEqual(null, again.of(122));
+}
+
 /// One builds file, through a day cube in `dir`
 fn buildsOne(dir: []const u8, db: store.Db, o: builds.Options, set: builds.Set) !builds.Builder {
     const gpa = testing.allocator;
@@ -2338,6 +2369,12 @@ fn expectLockAnswers(arena: std.mem.Allocator, dir: []const u8, f: *const builds
             try testing.expectEqualDeep(want.options, rows.options[0..n]);
         }
     }
+    // A reach lock's answer counts every lane opponent, so the row's groups keep theirs
+    const melee = (try lockanswer.file(gpa, arena, &t, &x, 122, .top, filter, &lockanswer.Locks.parse("vr1").?, o, f.label, f.min_tier)).?;
+    try testing.expectEqualSlices(builds.File.Opponent, none.get(122, .top).?.opponents, melee.get(122, .top).?.opponents);
+    const vs = (try buildblock.data(arena, &none, none.get(122, .top).?, "Darius", &.{})).vs;
+    try testing.expectEqual(f.getReach(122, .top, .melee).?.games, vs[0].games);
+    try testing.expectEqual(f.getReach(122, .top, .melee).?.wins, vs[0].wins);
     const nobody = (try lockanswer.file(gpa, arena, &t, &x, 122, .top, filter, &lockanswer.Locks.parse("ks8005").?, o, f.label, f.min_tier)).?;
     try testing.expectEqual(null, nobody.get(122, .top));
     try testing.expectEqual(null, try lockanswer.file(gpa, arena, &t, &x, 122, .jungle, filter, &.{}, o, f.label, f.min_tier));

@@ -18,6 +18,7 @@ const partials = @import("../partials.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
+const ui = root.ui;
 
 const log = std.log.scoped(.site);
 
@@ -180,6 +181,8 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
             site.by_view = by;
         }
     }
+    const shares = try extras.damageFor(io, db, all_opts, &phases);
+    site.damage = try damageTable(arena, site.champs, shares);
     if (shared) {
         site.daily_inputs = dailyInputs(io, opts);
         const kept = try Parts.ofFor(old, DailyPart, .daily, view, arena, champs_key);
@@ -192,7 +195,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
             site.learn = d.learn;
             site.eval = d.eval;
             phases.mark("daily and learn kept");
-        } else try loadDaily(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
+        } else try loadDaily(site, db, try extras.partialsFor(gpa, io, db, &phases), shares, &phases);
     }
     try extras.going();
     try loadPatchDay(site, db, all_opts, extras, old, &phases);
@@ -529,7 +532,7 @@ fn loadExample(site: *Site, files: *std.ArrayList(File)) !void {
 }
 
 /// The shared view's Daily Draft, your example, eval chart and Learn data
-fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *Phases) !void {
+fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, shares: *const learn.Shares, phases: *Phases) !void {
     const arena = site.arena;
     const io = site.io;
     const opts = site.opts;
@@ -556,7 +559,7 @@ fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *
     }
     phases.mark("daily");
     // After the Daily Draft, so practice leaves out the games behind its puzzles
-    if (learn.build(arena, io, db, games, &site.stats, if (site.curves) |*c| c else null, .{
+    if (learn.build(arena, io, db, games, &site.stats, if (site.curves) |*c| c else null, shares, .{
         .patches = opts.patches,
         .platforms = opts.platforms,
         .today = day,
@@ -571,6 +574,21 @@ fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *
     try dailydata.files(site, files.items, &bins);
     try files.appendSlice(arena, bins.items);
     site.daily_files = files.items;
+}
+
+/// Per champion id 1 AD, 2 AP, as ui.dailydata.dmgOf reads its magic share; 0 mixed or
+/// unknown (Site.damage)
+fn damageTable(arena: std.mem.Allocator, champs: []const root.Champ, shares: *const learn.Shares) ![]const u8 {
+    var most: u32 = 0;
+    for (champs) |c| most = @max(most, c.id);
+    const out = try arena.alloc(u8, @as(usize, most) + 1);
+    @memset(out, 0);
+    for (champs) |c| out[c.id] = switch (ui.dailydata.dmgOf(shares.of(c.id)) orelse continue) {
+        .ad => 1,
+        .ap => 2,
+        .mixed => 0,
+    };
+    return out;
 }
 
 /// The view's model file among its files
@@ -736,7 +754,7 @@ pub const Phases = struct {
     buf: [256]u8 = undefined,
     len: usize = 0,
 
-    fn init(io: std.Io, cpu: std.Io.Clock) Phases {
+    pub fn init(io: std.Io, cpu: std.Io.Clock) Phases {
         return .{ .io = io, .cpu = cpu, .last_ms = std.Io.Clock.awake.now(io).toMilliseconds(), .last_cpu_ms = cpu.now(io).toMilliseconds() };
     }
 

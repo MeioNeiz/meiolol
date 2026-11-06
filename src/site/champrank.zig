@@ -105,7 +105,7 @@ fn roleData(site: *const Site, x: *const filters.Ranked, k: f64) !Roles {
         .top = .{ .role = r, .games = x.games, .wins = x.wins, .share = 0, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .lane = &.{}, .opps = @intCast(opps.len) },
         .build = .{
             .role = r,
-            .build = if (picked) |p| try buildblock.data(a, p.picked.f, p.picked.b, ch.name) else null,
+            .build = if (picked) |p| try buildblock.data(a, p.picked.f, p.picked.b, ch.name, site.damage) else null,
             .from = if (picked) |p| p.rank else 0,
             .patch = if (picked) |p| p.picked.otherPatch(v) else null,
             .older = if (picked) |p| p.picked.newer != null else false,

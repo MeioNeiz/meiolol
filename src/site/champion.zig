@@ -319,7 +319,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         // The card has no period label: this view's games only, as the head's
         .timing = if (builds_page.forChampionHere(site, site.view, ch, r)) |b| try timingOf(a, b.first_item, cp.min_games) else &.{},
         .places = try rankings.placesOf(site, ch, r),
-        .build = if (picked) |b| try buildblock.data(a, b.f, b.b, ch.name) else null,
+        .build = if (picked) |b| try buildblock.data(a, b.f, b.b, ch.name, site.damage) else null,
         .build_patch = if (picked) |b| b.otherPatch(site.view) else null,
         .build_older = if (picked) |b| b.newer != null else false,
         .rels = rels,

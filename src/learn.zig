@@ -126,9 +126,21 @@ pub const Learn = struct {
     files: []File,
 };
 
+/// Each champion's magic share of its damage to champions (Champ.magic), by champion id
+pub const Shares = struct {
+    /// Indexed by champion id; null when too few sampled
+    magic: []const ?f32 = &.{},
+    /// Raw match docs read
+    games: u32 = 0,
+
+    pub fn of(s: *const Shares, champion: u32) ?f32 {
+        return if (champion < s.magic.len) s.magic[champion] else null;
+    }
+};
+
 /// Games, wins, lengths, team mixes and practice match ids from `games` when given (the
-/// views partials), else the database; the damage split (raw match JSON) and the
-/// practice games (kills, gold) always from the database
+/// views partials), else the database; the practice games (kills, gold) always from the
+/// database. `shares`: damageShares on opts' patches and platforms
 pub fn build(
     arena: std.mem.Allocator,
     io: std.Io,
@@ -136,10 +148,11 @@ pub fn build(
     games: ?*const partials.Store,
     st: *const Stats,
     curves: ?*const curvesfile.Curves,
+    shares: *const Shares,
     opts: Options,
 ) !Learn {
     const chosen = if (games) |g| try chosenGames(arena, g, opts) else null;
-    const facts = try champFacts(arena, db, chosen, st, opts);
+    const facts = try champFacts(arena, db, chosen, st, shares, opts);
     var files: std.ArrayList(File) = .empty;
     try files.append(arena, .{ .path = "learn/champs.json", .data = try champsJson(arena, st, facts) });
     const pack = try practice(arena, io, db, chosen, st, facts, curves, opts);
@@ -151,10 +164,10 @@ pub fn build(
     return .{ .facts = facts, .files = try files.toOwnedSlice(arena) };
 }
 
-fn patchWhere(arena: std.mem.Allocator, opts: Options) ![2][]const u8 {
+fn patchWhere(arena: std.mem.Allocator, patches: []const []const u8, platforms: []const []const u8) ![2][]const u8 {
     return .{
-        try std.json.Stringify.valueAlloc(arena, opts.patches, .{}),
-        try std.json.Stringify.valueAlloc(arena, opts.platforms, .{}),
+        try std.json.Stringify.valueAlloc(arena, patches, .{}),
+        try std.json.Stringify.valueAlloc(arena, platforms, .{}),
     };
 }
 
@@ -187,10 +200,11 @@ fn chosenGames(arena: std.mem.Allocator, g: *const partials.Store, opts: Options
     return .{ .games = games.items, .roles = roles };
 }
 
-fn champFacts(arena: std.mem.Allocator, db: store.Db, chosen: ?Chosen, st: *const Stats, opts: Options) !Facts {
+fn champFacts(arena: std.mem.Allocator, db: store.Db, chosen: ?Chosen, st: *const Stats, shares: *const Shares, opts: Options) !Facts {
     const champs = try arena.alloc(Champ, st.n);
     @memset(champs, .{});
-    const patch_json, const platform_json = try patchWhere(arena, opts);
+    for (champs, st.ids[0..st.n]) |*ch, id| ch.magic = shares.of(id);
+    const patch_json, const platform_json = try patchWhere(arena, opts.patches, opts.platforms);
     if (chosen) |ch| {
         for (ch.games) |g| {
             const minutes: u32 = @intCast(@divFloor(@max(0, g.duration_s), 60));
@@ -227,8 +241,6 @@ fn champFacts(arena: std.mem.Allocator, db: store.Db, chosen: ?Chosen, st: *cons
             if (p.win) n.wins += 1;
         }
     }
-
-    const damage_games = try damageSplit(arena, db, st, opts, champs);
 
     var mix: [mixes]Counts = @splat(.{ .games = 0, .wins = 0 });
     if (chosen) |ch| {
@@ -306,7 +318,7 @@ fn champFacts(arena: std.mem.Allocator, db: store.Db, chosen: ?Chosen, st: *cons
             known += 1;
         }
     }
-    return .{ .champs = champs, .mix = mix, .damage_games = damage_games };
+    return .{ .champs = champs, .mix = mix, .damage_games = shares.games };
 }
 
 const RawMatch = struct {
@@ -321,15 +333,14 @@ const RawMatch = struct {
 };
 
 /// Magic share of each champion's damage to champions, from the raw match JSON of the
-/// newest games on the chosen patches. Returns the games read.
-fn damageSplit(
+/// newest games on `patches` and `platforms`; in `arena`
+pub fn damageShares(
     arena: std.mem.Allocator,
     db: store.Db,
-    st: *const Stats,
-    opts: Options,
-    champs: []Champ,
-) !u32 {
-    const patch_json, const platform_json = try patchWhere(arena, opts);
+    patches: []const []const u8,
+    platforms: []const []const u8,
+) !Shares {
+    const patch_json, const platform_json = try patchWhere(arena, patches, platforms);
     var q = try db.prepare(
         \\SELECT body FROM raw.raw_docs WHERE source = 'riot_match' AND key IN (
         \\  SELECT match_id FROM matches
@@ -340,8 +351,7 @@ fn damageSplit(
     defer q.deinit();
     try q.bind(.{ patch_json, stats.ranked_solo, platform_json, damage_sample });
     const Sum = struct { magic: f64 = 0, all: f64 = 0, games: u32 = 0 };
-    const sums = try arena.alloc(Sum, st.n);
-    @memset(sums, .{});
+    var sums: std.ArrayList(Sum) = .empty;
     var doc_arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
     defer doc_arena.deinit();
     var games: u32 = 0;
@@ -354,20 +364,26 @@ fn damageSplit(
         }) catch continue;
         games += 1;
         for (doc.info.participants) |p| {
-            const c = st.index(p.championId) orelse continue;
+            // Riot's ids are under 1000; a bigger one is a bad doc
+            if (p.championId == 0 or p.championId > max_champion_id) continue;
+            if (p.championId >= sums.items.len) try sums.appendNTimes(arena, .{}, p.championId + 1 - sums.items.len);
+            const s = &sums.items[p.championId];
             const magic: f64 = @floatFromInt(@max(0, p.magicDamageDealtToChampions));
             const other: f64 = @floatFromInt(@max(0, p.physicalDamageDealtToChampions) +
                 @max(0, p.trueDamageDealtToChampions));
-            sums[c].magic += magic;
-            sums[c].all += magic + other;
-            sums[c].games += 1;
+            s.magic += magic;
+            s.all += magic + other;
+            s.games += 1;
         }
     }
-    for (sums, champs) |s, *ch| {
-        if (s.games >= min_damage_games and s.all > 0) ch.magic = @floatCast(s.magic / s.all);
+    const magic = try arena.alloc(?f32, sums.items.len);
+    for (sums.items, magic) |s, *m| {
+        m.* = if (s.games >= min_damage_games and s.all > 0) @floatCast(s.magic / s.all) else null;
     }
-    return games;
+    return .{ .magic = magic, .games = games };
 }
+
+const max_champion_id = 4095;
 
 /// {"lengths":[25,32],"mix":[[games,wins],...],"champions":[{"id","magic","length":
 /// [[g,w,g,w,g,w] per role]}]}
@@ -422,7 +438,7 @@ fn practice(
             used = try daily.readUsed(arena, io, dir);
         } else |_| {}
     }
-    const patch_json, const platform_json = try patchWhere(arena, opts);
+    const patch_json, const platform_json = try patchWhere(arena, opts.patches, opts.platforms);
     const where =
         \\FROM matches
         \\WHERE patch IN (SELECT value FROM json_each(?)) AND queue_id = ?
@@ -704,7 +720,8 @@ test "facts and practice drafts" {
     try built.builder.write(&model.writer, "16.20");
     var st: Stats = try .parse(arena, model.written());
 
-    const l = try build(arena, testing.io, db, null, &st, null, .{
+    const shares = try damageShares(arena, db, &.{"16.20"}, &.{"EUW1"});
+    const l = try build(arena, testing.io, db, null, &st, null, &shares, .{
         .patches = &.{"16.20"},
         .platforms = &.{"EUW1"},
         .today = 20740,
@@ -783,8 +800,9 @@ test "from the views partials: the same files" {
     defer games.deinit();
 
     const opts: Options = .{ .patches = &.{"16.20"}, .platforms = &.{"EUW1"}, .today = 20740 };
-    const want = try build(arena, io, db, null, &st, null, opts);
-    const got = try build(arena, io, db, games, &st, null, opts);
+    const shares = try damageShares(arena, db, opts.patches, opts.platforms);
+    const want = try build(arena, io, db, null, &st, null, &shares, opts);
+    const got = try build(arena, io, db, games, &st, null, &shares, opts);
     var teams: u32 = 0;
     for (want.facts.mix) |m| teams += m.games;
     try testing.expectEqual(798, teams);

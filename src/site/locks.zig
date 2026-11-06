@@ -102,10 +102,9 @@ pub const Answers = struct {
 };
 
 /// `rest` (a path under the view's directory, after `prefix`) answered from `s`, the
-/// view's site, in `s.arena`; null for a path that names nothing. `l`: site.Loaded
-pub fn answer(s: *Site, x: *const Answers, gpa: std.mem.Allocator, rest: []const u8, l: anytype) !?[]const u8 {
+/// view's site, in `s.arena`; null for a path that names nothing
+pub fn answer(s: *Site, x: *const Answers, gpa: std.mem.Allocator, rest: []const u8) !?[]const u8 {
     const q = parse(rest) orelse return null;
-    try lendLearn(s, &q.locks, l);
     const ch = s.champBySlug(q.slug) orelse return null;
     var out: std.ArrayList(u8) = .empty;
     switch (q.island) {
@@ -131,13 +130,13 @@ pub fn build(s: *const Site, x: *const Answers, gpa: std.mem.Allocator, ch: Cham
     const a = s.arena;
     const t = &x.table;
     const tier = tierOf(k);
-    const f = try filterOf(s, t, k, locks) orelse return null;
+    const f = filterOf(s, t, k) orelse return null;
     const base = if (s.view_builds[s.view.index()]) |*b| b else null;
     const label = if (base) |b| b.label else "";
     const file = try lockanswer.file(gpa, a, t, &x.index, @intCast(ch.id), r, f, locks, .{}, label, tier) orelse return null;
     const role = try a.create(cp.BuildRole);
     role.* = .{ .role = champion.uiRole(r) };
-    if (file.get(@intCast(ch.id), r)) |b| role.build = try buildblock.data(a, &file, b, ch.name);
+    if (file.get(@intCast(ch.id), r)) |b| role.build = try buildblock.data(a, &file, b, ch.name, s.damage);
     var d: cp.BuildData = .{ .roles = role[0..1] };
     if (locks.by.get(.opponent)) |v| for (s.champs) |o| if (o.id == v.v[0]) {
         d.vs = .{ .id = @intCast(o.id), .name = o.name, .icon = try s.icon(o) };
@@ -150,7 +149,7 @@ pub fn build(s: *const Site, x: *const Answers, gpa: std.mem.Allocator, ch: Cham
 pub fn more(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, locks: *const lockanswer.Locks) !?cp.MoreData {
     const a = s.arena;
     const t = &x.table;
-    const f = try filterOf(s, t, k, locks) orelse return null;
+    const f = filterOf(s, t, k) orelse return null;
     const m = try lockanswer.matchups(a, t, &x.index, @intCast(ch.id), r, f, locks) orelse return null;
     // Table codes by stats index
     const codes = try a.alloc(u8, s.stats.n);
@@ -178,7 +177,7 @@ pub fn more(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, l
 /// StatStrip: a TopData of that one role and nothing else, in `s.arena`; null as `build`
 pub fn top(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, locks: *const lockanswer.Locks) !?cp.TopData {
     const a = s.arena;
-    const f = try filterOf(s, &x.table, k, locks) orelse return null;
+    const f = filterOf(s, &x.table, k) orelse return null;
     const n = try lockanswer.count(a, &x.table, &x.index, @intCast(ch.id), r, f, locks) orelse return null;
     const role = try a.create(cp.TopRole);
     role.* = .{ .role = champion.uiRole(r), .games = n.games, .wins = n.wins, .share = 0, .pick = 0, .ban = 0, .lane = &.{} };
@@ -207,7 +206,6 @@ pub fn meioAnswer(arena: std.mem.Allocator, x: *const Answers, rest: []const u8,
     const locks = if (std.mem.eql(u8, lk, pd.no_locks)) lockanswer.Locks{} else pageLocks(lk) orelse return null;
     var s = (try l.site(html.View.all[v])).*;
     s.arena = arena;
-    try lendLearn(&s, &locks, l);
     const ch = for (s.champs) |c| {
         if (c.id == id) break c;
     } else return null;
@@ -215,13 +213,6 @@ pub fn meioAnswer(arena: std.mem.Allocator, x: *const Answers, rest: []const u8,
     var out: std.ArrayList(u8) = .empty;
     try ui.data.encode(arena, pd.Meio, d, &out);
     return out.items;
-}
-
-/// `s` with the shared view's Learn facts, which a damage lock's Filter.damage comes
-/// from, when `locks` hold one. `l`: site.Loaded
-pub fn lendLearn(s: *Site, locks: *const lockanswer.Locks, l: anytype) !void {
-    if (locks.by.get(.damage) == null or s.learn != null) return;
-    s.learn = (try l.site(html.View.shared)).learn;
 }
 
 /// The locks Meio models: one keystone, one finished item (any slot) and one lane
@@ -282,7 +273,7 @@ fn crOf(id: u16, cr: u16) u16 {
 fn meioOf(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, locks: *const lockanswer.Locks) !?pd.Meio {
     const a = s.arena;
     const t = &x.table;
-    const f = try filterOf(s, t, k, locks) orelse return null;
+    const f = filterOf(s, t, k) orelse return null;
     const c = try lockanswer.choices(a, t, &x.index, @intCast(ch.id), r, f, locks) orelse return null;
     var d: pd.Meio = .{ .gap = .none, .any_slot = false, .games = c.locked.games, .wins = c.locked.wins, .stack = null, .gold = null, .keystones = &.{}, .items = &.{}, .opponents = &.{} };
     const st = Stack.of(locks, &d.any_slot) catch |err| switch (err) {
@@ -364,35 +355,16 @@ fn tierOf(k: cp.Rank) []const u8 {
     return if (k == .plat) "PLATINUM" else builds.rank_tiers[@backingInt(k) - 1];
 }
 
-/// The rows the view and rank `k` count under `locks`; null when the view's patch or
+/// The rows the view and rank `k` count; null when the view's patch or
 /// region isn't in `t`
-fn filterOf(s: *const Site, t: *const lockrows.Table, k: cp.Rank, locks: *const lockanswer.Locks) !?lockanswer.Filter {
+fn filterOf(s: *const Site, t: *const lockrows.Table, k: cp.Rank) ?lockanswer.Filter {
     return .{
         .platform = if (s.view.region == .euw) codeOf(t.dicts.platforms, s.opts.home) orelse return null else null,
         .patch = if (s.view.period == .patch) codeOf(t.dicts.patches, s.opts.patches[0]) orelse return null else null,
         .since = if (s.view.period == .days30) @intCast(@max(0, @divFloor(s.opts.since_ms, std.time.ms_per_s))) else 0,
         .floor = builds.rankOf(tierOf(k)),
-        .damage = if (locks.by.get(.damage) != null) try damageTable(s) else &.{},
+        .damage = s.damage,
     };
-}
-
-/// Per champion id 1 AD, 2 AP, as ui.dailydata.dmgOf reads Learn's magic share; 0 mixed or
-/// unknown. Empty without Learn (lendLearn)
-fn damageTable(s: *const Site) ![]const u8 {
-    const facts = s.learn orelse return &.{};
-    var most: u32 = 0;
-    for (s.champs) |c| most = @max(most, c.id);
-    const out = try s.arena.alloc(u8, @as(usize, most) + 1);
-    @memset(out, 0);
-    for (s.champs) |c| {
-        if (c.c >= facts.champs.len) continue;
-        out[c.id] = switch (ui.dailydata.dmgOf(facts.champs[c.c].magic) orelse continue) {
-            .ad => 1,
-            .ap => 2,
-            .mixed => 0,
-        };
-    }
-    return out;
 }
 
 /// The islands with lock answers

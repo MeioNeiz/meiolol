@@ -12,6 +12,7 @@ const stats = @import("../stats.zig");
 const lean = @import("../lean.zig");
 const partials = @import("../partials.zig");
 const patchnotes = @import("../patchnotes.zig");
+const learn = @import("../learn.zig");
 
 const Stats = core.Stats;
 
@@ -42,11 +43,16 @@ pub const Extras = struct {
     arena: ?std.mem.Allocator = null,
     /// notesFor's, by "<prev> <cur>": null where they failed
     notes: std.StringHashMapUnmanaged(?*const patchnotes.Notes) = .empty,
+    /// damageFor's. As old as the Extras: one per round's load, so a new round reads the
+    /// raw docs again. Loaded.readViews sets the views file's: the renderer never reads
+    /// the database
+    damage: ?learn.Shares = null,
     /// For views loading at once (Options.view_loads): one each for partialsFor, tallies
     /// and notesFor, so a view reading the open partials never waits on a minute of tallies
     games_mutex: std.Io.Mutex = .init,
     people_mutex: std.Io.Mutex = .init,
     notes_mutex: std.Io.Mutex = .init,
+    damage_mutex: std.Io.Mutex = .init,
     /// Views loading at once: the first to fail sets it, and the others stop at their
     /// next step (going)
     stopped: std.atomic.Value(bool) = .init(false),
@@ -173,6 +179,26 @@ pub const Extras = struct {
         e.people.appendAssumeCapacity(p);
         if (e.games) |g| log.info("partials: {d} mastery rows, {d} read", .{ g.counts.mastery, g.counts.mastery_read });
         return p;
+    }
+
+    /// Learn's magic shares (learn.damageShares) on the shared view's patches and
+    /// platforms, read on the first call: whichever view asks first gets the same. Empty
+    /// when they fail (AD and AP unknown)
+    pub fn damageFor(e: *Extras, io: std.Io, db: store.Db, opts: Options, phases: *Phases) !*const learn.Shares {
+        try e.damage_mutex.lock(io);
+        defer e.damage_mutex.unlock(io);
+        if (e.damage) |*d| return d;
+        try e.going();
+        comptime std.debug.assert(html.View.shared.region == .euw and html.View.shared.period == .patch);
+        e.damage = learn.damageShares(e.arena.?, db, opts.patches, opts.platforms) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => blk: {
+                log.warn("damage split: {t}", .{err});
+                break :blk .{};
+            },
+        };
+        phases.mark("damage split");
+        return &e.damage.?;
     }
 
     /// error.Stopped once another view loading at once has failed

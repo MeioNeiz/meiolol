@@ -145,6 +145,8 @@ pub const File = struct {
     /// few lucky games can't make an option look best (spreadK). Empty in files before
     /// 21 Oct 2026
     shrink: []const Shrink = &.{},
+    /// ddragon.BuildData.ranges, for reachOf. Empty in files before 6 Nov 2026
+    ranges: []const [2]u32 = &.{},
 
     pub const Shrink = struct { kind: Kind, k: f64, vs: f64 };
 
@@ -168,8 +170,10 @@ pub const File = struct {
         /// First's order), and their wins. None in `matchups` and files before 30 Oct 2026
         firsts: []const Count = &.{},
         /// Per lane opponent (Player.opponent, 0 left out) its players and their wins,
-        /// sorted by opponent: the site groups them (melee or ranged, AD or AP). None in
-        /// `matchups` and splits, and files before 6 Nov 2026
+        /// sorted by opponent: the site groups them (melee or ranged, AD or AP). A lock
+        /// answer counts them under every lock but the lane opponent's reach and damage,
+        /// so the other groups keep theirs. None in `matchups` and splits, and files
+        /// before 6 Nov 2026
         opponents: []const Opponent = &.{},
 
         pub fn get(b: Build, kind: Kind) ?Rows {
@@ -206,6 +210,11 @@ pub const File = struct {
         const key: BuildKey = .{ .champion = champion, .role = role, .opponent = reachKey(reach) };
         const i = std.sort.binarySearch(Build, f.by_reach, key, BuildKey.order) orelse return null;
         return f.by_reach[i];
+    }
+
+    /// `champion`'s reach, by its base attack range; null when unknown
+    pub fn reachOf(f: *const File, champion: u32) ?ddragon.BuildData.Reach {
+        return ddragon.BuildData.reachIn(f.ranges, champion);
     }
 
     pub fn getLead(f: *const File, champion: u32, role: Role, lead: Lead) ?Build {
@@ -469,12 +478,7 @@ pub const Builder = struct {
         };
         if (b.split == .opponent and opp == 0) return;
         try b.total(.{ .champion = c, .role = p.role, .opponent = opp, .kind = null }, p.won);
-        if (b.split == .none and p.opponent != 0) {
-            const e = try b.opponents.getOrPut(b.gpa, .{ .champion = c, .role = p.role, .opponent = @intCast(p.opponent) });
-            if (!e.found_existing) e.value_ptr.* = .{};
-            e.value_ptr.games += 1;
-            e.value_ptr.wins += @intFromBool(p.won);
-        }
+        if (b.split == .none) try b.addOpponent(p);
         const vals = valuesOf(p, chosen, d);
         if (vals.get(.runes)) |page| {
             try b.addVs(p.champion, p.role, opp, .keystone, &.{p.keystone}, p.won);
@@ -523,6 +527,15 @@ pub const Builder = struct {
         try b.first_item.put(b.gpa, .{ .champion = @intCast(champion), .role = role }, hist);
     }
 
+    /// `p` in its lane opponent's counts alone (File.Build.opponents)
+    pub fn addOpponent(b: *Builder, p: Player) !void {
+        if (p.opponent == 0) return;
+        const e = try b.opponents.getOrPut(b.gpa, .{ .champion = @intCast(p.champion), .role = p.role, .opponent = @intCast(p.opponent) });
+        if (!e.found_existing) e.value_ptr.* = .{};
+        e.value_ptr.games += 1;
+        e.value_ptr.wins += @intFromBool(p.won);
+    }
+
     pub fn putOpponent(b: *Builder, champion: u32, role: Role, opponent: u16, c: Count) !void {
         try b.opponents.put(b.gpa, .{ .champion = @intCast(champion), .role = role, .opponent = opponent }, c);
     }
@@ -568,6 +581,7 @@ pub const Builder = struct {
             .by_lead = by_lead,
             .by_keystone = by_keystone,
             .shrink = try shrinks(arena, builds, matchups, d.trees),
+            .ranges = d.ranges,
         };
     }
 

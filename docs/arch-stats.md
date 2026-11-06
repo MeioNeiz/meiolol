@@ -135,7 +135,7 @@ with a timeline, then those whose team took first tower, dragon, Voidgrubs and R
 champion page's Objectives card, against the role's sum); role-wide only. Per build
 `opponents`: every lane opponent's players and wins, [id, games, wins] (the champion
 page groups them by reach and damage for the lane opponent locks); role-wide only.
-Matchups count
+`ranges`: Data Dragon base attack ranges by champion id, for File.reachOf. Matchups count
 every kind but keystone and skill_start. `by_reach`: the rune kinds (runes, shards, rune,
 shard) by the lane opponent's reach, melee under 300 base attack range (Data Dragon
 champion.json), groups of 100+ players (Options.min_split_games), 4 pages each.

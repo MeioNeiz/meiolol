@@ -19,9 +19,11 @@ const pages_shown = 4;
 
 /// `b` (a File.Build of `f`) as the panel's data, in `a`, with its runes against melee
 /// and ranged lane opponents, its items ahead and behind on gold and the build of each
-/// rune page's keystone when the file has them. `champion`: its name
-pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8) !bp.Data {
+/// rune page's keystone when the file has them. `champion`: its name; `damage`: per
+/// champion id 1 AD, 2 AP (Site.damage)
+pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8, damage: []const u8) !bp.Data {
     var d = try dataVs(a, f, b, champion, null);
+    d.vs = try groups(a, f, b, damage);
     const melee = f.getReach(b.champion, b.role, .melee);
     const ranged = f.getReach(b.champion, b.role, .ranged);
     if (melee != null or ranged != null) {
@@ -56,6 +58,24 @@ pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []con
     }
     d.keystones = locks.items;
     return d;
+}
+
+/// `b`'s lane opponents as melee, ranged (`f`'s ranges), AD and AP (`damage`); none
+/// without them
+fn groups(a: std.mem.Allocator, f: *const File, b: File.Build, damage: []const u8) ![]const bp.Group {
+    if (b.opponents.len == 0) return &.{};
+    const out = try a.alloc(bp.Group, 4);
+    @memset(out, .{});
+    for (b.opponents) |o| {
+        const id, const games, const wins = o;
+        const dmg = if (id < damage.len) damage[id] else 0;
+        const reach: ?usize = if (f.reachOf(id)) |r| @backingInt(r) else null;
+        for ([_]?usize{ reach, if (dmg != 0) @as(usize, 1) + dmg else null }) |g| if (g) |i| {
+            out[i].games += games;
+            out[i].wins += wins;
+        };
+    }
+    return out;
 }
 
 /// `all` with its item slots from the lead group `b`'s, a kind it lacks left out

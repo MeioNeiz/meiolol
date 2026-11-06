@@ -145,11 +145,18 @@ pub fn reference(gpa: Allocator, arena: Allocator, t: *const lockrows.Table, cha
     const block = t.block(champion, role) orelse return null;
     var b = try builder(gpa, o);
     defer b.deinit();
+    var rest = locks.*;
+    rest.by.set(.reach, null);
+    rest.by.set(.damage, null);
     var it: lockrows.Rows = .{ .t = t, .b = block };
     while (it.next()) |r| {
         if (!f.takes(r.start, r.platform, r.patch, r.seat.rank)) continue;
         const vals = builds.valuesOf(r.seat.p, r.seat.k, &t.build);
-        if (!locks.match(&r, &vals, &t.build, &f)) continue;
+        if (!rest.match(&r, &vals, &t.build, &f)) continue;
+        if (!locks.match(&r, &vals, &t.build, &f)) {
+            try b.addOpponent(r.seat.p);
+            continue;
+        }
         b.games += 1;
         b.timelines += @intFromBool(r.seat.k != null);
         try b.addPlayer(r.seat.p, r.seat.k, &t.build);
@@ -398,10 +405,20 @@ const Match = struct {
     }
 
     fn takes(m: *const Match, r: *const Coded) bool {
+        return m.rest(r) and m.lane(r);
+    }
+
+    /// Every lock but the lane opponent's reach and damage
+    fn rest(m: *const Match, r: *const Coded) bool {
         if (m.opponent) |x| if (r.opponent != x) return false;
+        for (m.allow, r.code) |a, c| if (a) |set| if (!set.isSet(c)) return false;
+        return true;
+    }
+
+    /// The lane opponent's reach and damage locks
+    fn lane(m: *const Match, r: *const Coded) bool {
         if (m.reach) |x| if (r.reach != x) return false;
         if (m.damage) |x| if (r.opponent == 0 or r.opponent >= m.table.len or m.table[r.opponent] != x) return false;
-        for (m.allow, r.code) |a, c| if (a) |set| if (!set.isSet(c)) return false;
         return true;
     }
 };
@@ -485,7 +502,6 @@ const Counts = struct {
         n.games += 1;
         n.timelines += @intFromBool(r.picks);
         n.group(0, .none, r);
-        if (r.opponent != 0) bump(&n.opponents[r.opponent], r.won);
         if (r.opponent != 0 and r.reach != 0) n.group(r.reach, .reach, r);
         if (r.lead != 0) n.group(2 + r.lead, .lead, r);
         if (r.keystone != 0) n.group(first_keystone - 1 + @as(usize, r.keystone), .keystone, r);
@@ -496,6 +512,11 @@ const Counts = struct {
         if (r.item[1] != 0) bump(&n.first_item[r.minute[1]], r.won);
         bump(&n.firsts[0], r.won);
         for (n.firsts[1..], 0..) |*x, i| if (r.firsts >> @intCast(i) & 1 != 0) bump(x, r.won);
+    }
+
+    /// In its lane opponent's counts alone (builds.Builder.addOpponent)
+    fn opponent(n: *Counts, r: *const Coded) void {
+        if (r.opponent != 0) bump(&n.opponents[r.opponent], r.won);
     }
 
     fn group(n: *Counts, g: usize, comptime split: Split, r: *const Coded) void {
@@ -628,8 +649,9 @@ pub fn file(gpa: Allocator, arena: Allocator, t: *const lockrows.Table, x: *cons
     const m: Match = try .init(arena, block, locks, &f);
     var n: Counts = try .init(arena, block);
     for (block.rows) |*r| {
-        if (!f.takes(r.start, r.platform, r.patch, if (r.rank == no_rank) null else r.rank) or !m.takes(r)) continue;
-        n.add(r);
+        if (!f.takes(r.start, r.platform, r.patch, if (r.rank == no_rank) null else r.rank) or !m.rest(r)) continue;
+        n.opponent(r);
+        if (m.lane(r)) n.add(r);
     }
     var b = try builder(gpa, o);
     defer b.deinit();

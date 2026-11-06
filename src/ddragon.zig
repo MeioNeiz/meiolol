@@ -237,12 +237,17 @@ pub const BuildData = struct {
 
     /// null when the champion is unknown
     pub fn reachOf(d: *const BuildData, champion: u32) ?Reach {
-        const i = std.sort.binarySearch([2]u32, d.ranges, champion, struct {
+        return reachIn(d.ranges, champion);
+    }
+
+    /// As reachOf, in `ranges` (BuildData.ranges)
+    pub fn reachIn(ranges: []const [2]u32, champion: u32) ?Reach {
+        const i = std.sort.binarySearch([2]u32, ranges, champion, struct {
             fn f(key: u32, r: [2]u32) std.math.Order {
                 return std.math.order(key, r[0]);
             }
         }.f) orelse return null;
-        return if (d.ranges[i][1] < melee_range) .melee else .ranged;
+        return if (ranges[i][1] < melee_range) .melee else .ranged;
     }
 
     pub fn isLegendary(d: *const BuildData, item: u32) bool {

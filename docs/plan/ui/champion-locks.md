@@ -114,9 +114,10 @@ What a block needs from a row:
   shards, shard, spells, start, boots, core 2/3, item 4-6, max order, levels, lane
   opponent, its reach `vr` 1 melee 2 ranged, its damage `vd` 1 AD 2 AP); the table
   carries the patch's Data Dragon data. Damage is Learn's magic share through
-  ui.dailydata.dmgOf (under 0.35 AD, over 0.65 AP, else neither), the shared view's
-  (site/locks.zig lendLearn); an answer carries per lane opponent players and wins
-  (Build.opponents) for the panel's group counts. An Index codes each block
+  ui.dailydata.dmgOf (under 0.35 AD, over 0.65 AP, else neither): Site.damage, every
+  view's from Extras.damageFor (read once a round, the renderer's from the views file).
+  An answer carries per lane opponent players and wins (Build.opponents), counted under
+  every lock but `vr` and `vd`, for the panel's group counts. An Index codes each block
   once at load (builds.valuesOf per row, a u16 code per kind, ~64 B a row in memory;
   1.0 s for the snapshot's 15.7M rows on the Mac's cores, largest dict 6.2k values);
   answers count codes in arrays and load each group's top options into builds.Builder
