@@ -9,6 +9,7 @@ hosting, storage, rendering and SEO, toolchain
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
 | active | now | [How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost?](../questions/box-disk-headroom.md): How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost? | 4 strong | 4 | 1 (thin) | 1 |
+| answered | now | [Does Cloudflare pass an origin's precompressed brotli (Content-Encoding: br) through to browsers, and how does it cache per encoding?](../questions/brotli-through-cloudflare.md): Does Cloudflare pass an origin's precompressed brotli (Content-Encoding: br) through to browsers, and how does it cache per encoding? | 4 strong, 1 moderate | 1 | 1 (thin) |  |
 | answered | now | [What free or very cheap hosting and storage fits meiolol's site, API and data?](../questions/free-hosting-storage.md): What free or very cheap hosting and storage fits meiolol's site, API and data? | 13 strong, 4 moderate, 2 unsupported | 34 | 7 (growing) | 4 |
 | answered | now | [Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines?](../questions/hybrid-rendering-seo.md): Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines? | 12 strong, 9 moderate | 16 | 9 (growing) | 2 |
 | answered | now | [Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box?](../questions/oci-payg-upgrade.md): Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box? | 8 strong, 2 moderate, 1 contested | 7 | 2 (thin) |  |
@@ -51,6 +52,7 @@ hosting, storage, rendering and SEO, toolchain
 | [Cloudflare R2 pricing (docs, updated 2026-10-01)](../sources/cloudflare-r2-pricing.md) | Cloudflare's official R2 object storage price list: free tier, Standard and Infrequent Access prices, no egress fees, minimum storage durations | docs | ops privacy | docs (whole page) | high | A/fair | 8/9 | 2026-10-11 |
 | [Cloudflare Workers limits (docs, 2026-10-08)](../sources/cf-workers-limits.md) | Cloudflare Workers Free plan: 100,000 requests a day, 10 ms CPU, 20,000 static asset files of 25 MiB each per Worker | docs | ops | docs (Account plan limits, CPU time) | high | A/fair | 2/3 | 2026-10-11 |
 | [Cloudflare Workers Static Assets: billing and limitations (docs, 2026-04-23)](../sources/cf-workers-static-assets.md) | Cloudflare docs: requests to Workers static assets are free and unlimited; only Worker script invocations are billed | docs | ops | docs (whole page) | high | A/fair | 1/1 | 2026-10-11 |
+| [Cloudflare: Content compression (docs, Apr 2026)](../sources/cf-content-compression.md) | Cloudflare's own page on compression to visitors and from origins, by plan | docs | ops render | docs (whole page) | high | A/fair | 7/8 | 2026-11-06 |
 | [Cloudflare: Purge cache by cache-tags (docs, 2026)](../sources/cloudflare-cache-tags.md) | Cloudflare Cache-Tag: the origin tags responses in a header, a purge by tag forces a miss on everything tagged | docs | ops render | docs (whole page) | medium | A/fair | 4/4 | 2026-10-15 |
 | [Cloudflare: Purge cache, availability and limits (docs, 2026)](../sources/cloudflare-purge-cache.md) | Cloudflare purge options and per-plan limits; purge by tag and prefix are on the free plan, at 5 requests a minute | docs | ops render | docs (whole page) | medium | A/fair | 3/4 | 2026-10-15 |
 | [Control Group v2, Linux kernel admin guide (io and memory controllers)](../sources/kernel-cgroup-v2-io.md) | The kernel's cgroup v2 reference; read for the io controller files (io.weight, io.cost.*, io.max, io.latency, io.prio.class), writeback attribution and memory protection. | docs | ops/io | docs (IO controller, writeback, io.latency, io.prio.class, memory.low/high, delegation model) | high | A/strong | 12/13 | 2026-10-15 |
@@ -430,7 +432,7 @@ hosting, storage, rendering and SEO, toolchain
 - [[memon-tap-2017#^f11]] [devflow/select] Flakiness rules out "rerun recently failed tests" heuristics: they mostly rerun flaky tests. I (A/strong, verified)
 - [[memon-tap-2017#^f12]] [devflow/select] The exact numbers (such as distance 10) may not hold elsewhere, especially in smaller codebases without deep dependencies. VI (A/strong, verified)
 
-### ops: hosting, object storage, backups off-site, free tiers, prices, provider terms (254)
+### ops: hosting, object storage, backups off-site, free tiers, prices, provider terms (262)
 
 - [[aws-s3-pricing#^f1]] [ops] S3 Glacier Deep Archive $0.00099 per GB-month (about $1 per TB-month). (A/fair, verified)
 - [[aws-s3-pricing#^f2]] [ops] Deep Archive is for data accessed once or twice a year, restored within 12 hours. (A/fair, verified)
@@ -448,6 +450,14 @@ hosting, storage, rendering and SEO, toolchain
 - [[backblaze-b2-pricing#^f4]] [ops] Egress free up to 3x average monthly storage, then $0.01/GB. (A/fair, verified)
 - [[backblaze-b2-pricing#^f5]] [ops] Class A, B, C calls free on pay as you go; Class D $0.004 per 10,000 after 2,500 free a day. (A/fair, verified)
 - [[backblaze-b2-pricing#^f6]] [ops] (inferred) 0.6 TB after a year is about $4.20/month; 1.2 TB after two about $8.30. (A/fair, unquoted)
+- [[cf-content-compression#^f1]] [ops] [render] Cloudflare asks every origin for br or gzip, on all plans. (A/fair, verified)
+- [[cf-content-compression#^f2]] [ops] [render] An origin's br or gzip response keeps its encoding to a visitor that supports it, given a content-encoding header and no content-changing feature. (A/fair, verified)
+- [[cf-content-compression#^f3]] [ops] [render] Cloudflare converts between br, gzip and none as each visitor needs, independently of caching. (A/fair, verified)
+- [[cf-content-compression#^f4]] [ops] [render] Some features force decompress and recompress even with one encoding end to end: Automatic HTTPS Rewrites, Fonts, Email Obfuscation, Polish, Rocket Loader, JavaScript detections, RUM; Replace insecure JS libraries can't be turned off. (A/fair, verified)
+- [[cf-content-compression#^f5]] [ops] Free plan compresses to visitors with Zstandard by default. (A/fair, verified)
+- [[cf-content-compression#^f6]] [ops] application/wasm is in the list of types Cloudflare compresses. (A/fair, verified)
+- [[cf-content-compression#^f7]] [ops] `cache-control: no-transform` from the origin stops Cloudflare changing the compression. (A/fair, verified)
+- [[cf-content-compression#^f8]] [ops] (inferred) Measured from C01 6 Nov (data/team/2026-11-05-notes2/brotli-before.txt): origin gzip passes through untouched for wasm (DYNAMIC) and js (HIT), Chrome's Accept-Encoding included; the rendered champion page is recompressed (Chrome gets zstd 43,641 B against our gzip 40,301 B), so s... (A/fair, unquoted)
 - [[cf-pages-limits#^f1]] [ops] Free plan: up to 20,000 files per site (paid plans 100,000). (A/fair, verified)
 - [[cf-pages-limits#^f2]] [ops] Max 25 MiB per file. (A/fair, verified)
 - [[cf-pages-limits#^f3]] [ops] 500 builds a month on Free, one at a time, 20-minute timeout. (A/fair, verified)
@@ -764,11 +774,15 @@ hosting, storage, rendering and SEO, toolchain
 - [[systemd-user-delegation#^f2]] [ops/io] (inferred) Memory is delegated, so MemoryLow=/MemoryHigh= on user units do take effect (within the ancestors' limits, see [[systemd-resource-control#^f5]]). (A/fair, unquoted)
 - [[systemd-user-delegation#^f3]] [ops/io] (inferred) To use io controls on user units, add io to the delegation with a root drop-in such as `/etc/systemd/system/user@.service.d/delegate.conf` containing `[Service]` and `Delegate=pids memory cpu io`, then `systemctl daemon-reload` and restart the user manager (which restarts ever... (A/fair, unquoted)
 
-### render: when pages are built: static generation, on-demand rendering, caching, ISR (81)
+### render: when pages are built: static generation, on-demand rendering, caching, ISR (85)
 
 - [[astro-inline-stylesheets-rfc#^f2]] [web] [render] The other end: a one-page site gains nothing from an external sheet, as no other page reuses the cache. (A/strong, verified)
 - [[astro-on-demand#^f1]] [render] Static by default; individual routes opt into server rendering, the rest stay static. (A/fair, verified)
 - [[astro-on-demand#^f2]] [render] Advice: keep static mode unless most pages need rendering on demand, so static content does not depend on a server. (A/fair, verified)
+- [[cf-content-compression#^f1]] [ops] [render] Cloudflare asks every origin for br or gzip, on all plans. (A/fair, verified)
+- [[cf-content-compression#^f2]] [ops] [render] An origin's br or gzip response keeps its encoding to a visitor that supports it, given a content-encoding header and no content-changing feature. (A/fair, verified)
+- [[cf-content-compression#^f3]] [ops] [render] Cloudflare converts between br, gzip and none as each visitor needs, independently of caching. (A/fair, verified)
+- [[cf-content-compression#^f4]] [ops] [render] Some features force decompress and recompress even with one encoding end to end: Automatic HTTPS Rewrites, Fonts, Email Obfuscation, Polish, Rocket Loader, JavaScript detections, RUM; Replace insecure JS libraries can't be turned off. (A/fair, verified)
 - [[cloudflare-cache-tags#^f1]] [render] [ops] Same model as surrogate keys: tags in a Cache-Tag response header, purge by tag, the next request is a miss. (A/fair, verified)
 - [[cloudflare-cache-tags#^f2]] [render] [ops] Cloudflare itself warns that a purge moves load to the origin. (A/fair, verified)
 - [[cloudflare-cache-tags#^f3]] [render] Limits: a response's tags may total 16 KB (about 1,000 tags), case-insensitive, no spaces. (A/fair, verified)

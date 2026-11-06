@@ -3835,3 +3835,5 @@
 {"t": "skip", "date": "2026-11-05", "url": "https://bibtex.github.io/ESEC-FSE-2019-NajafiRS.html", "reason": "bibliography entry only", "key": "bibtex.github.io/ESEC-FSE-2019-NajafiRS.html"}
 {"t": "skip", "date": "2026-11-05", "url": "https://graydon2.dreamwidth.org/1597.html", "reason": "live URL 404s; noted from Wayback copy as graydon-not-rocket-science", "key": "graydon2.dreamwidth.org/1597.html"}
 {"t": "search", "date": "2026-11-05", "where": "web", "query": "graydon2 dreamwidth \"not rocket science rule\" monotone bors", "for": "parallel-build-capacity"}
+{"t": "fetch", "date": "2026-11-06", "url": "https://developers.cloudflare.com/speed/optimization/content/compression/", "slug": "cf-content-compression", "file": "raw/cf-content-compression.md", "sha": "87424473cef5", "key": "developers.cloudflare.com/speed/optimization/content/compression"}
+{"t": "search", "date": "2026-11-06", "where": "web", "query": "cloudflare origin brotli content-encoding passthrough docs", "for": "brotli-through-cloudflare", "new": 1}

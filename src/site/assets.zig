@@ -100,7 +100,7 @@ test hashed {
 }
 
 /// The site's hashed copies a deploy replaced, in the uploaded site `dir` (the web loop's
-/// data/site: a file's time is when it first came): each goes with its .gz once the copy
+/// data/site: a file's time is when it first came): each goes with its .gz and .br once the copy
 /// that replaced it is `grace` old, so a page or island loaded before a deploy still finds
 /// its files that long. A hashed name no current asset has (removed or renamed) goes
 /// `orphan_grace` after it came. The count removed
@@ -111,7 +111,7 @@ pub fn prune(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, current: []con
     var copies: std.ArrayList(Copy) = .empty;
     var it = dir.iterate();
     while (try it.next(io)) |e| {
-        if (e.kind != .file or std.mem.endsWith(u8, e.name, ".gz")) continue;
+        if (e.kind != .file or isTwin(e.name)) continue;
         // rsync may be replacing it
         const st = dir.statFile(io, e.name, .{}) catch |err| switch (err) {
             error.FileNotFound => continue,
@@ -120,13 +120,20 @@ pub fn prune(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, current: []con
         try copies.append(arena, .{ .name = try arena.dupe(u8, e.name), .time = st.mtime });
     }
     const gone = try stale(arena, current, copies.items, now, grace);
-    for (gone) |name| for ([_][]const u8{ name, try arena.print("{s}.gz", .{name}) }) |n| {
+    for (gone) |name| for ([_][]const u8{ "", ".gz", ".br" }) |ext| {
+        const n = try arena.print("{s}{s}", .{ name, ext });
         dir.deleteFile(io, n) catch |err| switch (err) {
             error.FileNotFound => {},
             else => return err,
         };
     };
     return gone.len;
+}
+
+/// A compressed copy for nginx's gzip_static or brotli_static (the .br made by
+/// deploy/web-loop.sh): goes with its file
+fn isTwin(name: []const u8) bool {
+    return std.mem.endsWith(u8, name, ".gz") or std.mem.endsWith(u8, name, ".br");
 }
 
 const Copy = struct { name: []const u8, time: std.Io.Timestamp };
@@ -233,12 +240,14 @@ test looksHashed {
     }
 }
 
-test "prune deletes the copy and its .gz, keeps the current one" {
+test "prune deletes the copy and its .gz and .br, keeps the current one's" {
     const io = std.testing.io;
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
     const cur = hashed("search.js", "x");
-    for ([_][]const u8{ "search.00000001.js", "search.00000001.js.gz", cur.path, "search.js" }) |name| {
+    const cur_br = try std.mem.concat(std.testing.allocator, u8, &.{ cur.path, ".br" });
+    defer std.testing.allocator.free(cur_br);
+    for ([_][]const u8{ "search.00000001.js", "search.00000001.js.gz", "search.00000001.js.br", cur.path, cur_br, "search.js" }) |name| {
         try tmp.dir.writeFile(io, .{ .sub_path = name, .data = "x" });
     }
     const now = std.Io.Timestamp.now(io, .real);
@@ -246,6 +255,8 @@ test "prune deletes the copy and its .gz, keeps the current one" {
     try std.testing.expectEqual(1, try prune(std.testing.allocator, io, tmp.dir, &.{cur}, now, .fromNanoseconds(0)));
     try std.testing.expectError(error.FileNotFound, tmp.dir.access(io, "search.00000001.js", .{}));
     try std.testing.expectError(error.FileNotFound, tmp.dir.access(io, "search.00000001.js.gz", .{}));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access(io, "search.00000001.js.br", .{}));
     try tmp.dir.access(io, cur.path, .{});
+    try tmp.dir.access(io, cur_br, .{});
     try tmp.dir.access(io, "search.js", .{});
 }

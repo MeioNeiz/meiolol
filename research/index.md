@@ -14,7 +14,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 4 | 180 | 459 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 30 | 364 | 2687 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 17 | 481 | 2531 |
-| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 10 | 202 | 888 |
+| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 11 | 203 | 896 |
 | [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 176 | 1981 |
 
 ## Questions
@@ -113,6 +113,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
 | active | now | [How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost?](questions/box-disk-headroom.md): How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost? | 4 strong | 4 | 1 (thin) | 1 |
+| answered | now | [Does Cloudflare pass an origin's precompressed brotli (Content-Encoding: br) through to browsers, and how does it cache per encoding?](questions/brotli-through-cloudflare.md): Does Cloudflare pass an origin's precompressed brotli (Content-Encoding: br) through to browsers, and how does it cache per encoding? | 4 strong, 1 moderate | 1 | 1 (thin) |  |
 | answered | now | [What free or very cheap hosting and storage fits meiolol's site, API and data?](questions/free-hosting-storage.md): What free or very cheap hosting and storage fits meiolol's site, API and data? | 13 strong, 4 moderate, 2 unsupported | 34 | 7 (growing) | 4 |
 | answered | now | [Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines?](questions/hybrid-rendering-seo.md): Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines? | 12 strong, 9 moderate | 16 | 9 (growing) | 2 |
 | answered | now | [Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box?](questions/oci-payg-upgrade.md): Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box? | 8 strong, 2 moderate, 1 contested | 7 | 2 (thin) |  |
@@ -139,6 +140,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 83 questions, 1289 sources, 9821 findings
+- 84 questions, 1290 sources, 9829 findings
 - Open leads: 341 (`josearch leads`)
 - Lint: 0 errors, 5 warnings (`josearch lint`)

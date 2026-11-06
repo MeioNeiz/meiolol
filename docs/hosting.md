@@ -128,7 +128,12 @@ tools (zig, node 24, shellcheck 0.11 as the Mac's; `deploy/box-ci.sh install`), 
 The static upload is only what nginx must serve itself (`meiolol site --static core`,
 deploy/web-loop.sh; the list is core_static in src/site/root.zig): robots.txt,
 riot.txt, CSS, JS, wasm, font and icon, ~30 files with their .gz twins, all at the site
-root, from the options alone (no view loaded, seconds). The web loop builds only in a
+root, from the options alone (no view loaded, seconds). Hashed wasm, JS and CSS also get
+a brotli q11 .br, made by the web loop with the `brotli` CLI once per name (hashed files
+never change), served by nginx brotli_static (libnginx-mod-http-brotli-static): ~14%
+under gzip on every island. Cloudflare asks origins for `br, gzip` and passes br on to
+browsers that take it (research/questions/brotli-through-cloudflare.md). Pages stay gzip:
+a Cloudflare feature recompresses them anyway (zstd for Chrome, 8% over our gzip). The web loop builds only in a
 round that uploads; the others read the patch and game count with `meiolol site --patch-games`
 (1-8 s). meiolol-render on the box serves every page and data file (the home, champion,
 champions board, matchup, Daily Draft, Learn, legal and method pages, the views' _v/

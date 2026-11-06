@@ -73,7 +73,7 @@ if [[ ! -f /etc/apt/sources.list.d/cloudflared.list ]]; then
         > /etc/apt/sources.list.d/cloudflared.list
     apt-get update -qq
 fi
-apt-get install -y -qq nginx cloudflared jq > /dev/null
+apt-get install -y -qq nginx libnginx-mod-http-brotli-static brotli cloudflared jq > /dev/null
 
 id meiolol > /dev/null 2>&1 || useradd -m -s /bin/bash meiolol
 id meiolol-api > /dev/null 2>&1 \

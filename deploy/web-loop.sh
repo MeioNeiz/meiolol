@@ -79,7 +79,10 @@
 # to meiolol-render. Except hashed assets (src/site/assets.zig: style.1a2b3c4d.css) and
 # portrait and art folders (icon/, dd/<Data Dragon version>/), which stay 3 days after a
 # newer one came, for pages cached before a deploy (nginx's @render_any copies, a
-# browser's restored tab): meiolol site --prune-assets
+# browser's restored tab): meiolol site --prune-assets. Hashed wasm, JS and CSS also get a
+# brotli q11 .br beside the build's .gz (nginx brotli_static; ~14% under gzip), made once
+# per name since a hashed file never changes: the first round on a new box ~600 files
+# (1-2 min), later rounds only a deploy's new ones
 set -u
 contact=$1
 cd "$(dirname "$0")/.." || exit 1
@@ -299,6 +302,24 @@ if [[ -n "$patch" && -n "$format" ]]; then
     fi
 fi
 batch() { nice -n 10 ionice -c 3 "$@"; }
+# .br for data/site's hashed (glob $1) wasm, JS and CSS that have a .gz and no .br yet;
+# written aside and moved in, so an upload never sends half of one
+brotli_twins() {
+    local gz f n=0
+    command -v brotli > /dev/null || { echo "no brotli: .gz only"; return 0; }
+    for gz in data/site/$1.gz; do
+        f=${gz%.gz}
+        [[ $f == *.wasm || $f == *.js || $f == *.css ]] && [[ ! -e $f.br ]] || continue
+        if ! batch brotli -q 11 -c -- "$f" > data/brotli.tmp; then
+            rm -f data/brotli.tmp
+            echo "brotli failed: $f"
+            return 0
+        fi
+        mv data/brotli.tmp "$f.br"
+        n=$(( n + 1 ))
+    done
+    (( n == 0 )) || echo "$(date -u +%FT%TZ) brotli: $n new .br"
+}
 . bin/box-lib.sh
 # A forced round's deploy event (round_sha set): STEP STATUS [DETAIL]
 round_event() {
@@ -486,6 +507,7 @@ while true; do
             # Replaced hashed copies and portrait versions, three days after (times kept
             # above: when each came)
             bin/meiolol site --prune-assets data/site 2>&1 || echo "prune failed"
+            brotli_twins "$asset_glob"
             copy_s=$(( SECONDS - t )) t=$SECONDS
             if ! stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --exclude /private/ --stats \
                 data/site/ meiolol-web:./); then
