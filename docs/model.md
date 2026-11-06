@@ -6031,6 +6031,18 @@ targets from ~18 Nov (first look), all 14 from ~25 Nov (decides). Pass, per step
 
 Any miss: the step's flag goes off by default.
 
+Step 1, keystones, 16.21 dev (data/team/2026-11-05-notes2/m10-nl3ks-16.21.md, against
+m10-ob-16.21): kept, `keystone_bands` on.
+- Gate 311 -> 306 failing (28 by chance): 11 keystone groups clear, among them rare
+  raw below -1.29 -> -0.22 and the rarest bands (-7..-8 -1.20 -> -0.71, < -8 -1.00 ->
+  -0.72); rare raw above +0.17 -> -0.33; unseen -3.2 stays (middle unchanged). 6 new,
+  each crossing 0.5 by under 0.05 (EUW1 keystone x item, one keystone x opponent)
+- Log loss: no row worse beyond 2 se; unseen keystones -6.45 -> -6.62 vs parent
+- Miss sd over Meio's sd by band: 1.5-3.7 under -2 -> 0.9-1.3; common bands ~1 as were
+- Live, origin 13: keystone middles move 0.28 points on average where the cell has 100+
+  own games, at most 6.3 (a narrow old range on 108 games: 41.3% [40.2, 42.4] -> 34.9%
+  [32.3, 37.6]); half-widths +0.15 on average, at most +2.7
+
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
 data/snap (85,693 ranked solo games, 16.19 + 16.20, all regions), sqlite3 on the Mac;

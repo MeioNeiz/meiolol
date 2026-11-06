@@ -96,6 +96,11 @@ pub const Options = struct {
     /// -10 -6.8, unseen -6.45 vs parent; a plain hinge below -8 overshot under -10
     cond_x_knot: f64 = -8,
     cond_x_floor: f64 = -10,
+    /// The interactions' variance per role x popularity band (condBand) rather than per
+    /// role: rare x differ more (NL1, 16.21: true spread 1.6 points common, 2.8-3.9 under
+    /// -2 for keystones; one sd per role made rare ranges 2-3.7x too narrow)
+    keystone_bands: bool = true,
+    item_bands: bool = false,
 };
 
 /// Term kinds, one variance each
@@ -107,6 +112,10 @@ const max_k = 1 + max_patches + 3 + 1;
 const n_pair_classes = 6;
 /// Condition term classes (keystone, item), one per role
 const n_roles = 8;
+/// Popularity bands of a condition interaction's x (condBand), as truth's lean table
+const n_bands = 10;
+/// A band with fewer interactions in its role pools with its commoner neighbours
+const band_min_terms = 30;
 
 /// Rank brackets a number pools: bit br for bracket br (0 unknown, 1 low, 2 mid, 3 high)
 pub const Brackets = struct {
@@ -365,7 +374,8 @@ pub const Model = struct {
             // A main never seen: the role never takes it, so no lift to speak of
             const h = if (c.main_index.get(@as(u32, role) << 16 | x)) |j| hinge(s - c.main_share[j], c.knot) else 0;
             q.e += lineAt(c.line[role], .{ s, h, hinge(@max(s, c.x_floor), c.x_knot) });
-            q.v += c.inter_sd[role] * c.inter_sd[role];
+            const sd = c.inter_sd[role][condBand(s)];
+            q.v += sd * sd;
         }
         return q;
     }
@@ -771,7 +781,9 @@ const Cond = struct {
     /// By champion-role index (Model.index)
     shift: []f64 = &.{},
     main_sd: [n_roles]f64 = @splat(0),
-    inter_sd: [n_roles]f64 = @splat(0),
+    /// By role and condBand; every band holds its pooled class's sd (one per role
+    /// without bands)
+    inter_sd: [n_roles][n_bands]f64 = @splat(@splat(0)),
     /// The interactions' prior mean: lineAt(line[role], .{ x, hinge(lift, knot),
     /// hinge(max(x, x_floor), x_knot) }), x the
     /// champion-role's log share (shareOf), lift x less its main's role-wide share. 16.21:
@@ -972,8 +984,8 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     defer gpa.free(share);
     m.sd = fitLevels(m.counts, m.fitted, shape, opts.sd, 0, opts.rounds, .{ .m = &m, .share = share });
     m.pair = try fitPairs(gpa, shape, &m.index, m.counts, m.fitted, &cells, 0, opts.rounds);
-    m.keystone = try fitCond(gpa, &m, &keystones, opts, opts.rounds);
-    m.item = try fitCond(gpa, &m, &items, opts, opts.rounds);
+    m.keystone = try fitCond(gpa, &m, &keystones, opts, opts.keystone_bands, opts.rounds);
+    m.item = try fitCond(gpa, &m, &items, opts, opts.item_bands, opts.rounds);
     m.rune = try fitShare(gpa, &m, try rune.toOwnedSlice(gpa), &keystones, try rune_halves.drift(gpa), opts.rounds);
     m.build = try fitShare(gpa, &m, try build.toOwnedSlice(gpa), &items, try build_halves.drift(gpa), opts.rounds);
     m.gold = try fitGold(gpa, &m, try gold.toOwnedSlice(gpa), gold_sq, &gold_cells, opts.rounds);
@@ -1269,7 +1281,7 @@ fn sortedKeys(gpa: Allocator, cells: *const std.AutoHashMapUnmanaged(u64, PairCe
     return keys;
 }
 
-fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged(u64, PairCell), opts: Options, rounds: u8) !Cond {
+fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged(u64, PairCell), opts: Options, bands: bool, rounds: u8) !Cond {
     var c: Cond = .{ .knot = opts.cond_knot, .x_knot = opts.cond_x_knot, .x_floor = opts.cond_x_floor };
     errdefer c.deinit(gpa);
     const keys = try sortedKeys(gpa, map);
@@ -1339,13 +1351,52 @@ fn fitCond(gpa: Allocator, m: *const Model, map: *const std.AutoHashMapUnmanaged
     for (c.mains, c.main_share) |p, *x| x.* = Cond.shareOf(withOf(c.cells, p), role_games[p.class]);
     const regs = try gpa.alloc(Regs, c.inters.len);
     defer gpa.free(regs);
+    var in_band: [n_roles][n_bands]u32 = @splat(@splat(0));
     for (c.inters, regs, 0..) |p, *r, j| {
         const x = Cond.shareOf(withOf(c.cells, p), games(&m.counts[cri[p.first]]));
         c.least[p.class] = @min(c.least[p.class], x);
         r.* = .{ x, hinge(x - c.main_share[inter_main.items[j]], c.knot), hinge(@max(x, c.x_floor), c.x_knot) };
+        in_band[p.class][condBand(x)] += 1;
     }
-    fitTermsOnLine(c.inters, c.cells, &c.inter_sd, .{ .c = &c.line, .r = regs }, 0, rounds);
+    // Classes role * n_bands + the pooled band's group; without bands one per role
+    var group: [n_roles][n_bands]u8 = @splat(@splat(0));
+    if (bands) for (&group, in_band) |*g, n| {
+        g.* = bandGroups(n);
+    };
+    for (c.inters, regs) |*p, r| p.class = @intCast(p.class * n_bands + group[p.class][condBand(r[0])]);
+    var sd: [n_roles * n_bands]f64 = undefined;
+    fitTermsOnLine(c.inters, c.cells, &sd, .{ .c = &c.line, .r = regs, .per = n_bands }, 0, rounds);
+    for (&c.inter_sd, group, 0..) |*row, g, role| for (row, g) |*out, b| {
+        out.* = sd[role * n_bands + b];
+    };
     return c;
+}
+
+/// The popularity band of a condition's x, as truth's lean table: > -0.5, -0.5..-1,
+/// -1..-2, then 1 wide to < -8
+fn condBand(x: f64) usize {
+    if (x > -0.5) return 0;
+    if (x > -1) return 1;
+    return @intFromFloat(@min(n_bands - 1, @floor(-x) + 1));
+}
+
+/// Each band's group (its commonest band), pooling from the rarest end until a group
+/// holds band_min_terms; commoner bands left over join the last group closed
+fn bandGroups(in_band: [n_bands]u32) [n_bands]u8 {
+    var g: [n_bands]u8 = undefined;
+    var acc: u32 = 0;
+    var start: usize = n_bands;
+    var b: usize = n_bands;
+    while (b > 0) {
+        b -= 1;
+        acc += in_band[b];
+        if (acc < band_min_terms) continue;
+        @memset(g[b..start], @intCast(b));
+        start = b;
+        acc = 0;
+    }
+    @memset(g[0..start], if (start < n_bands) @intCast(start) else 0);
+    return g;
 }
 
 fn withOf(cells: []const PairCell, p: Pair) f64 {
@@ -1362,12 +1413,13 @@ fn fitTerms(terms: []Pair, cells: []const PairCell, sd_out: []f64, noise: f64, r
 /// fitTerms with each class's prior mean a line in x (one per term), fitted as the
 /// champion-roles' popularity line is (fitPopularity)
 fn fitTermsOnLine(terms: []Pair, cells: []const PairCell, sd_out: []f64, line: ?Lines, noise: f64, rounds: u8) void {
-    var sd: [n_roles]f64 = @splat(0.1);
-    const fixed: [n_roles]f64 = @splat(0);
+    const max_classes = n_roles * n_bands;
+    var sd: [max_classes]f64 = @splat(0.1);
+    const fixed: [max_classes]f64 = @splat(0);
     const classes = sd_out.len;
     for (0..rounds) |_| {
-        var sum_sq: [n_roles]f64 = @splat(0);
-        var gamma: [n_roles]f64 = @splat(0);
+        var sum_sq: [max_classes]f64 = @splat(0);
+        var gamma: [max_classes]f64 = @splat(0);
         for (terms) |*p| {
             pairNewton(p, cells[p.first..][0..p.len], sd[p.class], noise);
             sum_sq[p.class] += (p.i - p.mu) * (p.i - p.mu);
@@ -1380,8 +1432,8 @@ fn fitTermsOnLine(terms: []Pair, cells: []const PairCell, sd_out: []f64, line: ?
     @memcpy(sd_out, sd[0..classes]);
 }
 
-/// By term: its Regs for lineAt
-const Lines = struct { c: *[n_roles]Line, r: []const Regs };
+/// By term: its Regs for lineAt; a term's line is class / per
+const Lines = struct { c: *[n_roles]Line, r: []const Regs, per: u8 = 1 };
 
 /// Per class, the terms' line (LineFit); sets each prior mean, returns how far a line
 /// moved. Each term unshrunk, mu + (i - mu) / gamma, weighted by gamma (Fay-Herriot): the
@@ -1392,7 +1444,7 @@ fn fitLines(terms: []Pair, line: Lines, sd: []const f64) f64 {
     var fits: [n_roles]LineFit = @splat(.{});
     for (terms, line.r) |p, r| {
         const gamma = @max(1 - p.v / (sd[p.class] * sd[p.class]), 1e-3);
-        fits[p.class].add(r, p.mu + (p.i - p.mu) / gamma, gamma);
+        fits[p.class / line.per].add(r, p.mu + (p.i - p.mu) / gamma, gamma);
     }
     var moved: f64 = 0;
     for (line.c, fits) |*l, f| {
@@ -1401,7 +1453,7 @@ fn fitLines(terms: []Pair, line: Lines, sd: []const f64) f64 {
         for (new, l) |a, b| moved = @max(moved, @abs(a - b));
         l.* = new;
     }
-    for (terms, line.r) |*p, r| p.mu = lineAt(line.c[p.class], r);
+    for (terms, line.r) |*p, r| p.mu = lineAt(line.c[p.class / line.per], r);
     return moved;
 }
 
@@ -1686,12 +1738,61 @@ test "a keystone's rate is the champion-role's plus a role-wide term plus a shru
     const none = m.rate(.keystone, 0, 0, 15, 8229).?;
     try std.testing.expectApproxEqAbs(m.rate(.champion, 0, 0, 15, 0).?.p, none.p, 0.02);
     // Each planted 0.4 splits across a champion's two keystones once it is centred
-    const sd = m.keystone.inter_sd[0];
+    const sd = m.keystone.inter_sd[0][0];
     try std.testing.expect(sd > 0.08 and sd < 0.2);
     // Items count only timelined games: half of champion 3's
     const it = m.rate(.item, 0, 0, 3, 3071).?;
     try std.testing.expectApproxEqAbs(m.rate(.champion, 0, 0, 3, 0).?.p, it.p, 0.03);
     try std.testing.expectEqual(@as(?Estimate, null), m.rate(.gold14, 0, 0, 3, 0));
+}
+
+test "rare keystones get their own band's spread, so their ranges hold the truth" {
+    const gpa = std.testing.allocator;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    var prng: std.Random.DefaultPrng = .init(5);
+    const rand = prng.random();
+    // 150 champions at 50%: two common keystones (x ~ -0.7) a planted +-e apart, e sd
+    // 0.08, and two rare ones of ten (20 games each, x ~ -4.6) off by sd 0.3
+    const champions = 150;
+    var truth: [champions][2]f64 = undefined;
+    for (1..champions + 1) |ch| {
+        const cr: u16 = @intCast(ch);
+        const e = 0.08 * rand.floatNorm(f64);
+        const rare: [2]u16 = .{ @intCast(8100 + ch % 10), @intCast(8100 + (ch + 3) % 10) };
+        for (&truth[ch - 1]) |*t| t.* = 0.3 * rand.floatNorm(f64);
+        for (0..2000) |g| {
+            const ks: u16, const z: f64 = if (g < 1000) .{ 8010, e } else if (g < 1960) .{ 8437, -e } else if (g < 1980) .{ rare[0], truth[ch - 1][0] } else .{ rare[1], truth[ch - 1][1] };
+            try rows.append(gpa, .{ .day = -1, .cr = cr, .keystone = ks, .win = rand.float(f64) < sigmoid(z), .euw = false, .patch = 0, .bracket = 0 });
+        }
+    }
+    var cover: [2]f64 = undefined;
+    for (&cover, [2]bool{ false, true }) |*share, bands| {
+        var m = try fit(gpa, rows.items, 0, .{ .keystone_bands = bands });
+        defer m.deinit(gpa);
+        var in: f64 = 0;
+        for (1..champions + 1) |ch| for (0..2) |j| {
+            const x: u16 = @intCast(8100 + (ch + 3 * j) % 10);
+            const r = m.rate(.keystone, 0, 0, @intCast(ch), x).?;
+            const p = sigmoid(truth[ch - 1][j]);
+            if (r.lo <= p and p <= r.hi) in += 1;
+        };
+        share.* = in / (2 * champions);
+        if (!bands) continue;
+        const rare = m.keystone.inter_sd[0][condBand(@log(20.5 / 2001.0))];
+        const common = m.keystone.inter_sd[0][condBand(@log(1000.5 / 2001.0))];
+        try std.testing.expect(rare > 0.2 and rare < 0.45);
+        try std.testing.expect(common > 0.04 and common < 0.13);
+    }
+    // One sd per role is mostly the common keystones': rare ranges far too narrow
+    try std.testing.expect(cover[0] < 0.7);
+    try std.testing.expect(cover[1] > 0.7 and cover[1] < 0.9);
+}
+
+test "bands pool from the rare end until each holds enough interactions" {
+    const g = bandGroups(.{ 5, 300, 0, 0, 0, 300, 0, 0, 10, 25 });
+    try std.testing.expectEqualSlices(u8, &.{ 1, 1, 1, 1, 1, 5, 5, 5, 8, 8 }, &g);
+    try std.testing.expectEqualSlices(u8, &@as([n_bands]u8, @splat(0)), &bandGroups(@splat(1)));
 }
 
 test "a share leans on the old patch until the new one's games arrive" {
