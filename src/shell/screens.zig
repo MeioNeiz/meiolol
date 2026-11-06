@@ -973,11 +973,30 @@ fn loadCard(a: Allocator, c: Ctx, card: *const loading.Card, ours: bool) !ui.loa
         .rate = if (shown) .at(card.games, 100 * card.win) else null,
         .pills = pills.items,
     };
+    if (c.private) if (card.player) |p| {
+        x.player = try loadPlayer(a, if (x.champ) |ch| ch.name else "", p);
+    };
     if (card.lengths) |by| if (lengthTilt(by)) |long| {
         x.lengths = try lengthSpark(a, by);
         x.long = long;
     };
     return x;
+}
+
+/// The card's line about another player: rank, mastery at its ends, games on the pick
+fn loadPlayer(a: Allocator, name: []const u8, p: loading.Player) !ui.loadscreen.Player {
+    const first = p.mastery == .first;
+    return .{
+        .rank = if (p.tier.len == 0) "" else if (p.division.len == 0) p.tier else try a.print("{s} {s}", .{ p.tier, p.division }),
+        .mastery = switch (p.mastery) {
+            .main => try a.print("{s} main", .{name}),
+            .first => try a.print("first {s} game", .{name}),
+            .unknown, .some => "",
+        },
+        .games = if (first and p.on_pick == 0) 0 else p.games,
+        .on_pick = p.on_pick,
+        .won = if (p.on_pick < loading.Player.thin) null else p.won,
+    };
 }
 
 /// Shrunk win share per length bucket and its standard error

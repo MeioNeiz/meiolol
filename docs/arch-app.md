@@ -209,9 +209,10 @@ file and packed rows: docs/architecture.md.
   (p10/p25/p75/p90 in words). The poller keeps the team gold every 20 s of game time for
   the chart (new game: game time goes back)
 - Loading screen (APP10; loading.zig, desktop/loadscreen.zig): the poller keeps the
-  last champ select's seats and draft (seats_arena) and in GameStart builds ten cards
-  from them, and the comp of the same ten (comp.build): each team's pills, damage mix
-  and early or late lean counts, neutral (comp.pills); nothing shows when it saw no
+  last champ select's seats and draft (seats_arena) until the game ends, and in
+  GameStart, and InProgress until Live Client Data's game time passes 0, builds ten
+  cards from them, and the comp of the same ten (comp.build): each team's pills, damage
+  mix and early or late lean counts, neutral (comp.pills); nothing shows when it saw no
   champ select. The shell (screens.zig loadScreen) pairs the cards into a lane per role
   with the lane strip between (Card.lane: gold, level 6, first item) and gives each card
   a spark of wins by length about its own average, so no locked teammate gets a rating

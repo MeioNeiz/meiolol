@@ -630,36 +630,27 @@ const Poller = struct {
         }
         const cs_given = switch (step) {
             .phase => |phase| {
-                // Live Client Data is up once the game has loaded; until then, waiting
-                // After it, the client's end of game block; the game's history stays
+                // The game's loading screen is mostly InProgress (GameStart is short):
+                // the loading screen until Live Client Data's clock runs, unless a game
+                // was already seen (a dropped reply mid-game stays "In game"). After
+                // it, the client's end of game block; the game's history stays
                 if (std.mem.eql(u8, phase, "InProgress")) {
                     if (p.inGame(arena, data)) |g| return .{ .in_game = g } else |err| switch (err) {
                         error.OutOfMemory => return err,
-                        else => {},
+                        else => if (p.last == null) if (try p.loadingScreen(arena, data)) |l| return .{ .loading = l },
                     }
                 } else if (std.mem.eql(u8, phase, "PreEndOfGame") or std.mem.eql(u8, phase, "EndOfGame")) {
+                    p.endSeats();
                     if (p.postGame(arena, data)) |pg| return .{ .post_game = pg } else |err| switch (err) {
                         error.OutOfMemory => return err,
                         else => if (try p.pendingGame(arena)) |pg| return .{ .post_game = pg },
                     }
                 } else if (std.mem.eql(u8, phase, "WaitingForStats")) {
+                    p.endSeats();
                     if (try p.pendingGame(arena)) |pg| return .{ .post_game = pg };
                 } else if (std.mem.eql(u8, phase, "GameStart")) {
                     p.last = null;
-                    if (p.seats) |seats| {
-                        if (edition == .private) p.scoutStep();
-                        const l = try arena.create(loading.Loading);
-                        l.* = try loading.build(arena, .{
-                            .stats = &data.stats,
-                            .curves = if (data.curves) |*c| c else null,
-                            .facts = if (data.facts) |*f| f else null,
-                            .seats = seats,
-                            .draft = p.draft,
-                            .tier = if (p.own) |o| o.tier else null,
-                            .scouted = p.scouted,
-                        });
-                        return .{ .loading = l };
-                    }
+                    if (try p.loadingScreen(arena, data)) |l| return .{ .loading = l };
                 } else {
                     p.forgetOwn();
                     p.last = null;
@@ -814,6 +805,7 @@ const Poller = struct {
         defer client.gpa.free(resp.body);
         if (resp.status / 100 != 2) return error.HttpStatus;
         const game = try live.parse(arena, resp.body);
+        if (game.time <= 0) return error.NotStarted;
         if (p.own == null) p.own = loadOwn(p.own_arena.allocator(), client);
         const g = try arena.create(ingame.InGame);
         g.* = try ingame.build(arena, &data.stats, if (data.curves) |*c| c else null, game, p.own.?.tier);
@@ -843,6 +835,29 @@ const Poller = struct {
         if (g.plan) |plan| for (plan.items) |it| want.addArt(.{ .kind = .item, .id = it.id });
         p.fetchIcons(want.list[0..want.n]);
         return g;
+    }
+
+    /// After its game the draft is spent: a game spectated next shows no loading screen
+    fn endSeats(p: *Poller) void {
+        p.seats = null;
+        p.scouted = &.{};
+    }
+
+    /// Null without the last champ select's seats
+    fn loadingScreen(p: *Poller, arena: std.mem.Allocator, data: *const Data) !?*const loading.Loading {
+        const seats = p.seats orelse return null;
+        if (edition == .private) p.scoutStep();
+        const l = try arena.create(loading.Loading);
+        l.* = try loading.build(arena, .{
+            .stats = &data.stats,
+            .curves = if (data.curves) |*c| c else null,
+            .facts = if (data.facts) |*f| f else null,
+            .seats = seats,
+            .draft = p.draft,
+            .tier = if (p.own) |o| o.tier else null,
+            .scouted = p.scouted,
+        });
+        return l;
     }
 
     fn dupe(arena: std.mem.Allocator, v: anytype) !*const @TypeOf(v) {
@@ -1197,4 +1212,40 @@ test "loading screen scouting: other players' facts, none for me or streamer mod
     } else return error.NoLeona;
     try testing.expectEqual(.first, leona.mastery);
     try testing.expectEqual(0, leona.on_pick);
+}
+
+test "InProgress shows the loading screen until the game clock runs" {
+    const testing = std.testing;
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const s = try lcu.mock.Scenario.load(a, testing.io, "testdata/lcu/scenarios/full-game.json");
+    var h: lcu.mock.Harness = undefined;
+    try h.start(a, &s);
+    defer h.stop();
+    while (try h.mock.advance()) |_| if (std.mem.eql(u8, h.mock.state.phase, "InProgress")) break;
+    try testing.expectEqual(0, h.mock.state.game_time);
+
+    var champs: std.ArrayList(core.statsfile.Champion) = .empty;
+    var seats: [2][5]loading.Seat = undefined;
+    for (h.mock.state.cells, 0..) |c, i| {
+        try champs.append(a, .{ .id = c.champion, .name = "x" });
+        seats[i / 5][i % 5] = .{ .champion = c.champion, .role = @fromBackingInt(@intCast(i % 5)), .me = i == s.local_cell };
+    }
+    var b: core.statsfile.Builder = try .init(a, champs.items);
+    var aw: std.Io.Writer.Allocating = .init(a);
+    try b.write(&aw.writer, "16.20");
+    const data: Data = .{ .arena = .init(testing.allocator), .stats = try .parse(a, aw.written()), .all = null, .curves = null, .facts = null };
+
+    var r: Replay = .init(testing.allocator, testing.io, h.lock_path, h.livePort(), &data);
+    defer r.deinit();
+    r.p.seats = .{ &seats[0], &seats[1] };
+    try testing.expect(try r.p.tick(a, &data) == .loading);
+    _ = try h.mock.advance();
+    try testing.expect(h.mock.state.game_time > 0);
+    try testing.expect(try r.p.tick(a, &data) == .in_game);
+    // A game spectated after this one gets no loading screen of this draft
+    while (try h.mock.advance()) |_| if (std.mem.eql(u8, h.mock.state.phase, "EndOfGame")) break;
+    _ = try r.p.tick(a, &data);
+    try testing.expect(r.p.seats == null);
 }

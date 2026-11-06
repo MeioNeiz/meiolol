@@ -260,8 +260,8 @@ open at a time, Escape and a tap outside close it). Sparingly: a term or an unce
 that needs a line, never words an unclear component couldn't carry. Placed under its term
 by CSS anchor positioning where supported, else centred
 States: closed: tap; a column head's term; open
-Used by: strip, draftboard, compview, table, laneduel, puzzle, reasons, learnpage,
-dailyseat, champpage
+Used by: strip, draftboard, compview, loadscreen, table, laneduel, puzzle, reasons,
+learnpage, dailyseat, champpage
 
 ### Tip
 `tip.zig` `.c-hint` `.c-hintb` site
@@ -683,10 +683,11 @@ card is as tall as what it says: the portrait beside name and role (? when guess
 the champion's win rate in the role (private edition only), wins by game length as a spark
 with its word where the tilt is clear, and at most two pills coloured by meaning. Above,
 "your game": my lane and the enemy jungler and team in plain words. Narrow windows get one
-row per lane. Champion facts only: no player names or ranks
-(research/questions/desktop-app-layout.md C1-C3)
-States: public: bot with too few games of the lane, no enemy support yet; private: numbers
-and every pill
+row per lane. The private edition adds a line about each other player from the client:
+rank, "main" or "first game", their recent Rift games on the pick (docs/plan/app.md Policy
+line); never names (research/questions/desktop-app-layout.md C1-C3)
+States: public: bot with too few games of the lane, no enemy support yet; private:
+numbers, every pill, a line about each other player (Lulu's in streamer mode)
 
 ### GameScreen
 `gamescreen.zig` `.c-game`

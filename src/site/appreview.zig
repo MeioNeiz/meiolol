@@ -314,7 +314,11 @@ fn play(a: Allocator, gpa: Allocator, io: Io, data: *const poller.Data, lock: []
     var picking_done = false;
     while (try m.advance()) |step| {
         steps += 1;
-        const s = (try r.tick(a)) orelse continue;
+        var s = (try r.tick(a)) orelse continue;
+        // Other players' facts land on the loading screen's second tick
+        if (s == .loading) if (try r.tick(a)) |again| {
+            s = again;
+        };
         if (p.select_only and s != .select) continue;
         n += 1;
         const slug = try a.print("{s}-{d:0>2}", .{ prefix, n });

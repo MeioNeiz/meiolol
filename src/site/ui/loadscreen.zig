@@ -4,8 +4,10 @@
 //! guessed), then the champion's win rate in the role (private edition only), wins by
 //! game length as a spark with its word where the tilt is clear, and at most two pills
 //! coloured by meaning. Above, "your game": my lane and the enemy jungler and team in
-//! plain words. Narrow windows get one row per lane. Champion facts only: no player
-//! names or ranks (research/questions/desktop-app-layout.md C1-C3)
+//! plain words. Narrow windows get one row per lane. The private edition adds a line
+//! about each other player from the client: rank, "main" or "first game", their recent
+//! Rift games on the pick (docs/plan/app.md Policy line); never names
+//! (research/questions/desktop-app-layout.md C1-C3)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
@@ -13,8 +15,10 @@ const phrase = @import("phrase.zig");
 const bar = @import("bar.zig");
 const spark = @import("spark.zig");
 const rate = @import("rate.zig");
+const toggletip = @import("toggletip.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
+const Phrase = phrase.Phrase;
 const H = tree.H;
 const N = tree.N;
 
@@ -38,6 +42,22 @@ pub const Card = struct {
     /// Wins more in long games (true) or short; null: the tilt is inside its noise, so
     /// no spark
     long: ?bool = null,
+    /// Private edition, other players only
+    player: ?Player = null,
+};
+
+/// Each part empty when unknown
+pub const Player = struct {
+    /// "Emerald II"
+    rank: []const u8 = "",
+    /// "Leona main", "first Leona game"; empty between
+    mastery: []const u8 = "",
+    /// Their Summoner's Rift games of the last 20 ("12 of last 17 games on Leona, 7
+    /// won", "no Leona in last 17 games"); 0: no games part
+    games: u32 = 0,
+    on_pick: u32 = 0,
+    /// Null: too few on the pick for a win count, so faint
+    won: ?u32 = null,
 };
 
 pub const Side = bar.Side;
@@ -119,9 +139,9 @@ fn head(h: *H, side: TeamSide, draft: ?f32) N {
 
 fn lane(h: *H, i: usize, l: Lane) N {
     return h.li(.{ .key = i }, .{
-        if (l.us) |c| card(h, c, .us) else h.div(.{ .class = "card", .data_empty = true }, .{W.none}),
+        if (l.us) |c| card(h, i, c, .us) else h.div(.{ .class = "card", .data_empty = true }, .{W.none}),
         strip(h, l),
-        if (l.them) |c| card(h, c, .them) else h.div(.{ .class = "card", .data_empty = true }, .{W.none}),
+        if (l.them) |c| card(h, i, c, .them) else h.div(.{ .class = "card", .data_empty = true }, .{W.none}),
     });
 }
 
@@ -140,7 +160,7 @@ fn strip(h: *H, l: Lane) N {
     });
 }
 
-fn card(h: *H, c: Card, side: TeamSide) N {
+fn card(h: *H, i: usize, c: Card, side: TeamSide) N {
     var pills = h.list();
     for (c.pills, 0..) |p, j| pills.add(h.span(.{ .key = j, .class = "pill", .data_tone = if (p.tone == .none) null else p.tone }, .{p.text}));
     return h.div(.{ .class = "card", .data_side = side, .data_you = c.you }, .{
@@ -153,6 +173,7 @@ fn card(h: *H, c: Card, side: TeamSide) N {
                 if (c.guessed) W.guess else null,
             }),
             if (c.rate) |r| h.span(.{ .class = "fact" }, .{rate.view(h, r, .{})}) else null,
+            if (c.player) |p| player(h, i, side, if (c.champ) |ch| ch.name else "", p) else null,
             if (c.long) |l| h.span(.{ .class = "len" }, .{
                 spark.view(h, .{ .vs = c.lengths, .y = spark_y, .mid = 50, .w = 64, .h = 18 }),
                 if (l) W.long else W.short,
@@ -161,6 +182,40 @@ fn card(h: *H, c: Card, side: TeamSide) N {
         }),
     });
 }
+
+fn player(h: *H, i: usize, side: TeamSide, pick: []const u8, p: Player) N {
+    const sep = W.sep;
+    const id = switch (side) {
+        .us => games_ids[0][i],
+        .them => games_ids[1][i],
+    };
+    const games = p.games > 0;
+    const last: [2]N = if (games) toggletip.view(h, id, .{W.last.with(h, .{ .n = p.games })}, W.games, W.games_note) else .{ .none, .none };
+    const count: N = if (!games) .none else if (p.on_pick == 0) h.span(.{ .data_thin = true }, .{
+        W.none_of.with(h, .{ .c = pick }),
+        last[0],
+        W.games_after,
+    }) else h.span(.{ .data_thin = p.won == null }, .{
+        W.of.with(h, .{ .n = p.on_pick }),
+        last[0],
+        W.games_after,
+        W.on.with(h, .{ .c = pick }),
+        if (p.won) |w| W.won.with(h, .{ .n = w }) else null,
+    });
+    return h.span(.{ .class = "who" }, .{
+        if (p.rank.len > 0) p.rank else null,
+        if (p.rank.len > 0 and p.mastery.len > 0) sep else null,
+        if (p.mastery.len > 0) p.mastery else null,
+        if (games and (p.rank.len > 0 or p.mastery.len > 0)) sep else null,
+        count,
+        last[1],
+    });
+}
+
+const games_ids = [2][5][]const u8{
+    .{ "ls-games-0-us", "ls-games-1-us", "ls-games-2-us", "ls-games-3-us", "ls-games-4-us" },
+    .{ "ls-games-0-them", "ls-games-1-them", "ls-games-2-them", "ls-games-3-them", "ls-games-4-them" },
+};
 
 /// About its own average, shrunk to even, a champion's win % by length rarely moves 5
 /// points either way
@@ -182,6 +237,15 @@ const W = struct {
     const six_later = plain("6 later");
     const items_first = plain("items first");
     const slow_items = plain("slow items");
+    const sep = plain(" · ");
+    const games = plain("Recent games");
+    const of = Phrase("{n:count} of ");
+    const last = Phrase("last {n:count}");
+    const games_after = plain(" games");
+    const none_of = Phrase("no {c:text} in ");
+    const on = Phrase(" on {c:text}");
+    const won = Phrase(", {n:count} won");
+    const games_note = plain("Their Summoner's Rift games among the last 20 in their match history: ARAM, Arena and other modes left out. Wins show from 5 games on the champion.");
 };
 
 pub const css =
@@ -223,6 +287,8 @@ pub const css =
     \\    white-space: nowrap; max-width: 100%; }
     \\  .c-load .role { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--muted); }
     \\  .c-load .fact { font-size: var(--fs-m); font-weight: var(--w-b); }
+    \\  .c-load .who { font-size: var(--fs-xs); color: var(--t2); }
+    \\  .c-load .who [data-thin] { color: var(--faint); }
     \\  .c-load .len { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--t2); }
     \\  .c-load .pills { display: flex; flex-wrap: wrap; gap: 4px; }
     \\  .c-load .pill { padding: 1px 6px; border-radius: var(--r-s); font-size: var(--fs-xs); background: var(--wash); color: var(--t2); }
@@ -313,6 +379,27 @@ fn private(h: *H, s: Screen) Screen {
             .them => "−520",
         };
     }
+    // Lulu's player is in streamer mode: no line
+    const us = [_]?Player{
+        .{ .rank = "Silver I", .games = 17, .on_pick = 7, .won = 3 },
+        .{ .rank = "Diamond IV", .games = 18, .on_pick = 1 },
+        null,
+        .{ .games = 19 },
+        null,
+    };
+    const them = [_]?Player{
+        .{ .rank = "Gold II", .mastery = "Darius main", .games = 20, .on_pick = 12, .won = 7 },
+        .{ .rank = "Platinum IV", .games = 18, .on_pick = 3 },
+        .{ .rank = "Emerald III", .mastery = "Syndra main", .games = 20, .on_pick = 15, .won = 9 },
+        .{ .rank = "Platinum II", .mastery = "first Caitlyn game" },
+        null,
+    };
+    for (lanes, us, them) |*l, u, t| {
+        if (l.us) |*c| if (!c.you) {
+            c.player = u;
+        };
+        if (l.them) |*c| c.player = t;
+    }
     p.lanes = lanes;
     return p;
 }
@@ -320,5 +407,5 @@ fn private(h: *H, s: Screen) Screen {
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.addFill("public: bot with too few games of the lane, no enemy support yet", view(h, sample));
-    g.addFill("private: numbers and every pill", view(h, private(h, sample)));
+    g.addFill("private: numbers, every pill, a line about each other player (Lulu's in streamer mode)", view(h, private(h, sample)));
 }
