@@ -1038,7 +1038,8 @@ pub const Top = struct {
             card.view(h, .{}, &.{
                 champhead.view(h, .{
                     .champ = .{ .name = d.name, .src = d.icon },
-                    .sub = if (p.files.want.meio) W.sub_meio.with(h, .{ .r = rl.role.label().s, .p = d.patch }) else W.sub.with(h, .{ .r = rl.role.label().s, .p = d.patch }),
+                    // Meio's answer in with no estimate: the strip says so, the sub mustn't claim one
+                    .sub = if (p.files.want.meio and (p.meio != null or p.meio_path.len == 0)) W.sub_meio.with(h, .{ .r = rl.role.label().s, .p = d.patch }) else W.sub.with(h, .{ .r = rl.role.label().s, .p = d.patch }),
                     .abilities = d.abilities,
                     .roles = p.roles(h),
                     .vs = if (p.has_search) p.search.view(h) else null,
@@ -2391,6 +2392,7 @@ test "Meio: the strip's win rate is Meio's with its worth and no place; raw mark
     try std.testing.expect(std.mem.indexOf(u8, out, "worth ") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, ">~") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "against the 412 it played on 16.22") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "Win rate: Meio") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "3rd of 50") == null);
     try std.testing.expect(std.mem.indexOf(u8, out, "data-busy") == null);
 
@@ -2401,6 +2403,7 @@ test "Meio: the strip's win rate is Meio's with its worth and no place; raw mark
     try std.testing.expect(std.mem.indexOf(u8, w.written(), W.raw_note.s) != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), ">no estimate<") != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), ">~") == null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Win rate: Meio") == null);
 }
 
 test "a rare role is listed and opens with its games, faded only by its range" {
