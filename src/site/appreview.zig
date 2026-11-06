@@ -38,6 +38,9 @@ pub const Inputs = struct {
     icons: screens.SiteIcons,
     /// The mock's lockfile goes here for the run
     work_dir: []const u8,
+    /// The stats keep 1 game in this many (sampleOf): min_games shrinks to match, so the
+    /// options lists show as on full data
+    sample: u32 = 1,
 };
 
 pub const File = struct { path: []const u8, data: []const u8 };
@@ -85,6 +88,7 @@ const root = "/private/app";
 pub fn files(a: Allocator, gpa: Allocator, io: Io, in: Inputs) ![]File {
     const data = try poller.loadPaths(gpa, io, in.paths);
     defer poller.freeData(gpa, data);
+    data.opts.min_games = @max(1, data.opts.min_games / @max(1, in.sample));
     var groups: std.ArrayList(Group) = .empty;
     var shots: std.ArrayList(Shot) = .empty;
     const lock = try std.fs.path.join(a, &.{ in.work_dir, "app-review.lockfile" });
@@ -199,7 +203,7 @@ pub fn write(gpa: Allocator, io: Io, out_dir: []const u8, data_dir: []const u8, 
 /// The dev server's (serve.zig): made on the first request from what it loaded (its
 /// stats.bin and champion facts, the shared view's curves), kept until it restarts. `name`
 /// from private/, as `app/public/full-game-01`; null for none
-pub fn devFile(gpa: Allocator, io: Io, loaded: *site.Loaded, name: []const u8) !?[]const u8 {
+pub fn devFile(gpa: Allocator, io: Io, loaded: *site.Loaded, name: []const u8, sample: u32) !?[]const u8 {
     try dev.mutex.lock(io);
     defer dev.mutex.unlock(io);
     if (dev.files == null) {
@@ -221,6 +225,7 @@ pub fn devFile(gpa: Allocator, io: Io, loaded: *site.Loaded, name: []const u8) !
             .paths = .{ .stats = stats, .curves = loaded.opts.curves[site.html.View.shared.index()], .facts = if (has_facts) facts else null },
             .icons = .{ .ddragon = shared.ddragon_version, .keys = keys },
             .work_dir = work,
+            .sample = sample,
         });
     }
     for ([_][]const u8{ "", ".html" }) |ext| for (dev.files.?) |f| {
@@ -234,6 +239,27 @@ var dev: struct {
     arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator),
     files: ?[]File = null,
 } = .{};
+
+/// N of the "1/N" deploy/snap-small.sh ends `data_dir`/.source with; 1 for a full snapshot
+pub fn sampleOf(io: Io, data_dir: []const u8) u32 {
+    var buf: [1024]u8 = undefined;
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const path = std.fmt.bufPrint(&path_buf, "{s}/.source", .{data_dir}) catch return 1;
+    const text = Io.Dir.cwd().readFile(io, path, &buf) catch return 1;
+    return parseSample(std.mem.trimEnd(u8, text, " \n"));
+}
+
+fn parseSample(source: []const u8) u32 {
+    const last = source[(std.mem.findScalarLast(u8, source, ' ') orelse return 1) + 1 ..];
+    if (!std.mem.startsWith(u8, last, "1/")) return 1;
+    return @max(1, std.fmt.parseInt(u32, last[2..], 10) catch 1);
+}
+
+test parseSample {
+    try std.testing.expectEqual(20, parseSample("/data/snap 47658878 317255680 1792483761 1/20"));
+    try std.testing.expectEqual(1, parseSample(""));
+    try std.testing.expectEqual(1, parseSample("/data/snap 1 2 3"));
+}
 
 fn exists(io: Io, path: []const u8) bool {
     Io.Dir.cwd().access(io, path, .{}) catch return false;

@@ -137,6 +137,8 @@ pub const Dev = struct {
     api: []const u8 = "http://127.0.0.1:8090",
     /// /api/meionotes answered here (meionotes.zig) without a login: the tool runs on its own
     meionotes_db: [:0]const u8 = "",
+    /// The data keeps 1 game in this many (snap-small; site/appreview.zig sampleOf)
+    sample: u32 = 1,
 
     pub fn init(gpa: std.mem.Allocator, io: Io, argv: []const []const u8, static_dir: []const u8) !Dev {
         const args = try gpa.dupe([]const u8, argv);
@@ -379,7 +381,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             defer r.release(entry);
             var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
             defer arena_state.deinit();
-            var body = (try site_appreview.devFile(ctx.gpa, ctx.io, entry.loaded, path["private/".len..])) orelse return notFound(request);
+            var body = (try site_appreview.devFile(ctx.gpa, ctx.io, entry.loaded, path["private/".len..], if (ctx.opts.dev) |d| d.sample else 1)) orelse return notFound(request);
             const page = std.fs.path.extension(path).len == 0;
             if (page) if (std.mem.findLast(u8, body, "</body>")) |at| {
                 const meionotes_tag = if (meionotesMarked(request)) site.meionotes.tag else "";

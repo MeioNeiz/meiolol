@@ -7,6 +7,7 @@ const ui = @import("ui");
 const stats = @import("../stats.zig");
 const site = @import("../site/root.zig");
 const serve = @import("../serve.zig");
+const site_appreview = @import("../site/appreview.zig");
 const partials = @import("../partials.zig");
 const Date = @import("../date.zig").Date;
 const builds = @import("../builds.zig");
@@ -362,6 +363,7 @@ pub fn cmdDev(c: *Cmd) !u8 {
     const static_dir = "src/site/static";
     var dev: serve.Dev = try .init(c.arena, c.init.io, try c.init.minimal.args.toSlice(c.arena), static_dir);
     dev.meionotes_db = try std.fs.path.joinZ(c.arena, &.{ c.data_dir, "dev-meionotes.db" });
+    dev.sample = site_appreview.sampleOf(c.init.io, c.data_dir);
     const db = try c.open();
     defer db.close();
     var opts = try f.options(c, c.arena, db, f.contact orelse "dev@example.com");

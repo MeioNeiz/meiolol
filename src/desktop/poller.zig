@@ -67,6 +67,8 @@ pub const Data = struct {
     all: ?core.Stats,
     curves: ?core.curvesfile.Curves,
     facts: ?core.champfacts.Facts,
+    /// The recommender's; the review pages lower min_games on a sampled snapshot
+    opts: core.Options = .{},
 
     /// Champ select's: every region's when chosen and loaded, else EUW's
     pub fn statsFor(d: *const Data, all_regions: bool) *const core.Stats {
@@ -168,6 +170,7 @@ fn fill(data: *Data, paths: Paths) !void {
     const arena = data.arena.allocator();
     const cwd = std.Io.Dir.cwd();
     const limit: std.Io.Limit = .limited(1 << 30);
+    data.opts = .{};
     data.stats = try core.Stats.parse(arena, try cwd.readFileAlloc(io, paths.stats, arena, limit));
     // Without it champ select has EUW's alone, and no region chip
     data.all = null;
@@ -703,9 +706,10 @@ const Poller = struct {
             .mastery = own.mastery,
             .tier = own.tier,
             .expertise = if (by_mastery) .fitted else null,
+            .opts = data.opts,
         };
         sel.card = try lanecard.build(arena, mine);
-        sel.board = try board.build(arena, stats, .{}, cs, &sel.card, if (data.facts) |*f| f else null);
+        sel.board = try board.build(arena, stats, data.opts, cs, &sel.card, if (data.facts) |*f| f else null);
         p.enemy_roles = @splat(null);
         for (sel.board.enemies, 0..) |e, i| if (i < p.enemy_roles.len) {
             p.enemy_roles[i] = e.role;
@@ -854,6 +858,7 @@ const Poller = struct {
             .facts = if (data.facts) |*f| f else null,
             .seats = seats,
             .draft = p.draft,
+            .opts = data.opts,
             .tier = if (p.own) |o| o.tier else null,
             .scouted = p.scouted,
         });

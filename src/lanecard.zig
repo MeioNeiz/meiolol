@@ -647,6 +647,23 @@ test "guessed opponent, thin curve, options with reasons" {
     try testing.expectEqual(1, d.lane.?.strength);
 }
 
+test "no pool in the role: options from everyone who plays it, 3 to 5" {
+    var f = try fixture();
+    defer f.deinit();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    // Ahri's points are mid's: nothing of the pool plays top
+    const card = try build(arena.allocator(), .{
+        .stats = &f.stats,
+        .curves = null,
+        .role = .top,
+        .mastery = &.{.{ .champion = ahri, .points = 212_000 }},
+        .opts = test_opts,
+    });
+    try testing.expect(card.options.len >= min_options and card.options.len <= max_options);
+    for (card.options) |o| try testing.expect(o.champion != ahri);
+}
+
 test "before picks: no opponent, no sentence" {
     var f = try fixture();
     defer f.deinit();
