@@ -33,7 +33,9 @@
 # Daily, `meiolol truth` (E2, docs/plan/estimates.md) scores the raw modes and Meio on the
 # current patch's days so far from the day cubes: data/truth-<patch>.md and .tsv (one
 # line per cell kind, region, rank and day, for the method page), replaced whole; each
-# patch's files stay once a newer one is out. ~5 GB, minutes
+# patch's files stay once a newer one is out. ~5 GB, minutes. --refresh: first the cubes
+# a change to cubes.zig, curves.zig or builds.zig left in another format (~21 min for 31
+# days), else truth reads none
 # Daily, the admin Draft tester's models refit on every played game into data/tester/:
 # `meiolol draft-model` (the shipped draft model, seconds after its scan) and `meiolol
 # lane-model` (team2's lane outcomes, every timeline read once; 0.9 GB, ~2 min of CPU on
@@ -394,7 +396,7 @@ run_daily() {
         batch bin/meiolol lean > data/lean.log 2>&1 &
     elif [[ -n "$patch" ]] && (( now - last_truth >= 86400 )); then
         last_truth=$now
-        (if batch bin/meiolol truth --patch "$patch" --tsv "data/truth-$patch.tsv.new" \
+        (if batch bin/meiolol truth --refresh --patch "$patch" --tsv "data/truth-$patch.tsv.new" \
             > "data/truth-$patch.md.new" 2> data/truth.log; then
             mv "data/truth-$patch.tsv.new" "data/truth-$patch.tsv"
             mv "data/truth-$patch.md.new" "data/truth-$patch.md"

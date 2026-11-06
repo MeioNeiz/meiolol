@@ -134,7 +134,7 @@ pub fn cmdCurves(c: *Cmd) !u8 {
             cube.settle_ms = 6 * std.time.ms_per_hour;
             cube.fresh_days = 1;
         }
-        logCubes(try cubes.curvesOf(cube, db, items.source(), specs, builders, summaries));
+        (try cubes.curvesOf(cube, db, items.source(), specs, builders, summaries)).report();
     }
 
     var missing = false;
@@ -199,7 +199,7 @@ pub fn cmdPairlane(c: *Cmd) !u8 {
         var items: CubeItems = .{ .gpa = gpa, .arena = arena, .io = io };
         const cube = try cubes.Store.open(gpa, io, try cubes.dirIn(arena, c.data_dir));
         defer cube.deinit();
-        logCubes(try pairlane.fromCubes(cube, db, items.source(), &specs, &builders));
+        (try pairlane.fromCubes(cube, db, items.source(), &specs, &builders)).report();
     }
     for (paths, &builders) |path, *b| {
         if (b.games == 0) {
@@ -303,7 +303,7 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
         try items.put(patches[0], &data);
         const cube = try cubes.Store.open(gpa, io, try cubes.dirIn(c.arena, c.data_dir));
         defer cube.deinit();
-        logCubes(try cubes.buildsOf(cube, db, items.source(), &data, o, sets[0..targets.len], bs[0..targets.len]));
+        (try cubes.buildsOf(cube, db, items.source(), &data, o, sets[0..targets.len], bs[0..targets.len])).report();
     }
     defer for (bs[0..targets.len]) |*b| b.deinit();
     for (targets, bs[0..targets.len]) |t, *b| {
@@ -426,7 +426,7 @@ pub fn cmdLockrows(c: *Cmd) !u8 {
         defer cube.deinit();
         // Curves --site builds the patch's days each round, just before
         cube.settle_ms = 6 * std.time.ms_per_hour;
-        logCubes(try cube.refresh(db, from_ms, items.source()));
+        (try cube.refresh(db, from_ms, items.source())).report();
         std.log.info("cubes current in {d} ms", .{t0.durationTo(std.Io.Clock.awake.now(io)).toMilliseconds()});
         const ds = try cube.days(gpa, from_ms);
         defer gpa.free(ds);
@@ -434,7 +434,7 @@ pub fn cmdLockrows(c: *Cmd) !u8 {
         defer day_arena.deinit();
         for (ds) |day| {
             _ = day_arena.reset(.retain_capacity);
-            const d = try cube.read(gpa, day_arena.allocator(), day) orelse return error.StaleCube;
+            const d = try cube.need(gpa, day_arena.allocator(), day);
             for (d.games) |g| try w.addGame(d, g);
             games += d.games.len;
         }
@@ -555,34 +555,7 @@ fn benchLocks(c: *Cmd, path: []const u8) !u8 {
     return 0;
 }
 
-/// Data Dragon's item data per patch for the day cubes, each fetched once
-const CubeItems = struct {
-    gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
-    io: std.Io,
-    by_patch: std.StringHashMapUnmanaged(*const ddragon.BuildData) = .empty,
-
-    fn put(x: *CubeItems, patch: []const u8, d: *const ddragon.BuildData) !void {
-        try x.by_patch.put(x.arena, try x.arena.dupe(u8, patch), d);
-    }
-
-    fn get(ctx: *anyopaque, patch: []const u8) anyerror!*const ddragon.BuildData {
-        const x: *CubeItems = @ptrCast(@alignCast(ctx));
-        if (x.by_patch.get(patch)) |d| return d;
-        const d = try x.arena.create(ddragon.BuildData);
-        d.* = try ddragon.buildData(x.gpa, x.arena, x.io, patch);
-        try x.put(patch, d);
-        return d;
-    }
-
-    fn source(x: *CubeItems) cubes.Items {
-        return .{ .ctx = x, .get = get };
-    }
-};
-
-fn logCubes(n: cubes.Counts) void {
-    std.log.info("day cubes: {d} days, {d} built ({d} games, {d} B), {d} young kept as they were, {d} dropped", .{ n.days, n.built, n.games_built, n.bytes, n.young, n.dropped });
-}
+const CubeItems = cubes.ItemCache;
 
 pub const usage_lean =
     \\  lean        early or late: each champion-role's team gold lead at 14 min and its

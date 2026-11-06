@@ -274,8 +274,8 @@ honest. The method page (E9) shows the same numbers from a daily file.
   "snapshot" is a copy of data/cubes/days (~3.3 GB); old snapshots need their cubes
   rebuilt by the same build (formatKey)
 - Cost: each day's cells summed once, then each origin adds up its days; Meio fits once
-  per origin. Daily on the box: `meiolol truth --patch P --tsv FILE` after the web
-  loop's cube refresh, as a box job, while the patch is newest
+  per origin. Daily on the box: `meiolol truth --refresh --patch P --tsv FILE` from
+  the web loop (--refresh: the cubes current first), while the patch is newest
 - Boundaries: 16.21 -> 16.22 live (EUW1 from 4 Nov 06:40Z), scored as its days arrive;
   16.20 -> 16.21 (EUW1 from 21 Oct 05:12Z) on the box's cubes, which keep 31 days: its
   origins before day 15 see a raw window shorter than 30 days

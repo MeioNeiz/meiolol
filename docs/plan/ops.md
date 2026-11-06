@@ -94,6 +94,12 @@ tab shows people, unconfirmed and bots. Next, only if needed:
   anonymise and split assume a full rebuild (row order, split.tsv over all games, pack
   and seat stats rebuilt whole), and erasure must still reach the copy (forget applied
   to it, as to the mirrors)
+- Day cube format key (option, not taken): cubes.formatKey hashes all of cubes.zig,
+  curves.zig and builds.zig, so any builds.zig deploy (a comment, the files' writer)
+  sets the next refresher rebuilding all 31 days: ~21 min, 3.7 GB of writes on C01. A
+  key over the record types plus a small file holding only the decode code would spare
+  most of those, at the risk of keeping old days after a decode change that changes no
+  type (wrong data, no error)
 
 ## Complete form
 

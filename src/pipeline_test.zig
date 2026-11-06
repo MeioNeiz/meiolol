@@ -181,6 +181,7 @@ test "fixture games to stats, curves and the website" {
     {
         const rows = try truth.load(gpa, io, try cubeDir(arena, dir, "builds"), .{ .patch = patch, .origins = 1, .horizon = 255 });
         defer gpa.free(rows.rows);
+        try expectTruthRefreshes(arena, db, try cubeDir(arena, dir, "builds"), rows.rows.len);
         var m = try meio.fit(gpa, rows.rows, std.math.maxInt(i32), .{});
         defer m.deinit(gpa);
         meio.slim(&m, gpa);
@@ -2461,7 +2462,31 @@ fn codeOf(list: []const []const u8, x: []const u8) ?u8 {
     return null;
 }
 
-/// The lock rows of every game in `dir`'s day cubes
+/// A day file another binary built (its format key) is no current file; truth --refresh's
+/// refreshHeld builds it again and truth reads the same rows
+fn expectTruthRefreshes(arena: std.mem.Allocator, db: store.Db, dir: []const u8, rows: usize) !void {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    {
+        const cube = try cubes.Store.open(gpa, io, dir);
+        defer cube.deinit();
+        const ds = try cube.days(gpa, 0);
+        defer gpa.free(ds);
+        const path = try std.fmt.allocPrint(arena, "{s}/days/{d}.bin", .{ dir, ds[0] });
+        var f = try std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_write });
+        defer f.close(io);
+        try f.writePositionalAll(io, &@as([8]u8, @splat(0)), "MEIOCUB1".len);
+        try testing.expect(try cube.read(gpa, arena, ds[0]) == null);
+        const n = try cube.refreshHeld(db, fixture_items);
+        try testing.expectEqual(1, n.built);
+        try testing.expect(try cube.read(gpa, arena, ds[0]) != null);
+    }
+    const again = try truth.load(gpa, io, dir, .{ .patch = patch, .origins = 1, .horizon = 255 });
+    defer gpa.free(again.rows);
+    try testing.expectEqual(rows, again.rows.len);
+}
+
+/// The lock rows of every game in `dir`'s day cubes/// The lock rows of every game in `dir`'s day cubes
 fn lockTable(arena: std.mem.Allocator, dir: []const u8) !lockrows.Table {
     const gpa = testing.allocator;
     const cube = try cubes.Store.open(gpa, testing.io, dir);
@@ -2471,7 +2496,7 @@ fn lockTable(arena: std.mem.Allocator, dir: []const u8) !lockrows.Table {
     const ds = try cube.days(gpa, 0);
     defer gpa.free(ds);
     for (ds) |day| {
-        const d = try cube.read(gpa, arena, day) orelse return error.StaleCube;
+        const d = try cube.need(gpa, arena, day);
         for (d.games) |g| try w.addGame(d, g);
     }
     return w.finish(arena, build_data);

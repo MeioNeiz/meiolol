@@ -341,7 +341,7 @@ pub fn fromCubes(
     defer arena_state.deinit();
     for (ds) |day| {
         _ = arena_state.reset(.retain_capacity);
-        const d = try s.read(gpa, arena_state.allocator(), day) orelse return error.StaleCube;
+        const d = try s.need(gpa, arena_state.allocator(), day);
         for (d.games) |g| {
             if (g.curves != .lanes) continue;
             for (specs, builders) |spec, *b| {

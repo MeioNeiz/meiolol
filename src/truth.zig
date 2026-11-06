@@ -1319,7 +1319,7 @@ pub fn load(gpa: Allocator, io: std.Io, cube_dir: []const u8, opts: Options) !Lo
         fn body(c: @This(), i: usize) !void {
             var arena: std.heap.ArenaAllocator = .init(c.gpa);
             defer arena.deinit();
-            const d = try c.s.read(c.gpa, arena.allocator(), c.days[i]) orelse return error.StaleCube;
+            const d = try c.s.need(c.gpa, arena.allocator(), c.days[i]);
             var buf: [10]Row = undefined;
             for (d.games) |g| {
                 if (c.until_ms != 0 and g.start >= c.until_ms) continue;

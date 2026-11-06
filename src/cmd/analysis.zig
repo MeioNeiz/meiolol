@@ -345,6 +345,9 @@ pub const usage_truth =
     \\              --cells-kinds K,K  its kinds (default champion,keystone,item,rune,build)
     \\              --no-meio        the raw modes alone (no estimate fitted)
     \\              --threads N      default 4
+    \\              --refresh        first build the cubes again where DATA's games or
+    \\                               this binary's format changed (the box's daily run);
+    \\                               without, a copy is read as it is, with no database
     \\
 ;
 
@@ -355,6 +358,7 @@ pub fn cmdTruth(c: *Cmd) !u8 {
     var cells_path: ?[]const u8 = null;
     var cells_kinds: []const u8 = truth_lean.Dump.default_kinds;
     var with_meio = true;
+    var refresh = false;
     while (c.next()) |_| {
         if (c.is("--patch")) {
             o.patch = try c.value();
@@ -384,10 +388,24 @@ pub fn cmdTruth(c: *Cmd) !u8 {
             with_meio = false;
         } else if (c.is("--threads")) {
             o.threads = try c.int(u8);
+        } else if (c.is("--refresh")) {
+            refresh = true;
         } else return error.Usage;
     }
     if (o.patch.len == 0 or o.origins == 0) return error.Usage;
     const io = c.init.io;
+    const dir = try cubes.dirIn(c.arena, c.data_dir);
+    // Before any output file: a refresh that fails leaves the old ones
+    if (refresh) {
+        const db = try c.open();
+        defer db.close();
+        const s = try cubes.Store.open(c.init.gpa, io, dir);
+        defer s.deinit();
+        // As lockrows: the crawler's late games don't move a day enough to wait ~40 s
+        s.settle_ms = 6 * std.time.ms_per_hour;
+        var items: cubes.ItemCache = .{ .gpa = c.init.gpa, .arena = c.arena, .io = io };
+        (try s.refreshHeld(db, items.source())).report();
+    }
     var tsv_buf: [64 * 1024]u8 = undefined;
     const tsv_file = if (tsv_path) |p| try std.Io.Dir.cwd().createFile(io, p, .{}) else null;
     defer if (tsv_file) |f| f.close(io);
@@ -408,7 +426,6 @@ pub fn cmdTruth(c: *Cmd) !u8 {
     }
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
-    const dir = try cubes.dirIn(c.arena, c.data_dir);
     const tsv_w = if (tsv) |*w| &w.interface else null;
     const lean_tw = if (lean_w) |*w| &w.interface else null;
     if (with_meio) {

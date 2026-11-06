@@ -92,6 +92,31 @@ pub const Items = struct {
     get: *const fn (ctx: *anyopaque, patch: []const u8) anyerror!*const ddragon.BuildData,
 };
 
+/// Data Dragon's item data per patch for the day cubes, each fetched once
+pub const ItemCache = struct {
+    gpa: Allocator,
+    arena: Allocator,
+    io: std.Io,
+    by_patch: std.StringHashMapUnmanaged(*const ddragon.BuildData) = .empty,
+
+    pub fn put(x: *ItemCache, patch: []const u8, d: *const ddragon.BuildData) !void {
+        try x.by_patch.put(x.arena, try x.arena.dupe(u8, patch), d);
+    }
+
+    pub fn get(ctx: *anyopaque, patch: []const u8) anyerror!*const ddragon.BuildData {
+        const x: *ItemCache = @ptrCast(@alignCast(ctx));
+        if (x.by_patch.get(patch)) |d| return d;
+        const d = try x.arena.create(ddragon.BuildData);
+        d.* = try ddragon.buildData(x.gpa, x.arena, x.io, patch);
+        try x.put(patch, d);
+        return d;
+    }
+
+    pub fn source(x: *ItemCache) Items {
+        return .{ .ctx = x, .get = get };
+    }
+};
+
 pub fn dirIn(arena: Allocator, data_dir: []const u8) ![]const u8 {
     return std.fs.path.join(arena, &.{ data_dir, "cubes" });
 }
@@ -125,6 +150,10 @@ pub const Counts = struct {
     young: usize = 0,
     /// Bytes of the files built
     bytes: u64 = 0,
+
+    pub fn report(n: Counts) void {
+        std.log.info("day cubes: {d} days, {d} built ({d} games, {d} B), {d} young kept as they were, {d} dropped", .{ n.days, n.built, n.games_built, n.bytes, n.young, n.dropped });
+    }
 };
 
 /// The day files, held under the directory's lock until deinit
@@ -270,9 +299,29 @@ pub const Store = struct {
 
     /// The day's games, in `arena`; null without a current file
     pub fn read(s: *const Store, gpa: Allocator, arena: Allocator, day: i64) !?Day {
+        return switch (try s.readOr(gpa, arena, day)) {
+            .day => |d| d,
+            else => null,
+        };
+    }
+
+    /// The day's games, in `arena`; error.StaleCube, logged with why, without a current
+    /// file: for a reader of every listed day
+    pub fn need(s: *const Store, gpa: Allocator, arena: Allocator, day: i64) !Day {
+        const why = switch (try s.readOr(gpa, arena, day)) {
+            .day => |d| return d,
+            .missing => "no file",
+            .other_format => "another format (cubes.zig, curves.zig or builds.zig changed since it was built)",
+            .undecodable => "did not decode",
+        };
+        log.err("day {d}: {s}; a refresh builds it again", .{ day, why });
+        return error.StaleCube;
+    }
+
+    fn readOr(s: *const Store, gpa: Allocator, arena: Allocator, day: i64) !union(enum) { day: Day, missing, other_format, undecodable } {
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         var f = std.Io.Dir.cwd().openFile(s.io, try s.dayPath(&buf, day), .{}) catch |err| switch (err) {
-            error.FileNotFound => return null,
+            error.FileNotFound => return .missing,
             else => return err,
         };
         defer f.close(s.io);
@@ -280,17 +329,27 @@ pub const Store = struct {
         defer gpa.free(file_buf);
         var fr = f.reader(s.io, file_buf);
         var head: [header_len]u8 = undefined;
-        fr.interface.readSliceAll(&head) catch return null;
-        _ = headerEnd(&head) orelse return null;
+        fr.interface.readSliceAll(&head) catch return .other_format;
+        _ = headerEnd(&head) orelse return .other_format;
         const window = try gpa.alloc(u8, std.compress.flate.max_window_len);
         defer gpa.free(window);
         var d: std.compress.flate.Decompress = .init(&fr.interface, .gzip, window);
         const day_value = flat.read(Day, &d.reader, arena) catch |err| switch (err) {
             error.OutOfMemory => return err,
-            else => return null,
+            else => return .undecodable,
         };
-        if ((d.reader.discardRemaining() catch return null) != 0) return null;
-        return day_value;
+        if ((d.reader.discardRemaining() catch return .undecodable) != 0) return .undecodable;
+        return .{ .day = day_value };
+    }
+
+    /// refresh over every day held and the last keep_days: for a reader of every file
+    /// (truth) with no window of its own
+    pub fn refreshHeld(s: *Store, db: store.Db, items: Items) !Counts {
+        const held = try s.days(s.gpa, 0);
+        defer s.gpa.free(held);
+        var from_ms = std.Io.Clock.real.now(s.io).toMilliseconds() - keep_days * day_ms;
+        if (held.len > 0) from_ms = @min(from_ms, held[0] * day_ms);
+        return s.refresh(db, from_ms, items);
     }
 };
 
@@ -691,7 +750,7 @@ fn curvesFrom(
     defer arena_state.deinit();
     for (ds) |day| {
         _ = arena_state.reset(.retain_capacity);
-        const d = try s.read(gpa, arena_state.allocator(), day) orelse return error.StaleCube;
+        const d = try s.need(gpa, arena_state.allocator(), day);
         for (d.games) |g| {
             if (g.curves == .none) continue;
             for (specs, builders, summaries) |spec, *b, *sum| {
@@ -731,7 +790,7 @@ fn buildsFrom(
     defer arena_state.deinit();
     for (ds) |day| {
         _ = arena_state.reset(.retain_capacity);
-        const dy = try s.read(gpa, arena_state.allocator(), day) orelse return error.StaleCube;
+        const dy = try s.need(gpa, arena_state.allocator(), day);
         for (dy.games) |g| {
             const mask = stats.Slice.of(slices[0..sets.len], dy.string(g.platform), g.start, dy.string(g.patch));
             if (mask == 0) continue;
