@@ -261,6 +261,11 @@ pub const css =
     \\  }
     \\  .c-cs > div { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
     \\  .c-cs section { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+    \\  /* The lane's head first, ban options under it: the lane's parts join the side column */
+    \\  .c-cs > .side { gap: var(--sp-2); }
+    \\  .c-cs > .side > .lane { display: contents; }
+    \\  .c-cs > .side > .lane > :is(.vs, .vs + .say) { order: -1; }
+    \\  .c-cs > .side > .bans { margin-block: var(--sp-2); }
     \\  .c-cs h2 { margin: 0; font-size: var(--fs-l); font-weight: var(--w-b); line-height: var(--lh-tight); }
     \\  .c-cs h2 .them { font-weight: var(--w-r); color: var(--t2); }
     \\  .c-cs h3 { margin: var(--sp-2) 0 0; font-size: var(--fs-s); font-weight: var(--w-m); color: var(--t2); }

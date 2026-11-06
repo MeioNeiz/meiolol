@@ -177,10 +177,11 @@ pub const css =
     \\       (Card's look drawn behind it): the lane head, the view switch (radios in the
     \\       shell's static HTML), then that view, its main part in the flexible row with its
     \\       own scroll. The islands' boxes step aside so the lane panel's parts, the Options
-    \\       island and the comp view share the right column */
+    \\       island and the comp view share the right column. flex: none, else the page's
+    \\       flex column grows it to its content and the flexible row never scrolls */
     \\    .c-live:has(.c-cs) { display: grid; grid-template-columns: minmax(0, min(56%, 42rem)) minmax(0, 1fr);
     \\      grid-template-rows: [head] auto [tabs] auto repeat(6, auto) [main] minmax(0, 1fr) [foot] auto;
-    \\      gap: 0 var(--sp-4); height: calc(var(--vh) - var(--header)); box-sizing: border-box; position: relative;
+    \\      gap: 0 var(--sp-4); height: calc(var(--vh) - var(--header)); flex: none; box-sizing: border-box; position: relative;
     \\      isolation: isolate; }
     \\    .c-live:has(.c-cs)::before { content: ""; position: absolute; inset: 0; grid-column: 2; grid-row: 1 / -1; z-index: -1;
     \\      background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); }
@@ -200,12 +201,16 @@ pub const css =
     \\       seat: no h3) keeps its matchup under Options, else that view is empty */
     \\    .c-live:has(> .c-seg [value="options"]:checked) > .c-comp,
     \\    .c-live:has(> .c-seg [value="options"]:checked) .c-cs .lane:has(> .opts-head > h3) > :is(.vs + p, .c-lane, .c-lane + .scope),
-    \\    .c-live:has(> .c-seg [value="options"]:checked):has(> .c-picks[data-all]) .c-cs .lane > :is(.opts-head, .opts, .scope),
+    \\    .c-live:has(> .c-seg [value="options"]:checked):has(> .c-picks[data-all]) .c-cs .lane > :not(.vs),
     \\    .c-live:has(> .c-seg [value="lane"]:checked) > :is(.c-picks, .c-comp),
-    \\    .c-live:has(> .c-seg [value="lane"]:checked) .c-cs :is(.side > .bans, .lane > :is(.opts-head, .opts, .scope:last-child)),
+    \\    .c-live:has(> .c-seg [value="lane"]:checked) .c-cs :is(.side > .bans, .lane > :is(.opts-head:not(:has(> .c-btn)), .opts, .scope:last-child)),
     \\    .c-live:has(> .c-seg [value="comp"]:checked) > .c-picks,
     \\    .c-live:has(> .c-seg [value="comp"]:checked) .c-cs :is(.side > .bans, .lane > :not(.vs)),
-    \\    .c-live:not(:has(.c-cs .c-lane)) > .c-seg > label:has([value="lane"]) { display: none; }
+    \\    .c-live:not(:has(.c-cs .c-lane)) > .c-seg > label:has([value="lane"]),
+    \\    .c-live:has(.c-cs .lane > .c-lane):not(:has(.c-cs .lane > .opts-head > h3, > .c-picks[data-all])) > .c-seg > label:has([value="options"]) { display: none; }
+    \\    /* That matchup under Options is the lane: one tab for it, Lane, shown selected */
+    \\    .c-live:has(.c-cs .lane > .c-lane):not(:has(.c-cs .lane > .opts-head > h3, > .c-picks[data-all])):has(> .c-seg [value="options"]:checked) > .c-seg > label:has([value="lane"]) {
+    \\      background: var(--sel-bg); color: var(--sel-ink); box-shadow: inset 0 0 0 1px var(--sel-line), var(--shadow-ctl); }
     \\    /* Before champ select: the note and form panel beside the tiles */
     \\    .c-live:has(> .c-apphome) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     \\      grid-template-rows: repeat(4, auto) 1fr; align-items: start; gap: 0 var(--sp-4); }
