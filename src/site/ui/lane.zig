@@ -35,6 +35,9 @@ pub const Metric = struct {
     /// Set: only the band's first `fit` minutes set the scale and the rest clips. The band
     /// widens far past the lane (±3,000 gold at 30 min) while the line stays near 0
     fit: usize = 0,
+    /// Set: the lines set the scale, at least this far each way, and the band clips. An
+    /// even lane (Ahri, -40 gold) is then no flat stroke in a band of ±2,000
+    floor: ?f32 = null,
 };
 
 /// Marks on the first measure (the matchup page's facts about its lane)
@@ -146,10 +149,10 @@ pub const Lane = struct {
 
     fn plane(l: *const L) chart.Plane {
         const s = l.cur();
-        const fit = l.metrics[l.k].fit;
-        var up: f32 = 0;
-        var down: f32 = 0;
-        const fitted = if (fit > 0) s.band[0..@min(fit, s.band.len)] else s.band;
+        const m = l.metrics[l.k];
+        var up: f32 = m.floor orelse 0;
+        var down: f32 = m.floor orelse 0;
+        const fitted: []const [2]f32 = if (m.floor != null) &.{} else if (m.fit > 0) s.band[0..@min(m.fit, s.band.len)] else s.band;
         for (fitted) |b| for (b) |v| {
             up = @max(up, v);
             down = @max(down, -v);
@@ -418,4 +421,19 @@ test "on the fake DOM: a tap shows the minute, a drag selects minutes, the switc
     _ = rt.event(0, .{ .kind = .click, .target = xp });
     try testing.expectEqual(@as(u8, 1), state.l.k);
     try testing.expectEqual(@as(u32, 0), fake.warnings);
+}
+
+test "floor: an even lane gets its floor, not the band's ±2,000; a real gap still scales" {
+    const band = [_][2]f32{ .{ -2000, 2000 }, .{ -2000, 2000 } };
+    const even = [_]f32{ -40, -40 };
+    const behind = [_]f32{ 0, -1250 };
+    var m = [_]Metric{.{ .label = plain("Gold"), .floor = 1000, .s = .{ .band = &band, .line = &even } }};
+    var l: Lane = .{ .a = "Ahri", .b = "Opponent", .metrics = &m };
+    try testing.expectEqual(1000, l.plane().y.hi);
+    try testing.expectEqual(-1000, l.plane().y.lo);
+    m[0].s.line = &behind;
+    try testing.expectEqual(-1500, l.plane().y.lo);
+    // Without one the band sets it
+    m[0].floor = null;
+    try testing.expectEqual(2000, l.plane().y.hi);
 }

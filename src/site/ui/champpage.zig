@@ -295,9 +295,9 @@ const view_queries = @import("urls.zig").view_queries;
 const meio_queries = [2][]const u8{ "?period=meio", "?region=all&period=meio" };
 const rank_suffixes = [n_views][]const u8{ "", "-patch", "-all", "-all-patch" };
 
-/// The lane chart's scale fits its first minutes, as the matchup page's: the band widens
-/// far past the line later
-const lane_fit = 20;
+/// The lane chart's scale follows the line, at least this far each way (gold, XP, CS):
+/// the band, the middle half of lanes, clips
+const lane_floor = [3]f32{ 1000, 1000, 10 };
 pub const min_games = 100;
 
 /// An island's data in each view: the base file (0: the page's) and its rank file,
@@ -2047,7 +2047,7 @@ pub const Charts = struct {
     fn laneCard(p: *P, h: *H) N {
         const foot = places(h, &.{.{ short(.lane_gold), p.r().lane_gold }});
         const c = p.r().lane orelse return noneCard(h, W.lane_head, foot);
-        for (&p.lane_metrics, c.metrics, W.lane_metrics) |*m, x, l| m.* = .{ .label = l, .fit = lane_fit, .s = .{ .line = x.line, .band = x.band } };
+        for (&p.lane_metrics, c.metrics, W.lane_metrics, lane_floor) |*m, x, l, f| m.* = .{ .label = l, .floor = f, .s = .{ .line = x.line, .band = x.band } };
         p.lane.a = p.data.name;
         p.lane.metrics = &p.lane_metrics;
         p.lane.games = c.games;
