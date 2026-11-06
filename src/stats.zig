@@ -116,6 +116,9 @@ pub const Row = struct {
     /// By side and role; set only for a sink that declares `wants_ends`, and only during
     /// its add: rows kept in lists (analysis.GameList) stay small
     ends: ?*const [2][5]?End = null,
+    /// Champions banned, each once (both teams may ban the same one); as ends, for a sink
+    /// that declares `wants_bans`
+    bans: []const u32 = &.{},
 };
 
 /// A player's end-of-game figures, participants' columns
@@ -152,12 +155,12 @@ pub const End = struct {
     }
 };
 
-fn wantsEnds(comptime Sink: type) bool {
+fn wants(comptime Sink: type, comptime what: []const u8) bool {
     const T = switch (@typeInfo(Sink)) {
         .pointer => |p| p.child,
         else => Sink,
     };
-    return @hasDecl(T, "wants_ends");
+    return @hasDecl(T, what);
 }
 
 pub fn matchKey(match_id: []const u8) u64 {
@@ -300,6 +303,12 @@ pub fn scan(
     }, args) else null;
     defer if (ahead) |a| a.stop();
 
+    var bq: ?store.Stmt = if (comptime wants(@TypeOf(sink), "wants_bans"))
+        try db.prepare("SELECT champion_id FROM bans WHERE match_id = ?")
+    else
+        null;
+    defer if (bq) |*b| b.deinit();
+
     var summary: Summary = .{ .games = 0, .skipped = 0 };
     var game: Game = .{};
     var current: std.ArrayList(u8) = .empty;
@@ -328,6 +337,7 @@ pub fn scan(
         });
         if (!std.mem.eql(u8, r.match_id, current.items)) {
             if (ahead) |a| a.next();
+            if (bq) |*b| try readBans(b, &game, current.items);
             try game.finish(sink, &summary);
             current.clearRetainingCapacity();
             try current.appendSlice(gpa, r.match_id);
@@ -342,8 +352,15 @@ pub fn scan(
         }
         game.add(r.team_id, r.position, r.champion_id, r.tier, End.of(r));
     }
+    if (bq) |*b| try readBans(b, &game, current.items);
     try game.finish(sink, &summary);
     return summary;
+}
+
+fn readBans(q: *store.Stmt, g: *Game, match_id: []const u8) !void {
+    if (g.rows == 0) return;
+    try q.bind(.{match_id});
+    while (try q.step()) try g.ban(q.int(0));
 }
 
 /// As scan, from the views partials: the same games in the same order
@@ -374,6 +391,7 @@ pub fn scanFrom(
         };
         // A NULL position reads as "" from SQLite
         for (g.players) |p| game.add(p.team, games.string(p.position) orelse "", p.champion, games.string(p.tier), p.end);
+        if (comptime wants(@TypeOf(sink), "wants_bans")) for (g.bans) |b| try game.ban(b.champion);
         try game.finish(sink, &summary);
     }
     return summary;
@@ -451,6 +469,15 @@ const Game = struct {
     /// curvesfile.tierRank of the players with a known tier
     ranks: [10]usize = undefined,
     n_ranks: u8 = 0,
+    bans: [10]u32 = undefined,
+    n_bans: u8 = 0,
+
+    fn ban(g: *Game, champion: i64) !void {
+        const c = std.math.cast(u32, champion) orelse return error.Unrepresentable;
+        if (std.mem.findScalar(u32, g.bans[0..g.n_bans], c) != null or g.n_bans == g.bans.len) return;
+        g.bans[g.n_bans] = c;
+        g.n_bans += 1;
+    }
 
     fn add(g: *Game, team_id: i64, position: []const u8, champion: i64, tier: ?[]const u8, end: ?End) void {
         g.rows += 1;
@@ -505,7 +532,8 @@ const Game = struct {
             .winner = winner.?,
             .duration_s = g.duration_s,
             .bracket = g.bracket(),
-            .ends = if (comptime wantsEnds(@TypeOf(sink))) &g.ends else null,
+            .ends = if (comptime wants(@TypeOf(sink), "wants_ends")) &g.ends else null,
+            .bans = g.bans[0..g.n_bans],
         });
         summary.games += 1;
         summary.by_patch.add(g.patch);
@@ -601,11 +629,17 @@ pub const Trend = struct {
     patch_games: []u32,
     /// By patch, role, champion
     by_patch: []Counts,
+    /// Games banned in, by patch, champion
+    patch_bans: []u32,
     /// UTC days (since 1970) the newest patch has games on, oldest first; at most
     /// max_days, the newest
     days: []const i32 = &.{},
     /// By day, role, champion
     by_day: []Counts = &.{},
+    /// Games on each day
+    day_games: []u32 = &.{},
+    /// Games banned in, by day, champion
+    day_bans: []u32 = &.{},
 
     pub const max_patches = 6;
     pub const max_days = 28;
@@ -677,6 +711,14 @@ pub const Trend = struct {
     pub fn onDay(t: *const Trend, d: usize, r: Role, c: usize) Counts {
         return t.by_day[(d * Role.count + @backingInt(r)) * t.n + c];
     }
+
+    pub fn patchBans(t: *const Trend, p: usize, c: usize) u32 {
+        return t.patch_bans[p * t.n + c];
+    }
+
+    pub fn dayBans(t: *const Trend, d: usize, c: usize) u32 {
+        return t.day_bans[d * t.n + c];
+    }
 };
 
 /// The view's Trend: lengths over the games buildSince would read for `window` and
@@ -703,6 +745,7 @@ pub fn buildTrend(
         .patches = undefined,
         .patch_games = try arena.alloc(u32, recent.len),
         .by_patch = try arena.alloc(Counts, recent.len * Role.count * st.n),
+        .patch_bans = try arena.alloc(u32, recent.len * st.n),
     };
     const names = try arena.alloc([]const u8, recent.len);
     for (names, recent) |*name, p| name.* = try arena.dupe(u8, p);
@@ -712,6 +755,7 @@ pub fn buildTrend(
     @memset(t.ends, .{});
     @memset(t.patch_games, 0);
     @memset(t.by_patch, .{ .games = 0, .wins = 0 });
+    @memset(t.patch_bans, 0);
 
     var max_id: u32 = 0;
     for (st.ids) |id| max_id = @max(max_id, id);
@@ -742,7 +786,7 @@ pub fn buildTrend(
     };
     defer sink.lanes.deinit(gpa);
     defer {
-        for (sink.days.values()) |d| gpa.free(d);
+        for (sink.days.values()) |d| d.free(gpa);
         sink.days.deinit(gpa);
     }
     _ = if (from) |games|
@@ -770,7 +814,13 @@ pub fn buildTrend(
     const days = try arena.dupe(i32, sink.days.keys()[kept..]);
     t.days = days;
     t.by_day = try arena.alloc(Counts, days.len * Role.count * st.n);
-    for (sink.days.values()[kept..], 0..) |d, k| @memcpy(t.by_day[k * d.len ..][0..d.len], d);
+    t.day_games = try arena.alloc(u32, days.len);
+    t.day_bans = try arena.alloc(u32, days.len * st.n);
+    for (sink.days.values()[kept..], 0..) |d, k| {
+        @memcpy(t.by_day[k * d.counts.len ..][0..d.counts.len], d.counts);
+        t.day_games[k] = d.games;
+        @memcpy(t.day_bans[k * st.n ..][0..st.n], d.bans);
+    }
     return t;
 }
 
@@ -783,33 +833,61 @@ const TrendSink = struct {
     recent: []const u32,
     since_ms: i64,
     lanes: std.AutoHashMapUnmanaged(u32, [length_buckets]Counts) = .empty,
-    /// The newest patch's games by UTC day: by role, champion
-    days: std.AutoArrayHashMapUnmanaged(i32, []Counts) = .empty,
+    /// The newest patch's games by UTC day
+    days: std.AutoArrayHashMapUnmanaged(i32, Day) = .empty,
 
     pub const wants_ends = true;
+    pub const wants_bans = true;
+
+    const Day = struct {
+        games: u32 = 0,
+        /// By role, champion
+        counts: []Counts,
+        /// By champion
+        bans: []u32,
+
+        fn init(gpa: std.mem.Allocator, n: usize) !Day {
+            const counts = try gpa.alloc(Counts, Role.count * n);
+            errdefer gpa.free(counts);
+            @memset(counts, .{ .games = 0, .wins = 0 });
+            const bans = try gpa.alloc(u32, n);
+            @memset(bans, 0);
+            return .{ .counts = counts, .bans = bans };
+        }
+
+        fn free(d: Day, gpa: std.mem.Allocator) void {
+            gpa.free(d.counts);
+            gpa.free(d.bans);
+        }
+    };
 
     fn add(s: *TrendSink, r: Row) !void {
         const t = s.t;
         var cs: [2][Role.count]?usize = undefined;
         for (r.teams, &cs) |team, *out| {
-            for (team, out) |id, *c| c.* = if (id < s.index.len and s.index[id] > 0) s.index[id] - 1 else null;
+            for (team, out) |id, *c| c.* = s.indexOf(id);
         }
         if (std.mem.findScalar(u32, s.recent, r.patch)) |p| {
             t.patch_games[p] += 1;
             for (cs, 0..) |team, side| for (team, 0..) |c, role| {
                 add1(&t.by_patch[(p * Role.count + role) * t.n + (c orelse continue)], side == r.winner);
             };
+            for (r.bans) |id| if (s.indexOf(id)) |c| {
+                t.patch_bans[p * t.n + c] += 1;
+            };
             if (p == 0) {
                 const e = try s.days.getOrPut(s.gpa, @intCast(@divFloor(r.start, std.time.ms_per_day)));
-                if (!e.found_existing) {
-                    e.value_ptr.* = s.gpa.alloc(Counts, Role.count * t.n) catch |err| {
-                        _ = s.days.pop();
-                        return err;
-                    };
-                    @memset(e.value_ptr.*, .{ .games = 0, .wins = 0 });
-                }
+                if (!e.found_existing) e.value_ptr.* = Day.init(s.gpa, t.n) catch |err| {
+                    _ = s.days.pop();
+                    return err;
+                };
+                const d = e.value_ptr;
+                d.games += 1;
                 for (cs, 0..) |team, side| for (team, 0..) |c, role| {
-                    add1(&e.value_ptr.*[role * t.n + (c orelse continue)], side == r.winner);
+                    add1(&d.counts[role * t.n + (c orelse continue)], side == r.winner);
+                };
+                for (r.bans) |id| if (s.indexOf(id)) |c| {
+                    d.bans[c] += 1;
                 };
             }
         }
@@ -834,6 +912,10 @@ const TrendSink = struct {
             if (!e.found_existing) e.value_ptr.* = @splat(.{ .games = 0, .wins = 0 });
             add1(&e.value_ptr[b], (r.winner == 0) == (c0 <= c1));
         }
+    }
+
+    fn indexOf(s: *const TrendSink, id: u32) ?usize {
+        return if (id < s.index.len and s.index[id] > 0) s.index[id] - 1 else null;
     }
 
     fn add1(c: *Counts, won: bool) void {
@@ -1093,6 +1175,11 @@ test "trend: the newest patch by day, oldest first, the newest max_days kept" {
         try db.run("UPDATE matches SET game_start = ? WHERE match_id = ?", .{ @as(i64, @intCast((40 - i) * day)), m });
     }
     try addMatch(db, "EUW1_99", "16.19", 420, 100, false, roles_ok);
+    // Game 1 bans J on both sides (once) and C; 16.19's game bans J
+    try db.exec(
+        \\INSERT INTO bans VALUES ('EUW1_1', 100, 1, 10), ('EUW1_1', 200, 2, 10),
+        \\  ('EUW1_1', 200, 3, 3), ('EUW1_99', 100, 1, 10);
+    );
     var built = try build(gpa, db, &.{ "16.19", "16.20" }, euw);
     defer built.builder.deinit();
     var aw: std.Io.Writer.Allocating = .init(gpa);
@@ -1110,6 +1197,14 @@ test "trend: the newest patch by day, oldest first, the newest max_days kept" {
     // Day 40: game 1, blue won; day 39: game 2, red won
     try testing.expectEqual(Counts{ .games = 1, .wins = 1 }, t.onDay(t.days.len - 1, .top, a));
     try testing.expectEqual(Counts{ .games = 1, .wins = 0 }, t.onDay(t.days.len - 2, .top, a));
+    const j = s.index(10).?;
+    try testing.expectEqual(@as(u32, 1), t.patchBans(0, j));
+    try testing.expectEqual(@as(u32, 1), t.patchBans(1, j));
+    try testing.expectEqual(@as(u32, 1), t.patchBans(0, s.index(3).?));
+    try testing.expectEqual(@as(u32, 0), t.patchBans(0, a));
+    try testing.expectEqual(@as(u32, 1), t.day_games[t.days.len - 1]);
+    try testing.expectEqual(@as(u32, 1), t.dayBans(t.days.len - 1, j));
+    try testing.expectEqual(@as(u32, 0), t.dayBans(t.days.len - 2, j));
 }
 
 test lengthBucket {

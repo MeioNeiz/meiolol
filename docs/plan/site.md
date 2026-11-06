@@ -143,8 +143,6 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
 
 ### Steps
 
-- CH12 By patch: Win | Pick | Ban and a line per rank bracket (Trend by bracket, bans
-  by patch and day); By game length: each bucket's share of games as bars
 
 CH0 on decisions.md's recommendations (Jacob to confirm): no blind-safe score (J2
 measured no win)
@@ -179,8 +177,11 @@ measured no win)
 - End of game (CH10): per game and per minute figures, each "Nth of M" in the role,
   the damage split under its head; Objectives: first tower, dragon, grubs and herald
   taken, and the win rate after each
-- By patch (win line, pick bars, rank in role; Patches | Days: the newest patch by UTC
-  day, stats.Trend.days) and by game length (5 buckets) cards
+- By patch (CH12): Win | Pick | Ban over one chart (win: rank in role under each; pick
+  and ban plain rates from 0, bans from stats.Row.bans), Patches | Days (the newest patch
+  by UTC day, stats.Trend.days); a rank pick plots its rank file's (no days). No line per
+  rank bracket: the Rank pick covers it. By game length (5 buckets), each bucket's games
+  as faint bars
   after the opponents, from stats.Trend per view
 - Build page: tables in a grid of ~490 px cells, rune pages drawn as in game with
   per-rune pick and win rate, "highest win rate" marks pulled by k per kind (File.shrink,

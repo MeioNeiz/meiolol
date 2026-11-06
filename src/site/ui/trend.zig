@@ -3,8 +3,10 @@
 //! against a reference (dashed), the point's name under it with a second line (rank in
 //! role, games), the last figure at the end. No per-point text: a tap or hover shows a
 //! point's numbers (ChartTip). A base line, faint dashed, compares each point with a
-//! wider group (the matchup page's all lanes) and takes the reference's place. OutcomeCurve (Pick-up) is the same preset over mastery
-//! bands
+//! wider group (the matchup page's all lanes) and takes the reference's place. Faint bars
+//! from the floor can show the games behind each point. A plain rate (pick, ban) runs its
+//! axis from 0, grey dots, no reference. OutcomeCurve (Pick-up) is the same preset over
+//! mastery bands
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -56,6 +58,11 @@ pub const Trend = struct {
     points: []const Point,
     /// What the dots are coloured against, dashed: 50, or the champion's own rate
     ref: f32 = 50,
+    /// A plain rate (pick, ban): the axis from 0, grey dots, no reference
+    plain: bool = false,
+    /// Faint bars from the floor, scaled to the largest: games behind each point; one per
+    /// point, or none
+    bars: []const f32 = &.{},
     /// A rate to compare with at each point, faint dashed (all lanes): one per point, or
     /// none
     base: []const f32 = &.{},
@@ -97,6 +104,12 @@ pub const Trend = struct {
     /// Ticks every `step` points around the even number nearest the reference (50 for
     /// 49.3), at least ±4 so a flat champion stays flat
     fn scale(t: *const T) struct { y: chart.Scale, c: f32, step: f32 } {
+        if (t.plain) {
+            var top: f32 = 0;
+            for (t.points) |p| top = @max(top, p.v + if (fmt.wide(p.range)) 0 else p.range);
+            const hi = chart.niceCeil(top);
+            return .{ .y = .{ .lo = 0, .hi = hi * 1.1 }, .c = hi / 2, .step = hi / 2 };
+        }
         const c = @round(t.ref / 2) * 2;
         var dev: f32 = 0;
         for (t.points) |p| {
@@ -136,17 +149,20 @@ pub const Trend = struct {
         var ys: std.ArrayList(chart.Tick) = .empty;
         for ([_]f32{ 1, 0, -1 }) |k| {
             const at = s.c + k * s.step;
+            // A plain rate's middle tick only when whole (0, 1, 2 not 0, 0.5, 1)
+            if (t.plain and k == 0 and at != @round(at)) continue;
             ys.append(h.mem, .{ .at = p.py(at), .label = phrase.num(h, .pct, @as(i32, @intFromFloat(at))) }) catch {
                 h.oom = true;
             };
         }
         var xs: std.ArrayList(chart.Tick) = .empty;
         var over = h.list();
+        if (t.bars.len == n) over.add(chart.bars(h, p, t.bars));
         for (t.points, 0..) |pt, i| {
             xs.append(h.mem, .{ .at = p.px(i), .label = pt.label, .sub = pt.sub }) catch {
                 h.oom = true;
             };
-            over.add(chart.dot(h, p, i, pt.v, if (fmt.wide(pt.range)) fmt.Step{} else fmt.Step.of(pt.v - t.ref, fmt.win_cuts)));
+            over.add(chart.dot(h, p, i, pt.v, if (t.plain or fmt.wide(pt.range)) fmt.Step{} else fmt.Step.of(pt.v - t.ref, fmt.win_cuts)));
         }
         if (n > 0) over.add(chart.endLabel(h, p, v[n - 1], phrase.num(h, .rate, v[n - 1])));
         if (t.tip) |i| if (i < n) {
@@ -163,7 +179,7 @@ pub const Trend = struct {
             .x = xs.items,
             .marks = &.{
                 // The base alone is dashed: the grid already marks 50%
-                if (t.base.len == n) .none else chart.level(h, p, t.ref),
+                if (t.base.len == n or t.plain) .none else chart.level(h, p, t.ref),
                 chart.band(h, p, lo, hi),
                 if (t.base.len == n) chart.line(h, p, t.base, .prev) else .none,
                 chart.line(h, p, v, .typ),
@@ -200,6 +216,11 @@ pub const demo_patch = [_]Point{
     .{ .label = plain("16.20"), .sub = plain("49th"), .v = 48.7, .range = 0.6, .tip = plain("48.7% of 23,166 · pick 7.6% · 49th of 59") },
     .{ .label = plain("16.21"), .sub = plain("3rd"), .v = 51.3, .range = 1.2, .tip = plain("51.3% of 6,678 · pick 8.4% · 3rd of 58") },
 };
+pub const demo_ban = [_]Point{
+    .{ .label = plain("16.19"), .sub = plain("32nd"), .v = 6.1, .range = 0.4, .tip = plain("ban 6.1%") },
+    .{ .label = plain("16.20"), .sub = plain("49th"), .v = 4.2, .range = 0.2, .tip = plain("ban 4.2%") },
+    .{ .label = plain("16.21"), .sub = plain("3rd"), .v = 9.8, .range = 0.5, .tip = plain("ban 9.8%") },
+};
 pub const demo_length = [_]Point{
     .{ .label = plain("<20"), .sub = plain("2.3k"), .v = 49.1, .range = 2.0, .tip = plain("min 49.1% of 2,299") },
     .{ .label = plain("20-25"), .sub = plain("4.6k"), .v = 50.6, .range = 1.4, .tip = plain("min 50.6% of 4,642") },
@@ -222,6 +243,8 @@ pub fn gallery(g: *Gallery) void {
         .{ "by game length, games under each; a point tapped; y axis named", .{ .label = plain("By game length"), .points = &demo_length, .tip = 2, .y_name = plain("win rate") } },
         .{ "against a base, faint dashed (all lanes)", .{ .label = plain("Won by gold at 10"), .points = &demo_length, .base = &.{ 46, 48.5, 50, 51.5, 54 } } },
         .{ "OutcomeCurve: by mastery, against his own rate", .{ .label = plain("Pick-up"), .points = &demo_mastery, .ref = 49.3, .height = 110 } },
+        .{ "by game length with each bucket's games as faint bars", .{ .label = plain("By game length"), .points = &demo_length, .bars = &.{ 2299, 4642, 9926, 8607, 5783 } } },
+        .{ "a plain rate (ban by patch): from 0, grey dots, no reference", .{ .label = plain("By patch"), .points = &demo_ban, .plain = true } },
     };
     for (states) |s| {
         const t = h.mem.create(Trend) catch {
@@ -252,6 +275,16 @@ test "the scale centres on the reference, whole ticks, at least ±4" {
     // A base far off widens the scale too
     t = .{ .label = plain("x"), .points = &demo_patch, .base = &.{ 50, 50, 60 } };
     try testing.expectEqual(@as(f32, 10), t.scale().step);
+}
+
+test "a plain rate's scale runs from 0 to a nice top, the middle tick only when whole" {
+    var t: Trend = .{ .label = plain("x"), .points = &demo_ban, .plain = true };
+    const s = t.scale();
+    try testing.expectEqual(@as(f32, 0), s.y.lo);
+    try testing.expectEqual(@as(f32, 7.5), s.c);
+    const low = [_]Point{ .{ .label = plain("a"), .v = 0.3 }, .{ .label = plain("b"), .v = 0.6 } };
+    t = .{ .label = plain("x"), .points = &low, .plain = true };
+    try testing.expectEqual(@as(f32, 0.5), t.scale().c);
 }
 
 test "a tap picks the nearest point; leaving clears the tip" {

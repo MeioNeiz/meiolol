@@ -277,7 +277,14 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
             const pi = t.patches.len - 1 - i;
             const c = t.onPatch(pi, r, ch.c);
             const k = try trend.patchRank(a, t, pi, r, ch.c);
-            x.* = .{ .patch = t.patches[pi], .games = c.games, .wins = c.wins, .rank = if (k) |x2| @intCast(x2.rank) else 0 };
+            x.* = .{
+                .patch = t.patches[pi],
+                .games = c.games,
+                .wins = c.wins,
+                .rank = if (k) |x2| @intCast(x2.rank) else 0,
+                .pick = pct(c.games, t.patch_games[pi]),
+                .ban = pct(t.patchBans(pi, ch.c), t.patch_games[pi]),
+            };
         }
         by_day = try a.alloc(cp.Day, t.days.len);
         for (by_day, t.days, 0..) |*x, day, i| {
@@ -288,6 +295,8 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
                 .tip = try std.fmt.allocPrint(a, "{f}", .{d.short()}),
                 .games = c.games,
                 .wins = c.wins,
+                .pick = pct(c.games, t.day_games[i]),
+                .ban = pct(t.dayBans(i, ch.c), t.day_games[i]),
             };
         }
         by_length = try a.alloc(cp.Counts, stats.length_buckets);

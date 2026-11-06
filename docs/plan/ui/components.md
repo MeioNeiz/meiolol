@@ -846,11 +846,13 @@ bands), a line with its 80% range band, each point a dot coloured on the scale a
 reference (dashed), the point's name under it with a second line (rank in role, games),
 the last figure at the end. No per-point text: a tap or hover shows a point's numbers
 (ChartTip). A base line, faint dashed, compares each point with a wider group (the matchup
-page's all lanes) and takes the reference's place. OutcomeCurve (Pick-up) is the same
-preset over mastery bands
+page's all lanes) and takes the reference's place. Faint bars from the floor can show the
+games behind each point. A plain rate (pick, ban) runs its axis from 0, grey dots, no
+reference. OutcomeCurve (Pick-up) is the same preset over mastery bands
 States: by patch, rank in role under each; by game length, games under each; a point
 tapped; y axis named; against a base, faint dashed (all lanes); OutcomeCurve: by mastery,
-against his own rate
+against his own rate; by game length with each bucket's games as faint bars; a plain rate
+(ban by patch): from 0, grey dots, no reference
 Used by: card, compview, champpage, matchpage
 
 ### TimeChart

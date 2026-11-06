@@ -160,6 +160,9 @@ pub const Day = struct {
     tip: []const u8,
     games: u32,
     wins: u32,
+    /// %, of the day's games
+    pick: f32 = 0,
+    ban: f32 = 0,
 };
 
 /// Games and wins in a bucket of minutes ("<10", "10-12", "16+")
@@ -189,6 +192,9 @@ pub const Patch = struct {
     wins: u32,
     /// Its place in the role on that patch; 0: rare
     rank: u16 = 0,
+    /// %: of the patch's games with the role filled, of its games
+    pick: f32 = 0,
+    ban: f32 = 0,
 };
 
 pub const Rel = struct {
@@ -421,6 +427,12 @@ pub const W = struct {
     pub const span = plain("Patches or days");
     pub const patches = plain("Patches");
     pub const by_days = plain("Days");
+    pub const metric = plain("Win, pick or ban rate");
+    pub const win = plain("Win");
+    pub const pick_y = plain("pick rate");
+    pub const ban_y = plain("ban rate");
+    pub const pick_tip = Phrase("picked in {r:rate} of {n:count} games");
+    pub const ban_tip = Phrase("banned in {r:rate} of {n:count} games");
     pub const by_length = plain("By game length");
     pub const lean = Phrase("Early lean {g:signed} gold");
     pub const lean_note = plain("Gold at 14 minutes against an average lane opponent, from games of every length: whether it wins lanes, apart from how long its games last.");
@@ -1737,6 +1749,7 @@ pub const Trends = struct {
     cur: u8 = 0,
     by_patch: trend.Trend = .{ .label = W.by_patch, .points = &.{} },
     span: Span = .{},
+    metric: Metric = .{},
     by_length: trend.Trend = .{ .label = W.by_length, .points = &.{} },
     ranks: trend.Trend = .{ .label = W.by_rank, .points = &.{} },
     timing: trend.Trend = .{ .label = W.first_item, .points = &.{}, .y_name = W.win_rate_y },
@@ -1752,6 +1765,31 @@ pub const Trends = struct {
 
         pub fn update(s: *Span, m: Span.Msg, _: *tree.Event) void {
             s.days = m == .days;
+        }
+    };
+
+    /// What the By patch card plots
+    const Metric = struct {
+        m: Metric.Msg = .win,
+
+        pub const Msg = enum { win, pick, ban };
+
+        pub fn update(s: *Metric, m: Metric.Msg, _: *tree.Event) void {
+            s.m = m;
+        }
+
+        /// A point's figure: games and wins, or pick or ban as a plain rate (% of the
+        /// games played then, `games / pick` of them)
+        fn at(s: Metric, h: *H, label: tree.Text, games: u32, wins: u32, pick: f32, ban: f32) trend.Point {
+            const v = switch (s.m) {
+                .win => return point(h, label, .{ .games = games, .wins = wins }),
+                .pick => pick,
+                .ban => ban,
+            };
+            const all: u32 = if (pick > 0) @intFromFloat(@round(@as(f32, @floatFromInt(games)) * 100 / pick)) else 0;
+            const args = .{ .r = v, .n = all };
+            const tip = if (s.m == .pick) W.pick_tip.with(h, args) else W.ban_tip.with(h, args);
+            return .{ .label = label, .v = v, .range = @floatCast(@min(fmt.rangeAt(all, v), 100)), .tip = tip };
         }
     };
 
@@ -1836,13 +1874,31 @@ pub const Trends = struct {
         var n: usize = 0;
         for (by_patch) |x| {
             if (x.games == 0) continue;
-            pts[n] = point(h, .{ .s = x.patch }, .{ .games = x.games, .wins = x.wins });
-            pts[n].sub = if (x.rank > 0) W.nth.with(h, .{ .n = x.rank, .th = ordinal(x.rank) }) else null;
+            pts[n] = p.metric.at(h, .{ .s = x.patch }, x.games, x.wins, x.pick, x.ban);
+            pts[n].sub = if (x.rank > 0 and p.metric.m == .win) W.nth.with(h, .{ .n = x.rank, .th = ordinal(x.rank) }) else null;
             n += 1;
         }
-        p.by_patch.set(pts[0..n]);
-        p.by_patch.label = W.by_patch;
-        return card.view(h, .{}, &.{ card.head(h, W.by_patch, null, &.{p.spanPick(h, by_day.len)}), p.by_patch.view(h) });
+        p.setPatch(pts[0..n], W.by_patch);
+        return card.view(h, .{}, &.{ card.head(h, W.by_patch, null, &.{ p.metricPick(h), p.spanPick(h, by_day.len) }), p.by_patch.view(h) });
+    }
+
+    fn setPatch(p: *P, pts: []const trend.Point, label: tree.Text) void {
+        p.by_patch.set(pts);
+        p.by_patch.label = label;
+        p.by_patch.plain = p.metric.m != .win;
+        p.by_patch.y_name = switch (p.metric.m) {
+            .win => null,
+            .pick => W.pick_y,
+            .ban => W.ban_y,
+        };
+    }
+
+    fn metricPick(p: *P, h: *H) N {
+        return segmented.view(h, .{ .s = .s, .label = W.metric }, &.{
+            .{ .label = W.win, .selected = p.metric.m == .win, .on = h.on(&p.metric, .win) },
+            .{ .label = W.pick, .selected = p.metric.m == .pick, .on = h.on(&p.metric, .pick) },
+            .{ .label = W.ban, .selected = p.metric.m == .ban, .on = h.on(&p.metric, .ban) },
+        });
     }
 
     /// The newest patch by day (by_patch's last), the first with its month; every other
@@ -1853,15 +1909,14 @@ pub const Trends = struct {
         for (by_day, 0..) |x, i| {
             if (x.games == 0) continue;
             const named = by_day.len <= 10 or (by_day.len - 1 - i) % 2 == 0;
-            pts[n] = point(h, .{ .s = if (n == 0) x.tip else if (named) x.label else "" }, .{ .games = x.games, .wins = x.wins });
+            pts[n] = p.metric.at(h, .{ .s = if (n == 0) x.tip else if (named) x.label else "" }, x.games, x.wins, x.pick, x.ban);
             if (!named) pts[n].sub = null;
             pts[n].name = .{ .s = x.tip };
             n += 1;
         }
-        p.by_patch.set(pts[0..n]);
         const title = W.by_day.with(h, .{ .p = if (by_patch.len > 0) by_patch[by_patch.len - 1].patch else "" });
-        p.by_patch.label = title;
-        return card.view(h, .{}, &.{ card.head(h, title, null, &.{p.spanPick(h, by_day.len)}), p.by_patch.view(h) });
+        p.setPatch(pts[0..n], title);
+        return card.view(h, .{}, &.{ card.head(h, title, null, &.{ p.metricPick(h), p.spanPick(h, by_day.len) }), p.by_patch.view(h) });
     }
 
     fn spanPick(p: *P, h: *H, days: usize) N {
@@ -1875,14 +1930,20 @@ pub const Trends = struct {
     fn lengthCard(p: *P, h: *H) N {
         const rl = p.r();
         const pts = trend.alloc(h, rl.by_length.len) orelse return .none;
+        const bars = h.mem.alloc(f32, rl.by_length.len) catch {
+            h.oom = true;
+            return .none;
+        };
         var n: usize = 0;
         for (rl.by_length, 0..) |c, i| {
             if (c.games == 0) continue;
             const l = if (i < p.data.lengths.len) p.data.lengths[i] else "";
             pts[n] = trend.point(h, .{ .s = l }, c.games, c.wins, W.min_tip.with(h, .{ .r = rate(c), .n = c.games }));
+            bars[n] = @floatFromInt(c.games);
             n += 1;
         }
         p.by_length.set(pts[0..n]);
+        p.by_length.bars = bars[0..n];
         p.by_length.ref = rate(.{ .games = rl.games, .wins = rl.wins });
         const lean = if (rl.lean) |g| W.lean.with(h, .{ .g = @as(i32, g) }) else null;
         return card.view(h, .{}, &.{ card.head(h, W.by_length, null, &.{ p.plat(h), if (lean) |x| tipNote(h, "cp-lean", x, x, W.lean_note) else .none }), p.by_length.view(h), places(h, &.{.{ short(.long_games), rl.long_games }}) });
@@ -2482,6 +2543,40 @@ test "by rank: a thin bracket shows, an empty one doesn't, no chart under two" {
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(tree.find(w.written(), "Gold-Emerald") == null);
+}
+
+test "by patch: win with rank in role, pick and ban as plain rates; length buckets' games as bars" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const patches = [_]Patch{
+        .{ .patch = "16.19", .games = 1000, .wins = 500, .rank = 3, .pick = 10, .ban = 4.5 },
+        .{ .patch = "16.20", .games = 2000, .wins = 1100, .rank = 1, .pick = 8, .ban = 12.5 },
+    };
+    const lengths = [_]Counts{ .{ .games = 10, .wins = 5 }, .{ .games = 0, .wins = 0 }, .{ .games = 30, .wins = 15 } };
+    var roles = [_]TrendsRole{.{ .role = .top, .games = 3000, .wins = 1600, .by_patch = &patches, .by_length = &lengths }};
+    const d: TrendsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles, .lengths = &.{ "<20", "20-25", "25-30" } };
+    var p: Trends = .{ .data = &d, .root = "/" };
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(!p.by_patch.plain);
+    try std.testing.expectEqual(@as(f32, 55), p.by_patch.points[1].v);
+    try std.testing.expect(tree.find(w.written(), ">1st<") != null);
+    try std.testing.expectEqualSlices(f32, &.{ 10, 30 }, p.by_length.bars);
+
+    p.metric.m = .ban;
+    p.by_patch.tip = 1;
+    w.clearRetainingCapacity();
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(p.by_patch.plain);
+    try std.testing.expectEqual(@as(f32, 12.5), p.by_patch.points[1].v);
+    try std.testing.expect(p.by_patch.points[1].sub == null);
+    // 2,000 games at an 8% pick: 25,000 games on the patch
+    try std.testing.expect(tree.find(w.written(), "banned in 12.5% of 25,000 games") != null);
+    try std.testing.expect(tree.find(w.written(), ">1st<") == null);
+    try std.testing.expect(tree.find(w.written(), "ban rate") != null);
 }
 
 test "end of game: each figure with its place and the damage split, none under min_games or for a rare pick" {

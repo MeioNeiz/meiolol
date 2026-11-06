@@ -96,7 +96,7 @@ fn roleData(site: *const Site, x: *const filters.Ranked, k: f64) !Roles {
         };
     }
     const by_patch = try a.alloc(ui.champpage.Patch, x.patches.len);
-    for (by_patch, x.patches) |*o, p| o.* = .{ .patch = p.patch, .games = p.games, .wins = p.wins, .rank = p.rank };
+    for (by_patch, x.patches) |*o, p| o.* = .{ .patch = p.patch, .games = p.games, .wins = p.wins, .rank = p.rank, .pick = p.pick, .ban = p.ban };
     const picked = builds_page.forRank(site, v, ch, x.role, x.group + 1);
     const rels = try a.alloc(ui.champpage.Rel, 1);
     rels[0] = .{ .ally = false, .role = champion.uiRole(x.role), .opps = opps };

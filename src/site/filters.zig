@@ -112,7 +112,8 @@ pub const Ranked = struct {
 /// champ: site.champs index
 pub const RankedOpp = struct { champ: u16, games: u32, wins: u32 };
 
-pub const RankedPatch = struct { patch: []const u8, games: u32, wins: u32, rank: u16 = 0 };
+/// pick, ban: %, as Ranked's
+pub const RankedPatch = struct { patch: []const u8, games: u32, wins: u32, rank: u16 = 0, pick: f32 = 0, ban: f32 = 0 };
 
 /// The games' matches; make reads each one's players and bans by primary key. A join
 /// ordered by match_id walks every match ever stored: with +match_id the start and patch
@@ -487,13 +488,18 @@ fn rankFigures(a: std.mem.Allocator, site: *const root.Site, opts: root.Options,
     const totals = try a.alloc(Counts, vgr * n_c);
     const by_patch = try a.alloc(Counts, vgr * n_p * n_c);
     const players = try a.alloc(u64, vgr * (n_p + 1));
+    // Games and bans by view and group, then by view, group and patch
     const game_n = try a.alloc(u64, n_v * n_g);
     const ban_n = try a.alloc(u64, n_v * n_g * n_c);
+    const patch_game_n = try a.alloc(u64, n_v * n_g * n_p);
+    const patch_ban_n = try a.alloc(u64, n_v * n_g * n_p * n_c);
     @memset(totals, .{});
     @memset(by_patch, .{});
     @memset(players, 0);
     @memset(game_n, 0);
     @memset(ban_n, 0);
+    @memset(patch_game_n, 0);
+    @memset(patch_ban_n, 0);
     const at = struct {
         fn vgrOf(v: usize, g: usize, r: Role) usize {
             return (v * rank_groups.len + g) * Role.all.len + @backingInt(r);
@@ -517,6 +523,7 @@ fn rankFigures(a: std.mem.Allocator, site: *const root.Site, opts: root.Options,
         if (!scope.has(v, e.key_ptr.slice)) continue;
         for (0..n_g) |g| if (RankScope.inGroup(g, e.key_ptr.tier)) {
             game_n[vi * n_g + g] += e.value_ptr.*;
+            patch_game_n[(vi * n_g + g) * n_p + e.key_ptr.slice.patch] += e.value_ptr.*;
         };
     };
     var bit = bans.iterator();
@@ -528,6 +535,7 @@ fn rankFigures(a: std.mem.Allocator, site: *const root.Site, opts: root.Options,
             if (!scope.has(v, k.game.slice)) continue;
             for (0..n_g) |g| if (RankScope.inGroup(g, k.game.tier)) {
                 ban_n[(vi * n_g + g) * n_c + c] += e.value_ptr.*;
+                patch_ban_n[((vi * n_g + g) * n_p + k.game.slice.patch) * n_c + c] += e.value_ptr.*;
             };
         }
     }
@@ -611,7 +619,14 @@ fn rankFigures(a: std.mem.Allocator, site: *const root.Site, opts: root.Options,
             for (order) |p| {
                 if (players[i * (n_p + 1) + p] == 0) continue;
                 const pc = by_patch[(i * n_p + p) * n_c + c];
-                try ps.append(a, .{ .patch = patches[p], .games = pc.games, .wins = pc.wins, .rank = ranks[(i * (n_p + 1) + p) * n_c + c] });
+                try ps.append(a, .{
+                    .patch = patches[p],
+                    .games = pc.games,
+                    .wins = pc.wins,
+                    .rank = ranks[(i * (n_p + 1) + p) * n_c + c],
+                    .pick = @floatCast(100 * ratio(pc.games, players[i * (n_p + 1) + p] / 2)),
+                    .ban = @floatCast(100 * ratio(patch_ban_n[(vg * n_p + p) * n_c + c], patch_game_n[vg * n_p + p])),
+                });
             }
             const j = i * (n_p + 1) + n_p;
             const rank = ranks[j * n_c + c];
@@ -807,7 +822,7 @@ test "runs on their own connections tally as one walk does" {
                 const blue = slot < 5;
                 const tier: ?[]const u8 = switch ((g + slot) % 4) {
                     0 => "GOLD",
-                    1 => "SILVER",
+                    1 => "DIAMOND",
                     2 => "DIAMOND",
                     else => null,
                 };
@@ -840,6 +855,16 @@ test "runs on their own connections tally as one walk does" {
     site.view_curves = &no_curves;
     const one = try tally(&site, memory_db, opts, 1, null);
     const several = try tally(&site, file_db, opts, opts.filter_runs, null);
+    // A patch view has one patch, with the row's own pick and ban
+    const ranks = try rankFigures(a, &site, opts, one.patches, one.cells, &one.slots, &one.games, &one.bans, one.index_of);
+    var banned = false;
+    for (ranks.ranked) |x| if (html.View.all[x.view].period == .patch) {
+        try std.testing.expectEqual(1, x.patches.len);
+        try std.testing.expectEqual(x.pick, x.patches[0].pick);
+        try std.testing.expectEqual(x.ban, x.patches[0].ban);
+        banned = banned or x.ban > 0;
+    };
+    try std.testing.expect(banned);
     for (one.patches, several.patches) |x, y| try std.testing.expectEqualStrings(x, y);
     for (one.cells, several.cells) |x, y| {
         try std.testing.expectEqualSlices(Key, x.keys(), y.keys());

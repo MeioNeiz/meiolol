@@ -102,8 +102,8 @@ Y: shown; f: as a filter of the build page; -: not there. "Us" is the live site,
 | Counters against every enemy role | Y (5 strips) | - | - | | Y (Against + role) |
 | Lane result per opponent (gold at 15) | - | Y (GD@15 list, table) | - | Blitz lane WR | Y (gold at 14 in the brief) |
 | Duos by ally role | Y (synergy tabs) | - | Y (4 tables) | DeepLoL | Y (With + role) |
-| Win rate, pick, ban over time | Y (by day, per rank) | - | Y (by patch, with rank) | | Y (by patch: win, pick, rank) |
-| Win rate by game length | Y | - | Y (5 buckets) | LoG graphs | Y (5 buckets, early lean) |
+| Win rate, pick, ban over time | Y (by day, per rank) | - | Y (by patch, with rank) | | Y (by patch or day: win, pick, ban; per rank pick) |
+| Win rate by game length | Y | - | Y (5 buckets) | LoG graphs | Y (5 buckets with games, early lean) |
 | Objectives secured and won | Y | - | - | | Y |
 | End-of-game stats ranked in role | Y | - | - | | Y |
 | Players' win rate spread | - | - | - | | Y (histogram) |
