@@ -10,7 +10,8 @@
 # run for its uncommitted work may have rewritten (bcf6dc3 carried such hashes).
 # One touching src/site/ui gets the components register and uilint's debt file
 # regenerated in the same tree and committed with it, the same way (named in PATHS, the
-# generated one still wins).
+# generated one still wins). A file over its debt stops the commit; UILINT_GROW=1
+# (Jacob's ok) commits the raised debt.
 # The subject (first -m) is one short line; detail goes in a second -m, the body: every
 # session's opening context and `git log --oneline` carry subjects. Doc pages in PATHS
 # must not get worse than at HEAD (over budget and growing, or new dated-story lines):
