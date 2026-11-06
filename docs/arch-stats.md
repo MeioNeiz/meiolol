@@ -120,7 +120,8 @@ spells (unordered pair) from participants; from timelines: starting items (bough
 first 90 s, net of undo and sale, no trinkets), boots (first tier-2, tier 3 counted as
 its tier 2; "no boots" once two items are finished without), first two and first three
 finished items in purchase order (ddragon legendary rule, as first-item timing; an undone
-purchase comes off), the 4th, 5th and 6th finished item each on its own (any path), skill
+purchase comes off), the first finished item alone (item1, role-wide, 3 options: the
+champion page's Builds row; a lock answer counts it under every lock but its own), the 4th, 5th and 6th finished item each on its own (any path), skill
 priority (Q/W/E by points after 13 skill-ups or the game's end from 11, ties by who got
 there first; EVOLVE ups skipped), skill path (the slot of each level 1-18, 2 bits a level
 in two u32s; from 11 skill-ups, a shorter game filled as the player was going: R when

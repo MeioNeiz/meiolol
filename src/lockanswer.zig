@@ -19,11 +19,12 @@ const Values = std.EnumArray(builds.Kind, ?Value);
 
 /// What a lock holds to, as the build file's kinds plus the lane opponent, its reach (1
 /// melee, 2 ranged: ddragon Reach + 1) and its damage (1 AD, 2 AP: Filter.damage). `rune`
-/// and `shard` hold when any of the page's runes (shard rows) is the value
-pub const Kind = enum { keystone, runes, rune, shards, shard, spells, start, boots, core2, core3, item4, item5, item6, skills, skill_path, opponent, reach, damage };
+/// and `shard` hold when any of the page's runes (shard rows) is the value. Answers
+/// count item1's options under every lock but item1 (builds.Kind.item1)
+pub const Kind = enum { keystone, runes, rune, shards, shard, spells, start, boots, item1, core2, core3, item4, item5, item6, skills, skill_path, opponent, reach, damage };
 
 /// Each kind's URL code, in Kind's order (`lk=ks8010,vs86`)
-pub const codes = [_][]const u8{ "ks", "rp", "ru", "sh", "sd", "sp", "st", "bo", "c2", "c3", "i4", "i5", "i6", "mo", "lv", "vs", "vr", "vd" };
+pub const codes = [_][]const u8{ "ks", "rp", "ru", "sh", "sd", "sp", "st", "bo", "i1", "c2", "c3", "i4", "i5", "i6", "mo", "lv", "vs", "vr", "vd" };
 
 comptime {
     std.debug.assert(codes.len == std.enums.values(Kind).len);
@@ -146,15 +147,21 @@ pub fn reference(gpa: Allocator, arena: Allocator, t: *const lockrows.Table, cha
     var b = try builder(gpa, o);
     defer b.deinit();
     var rest = locks.*;
-    rest.by.set(.reach, null);
-    rest.by.set(.damage, null);
+    var lane: Locks = .{};
+    var style: Locks = .{};
+    for ([_]Kind{ .reach, .damage }) |k| lane.by.set(k, rest.by.get(k));
+    style.by.set(.item1, rest.by.get(.item1));
+    for ([_]Kind{ .reach, .damage, .item1 }) |k| rest.by.set(k, null);
     var it: lockrows.Rows = .{ .t = t, .b = block };
     while (it.next()) |r| {
         if (!f.takes(r.start, r.platform, r.patch, r.seat.rank)) continue;
         const vals = builds.valuesOf(r.seat.p, r.seat.k, &t.build);
         if (!rest.match(&r, &vals, &t.build, &f)) continue;
-        if (!locks.match(&r, &vals, &t.build, &f)) {
-            try b.addOpponent(r.seat.p);
+        const in_lane = lane.match(&r, &vals, &t.build, &f);
+        const styled = style.match(&r, &vals, &t.build, &f);
+        if (!in_lane or !styled) {
+            if (styled) try b.addOpponent(r.seat.p);
+            if (in_lane) if (vals.get(.item1)) |v| try b.add(r.seat.p.champion, role, .item1, v.slice(), r.seat.p.won);
             continue;
         }
         b.games += 1;
@@ -174,11 +181,13 @@ fn builder(gpa: Allocator, o: builds.Options) !builds.Builder {
 
 /// Kinds a row holds one value of, coded per block. keystone and rune follow from runes,
 /// shard from shards
-const coded = [_]builds.Kind{ .runes, .shards, .spells, .start, .boots, .core2, .core3, .item4, .item5, .item6, .skills, .skill_start, .skill_path };
+const coded = [_]builds.Kind{ .runes, .shards, .spells, .start, .boots, .item1, .core2, .core3, .item4, .item5, .item6, .skills, .skill_start, .skill_path };
 
 fn codedAt(kind: builds.Kind) ?usize {
     return std.mem.findScalar(builds.Kind, &coded, kind);
 }
+
+const item1_at = codedAt(.item1).?;
 
 /// File.Minute slots: 0 boots, 1 to 6 the finished items
 const slots = 7;
@@ -404,14 +413,19 @@ const Match = struct {
     }
 
     fn takes(m: *const Match, r: *const Coded) bool {
-        return m.rest(r) and m.lane(r);
+        return m.rest(r) and m.lane(r) and m.styled(r);
     }
 
-    /// Every lock but the lane opponent's reach and damage
+    /// Every lock but the lane opponent's reach and damage and item1
     fn rest(m: *const Match, r: *const Coded) bool {
         if (m.opponent) |x| if (r.opponent != x) return false;
-        for (m.allow, r.code) |a, c| if (a) |set| if (!set.isSet(c)) return false;
+        for (m.allow, r.code, 0..) |a, c, j| if (a) |set| if (j != item1_at and !set.isSet(c)) return false;
         return true;
+    }
+
+    fn styled(m: *const Match, r: *const Coded) bool {
+        const set = m.allow[item1_at] orelse return true;
+        return set.isSet(r.code[item1_at]);
     }
 
     /// The lane opponent's reach and damage locks
@@ -514,9 +528,16 @@ const Counts = struct {
         if (r.opponent != 0) bump(&n.opponents[r.opponent], r.won);
     }
 
+    /// Its first item's count, under every lock but item1's (group skips item1)
+    fn style(n: *Counts, r: *const Coded) void {
+        const c = r.code[item1_at];
+        if (c != 0) bump(&n.counts[n.at[0][item1_at].? + c], r.won);
+    }
+
     fn group(n: *Counts, g: usize, comptime split: Split, r: *const Coded) void {
         bump(&n.totals[g], r.won);
         inline for (split_kinds[@backingInt(split)]) |j| {
+            if (j == item1_at) continue;
             if (r.code[j] != 0) bump(&n.counts[n.at[g][j].? + r.code[j]], r.won);
         }
     }
@@ -533,14 +554,15 @@ const Counts = struct {
         b.timelines = n.timelines;
         const buf = try arena.alloc(Top.Option, rows);
         for (n.totals, n.at, 0..) |all, at, g| {
-            if (all.games == 0) continue;
+            // Role-wide item1 counts players the locks leave out
+            if (all.games == 0 and g != 0) continue;
             const split = splitOf(g);
             const into, const opp: u16 = switch (split) {
                 .none => .{ b, 0 },
                 .lead => .{ b.lead.?, @intCast(g) },
                 .keystone => .{ b.keystone.?, @intCast(n.b.keystones[g - first_keystone]) },
             };
-            try into.putTotal(champion, role, opp, null, all);
+            if (all.games > 0) try into.putTotal(champion, role, opp, null, all);
             for (split_kinds[@backingInt(split)]) |j| {
                 const kind = coded[j];
                 const counts = n.counts[at[j].?..][0 .. n.b.values[j].len + 1];
@@ -643,8 +665,11 @@ pub fn file(gpa: Allocator, arena: Allocator, t: *const lockrows.Table, x: *cons
     var n: Counts = try .init(arena, block);
     for (block.rows) |*r| {
         if (!f.takes(r.start, r.platform, r.patch, if (r.rank == no_rank) null else r.rank) or !m.rest(r)) continue;
-        n.opponent(r);
-        if (m.lane(r)) n.add(r);
+        const in_lane = m.lane(r);
+        const styled = m.styled(r);
+        if (styled) n.opponent(r);
+        if (in_lane) n.style(r);
+        if (in_lane and styled) n.add(r);
     }
     var b = try builder(gpa, o);
     defer b.deinit();

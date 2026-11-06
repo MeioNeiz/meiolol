@@ -124,6 +124,10 @@ pub const Group = struct { games: u32 = 0, wins: u32 = 0 };
 /// The build of the players who took one keystone
 pub const Lock = struct { keystone: u32, slots: []const Slot, games: u32, wins: u32 };
 
+/// A build style: a first finished item and its share of the players with one, %
+pub const Style = struct { art: art.Art, v: []const u32, share: f32 };
+pub const max_styles = 3;
+
 pub const Data = struct {
     runes: runetree.Data,
     /// Any order; a kind with no options draws no cell
@@ -143,6 +147,9 @@ pub const Data = struct {
     /// Against melee, ranged, AD and AP lane opponents (the vr and vd locks' groups),
     /// under every lock but those two; none on a matchup
     vs: []const Group = &.{},
+    /// The Builds row's first items (i1 locks), most played first, under every lock but
+    /// i1; none, or two to max_styles
+    styles: []const Style = &.{},
 };
 
 const W = struct {
@@ -158,6 +165,7 @@ const W = struct {
     pub const sort = plain("Sort");
     pub const most_picked = plain("Most picked");
     pub const vs = plain("Lane opponent");
+    pub const styles = plain("Builds");
     pub const groups = [5]tree.Text{ plain("All"), plain("Melee"), plain("Ranged"), plain("AD"), plain("AP") };
     pub const group_notes = [5]?[]const u8{ null, null, null, "Lane opponents who deal 65% or more of their damage as physical", "Lane opponents who deal 65% or more of their damage as magic" };
     pub const gold = plain("Gold at 14 min");
@@ -385,7 +393,7 @@ pub const BuildPanel = struct {
 
     const Set = struct { ctx: [n_kinds]Ctx, rows: [n_kinds][]Row };
 
-    pub const Msg = union(enum) { open: Kind, key, order: Order, vs: u8, lead: u8, unlock, lock: struct { kind: Kind, i: u16 } };
+    pub const Msg = union(enum) { open: Kind, key, order: Order, vs: u8, style: u8, lead: u8, unlock, lock: struct { kind: Kind, i: u16 } };
 
     pub const Url = struct {
         slot: ?Kind = null,
@@ -530,6 +538,17 @@ pub const BuildPanel = struct {
                 ev.push = true;
                 ev.keep = true;
             },
+            .style => |i| {
+                const set = p.locks orelse return;
+                if (i == 0 or i > p.data.styles.len) {
+                    set.remove(.item1);
+                } else {
+                    var buf: [lockbar.value_max]u8 = undefined;
+                    set.toggle(.item1, lockbar.text(&buf, p.data.styles[i - 1].v));
+                }
+                ev.push = true;
+                ev.keep = true;
+            },
             .lead => |i| {
                 p.lead = if (i <= p.data.lead.len) i else 0;
                 p.pick();
@@ -568,7 +587,7 @@ pub const BuildPanel = struct {
         var cells = h.list();
         for ([_]Kind{ .spells, .start, .boots, .core, .item4, .item5, .item6 }) |k| if (p.cell(h, k)) |c| cells.add(c);
         if (p.skillsCell(h)) |c| cells.add(c);
-        return h.div(.{ .class = "c-build", .data_dim = p.dim }, .{ p.vsPick(h), h.div(.{ .class = "in" }, .{
+        return h.div(.{ .class = "c-build", .data_dim = p.dim }, .{ p.vsPick(h), p.stylePick(h), h.div(.{ .class = "in" }, .{
             h.div(.{ .class = "runes" }, .{p.runes.view(h)}),
             p.levels(h),
             h.div(.{ .class = "slots" }, .{
@@ -607,6 +626,27 @@ pub const BuildPanel = struct {
         return h.div(.{ .class = "vs" }, .{
             h.span(.{ .aria_hidden = true }, .{W.vs}),
             segmented.view(h, .{ .s = .s, .label = W.vs }, &items),
+        });
+    }
+
+    /// Every build, or one first item's (an i1 lock): icons and shares, named on hover
+    fn stylePick(p: *BuildPanel, h: *H) N {
+        const set = p.locks orelse return .none;
+        const styles = p.data.styles;
+        if (styles.len < 2 or styles.len > max_styles) return .none;
+        const on = set.get(.item1);
+        var items: [max_styles + 1]segmented.Item = undefined;
+        items[0] = .{ .label = W.groups[0], .selected = on == null, .on = h.on(p, .{ .style = 0 }) };
+        for (items[1..][0..styles.len], styles, 1..) |*it, s, i| it.* = .{
+            .icon = art.view(h, s.art, .{ .px = .@"16" }),
+            .label = pickText(h, s.share),
+            .title = s.art.name,
+            .selected = on != null and tree.eql(on.?, lockbar.value(h.mem, s.v)),
+            .on = h.on(p, .{ .style = @intCast(i) }),
+        };
+        return h.div(.{ .class = "vs" }, .{
+            h.span(.{ .aria_hidden = true }, .{W.styles}),
+            segmented.view(h, .{ .s = .s, .label = W.styles }, items[0 .. styles.len + 1]),
         });
     }
 
@@ -937,6 +977,7 @@ pub fn gallery(g: *Gallery) void {
     reach.* = demo.darius;
     reach.vs = &.{ .{ .games = 5210, .wins = 2810 }, .{ .games = 2140, .wins = 1050 }, .{ .games = 4890, .wins = 2620 }, .{} };
     reach.lead = &.{ .{ .slots = demo.darius.slots, .games = 4120, .wins = 2580 }, .{ .slots = &.{}, .games = 0, .wins = 0 } };
+    reach.styles = &demo.styles;
     const pr = h.mem.create(BuildPanel) catch {
         h.oom = true;
         return;
@@ -953,10 +994,11 @@ pub fn gallery(g: *Gallery) void {
     };
     vr.* = .{};
     vr.toggle(.reach, "2");
+    vr.toggle(.item1, "3078");
     pr.setLocks(vr);
     var ev: tree.Event = .{ .kind = .click };
     pr.update(.{ .lead = 1 }, &ev);
-    g.addFill("lane opponent row: Ranged locked, no AP opponents here; items 500+ gold ahead (none behind)", pr.view(h));
+    g.addFill("lane opponent row: Ranged locked, no AP opponents here; Builds row: Trinity Force first locked; items 500+ gold ahead (none behind)", pr.view(h));
     const lk = h.mem.create(BuildPanel) catch {
         h.oom = true;
         return;

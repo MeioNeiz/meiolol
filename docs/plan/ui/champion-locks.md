@@ -111,13 +111,14 @@ What a block needs from a row:
 
 - L2 counting: src/lockanswer.zig answers a block's rows under a view (platform, patch,
   rank floor) and a lock stack (`lk=ks8010,c23071.6333,vs86`: keystone, rune page, rune,
-  shards, shard, spells, start, boots, core 2/3, item 4-6, max order, levels, lane
-  opponent, its reach `vr` 1 melee 2 ranged, its damage `vd` 1 AD 2 AP); the table
+  shards, shard, spells, start, boots, first item `i1`, core 2/3, item 4-6, max order,
+  levels, lane opponent, its reach `vr` 1 melee 2 ranged, its damage `vd` 1 AD 2 AP); the table
   carries the patch's Data Dragon data. Damage is Learn's magic share through
   ui.dailydata.dmgOf (under 0.35 AD, over 0.65 AP, else neither): Site.damage, every
   view's from Extras.damageFor (read once a round, the renderer's from the views file).
   An answer carries per lane opponent players and wins (Build.opponents), counted under
-  every lock but `vr` and `vd`, for the panel's group counts. An Index codes each block
+  every lock but `vr` and `vd`, for the panel's group counts, and first items (item1)
+  under every lock but `i1`, for the Builds row's shares. An Index codes each block
   once at load (builds.valuesOf per row, a u16 code per kind, ~64 B a row in memory;
   1.0 s for the snapshot's 15.7M rows on the Mac's cores, largest dict 6.2k values);
   answers count codes in arrays and load each group's top options into builds.Builder

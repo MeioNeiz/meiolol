@@ -21,6 +21,8 @@ pub const name = "Segmented";
 pub const scope = .{".c-seg"};
 
 pub const Item = struct {
+    /// Before the label (an item's icon)
+    icon: N = .none,
     label: tree.Text,
     on: ?tree.Handler = null,
     selected: bool = false,
@@ -65,7 +67,7 @@ fn of(h: *H, o: Opts, items: []const Item, comptime why: bool) N {
     var l = h.list();
     var tips = h.list();
     for (items, 0..) |it, i| {
-        const kids = .{ it.label, if (it.n) |n| h.span(.{ .class = "n" }, .{phrase.num(h, .count, n)}) else null };
+        const kids = .{ it.icon, it.label, if (it.n) |n| h.span(.{ .class = "n" }, .{phrase.num(h, .count, n)}) else null };
         if (why and it.disabled) if (it.why) |id| {
             l.add(h.button(.{ .key = i, .type = "button", .popovertarget = id, .aria_disabled = true }, kids));
             tips.add(toggletip.tip(h, id, it.label, .{ .s = it.title orelse "" }, false));

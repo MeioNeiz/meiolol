@@ -143,10 +143,6 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
 
 ### Steps
 
-- CH11 Build styles: a first finished item lock (lockanswer kind item1, `i1`) and a
-  Builds row under the lane opponent row (options on 15%+ and 100+ games, at most 3,
-  hidden with one); fits 320 and 390. 53% of champion-roles with 1k+ games have a second
-  first item on 15%+, 8% of another damage class
 - CH12 By patch: Win | Pick | Ban and a line per rank bracket (Trend by bracket, bans
   by patch and day); By game length: each bucket's share of games as bars
 
@@ -174,6 +170,10 @@ measured no win)
   view, filters.js reuses the root view's opponent strengths
 - Build panel Lane opponent row: All | Melee | Ranged | AD | AP (base attack range under
   300; 65%+ of damage physical or magic), a pick locks the whole panel (vr/vd)
+- Builds row under it (CH11): All | each first finished item on 15%+ of players and 100+
+  games (at most 3, none with one) as icon and share, a pick an `i1` lock (chip "1st
+  item"); shares under every lock but `i1`. 53% of champion-roles with 1k+ games have a
+  second first item on 15%+, 8% of another damage class
 - Item cells: All | Ahead | Behind (500+ gold on the lane opponent at 14 minutes; about
   two in three lanes are that far apart), builds files' by_lead, groups of 100+
 - End of game (CH10): per game and per minute figures, each "Nth of M" in the role,
@@ -193,7 +193,7 @@ measured no win)
 ### Later
 
 - Influence per opponent (bans into your pool's hard lanes, B3) and per rank filter
-- Build variants (Kai'Sa AP, U.GG's tabs) as clusters of item paths
+- Build variants past the first item (Kai'Sa AP, U.GG's tabs) as clusters of item paths
 
 ## Matchup page
 

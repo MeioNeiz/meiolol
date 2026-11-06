@@ -16,6 +16,10 @@ const Art = ui.art.Art;
 /// A tree shows when one of its runes has this share of the players
 const min_tree_share = 0.02;
 const pages_shown = 4;
+/// A first item is a build style (the Builds row) on this % of the players with one,
+/// and this many of them
+const min_style_share = 15;
+const min_style_games = 100;
 
 /// `b` (a File.Build of `f`) as the panel's data, in `a`, with its games against each
 /// group of lane opponents, its items ahead and behind on gold and the build of each
@@ -24,6 +28,7 @@ const pages_shown = 4;
 pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8, damage: []const u8) !bp.Data {
     var d = try dataVs(a, f, b, champion, null);
     d.vs = try groups(a, f, b, damage);
+    d.styles = try styles(a, f, b);
     const ahead = f.getLead(b.champion, b.role, .ahead);
     const behind = f.getLead(b.champion, b.role, .behind);
     if (ahead != null or behind != null) {
@@ -67,6 +72,19 @@ fn groups(a: std.mem.Allocator, f: *const File, b: File.Build, damage: []const u
         };
     }
     return out;
+}
+
+/// `b`'s first items on min_style_share and min_style_games, most played first; none
+/// unless two or more
+fn styles(a: std.mem.Allocator, f: *const File, b: File.Build) ![]const bp.Style {
+    const rows = b.get(.item1) orelse return &.{};
+    var out: std.ArrayList(bp.Style) = .empty;
+    for (rows.options) |o| {
+        const x = share(o.games, rows.games);
+        if (x < min_style_share or o.games < min_style_games or out.items.len == bp.max_styles) continue;
+        try out.append(a, .{ .art = try art(a, f.items, o.v[0]), .v = o.v, .share = @floatCast(x) });
+    }
+    return if (out.items.len >= 2) out.items else &.{};
 }
 
 /// `all` with its item slots from the lead group `b`'s, a kind it lacks left out

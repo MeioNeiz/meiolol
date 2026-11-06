@@ -56,6 +56,9 @@ pub const Kind = enum {
     /// 17 and 18]. From 11 skill-ups; a game ending sooner is filled as the player was
     /// going (Picks.skillPath)
     skill_path,
+    /// [item]: the first finished item, role-wide only. A lock answer counts it under
+    /// every lock but its own (lockanswer.Kind.item1), so each build style keeps its share
+    item1,
 };
 
 pub const max_values = 8;
@@ -69,6 +72,8 @@ const matchup_rows = 3;
 /// Options written for .rune and .shard: every rune a champion's players took, in a
 /// matchup only those on 1%+ of its players (the file stays small)
 const every_rune = 64;
+/// Options written for .item1: the build panel's Builds row shows at most 3
+const style_rows = 3;
 /// Starting items: bought before this many ms
 pub const start_ms = 90_000;
 /// What every player starts with. The first purchase it can't cover ends the start:
@@ -470,7 +475,7 @@ pub const Builder = struct {
         }
         if (vals.get(.spells)) |v| try b.addVs(p.champion, p.role, opp, .spells, v.slice(), p.won);
         const k = chosen orelse return;
-        for ([_]Kind{ .start, .boots, .core2, .core3, .item4, .item5, .item6, .skills, .skill_start, .skill_path }) |kind| {
+        for ([_]Kind{ .start, .boots, .item1, .core2, .core3, .item4, .item5, .item6, .skills, .skill_start, .skill_path }) |kind| {
             if (vals.get(kind)) |v| try b.addVs(p.champion, p.role, opp, kind, v.slice(), p.won);
         }
         if (b.split != .none) return;
@@ -600,7 +605,7 @@ pub const Builder = struct {
                     const e = entries.items[i];
                     if (!group(e.key, first) or e.key.kind != kind) break;
                     const per_rune = kind == .rune or kind == .shard;
-                    if (options.items.len == if (per_rune) every_rune else rows) continue;
+                    if (options.items.len == if (per_rune) every_rune else if (kind == .item1) @min(rows, style_rows) else rows) continue;
                     if (per_rune and min_games > 0 and e.count.games * 100 < t.games) continue;
                     const v = try arena.dupe(u32, e.key.v[0..valueLen(kind, e.key.v)]);
                     if (nameList(kind)) |list| for (v) |x| {
@@ -691,7 +696,7 @@ pub fn minuteOf(ms: i64) usize {
 pub fn itemSlot(kind: Kind, i: usize) ?u8 {
     return switch (kind) {
         .boots => 0,
-        .core2, .core3 => @intCast(i + 1),
+        .item1, .core2, .core3 => @intCast(i + 1),
         .item4 => 4,
         .item5 => 5,
         .item6 => 6,
@@ -812,14 +817,14 @@ fn nameList(kind: Kind) ?usize {
     return switch (kind) {
         .keystone, .runes, .shards, .rune => 1,
         .spells => 2,
-        .start, .boots, .core2, .core3, .item4, .item5, .item6 => 0,
+        .start, .boots, .item1, .core2, .core3, .item4, .item5, .item6 => 0,
         .shard, .skills, .skill_start, .skill_path => null,
     };
 }
 
 fn valueLen(kind: Kind, v: [max_values]u32) usize {
     return switch (kind) {
-        .keystone, .boots, .rune, .item4, .item5, .item6 => 1,
+        .keystone, .boots, .rune, .item1, .item4, .item5, .item6 => 1,
         .runes => 8,
         .shards, .core3, .skills, .skill_start => 3,
         .spells, .core2, .shard, .skill_path => 2,
@@ -863,6 +868,7 @@ pub fn valuesOf(p: Player, chosen: ?Picks, d: *const ddragon.BuildData) std.Enum
         out.set(.start, .of(start[0..k.start_len]));
     }
     if (k.boots != 0 or k.core_len >= 2) out.set(.boots, .of(&.{if (k.boots != 0) d.bootsOf(k.boots) orelse 0 else 0}));
+    if (k.core_len >= 1) out.set(.item1, .of(k.core[0..1]));
     if (k.core_len >= 2) out.set(.core2, .of(k.core[0..2]));
     if (k.core_len >= 3) out.set(.core3, .of(k.core[0..3]));
     for ([_]Kind{ .item4, .item5, .item6 }, 3..) |kind, i| {

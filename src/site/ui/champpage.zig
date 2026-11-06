@@ -1480,6 +1480,10 @@ fn lockLabel(h: *H, d: *const buildpanel.Data, k: lockbar.Kind, v: []const u8) ?
             };
             return null;
         },
+        .item1 => {
+            for (d.styles) |*x| if (tree.eql(lockbar.value(h.mem, x.v), v)) return .{ .kind = k, .art = (&x.art)[0..1], .text = "1st item" };
+            return null;
+        },
         .spells, .start, .boots, .core3, .item4, .item5, .item6, .skills, .skill_path => {
             const want: buildpanel.Kind = switch (k) {
                 .core3 => .core,

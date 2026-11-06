@@ -97,6 +97,13 @@ fn keys(comptime k: []const u8, games: u32, pct: f64) bp.Option {
     return .{ .keys = k, .games = games, .wins = wins(games, pct) };
 }
 
+/// The Builds row's first items (Data.styles)
+pub const styles = [_]bp.Style{
+    .{ .art = art.item("6631", "Stridebreaker"), .v = &.{6631}, .share = 48.2 },
+    .{ .art = art.item("3078", "Trinity Force"), .v = &.{3078}, .share = 27.5 },
+    .{ .art = art.item("3071", "Black Cleaver"), .v = &.{3071}, .share = 16.1 },
+};
+
 pub const darius: bp.Data = .{
     .runes = runes,
     .champion = "Darius",

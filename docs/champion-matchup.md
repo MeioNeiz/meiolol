@@ -92,7 +92,7 @@ Y: shown; f: as a filter of the build page; -: not there. "Us" is the live site,
 | Tier letter | Y | Y | Y | all | - (Jacob 25 Oct: none) |
 | Build on the first screen | Y, one panel | runes, spells only | n (y 815) | Blitz Y | Y, one panel |
 | Most played vs highest win rate build toggle | Y | - | - | - | Y, and "best" per slot |
-| Build variants (AP, lethality, ...) | - | Y | - | Blitz | - |
+| Build variants (AP, lethality, ...) | - | Y | - | Blitz | Y (Builds row: by first item, a lock) |
 | Full skill order, levels 1-18 | Y (4x18 grid) | Y (grid) | Y (15 squares) | LoG | Y (4x18 grid) |
 | Items 4, 5, 6 options by slot | Y (2-3 each) | Y (5-7 columns) | Y (5 rows each) | Blitz | Y (3 each, all when opened) |
 | Item purchase minute | Y | - | - | - | Y (core path) |

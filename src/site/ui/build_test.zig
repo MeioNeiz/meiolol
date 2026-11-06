@@ -360,3 +360,39 @@ test "the lane opponent row locks one group at a time; its pick again, or All, u
     p.update(.{ .vs = 0 }, &ev);
     try testing.expectEqualStrings("ks8010", set.s.slice());
 }
+
+test "the Builds row locks one first item; its pick again, or All, unlocks; none with one" {
+    var d = demo.darius;
+    d.styles = &demo.styles;
+    var page: Page = undefined;
+    try page.initData("", &d);
+    defer page.deinit();
+    const p = &page.state;
+    var set: @import("lockbar.zig").Set = .{};
+    set.toggle(.keystone, "8010");
+    p.setLocks(&set);
+    var ev: tree.Event = .{ .kind = .click };
+    p.update(.{ .style = 2 }, &ev);
+    try testing.expect(ev.push);
+    try testing.expectEqualStrings("ks8010,i13078", set.s.slice());
+    p.update(.{ .style = 1 }, &ev);
+    try testing.expectEqualStrings("ks8010,i16631", set.s.slice());
+    p.update(.{ .style = 1 }, &ev);
+    try testing.expectEqualStrings("ks8010", set.s.slice());
+    p.update(.{ .style = 3 }, &ev);
+    p.update(.{ .style = 0 }, &ev);
+    try testing.expectEqualStrings("ks8010", set.s.slice());
+
+    const a = page.arena.allocator();
+    for ([_]usize{ 3, 1 }) |n| {
+        d.styles = demo.styles[0..n];
+        const t = try a.create(tree.Tree);
+        t.* = .{};
+        var h: tree.H = .init(a, t);
+        t.root = p.view(&h);
+        var fake: Fake = .{ .a = a };
+        var w: std.Io.Writer.Allocating = .init(a);
+        try fake.html(fake.mirror(t, t.root), &w.writer);
+        try testing.expectEqual(n > 1, std.mem.find(u8, w.written(), "aria-label=\"Builds\"") != null);
+    }
+}

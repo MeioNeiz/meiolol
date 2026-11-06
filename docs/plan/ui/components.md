@@ -990,12 +990,12 @@ build under the set and shows it here. There a row over the panel, Lane opponent
 Melee | Ranged | AD | AP with each group's games, locks the whole panel on one group
 States: Darius top: whole build, most played first; Item 4 open in place: every option,
 sortable; Skills open: every order and level path; lane opponent row: Ranged locked, no AP
-opponents here; items 500+ gold ahead (none behind); Conqueror's page locked: its players'
-spells and boots, the chip unlocks; champion page: a whole option row or page locks on tap
-(the mark faint on hover), Conqueror and boots locked; a matchup's: spells and skills as
-usual (dimmed), boots' usual second; a lock's answer without Boots or Item 6: their cells
-stay, a faint dash; no games under the locks: the build stays, faded, under the host's
-line
+opponents here; Builds row: Trinity Force first locked; items 500+ gold ahead (none
+behind); Conqueror's page locked: its players' spells and boots, the chip unlocks;
+champion page: a whole option row or page locks on tap (the mark faint on hover),
+Conqueror and boots locked; a matchup's: spells and skills as usual (dimmed), boots' usual
+second; a lock's answer without Boots or Item 6: their cells stay, a faint dash; no games
+under the locks: the build stays, faded, under the host's line
 Used by: skillgrid, runetree, champpage
 
 ### LockBar

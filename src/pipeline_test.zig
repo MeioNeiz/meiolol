@@ -2389,9 +2389,20 @@ fn expectLocksAsBuilder(arena: std.mem.Allocator, t: *const lockrows.Table, x: *
     var view = view_;
     view.damage = damage;
     var stacks: usize = 0;
+    var styled: usize = 0;
     for (t.blocks) |b| for ([_]lockanswer.Filter{ .{ .damage = damage }, view }) |filter| {
         const base = (try lockanswer.reference(gpa, arena, t, b.champion, b.role, filter, &.{}, o, "", "")).?;
         const own = base.get(b.champion, b.role) orelse continue;
+        // An i1 lock's answer counts first items under the other locks, so every style
+        // keeps its share in the Builds row, one nobody bought first too (item 1: none)
+        if (own.get(.item1)) |firsts| for (try std.mem.concat(arena, builds.File.Option, &.{ firsts.options, &.{.{ .v = &.{1}, .games = 0, .wins = 0 }} })) |opt| {
+            var one: lockanswer.Locks = .{};
+            one.by.set(.item1, .of(opt.v));
+            const got = (try lockanswer.file(gpa, arena, t, x, b.champion, b.role, filter, &one, o, "", "")).?.get(b.champion, b.role).?;
+            try testing.expectEqualDeep(firsts, got.get(.item1).?);
+            try testing.expectEqual(opt.games, got.games);
+            styled += 1;
+        };
         var locks: std.ArrayList(lockanswer.Locks) = .empty;
         try locks.append(arena, .{});
         var all: lockanswer.Locks = .{};
@@ -2442,6 +2453,7 @@ fn expectLocksAsBuilder(arena: std.mem.Allocator, t: *const lockrows.Table, x: *
         }
     };
     try testing.expect(stacks > 100);
+    try testing.expect(styled > 10);
 }
 
 fn codeOf(list: []const []const u8, x: []const u8) ?u8 {
