@@ -403,8 +403,9 @@ How to write a line:
 ## Data quality
 
 - The rank we store with each game is looked up after it, so it knows the result: with
-  it a model calls 63.8% of winners instead of 53.7%. Models: use the rank at game
-  start (rank history, from 12 Oct), never the stored rank, as a pre-game input
+  it a model calls 63.8% of winners instead of 53.7%; Diamond+ wins 50.95% stored in
+  6 h, 54.45% 3+ days later; ranks under Platinum date from 11 Oct. Models, brackets:
+  rank at game start (rank history). Evidence: model.md "The stored rank knows the result"
 - In a new patch's first days, last month's numbers predict the next week better than
   the new patch's own games: win rates and items catch up after 2-3 days, matchups,
   duos and lane gold still trail after a week. Sure: two patch boundaries replayed. Site:
@@ -434,9 +435,8 @@ How to write a line:
   pages. Evidence: docs/plan/ops.md "Crawler at 99%+ of the key"
 - In the newest snapshot (2004Z) every game has end-of-game stats, but all ten
   players' mastery from before the game in only 1 game in 15 (1 in 3 of the newest
-  days), and all ten ranks at game start in about half the games since 13 Oct; every
-  16.21 game is in the test days. Models: seat-level mastery is usable. Evidence:
-  docs/model.md "The new pin, snap-20261023T2004Z"
+  days), and all ten ranks at game start in about half the games since 13 Oct. Models:
+  seat mastery is usable. Evidence: docs/model.md "The new pin, snap-20261023T2004Z"
 - Most lane matchups in a patch have a handful of games: of 166.5k matchup curves on
   EUW 16.20, 58% had under 5 games, only 9% 50+. Site: `meiolol curves` writes
   matchups from 10 games (docs/arch-stats.md "Lane curves")

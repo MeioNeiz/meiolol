@@ -6125,6 +6125,32 @@ group's usual level (lab TS2b, a shrunk lead term, the alternative). What's left
 (data/cubes-20261106); tables, cell dumps and scripts in
 data/team/2026-11-05-notes2/m6b1/.
 
+### The stored rank knows the result: the bracket lean, 2026-11-06 (m10, NL6)
+
+After NL3 most of the M10 gate's failures (~140 Iron-Silver, ~80 Diamond+ of 286) were a
+whole-bracket lean on every kind and day bucket. Cause: a seat's bracket is the
+player's latest ladder sighting when the match is stored (writer.zig storeMatch), and
+the ladder is walked Platinum IV+ every 12 h, so the later a game is stored the more its
+rank already holds the result. Seat win rate by store lag (fetch minus game end), 16.21
+games fetched 2 Nov (complete day files joined to matches and participants, ranked
+solo, no remakes):
+
+| bracket | < 6 h | 6-24 h | 1-3 d | 3 d+ |
+| --- | --: | --: | --: | --: |
+| Diamond+ | 50.95 | 51.67 | 53.60 | 54.45 |
+| Gold-Emerald | 49.73 | 49.59 | 49.70 | 49.69 |
+| Iron-Silver | 48.63 | 47.62 | 47.11 | 46.43 |
+| no rank | 49.64 | 48.59 | 46.85 | 46.45 |
+
+Seats per cell: Diamond+ 14k-169k, Iron-Silver 1.8k-6.7k (se ~1 point). 16.22 games
+fetched 5 Nov agree at equal lag (Diamond+ 50.69 / 51.35), so no step at the patch; a
+young patch holds no long-lag games, which made the target look like it followed the
+patch. Below the floor no rank is refreshed: all 12.6k Iron-Silver and 9.9k Gold rank
+rows were last seen 11 Oct, and Iron-Silver seats win 43-46% on 7-10 Oct (before that
+walk) against ~49.5 after. A bracket level per patch in Meio would fit 16.21 for the
+wrong reason; the fix is the bracket's source (backlog: rank at game time from
+rank_history). Notes: data/team/2026-11-05-notes2/m10.md "Bracket check".
+
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
 data/snap (85,693 ranked solo games, 16.19 + 16.20, all regions), sqlite3 on the Mac;
