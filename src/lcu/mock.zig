@@ -8,7 +8,9 @@
 //! Scenario keys: queue (420 ranked solo/duo, 430 blind, 450 ARAM), local_cell (0-4),
 //! positions (10 cells, "" hidden), pick_order (cell groups), mastery {name: points},
 //! tier, pickable and owned (names; default every champion), history (recent games
-//! newest first, each [name, "w" or "l", kills, deaths, assists, minutes]), steps. A step: wait
+//! newest first, each [name, "w" or "l", kills, deaths, assists, minutes]), hidden (cells
+//! in streamer mode: no puuid in game; the other players' ranks, mastery and history are
+//! made up per cell, scoutOf), steps. A step: wait
 //! (seconds before it), note, phase (gameflow), timer (champ select phase), session
 //! (false: champ select without a session, as between phases), positions, intent,
 //! hover, lock, ban ({cell: name}), swap ([cell, cell]: a trade), game ({time, gold,
@@ -61,6 +63,7 @@ pub const Scenario = struct {
     pick_order: []const []const u8,
     mastery: []const [2]u32,
     history: []const Played = &.{},
+    hidden: []const u8 = &.{},
     tier: []const u8,
     pickable: []const u32,
     owned: []const u32,
@@ -141,6 +144,11 @@ pub const Scenario = struct {
             s.history = out;
         }
         if (o.get("tier")) |v| s.tier = v.string;
+        if (o.get("hidden")) |v| {
+            const cells = try arena.alloc(u8, v.array.items.len);
+            for (cells, v.array.items) |*c, x| c.* = try cellOf(x);
+            s.hidden = cells;
+        }
         s.pickable = if (o.get("pickable")) |v| try s.championList(arena, v) else try s.allChampions(arena);
         s.owned = if (o.get("owned")) |v| try s.championList(arena, v) else s.pickable;
         s.steps = (o.get("steps") orelse return error.NoSteps).array.items;
@@ -372,12 +380,21 @@ pub fn lcu(a: std.mem.Allocator, s: *const Scenario, st: *const State, target: [
     if (eql(u8, path, "/lol-gameflow/v1/gameflow-phase")) return json(a, st.phase);
     if (eql(u8, path, "/lol-gameflow/v1/session")) {
         const m = s.mode();
+        // The teams fill in once the game starts
+        var teams: [10]InGame = undefined;
+        for (&teams, st.cells, 0..) |*t, c, i| t.* = .{ .championId = c.champion, .puuid = try puuidOf(a, s, @intCast(i)), .team = if (i < 5) 100 else 200 };
+        const shown = isGame(st.phase);
         return json(a, .{
             .phase = st.phase,
             .map = .{ .id = m.map },
-            .gameData = .{ .queue = .{ .id = s.queue, .gameMode = m.game, .type = m.queue_type, .isRanked = s.queue == 420 or s.queue == 440 } },
+            .gameData = .{
+                .queue = .{ .id = s.queue, .gameMode = m.game, .type = m.queue_type, .isRanked = s.queue == 420 or s.queue == 440 },
+                .teamOne = if (shown) teams[0..5] else &.{},
+                .teamTwo = if (shown) teams[5..] else &.{},
+            },
         });
     }
+    if (try scouted(a, s, st, path)) |r| return r;
     if (eql(u8, path, "/lol-summoner/v1/current-summoner")) {
         return json(a, .{ .gameName = local_name, .tagLine = local_tag, .puuid = "mock-puuid", .summonerId = 1, .summonerLevel = 100 });
     }
@@ -432,6 +449,88 @@ pub fn lcu(a: std.mem.Allocator, s: *const Scenario, st: *const State, target: [
         return json(a, try endOfGame(a, s, st));
     }
     return not_found;
+}
+
+const InGame = struct { championId: u32, puuid: []const u8, team: u32, summonerName: []const u8 = "" };
+
+const puuid_prefix = "mock-puuid-";
+
+fn puuidOf(a: std.mem.Allocator, s: *const Scenario, cell: u8) ![]const u8 {
+    if (cell == s.local_cell) return "mock-puuid";
+    if (std.mem.findScalar(u8, s.hidden, cell) != null) return "";
+    return a.print(puuid_prefix ++ "{d}", .{cell});
+}
+
+/// Made-up facts for another player, by cell: each card state once (main, first game,
+/// thin, unranked, apex)
+const Scout = struct { tier: []const u8, division: []const u8, on: u8, won: u8, main: bool, aram: u8 };
+fn scoutOf(cell: u8) Scout {
+    const all = [10]Scout{
+        .{ .tier = "GOLD", .division = "II", .on = 12, .won = 7, .main = true, .aram = 0 },
+        .{ .tier = "PLATINUM", .division = "IV", .on = 3, .won = 2, .main = false, .aram = 2 },
+        .{ .tier = "GOLD", .division = "II", .on = 0, .won = 0, .main = false, .aram = 0 },
+        .{ .tier = "SILVER", .division = "I", .on = 0, .won = 0, .main = false, .aram = 1 },
+        .{ .tier = "NONE", .division = "NA", .on = 7, .won = 3, .main = false, .aram = 3 },
+        .{ .tier = "EMERALD", .division = "III", .on = 15, .won = 9, .main = true, .aram = 0 },
+        .{ .tier = "DIAMOND", .division = "IV", .on = 1, .won = 1, .main = false, .aram = 2 },
+        .{ .tier = "GOLD", .division = "I", .on = 9, .won = 4, .main = false, .aram = 1 },
+        .{ .tier = "MASTER", .division = "I", .on = 4, .won = 3, .main = true, .aram = 0 },
+        .{ .tier = "PLATINUM", .division = "II", .on = 0, .won = 0, .main = false, .aram = 3 },
+    };
+    return all[cell];
+}
+
+/// Another player's ranked, mastery or history reply; null when `path` is none of them
+fn scouted(a: std.mem.Allocator, s: *const Scenario, st: *const State, path: []const u8) !?Reply {
+    const Route = struct { []const u8, []const u8 };
+    const routes = [_]Route{
+        .{ "/lol-ranked/v1/ranked-stats/", "" },
+        .{ "/lol-champion-mastery/v1/", "/champion-mastery" },
+        .{ "/lol-match-history/v1/products/lol/", "/matches" },
+    };
+    const which, const puuid = for (routes, 0..) |r, i| {
+        if (std.mem.startsWith(u8, path, r[0]) and std.mem.endsWith(u8, path, r[1]) and path.len > r[0].len + r[1].len)
+            break .{ i, path[r[0].len .. path.len - r[1].len] };
+    } else return null;
+    if (!std.mem.startsWith(u8, puuid, puuid_prefix)) return not_found;
+    const cell = std.fmt.parseInt(u8, puuid[puuid_prefix.len..], 10) catch return not_found;
+    if (cell >= 10 or cell == s.local_cell or std.mem.findScalar(u8, s.hidden, cell) != null) return not_found;
+    const x = scoutOf(cell);
+    const champion = st.cells[cell].champion;
+    const other: u32 = if (champion == 1) 2 else 1;
+    switch (which) {
+        0 => {
+            const Queue = struct { queueType: []const u8, tier: []const u8, division: []const u8 };
+            return try json(a, .{ .queueMap = .{ .RANKED_SOLO_5x5 = Queue{ .queueType = "RANKED_SOLO_5x5", .tier = x.tier, .division = x.division } } });
+        },
+        1 => {
+            const Row = struct { championId: u32, championPoints: u32 };
+            const rows: []const Row = if (x.main)
+                &.{ .{ .championId = champion, .championPoints = 150_000 }, .{ .championId = other, .championPoints = 20_000 } }
+            else if (x.on == 0)
+                &.{.{ .championId = other, .championPoints = 50_000 }}
+            else
+                &.{ .{ .championId = other, .championPoints = 80_000 }, .{ .championId = champion, .championPoints = 9_000 } };
+            return try json(a, rows);
+        },
+        else => {
+            const Stats = struct { win: bool };
+            const Them = struct { championId: u32, stats: Stats };
+            const Row = struct { gameCreation: i64, gameDuration: u32 = 1800, mapId: u32, queueId: i64, participants: [1]Them };
+            var out: [20]Row = undefined;
+            for (&out, 0..) |*o, i| {
+                const aram = i >= out.len - x.aram;
+                const on = i < x.on;
+                o.* = .{
+                    .gameCreation = 1_762_000_000_000 - @as(i64, @intCast(i)) * 3_600_000,
+                    .mapId = if (aram) 12 else 11,
+                    .queueId = if (aram) 450 else 420,
+                    .participants = .{.{ .championId = if (on and !aram) champion else other, .stats = .{ .win = on and i < x.won } }},
+                };
+            }
+            return try json(a, .{ .games = .{ .gameCount = out.len, .games = &out } });
+        },
+    }
 }
 
 const Member = struct {

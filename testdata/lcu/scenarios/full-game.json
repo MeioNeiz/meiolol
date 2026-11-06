@@ -3,6 +3,7 @@
   "queue": 420,
   "local_cell": 2,
   "tier": "GOLD",
+  "hidden": [3],
   "mastery": {"Ahri": 212000, "Orianna": 64000, "Syndra": 41000, "Viktor": 30500, "Lux": 12000},
   "pickable": ["Ahri", "Orianna", "Syndra", "Viktor", "Lux", "Annie", "Garen", "Zed", "Galio", "Malzahar"],
   "owned": ["Ahri", "Orianna", "Syndra", "Viktor", "Lux", "Garen", "Zed", "Galio"],

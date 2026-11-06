@@ -542,6 +542,10 @@ const Poller = struct {
     seats_arena: std.heap.ArenaAllocator,
     seats: ?[2][]const loading.Seat = null,
     draft: ?board.Draft = null,
+    /// Other players' facts for the private loading screen, in seats_arena: due on the
+    /// loading screen's first tick, loaded on its second, so the cards show at once
+    scout: enum { none, due, done } = .none,
+    scouted: []const loading.Scouted = &.{},
     /// Enemy roles by cell: as the last board showed them, and as moved by hand
     /// (state.swap), kept until champ select ends
     enemy_roles: [5]?core.Role = @splat(null),
@@ -643,6 +647,7 @@ const Poller = struct {
                 } else if (std.mem.eql(u8, phase, "GameStart")) {
                     p.last = null;
                     if (p.seats) |seats| {
+                        if (edition == .private) p.scoutStep();
                         const l = try arena.create(loading.Loading);
                         l.* = try loading.build(arena, .{
                             .stats = &data.stats,
@@ -651,6 +656,7 @@ const Poller = struct {
                             .seats = seats,
                             .draft = p.draft,
                             .tier = if (p.own) |o| o.tier else null,
+                            .scouted = p.scouted,
                         });
                         return .{ .loading = l };
                     }
@@ -735,6 +741,8 @@ const Poller = struct {
             .tier = own.tier,
         }, &sel.board);
         _ = p.seats_arena.reset(.retain_capacity);
+        p.scout = .none;
+        p.scouted = &.{};
         p.seats = try loading.seatsOf(p.seats_arena.allocator(), &sel.board);
         p.draft = sel.board.draft;
         var want: Want = .{};
@@ -953,6 +961,52 @@ const Poller = struct {
         return out;
     }
 
+    fn scoutStep(p: *Poller) void {
+        switch (p.scout) {
+            .none => p.scout = .due,
+            .due => {
+                p.scout = .done;
+                const mine = for (p.seats.?[0]) |s| {
+                    if (s.me) break s.champion;
+                } else 0;
+                p.scouted = scoutAll(p.seats_arena.allocator(), p.watch.client.?, mine) catch &.{};
+                p.fingerprint = std.hash.Wyhash.hash(p.fingerprint, std.mem.sliceAsBytes(p.scouted));
+            },
+            .done => {},
+        }
+    }
+
+    /// Up to 9 players x 3 GETs, once a game; a reply that fails leaves its part out
+    fn scoutAll(a: std.mem.Allocator, client: lcu.Client, mine: u32) ![]const loading.Scouted {
+        const players = lcu.players;
+        const body = try client.getOk(players.paths.session);
+        defer client.gpa.free(body);
+        const who = try players.parsePlayers(a, body);
+        var out: std.ArrayList(loading.Scouted) = .empty;
+        var buf: [players.paths.max_len]u8 = undefined;
+        for (who) |x| {
+            if (x.champion == mine) continue;
+            const rank = if (fetch(client, try players.paths.ranked(&buf, x.puuid))) |b| r: {
+                defer client.gpa.free(b);
+                break :r players.parseRank(a, b) catch null;
+            } else null;
+            const mastery = if (fetch(client, try players.paths.mastery(&buf, x.puuid))) |b| m: {
+                defer client.gpa.free(b);
+                break :m lcu.me.parseMastery(a, b) catch null;
+            } else null;
+            const games = if (fetch(client, try players.paths.history(&buf, x.puuid))) |b| g: {
+                defer client.gpa.free(b);
+                break :g lcu.me.parseHistory(a, b) catch null;
+            } else null;
+            try out.append(a, .{ .champion = x.champion, .player = players.factsOf(x.champion, rank, mastery, games) });
+        }
+        return out.items;
+    }
+
+    fn fetch(client: lcu.Client, path: []const u8) ?[]u8 {
+        return client.getOk(path) catch null;
+    }
+
     /// Once loaded, until the client leaves the lobby phases
     fn shownForm(p: *const Poller, s: state.Status) ?lcu.me.Form {
         if (s != .waiting) return null;
@@ -1100,4 +1154,47 @@ test "update retries back off from 5 minutes to the usual 3 hours" {
     const want = [_]u32{ 300, 300, 600, 1200, 2400, 4800, 9600, 10800, 10800 };
     for (want, 0..) |w, fails| try std.testing.expectEqual(w, retryAfter(@intCast(fails)));
     try std.testing.expectEqual(10800, retryAfter(std.math.maxInt(u32)));
+}
+
+test "loading screen scouting: other players' facts, none for me or streamer mode" {
+    const testing = std.testing;
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const s = try lcu.mock.Scenario.load(a, testing.io, "testdata/lcu/scenarios/full-game.json");
+    var h: lcu.mock.Harness = undefined;
+    try h.start(a, &s);
+    defer h.stop();
+    while (try h.mock.advance()) |_| if (std.mem.eql(u8, h.mock.state.phase, "GameStart")) break;
+    const client: lcu.Client = .{ .gpa = testing.allocator, .io = testing.io, .credentials = .{ .port = h.lcuPort(), .password = h.mock.password, .plain = true } };
+    const orianna = try s.champion("Orianna");
+    const got = try Poller.scoutAll(a, client, orianna);
+    // Ten less me, less Jinx (cell 3, streamer mode)
+    try testing.expectEqual(8, got.len);
+    for (got) |x| {
+        try testing.expect(x.champion != orianna);
+        try testing.expect(x.champion != try s.champion("Jinx"));
+    }
+    const darius = for (got) |x| {
+        if (x.champion == try s.champion("Darius")) break x.player;
+    } else return error.NoDarius;
+    try testing.expectEqualStrings("Gold", darius.tier);
+    try testing.expectEqualStrings("II", darius.division);
+    try testing.expectEqual(.main, darius.mastery);
+    try testing.expectEqual(20, darius.games);
+    try testing.expectEqual(12, darius.on_pick);
+    try testing.expectEqual(7, darius.won);
+    // Thresh (cell 4): unranked, 3 ARAM games of the 20 not counted
+    const thresh = for (got) |x| {
+        if (x.champion == try s.champion("Thresh")) break x.player;
+    } else return error.NoThresh;
+    try testing.expectEqualStrings("", thresh.tier);
+    try testing.expectEqual(17, thresh.games);
+    try testing.expectEqual(7, thresh.on_pick);
+    // Leona (cell 9): first game on her
+    const leona = for (got) |x| {
+        if (x.champion == try s.champion("Leona")) break x.player;
+    } else return error.NoLeona;
+    try testing.expectEqual(.first, leona.mastery);
+    try testing.expectEqual(0, leona.on_pick);
 }

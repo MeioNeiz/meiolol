@@ -4,11 +4,12 @@
 //! some playful (Jacob's note 113): how the champion does in its role now, lone damage
 //! type, ban and pick rates; at most two, none that half the board shares. Beside them
 //! the lane against the same role across (the lane strip: gold, level 6 and first item
-//! timings) and wins by game length (the card's spark). Player
-//! scouting is APP7's, private, where names are visible. Pure.
+//! timings) and wins by game length (the card's spark). The private edition adds
+//! what the client says about each other player (Card.player). Pure.
 
 const std = @import("std");
 const core = @import("core");
+const players = @import("lcu/players.zig");
 const lanecard = @import("lanecard.zig");
 const board = @import("board.zig");
 const comp = @import("comp.zig");
@@ -53,7 +54,14 @@ pub const Card = struct {
     lane: ?LaneFacts = null,
     /// Games and wins by game length (champfacts.length_edges): the card's spark
     lengths: ?Lengths = null,
+    /// Private edition only; null on my card and for streamer-mode players
+    player: ?Player = null,
 };
+
+pub const Player = players.Facts;
+
+/// A player's facts by the champion they play: unique in a draft game
+pub const Scouted = struct { champion: u32, player: Player };
 
 pub const Lengths = @FieldType(core.champfacts.LengthRow, "by");
 
@@ -76,6 +84,7 @@ pub const Input = struct {
     draft: ?board.Draft = null,
     tier: ?[]const u8 = null,
     opts: core.Options = .{},
+    scouted: []const Scouted = &.{},
 };
 
 /// A lane lead this many standard errors from even gets a colour
@@ -149,6 +158,9 @@ const banned_rate = 0.25;
 
 fn card(arena: std.mem.Allocator, in: Input, s: Seat, team: []const Seat, across: []const Seat) !Card {
     var c: Card = .{ .champion = s.champion, .role = s.role, .guessed = s.guessed, .me = s.me, .games = 0, .win = 0.5, .pills = &.{} };
+    if (!s.me) for (in.scouted) |x| if (x.champion == s.champion and !x.player.empty()) {
+        c.player = x.player;
+    };
     const stats = in.stats;
     const role = s.role orelse return c;
     const at = stats.index(s.champion) orelse return c;
@@ -291,7 +303,16 @@ test "loading screen: cards by role, lane facts against the same role across" {
         .{ .champion = id(st, "Malphite"), .role = .top, .guessed = true },
         .{ .champion = id(st, "Teemo"), .role = null, .guessed = true },
     };
-    const l = try build(arena, .{ .stats = st, .curves = &f.curves, .seats = .{ &ours, &theirs }, .opts = cardscenes.test_opts });
+    const scouted = [_]Scouted{
+        .{ .champion = id(st, "Ahri"), .player = .{ .tier = "Gold" } },
+        .{ .champion = id(st, "Syndra"), .player = .{ .tier = "Gold", .games = 20, .on_pick = 6, .won = 4 } },
+        .{ .champion = id(st, "Malphite"), .player = .{} },
+    };
+    const l = try build(arena, .{ .stats = st, .curves = &f.curves, .seats = .{ &ours, &theirs }, .opts = cardscenes.test_opts, .scouted = &scouted });
+    // My own card says nothing about me; a player with nothing known gets no line
+    try testing.expectEqual(null, l.teams[0][1].player);
+    try testing.expectEqual(null, l.teams[1][0].player);
+    try testing.expectEqual(6, l.teams[1][1].player.?.on_pick);
     // Role order: top first
     try testing.expectEqual(id(st, "Darius"), l.teams[0][0].champion);
     try testing.expect(l.teams[0][1].me);
