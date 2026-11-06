@@ -719,8 +719,13 @@ pub fn store(key: []const u8, value: []const u8) void {
 /// An attribute's base64 decoded (an island's data-bin), gpa's; null when missing or bad
 pub fn binOf(el: zjb.Handle, name: []const u8) ?[]u8 {
     const s = attrOf(el, name);
-    if (s.len == 0) return null;
     defer gpa.free(s);
+    return unbase64(s);
+}
+
+/// gpa's; null when empty or bad
+pub fn unbase64(s: []const u8) ?[]u8 {
+    if (s.len == 0) return null;
     const d = std.base64.standard.Decoder;
     const out = gpa.alloc(u8, d.calcSizeForSlice(s) catch return null) catch return null;
     d.decode(out, s) catch {

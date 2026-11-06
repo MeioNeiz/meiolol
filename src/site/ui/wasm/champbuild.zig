@@ -19,6 +19,9 @@ var data: cp.BuildData = undefined;
 var state: cp.Build = undefined;
 var server: cp.Build = undefined;
 var src: []const u8 = "";
+/// The matchup page's data-bin as served: with it set, Build renders no locks, as the
+/// server did
+var bin: ?[]const u8 = null;
 var root_path: []const u8 = "";
 var js: []const u8 = "";
 var wasm: []const u8 = "";
@@ -42,7 +45,11 @@ export fn main() void {
     defer root.release();
     js = dom.attrOf(root, "data-js");
     wasm = dom.attrOf(root, "data-wasm");
-    if (dom.binOf(root, "data-bin")) |b| return inline_(b);
+    const b64 = dom.attrOf(root, "data-bin");
+    if (dom.unbase64(b64)) |b| {
+        bin = b64;
+        return inline_(b);
+    }
     src = dom.attrOf(root, "data-src");
     root_path = dom.attrOf(root, "data-root");
     server_lk = dom.attrOf(root, "data-lk");
@@ -112,7 +119,7 @@ fn adopt(b: []u8) ?*ui.island.Island(cp.Build, dom.Dom) {
     // Each its own panels: the server's stay as rendered for hydration
     const sp = cp.panels(gpa, data.roles) catch return oom();
     const pp = cp.panels(gpa, data.roles) catch return oom();
-    server = .{ .data = &data, .panels = sp, .root = root_path, .src = src, .stamp = want, .js = js, .wasm = wasm };
+    server = .{ .data = &data, .panels = sp, .bin = bin, .root = root_path, .src = src, .stamp = want, .js = js, .wasm = wasm };
     server.files.base[0] = &data;
     var u: cp.Build.Url = .{ .role = dom.pageRole() };
     u.lk.set(server_lk);
