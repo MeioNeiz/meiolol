@@ -229,8 +229,9 @@ const W = struct {
     pub const used = plain("used");
     pub const disk_size = plain("disk size");
     pub const what = plain("What takes the space");
-    pub const what_sub = Phrase("Weekly dbstat scan, {t:text}. Sizes are pages in the file, so free pages and the WAL are not counted.");
-    pub const no_scan = plain("No dbstat scan yet (weekly on the box, data/storage.tsv).");
+    pub const what_sub = Phrase("meiolol.db by table: weekly dbstat scan, {t:text}; its free pages and the WAL are not counted.");
+    pub const no_scan = plain("meiolol.db by table: no dbstat scan yet (weekly on the box, data/storage.tsv).");
+    pub const totals_only = plain("Totals as of this build: a per-table scan of this file slows the crawler for hours.");
     pub const db_total = Phrase("{d:text}.db: {b:text}");
     pub const indexes = Phrase("Indexes {p:pct} of the file.");
     pub const more = Phrase("{n:count} more");
@@ -1070,6 +1071,7 @@ fn space(h: *H, s: *const ad.Snapshot) N {
     for (dbs.items, totals) |d, *t| {
         var sum: f64 = 0;
         var idx: f64 = 0;
+        var used = false;
         var most: f64 = 0;
         var listed: usize = 0;
         var rest: f64 = 0;
@@ -1079,6 +1081,7 @@ fn space(h: *H, s: *const ad.Snapshot) N {
             const b: f64 = @floatFromInt(x.bytes);
             sum += b;
             if (std.mem.eql(u8, x.kind, "index")) idx += b;
+            if (std.mem.eql(u8, x.kind, "used")) used = true;
             most = @max(most, b);
         };
         t.* = sum;
@@ -1101,7 +1104,7 @@ fn space(h: *H, s: *const ad.Snapshot) N {
         }));
         cards.add(card.view(h, .{}, &.{
             card.head(h, W.db_total.with(h, .{ .d = d, .b = bytes(h, sum).s }), null, &.{}),
-            h.p(.{ .class = "lead" }, .{W.indexes.with(h, .{ .p = @as(u64, @intFromFloat(@round(if (sum > 0) idx / sum * 100 else 0))) })}),
+            h.p(.{ .class = "lead" }, .{if (used) W.totals_only else W.indexes.with(h, .{ .p = @as(u64, @intFromFloat(@round(if (sum > 0) idx / sum * 100 else 0))) })}),
             h.table(.{ .class = "bars" }, .{
                 h.thead(.{}, .{h.tr(.{}, .{ h.th(.{}, .{W.c_name}), h.th(.{ .data_answer = true }, .{W.c_size}) })}),
                 h.tbody(.{}, .{list.done()}),
@@ -1127,7 +1130,7 @@ fn space(h: *H, s: *const ad.Snapshot) N {
     }
     return h.div(.{ .class = "tab" }, .{
         card.sechead(h, W.what, null, &.{}),
-        h.p(.{ .class = "lead" }, .{W.what_sub.with(h, .{ .t = ap.ago(h, s.now - st.generated).s })}),
+        h.p(.{ .class = "lead" }, .{if (st.generated > 0) W.what_sub.with(h, .{ .t = ap.ago(h, s.now - st.generated).s }) else W.no_scan}),
         h.div(.{ .class = "cards" }, .{cards.done()}),
         h.el(.details, .{ .class = "c-card" }, .{
             h.el(.summary, .{}, .{W.every.with(h, .{ .n = rows.len })}),

@@ -1006,8 +1006,10 @@ pub const Demo = struct {
         .deploy_events = &.{.{ .time = now - 3_000, .sha = "c9e836bf23992353", .step = "live", .status = "ok", .detail = "" }},
         .eval_report = "",
         .storage = .{ .generated = now - 30_000, .rows = &.{
-            .{ .db = "timeline", .name = "timelines", .kind = "table", .bytes = 47_000_000_000, .cells = 2_100_000 },
-            .{ .db = "timeline", .name = "sqlite_autoindex_timelines_1", .kind = "index", .bytes = 120_000_000, .cells = 2_100_000 },
+            .{ .db = "timeline", .name = "pages in use", .kind = "used", .bytes = 38_500_000_000, .cells = 0 },
+            .{ .db = "timeline", .name = "free pages", .kind = "free", .bytes = 120_000_000, .cells = 0 },
+            .{ .db = "raw", .name = "pages in use", .kind = "used", .bytes = 37_000_000_000, .cells = 0 },
+            .{ .db = "raw", .name = "free pages", .kind = "free", .bytes = 6_100_000_000, .cells = 0 },
             .{ .db = "meiolol", .name = "matches", .kind = "table", .bytes = 21_000_000_000, .cells = 2_400_000 },
             .{ .db = "meiolol", .name = "drafts", .kind = "table", .bytes = 9_000_000_000, .cells = 1_900_000 },
             .{ .db = "meiolol", .name = "drafts_day", .kind = "index", .bytes = 400_000_000, .cells = 1_900_000 },

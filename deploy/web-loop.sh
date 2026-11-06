@@ -50,8 +50,8 @@
 # private site's Draft tester (`--private-out`, with the tester's files) goes to private/,
 # but only while meio.lol/private sends a visitor without a login to the login page: the
 # draft win chances must never be public, and nginx's /private gate is installed by hand.
-# Weekly, a dbstat scan (system sqlite3, read-only) leaves space by table and index in
-# data/storage.tsv for it.
+# Weekly, a dbstat scan of meiolol.db (system sqlite3, read-only) leaves space by table
+# and index in data/storage.tsv for it; timeline.db and raw.db it reads as totals itself.
 # The daily jobs' timers start from the files each leaves, and curves' from their files,
 # so a restart doesn't run them all again. Batch work runs under ionice -c 3, which the
 # disk honours only under mq-deadline or bfq (not `none`).
@@ -103,18 +103,16 @@ push_curves() {
         || echo "$(date -u +%FT%TZ) curves push to the service FAILED"
 }
 
-# Bytes and cells of every table and index (dbstat, aggregate), read-only and idle
-# priority so the crawler never waits on it. Reads every page of ~110 GB at ~10 MB/s
-# beside the crawler (3-4 h on C01), so not a daily job: rounds and daily jobs run beside it
+# Bytes and cells of meiolol.db's tables and indexes (dbstat, aggregate), read-only. Mostly
+# in the page cache, so ~8 min on C01. timeline.db and raw.db are left out: a dbstat of
+# either reads tens of GB from disk at full priority (ionice is moot under `none`) and
+# slows the crawler's commits 2-4x for hours (docs/hosting.md "Disk scheduler")
 storage_scan() {
-    local db
     printf 'db\tname\tkind\tbytes\tcells\n' > data/storage.tsv.new
-    for db in meiolol raw timeline; do
-        nice -n 19 ionice -c 3 sqlite3 -readonly -cmd '.timeout 5000' -separator $'\t' \
-            "data/$db.db" "SELECT '$db', s.name, coalesce(m.type, 'table'), s.pgsize, s.ncell
-                FROM dbstat('main', 1) s LEFT JOIN sqlite_master m ON m.name = s.name
-                ORDER BY 4 DESC" >> data/storage.tsv.new 2> data/storage.log || return 1
-    done
+    nice -n 19 sqlite3 -readonly -cmd '.timeout 5000' -separator $'\t' data/meiolol.db \
+        "SELECT 'meiolol', s.name, coalesce(m.type, 'table'), s.pgsize, s.ncell
+            FROM dbstat('main', 1) s LEFT JOIN sqlite_master m ON m.name = s.name
+            ORDER BY 4 DESC" >> data/storage.tsv.new 2> data/storage.log || return 1
     mv data/storage.tsv.new data/storage.tsv
 }
 

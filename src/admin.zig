@@ -118,7 +118,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     const deployed = try tail(arena, io, "DEPLOYED", 15);
     const deploy_events = try deployEvents(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, deploys_file }));
     const eval_report = try readHead(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "eval-latest.md" }), eval_report_max);
-    const storage_rows = try storage(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "storage.tsv" }));
+    const storage_rows = try storage(arena, io, db, try std.fs.path.join(arena, &.{ o.data_dir, "storage.tsv" }));
     const crawl_args = std.mem.trim(u8, try readHead(arena, io, o.crawl_args orelse
         try std.fs.path.join(arena, &.{ o.data_dir, "..", "crawl.args" }), 4096) orelse "", " \n");
     const snap: ad.Snapshot = .{
@@ -141,7 +141,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
         .deploys = try adDeployed(arena, deployed),
         .deploy_events = try adDeployEvents(arena, deploy_events),
         .eval_report = eval_report orelse "",
-        .storage = if (storage_rows) |st| try adStorage(arena, st) else null,
+        .storage = try adStorage(arena, storage_rows),
         .backups = try backups(arena, io, o.backups_dir orelse try std.fs.path.join(arena, &.{ o.data_dir, "..", "backups" })),
         .riot = .{
             .app_limit = ratelimit.personal_key,
@@ -717,29 +717,48 @@ fn readHead(arena: std.mem.Allocator, io: Io, path: []const u8, max: usize) !?[]
 }
 
 const Storage = struct {
-    /// The scan's time (the file's)
+    /// meiolol.db's dbstat scan time (the file's); 0 before the first
     generated: i64,
     /// db, table or index name, kind, bytes, cells
     rows: []const struct { []const u8, []const u8, []const u8, u64, u64 },
 };
 
-/// deploy/web-loop.sh's weekly dbstat scan (data/storage.tsv); null before the first
-fn storage(arena: std.mem.Allocator, io: Io, path: []const u8) !?Storage {
-    const text = try readHead(arena, io, path, 4 << 20) orelse return null;
-    const st = try Io.Dir.cwd().statFile(io, path, .{});
-    var rows: std.ArrayList(@typeInfo(@FieldType(Storage, "rows")).pointer.child) = .empty;
-    var lines = std.mem.splitScalar(u8, text, '\n');
-    _ = lines.next();
-    while (lines.next()) |line| {
-        var f = std.mem.splitScalar(u8, line, '\t');
-        const db = f.next() orelse continue;
-        const name = f.next() orelse continue;
-        const kind = f.next() orelse continue;
-        const bytes = std.fmt.parseInt(u64, f.next() orelse continue, 10) catch continue;
-        const cells = std.fmt.parseInt(u64, f.next() orelse continue, 10) catch continue;
-        try rows.append(arena, .{ db, name, kind, bytes, cells });
+/// Databases shown as totals: a dbstat scan of either reads tens of GB from disk, which
+/// slows the crawler's commits 2-4x for hours (docs/hosting.md "Disk scheduler")
+const totals_only = [_][]const u8{ "timeline", "raw" };
+
+/// meiolol.db by table and index from deploy/web-loop.sh's weekly dbstat scan
+/// (data/storage.tsv), then timeline.db and raw.db as pages in use and free, read now
+fn storage(arena: std.mem.Allocator, io: Io, db: store.Db, path: []const u8) !Storage {
+    const Row = @typeInfo(@FieldType(Storage, "rows")).pointer.child;
+    var rows: std.ArrayList(Row) = .empty;
+    var generated: i64 = 0;
+    if (try readHead(arena, io, path, 4 << 20)) |text| {
+        generated = (try Io.Dir.cwd().statFile(io, path, .{})).mtime.toSeconds();
+        var lines = std.mem.splitScalar(u8, text, '\n');
+        _ = lines.next();
+        while (lines.next()) |line| {
+            var f = std.mem.splitScalar(u8, line, '\t');
+            const name_db = f.next() orelse continue;
+            for (totals_only) |t| {
+                if (std.mem.eql(u8, t, name_db)) break;
+            } else {
+                const name = f.next() orelse continue;
+                const kind = f.next() orelse continue;
+                const bytes = std.fmt.parseInt(u64, f.next() orelse continue, 10) catch continue;
+                const cells = std.fmt.parseInt(u64, f.next() orelse continue, 10) catch continue;
+                try rows.append(arena, .{ name_db, name, kind, bytes, cells });
+            }
+        }
     }
-    return .{ .generated = st.mtime.toSeconds(), .rows = rows.items };
+    inline for (totals_only) |t| {
+        const page: u64 = @intCast(try db.scalar("PRAGMA " ++ t ++ ".page_size", .{}) orelse 0);
+        const pages: u64 = @intCast(try db.scalar("PRAGMA " ++ t ++ ".page_count", .{}) orelse 0);
+        const free: u64 = @intCast(try db.scalar("PRAGMA " ++ t ++ ".freelist_count", .{}) orelse 0);
+        try rows.append(arena, .{ t, "pages in use", "used", (pages -| free) * page, 0 });
+        try rows.append(arena, .{ t, "free pages", "free", free * page, 0 });
+    }
+    return .{ .generated = generated, .rows = rows.items };
 }
 
 const Backups = ad.Backups;

@@ -91,6 +91,11 @@ Megatron's pace. Without the cache, measured 26 Oct (Python, O_DIRECT, 2 GB file
   Oracle box trialled mq-deadline: research/questions/box-io-priority.md). Under
   mq-deadline an idle-class read waits up to 10 s behind the crawler's, so nothing
   holding a database write lock runs idle class; those use `ionice -c 2 -n 7`
+- Whole-file reads of an uncached database compete with the crawler at full priority:
+  a dbstat of timeline.db (31 GB from disk) took commits from 6-10 s to 20-52 s a minute
+  and the platforms slot from 43% to 31% for its hour. So the storage scan is meiolol.db
+  only (mostly cached, 7.5 min), weekly; the admin page reads timeline.db and raw.db as
+  page_count/freelist_count totals each round
 
 ### Builds on the box
 
