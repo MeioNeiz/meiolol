@@ -1837,7 +1837,7 @@ pub const Trends = struct {
     }
 
     /// End-of-game averages, each with its place in the role as a dot on a track, lowest
-    /// left; the place in words on hover
+    /// left; the place in words on hover or tap
     fn endsCard(p: *P, h: *H) N {
         const e = p.r().ends orelse return noneCard(h, W.ends_head, .none);
         if (e.games < min_games) return noneCard(h, W.ends_head, .none);
@@ -1848,7 +1848,8 @@ pub const Trends = struct {
             if (x.rank == 0) continue;
             const pos: f64 = if (e.of > 1) @as(f64, @floatFromInt(e.of - x.rank)) / @as(f64, @floatFromInt(e.of - 1)) else 1;
             const place = W.ends_place.with(h, .{ .n = x.rank, .th = ordinal(x.rank), .of = e.of });
-            row.bar = bar.track(h, .{ .at = pos, .label = place });
+            // The track's label already reads the place; the tip shows it, by the dot's end
+            row.bar = hint.view(h, place, .{bar.track(h, .{ .at = pos, .label = place })}, .{ .block = true, .end = pos > 0.5, .stop = false, .said = false });
         }
         const of = W.ends_of.with(h, .{ .of = e.of });
         return card.view(h, .{}, &.{
@@ -2359,6 +2360,8 @@ test "end of game: each figure with its place, none under min_games or for a rar
     try std.testing.expect(std.mem.indexOf(u8, got, "1st highest of 48") != null);
     try std.testing.expect(std.mem.indexOf(u8, got, "3rd highest of 48") != null);
     try std.testing.expectEqual(9 + 1, std.mem.count(u8, got, "c-track"));
+    // Each place shown on hover or tap, not only to screen readers
+    try std.testing.expectEqual(9, std.mem.count(u8, got, "data-block"));
 
     roles[0].ends.?.rows[4].rank = 0;
     w.clearRetainingCapacity();

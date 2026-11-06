@@ -18,6 +18,8 @@ pub const Opts = struct {
     below: bool = false,
     /// Aligned to its content's end: a right-hand column or seat
     end: bool = false,
+    /// As wide as its container: a line that fills a cell (Bar.track)
+    block: bool = false,
     /// A tab stop of its own; null: when `said` (a stop that adds nothing to hear is
     /// noise). Off for dense cells (a rate in every row): a tap or a click still opens
     /// it, Tab passes by
@@ -36,6 +38,7 @@ pub fn view(h: *H, text: tree.Text, kids: anytype, o: Opts) N {
         .tabindex = @as(i8, if (o.stop orelse o.said) 0 else -1),
         .data_at = if (o.below) "below" else null,
         .data_end = o.end,
+        .data_block = o.block,
     }, kids ++ .{h.span(.{ .class = "c-hintb", .aria_hidden = if (o.said) null else true }, .{text})});
 }
 
@@ -48,6 +51,7 @@ pub fn view(h: *H, text: tree.Text, kids: anytype, o: Opts) N {
 pub const css =
     \\@layer components {
     \\  .c-hint { position: relative; outline: none; }
+    \\  .c-hint[data-block] { display: block; }
     \\  .c-hint:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
     \\  .c-hintb { position: absolute; left: 0; bottom: calc(100% + 4px); z-index: 3;
     \\    width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
