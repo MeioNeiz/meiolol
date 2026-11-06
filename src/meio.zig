@@ -98,9 +98,10 @@ pub const Options = struct {
     cond_x_floor: f64 = -10,
     /// The interactions' variance per role x popularity band (condBand) rather than per
     /// role: rare x differ more (NL1, 16.21: true spread 1.6 points common, 2.8-3.9 under
-    /// -2 for keystones; one sd per role made rare ranges 2-3.7x too narrow)
+    /// -2 for keystones, 2.2 to 3.8-5.5 for items; one sd per role made rare ranges
+    /// 1.2-3.7x too narrow)
     keystone_bands: bool = true,
-    item_bands: bool = false,
+    item_bands: bool = true,
 };
 
 /// Term kinds, one variance each

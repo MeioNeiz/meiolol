@@ -6043,6 +6043,24 @@ m10-ob-16.21): kept, `keystone_bands` on.
   own games, at most 6.3 (a narrow old range on 108 games: 41.3% [40.2, 42.4] -> 34.9%
   [32.3, 37.6]); half-widths +0.15 on average, at most +2.7
 
+Step 2, items, 16.21 dev (m10-nl3it-16.21.md, against m10-nl3ks-16.21): kept,
+`item_bands` on.
+- Gate 306 -> 297 failing: 13 groups clear (10 item, 3 keystone x item), among them
+  item rare raw below -1.07 -> -0.12 and raw above +0.76 -> -0.05 (every region, all
+  ranks); unseen -2.76 stays. 4 new, each crossing 0.5 by under 0.06 (keystone x item
+  Diamond+ rare, EUW1 item x opponent own 0)
+- Log loss: no row worse beyond 2 se (worst +0.15 milli-nats on se 0.6+); item rows
+  and the two-lock kinds with an item 0.01-0.3 better
+- Miss sd over Meio's sd by band, every region all ranks: 1.2-2.05 under -3 -> 0.84-1.21;
+  common bands 0.93-1.00 -> 0.98-1.04. Diamond+ still 1.4-2.2 under -6 (was 2.3-3.9)
+- PIT coverage by band (randomised binomial, logit-normal through the range): every
+  region all ranks under -3 78.7-79.7% -> 79.2-80.1%, > -0.5 81.1 -> 79.7; -0.5..-2
+  79.5-79.8 -> 78.9-79.4 (common ranges a little narrower)
+- Live, origin 13: item middles move 0.17 points on average where the cell has 100+ own
+  games, at most 4.2 (Twisted Fate mid, The Collector, 101 games: 52.2% [49.7, 54.7] ->
+  48.0% [44.6, 51.3]); half-widths +0.02 on average, at most +1.1; cells with no own
+  games +1.8
+
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
 data/snap (85,693 ranked solo games, 16.19 + 16.20, all regions), sqlite3 on the Mac;
