@@ -5995,6 +5995,11 @@ run high or low over a group of cells (docs/plan/meio-middle.md NL0)?
   looked bad run lower still (champion-role -1.18, item -1.07, keystone -1.29), rare
   items and keystone x item that looked good higher (+0.76, +0.78); rare unseen item
   -2.8, keystone -3.2; keystone x -4..-6 +0.6, x under -7 -1.0 to -1.2
+- Bracket level in pair terms (16.21, m10-ob-16.21.md): 311 failing (was 491). Lane
+  kinds now lean as their champion-role does per bracket (matchup Diamond+ -0.29,
+  Iron-Silver +0.83; champion-role -0.25, +0.83); log loss better in every rank set
+  (matchup Diamond+ -0.42, duo -0.89 milli-nats), all ranks unchanged. Left: Iron-Silver
+  142 failing (the champion-role's own +0.83), all ranks 33
 
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 

@@ -315,16 +315,23 @@ pub const Model = struct {
     /// A cell's terms on top of its champion-role's own, on the logit scale
     const Part = struct { e: f64, v: f64, own: f64 };
 
-    /// Against a lane opponent (minus its number) or with a support (plus it), and the
-    /// pair's shrunk term; null: the other champion-role has no games
+    /// Against a lane opponent (minus its number) or with a support (plus it), the level
+    /// counted once (Pairs.level), and the pair's shrunk term; null: the other
+    /// champion-role has no games
     fn pairPart(m: *const Model, pairs: *const Pairs, counts: []const Counts, fitted: []const Fitted, a: u16, b: u16, duo: bool, brackets: Brackets, region: u1) ?Part {
         const ib = m.index.get(b) orelse return null;
         if (games(&counts[ib]) == 0) return null;
-        const tb = newestOf(m.shape, &counts[ib], &fitted[ib], brackets, region);
+        // The level in b's own mix of brackets, as tb holds it
+        const w = mixOf(m.shape, &counts[ib], brackets, region);
+        const tb = newestIn(m.shape, &fitted[ib], w);
+        var level: f64 = 0;
+        for (w, pairs.level) |wr, lr| for (wr, lr) |x, l| {
+            level += x * l;
+        };
         const lo: u16 = if (duo) a else @min(a, b);
         const hi: u16 = if (duo) b else @max(a, b);
         const sign: f64 = if (duo or lo == a) 1 else -1;
-        var q: Part = .{ .e = if (duo) tb.eta else -tb.eta, .v = tb.v, .own = 0 };
+        var q: Part = .{ .e = if (duo) tb.eta - level else level - tb.eta, .v = tb.v, .own = 0 };
         if (pairs.index.get(pairKey(lo, hi, duo))) |pi| {
             const p = &pairs.terms[pi];
             q.e += sign * p.i;
@@ -474,31 +481,44 @@ fn etaOf(shape: Shape, f: *const Fitted, patch: usize, bracket: usize, euw: usiz
 /// unknown-rank, other-region baseline. The variance is the mixed design's, so shared
 /// terms count once
 fn newestOf(shape: Shape, c: *const Counts, f: *const Fitted, brackets: Brackets, region: u1) Logit {
-    const k = shape.params();
+    return newestIn(shape, f, mixOf(shape, c, brackets, region));
+}
+
+/// The newest patch's logit for weights over (bracket, region) summing to 1
+fn newestIn(shape: Shape, f: *const Fitted, w: [4][2]f64) Logit {
     var mix: [max_k]f64 = @splat(0);
     var x: [max_k]f64 = undefined;
+    for (0..4) |br| for (0..2) |e| {
+        if (w[br][e] == 0) continue;
+        shape.design(0, br, e, &x);
+        for (&mix, x) |*a, b| a.* += w[br][e] * b;
+    };
+    return at(shape, f, &mix);
+}
+
+/// A cell's games over a set of brackets and a region, as weights summing to 1. No games
+/// in the slice: the slice's own terms equally, all at their prior
+fn mixOf(shape: Shape, c: *const Counts, brackets: Brackets, region: u1) [4][2]f64 {
+    var w: [4][2]f64 = @splat(@splat(0));
     var total: f64 = 0;
     for (0..4) |br| for (0..2) |e| {
-        if (!brackets.has(br)) continue;
-        if (region == 1 and e == 0) continue;
-        var n: f64 = 0;
-        for (0..shape.patches) |p| n += c.n[p][br][e];
-        if (n == 0) continue;
-        shape.design(0, br, e, &x);
-        for (mix[0..k], x[0..k]) |*a, b| a.* += n * b;
-        total += n;
+        if (!brackets.has(br) or (region == 1 and e == 0)) continue;
+        for (0..shape.patches) |p| w[br][e] += c.n[p][br][e];
+        total += w[br][e];
     };
-    // No games in the slice: the slice's own terms, all at their prior
     if (total == 0) {
-        if (brackets.mask == Brackets.all.mask) return etaOf(shape, f, 0, 0, region);
-        for (1..4) |br| if (brackets.has(br)) {
-            shape.design(0, br, region, &x);
-            for (mix[0..k], x[0..k]) |*a, b| a.* += b;
+        if (brackets.mask == Brackets.all.mask) {
+            w[0][region] = 1;
+            total = 1;
+        } else for (1..4) |br| if (brackets.has(br)) {
+            w[br][region] = 1;
             total += 1;
         };
     }
-    for (mix[0..k]) |*a| a.* /= total;
-    return at(shape, f, &mix);
+    for (&w) |*row| for (row) |*x| {
+        x.* /= total;
+    };
+    return w;
 }
 
 fn at(shape: Shape, f: *const Fitted, x: *const [max_k]f64) Logit {
@@ -520,6 +540,12 @@ const Pairs = struct {
     terms: []Pair = &.{},
     cells: []PairCell = &.{},
     sd: [n_pair_classes]f64 = @splat(0),
+    /// By bracket and EUW1: the champion-roles' mean logit, games-weighted. Each
+    /// champion-role's own terms hold its bracket's level (16.21: rows win 51.5% in
+    /// Diamond+, 48.7% in Iron-Silver, against opponents of every rank), so a matchup is
+    /// eta_a - eta_b + level and a duo eta_a + eta_b - level: each side counts the level
+    /// once. Without it Diamond+ matchups averaged 50%, 1.5 points under their own rows
+    level: [4][2]f64 = @splat(@splat(0)),
 
     fn deinit(p: *Pairs, gpa: Allocator) void {
         p.index.deinit(gpa);
@@ -945,7 +971,7 @@ pub fn fit(gpa: Allocator, rows: []const Row, before_day: i32, opts: Options) !M
     const share = try logShares(gpa, &m);
     defer gpa.free(share);
     m.sd = fitLevels(m.counts, m.fitted, shape, opts.sd, 0, opts.rounds, .{ .m = &m, .share = share });
-    m.pair = try fitPairs(gpa, shape, &m.index, m.fitted, &cells, 0, opts.rounds);
+    m.pair = try fitPairs(gpa, shape, &m.index, m.counts, m.fitted, &cells, 0, opts.rounds);
     m.keystone = try fitCond(gpa, &m, &keystones, opts, opts.rounds);
     m.item = try fitCond(gpa, &m, &items, opts, opts.rounds);
     m.rune = try fitShare(gpa, &m, try rune.toOwnedSlice(gpa), &keystones, try rune_halves.drift(gpa), opts.rounds);
@@ -1060,7 +1086,7 @@ fn fitGold(gpa: Allocator, m: *const Model, counts: []Counts, sum_sq: f64, cells
     }
     g.noise = if (n > groups + 1) @max(ss / (n - groups), 1e-6) else 1;
     g.sd = fitLevels(g.counts, g.fitted, m.shape, @splat(0), g.noise, rounds, null);
-    g.pair = try fitPairs(gpa, m.shape, &m.index, g.fitted, cells, g.noise, rounds);
+    g.pair = try fitPairs(gpa, m.shape, &m.index, g.counts, g.fitted, cells, g.noise, rounds);
     return g;
 }
 
@@ -1183,13 +1209,25 @@ fn mackay(sd: []f64, fixed: []const f64, sum_sq: []const f64, gamma: []const f64
 }
 
 /// Pair terms on top of the fitted champion-roles: each pair cell's logit is the two
-/// champion-roles' (matchup: one minus the other; duo: the sum) plus the pair's term
-fn fitPairs(gpa: Allocator, shape: Shape, index: *const std.AutoHashMapUnmanaged(u16, u32), fitted: []const Fitted, cells: *const std.AutoHashMapUnmanaged(u64, PairCell), noise: f64, rounds: u8) !Pairs {
+/// champion-roles' (matchup: one minus the other plus the level; duo: the sum minus it)
+/// plus the pair's term
+fn fitPairs(gpa: Allocator, shape: Shape, index: *const std.AutoHashMapUnmanaged(u16, u32), counts: []const Counts, fitted: []const Fitted, cells: *const std.AutoHashMapUnmanaged(u64, PairCell), noise: f64, rounds: u8) !Pairs {
     const keys = try sortedKeys(gpa, cells);
     defer gpa.free(keys);
 
     var out_pairs: Pairs = .{};
     errdefer out_pairs.deinit(gpa);
+    var sum: [4][2]f64 = @splat(@splat(0));
+    var n: [4][2]f64 = @splat(@splat(0));
+    for (counts, fitted) |*c, *f| for (0..shape.patches) |p| for (0..4) |br| for (0..2) |e| {
+        const w = c.n[p][br][e];
+        if (w == 0) continue;
+        sum[br][e] += w * etaOf(shape, f, p, br, e).eta;
+        n[br][e] += w;
+    };
+    for (&out_pairs.level, sum, n) |*lr, sr, nr| for (lr, sr, nr) |*l, s, w| {
+        l.* = if (w > 0) s / w else 0;
+    };
     out_pairs.cells = try gpa.alloc(PairCell, keys.len);
     var pairs: std.ArrayList(Pair) = .empty;
     defer pairs.deinit(gpa);
@@ -1206,7 +1244,8 @@ fn fitPairs(gpa: Allocator, shape: Shape, index: *const std.AutoHashMapUnmanaged
         // Both sides of a game have rows, unless a caller dropped some: then 0
         const ta = if (index.get(a)) |i| etaOf(shape, &fitted[i], patch, bracket, euw).eta else 0;
         const tb = if (index.get(b)) |i| etaOf(shape, &fitted[i], patch, bracket, euw).eta else 0;
-        out.off = ta + (if (duo) tb else -tb);
+        const level = out_pairs.level[bracket][euw];
+        out.off = ta + (if (duo) tb - level else level - tb);
         if (j == 0 or keys[j - 1] >> 8 != pk) {
             try out_pairs.index.put(gpa, pk, @intCast(pairs.items.len));
             try pairs.append(gpa, .{ .class = pairClass(a, duo), .first = @intCast(j), .len = 0 });
@@ -1550,7 +1589,8 @@ test "a matchup is both champions' strength plus a shrunk pair term" {
     const ab = m.rate(.matchup, 0, 0, 1, 3).?;
     const ba = m.rate(.matchup, 0, 0, 3, 1).?;
     try std.testing.expectApproxEqAbs(0.6, ab.p, 0.05);
-    try std.testing.expectApproxEqAbs(1, ab.p + ba.p, 1e-9);
+    // Not exactly 1: the duo's rows lift the level a little
+    try std.testing.expectApproxEqAbs(1, ab.p + ba.p, 0.01);
     try std.testing.expectApproxEqAbs(0.4, m.rate(.matchup, 0, 0, 1, 2).?.p, 0.05);
     try std.testing.expect(ab.own == 0 and ab.lo < ab.p and ab.p < ab.hi);
     // A lane nobody played: both strengths, no pair term, the spread as its range
@@ -1560,6 +1600,50 @@ test "a matchup is both champions' strength plus a shrunk pair term" {
     const d = m.rate(.duo, 0, 0, bot, sup).?;
     // One duo among mostly 50% champions: shrunk, but above the bottom's own rate
     try std.testing.expect(d.p > m.rate(.champion, 0, 0, bot, 0).?.p + 0.01);
+}
+
+test "inside one bracket, a champion-role's matchups average its own rate" {
+    const gpa = std.testing.allocator;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    var prng: std.Random.DefaultPrng = .init(5);
+    const rand = prng.random();
+    // Six top champions, strengths 0.1 apart on the logit. Players of bracket 3 meet
+    // bracket 1 players in half their lanes and beat them by 0.4 more, so bracket 3's
+    // rows win ~53% and bracket 1's ~47%, in every matchup
+    const lanes = [_][2]u2{ .{ 3, 3 }, .{ 1, 1 }, .{ 3, 1 }, .{ 1, 3 } };
+    for (1..7) |ia| for (ia + 1..7) |ib| for (lanes) |lane| {
+        const a: u16 = @intCast(ia);
+        const b: u16 = @intCast(ib);
+        const rank: f64 = if (lane[0] == lane[1]) 0 else if (lane[0] == 3) 0.4 else -0.4;
+        const p = sigmoid(0.1 * (@as(f64, @floatFromInt(ia)) - @as(f64, @floatFromInt(ib))) + rank);
+        for (0..400) |_| {
+            const win = rand.float(f64) < p;
+            try rows.append(gpa, .{ .day = -1, .cr = a, .opp = b, .win = win, .euw = false, .patch = 0, .bracket = lane[0] });
+            try rows.append(gpa, .{ .day = -1, .cr = b, .opp = a, .win = !win, .euw = false, .patch = 0, .bracket = lane[1] });
+        }
+    };
+    var m = try fit(gpa, rows.items, 0, .{});
+    defer m.deinit(gpa);
+    try std.testing.expect(m.pair.level[3][0] > 0.08 and m.pair.level[1][0] < -0.08);
+    for (1..7) |ia| {
+        const a: u16 = @intCast(ia);
+        var n: [7]f64 = @splat(0);
+        for (rows.items) |r| if (r.cr == a and r.bracket == 3) {
+            n[r.opp] += 1;
+        };
+        var sum: f64 = 0;
+        var total: f64 = 0;
+        for (n, 0..) |w, x| if (w > 0) {
+            sum += w * m.rate(.matchup, 0, 3, a, @intCast(x)).?.p;
+            total += w;
+        };
+        try std.testing.expectApproxEqAbs(m.rate(.champion, 0, 3, a, 0).?.p, sum / total, 0.01);
+    }
+    // Both sides of a lane hold the level once each (p averages over its range: not exact)
+    const ab = m.rate(.matchup, 0, 3, 2, 5).?.p;
+    const ba = m.rate(.matchup, 0, 3, 5, 2).?.p;
+    try std.testing.expectApproxEqAbs(2 * m.pair.level[3][0], logit(ab) + logit(ba), 0.005);
 }
 
 test "a keystone's rate is the champion-role's plus a role-wide term plus a shrunk pair term" {
