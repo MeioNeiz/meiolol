@@ -23,7 +23,7 @@ const channel = @import("channel.zig");
 const app = ui.app;
 const Allocator = std.mem.Allocator;
 
-pub const css = ui.css.head ++ ui.css.join(.{ ui.site, ui.appbar, ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.compview, ui.resultstrip, ui.lobby, ui.apphome, ui.today, ui.art, ui.skillgrid, ui.gamebuild, ui.bar, ui.spark, ui.loadscreen, ui.chart, ui.lane, ui.trend, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.toggletip, ui.reasons, ui.rate, ui.candlist, ui.picks, ui.app });
+pub const css = ui.css.head ++ ui.css.join(.{ ui.site, ui.appbar, ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.dmgsplit, ui.compview, ui.resultstrip, ui.lobby, ui.apphome, ui.today, ui.art, ui.skillgrid, ui.gamebuild, ui.bar, ui.spark, ui.loadscreen, ui.chart, ui.lane, ui.trend, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.toggletip, ui.reasons, ui.rate, ui.candlist, ui.picks, ui.app });
 
 const Page = struct {
     arena: std.heap.ArenaAllocator,
@@ -1730,7 +1730,7 @@ test "comp view: once all ten are locked, words for everyone and numbers for tes
     // Static, after the app's island: not inside what ui-app.wasm adopts
     try testing.expect(std.mem.find(u8, html, "data-island=\"app\"").? < std.mem.find(u8, html, "class=\"c-comp\"").?);
     try testing.expect(std.mem.find(u8, try render(a, d, null, null), "c-comp") == null);
-    try testing.expect(std.mem.find(u8, html, "Mostly magic damage") != null);
+    try testing.expect(std.mem.find(u8, html, "aria-label=\"AP damage\"") != null);
     const late = std.mem.find(u8, html, "<span>Late</span>").?;
     try testing.expect(std.mem.findPos(u8, html, late, "title=\"Ahri\"") != null);
     try testing.expect(std.mem.find(u8, html, "%") == null);

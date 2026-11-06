@@ -13,6 +13,7 @@ const phrase = @import("phrase.zig");
 const trend = @import("trend.zig");
 const toggletip = @import("toggletip.zig");
 const badge = @import("badge.zig");
+const dmgsplit = @import("dmgsplit.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -26,6 +27,8 @@ pub const Mix = enum { physical, mixed, magic };
 pub const Damage = struct {
     /// The team's average magic share of damage to champions, 0 to 1: the bar
     magic: f32,
+    /// The mix tally's bucket (30/70, not dmgOf's 35/65): the bar says it, so its words
+    /// match the tag and the tips
     mix: Mix,
     /// Teams with this mix win under even by 2 SE (Learn's tally)
     wins_less: bool = false,
@@ -170,21 +173,15 @@ fn whole(p: f32) u32 {
     return @intFromFloat(@round(@max(0, @min(100, p))));
 }
 
-/// Magic from the left, physical the rest, the mix in words for a screen reader; the
-/// magic share on its end in the private edition (physical is the rest)
+/// The shares on its ends in the private edition only
 fn damage(h: *H, d: Damage) N {
-    const pct = 100 * @max(0, @min(1, d.magic));
-    const words = switch (d.mix) {
-        .physical => W.physical,
-        .mixed => W.mixed,
-        .magic => W.magic,
+    const kind: dmgsplit.Kind = switch (d.mix) {
+        .physical => .ad,
+        .mixed => .mixed,
+        .magic => .ap,
     };
     return h.div(.{ .class = "dmg" }, .{
-        h.span(.{ .class = "bar", .role = "img", .aria_label = words }, .{h.el(.i, .{ .style = h.vars(.{ .w = pct }) }, .{})}),
-        h.span(.{ .class = "ends", .aria_hidden = true }, .{
-            h.span(.{}, .{if (d.share) W.magic_share.with(h, .{ .p = whole(pct) }) else W.magic_end}),
-            h.span(.{}, .{W.physical_end}),
-        }),
+        dmgsplit.view(h, .{ .ap = d.magic, .kind = kind, .shares = d.share }),
         if (d.rate) |r| h.p(.{ .class = "rec" }, .{W.record.with(h, .{ .r = r, .n = d.teams })}) else null,
         if (d.wins_less) h.p(.{}, .{badge.view(h, .turn, .{W.one_sided})}) else null,
     });
@@ -196,12 +193,6 @@ const W = struct {
     const us = plain("Your team");
     const them = plain("Enemy team");
     const no_split = plain("Damage split not known for every champion yet.");
-    const physical = plain("Mostly physical damage");
-    const mixed = plain("Mixed damage");
-    const magic = plain("Mostly magic damage");
-    const magic_end = plain("magic");
-    const physical_end = plain("physical");
-    const magic_share = phrase.Phrase("{p:pct} magic");
     const record = phrase.Phrase("Teams like it won {r:rate} ({n:kilo} teams)");
     const one_sided = plain("One damage type: wins less");
     const early = plain("Early");
@@ -231,9 +222,6 @@ pub const css =
     \\  .c-comp p { margin: 0; }
     \\  .c-comp .none { font-size: var(--fs-xs); color: var(--muted); }
     \\  .c-comp .dmg { display: flex; flex-direction: column; gap: 3px; }
-    \\  .c-comp .bar { position: relative; height: 8px; border-radius: 4px; background: var(--bar-lo); overflow: hidden; }
-    \\  .c-comp .bar > i { position: absolute; inset: 0 auto 0 0; width: calc(var(--w) * 1%); background: var(--bar-hi); }
-    \\  .c-comp .ends { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--muted); }
     \\  .c-comp .rec { font-size: var(--fs-s); color: var(--t2); }
     \\  .c-comp ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
     \\  .c-comp li { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
