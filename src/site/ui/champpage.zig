@@ -467,8 +467,10 @@ pub const W = struct {
     pub const spread_note = Phrase("Players with 10+ games on it. Luck alone would spread the middle half over {lo:pct}-{hi:pct}.");
     pub const middle = plain("middle half");
     pub const pickup = plain("Pick-up");
-    pub const pickup_head = Phrase("{a:rate} new → {b:rate} practised · gap {g:dec}, usual {u:dec}");
-    pub const pickup_note = plain("New: under 30k mastery points; practised: 100k+. Every champion rises with practice: the usual gap is the average.");
+    pub const pickup_gap = plain("Gap");
+    pub const pickup_usual = Phrase("usual {u:dec}");
+    pub const pickup_ends = Phrase("{a:rate} under 30k mastery points → {b:rate} at 100k+");
+    pub const pickup_note = plain("Every role and region: practised players' win rate (100k+ mastery points) minus new players' (under 30k). Every champion rises with practice: usual is the average gap.");
     pub const harder = plain("harder to pick up");
     pub const hard = plain("hard");
     pub const easier = plain("easier to pick up");
@@ -1889,7 +1891,16 @@ pub const Trends = struct {
         if (n < 2) return noneCard(h, W.pickup, .none);
         p.pickup.set(pts[0..n]);
         p.pickup.ref = rate(all);
-        const head = if (k.gap) |g| tipNote(h, "cp-pickup", W.pickup_head.with(h, .{ .a = k.new.?, .b = k.practised.?, .g = g, .u = k.usual_gap }), W.pickup, W.pickup_note) else .none;
+        const gap: [2]N = if (k.gap) |g| .{
+            strip.view(h, &.{.{
+                .label = W.pickup_gap,
+                // dec drops the sign: a champion that loses with practice shows its minus
+                .value = if (g < 0) phrase.num(h, .points, g) else phrase.num(h, .dec, g),
+                .ctx = W.pickup_usual.with(h, .{ .u = k.usual_gap }),
+                .tip = .{ .id = "cp-pickup", .note = W.pickup_note },
+            }}),
+            h.p(.{ .class = "rare" }, .{W.pickup_ends.with(h, .{ .a = k.new.?, .b = k.practised.? })}),
+        } else .{ .none, .none };
         return card.view(h, .{}, &.{
             card.head(h, W.pickup, null, &.{
                 p.plat(h),
@@ -1898,8 +1909,9 @@ pub const Trends = struct {
                     .easier => badge.view(h, .neutral, .{W.easier}),
                     .usual => .none,
                 },
-                head,
             }),
+            gap[0],
+            gap[1],
             p.pickup.view(h),
         });
     }
@@ -2400,6 +2412,33 @@ test "first item done: a thin bucket shows, an empty one doesn't, no chart under
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "9-11") == null);
+}
+
+test "pick-up: the gap one figure with the usual, the two rates under it, a loss keeps its minus" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var roles = [_]TrendsRole{.{ .role = .mid, .games = 0, .wins = 0, .by_patch = &.{}, .by_length = &.{} }};
+    var d: TrendsData = .{ .name = "Hwei", .ddragon = "", .champs = &.{}, .roles = &roles, .lengths = &.{}, .pickup = .{
+        .bins = .{ .{ .games = 2000, .wins = 977 }, .{ .games = 2100, .wins = 1060 }, .{ .games = 3700, .wins = 1903 }, .{ .games = 4300, .wins = 2313 }, .{ .games = 4700, .wins = 2505 } },
+        .thin = 200,
+        .gap = 3.7,
+        .usual_gap = 3.6,
+        .new = 49.8,
+        .practised = 53.5,
+    } };
+    var p: Trends = .{ .data = &d, .root = "/" };
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, p.view(&h), &w.writer);
+    for ([_][]const u8{ ">Gap</button>", "3.7<small class=\"c\">usual 3.6</small>", "49.8% under 30k mastery points → 53.5% at 100k+", "Every role and region" }) |want|
+        try std.testing.expect(std.mem.indexOf(u8, w.written(), want) != null);
+
+    d.pickup.?.gap = -0.4;
+    w.clearRetainingCapacity();
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "−0.4<small") != null);
 }
 
 test "lane ends: biggest gold leads each way, thin and even lanes out" {

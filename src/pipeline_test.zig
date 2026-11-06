@@ -607,6 +607,14 @@ test "fixture games to stats, curves and the website" {
             }) + want.len;
         }
     }
+    // Darius's Matchups card: the finder link only under the ends' tiles (the fixture has
+    // no sure opponent, so neither; matchgrid's tests draw both)
+    {
+        const html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "champions/darius.html" }), arena, .limited(1 << 20));
+        const ends = std.mem.find(u8, html, "<div class=\"ends\">") != null;
+        const all = std.mem.find(u8, html, "href=\"/matchups#role=top&amp;c=darius\"") != null;
+        try testing.expectEqual(ends, all);
+    }
     // Data is Platinum+ (the crawl's floor): no lower tier to filter by, no "all ranks"
     for ([_][]const u8{ "champions.html", "champions/darius.html" }) |page| {
         const path = try std.fs.path.join(arena, &.{ out, page });

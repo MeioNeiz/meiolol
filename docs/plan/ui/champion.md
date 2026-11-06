@@ -118,8 +118,10 @@ the first screen, 1,154 on the page (frontend-rework.md).
      half 46-63%". The luck sentence goes into its Toggletip
 3. Learning row, two cards:
    - Pick-up: `OutcomeCurve`, 5 mastery bands as a small line (win rate) with games;
-     headline "New 47.6% → practised 52.6%, gap 5.0 (usual 3.2)" with a harder/easier
-     Badge only when clear. Card ~200 px tall, was ~700 px with two paragraphs
+     a StatStrip "Gap 3.2 usual 3.6" (practised minus
+     new, points; the label opens the note) and one small line "50.4% under 30k mastery
+     points → 53.6% at 100k+"; harder/easier Badge in the head only when clear. Per
+     champion, every role and region (the note says so): Hwei mid and bot share it
    - Also play: `ChampList` rows: icon, name, ×3.5 (the order) and share; harder to
      pick up as a Badge. Link to the pool page
 4. Footer: one "Method" link. The two method paragraphs move to method.html

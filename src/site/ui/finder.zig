@@ -686,6 +686,14 @@ test "Finder: bullies' bar is the gold lead, the biggest full; a role without mo
     try testing.expect(std.mem.find(u8, try Html.of(&f, a), "Moved this patch") == null);
 }
 
+test "Finder: the champion page's link to the rest opens on its champion and role" {
+    const href = try std.fmt.allocPrint(std.testing.allocator, matchgrid.finder_href, .{ "top", "darius" });
+    defer std.testing.allocator.free(href);
+    const u = url.read(Finder.Url, href[std.mem.findScalar(u8, href, '#').?..]);
+    try std.testing.expectEqual(.top, u.role.?);
+    try std.testing.expectEqualStrings("darius", u.c.slice());
+}
+
 test "Finder: All by default, every lane's pairs, each row its role and its lane's page" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();

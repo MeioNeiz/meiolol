@@ -234,7 +234,7 @@ pub const MatchupGrid = struct {
                 }),
                 if (in.finder and lane and !none and e.lo.len > 0) h.a(.{
                     .class = "all",
-                    .href = h.fmt("/matchups#role={s}&c={s}", .{ @tagName(in.role), in.slug }),
+                    .href = h.fmt(finder_href, .{ @tagName(in.role), in.slug }),
                 }, .{L.all.with(h, .{ .n = count + rare })}) else .none,
                 if (rel.ally) h.p(.{ .class = "alone" }, .{if (chosen) |o| L.alone.with(h, .{ .c = in.name, .p = in.champs[o.champ].name }) else L.alone_any.with(h, .{ .c = in.name })}) else .none,
                 if (chosen) |o| (if (none) .none else h.div(.{ .class = "brief" }, .{matchbrief.view(h, b: {
@@ -428,6 +428,10 @@ pub const css =
 ;
 
 const Gallery = @import("gallery.zig").Gallery;
+
+/// The finder on a champion and its role, by hand: url.write(Finder.Url) would cost the
+/// island. finder.zig's tests read it back
+pub const finder_href = "/matchups#role={s}&c={s}";
 
 pub const demo_champs = [_]cp.Other{
     .{ .name = "Garen", .key = "Garen", .slug = "garen" },                   .{ .name = "Sett", .key = "Sett", .slug = "sett" },
