@@ -920,7 +920,7 @@ pub const css =
     \\  .c-tiers .c-toolbar > .grp { margin-left: auto; }
     \\  .c-tiers .pl .rt { display: block; width: 100%; }
     \\  .c-tiers .c-table thead th { top: var(--header); }
-    \\  .c-tiers .who { display: flex; align-items: center; gap: var(--sp-2); color: inherit; text-decoration: none; }
+    \\  .c-tiers .who { --icon: 26px; display: flex; align-items: center; gap: var(--sp-2); color: inherit; text-decoration: none; }
     \\  .c-tiers .who .nm { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-tiers .wr .c-stat { font-size: var(--fs-l); }
     \\  .c-tiers td.num.p3 { color: var(--faint); }
