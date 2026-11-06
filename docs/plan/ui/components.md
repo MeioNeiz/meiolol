@@ -273,7 +273,7 @@ to open, is a Toggletip. The native title and attr(data-tip) are uilint debt tha
 here
 States: closed: hover, focus or tap; open, above; open, end; open, below; hover, then
 Escape: shut until the pointer leaves; open, wraps
-Used by: pv, champpage
+Used by: versus, pv, champpage
 
 ### StatCell
 `stat.zig` `.c-stat` site
@@ -990,13 +990,15 @@ it first carries a "1st" mark with its time on hover and for screen readers
 somewhere, the typical time a tick, the gap to typical a signed figure (later is worse).
 `band`: one figure on a track, the typical middle half shaded and its median a tick
 (game-detail.md "Lane"); `cell` the same at a list row's size, the figure under the track
-and the label only for screen readers (GameRow's lane at 14). `rows`: one side against the
-other, a row per figure: both rates as dots on one 0-100% track, each number beside its
-dot, the larger bold; a timing as both times and the gap (matchup.md "Versus"); `bars`:
-the same rows, each side's rate its own bar on a 0-100 track, so the share with neither
-shows (champion.md "Lane kills"); `key` names the sides, for the card head. `dumbbell`: a
-row per item, two rates on a shared axis as dots, the line between them the gap, the gap a
-figure (pool.md "How hard to pick up": new against practised players)
+and the label only for screen readers (GameRow's lane at 14); with `from`, a hollow dot
+joined to the figure's: before and after (an objective lost first, taken first), each with
+its typical tick. `rows`: one side against the other, a row per figure: both rates as dots
+on one 0-100% track, each number beside its dot, the larger bold; a timing as both times
+and the gap (matchup.md "Versus"); `bars`: the same rows, each side's rate its own bar on
+a 0-100 track, so the share with neither shows (champion.md "Lane kills"); `key` names the
+sides, for the card head. `dumbbell`: a row per item, two rates on a shared axis as dots,
+the line between them the gap, the gap a figure (pool.md "How hard to pick up": new
+against practised players)
 States: objectives and firsts; two; plain ink: rates, not sides; races: level 6 later than
 typical, first item earlier; key: the sides' names; rows: a matchup's head to head;
 timeline: lane kills by phase, Ornn above, the opponent under; timeline: first blood

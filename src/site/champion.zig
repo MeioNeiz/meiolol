@@ -772,7 +772,7 @@ test "objectives: firsts counted by the builder, against the role, to a drawn ca
     try ui.html.write(&t, p.view(&h), &w.writer);
     // Took first dragon 75% against 50%; won after it 66.7% against 50%. Herald has no
     // takes: its games, no figure
-    for ([_][]const u8{ "Objectives", "│ role average", "Rift Herald", "75%", "Win rate if first", "66.7%", "0 games" }) |x|
+    for ([_][]const u8{ "Objectives", "│ role average", "Rift Herald", "75%", "Win rate", "lost it first", "66.7%", "0 games" }) |x|
         try std.testing.expect(std.mem.indexOf(u8, w.written(), x) != null);
 }
 

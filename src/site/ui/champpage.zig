@@ -443,11 +443,14 @@ pub const W = struct {
     pub const objectives_head = plain("Objectives");
     pub const firsts = [4]tree.Text{ plain("First tower"), plain("First dragon"), plain("First Voidgrubs"), plain("First Rift Herald") };
     pub const obj_kinds = [4]objicon.Kind{ .tower, .dragon, .grubs, .herald };
-    pub const obj_rows = [2]tree.Text{ plain("Took it first"), plain("Win rate if first") };
+    pub const obj_rows = [2]tree.Text{ plain("Took it first"), plain("Win rate") };
+    pub const obj_lost = plain("lost it first");
+    pub const obj_took = plain("took it first");
     pub const games_n = Phrase("{n:count} games");
     pub const took_tip = Phrase("{l:text}: {c:text}'s team took it in {r:rate} of {n:count} games; role average {a:rate}");
     pub const obj_key = plain("│ role average");
     pub const won_tip = Phrase("{l:text}: {c:text}'s team won {r:rate} of {n:count} games after taking it; role average {a:rate}");
+    pub const swing_tip = Phrase("{l:text}: {c:text}'s team won {r:rate} of {n:count} games after taking it, {x:rate} of {m:count} after losing it; role average {a:rate} and {b:rate}");
     pub const by_rank = plain("By rank");
     pub const brackets = [3]tree.Text{ plain("Iron-Silver"), plain("Gold-Emerald"), plain("Diamond+") };
     pub const rank_tip = Phrase("{r:rate} in {n:count} games · gold at 14 {g:signed}, estimated from common matchups");
@@ -520,6 +523,11 @@ fn round(pct: f32) u32 {
 
 fn rate(c: Counts) f32 {
     return trend.rate(c.games, c.wins);
+}
+
+/// All games less those in `part`
+fn minus(all: Counts, part: Counts) Counts {
+    return .{ .games = all.games -| part.games, .wins = all.wins -| part.wins };
 }
 
 /// A Versus row of a's and b's rates, as the matchup page's head to head
@@ -2138,12 +2146,14 @@ pub const Charts = struct {
         l.add(h.span(.{}, .{}));
         for (W.obj_kinds) |o| l.add(h.span(.{ .class = "oh" }, .{ objicon.view(h, o, .{ .s = .xl, .named = false }), objicon.label(o) }));
         for (W.obj_rows, 0..) |rl, row| {
-            l.add(h.span(.{ .class = "rl" }, .{rl}));
+            const took = row == 0;
+            l.add(h.span(.{ .class = "rl" }, .{ rl, if (took) null else versus.cellKey(h, W.obj_lost, W.obj_took) }));
             for (W.firsts, k.mine[1..], k.role[1..]) |fl, x, y| {
-                const took = row == 0;
                 const mine: Counts = if (took) .{ .games = k.mine[0].games, .wins = x.games } else x;
                 const all: Counts = if (took) .{ .games = k.role[0].games, .wins = y.games } else y;
-                l.add(p.objCell(h, fl, took, mine, all));
+                // Lost first counts games nobody took it in
+                const lost: ?[2]Counts = if (took) null else .{ minus(k.mine[0], x), minus(k.role[0], y) };
+                l.add(p.objCell(h, fl, mine, all, lost));
             }
         }
         return card.view(h, .{}, &.{
@@ -2152,9 +2162,11 @@ pub const Charts = struct {
         });
     }
 
-    /// A won-after cell is coloured by its win rate; a taken-first one, not a win rate,
-    /// keeps its ink
-    fn objCell(p: *const P, h: *H, l: tree.Text, took: bool, mine: Counts, all: Counts) N {
+    /// A won-after cell is coloured by its win rate, the win rate after losing it first a
+    /// hollow dot joined to it; a taken-first one, not a win rate, keeps its ink.
+    /// `lost`: its and the role's games where the other team took it first (won-after only)
+    fn objCell(p: *const P, h: *H, l: tree.Text, mine: Counts, all: Counts, lost: ?[2]Counts) N {
+        const took = lost == null;
         if (mine.games < fmt.floor_games) return h.span(.{ .class = "fl" }, .{W.games_n.with(h, .{ .n = mine.games })});
         const v = rate(mine);
         const a = rate(all);
@@ -2164,12 +2176,19 @@ pub const Charts = struct {
                 return @intFromFloat(@round(x * 10 - 500));
             }
         }.f;
-        const b: versus.Band = .{
+        var b: versus.Band = .{
             .label = if (took) W.took_tip.with(h, tip) else W.won_tip.with(h, tip),
             .you = on(v),
             .typ = if (all.games > 0) .{ on(a), on(a), on(a) } else null,
             .dom = 500,
             .tint = false,
+            .tip = true,
+        };
+        if (lost) |ls| if (ls[0].games >= fmt.floor_games) {
+            const x = rate(ls[0]);
+            b.from = on(x);
+            if (ls[1].games > 0) b.from_typ = on(rate(ls[1]));
+            b.label = W.swing_tip.with(h, .{ .l = l.s, .c = p.data.name, .r = v, .n = mine.games, .x = x, .m = ls[0].games, .a = a, .b = rate(ls[1]) });
         };
         // A share of games whole, a win rate to a tenth as everywhere
         if (took) return versus.cell(h, b, phrase.num(h, .pct, round(v)));
@@ -2195,7 +2214,7 @@ pub const css =
     \\  }
     \\  .c-cpage > [data-busy]:not([data-island=champion]) > :not(.c-lockbar), .c-cpage > [data-busy] .c-champhead { opacity: 0.55; transition: opacity 0.2s; }
     \\  .c-cpage .plot[data-thin] { opacity: 0.6; }
-    \\  .c-cpage .rare { margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-cpage .rare { margin: var(--sp-3) 0 var(--sp-2); font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .c-champhead > .none { margin: 0 0 0 auto; }
     \\  .c-cpage #build { gap: var(--sp-3); }
     \\  .c-cpage #build .none { margin: 0; padding: var(--sp-4) var(--card-px); color: var(--muted); }
@@ -2400,6 +2419,38 @@ test "lane kills: a timeline of each side's share of lanes, first blood only whe
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "First blood") == null);
     try std.testing.expectEqual(3, std.mem.count(u8, w.written(), "class=\"tc\""));
+}
+
+test "objectives: won after taking it first joined to won after losing it, the role's ticks" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const c = struct {
+        fn f(g: u32, w: u32) Counts {
+            return .{ .games = g, .wins = w };
+        }
+    }.f;
+    // Tower: took 600 of 1000, won 440 (73.3%); lost first 400, won 80 (20.0%). Grubs: lost
+    // first in 10, too few for a dot
+    var roles = [_]ChartsRole{.{ .role = .top, .objectives = .{
+        .mine = .{ c(1000, 520), c(600, 440), c(500, 300), c(990, 520), c(400, 250) },
+        .role = .{ c(10000, 5000), c(5000, 3500), c(5000, 3000), c(5000, 2900), c(5000, 2800) },
+    } }};
+    const d: ChartsData = .{ .name = "Ornn", .ddragon = "", .champs = &.{}, .roles = &roles };
+    var p: Charts = .{ .data = &d, .root = "/" };
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, p.view(&h), &w.writer);
+    const got = w.written();
+    try std.testing.expect(std.mem.indexOf(u8, got, "First tower: Ornn&#39;s team won 73.3% of 600 games after taking it, 20.0% of 400 after losing it; role average 70.0% and 30.0%") != null);
+    // Hollow at 20%, joined to 73.3%; role's lost-first tick at 30%
+    try std.testing.expect(std.mem.indexOf(u8, got, "class=\"fr\" style=\"--x:20\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "class=\"typ\" style=\"--x:30\"") != null);
+    try std.testing.expectEqual(3, std.mem.count(u8, got, "class=\"fr\" style"));
+    try std.testing.expect(std.mem.indexOf(u8, got, "First Voidgrubs: Ornn&#39;s team won 52.5% of 990 games after taking it; role average 58.0%") != null);
+    // The label as a Tip, not a native title
+    try std.testing.expect(std.mem.indexOf(u8, got, "title=\"First") == null);
 }
 
 test "first item done: a thin bucket shows, an empty one doesn't, no chart under two" {

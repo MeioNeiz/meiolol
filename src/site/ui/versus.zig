@@ -5,7 +5,9 @@
 //! got somewhere, the typical time a tick, the gap to typical a signed figure (later is
 //! worse). `band`: one figure on a track, the typical middle half shaded and its median
 //! a tick (game-detail.md "Lane"); `cell` the same at a list row's size, the figure under
-//! the track and the label only for screen readers (GameRow's lane at 14). `rows`: one
+//! the track and the label only for screen readers (GameRow's lane at 14); with `from`, a
+//! hollow dot joined to the figure's: before and after (an objective lost first, taken
+//! first), each with its typical tick. `rows`: one
 //! side against the other, a row per figure: both rates as dots on one 0-100% track, each
 //! number beside its dot, the larger bold; a timing as both times and the gap (matchup.md
 //! "Versus"); `bars`: the same rows, each side's rate its own bar on a 0-100 track, so
@@ -20,6 +22,7 @@ const objicon = @import("objicon.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const badge = @import("badge.zig");
+const hint = @import("tip.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -118,6 +121,11 @@ pub const Band = struct {
     dom: i32,
     /// False: the figure keeps its ink, not the side's colour (the caller colours it)
     tint: bool = true,
+    /// A second value, hollow and joined to `you`, and its typical (cell only)
+    from: ?i32 = null,
+    from_typ: ?i32 = null,
+    /// The label as a Tip (hover, focus, tap), not a title (cell only)
+    tip: bool = false,
 };
 
 pub fn band(h: *H, b: Band) N {
@@ -137,10 +145,14 @@ pub fn band(h: *H, b: Band) N {
 /// `fig` written under the track ("−768 at 14")
 /// `fig`: a Text, or a node (rate.view)
 pub fn cell(h: *H, b: Band, fig: anytype) N {
-    return h.span(.{ .class = "c-vs", .data_v = "cell", .title = b.label }, .{
-        track(h, b),
-        h.span(.{ .class = "fig", .data_side = bandSide(b) }, .{fig}),
-    });
+    const kids = .{ track(h, b), h.span(.{ .class = "fig", .data_side = bandSide(b) }, .{fig}) };
+    if (b.tip) return h.span(.{ .class = "c-vs", .data_v = "cell" }, .{hint.view(h, b.label, kids, .{ .block = true, .stop = false })});
+    return h.span(.{ .class = "c-vs", .data_v = "cell", .title = b.label }, kids);
+}
+
+/// Names a two-value cell's marks: the hollow `from`, then `you`
+pub fn cellKey(h: *H, from: tree.Text, you: tree.Text) N {
+    return h.span(.{ .class = "c-vs", .data_v = "ckey", .aria_hidden = true }, .{ h.span(.{ .class = "fr" }, .{}), from, h.span(.{ .class = "you" }, .{}), you });
 }
 
 /// Against the typical median: better is ours
@@ -157,10 +169,14 @@ fn track(h: *H, b: Band) N {
             return @round(std.math.clamp((@as(f32, @floatFromInt(v)) + dd) / (2 * dd), 0, 1) * 1000) / 10;
         }
     }.f;
+    const you = at(b.you, d);
     return h.span(.{ .class = "tr", .aria_hidden = true }, .{
         if (b.typ) |q| h.span(.{ .class = "q", .style = h.vars(.{ .a = at(q[0], d), .b = at(q[2], d) }) }, .{}) else null,
         if (b.typ) |q| h.span(.{ .class = "typ", .style = h.vars(.{ .x = at(q[1], d) }) }, .{}) else null,
-        h.span(.{ .class = "you", .style = h.vars(.{ .x = at(b.you, d) }) }, .{}),
+        if (b.from_typ) |q| h.span(.{ .class = "typ", .style = h.vars(.{ .x = at(q, d) }) }, .{}) else null,
+        if (b.from) |f| h.span(.{ .class = "j", .style = h.vars(.{ .l = @min(at(f, d), you), .w = @abs(you - at(f, d)) }) }, .{}) else null,
+        if (b.from) |f| h.span(.{ .class = "fr", .style = h.vars(.{ .x = at(f, d) }) }, .{}) else null,
+        h.span(.{ .class = "you", .style = h.vars(.{ .x = you }) }, .{}),
     });
 }
 
@@ -404,6 +420,13 @@ pub const css =
     \\  .c-vs[data-v="cell"] > .tr { display: block; height: 8px; margin-top: 3px; }
     \\  .c-vs[data-v="cell"] .tr > .you { top: -3px; bottom: -3px; width: 6px; margin-left: -3px; }
     \\  .c-vs[data-v="cell"] > .fig { font-size: var(--fs-xs); white-space: nowrap; }
+    \\  .c-vs[data-v="ckey"] { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; font-size: var(--fs-xs); color: var(--muted); }
+    \\  .c-vs[data-v="ckey"] > .fr { width: 9px; height: 9px; box-sizing: border-box; border: 2px solid var(--t2); border-radius: 50%; }
+    \\  .c-vs[data-v="ckey"] > .you { width: 6px; height: 12px; margin-left: 4px; border-radius: 3px; background: var(--us); }
+    \\  .c-vs[data-v="cell"] > .c-hint { display: flex; flex-direction: column; gap: 3px; }
+    \\  .c-vs .tr > .j { position: absolute; top: 50%; height: 2px; margin-top: -1px; left: calc(var(--l) * 1%); width: calc(var(--w) * 1%); background: var(--t2); }
+    \\  .c-vs .tr > .fr { position: absolute; z-index: 1; top: 50%; left: calc(var(--x) * 1%); width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
+    \\    box-sizing: border-box; border: 2px solid var(--t2); border-radius: 50%; background: var(--panel); }
     \\  .c-vs[data-v="bell"] { grid-template-columns: minmax(0, 1fr); gap: 0; }
     \\  .c-vs > .bl { display: grid; grid-template-columns: minmax(0, 10em) minmax(0, 1fr) 3.4em; align-items: center; gap: var(--sp-2); min-height: 32px; }
     \\  .c-vs > .bl[data-thin], .c-vs > .mr[data-thin] > :not(.lab) { opacity: 0.55; }
@@ -510,6 +533,8 @@ pub fn gallery(g: *Gallery) void {
         cell(h, .{ .label = plain("Gold lead at 14"), .you = -768, .typ = .{ -1677, -63, 511 }, .dom = 3000 }, plain("−768 at 14")),
         cell(h, .{ .label = plain("Gold lead at 14"), .you = 1084, .typ = .{ -200, 300, 900 }, .dom = 3000 }, plain("+1,084 at 14")),
         cell(h, .{ .label = plain("Gold lead at 14"), .you = -3408, .dom = 3000 }, plain("−3,408 at 14")),
+        cellKey(h, plain("lost it first"), plain("took it first")),
+        cell(h, .{ .label = plain("First tower: won 73.3% after taking it, 37.0% after losing it"), .you = 233, .from = -130, .typ = .{ 201, 201, 201 }, .from_typ = -105, .dom = 500, .tint = false, .tip = true }, plain("73.3%")),
     }));
 }
 
