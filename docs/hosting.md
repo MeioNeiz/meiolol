@@ -132,7 +132,9 @@ root, from the options alone (no view loaded, seconds). Hashed wasm, JS and CSS 
 a brotli q11 .br, made by the web loop with the `brotli` CLI once per name (hashed files
 never change), served by nginx brotli_static (libnginx-mod-http-brotli-static): ~14%
 under gzip on every island. Cloudflare asks origins for `br, gzip` and passes br on to
-browsers that take it (research/questions/brotli-through-cloudflare.md). Pages stay gzip:
+browsers that take it (research/questions/brotli-through-cloudflare.md); gzip-only
+clients get its gzip of our br. A champion page for Chrome: 303 KB, was 334 KB on gzip
+(6 Nov). Pages stay gzip:
 a Cloudflare feature recompresses them anyway (zstd for Chrome, 8% over our gzip). The web loop builds only in a
 round that uploads; the others read the patch and game count with `meiolol site --patch-games`
 (1-8 s). meiolol-render on the box serves every page and data file (the home, champion,
