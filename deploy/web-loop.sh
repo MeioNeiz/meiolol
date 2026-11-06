@@ -50,7 +50,7 @@
 # private site's Draft tester (`--private-out`, with the tester's files) goes to private/,
 # but only while meio.lol/private sends a visitor without a login to the login page: the
 # draft win chances must never be public, and nginx's /private gate is installed by hand.
-# Daily, a dbstat scan (system sqlite3, read-only) leaves space by table and index in
+# Weekly, a dbstat scan (system sqlite3, read-only) leaves space by table and index in
 # data/storage.tsv for it.
 # The daily jobs' timers start from the files each leaves, and curves' from their files,
 # so a restart doesn't run them all again. Batch work runs under ionice -c 3, which the
@@ -103,8 +103,9 @@ push_curves() {
         || echo "$(date -u +%FT%TZ) curves push to the service FAILED"
 }
 
-# Bytes and cells of every table and index (dbstat, aggregate: seconds per database),
-# read-only and idle priority so the crawler never waits on it
+# Bytes and cells of every table and index (dbstat, aggregate), read-only and idle
+# priority so the crawler never waits on it. Reads every page of ~110 GB at ~10 MB/s
+# beside the crawler (3-4 h on C01), so not a daily job: rounds and daily jobs run beside it
 storage_scan() {
     local db
     printf 'db\tname\tkind\tbytes\tcells\n' > data/storage.tsv.new
@@ -350,7 +351,16 @@ views_write() {
         fi
     done
 }
-last_storage=$(mtime data/storage.tsv)
+last_storage=$(mtime data/storage.tsv) scan_pid=''
+# Weekly less an hour, so the hourly loop doesn't slip it
+start_scan() {
+    local now=$1
+    [[ -n "$scan_pid" ]] && kill -0 "$scan_pid" 2> /dev/null && return 0
+    (( now - last_storage >= 601200 )) || return 0
+    last_storage=$now
+    storage_scan &
+    scan_pid=$!
+}
 # The first due daily job, in the background (daily_pid); 1 when none is due. Builds
 # first on a new patch: the site's build pages wait on them
 run_daily() {
@@ -408,10 +418,6 @@ run_daily() {
             [[ -d data/tester ]] && mv data/tester data/tester.old
             mv data/tester.new data/tester && rm -rf data/tester.old
         fi) &
-    # Space by table and index, for the admin page: reads every page of every database
-    elif (( now - last_storage >= 82800 )); then
-        last_storage=$now
-        storage_scan &
     else
         return 1
     fi
@@ -536,6 +542,7 @@ while true; do
         private_gate=$gate
     fi
     run_daily "$(date +%s)" || true
+    start_scan "$(date +%s)"
     # Hourly; SIGUSR1 interrupts the wait, and one during the round or a held curves pass
     # skips it. A daily job longer than the hour holds the next round back rather than run
     # beside it

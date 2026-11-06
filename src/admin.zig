@@ -723,7 +723,7 @@ const Storage = struct {
     rows: []const struct { []const u8, []const u8, []const u8, u64, u64 },
 };
 
-/// deploy/web-loop.sh's daily dbstat scan (data/storage.tsv); null before the first
+/// deploy/web-loop.sh's weekly dbstat scan (data/storage.tsv); null before the first
 fn storage(arena: std.mem.Allocator, io: Io, path: []const u8) !?Storage {
     const text = try readHead(arena, io, path, 4 << 20) orelse return null;
     const st = try Io.Dir.cwd().statFile(io, path, .{});

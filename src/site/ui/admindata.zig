@@ -114,7 +114,7 @@ pub const Deployed = struct { sha: []const u8, time: i64 };
 /// deploys.tsv: one deploy step (docs/hosting.md "Deploy events"), detail redacted
 pub const DeployEvent = struct { time: i64, sha: []const u8, step: []const u8, status: []const u8, detail: []const u8 };
 
-/// Space by table and index (storage.tsv, a daily dbstat scan)
+/// Space by table and index (storage.tsv, a weekly dbstat scan)
 pub const StorageRow = struct { db: []const u8, name: []const u8, kind: []const u8, bytes: u64, cells: u64 };
 pub const Storage = struct { generated: i64, rows: []const StorageRow };
 

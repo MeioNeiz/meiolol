@@ -229,8 +229,8 @@ const W = struct {
     pub const used = plain("used");
     pub const disk_size = plain("disk size");
     pub const what = plain("What takes the space");
-    pub const what_sub = Phrase("Daily dbstat scan, {t:text}. Sizes are pages in the file, so free pages and the WAL are not counted.");
-    pub const no_scan = plain("No dbstat scan yet (daily on the box, data/storage.tsv).");
+    pub const what_sub = Phrase("Weekly dbstat scan, {t:text}. Sizes are pages in the file, so free pages and the WAL are not counted.");
+    pub const no_scan = plain("No dbstat scan yet (weekly on the box, data/storage.tsv).");
     pub const db_total = Phrase("{d:text}.db: {b:text}");
     pub const indexes = Phrase("Indexes {p:pct} of the file.");
     pub const more = Phrase("{n:count} more");
@@ -1050,7 +1050,7 @@ pub fn storage(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
     });
 }
 
-/// Per table and index, from the daily dbstat scan
+/// Per table and index, from the weekly dbstat scan
 fn space(h: *H, s: *const ad.Snapshot) N {
     const st = s.storage orelse return h.div(.{ .class = "tab" }, .{ card.sechead(h, W.what, null, &.{}), h.p(.{ .class = "lead" }, .{W.no_scan}) });
     const rows = h.mem.dupe(ad.StorageRow, st.rows) catch return oom(h);
