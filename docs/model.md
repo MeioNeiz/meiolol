@@ -6061,6 +6061,50 @@ Step 2, items, 16.21 dev (m10-nl3it-16.21.md, against m10-nl3ks-16.21): kept,
   48.0% [44.6, 51.3]); half-widths +0.02 on average, at most +1.1; cells with no own
   games +1.8
 
+### The patch's games from before EUW1, 16.21 and 16.22, 2026-11-06 (meio, M6b1)
+
+Why Meio's day-0 shares lost to the raw 30 days on 16.22 (items +0.05 ± 0.03, keystones
++0.08 ± 0.05 milli-nats). Not the patch prior: shares on Shape.walk (d[0] centred on last
+patch) changed nothing on 16.21 or 16.22 (every row within ±0.02), as the shares' fitted
+patch sd is 0.12-0.15 logit (main 3.1-3.2, bracket 0.36-0.46, EUW1 0.49-0.58).
+
+Cells dump (`truth --cells`, 16.22 origin 0, 277k share cells, every region and EUW1):
+the loss sits on popular cells (share over 5%, 30 days over 10k games) where Meio moves
+0.1-0.5 logit off the 30 days against the week's direction. T0 is EUW1's first game of
+the patch, so every newest-patch game before it comes from the platforms that get the
+patch first (KR, JP1, OC1, SG2, TW2, VN2). Meio's one non-EUW term (a + d[patch] + b +
+g(EUW1)) can't tell their meta from the patch, so d[0] takes it on and carries it to
+EUW1, which has no patch games yet. Example, champion-role 25380, item 6672: every region
+30 days 0.53, pre-T0 games 0.74, Meio 0.64, the week 0.53; EUW1 30 days 0.35, Meio 0.45,
+the week 0.32. Over cells with 200+ pre-T0 games the week moved about 0.10 of the
+pre-T0 move at every games band, so it isn't noise.
+
+With and without: truth with the newest patch's pre-T0 rows left out of Meio's fit
+(raw modes unchanged), same commit (1c06bb73), origins 0-2. Meio minus the raw 30 days,
+milli-nats a target game, all ranks:
+
+| cell | 16.21 day 0 with | without | 16.22 day 0 with | without |
+| --- | --: | --: | --: | --: |
+| champion-role | -0.02 ± 0.02 | +0.03 ± 0.02 | -0.00 ± 0.01 | 0.00 ± 0.00 |
+| matchup | -1.18 ± 0.05 | -1.10 ± 0.05 | -0.58 ± 0.05 | -0.57 ± 0.05 |
+| item win rate | -0.19 ± 0.02 | -0.15 ± 0.02 | -0.08 ± 0.02 | -0.08 ± 0.02 |
+| keystone win rate | -0.15 ± 0.03 | -0.11 ± 0.03 | -0.06 ± 0.02 | -0.05 ± 0.02 |
+| item share | +0.01 ± 0.02 | +0.02 ± 0.01 | +0.05 ± 0.03 | +0.03 ± 0.01 |
+| keystone share | +0.05 ± 0.07 | +0.10 ± 0.04 | +0.08 ± 0.05 | +0.04 ± 0.01 |
+| EUW1 item share | -0.04 ± 0.03 | -0.03 ± 0.01 | +0.08 ± 0.04 | +0.02 ± 0.01 |
+| EUW1 keystone share | +0.04 ± 0.10 | +0.05 ± 0.04 | +0.09 ± 0.07 | +0.02 ± 0.01 |
+
+Duo 16.21 day 0 -0.84 -> -0.70; days 1+ within ±0.01 on both patches (16.22 base row from
+41228cee, same shares). Leaving them out helps 16.22's shares but hurts 16.21's day 0 in
+12 kind x rank rows beyond 2 se, mostly win rates: the pre-T0 games carry real balance
+changes (they travel across regions) and their own taste (it doesn't). Not shipped; next
+an early-platforms region term beside EUW1, so those games move d[0] net of their
+group's usual level (lab TS2b, a shrunk lead term, the alternative). What's left on
+16.22 day 0 without them is cells that really moved (|z| over 5: 97% of the items' gap,
+63% of the keystones'), which no game data has yet (M8). Data: cubes of 6 Nov
+(data/cubes-20261106); tables, cell dumps and scripts in
+data/team/2026-11-05-notes2/m6b1/.
+
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
 data/snap (85,693 ranked solo games, 16.19 + 16.20, all regions), sqlite3 on the Mac;

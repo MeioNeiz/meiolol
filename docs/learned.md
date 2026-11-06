@@ -407,21 +407,21 @@ How to write a line:
   start (rank history, from 12 Oct), never the stored rank, as a pre-game input
 - In a new patch's first days, last month's numbers predict the next week better than
   the new patch's own games: win rates and items catch up after 2-3 days, matchups,
-  duos and lane gold still trail after a week. Sure: two patch boundaries replayed day
-  by day. Site: keep 30 days as the default; an estimate must beat it. Evidence:
-  docs/plan/estimates.md "E2 baseline"
+  duos and lane gold still trail after a week. Sure: two patch boundaries replayed. Site:
+  30 days stays the default. Evidence: docs/plan/estimates.md "E2 baseline"
 - A new patch moves champions' win rates beyond noise, mostly the changed ones: 0.75 pp
-  RMS on 16.21's first day, 1.9 pp for the 12 changed champions; last patch's numbers
-  unchanged cost about 1 milli-nat a game on day one. Sure: 52k games, day one only.
-  Evidence: docs/model.md "Patch 16.21's first day"
+  RMS on 16.21's first day, 1.9 pp for the 12 changed champions. Sure: 52k games, day
+  one only. Evidence: docs/model.md "Patch 16.21's first day"
 - (early) Across a patch, pooling every old game with a small per-patch champion offset
-  predicts the new patch best from its second day, and better on changed champions; the
-  new patch's games alone still trail after four days. Sure: dev, snap-20261029T1810Z,
-  16.21 days 1-3, 428k games: -0.28 ± 0.07 milli-nats a game vs plain pooling (changed
-  champions' games -0.40), latest-only +2 on day 3, shuffled control 0; a list of changed
-  champions adds nothing once the offset strength is estimated; days 4+ (test) not yet
-  looked at. Models: pooled + offsets (patch-transfer.md A2). Evidence: docs/model.md
-  "The latest patch day by day on 16.21"
+  predicts the new patch best from its second day, better on changed champions. Sure:
+  dev, 16.21 days 1-3, 428k games, -0.28 ± 0.07 milli-nats a game vs plain pooling; a
+  changed-champions list adds nothing. Evidence: docs/model.md "The latest patch day by
+  day on 16.21"
+- A new patch's first games, from Asia, SEA and Oceania hours before EUW1 has it, carry
+  real balance changes for win rates and their own region's taste for picks: left out,
+  16.21's first-day win rates got worse, 16.22's item and keystone shares better. Sure:
+  two patches replayed with and without them. Site: Meio uses them as is, for now.
+  Evidence: docs/model.md "The patch's games from before EUW1"
 - On a patch's first day most players have not played it: 75-89% of players checked
   had no game on it; players just seen in a new game give 3.1-3.5 new games per call.
   Crawler: snowball and patch-start reset. Evidence:
