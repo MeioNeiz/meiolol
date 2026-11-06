@@ -256,7 +256,7 @@ pub const Head = struct {
             .on_toggle = h.on(p, .filters),
         }, &.{
             segmented.view(h, .{ .label = W.region }, &.{ at(d, period, W.regions[0]), at(d, 2 + period, W.regions[1]) }),
-            segmented.view(h, .{ .label = W.period }, (&[_]segmented.Item{ at(d, 2 * region, W.days), at(d, 2 * region + 1, .{ .s = d.patch }), .{ .label = W.meio, .href = "", .disabled = true, .title = W.meio_off } })[0..if (urls.meio_period) 3 else 2]),
+            segmented.withWhy(h, .{ .label = W.period }, (&[_]segmented.Item{ at(d, 2 * region, W.days), at(d, 2 * region + 1, .{ .s = d.patch }), .{ .label = W.meio, .href = "", .disabled = true, .title = W.meio_off, .why = "mp-meio" } })[0..if (urls.meio_period) 3 else 2]),
             segmented.view(h, .{ .label = W.rank }, &ranks),
         })});
     }

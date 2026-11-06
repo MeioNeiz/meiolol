@@ -6,10 +6,13 @@
 //! with `on` too, an island takes the link's click (the page without it still follows).
 //! In the app, `shell` is the message bridge.js sends the shell on a click. `radios`:
 //! for static HTML with no island to switch views (the app's champ select): radios whose
-//! checked one the page's CSS reads (:has([value=..]:checked))
+//! checked one the page's CSS reads (:has([value=..]:checked)). `withWhy`: a disabled
+//! segment with `why` opens its title as a Toggletip on a tap, as a title never shows on
+//! phones
 const tree = @import("tree.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const phrase = @import("phrase.zig");
+const toggletip = @import("toggletip.zig");
 const plain = phrase.plain;
 const H = tree.H;
 const N = tree.N;
@@ -25,6 +28,9 @@ pub const Item = struct {
     disabled: bool = false,
     /// A line on hover: why it is disabled, what it counts
     title: ?[]const u8 = null,
+    /// Disabled, under withWhy: a tap opens the title as a note, under this Toggletip id
+    /// (unique on the page)
+    why: ?[]const u8 = null,
     /// A count after the label
     n: ?u32 = null,
     /// A link instead of a button: the page that shows it
@@ -46,9 +52,25 @@ pub const Opts = struct {
 };
 
 pub fn view(h: *H, o: Opts, items: []const Item) N {
+    return of(h, o, items, false);
+}
+
+/// `view` where a disabled segment's `why` opens on a tap: apart, so an island whose
+/// segments have none doesn't carry the Toggletip
+pub fn withWhy(h: *H, o: Opts, items: []const Item) N {
+    return of(h, o, items, true);
+}
+
+fn of(h: *H, o: Opts, items: []const Item, comptime why: bool) N {
     var l = h.list();
+    var tips = h.list();
     for (items, 0..) |it, i| {
         const kids = .{ it.label, if (it.n) |n| h.span(.{ .class = "n" }, .{phrase.num(h, .count, n)}) else null };
+        if (why and it.disabled) if (it.why) |id| {
+            l.add(h.button(.{ .key = i, .type = "button", .popovertarget = id, .aria_disabled = true }, kids));
+            tips.add(toggletip.tip(h, id, it.label, .{ .s = it.title orelse "" }, false));
+            continue;
+        };
         l.add(if (it.href) |href| h.a(.{
             .key = i,
             .href = if (it.disabled or it.selected) null else href,
@@ -72,7 +94,7 @@ pub fn view(h: *H, o: Opts, items: []const Item) N {
         .aria_label = o.label,
         .data_v = if (o.v == .default) null else o.v,
         .data_s = if (o.s == .m) null else o.s,
-    }, .{l.done()});
+    }, .{ l.done(), if (why) tips.done() else N.none });
 }
 
 /// Radios named `group`, the selected one checked: the page's CSS shows what it chooses
@@ -146,6 +168,11 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Plat+"), .selected = true, .href = "#" },
         .{ .label = plain("Emerald+"), .disabled = true, .href = "#" },
         .{ .label = plain("All regions"), .href = "#" },
+    }));
+    g.add("greyed with why: a tap opens it", withWhy(h, .{ .s = .s, .label = plain("Period") }, &.{
+        .{ .label = plain("30 days"), .selected = true, .href = "#" },
+        .{ .label = plain("16.22"), .href = "#" },
+        .{ .label = plain("Meio"), .disabled = true, .href = "", .title = "Meio's estimates are on champion pages", .why = g.id("seg-why") },
     }));
     g.add("radios, static HTML", radios(h, "seg-demo", .{ .s = .s, .label = plain("View") }, &.{
         .{ .label = plain("Options"), .value = "options", .selected = true },

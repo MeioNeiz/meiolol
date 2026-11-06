@@ -64,12 +64,12 @@ const W = struct {
     pub const missing = plain("·");
     pub const ends = phrase.Phrase("{lo:dec}-{hi:rate}");
     pub const ends_whole = phrase.Phrase("{lo:int}-{hi:pct}");
-    pub const ends_games = phrase.Phrase("{e:text}, {n:count} games");
+    /// `x`: "worth " for an estimate, else empty: one phrase for both
+    pub const ends_games = phrase.Phrase("{e:text}, {x:text}{n:count} games");
     pub const delta_ends = phrase.Phrase("{lo:points} to {hi:points}");
     pub const said = phrase.Phrase("{w:text} {v:text}");
-    pub const said_games = phrase.Phrase("{w:text} {v:text}, {n:count} games");
-    pub const ends_worth = phrase.Phrase("{e:text}, worth {n:count} games");
-    pub const said_worth = phrase.Phrase("{w:text} {v:text}, worth {n:count} games");
+    pub const said_games = phrase.Phrase("{w:text} {v:text}, {x:text}{n:count} games");
+    pub const worth = plain("worth ");
 };
 
 /// <span class="c-rate" style="--c:…" title="50.6-51.8%, 44,935 games">
@@ -77,8 +77,10 @@ const W = struct {
 /// <span class="sr">win rate 51.2%, 44,935 games</span></span>
 pub fn view(h: *H, r: Rate, look: Look) N {
     if ((r.games orelse 1) == 0) return h.span(.{ .class = "c-rate", .data_state = "missing" }, .{W.missing});
-    const v = figure(h, r, look.unit);
-    const sv = if (look.unit) v else figure(h, r, true);
+    // Without the unit, the same text less its "%" (a rate is never negative): one call
+    // of figure, which an island whose looks differ at run time would keep twice
+    const sv = figure(h, r);
+    const v: tree.Text = if (look.unit) sv else .{ .s = sv.s[0 .. sv.s.len - 1] };
     return cell(h, if (r.games == null) null else r.pct - r.ref, r.half, tip(h, r, look.worth), .{
         h.span(.{ .class = "v", .aria_hidden = true }, .{v}),
         if (!look.count) null else if (r.games) |n| h.span(.{ .class = "g", .aria_hidden = true }, .{phrase.num(h, .kilo, n)}) else null,
@@ -87,8 +89,7 @@ pub fn view(h: *H, r: Rate, look: Look) N {
 }
 
 fn said(h: *H, look: Look, v: tree.Text, n: u32) tree.Text {
-    const args = .{ .w = look.said, .v = v.s, .n = n };
-    return if (look.worth) W.said_worth.with(h, args) else W.said_games.with(h, args);
+    return W.said_games.with(h, .{ .w = look.said, .v = v.s, .x = if (look.worth) W.worth.s else "", .n = n });
 }
 
 /// "+2.6": a difference of rates (vs usual, won − own), on the rates' colour and fade;
@@ -115,20 +116,19 @@ fn colour(pts: f64) fmt.WrColour {
 
 /// The figure as it shows, for a label that must say the same ("50%", not "50.0%")
 pub fn shown(h: *H, r: Rate) tree.Text {
-    return figure(h, r, true);
+    return figure(h, r);
 }
 
-fn figure(h: *H, r: Rate, unit: bool) tree.Text {
-    const pct = r.pct;
-    if ((r.half orelse 0) >= 10) return if (unit) phrase.num(h, .pct, whole(pct)) else phrase.num(h, .int, whole(pct));
-    return if (unit) phrase.num(h, .rate, pct) else phrase.num(h, .dec, pct);
+fn figure(h: *H, r: Rate) tree.Text {
+    if ((r.half orelse 0) >= 10) return phrase.num(h, .pct, whole(r.pct));
+    return phrase.num(h, .rate, r.pct);
 }
 
 fn tip(h: *H, r: Rate, worth: bool) ?[]const u8 {
     const x = r.half orelse return null;
     const e = ends(h, r.pct, x);
     const n = r.games orelse return e.s;
-    return if (worth) W.ends_worth.with(h, .{ .e = e.s, .n = n }).s else W.ends_games.with(h, .{ .e = e.s, .n = n }).s;
+    return W.ends_games.with(h, .{ .e = e.s, .x = if (worth) W.worth.s else "", .n = n }).s;
 }
 
 /// A rate's range as its ends, for a hover: "50.2-52.6%", whole once it is ±10 or wider

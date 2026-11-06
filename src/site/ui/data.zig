@@ -78,6 +78,42 @@ pub fn decodeHead(comptime T: type, comptime Head: type, bytes: []const u8) Erro
     return .{ .head = v, .rest = bytes[r.i..] };
 }
 
+/// Field `f` alone of a `T` written by `encode`, read where it lies: every field before it
+/// has a fixed size, so a reader of one field needs no decoder for the others
+pub fn decodeField(comptime T: type, comptime f: []const u8, bytes: []const u8) Error!@FieldType(T, f) {
+    const at = comptime blk: {
+        var n: usize = 4;
+        for (std.meta.fieldNames(T)) |g| {
+            if (std.mem.eql(u8, g, f)) break :blk n;
+            n += fixedSize(@FieldType(T, g));
+        }
+        unreachable;
+    };
+    var r: Reader = .{ .bytes = bytes, .a = std.mem.Allocator.failing };
+    if (r.read(u32) != fingerprint(T)) return r.err orelse error.WrongType;
+    r.i = @min(at, bytes.len);
+    const v = r.read(@FieldType(T, f));
+    if (r.err) |e| return e;
+    return v;
+}
+
+fn fixedSize(comptime T: type) usize {
+    return switch (@typeInfo(T)) {
+        .int => |i| (i.bits + 7) / 8,
+        .float => |fl| fl.bits / 8,
+        .bool => 1,
+        .void => 0,
+        .@"enum" => |e| fixedSize(e.tag_type),
+        .@"struct" => blk: {
+            var n: usize = 0;
+            for (std.meta.fieldNames(T)) |g| n += fixedSize(@FieldType(T, g));
+            break :blk n;
+        },
+        .array => |a| a.len * fixedSize(a.child),
+        else => @compileError("data: " ++ @typeName(T) ++ " has no fixed size"),
+    };
+}
+
 fn put(a: Allocator, out: *std.ArrayList(u8), comptime T: type, v: T) Allocator.Error!void {
     switch (@typeInfo(T)) {
         .int => |i| {
@@ -270,6 +306,20 @@ test "a head without the rest's decoder" {
     try testing.expectEqualStrings("Ahri", got.head.name);
     try testing.expectEqualSlices(u8, &.{ 2, 0, 0, 0, 1, 0, 2, 0 }, got.rest);
     try testing.expectError(error.WrongType, decodeHead(struct { n: u8 }, struct { n: u8 }, out.items));
+}
+
+test "one field read where it lies, past fixed-size ones" {
+    const E = enum(u8) { a, b };
+    const T = struct { e: E, ok: bool, n: u32, x: ?struct { p: f32, k: u16 }, rest: []const u16 };
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(testing.allocator);
+    try encode(testing.allocator, T, .{ .e = .b, .ok = true, .n = 7, .x = .{ .p = 0.5, .k = 9 }, .rest = &.{ 1, 2 } }, &out);
+    const x = (try decodeField(T, "x", out.items)).?;
+    try testing.expectEqual(0.5, x.p);
+    try testing.expectEqual(9, x.k);
+    try testing.expectEqual(7, try decodeField(T, "n", out.items));
+    try testing.expectError(error.Truncated, decodeField(T, "x", out.items[0..12]));
+    try testing.expectError(error.WrongType, decodeField(struct { n: u32 }, "n", out.items));
 }
 
 test "a stale, cut or damaged file fails to decode" {

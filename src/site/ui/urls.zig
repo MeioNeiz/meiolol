@@ -114,9 +114,9 @@ pub const Data = struct {
 /// which spells by concat
 pub const view_queries = [_][]const u8{ "", "?period=patch", "?region=all", "?region=all&period=patch" };
 
-/// The Meio period (?period=meio) on champion pages, greyed on the others: off until the
-/// champion page shows Meio's figures, so Meio never labels the 30 days' numbers
-pub const meio_period = false;
+/// The Meio period (?period=meio) on champion pages, greyed on the others. Off hides it
+/// everywhere, ?period=meio then reads as the 30 days
+pub const meio_period = true;
 
 /// Each view's tree of pages and data under the site root, by View index (View.dir), never
 /// in a page's URL: nginx maps the query to it

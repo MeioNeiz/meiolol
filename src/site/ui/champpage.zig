@@ -39,6 +39,7 @@ const champsearch = @import("champsearch.zig");
 const champhead = @import("champhead.zig");
 const buildpanel = @import("buildpanel.zig");
 const lockbar = @import("lockbar.zig");
+const pd = @import("pvdata.zig");
 const art = @import("art.zig");
 const dotplot = @import("dotplot.zig");
 const matchbrief = @import("matchbrief.zig");
@@ -507,7 +508,14 @@ pub const W = struct {
     pub const days = plain("30 days");
     pub const meio = plain("Meio");
     pub const meio_tip = Phrase("Our estimate for patch {p:text} from every game, not only this patch's");
-    pub const sub_meio = Phrase("{r:text} · Meio's estimate for {p:text}");
+    /// Only the head's win rate is Meio's so far; the build, matchups and the rest stay
+    /// the region's 30 days until they read it
+    pub const sub_meio = Phrase("{r:text} · Win rate: Meio's estimate for {p:text}; the rest: 30 days");
+    /// `t`: meio_tip
+    pub const meio_note = Phrase("{t:text}: worth {n:count} games, against the {o:count} it played on {p:text}.");
+    pub const raw = plain("raw");
+    /// Master+, a lock it doesn't model, three locks, or its answer not in
+    pub const raw_note = plain("No Meio estimate here: the rate the games give.");
     pub const ranks = [4]tree.Text{ plain("Plat+"), plain("Emerald+"), plain("Diamond+"), plain("Master+") };
     pub const bands = [5]tree.Text{ plain("<10k"), plain("10k"), plain("30k"), plain("100k"), plain("300k+") };
 };
@@ -889,6 +897,10 @@ pub const Top = struct {
     answer_path: []const u8 = "",
     /// The server's answer under `locks`, base64 (Build.ans)
     ans: ?[]const u8 = null,
+    /// Meio's estimate for the pick and the locks, null where it has none, and its
+    /// answer's path (meioWant)
+    meio: ?pd.Est = null,
+    meio_path: []const u8 = "",
 
     const P = @This();
 
@@ -942,9 +954,7 @@ pub const Top = struct {
 
     /// The answer the locks want, null without locks
     pub fn lockWant(p: *const P, a: std.mem.Allocator) ?[]const u8 {
-        if (!p.locks.any() or p.cur >= p.data.roles.len) return null;
-        const w = p.files.want;
-        return lockPath(a, p.root, w.view, "top", p.data.slug, p.data.roles[p.cur].role, w.rank, p.locks.s.slice()) catch null;
+        return p.answerWant(a, false);
     }
 
     pub fn setAnswer(p: *P, path: []const u8, d: *const TopData) void {
@@ -952,7 +962,26 @@ pub const Top = struct {
         p.answer_path = path;
     }
 
+    /// Meio's answer the pick wants (site/locks.zig meio), null outside Meio
+    pub fn meioWant(p: *const P, a: std.mem.Allocator) ?[]const u8 {
+        return p.answerWant(a, true);
+    }
+
+    /// lockWant, or meioWant with `meio`: one function, as the island asks for both
+    pub noinline fn answerWant(p: *const P, a: std.mem.Allocator, meio: bool) ?[]const u8 {
+        const w = p.files.want;
+        if (!(if (meio) w.meio else p.locks.any()) or p.cur >= p.data.roles.len) return null;
+        const lk = if (p.locks.any()) p.locks.s.slice() else pd.no_locks;
+        return lockPath(a, p.root, w.view, if (meio) "meio" else "top", p.data.slug, p.data.roles[p.cur].role, w.rank, lk) catch null;
+    }
+
+    pub fn setMeio(p: *P, path: []const u8, e: ?pd.Est) void {
+        p.meio = e;
+        p.meio_path = path;
+    }
+
     fn waiting(p: *const P, a: std.mem.Allocator) bool {
+        if (p.meioWant(a)) |w| if (!tree.eql(w, p.meio_path)) return true;
         const w = p.lockWant(a) orelse return false;
         return !tree.eql(w, p.answer_path);
     }
@@ -1090,12 +1119,12 @@ pub const Top = struct {
     /// Under locks: the answer's games and win rate, and their share of the rank's games
     /// in the role (`all`, null with too few there). Pick, ban, rank and the patch's
     /// move are the champion's, not the locks'
-    fn locked(_: *P, h: *H, d: *const TopData, all: ?*const TopRole) N {
+    fn locked(p: *P, h: *H, d: *const TopData, all: ?*const TopRole) N {
         if (d.roles.len == 0 or d.roles[0].games == 0) return h.p(.{ .class = "none" }, .{if (d.roles.len == 0) W.no_answer else W.no_lock_games});
         const x = d.roles[0];
         var items: [2]strip.Item = undefined;
         var n: usize = 0;
-        items[n] = .{ .label = W.won, .rate = winrate.view(h, .counted(x.games, x.wins), .{ .said = "" }), .answer = true };
+        items[n] = p.won(h, x.games, x.wins, null);
         n += 1;
         // The two count different tables (lock rows, views): never past all of them
         if (all) |y| if (y.games > 0) {
@@ -1109,12 +1138,7 @@ pub const Top = struct {
     fn headline(p: *P, h: *H, rl: *const TopRole) N {
         var items: [4]strip.Item = undefined;
         var n: usize = 0;
-        items[n] = .{
-            .label = W.won,
-            .rate = winrate.view(h, .counted(rl.games, rl.wins), .{ .said = "" }),
-            .ctx = if (rl.rank > 0) W.rank.with(h, .{ .n = rl.rank, .th = ordinal(rl.rank), .of = rl.of, .r = rl.role.label().s }) else null,
-            .answer = true,
-        };
+        items[n] = p.won(h, rl.games, rl.wins, if (rl.rank > 0) W.rank.with(h, .{ .n = rl.rank, .th = ordinal(rl.rank), .of = rl.of, .r = rl.role.label().s }) else null);
         n += 1;
         if (rl.patch_move) |m| {
             items[n] = .{
@@ -1127,6 +1151,28 @@ pub const Top = struct {
         items[n] = .{ .label = W.pick, .value = phrase.num(h, .rate, rl.pick) };
         items[n + 1] = .{ .label = W.ban, .value = phrase.num(h, .rate, rl.ban) };
         return strip.view(h, items[0 .. n + 2]);
+    }
+
+    /// The StatStrip's win rate: the games' own, `place` after it; in Meio, Meio's
+    /// estimate (no place: that ranks the raw rates), or the raw rate marked with why
+    fn won(p: *P, h: *H, games: u32, wins: u32, place: ?tree.Text) strip.Item {
+        var it: strip.Item = .{ .label = W.won, .ctx = place, .answer = true };
+        var rt: winrate.Rate = .counted(games, wins);
+        var worth = false;
+        // Before Meio's first answer is in, the games' rate unmarked
+        if (p.files.shown.meio and p.meio_path.len > 0) {
+            it.ctx = W.raw;
+            it.tip = .{ .id = "cp-meio", .note = W.raw_note };
+            if (p.meio) |e| {
+                const n = e.worth();
+                rt = .{ .pct = 100 * e.p, .games = n, .half = 100 * (e.hi - e.lo) / 2 };
+                worth = true;
+                it.ctx = null;
+                it.tip.?.note = W.meio_note.with(h, .{ .t = W.meio_tip.with(h, .{ .p = p.data.patch }).s, .n = n, .o = e.own, .p = p.data.patch });
+            }
+        }
+        it.rate = winrate.view(h, rt, .{ .said = "", .worth = worth });
+        return it;
     }
 };
 
@@ -2315,6 +2361,44 @@ test "Meio switched off reads as the region's 30 days" {
     try std.testing.expectEqual(Pick{ .view = 0 }, Pick.of(Top.Url{ .period = .meio }));
     p.setPeriod(.meio);
     try std.testing.expectEqual(Pick{ .view = 2 }, p);
+}
+
+test "Meio: the strip's win rate is Meio's with its worth and no place; raw marked without it" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d: TopData = .{ .name = "Ornn", .slug = "ornn", .icon = "", .patch = "16.22", .ddragon = "16.22.1", .champs = &.{}, .roles = &.{
+        .{ .role = .top, .games = 9000, .wins = 4700, .share = 95, .pick = 4, .ban = 2, .rank = 3, .of = 50, .lane = &.{} },
+    } };
+    var p: Top = .init(&d, try prepare(a, &d, "../../"), "../../");
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "3rd of 50") != null);
+    try std.testing.expectEqual(null, p.meioWant(a));
+
+    p.fromUrl(.{ .period = .meio });
+    p.show(a);
+    try std.testing.expectEqualStrings("../../data/lock/meio/ornn/top/plat/none.bin", p.meioWant(a).?);
+    w.clearRetainingCapacity();
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), W.raw_note.s) == null);
+    p.setMeio(p.meioWant(a).?, .{ .p = 0.512, .lo = 0.506, .hi = 0.518, .own = 412 });
+    w.clearRetainingCapacity();
+    try html.write(&t, p.view(&h), &w.writer);
+    const out = w.written();
+    try std.testing.expect(std.mem.indexOf(u8, out, "51.2%") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "worth ") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "against the 412 it played on 16.22") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "3rd of 50") == null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "data-busy") == null);
+
+    p.setMeio(p.meio_path, null);
+    w.clearRetainingCapacity();
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "52.2%") != null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), W.raw_note.s) != null);
 }
 
 test "a rare role is listed and opens with its games, faded only by its range" {

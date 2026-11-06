@@ -56,14 +56,6 @@ pub const Preview = struct {
     }
 };
 
-/// The games a binomial rate at `p` needs for an 80% range as narrow as Meio's
-fn worth(e: pd.Est) u32 {
-    const half: f64 = @max(0.0005, (e.hi - e.lo) / 2);
-    const p: f64 = e.p;
-    const n = p * (1 - p) * std.math.pow(f64, 1.2816 / half, 2);
-    return if (n > 1e8) 100_000_000 else @intFromFloat(n + 0.5);
-}
-
 /// Nothing with no Meio number and no reason a player can act on (no model loaded is ops')
 pub fn view(h: *H, v: Preview) N {
     const gap: ?tree.Text = switch (v.gap) {
@@ -77,7 +69,7 @@ pub fn view(h: *H, v: Preview) N {
     const e = v.est orelse return h.div(.{ .class = "c-pv" }, .{ tag, h.small(.{}, .{gap.?}) });
     return h.div(.{ .class = "c-pv" }, .{
         tag,
-        rate.view(h, .{ .pct = 100 * e.p, .games = worth(e), .half = 100 * (e.hi - e.lo) / 2 }, .{ .said = W.said.s, .worth = true }),
+        rate.view(h, .{ .pct = 100 * e.p, .games = e.worth(), .half = 100 * (e.hi - e.lo) / 2 }, .{ .said = W.said.s, .worth = true }),
         scale(h, v),
     });
 }

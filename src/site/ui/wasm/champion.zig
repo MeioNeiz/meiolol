@@ -1,7 +1,8 @@
 //! ui-champion.wasm: the champion page's head (ui.champpage.Top), and the loader of
 //! ui-champbuild.wasm, ui-champmore.wasm and ui-champcharts.wasm for the rest. zjb's
 //! generated loader (ui-champion.js, `<script src data-wasm>`) calls `main`. Under locks
-//! (`lk`) it fetches the renderer's answer as ui-champmore.wasm does
+//! (`lk`) it fetches the renderer's answer as ui-champmore.wasm does; in Meio, Meio's
+//! answer for the pick and the locks too
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -23,9 +24,6 @@ var src: []const u8 = "";
 var root_path: []const u8 = "";
 var want: u32 = 0;
 var island: ?*ui.island.Island(cp.Top, dom.Dom) = null;
-var answers: std.ArrayList(Answer) = .empty;
-const Answer = struct { path: []const u8, d: *const cp.TopData };
-var asked: ?[]const u8 = null;
 var server_lk: []const u8 = "";
 var server_ans: ?[]u8 = null;
 
@@ -62,7 +60,7 @@ fn loaded(_: i32, bytes: ?[]u8) void {
     if (server_ans) |sb| if (server.lockWant(gpa)) |path| {
         const d = gpa.create(cp.TopData) catch return;
         d.* = ui.data.decode(gpa, cp.TopData, sb) catch return;
-        answers.append(gpa, .{ .path = path, .d = d }) catch return;
+        keep(.{ .path = path, .d = d });
         server.setAnswer(path, d);
     };
     state = .init(&data, pp, root_path);
@@ -80,7 +78,7 @@ var stored: u8 = 0;
 
 fn changed() void {
     loader.check();
-    locks();
+    answers();
     const v = state.files.want.view;
     if (v == stored) return;
     stored = v;
@@ -93,29 +91,65 @@ fn changed() void {
 
 const loader = dom.Loader(cp.Top, cp.TopData, ui.champrank.Top);
 
-/// The answer the lock set wants, shown once in; one fetch at a time, kept by path
-fn locks() void {
+/// Top's answers by kind: 0 the lock set's (lockWant), 1 Meio's (meioWant). Each shown
+/// once in and kept by path; one fetch at a time for both. A failed fetch keeps an empty
+/// answer for its path
+fn answers() void {
     const i = island orelse return;
-    const path = state.lockWant(gpa) orelse return;
-    if (ui.tree.eql(path, state.answer_path)) return gpa.free(path);
-    for (answers.items) |x| if (ui.tree.eql(x.path, path)) {
+    var shown = false;
+    for (0..2) |k| {
+        const path = state.answerWant(gpa, k == 1) orelse continue;
+        if (ui.tree.eql(path, if (k == 0) state.answer_path else state.meio_path)) {
+            gpa.free(path);
+            continue;
+        }
+        const x = keptAt(path) orelse {
+            if (asked == null) {
+                asked = path;
+                dom.fetch(path, @intCast(k), answered);
+            } else gpa.free(path);
+            continue;
+        };
         gpa.free(path);
-        state.setAnswer(x.path, x.d);
-        return i.render();
-    };
-    if (asked != null) return gpa.free(path);
-    asked = path;
-    dom.fetch(path, 0, answered);
+        if (k == 0) state.setAnswer(x.path, @ptrCast(@alignCast(x.d))) else state.setMeio(x.path, @as(*const ?ui.pvdata.Est, @ptrCast(@alignCast(x.d))).*);
+        shown = true;
+    }
+    if (shown) i.render();
 }
 
-fn answered(_: i32, bytes: ?[]u8) void {
+/// A lock answer (cp.TopData), or Meio's estimate (?ui.pvdata.Est, null where it has none)
+const Kept = struct { path: []const u8, d: *const anyopaque };
+
+fn keptAt(path: []const u8) ?*const Kept {
+    for (kept[0..@min(kept_n, kept.len)]) |*x| if (ui.tree.eql(x.path, path)) return x;
+    return null;
+}
+
+/// The last answers fetched, the oldest replaced: a fixed ring, not an ArrayList, as each
+/// ArrayList element type is its own append in the island
+var kept: [32]Kept = undefined;
+var kept_n: usize = 0;
+var asked: ?[]const u8 = null;
+
+fn keep(x: Kept) void {
+    kept[kept_n % kept.len] = x;
+    kept_n += 1;
+}
+
+fn answered(k: i32, bytes: ?[]u8) void {
     const path = asked.?;
     asked = null;
-    const d = gpa.create(cp.TopData) catch return;
-    d.* = .{ .name = "", .slug = "", .icon = "", .patch = "", .ddragon = "", .champs = &.{}, .roles = &.{} };
-    if (bytes) |b| {
-        d.* = ui.data.decode(gpa, cp.TopData, b) catch d.*;
-    } else dom.dom.warn("champion: no lock answer");
-    answers.append(gpa, .{ .path = path, .d = d }) catch return;
-    locks();
+    if (bytes == null) dom.dom.warn("champion: no answer");
+    const d: *const anyopaque = if (k == 0) top: {
+        const t = gpa.create(cp.TopData) catch return;
+        t.* = .{ .name = "", .slug = "", .icon = "", .patch = "", .ddragon = "", .champs = &.{}, .roles = &.{} };
+        if (bytes) |b| t.* = ui.data.decode(gpa, cp.TopData, b) catch t.*;
+        break :top t;
+    } else meio: {
+        const e = gpa.create(?ui.pvdata.Est) catch return;
+        e.* = if (bytes) |b| ui.data.decodeField(ui.pvdata.Meio, "stack", b) catch null else null;
+        break :meio e;
+    };
+    keep(.{ .path = path, .d = d });
+    answers();
 }

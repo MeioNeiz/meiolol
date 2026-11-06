@@ -163,10 +163,10 @@ fn picks(h: *H, p: Picks) N {
             .{ .label = .{ .s = p.home }, .href = p.region[0].href, .selected = p.region[0].current },
             .{ .label = W.all_regions, .href = p.region[1].href, .selected = p.region[1].current },
         }),
-        segmented.view(h, .{ .s = .s, .label = W.period }, (&[_]segmented.Item{
+        segmented.withWhy(h, .{ .s = .s, .label = W.period }, (&[_]segmented.Item{
             .{ .label = W.days, .href = p.period[0].href, .selected = p.period[0].current },
             .{ .label = W.patch.with(h, .{ .p = p.patch }), .href = p.period[1].href, .selected = p.period[1].current },
-            .{ .label = W.meio, .disabled = true, .href = "", .title = W.meio_off },
+            .{ .label = W.meio, .disabled = true, .href = "", .title = W.meio_off, .why = "subbar-meio" },
         })[0..if (urls.meio_period) 3 else 2]),
         segmented.view(h, .{ .s = .s, .label = W.rank }, &ranks),
     });

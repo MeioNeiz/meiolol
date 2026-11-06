@@ -7,7 +7,23 @@ const Role = @import("role.zig").Role;
 
 /// Meio's number for a cell (src/meio.zig Estimate): p, its 80% range, and the games in
 /// the cell's own slice (the newest patch, this region and rank)
-pub const Est = struct { p: f32, lo: f32, hi: f32, own: u32 };
+pub const Est = struct {
+    p: f32,
+    lo: f32,
+    hi: f32,
+    own: u32,
+
+    /// The games a binomial rate at p needs for an 80% range as narrow as this one
+    pub fn worth(e: Est) u32 {
+        // A branch, not @max: that pulls compiler_rt's fmax into the island
+        const w: f64 = (e.hi - e.lo) / 2;
+        const half = if (w < 0.0005) 0.0005 else w;
+        const p: f64 = e.p;
+        const z = 1.2816 / half;
+        const n = p * (1 - p) * z * z;
+        return if (n > 1e8) 100_000_000 else @intFromFloat(n + 0.5);
+    }
+};
 
 /// A keystone, finished item or lane opponent beside the lock stack: its games and wins
 /// under the stack and the page's view, Meio's number for the stack with it. `gold`:

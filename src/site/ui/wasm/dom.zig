@@ -839,40 +839,46 @@ fn onAnswerBytes(ctx: i32, status: i32, buf: zjb.Handle) callconv(.c) void {
     on_answer(ctx, @intCast(std.math.clamp(status, 0, 999)), zjb.global("Uint8Array").new(.{buf}).allocBytes(gpa) catch null);
 }
 
-fn request(p: zjb.Handle, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
-    on_bytes = done;
+/// Each request carries its own `done` (a function table index): fetches out at once,
+/// such as a Loader's and an island's answers, each reach their own
+fn request(p: zjb.Handle, ctx: i32, done: Done) void {
     defer p.release();
-    const ok = zjb.fnHandle("uiResponse", &onResponse).bind(.{ctx});
+    const f: i32 = @intCast(@intFromPtr(done));
+    const ok = zjb.fnHandle("uiResponse", &onResponse).bind(.{ ctx, f });
     defer ok.release();
-    const bad = zjb.fnHandle("uiFailed", &onFailed).bind(.{ctx});
+    const bad = zjb.fnHandle("uiFailed", &onFailed).bind(.{ ctx, f });
     defer bad.release();
     p.call("then", .{ ok, bad }, zjb.Handle).release();
 }
 
-var on_bytes: *const fn (i32, ?[]u8) void = undefined;
+const Done = *const fn (i32, ?[]u8) void;
 
-fn onResponse(ctx: i32, resp: zjb.Handle) callconv(.c) void {
+fn doneOf(f: i32) Done {
+    return @ptrFromInt(@as(usize, @intCast(f)));
+}
+
+fn onResponse(ctx: i32, f: i32, resp: zjb.Handle) callconv(.c) void {
     const s = enter();
     defer leave(s);
     defer resp.release();
-    if (!resp.get("ok", bool)) return on_bytes(ctx, null);
-    const step = zjb.fnHandle("uiBytes", &onBytes).bind(.{ctx});
-    const bad = zjb.fnHandle("uiFailed", &onFailed).bind(.{ctx});
+    if (!resp.get("ok", bool)) return doneOf(f)(ctx, null);
+    const step = zjb.fnHandle("uiBytes", &onBytes).bind(.{ ctx, f });
+    const bad = zjb.fnHandle("uiFailed", &onFailed).bind(.{ ctx, f });
     _ = resp.call("arrayBuffer", .{}, zjb.Handle).call("then", .{ step, bad }, zjb.Handle);
 }
 
-fn onFailed(ctx: i32, err: zjb.Handle) callconv(.c) void {
+fn onFailed(ctx: i32, f: i32, err: zjb.Handle) callconv(.c) void {
     const s = enter();
     defer leave(s);
     err.release();
-    on_bytes(ctx, null);
+    doneOf(f)(ctx, null);
 }
 
-fn onBytes(ctx: i32, buf: zjb.Handle) callconv(.c) void {
+fn onBytes(ctx: i32, f: i32, buf: zjb.Handle) callconv(.c) void {
     const s = enter();
     defer leave(s);
     defer buf.release();
-    on_bytes(ctx, zjb.global("Uint8Array").new(.{buf}).allocBytes(gpa) catch null);
+    doneOf(f)(ctx, zjb.global("Uint8Array").new(.{buf}).allocBytes(gpa) catch null);
 }
 
 /// Fetches what an island's toolbar pick needs (ui.champpage.Files: `files`, with the

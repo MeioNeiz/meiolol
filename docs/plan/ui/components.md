@@ -217,9 +217,10 @@ to another page (a view's), the chosen one aria-current; with `on` too, an islan
 the link's click (the page without it still follows). In the app, `shell` is the message
 bridge.js sends the shell on a click. `radios`: for static HTML with no island to switch
 views (the app's champ select): radios whose checked one the page's CSS reads
-(:has([value=..]:checked))
+(:has([value=..]:checked)). `withWhy`: a disabled segment with `why` opens its title as a
+Toggletip on a tap, as a title never shows on phones
 States: view; sort, disabled; small, in a chart head; fill, phone panes; links to views,
-one greyed; radios, static HTML; counts
+one greyed; greyed with why: a tap opens it; radios, static HTML; counts
 Used by: tabs, card, site, filterbar, practice, picks, app, table, lane, timeline,
 buildpanel, scoreboard, matchgrid, ranking, poolgrid, yourviews, yourtime, homepage,
 testerpage, testercand, meionotes, meionoteslist, adminpage, admincharts, admintraffic,
@@ -262,8 +263,8 @@ open at a time, Escape and a tap outside close it). Sparingly: a term or an unce
 that needs a line, never words an unclear component couldn't carry. Placed under its term
 by CSS anchor positioning where supported, else centred
 States: closed: tap; a column head's term; open
-Used by: strip, draftboard, compview, loadscreen, table, laneduel, puzzle, reasons,
-learnpage, dailyseat, champpage
+Used by: segmented, strip, draftboard, compview, loadscreen, table, laneduel, puzzle,
+reasons, learnpage, dailyseat, champpage
 
 ### Tip
 `tip.zig` `.c-hint` `.c-hintb` site
