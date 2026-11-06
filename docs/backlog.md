@@ -108,6 +108,15 @@ before picking up these older ones:
   parts of a root (ChampHeader's ability row, +550 B gz on ui-champion) cost no island
   bytes. Costs a few hundred B gz in every island runtime: only when two or more such
   parts are worth moving
+- Brotli for the islands and pages: precompressed q11 is 14% under the .gz we serve on
+  every ui.wasm (6 Nov, champion page's five islands: 201 KB gz -> ~173 KB br, e.g.
+  ui-champion 40,431 -> 34,782; zstd -19 only 8%). Today Cloudflare re-compresses on the
+  fly: live ui-champion gz 40,558 -> CF br 40,112 (1%). Needs: a brotli encoder at build
+  or upload time (Zig std has none: a C brotli built by zig build, or the `brotli` CLI on
+  the box; Jacob's call); .br beside each .gz (src/store/raw.zig writes those); ngx_brotli
+  static on C01 (Ubuntu libnginx-mod-http-brotli-static, not installed; nginx has
+  gzip_static); a check that Cloudflare passes origin br through untouched; budgets then
+  counted in br
 
 ## Code safety
 
