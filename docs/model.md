@@ -6000,6 +6000,17 @@ run high or low over a group of cells (docs/plan/meio-middle.md NL0)?
   Iron-Silver +0.83; champion-role -0.25, +0.83); log loss better in every rank set
   (matchup Diamond+ -0.42, duo -0.89 milli-nats), all ranks unchanged. Left: Iron-Silver
   142 failing (the champion-role's own +0.83), all ranks 33
+- NL1, the shape (16.21, origins 0 and 7, target windows; per cell unbiased moments of
+  the true rate from falling factorials, so no binomial noise; games-weighted, bootstrap
+  se over cells; table data/team/2026-11-05-notes2/m10-nl1-16.21.tsv). True spread of
+  rates in a band, every region all ranks: champion-role 1.18 +- 0.11 points (x
+  -3..-4), 2.34 (-5..-6), 3.24 (-7..-8), 4.58 +- 0.40 (-9..-10), 6.5 +- 0.8 (-10..-11);
+  keystone 1.58 (> -0.5) to 2.8-3.9 (under -2); item 2.23 to 3.8-4.2, 5.5 under -8.
+  Skew: common champion-roles -0.9 to -1.1 (+- 0.13-0.2), rare -0.4..+0.6 (+- 0.3-0.6),
+  excess kurtosis -0.5 to -1.1 under -8: no upper tail. Meio's miss sd over its own sd:
+  champion-role 0.84-1.18 down to x -9, 1.2-2.0 under it; item 1.2-1.6 from -3, 2.05
+  under -8; keystone 1.5 (-2..-3), 2.1-2.3 (-3..-7), 3.0-3.7 under -7; EUW1 and
+  per-rank alike
 
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
