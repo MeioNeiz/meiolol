@@ -817,6 +817,7 @@ pub const css =
     \\  .c-build > .vs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2);
     \\    padding: var(--sp-3) var(--card-px) 0; font-size: var(--fs-s); color: var(--muted); white-space: nowrap; }
     \\  @container (min-width: 900px) { .c-build > .vs { padding: var(--sp-4) var(--sp-5) 0; } }
+    \\  @container (max-width: 479px) { .c-build > .vs .n { display: none; } }
     \\  .c-build > .in > .levels { order: 1; }
     \\  .c-build .slots { container-type: inline-size; display: flex; flex-direction: column; }
     \\  .c-build .slots > .sort { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3);
