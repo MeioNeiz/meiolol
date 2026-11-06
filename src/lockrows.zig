@@ -400,9 +400,12 @@ const Reader = struct {
 
 const magic = "MEIOLKR1";
 
+/// After the magic; `meiolol lockrows --format` prints it for deploy/web-loop.sh
+pub const fingerprint = flat.fingerprint(Table);
+
 pub fn write(w: *std.Io.Writer, t: Table) !void {
     try w.writeAll(magic);
-    try w.writeInt(u64, flat.fingerprint(Table), .little);
+    try w.writeInt(u64, fingerprint, .little);
     try flat.write(w, t);
 }
 
@@ -411,7 +414,7 @@ pub fn read(r: *std.Io.Reader, arena: Allocator) !?Table {
     var head: [magic.len + 8]u8 = undefined;
     r.readSliceAll(&head) catch return null;
     if (!std.mem.eql(u8, head[0..magic.len], magic)) return null;
-    if (std.mem.readInt(u64, head[magic.len..][0..8], .little) != flat.fingerprint(Table)) return null;
+    if (std.mem.readInt(u64, head[magic.len..][0..8], .little) != fingerprint) return null;
     return flat.read(Table, r, arena) catch |err| switch (err) {
         error.OutOfMemory => return err,
         else => null,
@@ -483,6 +486,8 @@ test "rows decode to the seats builds reads" {
     var buf: std.Io.Writer.Allocating = .init(gpa);
     defer buf.deinit();
     try write(&buf.writer, t);
+    // Where web-loop.sh's od reads it
+    try std.testing.expectEqual(fingerprint, std.mem.readInt(u64, buf.written()[8..16], .little));
     var r: std.Io.Reader = .fixed(buf.written());
     const back = (try read(&r, arena.allocator())).?;
     try std.testing.expectEqual(10, back.blocks.len);

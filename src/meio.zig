@@ -422,7 +422,8 @@ pub fn load(r: *std.Io.Reader, arena: Allocator) !?Model {
     };
 }
 
-const fingerprint = std.hash.Wyhash.hash(0, shapeOf(Model));
+/// After the magic; `meiolol meio --format` prints it for deploy/web-loop.sh
+pub const fingerprint = std.hash.Wyhash.hash(0, shapeOf(Model));
 
 fn isMap(comptime T: type) bool {
     if (@typeInfo(T) != .@"struct" or !@hasDecl(T, "KV")) return false;
@@ -2077,6 +2078,8 @@ test "a saved model answers as the fitted one, over any set of brackets" {
     var aw: std.Io.Writer.Allocating = .init(gpa);
     defer aw.deinit();
     try save(&aw.writer, &m);
+    // Where web-loop.sh's od reads it
+    try std.testing.expectEqual(fingerprint, std.mem.readInt(u64, aw.written()[8..16], .little));
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     var r: std.Io.Reader = .fixed(aw.written());

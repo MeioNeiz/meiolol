@@ -338,6 +338,9 @@ pub const usage_lockrows =
     \\              --bench FILE     time build answers (lockanswer.zig) on FILE's
     \\                               largest blocks over a lock mix, each checked
     \\                               against builds.Builder's; write nothing
+    \\              --format         print the fingerprint after the file's magic
+    \\                               this binary writes and reads, then exit
+    \\                               (deploy/web-loop.sh)
     \\
 ;
 
@@ -346,8 +349,17 @@ pub const usage_meio =
     \\              up to now, and write it for the champion page locks
     \\              --patch P        the newest patch (default EUW1's in the database)
     \\              --out FILE       default DIR/export/meio.bin
+    \\              --format         as for lockrows
     \\
 ;
+
+fn printFormat(c: *Cmd, fingerprint: u64) !u8 {
+    var buf: [32]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(c.init.io, &buf);
+    try stdout.interface.print("{d}\n", .{fingerprint});
+    try stdout.interface.flush();
+    return 0;
+}
 
 pub fn cmdMeio(c: *Cmd) !u8 {
     var patch: ?[]const u8 = null;
@@ -357,6 +369,8 @@ pub fn cmdMeio(c: *Cmd) !u8 {
             patch = try c.value();
         } else if (c.is("--out")) {
             out = try c.value();
+        } else if (c.is("--format")) {
+            return printFormat(c, meio.fingerprint);
         } else return error.Usage;
     }
     const gpa = c.init.gpa;
@@ -408,6 +422,8 @@ pub fn cmdLockrows(c: *Cmd) !u8 {
             out = try c.value();
         } else if (c.is("--bench")) {
             return benchLocks(c, try c.value());
+        } else if (c.is("--format")) {
+            return printFormat(c, lockrows.fingerprint);
         } else return error.Usage;
     }
     const gpa = c.init.gpa;

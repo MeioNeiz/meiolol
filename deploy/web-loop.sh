@@ -60,7 +60,8 @@
 # A deploy (deploy/box.sh web start) sends SIGUSR1 rather than restarting, unless this
 # script, its unit or the contact changed (data/web-loop.sum). Either way the next round
 # (at once) builds, uploads and writes the views file with the new binary before a due
-# curves pass, which the round after runs at once (curves_due); a daily job already
+# curves pass, which the round after runs at once (curves_due), but with lock rows and
+# Meio refit first if left in another build's format (refit); a daily job already
 # running carries on beside it. That write keeps the parts of the old file the new
 # binary would make the same way (`--reuse`: same types and sources, src/site/root.zig
 # partKeys) and loads only the rest, so a deploy that changed one part waits for that
@@ -347,6 +348,31 @@ curves_due() {
     (( age >= interval )) && held_curves=1
     return 1
 }
+# data/export/$1.bin left in another build's format (its fingerprint after the 8-byte
+# magic): the renderer refuses it ("another build's"/"another format", site/locks.zig)
+# until a curves pass refits it, up to 6 h after a deploy. Refit by `meiolol $1 ARGS`, as
+# curves_due does; before the upload the render swap waits on, so the new renderer
+# starts with it. A missing file waits for the curves pass
+refit() {
+    local name=$1 f=data/export/$1.bin want status
+    shift
+    # Not a binary from before --format (a rollback): the next one checks
+    want=$(bin/meiolol "$name" --format 2> /dev/null) || return 0
+    [[ -s $f ]] || return 0
+    [[ $(od -An -t u8 -j 8 -N 8 "$f" | tr -d ' ') == "$want" ]] && return 0
+    echo "$(date -u +%FT%TZ) $f in another build's format: refit"
+    round_event refit start "$f in another build's format"
+    batch bin/meiolol "$name" "$@" 2>&1
+    status=$?
+    if (( status == 0 )); then
+        echo "$(date -u +%FT%TZ) $f refit"
+        round_event refit ok "$f refit"
+    else
+        echo "$(date -u +%FT%TZ) $f refit FAILED (exit $status, its log above)"
+        round_event refit failed "$f: meiolol $name exit $status (web log)"
+    fi
+}
+refit_binary=''
 round_sha=''
 # meio.lol/private's last answer, so a held private upload is logged once
 private_gate=''
@@ -482,6 +508,11 @@ while true; do
         batch bin/meiolol lockrows 2>&1 || true
         # Meio for the private locks (data/export/meio.bin): 2.3 min, 2.7 GB on C01
         batch bin/meiolol meio ${patch:+--patch "$patch"} 2>&1 || true
+    # Once per binary: a refit that fails would cost minutes every round
+    elif [[ $(mtime bin/meiolol) != "$refit_binary" ]]; then
+        refit_binary=$(mtime bin/meiolol)
+        refit lockrows
+        refit meio ${patch:+--patch "$patch"}
     fi
     # The core build's and the views file's, so rendered pages match the uploaded ones
     site_args=(--contact "$contact" --origin https://meio.lol)
