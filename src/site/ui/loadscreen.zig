@@ -52,8 +52,8 @@ pub const Player = struct {
     rank: []const u8 = "",
     /// "Leona main", "first Leona game"; empty between
     mastery: []const u8 = "",
-    /// Their Summoner's Rift games of the last 20 ("12 of last 17 games on Leona, 7
-    /// won", "no Leona in last 17 games"); 0: no games part
+    /// Their Summoner's Rift games of the last 20 ("7 won of 12 on Leona", then "in last
+    /// 17 games"; "no Leona"); 0: no games part
     games: u32 = 0,
     on_pick: u32 = 0,
     /// Null: too few on the pick for a win count, so faint
@@ -191,23 +191,24 @@ fn player(h: *H, i: usize, side: TeamSide, pick: []const u8, p: Player) N {
     };
     const games = p.games > 0;
     const last: [2]N = if (games) toggletip.view(h, id, .{W.last.with(h, .{ .n = p.games })}, W.games, W.games_note) else .{ .none, .none };
-    const count: N = if (!games) .none else if (p.on_pick == 0) h.span(.{ .data_thin = true }, .{
-        W.none_of.with(h, .{ .c = pick }),
-        last[0],
-        W.games_after,
-    }) else h.span(.{ .data_thin = p.won == null }, .{
-        W.of.with(h, .{ .n = p.on_pick }),
-        last[0],
-        W.games_after,
-        W.on.with(h, .{ .c = pick }),
-        if (p.won) |w| W.won.with(h, .{ .n = w }) else null,
-    });
-    return h.span(.{ .class = "who" }, .{
-        if (p.rank.len > 0) p.rank else null,
-        if (p.rank.len > 0 and p.mastery.len > 0) sep else null,
-        if (p.mastery.len > 0) p.mastery else null,
-        if (games and (p.rank.len > 0 or p.mastery.len > 0)) sep else null,
+    // The win count is the figure; without one (under 5 on the pick) it's faint. The
+    // window ("in last 18 games") its own faint line, so neither wraps in a narrow card
+    const count: N = if (!games) .none else if (p.on_pick == 0)
+        h.span(.{ .data_thin = true }, .{W.none_of.with(h, .{ .c = pick })})
+    else if (p.won) |w|
+        h.span(.{}, .{ h.b(.{}, .{W.won.with(h, .{ .n = w })}), W.of_on.with(h, .{ .n = p.on_pick, .c = pick }) })
+    else
+        h.span(.{ .data_thin = true }, .{if (p.on_pick == 1) W.one_on.with(h, .{ .c = pick }) else W.on.with(h, .{ .n = p.on_pick, .c = pick })});
+    const window: N = if (games) h.span(.{ .data_thin = true }, .{ W.within, last[0], W.games_after }) else .none;
+    const known = p.rank.len > 0 or p.mastery.len > 0;
+    return h.div(.{ .class = "who" }, .{
+        if (known) h.span(.{}, .{
+            if (p.rank.len > 0) h.b(.{}, .{p.rank}) else null,
+            if (p.rank.len > 0 and p.mastery.len > 0) sep else null,
+            if (p.mastery.len > 0) p.mastery else null,
+        }) else null,
         count,
+        window,
         last[1],
     });
 }
@@ -239,12 +240,14 @@ const W = struct {
     const slow_items = plain("slow items");
     const sep = plain(" · ");
     const games = plain("Recent games");
-    const of = Phrase("{n:count} of ");
+    const won = Phrase("{n:count} won");
+    const of_on = Phrase(" of {n:count} on {c:text}");
+    const one_on = Phrase("1 game on {c:text}");
+    const on = Phrase("{n:count} games on {c:text}");
+    const none_of = Phrase("no {c:text}");
+    const within = plain("in ");
     const last = Phrase("last {n:count}");
     const games_after = plain(" games");
-    const none_of = Phrase("no {c:text} in ");
-    const on = Phrase(" on {c:text}");
-    const won = Phrase(", {n:count} won");
     const games_note = plain("Their Summoner's Rift games among the last 20 in their match history: ARAM, Arena and other modes left out. Wins show from 5 games on the champion.");
 };
 
@@ -287,7 +290,9 @@ pub const css =
     \\    white-space: nowrap; max-width: 100%; }
     \\  .c-load .role { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--muted); }
     \\  .c-load .fact { font-size: var(--fs-m); font-weight: var(--w-b); }
-    \\  .c-load .who { font-size: var(--fs-xs); color: var(--t2); }
+    \\  .c-load .body > .who { grid-column: 1 / -1; justify-self: stretch; order: 1; display: flex; flex-direction: column; gap: 2px;
+    \\    margin-top: 4px; padding-top: var(--sp-2); border-top: 1px solid var(--line); font-size: var(--fs-s); color: var(--t2); }
+    \\  .c-load .who b { font-weight: var(--w-b); color: var(--text); }
     \\  .c-load .who [data-thin] { color: var(--faint); }
     \\  .c-load .len { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--t2); }
     \\  .c-load .pills { display: flex; flex-wrap: wrap; gap: 4px; }

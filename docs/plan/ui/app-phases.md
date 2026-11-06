@@ -12,9 +12,9 @@ Nov 2026, team run 2026-11-03-app. Rules: docs/plan/app.md "Policy line".
   now" (never on a locked teammate) and the spark's "wins long/short"; cards as tall as
   what they say; "Your game" in plain words ("Tough lane vs Syndra", "Their Lee Sin strong
   early", "Enemy team strong late"). Private (137, Jacob 5 Nov): a line about each other
-  player from the client, "Emerald II · Leona main · 12 of last 17 games on Leona, 7
-  won" (their Rift games of the last 20; under 5 on the pick faint, no wins; "no Leona in
-  last 17 games", "first Leona game");
+  player from the client under the card's champion facts: "Emerald II · Leona main",
+  "7 won of 12 on Leona", "in last 17 games" (their Rift games of the last 20; under 5 on
+  the pick faint, no wins; "no Leona", "first Leona game");
   none for streamer-mode players or me. Public only after the production key, enemy
   side first. No streaks or form
 - Comps (109): tips under each team in the comp view, a line each: "All AD: armour
