@@ -263,6 +263,33 @@ pub fn band(h: *H, p: Plane, lo: []const f32, hi: []const f32) N {
     return h.path(.{ .class = "band", .d = path.close() }, .{});
 }
 
+/// Where a band runs past the plot, a dashed stroke along the frame: its clamped edge
+/// would read as the band levelling off there
+pub fn clipped(h: *H, p: Plane, lo: []const f32, hi: []const f32) N {
+    var path: Path = .{ .h = h };
+    edge(&path, p, hi, p.y.hi, true);
+    edge(&path, p, lo, p.y.lo, false);
+    if (path.d.items.len == 0) return .none;
+    return h.path(.{ .class = "clip", .d = path.d.items }, .{});
+}
+
+fn edge(path: *Path, p: Plane, vs: []const f32, at: f32, up: bool) void {
+    const y = p.py(at);
+    for (vs, 0..) |v, i| {
+        const out = if (up) v > at else v < at;
+        if (i == 0) {
+            if (out) path.to('M', p.px(0), y);
+            continue;
+        }
+        const u = vs[i - 1];
+        if (out != (if (up) u > at else u < at)) {
+            const t = (at - u) / (v - u);
+            path.to(if (out) 'M' else 'L', p.px(i - 1) + t * (p.px(i) - p.px(i - 1)), y);
+        }
+        if (out) path.to('L', p.px(i), y);
+    }
+}
+
 /// A vertical band over x from a to b (domain units): the turning minute
 pub fn span(h: *H, p: Plane, a: f32, b: f32, class: []const u8) N {
     const x = p.x.at(a);
@@ -576,6 +603,19 @@ test "an area split at its base cuts at the crossing" {
     try testing.expectEqualStrings("M0 50L0 50L25 50L50 75L75 50L100 50L100 50Z", t.attr(a[1], "d").?);
     try testing.expectEqualStrings("M0 25L50 75L100 25", t.attr(line(&h, p, &.{ 5, -5, 5 }, .main), "d").?);
     try testing.expectEqual(N.none, line(&h, p, &.{5}, .main));
+}
+
+test "a clipped band dashes the frame's edge from where it crosses; one inside draws nothing" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    const p: Plane = .{ .x = .{ .lo = 0, .hi = 4 }, .y = .{ .lo = -10, .hi = 10 } };
+    const lo = [_]f32{ 0, -5, -5, -5, -5 };
+    try testing.expectEqual(N.none, clipped(&h, p, &lo, &.{ 0, 5, 5, 5, 5 }));
+    // Out from halfway between minutes 1 and 2 to halfway between 3 and 4
+    const n = clipped(&h, p, &lo, &.{ 0, 5, 15, 15, 5 });
+    try testing.expectEqualStrings("M37.5 0L50 0L75 0L87.5 0", t.attr(n, "d").?);
 }
 
 test "a press is a tap, a drag past 6 px a range" {

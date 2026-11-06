@@ -64,6 +64,7 @@ const W = struct {
     pub const you = phrase.Phrase(" · {n:text} {v:signed}");
     pub const typ = phrase.Phrase(" · typical {v:signed}");
     pub const games = phrase.Phrase(" · {n:count} games");
+    pub const half = phrase.Phrase("middle half {lo:signed} to {hi:signed}");
 };
 
 pub const Lane = struct {
@@ -216,6 +217,10 @@ pub const Lane = struct {
             if (i < s.you.len) kids.add(h.text(W.you.with(h, .{ .n = l.a, .v = round(s.you[i]) }).s));
             if (i < s.line.len) kids.add(h.text(W.typ.with(h, .{ .v = round(s.line[i]) }).s));
             if (i < l.games.len) kids.add(h.text(W.games.with(h, .{ .n = l.games[i] }).s));
+            // Only when the frame cuts it off: the band shows the rest. Its own line, so the
+            // tip fits a phone
+            if (i < s.band.len and (s.band[i][1] > p.y.hi or s.band[i][0] < p.y.lo))
+                kids.add(h.span(.{ .class = "half" }, .{W.half.with(h, .{ .lo = round(s.band[i][0]), .hi = round(s.band[i][1]) })}));
             for (chart.tip(h, p.px(i), .{kids.done()})) |n| over.add(n);
         }
         return chart.frame(h, .{
@@ -226,6 +231,7 @@ pub const Lane = struct {
             .x = xs.items,
             .marks = &.{
                 chart.band(h, p, lo, hi),
+                chart.clipped(h, p, lo, hi),
                 chart.line(h, p, s.prev, .prev),
                 chart.line(h, p, s.line, .typ),
                 chart.line(h, p, s.you, .you),
@@ -317,6 +323,8 @@ pub const css =
     \\    white-space: nowrap; }
     \\  .c-lane > .axn > span::before { content: ""; position: absolute; top: -22px; left: calc(var(--x) * 1%); width: 1px; height: 6px;
     \\    background: var(--muted); }
+    \\  .c-lane .tip .half { display: block; }
+    \\  .c-lane .clip { fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 2 3; }
     \\  .c-lane .dot[data-k="you"] { width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; background: var(--us); box-shadow: none; }
     \\}
     \\
@@ -353,6 +361,7 @@ pub fn gallery(g: *Gallery) void {
     const states = [_]struct { []const u8, Lane }{
         .{ "gold, a minute tapped", .{ .a = "LeBlanc", .b = "Yasuo", .metrics = &demo_metrics, .games = &lane_games, .tip = 14 } },
         .{ "CS, minutes dragged", .{ .a = "LeBlanc", .b = "Yasuo", .metrics = &demo_metrics, .k = 2, .range = .{ 10, 15 } } },
+        .{ "a floor under the band: it clips, dashed, and the tip says its range", .{ .a = "LeBlanc", .b = "Yasuo", .metrics = &.{.{ .label = plain("Gold"), .floor = 500, .s = .{ .you = lane_gold.you, .band = lane_gold.band, .line = lane_gold.line } }}, .games = &lane_games, .tip = 18 } },
         .{ "typical only (the matchup page)", .{ .a = "LeBlanc", .b = "Yasuo", .metrics = &.{.{ .label = plain("Gold"), .s = .{ .band = lane_gold.band, .line = lane_gold.line, .prev = &lane_prev } }} } },
     };
     for (states) |s| {
@@ -433,7 +442,20 @@ test "floor: an even lane gets its floor, not the band's ±2,000; a real gap sti
     try testing.expectEqual(-1000, l.plane().y.lo);
     m[0].s.line = &behind;
     try testing.expectEqual(-1500, l.plane().y.lo);
-    // Without one the band sets it
+    // The tip gives a clipped band's range, the frame dashes where it runs past
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    l.tip = 1;
+    const n = l.view(&h);
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try t.textOf(t.find(n, "class", "tip").?, &w);
+    try testing.expect(std.mem.find(u8, w.buffered(), "middle half \u{2212}2,000 to +2,000") != null);
+    try testing.expect(t.find(n, "class", "clip") != null);
+    // Without one the band sets it, and isn't cut
     m[0].floor = null;
     try testing.expectEqual(2000, l.plane().y.hi);
+    try testing.expectEqual(null, t.find(l.view(&h), "class", "clip"));
 }
