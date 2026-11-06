@@ -3,18 +3,18 @@
 //! side that got it first carries a "1st" mark with its time on hover and for screen
 //! readers (game-detail.md "Objectives and firsts"). `race`: when you and your opponent
 //! got somewhere, the typical time a tick, the gap to typical a signed figure (later is
-//! worse). `band`: one figure on a track, the typical middle half shaded and its median
-//! a tick (game-detail.md "Lane"); `cell` the same at a list row's size, the figure under
+//! worse). `band`: one figure on a track, the typical middle half shaded and its median a
+//! tick (game-detail.md "Lane"); `cell` the same at a list row's size, the figure under
 //! the track and the label only for screen readers (GameRow's lane at 14); with `from`, a
-//! hollow dot joined to the figure's: before and after (an objective lost first, taken
-//! first), each with its typical tick. `rows`: one
-//! side against the other, a row per figure: both rates as dots on one 0-100% track, each
-//! number beside its dot, the larger bold; a timing as both times and the gap (matchup.md
-//! "Versus"); `bars`: the same rows, each side's rate its own bar on a 0-100 track, so
-//! the share with neither shows (champion.md "Lane kills"); `key` names the sides, for
-//! the card head. `dumbbell`: a row per item,
-//! two rates on a shared axis as dots, the line between them the gap, the gap a figure
-//! (pool.md "How hard to pick up": new against practised players)
+//! hollow dot joined to the figure's: before and after (an objective not taken first,
+//! taken first), each with its typical tick. `rows`: one side against the other, a row
+//! per figure: both rates as dots on one 0-100% track, each number beside its dot, the
+//! larger bold; a timing as both times and the gap (matchup.md "Versus"); `bars`: the
+//! same rows, each side's rate its own bar on a 0-100 track, so the share with neither
+//! shows (champion.md "Lane kills"); `key` names the sides, for the card head.
+//! `dumbbell`: a row per item, two rates on a shared axis as dots, the line between them
+//! the gap, the gap a figure (pool.md "How hard to pick up": new against practised
+//! players)
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
@@ -427,7 +427,7 @@ pub const css =
     \\  .c-vs[data-v="ckey"] > .you { width: 6px; height: 12px; margin-left: 4px; border-radius: 3px; background: var(--us); }
     \\  .c-vs[data-v="cell"] > .c-hint { display: flex; flex-direction: column; gap: 3px; }
     \\  .c-vs .tr > .j { position: absolute; top: 50%; height: 2px; margin-top: -1px; left: calc(var(--l) * 1%); width: calc(var(--w) * 1%); background: var(--t2); }
-    \\  .c-vs .tr > .fr { position: absolute; z-index: 1; top: 50%; left: calc(var(--x) * 1%); width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
+    \\  .c-vs .tr > .fr { position: absolute; top: 50%; left: calc(var(--x) * 1%); width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
     \\    box-sizing: border-box; border: 2px solid var(--t2); border-radius: 50%; background: var(--panel); }
     \\  .c-vs[data-v="bell"] { grid-template-columns: minmax(0, 1fr); gap: 0; }
     \\  .c-vs > .bl { display: grid; grid-template-columns: minmax(0, 10em) minmax(0, 1fr) 3.4em; align-items: center; gap: var(--sp-2); min-height: 32px; }
@@ -535,8 +535,8 @@ pub fn gallery(g: *Gallery) void {
         cell(h, .{ .label = plain("Gold lead at 14"), .you = -768, .typ = .{ -1677, -63, 511 }, .dom = 3000 }, plain("−768 at 14")),
         cell(h, .{ .label = plain("Gold lead at 14"), .you = 1084, .typ = .{ -200, 300, 900 }, .dom = 3000 }, plain("+1,084 at 14")),
         cell(h, .{ .label = plain("Gold lead at 14"), .you = -3408, .dom = 3000 }, plain("−3,408 at 14")),
-        cellKey(h, plain("lost it first"), plain("took it first")),
-        cell(h, .{ .label = plain("First tower: won 73.3% after taking it, 37.0% after losing it"), .you = 233, .from = -130, .typ = .{ 201, 201, 201 }, .from_typ = -105, .dom = 500, .tint = false, .tip = true }, plain("73.3%")),
+        cellKey(h, plain("didn't take it first"), plain("took it first")),
+        cell(h, .{ .label = plain("First tower: won 73.3% after taking it, 37.0% otherwise"), .you = 233, .from = -130, .typ = .{ 201, 201, 201 }, .from_typ = -105, .dom = 500, .tint = false, .tip = true }, plain("73.3%")),
     }));
 }
 

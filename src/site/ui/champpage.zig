@@ -444,13 +444,13 @@ pub const W = struct {
     pub const firsts = [4]tree.Text{ plain("First tower"), plain("First dragon"), plain("First Voidgrubs"), plain("First Rift Herald") };
     pub const obj_kinds = [4]objicon.Kind{ .tower, .dragon, .grubs, .herald };
     pub const obj_rows = [2]tree.Text{ plain("Took it first"), plain("Win rate") };
-    pub const obj_lost = plain("lost it first");
+    pub const obj_lost = plain("didn't take it first");
     pub const obj_took = plain("took it first");
     pub const games_n = Phrase("{n:count} games");
     pub const took_tip = Phrase("{l:text}: {c:text}'s team took it in {r:rate} of {n:count} games; role average {a:rate}");
     pub const obj_key = plain("│ role average");
     pub const won_tip = Phrase("{l:text}: {c:text}'s team won {r:rate} of {n:count} games after taking it; role average {a:rate}");
-    pub const swing_tip = Phrase("{l:text}: {c:text}'s team won {r:rate} of {n:count} games after taking it, {x:rate} of {m:count} after losing it; role average {a:rate} and {b:rate}");
+    pub const swing_tip = Phrase("{l:text}: {c:text}'s team won {r:rate} of {n:count} games after taking it, {x:rate} of {m:count} otherwise; role average {a:rate} and {b:rate}");
     pub const by_rank = plain("By rank");
     pub const brackets = [3]tree.Text{ plain("Iron-Silver"), plain("Gold-Emerald"), plain("Diamond+") };
     pub const rank_tip = Phrase("{r:rate} in {n:count} games · gold at 14 {g:signed}, estimated from common matchups");
@@ -2163,9 +2163,10 @@ pub const Charts = struct {
         });
     }
 
-    /// A won-after cell is coloured by its win rate, the win rate after losing it first a
+    /// A won-after cell is coloured by its win rate, the win rate without taking it first a
     /// hollow dot joined to it; a taken-first one, not a win rate, keeps its ink.
-    /// `lost`: its and the role's games where the other team took it first (won-after only);
+    /// `lost`: its and the role's games without taking it first (the other team did, or
+    /// nobody; won-after only);
     /// `end`: its tip opens at its end
     fn objCell(p: *const P, h: *H, l: tree.Text, mine: Counts, all: Counts, lost: ?[2]Counts, end: bool) N {
         const took = lost == null;
@@ -2424,7 +2425,7 @@ test "lane kills: a timeline of each side's share of lanes, first blood only whe
     try std.testing.expectEqual(3, std.mem.count(u8, w.written(), "class=\"tc\""));
 }
 
-test "objectives: won after taking it first joined to won after losing it, the role's ticks" {
+test "objectives: won after taking it first joined to won otherwise, the role's ticks" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -2433,8 +2434,8 @@ test "objectives: won after taking it first joined to won after losing it, the r
             return .{ .games = g, .wins = w };
         }
     }.f;
-    // Tower: took 600 of 1000, won 440 (73.3%); lost first 400, won 80 (20.0%). Grubs: lost
-    // first in 10, too few for a dot
+    // Tower: took 600 of 1000, won 440 (73.3%); otherwise 400, won 80 (20.0%). Grubs: otherwise
+    // 10, too few for a dot
     var roles = [_]ChartsRole{.{ .role = .top, .objectives = .{
         .mine = .{ c(1000, 520), c(600, 440), c(500, 300), c(990, 520), c(400, 250) },
         .role = .{ c(10000, 5000), c(5000, 3500), c(5000, 3000), c(5000, 2900), c(5000, 2800) },
@@ -2446,7 +2447,7 @@ test "objectives: won after taking it first joined to won after losing it, the r
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, p.view(&h), &w.writer);
     const got = w.written();
-    try std.testing.expect(std.mem.indexOf(u8, got, "First tower: Ornn&#39;s team won 73.3% of 600 games after taking it, 20.0% of 400 after losing it; role average 70.0% and 30.0%") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got, "First tower: Ornn&#39;s team won 73.3% of 600 games after taking it, 20.0% of 400 otherwise; role average 70.0% and 30.0%") != null);
     // Hollow at 20%, joined to 73.3%; role's lost-first tick at 30%
     try std.testing.expect(std.mem.indexOf(u8, got, "class=\"fr\" style=\"--x:20\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, got, "class=\"typ\" style=\"--x:30\"") != null);
