@@ -110,7 +110,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 
 **App screens**
 - ChampSelect: the desktop app's champ select screen
-- CompView: the desktop app's comp view once all ten champions are locked (docs/plan/...
+- CompView: the desktop app's comp view (docs/plan/app.md APP6)
 - LobbyForm: the desktop app's panel before champ select (home, lobby, queue, match...
 - AppHome: the desktop app's tiles before champ select (docs/plan/ui/app-whole.md...
 - GameBuild: the desktop app's in-game panel under the island (private edition): my...
@@ -462,11 +462,11 @@ default, `on` for the role in force; named for screen readers unless the control
 names it
 States: muted, the one in force; 16, 20, 24; beside its name
 Used by: champ, sitesearch, rolepicker, champsearch, champlist, draftboard, champselect,
-teamrows, apphome, loadscreen, practice, picks, versus, gamehead, gamerow, scoreboard,
-candlist, champrolepicker, poolslots, matchgrid, finder, ranking, learnpage, dailypage,
-dailyseat, dailydays, patchpage, poolpage, poolgrid, profilesum, yourpage, yourviews,
-yourtime, yourfriends, squad, today, homepage, testerpage, testercand, champpage,
-matchpage, tiers
+teamrows, compview, apphome, loadscreen, practice, picks, versus, gamehead, gamerow,
+scoreboard, candlist, champrolepicker, poolslots, matchgrid, finder, ranking, learnpage,
+dailypage, dailyseat, dailydays, patchpage, poolpage, poolgrid, profilesum, yourpage,
+yourviews, yourtime, yourfriends, squad, today, homepage, testerpage, testercand,
+champpage, matchpage, tiers
 
 ### ChampIcon
 `champ.zig` `.c-champ` site
@@ -653,17 +653,18 @@ Used by: compview, gamescreen, postgame
 
 ### CompView
 `compview.zig` `.c-comp`
-CompView: the desktop app's comp view once all ten champions are locked (docs/plan/ app.md
-APP6), under the board. Each team's damage split as a bar, a tag when teams this one-sided
-win less often, its champions with a clear early or late lean; win chance by game length
-as a TrendChart; then the five lanes as TeamRows. The band (under the loading screen,
-whose cards and strips carry the leans and lanes): each team's damage either side of the
-chart. Static HTML in the shell, so the chart has no hover tip. Champion facts only, never
-players. The public edition gets words: every number here is null there
-(src/shell/screens.zig, docs/production-key.md)
+CompView: the desktop app's comp view (docs/plan/app.md APP6). Each team's damage split as
+a bar, a tag when teams this one-sided win less often, its champions with a clear early or
+late lean; win chance by game length as a TrendChart; then the five lanes as TeamRows. The
+band (static HTML under the loading screen, whose cards and strips carry the leans and
+lanes): each team's damage either side of the chart. The card (Teams, its own island under
+champ select's board, live from the first lock): the band's row with the leans and tips
+under each split, then each lane's gold gap; seats not locked yet hatch in the split.
+Champion facts only, never players. The public edition gets words: every number here is
+null there (src/shell/screens.zig, docs/production-key.md)
 States: all locked, public; all locked, private; private, length tilts but not sure: the
 band says so; band under the loading screen, private; band, public: words for the length;
-a split unknown
+Teams card from the first lock, private; Teams card, public: no gold gaps; a split unknown
 Used by: app
 
 ### LobbyForm
@@ -775,10 +776,10 @@ the in-game panel; the sign-in under it, or in its place before there is data. T
 screen and the post game have nothing to tap, so the shell renders them as static HTML
 after the island (ui/loadscreen.zig, ui/postgame.zig). The charts' own state (a tapped
 minute, a dragged range) and what's typed live in App, past patches
-States: waiting; champ select, private; all locked, comp under; all locked, comp under,
-private; lobby, form and tiles; in game; first start, sign in; first start, downloading;
-first start, download failed; League closed; waiting, sign in and restart lines; waiting,
-update address gone
+States: waiting; champ select, private; all locked, Teams under the board; all locked,
+Teams under the board, private; lobby, form and tiles; in game; first start, sign in;
+first start, downloading; first start, download failed; League closed; waiting, sign in
+and restart lines; waiting, update address gone
 
 ### AppBar
 `appbar.zig` `.c-appbar` `.c-appset`

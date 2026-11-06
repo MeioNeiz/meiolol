@@ -290,7 +290,7 @@ pub fn main(init: std.process.Init) !void {
                 sel.board = try board.build(a, &stats, opts, cs, &sel.card, comp_in.facts);
                 var in = comp_in;
                 in.tier = scene.tier;
-                sel.comp = try comp.after(a, in, &sel.board);
+                sel.comp = try comp.sofar(a, in, &sel.board);
                 break :blk .{ .select = sel };
             },
             .game => |gm| blk: {

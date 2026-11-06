@@ -37,12 +37,12 @@ file and packed rows: docs/architecture.md.
 - Page frame (screens.renderIn): `.c-page` holds the app bar (ui/appbar.zig: the site's
   header, its first link the live screen named for the phase, the site's pages on
   files.site, Practice, a settings popover: mastery, sign-in line, site links), then
-  `main.c-live`: the island, Options (ui-picks), comp view, lobby panel, lobby tiles
-  (ui/apphome.zig from shell/home.zig: mastery top's best role and each role's best by
-  smoothed win rate, links to Champion pool, Rankings, Patch changes, Draft tester;
-  every `waiting` phase), in-game build panel. Bar clicks carry their message as
-  `data-shell` JSON, sent by bridge.js; the bar is static, so a change of phase, mastery
-  or sign-in reloads the page. At 820 px and up (container `live`): champ select's board
+  `main.c-live`: the island, Options (ui-picks), Teams (ui-teams), comp view, lobby
+  panel, lobby tiles (ui/apphome.zig from shell/home.zig: mastery top's best role and
+  each role's best by smoothed win rate, links to Champion pool, Rankings, Patch
+  changes, Draft tester; every `waiting` phase), in-game build panel. Bar clicks carry
+  their message as `data-shell` JSON, sent by bridge.js; the bar is static, so a change
+  of phase, mastery or sign-in reloads the page. At 820 px and up (container `live`): champ select's board
   column beside the lane panel, which stays in view (1500 px and up with Options, a third
   column); in game score and lanes beside your lane; before champ select note and form
   panel beside the tiles
@@ -53,11 +53,13 @@ file and packed rows: docs/architecture.md.
 - screens.zig: the poller's state as ui.app.Data in the edition's words (notes,
   ChampSelect, LoadScreen, GameScreen private only, PostGame), rendered per page load
   and encoded at app.bin; the App island (ui-app.wasm) patches from it on each `app`
-  message and keeps the charts' state. Once all ten lock, and on the loading screen,
-  CompView after the island as static HTML (no interaction; when it comes or changes
-  the shell sends `reload`, which bridge.js turns into a page load); on the loading
-  screen without "win less" or win rates, as picks are locked. The Mac build's `--dump DIR --seconds N` writes
-  each change to DIR/<seq>/ for a look against the mock client
+  message and keeps the charts' state. Champ select from the first lock: Teams
+  (CompView's card, ui-teams.wasm, teams.bin; comp.sofar from the locked seats, unlocked
+  ones hatched in the split) anchored under the board. The loading screen: CompView after
+  the island as static HTML (no interaction; when it comes or changes the shell sends
+  `reload`, which bridge.js turns into a page load), without "win less" or win rates.
+  The Mac build's `--dump DIR --seconds N` writes each change to DIR/<seq>/ for a look
+  against the mock client
 - Review pages (src/site/appreview.zig, /private/app; the dev server makes them on the first
   request): each scenario in testdata/lcu/scenarios (embedded through its all.zig, which
   lists them) played through the poller's own tick (poller.Replay: the mock client on

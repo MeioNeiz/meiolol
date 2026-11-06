@@ -167,6 +167,8 @@ pub fn files(a: Allocator, gpa: Allocator, io: Io, in: Inputs) ![]File {
         .{ .path = "app/ui-practice.wasm", .data = shell_files.get("ui-practice.wasm").? },
         .{ .path = "app/ui-picks.js", .data = shell_files.get("ui-picks.js").? },
         .{ .path = "app/ui-picks.wasm", .data = shell_files.get("ui-picks.wasm").? },
+        .{ .path = "app/ui-teams.js", .data = shell_files.get("ui-teams.js").? },
+        .{ .path = "app/ui-teams.wasm", .data = shell_files.get("ui-teams.wasm").? },
     });
     return out.items;
 }
@@ -357,7 +359,7 @@ fn play(a: Allocator, gpa: Allocator, io: Io, data: *const poller.Data, lock: []
             picking_done = true;
             try seatLanes(a, &r, shots, p.group, steps, state.enemy_lanes);
             try movedEnemies(a, &r, shots, p.group, steps);
-        } else if (!lanes_done and s.select.comp != null) {
+        } else if (!lanes_done and desktop.comp.ready(&s.select.board)) {
             lanes_done = true;
             try seatLanes(a, &r, shots, p.group, steps, 0);
         }
@@ -535,6 +537,8 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         else => null,
     };
     if (opts) |*x| x.seq = d.seq;
+    var teams = try screens.teamsOf(a, c, s.status);
+    if (teams) |*x| x.seq = d.seq;
     const dir = try a.print("app/{t}/{s}", .{ ed, s.slug });
     const html = try screens.renderIn(a, d, bar, under, .{
         .css = root ++ "/app.css",
@@ -544,7 +548,10 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         .practice_wasm = root ++ "/ui-practice.wasm",
         .picks_js = root ++ "/ui-picks.js",
         .picks_wasm = root ++ "/ui-picks.wasm",
+        .teams_js = root ++ "/ui-teams.js",
+        .teams_wasm = root ++ "/ui-teams.wasm",
         .picks = opts,
+        .teams = teams,
         .lobby = if (s.form) |*f| try shell_lobby.view(a, c, f) else null,
         .home = if (s.status == .waiting) try shell_home.view(a, c, if (s.form) |*f| f else null) else null,
         .build = try screens.gameBuild(a, c, s.status),
@@ -572,6 +579,11 @@ fn page(a: Allocator, out: *std.ArrayList(File), c: screens.Ctx, ed: Edition, gr
         var kbin: std.ArrayList(u8) = .empty;
         try ui.data.encode(a, ui.picks.Data, x, &kbin);
         try out.append(a, .{ .path = try a.print("{s}/picks.bin", .{dir}), .data = kbin.items });
+    }
+    if (teams) |x| {
+        var tbin: std.ArrayList(u8) = .empty;
+        try ui.data.encode(a, ui.compview.Data, x, &tbin);
+        try out.append(a, .{ .path = try a.print("{s}/teams.bin", .{dir}), .data = tbin.items });
     }
 }
 
@@ -815,13 +827,13 @@ const nav_js =
 
 /// What the shell's webview gives a page (mac.zig's shim), faked, then the shell's own
 /// bridge.js. Messages to the shell show in the bar; a seat click opens that lane's page.
-/// The islands fetch app.bin, practice.bin and picks.bin relative to the page: from the
+/// The islands fetch app.bin, practice.bin, picks.bin and teams.bin relative to the page: from the
 /// state's folder (rv-bin; the index is a state's page at another address)
 const review_js =
     \\(() => {
     \\  const dir = document.querySelector('meta[name=rv-bin]').content;
     \\  const get = window.fetch;
-    \\  window.fetch = (u, o) => get(typeof u === 'string' && /^(app|practice|picks)\.bin\b/.test(u) ? dir + u : u, o);
+    \\  window.fetch = (u, o) => get(typeof u === 'string' && /^(app|practice|picks|teams)\.bin\b/.test(u) ? dir + u : u, o);
     \\  const ls = [];
     \\  const show = (m) => { const o = document.getElementById('rv-log'); if (o) o.textContent = 'to the app: ' + m; };
     \\  window.meiololApp = location.origin + '/private/app';

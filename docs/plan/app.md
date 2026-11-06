@@ -118,8 +118,8 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   patch, per all games under 2,000 patch games); plus its lane edge over an ally's
   champion at its pick rate, a chip from 2 wins per 10k (APP17). Left: pools where names show
 - APP6 After picks: comp view, first pass done (both editions; comp.zig,
-  desktop/comp.zig): once all ten are locked, above the lane panel, each team's damage
-  split bar and mix (and "teams this one-sided win less often" when Learn's tally is 2
+  desktop/comp.zig): in champ select from the first lock (Teams, under the board),
+  each team's damage split bar and mix (and "teams this one-sided win less often" when Learn's tally is 2
   SE under even), its champions with a clear early or late lean (`meiolol lean`), and
   five mirrored lane rows (ahead, even or behind at 14 min, 2 SE; level 6 sooner or
   later); testers see the magic share, the mix's win rate, lean numbers and lane gold.

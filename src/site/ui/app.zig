@@ -176,9 +176,9 @@ pub const css =
     \\    /* Champ select fits the window: the board card on the left, your pick on the right
     \\       (Card's look drawn behind it): the lane head, the view switch (radios in the
     \\       shell's static HTML), then that view, its main part in the flexible row with its
-    \\       own scroll. The islands' boxes step aside so the lane panel's parts, the Options
-    \\       island and the comp view share the right column. flex: none, else the page's
-    \\       flex column grows it to its content and the flexible row never scrolls */
+    \\       own scroll. The islands' boxes step aside so the lane panel's parts and the
+    \\       Options island share the right column. flex: none, else the page's flex column
+    \\       grows it to its content and the flexible row never scrolls */
     \\    .c-live:has(.c-cs) { display: grid; grid-template-columns: minmax(0, 58%) minmax(0, 1fr);
     \\      grid-template-rows: [head] auto [tabs] auto repeat(6, auto) [main] minmax(0, 1fr) [foot] auto;
     \\      gap: 0 var(--sp-4); height: calc(var(--vh) - var(--header)); flex: none; box-sizing: border-box; position: relative;
@@ -186,48 +186,47 @@ pub const css =
     \\    .c-live:has(.c-cs)::before { content: ""; position: absolute; inset: 0; grid-column: 2; grid-row: 1 / -1; z-index: -1;
     \\      background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); }
     \\    .c-live > .c-app:has(.c-cs), .c-live .c-cs, .c-live .c-cs > .side, .c-live .c-cs .side > .lane { display: contents; }
-    \\    .c-live .c-cs > .c-card { grid-column: 1; grid-row: 1 / -1; align-self: start; max-height: 100%; overflow-y: auto; }
+    \\    .c-live .c-cs > .c-card { grid-column: 1; grid-row: 1 / -1; align-self: start; max-height: 100%; overflow-y: auto;
+    \\      anchor-name: --cs-board; }
+    \\    /* Teams under the board: anchored, as a grid item there would share the right
+    \\       column's rows and stretch them (WebView2 is Chromium: anchors since 125) */
+    \\    .c-live:has(.c-cs) > .c-comp[data-island] { position: absolute; position-anchor: --cs-board; margin: 0;
+    \\      top: calc(anchor(bottom) + var(--sp-3)); left: anchor(left); right: anchor(right); }
     \\    .c-live:has(.c-cs) > :not(.c-app), .c-live:has(.c-cs) > .c-app > :not(.c-cs), .c-live .c-cs .side > :not(.lane),
     \\      .c-live .c-cs .side > .lane > * { grid-column: 2; min-width: 0; margin: 0 var(--card-px) var(--sp-3); }
     \\    .c-live .c-cs .lane > .vs { grid-row: head; padding-top: var(--card-py); }
     \\    .c-live:has(.c-cs) > .c-seg { display: inline-flex; grid-row: tabs; justify-self: start; }
-    \\    .c-live:has(.c-cs) > :is(.c-picks, .c-comp), .c-live .c-cs .lane > .c-lane { grid-row: main; align-self: stretch;
+    \\    .c-live:has(.c-cs) > .c-picks, .c-live .c-cs .lane > .c-lane { grid-row: main; align-self: stretch;
     \\      min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
     \\    .c-live:has(.c-cs) > .c-picks { padding: 0; }
     \\    .c-live .c-cs .lane > .scope { grid-row: foot; margin: 0 var(--card-px) var(--card-py); }
     \\    /* Each view shows its own: Options the lists (the lane panel's own only where the
-    \\       Options island lacks them, the public edition's), Lane the matchup, Comps the comp
-    \\       view. No Lane without a matchup chart, no switch of one view. A lane with no
-    \\       options (an ally's locked seat: no h3) keeps its matchup under Options; the
-    \\       shell checks Lane for it and leaves Options out (screens.zig laneOnly) */
-    \\    .c-live:has(> .c-seg [value="options"]:checked) > .c-comp,
+    \\       Options island lacks them, the public edition's), Lane the matchup. No Lane
+    \\       without a matchup chart, no switch of one view. A lane with no options (an
+    \\       ally's locked seat: no h3) keeps its matchup under Options; the shell checks
+    \\       Lane for it and leaves Options out (screens.zig laneOnly) */
     \\    .c-live:has(> .c-seg [value="options"]:checked) .c-cs .lane:has(> .opts-head > h3) > :is(.vs + p, .c-lane, .c-lane + .scope),
     \\    .c-live:has(> .c-seg [value="options"]:checked):has(> .c-picks[data-all]) .c-cs .lane > :not(.vs),
-    \\    .c-live:has(> .c-seg [value="lane"]:checked) > :is(.c-picks, .c-comp),
+    \\    .c-live:has(> .c-seg [value="lane"]:checked) > .c-picks,
     \\    .c-live:has(> .c-seg [value="lane"]:checked) .c-cs :is(.side > .bans, .lane > :is(.opts-head:not(:has(> .c-btn)), .opts, .scope:last-child)),
-    \\    .c-live:has(> .c-seg [value="comp"]:checked) > .c-picks,
-    \\    .c-live:has(> .c-seg [value="comp"]:checked) .c-cs :is(.side > .bans, .lane > :not(.vs)),
     \\    .c-live:not(:has(.c-cs .c-lane)) > .c-seg > label:has([value="lane"]),
-    \\    .c-live:not(:has(.c-cs .c-lane, > .c-seg [value="comp"])) > .c-seg { display: none; }
+    \\    .c-live:not(:has(.c-cs .c-lane)) > .c-seg { display: none; }
     \\    /* Before champ select: the note and form panel beside the tiles */
     \\    .c-live:has(> .c-apphome) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     \\      grid-template-rows: repeat(4, auto) 1fr; align-items: start; gap: 0 var(--sp-4); }
     \\    .c-live:has(> .c-apphome) > :not(.c-apphome) { grid-column: 1; margin-bottom: var(--sp-4); }
     \\    .c-live > .c-apphome { grid-column: 2; grid-row: 1 / -1; }
     \\  }
-    \\  .c-live > .c-comp { padding: 0; }
     \\}
     \\
 ;
 
 /// The shell's switch (screens.zig renderIn), for the gallery
-fn views(h: *H, group: []const u8, comp: bool) N {
-    const items = [_]segmented.Item{
+fn views(h: *H, group: []const u8) N {
+    return segmented.radios(h, group, .{ .s = .s }, &.{
         .{ .label = plain("Options"), .value = "options", .selected = true },
         .{ .label = plain("Lane"), .value = "lane" },
-        .{ .label = plain("Comps"), .value = "comp" },
-    };
-    return segmented.radios(h, group, .{ .s = .s }, items[0..if (comp) 3 else 2]);
+    });
 }
 
 /// The public Options panel: rows past the lane panel's own, as screens.zig picksOf
@@ -257,28 +256,30 @@ pub fn gallery(g: *Gallery) void {
         .text = "Both teams, your lane, options and bans.",
     } } }));
     // The shell's page (screens.zig renderIn; its <main> a div here): the view switch,
-    // the Options island and, once all ten lock, the comp view after the app's island
+    // the Options island and, from the first lock, the Teams island after the app's
     const priv = champselect.private(h, champselect.sample);
     g.addFill("champ select, private", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{
         page(h, .{ .seq = 2, .private = true, .where = "Champ select · Picks", .screen = .{ .select = priv }, .practice = false }),
-        views(h, "gal-cs-1", false),
+        views(h, "gal-cs-1"),
         picks.page(h, picks.sample, 0),
     })}));
     var locked = champselect.sample;
     locked.lane.mode = .locked;
-    g.addFill("all locked, comp under", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{
+    var teams: compview.Teams = .{ .data = .{ .seq = 6, .comp = compview.sample } };
+    g.addFill("all locked, Teams under the board", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{
         page(h, .{ .seq = 6, .private = false, .where = "Champ select · Finalization", .screen = .{ .select = locked } }),
-        views(h, "gal-cs-2", true),
+        views(h, "gal-cs-2"),
         picks.page(h, picks.public(h, past(h, picks.sample, locked.lane.options)), 0),
-        compview.view(h, compview.sample),
+        teams.view(h),
     })}));
     // The comp's numbers in the window; no picks table (the state's word budget)
     var locked_priv = champselect.private(h, locked);
     locked_priv.lane.mode = .locked;
-    g.addFill("all locked, comp under, private", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{
+    var teams_priv: compview.Teams = .{ .data = .{ .seq = 12, .comp = compview.private(h) } };
+    g.addFill("all locked, Teams under the board, private", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{
         page(h, .{ .seq = 12, .private = true, .where = "Champ select · Finalization", .screen = .{ .select = locked_priv }, .practice = false }),
-        views(h, "gal-cs-3", true),
-        compview.view(h, compview.private(h)),
+        views(h, "gal-cs-3"),
+        teams_priv.view(h),
     })}));
     // The shell's page before champ select: the form panel and tiles after the island
     g.addFill("lobby, form and tiles", h.div(.{ .class = "c-page" }, .{h.div(.{ .class = "c-live" }, .{

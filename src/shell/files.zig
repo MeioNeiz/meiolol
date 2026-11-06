@@ -20,6 +20,8 @@ const embedded = [_]File{
     .{ "ui-app.wasm", @embedFile("ui-app.wasm") },
     .{ "ui-picks.js", @embedFile("ui-picks.js") },
     .{ "ui-picks.wasm", @embedFile("ui-picks.wasm") },
+    .{ "ui-teams.js", @embedFile("ui-teams.js") },
+    .{ "ui-teams.wasm", @embedFile("ui-teams.wasm") },
 } ++ if (@import("build_options").public) [_]File{} else [_]File{
     .{ "ui-practice.js", @embedFile("ui-practice.js") },
     .{ "ui-practice.wasm", @embedFile("ui-practice.wasm") },

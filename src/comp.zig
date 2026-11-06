@@ -1,4 +1,4 @@
-//! The comp view once both teams have locked in (docs/plan/app.md APP6): each team's
+//! The comp view (docs/plan/app.md APP6), from the first lock in champ select: each team's
 //! damage mix, its champions that lean early or late, and the five lane matchups. Only
 //! measured, shipped facts: Learn's damage split and team mix tally and `meiolol lean`'s
 //! clear leans (core.champfacts), the lane curves. Comp leans (a champion into a
@@ -20,6 +20,8 @@ pub const Input = struct {
     curves: ?*const core.curvesfile.Curves = null,
     facts: ?*const champfacts.Facts = null,
     tier: ?[]const u8 = null,
+    /// Champ select so far: the length chart from whoever is locked, not only 5 a side
+    partial: bool = false,
 };
 
 pub const Mix = enum { physical, mixed, magic };
@@ -46,12 +48,21 @@ pub const Timing = struct {
 pub const Team = struct {
     /// Null unless every champion's damage split is known
     damage: ?Damage,
+    /// Of the whole team's damage (five seats), what the known splits give
+    split: Split = .{},
+    /// Its champions in this comp
+    seats: u8 = 0,
     /// Champions with a clear early or late lean in their role, early first
     timing: []const Timing,
     /// The team's only magic or only physical dealer (loading.lone)
     lone: ?Lone = null,
     /// Its champion with the most damage to champions a minute in its role
     top: ?Top = null,
+};
+
+pub const Split = struct {
+    magic: f64 = 0,
+    unknown: f64 = 1,
 };
 
 pub const Top = struct {
@@ -88,7 +99,7 @@ pub const Comp = struct {
     /// Ours, theirs
     teams: [2]Team,
     lanes: [Role.count]Lane,
-    /// Null without length facts or five seats a side
+    /// Null without length facts or five seats a side (`partial`: or no seat at all)
     length: ?Length = null,
     /// The damage facts' patch; "" without facts
     patch: []const u8,
@@ -105,18 +116,27 @@ pub fn ready(b: *const board.Board) bool {
     return true;
 }
 
-/// Null until `ready`. Allocates in `arena`
-pub fn after(arena: std.mem.Allocator, in: Input, b: *const board.Board) !?*const Comp {
-    if (!ready(b)) return null;
+/// Champ select's comp from the locked seats; null until one locks. Allocates in `arena`
+pub fn sofar(arena: std.mem.Allocator, in: Input, b: *const board.Board) !?*const Comp {
+    var seats: [2][]const loading.Seat = undefined;
+    for ([_][]const board.Seat{ b.allies, b.enemies }, &seats) |list, *o| {
+        var keep: std.ArrayList(loading.Seat) = .empty;
+        for (list) |s| if (s.slot.champion != 0 and s.slot.state == .locked)
+            try keep.append(arena, .{ .champion = s.slot.champion, .role = s.role, .guessed = s.guessed, .me = s.slot.me });
+        o.* = keep.items;
+    }
+    if (seats[0].len + seats[1].len == 0) return null;
+    var x = in;
+    x.partial = true;
     const c = try arena.create(Comp);
-    c.* = try build(arena, in, try loading.seatsOf(arena, b));
+    c.* = try build(arena, x, seats);
     return c;
 }
 
 pub fn build(arena: std.mem.Allocator, in: Input, seats: [2][]const loading.Seat) !Comp {
     var out: Comp = .{ .teams = undefined, .lanes = undefined, .patch = if (in.facts) |f| f.patch else "" };
     for (seats, &out.teams) |side, *t| t.* = try team(arena, in, side);
-    if (in.facts) |f| out.length = lengthOf(f, seats);
+    if (in.facts) |f| out.length = lengthOf(f, seats, in.partial);
     for (Role.all, &out.lanes) |r, *l| {
         const ours = inRole(seats[0], r);
         const theirs = inRole(seats[1], r);
@@ -139,7 +159,7 @@ fn inRole(seats: []const loading.Seat, r: Role) ?loading.Seat {
 }
 
 fn team(arena: std.mem.Allocator, in: Input, seats: []const loading.Seat) !Team {
-    const facts = in.facts orelse return .{ .damage = null, .timing = &.{} };
+    const facts = in.facts orelse return .{ .damage = null, .timing = &.{}, .seats = @intCast(seats.len) };
     var timing: std.ArrayList(Timing) = .empty;
     var sum: f64 = 0;
     var known: usize = 0;
@@ -176,7 +196,8 @@ fn team(arena: std.mem.Allocator, in: Input, seats: []const loading.Seat) !Team 
         lone = .{ .champion = s.champion, .ap = kind == .ap };
         break;
     };
-    return .{ .damage = damage, .timing = timing.items, .lone = lone, .top = topOf(facts, seats) };
+    const split: Split = .{ .magic = sum / 5, .unknown = 1 - @as(f64, @floatFromInt(known)) / 5 };
+    return .{ .damage = damage, .split = split, .seats = @intCast(seats.len), .timing = timing.items, .lone = lone, .top = topOf(facts, seats) };
 }
 
 fn topOf(facts: *const champfacts.Facts, seats: []const loading.Seat) ?Top {
@@ -203,8 +224,9 @@ fn topOf(facts: *const champfacts.Facts, seats: []const loading.Seat) ?Top {
 pub const length_k = 100;
 const z80 = 1.2816;
 
-fn lengthOf(facts: *const champfacts.Facts, seats: [2][]const loading.Seat) ?Length {
-    if (facts.lengths.len == 0 or seats[0].len != 5 or seats[1].len != 5) return null;
+fn lengthOf(facts: *const champfacts.Facts, seats: [2][]const loading.Seat, partial: bool) ?Length {
+    if (facts.lengths.len == 0) return null;
+    if (if (partial) seats[0].len + seats[1].len == 0 else seats[0].len != 5 or seats[1].len != 5) return null;
     var x: [champfacts.length_buckets]f64 = @splat(0);
     var v: [champfacts.length_buckets]f64 = @splat(0);
     for (seats, [_]f64{ 1, -1 }) |side, sign| for (side) |s| {

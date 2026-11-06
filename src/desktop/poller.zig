@@ -729,7 +729,7 @@ const Poller = struct {
             used = in;
         }
         sel.picks = try picks.build(arena, used, &sel.card);
-        sel.comp = try comp.after(arena, .{
+        sel.comp = try comp.sofar(arena, .{
             .stats = stats,
             .curves = if (data.curves) |*c| c else null,
             .facts = if (data.facts) |*f| f else null,

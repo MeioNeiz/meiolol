@@ -35,6 +35,8 @@ const Page = struct {
     comp: u32,
     /// ui-picks.wasm's picks.bin; "" while there is no Options panel
     picks: []const u8,
+    /// ui-teams.wasm's teams.bin; "" outside champ select
+    teams: []const u8,
     /// Champ select, the loading screen or a game: the window comes back from the site
     live: bool,
 };
@@ -49,6 +51,7 @@ pub fn get(path: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, path, "app.bin")) return p.bin;
     if (std.mem.eql(u8, path, "practice.bin") and p.practice.len > 0) return p.practice;
     if (std.mem.eql(u8, path, "picks.bin") and p.picks.len > 0) return p.picks;
+    if (std.mem.eql(u8, path, "teams.bin") and p.teams.len > 0) return p.teams;
     return null;
 }
 
@@ -63,7 +66,7 @@ pub fn icon(gpa: Allocator, path: []const u8) ?[]u8 {
 
 pub const Changed = struct {
     seq: u32,
-    /// The bar or the comp view changed: static HTML, so not in app.bin's patches
+    /// The bar, the comp view or an island coming or going: static HTML, so not in app.bin's patches
     reload: bool,
     /// The live screen began (champ select, loading, a game)
     started: bool,
@@ -81,11 +84,11 @@ pub fn refresh(gpa: Allocator, live: bool) ?Changed {
         arena.deinit();
         return null;
     };
-    // The Options panel's island comes or goes with the page
-    const reload = if (page) |old| old.comp != next.comp or (old.picks.len > 0) != (next.picks.len > 0) else false;
+    // The Options panel's and Teams' islands come or go with the page
+    const reload = if (page) |old| old.comp != next.comp or (old.picks.len > 0) != (next.picks.len > 0) or (old.teams.len > 0) != (next.teams.len > 0) else false;
     const started = next.live and !(if (page) |old| old.live else false);
     if (page) |*old| old.arena.deinit();
-    page = .{ .arena = arena, .html = next.html, .bin = next.bin, .practice = next.practice, .comp = next.comp, .picks = next.picks, .live = next.live };
+    page = .{ .arena = arena, .html = next.html, .bin = next.bin, .practice = next.practice, .comp = next.comp, .picks = next.picks, .teams = next.teams, .live = next.live };
     return .{ .seq = seq, .reload = reload, .started = started };
 }
 
@@ -94,10 +97,10 @@ pub fn deinit() void {
     page = null;
 }
 
-const Next = struct { html: []const u8, bin: []const u8, practice: []const u8, comp: u32, picks: []const u8, live: bool };
+const Next = struct { html: []const u8, bin: []const u8, practice: []const u8, comp: u32, picks: []const u8, teams: []const u8, live: bool };
 
 fn build(a: Allocator, live: bool) !?Next {
-    if (!live) return finish(a, try data(a, .{ .stats = null, .icons = null, .private = false }, .no_client, .none), null, null, null, .{});
+    if (!live) return finish(a, try data(a, .{ .stats = null, .icons = null, .private = false }, .no_client, .none), null, null, null, null, .{});
     const s = poller.lock();
     defer poller.unlock();
     const c: Ctx = .{
@@ -123,7 +126,7 @@ fn build(a: Allocator, live: bool) !?Next {
         .select => |x| try picksOf(a, c, x),
         else => null,
     };
-    return finish(a, d, bar, under, opts, .{
+    return finish(a, d, bar, under, opts, try teamsOf(a, c, s.status), .{
         .form = if (s.form) |f| try lobby.view(a, c, f) else null,
         .home = if (s.status == .waiting) try home.view(a, c, s.form) else null,
         .build = try gameBuild(a, c, s.status),
@@ -159,7 +162,7 @@ const Panels = struct {
     post: ?ui.postgame.Screen = null,
 };
 
-fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp, opts: ?ui.picks.Data, panels: Panels) !?Next {
+fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.compview.Comp, opts: ?ui.picks.Data, teams: ?ui.compview.Data, panels: Panels) !?Next {
     var d = shown;
     d.seq = seq + 1;
     // The comp view and the panels are static: a change to any reloads the page
@@ -187,15 +190,21 @@ fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data, under: ?ui.comp
         x.seq = d.seq;
         try ui.data.encode(a, ui.picks.Data, x.*, &kbin);
     }
+    var tbin: std.ArrayList(u8) = .empty;
+    var tm = teams;
+    if (tm) |*x| {
+        x.seq = d.seq;
+        try ui.data.encode(a, ui.compview.Data, x.*, &tbin);
+    }
     if (page) |old| if (std.mem.eql(u8, shows(old.bin), shows(bin.items)) and std.mem.eql(u8, shows(old.practice), shows(pbin.items)) and
-        std.mem.eql(u8, shows(old.picks), shows(kbin.items)) and old.comp == comp_id) return null;
+        std.mem.eql(u8, shows(old.picks), shows(kbin.items)) and std.mem.eql(u8, shows(old.teams), shows(tbin.items)) and old.comp == comp_id) return null;
     seq += 1;
-    const html = try renderIn(a, d, p, under, .{ .site = files.site, .mastery = state.by_mastery.load(.acquire), .picks = k, .lobby = panels.form, .home = panels.home, .build = panels.build, .load = panels.load, .post = panels.post });
+    const html = try renderIn(a, d, p, under, .{ .site = files.site, .mastery = state.by_mastery.load(.acquire), .picks = k, .teams = tm, .lobby = panels.form, .home = panels.home, .build = panels.build, .load = panels.load, .post = panels.post });
     const live = switch (d.screen) {
         .select, .loading, .game => true,
         .note, .post => false,
     };
-    return .{ .html = html, .bin = bin.items, .practice = pbin.items, .comp = comp_id, .picks = kbin.items, .live = live };
+    return .{ .html = html, .bin = bin.items, .practice = pbin.items, .comp = comp_id, .picks = kbin.items, .teams = tbin.items, .live = live };
 }
 
 /// Past the fingerprint and seq: what shows
@@ -209,9 +218,9 @@ pub fn dump(io: std.Io, gpa: Allocator, dir: []const u8) !void {
     const p = page orelse return;
     const sub = try std.fmt.allocPrint(gpa, "{s}/{d}", .{ dir, seq });
     defer gpa.free(sub);
-    const own = [_]struct { []const u8, []const u8 }{ .{ files.start_page, p.html }, .{ "app.bin", p.bin }, .{ "practice.bin", p.practice }, .{ "picks.bin", p.picks } };
+    const own = [_]struct { []const u8, []const u8 }{ .{ files.start_page, p.html }, .{ "app.bin", p.bin }, .{ "practice.bin", p.practice }, .{ "picks.bin", p.picks }, .{ "teams.bin", p.teams } };
     for (own) |f| if (f[1].len > 0) try dumpFile(io, gpa, sub, f[0], f[1]);
-    for ([_][]const u8{ "app.css", "ui-app.js", "ui-app.wasm", "ui-picks.js", "ui-picks.wasm", "ui-practice.js", "ui-practice.wasm" }) |f|
+    for ([_][]const u8{ "app.css", "ui-app.js", "ui-app.wasm", "ui-picks.js", "ui-picks.wasm", "ui-teams.js", "ui-teams.wasm", "ui-practice.js", "ui-practice.wasm" }) |f|
         if (files.get(f)) |bytes| try dumpFile(io, gpa, sub, f, bytes);
     var rest = p.html;
     while (std.mem.find(u8, rest, "src=\"")) |i| {
@@ -252,8 +261,12 @@ pub const Frame = struct {
     practice_wasm: []const u8 = "ui-practice.wasm",
     picks_js: []const u8 = "ui-picks.js",
     picks_wasm: []const u8 = "ui-picks.wasm",
+    teams_js: []const u8 = "ui-teams.js",
+    teams_wasm: []const u8 = "ui-teams.wasm",
     /// The Options panel's island after the app's (ui/picks.zig); null none
     picks: ?ui.picks.Data = null,
+    /// Champ select's Teams island under the board (ui/compview.zig Teams); null none
+    teams: ?ui.compview.Data = null,
     /// The lobby's form panel after the island (ui/lobby.zig); null none
     lobby: ?ui.lobby.Lobby = null,
     /// The lobby's tiles after the form panel (ui/apphome.zig); null none
@@ -300,15 +313,19 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
         break :blk options.view(&h);
     } else null;
     const comp_n: ?ui.N = if (under) |x| ui.compview.view(&h, x) else null;
+    var teams: ui.compview.Teams = undefined;
+    const teams_n: ?ui.N = if (f.teams) |x| blk: {
+        teams = .{ .data = x };
+        break :blk teams.view(&h);
+    } else null;
     // Champ select's views (ui/app.zig): CSS reads the checked radio, so no island byte;
-    // a page reload (the comp view coming, laneOnly changing) starts on the first again
+    // a page reload (laneOnly changing) starts on the first again
     const lane_only = laneOnly(d, f.picks);
     const views = [_]ui.segmented.Item{
         .{ .label = .{ .s = "Options" }, .value = "options", .selected = true },
         .{ .label = .{ .s = "Lane" }, .value = "lane", .selected = lane_only },
-        .{ .label = .{ .s = "Comps" }, .value = "comp" },
     };
-    const shown = views[@intFromBool(lane_only)..if (under != null) 3 else 2];
+    const shown = views[@intFromBool(lane_only)..];
     const tabs_n: ?ui.N = if (d.screen == .select and shown.len > 1) ui.segmented.radios(&h, "cs-view", .{ .s = .s, .label = .{ .s = "View" } }, shown) else null;
     const lobby_n: ?ui.N = if (f.lobby) |x| ui.lobby.view(&h, x) else null;
     const home_n: ?ui.N = if (f.home) |x| ui.apphome.view(&h, f.site, x) else null;
@@ -335,6 +352,7 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
     if (tabs_n) |n| try ui.html.write(&t, n, w);
     if (picks_n) |n| try ui.html.write(&t, n, w);
     if (comp_n) |n| try ui.html.write(&t, n, w);
+    if (teams_n) |n| try ui.html.write(&t, n, w);
     if (lobby_n) |n| try ui.html.write(&t, n, w);
     if (home_n) |n| try ui.html.write(&t, n, w);
     if (build_n) |n| try ui.html.write(&t, n, w);
@@ -342,6 +360,7 @@ pub fn renderIn(a: Allocator, d: app.Data, bar: ?ui.practice.Data, under: ?ui.co
     try w.print("{s}\n<script src=\"{s}\" data-wasm=\"{s}\" defer></script>", .{ f.end, f.js, f.wasm });
     if (top != null) try w.print("<script src=\"{s}\" data-wasm=\"{s}\" defer></script>", .{ f.practice_js, f.practice_wasm });
     if (picks_n != null) try w.print("<script src=\"{s}\" data-wasm=\"{s}\" defer></script>", .{ f.picks_js, f.picks_wasm });
+    if (teams_n != null) try w.print("<script src=\"{s}\" data-wasm=\"{s}\" defer></script>", .{ f.teams_js, f.teams_wasm });
     try w.writeAll("</body></html>\n");
     return out.written();
 }
@@ -501,11 +520,9 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
 
 /// Words for everyone; the share, the mix's record, lean numbers and lane gold for
 /// testers
-/// The comp view under the page: champ select's once the comp is known, the loading
-/// screen's locked one
+/// The comp view under the loading screen; champ select's is Teams (teamsOf)
 pub fn compUnder(a: Allocator, c: Ctx, status: state.Status) !?ui.compview.Comp {
     return switch (status) {
-        .select => |x| if (x.comp) |cv| try compView(a, c, cv) else null,
         .loading => |l| if (l.comp) |*cv| blk: {
             const v = try lockedComp(a, c, cv);
             // No split on either side and no length: the band would be two empty boxes
@@ -515,13 +532,35 @@ pub fn compUnder(a: Allocator, c: Ctx, status: state.Status) !?ui.compview.Comp 
     };
 }
 
+/// Champ select's Teams card, from the first lock: a split hatches what isn't locked;
+/// tips only for a side of five (a lone kind among three isn't one). Null outside it
+pub fn teamsOf(a: Allocator, c: Ctx, status: state.Status) !?ui.compview.Data {
+    const sel = switch (status) {
+        .select => |x| x,
+        else => return null,
+    };
+    const x = sel.comp orelse return .{ .seq = 0 };
+    var v = try compView(a, c, x);
+    for ([_]*ui.compview.Team{ &v.us, &v.them }, x.teams) |t, ct| {
+        if (ct.seats < 5) t.tips = &.{};
+        if (t.damage == null and ct.split.unknown < 1) t.damage = .{
+            .magic = @floatCast(ct.split.magic),
+            .unknown = @floatCast(ct.split.unknown),
+            .mix = null,
+            .share = c.private,
+        };
+    }
+    v.notes_id = "teams-notes";
+    return .{ .seq = 0, .comp = v };
+}
+
 /// The comp view under the loading screen, as a band: its cards and lane strips carry
 /// the leans and lanes. Picks are locked, so no "win less" and no win rates: they would
 /// rate teammates' picks
 fn lockedComp(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
     var v = try compView(a, c, x);
     v.lanes = &.{};
-    v.band = true;
+    v.look = .band;
     for ([_]*ui.compview.Team{ &v.us, &v.them }) |t| if (t.damage) |*d| {
         d.wins_less = false;
         d.rate = null;
@@ -1672,10 +1711,6 @@ test "an ally's lane: once they lock the matchup only, nothing rates their pick"
     var d = try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .select = &sel }, .none);
     d.screen.select.lane.chart = ui.champselect.sample.lane.chart;
     try testing.expect(laneOnly(d, null));
-    const comps = try render(a, d, null, ui.compview.sample);
-    try testing.expect(std.mem.find(u8, comps, "value=\"lane\" checked") != null);
-    try testing.expect(std.mem.find(u8, comps, "value=\"options\"") == null);
-    try testing.expect(std.mem.find(u8, comps, "value=\"comp\"") != null);
     try testing.expect(std.mem.find(u8, try render(a, d, null, null), "name=\"cs-view\"") == null);
     try testing.expect(!laneOnly(d, .{ .seq = 0, .private = true, .role = .mid, .rows = &.{} }));
     // Still to pick, nothing with enough games: no head, no sentence in its place
@@ -1723,11 +1758,25 @@ test "comp view: once all ten are locked, words for everyone and numbers for tes
                     .{ .champion = 999_999, .role = .top, .lean = .early, .gold = 300, .win = -2 },
                 },
             },
-            .{ .damage = null, .timing = &.{} },
+            .{ .damage = null, .timing = &.{}, .split = .{ .magic = 0.2, .unknown = 0.6 }, .seats = 2 },
         },
         .lanes = rows,
         .patch = "15.21",
     };
+    sel.comp = &c;
+
+    // Teams, mid draft: theirs hatch the 60% not locked; no tips for a side short of five
+    const card = (try teamsOf(a, .{ .stats = &f.stats, .icons = null, .private = true }, .{ .select = &sel })).?.comp.?;
+    try testing.expectEqual(0, card.us.tips.len);
+    try testing.expectApproxEqAbs(@as(f32, 0.6), card.them.damage.?.unknown, 1e-6);
+    try testing.expectEqual(null, card.them.damage.?.mix);
+    const teams_html = try renderIn(a, try data(a, .{ .stats = &f.stats, .icons = null, .private = true }, .{ .select = &sel }, .none), null, null, .{ .teams = .{ .seq = 1, .comp = card } });
+    try testing.expect(std.mem.find(u8, teams_html, "data-island=\"teams\"") != null);
+    try testing.expect(std.mem.find(u8, teams_html, "Lane gold at") != null);
+    try testing.expect(std.mem.find(u8, teams_html, "ui-teams.js") != null);
+    // Before a lock: the island's root alone, so the first lock needs no reload
+    sel.comp = null;
+    try testing.expectEqual(null, (try teamsOf(a, .{ .stats = &f.stats, .icons = null, .private = true }, .{ .select = &sel })).?.comp);
     sel.comp = &c;
 
     const priv = try compView(a, .{ .stats = &f.stats, .icons = null, .private = true }, sel.comp.?);

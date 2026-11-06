@@ -361,7 +361,7 @@ fn selectOf(arena: std.mem.Allocator, in: Input, sc: *const mock.Scenario, s: Se
     return .{
         .card = card,
         .board = b,
-        .comp = try comp.after(arena, .{ .stats = in.stats, .curves = in.curves, .facts = in.facts, .tier = in.tier }, &b),
+        .comp = try comp.sofar(arena, .{ .stats = in.stats, .curves = in.curves, .facts = in.facts, .tier = in.tier }, &b),
         .picks = try picks.build(arena, lin, &card),
     };
 }

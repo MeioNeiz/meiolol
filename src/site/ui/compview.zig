@@ -1,11 +1,13 @@
-//! CompView: the desktop app's comp view once all ten champions are locked (docs/plan/
-//! app.md APP6), under the board. Each team's damage split as a bar, a tag when teams
-//! this one-sided win less often, its champions with a clear early or late lean; win
-//! chance by game length as a TrendChart; then the five lanes as TeamRows. The band
-//! (under the loading screen, whose cards and strips carry the leans and lanes): each
-//! team's damage either side of the chart. Static HTML in the shell, so the chart has
-//! no hover tip. Champion facts only, never players. The public edition gets words:
-//! every number here is null there (src/shell/screens.zig, docs/production-key.md)
+//! CompView: the desktop app's comp view (docs/plan/app.md APP6). Each team's damage
+//! split as a bar, a tag when teams this one-sided win less often, its champions with a
+//! clear early or late lean; win chance by game length as a TrendChart; then the five
+//! lanes as TeamRows. The band (static HTML under the loading screen, whose cards and
+//! strips carry the leans and lanes): each team's damage either side of the chart. The
+//! card (Teams, its own island under champ select's board, live from the first lock):
+//! the band's row with the leans and tips under each split, then each lane's gold gap;
+//! seats not locked yet hatch in the split. Champion facts only, never players. The
+//! public edition gets words: every number here is null there (src/shell/screens.zig,
+//! docs/production-key.md)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const teamrows = @import("teamrows.zig");
@@ -14,6 +16,7 @@ const trend = @import("trend.zig");
 const toggletip = @import("toggletip.zig");
 const badge = @import("badge.zig");
 const dmgsplit = @import("dmgsplit.zig");
+const role = @import("role.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -28,8 +31,10 @@ pub const Damage = struct {
     /// The team's average magic share of damage to champions, 0 to 1: the bar
     magic: f32,
     /// The mix tally's bucket (30/70, not dmgOf's 35/65): the bar says it, so its words
-    /// match the tag and the tips
-    mix: Mix,
+    /// match the tag and the tips; null while seats are unknown (dmgOf of the known share)
+    mix: ?Mix,
+    /// Of the whole bar, the seats not locked or without a split: hatched
+    unknown: f32 = 0,
     /// Teams with this mix win under even by 2 SE (Learn's tally)
     wins_less: bool = false,
     /// Private edition: show the share in %
@@ -93,25 +98,66 @@ pub const Comp = struct {
     lane_minute: u8,
     /// The notes' toggletip, unique on the page
     notes_id: []const u8 = "comp-notes",
+    look: Look = .full,
+};
+
+pub const Look = enum {
+    full,
     /// One row under the loading screen: damage, chart, damage; no tips, leans or lanes
-    band: bool = false,
+    band,
+    /// The band's row with the leans and tips, then the lanes' gold gaps (Teams)
+    card,
+};
+
+pub const sel = "[data-island=teams]";
+
+pub const Data = struct {
+    /// The shell's count of changes, as app.Data's
+    seq: u32,
+    /// Null until a seat locks: the island's root, empty
+    comp: ?Comp = null,
+};
+
+/// Champ select's Teams card as an island (ui-teams.wasm, teams.bin): a lock changes it
+/// without the page reload a change to the shell's static HTML takes
+pub const Teams = struct {
+    data: Data,
+
+    pub const Msg = enum {};
+
+    pub fn update(_: *Teams, m: Msg, _: *tree.Event) void {
+        switch (m) {}
+    }
+
+    pub fn view(t: *Teams, h: *H) N {
+        var c = t.data.comp orelse return h.section(.{ .class = "c-comp", .data_island = "teams", .data_seq = t.data.seq }, .{});
+        c.look = .card;
+        return viewIn(h, c, t.data.seq);
+    }
 };
 
 const Side = enum { us, them };
 
 pub fn view(h: *H, c: Comp) N {
+    return viewIn(h, c, null);
+}
+
+/// `seq`: the Teams island's root
+fn viewIn(h: *H, c: Comp, seq: ?u32) N {
+    const island: ?[]const u8 = if (seq != null) "teams" else null;
     const notes = toggletip.view(h, c.notes_id, .{W.comps}, W.comps, W.notes.with(h, .{
         .g = @as(u32, c.gold_minute),
         .w = @as(u32, c.win_minute),
         .p = if (c.patch.len > 0) c.patch else "?",
         .l = @as(u32, c.lane_minute),
     }));
-    const len: ?N = if (c.length) |l| length(h, l, if (c.band) 80 else 110) else null;
+    const len: ?N = if (c.length) |l| length(h, l, if (c.look == .full) 110 else 80) else null;
     // Without the chart the band is the two teams as usual
-    if (c.band) return h.section(.{ .class = "c-comp", .data_v = if (len != null) "band" else null }, .{
+    if (c.look != .full) return h.section(.{ .class = "c-comp", .data_v = if (len != null) "band" else null, .data_island = island, .data_seq = seq }, .{
         h.h3(.{}, .{notes[0]}),
         notes[1],
-        h.div(.{ .class = "teams" }, .{ team(h, c.us, .us, true), len, team(h, c.them, .them, true) }),
+        h.div(.{ .class = "teams" }, .{ team(h, c.us, .us, c.look == .band), len, team(h, c.them, .them, c.look == .band) }),
+        if (c.look == .card) gaps(h, c.lanes, c.lane_minute) else null,
     });
     return h.section(.{ .class = "c-comp" }, .{
         h.h3(.{}, .{notes[0]}),
@@ -149,6 +195,20 @@ fn team(h: *H, t: Team, side: Side, band: bool) N {
     });
 }
 
+/// Each lane's gold gap at the lane minute, the private edition's: none without one
+fn gaps(h: *H, rows: []const teamrows.Row, minute: u8) ?N {
+    var list = h.list();
+    for (rows, 0..) |r, i| if (r.gap.len > 0) list.add(h.li(.{ .key = i }, .{
+        role.view(h, r.role, .{ .s = .s }),
+        h.b(.{ .data_lean = if (r.lean == .none) null else r.lean }, .{r.gap}),
+    }));
+    if (list.items.items.len == 0) return null;
+    return h.div(.{ .class = "gaps" }, .{
+        h.h3(.{}, .{W.gold.with(h, .{ .m = @as(u32, minute) })}),
+        h.ul(.{}, .{list.done()}),
+    });
+}
+
 /// Private: the line with its band against a dashed 50%, the band saying how sure;
 /// words only when the lean is clear. Public: the words alone, nothing without a lean
 fn length(h: *H, l: Length, height: u16) ?N {
@@ -175,13 +235,13 @@ fn whole(p: f32) u32 {
 
 /// The shares on its ends in the private edition only
 fn damage(h: *H, d: Damage) N {
-    const kind: dmgsplit.Kind = switch (d.mix) {
+    const kind: ?dmgsplit.Kind = if (d.mix) |m| switch (m) {
         .physical => .ad,
         .mixed => .mixed,
         .magic => .ap,
-    };
+    } else null;
     return h.div(.{ .class = "dmg" }, .{
-        dmgsplit.view(h, .{ .ap = d.magic, .kind = kind, .shares = d.share }),
+        dmgsplit.view(h, .{ .ap = d.magic, .unknown = d.unknown, .kind = kind, .shares = d.share }),
         if (d.rate) |r| h.p(.{ .class = "rec" }, .{W.record.with(h, .{ .r = r, .n = d.teams })}) else null,
         if (d.wins_less) h.p(.{}, .{badge.view(h, .turn, .{W.one_sided})}) else null,
     });
@@ -190,6 +250,7 @@ fn damage(h: *H, d: Damage) N {
 const W = struct {
     const comps = plain("Team comps");
     const lanes = plain("Lanes");
+    const gold = phrase.Phrase("Lane gold at {m:int} min");
     const us = plain("Your team");
     const them = plain("Enemy team");
     const no_split = plain("Damage split not known for every champion yet.");
@@ -247,6 +308,17 @@ pub const css =
     \\  @container (min-width: 760px) {
     \\    .c-comp[data-v="band"] .teams { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr); grid-template-areas: "us len them"; }
     \\  }
+    \\  /* Teams: a card of its own under the board, nothing before a lock */
+    \\  .c-comp[data-island] { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); padding: var(--card-pad); }
+    \\  .c-comp[data-island]:empty { display: none; }
+    \\  .c-comp[data-island] > h3 { margin: 0; }
+    \\  .c-comp .gaps { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); }
+    \\  .c-comp .gaps h3 { margin: 0; }
+    \\  .c-comp .gaps ul { flex-direction: row; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); }
+    \\  .c-comp .gaps li { gap: var(--sp-1); }
+    \\  .c-comp .gaps b { font-size: var(--fs-s); font-variant-numeric: tabular-nums; }
+    \\  .c-comp .gaps [data-lean="good"] { color: var(--hi2); }
+    \\  .c-comp .gaps [data-lean="bad"] { color: var(--lo2); }
     \\}
     \\
 ;
@@ -334,7 +406,7 @@ pub fn gallery(g: *Gallery) void {
     var band = private(h);
     band.notes_id = g.id("comp-band");
     band.lanes = &.{};
-    band.band = true;
+    band.look = .band;
     for ([_]*Team{ &band.us, &band.them }) |t| {
         t.damage.?.rate = null;
         t.damage.?.wins_less = false;
@@ -343,9 +415,24 @@ pub fn gallery(g: *Gallery) void {
     var band_public = sample;
     band_public.notes_id = g.id("comp-band-pub");
     band_public.lanes = &.{};
-    band_public.band = true;
+    band_public.look = .band;
     band_public.them.damage.?.wins_less = false;
     g.addFill("band, public: words for the length", view(h, band_public));
+    // Teams in champ select: three of ours and two of theirs locked, the rest hatched
+    var card = private(h);
+    card.notes_id = g.id("comp-card");
+    card.us.damage = .{ .magic = 0.3, .mix = null, .unknown = 0.4, .share = true };
+    card.them.damage = .{ .magic = 0.36, .mix = null, .unknown = 0.6, .share = true };
+    card.us.tips = &.{};
+    card.them.tips = &.{};
+    card.them.top = null;
+    var teams: Teams = .{ .data = .{ .seq = 1, .comp = card } };
+    g.addFill("Teams card from the first lock, private", teams.view(h));
+    var card_public = sample;
+    card_public.notes_id = g.id("comp-card-pub");
+    card_public.us.damage = .{ .magic = 0.3, .mix = null, .unknown = 0.4 };
+    var teams_public: Teams = .{ .data = .{ .seq = 1, .comp = card_public } };
+    g.addFill("Teams card, public: no gold gaps", teams_public.view(h));
     g.addFill("a split unknown", view(h, .{
         .us = .{ .timing = sample.us.timing },
         .them = sample.them,
