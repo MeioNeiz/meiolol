@@ -374,8 +374,9 @@ DamageSplit: a champion's or a team's damage to champions as one bar, AD (physic
 damage with it) from the left and AP the rest, each share at its end. Under 35% AP reads
 AD, over 65% AP, else AD and AP (dailydata.dmgOf) unless the caller's tally buckets it,
 said once for a screen reader, an unknown share too. A share whose champions are unknown
-hatches after both; all of it unknown, the bar is the hatch alone. Without shares (the
-app's public edition) the ends and the label carry no %
+hatches between them, so each end's label stays on its own part and the bar fills towards
+the middle as they come; all of it unknown, the bar is the hatch alone. Without shares
+(the app's public edition) the ends and the label carry no %
 States: AD; AD and AP; AP; a share unknown; all unknown; no shares, a tally's kind: 0.33
 AP in a 30-70 bucket
 Used by: draftboard, compview, champpage

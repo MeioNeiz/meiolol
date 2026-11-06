@@ -2,8 +2,10 @@
 //! true damage with it) from the left and AP the rest, each share at its end. Under 35%
 //! AP reads AD, over 65% AP, else AD and AP (dailydata.dmgOf) unless the caller's tally
 //! buckets it, said once for a screen reader, an unknown share too. A share whose
-//! champions are unknown hatches after both; all of it unknown, the bar is the hatch
-//! alone. Without shares (the app's public edition) the ends and the label carry no %
+//! champions are unknown hatches between them, so each end's label stays on its own
+//! part and the bar fills towards the middle as they come; all of it unknown, the bar
+//! is the hatch alone. Without shares (the app's public edition) the ends and the label
+//! carry no %
 const std = @import("std");
 const testing = std.testing;
 const tree = @import("tree.zig");
@@ -81,8 +83,8 @@ pub fn view(h: *H, x: Split) N {
     return h.div(.{ .class = "c-dmg", .role = "img", .aria_label = said }, .{
         h.span(.{ .class = "bar", .aria_hidden = true }, .{
             h.el(.i, .{ .class = "ad", .style = h.vars(.{ .w = ad }) }, .{}),
-            h.el(.i, .{ .class = "ap", .style = h.vars(.{ .w = ap }) }, .{}),
             hatch,
+            h.el(.i, .{ .class = "ap", .style = h.vars(.{ .w = ap }) }, .{}),
         }),
         h.span(.{ .class = "sh", .aria_hidden = true }, .{
             h.span(.{}, .{ if (x.named) h.span(.{ .class = "k" }, .{W.damage}) else null, if (x.named) " " else null, W.ad, " ", if (x.shares) h.b(.{}, .{phrase.num(h, .pct, n.ad)}) else null }),
