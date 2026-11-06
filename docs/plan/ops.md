@@ -29,9 +29,13 @@ of raw.db's free pages instead of moving pages back to the disk.
   first export), and 1000-summary chunks holding it 10-30 s each (a delete reads every
   overflow page it frees). Fixed 3 Nov: ~5 MB chunks, 250 ms apart. Still to see: an
   hour of catch-up at 97%+, then the learned.md line
-- Dips left: daily jobs and runs of deploys (90-95% for an hour while a job reads
-  meiolol.db hard). If they stay: pipelined steps instead of Bucket.flush after each,
-  or BFQ (mq-deadline honours ionice -c 3 only partly)
+- Dips left (4-6 Nov, 48 h: 28 hours every region 97%+, 19 one under): (a) curves
+  rounds and full views writes, 30-190 s commits; (b) hand-run reads, box jobs and
+  deploy runs (worst 5 Nov 22-23h, 86-94%); (c) Riot slow for sea in 6-12 min bursts
+  (riot 83-93% of its minute); (d) checkpointer stuck 5-15 min and 30-60 s commits with
+  nothing beside them in any log (4 Nov 20:34, 6 Nov 07:28). If (a)/(b) stay: pipelined
+  steps instead of Bucket.flush after each, or BFQ (mq-deadline honours ionice -c 3
+  only partly); (d) first needs the writer to log what it waited on
 - Sea runs ~98% (93-95% on C01 before the fix): one request at a time, ~0.7 s of each
   1.2 s slot in Riot's answer (time %: 36-40 slot wait, 56-61 Riot). Two in flight
   would not help: every minute sea still waits 25%+ on the limiter, whose catch-up
