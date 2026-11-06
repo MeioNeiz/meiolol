@@ -184,12 +184,11 @@ holding ~80% (so too wide fails as well as too narrow); boundaries 16.20 -> 16.2
   term per region with a learnt covariance (borrowing then differs each way). A region
   leading EUW1 (KR) is TS2 in meio-middle.md; the draft model's region terms PT6 A8
 
-Order: E7 next, as the base: on its own it fixes the matchup builds strip per
-period and rank in every block. Then E2, then E3-E5 as each passes the gate, then E9 and
-the default switch (E0b). E10 follows E7; E11 follows each estimate that passes E2.
+Order: E3-E5 as each passes E2's gate, then E9, the default switch (E0b); E10 now; E11.
 
 ## Status
 
+- E7 (day cubes): done, kept current by the box's web loop (measured below)
 - E2 (meio-truth): `meiolol truth` reads the day cubes, scores Meio as a third mode
   over eight cell kinds (the locks' keystone, item and rank cuts), with unseen-combo and
   range checks and `--tsv` for the method page. 16.20 -> 16.21: Meio beats both raw
@@ -248,11 +247,12 @@ Snapshot snap-20261023T2004Z on the Mac (M-series, ReleaseFast; 24 days, 1.6M ga
   ~10 days a run, hence the in-place update: a changed 100k-game day is read and
   written again in ~12 s (mostly the compression), plus ~0.5 ms a game decoded: ~2 min
   of cubes a box run
-- Box (C01, 30 Oct, `curves --site --patch 16.21` in the web loop, beside the crawler
-  and renderer): before, timelines ~8 min and fit and files ~9 min, ~17 min (06:43 to
-  07:00; 23:30 the night before ~30 min). First cube run: 31 days built in ~17 min
-  (2.66M games, 2.85 GB, ~95 MB a 100k-game day), then fit and files ~9 min, ~26 min.
-  On C01 the fit, not the read, is the larger part
+- Box (C01, 30 Oct, `curves --site --patch 16.21` in the web loop): before, ~17 min
+  (timelines ~8, fit and files ~9). First cube run: 31 days in ~17 min (2.66M games),
+  then ~9 min fit and files. On C01 the fit, not the read, is the larger part
+- Box, 6 Nov: 31 days afresh in 23 min (3.62M games, 3.82 GB, ~40 s a 120k-game day). A
+  young day afresh (12k games) takes 8 min, mostly the mastery read: WAL to ~2 GB, no
+  commit waits; act only past ~20 min or beside eval or lean
 
 ### E2 plan: Meio in the truth test, daily
 
