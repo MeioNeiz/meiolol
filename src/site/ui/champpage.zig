@@ -513,7 +513,7 @@ pub const W = struct {
     pub const sub_meio = Phrase("{r:text} · Win rate: Meio's estimate for {p:text}; the rest: 30 days");
     /// `t`: meio_tip
     pub const meio_note = Phrase("{t:text}: worth {n:count} games, against the {o:count} it played on {p:text}.");
-    pub const raw = plain("raw");
+    pub const raw = plain("no estimate");
     /// Master+, a lock it doesn't model, three locks, or its answer not in
     pub const raw_note = plain("No Meio estimate here: the rate the games give.");
     pub const ranks = [4]tree.Text{ plain("Plat+"), plain("Emerald+"), plain("Diamond+"), plain("Master+") };
@@ -2389,6 +2389,7 @@ test "Meio: the strip's win rate is Meio's with its worth and no place; raw mark
     const out = w.written();
     try std.testing.expect(std.mem.indexOf(u8, out, "51.2%") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "worth ") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, ">~") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "against the 412 it played on 16.22") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "3rd of 50") == null);
     try std.testing.expect(std.mem.indexOf(u8, out, "data-busy") == null);
@@ -2398,6 +2399,8 @@ test "Meio: the strip's win rate is Meio's with its worth and no place; raw mark
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "52.2%") != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), W.raw_note.s) != null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), ">no estimate<") != null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), ">~") == null);
 }
 
 test "a rare role is listed and opens with its games, faded only by its range" {

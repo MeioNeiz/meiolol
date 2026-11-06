@@ -170,6 +170,7 @@ test "view: Meio's figure with its worth, the windows on hover and in sr text" {
     const html = out.written();
     try testing.expect(std.mem.find(u8, html, ">52.2%<") != null);
     try testing.expect(std.mem.find(u8, html, "worth 11,") != null);
+    try testing.expect(std.mem.find(u8, html, ">~11k<") != null);
     try testing.expect(std.mem.find(u8, html, "30 days 52.7%, 26,994 games") != null);
     try testing.expect(std.mem.find(u8, html, "Newest patch 55.1%, 972 games") != null);
     try testing.expectEqual(null, std.mem.find(u8, html, "own"));

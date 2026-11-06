@@ -56,7 +56,7 @@ pub const Look = struct {
     /// head says it (StatStrip, BuildPanel)
     said: []const u8 = "win rate",
     /// An estimate's games are the games its range is worth, not games played: hover and
-    /// screen readers say "worth N games"
+    /// screen readers say "worth N games", and the count shows as "~13k"
     worth: bool = false,
 };
 
@@ -70,6 +70,8 @@ const W = struct {
     pub const said = phrase.Phrase("{w:text} {v:text}");
     pub const said_games = phrase.Phrase("{w:text} {v:text}, {x:text}{n:count} games");
     pub const worth = plain("worth ");
+    /// An estimate's worth beside its figure: "~13k", as a bare "13k" reads as games played
+    pub const about = phrase.Phrase("~{n:kilo}");
 };
 
 /// <span class="c-rate" style="--c:…" title="50.6-51.8%, 44,935 games">
@@ -83,7 +85,7 @@ pub fn view(h: *H, r: Rate, look: Look) N {
     const v: tree.Text = if (look.unit) sv else .{ .s = sv.s[0 .. sv.s.len - 1] };
     return cell(h, if (r.games == null) null else r.pct - r.ref, r.half, tip(h, r, look.worth), .{
         h.span(.{ .class = "v", .aria_hidden = true }, .{v}),
-        if (!look.count) null else if (r.games) |n| h.span(.{ .class = "g", .aria_hidden = true }, .{phrase.num(h, .kilo, n)}) else null,
+        if (!look.count) null else if (r.games) |n| h.span(.{ .class = "g", .aria_hidden = true }, .{if (look.worth) W.about.with(h, .{ .n = n }) else phrase.num(h, .kilo, n)}) else null,
         h.span(.{ .class = "sr" }, .{if (r.games != null and look.count) said(h, look, sv, r.games.?) else W.said.with(h, .{ .w = look.said, .v = sv.s })}),
     });
 }
