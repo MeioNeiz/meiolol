@@ -6012,6 +6012,25 @@ run high or low over a group of cells (docs/plan/meio-middle.md NL0)?
   under -8; keystone 1.5 (-2..-3), 2.1-2.3 (-3..-7), 3.0-3.7 under -7; EUW1 and
   per-rank alike
 
+### A spread per popularity band, 16.22 confirm rule, declared 2026-11-06 (m10, NL3)
+
+Declared before any 16.22 look (docs/plan/meio-middle.md NL3). Steps, each behind its
+own flag, kept on the 16.21 dev pass and shipped: 1 keystone interactions' sd per role x
+band of x, 2 items the same, 3 the champion-role's main term per band.
+
+Run: `meiolol truth` 16.21 -> 16.22, the dev run's flags, Meio with the step against
+Meio without it (flag off). 16.22 started 4 Nov 06:40 UTC: origins 0-6 with 7-day
+targets from ~18 Nov (first look), all 14 from ~25 Nov (decides). Pass, per step, all of:
+
+- No kind x rank set log loss row worse beyond 2 se; the step's rare-band rows (keystone
+  and item x under -2, champion-role x under -8) not worse
+- The gem check rows it targets (rare, raw below / above) closer to 0 than without it,
+  or within 2 se of 0
+- PIT coverage in its rare bands within 75-85%, or closer to 80% than without it
+- Failing groups in the lean table not up beyond the chance count
+
+Any miss: the step's flag goes off by default.
+
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
 data/snap (85,693 ranked solo games, 16.19 + 16.20, all regions), sqlite3 on the Mac;
