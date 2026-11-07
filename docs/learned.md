@@ -38,16 +38,16 @@ How to write a line:
   suggestions; the desktop app still scores with counts until its stats file keeps the
   fitted model. Evidence: docs/model.md "Pair cells that borrow strength (A4)", "A4 on
   the new pin, shipped form"
-- Rare picks lose: a champion in a role it is seldom played in (under 100 games in 30
-  days, every region) won 34% of its next week's games, so shrinking a thin rate to 50% is
-  wrong; shrink it to what equally rare picks win. Keystones go by lift: one common in the
-  role that this champion seldom takes wins up to 7 points less, one rare in the role too
-  doesn't lean. Sure: Meio's terms centred on popularity lines, hinged below 0.005% of the
-  role for champion-roles, lift -2 and 0.03-0.005% of the champion's games for keystones,
-  made unseen keystone cells on 16.21 (14 origins, 34k cells, every region) 6.45 +- 0.87
-  milli-nats better than the champion's raw rate (straight lines 2.68, none -2.08);
-  unseen items, matchups and duos better too, seen cells unchanged. Site: the Meio
-  period. Evidence: src/meio.zig, docs/model.md "Rare picks in Meio's prior lines"
+- Rare picks lose: a champion seldom played in a role (under 100 games in 30 days, every
+  region) won about 39% of its next week's games (147 champion-roles, 4.8k games at
+  16.21's start; later days 34-35%), so a thin rate shrinks not to 50% but to what
+  equally rare picks win. Keystones go by lift: one common in the role this champion
+  seldom takes wins up to 7 points less, one rare in the role too doesn't lean. Sure:
+  Meio's popularity lines, hinged below 0.005% of the role for champion-roles, lift -2
+  and 0.03-0.005% of the champion's games for keystones, made unseen keystone cells on
+  16.21 (14 origins, 34k cells, every region) 6.45 +- 0.87 milli-nats better than the
+  champion's raw rate; unseen items, matchups and duos better too, seen cells unchanged.
+  Site: the Meio period, Learn. Evidence: docs/model.md "Rare picks in Meio's prior lines"
 - No counter or duo stands far out from the rest: pulling thin pairings to the pack
   loses nothing. Rare picks differ far more than common ones, but symmetrically: no
   hidden gems. Meio's ranges are too narrow on them (misses 1.2-2x its sd for rare

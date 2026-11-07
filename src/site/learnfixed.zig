@@ -239,6 +239,18 @@ pub const sample: ld.Puzzle = .{
         "(snapshot of 17 Oct), split in halves",
 };
 
+pub const rare_pick: ld.Puzzle = .{
+    .id = "rare-pick",
+    .q = "How often does it win the next week?",
+    .setup = .{ .facts = &.{ .{ .v = "Rare role", .label = "a champion seldom played there" }, .{ .v = "Under 100", .label = "games in that role, 30 days" } } },
+    .answer = .{ .guess = .{ .lo = 20, .hi = 70, .step = 1, .real = 39, .tol = 2 } },
+    .why = "Rare picks won 39%, not 50%: judge a thin rate against equally rare picks, not an average one.",
+    .tip = "Expect a rare pick to win about 39%, not a coin flip, until its games say otherwise.",
+    .games = 4_810,
+    .from = "Ranked solo, every rank crawled, every region: 147 champion-roles with under " ++
+        "100 games in the 30 days before patch 16.21, their 4,810 games the week after",
+};
+
 pub const item_wr: ld.Puzzle = .{
     .id = "item-wr",
     .q = "Why do its buyers win more?",
@@ -286,8 +298,8 @@ pub const chapter2 = [_]ld.Puzzle{ fed, fed_role, surrender, bounty };
 pub const chapter3 = [_]ld.Puzzle{gold_nudge};
 pub const chapter4 = [_]ld.Puzzle{team_counter};
 pub const chapter5 = [_]ld.Puzzle{
-    splitpush, wincon, sample, item_wr, support_gold, scaling, comeback, runes, skillshots,
-    luck,
+    splitpush, wincon,   sample, rare_pick,  item_wr, support_gold,
+    scaling,   comeback, runes,  skillshots, luck,
 };
 
 test "fixed puzzles: answers in range, games on every bar, no pick advice" {
