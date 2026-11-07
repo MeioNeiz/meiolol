@@ -49,7 +49,8 @@ pub const Seat = struct {
     fig: []const u8 = "",
     /// Private edition: the rate `fig` shows, in %, which colours it
     rate: ?f32 = null,
-    /// An ally still to pick: options for the role
+    /// An ally still to pick: options for the role; an enemy's empty seat: the role's
+    /// likeliest picks, faint
     ideas: []const champ.Champ = &.{},
     /// An enemy yet to pick: their ban, a hint at their role
     ban: ?champ.Champ = null,
@@ -512,6 +513,7 @@ pub const css =
     \\  .c-draft .fact[data-lean="bad"] { color: var(--lo2); }
     \\  .c-draft .fact[style] { color: var(--c); }
     \\  .c-draft .ideas { display: flex; align-items: center; gap: 4px; overflow: hidden; }
+    \\  .c-draft .seat[data-side="them"] .ideas { opacity: var(--fade); }
     \\  .c-draft .bans > span { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-draft .bans > [data-side="them"] { justify-content: flex-end; }
     \\  .c-draft:not([data-v]) .bans .c-champ { --sz: 32px; }
@@ -656,6 +658,7 @@ pub const sample: Board = .{
         .{
             .role = .bot,
             .us = .{ .ideas = &.{ demo("Jinx", "Jinx"), demo("Caitlyn", "Caitlyn"), demo("Ezreal", "Ezreal") } },
+            .them = .{ .ideas = &.{ demo("Kai'Sa", "Kaisa"), demo("Jhin", "Jhin"), demo("Varus", "Varus") } },
         },
         .{
             .role = .support,

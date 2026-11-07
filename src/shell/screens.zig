@@ -670,6 +670,12 @@ fn lanes(a: Allocator, c: Ctx, b: *const board.Board, shown: ?Shown) ![]const ui
             break;
         };
     }
+    // An empty enemy seat: its row's likeliest picks
+    for (&rows, b.enemy_ideas) |*row, list| if (row.them.champ == null) {
+        const ideas = try a.alloc(ui.champ.Champ, list.len);
+        for (ideas, list) |*x, id| x.* = (try c.champ(a, id)).?;
+        row.them.ideas = ideas;
+    };
     if (shown) |x| {
         const row = &rows[@backingInt(x.role)];
         if (x.enemy) row.them.sel = true else row.us.sel = true;

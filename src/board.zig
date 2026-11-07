@@ -79,6 +79,9 @@ pub const Board = struct {
     ban_options: []const BanOption,
     /// Null before any champion shows
     draft: ?Draft,
+    /// By role, where no enemy champion is: the role's likeliest picks (likely), for an
+    /// empty enemy seat placed there
+    enemy_ideas: [Role.count][]const u32 = @splat(&.{}),
 };
 
 pub const max_ban_options = 5;
@@ -104,6 +107,13 @@ pub fn build(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, 
         const role = s.role orelse continue;
         s.ideas = try ideas(arena, stats, opts, cs, role);
     }
+    var enemy_ideas: [Role.count][]const u32 = @splat(&.{});
+    for (Role.all, &enemy_ideas) |r, *o| {
+        const filled = for (enemies) |e| {
+            if (e.slot.champion != 0 and e.role == r) break true;
+        } else false;
+        if (!filled) o.* = try likely(arena, stats, cs, r);
+    }
 
     return .{
         .allies = allies,
@@ -115,6 +125,7 @@ pub fn build(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, 
         .mode = if (card) |c| modeOf(c) else .blind,
         .ban_options = if (cs.bans_open) try banOptions(arena, stats, opts, cs, enemies, card, facts) else &.{},
         .draft = draft(stats, opts, allies, enemies),
+        .enemy_ideas = enemy_ideas,
     };
 }
 
@@ -312,6 +323,28 @@ fn ideas(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, cs: 
     return out;
 }
 
+/// The role's most played champions still free (not banned, on neither team), by the
+/// stats file's games in the role: who an empty enemy seat there likely picks
+fn likely(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSelect, role: Role) ![]const u32 {
+    var top: [max_ideas]struct { id: u32 = 0, games: u32 = 0 } = @splat(.{});
+    for (stats.ids, 0..) |id, c| {
+        const games = stats.champRole(role, c).games;
+        if (games <= top[max_ideas - 1].games or taken(cs, id)) continue;
+        var i: usize = max_ideas - 1;
+        while (i > 0 and top[i - 1].games < games) : (i -= 1) top[i] = top[i - 1];
+        top[i] = .{ .id = id, .games = games };
+    }
+    var out: std.ArrayList(u32) = .empty;
+    for (top) |t| if (t.games > 0) try out.append(arena, t.id);
+    return out.items;
+}
+
+fn taken(cs: session.ChampSelect, id: u32) bool {
+    for ([_][]const Slot{ cs.my_team, cs.their_team }) |slots| for (slots) |sl| if (sl.champion == id) return true;
+    for ([_][]const u32{ cs.bans, cs.my_bans, cs.their_bans }) |list| if (std.mem.findScalar(u32, list, id) != null) return true;
+    return false;
+}
+
 fn stage(phase: []const u8) []const u8 {
     const names = [_]struct { []const u8, []const u8 }{
         .{ "PLANNING", "Planning" },
@@ -490,6 +523,17 @@ test "board: seats, guessed enemy roles, ideas, bans, draft" {
     try testing.expectEqual(0, b.allies[2].ideas.len);
     try testing.expect(b.allies[1].ideas.len > 0);
     for (b.allies[1].ideas) |c| try testing.expect(c != id(st, "Darius") and c != id(st, "Garen"));
+    // Empty enemy seats: the open roles' most played, most first, none taken or banned
+    try testing.expectEqual(0, b.enemy_ideas[@backingInt(Role.top)].len);
+    try testing.expectEqual(0, b.enemy_ideas[@backingInt(Role.middle)].len);
+    var banned = cs;
+    const jungle = b.enemy_ideas[@backingInt(Role.jungle)];
+    try testing.expectEqual(max_ideas, jungle.len);
+    for (jungle[1..], jungle[0 .. jungle.len - 1]) |c, before|
+        try testing.expect(st.champRole(.jungle, st.index(c).?).games <= st.champRole(.jungle, st.index(before).?).games);
+    banned.bans = @constCast(&[_]u32{jungle[0]});
+    const after_ban = (try build(arena, st, cardscenes.test_opts, banned, null, null)).enemy_ideas[@backingInt(Role.jungle)];
+    try testing.expectEqualSlices(u32, jungle[1..], after_ban[0..2]);
     // Bans only in roles the enemy has not filled
     try testing.expect(b.ban_options.len > 0);
     for (b.ban_options) |o| try testing.expect(o.role != .top and o.role != .middle);
