@@ -116,6 +116,8 @@ pub const css =
     \\  .c-strip .val > .c-rate > .g { margin-left: 6px; font-size: var(--fs-s); }
     \\  .c-strip .val > .c-rate + .c { display: block; line-height: 1.2; }
     \\  .c-strip > .answer .val { font-size: var(--fs-xl); }
+    \\  .c-strip .val .us { color: var(--us-hot); }
+    \\  .c-strip .val .them { color: var(--them-hot); }
     \\  .c-strip > a:hover { text-decoration: none; }
     \\  .c-strip > a:hover .lab { color: var(--text); }
     \\  .c-strip > [data-press] { position: relative; padding: 4px var(--sp-2); margin: -4px calc(-1 * var(--sp-2));
@@ -180,6 +182,8 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Swing"), .value = plain("+38"), .ctx = plain("32–33"), .step = .of(38, fmt.game_cuts), .on = on, .pressed = true },
         .{ .label = plain("Drop"), .value = plain("−19"), .ctx = plain("12–13"), .step = .of(-19, fmt.game_cuts), .on = on },
         .{ .label = plain("Longest lead"), .value = plain("9"), .ctx = plain("min, 4–13"), .on = on },
+        // Each side's number in its team's colour
+        .{ .label = plain("Fight"), .value = plain("5–2"), .rate = h.span(.{}, .{ h.span(.{ .class = "us" }, .{"5"}), "–", h.span(.{ .class = "them" }, .{"2"}) }), .ctx = plain("at 20:07"), .on = on },
     }));
     const eog = [_]struct { []const u8, []const u8, u8, []const u8 }{
         .{ "Kills", "3.1", 59, "59th" },

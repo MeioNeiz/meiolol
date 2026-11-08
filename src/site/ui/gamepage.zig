@@ -58,6 +58,8 @@ const W = struct {
     pub const best = plain("Best minute");
     pub const peak = plain("Peak");
     pub const low = plain("Low");
+    pub const never_behind = plain("Never behind");
+    pub const never_ahead = plain("Never ahead");
     pub const at = phrase.Phrase("at {t:time}");
     pub const lead = plain("Longest lead");
     pub const min = plain("min");
@@ -318,8 +320,9 @@ pub const GamePage = struct {
             items[n] = .{
                 .label = W.fight,
                 .value = W.pair.with(h, .{ .a = m.us, .b = m.them }),
+                // Each side's deaths in its team's colour, as the inspector's score
+                .rate = h.span(.{}, .{ h.span(.{ .class = "us" }, .{phrase.num(h, .count, m.us)}), "–", h.span(.{ .class = "them" }, .{phrase.num(h, .count, m.them)}) }),
                 .ctx = W.at.with(h, .{ .t = m.t }),
-                .step = .of(@as(f32, @floatFromInt(@as(i16, m.us) - m.them)), .{ 0.5, 1.5, 2.5, 3.5 }),
                 .on = h.on(&p.tl, .{ .mark = i }),
                 .pressed = p.tl.cur == i,
             };
@@ -328,12 +331,14 @@ pub const GamePage = struct {
         // A win's peak and a loss's low are its result: the other end is the record
         if (if (g.win) sw.low else sw.peak) |e| {
             const ms = gamedata.minuteSpan(e.minute);
+            // Its lowest minute is then the start's even chance: no moment to show
+            const never = if (g.win) e.v >= 50 else e.v <= 50;
             items[n] = .{
                 .label = if (g.win) W.low else W.peak,
-                .value = phrase.num(h, .pct, e.v),
-                .ctx = W.at.with(h, .{ .t = @as(u32, e.minute) * 60 }),
-                .on = h.on(p, .{ .sel = .{ ms.a, ms.b } }),
-                .pressed = p.selected(ms),
+                .value = if (never) (if (g.win) W.never_behind else W.never_ahead) else phrase.num(h, .pct, e.v),
+                .ctx = if (never) null else W.at.with(h, .{ .t = @as(u32, e.minute) * 60 }),
+                .on = if (never) null else h.on(p, .{ .sel = .{ ms.a, ms.b } }),
+                .pressed = !never and p.selected(ms),
             };
             n += 1;
         }
@@ -656,4 +661,33 @@ test "opens on the turn, a strip press switches game, the URL round trips" {
     t.root = c.view(&h);
     try testing.expect(!h.oom);
     try testing.expect(c.insp.tl == &c.tl);
+}
+
+test "cells: a win never behind and a loss never ahead say so, unpressable; Fight per team" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const demo = &@import("game_demo.zig").data;
+    const games = try a.dupe(gamedata.Game, demo.games);
+    games[0].wc = &.{ 50, 50, 52, 61, 70, 88 };
+    games[1].wc = &.{ 50, 50, 41, 30, 12 };
+    const d: gamedata.Data = .{ .champs = demo.champs, .games = games, .arts = demo.arts };
+    for ([_]u8{ 0, 1 }, [_][]const u8{ "Never behind", "Never ahead" }) |i, want| {
+        var p = try GamePage.init(a, &d);
+        var ev: tree.Event = .{ .kind = .click };
+        p.update(.{ .game = i }, &ev);
+        var t: tree.Tree = .{};
+        var h: H = .init(a, &t);
+        const n = p.cells(&h);
+        try testing.expect(!h.oom);
+        var w: std.Io.Writer.Allocating = .init(a);
+        try t.textOf(n, &w.writer);
+        try testing.expect(tree.find(w.written(), want) != null);
+        try testing.expect(tree.find(w.written(), "at 0:") == null);
+    }
+    var p = try GamePage.init(a, demo);
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    const n = p.cells(&h);
+    try testing.expect(t.find(n, "class", "us") != null and t.find(n, "class", "them") != null);
 }
