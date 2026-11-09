@@ -110,10 +110,9 @@ under the write lock they starve the crawler on a slow host.
   --forgotten FILE`). A `--full` segment on the box leaves older ones on the mirrors:
   restore starts at the newest segment that copies from the beginning, so they are
   ignored
-- Not compressed (zstd -3 would take a segment 1.57 GB to 1.29 (18%),
-  a state snapshot 3.65 to 2.69 (26%; -19 29%)). Compressed mirror files would need
-  unpacking for every scrub and restore; open, for when segments (~1.6 GB a day, kept)
-  outgrow a mirror
+- Not compressed (zstd -3: a segment 1.57 GB to 1.29, 18%; state is ~50 KB). Compressed
+  mirror files would need unpacking for every scrub and restore; open, for when segments
+  (~1.6 GB a day, kept) outgrow a mirror
 
 Covers: the box's disk or VM lost, a bad migration or DELETE (state up to 4 weeks back).
 Not covered: losing the box, the PC and the Mac together (nothing off-site yet;
@@ -136,12 +135,13 @@ Raw tables, players and ladder_pages come back empty; the crawler refills them. 
 re-applies `forgotten`. From the Megatron mirror it also copies the sealed day files into
 `complete/` and scrubs them to the restored `forgotten` before it returns.
 
-Restore test, quarterly (last row by row 18 Oct 2026): back up the live data, restore
-it into another directory, then compare. Counts: `meiolol status --exact` on both,
-every count equal except raw.raw_docs and raw.timeline_docs (empty by design). Rows:
-digest every column per key of each table on both at the backup point
-(data/team/2026-10-18-waste/restore-digest.sh, restore-compare.sh); participants differ
-only in matches whose timeline came after the backup point.
+Restore test, quarterly: back up, restore into another directory, compare. Last row by
+row 18 Oct 2026: `meiolol status --exact` equal on both except raw.raw_docs and
+raw.timeline_docs (empty by design); every column per key digested at the backup point
+(data/team/2026-10-18-waste/restore-digest.sh, restore-compare.sh), participants differ
+only in matches whose timeline came after it. Last with day files 6 Nov 2026 (Megatron
+mirror, 3 h 56 min at idle IO beside the crawler): each day file's sha256 equals live's.
+`status --exact` on a restore only in a quiet hour: it stalls the crawler's checkpoints.
 
 ### Logins backup
 
