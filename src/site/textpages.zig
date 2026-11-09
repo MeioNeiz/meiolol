@@ -25,20 +25,24 @@ const method_lead = "meiolol helps players understand how lane matchups unfold a
 const method_md =
     \\**In short**
     \\
-    \\- Ranked solo/duo games from Riot's official API, of players picked at random
-    \\  from Platinum IV and above in every region.
+    \\- Ranked solo/duo games from Riot's official API, of Platinum IV and above
+    \\  players in every region: the most active first, then the players in their games.
     \\- Each page says its region, period (last 30 days or this patch) and number of
     \\  games.
-    \\- Win rates are plain shares of games won, fainter when games are few.
+    \\- Win rates are plain shares of games won, fainter when their 80% range is wider
+    \\  than ±6 points.
     \\- A matchup with few games leans on how its two champions usually do, and moves
     \\  toward its own games as they come in.
     \\
     \\## The data
     \\
-    \\- Ranked Solo/Duo games collected through the official Riot Games API, from
-    \\  players chosen at random from Platinum IV and above on the ladder, in every
-    \\  region. Their teammates and opponents are matched to them, so nearly every player
-    \\  is Platinum or higher: these are the "Platinum+ games" the pages count.
+    \\- Ranked Solo/Duo games collected through the official Riot Games API, in every
+    \\  region, EUW first. Collection starts from players Platinum IV and above whom the
+    \\  ladder shows playing, most new games first, then takes in the players met in
+    \\  their games. Their teammates and opponents are matched to them, so nearly every
+    \\  player is Platinum or higher: these are the "Platinum+ games" the pages count.
+    \\  Players who play a lot count for more than their share of the ladder; how much
+    \\  that moves the rates is not measured.
     \\- Only complete games: no remakes, a winner, all ten positions known.
     \\- Each game's match timeline: every player's gold, experience and CS once a
     \\  minute, plus kills, level ups and item purchases. Timelines are stored once per
@@ -74,7 +78,8 @@ const method_md =
     \\- **Spread**: after an average, "8 games in 10" is where single games end up,
     \\  the 10th to 90th percentile of this matchup's games (the role's spread around
     \\  the line while it has few of its own); the band is the middle half. In tables,
-    \\  colour says who is ahead on average and fades with fewer games, full from 200.
+    \\  colour says who is ahead on average, faded when the matchup's win rate has an
+    \\  80% range wider than ±6 points.
     \\- **Verdict**: the line above a gold chart says ahead or behind only while the
     \\  estimate is clear of noise (more than two standard errors from 0) and at least 200
     \\  gold at 14 minutes, else about even; "whoever is ahead wins" counts both sides'
@@ -118,10 +123,10 @@ const method_md =
     \\  never pulled toward 50%; a dot marks it on a track from 25% to 75%. Colour runs
     \\  from hot pink through orange (low) to blue through aqua (high), grey at 50%, by
     \\  the rate alone, not red and green, which colour-blind readers can't tell apart;
-    \\  a key under each table gives the rates. Fewer games make it fainter, full from
-    \\  200: with few games a rate can sit far from the truth. Sorting by win rate uses
-    \\  the rate pulled toward the average, the more so the fewer its games, so a few
-    \\  lucky games can't top a table.
+    \\  a key under each table gives the rates. One whose 80% range is wider than ±6
+    \\  points is fainter: with few games a rate can sit far from the truth. Sorting by
+    \\  win rate uses the rate pulled toward the average, the more so the fewer its
+    \\  games, so a few lucky games can't top a table.
     \\- **Influence**: extra games its team wins per 10,000 games in which it could be
     \\  picked, against the role's average. Its win rate over the role's, pulled toward
     \\  the average when games are few, times its pick rate, over the share of games it

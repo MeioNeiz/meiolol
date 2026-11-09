@@ -40,8 +40,8 @@ pub const Spec = struct {
 
 pub fn spec(s: Stat) Spec {
     return switch (s) {
-        .ahead => .{ .title = "Wins from ahead", .short = "From ahead", .lead = "Win rate in games where the champion was 1,500+ gold ahead of its lane opponent at 15 minutes.", .about = "Win rate when 1,500+ gold ahead of the lane opponent at 15 minutes: who turns a lead into a win." },
-        .behind => .{ .title = "Wins from behind", .short = "From behind", .lead = "Win rate in games where the champion was 1,500+ gold behind its lane opponent at 15 minutes.", .about = "Win rate when 1,500+ gold behind the lane opponent at 15 minutes: who still wins from a bad lane." },
+        .ahead => .{ .title = "Wins from ahead", .short = "From ahead", .lead = "Win rate in games where the champion was 1,500+ gold ahead of its lane opponent at 15 minutes. Compare within a role. No champion was found to turn its own lead into wins better than others in its role.", .about = "Win rate when 1,500+ gold ahead of the lane opponent at 15 minutes." },
+        .behind => .{ .title = "Wins from behind", .short = "From behind", .lead = "Win rate in games where the champion was 1,500+ gold behind its lane opponent at 15 minutes. Compare within a role; late-game champions hold up better from behind. No champion was found to come back better than its strength and scaling predict.", .about = "Win rate when 1,500+ gold behind the lane opponent at 15 minutes." },
         .long_games => .{ .title = "Wins in long games", .short = "Long games", .lead = "Win rate in games of 35+ minutes minus in games under 25, in points: who wins more of its long games. Stomps end early: this is how its games go, not a power curve.", .about = "Win rate in 35+ minute games minus under 25: who wins more of its long games." },
         .lane_gold => .{ .title = "Lane gold at 14", .short = "Lane gold", .lead = "Gold ahead of or behind its lane opponent at 14 minutes, averaged over its lanes: who wins its lane.", .about = "Gold lead over the lane opponent at 14 minutes: who wins its lane." },
     };

@@ -8,6 +8,7 @@ const ui = @import("ui");
 const Writer = std.Io.Writer;
 
 pub const Point = struct {
+    /// Games learnt from: the TSV's `train`, test games not counted
     games: u32,
     /// AUC per series, in `series` order
     auc: [series.len]f64,
@@ -21,8 +22,8 @@ pub const series = [_]Series{
     .{ .column = "auc_joint", .label = "Joint ratings (on trial)" },
 };
 
-/// The TSV's lines by its header's column names, sorted by games, one point per games
-/// count (the newest); lines with missing columns or values that aren't numbers (nan
+/// The TSV's lines by its header's column names, sorted by train games, one point per
+/// train count (the newest); lines with missing columns or values that aren't numbers (nan
 /// and inf parse) skipped. Lines scored on one region (test_platform set, the runs
 /// before the all-platform cut of 14 Oct) are skipped: a different test set
 pub fn parse(arena: std.mem.Allocator, tsv: []const u8) ![]Point {
@@ -33,7 +34,7 @@ pub fn parse(arena: std.mem.Allocator, tsv: []const u8) ![]Point {
     var cols = std.mem.splitScalar(u8, header, '\t');
     var i: usize = 0;
     while (cols.next()) |name| : (i += 1) {
-        if (std.mem.eql(u8, name, "games")) at[0] = i;
+        if (std.mem.eql(u8, name, "train")) at[0] = i;
         if (std.mem.eql(u8, name, "test_platform")) region_at = i;
         for (series, 1..) |s, k| if (std.mem.eql(u8, name, s.column)) {
             at[k] = i;
@@ -78,9 +79,12 @@ pub fn intro(a: std.mem.Allocator, points: []const Point) ![]const u8 {
     return std.fmt.allocPrint(a,
         \\## Model accuracy vs data {{#accuracy}}
         \\
-        \\How well each model tells winners from losers on ranked games it never saw, as
-        \\more games come in. 0.5 is a coin flip, 1 would be always right. A draft decides
-        \\little of a game, so expect small numbers: at {f} games the best is {d:.3}.
+        \\How well each model tells winners from losers on ranked games it never saw,
+        \\against how many games it learnt from. 0.5 is a coin flip, 1 would be always
+        \\right. A draft decides little of a game, so expect small numbers: learning from
+        \\{f} games the best is {d:.3}. Each daily run tests on its own newest games, and
+        \\the draft model in use changed on 17 and 23 October, so the rise is more games,
+        \\better models and newer test games together.
         \\
     , .{ @import("root.zig").Thousands{ .n = last.games }, @max(last.auc[0], last.auc[1], last.auc[2]) });
 }
@@ -102,7 +106,7 @@ pub fn chart(h: *ui.H, points: []const Point) ui.N {
     const c: ui.aucchart.AucChart = .{
         .games = games,
         .series = h.mem.dupe(ui.aucchart.Series, &ss) catch return oom(h),
-        .caption = h.fmt("AUC on held-out games (every platform, from one time cut) against the games the models learnt from; one point per daily run. Latest: {s} {d:.3}, {s} {d:.3}, {s} {d:.3}. The draft model in use stays until another beats it beyond noise.", .{
+        .caption = h.fmt("AUC on held-out games (every platform, each run's own newest games) against the games the models learnt from, test games not counted; one point per daily run. The draft model in use changed on 17 and 23 October. Latest: {s} {d:.3}, {s} {d:.3}, {s} {d:.3}. The draft model in use stays until another beats it beyond noise.", .{
             series[0].label, last.auc[0],
             series[1].label, last.auc[1],
             series[2].label, last.auc[2],
@@ -120,7 +124,7 @@ test "parse keeps the newest line per games count, sorted" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const tsv =
-        "date\tgames\tauc_base\tauc_current\tauc_joint\n" ++
+        "date\ttrain\tauc_base\tauc_current\tauc_joint\n" ++
         "d\t9000\t0.51\t0.52\t0.53\n" ++
         "d\t8000\t0.50\t0.51\t0.52\n" ++
         "d\t9000\t0.54\t0.55\t0.56\n" ++
@@ -140,10 +144,15 @@ test "parse keeps the newest line per games count, sorted" {
     try std.testing.expectEqualStrings("", try intro(arena.allocator(), points[0..1]));
 
     const regions =
-        "date\ttest_platform\tgames\tauc_base\tauc_current\tauc_joint\n" ++
+        "date\ttest_platform\ttrain\tauc_base\tauc_current\tauc_joint\n" ++
         "d\tEUW1\t8000\t0.50\t0.51\t0.52\n" ++
         "d\t\t9000\t0.54\t0.55\t0.56\n";
     const global = try parse(arena.allocator(), regions);
     try std.testing.expectEqual(1, global.len);
     try std.testing.expectEqual(9000, global[0].games);
+
+    const both =
+        "date\tgames\ttrain\ttest\tauc_base\tauc_current\tauc_joint\n" ++
+        "d\t10000\t8500\t1500\t0.54\t0.55\t0.56\n";
+    try std.testing.expectEqual(8500, (try parse(arena.allocator(), both))[0].games);
 }
