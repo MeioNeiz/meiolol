@@ -107,12 +107,13 @@ pub fn build(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, 
         const role = s.role orelse continue;
         s.ideas = try ideas(arena, stats, opts, cs, role);
     }
+    var open: [Role.count]bool = @splat(true);
+    for (enemies) |e| if (e.slot.champion != 0) if (e.role) |r| {
+        open[@backingInt(r)] = false;
+    };
     var enemy_ideas: [Role.count][]const u32 = @splat(&.{});
-    for (Role.all, &enemy_ideas) |r, *o| {
-        const filled = for (enemies) |e| {
-            if (e.slot.champion != 0 and e.role == r) break true;
-        } else false;
-        if (!filled) o.* = try likely(arena, stats, cs, r);
+    for (Role.all, &enemy_ideas, open) |r, *o, empty| {
+        if (empty) o.* = try likely(arena, stats, cs, open, r);
     }
 
     return .{
@@ -324,12 +325,20 @@ fn ideas(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, cs: 
 }
 
 /// The role's most played champions still free (not banned, on neither team), by the
-/// stats file's games in the role: who an empty enemy seat there likely picks
-fn likely(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSelect, role: Role) ![]const u32 {
+/// stats file's games in the role: who an empty enemy seat there likely picks. Each
+/// champion only in the open role it has most games in (ties: the first), so no two seats
+/// show it
+fn likely(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSelect, open: [Role.count]bool, role: Role) ![]const u32 {
     var top: [max_ideas]struct { id: u32 = 0, games: u32 = 0 } = @splat(.{});
     for (stats.ids, 0..) |id, c| {
         const games = stats.champRole(role, c).games;
         if (games <= top[max_ideas - 1].games or taken(cs, id)) continue;
+        const elsewhere = for (Role.all, open) |r, o| {
+            const g = stats.champRole(r, c).games;
+            const first = g == games and @backingInt(r) < @backingInt(role);
+            if (o and r != role and (g > games or first)) break true;
+        } else false;
+        if (elsewhere) continue;
         var i: usize = max_ideas - 1;
         while (i > 0 and top[i - 1].games < games) : (i -= 1) top[i] = top[i - 1];
         top[i] = .{ .id = id, .games = games };
@@ -534,6 +543,8 @@ test "board: seats, guessed enemy roles, ideas, bans, draft" {
     banned.bans = @constCast(&[_]u32{jungle[0]});
     const after_ban = (try build(arena, st, cardscenes.test_opts, banned, null, null)).enemy_ideas[@backingInt(Role.jungle)];
     try testing.expectEqualSlices(u32, jungle[1..], after_ban[0..2]);
+    for (Role.all) |r| for (b.enemy_ideas[@backingInt(r)]) |c| for (Role.all) |r2| if (r2 != r)
+        try testing.expect(std.mem.findScalar(u32, b.enemy_ideas[@backingInt(r2)], c) == null);
     // Bans only in roles the enemy has not filled
     try testing.expect(b.ban_options.len > 0);
     for (b.ban_options) |o| try testing.expect(o.role != .top and o.role != .middle);
