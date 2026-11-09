@@ -39,6 +39,23 @@ pub const know: ld.Puzzle = .{
     .from = mastery_from,
 };
 
+pub const practice: ld.Puzzle = .{
+    .id = "practice",
+    .q = "Why do mains win more?",
+    .setup = .{ .facts = &.{ .{ .v = "300k vs 10k", .label = "mastery points on the champion" }, .{ .v = "+4 points", .label = "mains' win rate over new players'" } } },
+    .answer = .{ .pick = .{ .right = 1, .choices = &.{
+        .{ .text = "Better players main", .shown = "No: more points overall win a little less" },
+        .{ .text = "Practice on that champion", .shown = "+3.7 points, same player" },
+        .{ .text = "Mains play easier champions" },
+    } } },
+    .why = "The same player wins about 3.7 points more on a 300k champion than a 10k one.",
+    .tip = "Your hours on a champion count more than your hours in the game.",
+    .games = 130_000,
+    .from = "Ranked solo, Platinum IV and up, every region: 944k player-games in 130k games " ++
+        "(15 to 18 Oct), fitted on 746k earlier games, mastery points before the game; " ++
+        "the +4 points from 1.92M player-games by mastery band",
+};
+
 pub const newcomer: ld.Puzzle = .{
     .id = "newcomer",
     .q = "New players struggle most on...?",
@@ -292,14 +309,60 @@ pub const team_counter: ld.Puzzle = .{
     .from = held_from,
 };
 
-pub const chapter1 = [_]ld.Puzzle{ know, newcomer };
-pub const chapter2 = [_]ld.Puzzle{ fed, fed_role, surrender, bounty };
+pub const lead_worth: ld.Puzzle = .{
+    .id = "lead-worth",
+    .q = "Whose gold lead is worth more?",
+    .setup = .{ .facts = &.{ .{ .v = "+1,000 gold", .label = "your bot laner, at 15 min" }, .{ .v = "Same", .label = "team gold, XP and objectives" } } },
+    .answer = .{ .pick = .{ .right = 2, .choices = &.{
+        .{ .text = "Jinx" },
+        .{ .text = "Ashe" },
+        .{ .text = "No difference found", .shown = "Not detected" },
+    } } },
+    .why = "No champion was found beating its role with a lead: 1,000 gold at 15 is about 8 points on bot.",
+    .tip = "Ahead? Your role decides what the lead is worth, not a carry champion.",
+    .games = 117_806,
+    .from = held_from,
+};
+
+pub const counter_role: ld.Puzzle = .{
+    .id = "counter-role",
+    .q = "Where does the matchup matter most?",
+    .setup = .{ .facts = &.{ .{ .v = "Same", .label = "both champions' own strength" }, .{ .v = "Typical", .label = "lane matchup, by role" } } },
+    .answer = .{ .pick = .{ .right = 0, .choices = &.{
+        .{ .text = "Top", .role = .top, .shown = "2.2-2.5 points" },
+        .{ .text = "Support", .role = .support, .shown = "1.2-1.5 points" },
+        .{ .text = "Jungle", .role = .jungle, .shown = "1.0-1.4 points" },
+    } } },
+    .why = "With both champions' strength allowed for, top matchups spread about twice as far as jungle ones.",
+    .tip = "Counter-pick in top lane; in jungle, play what you play well.",
+    .games = 268_750,
+    .from = "Ranked solo, Platinum IV and up, every region: 268,750 games (snapshot of 13 Oct); " ++
+        "the gain was declared beforehand and held on 134,375 games",
+};
+
+pub const style_types: ld.Puzzle = .{
+    .id = "style-types",
+    .q = "What does your playstyle add?",
+    .setup = .{ .facts = &.{ .{ .v = "Same", .label = "gold, XP and objectives at 14 min" }, .{ .v = "Your style", .label = "where you went, fought and warded" } } },
+    .answer = .{ .pick = .{ .right = 1, .choices = &.{
+        .{ .text = "Its own way to win" },
+        .{ .text = "Almost nothing", .shown = "About 0.7 points" },
+        .{ .text = "More than the gold" },
+    } } },
+    .why = "Beyond the 14-minute gold, XP and objectives, style moved results under a point; no player types showed.",
+    .tip = "Play for gold, XP and objectives; there is no player type to play to.",
+    .games = 10_604,
+    .from = held_from,
+};
+
+pub const chapter1 = [_]ld.Puzzle{ know, practice, newcomer };
+pub const chapter2 = [_]ld.Puzzle{ fed, fed_role, lead_worth, surrender, bounty };
 /// After the generated ones (learnbuild.zig)
 pub const chapter3 = [_]ld.Puzzle{gold_nudge};
-pub const chapter4 = [_]ld.Puzzle{team_counter};
+pub const chapter4 = [_]ld.Puzzle{ counter_role, team_counter };
 pub const chapter5 = [_]ld.Puzzle{
-    splitpush, wincon,   sample, rare_pick,  item_wr, support_gold,
-    scaling,   comeback, runes,  skillshots, luck,
+    splitpush, wincon,   sample, rare_pick,  item_wr,     support_gold,
+    scaling,   comeback, runes,  skillshots, style_types, luck,
 };
 
 test "fixed puzzles: answers in range, games on every bar, no pick advice" {
