@@ -1,0 +1,2537 @@
+Forecasting the international diffusion of innovations:
+An adaptive estimation approach
+Yvonne M. van Everdingen and Wouter B. Aghina
+
+ERIM REPORT SERIES RESEARCH IN MANAGEMENT
+ERIM Report Series reference number
+ERS-2003-073-MKT
+Publication
+
+2003
+
+Number of pages
+
+45
+
+Email address corresponding author
+
+yeverdingen@fbk.eur.nl
+
+Address
+
+Erasmus Research Institute of Management (ERIM)
+Rotterdam School of Management / Faculteit Bedrijfskunde
+
+Rotterdam School of Economics / Faculteit
+Economische Wetenschappen
+Erasmus Universiteit Rotterdam
+P.O. Box 1738
+3000 DR Rotterdam, The Netherlands
+Phone:
+Fax:
+
++31 10 408 1182
++31 10 408 9640
+
+Email:
+info@erim.eur.nl
+Internet: www.erim.eur.nl
+Bibliographic data and classifications of all the ERIM reports are also available on the ERIM website:
+www.erim.eur.nl
+
+ERASMUS RESEARCH INSTITUTE OF MANAGEMENT
+REPORT SERIES
+RESEARCH IN MANAGEMENT
+
+BIBLIOGRAPHIC DATA AND CLASSIFICATIONS
+Abstract
+
+Library of Congress
+Classification
+(LCC)
+
+We introduce an international, adaptive diffusion model that can be used to forecast the crossnational diffusion of an innovation at early stages of the diffusion curve. We model the mutual
+influence between the diffusion processes in the different social systems (countries) by mixing
+behaviour. Furthermore, we apply the matching procedure as proposed by Dekimpe, Parker
+and Sarvary (1998). This international diffusion model is adaptively estimated using an
+augmented Kalman Filter with Continuous States and Discrete observations, developed by Xie,
+Song, Sirbu and Wang (1997). This is the first application of this procedure in an international
+context. We empirically applied this method to the diffusion of Internet access at home, and
+mobile telephony among households in the 15 countries of the European Union. The results
+show that our international, adaptive model performs well and is by far superior when compared
+to the classical method of estimating diffusion models for each country separately.
+
+5001-6182
+Business
+5410-5417.5
+Marketing
+HD 45+
+Technological Innovation
+Journal of Economic
+M
+Business Administration and Business Economics
+Literature
+M 31
+Marketing
+(JEL)
+C 44
+Statistical Decision Theory
+O 31
+Innovation and Invention
+O 57
+Comparative studies of countries
+European Business Schools
+85 A
+Business General
+Library Group
+280 G
+Managing the marketing function
+(EBSLG)
+255 A
+Decision theory (general)
+15 A
+Technlogy, technological innovations
+Gemeenschappelijke Onderwerpsontsluiting (GOO)
+Classification GOO
+85.00
+Bedrijfskunde, Organisatiekunde: algemeen
+85.40
+Marketing
+85.03
+Methoden en technieken, operations research
+83.62
+Economie van de Technologie
+Keywords GOO
+Bedrijfskunde / Bedrijfseconomie
+Marketing / Besliskunde
+Innovatiediffusie, Forecasting, Methode van Bayes, Internationale marketing
+Free keywords
+Cross-country Diffusion, Forecasting, Bayesian estimation, International marketing
+
+Forecasting the international diffusion of innovations:
+An adaptive estimation approach
+
+Yvonne M. van Everdingen1
+Erasmus University Rotterdam
+The Netherlands
+
+Wouter B. Aghina
+McKinsey and Company, Amsterdam
+The Netherlands
+
+1
+
+Contact address: Erasmus University Rotterdam, Faculty of Business Administration, P.O. Box 1738, 3000 DR
+Rotterdam, The Netherlands. E-mail: yeverdingen@fbk.eur.nl
+
+Forecasting the international diffusion of innovations:
+An adaptive estimation approach
+Abstract
+We introduce an international, adaptive diffusion model that can be used to forecast the crossnational diffusion of an innovation at early stages of the diffusion curve. We model the
+mutual influence between the diffusion processes in the different social systems (countries) by
+mixing behaviour. Furthermore, we apply the matching procedure as proposed by Dekimpe,
+Parker and Sarvary (1998). This international diffusion model is adaptively estimated using
+an augmented Kalman Filter with Continuous States and Discrete observations, developed by
+Xie, Song, Sirbu and Wang (1997). This is the first application of this procedure in an
+international context. We empirically applied this method to the diffusion of Internet access at
+home, and mobile telephony among households in the 15 countries of the European Union.
+The results show that our international, adaptive model performs well and is by far superior
+when compared to the classical method of estimating diffusion models for each country
+separately.
+
+Key search words
+Cross-country Diffusion, Forecasting, Bayesian estimation, International marketing
+
+Introduction
+Ever since the introduction of the Bass diffusion model (BDM) in 1969, a lot of attention has
+been paid by marketing researchers to the diffusion of new products in a particular market.
+Mahajan, Muller and Bass (1990) provide an extensive overview of the extensions of the
+standard Bass model. These studies mainly focused on one market or country, and so far
+limited attention has been paid to the international diffusion of new products. However,
+nowadays marketing managers launch new products not only into the domestic market, but
+sooner or later new products will often be introduced in foreign markets as well.
+Consequently, insight into the diffusion processes across countries is becoming more and
+more important, which has recently led to a growing interest of marketers to model these
+cross-national diffusion patterns (see e.g. Takada and Jain, 1991; Helsen, Jedidi and Desarbo,
+1993; Putsis, Balasumbramaniam, Kaplan and Sen, 1997; Dekimpe, Parker and Sarvary,
+2000; Talukdar, Sudhir and Ainslie, 2002; Kumar and Krishnan, 2002; Tellis, Stremersch and
+Yin, 2003).
+A significant gap in the global diffusion literature, however, is that to date little research has
+been conducted on forecasting the multi-country diffusion of an innovation, and especially on
+estimation approaches when little or no data are available. According to Putsis and Srinivasan
+(2000, p. 283), “procedures that combine Bayesian approaches with adaptive processes may
+be a promising avenue for future research addressing what to do when little or no data are
+available.” They suggest two approaches in particular, worth exploring when little or no data
+are available, i.e. the Hierarchical Bayes (HB) procedure used by Lenk and Rao (1990), and
+the adaptive procedure suggested by Xie, Song, Sirbu and Wang (1997), i.e. the Augmented
+Kalman Filter with Continuous State and Discrete Observations (AKF(C-D)).
+
+2
+
+Studies by Neelamegham and Chintagunta (1999) and Talukdar, Sudhir and Ainslie (2002)
+extended the HB method proposed by Lenk and Rao (1990) to international markets by
+pooling the data not only across multiple products, as Lenk and Rao (1990) did, but also
+across countries. However, these studies still have some limitations. First of all, the proposed
+HB method requires an analytical solution, i.e. the diffusion model is required to be solvable.
+However, diffusion models often are expressed by differential equations that do not have
+analytical solutions (Xie et al., 1997). Secondly, Talukdar et al (2002) have assumed that,
+consistent with most diffusion research, the parameters of the diffusion model are time
+invariant and use the time-invariant NLS estimation approach developed by Srinivasan and
+Mason (1986). A disadvantage of the time-invariant approach is that it often requires data to
+include the peak sales, which makes it less appropriate for early forecasting. Furthermore, it is
+unlikely that the parameters in a diffusion model will be constant over time. Van den Bulte
+and Lilien (1997, p. 338) have shown that “NLS estimates of the Bass model coefficients are
+biased and that they change systematically as one extends the number of observations used in
+the estimation.”
+Our study overcomes these shortcomings. It contributes to the new product forecasting
+literature by developing an international, adaptive (IA) diffusion model, which can be used
+for early forecasts if only a few data points are available or even prior to launch, and by
+estimating this model with a time-varying Bayesian estimation procedure. Our model
+combines the approaches by Putsis et al. (1997) and Dekimpe, Parker and Sarvary (1998).
+Putsis and Srinivasan (2000) suggested this combination as a potential area for future study,
+but so far, none of the earlier global diffusion studies has combined these approaches.
+Following Putsis et al. (1997), we model the diffusion in multiple countries simultaneously,
+taking into account the cross-country interaction between the individuals of the different
+countries. Since it can be expected that some interaction of individuals takes place across
+countries, it is most likely that the adoption of an innovation in country A influences the
+innovation adoption in country B to some extent, dependent on the level of interaction. When
+studying international diffusion this cross-country interaction should be addressed, and is
+therefore explicitly incorporated in our model. We also apply a sample-matching procedure as
+proposed by Dekimpe et al. (1998). When pooling data across countries to estimate the
+diffusion parameters, Dekimpe et al. (1998) suggest that country samples should be matched
+on external criteria, such as country size, before valid cross-national comparisons can be
+made.
+To estimate our IA diffusion model, we use the adaptive, Bayesian estimation procedure
+proposed by Xie et al. (1997), i.e. the Augmented Kalman Filter with Continuous State and
+Discrete Observations (AKF(C-D)). Xie et al. (1997) have demonstrated the superior
+prediction performance of the AKF(C-D) method over five other methods, amongst which the
+NLS estimation method by Srinivasan and Mason (1986) and the HB method of Lenk and
+Rao (1990). Nevertheless, this method has not yet been applied to an international diffusion
+model. Therefore, we extend the AKF(C-D) method to an international context, in order to be
+able to forecast the diffusion of an innovation across multiple countries.
+To estimate and validate the proposed IA diffusion model, we use a novel data set on the
+penetration of the Internet access and mobile telephony among households in 15 European
+Union countries. The data sets we use have two major features. First of all, it concerns more
+recently introduced innovations as opposed to the products generally included in global
+diffusion studies, such as VCR’s, color TVs, microwave ovens, etc (see Kumar, Ganesh and
+Echambadi, 1998). Consequently, the results of our study are not only useful for scientific
+purposes but also for the suppliers of these relative new products. Secondly, the yearly
+penetration rates included in these data sets are based on real adoption data at the household
+level, instead of annual sales data that are generally used in international diffusion studies.
+
+3
+
+The advantage of real adoption data is that no repeat purchases are included, which is the case
+with sales data.
+The remainder of this article is organized as follows. The next section presents our forecasting
+model, and subsequently we discuss the adaptive estimation technique we use to estimate our
+IA diffusion model. Then, we discuss the data we use for the empirical validation of our
+forecasting approach, followed by a description of the forecasting results. These results are
+compared to the results obtained using the classical approach in order to evaluate the
+performance of our model. We conclude with a discussion of the limitations and suggestions
+for future research.
+
+The international adaptive diffusion model
+Cross-country interaction
+Takada and Jain (1991) found faster innovation diffusion in the so-called lag countries, i.e.
+countries where the innovation was launched at a later point in time than in the lead country,
+i.e. the first country where the innovation is launched. This might be due to the
+communication between people from different countries. This cross-country interaction may
+influence the cross-country diffusion of a new product. For example, if a product is accepted
+fast in Belgium, does this automatically lead to a fast adoption in neighbor countries France
+and The Netherlands? So far, only a few studies modeled these cross-country influences
+(Mahajan and Muller, 1994; Putsis et al., 1997; Ganesh, Kumar and Subramaniam, 1997;
+Kumar and Krishnan, 2002). Table 1 provides an overview of these studies by summarizing
+the specific characteristics of each of these models. This table also includes the Staged
+estimation procedure by Dekimpe et al (1998), which will be discussed in the next section /
+paragraph.
+- Table 1 about here Ganesh et al (1997) investigated the influence between the lead country and the lag countries.
+The learning effect they modelled, works only in one direction, from the lead country to the
+lag country. The diffusion in a lag country is supposed to have no influence on the diffusion
+in both other lag countries and the lead country. However, following communication, the
+influence between countries may take place between all the countries where the innovation is
+introduced (Mahajan and Muller, 1994; Putsis et al., 1997; Kumar and Krishnan, 2002). The
+mutual influence model proposed by Mahajan and Muller (1994) assumes, however, that the
+influence of adopters on potential adopters in another country is equal to the influence on
+potential adopters within their own country. This assumption is very hard to defend and there
+is no empirical evidence to support it. Since very little is known about the influence between
+countries, the model should allow for an intensity of the influence that is based on the
+observations of the diffusion process, which is done in the models of Putsis et al. (1997) and
+Kumar and Krishnan (2002). They both allow for a varying influence between all countries
+investigated, and found significant cross-country interactions. When studying international
+diffusion the cross-country interaction should be addressed.
+To model this cross-country interaction, we use the model of Putsis et al. (1997) as the
+starting point. They model the mutual influence (called mixing behavior) as variable, ranging
+from no mixing at all (pure segregation, countries are isolated) to complete mixing (random
+mixing, mixing occurs freely). The empirical results obtained, show that the mean absolute
+percentage error is lowest when the intermediate form of Bernoulli mixing is used. We
+improve the model of Putsis et al. (1997) in two ways. First of all, Putsis et al. (1997) uses a
+4
+
+nonlinear least squares algorithm to estimate the model, which is non-adaptive, i.e. all the data
+is used in one pass. We reformulate the model to make it possible to adaptively estimate the
+parameters, i.e. the parameters estimations will be updated as additional data becomes
+available, a recommended estimation technique by for example Brettschneider and Mahajan
+(1980), Sultan and Farley (1990) and Xie et al. (1997). A second adjustment to the model of
+Putsis et al. (1997) is that we combine it with the matching procedure of the staged estimation
+approach of Dekimpe et al. (1998).
+Sample Matching
+When investigating the cross-national diffusion of an innovation, it is important to match the
+countries based on objective criteria, in order to be able to make a valid comparison of the
+diffusion patterns across those countries. Dekimpe et al. (1998) propose to match on three
+dimensions, i.e. the size of the countries, the penetration ceiling, and finally the time of origin.
+They apply this procedure to the diffusion of cellular phones across 184 countries, and show
+that the critical factor in explaining diffusion patterns across countries is the matched
+definition of (1) the social system size, (2) the adoption ceiling and (3) the time of
+introduction. In line with these results, we also apply the matching procedure on these three
+dimensions.
+Ad 1. Matching on country size Si
+Of course one should reckon with the size of countries (e.g. in terms of inhabitants) before
+comparing the absolute number of adopters. A straightforward solution is expressing
+penetration as penetration per population.
+Following Dekimpe et al. (1998) we define the market potential of country i, mi(t) as:
+Equation 1
+
+mi (t ) = Ci (t ) * Si (t )
+
+Where:
+· Si(t) is the exogenously estimated country size of country i expressed in the number of
+units of adoption (e.g. households or individuals),
+· and Ci(t) is the estimate at time t of the long-term ceiling of penetration in country i,
+varying between 0 and 100%.
+The social system size, Si(t), will be determined using exogenous statistical data on the
+number of units per adoption, and is modeled as an exogenous variable:
+S (t ) = exogenous variable
+
+Equation 2
+
+To match on social system size when comparing the progress of diffusion in the different
+countries, we will report the diffusion using the penetration per unit:
+PENETRATION i =
+
+N i (t )
+Si (t )
+
+Equation 3
+
+Where:
+· PENETRATIONi is the penetration per unit of adoption of the innovation in country i,
+· and Ni(t) is the total number of units that have adopted the innovation at time t in country i.
+Ad 2. Matching on penetration ceiling Ci
+A certain percentage of individuals within a given country may never have sufficient intrinsic
+utility for the innovation in question. Therefore an exogenous ceiling, which is independent of
+the size of the country, should be introduced for each of the social systems studied.
+
+5
+
+Determining the long term ceiling, Ci(t), is difficult. Dekimpe et al. (1998) estimate this
+ceiling completely exogenous, and don’t adjust it as additional data points become available.
+Making a good assessment of the long-term utility of an innovation is, however, a complex
+and sometimes impossible task. In our opinion, it is necessary to use data available at later
+points in time to adjust a first assessment. Consequently, the penetration ceiling will be
+included in our model as a vector function of exogenous variables (e.g. income distributions)
+of which the parameters are allowed to vary2:
+C (t ) = G C ( β C (t ), exogenous variables)
+
+Equation 4
+
+Where:
+· C(t) is the Kx1 vector of the long term ceiling in each of the K countries,
+· bC(t) is a vector of time varying parameters,
+· and GC is a vector function of the parameter vector bC(t) and exogenous variables.
+Ad 3. Matching on time of introduction t0i
+The time origin must be matched to correct for the fact that innovation introduction timing
+may vary widely across countries. Before the innovation is introduced in country i there will
+be no diffusion in this country. To match on the time of origin, the following constraint is
+imposed:
+ni (t ) = 0 if t < t0,i
+
+Equation 5
+
+Where:
+· ni(t) is the speed of diffusion in country i,
+· and t0,i is the time of introduction of the innovation in country i.
+Model specification
+We model the cross-country interaction by a Bernoulli noise mixing parameter Fi, as was
+found to be the best way to model it (see Putsis et al., 1997). Further, we extend the mixing
+behavior model of Putsis et al. in two ways. First of all, we replace the constant parameters by
+time varying parameters (see Equation 6) in order to be able to use an adaptive estimation
+technique, which allows us to update the estimates as additional data points become available.
+Secondly, we apply matching on country size, penetration ceiling and time of introduction
+(see equations 1 to 5).
+For each of the K countries we model the diffusion as follows:
+
+2
+
+This is allowed by the adaptive estimation technique used to adapt the initial estimates of the parameters based
+on the observations of the diffusion process.
+
+6
+
+ni (t ) =
+
+dN i (t )
+dt
+
+with :
+
+r ij (t )
+
+, if t < t0, i
+ì0
+ï
+ï
+æ
+N (t ) ö
+K
+= í
+j ÷
+ç
+ï mi (t ) - Ni (t ) * çç pi (t ) + å qi (t ) * rij (t ) * m (t ) ÷÷ , if t ³ t0, i
+j =1
+j ø
+ï
+è
+î
+
+(
+
+=
+
+)
+
+ì
+é
+ï
+ê
+ï
+ê
+ï F (t ) + (1 - F (t )) * ê
+ï i
+i
+ê
+ï
+ê
+ï
+êë
+í
+é
+ï
+ê
+ï
+ê
+ï
+0 + (1 - F (t )) * ê
+ï
+i
+ê
+ï
+ê
+ï
+êë
+î
+
+å
+
+ù
+q (t ) * m (t ) * (1 - F (t )) ú
+ú
+j
+j
+j
+ú
+K
+ú
+q
+t
+m
+t
+t
+(
+)
+*
+(
+)
+*
+(
+1
+F
+(
+))
+ú
+k =1 j
+j
+j
+úû
+ù
+q (t ) * m (t ) * (1 - F (t )) ú
+ú
+j
+j
+j
+ú
+K
+ú
+q
+(
+t
+)
+*
+m
+(
+t
+)
+*
+(
+1
+F
+(
+t
+))
+ú
+k =1 j
+j
+j
+úû
+
+å
+
+Equation 6
+
+, if i = j
+
+, if i ¹ j
+
+Where:
+· Ni(t) is total number of units (e.g. households) that have adopted the innovation in country i,
+· ni(t) is the speed of adoption in country i (the derivative of Ni(t)),
+· mi(t) is the market potential of country i,
+· pi(t) is the coefficient of external influence of country i,
+· qi(t) is the effective contact rate for country i (how gregarious are individuals in country i,
+and how susceptible are they to word-of-mouth influence),
+· rij is the mixing probability for individuals in country i with individuals in country j,
+· t0,i is the time of introduction of the innovation in country i,
+· and Fi is the Bernoulli noise mixing parameter for country i, varying from Fi=0 (random
+mixing; country borders do not exist) to FI=1 (no mixing at all; complete segregation).
+Use of exogenous covariates
+The possibility to use exogenous covariates to explain the cross-country diffusion differences
+in p and q is secured by the following equations:
+
+(
+(
+
+)
+)
+
+p(t ) = G p β p (t ), exogeneous variables
+q (t ) = Gq βq (t ), exogeneous variables
+
+Equation 7
+
+Where:
+· p(t) is the Kx1 vector of the coefficient of external influence in each of the K countries,
+· q(t) is the Kx1 vector of the effective contact rate in each of the K countries,
+· bp(t) and bq(t) are vectors of time varying parameters,
+· and Gp and Gp are vector functions.
+Combining equations 1, 2, 6, and 7, we obtain the following differential equation with time
+varying parameters that describes the diffusion in the K countries:
+n(t ) =
+
+(
+
+)
+
+dN (t )
+= f N (t ), βC (t ), β p (t ), βq (t ), Φ (t ), t 0 , exogenous variables
+dt
+
+Equation 8
+
+Where:
+· n(t) is the Kx1 vector of the speed of adoption in each of the K countries,
+· N(t) is the Kx1 vector of the total number of units (e.g. households) that have adopted the
+innovation in each of the K countries,
+· and bC(t), bp(t), bq(t), Ф(t), and t0 are parameter vectors.
+
+7
+
+Model estimation
+The Augmented Kalman Filter with Continuous State and Discrete Observations
+We estimate the IA diffusion model (equation 8) using the Augmented Kalman Filter with
+Continuous State and Discrete Observations (AKF(C-D)) approach (Xie et al. 1997). This
+estimation procedure is an adaptive estimation procedure, providing a systematic way of
+incorporating prior information about the likely values of parameters, and a Bayesian
+updating mechanism to upgrade the estimates as additional data becomes available. Such an
+adaptive procedure facilitates forecasting early in the innovation life cycle.
+Figure 1 shows how the AKF(C-D) estimation procedure works. The procedure is initiated by
+giving initial estimates of the parameters and the state (e.g. cumulative sales or the cumulative
+number of adopters) based on a-priori knowledge. The AKF(C-D) procedure updates the
+parameter estimations as soon as an additional data point becomes available. Two
+mechanisms are used for this updating procedure, a time-updating and a measurementupdating mechanism.
+- Figure 1 about here At a certain point in time (t=tk), the time-updating mechanism provides a-priori estimates of
+the cumulative number of adopters and the parameters for the period tk+1. As soon as
+observations become available, this a-priori estimate is compared with the observation, and
+the forecasting error (i.e. the difference between the observed and forecasted number of
+adopters) is calculated. This forecasting error is subsequently used by the measurementupdating mechanism to update the estimation of the parameters, which leads to the aposteriori estimates. This time- and measurement-updating mechanism can be repeated for a
+next period.
+Xie et al.(1997) have developed their approach for diffusion models that have only one state.
+International diffusion models that describe the diffusion in multiple countries at a time have
+multiple states (e.g. the penetration in each country). Consequently, AKF(C-D) estimation
+approach is not directly applicable to international diffusion models, but using the underlying
+control engineering theory (Lewis, 1986; Stengel, 1986), it is possible to generalize the
+AKF(C-D) procedure to a procedure that can handle international diffusion models. We
+present this generalization in Appendix A.
+The AKF(C-D) method compared to other adaptive estimation techniques
+Table 2 compares four time-varying estimation approaches using adaptive estimation
+techniques.
+- Table 2 about here Xie et al. (1997) have shown that the AKF(C-D) procedure provides better 1-year-ahead
+forecasts than the other three methods, due to three concrete advantages of this method. First
+of all, it can be applied directly to differential diffusion models, since it does not require a
+discrete analogue or an analytical solution as in case of the methods by Brettschneider and
+Mahajan (1980), Sultan, Farley and Lehmann (1990), and Lenk and Rao (1990). Given the
+fact that diffusion models are often represented as continuous differential equations, this is an
+important advantage. Secondly, the method of Xie et al. (1997) is better able to follow the
+changes in parameters over time. And finally, the AKF(C-D) procedure “explicitly
+
+8
+
+incorporates observation error in the estimation process, which is ignored in other procedures
+(Xie et al., 1997, p. 380).” The importance of this is twofold. It allows researchers to make
+better use of market data based on its’ reliability. An increase in the variance of the
+measurement noise, implying a less reliable measure, leads to a decreasing importance of the
+measure for the a-posteriori estimation. And the other way around, if the measure is
+characterized by small errors, then the measure becomes more important for the updating of
+the parameters. Additionally, taking into account the measurement noise, improves the
+estimation of the cumulative number of adopters. A procedure that not take into account the
+measurement noise, such as the Adaptive Filtering approach of Bretschneider and Mahajan
+(1980), provides at time tk as the best estimation of the cumulative sales simply the measure
+of the sales at time tk. The AKF(C-D) method estimates the sales by a weighted sum of the
+measure and the previous forecast.
+Given the clear advantages of the AKF(C-D) method as compared to other three adaptive
+estimation procedures in Table 2, and given the fact that this method has not yet been applied
+in an international context, we decided to use this method to adaptively estimate our IA
+diffusion model. In order to be able to apply the AKF(C-D) method we had to reformulate the
+model as expressed in equation 8. Appendix B shows our IA diffusion model written in a
+form that allows the application of the AKF(C-D) estimation technique.
+
+Empirical application
+Data
+Our data includes yearly information, covering the period 1990-1999, on the diffusion of
+Internet access and mobile telephony among the households in the fifteen countries in the
+European Union (Gallup Europe, 2000). The penetration data we use, has been calculated
+based on the responses to the following questions (Gallup Europe, 2000):
+· “About your Internet access at home, in which year did your household first get Internet
+access at home?”
+· “In which year did your household get your first mobile telephone?”
+The Figures 2 and 3 show the penetration rates for Internet access and mobile telephony
+respectively. The data is based on over 44000 household interviews executed in the second
+half of 19993 in 130 regions of the 15 Member States. It is by far the largest survey at a
+European level that has been undertaken in the sector. All the European regions have been
+covered and the sub-samples were of sufficient size as to obtain statistically reliable findings.
+A carefully set up sampling plan has been followed closely. The number of respondents
+interviewed per country varies from 1009 for Luxembourg to 5301 for France.
+- Figures 2 and 3 about here Prior estimates: initiating the forecasting model
+To initiate the filter in the AKF(C-D) method, we need a number of prior estimates. To be
+able to apply the sample matching procedure, we have to use estimates of the size of each
+country, the time of introduction of both products, and the estimated penetration ceiling as
+input in the model. Table 3 shows these input variables. The number of households is used as
+a measure for country size, because we use penetration data at the household level.
+3
+
+According to Gallup, the surveys for 1999 have been taken between June and October 1999, an exact date is
+not given. We have approximated this date by July 1, 1999 (1999.5).
+
+9
+
+- Table 3 about here In addition to the data in Table 3, we need an a-priori estimate of the cumulative adoption in
+each country at t=t0 (=initial penetration), ( N (0) ~ (N 0 , PN 0 ) ). We have fixed the expected
+values of the initial penetration for Internet access and mobile telephony at the values
+observed in 1994 (Internet access) and 1990 (mobile telephony), the years of introduction of
+these innovations. The variance is fixed at the square root of 0.5%, since we estimate that the
+standard error of the observations is 0.5%.
+Finally, we need initial estimates of the distribution of the parameters p, q, and Ф at t=t0
+( β (0) ~ (β0 , Pb 0 ) ), and the covariance of the process noise Q and the measurement noise R.
+The initial values of the parameters are assumed to be uncorrelated. Thus the initial
+distribution of the parameters, β (0) ~ (β0 , Pb 0 ) , consists of the expected value and variance of
+each of the parameters at t=t0. The variances will form the diagonal of the covariance matrix
+Pβ0. All other elements of this matrix will be zero. We also assume that the process noises and
+the observation noises are uncorrelated. Consequently, in order to estimate the covariance
+matrices, we need to estimate the variances of both noises.
+Determining the starting values for the parameters can be based either on expert judgments or
+on the experience with previous products. We do the latter, and construct the priors mainly
+based on the results reported in Sultan, Farley and Lehmann (1990), Putsis et al. (1997) and
+Xie et al. (1997), combined with the specific nature of the two types of innovation under
+study. The initial expected values and variances for the model parameters p, q, and Ф as well
+as for the noise statistics, used to initiate our model, are shown and elucidated in Appendix C.
+
+Forecasting results
+One-step ahead forecasts
+Our IA diffusion model and the AKF(C-D) approach are formulated and estimated in a
+Matlab environment (Mathworks, 2001). First we present the one-step-ahead predictions and
+compare them with the actual observations. The step size is determined by the time between
+the observations, which is one year in our data set. In this application one-step-ahead is thus
+one-year-ahead for all but the last prediction, which is made for half-a-year.
+Each time an observation becomes available, the IA method uses it to generate a new forecast
+(see Figure 1). This forecast consists of distributions that are assumed to be normal and are
+characterized by their expected value and variance. The variance and expected value can be
+used to calculate an interval estimate. We have chosen to show the 68% confidence interval
+estimate (E(x) +/- 1SD(x)), and the point estimate given by the expected value.
+Figure 4 shows the results for the one-step-ahead predictions of the penetration of Internet
+access in Sweden (see Appendix D for the one-step-ahead forecast for mobile telephony in
+Sweden). Internet access was introduced in Sweden in 1994, and therefore the first forecast
+takes place for the year 1995. We have chosen to show the results for Sweden because the
+diffusion process has advanced the most in this country, which makes it also possible to
+compare the long-term forecasts with the observed penetration in the next section. Although
+we show the results for only one country here, we remind the reader that the IA method uses
+an international diffusion model and therefore provides a forecast for all countries
+simultaneously. Appendix E shows the one-step-ahead forecasts for Internet access for all
+countries.
+
+10
+
+- Figure 4 about here Figure 4 shows that the observed values always fall within the 68% confidence interval
+estimation. In 161 out of all 172 one-step-ahead forecasts made (15 countries, 2 innovations
+and different years), the observed values fall within the forecasted 68% confidence interval
+(i.e. in 94% of the cases). As such the interval estimation gives a reasonable estimation of the
+uncertainty. Furthermore, we can remark that the point estimate provided by the expected
+value is also close to the observed values. The average absolute one-step-ahead percentage
+prediction error (MAPE) is 12% for the Internet case and 10% for the mobile telephony case.
+Though these errors are substantial, these still are good results since a very simple model is
+used to forecast a process that is characterized by a high level of uncertainty.
+Long-term forecasts
+The forecasting method not only produces one-step-ahead forecasts. In fact, forecasts are
+obtained for the whole diffusion process. Since we only have observations up to July 1999,
+the long-term forecasts are shown only up to this date. The first available forecast is made
+using the initial estimates that are reported in Table 3 and Appendix C. Then, each time a new
+observation becomes available it is used to adapt the estimates of the parameters and a new
+forecast is made. Figure 5 shows the resulting long-term forecasts for Internet access in
+Sweden (the long-term forecast for mobile telephony in Sweden is shown in Appendix F,
+while Appendix G shows the long-term forecasts for Internet access for all countries).
+- Figure 5 about here The initial forecast is shown in the upper left corner. We see that in the case of Internet access
+in Sweden our initial estimates have resulted in a forecast of the diffusion that is much too
+slow. In the following graphs, we see the adaptive forecasts provided by our IA approach,
+each time an observation becomes available. We see that the adaptive estimation results in
+forecasts that become better and better as more observations become available. Again, all
+observed values fall within the 68% confidence interval for all the forecasts. For the whole
+study (15 countries, 2 innovations and different years), this is true for 155 out of 172 longterm forecasts made (i.e. in 90% of the cases).
+Like the expected values, the variances are estimated adaptively by the IA method. In the case
+of Sweden we see that as more observations become available the variance becomes smaller
+which causes the confidence interval to become narrower. This reflects the decreasing
+uncertainty of the predictions as more and more observations have been made, and past
+predictions have proved to be close to the observed values. This trend can also be seen in the
+long-term forecasts for mobile telephony in Sweden (see Appendix F) and the forecasts for
+Internet access for the other countries (see Appendix G).
+The effect of the international dimension on the forecasting performance
+In our IA diffusion model, the extent to which mixing takes place, or the extent to which the
+diffusion processes in the different countries influence each other, is regulated by the
+Bernoulli mixing parameter, F. This parameter can vary between zero, which implies ideal
+mixing, and one, which implies total segregation. When F equals zero, the European Union is
+modeled as one country without borders that influence the diffusion process. When F equals
+one, the diffusion is supposed to take place entirely within each country without any influence
+11
+
+between the countries. A value between zero and one implies that borders play a role (the
+closer F is to one the more), but the diffusion processes in the different countries do influence
+each other (the closer F is to zero the more).
+In order to quantify the contribution of the international dimension of our IA diffusion model
+on the forecasting performance, we have fixed F at different values varying from zero to one.
+The mean absolute percentage errors (MAPE’s) for Internet access in the one-, two- and
+three-step-ahead predictions are used as the performance indicators, and are shown in Figure
+6. Figure 6 clearly shows the contribution of the international dimension. When the countries
+are considered to be isolated (F=1), the forecasting errors are much higher then when a
+moderate influence between the countries is supposed to exist (F=0.7). The results also
+clearly show that country-borders in the European Union still play an important role in the
+diffusion of innovations. When the borders are considered to be non-existent (F=0) the
+forecasting error increases dramatically.
+- Figure 6 about here The MAPE’s are lowest for F=0.7, a value which is close to the value for Φ found by Putsis
+et al. (1997) for the diffusion of personal computers (PCs), namely Φ=0.72. This doesn’t
+surprise, since these innovations are closely related (the device most widely used to obtain
+access to the Internet is the PC). When constructing our initial estimate of Φ (see Appendix
+C), we already indicated that we expected that F is likely to be similar across innovations
+with similar word-of-mouth networks like PCs and Internet access.
+Based on these results, we can conclude that suppliers, who want to launch a new product
+across Europe, should take the country borders into account. The European Union cannot be
+considered to be one market, as the diffusion processes differ substantially across the
+countries. At the same time, however, the countries should not be treated as totally
+independent of each other, since our results clearly indicate that an important influence
+between the diffusion processes in the separate countries does exist.
+
+The estimates of parameters p, q, and C
+The IA forecasting method not only adaptively estimates the distribution of the diffusion or
+penetration itself, it also adaptively estimates the distributions of the parameters. Like the
+distributions of the penetration in the different countries, the parameter distributions are
+assumed to be normal and are characterized by an expected value and a variance.
+The results show stable estimates of both the expected value of the penetration ceiling C and
+the coefficient of innovation p. For both parameters, no large adjustments with an important
+impact on the forecasts are made by the updating-mechanism. With respect to the effective
+contact rate qi, however, substantial adjustments have been made to the a-priori estimate.
+Table 4 provides an overview of the initial estimates of qi and the estimate after the final
+measurement update (halfway 1999) for all countries.
+- Table 4 about here Comparing the estimates of the expected values of the qi, we see that substantial adjustments,
+ranging from –27% for Luxembourg to +52% for Sweden, have been made for most
+countries. In Luxembourg, the penetration of Internet access happened to be slower than
+expected, while we found the opposite for Sweden. The adjustments to the expected values of
+12
+
+qi made by the IA diffusion model can result from two sources. Te initial estimate of the
+expected value may be different from the real value, or the diffusion process has changed in
+terms of qi during its evolvement. For Sweden, for example, the initial estimate appears to be
+a rather imprecise estimate. Figure 7 shows the evolvement of the estimates for q for Sweden
+and Luxembourg. The initial estimate for Sweden was 0.81, and we see that the IA algorithm
+had adjusted this upward every time an observation became available. This upward
+adjustment was necessary because our initial estimate of q resulted in a forecast of the
+diffusion that was much too slow. However, not all adjustments of q are caused by a bad
+initial estimate. A good example of an adjustment that is caused by a changing diffusion
+process is the diffusion in Luxembourg. Figure 7 shows that the estimate of the expected
+value of q remains almost unchanged for the first four years. After the observation of the
+diffusion in 1998, however, the parameter is firmly adjusted downwards, due to a sudden
+change in the real diffusion process (see Appendix G – Long-term forecast for Luxembourg).
+This slowdown could be caused by all kind of effects. One possible explanation is the
+existence of Moore’s chasm: the dissociation between the early adopters and the early
+majority (see Moore 1991,1995).
+- Figure 7 about here In addition to the parameter adjustments over time, Table 4 shows that the differences
+between the different countries in the final estimate are larger than our initial estimation. The
+expected values of the qi after the final measurement update vary from 0.45 (Greece) to 1.25
+(Sweden). This implies that the differences between the speeds of diffusion in the different
+countries are very large. Consumers from Portugal, Spain and Greece are amongst the slowest
+in adopting Internet, while consumers from Sweden, Denmark, and The Netherlands appear to
+embrace the Internet very rapidly. These differences between countries should be taken into
+account by managers when assessing the diffusion of innovations in the consumer markets in
+the European Union. When compared to the values of q found in other studies of the diffusion
+of innovations, the values of q shown in Table 4 are very high (see for instance Putsis et al.
+1997, Dekimpe et al. 1998 and Sultan et al. 1990). The take up of Internet access in the EU
+has been very fast compared to other innovations like CD-players, VCRs and PCs.
+Finally, the last column of Table 4 shows a strong reduction of the standard deviations of the
+estimated parameters (SD(qi)), ranging from -29% for Portugal to even -83% for
+Luxembourg, which reflects the reduced uncertainty. This implies that the estimates for
+parameter qi have become more precise.
+
+Evaluation of the forecasting performance of the IA diffusion model
+A comparison with the classic approach
+To evaluate the forecasting performance of our IA diffusion model, we compare the
+forecasting results of our model with the results obtained from the classical approach, which
+uses observations of the diffusion process in different countries to estimate the parameters p
+and q in a Bass model for each country separately. Consequently, it doesn’t take into account
+the mutual influence of the diffusion processes across the countries, as our approach does. We
+estimate the parameters of this classical approach with the toolbox made available by
+Mahajan, Muller and Wind (2000). The classical diffusion model is estimated with a
+nonlinear least squares (NLS) estimation technique. Since this is a non-adaptive estimation
+technique, each period the whole diffusion curve is re-estimated, and the parameters p and q
+
+13
+
+are considered to be constant over time. To initiate the NLS estimation procedure, the market
+potential has to be determined exogenously. We have fixed it at the same value as we used to
+initiate our adaptive approach (see Table 3).
+To evaluate the forecasting performance of the IA diffusion model, we focus on the
+forecasting errors. Table 5 shows the mean absolute percentage errors (MAPE’s) for both
+methods, while we also include MAPE’s for the IA approach with the international dimension
+switched off (i.e. IA with Φ=1). These averages are calculated over the cases where both
+methods provide a forecast. Since the classic method needs at least two observations, it does
+not provide a forecast for the first two years following introduction. The results in Table 5
+clearly indicate that the IA diffusion model provides better forecasts as compared to the
+classical approach. For both innovations, we found much smaller MAPE’s for the IA
+diffusion model than for the classical diffusion model. This is even the case for the IA
+diffusion model with the international dimension switched off (Φ=1). Thus both, modeling the
+mutual influence between the countries and the adaptive estimation technique contribute
+substantially to the better performance of our IA diffusion model. The biggest contribution to
+the better performance is, however, made by the adaptive estimation technique. We see only
+minor improvements in the forecasting errors for the IA approach with the international
+dimension switched on as compared to the IA method with Φ=1. The better forecasting results
+suggest that the IA diffusion model should be preferred over a non-adaptive non-international
+forecasting approach when forecasting the international diffusion of innovations.
+- Table 5 about here Sensitivity analysis
+The IA diffusion model needs initial estimates to start the algorithm, which were discussed in
+the section on the empirical application. We have fixed very general initial estimates, which
+may not be the best initial estimates possible. Better initial estimates will of course give a
+better forecasting performance, especially for the first few years after introduction4.
+Therefore, another method to check the forecasting performance of our IA diffusion model is
+to perform a sensitivity analysis of the influence of changing the initial estimates on the
+overall performance indicators. Table 6 shows the results of this sensitivity analysis for the
+Internet case, and indicates that our findings are robust with respect to variations in the initial
+estimates. The results are the most sensitive for the initial estimate of parameter q.
+- Table 6 about here -
+
+Conclusions and implications
+We have developed an international, adaptive diffusion model, which can be used to forecast
+the cross-national diffusion curves of a new product, just before, during, or immediately after
+a new product launch, if only a small number of data points are available. As soon as
+additional data points become available, the forecasts are re-estimated and adjusted. The
+model contributes to the literature by combining the approaches of Putsis et al. (1997) and
+Dekimpe et al. (1998). We model the mutual influence between the diffusion processes in the
+4
+
+As more observations have been used to update the estimates the influence of the initial estimates on the
+forecasts reduces.
+
+14
+
+different countries. Moreover, we apply a sample-matching procedure by matching the
+samples from the different countries on three dimensions, i.e. (1) the size of the country, (2)
+the penetration ceiling, and (3) the time of introduction of the innovation. To estimate the
+model we extend the AKF(C-D) estimation approach of Xie et al. (1997), which has not yet
+been used for estimating cross-national diffusion patterns, to an international context.
+The data we use involve the diffusion of Internet access and mobile telephony among
+households in the 15 countries of the EU. The empirical application shows good forecasts of
+these two diffusion processes. The IA diffusion model result in much lower mean absolute
+percentage errors (MAPE’s) for the 1-, 2- and 3-year-ahead forecasts as compared to the
+classical approach, i.e. estimating a Bass diffusion model for each country separately. Both
+the international dimension and the adaptive nature of the estimation approach contribute
+substantially to the better forecasting performance of the IA diffusion model. The biggest
+contribution, however, is made by the adaptive estimation, which is caused by the following
+advantages of this estimation technique: (1) the model parameters are allowed to change over
+time, which better reflects the reality then parameters that are not allowed to change, (2) the
+model uses a-priori knowledge through the usage of initial estimates, (3) the observation noise
+is modeled and used as an input for the adaptation of the estimates, and finally (4) it does not
+require the continuous diffusion process to be approximated by a discrete-time model.
+The IA diffusion model leads to a better performance because it more accurately models
+reality. The assumption that diffusion processes in the different countries of the EU do not
+influence each other has little face value. Our results show that this assumption is indeed
+flawed. It appears that the diffusion processes in the different EU countries influence each
+other, but at the same time it is not possible to consider the EU as one big market, since the
+diffusion processes vary enormously across the countries. Especially the pace of the diffusion
+differs a lot.
+When assessing the diffusion of high-tech or disruptive consumer innovations, marketing
+managers should take the mutual influence between the diffusion processes in different
+countries into account. Furthermore, they cannot take it for granted that the diffusion
+processes in the different EU countries show the same pattern. Thus our results indicate that
+when forecasting the diffusion in EU member countries, an international diffusion model,
+explicitly modeling the mutual influence, should be used.
+
+Limitations and future research
+To validate the IA diffusion model we used data involving only two innovations, Internet
+access and mobile telephony, among households in the 15 EU member states. Moreover, the
+diffusion processes of these two innovations are not yet finished, and therefore our forecasting
+method could only be tested on part of the diffusion process. Data on other innovations and /
+or from countries outside the EU should be used for further validation of our IA diffusion
+model. This will also provide the opportunity to make generalizations, e.g. new products
+diffuse always slower in Greece than in the other EU countries, or the parameter Φ is always
+about 0.7 for Europe.
+To assess the forecasting performance of our IA diffusion model, we compared the results of
+our model with the forecasting results obtained from the classical approach, i.e. estimating a
+Bass model for each country separately. Future research could compare the forecasting results
+of our model with the results of other international diffusion models, such as the model of
+Putsis et al. (1997).
+
+15
+
+A final limitation concerns the fact that we did not use covariates (exogenous variables) in the
+empirical test of our model. For individual companies or managers, however, it could be
+important to see how the diffusion would look like if, for example, a certain amount of the
+budget were spent on advertising for the product. Although we didn’t include covariates in
+our empirical test of the model, our model allows for including such covariates (see Equations
+7 and 8). Including covariates will not only reduce the forecasting errors, but the model will
+also become more useful for the strategic planning of new product introductions, and for
+evaluating the effects of the marketing mix on the sales.
+
+References
+Bass, Frank M., 1969. A New Product Growth Model For Consumer Durables. Management
+Science 15 (January), 215-227.
+Bretschneider, Stuart I and Vijay Mahajan, 1980. Adaptive Technological Substitution
+Models. Technological Forecasting and Social Change 18, 129-139.
+Dekimpe, Marnik G., Philip M. Parker and Miklos Sarvary, 1998. Staged Estimation of
+International Diffusion Models: An Application to Global Cellular Telephone Adoption.
+Technological Forecasting and Social Change 57, 105-132.
+Dekimpe, Marnik G., Philip M. Parker and Miklos Sarvary, 2000. Global Diffusion of
+Technological Innovations: A Coupled-Hazard Approach. Journal of Marketing
+Research 37 (February), 47-59.
+European Communities, 2000. European Social Statistics: Income, Poverty and Social
+Exclusion. Luxembourg: Office for official publications of the European Community.
+Eurostat, 1996. Social Portrait of Europe. Luxembourg: Office for official publications of the
+European Community.
+Gallup Europe, 2000. The European Commission: The Situation of Telecommunications
+Services in The Regions of the European Union. Website of the European Union:
+Communication Policy Pages,
+http://europe.eu.int/ISPO/infosoc/telecompolicy/en/EOStudy/Resid/2br.htm
+Ganesh, Jaishankar, V. Kumar and Velevan Subramaniam, 1997. Learning Effect in
+Multinational Diffusion of Consumer Durables: An Exploratory Investigation. Journal of
+the Academy of Marketing Science 25 (3), 214-228.
+Helsen, K., K. Jedidi and W.S. Desarbo, 1993. A New Approach to Country Segmentation
+Utilizing Multinational Diffusion Patterns. Journal of Marketing 57, 60-71.
+Kumar, V., J. Ganesh and R. Echambadi, 1998. Cross-National Diffusion Research: What Do
+We Know and How Certain Are We? Journal of Product Innovation Management
+Vol. 15 (3), pp 255-268.
+
+16
+
+Kumar, V., and T.V. Krishnan, 2002. Multinational Diffusion Models: An Alternative
+Framework. Marketing Science 21(3), 318-330.
+Lenk, Peter J. and Ambar G. Rao, 1990. New Models From Old: Forecasting Product
+Adoption By Hierarchical Bayes Procedures. Marketing Science 9 (Winter), 42-57.
+Lewis, Frank L., 1986. Optimal Estimation. New York: John Wiley & Sons.
+Mahajan, Vijay, and Eitan Muller,1994. Innovation Diffusion in a Borderless Global Market:
+Will the 1992 Unification of the European Community Accelerate Diffusion of New
+Ideas, Products and Technologies? Technological Forecasting and Social Change 45,
+221-235.
+Mahajan, Vijay, Eaten Muller, and Frank M. Bass, 1990. New Product Diffusion Models in
+Marketing: A Review and Directions for Research. Journal of Marketing 54 (January), 126.
+Mahajan, Vijay, Eitan Muller, and Yoram Wind, 2000. New-Product Diffusion Models: From
+Theory To Practice. In Vijay Mahajan, Eitan Muller, Yoram Wind (eds.), New-Product
+Diffusion Models. Boston: Kluwer, pp. 3-24.
+Mathworks, 2001. Webpage including full manual of Matlab, www.mathworks.com.
+Moore, Geoffrey A., 1991. Crossing the chasm. Marketing and Selling High-Tech Products to
+Mainstream Consumers. New York: Harper Business.
+Moore, Geoffrey A., 1995. Inside the Tornado: Marketing Strategies from Silicon Valleys
+Cutting Edge. New York: Harper Business.
+Neelamegham, R. and P. Chintagunta, 1999. A Bayesian model to forecast new product
+performance in domestic and international markets. Marketing Science, 18 (2), 115136.
+Putsis, William P. Jr., Sridhar Balsubramanian, Edward H. Kaplan and Subrata K. Sen, 1997.
+Mixing Behavior in Cross-Country Diffusion. Marketing Science 16 (No. 4), 354-369.
+Putsis, William P. Jr. and V. Srinivasan, 2000. Estimation Techniques For Macro Diffusion
+Models. In Vijay Mahajan, Eitan Muller, Yoram Wind (eds.), New Product Diffusion
+Models. Boston: Kluwer, pp: 76-96.
+Srinivasan, V. and Charlotte H. Mason, 1986. Nonlinear Least Squares Estimation Of New
+Product Diffusion Models. Marketing Science 5 (No. 2), 169-178.
+Stengel, Robert F., 1986. Stochastic Optimal Control: Theory and Application. New York:
+John Wiley & Sons.
+Sultan, Fareena, John U. Farley and Donald R. Lehmann, 1990. A Meta-Analysis of
+Applications of Diffusion Models. Journal of Marketing Research 27 (February), 70-77.
+
+17
+
+Takada, H. and D. Jain, 1991. Cross-National Analysis of Diffusion of Consumer Durable
+Goods in Pacific Rim Countries. Journal of Marketing 55, 48-54.
+Talukdar, D., K. Sudhir, and A. Ainslie, 2002. Investigating new product diffusion across
+products and countries. Marketing Science 21(1), 97-114.
+Tellis, G.J., S. Stremersch, and E. Yin, 2003. The International Takeoff of New Products: The
+Role of Economics, Culture and Country Innovativeness. Marketing Science 22(2), 188208.
+Van den Bulte, C., and G. Lilien, 1997. Bias and Systematic Change in the Parameter
+Estimates of Macro-level Diffusion Models. Marketing Science 16(4), 338-353.
+Xie, Jinhong, Micheal Song, Marvin Sirbu, and Qiong Wang, 1997. Kalman Filter Estimation
+of New Product Diffusion Models. Journal of Marketing Research 34 (August), 378-393.
+
+18
+
+Figure 1: The AKF(C-D) estimation procedure (Xie et al., 1997, p. 382).
+Information that flows
+continuously
+
+Measurement
+noise
+Marketing mix
+variables
+
+Initial estimate
+t=t0
+
+Information that flows when
+an observation is made
+
+The real
+market
+
+Diffusion
+model:
+differential
+equation with
+unknown
+parameters
+
+Diffusion
+
++
+
+Observation
+
+A priori
+estimate
+Time update
+
+A posteriori
+estimate
+
+Forecasting
+error
+
+Measurement
+update
+
+AKF(C-D) estimation
+
+Figure 2: Penetration of Internet access in the households of the EU (Source: Gallup
+Europe, 2000).
+60,0%
+Sweden
+Denmark
+
+50,0%
+
+Finland
+Netherlands
+Luxembourg
+
+40,0%
+
+UK
+Belgium
+
+30,0%
+
+Austria
+Germany
+France
+
+20,0%
+
+Italy
+Spain
+Ireland
+
+10,0%
+
+Portugal
+Greece
+
+0,0%
+jan/90 jan/91 jan/92 jan/93 jan/94 jan/95
+
+jan/96
+
+jan/97 jan/98 jan/99
+
+19
+
+Figure 3: Penetration of mobile telephony in the households of the EU (Source: Gallup
+Europe, 2000).
+80,0%
+
+Finland
+
+70,0%
+
+Sweden
+
+Italy
+60,0%
+
+Denmark
+
+Luxembourg
+50,0%
+
+Portugal
+
+Austria
+40,0%
+
+UK
+
+Spain
+
+Greece
+
+30,0%
+
+Ireland
+
+Netherlands
+
+20,0%
+
+France
+
+Belgium
+
+10,0%
+0,0%
+jan/90
+
+Germany
+
+jan/91
+
+jan/92
+
+jan/93
+
+jan/94
+
+jan/95
+
+jan/96
+
+jan/97
+
+jan/98
+
+jan/99
+
+Figure 4: One-step-ahead prediction for Internet access in Sweden
+
+50
+
+forecasted expected value
+upper bound 68% confidence estimation
+lower bound 68% confidence estimation
+oberserved penetration
+
+penetration (%)
+
+40
+
+30
+
+20
+
+10
+
+0
+
+1995
+
+1995.5
+
+1996
+
+1996.5
+
+1997
+
+1997.5
+year
+
+1998
+
+1998.5
+
+1999
+
+1999.5
+
+2000
+
+20
+
+Figure 5: The long-term forecasts for Internet access in Sweden
+
+21
+
+Figure 6: Forecasting errors for different values of Φ (Internet access case)
+Mean Absolute Percentage Error
+
+45
+40
+35
+30
+
+three-step-ahead
+
+25
+
+two-step-ahead
+
+20
+
+one-step-ahead
+
+15
+10
+5
+0
+0
+
+0,2
+
+0,4
+
+0,6
+
+F
+
+0,7
+
+0,8
+
+0,9
+
+1
+
+Figure 7: The evolvement of the estimates of q for Sweden and Luxembourg
+1,5
+
+q
+
+1,25
+Sweden
+
+1
+
+Luxembourg
+
+0,75
+
+0,5
+1994
+
+1995
+
+1996
+
+1997
+
+1998
+
+1999
+
+1999,5
+
+Year
+
+22
+
+Table 1: Four approaches to international diffusion compared
+Staged
+estimation,
+Dekimpe et al.
+1998
+
+Mutual
+influence,
+Mahajan and
+Muller 1994
+
+Mixing
+behavior,
+Putsis et al.
+1997
+
+Learning
+effect,
+Ganesh et al.
+1997
+
+Basic principle
+
+Adopters from
+each country
+influence the
+potential
+adopters in
+other countries
+
+Bernouilli
+mixing
+describes the
+way countries
+interact
+
+Consumers in
+lag countries
+learn from
+adopters in
+lead country
+
+Which influence of
+adoption in one
+country on
+adoption in other
+countries is
+included in the
+model?
+Does the model
+assume a fixed or
+variable intensity
+of the influence
+between the
+countries?
+
+Mutual
+influence
+between all
+countries
+
+Mutual
+influence
+between all the
+countries
+
+Lead country
+influences lag
+countries
+
+Lead-lag, laglead and
+simultaneous
+influence
+between all
+countries
+
+Fixed,
+assumed equal
+to influence
+within country
+(q)
+
+Variable,
+learning
+coefficient
+may be varied
+
+Variable,
+Interaction
+effects may
+vary.
+
+Fixed, no
+influence
+
+Does the approach
+include sample
+matching?
+
+No
+
+Variable,
+mixing can be
+varied on the
+continuum
+from no
+mixing at all to
+complete
+mixing
+No
+
+Yes, matching
+on social
+system size by
+using
+penetration per
+population
+
+No
+
+Yes, matching
+on country size,
+ceiling and time
+of introduction
+
+Mutual
+influence,
+Kumar and
+Krishnan,
+2002
+Adopters from
+each country
+influence the
+potential
+adopters in
+other countries
+
+Before
+estimating
+diffusion
+parameters a
+matching
+procedure has to
+be followed
+None
+
+23
+
+Table 2: Four adaptive parameter estimation methods compared
+Adaptive filtering,
+Bretschneider and
+Mahajan 1980
+Feedback filter is used
+to update time
+varying coefficients in
+regression model
+
+Hierarchical
+Bayes, Lenk and
+Rao (1990)
+Hierarchical Bayes
+procedure to update
+the a-priori
+parameter estimates
+
+Bayesian
+updating, Sultan
+and Farley 1990
+Bayesian updates
+of prior estimates,
+using data based
+estimates
+obtained by NLS
+
+Does the method
+allow for parameters
+that also vary
+according to
+prescribed dynamics
+(flexible diffusion
+models)?
+Does method require
+model to have
+explicit solution or
+be discrete?
+
+No, the parameters
+are considered to vary
+randomly only
+
+No, the parameters
+are considered to
+vary randomly only
+
+No
+
+Yes, the method is
+based on a discrete
+diffusion model
+
+Yes, the method
+requires analytical
+solution of the
+diffusion model
+
+Does the method
+already update the
+prior estimate when
+first data point
+becomes available?
+
+Yes
+
+Yes
+
+Yes, NLS
+requires the
+analytical
+solution of the
+diffusion model
+No, three data
+points are needed
+for the first
+update.
+
+Basic principle
+
+AKF(C-D), Xie
+et al. 1997
+
+Augmented
+extended Kalman
+feedback filter
+applied directly to
+the diffusion
+model
+Yes, they can
+simultaneously
+vary according to
+prescribed
+dynamics and a
+random process
+No, the method is
+applied directly to
+the differential
+equation
+Yes
+
+24
+
+Table 3: Initial estimates of country size, time of introduction, and expected penetration
+ceiling
+Country
+
+Size
+(number of
+households)1
+
+Time of
+introduction
+Internet
+access2
+
+Time of
+introduction
+mobile
+phones3
+
+Austria
+Belgium
+Denmark
+Finland
+France
+Germany
+Greece
+Ireland
+Italy
+Luxembourg
+Netherlands
+Portugal
+Spain
+Sweden
+United
+Kingdom
+
+3.013.000
+3.953.000
+2.274.000
+2.037.000
+21.542.000
+35.256.000
+3.204.000
+1.029.000
+19.909.000
+145.000
+6.162.000
+3.146.000
+11.836.000
+3.830.000
+22.422.000
+
+1995
+1996
+1994
+1994
+1996
+1996
+1997
+1997
+1996
+1995
+1994
+1997
+1996
+1994
+1994
+
+1992
+1992
+1990
+1990
+1993
+1993
+1994
+1993
+1990
+1992
+1993
+1992
+1992
+1990
+1990
+
+1.
+2.
+3.
+4.
+5.
+
+Expected
+penetration
+ceiling
+Internet
+access4
+71%
+73%
+75%
+69%
+71%
+72%
+49%
+60%
+56%
+88%
+69%
+44%
+54%
+79%
+66%
+
+Expected
+penetration
+ceiling
+mobile
+phones5
+98%
+98%
+99%
+100%
+99%
+99%
+96%
+89%
+97%
+100%
+100%
+85%
+93%
+100%
+99%
+
+Source: Eurostat (1996)
+Operationalized as: “the first year in which 0,4% or more of the households acquired Internet access at
+home” (source: Gallup Europe, 2000)
+Operationalized as: “the first year in which 0,4% or more of the households acquired a mobile phone”
+(source: Gallup Europe, 2000)
+The percentage of households in the EU-member countries that have an income that is higher then the
+European poverty line (Dekimpe et al. 1998; source: European Communities, 2000)
+The percentage of households that has a sufficient income to afford basic telephone service (source:
+European Communities, 2000)
+
+25
+
+Table 4: The initial and final estimates of the effective contact rate q (Internet access)
+Country
+Belgium
+Denmark
+Germany
+Finland
+France
+Greece
+Ireland
+Italy
+Luxembourg
+Netherlands
+Austria
+Portugal
+Spain
+United Kingdom
+Sweden
+
+Initial estimate
+(t=t0)
+E(qi)
+SD(qi)
+0.82
+0.45
+0.89
+0.47
+0.83
+0.46
+0.79
+0.44
+0.81
+0.45
+0.57
+0.38
+0.68
+0.41
+0.69
+0.42
+1.10
+0.52
+0.81
+0.45
+0.85
+0.46
+0.57
+0.38
+0.63
+0.40
+0.69
+0.42
+0.82
+0.45
+
+Estimate after final
+measurement update
+(1999.5)
+E(qi)
+SD(qi)
+0.75
+0.13
+1.11
+0.12
+0.72
+0.14
+0.73
+0.10
+0.69
+0.18
+0.26
+0.45
+0.76
+0.25
+0.66
+0.19
+0.80
+0.09
+0.93
+0.09
+0.78
+0.14
+0.59
+0.27
+0.60
+0.18
+0.91
+0.10
+0.16
+1.25
+
+Difference between
+Initial and 1999.5
+estimate
+E(qi)
+SD(qi)
+-8%
+-72%
++25%
+-75%
+-13%
+-70%
+-7%
+-78%
+-15%
+-59%
+-20%
+-32%
++13%
+-40%
+-5%
+-55%
+-27%
+-83%
++14%
+-79%
+-8%
+-70%
++5%
+-29%
+-4%
+-55%
++31%
+-76%
+-64%
++52%
+
+Table 5: Mean absolute percentage errors of the IA and the classical forecasting
+approach
+Forecasting period
+Internet access
+Mobile telephony
+IA
+IA
+Classic
+IA
+IA
+Classic
+Ф=1
+Ф=1
+approach
+approach
+One-year-ahead
+8%
+9%
+14%
+7%
+8%
+13%
+Two-year-ahead
+14%
+16%
+27%
+15%
+17%
+24%
+Three-year-ahead
+12%
+16%
+39%
+23%
+25%
+32%
+Table 6: Sensitivity of the forecasting performance to changes in initial estimates
+(Internet access)
+Change of initial
+Mean average absolute percentage error
+estimate
+one-step-ahead
+two-step-ahead
+three-step-ahead
+With used values
+12.2
+16.0
+17.6
+C+ 25%
+12.2
+15.9
+17.4
+C– 25%
+12.3
+16.1
+18.0
+q+25%
+16.5
+28.4
+40.2
+q-25%
+20.3
+32.8
+43.3
+p+25%
+12.2
+16.0
+17.6
+p-25%
+12.2
+16.0
+17.6
+13.1
+18.1
+18.5
+F+25%
+13.0
+17.1
+20.0
+F+25%
+P+25%
+12.3
+15.8
+17.1
+P-25%
+12.3
+16.3
+18.2
+
+26
+
+Appendix A: The AKF(C-D) estimation procedure.
+In this appendix a generalized version of the AKF(C-D) estimation procedure used by Xie et
+al. (1997) is presented. It is based on the books of Lewis (1986, p.260-265) and Stengel
+(1986, p.386-396). The model used by Xie et al. describes the diffusion in one social system.
+They use one state to describe the evolvement in time of the diffusion process. Our
+generalization consists of augmenting the state from one state variable to a (Kx1) vector of
+state variables that describes the evolvement of the diffusion in K social systems (or
+countries) at a time.
+When studying the diffusion of innovations in K countries at a time, we study a continuous
+process with K states. The observations of the diffusion process are made only at a finite
+number of discrete times, z = tz. Following control engineering theory, such a dynamic system
+and its discrete observation can be described by two equations. The system equation describes
+the evolution of the state variable in time. The measurement equation describes how the
+observations are related to the state of the system.
+dN ( t )
+dt
+y( z )
+
+=
+
+f ( N (t ), u(t ), t ) + G (t ) * w
+
+= H ( z ) * N (t ) + v
+
+Equation 9
+
+N (0) ~ (N 0 , P0 ), w ~ (0, Q ), v ~ (0, R )
+
+Where:
+· N(t) is the state variable vector with dimension (Kx1), and N(0) is assumed to have an
+initial distribution with mean vector N0 and covariance matrix P0,
+· f is a vector function of the state, N(t), the control vector u(t), and time t,
+· u(t) is the control variable vector (for instance the marketing mix variables),
+· y(z) is the measurement vector at time z,
+· H(z) is the measurement matrix,
+· w and v are respectively the process noise and the measurement noise vectors that both are
+assumed to be stationary white noise processes, that are uncorrelated with each other and
+with N(0),
+· and Q and R are covariance matrices of the process noise and the measurement noise.
+In international diffusion research the observations are made directly of the diffusion itself.
+Therefore the measurement matrix will only have non-zero elements in the diagonal. At each
+observation moment t=z, observations of the diffusion process are made in one or more of the
+countries. At instant z, the diagonal elements of the measurement matrix H(z) will be zero
+when the diffusion in the associated country is not observed, and one when the diffusion in
+the associated country is observed.
+In this formulation the model parameters are considered to be constant. Following Stengel
+(1986, p.392-6), we can incorporate model parameters that vary with time by writing:
+
+27
+
+é dN (t ) ù
+é f n ( N (t ), β (t ), u(t ), t )ù
+é wn ù
+ê dt ú
+ê
+ú
+ê ú
+=
++
+ê dβ (t ) ú
+ê f b ( N (t ), β (t ), t )
+ú
+êwb ú
+ê
+ú
+ë
+û
+ë û
+dt
+ë
+û
+= H ( z ) * N (t ) + v
+y( z )
+
+(
+
+Equation 10
+
+)
+
+N (0) ~ (N 0 , PN 0 ), β (0) ~ β0 , Pb 0 , w ~ (0, Q ), v ~ (0, R )
+
+Where:
+· b(t) is the parameter vector,
+· fb is a vector function of the state N(t), the parameters β(t) and the time t,
+· wb is the process noise associated with the modeling of the dynamics of the parameters.
+Combining the state and the parameter vector we define the augmented state, x(t) as:
+é N (t )ù
+ú
+x (t ) = ê
+êë β (t ) úû
+
+Equation 11
+
+Where:
+· x(t) is the augmented state vector of length K+M, where M denotes the number of model
+parameters that are incorporated.
+Then we can rewrite the system equation as:
+dx (t )
+dt
+
+é wn ù
+é f n ( N (t ), β (t ), u(t ), t )ù
+ú + ê ú = f x ( x (t ), u(t ), t ) + w x
+= ê
+ú
+êwb ú
+ê f b ( N (t ), β (t ), t )
+û
+ë û
+ë
+
+Equation 12
+
+The observations that are made are only a function of the non-augmented state, N(t). The
+parameters of course are not observed at all. Then the observation function becomes:
+é N (t )ù
+ú+v
+y ( z ) = H A (t ) * x (t ) + v = [H (t ) 0]* ê
+êë β (t ) úû
+
+Equation 13
+
+Where:
+· HA(t) is the augmented measurement matrix, that is augmented with zeros. This is done to
+give it the right dimension to multiply it with the augmented state x(t), instead of the
+original state N(t).
+Following Lewis (1986), Stengel (1986) and Xie et al. (1997) we now define the AKF(C-D)
+estimation procedure that consists of three main steps (see Figure 1). The Filter is initialized
+with prior estimates of the state and the error covariance matrix of the state. Between
+measurements, estimates of the state and the error covariance are obtained by the “time
+update” step. When a measurement becomes available, the state and parameter estimates are
+updated in the “measurement update” step.
+Step 1: Initialization
+At t=t0, based on prior information, the best prior estimate of the distributions of the
+augmented state ( xˆ 0 , Pˆ0 ) and the noise statistics, (Q,R) are developed and the filter is
+initialized:
+
+28
+
+Pˆ (0) = Pˆ0 ,
+
+Equation 14
+
+xˆ (0) = xˆ 0
+
+Step 2: Time update
+At a given time t, the filter predicts the future state at t+Dt, or future diffusion and parameter
+values, through the time updating process. Time updating is accomplished by the following
+equations over the time interval (t, t+Dt).
+dx (t )
+dt
+dP (t )
+dt
+with :
+
+=
+
+f x ( x (t ), u(t ), t )
+
+= F ( x, t ) * P (t ) + P (t ) * F T ( x, t ) + Q
+
+F ( x, t ) =
+
+Equation 15
+
+¶f x ( x (t ), u(t ), t )
+¶x
+
+Where:
+· F(x,t) is the Jacobian of fx.
+The output of the time update step is an a priori estimate of the state at t+∆t, ˆyapriori (t + Dt ) ,
+and of the error covariance at t+Dt, Pˆapriori (t + Dt ) .
+Step 3: Measurement update
+When a new observation becomes available at time z, the estimate is modified using the
+forecasting error (the difference between the observed diffusion and the predicted diffusion).
+
+(
+
+xˆ ( z )
+
+=
+
+xˆ apriori ( z ) + K c * y ( z ) - H A ( z ) * xˆ apriori ( z )
+
+Pˆ ( z )
+
+=
+
+[I - K c * H A ( z )]* Pˆapriori ( z )
+
+)
+Equation 16
+
+with :
+KC
+
+[
+
+]
+
+-1
+= Pˆapriori ( z ) * H AT ( z ) H A ( z ) * Pˆapriori ( z ) * H AT ( z ) + R
+
+Where:
+· KC is the Kalman gain,
+· ( y ( z ) - H A ( z ) * xˆ apriori ( z ) ) is the forecasting error,
+·
+
+xˆ apriori ( z ) and Pˆapriori ( z ) denote respectively the a priori estimate of the state and the error
+
+covariance matrix obtained by the time updating step,
+· and xˆ ( z ) and Pˆ ( z ) are the posterior estimates of the state and the error covariance matrix
+that result from the measurement update step
+The posterior estimates obtained by the measurement update step will now be used as the
+starting point for the estimates made by the time updating mechanism, until a new observation
+becomes available (see Figure 1).
+
+29
+
+Appendix B: Formalizing the IA diffusion model to apply the Kalman
+Filter.
+Following Xie et al. (1997) and Putsis (1998), we will model parameter variation as purely
+stochastic. Because there are only very weak priors for the nature of parameter variation in
+diffusion models (Putsis 1998, p.235), we do not impose a systematic variation. This gives:
+db (t )
+= 0 + wb
+dt
+
+Where:
+· b(t)
+
+unknown time varying parameters of the model,
+T
+β (t) = [βC (t ), β p (t ), βq (t ), Φ (t ), t 0 ] , it is assumed that β (0) ~ (β0 , Pb 0 ) is a white noise
+
+·
+
+is
+
+Equation 17
+
+the
+
+vector
+
+of
+
+wb is vector of process noise in the parameters that is assumed to be white noise:
+
+(
+
+)
+
+wb ~ 0, Qb .
+
+Adding a noise term, wN, to equation 8, combining it with equation 17 by augmenting the state
+and writing the measurement equation5, the AKF(C-D) model is:
+é dN (t ) ù
+éwN ù
+ê dt ú
+é f N ( N (t ), β (t ), u(t ), t )ù
++ ê ú
+ê dβ (t ) ú = ê
+ú
+0
+ë
+û
+ë wb û
+ú
+ê
+ë dt û
+y( z )
+= H ( z ) * N (t ) + v
+
+Equation 18
+
+Where:
+· N(t) is the vector of the of the total number of units that have adopted the innovation in
+each country, it is assumed that N (0) ~ (N 0 , PN 0 ) is a white noise,
+· b(t) is the vector of unknown time varying parameters of the model,
+T
+β (t) = [βC (t ), β p (t ), βq (t ), Φ (t ), t 0 ] , it is assumed that β (0) ~ (β0 , Pb 0 ) is a white noise,
+T
+· [wN,wb]T is the vector of process noises that is assumed to be white noise:
+[w N , wb ] ~ (0, Q ) ,
+· y(z) is the vector of observations at time t=tz,
+· H(z) is the observation or measurement matrix,
+· v is the vector of measurement noises, that is assumed to be white noise, v ~ (0, R ) .
+It is assumed that all the white noise processes are not correlated to one another.
+As is shown in the measurement equation, the observations y(z) of the diffusion process are
+made only at a finite number of discrete times, z = tz. The observations are made of the
+diffusion itself. Therefore the measurement matrix will only have non-zero elements in the
+diagonal. At each observation moment t=z, observations of the diffusion process are made in
+one or more of the countries. At instant z, the diagonal elements of the measurement matrix
+H(z) will be zero when the diffusion in the associated country is not observed, and one when
+the diffusion in the associated country is observed.
+
+5
+
+This equation describes the relation between the observations and the dynamic states of the system
+
+30
+
+Appendix C: Prior estimates
+The prior estimates of the parameter distributions
+Following Xie et al. (1997), we define the variance of the parameters as follows:
+Var0 ( β ) = 0.25 * E0 ( β ) . The expected initial value for the parameter C has already been given
+in Table 3. The expected initial values we use for the other parameters are summarized in
+Table C1 and elucidated below.
+Table C1 : Expected values of the parameters.
+Parameter
+Internet access
+Coefficient of innovation
+E0(pi)=1e-5
+(p)
+Effective contact rate (q)
+GDPPCi - 5000
+E0 (qi ) = 0.5 +
+
+Penetration ceiling (C)
+Bernoulli mixing
+coefficient (F)
+
+Mobile telephony
+E0(pi)=1e-3
+E0(qi)=0.5
+
+25000
+
+% of households with
+income above European
+poverty line
+E0(F)=0.7
+
+% of households that can
+afford basic telephone
+service
+E0(F)=0.7
+
+p
+For Internet access we have initiated p with a low expected value: E0(pi)=1e-5. It is a new
+interactive medium that needs to build an entirely new network and that requires substantial
+learning to use. Moreover, network effects are at work, and therefore adopting it
+independently of others seems unlikely. For mobile telephony we have fixed the initial
+expected value of p higher: E0(pi)=1e-3. We expect a higher p for mobile phones than Internet
+because the mobile phone seamlessly fits into the existing telephone network and does not
+require learning to use it.
+q
+The effective contact rate q is closely related to the coefficient of imitation in the Bass model
+that is also labeled q. In their meta-analysis of applications of diffusion models, Sultan et al.
+(1990) show that the average value of q found in past research, mostly of diffusion processes
+before 1980, was about 0.4. We expect that the take up of the Internet will be quicker than the
+take up of the average innovation in the past, and also expect that the speed of diffusion will
+be strongly related to the GDP per capita (GDPPC). The Internet is complex to use, requiring
+computer skills, and a substantial investment in a PC. Furthermore, network externalities play
+an important role. The Internet is a new interactive medium that needs to build a new network
+to become really valuable. One of the most important applications of the Internet is e-mail
+that only has value when the people you want to communicate with have access. We expect
+word-of-mouth communication to play an important role in the adoption decision process.
+Therefore we have initiated q using the following equation that gives rather high values for q
+varying between 0.6 and 1.16 (see Table C2 for the exact values for each country):
+E0 (qi ) = 0.5 +
+
+GDPPCi - 5000
+25000
+
+6
+
+The GDP per capita of the richest country (Luxembourg) is about 30000 Euro and of the poorest country
+(Greece) it is 5000 Euro. We have used this equation to roughly fix the qi at values between 0.5 for the poorest
+countries and 1 for the richest.
+
+31
+
+Table C2: Initial estimates of the expected value
+of the effective contact rate q
+Country
+E (qi) Internet
+Austria
+0.85
+Belgium
+0.82
+Denmark
+0.89
+Finland
+0.79
+France
+0.81
+Germany
+0.83
+Greece
+0.57
+Ireland
+0.68
+Italy
+0.69
+Luxembourg
+1.10
+Netherlands
+0.81
+Portugal
+0.56
+Spain
+0.63
+Sweden
+0.81
+United Kingdom
+0.69
+For mobile telephony we expect that the speed of diffusion will be slightly higher than the
+average innovation. We have initiated q on the same value for all countries (E0(qi)=0.5).
+Measures like GDP per capita will not be useful to predict the speed of mobile phone
+diffusion, because the innovation is easy to use and does not require a large upfront
+investment by the adopters.
+F
+Finally, as an initial estimate of the expected value of the Bernoulli mixing parameter we have
+used the value found by Putsis et al (1997) for Home Computers: E0(F)=0.7, both for the
+Internet access and the mobile telephony. The F may be considered to be similar across
+innovations with comparable word-of-mouth networks like PCs and Internet access. It is very
+likely that people, who talk to each other about PCs, also talk about Internet access at home,
+and other technological innovations like mobile telephones.
+
+The noise statistics
+Process noise Q
+Xie et al. (1997) fix the process noise at a value of the order of magnitude of 1% of the
+penetration. We assume, however, that the process noise depends on the level of penetration,
+and we set Q by the following two rules:
+· the minimum value of Q is 0.5%;
+· Q equals 5% of the predicted penetration N(t).
+Thus we obtain:
+Q(t ) = max(0.5,0.05 * N (t ) )
+
+If the penetration N(t) is below 10%, then we use a process noise of 0,5%; as soon as the
+penetration level is above 10%, the process noise is calculated as 5% of N(t).
+
+32
+
+Measurement noise R
+Based on the information Gallup (2000) gives about the accuracy of the results we have
+estimated the observation error (measurement noise) to be 0.5% for all countries. This
+resulted in the following variance: R = 0.5 * I KxK .
+A very attractive feature of the AKF(C-D) estimation procedure that is used in the IA
+forecasting method is that the observation noise can be specified for each observation
+separately. This is especially useful when multiple sources of different reliability are used, as
+is often the case in the practice of forecasting. Since we have only one source, we do not use
+this possibility.
+
+33
+
+Appendix D: The one-step-ahead forecast for mobile telephony in Sweden
+One−step−ahead point and interval forecasts for SW
+70
+
+forecasted expected value
+upper bound 68% confidence estimation
+lower bound 68% confidence estimation
+oberserved penetration
+
+60
+
+penetration (%)
+
+50
+
+40
+
+30
+
+20
+
+10
+
+0
+1991
+
+1992
+
+1993
+
+1994
+
+1995
+
+1996
+
+1997
+
+1998
+
+1999
+
+2000
+
+year
+
+34
+
+Appendix E: The one-step-ahead forecasts for Internet access for all
+countries
+Austria:
+
+Belgium:
+
+Denmark:
+
+Finland:
+
+France:
+
+Germany:
+
+35
+
+Ireland:
+Greece:
+
+Italy:
+
+Luxembourg:
+
+The Netherlands:
+
+Portugal:
+
+36
+
+Spain:
+
+United Kingdom:
+
+Sweden:
+
+Appendix F: The long-term forecast for mobile telephony in Sweden
+
+38
+
+Appendix G: The long-term forecasts for Internet access for all countries
+Austria:
+
+Belgium:
+
+39
+
+Denmark:
+
+Finland:
+
+40
+
+France:
+
+Germany:
+
+41
+
+Ireland:
+
+Italy:
+
+42
+
+Luxembourg:
+
+The Netherlands:
+
+43
+
+Portugal:
+
+Spain:
+
+44
+
+Sweden:
+
+The United Kingdom:
+
+45
+
+Publications in the Report Series Research* in Management
+ERIM Research Program: “Marketing”
+2003
+The Effect of Members’ Satisfaction with a Virtual Community on Member Participation
+Fred Langerak, Peter C. Verhoef, Peeter W.J. Verlegh, Kristine de Valck
+ERS-2003-004-MKT
+http://hdl.handle.net/1765/269
+Surprise … Surprise, An Empirical Investigation on How Surprise is Connected to Customer Satisfaction
+Joëlle Vanhamme
+ERS-2003-005-MKT
+http://hdl.handle.net/1765/273
+Differentiated Bayesian Conjoint Choice Designs
+Zsolt Sándor, Michel Wedel
+ERS-2003-016-MKT
+http://hdl.handle.net/1765/320
+A Multi-Country Study Of The Adoption Of ERP Systems: The Effect Of National Culture
+Yvonne M. van Everdingen, Eric Waarts
+ERS-2003-019-MKT
+http://hdl.handle.net/1765/280
+New Product Announcements As Market Signals;
+A Content Analysis In The DRAM Chip Industry
+Wybe T. Popma, Eric Waarts, Berend Wierenga
+ERS-2003-025-MKT
+http://hdl.handle.net/1765/328
+Estimating Duration Intervals
+Philip Hans Franses, Björn Vroomen
+ERS-2003-031-MKT
+http://hdl.handle.net/1765/331
+On The Bass Diffusion Theory, Empirical Models And Out-Of-Sample Forecasting
+Philip Hans Franses
+ERS-2003-034-MKT
+http://hdl.handle.net/1765/333
+Predicting Customer Lifetime Value in Multi-Service Industries
+Bas Donkers, Peter C. Verhoef, Martijn de Jong
+ERS-2003-038-MKT
+http://hdl.handle.net/1765/325
+
+*
+
+A complete overview of the ERIM Report Series Research in Management:
+http://www.erim.eur.nl
+ERIM Research Programs:
+LIS Business Processes, Logistics and Information Systems
+ORG Organizing for Performance
+MKT Marketing
+F&A Finance and Accounting
+STR Strategy and Entrepreneurship
+
+Confidence Intervals for Cronbach’s Coefficient Alpha
+Alex J. Koning, Philip Hans Franses
+ERS-2003-041-MKT
+http://hdl.handle.net/1765/431
+Modeling Dynamic Effects of the Marketing Mix on Market Shares
+Dennis Fok, Richard Paap, Philip Hans Franses
+ERS-2003-044-MKT
+http://hdl.handle.net/1765/336
+Weathering Tight Economic Times: The Sales Evolution Of Consumer Durables Over The Business Cycle
+Barbara Deleersnyder, Marnik G. Dekimpe, Miklos Sarvary, Philip M. Parker
+ERS-2003-046-MKT
+http://hdl.handle.net/1765/428
+The Effectiveness of Case-Based Reasoning: An Application in Sales Promotions
+Niek A.P. Althuizen, Berend Wierenga
+ERS-2003-053-MKT
+http://hdl.handle.net/1765/436
+
+ii
+
+

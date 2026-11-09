@@ -1,0 +1,2555 @@
+The Missing Indicator Method: From Low to High Dimensions
+Mike Van Ness
+
+Tomas M. Bosschieter
+
+Stanford University
+Stanford, CA, USA
+
+Stanford University
+Stanford, CA, USA
+
+Roberto Halpin-Gregorio
+
+Madeleine Udell
+
+Cornell University
+Ithaca, NY, USA
+
+Stanford University
+Stanford, CA, USA
+
+arXiv:2211.09259v2 [cs.LG] 4 Feb 2023
+
+ABSTRACT
+Missing data is common in applied data science, particularly for
+tabular data sets found in healthcare, social sciences, and natural
+sciences. Most supervised learning methods only work on complete
+data, thus requiring preprocessing such as missing value imputation to work on incomplete data sets. However, imputation alone
+does not encode useful information about the missing values themselves. For data sets with informative missing patterns, the Missing
+Indicator Method (MIM), which adds indicator variables to indicate
+the missing pattern, can be used in conjunction with imputation to
+improve model performance. While commonly used in data science,
+MIM is surprisingly understudied from an empirical and especially
+theoretical perspective. In this paper, we show empirically and theoretically that MIM improves performance for informative missing
+values, and we prove that MIM does not hurt linear models asymptotically for uninformative missing values. Additionally, we find
+that for high-dimensional data sets with many uninformative indicators, MIM can induce model overfitting and thus test performance.
+To address this issue, we introduce Selective MIM (SMIM), a novel
+MIM extension that adds missing indicators only for features that
+have informative missing patterns. We show empirically that SMIM
+performs at least as well as MIM in general, and improves MIM for
+high-dimensional data. Lastly, to demonstrate the utility of MIM
+on real-world data science tasks, we demonstrate the effectiveness
+of MIM and SMIM on clinical tasks generated from the MIMIC-III
+database of electronic health records.
+
+KEYWORDS
+missing values, supervised learning, imputation, healthcare
+
+1
+
+INTRODUCTION
+
+Missing data is an unavoidable consequence of tabular data collection in many domains. Nonetheless, most statistical studies and
+machine learning algorithms not only assume complete data, but
+cannot run on data sets with missing entries. Two common preprocessing methods are used to address this issue. The first method is
+complete case analysis, in which the fully observed data samples
+are used, while the others are discarded. However, discarding data
+reduces statistical power and can bias results, as partially-observed
+data samples may still contain important information. Furthermore,
+sometimes all data samples have missing values, in which case
+discarding incomplete samples is catastrophic.
+The second method is missing value imputation, in which missing values are replaced by estimates from the observed data. While
+missing value imputation is well studied and widely used [28, 48],
+it comes with two problems. Firstly, most imputation methods are
+
+only (provably) effective when missing values are missing at random (MAR), which is often violated in real-world data, e.g. medical
+data [34]. In particular, many real-world data sets exhibit informative missingness, i.e. when the pattern of missing data encodes
+information about the response variable. When data has informative missingness, the MAR assumption is not typically satisfied,
+making imputation methods less effective.
+Secondly, imputation methods are typically evaluated by their
+reconstruction error. This method of evaluation is reasonable when
+the task of interest itself is imputation, e.g. for recommender systems. However, optimal imputation in terms of lowest reconstruction error is not necessarily required for optimizing downstream
+prediction accuracy. In fact, recent theoretical work has shown
+that simple imputation schemes can still result in Bayes optimal
+predictions if the imputation function is paired with an appropriate
+prediction function [4, 21, 25]. Thus, it is possible to obtain optimal
+predictions without accurate imputations, which is particularly
+useful when making accurate imputations is challenging, i.e. for
+MNAR data.
+An alternative strategy, particularly when missing values are
+informative, is the Missing Indicator Method (MIM), which directly
+leverages the signal in the missingness itself rather than optimizing
+imputation accuracy. For each partially observed feature, MIM adds
+a corresponding indicator feature to indicate whether the feature
+is missing or not. MIM can be used with any imputation method,
+but is most commonly used with mean imputation, which is equivalent to 0-imputation after centering features. MIM is a common
+method in practice, e.g. it is implemented in scikit-learn [33], yet
+MIM remains understudied from an empirical and, in particular,
+theoretical perspective.
+In this paper, we show both theoretically and empirically that
+MIM is an effective strategy for supervised learning in a wide variety of data regimes. While some previous work has studied MIM
+related to statistical inference [15, 22], our work focuses on MIM as
+part of a supervised learning pipeline, where prediction accuracy
+is the primary objective opposed to inference. Additionally, to better handle high-dimensional data sets where extra uninformative
+indicator features can lead to overfitting, we introduce Selective
+MIM (SMIM), a novel MIM extension to adaptively select which
+indicators are useful to add to the data set.
+Our main contributions are as follows:
+• We provide a novel theoretical analysis of MIM for linear regression. In particular, we prove that MIM successfully encodes the
+signal in missing values when the missingness is informative,
+
+Van Ness et al.
+
+thus increasing prediction performance. Further, when missingness is not informative, MIM does not degrade performance
+asymptotically.
+• We introduce Selective MIM (SMIM), a novel improvement to
+MIM that uses significance tests to select only the informative
+indicators. SMIM stabilizes MIM for high-dimensional data sets,
+where MIM can cause overfitting and thus increased variance in
+training.
+• We conduct an extensive empirical study of MIM and SMIM on
+synthetic data and real-world data, for various different imputation and prediction models. We show that MIM plus mean
+imputation is a strong method while being much more efficient
+than more complicated imputation schemes. Additionally, we
+show that SMIM performs at least as well as MIM in general,
+while outperforming MIM on high-dimensional data sets.
+• To demonstrate the utility of MIM and SMIM in real-world applications, we evaluate these methods on the MIMIC-III data set
+[20], a clinical data set of electronic health records (EHRs). We
+show that (S)MIM improves model performance on a collection of
+clinical tasks, showing that real-world data often has informative
+missing values with signal that can be captured with MIM.
+
+2
+
+MISSING VALUES IN SUPERVISED
+LEARNING
+
+In this section we introduce the problem statement and relevant
+work, and expand on how we build on existing work.
+
+2.1
+
+Notation
+
+We use the following conventions. Upper case letters 𝑋 are random
+variables. Bold letters 𝑿 are vectors, which by default are always
+column vectors. Subscripts 𝑋 𝑗 denote components of 𝑿 , and superscripts 𝑿 (𝑖) denote sample vectors in a data set. We use 𝑛 for the
+number of samples/rows, and 𝑝 for the number of features/columns.
+We reserve 𝑖 as an index on samples and 𝑗 as an index on features.
+𝑹 will denote indicator features corresponding to missing values
+in 𝑿 . The sets obs(𝑹) = { 𝑗 : 𝑅 𝑗 = 0} and miss(𝑹) = { 𝑗 : 𝑅 𝑗 = 1}
+indicate observed and missing components of a vector. 𝑋 𝑗 ⊥
+⊥ 𝑋𝑘
+means 𝑋 𝑗 and 𝑋𝑘 are independent as random variables.
+
+2.2
+
+Problem Statement
+
+We consider the following supervised learning setup. Let 𝑿 ∈ R𝑝
+be a vector of 𝑝 features, and 𝑌 ∈ Y a response to be predicted
+from 𝑿 , where Y = R for regression tasks and Y = {0, 1, . . . , 𝑘 − 1}
+for k-class classification tasks. The vector 𝑿 contains a complete
+set of values, in the sense that a value exists for each component
+of 𝑿 even if that value is not observed. In reality, we observe 𝒁 ∈
+{R ∪ {∗}}𝑝 where 𝑍 𝑗 = 𝑋 𝑗 when 𝑋 𝑗 is observed and 𝑍 𝑗 = ‘ ∗ ’
+when 𝑋 𝑗 is unobserved/missing. 𝒁 yields the random binary vector
+𝑹 ∈ {0, 1}𝑝 that indicates the missing and observed components of
+𝒁 . Specifically, 𝑅 𝑗 = 0 when 𝑋 𝑗 is observed and 𝑅 𝑗 = 1 when 𝑋 𝑗 is
+missing.
+Given a loss function L : Y × Y → R and a distribution over
+pairs (𝒁, 𝑌 ) ∼ D, the goal is to find function 𝑓 : {R ∪ {∗}}𝑝 → Y
+
+that minimizes the expected loss:
+𝑓 ∗ = argmin E D [L (𝑓 (𝒁 ), 𝑌 )] .
+
+(1)
+
+𝑓
+
+We will often drop the subscript D from expectations with the
+default being that the expectation is with respect to D. The function
+𝑓 can be a pipeline that combines an imputation method with
+a prediction method, or can directly predict 𝑌 from 𝒁 without
+imputation, e.g. fitting a different model per missing pattern.
+
+2.3
+
+Types of Missing Data
+
+Traditionally, partially observed data is categorized by the missing
+mechanism, i.e. the distribution of 𝑹 conditional on the complete
+data 𝑿 . The most typical categorization of missing mechanisms is
+[30]:
+• Missing Completely at Random (MCAR). The missing pattern is random and independent of the data: 𝑃 (𝑹 | 𝑿 ) = 𝑃 (𝑹).
+• Missing at Random (MAR). The missing pattern is independent of unobserved values 𝑿 miss(𝑹) conditioned on observed
+values 𝑿 obs(𝑹) : 𝑃 (𝑹 | 𝑿 ) = 𝑃 (𝑹 | 𝑿 obs(𝑹) ).
+• Missing Not at Random (MNAR). The missing pattern may
+depend on unobserved values.
+The MCAR and MAR mechanisms are sometimes considered ignorable in the sense that these mechanisms may be ignored for
+likelihood-based inference [38]. Many imputation methods work
+well on MCAR or MAR data [18, 45, 49, 56], while MNAR data is
+more challenging for imputation methods and requires modeling
+the missing mechanism itself [23, 31, 44].
+While missing mechanisms define the relationship between 𝑹
+and 𝑿 , informative missingness is defined by the relationship between 𝑹 and 𝑌 :
+Definition 2.1. For (𝒁, 𝑌 ) ∼ D with missing pattern 𝑹, the
+missing pattern is informative if 𝑹 ̸⊥
+⊥ 𝑌.
+Assuming 𝑿 ̸⊥
+⊥ 𝑌 , this definition implies that MAR and MNAR
+data always have informative missingness. MCAR data can also
+have informative missingness if 𝑹 ̸⊥
+⊥ 𝑌 despite 𝑹 ⊥
+⊥ 𝑿 , although
+this is rare in practice. In previous literature, informative missingness is most often associated with MNAR data, as in this setting the
+missingness is most informative [27, 39]. In general, we expect MIM
+to improve predictions when missingness is informative. Yet, we
+can have MAR data and not see any benefit to MIM over imputation
+alone if 𝑹 ⊥
+⊥ 𝑌 | 𝑿𝑜𝑏𝑠
+
+2.4
+
+Related Work
+
+Missing values have been an important topic of study in statistics
+for decades. Classical work focused on statistical inference problems
+[8, 30, 38], while more recent work has focused more on imputation,
+ranging from statistical methods [18, 55] to iterative approaches
+[45, 49] and deep learning [14, 31, 54].
+Even though MIM is commonly used in practice (e.g. it is implemented in sklearn [33]), its properties are surprisingly understudied
+in statistical and machine learning literature, particularly from the
+perspective of supervised learning. MIM has been explored more in
+the medical literature due to the ubiquity of missing values in medical data sets, and particularly the tendency of these missing values
+
+The Missing Indicator Method: From Low to High Dimensions
+
+to be informative. A few medical papers advocate for MIM with
+mean imputation [41, 43], and some for MIM with other imputation
+methods [36, 42]. Other medical papers caution the use of MIM
+when statistical estimation and inference is the downstream task,
+as then using MIM can add bias to parameter estimates [15, 22]. We
+instead focus on the problem of optimal supervised learning.
+Many previous methodological and empirical works have studied missing value preprocessing for supervised learning, yet most
+do not include MIM or a similar method to capture informative
+missingness. Some empirical studies have evaluated combinations
+of imputation and prediction models [11, 52], but these most often exclude MIM. Recent AutoML methods attempt to optimize
+the entire supervised learning pipeline [10, 12, 53], but without
+considering MIM. Deep learning can be used to jointly optimize imputation and prediction if both models are neural networks [19, 24],
+but these methods do not capture informative missingness without
+additionally using missing indicators. Decision trees can uniquely
+handle missing values without imputation, e.g. using the Missing
+Incorporated as Attribute method [21, 47], but such methods are
+only applicable to tree-based methods.
+Lastly, some recent papers have explored impute-then-predict
+pipelines from a theoretical perspective. [4, 21, 25] show that accurate imputation is not needed to produce Bayes optimal predictions
+as long as a powerful enough predictor is used. While this theory
+is not immediately applicable in practice, since constructing these
+predictors would often be impossible, it does give motivation for
+developing missing value preprocessing methods that do not focus
+on imputation accuracy, such as MIM with mean imputation. Perhaps the most relevant previous work to this paper is [26], which
+gives a risk bounds for linear models with 0-imputation using both
+MIM and an expanded linear model. We also present theory for
+MIM with linear models in this paper, but under different assumptions and focusing on asymptotics rather than risk bounds. We also
+perform a much more diverse set of empirical experiments in this
+paper compared to [26].
+
+3
+
+MISSING INDICATOR METHOD THEORY
+
+In this section, we present a theoretical study of MIM for linear
+regression. Following the notation from Section 2, let 𝑿 ∈ R𝑝 be
+𝑝 features, 𝑌 ∈ R a continuous response, and 𝒁 ∈ {R ∪ {∗}}𝑝 the
+observed features with potentially missing values. The full optimization problem in Eq. (1) with squared error loss L (𝑥, 𝑦) = (𝑥 − 𝑦) 2
+is solved by the conditional expectation E[𝑌 | 𝒁 ]. However, as
+explained in [24, 26], this conditional expectation is combinatorial
+in nature, as it involves estimating a different expectation for each
+missing pattern 𝑹:
+𝑓 ∗ = E[𝑌 | 𝒁 ] = E[𝑌 | 𝑿 obs(𝑹) , 𝑹]
+∑︁
+=
+E[𝑌 | 𝑿 obs(𝒓) , 𝑹 = 𝒓] 1𝑹=𝒓 .
+
+(2)
+(3)
+
+𝒓 ∈ {0,1}𝑑
+
+In [24, 26], the conditional expectation in Eq. (2) is estimated after
+assuming that 𝑿 comes from a Gaussian distribution. In this paper, we make no distributional assumptions, and instead make the
+following assumptions:
+Assumption 3.1. 𝑌 is centered as 𝑌 ← 𝑌 − E[𝑌 ], while 𝒁 is
+centered over the observed entries 𝑍 𝑗 ← 𝑍 𝑗 − E[𝑍 𝑗 | 𝑅 𝑗 = 0] and
+
+imputed with 0, resulting in the imputed data vector 𝒁˜ defined as
+(
+𝑋 𝑗 𝑅 𝑗 = 0,
+˜
+𝑍𝑗 =
+(4)
+0
+𝑅 𝑗 = 1.
+Assumption 3.2. 𝑓 is constrained to be a linear function, and thus
+𝑓 ∗ is the best linear prediction function.
+We now examine 𝑓 ∗ with and without MIM. Specifically, we
+compare the best linear predictors (BLPs):
+𝜷 ∗ = argmin E[(𝑌 − 𝒁˜ 𝑇 𝜷) 2 ],
+
+(5)
+
+𝜷
+∗
+∗
+𝑇 2
+˜𝑇
+𝜷𝑀𝐼
+𝑀 , 𝜸 𝑀𝐼 𝑀 = argmin E[(𝑌 − 𝒁 𝜷 − 𝑹 𝜸 ) ].
+
+(6)
+
+(𝜷,𝜸 )
+
+In practice, we would estimate these BLPs using a training set
+{(𝒁 (1) , 𝑹 (1) ), . . . (𝒁 (𝑛) , 𝑹 (𝑛) )}, obtaining the standard ordinary least
+ˆ 𝜷ˆ𝑀𝐼 𝑀 , and 𝜸ˆ𝑀𝐼 𝑀 . Under mild condisquares (OLS) estimates 𝜷,
+tions, most notably that E[ 𝒁˜ 𝒁˜ 𝑇 ] and E[( 𝒁˜ 𝑇 , 𝑹𝑇 )𝑇 ( 𝒁˜ 𝑇 , 𝑹𝑇 )] are
+invertible, these OLS estimates will converge to the corresponding
+BLPs in Eqs. (5) and (6); see [16] for further details. This convergence validates the study of the best linear predictors, as they serve
+as the limits of the OLS estimates obtained in practice.
+Theorem 3.1 starts by analyzing the simple case when 𝑝 = 1,
+which has particularly nice properties.
+Theorem 3.1. Grant Assumptions 3.1 and 3.2. 𝑝 = 1, and let
+M = {𝑖 : 𝑅 (𝑖) = 1} be the missing samples, then the OLS estimates
+are
+∑︁
+ˆ 𝛾ˆ𝑀𝐼 𝑀 = 1
+𝛽ˆ𝑀𝐼 𝑀 = 𝛽,
+𝑌 (𝑖) ,
+(7)
+|M|
+𝑖 ∈M
+
+and thus the BLPs are
+∗
+∗
+𝛽𝑀𝐼
+𝑀 =𝛽 ,
+
+∗
+𝛾𝑀𝐼
+𝑀 = E[𝑌 | 𝑅 = 1].
+
+(8)
+
+A direct corollary of Theorem 3.1 is that if 𝑅 is uninformative,
+then
+∗
+𝛾𝑀𝐼
+(9)
+𝑀 = E[𝑌 | 𝑅 = 1] = E[𝑌 ] = 0
+since 𝑌 is centered. On the other hand, if 𝑅 is informative, then
+∗
+𝛾𝑀𝐼
+𝑀 = E[𝑌 | 𝑅 = 1] ≠ 0, allowing the model to adjust its
+predictions when 𝑋 is missing. Specifically, because 𝑋 is imputed
+with 0, the best linear prediction function is
+(
+𝑋 𝛽∗
+if 𝑅 = 0,
+∗
+𝑓𝑙𝑖𝑛𝑒𝑎𝑟 (𝑋 ) =
+(10)
+E[𝑌 | 𝑅 = 1] if 𝑅 = 1.
+or correspondingly in finite sample
+(
+𝑋 𝛽ˆ
+𝑓ˆ𝑙𝑖𝑛𝑒𝑎𝑟 (𝑋 ) =
+Í
+1
+|M |
+
+𝑖 ∈M 𝑌
+
+(𝑖)
+
+if 𝑅 = 0,
+if 𝑅 = 1.
+
+(11)
+
+We see that when 𝑋 is observed, the model ignores 𝑅 as a feature,
+and when 𝑋 is missing, the model predicts the average of 𝑌 among
+the missing values. Note that when 𝑝 = 1, this result occurs both
+in finite sample and asymptotically.
+We now consider the more general case of 𝑝 > 1 features in
+Theorem 3.2.
+Theorem 3.2. Grant Assumptions 3.1 and 3.2.
+(a) If the missing mechanism is MCAR and 𝑹 is uninformative, then
+∗
+𝜷 ∗ = 𝜷𝑀𝐼
+𝑀,
+
+𝜸 ∗ = 0.
+
+(12)
+
+Van Ness et al.
+
+(b) If (i) the missing mechanism is self-masking, i.e. 𝑃 (𝑹 | 𝑿 ) =
+Î
+⊥ 𝑋𝑘 for 𝑗 ≠ 𝑘; and (iii) 𝑹 is centered,
+𝑗 𝑃 (𝑅 𝑗 | 𝑋 𝑗 ); (ii) 𝑋 𝑗 ⊥
+then
+∗
+𝜷 ∗ = 𝜷𝑀𝐼
+𝑀,
+
+(13)
+(14)
+
+and for 𝑗 = 1, . . . , 𝑝
+∗
+𝛾𝑀𝐼
+𝑀 𝑗 = E[𝑌 | 𝑋 𝑗 missing] − E[𝑌 | 𝑋 𝑗 observed].
+
+(15)
+
+(c) If {1, . . . , 𝑝} can be partitioned into 𝑑 blocks 𝐵 1, . . . , 𝐵𝑑 with blockindependence: 𝑅 𝑗 , 𝑋 𝑗 ⊥
+⊥ 𝑅𝑘 , 𝑋𝑘 when 𝑗, 𝑘 are in different blocks,
+then for 𝑗 ∈ 𝐵𝑚
+∑︁
+∗
+𝛽𝑀𝐼
+𝑎E[𝑍˜ 𝑗 𝑌 ] +
+𝑀𝑗 =
+ℓ ∈𝐵𝑚
+(16)
+𝑏 (E[𝑌 | 𝑋 ℓ missing] − E[𝑌 | 𝑋 ℓ observed])
+˜ 𝑹), and the same for 𝛾 ∗
+for 𝑎 and 𝑏 are functions of ( 𝒁,
+𝑀𝐼 𝑀 𝑗 but
+for different 𝑎 and 𝑏.
+The proofs of Theorems 3.1 and 3.2 are given in Appendix A. Theorem 3.2 (a) shows that when the missing mechanism is MCAR and
+𝑹 is uninformative, the best linear predictions are the same regardless of whether MIM is used or not. Since MIM is not expected to
+improve model performance when missingness is not informative,
+it is promising that MIM does not decrease the accuracy of linear
+models in this setting, at least asymptotically. This is important
+because practitioners are often unaware of the missing mechanism
+of the data, which is difficult to test [1]. It is therefore crucial to
+understand the effects of MIM across all missing mechanisms. This
+evidence that MIM does not hurt performance even in a worst-case
+scenario justifies its use when predictive performance is prioritized.
+Parts (b) and (c) of Theorem 3.2 show that when missingness is
+informative, the best linear prediction function using MIM learns
+how the missing values impact the distribution of 𝑌 , thereby leveraging the signal in the missing values. In part (b), under the fully∗
+independent self-masking mechanism, the form of 𝜸𝑀𝐼
+𝑀 in Eq. (15)
+directly accounts for the informative missingness in each feature,
+i.e. E[𝑌 | 𝑋 𝑗 missing] − E[𝑌 | 𝑋 𝑗 observed]. Part (c) presents a
+more general case, where independence is only assumed blockwise.
+Nonetheless, the formula for the BLP in (c) still contains the same
+expression as in Eq. (15) from (b), which encodes the (potential)
+informative missingness of each feature.
+As discussed in Section 2.4, even though MIM is commonly used
+in practice, very little previous work has studied MIM theoretically,
+especially from the lens of supervised learning. A notable exception
+is [26], in particular Theorem 5.2, which presents an upper bound
+for the risk of the linear model with MIM, i.e. the expected loss
+in Eq. (6). [26] compares this risk bound to the risk bound for
+the “expanded” linear model, which fits a separate linear model
+for each missing pattern in Eq. (3). Theorem 3.2 in our paper is
+complementary to these results, as our results specify the values for
+the best linear predictors under specific missing mechanisms. While
+the risk bounds in [26] are useful for comparing the finite-sample
+risk of MIM compared to other models, our results present a more
+practical understanding of linear model coefficients with MIM, and
+how these coefficients can directly encode or ignore missingness
+depending on the missing mechanism.
+
+4
+
+SELECTIVE MIM
+
+Observe that MIM adds a missing indicator for every feature that is
+partially observed, regardless of the missing mechanism. Theorem
+3.2 (a) justifies this behavior asymptotically, since the uninformative indicators can be ignored as 𝑛 → ∞. However, in finite sample,
+and particularly for high-dimensional data, adding many uninformative indicators can cause overfitting and thus can hurt model
+performance.
+Keeping only the informative indicators from MIM would help
+stabilize MIM on high-dimensional data. One strategy to do such
+selection would be to use a statistical test to discover the missing
+mechanism, and use this information to determine which indicators
+to keep. However, testing for the missing mechanism is challenging.
+Previous literature has suggested tests for MCAR, notably Little’s
+MCAR test [29], but these tests have been criticized [1]. Testing for
+MAR or MNAR, on the other hand, is impossible, since it would
+require access to the unobserved data. From Definition 2.1, however,
+we can instead test for informative missingness directly by testing
+the relationship between 𝑹 and 𝑌 , and determine which indicators
+are worth including, instead of adding all.
+We propose a novel strategy to selectively add indicators based
+on a statistical test, which we call Selective MIM (SMIM). The overall procedure for SMIM is summarized in Algorithm 1. Instead of
+testing the relationship between 𝑅 𝑗 and 𝑿 , as a test for the missing
+mechanism would, SMIM tests the relationship between 𝑅 𝑗 and 𝑌 ,
+directly yielding signal from the informative missingness towards
+the response of each missing indicator. Since we assume 𝑌 is complete, there are no issues testing the relationship between 𝑅 𝑗 and 𝑌 ,
+as there would be when testing for the missing mechanism. Further,
+if 𝑋 𝑗 is correlated with 𝑌 , then testing the relationship between 𝑅 𝑗
+and 𝑌 serves as a proxy for testing the relationship between 𝑋 𝑗 and
+𝑅 𝑗 , which is otherwise impossible if 𝑋 𝑗 has missing values.
+Specifically, for feature 𝑗, SMIM tests whether 𝑅 𝑗 and 𝑌 are
+independent. When 𝑌 is continuous, we use a two-sample t-test
+comparing the 𝐸 [𝑌 | 𝑅 = 1] and 𝐸 [𝑌 | 𝑅 = 0]. When 𝑌 is discrete,
+we use a chi-squared test of independence between 𝑌 and 𝑅 𝑗 . To
+correct for multiple testing across the features, we use BenjaminiHochberg p-value correction [3] with false discovery rate (FDR) of
+𝛼. Since false negatives (not adding an indicator that is informative)
+are more harmful than false positives (adding an indicator that is
+not informative), we use a relatively high FDR of 𝛼 = 0.1 throughout
+the paper. See Algorithm 1.
+
+5
+
+EXPERIMENTS
+
+We now empirically evaluate MIM and SMIM through experiments
+on synthetic data as well as real-world OpenML data sets with
+synthetic missing values. We show that MIM boosts performance
+when missing values are informative, and does not negatively affect
+performance on most data sets with uninformative missing values.
+Further, we show that SMIM can successfully discover the missing
+indicators that are informative, and is more effective than MIM on
+high-dimensional data sets.
+
+5.1
+
+Setup
+
+For all experiments in this section, we start with complete data
+and mask values, controlling for how much the missing pattern is
+
+The Missing Indicator Method: From Low to High Dimensions
+Linear Regression
+
+0.90
+0.85
+
+2: Output: Indicator indices to keep I ⊆ {1, . . . , 𝑝}.
+
+0.80
+
+Test RMSE
+
+1: Input: Missing indicators 𝑹, response 𝑌 , error rate 𝛼.
+3: pvals ← [ ]
+4: for 𝑗 = 1 to 𝑝 do
+
+if 𝑌 is continuous then
+6:
+pval ← t-test(𝑌 | 𝑅 = 0, 𝑌 | 𝑅 = 1)
+7:
+else if 𝑌 is categorical then
+8:
+pval ← Chi2-test(Contingency-Table(𝑌, 𝑅 𝑗 ))
+9:
+end if
+10:
+pvals[ 𝑗] ← pval
+11: end for
+12: reject = Benjamini–Hochberg(pvals, 𝛼)
+13: return I = { 𝑗 : reject 𝑗 = true}.
+
+XGBoost
+0.85
+Imputer
+Mean
+GC
+MF
+MIM_Type
+No_MIM
+MIM
+
+0.75
+0.70
+0.65
+0.60
+
+5:
+
+0
+
+1
+
+2
+
+3
+
+Informativeness Parameter
+MLP
+
+4
+
+5
+
+0.05
+
+0.025
+
+0.5
+
+1.0
+
+P(R = 1 | X) for = 1
+
+0.000 0.0
+
+0.5
+
+1.0
+
+P(R = 1 | X) for = 2
+
+0.00 0.0
+
+0.5
+
+1.0
+
+P(R = 1 | X) for = 3
+
+Figure 1: Distributions of masking probabilities 𝑃 (𝑅 = 1 | 𝑋 )
+generated from 𝑋 ∼ N (0, 1) using Eq. (17) for different values
+of the informativeness parameter 𝜆. Larger values of 𝜆 result
+in ‘steeper’ sigmoid functions in Eq. (17), hence more values
+lie in the masked-with-high-probability regime.
+
+1
+
+2
+
+3
+
+4
+
+5
+
+2
+
+3
+
+4
+
+5
+
+Informativeness Parameter
+Coefficient Norms
+MIM
+
+1.2
+1.0
+
+0.70
+
+L2 Norm
+
+Test RMSE
+
+Proportion of X
+
+Proportion of X
+
+Proportion of X
+
+0.10
+
+0.050
+
+0
+
+1.4
+
+0.65
+
+0.8
+0.6
+0.4
+
+0.60
+
+0.15
+
+0.075
+
+0.65
+
+0.75
+
+0.20
+
+0.100
+
+0.70
+
+0.80
+
+0.2
+0.0
+0
+
+0.125
+
+0.75
+
+0.60
+
+0.55
+
+0.55
+
+0.150
+0.125
+0.100
+0.075
+0.050
+0.025
+0.000 0.0
+
+0.80
+
+Test RMSE
+
+Algorithm 1 Selective MIM
+
+1
+
+2
+
+3
+
+Informativeness Parameter
+
+4
+
+5
+
+0
+
+1
+
+Informativeness Parameter
+
+Figure 2: MIM performance on synthetic data with (𝑛, 𝑝) =
+(10000, 10) with different imputation methods, as a function of the informativeness parameter 𝜆 (see Eq. (17)). The
+top left, top right, and bottom left plots demonstrate that
+MIM (dashed lines) reduces test RSME in almost all scenarios when missingness is informative. The bottom right
+plot shows the linear regression coefficient norms, where
+||𝜸ˆ || increases as missing value become more informative, as
+shown in Theorem 3.2.
+• Imputer + SMIM: Imputation via the given imputer, along with
+Selective MIM as in Algorithm 1.
+
+informative. To generate the missing masks, we use a self-masking
+mechanism:
+𝑃 (𝑅 𝑗 = 0 | 𝑿 ) = 𝑃 (𝑅 𝑗 = 0 | 𝑋 𝑗 )
+1
+(17)
+.
+=
+1 + exp(−𝜆 𝑗 𝑋 𝑗 )
+
+• MF: Imputation via missForest [45], an iterative imputer based
+on random forests [5].
+
+We occasionally use the term “No MIM” to refer to imputation
+without MIM or SMIM. We choose these imputation methods to include either an iterative approach (MF) and an EM-based approach
+(GC), both popular classes of imputation methods. For supervised
+learning models, we use linear/logistic regression, XGBoost [7], and
+a multi-layer perceptron (MLP), giving us one model from the 3
+most popular classes of supervised learning models (linear models, boosted decision trees, and neural networks). We standardize
+features over the observed entries in all experiments. We use a
+75%-25% train-test data split and run each experiment for 20 trials,
+each with a different model seed, train-test split, and missing value
+mask. To isolate the impact of the missing value handling, we analyze how different missing value preprocessing methods impact
+each supervised learning method separately, rather than comparing
+the supervised learning methods to each other. For performance
+metrics, we use RMSE for regression tasks, 1 - AUC for binary
+classification tasks, and 1 - accuracy for multiclass classification
+tasks (so in all cases lower is better). We release the code necessary
+to reproduce our results 1 .
+
+• GC: Imputation via gcimpute [56, 57], an EM-style imputer
+which uses the Gaussian Copula.
+
+5.2
+
+• LRGC: Imputation via gcimpute with the low rank Gaussian
+Copula model [55], useful for high-dimensional data sets.
+
+Before discussing our empirical results, we preface our findings
+with intuition for why XGBoost will likely behave differently with
+MIM than linear models and MLPs. Tree-based methods treat all
+
+We call 𝜆 𝑗 the informativeness parameter as it directly controls
+how informative the missing values in 𝑋 𝑗 are by determining the
+steepness of the sigmoid masking probability function. The higher
+the value of 𝜆 𝑗 , the more informative the missing values are. If 𝜆 𝑗 =
+0 for all 𝑗, then the missing values are MCAR and the missingness is
+uninformative. The impact of 𝜆 𝑗 on 𝑅 𝑗 is showcased in more detail
+in Figure 1.
+We consider the following preprocessing methods to treat missing values:
+• Mean: Mean imputation over the observed entries. This is equivalent to 0-imputation, since we always standardize features.
+
+• Imputer + MIM: Imputation via the given imputer, along with
+MIM.
+
+MIM on Tree-Based Models
+
+1 https://github.com/mvanness354/missing_indicator_method.
+
+Van Ness et al.
+Linear - Mean
+
+0.80
+
+0.80
+
+0.75
+
+0.75
+
+0.70
+0.65
+No MIM
+MIM
+SMIM
+OMIM
+
+0.60
+0.55
+0
+
+20
+
+0.65
+
+0.55
+40
+
+60
+
+80
+
+% Features with Informative Missingness
+XGB - Mean
+
+100
+
+0
+
+0.95
+
+0.95
+
+0.90
+
+0.90
+
+0.85
+
+0.85
+
+0.80
+0.75
+
+20
+
+40
+
+60
+
+80
+
+100
+
+20
+
+40
+
+60
+
+80
+
+100
+
+20
+
+40
+
+60
+
+80
+
+100
+
+% Features with Informative Missingness
+XGB - LRGC
+
+0.80
+0.75
+
+0.70
+
+0.70
+0
+
+1.00
+
+20
+
+40
+
+60
+
+80
+
+% Features with Informative Missingness
+MLP - Mean
+
+100
+
+0
+
+% Features with Informative Missingness
+MLP - LRGC
+
+1.00
+
+0.95
+
+0.95
+
+0.90
+
+0.90
+
+0.85
+
+Test RMSE
+
+Test RMSE
+
+0.70
+
+0.60
+
+Test RMSE
+
+Test RMSE
+
+Linear - LRGC
+
+Test RMSE
+
+Test RMSE
+
+0.85
+
+0.80
+0.75
+
+0.85
+0.80
+0.75
+0.70
+
+0.70
+
+0.65
+
+0.65
+0
+
+20
+
+40
+
+60
+
+80
+
+% Features with Informative Missingness
+
+100
+
+0
+
+% Features with Informative Missingness
+
+Figure 3: Comparison of MIM, SMIM, Oracle MIM (OMIM),
+and No MIM on high-dimensional synthetic data with
+(𝑛, 𝑝) = (10000, 1000), as a function of the percent of features
+with informative missingness.
+
+features as discrete, and so they discretize continuous features using binning [6]. When using a constant imputation method like
+mean imputation, all imputed values always fall into the same bin
+and will always be split together by each tree. We thus expect MIM
+to provide little additional information to the tree-based methods
+in this setting, since splitting on the indicator feature can be alternatively achieved by splitting twice to isolate the bin with the
+constant imputation value. Meanwhile, if a non-constant imputation method is used, then MIM does add new splits for the tree to
+search over and thus has high potential to be valuable. On the other
+hand, linear and neural network models do not treat continuous
+features as discrete, and thus are expected to benefit from missing
+indicators with all imputation methods. A more detailed discussion
+of missing values in decision trees can be found in Appendix B.1.
+
+5.3
+
+continually reduces RSME as 𝜆 increases across all imputation
+methods, which confirms that MIM is an effective preprocessor for
+informative missing values. The lone exception is XGBoost, which
+benefits from MIM using GC and MF imputation but not when
+using mean imputatation. This might be because mean imputation
+already allows trees to capture the informative signal in the missing
+values without MIM, as explained in Section 5.2.
+The bottom right plot shows the linear regression coefficient
+norms || 𝜷ˆ − 𝜷ˆ𝑀𝐼 𝑀 || 2 and ||𝜸ˆ || 2 as a function of 𝜆, using the definition of these coefficients from Section 3. When 𝜆 = 0, both norms
+are close to 0, which we expect from Theorem 3.2 (a) as it tells
+us that 𝜷ˆ ≈ 𝜷ˆ𝑀𝐼 𝑀 and 𝜸ˆ ≈ 0 when missingness is uninformative.
+As 𝜆 increases, i.e. the missing values become more informative,
+||𝜸ˆ || 2 increases while || 𝜷ˆ − 𝜷ˆ𝑀𝐼 𝑀 || 2 remains small. This behavior
+parallels Theorem 3.2 (b), which shows that under a self-masking
+mechanism like Eq. (17), || 𝜷ˆ − 𝜷ˆ𝑀𝐼 𝑀 || 2 should remain small but
+||𝜸ˆ || 2 should increase to capture the informative signal in each
+variable, i.e. E[𝑌 | 𝑅 𝑗 = 1] − E[𝑌 | 𝑅 𝑗 = 0]. It is noteworthy that
+this behavior still holds even without independence among the
+features in 𝑿 , suggesting that this behavior might hold, at least
+approximately, in more general linear regression settings.
+
+Synthetic Data
+
+Low Dimensional Data. We first consider the effects of MIM on
+synthetic data as a function of the informativeness parameter 𝜆.
+Using 𝑛 = 10000 and 𝑝 = 10, we generate 𝑿 ∼ N (0, Σ) with
+Σ = 𝜌11𝑇 + (1−𝜌)I using 𝜌 = 0.3 and 𝑌 = 𝑿 𝑇 𝜷 +𝜖 for 𝜷 ∼ N (0, I)
+and 𝜖 ∼ N (0, 𝜎 2 ) with 𝜎 2 chosen to enforce a signal-to-noise ratio
+of 10. We mask each feature according to Eq. (17) with 𝜆 𝑗 = 𝜆
+for all 𝑗 = 1, . . . , 𝑝. The results for 𝜆 ∈ [0, 5] are shown in Figure
+2. The top left, top right, and bottom left plots show that MIM
+
+High Dimensional Data. We now consider high-dimensional synthetic data with 𝑛 = 10000 and 𝑝 = 1000. To generate realistic
+high-dimensional data, we generate 𝑿 ∼ N (0, Σ) where Σ is block
+diagonal with 𝑏 blocks and 𝑑 features per block, with block elements 𝜌11𝑇 + (1 − 𝜌)I using 𝜌 = 0.5. We compute 𝑿 ∗ ∈ R𝑏 as
+the block-wise mean of 𝑿 (averaging over features in each block),
+and generate 𝑌 as in the low dimensional case: 𝑌 = 𝑿 ∗𝑇 𝜷 + 𝜖
+with 𝜖 ∼ N (0, 𝜎 2 ). This simulates real-world high-dimensional
+data where several features may be correlated with each other (but
+predominantly independent of other features), and thus are more
+likely to be missing together under informative missingness.
+To generate the mask, we select only a random subset of blocks
+to have informative missingness: for each block, with probability
+𝑝 inf we set 𝜆 = 2 for all features in the block as a whole, and with
+probability 1 − 𝑝 inf we set 𝜆 = 0 for all features in said block. In
+this setting, SMIM should be able to detect which features have
+informative missing values and only add the correponding indicators. Along with MIM and SMIM, we also run experiments with
+Oracle MIM (OMIM), in which only features masked with 𝜆 𝑗 = 2
+are added, to represent an unrealistic but optimal preprocessor.
+The results for 𝑝 inf ∈ [0, 1] are shown in Figure 3. We use LRGC
+instead of GC since the data is high-dimensional, and we do not
+report MF because computations do not terminate in less than 3
+hours. Using linear models, SMIM achieves comparable RMSE to
+OMIM and significantly better RMSE than No MIM across all values
+of 𝑝 inf . Further, SMIM outperforms MIM for smaller values of 𝑝 inf ,
+when MIM adds many uninformative indicators. For MLP models,
+MIM and SMIM achieve comparable error to OMIM across all 𝑝 inf ,
+demonstrating that MLPs can more readily ignore uninformative
+feature than linear models. Lastly, XGBoost with mean imputation
+is comparable for preprocessors, but suffers from No MIM with
+LRGC, further supporting the discussion on tree-based models in
+Section 5.2.
+
+The Missing Indicator Method: From Low to High Dimensions
+
+Linear on binary datasets
+MF
+MF + MIM
+MF + SMIM
+
+0.3
+0.2
+0.1
+
+0.1
+0.0
+0.4
+
+0.2
+0.1
+
+miniboone arcene christine phoneme higgs philippine
+
+0.6
+
+volkert
+wine
+dilbert
+XGBoost on multiclass datasets
+
+space
+housing yolanda
+XGBoost on regression datasets
+
+0.9
+
+0.4
+0.3
+0.2
+
+0.8
+0.7
+
+0.1
+
+0.6
+
+volkert
+wine
+dilbert
+MLP on multiclass datasets
+
+space
+housing yolanda
+MLP on regression datasets
+
+0.9
+
+0.4
+0.3
+0.2
+
+0.8
+0.7
+
+0.1
+0.0
+
+0.8
+0.7
+
+0.1
+
+0.5
+
+1 - accuracy
+
+1 - AUC
+
+0.2
+
+0.0
+
+miniboone arcene christine phoneme higgs philippine
+MLP on binary datasets
+
+0.3
+
+0.0
+
+0.3
+
+0.5
+
+1 - accuracy
+
+1 - AUC
+
+0.2
+
+0.9
+
+0.4
+
+0.0
+
+miniboone arcene christine phoneme higgs philippine
+XGBoost on binary datasets
+
+0.3
+
+Linear on regression datasets
+
+RMSE
+
+0.0
+
+Linear on multiclass datasets
+0.5
+
+RMSE
+
+GC
+GC + MIM
+GC + SMIM
+
+RMSE
+
+Mean
+Mean + MIM
+Mean + SMIM
+
+1 - accuracy
+
+1 - AUC
+
+0.4
+
+volkert
+
+wine
+
+dilbert
+
+0.6
+
+space
+
+housing
+
+yolanda
+
+Figure 4: Test performance (lower is better) of MIM and SMIM with various imputation methods on OpenML data sets. Missing
+values are generated according to Eq. (17), where for each feature 𝜆 𝑗 = 2 with probability 𝑝 inf = 0.5 and 𝜆 𝑗 = 0 otherwise.
+Performance metric is RMSE for regression problems, 1-AUC for binary classification problems, 1-accuracy for multi-class
+problems. Each bar represents the mean across 20 trials, and a a missing bar indicates a > 3 hour run time.
+
+5.4
+
+Masked Real-World Data
+
+We now run experiments on fully-observed real-world data sets obtained from the OpenML data set repository [50]. We mask entries
+according to Eq. (17), using 𝜆 𝑗 = 2 with probability 0.5 and 𝜆 𝑗 = 0
+with probability 0.5 for all features 𝑗. We select 12 data sets that
+cover a diverse spectrum of values for 𝑛 (number of samples), 𝑝
+(number of features), and outcome type (binary, multiclass, regression); see Appendix C.1 for further OpenML data set descriptions.
+We focus on data sets with continuous features, although we discuss how MIM can be used with categorical features in Appendix
+B.2. Lastly, we use LRGC for high-dimensional data sets (arcene,
+christine, philippine, volkert, dilbert, yolanda) and use GC for all
+other data sets.
+Figure 4 shows the performance of each missing value preprocessing method paired with the 3 supervised learning models. For
+Linear and MLP models, MIM and SMIM improve performance
+across imputation methods for almost all data sets. This affirms
+the importance of MIM when missing values are informative. XGBoost generally does as well with mean imputation as with other
+imputation methods, and is less impacted by MIM, supporting the
+discussion from Section 5.2. On high-dimensional data sets, SMIM
+outperforms MIM in most cases. This further demonstrates the
+value of discarding uninformative features in high-dimensional
+data, which SMIM can do effectively.
+
+To better understand the time efficiency of the methods employed, we plot the relative wallclock times of each result from
+Figure 4 in Figure 5. It is clear from Figure 5 that the choice of imputation method dominates the computation time, instead of whether
+or not MIM or SMIM is used. Specifically, mean imputation is orders
+of magnitude faster than GC and MF imputation. Also, MIM and
+SMIM appear to add relatively very little time to the total computation time, even though MIM doubles the number of features,
+suggesting that the method of imputation is much more important
+than the inclusion of MIM. Further, notice that in Figure 4, (S)MIM
+with mean imputation often performs very comparably to (S)MIM
+with GC and MF. Therefore, (S)MIM with mean imputation is an
+effective yet remarkably efficient alternative to using expensive
+imputation models.
+
+6
+
+MIM ON THE MIMIC BENCHMARK
+
+In Section 5, we demonstrate that MIM and SMIM are effective tools
+for capturing informative missingness in synthetic and real-world
+data sets with synthetic missing values. In this section, we demonstrate the effectiveness of MIM and SMIM on healthcare data which
+already has missing values. Specifically, we use MIMIC-III [20], an
+open source clinical database of electronic health records (EHRs)
+
+Van Ness et al.
+
+Linear
+Wallclock Ratio (s)
+
+104
+
+Mean
+Mean + MIM
+Mean + SMIM
+
+GC
+GC + MIM
+GC + SMIM
+
+MF
+MF + MIM
+MF + SMIM
+
+103
+102
+101
+100
+miniboone*
+
+arcene*
+
+christine*
+
+phoneme*
+
+higgs*
+
+philippine*
+
+volkert**
+
+wine**
+
+dilbert**
+
+space
+
+housing
+
+yolanda
+
+volkert**
+
+wine**
+
+dilbert**
+
+space
+
+housing
+
+yolanda
+
+volkert**
+
+wine**
+
+dilbert**
+
+space
+
+housing
+
+yolanda
+
+Wallclock Ratio (s)
+
+XGBoost
+102
+
+101
+
+100
+miniboone*
+
+arcene*
+
+christine*
+
+phoneme*
+
+higgs*
+
+philippine*
+
+Wallclock Ratio (s)
+
+MLP
+102
+
+101
+
+100
+miniboone*
+
+arcene*
+
+christine*
+
+phoneme*
+
+higgs*
+
+philippine*
+
+Figure 5: Wallclock times (in seconds) for results in Figure 4. Each time is the ratio between the indicated method and the
+corresponding mean imputation method. A missing bar indicates a > 3 hour run time, as in Figure 4.
+from the Beth Israel Deaconess Medical Center in Boston, Massachusetts. To preprocess the MIMIC data, we utilize the mimic3benchmark [17], which generates tabular data for various clinical
+tasks. We consider the following tasks for our experiments:
+• In Hospital Mortality Prediction: binary mortality prediction
+using the first 48 hours of an ICU stay.
+• Length-of-Stay Prediction (LOS): prediction of the remaining
+length-of-stay in the hospital. We formulate this as a binary
+prediction task to predict whether or not a patient will leave the
+hospital in the next 7 days.
+• Phenotyping: prediction of the acute care conditions present
+during a given hospital stay, formulated as a multi-label binary
+classification problem for 25 phenotypes.
+For each task, the target metric is 1 - AUC, following Section 5
+and using a metric such that lower is better (for consistency across
+response types). For phenotyping, we average the AUC for each
+of the 25 labels to create the macro AUC score, then set the metric
+as 1 - macro AUC. The train and test splits are established by the
+benchmark and kept constant across all trials. The data set for each
+task contains 17 clinical variables that describe patient vital signs
+
+and other typical hospital measurements. For additional details
+about our these variables and well as our experimental setup for
+MIMIC experiments, see Appendix C.3.
+Figure 6 shows the results of MIM and SMIM with the prediction
+pipelines used in Section 5. As on synthetic data and OpenML data,
+MIM and SMIM both consistently improve predictive performance
+with linear and MLP models, as well as with XGBoost when using
+GC or MF for imputations. This result is particularly significant
+because it demonstrates that real-world data sets often have informative missing values, and MIM can help predictive models learn
+the signal in these missing values. Additionally, there are no scenarios MIM negatively impacts predictive performance, confirming
+that MIM should be a standard preprocessing tool for supervised
+learning on low-dimensional real-world data sets, should predictive
+performance be prioritized. In Figure 7 in Appendix C.2, we provide
+additional evidence that real-world data often contains informative
+missing values through additional experiments on OpenML data
+sets.
+
+The Missing Indicator Method: From Low to High Dimensions
+
+Linear
+0.325
+
+1 - AUC
+
+0.300
+
+Mean
+Mean + MIM
+Mean + SMIM
+
+GC
+GC + MIM
+GC + SMIM
+
+of MIM that adds all the indicator features that have informative
+missing values.
+
+MF
+MF + MIM
+MF + SMIM
+
+0.275
+0.250
+0.225
+0.200
+0.175
+
+mortality
+
+los
+XGBoost
+
+phenotyping
+
+0.325
+
+• MIM and SMIM can increase performance not only with mean
+imputation, but also with other imputation methods, as shown
+in our experiments. Nonetheless, Figure 5 shows that MIM with
+mean imputation is many orders of magnitude faster than using
+other imputation methods, yet usually results in about the same
+predictive performance. Therefore, MIM with mean imputation is
+a very effective and yet efficient way to treat missing values, especially under informative missingness when expensive imputation
+methods often bring little benefit.
+
+1 - AUC
+
+0.300
+0.275
+
+8
+
+0.250
+0.225
+0.200
+0.175
+
+mortality
+
+los
+MLP
+
+phenotyping
+
+mortality
+
+los
+
+phenotyping
+
+0.325
+
+1 - AUC
+
+0.300
+0.275
+0.250
+0.225
+0.200
+0.175
+
+Figure 6: MIM and SMIM performance (lower is better) for
+clinical tasks on the MIMIC-III data set. Each bar represents
+the mean across 20 trials, each with a different random seed.
+A missing bar indicates a > 3 hour run time. MIM and SMIM
+improve performance for logistic regression and MLP models on all 3 tasks, following the behavior exhibited in Figure
+4.
+
+7
+
+DISCUSSION
+
+From our experiments on synthetic data, real-world data with synthetic missing values, and real-world EHR data, we obtain the following main takeaways:
+• When missing values are informative, MIM increases predictive performance of linear models and neural networks. This is
+supported by Figure 2, where increasing the informativeness in
+synthetic data gradually increases the effectiveness of MIM; in
+OpenML data with informative missing values in Figure 4; and
+in EHR data in Figure 6.
+• Tree-based models in general benefit less from MIM than linear
+models and neural networks, particularly when using mean imputation. We provide a possible explanation for this behavior
+in Section 5.2, and see this behavior manifest across all of our
+experiments.
+• The only scenario where MIM might harm predictive performance is on high-dimensional data sets, e.g. the synthetic data in
+Figure 3 and on select high-dimensional OpenML data sets in Figure 4. In these cases, Selective MIM (SMIM) is a stable extension
+
+CONCLUSION
+
+When dealing with missing data, imputation with state-of-the-art
+imputers is often expensive. We show that using MIM in conjunction with mean imputation is an effective and efficient alternative,
+which we demonstrate via novel theory and comprehensive experimentation on synthetic data as well as real data with both
+synthetic and actual missing values. We additionally introduce
+Selective MIM (SMIM), a MIM-based preprocessor that discards
+uninformative missing indicators and is thus more stable than MIM
+on high-dimensional data sets. We show experimentally that adding
+MIM or SMIM helps achieve substantially better accuracy on data
+with informative missingness overall, and SMIM outperforms MIM
+on high-dimensional data. Future work might include researching
+theoretical guarantees on the use of imputation methods along with
+missing indicators, building on our theory.
+
+Van Ness et al.
+
+REFERENCES
+[1] Amanda N Baraldi and Craig K Enders. 2010. An introduction to modern missing
+data analyses. Journal of school psychology 48, 1 (2010), 5–37.
+[2] Brett K Beaulieu-Jones, Patryk Orzechowski, and Jason H Moore. 2018. Mapping
+patient trajectories using longitudinal extraction and deep learning in the MIMICIII critical care database. In PACIFIC SYMPOSIUM ON BIOCOMPUTING 2018:
+Proceedings of the Pacific Symposium. World Scientific, 123–132.
+[3] Yoav Benjamini and Yosef Hochberg. 1995. Controlling the false discovery rate: a
+practical and powerful approach to multiple testing. Journal of the Royal statistical
+society: series B (Methodological) 57, 1 (1995), 289–300.
+[4] Dimitris Bertsimas, Arthur Delarue, and Jean Pauphilet. 2021. Prediction with
+Missing Data. arXiv preprint arXiv:2104.03158 (2021).
+[5] Leo Breiman. 2001. Random forests. Machine learning 45 (2001), 5–32.
+[6] Leo Breiman. 2017. Classification and regression trees. Routledge.
+[7] Tianqi Chen and Carlos Guestrin. 2016. Xgboost: A scalable tree boosting system.
+In Proceedings of the 22nd acm sigkdd international conference on knowledge
+discovery and data mining. 785–794.
+[8] Arthur P Dempster, Nan M Laird, and Donald B Rubin. 1977. Maximum likelihood
+from incomplete data via the EM algorithm. Journal of the Royal Statistical Society:
+Series B (Methodological) 39, 1 (1977), 1–22.
+[9] Ning Ding, Cuirong Guo, Changluo Li, Yang Zhou, and Xiangping Chai. 2021.
+An artificial neural networks model for early predicting in-hospital mortality in
+acute pancreatitis in MIMIC-III. BioMed research international 2021 (2021).
+[10] Matthias Feurer, Katharina Eggensperger, Stefan Falkner, Marius Lindauer, and
+Frank Hutter. 2020. Auto-Sklearn 2.0: Hands-free automl via meta-learning. arXiv
+preprint arXiv:2007.04074 (2020).
+[11] Unai Garciarena and Roberto Santana. 2017. An extensive analysis of the interaction between missing data types, imputation methods, and supervised classifiers.
+Expert Systems with Applications 89 (2017), 52–65.
+[12] Unai Garciarena, Roberto Santana, and Alexander Mendiburu. 2017. Evolving
+imputation strategies for missing data in classification problems with TPOT.
+arXiv preprint arXiv:1706.01120 (2017).
+[13] Thanos Gentimis, Alnaser Ala’J, Alex Durante, Kyle Cook, and Robert Steele.
+2017. Predicting hospital length of stay using neural networks on mimic iii
+data. In 2017 IEEE 15th intl conf on dependable, autonomic and secure computing, 15th intl conf on pervasive intelligence and computing, 3rd intl conf on
+big data intelligence and computing and cyber science and technology congress
+(DASC/PiCom/DataCom/CyberSciTech). IEEE, 1194–1201.
+[14] Lovedeep Gondara and Ke Wang. 2018. Mida: Multiple imputation using denoising autoencoders. In Advances in Knowledge Discovery and Data Mining: 22nd
+Pacific-Asia Conference, PAKDD 2018, Melbourne, VIC, Australia, June 3-6, 2018,
+Proceedings, Part III 22. Springer, 260–272.
+[15] Rolf HH Groenwold, Ian R White, A Rogier T Donders, James R Carpenter,
+Douglas G Altman, and Karel GM Moons. 2012. Missing covariate data in clinical
+research: when and when not to use the missing-indicator method for analysis.
+Cmaj 184, 11 (2012), 1265–1269.
+[16] Bruce Hansen. 2022. Econometrics. Princeton University Press.
+[17] Hrayr Harutyunyan, Hrant Khachatrian, David C. Kale, Greg Ver Steeg, and Aram
+Galstyan. 2019. Multitask learning and benchmarking with clinical time series
+data. Scientific Data 6, 1 (2019), 96. https://doi.org/10.1038/s41597-019-0103-9
+[18] James Honaker, Gary King, and Matthew Blackwell. 2011. Amelia II: A program
+for missing data. Journal of statistical software 45 (2011), 1–47.
+[19] Niels Bruun Ipsen, Pierre-Alexandre Mattei, and Jes Frellsen. 2021. How to deal
+with missing data in supervised deep learning?. In International Conference on
+Learning Representations.
+[20] Alistair EW Johnson, Tom J Pollard, Lu Shen, Li-wei H Lehman, Mengling Feng,
+Mohammad Ghassemi, Benjamin Moody, Peter Szolovits, Leo Anthony Celi, and
+Roger G Mark. 2016. MIMIC-III, a freely accessible critical care database. Scientific
+data 3, 1 (2016), 1–9.
+[21] Julie Josse, Nicolas Prost, Erwan Scornet, and Gaël Varoquaux. 2019. On the consistency of supervised learning with missing values. arXiv preprint arXiv:1902.06931
+(2019).
+[22] Mirjam J Knol, Kristel JM Janssen, A Rogier T Donders, Antoine CG Egberts,
+E Rob Heerdink, Diederick E Grobbee, Karel GM Moons, and Mirjam I Geerlings.
+2010. Unpredictable bias when using the missing indicator method or complete
+case analysis for missing confounder values: an empirical example. Journal of
+clinical epidemiology 63, 7 (2010), 728–736.
+[23] Trent Kyono, Yao Zhang, Alexis Bellot, and Mihaela van der Schaar. 2021. MIRACLE: Causally-Aware Imputation via Learning Missing Data Mechanisms. Advances in Neural Information Processing Systems 34 (2021).
+[24] Marine Le Morvan, Julie Josse, Thomas Moreau, Erwan Scornet, and Gaël Varoquaux. 2020. NeuMiss networks: differentiable programming for supervised
+learning with missing values. Advances in Neural Information Processing Systems
+33 (2020), 5980–5990.
+[25] Marine Le Morvan, Julie Josse, Erwan Scornet, and Gaël Varoquaux. 2021. What’s
+a good imputation to predict with missing values? Advances in Neural Information
+Processing Systems 34 (2021).
+
+[26] Marine Le Morvan, Nicolas Prost, Julie Josse, Erwan Scornet, and Gaël Varoquaux.
+2020. Linear predictor on linearly-generated data with missing values: non
+consistency and solutions. In International Conference on Artificial Intelligence
+and Statistics. PMLR, 3165–3174.
+[27] Jia Li, Mengdie Wang, Michael S Steinbach, Vipin Kumar, and Gyorgy J Simon.
+2018. Don’t do imputation: Dealing with informative missing values in EHR data
+analysis. In 2018 IEEE International Conference on Big Knowledge (ICBK). IEEE,
+415–422.
+[28] Wei-Chao Lin and Chih-Fong Tsai. 2020. Missing value imputation: a review and
+analysis of the literature (2006–2017). Artificial Intelligence Review 53, 2 (2020),
+1487–1509.
+[29] Roderick JA Little. 1988. A test of missing completely at random for multivariate
+data with missing values. Journal of the American statistical Association 83, 404
+(1988), 1198–1202.
+[30] Roderick JA Little and Donald B Rubin. 2019. Statistical analysis with missing
+data. Vol. 793. John Wiley & Sons.
+[31] Pierre-Alexandre Mattei and Jes Frellsen. 2019. MIWAE: Deep generative modelling and imputation of incomplete data sets. In International conference on
+machine learning. PMLR, 4413–4423.
+[32] Siddhartha Nuthakki, Sunil Neela, Judy W Gichoya, and Saptarshi Purkayastha.
+2019. Natural language processing of MIMIC-III clinical notes for identifying
+diagnosis and procedures with neural networks. arXiv preprint arXiv:1912.12397
+(2019).
+[33] F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M.
+Blondel, P. Prettenhofer, R. Weiss, V. Dubourg, J. Vanderplas, A. Passos, D. Cournapeau, M. Brucher, M. Perrot, and E. Duchesnay. 2011. Scikit-learn: Machine
+Learning in Python. Journal of Machine Learning Research 12 (2011), 2825–2830.
+[34] Alexandre Perez-Lebel, Gaël Varoquaux, Marine Le Morvan, Julie Josse, and JeanBaptiste Poline. 2022. Benchmarking missing-values approaches for predictive
+models on health databases. GigaScience 11 (2022).
+[35] Sanjay Purushotham, Chuizheng Meng, Zhengping Che, and Yan Liu. 2018. Benchmarking deep learning models on large healthcare datasets. Journal of biomedical
+informatics 83 (2018), 112–134.
+[36] Yongming Qu and Ilya Lipkovich. 2009. Propensity score estimation with missing values using a multiple imputation missingness pattern (MIMP) approach.
+Statistics in medicine 28, 9 (2009), 1402–1414.
+[37] J Ross Quinlan. 2014. C4. 5: programs for machine learning. Elsevier.
+[38] Donald B Rubin. 1976. Inference and missing data. Biometrika 63, 3 (1976),
+581–592.
+[39] Joseph L Schafer and John W Graham. 2002. Missing data: our view of the state
+of the art. Psychological methods 7, 2 (2002), 147.
+[40] Matthieu Scherpf, Felix Gräßer, Hagen Malberg, and Sebastian Zaunseder. 2019.
+Predicting sepsis with a recurrent neural network using the MIMIC III database.
+Computers in biology and medicine 113 (2019), 103395.
+[41] Anis Sharafoddini, Joel A Dubin, David M Maslove, Joon Lee, et al. 2019. A new
+insight into missing data in intensive care unit patient profiles: observational
+study. JMIR medical informatics 7, 1 (2019), e11605.
+[42] Matthew Sperrin and Glen P Martin. 2020. Multiple imputation with missing
+indicators as proxies for unmeasured variables: simulation study. BMC medical
+research methodology 20, 1 (2020), 1–11.
+[43] Matthew Sperrin, Glen P Martin, Rose Sisk, and Niels Peek. 2020. Missing
+data should be handled differently for prediction than for description or causal
+explanation. Journal of Clinical Epidemiology 125 (2020), 183–187.
+[44] Aude Sportisse, Claire Boyer, and Julie Josse. 2020. Estimation and imputation
+in probabilistic principal component analysis with missing not at random data.
+Advances in Neural Information Processing Systems 33 (2020), 7067–7077.
+[45] Daniel J Stekhoven and Peter Bühlmann. 2012. MissForest—non-parametric
+missing value imputation for mixed-type data. Bioinformatics 28, 1 (2012), 112–
+118.
+[46] Shengpu Tang, Parmida Davarmanesh, Yanmeng Song, Danai Koutra, Michael W
+Sjoding, and Jenna Wiens. 2020. Democratizing EHR analyses with FIDDLE: a
+flexible data-driven preprocessing pipeline for structured clinical data. Journal
+of the American Medical Informatics Association 27, 12 (2020), 1921–1934.
+[47] Bheki ETH Twala, MC Jones, and David J Hand. 2008. Good methods for coping
+with missing data in decision trees. Pattern Recognition Letters 29, 7 (2008),
+950–956.
+[48] Stef Van Buuren. 2018. Flexible imputation of missing data. CRC press.
+[49] Stef Van Buuren and Karin Groothuis-Oudshoorn. 2011. mice: Multivariate
+imputation by chained equations in R. Journal of statistical software 45 (2011),
+1–67.
+[50] Joaquin Vanschoren, Jan N Van Rijn, Bernd Bischl, and Luis Torgo. 2014. OpenML:
+networked science in machine learning. ACM SIGKDD Explorations Newsletter
+15, 2 (2014), 49–60.
+[51] Shirly Wang, Matthew BA McDermott, Geeticka Chauhan, Marzyeh Ghassemi,
+Michael C Hughes, and Tristan Naumann. 2020. Mimic-extract: A data extraction,
+preprocessing, and representation pipeline for mimic-iii. In Proceedings of the
+ACM conference on health, inference, and learning. 222–235.
+
+The Missing Indicator Method: From Low to High Dimensions
+
+[52] Katarzyna Woźnica and Przemysław Biecek. 2020. Does imputation matter?
+Benchmark for predictive models. arXiv preprint arXiv:2007.02837 (2020).
+[53] Chengrun Yang, Jicong Fan, Ziyang Wu, and Madeleine Udell. 2020. Automl
+pipeline selection: Efficiently navigating the combinatorial space. In Proceedings
+of the 26th ACM SIGKDD International Conference on Knowledge Discovery & Data
+Mining. 1446–1456.
+[54] Jinsung Yoon, James Jordon, and Mihaela Schaar. 2018. Gain: Missing data imputation using generative adversarial nets. In International conference on machine
+learning. PMLR, 5689–5698.
+[55] Yuxuan Zhao and Madeleine Udell. 2020. Matrix completion with quantified
+uncertainty through low rank gaussian copula. Advances in Neural Information
+Processing Systems 33 (2020), 20977–20988.
+[56] Yuxuan Zhao and Madeleine Udell. 2020. Missing value imputation for mixed
+data via gaussian copula. In Proceedings of the 26th ACM SIGKDD international
+conference on knowledge discovery & data mining. 636–646.
+[57] Yuxuan Zhao and Madeleine Udell. 2022. gcimpute: A Package for Missing Data
+Imputation. arXiv preprint arXiv:2203.05089 (2022).
+[58] Yibing Zhu, Jin Zhang, Guowei Wang, Renqi Yao, Chao Ren, Ge Chen, Xin Jin,
+Junyang Guo, Shi Liu, Hua Zheng, et al. 2021. Machine learning prediction
+models for mechanically ventilated patients: analyses of the MIMIC-III database.
+Frontiers in medicine 8 (2021), 662340.
+
+since 𝒁˜ is imputed with 0. We have now shown that E[𝑍˜ 𝑗 𝑅𝑘 ] = 0 for
+
+
+all 𝑗, 𝑘, showing as desired that E 𝑫𝑫𝑇 is block diagonal. Further,
+since 𝑅 is uninformative, we have for all 𝑗
+E[𝑅 𝑗 𝑌 ] = E[𝑅 𝑗 ]E[𝑌 ] = 0
+using the centering of 𝑌 . Thus we have
+ ∗  
+ −1
+𝜷𝑀𝐼 𝑀
+= E[𝑫𝑫𝑇 ]
+E[𝑫𝑌 ]
+∗
+𝜸𝑀𝐼 𝑀
+
+
+
+˜ ]
+E[ 𝒁˜ 𝒁˜ 𝑇 ] −1
+0
+E[ 𝒁𝑌
+=
+𝑇
+−1
+0
+0
+E[𝑹𝑹 ]
+ ∗
+𝜷
+=
+,
+0
+
+(29)
+(30)
+(31)
+□
+
+Part (b). For Part b we assume that 𝑹 is centered, so
+(
+1 − 𝑝 𝑗 w.p. 𝑝 𝑗
+𝑅𝑗 =
+.
+−𝑝 𝑗
+w.p. 1 − 𝑝 𝑗
+
+A PROOFS
+A.1 Proof of Theorem 3.1
+
+(28)
+
+(32)
+
+Let 𝑫 = [ ˜
+𝑍, 𝑅]𝑇 , then
+ 
+𝑍˜  ˜
+𝑫𝑫 =
+𝑍
+𝑅
+𝑇
+
+ 2
+𝑍˜
+𝑅 =
+0
+
+
+
+0
+.
+𝑅
+
+(18)
+
+as 𝑅 2 = 𝑅 and ˜
+𝑍𝑅 = 0 by zero imputation (Assumption 3.1). Thus
+the finite sample OLS estimates 𝛽ˆ and 𝛾ˆ are
+
+
+h
+i −1
+𝛽ˆ𝑀𝐼 𝑀
+= E𝑛 𝑫𝑫𝑇
+E𝑛 [𝑫𝑌 ]
+(19)
+𝛾ˆ𝑀𝐼 𝑀
+"  
+#
+−1
+˜ ]
+E 𝑍˜ 2
+E𝑛 [𝑍𝑌
+= 𝑛
+(20)
+−1
+E𝑛 [𝑅] E𝑛 [𝑅𝑌 ]
+
+
+𝛽ˆ
+=
+(21)
+E𝑛 [𝑌 | 𝑅 = 1]
+The result for 𝛾 in (21) holds because
+
+
+|M| −1 1 ∑︁ (𝑖)
+E𝑛 [𝑅] −1 E𝑛 [𝑅𝑌 ] =
+𝑌
+𝑛
+𝑛
+𝑖 ∈M
+1 ∑︁ (𝑖)
+=
+𝑌
+|M|
+
+(22)
+
+(23)
+
+𝑖 ∈M
+
+= E𝑛 [𝑌 | 𝑅 = 1]
+
+(24)
+□
+
+A.2
+
+Proof of Theorem 3.2
+
+Part (a). Let 𝑫 = [ 𝒁˜ 𝑇 , 𝑹𝑇 ]𝑇 and 𝑝 𝑗 = 𝑃 (𝑅 = 1). We would like
+
+
+to show that E 𝑫𝑫𝑇 is a 2 × 2 block diagonal matrix. When 𝑗 ≠ 𝑘,
+E[𝑍˜ 𝑗 𝑅𝑘 ] = 0 since 𝑋 𝑗 and 𝑅𝑘 are independent under MCAR. If
+𝑗 = 𝑘, we cannot assume that 𝑍˜ 𝑗 and 𝑅 𝑗 are independent since they
+are directly dependent by construction. Nonetheless, by the law of
+total expectations we have
+E[𝑍˜ 𝑗 𝑅 𝑗 ] = E[𝑍˜ 𝑗 𝑅 𝑗 | 𝑅 𝑗 = 1]𝑝 𝑗 + E[𝑍˜ 𝑗 𝑅 𝑗 | 𝑅 𝑗 = 0] (1 − 𝑝 𝑗 ) (25)
+= E[𝑍˜ 𝑗 | 𝑅 𝑗 = 1]𝑝 𝑗
+
+(26)
+
+=0
+
+(27)
+
+Like in the proof of (a), we want to show that E[𝑫𝑫𝑇 ] is 2 × 2 is
+2 × 2 block diagonal. The only difference from the proof used in
+part (a) is that 𝑹 is now centered. E[𝑍˜ 𝑗 𝑅𝑘 ] = 0 when 𝑗 ≠ 𝑘 because
+𝑋 𝑗 and 𝑅𝑘 are still independent under the self-masking mechanism,
+and when 𝑗 = 𝑘,
+E[𝑍˜ 𝑗 𝑅 𝑗 ] = E[𝑍˜ 𝑗 𝑅 𝑗 | 𝑅 𝑗 = 1 − 𝑝 𝑗 ]𝑝 𝑗 + E[𝑍˜ 𝑗 𝑅 𝑗 | 𝑅 𝑗 = −𝑝 𝑗 ] (1 − 𝑝 𝑗 )
+(33)
+
+
+= 𝑝 𝑗 (1 − 𝑝 𝑗 ) E[𝑍˜ 𝑗 | 𝑅 𝑗 = 1 − 𝑝 𝑗 ] − E[𝑍˜ 𝑗 | 𝑅 𝑗 = −𝑝 𝑗 ]
+(34)
+=0
+
+(35)
+
+where E[𝑍˜ 𝑗 | 𝑅 𝑗 = 1 − 𝑝 𝑗 ] = 0 because of 0 imputation and
+E[𝑍˜ 𝑗 | 𝑅 𝑗 = −𝑝 𝑗 ] = 0 because of centering.
+Different from (a), though, 𝑅 𝑗 ̸⊥
+⊥ 𝑌 now because both depend on
+𝑋 𝑗 . We thus have
+E[𝑅 𝑗 𝑌 ] = E[𝑌 𝑅 𝑗 | 𝑅 𝑗 = 1 − 𝑝 𝑗 ]𝑝 𝑗 + E[𝑌 𝑅 𝑗 | 𝑅 𝑗 = −𝑝 𝑗 ] (1 − 𝑝 𝑗 )
+(36)
+
+= 𝑝 𝑗 (1 − 𝑝 𝑗 ) E[𝑌 | 𝑅 𝑗 = 1 − 𝑝 𝑗 ] − E[𝑌 | 𝑅 𝑗 = −𝑝 𝑗 ] .
+(37)
+Lastly, E[𝑅 𝑗 , 𝑅𝑘 ] = 0 when 𝑗 = 𝑘 since 𝑅 𝑗 ⊥
+⊥ 𝑅𝑘 under self-masking,
+and E[𝑅 2𝑗 ] = 𝑝 𝑗 (1 − 𝑝 𝑗 ). Putting this together, we have
+ ∗  
+
+
+˜ ]
+𝜷𝑀𝐼 𝑀
+E[ 𝒁˜ 𝒁˜ 𝑇 ] −1
+0
+E[𝒁𝑌
+=
+(38)
+∗
+𝜸𝑀𝐼 𝑀
+0
+E[𝑹𝑹𝑇 ] −1 E[𝑹𝑌 ]
+
+
+𝛽 1∗
+
+
+
+
+..
+
+
+.
+
+
+
+
+∗
+𝛽𝑝
+
+
+=
+(39)
+.
+ E[𝑌 | 𝑅1 = 1 − 𝑝 1 ] − E[𝑌 | 𝑅1 = −𝑝 1 ] 
+
+
+..
+
+
+
+
+.
+
+
+E[𝑌 | 𝑅𝑝 = 1 − 𝑝𝑝 ] − E[𝑌 | 𝑅𝑝 = −𝑝𝑝 ] 
+
+
+□
+
+Van Ness et al.
+
+Part (c). The proof of part (c) starts by reordering the columns
+of 𝑫 = [ 𝒁˜ 𝑇 , 𝑹𝑇 ]𝑇 based on the blocks 𝐵 1, . . . , 𝐵𝑑 , i.e.
+𝑫 B [𝑫𝑇𝐵1 , . . . , 𝑫𝑇𝐵𝑑 ]𝑇 B [𝒁˜ 𝐵𝑇 1 , 𝑹𝑇𝐵1 , . . . , 𝒁˜ 𝐵𝑇𝑑 , 𝑹𝑇𝐵𝑑 ]𝑇 .
+
+(40)
+
+Using the
+ same
+ logic as in the proof of part (b), we can conclude
+that E 𝑫𝑫𝑇 is 𝑑 × 𝑑 block diagonal, where 𝑑 is the number of
+blocks, and further for block 𝐵 ℓ
+" ∗
+#
+𝜷𝑀𝐼 𝑀
+𝐵ℓ
+= E[𝑫 𝐵ℓ 𝑫𝑇𝐵ℓ ] −1 E[𝑫 𝐵ℓ 𝑌 ].
+(41)
+∗
+𝜸𝑀𝐼
+𝑀
+𝐵ℓ
+
+Recall from the proof of (b) that
+
+E[𝑅 𝑗 𝑌 ] = 𝑝 𝑗 (1−𝑝 𝑗 ) E[𝑌 | 𝑅 𝑗 = 1 − 𝑝 𝑗 ] − E[𝑌 | 𝑅 𝑗 = −𝑝 𝑗 ] (42)
+thus for block 𝐵 ℓ
+E[𝑫 𝐵ℓ 𝑫𝑇𝐵ℓ ] −1 E[𝑫 𝐵ℓ 𝑌 ]
+(43)
+
+
+˜
+E[ 𝒁𝐵ℓ 𝑌 ]
+= E[𝑫 𝐵ℓ 𝑫𝑇𝐵ℓ ] −1
+E[𝑌 | 𝑹 𝐵ℓ = 1 − 𝒑 𝐵ℓ ] − E[𝑌 | 𝑹 𝐵ℓ = −𝒑 𝐵ℓ ]
+(44)
+where we’ve abused notation and used E[𝑌 | 𝑹 𝐵ℓ = 1 − 𝒑 𝐵ℓ ] to
+mean the vector of E[𝑌 | 𝑅 𝑗 = 1 − 𝑝 𝑗 ] for 𝑗 ∈ 𝐵 ℓ and similarly for
+E[𝑌 | 𝑹 𝐵ℓ = −𝒑 𝐵ℓ ].
+□
+
+B ADDITIONAL MIM DETAILS
+B.1 MIM with decision trees
+Supervised learning models based on decision trees are discrete
+models, making them different from continuous supervised learning models, like linear models and neural networks. When decision
+trees split on categorical features, the split is chosen based on the
+levels of the categorical feature. With numerical features, however,
+decision trees must choose a collection of threshold points. For each
+threshold point 𝑇 , the tree can split on the numerical feature if it
+is greater than 𝑇 or less than 𝑇 . Exact details of how decision tree
+algorithms handle numerical features depends on the implementation; see, for example, the popular C4.5 decision tree algorithm
+[37].
+When doing imputation as a preprocessing step for tree-based
+models like XGBoost, the choice of imputation can significantly
+affect the performance of the model. In particular, if the imputation method is constant, i.e. always imputes the same value, then
+the branches will be split by these imputed values each tree with
+high probability. With an imputation method that is non-constant,
+e.g. GC or MF, this is no longer the case. Additionally, for nondecision-tree-based supervised models, constant and non-constant
+imputation can have similar behavior in some cases, e.g. using
+constant imputation plus noise.
+Now consider using MIM in conjunction with imputation for
+tree-based models. Each new indicator feature gives the tree 1
+extra split to consider. Specifically, the indicator features allow a
+tree to split directly on whether or not a feature is observed. If
+constant imputation is used, e.g. mean imputation, these indicator
+features add little additional value to the model, since all imputed
+values are already split together by the tree. On the other hand,
+if a non-constant imputation is used, e.g. GC or MF, then the tree
+has much higher probability to split on the missing indicators,
+which can potentially really enhance the model. This explains why,
+
+throughout the experiments, MIM improves the performance of
+GC and MF more than the performance of Mean for experiments
+with XGBoost.
+Since decision trees are discrete models, there are also other
+preprocessing methods unique to trees for dealing with missing
+values. One notable example is the Missing Incorporate as Attribute
+(MIA) strategy [21, 34, 47], which is similar in spirit to MIM. To
+illustrate MIA, let 𝑥 be a numerical feature to split, with missing
+values represented as ∗. For a given threshold 𝑇 , a normal decision
+tree would consider the split 𝑥 ≥ 𝑇 versus 𝑥 < 𝑇 . MIA instead
+considers the following 3 splits for each split:
+• (𝑥 ≤ 𝑇 or 𝑥 = ∗) versus 𝑥 > 𝑇
+• 𝑥 ≤ 𝑇 versus (𝑥 > 𝑇 or 𝑥 = ∗)
+• 𝑥 = ∗ versus 𝑥 ≠ ∗
+MIA allows trees to split on missing values while doing any imputation, thereby allowing tree to utilize informative signal from the
+missing values if such signal is present. Note that the third split
+in the above list is the same as splitting on indicator features from
+MIM. The first and second splits in the list essentially compute the
+optimal constant imputation value for each feature, rather than
+always using the same value, e.g. the mean. Thus, MIA is very similar to Mean + MIM, although using another non-constant imputer
+with MIM is still quite different than MIA. A further discussion of
+MIA and other methods for handling missing values in decision
+trees can be found in [21].
+
+B.2
+
+MIM with categorical features
+
+In our experiments, we consider data sets only with numeric variables, for several reasons. First, many imputation methods cannot
+handle categorical variables (e.g. gcimpute), making comparisons
+more difficult. Second, mean imputation is not possible with categorical variables. The closest comparison is perhaps mode imputation,
+i.e. imputing with the most frequent category, but this has different
+properties than mean imputation and complicates the analysis. On
+the other hand, MIM has a very straightforward implementation
+for categorical variables: replace missing categorical values with a
+new “missing” category. After one-hot encoding, this corresponds
+exactly to adding a new indicator column as in the numeric case. For
+neural network models, this transformation could also correspond
+to learning a new embedding for the missing category.
+
+C ADDITIONAL EXPERIMENT DETAILS
+C.1 OpenML Data Sets
+In Table 2 we show a description of the OpenML data sets used.
+The source data sets can easily by found by searching the IDs on
+OpenML. We chose these data sets to represent diversity in 𝑛, 𝑝,
+and outcome type. We also restrict to data sets with continuous
+features, as explained in Appendix B.2. For Figure 4, we only use
+data sets which have no missing values, since we want to be able to
+completely control the missing mechanism in the data. The listed
+values for 𝑝 are the number of features used in the data sets for our
+experiments, which in some cases is different than the listed number
+of features on OpenML. For example, there are several features in
+the volkert data set which all entirely 0, and so we remove these
+features.
+
+The Missing Indicator Method: From Low to High Dimensions
+
+Table 1: Details of the 17 clinical features used for MIMIC experiments in Section 6. For each feature and each task, the missing
+rate is given, along with whether the missingness is informative or not, based on the SMIM procedure in Algorithm 1. Multiple
+features for each task have informative missingness, suggesting that MIM will likely improve model performance, which turns
+out to be the case in Figure 6.
+Mortality
+Missing Rate Is Informative
+
+Feature
+Capillary refill rate
+Diastolic blood pressure
+Fraction inspired oxygen
+Glascow coma scale eye opening
+Glascow coma scale motor response
+Glascow coma scale total
+Glascow coma scale verbal response
+Glucose
+Heart Rate
+Height
+Mean blood pressure
+Oxygen saturation
+Respiratory rate
+Systolic blood pressure
+Temperature
+Weight
+pH
+Linear on binary datasets
+
+0.25
+
+0.985
+0.055
+0.753
+0.055
+0.056
+0.477
+0.056
+0.011
+0.054
+0.797
+0.056
+0.048
+0.055
+0.055
+0.063
+0.248
+0.170
+
+0.2
+
+eucalyptus
+
+college
+XGBoost on multiclass datasets
+
+mice
+
+0.18
+0.16
+
+bands
+MLP on binary datasets
+
+0.15
+0.05
+
+0.65
+
+eucalyptus
+
+college
+MLP on multiclass datasets
+
+0.60
+
+mice
+
+0.90
+
+0.4
+
+0.85
+
+0.3
+
+0.80
+
+0.2
+
+0.20
+
+0.1
+
+0.15
+
+0.0
+
+bands
+
+0.75
+0.70
+
+1 - accuracy
+
+0.25
+
+0.80
+
+0.10
+
+0.35
+0.30
+
+RMSE
+
+0.20
+
+0.00
+
+crime
+XGBoost on regression datasets
+
+0.85
+
+0.25
+
+RMSE
+
+1 - accuracy
+
+0.20
+
+1.00
+0.95
+0.90
+0.85
+0.80
+0.75
+0.70
+0.65
+0.60
+
+0.90
+
+0.30
+
+0.22
+
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+
+Linear on regression datasets
+MF
+MF + MIM
+MF + SMIM
+
+0.35
+
+0.24
+
+1 - AUC
+
+GC
+GC + MIM
+GC + SMIM
+
+0.3
+
+0.0
+
+bands
+XGBoost on binary datasets
+
+0.26
+
+1 - AUC
+
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+
+0.1
+
+0.20
+
+0.40
+
+0.973
+0.069
+0.698
+0.070
+0.070
+0.438
+0.070
+0.007
+0.068
+0.805
+0.069
+0.059
+0.068
+0.069
+0.077
+0.223
+0.102
+
+RMSE
+
+1 - accuracy
+
+1 - AUC
+
+0.30
+
+0.28
+
+Mean
+Mean + MIM
+Mean + SMIM
+
+0.4
+
+0.35
+
+no
+no
+yes
+no
+no
+no
+no
+no
+no
+yes
+no
+no
+no
+no
+no
+no
+yes
+
+Phenotyping
+Missing Rate Is Informative
+
+Linear on multiclass datasets
+
+0.5
+
+0.40
+
+0.15
+
+0.984
+0.012
+0.710
+0.010
+0.010
+0.422
+0.010
+0.001
+0.012
+0.829
+0.012
+0.006
+0.012
+0.012
+0.022
+0.235
+0.104
+
+LOS
+Missing Rate Is Informative
+
+crime
+MLP on regression datasets
+
+0.75
+0.70
+0.65
+
+eucalyptus
+
+college
+
+mice
+
+0.60
+
+crime
+
+Figure 7: MIM and SMIM performance on OpenML data sets that already have missing values. Both MIM and SMIM improve
+linear and MLP performance on 4 out of 6 data sets, showing that missing values in real-world data often has informative
+missingness.
+
+Van Ness et al.
+
+Table 2: OpenML data sets used. Note that for volkert and christine, we remove several features that are either all 0 or are all
+0 except a few rows, resulting in the dimensions listed.
+
+C.2
+
+OpenML ID
+
+Name
+
+n
+
+p
+
+Task
+
+n_classes
+
+23512
+1458
+41150
+41145
+41142
+1489
+6332
+41166
+40498
+41163
+188
+488
+537
+42705
+507
+315
+
+higgs
+arcene
+miniboone
+philippine
+christine
+phoneme
+bands
+volkert
+wine
+dilbert
+eucalyptus
+college
+housing
+yolanda
+space
+crime
+
+98050
+200
+130064
+5832
+5418
+5404
+540
+58310
+4898
+10000
+736
+1161
+20640
+400000
+3107
+1994
+
+28
+10001
+50
+309
+1599
+5
+16
+147
+11
+2000
+9
+6
+8
+100
+6
+25
+
+classification
+classification
+classification
+classification
+classification
+classification
+classification
+classification
+classification
+classification
+classification
+classification
+regression
+regression
+regression
+regression
+
+2
+2
+2
+2
+2
+2
+2
+10
+7
+5
+5
+3
+NA
+NA
+NA
+NA
+
+OpenML Real Missing Experiments
+
+We show in Figure 6 that MIM improves performance for EHR
+prediction tasks, where missing values occur naturally in the data.
+We also experiment on some additional OpenML data set which
+already have missing values without masking. We follow the same
+experimental setup as in Section 5, except that the missing values
+remain the same in each trial since we are not using a synthetic
+missing value mask. The results are shown in Figure 7. Like the
+results on the MIMIC tasks, MIM and SMIM improve performance
+on all data sets except OpenML’s ‘college’ data set for linear and
+MLP models. This provides further evidence that missing values
+are commonly informative in real-world data sets.
+
+C.3
+
+MIMIC
+
+The MIMIC-III data set [20] is a standard data set for building models
+on electronic health records (EHRs), and has been used by many
+papers to evaluate machine learning models [2, 9, 13, 32, 40, 58]. Due
+to its popularity, many tools have been developed to preprocess the
+raw MIMIC data into forms suitable for data science [17, 35, 46, 51].
+We chose to use the mimic3-benchmark [17] to help preprocess our
+data, creating data sets for the mortality, length of stay (LOS), and
+phenotype prediction tasks described in Section 6.
+For each of the above tasks, the mimic3-benchmark code gathers data from 17 clinical variables as features for the prediction.
+These 17 features are the same for each task. The feature names
+are provided in Table 1. For each of the above tasks, the mimic3benchmark code provides scripts for generating multivariate time
+series data, with 1 time series per feature per visit that covers a
+patient’s data across their hospital stay. The benchmark code also
+provides an additional script to generate tabular data using feature
+engineering on the multivariate time series data to support their
+logistic regression baselines. Since we study tabular data in this
+paper, we use this additional preprocessing, and generate 1 feature
+
+for each clinical feature in Table 1 corresponding to the mean value
+across the observed components of the time series. When a time
+series has no observed time steps, we leave the tabular feature as
+missing. For each of the resulting features, we compute the missing
+rate and whether or not the feature has informative missingness
+based on SMIM, and display the results in Table 1.
+
+

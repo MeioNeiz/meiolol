@@ -1,0 +1,1463 @@
+One Model to Serve All: Star Topology Adaptive Recommender
+for Multi-Domain CTR Prediction
+Xiang-Rong Sheng, Liqin Zhao∗
+Guorui Zhou, Xinyao Ding, Binding Dai, Qiang Luo
+Siran Yang, Jingshan Lv, Chi Zhang, Hongbo Deng, Xiaoqiang Zhu
+Alibaba Group
+Beijing, China
+
+arXiv:2101.11427v5 [cs.IR] 2 Nov 2021
+
+ABSTRACT
+Traditional industry recommendation systems usually use data in a
+single domain to train models and then serve the domain. However,
+a large-scale commercial platform often contains multiple domains,
+and its recommendation system often needs to make click-through
+rate (CTR) predictions for multiple domains. Generally, different
+domains may share some common user groups and items, and each
+domain may have its own unique user groups and items. Moreover,
+even the same user may have different behaviors in different domains. In order to leverage all the data from different domains, a
+single model can be trained to serve all domains. However, it is
+difficult for a single model to capture the characteristics of various
+domains and serve all domains well. On the other hand, training an
+individual model for each domain separately does not fully use the
+data from all domains. In this paper, we propose the Star Topology
+Adaptive Recommender (STAR) model to train a single model to
+serve all domains by leveraging data from all domains simultaneously, capturing the characteristics of each domain, and modeling
+the commonalities between different domains. Essentially, the network of each domain consists of two factorized networks: one
+centered network shared by all domains and the domain-specific
+network tailored for each domain. For each domain, we combine
+these two factorized networks and generate a unified network by
+element-wise multiplying the weights of the shared network and
+those of the domain-specific network, although these two factorized
+networks can be combined using other functions, which is open
+for further research. Most importantly, STAR can learn the shared
+network from all the data and adapt domain-specific parameters
+according to the characteristics of each domain. The experimental
+results from production data validate the superiority of the proposed STAR model. Since late 2020, STAR has been deployed in the
+display advertising system of Alibaba, obtaining 8.0% improvement
+on CTR and 6.0% increase on RPM (Revenue Per Mille).
+∗ Xiang-Rong Sheng and Liqin Zhao contributed equally to this work.
+{xiangrong.sxr, liqin.zlq}@alibaba-inc.com
+
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+fee. Request permissions from permissions@acm.org.
+CIKM ’21, November 1–5, 2021, Virtual Event, QLD, Australia
+© 2021 Association for Computing Machinery.
+ACM ISBN 978-1-4503-8446-9/21/11. . . $15.00
+https://doi.org/10.1145/3459637.3481941
+
+Banner
+
+Guess What You Like
+
+Figure 1: Two representative business domains, Banner and
+Guess What You Like on Taobao mobile app home. A business domain is referred to as a specific spot that items are
+presented to users in the mobile app and PC websites.
+
+CCS CONCEPTS
+• Information systems → Information retrieval.
+
+KEYWORDS
+Multi-Domain Learning, Recommender System, Display Advertising
+ACM Reference Format:
+Xiang-Rong Sheng, Liqin Zhao and Guorui Zhou, Xinyao Ding, Binding Dai,
+Qiang Luo, Siran Yang, Jingshan Lv, Chi Zhang, Hongbo Deng, Xiaoqiang
+Zhu. 2021. One Model to Serve All: Star Topology Adaptive Recommender
+for Multi-Domain CTR Prediction. In Proceedings of the 30th ACM International Conference on Information and Knowledge Management (CIKM ’21),
+November 1–5, 2021, Virtual Event, QLD, Australia. ACM, New York, NY,
+USA, 10 pages. https://doi.org/10.1145/3459637.3481941
+
+1
+
+INTRODUCTION
+
+Traditional CTR prediction models [6, 13, 32, 43, 44] focus on singledomain prediction, where the CTR model serves for a single business domain after trained with examples collected from this domain.
+Each business domain is a specific spot that items are presented
+
+Domain
+3
+Domain
+2
+
+Shared
+
+Domain
+3
+Domain
+4
+
+Domain
+1
+
+Domain
+5
+
+Domain
+2
+
+Domain
+1
+
+7$6.
+
+7DVN
+
+7DVN
+
+ŏ
+
+(a)
+
+Domain
+7
+(b)
+
+Domain
+6
+
+Domain
+8
+
+7$6.
+
+Domain
+4
+
+Shared
+
+Domain
+5
+
+6DPSOHV
+
+'RPDLQ
+
+D 0XOWL7DVN/HDUQLQJ
+Domain
+8
+
+7DVN1
+
+Domain
+7
+
+'RPDLQ
+
+'RPDLQ
+
+ŏ
+
+'RPDLQ1
+
+E 0XOWL'RPDLQ/HDUQLQJ
+
+Domain
+6
+
+(c)
+
+Figure 2: (a): Single shared model for all domains, square
+nodes indicate the shared model. (b): One model per domain
+where each model is learned separately. The circle node indicates the domain-specific model. (c): The proposed Star
+Topology Adaptive Recommender (STAR), where each domain has specific parameters and also shares a common centered model. The edges mean the combination of the center
+shared parameters with the domain-specific parameters.
+to users on the mobile app or PC websites. At large commercial
+companies like Alibaba and Amazon, there are often many business
+domains that need CTR prediction to enhance user satisfaction and
+improve business revenue. For example, in Alibaba, the business
+domains range from Guess What You Like in Taobao App homepage,
+Banner of Taobao App homepage to other domains [46]. Figure 1
+shows two representative business domains in Alibaba.
+• Banner: In banner, the items to be recommended appears in
+the top banner of the Taobao home page. The item can be a
+single commodity, a store, or a brand.
+• Guess What You Like: In Guess What You Like, items are all
+single commodities and displayed to users in the left or right
+column.
+Since different business domains have overlapping user groups and
+items, there exist commonalities among these domains. Enabling
+information sharing is beneficial for learning the CTR model of
+each domain. However, the specific user group may be different
+and the users’ behaviors also change in various domains. These
+distinctions result in domain-specific data distributions. Simply
+mixing all the data and training a single shared CTR model can not
+work well on all domains.
+Besides mixing data and training a shared model, another simple
+solution is to build a separate model per business domain. This
+strategy also has some downsides: (1) some business domains have
+much less data than other domains. Splitting the data neglects
+the domain commonalities and causes much less training data,
+making the models hard to learn. (2) Maintaining multiple models
+cause a tremendous amount of resource consumption and require
+much more human cost. It is unduly burdensome when the number
+of business domains is up to hundreds. This paper aims to learn
+an effective and efficient CTR model to handle multiple domains
+simultaneously. We formulate multi-domain CTR prediction as the
+problem that the recommender needs to make CTR prediction for 𝑀
+business domains 𝐷 1, 𝐷 2, . . . , 𝐷 𝑀 simultaneously. The model takes
+input as (x, 𝑦, 𝑝), where x is the common feature used by multiple
+business domains like historical user behavior, user profile feature,
+item feature, and context feature. 𝑦 ∈ {0, 1} is the clicked label, and
+
+Figure 3: Comparison of multi-task learning with multidomain learning. Most multi-task learning approaches focus on tackling different tasks within a single domain. In
+contrast, multi-domain learning makes predictions for multiple domains addressing the same task, e.g., CTR prediction,
+where the label spaces are of the same. Directly adapting
+multi-task approaches to multi-domain CTR prediction can
+not sufficiently exploit the domain relationship in the label
+space and neglects the distinct data distribution of different
+domains.
+
+𝑝 is the domain indicator that indicates which domain this sample
+is collected. Note that (x, 𝑦) is drawn from the domain-specific
+distribution 𝐷𝑝 , and the distribution varies with different domains.
+Multi-domain CTR prediction aims to construct an effective and
+efficient model that gives accurate CTR prediction for each domain
+and at a trivial cost on resource consumption. To achieve this goal,
+the model should make full use of the domain commonalities and
+capture the domain distinction.
+One possible strategy to improve learning with multiple domains
+is multi-task learning [5, 25, 33]. As shown in Figure 3, the difference between multi-domain CTR prediction and multi-task learning
+is that multi-domain CTR prediction solves the same task, i.e., CTR
+prediction, across different domains, in which the label spaces of
+different domains are the same and the data distribution is different. By contrast, most multi-task learning approaches [24–27, 36]
+address various tasks in the same domain, where the label space
+might be different, e.g., jointly estimate CTR and conversion rate
+(CVR) [26, 39]. Due to the heterogeneity of tasks, existing multi-task
+learning approaches focus on sharing information in the bottom
+layers but keeping separate task-specific output layers [33]. Directly
+adapting multi-task approaches to multi-domain CTR prediction
+can not sufficiently exploit the domain relationship in the label
+space and neglect the distinct data distribution of different domains.
+To fully exploit the domain relationship, we propose Star Topology Adaptive Recommender (STAR) for multi-domain CTR prediction. The proposed STAR model has the star topology, as illustrated
+in Figure 4. STAR consists of shared centered parameters and multiple sets of domain-specific parameters. The final model of each
+domain is obtained by combining the shared centered parameters
+and the domain-specific parameters. The centered parameters are
+used to learn general behaviors among all domains, in which the
+common knowledge can be learned and transferred among all domains. The domain-specific parameters capture specific behaviors
+in different domains to facilitate more refined CTR prediction. The
+star topology facilitates effective information transformation across
+multiple domains to learn domain commonalities and distinctions.
+This paper implements the STAR model with the element-wise
+
+product of weights in each layer as the combination strategy. Since
+embedding layers contribute most parameters in industrial recommender, the added domain-specific parameters are negligible to the
+total amount of parameters. Thus, using the STAR model to serve
+multiple domains only adds little computational and memory costs
+while yielding much better performance.
+The main contributions of this work can be summarized as follows:
+• We propose Star Topology Adaptive Recommender (STAR)
+to tackle multi-domain CTR prediction. The star topology
+facilitates effective information transformation across multiple domains to learn domain commonalities while capturing
+domain distinction.
+• Different domains have different data distributions, this leads
+to inaccurate statistics when using batch normalization. We
+propose Partitioned Normalization (PN) that privatizes normalization for examples from different domains to address
+this issue. PN can lead to more accurate moments within the
+domain, which improves model performance.
+• In multi-domain CTR prediction, features that depict the
+domain information are of importance. We propose an auxiliary network that treats the domain indicator directly as the
+input and learns its embeddings to depict the domain. The
+embeddings are then fed to the auxiliary network, which
+is much simpler than the original network. This makes the
+domain indicator influence the final prediction in a direct
+manner.
+• We evaluate STAR on the industrial production dataset and
+deploy it in the display advertising system of Alibaba in 2020.
+The consistent superiority validates the efficacy of STAR. Up
+to now, the deployment of STAR brings 6% CTR and 8% RPM
+lift. We believe the lessons learned in our deployment generalize to other setups and are thus of interest to researchers
+and industrial practitioners.
+
+2
+
+RELATED WORK
+
+Our work is closely related to traditional single-domain CTR prediction, where the recommender is trained on a single business
+domain and then serve for this business domain. Besides, our work
+is also related to multi-task learning and multi-domain learning. In
+this section, we give a brief introduction.
+
+2.1
+
+loss to capture latent interest from historical behaviors. Additionally, DIEN integrates the attention mechanism with GRU to model
+the dynamic evolution of user interest. MIND [21] and DMIN [40]
+argue that a single vector might be insufficient to capture complicated pattern lying in the user and items. Capsule network and
+the dynamic routing mechanism are introduced in MIND to learn
+multiple representations to aggregate raw features. Moreover, inspired by the success of the self-attention architecture in the tasks
+of sequence to sequence learning [37], Transformer is introduced
+in [10] for feature aggregation. MIMN [28] proposes a memorybased architecture to aggregate features and tackle the challenge
+of long-term user interest modeling. SIM [29] extracts user interests with two cascaded search units, which achieves better ability
+to model lifelong sequential behavior data in both scalability and
+accuracy.
+
+2.2
+
+Multi-Task Learning
+
+Multi-task learning [5, 33] aims to improve generalization by sharing knowledge across multiple related tasks. The shared knowledge
+and task-specific knowledge are explored to facilitate the learning
+of each task. Multi-task learning has been used successfully on
+multiple application domains, ranging from natural language processing [7], speech recognition [8], recommender system [42] to
+computer vision [17]. In early literature on MTL for linear models,
+Argyriou et al. [1] propose a method to learn sparse representations
+shared across multiple tasks. In the context of deep learning, multitask learning is typically done with parameter sharing of hidden
+layers [5, 26]. Misra et al. [27] propose cross-stitch units to learn
+unique combinations of task-specific hidden-layers for each task.
+Ma et al. [25] proposes Multi-gate Mixture-of-Experts (MMoE) to
+model task relationships by sharing the expert sub-models across all
+tasks, while also having a gating network trained to optimize each
+task. Kendall et al. [17] propose a principled approach to multi-task
+deep learning which weighs multiple loss functions by considering
+the homoscedastic uncertainty of each task. In multi-task learning,
+different tasks may conflict, necessitating a trade-off, optimize a
+proxy objective that minimizes a weighted linear combination of
+per-task losses may not be optimal. To address this issue, Sener and
+Koltun [35] explicitly cast multi-task learning as multi-objective
+optimization, with the overall objective of finding a Pareto optimal
+solution. Note that [17, 35] are complementary to this work and
+could be potentially combined to achieve better performance.
+
+Single-Domain CTR Prediction
+
+Inspired by the success within deep learning, recent CTR prediction model has made the transition from traditional shallow approaches [11, 19, 20, 32, 45] to modern deep approaches [6, 13, 28,
+30, 43, 44]. Most deep CTR models follow the embedding and MLP
+paradigm. Wide & Deep [6] and deepFM [13] combine low-order
+and high-order features to improve the expression power of the
+model. PNN [30] introduces a product layer to capture interactive
+patterns between inter-field categories. In these models, the user’s
+history behaviors are transformed into low-dimensional vectors
+after the embedding and pooling. DIN [44] employs the mechanism of attention to activate historical behaviors locally w.r.t. the
+given the target item, and successfully captures the diversity characteristic of user interest. DIEN [43] further proposes an auxiliary
+
+2.3
+
+Multi-Domain Learning
+
+In real-world applications, it is oftentimes that the data are collected from multiple domains [9, 16, 22]. Multi-domain learning
+enables knowledge transfer between domains to improve learning.
+As such, it contrasts with the domain adaptation (DA) problem [3, 4],
+where knowledge transfer is only one way, i.e., from the source
+domain to the target domain. Wang et al. [38] propose Transferable
+Normalization in place of existing normalization techniques for
+domain adaptation and reveals that BN [14] is the constraint of
+transferability.
+Multi-domain CTR prediction can be seen as a special kind of
+multi-domain learning problem, in which each domain corresponds
+to a business domain and the task is the CTR prediction. Compared
+
+Output
+
+Output
+
+user 𝑢 clicking on an item 𝑚 is calculated via:
+
+SWDU7RSRORJ\
+)&1
+
+)&1
+
+𝑦ˆ = f (𝐸 (𝑢 1 ), . . . , 𝐸 (𝑢𝑖 ); 𝐸 (𝑚 1 ), . . . , 𝐸 (𝑚 𝑗 ); 𝐸 (𝑐 1 ), . . . , 𝐸 (𝑐𝑘 )),
+Domain-M
+Domain-2
+Domain-1
+
+Centered
+
+Domain-M
+Domain-2
+Domain-1
+Batch Normalization
+
+Pooling & Concatenation
+
+Partitioned Normalization
+
+Pooling & Concatenation
+
+…
+
+SKDUHG Embedding Layer
+
+b(1) b(2) …b(n)
+
+User profile
+… … Target item
+
+User behavior sequence
+
+…
+
+SKDUHG Embedding Layer
+
+b(1) b(2) …b(n) User profile
+… … Target item Domain indicator
+User behavior sequence
+
+Model for Single-Scenario CTR Prediction
+
+STAR for Multi-Domain CTR Prediction
+
+(a)
+
+(b)
+
+Figure 4: Comparison of model for single-domain CTR
+prediction and the Star Topology Adaptive Recommender
+(STAR) for multi-domain CTR prediction. In STAR, the partitioned normalization (PN) privatizes normalization for examples from different domains. The normalized features
+are then fed as input to the following star topology fullyconnected neural network (star topology FCN). The star
+topology FCN consists of shared centered FCN and multiple
+domain-specific FCNs. The final combined model of each domain is obtained by the element-wise product of weights in
+each layer.
+with traditional multi-domain learning, our work focuses on CTR
+prediction. The proposed model makes full use of the domain indicator that is directly fed as the ID feature and learning its semantic
+embeddings to facilitates the model learning, which is neglected
+by previous literature. The difference between multi-domain learning and multi-task learning is that multi-domain learning makes
+prediction for multiple domains addressing the same problem, e.g.,
+CTR prediction, where the label spaces are of the same. In contrast,
+multi-task learning focuses on tackling different problems [41].
+For example, in the field of video recommendation, a multi-task
+learning problem can be as simultaneously predicting CTR and
+expected watch time of videos for a single business domain and
+multi-domain CTR prediction makes CTR predictions for multiple
+business domains, e.g., multiple video platforms.
+
+3
+
+THE PROPOSED APPROACH
+
+In this section, we first give a brief introduction about the background of multi-domain CTR prediction. Next is the architecture
+overview of the proposed method, star topology adaptive recommender (STAR) for multi-domain CTR prediction. Then we introduce STAR in detail, including the proposed star topology network,
+partitioned normalization, and auxiliary network.
+
+where {𝑢 1, . . . , 𝑢𝑖 } is the set of user features including user historical
+behavior and user profile feature. {𝑚 1, . . . , 𝑚 𝑗 } is the set of target
+item feature and {𝑐 1, . . . , 𝑐𝑘 } is the set of other features. The 𝐸 (·) ∈
+R𝑑 means the embedding layer which maps the sparse IDs into
+learnable dense vectors.
+After mapping the raw features to low-dimensional embeddings, the common practice is to aggregate these embeddings to
+obtain fixed-length vectors. Different kinds of aggregation methods
+like [43, 44] can be employed to aggregate these embeddings to
+extract user interest and get the fixed-length representation. The
+obtained representation is then fed into the following deep neural
+network, e.g., a multi-layer fully-connected network, to get the final
+CTR prediction.
+Traditional CTR models [6, 13, 23, 43, 44] are usually trained
+on data from a single business domain. However, real-world recommender often has to deal with multiple business domains. Concretely, the recommender needs to make CTR prediction for 𝑀
+domains 𝐷 1, 𝐷 2, . . . , 𝐷 𝑀 simultaneously. The model takes input
+as (x, 𝑦, 𝑝), where x is the common feature used by multiple domains like user historical behavior and user profile feature, target
+item feature as mentioned above. 𝑦 ∈ {0, 1} is the clicked label
+and 𝑝 ∈ {1, 2, . . . , 𝑀 } is the domain indicator that indicates which
+domain this sample is collected. Note that (x, 𝑦) is drawn from
+the domain-specific distribution 𝐷𝑝 and the distribution varies for
+different domains. The goal of multi-domain CTR prediction is to
+construct a single CTR model that can give accurate CTR prediction
+to serve all domains at low resource consumption and human cost.
+
+3.2
+
+Architecture Overview
+
+As mentioned above, ignoring domain indicator 𝑝 and learning a
+single shared CTR model neglect the domain differences. This leads
+to inferior model performance. On the other hand, training separate
+models for each domain performs much worse since splitting the
+domains provides much less data for each model. Besides, it is
+infeasible to maintain each domain a separate model in production
+due to the resource consumption and human cost.
+To this end, we propose Star Topology Adaptive Recommender
+(STAR) for multi-domain CTR prediction to better utilize the similarity among different domains while capturing the domain distinction.
+As shown in Figure 4, STAR consists of three main components:
+(1) the partitioned normalization (PN) which privatizes normalization for examples from different domains, (2) the star topology
+fully-connected neural network (star topology FCN), (3) the
+auxiliary network that treats the domain indicator directly as the
+input feature and learns its semantic embeddings to capture the
+domain distinction.
+During training, a domain indicator 𝑝 is first sampled and then
+a mini-batch of 𝐵 instances
+(x1, 𝑝), (x2, 𝑝), . . . , (x𝐵 , 𝑝)
+
+3.1
+
+Multi-Domain CTR Prediction
+
+In sequential recommender systems, the model takes input as the
+user historical behavior, user profile feature, target item feature,
+and other features like context feature. The predicted CTR 𝑦ˆ of a
+
+is sampled from this domain. STAR first embeds these input features
+as low-dimensional vectors by an embedding layer. In industrial recommender, the model is often trained with billions of features [15]
+and the parameters of embedding are usually much more than other
+
+parts of the model. This makes it difficult for different domains to
+learn domain-specific embeddings with limited data. For example,
+for models used in our daily tasks, the embeddings parameters
+are 10,000 times more than the parameters of fully-connected layers [15]. Thus, in the proposed STAR model, we let all business
+domains share the same embedding layer, i.e., the same ID features
+in different domains share the same embedding. Sharing embedding layer across multiple domains can significantly reduce the
+computational and memory cost.
+The embeddings are then pooled and concatenated to obtain 𝐵
+fixed-length representations. After that, the 𝐵 extracted representations are processed by the proposed partitioned normalization (PN)
+layer that privatizes normalization statistics for different domains.
+The normalized vectors are then fed as input to the proposed star
+topology FCN to get the output. The star topology FCN consists
+of shared centered FCN and multiple domain-specific FCNs. The
+final model of each domain is obtained by combining the shared
+centered FCN and domain-specific FCN.
+In multi-domain CTR prediction, features that depict the domain
+information is of importance. In the STAR model, the auxiliary
+network treats the domain indicator as input and fed with other
+features depicting the domain to the auxiliary network. The output
+of the auxiliary network is added with the output of the star topology FCN to get the final prediction. We make the auxiliary network
+much simpler than the star topology FCN to let the model capture
+the domain distinction in a direct and easy manner. In what follows
+we will describe these components in detail.
+
+3.3
+
+Partitioned Normalization
+
+As mentioned above, the raw features are first transformed into
+low-dimensional embeddings and then pooled and aggregated to
+get the intermediate representation. Denote the intermediate representation of an instance as z, to train deep networks fast and
+stably, a standard practice is applying normalization layer to the
+intermediate representation z. Among all normalization methods,
+batch normalization (BN) [14] is a representative method that is
+proved to be crucial to the successful training of very deep neural
+networks [14, 31]. BN uses a global normalization for all examples,
+which accumulates normalization moments and learns shared parameters across all samples. Concretely, the normalization of BN in
+training is given as
+z−𝜇
++ 𝛽,
+z′ = 𝛾 √
+𝜎2 + 𝜖
+
+(1)
+
+where z ′ is the output, 𝛾, 𝛽 are the learnable scale and bias parameters, 𝜇, 𝜎 2 are mean and variances of current mini-batch. During
+testing, moving averaged statistics of mean 𝐸 and variance 𝑉 𝑎𝑟
+across all samples are used instead
+z−𝐸
+z′ = 𝛾 √
++ 𝛽.
+𝑉 𝑎𝑟 + 𝜖
+
+(2)
+
+In other words, BN assumes all samples are i.i.d. and use the shared
+statistics across all training samples.
+However, in multi-domain CTR prediction, samples are only assumed to be locally i.i.d. within a specific domain. Thus, data from
+different domains have different normalization moments. Sharing
+
+global moments and parameters of BN layers during testing will obscure domain differences and lead to degraded model performance.
+To capture the unique data characteristic of each domain, we propose partitioned normalization (PN) which privatizes normalization
+statistics and parameters for different domains. Concretely, during training, suppose the current mini-batch is sampled from the
+𝑝-th domain, we compute the mean and variances of the current
+mini-batch and normalize the feature as:
+𝑧−𝜇
+𝑧 ′ = (𝛾 ∗ 𝛾𝑝 ) √
++ (𝛽 + 𝛽𝑝 ),
+(3)
+𝜎2 + 𝜖
+where 𝛾, 𝛽 are the global scale and bias, and 𝛾𝑝 , 𝛽𝑝 are the domainspecific scale and bias parameters. For each mini-batch, it receives
+the final scale by element-wise multiplying the shared 𝛾 with the
+domain-specific 𝛾𝑝 , i.e., PN adaptively scales the representation
+according to the domain indicator. Similarly, the bias of PN is also
+adaptive conditioned on the domain, which is implemented by the
+addition of global bias 𝛽 and domain-specific bias 𝛽𝑝 . Note that
+compared with BN, PN also uses the moments of the current minibatch during training, but PN introduces domain-specific scale and
+bias 𝛾𝑝 , 𝛽𝑝 to capture the domain distinction.
+Besides the modification of the scale and bias, PN also let different
+domains to accumulate the domain-specific moving average of
+mean 𝐸𝑝 and variance 𝑉 𝑎𝑟 𝑝 . During testing, PN transforms instance
+z from the 𝑝-th domain as:
+z − 𝐸𝑝
+z ′ = (𝛾 ∗ 𝛾𝑝 ) √︁
++ (𝛽 + 𝛽𝑝 ).
+(4)
+𝑉 𝑎𝑟 𝑝 + 𝜖
+From Equation 4, we can see that PN uses the domain-specific mean
+𝐸𝑝 and variance 𝑉 𝑎𝑟 𝑝 to normalize the intermediate representation z. Thus PN adaptively alters the intermediate representation
+conditioned on the domain indicator to capture the distinctive characteristics.
+
+3.4
+
+Star Topology FCN
+
+After the PN layer, the representation z ′ is fed as input to the
+following star topology multi-layer fully-connected neural network
+(star topology FCN). As depicted in Figure 5, the proposed star
+topology FCN consists of a shared centered FCN and independent
+FCNs per domain, thus the total number of FCN is 𝑀 + 1. The
+final model of 𝑝-th domain is obtained by combining the shared
+centered FCN and domain-specific FCN, in which the centered
+parameters learn general behaviors among all domains, and the
+domain-specific parameters capture specific behaviors in different
+domains to facilitate more refined CTR prediction.
+Specifically, for the shared FCN, let 𝑊 be the weights and 𝑏 be
+the bias in a neural network layer respectively. For the specific
+FCN of the 𝑝-th domain, let 𝑊𝑝 be the weights and 𝑏𝑝 be the bias
+in the corresponding layer. Denote the input dimension as 𝑐 and
+the output dimension as 𝑑, i.e, 𝑊 ,𝑊𝑝 ∈ R𝑐×𝑑 , 𝑏, 𝑏𝑝 ∈ R𝑑 . The final
+weights 𝑊𝑖★ and bias 𝑏𝑖★ for the 𝑝-th domain is obtained by:
+𝑊𝑝★ = 𝑊𝑝 ⊗ 𝑊 , 𝑏𝑝★ = 𝑏𝑝 + 𝑏,
+
+(5)
+
+where ⊗ denotes the element-wise multiplication. Let 𝑖𝑛𝑝 ∈ R𝑐×1
+denote the input of this neural network layer from the 𝑝-th domain,
+the final output 𝑜𝑢𝑡𝑝 ∈ R𝑑 × 1 is given by:
+𝑜𝑢𝑡𝑝 = 𝜙 ((𝑊𝑝★) ⊤𝑖𝑛𝑝 + 𝑏★
+𝑝 ),
+
+(6)
+
+element-wise product
+
+=
+
+=
+Domain-specific
+FCN
+
+Domain-specific
+FCN
+
+Shared
+FCN
+
+=
+Domain-specific
+FCN
+
+the ID feature input. The domain indicator is first mapped into
+embedding vector and concatenated with other features. The auxiliary network then computes forward pass with respect to the
+concatenated features to gets the one-dimensional output. Denote
+the one-dimensional output of star topology FCN as 𝑠𝑚 and the
+output of the auxiliary network as 𝑠𝑎 . 𝑠𝑚 and 𝑠𝑎 are added to get
+the final logit. Sigmoid is then applied to get the CTR prediction:
+
+=
+Domain-specific
+FCN
+
+Figure 5: An illustration on how STAR generates the parameters of fully-connected network (FCN) for different domains.
+STAR consists of a shared centered FCN and independent
+FCNs per domain. For each domain, the final weights of
+a neural network layer are obtained by element-wise multiplying the weights of the shared FCN and the domainspecific FCN. The shared parameters are updated through
+the gradient of all examples, while the domain-specific parameters are only updated through examples within this domain.
+
+Sigmoid(𝑠𝑚 + 𝑠𝑎 ).
+
+In our implementation, the auxiliary network is much simpler than
+the main network, which is a two-layer fully connected neural network. The simple architecture makes the domain features directly
+influence the final prediction.
+𝑝
+Denote 𝑦ˆ𝑖 the predicted probability for the 𝑖-th instance in the 𝑝𝑝
+th domain and 𝑦𝑖 ∈ {0, 1} the ground truth. We minimize the cross
+𝑝
+𝑝
+entropy loss function between the 𝑦ˆ𝑖 and label 𝑦𝑖 in all domains
+as:
+min
+
+3.5
+
+Auxiliary Network
+
+In the traditional way of CTR modeling, all features are treated
+equally and fed to the complicated model. In multi-domain CTR
+prediction, however, it may be hard for the model to automatically
+learn the domain distinction. We argue that a good multi-domain
+CTR model should have the following characteristic: (1) have informative features regarding the domain characteristic (2) make
+these features easily and directly influence the final CTR prediction.
+The intuition behind is that features that depict the information of
+domains are of importance since it can reduce the difficulty for the
+model to capture the distinction among domains.
+To this end, we propose an auxiliary network to learn the domain distinction. To augment informative features regarding the
+domain characteristic, we treat the domain indicator directly as
+
+𝑁𝑝
+𝑀
+∑︁ ∑︁
+
+𝑝
+
+𝑝
+
+𝑝
+
+𝑝
+
+−𝑦𝑖 log(𝑦ˆ𝑖 ) − (1 − 𝑦𝑖 )log(1 − 𝑦ˆ𝑖 ).
+
+(8)
+
+𝑝=1 𝑖=1
+
+4
+where 𝜙 denotes the activation function of this layer. The combination of shared parameters of domain-specific parameters is
+employed in all layers. By this means, STAR can modulate its parameters conditioned on the domain.
+Note that we implement the combination strategy of the shared
+centered FCN and domain-specific FCN by element-wise product
+of between weights and addition of bias in each layer, other strategies can also be investigated for better performance. The shared
+parameters are updated through the gradient of all examples while
+the domain-specific parameters are only updated through examples
+within this domain. This helps captures the domain differences
+for more refined CTR prediction while learning the domain commonality through the shared centered parameters. As mentioned
+above, most of the parameters in industrial recommenders are contributed by the embedding layer, the increased 𝑀 FCNs is negligible
+to the total amount of parameters. Thus STAR uses one model to
+effectively serve all business domains in a parameter efficient and
+memory friendly manner.
+
+(7)
+
+EXPERIMENTS
+
+We evaluate the efficacy of STAR in this section. We begin by introducing the setup including the used production dataset, compared
+methods and implementation details in Sec. 4.1. The results and
+discussion are elaborated in Sec. 4.2. We also perform in-depth
+ablation studies in Sec. 4.3. Experimental results on production
+environment are shown in Sec. 4.4.
+
+4.1
+
+Experimental Settings
+
+Dataset. Due to the lack of public dataset on multi-domain CTR
+prediction, we use Alibaba production data regarding user click
+behavior on 19 business domains to perform the offline evaluation.
+The training data is collected from traffic logs of the online display
+advertising system of Alibaba. Data of one day from 19 business
+domains are used for training and the data of the following day is
+used for testing. The training dataset consists of billions of examples.
+Table 1 shows the example percentage and average CTR (# Click/#
+Impression, i.e., ratio of positive examples) of each domain in the
+training set. As shown in Table1, different domains have different
+domain-specific data distribution, which can be reflected from the
+different CTR. It can be seen that domain with the highest CTR
+(domain #15) is 12.03% while domain with the lowest CTR (domain
+#13) is only 1.27%. In this dataset, the majority of items are available
+in most of the business domains while only some of users are
+overlapping, e.g., domain #1 and domain #2 have the same set of
+items but only have 8.52% overlapping users.
+Compared models. To verify the effectiveness of the proposed
+approach, we compare STAR with the following models:
+• Base. We refer to Base as the model composed of embedding
+layer, pooling & concatenation layer, batch normalization,
+and a 7-layer fully-connected network. Specifically, the pooling & concatenation layer is based on DIEN [43], which
+extracts user interest after the embedding layer. We mix all
+samples from different domains and train the base model.
+
+Table 1: The example percentage and average click-through rate (CTR) of each domain.
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+11
+
+12
+
+13
+
+14
+
+15
+
+16
+
+17
+
+18
+
+19
+
+Percentage
+
+0.99%
+
+1.61%
+
+3.40%
+
+3.85%
+
+2.79%
+
+0.56%
+
+4.27%
+
+16.76%
+
+10.00%
+
+12.16%
+
+0.76%
+
+1.31%
+
+3.34%
+
+28.76%
+
+1.17%
+
+0.46%
+
+1.05%
+
+0.91%
+
+5.85%
+
+CTR
+
+2.14%
+
+2.69%
+
+2.97%
+
+3.63%
+
+2.77%
+
+3.45%
+
+3.59%
+
+3.24%
+
+3.23%
+
+2.08%
+
+12.05%
+
+3.52%
+
+1.27%
+
+3.75%
+
+12.03%
+
+4.02%
+
+1.63%
+
+4.64%
+
+1.42%
+
+• Shared Bottom. The Shared Bottom model is a multi-task
+model that shares the parameters of the bottom layers. In
+our implementation, we let the Shared Bottom share the
+embedding layer. Each domain will also have a specific 7layer fully-connected network that is not shared.
+• MulANN. MulANN [34] adds domain discriminator module
+to the Base model. The domain discriminator classifies which
+domain the examples are from. MulANN adopts a adversarial
+loss to let the domain discriminator indiscriminates with
+respect to the shift between the domains.
+• MMoE. MMoE [25] implicitly models task relationships for
+multi-task learning, where different tasks may have different
+label spaces. Here we adapt MMoE for multi-domain CTR
+prediction, where each expert is a 7-layer fully-connected
+network. The number of experts is equal to the number of
+domains. Besides, MMoE also learns gating networks per
+domain that takes the input features and outputs softmax
+gates assembling the experts with different weights.
+• Cross-Stitch. Cross-Stitch [27] uses linear cross-stitch units
+to learn an optimal combination of task-specific representations. In the cross-stitch method, each domain have a 7-layer
+fully-connected network and the cross-stitch units are added
+in each hidden layer to learn task-specific representations.
+To give a fair comparison, all compared methods and the STAR
+model are trained with the proposed auxiliary network in Sec. 4.2.
+The ablation study about the auxiliary network is performed in
+Sec. 4.3.
+Implementation details. All models are trained with Adam [18],
+the learning rate is set to 0.001 and the batch size is 2000. We minimize the cross-entropy loss for samples from all domains to train
+the model.
+Metrics. Area under the ROC curve (AUC) is the common metric
+used to evaluate the performance of CTR prediction. An variation of
+user weighted AUC [44] measures the goodness of intra-user order
+by averaging AUC over users and is shown to be more relevant
+to online performance in recommender system. It is calculated as
+follows:
+Í𝑛
+#impression𝑖 × AUC𝑖
+AUC = 𝑖 Í𝑛
+,
+(9)
+𝑖 #impression𝑖
+where 𝑛 is the number of users, impression𝑖 and AUC𝑖 are the
+number of impressions and AUC of the 𝑖-th user, respectively. We
+use this weighted AUC as the evaluation metric and still refer it to
+as AUC for simplicity. Concretely, we use the AUC of each domain
+and overall AUC (mixing samples from all domains to calculate the
+overall AUC) as the metrics.
+
+4.2
+
+Results
+
+We evaluate all approaches on the Alibaba production dataset. To
+give a fair comparison, all compared methods and STAR model
+
+Table 2: Results of different approaches on offline Alibaba
+production dataset.
+Base
+
+Shared Bottom
+
+MulANN
+
+MMoE
+
+Cross-Stitch
+
+STAR
+
+#1
+#2
+#3
+#4
+#5
+#6
+#7
+#8
+#9
+#10
+#11
+#12
+#13
+#14
+#15
+#16
+#17
+#18
+#19
+
+0.6134
+0.6321
+0.6281
+0.6326
+0.6308
+0.6378
+0.6305
+0.6297
+0.6264
+0.6392
+0.6469
+0.6506
+0.6558
+0.6362
+0.6745
+0.6638
+0.6524
+0.6493
+0.6330
+
+0.6186
+0.6320
+0.6293
+0.6361
+0.6292
+0.6383
+0.6329
+0.6278
+0.6283
+0.6434
+0.6529
+0.6575
+0.6612
+0.6405
+0.6888
+0.6627
+0.6658
+0.6480
+0.6375
+
+0.6143
+0.6321
+0.6282
+0.6333
+0.6302
+0.6336
+0.6310
+0.6297
+0.6258
+0.6375
+0.6445
+0.6498
+0.6538
+0.6371
+0.6710
+0.6517
+0.6499
+0.6375
+0.6306
+
+0.6143
+0.6355
+0.6311
+0.6373
+0.6336
+0.6412
+0.6340
+0.6330
+0.6292
+0.6431
+0.6508
+0.6518
+0.6603
+0.6412
+0.6787
+0.6634
+0.6519
+0.6500
+0.6374
+
+0.6183
+0.6337
+0.6307
+0.6372
+0.6322
+0.6368
+0.6352
+0.6328
+0.6278
+0.6278
+0.6548
+0.6570
+0.6637
+0.6411
+0.6819
+0.6727
+0.6575
+0.6610
+0.6381
+
+0.6306
+0.6417
+0.6372
+0.6451
+0.6388
+0.6494
+0.6410
+0.6411
+0.6368
+0.6577
+0.6719
+0.6676
+0.6739
+0.6486
+0.7021
+0.6901
+0.6715
+0.6754
+0.6476
+
+Overall AUC
+
+0.6364
+
+0.6398
+
+0.6353
+
+0.6403
+
+0.6415
+
+0.6506
+
+are trained with the proposed auxiliary network. As illustrated
+in Table 2, the consistent improvement validates the efficacy of
+STAR. Note that the performance of MulANN is worse than the
+Base model, which proves obscuring domain difference hurts the
+modeling of multi-domain CTR prediction. Besides, the shared
+Bottom model, MMoE, Cross-Stitch and STAR all achieve better
+overall performance than the Base model. This demonstrates the
+importance of exploiting domain relationship and capturing domain
+distinction to enhance the prediction performance.
+Although the Shared Bottom, MMoE, and Cross-Stitch achieve
+better overall performance than the Base model, it is notable that
+in some domains, the AUCs of Shared Bottom, MMoE, and CrossStitch are worse than the Base model, e.g., domain # 5, #6, and #16.
+We hypothesize this is because the learning of these models conflicts in different domains. In contrast, STAR avoids this issue by its
+star topology, where the the domain-specific parameters are only
+updated through examples within this domain. The proposed STAR
+model exhibits superior performance across all domains compared
+with the Base model. STAR also achieves consistent improvement
+over the Shared Bottom, which demonstrates the importance of information sharing on top specific layers for multi-domain learning,
+where all domains share the same label space. STAR also outperforms MMoE and Cross-Stitch, which shows the superiority of
+explicitly modeling domain relationships compared with implicitly
+modeling domain relationships by the gate networks or cross-stitch
+units.
+
+Table 3: Ablation study of partitioned normalization (PN)
+and star topology fully-connected neural networks (STAR
+FCN). All models are trained with the proposed auxiliary
+network.
+
+Overall AUC
+
+Base (BN)
+
+Base (PN)
+
+STAR FCN (BN)
+
+STAR FCN (PN)
+
+0.6364
+
+0.6485
+
+0.6455
+
+0.6506
+
+Table 4: Ablation study of normalization methods for multidomain CTR prediction. STAR FCN is trained BN, LN, and
+PN respectively.
+Base
+
+Overall AUC
+
+4.3
+
+STAR FCN (BN)
+
+STAR FCN (LN)
+
+STAR FCN (PN)
+
+0.6455
+
+0.6463
+
+0.6506
+
+Ablation Study
+
+4.3.2 Normalization. Normalization methods are very effective
+components in deep learning, which have been shown by many
+practices to ease optimization and enable very deep networks to
+converge. We analyze the effect of different normalization methods including Batch Normalization (BN) [14], Layer Normalization
+(LN) [2] and the proposed Partitioned Normalization (PN) on multidomain CTR prediction. BN accumulates global statistics and learns
+global parameters for samples from all domains. LN is a representative instance-based normalization method, which operates along
+the channel dimension and avoids mixing statistics for samples
+from different domains.
+The result is shown in Table 4. Our first observation is that both
+LN and PN outperforms BN. This observation validates that data
+from different domains have distinct distribution and need specific
+normalization. Using global normalization obscures domain differences, which will hurt performance for multi-domain CTR prediction. We also observe that PN outperforms LN, which validates that
+domain-specific normalization is better than the instance-specific
+normalization, since PN leads to more accurate moments within
+the domain.
+4.3.3 Auxiliary network. We conduct experiment to assess the effect of the auxiliary network for different models. All methods are
+trained with and without the proposed auxiliary network. The result is illustrated in Figure 6. We observe that the auxiliary network
+improves all methods consistently. The result validates the importance of making full utilization of domain features and using it to
+
+MulANN
+
+MMOE
+
+Cross-Stitch
+
+STAR
+
+Figure 6: The performance of different methods trained
+with (w/) and without (w/o) the auxiliary network.
+2.00
+
+To investigate the effect of each component, we conduct several
+ablation studies.
+
+1.75
+
+Base Model
+STAR
+
+1.50
+
+PCOC
+
+4.3.1 STAR Topology FCN and PN. We analyze the influence of
+different components of STAR. Concretely, the separate effects of
+star topology FCN and PN are investigated. We compare (a) the
+Base model trained with BN, (b) Base model trained with PN, (c)
+STAR FCN with BN and (d) STAR model (STAR FCN + PN). The
+result is reported in Table 3. We observe that using star topology
+FCN and PN separately can outperform the Base model. Bring them
+together can further boost performance. The result validates the
+effect of both star topology FCN and PN.
+
+Shared Bottom
+
+1.25
+1.00
+0.75
+0.50
+0.25
+0.00
+
+Figure 7: Predicted CTR over CTR (PCOC) of the Base model
+and STAR in all domains. Each circle means PCOC of a specific domain.
+
+capture the domain distinction. We also observe the improvement
+of the auxiliary network for MulANN is slightly weaker than the
+other methods. The reason may due to the fact that the adversarial
+loss for obscuring domain differences contradicts with the domain
+feature to capture the domain differences.
+4.3.4 Ability to Capture Domain Distinction. Cost-per-click (CPC)
+is a widely used performance-dependent payment model in display
+advertising, where advertisers bid for clicks. In CPC, the display
+systems compute the effective cost per mille (eCPM) as the product
+of bid times its CTR. The systems allocate impressions according to
+the descending order of the eCPM. In CPC, the CTR model needs to
+be well-calibrated [12] in order to achieve a competitive advertising
+system, i.e., the predicted CTR should be as close as to the actual
+CTR.
+We show that STAR is more well-calibrated and is capable of
+capturing domain distinctions. We compute the predicted CTR
+over CTR (PCOC) in each domain. Note that the closer PCOC is to
+1.0, the more accurate the CTR prediction is. For the simplicity of
+illustration, we show the PCOCs of the Base model and STAR in
+Figure 7. We can see that the PCOCs of STAR in different domains
+are more compact and concentrated around 1.0 compared with the
+
+Table 5: CTR and RPM gains in online display advertising
+system of Alibaba.
+
+Overall
+
+CTR
+
+RPM
+
++8.0%
+
++6.0%
+
+Base model. The result validates the ability of STAR to capture the
+domain distinction.
+
+4.4
+
+Production
+
+Online serving and challenges. One of the challenges in industrial recommender is that the distribution of features and CTR
+exhibits large shifts over time. To capture the dynamic change of
+data in real-time, it is important to use real-time examples to update the CTR models continuously to prevent them from becoming
+stale. However, for multi-domain CTR prediction, the percentage
+of examples of each domain changes over time. For example, some
+business domains have traffic spike in the morning while some
+business domains have traffic spike in the evening. If we train the
+model directly in the chronological order, the changes in data percentage over time will cause the instability of model learning. To
+address this issue, we redesign the data pipeline and maintain a
+buffer that stores a sliding window of history samples to avoid
+the sudden change of example percentage. Specifically, samples
+in the buffer are shuffled firstly and then sampled to construct a
+mini-batch. After fed to the model, this mini-batch of samples are
+removed from the buffer and new arriving data is added to this
+buffer. We empirically found this training manner is more stable
+than the traditional way of online updates.
+Note that during serving, the weights of FCN for each domain
+are pre-computed to achieve faster inferences. By this means, the
+computational time of STAR equals the Shared Bottom model. The
+systematical optimization makes STAR capable of serving main
+traffic of multiple business domains stably. Since 2020, STAR is
+deployed and serves more than 60 business domains on the display
+advertising system of Alibaba. We compute the overall improvements of all domains. Table 5 shows the improvement of STAR over
+the previous production model, the Base model. The introduction
+of STAR brings +8.0% overall CTR lift and +6.0% overall RPM lift in
+our online A / B test.
+
+5
+
+CONCLUSION
+
+In this paper, we propose the star topology adaptive recommender
+to address the problem of multi-domain CTR prediction. Instead
+of keeping unique models for different domains or simply mixing all samples and maintaining a shared model, STAR has the
+star topology, which consists of shared centered parameters and
+domain-specific parameters. The shared parameters learn commonalities, which is updated through all examples. The domain-specific
+parameters capture domain distinction for more refined prediction,
+which is learned using examples within the specific domain. By
+this means, STAR can adaptively modulate its parameters conditioned on the domain for more refined prediction. The experiments
+demonstrate that the superiority of STAR on multi-domain CTR
+prediction. Since 2020, STAR is deployed in the advertising system
+of Alibaba, obtaining 8.0% improvement on CTR and 6.0% on RPM.
+
+REFERENCES
+[1] Andreas Argyriou, Theodoros Evgeniou, and Massimiliano Pontil. 2008. Convex
+multi-task feature learning. Machine Learning 73, 3 (2008), 243–272.
+[2] Lei Jimmy Ba, Jamie Ryan Kiros, and Geoffrey E. Hinton. 2016. Layer Normalization. CoRR abs/1607.06450 (2016).
+[3] Shai Ben-David, John Blitzer, Koby Crammer, Alex Kulesza, Fernando Pereira, and
+Jennifer Wortman Vaughan. 2010. A theory of learning from different domains.
+Machine Learning 79, 1-2 (2010), 151–175.
+[4] Steffen Bickel, Michael Brückner, and Tobias Scheffer. 2007. Discriminative
+learning for differing training and test distributions. In Proceedings of the 24th
+International Conference on Machine Learning, Vol. 227. 81–88.
+[5] Rich Caruana. 1998. Multitask Learning. In Learning to Learn. 95–133.
+[6] Heng-Tze Cheng, Levent Koc, Jeremiah Harmsen, Tal Shaked, Tushar Chandra,
+Hrishi Aradhye, Glen Anderson, Greg Corrado, Wei Chai, Mustafa Ispir, et al.
+2016. Wide & deep learning for recommender systems. In Proceedings of the 1st
+Workshop on Deep Learning for Recommender Systems. ACM, 7–10.
+[7] Ronan Collobert and Jason Weston. 2008. A Unified Architecture for Natural
+Language Processing: Deep Neural Networks with Multitask Learning. In Proceedings of the 25-th International Conference on Machine Learning, William W.
+Cohen, Andrew McCallum, and Sam T. Roweis (Eds.), Vol. 307. 160–167.
+[8] Li Deng, Geoffrey E. Hinton, and Brian Kingsbury. 2013. New Types of Deep
+Neural Network Learning for Speech Recognition and Related Applications: An
+Overview. In Proceedings of the 2013 IEEE International Conference on Acoustics,
+Speech and Signal Processing. 8599–8603.
+[9] Mark Dredze, Alex Kulesza, and Koby Crammer. 2010. Multi-Domain Learning by
+Confidence-Weighted Parameter Combination. Maching Learning 79, 1-2 (2010),
+123–149.
+[10] Yufei Feng, Fuyu Lv, Weichen Shen, Menghan Wang, Fei Sun, Yu Zhu, and Keping
+Yang. 2019. Deep Session Interest Network for Click-Through Rate Prediction.
+In Proceedings of the 28th International Joint Conference on Artificial Intelligence.
+2301–2307.
+[11] Jerome H Friedman. 2001. Greedy function approximation: a gradient boosting
+machine. Annals of statistics (2001), 1189–1232.
+[12] Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q. Weinberger. 2017. On Calibration
+of Modern Neural Networks. In Proceedings of the 34th International Conference on
+Machine Learning (Proceedings of Machine Learning Research, Vol. 70). 1321–1330.
+[13] Huifeng Guo, Ruiming Tang, Yunming Ye, Zhenguo Li, and Xiuqiang He. 2017.
+Deepfm: a factorization-machine based neural network for ctr prediction. In
+Proceedings of the 26th International Joint Conference on Artificial Intelligence.
+Melbourne, Australia., 2782–2788.
+[14] Sergey Ioffe and Christian Szegedy. 2015. Batch Normalization: Accelerating
+Deep Network Training by Reducing Internal Covariate Shift. In Proceedings of
+the 32nd International Conference on Machine Learning, Vol. 37. 448–456.
+[15] Biye Jiang, Chao Deng, Huimin Yi, Zelin Hu, Guorui Zhou, Yang Zheng, Sui
+Huang, Xinyang Guo, Dongyue Wang, Yue Song, et al. 2019. XDL: An Industrial
+Deep Learning Framework for High-Dimensional Sparse Data. In Proceedings of
+the 1st International Workshop on Deep Learning Practice for High-Dimensional
+Sparse Data. 1–9.
+[16] Mahesh Joshi, Mark Dredze, William W. Cohen, and Carolyn Penstein Rosé.
+2012. Multi-Domain Learning: When Do Domains Matter?. In Proceedings of the
+2012 Joint Conference on Empirical Methods in Natural Language Processing and
+Computational Natural Language Learning. 1302–1312.
+[17] Alex Kendall, Yarin Gal, and Roberto Cipolla. 2018. Multi-task learning using
+uncertainty to weigh losses for scene geometry and semantics. 7482–7491.
+[18] Diederik P. Kingma and Jimmy Ba. 2015. Adam: A Method for Stochastic Optimization. In Proceedings of the 3rd International Conference on Learning Representations.
+[19] Yehuda Koren. 2008. Factorization meets the neighborhood: a multifaceted
+collaborative filtering model. In Proceedings of the 14th ACM SIGKDD International
+Conference on Knowledge Discovery and Data Mining. Las Vegas, Nevada, USA,
+426–434.
+[20] Yehuda Koren, Robert M. Bell, and Chris Volinsky. 2009. Matrix Factorization
+Techniques for Recommender Systems. IEEE Computer 42, 8 (2009), 30–37.
+[21] Chao Li, Zhiyuan Liu, Mengmeng Wu, Yuchi Xu, Huan Zhao, Pipei Huang,
+Guoliang Kang, Qiwei Chen, Wei Li, and Dik Lun Lee. 2019. Multi-Interest
+Network with Dynamic Routing for Recommendation at Tmall. In Proceedings of
+the 28th ACM International Conference on Information and Knowledge Management.
+2615–2623.
+[22] Pengcheng Li, Runze Li, Qing Da, Anxiang Zeng, and Lijun Zhang. 2020. Improving Multi-Scenario Learning to Rank in E-commerce by Exploiting Task
+Relationships in the Label Space. In Proceedings of The 29th ACM International
+Conference on Information and Knowledge Management0. 2605–2612.
+[23] Jianxun Lian, Xiaohuan Zhou, Fuzheng Zhang, Zhongxia Chen, Xing Xie, and
+Guangzhong Sun. 2018. xDeepFM: Combining Explicit and Implicit Feature
+Interactions for Recommender Systems. In Proceedings of the 24th ACM SIGKDD
+
+International Conference on Knowledge Discovery & Data Mining. London, United
+Kingdom.
+[24] Jiaqi Ma, Zhe Zhao, Jilin Chen, Ang Li, Lichan Hong, and Ed H. Chi. 2019. SNR:
+Sub-Network Routing for Flexible Parameter Sharing in Multi-Task Learning. In
+Proceedings of The 33rd AAAI Conference on Artificial Intelligence. 216–223.
+[25] Jiaqi Ma, Zhe Zhao, Xinyang Yi, Jilin Chen, Lichan Hong, and Ed H. Chi. 2018.
+Modeling Task Relationships in Multi-task Learning with Multi-gate Mixtureof-Experts. In Proceedings of the 24th ACM SIGKDD International Conference on
+Knowledge Discovery & Data Mining. 1930–1939.
+[26] Xiao Ma, Liqin Zhao, Guan Huang, Zhi Wang, Zelin Hu, Xiaoqiang Zhu, and Kun
+Gai. 2018. Entire Space Multi-Task Model: An Effective Approach for Estimating
+Post-Click Conversion Rate. In The 41st International ACM SIGIR Conference on
+Research & Development in Information Retrieval. 1137–1140.
+[27] Ishan Misra, Abhinav Shrivastava, Abhinav Gupta, and Martial Hebert. 2016.
+Cross-Stitch Networks for Multi-task Learning. 3994–4003.
+[28] Qi Pi, Weijie Bian, Guorui Zhou, Xiaoqiang Zhu, and Kun Gai. 2019. Practice
+on Long Sequential User Behavior Modeling for Click-through Rate Prediction.
+In Proceedings of the 25th ACM SIGKDD International Conference on Knowledge
+Discovery & Data Mining. 1059–1068.
+[29] Qi Pi, Guorui Zhou, Yujing Zhang, Zhe Wang, Lejian Ren, Ying Fan, Xiaoqiang
+Zhu, and Kun Gai. 2020. Search-based User Interest Modeling with Lifelong
+Sequential Behavior Data for Click-Through Rate Prediction. In Proceeding of The
+29th ACM International Conference on Information and Knowledge Management.
+2685–2692.
+[30] Yanru Qu, Han Cai, Kan Ren, Weinan Zhang, Yong Yu, Ying Wen, and Jun Wang.
+2016. Product-based neural networks for user response prediction. In Proceedings
+of the16th International Conference on Data Mining. IEEE, 1149–1154.
+[31] Alec Radford, Luke Metz, and Soumith Chintala. 2016. Unsupervised Representation Learning with Deep Convolutional Generative Adversarial Networks. In
+Proceedings of the 4th International Conference on Learning Representations.
+[32] Steffen Rendle. 2010. Factorization machines. In Proceedings of the 10th International Conference on Data Mining. IEEE, 995–1000.
+[33] Sebastian Ruder. 2017. An Overview of Multi-Task Learning in Deep Neural
+Networks. CoRR abs/1706.05098 (2017).
+[34] Alice Schoenauer Sebag, Louise Heinrich, Marc Schoenauer, Michèle Sebag,
+Lani F. Wu, and Steven J. Altschuler. 2019. Multi-Domain Adversarial Learning.
+In Proceedings of the 7th International Conference on Learning Representations.
+[35] Ozan Sener and Vladlen Koltun. 2018. Multi-Task Learning as Multi-Objective
+Optimization. In Advances in Neural Information Processing Systems 31. 525–536.
+[36] Hongyan Tang, Junning Liu, Ming Zhao, and Xudong Gong. 2020. Progressive Layered Extraction (PLE): A Novel Multi-Task Learning (MTL) Model for
+
+Personalized Recommendations. In Proceedings of the 14th ACM Conference on
+Recommender Systems. 269–278.
+[37] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
+Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. 2017. Attention is All
+you Need. In Advances in Neural Information Processing Systems 30. 5998–6008.
+[38] Ximei Wang, Ying Jin, Mingsheng Long, Jianmin Wang, and Michael I. Jordan.
+2019. Transferable Normalization: Towards Improving Transferability of Deep
+Neural Networks. In Advances in Neural Information Processing Systems 32 Vancouver, BC, Canada. 1951–1961.
+[39] Hong Wen, Jing Zhang, Yuan Wang, Fuyu Lv, Wentian Bao, Quan Lin, and Keping
+Yang. 2020. Entire Space Multi-Task Modeling via Post-Click Behavior Decomposition for Conversion Rate Prediction. In Proceedings of the 43rd International ACM
+SIGIR conference on research and development in Information Retrieval. 2377–2386.
+[40] Zhibo Xiao, Luwei Yang, Wen Jiang, Yi Wei, Yi Hu, and Hao Wang. 2020. Deep
+Multi-Interest Network for Click-through Rate Prediction. In Proceedings of the
+29th ACM International Conference on Information and Knowledge Management.
+2265–2268.
+[41] Yongxin Yang and Timothy M. Hospedales. 2015. A Unified Perspective on
+Multi-Domain and Multi-Task Learning. In Proceeding of the 3rd International
+Conference on Learning Representations.
+[42] Fajie Yuan, Guoxiao Zhang, Alexandros Karatzoglou, Xiangnan He, Joemon Jose,
+Beibei Kong, and Yudong Li. 2020. One Person, One Model, One World: Learning
+Continual User Representation without Forgetting. CoRR abs/2009.13724 (2020).
+arXiv:2009.13724 https://arxiv.org/abs/2009.13724
+[43] Guorui Zhou, Na Mou, Ying Fan, Qi Pi, Weijie Bian, Chang Zhou, Xiaoqiang Zhu,
+and Kun Gai. 2019. Deep Interest Evolution Network for Click-Through Rate
+Prediction. In Proceedings of the 33rd AAAI Conference on Artificial Intelligence.
+Honolulu, Hawaii, USA, 5941–5948.
+[44] Guorui Zhou, Xiaoqiang Zhu, Chenru Song, Ying Fan, Han Zhu, Xiao Ma, Yanghui
+Yan, Junqi Jin, Han Li, and Kun Gai. 2018. Deep interest network for click-through
+rate prediction. In Proceedings of the 24th ACM SIGKDD International Conference
+on Knowledge Discovery & Data Mining. ACM, 1059–1068.
+[45] Yunhong Zhou, Dennis Wilkinson, Robert Schreiber, and Rong Pan. 2008. Largescale parallel collaborative filtering for the netflix prize. In Proceedings of the
+International Conference on Algorithmic Applications in Management. Springer,
+337–348.
+[46] Han Zhu, Junqi Jin, Chang Tan, Fei Pan, Yifan Zeng, Han Li, and Kun Gai. 2017.
+Optimized Cost per Click in Taobao Display Advertising. In Proceedings of the
+23rd ACM SIGKDD International Conference on Knowledge Discovery and Data
+Mining. 2191–2200.
+
+

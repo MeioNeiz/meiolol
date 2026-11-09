@@ -1,0 +1,481 @@
+“Embarrassingly Causal”: Causal Use of Associational Data in Magic The Gathering Drafts
+
+
+Mark Louie F. Ramos, Ph.D.
+Department of Health Policy and Administration, The Pennsylvania State University, University Park, PA
+mlr6219@psu.edu
+
+
+
+
+Abstract
+
+Observational data are often used to answer causal questions, yet the legitimacy of doing
+so is often argued to hinge on strong, domain-supported assumptions about underlying
+causal structure with limited guidance on how much domain-knowledge support should
+exist to justify including a causal edge of interest in a directed acyclic graph (DAG). We
+introduce the criterion of “embarrassingly causal” scenarios, where the existence of an
+exposure → outcome relationship is so uncontroversial that the assumptions needed to
+include the corresponding causal edge in a DAG can be reasonably made. Using the case
+of Magic: The Gathering booster draft decisions and gameplay outcomes, we show how
+purely observational data from 17Lands.com are widely and effectively used to guide draft
+choices despite substantial confounding, selection effects, and post-treatment
+conditioning. We argue that the embarrassingly causal quality is a sufficient condition for
+justifying the construction of causal estimands and the collection of observational data to
+estimate them. Correspondingly, we provide guidance on evaluating observational causal
+inference assumptions for authors, reviewers, and readers.
+1.     Introduction
+
+There is ongoing debate over the extent to which causal structure can be learned from
+observational data. In machine learning, a growing literature on causal discovery argues
+that, under sufficiently strong structural assumptions such as faithfulness, causal
+sufficiency, or independence of causal mechanisms, statistical patterns in observational
+data may partially identify causal graphs or even latent causal variables [1–3] Within this
+framework, causal structure is treated as an object that may be discoverable, at least in
+part, from appropriately modeled data. In contrast, much of contemporary causal
+inference in statistics and epidemiology emphasizes that causal directed acyclic graphs
+(DAGs) primarily encode scientiﬁc assumptions about the data-generating process (dgp)
+and cannot themselves be justiﬁed by observational data alone [4–6]. In this perspective,
+researchers use substantive knowledge about the dgp to assume a speciﬁc DAG and
+estimate causal quantities identiﬁed under this assumption.
+
+Amid this debate lies persistent difficulties in communicating the foundational limits of
+causal inference from observational data to both the general public and even to practicing
+quantitative researchers who encounter or use observational causal inference tools.
+Recent work suggests that misunderstandings commonly arise at both extremes: some
+interpret “correlation is not causation” as an absolute prohibition [7, 8], missing the nuance
+that correlations can reﬂect causal relationships under assumptions, while others
+overread associations as causal without justiﬁcation [9] or assume that turning an
+association into a causal effect is a purely statistical or mathematical exercise [10].
+
+It is in this context that this paper is situated. We take the position that causal inference
+from observational data necessarily relies on strong, explicit a priori assumptions about
+causal structure that must be articulated prior to decisions about acquiring or analyzing
+data and should heavily inform such decisions. In this sense, causal assumptions are not
+merely considerations that are applied post hoc, like the Bradford-Hill criteria for when
+observed associational evidence may be treated as causal [11], but foundational
+commitments that determine whether an observational dataset may be relevant to a
+causal question in the ﬁrst place. As such, a central methodological concern is being able
+to qualify the reasonableness of these assumptions. Many sources point to the importance
+of domain knowledge from subject-matter experts in justifying a causal edge in a DAG but
+there is no guidance on how much domain knowledge is sufficient [5, 12]. In fact, it is
+somewhat meaningless to think about this in terms of how many subject-matter experts
+one can get to agree that it is reasonable to include a speciﬁc causal edge in a graph or
+make a potential outcomes assumption, and yet there is somewhat a kernel of truth to that
+since if practically everyone in the domain agrees that a speciﬁc causal edge is obviously
+reasonable to include, then that assumption is defensible based on existing domain
+knowledge. Towards this end, we deﬁne the “embarrassingly causal” criterion to formalize
+a class of situations in which the causal structure between an exposure and an outcome is
+so strongly supported by domain knowledge that including the corresponding causal edge
+in a DAG is uncontroversial. While, even in these scenarios, identiﬁcation of speciﬁc useful
+estimands may remain difficult or even impossible, and such estimands may still be
+practically negligible or even zero, the causal direction itself need not be treated as
+uncertain.
+
+We demonstrate an embarrassingly causal scenario in the context of using observational
+data from 17lands.com when making pick decisions for the booster draft game format of
+the collectible card game, Magic: The Gathering. In this setting, players repeatedly face
+well-deﬁned decision points, followed by downstream game outcomes that depend on
+those choices. Although the data collected by 17Lands are entirely observational and
+subject to estimand identiﬁcation and analysis issues such as substantial confounding,
+selection effects, and post-treatment conditioning, we show that the causal structure from
+pick choices to subsequent win outcomes is not plausibly in doubt, making it reasonable
+to collect and analyze such data for the purpose of informing intervening decisions. In the
+succeeding sections, we expound on the context of Magic: The Gathering booster drafts
+and the 17Lands dataset. Then, we illustrate the causal identiﬁcation problem in this
+context and demonstrate how purely observational data are effectively used in practice.
+We examine the justiﬁcation for this usage under our embarrassingly causal framework and
+consider the extent to which this framework is sufficient and necessary for observational
+causal inference in general.
+
+2.       Magic: The Gathering Booster Drafts
+     2.1. Magic: The Gathering
+
+Magic: The Gathering (MTG) is a long-running collectible card game created in 1993 by
+mathematician Richard Garﬁeld [13]. It has since grown into a globally recognized strategy
+game with millions of players and a deeply studied competitive ecosystem and trading card
+economy [14–17]. Each game of MTG is played with decks constructed from a large pool of
+cards and is almost always a zero-sum game where players take turns until one of them
+wins. MTG is a billion dollar brand [18] with a competitive scene that offers millions of
+dollars in prizes annually [19].
+
+     2.2. Booster Draft Leagues
+
+I focus this exposition on Magic: The Gathering Arena (MTGA) booster draft leagues. MTGA
+is the primary digital platform for playing Magic: The Gathering. In a booster draft, eight
+human players are placed into a virtual pod. Each player opens a 15-card booster pack,
+selects one card, and passes the remaining cards to the next player. This continues until all
+cards from the pack have been drafted. The process is repeated for a total of three packs
+per person, with the direction of passing alternating in each pack. After drafting, players
+construct a minimum 40-card deck using the cards they selected [20]. After building their
+decks, players enter a queue and are matched against other players to play a round. They
+can be matched against any player who is in the queue, not necessarily the people they
+drafted with [21].
+
+     2.3. Causal Identiﬁcation Problem
+
+Deﬁne 𝐶𝐶𝑡𝑡 as the action of picking a card at pick 𝑡𝑡, where 𝑡𝑡 = 1 … 45. Next, deﬁne the
+indicator variable 1𝑤𝑤𝑤𝑤𝑤𝑤 , which denotes that future outcome (win or loss) of a match that the
+player will play using the deck drafted. We are interested in the causal effect of 𝐶𝐶𝑡𝑡 on 1𝑤𝑤𝑤𝑤𝑤𝑤 .
+That is, how much does picking a speciﬁc card among the choices in pick 𝑡𝑡 affect the
+probability that the player will win some future match with the deck eventually drafted.
+Formally, for any card 𝑐𝑐 present at pick 𝑡𝑡, we are interested in the following estimands.
+
+𝑃𝑃𝑃𝑃� 1𝑤𝑤𝑤𝑤𝑤𝑤 ∣∣ 𝑑𝑑𝑑𝑑(𝐶𝐶𝑡𝑡 = 𝑐𝑐) �        (1)
+
+𝑃𝑃𝑃𝑃� 1𝑤𝑤𝑤𝑤𝑤𝑤 ∣∣ 𝑑𝑑𝑑𝑑(𝐶𝐶𝑡𝑡 = 𝑐𝑐) � − 𝑃𝑃𝑃𝑃� 1𝑤𝑤𝑤𝑤𝑤𝑤 ∣∣ 𝑑𝑑𝑑𝑑(𝐶𝐶𝑡𝑡 = 𝑐𝑐 ′ ) �   (2)
+
+Knowing these gives the player a clear, causally justiﬁed, strategy on what card to choose.
+Among the cards presented to them in pick 𝑡𝑡 = 1, an optimal strategy is some function of
+(1) and (2). For example, choosing the maximum (2) among the cards meeting some
+minimum threshold for (1). Beyond 𝑡𝑡 = 1, the same rule may be used but with the caveat of
+considering cards already chosen. The inﬂuence of this caveat grows as the draft
+progresses, until such a time when the player decides to “lock-in” and limit their choices
+only among cards that are relevant to the current pool of cards already selected.
+
+However, estimating these quantities is very challenging. Decisions for each pick are
+embedded in a dynamic, history-dependent process with downstream consequences and
+substantial outcome noise. Likewise, the outcome of winning a match given a card is
+picked is inﬂuenced by a cascade of factors such as the player’s and their opponent’s skill
+and strategic tendencies, the favorability of the match based on all other cards in the
+players’ decks and the inherent variance of the game itself.
+
+3. Embarrassingly Causal Associations in 17Lands data
+
+     3.1. 17Lands data
+17Lands is a large, crowd-sourced dataset collected from players of Magic: The Gathering
+Arena who opt in to share their draft and gameplay logs [22]. For each draft, the system
+records the full sequence of packs and picks encountered by the player (but not by other
+players in the draft who have not opted into 17Lands), the evolving contents of the player’s
+deck, and the outcomes of the matches played with that deck. This results in a rich dataset
+that contains millions of pick decisions and thousands of match results across a wide
+range of players.
+
+From this raw dataset, 17Lands computes various card-level summary statistics that are
+published on their website [23]. These include both raw frequencies, such as the number of
+packs in which a card has been seen, and functions of frequencies, such as Average Last
+Seen At (ALSA), deﬁned as “the average pick number where this card was last seen in
+packs” [23]. Three statistics speciﬁcally of interest are as follows:
+
+Games in Hand Win Rate (GIHWR): The win rate of games where an instance of the card
+was drawn into hand, either in the opening hand or later.
+
+Games Not Seen Win Rate (GNSWR): The win rate in games where one or more copies of
+the card was in the deck but not seen at any stage of the game.
+
+Improvement In Hand (IIH): The difference between Games in Hand Win Rate and Games
+Not Seen Win Rate.
+
+These statistics are of interest because they seem to be estimators of our estimands, yet it
+is clear that these estimators are not unbiased for our estimands. First, GIHWR is
+conditioned on drawing the card, and thus is closer to the estimand:
+
+𝑃𝑃𝑃𝑃� 1𝑤𝑤𝑤𝑤𝑤𝑤 ∣ 𝑑𝑑𝑑𝑑(𝐶𝐶𝑡𝑡 = 𝑐𝑐), 1𝑑𝑑𝑑𝑑𝑑𝑑𝑑𝑑_𝑐𝑐 = 1 �                   (3)
+
+While (3) is also a reasonable estimand, GIHWR is still biased for (3). For example, drawing
+a speciﬁc card 𝑐𝑐 is confounded with variables such as the number of turns in the game,
+which also affects 𝑃𝑃𝑃𝑃(1𝑤𝑤𝑤𝑤𝑤𝑤 ) depending on the totality of cards in each deck (some decks
+are designed to win quickly while others are designed to play longer games). In addition,
+some cards are much more impactful when played in earlier turns than on later turns.
+
+On the other hand, IIH only looks visually similar to (2) but is entirely different. The
+estimand (2) compares the probability of winning when picking 𝑐𝑐 at pick 𝑡𝑡 compared to not
+doing so, but IIH conditions on having picked 𝑐𝑐 and compares the win rate when it is drawn
+compared to when it is not. Thus, the corresponding estimand for IIH is closer to
+
+𝑃𝑃𝑃𝑃� 1𝑤𝑤𝑤𝑤𝑤𝑤 ∣ 𝑑𝑑𝑑𝑑(𝐶𝐶𝑡𝑡 = 𝑐𝑐), 1𝑑𝑑𝑑𝑑𝑑𝑑𝑑𝑑_𝑐𝑐 = 1 � − 𝑃𝑃𝑃𝑃� 1𝑤𝑤𝑤𝑤𝑤𝑤 ∣ 𝑑𝑑𝑑𝑑(𝐶𝐶𝑡𝑡 = 𝑐𝑐), 1𝑑𝑑𝑑𝑑𝑑𝑑𝑑𝑑_𝑐𝑐 = 0 �   (4)
+
+And IIH is still biased for (4) similar to how GIHWR is biased for (3).
+   3.2. Wide and effective use of naïve associations
+
+It is clear that both GIHWR and IIH are naïve associational quantities that can be heavily
+biased estimators of useful estimands (3) and (4). Earlier, it was pointed out that if good
+estimates of (1) and (2) were available, then the player can use simple strategies involving
+these to make optimal decisions for each pick. Similar arguments can be made for
+estimands (3) and (4). However, what is remarkable is that despite the fact that these are
+associational data only, 17Lands data have been widely and effectively used to inform
+decisions in draft as though they were causal estimates [24–26]. Alex Nikolic, a draft
+specialist and content creator [27] wrote that GIHWR “is the gold standard for when you're
+just trying to look up the ‘raw power’ of a card.” [26] Sam Black, former professional player
+with multiple accolades playing draft [28] wrote that negative IIH “means drawing (this
+card) actively hurts your chances of winning.” [25] While these people are experts at
+drafting, not observational causal inference scientists, their perspectives do duly consider
+the issues of treating GIHWR and IIH as causal estimates. As Nikolic claimed that GIHWR
+is “the least biased metric to determine ‘raw power’” while criticizing IIH as “naturally
+harbors a few biases which makes it an unreliable metric to look at.” [26] Black explains
+cards with negative IIH but high GIHWR as “this card itself isn’t as strong as the win rate
+suggests; it just happens to make it into good decks.” [25] Sierkovitz, another draft expert,
+cautioned that “we can’t say from these raw WR numbers whether it is the card in question
+that may help you win or if it was the rest of the deck doing well,” but also recommends to
+“think of the data as a humble servant that lets you improve your draft and gameplay.” [24]
+Thus, while these sources recognize the weaknesses of GIHWR and IIH as causal
+estimates, they nonetheless agree that using them to inform picks, especially early ones, is
+causally informative of a player’s chances of winning.
+
+4. Sufficiency and necessity of embarrassingly causal qualiﬁcation for causal
+   observational studies
+
+   4.1. Sufficiency of embarrassingly causal contexts
+
+The case described is qualiﬁed as an “embarrassingly causal” scenario. An embarrassingly
+causal scenario is one in which the main exposure → outcome relationship of interest is so
+supported by domain knowledge that the reasonableness of including it in a DAG for
+observational causal inference can be safely assumed. Naturally, the true sign or
+magnitude of this assumed causal effect, including the possibility that it is exactly zero,
+remains an empirical question. Rather, we hold that the embarrassingly causal quality is a
+sufficient condition for justifying the attempt to estimate the effect in purely observational
+data settings.
+All the data in 17Lands.com are observational only. There is no randomization or control
+made in its collection. While useful estimands (1) – (4) can be conceptualized, they are very
+difficult if not impossible to operationalize for direct estimation. Despite this, no
+reasonable draft player would doubt the causal direction 𝐶𝐶𝑡𝑡 → 1𝑤𝑤𝑤𝑤𝑤𝑤 ; whether they choose
+card 𝑐𝑐 on some pick 𝑡𝑡 causally affects the outcomes of the games in that draft that they
+have yet to play. This domain knowledge is so strongly accepted that the expected values of
+GIHWR and IIH are simply assumed to be informative estimands even if those expectations
+are not (3) or (4) respectively, and such that simply picking the card with the highest GIHWR
+at 𝑡𝑡 = 1 is a valid causally informed decision for maximizing win rate.
+
+This example is not intended to suggest that embarrassingly causal scenarios justify
+relaxing rigorous methods for establishing and estimating useful causal estimands, but
+rather illustrates how this quality bestows conﬁdence that even purely associational data,
+whatever their actual values end up being, are causally informative. As such, we claim that
+the embarrassingly causal quality is a sufficient condition for justifying the necessary
+assumption of causal relevance in causal observational studies. That is, for scenarios
+where the relationship between the proposed exposure and outcome is embarrassingly
+causal, it is justiﬁed to pursue constructing the estimand and its estimator and acquiring
+the observational data that would allow for estimation.
+
+   4.2. Extent of necessity of embarrassingly causal contexts
+
+The embarrassingly causal qualiﬁcation is by no means a low bar for a proposed
+observational causal inference study to clear. As illustrated by the case examined here, it
+requires overwhelming domain-level acceptance that, in principle, the exposure →
+outcome relationship holds. The causal direction itself is not in dispute; the scientiﬁc
+question concerns the magnitude, sign, or contextual relevance of the effect within the
+data-generating process at hand, including the possibility that the effect is negligible or
+exactly zero.
+
+Therefore, in considering the necessity of embarrassingly causal qualiﬁcation, we ﬁrst
+provide more examples of situations that ﬁt this context. Consider the very common subset
+of observational causal inference studies that seek to examine the impact of interventions
+from successful randomized controlled trials (RCTs) in “real world evidence” (RWE)
+settings. In such studies, the causal direction from intervention to outcome is generally not
+plausibly contested unless the internal validity of the RCT itself is challenged. That is, if one
+is sufficiently satisﬁed that the RCT showed causality of exposure to outcome for the
+sample in the study, the fact that this sample is only expected to generalize for the
+population it speciﬁcally represents still implies that it can plausibly transport to other
+populations it does not exactly represent, thereby justifying data gathering and analysis in
+those external settings under some suitable observational causal inference strategy. Thus,
+this subset of observational causal inference studies does fall under the embarrassingly
+causal qualiﬁcation. This is consistent with prevailing opinions on the utility of real world
+evidence studies in supplementing randomized clinical trials [29, 30]. The U.S. FDA
+provides guidance on the use of RWE to help support approval of a new indication for drugs
+that have already been approved on the basis of clinical trial evidence [30].
+
+Another subset of scenarios that qualify as embarrassingly causal is when the exposure →
+outcome relationship has a universally supported mechanism. For example, consider
+examining the effect of radiation exposure on getting cancer. The mechanism for the basic
+causal claim – exposure to radiation causally contributes to the risk of getting cancer, is
+well-known and accepted [31]. This applies across different settings where the same
+relationship is investigated, like in the INWORKS cohort study that was recently updated
+with causal estimands for the direct effect of radiation dose on cancer mortality [32]. This
+same reasoning can be used to justify why studies that investigate asbestos exposure
+effects on developing mesothelioma [33] or alcohol exposure effects on liver cirrhosis are
+likewise embarrassingly causal [34].
+
+Having identiﬁed broader examples of scenarios that qualify as embarrassingly causal, we
+now consider how necessary this qualiﬁcation is for justifying causal interpretation in
+observational studies. Importantly, the absence of this quality does not hinder the analysis
+of observational data, nor does it preclude the use of explicitly causal frameworks,
+including approaches that invoke causal structure such as instrumental variables designed
+to approximate randomization or structural equation models used to deﬁne causally
+motivated estimands. However, when the embarrassingly causal quality is absent, it
+means there remains substantive doubt that the assumed causal structure is correct, with
+alternative causal structures, especially unmeasured confounding or reverse causation,
+that are considered at least as plausible. This uncertainty impacts the interpretation of any
+resulting causal estimate regardless of its sign or magnitude, because the estimate is
+conditional on a causal structure that is itself not uniquely supported by domain
+knowledge. This is especially concerning for causal discovery and DAG-exploration
+algorithms, which attempt to infer the causal structure directly from observational data.
+We argue similarly with other critiques of these methods [35, 36] that in the absence of
+embarrassingly causal structure, such approaches are unavoidably underdetermined:
+multiple, substantively distinct causal graphs remain observationally compatible with the
+data, and any edge orientation relies on strong auxiliary assumptions rather than
+domain-supported causal direction. As a result, these methods do not resolve causal
+ambiguity, and estimates resulting from them should not satisfactorily rebut contrary
+plausible causal explanations that may simply not yet have available data.
+5. Conclusions and Recommendations
+
+Through the case of purely observational data used to make causal decisions in Magic: The
+Gathering drafts, we showed the importance of the causal relevance assumption for the
+exposure → outcome relationship that underlies any attempt to draw causal inference from
+observational data. From this, we introduced the criterion of embarrassingly causal
+scenarios to describe settings in which this assumption is overwhelmingly supported by
+domain knowledge, including mechanistic understanding or accumulated empirical
+evidence. We claim that qualiﬁcation of an exposure → outcome relationship as
+embarrassingly causal is a sufficient condition for justifying the positing of a corresponding
+causal structure, including expansion into a DAG with outcome-relevant estimands.
+
+Consequently, these conclusions provide some formal guidance for authors, reviewers,
+and readers of research studies that infer about causal effects from observational data. For
+authors, the proposed sufficiency condition provides a principled basis for justifying the
+inclusion of causal edges which qualify as embarrassingly causal. Magic: The Gathering
+was presented as an illustrative example, but it is not unique in this regard. Clear evidence
+of a causal relationship existing from conducted RCT serves as embarrassingly causal
+justiﬁcation for including those corresponding causal edges in subsequent observational
+studies.
+
+For reviewers, this paper provides some guidance on how to evaluate assumptions made
+by observational studies that claim causal effects. When authors justify inclusion of causal
+edges based on supposed subject-matter expertise, reviewers should examine if subject
+matter experts regard the relationship between the proposed exposure and outcome as
+embarrassingly causal. If this is not the case, then it is prudent for reviewers to have
+authors accurately represent competing arguments from subject-matter experts on why
+this relationship is not embarrassingly causal. Where reviewers are themselves, subject-
+matter experts, this presents a fortuitous situation as the proposed causal edge should
+ideally be embarrassingly causal from their perspective. If not, then their critique as to why
+should be provided towards informing the manuscript regardless of how large or
+statistically signiﬁcant the effects estimated for those edges are. Naturally, even if a causal
+edge is considered embarrassingly causal, it still falls upon the authors to provide a valid
+estimating procedure. Embarrassingly causal only provides justiﬁcation for including the
+causal edge and thus proceeding to the next step of properly proposing an estimand and
+estimating it.
+
+For readers, looking for how well assumptions for key causal edges are framed as
+embarrassingly causal when reading a research paper can help regard the evidentiary value
+of everything that follows from that paper about that causal edge. While the embarrassingly
+causal qualiﬁcation is not necessary for exploring observational data, its absence should
+caution readers that any resulting causal estimates are conditional on structural
+assumptions that are not overwhelmingly supported by domain knowledge and therefore
+cannot, on their own, rule out competing causal explanations, such as those involving
+unobserved variables, regardless of the size of effects found.
+References
+
+[1] PETERS, J., JANZING, D. and SCHÖLKOPF, B. (2017). Elements of Causal Inference:
+    Foundations and Learning Algorithms. MIT Press, Cambridge, MA, USA.
+
+[2] BROUILLARD, P., LACHAPELLE, S., LACOSTE, A., LACOSTE-JULIEN, S. and DROUIN, A. (2020).
+    Differentiable Causal Discovery from Interventional Data. In Advances in Neural
+    Information Processing Systems vol 33 pp 21865–77. Curran Associates, Inc.
+
+[3] MOOIJ, J. M., PETERS, J., JANZING, D., ZSCHEISCHLER, J. and SCHÖLKOPF, B. (2016).
+    Distinguishing Cause from Effect Using Observational Data: Methods and Benchmarks.
+    Journal of Machine Learning Research 17 1–102.
+
+[4] PEARL, J. (2014). The Science and Ethics of Causal Modeling. In Handbook of Ethics in
+    Quantitative Methodology. Routledge.
+
+[5] HERNAN, M. A. and ROBINS, J. (2024). Causal Inference: What If. Taylor & Francis, Boca
+    Raton.
+
+[6] DAWID, A. P. (2010). Beware of the DAG! In Proceedings of Workshop on Causality:
+    Objectives and Assessment at NIPS 2008 Causality: Objectives and Assessment pp 59–
+    86. PMLR.
+
+[7] STEVENS, C., WITKOW, M. R. and ISBELL, J. (2025). Improving the teaching of “correlation
+    does not equal causation” in Introductory Psychology. Front. Psychol. 16.
+
+[8] SEIFERT, C. M., HARRINGTON, M., MICHAL, A. L. and SHAH, P. (2022). Causal theory error in
+    college students’ understanding of science studies. Cogn. Research 7 4.
+
+[9] HABER, N. A., WIETEN, S. E., ROHRER, J. M., ARAH, O. A., TENNANT, P. W. G., STUART, E. A.,
+    MURRAY, E. J., PILLERON, S., LAM, S. T., RIEDERER, E., HOWCUTT, S. J., SIMMONS, A. E., LEYRAT,
+    C., SCHOENEGGER, P., BOOMAN, A., DUFOUR, M.-S. K., O’DONOGHUE, A. L., BAGLINI, R., DO,
+    S., TAKASHIMA, M. D. L. R., EVANS, T. R., RODRIGUEZ-MOLINA, D., ALSALTI, T. M., DUNLEAVY, D.
+    J., MEYEROWITZ-KATZ, G., ANTONIETTI, A., CALVACHE, J. A., KELSON, M. J., SALVIA, M. G., PARRA,
+    C. O., KHALATBARI-SOLTANI, S., MCLINDEN, T., CHATTON, A., SEILER, J., STERIU, A., ALSHIHAYB, T.
+    S., TWARDOWSKI, S. E., DABRAVOLSKAJ, J., AU, E., HOOPSICK, R. A., SURESH, S., JUDD, N.,
+    PEÑA, S., AXFORS, C., KHAN, P., RIVERA AGUIRRE, A. E., ODO, N. U., SCHMID, I. and FOX, M. P.
+    (2022). Causal and Associational Language in Observational Health Research: A
+    Systematic Evaluation. Am J Epidemiol 191 2084–97.
+
+[10]   FEENEY, T. and ZIVICH, P. N. (2025). Causal inference is hard, and advanced statistical
+    analysis is not enough. BMJ 391 r2618.
+
+[11]   HILL, A. B. (1965). The Environment and Disease: Association or Causation?
+    Proceedings of the Royal Society of Medicine 58 295–300.
+[12]   IMBENS, G. W. and RUBIN, D. B. (2015). Causal Inference for Statistics, Social, and
+    Biomedical Sciences: An Introduction. Cambridge University Press, Cambridge.
+
+[13]   ZILIO, F., PRATES, M. and LAMB, L. (2018). Neural Networks Models for Analyzing
+    Magic: The Gathering Cards. In Neural Information Processing (L. Cheng, A. C. S. Leung
+    and S. Ozawa, ed) pp 227–39. Springer International Publishing, Cham.
+
+[14]    CHATTERJEE, K. and IBSEN-JENSEN, R. (2016). The complexity of deciding legality of a
+    single step of magic: The gathering. In vol 285.
+
+[15]  CHURCHILL, A., BIDERMAN, S. and HERRICK, A. (2019). Magic: The Gathering is Turing
+    Complete.
+
+[16]   HAU, R., PLOTKIN, E. and HUNG, T. (2015). Magic: The Gathering Deck Performance
+    Prediction.
+
+[17]   RAMOS, M. L. F. (2024). The MTGO Virtual Economy: A Case Study on a “Play-to-
+    Earn” Game That has Existed Since Before Cryptocurrency Was Even Invented. Games
+    and Culture 15554120241273867.
+
+[18]   SCHMIDT, G. (2023). Magic: The Gathering Becomes a Billion-Dollar Brand for
+    Toymaker Hasbro. The New York Times.
+
+[19]    WIZARDS OF THE COAST. Magic World Championship XXIX Viewers Guide.MAGIC: THE
+    GATHERING | ESPORT. Available at http://magic.gg/news/magic-world-championship-
+    xxix-viewers-guide.
+
+[20]    WIZARDS OF THE COAST. MTG Booster Draft.MAGIC: THE GATHERING. Available at
+    https://magic.wizards.com/en/formats/booster-draft.
+
+[21]    VAN DER VLUGT, N. The Ultimate Guide to Drafting on MTG Arena - Draftsim.Available
+    at https://draftsim.com/mtg-arena-draft-guide/.
+
+[22]   17LANDS. 17Lands.com.Available at https://www.17lands.com/.
+
+[23]    17LANDS. Metrics Deﬁnitions.Available at
+    https://www.17lands.com/metrics_deﬁnitions.
+
+[24]    SIERKOVITZ. (2021). Using Win Rate Data.17Lands Blog. Available at
+    https://blog.17lands.com/posts/using-win-rate-data/.
+
+[25]    BLACK, S. (2021). Using 17Lands.com As A Resource To Improve At Limited.Star City
+    Games. Available at https://articles.starcitygames.com/magic-the-
+    gathering/select/using-17lands-com-as-a-resource-to-improve-at-limited/.
+[26]   NIKOLIC, A. (2023). How to Get the Most Out of 17Lands for MTG Limited.TCGplayer
+    Content. Available at https://www.tcgplayer.com/content/article/How-to-Get-the-
+    Most-Out-of-17Lands-for-MTG-Limited/a3994007-91ab-4fbb-9fe4-034f96741bf4/.
+
+[27]   NIKOLIC, A. Limited Level-Ups.Available at https://www.youtube.com/@limitedlevel-
+    ups.
+
+[28]    MTG WIKI. Sam Black - MTG Wiki.Available at
+    https://mtg.fandom.com/wiki/Sam_Black#Pro_Tour_Results.
+
+[29]   COLNET, B., MAYER, I., CHEN, G., DIENG, A., LI, R., VAROQUAUX, G., VERT, J.-P., JOSSE, J.
+    and YANG, S. (2024). Causal Inference Methods for Combining Randomized Trials and
+    Observational Studies: A Review. Stat Sci 39 165–91.
+
+[30]    US FDA. (2023). Considerations for the Use of Real-World Data and Real-World
+    Evidence To Support Regulatory Decision-Making for Drug and Biological
+    Products.Available at https://www.fda.gov/regulatory-information/search-fda-
+    guidance-documents/considerations-use-real-world-data-and-real-world-evidence-
+    support-regulatory-decision-making-drug.
+
+[31]   HILL, M. A. and ULLRICH, R. L. (2019). Ionizing radiation. In Tumour Site Concordance
+    and Mechanisms of Carcinogenesis IARC Scientiﬁc Publications (R. A. Baan, B. W.
+    Stewart and K. Straif, ed). International Agency for Research on Cancer, Lyon (FR).
+
+[32]    RICHARDSON, D. B., LEURAUD, K., LAURIER, D., GILLIES, M., HAYLOCK, R., KELLY-REIF, K.,
+    BERTKE, S., DANIELS, R. D., THIERRY-CHEF, I., MOISSONNIER, M., KESMINIENE, A. and
+    SCHUBAUER-BERIGAN, M. K. (2023). Cancer mortality after low dose exposure to ionising
+    radiation in workers in France, the United Kingdom, and the United States (INWORKS):
+    cohort study.
+
+[33]  GAUDINO, G., XUE, J. and YANG, H. (2020). How asbestos and other ﬁbers cause
+    mesothelioma. Translational Lung Cancer Research 9.
+
+[34]   OSNA, N. A., DONOHUE, T. M. and KHARBANDA, K. K. (2017). Alcoholic Liver Disease:
+    Pathogenesis and Current Management. Alcohol Res 38 147–61.
+
+[35]   FREEDMAN, D. (1997). From Association to Causation via Regression. Advances in
+    Applied Mathematics 18 59–110.
+
+[36]    HO, F. (2025). Regression adjustment for causal inference. BMJ Med 4 e000816.
+

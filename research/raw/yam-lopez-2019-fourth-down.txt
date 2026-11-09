@@ -1,0 +1,50 @@
+                                                Quantifying the causal effects of conservative fourth down decision making in
+                                                the National Football League
+                                                Derrick R. Yam, derrick_yam@brown.edu
+                                                Michael J. Lopez, Ph.D, mlopez1@skidmore.edu
+  Objective: To estimate the potential number of games lost for each NFL team due to conservative fourth down behavior, while controlling for confounding variables.
+Motivation      “There's so much more involved with the game than          Before Matching:                                                               Outcome
+                just sitting there, looking at the numbers and saying,      • Teams that went for it differ inherently from those that did not.           • Change in win probability, calculated using average of two models:
+                ‘OK, these are my percentages, then I'm going to do it                                                                                      • Lock & Nettleton’s Random Forest model.
+                this way,’ because that one time it doesn't work could                                                                                      • NFLscrapR’s Generalized Additive model.
+                cost your team a football game, and that's the                                                                                            • Distributions of wins added estimated using non-parametric bootstrap.
+                thing a head coach has to live with, not the professor.”                                                                                    • Number of wins is the aggregated pairwise difference in the change
+                                                     – Bill Cowher                                                                                            in win probability between “going for it” and “kicking”.
+Treatment: 4th down behavior                                                                                                                              Results: Estimated ATCf ’s
+ • Teams historically behave less aggressive than they should.
+ • Of roughly 13,000 plays in the New York Times 4th down bot “go
+   for it” range, teams actually went for it ~ 35% of time.
+    What would outcomes look like if teams went for it when they
+                               should have?
+
+
+                                                                           How matching works:
+                                                                           • Teams that did not go for it matched to those that did based on: win
+                                                                             probability, game time, yards to go, and propensity score (defined as
+                                                                             the probability of going for it).
+                                                                                                   4th & 2 on the opposing 35 yard line
+                                                                                                   5 minutes into the game. The game is tied.
+                                                                                    Vs.
+                                                                                                   Play Call: ATL punts
+                                                                                                   Outcome: ΔWP = -2.41%
+                                                                                                   4th & 2 on the opposing 32 yard line
+                                                                                    Vs.            10 minutes into the game. The game is tied.
+4th down outcomes are a missing data problem                                                       Play Call: NE goes for it
+                                                                                                   Outcome: ΔWP 8.45%
+                                                                                     e(x) = 54%, wp =54%
+                                                                             i=1                             W1 = 0    Y1obs(0) = -2.4% Y1mis(1) = 8.5%
+                                                                                           time = 5…
+
+                                                                           After Matching:
+                                                                           • Increased similarity between teams that went for it & those that did not.
+
+
+
+
+Causal estimand of interest: wins added
+                                                                                                                                                          Summary
+                                                                                                                                                           • Median number of wins added ~ 4.2.
+                                                                                                                                                           • Significant evidence ~ 80% of teams would have won more games.
+                                                                                                                                                           • Maximum number of additional wins is Kansas City (6.4).
+                                                                                                                                                           • Minimum number of additional wins is New Orleans (1.8).
+

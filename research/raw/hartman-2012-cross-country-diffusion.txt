@@ -1,0 +1,2109 @@
+Investigating Cross-Country Influence Dynamics
+in New Product Diffusions
+B RIAN M. H ARTMAN∗
+
+BANI K. M ALLICK
+
+K. S UDHIR
+
+Department of Mathematics
+
+Department of Statistics
+
+Department of Marketing
+
+University of Connecticut
+
+Texas A&M University
+
+Yale University
+
+D EBABRATA TALUKDAR
+Department of Marketing
+University at Buffalo
+
+February 6, 2012
+
+ABSTRACT: An unfortunate disconnect remains between recent unprecedented trends in
+the socio-economic interactions among countries and the limited number of studies analyzing
+their effects on new product diffusions. Here we study the role of cross-country influence in
+the diffusion of 7 new consumer durables across 31 countries. We augment the existing crosscountry diffusion models in two ways: (1) incorporate non-personal communication-based
+signals across countries, and (2) compare alternative metrics of country proximity (i.e., bilateral flow of tourists, bilateral flow of trade, geographic distance, and cultural similarity). We
+also allow the diffusion parameters to vary over time. We find that word-of-mouth and nonpersonal communication signals across countries significantly help to predict diffusion. Wordof-mouth signals improve prediction by 58%, whereas non-personal communication signals
+improve predictions by 40%. Together, they improve prediction by 69%. Bilateral trade and
+tourism flows best describe country proximity. Non-personal communication-based effects on
+diffusion have been increasing over the last three decades.
+
+KEY WORDS: Socio-Economic Interactions; Neighborhood Influences; Hierarchical Bayes.
+
+∗
+
+Corresponding Author: brian.hartman@uconn.edu
+
+1
+
+1. INTRODUCTION
+Since the 1990s, there has been an increasing recognition that we live in a world that is “flatter”
+than ever (Friedman and Wyman 2005). This recognition is fueled by the significant growth in the
+flows of goods, investments, people and information across the world. For example, according
+to the available data from the World Bank (2010), the volume of trade and direct investments
+among the countries of the world grew by approximately 126% and 550%, respectively, from
+1990-2007. Over the same time period, the volume of international tourism, air passenger traffic
+and phone traffic more than doubled. Such growth rates reflect an unprecedented level of crosscountry interactions in the modern era and arguably the closest realization to date of the notion
+of a “global village” (Friedman and Wyman 2005). These growth rates also represent the relevant
+motivational backdrop to this research study.
+The objective of this research study is to substantively expand our current understanding of
+the impact of the socio-economic interactions among countries on the aggregate process of new
+product diffusion. Of course, there exists a rich stream of research on the new product diffusion
+process at the country level (e.g., Bass 1969, Chandrasekaran and Tellis 2007, Gatignon et al.
+1989, Horsky 1990, Mahajan et al. 2000, Talukdar et al. 2002). At the same time, much of this
+research stream has focused on investigating the within-country diffusion process to understand the
+roles of macro environmental variables in driving the differences in this diffusion process among
+countries (Helsen et al. 1993, Kumar and Krishnan 2002, Tellis et al. 2003). In contrast, as Putsis
+et al. (1997) observe, little quantitative research has been conducted in understanding the role of
+cross-country influence in the new product diffusion process. A similar observation is also made
+by Dekimpe et al. (2000), who emphasize the need for additional research to better understand the
+spatial nature of the new product diffusion process, especially in the face of consistent empirical
+evidence on cross-country correlations in diffusion patterns. Approximately a decade later, those
+observations still remain valid (Peres et al. 2010).
+The few existing studies that have investigated the role of cross-country influence in the new
+product diffusion process have modeled this influence in the form of product-specific word-of2
+
+mouth effects by using either the learning (sequential) models or the mixing (simultaneous) models
+(Ganesh and Kumar 1996, Ganesh et al. 1997, Kumar and Krishnan 2002, Putsis et al. 1997, Takada
+and Jain 1991). The learning models are based on a restrictive method of capturing cross-country
+influence dynamics. Specifically, these models use the new product introduction “lag periods” to
+model the effect of the early diffusion of a new product in one country (the lead country) on the
+subsequent diffusion of the product in another country (the lag country). Although this approach
+accounts for the role of cross-country influence in analyzing diffusion, it provides little insight
+into the underlying dynamics of such cross-country influence. Further, this approach allows for
+only sequential and pair-wise, one-directional cross-country influence (Kumar and Krishnan 2002,
+Putsis et al. 1997).
+Putsis et al. (1997) underscored the above limitations of the learning or sequential models
+to motivate their own study, which sought to expand the framework of cross-country influence
+by pioneering the “mixing” models. In analyzing the new product diffusion process, their proposed mixing model accounts for the cross-country influence engendered through simultaneous
+cross-country interactions. This model was founded on a basic, population-based approach to
+capturing cross-country interactions and still remains prominent in the new product diffusion literature (Van Everdingen et al. 2005). However, as Putsis et al. (1997) noted, their proposed mixing
+model was an initial foray into capturing the underlying dynamics of cross-country influence on
+the new product diffusion process. The model was intended to encourage future researchers to use
+alternative approaches that serve as more detailed complementary and/or competing explanations
+in modeling these underlying dynamics. Putsis et al. (1997) further emphasized the need for future research that tests alternative approaches to modeling cross-country influence on a broader
+set of new products (than their four products), countries (than their 10 EC nations) and parameter
+covariates (than their two covariates).
+Since the study by Putsis et al. (1997), three more studies (Albuquerque et al. 2007, Kumar
+and Krishnan 2002, Van den Bulte and Joshi 2007) have investigated multiple and simultaneous
+cross-country or cross-market influences in analyzing new product diffusion. However, all of these
+
+3
+
+studies still allow only the product-specific word-of-mouth signals from existing adopters to serve
+as the sole source of cross-country or cross-market influence. This restriction contrasts with the
+recognition that new product diffusion will be subject to cross-country influences that goes beyond
+just inter-personal word-of-mouth effects (Peres et al. 2010). Further, the studies by Kumar and
+Krishnan (2002) and Van den Bulte and Joshi (2007) implicitly used only a population-based
+approach to capture cross-country interactions. In this respect, the study by Albuquerque et al.
+(2007) expanded the current literature by capturing cross-country interactions through multiple
+forms among multiple countries within a “neighbor set”. Specifically, the n countries that are
+likely to have the most interactions with a country of interest are included in its neighbor set.
+The interactions are modeled through three alternative forms: geographical distance (the n closest
+countries), trade flow (the n countries with the most trade), and cultural similarity which is the n
+closest countries in terms of the “distance” along the four cultural dimensions outlined in Hofstede
+(2001).
+The goal of our study is to build on the limited set of existing studies mentioned above and to
+extend them in several important ways. First, our study addresses a conspicuous limitation in the
+aforementioned studies; the use of product-specific word-of-mouth effects from existing adopters
+as the only explicit source of cross-country influence on new product diffusion (Albuquerque et al.
+2007, Peres et al. 2010). An extensive recent review of the extant diffusion research literature has
+led Peres et al. (2010) to observe, “Further research is required to estimate the relative roles of
+word-of-mouth and non-communication signals in cross-country spillover and to study their relative effects on the overall diffusion process.” Our study addresses this important research need
+by explicitly accounting for the non-personal communication-based signals that may serve as part
+of the cross-country influence dynamics in the diffusion process. Specifically, we incorporate the
+usual product-specific word-of-mouth-based communication signals and the consumption reference hierarchy-based non-personal communication signals (Dholakia and Talukdar 2004, Ger and
+Belk 1996, Tomlinson 2001) as two independent sources of cross-country influence. We estimate
+their relative effects on the new product diffusion process.
+
+4
+
+Second, our study helps to address another important weakness in the existing diffusion literature: modeling the cross-country interaction process expected to enhance the cross-country
+influence on new product diffusion (Putsis et al. 1997). We model the cross-country interactions
+based on four distinct sources: bilateral flow of people (tourism), bilateral flow of goods and
+services (trade), cultural similarity (Hofstede 2001), and spatial proximity. Thus, by using the
+bilateral tourism flow in addition to the other three sources used by Albuquerque et al. (2007)
+to model the cross-country interaction process, our study expands the current diffusion literature.
+Further, because our study uses not only two distinct types (word-of-mouth communication versus
+non-personal communication) of cross-country influence but also four distinct cross-country interaction “conduits” for the flow of this influence, we can empirically test the most comprehensive
+set of complementary and/or competing explanatory models of cross-country influence dynamics
+in new product diffusions to date. As Putsis et al. (1997) and Peres et al. (2010) note, the conceptual development and empirical testing of various alternative explanatory models is critical to
+enhancing our understanding of the cross-country influence dynamics in new product diffusions.
+Third, by using a hierarchical model, our study investigates the effects of relevant country-level
+covariates on the diffusion model parameters. The number of covariates analyzed in this study represents the most comprehensive set used in any single international diffusion study. Further, we
+also investigate whether any systematic time-varying pattern exists in each of the model parameters
+capturing a country’s relative responsiveness to both the within-country and cross-country influences on its diffusion process. We note here that, although many scholars have conducted a determinant analysis of the variation in response parameter values in the context of the within-country
+influence on the diffusion process, few have done so in the context of cross-country influence
+(Chandrasekaran and Tellis 2007, Putsis et al. 1997). For instance, the study by Albuquerque et al.
+(2007), which is arguably the most in-depth existing study on cross-country influence, does not
+undertake such a determinant analysis of the variation in response parameter values or investigate
+the time-varying patterns in these parameter values.
+Fourth, a key reason for the limited amount of existing research on cross-country influence
+
+5
+
+dynamics in the diffusion process is the difficulty of collecting relevant data, especially in terms of
+the information on the bilateral interactions among countries (Putsis et al. 1997). At the same time,
+the scale and scope of the data used are naturally critical to drawing in-depth and generalizable
+insights in any international new product diffusion study (Chandrasekaran and Tellis 2007). In that
+respect, our study also contributes to the literature by collecting and using a novel data set. Drawn
+from several sources, such as the International Monetary Fund, the United Nations, the World
+Bank, and the World Tourism Organization, the data set covers 7 new product diffusions across
+31 countries over the last three decades. It includes the bilateral trade and tourism data of the 31
+countries as well as information on a large number of macro-environmental covariates. The 31
+countries cover essentially all of the major developed and developing countries, which account for
+approximately 80% of the global economic output and 60% of the global population. Additionally,
+our focus on 7 consumer products nicely complements the focus on two business process-related
+products in the study by Albuquerque et al. (2007).
+Similar to past studies that have investigated cross-country influence on new product diffusion
+(e.g., Albuquerque et al. 2007, Putsis et al. 1997), we use the Bass Diffusion Model (BDM) as
+the core model. Based on our conceptual framework, we then augment the BDM to develop and
+test a large set of 24 complementary and/or competing explanatory models of the cross-country
+influence dynamics in new product diffusions. We fit the proposed models and compare their
+forecasting accuracy. Taken together, the scope of our data, the large set of conceptual models for
+empirical testing and the estimation methodology enable our study to investigate several important
+but hitherto unexplored dynamics of cross-country influence on the new product diffusion process.
+As a result, our study makes significant contributions to an area that otherwise remains quite underresearched, especially in the context of accelerating globalization trends.
+The rest of the paper is organized as follows. The next section discusses our conceptual framework and proposed models. Section 3 discusses our data. We present our empirical estimation
+approach in Section 4 and the results from our empirical analyses in Section 5. Finally, Section 6
+concludes with a summary discussion of the key insights from our study.
+
+6
+
+2. CONCEPTUAL FRAMEWORK AND PROPOSED MODELS
+Past scholars have observed that the consumption behaviors by the individuals in one geographic neighborhood influence the consumption behaviors of those living in the surrounding
+neighborhoods (Case 1992, Lichtenberg 1996). Similarly, in the real-world context, countries
+rarely exist in isolation; rather, they can be conceptualized as neighbors interacting with one another in a global village (Featherstone 1990, Wilk 1998). In this global village, the diffusion of a
+new product in any country is naturally subject to strong cross-country influence. As noted earlier,
+the primary objective of our study is to investigate the rich dynamics of this cross-country influence on the new product diffusion process. Before we present our proposed models, we discuss
+the conceptual framework that guides our model formulation and structure (see figure 1). In our
+conceptual framework, the cross-country influence dynamics in the new product diffusion process
+consists of the following three key elements: (1) the influence originating from each country; (2)
+the bilateral interactions among countries; and (3) each country’s responsiveness to cross-country
+influence.
+With respect to the first key element in our conceptual framework, we assume that the new
+product diffusion process in a country is subject to two different sources of cross-country influence: product-specific word-of-mouth signals and non-personal communication signals (Peres
+et al. 2010). Specifically, in our conceptual framework, one source of cross-country influence that
+a country experiences is particular to the new product being analyzed and is contingent on the
+level of market penetration by the new product in other countries. This source captures the likely
+cross-country influence on the potential adopters in a country due to the product-specific word-ofmouth signals transmitted by the people who have already adopted the product in another country
+(Albuquerque et al. 2007, Kumar and Krishnan 2002, Putsis et al. 1997).
+We conceptualize the non-personal communication signal as a source of cross-country influence based on the implicit consumption reference hierarchy (Dholakia and Talukdar 2004, Ger
+and Belk 1996, Tomlinson 2001). This notion of hierarchy-based influence posits that the overall
+consumption behavior of the people in a country will be influenced by an observational learning
+7
+
+Figure 1. Conceptual Framework
+
+process. Specifically, these people will learn from the consumption behaviors of the people in
+other countries with which the country has bilateral interactions. Additionally, the influence will
+be greater if the country has stronger bilateral interactions with those countries that are perceived
+to be higher in the consumption reference hierarchy. One common basis of this implicit consumption hierarchy is the relative affluence and consumption spending levels across countries, which
+serve as readily observable status signals (Dholakia and Talukdar 2004). Conceptually, a neighbor
+in the global village that is more closely related to its affluent neighbors will be more subject to
+consumption reference hierarchy-based influence.
+As one would expect, the cross-country influence on the new product diffusion process in a
+global village will depend not only on the type and strength of the sources’ influence but also
+on the proximity of neighboring countries. Accordingly, the next key element in our conceptual
+framework is the bilateral interactions among the countries. The bilateral interactions between
+each pair of countries reflect the proximity of the neighbors and serve as conduits for the flow
+
+8
+
+of cross-country influences. It is natural to expect that in reality, multiple sources or drivers of
+bilateral interactions will determine the degree of closeness or proximity among countries. In our
+study, we consider the following four sources of bilateral interactions between any two countries:
+flow of people, flow of goods and services, spatial distance, and cultural similarity.
+The third and final key element in our conceptual framework is each country’s responsiveness
+to the cross-country influence on its new product diffusion process. This element is based on
+past empirical studies that have found this responsiveness to vary across countries and over time,
+but these studies have only examined the context of word-of-mouth influence (Putsis et al. 1997,
+Talukdar et al. 2002). In our framework, we allow for this responsiveness to vary across countries
+and over time for both sources of cross-country influence: word-of-mouth and non-personal communication signals. As we discuss later, a number of country-specific covariates are expected to
+determine a country’s relative responsiveness to cross-country influence depending on the source
+of the influence.
+
+2.1 Proposed Diffusion Models Incorporating Cross-Country Influence Dynamics
+The Bass Diffusion Model (BDM) has been widely used in the extant literature to study new
+product diffusion in general (Chandrasekaran and Tellis 2007). It is expressed as follows (Talukdar
+et al. 2002):
+
+[
+
+Yin (t − 1)
+ybin (t) = [αin Mi (t) − Yin (t − 1)] pin + qin
+αin Mi (t)
+
+]
+(1)
+
+where ybin (t) is the predicted adoption sales of new product n for year t in country i, Yin (t) is the
+cumulative adoption sales, and Mi (t) is the country population. The three parameters of the model
+are as follows: (1) the market penetration potential (αin ), (2) the coefficient of external influence
+(pin ), and (3) the coefficient of internal influence (qin ). As evident from the above model and the
+coefficient qin , the within-country or internal influence on the diffusion process of a new product
+is captured in the BDM through a product-specific word-of-mouth-based social contagion process
+between the adopters and the non-adopters within the country (Putsis et al. 1997). Although the
+BDM implicitly allows for non-word-of-mouth influence through the coefficient pin , the model is
+9
+
+silent on the specific nature or source of this influence and whether this influence is emanating
+from outside or inside of the focal country. In other words, the BDM does not explicitly recognize
+the cross-country influence dynamics in the diffusion process or any type of bilateral cross-country
+interactions that serve as conduits for the flow of this cross-country influence. In subsequent studies
+using the BDM, the coefficient pin has come to represent the overall effect of the non-word-ofmouth-based sources of influence originating within a country on the new product diffusion in that
+country (Albuquerque et al. 2007, Talukdar et al. 2002).
+We now propose several competing new product diffusion models that use the above BDM
+(model 1) as the core structure but incorporate from our earlier conceptual framework the various
+key elements of cross-country influence dynamics in the new product diffusion process. Our first
+proposed modification (model 2) of the BDM incorporates a non-personal communication signal
+as the only source of explicit cross-country influence. Specifically, the cross-country influence
+dynamics between country i and country j are modeled in the form of the consumption reference
+hierarchy effect, and the modified BDM (model 2) is expressed as:
+[
+
+]
+∑
+Yin (t − 1)
+ybin (t) = [αin Mi (t) − Yin (t − 1)] pin + qin
++ rin
+aij Lj (t)
+αin Mi (t)
+j̸=i
+
+(2)
+
+L∗jt
+and Ljt = ∑ ∗ .
+j̸=i wij
+j Ljt
+
+wij
+where aij = ∑ ∑
+i
+
+To model the non-personal communication signal in the form of the consumption reference hierarchy effect, we use the noted insights from previous international consumption behavior studies
+that indicate that this hierarchy is driven by readily observable status signals, such as the relative
+affluence and consumption spending levels across countries (Dholakia and Talukdar 2004, Ger and
+Belk 1996, Tomlinson 2001). In our model, each country’s status in the consumption reference
+hierarchy is measured on a normalized scale (Lj ), which represents the country’s relative affluence
+level. Specifically, we use the GNP of the countries (L∗j ) as an operational construct to capture
+their relative affluence levels. As expected, we find that an alternative construct of relative affluence using the per capita consumption expenditure levels across countries is highly correlated with
+10
+
+the GNP-based measure.
+In our above model specification, the parameter rin captures the responsiveness of country i to
+non-personal communication as the source of explicit cross-country influence. The construct wij
+denotes the observed level of a chosen driver of the bilateral interactions between country i and
+country j, whereas aij denotes the relative level of these bilateral interactions. As noted in our
+conceptual framework, we use four different empirical measures as the basis of the bilateral proximity between each pair of countries: bilateral tourism flow, bilateral trade flow, cultural similarity,
+and spatial distance. Our constructs wij and aij allow the bilateral proximities between countries
+to vary in intensity instead of being dichotomous in nature. This model directly contrasts with the
+more restrictive modeling approach used in the study by Albuquerque et al. (2007), which treats
+the bilateral proximity between two countries to be dichotomous in nature. Thus, in their study,
+all of the countries selected for analysis are assumed to have either one level of relationship or no
+relationship at all with a focal country.
+Our second proposed modification (model 3) of the BDM incorporates product-specific wordof-mouth signals as the only source of explicit cross-country influence and is analytically expressed
+as:
+
+[
+
+∑ Qjn (t)
+Yin (t − 1)
+ybin (t) = [αin Mi (t) − Yin (t − 1)] pin + qin
++ sin
+bij
+αin Mi (t)
+Mj (t)
+j̸=i
+vij
+where bij = ∑ ∑
+i
+
+j̸=i vij
+
+]
+(3)
+
+.
+
+Compared with the BDM, the above model has the additional parameter sin , which is analogous
+to the BDM parameter qin . Whereas qin captures the responsiveness of country i to the withincountry product-specific word-of-mouth influence, sin captures the country’s responsiveness to the
+cross-country product-specific word-of-mouth influence. The bilateral interaction construct vij is
+identical to wij in model 2 and uses the same four possible empirical measures as the drivers of
+this interaction. We denote vij with a different letter to emphasize that vij and wij need not be
+based on the same empirical measure used in our final proposed model (model 4). We should
+point out that our proposed model 2 is quite similar to the model used in the study by Albuquerque
+11
+
+et al. (2007). However, our model differs in two important respects. First, as noted earlier, our
+model uses a continuous measure to model bilateral proximity. This measure is likely to be more
+realistic than the dichotomous measure used in the study by Albuquerque et al. (2007). Second,
+our study expands upon that of Albuquerque et al. (2007) by using not only their three alternative
+empirical measures to capture bilateral proximity but also bilateral tourism flow as an additional
+measure. In our final proposed model (model 4), we use both non-personal communication signals
+and product-specific word-of-mouth signals as the two explicit sources of cross-country influence
+on the new product diffusion process. Thus, this model combines elements of models 2 and 3
+proposed above and is analytically expressed as:
+[
+
+]
+∑
+∑ Qjn (t)
+Yin (t − 1)
+ybin (t) = [αin Mi (t) − Yin (t − 1)] pin + qin
++ rin
+aij Lj (t) + sin
+bij
+.
+αin Mi (t)
+M
+j (t)
+j̸=i
+j̸=i
+(4)
+The measures aij and bij for the relative levels of bilateral interactions remain as defined in models
+2 and 3, respectively. Although we use four alternate alternative empirical measures as the drivers
+of bilateral proximity in all of our proposed models (models 2-4), we also recognize that the effect
+of a particular source of cross-country influence on the new product diffusion process may be
+better captured with a particular measure of bilateral proximity. Thus, while our three proposed
+primary models (models 2-4) differ in the nature of cross-country influence dynamics, each model
+also has variants that differ based on the specific distance measures. Specifically, models 2 and
+3 each have four variants, and model 4 has 16. Thus, taken together, our three proposed primary
+models represent 24 complementary models of cross-country influence dynamics in new product
+diffusions.
+
+2.2 Expected Covariates for the Proposed Model Parameters
+As noted earlier, one goal of our study is to investigate the impacts of relevant country-level
+covariates on the diffusion model parameters. Table 1 lists the expected directional effects by each
+of the covariates on the respective model parameters. We next discuss the rationale behind these
+
+12
+
+expected effects.
+
+Parameter
+α
+
+Table 1. Expected effect of country-specific covariates
+Covariate
+Average Per Capita Income
+Elderly Population Proportion
+GINI Index
+Urban Population
+Trade
+Cell-Phone × Telephone Mainlines
+Cell-phone × Price Basket for Fixed Line
+Fax × Telephone Mainlines
+VCR × TV penetration rate
+Camcorder × TV penetration rate
+
+Expected Effect
+Positive
+Positive
+Negative
+Positive
+Positive
+Negative
+?
+Positive
+Positive
+Positive
+
+p and r
+
+Average Per Capita Income
+Individualism Index
+Uncertainty Avoidance Index
+
+Negative
+Positive
+Negative
+
+q and s
+
+Internet penetration rate
+TV penetration rate
+GINI Index
+Female Labor Participation
+Individualism Index
+Uncertainty Avoidance Index
+Introduction Lag
+
+Positive
+Positive
+Negative
+Positive
+Positive
+Negative
+Positive
+
+2.2.1 Parameter for Penetration Potential (α)
+Economic theories and the empirical evidence from the existing diffusion studies imply that the
+consumers who adopt a new product have the following characteristics: (1) the ability to pay, (2)
+the willingness to pay, and (3) access to the product (Horsky 1990, Talukdar et al. 2002). Thus, the
+covariates likely to affect the magnitude of the penetration potential parameter αin influence the
+consumers’ abilities and willingness to pay for the product as well as their access to the product.
+We use three covariates to reflect consumers’ abilities to pay. First, we use the average national
+per capita income (adjusted for purchasing power parity). However, average per capita income
+sheds no light on the distribution of this income across the population within a country, which
+13
+
+can have a considerable effect on new product diffusion (Horsky 1990). As Talukdar et al. (2002)
+argue, for a given level of average income, a country with a higher income concentration has
+fewer consumers with the purchasing power needed to adopt a product. We use the GINI Index
+as the measure of national income concentration (World Bank 2010). Because higher values of
+the GINI Index indicate higher concentrations, we expect the GINI index to have a negative effect
+on penetration potential. Finally, we use the national demographic profile (specifically, the elderly
+proportion of the population) to obtain a measure of disposable income. Because the elderly typically have lower basic expenditures, a higher proportion of elderly people in the population will
+suggest a higher disposable income for a given level of national per capita income.
+The consumers’ willingness to pay for a new product will increase with the expected incremental benefit offered by the new product relative to the benefit offered by the current product (Horsky
+1990, Talukdar et al. 2002). Accordingly, if consumers have limited access to an existing product,
+they may be more willing to adopt a new product that is a substitute for the existing product. If a
+consumer already owns a complementary product that is needed to use the new product, he or she
+will be more willing to adopt it. Based on this rationale, we expect the fixed phone line penetration
+level to have a negative effect on the cell phone penetration potential but a positive effect on the
+fax penetration potential. Additionally, the TV penetration level will have positive effects on the
+VCR and camcorder penetration potentials. We also expect the price of land phone services to
+have a positive effect on cell phone penetration. Conversely, if the price of fixed phone services is
+positively correlated with that of cell phone services within a country, then the former will have a
+negative own price effect on cell phone penetration.
+Finally, following Talukdar et al. (2002), we use trade as a percentage of national GDP and
+the urban population as a percentage of the national population as two country-level covariates
+that affect consumers’ relative access to a new product. We do so because higher trade fosters a
+more open and competitive economy, which, in turn, enhances product access through increased
+production and distribution efficiency (Lieberman 1993). Similarly, studies on urban economics
+show that urban areas are more likely to enjoy greater production and distribution efficiency from
+
+14
+
+better infrastructure and economies of scale (Calem and Carlino 1991). Therefore, we expect new
+product penetration to be higher in the countries with higher levels of trade and urbanization.
+
+2.2.2 Parameters for Non-Personal Communication-based Influences (p and r)
+The parameters p and r represent the responsiveness (in terms of the new product adoption
+decision) of the people in a country to within-country and cross-country non-personal communication or observational signals, respectively. As discussed in our conceptual framework, one
+important source of these non-personal communication or observational signals is the reference
+leader-follower consumption hierarchy structure within and across countries. Additionally, prior
+consumption behavior studies have shown that poor consumers are more likely to be the “followers” in this consumption hierarchy and to be influenced by the consumption behaviors of rich consumers (Dholakia and Talukdar 2004, Tomlinson 2001). Thus, we expect p and r to be negatively
+correlated with national per capita income.
+We also expect the national cultural traits that reflect consumers’ inclinations to learn from
+other societies and cultural groups to have a positive effect on the consumers’ responsiveness to
+both external and internal non-personal communication-based sources of influence (Ger and Belk
+1996). Two well-known measures of the differences in cultural traits across countries that are
+particularly relevant in this context are the Individualism Index and the Uncertainty Avoidance
+Index (Hofstede 2001). The people in a country with a high Individualism Index are expected
+to interact with those outside of their familiar social circles to look after themselves and their
+immediate families. In contrast, the people in a country with a high Uncertainty Avoidance Index
+are more intolerant of opinions different from what they are used to and are more likely to believe
+that “there can only be one Truth and we have it” (Hofstede 2001). The aforementioned discussion
+suggests that the Individualism Index will have a positive relationship with p and r, whereas the
+Uncertainty Avoidance Index will have a negative relationship.
+
+15
+
+2.2.3 Parameters for Product-Specific Word-of-Mouth Influences (q and s)
+The parameters q and s in our proposed models represent the responsiveness of a country’s new
+product adoption decision process to the product-specific word-of-mouth influence of the adopters
+both within and outside of the country. Thus, the factors that facilitate the flow of word-of-mouth
+information will positively affect the parameters q and s. These factors include the relative level of
+communication media in a country. We use two covariates in our analysis to capture the countryspecific level of communication media. One is the TV penetration level, which represents the more
+traditional communication media, and the other is the Internet penetration level, which represents
+the new interactive media (Ratchford et al. 2007). Another factor that will positively affect the
+parameters q and s is the persuasiveness of the word-of-mouth recommendations from the existing
+adopters (Talukdar et al. 2002). The persuasiveness of these recommendations will increase with
+the existing adopters’ satisfaction and familiarity with the new product (Takada and Jain 1991). We
+use the number of years that the new product introduction in a country lags behind the introduction
+of the product in the lead country as an operational measure of the existing adopters’ relative levels
+of satisfaction and familiarity with a new product (Kumar and Krishnan 2002).
+We also use four other covariates that capture the societal characteristics that are likely to facilitate the flow of word-of-mouth information among the people within a country. One covariate is
+the GINI Index, which captures the population heterogeneity in terms of income based on the rationale that personal interactions and communication are facilitated within homogeneous populations
+(Takada and Jain 1991). Another covariate is the proportion of females in a country’s labor force.
+As women enter the labor force in greater numbers, they have greater opportunities to interact with
+other men and women, and as a result, social communication improves (Talukdar et al. 2002). The
+other two covariates are cultural measures: the Individualism Index and the Uncertainty Avoidance
+Index. As discussed earlier, we expect the Individualism Index to have a positive relationship with
+parameters q and s, whereas the Uncertainty Avoidance Index will have a negative relationship.
+
+16
+
+3.
+
+DATA
+
+We collected relevant new product diffusion data for seven consumer product categories across
+31 countries. Table 2 lists the 31 countries used in our study (World Bank 2010). The list consists
+of most of the major developed and developing countries that together account for approximately
+80% of the world’s economic output and 60% of the world population. Overall, our study has
+217 (7x31) product-country diffusions and broadly represents the key developed and developing
+countries. In the context of international diffusion studies, the scale and scope of our data provide
+a substantial empirical basis for investigation. For instance, Chandrasekaran and Tellis (2007) note
+that a substantial data basis in this context should have a sample size of more than 10 countries or
+10 products.
+
+Country
+Argentina
+Australia
+Austria
+Belgium
+Brazil
+Canada
+Chile
+China
+Denmark
+Finland
+France
+Germany
+Greece
+Hong Kong
+India
+Ireland
+
+% World
+Population
+in 2005
+0.60
+0.31
+0.13
+0.16
+2.88
+0.50
+0.25
+20.19
+0.08
+0.08
+0.94
+1.28
+0.17
+0.11
+16.94
+0.06
+
+Table 2. 31 countries in our sample
+% World
+Income
+in 2005
+Country
+0.96
+Italy
+1.19
+Malaysia
+0.49
+Mexico
+0.62
+Netherlands
+2.75
+Norway
+1.90
+Philippines
+0.32
+Portugal
+15.87
+Singapore
+0.33
+South Korea
+0.30
+Spain
+3.50
+Sweden
+4.44
+Switzerland
+0.46
+Thailand
+0.43
+United Kingdom
+6.73
+United States
+0.25
+TOTAL
+
+% World
+Population
+in 2005
+0.91
+0.39
+1.60
+0.25
+0.07
+1.29
+0.16
+0.07
+0.75
+0.67
+0.14
+0.12
+0.99
+0.93
+4.59
+57.62
+
+% World
+Income
+in 2005
+3.06
+0.47
+1.96
+1.01
+0.34
+0.83
+0.39
+0.22
+1.91
+2.05
+0.53
+0.52
+0.98
+3.65
+22.30
+80.76
+
+The seven product categories and the respective years in which they were introduced globally
+are as follows: VCR players (1976), CD players (1984), microwaves (1975), camcorders (1984),
+fax machines (1979), home computers (1980), and cellular phones (1981). The country-specific
+17
+
+introduction years for the seven products across the 31 countries in our sample ranged from 1975
+to 1997. It is pertinent to note here that the information on the new product introduction year for
+a specific product-country pair sometimes varies across data sources (Chandrasekaran and Tellis
+2007). Thus, we ensured that the introduction years for the various product-country pairs in our
+study are consistent with those used in similar existing studies. Accordingly, we used the same
+introduction years for the various product-country pairs as in the study by Talukdar et al. (2002),
+which had six of our seven products and all 31 of our countries. For home computers, we crosschecked our introduction years to make them consistent with the available information on various
+countries found in some of the existing international diffusion studies (Kumar and Krishnan 2002,
+Putsis et al. 1997). Collecting data for international new product diffusion studies remains a challenging task, and our own experience is no exception in this respect. Although adoption (first
+purchase) data are ideal for estimating diffusion models, such data are difficult to collect across a
+wide range of countries, especially for developing countries (Talukdar et al. 2002). Accordingly,
+we use adoption data whenever such data are available. Otherwise, we use sales data. To reduce
+the impact of repeat purchases on our estimates, we follow previous studies and use sales data only
+from within the first ten years of product life in a country for our analysis. Our data sources consist
+of several international organizations, such as the International Monetary Fund (IMF), the International Telecommunications Union (ITU), the United Nations (UN), the World Bank and the World
+Tourism Organization (WTO). The product adoption and sales data are obtained from the databases
+of the World Bank, the ITU, publications by Euromonitor (European and International Marketing
+Data and Statistics, various years) and various national government agencies. The UN and World
+Bank databases served as the source of various country-specific covariates. In contrast to most of
+the existing new product diffusion studies, our study is unique in that we assemble detailed information to measure the basis of bilateral proximity among the countries analyzed. The bilateral
+tourism flow data were collected primarily from the database of the World Tourism Organization
+(World Tourism Organization 2008), but we also collected data from national tourism agencies.
+The bilateral trade flow data were collected from the general database of the United Nations Con-
+
+18
+
+ference on Trade and Development (UNCTAD) and the Direction of Trade Statistics database of
+the International Monetary Fund (2008). For the purposes of our study, the time-averaged values
+of the annual tourism and trade flow levels are used. The annual averages of the total tourism and
+trade flow levels in our entire sample of 31 countries are approximately 1 billion tourists and 8.3
+trillion dollars, respectively. As expected, considerable variation in the total tourism and trade flow
+levels exists across the 31 countries. Additionally, each country’s levels of bilateral tourism and
+trade flows vary significantly with the other 30 countries. For instance, the coefficient of variation
+of China’s bilateral tourism and trade flows with the other 30 countries are 4.6 and 9.7, respectively. To measure the cultural similarity between any two countries, we follow the approach by
+Albuquerque et al. (2007). We use the normative distance between the two countries along the
+four cultural dimensions of Hofstede (2001). The spatial proximity between a pair of countries
+is measured as the reciprocal of the distance between their respective population centroids. The
+population centroid data were obtained from the Center for International Earth Science Information Network (CIESIN), Centro Internacional de Agricultura Tropical (CIAT) (2005) at Columbia
+University. The population centroid is the geographical point that is, on average, nearest to all of
+the people in the country. We obtained a longitude and latitude for the centroid of each country
+and then calculated the distance between them by using the Haversine formula, as described in the
+appendix.
+
+4.
+
+ESTIMATION
+
+As discussed in §2, we use our proposed conceptual framework to develop three distinct models
+(models 2-4) from the BDM (model 1) to capture the role of cross-country influence dynamics
+in new product diffusion. In estimating these models, we use a hierarchical structure to borrow
+strength from the other estimates in the same country or with the same product. We began by
+allowing the parameters to vary over the real line. We applied an exponential transformation to the
+pin , qin , rin , and sin parameters to map them from the positive real line to the full real line. We
+also apply a logit transformation to the αin parameter to move it from 0-1 to the full real line. We
+19
+
+will denote the transformed variables with a star as follows:
+
+αin =
+
+∗
+exp {αin
+}
+∗
+1 + exp αin
+
+pin = exp {p∗in }
+
+∗
+∗
+qin = exp {qin
+} rin = exp {rin
+} sin = exp {s∗in } (5)
+
+We then apply the hierarchical structure to the transformed variables. We divide the transformed
+parameters into several parts: the country- and product-specific portions and an interaction regression term. The regressors are related to the hypotheses in §2. Using the standard BDM for
+illustration purposes, we derive:
+[
+
+Yin (t − 1)
+ybin (t) = [αin Mi (t) − Yin (t − 1)] pin + qin
+αin Mi (t)
+  
+ 
+ 
+
+∑
+∗
+∗
+∗
+αin  αi + αn   k∈Pα1 Xkin βk  παin 
+  
+ 
+ 
+
+ p∗  =  p∗ + p∗  +  ∑
+ + π  ,
+X
+β
+kin k 
+ in   i
+ k∈P
+ pin 
+n
+  
+  ∑ p1
+ 
+
+∗
+qin
+qi∗ + qn∗
+X
+β
+π
+kin k
+qin
+k∈Pq1
+
+]
+
+
+
+παin 
+
+
+ π  ∼ M V N (0, λ)
+ pin 
+
+
+πqin
+
+(6)
+
+(7)
+
+Pα1 is the set of all covariates related to the α interaction term, and ϵin (t) is a mean zero error term.
+The country-specific terms are then regressed on the covariates discussed in §2.
+  
+  
+∑
+∗
+αi   k∈Pα2 Xki βk  παi 
+  ∑
+  
+ p∗  = 
+  
+X
+β
+ i   k∈Pp2 ki k  +  πpi  ,
+  ∑
+  
+qi∗
+X
+β
+πqi
+ki k
+k∈Pq2
+
+ 
+παi 
+ 
+ π  ∼ M V N (0, γi )
+ pi 
+ 
+πqi
+
+(8)
+
+Pα2 is the set of all covariates related to the country-specific α term. The product-specific terms
+are given a random component without any regressors. This decision follows the results of our
+own testing and is confirmed in Talukdar et al. (2002).
+   
+∗
+αn  παn 
+   
+ p∗  =  π  ,
+ n   pn 
+   
+πqn
+qn∗
+
+ 
+παn 
+ 
+ π  ∼ M V N (0, γn )
+ pn 
+ 
+πqn
+
+20
+
+(9)
+
+The error term has a normal prior with a product-specific variance term, αin (t) ∼ N (0, σn2 ). The
+majority of the parameters are given non-informative but conjugate priors. The priors were tested
+for robustness. The αin , pin , and qin parameters require a Metropolis-Hastings step, again with
+noninformative priors. The details of the estimation algorithm can be found in the appendix.
+
+5. EMPIRICAL RESULTS AND DISCUSSION
+5.1 Comparative Performance of the Proposed Models
+Here we analyze our three proposed primary models (models 2-4) to determine which model
+best describes the underlying diffusion process from an empirical standpoint. We also compare the
+relative performance of the three proposed models with that of the BDM (model 1). We compare
+the various models by checking how effectively they predict the future values of the underlying new
+product diffusion processes being analyzed because prediction is a main purpose of these models
+in practice. We predicted the diffusion levels for one, two and three years beyond our sample
+(i.e., years 8-10 since the product was introduced in a country). The mean square prediction errors
+(MSPE) allow us to compare the effectiveness of the various models and are calculated as follows.
+(
+M SP E =
+
+yin (t) − ybin (t)
+Mi (t)
+
+)2
+where ybin (t) is the predicted value of yin (t).
+
+(10)
+
+We then find the average MSPE over each country, product, year, and parameter draw. Table
+3 gives the MSPE multiplied by 10,000 for ease of comparison. Additionally, we calculate the
+average improvement over the base BDM and sort the models by this level of improvement. We
+highlight the lowest MSPE in each model for each prediction level.
+For the four variants of model 2, the spatial measure of the bilateral proximity between countries produces the best model predictions, but these predictions are not significantly better than
+those produced by the tourism measure. Whereas the tourism measure outperforms the spatial
+measure in predicting the first two years ahead, the spatial measure performs better in the third
+year. With either of those two measures, model 2 outperforms the BDM by approximately 40%.
+21
+
+Word-ofMouth
+-
+
+Reference
+Hierarchy
+-
+
+1 Year
+Ahead
+2.200
+
+2 Years
+Ahead
+9.005
+
+3 Years
+Ahead
+20.873
+
+Average
+10.692
+
+Model 2
+
+-
+
+Spatial
+Tourism
+Cultural
+Trade
+
+0.931
+[0.727]
+0.852
+0.870
+
+3.714
+[3.082]
+3.712
+4.133
+
+[14.509]
+15.928
+20.042
+25.181
+
+[6.385]
+6.579
+8.202
+10.061
+
+40.29%
+38.47%
+23.29%
+5.90%
+
+Model 3
+
+Table 3. MSPE Comparison
+
+Cultural
+Spatial
+Tourism
+Trade
+
+-
+
+[0.709]
+1.910
+2.126
+2.137
+
+[2.676]
+7.781
+8.586
+8.676
+
+[10.248]
+16.723
+19.468
+19.914
+
+[4.544]
+8.805
+10.060
+10.242
+
+57.50%
+17.66%
+5.91%
+4.21%
+
+Trade
+Tourism
+0.683
+Tourism
+Spatial
+0.702
+Cultural
+Spatial
+0.659
+Cultural
+Cultural
+[0.637]
+Cultural
+Tourism
+0.674
+Tourism
+Trade
+0.696
+Spatial
+Spatial
+0.654
+Trade
+Spatial
+0.677
+Trade
+Trade
+0.716
+Tourism
+Cultural
+0.729
+Spatial
+Tourism
+0.765
+Trade
+Cultural
+1.405
+Spatial
+Cultural
+1.516
+Cultural
+Trade
+1.921
+Spatial
+Trade
+2.208
+Tourism
+Tourism
+2.216
+NOTE: Best predictions are in brackets.
+
+[2.329]
+2.438
+2.458
+2.432
+2.455
+2.688
+2.449
+2.725
+2.953
+3.034
+3.181
+5.453
+5.941
+7.895
+8.854
+8.899
+
+[6.815]
+7.618
+8.049
+8.766
+9.033
+9.534
+10.146
+12.840
+14.172
+14.233
+15.646
+13.912
+14.639
+17.259
+19.945
+19.918
+
+[3.275]
+3.586
+3.722
+3.945
+4.054
+4.306
+4.416
+5.414
+5.947
+5.999
+6.531
+6.923
+7.365
+9.025
+10.336
+10.344
+
+69.37%
+66.46%
+65.19%
+63.10%
+62.08%
+59.73%
+58.70%
+49.36%
+44.38%
+43.90%
+38.92%
+35.25%
+31.12%
+15.60%
+3.34%
+3.26%
+
+Model 4
+
+Model
+BDM
+
+Improvement
+over BDM
+
+Improvement
+over Model 3
+
+27.92%
+
+With respect to the four variants of model 3, the cultural measure of bilateral proximity provides by
+far the best predictions. This measure enables model 3 to outperform the BDM by approximately
+57%. When comparing the prediction performance results across the 16 variants of model 4, we
+find that model 4 performs best when the bilateral proximity between the countries is measured
+through trade flow and tourism flow to capture the effects of word-of-mouth-based cross-country
+influence and of reference hierarchy-based cross-country influence, respectively. Our findings
+suggest that, although those two measures of the bilateral proximity between countries produce
+less effective predictions in models 2 and 3, an interaction effect renders these measures the best
+measures when they are combined. In fact, when these two measures are used to capture bilateral
+
+22
+
+proximity, model 4 outperforms the BDM by as much as 69%. Because our model 3 is analogous in
+structure to the one used in Albuquerque et al. (2007), we also compared the performance of model
+3 (see the last column in Table 3) to that of model 4, which adds the reference hierarchy effect as
+another explicit source of cross-country influence. We find that adding the reference hierarchy
+effect improves the predictions by nearly 28%. In summary, because the MSPE is the smallest for
+model 4, which uses trade and tourism as the measures of the bilateral proximity between countries, we find this specific variant to be the most consistent with the underlying diffusion process.
+The finding shows that cross-country influence plays a significant role in the new product diffusion process and is best captured by using both non-personal communication and product-specific
+word-of-mouth signals as the two explicit sources of this influence on the new product diffusion
+process. The results of our model comparisons also enable us to obtain insights into the relative
+effects of within- versus cross-country influences on the new product diffusion process and into
+the relative effects of non-personal communication versus product-specific word-of-mouth signals
+as the two explicit sources of cross-country influence. For instance, the fact that the best variant
+of model 4 (which incorporates both within-country and cross-country influences) outperforms the
+BDM (which does not incorporate any explicit cross-country influence) by approximately 69%
+clearly demonstrates that the cross-country influences have major effects on the new product diffusion processes within a country. Similarly, the fact that the best variants of model 2 and of model 3
+outperform the BDM by approximately 40% and 57%, respectively, show that both non-personal
+communication and product-specific word-of-mouth cross-country signals have strong and comparable effects on the new product diffusion process. Further, the above results provide interesting
+insights into which empirical measures of the bilateral proximity between countries better capture
+the effects of non-personal communication and product-specific word-of-mouth cross-country signals on the new product diffusion process. The results show that the tourism measure best captures
+the effects of the non-personal communication signals. Conversely, the effects of the productspecific word-of-mouth signals as a source of cross-country influence are better captured by the
+trade and cultural measures. Our findings also suggest that, although the spatial measure still pro-
+
+23
+
+vides improved predictions, it serves as the weakest measure of bilateral proximity in capturing
+cross-country influences from either type of signal. These findings make conceptual sense because
+in the consumption reference hierarchy context, one would expect the people in one country to be
+able to effectively learn about which new products are being used by the people in another country
+by actually visiting and observing the other country. One would also expect that in future decades,
+the flow of product-specific word-of-mouth communications from one country to another will become increasingly less dependent on the actual physical proximities than on the cultural and trade
+relationships between the countries.
+
+5.2 Insights from the Key Model Parameters
+As evident from the structure of our proposed diffusion models, there are five key model parameters: α, p, q, r and s. Table 4 shows the estimated values of these parameters. Please note that
+we used the logit transformation, which restricted α to between 0 and 1. For the three parameters
+(viz., α, p, and q) that also exist in the traditional BDM, our respective estimates are similar to
+those found in past studies (Talukdar et al. 2002). We next analyze these key model parameters
+in several ways to draw various relevant and interesting insights about the new product diffusion
+process in general and about the role of cross-country influences in particular.
+Table 4. Model Parameter Estimates
+α
+p
+q
+r
+s
+
+Model 1
+0.1550 (1.5E-03, 1.0000)
+0.0088 (2.2E-04, 0.0331)
+0.1639 (4.8E-03, 1.0786)
+-
+
+Model 2
+0.8417 (1.9E-02, 1.0000)
+0.0020 (7.2E-07, 0.0238)
+0.1061 (3.6E-05, 0.8642)
+0.0005 (1.8E-06, 0.0030)
+-
+
+Model 3
+0.8872 (5.5E-02, 1.0000)
+0.0019 (9.6E-07, 0.0226)
+0.0967 (1.0E-04, 0.8192)
+0.0019 (6.4E-07, 0.0202)
+
+Model 4
+0.8074 (2.1E-02, 1.0000)
+0.0016 (3.0E-10, 0.0205)
+0.0629 (2.0E-07, 0.7630)
+0.0003 (8.2E-08, 0.0026)
+0.0117 (4.3E-06, 0.0943)
+
+5.2.1 Hierarchical Regression Results for the Parameter Covariates
+We first discuss the hierarchical regression results of our proposed models to obtain insights
+into the effects of the relevant country-level covariates on the key diffusion model parameters.
+These insights help to enhance our understanding of the factors that drive the differences in the
+24
+
+diffusion processes across individual countries (Peres et al. 2010). As noted earlier, the set of
+covariates used in our study is larger than that of any other existing study investigating the crosscountry influence on the new product diffusion process. Table 5 shows the results of the various
+covariates used in our hierarchical regression analysis. Many of the covariates analyzed are found
+to be statistically significant and have the expected directional impacts on the respective model
+parameters in almost all of the cases. Because the directional impacts of the covariates on their
+respective parameters are consistent across the various estimated models, we discuss below the
+results in terms of our most extensive model (viz., model 4).
+Table 5. Hierarchical Regression Results
+Exp.
+Covariate
+Eff.
+Potential Penetration (α)
+GINI Index
+Urban Population
++
+International Trade
++
+Telephone Mainlines
+on Cell Phones
+Price of Mainlines
+?
+on Cell Phones
+Telephone Mainlines
++
+on Fax
+TV on VCR
++
+TV on Camcorder
++
+
+Est.
+
+p-val
+
+sig1
+
+-0.28
+-0.37
+0.04
+
+0.027
+0.000
+0.000
+
+*
+***
+***
+
+-0.70
+
+0.000
+
+***
+
+-4.65
+
+0.000
+
+***
+
+-0.01
+
+0.348
+
+0.06
+0.08
+
+0.012
+0.196
+
+General Non-Personal Communication (p)
+Intercept
+-10.6
+0.000
+Per Capita Income
+-2.54
+0.000
+Individualism Index
++
+0.04
+0.000
+Uncertainty
+-0.01
+0.122
+Avoidance Index
+
+Exp.
+Covariate
+Eff.
+Est.
+Within-Country Word-of-Mouth (q)
+GINI Index
+-0.09
+Female Labor
++
+0.03
+Participation
+Individualism Index
++
+0.03
+Uncertainty
+0.02
+Avoidance Index
+Introductory Lag
++
+0.78
+
+p-val
+
+sig1
+
+0.000
+
+***
+
+0.018
+
+*
+
+0.019
+
+*
+
+0.456
+0.000
+
+***
+
+Cross-Country Non-Personal Communication (r)
+Intercept
+-15.9
+0.000
+***
+Per Capita Income
+0.02
+0.401
+Individualism Index
++
+0.08
+0.000
+***
+Uncertainty
+-0.01
+0.265
+Avoidance Index
+
+*
+
+***
+***
+***
+
+Cross-Country Word-of-Mouth (s)
+Intercept
+-17.5
+Internet Penetration
++
+0.01
+TV Penetration
++
+0.10
+GINI Index
+0.05
+Female Labor
++
+-0.01
+Participation
+Individualism Index
++
+-0.01
+Uncertainty
+-0.01
+Avoidance Index
+Introductory Lag
++
+0.28
+1
+Statistical significance: * 10% level; ** 5% level; *** 1% level.
+
+0.000
+0.000
+0.000
+0.145
+
+***
+***
+***
+
+0.258
+0.303
+0.288
+0.134
+
+With respect to the covariates for the penetration potential parameter α, we find that international trade (as a percent of GDP), which is highly correlated with income, has a strong positive
+25
+
+effect on the penetration level, as expected. However, we find that the per capita income effect is
+negative when it is expected to be positive. The high correlation with trade may have caused the
+unexpected effect of per capita income. After controlling for the average per capita income level,
+we find that the positive effect of the elderly population ratio is consistent with the expectation
+that a higher value of this ratio reflects a higher proportion of disposable income. The GINI index
+has a negative impact, which confirms the prediction that a more inequitable income distribution
+adversely affects the new product penetration potential. Urbanization, which has a negative effect,
+is the other covariate for which we find the directional effect to contradict our initial expectations.
+In this context, it is relevant to note that several major developing countries (e.g., China and India)
+with lower levels of urbanization have experienced higher penetration levels at the comparative
+stages of the diffusion process for mobile phones (Talukdar et al. 2002). The effects of the various
+product interactions on the parameter α are generally consistent with our expectations.
+In terms of p and r, the parameters of non-personal communication-based influence, we find
+that the following two covariates show significant effects in the expected directions: per capita
+income and individualism index. The adoption behaviors of the people in the less affluent countries
+and in the countries that score higher on the individualism index are more responsive to nonpersonal communication-based influences. Introductory lag has a significant positive effect on the
+covariates for the parameter (q) of the within-country product-specific word-of-mouth influence.
+This result is consistent with the evidence from past studies (Takada and Jain 1991). The GINI
+index has a negative effect, which is in line with the expectation that the word-of-mouth-based
+social contagion process will be less effective in a population with lower income homogeneity.
+The TV penetration rate has a strong positive effect on the parameter q. We also find a similar
+strong positive effect of the TV penetration rate on the parameter s of the cross-country productspecific word-of-mouth influence. The internet penetration rate has a significant positive effect
+on the parameters q and s. This finding provides the first systematic evidence showing that the
+emergence of the internet has significantly boosted the effect of word-of-mouth-based influences
+on new product diffusion processes (Chandrasekaran and Tellis 2007).
+
+26
+
+5.2.2 Time-Varying Patterns in the Influence Parameters
+In the context of accelerating globalization trends, it would be interesting to search for evidence
+of any systematic time-varying pattern in the four influence parameter values: p, q, r and s. In
+this respect, similar to other new product diffusion models (e.g., Albuquerque et al. 2007, Putsis
+et al. 1997, Talukdar et al. 2002), our primary proposed models consider all of the within- and
+cross-country influence parameters to be invariant over time. However, a few adjustments to our
+best-performing model (Model 4) allow the influence parameters to vary across time as follows.
+[
+
+∑
+∑ Qjn (t)
+Yin (t − 1)
+ybin (t) = [αin Mi (t)−Yin (t−1)] pin (t) + qin (t)
++ rin (t)
+aij Lj (t) + sin (t)
+bij
+αin Mi (t)
+Mj (t)
+j̸=i
+j̸=i
+(11)
+Then we add a time-varying component to the hierarchical portion of our model:
+
+ 
+ ∑
+ 
+
+∗
+∗
+∗
+∗
+α (t)
+α + αn + αt
+X β
+π
+ in   i
+  k∈Pα1 kin k   αint 
+ ∗
+  ∗
+
+
+
+
+
+∑
+ pin (t)   pi + p∗n + p∗t   k∈P Xkin βk   πpint 
+p1
+
+ 
+ 
+ 
+
+
+ 
+ ∑
+ 
+
+ q ∗ (t)  =  q ∗ + q ∗ + q ∗  + 
+ 
+
+ in   i
+ k∈Pq1 Xkin βk  +  πqint  ,
+n
+t 
+
+ 
+ ∑
+ 
+
+ ∗
+  ∗
+
+ 
+
+∗
+∗ 
+ rin (t)   ri + rn + rt   k∈Pr1 Xkin βk   πrint 
+
+ 
+ 
+ 
+
+∑
+∗
+∗
+∗
+∗
+sin (t)
+si + sn + st
+πsint
+k∈Ps1 Xkin βk
+
+
+
+π
+ αint 
+
+
+ πpint 
+
+
+
+
+ π  ∼ M V N (0, λ) (12)
+ qint 
+
+
+
+
+ πrint 
+
+
+πsint
+
+The time-varying components are estimated through cubic splines (Hastie and Tibshirani 1990,
+Ruppert et al. 2003). The estimates and 95% credible intervals for the parameters whose slopes
+are significantly different from zero are shown in figure 2 below. Note that the time effects are
+transformed because they are within the hierarchical structure. The actual size of the estimates is
+less informative than the direction.
+We find that the parameters qt∗ and s∗t do not show any significant time effects. In contrast, the
+parameters p∗t and rt∗ exhibit significant time effects with distinct positive slopes. Thus, our results
+show that consumers’ responsiveness to non-personal communication-based influences on their
+new product adoption decisions has been increasing since the 1970s, even as their responsiveness
+to word-of-mouth- or social contagion-based influences have remained relatively unchanged. In
+27
+
+]
+
+Figure 2. Significant Time-varying Parameters
+
+other words, we find evidence of a distinct shift since the 1970s. Specifically, the new product
+diffusion process has become driven more by non-personal communication signals than by the
+word-of-mouth signals from existing adopters.
+
+5.2.3 Variance Decomposition of Heterogeneity
+We also analyzed the variance decomposition of heterogeneity in the context of the results
+estimated by the proposed diffusion model. We divide the variance into five categories: unobserved
+product effects, observed and unobserved country effects, and observed and unobserved productcountry interaction effects. Because we find that our fully augmented model (model 4), which uses
+trade and tourism measures of bilateral proximity, is the best-performing model, we perform the
+variance decomposition on its output. Table 6 shows the results.
+Table 6. Variance Decomposition Results
+α∗
+p∗
+q∗
+r∗
+s∗
+
+Product Effects
+Unobserved
+0.12 (0%)
+1.80 (14%)
+1.05 (6%)
+0.21 (4%)
+0.17 (2%)
+
+Country Effects
+Observed
+Unobserved
+153.91 (2%)
+0.05 (0%)
+10.23 (82%)
+0.13 (1%)
+3.03 (18%)
+0.08 (0%)
+4.30 (94%)
+0.04 (1%)
+5.18 (73%)
+0.08 (1%)
+
+28
+
+Product/Country Interactions
+Observed
+Unobserved
+7224.06 (98%)
+0.01 (0%)
+0.32 (3%)
+12.67 (74%)
+0.27 (2%)
+0.03 (1%)
+1.67 (23%)
+0.04 (1%)
+
+Total Variance
+7378.15
+12.48
+17.10
+4.58
+7.14
+
+For α∗ , almost all of the variance is captured in the observed country effects and the observed
+interactions between products and countries. Most of the variation is captured in the interactions.
+This finding implies that the adoption ceiling can be effectively estimated by the covariates specified in this study. Notice also that the total variance of α∗ is rather large when compared with the
+other parameters. This variance is large partly because α∗ is found through a logit transformation,
+whereas the others use a log transformation. As α approaches 0 or 1, as was the case in a few
+instances, a small change in α can cause a large change in α∗ . For p∗ and r∗ , the observed interactions cell is not applicable because we did not specify any covariates there. Almost all of the
+variance for these two parameters is found in the observed country effects. This finding shows that
+these parameters can be effectively estimated by examining the other product launches in the same
+country. For q ∗ , almost all of the variance is found in the interactions between the product and the
+country. This finding shows that one cannot simply examine similar products in another country or
+other products in the same country to estimate q. Rather, much of the information comes from the
+introductory lag. The parameter s∗ is mainly described by the observed country effects, with some
+contribution from the observed product effects. In summary, all of the parameters are effectively
+described by the covariates chosen by this study. In comparing the results with those from Talukdar
+et al. (2002), much of the unobserved idiosyncratic variance appears to have been explained in our
+setup, likely because of the additional covariates in our study.
+
+6.
+
+CONCLUSION
+
+Because of its obvious significance in understanding consumers’ adoption behaviors and the
+resulting strategic implications for firms, the new product diffusion process represents an important area of research in the marketing literature. Not surprisingly, there exists a rich steam of
+research on the diffusion of new products (Chandrasekaran and Tellis 2007, Mahajan et al. 2000).
+At the same time, the scope of this existing research remains quite limited in that few studies have
+investigated the role of cross-country influence dynamics in the new product diffusion process
+(Peres et al. 2010). This limitation becomes particularly conspicuous given the recent accelera29
+
+tion in globalization trends and the surge in cross-country interactions in an increasingly “flat”
+world (Friedman and Wyman 2005). In other words, an unfortunate disconnect remains between
+the widespread existence of cross-country interactions in reality and the limited number of studies
+analyzing the expected influence of these interactions on the new product diffusion process. Our
+study takes an important and substantive step in addressing this disconnect. Based on the notion
+of simultaneous mixing models (Putsis et al. 1997), our study proposes a conceptual framework
+to investigate the role of cross-country influence. Using the BDM as our core model, we then
+apply this framework to develop 24 complementary models. We use model structures and operational measures that capture and analyze the cross-country influence dynamics expected in reality.
+Our study models these dynamics more comprehensively than any other existing study. For one,
+our study addresses a conspicuous limitation in the existing studies, which use the product-specific
+word-of-mouth effects from existing adopters as the only source of cross-country influences on new
+product diffusion (Peres et al. 2010). Specifically, our study incorporates the usual product-specific
+word-of-mouth-based communication signals and the consumption reference hierarchy-based nonpersonal communication signals (Ger and Belk 1996, Tomlinson 2001) as two independent sources
+of cross-country influence. Our study also helps to address another important weakness in the existing diffusion literature: modeling the cross-country interaction process expected to facilitate
+cross-country influence on new product diffusion (Putsis et al. 1997). We model cross-country interactions based on four distinct measures. Among these measures is bilateral tourism flow, which
+is included for the first time in the new product diffusion literature. Further, in contrast to the
+existing cross-country diffusion studies (Putsis et al. 1997, Albuquerque et al. 2007), our study
+also searches for evidence of any systematic time-varying pattern in the key model parameters
+that reflect consumers’ responsiveness to within- and cross-country influences on the new product
+diffusion process. The data consist of seven new consumer product diffusions across 31 countries
+since the 1970s. The sample set of 31 countries covers essentially all of the major developed and
+developing countries. These 31 countries account for approximately 80% of the global economic
+output and 60% of the population. The data are collected from a multitude of sources and contain
+
+30
+
+detailed information on the bilateral trade and tourism flows across the sample set of countries.
+The scale and scope of our data enable us to analyze the largest set of parameter covariates to date
+in any single study investigating cross-country diffusion models. All of our proposed models outperform the BDM in terms of relative predictive accuracy. Given the widespread use of the BDM
+in investigations of aggregate country-level new product diffusion processes (Talukdar et al. 2002),
+our findings show that incorporating cross-country influences in diffusion models not only helps
+to better explain the dynamics of the international diffusion process but also helps to improve the
+predictive power of these models. We find that the best-performing model in terms of predictive accuracy allows for the usual product-specific word-of-mouth-based communication signals and the
+consumption reference hierarchy-based non-personal communication signals to serve as two separate sources of cross-country influences. This model outperforms the BDM by as much as 69%. We
+find that even those competing proposed models that only include either the usual product-specific
+word-of-mouth-based communication signals or the consumption reference hierarchy-based nonpersonal communication signals as the only source of cross-country influences improve upon the
+predictions of the BDM by 57% and 40%, respectively. This finding clearly demonstrates that
+both non-personal communication and product-specific word-of-mouth cross-country signals have
+strong and comparable effects on a country’s new product diffusion process. This finding also underscores the limitation of the existing studies, which use the product-specific word-of-mouth effects from existing adopters as the only source of cross-country influence on new product diffusion
+(Peres et al. 2010). Our findings also provide interesting insights into which empirical measures
+of the bilateral proximity between countries better capture the influences of non-personal communication and product-specific word-of-mouth cross-country signals on the new product diffusion
+process. Our results show that the tourism measure best captures the non-personal communication signal. In contrast, as a source of cross-country influence, the product-specific word-of-mouth
+signal is better captured by the trade and cultural measures of the bilateral proximity between countries. As one would expect in the face of accelerating globalization trends, we find that the spatial
+measure serves as the weakest measure of the bilateral proximity between countries in capturing
+
+31
+
+the cross-country influences from either type of signal. With respect to the results from the analysis
+of the key model parameters, we find strong and systematic evidence that the emergence of the Internet has accentuated both the within-country and cross-country influences of the product-specific
+word-of-mouth signals from existing adopters. To our knowledge, our study is the first to document
+such evidence in new product diffusion studies (Chandrasekaran and Tellis 2007). Our results also
+show that consumers’ responsiveness to non-personal communication-based influences on their
+new product adoption decisions has been increasing since the 1970s, even as their responsiveness
+to word-of-mouth or social contagion-based influences has remained relatively unchanged. The
+new product diffusion process has become driven more by non-personal communication effects
+than by the word-of-mouth effects from existing adopters. Taken together, the large set of models
+and the scope of our data enabled our study to investigate several important but hitherto unexplored
+dynamics of cross-country influence on the new product diffusion process. Thus, our findings add
+new and substantive insights to the limited existing literature on the role of cross-country influence dynamics in the new product diffusion process. These findings also bring significant value to
+managers interested in better-performing predictive models of international new product diffusion,
+especially in a world experiencing unprecedented socio-economic interactions among countries.
+We hope that our study stimulates additional studies on the under-researched but important issue
+of cross-country influence dynamics in new product diffusion processes. We also note that in a
+broader context, our study is related to the understanding of social interactions and neighborhood
+influence dynamics in general. Given the emergence of social networking and digital communities, these issues have generated considerable interest among researchers in recent years (Hartmann
+et al. 2008). Although our study investigated these social interaction dynamics at the macro level
+because of our focus on aggregate diffusion, an interesting area for future research would be to use
+micro-level models to investigate the role of social interaction dynamics in individual consumers’
+new product adoption decisions.
+
+32
+
+7.
+
+ACKNOWLEDGMENTS
+
+The authors are listed in alphabetical order and all contributed equally. They are especially
+grateful to Craig Meisner (World Bank) and Azucena Pernia (United Nations World Tourism Organization) for their help in providing much of the data used in this study. Hartman’s research was
+supported by the National Science foundation CMG research grants DMS-0724704. Mallick’s
+research was partially supported by the National Science foundation CMG research grants DMS0724704, ATM-0620624 and by Award Number KUS-CI-016-04 made by the King Abdullah University of Science and Technology (KAUST). Talukdar’s research was partially supported by the
+Dean’s Faculty Research Fellowship award from the School of Management, University of New
+York at Buffalo.
+
+33
+
+8. APPENDIX A: MCMC ALGORITHM
+To estimate the parameters, we use the following algorithm. The full conditional distribution
+is known for steps 1-8, but step 9 is Metropolis-Hastings with symmetric proposals.
+(
+)
+∑I ∑T
+2
+(Y
+(t)
+−
+ρ
+Y
+(t
+−
+1))
+T
+·
+I
+in
+n
+in
+, i=1 t=1
+1) σn2 ∼ IG
+2
+2
+(
+)
+2) λ−1 ∼ W ish 5 + N · C, 0.1IP + S1T S1
+∑N ∑I
+
+∗
+T
+αin
+− αi∗ − αn∗ − Xαin
+βαin
+n=1
+i=1
+∑
+∑I
+T
+where S1 =  N
+p∗in − p∗i − p∗n − Xpin
+βpin 
+n=1
+∑N ∑i=1
+I
+∗
+∗
+∗
+T
+n=1
+i=1 qin − qi − qn − Xqin βqin
+
+∑I
+T ∑I
+
+∗
+T
+∗
+T
+α
+−
+X
+β
+α
+−
+X
+β
+αi αi
+αi αi
+∑i=1 i
+∑i=1 i
+
+
+T
+T
+3) γi−1 ∼ W ish 5 + I, 0.1IP +  Ii=1 p∗i − Xpi
+βpi   Ii=1 p∗i − Xpi
+βpi 
+∑I
+∑
+I
+∗
+T
+∗
+T
+i=1 qi − Xqi βqi
+i=1 qi − Xqi βqi
+
+∑N ∗ T ∑N ∗ 
+αn
+αn
+∑i=1
+∑i=1
+
+
+N
+N
+−1
+∗
+
+
+
+4) γn ∼ W ish 5 + N, 0.1IP +
+pn
+p∗n 
+i=1
+i=1
+∑N ∗
+∑N ∗
+i=1 qn
+i=1 qn
+
+
+
+
+(
+)
+(
+)−1  
+ 
+−1
+T
+T ∗
+T
+Xαi
+Xαi
+Xαi
+αi
+Xαi
+Xαi
+βαi
+)−1 T ∗   ( T
+)−1  
+ ( T
+5)  βpi  ∼ NP  Xpi
+Xpi
+Xpi pi  ,  Xpi Xpi
+γ 
+( T
+)−1 T ∗
+( T
+)−1 i
+βqi
+Xqi Xqi
+Xqi qi
+Xqi Xqi
+(
+ (
+)
+)−1  
+
+
+−1
+T
+T
+∗
+T
+Xαin
+Xαin
+Xαin
+(αin
+− αi∗ − αn∗ )
+Xαin
+Xαin
+βαin
+)−1 T
+)−1  
+ ( T
+ ( T
+6)  βpin  ∼ NP  Xpin
+Xpin
+Xpin (p∗in − p∗i − p∗n )  ,  Xpin
+Xpin
+ λ
+( T
+)−1 T
+( T
+)−1
+∗
+∗
+∗
+βqin
+Xqin Xqin
+Xqin (qin − qi − qn )
+Xqin Xqin
+ ∗
+
+
+ T
+
+ ∗
+
+
+T
+Xαi βαi
+αin − αn∗ − Xαin
+βαin
+αi
+T
+T
+βpi  + N λ−1  p∗in − p∗n − Xpin
+βpin  , Λ−1 
+7)  p∗i  ∼ NP Λ−1 γi−1  Xpi
+∗
+T
+∗
+∗
+T
+qi
+Xqi βqi
+qin − qn − Xqin βqin
+where Λ = γi−1 + N λ−1
+ ∗
+
+
+ ∗
+
+
+T
+αin − αi∗ − Xαin
+βαin
+αn
+T
+βpin  , (γn−1 + Iλ−1 )−1 
+8)  p∗n  ∼ NP (γn−1 + Iλ−1 )−1 N λ−1  p∗in − p∗i − Xpin
+∗
+T
+qn∗
+qin
+− qi∗ − Xqin
+βqin
+ 
+{
+∑T
+αin
+Yin (t)2
+−
+9) L  pin  ∝ exp − t=1 2
+2σn
+qin
+
+
+
+
+T
+2
+βαin
+logit(αin ) − αi∗ − αn∗ − Xαin
+αin − αin
+
+T
+βpin  λ−1 − log  pin 
+0.5  log pin ) − p∗i − p∗n − Xpin
+
+T
+qin
+βqin
+log(qin ) − qi∗ − qn∗ − Xqin
+
+34
+
+9.
+
+APPENDIX B: HAVERSINE FORMULA
+
+The distance between two points with latitudes lat1 and lat2 and longitudes lon1 and lon2 can
+be calculated as:
+{√
+(
+)
+(
+)}
+lat
+−
+lat
+lon
+−
+lon
+2
+1
+2
+1
+d = 2 · R · arcsin
+sin2
++ cos(lat1 ) cos(lat2 ) sin2
+2
+2
+where R = 6367km = 3956mi (the radius of the Earth)
+
+REFERENCES
+Albuquerque, P., B. J. Bronnenberg, and C. J. Corbett (2007). A spatiotemporal analysis of the
+global diffusion of ISO 9000 and ISO 14000 certification. Management Science 53(3), 451.
+Bass, F. M. (1969). A new product growth for model consumer durables. Management Science 15(5), 215–227.
+Calem, P. S. and G. A. Carlino (1991). Urban agglomeration economies in the presence of technical
+change. Journal of Urban Economics 29(1), 82–95.
+Case, A. (1992). Neighborhood influence and technological change. Regional Science and Urban
+Economics 22(3), 491–508.
+Center for International Earth Science Information Network (CIESIN), Centro Internacional de
+Agricultura Tropical (CIAT) (2005). Gridded population of the world, version 3 (gpwv3) data
+collection.
+Chandrasekaran, D. and G. Tellis (2007). A critical review of marketing research on diffusion of
+new products. Review of marketing research, 39–80.
+Dekimpe, M., P. Parker, and M. Sarvary (2000). Multimarket and Global Diffusion. In Newproduct diffusion models. Kluwer Academic Pub.
+Dholakia, U. M. and D. Talukdar (2004). How social influence affects consumption trends in
+emerging markets: An empirical investigation of the consumption convergence hypothesis. Psychology and Marketing 21(10), 775–797.
+Featherstone, M. (1990). Global culture: an introduction. Theory, Culture & Society 7(2), 1–14.
+Friedman, T. and O. Wyman (2005). The world is flat. Farrar, Straus and Giroux New York.
+Ganesh, J. and V. Kumar (1996). Capturing the cross-national learning effect: An analysis of an
+industrial technology diffusion. Journal of the Academy of Marketing Science 24(4), 328–337.
+35
+
+Ganesh, J., V. Kumar, and V. Subramaniam (1997). Learning effect in multinational diffusion
+of consumer durables: An exploratory investigation. Journal of the Academy of Marketing
+Science 25(3), 214–228.
+Gatignon, H., J. Eliashberg, and T. S. Robertson (1989). Modeling multinational diffusion patterns:
+An efficient methodology. Marketing Science 8(3), 231–247.
+Ger, G. and R. W. Belk (1996). I’d like to buy the world a coke: Consumptionscapes of the less
+affluent world. Journal of Consumer Policy 19(3), 271–304.
+Hartmann, W. R., P. Manchanda, H. Nair, M. Bothner, P. Dodds, D. Godes, K. Hosanagar, and
+C. Tucker (2008). Modeling social interactions: Identification, empirical methods and policy
+implications. Marketing Letters 19(3), 287–304.
+Hastie, T. and R. Tibshirani (1990). Generalized additive models. Chapman & Hall/CRC.
+Helsen, K., K. Jedidi, and W. S. DeSarbo (1993). A new approach to country segmentation utilizing
+multinational diffusion patterns. The Journal of Marketing 57(4), 60–71.
+Hofstede, G. (2001). Culture’s Consequences: Comparing Values, Behaviors, Institutions, and
+Organizations Across Nations. Thousand Oaks CA: Sage Publications.
+Horsky, D. (1990). A diffusion model incorporating product benefits, price, income and information. Marketing Science 9(4), 342–365.
+International Monetary Fund (2008). Direction of trade statistics.
+Kumar, V. and T. V. Krishnan (2002). Multinational diffusion models: An alternative framework.
+Marketing Science 21(3), 318–330.
+Lichtenberg, J. (1996). Consuming because others consume. Social Theory and Practice 22(3),
+273–297.
+Lieberman, I. W. (1993). Privatization: The theme of the 1990s. The Columbia Journal of World
+Business 28(1), 8–17.
+Mahajan, V., E. Müller, and Y. Wind (2000). New-product diffusion models. Kluwer Academic
+Pub.
+Peres, R., E. Muller, and V. Mahajan (2010). Innovation diffusion and new product growth models:
+A critical review and research directions. International Journal of Research in Marketing.
+Putsis, W. P., S. Balasubramanian, E. H. Kaplan, and S. K. Sen (1997). Mixing behavior in crosscountry diffusion. Marketing Science 16(4), 354–369.
+Ratchford, B. T., D. Talukdar, and M. S. Lee (2007). The impact of the Internet on consumers’
+use of information sources for automobiles: A re-inquiry. Journal of Consumer Research 34(1),
+111–119.
+
+36
+
+Ruppert, D., M. Wand, and R. Carroll (2003). Semiparametric regression, Volume 12. Cambridge
+Univ Pr.
+Takada, H. and D. Jain (1991). Cross-national analysis of diffusion of consumer durable goods in
+Pacific Rim countries. The Journal of Marketing 55(2), 48–54.
+Talukdar, D., K. Sudhir, and A. Ainslie (2002). Investigating new product diffusion across products
+and countries. Marketing Science 21(1), 97–114.
+Tellis, G. J., S. Stremersch, and E. Yin (2003). The international takeoff of new products: The role
+of economics, culture, and country innovativeness. Marketing Science 22(2), 188–208.
+Tomlinson, J. (2001). Cultural imperialism: A critical introduction. Burns & Oates.
+Van den Bulte, C. and Y. Joshi (2007). New product diffusion with influentials and imitators.
+Marketing Science 26(3), 400–421.
+Van Everdingen, Y. M., W. B. Aghina, and D. Fok (2005). Forecasting cross-population innovation
+diffusion: A Bayesian approach. International Journal of Research in Marketing 22(3), 293–
+308.
+Wilk, R. (1998). Emulation, imitation, and global consumerism.
+ment 11(3), 314–333.
+World Bank (2010). World development indicators. Washington, D.C.
+World Tourism Organization (2008). Tourism statistics.
+
+37
+
+Organization & Environ-
+
+

@@ -1,0 +1,2917 @@
+arXiv:1804.09941v1 [math.ST] 26 Apr 2018
+
+On Measuring the Variability of Small Area Estimators in a
+Multivariate Fay-Herriot Model
+Tsubasa Ito∗and Tatsuya Kubokawa†
+
+Abstract
+This paper is concerned with the small area estimation in the multivariate Fay-Herriot
+model where covariance matrix of random effects are fully unknown. The covariance matrix
+is estimated by a Prasad-Rao type consistent estimator, and the empirical best linear unbiased predictor (EBLUP) of a vector of small area characteristics is provided. When the
+EBLUP is measured in terms of a mean squared error matrix (MSEM), a second-order approximation of MSEM of the EBLUP and a second-order unbiased estimator of the MSEM
+is derived analytically in closed forms. The performance is investigated through numerical
+and empirical studies.
+Key words and phrases: Empirical Bayes method, empirical best linear unbiased prediction, mean squared error matrix, second-order approximation, small area estimation.
+
+1
+
+Introduction
+
+Mixed effects models and their model-based estimators have been recognized as a useful method
+in statistical inference. In particular, small area estimation is an important application of
+mixed effects models. Although direct design-based estimates for small area means have large
+standard errors because of small sample sizes from small areas, the empirical best linear unbiased
+predictors (EBLUP) induced from mixed effects models provide reliable estimates by “borrowing
+strength” from neighboring areas and by using data of auxiliary variables. Such a model-based
+method for small area estimation has been studied extensively and actively from both theoretical
+and applied aspects, mostly for handling univariate survey data. For comprehensive reviews of
+small area estimation, see Ghosh and Rao (1994), Datta and Ghosh (2012), Pfeffermann (2013)
+and Rao and Molina (2015).
+When multivariate data with correlations are observed from small areas for estimating multidimensional characteristics, like poverty and unemployment indicators, Fay (1987) suggested a
+multivariate extension of the univariate Fay-Herriot model, called a multivariate Fay-Herriot
+model, to produce reliable estimates of median incomes for four-, three- and five-person families. Fuller and Harter (1987) also considered a multivariate modeling for estimating a finite
+population mean vector. Datta, Day and Basawa (1999) provided unified theories in empirical linear unbiased prediction or empirical Bayes estimation in general multivariate mixed linear
+∗
+
+Graduate School of Economics, University of Tokyo, 7-3-1 Hongo, Bunkyo-ku, Tokyo 113-0033, JAPAN.
+E-Mail: tsubasa ito.0710@gmail.com
+†
+Faculty of Economics, University of Tokyo, 7-3-1 Hongo, Bunkyo-ku, Tokyo 113-0033, JAPAN.
+E-Mail: tatsuya@e.u-tokyo.ac.jp
+
+1
+
+models. Datta, Day and Maiti (1998) suggested a hierarchical Bayesian approach to multivariate
+small area estimation. Datta, et al. (1999) showed the interesting result that the multivariate
+modeling produces more efficient predictors than the conventional univariate modeling. Porter,
+Wikle and Holan (2015) used the multivariate Fay-Herriot model for modeling spatial data.
+Ngaruye, von Rosen and Singull (2016) applied a multivariate mixed linear model to crop yield
+estimation in Rwanda.
+Although Datta, et al. (1999) developed the general and unified theories concerning the
+empirical best linear unbiased predictors (EBLUP) and their uncertainty, it is definitely more
+helpful and useful to provide concrete forms with closed expressions for EBLUP, the secondorder approximation of the mean squared error matrix (MSEM) and the second-order unbiased
+estimator of the mean squared error matrix. Recently, Benavent and Morales (2016) treated
+the multivariate Fay-Herriot model with the covariance matrix of random effects depending on
+unknown parameters. As a structure in the covariance matrix, they considered diagonal, AR(1)
+and the related structures and employed the residual maximum likelihood (REML) method
+for estimating the unknown parameters embedded in the covariance matrix. A second-order
+approximation and estimation of the MESM were also derived. For some examples, however,
+we cannot assume specific structures without prior knowledge or information on covariance
+matrices.
+In this paper, we treat the multivariate Fay-Herriot model where the covariance matrix
+of random effects is fully unknown. This situation has been studied by Fay (1987), Fuller and
+Harter (1987), Datta, et al. (1998), and useful in the case that statisticians have little knowledge
+on structures in correlation. As a specific estimator of the covariance matrix, we employ PrasadRao type estimators with closed forms and use the modified versions which are restricted over
+the space of nonnegative definite matrices. The empirical best linear unbiased predictors are
+provided based on the Prasad-Rao type estimators, and second-order approximation of their
+mean squared error matrices and their second-order unbiased estimators of the MSEM are
+derived with closed expressions. These are multivariate extensions of the results given by Prasad
+and Rao (1990) and Datta, et al. (2005) for the univariate case.
+The paper is organized as follows: Section 2 gives the Prasad-Rao type estimators and
+their nonnegative-definite modifications for the covariance matrix of the random effects, and
+shows their consistency. In Sections 3 and 4, the second-order approximation of MSEM of
+EBLUP and the second-order unbiased estimator of the MSEM are derived in closed forms.
+The performance of EBLUP and the MSEM estimator are investigated in Section 5. This
+numerical study illustrates that the proposals have good performances for the low-dimensional
+case. However, a k × k covariance matrix has k(k + 1)/2 parameters, and we need more data so
+as to maintain the performances of the proposals for higher-dimensional cases.
+Finally, it is noted that empirical best linear unbiased predictors for small area means are
+empirical Bayes estimators and related to the so-called James-Stein estimators. In this sense, the
+prediction in the multivariate Fay-Herriot model corresponds to the empirical Bayes estimation
+of a mean matrix of a multivariate normal distribution, which is related to the estimation of
+a precision matrix from a theoretical aspect as discussed in Efron and Morris (1976). In this
+framework, several types of estimators are suggested for estimation of the precision matrix, and it
+may be an interesting query whether those estimators provide improvements in the multivariate
+small area estimation.
+2
+
+2
+
+Empirical Best Linear Unbiased Prediction
+
+In this paper, we assume that area-level data (y 1 , X 1 ), . . . , (y m , X m ) are observed, where m is
+the number of small areas, y i is a k-variate vector of direct survey estimates and X i is a k × s
+matrix of covariates associated with y i for the i-th area. Then, the multivariate Fay-Herriot
+model is described as
+y i = X i β + v i + εi , i = 1, . . . , m,
+(1)
+where β is an s-variate vector of unknown regression coefficients, vi is a k-variate vector of
+random effects depending on the i-th area and εi is a k-variate vector of sampling errors. It is
+assumed that vi and εi are mutually independently distributed as
+v i ∼ Nk (0, Ψ) and εi ∼ Nk (0, D i ),
+where Ψ is a k × k unknown and nonsingular covariance matrix and D 1 , . . . , D m are k × k
+known covariance matrices. This is a multivariate extension of the so-called Fay-Herriot model
+suggested by Fay and Herriot (1979).
+For example, we consider the crop data of Battese, Harter and Fuller (1988), who analyze
+the data in the nested error regression model. For the i-th county, let yi1 and yi2 be survey
+data of average areas of corn and soybean, respectively. Also let xi1 and xi2 be satellite data of
+average areas of corn and soybean, respectively. In this case, y i , X i and β correspond to
+
+
+1 xi1 xi2 0 0
+0
+⊤
+y i = (yi1 , yi2 ) , X i =
+, β = (β1 , . . . , β6 )⊤
+0 0
+0 1 xi1 xi2
+for k = 2 and s = 6. Battese, et al. (1988) applied a univariate nested error regression model
+for each of yi1 and yi2 , while we can use the multivariate model (1) for analyzing both data
+simultaneously.
+⊤
+⊤ ⊤
+⊤ ⊤
+We now express model (1) in a matrix form. Let y = (y ⊤
+1 , . . . , y m ) , X = (X 1 , . . . , X m ) ,
+⊤
+⊤
+⊤
+⊤
+⊤
+⊤
+v = (v 1 , . . . , v m ) and ε = (ε1 , . . . , εm ) . Then, model (1) is expressed as
+
+y = Xβ + v + ε,
+
+(2)
+
+where v ∼ Nkm (0, I m ⊗ Ψ) and ε ∼ Nkm (0, D) for D = block diag(D 1 , . . . , D m ).
+
+For the a-th area, we want to predict the quantity θ a = X a β + v a , which is the conditional
+mean E[y a | v a ] given v a . A reasonable estimator can be derived from the conditional expectation E[θ a | y a ] = X a β + E[v a | y a ]. The conditional distribution of v i given y i and the
+marginal distribution of y i are
+−1
+v i | y i ∼Nk (v ∗i (β, Ψ), (Ψ−1 + D −1
+i ) ),
+
+y i ∼Nk (X i β, Ψ + D i ),
+
+i = 1, . . . , m,
+
+(3)
+
+where
+
+v ∗i (β, Ψ) = Ψ(Ψ + D i )−1 (y i − X i β) = I k − D i (Ψ + D i )−1 (y i − X i β).
+
+Thus, we get the estimator
+
+θ ∗a (β, Ψ) =X a β + E[v a | y a ] = X a β + v ∗a (β, Ψ)
+=y a − D a (Ψ + D a )−1 (y a − X a β),
+3
+
+(4)
+
+which corresponds to the Bayes estimator of θ a in the Bayesian framework.
+When Ψ is known, the maximum likelihood estimator or generalized least squares estimator
+of β is
+b
+β(Ψ)
+={X ⊤ (I m ⊗ Ψ + D)−1 X}−1 X ⊤ (I m ⊗ Ψ + D)−1 y
+m
+m
+o−1 X
+nX
+−1
+−1
+X⊤
+=
+X⊤
+(Ψ
++
+D
+)
+X
+i
+i
+i (Ψ + D i ) y i .
+i
+
+(5)
+
+i=1
+
+i=1
+
+Substituting b
+β(Ψ) into θ ∗ (β, Ψ) yields the estimator
+
+
+ba (Ψ) = y − D a (Ψ + D a )−1 y − X a b
+θ
+β(Ψ) .
+a
+a
+
+(6)
+
+ba (Ψ) is the best linear unbiased predictor (BLUP) of θ a . It can
+Datta, et al. (1999) showed that θ
+ba (Ψ) is the Bayes estimator against the uniform prior distribution
+be also demonstrated that θ
+of β as well as the empirical Bayes estimator as shown above, which is called the Bayes empirical
+Bayes estimator.
+⊤ ] = Ψ + D for
+Concerning estimation of Ψ,Pit is noted that E[(y i − X i β)(y i − X
+i
+Pi β)
+m
+m
+⊤
+i = 1, . . . , m, which implies that i=1 E[(y i −X i β)(y i −X i β) ] = mΨ+ i=1 D i . Substituting
+e = (X ⊤ X)−1 X ⊤ y into β, we get the consistent estimator
+the ordinary least squares estimator β
+
+b0 = 1
+Ψ
+m
+
+m
+X
+i=1
+
+
+
+e
+e ⊤
+(y i − X i β)(y
+i − X i β) − D i .
+
+(7)
+
+b 0 , we can see that E[Ψ
+b 0 ] = Ψ + Bias b (Ψ), where
+Taking the expectation of Ψ
+Ψ0
+
+o
+nX
+1 X
+BiasΨ
+(X ⊤ X)−1 X ⊤
+X⊤
+(Ψ
++
+D
+)X
+X i (X ⊤ X)−1
+j
+j
+b 0 (Ψ) =
+i
+j
+m
+m
+
+m
+
+j=1
+
+i=1
+
+−
+
+1
+m
+
+m
+X
+i=1
+
+m
+
+(Ψ + D i )X i (X ⊤ X)−1 X ⊤
+i −
+
+1 X
+X i (X ⊤ X)−1 X ⊤
+i (Ψ + D i ).
+m
+
+(8)
+
+i=1
+
+(Ψ), we get a bias-corrected given by
+Substituting b
+Ψ0 into Bias b
+Ψ0
+b 0 ).
+b
+(Ψ
+Ψ0 − Bias b
+Ψ1 = b
+Ψ0
+
+(9)
+
+b for Ψ
+b 0 and Ψ
+b 1 without any conFor notational convenience, we use the same notation Ψ
+fusion. It is noted that both estimators are not necessarily nonnegative definite. In this case,
+there exist a k × k orthogonal matrix H and a diagonal matrix Λ = diag (λ1 , . . . , λk ) such that
+b
+Ψ = HΛH ⊤ . Let Λ+ = diag (max{0, λ1 }, . . . , max{0, λk }), and let
+b + = HΛ+ H ⊤ .
+Ψ
+
+ba (Ψ) with the estimator Ψ
+b + , and the resulting estimator is the empirical Bayes
+Replace Ψ in θ
+(EB) estimator
+ba (Ψ
+bEB = θ
+b + ).
+(10)
+θ
+a
+4
+
+b + , we assume the following conditions:
+To guarantee asymptotic properties of Ψ
+(H1) 0 < k < ∞, 0 < s < ∞.
+(H2) There exist positive constants d and d such that d and d do not depend on m and satify
+dI k ≤ D i ≤ dI k for i = 1, . . . , m.
+(H3) X ⊤ X is nonsingular and X ⊤ X/m converges to a positive definite matrix.
+b =Ψ
+b 0 and Ψ
+b 1:
+Theorem 1 Under conditions (H1)-(H3), the following properties hold for Ψ
+−1
+b
+b
+(1) Bias b
+Ψ0 (Ψ) = O(m ), which means that Ψ0 has the second-order bias, while Ψ1 is a
+second-order unbiased estimator of Ψ.
+b − Ψ = Op (m−1/2 ) and β(
+b Ψ)
+b − β = Op (m−1/2 ).
+(2) Ψ
+b + is consistent for large m, and P (Ψ
+b + 6= Ψ)
+b =
+(3) The nonnegative defnite matrix Ψ
+−K
+O(m ) for any K.
+b 0 − Ψ as
+Proof. We begin with writing Ψ
+
+b0 − Ψ = 1
+Ψ
+m
+
+m
+m
+X
+1 X
+⊤
+e − β)(β
+e − β)⊤ X ⊤
+{(y i − X i β)(y i − X i β) − (Ψ + D i )} +
+X i (β
+i
+m
+i=1
+
+i=1
+
+m
+m
+1 X
+1 X
+⊤ ⊤
+e
+e − β)(y − X i β)⊤ ,
+(y i − X i β)(β − β) X i −
+X i (β
+−
+i
+m
+m
+i=1
+
+i=1
+
+which yields the bias given in (8). It is easy to check that the bias is of order O(m−1 ).
+b − Ψ is approximated as
+For (2), it is noted that Ψ
+b −Ψ=1
+Ψ
+m
+
+m
+X
+{(y i − X i β)(y i − X i β)⊤ − (Ψ + D i )} + Op (m−1 )
+i=1
+
+m
+1 X
+−1
+{ui u⊤
+=
+i − (Ψ + D i )} + Op (m ),
+m
+
+(11)
+
+i=1
+
+where ui = y i − X i β, having Nk (0, Ψ + D i ). It is here noted that (ui u⊤
+i − (Ψ + D i ))/m for
+⊤ − (Ψ + D ))/m = 0 for i = 1, . . . , m. Then
+i = 1, . . . , m are mutually independent
+and
+E(u
+u
+i
+i i
+P
+Pm
+⊤
+2
+2
+2
+the consistency follows because m
+i=1 E(ui ui − (Ψ + D i )) /m =
+i=1 (2(Ψ + D i ) + tr (Ψ +
+D i )I k )/m2 = O(m−1 ) under condition (H2). Using condition (H2) and finiteness of moments
+√ b
+of normal random variables, we can show that m(Ψ
+− Ψ) converges to a multivariate normal
+−1/2
+b
+distribution, which implies that Ψ − Ψ = Op (m
+).
+
+b Ψ)
+b Ψ)
+b Ψ)
+b − β = Op (m−1/2 ). Note that β(
+b − β is decomposed as {β(
+b −
+We next verify that β(
+b
+b
+b
+β(Ψ)}
++ {β(Ψ)
+− β}. For β(Ψ)
+− β, it is noted that
+b
+β(Ψ)
+−β =
+
+b
+Then, Var(β(Ψ)
+− β) =
+
+m
+nX
+
+−1
+X⊤
+i (Ψ + D i ) X i
+
+i=1
+
+i=1
+
+nP
+
+m
+o−1 X
+
+m
+⊤
+−1
+i=1 X i (Ψ + D i ) X i
+
+5
+
+o−1
+
+−1
+X⊤
+i (Ψ + D i ) (y i − Ey i ).
+
+(12)
+
+b
+= O(1/m) and this implies β(Ψ)
+−β =
+
+Op (m−1/2 ). We next evaluate b
+β( b
+Ψ) − β(Ψ) as
+
+b
+β( b
+Ψ) − β(Ψ)
+o−1 m
+n m
+X
+X
+−1
+−1
+b
+b
+X⊤
+X⊤
+(
+Ψ
++
+D
+)
+X
+=
+i
+i
+i (Ψ + D i ) y i
+i
+−
+
+=
++
+
+i=1
+
+i=1
+
+m
+nX
+
+−1
+X⊤
+i (Ψ + D i ) X i
+
+m
+o−1 X
+
+i=1
+
+−1
+b
+X⊤
+i (Ψ + D i ) X i
+
+i=1
+
+i=1
+
+m
+nX
+
+−1
+X⊤
+i (Ψ + D i ) y i
+
+m
+hn X
+i=1
+
+m
+o−1 X
+
+−1
+b
+X⊤
+i (Ψ + D i ) X i
+
+= I1 + I2 .
+
+i=1
+
+o−1
+
+−
+
+o
+n
+b + D i )−1 − (Ψ + D i )−1 y i
+(
+Ψ
+X⊤
+i
+
+m
+nX
+
+−1
+X⊤
+i (Ψ + D i ) X i
+
+m
+o−1 i X
+
+−1
+X⊤
+i (Ψ + D i ) y i
+
+i=1
+
+i=1
+
+First, I1 is written as
+m
+m
+o−1 X
+nX
+−1 b
+−1
+⊤ b
+−1
+b
+X⊤
+X i (Ψ + D i ) X i
+I1 = −
+i (Ψ + D i ) (Ψ − Ψ)(Ψ + D i ) y i ,
+
+(13)
+
+(14)
+
+i=1
+
+i=1
+
+P
+Pm
+⊤ b
+⊤ b
+−1
+which is of order Op (m−1/2 ), because m
+i=1 X i (Ψ + D i ) X i = Op (m) and
+i=1 X i (Ψ +
+b − Ψ)(Ψ + D i )−1 y i = Op (m1/2 ). Next, I2 is rewritten as
+D i )−1 (Ψ
+m
+m
+o
+n
+o−1 X
+nX
+⊤
+b + D i )−1 − (Ψ + D i )−1 X i
+b + D i )−1 X i
+(
+Ψ
+X
+I2 = −
+X⊤
+(
+Ψ
+i
+i
+×
+
+=
+
+i=1
+
+i=1
+
+m
+nX
+
+m
+o−1 X
+
+i=1
+
+−1
+b
+X⊤
+i (Ψ + D i ) X i
+
+m
+nX
+i=1
+
+−1
+X⊤
+i (Ψ + D i ) y i
+
+i=1
+
+i=1
+
+m
+nX
+
+×
+
+−1
+X⊤
+i (Ψ + D i ) X i
+
+m
+o−1 X
+
+−1
+X⊤
+i (Ψ + D i ) X i
+
+i=1
+
+−1 b
+−1
+b
+X⊤
+i (Ψ + D i ) (Ψ − Ψ)(Ψ + D i ) X i
+
+m
+o−1 X
+
+−1
+X⊤
+i (Ψ + D i ) y i ,
+
+(15)
+
+i=1
+
+P
+Pm
+⊤ b
+−1
+−1 b
+b
+which is of order Op (m−1/2 ), because m
+X⊤
+(Ψ+D
+i ) X i = Op (m),
+i
+i=1
+i=1 X i (Ψ+D i ) (Ψ−
+P
+P
+m
+⊤ b
+⊤
+−1
+−1
+Ψ)(Ψ + D i )−1 X i = Op (m1/2 ), m
+i=1 X i (Ψ + D i ) X i = O(m) and
+i=1 X i (Ψ + D i ) y i =
+b Ψ)
+b Ψ)
+b − β(Ψ) = Op (m−1/2 ), and it is concluded that β(
+b −β =
+Op (m). Thus, we have β(
+−1/2
+Op (m
+).
+b and let λ1 , . . . , λk be eigenvalues of Ψ. Then, for
+For (3), let λ̂1 , . . . , λ̂k be eigenvalues of Ψ,
+j = 1, . . . , k,
+√
+√
+P (λ̂j < 0) = P (λ̂j − λj < −λj ) = P (−(λ̂j − λj ) > λj ) ≤ P (| m(λ̂j − λj )| > mλj ).
+
+Note that λj > 0. It follows from the Markov inequality that for any K > 0,
+√
+√
+√
+E[{| m(λ̂j − λj )|}2K ]
+√
+P (| m(λ̂j − λj )| > mλj ) ≤
+= O(m−K ),
+( mλj )2K
+b − Ψ = Op (m−1/2 ).
+because λ̂j − λj = Op (m−1/2 ) from Ψ
+6
+
+
+
+3
+
+Second-order Approximation of Mean Squared Error Matrix
+EB
+
+b
+in (10) is measured by the mean squared error
+Uncertainty of the empirical Bayes estimator θ
+a
+EB
+EB
+bEB − θ a }⊤ ]. It is noted that
+b
+b ) = E[{θ
+− θ a }{θ
+matrix (MSEM), defined as MSEM(θ
+a
+
+a
+
+a
+
+ba (Ψ)}
+ba (Ψ) − θ ∗ (β, Ψ)} + {θ
+bEB − θ
+bEB − θ a = {θ ∗ (β, Ψ) − θ a } + {θ
+θ
+a
+a
+a
+a
+
+ba (Ψ) − θ ∗ (β, Ψ) = −Da (Ψ + Da )−1 X a {β(Ψ)
+b
+and that θ
+− β}. The following lemma is useful
+a
+for evaluating the mean square error matrix.
+EB
+
+e or b
+b
+Lemma 1 b
+β(Ψ) is independent of y − X β
+Ψ. Also, b
+β(Ψ) is independent of θ
+a
+e and β(Ψ)
+b
+Proof. The covariance of y − X β
+is
+
+ba (Ψ).
+−θ
+
+e β(Ψ)
+b
+E[(y − X β)(
+− β)⊤ ]{X ⊤ (I m ⊗ Ψ + D)−1 X}
+= E[(y − X e
+β)(y − Xβ)⊤ ](I m ⊗ Ψ + D)−1 X
+i
+h
+⊤
+−1
+−1 ⊤
+= (I m ⊗ Ψ + D) − X{X (I m ⊗ Ψ + D) X} X (I m ⊗ Ψ + D)−1 X
+= 0.
+
+e or b
+This implies that b
+β(Ψ) is independent of y − X β
+Ψ. It is also noted that
+
+ba (Ψ) = − D a ( b
+bEB − θ
+β(Ψ))
+β( b
+Ψ)) + D a (Ψ + D a )−1 (y a − X a b
+Ψ + D a )−1 (y a − X a b
+θ
+a
+e
+b + D a )−1 }(y a − X a β)
+=D a {(Ψ + D a )−1 − (Ψ
+
+b + D a )−1 X a {X ⊤ (I m ⊗ Ψ
+b + D)−1 X}−1 X ⊤ (I m ⊗ Ψ
+b + D)−1 (y − X β)
+e
++ D a (Ψ
+− D a (Ψ + D a )−1 X a {X ⊤ (I m ⊗ Ψ + D)−1 X}−1 X ⊤ (I m ⊗ Ψ + D)−1 (y − X e
+β),
+
+e Hence, θ
+bEB − θ
+ba (Ψ) is independent of β(Ψ).
+b
+which is a function of y − X β.
+a
+
+
+
+Using Lemma 1, we can decompose the mean squared error matrix as
+EB
+
+b ) =E[{θ ∗ (β, Ψ) − θ a }{θ ∗ (β, Ψ) − θ a }⊤ ]
+MSEM(θ
+a
+a
+a
+∗
+b
+ba (Ψ) − θ ∗ (β, Ψ)}⊤ ]
++ E[{θ a (Ψ) − θ (β, Ψ)}{θ
+
+a
+a
+EB
+EB
+⊤
+b
+b
+b
+b
++ E[{θ
+a − θ a (Ψ)}{θ a − θ a (Ψ)} ]
+bEB − θ
+ba (Ψ)}{θ
+bEB − θ
+ba (Ψ)}⊤ ],
+=G1a (Ψ) + G2i (Ψ) + E[{θ
+a
+a
+
+where
+
+−1
+G1a (Ψ) =(Ψ−1 + D −1
+= Ψ(Ψ + D a )−1 D a ,
+a )
+
+−1
+G2a (Ψ) =D a (Ψ + D a )−1 X a {X ⊤ (I m ⊗ Ψ + D)−1 X}−1 X ⊤
+a (Ψ + D a ) D a .
+
+(16)
+
+(17)
+
+The third term can be approximated as
+hX
+1
+−1
+(Ψ + D i )(Ψ + D a )−1 (Ψ + D i )
+D
+(Ψ
++
+D
+)
+a
+a
+m2
+m
+
+G3a (Ψ) =
+
+i=1
+
+m
+i
+X
+{tr [(Ψ + D i )(Ψ + D a )−1 ]}(Ψ + D i ) (Ψ + D a )−1 Da .
++
+i=1
+
+7
+
+(18)
+
+bEB is approxiTheorem 2 The mean squared error matrix of the empirical Bayes estimator θ
+a
+mated as
+bEB ) = G1a (Ψ) + G2a (Ψ) + G3a (Ψ) + O(m−3/2 ).
+(19)
+MSEM(θ
+a
+
+ba (Ψ)}⊤ ] = G3a (Ψ) + Op (m−3/2 ).
+ba (Ψ)}{θ
+bEB − θ
+bEB − θ
+Proof. We shall prove that E[{θ
+a
+a
+b instead of Ψ
+b + . It
+Also from (2) in Theorem 1, it is sufficient to show this approximation for Ψ
+is observed that
+ba (Ψ) =D a {(Ψ + D a )−1 − (Ψ
+bEB − θ
+b + D a )−1 }(y a − X a β) + Da (Ψ
+b + D a )−1 X a { b
+β( b
+Ψ) − β}
+θ
+a
+b
+− Da (Ψ + D a )−1 X a {β(Ψ)
+− β}.
+
+Using the equation
+
+we can see that
+
+b + D i )−1 = (Ψ + D i )−1 − (Ψ + D i )−1 (Ψ
+b − Ψ)(Ψ
+b + D i )−1 ,
+(Ψ
+
+(20)
+
+b + D a )−1 }(y a − X a β)
+Da {(Ψ + D a )−1 − (Ψ
+b − Ψ)(Ψ
+b + D a )−1 (y − X a β)
+=Da (Ψ + D a )−1 (Ψ
+a
+
+−1
+
+=Da (Ψ + D a )
+
+and
+
+b − Ψ)(Ψ + D a )−1 (y − X a β) + Op (m−1 )
+(Ψ
+a
+
+b Ψ)
+b + D a )−1 X a {β(
+b − β}
+D a (Ψ
+b Ψ)
+b − β} − D a (Ψ + D a )−1 (Ψ
+b − Ψ)(Ψ
+b + D a )−1 X a {β(
+b Ψ)
+b − β}
+=D a (Ψ + D a )−1 X a {β(
+=D a (Ψ + D a )−1 X a { b
+β( b
+Ψ) − β} + Op (m−1 ).
+
+Thus, we have
+
+ba (Ψ) =D a (Ψ + D a )−1 (Ψ
+b − Ψ)(Ψ + D a )−1 (y a − X a β)
+bEB − θ
+θ
+a
+b Ψ)
+b
+b − β(Ψ)}
++ D a (Ψ + D a )−1 X a {β(
++ Op (m−1 )
+=I1 + I2 + Op (m−1 ). (say)
+
+For I2 , it is noted that
+b Ψ)
+b
+b − β(Ψ)
+β(
+m
+m
+o−1 n X
+o−1 i
+hn X
+⊤ b
+−1
+−1
+=
+X j (Ψ + D j ) X j
+−
+X⊤
+j (Ψ + D j ) X j
+×
+
++
+
+j=1
+m
+X
+i=1
+
+j=1
+
+−1
+b
+X⊤
+i (Ψ + D i ) (y i − X i β)
+
+m
+nX
+
+−1
+X⊤
+j (Ψ + D j ) X j
+
+j=1
+
+=I21 + I22 .
+
+m
+o−1 X
+i=1
+
+o
+n
+b + D i )−1 − (Ψ + D i )−1 (y i − X i β)
+(
+Ψ
+X⊤
+i
+8
+
+We can evaluate I21 as
+m
+m
+o
+o−1 n X
+nX
+⊤
+−1 b
+−1
+−1
+b b
+X
+(Ψ
++
+D
+)
+(
+Ψ
+−
+Ψ)(Ψ
++
+D
+)
+X
+I21 =
+X⊤
+(Ψ
++
+D
+)
+X
+i
+i
+i {β(Ψ) − β}
+j
+j
+i
+j
+i=1
+
+j=1
+
+−1
+
+=Op (m ),
+Pm
+Pm
+⊤
+⊤
+−1
+−1 b
+−1
+because
+j=1 X j (Ψ + D j ) X j = O(m),
+i=1 X i (Ψ + D i ) (Ψ − Ψ)(Ψ + D i ) X i =
+Op (m1/2 ) and b
+β( b
+Ψ) − β = Op (m−1/2 ) from Theorem 1 (2). We next estimate I22 as
+I22 = −
+
+×
+
+m
+nX
+
+−1
+X⊤
+j (Ψ + D j ) X j
+
+i=1
+
+j=1
+
+m
+nX
+i=1
+
+m
+o−1 n X
+
+b
+X⊤
+i A(Ψ, D i )X i
+
+m
+o−1 X
+i=1
+
+b
+X⊤
+i A(Ψ, D i )X i
+
+o
+
+b
+X⊤
+i A(Ψ, D i )(y i − X i β)
+
+b + Di )−1 ( b
+for A( b
+Ψ, D i ) = (Ψ
+Ψ − Ψ)(Ψ + D i )−1 . It can be seen that I22 = Op (m−1 ) from the
+same arguments as in I21 . Thus, it follows that I2 = Op (m−1 ). Hence, we have
+ba (Ψ)}⊤ ]
+ba (Ψ)}{θ
+b EB − θ
+−θ
+a
+h
+i
+b − Ψ)(Ψ + D a )−1 (y a − X a β)(y a − X a β)⊤ (Ψ + D a )−1 (Ψ
+b − Ψ)
+=Da (Ψ + D a )−1 E (Ψ
+EB
+
+b
+E[{θ
+a
+
+× (Ψ + D a )−1 D a + O(m−3/2 ).
+
+b − Ψ is approximated as
+It is noted from (3) that Ψ
+1
+b
+Ψ−Ψ =
+m
+
+m
+X
+−1
+{ui u⊤
+i − (Ψ + D i )} + Op (m ),
+i=1
+
+which is used to evaluate
+h
+i
+b − Ψ)(Ψ + D a )−1 (y a − X a β)(y a − X a β)⊤ (Ψ + D a )−1 (Ψ
+b − Ψ)
+E (Ψ
+=
+
+m m
+i
+1 XX h
+⊤
+−1
+⊤
+−1
+⊤
+E
+{u
+u
+−
+(Ψ
++
+D
+)}(Ψ
++
+D
+)
+u
+u
+(Ψ
++
+D
+)
+{u
+u
+−
+(Ψ
++
+D
+)}
+i i
+i
+a
+a a
+a
+j j
+i
+m2
+i=1 j=1
+
++ O(m−3/2 )
+m
+i
+1 X h
+−1
+⊤
+−1
+⊤
+E {ui u⊤
+−
+(Ψ
++
+D
+)}(Ψ
++
+D
+)
+u
+u
+(Ψ
++
+D
+)
+{u
+u
+−
+(Ψ
++
+D
+)}
+= 2
+i
+a
+a a
+a
+i i
+i
+i
+m
+i=1
+
++ O(m−3/2 ),
+i
+h
+−1
+⊤
+−1
+⊤
+since E {ui u⊤
+i − (Ψ + D i )}(Ψ + D a ) ua ua (Ψ + D a ) {uj uj − (Ψ + D i )} = 0 for i 6= j.
+
+Letting z i = (Ψ + D i )−1/2 ui , we can see that z i ∼ Nk (0, I k ). Then,
+
+m
+i
+1 X h
+⊤
+−1
+⊤
+−1
+⊤
+E
+{u
+u
+−
+(Ψ
++
+D
+)}(Ψ
++
+D
+)
+u
+u
+(Ψ
++
+D
+)
+{u
+u
+−
+(Ψ
++
+D
+)}
+i i
+i
+a
+a a
+a
+i i
+i
+m2
+i=1
+h
+i
+1 X
+⊤ ⊤
+⊤
+1/2
+(Ψ + D i )1/2 E (z i z ⊤
++ O(m−2 ),
+= 2
+i − I)Bz a z a B (z i z i − I) (Ψ + D i )
+m
+i6=a
+
+9
+
+for B = (Ψ + D i )1/2 (Ψ + D a )−1/2 . Let C = BB ⊤ = (Ψ + D i )1/2 (Ψ + D a )−1 (Ψ + D i )1/2 . For
+i 6= a,
+⊤ ⊤
+⊤
+E[(z i z ⊤
+i − I)Bz a z a B (z i z i − I)]
+
+⊤ ⊤
+⊤
+⊤ ⊤
+⊤
+⊤ ⊤
+⊤ ⊤
+⊤
+=E[z i z ⊤
+i Bz a z a B z i z i + Bz a z a B − z i z i Bz a z a B − Bz a z a B z i z i ]
+
+⊤
+=E[z i z ⊤
+i Cz i z i − C] = C + (tr C)I k ,
+
+⊤
+because E[z i z ⊤
+i Cz i z i ] = 2C + (tr C)I k . Thus,
+1 X
+(Ψ + D i )1/2 {C + (tr C)I k }(Ψ + D i )1/2
+m2
+i6=a
+
+m
+
+=
+
+1 X
+(Ψ + D i )1/2 {C + (tr C)I k }(Ψ + Di )1/2 + O(m−2 ),
+m2
+i=1
+
+which leads to the expression in (18).
+
+4
+
+
+
+Estimation of Mean Squared Error Matrix
+
+In this section, we obtain a second-order unbiased estimator of the mean squared error matrix
+bEB in (10). A naive estimator of MSEM(θ
+bEB ) is the plug-in
+of the empirical Bayes estimator θ
+a
+a
++
+b + ) + G3a (Ψ
+b + ), but this has a second-order bias,
+estimator of (19) given by G1a ( b
+Ψ ) + G2a (Ψ
+b + )] = G1a (Ψ) + O(m−1 ). Thus, we need to correct the second-order bias. Let
+because E[G1a (Ψ
+−1
+G4a (Ψ) = −D a (Ψ + D a )−1 BiasΨ
+b (Ψ)(Ψ + D a ) D a ,
+
+b is the bias of Ψ
+b given by
+where Bias(Ψ)
+(
+(Ψ) =
+Bias b
+Ψ
+
+(21)
+
+b
+b
+BiasΨ
+b 0 (Ψ) for Ψ = Ψ0 ,
+0
+for b
+Ψ= b
+Ψ1 ,
+EB
+
+b
+where Bias b
+Ψ0 (Ψ) is given in (8). Define the estimator msem(θ a ) by
+
+bEB ) = G1a (Ψ
+b + ) + G2a (Ψ
+b + ) + 2G3a (Ψ
+b + ) + G4a (Ψ
+b + ).
+msem(θ
+a
+
+(22)
+
+b + )+G3a (Ψ
+b + )+G4a (Ψ
+b + )] = G1a (Ψ)+O(m−3/2 ),
+Theorem 3 Under the assumption, E[G1a (Ψ
+and
+bEB ) + O(m−3/2 ),
+bEB )] = MSEM(θ
+E[msem(θ
+a
+a
+
+bEB ).
+bEB ) is a second-order unbiased estimator of MSEM(θ
+namely, msem(θ
+a
+a
+
+b instead of
+Proof. From (2) in Theorem 1, it is sufficient to show this approximation for Ψ
+b . Using the equation in (20), we can rewrite G1a (Ψ)
+b as
+Ψ
++
+
+−1
+b =(Ψ
+b −1 + D −1
+b + D a )−1 D a
+G1a (Ψ)
+= D a − D a (Ψ
+a )
+b − Ψ)(Ψ + D a )−1 D a
+=G1a (Ψ) + D a (Ψ + D a )−1 (Ψ
+−1
+
+− D a (Ψ + D a )
+
+b − Ψ)(Ψ + D a )
+(Ψ
+
+−1
+
+10
+
+(23)
+
+b − Ψ)(Ψ + D a )
+(Ψ
+
+−1
+
+Da + Op (m
+
+−3/2
+
+).
+
+We shall evaluate each term in RHS of the above equality. It is easy to see from (3) that
+b − Ψ] = Bias(Ψ),
+b which is written as (8). We next evaluate E[(Ψ
+b − Ψ)(Ψ + D a )−1 (Ψ
+b − Ψ)],
+E[Ψ
+which is, from (3), approximated as
+b − Ψ)(Ψ + D a )−1 (Ψ
+b − Ψ)]
+E[(Ψ
+m m
+o
+1 X X hn
+⊤
+E (y i − X i β)(y i − X i β) − (Ψ + D i ) (Ψ + D a )−1
+= 2
+m
+i=1 j=1
+n
+oi
+× (y j − X j β)(y j − X j β)⊤ − (Ψ + D j ) + O(m−3/2 )
+m
+
+=
+
+m
+
+1 XX
+⊤
+1/2
+(Σ + D i )1/2 E[(z i z ⊤
++ O(m−3/2 ),
+i − I)C(z j z j − I)](Ψ + D j )
+m2
+i=1 j=1
+
+⊤
+for C = (Ψ + Di )1/2 (Ψ + D a )−1 (Ψ + Di )1/2 . For i 6= j, E[(z i z ⊤
+i − I)C(z j z j − I)] = 0, we
+have
+m
+m
+m X
+X
+X
+⊤
+⊤
+E[z i z ⊤
+E[(z i z ⊤
+−
+I)C(z
+z
+−
+I)]
+=
+j j
+i Cz i z i − C].
+i
+i=1
+
+i=1 j=1
+
+⊤
+Because E[z i z ⊤
+i Cz i z i ] = 2C + (tr C)I k , it is concluded that
+
+b − Ψ)(Ψ + D a )−1 (Ψ
+b − Ψ)](Ψ + D a )−1 D a = G3a (Ψ) + O(m−3/2 ).
+D a (Ψ + D a )−1 E[(Ψ
+
+b + )+
+The above arguments imply that a second-order unbiased estimator of G1a (Ψ) is G1a (Ψ
+b + ) + G4a (Ψ
+b + ). The estimators G2a (Ψ
+b + ) and G3a (Ψ
+b + ) do not have second-order biases,
+G3a (Ψ
+and the results in Theorem 3 are established.
+
+
+5
+
+Simulation and Empirical Studies
+
+5.1
+
+Finite sample performances
+
+We now investigate finite sample performances of EBLUP in terms of MSEM and the secondorder unbiased estimator of MSEM by simulation.
+[1] Setup of simulation experiments. We treat the multivariate Fay-Herriot model (1)
+for k = 2, 3 and m = 30, 60 without covariates, namely X i = I k . As a setup of the covariance
+matrix Ψ of the random effects, we consider
+
+⊤
+ρψ 2 ψ ⊤
+2 + (1 − ρ)diag(ψ 2 ψ 2 ) for k = 2,
+Ψ=
+⊤
+ρψ 3 ψ ⊤
+3 + (1 − ρ)diag(ψ 3 ψ 3 ) for k = 3,
+√
+√
+√
+√
+where ψ 2 = ( 1.5, 0.5)⊤ , ψ 3 = ( 1.5, 1, 0.5)⊤ , and diag(A) denotes the diagonal matrix
+consisting of diagonal elements of matrix A. Here, ρ is the correlation coefficient, and we handle
+the three cases ρ = 0.25, 0.5, 0.75. The cases of negative correlations are omitted, because we
+observe the same results with those of positive ones.
+Concerning the dispersion matrices D i of sampling errors εi , we treat the two Di -patterns:
+(a) 0.7Ik , 0.6Ik , 0.5Ik , 0.4Ik , 0.3Ik and (b) 2.0Ik , 0.6Ik , 0.5Ik , 0.4Ik , 0.2Ik . In the univariate FayHerriot model, these cases are treated by Datta, et al. (2005). There are five groups G1 , . . . , G5
+11
+
+corresponding to these Di -patterns, and there are six and twelve small areas in each group for
+m = 30 and 60, respectively, where the sampling covariance matrices D i are the same for areas
+within the same group.
+[2] Comparison of MSEM. We begin with obtaining the true mean squared error matrices
+ba (Ψ
+bEB = θ
+b + ) by simulation. Let {y (r) , i = 1, . . . , m} be the simulated data
+of the EBLUP θ
+a
+i
+
+b +(r) and θ (r)
+in the r-th replication for r = 1, . . . , R with R = 50, 000. Let Ψ
+a be the values of
++
+b
+Ψ and θ a in the r-th replication. Then the simulated value of the true mean squared error
+matrices is calculated by
+EB
+
+b ) = R−1
+MSEM(θ
+a
+
+R
+X
+
+i=1
+
+ba (Ψ
+b +(r) ) − θ (r)
+θ
+a
+
+
+⊤
+ba (Ψ
+b +(r) ) − θ (r)
+θ
+.
+a
++
+
+As an estimator of Ψ, we here use the simple estimator b
+Ψ0 , because there is little difference
++
++
+b 0 and Ψ
+b 1 in simulated values of MSEM under the setup of X i = Ik . Simulated
+between Ψ
+values of the mean squared error matrices, averaged over areas within groups Gt , are reported
+in Tables 1, 3, and 5. To measure relative improvement of EBLUP, we calculate the percentage
+bEB over y , defined by
+relative improvement in the average loss (PRIAL) of θ
+a
+a
+h
+bEB i
+bEB , y ) = 100 × 1 − tr {MSEM(θ a )} .
+PRIAL(θ
+a
+a
+tr {MSEM(y a )}
+
+buEB derived from the univariate FaybEB with the EBLUP θ
+It is also interesting to compare θ
+a
+a
+Herriot model. Thus, we calculate the PRIAL given by
+EB
+
+uEB
+
+b
+b ,θ
+PRIAL(θ
+a
+a
+
+h
+bEB )} i
+tr {MSEM(θ
+a
+,
+) = 100 × 1 −
+uEB
+b
+tr {MSEM(θ
+)}
+a
+
+and those values are reported in Tables 2, 4 and 6.
+
+bEB for k = 2, D i -patterns (a),
+Table 1 reports the simulated values of the true MSEM of θ
+a
+m = 30, 60 and ρ = 0.25, 0.5, 0.75. For fixed m, the values of MSEM decrease as the correlation
+ρ in the random effect becomes large. For fixed ρ, the values of MSEM decrease as m becomes
+buEB under the same setup as in
+bEB over y and θ
+large. Table 2 reports the values of PRIAL of θ
+a
+a
+a
+EB
+b
+improves on y largely and the improvement rates are larger for
+Table 1. In all the cases, θ
+a
+
+a
+
+bEB for
+buEB is slightly better than θ
+buEB , the univariate EBLUP θ
+larger ρ. In comparison with θ
+a
+a
+a
+buEB get larger
+bEB over θ
+ρ = 0.25, but the difference is not significant. The values of PRIAL of θ
+a
+
+EB
+
+a
+
+b
+in light of PRIAL get larger
+as ρ increases. In the case of m = 60, the improvements of θ
+a
+EB
+b
+buEB is better for m = 60
+for larger ρ. In the case of ρ = 0.25, the improvement of θ
+over θ
+a
+
+a
+
+than for m = 30. This is because the low accuracy in estimation of the covariance matrix Ψ has
+more adverse influence on prediction than the benefit from incorporating the small correlation
+into the estimation.
+The comparison of performances between Di -patterns (a) and (b) is investigated in Tables
+bEB in D i -patterns (a) and (b) are reported in
+3 and 4. The simulated values of the MSEM of θ
+a
+
+12
+
+Table 3 for k = 2, m = 30, 60 and ρ = 0.5. As the increment of variance of sampling error in
+G1 , the MSEM in G1 becomes larger, and the other groups have slightly larger MSEM except
+bEB over y and θ
+buEB are given in Table 4 for Di -patterns (a) and
+G5 . The values of PRIAL of θ
+a
+a
+a
+bEB over
+(b). under the same setup as in Table 3. As seen from the table, the improvement of θ
+a
+
+bEB is
+y a in G1 is larger for D i -pattern (b) because of the large sampling variance. However, θ
+a
+buEB in G4 and G5 for m = 30 and in G5 for m = 60 in Di -pattern (b). This
+not better than θ
+implies that incorporating the information of areas with large sampling variances affects more
+adversely estimation of areas with small sampling variances in the multivariate model than in
+the univariate model.
+
+Tables 5 and 6 report the values of MSEM and PRIAL for k = 3, m = 30, ρ = 0.5 and
+buEB are larger
+bEB over y and θ
+D i -pattern (a). From Table 6, it is revealed that PRIAL of θ
+a
+a
+a
+for k = 3 than for k = 2 in the case of ρ = 0.75, but smaller in the case of ρ = 0.25. When
+m is fixed as m = 30, the accuracy in estimation of the covariance matrix Ψ gets smaller for
+the larger dimension. This demonstrates that it is not appropriate to treat the multivariate
+Fay-Herriot model with a large covariance matrix when m is not large.
+[3] MSEM approximation and its estimator. We next investigate the performance of
+bEB given in Theorem 2 and the secondthe second-order approximation of MSEM of EBLUP θ
+a
+
+bEB ) of MSEN given in Theorem 3. The values of the secondorder unbiased estimator msem(θ
+a
+order approximation of MSEM are given in Table 7 for k = 2, m = 3 and Di -pattern (a).
+Comparing the values in Table 7 with the corresponding true values of the MSEM in Table 1,
+we can see that the second-order approximation can approximate the true MSEM precisely for
+every Gt and ρ.
+bEB ) given in
+Concerning the performance of the second-order unbiased estimator msem(θ
+a
+bEB ), averaged
+(22), we compute the simulated values of relative bias of the estimator msem(θ
+a
+
+over areas within groups Gt . Those values are reported in Table 8 for k = 2, m = 30, 60 and
+D i -pattern (a). It is revealed from Table 8 that the relative bias gets larger for larger ρ. Also,
+the values of the relative bias are smaller for m = 60 than for m = 30, namely, the relative bias
+gets small as m increases.
+
+5.2
+
+Illustrative example
+
+This example, primarily for illustration, uses the multivariate Fay-Herriot model (1) and data
+from the 2016 Survey of Family Income and Expenditure in Japan, which is based on two or
+more person households (excluding agricultural, forestry and fisheries households). The target
+domains are the 47 Japanese prefectural capitals. The 47 prefectures are divided into 10 regions:
+Hokkaido, Tohoku, Kanto, Hokuriku, Tokai, Kinki, Chugoku, Shikoku, Kyushu and Okinawa.
+Each region consists of several prefectures except Hokkaido and Okinawa, which consist of one
+prefecture.
+In this study, as observations (yi1 , yi2 )⊤ , we use the reported data of the yearly averaged
+monthly spendings on ‘Education’ and ‘ Cultural-amusement’ per worker’s household, scaled
+by 1,000 Yen, at each capital city of 47 prefectures. In addition, we use the data in the 2014
+National Survey of Family Income and Expenditure. The average spending data in this survey
+13
+
+Table 1: Simulated values of mean squared error matrices of θbEB
+multipled by 100 for k = 2, D i -patterns (a)
+a
+
+G1
+G2
+G3
+G4
+G5
+
+G1
+G2
+G3
+G4
+G5
+
+ ρ = 0.25 
+49.8 3.8
+ 3.8 32.6 
+44.7 3.1
+ 3.1 30.4 
+39.0 2.4
+ 2.4 27.9 
+33.1 1.7
+ 1.7 25.3 
+26.1 1.1
+1.1 21.6
+ ρ = 0.25 
+49.0 4.1
+ 4.1 30.7 
+43.5 3.4
+ 3.4 28.6 
+37.9 2.6
+ 2.6 26.0 
+31.9 1.8
+ 1.8 23.4 
+25.2 1.2
+1.2 19.8
+
+m = 30
+ ρ = 0.5 
+48.7 8.1
+ 8.1 30.1 
+43.8 6.5
+ 6.5 28.3 
+38.0 5.3
+ 5.3 26.3 
+32.4 3.8
+ 3.8 23.6 
+25.6 2.3
+2.3 20.4
+m = 60
+ ρ = 0.5 
+47.4 8.2
+ 8.2 28.0 
+42.5 7.0
+ 7.0 26.5 
+37.1 5.7
+ 5.7 24.5 
+31.4 4.1
+ 4.1 21.8 
+24.8 2.7
+2.7 18.7
+
+ ρ = 0.75 
+46.5 13.8
+ 13.8 25.3 
+41.4 11.6
+ 11.6 23.7 
+36.6 9.2
+ 9.2 21.8 
+30.6 6.8
+ 6.8 19.8 
+24.2 4.6
+4.6 17.4
+ ρ = 0.75 
+45.2 14.0
+ 14.0 23.6 
+40.3 11.7
+ 11.7 22.1 
+35.2 9.6
+ 9.6 20.4 
+29.8 7.3
+ 7.3 18.5 
+23.8 5.1
+5.1 16.1
+
+buEB for k = 2, D i -patterns (a)
+Table 2: PRIAL of θbEB
+over y a and θ
+a
+a
+
+m = 30
+G1
+G2
+G3
+G4
+G5
+
+ρ = 0.25
+41.2
+37.2
+33.0
+27.3
+20.8
+
+m = 60
+G1
+G2
+G3
+G4
+G5
+
+ρ = 0.25
+43.2
+39.8
+35.6
+30.6
+24.8
+
+bEB vs y
+θ
+a
+a
+ρ = 0.5
+43.8
+40.1
+35.8
+29.8
+23.5
+bEB vs y a
+θ
+
+ρ = 0.75
+48.9
+45.7
+41.8
+37.2
+30.4
+
+ρ = 0.25
+-0.5
+0.0
+-0.7
+-1.9
+-2.5
+
+ρ = 0.75
+51.0
+48.1
+44.2
+39.8
+33.6
+
+ρ = 0.25
+-0.6
+0.2
+1.3
+0.3
+0.4
+
+a
+
+ρ = 0.5
+45.8
+42.4
+38.7
+33.7
+27.5
+
+bEB vs θ
+buEB
+θ
+a
+a
+ρ = 0.5
+3.8
+3.5
+3.4
+1.8
+1.1
+bEB vs θ
+buEB
+θ
+a
+
+14
+
+ρ = 0.75
+11.6
+12.3
+11.8
+11.0
+10.0
+
+a
+
+ρ = 0.5
+4.6
+5.1
+4.6
+3.5
+2.9
+
+ρ = 0.75
+13.9
+13.6
+14.3
+13.2
+11.0
+
+Table 3: Simulated values of mean squared error matrices of θbEB
+multipled by 100 for k = 2, ρ = 0.5
+a
+m = 30
+G1
+G2
+G3
+G4
+G5
+
+ Pattern (a) 
+48.7 8.1
+ 8.1 30.1 
+43.8 6.5
+ 6.5 28.3 
+38.0 5.3
+ 5.3 26.3 
+32.4 3.8
+ 3.8 23.6 
+25.6 2.3
+2.3 20.4
+
+ Pattern (b) 
+89.9 19.7
+ 19.7 42.9 
+44.5 6.0
+ 6.0 30.2 
+39.3 4.7
+ 4.7 28.3 
+33.4 3.2
+ 3.2 25.9 
+19.1 0.1
+0.1 18.8
+
+m = 60
+G1
+G2
+G3
+G4
+G5
+
+ Pattern (a) 
+47.4 8.2
+ 8.2 28.0 
+42.5 7.0
+ 7.0 26.5 
+37.1 5.7
+ 5.7 24.5 
+31.4 4.1
+ 4.1 21.8 
+24.8 2.7
+2.7 18.7
+
+ Pattern (b) 
+86.8 20.1
+ 20.1 40.0 
+42.9 6.5
+ 6.5 27.8 
+37.8 5.0
+ 5.0 25.8 
+32.0 3.6
+ 3.6 23.8 
+18.1 0.6
+0.6 16.4
+
+buEB for k = 2, m = 30, 60, ρ = 0.5, D i -patterns (a), (b)
+Table 4: PRIAL of θbEB
+over y a and θ
+a
+a
+
+m = 30
+G1
+G2
+G3
+G4
+G5
+
+bEB vs y a
+θ
+a
+Pattern (a)
+43.8
+40.1
+35.8
+29.8
+23.5
+bEB vs y
+θ
+a
+
+m = 60
+G1
+G2
+G3
+G4
+G5
+
+Pattern (b)
+66.4
+37.0
+32.1
+26.2
+4.2
+
+a
+
+Pattern (a)
+45.8
+42.4
+38.7
+33.7
+27.5
+
+bEB vs θ
+buEB
+θ
+a
+a
+Pattern (a)
+3.8
+3.5
+3.4
+1.8
+1.1
+EB
+b
+buEB
+θ
+vs θ
+a
+
+Pattern (b)
+68.5
+40.7
+36.2
+30.6
+13.9
+
+15
+
+Pattern (b)
+2.1
+0.8
+1.0
+-0.2
+-8.5
+
+a
+
+Pattern (a)
+4.6
+5.1
+4.6
+3.5
+2.9
+
+Pattern (b)
+3.1
+3.1
+2.7
+1.3
+-2.7
+
+Table 5: Simulated values of mean squared error matrices of θbEB
+multiplied by 100 for k = 3, m = 30, D i -patterns (a)
+a
+
+G1
+
+G2
+
+G3
+
+G4
+
+G5
+
+m = 30
+ρ = 0.5
+
+
+48.0 7.0 6.4
+ 7.0 41.1 6.5 
+ 6.4 6.5 29.5 
+42.8 5.8 5.4
+ 5.8 37.7 5.5 
+ 5.4 5.5 28.2 
+37.5 4.1 3.9
+ 4.1 33.9 4.1 
+ 3.9 4.1 25.8 
+32.1 2.7 2.9
+ 2.7 29.2 3.0 
+ 2.9 3.0 20.7 
+25.8 1.6 1.5
+ 1.6 24.1 1.8 
+1.5 1.8 20.7
+
+ρ = 0.25
+
+
+50.0 3.4 3.5
+ 3.4 44.3 3.4 
+ 3.5 3.4 33.3 
+45.2 2.6 2.8
+ 2.6 39.8 2.9 
+ 2.8 2.9 31.2 
+40.0 2.0 1.9
+ 1.9 36.1 2.1 
+ 1.9 2.1 29.0 
+33.4 1.3 1.5
+ 1.3 31.0 1.6 
+ 1.5 1.6 26.0 
+26.3 0.7 0.7
+ 0.7 25.4 1.0 
+0.7 1.0 22.7
+
+ρ = 0.75
+
+42.0 12.3 10.0
+ 12.3 34.8 9.4 
+ 10.0 9.4 23.1 
+38.2 10.0 8.3
+ 10.0 31.8 8.0 
+ 8.3 8.0 21.7 
+33.5 7.7 7.0
+ 7.7 28.8 6.4 
+ 7.0 6.4 20.5 
+29.2 5.6 5.1
+ 5.6 25.2 5.1 
+ 5.1 5.1 18.4 
+23.4 3.1 3.2
+ 3.1 21.0 3.4 
+3.2 3.4 16.5
+
+
+buEB for k = 2, 3, m = 30, D i -patterns (a)
+Table 6: PRIAL of θbEB
+over y a and θ
+a
+a
+
+k=2
+G1
+G2
+G3
+G4
+G5
+
+ρ = 0.25
+41.2
+37.2
+33.0
+27.3
+20.8
+
+k=3
+G1
+G2
+G3
+G4
+G5
+
+ρ = 0.25
+39.5
+35.2
+30.3
+25.2
+17.6
+
+bEB vs y
+θ
+a
+a
+ρ = 0.5
+43.8
+40.1
+35.8
+29.8
+23.5
+bEB vs y
+θ
+a
+
+ρ = 0.5
+43.6
+40.0
+35.1
+29.7
+21.6
+
+ρ = 0.75
+48.9
+45.7
+41.8
+37.2
+30.4
+
+ρ = 0.25
+-0.5
+0.0
+-0.7
+-1.9
+-2.5
+
+ρ = 0.75
+52.4
+48.9
+44.6
+39.6
+32.0
+
+ρ = 0.25
+-1.9
+-2.6
+-3.9
+-4.4
+-5.7
+
+a
+
+buEB
+bEB vs θ
+θ
+a
+a
+ρ = 0.5
+3.8
+3.5
+3.4
+1.8
+1.1
+bEB vs θ
+buEB
+θ
+a
+
+16
+
+ρ = 0.75
+11.6
+12.3
+11.8
+11.0
+10.0
+
+a
+
+ρ = 0.5
+5.9
+4.8
+3.2
+1.9
+-0.3
+
+ρ = 0.75
+20.3
+19.2
+18.2
+15.7
+12.8
+
+Table 7: Second order approximations of mean squared error matrices of θbEB
+multiplied by 100 for k = 2, D i -patterns
+a
+(a)
+
+G1
+G2
+G3
+G4
+G5
+
+ ρ = 0.25 
+49.8 3.7
+ 3.7 32.6 
+44.6 3.1
+ 3.1 30.4 
+38.9 2.4
+ 2.4 27.8 
+32.6 1.7
+ 1.7 24.7 
+25.7 1.1
+1.1 20.7
+
+m = 30
+ ρ = 0.5 
+48.6 7.9
+ 7.9 30.3 
+43.6 6.6
+ 6.6 28.4 
+38.1 5.2
+ 5.2 26.1 
+32.0 3.8
+ 3.8 23.3 
+25.3 2.4
+2.4 20.0
+
+ ρ = 0.75 
+46.2 13.2
+ 13.2 25.9 
+41.5 11.1
+11.1
+24.4 
+
+36.3 8.9
+ 8.9 22.6 
+30.6 6.6
+ 6.6 20.5 
+24.4 4.3
+4.3 17.8
+
+Table 8: Simulated values of percentage average relative bias of mean squared error matrices of θbEB
+multiplied by 100
+a
+for k = 2, m = 30, 60, D i -pattern (a)
+
+m = 30
+G1
+G2
+G3
+G4
+G5
+m = 60
+G1
+G2
+G3
+G4
+G5
+
+ ρ = 0.25 
+−0.3 −2.6
+−2.6
+1.1
+
+0.6 3.1
+ 3.1 0.9 
+−0.6 −5.8
+−5.8
+1.2 
+
+−0.4 −4.6
+2.9 
+ −4.6
+0.3 −24.4
+−24.4
+2.2
+ρ = 0.25 
+−0.1 −2.3
+ −2.3 −0.5 
+0.7 −3.4
+−3.4
+−0.2 
+
+0.2 −5.1
+ −5.1 −0.2 
+−0.1 −5.1
+−5.1
+−0.4 
+
+0.2 −3.3
+−3.3 −0.2
+
+
+Pattern (a)
+ ρ = 0.5 
+−0.9 −4.1
+−4.1
+2.9 
+
+0.3 −3.5
+2.7 
+ −3.5
+1.3 −7.8
+4.6 
+ −7.8
+0.4 −10.8
+4.7 
+ −10.8
+0.6 −26.1
+−26.1
+7.7
+Pattern (a)
+ ρ = 0.5 
+0.2 −0.2
+−0.2
+−0.5 
+
+0.4 −0.8
+ −0.8 −0.5 
+0.1 −1.5
+−1.5
+0.1 
+
+−0.4 −2.4
+0.3 
+ −2.4
+0.3 −5.9
+−5.9 −0.1
+
+17
+
+ρ = 0.75 
+0.6 −9.5
+−9.5
+10.1 
+
+1.1 −10.4
+13.1 
+ −10.4
+1.2 −16.7
+13.6 
+ −16.7
+1.2 −23.4
+17.8 
+ −23.4
+3.4 −42.3
+−42.3
+23.1
+
+
+ρ = 0.75 
+0.4 −0.7
+−0.7
+1.7 
+
+0.8 −0.0
+2.1 
+ −0.0
+0.3 −1.4
+2.9 
+ −1.4
+1.4 −2.9
+3.6 
+ −2.9
+0.6 −8.1
+−8.1
+5.1
+
+
+are more reliable than the Survey of Family Income and Expenditure since the sample sizes
+are much larger. However, this survey is conducted only once in every five years. As auxiliary
+variables, we use the data of the average spendings on ‘Education’ and ‘ Cultural-amusement’,
+which is denoted by EDUi and CULi , respectively. Then the regressor in the model (1) is
+
+
+1 EDUi 0
+0
+Xi =
+.
+0
+0
+1 CULi
+Then we apply the multivariate Fay-Herriot model (1), where sampling covariance matrices Di
+of the i-th region for i = 1, . . . , 10 are calculated based on data of yearly averaged monthly
+spendings on ‘Education’ and ‘ Cultural-amusement’ in the past ten years (2006-2015), where
+D i is given as the average of the sampling covariance matrices of prefectures within the i-th
+region. That is, the sampling covariance matrix D i are the same for prefectures within the same
+region.
+The estimates of the covariance matrix Ψ and the correlation coefficient ρ is
+
+
+8.5 3.0
+b
+Ψ=
+and ρ̂ = 0.32.
+3.0 10.2
+
+The estimates of the regression coefficients and the p-values for testing H0 : βk = 0 for k =
+1, . . . , 4 are given in Table 9. All the estimates are significant.
+Table 9: Estimates of regression coefficients and p-values
+
+varables
+β
+p-value
+
+Constant(EDU)
+4.47
+0.007
+
+EDU
+0.82
+0.000
+
+Constant(CUL)
+12.12
+0.002
+
+CUL
+0.65
+0.000
+
+The values of EBLUP and direct estimate of spendings on ‘Education’ and ‘ Culturalamusement’ are reported in Table 10. We only pick up the three prefectures from three different
+regions: Tokyo prefecture from the Kanto region, Osaka prefecture from the Kinki region and
+Fukushima prefecture from the Tohoku region, whose sampling covariance matrices are
+
+ 
+
+
+
+1.1 0.3
+1.1 −0.2
+4.7 3.5
+,
+and
+,
+0.3 3.0
+−0.2 3.9
+3.5 4.9
+respectively. It is seen that as the sampling variances become larger, the direct estimates are
+more shrunken by the EBLUP in the sense of (direct estimate - EBLUP)/(direct estimate).
+The uncertainty of EBLUP is provided by the second-order unbiased estimator of MSEM
+of EBLUP. Table 11 reports the estimates of MSEM averaged over prefectures within each
+region for 10 regions. We also calculate the percentage relative improvement in the average loss
+buEB . Table 12 reports the average of those
+bEB over y and θ
+estimate (PRIAL estimate) of θ
+a
+a
+a
+values over each region for spendings on education and cultural-amusement. It is revealed from
+Table 12 that the multivariate EBLUP improves on the direct estimates significantly and that
+the multivariate EBLUP is slightly better than the univariate EBLUP for most regions except
+Okinawa, which has a smaller sampling covariance matrix.
+18
+
+Table 10: EBLUP and direct estimates
+direct estimator (EDU)
+EBLUP (EDU)
+direct estimator (CUL)
+EBLUP (CUL)
+
+Tokyo
+32.5
+31.8
+41.8
+40.6
+
+Osaka
+19.0
+19.4
+24.9
+26.1
+
+Fukushima
+13.3
+12.6
+29.9
+29.0
+
+Table 11: Estimates of the mean squared error matrices of θbEB
+a
+ Hokkaido 
+0.5 0.7
+0.7 3.8
+Kinki
+
+
+1.0 −0.0
+−0.0
+2.8
+
+ Tohoku 
+3.2 2.2
+2.2 3.4
+Chugoku
+
+
+1.5 0.3
+0.3 2.6
+
+ Kanto 
+1.0 0.3
+0.3 2.5
+ Shikoku 
+4.2 0.9
+0.9 3.5
+
+ Hokuriku 
+1.0 0.6
+0.6 4.7
+ Kyushu 
+1.0 0.7
+0.7 1.8
+
+ Tokai 
+1.4 0.6
+0.6 1.8
+Okinawa
+
+
+3.0 0.8
+0.8 1.7
+
+buEB
+Table 12: PRIAL estimates of θbEB
+over y a and θ
+a
+a
+
+bEB vs y
+θ
+a
+a
+Hokkaido
+82.4
+
+Tohoku
+84.7
+
+Kanto
+80.9
+
+Hokuriku
+84.1
+
+Tokai
+80.5
+
+Kinki
+81.5
+
+Chugoku
+81.6
+
+Shikoku
+85.7
+
+Kyushu
+80.1
+
+Okinawa
+81.0
+
+bEB vs θ
+buEB
+θ
+a
+a
+Hokkaido
+4.1
+
+Tohoku
+7.1
+
+Kanto
+1.9
+
+Hokuriku
+5.3
+
+Tokai
+1.1
+
+Kinki
+4.5
+
+Chugoku
+2.4
+
+Shikoku
+3.9
+
+Kyushu
+1.3
+
+Okinawa
+-33.9
+
+19
+
+Acknowledgments
+Research of the second author was supported in part by Grant-in-Aid for Scientific Research
+(15H01943 and 26330036) from Japan Society for the Promotion of Science.
+
+References
+[1] G.E. Battese, R.M. Harter, W.A. Fuller, An error component model for prediction of mean
+crop areas using survey and satellite data., J. Am. Statist. Assoc. 95 (1988) 28–36.
+[2] R. Benavent, D. Morales, Multivariate Fay-Herriot models for small area estimation, Comp.
+Statist. Data Anal. 94 (2016) 372–390.
+[3] G.S. Datta, B. Day, I.V. Basawa, Empirical best linear unbiased and empirical Bayes prediction in multivariate small area estimation, J. Statist. Plan. Inf. 75 (1999) 269–279.
+[4] G.S. Datta, B. Day, T. Maiti, Multivariate Bayesian small area estimation: An application
+to survey and satelite data, Sankhya 60 (1998) 344–362.
+[5] G.S. Datta, M. Ghosh, Small area shrinkage estimation, Statist. Science 27 (2012) 95–114.
+[6] G.S. Datta, J.N.K. Rao, D.D. Smith, On measuring the variability of small area estimators
+under a basic area level model, Biometrika 92 (2005) 183–196.
+[7] B. Efron, C. Morris, Multivariate empirical Bayes estimation of covariance matrices, Ann.
+Statist. 4 (1976) 22–32.
+[8] R. Fay, Application of multivariate regression to small domain estimation, Small Area
+Statistics (R. Platek, J.N.K. Rao, C.E. Sarndal, M.P. Singh, eds) (1987) 91–102.
+[9] R. Fay, R. Herriot, Estimators of income for small area places: an application of James–
+Stein procedures to census, J. Amer. Statist. Assoc. 74 (1979) 341–353.
+[10] W.A. Fuller, R.M. Harter, The multivariate components of variance model for small area
+estimation, Small Area Statistics (R. Platek, J.N.K. Rao, C.E. Sarndal, M.P. Singh, eds)
+(1987) 103–137.
+[11] M. Ghosh, J.N.K. Rao, Small area estimation: An appraisal, Statist. Science 9 (1994) 55–93.
+[12] I. Ngaruye, D. von Rosen, M. Singull, Crop yield estimation at district level for agricultural
+seasons 2014 in Rwanda, African J. Applied Statist. 3 (2016) 69-90.
+[13] D. Pfeffermann, New important developments in small area estimation, Statist. Science 28
+(2013) 40–68.
+[14] A.T. Porter, C.K. Wikle, S.H. Holan, Small area estimation via multivariate Fay-Herriot
+models with latent spatial dependence, Australian and New Zealand J. Statist. 57 (2015)
+15–29.
+[15] N.G.N. Prasad, J.N.K. Rao, The estimation of mean squared errors of small area estimators,
+J. Am. Statist. Assoc. 85 (1990) 163–171.
+20
+
+[16] J.N.K. Rao, I. Molina, Small Area Estimation, 2nd Edition (2015) Wiley.
+
+21
+
+

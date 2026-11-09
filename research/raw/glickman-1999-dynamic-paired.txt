@@ -1,0 +1,1461 @@
+Appl. Statist. (1999)
+48, Part 3, pp. 377^394
+
+Parameter estimation in large dynamic paired
+comparison experiments
+Mark E. Glickman
+Boston University, USA
+[Received June 1997. Revised November 1998]
+Summary. Paired comparison data in which the abilities or merits of the objects being compared
+may be changing over time can be modelled as a non-linear state space model. When the population of objects being compared is large, likelihood-based analyses can be too computationally
+cumbersome to carry out regularly. This presents a problem for rating populations of chess players
+and other large groups which often consist of tens of thousands of competitors. This problem is
+overcome through a computationally simple non-iterative algorithm for ®tting a particular dynamic
+paired comparison model. The algorithm, which improves over the commonly used algorithm of Elo
+by incorporating the variability in parameter estimates, can be performed regularly even for large
+populations of competitors. The method is evaluated on simulated data and is applied to ranking the
+best chess players of all time, and to ranking the top current tennis-players.
+Keywords: Approximate Bayesian estimation; Bradley±Terry model; Chess; Ranking; State space
+models; Tennis
+
+1.
+
+Introduction
+
+Paired comparison models address data that arise from situations in which two objects or
+treatments are compared at the same time to determine a degree of preference. Examples
+include modelling choice behaviour (preference of one soft drink to another or the preference
+of the Democratic presidential candidate to the Republican candidate), competitive ability in
+sports (determining the strengths of teams in basketball or baseball) and many others. A
+review of some examples and issues involved in paired comparison modelling was given by
+David (1988) and Bradley (1984).
+Recent work (Fahrmeir and Tutz, 1994; Glickman, 1993) extended the usual (static) paired
+comparison models by including parameters that are time varying. These `dynamic' paired
+comparison models are appropriate, for example, for modelling paired comparison data
+arising from competitive sports where player or team abilities change over time. When the
+size of the population of competitors is reasonably small, the methodologies developed in
+these papers present no computational diculties. However, these methods are inadequate
+for large populations of competitors because the computation becomes intractable. For
+example, with more than 30000 chess players playing over 450000 games each year in United
+States Chess Federation (USCF) chess tournaments, other less computationally intensive
+methods for ®tting dynamic paired comparison models need to be considered.
+This paper presents a non-iterative method for ®tting dynamic paired comparison models.
+The method is especially useful when the population of objects or treatments to be compared
+Address for correspondence: Mark E. Glickman, Department of Mathematics and Statistics, Boston University, 111
+Cummington Street, Boston, MA 02215, USA.
+E-mail: mg@math.bu.edu
+& 1999 Royal Statistical Society
+
+0035±9254/99/48377
+
+378
+
+M. E. Glickman
+
+is large, and where parameter estimates are desired on an on-going basis. Measuring the
+abilities of chess players is the motivating example, though the method applies directly to
+other paired comparison settings where abilities or merits change over time. Section 2
+introduces our dynamic paired comparison model. The non-iterative parameter updating
+algorithm is presented in Section 3. In our procedure, certain parameters need to be estimated
+before applying the updating algorithm, and the estimation of these model parameters is
+described in Section 4. The algorithm is then evaluated on simulated data in Section 5.
+Finally, the method is applied to two data sets: outcomes of chess games between the best
+chess players of all time and outcomes of tennis matches played between current tournament
+players.
+
+2.
+
+A dynamic paired comparison model
+
+The model that we assume for competitor ability is closely related to the Bradley±Terry
+model for paired comparisons (Bradley and Terry, 1952). The Bradley±Terry model asserts
+that, for two objects with merit parameters 1 and 2 , object 1 is preferred to object 2 with
+probability 1 = 1  2 . For our speci®c problem, let i and j be the unknown (scalar)
+strengths for players i and j at a ®xed point in time. Assume ®rst that a game results in only
+two outcomes: a win or a loss. Let sijk be the kth outcome of a game played between players i
+and j, where sijk  1 when player i wins and sijk  0 when player j wins. The model for game
+outcomes, not allowing for ties or partial preferences, is given by
+Pr sijk  s 
+
+10 i ÿj =400 s
+,
+1  10 i ÿj =400
+
+1
+
+for s  0, 1. This is simply a reparameterized version of the Bradley±Terry model. Likelihood-based inference for the Bradley±Terry model is straightforward from a set of
+paired comparison data. This particular reparameterization was chosen to produce parameter estimates that have an interpretation on the same scale as the USCF rating system, which
+corresponds to strength estimates roughly between 0 and 3000.
+Several extensions to the Bradley±Terry model incorporating ties have been proposed,
+including those by Davidson (1970) and Rao and Kupper (1967), each of whom introduced a
+single parameter governing the frequency of ties. Joe (1990) found that Davidson's model is
+not well ®tted by a particular chess data set. In our likelihood framework, instead of adopting
+an approach that models a tie as a possible outcome of a game, we act as if ties do not really
+occur, but we treat a tie as half way between a win and a loss when constructing the likelihood.
+This approach avoids the complications of including extra (possibly time-varying) parameters in the model to account for the probability of a third outcome. More formally, we
+assume that the information about players' strengths resulting from a win followed by a loss
+is equivalent to the information resulting from two consecutive ties. Thus, if p is the
+probability that the ®rst player wins, so that the contribution to the likelihood of a win
+followed by a loss is p 1 ÿ p, then the contribution to the likelihood of a single tie should be
+p
+f p 1 ÿ pg. We therefore construct a likelihood using terms in model (1) where a tie
+corresponds to s  0:5. Other extensions to the Bradley±Terry model, such as recognizing a
+home ground advantage for certain sports or the advantage of having the ®rst move in chess,
+can be incorporated by the inclusion of an `order eect' parameter, as in Davidson and
+Beaver (1977). We do not pursue this extension here.
+Model (1) addresses measuring competitor ability when players' abilities remain ®xed over
+
+Parameter Estimation in Paired Comparison Experiments
+
+379
+
+time. This model can be extended to recognize that players' abilities can change over time.
+Glickman (1993) and Fahrmeir and Tutz (1994) explored an approach to modelling paired
+comparison data with time-varying abilities through the use of state space models. To use this
+approach, we assume that groups of comparisons considered to be collected in a short time
+interval are assumed to fall in the same `rating period'. For example, chess tournament games
+played during a 2-month period could be considered to be part of the same rating period.
+t 
+Denoting the strength of player i during a rating period at time t0 by i 0 , and the strength of
+t0 t
+, we adopt a model that assumes
+player i a rating period t units of time later by i
+t t
+
+i 0
+
+t 
+
+t 
+
+ji 0 ,  2 , t  N i 0 ,  2 t,
+
+2
+
+2
+
+where  is the increase in variance in competitors' strength per unit time. This model asserts
+that, as time passes while a player is not competing, the description of a competitor's strength
+becomes more uncertain. Knowledge of a player's activities (e.g. preparation) between events
+could be incorporated in model (2), but we assume that such information is not generally
+available.
+A likelihood-based analysis of paired comparison data using state space models can follow
+either Fahrmeir and Tutz (1994), who used empirical Bayes methods, or Glickman (1993),
+who used Markov chain Monte Carlo simulation from the posterior distribution. In both
+approaches, a complete analysis involves estimating all the parameters jointly. With a small
+population of competitors (e.g. teams in a league), this does not present a diculty. However,
+because competitions in many organizations involve populations of thousands of players (e.g.
+chess or interactive games on the Internet), an exact likelihood-based analysis may not be
+computationally feasible.
+3.
+
+An approximate Bayesian updating algorithm
+
+Suppressing the superscript t, let  be the strength parameter of a player whose ability is to be
+estimated. Before a rating period, we assume that the prior distribution of a player's strength
+is
+j, 2  N , 2 
+
+3
+
+with  and 2 known. During a rating period, the player competes against m opponents,
+playing nj games against opponent j, where j  1, . . ., m. We assume that the distribution of
+the jth opponent's strength, j , is
+j jj , 2j  N j , 2j 
+
+4
+
+with known j and 2j . Let sjk be the score of the kth game against opponent j, with sjk  1 if
+
+the player wins game k, sjk  0:5 if the game results in a tie and sjk  0 if the player loses. As
+before, we assume that the likelihood will be a product of Bradley±Terry `probabilities'
+p sjk j, j  
+
+10 ÿj =400 sjk
+:
+1  10 ÿj =400
+
+5
+
+The following sections develop a rating system based on closed form approximations to the
+computations required to perform a fully Bayesian model ®t of the state space model
+described in Section 2. The rating algorithm is implemented as follows.
+(a) Collect game outcome data over a rating period.
+
+380
+
+M. E. Glickman
+
+(b) At the end of the period, update players' rating distributions due to game outcomes
+from their preperiod (prior) rating distributions.
+(c) Subsequently update players' rating distributions due to the passage of time.
+This is repeated for every rating period.
+We proceed by describing prior distributions for players who had not previously competed
+in tournaments, then the procedure for computing posterior distributions of strengths due to
+the passage of time and ®nally the procedure for updating the strength distributions due to
+game results. The updating algorithm from game results is assessed in a simulation analysis.
+We also describe a smoothing procedure to make inferences on player strengths for early
+rating periods.
+3.1. Prior distribution of strengths
+Assume that, before competing, players' strengths are drawn independently from a normal
+distribution with mean 1500 and unknown variance. The initial variance 20 is treated as a
+parameter to be inferred from data. Thus, the prior distribution assumed for any player with
+strength parameter  before competing is
+j20  N 1500, 20 ,
+ 20  / 1:
+Incorporating useful sources of information (such as players' ages) could result in more
+informative prior distributions, though for the development of the algorithm such information
+is assumed to be unavailable.
+3.2. Updating from the passage of time
+In performing the updating computations, we act as if all games in a rating period are played
+at the beginning of the period. Over the duration of the rating period, we assume that
+knowledge of a player's strength becomes less certain, so that the parameter variance
+increases. At time t0 , assume that a player's strength is distributed as
+ t0  j, 2  N , 2 :
+Integrating the distribution of 
+bution (6) yields
+
+t0 t
+
+t0 
+
+2
+
+j ,  , t  N 
+
+t0 
+
+6
+2
+
+,  t with respect to the prior distri-
+
+ t0 t j, 2 ,  2 , t  N , 2   2 t,
+2
+
+7
+
+where  is the increase in variance per unit time. In other words, an elapse of t units in time
+corresponds to an increase in  2 t in the variance. This model for the increase in variance
+preserves the additivity of variance with respect to time. The variance per unit time,  2 , is a
+parameter that needs to be inferred in the model ®tting process.
+The choice of the length of a rating period involves a variance±bias trade-o. For short
+rating periods, few data may be available to estimate players' strengths, and the analytic
+approximations used in the algorithm in Section 3.3 may not be dependable. Conversely, if
+long rating periods are used, a player's ability may have changed substantially over a rating
+period, but this would not be detectable. The best compromise seems to be rating periods that
+are as short as possible, but where enough data are available to have some indication of
+players' strengths, perhaps at least 5±10 games per player on average.
+
+Parameter Estimation in Paired Comparison Experiments
+
+381
+
+3.3. Updating from outcomes of games
+At the beginning of a rating period, every competitor has a normal prior distribution of their
+playing strength. Rather than determine the posterior distribution of all strength parameters
+simultaneously making use of all paired comparison information, we carry out an approximate Bayesian analysis which leads to a tractable set of closed form computations. The key
+idea is that the marginal posterior distribution of a player's strength is determined by
+integrating out the opponents' strength parameters over their prior distribution rather than
+over their posterior distribution. The main disadvantage of this approach is that potentially
+important information is sacri®ced, particularly the outcomes of opponents' games against
+other opponents. This is done to derive a set of closed form computations. Thus inferences
+from our algorithm will not be as precise as a fully Bayesian analysis. This sacri®ce of
+precision appears necessary if posterior updates are needed on an on-going basis.
+Letting s be the collection of outcomes of games during a rating period, the marginal
+posterior distribution of  can be approximated as the integral of the posterior distribution of
+ conditional on opponents' strengths integrated over their prior distribution,
+f js 
+
+...
+
+f j1 , . . ., m , s ' 1 j1 , 21  . . . ' m jm , 2m  d1 . . . dm ,
+
+where ' . is the normal density with the given mean and variance, and
+f j1 , . . ., m , s / ' j, 2  L , 1 , . . ., m js:
+Here, L , 1 , . . ., m js is the likelihood for all parameters. As terms in the likelihood that do
+not depend on  (which correspond to games played between other players) may be treated as
+constant with respect to , the marginal posterior distribution of  can be written as
+f js /
+
+...
+
+' j, 2  L , 1 , . . ., m js ' 1 j1 , 21  . . . ' m jm , 2m  d1 . . . dm
+
+ ' j, 2 
+/ ' j, 2 
+
+...
+m
+Q
+j1
+
+L , 1 , . . ., m js ' 1 j1 , 21  . . . ' m jm , 2m  d1 . . . dm
+10 ÿj =400 sjk
+' j jj , 2j  dj :
+ÿj =400
+k1 1  10
+nj
+Q
+
+8
+
+This expression may be evaluated by using numerical methods, such as Monte Carlo
+integration. Instead, we determine a set of closed form computations that approximate the
+marginal posterior density in expression (8). The details of the derivation are in Appendix A.
+The updating algorithm approximates expression (8) by a normal density with mean and
+variance parameters 0 and 02 respectively. The parameters are given by
+0   
+
+q
+
+m
+P n
+Pj
+
+1=2  1=2
+
+j1 k1
+
+02 
+where
+
+
+
+g 2j  fsjk ÿ E sj, j , 2j g,
+
+1
+1
+
+2  2
+
+9
+
+ÿ1
+10
+
+382
+
+M. E. Glickman
+
+q  log 10=400  0:005756 5,
+g 2   p
+E sj, j , 2j  
+2
+
+
+
+  q
+
+m
+2P
+j1
+
+1
+,
+1  3q2 2 =2 
+1
+1  10
+
+ÿg 2j  ÿj =400
+
+,
+ÿ1
+
+nj g 2j 2 E sj, j , 2j f1 ÿ E sj, j , 2j g
+
+:
+
+These calculations are carried out in parallel for each player individually over the rating
+period to produce the approximating normal posterior distributions of each player's strength.
+The posterior mean updating approximation in equation (9) has close connections to the
+chess rating system of Elo (1978). Elo's system was adopted by the USCF in the early 1960s
+and subsequently by the World Chess Federation in 1970. Most national chess organizations,
+as well as national organizations for tournament table-tennis and Scrabble, have adopted
+Elo's system with minor variations. If a player has an estimated strength ~ at the onset of a
+rating period, then the Elo algorithm for updating a player's strength estimate from the
+outcomes of games is given by
+~ 0  ~  K
+
+nj
+m P
+P
+j1 k1
+
+~ ~j g,
+fsjk ÿ We ,
+
+11
+
+where ~ 0 is the player's posterior strength estimate, ~j is the preperiod strength estimate of
+opponent j, K is a constant (e.g. K  32 in the USCF system for amateur players) and
+We ~, ~j  
+
+1
+1  10ÿ ~ÿ~j =400
+
+12
+
+is the approximate probability of defeating player j as a function of the estimates of strength.
+The Elo updating algorithm is seen to be a special case of equation (9). If 2j  0 for all
+opponents, implying that all opponents' mean strengths are known without error, then
+g 2j   1 for all j, and E sj, j , 2j   We , j . Then, equation (9) reduces to the Elo
+updating formula with
+q
+:
+13
+K
+1=2  1=2
+The computations in equations (9) and (10) may be preferable because they make use of the
+expected game outcome incorporating the uncertainty in the player's own strength and in the
+opponents' strengths, and the variability due to the game outcomes (represented by 2 ). The
+updating formula (9) distinguishes the uncertainty in opponents' strengths by allowing g . to
+be less than 1; when an opponent's prior rating variance 2j is large, then g 2j  is substantially
+less than 1, and therefore the contribution of this opponent to the sum in equation (9) will be
+relatively small. Also, the fraction in equation (13) in eect weights the results of games
+relative to the precision of one's strength before a competition. Thus, in contrast with the Elo
+updating formula, the value of K depends on the prior precision of one's strength. When
+one's prior strength is uncertain, the outcomes of games have a potentially substantial eect
+on one's strength distribution update, and this is re¯ected in a large value of equation (13).
+When one's prior strength is precisely measured, then the outcomes of games should have
+little eect on one's strength update, and equation (13) is small.
+
+Parameter Estimation in Paired Comparison Experiments
+
+383
+
+3.4. Accuracy of approximation
+The accuracy of the approximation to the marginal posterior distribution (8) by a normal
+distribution with parameters given by equations (9) and (10) is assessed through simulation.
+We examine the accuracy of the updating algorithm when a player competes against 4, 10, 20
+or 50 opponents in a rating period.
+For a given number of opponents in a rating period, a player with prior strength distribution   N 1500, 1002  competes against opponents with normal prior distributions having
+means drawn from N 1500, 1002  and standard deviations drawn from a scaled inverse 2 distribution on 10 degrees of freedom with mean 50. Outcomes of games were determined by
+simulating strengths from the prior distributions, and then simulating binary outcomes given
+the strengths. From a simulated collection of game outcomes and opponents' prior strength
+distributions, the computations in equations (9) and (10) were carried out. Additionally, 500
+values of the marginal posterior distribution of  given in expression (8) were simulated via
+Monte Carlo integration by using the weighted bootstrap (Smith and Gelfand, 1992). This
+was accomplished by generating 10 000 random draws of  from the player's prior distribution, determining the corresponding (approximate) marginal likelihoods evaluated at each
+of the draws (which involved averaging Bradley±Terry probabilities over 50 random draws
+from each opponent's prior distribution) and then drawing 500 values of  without replacement from the original 10000 with probabilities proportional to the marginal likelihoods.
+The 500 values were summarized by means and standard deviations, and also by the proportion of values that lay within nominal 50% and 95% normal posterior intervals based
+on the approximating mean and standard deviation from equations (9) and (10). This entire
+process of calculating posterior summaries by the approximating method and the weighted
+bootstrap for each collection of simulated parameters and outcomes of games was repeated
+500 times for each ®xed number of opponents.
+The results of the analyses are displayed in Table 1. The entries of Table 1 summarize the
+results of the 500 simulated data sets per number of opponents. On average, for 4, 10, 20 or
+50 opponents in one rating period, approximately 50% and 95% of weighted bootstrap
+draws fall within 50% and 95% nominal posterior intervals constructed from the approximating normal distribution using the updating formulae. This suggests that, on average, the
+approximating normal distribution produced by the updating algorithm closely approximates
+the distribution of values determined from the weighted bootstrap. Because the entries in
+Table 1 are slightly less, on average, than the nominal coverage fractions, the updating
+algorithm produces mean and variance estimates that slightly overstate the precision of the
+marginal posterior distribution. One possible reason is that the updating algorithm produces
+Table 1. Averages and 95% central intervals of the proportion of weighted
+bootstrap simulated values that fall within nominal 50% and 95% posterior intervals
+constructed from the approximating normal distribution{
+Number of
+opponents
+4
+10
+20
+50
+
+Average coverage fraction (95% intervals)
+Nominal 50% posterior interval
+
+Nominal 95% posterior interval
+
+0.4976 (0.448, 0.546)
+0.4959 (0.449, 0.536)
+0.4919 (0.437, 0.538)
+0.4873 (0.433, 0.538)
+
+0.9480 (0.929, 0.967)
+0.9467 (0.924, 0.966)
+0.9452 (0.922, 0.966)
+0.9413 (0.911, 0.963)
+
+{The coverage fractions and intervals were computed on the basis of 500 simulated data
+sets.
+
+384
+
+M. E. Glickman
+
+posterior standard deviations that do not make full use of the data, resulting in variance
+estimates that are too small when a player has extreme results (relative to the prior distribution), and too large when a player's results are very consistent with the prior distribution.
+See Appendix A for computational details. This approximation becomes slightly ampli®ed
+when more opponents are involved in the computations. It appears, however, that the
+approximating algorithm produces estimates that are suciently close to the Monte Carlo
+approach for practical purposes.
+3.5. Parameter smoothing
+The algorithm developed in Section 3.3 results in approximate posterior distributions of each
+player's strength parameter at the end of each rating period conditionally only on preceding
+outcomes of games. Thus, the algorithm makes ecient use of the data for estimating players'
+current strengths but makes poor use of the data for estimating strengths of players during
+early rating periods. A smoothing procedure is now described to obtain approximate posterior
+distributions of strength parameters about earlier rating periods conditionally on both
+previous and future data. This algorithm is the standard `backward ®ltering' of the Kalman
+®lter to obtain smoothed estimates of past parameters.
+Let t  1, 2, . . ., T sequentially index each of T equally spaced rating periods. Denote the
+collection of all available outcomes of games in all rating periods before and including period
+t by s t . Carrying out the (forward) rating algorithm, we obtain approximate normal
+t
+t
+2 t
+posterior distributions of i js t  N i , i , for t  1, . . ., T and for all players i, where
+t
+i denotes the strength parameter for player i during rating period t. The posterior distriTÿ1 T 
+js can be determined by noting that
+bution of i
+f i
+
+Tÿ1
+
+js T   /
+
+f i
+
+Tÿ1
+
+T
+
+js Tÿ1  f i ji
+
+Tÿ1
+
+T
+
+T
+
+,  2  f i js T   di :
+
+14
+
+Because all the densities in the integrand are assumed normal, the posterior distribution of
+Tÿ1
+Tÿ1 T 
+is also normal, i.e. i
+js  N M, V  where
+i
+ÿ1
+
+1
+1
+
+,
+V
+2 Tÿ1
+2 T
+i
+ 2  i
+
+MV
+
+i
+
+Tÿ1
+
+2 Tÿ1
+
+i
+
+
+
+i
+
+T
+2 T
+
+ 2  i
+
+
+:
+
+This procedure is then applied recursively to t  T ÿ 2, T ÿ 3, . . ., 1 to obtain all the
+posterior distributions of strength parameters for player i conditionally on all the data. The
+same procedure is then applied to each player.
+4.
+
+Model ®tting
+
+The algorithm in the preceding sections depends on knowing 20 , the variance describing the
+initial uncertainty in players' abilities, and  2 , the variance increase per unit time. This section
+describes a procedure to estimate these parameters.
+Let t  1, 2, . . ., T index each of T rating periods, s t represent the collection of all
+t
+available outcomes of games in all rating periods before and including period t, and i and
+t
+j denote the strength parameters for players i and j during period t. For a given ordered
+
+Parameter Estimation in Paired Comparison Experiments
+
+385
+
+pair of variances 20 ,  2 , the rating algorithm provides the computations to obtain the
+t
+t
+approximate distributions of i js tÿ1  N i , 2i  and j js tÿ1  N j , 2j . We may now
+de®ne the `predictive discrepancy' for a game between i and j during period t as a measure of
+discrepancy between the predicted result for the game, given only information before period
+t, and the actual result of the game. In particular, let
+dij  ÿsij log pij  ÿ 1 ÿ sij  log 1 ÿ pij 
+
+15
+
+be the discrepancy of a game played between i and j, where sij is the outcome of the game, and
+pij 
+
+1
+1  10
+
+ÿg 2i 2j  i ÿj =400
+
+:
+
+16
+
+Expression (16) is an approximation to the probability that i defeats j incorporating the
+variability of each player's strength estimate and is derived analogously to the expected
+outcome integrated over an opponent's prior strength distribution. Thus the predictive discrepancy dij in equation (15) is the binomial log-likelihood for a game evaluated at a value
+that only depends on previous data.
+The total discrepancy for the entire collection of outcomes of games is computed as the
+sum of the dij over all games in the data set. This is accomplished by ®rst summing the discrepancies in the ®rst rating period, then updating the strength distributions based on the
+outcomes of games from the ®rst period followed by updating the distributions due to the passage of time, then summing the discrepancies in the second rating period given the updated
+strength distributions, and so on. Because the discrepancies in results are cross-validatory,
+minimizing the total discrepancy is unlikely to result in an over®tted choice of variance
+parameters. Loss functions that involve measuring a discrepancy between predicted and
+actual outcomes, where the predicted outcome depends on all the data, may result in
+excessively large estimates of 2 in order to allow a player's strengths to have unlimited
+variation from one rating period to the next.
+Several numerical methods for minimizing the total discrepancy as a function of 2 and  2
+are feasible. However, because the total discrepancy is a complicated function of 2 and  2 ,
+methods involving closed form derivatives are not possible. To minimize the total discrepancy, the Nelder±Mead simplex algorithm (Nelder and Mead, 1965) was employed. This
+algorithm uses a direct search approach rather than numerically computing gradient
+information.
+5.
+
+Evaluation of the estimation algorithm
+
+To evaluate the variance estimation procedure, the algorithm was applied to simulated data
+under three dierent sets of assumed parameters and conditions:
+(a) simulation 1 Ð 10 players competing over 30 rating periods, playing a total of 50 games
+per period, with 0  200 and   50,
+(b) simulation 2 Ð 10 players competing over 120 rating periods, playing a total of 50
+games per period, with 0  200 and   50, and
+(c) simulation 3 Ð 20 players competing over 50 rating periods, playing a total of 200
+games per period, with 0  200 and   10.
+For each of the three simulation conditions, the ®ctitious competitors would compete with
+each other at random for the speci®ed number of rating periods, over which their strengths
+
+386
+
+M. E. Glickman
+Table 2. Results of simulation analyses{
+Simulation
+
+1
+2
+3
+
+Parameters
+
+Estimates
+
+0
+
+
+
+^0
+
+^
+
+Coverage fractions
+50%
+
+95%
+
+200
+200
+200
+
+50
+50
+10
+
+224.04
+240.10
+252.63
+
+44.98
+44.64
+9.47
+
+0.483
+0.446
+0.505
+
+0.940
+0.912
+0.947
+
+{Outcomes of games were generated under diering model and data assumptions, and
+the table reports summaries over 200 replications. The second and third columns show
+the assumed variances that generated the simulated data. The estimates of the two
+variance parameters, which are shown in the fourth and ®fth columns, are the averages
+over the 200 replications. The sixth and seventh columns show the proportion of 50%
+and 95% central posterior intervals that contain players' true mean strengths for the last
+rating period.
+
+would change by the addition of N 0,  2  at the beginning of each successive rating period.
+This procedure was repeated 200 times for each of the three simulation conditions. From the
+results of each simulated data set, estimates of 0 and  were obtained by using the approach
+in Section 4 and then used to compute ratings from the ®nal rating period.
+A summary of the analyses is shown in Table 2. The estimates of 0 and  were calculated
+by using the simplex method, and the averages of these estimates over the 200 replications are
+shown in the fourth and ®fth columns of Table 2. The estimation procedure seems to produce
+estimates that are reasonably close to the underlying parameters. Sampling variability would
+explain some of the discrepancy. The slightly large estimates of 0 re¯ects that its posterior
+distribution is skewed. This can be seen in Fig. 1, which shows the approximate joint posterior distribution of the two standard deviation parameters. These plots demonstrate that
+the posterior distribution of the standard deviation parameters are centred near the generating
+parameters. The large posterior variability of 0 re¯ects the small number of players in the
+simulations. Not surprisingly, the posterior variability of  is smaller when the number of
+rating periods is larger.
+The last two columns of Table 2 show how well the estimated strengths from the last rating
+period correspond to the true parameter values. For each set of simulations, normal posterior
+distributions at the end of the last rating period are obtained for all players by using the
+estimated values of 0 and . Also, the true mean strengths during the last rating period were
+recorded. After centring the estimated and true mean strengths to 1500 for each of the 200
+replications, we determined the proportion of the players across the 200 replications that
+have 50% and 95% central posterior intervals containing their true mean strength at the last
+rating period. These appear in the last two columns in Table 2. The strengths were centred
+because drift in average strength cannot be detected from paired comparison data; if all
+players increased in strength by the same amount from one rating period to the next, it would
+be impossible to determine this from the data. In all cases, the actual proportion of coverage
+is close to the nominal level of coverage. This is particularly true for the third simulation
+which had parameters that were more precisely estimated because the size of the simulated
+data set per replication was large. For the ®rst two simulations, the actual fraction of
+coverage is slightly less than the reported level of coverage, indicating that a player's
+approximate normal posterior distribution from the updating algorithm may be overstating
+the precision under similar conditions. However, the coverage is still fairly close to nominal,
+and with a large set of data coverage does not appear to be a problem.
+
+Parameter Estimation in Paired Comparison Experiments
+
+387
+
+Fig. 1. Joint posterior distribution of (0 , ) from (a) simulation 1, (b) simulation 2 and (c) simulation 3: the
+vertical and horizontal dotted lines indicate the values of the generating parameters
+
+6.
+
+Examples
+
+We apply the methodology of Section 3 to the analysis of two data sets. The ®rst data set
+consists of all known results of games from 1857 to 1991 between 88 of the world's all-time
+best chess players. The second data set involves the outcomes of tennis-matches played
+between 1190 competitors from 1986 to 1995.
+
+388
+
+M. E. Glickman
+
+6.1. The best chess players of all time
+Professor Nathan Divinsky has compiled a data set consisting of all known tournament or
+match game results between 88 of the top chess players of all time. The
+set contains
+ÿ data
+
+15 664 outcomes of games played between 1367 pairs of players. Not all 882  3828 pairs of
+players competed against each other because some players' lives, much less their playing
+careers, did not overlap. Several analyses based on smaller versions of this data set have been
+published, including those by Elo (1978), Keene and Divinsky (1989), Joe (1990) and Henery
+(1992). Elo ®tted paired comparison models separately in each year and then smoothed the
+estimates. Keene and Divinsky ®tted a Bradley±Terry model to the data, acting as if all the
+games were played in one large tournament. Joe divided players' careers into `peak' and `opeak' periods, and ®tted an extension of the Bradley±Terry model explicitly accounting for
+ties. Henery ®tted a model that accounts for diering frequencies of ties, but not the
+possibility of changes in abilities over time.
+For our analysis, a single rating period is a year, so the number of rating periods is 135. In
+some years no outcomes of games were observed (e.g. 1859, 1874 and 1875), but this is
+handled by applying the computations in Section 3.2 in succession. The prior variance for a
+player was constrained to be 2 for the year of ®rst competition. The total discrepancy was
+minimized for   38:19 and   18:87. Using these values, estimates of all players' strengths
+for every year were computed by using the rating algorithm followed by the backward
+smoothing procedure.
+In Table 3, the top 20 players are ranked according to their peak posterior mean strength,
+along with the posterior standard deviation of the strength and the year in which the player
+attained highest strength (the peak year). The top eight players on the list are former and
+current world champions. The top eight players identi®ed by Joe (1990) match the top eight
+Table 3. 20 of the best chess players of all time ranked according to their posterior
+mean strength from the ®tted model for the year in which the player attained highest
+strength, the peak year
+Rank
+
+Player
+
+Posterior mean
+strength in peak
+year
+
+Posterior
+standard
+deviation
+
+Peak
+year
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+
+Emanuel Lasker
+JoseÂ Capablanca
+Robert Fischer
+Alexander Alekhine
+Garry Kasparov
+Mikhail Botvinnik
+Anatoly Karpov
+Wilhelm Steinitz
+Akiba Rubinstein
+Max Euwe
+Boris Spassky
+Siegbert Tarrasch
+Viktor Korchnoi
+Geza Maroczy
+David Bronstein
+Vassily Ivanchuk
+Samuel Reshevsky
+Vassily Smyslov
+Aron Nimzovitch
+Tigran Petrosian
+
+1693
+1680
+1656
+1647
+1643
+1623
+1609
+1608
+1584
+1579
+1578
+1576
+1573
+1572
+1571
+1570
+1569
+1567
+1565
+1564
+
+29
+28
+38
+24
+32
+27
+20
+29
+24
+23
+21
+25
+21
+25
+23
+32
+24
+22
+26
+22
+
+1916
+1921
+1972
+1930
+1991
+1947
+1984
+1876
+1912
+1935
+1968
+1905
+1978
+1908
+1953
+1991
+1952
+1954
+1931
+1963
+
+Parameter Estimation in Paired Comparison Experiments
+
+389
+
+in Table 3, except that Steinitz is replaced by Paul Morphy. The data set consists of only 25
+games against two opponents played by Morphy between 1857 and 1858, so there is very little
+information in our analysis that would indicate such profound playing strength (Morphy is
+ranked 27 on our list). The ninth on the list, Akiba Rubinstein, is the highest ranked player
+who never held the world championship. Because of the possible increase in overall playing
+strength (which could result from an increased understanding of chess over time), the
+posterior mean strengths of players at dierent points in time cannot be directly compared.
+Instead, one should interpret Table 3 as indicating the level of strength relative to current
+competitors. Thus, according to the data analysis, Lasker dominated his opponents around
+1916 more so than Fischer did in 1972.
+Fig. 2 shows the strengths of the top eight players plotted over time. Typically, at the
+beginning of their careers, they are moderate in strength, with a gradual climb towards their
+peak strength and then a gradual decline. The most obvious exception is Fischer, who gave
+up competitive chess in 1972 after winning the world championship. The plot also suggests
+that Kasparov may have still been on the rise in 1991, and that Karpov has been gradually
+declining in strength since his peak in the mid-1980s. Both Alekhine and Botvinnik had
+careers that ended without a steep decline.
+6.2. Ranking current tennis-players
+The methodology of Section 3 was applied to rank the world's current top tennis-players. The
+data set consisted of all 33 359 matches played between 1190 male participants from 1986 to
+
+Fig. 2. Smoothed posterior mean strengths of eight players over time: . . . . , W. Steinitz; Ð, E. Lasker;
+.........., J. Capablanca; ± ± ±, A. Alekhine; Ð . Ð, M. Botvinnik; - - - - -, R. Fischer; ± . ± ., A. Karpov; ± ±,
+G. Kasparov
+
+390
+
+M. E. Glickman
+
+the end of 1995 in events on the ATP tour. The ATP tour is generally regarded as the main
+international organizer of men's professional tennis. Games were excluded from the analysis
+if they were played in events that did not award ATP `points', e.g. the Davis Cup and some
+ATP tour championships. Rating periods were designated to be 2 months long, resulting in
+60 rating periods. As in the analysis of outcomes of chess games, the prior variance for a
+player was assumed to be 2 during the rating period in which he ®rst competed.
+Minimizing the total discrepancy for these data yielded values of   113:65 and  
+22:35. In contrast with the chess outcomes analysis, the spread of players' initial strengths
+is much larger, indicating a wider variation of playing strengths among the tennis competitors. Because the chess players were selected to be (roughly) the 88 best in the world over
+all time, whereas the 1190 tennis-players were likely to be the best only in a 10-year period,
+the greater variability in the tennis-players' strengths is not surprising. The variance increase per year was much smaller for the chess player data than for the tennis data, suggesting
+more stability in chess playing strength than in tennis. This seems intuitively sensible
+because the factors that result in a tennis-player performing well (e.g. physical condition,
+responsiveness and lack of injuries) may be more variable over time than factors that result
+in a chess player performing well (judgment, insight and ability to calculate variations).
+Table 4 displays the posterior means and standard deviations of the strengths for the top
+20 players ranked according to their posterior means. Players were included in the list if they
+had played within four rating periods (8 months) of the end of 1995. The posterior means for
+these top players have a greater spread than those for the top chess players, though because
+the standard deviations are also larger it is more dicult to assert dierences in playing
+strength. Agassi and Sampras have posterior means that are about 100 higher than those for
+all other competitors. Posterior probabilities of game outcomes can be computed by using
+formula (16). According to the parameter estimates, Sampras, ranked second, would defeat
+Muster, ranked third, with a posterior probability of 0.63.
+Table 4. 20 of the current ATP tour tennis participants ranked according to their posterior
+mean strengths at the end of 1995 from the ®tted model
+Rank
+
+Player
+
+Posterior mean
+strength
+
+Posterior standard
+deviation
+
+ATP tour rank
+at end of 1995
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+
+AndreÂ Agassi
+Pete Sampras
+Thomas Muster
+Michael Chang
+Boris Becker
+Jim Courier
+Michael Stich
+Yevgeny Kafelnikov
+Thomas Enqvist
+Wayne Ferreira
+Todd Martin
+Magnus Larsson
+Sergi Bruguera
+Goran Ivanisevic
+Stefan Edberg
+Richard Krajicek
+Marc Rosset
+Arnaud Boetsch
+Andrei Medvedev
+Malivai Washington
+
+1992
+1987
+1892
+1885
+1860
+1841
+1804
+1790
+1780
+1776
+1767
+1764
+1764
+1757
+1752
+1747
+1720
+1704
+1702
+1695
+
+53
+51
+46
+50
+51
+48
+52
+46
+46
+47
+50
+57
+52
+51
+53
+50
+47
+43
+51
+48
+
+2
+1
+3
+5
+4
+8
+12
+6
+7
+9
+18
+17
+13
+10
+23
+11
+15
+14
+16
+26
+
+Parameter Estimation in Paired Comparison Experiments
+
+391
+
+The last column of Table 4 shows the ocial ATP tour rankings of the players at the end of
+1995, based on players accruing points depending on their successes in their best 14 tournaments over the previous 12 months. The players are then ranked according to the sum of
+their points. Although this system does not use a probabilistic model to measure players'
+strengths, it does produce a ranking list that conforms to generally held perceptions. The top
+18 players in the ATP tour rankings appear in Table 4. The other two players are Stefan
+Edberg, who is ranked 15 on our list, and Malivai Washington, who is ranked 20. Edberg
+appears high on our list because he was inferred to be much stronger in the early 1990s, and
+that the model ®t purports that he did not decline in ability as much as the ATP ranking
+system indicates. Washington, interestingly, had the newsworthy result of competing in the
+®nals at Wimbledon in 1996, so he may have been stronger, as our estimate shows, than
+indicated by the ATP rank.
+7.
+
+Discussion
+
+The problem of developing a rating system for large paired comparison experiments with
+time-varying abilities involves a trade-o between making full use of outcome information
+and keeping a system that is suciently simple to be used regularly. The likelihood-based
+state space approach provides inferences that are consistent with the model assumptions, but
+the computational complexity can be enormous. The algorithm developed in this paper
+attempts to combine desirable features of each approach to produce a system that is both
+usable and accurate for time-dependent paired comparison situations.
+Although it is computationally straightforward, the algorithm ignores certain features of
+the model that a likelihood-based analysis would recognize. For example, information about
+the results of opponents' games is sacri®ced to aid the computational ease of the algorithm.
+More precision could be gained in a likelihood-based analysis because all players' results
+would have an eect on inferences. A related issue is that posterior correlations of players'
+strengths are not accounted for in our algorithm. If a player competes against one particular
+opponent more frequently than against others, then a strong correlation may be induced.
+Then both strength distributions should be aected when either player competes. However,
+the bene®t in excluding correlations is that the number of model parameters is greatly
+reduced. This is quite desirable when the number of players in the population is large. In any
+event, the simulations in this paper seem to show that the approximating algorithm performs
+reasonably well, and the application to the chess and tennis game data produced player
+rankings that match external criteria.
+Acknowledgements
+The author is grateful to Miki Singh and Harry Joe for providing the tennis data and chess
+data respectively and to Christopher Avery for his help in preparing the tennis data.
+Appendix A: Derivation of closed form computations
+We derive a closed form normal approximation to the approximate posterior distribution of a player's
+strength given in equation (8). The derivation of formulae (9) and (10) can be summarized in the
+following three steps.
+(a) Approximate the likelihood, marginalized over the opponents' prior strength distribution, by a
+product of logistic cumulative distribution functions.
+
+392
+
+M. E. Glickman
+
+(b) Approximate the resulting expression by a normal distribution.
+(c) Construct a linear approximation by using a Taylor series expansion around the prior mean to
+determine the mean and variance of the approximating normal posterior distribution.
+The likelihood, integrated over the distribution of the opponents' prior strength distribution, is given
+by
+L js 
+
+
+
+10 ÿj =400 sjk
+' j jj , 2j  dj
+ÿj =400
+k1 1  10
+nj
+Q
+
+m
+Q
+j1
+nj
+m Q
+Q
+
+j1 k1
+
+10 ÿj =400 sjk
+' j jj , 2j  dj :
+1  10 ÿj =400
+
+17
+
+Under the actual model, an opponent plays at a ®xed strength (which can be viewed as a single value of
+j drawn from the prior distribution) for all games in a rating period. This last approximation is justi®ed
+by allowing the possibility that an opponent can display dierent strengths for dierent games, the
+strengths being drawn independently from the opponent's prior distribution.
+An integral in the above product could be approximated easily by using numerical methods. Instead,
+we approximate the integrals in expression (17), which are logistic cumulative distribution functions
+(CDFs) integrated over normal densities, by rescaled logistic CDFs. This is accomplished by ®rst
+approximating each logistic CDF in an integrand by a normal CDF with the same mean and variance so
+that the integral can be evaluated in closed form to a normal CDF. The resulting normal CDF is then
+converted back to a logistic CDF with the same mean and variance. This yields the approximation
+2
+
+10 ÿj =400 sjk
+10g j  ÿj =400 sjk
+' j jj , 2j  dj 
+,
+2
+ÿj =400
+1  10
+1  10g j  ÿj =400
+
+18
+
+where
+g 2   p
+
+1
+1  3q2 2 =2 
+
+19
+
+and
+q  log 10=400:
+Approximating integrals of this type, which commonly arise in logistic regression models with random
+eects, has been addressed similarly in Aitchison and Begg (1976), Lauder (1978) and Boys and
+Dunsmore (1987). The (approximate) marginal likelihood, therefore, may now be written as
+L js 
+
+2
+
+nj
+m Q
+Q
+
+10g j  ÿj =400 sjk
+
+j1 k1
+
+1  10g j  ÿj =400
+
+2
+
+:
+
+We now obtain a normal approximation to this marginal likelihood. To do so, we ®rst ®nd an
+expression for the mode by setting the derivative of the log-marginal likelihood equal to 0. Note that
+log fL jsg 
+so
+
+m
+Pj
+P n
+j1 k1
+
+2
+
+f q g 2j sjk  ÿ j  ÿ log 1  10g j  ÿj =400  g
+
+
+
+m
+Pj
+P n
+@  log fL js g
+1
+g 2j  sjk ÿ
+:
+q
+2
+@
+j1 k1
+1  10ÿg j  ÿj =400
+
+Let
+E sj, j , 2j  
+
+1
+ÿg 2j  ÿj =400
+
+1  10
+
+,
+
+20
+
+Parameter Estimation in Paired Comparison Experiments
+
+393
+
+which is the approximate expected outcome of a game against opponent j, incorporating the uncertainty
+contained in the prior distribution of this opponent's strength. At the mode of the marginal likelihood ^,
+we therefore have
+m n
+Pj
+P
+j1 k1
+
+g 2j fsjk ÿ E sj ^, j , 2j g  0:
+
+21
+
+The second derivative of the log-marginal likelihood, evaluated at ^, is given by
+m
+P n
+Pj
+@ 2  log fL jsg 
+ ÿq2
+g 2j 2 E sj ^, j , 2j  f1 ÿ E sj ^, j , 2j  g
+2
+@
+j1 k1
+^
+
+ ÿq2
+
+m
+P
+j1
+
+^ j , 2j f1 ÿ E sj,
+^ j , 2j g:
+nj g 2j 2 E sj,
+
+22
+
+The marginal likelihood can be approximated by a normal density with a mean equal to ^ and a
+variance which is the negative reciprocal of expression (22). Let 2 be the variance associated with the
+normal approximation to the marginal likelihood. We can eectively approximate 2 by substituting ,
+^
+the prior mean, for ,
+ m
+ÿ1
+P
+nj g 2j 2 E sj, j , 2j  f1 ÿ E sj, j , 2j  g ,
+23
+2  q2
+j1
+
+because the binomial-type variance in equation (22) is roughly constant over a wide range of values of .
+The approximate marginal posterior distribution for  can now be expressed as proportional to a
+product of two normal densities,
+f js / ' j, 2  ' j ^, 2 :
+0
+
+24
+
+02
+
+The posterior mean  and posterior variance  can therefore be expressed as
+02  1=2  1=2 ÿ1 ,
+
+25
+
+0  02 =2  ^=2 
+
+
+1=2
+1=2  1=2
+
+^ ÿ :
+
+26
+
+Rather than calculating ^ directly by using an iterative numerical procedure, we use a linear closed form
+approximation to ^ ÿ . De®ne
+h  
+
+g 2j 
+
+nj
+m P
+P
+
+ÿg 2j  ÿj =400
+
+j1 k1 1  10
+
+:
+
+27
+
+From equation (21), we now have that
+h ^  
+
+m
+P n
+Pj
+j1 k1
+
+g 2j sjk :
+
+28
+
+A Taylor series expansion of h  around  yields
+h ^   h   ^ ÿ  h0 
+
+29
+
+where
+h0   q
+
+nj
+m P
+P
+j1 k1
+
+g 2j 2 E sj, j , 2j f1 ÿ E sj, j , 2j g:
+
+30
+
+Substituting the linear approximation implied by approximation (29) for ^ ÿ , equation (26) can be
+rewritten as
+
+394
+
+M. E. Glickman
+0   
+
+1=2
+1=2  1=2
+
+h ^  ÿ h 
+h0 
+
+
+
+q
+fh ^  ÿ h  g
+1=2  1=2
+
+31
+
+
+
+nj
+m P
+P
+q
+g 2j  fsjk ÿ E sj, j , 2j  g:
+1=2  1=2 j1 k1
+
+32
+
+The equality in expression (31) follows as 1=2 h0   q. The last equality in expression (32) is justi®ed
+by expanding the expressions for h ^  and h . The posterior mean and variance, therefore, can be
+computed by using closed form equations (25) and (32).
+
+References
+Aitchison, J. and Begg, C. B. (1976) Statistical diagnosis when basic cases are not classi®ed with certainty.
+Biometrika, 63, 1±12.
+Boys, R. J. and Dunsmore, I. R. (1987) Diagnostic and sampling models in screening. Biometrika, 74, 365±374.
+Bradley, R. A. (1984) Paired comparisons: some basic procedures and examples. In Handbook of Statistics (eds P. R.
+Krishnaiah and P. K. Sen), vol. 4, pp. 299±326. Amsterdam: Elsevier.
+Bradley, R. A. and Terry, M. E. (1952) The rank analysis of incomplete block designs: 1, The method of paired
+comparisons. Biometrika, 39, 324±345.
+David, H. A. (1988) The Method of Paired Comparisons, 2nd edn. London: Chapman and Hall.
+Davidson, R. R. (1970) On extending the Bradley-Terry model to accommodate ties in paired comparison experiments. J. Am. Statist. Ass., 65, 317±328.
+Davidson, R. R. and Beaver, R. J. (1977) On extending the Bradley-Terry model to incorporate within-pair order
+eects. Biometrics, 33, 693±702.
+Elo, A. E. (1978) The Rating of Chess Players Past and Present. New York: Arco.
+Fahrmeir, L. and Tutz, G. (1994) Dynamic stochastic models for time-dependent ordered paired comparison
+systems. J. Am. Statist. Ass., 89, 1438±1449.
+Glickman, M. E. (1993) Paired comparison models with time-varying parameters. PhD Dissertation. Department of
+Statistics, Harvard University, Cambridge.
+Henery, R. J. (1992) An extension to the Thurstone±Mosteller model for chess. Statistician, 41, 559±567.
+Joe, H. (1990) Extended use of paired comparison models, with application to chess rankings. Appl. Statist., 39, 85±93.
+Keene, R. and Divinsky, N. (1989) Warriors of the Mind: a Quest for the Supreme Genius of the Chess Board.
+Brighton: Hardinge Simpole.
+Lauder, I. J. (1978) Computational problems in predictive diagnosis. In COMPSTAT: Proc. 3rd Symp. Computational Statistics, Leiden (eds L. C. A. Corsten and J. Hermans), pp. 186±192. Leiden: Physica.
+Nelder, J. A. and Mead, R. (1965) A simplex method for function minimization. Comput. J., 7, 308±313.
+Rao, P. V. and Kupper, L. L. (1967) Ties in paired-comparison experiments: a generalization of the Bradley-Terry
+model. J. Am. Statist. Ass., 62, 194±204.
+Smith, A. F. M. and Gelfand, A. E. (1992) Bayesian statistics without tears: a sampling±resampling perspective. Am.
+Statistn, 46, 84±88.
+
+

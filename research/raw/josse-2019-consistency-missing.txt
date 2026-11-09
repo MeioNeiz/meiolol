@@ -1,0 +1,17097 @@
+Noname manuscript No.
+
+(will be inserted by the editor)
+
+On the consistency of supervised learning with missing
+values
+Julie Josse · Jacob M Chen · Nicolas Prost ·
+
+arXiv:1902.06931v5 [stat.ML] 21 Mar 2024
+
+Gaël Varoquaux · Erwan Scornet
+
+March 22, 2024
+
+Abstract In many application settings, data have missing entries, which makes
+
+subsequent analyses challenging. An abundant literature addresses missing values
+in an inferential framework, aiming at estimating parameters and their variance
+from incomplete tables. Here, we consider supervised-learning settings: predicting
+a target when missing values appear in both training and test data. We first rewrite
+classic missing values results for this setting. We then show the consistency of two
+approaches, test-time multiple imputation and single imputation in prediction. A
+striking result is that the widely-used method of imputing with a constant prior
+to learning is consistent when missing values are not informative. This contrasts
+with inferential settings where mean imputation is frowned upon as it distorts the
+distribution of the data. The consistency of such a popular simple approach is
+J. Josse
+Centre de Mathémathiques Appliquées, Ecole Polytechnique
+Present address: INRIA-INSERM University of Montpellier
+
+E-mail: julie.josse@inria.fr
+
+J.M. Chen
+Williams College, Massachusetts
+N. Prost
+Centre de Mathémathiques Appliquées, Ecole Polytechnique
+Parietal project-team, INRIA Saclay
+E. Scornet
+Sorbonne Université and Université Paris Cité, CNRS,
+Laboratoire de Probabilités, Statistique et Modélisation, F-75005 Paris, France
+G. Varoquaux
+Parietal project-team, INRIA Saclay
+
+2
+
+Julie Josse et al.
+
+important in practice. Finally, to contrast procedures based on imputation prior
+to learning with procedures that optimize the missing-value handling for prediction, we consider decision trees. Indeed, decision trees are among the few methods
+that can tackle empirical risk minimization with missing values, due to their ability to handle the half-discrete nature of incomplete variables. After comparing
+empirically different missing values strategies in trees, we recommend using the
+“missing incorporated in attribute” method as it can handle both non-informative
+and informative missing values.
+Keywords Bayes consistency, empirical risk minimization, decision trees, missing
+
+values, imputation, missing incorporated in attribute
+
+1 Introduction
+
+As volumes of data increase, they are harder to curate and clean. They may come
+from the aggregation of various sources (e.g. merging multiple databases) and contain variables of different natures (e.g. different sensors). Such heterogeneous data
+collections can lead to many missing values: samples only come with a fraction of
+the features observed. Though there is a vast literature on treating missing values,
+it focuses on estimating parameters and their variance in the presence of missing
+values in a single data set. In contrast, there are few studies of supervised-learning
+settings where the aim is to predict a target variable given input variables with
+missing entries. These settings only require to use discriminative (or conditional)
+models, compared to the first inferential frameworks, which often assume parametric data distributions (generative modelling). Besides, a predictive model is
+applied on a test set, different from the training set, a separation seldom considered in inferential settings. Therefore, inference and prediction in the presence of
+missing values are intrinsically two very different problems.
+Beyond the aggregation of multiple sources, missing values can appear for a variety
+of reasons. For sensor data, missing values can arise from device failure. Informative
+missing values can be found for instance in poll data where participants may not
+
+On the consistency of supervised learning with missing values
+
+3
+
+answer sensitive questions related to unpopular opinions. In medical studies, some
+measurements may be impractical on patients in a critical state, in which case
+the presence of missing values can be related to the variable of interest, target of
+the prediction (e.g. patient status). These various scenarios correspond to different
+missing-value mechanisms.
+The classical literature on missing values, led by Rubin [1976], defines missingvalues mechanisms based on the relationship between missingness and observed
+values: if they are independent, the mechanism is said to be Missing Completely
+At Random (MCAR); if the missingness only depends on the observed values,
+then it is Missing At Random (MAR); otherwise it is Missing Not At Random
+(MNAR). However, this nomenclature has seldom been discussed in the context
+of supervised learning, accounting for the target variable of the prediction.
+Many statistical methods tackle missing values [Josse and Reiter, 2018, Mayer
+et al., 2022]. Listwise deletion, i.e. removing incomplete observations, may allow
+to train the model on complete data. However, it may lead to the deletion of almost
+all data especially in high dimension and may result in biased sample depending
+on the missing values mechanism. In addition, it does not suffice for supervised
+learning, as the test set may also contain incomplete data. Hence the prediction
+procedure should handle missing values. A popular solution is to impute missing
+values, that is to replace them with plausible values to produce a completed data
+set. The benefit of imputation is that it adapts existing pipelines and software to
+the presence of missing values. The widespread practice of imputing with the mean
+of the variable on the observed entries has serious drawbacks in inferential settings,
+as it distorts the joint and marginal distributions of the data which induces biased estimators [Little and Rubin, 2019]. Yet, few studies focus on the impact of
+constant imputation in a predictive setting. Imputation itself must be revisited for
+out-of-sample prediction settings: users resort to different strategies such as imputing separately the train and test sets or imputing them jointly. More elaborate
+strategies rely on using maximum likelihood with expectation maximization (EM)
+
+4
+
+Julie Josse et al.
+
+to fit a model on incomplete data [Dempster et al., 1977, Little, 1992, Jiang et al.,
+2019]. However, such techniques often rely on strong parametric assumptions. Alternatively, some learning algorithms, such as decision trees, can readily handle
+missing values, accounting for their discrete nature.
+
+In this paper, we study the classic tools of missing values in the context of supervised learning. We start in Section 2 by setting the notations and briefly summarizing the missing-value literature. Our first contribution, detailed in Section 3, is to
+adapt the formalism for missing values to supervised learning: we show how to use
+standard missing-values techniques to make predictions on a test set with missing
+values. Section 4 presents our main contribution: studying the consistency of two
+approaches to estimate the prediction function with missing values. The first theorem states that, given an optimal predictor for the completely-observed data, a
+consistent procedure can be built by predicting on a test set where missing entries
+are replaced by multiple imputation. The second theorem, which is the most striking and has important consequences in practice, shows that constant imputation
+prior to learning is consistent for supervised learning. This is, as far as we know,
+the first result justifying this very convenient practice of handling missing values.
+In Section 5, we compare imputation to learning directly with missing values via
+decision trees. Indeed, their greedy and discrete natures allow adapting them to
+handle missing values directly. We compare the different tree methods (together
+with classic machine learning approaches such as SVM or nearest neighbours) on
+simulated data with missing values and recommend to use the “Missing incorporated in attributes” (MIA, Twala et al. 2008) approach, whose good predictive
+performances have been highlighted by Kapelner and Bleich [2015], one of the few
+studies of trees with missing values for supervised learning. Other experimental
+works have shown that tree-based methods are competitive in terms of predictive
+performances [see Jäger et al., 2021]. We also show the benefits for prediction
+of an approach often used in practice, which consists in “adding the mask”, i.e.
+adding binary variables that code for the missingness of each variables as new co-
+
+On the consistency of supervised learning with missing values
+
+5
+
+variates, even though this method is not recommended for parameter estimation
+[Jones, 1996].
+
+2 Definitions, problem setting, prior art
+Notation. Throughout the paper, bold letters refer to vectors; CAPITAL letters
+
+refer to random variables, while lower-case letters are realisations. In addition, as
+usual, for any two variables A and B of joint density g ,
+Z
+g (b) := gB (b) :=
+
+g (α, b) dµ(α),
+
+g (a|b) := gA|B =b (a) :=
+
+g (a, b)
+.
+g (b )
+
+2.1 Supervised learning
+Supervised learning is typically focused on learning to predict a target Y ∈ Y from
+N
+inputs X ∈ X = dj=1 Xj , where the pair (X, Y ) is considered as random, drawn
+from a distribution P . Formally, the goal is to find a function f : X → Y , that
+minimizes E[ℓ(f (X), Y )] given a cost function ℓ : Y ×Y → R, called the loss [Vapnik,
+1999]. The best possible prediction function is known as the Bayes predictor, given
+by
+f ⋆ ∈ argmin E [ℓ(f (X), Y )] ,
+
+(1)
+
+f : X →Y
+
+and its expected loss is the Bayes loss [Devroye et al., 2013]. A learning procedure is
+used to create a function f based on a set of training pairs Dn,train = {(Xi , Yi ), i =
+1, . . . , n}. The function f is therefore itself a function of Dn,train , and can be written
+fˆDn,train or simply fˆn . There are many different learning procedures, including
+
+random forests [Breiman, 2001] or support vector machines [SVM, see Cortes and
+Vapnik, 1995]. A learning procedure that, given an infinite amount of data, yields
+a function that achieves the Bayes loss is said to be Bayes consistent. In other
+words, fˆn is Bayes consistent if
+lim E[ℓ(fˆn (X), Y )] = E[ℓ(f ⋆ (X), Y )].
+
+n→∞
+
+6
+
+Julie Josse et al.
+
+A learning procedure that is Bayes consistent for every distribution (X, Y ) is said
+to be (Bayes) universally consistent. In a classification setting, Y is drawn from a
+finite set of discrete values, and the cost ℓ is typically the zero-one loss: ℓ(Y1 , Y2 ) =
+1Y1 ̸=Y2 . In a regression setting, Y is drawn from continuous values in R and is
+assumed to satisfy E[Y 2 ] < ∞. A common cost is then the square loss, ℓ(Y1 , Y2 ) =
+(Y1 − Y2 )2 . Considering the zero-one loss [Rosasco et al., 2004] or the square loss
+(see e.g. sec 1.5.5 of Bishop [2006]), the Bayes predictor f ⋆ , that minimizes the
+expected loss, satisfies f ⋆ (X) = E[Y |X].
+Note that the learning procedure has access to a finite sample Dn,train , and not to
+P
+the distribution P , hence it can only use the empirical risk, i=1...n ℓ(f (Xi ), Y ),
+rather than the expected risk. A typical learning procedure is therefore the empirical risk minimization defined as the following optimization problem
+n
+
+fˆn ∈ argmin
+f :X →Y
+
+1X
+n
+
+!
+ℓ (f (Xi ), Yi )
+
+.
+
+i=1
+
+A new data set Dn,test is then needed to estimate the generalization error of the
+resulting function fˆn .
+
+2.2 Background on missing values
+In this section, we introduce the classic work on missing values, including the
+different missing-value mechanisms. We then summarize the main methods to
+handle missing values: imputation and likelihood-based methods. Most of this prior
+art to deal with missing values is based on a single data set with no distinction
+between training and test set. One challenge in formalizing statistical learning
+with missing values is adapting notations to describe precisely incomplete feature
+vectors: notations not explicit enough have led to confusions [Seaman et al., 2013];
+the literature is in flux [Little and Rubin, 2019, preface].
+Notations for missing values In presence of missing values, we do not observe a
+
+complete vector X. To define precisely the observed quantity, we introduce the
+
+On the consistency of supervised learning with missing values
+
+7
+
+missing indicator vector M ∈ {0, 1}d which satisfies, for all 1 ≤ j ≤ d, Mj = 1 if
+and only if Xj is not observed. The random vector M acts as a mask on X. To
+e (see
+formalize incomplete observations, we use the incomplete feature vector X
+Rubin [1976], Rosenbaum and Rubin 1984, appendix B; Mohan and Pearl 2018,
+ej = NA if Mj = 1, and X
+ej = Xj otherwise. As X is
+Yoon et al. 2018) defined as X
+Nd
+e belongs to the space Xe =
+a cartesian product, X
+j =1 (Xj ∪ {NA}). We have
+e = X ⊙ (1 − M) + NA ⊙ M,
+X
+where ⊙ is the term-by-term product, with the convention that, for all onedimensional x ̸= 0, NA · x = NA and NA · 0 = 0. As such, when the data are
+e can be seen as a mixed categorical and continuous variable, taking valreal, X
+ues in R ∪ {NA}. Here is an example of realizations (lower-case letters) of previous
+random variables: for a given vector x = (1.1, 2.3, −3.1, 8, 5.27) with the missing
+pattern m = (0, 1, 0, 0, 1), we have
+
+x
+e = (1.1, NA, − 3.1, 8, NA).
+
+To write likelihoods (see Section 2.2.1), we must also introduce notations xobs(m)
+and xmis(m) , classic in the missing value literature. For any vector x, and any set
+J ⊂ {1, . . . , d}, we let xJ be the subvector of x composed of the components of x
+
+indexed by J . We also let |J| be the cardinal of J . For any vector m ∈ {0, 1}d ,
+we let obs(m) = {j ∈ {1, . . . , d}, mj = 0} and mis(m) = {j ∈ {1, . . . , d}, mj = 1}.
+N
+Hence xobs(m) ∈ j∈obs(m) Xj is composed of observed entries in x and xmis(m) ∈
+N
+j∈mis(m) Xj contains the missing components in x. To shorten notations, we will
+sometimes write xo (resp. xm ) instead of xobs(m) (resp. xmis(m) ). To continue the
+above example, we have
+
+xobs(m) = x(1,3,4) = (1.1, − 3.1, 8),
+
+xmis(m) = x(2,5) = (2.3, 5.27).
+
+8
+
+Julie Josse et al.
+
+Given a vector x ∈
+
+Nd
+
+j =1 Xj and a missingness pattern m, one can recompose x
+
+based on xobs(m) , xmis(m) and m by the ordering operator x = o(xobs(m) , xmis(m) ; m).
+Finally, we use the generic notation x̂ to denote x
+e in which missing values have
+been imputed, based on any imputation procedure to be specified. For example, if
+we impute the missing values by 0 in the previous example, we have
+
+x̂ = (1.1, 0, −3.1, 8, 0).
+
+Notations related to missing data are summarized in Table 1.
+Notation
+x∈X
+y∈Y
+m ∈ {0, 1}d
+N
+x
+e ∈ dj=1 (Xj ∪ {NA})
+xobs(m) ∈
+
+N
+
+j∈obs(m) Xj
+
+N
+
+xmis(m) ∈ j∈mis(m) Xj
+x = o(xobs(m) , xmis(m) ; m)
+x̂ ∈ X
+
+Description
+
+Complete input vector
+Complete output (always observed)
+Missingness indicator vector
+Observed vector x where missing entries are written as NA
+Subvector of x containing its observed components
+Subvector of x containing its missing components
+Complete vector x recreated by merging xobs(m)
+and xmis(m) according to the missing pattern m
+Vector x for which missing entries have been imputed
+
+Table 1: Notations and definitions used throughout the paper. Bold variables are
+vectors
+
+2.2.1 Missing data mechanisms
+
+To follow the historical definitions which do not give to the response Y a particular
+role, we temporarily consider Y as part of the input vector X, though we assume
+that Y has no missing values. Rubin [1976] defines three missing data mechanisms
+and fundamental results for working with likelihood models in the presence of
+missing data. Let us consider that realizations (xi , mi ) are sampled i.i.d. from a
+distribution in P = {gθ (x)gϕ (m|x) : (θ, ϕ) ∈ Ωθ,ϕ } where Ωθ,ϕ ⊂ Θ × Φ is the joint
+parameter space (marginally, θ ∈ Θ and ϕ ∈ Φ). The goal in statistical inference
+
+On the consistency of supervised learning with missing values
+
+9
+
+is to estimate the parameter θ. This is usually done by maximizing the likelihood
+Qn
+L(θ) = i=1 gθ (xi ), which is well defined when the xi are fully observed. Recall
+that each xi can be decomposed into an observed vector xi,o and an unobserved
+vector xi,m . Here, the likelihood is integrated over the missing values, resulting in
+
+(full likelihood)
+
+L1 (θ, ϕ) =
+
+n Z
+Y
+
+gθ (o(xi,o , xi,m ; m))gϕ (mi |o(xi,o , xi,m ; m)) dxi,m ,
+
+i=1
+
+where the integration is taken on the components of xi,m only. The parameter ϕ is
+generally not considered as of interest. In addition, modelling the missing values
+mechanism may require strong parametric assumptions. An easier quantity would
+be
+
+(likelihood of observed data)
+
+L2 (θ) =
+
+n Z
+Y
+
+gθ (o(xi,o , xi,m ; m)) dxi,m
+
+i=1
+
+ignoring the missing data mechanism. To leave the difficult term, i.e. the missing
+values mechanism, out of the expectation, Rubin [1976] introduces an ad hoc assumption, called Missing At Random (MAR), which is that for all ϕ ∈ Φ, for all
+i ∈ J1, nK, for all x′ ∈ X ,
+x′obs(mi ) = xi,o , ⇒ gϕ (mi |x′ ) = gϕ (mi |xi ),
+
+for instance, for all a, b ∈ R,
+
+gϕ ((0, 1, 0, 0)|(1, a, 3, 10)) = gϕ ((0, 1, 0, 0)|(1, b, 3, 10)).
+
+Using this assumption, he states the following result.
+Theorem 1 (Theorem 7.1 in Rubin [1976]) Let ϕ such that for all 1 ≤ i ≤ n,
+gϕ (mi |xi ) > 0. Assume (a) MAR, (b) Ωθ,ϕ = Θ × Φ, then L2 (θ) is proportional to
+L1 (θ, ϕ) with respect to θ, so that the inference for θ can be obtained by maximizing
+the likelihood L2 , which ignores the missing mechanism.
+
+MAR has a stronger version, more intuitive: Missing Completely At Random (MCAR).
+|=
+
+In its simplest and strongest form, it states that M X (the model density is
+
+10
+
+Julie Josse et al.
+
+gθ (x)gϕ (m)). At the other end of the spectrum, if it is not possible to ignore the
+
+mechanism, the corresponding model is called Missing Not At Random (MNAR).
+These definitions are often subject to debates [Seaman et al., 2013] but can be
+understood using the following example: let us consider two variables, income and
+age with missing values on income. MCAR means that the missing values are
+independent of any values; MAR is satisfied if missing values on income depend
+on the values of age (older people are less incline to reveal their income) whereas
+MNAR holds if rich people are less prone to reveal their income.
+There is little literature on missing data mechanism for supervised learning or discriminative models. Kapelner and Bleich [2015] formalise the problem by separating the role of the response y , factorising the likelihood as gθ (x)gϕ (m|x)gχ (y|x, m).
+Note that they do not write gϕ (m|x, y ). They justify this factorisation with the –
+somewhat causal – consideration that the missing values are part of the features,
+which precede the response. The need to represent the response variable in the
+factorization show that it may be useful to extend the traditional mechanisms
+for a supervised learning setting: the link between the mechanism and the output
+variable can have a significant impact on the results. Davidian [2017] and ArelBundock and Pelc [2018] noticed that as long as M does not depend on Y , it is
+possible to estimate regression coefficients without bias even with listwise deletion
+and MNAR values. Ding and Simonoff [2010] generalise the MAR assumption with
+the following nomenclature MXY: the missing mechanism can marginally depend
+on the target (**Y), on the features that are always observed (*X*) or on the
+features that can be missing (M**).
+
+2.2.2 Imputation prior to analysis
+
+Most statistical models and machine-learning procedures are not designed for incomplete data. To use existing pipelines in the presence on missing values, imputing
+the data is commonly used to form a completed data set. To (single) impute data,
+joint modeling (JM) approaches capture the joint distribution across features [Lit-
+
+On the consistency of supervised learning with missing values
+
+11
+
+tle and Rubin, 2019]. A simple example of joint modeling imputation is to assume
+a Gaussian distribution of the data and to estimate the mean vector and covariance matrix from the incomplete data (using an EM algorithm, see Section 2.2.3).
+Missing entries can then be imputed with their conditional expectation knowing
+the observed data and the estimated parameters. More powerful methods can be
+based on low-rank models [Hastie et al., 2015, Josse et al., 2016]. While KNN imputation is not intrinsically suited for high-dimensional data, such methods often
+yield good predictive performances [see, e.g., Batista and Monard, 2003, Poulos
+and Valle, 2018]. Recently, several deep learning (DL) architectures have been proposed to impute datasets, based on variational autoencoder [Mattei and Frellsen,
+2019], GAN such as GAIN [Yoon et al., 2018] or MisGAN [Li et al., 2019], or on
+denoising autoencoders as MIDA [Vincent et al., 2008, Gondara and Wang, 2018]
+just to name a few. The quality of an imputation strategy is usually assessed via
+its RMSE performance: several observed values are first hidden, then the imputed
+values are compared to the true ones in terms of RMSE. While such a protocol is
+easy to implement, it has been recently criticized [see, e.g., Näf et al., 2023] as the
+optimal imputation is then the conditional mean, therefore reducing the variability of the distribution of imputed data, compared to the actual true distribution.
+While DL architectures show promising performances for imputation in terms of
+RMSE, DL architectures fails to provide a correct imputation in terms of distributional statistics [mean, variance, correlation, see Wang et al., 2022]. A new line of
+research aims at designing imputation scores able to reflect how the distribution of
+imputed value is close to the actual distribution [see, e.g., Näf et al., 2023]. In this
+paper, we are interested in the predictive performance of any methods (including
+imputation followed by a learning algorithm) capable of handling missing data.
+Therefore, the quality of imputation is not assessed on its own but through the
+predictive performance of subsequent learning algorithm applied on the imputed
+data set.
+
+12
+
+Julie Josse et al.
+
+Another class of popular approaches to impute data defines the joint distribution
+implicitly by the conditional distributions of each variable. These approaches are
+called fully conditional specification (FCS) or imputation with conditional equation (ICE) [van Buuren, 2018]. This formulation is very flexible and can easily
+handle variables of a different nature such as ordinal, categorical, numerical, etc,
+via a separate model for each, e.g. using supervised learning. Well-known examples
+of such approach are missForest, using iterative imputation of each variable by
+random forests [Stekhoven and Bühlmann, 2011], or MICE [Buuren and GroothuisOudshoorn, 2010]. Their computational scalability however prohibits their use on
+large dataset. As they fit one model per feature, their cost is at least O(d2 ): using
+random forests as a base model leads to a complexity O(d2 n log n) and using a
+ridge model amounts to a complexity O(d2 n min(n, d)).
+The role of the dependent variable Y and whether or not to include it in the
+imputation model has been a rather controversial point. Indeed, it is quite counterintuitive to include it when the aim is to apply a conditional model on the imputed
+data set to predict the outcome Y . Nevertheless, it is recommended as it can
+provide information for imputing covariates [Allison, 2001, p.57]. Sterne et al.
+[2009] illustrated the point for the simple case of a bivariate Gaussian data (X, Y )
+with a positive structure of correlation and missing values on X . Imputing using
+only X is not appropriate when the aim is to estimate the parameters of the linear
+regression model of Y given X .
+One important issue with “single” imputation, i.e. predicting only one value for
+each missing entries, is that it forgets that some values were missing and considers
+imputed values and observed values in the same way. It leads to underestimation of
+the variance of the parameters [Little and Rubin, 2019] estimated on the completed
+data. One solution, to incorporate the uncertainty of the imputed values is to use
+multiple imputation (MI, Rubin 1987) where many plausible values are generated
+for each missing entries, leading to many imputed data sets. Then, MI consists
+in applying an analysis on each imputed data sets and combining the results.
+
+On the consistency of supervised learning with missing values
+
+13
+
+Although many procedures to generate multiple imputed data sets are available
+[Murray, 2018], here again, the case of discriminative models is rarely considered,
+with the exception of Wood et al. [2008] who use a variable selection procedure on
+each imputed data set and propose to keep the variables selected in all imputed
+data sets to construct the final model [see also Liu et al., 2016].
+
+2.2.3 EM algorithm
+
+Imputation leads to two-step methods that are generic in the sense that any analysis can be performed from the same imputed data set. On the contrary, the
+expectation maximization (EM) algorithm [Dempster et al., 1977] proceeds directly in one step. It can thus be better suited to a specific problem but requires
+the development of a dedicated algorithm.
+The EM algorithm can be used in missing data settings to compute maximum
+likelihood estimates from an incomplete data set. Indeed, with the assumptions of
+Theorem 1 (MAR settings), maximizing the observed likelihood L2 gives principle
+estimation of parameters θ. The log-likelihood of the observed data is
+
+log L2 (θ) =
+
+n
+X
+
+Z
+log
+
+gθ (o(xi,o , xi,m ; m)) dxi,m .
+
+i=1
+
+Starting from an initial parameter θ(0) , the algorithm alternates the two following
+steps,
+
+(E-step)
+
+Q(θ|θ(t) ) =
+
+n Z
+X
+
+(log gθ (o(xi,o , xi,m ; m)))gθ(t) (o(xi,o , xi,m ; m)) dxi,m .
+
+i=1
+
+(M-step)
+
+θ(t+1) ∈ argmax Q(θ|θ(t) ).
+θ∈Θ
+
+The well-known property of the EM algorithm states that at each step t, the observed log-likelihood increases, although there is no guarantee to find the global
+maximum. In Appendix C.2 we give an example of an EM algorithm to estimate
+the parameters of a bivariate Gaussian distribution from incomplete data. The in-
+
+14
+
+Julie Josse et al.
+
+terested reader can refer to Roche [2011] and the references therein for a theoretical
+review on the EM algorithm.
+
+3 Supervised learning procedures with missing data on train and test set
+
+Supervised learning typically assumes that the data are i.i.d. In particular, an outof-sample observation (test set) is supposed to be drawn from the same distribution
+as the original sample (train set). Hence, it must possess the same missing-values
+mechanism. An appropriate method should then be able to predict on new data
+with missing values. Here we discuss how to adapt classic missing-values techniques
+to machine-learning settings, and vice versa.
+
+3.1 Out-of-sample imputation
+Using missing-value imputation in a supervised learning setting is not straightforward as it requires to impute new, out-of-sample, test data, where the target Y is
+unavailable.
+A simple strategy is to fit an imputation model on the training set; let us consider
+a parametric imputation model governed by a parameter α . Based on the training
+set, we estimate a value α̂ and use this value to impute the training set, which is
+then denoted by X̂train . Then a supervised-learning model is learned using X̂train
+and Ytrain . If the supervised-learning procedure is indexed by a parameter β , it
+yields the estimated parameter β̂ . Finally, on the test set, the covariates must be
+imputed with the same imputation model (using α̂) and the prediction is built
+using the imputed test set and the estimated learning model (using β̂ ).
+This approach is easy to implement for univariate imputation methods that consider each feature separately, for instance with mean imputation: parameters α̂
+correspond to the mean µ̂j of each column which is learned on the training set,
+and new observations on the test set are imputed by (µ̂1 , . . . , µ̂d ). This approach
+can also be implemented with a joint Gaussian model on (X, Y ), learning param-
+
+On the consistency of supervised learning with missing values
+
+15
+
+eters of the Gaussian with the EM algorithm on the training set. Indeed, one can
+then impute the test set using the conditional expectations of the missing features
+given the observed features (without Y ) and the estimated parameters.
+For more general imputation methods, two issues hinder out-of-sample imputation.
+First, many available imputation methods are “black-boxes” that take as input an
+incomplete data set and output a completed data set: they do not separate the estimation of model parameters from their use to complete the data. This is the case
+for many implementations of iterative conditional imputation such as missForest
+[Stekhoven and Bühlmann, 2011], through scikit-learn [Pedregosa et al., 2011] and
+recent versions of MICE [van Buuren, 2018] (using an argument ”ignore”) provides
+out-of-sample iterative conditional imputation. It is also difficult for powerful imputers presented in Section 2.2.2 such as low-rank matrix completion, which cannot
+be easily marginalised on X alone.
+As most existing implementations cannot easily impute a new data set with the
+same imputation model, some analysts resort to performing separate imputation of
+the training set and the test set. But the smaller the test set, the more suboptimal
+this strategy is, and it completely fails in the case where only one observation has
+to be predicted. Another option is to consider semi-supervised settings, when the
+test set is available at train time: grouped imputation can then simultaneously
+impute the train and the test set [Kapelner and Bleich, 2015], while the predictive
+model is subsequently learned on the training set only.
+
+3.2 EM and out-of-sample prediction
+The likelihood framework (Section 2.2.1) enables predicting new observation, though
+it has not been much discussed. Jiang et al. [2019] consider a special case of this
+approach for a logistic regression where covariates X are assumed to be Gaussian.
+Let the assumptions of Theorem 1 be verified (MAR settings). The true parameters
+of the model can then be estimated by maximizing the observed log-likelihood
+log L2 with an EM algorithm on the train data (Section 2.2.3). The corresponding
+
+16
+
+Julie Josse et al.
+
+estimates θ̂n can be used for out-of-sample prediction with missing values. The
+probability distribution of y as a function of the observed values xo = xobs(m)
+only, can be related to that on a fully-observed data set:
+
+gθ̂ (y|Xo = xo ) =
+n
+
+gθ̂ (y, xo )
+n
+
+gθ̂ (xo )
+n
+
+Z
+1
+gθ̂ (y, o(xo , xm ; m)) dxm
+n
+gθ̂ (xo )
+n
+Z
+g (o(xo , xm ; m))
+= gθ̂n (y|o(xo , xm ; m)) θ̂n
+dxm
+gθ̂ (xo )
+n
+i
+h
+= EXm |Xo =xo gθ̂n (y|o(xo , Xm ; m))
+=
+
+(2)
+
+It is then possible to approximate the expectation with Monte Carlo sampling
+from the distribution gθ̂n (Xm |Xo = xo ). Such a sampling is easy in simple models,
+e.g. using Schur’s complements for Gaussian distributions in linear regression set-
+
+tings. But in more complex settings, such as logistic regression, there is no explicit
+solution and one option is to use Metropolis-Hasting algorithms [Hastings, 1970].
+
+3.3 Empirical risk minimization with missing data
+The two approaches discussed above are specifically designed to fix the missingvalues issue: imputing or specifying a parametric model and computing the probability of the response given the observed values. However, in supervised-learning
+settings, the goal is rather to build a prediction function that minimizes an expected risk. Empirical risk minimization, the workhorse of machine learning, can
+be adapted to deal with missing data.
+Recall that in missing-values settings, we do not have access to X but rather to
+e . Therefore, we aim at minimizing the empirical risk over
+the incomplete vector X
+the set of measurable functions from Xe to Y , that is
+fbn ∈ argmin
+f :Xe→Y
+
+n
+1X 
+
+n
+
+
+
+e i ), Y i .
+ℓ f (X
+
+i=1
+
+(3)
+
+On the consistency of supervised learning with missing values
+
+Unfortunately, the half-discrete nature of Xe =
+
+17
+
+Nd
+
+j =1 (Xj ∪{NA}) makes the problem
+
+difficult. Indeed, many learning algorithms do not work with mixed data types,
+such as R ∪ {NA}, but rather require a vector space. This is true in particular for
+gradient-based algorithms. As a result, the optimization problem (3) is hard to
+solve with typical learning tools.
+Another point of view can be adopted for losses which leads to Bayes-optimal
+e ) = E[Y |X
+e ]. As there are at most 2d admissible missing
+solutions defined as f ⋆e
+(X
+X
+patterns, we can rewrite the Bayes estimate as
+⋆ e
+fX
+e (X) =
+
+X
+
+
+
+E Y Xobs(m) , M = m 1M=m ,
+
+(4)
+
+m∈{0,1}d
+
+This formulation highlights the combinatorial issues: solving (3) may require, as
+suggested by Rosenbaum and Rubin [1984, Appendix B], to estimate 2d different
+
+
+submodels, that is E Y Xobs(m) , M = m appearing in (4) for each m ∈ {0, 1}d ,
+which grows exponentially with the number of variables.
+Modifying existing algorithms or creating new ones to deal with the optimization
+problem (3) is in general a difficult task, due to the numerous possible missing
+data patterns. Nevertheless, we will see in Section 5 and Appendix B that decision
+trees are particularly well suited to address this problem.
+
+Remark 1 Note that, in practice, not all patterns may be possible in the training
+
+and test sets. For instance, if there are only complete data in the train set, the
+
+
+only submodel of interest is E Y Xobs(m) , M = m for m = (0, . . . , 0), which boils
+down to the regular supervised-learning scenario on a complete data set. However,
+the train and test sets are assumed to be drawn from the same data distribution.
+Hence, we expect to observe similar patterns of missingness in train and test sets.
+If this is not the case, we are in presence of a distributional shift, which should
+be tackled with dedicated methods [see, e.g., Sugiyama et al., 2017]. This may
+happen for instance, when a study conducted on past data leads to operational
+
+18
+
+Julie Josse et al.
+
+recommendations, advising practitioners to focus on certain variables of interest.
+In that case, they will more likely measure them systematically.
+
+4 Consistency of imputation procedures
+
+In this section, we show theoretically that, without assuming any parametric distribution for the data, imputation procedures can lead to a Bayes-optimal predictor
+in the presence of missing data on covariates (in both train and test sets), i.e. it
+⋆ e
+e
+asymptotically targets the function fX
+e (X) = E[Y |X].
+
+In Section 4.1, we assume that we are given the true regression function f ⋆ on
+the fully-observed data and study the performance of applying this regression
+function to a test set with missing values, using several imputation strategies:
+unconditional mean, conditional mean and multiple imputation. Note that, for
+MCAR data, the function f ⋆ can be estimated using the complete observations
+only, i.e., by deleting observations with missing values in the train set and applying
+a supervised procedure on the remaining observations. Such a strategy is relevant
+for very large training sets and MCAR missing values.
+In Section 4.2, we consider the full problem of tackling missing values in the train
+and the test set, which is of particular interest when the training set is of reasonable size as it can leverage the information contained in incomplete observations.
+We study a classical approach, described in Section 3.1, which consists in imputing
+the training set, fitting a learning algorithm on the imputed data, and predicting
+on a test set which has been imputed with the same method. Although mean imputation of variables is one of the most widely used approaches, it is highly criticised
+in the classic literature for missing data [Little and Rubin, 2019]. Indeed, it leads
+to a distortion of the data distribution and, consequently, statistics calculated on
+the imputed data table are biased. A simple example is the correlation coefficient
+between two variables, which is biased towards zero if the missing data are imputed by the mean. However, in a supervised-learning setting, the aim is not to
+compute statistics representative of the data set, but to minimize a prediction risk
+
+On the consistency of supervised learning with missing values
+
+19
+
+by estimating a regression function. For this purpose, we show in Section 4.2 that
+constant imputation may be completely appropriate and leads to consistent estimation of the prediction function. This result is remarkable and extremely useful
+in practice.
+
+4.1 Test-time imputation
+Here we consider that we have access to the optimal (Bayes) predictor f ⋆ for the
+complete data, i.e. f ⋆ (X) = E[Y |X], and we show that, in MAR settings, when
+missing data appears in the test set, the optimal predictor for incomplete data can
+be computed by using multiple imputation with f ⋆ .
+
+4.1.1 Test-time conditional multiple imputation is consistent
+
+Let us first make explicit the multiple imputation procedure for prediction. Recall
+that we observe xobs(m) . We then draw the missing values Xm from the conditional
+distribution Xm |Xo = xo and compute the regression function on these completed
+observations. The resulting multiple imputation function is given by:
+⋆
+fMI
+(e
+x) = EXm |Xo =xo [f ⋆ (o(xo , Xm ; m))].
+
+(5)
+
+Note that this expression is similar to the expression (2) given for EM, but assuming that we know the true nonparametric distribution of the data.
+Assumption 1 (Regression model) The regression model satisfies Y = f ⋆ (X) + ε,
+
+Assumption 2 (Missingness pattern - MAR-Y ) We have Y
+
+|=
+
+where X takes values in Rd and ε satisfies a.s. E[ε|Xobs(M) ] = 0.
+M|Xobs(M)
+
+The missingness pattern in Assumption 2 is more generic than MAR, since it is
+notably verified if the missingness pattern is MAR, that is if P[M = m|X] = P[M =
+m|Xobs(m) ] (classic definition recalled in Section 2.2.1), i.e. if the probability to
+
+observe a given pattern depends only on the observed values.
+
+20
+
+Julie Josse et al.
+
+Theorem 2 Grant Assumption 1 and 2. Then the multiple imputation procedure, defined in (5) is Bayes optimal, that is, for all x
+e ∈ (R ∪ {NA})d ,
+⋆
+fMI
+(e
+x) = f ⋆e
+(e
+x).
+X
+
+The proof is given in Appendix A. Theorem 2 justifies the use of multiple imputation when missing pattern is MAR and when we have access to an estimate of
+f ⋆ and of the conditional distribution Xm |Xo = xo .
+
+4.1.2 Single mean imputation is not consistent
+
+Given the success of multiple imputation, it is worth checking that single imputation is not sufficient. We show with two simple examples that indeed, single
+imputation on the test set is not consistent even in MAR setting.
+We first show, that (unconditional) mean imputation is not consistent, if the learning algorithm has been trained on the complete cases only.
+
+X1 ∼ U (0, 1),
+
+Y = X12 + ε,
+
+M1 ∼ B(1/2)
+
+|=
+
+Example 1 In one dimension, consider the following simple example,
+
+(X1 , Y ),
+
+with ε an independent centered Gaussian noise. Here, E[Y |X1 ] = X12 , and the
+e ) = E[Y |X
+e ] satisfies
+(X
+regression function f ⋆e
+X
+⋆ e
+2
+e
+fX
+e (X) = X1 · 1M1 =0 + E[Y |X = NA] · 1M1 =1
+
+= X12 · 1M1 =0 + E[X12 ] · 1M1 =1
+= X12 · 1M1 =0 + (1/3) · 1M1 =1 .
+
+(6)
+
+On the consistency of supervised learning with missing values
+
+21
+
+In the oracle setting where the distribution of (X1 , Y, M1 ) is known, ”plugging in”
+the mean imputation of X1 yields the Plug-in Imputation function prediction
+e ) = X12 · 1M =0 + (E[X1 ])2 · 1M =1
+fP I (X
+1
+1
+= X12 · 1M1 =0 + (1/4) · 1M1 =1 .
+
+(7)
+
+In this example, mean imputation is not optimal: when X1 is missing, the prediction obtained by mean imputation is 1/4, whereas the optimal prediction (the one
+which minimizes the square loss) is 1/3 as seen in (6).
+Inspecting (6) and (7) reveals that the poor performance of mean imputation is
+due to the fact that E[X12 ] ̸= (E[X1 ])2 . The non-linear relation between Y and
+X1 breaks mean imputation. This highlights the fact that the imputation method
+
+should be chosen in accordance with the learning algorithm that will be applied
+later on. This is related to the concept of congeniality [Meng, 1994] defined in
+multiple imputation.
+
+4.1.3 Conditional mean imputation is consistent if there are deterministic relations
+between input variables
+
+We now consider conditional mean imputation, using information of other observed
+variables to impute. Conditional mean imputation may work in situations where
+there is redundancy between variables, as highlighted in Example 2. However, we
+give a simple example below stressing that using it to impute the test may not be
+Bayes optimal.
+
+Example 2 Consider the following regression problem with two identical input vari-
+
+ables:
+Y = X1 + X22 + ε,
+
+M2 ∼ B(1/2) (X1 , X2 , Y )
+|=
+
+X1 = X2 ∼ U ([0, 1]),
+
+22
+
+Julie Josse et al.
+
+The Bayes predictor is then given by
+
+e) =
+f ⋆e
+(X
+X
+
+=
+
+
+
+ X1 + X 2
+
+e2 ̸= NA
+if X
+
+2
+
+
+e2 = NA] if X
+e2 = NA
+ X1 + E[X22 |X1 , X
+
+
+ X1 + X 2 if X
+e2 ̸= NA
+2
+
+e2 = NA
+ X1 + X12 if X
+
+Plugging in the previous expression the mean of X2 when missing leads to the
+Plug-in Imputation function
+
+e) =
+f P I (X
+
+
+
+ X1 + X 2
+
+e2 ̸= NA
+if X
+
+2
+
+
+e2 = NA,
+ X1 + (1/4) if X
+whereas plugging in the Mean Imputation of X2 conditional on X1 leads to
+
+e) =
+f P M I (X
+
+
+
+ X1 + X 2 if X
+e2 ̸= NA
+2
+
+,
+
+
+e2 = NA
+ X1 + X12 if X
+
+as (E[X2 |X1 ])2 = X12 .
+If there is no deterministic link between variables, conditional mean imputation
+fails to recover the regression function, in the case where the regression function
+is not linear (see Example 2, where X1 = X2 is replaced by X1 = X2 + ε).
+
+4.1.4 Pathological case: missingness is a covariate
+
+Example 3 below shows a situation in which any imputation method, single or
+multiple, fails, because the missingness contains information about the response
+variable Y . In this univariate setting, there is no distinction between conditional
+and unconditional mean.
+Example 3 Consider the following regression model,
+
+M1 ∼ B(1/2) X1
+|=
+
+X1 ∼ U (0, 1)
+
+Y = X1 · 1M1 =0 + 3X1 · 1M1 =1 + ε.
+
+On the consistency of supervised learning with missing values
+
+Here,
+
+23
+
+E[Y |X1 ] = X1 · P(M1 = 0) + 3X1 · P(M1 = 1) = 2X1 .
+
+Plugging in the mean imputation of X1 leads to
+
+e ) = X1 · 1M1 =0 + E[X1 ] · 1M1 =1
+f P I (X
+= X1 · 1M1 =0 + (1/2) · 1M1 =1 ,
+whereas the regression function satisfies
+⋆ e
+e
+fX
+e (X ) = X1 · 1M1 =0 + 3E[X1 |X = NA] · 1M1 =1
+
+= X1 · 1M1 =0 + (3/2) · 1M1 =1 .
+
+In this case, the presence of missing values is informative in itself, and having access
+to the complete data set (all values of X1 ) does not provide enough information.
+Such a scenario advocates for considering the missingness as an additional input
+variable. Indeed, in such situations, single and multiple imputation fail to recover
+the targeted regression function, without adding a missingness indicator to the
+input variables.
+
+4.2 Constant imputation at train and test time is consistent
+We now show that the same single imputation used in both train and test sets leads
+to consistent procedures. More precisely, we allow missing data on X1 only, and
+replace its value by some constant α ∈ R if X1 is missing. More precisely, for each
+observed x̃ ∈ (R ∪{NA}) × Rd−1 , the imputed entry is defined as x′ = (x′1 , x2 , . . . , xd )
+where
+
+(constant imputation)
+
+x′1 = x1 1M1 =0 + α1M1 =1 .
+
+We consider the following procedure: (i) impute the missing values on X1 in the
+training set by α (ii) use a universally consistent algorithm (see the definition
+
+24
+
+Julie Josse et al.
+
+⋆
+in Section 2) on the training set to approach the regression function fSI
+(x ′ ) =
+
+E[Y |X′ = x′ ]. Theorem 3 shows that this procedure is consistent under the following assumptions.
+Assumption 3 (Regression model) Let Y = f ⋆ (X) + ε where X has a continuous
+density g > 0 on [0, 1]d , f ⋆ is continuous, and ε is a centred noise independent of
+
+(X, M1 ).
+
+observed and the missingness pattern M1 on variable X1 satisfies M1
+
+|=
+
+Assumption 4 (Missingness pattern - MAR) The variables X2 , . . . , Xd are fully
+X1 |X2 , . . . , Xd
+
+and is such that the function (x2 , . . . , xd ) 7→ P[M1 = 1|X2 = x2 , . . . , Xd = xd ] is
+continuous.
+
+As for Assumption 2, Assumption 4 states that the missingness pattern is a specific
+MAR process since only X1 can be missing with a probability that depends only
+on the other variables, which are always observed. The conditional distribution of
+M is also assumed to be continuous to avoid technical complexities in the proof of
+
+Theorem 3.
+Theorem 3 Grant Assumption 3 and 4. The single imputation procedure described
+above satisfies, for all imputed entries x′ ∈ Rd ,
+⋆
+fSI
+(x′ ) = E[Y |X2 = x2 , . . . , Xd = xd , M1 = 1]1x′1 =α 1P[M1 =1|X2 =x2 ,...,Xd =xd ]>0
+
++ E[Y |X = x′ ]1x′1 =α 1P[M1 =1|X2 =x2 ,...,Xd =xd ]=0
++ E[Y |X = x′ , M1 = 0]1x′1 ̸=α .
+
+Consequently, letting
+
+e =
+X
+
+
+
+
+
+X′
+
+if X1′ ̸= α
+
+,
+
+
+ (NA, X2 , . . . , Xd ) if X1′ = α
+
+the single imputation procedure is equal to the Bayes function almost everywhere, that
+is
+⋆
+⋆ e
+fSI
+(X′ ) = fX
+e (X).
+
+(8)
+
+On the consistency of supervised learning with missing values
+
+25
+
+The proof is given in Appendix A. Theorem 3 confirms that it is preferable to use
+the same imputation for the training and test sets. Indeed, the learning algorithm
+can learn the imputed value and use that information to detect that the entry
+was initially missing. If the imputed value changes from train set to test set (for
+example, if instead of imputing the test set with the mean of the variables of the
+train set, one imputes by the mean of the variables on the test set), the learning
+algorithm may fail, since the imputed data distribution would differ between train
+and test sets.
+
+Multivariate missingness. Interestingly, Theorem 3 remains valid when missing val|=
+
+ues occur for variables X1 , . . . , Xj under the assumption that (M1 , . . . , Mj ) (X1 ,
+. . . , Xj ) conditional on (Xj +1 , . . . , Xd ) and if for every pattern m ∈ {0, 1}j ×{0}d−j ,
+
+the functions (xj +1 , . . . , xd ) 7→ P[M = m|Xj +1 = xj +1 , . . . , Xd = xd ] are continuous.
+
+Note that the precise imputed value α does not matter if the learning algorithm
+is universally consistent. By default, the mean is not a bad choice, as it preserves
+the first order statistic (mean) of the sample. However, our analysis does not
+stress out any particular role of mean imputation. In fact, any imputation in the
+support of X1 is equivalent and leads to a consistent procedure. The comment
+below stresses out the benefit of choosing α outside of the support of X1 .
+
+Almost everywhere consistency. The equality between the constant imputation learner
+⋆
+holds almost surely but not for every x̃. Indeed,
+and the Bayes function f ⋆e
+fSI
+X
+
+under the setting of Theorem 3, let x̃ = (α, x2 , . . . , xd ), for any x2 , . . . , xd ∈ [0, 1]
+such that P[M1 = 1|X2 = x2 , . . . , Xd = xd ] > 0. In this case, x′ = (α, x2 , . . . , xd )
+and
+⋆
+fSI
+(x′ ) = E[Y |X2 = x2 , . . . , Xd = xd , M1 = 1],
+
+26
+
+Julie Josse et al.
+
+which is different, in general, from
+⋆
+fX
+x) = E[Y |X1 = α, X2 = x2 , . . . , Xd = xd ].
+e (e
+
+⋆
+Therefore, on the event A1 = {X̃, X̃1 = α}, the two functions fSI
+and f ⋆e
+differ,
+X
+
+and thus the equality between these functions does not hold pointwise. However,
+⋆
+⋆ e
+since A1 is a zero probability event, the equality fSI
+(X′ ) = fX
+e (X) hold almost
+
+everywhere, as stated in Theorem 3. A simple way to obtain the pointwise equality
+in equation (8) is to impute missing entries by values that are out of the range
+of the true distribution, which echoes the ”separate class” method advocated by
+Ding and Simonoff [2010].
+
+Discrete/categorical variables. According to Assumption 3, the variables X1 , . . . , Xd
+
+admit a density. Therefore, the proof of Theorem 3 is not valid for discrete variables. However, Theorem 3 can be extended to handle discrete variables, if missing
+entries in each variable are imputed by an extra category “missing” for each variable. In this framework, consistency boils down to estimating the expectation of
+Y given a category which directly results from the universal consistency of the
+
+selected algorithm.
+
+Classification. Theorem 3 is established for a regression problem. However, in
+
+a binary classification setting where Y ∈ {0, 1}, the plug-in classifier ĝn (x) =
+1η̂n (x)≥1/2 is universally consistent if the estimate η̂n (an estimator of E[Y |X]) is
+universally consistent, according to Corollary 6.2 in Devroye et al. [2013]. Theorem 3 can be applied to consistently estimate E[Y |X = x] via η̂n (x), which leads
+to a universally consistent plug-in classifier ĝn . Consequently, Theorem 3 is also
+valid for classification frameworks.
+
+Universal consistency. In Theorem 3, we assume to be given a universally consistent
+
+algorithm which may appear as a strong restriction on the choice of the algorithm.
+However many estimators exhibit this property as, for example, local averaging
+
+On the consistency of supervised learning with missing values
+
+27
+
+estimate [kernel methods, nearest neighbors and decision trees, see Devroye et al.,
+2013]. The key point of Theorem 3 is to state that the universal consistency of
+a procedure with missing values results directly from the universal consistency of
+an algorithm applied to an imputed data set, therefore providing guarantees that
+consistent algorithm and imputation are useful tools to handle missing values.
+
+Optimizing the imputed values. Bertsimas et al. [2018]1 propose a general framework
+
+to optimize the imputation values, and instantiate this framework for different
+learning algorithm. Extended simulations show that their proposal is competitive
+in terms of imputation quality (measured via MAE/RMSE) or predictive performances.
+
+Consistency for some specific distributions. In Theorem 3, we assume to be given a
+
+universally consistent algorithm. One can legitimately ask if the result still holds
+if an algorithm which is consistent only for some specific data distribution was
+used instead. For example, assume that data are generated via a linear model and
+a linear estimator is used after missing values have been imputed. One can show
+that the 2d submodels are not linear in general and consequently, using a single
+linear model on imputed data does not yield the Bayes loss [Le Morvan et al.,
+2020]. In a nutshell, Theorem 3 is not valid for procedures that are consistent for
+some specific data distributions only. The interested reader can refer to Le Morvan
+et al. [2020] for further details on missing values in linear generative models.
+
+5 Simulations
+
+In Section 3, we provided theoretical guarantees justifying the common practice
+of imputing by a constant, in a specific MAR setting and in an asymptotic sample
+regime. More precisely, Theorem 3 gives us a positive response in principle regarding the usage of constant imputation for prediction purpose but does not establish
+1
+
+Their work were submitted after our contribution.
+
+28
+
+Julie Josse et al.
+
+the predictive performances of such methods in a finite-sample regime. To go beyond the framework of Theorem 3, we now evaluate the predictive performances of
+learning algorithms trained on imputed data sets (following the imputation priorto-learning strategy of Theorem 3) and, to give a broader perspective, we compare
+it to that of procedures intrinsically able to handle missing values. In general such
+procedures are hard to design, but decision trees offer natural approaches for empirical risk minimization with missing values [Saar-Tsechansky and Provost, 2007,
+Twala et al., 2008]. This is due to their ability to handle the half-discrete nature
+of X̃, as they rely on greedy decisions rather than smooth optimization.
+We first present the different approaches available to handle missing values in
+tree-based methods in Section 5.1. We then compare numerically the two different
+strategies: imputation prior to learning and learning directly with missing data.
+
+5.1 Dealing with missing values using decision trees
+There exist several approaches to build decision trees based on data sets containing
+missing data. These approaches can be divided into two parts: (i) those for which
+the splitting mechanism omits missing data (namely Probabilistic splits, Block
+propagation and surrogate splits) and (ii) those for which missing data are taken
+into account to build the splits (Missing incorporated in attributes, MIA). These
+approaches are detailed below.
+For the first set of approaches, in each cell, a splitting criterion (see equation 21 in
+Appendix B) is computed for each variable j ∈ {1, . . . , d}, based on observations
+that have non-missing entries Xj . The best split (j ⋆ , z ⋆ ) (corresponding to a split
+at position z ⋆ along variable j ⋆ ), is then chosen as the one optimizing this criterion
+(see Algorithm 1 in Appendix B.2 for details). Since such an approach omits the
+missing data for building the best split, one need to specify a method to send
+partially-observed data down the tree. The following approaches propose different
+strategies.
+
+On the consistency of supervised learning with missing values
+
+29
+
+Surrogate splits Surrogate splits search for a split on another variable that induces
+
+a data partition close to the original one. More precisely, for a selected split (j0⋆ , z0⋆ ),
+to send down the tree observations with no j0⋆ th variable, a new stump, i.e., a tree
+with one cut, is fitted to the response 1Xj ⋆ ≤z0⋆ , using variables (Xj )j̸=j0⋆ . The split
+0
+
+(j1⋆ , z1⋆ ) which minimizes the misclassification error is selected, and observations are
+split accordingly. Those that lack both variables j0⋆ and j1⋆ are split with the second
+best, j2⋆ , and so on until the proposed split has a worse misclassification error than
+the blind rule of sending all remaining missing values to the same daughter, the
+most populated one. To predict, the training surrogates are kept (see Algorithm 2
+in Appendix B.2 for details). This construction is the default method in rpart
+[Therneau et al., 1997]. Surrogate method is expected to be appropriate when
+there are relationships between covariates.
+
+Probabilistic splits Another option is to propagate missing observations according
+L
+to a Bernoulli distribution B( #L#+#
+R ), where #L (resp. #R) is the number of
+
+points already on the left (resp. right) (see Algorithm 3 in Appendix B.5). This is
+the default method in C4.5 [Quinlan, 2014].
+
+Block propagation A third option is to choose the split on the observed values, and
+
+then send all incomplete observations as a block, to a side chosen by minimizing
+the error (see Algorithm 4 in Appendix B.5). This is the method used in LightGBM [Ke et al., 2017].
+
+Missing incorporated in attribute (MIA, Twala et al. 2008) A second class of methods
+
+uses missing values to compute the splitting criterion itself. Consequently, the
+splitting location depends on the missing values, contrary to all methods presented
+above. Its most common instance is “missing incorporated in attribute” (MIA),
+which considers the following splits, for all splits (j, z ):
+ej ≤ z or X
+ej = NA} vs {X
+ej > z},
+– {X
+
+30
+
+Julie Josse et al.
+
+ej ≤ z} vs {X
+ej > z or X
+ej = NA},
+– {X
+ej ̸= NA} vs {X
+ej = NA}.
+– {X
+In a nutshell, MIA tries to send all missing values to the left or to the right for each
+possible split, or to separate observed values from missing ones. For each option,
+the prediction error is computed and the selected option is the one minimizing the
+prediction error (see Algorithm 5 in Appendix B.5 for details).
+Missing values are treated as a category by MIA, which is thus nothing but a
+e and
+greedy algorithm minimizing the square loss between Y and a function of X
+e ] into 2d terms. Howconsequently targets the quantity (4) which separate E[Y |X
+ever, it is not exhaustive: at each step, the tree can cut for each variable according
+to missing or non missing and selects this cut when it is relevant, i.e. when it minimizes the prediction error. The final leaves can correspond to a cluster of missing
+values patterns (observations with missing values on the two first variables for
+instance and any missing patterns for the other variables).
+MIA is thought to be a good method to apply when missing pattern is informative, as this procedure allows to cut with respect to missing/non missing and uses
+missing data to compute the best splits. Note this latter property implies that
+the MIA approach does not require a different method to propagate missing data
+down the tree. Notably, MIA is implemented in the R packages partykit [Hothorn
+and Zeileis, 2015] and grf [Tibshirani et al., 2020], as well as in XGBoost [Chen
+and Guestrin, 2016] and for the HistGradientBoosting models in scikit-learn [Pedregosa et al., 2011].
+In Appendix B.4, we conduct a theoretical analysis on a very simple regression
+models to highlight differences between the above strategies. In particular, we
+compare in Proposition 2 the risk of the different splitting strategies (probabilistic
+split, block propagation, surrogate split, and MIA) and prove that MIA and surrogate splits are the two best strategies, one of which may be better than the other
+depending on the dependence structure of covariates. Note that block propagation
+can be seen as a greedy way of successively optimizing the choices in the two first
+
+On the consistency of supervised learning with missing values
+
+31
+
+options in MIA. However, as we show in Proposition 1, these successive choices
+are sub-optimal.
+
+5.2 Simulation settings
+We consider three regression models with covariates (X1 , . . . , Xd ) distributed as
+N (µ, Σ ) with µ = 1d and Σ = ρ1d 1T
+d + (1 − ρ)Id , where 1d is the d-dimensional
+
+vector composed of ones and Id the d × d identity matrix. By default, ρ is set to
+0.5 in our experiments. The first model is quadratic, the second one is linear, and
+the third one has been used as a benchmark for tree methods by several authors,
+including Friedman [1991] and Breiman [1996]. We also consider a last regression
+model where the relationship between covariates are nonlinear. In all four models,
+ε is a centered Gaussian noise with standard deviation 0.1.
+Model 1 (Quadratic) Y = X12 + X22 + X32 + ε
+Model 2 (Linear) Y = Xβ + ε with β = (1, 2, −1, 3, −0.5, −1, 0.3, 1.7, 0.4, −0.3).
+Model 3 (Friedman) Y = 10 sin(πX1 X2 ) + 20(X3 − 0.5)2 + 10X4 + 5X5 + ε
+Model 4 (Friedman, Nonlinear) Y = sin(πX1 X2 ) + 2(X3 − 0.5)2 + X4 + .5X5 + ε
+where X is a hidden uniform variable on [−3, 0] and the covariates (X1 , . . . , Xd ) are
+distributed as
+
+
+
+X1 = X 2 + ε1
+
+
+
+
+
+
+
+X2 = sin(X ) + ε2
+
+
+
+X3 = tanh(X ) exp(X ) sin(X ) + ε3
+
+
+
+
+
+
+X4 = sin(X − 1) + cos(X − 3)3 + ε4
+
+
+
+
+
+X5 = (1 − X )3 + ε5
+
+
+p
+
+X6 = sin(X 2 ) + 2 + ε6
+
+
+
+
+
+
+
+X7 = X − 3 + ε7
+
+
+
+
+X8 = (1 − X ) sin(X ) cosh(X ) + ε8 ,
+
+
+
+
+
+
+X9 = sin(21X )−2 + ε9
+
+
+
+
+
+X10 = X 4 + ε10
+
+where εi are independent centered Gaussian with standard deviation 0.05.
+
+In our experiments, we generate missing data as follows.
+
+32
+
+Julie Josse et al.
+
+Missing Pattern 1 (MCAR) For p ∈ [0, 1], the missingness on variable j is generated according to a Bernoulli distribution
+
+∀i ∈ J1, nK, Mi,j ∼ B(p).
+Missing Pattern 2 (Censoring MNAR) A direct way to select a proportion p of
+missing values on a variable Xj , that depends on the underlying value, is to crop them
+above the 1 − p-th quantile
+
+∀i ∈ J1, nK, Mi,j = 1Xi,j >[Xj ](1−p)n .
+
+model, letting Mj be part of the regression function, with Mj
+
+∀i ∈ J1, nK, Mi,j ∼ B(p),
+
+and
+
+Y =
+
+3
+X
+
+|=
+
+Missing Pattern 3 (Predictive Missingness) Last, we consider a pattern mixture
+X,
+
+Xj2 + 2 Mj + ε.
+
+
+
+j =1
+
+MCAR is the most simple instance of missing patterns. In particular, it falls in the
+framework of Theorem 3, for which constant imputation leads to consistent predictive methods. MNAR is a more complex pattern where the missingness indicator
+depends on the true value of the variable. For such a pattern, adding the mask
+can help the prediction, but using the dependencies between the missing covariate
+and the existing ones can help to build an accurate prediction. The third missing
+pattern is, in some sense, pathological (see Example 3) as the output depends directly on the missingness indicator. In such extreme settings, good performances
+can only be obtained if the mask is added as input variable.
+We compare the following methods using implementation in R [R Core Team, 2018]
+and default values for the tuning parameters. We compare tree-based methods
+(decision trees, random forests, gradient boosting) able to handle directly missing
+values, with more classic machine learning methods like Support Vector Machines
+[SVM, see Cortes and Vapnik, 1995] or K nearest neighbours [KNN, see Cover
+and Hart, 1967]. Unless stated otherwise, we use the following packages: rpart
+
+On the consistency of supervised learning with missing values
+
+33
+
+[Therneau and Atkinson, 2018] for decision trees, ranger [Wright and Ziegler, 2015]
+for random forests, XGBoost [Chen and Guestrin, 2016] for gradient boosting,
+e1071 for SVM and caret for KNN. Note that we have used surrogate splits only
+with decision trees. More precisely, we compare for decision trees the following
+strategies:
+– MIA: missing in attributes (see Remark 2 in Appendix B.3 for implementation
+
+details)
+– rpart+mask/ rpart: CART with surrogate splits, with or without the indicator
+M in the covariates
+– ctree+mask/ ctree: conditional trees, implemented in package partykit [Hothorn
+
+and Zeileis, 2015] with or without the indicator M in the covariates
+– impute mean+mask/ impute mean: missing values are imputed by uncondi-
+
+tional mean with or without the indicator M added in the covariates
+– impute OOR+mask / impute OOR: missing values are imputed by a constant
+
+value, chosen out of range (OOR) from the values of the corresponding covariate
+in the training set, with or without the indicator M added in the covariates
+– impute Gaussian+mask /impute Gaussian: missing values are imputed by
+
+conditional expectation when data are assumed to follow a Gaussian multivariate distribution. More precisely, the parameters of the Gaussian distribution
+are estimated with an EM algorithm (R package norm [Fox, 2013]). Note that
+for numerical reasons, we shrink the estimated covariance matrix (replacing Σ̂
+by 0.99 × Σ̂ + 0.01 × tr(Σ̂)Id ) before imputing. The method can also be applied
+with the indicator M added in the imputed values.
+For KNN and SVM, we compare the last three methods, namely mean imputation, Out-Of-Range (OOR) imputation, Gaussian imputation (as other methods
+do not apply), with and without adding the mask, whereas for random forests and
+gradient boosting methods, we also use MIA.
+To evaluate the performance of the methods, we repeatedly draw a training set
+and a testing set of the same size 1000 times. We choose to display the percentage
+
+34
+
+Julie Josse et al.
+
+of explained variance, i.e. the R2 statistic computed on the test set, defined as
+1
+2
+
+R =1−
+
+ntest
+
+Pntest
+
+i=1 (ŷi − yi )
+
+2
+
+V[Y ]
+
+,
+
+(9)
+
+The numerator corresponds to the Mean Square Error (MSE) computed on the
+test set, and the denominator is the true variance of Y , available since we know
+the generative model. Using the R2 metric allows us to quickly assess the quality
+of a regression model: values close to one indicate a very good predictive model.
+Note that, depending on the regression model and the missing mechanism at hand,
+some predictive tasks are easier than other, thus explaining the differences in the
+average predictive performance of all methods. The code for these experiments is
+available online2 .
+
+Experiment 1 In the first experiment, we use Model 1 with d = 9 and introduce
+
+missing values on X1 , X2 , and X3 according to the mechanisms described hereafter.
+Results are depicted in Figure 1.
+
+Experiment 2 In the second experiment, the other three models are used with
+d = 10, with a MCAR mechanism on all variables. Results are shown in Figure 3.
+
+5.3 Results comparing strategies for fixed sample sizes
+Figure 1 presents the results for one choice of correlation (ρ = 0.5) between covariates and percentage of missing entries (20%), as others give similar interpretation
+(see Appendix D for different values of the correlation ρ and the missing rate).
+In the MCAR case, all decision-tree methods perform similarly aside from out-ofrange imputation which significantly under-performs. Performing a “good” conditional imputation, i.e. one that captures the relationships between variables such as
+impute Gaussian, slightly helps prediction. This is all the most true as the correla-
+
+tion between variables increases, which we have not displayed. Adding the missing2
+
+https://github.com/jacobmchen/supervised_missing/
+
+On the consistency of supervised learning with missing values
+
+MCAR
+
+ctree
+ctree + mask
+rpart
+rpart + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+
+MNAR
+
+DECISION TREE
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+DECISION TREE
+
+0.4
+
+RANDOM FOREST
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+1.00.2
+
+0.6
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.4
+
+0.6
+
+0.8
+
+0.6
+
+0.8
+
+1.00.2
+
+1.0
+
+XGBOOST
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+SVM
+
+0.4
+
+0.6
+
+0.8
+
+KNN
+
+0.4
+
+1.0
+
+RANDOM FOREST
+
+SVM
+
+KNN
+
+0.2
+
+0.4
+
+XGBOOST
+
+SVM
+
+0.2
+
+1.00.2
+
+Predictive M
+DECISION TREE
+
+RANDOM FOREST
+
+XGBOOST
+
+0.2
+
+35
+
+1.0
+
+KNN
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+2
+
+Fig. 1: R scores on model 1 • Normalized explained variance for the three missing
+data mechanisms (MCAR, Censoring MNAR, Predictive Missingness) introduced
+above, with 20% of missing values, n = 1000, d = 9 and ρ = 0.5.
+
+value mask is not important. For powerful models, random forests and gradient
+boosting, the benefit of conditional imputation compared to MIA is much reduced.
+These models give significantly better prediction accuracy than tree-based models
+as expected.
+More complex patterns (MNAR or predictive missingness) reveal the importance
+of adding the missing mask in most imputation strategies, except for the OOR
+imputation. MIA achieves excellent performance even for these more complex
+missing-values mechanisms. Remarkably, mean imputation also achieves good per-
+
+36
+
+Julie Josse et al.
+
+formances with random forests and xgboost methods though adding a mask helps.
+This is not the case for KNN and SVM. Note that, whatever the missing data
+mechanism, combining OOR imputation with SVM learners leads to sub-optimal
+predictive performances.
+
+Statistical tests In order to assess whether the differences observed in Figure 1 are
+
+significant, we employ statistical tests. More precisely, for each learning algorithm
+and each pair of imputation strategy, we consider the R2 of the 1000 repetitions.
+As these values are computed on similar individuals (the generated data are the
+same for all imputation methods and a given repetition), we employ paired ttests. A p-value lower than 0.05 indicates that the two considered imputation
+method exhibits different predictive performances. Such results help us to assess
+the significance of the difference observed via the boxplots in Figure 1. P-values
+are displayed in Appendix D.2. The vast majority of differences observed in Figure 1 appear to be significant. For example, in the MCAR model, only the pair
+Gaussian/Gaussian+mask and Mean/Mean+mask are not statistically different
+for decision trees and random forests at the level 0.05.
+
+Computational complexity The computational complexity together with the pre-
+
+dictive performances are two main criteria to assess the usefulness of a method
+handling missing values. We display in Figure 2 the training time (taking into account the imputation time and the training time on imputed data) of each method.
+As expected, the computational time increases when adding the mask except for
+the forests. In this low-dimensional setting, KNN is the quickest method, followed
+by decision trees and SVMs. The most computationally intensive methods, as expected, are random forests and gradient boosting. Nevertheless, the computational
+time for data of this size is not substantial. The computation time is primarily attributable to the learners, and imputation methods have minimal impact.
+Figure 3 compares methods for datasets with a non-linear generative model and
+values missing completely at random. The figure focuses on methods without
+
+On the consistency of supervised learning with missing values
+
+37
+
+DECISION TREE
+
+ctree(train)
+ctree + mask(train)
+rpart(train)
+rpart + mask(train)
+Gaussian(train)
+Gaussian + mask(train)
+oor(train)
+oor + mask(train)
+mean(train)
+mean + mask(train)
+MIA(train)
+0.0
+
+0.075
+
+0.150
+
+RANDOM FOREST
+
+Gaussian(train)
+Gaussian + mask(train)
+oor(train)
+oor + mask(train)
+mean(train)
+mean + mask(train)
+MIA(train)
+0.0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+XGBOOST
+
+Gaussian(train)
+Gaussian + mask(train)
+oor(train)
+oor + mask(train)
+mean(train)
+mean + mask(train)
+MIA(train)
+0.0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+Gaussian(train)
+Gaussian + mask(train)
+oor(train)
+oor + mask(train)
+mean(train)
+mean + mask(train)
+0.000
+
+0.025
+
+0.050
+
+0.075
+
+0.100
+
+0.125
+
+0.150
+
+0.175
+
+0.200
+
+KNN
+
+Gaussian(train)
+Gaussian + mask(train)
+oor(train)
+oor + mask(train)
+mean(train)
+mean + mask(train)
+0.00
+
+0.8
+
+SVM
+
+0.01
+
+0.02
+
+0.03
+
+0.04
+
+0.05
+
+0.06
+
+0.07
+
+0.08
+
+Fig. 2: Computation time (in seconds) of the different imputation methods/learning procedures for the MCAR generative mechanism with 20% of missing
+values, n = 1000, d = 9 and ρ = 0.5.
+
+38
+
+MCAR:
+
+Julie Josse et al.
+
+Model 2 (linear)
+ctree
+rpart
+Gaussian
+oor
+mean
+MIA
+Gaussian
+oor
+mean
+MIA
+Gaussian
+oor
+mean
+MIA
+
+Model 3 (Friedman)
+
+Model 4 (nonlinear)
+
+DECISION TREE
+
+DECISION TREE
+
+-0.06 -0.04 -0.02 0.71 +0.02 +0.04 +0.06
+
+-0.08 -0.05 -0.02 0.69 +0.02 +0.05 +0.08
+
+RANDOM FOREST
+
+RANDOM FOREST
+
+-0.06 -0.04 -0.02 0.83 +0.02 +0.04 +0.06
+
+-0.08 -0.05 -0.02 0.76 +0.02 +0.05 +0.08
+
+XGBOOST
+
+XGBOOST
+
+-0.06 -0.04 -0.02 0.84 +0.02 +0.04 +0.06
+
+-0.08 -0.05 -0.02 0.80 +0.02 +0.05 +0.08
+
+ctree
+rpart
+Gaussian
+oor
+mean
+MIA
+Gaussian
+oor
+mean
+MIA
+Gaussian
+oor
+mean
+MIA
+
+DECISION TREE
+
+ctree
+rpart
+Gaussian
+oor
+mean
+MIA
+-0.30
+
+-0.20
+
+-0.10
+
+0.70 +0.10 +0.20 +0.30
+
+RANDOM FOREST
+
+Gaussian
+oor
+mean
+MIA
+-0.30
+
+-0.20
+
+-0.10
+
+0.97 +0.10 +0.20 +0.30
+
+XGBOOST
+
+Gaussian
+oor
+mean
+MIA
+-0.30
+
+-0.20
+
+-0.10
+
+0.94 +0.10 +0.20 +0.30
+
+Fig. 3: Relative scores on different models in MCAR • Relative explained
+variance for models 2, 3, 4, MCAR with 20% of missing values, n = 1000, d = 10
+and ρ = 0.5.
+
+adding the mask, as it makes little difference in MCAR settings. Even with non
+linearities, Gaussian imputation often performs as well or better than mean imputation or MIA, likely because the non-linear supervised model compensates for
+the non linearity. All in all, MIA proves to be a strong option in all the scenarios
+that we have experimented when using tree-based methods, although Gaussian
+imputation with the mask can outperform it in these MCAR settings.
+
+5.4 Consistency and learning curves
+
+In the third experiment, we compare the methods of Section 5.2 varying sample
+size to assess their asymptotic performances, on models 2, 3 and 4. We wish to
+compare the tree performance with respect to the Bayes loss. For each sample size
+(between 300 and 104 ), we summarize 200 repetitions by their median and quartiles
+(as in the boxplots). Assuming MCAR, the Bayes estimator is the expectation of
+Y conditionally to the observed values,
+
+e ] = E[f (X)|X
+e ] = E[f (X)|Xobs(m) = xobs(m) , M = m].
+E[Y |X
+
+On the consistency of supervised learning with missing values
+
+0.6
+0.5
+103
+Sample size
+
+0.7
+0.6
+0.5
+0.4102
+
+103
+Sample size
+
+Explained variance
+
+0.5
+
+0.8
+0.7
+0.6
+0.5
+0.4102
+
+103
+Sample size
+
+Surrogates (rpart)
+Mean imputation
+
+Explained variance
+103
+Sample size
+
+103
+Sample size
+
+103
+Sample size
+
+104
+
+103
+Sample size
+
+104
+
+0.85
+
+0.95
+0.90
+0.85
+0.80102
+1.00
+
+104
+
+104
+
+0.90
+
+1.00
+
+104
+
+103
+Sample size
+
+0.95
+
+0.80102
+
+104
+
+104
+
+0.95
+
+KNN
+
+104
+
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2102
+
+0.6
+
+103
+Sample size
+
+103
+Sample size
+
+0.85
+
+SVM
+
+104
+
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2102
+
+0.7
+
+103
+Sample size
+
+0.5
+
+104
+
+0.90
+
+1.00
+
+0.6
+
+103
+Sample size
+
+0.95
+
+0.80102
+
+104
+
+0.7
+
+0.4102
+
+0.8
+
+0.4102
+
+0.5
+
+104
+
+0.4
+
+XGBOOST
+
+Explained variance
+
+0.8
+
+0.6
+
+103
+Sample size
+
+0.6
+
+1.00
+
+0.7
+
+0.4102
+
+104
+
+0.8
+
+0.2102
+
+104
+
+Explained variance
+
+0.7
+
+103
+Sample size
+
+Explained variance
+
+Explained variance
+
+0.8
+
+0.2
+102
+
+Explained variance
+
+Explained variance
+
+104
+
+0.4
+
+Non-linear problem
+(low noise)
+
+RANDOM FOREST
+
+Explained variance
+
+103
+Sample size
+
+0.6
+
+Explained variance
+
+0.2
+
+1.0
+
+Explained variance
+
+0.4
+
+0.4102
+
+Explained variance
+
+Explained variance
+
+0.6
+
+102
+
+Explained variance
+
+Friedman problem
+(high noise)
+
+Linear problem
+(high noise)
+
+DECISION TREE
+
+Explained variance
+
+0.8
+
+39
+
+0.90
+0.85
+0.80102
+
+Gaussian imputation
+MIA
+
+Bayes rate
+
+Fig. 4: Bayes consistency in MCAR • Consistency with 40% of MCAR values
+on all variables, on models 2 (linear), 3 (Friedman), 4 (non-linear).
+
+40
+
+Julie Josse et al.
+
+It has an simple expression only if the joint distribution of (X, Y ) is Gaussian.
+To compute an approximate Bayes loss for a nonlinear regression with Gaussian
+features, we apply joint Gaussian multiple imputation, as justified in Section 4.1.1,
+on a very large sample. For the third scenario with non-Gaussian features, we have
+not computed the Bayes loss.
+In linear settings, Figure 4 (left) shows that impute Gaussian benefits from correlations between features and is the best-performing method; For decision trees
+and forests, mean imputation, MIA and surrogate splits are also consistent but
+with a slower convergence rate (we have not displayed conditional trees as they
+exhibit the same behaviour as rpart with surrogate splits). Adding the indicator
+matrix in the data changes almost nothing here, so we have not displayed the corresponding curves. For non-linear associations (Figure 4, middle and right), the
+benefit brought by Gaussian imputation over the others methods seems to carry
+over though it is less pronounced for random forests and boosting. For low-noise
+settings (Figure 4, right) MIA and mean imputation seem equivalent. Gaussian imputation is also the best method compared to mean imputation when using KNN
+or SVM. Note that SVM is not a local averaging method (in contrast to treebased methods and nearest neighbors) and thus poor imputation may damage the
+predictive performances in the whole input space. On the contrary, imputed data
+points have only a local influence in tree-based methods and nearest neighbors,
+which may make them less sensitive to a bad imputation technique.
+For boosting, the difference between methods vanishes with large n, as can be
+expected from boosting’s ability to turn weak learners into strong ones [Schapire,
+1990]. Gaussian imputation is still beneficial for small sample sizes. Note that MIA
+can easily be implemented as a preprocessing step (see Remark 2 in Appendix B.3
+for implementation details).
+
+Link to studies on real-life data The experiments above are simple synthetic prob-
+
+lems to showcase the principles behind prediction with missing values. A benchmark on real-life data is beyond the scope of this work because it requires studying
+
+On the consistency of supervised learning with missing values
+
+41
+
+several datasets for generalizable findings. Perez-Lebel et al. [2022] conducted such
+study on 13 different prediction tasks on data with missing values. Their findings
+confirms that our results apply to real-life data. In particular: 1) given sufficient
+data, constant imputation (eg with the mean) performs as well as conditional imputation; 2) using MIA in tree-based models gives leading methods for all sample
+sizes; 3) often adding the missing indicator M in the features helps predictions.
+
+Take-home messages First, mean imputation can be appropriate and is consistent
+
+in a supervised-learning setting when missing values are MAR and not related to
+e) =
+the outcome. Second, tree-based methods are an efficient way to target fe⋆ (X
+e ] especially when using MIA (Section B.3) and can handle well informative
+E[Y |X
+pattern of missing values.
+We compare imputation methods, using the “proper way” to impute as described
+in Section 3.1, i.e., where imputation values from the training set are used to
+impute the test set.
+In addition, we consider imputation with the missing indicator M in the features.
+The rationale behind this indicator is that it can be useful to improve the prediction
+when going beyond the hypothesis of Theorem 3, i.e. considering a finite sample,
+a learning algorithm with a low approximation capacity (as linear regression) and
+with missing values that can either be MNAR or depend on Y .
+
+6 Discussion and conclusion
+
+We have studied procedures for supervised learning with missing data. Unlike in
+the classic missing data literature, the goal of the procedures is to yield the best
+possible prediction on test data with missing values. Focusing on simple ways of
+adapting existing procedures, our theoretical and empirical results outline simple
+practical recommendations:
+– In presence of MAR missing values, Bayes-consistent estimate can be built by
+
+applying the Bayes predictor (on complete data) to data imputed via condi-
+
+42
+
+Julie Josse et al.
+
+tional multiple imputation, and averaging the resulting prediction (Theorem
+2). Thus, Theorem 2 justifies the use of multiple conditional imputation in a
+MAR setting.
+– To train and test on data with missing values, the same imputation model
+
+should be used. Constant imputation is consistent, if used in conjunction with
+a powerful, non-linear learning model (Theorem 3).
+– There are a variety of manners to handle missing values inside decision trees.
+
+Among them, Missing Incorporated in Attribute (MIA, Twala et al. 2008, see
+Remark 2 in Appendix B.3), which works by optimizing jointly the split and
+the handling of the missing values is the most versatile, as it adapts to different
+missing data scenarios (see Section 5 and theoretical analysis in Appendix B.4).
+– Empirically, the choice of imputation methods (applied at train and test time)
+
+may lead to a reduction of the number of samples required to reach a given
+prediction performance (Figure 4).
+– When missingness is related to the prediction target, imputation does not suffice
+
+and it is useful to add the missingness indicators as features (Example 3 and
+Figure 1).
+These recommendations hold to minimize the prediction error in an asymptotic
+regime. More work is needed to establish theoretical results in the finite sample
+regime. In addition, different practices may be needed to control for the uncertainty
+associated to a prediction.
+
+Declarations
+
+Ethics approval and Consent to participate As the work is purely mathematical and
+
+numerical, and all data are synthetic, no ethic approval or consent to participate
+was necessary.
+
+Competing interests We have no competing interests to disclose.
+
+On the consistency of supervised learning with missing values
+
+43
+
+Funding JJ, NP, and GV acknowledge funding from ANR (“DirtyData” grant
+
+ANR-17-CE23-0018) and DataIA (“MissingBigData” grant).
+
+Acknowledgements We thank Stefan Wager for fruitful discussion and Julie Tib-
+
+shirani for the suggestion to implement MIA. We also thank Antoine Ogier who
+initiated our work on imputation in supervised learning during his internship. We
+thank the reviewers who provided constructive feedback that helped to improve
+the quality of the manuscript.
+
+Consent for publication Not applicable: no data or individual images were used in
+
+this publication
+
+Code availability The code to reproduce the experiments of this work is available
+
+on https://github.com/dirty-data/supervised_missing
+
+Availability of data and material - (data transparency) Not applicable as all the ex-
+
+periments in this study use simulated data.
+
+References
+
+Paul D Allison. Missing data, volume 136. Sage publications, 2001.
+Vincent Arel-Bundock and Krzysztof J Pelc. When can multiple imputation improve regression estimates? Political Analysis, 26(2):240–245, 2018.
+Gustavo EAPA Batista and Maria Carolina Monard. An analysis of four missing
+data treatment methods for supervised learning. Applied artificial intelligence, 17
+(5-6):519–533, 2003.
+Dimitris Bertsimas, Colin Pawlowski, and Ying Daisy Zhuo. From predictive methods to missing data imputation: an optimization approach. Journal of Machine
+Learning Research, 18(196):1–39, 2018.
+
+Christopher M Bishop. Pattern recognition and machine learning. springer, 2006.
+Leo Breiman. Bagging predictors. Machine learning, 24(2):123–140, 1996.
+
+44
+
+Julie Josse et al.
+
+Leo Breiman. Random forests. Machine learning, 45(1):5–32, 2001.
+Leo Breiman, J. H. Friedman, R. A. Olshen, and C. J. Stone. Classification and
+Regression Trees. Wadsworth, 1984. ISBN 0-534-98053-8.
+
+S van Buuren and Karin Groothuis-Oudshoorn. mice: Multivariate imputation by
+chained equations in r. Journal of statistical software, pages 1–68, 2010.
+Tianqi Chen and Carlos Guestrin. Xgboost: A scalable tree boosting system. In
+sigkdd international conference on knowledge discovery and data mining, page 785.
+
+ACM, 2016.
+Corinna Cortes and Vladimir Vapnik. Support-vector networks. Machine learning,
+20(3):273–297, 1995.
+Thomas Cover and Peter Hart. Nearest neighbor pattern classification. IEEE
+transactions on information theory, 13(1):21–27, 1967.
+
+Marie Davidian. Statistical methods for analysis with missing data - course, 2017.
+URL https://www4.stat.ncsu.edu/~davidian/st790/notes.html.
+Arthur P Dempster, Nan M Laird, and Donald B Rubin. Maximum likelihood
+from incomplete data via the em algorithm. Journal of the royal statistical society.
+Series B (methodological), pages 1–38, 1977.
+
+Luc Devroye, László Györfi, and Gábor Lugosi. A probabilistic theory of pattern
+recognition, volume 31. Springer Science & Business Media, 2013.
+
+Yufeng Ding and Jeffrey S Simonoff. An investigation of missing data methods for
+classification trees applied to binary response data. Journal of Machine Learning
+Research, 11:131, 2010.
+
+John Fox. Package ‘norm’. 2013.
+Jerome H Friedman. Multivariate adaptive regression splines. The annals of statistics, pages 1–67, 1991.
+
+Lovedeep Gondara and Ke Wang. Mida: Multiple imputation using denoising autoencoders. In Advances in Knowledge Discovery and Data Mining: 22nd PacificAsia Conference, PAKDD 2018, Melbourne, VIC, Australia, June 3-6, 2018, Proceedings, Part III 22, pages 260–272. Springer, 2018.
+
+On the consistency of supervised learning with missing values
+
+45
+
+Trevor Hastie, Rahul Mazumder, Jason D Lee, and Reza Zadeh. Matrix completion
+and low-rank svd via fast alternating least squares. The Journal of Machine
+Learning Research, 16:3367, 2015.
+
+W Keith Hastings. Monte carlo sampling methods using markov chains and their
+applications. 1970.
+Torsten Hothorn and Achim Zeileis. partykit: A modular toolkit for recursive
+partytioning in R. Journal of Machine Learning Research, 16:3905, 2015.
+Torsten Hothorn, Kurt Hornik, and Achim Zeileis. Unbiased recursive partitioning: A conditional inference framework. Journal of Computational and Graphical
+Statistics, 15(3):651–674, 2006.
+
+Sebastian Jäger, Arndt Allhorn, and Felix Bießmann. A benchmark for data imputation methods. Frontiers in big Data, 4:693674, 2021.
+Wei Jiang, Julie Josse, and Marc Lavielle.
+
+Logistic regression with missing
+
+covariates–parameter estimation, model selection and prediction. Computational
+and Statistics Analysis, 2019.
+
+Michael P Jones. Indicator and stratification methods for missing explanatory
+variables in multiple linear regression. Journal of the American statistical association, 91(433):222–230, 1996.
+
+Julie Josse and Jerome P. Reiter. Introduction to the special section on missing
+data. Statist. Sci., 33(2):139–141, 05 2018. doi: 10.1214/18-STS332IN.
+Julie Josse, Sylvain Sardy, and Stefan Wager. denoiser: A package for low rank
+matrix estimation. Journal of Statistical Software, 2016.
+Adam Kapelner and Justin Bleich. Prediction with missing data via bayesian
+additive regression trees. Canadian Journal of Statistics, 43(2):224–239, 2015.
+Guolin Ke, Qi Meng, Thomas Finley, Taifeng Wang, Wei Chen, Weidong Ma, Qiwei
+Ye, and Tie-Yan Liu. Lightgbm: A highly efficient gradient boosting decision
+tree. In Advances in Neural Information Processing Systems, pages 3146–3154,
+2017.
+
+46
+
+Julie Josse et al.
+
+Marine Le Morvan, Nicolas Prost, Julie Josse, Erwan Scornet, and Gaël Varoquaux. Linear predictor on linearly-generated data with missing values: non
+consistency and solutions. AISTAT, 2020.
+Steven Cheng-Xian Li, Bo Jiang, and Benjamin Marlin.
+
+Misgan: Learning
+
+from incomplete data with generative adversarial networks.
+
+arXiv preprint
+
+arXiv:1902.09599, 2019.
+
+Roderick JA Little. Regression with missing x’s: a review. Journal of the American
+Statistical Association, 87(420):1227–1237, 1992.
+
+Roderick JA Little and Donald B Rubin. Statistical analysis with missing data,
+volume 793. John Wiley & Sons, 2019.
+Ying Liu, Yuanjia Wang, Yang Feng, and Melanie M. Wall. Variable selection
+and prediction with incomplete high-dimensional data. Ann. Appl. Stat., 10(1):
+418–450, 2016.
+Pierre-Alexandre Mattei and Jes Frellsen. MIWAE: Deep generative modelling
+and imputation of incomplete data sets. In Kamalika Chaudhuri and Ruslan Salakhutdinov, editors, Proceedings of the 36th International Conference on
+Machine Learning, volume 97 of Proceedings of Machine Learning Research, pages
+
+4413–4423. PMLR, 09–15 Jun 2019. URL https://proceedings.mlr.press/v97/
+mattei19a.html.
+
+Imke Mayer, Sportisse Aude, Nicholas Tierney, Nathalie Vialaneix, and Julie Josse.
+R-miss-tastic: a unified platform for missing values methods and workflows. R
+journal, 2022.
+
+Xiao-Li Meng. Multiple-imputation inferences with uncongenial sources of input.
+Statistical Science, pages 538–558, 1994.
+
+Karthika Mohan and Judea Pearl. Graphical models for processing missing data.
+arXiv preprint arXiv:1801.03583, 2018.
+
+Jared S. Murray. Multiple imputation: A review of practical and theoretical findings. Statist. Sci., 33(2):142–159, 05 2018.
+
+On the consistency of supervised learning with missing values
+
+47
+
+Jeffrey Näf, Meta-Lina Spohn, Loris Michel, and Nicolai Meinshausen. Imputation
+scores. The Annals of Applied Statistics, 17(3):2452–2472, 2023.
+F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel,
+M. Blondel, P. Prettenhofer, R. Weiss, V. Dubourg, J. Vanderplas, A. Passos,
+D. Cournapeau, M. Brucher, M. Perrot, and E. Duchesnay. Scikit-learn: Machine Learning in Python . Journal of Machine Learning Research, 12:2825–2830,
+2011.
+Alexandre Perez-Lebel, Gaël Varoquaux, Marine Le Morvan, Julie Josse, and JeanBaptiste Poline. Benchmarking missing-values approaches for predictive models
+on health databases. GigaScience, 11, 2022.
+Jason Poulos and Rafael Valle. Missing data imputation for supervised learning.
+Applied Artificial Intelligence, 32(2):186–196, 2018.
+
+J Ross Quinlan. C4. 5: programs for machine learning. Elsevier, 2014.
+R Core Team.
+
+R: A Language and Environment for Statistical Computing.
+
+Foundation for Statistical Computing, Vienna, Austria, 2018.
+
+R
+
+URL https:
+
+//www.R-project.org/.
+
+Alexis Roche. Em algorithm and variants: An informal tutorial. arXiv:1105.1476,
+2011.
+Lorenzo Rosasco, Ernesto De Vito, Andrea Caponnetto, Michele Piana, and
+Alessandro Verri. Are loss functions all the same? Neural Computation, 16
+(5):1063–1076, 2004.
+Paul R Rosenbaum and Donald B Rubin. Reducing bias in observational studies
+using subclassification on the propensity score. Journal of the American statistical
+Association, 79(387):516–524, 1984.
+
+D. B. Rubin. Multiple Imputation for Nonresponse in Surveys. Wiley, 1987.
+Donald B Rubin. Inference and missing data. Biometrika, 63(3):581–592, 1976.
+Maytal Saar-Tsechansky and Foster Provost. Handling missing values when applying classification models. 2007.
+
+48
+
+Julie Josse et al.
+
+Robert E Schapire. The strength of weak learnability. Machine learning, 5:197,
+1990.
+Shaun Seaman, John Galati, Dan Jackson, and John Carlin. What is meant by
+“missing at random”? Statistical Science, 28(2):257–268, 2013.
+Daniel J Stekhoven and Peter Bühlmann. Missforest—non-parametric missing
+value imputation for mixed-type data. Bioinformatics, 28(1):112–118, 2011.
+Jonathan A C Sterne, Ian R White, John B Carlin, Michael Spratt, Patrick Royston, Michael G Kenward, Angela M Wood, and James R Carpenter. Multiple
+imputation for missing data in epidemiological and clinical research: potential
+and pitfalls. BMJ, 338, 2009. ISSN 0959-8138.
+C. Strobl, A.-L. Boulesteix, and T. Augustin. Unbiased split selection for classification trees based on the gini index. Computational Statistics and Data Analysis,
+52(1):483–501, 2007.
+Masashi Sugiyama, Neil D Lawrence, Anton Schwaighofer, et al. Dataset shift in
+machine learning. The MIT Press, 2017.
+
+Terry Therneau and Beth Atkinson. rpart: Recursive Partitioning and Regression
+Trees, 2018. URL https://CRAN.R-project.org/package=rpart. R package ver-
+
+sion 4.1-13.
+Terry M Therneau, Elizabeth J Atkinson, et al. An introduction to recursive
+partitioning using the rpart routines, 1997. URL http://www.mayo.edu/hsr/
+techrpt/61.pdf.
+
+Julie Tibshirani, Susan Athey, and Stefan Wager. grf: Generalized Random Forests,
+2020. URL https://CRAN.R-project.org/package=grf. R package version 1.1.0.
+B. E. T. H. Twala, M. C. Jones, and D. J. Hand. Good methods for coping with
+missing data in decision trees. Pattern Recogn. Lett., 29(7):950–956, May 2008.
+ISSN 0167-8655.
+S. van Buuren. Flexible Imputation of Missing Data. Chapman & Hall/CRC Interdisciplinary Statistics. CRC Press LLC, 2018. ISBN 9781138588318.
+
+On the consistency of supervised learning with missing values
+
+49
+
+Vladimir Naumovich Vapnik. An overview of statistical learning theory. IEEE
+transactions on neural networks, 10(5):988–999, 1999.
+
+Pascal Vincent, Hugo Larochelle, Yoshua Bengio, and Pierre-Antoine Manzagol.
+Extracting and composing robust features with denoising autoencoders. In Proceedings of the 25th international conference on Machine learning, pages 1096–1103.
+
+ACM, 2008.
+Zhenhua Wang, Olanrewaju Akande, Jason Poulos, and Fan Li. Are deep learning models superior for missing data imputation in surveys? evidence from an
+empirical comparison. Survey Methodology, 48(2):375–399, 2022.
+Angela M. Wood, Ian R. White, and Patrick Royston. How should variable selection be performed with multiply imputed data? Statistics in Medicine, 27(17):
+3227–3246, 2008.
+Marvin N Wright and Andreas Ziegler. ranger: A fast implementation of random
+forests for high dimensional data in c++ and r. arXiv preprint arXiv:1508.04409,
+2015.
+Jinsung Yoon, James Jordon, and Mihaela Schaar. Gain: Missing data imputation
+using generative adversarial nets. In International conference on machine learning,
+pages 5689–5698. PMLR, 2018.
+
+A Proofs of Section 4
+
+A.1 Proof of Theorem 2
+Proof (Proof of Theorem 2: consistency of test-time conditional multiple imputation)
+e ∈ (R ∪ {NA})d . By Assumption 1, E[ε|Xobs(M) ] = 0 a.s., which yields, a.s.,
+Let x
+E[Y |Xobs(m) = xobs(m) ] = E[f ⋆ (X) + ε|Xobs(m) = xobs(m) ]
+= E[f ⋆ (X)|Xobs(m) = xobs(m) ]
+= E[f ⋆ (o(Xobs(m) , Xmis(m) ; m))|Xobs(m) = xobs(m) ].
+
+50
+
+Julie Josse et al.
+
+By definition, the multiple imputation procedure described in Theorem 2 is given by
+
+⋆
+fMI
+(e
+x) = EXmis(m) |Xobs(m) =xobs(m) [f ⋆ (o(xobs(m) , Xmis(m) ; m))]
+
+= E[f ⋆ (o(Xobs(m) , Xmis(m) ; m))|Xobs(m) = xobs(m) ]
+= E[Y |Xobs(m) = xobs(m) ].
+
+(10)
+
+Besides, since the missing pattern is MAR,
+
+e =x
+e]
+f ⋆e
+(e
+x) = E[Y |X
+X
+= E[Y |Xobs(m) = xobs(m) , M = m]
+= E[Y |Xobs(m) = xobs(m) ]
+
+(11)
+
+Combining (10) and (11), we finally obtain
+
+⋆
+⋆
+fMI
+(e
+x ) = fX
+x).
+e (e
+
+A.2 Proof of Theorem 3
+Proof (Proof of Theorem 3: consistency of mean imputation at train and test time)
+We distinguish the three following cases in order to make explicit the expression of E[Y |X′ = x].
+
+First case : let x ∈ [0, 1]d such that x1 ̸= α.
+For 0 < ρ < |x1 − α|, letting B(x, ρ) be the euclidean ball centered at x of radius ρ,
+E[Y |X′ ∈ B(x, ρ)] =
+=
+
+E[Y 1X′ ∈B(x,ρ) ]
+P[X′ ∈ B(x, ρ)]
+E[Y 1X∈B(x,ρ) 1M1 =0 ]
+P[X ∈ B(x, ρ), M1 = 0]
+
+= E[Y |X ∈ B(x, ρ), M1 = 0] .
+
+(12)
+
+Taking the limit of (12) when ρ tends to zero,
+
+E[Y |X′ = x] = lim E[Y |X′ ∈ B(x, ρ)] = E[Y |X = x, M1 = 0].
+ρ→0
+
+Second case : let x ∈ [0, 1]d such that x1 = α.
+First Subcase: assume P[M1 = 1|X2 = x2 , . . . , Xd = xd ] = 0.
+
+(13)
+
+On the consistency of supervised learning with missing values
+
+51
+
+We have {X′ = x} = {X′ = x, M1 = 0} = {X = x}, and consequently,
+E[Y |X′ = x] = E[Y |X = x].
+
+(14)
+
+Second Subcase: assume P[M1 = 1|X2 = x2 , . . . , Xd = xd ] > 0.
+We have
+
+P[X′ ∈ B(x, ρ)] = E[1X′ ∈B(x,ρ) 1M1 =0 ] + E[1X′ ∈B(x,ρ) 1M1 =1 ]
+= E[1X∈B(x,ρ) 1M1 =0 ] + E[1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) 1M1 =1 ],
+and
+
+E[f (X)1X′ ∈B(x,ρ) ] = E[f (X)1X∈B(x,ρ) 1M1 =0 ]
++ E[f (X)1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) 1M1 =1 ].
+Therefore,
+
+E[Y |X′ ∈ B(x, ρ)] =
+=
+
+E[f (X)1X′ ∈B(x,ρ) ]
+P[X′ ∈ B(x, ρ)]
+E[f (X)1X∈B(x,ρ) 1M1 =0 ] + E[f (X)1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) 1M1 =1 ]
+E[1X∈B(x,ρ) 1M1 =0 ] + E[1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) 1M1 =1 ]
+
+.
+
+(15)
+The terms in (15) involving M1 = 0 satisfy
+
+E[1X∈B(x,ρ) 1M1 =0 ] ≤ µ(B(x, ρ)) ≤
+
+π d/2
+Γ ( d2 + 1)
+
+∥g∥∞ ρd ,
+
+(16)
+
+and
+
+|E[f (X)1X∈B(x,ρ) 1M1 =0 ]| ≤ E[|f (X)|1X∈B(x,ρ) ]|
+≤
+
+π d/2
+Γ ( d2 + 1)
+
+∥g∥∞ ∥f ∥∞ ρd .
+
+(17)
+
+The second term of the denominator in (15) can be bounded from below,
+
+E[1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) 1M1 =1 ]
+= E[1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) P[M1 = 1|X2 , . . . , Xd ]]
+≥
+
+π (d−1)/2
+Γ ( d−1
++ 1)
+2
+
+
+inf g ρd−1 η.
+
+[0,1]d
+
+(18)
+
+52
+
+Julie Josse et al.
+
+The second term of the numerator in (15) verifies
+
+E[f (X)1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) 1M1 =1 ]
+= E[1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) E[f (X)1M1 =1 |X2 , . . . , Xd ]]
+= E[1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) E[f (X)|X2 , . . . , Xd ]E[1M1 =1 |X2 , . . . , Xd ]].
+If E[f (X)|X2 = x2 , . . . , Xd = xd ] > 0, by uniform continuity of f and g,
+
+E[1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) E[f (X)|X2 , . . . , Xd ]E[1M1 =1 |X2 , . . . , Xd ]]
+≥ E[f (X)|X2 = x2 , . . . , Xd = xd ]
+
+π (d−1)/2
+Γ ( d−1
++ 1)
+2
+
+
+inf g ρd−1 η.
+
+[0,1]d
+
+Similarly, if E[f (X)|X2 = x2 , . . . , Xd = xd ] < 0, we have
+
+E[1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) E[f (X)|X2 , . . . , Xd ]E[1M1 =1 |X2 , . . . , Xd ]]
+≤ E[f (X)|X2 = x2 , . . . , Xd = xd ]
+
+π (d−1)/2
+Γ ( d−1
++ 1)
+2
+
+
+inf g ρd−1 η
+
+[0,1]d
+
+≤ 0.
+
+Hence, if E[f (X)|X2 = x2 , . . . , Xd = xd ] ̸= 0
+
+|E[f (X)1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) 1M1 =1 ]|
+≥ |E[f (X)|X2 = x2 , . . . , Xd = xd ]|
+
+π (d−1)/2
+Γ ( d−1
++ 1)
+2
+
+
+inf g ρd−1 η.
+
+[0,1]d
+
+(19)
+
+Gathering inequalities (16)-(19) and using equation (15), we have, if E[f (X)|X2 = x2 , . . . , Xd =
+xd ] ̸= 0
+lim E[Y |X′ ∈ B(x, ρ)] = lim
+
+ρ→0
+
+ρ→0
+
+E[f (X)1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) 1M1 =1 ]
+E[1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) 1M1 =1 ]
+
+= E[f (X)|X2 = x2 , . . . , Xd = xd , M1 = 1].
+
+Finally, if E[f (X)|X2 = x2 , . . . , Xd = xd ] = 0 then by uniform continuity of f , there exists ερ
+such that ερ → 0 as ρ → 0 satisfying,
+|E[f (X)1(X2 ,...,Xd )∈B((x2 ,...,xd ),ρ) 1M1 =1 ]| ≤ ερ ρd−1
+
+π d/2
+Γ ( d2 + 1)
+
+∥g∥∞ ,
+
+On the consistency of supervised learning with missing values
+
+53
+
+hence
+
+lim E[Y |X′ ∈ B(x, ρ)] = 0
+
+ρ→0
+
+= E[f (X)|X2 = x2 , . . . , Xd = xd ]
+
+since M1
+
+|=
+
+= E[f (X)|X2 = x2 , . . . , Xd = xd , M1 = 1],
+X1 |(X2 , . . . , Xd ). Consequently, for all x ∈ [0, 1]d such that x1 = α,
+lim E[Y |X′ ∈ B(x, ρ)] = E[f (X)|X2 = x2 , . . . , Xd = xd , M1 = 1].
+
+ρ→0
+
+(20)
+
+Combining equations (13), (14) and (20), the prediction given by the mean imputation followed
+by learning is, for all x′ ∈ Rd ,
+⋆
+′
+fX
+e (x ) = E[Y |X2 = x2 , . . . , Xd = xd , M1 = 1]1x′ =α 1P[M1 =1|X2 =x2 ,...,Xd =xd ]>0
+1
+
+′
+
++ E[Y |X = x ]1x′ =α 1P[M1 =1|X2 =x2 ,...,Xd =xd ]=0
+1
+
++ E[Y |X2 = x2 , . . . , Xd = xd , M1 = 0]1x′ ̸=α ,
+1
+
+which concludes the proof.
+
+B Decision trees: an example of empirical risk minimization with missing
+data
+
+Aside from using procedures that require imputation prior to learning in order to handle
+missing values (as theoretically discussed in the previous section), one can use procedures
+intrinsically able to handle missing values. Among them, decision trees offer a natural way for
+empirical risk minimization with missing values [Saar-Tsechansky and Provost, 2007, Twala
+et al., 2008]. This is due to their ability to handle the half-discrete nature of X̃, as they rely
+on greedy decisions rather than smooth optimization.
+We first present the different approaches available to handle missing values in tree-based methods in Sections B.2 and B.3. We then compare them theoretically in Section B.4, highlighting
+the interest of using the “missing incorporated in attribute” approach in particular when the
+missing values are informative. In Section 5, we will compare numerically the two different
+strategies: imputation prior to learning and learning directly with missing data.
+
+54
+
+Julie Josse et al.
+
+B.1 Tree construction with CART
+CART (Classification And Regression Trees, Breiman et al. 1984) is one of the most popular
+tree algorithm, originally designed for complete data sets. It recursively builds a partition of the
+input space X = Rd , and predicts by aggregating the observation labels (average or majority
+Q
+vote) inside each terminal node, also called leaf. For each node A = dj=1 [aj,L , aj,R ] ⊂ Rd ,
+CART algorithm finds the best split (j ⋆ , z ⋆ ) among the set of all eligible splits S = {(j, z), j ∈
+J1, dK, z ∈ R, zj ∈ [aj,L , aj,R ]}, where a split is defined by the variable j along which the split
+
+is performed and the position z of the split. More precisely, the best split (j ⋆ , z ⋆ ) in any node
+A is the solution of the following optimization problem
+h
+2
+(j ⋆ , z ⋆ ) ∈ argmin E Y − E[Y |Xj ≤ z, X ∈ A] · 1Xj ≤z,X∈A
+(j,z)∈S
+
++ Y − E[Y |Xj > z, X ∈ A]
+
+2
+
+i
+· 1Xj >z,X∈A .
+
+(21)
+
+For each cell A, problem (21) can be rewritten as
+h
+i
+2
+f ⋆ ∈ argmin E Y − f (X) 1X∈A ,
+
+(22)
+
+f ∈Pc
+
+where Pc is the set of piecewise-constant functions on A ∩ {xj ≤ s} and A ∩ {xj > s} for
+(j, s) ∈ S. Therefore the optimization problem (22) amounts to solving a least square problem
+on the subclass of functions Pc . Thus, by minimizing the mean squared error, the CART
+procedure targets the quantity E[Y |X]. In the presence of missing values, this criterion must
+be adapted and several ways to do so have been proposed. Section B.2 and Section B.3 detail
+the existing criteria that can be used when dealing with missing values.
+
+B.2 Splitting criterion discarding missing values
+A simple option to extend CART methodology in presence of missing values is to select the
+best split only on the available cases for each variable. More precisely, for any node A, the best
+split in presence of missing values is a solution of the new optimization problem
+h
+2
+(j ⋆ , z ⋆ ) ∈ argmin E Y − E[Y |Xj ≤ z, Mj = 0, X ∈ A] · 1Xj ≤z,Mj =0,X∈A
+(j,z)∈S
+
++ Y − E[Y |Xj > z, Mj = 0, X ∈ A]
+
+2
+
+i
+· 1Xj >z,Mj =0,X∈A ,
+
+(23)
+
+which is nothing but problem (21) computed, for each j ∈ {1, . . . , d}, on observed values
+“Mj = 0” only. Note that, by convention, the problem (23) is optimised empirically along
+
+On the consistency of supervised learning with missing values
+
+55
+
+the variables j that have at least two observed entries (we do not allow splits to be performed
+along variables that have less than two observed entries). This splitting strategy is described in
+Algorithm 1. As the missing values were not used to calculate the criterion, it is still necessary
+to specify to which cell they are sent. The solution consisting in discarding missing data at
+each step would lead to a drastic reduction of the data set and is therefore not viable. The
+different methods to propagate missing data down the tree are explained below.
+
+Algorithm 1 Splitting strategy
+1: Input: a node A, a sample Dn of observations falling into A.
+2: For each variable j ∈ {1, . . . , d} and position z, compute the CART splitting criterion on
+observed values “Mj = 0” only.
+3: Choose a split (j ⋆ , z ⋆ ) that minimizes the previous criterion (see optimization problem
+23).
+4: Split the cell A accordingly. Two new cells AL and AR are created.
+5: Output: Split (j ⋆ , z ⋆ ), AL , AR .
+
+Surrogate splitsOnce the best split is chosen via Algorithm 1, surrogate splits search for a
+split on another variable that induces a data partition close to the original one. More precisely,
+for a selected split (j0⋆ , z0⋆ ), to observations send down the tree with no j0⋆ th variable, a new
+stump, i.e., a tree with one cut, is fitted to the response 1Xj ⋆ ≤z0⋆ , using variables (Xj )j̸=j0⋆ .
+0
+
+The split (j1⋆ , z1⋆ ) which minimizes the misclassification error is selected, and observations are
+split accordingly. Those that lack both variables j0⋆ and j1⋆ are split with the second best,
+j2⋆ , and so on until the proposed split has a worse misclassification error than the blind rule
+of sending all remaining missing values to the same daughter, the most populated one. To
+predict, the training surrogates are kept. This construction is described in Algorithm 2 and
+is the default method in rpart [Therneau et al., 1997]. Surrogate method is expected to be
+appropriate when there are relationships between covariates.
+
+Probabilistic splitsAnother option is to propagate missing observations according to a Bernoulli
+#L
+), where #L (resp. #R) is the number of points already on the left (resp.
+distribution B( #L+#R
+
+right) (see Algorithm 3 in Appendix B.5). This is the default method in C4.5 [Quinlan, 2014].
+
+Block propagationA third option is to choose the split on the observed values, and then send
+all incomplete observations as a block, to a side chosen by minimizing the error (see Algorithm 4 in Appendix B.5). This is the method used in LightGBM [Ke et al., 2017].
+
+Note that Hothorn et al. [2006] proposed conditional trees, a variant of CART which also
+uses surrogate splits, but adapts the criterion (23) to missing values. Indeed, this criterion
+
+56
+
+Julie Josse et al.
+
+implies a selection bias: it leads to underselecting the variables with many missing values
+due to multiple comparison effects [Strobl et al., 2007]. As a result, it favors variables where
+many splits are available, and therefore those with fewer missing values. Conditional trees are
+based on the calculation of a linear statistic of association between Y and each feature Xj ,
+T = ⟨Xj , Y ⟩. Then, its distribution under the null hypothesis of independence between Y
+and Xj is estimated by permutation, and the variable with the smallest p-value is selected.
+As illustrated in Appendix C.1, conditional trees are meant to improve the selection of the
+splitting variables but do not ensure an improvement in prediction performance.
+
+B.3 Splitting criterion with missing values: MIA
+A second class of methods uses missing values to compute the splitting criterion itself. Consequently, the splitting location depends on the missing values, contrary to all methods presented
+in Section B.2. Its most common instance is “missing incorporated in attribute” (MIA, Twala
+et al. 2008, ). More specifically, MIA considers the following splits, for all splits (j, z):
+ej ≤ z or X
+ej = NA} vs {X
+ej > z},
+– {X
+ej ≤ z} vs {X
+ej > z or X
+ej = NA},
+– {X
+ej ̸= NA} vs {X
+ej = NA}.
+– {X
+In a nutshell, for each possible split, MIA tries to send all missing values to the left or to the
+right, and compute for each choice the corresponding error (right-hand side in 21, as well as
+
+Algorithm 2 Surrogate strategy
+1: Input: a node A, a sample Dn of observations falling into A, a split (j0⋆ , z0⋆ ) produced by
+Algorithm 1
+2: Create the variable 1Xj ⋆ ≤z0⋆
+0
+
+3: Let J = {1, . . . , d} − {j0 }
+4: while Missing data have not been sent down the tree do
+5:
+Compute the misclassification error ε⋆ corrresponding to sending all remaining missing
+observation on the most populated side.
+6:
+for all j ∈ J do
+7:
+Fit a tree with one split along j, on data in Dn with observed values Xj and Xj0⋆ , in
+order to predict 1Xj ⋆ ≤z0⋆ .
+0
+
+For j, ∈ J , let εj be the misclassification error of the previous trees
+Let jmin ∈ argminj∈J εj
+end for
+if εjmin < ε⋆ then
+Use the tree built on jmin to send data with missing values on j0 into AL or AR ,
+depending on the tree prediction
+13:
+J ← J ∪ {jmin }
+14:
+else
+15:
+Send all remaining missing values to the most populated cell (AL or AR )
+16:
+end if
+17: end while
+
+8:
+9:
+10:
+11:
+12:
+
+On the consistency of supervised learning with missing values
+
+57
+
+the error associated to separating the observed values from the missing ones. Finally, it chooses
+the split among the previous ones with the lowest error (see Algorithm 5 in Appendix B.5).
+Note that block propagation can be seen as a greedy way of successively optimizing the choices
+in two first options. However, as we show in Prop. 1, these successive choices are sub-optimal.
+Missing values are treated as a category by MIA, which is thus nothing but a greedy algorithm
+e and consequently targets the
+minimizing the square loss between Y and a function of X
+quantity (4) which separate E[Y | e
+X] into 2d terms. However, it is not exhaustive: at each step,
+the tree can cut for each variable according to missing or non missing and selects this cut when
+it is relevant, i.e. when it minimizes the prediction error. The final leaves can correspond to a
+cluster of missing values patterns (observations with missing values on the two first variables
+for instance and any missing patterns for the other variables).
+MIA is thought to be a good method to apply when missing pattern is informative, as this
+procedure allows to cut with respect to missing/ non missing and uses missing data to compute
+the best splits. Note this latter property implies that the MIA approach does not require a
+different method to propagate missing data down the tree. Notably, MIA is implemented in the
+R packages partykit [Hothorn and Zeileis, 2015] and grf [Tibshirani et al., 2020], as well as in
+XGBoost [Chen and Guestrin, 2016] and for the HistGradientBoosting models in scikit-learn
+[Pedregosa et al., 2011].
+Remark 2 Implementation: A simple way to implement MIA consists in duplicating the
+incomplete columns, and replacing the missing entries once by +∞ and once by −∞ (or an
+extreme out-of-range value). This creates two dummy variables for each original one containing
+missing values. Splitting along a variable and sending all missing data to the left (for example)
+is the same as splitting along the corresponding dummy variable where missing entries have
+been completed by −∞. Alternatively, MIA can be with two scans on a feature’s values in
+ascending and descending orders [Chen and Guestrin, 2016, Alg 3].
+Remark 3 Implicit imputation: Whether it is in the case where the missing values are
+propagated in the available case method (Section B.2), or incorporated in the split choice in
+MIA, missing values are assigned either to the left or the right interval. Consequently, handling
+missing values in a tree can be seen as implicit imputation by an interval value.
+
+B.4 Theoretical comparison of CART versus MIA
+We now compare theoretically the positions of the splitting point at the root and the prediction
+errors on simple examples with MCAR values. Proposition 1 computes the splitting position
+of MIA and CART, and highlights that the splitting position of MIA varies even for MCAR
+
+Julie Josse et al.
+
+Fig. 5: Split position chosen by MIA and
+CART criterion, depending on the fraction p of missing values on X1 .
+
+Fraction p of missing values
+
+58
+
+1.0
+0.8
+0.6
+0.4
+0.2
+0.0
+
+MIA
+CART
+0.4
+
+0.5
+Split position
+
+0.6
+
+missing data. Proposition 2 then compares the risk of the different splitting strategies: probabilistic split, block propagation, surrogate split, and MIA. We prove that MIA and surrogate
+splits are the two best strategies, one of which may be better than the other depending on the
+dependence structure of covariates.
+Proposition 1 Let p ∈ [0, 1]. Consider the regression model
+
+Y
+
+=
+
+X1
+
+where M1
+
+|=
+
+ X ∼ U ([0, 1])
+1
+
+,
+
+
+ P[M1 = 0] = 1 − p
+ P[M = 1] =
+1
+
+,
+
+p
+
+(X1 , Y ) is the missingness pattern on X1 . Let CMIA (1, s, q, p) be the value of the
+
+splitting MIA criterion computed on X1 at threshold s such that (1, s) ∈ S, and q ∈ {L, R},
+where q stands for the side where missing values are sent. Therefore,
+1. The best split s⋆ given by the CART criterion (23) is s⋆ = 1/2.
+2. The best splits s⋆MIA,L (p) and s⋆MIA,R (p) given by the MIA procedure (described in Section B.3), assuming that all missing values are sent to the left node (resp. to the right
+node), satisfy
+s⋆MIA,L (p) = argmin CMIA (1, s, L, p),
+
+(24)
+
+s∈[0,1]
+
+where
+
+CMIA (1, s, L, p) =
+
+p
+ 1 + s 2
+1
+1
+(1 − p)s2 2
+−
++
+− (1 − p)(1 − s)
+,
+3
+p + (1 − p)s 2
+2
+2
+
+and s⋆MIA,R (p) = 1 − s⋆MIA,L (p).
+The proof is given in Appendix A. Proposition 1 shows that the split given by optimizing the
+CART criterion does not depend on the percentage p of missing values since the pattern is
+independent of (X, Y ). A numerical solution to equation (24) is displayed in Figure 5. When
+there are no missing values (p = 0), the split occur at s = 1/2 as expected. When p increases,
+the threshold does not correspond anymore to the one calculated using observed values only
+
+On the consistency of supervised learning with missing values
+
+59
+
+as it is influenced by the missing entries even in the MCAR setting. It may be surprising that
+the splitting position change in a MCAR setting but the missing values correspond to data
+from the whole interval [0, 1] and thus introduce noise in the side they are sent to. This implies
+that the cell that receives missing values must be bigger than usual so that the noise of the
+missing data is of the same order than the noise of original observations belonging to the cell.
+Recall that, since the threshold in MIA is chosen by taking into account missing values, it is
+straightforward to propagate a new element with missing values down the tree.
+Recall that the quadratic risk R of a function f ⋆ is defined as R(f ⋆ ) = E[(Y − f ⋆ (X))2 ].
+Proposition 2 enables us to compare the risk of a tree with a single split computed with
+the different strategies. It highlights that even in the simple case of MCAR, MIA gives more
+accurate predictions than block propagation or probabilistic split.
+Proposition 2 Consider the regression model
+
+
+ P[W = 0] =
+
+η
+
+,
+
+ P[W = 1] = 1 − η
+
+
+ P[M1 = 0] = 1 − p
+ P[M = 1] =
+1
+
+,
+
+p,
+
+|=
+
+
+
+Y =
+X1
+
+
+
+X1 ∼ U ([0, 1]) ,
+
+
+
+
+X2 = X1 1W =1
+
+where (M1 , W ) (X1 , Y ). The random variable M1 is the pattern of missingness for X1 and
+⋆
+⋆
+⋆ , f⋆
+W stands for the link between X1 and X2 . Let fMIA
+, fblock
+, fprob
+surr be respectively, the
+
+theoretical prediction resulting from one split according to MIA, CART with block propagation
+and CART with probabilistic splitting strategy, and a single split, where missing data are
+handled via surrogate split (in the infinite sample setting). We have
+
+⋆
+R(fMIA
+) = min CMIA (1, s, L, p)1p≤η + min CMIA (1, s, L, η)1p>η ,
+s∈[0,1]
+
+s∈[0,1]
+
+⋆
+R(fblock
+) = CMIA (1, 1/2, L, p) = CMIA (1, 1/2, R, p)
+
+p
+1
+p2
++ +
+,
+16
+8
+48
+1
+6
+⋆
+R(fsurr
+)=
++
+ηp.
+48
+48
+
+⋆
+R(fprob
+)=−
+
+where CMIA (1, s, L, p) is defined in Proposition 1. In particular,
+⋆
+⋆
+R(fMIA
+) ≤ R(fblock
+)
+
+and
+
+⋆
+⋆
+R(fMIA
+) ≤ R(fprob
+).
+
+Proof is given in Appendix A. Figure 6 depicts the risk of each estimate, in the context of
+proposition 2, resulting from a split computed via one of the four methods described above.
+Only surrogate and MIA risks depend on the value η which measures the independence between
+X1 and X2 . As proved, the risk of probabilistic split and block propagation is larger than that
+
+Coupling across variables = 0.0
+0.12
+0.10
+0.08
+0.06
+0.04
+0.02
+0.00
+0.00 0.25 0.50 0.75 1.00
+Fraction p of missing values
+
+Quadratic risk R(p)
+
+Julie Josse et al.
+
+Quadratic risk R(p)
+
+Quadratic risk R(p)
+
+60
+
+Coupling across variables = 0.25
+0.12
+0.10
+0.08
+0.06
+0.04
+0.02
+0.00
+0.00 0.25 0.50 0.75 1.00
+Fraction p of missing values
+
+Coupling across variables = 0.75
+0.12
+0.10
+0.08
+0.06
+0.04
+0.02
+0.00
+0.00 0.25 0.50 0.75 1.00
+Fraction p of missing values
+
+Block propagation
+
+MIA
+
+Surrogate splits
+
+Probabilistic split
+
+Fig. 6: Theoretical risk of the splitting methods as a function of p, for three values
+of η parameter that controls the amount of coupling between X1 and X2 in the
+model of Proposition 2.
+
+of MIA. Besides, surrogate split is better than MIA if the link between X1 and X2 is strong
+(small values of η) and worse if this link is weak (high values of η).
+
+B.5 Splitting algorithms
+
+Algorithm 3 Probabilistic split
+1: Input: a node A, a sample Dn of observations falling into A, a split (j0⋆ , z0⋆ ) produced by
+Algorithm 1
+2: Compute the number nL of points with observed Xj0⋆ falling into AL .
+3: Compute the number nR of points with observed Xj0⋆ falling into AR .
+4: for all data with missing value along j0⋆ do
+5:
+Send the data randomly to AL (resp. AR ) with probability nL /(nL + nR ) (resp.
+nR /(nL + nR ))
+6: end for
+
+Algorithm 4 Block propagation
+1: Input: a node A, a sample Dn of observations falling into A, a split (j0⋆ , z0⋆ ) produced by
+Algorithm 1
+2: Consider sending all observations with missing values on j0⋆ into AL . Compute the corresponding error (criterion on the right-hand side in 21)
+3: Consider sending all observations with missing values on j0⋆ into AR . Compute the corresponding error (criterion on the right-hand side in 21).
+4: Choose the alternative with the lowest error and send all missing data on the same side
+accordingly.
+
+On the consistency of supervised learning with missing values
+
+61
+
+Algorithm 5 Missing Incorporated in Attribute (MIA)
+1: Input: a node A, a sample Dn of observations falling into A
+2: for each split (j, z) do
+3:
+Send all observations with missing values on j on the left side. Compute the error εj,z,L
+(right-hand side in 21)
+4:
+Send all observations with missing values on j on the right side. Compute the error
+εj,z,R (right-hand side in 21)
+5: end for
+6: for each j ∈ {1, . . . , d} do
+7:
+Compute the error εj,−,− associated to separating observations with missing data on j
+from the remaining ones.
+8: end for
+9: Choose the split corresponding to the lowest error ε·,·,· . Split the data accordingly.
+
+B.6 Proof of Proposition 1
+
+Cart splitting criterion. Under the model given in Proposition 1, simple calculations show
+that
+s
+s2
+, E[Y 2 |X ∈ [0, s]] =
+2
+3
+1 − s3
+1+s
+2
+, E[Y |X ∈ [s, 1]] =
+E[Y |X ∈ [s, 1]] =
+2
+3(1 − s)
+E[Y |X ∈ [0, s]] =
+
+P[X ∈ [0, s]] = s,
+
+P[X ∈ [s, 1]] = 1 − s.
+
+Thus the CART spltting criterion can be written as
+
+C(1, s) = E[Y 2 ] − (P[X ∈ [0, s]](E[Y |X ∈ [0, s]])2 + P[X ∈ [s, 1]](E[Y |X ∈ [s, 1]])2 )
+
+
+1   s 2
+1+s 2
+=
+− s
++ (1 − s)
+3
+2
+2
+s(s − 1)
+1
+=
++
+.
+4
+12
+By definition,
+
+s⋆ = argmin
+s∈[0,1]
+
+
+
+1
+1
+s(s − 1) +
+4
+12
+
+
+= 1/2,
+
+when a percentage of missing value is added if M1
+
+|=
+
+and the criterion evaluated in s = 1/2 is equal to 1/48. The calculations are exactly the same
+X1 .
+
+MIA splitting criterion. By symmetry, we can assume than missing values are sent left. It
+is equivalent to observing
+X ′ = 01M =1 + X1M =0 .
+
+62
+
+Julie Josse et al.
+
+The MIA splitting criterion is then defined as
+
+s⋆MIA,L = argmin E
+
+h
+
+Y − E[Y |X ′ ≤ s]1X ′ ≤s − E[Y |X ′ > s]1X ′ >s
+
+2 i
+
+s∈[0,1]
+
+= argmin P(X ′ ≤ s)E
+
+h
+
+Y − E[Y |X ′ ≤ s]
+
+2
+
+X′ ≤ s
+
+i
+
+s∈[0,1]
+
++ P(X ′ > s)E
+
+h
+
+Y − E[Y |X ′ > s]
+
+2
+
+i
+X′ > s .
+
+We have
+
+E[Y |X ′ ∈ [0, s]] = E[X|X ′ ∈ [0, s]]
+= E[X1M =1 + X1M =0 |X ′ ∈ [0, s]]
+1
+E[X1M =1,X ′ ∈[0,s] + X1M =0,X ′ ∈[0,s] ]
+P[X ′ ∈ [0, s]]
+p
+1
+(1 − p)s2 
+=
++
+.
+p + (1 − p)s 2
+2
+=
+
+Besides,
+
+E[Y 2 |X ′ ∈ [0, s]] = E[X 2 |X ′ ∈ [0, s]]
+= E[X 2 1M =1 + X 2 1M =0 |X ′ ∈ [0, s]]
+1
+E[X 2 1M =1,X ′ ∈[0,s] + X 2 1M =0,X ′ ∈[0,s] ]
+p + (1 − p)s
+p
+1
+(1 − p)s3 
+=
++
+p + (1 − p)s 3
+3
+=
+
+Thus the left-part of the criterion is given by
+
+P(X ′ ∈ [0, s])E[(Y − E[Y |X ′ ∈ [0, s]])2 |X ′ ∈ [0, s]]
+
+
+
+= p + (1 − p)s E[Y 2 |X ′ ∈ [0, s]] − (E[Y |X ′ ∈ [0, s]])2
+p
+1
+(1 − p)s3 
++
+p + (1 − p)s 3
+3
+
+p
+1
+(1 − p)s2 2 
+−
++
+p + (1 − p)s 2
+2
+p
+p
+(1 − p)s3 
+1
+(1 − p)s2 2
+=
++
+−
++
+3
+3
+p + (1 − p)s 2
+2
+
+
+
+= p + (1 − p)s
+
+On the consistency of supervised learning with missing values
+On the other hand, we have
+
+E[Y |X ′ ∈ [s, 1]] = E[X|X ′ ∈ [s, 1]]
+= E[X1M =1 + X1M =0 |X ′ ∈ [s, 1]]
+1
+E[X1M =1,X ′ ∈[s,1] + X1M =0,X ′ ∈[s,1] ]
+(1 − p)(1 − s)
+
+1 − s2 
+1
+(1 − p)
+=
+(1 − p)(1 − s)
+2
+1+s
+=
+.
+2
+
+=
+
+Besides,
+
+E[Y 2 |X ′ ∈ [s, 1]] = E[X 2 |X ′ ∈ [s, 1]]
+= E[X 2 1M =1 + X 2 1M =0 |X ′ ∈ [s, 1]]
+1
+E[X 2 1M =1,X ′ ∈[s,1] + X 2 1M =0,X ′ ∈[s,1] ]
+(1 − p)(1 − s)
+
+1 − s3 
+1
+(1 − p)
+=
+(1 − p)(1 − s)
+3
+
+=
+
+=
+
+1 − s3
+.
+3(1 − s)
+
+Thus the right-part of the criterion is given by
+
+P(X ′ ∈ [s, 1])E[(Y − E[Y |X ′ ∈ [s, 1]])2 |X ′ ∈ [s, 1]]
+
+
+
+= (1 − p)(1 − s) E[Y 2 |X ′ ∈ [s, 1]] − (E[Y |X ′ ∈ [s, 1]])2
+
+ 1 − s3
+1 + s 2
+−(
+)
+= (1 − p)(1 − s)
+3(1 − s)
+2
+ 1 + s 2
+1 − s3
+= (1 − p)
+− (1 − p)(1 − s)
+.
+3
+2
+
+Finally,
+(
+s⋆MIA,L = argmin
+s∈[0,1]
+
+which concludes the proof.
+
+p
+(1 − p)s3 
+(1 − p)s2 2
+1
+−
++
+3
+3
+p + (1 − p)s 2
+2
+)
+
+
+3
+1+s 2
+1−s
++ (1 − p)
+− (1 − p)(1 − s)
+,
+3
+2
+
+p
+
++
+
+63
+
+64
+
+Julie Josse et al.
+
+B.7 Proof of proposition 2
+
+Probabilistic and block propagation. First, note that the variable X2 = X1 1W =1 is
+similar to the variable studied for the computation of the MIA criterion in Proposition 1.
+Therefore, the value of the CART splitting criterion along the first variable is CMIA (1, 1/2, L, 0)
+and its value along the second variable is CMIA (2, s⋆MIA,L , L, η). Since the function
+α 7→ CMIA (·, s⋆MIA,L , L, α)
+
+is increasing, splitting along the first variable leads to the largest variance reduction. Thus, for
+probabilistic and block propagation, splits occur along the first variable. Let us now compare
+the value of these criteria. We have
+
+P[X1 ≤ 1/2] = P[X1 ≥ 1/2] = 1/2.
+
+The quantities related to the left cell are given by
+
+E[Y |X1 ≤ 1/2] =
+
+p+1
+4
+
+and
+
+E[Y 2 |X1 ≤ 1/2] =
+
+p
+1
++
+.
+4
+12
+
+The quantities related to the right cell are given by
+
+E[Y |X1 ≥ 1/2] =
+
+3−p
+4
+
+and
+
+E[Y 2 |X1 ≥ 1/2] =
+
+7
+p
+− .
+12
+4
+
+Thus, the value of the criterion satisfies
+
+⋆
+R(fprob
+)=
+
+
+
+1p
+1
+p+1 2
++
+−
+2 4
+12
+4
+
+
+1 7
+p
+3−p 2
++
+− −
+2 12
+4
+4
+
+=−
+
+p2
+p
+1
++ +
+.
+16
+8
+48
+
+Let, for all p ∈ [0, 1],
+
+⋆
+⋆
+h(p) = R(fprob
+) − R(fblock
+)
+
+
+2
+p
+1
+11
+1 3p + 2
+p
+=−
++ +
+− −
++
+16
+8
+48
+48
+8 2p + 1
+
+=−
+
+p2
+p
+1
+1
+1
++ +
+−
+.
+16
+8
+16
+16 2p + 1
+
+On the consistency of supervised learning with missing values
+
+65
+
+We have,
+
+h′ (p) = −
+
+p
+1
+1
++ +
+,
+8
+8
+8(2p + 1)2
+
+and consequently,
+
+h′′ (p) = −
+
+1
+1
+−
+.
+8
+2(2p + 1)3
+
+An inspection of the variation of h reveals that h(p) ≥ 0 for all p ∈ [0, 1], which concludes the
+first part of the proof.
+
+MIA. As noticed above, the criterion computed along the second variable is given by
+
+CMIA (2, s⋆MIA,L , L, η)
+
+Since the function
+α 7→ CMIA (·, s⋆MIA,L , L, α)
+is increasing, MIA split will occur along the first variable if p ≤ η and along the second variable
+if p ≥ η. Therefore, the risk of the MIA splitting procedure is given by
+
+⋆
+R(fMIA
+) = min CMIA (1, s, L, p)1p≤η + min CMIA (1, s, L, η)1p>η .
+s∈[0,1]
+
+s∈[0,1]
+
+Surrogate split. Consider the model Y = X1 and X2 = X1 1W =1 , where P[W = 0] = η.
+Let us determine the best split along X2 to predict Z = 1X1 <0.5 . Since {X2 ≤ s} = {X1 ≤
+s, W = 1} ∪ {W = 0}, and {X2 > s} = {X1 > s, W = 1},
+
+P[X2 ≤ s] = s(1 − p) + p
+
+and
+
+P[X2 > s] = (1 − s)(1 − p).
+
+Consequently,
+E[1X1 ≤0.5,X2 ≤s ]
+P[X2 ≤ s]
+1
+=
+E[1X1 ≤0.5,X1 ≤s,W =1 + 1X1 ≤0.5,W =0 ]
+s(1 − p) + p
+
+1
+p
+=
+(1 − p) min(0.5, s) +
+.
+s(1 − p) + p
+2
+
+E[Z|X2 ≤ s] =
+
+66
+
+Julie Josse et al.
+
+E[1X1 ≤0.5,X2 >s ]
+P[X2 > s]
+1
+=
+P[X1 ≤ 0.5, W = 1, X1 ≥ s]
+(1 − s)(1 − p)
+
+E[Z|X2 ≥ s] =
+
+=
+
+(0.5 − s)+
+.
+1−s
+
+Besides, note that E[Z 2 ] = P[X1 ≤ 0.5] = 0.5. Therefore, the splitting criterion to predict
+1X1 ≤0.5 with X2 is given by
+1
+− P[X2 ≤ s](E[Z|X2 ≤ s])2 − P[X2 > s](E[Z|X2 > s])2
+2
+
+1
+1
+p 2
+1−p
+= −
+(1 − p) min(0.5, s) +
+−
+((0.5 − s)+ )2 .
+2
+s(1 − p) + p
+2
+1−s
+
+f (s) =
+
+For s ≥ 1/2,
+
+h(s) =
+
+1
+1
+−
+,
+2
+4(s(1 − p) + p)
+
+which is minimal for s = 1/2. For s ≤ 1/2,
+
+h(s) =
+
+1
+1
+−
+2
+4
+
+
+
+1−p
+p2
++
+p + s(1 − p)
+1−s
+
+
+.
+
+Hence,
+
+h′ (s) = −
+
+1−p
+(1 − 2p)s2 + 2ps
+.
+4 (1 − s)2 (s(1 − p) + p)2
+
+Let g(s) = (1 − 2p)s2 + 2ps. If p ≤ 1/2, the solutions of g(s) = 0 are negative, thus, g(s) ≥ 0
+for all s ∈ [0, 1/2] and thus the minimum of h is reached at s = 1/2. If p ≥ 1/2, one solution
+of g(s) = 0 is zero and the other is s = 2p/(2p − 1) > 1. Thus, g(s) ≥ 0 for all s ∈ [0, 1/2] and
+the minimum of h is reached at s = 1/2. Finally, the minimum of h is reached at s = 1/2. The
+risk of the surrogate estimate is then given by
+
+⋆
+⋆
+R(fsurr
+) = E[(Y − fsurr
+(X))2 ]
+⋆
+⋆
+= E[(Y − fsurr
+(X))2 1M1 =0 + (Y − fsurr
+(X))2 1M1 =1 ].
+
+On the consistency of supervised learning with missing values
+
+67
+
+Here,
+
+⋆
+(X))2 |M1 = 1]
+E[(Y − fsurr
+
+= E[(X1 − 0.25)2 1X2 <0.5 + (X1 − 0.75)2 1X2 ≥0.5 ]
+= ηE[(X1 − 0.25)2 ] + (1 − η)E[(X1 − 0.25)2 1X1 ≤0.5 ]
++ (1 − η)E[(X1 − 0.75)2 1X1 >0.5 ]
+=
+
+1
+6η
++
+.
+48
+48
+
+Finally,
+
+⋆
+)=
+R(fsurr
+
+ 1
+1−p
+6η 
+1
+6
++p
++
+=
++
+ηp.
+48
+48
+48
+48
+48
+
+C Miscellaneous
+
+C.1 Variable selection properties of the tree methods with missing values
+
+Decision trees based on the CART criterion (implemented in the R library rpart) and on
+conditional trees (implemented in the the R library partykit) lead to different ways of selecting
+
+
+
+X1
+
+
+
+
+
+
+
+
+|=
+
+splitting variables. We illustrate this behaviour on the simple following model:
+
+X2 ∼ N (0, 1)
+ε ∼ N (0, 1)
+Y = 0.25X1 + ε.
+
+We insert MCAR values, either on the first variable or on both variables. Stumps (decision
+trees of depth one) are fit on 500 Monte-Carlo repetitions. We vary the sample size and the
+percentage of missing values. Figure 7 show that CART and conditional trees give similar
+results when there are missing values on both variables. However, Figure 8 shows that CART
+has a tendency to underselect X1 when there are missing values only on X1 . For instance, for
+a sample of size 50 with 75% missing values, CART selects the non-informative variable X2
+more frequently than X1 , while conditional trees keep selecting X1 more often.
+
+68
+
+Julie Josse et al.
+
+(a) CART
+
+(b) Conditional trees
+
+Fig. 7: Frequency of selection of X1 when there are missing values on X1 and X2
+
+(a) CART
+
+(b) Conditional trees
+
+Fig. 8: Frequency of selection of X1 when there are missing values on X1 only
+
+C.2 Example of EM algorithm
+Let us consider a simple case of n observations (x1 , x2 ) = (xi1 , xi2 )1≤i≤n sampled from the
+distribution of (X1 , X2 ), a bivariate Gaussian distribution with parameters (µ, Σ). We assume
+that X2 is subjected to missing values and that only r values are observed. The aim is to
+get the maximum likelihood estimates of (µ, Σ) from the incomplete data set. The algorithm
+described below can be straightforwardly extended to the multivariate case. Note that from
+(µ̂, Σ̂), it is then possible to directly estimate the parameters of a linear regression model and
+thus to perform linear regression with missing values.
+We denote by f1,2 (x1 , x2 ; µ, Σ), f1 (x1 ; µ1 , σ11 ) and f2|1 (x2 |x1 ; µ, Σ), respectively, the probability of joint distribution of (X1 , X2 ), marginal distribution of X1 and conditional distribution
+of X2 |X1 . The joint distribution of observed data can be decomposed as:
+
+f1,2 (x1 , x2 ; µ, Σ) =
+
+n
+Y
+i=1
+
+f1 (xi1 ; µ1 , σ11 )
+
+r
+Y
+j=1
+
+f2|1 (xj2 |xj1 ; µ, Σ),
+
+On the consistency of supervised learning with missing values
+
+69
+
+and the observed log-likelihood is written (up to an additional constant that does not appear
+in the maximization and that we therefore drop):
+
+ℓ(µ, Σ; x1 , x2 ) = −
+
+
+
+n
+2
+σ12
+1 X (xi1 − µ1 )2
+n
+r
+2
+2
+)−
+log(σ11
+−
+log
+(σ
+−
+)
+22
+2
+2
+2 i=1
+σ11
+2
+σ11
+
+
+2
+σ12
+r
+1 X xi2 − µ2 − σ11 (xi1 − µ1 )
+−
+σ2
+2 i=1
+(σ − 12 )2
+22
+
+σ11
+
+We skip the computations and directly give the expression of the closed form maximum likelihood estimates of the mean:
+µ̂1 = n−1
+
+n
+X
+
+xi1
+
+i=1
+
+µ̂2 = β̂20.1 + β̂21.1 µ̂1 ,
+where
+β̂20.1 = x̄2 − β̂21.1 x̄1 ,
+
+β̂21.1 = s12 /s11 ,
+x̄j = r−1
+
+r
+X
+
+xij
+
+and
+
+sjk = r−1
+
+i=1
+
+r
+X
+
+(xij − x̄j )(xik − x̄k ),
+
+j, k = 1, 2.
+
+i=1
+
+In this simple setting, we have an explicit expression of the maximum likelihood estimator
+despite missing values. However, this is not always the case but it is possible to use an EM
+algorithm to get the maximum likelihood estimators in the cases where data are missing.
+The EM algorithm consists in maximizing the observed likelihood through successive maximization of the complete likelihood (if we had observed all n realizations of x1 and x2 ).
+Maximizing the complete likelihood
+
+ℓc (µ, Σ; x1 , x2 ) = −
+
+n
+n
+1X
+log (det(Σ)) −
+(xi1 − µ1 )T Σ −1 (xi1 − µ1 )
+2
+2 i=1
+
+would be straightforward if we had all the observations. However elements of this likelihood are
+not available. Therefore, we replace them by the conditional expectation given observed data
+and the parameters of the current iteration. These two steps of computation of the conditional
+expectation (E-step) and maximization of the completed likelihood (M step) are repeated until
+convergence. The update formulas for the E and M steps are as follows:
+E step: The sufficient statistics of the likelihood are:
+
+s1 =
+
+n
+X
+i=1
+
+xi1 ,
+
+s2 =
+
+n
+X
+i=1
+
+xi2 ,
+
+s11 =
+
+n
+X
+i=1
+
+x2i1 ,
+
+s22 =
+
+n
+X
+i=1
+
+x2i2 ,
+
+s12 =
+
+n
+X
+i=1
+
+xi1 xi2 .
+
+70
+
+Julie Josse et al.
+
+Since some values of x2 are not available, we fill in the sufficient statistics with:
+
+E[xi2 |xi1 ; µ, Σ] = β20.1 + β21.1 xi1
+E[x2i2 |xi1 ; µ, Σ] = (β20.1 + β21.1 xi1 )2 + σ22.1
+E[xi2 xi2 |xi1 ; µ, Σ] = (β20.1 + β21.1 xi1 )xi1 .
+2 /σ .
+with, β21.1 = σ12 /σ11 , β20.1 = µ2 − β21.1 µ1 , and σ22.1 = σ22 − σ12
+11
+
+M step: The M step consists in computing the maximum likelihood estimates as usual. Given
+s1 , s2 , s11 , s22 , and s12 , update µ̂ and σ̂ with
+
+µ̂1 = s1 /n, µ̂2 = s2 /n,
+σ̂1 = s11 /n − µ̂21 , σ̂2 = s22 /n − µ̂22 , σ̂12 = s12 /n − µ̂1 µ̂2
+Note that s1 , s11 , µ̂1 and σ̂1 are constant across iterations since we do not have missing values
+on x1 .
+Remark 4 Note that EM imputes the sufficient statistics and not the data.
+
+On the consistency of supervised learning with missing values
+
+71
+
+D Additional experiments
+
+D.1 Varying the correlation strength and the missing rate
+
+MCAR
+
+ctree
+ctree + mask
+rpart
+rpart + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+
+MNAR
+
+DECISION TREE
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+DECISION TREE
+
+0.4
+
+RANDOM FOREST
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.4
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+1.00.2
+
+0.6
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.4
+
+0.6
+
+0.8
+
+0.6
+
+0.8
+
+1.00.2
+
+1.0
+
+XGBOOST
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+SVM
+
+0.4
+
+0.6
+
+0.8
+
+KNN
+
+0.4
+
+1.0
+
+RANDOM FOREST
+
+SVM
+
+KNN
+
+0.2
+
+0.4
+
+XGBOOST
+
+SVM
+
+0.2
+
+1.00.2
+
+RANDOM FOREST
+
+XGBOOST
+
+0.2
+
+0.8
+
+Predictive M
+DECISION TREE
+
+1.0
+
+KNN
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+Fig. 9: R2 scores on model 1 • Normalized explained variance for different mechanisms with 20% of missing values, n = 1000, d = 9 and ρ = 0.2.
+
+72
+
+Julie Josse et al.
+
+MCAR
+
+ctree
+ctree + mask
+rpart
+rpart + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+2
+
+MNAR
+
+DECISION TREE
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+DECISION TREE
+
+0.4
+
+RANDOM FOREST
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.4
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+1.00.2
+
+0.6
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.4
+
+0.6
+
+0.8
+
+0.6
+
+0.8
+
+1.00.2
+
+1.0
+
+XGBOOST
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+SVM
+
+0.4
+
+0.6
+
+0.8
+
+KNN
+
+0.4
+
+1.0
+
+RANDOM FOREST
+
+SVM
+
+KNN
+
+0.2
+
+0.4
+
+XGBOOST
+
+SVM
+
+0.2
+
+1.00.2
+
+RANDOM FOREST
+
+XGBOOST
+
+0.2
+
+0.8
+
+Predictive M
+DECISION TREE
+
+1.0
+
+KNN
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+Fig. 10: R scores on model 1 • Normalized explained variance for different
+mechanisms with 20% of missing values, n = 1000, d = 9 and ρ = 0.5.
+
+On the consistency of supervised learning with missing values
+
+MCAR
+
+ctree
+ctree + mask
+rpart
+rpart + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+2
+
+MNAR
+
+DECISION TREE
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+DECISION TREE
+
+0.4
+
+RANDOM FOREST
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+1.00.2
+
+0.6
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.4
+
+0.6
+
+0.8
+
+0.6
+
+0.8
+
+1.00.2
+
+1.0
+
+XGBOOST
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+SVM
+
+0.4
+
+0.6
+
+0.8
+
+KNN
+
+0.4
+
+1.0
+
+RANDOM FOREST
+
+SVM
+
+KNN
+
+0.2
+
+0.4
+
+XGBOOST
+
+SVM
+
+0.2
+
+1.00.2
+
+Predictive M
+DECISION TREE
+
+RANDOM FOREST
+
+XGBOOST
+
+0.2
+
+73
+
+1.0
+
+KNN
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+Fig. 11: R scores on model 1 • Normalized explained variance for different
+mechanisms with 20% of missing values, n = 1000, d = 9 and ρ = 0.8.
+
+74
+
+Julie Josse et al.
+
+MCAR
+
+ctree
+ctree + mask
+rpart
+rpart + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+2
+
+MNAR
+
+DECISION TREE
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+DECISION TREE
+
+0.4
+
+RANDOM FOREST
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.4
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+1.00.2
+
+0.6
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.4
+
+0.6
+
+0.8
+
+0.6
+
+0.8
+
+1.00.2
+
+1.0
+
+XGBOOST
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+SVM
+
+0.4
+
+0.6
+
+0.8
+
+KNN
+
+0.4
+
+1.0
+
+RANDOM FOREST
+
+SVM
+
+KNN
+
+0.2
+
+0.4
+
+XGBOOST
+
+SVM
+
+0.2
+
+1.00.2
+
+RANDOM FOREST
+
+XGBOOST
+
+0.2
+
+0.8
+
+Predictive M
+DECISION TREE
+
+1.0
+
+KNN
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+Fig. 12: R scores on model 1 • Normalized explained variance for different
+mechanisms with 40% of missing values, n = 1000, d = 9 and ρ = 0.5.
+
+On the consistency of supervised learning with missing values
+
+MCAR
+
+ctree
+ctree + mask
+rpart
+rpart + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+MIA
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+Gaussian
+Gaussian + mask
+oor
+oor + mask
+mean
+mean + mask
+2
+
+MNAR
+
+DECISION TREE
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+DECISION TREE
+
+0.4
+
+RANDOM FOREST
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+1.00.2
+
+0.6
+
+1.00.2
+
+0.8
+
+0.4
+
+0.6
+
+0.8
+
+1.00.2
+
+0.4
+
+0.6
+
+0.8
+
+0.6
+
+0.8
+
+1.00.2
+
+1.0
+
+XGBOOST
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+SVM
+
+0.4
+
+0.6
+
+0.8
+
+KNN
+
+0.4
+
+1.0
+
+RANDOM FOREST
+
+SVM
+
+KNN
+
+0.2
+
+0.4
+
+XGBOOST
+
+SVM
+
+0.2
+
+1.00.2
+
+Predictive M
+DECISION TREE
+
+RANDOM FOREST
+
+XGBOOST
+
+0.2
+
+75
+
+1.0
+
+KNN
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+Fig. 13: R scores on model 1 • Normalized explained variance for different
+mechanisms with 60% of missing values, n = 1000, d = 9 and ρ = 0.5.
+
+D.2 Statistical tests
+Fig. 14: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a MCAR model (ρ = 0.2, missing rate of 20%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.004
+
+0.004
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.059
+
+0.059
+
+0.001
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.311
+
+0.313
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.004
+
+0.000
+
+0.000
+
+0.059
+
+0.311
+
+0.000
+
+0.000
+
+nan
+
+0.888
+
+0.000
+
+mean + mask
+
+0.000
+
+0.004
+
+0.000
+
+0.000
+
+0.059
+
+0.313
+
+0.000
+
+0.000
+
+0.888
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.001
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.120
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.456
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.120
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.456
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 15: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a MNAR model (ρ = 0.2, missing rate of 20%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.170
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.431
+
+0.000
+
+0.170
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.700
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.700
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.431
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.130
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.130
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.933
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.933
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 16: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a Predictive M model (ρ = 0.2, missing rate of 20%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.954
+
+0.954
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.867
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.867
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.954
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.954
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.008
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.008
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 17: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a MCAR model (ρ = 0.5, missing rate of 20%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.098
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.098
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.096
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.096
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 18: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a MNAR model (ρ = 0.5, missing rate of 20%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.001
+
+0.001
+
+0.000
+
+0.171
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.001
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.002
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.001
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.002
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.171
+
+0.000
+
+0.000
+
+0.002
+
+0.002
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.111
+
+0.111
+
+0.000
+
+0.846
+
+0.000
+
+oor
+
+0.000
+
+0.111
+
+nan
+
+nan
+
+0.000
+
+0.066
+
+0.000
+
+oor + mask
+
+0.000
+
+0.111
+
+nan
+
+nan
+
+0.000
+
+0.066
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.846
+
+0.066
+
+0.066
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.070
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.017
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.070
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.017
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 19: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a Predictive M model (ρ = 0.5, missing rate of 20%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.030
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.030
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.175
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.175
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 20: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a MCAR model (ρ = 0.8, missing rate of 20%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.218
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.218
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.466
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.466
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.008
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.008
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.226
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.226
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 21: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a MNAR model (ρ = 0.8, missing rate of 20%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.104
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.003
+
+0.003
+
+0.000
+
+0.000
+
+0.038
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.899
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.899
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.279
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.003
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.003
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.104
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.279
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.038
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.001
+
+0.403
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.001
+
+0.403
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.001
+
+0.001
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.403
+
+0.403
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 22: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a Predictive M model (ρ = 0.8, missing rate of 20%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.001
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.018
+
+0.109
+
+0.000
+
+0.000
+
+0.001
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.520
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.018
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.109
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.520
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 23: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a MCAR model (ρ = 0.5, missing rate of 40%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.261
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.261
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.672
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.113
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.672
+
+0.113
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.006
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.006
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 24: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a MNAR model (ρ = 0.5, missing rate of 40%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.538
+
+0.538
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.318
+
+0.872
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.538
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.538
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.318
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.883
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.872
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.883
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.479
+
+0.479
+
+0.000
+
+0.029
+
+0.532
+
+oor
+
+0.000
+
+0.479
+
+nan
+
+nan
+
+0.000
+
+0.025
+
+0.882
+
+oor + mask
+
+0.000
+
+0.479
+
+nan
+
+nan
+
+0.000
+
+0.025
+
+0.882
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.029
+
+0.025
+
+0.025
+
+0.000
+
+nan
+
+0.013
+
+MIA
+
+0.000
+
+0.532
+
+0.882
+
+0.882
+
+0.000
+
+0.013
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.099
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.099
+
+0.000
+
+0.000
+
+nan
+
+0.025
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.025
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 25: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a Predictive M model (ρ = 0.5, missing rate of 40%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.001
+
+0.005
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.001
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.013
+
+0.000
+
+mean + mask
+
+0.000
+
+0.005
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.013
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.003
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.003
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.183
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.183
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 26: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a MCAR model (ρ = 0.5, missing rate of 60%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.002
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.027
+
+0.016
+
+0.044
+
+ctree + mask
+rpart
+
+0.002
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.070
+
+0.044
+
+0.108
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.002
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.002
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.027
+
+0.070
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.001
+
+0.287
+
+mean + mask
+
+0.016
+
+0.044
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.001
+
+nan
+
+0.039
+
+MIA
+
+0.044
+
+0.108
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.287
+
+0.039
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 27: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a MNAR model (ρ = 0.5, missing rate of 60%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.009
+
+0.009
+
+0.000
+
+0.004
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.009
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.004
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.009
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.004
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.004
+
+0.000
+
+0.000
+
+0.004
+
+0.004
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.001
+
+0.916
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.001
+
+0.916
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.001
+
+0.001
+
+0.000
+
+nan
+
+0.001
+
+MIA
+
+0.000
+
+0.000
+
+0.916
+
+0.916
+
+0.000
+
+0.001
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.117
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.117
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.031
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.031
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+Fig. 28: P-values of paired t-tests for each pair of imputation method and for each
+learning algorithm in a Predictive M model (ρ = 0.5, missing rate of 60%)
+
+DECISION TREE
+ctree
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+ctree + mask
+rpart
+
+0.000
+
+nan
+
+0.000
+
+0.024
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+rpart + mask
+
+0.000
+
+0.024
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.048
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.048
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.219
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.219
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.048
+
+0.048
+
+0.000
+
+0.000
+
+nan
+
+ctree
+
+ctree + mask
+
+rpart
+
+Gaussian
+oor
+mean
+MIA
+rpart + mask Gaussian + mask oor + mask
+mean + mask
+
+XGBOOST
+Gaussian
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+oor + mask
+
+0.4
+0.3
+0.2
+0.1
+
+mean
+
+mean + mask
+
+MIA
+
+KNN
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+MIA
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.0
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+SVM
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.3
+
+0.2
+
+oor + mask
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+0.5
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+Gaussian + mask
+
+0.000
+
+nan
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+oor
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.3
+
+oor + mask
+
+0.000
+
+0.000
+
+nan
+
+nan
+
+0.000
+
+0.000
+
+0.2
+
+mean
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.000
+
+mean + mask
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+0.000
+
+nan
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+MIA
+
+0.2
+
+0.000
+
+0.000
+
+mean
+
+mean + mask
+
+0.3
+
+nan
+
+nan
+
+oor + mask
+
+mean
+
+0.4
+
+Gaussian
+
+Gaussian
+
+Gaussian
+oor
+Gaussian + mask
+
+0.5
+
+Gaussian
+
+0.5
+
+nan
+
+Gaussian
+oor
+Gaussian + mask
+
+RANDOM FOREST
+
+0.5
+
+Gaussian
+oor
+Gaussian + mask
+
+oor + mask
+
+mean
+
+0.4
+
+0.1
+0.0
+
+mean + mask
+
+
