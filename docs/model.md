@@ -6290,6 +6290,58 @@ Not kept: the gain is real in sign on both patches but under the declared size o
 where EUW1's own move is smaller. The code is in data/team/2026-11-09-more/t1.patch. A
 16.22 look with day 7 complete is a check, not a decision.
 
+### EUW1's share move from own days and the rest's, 16.21-16.22, 2026-11-09 (P2a)
+
+Question (P2 step A, data/team/2026-11-09-more/modelresearch-proposals.md): after a
+patch, does EUW1's pick-share move predict its next days better as a best linear
+predictor (BLP) of its own early move and the rest's than either alone, and should KR
+and VN2 leave the rest? Read-only; rule and method declared before the look
+(data/team/2026-11-09-more/modelresearch.md).
+
+Data: champion-role share of the role from data/lab-cubes/daycells-20261109.tsv (box
+cubes of 9 Nov; 16.22 days 0-3 complete); item (build) and keystone (rune) share of the
+champion-role from `truth --cells` dumps (16.21: m10-cells-base-16.21.tsv; 16.22:
+origins 3, horizon 2 on cubes-20261109), every bracket summed. Move: logit(early days)
+minus logit(before), +0.5 smoothing, binomial noise; before = previous patch days 7-13
+(champion-roles) or the 30 days minus the patch (options). Forecasts of EUW1's target
+logit = EUW1 before + move: (a) own raw, (b) rest raw (every region minus EUW1), (c) (b)
+minus KR VN2 (champion-roles only: the dumps have no platform split), (d) BLP of EUW1's
+true move from own and (c) (options: (b)), true sds and rho by moments on role-centred
+moves, fitted on the other boundary; a' = own move shrunk alone (diagnostic). Score:
+binomial log loss of EUW1's target days, milli-nats per target game summed over cells,
+se from 400 champion resamples. 16.22 is too young for the declared days 0-2 -> 3-6, so
+both patches also score days 0-1 -> 2-3 (16.21 options: 2-8, the dump's horizon). Tool:
+data/team/2026-11-09-more/modelresearch/p2a.py (out p2a-champ.out, p2a-opt.out).
+
+Milli-nats per target game, negative = (d) better:
+
+| kind | window | (d) vs (a) | (d) vs best of (b, c) | (d) vs a' | (c) vs (b) |
+| --- | --- | --: | --: | --: | --: |
+| champion-role | 16.21 0-2 -> 3-6 | -0.003 ± 0.001 | -0.008 ± 0.003 | -0.000 ± 0.001 | -0.001 ± 0.004 |
+| champion-role | 16.21 0-1 -> 2-3 | -0.001 ± 0.001 | -0.015 ± 0.002 | -0.001 ± 0.001 | -0.005 ± 0.003 |
+| champion-role | 16.22 0-1 -> 2-3 | -0.002 ± 0.001 | -0.009 ± 0.002 | -0.000 ± 0.000 | -0.010 ± 0.002 |
+| item | 16.21 0-2 -> 3-9 | -0.098 ± 0.009 | -0.294 ± 0.036 | -0.004 ± 0.002 | |
+| item | 16.21 0-1 -> 2-8 | -0.173 ± 0.014 | -0.334 ± 0.034 | -0.005 ± 0.002 | |
+| item | 16.22 0-1 -> 2-3 | -0.220 ± 0.015 | -0.273 ± 0.020 | -0.013 ± 0.004 | |
+| keystone (extra) | 16.21 0-2 -> 3-9 | -0.102 ± 0.016 | -0.227 ± 0.058 | -0.006 ± 0.005 | |
+| keystone (extra) | 16.22 0-1 -> 2-3 | -0.227 ± 0.024 | -0.245 ± 0.039 | -0.002 ± 0.003 | |
+
+Base (no move) to (a) is 0.05-0.09 (champion-roles) and 0.08-0.49 (options). True-move
+rho of EUW1 with the rest over these short windows: champion-roles 0.79-0.91 (0.89-0.91
+without KR VN2), items 0.50-0.55, keystones 0.36-0.51 (M11's 0.80 and 0.64 were days
+0-6 against the 30 days).
+
+- Rule step A passes: (d) beats (a) and the better of (b, c) by 2 se on both patches,
+  champion-role and item shares (16.21 champion-role short window 1.1 se, the declared
+  window 2.4 se); (c) beats (b) on 16.22 (4.5 se), so KR and VN2 leave the rest
+- But the gain is shrinkage, not borrowing: (d) against EUW1's own move shrunk alone
+  (a') is nil on champion-roles (EUW1 has ~300k seats a day, its own move is already
+  sharp) and 0.004-0.013 on items, 2-3 se, keystones under 2 se
+- Meio with T1 is this predictor's shape (EUW1's patch offset shrunk toward the shared
+  patch move), so step B can add at most the borrowing part plus KR VN2 out of the
+  shared move: about 0.005-0.013 on EUW1 item shares, under T1's 0.05 bar
+- Two patches, short windows; options pool brackets and lack (c)
+
 ### The stored rank knows the result: the bracket lean, 2026-11-06 (m10, NL6)
 
 After NL3 most of the M10 gate's failures (~140 Iron-Silver, ~80 Diamond+ of 286) were a
