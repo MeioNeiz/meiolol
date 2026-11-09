@@ -2,9 +2,10 @@
 //! island (ui-picks.wasm, picks.bin): ui-app.wasm has no room. The champions played in
 //! the lane panel's role as a CandidateList, each with its effects (the role, an ally
 //! pair, an enemy matchup) as the other champion's icon and its points, a click opens
-//! the ReasonBreakdown. The private edition: 20 rows with numbers; the public one: 5 more
-//! past the lane panel's own, words mode (product rules: 3 to 5, no numbers). The shell
-//! renders it after the app's island and keeps its Data at picks.bin (src/shell/screens.zig)
+//! the ReasonBreakdown; rows as cards, like the lane panel's options. The private
+//! edition: 20 rows with numbers; the public one: 5 more past the lane panel's own, words
+//! mode (product rules: 3 to 5, no numbers). The shell renders it after the app's island
+//! and keeps its Data at picks.bin (src/shell/screens.zig)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
@@ -128,6 +129,7 @@ pub const Picks = struct {
                 .head = if (d.private) .{ W.none, W.team, if (ref != null) W.vs_yours else W.vs_first } else null,
                 .ref_label = W.yours,
                 .extra = if (d.private and d.them.len > 0) .{ .head = W.gold_h, .cuts = gold_cuts } else null,
+                .look = .cards,
             }),
         });
     }

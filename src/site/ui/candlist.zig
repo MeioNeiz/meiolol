@@ -111,7 +111,12 @@ pub const List = struct {
     extra: ?Extra = null,
     /// A second model's column after vs, this its head: its rank and points (Row.b_rank)
     b_head: ?tree.Text = null,
+    look: Look = .table,
 };
+
+/// Cards: each row a panel with a 40 px portrait beside the name and its chips, no rank
+/// (the order is the rank), as the app's lane options
+pub const Look = enum { table, cards };
 
 pub fn view(h: *H, l: List) N {
     return viewOf(h, l, false);
@@ -131,7 +136,8 @@ fn viewOf(h: *H, l: List, comptime pick: bool) N {
     }
     const x = l.mode == .points and l.extra != null;
     const bc = l.mode == .points and l.b_head != null;
-    return h.div(.{ .class = "c-cand", .data_v = if (l.mode == .points) null else l.mode, .data_x = x, .data_b = bc }, .{
+    const look: ?Look = if (l.look == .table) null else l.look;
+    return h.div(.{ .class = "c-cand", .data_v = if (l.mode == .points) null else l.mode, .data_x = x, .data_b = bc, .data_look = look }, .{
         if (l.head) |hd| h.div(.{ .class = "hd" }, .{
             h.span(.{ .class = "rk" }, .{}),
             h.span(.{ .class = "nm" }, .{hd[0]}),
@@ -171,9 +177,13 @@ fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
     // the Why toggle
     const picks = pick and r.pick != null;
     // Only the name is the button (a short label); its ::after stretches over the row
-    const who = .{ champ.view(h, r.champ, .{ .named = false }), h.b(.{}, .{r.champ.name}) };
+    const cards = l.look == .cards;
+    const who = .{ if (cards) null else champ.view(h, r.champ, .{ .named = false }), h.b(.{}, .{r.champ.name}) };
     const head = h.div(.{ .key = 0, .class = "r", .data_ref = r.ref, .data_cur = r.cur }, .{
-        h.span(.{ .class = "rk" }, .{if (r.rank) |n| phrase.num(h, .int, n) else null}),
+        if (cards)
+            h.span(.{ .class = "pic" }, .{champ.view(h, r.champ, .{ .px = .@"40", .named = false })})
+        else
+            h.span(.{ .class = "rk" }, .{if (r.rank) |n| phrase.num(h, .int, n) else null}),
         h.span(.{ .class = "nm" }, .{
             if (picks) h.button(.{
                 .class = "pk",
@@ -316,6 +326,26 @@ pub const css =
     \\    .c-cand .why { padding-left: 0; }
     \\    .c-cand .det { padding-left: var(--sp-2); }
     \\  }
+    \\  .c-cand[data-look] { gap: 2px; }
+    \\  .c-cand[data-look] :is(.r, .hd) { grid-template-columns: 40px minmax(0, 1fr) 56px 48px; column-gap: var(--sp-3); }
+    \\  .c-cand[data-look][data-x] :is(.r, .hd) { grid-template-columns: 40px minmax(0, 1fr) 56px 48px 52px; }
+    \\  .c-cand[data-look][data-v="words"] .r { grid-template-columns: 40px minmax(0, 1fr); }
+    \\  .c-cand[data-look] .hd { min-height: 20px; border: 0; }
+    \\  .c-cand[data-look] .r { min-height: 56px; padding: var(--sp-2); border: 0; border-radius: var(--r-s); background: var(--panel-2); }
+    \\  .c-cand[data-look] .r:has(button.pk:hover), .c-cand[data-look] .r:has([aria-expanded="true"]) { background: var(--panel-3); }
+    \\  .c-cand[data-look] .r[data-ref] { box-shadow: inset 0 0 0 1px var(--sel-line); }
+    \\  .c-cand[data-look] .pic { grid-row: 1 / 3; display: flex; }
+    \\  .c-cand[data-look] .nm { grid-row: 1; grid-column: 2; }
+    \\  .c-cand[data-look] .why { grid-row: 2; grid-column: 2 / -1; padding-left: 0; }
+    \\  .c-cand[data-look] .r:not(:has(.why)) > .pic { grid-row: 1; }
+    \\  .c-cand[data-look] .row:has(.det) > .r { border-radius: var(--r-s) var(--r-s) 0 0; }
+    \\  .c-cand[data-look] .det { padding-left: 64px; border: 0; border-radius: 0 0 var(--r-s) var(--r-s); background: var(--panel-3); }
+    \\  .c-cand[data-look] .gap { border: 0; }
+    \\  @container (max-width: 420px) {
+    \\    .c-cand[data-look] :is(.r, .hd) { grid-template-columns: 40px minmax(0, 1fr) 48px 40px; column-gap: var(--sp-2); }
+    \\    .c-cand[data-look][data-x] :is(.r, .hd) { grid-template-columns: 40px minmax(0, 1fr) 48px 40px 44px; }
+    \\    .c-cand[data-look] .det { padding-left: var(--sp-2); }
+    \\  }
     \\}
     \\
 ;
@@ -396,6 +426,9 @@ pub fn gallery(g: *Gallery) void {
     }
     gold.rows = golds;
     g.addFill("tester: Gold column, one row without, lane line", view(h, gold));
+    var cards = gold;
+    cards.look = .cards;
+    g.addFill("cards (the app's Options), Gold column", view(h, cards));
     var vs = gold;
     vs.b_head = plain("Comp model: rank, vs its average");
     const bs = h.mem.dupe(Row, gold.rows) catch {

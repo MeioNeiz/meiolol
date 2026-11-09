@@ -761,9 +761,10 @@ Picks: the app's Options panel in champ select (docs/plan/ui/app-options.md), it
 island (ui-picks.wasm, picks.bin): ui-app.wasm has no room. The champions played in the
 lane panel's role as a CandidateList, each with its effects (the role, an ally pair, an
 enemy matchup) as the other champion's icon and its points, a click opens the
-ReasonBreakdown. The private edition: 20 rows with numbers; the public one: 5 more past
-the lane panel's own, words mode (product rules: 3 to 5, no numbers). The shell renders it
-after the app's island and keeps its Data at picks.bin (src/shell/screens.zig)
+ReasonBreakdown; rows as cards, like the lane panel's options. The private edition: 20
+rows with numbers; the public one: 5 more past the lane panel's own, words mode (product
+rules: 3 to 5, no numbers). The shell renders it after the app's island and keeps its Data
+at picks.bin (src/shell/screens.zig)
 States: private, one open; public, words
 Used by: app
 
@@ -1217,8 +1218,8 @@ the owner fills the seat from the list (`withPick`) the whole row picks, and a W
 after the chips opens the breakdown. Words mode (the public app: product rules, why.md):
 no numbers, reasons as words with a direction
 States: seat panel, played row open; tester: Gold column, one row without, lane line;
-tester: a second model's column, then Gold; average pinned, played far down, a mark by a
-name, Pick; words, public app
+cards (the app's Options), Gold column; tester: a second model's column, then Gold;
+average pinned, played far down, a mark by a name, Pick; words, public app
 Used by: picks, dailyseat, poolgrid, testercand
 
 ### ChampRolePicker
@@ -1592,7 +1593,7 @@ HomeReview (ui-homegame.wasm: the example's game, its role switch, the stat cell
 on the graph; a returning visitor's newest game in its place). The patch card is static
 States: first visit; Daily Draft played; returning visitor; champions by win rate, a role
 with none
-Used by: yourlookup, yourfriends, squad
+Used by: yourviews, yourlookup, yourfriends, squad
 
 ### Account
 `account.zig` `.c-account` site
