@@ -25,7 +25,7 @@ pub fn write(site: *const Site, w: *Writer) !void {
     const a = site.arena;
     const p = try site.sharedPage(
         "Daily Draft | meiolol",
-        "Guess the last pick and the winner of a real pro draft, then see how the model reads every seat.",
+        "Guess the last pick and the winner of a real draft, then see how the model reads every seat.",
         .daily,
     );
     try shell.open(w, p);
@@ -58,7 +58,7 @@ fn routeOn(site: *const Site, w: *Writer, slug: []const u8, today: u32) !bool {
     const shown = try own(a, site.daily_files, n, today) orelse return false;
     var p = try site.sharedPage(
         try a.print("Daily Draft #{d} | meiolol", .{n}),
-        "A past Daily Draft: guess the last pick and the winner of a real pro draft, then see how the model reads every seat.",
+        "A past Daily Draft: guess the last pick and the winner of a real draft, then see how the model reads every seat.",
         .daily,
     );
     p.index = false;

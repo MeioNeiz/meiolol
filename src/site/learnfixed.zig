@@ -260,9 +260,9 @@ pub const rare_pick: ld.Puzzle = .{
     .id = "rare-pick",
     .q = "How often does it win the next week?",
     .setup = .{ .facts = &.{ .{ .v = "Rare role", .label = "a champion seldom played there" }, .{ .v = "Under 100", .label = "games in that role, 30 days" } } },
-    .answer = .{ .guess = .{ .lo = 20, .hi = 70, .step = 1, .real = 39, .tol = 2 } },
-    .why = "Rare picks won 39%, not 50%: judge a thin rate against equally rare picks, not an average one.",
-    .tip = "Expect a rare pick to win about 39%, not a coin flip, until its games say otherwise.",
+    .answer = .{ .guess = .{ .lo = 20, .hi = 70, .step = 1, .real = 39, .tol = 3 } },
+    .why = "Rare picks won under 40%, not 50%: judge a thin rate against equally rare picks, not an average one.",
+    .tip = "Expect a rare pick to win under 40%, not a coin flip, until its games say otherwise.",
     .games = 4_810,
     .from = "Ranked solo, every rank crawled, every region: 147 champion-roles with under " ++
         "100 games in the 30 days before patch 16.21, their 4,810 games the week after",
