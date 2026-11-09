@@ -2,8 +2,8 @@
 title: DraftGap (vigovlugt/draftgap) README, FAQ and data pipeline
 url: https://github.com/vigovlugt/draftgap
 kind: project
-commit: 872c6d5cebfec186fdebb14005fd42b2bf84ad22
-for: [riot-production-key, curve-statistics-method, league-apps-feature-matrix, desktop-app-layout]
+commit: e5ffb383388844a7cc2bca928627b1d77df9c195
+for: [riot-production-key, curve-statistics-method, league-apps-feature-matrix, desktop-app-layout, champselect-advice-methods]
 looked: 2026-10-11
 depth: code (README, FAQ dialog, dataset riot.ts and lolalytics; issue list; core draft analysis, ratings, risk level; desktop LCU integration main.rs, LolClientContext.tsx, lcu-api.ts; layout: App.tsx, TeamSidebar, Pick, DraftTable, RatingText, rating colours, Tauri window)
 relevance: medium
@@ -128,11 +128,58 @@ Why: closest open-source precedent to meiolol (desktop app syncing with champ se
   (#101010 main, #141414 team columns). `apps/frontend/src/index.css` ^f28
   > --color-ally: #3b82f6;
 
+- [method/dynamics] Patch handling: two datasets, the current patch and the last 30
+  days; the current patch keeps only champion base rates (matchup and duo data deleted),
+  so matchups and duos always come from the 30-day window. `apps/dataset/src/index.ts`
+  (snapped at e5ffb38) ^f29
+  > const dataset30days = await getDataset(
+  > deleteDatasetMatchupSynergyData(datasetCurrentPatch);
+- [stats] [method/dynamics] A champion's base rate is its current-patch record shrunk toward
+  its 30-day rate with the same risk-level pseudo-games (1000 at medium), so early in a
+  patch the 30-day (mostly old patch) rate dominates. `packages/core/src/draft/analysis.ts` ^f30
+  > wins: priorGames * fullChampionRoleWinrate,
+  > // Get stats for the full dataset (30days)
+- [method] Team score is a plain sum on the logit (Elo) scale: ally champion ratings plus ally
+  duo deviations plus matchup deviations, minus the enemy's champion and duo terms, turned
+  back into one win rate; suggestions are every champion in every open role, sorted by that
+  win rate. `analysis.ts`, `suggestions.ts` ^f31
+  > allyChampionRating.totalRating +
+  > (a, b) => b.draftResult.winrate - a.draftResult.winrate,
+- [stats] [ux/uncertainty] Minimum games: a candidate is dropped from suggestions unless its
+  30-day games in that role, scaled to a week (games / 30 x 7), reach minGames; default
+  1000, user options 500, 1000, 2500, 5000, labelled "Minimum game count (7d)".
+  `suggestions.ts`, `UserContext.tsx`, `FilterMenu.tsx` ^f32
+  > (getStats(synergyMatchupDataset, championKey, role).games /
+  > minGames: 1000,
+  > Minimum game count (7d)
+- [stats] Rank bias removal: every champion, matchup and duo win rate is shifted on the logit
+  scale by the dataset's overall win rate, so Emerald+ games (where the pool wins above 50%)
+  centre on 50%. `packages/core/src/models/dataset/Dataset.ts` ^f33
+  > ratingToWinrate(winrateToRating(wins / games) - rankRating) * games
+- [data] [ux/controls] Fixed inputs: Emerald+, all regions, ranked solo, from Lolalytics; no
+  rank or region filter, and the FAQ gives load on Lolalytics and thin data at high ranks as
+  the reasons. `apps/dataset/src/lolalytics/champion2.ts`, `FAQDialog.tsx` ^f34
+  > queryParams.append("tier", "emerald_plus");
+  > queryParams.append("region", "all");
+  > allowing for filtering by
+  > higher ranks will also result in a lot more data sample size
+- [ux/trust] Freshness shown in the header: the dataset's patch and "Last updated" time ago;
+  data refreshes every 12 hours per the FAQ. `App.tsx`, `FAQDialog.tsx` ^f35
+  > <span>Last updated {timeAgo()}</span>
+  > data is updated every 12 hours.
+- [method] Checked, not there: no claimed accuracy, held-out test, log loss or calibration
+  anywhere in README, FAQ or code; the team win rate is the summed estimate, never scored.
+  No personal pool or mastery input beyond favourites and greying unowned champions. ^f36
+- [stats] (inferred) The 30-day matchup window with no patch weighting means a matchup
+  changed by this patch keeps its old-patch value until the window turns over; the
+  1000-pseudo-game prior hides most off-meta tiny-sample spikes by design. ^f37
+
 ## Read
 
 - `packages/core/src/draft/analysis.ts` (analyzeMatchups), `rating/ratings.ts`, `risk/risk-level.ts`
 - `README.md`, `FAQDialog.tsx`, `apps/dataset/src/riot.ts`, `lolalytics/index.ts` head; titles of all 16 issues, bodies of #8, #12, #20 (technical, nothing on policy)
 - `apps/frontend/src-tauri/src/main.rs`, `src/contexts/LolClientContext.tsx`, `src/api/lcu-api.ts` (2026-10-22, for league-apps-feature-matrix)
+- 2026-11-06 at e5ffb38: `draft/suggestions.ts`, `models/dataset/Dataset.ts`, `apps/dataset/src/index.ts`, `lolalytics/champion2.ts`, `FilterMenu.tsx`, `UserContext.tsx` (for champselect-advice-methods); analysis.ts unchanged since 872c6d5
 
 ## Not read
 
