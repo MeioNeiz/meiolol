@@ -49,10 +49,11 @@ How to write a line:
   docs/model.md "Rare picks in Meio's prior lines"
 - No counter or duo stands far out from the rest: pulling thin pairings to the pack
   loses nothing. Rare picks differ far more than common ones, but symmetrically: no
-  hidden gems. Meio's ranges are too narrow on them (misses 1.2-2x its sd for rare
-  champion-roles and items, 2-3.7x for keystones). Sure: 16.21, outlier room moved 0.97M
-  matchups' and 0.16M duos' accuracy under 0.01 milli-nats; rare spreads by noise-free
-  moments per band. Evidence: docs/model.md "pair mixture prior", "The lean table"
+  hidden gems. Meio's ranges hold on them since a spread per popularity band (were
+  1.2-3.7x too narrow): about 10% land below an 80% range, 10% above. Sure: 16.21, outlier
+  room moved 0.97M matchups' and 0.16M duos' accuracy under 0.01 milli-nats; rare tails
+  on 16.21 and 16.22, 3 of 141 band rows off beyond 2 se (6 by chance). Evidence:
+  docs/model.md "pair mixture prior", "Rare ranges after the band spreads (P1)"
 - Before your lane opponent picks, ranking as if they were average is as good as any safer
   ranking we tried. Sure: 86k held-out games (29 Oct snap), no enemy known: favouring
   champions whose matchups vary less ranks winners' picks a little higher (at most 7% of

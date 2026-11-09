@@ -6342,6 +6342,43 @@ without KR VN2), items 0.50-0.55, keystones 0.36-0.51 (M11's 0.80 and 0.64 were 
   shared move: about 0.005-0.013 on EUW1 item shares, under T1's 0.05 bar
 - Two patches, short windows; options pool brackets and lack (c)
 
+### Rare ranges after the band spreads, 16.21 and 16.22, 2026-11-09 (meio, P1)
+
+Question (P1, data/team/2026-11-09-more/modelresearch-proposals.md): Meio's ranges on
+rare cells missed 1.2-3.7x their sd ("The lean table", NL1). Would a smooth spread line
+by popularity, log s^2 = a + b min(0, h - knot) in place of the per-band steps, bring
+the rare tails to 7-13% each side? Keep rule declared before the look: (1) rare
+champion-roles (x -10..-11, < -11) and keystones (x under -7): PIT tails each within
+7-13% on 16.21 and 16.22; (2) interval score on rare cells better by 2 se; (3) cells
+with 1,000+ own games unmoved; (4) no truth row worse. First step: today's tails, read
+only.
+
+HEAD Meio (c5cfdf1a, all three NL3 band flags on), `truth --cells` on cubes-20261106,
+16.21 origins 14, 16.22 origins 3; randomised binomial PIT parts as truth computes them
+(the dump's `pit` column is the in-range share, not the PIT value), clustered by cell:
+
+| patch | kind, rare bands | below 0.1 | above 0.9 | both |
+| --- | --- | --: | --: | --: |
+| 16.21 | champion-role -10..-11 / < -11 | 11.2 / 9.4 | 13.3 / 10.2 | 24.5 / 19.6 |
+| 16.21 | keystone -7..-8 / < -8 | 11.0 / 10.6 | 9.4 / 9.0 | 20.4 / 19.6 |
+| 16.22 | champion-role -10..-11 / < -11 | 13.6 / 8.8 | 5.8 / 10.1 | 19.4 / 18.9 |
+| 16.22 | keystone -7..-8 / < -8 | 10.0 / 9.9 | 9.4 / 9.5 | 19.4 / 19.4 |
+
+Every region, all ranks; se 1.2-2.4 points for champion-roles (80-100 cells), 0.4-0.6
+for keystones. Over every rare band (champion-roles x -8 and under, locks x -5 and
+under) by region and rank set (Iron-Silver too thin), 141 rows: tails summed 15.6-24.5%,
+mean 20.0; 3 beyond 2 se of 20% (6 expected by chance). Items: 9.2-10.7% each side.
+
+- Already met: the band spreads (NL3) closed the rare misses; (1) holds within 1 se on
+  the three champion-role values at its edges (13.3 ± 1.8, 13.6 ± 2.4, 5.8 ± 1.4, whose
+  bands sum to 24.5 and 19.4). A smooth line has nothing left to fix: not built
+- What's left is lopsided tails with honest widths, a middle that runs off: 25 rare and
+  58 common rows have below and above apart beyond 2 se, mostly Diamond+ below (champion
+  -3..-5 and 1,000+ own games 14-22% below, 4-9% above) and EUW1 common items on 16.21
+  (15% below, 7% above). That is the lean table's bracket lean, not spread
+
+Data: data/team/2026-11-09-more/p1/ (tails.tsv, tails.py, pit.py, truth runs).
+
 ### The stored rank knows the result: the bracket lean, 2026-11-06 (m10, NL6)
 
 After NL3 most of the M10 gate's failures (~140 Iron-Silver, ~80 Diamond+ of 286) were a
