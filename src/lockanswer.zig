@@ -10,6 +10,7 @@ const builds = @import("builds.zig");
 const ddragon = @import("ddragon.zig");
 const lockrows = @import("lockrows.zig");
 const par = @import("par.zig");
+const store = @import("store");
 
 const Allocator = std.mem.Allocator;
 const Role = core.Role;
@@ -774,6 +775,107 @@ pub fn choices(arena: Allocator, t: *const lockrows.Table, x: *const Index, cham
         }
     }.more);
     return out;
+}
+
+/// A champion-role's Trends cards under a view and locks (champion-locks.md L4). Each
+/// card keeps the slice of rows its unlocked card has: by patch and day every patch in
+/// the table at the rank floor; by rank every rank in the view's period, bracketed by the
+/// player's own rank (the unlocked card's is the game's median); first item done the
+/// view's rows with a timeline
+pub const Trends = struct {
+    all: Count = .{},
+    /// By Table.dicts.patches code
+    by_patch: []Count,
+    /// The newest patch's code, null without rows
+    newest: ?u8 = null,
+    /// The newest patch's games by UTC day from `first_day` (days since the epoch)
+    first_day: u32 = 0,
+    by_day: []Count = &.{},
+    /// Iron-Silver, Gold-Emerald, Diamond+; `ranked` every row of the period, of no
+    /// bracket too
+    brackets: [3]Count = @splat(.{}),
+    ranked: Count = .{},
+    /// By the minute the first finished item was bought (builds.File.Build.first_item)
+    first_item: [builds.minute_buckets]Count = @splat(.{}),
+};
+
+/// `champion` in `role`'s Trends under `f` and `locks`, in `arena`; null as `count`
+pub fn trends(arena: Allocator, t: *const lockrows.Table, x: *const Index, champion: u32, role: Role, f: Filter, locks: *const Locks) !?Trends {
+    const bi = t.blockIndex(champion, role) orelse return null;
+    const block = &x.blocks[bi];
+    const m: Match = try .init(arena, block, locks, &f);
+    var any_patch = f;
+    any_patch.patch = null;
+    any_patch.since = 0;
+    var any_rank = f;
+    any_rank.floor = null;
+    const newest = newestPatch(t.dicts.patches);
+    var out: Trends = .{ .by_patch = try arena.alloc(Count, t.dicts.patches.len), .newest = newest };
+    @memset(out.by_patch, .{});
+    var days: ?[2]u32 = null;
+    for (block.rows) |*r| {
+        const rank = if (r.rank == no_rank) null else r.rank;
+        if (newest == null or r.patch != newest.? or !any_patch.takes(r.start, r.platform, r.patch, rank)) continue;
+        const d = r.start / std.time.s_per_day;
+        days = if (days) |s| .{ @min(s[0], d), @max(s[1], d) } else .{ d, d };
+    }
+    if (days) |s| {
+        out.first_day = s[0];
+        out.by_day = try arena.alloc(Count, s[1] - s[0] + 1);
+        @memset(out.by_day, .{});
+    }
+    for (block.rows) |*r| {
+        if (!m.takes(r)) continue;
+        const rank = if (r.rank == no_rank) null else r.rank;
+        if (any_patch.takes(r.start, r.platform, r.patch, rank)) {
+            Counts.bump(&out.by_patch[r.patch], r.won);
+            if (newest != null and r.patch == newest.?) Counts.bump(&out.by_day[r.start / std.time.s_per_day - out.first_day], r.won);
+        }
+        if (any_rank.takes(r.start, r.platform, r.patch, rank)) {
+            Counts.bump(&out.ranked, r.won);
+            if (rank) |k| if (bracketOf(k)) |b| Counts.bump(&out.brackets[b], r.won);
+        }
+        if (!f.takes(r.start, r.platform, r.patch, rank)) continue;
+        Counts.bump(&out.all, r.won);
+        if (r.picks and r.item[1] != 0) Counts.bump(&out.first_item[r.minute[1]], r.won);
+    }
+    return out;
+}
+
+/// A store.schema.tiers index's bracket: 0 Iron-Silver, 1 Gold-Emerald, 2 Diamond+
+fn bracketOf(rank: u8) ?usize {
+    const tier = if (rank < store.schema.tiers.len) store.schema.tiers[rank] else return null;
+    const k = core.curvesfile.tierRank(tier) orelse return null;
+    return @backingInt(core.curvesfile.Bracket.ofRank(k)) - @backingInt(core.curvesfile.Bracket.low);
+}
+
+/// The highest "major.minor" in `patches`' codes, null for none
+fn newestPatch(patches: []const []const u8) ?u8 {
+    var best: ?u8 = null;
+    for (patches, 0..) |p, i| {
+        if (patchKey(p) == 0) continue;
+        if (best == null or patchKey(p) > patchKey(patches[best.?])) best = @intCast(i);
+    }
+    return best;
+}
+
+/// "major.minor" as one sortable number, 0 for another form
+pub fn patchKey(p: []const u8) u32 {
+    var it = std.mem.splitScalar(u8, p, '.');
+    const major = std.fmt.parseInt(u32, it.next() orelse return 0, 10) catch return 0;
+    const minor = std.fmt.parseInt(u32, it.next() orelse return 0, 10) catch return 0;
+    return major << 16 | minor;
+}
+
+test "trends: newest patch by version, brackets by tier" {
+    try std.testing.expectEqual(2, newestPatch(&.{ "16.9", "15.24", "16.10" }));
+    try std.testing.expectEqual(null, newestPatch(&.{}));
+    try std.testing.expectEqual(2, bracketOf(0).?);
+    try std.testing.expectEqual(2, bracketOf(3).?);
+    try std.testing.expectEqual(1, bracketOf(4).?);
+    try std.testing.expectEqual(1, bracketOf(6).?);
+    try std.testing.expectEqual(0, bracketOf(9).?);
+    try std.testing.expectEqual(null, bracketOf(10));
 }
 
 test "locks parse and format back" {

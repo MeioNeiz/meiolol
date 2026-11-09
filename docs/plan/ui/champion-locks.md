@@ -162,7 +162,15 @@ What a block needs from a row:
   rank and the patch's move are the champion's, so hidden. A lane opponent's brief has
   Lock / Unlock (a button beside "Matchup ›", not tapping the dot: a dot shows its
   brief first, and locking on every look would refetch the page). The bar says "Not
-  Trends yet" until L4 and L5
+  lane, length, players or end of game" (what still ignores locks)
+
+- L4a Trends (`trends/...`, lockanswer.trends, one pass over the rows): By patch
+  (patches and the newest patch's days; win rate only, pick, ban and place are the
+  champion's), By rank (brackets by the player's tier at any rank floor), First item
+  done (minute of core_ms[0] under the full view). Rendered into ?lk= pages and fetched
+  by ui-champtrends. Game length waits for duration in the cubes (L4b, rides m10's cube
+  rebuild: lockrows flag 128 and a minutes byte, fingerprint unchanged); players,
+  pick-up, also play and end of game are not in the rows
 
 - Thin (J35) in the build panel: every rate with its 80% range (fmt.range, Wilson),
   faded past ±6, whole numbers from ±10, none hidden; counts don't fade

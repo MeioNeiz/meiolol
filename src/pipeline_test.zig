@@ -860,11 +860,12 @@ test "fixture games to stats, curves and the website" {
         for (mk.opponents) |o| try testing.expectEqual(null, o.gold);
         // Other islands still need a lock set
         try testing.expectEqual(null, try loaded.get(arena, try lock(arena, "", 0, "build", "darius", .top, .plat, "none")));
-        // The page's own lock set rendered in: the LockBar, the answer inline for the
-        // island, the opponent by name; a set not in its one form renders unlocked
+        // The page's own lock set rendered in: the LockBar, the answer inline for each
+        // island that follows locks, the opponent by name; a set not in its one form
+        // renders unlocked
         const page = (try loaded.getLocked(arena, "champions/darius/top.html", "ks8010,vs82")).?;
         try testing.expect(std.mem.find(u8, page, "data-lk=\"ks8010,vs82\"") != null);
-        try testing.expectEqual(3, std.mem.count(u8, page, "data-ans=\""));
+        try testing.expectEqual(4, std.mem.count(u8, page, "data-ans=\""));
         try testing.expect(std.mem.find(u8, page, "Of its games") != null);
         try testing.expect(std.mem.find(u8, page, "class=\"c-lockbar\"") != null);
         try testing.expect(std.mem.find(u8, page, "vs Mordekaiser") != null);
@@ -2445,6 +2446,24 @@ fn expectLocksAsBuilder(arena: std.mem.Allocator, t: *const lockrows.Table, x: *
                     try testing.expectEqualDeep(c.locked, (try lockanswer.count(arena, t, x, b.champion, b.role, filter, &more)).?);
                 }
             }
+            // Trends (site/locks.zig trends): each card sums to its slice's count, first
+            // item done to the build file's histogram
+            const tr = (try lockanswer.trends(arena, t, x, b.champion, b.role, filter, l)).?;
+            try testing.expectEqual(n, tr.all.games);
+            var any_patch = filter;
+            any_patch.patch = null;
+            any_patch.since = 0;
+            var patch_games: u32 = 0;
+            for (tr.by_patch) |c| patch_games += c.games;
+            try testing.expectEqual((try lockanswer.count(arena, t, x, b.champion, b.role, any_patch, l)).?.games, patch_games);
+            var day_games: u32 = 0;
+            for (tr.by_day) |c| day_games += c.games;
+            try testing.expectEqual(if (tr.newest) |p| tr.by_patch[p].games else 0, day_games);
+            var any_rank = filter;
+            any_rank.floor = null;
+            try testing.expectEqual((try lockanswer.count(arena, t, x, b.champion, b.role, any_rank, l)).?.games, tr.ranked.games);
+            const hist: []const builds.Count = if (want) |f| if (f.get(b.champion, b.role)) |own_| own_.first_item else &.{} else &.{};
+            for (tr.first_item, 0..) |c, i| try testing.expectEqual(if (i < hist.len) hist[i] else builds.Count{}, c);
             stacks += 1;
         }
     };

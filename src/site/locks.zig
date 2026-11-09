@@ -14,6 +14,7 @@ const lockrows = @import("../lockrows.zig");
 const lockanswer = @import("../lockanswer.zig");
 const meio = @import("../meio.zig");
 const ddragon = @import("../ddragon.zig");
+const Date = @import("../date.zig").Date;
 
 const Role = core.Role;
 const Counts = core.statsfile.Counts;
@@ -111,6 +112,7 @@ pub fn answer(s: *Site, x: *const Answers, gpa: std.mem.Allocator, rest: []const
         .build => try ui.data.encode(s.arena, cp.BuildData, try build(s, x, gpa, ch, q.role, q.rank, &q.locks) orelse return null, &out),
         .more => try ui.data.encode(s.arena, cp.MoreData, try more(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
         .top => try ui.data.encode(s.arena, cp.TopData, try top(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
+        .trends => try ui.data.encode(s.arena, cp.TrendsData, try trends(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
         // The Meio period: public, as the view's numbers are (estimates.md E0d)
         .meio => try ui.data.encode(s.arena, pd.Meio, try meioOf(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
     }
@@ -182,6 +184,48 @@ pub fn top(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, lo
     const role = try a.create(cp.TopRole);
     role.* = .{ .role = champion.uiRole(r), .games = n.games, .wins = n.wins, .share = 0, .pick = 0, .ban = 0, .lane = &.{} };
     return .{ .name = "", .slug = "", .icon = "", .patch = "", .ddragon = "", .champs = &.{}, .roles = role[0..1] };
+}
+
+/// `ch`'s Trends cards in `r` at rank `k` under `locks` that follow them (by patch and
+/// day, by rank, first item done), as a TrendsData of that one role, in `s.arena`; null
+/// as `build`. By patch has no pick, ban or place: the champion's, not the locked games'
+pub fn trends(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, locks: *const lockanswer.Locks) !?cp.TrendsData {
+    const a = s.arena;
+    const t = &x.table;
+    const f = filterOf(s, t, k) orelse return null;
+    const n = try lockanswer.trends(a, t, &x.index, @intCast(ch.id), r, f, locks) orelse return null;
+    // Oldest patch first, as the unlocked card
+    const order = try a.alloc(u8, t.dicts.patches.len);
+    for (order, 0..) |*o, i| o.* = @intCast(i);
+    std.mem.sort(u8, order, t.dicts.patches, struct {
+        fn older(ps: []const []const u8, i: u8, j: u8) bool {
+            return lockanswer.patchKey(ps[i]) < lockanswer.patchKey(ps[j]);
+        }
+    }.older);
+    var by_patch: std.ArrayList(cp.Patch) = .empty;
+    for (order) |i| {
+        const c = n.by_patch[i];
+        if (c.games > 0) try by_patch.append(a, .{ .patch = t.dicts.patches[i], .games = c.games, .wins = c.wins });
+    }
+    const by_day = try a.alloc(cp.Day, n.by_day.len);
+    for (by_day, n.by_day, 0..) |*o, c, i| {
+        const d: Date = .fromDay(@intCast(n.first_day + i));
+        o.* = .{ .label = try a.print("{d}", .{d.day}), .tip = try a.print("{f}", .{d.short()}), .games = c.games, .wins = c.wins };
+    }
+    var ranks: cp.Ranks = .{ .by = undefined, .all = .{ .games = n.ranked.games, .wins = n.ranked.wins } };
+    for (&ranks.by, n.brackets) |*o, c| o.* = .{ .games = c.games, .wins = c.wins };
+    const role = try a.create(cp.TrendsRole);
+    role.* = .{
+        .role = champion.uiRole(r),
+        .games = n.all.games,
+        .wins = n.all.wins,
+        .by_patch = by_patch.items,
+        .by_day = by_day,
+        .by_length = &.{},
+        .ranks = ranks,
+        .timing = try champion.timingOf(a, &n.first_item, cp.min_games),
+    };
+    return .{ .name = ch.name, .ddragon = s.ddragon_version, .champs = &.{}, .roles = role[0..1], .lengths = &.{} };
 }
 
 /// Most keystones and items in a Meio answer; opponents are all listed (Matchups)
@@ -340,7 +384,7 @@ fn filterOf(s: *const Site, t: *const lockrows.Table, k: cp.Rank) ?lockanswer.Fi
 }
 
 /// The islands with lock answers
-pub const Island = enum { build, more, top, meio };
+pub const Island = enum { build, more, top, meio, trends };
 
 const Query = struct { island: Island, slug: []const u8, role: Role, rank: cp.Rank, locks: lockanswer.Locks };
 
@@ -391,12 +435,13 @@ test "lock paths parse only in their one form" {
     try std.testing.expectEqual(86, q.locks.by.get(.opponent).?.v[0]);
     try std.testing.expectEqual(.more, parse("more/darius/top/plat/ks8010.bin").?.island);
     try std.testing.expectEqual(.top, parse("top/darius/top/plat/ks8010.bin").?.island);
+    try std.testing.expectEqual(.trends, parse("trends/darius/top/plat/ks8010.bin").?.island);
     for ([_][]const u8{
         "build/darius/top/emerald/vs86,ks8010.bin",
         "build/darius/top/emerald/.bin",
         "build/darius/top/gold/ks8010.bin",
         "build/darius/middle/plat/ks8010.bin",
-        "trends/darius/top/plat/ks8010.bin",
+        "trends/darius/top/plat/.bin",
         "build/darius/top/plat/ks8010.bin/x",
         "build/darius/top/plat/ks8010",
     }) |bad| try std.testing.expectEqual(null, parse(bad));

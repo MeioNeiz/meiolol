@@ -200,7 +200,6 @@ measured no win)
 ### Later
 
 - Influence per opponent (bans into your pool's hard lanes, B3) and per rank filter
-- Build variants past the first item (Kai'Sa AP, U.GG's tabs) as clusters of item paths
 
 ## Matchup page
 

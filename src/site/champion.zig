@@ -111,6 +111,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
     try lockMore(site, &more, ch, r);
     try lockTop(site, &top, ch, r);
     trends.fromUrl(.{ .role = shown.role });
+    try lockTrends(site, &trends, ch, r);
     charts.fromUrl(.{ .role = shown.role });
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
@@ -175,6 +176,21 @@ fn lockTop(site: *const Site, top: *cp.Top, ch: Champ, r: Role) !void {
     const path = top.lockWant(a) orelse return;
     top.setAnswer(path, d);
     top.ans = try base64(a, cp.TopData, d.*);
+}
+
+/// The request's lock set rendered into the Trends cards that follow it, as lockBuild
+fn lockTrends(site: *const Site, trends: *cp.Trends, ch: Champ, r: Role) !void {
+    const a = site.arena;
+    const x = site.answers orelse return;
+    const lk = locks.pageLocks(site.lk) orelse return;
+    const d = try a.create(cp.TrendsData);
+    d.* = try locks.trends(site, x, ch, r, .plat, &lk) orelse return;
+    var u = trends.toUrl();
+    u.lk.set(site.lk);
+    trends.fromUrl(u);
+    const path = trends.lockWant(a) orelse return;
+    trends.setAnswer(a, path, d);
+    trends.ans = try base64(a, cp.TrendsData, d.*);
 }
 
 fn base64(a: std.mem.Allocator, comptime D: type, d: D) ![]const u8 {

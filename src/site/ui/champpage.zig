@@ -400,8 +400,9 @@ pub const W = struct {
     pub const build_usual = Phrase("{x:text}'s build");
     pub const no_lock_games = plain("No games with these locks.");
     pub const vs_lock = Phrase("vs {y:text}");
-    /// Until Trends and the lane charts follow the locks (champion-locks.md L4, L5)
-    pub const lock_scope = plain("Not Trends yet");
+    /// The cards that don't follow the locks: lane charts (champion-locks.md L5), game
+    /// length (no length in the cubes yet), players and end of game (player-level)
+    pub const lock_scope = plain("Not lane, length, players or end of game");
     /// The StatStrip under locks: their games out of the champion-role's
     pub const lock_share = plain("Of its games");
     pub const no_answer = plain("These locks can't be counted here yet.");
@@ -1774,6 +1775,14 @@ pub const Trends = struct {
     ranks: trend.Trend = .{ .label = W.by_rank, .points = &.{} },
     timing: trend.Trend = .{ .label = W.first_item, .points = &.{}, .y_name = W.win_rate_y },
     pickup: trend.Trend = .{ .label = W.pickup, .points = &.{}, .height = 110 },
+    /// The champion page's locks (`lk`): by patch, by rank and first item done show the
+    /// renderer's answer for them (lockPath), fetched by ui-champtrends.wasm
+    locks: lockbar.Set = .{},
+    /// The answer shown and its path; roles empty: none for the path
+    answer: ?*const TrendsData = null,
+    answer_path: []const u8 = "",
+    /// The server's answer under `locks`, base64 (Build.ans)
+    ans: ?[]const u8 = null,
 
     const P = @This();
 
@@ -1820,21 +1829,53 @@ pub const Trends = struct {
         region: Region = .euw,
         period: PeriodPick = .days30,
         rank: Rank = .plat,
+        lk: url.Str(200) = .{},
     };
 
     fn r(p: *const P) *const TrendsRole {
         return &p.data.roles[p.cur];
     }
 
+    /// Under locks, the answer's role once one is in: the cards that follow locks draw it
+    fn locked(p: *const P) ?*const TrendsRole {
+        if (!p.locks.any()) return null;
+        const x = p.answer orelse return null;
+        return if (x.roles.len > 0) &x.roles[0] else null;
+    }
+
+    /// The answer the locks want, null without locks
+    pub fn lockWant(p: *const P, a: std.mem.Allocator) ?[]const u8 {
+        if (!p.locks.any() or p.cur >= p.data.roles.len) return null;
+        const w = p.files.want;
+        return lockPath(a, p.root, w.view, "trends", p.slug(), p.data.roles[p.cur].role, w.rank, p.locks.s.slice()) catch null;
+    }
+
+    /// From the data file's name, as Build.slug
+    fn slug(p: *const P) []const u8 {
+        const base = p.src[if (std.mem.findScalarLast(u8, p.src, '/')) |i| i + 1 else 0..];
+        return if (tree.endsWith(base, "-trends.bin")) base[0 .. base.len - "-trends.bin".len] else base;
+    }
+
+    pub fn setAnswer(p: *P, _: std.mem.Allocator, path: []const u8, d: *const TrendsData) void {
+        p.answer = d;
+        p.answer_path = path;
+    }
+
+    fn waiting(p: *const P, a: std.mem.Allocator) bool {
+        const w = p.lockWant(a) orelse return false;
+        return !tree.eql(w, p.answer_path);
+    }
+
     pub fn toUrl(p: *const P) Url {
         const w = p.files.want;
-        return .{ .role = p.want_role, .region = w.region(), .period = w.period(), .rank = w.rank };
+        return .{ .role = p.want_role, .region = w.region(), .period = w.period(), .rank = w.rank, .lk = p.locks.s };
     }
 
     pub fn fromUrl(p: *P, u: Url) void {
         p.want_role = u.role;
         p.files.want = .of(u);
         p.cur = roleIndex(p.data.roles, u.role);
+        p.locks.s = u.lk;
     }
 
     /// The loader's, once what files.want needs is in
@@ -1875,7 +1916,9 @@ pub const Trends = struct {
             .data_root = p.root,
             .data_js = p.js,
             .data_wasm = p.wasm,
-            .data_busy = p.files.busy(),
+            .data_busy = p.files.busy() or p.waiting(h.mem),
+            .data_lk = if (p.ans != null) p.locks.s.slice() else null,
+            .data_ans = p.ans,
         }, .{
             h.div(.{ .class = "row3", .id = "trends", .tabindex = @as(i8, -1), .role = "region", .aria_label = W.trends }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
@@ -1884,7 +1927,9 @@ pub const Trends = struct {
     }
 
     fn patchCard(p: *P, h: *H) N {
-        const by_patch, const by_day = if (p.ranked()) |x| switch (x) {
+        // Under locks only the locked games' win rate: pick, ban and place are the champion's
+        if (p.locked() != null) p.metric.m = .win;
+        const by_patch, const by_day = if (p.locked()) |x| .{ x.by_patch, x.by_day } else if (p.ranked()) |x| switch (x) {
             .few => return card.view(h, .{}, &.{ card.head(h, W.by_patch, null, &.{}), p.few(h) }),
             .role => |y| .{ y.by_patch, y.by_day },
         } else .{ p.r().by_patch, p.r().by_day };
@@ -1914,6 +1959,7 @@ pub const Trends = struct {
     }
 
     fn metricPick(p: *P, h: *H) N {
+        if (p.locked() != null) return .none;
         return segmented.view(h, .{ .s = .s, .label = W.metric }, &.{
             .{ .label = W.win, .selected = p.metric.m == .win, .on = h.on(&p.metric, .win) },
             .{ .label = W.pick, .selected = p.metric.m == .pick, .on = h.on(&p.metric, .pick) },
@@ -1986,7 +2032,7 @@ pub const Trends = struct {
     /// Win rate by rank bracket, dashed at its rate over every game (the head's); a thin
     /// bracket shows with its wide range
     fn rankCard(p: *P, h: *H) N {
-        const k = p.r().ranks orelse return noneCard(h, W.by_rank, .none);
+        const k = (p.locked() orelse p.r()).ranks orelse return noneCard(h, W.by_rank, .none);
         const pts = trend.alloc(h, k.by.len) orelse return .none;
         var n: usize = 0;
         for (k.by, W.brackets) |b, l| {
@@ -2028,7 +2074,7 @@ pub const Trends = struct {
     /// Win rate by the minute the first item was finished, dashed at the rate over every
     /// bucket; a thin bucket shows with its wide range
     fn timingCard(p: *P, h: *H) N {
-        const k = p.r().timing;
+        const k = (p.locked() orelse p.r()).timing;
         const pts = trend.alloc(h, k.len) orelse return .none;
         var all: Counts = .{ .games = 0, .wins = 0 };
         var n: usize = 0;
@@ -2042,7 +2088,9 @@ pub const Trends = struct {
         if (n < 2) return noneCard(h, W.first_item, .none);
         p.timing.set(pts[0..n]);
         p.timing.ref = rate(all);
-        return card.view(h, .{}, &.{ card.head(h, W.first_item, null, &.{ p.plat(h), tipNote(h, "cp-item", W.first_item_key, W.first_item, W.first_item_note.with(h, .{ .c = p.data.name })) }), p.timing.view(h) });
+        // An answer is the rank pick's; the data file's is Platinum+
+        const plat_badge = if (p.locked() != null) N.none else p.plat(h);
+        return card.view(h, .{}, &.{ card.head(h, W.first_item, null, &.{ plat_badge, tipNote(h, "cp-item", W.first_item_key, W.first_item, W.first_item_note.with(h, .{ .c = p.data.name })) }), p.timing.view(h) });
     }
     fn pickupCard(p: *P, h: *H) N {
         const k = p.data.pickup orelse return noneCard(h, W.pickup, .none);
