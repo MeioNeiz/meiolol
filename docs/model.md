@@ -6255,6 +6255,41 @@ Reading:
   shared across patches, can't follow
 - Two patches, one window each; option shares on 16.22 only
 
+### EUW1's own patch move in Meio's shares, 16.21 and 16.22, 2026-11-09 (meio, T1)
+
+Question: "Regions as neighbours" found EUW1 keeps an own patch move in item and keystone
+shares (~0.09-0.11 logit sd) that Meio's one EUW1 level, shared across patches, can't
+follow. Does a term for it help? T1: an EUW1 x newest-patch offset in the share fits
+only (item, keystone), its own variance by MacKay; win rates untouched. Day 0 has no
+EUW1 games on the patch, so it changes nothing there. Keep rule declared before the look
+(data/team/2026-11-05-notes2/meio.md, 18:15Z 6 Nov): (1) EUW1 all-ranks item + keystone
+share rows against the 30 days, days 1 and 2-3: on 16.21 the four gains sum to 0.05 or
+more, none worse; on 16.22 none worse; (2) no row worse beyond 2 se, both patches; (3)
+every-region rows within +0.01; (4) days 1+ share PIT no more than 3 points further from
+80%; (5) meio.bin and fit time at most 1.25x.
+
+Truth pair on cubes-20261106, origins 3, base c5cfdf1a (milli-nats, Meio minus the 30
+days, EUW1, all ranks; negative better):
+
+| patch | kind | day 1 base -> T1 | days 2-3 base -> T1 |
+| --- | --- | --: | --: |
+| 16.21 | item share | -0.16 -> -0.17 | -0.14 -> -0.16 |
+| 16.21 | keystone share | -0.13 -> -0.13 | -0.12 -> -0.12 |
+| 16.22 | item share | -0.15 -> -0.17 | -0.22 -> -0.24 |
+| 16.22 | keystone share | -0.16 -> -0.19 | -0.11 -> -0.16 |
+
+- (1) FAILS: 16.21's four gains sum to 0.03 (needed 0.05), none worse; 16.22's sum to
+  0.12, none worse
+- (2) passes: no real row worse beyond 2 se; the two on 16.21 are EUW1 Iron-Silver
+  keystone rows with no cells (se 0)
+- (3) passes: every-region rows move at most +0.01 (keystone share day 1)
+- (4) passes: EUW1 days 1+ share PIT 78-81% both ways
+- (5) passes: meio.bin 135.0 -> 146.6 MB (1.09x), fit 10.9 -> 10.4 s, RSS 2.64 -> 2.71 GB
+
+Not kept: the gain is real in sign on both patches but under the declared size on 16.21,
+where EUW1's own move is smaller. The code is in data/team/2026-11-09-more/t1.patch. A
+16.22 look with day 7 complete is a check, not a decision.
+
 ### The stored rank knows the result: the bracket lean, 2026-11-06 (m10, NL6)
 
 After NL3 most of the M10 gate's failures (~140 Iron-Silver, ~80 Diamond+ of 286) were a

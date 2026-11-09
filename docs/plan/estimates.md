@@ -179,10 +179,10 @@ holding ~80% (so too wide fails as well as too narrow); boundaries 16.20 -> 16.2
 - M10 No lean (Jacob, 4 Nov): Meio's middle runs neither high nor low for any kind,
   popularity band, rank or region, rare strong picks included; the lean table as a
   truth gate. Steps NL0-NL7 in meio-middle.md
-- M11 Regions as neighbours (Jacob, 5 Nov): one EUW1 term against a pooled rest today.
-  Measure per region pair how alike champion-roles' patch moves are; if pairs differ, a
-  term per region with a learnt covariance (borrowing then differs each way). A region
-  leading EUW1 (KR) is TS2 in meio-middle.md; the draft model's region terms PT6 A8
+- M11 Regions as neighbours (Jacob, 5 Nov): measured (model.md "Regions as neighbours"):
+  win rate too noisy per region; shares alike but not as one, and an EUW1 x patch term
+  in shares missed its bar (16.21), not kept. A region leading EUW1 (KR) is TS2 in
+  meio-middle.md; the draft model's region terms PT6 A8
 
 Order: E3-E5 as each passes E2's gate, then E9, the default switch (E0b); E10 now; E11.
 
