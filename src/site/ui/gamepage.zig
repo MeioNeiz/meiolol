@@ -58,11 +58,12 @@ const W = struct {
     pub const best = plain("Best minute");
     pub const peak = plain("Peak");
     pub const low = plain("Low");
-    pub const never_behind = plain("Never behind");
-    pub const never_ahead = plain("Never ahead");
+    /// A win never behind: label "Behind", value "Never" (fits Home's narrow cells)
+    pub const behind = plain("Behind");
+    pub const ahead = plain("Ahead");
+    pub const never = plain("Never");
     pub const at = phrase.Phrase("at {t:time}");
     pub const lead = plain("Longest lead");
-    pub const min = plain("min");
     pub const run = phrase.Phrase("min, {a:int}–{b:int}");
     /// The biggest fight
     pub const fight = plain("Fight");
@@ -334,24 +335,27 @@ pub const GamePage = struct {
             // Its lowest minute is then the start's even chance: no moment to show
             const never = if (g.win) e.v >= 50 else e.v <= 50;
             items[n] = .{
-                .label = if (g.win) W.low else W.peak,
-                .value = if (never) (if (g.win) W.never_behind else W.never_ahead) else phrase.num(h, .pct, e.v),
+                .label = if (never) (if (g.win) W.behind else W.ahead) else if (g.win) W.low else W.peak,
+                .value = if (never) W.never else phrase.num(h, .pct, e.v),
                 .ctx = if (never) null else W.at.with(h, .{ .t = @as(u32, e.minute) * 60 }),
                 .on = if (never) null else h.on(p, .{ .sel = .{ ms.a, ms.b } }),
                 .pressed = !never and p.selected(ms),
             };
             n += 1;
         }
-        const a = sw.lead.end - sw.lead.len;
-        const ms: gamedata.Span = .{ .a = @as(u16, a) * 60, .b = @as(u16, sw.lead.end) * 60 };
-        items[n] = .{
-            .label = W.lead,
-            .value = phrase.num(h, .count, sw.lead.len),
-            .ctx = if (sw.lead.len == 0) W.min else W.run.with(h, .{ .a = a, .b = sw.lead.end }),
-            .on = if (sw.lead.len > 0) h.on(p, .{ .sel = .{ ms.a, ms.b } }) else null,
-            .pressed = sw.lead.len > 0 and p.selected(ms),
-        };
-        n += 1;
+        // No lead at all: a loss never ahead, which Ahead already says
+        if (sw.lead.len > 0) {
+            const a = sw.lead.end - sw.lead.len;
+            const ms: gamedata.Span = .{ .a = @as(u16, a) * 60, .b = @as(u16, sw.lead.end) * 60 };
+            items[n] = .{
+                .label = W.lead,
+                .value = phrase.num(h, .count, sw.lead.len),
+                .ctx = W.run.with(h, .{ .a = a, .b = sw.lead.end }),
+                .on = h.on(p, .{ .sel = .{ ms.a, ms.b } }),
+                .pressed = p.selected(ms),
+            };
+            n += 1;
+        }
         return h.div(.{ .class = "cells" }, .{strip.view(h, items[0..n])});
     }
 
@@ -664,6 +668,7 @@ test "opens on the turn, a strip press switches game, the URL round trips" {
 }
 
 test "cells: a win never behind and a loss never ahead say so, unpressable; Fight per team" {
+    // A loss never ahead has no Longest lead cell (no "0 min")
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -672,7 +677,7 @@ test "cells: a win never behind and a loss never ahead say so, unpressable; Figh
     games[0].wc = &.{ 50, 50, 52, 61, 70, 88 };
     games[1].wc = &.{ 50, 50, 41, 30, 12 };
     const d: gamedata.Data = .{ .champs = demo.champs, .games = games, .arts = demo.arts };
-    for ([_]u8{ 0, 1 }, [_][]const u8{ "Never behind", "Never ahead" }) |i, want| {
+    for ([_]u8{ 0, 1 }, [_][]const u8{ "BehindNever", "AheadNever" }) |i, want| {
         var p = try GamePage.init(a, &d);
         var ev: tree.Event = .{ .kind = .click };
         p.update(.{ .game = i }, &ev);
@@ -684,6 +689,7 @@ test "cells: a win never behind and a loss never ahead say so, unpressable; Figh
         try t.textOf(n, &w.writer);
         try testing.expect(tree.find(w.written(), want) != null);
         try testing.expect(tree.find(w.written(), "at 0:") == null);
+        try testing.expectEqual(i == 0, tree.find(w.written(), "Longest lead") != null);
     }
     var p = try GamePage.init(a, demo);
     var t: tree.Tree = .{};
