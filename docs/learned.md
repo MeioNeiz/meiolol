@@ -74,8 +74,7 @@ How to write a line:
   the pair model and 0.7 to the largest net, while champion strength alone has stopped
   improving; nets only help past about 300k games. Sure: dev only, five sizes, the
   same 754k held-out games; "the net becomes best with twice the games" is an
-  extrapolation. Site: a reason to keep crawling. Evidence: docs/model.md "A1: scaling
-  curves"
+  extrapolation. Site: a reason to keep crawling. Evidence: model.md "A1: scaling curves"
 - (early) Within a patch, the newest games predict no better than the same number of
   games from up to two weeks earlier: what wins drafts barely moves day to day, so
   older games are worth keeping and more games is what helps. Sure: dev only, 297k fit
@@ -98,8 +97,7 @@ How to write a line:
   thirds. Duos are the same; a champion's own rate in a role is 0.77 real at 500-2,000
   games and 0.93 above. Sure: split halves of 800k games (1320Z) agree with the method
   of moments in every band. Site: matchup "vs usual" and sorting shrink by a k
-  estimated this way and fade under 10 games. Evidence: docs/model.md "Lab frontier
-  wave 1"
+  estimated this way and fade under 10 games. Evidence: model.md "Lab frontier wave 1"
 - Once the two champions' own win rates are allowed for, lane matchups still differ by
   about 2 points in top and mid, 1.2 in bot, 1.0 in support and 0.7 in jungle. Sure:
   method of moments on the live pages' tables (269k EUW games, 30 days). Site: the
@@ -387,8 +385,8 @@ How to write a line:
   about 3.7 points more from 10k to 300k points on a champion, even against their own
   other champions; the lane card then shows the champion actually picked 47% of the
   time instead of 39%. Sure: 944k held-out player-games, -0.00052 ± 0.00007 nats.
-  Site: the app ranks the pool with it and says only "150k mastery points". Evidence:
-  docs/model.md "Pool and expertise replay"
+  Site: the app ranks the pool with it and says only "150k mastery points"; Learn.
+  Evidence: docs/model.md "Pool and expertise replay"
 - (early) Part of a champion's win rate is how practised its players are: a new
   champion looks up to 1.6 points weaker (Locke, Corki top) and one-trick favourites up
   to 1 stronger (Katarina mid, Shaco jungle). The lane card's mastery bonus counts this
@@ -410,9 +408,11 @@ How to write a line:
   the new patch's own games: win rates and items catch up after 2-3 days, matchups,
   duos and lane gold still trail after a week. Sure: two patch boundaries replayed. Site:
   30 days stays the default. Evidence: docs/plan/estimates.md "E2 baseline"
-- A new patch moves champions' win rates beyond noise, mostly the changed ones: 0.75 pp
-  RMS on 16.21's first day, 1.9 pp for the 12 changed champions. Sure: 52k games, day
-  one only. Evidence: docs/model.md "Patch 16.21's first day"
+- A new patch moves champions' win rates beyond noise, mostly the changed ones (0.75 pp
+  RMS on 16.21's day one, 1.9 pp for the 12 changed); Diamond+ doesn't move first, nor KR
+  before EUW1, and a pick that jumps starts about a point up and stays. Sure: day one 52k
+  games; 16.21 (KR 16.22 too): no lead, no curve (late minus early -0.2 ± 0.3 pp).
+  Evidence: model.md "Patch 16.21's first day", "Who leads a patch move (TS2, TS4)"
 - (early) Across a patch, pooling every old game with a small per-patch champion offset
   predicts the new patch best from its second day, better on changed champions. Sure:
   dev, 16.21 days 1-3, 428k games, -0.28 ± 0.07 milli-nats a game vs plain pooling; a
@@ -438,7 +438,7 @@ How to write a line:
   days), and all ten ranks at game start in about half the games since 13 Oct. Models:
   seat mastery is usable. Evidence: docs/model.md "The new pin, snap-20261023T2004Z"
 - Most lane matchups in a patch have a handful of games: of 166.5k matchup curves on
-  EUW 16.20, 58% had under 5 games, only 9% 50+. Site: `meiolol curves` writes
+  EUW 16.20, 58% had under 5 games, only 9% 50+. Site: Learn; `meiolol curves` writes
   matchups from 10 games (docs/arch-stats.md "Lane curves")
 - Leaving out games that end before 15:00 without a remake flag (about 1.5%, mostly
   surrenders after a leaver) makes no detectable difference to draft predictions.

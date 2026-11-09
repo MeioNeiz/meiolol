@@ -6281,6 +6281,77 @@ walk) against ~49.5 after. A bracket level per patch in Meio would fit 16.21 for
 wrong reason; the fix is the bracket's source (backlog: rank at game time from
 rank_history). Notes: data/team/2026-11-05-notes2/m10.md "Bracket check".
 
+### Who leads a patch move (TS2, TS4), 16.21, 2026-11-09 (lab)
+
+Questions (docs/plan/meio-middle.md TS2, TS4), rules declared 6 Nov before any look
+(data/team/2026-11-05-notes2/lab.md "Candidate 1 plan"). Measurement only:
+- TS2a: does Diamond+'s win-rate move on a patch's days 1-3 predict Gold-Emerald's and
+  Iron-Silver's on days 4-10, beyond each bracket's own and the pooled early move?
+- TS2b: does KR's move before EUW1's first game predict EUW1's day 0?
+- TS4: after a champion-role's pick share jumps, does its win rate rise with days?
+
+Data: data/lab-cubes/daycells-20261106.tsv (the box's day cubes of 7 Oct-6 Nov), day n
+from EUW1's first game of the patch; brackets as stored (the lean of "The stored rank
+knows the result" sits in both patches, so moves mostly cancel). Move: logit(window)
+minus logit(16.20 whole, same bracket), +0.5 smoothing. Cells: champion-roles with 100+
+16.20 games in the target bracket, every platform pooled; the EUW1 rows restrict every
+input to EUW1. Forecasts: last patch's rate plus a shrunk move (weight tau^2 / (tau^2 +
+se^2)): M0 none, M1 the bracket's own days 1-3, M2 every bracket's days 1-3 pooled by
+games, M3 = M2 + beta x (Diamond+'s shrunk move - M2's). tau and beta by grid on half
+the champion-roles, scored on the other half (2 folds); control: Diamond+'s moves
+shuffled within role, 50 times. Score: log loss on the target's days 4-10 games,
+milli-nats a game, paired, se over cells. Tool: data/team/2026-11-09-more/lab-ts.py
+(numpy on the Mac), output lab-ts-run1.txt beside it.
+
+TS2a, win rate (decides):
+
+| target | cells | M1 - M0 | M2 - M1 | M3 - M2 | shuffled M3 - M2 |
+| --- | --: | --: | --: | --: | --: |
+| Gold-Emerald, every region | 692 | -0.056 ± 0.018 | -0.001 ± 0.003 | +0.001 ± 0.001 | +0.001 |
+| Iron-Silver, every region | 199 | -0.372 ± 0.158 | +0.414 ± 0.158 | +0.170 ± 0.073 | +0.146 |
+| Gold-Emerald, EUW1 | 510 | -0.068 ± 0.026 | -0.003 ± 0.008 | -0.001 ± 0.003 | -0.001 |
+
+Iron-Silver EUW1: no champion-role has 100 16.20 games. Gold-Emerald's fitted beta
+-0.15 / +0.15 by fold. Pick share (beside): every M3 - M2 within ±0.002 but
+Iron-Silver's, -0.023 ± 0.010 (shuffled +0.001 ± 0.006) with beta -0.7 / -2.0: its
+share moves away from Diamond+'s relative to the pool, not with it.
+
+TS2b, EUW1 day 0, cells with 100+ EUW1 16.20 games:
+
+| patch | cells | KR games before T0 | lead - M0 | shuffled | share lead - M0 |
+| --- | --: | --: | --: | --: | --: |
+| 16.21, 2 folds | 560 | ~5.3k | -0.010 ± 0.010 | +0.009 | -0.020 ± 0.013 |
+| 16.22, frozen | 597 | ~8.7k | +0.009 ± 0.007 | | -0.006 ± 0.008 |
+
+The fit puts beta at the grid's top (6) with tau 0.012: the two trade off, only the
+weight beta x tau^2 / (tau^2 + se^2) is pinned. The grid went from 2 to 6 after 16.21's
+fit hit 2, before 16.22's one look.
+
+TS4, every bracket; jumpers: day 0-1 share 1.5x+ 16.20's, 300+ games on days 0-13;
+controls: the role's other champion-roles; late days 7-13, early days 0-2:
+
+| | jumpers | late - early, minus controls | early vs 16.20 (controls) | fallers (0.67x-) |
+| --- | --: | --: | --: | --: |
+| every region | 10 of 643 | -0.23 ± 0.30 pp | +0.92 ± 0.30 (-0.03) | 3: -1.31 ± 2.98 |
+| EUW1 | 12 of 464 | -0.10 ± 0.39 pp | +1.41 ± 0.38 (-0.04) | 5: +0.61 ± 1.87 |
+
+Reading (every keep rule fails on 16.21, so the 16.22 confirms of TS2a and TS4 are moot
+and these are final; none is a TS5 input):
+- No Diamond+ lead: beyond the pooled move it adds nothing in Gold-Emerald (+0.001 ±
+  0.001) and only noise in Iron-Silver (as much as its shuffle). Predicted
+- Pooling buys Gold-Emerald nothing (72% of the seats, so the pool is mostly itself)
+  and costs Iron-Silver: its own days 1-3 predict its days 4-10 (-0.37 ± 0.16), the
+  pool doesn't (+0.04 ± 0.05). Predicted the other way. Likely (untested): Iron-Silver
+  is 0.7% of seats from few players, many games each, with ranks frozen since 11 Oct, so
+  its "move" is who plays the champion there now, which persists, not the patch
+- What days 1-3 can add is small: the best forecast beats last patch's rate by 0.06-0.07
+  milli-nats a game; win rates catch up within days ("E2 baseline")
+- KR before EUW1, alone as a shrunk lead term: not detected, and it hurt on 16.22 frozen.
+  KR had 5-9k games before T0, under the ~20k the prediction asked for. "The patch's
+  games from before EUW1" (every early platform, in Meio) stands
+- No learning curve: jumpers start about a point above 16.20 (mostly buffed) and stay
+  there; +1 pp (the prediction) is 4 se out. Only 10 jumpers on 16.21
+
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
 data/snap (85,693 ranked solo games, 16.19 + 16.20, all regions), sqlite3 on the Mac;

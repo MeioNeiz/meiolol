@@ -132,11 +132,12 @@ games as a whole would throw a gem's record away.
   shuffled exposures gain 0. Scored on champion-role win rate, days 0-3
 - TS2 Who leads: does Diamond+'s move on days 1-3 predict Gold-Emerald's and
   Iron-Silver's on days 4-10 beyond their own days 1-3; does KR's day (KR and VN2 patch
-  a day before EUW) predict EUW1's day 0. Cubes only, cheap; win rates and shares
+  a day before EUW) predict EUW1's day 0. Done 16.21: no lead, nor KR (model.md "Who
+  leads a patch move")
 - TS3 Behaviour first: pick-rate jumps and build shifts on days 0-1 (high volume) as
   predictors of win-rate moves on days 2-7
 - TS4 Learning curve: after a champion-role's pick rate jumps, does its win rate rise
-  with days since; if so, a small curve term
+  with days since; if so, a small curve term. Done 16.21: no curve (same section)
 - TS5 The winners of TS1-TS4 as the mean of Meio's patch offset d[cr, patch] (0 today),
   scored day by day; confirmed on 16.22
 
