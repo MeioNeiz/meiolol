@@ -149,6 +149,8 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   /lol-end-of-game/v1/eog-stats-block (lcu/eog.zig; positions from detectedTeamPosition,
   else the last in-game tick, else inferred). Left: check APP1's real block; tabs
   (fighting, farming, vision); our draft call against the result
+  Next (rivals' list 1-3): the review walk as site.md Your games RV1. Done when the post
+  game view steps through the same moments
 - APP12 Practice, first pass done (private; Jacob: "test out different drafts
   and see more of the UI before even getting into a lobby"): arch-app.md "Desktop
   window". Left: Jacob's try on the PC; Data Dragon icons when the client is closed;

@@ -23,6 +23,9 @@ layout, colour by impact, build order).
   a cell (a cell with opacity traps the link)
 - Scale tokens in style.css; wrap 1,560, header 48, 29 px table rows; --faint #7a7f88
   (4.6:1), fade floor 0.6
+- SW1 (rivals' list 4, 12) Rare champion-roles pull toward what rare picks win (~39%,
+  learned.md), not the role's average; check (owner lab) every rank filter reads rank at
+  game start (estimates.md E8). Done when Learn's card agrees and each source is listed
 - Next: design build order 5's heat cells and pick/ban bars, 6 (header row, phone
   filters button); Your games' game scale (2.5, 5, 10, 15 points) not wired; whole-box
   links on Your games lists, the home record book and Learn lesson cards
@@ -60,6 +63,11 @@ Next:
   link only stays exact in a fresh tab)
 - Example review per role (B7); "what your draft was up against" from comp leans
   (data-and-model.md step 4)
+- RV1 (research/questions/competitor-steal-beat-avoid.md 1-3) No per-game grade; a walk:
+  summary, then Next through your moments, each saying what it moved against what, good
+  ones named too, ending on one thing to try. Done when Next alone reads a whole review
+- RV2 (same, 7) Progress: lane gold at 14, deaths and win chance lows over your last 10+
+  games. Done when the trend shows beside the game list
 
 ## Daily Draft
 
@@ -180,8 +188,7 @@ measured no win)
   and ban plain rates from 0, bans from stats.Row.bans), Patches | Days (the newest patch
   by UTC day, stats.Trend.days); a rank pick plots its rank file's (no days). No line per
   rank bracket: the Rank pick covers it. By game length (5 buckets), each bucket's games
-  as faint bars
-  after the opponents, from stats.Trend per view
+  as faint bars after the opponents, from stats.Trend per view
 - Build page: tables in a grid of ~490 px cells, rune pages drawn as in game with
   per-rune pick and win rate, "highest win rate" marks pulled by k per kind (File.shrink,
   builds.zig Spread; learned.md Items), never "best"
@@ -287,6 +294,7 @@ detected cross-role kinds. Admin and /private only; the public draft tool follow
   as at the game, from api.db `match_names` (erased with the player, none for blocked
   PUUIDs; live API serves them); streamer mode only hides names live, so finished games
   show everyone. Daily Draft stays nameless unless Jacob says otherwise
+- Method page (estimates.md E9) before the review: no big rival publishes one (list 10)
 - Reviewer walk (screenshots docs/review-shots/), left: GIFs and a short demo video
 - Admin polish, low while the panel is Jacob's only (J9): fix3 leftovers R48-R50, R58,
   R60, R61 (plans in docs/archive/review-2026-10-17/fix3-notes-2026-10-17.md)
