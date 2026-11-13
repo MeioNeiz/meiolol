@@ -186,19 +186,19 @@ test "hydration takes the URL's cell; one with no cell is dropped" {
     try testing.expectEqual(@as(?bp.Kind, null), p.state.open);
 }
 
-test "the best win rate on 400+ games is marked, a 4th row when not in the top 3" {
+test "the highest win rate on 400+ games is marked, a 4th row when not in the top 3" {
     var p: Page = undefined;
     try p.init("");
     defer p.deinit();
     const item4 = cellOf(try p.shown(), "item4");
     try testing.expectEqual(4, std.mem.count(u8, item4, "<tr"));
-    try testing.expect(inOrder(item4, &.{ "Force of Nature", "Sterak", "Death's Dance", "Dead Man", ">best<" }));
+    try testing.expect(inOrder(item4, &.{ "Force of Nature", "Sterak", "Death's Dance", "Dead Man", ">highest<" }));
     // Exhaust Flash, in the top 3: no 4th row
     const spells = cellOf(try p.shown(), "spells");
     try testing.expectEqual(3, std.mem.count(u8, spells, "<tr"));
-    try testing.expect(inOrder(spells, &.{ "Exhaust", ">best<" }));
+    try testing.expect(inOrder(spells, &.{ "Exhaust", ">highest<" }));
     // Item 6: none on 400 games, no mark
-    try testing.expect(std.mem.find(u8, cellOf(try p.shown(), "item6"), ">best<") == null);
+    try testing.expect(std.mem.find(u8, cellOf(try p.shown(), "item6"), ">highest<") == null);
 }
 
 test "Highest WR sorts every cell by win rate, under 400 games after; in the URL" {

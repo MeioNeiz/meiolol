@@ -231,8 +231,8 @@ fn champHref(site: *const Site, ch: Champ, r: Role) ![]const u8 {
     return site.href(.{ .champion = .{ .slug = ch.slug, .role = root.urlRole(r) } });
 }
 
-/// Each role's most played and best win rate over the champions table's games floor,
-/// with the change since the last patch
+/// Each role's most played and highest win rates over the champions table's games floor,
+/// in the table's order (ui.tiers.sortKey), with the change since the last patch
 fn champsOf(site: *const Site, up: []const u8) !?*hp.HomeChamps {
     const a = site.arena;
     if (site.games == 0) return null;
@@ -250,9 +250,10 @@ fn champsOf(site: *const Site, up: []const u8) !?*hp.HomeChamps {
             x.* = if (cr.games == 0) null else @floatFromInt(cr.games);
         }
         played.* = try l.picks(r, scores);
+        const prior: core.banimpact.Prior = .of(&site.stats, r);
         for (site.champs, scores) |ch, *x| {
             const cr = site.stats.champRole(r, ch.c);
-            x.* = if (cr.games < floor) null else @as(f64, @floatFromInt(cr.wins)) / @as(f64, @floatFromInt(cr.games));
+            x.* = if (cr.games < floor) null else ui.tiers.sortKey(prior, cr.games, cr.wins);
         }
         best.* = try l.picks(r, scores);
     }

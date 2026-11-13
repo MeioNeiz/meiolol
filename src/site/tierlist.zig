@@ -35,15 +35,17 @@ const Row = struct {
     share: f64,
     /// Under min_pick_rate or min_role_share: listed only on request
     rare: bool,
+    key: f64,
 };
 
-/// Every champion's games in `role`, or in each role it plays when null, by the win rate
-/// shown (ties most played first; the minimum games keeps a few lucky games off the top);
-/// the browser sorts by any column (ui.tiers)
+/// Every champion's games in `role`, or in each role it plays when null, by win rate
+/// pulled toward its role's (sortKey; ties most played first): a few lucky games can't top
+/// it, as the method page says. The browser sorts by any column (ui.tiers)
 fn tierRows(site: *const Site, role: ?Role) ![]Row {
     var rows: std.ArrayList(Row) = .empty;
     for (Role.all) |r| {
         if (role != null and role.? != r) continue;
+        const prior: core.banimpact.Prior = .of(&site.stats, r);
         for (site.champs) |ch| {
             const cr = site.stats.champRole(r, ch.c);
             if (cr.games == 0) continue;
@@ -55,6 +57,7 @@ fn tierRows(site: *const Site, role: ?Role) ![]Row {
                 .wins = cr.wins,
                 .share = share,
                 .rare = ratio(cr.games, site.games) < min_pick_rate or share < min_role_share,
+                .key = ui.tiers.sortKey(prior, cr.games, cr.wins),
             });
         }
     }
@@ -65,7 +68,7 @@ fn tierRows(site: *const Site, role: ?Role) ![]Row {
     }.f);
     std.mem.sort(Row, rows.items, {}, struct {
         fn f(_: void, a: Row, b: Row) bool {
-            return ratio(a.wins, a.games) > ratio(b.wins, b.games);
+            return a.key > b.key;
         }
     }.f);
     return rows.items;
@@ -218,14 +221,17 @@ pub fn rankFiles(site: *const Site, files: anytype) !void {
                     .rates = .{ x.pick, x.ban },
                 });
             };
-            try influence(a, rows.items);
-            std.mem.sort(ui.tiers.Row, rows.items, {}, struct {
-                fn f(_: void, x: ui.tiers.Row, y: ui.tiers.Row) bool {
-                    const rx = ratio(x.wins, x.games);
-                    const ry = ratio(y.wins, y.games);
-                    return if (rx != ry) rx > ry else x.games > y.games;
+            const keys = try influence(a, rows.items);
+            const order = try a.alloc(usize, rows.items.len);
+            for (order, 0..) |*o, i| o.* = i;
+            const By = struct { rows: []const ui.tiers.Row, keys: []const f64 };
+            std.mem.sort(usize, order, By{ .rows = rows.items, .keys = keys }, struct {
+                fn f(c: By, i: usize, j: usize) bool {
+                    return if (c.keys[i] != c.keys[j]) c.keys[i] > c.keys[j] else c.rows[i].games > c.rows[j].games;
                 }
             }.f);
+            const sorted = try a.alloc(ui.tiers.Row, rows.items.len);
+            for (sorted, order) |*o, i| o.* = rows.items[i];
             const games: u32 = @intCast(made.gamesAt(vi, g));
             d.* = .{
                 .games = games,
@@ -239,7 +245,7 @@ pub fn rankFiles(site: *const Site, files: anytype) !void {
                 .query = v.query(),
                 .rank = @fromBackingInt(@intCast(g + 1)),
                 .champs = champs,
-                .rows = rows.items,
+                .rows = sorted,
             };
         }
         var out: std.ArrayList(u8) = .empty;
@@ -248,8 +254,10 @@ pub fn rankFiles(site: *const Site, files: anytype) !void {
     }
 }
 
-/// Each row's influence from its rank group's rates, priors from the group's rows by role
-fn influence(a: std.mem.Allocator, rows: []ui.tiers.Row) !void {
+/// Each row's influence from its rank group's rates, priors from the group's rows by role;
+/// returns each row's sortKey under the same priors
+fn influence(a: std.mem.Allocator, rows: []ui.tiers.Row) ![]const f64 {
+    const keys = try a.alloc(f64, rows.len);
     const cells = try a.alloc(core.statsfile.Counts, rows.len);
     for (Role.all) |r| {
         var n: usize = 0;
@@ -258,11 +266,13 @@ fn influence(a: std.mem.Allocator, rows: []ui.tiers.Row) !void {
             n += 1;
         };
         const prior: core.banimpact.Prior = .ofCounts(cells[0..n]);
-        for (rows) |*x| if (@backingInt(x.role) == @backingInt(r)) {
+        for (rows, keys) |*x, *k| if (@backingInt(x.role) == @backingInt(r)) {
             const rt = x.rates.?;
             x.influence = @floatCast(prior.scoreRates(x.wins, x.games, rt[0] / 100, rt[1] / 100));
+            k.* = ui.tiers.sortKey(prior, x.games, x.wins);
         };
     }
+    return keys;
 }
 
 /// The current patch against the previous one, as the base rows' (patchday.PatchDay

@@ -107,7 +107,10 @@ const method_md =
     \\  Emerald is mostly Platinum and Emerald. A champion page's Rank filter uses the
     \\  player's own tier and counts that tier and above (Gold+ includes Platinum and
     \\  higher); below Platinum it only adds the few lower-ranked players in these
-    \\  games.
+    \\  games. Every rank filter reads the tier as we stored it, often days after the
+    \\  game, so it partly knows the result: a winner may have climbed by then. Diamond+
+    \\  players win about 51% of games we stored within 6 hours, 54% of those stored 3 or
+    \\  more days later, so a high rank's win rates read a little high.
     \\- **Sample size**: every chart states patch, rank and the number of games.
     \\  Every matchup gets a page; under 200 games, or while less than half of the line
     \\  comes from the matchup's own games, it is greyed out: thin curves still move as
@@ -200,11 +203,11 @@ const method_md =
     \\  at 6, 11 and 16, otherwise the ability with the most points), except for kits that
     \\  break those rules (R before 6, an ability past 5 points), which count only when
     \\  the game reached 18.
-    \\- **Highest win rate**: marked among options with 100 or more games, once each
-    \\  is pulled toward the average of its kind by k games and taken at the low end of its
-    \\  range, so a few lucky games can't top it. k comes from how much options of a kind
-    \\  really differ across every champion (about 6,000 games for a rune, 600 to 1,000 for
-    \\  items); against one lane opponent, from every matchup.
+    \\- **Highest win rate**: marked among options with 400 or more games, once each
+    \\  is pulled toward its slot's win rate by k games, so a few lucky games can't top it;
+    \\  the rate shown stays raw. k comes from how much options of a kind really differ
+    \\  across every champion (about 6,000 games for a rune, 600 to 1,000 for items);
+    \\  against one lane opponent, from every matchup.
     \\- **Sample size**: every row shows games and its share. Every win rate comes with
     \\  its 80% range; one wider than ±6 points is faded, never hidden.
     \\  Games that reach three finished items run long, so their win rates are for

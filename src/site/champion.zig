@@ -278,7 +278,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         break :blk .{ @floatCast(m.win.delta()), @floatCast((range[1] - range[0]) / 2) };
     } else null else null;
     const picked = builds_page.forChampion(site, site.view, ch, r);
-    const lean: ?i16 = if (site.lean) |l| if (l.get(ch.id, r)) |row| (if (row.enough()) @intFromFloat(@round(row.gold / 10) * 10) else null) else null else null;
+    const lean: ?i16 = if (site.lean) |l| if (l.get(ch.id, r)) |row| (if (row.goldClear()) @intFromFloat(@round(row.gold / 10) * 10) else null) else null else null;
 
     var by_patch: []cp.Patch = &.{};
     var by_day: []cp.Day = &.{};
@@ -367,18 +367,18 @@ pub const hard_max = 3;
 pub fn hardAgainst(site: *const Site, ch: Champ, r: Role) ![]const u16 {
     const rel = try laneRel(site, ch, r) orelse return &.{};
     var buf: [hard_max]u16 = undefined;
-    return site.arena.dupe(u16, hardest(rel.opps, &buf));
+    return site.arena.dupe(u16, hardest(rel.opps, rel.k, &buf));
 }
 
 /// The lowest win rates under 50% among `opps` not past fmt.wide_range and with a page,
-/// ties most games first
-fn hardest(opps: []const cp.Opp, buf: *[hard_max]u16) []const u16 {
+/// by cp.Opp.shrunk under `k` (a few lucky games can't top it), ties most games first
+fn hardest(opps: []const cp.Opp, k: f32, buf: *[hard_max]u16) []const u16 {
     var top: [hard_max]cp.Opp = undefined;
     var n: usize = 0;
     for (opps) |o| {
         if (!o.page or 2 * @as(u64, o.wins) >= o.games or ui.fmt.wide(ui.fmt.range(o.games, o.wins))) continue;
         var at = n;
-        while (at > 0 and tougher(o, top[at - 1])) at -= 1;
+        while (at > 0 and tougher(o, top[at - 1], k)) at -= 1;
         if (at == hard_max) continue;
         if (n < hard_max) n += 1;
         var i = n - 1;
@@ -389,9 +389,9 @@ fn hardest(opps: []const cp.Opp, buf: *[hard_max]u16) []const u16 {
     return buf[0..n];
 }
 
-fn tougher(a: cp.Opp, b: cp.Opp) bool {
-    const ra = @as(u64, a.wins) * b.games;
-    const rb = @as(u64, b.wins) * a.games;
+fn tougher(a: cp.Opp, b: cp.Opp, k: f32) bool {
+    const ra = a.shrunk(k);
+    const rb = b.shrunk(k);
     if (ra != rb) return ra < rb;
     return a.games > b.games;
 }
@@ -459,7 +459,7 @@ fn relOf(site: *const Site, ch: Champ, cr: Counts, pairs: Pairs, locked: ?[]cons
             return x.games > y.games;
         }
     }.f);
-    return .{ .ally = pairs.ally, .role = uiRole(pairs.r2), .opps = opps.items, .rare = rare };
+    return .{ .ally = pairs.ally, .role = uiRole(pairs.r2), .opps = opps.items, .rare = rare, .k = @floatCast(k) };
 }
 
 /// ch's lane against the average opponent in r, by minute: its pairs' estimates from its
@@ -996,10 +996,26 @@ test "hard against: the lowest sure rates under 50% with a page, ties most games
     };
     var buf: [hard_max]u16 = undefined;
     // 40%, then 45% twice with the more played first; 50% and 55% left out
-    try std.testing.expectEqualSlices(u16, &.{ 5, 4, 3 }, hardest(&opps, &buf));
+    try std.testing.expectEqualSlices(u16, &.{ 5, 4, 3 }, hardest(&opps, 0, &buf));
     // 50% and over: none, however low among them
-    try std.testing.expectEqual(0, hardest(&.{ opps[0], opps[6], opps[1] }, &buf).len);
-    try std.testing.expectEqual(0, hardest(&.{opps[2]}, &buf).len);
+    try std.testing.expectEqual(0, hardest(&.{ opps[0], opps[6], opps[1] }, 0, &buf).len);
+    try std.testing.expectEqual(0, hardest(&.{opps[2]}, 0, &buf).len);
+}
+
+test "hard against: picked on the rate pulled toward usual, so a thin 33% doesn't top" {
+    const O = cp.Opp;
+    // Usual 50%, k 600: vs usual (wins - games / 2) / (games + 600), points
+    const opps = [_]O{
+        .{ .champ = 3, .games = 400, .wins = 180, .usual = -2, .page = true },
+        .{ .champ = 4, .games = 800, .wins = 360, .usual = -20.0 / 7.0, .page = true },
+        .{ .champ = 5, .games = 400, .wins = 160, .usual = -4, .page = true },
+        .{ .champ = 7, .games = 150, .wins = 50, .usual = -10.0 / 3.0, .page = true },
+    };
+    var buf: [hard_max]u16 = undefined;
+    // Raw: 33%, 40%, 45%, 45%; pulled in: 46.0, 46.7, 47.1, 48.0
+    try std.testing.expectEqualSlices(u16, &.{ 7, 5, 4 }, hardest(&opps, 0, &buf));
+    try std.testing.expectEqualSlices(u16, &.{ 5, 7, 4 }, hardest(&opps, 600, &buf));
+    try std.testing.expectApproxEqAbs(46.667, opps[3].shrunk(600), 1e-3);
 }
 
 test "usual and vs usual" {

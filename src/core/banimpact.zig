@@ -11,7 +11,7 @@ const statsfile = @import("statsfile.zig");
 
 const Role = roles.Role;
 const Stats = statsfile.Stats;
-const Counts = statsfile.Counts;
+pub const Counts = statsfile.Counts;
 
 /// The role's average win rate and k, the games that pull a champion's rate halfway to
 /// it, from how much true champion win rates in the role differ (method of moments over

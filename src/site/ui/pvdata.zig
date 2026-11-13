@@ -36,7 +36,7 @@ pub const Gap = enum {
     none,
     /// The renderer has no fitted model (data/export/meio.bin)
     no_model,
-    /// Master+: its bracket is wider than the pick, so raw only
+    /// Emerald+ or Master+: no bracket pool as narrow as the pick, so raw only
     master,
     /// A lock Meio doesn't model (rune page, spells, a core path, ...)
     kind,

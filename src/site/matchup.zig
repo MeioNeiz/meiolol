@@ -161,7 +161,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     const build_data: ?*cp.BuildData = if (builds.forVs(site, r, x, y)) |b| blk: {
         const d = try a.create(cp.BuildData);
         const roles = try a.alloc(cp.BuildRole, 1);
-        roles[0] = .{ .role = champion.uiRole(r), .build = try buildblock.dataVs(a, b.f, b.b, x.name, b.f.get(x.id, r)), .patch = b.otherPatch(site.view), .older = b.newer != null };
+        roles[0] = .{ .role = champion.uiRole(r), .build = try buildblock.dataVs(a, b.f, b.b, x.name, b.f.get(x.id, r), true), .patch = b.otherPatch(site.view), .older = b.newer != null };
         d.* = .{ .roles = roles, .against = y.name };
         break :blk d;
     } else if (builds.forChampion(site, site.view, x, r)) |b| blk: {

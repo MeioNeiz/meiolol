@@ -26,7 +26,7 @@ const min_style_games = 100;
 /// rune page's keystone when the file has them. `champion`: its name; `damage`: per
 /// champion id 1 AD, 2 AP (Site.damage)
 pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8, damage: []const u8) !bp.Data {
-    var d = try dataVs(a, f, b, champion, null);
+    var d = try dataVs(a, f, b, champion, null, false);
     d.vs = try groups(a, f, b, damage);
     d.styles = try styles(a, f, b);
     const ahead = f.getLead(b.champion, b.role, .ahead);
@@ -47,7 +47,7 @@ pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []con
             if (l.keystone == k) break;
         } else if (f.getKeystone(b.champion, b.role, k)) |x| try locks.append(a, .{
             .keystone = k,
-            .slots = (try dataVs(a, f, x, "", null)).slots,
+            .slots = (try dataVs(a, f, x, "", null, false)).slots,
             .games = x.games,
             .wins = x.wins,
         });
@@ -94,13 +94,14 @@ fn leadSlots(a: std.mem.Allocator, f: *const File, b: File.Build, all: []const b
         .boots, .core, .item4, .item5, .item6 => {},
         else => try out.append(a, s),
     };
-    try out.appendSlice(a, (try dataVs(a, f, b, "", null)).slots);
+    try out.appendSlice(a, (try dataVs(a, f, b, "", null, false)).slots);
     return out.items;
 }
 
 /// A matchup's `b`, with the champion's `usual` build: each slot's "as usual" option and
-/// the runes the matchup moves
-pub fn dataVs(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8, usual: ?File.Build) !bp.Data {
+/// the runes the matchup moves. `vs`: b is a matchup's, its slots pulled by File.shrink's
+/// matchup k
+pub fn dataVs(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8, usual: ?File.Build, vs: bool) !bp.Data {
     var slots: std.ArrayList(bp.Slot) = .empty;
     const kinds = [_]struct { Kind, bp.Kind }{ .{ .spells, .spells }, .{ .start, .start }, .{ .boots, .boots }, .{ .core3, .core }, .{ .item4, .item4 }, .{ .item5, .item5 }, .{ .item6, .item6 }, .{ .skills, .skills }, .{ .skill_path, .skill_path } };
     for (kinds) |k| {
@@ -108,7 +109,7 @@ pub fn dataVs(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []c
         if (rows.options.len == 0) continue;
         const options = try a.alloc(bp.Option, rows.options.len);
         for (options, rows.options) |*o, x| o.* = try option(a, f, b, k[0], x);
-        try slots.append(a, .{ .kind = k[1], .games = rows.games, .wins = rows.wins, .options = options, .usual = usualOf(rows, if (usual) |u| u.get(k[0]) else null) });
+        try slots.append(a, .{ .kind = k[1], .games = rows.games, .wins = rows.wins, .options = options, .usual = usualOf(rows, if (usual) |u| u.get(k[0]) else null), .k = kOf(f, k[0], vs) });
     }
     return .{
         .runes = try runes(a, f, b, if (usual) |u| u.get(.rune) else null),
@@ -118,6 +119,12 @@ pub fn dataVs(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []c
         .games = b.games,
         .wins = b.wins,
     };
+}
+
+/// File.shrink's k for `kind`, 0 when the file has none
+fn kOf(f: *const File, kind: Kind, vs: bool) f32 {
+    for (f.shrink) |x| if (x.kind == kind) return @floatCast(if (vs) x.vs else x.k);
+    return 0;
 }
 
 /// Where the usual build's most played option is among the matchup's `rows`

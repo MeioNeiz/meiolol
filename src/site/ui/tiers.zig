@@ -10,6 +10,8 @@
 //! its data file is fetched and the board shown faded until it is in. A rank above
 //! Platinum+ the same way: the view's rank file (rank_paths)
 const std = @import("std");
+// One file of core, not its root: fmtlint follows every file an import reaches
+const banimpact = @import("core").banimpact;
 const tree = @import("tree.zig");
 const url = @import("url.zig");
 const phrase = @import("phrase.zig");
@@ -229,6 +231,8 @@ pub const Line = struct {
     /// Under All: the role icon beside the name
     all: bool,
     hard: []const hardagainst.Face,
+    /// The win rate column's sort: sortKey under its role's prior in the data
+    key: f64,
 
     fn row(l: *const Line) *const Row {
         return &l.d.rows[l.i];
@@ -273,7 +277,14 @@ fn offRole(l: *const Line) bool {
     return l.row().share < off_role;
 }
 fn rateOf(l: *const Line) f64 {
-    return l.rate();
+    return l.key;
+}
+
+/// A win rate pulled toward its role's by the prior's k games, %: the order a win rate
+/// sorts in (tables, "Nth of M"), so a few lucky games can't top it; the shown rate stays
+/// raw
+pub fn sortKey(prior: banimpact.Prior, games: u32, wins: u32) f64 {
+    return 100 * (prior.base + prior.edge(wins, games));
 }
 fn influenceOf(l: *const Line) f64 {
     return l.row().influence;
@@ -429,6 +440,17 @@ pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
     for (d.champs, icons) |c, *s| s.* = try a.print(champ.icon_fmt, .{ d.ddragon, c.key });
     const all = try a.alloc(Line, d.rows.len);
     var n: [Role.names.len]usize = @splat(0);
+    // As the server's: every row of the role, rare picks too
+    var priors: [Role.names.len]banimpact.Prior = undefined;
+    const cells = try a.alloc(banimpact.Counts, d.rows.len);
+    for (&priors, 0..) |*p, k| {
+        var m: usize = 0;
+        for (d.rows) |x| if (@backingInt(x.role) == k) {
+            cells[m] = .{ .games = x.games, .wins = x.wins };
+            m += 1;
+        };
+        p.* = .ofCounts(cells[0..m]);
+    }
     for (d.rows, all, 0..) |x, *l, i| {
         const c = d.champs[x.champ];
         l.* = .{
@@ -440,6 +462,7 @@ pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
             .shape = if (x.spread) |s| try violin.path(a, &s.shape, 100 * share(.{ x.games, x.wins }) - shape_reach, shape_step) else null,
             .all = true,
             .hard = try hardFaces(a, d, x, base, icons),
+            .key = sortKey(priors[@backingInt(x.role)], x.games, x.wins),
         };
         n[@backingInt(x.role)] += 1;
     }

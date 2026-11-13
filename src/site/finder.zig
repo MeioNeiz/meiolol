@@ -127,11 +127,13 @@ fn index(site: *const Site, id: u32) ?u16 {
     return @intCast(site.by_c[c] orelse return null);
 }
 
-/// A role's lane pairs with a page and list_games, from the curve's side
-const LanePair = struct { role: ui.role.Role, x: u16, y: u16, games: u32, wins: u32, gold: i16 };
+/// A role's lane pairs with a page and list_games, from the curve's side. `shrunk`: x's
+/// win rate pulled toward usual by the role's champion.usualK, the champion page's vs usual
+const LanePair = struct { role: ui.role.Role, x: u16, y: u16, games: u32, wins: u32, gold: i16, shrunk: f64 };
 
 fn lanePairs(site: *const Site, curves: *const Curves, r: Role) ![]const LanePair {
     var list: std.ArrayList(LanePair) = .empty;
+    const k = champion.usualK(&site.stats, r);
     for (curves.curves) |*cv| {
         const hd = cv.header;
         if (hd.role != @backingInt(r) or !matchup.isPage(hd)) continue;
@@ -141,25 +143,35 @@ fn lanePairs(site: *const Site, curves: *const Curves, r: Role) ![]const LanePai
         if (e.games < list_games) continue;
         const v: core.curvesfile.View = .{ .curve = cv, .flipped = false };
         const gold = v.estimate(.gold, core.curvesfile.lane_minute - 1).mean;
-        try list.append(site.arena, .{ .role = champion.uiRole(r), .x = x, .y = y, .games = e.games, .wins = e.wins, .gold = gold });
+        const xr = site.stats.champRole(r, site.champs[x].c);
+        const yr = site.stats.champRole(r, site.champs[y].c);
+        const u = champion.usual(root.ratio(xr.wins, xr.games), root.ratio(yr.wins, yr.games));
+        const shrunk = u + champion.VsUsual.of(e.wins, e.games, u, k).mean;
+        try list.append(site.arena, .{ .role = champion.uiRole(r), .x = x, .y = y, .games = e.games, .wins = e.wins, .gold = gold, .shrunk = shrunk });
     }
     return list.items;
 }
 
-/// From the side that wins less, the lowest win rate first: in the order shown, as on the
-/// champions list (list_games keeps the thin pairs off)
+/// From the side that wins less, the lowest win rate first by `shrunk` (a few lucky games
+/// can't top it, as on the champions list); the rate shown stays raw
 fn hardest(a: std.mem.Allocator, pairs: []const LanePair) ![]const fd.Pair {
-    const list = try a.alloc(fd.Pair, pairs.len);
+    const Keyed = struct { p: fd.Pair, key: f64 };
+    const list = try a.alloc(Keyed, pairs.len);
     for (pairs, list) |p, *o| {
         const swap = 2 * p.wins > p.games;
-        o.* = .{ .role = p.role, .x = if (swap) p.y else p.x, .y = if (swap) p.x else p.y, .games = p.games, .wins = if (swap) p.games - p.wins else p.wins };
+        o.* = .{
+            .p = .{ .role = p.role, .x = if (swap) p.y else p.x, .y = if (swap) p.x else p.y, .games = p.games, .wins = if (swap) p.games - p.wins else p.wins },
+            .key = if (swap) 1 - p.shrunk else p.shrunk,
+        };
     }
-    std.mem.sort(fd.Pair, list, {}, struct {
-        fn f(_: void, p: fd.Pair, q: fd.Pair) bool {
-            return @as(u64, p.wins) * q.games < @as(u64, q.wins) * p.games;
+    std.mem.sort(Keyed, list, {}, struct {
+        fn f(_: void, p: Keyed, q: Keyed) bool {
+            return p.key < q.key;
         }
     }.f);
-    return list[0..@min(list.len, kept)];
+    const out = try a.alloc(fd.Pair, @min(list.len, kept));
+    for (out, list[0..out.len]) |*o, x| o.* = x.p;
+    return out;
 }
 
 /// From the side ahead, the biggest gold lead at lane_minute first (the curve's estimate,
@@ -284,15 +296,15 @@ test "moved: clear moves only, biggest first, from the side that gained; All" {
     try std.testing.expectEqual(ui.role.Role.mid, every[1].role);
 }
 
-test "hardest: the lowest win rate first, from the side that wins less" {
+test "hardest: the lowest shrunk win rate first, from the side that wins less" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const got = try hardest(arena.allocator(), &.{
-        // 39.7% on many games, 39.2% on fewer: 39.2 first, as shown
-        .{ .role = .mid, .x = 1, .y = 2, .games = 5000, .wins = 1985, .gold = 0 },
-        .{ .role = .support, .x = 4, .y = 3, .games = 600, .wins = 365, .gold = 0 },
+        // 39.7% on many games, 39.2% on fewer: shrunk, the many games' is the lower
+        .{ .role = .mid, .x = 1, .y = 2, .games = 5000, .wins = 1985, .gold = 0, .shrunk = 0.40 },
+        .{ .role = .support, .x = 4, .y = 3, .games = 600, .wins = 365, .gold = 0, .shrunk = 0.57 },
     });
-    try std.testing.expectEqual(3, got[0].x);
-    try std.testing.expectEqual(235, got[0].wins);
-    try std.testing.expectEqual(1, got[1].x);
+    try std.testing.expectEqual(1, got[0].x);
+    try std.testing.expectEqual(3, got[1].x);
+    try std.testing.expectEqual(235, got[1].wins);
 }

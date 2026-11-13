@@ -119,7 +119,7 @@ fn goldOf(in: *const Input, o: Opp) ?i16 {
 /// Input.champs' index of the opponent locked
 pub const Lock = struct { on: ?u16 = null };
 
-pub const Ranked = union(enum) { few, lane: struct { counts: Counts, opps: []const Opp, rare: u16 } };
+pub const Ranked = union(enum) { few, lane: struct { counts: Counts, opps: []const Opp, rare: u16, k: f32 = 0 } };
 
 pub const MatchupGrid = struct {
     /// Input.rels' index
@@ -186,6 +186,7 @@ pub const MatchupGrid = struct {
         var counts = in.counts;
         var opps = rel.opps;
         var rare = rel.rare;
+        var shrink_k = rel.k;
         var none = false;
         if (lane) if (in.ranked) |x| switch (x) {
             .few => none = true,
@@ -193,6 +194,7 @@ pub const MatchupGrid = struct {
                 counts = y.counts;
                 opps = y.opps;
                 rare = y.rare;
+                shrink_k = y.k;
             },
         };
         const own = if (in.meio) |m| (if (m.stack) |e| 100 * e.p else rate(counts)) else rate(counts);
@@ -206,8 +208,14 @@ pub const MatchupGrid = struct {
             h.oom = true;
             return .none;
         };
+        // What the tiles pick extremes on: a counted win rate pulled toward usual, as
+        // the method page says of sorts; estimates and the other measures as drawn
+        const keys = h.mem.alloc(f32, opps.len) catch {
+            h.oom = true;
+            return .none;
+        };
         var n: usize = 0;
-        for (opps, 0..) |o, k| {
+        for (opps, 0..) |o, i| {
             const wo = winOf(in, o);
             const est = wo.meio;
             const w = wo.rate;
@@ -227,13 +235,14 @@ pub const MatchupGrid = struct {
                 .thin = faded(in, o),
                 .href = matchHref(h, in, o),
             };
-            of[n] = @intCast(k);
+            keys[n] = if (g.measure == .win and !est) @floatCast(o.shrunk(shrink_k) - raw_own) else x;
+            of[n] = @intCast(i);
             n += 1;
         }
         g.dots.dots = dots[0..n];
         // The locked lane opponent is chosen until another is: its brief holds Unlock
         if (lane and g.dots.sel == null) if (in.lock) |l| if (l.on) |c| {
-            for (of[0..n], 0..) |k, i| if (opps[k].champ == c) {
+            for (of[0..n], 0..) |oi, i| if (opps[oi].champ == c) {
                 g.dots.sel = @intCast(i);
                 break;
             };
@@ -248,7 +257,7 @@ pub const MatchupGrid = struct {
             h.oom = true;
             return .none;
         };
-        const e = ends(buf, dots[0..n]);
+        const e = ends(buf, dots[0..n], keys[0..n]);
 
         var rels: [role.Role.all.len]rolepicker.Item = undefined;
         for (role.Role.all, &rels) |x, *it| {
@@ -374,10 +383,10 @@ pub const MatchupGrid = struct {
 
 const Ends = struct { lo: []const u16, hi: []const u16 };
 
-/// The tile rows' dots, `buf` one slot per dot: the lowest and the highest by the measure
-/// among the sure ones, hardest and easiest first; fewer than two rows' worth split, the
-/// harder half the larger. None sure: no rows, the plot stays in a narrow card too
-fn ends(buf: []u16, dots: []const dotplot.Dot) Ends {
+/// The tile rows' dots, `buf` one slot per dot: the lowest and the highest by `keys` (one
+/// per dot) among the sure ones, hardest and easiest first; fewer than two rows' worth
+/// split, the harder half the larger. None sure: no rows, the plot stays in a narrow card
+fn ends(buf: []u16, dots: []const dotplot.Dot, keys: []const f32) Ends {
     var n: usize = 0;
     for (dots, 0..) |d, i| if (!d.thin) {
         buf[n] = @intCast(i);
@@ -385,13 +394,15 @@ fn ends(buf: []u16, dots: []const dotplot.Dot) Ends {
     };
     const s = buf[0..n];
     const Ctx = struct {
-        fn less(ds: []const dotplot.Dot, a: u16, b: u16) bool {
-            if (ds[a].x != ds[b].x) return ds[a].x < ds[b].x;
-            return ds[a].games > ds[b].games;
+        ds: []const dotplot.Dot,
+        ks: []const f32,
+        fn less(c: @This(), a: u16, b: u16) bool {
+            if (c.ks[a] != c.ks[b]) return c.ks[a] < c.ks[b];
+            return c.ds[a].games > c.ds[b].games;
         }
     };
     // Insertion, as DotPlot's order: std.mem.sort's block sort costs ~9 KB of wasm
-    std.sort.insertion(u16, s, dots, Ctx.less);
+    std.sort.insertion(u16, s, Ctx{ .ds = dots, .ks = keys }, Ctx.less);
     const lo = @min(tiles_max, (n + 1) / 2);
     const hi = @min(tiles_max, n - lo);
     std.mem.reverse(u16, s[n - hi ..]);
@@ -604,18 +615,29 @@ test "the tile rows: the sure ends, hardest and easiest first; few split, the ha
     // The hardest and the easiest are wide: the next ones stand in
     ds[0].thin = true;
     ds[13].thin = true;
-    const e = ends(&buf, &ds);
+    const e = ends(&buf, &ds, &xsOf(&ds));
     try testing.expectEqualSlices(u16, &.{ 1, 2, 3, 4, 5, 6 }, e.lo);
     try testing.expectEqualSlices(u16, &.{ 12, 11, 10, 9, 8, 7 }, e.hi);
     // 5 sure: 3 harder, 2 easier, by x whatever the order given
     const few = [_]dotplot.Dot{ testDot(2, false), testDot(-1, false), testDot(9, true), testDot(0.5, false), testDot(-3, false), testDot(1, false) };
-    const f = ends(&buf, &few);
+    const f = ends(&buf, &few, &xsOf(&few));
     try testing.expectEqualSlices(u16, &.{ 4, 1, 3 }, f.lo);
     try testing.expectEqualSlices(u16, &.{ 0, 5 }, f.hi);
     // None sure: no rows
     const thin = [_]dotplot.Dot{ testDot(1, true), testDot(-1, true) };
-    try testing.expectEqual(@as(usize, 0), ends(&buf, &thin).lo.len);
-    try testing.expectEqual(@as(usize, 0), ends(&buf, &.{}).lo.len);
+    try testing.expectEqual(@as(usize, 0), ends(&buf, &thin, &xsOf(&thin)).lo.len);
+    try testing.expectEqual(@as(usize, 0), ends(&buf, &.{}, &.{}).lo.len);
+    // By keys, not x: the -3 dot, pulled in to 1, is no longer the hardest
+    const keys = [_]f32{ 2, -1, 0.5, -0.2, 1 };
+    const g = ends(&buf, few[0..5], &keys);
+    try testing.expectEqualSlices(u16, &.{ 1, 3 }, g.lo);
+    try testing.expectEqualSlices(u16, &.{ 0, 4 }, g.hi);
+}
+
+fn xsOf(ds: anytype) [@typeInfo(@TypeOf(ds.*)).array.len]f32 {
+    var out: [@typeInfo(@TypeOf(ds.*)).array.len]f32 = undefined;
+    for (&out, ds) |*o, d| o.* = d.x;
+    return out;
 }
 
 test "on the fake DOM: tiles name the champion's figure, a tap picks one and opens its brief" {

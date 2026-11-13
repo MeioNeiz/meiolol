@@ -4,8 +4,9 @@
 //! container. Each cell lists its top 3 options as compact DataTable rows, most played
 //! first: pick share, win rate coloured against the slot's own (which choice is better
 //! here, Jacob 25 Oct), games; the quieter reading (the rate minus the champion's)
-//! only in an open cell. The slot's highest win rate on solid_games is marked "best", a
-//! 4th row when not in the top 3.
+//! only in an open cell. The slot's highest win rate on solid_games, pulled toward the
+//! slot's by Slot.k (learned.md Items: never "best"), is marked "highest", a 4th row when
+//! not in the top 3.
 //! Most picked | Highest WR (lolalytics' build toggle, Jacob 26 Oct) re-sorts every cell
 //! by win rate, options under solid_games after. A matchup's marks the champion's usual
 //! choice "as usual" and dims a cell led by it. Tap a cell's "N more" to open it in
@@ -43,7 +44,7 @@ const N = tree.N;
 pub const name = "BuildPanel";
 pub const scope = .{".c-build"};
 
-/// Under this many games an option can't be "best" and sorts after the others by win
+/// Under this many games an option can't be marked highest and sorts after the others by win
 /// rate. Its rate fades by its range instead (win)
 pub const solid_games = 400;
 /// Options in a closed cell
@@ -114,6 +115,9 @@ pub const Slot = struct {
     options: []const Option,
     /// A matchup's: the option the champion plays most in all its games ("as usual")
     usual: ?u8 = null,
+    /// Games that pull an option's win rate halfway to the slot's (builds.File.shrink):
+    /// Highest WR and its mark go by the pulled rate, the rate shown stays raw. 0: raw
+    k: f32 = 0,
 };
 
 pub const Lead = struct { slots: []const Slot, games: u32, wins: u32 };
@@ -160,7 +164,7 @@ const W = struct {
     pub const more = Phrase("{n:int} more");
     pub const own_note = plain("The option's win rate minus the champion's in the role. Late items read high: games that reach them were often won already.");
     pub const min = plain("min");
-    pub const best = plain("best");
+    pub const best = plain("highest");
     pub const as_usual = plain("as usual");
     pub const sort = plain("Sort");
     pub const most_picked = plain("Most picked");
@@ -212,8 +216,10 @@ const Ctx = struct {
     open: bool = false,
     /// Core: the most played path, whose items dim in the others
     top: []const art.Art = &.{},
-    /// The highest win rate of two or more options on solid_games
+    /// The highest pulled win rate of two or more options on solid_games
     best: ?*const Option = null,
+    /// Slot.k
+    k: f64 = 0,
     usual: ?*const Option = null,
     /// The slot's options, which a lock tap indexes
     options: []const Option = &.{},
@@ -221,16 +227,22 @@ const Ctx = struct {
     host: ?*BuildPanel = null,
 };
 
-/// The highest win rate on solid_games, when two or more options have that many
-fn bestOf(options: []const Option) ?*const Option {
+/// The highest pulled win rate on solid_games, when two or more options have that many
+fn bestOf(options: []const Option, ref: f64, k: f64) ?*const Option {
     var best: ?*const Option = null;
     var solid: usize = 0;
     for (options) |*o| {
         if (o.games < solid_games) continue;
         solid += 1;
-        if (best == null or rate(o.games, o.wins) > rate(best.?.games, best.?.wins)) best = o;
+        if (best == null or pulled(o, ref, k) > pulled(best.?, ref, k)) best = o;
     }
     return if (solid >= 2) best else null;
+}
+
+/// `o`'s win rate pulled toward the slot's (`ref`, %) by k games, %
+fn pulled(o: *const Option, ref: f64, k: f64) f64 {
+    const n: f64 = @floatFromInt(o.games);
+    return (100 * @as(f64, @floatFromInt(o.wins)) + k * ref) / @max(n + k, 1);
 }
 
 pub const Row = struct {
@@ -247,7 +259,7 @@ pub const Row = struct {
         return @floatFromInt(r.o.games);
     }
     fn winSort(r: *const Row) f64 {
-        return if (r.o.games < solid_games) -1 else rate(r.o.games, r.o.wins);
+        return if (r.o.games < solid_games) -1 else pulled(r.o, r.c.ref, r.c.k);
     }
     fn ownSort(r: *const Row) f64 {
         return rate(r.o.games, r.o.wins) - r.c.own;
@@ -503,7 +515,8 @@ pub const BuildPanel = struct {
                 .ref = rate(s.games, s.wins),
                 .own = own,
                 .top = if (s.options.len > 0) s.options[0].art else &.{},
-                .best = bestOf(s.options),
+                .best = bestOf(s.options, rate(s.games, s.wins), s.k),
+                .k = s.k,
                 .usual = if (s.usual) |u| (if (u < s.options.len) &s.options[u] else null) else null,
                 .options = s.options,
             };
@@ -1120,4 +1133,16 @@ fn matchup(h: *H, d: *const Data) !*const Data {
 
 test {
     _ = @import("build_test.zig");
+}
+
+test "the highest mark: the rate pulled toward the slot's by k, so a lucky few can't top" {
+    const opts = [_]Option{
+        .{ .games = 5000, .wins = 2700 },
+        // 60% on 400: raw top; at k 1,000 it reads 52.9%, the 54% on 5,000 53.3%
+        .{ .games = 400, .wins = 240 },
+        .{ .games = 300, .wins = 200 },
+    };
+    try std.testing.expectEqual(&opts[1], bestOf(&opts, 50, 0).?);
+    try std.testing.expectEqual(&opts[0], bestOf(&opts, 50, 1000).?);
+    try std.testing.expectApproxEqAbs(52.857, pulled(&opts[1], 50, 1000), 1e-3);
 }

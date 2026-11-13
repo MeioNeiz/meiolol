@@ -135,7 +135,9 @@ pub fn build(s: *const Site, x: *const Answers, gpa: std.mem.Allocator, ch: Cham
     const f = filterOf(s, t, k) orelse return null;
     const base = if (s.view_builds[s.view.index()]) |*b| b else null;
     const label = if (base) |b| b.label else "";
-    const file = try lockanswer.file(gpa, a, t, &x.index, @intCast(ch.id), r, f, locks, .{}, label, tier) orelse return null;
+    var file = try lockanswer.file(gpa, a, t, &x.index, @intCast(ch.id), r, f, locks, .{}, label, tier) orelse return null;
+    // The answer's options pulled as the unlocked panel's
+    if (base) |b| file.shrink = b.shrink;
     const role = try a.create(cp.BuildRole);
     role.* = .{ .role = champion.uiRole(r) };
     if (file.get(@intCast(ch.id), r)) |b| role.build = try buildblock.data(a, &file, b, ch.name, s.damage);
@@ -302,12 +304,13 @@ fn meioOf(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, loc
             break :blk null;
         },
     };
-    // Plat+ and Emerald+ pool the mid and high brackets (Gold sits in mid too), Diamond+
-    // the high one; Master+'s pick is narrower than any bracket
+    // Plat+ pools the mid and high brackets (Gold sits in mid too), Diamond+ the high one;
+    // Emerald+ and Master+ are narrower than any pool: Plat+'s number under an Emerald+
+    // label would claim a split Meio doesn't make, so raw only
     const br: ?meio.Brackets = switch (k) {
-        .plat, .emerald => .{ .mask = 0b1100 },
+        .plat => .{ .mask = 0b1100 },
         .diamond => .{ .mask = 0b1000 },
-        .master => null,
+        .emerald, .master => null,
     };
     if (br == null and d.gap == .none) d.gap = .master;
     if (x.meio == null and d.gap == .none) d.gap = .no_model;

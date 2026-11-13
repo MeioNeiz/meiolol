@@ -122,7 +122,7 @@ pub const Role = struct {
     ban: f32,
     /// Win rate change since the previous patch, points, with its 95% half width
     patch_move: ?[2]f32 = null,
-    /// Early lean: gold at 14 against an average opponent
+    /// Early lean: team gold lead at 14 against the role's average pick, when clear
     lean: ?i16 = null,
     lane: ?LaneCurves = null,
     comeback: ?Comeback = null,
@@ -204,6 +204,9 @@ pub const Rel = struct {
     opps: []const Opp,
     /// How many met it less often, left out
     rare: u16 = 0,
+    /// Games that pull a matchup's win rate halfway to usual (the server's usualK): the
+    /// extremes are picked on Opp.shrunk, the rates shown raw. 0: raw
+    k: f32 = 0,
 };
 
 pub const Opp = struct {
@@ -216,6 +219,13 @@ pub const Opp = struct {
     gold: ?i16 = null,
     /// A matchup page exists
     page: bool = false,
+
+    /// The win rate pulled toward usual by `k` games, %: usual + (wins - games usual) /
+    /// (games + k), which with `usual` = that minus usual is the raw rate - usual k / games
+    pub fn shrunk(o: Opp, k: f32) f64 {
+        const n: f64 = @floatFromInt(@max(o.games, 1));
+        return 100 * @as(f64, @floatFromInt(o.wins)) / n - @as(f64, o.usual) * k / n;
+    }
 };
 
 pub const Spread = struct {
@@ -400,9 +410,10 @@ pub const W = struct {
     pub const build_usual = Phrase("{x:text}'s build");
     pub const no_lock_games = plain("No games with these locks.");
     pub const vs_lock = Phrase("vs {y:text}");
-    /// The cards that don't follow the locks: lane charts (champion-locks.md L5), game
-    /// length (no length in the cubes yet), players and end of game (player-level)
-    pub const lock_scope = plain("Not lane, length, players or end of game");
+    /// The parts that follow the locks, beside the head: the rest (Charts, champion-locks.md
+    /// L5; game length, no length in the cubes yet; players, pick-up, mains also play and
+    /// end of game, player-level) don't, and a list of those ran long and missed some
+    pub const lock_scope = plain("Applies to build, matchups, by patch, by rank and first item");
     /// The StatStrip under locks: their games out of the champion-role's
     pub const lock_share = plain("Of its games");
     pub const no_answer = plain("These locks can't be counted here yet.");
@@ -436,7 +447,7 @@ pub const W = struct {
     pub const ban_tip = Phrase("banned in {r:rate} of {n:count} games");
     pub const by_length = plain("By game length");
     pub const lean = Phrase("Early lean {g:signed} gold");
-    pub const lean_note = plain("Gold at 14 minutes against an average lane opponent, from games of every length: whether it wins lanes, apart from how long its games last.");
+    pub const lean_note = plain("Its team's gold lead at 14 minutes against the role's average pick, from ranked games that reached 15 minutes, not only this view's. Shown when clear of luck.");
     pub const lane_head = plain("Lane");
     pub const lane_them = "Opponent";
     pub const lane_ends = [2]tree.Text{ plain("Wins lane against"), plain("Loses lane to") };
@@ -521,9 +532,9 @@ pub const W = struct {
     pub const days = plain("30 days");
     pub const meio = plain("Meio");
     pub const meio_tip = Phrase("Our estimate for patch {p:text} from every game, not only this patch's");
-    /// Only the head's win rate is Meio's so far; the build, matchups and the rest stay
-    /// the region's 30 days until they read it
-    pub const sub_meio = Phrase("{r:text} · Win rate: Meio's estimate for {p:text}; the rest: 30 days");
+    /// The head's win rate and the lane's matchups are Meio's so far; the build, other
+    /// roles' matchups and the rest stay the region's 30 days until they read it
+    pub const sub_meio = Phrase("{r:text} · Win rate and lane matchups: Meio's estimate for {p:text}; the rest: 30 days");
     /// `t`: meio_tip
     pub const meio_note = Phrase("{t:text}: worth {n:count} games, against the {o:count} it played on {p:text}.");
     pub const raw = plain("no estimate");
@@ -1739,10 +1750,10 @@ pub const More = struct {
         };
         var in = p.input();
         if (p.unlockedLane()) |y| {
-            in.ranked = .{ .lane = .{ .counts = .{ .games = y.games, .wins = y.wins }, .opps = y.rels[0].opps, .rare = y.rels[0].rare } };
+            in.ranked = .{ .lane = .{ .counts = .{ .games = y.games, .wins = y.wins }, .opps = y.rels[0].opps, .rare = y.rels[0].rare, .k = y.rels[0].k } };
         } else if (p.ranked()) |x| in.ranked = switch (x) {
             .few => .few,
-            .role => |y| .{ .lane = .{ .counts = .{ .games = y.games, .wins = y.wins }, .opps = if (y.rels.len > 0) y.rels[0].opps else &.{}, .rare = if (y.rels.len > 0) y.rels[0].rare else 0 } },
+            .role => |y| .{ .lane = .{ .counts = .{ .games = y.games, .wins = y.wins }, .opps = if (y.rels.len > 0) y.rels[0].opps else &.{}, .rare = if (y.rels.len > 0) y.rels[0].rare else 0, .k = if (y.rels.len > 0) y.rels[0].k else 0 } },
         };
         // In Meio the lane is Meio's; the other relations are the 30 days'
         in.plat = if (p.files.shown.meio) h.span(.{}, .{ p.plat(h), badge.view(h, .neutral, .{W.days}) }) else p.plat(h);
@@ -1926,9 +1937,14 @@ pub const Trends = struct {
         });
     }
 
+    /// Under locks only the locked games' win rate: pick, ban and place are the champion's.
+    /// The pick stays as chosen, so clearing the locks brings it back
+    fn shownMetric(p: *P) Metric {
+        return if (p.locked() != null) .{ .m = .win } else p.metric;
+    }
+
     fn patchCard(p: *P, h: *H) N {
-        // Under locks only the locked games' win rate: pick, ban and place are the champion's
-        if (p.locked() != null) p.metric.m = .win;
+        const metric = p.shownMetric();
         const by_patch, const by_day = if (p.locked()) |x| .{ x.by_patch, x.by_day } else if (p.ranked()) |x| switch (x) {
             .few => return card.view(h, .{}, &.{ card.head(h, W.by_patch, null, &.{}), p.few(h) }),
             .role => |y| .{ y.by_patch, y.by_day },
@@ -1939,8 +1955,8 @@ pub const Trends = struct {
         var n: usize = 0;
         for (by_patch) |x| {
             if (x.games == 0) continue;
-            pts[n] = p.metric.at(h, .{ .s = x.patch }, x.games, x.wins, x.pick, x.ban);
-            pts[n].sub = if (x.rank > 0 and p.metric.m == .win) W.nth.with(h, .{ .n = x.rank, .th = ordinal(x.rank) }) else null;
+            pts[n] = metric.at(h, .{ .s = x.patch }, x.games, x.wins, x.pick, x.ban);
+            pts[n].sub = if (x.rank > 0 and metric.m == .win) W.nth.with(h, .{ .n = x.rank, .th = ordinal(x.rank) }) else null;
             n += 1;
         }
         p.setPatch(pts[0..n], W.by_patch);
@@ -1948,10 +1964,11 @@ pub const Trends = struct {
     }
 
     fn setPatch(p: *P, pts: []const trend.Point, label: tree.Text) void {
+        const m = p.shownMetric().m;
         p.by_patch.set(pts);
         p.by_patch.label = label;
-        p.by_patch.plain = p.metric.m != .win;
-        p.by_patch.y_name = switch (p.metric.m) {
+        p.by_patch.plain = m != .win;
+        p.by_patch.y_name = switch (m) {
             .win => null,
             .pick => W.pick_y,
             .ban => W.ban_y,
@@ -1975,7 +1992,7 @@ pub const Trends = struct {
         for (by_day, 0..) |x, i| {
             if (x.games == 0) continue;
             const named = by_day.len <= 10 or (by_day.len - 1 - i) % 2 == 0;
-            pts[n] = p.metric.at(h, .{ .s = if (n == 0) x.tip else if (named) x.label else "" }, x.games, x.wins, x.pick, x.ban);
+            pts[n] = p.shownMetric().at(h, .{ .s = if (n == 0) x.tip else if (named) x.label else "" }, x.games, x.wins, x.pick, x.ban);
             if (!named) pts[n].sub = null;
             pts[n].name = .{ .s = x.tip };
             n += 1;
@@ -2579,7 +2596,7 @@ test "Meio: the strip's win rate is Meio's with its worth and no place; raw mark
     try std.testing.expect(std.mem.indexOf(u8, out, "worth ") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, ">~") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "against the 412 it played on 16.22") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out, "Win rate: Meio") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "lane matchups: Meio") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "3rd of 50") == null);
     try std.testing.expect(std.mem.indexOf(u8, out, "data-busy") == null);
 
@@ -2590,7 +2607,7 @@ test "Meio: the strip's win rate is Meio's with its worth and no place; raw mark
     try std.testing.expect(std.mem.indexOf(u8, w.written(), W.raw_note.s) != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), ">no estimate<") != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), ">~") == null);
-    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Win rate: Meio") == null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "lane matchups: Meio") == null);
 }
 
 test "a rare role is listed and opens with its games, faded only by its range" {
