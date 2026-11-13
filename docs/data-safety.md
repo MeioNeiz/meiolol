@@ -130,6 +130,7 @@ A restore from the Mac mirror takes ~12-17 min.
 3. Stop the crawler and loops, `mv data data.broken && mv data.restored data`, copy back
    anything outside the databases (daily/, export/, site/; not partials/, which the next
    views write rebuilds from the restored tables), start again
+4. `bin/meiolol rank-backfill`: segments lack rank_start of games stored before 13 Nov
 
 Raw tables, players and ladder_pages come back empty; the crawler refills them. Restore
 re-applies `forgotten`. From the Megatron mirror it also copies the sealed day files into

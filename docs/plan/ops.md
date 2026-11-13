@@ -35,7 +35,17 @@ of raw.db's free pages instead of moving pages back to the disk.
   (riot 83-93% of its minute); (d) checkpointer stuck 5-15 min and 30-60 s commits with
   nothing beside them in any log (4 Nov 20:34, 6 Nov 07:28). If (a)/(b) stay: pipelined
   steps instead of Bucket.flush after each, or BFQ (mq-deadline honours ionice -c 3
-  only partly); (d) first needs the writer to log what it waited on
+  only partly); (d) crawl.log now names it (riot/stall.zig): "stall: writer PHASE N s
+  (N jobs), checkpointer SCHEMA PHASE N s, whole checkpoint N s ago | snapshot: io some
+  X full Y | locks main-shm write W PID CMD, ..." once per batch over 30 s or checkpoint
+  round over 60 s (same snapshot on "no checkpoint for"), and "writer: commit took N s:
+  last try begin, apply, commit; busy retries; pages read, written" after a commit
+  over 30 s. Next J16 read: give (d)'s rows a cause from these
+- 10 Nov 18:01Z to 13 Nov 20:50Z nothing was fetched (74 h): std.http.Client judged
+  Riot's new certificate (valid from 10 Nov) by the time of the crawler's start (6 Nov),
+  so every handshake failed (TlsInitializationFailed, ladder GaveUp). Fixed in
+  riot/client.zig (the client's clock follows the real one). Health logged "no new
+  matches" hourly to nobody: no ntfy topic (Storage and hosts)
 - Sea runs ~98% (93-95% on C01 before the fix): one request at a time, ~0.7 s of each
   1.2 s slot in Riot's answer (time %: 36-40 slot wait, 56-61 Riot). Two in flight
   would not help: every minute sea still waits 25%+ on the limiter, whose catch-up
