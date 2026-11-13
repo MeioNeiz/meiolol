@@ -168,6 +168,28 @@ pub const Estimate = struct {
     }
 };
 
+/// What a number leans on (E9, estimates.md Trust rules): each source's share of how sure
+/// the fit is of it, summing to 1. With Σ the posterior covariance, x the shown mix and
+/// H_s a source's binomial information, x'Σx = x'ΣP0Σx + Σ_s x'ΣH_sΣx, every part >= 0
+pub const Leans = struct {
+    /// The asked slice: newest patch, these ranks, this region
+    own: f64 = 0,
+    /// Older patches, moved by the patch term
+    older: f64 = 0,
+    /// The newest patch's other ranks (the unknown rank among them)
+    ranks: f64 = 0,
+    /// The newest patch outside EUW1, for an EUW1 number
+    region: f64 = 0,
+    /// The prior: the role's usual for a number this popular (or x's share in the role)
+    usual: f64 = 1,
+    /// Games behind each source: own unweighted; older, ranks and region weighted (older
+    /// games count less), as the fit counts them
+    own_games: f64 = 0,
+    older_games: f64 = 0,
+    ranks_games: f64 = 0,
+    region_games: f64 = 0,
+};
+
 /// Weighted games and wins of one champion-role, by patch slot, bracket and EUW1
 const Counts = struct {
     n: [max_patches][4][2]f64 = @splat(@splat(@splat(0))),
@@ -260,6 +282,26 @@ pub const Model = struct {
         m.rune.deinit(gpa);
         m.build.deinit(gpa);
         m.gold.deinit(gpa);
+    }
+
+    /// What rateIn's number leans on: the champion-role and shares so far, else null
+    pub fn leans(m: *const Model, kind: Kind, region: u1, brackets: Brackets, a: u16, b: u32) ?Leans {
+        const i = m.index.get(a) orelse return null;
+        switch (kind) {
+            .champion => return leansOf(m.shape, &m.counts[i], &m.fitted[i], brackets, region),
+            .rune, .build => {
+                const x = std.math.cast(u16, b) orelse return null;
+                const s = if (kind == .rune) &m.rune else &m.build;
+                var c: Counts = undefined;
+                var f: Fitted = undefined;
+                const got = s.cell(m.shape, i, a, x, &c, &f) orelse return null;
+                var l = leansOf(m.shape, got.c, got.f, brackets, region);
+                // A share's games are the anchor's (the games it is a share of)
+                l.own_games = ownOf(&s.anchor[i].own, brackets, region);
+                return l;
+            },
+            else => return null,
+        }
     }
 
     /// The newest patch's number for a cell; region 1 is EUW1, bracket 0 all ranks. null:
@@ -505,6 +547,12 @@ fn newestOf(shape: Shape, c: *const Counts, f: *const Fitted, brackets: Brackets
 
 /// The newest patch's logit for weights over (bracket, region) summing to 1
 fn newestIn(shape: Shape, f: *const Fitted, w: [4][2]f64) Logit {
+    const mix = mixDesign(shape, w);
+    return at(shape, f, &mix);
+}
+
+/// The shown mix's design, as newestIn mixes it
+fn mixDesign(shape: Shape, w: [4][2]f64) [max_k]f64 {
     var mix: [max_k]f64 = @splat(0);
     var x: [max_k]f64 = undefined;
     for (0..4) |br| for (0..2) |e| {
@@ -512,7 +560,57 @@ fn newestIn(shape: Shape, f: *const Fitted, w: [4][2]f64) Logit {
         shape.design(0, br, e, &x);
         for (&mix, x) |*a, b| a.* += w[br][e] * b;
     };
-    return at(shape, f, &mix);
+    return mix;
+}
+
+/// Leans for newestOf's number: each (patch, bracket, region) group's information
+/// n q(1-q) (z'Σx)^2 over x'Σx, by source; the rest is the prior's. f.cov is the last
+/// Newton step's, so the data parts can top 1 by a hair: then scaled to 1
+fn leansOf(shape: Shape, c: *const Counts, f: *const Fitted, brackets: Brackets, region: u1) Leans {
+    const k = shape.params();
+    const x = mixDesign(shape, mixOf(shape, c, brackets, region));
+    var u: [max_k]f64 = @splat(0);
+    var v: f64 = 0;
+    for (0..k) |r| {
+        for (0..k) |j| u[r] += f.cov[r * k + j] * x[j];
+        v += x[r] * u[r];
+    }
+    var l: Leans = .{ .own_games = ownOf(&c.own, brackets, region) };
+    if (!(v > 0)) return l;
+    var z: [max_k]f64 = undefined;
+    for (0..shape.patches) |p| for (0..4) |br| for (0..2) |e| {
+        const n = c.n[p][br][e];
+        if (n == 0) continue;
+        shape.design(p, br, e, &z);
+        var eta: f64 = 0;
+        var zu: f64 = 0;
+        for (0..k) |j| {
+            eta += z[j] * f.theta[j];
+            zu += z[j] * u[j];
+        }
+        const q = sigmoid(eta);
+        const part = n * q * (1 - q) * zu * zu / v;
+        const in_region = region == 0 or e == 1;
+        if (p != 0) {
+            l.older += part;
+            l.older_games += n;
+        } else if (!in_region) {
+            l.region += part;
+            l.region_games += n;
+        } else if (!brackets.has(br)) {
+            l.ranks += part;
+            l.ranks_games += n;
+        } else l.own += part;
+    };
+    const data = l.own + l.older + l.ranks + l.region;
+    if (data > 1) {
+        l.own /= data;
+        l.older /= data;
+        l.ranks /= data;
+        l.region /= data;
+    }
+    l.usual = @max(0, 1 - data);
+    return l;
 }
 
 /// A cell's games over a set of brackets and a region, as weights summing to 1. No games
@@ -625,22 +723,27 @@ const Share = struct {
     }
 
     fn rate(s: *const Share, shape: Shape, i: u32, a: u16, x: u16, brackets: Brackets, region: u1) ?Estimate {
+        var c: Counts = undefined;
+        var f: Fitted = undefined;
+        const got = s.cell(shape, i, a, x, &c, &f) orelse return null;
+        const anchor = &s.anchor[i];
+        const t = newestOf(shape, got.c, got.f, brackets, region);
+        return .of(t.eta, t.v + s.drift.tau2In(&anchor.own, brackets, region), ownOf(&anchor.own, brackets, region));
+    }
+
+    /// x's counts and fit for champion-role i; never seen, its games with none of x
+    /// fitted on the spot into c and f
+    fn cell(s: *const Share, shape: Shape, i: u32, a: u16, x: u16, c: *Counts, f: *Fitted) ?struct { c: *const Counts, f: *const Fitted } {
         if (x == 0) return null;
         const anchor = &s.anchor[i];
         if (games(anchor) == 0) return null;
-        const own = ownOf(&anchor.own, brackets, region);
-        if (s.index.get(@as(u32, a) << 16 | x)) |j| {
-            const t = newestOf(shape, &s.counts[j], &s.fitted[j], brackets, region);
-            return .of(t.eta, t.v + s.drift.tau2In(&anchor.own, brackets, region), own);
-        }
-        // Never seen: its games with none of x, fitted on the spot
-        const c: Counts = .{ .n = anchor.n, .own = anchor.own };
+        if (s.index.get(@as(u32, a) << 16 | x)) |j| return .{ .c = &s.counts[j], .f = &s.fitted[j] };
+        c.* = .{ .n = anchor.n, .own = anchor.own };
         const mu = s.prior(a >> 13, x);
-        var f: Fitted = .{ .mu = mu };
+        f.* = .{ .mu = mu };
         f.theta[0] = mu;
-        newton(&c, &f, shape, s.sd, 0);
-        const t = newestOf(shape, &c, &f, brackets, region);
-        return .of(t.eta, t.v + s.drift.tau2In(&anchor.own, brackets, region), own);
+        newton(c, f, shape, s.sd, 0);
+        return .{ .c = c, .f = f };
     }
 };
 
@@ -1943,6 +2046,70 @@ test "a share leans on the old patch until the new one's games arrive" {
     try std.testing.expectApproxEqAbs(0.5, it.p, 0.05);
     try std.testing.expectEqual(@as(?Estimate, null), after.rate(.build, 0, 0, 31, 3071));
     try std.testing.expect(after.rate(.rune, 0, 0, 31, 8010).?.p > 0.9);
+    // Before the patch's games the share is all older patches; after, mostly its own
+    const lb = before.leans(.rune, 0, .all, 1, 8010).?;
+    try std.testing.expectEqual(@as(f64, 0), lb.own);
+    try std.testing.expect(lb.older > 0.5);
+    try expectSumsToOne(lb);
+    const la = after.leans(.rune, 0, .all, 1, 8010).?;
+    try std.testing.expect(la.own > 0.5);
+    try std.testing.expectEqual(@as(f64, 500), la.own_games);
+    try expectSumsToOne(la);
+    try expectSumsToOne(after.leans(.rune, 0, .all, 20, 8229).?);
+}
+
+fn expectSumsToOne(l: Leans) !void {
+    for ([_]f64{ l.own, l.older, l.ranks, l.region, l.usual }) |x| try std.testing.expect(x >= 0 and x <= 1);
+    try std.testing.expectApproxEqAbs(1, l.own + l.older + l.ranks + l.region + l.usual, 1e-9);
+}
+
+test "a champion-role's number leans on its own games as they arrive" {
+    const gpa = std.testing.allocator;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    var prng: std.Random.DefaultPrng = .init(13);
+    const rand = prng.random();
+    // 40 champion-roles with 2000 games on the old patch (Gold-Emerald, a quarter on
+    // EUW1); on the new one champion ch has 50 ch games, half Gold-Emerald, half
+    // Diamond+, its rate moved. Champion 41 has 20 games in all
+    for (1..41) |ch| {
+        const cr: u16 = @intCast(ch);
+        const p = 0.45 + 0.0025 * @as(f64, @floatFromInt(ch));
+        for (0..2000) |g| try rows.append(gpa, .{ .day = -5, .cr = cr, .win = rand.float(f64) < p, .euw = g % 4 == 0, .patch = 1, .bracket = 2 });
+        // The patch moves each champion-role by up to 6 points, so its spread is real
+        const moved = p + 0.06 * (@as(f64, @floatFromInt(ch % 5)) - 2) / 2;
+        for (0..50 * ch) |g| try rows.append(gpa, .{ .day = 0, .cr = cr, .win = rand.float(f64) < moved, .euw = g % 4 == 0, .patch = 0, .bracket = if (g % 2 == 0) 2 else 3 });
+    }
+    for (0..20) |g| try rows.append(gpa, .{ .day = -5, .cr = 41, .win = g % 2 == 0, .euw = false, .patch = 1, .bracket = 2 });
+    var before = try fit(gpa, rows.items, 0, .{});
+    defer before.deinit(gpa);
+    var after = try fit(gpa, rows.items, 1, .{});
+    defer after.deinit(gpa);
+    const b = before.leans(.champion, 0, .all, 10, 0).?;
+    try std.testing.expectEqual(@as(f64, 0), b.own);
+    try std.testing.expectEqual(@as(f64, 0), b.own_games);
+    // Day 0: the old games fix the role's level, but how far the patch moved it is the
+    // patch term's prior alone, which outweighs them
+    try std.testing.expect(b.older > 0.02 and b.usual > 0.5);
+    try expectSumsToOne(b);
+    const few = after.leans(.champion, 0, .all, 2, 0).?;
+    const many = after.leans(.champion, 0, .all, 40, 0).?;
+    try std.testing.expectEqual(@as(f64, 2000), many.own_games);
+    try std.testing.expect(many.own > few.own and many.own > 0.4);
+    try expectSumsToOne(many);
+    // Diamond+ alone: Gold-Emerald's new games are other ranks
+    const hi = after.leans(.champion, 0, .of(3), 40, 0).?;
+    try std.testing.expect(hi.ranks > 0.05);
+    try std.testing.expectEqual(@as(f64, 1000), hi.own_games);
+    try expectSumsToOne(hi);
+    // EUW1 alone: the other regions' new games count as the region's
+    const euw = after.leans(.champion, 1, .all, 40, 0).?;
+    try std.testing.expect(euw.region > 0.05);
+    try std.testing.expectEqual(@as(f64, 500), euw.own_games);
+    try expectSumsToOne(euw);
+    // A rare one leans on the role's usual
+    try std.testing.expect(after.leans(.champion, 0, .all, 41, 0).?.usual > 0.5);
+    try std.testing.expectEqual(@as(?Leans, null), after.leans(.matchup, 0, .all, 40, 2));
 }
 
 test "lane gold at 14 is both champions' leads plus a shrunk pair term" {

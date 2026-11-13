@@ -371,6 +371,8 @@ pub fn cmdMeio(c: *Cmd) !u8 {
             out = try c.value();
         } else if (c.is("--format")) {
             return printFormat(c, meio.fingerprint);
+        } else if (c.is("--time-leans")) {
+            return timeLeans(c, try c.value());
         } else return error.Usage;
     }
     const gpa = c.init.gpa;
@@ -409,6 +411,41 @@ pub fn cmdMeio(c: *Cmd) !u8 {
     std.log.info("{s}: patch {s} day {d}, {d} rows, {d} champion-roles, {d} B; load {d} ms, fit {d} ms, write {d} ms", .{
         path, patch.?, today, loaded.rows.len, m.counts.len, bytes, ms(t0, t_load), ms(t_load, t_fit), ms(t_fit, std.Io.Clock.awake.now(io)),
     });
+    return 0;
+}
+
+/// `meio --time-leans FILE`: Model.leans over every champion-role and share cell of a
+/// meio.bin, all ranks every region and EUW1 Diamond+; per-number cost (E9a's budget)
+fn timeLeans(c: *Cmd, path: []const u8) !u8 {
+    const io = c.init.io;
+    const f = try std.Io.Dir.cwd().openFile(io, path, .{});
+    defer f.close(io);
+    var buf: [1 << 20]u8 = undefined;
+    var r = f.reader(io, &buf);
+    const m = (try meio.load(&r.interface, c.arena)) orelse {
+        std.log.err("{s}: another build's meio.bin", .{path});
+        return 1;
+    };
+    const asks = [_]struct { region: u1, brackets: meio.Brackets }{ .{ .region = 0, .brackets = .all }, .{ .region = 1, .brackets = .of(3) } };
+    var n: usize = 0;
+    var usual: f64 = 0;
+    const t0 = std.Io.Clock.awake.now(io);
+    for (asks) |ask| {
+        var it = m.index.keyIterator();
+        while (it.next()) |a| if (m.leans(.champion, ask.region, ask.brackets, a.*, 0)) |l| {
+            n += 1;
+            usual += l.usual;
+        };
+        inline for (.{ .{ meio.Kind.rune, &m.rune }, .{ meio.Kind.build, &m.build } }) |s| {
+            var si = s[1].index.keyIterator();
+            while (si.next()) |k| if (m.leans(s[0], ask.region, ask.brackets, @intCast(k.* >> 16), k.* & 0xffff)) |l| {
+                n += 1;
+                usual += l.usual;
+            };
+        }
+    }
+    const us = @as(f64, @floatFromInt(t0.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds())) / 1000;
+    std.log.info("{s}: {d} numbers, {d:.1} us each, {d:.0} ms in all; mean usual {d:.3}", .{ path, n, us / @as(f64, @floatFromInt(n)), us / 1000, usual / @as(f64, @floatFromInt(n)) });
     return 0;
 }
 
