@@ -3,16 +3,41 @@
 # deploy/health-loop.sh (box, ntfy) and deploy/mac-watch.sh (Mac, wz notify). Thresholds
 # in docs/data-safety.md. Keeps the crawler's last progress in data/health.state.
 set -u
+if [[ $(uname) != Linux ]]; then
+    echo "health.sh runs on the box (GNU date, stat, df, its units): deploy/box.sh health check" >&2
+    exit 2
+fi
 cd "$(dirname "$0")/.." || exit 1
 # host.env (MEIOLOL_BACKUPS etc.) is the services' EnvironmentFile; mac-watch.sh runs this
 # over ssh without it
 [[ -f host.env ]] && { set -a; . ./host.env; set +a; }
 BACKUPS=${MEIOLOL_BACKUPS:-$HOME/ml/meiolol/backups}
 STALL_H=${STALL_H:-2}
+# Key use alert: any region under KEYUSE_PCT of the key over the last KEYUSE_MIN min
+KEYUSE_PCT=${KEYUSE_PCT:-90}
+KEYUSE_MIN=${KEYUSE_MIN:-30}
 now=$(date +%s)
 problems=()
 # A systemd user service (deploy/systemd)
 running() { systemctl --user is-active -q "$1" 2>/dev/null; }
+# A condition's first sighting while it lasts (data/health.episodes, "NAME UNIX"), so its
+# line stays the same and health-loop.sh pushes it once. `episode NAME 1` prints its start;
+# `episode NAME 0` forgets it and fails
+EPISODES=${HEALTH_EPISODES:-data/health.episodes}
+episode() {
+    local start
+    start=$(awk -v n="$1" '$1 == n { print $2 }' "$EPISODES" 2> /dev/null)
+    if (( $2 )); then
+        [[ -n "$start" ]] || { start=$now; echo "$1 $now" >> "$EPISODES"; }
+        date -u -d "@$start" '+%F %H:%MZ'
+        return 0
+    fi
+    if [[ -n "$start" ]]; then
+        grep -v "^$1 " "$EPISODES" > "$EPISODES.new"
+        mv "$EPISODES.new" "$EPISODES"
+    fi
+    return 1
+}
 
 if ! running meiolol-crawl; then
     if tail -n 5 data/crawl.log 2>/dev/null | grep -q 'KEY REJECTED'; then
@@ -20,9 +45,13 @@ if ! running meiolol-crawl; then
     else
         problems+=("crawler not running (meiolol-crawl)")
     fi
+    episode keyuse 0
+    episode stall 0
 else
-    # Report line every minute; its per-region "<n>m" counters are cumulative per process
-    report=$(grep 'matches/day' data/crawl.log | tail -n 1)
+    # Report line every minute; its per-region "<n>m" and "<n>req" counters are cumulative
+    # per process
+    reports=$(grep 'matches/day' data/crawl.log | tail -n $(( KEYUSE_MIN + 5 )))
+    report=$(tail -n 1 <<< "$reports")
     stamp=$(cut -c1-19 <<< "$report")
     age=$(( now - $(date -u -d "$stamp" +%s 2>/dev/null || echo 0) ))
     if (( age > 900 )); then
@@ -53,6 +82,44 @@ else
     if (( now - last_progress > STALL_H * 3600 )); then
         problems+=("no new matches for $(( (now - last_progress) / 3600 ))h")
     fi
+    # Key use: each region's requests over the window's report lines of this process (a
+    # restart resets the counters) against the key's 100 per 120 s. Not the "time %" lines:
+    # commits and rests there overlap the limiter's catch-up, so they show 10-15% lost in
+    # hours that used 97-100% of the key. 4-10 Nov, 30 min under 90%: 1-6 dips a day
+    read -r secs worst <<< "$(awk -v since="$(date -u -d "@$(( now - KEYUSE_MIN * 60 ))" '+%F %T')" '
+        {
+            n++; t[n] = $1 " " $2; d[n] = $1
+            s[n] = substr($2, 1, 2) * 3600 + substr($2, 4, 2) * 60 + substr($2, 7, 2)
+            for (i = 3; i < NF; i++) if ($i ~ /^(americas|asia|europe|sea)$/)
+                for (j = i + 1; j <= i + 6 && j <= NF; j++)
+                    if ($j ~ /^[0-9]+req$/) { r[n, $i] = $j + 0; g[$i] = 1; break }
+        }
+        END {
+            k = n
+            while (k > 1 && t[k - 1] >= since) {
+                back = 0
+                for (x in g) if (r[k - 1, x] > r[k, x]) back = 1
+                if (back) break
+                k--
+            }
+            secs = s[n] - s[k] + (d[n] != d[k] ? 86400 : 0)
+            if (secs <= 0) exit
+            worst = 1000
+            for (x in g) { u = (r[n, x] - r[k, x]) * 120 / secs; if (u < worst) worst = u }
+            printf "%d %d\n", secs, worst
+        }' <<< "$reports")"
+    dip=0
+    (( ${secs:-0} >= KEYUSE_MIN * 48 && ${worst:-100} < KEYUSE_PCT )) && dip=1
+    if began=$(episode keyuse $dip); then
+        problems+=("crawler key use under ${KEYUSE_PCT}% since $began (crawl.log time % lines say where the minutes go)")
+    fi
+    # The writer's stall reports (riot/stall.zig): a batch over 30 s, a checkpoint round
+    # over 60 s, or no checkpoint for 5 min
+    stalls=$(grep -E 'stall: |no checkpoint for' data/crawl.log | tail -n 20 \
+        | awk -v since="$(date -u -d "@$(( now - 900 ))" '+%F %T')" '$1 " " $2 >= since' | wc -l)
+    if began=$(episode stall $(( stalls > 0 ))); then
+        problems+=("crawler writer stalling since $began (crawl.log 'stall:' and 'no checkpoint for' lines)")
+    fi
 fi
 
 # The crawler's checkpointer keeps WALs to ~64 MB; a long reader can hold one at ~1 GB
@@ -68,6 +135,31 @@ fi
 uploaded=$(grep -oE '^[0-9TZ:-]+ uploaded' data/web.log 2>/dev/null | tail -n 1 | cut -d' ' -f1)
 if [[ -z "$uploaded" ]] || (( now - $(date -d "$uploaded" +%s) > 26 * 3600 )); then
     problems+=("site upload stale: last ${uploaded:-never}")
+fi
+# Each web loop step's latest outcome (web-loop.sh step_status: step, unix time, ok|failed,
+# detail). A failed refit leaves no Meio until the next binary; a failed daily job keeps
+# yesterday's files. The line carries the failure's time, so it pushes once
+while IFS=$'\t' read -r step at status detail; do
+    [[ "$status" == failed && "$at" =~ ^[0-9]+$ ]] || continue
+    problems+=("site loop: $step failed $(date -u -d "@$at" '+%F %H:%MZ'): ${detail:0:200}")
+done < <(cat data/web-steps.tsv 2> /dev/null)
+# The public site end to end, from here through Cloudflare's tunnel: nginx, the renderer
+# (a page and a lock answer) and the Your games API. X-Meiolol-Render STALE or ANY-*:
+# nginx served its last copy because the renderer did not answer. MEIOLOL_SITE (host.env)
+# empty: no public site to check
+site=${MEIOLOL_SITE-https://meio.lol}
+if [[ -n "$site" ]]; then
+    for path in "" data/lock/meio/darius/top/plat/none.bin api/health; do
+        url=$site/$path
+        head=$(curl -s -o /dev/null -D - -w '%{http_code}' -m 20 -A meiolol-health "$url")
+        code=${head##*$'\n'}
+        render=$(grep -i '^x-meiolol-render:' <<< "$head" | tr -d '\r' | cut -d' ' -f2)
+        if [[ "$code" != 200 ]]; then
+            problems+=("site: $url answers ${code/#000/nothing}")
+        elif [[ "$render" == STALE || "$render" == ANY-* ]]; then
+            problems+=("site: $url served from nginx's copy ($render): the renderer is not answering (data/render.log)")
+        fi
+    done
 fi
 
 # Without C01's data disk cache file (deploy/c01): 30 GB of its 60 GB /, and it never grows
@@ -142,7 +234,12 @@ if archive=$(bin/meiolol raw-export --data data --status 2>&1); then
         at=$(date -u -d "@$(( now - since_drop ))" '+%F %H:%MZ')
         problems+=("box disk low: raw not yet archived dropped, last at $at (data/raw-dropped.log)")
     fi
-    if [[ "$since" =~ ^[0-9]+$ ]] && (( since > ACK_H * 3600 )); then
+    # With nothing exported (the crawler stored nothing) acks stop too: then the pulls'
+    # reports (data/gpu-box.pull, first field its time) say whether the gpu-box is there
+    read -r pulled _ < data/gpu-box.pull 2> /dev/null || pulled=0
+    [[ "$pulled" =~ ^[0-9]+$ ]] || pulled=0
+    if [[ "$since" =~ ^[0-9]+$ ]] && (( since > ACK_H * 3600 )) \
+        && { (( ${unacked:-0} > 0 )) || (( now - pulled > ACK_H * 3600 )); }; then
         last=$(date -u -d "@$(( now - since ))" '+%F %H:%MZ')
         problems+=("gpu-box: no archive ack since $last ($unacked exports waiting)")
     elif [[ "$since" == null && "$oldest" =~ ^[0-9]+$ ]] && (( oldest > ACK_H * 3600 )); then

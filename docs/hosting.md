@@ -97,6 +97,21 @@ Megatron's pace. Without the cache, measured 26 Oct (Python, O_DIRECT, 2 GB file
   only (mostly cached, 7.5 min), weekly; the admin page reads timeline.db and raw.db as
   page_count/freelist_count totals each round
 
+### Heavy lock
+
+Heavy readers of the data disk take data/heavy.lock (flock) one at a time; data/heavy.who
+names the holder. 9 Nov a tester rebuild beside a box job's restore check stalled the
+crawler's checkpoints ~20 min.
+- Web loop (deploy/web-loop.sh): a round's heavy part (digest, curves pass or refit, site
+  build and upload, views file) waits up to 15 min for it, a deploy's round not at all,
+  then runs beside the holder (web.log "heavy lock held by"). Daily jobs and the weekly
+  storage scan start only while it is free (else the next round tries) and hold it
+- `deploy/box.sh job run` waits for it as long as it takes (the job's log says who holds
+  it); `job light` doesn't, for jobs that read little of the disk
+- The daily backup waits up to an hour, then runs beside
+- Not under it: the crawler, archive exports and prunes (paced, idle IO), the Megatron
+  mirror, hand runs over ssh (`deploy/box.sh run`): long ones go through `job run`
+
 ### Builds on the box
 
 The pre-push ci runs here (deploy/ci-run.sh, remote-build.sh --host box), the Mac's ci

@@ -7,7 +7,11 @@
 # time, the loop's first
 # (curves, views file), then at most one daily job per round, which the loop waits for:
 # on 14-15 Oct several at once held the disk at its 70 MB/s cap and a curves pass took
-# 45-60 min every hour (research/questions/box-io-priority.md). The build is
+# 45-60 min every hour (research/questions/box-io-priority.md). Beyond this loop, heavy
+# readers of the data disk take data/heavy.lock (docs/hosting.md "Heavy lock"): a round's
+# heavy part (digest to views file) waits up to 15 min for it (a deploy's not at all) and
+# then runs beside the holder; daily jobs and the storage scan start only while it is free.
+# Each step's latest outcome goes to data/web-steps.tsv, which health.sh reads. The build is
 # `--static core`: robots.txt,
 # riot.txt and the front-end files (~30 files, no data loaded, seconds); meiolol-render
 # serves every page and data file, the home too. After each upload,
@@ -38,8 +42,8 @@
 # days), else truth reads none
 # Daily, the admin Draft tester's models refit on every played game into data/tester/:
 # `meiolol draft-model` (the shipped draft model, seconds after its scan) and `meiolol
-# lane-model` (team2's lane outcomes, every timeline read once; 0.9 GB, ~2 min of CPU on
-# the Mac for 800k games), each file with a .gz copy, written beside it and swapped in
+# lane-model` (team2's lane outcomes, every timeline read once; 0.9 GB; the two together
+# over an hour on C01 since A4), each file with a .gz copy, written beside it and swapped in
 # whole. Each round copies it into the private upload at private/models/, where the
 # tester reads it before the lab's pick (docs/model.md "Draft model file").
 # Daily, `meiolol your-example` (read-only, background) leaves an anonymised player's
@@ -105,8 +109,12 @@ push_curves() {
     # link keeps the version pushed
     # shellcheck disable=SC2086
     ln $files data/curves-push/
-    rsync -a --delete data/curves-push/ meiolol-exchange:curves/ \
-        || echo "$(date -u +%FT%TZ) curves push to the service FAILED"
+    if rsync -a --delete data/curves-push/ meiolol-exchange:curves/; then
+        step_status curves-push ok
+    else
+        echo "$(date -u +%FT%TZ) curves push to the service FAILED"
+        step_status curves-push failed "rsync to meiolol-exchange failed"
+    fi
 }
 
 # Bytes and cells of meiolol.db's tables and indexes (dbstat, aggregate), read-only. Mostly
@@ -303,6 +311,71 @@ if [[ -n "$patch" && -n "$format" ]]; then
     fi
 fi
 batch() { nice -n 10 ionice -c 3 "$@"; }
+# Each step's latest outcome, for health.sh: data/web-steps.tsv, "STEP UNIX ok|failed
+# DETAIL", one line a step (daily jobs write theirs from their subshells, so locked)
+#   step_status STEP ok|failed [DETAIL]
+step_status() {
+    local f=data/web-steps.tsv detail=${3:-}
+    (
+        flock 8
+        { awk -F'\t' -v s="$1" '$1 != s' "$f" 2> /dev/null
+            printf '%s\t%s\t%s\t%s\n' "$1" "$(date +%s)" "$2" "${detail//$'\t'/ }"; } > "$f.new"
+        mv "$f.new" "$f"
+    ) 8> data/web-steps.lock
+}
+# From an exit status; a failure's detail is LOG's last line
+#   step_done STEP STATUS LOG
+step_done() {
+    if (( $2 == 0 )); then
+        step_status "$1" ok
+    else
+        step_status "$1" failed "exit $2: $(tail -n 1 "$3" 2> /dev/null | cut -c1-200)"
+    fi
+}
+# data/heavy.lock on fd 7 from here to heavy_drop, waiting up to $1 s (0: not at all) or
+# until a deploy's signal; then beside its holder (data/heavy.who), logged. The wait runs
+# in the background so the signal lands (the lock is the open file's, so the child's
+# flock leaves it held here)
+#   heavy_take WAIT WHAT
+heavy_take() {
+    local got pid
+    exec 7> data/heavy.lock
+    if (( $1 > 0 )); then
+        flock -w "$1" 7 &
+        pid=$!
+        while true; do
+            wait "$pid"
+            got=$?
+            kill -0 "$pid" 2> /dev/null || break
+            if (( force )); then
+                kill "$pid" 2> /dev/null
+                wait "$pid"
+                got=1
+                break
+            fi
+        done
+    else
+        flock -n 7
+        got=$?
+    fi
+    if (( got == 0 )); then
+        echo "$2, web loop, since $(date -u +%FT%TZ)" > data/heavy.who
+    else
+        echo "$(date -u +%FT%TZ) heavy lock held by $(cat data/heavy.who 2> /dev/null):" \
+            "$2 beside it"
+    fi
+}
+heavy_drop() {
+    flock -u 7 2> /dev/null
+    exec 7>&-
+}
+heavy_busy() { ! flock -n data/heavy.lock true; }
+# A daily job's or scan's subshell: its own hold (run_daily starts one only while free)
+heavy_hold() {
+    exec 7> data/heavy.lock
+    flock 7
+    echo "$1, web loop daily job, since $(date -u +%FT%TZ)" > data/heavy.who
+}
 # .br for data/site's hashed (glob $1) wasm, JS and CSS that have a .gz and no .br yet;
 # written aside and moved in, so an upload never sends half of one
 brotli_twins() {
@@ -367,9 +440,11 @@ refit() {
     if (( status == 0 )); then
         echo "$(date -u +%FT%TZ) $f refit"
         round_event refit ok "$f refit"
+        step_status "$name" ok
     else
         echo "$(date -u +%FT%TZ) $f refit FAILED (exit $status, its log above)"
         round_event refit failed "$f: meiolol $name exit $status (web log)"
+        step_status "$name" failed "refit in a new build's format: exit $status (web.log)"
     fi
 }
 refit_binary=''
@@ -404,8 +479,11 @@ start_scan() {
     local now=$1
     [[ -n "$scan_pid" ]] && kill -0 "$scan_pid" 2> /dev/null && return 0
     (( now - last_storage >= 601200 )) || return 0
+    heavy_busy && return 0
     last_storage=$now
-    storage_scan &
+    (heavy_hold storage
+        storage_scan
+        step_done storage $? data/storage.log) &
     scan_pid=$!
 }
 # The first due daily job, in the background (daily_pid); 1 when none is due. Builds
@@ -414,45 +492,63 @@ run_daily() {
     local now=$1
     # One left running by a deploy's round
     [[ -n "$daily_pid" ]] && kill -0 "$daily_pid" 2> /dev/null && return 1
+    # A box job or backup reading the disk: the next round tries again
+    heavy_busy && return 1
     if [[ -n "$patch" ]] && { [[ "$patch" != "$builds_patch" ]] || (( now - last_builds >= $(builds_every "$patch") )); }; then
         last_builds=$now builds_patch=$patch
         # EUW's and every region's files, patch and 30 days, from one read of the timelines
         # (two passes until 18 Oct, the second 15 min)
-        batch bin/meiolol builds --patch "$patch" --site > data/builds.log 2>&1 &
+        (heavy_hold builds
+            batch bin/meiolol builds --patch "$patch" --site > data/builds.log 2>&1
+            step_done builds $? data/builds.log) &
     elif [[ -n "$prev_patch" && "$prev_patch" != "$prev_curves_patch" ]]; then
         prev_curves_patch=$prev_patch
-        (batch bin/meiolol curves --patch "$prev_patch" \
-            && batch bin/meiolol curves --patch "$prev_patch" --platform all) > data/prev-curves.log 2>&1 &
+        (heavy_hold prev-curves
+            (batch bin/meiolol curves --patch "$prev_patch" \
+                && batch bin/meiolol curves --patch "$prev_patch" --platform all) \
+                > data/prev-curves.log 2>&1
+            step_done prev-curves $? data/prev-curves.log) &
     # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it
     elif [[ -z "${MEIOLOL_NO_EVAL:-}" ]] && (( now - last_eval >= 86400 )); then
         last_eval=$now
         (flock -n 9 || exit 0
+            heavy_hold eval
             batch bin/meiolol eval --platform all \
                 --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
-                && mv data/eval-latest.md.new data/eval-latest.md) 9> data/eval.lock &
+                && mv data/eval-latest.md.new data/eval-latest.md
+            step_done eval $? data/eval.log) 9> data/eval.lock &
     elif (( now - last_example >= 86400 )); then
         last_example=$now
-        (if batch bin/meiolol your-example --out data/your-example.json.new \
+        (heavy_hold example
+        if batch bin/meiolol your-example --out data/your-example.json.new \
             > data/your-example.log 2>&1; then
             mv data/your-example.json.new data/your-example.json
+            step_status example ok
         else
+            step_done example $? data/your-example.log
             rm -f data/your-example.json data/your-example.json.new
         fi) &
     elif (( now - last_lean >= 86400 )); then
         last_lean=$now
-        batch bin/meiolol lean > data/lean.log 2>&1 &
+        (heavy_hold lean
+            batch bin/meiolol lean > data/lean.log 2>&1
+            step_done lean $? data/lean.log) &
     elif [[ -n "$patch" ]] && (( now - last_truth >= 86400 )); then
         last_truth=$now
-        (if batch bin/meiolol truth --refresh --patch "$patch" --tsv "data/truth-$patch.tsv.new" \
+        (heavy_hold truth
+        if batch bin/meiolol truth --refresh --patch "$patch" --tsv "data/truth-$patch.tsv.new" \
             > "data/truth-$patch.md.new" 2> data/truth.log; then
             mv "data/truth-$patch.tsv.new" "data/truth-$patch.tsv"
             mv "data/truth-$patch.md.new" "data/truth-$patch.md"
+            step_status truth ok
         else
+            step_done truth $? data/truth.log
             rm -f "data/truth-$patch.tsv.new" "data/truth-$patch.md.new"
         fi) &
     elif (( now - last_tester >= 86400 )); then
         last_tester=$now
-        (rm -rf data/tester.new
+        (heavy_hold tester
+        rm -rf data/tester.new
         # tester-bin writes no .bin whose scorer is off its references: that drops only
         # the new page's file; the old page's JSON still goes up
         if batch bin/meiolol draft-model --out data/tester.new > data/tester.log 2>&1 \
@@ -464,6 +560,9 @@ run_daily() {
             rm -rf data/tester.old
             [[ -d data/tester ]] && mv data/tester data/tester.old
             mv data/tester.new data/tester && rm -rf data/tester.old
+            step_status tester ok
+        else
+            step_status tester failed "$(tail -n 1 data/tester.log | cut -c1-200)"
         fi) &
     else
         return 1
@@ -495,19 +594,28 @@ while true; do
     interval=$(interval_for "$patch")
     # Digests of the timelines stored since the last round, for this round's curves and
     # daily jobs (a game without one is read in full, same output)
-    batch bin/meiolol digest 2>&1 || true
+    heavy_take $(( forced ? 0 : 900 )) round
+    batch bin/meiolol digest 2>&1
+    step_done digest $? data/web.log
     held_curves=0
     if curves_due; then
-        # Fails harmlessly (logged) until there are timelines
-        if batch bin/meiolol curves --site ${patch:+--patch "$patch"} 2>&1; then fresh_curves=1; fi
+        # Fails (logged) until there are timelines
+        if batch bin/meiolol curves --site ${patch:+--patch "$patch"} 2>&1; then
+            fresh_curves=1
+            step_status curves ok
+        else
+            step_done curves $? data/web.log
+        fi
         [[ -n "$curves_patch" && -n "$patch" && "$patch" != "$curves_patch" ]] && prev_patch=$curves_patch
         last_curves=$now curves_patch=$patch
         push_curves
         # The champion pages' lock answers (site/locks.zig), from the days curves just
         # built and older ones: ~4 min, most of it reading 30 days of cubes
-        batch bin/meiolol lockrows 2>&1 || true
+        batch bin/meiolol lockrows 2>&1
+        step_done lockrows $? data/web.log
         # Meio for the private locks (data/export/meio.bin): 2.3 min, 2.7 GB on C01
-        batch bin/meiolol meio ${patch:+--patch "$patch"} 2>&1 || true
+        batch bin/meiolol meio ${patch:+--patch "$patch"} 2>&1
+        step_done meio $? data/web.log
     # Once per binary: a refit that fails would cost minutes every round
     elif [[ $(mtime bin/meiolol) != "$refit_binary" ]]; then
         refit_binary=$(mtime bin/meiolol)
@@ -525,9 +633,11 @@ while true; do
         if ! out=$(bin/meiolol site "${site_args[@]}" --out data/site.new --static core 2>&1); then
             echo "$out"
             round_event site failed "$(tail -n 1 <<< "$out")"
+            step_status site failed "$(tail -n 1 <<< "$out" | cut -c1-200)"
         else
             site_s=$(( SECONDS - site_start ))
             round_event site ok "core build ${site_s}s"
+            step_status site ok
             echo "$out"
             t=$SECONDS
             asset_glob='*.[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].*'
@@ -543,7 +653,9 @@ while true; do
             if ! stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --exclude /private/ --stats \
                 data/site/ meiolol-web:./); then
                 round_event upload failed "rsync to the web server failed"
+                step_status upload failed "rsync to the web server failed"
             else
+                step_status upload ok
                 sent=$(sed -nE 's/^Total bytes sent: ([0-9,]+)/\1/p' <<< "$stats")
                 echo "$(date -u +%FT%TZ) upload: site ${site_s}s, copy ${copy_s}s" \
                     "(${changed:-?} files changed), send $(( SECONDS - t ))s (${sent:-?} bytes)"
@@ -560,6 +672,7 @@ while true; do
                     echo "$(date -u +%FT%TZ) views file $(( SECONDS - t ))s" \
                         "($(stat -c %s data/views.bin) bytes${reuse:+, current parts kept})"
                     round_event views ok "$(( SECONDS - t ))s, $(views_parts)"
+                    step_status views ok
                     (( forced && ! full )) || { touch data/views.full; last_upload=$now; }
                     touch data/render.reload
                     round_event reload ok "renderer told to read the new views file"
@@ -567,6 +680,8 @@ while true; do
                     echo "$(date -u +%FT%TZ) views file FAILED after $(( SECONDS - t ))s:" \
                         "$(tail -n 1 data/views.log)"
                     round_event views failed "after $(( SECONDS - t ))s: $(tail -n 1 data/views.log)"
+                    step_status views failed \
+                        "after $(( SECONDS - t ))s: $(tail -n 1 data/views.log | cut -c1-200)"
                     touch data/render.reload
                     round_event reload ok "renderer told to reload (from the database)"
                 fi
@@ -574,8 +689,11 @@ while true; do
             fi
         fi
     fi
-    desktop_files || true
+    heavy_drop
+    desktop_files
+    step_done desktop $? data/web.log
     rm -rf data/admin.new data/private.new
+    admin_ok=1
     if nice -n 10 bin/meiolol admin --out data/admin.new --private-out data/private.new \
         --disk "$(df -B1 --output=size,used,avail data | tail -n 1)" \
         --health "$(bin/health.sh)" 2>&1; then
@@ -584,15 +702,24 @@ while true; do
         # The private edition's channel (app.md "Two editions"); linked, not copied (~50 MB)
         [[ -d data/desktop ]] && cp -al data/desktop data/private.new/desktop
         rm -rf data/admin && mv data/admin.new data/admin
-        rsync -a --delete data/admin/ meiolol-web:admin/ || echo "$(date -u +%FT%TZ) admin upload FAILED"
+        rsync -a --delete data/admin/ meiolol-web:admin/ \
+            || { echo "$(date -u +%FT%TZ) admin upload FAILED"; admin_ok=0; }
         rm -rf data/private && mv data/private.new data/private
         gate=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://meio.lol/private || true)
         if [[ "$gate" == 302 ]]; then
-            rsync -a --delete --exclude=/lab data/private/ meiolol-web:private/ || echo "$(date -u +%FT%TZ) private upload FAILED"
+            rsync -a --delete --exclude=/lab data/private/ meiolol-web:private/ \
+                || { echo "$(date -u +%FT%TZ) private upload FAILED"; admin_ok=0; }
         elif [[ "$gate" != "$private_gate" ]]; then
             echo "$(date -u +%FT%TZ) private upload held: meio.lol/private answers ${gate:-nothing}, not the login redirect"
         fi
         private_gate=$gate
+    else
+        admin_ok=0
+    fi
+    if (( admin_ok )); then
+        step_status admin ok
+    else
+        step_status admin failed "$(tail -n 1 data/web.log | cut -c1-200)"
     fi
     run_daily "$(date +%s)" || true
     start_scan "$(date +%s)"

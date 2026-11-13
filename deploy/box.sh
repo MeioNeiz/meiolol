@@ -253,19 +253,26 @@ case "${1:-}" in
         # with a dropped ssh): deploy/box.sh job run NAME 'CMD' runs CMD (bash, in
         # ml/meiolol) as user unit meiolol-job-NAME, output in data/job-NAME.log and its
         # exit status in data/job-NAME.rc; `job status NAME`; `job wait NAME [S]` until it
-        # ends (default 3600 s), exit its status, 3 timeout
+        # ends (default 3600 s), exit its status, 3 timeout. `run` first waits for
+        # data/heavy.lock (docs/hosting.md "Heavy lock": the web loop's heavy steps, its
+        # daily jobs, the backup), its log saying who holds it; `job light NAME 'CMD'`
+        # doesn't, for jobs that read little of the data disk
         name=${3:-}
-        [[ $name =~ ^[a-z0-9-]+$ ]] || { echo "usage: deploy/box.sh job run NAME 'CMD'|status NAME|wait NAME [S]"; exit 2; }
+        [[ $name =~ ^[a-z0-9-]+$ ]] || { echo "usage: deploy/box.sh job run|light NAME 'CMD'|status NAME|wait NAME [S]"; exit 2; }
         unit=meiolol-job-$name log=data/job-$name.log rc=data/job-$name.rc
         status_job="cd $DIR; if systemctl --user -q is-active $unit; then echo '$unit running'; \
             elif [ -f $rc ]; then echo \"$unit ended, exit \$(cat $rc)\"; else echo '$unit not run'; fi; \
             tail -n 5 $log 2> /dev/null"
         case "${2:-}" in
-            run)
-                [[ -n "${4:-}" ]] || { echo "usage: deploy/box.sh job run NAME 'CMD'"; exit 2; }
+            run | light)
+                [[ -n "${4:-}" ]] || { echo "usage: deploy/box.sh job run|light NAME 'CMD'"; exit 2; }
                 # A subshell, so an exit in CMD still leaves its status. MemoryHigh as
                 # meiolol-web.service: a job's page cache must not evict the crawler's
-                body=$(printf '( %s\n) > %s 2>&1; echo $? > %s' "$4" "$log" "$rc")
+                lock=:
+                [[ $2 == run ]] && lock="exec 7> data/heavy.lock; flock -n 7 || { echo \"waiting \
+for data/heavy.lock: \$(cat data/heavy.who 2> /dev/null)\"; flock 7; }; echo \"job $name, \
+since \$(date -u +%FT%TZ)\" > data/heavy.who"
+                body=$(printf '( %s\n%s\n) > %s 2>&1; echo $? > %s' "$lock" "$4" "$log" "$rc")
                 ssh "$HOST" "cd $DIR && if systemctl --user -q is-active $unit; then \
                     echo '$unit already running'; exit 1; fi; rm -f $rc \
                     && systemd-run --user -q --collect --unit $unit -p MemoryHigh=6G \
@@ -279,7 +286,7 @@ case "${1:-}" in
                     systemctl --user -q is-active $unit || break; sleep 5; done; $status_job; \
                     cd; systemctl --user -q is-active $unit && exit 3; exit \$(cat $DIR/$rc 2> /dev/null || echo 1)"
                 ;;
-            *) echo "usage: deploy/box.sh job run NAME 'CMD'|status NAME|wait NAME [S]"; exit 2 ;;
+            *) echo "usage: deploy/box.sh job run|light NAME 'CMD'|status NAME|wait NAME [S]"; exit 2 ;;
         esac
         ;;
     stop) ssh "$HOST" "systemctl --user disable -q --now meiolol-crawl" ;;
@@ -512,6 +519,6 @@ SQL
             *) echo "usage: deploy/box.sh watch install|uninstall"; exit 2 ;;
         esac
         ;;
-    *) echo "usage: deploy/box.sh sync|start [crawl args]|restart|stop|status|wait-deployed [rev] [--live] [--timeout S]|job run|status|wait NAME|logs [n]|model [rows] [-f]|run <meiolol args>|snapshot|preview [static|stop]|web start [contact]|rebuild|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
+    *) echo "usage: deploy/box.sh sync|start [crawl args]|restart|stop|status|wait-deployed [rev] [--live] [--timeout S]|job run|light|status|wait NAME|logs [n]|model [rows] [-f]|run <meiolol args>|snapshot|preview [static|stop]|web start [contact]|rebuild|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
        exit 2 ;;
 esac

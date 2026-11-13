@@ -20,7 +20,16 @@ if rsync -q meiolol-exchange:forgotten.txt data/exchange-forgotten.txt 2> /dev/n
 fi
 # A restart runs this again: no second heavy run beside the crawler
 if [[ ! -f "$MEIOLOL_BACKUPS/state/state-$(date -u +%F).db" ]]; then
-    bin/meiolol backup --data data || echo "$(date -u +%FT%TZ) backup FAILED"
+    # One heavy reader of the data disk at a time (docs/hosting.md "Heavy lock"); after an
+    # hour's wait, beside the holder
+    (exec 7> data/heavy.lock
+        if flock -w 3600 7; then
+            echo "backup, since $(date -u +%FT%TZ)" > data/heavy.who
+        else
+            echo "$(date -u +%FT%TZ) heavy lock held an hour by $(cat data/heavy.who):" \
+                "backup beside it"
+        fi
+        bin/meiolol backup --data data) || echo "$(date -u +%FT%TZ) backup FAILED"
 fi
 # Files a mirror (the Mac, the gpu-box: deploy/backup-mirror.sh) holds leave the box
 bin/backup-serve.sh prune || echo "$(date -u +%FT%TZ) backup prune FAILED"

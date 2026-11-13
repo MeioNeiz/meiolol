@@ -135,13 +135,11 @@ Raw tables, players and ladder_pages come back empty; the crawler refills them. 
 re-applies `forgotten`. From the Megatron mirror it also copies the sealed day files into
 `complete/` and scrubs them to the restored `forgotten` before it returns.
 
-Restore test, quarterly: back up, restore into another directory, compare. Last row by
-row 18 Oct 2026: `meiolol status --exact` equal on both except raw.raw_docs and
-raw.timeline_docs (empty by design); every column per key digested at the backup point
-(data/team/2026-10-18-waste/restore-digest.sh, restore-compare.sh), participants differ
-only in matches whose timeline came after it. Last with day files 6 Nov 2026 (Megatron
-mirror, 3 h 56 min at idle IO beside the crawler): each day file's sha256 equals live's.
-`status --exact` on a restore only in a quiet hour: it stalls the crawler's checkpoints.
+Restore test, quarterly (last 18 Oct 2026 row by row, 6 Nov with day files): restore into
+another directory (Megatron mirror ~4 h); `status --exact` equal but raw.raw_docs and
+raw.timeline_docs; every column per key at the backup point (data/team/2026-10-18-waste/
+restore-*.sh; participants differ where a timeline came later); day files' sha256 equal.
+Through `deploy/box.sh job run`, in a quiet hour: `status --exact` stalls checkpoints.
 
 ### Logins backup
 
@@ -186,6 +184,8 @@ deploy/health.sh runs on the box and prints one line per problem:
 | crawler | unit `meiolol-crawl` not active; "Riot rejected the key" if crawl.log ends in KEY REJECTED |
 | crawler silent | last per-minute report older than 15 min |
 | no new matches | report's per-region match counters unchanged for 2h (STALL_H) |
+| crawler key use | any region's requests over the last 30 min of this crawler run under 90% of the key's 100 per 120 s (KEYUSE_MIN, KEYUSE_PCT; the report lines' `req` counters: the time % lines show 10-15% lost in hours that used 97-100%); 4-10 Nov it would have fired 1-6 times a day. Its line carries when it began (data/health.episodes), so it pushes once (the next row's too) |
+| crawler writer stalling | crawl.log `stall:` or `no checkpoint for` lines in the last 15 min (riot/stall.zig) |
 | complete form off | the last report line says `complete off`: a packer or sealer error, the form restarts from its spool after 60 s, doubled for each other restart in the last 6 h, at most 1 h (riot/complete.zig); the line's `complete` part counts docs, raw, frames, MB, queued, dropped (queue full at 200,000, or a spool write failed) and restarts in the last hour; also a problem: 3+ restarts in an hour, or any dropped |
 | complete form still | the newest `.part` in data/complete not written for 30 min while the crawler runs (mastery blocks seal about every minute) |
 | complete form scrub | data/complete-scrub.status, the last scrub by any `forget` or `backup`, is not `ok`: day files failed (`failed N`) or the scrub stopped (`error NAME`); the next run retries. The forgotten list is exported before the scrub, so mirrors and the archive still get it |
@@ -193,11 +193,13 @@ deploy/health.sh runs on the box and prints one line per problem:
 | complete form quarantine | files in data/complete/spool/quarantine (below) |
 | WAL not checkpointed | a data/*.db-wal over 4 GB (crawler's checkpointer stuck, or a reader holding it) |
 | site | unit `meiolol-web` not active, or last upload in web.log older than 26h |
+| site loop step | a step's latest outcome in data/web-steps.tsv failed (web-loop.sh: digest, curves, curves-push, lockrows and meio (pass or refit), site, upload, views, desktop, admin; daily builds, prev-curves, eval, example, lean, truth, tester, storage); clears when the step next succeeds |
+| site end to end | from C01 through https://meio.lol (Cloudflare tunnel, nginx): the home, a lock answer (data/lock/meio/darius/top/plat/none.bin) or /api/health not 200, or served from nginx's copy (X-Meiolol-Render STALE or ANY-*: the renderer did not answer); MEIOLOL_SITE in host.env, empty for none |
 | disk | / at 80% not counting C01's fixed 30 GB disk cache file (the rest grows slowly: snaps, nginx's 2 GB cache, /var/www), or the data's disk at 80%; or the data disk under 30 days from full at its weekly growth plus the newest whole day of day files (Disk) |
 | mounts | a path in host.env's MEIOLOL_MOUNTS not mounted (C01: /srv/meiolol, /srv/megatron, /srv/megatron-backups); with the data disk itself down health.sh can't run: mac-watch.sh says "data disk not mounted" (ssh's exit 127) |
 | deploy | the newest finished deploy in data/deploys.tsv failed (the Mac's on-push.sh queues events until the box answers) |
 | backup | unit `meiolol-backup` not active, or newest state snapshot older than 26h |
-| gpu-box | no raw archive ack for 12h (ACK_H): PC off, asleep or WSL down; first export never acked; one export unacked for 12h while others are acked (see archive-pull.log on the gpu-box) |
+| gpu-box | no raw archive ack for 12h (ACK_H) while exports wait or no pull reported for 12h (data/gpu-box.pull; nothing exported, e.g. the crawler stored nothing, stops acks too): PC off, asleep or WSL down; first export never acked; one export unacked for 12h while others are acked (see archive-pull.log on the gpu-box) |
 | gpu-box disks | C: (holds the WSL disk) or the WSL disk or the archive partition at 85%, or the partition not attached; reported by each archive pull |
 | gpu-box logins backup | the last accounts pull failed, its timer is not running, or the newest copy is over 3 days old; reported by each archive pull |
 | raw held | free disk above the raw valve under 3 days of raw (bytes sent to the gpu-box over the last 24 h, data/archive-sent.log): what an outage of the gpu-box can last before the valve drops unarchived raw; exports waiting on the box shown apart |
@@ -205,15 +207,13 @@ deploy/health.sh runs on the box and prints one line per problem:
 | raw valve | the disk valve dropped raw the archive never got in the last 24 h (raw-export --status drops_24h, data/raw-dropped.log) |
 | backup mirrors | backups not mirrored for 26 h, or a mirror silent for 48 h (backup-serve.sh status) |
 
-- Box: user unit meiolol-health (deploy/health-loop.sh) every 15 min, log
-  data/health.log; with NTFY_TOPIC in .env it pushes to that private ntfy.sh topic when
-  the problems change, every 12h while they last, and once when resolved (no topic is
-  set today: the Mac's toast is the alert)
-- Mac: launchd `net.jacob.meiolol-watch` every 30 min (deploy/mac-watch.sh): the same
-  check over ssh, toasted with `wz notify`; adds "gpu-box unreachable" (PC off or asleep)
-  and a stale Mac mirror. Log in ~/.cache/meiolol-watch/log
-- Manage: `deploy/box.sh backup|health start|stop|status`, `deploy/box.sh health check`,
-  `deploy/box.sh watch install|uninstall`
+- Box: user unit meiolol-health (deploy/health-loop.sh) every 15 min, log data/health.log;
+  with NTFY_TOPIC in .env it pushes to that private ntfy.sh topic when the problems
+  change, every 12h while they last, and once when resolved (no topic set today)
+- Mac: launchd `net.jacob.meiolol-watch` (deploy/mac-watch.sh) every 30 min: the same
+  check over ssh as `wz notify` toasts, plus "gpu-box unreachable" and a stale Mac mirror
+- Manage: `deploy/box.sh backup|health start|stop|status`, `health check`, `watch
+  install|uninstall`
 
 ### Complete form quarantine
 
