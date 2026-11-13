@@ -1,4 +1,4 @@
-//! ui-forget.wasm: Remove my data (ui.forget.Forget). POSTs /api/forget, then asks again
+//! ui-forget.wasm: Remove a Riot ID (ui.forget.Forget). POSTs /api/forget, then asks again
 //! while the API talks to Riot; once done, the Riot ID leaves your-recent and your-last.
 //! ui-yourviews.wasm adds its loader (ui-forget.js) as the page's foot nears the
 //! viewport, which calls `main`

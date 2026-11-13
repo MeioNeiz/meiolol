@@ -259,6 +259,7 @@ EOF
 last_patch='' last_games=0
 patch='' curves_patch='' last_curves=0 fresh_curves=0
 builds_patch='' daily_pid=''
+last_champions=0
 # The patch before the current one once it changes: its curves again, complete, for the
 # site's patch day (patch.html), one daily job
 prev_patch='' prev_curves_patch=''
@@ -592,6 +593,14 @@ while true; do
         games=0
     fi
     interval=$(interval_for "$patch")
+    # Champion names and Data Dragon's newest version, which the pages' portraits and ability
+    # art are by; nothing else refreshes them. Every 6 h, so a patch's art follows within one
+    # day of Data Dragon's release
+    if (( now - last_champions >= 21600 )); then
+        batch bin/meiolol champions 2>&1
+        step_done champions $? data/web.log
+        last_champions=$now
+    fi
     # Digests of the timelines stored since the last round, for this round's curves and
     # daily jobs (a game without one is read in full, same output)
     heavy_take $(( forced ? 0 : 900 )) round

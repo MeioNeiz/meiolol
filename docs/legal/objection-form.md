@@ -66,7 +66,7 @@ until the check passes.
 
 ## Page copy
 
-### Remove my data
+### Remove a Riot ID
 
 Stop meiolol using your League data, and delete what we hold about you.
 

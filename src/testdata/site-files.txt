@@ -514,5 +514,5 @@ rankings/long-games/mid.html d573451bb3eeb4ea
 rankings/long-games/support.html 4a855e7c54dda2ec
 rankings/long-games/top.html 347e4bf2184179c1
 robots.txt 331ea9090db0c9f6
-squad.html db7a7ae1022a744c
+squad.html 33cd67c0bee5d670
 terms.html 9e9a49046f26175c

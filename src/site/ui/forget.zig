@@ -1,4 +1,4 @@
-//! Remove my data (docs/legal/lia.md "3. Balancing test", its objection line): anyone,
+//! Remove a Riot ID (docs/legal/lia.md "3. Balancing test", its objection line): anyone,
 //! for any Riot ID, proves it is theirs by setting a profile icon, then the API removes
 //! it and never collects it again. Island Forget (ui-forget.wasm, lazy at the Your games
 //! page's foot); /api/forget does the Riot calls (api/root.zig forget) and answers a
@@ -21,7 +21,7 @@ pub const sel = "[data-island=forget]";
 pub const poll_ms = 2000;
 
 const W = struct {
-    pub const open = plain("Remove my data");
+    pub const open = plain("Remove a Riot ID");
     pub const id = plain("Riot ID");
     pub const hint = plain("Name#TAG");
     pub const start = plain("Start");

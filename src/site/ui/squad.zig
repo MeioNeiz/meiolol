@@ -317,11 +317,29 @@ pub const Squad = struct {
             h.p(.{ .class = "lead" }, .{W.proof}),
             p.form(h, .create),
             h.a(.{ .href = "/privacy#squads", .class = "why" }, .{W.why}),
-            h.div(.{ .class = "example" }, .{
-                h.p(.{ .class = "note" }, .{W.example}),
-                p.head(h, &example, false),
-                p.games(h, &example, false),
-            }),
+            p.exampleView(h),
+        });
+    }
+
+    /// The site's portraits once the page names its Data Dragon version, else the gallery's
+    fn exampleView(p: *P, h: *H) N {
+        const d = h.mem.create(Data) catch {
+            h.oom = true;
+            return .none;
+        };
+        d.* = example;
+        if (p.ddragon.len > 0) {
+            const cs = h.mem.dupe(champ.Champ, example.champs) catch {
+                h.oom = true;
+                return .none;
+            };
+            for (cs, example_keys) |*c, key| c.src = h.fmt(champ.icon_fmt, .{ p.ddragon, key });
+            d.champs = cs;
+        }
+        return h.div(.{ .class = "example" }, .{
+            h.p(.{ .class = "note" }, .{W.example}),
+            p.head(h, d, false),
+            p.games(h, d, false),
         });
     }
 
@@ -515,6 +533,8 @@ pub const css =
     \\}
     \\
 ;
+
+const example_keys = [_][]const u8{ "Ahri", "Leona", "Jinx", "Vi" };
 
 /// The start page's: made-up members, never a real Riot ID
 const example: Data = .{

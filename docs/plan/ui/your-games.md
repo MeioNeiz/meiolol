@@ -34,7 +34,7 @@ each its own URL (#id=..&view=friends), so each gets the whole screen:
 - Player bar (always, 64 px): Riot ID at --fs-xl, rank emblem and "Platinum II · 2 LP",
   the record "15-8", win rate, a form strip of the last 20 results (W/L ticks), the
   refresh button with its time ("11:21", spins while checking), a "⋯" menu (Copy link,
-  Not you?, Remove my data)
+  Not you?, Remove a Riot ID)
 - Views as tabs (`tabs`, the one "pick a view" control): Games, Highlights, Friends,
   Over time. Game detail opens from Games and keeps the bar
 - The lookup box moves into the site header search (it already takes Riot IDs) plus
@@ -200,7 +200,7 @@ small bar each. Client side from the report; not mocked.
 ## Your data
 
 Built (ui.forget, island ui-forget.wasm, loaded lazily as the foot nears): a closed
-"Remove my data" disclosure at the page's foot. Open: a "What we keep" link to the
+"Remove a Riot ID" disclosure at the page's foot. Open: a "What we keep" link to the
 privacy page, a Riot ID box (any ID: lia.md's objection is open to anyone) and Start;
 then the icon at 64 px, one line "Set this profile icon on X before 18:05, then press
 Check" and Check. Done drops the ID from your-recent and your-last. It reads /api/forget's
