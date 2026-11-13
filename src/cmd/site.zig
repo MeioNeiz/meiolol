@@ -350,6 +350,13 @@ pub const usage_dev =
     \\
 ;
 
+fn newestGameMs(db: store.Db) !?i64 {
+    var q = try db.prepare("SELECT max(game_start) FROM matches");
+    defer q.deinit();
+    if (!try q.step() or q.isNull(0)) return null;
+    return q.int(0);
+}
+
 /// Pages rendered on request from data loaded once, CSS and JS from src/site/static, and
 /// the browser reloading after an edit (deploy/dev.sh rebuilds the binary)
 pub fn cmdDev(c: *Cmd) !u8 {
@@ -368,6 +375,12 @@ pub fn cmdDev(c: *Cmd) !u8 {
     defer db.close();
     var opts = try f.options(c, c.arena, db, f.contact orelse "dev@example.com");
     opts.static_dir = static_dir;
+    // A snapshot older than the window would leave the 30 days empty (NoMatches): they
+    // end at its newest game instead
+    if (try newestGameMs(db)) |newest| if (newest < opts.since_ms) {
+        opts.since_ms = newest - main.recent_days * std.time.ms_per_day;
+        std.log.info("dev: the snapshot ends {f}: its last {d} days stand in for the 30", .{ Date.fromMs(newest).long(), main.recent_days });
+    };
     const loaded = try site.Loaded.init(c.init.gpa, c.init.io, db, opts);
     const rendered = serve.Rendered.init(c.init.gpa, c.init.io, loaded, null) catch |err| {
         loaded.deinit();
