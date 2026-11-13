@@ -46,7 +46,9 @@ lab_tools() {
     # Not on stderr: lab-run.sh reads lab-place's stderr as its answer
     { echo "building the lab tools ($key) from HEAD, ~30 s" > /dev/tty; } 2> /dev/null || true
     stage=$(mktemp -d)
-    git -C "$root" archive HEAD -- src build.zig build.zig.zon | tar -x -C "$stage"
+    # build.zig's inputs outside src that the backend compiles in
+    git -C "$root" archive HEAD -- src build.zig build.zig.zon testdata/lcu/scenarios \
+        docs/plan/ui/components.md | tar -x -C "$stage"
     ln -s "$base/zig-pkg" "$stage/zig-pkg"
     if ! (cd "$stage" && "$zig" build backend --prefix "$stage/out" --cache-dir "$base/.zig-cache") \
         > "$dir/build.log" 2>&1; then

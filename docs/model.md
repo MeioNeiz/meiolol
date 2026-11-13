@@ -6499,6 +6499,52 @@ data/team/2026-11-02-polish/notes/meiolol-stats-review.md.
 - A player's own win rate on a champion (5+ games) varies 5.6 points beyond chance:
   intra-player correlation 0.012; games-weighted 20 games per player-champion
 
+### A10 (a): strength shrinks to a line in log share, and D1 inside v2, 2026-11-13 (draftmodel)
+
+Question (docs/plan/lab-frontier.md A10 (a), D1): Meio's lesson was that rare off-role
+picks lose (under 100 games: 34%). Additive v2 shrinks a thin champion-role's strength
+to 0. Does shrinking it to a line in its log share of the role help, and where? Beside
+it D1's open part: seat mastery as a term inside v2.
+
+Rules, declared 2026-11-09 before any run (data/team/2026-11-09-more/draftmodel.md);
+between then and the full run only fold 1 was run, as a smoke (line + hinge vs full
+-0.16 ± 0.10, rare -10.8 ± 6.1 on 1,679 games; mastery -1.03 ± 0.19), nothing changed
+after it:
+
+- Data: snap-20261023T2004Z, effects' blocks: dev-val (158,728 games, fit on 1.19M) and
+  folds 1-5 (119k each); 753,959 scored. No test game touched
+- Line: x = ln(champion-role's fit games / its role's fit games), from each block's fit
+  games only; a champion-role unseen in the fit counts 0.5 games. Per game, blue minus
+  red summed over roles: x and the hinge min(0, x + 10) (Meio's pop_knot), two fixed
+  terms fitted jointly with v2 (unpenalised bar the fixed ridge 1e-3), so each
+  champion-role's strength shrinks to the line, not 0. One line for all roles (as Meio)
+- Models, each against the same model without the line, paired per game: v2 full
+  (damage mix) -> full-ls (line) and full-lsh (line + hinge); v2's shipped form
+  full-nomix -> full-nomix-lsh. D1: full + seat mastery m = log10(points + 1000) - 3
+  (lanecard.Expertise.feature), blue minus red summed over seats, an unknown seat at its
+  champion-role's mean m among the block's fetched fit seats (shrunk to the role's by 50
+  seats): full-m, full-lsh-m
+- Score: milli-nats a game, paired, ± 1.96 se over games; the folds pooled are the
+  headline, dev-val beside, each fold listed
+- Slices, per game, fixed before the run: rank bracket by the median rank_start of the
+  game's known seats, 6+ known (rank_start is the lab's fillRankStart: the ladder rank
+  before the game's day, never the stored tier): Iron-Silver (0-11), Gold-Emerald
+  (12-23), Diamond+ (24+), unknown; EUW1; rare: some seat's champion-role under 100 fit
+  games in its block; thin: 100-999; common: all 1,000+. Pick metric on dev-val, 1 game
+  in 8: each pick hidden in turn, candidates the role's champions with 10+ fit games,
+  percentile of the real pick under the model; AUC winners vs losers and the top-10% win
+  rate, paired over picks
+- Patch days 0-3: not scoreable on this pin (16.20 starts in the fit-only window behind
+  53k 16.19 games; all 16.21 is test). Reported as missing
+- Reading: a gain needs its interval to exclude 0. Expected: the rare slice gains, the
+  overall is near 0 (rare games are few). A10 (a) is done with the paired difference per
+  slice whatever its sign. A ship proposal only if the overall is <= 0 within noise and
+  rare gains beyond 2 se, and then a sealed check on the next pin first. Shuffle control
+  (--shuffle) on one block: every gain ~0
+- D1: the mastery term's gain in log loss, beta with its interval, and v2's
+  champion-role strengths with the term (at any fixed mastery, so at 50k points) against
+  without
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now

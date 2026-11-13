@@ -25,6 +25,7 @@ const additive = @import("../additive.zig");
 const addinputs = @import("addinputs.zig");
 const par = @import("../par.zig");
 const winnet = @import("winnet.zig");
+const a10 = @import("a10.zig");
 
 const Io = std.Io;
 const A = additive;
@@ -43,6 +44,11 @@ pub const usage =
     \\                                  [--param v1|v2] (v2, default: 15 identified
     \\                                  matchup blocks; v1: 25 enemy blocks, two cells
     \\                                  per matchup, as runs before 14 Oct 03Z)
+    \\                                  [--a10 1] (A10 (a) and D1: v2 with its strength
+    \\                                  shrunk to a line in log share, and seat
+    \\                                  mastery; games-meta.tsv slices, picks-*.tsv
+    \\                                  on dev-val, mains-*.tsv strengths with and
+    \\                                  without mastery; lab/a10.zig)
     \\                                  [--calibrate SIMS] (block variances corrected by
     \\                                  simulation: calibrated table, and full-cal, the
     \\                                  full model refitted with them fixed)
@@ -75,6 +81,7 @@ const Options = struct {
     /// Simulations per calibration round (additive.calibrate); 0 off
     calibrate: u32 = 0,
     param: Param = .v2,
+    a10: bool = false,
 };
 
 /// v2: identified matchups (additive.Variant.matchupGroups); v1: the 25 enemy blocks
@@ -152,6 +159,10 @@ const Model = struct {
     name: []const u8,
     variant: A.Variant,
     target: Target = .win,
+    /// Pick metric on dev-val (--a10)
+    picks: bool = false,
+    /// Champion-role strengths per block to mains-NAME.tsv (--a10, D1)
+    mains: bool = false,
 };
 
 const Target = enum {
@@ -175,7 +186,7 @@ fn lanePair(r: usize, q: usize) bool {
     return r == q or (r == 3 and q == 4) or (r == 4 and q == 3);
 }
 
-fn models(arena: std.mem.Allocator, param: Param) ![]Model {
+fn models(arena: std.mem.Allocator, param: Param, with_a10: bool) ![]Model {
     var mains = A.Variant.mains();
     mains.matchup = param == .v2;
     var mix = mains;
@@ -206,6 +217,31 @@ fn models(arena: std.mem.Allocator, param: Param) ![]Model {
         .{ .name = "full-nomix", .variant = nomix },
         .{ .name = "gold", .variant = full, .target = .gold },
     });
+    if (with_a10) {
+        const line: u8 = 1 << a10.slot_line;
+        const hinge: u8 = 1 << a10.slot_hinge;
+        const m: u8 = 1 << a10.slot_mastery;
+        var ls = full;
+        ls.cont |= line;
+        var lsh = full;
+        lsh.cont |= line | hinge;
+        var nomix_lsh = nomix;
+        nomix_lsh.cont |= line | hinge;
+        var fm = full;
+        fm.cont |= m;
+        var lsh_m = lsh;
+        lsh_m.cont |= m;
+        out.items[full_model].picks = true;
+        out.items[full_model].mains = true;
+        out.items[full_model + 1].picks = true;
+        try out.appendSlice(arena, &.{
+            .{ .name = "full-ls", .variant = ls, .picks = true },
+            .{ .name = "full-lsh", .variant = lsh, .picks = true },
+            .{ .name = "full-nomix-lsh", .variant = nomix_lsh, .picks = true },
+            .{ .name = "full-m", .variant = fm, .mains = true },
+            .{ .name = "full-lsh-m", .variant = lsh_m },
+        });
+    }
     return out.toOwnedSlice(arena);
 }
 
@@ -260,7 +296,27 @@ const Task = struct {
     label: []const u8,
 };
 
-const Result = struct { pred: []f64 = &.{} };
+const Result = struct {
+    pred: []f64 = &.{},
+    /// a10.pickPercentiles' over the pick sample, when the task has picks
+    picks: []f32 = &.{},
+    /// The fit's continuous terms (a10's slots) and their posterior curvature
+    cont: [A.n_cont]f64 = @splat(0),
+    cont_h: [A.n_cont]f64 = @splat(0),
+    /// Champion-role strengths, when the model asks
+    mains: []Main = &.{},
+};
+
+const Main = struct { champion: u32, role: u8, games: u32, theta: f64, sd: f64 };
+
+/// --a10 inputs of one block
+const A10 = struct {
+    block: a10.Block,
+    mix: *const Mix,
+    cands: [A.n_role][]u32,
+    /// Scored games in the pick sample (dev-val only, else empty)
+    sample: []const A.GameIn,
+};
 
 /// Logit of blue's win per unit of gold difference at 14 (thousands), from the fit
 /// games' real gold: what a predicted gold edge is worth (one-variable logistic).
@@ -307,6 +363,7 @@ fn runBlock(
     tasks: []const Task,
     soft: ?*const Soft,
     opts: Options,
+    mastery: []const f32,
     files: *Files,
     pooled: *Pooled,
     w: *Io.Writer,
@@ -325,6 +382,17 @@ fn runBlock(
     }
     var mix = try Mix.init(gpa, d, is_fit, in.win);
     defer mix.deinit(gpa);
+    var ax: ?A10 = if (opts.a10) .{
+        .block = try a10.Block.init(gpa, d, is_fit, mastery),
+        .mix = &mix,
+        .cands = undefined,
+        .sample = &.{},
+    } else null;
+    defer if (ax) |*x| {
+        x.block.deinit(gpa);
+        for (x.cands) |cs| gpa.free(cs);
+    };
+    if (ax) |*x| x.cands = try x.block.candidates(gpa);
 
     // Fit games per target: win, teacher logit, mix, gold (known gold only)
     const fit_win = try arena.alloc(A.GameIn, fit_idx.items.len);
@@ -337,6 +405,7 @@ fn runBlock(
     for (fit_idx.items, fit_win, fit_logit, fit_mix, fit_goldv) |gi, *fw, *fl, *fm, *gv| {
         const m = mix.diff(d, in, gi, true);
         fw.* = gameIn(d, gi, in.win[gi], m);
+        if (ax) |*x| x.block.fill(d, in, mastery, gi, fw);
         fl.* = fw.*;
         fm.* = fw.*;
         if (soft) |s| if (s.get(&kbuf, blockName(block), d.games[gi].match_id)) |z| {
@@ -353,6 +422,20 @@ fn runBlock(
     }
     const scored_in = try arena.alloc(A.GameIn, scored.items.len);
     for (scored.items, scored_in) |gi, *s| s.* = gameIn(d, gi, in.win[gi], mix.diff(d, in, gi, false));
+    var sample_ids: std.ArrayList(u32) = .empty;
+    if (ax) |*x| {
+        for (scored.items, scored_in) |gi, *s| x.block.fill(d, in, mastery, gi, s);
+        const mw = try files.meta(io);
+        for (scored.items, scored_in) |gi, *s| try mw.print("{s}\t{s}\t{d}\t{s}\t{d:.1}\n", .{ blockName(block), d.games[gi].match_id, d.games[gi].platform, a10.bracket_names[a10.bracket(d, in, gi)], a10.minFitGames(&x.block, s) });
+        if (block == .dev) {
+            var sample: std.ArrayList(A.GameIn) = .empty;
+            for (scored.items, scored_in, 0..) |gi, s, i| if (i % a10.pick_every == 0) {
+                try sample.append(arena, s);
+                try sample_ids.append(arena, gi);
+            };
+            x.sample = sample.items;
+        }
+    }
     const slope = goldSlope(fit_goldv, blk: {
         const ys = try arena.alloc(f32, fit_idx.items.len);
         for (fit_idx.items, ys) |gi, *y| y.* = in.win[gi];
@@ -399,6 +482,7 @@ fn runBlock(
         fit_gold: []const A.GameIn,
         scored: []const A.GameIn,
         slope: [3]f64,
+        ax: ?*const A10,
         fn one(x: @This(), i: usize) !void {
             const t = x.tasks[i];
             var v = t.model.variant;
@@ -432,6 +516,24 @@ fn runBlock(
                 };
             }
             x.results[i] = .{ .pred = pred };
+            for (0..A.n_cont) |ci| {
+                x.results[i].cont[ci] = f.theta[A.n_platforms + ci];
+                x.results[i].cont_h[ci] = f.h[A.n_platforms + ci];
+            }
+            if (t.model.mains) {
+                const lo = p.param_start[A.g_main];
+                const ms = try x.gpa.alloc(Main, p.param_start[A.g_main + A.n_role] - lo);
+                for (ms, lo..) |*m, j| {
+                    const cl = A.cellOf(&p, j);
+                    m.* = .{ .champion = cl.a, .role = @intCast(cl.group - A.g_main), .games = p.count[j], .theta = f.theta[j], .sd = 1 / @sqrt(f.h[j]) };
+                }
+                x.results[i].mains = ms;
+            }
+            if (x.ax) |a| if (t.model.picks and a.sample.len > 0) {
+                const pk = try x.gpa.alloc(f32, a.sample.len * 2 * A.n_role);
+                a10.pickPercentiles(&p, &f, &a.block, a.mix, &a.cands, a.sample, pk);
+                x.results[i].picks = pk;
+            };
         }
     };
     var at: usize = 0;
@@ -449,9 +551,14 @@ fn runBlock(
             .fit_gold = fit_gold.items,
             .scored = scored_in,
             .slope = slope,
+            .ax = if (ax) |*x| x else null,
         }, Ctx.one);
     }
-    defer for (results) |r| gpa.free(r.pred);
+    defer for (results) |r| {
+        gpa.free(r.pred);
+        gpa.free(r.picks);
+        gpa.free(r.mains);
+    };
 
     const name = blockName(block);
     const secs = winnet.secondsSince(io, t0);
@@ -473,6 +580,11 @@ fn runBlock(
         const mean = s / n_sc;
         const se = @sqrt(@max(s2 / n_sc - mean * mean, 0) / @max(n_sc - 1, 1));
         try w.print("  {s}: {d:.5}, vs {s} {d:.5} +- {d:.5}\n", .{ t.label, l / n_sc, cand_name, mean, 1.96 * se });
+        if (opts.a10) {
+            try w.print("    cont terms {d:.5} {d:.5} {d:.5} {d:.5}, half-widths (1.96 / sqrt of own curvature)", .{ r.cont[0], r.cont[1], r.cont[2], r.cont[3] });
+            for (r.cont_h) |h| try w.print(" {d:.5}", .{if (h > 0) 1.96 / @sqrt(h) else 0});
+            try w.writeAll("\n");
+        }
         try files.folds.print("{s}\t{s}\t{d}\t{d}\t{d:.6}\t{d:.6}\t{d:.6}\t{d:.6}\n", .{ name, t.label, fit_idx.items.len, scored.items.len, l / n_sc, ref_loss / n_sc, mean, se });
         if (t.model.target == .gold) {
             // Diagnostic, from the scored games' outcomes: what the draft's predicted
@@ -506,6 +618,18 @@ fn runBlock(
     try w.flush();
     try files.folds.flush();
 
+    for (tasks, results) |t, r| if (r.mains.len > 0) {
+        const mw = try files.mainsFor(io, t.label);
+        for (r.mains) |m| try mw.print("{s}\t{d}\t{s}\t{d}\t{d:.6}\t{d:.6}\n", .{ name, m.champion, A.role_names[m.role], m.games, m.theta, m.sd });
+    };
+    for (tasks, results) |t, r| if (r.picks.len > 0) {
+        const pw = try files.picksFor(io, t.label);
+        for (sample_ids.items, 0..) |gi, k| for (0..2) |s| for (0..A.n_role) |role| {
+            const q = r.picks[(k * 2 + s) * A.n_role + role];
+            const won = @intFromBool(d.games[gi].winner == s);
+            try pw.print("{s}\t{d}\t{d}\t{d:.5}\t{d}\n", .{ d.games[gi].match_id, s, role, q, won });
+        };
+    };
     const gw = try files.gamesFor(io, cand_name);
     for (scored.items, pc) |gi, p| try gw.print("{s}\t0\twin\t{d}\t{d:.6}\t{s}\n", .{ d.games[gi].match_id, in.win[gi], p, name });
     for (tasks, results) |t, r| {
@@ -578,6 +702,40 @@ const Files = struct {
         try fw.interface.writeAll("match_id\tslot\toutcome\ty\tpred\tblock\n");
         try f.games.put(arena, label, fw);
         return &fw.interface;
+    }
+
+    fn picksFor(f: *Files, io: Io, label: []const u8) !*Io.Writer {
+        const name = try f.arena.print("picks-{s}", .{label});
+        if (f.games.get(name)) |x| return &x.interface;
+        const fw = try f.open(io, try f.arena.print("{s}.tsv", .{name}));
+        try fw.interface.writeAll("match_id\tside\trole\tpct\twon\n");
+        try f.games.put(f.arena, name, fw);
+        return &fw.interface;
+    }
+
+    fn mainsFor(f: *Files, io: Io, label: []const u8) !*Io.Writer {
+        const name = try f.arena.print("mains-{s}", .{label});
+        if (f.games.get(name)) |x| return &x.interface;
+        const fw = try f.open(io, try f.arena.print("{s}.tsv", .{name}));
+        try fw.interface.writeAll("block\tchampion\trole\tgames\ttheta\tsd\n");
+        try f.games.put(f.arena, name, fw);
+        return &fw.interface;
+    }
+
+    fn meta(f: *Files, io: Io) !*Io.Writer {
+        if (f.games.get("meta")) |x| return &x.interface;
+        const fw = try f.open(io, "games-meta.tsv");
+        try fw.interface.writeAll("block\tmatch_id\tplatform\tbracket\tmin_fit_games\n");
+        try f.games.put(f.arena, "meta", fw);
+        return &fw.interface;
+    }
+
+    fn open(f: *Files, io: Io, path: []const u8) !*Io.File.Writer {
+        const file = try f.dir.createFile(io, path, .{});
+        const buf = try f.arena.alloc(u8, 64 * 1024);
+        const fw = try f.arena.create(Io.File.Writer);
+        fw.* = file.writer(io, buf);
+        return fw;
     }
 
     fn close(f: *Files, io: Io) !void {
@@ -869,6 +1027,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.threads = @max(1, try std.fmt.parseInt(u32, v, 10));
         } else if (std.mem.eql(u8, k, "--param")) {
             o.param = std.meta.stringToEnum(Param, v) orelse return error.BadParam;
+        } else if (std.mem.eql(u8, k, "--a10")) {
+            o.a10 = std.mem.eql(u8, v, "1");
         } else if (!try winnet.setFlag(&o, k, v, &.{})) return error.UnknownOption;
     }
     return o;
@@ -922,7 +1082,14 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     if (opts.shuffle != null) try w.writeAll("SHUFFLED LABELS: a control, every gain and sd must be ~0 (the candidate fits the real labels: its rows' y)\n\n");
     try w.flush();
 
-    const ms = try models(arena, opts.param);
+    const ms = try models(arena, opts.param, opts.a10);
+    const mastery: []f32 = if (opts.a10) try a10.loadMastery(gpa, io, snap, &data) else &.{};
+    defer gpa.free(mastery);
+    if (opts.a10) {
+        var known: usize = 0;
+        for (mastery) |x| known += @intFromBool(!std.math.isNan(x));
+        try w.print("a10: pre-game mastery on {d} of {d} rows\n\n", .{ known, mastery.len });
+    }
     var tasks: std.ArrayList(Task) = .empty;
     for (ms) |m| try tasks.append(arena, .{ .model = m, .label = m.name });
     if (soft != null) {
@@ -957,7 +1124,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         };
         var block_arena: std.heap.ArenaAllocator = .init(gpa);
         defer block_arena.deinit();
-        try runBlock(gpa, block_arena.allocator(), io, &data, players, in, c, spec, b, tasks.items, if (soft) |*s| s else null, opts, &files, &pooled, w);
+        try runBlock(gpa, block_arena.allocator(), io, &data, players, in, c, spec, b, tasks.items, if (soft) |*s| s else null, opts, mastery, &files, &pooled, w);
     }
     if (pooled.y.items.len > 0) {
         try w.print("\nfolds pooled ({d} games), vs {s} (negative is better):\n", .{ pooled.y.items.len, cand_name });
