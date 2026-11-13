@@ -688,7 +688,8 @@ fn runBlock(
     var cand_train: f64 = 0;
     if (spec.fifth == null) {
         for (fit.items) |gi| {
-            cand_train += loss1(@floatFromInt(1 - d.games[gi].winner), p_all[gi]);
+            const y: f32 = if (d.games[gi].winner == 0) 1 else 0;
+            cand_train += loss1(y, p_all[gi]);
             p_all[gi] = std.math.nan(f32);
         }
         cand_train /= @floatFromInt(@max(fit.items.len, 1));
