@@ -24,6 +24,18 @@ pub fn listFile(site: *const Site) ?root.File {
     return null;
 }
 
+/// The roles with an example list (yourgame.list_dir), which the page can switch to
+fn exampleRoles(site: *const Site) [5]bool {
+    var roles: [5]bool = @splat(false);
+    const dir = yourgame.list_dir;
+    for (site.daily_files) |f| {
+        if (!std.mem.startsWith(u8, f.path, dir) or !std.mem.endsWith(u8, f.path, ".bin")) continue;
+        const r = std.meta.stringToEnum(ui.role.Role, f.path[dir.len .. f.path.len - ".bin".len]) orelse continue;
+        roles[@backingInt(r)] = true;
+    }
+    return roles;
+}
+
 /// False without the example's list
 pub fn writePage(site: *const Site, w: *Writer) !bool {
     const f = listFile(site) orelse return false;
@@ -43,7 +55,7 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
     const bin = try a.alloc(u8, enc.calcSize(f.data.len));
     // The lookup's status line above the list; ui-your loads its file for a URL's id
     var look: ui.yourlookup.YourLookup = .{ .js = assets.yourlookup_js.path, .wasm = assets.yourlookup_wasm.path };
-    var v: ui.yourviews.YourViews = .{ .l = l, .game = yourgame.page_path };
+    var v: ui.yourviews.YourViews = .{ .l = l, .game = yourgame.page_path, .roles = exampleRoles(site) };
     var o: ui.yourtime.YourTime = .{ .l = l, .game = yourgame.page_path, .js = assets.yourtime_js.path, .wasm = assets.yourtime_wasm.path };
     // Empty: a lookup's view (the example has no friends)
     var fr: ui.yourfriends.YourFriends = .{ .js = assets.yourfriends_js.path, .wasm = assets.yourfriends_wasm.path };

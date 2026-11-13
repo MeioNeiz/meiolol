@@ -140,7 +140,7 @@ test "the lookup: this device's IDs as chips" {
     try testing.expect(std.mem.find(u8, page, "href=\"/your#id=Agurin%23EUW\"") != null);
 }
 
-test "the review: roles off until live, then a pick waits for its file; Open on the default only" {
+test "the review: roles off until live, then a pick waits for its file; Open on the role shown" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     var t: tree.Tree = .{};
@@ -165,11 +165,12 @@ test "the review: roles off until live, then a pick waits for its file; Open on 
     try testing.expectEqual(.mid, p.state.shown);
     page = try p.shown();
     try testing.expect(std.mem.find(u8, page, ">Open</a>") != null);
-    // Top's file in: game.html opens the default role's games only
+    try testing.expect(std.mem.find(u8, page, "href=\"game\"") != null);
+    // Top's file in: Open goes to top's example
     p.state.shown = .top;
     p.i.render();
     page = try p.shown();
-    try testing.expect(std.mem.find(u8, page, ">Open</a>") == null);
+    try testing.expect(std.mem.find(u8, page, "href=\"game#example=top\"") != null);
 }
 
 test "the review for a returning visitor: their record and form, Open on their game, no roles" {

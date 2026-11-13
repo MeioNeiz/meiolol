@@ -17,6 +17,7 @@ const segmented = @import("segmented.zig");
 const rolepicker = @import("rolepicker.zig");
 const gamerow = @import("gamerow.zig");
 const role = @import("role.zig");
+const homepage = @import("homepage.zig");
 const url = @import("url.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
@@ -45,6 +46,7 @@ const W = struct {
     pub const none = plain("No games match");
     pub const queue = plain("Queue");
     pub const role = plain("Role");
+    pub const example_role = plain("Example's role");
     pub const all = plain("All");
 };
 
@@ -59,22 +61,40 @@ pub const YourViews = struct {
     id: []const u8 = "",
     /// Minutes east of UTC, for the records' dates; the server's: UTC
     tz_min: i32 = 0,
+    /// The example's roles with a list (homepage.your_list_dir): the role icons switch
+    /// the example's player in place of filtering
+    roles: [5]bool = @splat(false),
+    /// The example's role asked for (the URL's), shown once its list is in (the island)
+    want: ?Role = null,
+    /// Set by the island once in: the example's role switch works
+    live: bool = false,
 
     const P = @This();
 
-    pub const Url = struct { view: View = .games, q: ?yl.Queue = null, role: ?Role = null, champ: url.Str(24) = .{} };
+    pub const Url = struct { view: View = .games, q: ?yl.Queue = null, role: ?Role = null, champ: url.Str(24) = .{}, example: ?Role = null };
 
-    pub const Msg = union(enum) { view: View, queue: u8, role: ?Role };
+    pub const Msg = union(enum) { view: View, queue: u8, role: ?Role, example: Role };
 
     pub fn toUrl(p: *const P) Url {
         const f = yp.urlOf(p.l, p.filter);
-        return .{ .view = p.tab, .q = f.q, .role = f.role, .champ = f.champ };
+        return .{ .view = p.tab, .q = f.q, .role = f.role, .champ = f.champ, .example = p.want };
     }
 
     /// A view not on the page is Games
     pub fn fromUrl(p: *P, u: Url) void {
         p.tab = if (p.has(u.view)) u.view else .games;
         p.filter = yp.filterOf(p.l, .{ .q = u.q, .role = u.role, .champ = u.champ });
+        p.want = u.example;
+    }
+
+    /// The example's role switch in place of the role filter: the example, with roles
+    fn switches(p: *const P) bool {
+        return p.id.len == 0 and std.mem.findScalar(bool, &p.roles, true) != null;
+    }
+
+    /// The example's role shown: its games' (one player, one role)
+    pub fn shown(p: *const P) ?Role {
+        return if (p.l.games.len > 0) p.l.games[0].role else null;
     }
 
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
@@ -87,6 +107,9 @@ pub const YourViews = struct {
                 p.filter.queue = yp.queues[i];
             },
             .role => |r| p.filter.role = r,
+            .example => |r| if (p.roles[@backingInt(r)]) {
+                p.want = r;
+            },
         }
         ev.push = true;
     }
@@ -102,7 +125,12 @@ pub const YourViews = struct {
             return .none;
         };
         const to: highlights.Links = .{ .page = p.game, .id = p.id, .tz_min = p.tz_min };
-        return h.div(.{ .class = "c-yviews", .data_island = "yourviews", .data_view = @tagName(p.tab) }, .{
+        return h.div(.{
+            .class = "c-yviews",
+            .data_island = "yourviews",
+            .data_view = @tagName(p.tab),
+            .data_roles = if (p.switches()) homepage.rolesMask(p.roles) else null,
+        }, .{
             playerbar.view(h, p.l, .{ .games = kept.items, .bands = &.{ if (p.views.len > 1) p.tabBand(h) else .none, p.filters(h) } }),
             switch (p.tab) {
                 .games => h.div(.{ .class = "cards" }, .{
@@ -147,15 +175,21 @@ pub const YourViews = struct {
             };
         }
         var rs: [Role.all.len + 1]rolepicker.Item = undefined;
+        const ex = p.switches();
         rs[0] = .{ .role = null, .current = f.role == null, .on = h.on(p, .{ .role = null }) };
         for (rs[1..], Role.all) |*it, r| {
             var x = f;
             x.role = r;
-            it.* = .{ .role = r, .current = f.role == r, .disabled = !yp.any(p.l.games, x), .on = h.on(p, .{ .role = r }) };
+            it.* = if (ex) .{
+                .role = r,
+                .current = r == p.want orelse p.shown(),
+                .disabled = !p.live or !p.roles[@backingInt(r)],
+                .on = h.on(p, .{ .example = r }),
+            } else .{ .role = r, .current = f.role == r, .disabled = !yp.any(p.l.games, x), .on = h.on(p, .{ .role = r }) };
         }
         return h.div(.{ .class = "filters" }, .{
             segmented.view(h, .{ .s = .s, .label = W.queue }, &qs),
-            rolepicker.view(h, .{ .v = .compact, .label = W.role }, &rs),
+            rolepicker.view(h, .{ .v = .compact, .label = if (ex) W.example_role else W.role }, if (ex) rs[1..] else &rs),
         });
     }
 };
@@ -268,4 +302,39 @@ test "only built views: no tabs for one, another's URL shows Games" {
     const n = p.view(&h);
     try testing.expectEqual(null, t.find(n, "role", "tablist"));
     try testing.expectEqualStrings("games", t.attr(n, "data-view").?);
+}
+
+test "the example's role icons switch its player: no All, off until live, the URL keeps it" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    var p: YourViews = .{ .l = &yp.demo.list, .roles = .{ true, true, true, false, false } };
+    var ev: tree.Event = .{ .kind = .click };
+    var n = p.view(&h);
+    try testing.expectEqualStrings("7", t.attr(n, "data-roles").?);
+    const g = t.find(n, "class", "c-roles").?;
+    try testing.expectEqualStrings("Example's role", t.attr(g, "aria-label").?);
+    try testing.expectEqual(5, t.count(g, "type"));
+    // The server's: every role off, mid (the list's) pressed
+    try testing.expectEqual(5, t.count(g, "aria-disabled"));
+    try testing.expectEqualStrings("true", t.attr(t.find(g, "aria-label", "Mid").?, "aria-pressed").?);
+    p.live = true;
+    n = p.view(&h);
+    try testing.expectEqual(2, t.count(t.find(n, "class", "c-roles").?, "aria-disabled"));
+    // A role without a list stays put; one with asks for it, the URL carries it
+    p.update(.{ .example = .bot }, &ev);
+    try testing.expectEqual(null, p.want);
+    p.update(.{ .example = .top }, &ev);
+    try testing.expectEqual(.top, p.want);
+    try testing.expectEqual(.top, p.toUrl().example);
+    p.want = null;
+    p.fromUrl(.{ .example = .jungle });
+    try testing.expectEqual(.jungle, p.want);
+    // A lookup's list: the role filter as before
+    p.id = "MeioNeiz%23EUW";
+    n = p.view(&h);
+    try testing.expectEqual(null, t.attr(n, "data-roles"));
+    try testing.expectEqual(6, t.count(t.find(n, "class", "c-roles").?, "type"));
+    try testing.expect(!h.oom);
 }

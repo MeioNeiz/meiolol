@@ -39,6 +39,28 @@ fn load(a: std.mem.Allocator, attr: []const u8) ?ui.yourlist.List {
     return ui.data.decode(a, ui.yourlist.List, kept) catch null;
 }
 
+/// A list file onto YourList's root, the server's example kept in data-example, then
+/// yk.event: every island on the page swaps to it (an example role's list)
+pub fn put(b: []const u8) void {
+    const el = zjb.global("document").call("querySelector", .{zjb.constString(ui.yourpage.sel)}, zjb.Handle);
+    if (el == .null) return;
+    defer el.release();
+    if (!el.call("hasAttribute", .{zjb.constString("data-example")}, bool)) {
+        const ex = el.call("getAttribute", .{zjb.constString("data-bin")}, zjb.Handle);
+        defer ex.release();
+        if (ex != .null) el.call("setAttribute", .{ zjb.constString("data-example"), ex }, void);
+    }
+    const enc = std.base64.standard.Encoder;
+    const s = gpa.alloc(u8, enc.calcSize(b.len)) catch return;
+    defer gpa.free(s);
+    const v = zjb.string(enc.encode(s, b));
+    defer v.release();
+    el.call("setAttribute", .{ zjb.constString("data-bin"), v }, void);
+    const e = zjb.global("Event").new(.{zjb.constString(yk.event)});
+    defer e.release();
+    zjb.global("window").call("dispatchEvent", .{e}, void);
+}
+
 fn onList(e: zjb.Handle) callconv(.c) void {
     e.release();
     swap();

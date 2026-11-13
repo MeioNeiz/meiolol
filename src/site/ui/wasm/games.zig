@@ -26,8 +26,8 @@ export fn main() void {
     dom.start();
     dom.lazyLoad(&lazy);
     // Theirs load later: hidden from now, not from when they start
-    var hb: [1024]u8 = undefined;
-    if (gamesrc.lookup(&hb) != null) for (lazy) |l| gamesrc.hide(l);
+    const q = gamesrc.ask();
+    if (q.look != null or q.example != null) for (lazy) |l| gamesrc.hide(l);
     const root = zjb.global("document").call("querySelector", .{zjb.constString(sel)}, zjb.Handle);
     if (root == .null) return dom.lazyLater();
     defer root.release();
@@ -43,9 +43,10 @@ fn loaded(ok: bool) void {
     // Each its own prepared games: the server's stays as rendered for hydration
     server = init(&gamesrc.server) catch return dom.dom.warn("games: out of memory");
     state = init(gamesrc.shown) catch return dom.dom.warn("games: out of memory");
-    // A lookup's "all games" is that player's
-    var hb: [1024]u8 = undefined;
-    if (gamesrc.lookup(&hb)) |l| state.all = std.mem.concat(gpa, u8, &.{ gp.all_games, "#id=", l.id }) catch state.all;
+    // A lookup's "all games" is that player's, an example role's (its file in) that role's
+    const q = gamesrc.ask();
+    const kv: ?[2][]const u8 = if (q.look) |l| .{ "#id=", l.id } else if (gamesrc.shown != &gamesrc.server) .{ "#example=", q.example.? } else null;
+    if (kv) |x| state.all = std.mem.concat(gpa, u8, &.{ gp.all_games, x[0], x[1] }) catch state.all;
     _ = dom.rt.add(gp.GamePage, &state, &server, sel) catch return dom.dom.warn("games: out of memory");
     gamesrc.ready();
 }

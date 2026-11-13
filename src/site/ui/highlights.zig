@@ -343,7 +343,7 @@ test "the view: groups with something to say; the top three link to their moment
     const tp = top(&h, &yp.demo.list, &yp.demo.games, .{}, null);
     // No streak there, the player bar has it: the demo's KDA alone
     try testing.expectEqual(1, count(&t, tp, "c-rtile"));
-    try testing.expectEqualStrings("/game#g=0", t.attr(t.find(tp, "class", "chip").?, "href").?);
+    try testing.expectEqualStrings("/game#example=mid&g=0", t.attr(t.find(tp, "class", "chip").?, "href").?);
     try testing.expect(!h.oom);
     // None at all: nothing
     try testing.expectEqual(N.none, view(&h, &yp.demo.list, &.{}, .{}));

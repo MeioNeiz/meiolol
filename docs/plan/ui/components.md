@@ -1604,7 +1604,7 @@ HomeReview (ui-homegame.wasm: the example's game, its role switch, the stat cell
 on the graph; a returning visitor's newest game in its place). The patch card is static
 States: first visit; Daily Draft played; returning visitor; champions by win rate, a role
 with none
-Used by: yourlookup, yourfriends, squad
+Used by: yourviews, yourlookup, yourfriends, squad
 
 ### Account
 `account.zig` `.c-account` site

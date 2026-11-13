@@ -60,16 +60,19 @@ pub fn filterOf(l: *const yl.List, u: FilterUrl) yl.Filter {
         f.champ = @intCast(i);
     };
     if (f.champ != null and !any(l.games, f)) f.champ = null;
+    // Another list's role (the example's other player, a lookup's before Not you?)
+    if (f.role != null and !any(l.games, .{ .role = f.role })) f.role = null;
     return f;
 }
 
-/// A game on `page` (game.html): a lookup's (`id`) by start, the example's by page; at
-/// second `m` when not 0
+/// A game on `page` (game.html): a lookup's (`id`) by start, the example's by its role's
+/// file and page; at second `m` when not 0
 pub fn gameHref(h: *H, page: []const u8, id: []const u8, g: yl.Game, m: u16) ?[]const u8 {
     const at = if (m > 0) h.fmt("&m={d}", .{m}) else "";
     if (id.len > 0) return h.fmt("{s}#id={s}&game={d}{s}", .{ page, id, g.start_ms, at });
     const i = g.page orelse return null;
-    return h.fmt("{s}#g={d}{s}", .{ page, i, at });
+    const ex = if (g.role) |r| h.fmt("example={t}&", .{r}) else "";
+    return h.fmt("{s}#{s}g={s}{s}", .{ page, ex, phrase.num(h, .int, i).s, at });
 }
 
 const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
@@ -238,7 +241,7 @@ test "the URL's filter, day groups and Show older" {
     var n = p.view(&h);
     try testing.expectEqual(4, t.count(n, "data-day"));
     try testing.expectEqual(10, rowCount(&t, n));
-    try testing.expectEqualStrings("/game#g=0", t.attr(t.find(n, "class", "c-grow").?, "href").?);
+    try testing.expectEqualStrings("/game#example=mid&g=0", t.attr(t.find(n, "class", "c-grow").?, "href").?);
     var text: std.Io.Writer.Allocating = .init(a);
     try t.textOf(n, &text.writer);
     try testing.expect(tree.find(text.written(), "Today") != null);

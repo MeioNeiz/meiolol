@@ -1149,7 +1149,7 @@ test "fixture games to stats, curves and the website" {
     // The list page: the example's list in the island, rows opening /game
     const your_page = (try core_loaded.get(arena, "your.html")).?;
     try testing.expect(std.mem.find(u8, your_page, "noindex") == null);
-    for ([_][]const u8{ "data-island=\"your\" data-bin=\"", "class=\"c-player\"", "class=\"c-psum\"", "href=\"/game#g=0\"", "data-wasm=\"" ++ assets.your_wasm.path ++ "\"", "data-island=\"yourviews\"", "data-island=\"yourtime\"", "data-js=\"" ++ assets.yourtime_js.path ++ "\" data-wasm=\"" ++ assets.yourtime_wasm.path ++ "\"", "data-wasm=\"" ++ assets.yourviews_wasm.path ++ "\"", "data-island=\"yourlookup\"", "data-island=\"forget\"", "data-island=\"yourfriends\"", "data-wasm=\"" ++ assets.yourfriends_wasm.path ++ "\"", "data-wasm=\"" ++ assets.forget_wasm.path ++ "\"", "data-js=\"" ++ assets.yourlookup_js.path ++ "\" data-wasm=\"" ++ assets.yourlookup_wasm.path ++ "\"", "An example player" }) |want| {
+    for ([_][]const u8{ "data-island=\"your\" data-bin=\"", "class=\"c-player\"", "class=\"c-psum\"", "href=\"/game#example=mid&amp;g=0\"", "data-wasm=\"" ++ assets.your_wasm.path ++ "\"", "data-island=\"yourviews\"", "data-island=\"yourtime\"", "data-js=\"" ++ assets.yourtime_js.path ++ "\" data-wasm=\"" ++ assets.yourtime_wasm.path ++ "\"", "data-wasm=\"" ++ assets.yourviews_wasm.path ++ "\"", "data-island=\"yourlookup\"", "data-island=\"forget\"", "data-island=\"yourfriends\"", "data-wasm=\"" ++ assets.yourfriends_wasm.path ++ "\"", "data-wasm=\"" ++ assets.forget_wasm.path ++ "\"", "data-js=\"" ++ assets.yourlookup_js.path ++ "\" data-wasm=\"" ++ assets.yourlookup_wasm.path ++ "\"", "An example player" }) |want| {
         try testing.expect(std.mem.find(u8, your_page, want) != null);
     }
     // Squads: the start view, its island loads the fragment's squad; never indexed, and
@@ -1177,6 +1177,10 @@ test "fixture games to stats, curves and the website" {
         const bin = (try core_loaded.get(arena, "data/your/" ++ comptime r.label() ++ ".bin")).?;
         const d = try ui.data.decode(arena, ui.gamedata.Data, bin);
         try testing.expectEqual(games, d.games.len);
+        // Its list for the Your games page's role switch: that role's games
+        const rl = try ui.data.decode(arena, ui.yourlist.List, (try core_loaded.get(arena, "data/your/list-" ++ comptime r.label() ++ ".bin")).?);
+        try testing.expectEqual(games, rl.games.len);
+        for (rl.games) |g| try testing.expectEqualStrings(r.label(), @tagName(g.role.?));
     }
     // The list: the default role's games, each with its page on game.html
     const list = try ui.data.decode(arena, ui.yourlist.List, (try core_loaded.get(arena, "data/your/list.bin")).?);

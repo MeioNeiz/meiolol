@@ -1,6 +1,6 @@
 //! The game page (game.html) from `meiolol your-example`'s file: each role's player's
 //! games as ui.gamedata.Data (api/game.zig's Game with its Detail) in data/your/<role>.bin,
-//! and the default role's list for your.html
+//! and each role's list for your.html (the default's in list.bin, inlined there)
 const std = @import("std");
 const ui = @import("ui");
 const game = @import("../api/game.zig");
@@ -20,6 +20,8 @@ const log = std.log.scoped(.site);
 pub const page_path = "/game";
 const data_dir = "data/your/";
 pub const list_path = data_dir ++ "list.bin";
+/// Each role's list: list-<role>.bin
+pub const list_dir = ui.homepage.your_list_dir;
 const roles = [_][]const u8{ "top", "jungle", "mid", "bot", "support" };
 
 /// The example's files: each role's games, the default role's first (writePage reads that
@@ -40,13 +42,18 @@ pub fn files(site: *const Site, json: []const u8, out: *std.ArrayList(File)) !vo
         try ui.data.encode(a, gd.Data, d, &bytes);
         try out.append(a, .{ .path = try a.print(data_dir ++ "{s}.bin", .{r}), .data = bytes.items });
     }
-    // After the role files, which may be none (an example without detail)
-    if (ex.player(ex.default)) |pl| if (pl.report) |report| {
+    // After the role files, which may be none (an example without detail). Each role's
+    // list loads on a role switch; the default's is also list.bin, inlined in your.html
+    for (order, 0..) |r, i| {
+        if (i > 0 and std.mem.eql(u8, r, ex.default)) continue;
+        const pl = ex.player(r) orelse continue;
+        const report = pl.report orelse continue;
         const l = try pagedata.list(a, pl.player orelse .{}, report.games, names(site), site, siteChamp);
         var bytes: std.ArrayList(u8) = .empty;
         try ui.data.encode(a, ui.yourlist.List, l, &bytes);
-        try out.append(a, .{ .path = list_path, .data = bytes.items });
-    };
+        try out.append(a, .{ .path = try a.print(list_dir ++ "{s}.bin", .{r}), .data = bytes.items });
+        if (i == 0) try out.append(a, .{ .path = list_path, .data = bytes.items });
+    }
 }
 
 /// Items, spells and runes from the view's builds file; none without one (icons then
@@ -65,7 +72,7 @@ fn siteChamp(site: *const Site, id: u32) anyerror!ui.champ.Champ {
 
 /// The first role's file: the default role's (files)
 fn gameFile(all: []const File) ?File {
-    for (all) |f| if (std.mem.startsWith(u8, f.path, data_dir) and !std.mem.eql(u8, f.path, list_path)) return f;
+    for (all) |f| if (std.mem.startsWith(u8, f.path, data_dir) and !std.mem.startsWith(u8, f.path, data_dir ++ "list")) return f;
     return null;
 }
 

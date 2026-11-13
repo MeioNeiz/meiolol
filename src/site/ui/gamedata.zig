@@ -166,35 +166,33 @@ pub const Lookup = struct {
     as: ?u8 = null,
 
     pub fn ofHash(hash: []const u8) ?Lookup {
-        var id: ?[]const u8 = null;
-        var start: ?i64 = null;
-        var as: ?u8 = null;
-        var it = std.mem.tokenizeScalar(u8, if (hash.len > 0 and hash[0] == '#') hash[1..] else hash, '&');
-        while (it.next()) |kv| {
-            const eq = std.mem.findScalar(u8, kv, '=') orelse continue;
-            const v = kv[eq + 1 ..];
-            if (tree.eql(kv[0..eq], "id")) id = v;
-            if (tree.eql(kv[0..eq], "game")) start = std.fmt.parseInt(i64, v, 10) catch null;
-            // Slots 0-9 by hand: a second parseInt costs ui-games.wasm 250 B
-            if (tree.eql(kv[0..eq], "as") and v.len == 1 and std.ascii.isDigit(v[0])) as = v[0] - '0';
-        }
-        const i = id orelse return null;
-        if (i.len == 0 or std.mem.findAny(u8, i, " ?") != null) return null;
-        return .{ .id = i, .start = start orelse return null, .as = as };
+        return Ask.of(hash).look;
     }
 
     pub fn api(l: Lookup, buf: []u8) ?[]const u8 {
-        const head = std.fmt.bufPrint(buf, "/api/game?id={s}&start={d}", .{ l.id, l.start }) catch return null;
-        const a = l.as orelse return head;
-        return withAs(buf, head.len, a);
+        var w: std.Io.Writer = .fixed(buf);
+        write(&w, &.{ "/api/game?id=", l.id, "&start=" }, l.start) catch return null;
+        const a = l.as orelse return w.buffered();
+        return withAs(buf, w.end, a);
+    }
+
+    /// #id=<id>&game=<start> after `head`
+    pub fn frag(l: Lookup, buf: []u8, head: []const u8) ?[]const u8 {
+        var w: std.Io.Writer = .fixed(buf);
+        write(&w, &.{ head, "#id=", l.id, "&game=" }, l.start) catch return null;
+        return w.buffered();
     }
 
     /// The fragment for the same game from `slot`
     pub fn from(l: Lookup, buf: []u8, slot: u8) ?[]const u8 {
-        var w: std.Io.Writer = .fixed(buf);
-        w.print("#id={s}&game=", .{l.id}) catch return null;
-        fmt.write(&w, .int, l.start) catch return null;
-        return withAs(buf, w.end, slot);
+        const f = l.frag(buf, "") orelse return null;
+        return withAs(buf, f.len, slot);
+    }
+
+    /// `parts` then `n`: std's {d} costs ui-games.wasm 535 B
+    fn write(w: *std.Io.Writer, parts: []const []const u8, n: i64) !void {
+        for (parts) |p| try w.writeAll(p);
+        try fmt.write(w, .int, n);
     }
 
     pub fn eql(l: Lookup, o: Lookup) bool {
@@ -209,6 +207,77 @@ pub const Lookup = struct {
         return buf[0 .. n + tail.len];
     }
 };
+
+/// What game.html's fragment shows in place of the default role's example: a
+/// looked-up player's game, else #example=<role>: that role's example, its file beside
+/// the page's data-src
+pub const Ask = struct {
+    look: ?Lookup = null,
+    /// A plain lowercase word, else null
+    example: ?[]const u8 = null,
+
+    pub fn of(hash: []const u8) Ask {
+        var id: ?[]const u8 = null;
+        var start: ?i64 = null;
+        var as: ?u8 = null;
+        var ex: ?[]const u8 = null;
+        var it = std.mem.tokenizeScalar(u8, if (hash.len > 0 and hash[0] == '#') hash[1..] else hash, '&');
+        while (it.next()) |kv| {
+            const eq = std.mem.findScalar(u8, kv, '=') orelse continue;
+            const k = kv[0..eq];
+            const v = kv[eq + 1 ..];
+            if (tree.eql(k, "id")) id = v;
+            if (tree.eql(k, "game")) start = ms(v);
+            // Slots 0-9 by hand: a second parseInt costs ui-games.wasm 250 B
+            if (tree.eql(k, "as") and v.len == 1 and std.ascii.isDigit(v[0])) as = v[0] - '0';
+            if (tree.eql(k, "example") and word(v)) ex = v;
+        }
+        if (id) |i| if (start) |s| if (i.len > 0 and std.mem.findAny(u8, i, " ?") == null) {
+            return .{ .look = .{ .id = i, .start = s, .as = as } };
+        };
+        return .{ .example = ex };
+    }
+
+    pub fn eql(a: Ask, b: Ask) bool {
+        if (a.look) |l| return b.look != null and l.eql(b.look.?);
+        if (b.look != null) return false;
+        const x = a.example orelse return b.example == null;
+        return b.example != null and tree.eql(x, b.example.?);
+    }
+
+    /// By hand: std's parseInt(i64) costs ui-games.wasm 330 B
+    fn ms(v: []const u8) ?i64 {
+        if (v.len == 0 or v.len > 18) return null;
+        var n: i64 = 0;
+        for (v) |c| {
+            if (c < '0' or c > '9') return null;
+            n = n * 10 + (c - '0');
+        }
+        return n;
+    }
+
+    fn word(v: []const u8) bool {
+        if (v.len == 0 or v.len > 12) return false;
+        for (v) |c| if (c < 'a' or c > 'z') return false;
+        return true;
+    }
+};
+
+test Ask {
+    try std.testing.expectEqualStrings("jungle", Ask.of("#example=jungle&g=2").example.?);
+    try std.testing.expectEqualStrings("top", Ask.of("g=0&example=top").example.?);
+    try std.testing.expectEqual(null, Ask.of("#g=2").example);
+    try std.testing.expectEqual(null, Ask.of("#example=").example);
+    try std.testing.expectEqual(null, Ask.of("#example=../x").example);
+    // A lookup wins
+    const l = Ask.of("#example=top&id=A%231&game=5");
+    try std.testing.expectEqual(null, l.example);
+    try std.testing.expect(l.look != null);
+    try std.testing.expect(Ask.of("#example=top&g=1").eql(Ask.of("#g=4&example=top")));
+    try std.testing.expect(!Ask.of("#example=top").eql(Ask.of("#example=mid")));
+    try std.testing.expect(!Ask.of("#example=top").eql(.{}));
+    try std.testing.expect(!l.eql(Ask.of("#example=top")));
+}
 
 /// Purchases this close to the one before are the same shop visit
 pub const back_gap_s = 45;

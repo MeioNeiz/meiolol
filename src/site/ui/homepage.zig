@@ -39,6 +39,8 @@ pub const scope = .{ ".c-home", ".c-hrev", ".c-hch" };
 
 /// The example's files (site/yourgame.zig)
 pub const your_dir = "data/your/";
+/// A role's Your games list: list-<role>.bin
+pub const your_list_dir = your_dir ++ "list-";
 pub const game_page = "game";
 
 const W = struct {
@@ -117,8 +119,7 @@ pub const HomeReview = struct {
             .disabled = !p.live or !p.roles[@backingInt(r)],
             .on = h.on(p, .{ .role = r }),
         };
-        // /game opens the default role's games only
-        const open = if (p.you) |y| y.open else if (p.shown == p.default) h.fmt("{s}" ++ game_page, .{p.up}) else null;
+        const open = if (p.you) |y| y.open else if (p.shown == p.default) h.fmt("{s}" ++ game_page, .{p.up}) else h.fmt("{s}" ++ game_page ++ "#example={t}", .{ p.up, p.shown });
         return h.div(.{
             .class = "c-hrev",
             .data_island = "home",
@@ -133,7 +134,7 @@ pub const HomeReview = struct {
             h.div(.{ .class = "c-head" }, .{
                 if (p.you) |*y| y.view(h) else badge.view(h, .accent, .{W.example}),
                 if (p.you == null) rolepicker.view(h, .{ .v = .compact, .label = W.example_role }, &roles) else null,
-                if (open) |o| button.view(h, .{ .s = .s, .href = o }, .{W.open}) else null,
+                button.view(h, .{ .s = .s, .href = open }, .{W.open}),
             }),
             h.div(.{ .class = "hd" }, .{gamehead.view(h, s.game(), s.data.champs, s.data.arts)}),
             h.div(.{ .class = "gr" }, .{ s.tl.modes(h), s.tl.view(h), s.cells(h) }),
