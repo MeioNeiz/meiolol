@@ -1,0 +1,6432 @@
+Published as a conference paper at ICLR 2025
+
+I NSTA SHAP: I NTERPRETABLE A DDITIVE M ODELS
+E XPLAIN S HAPLEY VALUES I NSTANTLY
+Yan Liu
+Department of Computer Science
+University of Southern California
+Los Angeles, CA
+yanliu.cs@usc.edu
+
+arXiv:2502.14177v1 [cs.LG] 20 Feb 2025
+
+James Enouen
+Department of Computer Science
+University of Southern California
+Los Angeles, CA
+enouen@usc.edu
+
+A BSTRACT
+In recent years, the Shapley value and SHAP explanations have emerged as one
+of the most dominant paradigms for providing post-hoc explanations of blackbox models. Despite their well-founded theoretical properties, many recent works
+have focused on the limitations in both their computational efficiency and their
+representation power. The underlying connection with additive models, however,
+is left critically under-emphasized in the current literature. In this work, we find
+that a variational perspective linking GAM models and SHAP explanations is able
+to provide deep insights into nearly all recent developments. In light of this connection, we borrow in the other direction to develop a new method to train interpretable GAM models which are automatically purified to compute the Shapley
+value in a single forward pass. Finally, we provide theoretical results showing the
+limited representation power of GAM models is the same Achilles’ heel existing
+in SHAP and discuss the implications for SHAP’s modern usage in CV and NLP.
+
+1
+
+I NTRODUCTION
+
+Since their introduction into machine learning, Shapley values have had a meteoric rise within the
+space of model explanation. The principled axioms of Shapley (Shapley, 1953) and the easy-to-use
+framework of SHAP (Lundberg & Lee, 2017) have led to their widespread adoption when compared
+with alternatives in gradient-based and black-box explanation methods. The developments which
+then followed quickly pushed beyond tabular datasets into higher dimensional data like computer
+vision and natural language, with abundant research investigating how to improve the speed and
+efficiency of Shapley values across these various high-dimensional domains (Covert et al., 2021;
+Mosca et al., 2022; Jethani et al., 2022; Covert et al., 2023; Enouen et al., 2024). In recent years,
+however, some lines of work have identified specific application scenarios where the Shapley value
+is provably guaranteed to fail, perhaps begging the question of whether such works improving on
+the Shapley value are instead done in vain (Bilodeau et al., 2022; Huang & Marques-Silva, 2023).
+Unfortunately, many of these critiques have been made piecemeal without an overall sense of their
+underlying causes. In contrast, this work takes the perspective that SHAP’s issues of explanation
+speed and explanation power can all be viewed under the same lens through the underlying connection with additive models and feature interactions.
+In this work, we find that all of the most recent development in the SHAP value, like the practical
+improvements of FastSHAP (Jethani et al., 2022) and the theoretical advancements of FaithSHAP
+(Tsai et al., 2023), can be unified and more easily understood by using a functional perspective
+using additive models. In particular, the amortization scheme introduced by FastSHAP (Jethani
+et al., 2022) builds on the least squares formulation of the Shapley value (Charnes et al., 1988;
+Lundberg & Lee, 2017) by training a global approximator for the Shapley value, which can each
+be viewed as fitting a pointwise and a global additive model, respectively. Tsai et al. (2023) instead
+extends this least squares characterization to the bivariate and higher-order interactions to yield a
+richer understanding of the model to explain, drawing the same parallels with higher-order additive
+models.
+1
+
+Published as a conference paper at ICLR 2025
+https://www.freepik.com/icon/temperature-high_6854003
+https://www.freepik.com/icon/calendar_833593
+https://www.freepik.com/icon/bike_2918597
+
+Scenario B:
+(CV data)
+
+Theorem 3:
+functional
+correspondence
+
+Scenario A:
+(tabular data)
+
+SH
+
+AP
+
+SH
+
+AP
+
+Insta
+SHAP
+
+GAM
+
+GAM
+
+similar
+accuracy
+
+similar
+explanation
+
+accuracy
+gap
+
+Insta
+SHAP
+Resolution 1:
+insuﬃcient GAM?
+
+Resolution 2:
+insuﬃcient SHAP?
+
+Equation 13:
+interaction
+smoothing
+
+SH
+
+AP
+
+SH
+
+AP
+
+DNN
+SHAP
+
+explanation
+gap
+
+DNN
+
+DNN
+
+DNN
+SHAP
+
+Figure 1: The fundamental correspondence between SHAP and GAM is used practically to distinguish two unique scenarios. In scenario A, such as simpler tabular data, GAM models can achieve
+SOTA performance and their SHAP explanations align with SHAP explanations of blackbox models. In modern ML applications like computer vision, we have scenario B, where there is a gap
+between GAM and DNN performance in practice. This means that either: (#1) we cannot train
+GAMs as well as other deep neural networks; or (#2) there is an overcredulous trust of SHAP in
+these domains.
+
+All of these extensions and more can be though of as special cases of training additive models when
+considered from the functional ANOVA perspective (Sobol, 2001), allowing not only for their simple combination but a greater understanding of the underlying mechanisms overall. We further find
+that there is a deep variational connection which underscores all such recent developments between
+the fundamentally interrelated SHAP explanation and GAM model, paralleling the algebraic case
+studied in Bordt & von Luxburg (2023) and building on various works in the GAM literature studying purification of additive models (Hooker, 2007; Hart & Gremaud, 2018; Lengerich et al., 2020;
+Sun et al., 2022).
+Overall, we set out to emphasize these fundamental connections between SHAP and GAM (as well
+as Faith-SHAP-k and GAM-k) across all possible correlated input distributions, where previous
+work only addressed the case of independent input variables (Bordt & von Luxburg, 2023). We use
+these theoretical advances in the variational equation to provide a simple check of whether SHAP is
+trustworthy by requiring a GAM model can be trained to the same accuracy (as depicted in Figure
+1.) This development allows for deeper insights and practical checks into SHAP’s application in
+important ML domains like CV and NLP where input features are heavily correlated. Further, by
+developing a new technique to automatically purify additive models to return the corresponding
+SHAP values, we simultaneously solve a longstanding problem from the GAM literature as well
+as demonstrate practical advantages of our method InstaSHAP over the existing FastSHAP. We
+envision our major contributions as follows:
+• Establishment of the variational formulation of Shapley additive models alongside the existing variational formulations of GAM and functional ANOVA, solving the case of dependent variables which was left open in Bordt & von Luxburg (2023).
+• Introduction of a practical training method for GAM models via an alternative loss function
+with output masking, automatically solving the problem of GAM purification and allowing
+for ‘instant’ access to the Shapley values.
+• Theoretical insights into the real-world application of SHAP and many comparative experiments across synthetic and real-world domains of interest, helping to lay bare the question
+of whether Shapley values are trustworthy for ML in practical environments.
+
+2
+
+BACKGROUND
+
+Let F : X → Y be a function representing a machine learning model which maps from input space
+X ⊆ Rd to output space Y ⊆ Rc , where there are d input features and c output features. We will
+use [d] := {1, . . . , d} to represent the set of input features and S ⊆ [d] to represent a subset of the
+input features. We also write the set of all such subsets, the powerset, as P([d]) ∼
+= {0, 1}d .
+2
+
+SH
+
+AP
+
+Published as a conference paper at ICLR 2025
+
+2.1
+
+E XPLAINING BY R EMOVING
+
+A very important aspect of removal-based explanations like LIME or SHAP (Ribeiro et al., 2016;
+Lundberg & Lee, 2017) is the method of feature removal (Sundararajan & Najmi, 2020; Covert et al.,
+2021). We review the three most popular removal approaches: replacing the feature with a reference
+value (baseline), integrating over the marginal distribution of the feature (marginal), or integrating
+over the conditional distribution of the feature (conditional). When applied to an explanation method
+like the Shapley value, these result in the corresponding: baseline Shapley, marginal Shapley, or
+conditional Shapley (Sundararajan & Najmi, 2020; Janzing et al., 2020; Frye et al., 2021).
+First, consider an input example one would like to explain x ∈ X and a subset of the features which
+one would like to keep S ⊆ [d] as part of the model. We may then compare against a baseline
+value x̄ ∈ Rd and define the baseline value as Bx̄ as below. We may also choose a distribution of
+baselines p(x) over the input space X , which allows us to define both the marginal projection and
+the conditional projection, Np and Mp .
+[Bx̄ ◦ F ](x, S) :=
+
+F (xS , x̄−S )
+
+[Np ◦ F ](x, S) := EX̄−S ∼p(X−S )
+
+h
+
+(1)
+i
+
+F (xS , X̄−S )
+h
+i
+[Mp ◦ F ](x, S) := EX̄−S ∼p(X−S |XS =xS ) F (xS , X̄−S )
+
+(2)
+(3)
+
+We write these three operators as functionals mapping F to a new function f to support our analysis
+from a functional perspective. Historically, the baseline value and marginal value have been the
+easiest to use in practice because we may directly explain our blackbox F without significant modifications. However, since the highlighting of the ‘off-the-manifold’ problem by Frye et al. (2021), it
+has been shown that baseline methods Bx̄ and marginal methods Np significantly overemphasize the
+algebraic structure of the model instead of the statistical structure. If one is exclusively interested in
+the algebraic dependencies of their ML model, the correspondence highlighted herein has already
+been established in Bordt & von Luxburg (2023). Otherwise we hereafter restrict our attention to the
+conditional expectation using Mp and provide details on further considerations in Appendix A.1.
+We define a feature attribution method Φ as taking F (x) and returning a local explanation function
+[Φi ◦ F ](x) for each feature i ∈ [d] on each local input x ∈ X . Similarly, we define a blackbox feature attribution method as instead taking a masked function f (x, S) and returning a local explanation
+function for each feature, [ϕi ◦ f ](x).
+We now provide one of the typical definitions of the Shapley value as follows; however, we recommend the unfamiliar reader instead waits until the more intuitive Equation 13.
+X
+h
+i
+[ϕSHAP
+◦ f ](x) =
+pSHAP-unif (S) · f (x, S + i) − f (x, S − i)
+(4)
+i
+S⊆[d]
+
+p
+
+SHAP-unif
+
+ −1
+d
+1
+(S) ∝
+s
+d+1
+
+(5)
+
+Here, the Shapley value is defined as the addition and removal of a single feature i ∈ [d] across
+many contexts S ⊆ [d] according to the distribution pSHAP-unif (S) where the shorthand s = |S| is
+used. Following the discussion in the previous section, we will in this work always consider the
+conditional Shapley Φcond-SHAP := ϕSHAP ◦ Mp . Alternative black-box explanations to the Shapley
+value are discussed further in Appendix A.2.
+2.2
+
+I NTERPRETING BY A DDING
+
+We now introduce the interpretable generalized additive model (GAM) of Hastie & Tibshirani
+(1990). This model is seen as interpretable because each of the input features have a simple 1D
+relationship with their effect on the output. In this work, we also include the ‘zero dimensional’ normalizing constant f∅ and often use the term GAM1 to emphasize a GAM that only has 1D functions.
+
+3
+
+Published as a conference paper at ICLR 2025
+
+F ≤ 1 (x1 , . . . , xd ) = f∅ + f1 (x1 ) + · · · + fd (xd )
+|
+{z
+}
+X
+= f∅ +
+fi (xi )
+
+(6)
+
+i∈[d]
+
+This can further be generalized to a GAM2 model (Wahba et al., 1994; Lou et al., 2012; 2013;
+Chang et al., 2022) which is still seen as an interpretable model because its 2D functions can still be
+visualized using a heatmap plot.
+F ≤ 2 (x1 , . . . , xd ) = f∅ + f1 (x1 ) + · · · + fd (xd ) + f1,2 (x1 , x2 ) + · · · + fd−1,d (xd−1 , xd )
+|
+{z
+}
+|
+{z
+}
+X
+X
+= f∅ +
+fi (xi )
++
+fi,j (xi , xj )
+(7)
+{i,j}⊆[d]
+
+i∈[d]
+
+Recent research has additionally focused on addressing the practical considerations associated with
+training increasingly high-order GAMs (Yang et al., 2020; Dubey et al., 2022; Enouen & Liu, 2022).
+For some order k ≥ 3, we may define the higher-order GAM-k as:
+X
+X
+X
+fi (xi ) + . . . +
+fS (xS ) =
+fS (xS )
+(8)
+F ≤ k (x1 , . . . , xd ) = f∅ +
+i∈[d]
+
+S∈I≤k
+
+S⊆[d],|S|=k
+
+where we write I≤k := {S ⊆ [d] : |S| ≤ k}.
+This might immediately raise the question of when to stop adding higher-order functions to our
+GAM model. Multiple practical works have shown that for tabular data, k does not have to be too
+large: GAM-1 and GAM-2 are often sufficient to fit the complexities of the data and achieve stateof-the-art performance across many datasets (Chang et al., 2022; Enouen & Liu, 2022). The same
+question for CV or NLP, however, has faced little exploration in previous works. In order to answer
+this question precisely, however, we instead turn to the functional ANOVA decomposition coming
+from the field of sensitivity analysis.
+2.3
+
+F UNCTIONAL ANOVA
+
+In the literature on sensitivity analysis, we may take any function and completely decompose it via
+its functional ANOVA decomposition (Sobol, 2001; Hooker, 2004):
+X
+F (x1 , . . . , xd ) =
+f˜S (xS )
+(9)
+S⊆[d]
+
+Although there are many possible choices of f˜S which could obey this equation, we may define a
+unique decomposition via the conditional projection from Section 2.1:
+X
+X
+f˜S (xS ) :=
+(−1)|S|−|T | f (x, T ) =
+(−1)|S|−|T | [Mp ◦ F ](x, T )
+(10)
+T ⊆S
+
+T ⊆S
+
+Hereafter, we often follow the sensitivity analysis notation of writing f˜S (xS ) rather than f˜(x, S).
+This specific choice using conditional projection is often called the ‘Sobol-Hoeffding’ decomposition. In the case of independent input variables, Sobol (2001) provides us a complete understanding
+of what happens to the variational solution of training any additive model. In particular, the variance or the mean squared error is able to decompose completely via the decomposition of variance
+formula:
+X
+X
+V := VarX [F (X)] =
+VarX [f˜S (XS )] =
+VS
+(11)
+S
+
+S⊆[d]
+
+S⊆[d]
+
+where the orthogonal contributions, VS := VarXS [f˜S (XS )], are called the Sobol indices and measure the variance which can be uniquely ascribed to each feature interaction S.
+Unfortunately, this variational formulation for additive models breaks down for the case of correlated
+input variables. The best existing alternative in the literature is the Sobol covariances (Rabitz, 2010;
+Hart & Gremaud, 2018) which is instead defined as CS := CovX [F (X), f˜S (XS )]. However, these
+4
+
+Published as a conference paper at ICLR 2025
+
+(a) Synergistic Interaction
+
+Redundant Interaction (d)
+
+(b)
+functional
+ANOVA
+
+(e)
+functional
+ANOVA
+xy
+x
+
+xy
+y
+
+x
+
+∅
+
+y
+∅
+
+(c)
+Shapley
+functions
+
+(f)
+Shapley
+functions
+
+Figure 2: Simple examples (Gaussian input variables and multilinear response variables) which
+demonstrate each of the two major types of feature interactions: synergistic interactions and redundant interactions. Their full functional ANOVA and exact Shapley functions are additionally
+calculated and shown. Colored by relevant variable. Note we use x and y instead of x1 and x2 .
+covariances may result in values which are both positive and negative, conflating the synergistic
+effects between a set of features S and the redundant effects of shared information amongst the
+same set of features S.
+We will still say that a statistical feature interaction, S ⊆ [d], is said to exist whenever
+VS := VarXS [f˜S (XS )] > 0 ,
+
+(12)
+
+however, for the case of correlated input features, we importantly need to distinguish between the
+two major types of feature interactions:
+1. feature interaction synergy, where VS > 0 and CS > 0.
+2. feature interaction redundancy, where VS > 0 but CS < 0.
+Using this functional ANOVA perspective, we can now write the Shapley value as a complete function for each variable i ∈ [d] using the well known alternative via the synergy or unanimity functions
+(Shapley, 1953):
+[ϕSh
+i ◦ f ](x) =
+
+X f˜S (xS )
+S⊇{i}
+
+|S|
+
+(13)
+
+Intuitively, the value which is ascribed to each feature interaction S is uniformly divided amongst
+each of its constituents i ∈ S. In Figure 2, we can see the easily computed Shapley functions coming
+from computing the functional ANOVA decomposition, dividing the interaction effects in both the
+synergistic and the redundant setting. In real-world datasets and in the presence of higher-order
+interactions, it easy to imagine how quickly such effects will compound and conflate one another.
+
+3
+
+R EPRESENTATION P OWER OF A DDITIVE M ODELS
+
+Before proceeding further with the variational GAM methods we introduce, we find it is important to
+characterize the behavior of SHAP in terms of the functional ANOVA decomposition. In particular,
+we will do this in the form of an “impossibility theorem” to help cement the correspondence which
+exists between GAM and SHAP. However, unlike previous works focusing on the flaws of SHAP, we
+not only exactly characterize all negative results showing when hypothesis tests are impossible, but
+consequently characterize all positive results showing exactly when hypothesis tests are possible.
+5
+
+Published as a conference paper at ICLR 2025
+
+3.1
+
+SHAP F UNCTION S PACE
+
+Theorem 1. (SHAP∼
+=ANOVA-1) SHAP will succeed on any hypothesis for some hypothesis space
+≤1
+H if and only if H is completely free of feature interactions (H ⊆ HANOVA
+).
+We leave the details of the proof until Appendix C; however, for one direction it is relatively straightforward to see from from Equation 13 that SHAP can succeed if all interaction terms are zero. Con≤1
+versely, if some true model F ∈ H is not representable by an ANOVA-1 model, then F ∈
+/ HANOVA
+and hence SHAP is instead obscuring the feature interactions. Importantly, we emphasize that this
+means SHAP cannot distinguish synergistic feature interactions nor can it distinguish redundant
+feature interactions. We can additionally show the exact same type of relationship is true for FaithSHAP-k.
+Theorem 2. (Faith-SHAP-k∼
+=ANOVA-k) For any k ∈ [d], Faith-SHAP-k will succeed on any hypothesis test in some hypothesis space H if and only if H is free of higher-order features interactions
+≤k
+of size (k + 1) or greater (H ⊆ HANOVA
+).
+This similarly implies that even indices measuring feature interactions will still be forced to blur out
+the higher-order interactions and hence remain limited in their representational capacity. Once again,
+we emphasize that the reliance of these approaches on the functional ANOVA decomposition means
+it is not possible for them to distinguish between synergistic interactions and redundant interactions.
+3.2
+
+GAM F UNCTION S PACE
+
+Let us now contrast these two results with the representation power of GAM models.
+Theorem 3. (ANOVA-1⊊GAM-1) The functional space of ANOVA-1 representable functions is a
+≤1
+≤1
+).
+⊊ HGAM
+strict subset of the functional space of GAM-1 representable functions (HANOVA
+Any function which is representable by a univariate ANOVA decomposition is automatically representable by a GAM model by the subset compliance of the ANOVA decomposition. This inclusion
+is strict in the other direction as soon as there is a feature correlation in the input data.
+Theorem 4. (ANOVA-k⊊GAM-k) The functional space of ANOVA-k representable functions is a
+≤k
+≤k
+strict subset of the functional space of GAM-k representable functions (HANOVA
+⊊ HGAM
+).
+Once again, the inclusion of k-dimensional ANOVA functions are automatically representable by an
+arbitrary GAM-k model by the definition of the decomposition. The inclusion is again strict as soon
+as there is a correlation between features in the input data. We save proofs and further discussions
+for Appendix C.
+3.3
+
+P RACTICAL I NSIGHTS
+
+In conclusion, our results show that a practitioner may evaluate the trustworthiness of SHAP on a
+given dataset by simply training a GAM model on the same dataset. If a GAM can easily match the
+same accuracy as a blackbox model or easily distill the same predictions as a blackbox model, then
+this is a dataset for which SHAP explanations can generally be trusted. On the other hand, if a GAM
+cannot match the same accuracy as the blackbox model, this means that the practitioner needs to
+be wary about trusting SHAP values on this dataset. In this second scenario, there are two possible
+resolutions. For the GAM researcher, resolution 1 of Figure 1 is to train a better GAM through the
+use of more efficient training procedures or through an increase in capacity with additional feature
+interaction terms. For the SHAP practitioner, resolution 2 of Figure 1 is to admit that SHAP is likely
+not a sufficient explanation for this model or dataset.
+In many real-world scenarios, it is possible that neither of these extremes is completely true, with
+the lower bound GAM and upper bound SHAP meeting somewhere in the middle. Nevertheless, in
+the current literature, this gap is extremely large for practical AI tasks including CV and NLP. In
+our experiments, we highlight this large gap on a high-dimensional CV task of bird classification.
+Ultimately, the key contribution of this theory is that it provides a practical test for researchers
+to understand task-by-task what are the advantages as well as the limitations of SHAP and GAM
+approaches.
+6
+
+Published as a conference paper at ICLR 2025
+
+4
+
+S HAPLEY VIA L EAST S QUARES
+
+Kernel SHAP The Shapley value was first given an optimization-based definition or ‘variational’
+characterization in Charnes et al. (1988) as the solution to:
+
+
+
+d
+X
+2
+arg min ES∼pSHAP (S) f (S) −
+1(i ∈ S) · ϕi
+(14)
+ϕ∈Rd
+
+i=1
+
+where the distribution is over the SHAP kernel
+p
+
+SHAP
+
+ −1
+d
+1
+(S) ∝
+s
+s(d − s)
+
+(15)
+
+where once again s = |S| (contrast this distribution with Equation 5). This formulation was originally utilized by KernelSHAP (Lundberg & Lee, 2017) to fit a local linear model according to the
+SHAP kernel distribution in order to attain sufficient speed to see use in ML applications.
+Fast SHAP This was importantly used more recently by FastSHAP (Jethani et al., 2022) in order
+to create a functional amortization scheme which fits to the same SHAP kernel. They then write the
+Shapley function as the solution to the following equation:1
+
+
+
+
+d
+X
+2
+arg min Ex∼p(x) ES∼pSHAP (S) f (x; S) −
+1(i ∈ S) · ϕi (x)
+(16)
+ϕ:X →Rd
+
+i=1
+
+where they then fit the functions ϕi : X → R over the entire input space to automatically generate
+the Shapley values at test time. This dramatically improves the test-time speed with which SHAP
+explanations can be generated, overcoming what is often the most major practical limitation to
+deployment.
+The summing over multiple functions to create the predicted output should remind the reader of the
+structure of GAM-1 additive models. As we saw in our impossibility theorems and as we will later
+show with InstaSHAP, this functional perspective indeed opens up the possibility to connect with
+training additive models.
+Faith SHAP As we highlight in Theorem 1, it is well known that feature interactions are necessary
+for explaining more complex functions. Accordingly, many works have tried to extend the Shapley
+value to be able to handle the effects of feature interactions (Grabisch & Roubens, 1999; Sundararajan et al., 2020; Bordt & von Luxburg, 2023; Fumagalli et al., 2023). Recently, there have been
+theoretical advancements which extend the Shapley value directly using the variational formulation
+in Tsai et al. (2023). They write their higher-order solution, called Faith SHAP, as:
+
+
+
+X
+2
+1(T ⊆ S) · ϕT
+(17)
+arg min ES∼pSHAP (S) f (S) −
+ϕ∈RI≤k
+
+T ⊆[d],|T |≤k
+
+Once again, we can see parallels between the GAM-k model from Equation 8. The case of k = 1
+indeed reduces to the original least squares solution in Equation 14.
+
+5
+
+I NSTANT SHAP
+
+A simple combination of these two ideas (functional amortization and feature interaction) would
+lead to an explainer which automatically recovers the two-dimensional or higher-dimensional FaithSHAP explanations of the target function, while maintaining the practical speedups of FastSHAP:
+
+
+
+
+X
+2
+arg min Ex∼p(x) ES∼pSHAP (S) f (x; S) −
+1(T ⊆ S) · ϕT (x)
+(18)
+ϕ:X →RI≤k
+
+T ⊆[d],|T |≤k
+
+1
+To keep the notation cleaner and more similar with other existing works, we assume throughout this section
+that f∅ = 0, which is equivalent to centering or normalizing the outputs.
+
+7
+
+Published as a conference paper at ICLR 2025
+
+This functional amortization automatically recovers the Faith-SHAP-k values as defined in Tsai et al.
+(2023), but maintains the practical advantages and speedups of FastSHAP from Jethani et al. (2022).
+Instead, however, we propose to adapt the typical variational equations used to fit GAM models to
+fall under this same variational Shapley framework. We first make explicit the variational equation
+used to train GAM models as:
+
+
+
+
+X
+2
+arg min Ex∼p(x) ES∼pGAM (S) f (x; S) −
+ϕT (xT )
+(19)
+ϕ:X →RI≤k
+
+T ⊆[d],|T |≤k
+
+Accordingly, we define the Insta-SHAP-GAM as an additive model which is trained as:
+
+
+
+
+X
+2
+1(T ⊆ S) · ϕT (xT )
+arg min Ex∼p(x) ES∼pSHAP (S) f (x; S) −
+ϕ:X →RI≤k
+
+(20)
+
+T ⊆[d],|T |≤k
+
+where first we introduce the masked training objective where S are drawn from the Shapley kernel
+and second we add the masking on each additive component of the GAM to only be included if all
+features of that component are unmasked in S.
+This new formulation is able to bring novel insights to both the literature on SHAP and the literature on GAM. For SHAP, we incorporate the low-dimensional GAM bias which is able to more
+accurately model SHAP values when compared with FastSHAP. Additionally, by the explicit modeling of interactions, we are able to improve on the practical feasability of methods like FaithSHAP,
+which have yet to develop a method for practical deployment. For the GAM literature, we make
+progress towards the longstanding goal of purification of the shape functions of additive models.
+In the appendix, we further detail how this extends on the existing GAM literature and its various
+applications towards the selection of feature interactions under correlated inputs.
+
+6
+
+TABULAR E XPERIMENTS
+
+6.1
+
+S YNTHETIC E XPERIMENTS
+
+We construct a simple dataset to test the varying effects of synergistic interactions and redundant
+interactions in a similar spirit to Figure 2. We provide additional details in the Appendix, but we use
+a simple ten-dimensional feature space with an algebraic GAM rank of k∗ and a correlation of ρ. In
+Figure 3, we see the approximation results consistently showing InstaSHAP has a better inductive
+bias than FastSHAP for learning the Shapley values.
+
+10 3
+10 4
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=1, =0.707)
+FastSHAP
+InstaSHAP
+
+10 2
+10 3
+10 4
+
+0
+
+50
+
+10 1
+
+10 2
+
+10 3
+
+100 150 200 250 300
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=2, =0.000)
+FastSHAP
+InstaSHAP
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+10 1
+
+MSE Error (log)
+
+10 2
+
+10 1
+
+MSE Error (log)
+
+Model SHAP-1 Error (k*=1, =0.000)
+FastSHAP
+InstaSHAP
+
+MSE Error (log)
+
+MSE Error (log)
+
+10 1
+
+Model SHAP-1 Error (k*=2, =0.707)
+FastSHAP
+InstaSHAP
+
+10 2
+
+10 3
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+Figure 3: MSE error of approximations of the model’s SHAP values. Since both FastSHAP and
+InstaSHAP are functional approximations, we report the MSE errors across the epochs of training.
+6.2
+
+S YNERGY IN B IKE S HARING
+
+In the bike sharing dataset, we find strong evidence of a synergistic interaction effect. This dataset
+predicts the expected bike demand each hour given some relevant features like the day of the week,
+time of day, and current weather. There is a total of thirteen different input features predicting a
+single continuous output variable.
+In the case of a multi-layer perceptron trained to predict the bike demand, the normalized meansquared error (R2 ) results is 6.59%. Although a GAM-1 can only achieve an R2 of 17.4%, a lowdimensional GAM can achieve an R2 of 6.23%. It is well-known that on this dataset there is a
+strong interaction between the hour variable and workday variable (since people’s schedules change
+8
+
+Published as a conference paper at ICLR 2025
+
+on the weekend vs. a workday.) In Figure 4a, we can see how this feature interaction is adequately
+captured. In Figure 4b, we can see how if the SHAP value also makes this trend identifiable, but does
+not completely separate this bivariate interaction from other feature effects in the dataset. Overall,
+Figure 4 supports the hypothesis that training interpretable models is a better path than explaining
+blackbox models, especially when the same accuracies can be achieved.
+
+Figure 4: The Spectrum of Interpretability to Uninterpretability. We display the key {hour, workday} interaction for the interpretable GAM, explainable SHAP, and uninterpretable blackbox.
+6.3
+
+R EDUNDANCY IN T REE C OVER
+
+In the treecover dataset, we find strong evidence of a redundant interaction effect. This dataset
+consists of predicting one of the seven types of tree species which are covering a given plot of land
+based on eleven input features describing the area. Simple investigation can determine the most
+important features for determining the species of tree are the altitude of the land and soil category
+of the land. Accordingly, we provide their partial dependence plots in Figure 5a and 5b.
+Tree Species v. Soil Type
+
+Tree Species v. Elevation
+
+2.0
+
+Spruce/Fir
+Lodgepole Pine
+Ponderosa Pine
+Cottonwood/Willow
+Aspen
+Douglas-fir
+Krummholz
+
+1.8
+1.6
+1.4
+1.2
+
+2000
+
+2500
+
+3000
+Elevation (m)
+
+3500
+
+lower
+montane
+
+upper
+subalpine
+montane
+Soil Type
+
+alpine
+
+1.0
+1.0
+
+1.2
+
+1.4
+
+1.6
+
+1.8
+
+2.0
+
+Figure 5: 1D and 2D Dependence of Tree Species on Altitude and Soil
+However, a cursory look at the 1D dependence such as these plots or SHAP ignores the fact that both
+the elevation and soil type are additionally correlated with one another. Indeed, some montane-type
+soils can only be found in lower altitudes and, equally, alpine-type soils can only be found at higher
+altitudes. Looking at the 2D heatmap in Figure 5c, we can see that soil and altitude are correlated
+with one another and somewhat redundantly predict the joint trend in the species of tree.
+Training an MLP on this dataset is able to achieve validation accuracy of 80.4% whereas a GAM-1
+can only achieve 72.4% accuracy. Alternatively, a low-dimensional GAM is instead able to achieve
+82.2% accuracy. This once again demonstrates that although the 1D SHAP is unable to accurately
+represent this tabular dataset, a simple low-dimensional GAM is able to as well.
+Beyond the datasets we study here, there are many existing works showing that both (a) feature
+interactions are necessary for real-world datasets, and (b) relatively low-dimensional GAM models
+can often achieve SOTA performance on tabular datasets (Chang et al., 2022; Enouen & Liu, 2022).
+Accordingly, after the clear demonstration of both categories (synergy and redundancy) of feature
+interactions in practice, we move on to exploring the same phenomenon in higher-dimensional data.
+
+7
+
+H IGHER D IMENSIONAL E XPERIMENTS
+
+We additionally use our methods to explore a bird classification task on natural images. We run
+experiments on the CUB dataset using a resnet CNN architecture, evaluating not only at the original,
+fine-grained 200 classes corresponding to each bird’s species, but also with 37 coarse-grained classes
+corresponding to each bird’s family. For our GAM models we adapt the resnet architecture to only
+include the influence from a 1 × 1, 2 × 2, or 3 × 3 set of patches, leading to a GAM-1, GAM-4,
+and GAM-9 model. We fine-tune all models with procedures similar to Covert et al. (2023), see
+appendix for details.
+9
+
+Published as a conference paper at ICLR 2025
+
+Indigo
+Bunting
+
+Lazuli
+Bunting
+
+Northern
+Cardinal
+
+Summer
+Tanager
+
+California
+Gull
+
+Western
+Gull
+
+Prothonotary Blue-winged
+Warbler
+Warbler
+
+CNN
+
+GAM
+1x1
+
+GAM
+2x2
+
+GAM
+3x3
+
+Figure 6: Display of SHAP explanations for multiple images inside of the CUB birds dataset. Explanations are provided for the CNN model as well as multiple GAM models. We can see that
+beyond the gap in accuracy between the CNN and GAM models, there are also discrepancies in the
+reasoning processes as explained by SHAP. This can be taken as strong evidence of oversmoothing
+of the interaction effects which are used by the original CNN model.
+
+Fine-tuning a resnet-50 model on the dataset, we are able to achieve a fine-grained accuracy of
+65.0% and a coarse-grained accuracy of 81.8%. In contrast, the GAM-1 model is only able to
+achieve a 33.2% fine and 53.7% coarse accuracies. This can be taken as strong evidence that SHAP
+is oversimplifying the behavior of the CNN on this dataset. In Figure 6, we can see that this also
+manifests as sizable visual differences in the explanations between the two models. In some sense,
+at least 20 percentage points of accuracy are being completely thrown away when using the simplification of SHAP. So although a useful first approximation of the understanding, SHAP is once again
+not sufficient for giving a complete understanding of the behavior of feature interactions.
+Extension to the GAM-2x2 and GAM-3x3 models is able to give improvements to 45.8% and 46.8%
+fine as well as 66.3% and 66.8% coarse accuracies. Even with some feature interactions, a convolutional GAM model is unable to achieve the same accuracies as a resnet. This points to the fact that
+either long-range or higher-order interactions are necessary to completely match the performance of
+the resnet. It is also possible that an alternate GAM architecture would be able to further improve
+upon these accuracy results, helping close the gap between CNN and GAM. Overall, we take this
+as significant evidence towards the oversimplification of SHAP explanations on high-dimensional
+data, domains where the need for explainability also remains the highest.
+
+8
+
+C ONCLUSION
+
+We find that the study of SHAP and GAM from a joint functional perspective allows for a plethora
+of insights in both domains which were not previously possible. We establish the theoretical correspondence between the two across all possible correlated input features and discuss the implications
+in terms of functional representation power. In practical ML datasets where input correlations are
+abundant, we provide a simple but theoretically grounded method of detecting whether SHAP is
+providing adeqeuate explanations by means of training a GAM model. We extend on the GAM
+literature by means of rigorously studying the effect of training on a correlated input distribution,
+as well as introducing a novel masking technique which allows for the recovery of purified GAM
+models. In multiple real-world datasets, we find that the existence of feature interactions as synergies and as redundancies is ubiquitous in practical settings. We finally discuss the implications of
+this fact in the context of interpreting SHAP in high-dimensional data like natural images. Although
+SHAP is a very useful approximation of the first-order effects, a more careful treatment of feature
+interactions will be required for a complete understanding of blackbox models.
+10
+
+Published as a conference paper at ICLR 2025
+
+9
+
+B ROADER I MPACT
+
+This work focuses on enhancing the interpretability of deep learning models. Although, broadly, the
+work of interpretability can help inform all related stakeholders to the reasonings behind decisions
+made by AI systems to the benefit of everyone involved, ultimately, all interpretations and decisions
+are made by humans and can hence be used for unfavorable outcomes both intentionally and unintentionally. Moreover, interpretability is only one piece of the larger puzzle which is transparency
+and trustworthiness in AI systems.
+
+10
+
+ACKNOWLEDGEMENTS
+
+This work was supported in part by the Department of Defense under Cooperative Agreement Number W911NF-24-2-0133. The views and conclusions contained in this document are those of the
+authors and should not be interpreted as representing the official policies, either expressed or implied, of the Army Research Office or the U.S. Government. The U.S. Government is authorized to
+reproduce and distribute reprints for Government purposes notwithstanding any copyright notation
+herein.
+
+11
+
+Published as a conference paper at ICLR 2025
+
+R EFERENCES
+Robert J. Auman and Lloyd S. Shapley. Values of Non-Atomic Games. Princeton University Press,
+1974.
+David Balduzzi, Marcus Frean, Lennox Leary, J. P. Lewis, Kurt Wan-Duo Ma, and Brian
+McWilliams. The shattered gradients problem: If resnets are the answer, then what is the
+question? In Doina Precup and Yee Whye Teh (eds.), Proceedings of the 34th International
+Conference on Machine Learning, volume 70 of Proceedings of Machine Learning Research,
+pp. 342–350. PMLR, 06–11 Aug 2017. URL https://proceedings.mlr.press/v70/
+balduzzi17b.html.
+John F. III Banzhaf. Weighted Voting Doesn’t Work: A Mathematical Analysis, volume 19, pp.
+317–344. Rutgers School of Law–Newark, 1965.
+Blair Bilodeau, Natasha Jaques, Pang Wei Koh, and Been Kim. Impossibility theorems for feature
+attribution. Proceedings of the National Academy of Sciences, 121(2), January 2022. ISSN
+1091-6490. doi: 10.1073/pnas.2304406120. URL http://dx.doi.org/10.1073/pnas.
+2304406120.
+Darya Biparva and Donatello Materassi. Incorporating information into shapley values: Reweighting via a maximum entropy approach. In Forty-first International Conference on Machine Learning, 2024. URL https://openreview.net/forum?id=DwniHlwcOB.
+Gagan Biradar, Yacine Izza, Elita Lobo, Vignesh Viswanathan, and Yair Zick. Axiomatic aggregations of abductive explanations. Proceedings of the AAAI Conference on Artificial Intelligence,
+38(10):11096–11104, Mar. 2024.
+Sebastian Bordt and Ulrike von Luxburg. From shapley values to generalized additive models
+and back. In Francisco Ruiz, Jennifer Dy, and Jan-Willem van de Meent (eds.), Proceedings of The 26th International Conference on Artificial Intelligence and Statistics, volume 206
+of Proceedings of Machine Learning Research, pp. 709–745. PMLR, 25–27 Apr 2023. URL
+https://proceedings.mlr.press/v206/bordt23a.html.
+Chun-Hao Chang, Elliot Creager, Anna Goldenberg, and David Duvenaud. Explaining image classifiers by counterfactual generation. In International Conference on Learning Representations,
+2019. URL https://openreview.net/forum?id=B1MXz20cYQ.
+Chun-Hao Chang, Rich Caruana, and Anna Goldenberg. NODE-GAM: Neural generalized additive
+model for interpretable deep learning. In International Conference on Learning Representations,
+2022. URL https://openreview.net/forum?id=g8NJR6fCCl8.
+A. Charnes, B. Golany, M. Keane, and J. Rousseau. Extremal principle solutions of games in characteristic function form: Core, chebychev and shapley value generalizations. In Jati K. Sengupta
+and Gopal K. Kadekodi (eds.), Econometrics of Planning and Efficiency, pp. 123–133, Dordrecht,
+1988. Springer Netherlands.
+Ian Covert, Scott Lundberg, and Su-In Lee. Explaining by removing: A unified framework for
+model explanation. Journal of Machine Learning Research, 22(209):1–90, 2021. URL http:
+//jmlr.org/papers/v22/20-1316.html.
+Ian Connick Covert, Chanwoo Kim, and Su-In Lee. Learning to estimate shapley values with vision
+transformers. In The Eleventh International Conference on Learning Representations, 2023. URL
+https://openreview.net/forum?id=5ktFNz_pJLK.
+J. Deegan and E. W. Packel. A new index of power for simplen-person games. Int. J. Game Theory,
+7(2):113–123, June 1978. ISSN 0020-7276. doi: 10.1007/BF01753239. URL https://doi.
+org/10.1007/BF01753239.
+Abhimanyu Dubey, Filip Radenovic, and Dhruv Mahajan. Scalable interpretability via polynomials.
+In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho (eds.), Advances in
+Neural Information Processing Systems, 2022. URL https://openreview.net/forum?
+id=TwuColwZAVj.
+12
+
+Published as a conference paper at ICLR 2025
+
+James Enouen and Yan Liu. Sparse interaction additive networks via feature interaction detection
+and sparse selection. In Advances in Neural Information Processing Systems, 2022.
+James Enouen, Hootan Nakhost, Sayna Ebrahimi, Sercan Arik, Yan Liu, and Tomas Pfister.
+TextGenSHAP: Scalable post-hoc explanations in text generation with long documents. In LunWei Ku, Andre Martins, and Vivek Srikumar (eds.), Findings of the Association for Computational Linguistics ACL 2024, pp. 13984–14011, Bangkok, Thailand and virtual meeting, August
+2024. Association for Computational Linguistics. URL https://aclanthology.org/
+2024.findings-acl.832.
+Christopher Frye, Damien de Mijolla, Tom Begley, Laurence Cowton, Megan Stanley, and Ilya
+Feige. Shapley explainability on the data manifold. In International Conference on Learning
+Representations, 2021. URL https://openreview.net/forum?id=OPyWRrcjVQw.
+Fabian Fumagalli, Maximilian Muschalik, Patrick Kolpaczki, Eyke Hüllermeier, and Barbara Eva
+Hammer. SHAP-IQ: Unified approximation of any-order shapley interactions. In Thirty-seventh
+Conference on Neural Information Processing Systems, 2023. URL https://openreview.
+net/forum?id=IEMLNF4gK4.
+Michel Grabisch and Marc Roubens. An axiomatic approach to the concept of interaction
+among players in cooperative games. International Journal of Game Theory, 1999. doi:
+10.1007/s001820050125. URL https://doi.org/10.1007/s001820050125.
+Joseph Hart and Pierre A. Gremaud. An approximation theoretic perspective of the sobol’ indices
+with dependent variables. International Journal for Uncertainty Quantification, 8(6):483–493,
+2018. ISSN 2152-5080.
+Trevor J Hastie and Robert J Tibshirani. Generalized additive models, 1990.
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In 2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR), pp.
+770–778, 2016. doi: 10.1109/CVPR.2016.90.
+Giles Hooker. Discovering additive structure in black box functions. In Proceedings of the tenth
+ACM SIGKDD international conference on Knowledge discovery and data mining, pp. 575–580.
+ACM, 2004.
+Giles Hooker. Generalized functional anova diagnostics for high-dimensional functions of dependent variables. Journal of Computational and Graphical Statistics, 16(3):709–732, 2007.
+Xuanxiang Huang and Joao Marques-Silva. The inadequacy of shapley values for explainability,
+2023. URL https://arxiv.org/abs/2302.08160.
+Joseph D. Janizek, Pascal Sturmfels, and Su-In Lee. Explaining explanations: Axiomatic feature
+interactions for deep networks. Journal of Machine Learning Research, 22(104):1–54, 2021.
+URL http://jmlr.org/papers/v22/20-1223.html.
+Dominik Janzing, Lenon Minorics, and Patrick Bloebaum. Feature relevance quantification in explainable ai: A causal problem. In Silvia Chiappa and Roberto Calandra (eds.), Proceedings of
+the Twenty Third International Conference on Artificial Intelligence and Statistics, volume 108 of
+Proceedings of Machine Learning Research, pp. 2907–2916. PMLR, 26–28 Aug 2020.
+Neil Jethani, Mukund Sudarshan, Ian Connick Covert, Su-In Lee, and Rajesh Ranganath. FastSHAP:
+Real-time shapley value estimation. In International Conference on Learning Representations,
+2022. URL https://openreview.net/forum?id=Zq2G_VTV53T.
+Benjamin Lengerich, Sarah Tan, Chun-Hao Chang, Giles Hooker, and Rich Caruana. Purifying
+interaction effects with the functional anova: An efficient algorithm for recovering identifiable
+additive models. In Silvia Chiappa and Roberto Calandra (eds.), Proceedings of the Twenty Third
+International Conference on Artificial Intelligence and Statistics, volume 108 of Proceedings
+of Machine Learning Research, pp. 2402–2412. PMLR, 26–28 Aug 2020. URL https://
+proceedings.mlr.press/v108/lengerich20a.html.
+13
+
+Published as a conference paper at ICLR 2025
+
+Yin Lou, Rich Caruana, and Johannes Gehrke. Intelligible models for classification and regression.
+In Proceedings of the 18th ACM SIGKDD international conference on Knowledge discovery and
+data mining, pp. 150–158. ACM, 2012.
+Yin Lou, Rich Caruana, Johannes Gehrke, and Giles Hooker. Accurate intelligible models with
+pairwise interactions. In Proceedings of the 19th ACM SIGKDD international conference on
+Knowledge discovery and data mining, pp. 623–631. ACM, 2013.
+Scott M Lundberg and Su-In Lee.
+A unified approach to interpreting model predictions.
+In I. Guyon, U. V. Luxburg, S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan, and R. Garnett (eds.), Advances in Neural Information Processing Systems 30, pp.
+4765–4774. Curran Associates, Inc., 2017. URL http://papers.nips.cc/paper/
+7062-a-unified-approach-to-interpreting-model-predictions.pdf.
+Edoardo Mosca, Ferenc Szigeti, Stella Tragianni, Daniel Gallagher, and Georg Groh. SHAPbased explanation methods: A review for NLP interpretability. In Proceedings of the 29th International Conference on Computational Linguistics, pp. 4593–4603, Gyeongju, Republic of
+Korea, October 2022. International Committee on Computational Linguistics. URL https:
+//aclanthology.org/2022.coling-1.406.
+Melvyn B. Nathanson. Alternate minimization and doubly stochastic matrices, 2019. URL https:
+//arxiv.org/abs/1812.11930.
+R. O’Donnell. Analysis of Boolean Functions. Cambridge University Press, 2014. ISBN
+9781107038325. URL https://books.google.com/books?id=5xlvAwAAQBAJ.
+Herschel Rabitz. Global sensitivity analysis for systems with independent and/or correlated inputs. Procedia - Social and Behavioral Sciences, 2(6):7587–7589, 2010. ISSN 1877-0428. doi:
+https://doi.org/10.1016/j.sbspro.2010.05.131. URL https://www.sciencedirect.com/
+science/article/pii/S1877042810012723. Sixth International Conference on Sensitivity Analysis of Model Output.
+Marco Tulio Ribeiro, Sameer Singh, and Carlos Guestrin. “why should i trust you?” explaining the
+predictions of any classifier. In Proceedings of the 22nd ACM SIGKDD International Conference
+on Knowledge Discovery and Data Mining, pp. 1135–1144. ACM, 2016.
+Cynthia Rudin. Stop explaining black box machine learning models for high stakes decisions and
+use interpretable models instead. Nature Machine Intelligence, 1(5):206–215, 2019. doi: 10.
+1038/s42256-019-0048-x.
+L. S. Shapley. A Value for n-Person Games, volume 2, pp. 307–318. Princeton University Press,
+Princeton, 1953. ISBN 9781400881970. doi: doi:10.1515/9781400881970-018. URL https:
+//doi.org/10.1515/9781400881970-018.
+Richard Sinkhorn. Diagonal equivalence to matrices with prescribed row and column sums. The
+American Mathematical Monthly, 74(4):402–405, 1967. ISSN 00029890, 19300972. URL
+http://www.jstor.org/stable/2314570.
+I.M Sobol. Global sensitivity indices for nonlinear mathematical models and their monte carlo estimates. Mathematics and Computers in Simulation, 55(1):271–280, 2001. ISSN 0378-4754. doi:
+https://doi.org/10.1016/S0378-4754(00)00270-6. URL https://www.sciencedirect.
+com/science/article/pii/S0378475400002706. The Second IMACS Seminar on
+Monte Carlo Methods.
+Xingzhi Sun, Ziyu Wang, Rui Ding, Shi Han, and Dongmei Zhang. puregam: Learning an inherently pure additive model. In Proceedings of the 28th ACM SIGKDD Conference on Knowledge
+Discovery and Data Mining, KDD ’22, pp. 1728–1738, New York, NY, USA, 2022. Association for Computing Machinery. ISBN 9781450393850. doi: 10.1145/3534678.3539256. URL
+https://doi.org/10.1145/3534678.3539256.
+Mukund Sundararajan and Amir Najmi. The many shapley values for model explanation. In
+Hal Daumé III and Aarti Singh (eds.), Proceedings of the 37th International Conference on
+Machine Learning, volume 119 of Proceedings of Machine Learning Research, pp. 9269–9278.
+PMLR, 13–18 Jul 2020.
+14
+
+Published as a conference paper at ICLR 2025
+
+Mukund Sundararajan, Ankur Taly, and Qiqi Yan. Axiomatic attribution for deep networks. In
+Proceedings of the 34th International Conference on Machine Learning-Volume 70, pp. 3319–
+3328. JMLR. org, 2017.
+Mukund Sundararajan, Kedar Dhamdhere, and Ashish Agarwal. The shapley taylor interaction
+index. In Hal Daumé III and Aarti Singh (eds.), Proceedings of the 37th International Conference on Machine Learning, volume 119 of Proceedings of Machine Learning Research, pp.
+9259–9268. PMLR, 13–18 Jul 2020. URL https://proceedings.mlr.press/v119/
+sundararajan20a.html.
+Che-Ping Tsai, Chih-Kuan Yeh, and Pradeep Ravikumar. Faith-shap: The faithful shapley interaction index. Journal of Machine Learning Research, 24(94):1–42, 2023. URL http:
+//jmlr.org/papers/v24/22-0202.html.
+Michael Tsang, Sirisha Rambhatla, and Yan Liu. How does this interaction affect me? interpretable
+attribution for feature interactions. arXiv preprint arXiv:2006.10965, 2020.
+C. Wah, S. Branson, P. Welinder, P. Perona, and S. Belongie. The caltech-ucsd birds-200-2011
+dataset. Technical Report CNS-TR-2011-001, California Institute of Technology, 2011.
+Grace Wahba, Yuedong Wang, Chong Gu, Ronald Kleins, and Barbara Kle. Smoothing spline anova
+for exponential families. In The Annals of Statistics, 1994. URL https://www.jstor.org/
+stable/2242776.
+Jiachen T. Wang and Ruoxi Jia. Data banzhaf: A robust data valuation framework for machine
+learning. In Francisco Ruiz, Jennifer Dy, and Jan-Willem van de Meent (eds.), Proceedings of The
+26th International Conference on Artificial Intelligence and Statistics, volume 206 of Proceedings
+of Machine Learning Research, pp. 6388–6421. PMLR, 25–27 Apr 2023. URL https://
+proceedings.mlr.press/v206/wang23e.html.
+Zebin Yang, Aijun Zhang, and Agus Sudjianto. GAMI-Net: An explainable neural network based on
+generalized additive models with structured interactions, 2020. URL https://arxiv.org/
+abs/2003.07132.
+
+15
+
+Published as a conference paper at ICLR 2025
+
+A
+
+P OST-H OC E XPLAINABILITY
+
+A.1
+
+F URTHER D ISCUSSION OF E XPLANATION BASELINE M ETHODS
+
+Conditional/ Marginal/ Baseline We first reiterate the three main removal baselines which see
+widespread usage across all domains of machine learning explainability. Those are the three methods
+introduced in the main text (baseline value, marginal value, and conditional value.) It should be
+noted for instance that in the original SHAP paper (Lundberg & Lee (2017), Equations 9-12), each
+of the former two were considered as a simplification or approximation to the conditional value. The
+first assumption of feature independence implies the equivalence of the conditional value and the
+marginal value. The second assumption of model linearity implies the equivalence of the marginal
+value and the baseline value. Accordingly, it is perhaps better to think of these two alternatives as
+practical simplifications whereas the conditional value is the value of theoretical interest. Especially
+after the highlighting of the off-the-manifold problem (Frye et al., 2021), these two approaches have
+been under higher scrutiny in their application to typical ML pipelines where input data often have
+heavy correlations existing outside of the control of the ML practitioner.
+Integrated Gradients Another common removal approach is Integrated Gradients which is equivalent to Aumann-Shapley value (Auman & Shapley, 1974; Sundararajan et al., 2017; Sundararajan
+& Najmi, 2020). In this version, a line integral is taken from a baseline point x̄ to the target point
+x, rather than the original baseline method which simply takes the difference between the two. Although it is a smoother approximation which has had empirical success, its interaction extensions
+(Janizek et al., 2021) cannot succeed on non-smooth functions like piecewise linear ReLU networks
+and it is nonetheless susceptible to the off-the-manifold problem. Although incorporating a more
+general definition of line integrals could be of interest to solving the off-the-manifold and simultaneously integrating into the discrete masking framework we utilize, we envision this as out of scope
+for our focus on the Shapley value.
+Stone-Hooker Decomposition Of potentially the greatest interest besides the conditional case
+which we directly study is the alternative functional ANOVA decomposition proposed by Hooker
+(2007) and further investigated in (Hart & Gremaud, 2018; Lengerich et al., 2020; Sun et al., 2022).
+
+F (x1 , . . . , xd ) =
+
+X
+
+h̃S (xS )
+
+(21)
+
+S⊆[d]
+
+where the functions are required to obey a set of ‘hierarchical orthogonality conditions’
+Mp,∅ ◦ (gT · h̃S ) = 0
+
+∀gT , ∀T ⊊ S
+
+(22)
+
+∀i ∈ S.
+
+(23)
+
+which is equivalent to the ‘integral conditions’
+Mp,(S−i) ◦ (h̃S ) ≡ 0
+
+Despite its relatively pleasant properties compared to the original Sobol-Hoeffding decomposition,
+nearly two decades after its introduction it has received relatively little attention when compared
+with the Sobol-Hoeffding alternative defined by conditional projections. (It should be briefly noted
+that in the case of independent variables, the same solution is recovered.) Amongst its limitations,
+beyond a lack of intuitive meaning behind its prescribed functions, the most severe is seemingly its
+computational intractability. It is rare to see a calculation of the full decomposition beyond a small
+number of dimensions or for distributions which are not piecewise constant. Unlike the conditional
+projection which can be more efficiently approximated from the bottom-up, the Hooker decomposition seems to endure the full exponential complexity of constructing a functional decomposition
+from the top-down (starting with the most complex h̃[d] .)
+Practical approaches to providing a solution to the full Hooker problem imitate Sinkhorn approximations via iterative refinement across the different variable axes (Lengerich et al., 2020). Nonetheless,
+the Sinkhorn algorithm has itself escaped a general closed form solution for decades (Sinkhorn,
+1967; Nathanson, 2019), and practical application of the original Hooker decomposition has remained extremely limited.
+16
+
+Published as a conference paper at ICLR 2025
+
+In the space of Generalized Additive Models, however, recently some progress has been made. By
+leveraging the GAM’s ability to reduce the exponential complexity of the true function to a lowerdimensional representation, works like Lengerich et al. (2020) and Sun et al. (2022) have found
+success in purifying the terms of an additive models. However, this success is still limited to twoor three- dimensional GAM models, being limited by: discrete variables assumptions requiring histogramming or kerneling of continuous variables; difficult transformations which do not easily scale
+to higher orders; and/or the previously discussed Sinkhorn-like approximations without clear guarantees. We later revisit these considerations more thoroughly in Appendix E after the introduction of
+our novel results for additive models, suggesting how our variational perspective potentially allows
+to unlock the same advantages for Hooker-type purified models.
+Further Alternatives We highly recommend the work of Covert et al. (2021) for a very comprehensive review of potential methods for removal; however, we quickly review some of the major
+flavors for the counterfactual ‘removal’ of a feature. Some of the important methods yet unmentioned include the utilization of surrogate models to explicitly or implicitly mask out the features.
+This can be done implicitly via the training of a masked surrogate predictor using the projection
+equations for mean-squared error or for KL divergence as used within this work (Covert et al., 2021;
+Jethani et al., 2022; Covert et al., 2023). There have also been pursuits through a more explicit
+approach via using a separate generative model (VAE or GAN) as a proxy for removal (Chang et al.,
+2019), additionally allowing for more domain-specific approaches like image blurring and infilling.
+Another important set of alternatives is via the language of causality as introduced via Janzing et al.
+(2020). Unfortunately, after the introduction of elegant causal notation, the authors immediately use
+a simplifying assumption to reduce to the marginal Shapley, which has the aforementioned problems, only considering the engineer-level causality of ‘causing the model’ to change its predictions.
+This is significantly different from the scientist-level causality of ‘causing the output’ and has only
+begun to be thoroughly addressed in recent works like Biparva & Materassi (2024).
+A.2
+
+P OST-H OC F EATURE ATTRIBUTION AND I NTERACTION ATTRIBUTION
+
+Notation Let d ∈ N and c ∈ N be the dimensions of the input and output spaces,X ⊆ Rd and
+Y ⊆ Rc . Let F : X → Y be a function representing a machine learning model which maps from
+inputs to outputs. We will use [d] := {1, . . . , d} to represent the set of input features and S ⊆ [d]
+to represent a subset of the input features. We also write the set of all such subsets, the powerset, as
+P([d]) ∼
+= {0, 1}d and use slight abuse of notations including (S+i) := S∪{i} and (S−i) := S\{i}.
+We will write the function space as some H = {F : X → Y} and a masked function space as
+H′ = {f : X × P([d]) → R}. For a general feature attribution method, we write Φ : H → Hd ,
+taking a function F (x) as input and returning a local explanation function [Φi ◦ F ](x) for each
+feature i ∈ [d] on each local input x ∈ X . Similarly, we define a blackbox feature attribution
+method as ϕ : H′ → Hd , instead taking a masked function f (x, S) as input and returning a local
+explanation function for each feature, [ϕi ◦ f ](x).
+In addition to the notation introduced in the main body, we introduce some notation which are very
+useful in the domain of feature interactions. We first define the discrete derivative operator:
+[δi ◦ f ](T ) = f (T + i) − f (T − i),
+
+(24)
+
+and its higher-order counterpart:
+[δS ◦ f ](T ) :=
+
+X
+
+(−1)|S|−|W | f (T − S + W ).
+
+(25)
+
+W ⊆S
+
+We note that the decision to add and remove elements instead of only adding elements is not necessarily typical; however, we find it beneficial to not need to restrict the domain of the discrete
+derivative operator.
+We may now define the Mobius transformation or purification transformation as the one which
+replaces each function with its purified version, µ : H′ → H′ .
+X
+[µ ◦ f ](x, S) := f˜(x, S) =
+(−1)|S|−|W | f (x, W )
+(26)
+W ⊆S
+
+17
+
+Published as a conference paper at ICLR 2025
+
+We can also see that the purified functions can additionally be written in terms of the discrete derivative operator.
+X
+f˜(x, S) = [δS ◦ f ](x, ∅) =
+(−1)|S|−|W | f (x, ∅ + W )
+(27)
+W ⊆S
+
+Both the discrete derivative operator and the Mobius purification transformation are important tools
+for being able to more easily study the case of feature interactions in blackbox explainers. In the
+sections that follow we will define the major feature attribution and feature interaction attribution
+methods in terms of these operators.
+The Shapley Value The most typical definition of the Shapley value is usually its closed form
+solution as the weighted average of 1D derivatives,
+
+X  1 d − 1−1  
+SHAP
+[ϕ
+◦ f ]i (x) =
+· δi f (x, S) ,
+d |S|
+S⊆[d]−i
+
+although its definition as an expectation over random permutations,
+
+
+1 X  
+SHAP
+δi f (x, Sπ,i ) ,
+[ϕi
+◦ f ](x) =
+|Sd |
+π∈Sd
+
+has gained popularity in practice due to its susceptibility to Monte-Carlo sampling. We define Sd as
+the symmetric group or set of permutations on d elements, Sd := {π : [d] → [d] s.t. π is bijective},
+and we define Sπ,i as the set of predecessors to i under the ordering π, Sπ,i := {j ∈ [d] s.t. π(j) <
+π(i)}.
+We also state the alternative formulation in terms of ‘unanimity games’ which the authors believe to
+yield a more intuitive understanding of the Shapley value.
+X f˜S (xS )
+
+[ϕSh ◦ f ]i (x) =
+
+S⊇{i}
+
+(28)
+
+|S|
+
+In words, the Shapley value divides the purified interaction f˜S (xS ) (which is the value created by S
+1
+and only S) amongst all of its constituent features, i ∈ S, completely uniformly between them, |S|
+.
+We rewrite the four Shapley axioms in terms of the functional notation:
+1. Dummy
+
+If [δi ◦ f ](x, S) = 0 for all S,
+then [ϕi ◦ f ](x) = 0 (for that local x).
+
+3. Efficiency
+
+π −1 ◦ ϕπ(i) ◦ π ◦ f = ϕi ◦ f
+P
+i∈[d] ϕi ◦ f = f[d] − f∅
+
+4. Linearity
+
+ϕ ◦ (f + g) = ϕ ◦ f + ϕ ◦ g
+
+2. Symmetry
+
+∀i ∈ [d], ∀π ∈ Sd
+
+It should be emphasized that dummy is a truly local property whereas symmetry, efficiency, and
+linearity can all be realized as properties of the additive functions. Thus, from the functional perspective, it is more appropriate to call this property ‘local dummy’ to emphasize its distinction from
+‘global dummy’ functions which would be the case when ϕi ◦ f ≡ 0. We hope this would help
+eliminate the common confusion we discuss later in Appendix B. Another point to briefly note is
+that linearity condition is about the linearity of the operator rather than the linearity of the function.
+Other Common Explainers One of the original blackbox explainers is the LIME value (Ribeiro
+et al., 2016), which can also be written in this functional notation as:
+
+
+
+d
+X
+2
+LIME
+LIME
+(x, S) −
+1(i ∈ S) · ϕi
+(29)
+[Φi
+◦ F ](x) := arg min ES∼pLIME (S) f
+ϕ∈Rd
+
+i=1
+
+18
+
+Published as a conference paper at ICLR 2025
+
+where the distribution is taken over a LIME distribution pLIME (S), and the function f LIME (x, S)
+is taken as the semi-local average value according to a data-dependent LIME kernel which is the
+exponential of some distance function. For further details see Ribeiro et al. (2016) or Lundberg &
+Lee (2017).
+Another common set of explainers are the extremely simple ‘leave-one-in’ and ‘leave-one-out’ values, based on including a single feature or removing a single feature:
+[ϕinc
+i ◦ f ](x) := [δi ◦ f ](x, ∅)
+rem
+[ϕi ◦ f ](x) := [δi ◦ f ](x, [d])
+
+(30)
+(31)
+
+These also have equivalent versions for measuring the interaction effect in the more general ‘inclusion value’ or ‘removal value’:
+[ϕinc
+S ◦ f ](x) := [δS ◦ f ](x, ∅)
+[ϕrem
+S ◦ f ](x) := [δS ◦ f ](x, [d])
+
+(32)
+(33)
+
+We note that it is also popular to refer to the difference, f (x, S) − f (x, ∅), rather than the interaction
+effect, as the inclusion value. Another important interaction explainer is the Archipelago value
+1 rem
+(Tsang et al., 2020) which is defined to be the average of these two ϕarch
+:= 21 ϕinc
+S
+S + 2 ϕS . This
+inc
+rem
+simple estimator is surprisingly robust at detecting feature interactions that ϕS or ϕS would each
+individually miss.
+There are also a few other game-theoretic approaches which have attracted attention recently such as
+the Banzhaf value (Banzhaf, 1965; Tsai et al., 2023; Wang & Jia, 2023; Enouen et al., 2024) and the
+Deegan-Packel index (Deegan & Packel, 1978; Biradar et al., 2024), especially in their application
+to classification tasks instead of regression tasks.
+A.3
+
+S HAPLEY I NTERACTION I NDICES
+
+Shapley Interaction Indices The first definition extending the Shapley value to try handling feature interactions was already constructed in 1999, mainly by the removal of the efficiency axiom
+(Grabisch & Roubens, 1999). This allows for a relatively simple extension using the permutation
+symmetry axiom to define the interaction index as a random order value where both features must
+be present rather than the one. From Table 1 below, it can be seen how this index divides the
+higher-order interaction effects amongst their constituent lower-order subsets in the same way as the
+original Shapley value (1/t).
+Table 1: Shapley Interaction Indices for k = 1, 2, 3
+
+1/(t − 2)
+
+t=1
+1
+0
+0
+
+t=2
+1/2
+1
+0
+
+t=3
+1/3
+1/2
+1
+
+Equation
+1/t
+1/(t − 1)
+1/(t − 2)
+
+t = 11
+1/11
+1/10
+1/9
+
+t = 12
+1/12
+1/11
+1/10
+
+t = 13
+1/13
+1/12
+1/11
+
+Equation
+k=1
+k=2
+k=3
+
+s=1
+s=2
+s=3
+
+k=1
+k=2
+k=3
+
+s=1
+s=2
+s=3
+
+1/t
+1/(t − 1)
+
+19
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+1/4
+
+1/5
+
+1/6
+
+1/7
+
+1/8
+
+1/9
+
+1/10
+
+1/3
+
+1/4
+
+1/5
+
+1/6
+
+1/7
+
+1/8
+
+1/9
+
+1/2
+
+1/3
+
+1/4
+
+1/5
+
+1/6
+
+1/7
+
+1/8
+
+14
+
+15
+
+16
+
+17
+
+18
+
+19
+
+20
+
+1/14
+
+1/15
+
+1/16
+
+1/17
+
+1/18
+
+1/19
+
+1/20
+
+1/13
+
+1/14
+
+1/15
+
+1/16
+
+1/17
+
+1/18
+
+1/19
+
+1/12
+
+1/13
+
+1/14
+
+1/15
+
+1/16
+
+1/17
+
+1/18
+
+Published as a conference paper at ICLR 2025
+
+Shapley-Taylor Interaction Indices The next major advancement to Shapley interaction indices
+came with the introduction of the Shapley-Taylor indices in 2019 (Sundararajan et al., 2020). These
+interaction indices reintroduce the efficiency condition in a way which we now know reflects the
+additive model structure of summing to the full prediction. However, they achieve this decomposition by treating the lower-order additive effects asymmetrically from the maximum rank effects.
+In particular, they zero out the influence of everything except the purified effect and distribute the
+higher-order effects amongst the rank k subsets. This can be seen more clearly in Tables 2, 3, and 4.
+Table 2: Shapley-Taylor Coefficients for k = 1
+t=1
+1
+
+t=2
+1/2
+
+t=3
+1/3
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+s=1
+
+Equation
+1/t
+
+4
+
+k=1
+
+1/4
+
+1/5
+
+1/6
+
+1/7
+
+1/8
+
+1/9
+
+1/10
+
+t = 11
+1/11
+
+t = 12
+1/12
+
+t = 13
+1/13
+
+15
+
+16
+
+17
+
+18
+
+19
+
+20
+
+s=1
+
+Equation
+1/t
+
+14
+
+k=1
+
+1/14
+
+1/15
+
+1/16
+
+1/17
+
+1/18
+
+1/19
+
+1/20
+
+Table 3: Shapley-Taylor Coefficients for k = 2
+
+k=2
+
+s=1
+s=2
+
+k=2
+
+s=1
+s=2
+
+Equation
+
+t=1
+1
+0
+
+t=2
+0
+1
+
+t=3
+0
+1/3
+
+4
+0
+1/6
+
+5
+0
+1/10
+
+6
+0
+1/15
+
+7
+0
+1/21
+
+8
+0
+1/28
+
+9
+0
+1/36
+
+10
+0
+1/45
+
+Equation
+
+t = 11
+0
+1/55
+
+t = 12
+0
+1/66
+
+t = 13
+0
+1/78
+
+14
+0
+1/91
+
+15
+0
+1/105
+
+16
+0
+1/120
+
+17
+0
+1/136
+
+18
+0
+1/153
+
+19
+0
+1/171
+
+20
+0
+1/190
+
+Table 4: Shapley-Taylor Coefficients for k = 3
+
+k=3
+
+s=1
+s=2
+s=3
+
+k=3
+
+s=1
+s=2
+s=3
+
+Equation
+
+t=1
+1
+0
+0
+
+t=2
+0
+1
+0
+
+t=3
+0
+0
+1
+
+4
+0
+0
+1/4
+
+5
+0
+0
+1/10
+
+6
+0
+0
+1/20
+
+7
+0
+0
+1/35
+
+8
+0
+0
+1/56
+
+9
+0
+0
+1/84
+
+10
+0
+0
+1/120
+
+Equation
+
+t = 11
+0
+0
+1/165
+
+t = 12
+0
+0
+1/220
+
+t = 13
+0
+0
+1/286
+
+14
+0
+0
+1/364
+
+15
+0
+0
+1/455
+
+16
+0
+0
+1/560
+
+17
+0
+0
+1/680
+
+18
+0
+0
+1/816
+
+19
+0
+0
+1/969
+
+20
+0
+0
+1/1140
+
+20
+
+Published as a conference paper at ICLR 2025
+
+n-Shapley Values The n-Shapley values are a more recent attempt to revitalize the original Shapley interaction indices to obey the efficiency axiom in an alternate way (Bordt & von Luxburg,
+2023). They use a recursive form so that the maximum rank terms (s = k) are the same as the
+original interaction index (Grabisch & Roubens, 1999); however, the lower order terms (s < k) are
+chosen to exactly obey the efficiency terms. This requires the use of the Beroulli numbers to balance
+these terms in a recursive expansion. The first few orders can be seen in Tables 5, 6, and 7. Note the
+similarities and differences with Table 1.
+Table 5: n-Shapley Coefficients for n = k = 1
+t=1
+1
+
+t=2
+1/2
+
+t=3
+1/3
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+s=1
+
+Equation
+1/t
+
+4
+
+k=1
+
+1/4
+
+1/5
+
+1/6
+
+1/7
+
+1/8
+
+1/9
+
+1/10
+
+t = 11
+1/11
+
+t = 12
+1/12
+
+t = 13
+1/13
+
+15
+
+16
+
+17
+
+18
+
+19
+
+20
+
+s=1
+
+Equation
+1/t
+
+14
+
+k=1
+
+1/14
+
+1/15
+
+1/16
+
+1/17
+
+1/18
+
+1/19
+
+1/20
+
+Table 6: n-Shapley Coefficients for n = k = 2
+Equation
+k=2
+
+s=1
+s=2
+
+−(t−2)
+2t
+1
+(t−1)
+
+Equation
+k=2
+
+s=1
+s=2
+
+−(t−2)
+2t
+1
+(t−1)
+
+t=1
+1
+0
+
+t=2
+0
+1
+
+t=3
+− 1/6
+1/2
+
+t = 11
+− 9/22
+1/10
+
+t = 12
+− 5/12
+1/11
+
+t = 13
+
+14
+
+15
+
+16
+
+17
+
+18
+
+19
+
+20
+
+− 11/26
+
+− 3/7
+
+− 13/30
+
+− 7/16
+
+− 15/34
+
+− 4/9
+
+− 17/38
+
+− 9/20
+
+1/12
+
+1/13
+
+1/14
+
+1/15
+
+1/16
+
+1/17
+
+1/18
+
+1/19
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+− 1/4
+
+− 3/10
+
+− 1/3
+
+− 5/14
+
+− 3/8
+
+− 7/18
+
+− 2/5
+
+1/3
+
+1/4
+
+1/5
+
+1/6
+
+1/7
+
+1/8
+
+1/9
+
+Table 7: n-Shapley Coefficients for n = k = 3
+Equation
+k=3
+
+s=1
+s=2
+s=3
+
+(t−3)(t−4)
+12t
+−(t−3)
+2(t−1)
+1
+(t−2)
+
+s=1
+s=2
+s=3
+
+(t−3)(t−4)
+12t
+−(t−3)
+2(t−1)
+1
+(t−2)
+
+Equation
+k=3
+
+t=1
+1
+0
+0
+
+t=2
+0
+1
+0
+
+t=3
+0
+0
+1
+
+t = 11
+14/33
+− 2/5
+1/9
+
+t = 12
+1/2
+− 9/22
+1/10
+
+t = 13
+15/26
+− 5/12
+1/11
+
+4
+0
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+1/30
+
+1/12
+
+1/7
+
+5/24
+
+5/18
+
+7/20
+
+− 1/6
+
+− 1/4
+
+− 3/10
+
+− 1/3
+
+− 5/14
+
+− 3/8
+
+− 7/18
+
+1/2
+
+1/3
+
+1/4
+
+1/5
+
+1/6
+
+1/7
+
+1/8
+
+14
+
+15
+
+16
+
+17
+
+18
+
+19
+
+55/84
+
+11/15
+
+13/16
+
+91/102
+
+35/36
+
+20/19
+
+17/15
+
+− 11/26
+
+− 3/7
+
+− 13/30
+
+− 7/16
+
+− 15/34
+
+− 4/9
+
+− 17/38
+
+1/12
+
+1/13
+
+1/14
+
+1/15
+
+1/16
+
+1/17
+
+1/18
+
+21
+
+20
+
+Published as a conference paper at ICLR 2025
+
+Faith SHAP, the Faithful Shapley Index The other most recent attempt at a Shapley interaction
+index is the faithful Shapley interaction index. Instead of leveraging the permutation sampling
+symmetry of the original Shapley value, this work instead extends the Shapley value by means of
+its least-squares characterization. As we discuss extensively in this work, this can be seen as further
+utilizing the characteriztaion of Shapley values as an additive model approximation.
+Tsai et al. (2023)’s Equation (16) solves for the faithful Shapey interaction indices from the perspective of the Mobius/purified functions:
+
+  X
+|T |−1
+k
+k
+˜S + (−1)k−|S| |S|
+ϕFaith-SHAP-k
+◦
+f
+=
+f
+(34)
+ f˜T
+S
+|T |+k−1
+k + |S| |S|
+T ⊋S,|T |>k
+
+k+|S|
+
+In Tables 8, 9, and 10 below, we display what these coefficients are for the Mobius purified interaction effects. We additionally calculate a slightly simpler form of these coefficients in the claim
+below.
+Table 8: FaithSHAP Coefficients for k = 1
+t=1
+1
+
+t=2
+1/2
+
+t=3
+1/3
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+s=1
+
+Equation
+1/t
+
+4
+
+k=1
+
+1/4
+
+1/5
+
+1/6
+
+1/7
+
+1/8
+
+1/9
+
+1/10
+
+t = 11
+1/11
+
+t = 12
+1/12
+
+t = 13
+1/13
+
+15
+
+16
+
+17
+
+18
+
+19
+
+20
+
+s=1
+
+Equation
+1/t
+
+14
+
+k=1
+
+1/14
+
+1/15
+
+1/16
+
+1/17
+
+1/18
+
+1/19
+
+1/20
+
+Table 9: FaithSHAP Coefficients for k = 2
+Equation
+k=2
+
+s=1
+s=2
+
+−2(t−2)
+t(t+1)
+6
+t(t+1)
+
+s=1
+s=2
+
+−2(t−2)
+t(t+1)
+6
+t(t+1)
+
+Equation
+k=2
+
+t=1
+1
+0
+
+t=2
+0
+1
+
+t=3
+− 1/6
+1/2
+
+t = 11
+− 3/22
+1/22
+
+t = 12
+− 5/39
+1/26
+
+t = 13
+
+14
+
+15
+
+16
+
+17
+
+18
+
+19
+
+20
+
+− 11/91
+
+− 4/35
+
+− 13/120
+
+− 7/68
+
+− 5/51
+
+− 16/171
+
+− 17/190
+
+− 3/35
+
+3/91
+
+1/35
+
+1/40
+
+3/136
+
+1/51
+
+1/57
+
+3/190
+
+1/70
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+− 1/5
+
+− 1/5
+
+− 4/21
+
+− 5/28
+
+− 1/6
+
+− 7/45
+
+− 8/55
+
+3/10
+
+1/5
+
+1/7
+
+3/28
+
+1/12
+
+1/15
+
+3/55
+
+Table 10: FaithSHAP Coefficients for k = 3
+t=1
+1
+
+t=2
+0
+
+t=3
+0
+
+0
+0
+
+1
+0
+
+0
+1
+
+t = 11
+18/143
+
+t = 12
+45/364
+
+t = 13
+11/91
+
+14
+
+15
+
+16
+
+17
+
+18
+
+19
+
+20
+
+33/280
+
+39/340
+
+91/816
+
+35/323
+
+2/19
+
+68/665
+
+153/1540
+
+− 16/143
+
+− 9/91
+
+− 8/91
+
+− 11/140
+
+− 6/85
+
+− 13/204
+
+− 56/969
+
+− 1/19
+
+− 32/665
+
+− 17/385
+
+5/143
+
+5/182
+
+2/91
+
+1/56
+
+1/68
+
+5/408
+
+10/969
+
+1/114
+
+1/133
+
+1/154
+
+Equation
+k=3
+
+s=1
+s=2
+s=3
+
+3(t−3)(t−2)
+t(t+1)(t+2)
+24(t−3)
+t(t+1)(t+2)
+60
+t(t+1)(t+2)
+
+Equation
+k=3
+
+s=1
+s=2
+s=3
+
+3(t−3)(t−2)
+t(t+1)(t+2)
+24(t−3)
+t(t+1)(t+2)
+60
+t(t+1)(t+2)
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+1/20
+
+3/35
+
+3/28
+
+5/42
+
+1/8
+
+7/55
+
+7/55
+
+− 1/5
+
+− 8/35
+
+− 3/14
+
+− 4/21
+
+− 1/6
+
+− 8/55
+
+− 7/55
+
+1/2
+
+2/7
+
+5/28
+
+5/42
+
+1/12
+
+2/33
+
+1/22
+
+Claim 1. The Faithful Shapley coefficients can be written with the alternative formula:
+
+ϕFaith-SHAP-k
+◦ f = f˜S +
+S
+
+X
+T ⊋S,|T |>k
+
+(−1)
+
+k−s k+s−1
+
+s−1
+
+ t−s−1
+k−s
+
+
+ f˜T
+
+t+k−1
+k
+
+(35)
+
+Proof. We would like to show that:
+
+(−1)
+
+k−s
+
+
+ t−1
+ t−s−1
+s
+k
+k−s
+k−s k+s−1
+k
+ = (−1)
+
+t+k−1
+s−1
+k + s s t+k−1
+k+s
+k
+
+Let us write
+
+ 
+
+−1  
+
+
+−1 −1
+s
+k
+t−1 t+k−1
+k+s−1 t−s−1 t+k−1
+·
+=
+k+s s
+k
+k+s
+s−1
+k−s
+k
+22
+
+Published as a conference paper at ICLR 2025
+
+
+−1  
+
+−1
+
+s
+k!
+(t − 1)!
+t+k−1
+(s − 1)!k! t − s − 1
+(t + k − 1)!
+·
+·
+=
+k + s s!(k − s)! k!(t − k − 1)!
+k+s
+(k + s − 1)!
+k−s
+k!(t − 1)!
+
+
+−1  
+
+−1 
+1
+(t − 1)!
+t+k−1
+(s − 1)!(t + k − 1)! t − s − 1
+·
+·
+=
+k + s (s − 1)!(k − s)!(t − k − 1)!
+k+s
+(k + s − 1)!(t − 1)!
+k−s
+
+
+−1  
+
+−1 
+1
+1
+t+k−1
+(t + k − 1)! t − s − 1
+·
+·
+=
+k + s (k − s)!(t − k − 1)!
+k+s
+(k + s − 1)!
+k−s
+
+ 
+
+1
+1
+(t − s − 1)!(k + s)!
+(t + k − 1)! (k − s)!(t − k − 1)!
+·
+·
+=
+k + s (k − s)!(t − k − 1)!
+(t + k − 1)!
+(k + s − 1)!
+(t − s − 1)!
+ 
+
+
+(k + s)!
+(t + k − 1)!
+1
+·
+·
+=
+k + s (t + k − 1)!
+(k + s − 1)!
+
+ 
+
+(k + s − 1)!
+(t + k − 1)!
+·
+=
+(t + k − 1)!
+(k + s − 1)!
+   
+1 · 1 =1
+
+
+Due to the fact that s ≤ k < t, we find this to be a slightly nicer formulation when written as a
+function of t.
+
+23
+
+Published as a conference paper at ICLR 2025
+
+B
+
+C OMMON P ITFALLS IN THE C URRENT L ITERATURE
+
+B.1
+
+L OCALLY Z ERO VS . G LOBALLY Z ERO
+
+Consider the simple function f (x1 , x2 ) = cos (2πx1 ) + sin (2πx2 ). Assume the input features are
+uniformly distributed across the space [−1, 1]2 . Based on our correspondence, we can see see that
+the Shapley value functions decompose the same as an additive model with ϕ1 (x1 , x2 ) = cos (2πx1 )
+and ϕ2 (x1 , x2 ) = sin (2πx2 ).
+When we set x1 = 41 , we have that ϕ1 ( 14 , x2 ) = cos π2 = 0. Does this suddenly mean that our
+function ϕ1 (x1 , x2 ) is not a function of x1 because it is zero at one value? No, it does not.
+
+Figure 7: Cosine and sine functions.
+It is hoped that after the clarification of the functional perspective on the Shapley value, it can be
+made clear that the exact same question is being asked when the Shapley value is equal to zero for
+a single input point. If one is interested in the global importance of a feature, then one should check
+for being zero or nonzero as an entire function. This can for instance be checked with the variance
+of the Shapley function:
+VSHAP
+:= VarX [ϕSHAP
+(X)] > 0
+(36)
+i
+i
+B.2
+
+B EESWARM P LOTS INSTEAD OF S HAPE F UNCTIONS
+
+It is common to see beeswarm plots of the SHAP values used as an aggregate summary over an
+entire dataset. Although it is an information dense representation of the SHAP values across the
+entire dataset, we feel the additive model perspective brings some insights into their limitations and
+what can be improved about them.
+
+(a) Beeswarm Representation of SHAP
+
+(b) Shape Function Representation of SHAP
+
+Figure 8: Alternate representations of the SHAP values aggregated over an entire dataset.
+First of all, the major limitation when compared to the shape function or additive model representation is simply the compression of information. Each of the shape functions in Figure 8b is com24
+
+Published as a conference paper at ICLR 2025
+
+pressed horizontally and then its flattened version is rotated and stacked amongst the SHAP values
+for all other features. Although this information about the feature value is theoretically preserved via
+the colormap, it is well known from data visualization that this is insufficient to adequately preserve
+the information. This compression effect is especially pronounced in cyclic or heavily oscillating
+shape functions.
+Surprisingly, these plots are also commonly used with the same red-blue diverging colormap which
+is used in the output space for SHAP. This colormap makes sense for the SHAP values since they are
+referring to the positive or negative influence on the output prediction; however, when also applied
+to the feature value, we are conflating the y-axis and the x-axis in the shape functions of Figure 8b.
+Additionally, this is using a diverging colormap to represent what are usually sequential features
+(meaning a sequential colormap should be used instead). Although we again recommend to look at
+the shape functions to get a clearer overall picture, if one is not willing to inspect all of the shape
+functions, it is perhaps more effective to remove the color from the beeswarm plot entirely and/ or
+to just use an aggregate statistic such as the variance in Equation 36 to measure the spread of the
+Shapley values depicted by the beeswarm plot.
+B.3
+
+L OCALLY L INEAR OR L OCALLY A DDITIVE
+
+The interpretation of a locally linear model has two key interpretations which are unfortunately
+conflated in much of the work on explainability. The first is the semi-local interpretation of the
+coefficients as gradient-like coefficients telling the direction of greatest influence. Usually this is
+done similar to LIME (Ribeiro et al., 2016) where a linear function is fit to a weighted neighborhood
+of points. This is in contrast with the gradient which fits the same linear function to an arbitrarily
+small neighborhood of points. These are both different from the second interpretation of the linear
+model as a structural assumption onto the functional space. In particular, the linearity and efficiency
+axioms of the Shapley value are made on the Shapley operator itself. The local linearity assumptions
+do not translate to a global linearity assumption, but rather to a global additive assumption where
+the height function is dictated to respect the additive structure of the original function.
+Hopefully after the clearer connections we make with additive models, it is clear why the height
+interpretation is the correct one for SHAP and that the gradient-like tests for SHAP are ill-posed after
+a contextual understanding of the goal of SHAP as the height function rather than a measurement of
+the local sensitivity similar to the gradient.
+Let us also briefly recall that in the case of a GAM, there is still an interesting correspondence
+between the gradient of SHAP and the gradient of the GAM.
+Recall the GAM-1 equation.
+F ≤ 1 (x1 , . . . , xd ) = f1 (x1 ) + · · · + fd (xd )
+It follows that the gradient obeys the similar
+∇F ≤ 1 (x1 , . . . , xd ) = ⟨∂1 f1 (x1 ), . . . , ∂d fd (xd )⟩
+= ⟨∂1 ϕ1 (x), . . . , ∂d ϕd (x)⟩
+If one is interested in a local sensitivity test, then something like the gradient of the GAM or gradient
+of the SHAP should instead be used, but it is gently reminded that the vanilla gradient will ignore
+the statistical structure of the manifold (Frye et al., 2021) and could face alternate issues like the
+shattered gradients problem (Balduzzi et al., 2017).
+B.4
+
+BASELINE M ETHOD ON D ISCRETE I NPUTS
+
+If you have a finite set of discrete, categorical inputs, then the (mis)usage of the baseline method
+becomes of great importance for reasons beyond the off-the-manifold problem. In particular, it is
+common to replace the current input variable by the baseline input variable only to realize they had
+the same value (e.g. zero). It follows that the counterfactual removal will have no effect, Although
+extremely rare in the continuous case, when using categorical input variables it is easy to mask out
+bivariate and even higher-order effects. It is especially easy to make this mistake on boolean input
+variables. Accordingly, it is perhaps recommended to those with lesser familiarity with boolean
+functions or logical functions to use the {±1} or one-hot encoding instead of {0, 1} to avoid making
+such mistakes (O’Donnell, 2014).
+25
+
+Published as a conference paper at ICLR 2025
+
+C
+
+I MPOSSIBILITY T HEOREMS FOR F EATURE I NTERACTIONS
+
+This section will broadly prove the representational power of SHAP and related black-box explainers
+in the form of ‘impossibility theorems’ or ‘possibility theorems’. The main method of proof technique is simply via the proof of functional correspondence between the two spaces, the functional
+space of interest to be taken for hypothesis tests, H, and the functional space of additive models for
+some sufficiently large order k ∈ N, H≤k .
+Let us first proceed by defining the trace of the SHAP function as the object of interest so that we
+may thus allow a direct functional comparison between the two of GAM and SHAP. For simplicity,
+we will assume a rectangular feature space X = X1 × · · · × Xd for some subspaces Xi for each
+i ∈ [d]. It is simple to extend some subset of Rd to a rectangular subset in this way by taking
+the product of the marginal spaces. It is also necessary to extend the distribution p(x) which has
+been assumed on the original space X to our rectangular space. However, the obvious extension
+of zero probability on any additional coordinate will be sufficient for our purposes, since it will
+already be required to make all of our statements modulo differences on a null set (set of measure
+zero). Accordingly, we will simply restrict our focus to a rectangular feature space and ignore any
+concerns regarding differences on a null set. Any hypothesis test which is testing on a set of measure
+zero, although completely ill-posed, will not be answerable under this statistical framework.
+For a given test point x∗ ∈ X , we define the SHAP trace at x∗ to be the object:
+
+
+
+[
+TFSHAP (x∗ ) =
+x, [ΦSHAP ◦ F ](x) : x ∈
+{x∗1 } × · · · × {x∗i−1 } × Xi × {x∗i+1 } × · · · × {x∗d }
+i∈[d]
+
+In words, the trace of the SHAP value is the image under the Shapley function of the set which
+includes all possible 1D perturbations of a single feature value.
+To enable a direct comparison with the original functional space H, we will define the completion of
+the trace as the function which is extended to the entire rectangular feature space X in the obvious
+way by assuming that the SHAP trace is the true additive model representing the underlying function
+F.
+
+ X
+d
+
+SHAP ∗
+SHAP
+∗
+∗
+∗
+∗
+[Φi
+◦ F ](x1 , . . . , xi−1 , xi , xi+1 , . . . , xd ) : x ∈ X
+x,
+CT F (x ) =
+i=1
+
+Theorem 5. The SHAP trace of a function F will satisfy any hypothesis test H0 v. H1 inside of
+the functional space H if and only if the functional space H is equivalent to a shift which is not a
+≤1
+superset of HANOVA
+.
+Proof. Since we are making a claim across all possible splittings of the functional space H into
+two possibilites of the null hypothesis H0 and the alternative hypothesis H1 , it is required that we
+actually show the exact identifiability of the individual function from the SHAP trace alone.
+Suppose first the H truly is a subset of the ANOVA-1 space (or a shift thereof). We simply take the
+difference (F1 − F2 ) for some arbtirary F1 , F2 ∈ H or otherwise assume we know the functional
+shift required to center our functional space to be a subset of the ANOVA-1 space. It follows from
+the exact formula of the SHAP function that for any F ∈ H, we will have that ϕi (x) = ϕi (xi ) =
+f˜i (xi ), which implies that the completion of this trace will immediately recover the original GAM-1
+function.
+In the other direction, to prove the contrapositive, assume instead that H truly has some feature
+interaction, which can be represented by (F1 − F2 ) and (F1 − F3 ) being some different shifts for
+some F1 , F2 , F3 ∈ H. For simplicity, let us shift by (F1 − F3 ) so that one difference is zero and
+one difference is nonzero. It follows that for the nonzero interaction effect, there is some S ⊆ [d]
+with |S| > 1 such that f˜S ̸≡ 0. Since this is true in the statistical sense, there is a region of
+≤1
+sufficient difference. Via the assumption that our space H is at least as representative as HANOVA
+,
+this means we can find two distinct functions which map to the same SHAP trace in the local region
+of this nonzero measure region. Accordingly, if we take a hypothesis test which identifies these two
+distinct functions, their SHAP traces will still look indistinguishable and there will be no succesful
+hypothesis test based on the SHAP trace.
+26
+
+Published as a conference paper at ICLR 2025
+
+Of course, practically speaking, we likely do not have access to a priori knowledge about the global
+feature interactions of some hypothesis space H which would allow for the construction of the
+isomporhism between our given H and some H̃ which is actually a subset of the ANOVA-1 space
+≤1
+HANOVA
+Proceeding by defining the trace of Faith-SHAP-k and GAM-k in the obvious way, we may find a
+similar theorem for the higher-order interactions of k ∈ N. Once again, it is practically more useful
+to say we cannot directly assume the existence of feature interactions across the entire hypothesis
+≤k
+space and hence again asssume H ⊆ HANOVA
+without the caveat of allowing a shift by some oracle
+assumption. It is also perhaps more interesting that we can make the same statement for any arbitrary
+frontier I ⊆ P([d]) as we will introduce in the general study of additive models in Appendix E.
+C.1
+
+S PECIFIC E XAMPLES
+
+Although we have shown exact functional equivalence from which the ability to do hypothesis tests
+follows, we restate some of the tests from Bilodeau et al. (2022) to make a clearer comparison.
+The first hypothesis test is coming from their Proposition 3.5, and although they do not name this
+hypothesis test, we call it the “almost δ-local Lipschitz” because of its resemblance to the slightly
+more typical “δ-local Lipschitz” test.
+
+
+|F (x′ ) − F (x)|
+δ,x,i
+Lalmost (F ) :=
+sup
+(37)
+δ
+x′i ∈[xi −δ,xi +δ]
+
+
+|F (x′ ) − F (x)|
+δ,x,i
+(38)
+L
+(F ) :=
+sup
+|x′ − x|
+x′i ∈[xi −δ,xi +δ]
+They then create the hypothesis tests:
+
+H0 =
+
+ε
+F ∈ H : Lδ,x,i
+almost (F ) ≤
+
+(39)
+
+2
+
+
+H1 =
+
+
+
+
+δ,x,i
+F ∈ H : Lalmost (F ) > ε
+
+(40)
+
+And then identify that the gradient can successfully distinguish these two hypotheses. This is desired since it is well known that on a compact interval, continuously differentiable functions are
+automatically Lipschitz functions.
+The next two major hypothesis tests they build are for ‘local recourse’ in Definition 3.7 and ‘locally
+spurious’ in Definition 3.8. For recourse, we first assume some counterfactual distribution ν(x)
+which they implicitly assume to have nonzero measure across the left-local and right-local regions
+[xi − δ, xi ] and [xi , xi + δ]. We define the ‘value of moving to the left’ and the ‘value of moving to
+the right’ under the counterfactual distribution, ν(x), as the δ-local left and right recourse values:
+
+
+δ,x,i,−
+V
+(F ) := EX∼ν f (x1 , . . . , Xi , . . . , xd ) | Xi ∈ [xi − δ, xi ]
+(41)
+
+
+V δ,x,i,+ (F ) := EX∼ν f (x1 , . . . , Xi , . . . , xd ) | Xi ∈ [xi , xi + δ]
+(42)
+They then create the hypothesis tests:
+
+
+δ,x,i,+
+δ,x,i,−
+H0 = F ∈ H : V
+(F ) > V
+(F )
+
+
+δ,x,i,+
+δ,x,i,−
+H1 = F ∈ H : V
+(F ) ≤ V
+(F )
+The infinity norm over a local interval (from the left and from the right) is defined as:
+
+
+′
+∥F ∥δ,x,i,−
+:=
+sup
+F
+(x
+)
+∞
+
+(43)
+(44)
+
+(45)
+
+x′i ∈[xi −δ,xi ]
+
+∥F ∥δ,x,i,+
+:=
+∞
+
+
+sup
+x′i ∈[xi ,xi +δ]
+
+27
+
+′
+
+F (x )
+
+
+(46)
+
+Published as a conference paper at ICLR 2025
+
+The final major hypothesis tests introduced in that work are the tests for if a feature is local spurious:
+
+
+δ,x,i,+
+H0 = F ∈ H : ∥F ∥∞
+=0
+(47)
+
+
+H1 = F ∈ H : ∥F ∥δ,x,i,+
+≥ε
+(48)
+∞
+To reiterate, all of these tests are easily answered via the SHAP value using the additive model
+trace. All of these hypothesis tests focus on the behavior inside of a local neighborhood for some
+arbitrary δ, whereas the SHAP value evaluated at a single point only describes the behavior at a
+single point. Hopefully, from the functional perspective on Shapley, it is now clear how easily all
+of these questions can be answered by using the additive model equivalent of the Shapley value.
+This does not conflict with previous works showing negative results on these same hypothesis test
+since their focus was on the ability of a pointwise indicator’s ability to perform these hyptohesis
+tests, and is related to our discussion in Section B.1 and Section B.3. Moreover, it is hoped that the
+true limitation of SHAP, its inability to adequately handle feature interactions, is now emphasized
+as something that cannot be shown by any of these existing impossibility tests due to their focus on
+a single perturbed feature at a time.
+
+28
+
+Published as a conference paper at ICLR 2025
+
+D
+
+E XPERIMENT D ETAILS
+
+D.1
+
+2D S YNTHETIC
+
+First, we look at a particularly simple example of synthetic data to highlight the two important aspects which the Shapley value alone is unable to capture: feature interaction and feature correlation.
+Hopefully this example will help develop intuition for the Shapley value and highlight its unique
+challenges in the setting where input variables are correlated.
+For some ρ ∈ [−1, 1], we consider the data generated by
+f (x, y) = x + xy
+
+  
+X, Y ∼ N ⃗0, ρ1 ρ1
+
+It is relatively straightforward to calculate that:
+
+fx = x + ρx2
+
+f˜∅ = ρ
+f˜x = x + ρx2 − ρ
+
+fy = ρy + ρy 2
+fxy = x + xy
+
+f˜y = ρy + ρy 2 − ρ
+f˜xy = −ρy + xy − ρx2 − ρy 2 + ρ
+
+f∅ = ρ
+
+Figure 9: Simple Synthetic Dataset using various ρ ∈ {0.0, 0.1, 0.2, . . . , 1.0}. Each of the five rows
+corresponds to the learned f˜x , f˜y , f˜xy , ϕx , and ϕy . The third row is hence ‘top-down’ from the zaxis whereas all others have the output f as the vertical axis. Visually constrained to x, y ∈ [−2, 2]2
+with colors/ outputs in [−3, 3]. A single point is highlighted to emphasize how the Shapley value in
+the bottom two rows is constructed from the top three rows.
+The Sobol covariances are hence:
+E[f · f˜∅ ] = ρ2
+E[f · f˜x ] = E[x2 + ρx3 + x2 y + ρx3 y − ρx − ρxy] = 1 + 0 + 0 + 3ρ2 + 0 − ρ2
+E[f · f˜y ] = E[ρxy + ρxy 2 + ρxy 2 + ρxy 3 − ρx − ρxy] = ρ2 + 0 + 0 + ρ(3ρ) + 0 − ρ2
+E[f · f˜xy ] = E[f 2 ] − (ρ2 ) − (1 + 2ρ2 ) − (3ρ2 ) = 1 + (1 + 2ρ2 ) − (1 + 6ρ2 )
+Hence C∅ = ρ2 , Cx = 1 + 2ρ2 , Cy = 3ρ2 , Cxy = 1 − 4ρ2 .
+The Shapley functions are also ϕx (x, y) = f˜x + 21 f˜xy and ϕy (x, y) = f˜y + 12 f˜xy :
+h
+i h
+i
+ρ
+2
+2
+ϕx (x, y) = (x + ρx2 − ρ) + 12 (−ρy + xy − ρx2 − ρy 2 + ρ) = x − ρ2 y + xy
++
+(x
+−
+y
+−
+1)
+2
+2
+h i h
+i
+ρ 2
+2
+ϕy (x, y) = (ρy + ρy 2 − ρ) + 21 (−ρy + xy − ρx2 − ρy 2 + ρ) = ρ2 y + xy
+2 + 2 (y − x − 1)
+29
+
+Published as a conference paper at ICLR 2025
+
+In Figure 9, we can see the learned set of functions across various ρ ∈ {0.0, 0.1, . . . , 1.0} when
+learning a GAM with the purified loss function. The Shapley functions can also be calculated to
+be ϕx = f˜x + 12 f˜xy and ϕy = f˜y + 21 f˜xy which can be seen in the fourth and fifth rows from
+the Figure. We can furthermore see that the additive models using the purified loss align with the
+true purified ANOVA decomposition and that hence the Shapley value functions can be computed
+in constant time given the purified GAM model. Further, going left to right, we see how the strength
+of the 1D effects (first and second rows) increase, whereas the strength of the 2D effects (third row)
+decreases as the amount of correlation increases. This corresponds to the deterioration of the feature
+interaction due to the increase in feature correlation. At the halfway mark, the 2D function is no
+longer positively correlated with the true outcome. This is most obvious in the far right (ρ = 1.0)
+plots where f˜x = f˜x = −f˜xy , meaning ϕx = 12 f˜x and ϕy = 12 f˜y .
+Interestingly, we can see that for |ρ| > 12 , we actually have that Cxy < 0. That is to say, the
+interaction term alone is no longer positively correlated with the function we are trying to learn.
+This further implies that the purified interaction is actually negatively correlated with our target,
+and adding it to the model somehow reduces the performance as measured with MSE. This must be
+juxtaposed with the fact that our function f (x, y) = x+xy clearly demonstrates a feature interaction
+in the term xy.
+This can however be resolved by not thinking of the purified interaction alone but in conjunction
+with other features when it is added to the model. For example, if we started with y and added x,
+then we could consider Cx + Cxy = 2 − 2ρ2 ≥ 0 as the improvement to the model. Conversely, if
+we started with x and added y, we could consider Cy + Cxy = 1 − ρ2 ≥ 0 as the improvement to
+the model. Intuitively, it is not the fact that the interaction is detrimental to the model performance,
+as clearly it is necessary for |ρ| < 1, but rather that it is overshadowed by the information which is
+gained from either x or y alone. “The redundant information from knowing x or y outweighs the
+synergistic information from knowing x and y.”
+D.2
+
+10D S YNTHETIC
+
+For our major synthetic experiments where we benchmark the ability of FastSHAP and InstaSHAP
+to recover the Shapley value effects, we create a dataset similar to the simple ones in Figures 2 and 9.
+We generate ten features from a correlated pairs structure on the covariance matrix. In practice, this
+will mean our low-dimensional synthetic target variable will remain having a low-dimensional functional ANOVA decomposition because of this simplistic correlation structure. Moreover, this allows
+us to relatively easily calculate the exact Shapley functions even in this 10-dimensional dataset.
+
+
+1
+ρ
+
+
+
+Σ=
+
+
+
+
+
+
+
+ρ
+1
+1
+ρ
+
+ρ
+1
+
+
+
+
+
+
+
+
+
+1 ρ
+ρ 1
+
+..
+
+.
+
+βS ·
+
+Y
+
+We then take the target variable to be
+X
+
+f (x) =
+
+S∈I ≤k∗
+
+xi
+
+(49)
+
+i∈S
+
+for some k∗ ∈ N and for some βS drawn from the normal distribution N (0, 1) or the Laplace
+distribution Laplace(0, 1). We finally divide by a constant to normalize the output response such
+that the total variance of the output is equal to one.
+D.3
+
+R EAL -W ORLD TABULAR DATASETS
+
+We follow the methods of SIAN (Enouen & Liu, 2022) to train GAM models for tabular datasets.
+After the training of a surrogate model, the Archipelago (Tsang et al., 2020) interaction detection
+method is applied to choose the most important feature interactions from the dataset. After a small
+30
+
+Published as a conference paper at ICLR 2025
+
+number of feature interactions are chosen from the dataset, a neural network which obeys this lowdimensional GAM structure is trained under the same loss function objective as in the main paper.
+Bikeshare This dataset predicts the expected bike demand each hour given some relevant features
+like the day of the week, time of day, and current weather. There is a total of thirteen different input
+features predicting a single continuous output variable.
+There is a gap in accuracy from GAM-1 to an MLP where the GAM-1 achieves an R2 error of
+17.4%, whereas an MLP achieves an R2 error of 6.59%. Using the techniques of SIAN, we select
+20 tuples of size three or less to train a GAM-3 model which achieves 6.23% R2 error, closing the
+gap between GAM-1≡SHAP through the usage of feature interactions.
+In particular, it is well known that on this dataset there is a strong interaction between the hour variable and workday variable (since people’s schedules change on the weekend vs. a workday.) The
+ability to capture this particular feature interaction is critical for accurately understanding the dataset,
+as seen in Figure 4. Also in Figure 4, it can be viewed how the interpretability-uninterpretability
+spectrum along the axis of additive models supports the hypothesis of Rudin (2019) by demonstrating that training an accurate GAM model is sufficient to explain SHAP; however, training an
+accurate SHAP score is not sufficient for training accurate GAM models.
+Treecover The dataset consists of predicting the types of trees covering a specific forest area
+from a selection of 7 tree species (Spruce, Lodgepole Pine, Ponderosa Pine, Cottonwood, Aspen,
+Douglas-Fir, or Krummholz) in a Colorado national park based on 10 numerical features and 1
+categorical feature of the area.
+However, this misses the fact that both the elevation and soil type are additionally correlated with
+one another. Indeed, the soils are grouped according to climatic zone which generally correspond to
+different altitude climates. For convenience, we keep these soil classes in the same orders as their
+expected elevation, named: ‘lower montane’, ‘upper montane’, ‘subalpine’, and ‘alpine’. One notes
+that the Krummholz tree can be found at high altitudes but also in alpine (often rocky) soil. Similarly,
+Cottonwoods, Douglas-firs, and Ponderosas are expected to be found at lower altitudes, but also to
+be found in montane soils. Without an understanding that these two features are correlated with
+one another, it might a priori seem like these are two independent contributions to the prediction.
+Yet again, it turns out that these two facts are indeed correlated with one another and hence the 1D
+projections alone may not be sufficient to yield a good explanation.
+In this case, a lot can be gleaned by viewing the 2D shape function which depends on both the soil
+and the elevation. In Figure 5, we visualize this 2D shape function as a scatterplot with colored
+heatmap. Through the density of points, we can see there is indeed a strong positive correlation
+between the soil type and the elevation. Furthermore, using the colors for each tree species, we can
+see that there is a lot of redundant information carried by both the soil and the elevation, but also
+that there is some non redundant information.
+We train an MLP on this dataset to achieve 80.4% validation accuracy and we train a GAM-1 to
+achieve 72.4% validation accuracy. This once again shows a gap in the feature interactions which
+discredits the ability of SHAP to provide an adequate explanation of what is being learned by the
+MLP model. Once again following the techniques of training lower-order GAMs, we are able to train
+a GAM-5 on 50 tuples to achieve 82.2% accuracy. This shows that likely there is some information
+which the low-order GAM with interactions can understand that GAM-1 and SHAP are missing.
+D.4
+
+C OMPUTER V ISION
+
+We perform experiments on the CUB dataset consisting of 200 different species of birds and containing over 6000 labeled images (Wah et al., 2011). In addition to the species level information,
+we construct a coarser-grained class label out of the taxonomic family of each of those bird species.
+This results in 37 coarse-grained labels for each bird. For our main CNN we train a ResNet-50
+model (He et al., 2016) on the masked surrogate objective and for our GAM-KxK architecture we
+train a modififed resnet to only allow for communication between adjacent patches of size 16x16,
+further details in code. Both models are initialized with mostly pretrained weights and fine-tuned
+for 300 epochs on the CUB dataset.
+31
+
+Published as a conference paper at ICLR 2025
+
+Our vanilla resnet is able to get to 65.0% fine accuracy and 81.8% coarse accuracy. Compare
+this to the 33.2% fine and 53.7% coarse accuracies of the GAM-1x1. There is clearly a sizable
+gap in performance between the full complexity ResNet and the GAM-restricted Resnet, indicating
+the importance of feature interactions and emphasizing the potential deceptiveness of SHAP on this
+dataset. The GAM-2x2 and GAM-3x3 achieve fine accuracies of 45.8% and 46.8% as well as coarse
+accuracies of 66.3% and 66.8%. This once again indicates that even with some feature interactions,
+the performance of the Resnet is dependent on even higher order feature interactions or longerrange feature interactions. As discussed, it is not impossible that these conclusions are only true for
+the training method used in the GAM-KxK and that some novel GAM architecture would not be
+able to achieve higher performance. Nonetheless, the issues in training modern neural network will
+be present also in alternative approaches like FastSHAP, implying that these conclusions are valid
+regardless.
+Another major challenge of applying to domains like computer vision and natural language processing is the prolific usage of pretrained models for downstream tasks. As discussed in Covert et al.
+(2023), this brings up the important question of how to do surrogate-based modeling to compute
+the conditional expectation M. In principle, we would like to also do the pretraining stage with
+surrogate masking, however, in practice previous works on this domain (Jethani et al., 2022; Covert
+et al., 2023) will instead use the pretrained models which are available and do the fine tuning stage
+with the masked objectives as we presented in the paper.
+We briefly discuss the application of SHAP to classification and how it is different from its application to regression. In particular, it is often common to train on the cross-entropy or DKL objective,
+but still use the SHAP for regression directly on the logits. There are some potential questions raised
+about how well this address the nuanced differences between the DKL objective and the ∥ · ∥2 objective, it is the choice made in previous works (Covert et al., 2023). Alternatives for classiffication
+like Shapley-Shubik (Enouen et al., 2024) or Deegan-Packel (Biradar et al., 2024) tend to focus on
+the one-hot scenario, limiting their application for calibrated prediction. Accordingly, all of our
+explanations are done on the logits or log-probabilites of the output prediction.
+
+32
+
+Published as a conference paper at ICLR 2025
+
+E
+
+A DDITIVE M ODELS
+
+E.1
+
+P URIFIED L OSS E QUATION
+
+We first reiterate the Fast-Faith-SHAP-k, GAM-k, and Insta-SHAP-GAM-k equations as:
+
+
+
+
+
+X
+2
+arg min Ex∼p(x) ES∼pSHAP (S) f (x; S) −
+1(T ⊆ S) · ϕT (x)
+{ϕT }T ∈I≤k
+
+
+arg min
+
+
+Ex∼p(x) ES∼pGAM (S)
+
+
+
+X
+
+f (x; S) −
+
+{ϕT }T ∈I≤k
+
+2
+
+
+
+
+
+ϕT (xT )
+
+(51)
+
+T ⊆[d],|T |≤k
+
+
+arg min
+
+(50)
+
+T ⊆[d],|T |≤k
+
+
+
+Ex∼p(x) ES∼pSHAP (S) f (x; S) −
+
+{ϕT }T ∈I≤k
+
+X
+
+2
+
+1(T ⊆ S) · ϕT (xT )
+
+
+
+
+(52)
+
+T ⊆[d],|T |≤k
+
+From the Fast-Faith-SHAP-k perspective, the major modification we make is to remove the pointwise flexibility of each of the SHAP-k estimators ϕT (x) and instead replace each functional approximator with a GAM-like functional approximator ϕT (xT ). This restricts the capacity of the
+functional amortizer but as discussed extensively this may give a more accurate representation of
+the true behavior and also is able to demonstrate improved convergence on synthetic datasets.
+From the GAM-k perspective, the major modification is to replace the typical unmasked distribution
+pGAM (S) (or sometimes nontrivial in fitting techniques like backfitting), with the masking distribution coming from the Shapley kernel distribution pSHAP (S). The second key modification we include
+is the Instant Mask which only allows the additive influence of each function ϕT (xT ) to flow to the
+final output so long as all of its constituents have been included in the observed mask S. It follows
+that we may easily calculate downstream explanations of interest like the SHAP value because of
+the automatic purification of such effects.
+E.2
+
+E XTENSION TO A RBITRARY F RONTIERS
+
+Although the extension of GAMs to higher-order interactions of size 3D and larger is simple to write
+down as
+X
+F≤k (x) =
+fS (xS ),
+(53)
+S∈I≤k
+
+the exploration of these higher-order GAMs delayed because it is typical to be unable to explicitly
+model all higher-order interaction sets. For instance, the size of I≤k grows like O(dk ) which is
+untenable for most practical purposes. Instead, it has recently been proposed to select only a portion
+of these interactions as important enough to be included in the model Yang et al. (2020); Dubey
+et al. (2022); Enouen & Liu (2022). We can consider these more general additive models by first
+choosing a candidate collection of interactions I ⊆ P([d]) and then writing the similar equation:
+X
+FI (x) =
+fS (xS )
+(54)
+S∈I
+
+Once again, we will say the order is the size of the largest subset k = max{|S| : S ∈ I}; however,
+there is now a much richer set of choices compared with the original hyperparameter selection of k.
+Hence, despite its simplicity by choosing a small number of feature interactions, it does not provide
+a reduction in complexity unless we can also answer the question of which feature interactions to
+include.
+E.3
+
+S OBOL S OLUTION WITH I NDEPENDENT VARIABLES
+
+If we briefly return to the case of independent variables, we find that the aforementioned decomposition of variance allows a precise answer to the question of feature interaction selection. Moreover,
+this means that the functional ANOVA space and the GAM spaces are exactly connected with each
+other.
+
+
+
+X
+X
+2
+arg min Ex∼p(x) F (x) −
+ϕT (xT )
+=
+VT ′
+(55)
+{ϕT }T ∈I
+
+T ∈I
+
+33
+
+T′/
+∈I
+
+Published as a conference paper at ICLR 2025
+
+This of course means that if we have a good way to approximate the Sobol indices, then we have an
+easy way to select for interaction tuples by choosing the largest Sobol indices.
+In the case of correlated input variables, we are not so lucky. Although the Sobol covariances
+(Rabitz, 2010; Hart & Gremaud, 2018) are still able to give a decomposition of the variance of a
+function
+X
+CS
+(56)
+V=
+S⊆[d]
+
+where again CS := CovX [F (X), f˜S (XS )], they no longer provide an answer to the effectiveness
+of an additive model with an arbitrary collection of feature interactions I ⊆ P([d]). In particular,
+CS may indeed be negative whereas adding an interaction to an additive model can never decrease
+its represntational capacity. Intuitively, this corresponds to the case where the ‘constructive’ information provided by allowing a feature interaction is overshadowed by the ‘destructive’ information
+created by the redundancies of a feature correlation.
+It follows that we must be able to measure the efficacy of an additive model to represent a function
+under some distribution in an alternative way. In the sections which follow, we will take a variational
+perspective to represent the efficacy of the interaction collection for an additive model and to begin
+to answer the question of how to distinguish the multiple types of feature interactions.
+E.4
+
+A DDITIVE M ODEL S OLUTION FOR A RBITRARY F RONTIERS
+
+Because of the need to further granulate to the level of synergistic interactions and dissonant interactions, we find that it is necessary to study the entire set of possibilities for additive models. We find
+that only then can one distinguish between the synergistic interactions and redundant interactions of
+Figure 2 For d = 3, we list all representatives (‘frontiers’) of nontrivial additive models in Figure
+10. For example, the function in Figure 2d would be covered by 1, 2 ≡ {∅, {1}, {2}} whereas the
+function from 2a would need to be covered by 12 ≡ {∅, {1}, {2}, {1, 2}}.
+
+All Possible 3D Additive Models
+
+∅
+1
+
+2
+
+3
+
+1,2
+
+1,3
+
+2,3
+
+12
+
+13
+
+23
+
+12,3
+
+13,2
+
+23,1
+
+12,13
+
+12,23
+
+13,23
+
+1,2,3
+
+GAM-1
+
+12,13,23
+123
+GAM-2
+GAM-3
+
+Figure 10: All possible frontiers for a GAM model when d = 3.
+As mentioned in the main text, one of the critical issues for using additive models to learn a particular
+target function, is solving the meta-optimization to find an optimal frontier for the additive model.
+As of yet, there is seemingly no known measurements for the correlated input case paralleling the
+Sobol indices in the indepdendent input case. In particular, for a given frontier I ⊆ P([d]) and a
+candidate interaction S ⊆ [d] not yet in the frontier, there is seemingly no work trying to estimate
+the differences in errors between these two learned additive models. Moreover, it is noted in the
+main body that the measurements CS are in general insufficient to measure these differences in all
+cases, and must only be used as an approximation.
+Herein, we describe the solution to the additive model training procedure as the solution the EulerLagrange equation from calculus of variations. Thereafter, we simplify our solution into a single
+matrix-operator functional equation defined by the projection operators NS in the function space
+34
+
+Published as a conference paper at ICLR 2025
+
+H. We then provide a formal solution to the matrix-operator equation and show how it can be
+approximated through repeated projections.
+Theorem 6. Fix an input distribution X ∼ p(X) and a function y = F (x). Consider a collection
+I = {S1 , . . . , SL } ⊆ P([d]) and consider the solution to the additive model training equation:
+
+ 
+X
+2
+∗
+(57)
+{gT }T := arg min EX F (X) −
+gT (XT )
+{gT }T
+
+T ∈I
+
+Recalling the conditional expectation projection operators
+h
+i
+[MS ◦ F ](x) := EX̄−S ∼p(X−S |XS =xS ) F (xS , X̄−S )
+
+(58)
+
+where we drop the subscript denoting the distribution p(x).
+The solution to the variational GAM training equation in Equation 57 obeys the matrix equation:
+
+
+  g∗  
+e
+MS1 . . . MS1
+fS1
+S1
+∗
+e
+. . . MS2   gS2   fS2 
+ MS2
+ .
+ . = . 
+(59)
+..
+.. 
+..
+ ..
+.
+.
+.   ..   .. 
+MSL
+
+MSL
+
+...
+
+gS∗ L
+
+e
+
+fSL
+
+Proof. Let the objective functional be defined
+
+
+X
+2
+J({gT }T ) := EX F (X) −
+gT (XT )
+
+(60)
+
+T ∈I
+
+Recall from calculus of variations the Euler-Lagrange equation:
+δJ
+≡0
+δgSi
+for each possible Si ∈ I, which then implies:
+i
+1 h
+lim
+J({gT + εT · δT }) − J({gT }T ) ≡ 0
+εSi →0 εSi
+
+
+X
+X
+2
+2
+1
+lim EX F (X) −
+gT (XT ) − ε · δSi (XSi ) − F (X) −
+gT (XT )
+≡0
+ε→0 ε
+T ∈I
+T ∈I
+
+
+h
+i 1
+X
+lim EX 2δSi (XSi ) · F (X) −
+gT (XT ) + δS2 i (XSi ) ≡ 0
+ε→0
+ε
+T ∈I
+
+h
+i
+X
+EX 2δSi (XSi ) · F (X) −
+gT (XT ) ≡ 0
+T ∈I
+
+
+
+
+X
+EXSi δSi (XSi ) · EX−Si |XSi F (X) −
+gT (XT ) ≡ 0
+Si ∈I
+
+
+
+X
+EX−Si |XSi F (X) −
+gT (XT ) ≡ 0
+T ∈I
+
+This can simply be rewritten as:
+fSi (X) ≡ MSi ◦
+
+X
+
+gT (X)
+
+T ∈I
+
+fSi (X) ≡ MSi ◦ gSi (X) +
+
+X
+
+MSi ◦ gT (X)
+
+T ∈I−Si
+
+fSi (x) ≡ gSi (x) +
+
+X
+
+[Si ◦ gT ](x)
+
+T ∈I−Si
+
+fSi = gSi +
+
+X
+T ∈I−Si
+
+35
+
+[Si ◦ gT ]
+
+Published as a conference paper at ICLR 2025
+
+Hence, it can be seen that each row of the matrix equation corresponds to a partial gradient from the
+Euler-Lagrange equation as desired. Thus, any possible solution to minimization of the quadratic
+functional J must obey the above matrix equation.
+It is moreover the case that we can reduce a collection of feature interactions to its ‘frontier’ or its
+solution only on the largest subsets which have no supersets included. From the perspective of the
+poset P([d]), this corresponds to the set of maximal elements. It can be seen in the above proof that
+any solution on a projection S1 ⊆ S2 must automatically be obeyed by the operator equation for the
+larger set S2 .
+Accordingly, identify a frontier I with its set of maximal elements T1 , . . . , TL′ . Following from
+Equation 59, we can ensure that it is enough to solve the matrix equation:
+
+ ∗  
+
+gT1
+fT1
+e
+. . . MT1
+ ..
+..   ..  =  .. 
+..
+(61)
+ .
+.
+.  .   . 
+∗
+gTL′
+fTL′
+MTL′ . . .
+e
+Which we can then take the formal inverse of the operator matrix to yield a solution
+
+ ∗ 
+−1 
+
+gT1
+e
+. . . MT1
+f T1
+ .
+ .. 
+..   .. 
+..
+ .  “ = ”  ..
+.
+.   . 
+∗
+gTL′
+MTL′ . . .
+e
+fTL′
+
+(62)
+
+so long as we take care with the determinant in realizing that a matrix of non-commutative elements
+does not have a well-defined matrix determinant as it does in the commutative case.
+Nonetheless, let us now illustrate the usefulness of such a formal inverse in a simple case with our
+synthetic example from earlier.
+
+  ∗  
+gx
+e
+Mx
+fx
+gy∗ = fy
+My
+e
+
+
+e
+−My
+
+
+−Mx
+e
+
+
+
+e − Mx My
+0
+
+e
+My
+
+Mx
+e
+
+  ∗ 
+gx
+e
+gy∗ = −My
+
+0
+e − My Mx
+
+−Mx
+e
+
+ 
+fx
+fy
+
+
+  ∗ 
+gx
+fx − M x ◦ fy
+gy∗ = fy − My ◦ fx
+
+
+  ∗ 
+
+g
+e − Mx My
+fx − Mx ◦ fy
+⊙ gx∗ =
+e − My Mx
+fy − M y ◦ fx
+y
+ ∗ 
+
+gx
+[e − Mx My ]−1 ◦ [fx − Mx ◦ fy ]
+=
+gy∗
+[e − My Mx ]−1 ◦ [fy − My ◦ fx ]
+We can then use the formal Taylor series expansion of the operator inverse to yield:
+gx∗ =
+gy∗ =
+
+∞
+X
+
+h
+i
+(Mx My )n ◦ fx − Mx ◦ fy
+
+n=0
+∞
+X
+
+h
+i
+(My Mx )n ◦ fy − My ◦ fx
+
+n=0
+
+If we choose to denote repeated projections with semicolons, we can then write our solutions as
+gx∗ = fx − fy;x + fx;y;x − fy;x;y;x + fx;y;x;y;x − fy;x;y;x;y;x + . . .
+gy∗ = fy − fx;y + fy;x;y − fx;y;x;y + fy;x;y;x;y − fx;y;x;y;x;y + . . .
+36
+
+Published as a conference paper at ICLR 2025
+
+So then we can caclulate this to be
+gx∗ = (x + ρx2 − ρ) − (ρ2 x + ρ3 x2 + ρ(1 − ρ2 ) − ρ) + (ρ2 x + ρ5 x2 + ρ3 (1 − ρ2 ) + ρ(1 − ρ2 ) − ρ) − . . .
+= [x] + [−ρ + ρ3 − ρ5 + . . . ] + [ρ − ρ3 + ρ5 − . . . ]x2
+ρ
+[x2 − 1]
+=x+
+1 + ρ2
+gy∗ = (ρy + ρy 2 − ρ) − (ρy + ρ3 y 2 + ρ(1 − ρ2 ) − ρ) + (ρ3 y + ρ5 y 2 + ρ3 (1 − ρ2 ) + ρ(1 − ρ2 ) − ρ) − . . .
+= 0 + [−ρ + ρ3 − ρ5 + . . . ] + [ρ − ρ3 + ρ5 − . . . ]y 2
+ρ
+=0+
+[y 2 − 1]
+1 + ρ2
+It may be checked that this solution agrees with that of directly solving Equation 59:
+ρ
+ρ
+[x2 − 1] gy∗ =
+[y 2 − 1]
+gx∗ = x +
+2
+1+ρ
+1 + ρ2
+It should at the very least be cautioned that these operator manipulations, especially that of the
+inverse are done only in the formal sense. For instance, considerations of the limit point ρ = 1 are
+not able to demonstrate local convergence in the inversion; however, the formula still remains true
+in this case. It is considered very likely that these matrix equations are, in most cases, easily able to
+be solved by the suggested formal manipulations but at least some caution should be exercised.
+E.5
+
+I MPLICATIONS
+
+We reiterate how the additive model’s ability to distinguish between synergistic feature interactions
+and redundant feature interactions is a key strength which has yet to be fully utilized in either the
+literature on SHAP or the literature on GAMs. By the introduction to the characterization of the set
+of GAM solutions and drawing parallels with where this aligns and misaligns with the ever-popular
+functional ANOVA decomposition, we provide a further set of tools to explore SHAP which goes
+beyond the ‘feature-only’ perspective of functional ANOVA alone, and begins to explore the ‘feature
+interaction’ perspective which adequately handles the intimate complexities which are introduced in
+the case of correlated variables.
+This spectrum of additive models which operates over the entire combinatorially large set of frontiers
+of additive models is able to give a much more nuanced picture of the underlying structure of both
+the underlying statistical manifold of the input X variables, but in conjunction with the mapping
+to the output Y variables. Compared with existing theory in functional ANOVA which spans the
+entirety of the exponential feature interaction space, this variational formulation covers the range of
+structures living in the doubly exponential space of all frontiers. As demonstrated in this work, such
+structure can be directly accessed with relatively simple machine learning approaches, that is additive models and feature masking. It is envisioned that there yet remains many directions of further
+theoretical exploration to more succinctly and understandably represent the underlying structures
+of a statistical mapping between data, while simultaneously there still exists abundant opportunities
+in the application of these learnings directly to machine learning, particularly in bridging the gaps
+from supervised learning to semi-supervised learning and semi-supervised learning to unsupervised
+learning.
+
+37
+
+Published as a conference paper at ICLR 2025
+
+F
+
+A DDITIONAL R ESULTS
+
+F.1
+
+A DDITIONAL S YNTHETIC R ESULTS
+
+0.01
+
+0.00
+
+0.00
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Model SHAP-1 Error (k*=1, =0.707)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+0.02
+0.00
+
+0.00
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+0.00
+
+1000
+
+0.02
+0.01
+
+0
+
+0
+
+Model SHAP-1 Error (k*=1, =0.841)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+
+0.01
+1000
+
+0.02
+0.01
+
+0.05
+
+MSE Error
+
+0.05
+
+MSE Error
+
+0.02
+
+0.01
+
+Model SHAP-1 Error (k*=1, =0.500)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+0.05
+
+MSE Error
+
+MSE Error
+
+MSE Error
+
+0.02
+
+Model SHAP-1 Error (k*=1, =0.250)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+0.05
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Model SHAP-1 Error (k*=1, =0.917)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+0.05
+
+MSE Error
+
+Model SHAP-1 Error (k*=1, =0.000)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+0.05
+
+0.02
+0.01
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+0.00
+
+1000
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Figure 11: Model MSE Error of SHAP values. Comparison with test-time permutation sampling.
+k ∗ = 1.
+
+0.01
+
+0.00
+
+0.00
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Model SHAP-1 Error (k*=2, =0.707)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+0.02
+0.00
+
+0.00
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+0.00
+
+1000
+
+0.02
+0.01
+
+0
+
+0
+
+Model SHAP-1 Error (k*=2, =0.841)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+
+0.01
+
+0.02
+0.01
+
+0.05
+
+MSE Error
+
+0.05
+
+MSE Error
+
+0.02
+
+0.01
+
+Model SHAP-1 Error (k*=2, =0.500)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+0.05
+
+MSE Error
+
+MSE Error
+
+MSE Error
+
+0.02
+
+Model SHAP-1 Error (k*=2, =0.250)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+0.05
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Model SHAP-1 Error (k*=2, =0.917)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+0.05
+
+MSE Error
+
+Model SHAP-1 Error (k*=2, =0.000)
+Perm Samp
+KernelSHAP
+0.04
+FastSHAP
+0.03
+InstaSHAP
+0.05
+
+0.02
+0.01
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+0.00
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Figure 12: Model MSE Error of SHAP values. Comparison with test-time permutation sampling.
+k ∗ = 2.
+
+38
+
+Published as a conference paper at ICLR 2025
+
+10 6
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+Model SHAP-1 Error (k*=1, =0.841)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+InstaSHAP
+
+10 4
+
+10 3
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+10 5
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Model SHAP-1 Error (k*=1, =0.917)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+InstaSHAP
+10 1
+
+10 4
+0
+
+10 4
+10 6
+
+1000
+
+10 1
+
+MSE Error (log)
+
+MSE Error (log)
+
+10 1
+
+10 3
+
+10 5
+10 6
+
+1000
+
+Model SHAP-1 Error (k*=1, =0.707)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+InstaSHAP
+
+10 4
+
+Model SHAP-1 Error (k*=1, =0.500)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+10 3
+InstaSHAP
+10 1
+
+MSE Error (log)
+
+10 5
+
+MSE Error (log)
+
+MSE Error (log)
+
+10 4
+
+Model SHAP-1 Error (k*=1, =0.250)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+10 3
+InstaSHAP
+10 1
+
+MSE Error (log)
+
+Model SHAP-1 Error (k*=1, =0.000)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+10 3
+InstaSHAP
+10 1
+
+10 3
+10 4
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Figure 13: Model MSE Error of SHAP values (logarithmic scale). Comparison with test-time permutation sampling. k ∗ = 1.
+
+MSE Error (log)
+
+10 4
+
+10 4
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Model SHAP-1 Error (k*=2, =0.707)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+InstaSHAP
+10 4
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Model SHAP-1 Error (k*=2, =0.841)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+InstaSHAP
+10 3
+10 4
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+0
+
+10 1
+
+MSE Error (log)
+
+10 3
+
+10 3
+10 4
+
+0
+
+10 1
+
+MSE Error (log)
+
+10 3
+
+Model SHAP-1 Error (k*=2, =0.500)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+InstaSHAP
+10 1
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Model SHAP-1 Error (k*=2, =0.917)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+InstaSHAP
+10 1
+
+MSE Error (log)
+
+MSE Error (log)
+
+10 3
+
+Model SHAP-1 Error (k*=2, =0.250)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+InstaSHAP
+10 1
+
+MSE Error (log)
+
+Model SHAP-1 Error (k*=2, =0.000)
+Perm Samp
+KernelSHAP
+10 2
+FastSHAP
+InstaSHAP
+10 1
+
+10 3
+10 4
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+0
+
+200
+
+400
+
+600
+
+Number of Evals
+
+800
+
+1000
+
+Figure 14: Model MSE Error of SHAP values (logarithmic scale). Comparison with test-time permutation sampling. k ∗ = 2.
+
+39
+
+Published as a conference paper at ICLR 2025
+
+10 1
+
+0
+
+50
+
+Model SHAP-1 Error (k*=1, =0.707)
+FastSHAP
+InstaSHAP
+
+10 3
+0
+
+50
+
+10 1
+
+50
+
+10 3
+
+Number of Epochs
+
+0
+
+50
+
+10 3
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=1, =0.841)
+FastSHAP
+InstaSHAP
+
+10 1
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=1, =0.917)
+FastSHAP
+InstaSHAP
+
+10 2
+10 3
+10 4
+
+100 150 200 250 300
+
+Model SHAP-1 Error (k*=1, =0.500)
+FastSHAP
+InstaSHAP
+
+10 2
+
+10 4
+
+100 150 200 250 300
+
+10 2
+
+10 4
+
+100 150 200 250 300
+
+0
+
+10 1
+
+MSE Error (log)
+
+10 3
+
+Number of Epochs
+
+10 2
+
+10 4
+
+10 2
+
+10 4
+
+100 150 200 250 300
+
+Model SHAP-1 Error (k*=1, =0.250)
+FastSHAP
+InstaSHAP
+
+MSE Error (log)
+
+10 3
+
+10 1
+
+MSE Error (log)
+
+10 2
+
+10 4
+
+MSE Error (log)
+
+Model SHAP-1 Error (k*=1, =0.000)
+FastSHAP
+InstaSHAP
+
+MSE Error (log)
+
+MSE Error (log)
+
+10 1
+
+Number of Epochs
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+Figure 15: Model MSE Error of SHAP values (logarithmic scale). Comparison with pre-test-time
+functional amortization. k ∗ = 1.
+
+50
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=2, =0.707)
+FastSHAP
+InstaSHAP
+
+10 2
+
+10 3
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+10 1
+
+0
+
+50
+
+Model SHAP-1 Error (k*=2, =0.841)
+FastSHAP
+InstaSHAP
+
+0
+
+50
+
+10 3
+
+100 150 200 250 300
+
+100 150 200 250 300
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=2, =0.500)
+FastSHAP
+InstaSHAP
+
+10 2
+
+Number of Epochs
+
+10 2
+
+10 3
+
+10 1
+
+MSE Error (log)
+
+10 2
+
+10 3
+
+100 150 200 250 300
+
+Model SHAP-1 Error (k*=2, =0.250)
+FastSHAP
+InstaSHAP
+
+10 1
+
+MSE Error (log)
+
+10 1
+
+0
+
+10 1
+
+MSE Error (log)
+
+10 2
+
+10 3
+
+MSE Error (log)
+
+Model SHAP-1 Error (k*=2, =0.000)
+FastSHAP
+InstaSHAP
+
+MSE Error (log)
+
+MSE Error (log)
+
+10 1
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=2, =0.917)
+FastSHAP
+InstaSHAP
+
+10 2
+
+10 3
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+Figure 16: Model MSE Error of SHAP values (logarithmic scale). Comparison with pre-test-time
+functional amortization. k ∗ = 2.
+
+40
+
+Published as a conference paper at ICLR 2025
+
+10 4
+
+0
+
+50
+
+10 4
+
+100 150 200 250 300
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=1, =0.707)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+10 2
+10 3
+0
+
+50
+
+0
+
+50
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=1, =0.841)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+10 2
+10 3
+10 4
+
+100 150 200 250 300
+
+Number of Epochs
+
+0
+
+50
+
+10 3
+10 4
+
+100 150 200 250 300
+
+10 1
+
+MSE Error (log)
+
+MSE Error (log)
+
+10 1
+
+10 4
+
+10 3
+
+Model SHAP-1 Error (k*=1, =0.500)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+10 2
+10 1
+
+MSE Error (log)
+
+MSE Error (log)
+
+MSE Error (log)
+
+10 3
+
+Model SHAP-1 Error (k*=1, =0.250)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+10 2
+10 1
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=1, =0.917)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+10 2
+10 1
+
+MSE Error (log)
+
+Model SHAP-1 Error (k*=1, =0.000)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+10 2
+10 1
+
+10 3
+10 4
+
+100 150 200 250 300
+
+Number of Epochs
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+Figure 17: True MSE Error of SHAP values (logarithmic scale). Comparison with pre-test-time
+functional amortization. k ∗ = 1.
+
+50
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=2, =0.707)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+
+10 2
+
+10 3
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+10 1
+
+0
+
+50
+
+Model SHAP-1 Error (k*=2, =0.841)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+
+0
+
+50
+
+10 3
+
+100 150 200 250 300
+
+100 150 200 250 300
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=2, =0.500)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+
+10 2
+
+Number of Epochs
+
+10 2
+
+10 3
+
+10 1
+
+MSE Error (log)
+
+10 2
+
+10 3
+
+100 150 200 250 300
+
+Model SHAP-1 Error (k*=2, =0.250)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+
+10 1
+
+MSE Error (log)
+
+10 1
+
+0
+
+10 1
+
+MSE Error (log)
+
+10 2
+
+10 3
+
+MSE Error (log)
+
+Model SHAP-1 Error (k*=2, =0.000)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+
+MSE Error (log)
+
+MSE Error (log)
+
+10 1
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+Model SHAP-1 Error (k*=2, =0.917)
+distill FastSHAP
+distill InstaSHAP
+direct InstaSHAP
+
+10 2
+
+10 3
+
+0
+
+50
+
+100 150 200 250 300
+
+Number of Epochs
+
+Figure 18: True MSE Error of SHAP values (logarithmic scale). Comparison with pre-test-time
+functional amortization. k ∗ = 2.
+
+41
+
+Published as a conference paper at ICLR 2025
+
+F.2
+
+A DDITIONAL V ISION R ESULTS
+Indigo
+Bunting
+
+Lazuli
+Bunting
+
+Northern
+Cardinal
+
+Summer
+Tanager
+
+California
+Gull
+
+Western
+Gull
+
+Prothonotary Blue-winged
+Warbler
+Warbler
+
+CNN
+
+GAM
+1x1
+
+GAM
+2x2
+
+GAM
+3x3
+
+Figure 19: A repeat of Figure 6. Provided for closer comparison with Figure 20 below.
+
+42
+
+Published as a conference paper at ICLR 2025
+
+Indigo
+Bunting
+
+Lazuli
+Bunting
+
+Northern
+Cardinal
+
+Summer
+Tanager
+
+California
+Gull
+
+Western
+Gull
+
+Prothonotary Blue-winged
+Warbler
+Warbler
+
+CNN
+
+GAM
+1x1
+
+GAM
+2x2
+
+GAM
+3x3
+
+Figure 20: An alternate version of Figure 6 which includes the contrastive Shapley value. In each
+panel, two similar-looking species are directly compared against one another. For instance, the first
+two columns compare the Indigo Bunting species (more green) versus the Lazuli Bunting species
+(more magenta).
+In Figure 20, we can see some more granular details about the model explanations with respect to
+certain species. For instance, the bluer and browner feathers of the two Bunting species, especially
+in the GAM-1x1 model. Some other characteristics which seem to be picked up by some of the
+models are the orange beak and black mask of the Cardinal vs. the ordinary beak and face of the
+Summer Tanager; the yellow feet of the California Gull vs. the orange feet of the Western Gull; and
+the different upper backs and eye areas for the Prothonotary and Blue-winged Warblers.
+
+43
+
+Published as a conference paper at ICLR 2025
+
+F.3
+
+A DDITIONAL H EALTHCARE R ESULTS
+
+We additionally train on a tabular version of the MIMIC healthcare dataset which consists of thirty
+features used to predict hospital outcomes. We train an ensemble of five additive models using the
+vanilla GAM training procedure and the InstaSHAP masked training procedure. In Figure 21 below,
+we display all shape functions learned by the 1D additive model. We plot the mean and one standard
+deviation according to the ensemble of five models.
+The vanilla GAM models achieve accuracies of 91.0%, 91.5%, 90.6%, 91.1%, and 91.2% for an
+average accuracy of 91.1%. The InstaSHAP GAM models achieve accuracies of 91.5%, 91.3%,
+91.2%, 91.3%, 91.0% for an average accuracy of 91.3%. Generally, the InstaSHAP models have a
+more consistent interpretation of the dataset and achieve tighter confidence intervals than the typical
+training procedure. It can then be assumed a significant amount of the variance between the vanilla
+ensemble is due to overinterpretaion or sensitivity to the natural correlations of the dataset.
+
+44
+
+Published as a conference paper at ICLR 2025
+
+2.0
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+0.0
+
+0.0
+
+0.0
+
+-1.0
+
+-1.0
+
+-1.0
+
+-2.0
+
+-2.0
+
+20 30 40 50 60 70 80 90
+
+Age
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+2.0
+
+-2.0
+
+100 120 140 160
+
+max Heart Rate
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+80
+
+2.0
+
+0.0
+
+0.0
+
+0.0
+
+0.0
+
+-1.0
+
+-1.0
+
+-1.0
+
+-2.0
+
+120 140 160 180 200 220
+
+60
+
+max Blood Pressure
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+80
+
+100
+
+120
+
+min Blood Pressure
+
+2.0
+
+-2.0
+36.036.537.037.538.038.539.039.540.0
+
+-2.0
+33
+
+2.0
+
+2.0
+
+max Temperature
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+0.0
+
+0.0
+
+0.0
+
+0.0
+
+-1.0
+
+-1.0
+
+-1.0
+
+100 150 200 250 300 350 400 450
+
+-2.0
+
+no
+
+min PaO2 FiO2
+
+2.0
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+-2.0
+
+yes
+
+PaO2 FiO2 measured?
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+-2.0
+
+0.0
+
+0.0
+
+0.0
+
+-1.0
+
+-1.0
+
+60
+
+80
+
+min BUN
+
+2.0
+
+100
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+-2.0
+
+20
+
+40
+
+60
+
+-2.0
+
+80 100 120
+
+max BUN
+
+2.0
+
+10
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+5
+
+15
+
+20
+
+min WBC
+
+25
+
+30
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+0.0
+
+0.0
+
+0.0
+
+-1.0
+
+-1.0
+
+3.5
+
+4.0
+
+min Potassium
+
+2.0
+
+-2.0
+
+4.5
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+4
+
+5
+
+6
+
+7
+
+2.0
+
+-2.0
+
+8
+
+max Potassium
+
+2.0
+
+1.0
+
+1.0
+
+0.0
+
+0.0
+
+0.0
+
+-1.0
+
+-1.0
+
+10
+
+15
+
+20
+
+25
+
+min Bicarbonate
+
+30
+
+35
+
+-2.0
+
+20
+
+25
+
+30
+
+max Bicarbonate
+
+35
+
+40
+
+-2.0
+
+-2.0
+
+0.0
+
+0.0
+
+0.0
+
+-1.0
+
+-1.0
+
+-2.0
+
+-2.0
+
+2.0
+
+20
+
+2.0
+
+1.0
+
+1.0
+
+0.0
+
+0.0
+-1.0
+absent
+
+AIDS
+
+present
+
+yes
+
+2.0
+
+-1.0
+-2.0
+
+1.0
+
+max Bili measured?
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+-2.0
+
+-2.0
+
+12
+
+14
+
+Vanilla GAM
+InstaSHAP GAM
+
+0.0
+-1.0
+-2.0
+absent
+
+present
+
+Metastatic Cancer
+
+Figure 21: Shape Functions for the MIMIC dataset
+
+45
+
+min GCS
+
+1.0
+
+-1.0
+
+Hemotologic Malignancy
+
+4
+
+Vanilla GAM
+InstaSHAP GAM
+6
+8 10
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+0.0
+Vanilla GAM
+InstaSHAP GAM
+absent
+present
+
+yes
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+no
+
+no
+
+min Bili measured?
+
+1.0
+
+max Bilirubin
+
+Vanilla GAM
+InstaSHAP GAM
+
+min Bilirubin
+
+2.0
+
+-2.0
+
+130 135 140 145 150 155
+
+-1.0
+
+1.0
+
+Vanilla GAM
+InstaSHAP GAM
+5
+10
+15
+
+40
+
+0.0
+Vanilla GAM
+InstaSHAP GAM
+2.5 5.0 7.5 10.0 12.5 15.0 17.5
+
+2.0
+
+-1.0
+
+30
+
+max WBC
+
+max Sodium
+
+2.0
+
+-1.0
+-2.0
+
+-2.0
+
+min Sodium
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+120 125 130 135 140 145
+
+20
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+-1.0
+3.0
+
+10
+
+2.0
+
+0.0
+
+2.5
+
+Vanilla GAM
+InstaSHAP GAM
+
+-2.0
+
+-1.0
+-2.0
+
+37
+
+yes
+
+1.0
+
+-1.0
+40
+
+no
+
+2.0
+
+0.0
+
+20
+
+36
+
+Urine measured?
+
+-1.0
+-2.0
+
+35
+
+min Temperature
+
+Vanilla GAM
+InstaSHAP GAM
+
+Urine Output
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+2000 4000 6000 8000 10000
+
+34
+
+1.0
+
+-1.0
+-2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+-1.0
+-2.0
+
+40 50 60 70 80 90 100
+
+min Heart Rate
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+medical
+visit
+
+scheduled unscheduled
+surgery
+surgery
+
+Admission Type
+
+Published as a conference paper at ICLR 2025
+
+F.4
+
+A DDITIONAL F INANCE R ESULTS
+
+We train on the census income dataset which consists of thirteen features used to predict whether
+or not a person’s income surpasses a certain level ($50,000 annually). We train an ensemble of
+five additive models using the vanilla GAM training procedure and the InstaSHAP masked training
+procedure. In Figure 22 below, we display all shape functions learned by the 1D additive model. We
+plot the mean and one standard deviation according to the ensemble of five models.
+The vanilla GAM models achieve accuracies of 82.1%, 84.6%, 85.1%, 84.4%, 84.7%, for an average
+accuracy of 84.2%. The InstaSHAP GAM models achieve accuracies of 82.1%, 85.4%, 84.4%,
+84.7%, 84.7%, for an average accuracy of 84.3%. We again find that the InstaSHAP models have
+a more consistent interpretation of the dataset via tighter confidence intervals over the ensemble.
+Once again, it is assumed that the variance in typically trained GAMs is coming from the inability
+to consistently interpret the correlations which exist in the dataset.
+
+2.0
+
+60
+
+70
+
+2
+
+4
+
+6
+
+8
+
+10
+
+12
+
+Capital Gains (thousands of dollars)
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+0
+
+14
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+-2.0
+0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00
+
+-2.0
+
+2.0
+
+2.0
+
+Capital Losses (thousands of dollars)
+
+preschool
+1st-4th
+5th-6th
+7th-8th
+9th
+10th
+11th
+12th
+HS grad
+some college
+assoc. voc
+assoc. acdm
+bachelors
+masters
+prof school
+doctorate
+
+never worked
+
+(missing value)
+
+private
+
+Job Type
+
+without pay
+
+-2.0
+
+self emp
+(not inc)
+self emp
+(inc)
+
+-2.0
+
+local gov
+
+-1.0
+
+state gov
+
+0.0
+
+-1.0
+federal gov
+
+0.0
+
+-1.0
+-2.0
+
+Education
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+2.0
+
+0.0
+
+-1.0
+
+-1.0
+not in husband
+family
+
+wife
+
+own unmarried other
+child
+relative
+
+-2.0
+
+black
+
+asian
+
+Race
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+0.0
+-1.0
+
+-2.0
+
+100
+
+200
+
+300
+
+"final weight"
+
+-2.0
+
+Marital Status
+
+400
+
+-2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+american
+indian
+
+other
+
+-2.0
+
+male
+
+Sex
+
+Vanilla GAM
+InstaSHAP GAM
+
+Native Country
+
+Figure 22: Shape Functions for the Income dataset
+
+46
+
+60
+
+70
+
+Vanilla GAM
+InstaSHAP GAM
+
+Occupation
+
+2.0
+
+1.0
+
+0.0
+
+50
+
+-1.0
+
+2.0
+
+-1.0
+
+40
+
+1.0
+
+-1.0
+white
+
+30
+
+Hours Worked per Week
+
+0.0
+
+Relationship
+2.0
+
+20
+
+0.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+0.0
+
+-2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+0.0
+
+10
+
+admin/clerical
+exec/managerial
+handlers/cleaners
+prof/specialty
+other service
+sales
+craft/repair
+transport/moving
+farming/fishing
+machine op inspct
+tech support
+(missing value)
+protective serv
+armed forces
+priv house serv
+
+50
+
+Age
+
+0.0
+-1.0
+
+widowed
+
+40
+
+0.0
+-1.0
+
+married
+(AF spouse)
+
+30
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+married
+(spouse
+absent)
+
+20
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+separated
+
+-2.0
+
+2.0
+
+Vanilla GAM
+InstaSHAP GAM
+
+divorced
+
+0.0
+-1.0
+
+5.0
+4.0
+3.0
+2.0
+1.0
+0.0
+-1.0
+-2.0
+-3.0
+-4.0
+-5.0
+
+never
+married
+
+Vanilla GAM
+InstaSHAP GAM
+
+1.0
+
+married
+(civ spouse)
+
+2.0
+
+female
+
+

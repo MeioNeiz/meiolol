@@ -1,0 +1,1015 @@
+                                          GAMI-Net: An Explainable Neural Network
+                                          based on Generalized Additive Models with
+                                                               Structured Interactions
+
+
+
+
+arXiv:2003.07132v2 [stat.ML] 2 Jun 2021
+                                                         Zebin Yang1 , Aijun Zhang1,2 and Agus Sudjianto2
+                                            1
+                                                Department of Statistics and Actuarial Science, The University of Hong Kong,
+                                                                           Pokfulam Road, Hong Kong
+                                                                  2
+                                                                      Corporate Model Risk, Wells Fargo, USA
+
+
+                                                                                    Abstract
+
+                                                  The lack of interpretability is an inevitable problem when using neural network
+                                            models in real applications. In this paper, an explainable neural network based on
+                                            generalized additive models with structured interactions (GAMI-Net) is proposed to
+                                            pursue a good balance between prediction accuracy and model interpretability. GAMI-
+                                            Net is a disentangled feedforward network with multiple additive subnetworks; each
+                                            subnetwork consists of multiple hidden layers and is designed for capturing one main
+                                            effect or one pairwise interaction. Three interpretability aspects are further considered,
+                                            including a) sparsity, to select the most significant effects for parsimonious representa-
+                                            tions; b) heredity, a pairwise interaction could only be included when at least one of its
+                                            parent main effects exists; and c) marginal clarity, to make main effects and pairwise
+                                            interactions mutually distinguishable. An adaptive training algorithm is developed,
+                                            where main effects are first trained and then pairwise interactions are fitted to the
+                                            residuals. Numerical experiments on both synthetic functions and real-world datasets
+                                            show that the proposed model enjoys superior interpretability and it maintains com-
+                                            petitive prediction accuracy in comparison to the explainable boosting machine and
+                                            other classic machine learning models.
+
+                                            Keywords: Explainable neural network, generalized additive model, pairwise interac-
+                                            tion, interpretability constraints.
+
+
+
+                                                                                        1
+1     Introduction
+Deep learning is one of the leading techniques in artificial intelligence (AI). Despite its great
+success, a fundamental and unsolved problem is that the working mechanism of deep neural
+networks is hardly understandable [1, 2]. Without sufficient interpretability, it would be
+risky to apply these AI systems in real-life applications. A well-trained deep neural network
+is known to usually have accurate predictive performance on data at hand. However, it may
+perform abnormally as the data is slightly changed, as its inner decision-making process
+is unknown. Some recent examples can be referred to as the adversarial attacks, where a
+convolutional neural network can be easily fooled by its attackers [3].
+    Interpretable machine learning is an emerging research topic that tries to solve the
+aforementioned problem and opens up the black-box of complicated machine learning al-
+gorithms [4, 5]. Two categories of interpretability are generally investigated, i.e., post-hoc
+interpretability and intrinsic interpretability. In the post-hoc analysis, a fitted model is in-
+terpreted using external tools. Examples of this category include the partial dependence
+plot (PDP; [6]), local interpretable model-agnostic explanations (LIME; [7]), SHapley Ad-
+ditive exPlanations (SHAP; [8]) and heatmap visualization of deep neural networks [9]. In
+contrast, intrinsic interpretability aims at making the model intrinsically interpretable. A
+lot of statistical models belong to this category, e.g., the generalized linear model, decision
+tree, and naı̈ve Bayes classifier. In this paper, we limit our focus to the second type of
+interpretability.
+    The generalized additive index model (GAIM) is such an intrinsically interpretable model
+when proper constraints are imposed. It was first proposed by [10] in the name of projec-
+tion pursuit regression. GAIM is shown to have close connections with feedforward neural
+networks [11], which has universal approximation capability as the number of hidden nodes
+is sufficiently large [12]. The functional relationship between raw features x ∈ Rp and the
+response y is represented by
+                                                   M
+                                                   X
+                                g(E(y|x)) = µ +          hj (wjT x),                         (1)
+                                                   j=1
+
+
+where g is a pre-specified link function, µ is the intercept, and M is the number of additive
+functional components. For each j = 1, . . . , M , wj ∈ Rp denotes the projection index and
+hj is the so-called ridge or nonlinear shape function. Conventionally, GAIM is estimated
+by the backfitting algorithm, which iteratively estimates a pair of {wj , hj } at a time, with
+other pairs fixed. Nonparametric regression (e.g. smoothing splines) is used to fit the shape
+                                               2
+functions in (1). Such a greedy procedure yields the sub-optimal solution. Recently, GAIM
+has been reformulated to be an explainable neural network (xNN; 13). In xNN, a fully-
+connected multi-layer perceptron is disentangled into a projection layer followed by multiple
+sub-modular networks, where each subnetwork represents a nonlinear shape function in (1).
+The interpretability of xNN is further enhanced by imposing sparsity, orthogonality, and
+smoothness constraints [14]. As a result of using neural network parametrization of shape
+functions in xNN, a globally optimal solution can be obtained through full network training.
+   The generalized additive model (GAM; 15) is another intrinsically interpretable model
+of the form                                         p
+                                                    X
+                                  g(E(y|x)) = µ +         hj (xj ),                           (2)
+                                                    j=1
+
+which is a special case of (1) when M = p and wj = ej . When fitting mathematically
+complex functions, GAM is less competitive than GAIM, however when solving real problems
+in specific application domains, GAM is simpler and more interpretable than GAIM. This
+difference lies in interpretation of the projection zj = wjT x. It is usually difficult to explain
+the practical meaning of weighted combination of raw features, whereas each raw feature is
+indeed meaningful. GAM [15] deserves to be an important model for interpretable machine
+learning, due to its intrinsic interpretability of nonlinear main effects. An empirical study
+of GAM based on machine learning datasets was presented by [16], which suggested that
+using tree ensembles to fit nonlinear shape functions in (2) may achieve better predictive
+performance than using regression splines. Recently, it draws our attention that [17] proposed
+to use neural network representation for the shape functions in GAM, which is the same idea
+as in xNN [13, 14].
+   The interaction effects between individual features can be incorporated into the GAM
+for performance improvement [2, 18, 19, 20]. Among them, the GA2 M proposed by [19]
+is a state-of-the-art extension of (2) plus pairwise interactions, which is also known as the
+explainable boosting machine (EBM) with a fast implementation by Microsoft Research
+team [21]. EBM is similar to [16] by using tree ensembles to fit either main effect hj (xj ) or
+pairwise interaction fjk (xj , xk ), and it comes with a fast procedure for pairwise interaction
+detection. It is shown by [21] that EBM has the overwhelming prediction performance when
+compared to some black-box models (including Random Forest, LightGBM, and XGBoost)
+based on five classification datasets.
+   In this paper, a novel xNN structure is proposed by using neural network parametrization
+for both main effects and pairwise interactions, and we call it GAMI-Net. Unlike EBM based
+on tree ensembles, we suggest modeling each main effect or pairwise interaction by a fully-
+                                                3
+connected subnetwork consisting of one or two input nodes, respectively. These subnetworks
+are then additively combined to form the final output. Each subnetwork can be easily
+visualized by 1D and 2D plots for the purpose of interpretation. In addition to neural
+network parametrization, the interpretability of GAMI-Net is enhanced with the following
+three constraints,
+
+    • Sparsity. Model parsimony is an essential factor for an interpretable model. In GAMI-
+      Net, only non-trivial main effects and pairwise interactions are included. Pruning of
+      trivial effects is also helpful for reducing the degree of overfitting.
+
+    • Heredity. The classic heredity principle in statistics is introduced to enhance struc-
+      tural interpretability. That is, a pairwise interaction can only be included in the final
+      model if at least one of its parent main effects is important.
+
+    • Marginal Clarity. The first two constraints are both employed to select important
+      main effects and pairwise interactions, while marginal clarity serves as a regularization
+      to avoid potential confusion between main effects and their corresponding child pairwise
+      interactions.
+
+    A three-stage adaptive training algorithm is proposed for GAMI-Net estimation. First,
+the main effect subnetworks are trained and pruned. Second, important pairwise interac-
+tions are selected, fitted, and pruned. Finally, all the important main effects and pairwise
+interactions are collectively fine-tuned. Numerical experiments on both synthetic functions
+and real-world datasets are conducted. The results reveal that the fitted GAMI-Net is more
+interpretable as compared to its benchmark models. Moreover, it is shown that GAMI-Net
+is competitive regarding predictive performance, which makes it another promising tool for
+interpretable machine learning.
+    This paper is organized as follows. Section 2 presents the proposed GAMI-Net method-
+ology, including the network architecture, the training algorithm, and the interpretability.
+Two synthetic functions and multiple real-world datasets are used to test the GAMI-Net
+performance in Section 3.
+
+
+2     GAMI-Net Methodology
+This section first introduces the proposed GAMI-Net architecture, interpretability con-
+straints, and computational algorithm. Further discussions are then provided, regarding the
+
+                                                4
+model interpretation and hyperparameter tuning guidelines. Finally, we compare GAMI-Net
+with its counterpart models from various perspectives.
+
+
+2.1        Network Architecture
+In GAMI-Net, a complex functional relationship is formulated via its lower-order representa-
+tions, including nonlinear main effects and pairwise interactions1 . Let S1 , S2 denote the set
+of active main effects and pairwise interactions, respectively. Then, the proposed GAMI-Net
+is formulated as follows,
+                                               X                    X
+                            g(E(y|x)) = µ +           hj (xj ) +              fjk (xj , xk ).          (3)
+                                               j∈S1                (j,k)∈S2
+
+
+Here, each main effect and pairwise interaction is assumed to have zero means, i.e.,
+                                Z
+                                   hj (xj )dF (xj ) = 0, ∀j ∈ S1 ,
+                         Z                                                                             (4)
+                            fjk (xj , xk )dF (xj , xk ) = 0, ∀(j, k) ∈ S2 ,
+
+where F (xj ) and F (xj , xk ) represent the corresponding cumulative distribution functions. To
+avoid the non-identifiability problem, each pairwise interaction fjk (xj , xk ) should be nearly
+orthogonal to its parent main effects hj (xj ) and hk (xk ), subject to the marginal clarity
+constraint (to de discussed below).
+       The GAMI-Net architecture is presented in Figure 1. It consists of a main effect module
+and a pairwise interaction module. Each main effect hj (xj ) in (3) is captured by a sub-
+network consisting of one input node, multiple hidden layers, and one output node. Each
+pairwise interaction fjk (xj , xk ) in (3) is captured a subnetwork with two input nodes. All
+these networks are linearly combined (plus a bias node for capturing the intercept µ) to
+produce the final output. More specifically, the main effect subnetwork fits a 1D curve,
+while the interaction subnetwork approximates a 2D surface. When approximating an arbi-
+trary curve or surface, we can use a single-hidden-layer feedforward neural network with a
+sufficiently large number of hidden nodes, while modern deep learning training techniques
+make it feasible to use multiple hidden layers to achieve superior predictive performance.
+In fact, the multi-layer subnetworks are flexible enough to capture any form of functions
+upon proper network configuration. Besides, categorical variables are preprocessed using
+   1
+       Higher-order interactions can be treated similarly by GAMI-Net, but for simplicity we focus on pair-
+wise interactions only. Besides, we believe that higher-order interactions are usually rarer than pairwise
+interactions in practice, and when they exist the interpretation is not as straightforward.
+                                                        5
+Figure 1: The GAMI-Net architecture. The main effects are first fitted. Then the top-K
+ranked pairwise interactions are selected and fitted to the residuals, subject to the heredity
+constraint. The dashed arrows pointing to the Σ nodes denote the sparsity constraints, where
+the trivial subnetworks are pruned. Finally, the marginal clarity is imposed for regularizing
+pairwise interactions, denoted by the symbol “C”.
+
+
+one-hot encoding. The subnetworks used for fitting the main effects of categorical variables
+can be simplified to many bias nodes, where each node captures the intercept effect of a
+corresponding dummy variable.
+
+
+2.2    Interpretability Constraints
+The proposed GAMI-Net is developed with the sparsity, heredity, and marginal clarity con-
+straints. Specifically, sparsity and heredity constraints are introduced to enhance the inter-
+pretability of the fitted model; while the marginal clarity constraint is introduced to make
+main effects and their child pairwise interactions uniquely identifiable.
+   Sparsity Constraint. The principle of parsimony is commonly assumed in statistical
+machine learning. The sparse models, upon reduction of unnecessary model complexity, not
+only enjoy computational benefits but also prevent overfitting problems. Moreover, sparsity
+is an essential building block for model interpretation. For example, a shallow decision
+tree that uses a few explanatory variables is generally thought to be easily interpretable;
+however, a deep decision tree involving multiple variables and many leaf nodes can be hardly
+understandable. For high-dimensional data, the GAM involving all the variables can be
+                                              6
+too complex to interpret. Therefore, it is critical for GAMI-Net to remove unnecessary
+main or interaction effects, in order to benefit from efficient computation and enhanced
+interpretability.
+   The importance of a main effect or pairwise interaction can be quantified by the variation
+it explains. Empirically, the variation of the j-th main effect can be measured by the sample
+variance,
+                                          1 X 2
+                                   D(hj ) =        hj (xj ),                            (5)
+                                         n−1
+where n is the sample size. We treat the main effect functions with very small variation as
+trivial effects, and enforce them to zero, which results in the sparse GAM [22]. Alternatively,
+given an integer parameter s1 (between 1 and p), GAMI-Net is designed to select the top-s1
+main effects ranked by D(hj ) values, as listed by the index set S1 .
+   Similarly, the sparsity of pairwise interactions can also be induced by selecting the top-s2
+pairwise interactions according to the D(fjk ) value defined by
+                                          1 X 2
+                               D(fjk ) =           fjk (xj , xk ),                           (6)
+                                         n−1
+for all the pairwise interactions. We use the index set S2 to denote the list of selected top-s2
+pairwise interactions.
+   Heredity Constraint. In addition to sparsity constraint, hierarchical and hereditary
+principles are both essential rules for modeling main effects and low-order to high-order
+interactions. The hierarchical principle states that lower-order effects are generally more
+important than higher-order effects. The principle of heredity further requires a more strict
+hierarchical structure between main effects and interactions [23], whereas the model violating
+the heredity principle is thought to be insensible [24]. The heredity principle has also been
+used in the variable selection literature [25, 26, 27, 28].
+   There are two versions of the heredity principle, namely strong heredity, and weak hered-
+ity. In the case of main effects (indexed by S1 ) and pairwise interactions (indexed by S2 ),
+the strong heredity imposes the constrain that
+
+                               ∀(j, k) ∈ S2 : j ∈ S1 and k ∈ S1 ;
+
+while the weak heredity imposes that
+
+                               ∀(j, k) ∈ S2 : j ∈ S1 or k ∈ S1 .
+
+That is, a pairwise interaction can be included by S2 only if a) both of its parent main effects
+are included (strong heredity) by S1 , or b) at least one of its parent main effects is included
+by S1 .
+                                                7
+   In GAMI-Net, the weak heredity constraint is employed for the following reasons. First,
+the search space (of pairwise interactions) can be reduced and hence it brings computational
+efficiency. Second, the resulting model can be improved with enhanced interpretability in
+the sense of the heredity principle. Third, the heredity principle is empirically supported
+in statistical modeling literature; see for instance the meta-analysis conducted by [29] for a
+large number of data sets from published factorial experiments.
+   Marginal Clarity. For model identifiability, each main effect or pairwise interaction is
+assumed to have zero mean in (4). However, without further assumptions, the main effects
+can be easily absorbed by their child interactions and vice versa. There could be multiple
+representations for a given model, which makes the model estimation unstable and leads to
+confusion in model interpretation.
+   The marginal clarity constraint is accordingly introduced to make the model more iden-
+tifiable. It is motivated by the functional ANOVA decomposition, in which the original
+function can be uniquely decomposed into orthogonal components. The weighted functional
+ANOVA decomposition [30] is proposed for handling explanatory variables with empirical
+distributions, where the orthogonality condition for the j-th main effect and corresponding
+pairwise interaction (j, k) is presented as follows,
+                                Z
+                                   hj (xj ) fjk (xj , xk ) dF (x) = 0.                          (7)
+
+The symbol F (x) denotes the joint cumulative distribution function. Empirically, the degree
+of non-orthogonality can be defined by
+
+                                               1X
+                              Ω(hj , fjk ) =      hj (xj )fjk (xj , xk ) .                      (8)
+                                               n
+
+The smaller the value of Ω(hj , fjk ), the more clearly the marginal effect hj is separated from
+its child interaction fjk . The perfect case is when Ω(hj , fjk ) = 0; in practice, it is acceptable
+to have Ω(hj , fjk ) slightly greater than zero. Hence in GAMI-Net, we penalize the non-
+orthogonality Ω(hj , fjk ) for all j ∈ S1 and (j, k) ∈ S2 , in a way for pursuing the marginal
+clarity. Note that a similar interaction purifying method is proposed in [2], which is based
+on post-hoc processing and only suitable for piecewise constant functions.
+
+
+2.3     Computational Aspects
+In this section, we discuss the computational procedures for estimating GAMI-Net. All
+the unknown parameters in the proposed model are denoted by θ. For each sample x,
+
+                                                    8
+the prediction is denoted by ŷ = E(y|x; θ). Combining all the interpretability constraints,
+GAMI-Net is estimated by solving the following constrained optimization problem,
+                                            X X
+                      min Lλ (θ) = l(θ) + λ            Ω(hj , fjk ),
+                              θ
+                                                         j∈S1 (j,k)∈S2
+                                          Z
+                                   s.t.       hj (xj )dF (xj ) = 0, ∀j ∈ S1 ,                (9)
+                             Z
+                                  fjk (xj , xk )dF (xj , xk ) = 0, ∀(j, k) ∈ S2 ,
+
+where the active sets of main effects and pairwise interactions S1 , S2 are determined subject to
+sparsity and heredity constraints. The empirical loss l(θ) is determined by the type of tasks
+(e.g. regression or classification). The second term is the marginal clarity regularization,
+and the regularization strength is denoted by λ ≥ 0.
+    Referring to Figure 1, an adaptive training algorithm is introduced to sequentially esti-
+mate the main effects and pairwise interactions, which can be summarized as the following
+three stages.
+
+1) Train all the main effect subnetworks for some epochs and prune the trivial main effects
+   according to their contributions and validation performance.
+
+2) Select at most K pairwise interactions for training and then prune the trivial pairwise
+   interactions according to their contributions and validation performance.
+
+3) Fine-tune all the network parameters for some epochs.
+
+    Training Main Effects. In the first stage, all the main effect subnetworks are simultane-
+ously estimated while the pairwise interaction subnetworks are frozen to zero. The trainable
+parameters in the network are updated by mini-batch gradient descent with adaptive learning
+rates determined by the Adam optimizer, which is scalable to very large datasets.
+    The training will stop as the maximum number of training epochs is reached or the
+validation performance does not get improved for a certain number of epochs. Each main
+effect is then centered to have mean zero mean such that the bias node of the output layer
+represents the overall mean. The trivial main effect subnetworks are then pruned according to
+the sparsity constraint. Given a null model that only contains the intercept term, we evaluate
+its performance on the validation set, denoted by l0 . Then, the most important main effect
+will be added and we evaluate its validation performance l1 . Next, the other important main
+effects will be added one-by-one in the descending order of their contributions (5). The list
+{l0 , l1 , · · · , lp } represents their corresponding validation losses.
+                                                        9
+   In general, when more and more main effects are added, the validation loss would show
+a decreasing trend. However, including too many main effects can lead to overfitting, as
+reflected by the turning trend in the loss curve. According to the sparse modeling principle,
+those main effects after the turning point should be pruned. In practice, a tolerance threshold
+η is introduced to balance the level of sparsity and predictive performance. That is, s1 is set to
+the minimal index whose validation loss is smaller than or equal to (1 + η) min{l0 , l1 , · · · , lp }.
+The active set S1 is determined as the list of top-s1 important main effects.
+   Training Interactions. After the top-s1 important main effects are captured, the next
+step is to train the pairwise interaction subnetworks. In total there exist p(p − 1)/2 possible
+pairwise interactions that can be tested, which is extremely time-consuming especially for a
+large p. According to the weak heredity constraint, we consider those candidates of pairwise
+interactions with at least one of its parent main effects belonging to S1 . This reduces the
+computational complexity a lot when s1 is much less than p. Besides, an interaction filter-
+ing procedure is introduced to remove the pairwise interactions which are less likely to be
+important. There exist many interaction detection methods in the literature, to list a few,
+additive Grove [31], RuleFit [32], hierarchical Lasso [25], neural network-based interaction
+detection [33], and shallow tree-like model-based pairwise interaction ranking [19].
+   In GAMI-Net, we employ the interaction ranking algorithm proposed in [19], subject
+to the heredity constraint. The modified pairwise interaction filtering algorithm selects the
+top-K pairwise interactions through the following steps.
+
+1) Obtain the prediction residuals from the main effect training stage.
+
+2) For each j < k with j ∈ S1 or k ∈ S1 , evaluate the strength of interaction (j, k) by
+   building shallow tree-like models between variables (xj , xk ) and the residuals; the strength
+   of interaction (j, k) is set to the minimal fitting loss across all evaluated trees [19].
+
+3) Rank all the evaluated pairwise interactions and obtain the top-K pairwise interactions.
+
+Next, the selected top-K pairwise interactions are simultaneously trained using the mini-
+batch gradient algorithm, subject to the marginal clarity regularization. Note that in this
+stage, the main effect subnetworks are fixed. Each estimated pairwise interaction is centered
+to have mean zero, for which the offset is added to the bias node in the output layer.
+   Pruning of pairwise interaction effects is similar to that of the main effects. We start
+from the pre-trained model with the intercept term and active main effects. The top-ranked
+pairwise interactions are sequentially added to the model, together with the record of their
+corresponding validation losses. For simplicity, we use the same tolerance threshold η as for
+                                                  10
+main effect pruning, in order to balance the level sparsity and predictive performance. Thus,
+s2 can be determined accordingly, and the active set S2 is formed as the list of the top-s2
+important pairwise interactions.
+   Fine Tuning. The first two stages perform a structured variable selection. In the final
+stage, a fine-tuning procedure is implemented to jointly retrain all the active subnetworks,
+where the marginal clarity regularization is still imposed between main effects and pairwise
+interactions. All the main effects and pairwise interactions are re-centered. We find such a
+fine-tuning step is helpful to solve the following two problems:
+
+1) The removal of trivial main effects or pairwise interactions may lead to biased estimation;
+
+2) The pairwise interactions estimated separately are conditional on the pre-trained main
+   effects (subject to marginal clarity regularization), which can limit the predictive perfor-
+   mance.
+
+These two problems can be mitigated via jointly retraining all the selected main effects
+and pairwise interactions so that the predictive performance of GAMI-Net can be further
+improved.
+
+
+2.4    Interpretability of GAMI-Net
+The proposed GAMI-Net is intrinsically interpretable in the following aspects.
+   Importance Ratio (IR). The an estimated model by GAMI-Net, we can inspect the
+contribution of each individual variable to the overall prediction. The IR of each main effect
+can be quantitatively measured by
+
+                                         IR(j) = D(hj )/T,                                    (10)
+             P                   P
+where T =        j∈S1 D(hj ) +   (j,k)∈S2 D(fjk ).   Similarly, the IR of each pairwise interaction
+can be measured by
+                                       IR(j, k) = D(fjk )/T.                                  (11)
+The IR’s of all the effects sum up to one. In practice, we can sort the effect importance
+according to the IR values in descending order. The effects of large IR values are more
+important.
+   The definition of IR is related to that of Sobol indices [34]. The main difference lies
+in that Sobol indice is derived under the assumption that all the variables are independent
+and uniformly distributed; while IR is based on the empirical distributions of explanatory
+variables.
+                                                     11
+   Global Interpretation. In addition to measuring the importance of each estimated
+effect, we can further inspect the relationship between one/two individual variables and
+the response by visualizing the fitted shape functions. Unlike the post-hoc diagnostic tool
+PDP [6], the partial dependence relationships can be directly obtained from GAMI-Net.
+We suggest using the 1D line plots for numerical variables and the bar charts for categorical
+variables to show the input-output relationship, which can be linear, convex, monotonic, and
+any other forms. These plots can be directly drawn based on the final estimates of hj (xj ) for
+j ∈ S1 . Moreover, we suggest using the 2D heatmap for visualizing each estimated pairwise
+interaction, which shows the joint effect of the two underlying variables. See e.g. Figure 4
+(middle panel) for such kinds of plots.
+   Local Interpretation. The prediction by GAMI-Net is also easy to be locally explained,
+leading to a transparent decision-making system. Given a sample x, the model not only
+outputs the final decision but also the concrete function form (1) with the input x. The
+values of each additive component, i.e. marginal main or pairwise interaction effects, can
+be directly obtained. These marginal effects can be rank-ordered for understanding the
+decision for the input x specifically. Besides, the sensitivity of prediction to small changes
+of an explanatory variable can be quantitatively investigated by the corresponding 1D line
+plots (or bar charts) and 2D heatmaps.
+
+
+2.5    Hyperparameters
+Some hyperparameters for GAMI-Net can be configured with the following default settings
+(for numerical experiments in the next section). The maximal number of pairwise interac-
+tions is set to K = 20. For simplicity, each subnetwork is configured to have 5 ReLU hidden
+layers each with 40 nodes. It is worth mentioning that the choice of activation will affect the
+resulting functional forms of the fitted model. Using ReLU, the fitted curves are piecewise
+linear; while using hyperbolic tangent, the fitted curves can be more smooth.
+   The subnetwork weights are initialized using the Gaussian orthogonal initializer. The
+initial learning rate of the Adam optimizer is set to 0.0001. The numbers of training epochs
+for the three training stages are set to 5000, 5000, and 500, respectively. The mini-batch
+sample size is determined according to the sample sizes of different datasets. A 20% validation
+set is split for early stopping, and the early stopping threshold is set to be 50 epochs. The
+tolerance threshold η is set to be 1% of the minimal validation loss. The marginal clarity
+regularization strength λ can be empirically selected from 0.0001 to 1.
+   Finally, a demo implementation of the proposed GAM-Net is publicly available, which
+
+                                              12
+can be found on the Github2 , which also includes the numerical examples presented in this
+paper. This package is based on the TensorFlow 2.0 platform using the Python language.
+
+
+2.6      Comparison with Related Methods
+Unlike traditional spline-based GAMs, GAMI-Net uses neural networks to model the non-
+parametric shape functions. The proposed GAMI-Net is also closely related to the explain-
+able boosting machine (EBM; 19), as both of them are based on main effects and pairwise
+interactions.
+      In EBM, each main effect or pairwise interaction is estimated via gradient boosted shal-
+low trees, which is modified from the standard gradient boosting model [6]. Therefore, the
+estimated shape functions by EBM are all piecewise constant. Empirically, gradient boosted
+shallow trees are shown to have strong approximation ability, which makes EBM even com-
+parable to black-box models like random forest and neural networks [16, 35]. Despite its
+predictive performance, EBM sometimes outputs shape functions with unexpected jumps,
+which are hard to explain. Such a problem may become worse when there exist outliers or
+noisy samples.
+      In contrast, spline-based GAMs and neural network-based GAMI-Net usually output
+continuous shape functions for numerical variables. Using splines, the smoothness of the
+fitted functions can be partially controlled by the choice of spline orders; while for GAMI-Net,
+the fitted functions can be piecewise linear (e.g., when using ReLU) or more smooth (e.g.,
+when using sigmoid). Such continuous or smooth shape functions can prevent unexpected
+jumps and therefore warrant the model interpretability.
+      The proposed GAMI-Net tends to be more efficient and more interpretable than EBM.
+In EBM, all the main effects are included in the final model; the number of active pairwise
+interactions in EBM can only be pre-specified (this is not flexible) or tuned by cross-validation
+(this is time-consuming). The resulting model from EBM can be extremely complex for high-
+dimensional data. Besides, without marginal clarity constraint in EBM, one main effect and
+its corresponding child pairwise interactions may be mutually absorbed, which leads to non-
+identifiable results. Such problems can be well addressed by the interpretability constraints
+imposed on GAMI-Net, including sparsity, heredity, and marginal clarity.
+  2
+      https://github.com/ZebinYang/gaminet
+
+
+
+
+                                               13
+3     Numerical Experiments
+In this section, the proposed GAMI-Net is tested on a synthetic example and an extensive
+list of real-world datasets.
+
+
+3.1    Experimental Setup
+Several benchmark models are included for comparison, including EBM, spline-based GAM,
+generalized linear models (GLM), multi-layer perceptron (MLP), random forest (RF), and
+extreme gradient boosting (XGBoost). Specifically, EBM is implemented by the open-source
+Python package interpret [21]. The spline-based GAM is based on the implementation of
+the pyGAM package [36], and we use pyGAM to denote spline-based GAM in the remain-
+ing part of this paper. For the other benchmarks, GLM, MLP, and RF are all available
+in the Scikit-learn package, and XGBoost is implemented by the xgboost package. In par-
+ticular, GLM uses Lasso for regression tasks and `1 -shrinkage logistic regression for binary
+classification tasks. The comparative results are grouped into two categories, intrinsically
+interpretable models (GAMI-Net, EBM, pyGAM, and GLM) and black-box models (MLP,
+RF, and XGBoost).
+    By default, we split a dataset into training (80%) and test (20%) sets upon random per-
+mutation. For hyperparameter tuning, a 20% hold-out validation set is further split from the
+training set. GAMI-Net is configured and trained using the settings described in Section 2.5.
+By default, the strength of the marginal clarity regularization is set to 1 in the simulation
+study and 0.1 in all the real-world datasets. The rationale of such settings is further justified
+through ablation studies. In EBM, the number of interactions is set to 20, and all the other
+hyperparameters are set to the default values. In pyGAM, the smoothness regularization
+strength is tuned within the package’s recommended range. The `1 regularization strength
+for Lasso (or logistic regression) is tuned within {10−2 , 10−1 , 100 , 101 , 102 }. For black-box
+MLP, the hidden layer architecture is set to [40, 20] with hyperbolic tangent nodes. Finally,
+the number of base estimators is set to 500 for both RF and XGBoost; and for each of
+them, the maximum tree depth is tuned within {3, 4, 5, 6, 7, 8}. The predictive performance
+is measured by the root mean squares error (RMSE) for regression tasks and the area under
+the ROC curve (AUC) for binary classification tasks. All the experiments are repeated 10
+times and we report the average results.
+
+
+
+
+                                               14
+3.2     Simulation Study
+A synthetic function is used to demonstrate the proposed method, in which both main effects
+and pairwise interactions are included, as follows,
+                                    2
+                                   1          1
+                      y =8 x1 −          + e(−8x2 +4) + 3 sin (2πx3 x4 )+
+                                   2         10                                                    (12)
+                                        1                       2
+                         5e−2(2x5 −1) − 2 [15x6 +12(2x5 −1) −13] + ε,
+                                     2                     2
+
+
+
+
+where the response is calculated via complicated nonlinear transformations of the explana-
+tory variables plus a noise term generated from the standard normal distribution. In addition
+to (x1 , · · · , x6 ), a large number of noisy variables (x7 , · · · , x100 ) are also introduced, which
+has no contribution to the response. These explanatory variables are generated within the
+domain [0, 1]100 , with 3 different distributions, i.e, uniform distribution U(0, 1), normal distri-
+bution N(0.5, 0.22 ) truncated within [0, 1], and exponential distribution Exp(0.5) truncated
+within [0, 1]. For each of these three distributions, four different sample sizes are tested, i.e.,
+n = {1000, 2000, 5000, 10000}.
+   Table 1 reports the averaged test set RMSE and standard deviation (over 10 repeti-
+tions) of different models on this synthetic dataset, respectively. For each setting, the best
+interpretable and black-box models are both highlighted in bold, respectively. It can be
+observed that the proposed GAMI-Net outperforms all the compared models including both
+interpretable and black-box models. In all the tested cases, GAMI-Net outperforms the
+black-box models including MLP and RF.
+   The training and validation losses of GAMI-Net is presented in Figure 2, for the case
+with uniform distribution and n = 10000. It can be observed that the losses decrease
+significantly as pairwise interactions are added to the network, which shows the necessity of
+adding pairwise interactions to GAM. At the beginning of the fine-tuning stage, there exists a
+sudden jump of training losses (increase) and validation losses (decrease), which corresponds
+to the pruning of trivial pairwise interactions. Besides, the validation losses for determining
+the optimal number of main effects and pairwise interactions are visualized in Figure 3. The
+left and right x-axises denote the number of included main effects and pairwise interactions,
+respectively. The optimal number of main effects / pairwise interactions is marked by red
+star symbols, and the red circle symbols denote the solutions that are acceptable due to
+the sparsity consideration. The results show that s1 = 6 main effects and s2 = 2 pairwise
+interactions are included in GAMI-Net. The marginal benefits of adding more effects could
+be extremely small and may even lead to the overfitting problem.
+
+                                                  15
+Figure 2: The training and validation trajectories of GAMI-Net for the synthetic function
+(uniform distribution; n = 10000).
+
+
+
+
+Figure 3: The validation loss for determining s1 , s2 for the synthetic function (uniform
+distribution; n = 10000).
+
+
+   Figures 4a and 4b draw the ground truth and global interpretation of GAMI-Net (with
+uniform distribution and n = 10000). Note the original formulation (12) has only 2 active
+main effects (x1 , x2 ) and 2 active interaction effects {(x3 , x4 ), (x5 , x6 )}. But according to
+the functional ANOVA decomposition, this formula can be rewritten such that the marginal
+main effects are extracted from the interactions. Therefore, the active main effects also
+include x3 , x4 , x5 , x6 . Each main effect / pairwise interaction is ranked in the descending
+order of IR, and the pairwise interactions are all presented behind main effects. It can be
+observed that all the 6 main effects and 2 pairwise interactions are successfully captured by
+GAMI-Net, which is close to that of the ground truth.
+   Since EBM does not have a pruning procedure, the final model of EBM includes 100
+main effects and 20 pairwise interactions. To make a valid comparison, we also draw its first
+6 main effects and first 2 pairwise interactions in Figure 4c. The results indicate that EBM
+
+                                                16
+                                     (a) Ground Truth
+
+
+
+
+                                       (b) GAMI-Net
+
+
+
+
+                                         (c) EBM
+
+Figure 4: The fitted results of GAMI-Net and EBM vs. the ground truth of the synthetic
+function (uniform distribution; n = 10000).
+
+
+                                              17
+can also approximately capture the shape of these important effects. However, due to the
+use of gradient boosting trees, the estimated shape functions are all piecewise constant and
+the existence of sudden jumps makes it hard to interpret. Second, we also calculate IR for
+each effect in EBM using the same method as in GAMI-Net. The result of EBM is shown to
+have a larger bias as compared to the actual model. For example, the interaction (x5 , x6 ) is
+underestimated and the overall IR captured by these true effects is just around 80%. That
+means the noise effects take more than 10% of the contribution.
+   The benefits of introducing the sparsity constraint in GAMI-Net is already demonstrated
+in Figure 3. Moreover, ablation studies are conducted to justify the use of heredity and
+marginal clarity constraints. In Table 2, we report the training, validation, and test RMSE
+of the benchmark models. There exist several reasons that EBM fails in this task. First,
+as the ground truth function is continuous, the piecewise constant fits cannot well capture
+the ground truth. Second, due to the lack of sparsity consideration, EBM suffers from the
+overfitting problem. Third, as the main effects are not well captured, the correct pairwise
+interactions may not always be detected.
+   Then, the results of GAMI-Net with different marginal clarity regularization strengths
+are also reported in Table 2. The last row denotes the results of GAMI-Net without heredity
+constraint and λ = 100 . The marginal clarity losses are calculated for both EBM and
+GAMI-Net, via                       X X
+                                                    Ω(hj , fjk ),                        (13)
+                                    j∈S1 (j,k)∈S2
+
+which is the smaller, the better. The results show that the increase of λ can help a) prevent
+from overfitting, according to the validation RMSE; b) make the model more identifiable,
+see the decreasing trend of marginal clarity loss. As is discussed in the previous sections,
+the purpose of using heredity constraint is to help reduce the search space of interactions
+and make the model structurally more interpretable. The possible drawback of heredity
+lies in it may reduce the predictive performance. However, it is observed that the inclusion
+of heredity constraint does not have a significant influence on the predictive performance.
+Therefore, the use of heredity constraint can be viewed as a bonus term for GAMI-Net.
+
+
+3.3    Bank Marketing Dataset
+This dataset is typically used in a binary classification setting (https://archive.ics.uci.
+edu/ml/datasets/Bank+Marketing). It has 45211 samples with 9 categorical variables and
+7 numerical variables, denoting a client’s age, education, job, and other related information.
+
+                                               18
+                (a) GAMI-Net                                      (b) EBM
+
+   Figure 5: GAMI-Net vs. EBM global interpretation for the bank marketing dataset.
+
+
+
+
+Figure 6: GAMI-Net local interpretation of a sample point in the bank marketing dataset.
+
+
+The goal is to predict whether a client will subscribe to the term deposit.
+   Due to the limit of page size, we only present the top 6 main effects and top 3 pairwise
+interaction, which is a subset of the selected 11 (out of 16) main effects and 8 (out of
+20) pairwise interactions. The top three important variables are “duration” (last contact
+duration, in seconds), “contact” (contact communication type), and “month” (last contact
+month of year). The two most significant pairwise interactions are “day vs. month” and
+“housing vs. month”, which are the statistics of the last contact. The fitted results of EBM
+
+                                             19
+in Figure 5b is rather difficult to understand. For instance, there exist significant fluctuations
+as the variable “age” is greater than 80. It is hard to explain why the predicted outcomes
+of a client change greatly when his age increases from 80 to 90. In contrast, GAMI-Net is
+free from these problems as its fitted model is continuous and even smooth. Finally, the
+local interpretability of GAMI-Net is demonstrated in Figure 6, which shows the prediction
+diagnosis of one sample point.
+   The comparison results of different methods are shown in Table 3, together with the
+GAMI-Net results under different settings. From the results, we can obtain similar conclu-
+sions to that of the simulation study. With the increase of λ, the marginal clarity losses
+get decreased while the predictive performance does not change too much until λ = 10−1 .
+Therefore, λ is set to 10−1 for this dataset to pursue a good balance between model inter-
+pretability and predictive performance. In addition, it is observed that GAMI-Net with and
+without the heredity constraint provide the same results, which indicates that the model
+following heredity constraint is naturally favored regarding the predictive performance. And
+the use of heredity constraint can still help reduce the search space during model estimation.
+
+
+3.4    Bike Sharing Hour Dataset
+The bike sharing hour dataset is a regression task with 17379 samples and 12 explanatory
+variables (https://archive.ics.uci.edu/ml/datasets/bike+sharing+dataset). Each
+sample records the basic environmental information including 8 categorical variables, e.g.,
+the season and the weather situation; and 4 numerical variables, e.g., the temperature and
+wind speed. The target is to predict the hourly count of rental bikes in the capital bike share
+system between 2011 and 2012.
+   Similarly, the global interpretation of the bike sharing hour dataset is shown in Figure 7.
+In total, 9 (out of 12) main effects and all the 20 pairwise interactions are shown to be
+non-trivial. The most important variable is “hr” (hour, ranges from 0 to 23) with IR equals
+to 39.2%. It can be observed that there exist two peaks of bike sharing around 8 AM and
+5 PM, which correspond to the rush hour in a day. The categorical variable “yr” (year, 0
+denotes 2011 and 1 means 2012) is the second important one, and the results show that
+there exists an increasing trend of bike sharing over time. The third important variable is
+“atemp” (feeling temperature in Celsius divided by 50), and low feeling temperature (below
+20 Celsius) is a negative factor for bike sharing. Regarding pairwise interactions, the “hr vs.
+workingday” is shown to be relatively important.
+   The comparison results of the bike sharing hour dataset are shown in Table 4, in which
+
+                                               20
+                (a) GAMI-Net                                     (b) EBM
+
+  Figure 7: GAMI-Net vs. EBM global interpretation for the bike sharing hour dataset.
+
+
+consistent conclusions can be derived. The default marginal clarity regularization strength
+is also set to 10−1 considering the balance between predictive performance and model inter-
+pretability.
+
+
+3.5    More Real-world Datasets
+In addition to the simulation study and 2 real-world applications, we test the predictive
+performance of the proposed GAMI-Net on another 20 regression datasets, collected from
+different domains. These datasets are available in the UCI machine learning repository or
+the OpenML platform. The sample sizes range from 500 (no2) to 20640 (california hous-
+ing) and the number of variables also varies from 3 (disclosure z) to 266 (topo 2 1). The
+detailed information of each dataset is presented in Table 5, where the test set performance
+of each compared method is reported. Note all the listed results should be multiplied by the
+corresponding scaling factors in the last column.
+   Generally speaking, GAMI-Net shows comparative predictive performance to that of
+EBM and other benchmark models. In practice, it is hard to say which one will perform
+better. GAMI-Net is more likely to have better predictive performance when the actual
+shape functions are continuous and smooth. In contrast, EBM could perform better as the
+shape functions are piece-wise constant. Both of them are competitive regarding predictive
+power, while the proposed GAMI-Net is designed with more interpretability considerations.
+Therefore, GAMI-Net is a promising tool in the area of interpretable machine learning.
+
+
+                                             21
+4     Conclusion
+In this paper, an intrinsically explainable neural network called GAMI-Net is proposed. It
+approximates the complex functional relationship using subnetwork-represented main effects
+and pairwise interactions, which can be easily interpreted using 1D line plots / bar charts
+and 2D heatmaps. Several statistically meaningful constraints are considered to enhance
+the model interpretability, including the heredity constraint for enforcing structural pair-
+wise interactions, the sparsity constraint for promoting model parsimony, and the marginal
+clarity constraint for avoiding effects mixing problem. The experimental results show that
+the proposed model has competitive predictive performance to black-box machine learning
+models. Meanwhile, the model estimated by GAMI-Net is highly interpretable and easily
+visualized.
+    Some future works can be done for extending GAMI-Net. One direction is to con-
+sider additional shape constraints for each component function, e.g., monotonic increas-
+ing/decreasing, convex or concave, according to prior experience or domain knowledge. An-
+other direction is to consider higher-order interactions for more sophisticated developments.
+
+
+References
+ [1] G. Montavon, S. Lapuschkin, A. Binder, W. Samek, K.-R. Müller, Explaining nonlinear
+     classification decisions with deep taylor decomposition, Pattern Recognition 65 (2017)
+     211–222.
+
+ [2] B. Lengerich, S. Tan, C.-H. Chang, G. Hooker, R. Caruana, Purifying interaction effects
+     with the functional anova: An efficient algorithm for recovering identifiable additive
+     models, in: International Conference on Artificial Intelligence and Statistics, PMLR,
+     2020, pp. 2402–2412.
+
+ [3] S. Tang, X. Huang, M. Chen, C. Sun, J. Yang, Adversarial attack type I: Cheat classifiers
+     by significant changes, IEEE Transactions on Pattern Analysis and Machine Intelligence
+     (2019).
+
+ [4] C. Molnar, et al., Interpretable machine learning: A guide for making black box models
+     explainable, E-book at https://christophm. github. io/interpretable-ml-book, version
+     dated 10 (2018).
+
+
+                                             22
+ [5] W. J. Murdoch, C. Singh, K. Kumbier, R. Abbasi-Asl, B. Yu, Definitions, methods, and
+    applications in interpretable machine learning, Proceedings of the National Academy of
+    Sciences 116 (44) (2019) 22071–22080.
+
+ [6] J. H. Friedman, Greedy function approximation: a gradient boosting machine, Annals
+    of Statistics (2001) 1189–1232.
+
+ [7] M. T. Ribeiro, S. Singh, C. Guestrin, “Why should I trust you?”: Explaining the
+    predictions of any classifier, in: Proceedings of the 22nd ACM SIGKDD International
+    Conference on Knowledge Discovery and Data Mining, ACM, 2016, pp. 1135–1144.
+
+ [8] S. M. Lundberg, S.-I. Lee, A unified approach to interpreting model predictions, in:
+    Advances in Neural Information Processing Systems, 2017, pp. 4765–4774.
+
+ [9] W. Samek, A. Binder, G. Montavon, S. Lapuschkin, K.-R. Müller, Evaluating the vi-
+    sualization of what a deep neural network has learned, IEEE Transactions on Neural
+    Networks and Learning Systems 28 (11) (2016) 2660–2673.
+
+[10] J. H. Friedman, W. Stuetzle, Projection pursuit regression, Journal of the American
+    Statistical Association 76 (376) (1981) 817–823.
+
+[11] J.-N. Hwang, S.-R. Lay, M. Maechler, R. D. Martin, J. Schimert, Regression model-
+    ing in back-propagation and projection pursuit learning, IEEE Transactions on Neural
+    Networks 5 (3) (1994) 342–353.
+
+[12] T. Hastie, R. Tibshirani, J. Friedman, The Elements of Statistical Learning: Data
+    Mining, Inference, and Prediction, New York, NY: Springer, 2009.
+
+[13] J. Vaughan, A. Sudjianto, E. Brahimi, J. Chen, V. N. Nair, Explainable neural networks
+    based on additive index models, The RMA Journal (2018) 40–49.
+
+[14] Z. Yang, A. Zhang, A. Sudjianto, Enhancing explainability of neural networks through
+    architecture constraints, IEEE Transactions on Neural Networks and Learning Systems
+    (2020).
+
+[15] T. Hastie, R. Tibshirani, Generalized Additive Models, Chapman & Hall, London, 1990.
+
+[16] Y. Lou, R. Caruana, J. Gehrke, Intelligible models for classification and regression,
+    in: Proceedings of the 18th ACM SIGKDD International Conference on Knowledge
+    Discovery and Data Mining, ACM, 2012, pp. 150–158.
+                                            23
+[17] R. Agarwal, N. Frosst, X. Zhang, R. Caruana, G. E. Hinton, Neural additive mod-
+    els: Interpretable machine learning with neural nets, arXiv preprint arXiv:2004.13912
+    (2020).
+
+[18] B. A. Coull, D. Ruppert, M. Wand, Simple incorporation of interactions into additive
+    models, Biometrics 57 (2) (2001) 539–545.
+
+[19] Y. Lou, R. Caruana, J. Gehrke, G. Hooker, Accurate intelligible models with pairwise
+    interactions, in: Proceedings of the 19th ACM SIGKDD international conference on
+    Knowledge Discovery and Data Mining, ACM, 2013, pp. 623–631.
+
+[20] R. Caruana, Y. Lou, J. Gehrke, P. Koch, M. Sturm, N. Elhadad, Intelligible models for
+    healthcare: Predicting pneumonia risk and hospital 30-day readmission, in: Proceedings
+    of the 21th ACM SIGKDD International Conference on Knowledge Discovery and Data
+    Mining, ACM, 2015, pp. 1721–1730.
+
+[21] H. Nori, S. Jenkins, P. Koch, R. Caruana, Interpretml: A unified framework for machine
+    learning interpretability, arXiv preprint arXiv:1909.09223 (2019).
+
+[22] P. Ravikumar, J. Lafferty, H. Liu, L. Wasserman, Sparse additive models, Journal of the
+    Royal Statistical Society: Series B (Statistical Methodology) 71 (5) (2009) 1009–1030.
+
+[23] J. A. Nelder, The selection of terms in response-surface models how strong is the weak-
+    heredity principle? The American Statistician 52 (4) (1998) 315–318.
+
+[24] P. McCullagh, J. A. Nelder, Generalized linear models, Chapman & Hall, London, 1983.
+
+[25] J. Bien, J. Taylor, R. Tibshirani, A lasso for hierarchical interactions, Annals of Statis-
+    tics 41 (3) (2013) 1111.
+
+[26] N. H. Choi, W. Li, J. Zhu, Variable selection with the strong heredity constraint and
+    its oracle property, Journal of the American Statistical Association 105 (489) (2010)
+    354–364.
+
+[27] M. Yuan, V. R. Joseph, H. Zou, et al., Structured variable selection and estimation,
+    The Annals of Applied Statistics 3 (4) (2009) 1738–1757.
+
+[28] J. L. Peixoto, Hierarchical variable selection in polynomial regression models, The Amer-
+    ican Statistician 41 (4) (1987) 311–313.
+
+
+                                               24
+[29] X. Li, N. Sudarsanam, D. D. Frey, Regularities in data from factorial experiments,
+    Complexity 11 (5) (2006) 32–45.
+
+[30] G. Hooker, Generalized functional anova diagnostics for high-dimensional functions of
+    dependent variables, Journal of Computational and Graphical Statistics 16 (3) (2007)
+    709–732.
+
+[31] D. Sorokina, R. Caruana, M. Riedewald, Additive groves of regression trees, in: Euro-
+    pean Conference on Machine Learning, Springer, 2007, pp. 323–334.
+
+[32] J. H. Friedman, B. E. Popescu, et al., Predictive learning via rule ensembles, The Annals
+    of Applied Statistics 2 (3) (2008) 916–954.
+
+[33] M. Tsang, D. Cheng, Y. Liu, Detecting statistical interactions from neural network
+    weights, in: International Conference on Learning Representations, 2018.
+
+[34] I. M. Sobol, Global sensitivity indices for nonlinear mathematical models and their
+    monte carlo estimates, Mathematics and Computers in Simulation 55 (1-3) (2001) 271–
+    280.
+
+[35] C.-H. Chang, S. Tan, B. Lengerich, A. Goldenberg, R. Caruana, How interpretable and
+    trustworthy are gams? arXiv preprint arXiv:2006.06466 (2020).
+
+[36] D. Servén, C. Brummitt, pygam: generalized additive models in python, Zenodo. 10
+    (2018). doi:10.5281/zenodo.1208723.
+
+
+
+
+                                             25
+                             Table 1: Testing RMSE comparison of the synthetic function.
+
+     Distribution    n     GAMI-Net      EBM        pyGAM        GLM         MLP           RF      XGBoost
+       uniform      1000 1.712±0.403 2.587±0.000 2.998±0.138 2.999±0.000 3.201±0.000 2.458±0.160 2.383±0.172
+       uniform      2000 1.242±0.205 2.529±0.000 2.889±0.069 3.124±0.000 3.054±0.000 2.127±0.056 2.077±0.099
+       uniform      5000 1.081±0.053 2.158±0.000 2.456±0.058 3.003±0.000 2.705±0.000 1.895±0.058 1.790±0.045
+       uniform      10000 1.044±0.019 1.799±0.132 2.450±0.046 3.103±0.065 2.615±0.057 1.822±0.043 1.634±0.013
+       normal       1000 1.842±0.352 2.029±0.000 2.528±0.120 2.399±0.000 2.484±0.000 1.914±0.104 1.882±0.121
+26
+       normal       2000 1.385±0.177 1.914±0.000 2.526±0.081 2.579±0.000 2.474±0.000 1.702±0.052 1.660±0.066
+       normal       5000 1.092±0.118 1.854±0.000 2.105±0.050 2.505±0.000 2.148±0.000 1.541±0.059 1.487±0.042
+       normal       10000 1.043±0.020 1.647±0.124 2.010±0.032 2.560±0.055 2.110±0.024 1.485±0.027 1.358±0.026
+     exponential 1000 1.408±0.049 2.066±0.000 2.357±0.137 2.336±0.000 2.519±0.000 2.010±0.107 1.960±0.098
+     exponential 2000 1.264±0.108 1.965±0.000 2.221±0.083 2.360±0.000 2.325±0.000 1.890±0.101 1.815±0.069
+     exponential 5000 1.062±0.044 1.833±0.000 1.954±0.045 2.508±0.000 2.303±0.000 1.767±0.056 1.624±0.040
+     exponential 10000 1.027±0.019 1.614±0.104 1.893±0.023 2.523±0.043 2.078±0.030 1.659±0.037 1.520±0.034
+Table 2: Comparison results of the synthetic function (uniform distribution; n = 10000).
+
+             Model        Train RMSE Val RMSE Test RMSE           Clarity Loss
+            XGBoost       0.135±0.103 1.630±0.046 1.634±0.013           -
+              RF          1.500±0.019 1.840±0.060 1.822±0.043           -
+             MLP          2.320±0.076 2.372±0.119 2.615±0.057           -
+             GLM          3.062±0.039 3.123±0.094 3.103±0.065           -
+            pyGAM         2.253±0.025 2.459±0.057 2.450±0.046           -
+             EBM          1.155±0.157 1.211±0.165 1.799±0.132 0.0007±0.0001
+              λ = 100     0.999±0.012 1.053±0.023 1.044±0.019 0.0003±0.0001
+        G    λ = 10−1     0.970±0.011 1.061±0.029 1.058±0.027 0.0002±0.0001
+        A
+        M    λ = 10−2     0.966±0.013 1.059±0.021 1.056±0.024 0.0006±0.0004
+        I
+        N    λ = 10−3     0.959±0.016 1.069±0.020 1.058±0.018 0.0024±0.0013
+        E
+        T    λ = 10−4     0.967±0.019 1.079±0.025 1.072±0.031 0.0037±0.0025
+            No Heredity
+                          1.008±0.010 1.054±0.019 1.045±0.022 0.0002±0.0001
+                     0
+              λ = 10
+
+
+
+
+                                          27
+   Table 3: Comparison results of the bank marketing dataset.
+
+    Model        Train AUC Val AUC     Test AUC     Clarity Loss
+   XGBoost       97.38±0.09 93.24±0.52 93.01±0.26        -
+     RF          93.59±0.10 92.01±0.62 91.98±0.35        -
+    MLP          93.15±0.65 93.12±0.90 92.29±0.41        -
+    GLM          90.81±0.21 90.77±0.47 90.60±0.30        -
+   pyGAM         91.90±0.17 91.68±0.39 91.53±0.36        -
+    EBM          94.59±0.16 94.63±0.40 93.16±0.31 1.0228±0.0755
+     λ = 100     92.15±0.42 92.08±0.46 91.85±0.42 0.0015±0.0016
+  λ = 8 × 10−1 92.38±0.43 92.30±0.42 92.09±0.40 0.0018±0.0022
+  λ = 6 × 10−1 92.74±0.17 92.67±0.44 92.42±0.30 0.0038±0.0022
+G λ = 4 × 10−1 93.01±0.17 92.91±0.48 92.65±0.36 0.0052±0.0038
+A
+M λ = 2 × 10−1 93.46±0.23 93.25±0.44 93.04±0.31 0.0112±0.0044
+I
+N λ = 10−1 93.94±0.23 93.52±0.41 93.33±0.39 0.0284±0.0138
+E
+T λ = 10−2 94.22±0.20 93.53±0.38 93.38±0.33 0.0737±0.0255
+
+    λ = 10−3     94.25±0.15 93.54±0.40 93.36±0.32 0.3733±0.0785
+    λ = 10−4     94.19±0.26 93.52±0.42 93.34±0.30 1.5088±0.2752
+   No Heredity
+                 93.94±0.23 93.51±0.41 93.33±0.40 0.0305±0.0166
+    λ = 10−1
+
+
+
+
+                               28
+    Table 4: Comparison results of the bike sharing hour dataset.
+
+    Model        Train RMSE Val RMSE Test RMSE           Clarity Loss
+   XGBoost        5.64±4.52   40.96±1.17 42.33±0.72           -
+     RF          62.00±0.72   65.12±1.47 65.69±2.10           -
+    MLP          35.54±1.31   37.09±1.52 43.35±1.32           -
+    GLM          158.98±0.52 158.54±2.49 159.09±1.57          -
+   pyGAM         99.52±0.60 100.16±1.61 100.22±1.12           -
+    EBM          54.32±0.55   54.27±0.99 57.48±1.20 0.0026±0.0005
+     λ = 100     52.93±0.80   55.02±1.23 55.81±1.13 0.0005±0.0001
+  λ = 8 × 10−1 52.12±0.93     54.45±1.23 54.99±1.00 0.0005±0.0001
+  λ = 6 × 10−1 51.26±0.80     53.63±1.11 54.27±1.05 0.0006±0.0001
+G λ = 4 × 10−1   50.84±1.07   53.31±1.03 53.91±1.31 0.0007±0.0002
+A
+M λ = 2 × 10−1   50.21±0.96   52.98±1.32 53.47±1.19 0.0007±0.0001
+I
+N λ = 10−1       50.26±1.33   53.38±1.85 53.68±1.83 0.0007±0.0001
+E
+T λ = 10−2       50.00±0.93   53.02±1.33 53.40±1.12 0.0014±0.0002
+    λ = 10−3     50.22±0.95   53.08±1.53 53.71±1.07 0.0050±0.0033
+    λ = 10−4     50.08±1.08   53.03±0.92 53.62±0.96 0.0137±0.0067
+   No Heredity
+                 50.26±1.33   53.38±1.85 53.68±1.83 0.0007±0.0001
+    λ = 10−1
+
+
+
+
+                                 29
+                                     Table 5: Test set RMSE on 20 real-world regression datasets.
+
+         Dataset         n     p   GAMI-Net      EBM        pyGAM        GLM         MLP            RF     XGBoost      Scale
+           no2           500   7 4.954±0.444 4.681±0.396 4.971±0.514 6.508±0.626 5.201±0.466 4.688±0.422 4.911±0.342    ×0.1
+         sensory         576   11 7.335±0.541 7.054±0.475 7.923±0.279 8.066±0.226 7.455±0.339 7.318±0.497 8.205±0.549   ×0.1
+       disclosure z      662   3 2.420±0.275 2.438±0.275 2.429±0.277 2.438±0.267 2.442±0.270 2.445±0.260 2.856±0.184 ×10000
+     bike sharing day    731   11 0.691±0.029 0.663±0.043 0.710±0.036 1.144±0.045 0.827±0.042 0.727±0.051 0.711±0.067 ×1000
+           era          1000   4 1.566±0.037 1.566±0.038 1.568±0.039 1.684±0.041 1.583±0.041 1.573±0.041 1.596±0.045     ×1
+         treasury       1049 15 2.187±0.268 2.513±0.400 2.114±0.260 8.971±0.739 2.367±0.282 2.416±0.324 2.489±0.247     ×0.1
+      weather izmir     1461   9 1.105±0.128 1.322±0.073 1.150±0.131 3.231±0.133 1.289±0.129 1.303±0.103 1.337±0.095     ×1
+          airfoil       1503   5 2.080±0.141 2.169±0.100 4.563±0.194 6.357±0.205 2.607±0.269 2.440±0.126 1.742±0.161     ×1
+         wine red       1599 11 6.219±0.147 5.991±0.231 6.252±0.129 7.473±0.180 6.201±0.165 5.918±0.210 6.135±0.251     ×0.1
+30
+        skill craft     3395 18 0.970±0.025 0.920±0.026 1.154±0.531 1.200±0.022 1.019±0.075 0.927±0.025 0.997±0.021      ×1
+         abalone        4177   8 2.132±0.051 2.240±0.052 2.168±0.091 2.975±0.126 2.142±0.078 2.186±0.074 2.372±0.066     ×1
+      parkinsons tele   5875 19 0.364±0.028 0.412±0.008 0.771±0.035 1.061±0.018 0.580±0.026 0.321±0.014 0.198±0.009     ×10
+           wind         6574 14 3.050±0.064 3.085±0.064 3.071±0.062 4.590±0.064 3.046±0.071 3.258±0.069 3.205±0.095      ×1
+        cpu small       8192 12 0.292±0.008 0.286±0.010 0.327±0.011 1.464±0.049 0.310±0.006 0.314±0.011 0.294±0.023     ×10
+         topo 2 1       8885 266 2.897±0.306 2.873±0.312 3.054±0.337 2.940±0.318 2.892±0.314 2.864±0.318 3.067±0.301 ×0.01
+           ccpp         9568   4 3.873±0.063 3.673±0.069 4.087±0.084 6.143±0.053 4.157±0.084 3.705±0.073 3.121±0.090     ×1
+      electrical grid   10000 11 0.927±0.021 0.951±0.016 1.718±0.020 2.885±0.049 0.658±0.019 1.448±0.028 0.993±0.016 ×0.01
+         ailerons       13750 40 1.640±0.049 1.660±0.049 1.690±0.054 3.380±0.087 1.590±0.030 1.680±0.040 1.650±0.050 ×0.0001
+         elevators      16599 18 2.253±0.079 2.284±0.087 2.389±0.053 6.710±0.167 2.106±0.070 3.147±0.064 2.167±0.041 ×0.001
+     california housing 20640 8 5.181±0.072 5.235±0.084 6.504±0.327 9.160±0.091 5.777±0.169 5.796±0.095 4.708±0.087     ×0.1
+

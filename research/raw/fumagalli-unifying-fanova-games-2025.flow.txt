@@ -1,0 +1,4684 @@
+Unifying Feature-Based Explanations with Functional ANOVA and
+Cooperative Game Theory
+
+arXiv:2412.17152v2 [cs.LG] 17 Apr 2025
+
+Fabian Fumagalli
+Bielefeld University, CITEC
+
+Maximilian Muschalik
+LMU Munich, MCML
+
+Barbara Hammer
+Bielefeld University, CITEC
+
+Abstract
+Feature-based explanations, using perturbations or gradients, are a prevalent tool to
+understand decisions of black box machine
+learning models. Yet, differences between
+these methods still remain mostly unknown,
+which limits their applicability for practitioners. In this work, we introduce a unified
+framework for local and global feature-based
+explanations using two well-established concepts: functional ANOVA (fANOVA) from
+statistics, and the notion of value and interaction from cooperative game theory. We introduce three fANOVA decompositions that determine the influence of feature distributions,
+and use game-theoretic measures, such as the
+Shapley value and interactions, to specify the
+influence of higher-order interactions. Our
+framework combines these two dimensions to
+uncover similarities and differences between a
+wide range of explanation techniques for features and groups of features. We then empirically showcase the usefulness of our framework on synthetic and real-world datasets.
+
+1
+
+INTRODUCTION
+
+The growing application of black box machine learning models in high-stake decision domains has led to
+increased research in Explainable AI (XAI) to uncover
+aspects of their reasoning. In this context, featurebased explanations are a prominent tool to address
+Proceedings of the 28th International Conference on Artificial Intelligence and Statistics (AISTATS) 2025, Mai Khao,
+Thailand. PMLR: Volume 258. Copyright 2025 by the author(s).
+
+Eyke Hüllermeier
+LMU Munich, MCML
+
+Julia Herbinger
+Leibniz Institute for Agricultural
+Engineering and Bioeconomy
+
+research questions, such as “How does this individual feature influence the model’s prediction or performance?”. The trend of developing new featurebased explanations to address the limitations of existing methods has resulted in a large toolbox, making it unclear how they are related or which method
+users should choose. Categorizations, e.g., into local
+and global, and guidance on pitfalls (Molnar et al.,
+2022) or within sub-categories of explanation methods
+(Sundararajan and Najmi, 2020; Ewald et al., 2024),
+help to understand differences but do not provide a
+general understanding of relations between methods,
+nor answer how to choose an appropriate one. Existing frameworks unify methods for individual features
+(Covert et al., 2021; Lundstrom and Razaviyayn, 2023;
+Deng et al., 2024), or SHAP (Hiabu et al., 2023; Bordt
+and von Luxburg, 2023), and serve as a building block
+here.
+In this paper, we present a unified framework for
+feature-based explanations, which is driven from two
+different perspectives: functional analysis of variance
+(fANOVA) (Stone, 1994; Hooker, 2004) from statistics, as well as the Shapley value (SV) (Shapley, 1953)
+and Möbius transform (MT) (Grabisch et al., 2000)
+from cooperative game theory. Our framework covers local explanations for a specific data point and two
+global explanations in terms of sensitivity and risk.
+Practitioners determine the influence of feature distribution by a specific choice of fANOVA. This choice
+corresponds to the marginalization of features using either a baseline (b), the marginal (m), or the conditional
+(c) distribution and yields an increasing influence of
+feature distributions. Based on the fANOVA decomposition, we introduce three types of feature influence
+measures: Individual and joint effects capture the contributions of single and groups of features, whereas interaction effects quantify synergies and redundancies
+of groups of features. Finally, using fundamental con-
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+Figure 1: Categorization of selected feature-based explanations with our framework: Local, and global methods (risk,
+sensitivity) by color, and explanation types individual (⃝) and joint (□) influence, as well as interactions (△) by symbol.
+Each imputation method (b/m/c) corresponds to a fANOVA decomposition with increasing influence of feature distributions, whereas pure, partial and full effects are increasingly influenced by higher-order interactions.
+
+cepts from cooperative game theory, we quantify pure,
+partial, and full effects that yield an increasing influence of higher-order interactions. Figure 1 illustrates
+our framework and categorizes existing methods.
+
+space into pure effects
+F (x) = f∅ +
+
+d
+X
+i=1
+
+Contributions.
+
+Our main contributions include:
+
+(1) A framework for feature-based explanations using
+fANOVA and cooperative game theory, including a local and two global explanation games.
+(2) Interpretations for three types of explanations according to influence of a) feature distributions, and b)
+higher-order interactions, undermined by our theoretical results and examples.
+(3) A summary of existing methods within our framework, including a guide for practitioners.
+
+2
+
+BACKGROUND
+
+Here, we provide the relevant background on fANOVA
+(Section 2.1), gradient-based methods (Section 2.2),
+and game theory (Section 2.3). Each field quantifies
+feature-based explanations from a different viewpoint,
+which our unified framework (Section 3) summarizes.
+Notations. Throughout the paper, we use the feature set D := {1, . . . , d}, lowercase letters for cardinalities (s := |S|), abbreviated sets (i := {i} and ij :=
+{i, j}), and denote the complement as −S := D \ S.
+2.1
+
+Functional ANOVA
+
+Functional analysis of variance (fANOVA) (Hoeffding,
+1948; Stone, 1994; Hooker, 2004; Owen, 2013) is a popular tool in statistics that globally decomposes a black
+box model F : Rd → Y on a d-dimensional feature
+
+fi (xi )+
+
+X
+
+fij (xi , xj ) · · · =
+
+X
+
+fS (x),
+
+S⊆D
+
+i̸=j
+
+where fS is restricted to features in S. These effects
+fS are referred to as baseline (S = ∅), main (s = 1)
+and interaction effects (s > 1). A fANOVA always
+exists, but is not generally unique. Given the feature
+distribution P , the components are defined as
+Z
+X
+fS (x) = F (x) dP (x−S ) −
+fT (x),
+(1)
+T ⊂S
+
+i.e. the effect fS is the expectation over features in
+−S minus the sum of lower-order effects fT , where
+T is contained in S. For independent feature distributions, all effects fS are zero-centered and orthogonal, which P
+yields the unique variance decomposition
+V[F (X)] = S⊆D σS2 with σS2 := V[fS (X)]. Based on
+this decomposition, sensitivity analysis (Owen, 2013)
+then quantifies the global importance of a set of features by summarizing the variances of the effects, σS2 ,
+via the Sobol’ indices τ , τ̄ (Sobol’, 2001) or the superset measure Υ2 (Hooker, 2004) as
+X
+X
+X
+τ S :=
+σT2 , τ S :=
+σT2 , Υ2S :=
+σT2 .
+T ⊆S
+
+T ∩S̸=∅
+
+T ⊇S
+
+Additionally, Owen (2014) utilizes the SV (Shapley,
+1953) (introduced in Section 2.3) to summarize the
+variances. For dependent random variables, the effects
+fT are not orthogonal, and thus the variance decomposition does not hold. With alternative definitions of fT
+(Hooker, 2007) or assumptions on P (Chastaing et al.,
+2012) unique and quasi-orthogonal decompositions can
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+be found. Moreover, it was shown that the definition
+via Eq. (1) yields sensible results when combined with
+the SV (Owen and Prieur, 2017).
+2.2
+
+Gradient-Based Attribution Methods
+
+Gradient-based attributions are a prominent modelspecific approach to explain predictions of black box
+models, where gradient information is available. They
+are widely applied in deep learning, and a variety of
+methods have been proposed. They can be broadly
+categorized into methods that use the gradients of each
+layer and backpropagate attributions throughout the
+network (Bach et al., 2015; Shrikumar et al., 2017;
+Lundberg and Lee, 2017), and methods that rely on
+the gradients computed with respect to the features directly (Sundararajan et al., 2017; Smilkov et al., 2017;
+Erion et al., 2021). Most popular methods can be unified with Taylor interactions (Deng et al., 2024). Taylor interactions are obtained by a multivariate infinite
+Taylor expansion of F around a baseline b ∈ Rd as
+
+F (x) = F (b) +
+
+X X
+
+ϕ(κ) +
+
+{z
+
+=:ψ(i)
+
+X
+
+I(κ),
+
+S⊆D,s>1 κ∈ΩS
+
+i∈D κ∈Ωi
+
+|
+
+X
+
+}
+
+|
+
+{z
+
+=:J(S)
+
+L⊆S
+
+The discrete derivative is a natural measure of interaction for S ⊆ D in the presence of T . The absence
+(T = ∅) and presence (T = −S) of all remaining
+features yields the MT and Co-MT (Grabisch et al.,
+2000), respectively, as
+m(S) := ∆S (∅) and m̃(S) := ∆S (−S).
+The MT, or Harsanyi dividend (Harsanyi, 1963), is
+the
+P unique measure (Rota, 1964) that satisfies ν(T ) =
+S⊆T m(S) for T ⊆ D, i.e., m(S) is the pure additive
+contribution obtained by the interaction of S, which
+cannot be attributed to any subgroup of S. Clearly,
+such contributions are difficult to interpret, since they
+involve 2d distinct coefficients. Instead, the SV (Shapley, 1953) aggregates marginal contributions for an individual feature i ∈ D as
+
+}
+
+where ψ, J are the generic independent, and interaction effect, respectively. Here, κ = [κ1 , . . . , κd ] ∈ Nd0
+capture the order of partial derivatives for each feature in the Taylor expansion, and ΩS := {κ | ∀i ∈ S :
+κi > 0, ∀i ∈
+/ S : κi = 0} is the set of degree vectors,
+where partial derivatives are computed exclusively for
+features in S. For more details regarding the definition
+of Taylor interactions, we refer to Appendix C.
+2.3
+
+Subtracting the marginal contributions yields the synergy or redundancy of both features by accounting for
+their individual effects. The generalization of this recursion is the discrete derivative of a set S ⊆ D in the
+presence of a set T ⊆ D \ S defined as
+X
+∆S (T ) :=
+(−1)s−ℓ ν(T ∪ L) for T ⊆ −S.
+
+Cooperative Game Theory
+
+Feature-based explanations attribute value to individual features or groups of features. This attribution
+can be viewed from a game theoretical perspective
+by studying a cooperative game ν : 2D → R, which
+describes a payoff for any possible group of features.
+This game is typically the prediction (local) or the performance (global) of the model restricted to the particular subset of features (Covert et al., 2021). Given
+a set of features T ⊆ D and a feature i ∈ D, we
+measure the marginal contribution of this feature as
+∆i (T ) := ν(T ∪ i) − ν(T \ i), i.e., the impact of adding
+this feature to a group of features. The joint marginal
+contribution ∆[ij] (T ) := ν(T ∪ ij) − ν(T \ ij) is an extension for the contribution of two features i, j ∈ D.
+The interaction ∆ij (T ) := ∆[ij] (T ) − ∆i (T ) − ∆j (T )
+of i, j in the presence of T is the effect of adding both
+features jointly minus their individual contributions.
+
+ϕSV (i) :=
+
+X m(S)
+∆i (T )
+,
+=
+d−1
+s
+d· t
+S⊆D:i∈S
+T ⊆D\i
+X
+
+where the second representation is a well-known result from cooperative game theory (Grabisch, 1997).
+In this context, the SV summarizes the main effect
+and all pure interactions equally distributed among
+the involved features. Moreover, the SV is the unique
+measure that yields a fair attribution with four intuitive axioms: linearity, symmetry, dummy and efficiency (Shapley, 1953). Beyond individual contributions, generalized values (GVs) (Marichal et al., 2007)
+and JointSVs (Harris et al., 2022) summarize joint
+marginal contributions, whereas the Shapley interaction index (Grabisch and Roubens, 1999) summarizes
+discrete derivatives for all groups of features. Lastly,
+Shapley interactions (SIs) (Lundberg et al., 2019; Sundararajan et al., 2020; Bordt and von Luxburg, 2023;
+Tsai et al., 2023) provide interactions for subsets up
+to size k = 1, . . . , d, where k = 1 is the SV, and k = d
+the MT (Bordt and von Luxburg, 2023).
+
+3
+
+A UNIFIED FRAMEWORK
+
+We now present our unified framework for featurebased explanations. We propose three fANOVA decompositions (Section 3.1), and define a local explanation game based on the prediction, and two global
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+explanation games based on sensitivity and risk (Section 3.2). We then introduce three types of explanations: individual, joint and interaction effects (Section 3.3), and show that feature-based explanations
+are essentially determined by two components: First,
+the choice of distribution P in the fANOVA specifies
+the influence of feature distribution in the explanation.
+Second, pure, partial or full effects (Section 3.4) are increasingly influenced by higher-order interactions. All
+proofs are deferred to Appendix A.
+3.1
+
+Influence of Feature Distributions
+
+The fANOVA is determined by P in the
+Z
+value function FS (x) := F (x) dP (x−S ),
+
+(2)
+
+and iteratively constructed by Eq. (1). We now present
+three decompositions (induced by choices of P ) that
+are increasingly influenced by the feature distribution.
+Definition 1. Baseline fANOVA (b-fANOVA)
+with
+N
+baseline b ∈ Rd is given by P (b) (x−S ) :=
+i∈−S δbi
+(b)
+
+with Dirac functions δbi , and effects fS derived from
+Z
+(b)
+FS (x) := F (x) dP (b) (x−S ) = F (xS , b−S ).
+The feature distribution influences b-fANOVA exclusively through the choice of the baseline b. Moreover,
+b-fANOVA effects correspond to the Taylor interactions (Deng et al., 2024), introduced in Section 2.3.
+Theorem 1. If F is represented by its Taylor series
+expanded around b for an instance x0 , then the effect
+(b)
+fS is given by the generic effects (Deng et al., 2024)
+
+
+F (b), if S = ∅ (baseline)
+(b)
+fS (x0 ) = ψ(i), if S = i (main effect)
+
+
+J(S), else.
+(interaction effect)
+In b-fANOVA, the feature distribution is highly compressed in b. Instead, we define a fANOVA that partially takes into account the feature distribution.
+Definition 2. Marginal fANOVA (m-fANOVA) is
+given by P (m) (x−S ) := p(x−S ) with joint marginal dis(m)
+tribution p, and effects fS derived from
+Z
+(m)
+FS (x) := F (x) dP (m) (x−S ) = E[F (xS , X−S )].
+Using the joint marginal distribution of the remaining
+features breaks the feature dependencies between features in S and −S, which yields evaluations of F in
+sparsely sampled or unseen regions of the input space,
+known as extrapolation (Hooker, 2007). Therefore, we
+propose a third fANOVA based on conditional distributions that fully accounts for the feature distribution.
+
+Definition 3. Conditional fANOVA (c-fANOVA) is
+given by P (c) (x−S ) := p(x−S | xS ) with conditional
+(c)
+distribution p, and effects fS derived from
+Z
+(c)
+FS (x) := F (x) dP (c) (x−S ) = E[F (X) | XS = xS ].
+The c-fANOVA, m-fANOVA and b-fANOVA are related through the following theorem.
+Theorem 2. If F is linear, then m-fANOVA equals
+b-fANOVA with b := E[X]. For independent features,
+c-fANOVA equals m-fANOVA, and if F is additionally
+multilinear, then it equals b-fANOVA with b := E[X].
+Illustration of FANOVA Decompositions. We
+now illustrate differences between the fANOVA
+decompositions based on features from a twodimensional multivariate normal distribution X ∼
+N (µ, Σ) with mean µ ∈ R2 and covariance Σ ∈ R2×2 .
+We consider a linear function Flin (x) = β1 x1 + β2 x2 ,
+and one including a two-way interaction F2int (x) =
+Flin (x) + β12 x1 x2 . The main and interaction effects of
+the fANOVA decompositions are summarized in Table 1. For b- and m-fANOVA of Flin the main effect
+is intuitively the deviation of xi from bi and the expectation of E[Xi ] = µi , respectively, which is scaled
+by the linear coefficient βi (first row). For c-fANOVA,
+this effect is distorted by the cross-correlation with
+the second feature. As stated in Theorem 2, it is clear
+that c-fANOVA reduces to m-fANOVA for independent features and that m-fANOVA equals b-fANOVA
+for bi := E[Xi ]. For F2int , the first order effects of
+b- and m-fANOVA again only depend on feature i,
+but also include the interaction coefficient βij (second
+row). In contrast, c-fANOVA additionally includes
+cross-correlation effects based on effects of features
+correlated with xi . The two-way interaction of b- and
+m-fANOVA is solely defined by the centered interaction effect between the two features and thus results
+in zero values for Flin . Yet, c-fANOVA accounts again
+for cross-correlation effects. For a more detailed discussion, we refer to Appendix D.1.
+3.2
+
+Explanation Games via fANOVA
+
+In the previous section, we have shown that the choice
+of P in FS from Eq. (2) determines the influence of the
+feature distribution in the fANOVA decomposition. In
+this section, we define three instances of an
+explanation game ν : 2D → R,
+which consider different properties of the value function FS given a feature set S ⊆ D. We then show
+that the MT of ν directly relates to properties of the
+fANOVA effects fS . For local explanations, we naturally analyze FS evaluated at x0 .
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+Table 1: Main and interaction fANOVA components of Flin and F2int , where x̄i := xi − µi
+
+Main Effect fi
+
+Interaction fij
+
+b-fANOVA f (b)
+
+m-fANOVA f (m)
+
+c-fANOVA f (c)
+
+Flin
+
+βi · (xi − bi )
+
+βi · x̄i
+(m)
+flin + βij µj x̄i − βij σij
+
+j ij
+flin + x̄i V[X
+i]
+
+F2int
+
+(b)
+flin + βij bj (xi − bi )
+
+Flin
+
+0
+
+0
+
+F2int
+
+βij (xi − bi )(xj − bj )
+
+βij x̄i x̄j + βij σij
+
+Definition 4. Given FS and an instance x0 ∈ Rd , we
+define the local explanation game as
+νx(loc)
+(S) := FS (x0 ).
+0
+The local explanation game captures the predictions
+FS at x0 , i.e. the prediction F at x0 restricted to any
+subset of features S. In this case, the MT directly
+corresponds to the fANOVA effect evaluated at x0 .
+(loc)
+
+Corollary 1. The MT mx0 of the local explanation
+(loc)
+game νx0 is the fANOVA effect fS evaluated at x0 ,
+X
+m(loc)
+(−1)s−t FT (x0 ) = fS (x0 ),
+x0 (S) =
+
+(m)
+
+β σ
+
+(c)
+σij xi
+flin + βij x̄i (µj + V[X
+) − βij σij
+i]
+β−ℓ σ−ℓ,ℓ
+ℓ∈ij x̄ℓ V[Xℓ ]
+(m)
+(c)
+x̄j xj
+x̄i xi
++ V[X
+)
+f2int + flin − βij σij ( V[X
+i]
+j]
+
+−
+
+P
+
+For independent features, the MT of the sensitivity
+game is the variance of the fANOVA effect fS . For dependent features, the covariances are exclusively distributed among the MT. Lastly, for the risk game, the
+MT m(risk) (S) is the additive improvement in risk obtained by S. Given an explanation game, we now specify different types of feature influence.
+3.3
+
+Types of Feature Influence Measure
+
+Here we present three types of
+feature influences ϕ : 2D → R;
+
+T ⊆S
+
+i.e., the pure additive contribution of the features in S
+in the fANOVA decomposition.
+Remark 1. Corollary 1 follows directly from the definitions of the MT and the fANOVA components. In
+fact, both are special cases of the Möbius inversion theorem (Rota, 1964, Proposition 2) with the inclusion
+(loc)
+ordering. While the MT mx0 is based on FS (x0 ),
+the fANOVA effect is based on the functions FS .
+The local explanation game depends on x0 , whereas
+global explanation games capture FS across the random features X or the data-generating process (X, Y ).
+Definition 5. Given FS , the global sensitivity
+game is defined as the variance across the features
+ν (sens) (S) := V[FS (X)].
+Definition 6. Given FS and a loss ℓ : Y × Y → R,
+the global risk game is defined as the negative risk
+ν (risk) (S) := −E(x,y)∼(X,Y ) [ℓ(FS (x), y)].
+The sensitivity game quantifies the importance of features to the model’s prediction whereas the risk game
+considers its performance. In general, a large value of
+ν indicates a higher importance of S. The following
+theorem describes the MT of the sensitivity game.
+Theorem 3. The MT of the sensitivity game is
+(c)
+
+m(sens) (S) = V[fS (X)]
+for independent features. For dependent features, it is
+P
+(c)
+(c)
+distorted by L∪L′ =S,L̸=L′ cov(fL (X), fL′ (X)).
+
+Given an explanation game ν, individual feature influence ϕ(i) quantifies the contribution of a single feature i ∈ D, which is naturally based on the marginal
+contribution ∆i (T ) := ν(T ∪i)−ν(T \i) in the presence
+of features in T . If individual features are less meaningful, e.g., in high-dimensional image data (Zintgraf
+et al., 2017), then practitioners are frequently interested in the joint feature influence ϕ(S) of a group
+of features S, which we base on the joint marginal
+contribution ∆[S] (T ) = ν(T ∪ S) − ν(T \ S) in the
+presence of features in T . Beyond joint contributions,
+to investigate synergies and redundancies of groups of
+features, referred to as interactions, we introduce feature interactions ϕIP
+(S) based on discrete derivatives
+∆S (T ) = ∆[S] (T ) − L⊂S ∆L (T ) in the presence of
+features in T , which account for lower-order effects.
+Having established three types of feature influences,
+we now introduce measures to quantify these.
+3.4
+
+Quantifying Feature Influence
+
+Given an explanation game ν and explanation type,
+we propose feature influence in absence of all remaining features as the pure effect, i.e., ϕ∅ (i) := ∆i (∅) =
+ν(i) − ν(∅) for individuals, ϕ∅ (S) := ∆[S] (∅) = ν(S) −
+ν(∅) for joint influences, and ϕI∅ (S) := ∆S (∅) = m(S)
+for interactions. Second, we introduce feature influence in presence of all remaining features as the full
+effect, i.e. ϕ+ (i) := ∆i (−i) = ν(D) − ν(−i) for individuals, ϕ+ (S) := ∆[S] (−S) = ν(D) − ν(−S) for
+joint influences, and ϕI+ (S) := ∆S (−S) = m̃(S) for
+interactions. Notably, pure interactions ϕI∅ and full
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+interactions ϕI+ correspond to the MT and Co-MT,
+respectively. Lastly, we introduce the partial effect
+as the SV ϕSV for individuals, GV ϕGV for joint influences, and SIs ϕSI for interactions. With these definitions, we now analyze how feature influence measures
+capture the MT, and thus the corresponding properties of fANOVA effects.
+Theorem 4. Feature influence measures summarize
+the MT, according to Table 2. Consequently, local explanations summarize fANOVA effects evaluated at x0
+according to Table 2.
+
+partial and full effect also account for the higher-order
+interaction x1 x2 x3 .
+
+With Theorem 4, we can distinguish all feature influence measures based on their summary of the MT. For
+local explanations with Corollary 1, we can view the
+MT m(S) as the fANOVA effect fS evaluated at x0 .
+For individuals, the pure effect captures the main effect m(i), whereas the full effect additionally includes
+all effects that involve feature i, while the partial effect (SV) distributes the higher-order effects equally
+among involved features. For joint feature influences,
+the pure effect captures the effect m(S) and all effects
+of subsets contained in S. The full effect captures all
+effects that involve at least one feature in S, including
+the pure effect. Moreover, the partial effect captures
+a share of each of these effects with an index-specific
+weight wts (Muschalik et al., 2024a). For feature interactions, the pure interaction equals the isolated effect
+m(S), whereas the full effect is the sum over all effects
+that involve all features in S. Lastly, the partial effect captures a share of these higher-order effects with
+an index-specific weight wts . In summary, pure, partial, and full effects yield an increasing influence of
+higher-order interactions, which we illustrate with the
+following example.
+
+4.1
+
+Illustration of Feature Influence. We now illustrate the influence of main and higher-order effects for
+different feature influence methods. We consider three
+independent features Xi ∼ N (0, 1) and a functional relationship of F3int (x) = x1 +x2 +x3 +x1 x2 +x1 x2 x3 . In
+this case, c-fANOVA is equivalent to m-fANOVA and
+b-fANOVA with b = E[X], and each term in F corresponds to a fANOVA effect. The weights of fANOVA
+effects for different feature influences of the local explanation are summarized in Table 3. For individual contributions (rows 1-3), the pure effect captures
+the main effect x1 , whereas the partial effect includes
+the equally distributed interactions x1 x2 and x1 x2 x3 .
+Moreover, the full effect ϕ+ accounts for both interactions with weight 1. For joint influence (rows 4-6),
+the pure effect captures the interaction x1 x2 , as well
+as the individual effects x1 , x2 . The partial and full
+effects additionally capture the higher-order interaction x1 x2 x3 . Lastly, for interactions (rows 7-9), the
+pure effect captures the interaction x1 x2 , whereas the
+
+4
+
+UNIFYING EXPLANATIONS
+
+We now use our previously established framework to
+categorize existing feature-based explanations, including a guide for practitioners. A selection of algorithms
+is displayed in Figure 1, and we refer to Appendix E
+for a full categorization.
+Local Feature-Based Explanations
+
+Local methods explain feature influence on predictions
+for an instance based on the local explanation game.
+Influence via Perturbations. For individuals,
+baseline (Sundararajan and Najmi, 2020), interventional (int.) (Janzing et al., 2020), and observational
+(obs.) SHAP (Lundberg and Lee, 2017) rely on partial effects with b-, m- and c-fANOVA, respectively.
+Occlusion-1 (Zeiler and Fergus, 2014) and individual conditional expectations (ICEs) (Goldstein et al.,
+2015) use the full effect and b-fANOVA. For groups of
+features, ArchAttribute (Tsang et al., 2020) quantifies
+the pure joint effect with b-fANOVA. Occlusion-patch
+and ICE compute the full joint effect with b-fANOVA,
+whereas PredDiff-patch (Zintgraf et al., 2017) uses cfANOVA. Global feature effect methods, like partial
+dependence plot (PDP) (Friedman, 2001) and its conditional variant known as marginal (M) plot (Apley
+and Zhu, 2020), visualize the pure joint effect using
+m- and c-fANOVA across a feature’s range.
+Corollary 2. In practice, PDP and M-Plot can be
+used to compute m- and c-fANOVA, respectively.
+Inspired by game theory, joint SVs (Harris et al., 2022)
+and Faith-SHAP (Tsai et al., 2023) capture partial
+joint and interaction effects with b-fANOVA. The int.
+Shapley-GAM (Bordt and von Luxburg, 2023) and int.
+k-SVs (Lundberg et al., 2019) use pure and partial effects of m-fANOVA, whereas obs. Shapley-GAM and
+k-SVs rely on pure and partial effects of c-fANOVA.
+Influence via Gradients. For some model classes,
+most prominently in deep learning, gradients with respect to individual features can be calculated. With
+Theorem 1, we linked Taylor interactions and bfANOVA. Gradient-based methods distribute the Taylor interactions, and partially account for b-fANOVA
+effects, as described by Deng et al. (2024). An advantage of gradients is that effects without the feature of
+P
+∂fS (x)
+(x)
+interest vanish ∂F
+S⊆D:i∈S ∂xi . A clear dis∂xi =
+S
+advantage is that the derivatives ∂f
+∂xi differ from the
+actual effects fS . The gradient evaluated at x0 is a
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+Table 2: Game-theoretic measures to quantify individual and joint feature influence, as well as feature interactions based
+on the MT m of the game ν. All methods capture the pure effect, and differently summarize higher-order interactions.
+
+Individual Effect
+Pure (ϕ∅ )
+Partial (ϕSV/GV/SI )
+Full (ϕ+ )
+
+m(i)
+P
+)
+m(i) + T ⊃i m(T
+t
+P
+m(i) + T ⊃i m(T )
+
+Joint Effect
+P
+m(S) + ∅̸=L⊂S m(L)
+P
+s
+m(S) + T ∩S /∈{S,∅} w|T
+\S| m(T )
+P
+m(S) + T ∩S /∈{S,∅} m(T )
+
+Table 3: Weights of fANOVA effects in local explanation
+ϕx with pure, partial, and full for Individual (Ind), Joint,
+and Interaction (Int) effects of feature x1 (i = {1}) and
+interaction x1 × x2 (ij = {1, 2}).
+
+F3int fANOVA effects
+
+x1
+
+x2
+
+x1 x2
+
+x1 x2 x3
+
+1
+1
+1
+
+0
+0
+0
+
+0
+
+0
+
+Ind
+
+Pure ϕ∅x (i)
+Partial ϕSV
+x (i)
+Full ϕ+
+x (i)
+
+1
+2
+
+1
+3
+
+1
+
+1
+
+Joint
+
+Pure ϕ∅x (ij)
+Partial ϕGV
+x (ij)
+(ij)
+Full ϕ+
+x
+
+1
+1
+1
+
+1
+1
+1
+
+1
+1
+1
+
+0
+w12
+1
+
+Int
+
+Pure ϕI∅
+x (ij)
+Partial ϕSI
+x (ij)
+Full ϕI+
+x (ij)
+
+0
+0
+0
+
+0
+0
+0
+
+1
+1
+1
+
+0
+w12
+1
+
+linear approximation of F at x0 , which yields a rough
+influence measure (Grad×Input). Other methods, like
+integrated gradients (IG) (Sundararajan et al., 2017)
+or ALE (Apley and Zhu, 2020), compute average gradients, where ALE relies on conditional expectations
+and IG on a path integral (Friedman, 2004). IG relates to F via the Aumann-SV (Aumann and Shapley,
+1974), but the choice of baseline has a strong impact
+(Sturmfels et al., 2020; Koenen and Wright, 2024).
+4.2
+
+Global Feature-Based Explanations
+
+Global methods explain the feature influence on a
+global level, independent of specific instances.
+Influence via Sensitivity Analysis. Sensitivity
+analysis studies the variance of FS (Owen, 2013), captured by the global sensitivity game ν sens . Sobol’ indices, τ S , τ S (Sobol’, 2001) correspond to the pure and
+full joint effect, respectively. The superset measure Υ2S
+(Hooker, 2004) is the full interaction effect. To measure the strength of interaction, Friedman and Popescu
+(2008) proposed the H-statistic, which corresponds to
+the pure interaction effect. Moreover, Owen (2014)
+proposed the partial effect for individuals. Above measures require independent features and summarize mfANOVA effects, which by Theorem 3 are the MT. For
+dependent features, Owen and Prieur (2017) proposed
+the partial effect for c-fANOVA, and demonstrated intuitive results for a variety of distributions and models.
+
+Interaction Effect
+m(S)
+P
+s
+m(S) + T ⊃S w|T
+\S| m(T )
+P
+m(S) + T ⊃S m(T )
+
+Influence via Performance (Risk). Featurebased explanations using the expected model loss include the data-generating process and provide global
+feature importance scores based on the risk game. Permutation feature importance (PFI) (Breiman, 2001;
+Fisher et al., 2019) and conditional feature importance
+(CFI) (Strobl et al., 2008; Molnar et al., 2023) quantify
+the full individual effect based on m- and c-fANOVA.
+In contrast, SAGE (Covert et al., 2020) computes the
+partial individual effect for c-fANOVA (theoretically)
+and m-fANOVA (practically).
+4.3
+
+A Guide for Practitioners
+
+Our framework facilitates the process of selecting a
+suitable feature-based explanation for a given interpretation goal to answering the following four questions:
+(1) Explanation game: Do we explain a single instance (local) or the general model behavior (global)?
+(2) Explanation Type: Do we report influence of individuals or groups (joint), or synergies (interaction)?
+(3) Imputation method: Should the feature distribution not (baseline), partially (marginal ), or fully
+(conditional ) be captured by the explanation?
+(4) Higher-order interactions: Should higherorder interactions not (pure), partially, or fully influence the explanation?
+Explanation Cost. Computational complexity is
+typically assessed by the number of model calls to F .
+In the local explanation game the primary factor is the
+value function FS , for which a single model call suffices for b-fANOVA, whereas m- and c-fANOVA rely
+on approximations of expectations, requiring varying
+numbers of evaluations depending on the desired estimation quality (Baniecki et al., 2025). For global
+explanations, local explanation game values must be
+computed across the feature distribution or the labeled data. Once game values are available, pure
+and full individual and joint effects each require two
+game evaluations, while pure and full interactions for
+a set of size s demand 2s evaluations. Partial effects
+are the most computationally expensive, necessitating
+2d game evaluations or their approximations. Importantly, game evaluations can be reused across different
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+Correlation: ρ
+0.0
+
+0.5
+
+0.9
+
+0.0
+
+0.5
+
+0.9
+
+0.0
+
+0.5
+
+0.9
+x3
+x4
+
+6
+5
+4
+3
+2
+1
+0
+6
+5
+4
+3
+2
+1
+0
+
+a)
+
+Effect
+
+Influence of Feature Distribution
+b
+m
+c
+
+x1
+x2
+
+6
+5
+4
+3
+2
+1
+0
+
+Pure
+Partial
+Full
+Influence of Higher − order Interaction
+
+Figure 2: Local explanations for the instance x = (1, 1, 1, 1)
+averaged over 30 repetitions of varying random seeds (fluctuation is shown by error bars). Note that the model is correctly specified as F (x) = 2x1 + 2x2 + 2x3 + x1 x2 + x1 x2 x3 .
+
+explanation games, types, and effects.
+
+5
+
+Figure 3: Pure (a) and full (b) individual effects and twoway interactions for the global sensitivity game of an XGBoost model trained on California housing. Blue and red
+colors denote a reduction and increase of variance.
+
+fects. For b- and m-fANOVA, the comparison between
+pure, partial, and full clearly shows the presence of feature interactions between x1 , x2 , and x3 with stronger
+effects between the first two features.
+5.2
+
+Real-World Application
+
+We now demonstrate differences between the explanation methods in two real-world settings, and uncover
+interactions in local and global explanations.
+
+EXPERIMENTS
+
+We now showcase our framework on synthetic and realworld datasets. For m-fANOVA, we use a background
+dataset of 512 samples, and for c-fANOVA the synthetic ground-truth. Further details and experiments
+are described in Appendix F.3 and Appendix G. Our
+code is available at https://github.com/FFmgll/
+unifying_feature_based_explanations.
+5.1
+
+b)
+
+Synthetic Example
+
+We consider a 4-dimensional normal distribution X ∼
+2
+N (0, Σ) with σii
+= 1 and σij = ρ for i ̸= j. We
+then vary ρ ∈ {0, 0.5, 0.9}, i.e., from uncorrelated to
+highly correlated. The target is given by F (x) =
+2x1 +2x2 +2x3 +x1 x2 +x1 x2 x3 and corrupted by noise
+ϵ ∼ N (0, 0.01). We then fit a correctly specified linear
+model (LM) to each setting. Figure 2 shows the individual local explanations of our framework for one instance for varying feature dependencies. As expected,
+explanations based on b-, m-, and c-fANOVA only differ when features are correlated. While b-fANOVA
+explanations are not affected by feature dependencies, m-fANOVA uses the joint marginal distribution,
+which particularly influences pure feature effects. CfANOVA is highly influenced by feature dependencies
+due to cross-correlation effects. Thus, for ρ = 0.9 all
+features including the noise feature result in equally
+high pure effects. In contrast, full effects are small,
+since the remaining three features capture the effects
+of the feature of interest through cross-correlation ef-
+
+California Housing. We consider the global sensitivity game on the California housing dataset (Kelley
+Pace and Barry, 1997). We display pure (MT) and full
+(superset measures Υ2 ) interaction effects for the first
+and second order based on m-fANOVA in Figure 3.
+Pure effects (a) show that features Latitude (La) and
+Longitude (Lo) have a strong individual importance
+with a negative pairwise interaction indicating a redundancy between these two features. On the contrary, different full effects (b) indicate the presence of
+higher-order interactions. While MedianIncome (MI)
+shows almost no main (individual pure) effect, it has a
+strong full individual effect due to higher-order interactions particularly including La and Lo highlighted
+by the full pairwise interaction effects.
+Sentiment Language Model. In Figure 4, we further investigate local explanations on a sentiment analysis language model fine-tuned on the IMDB (Maas
+et al., 2011) dataset. The sentiment scores range
+between [−1, 1], where values close to −1 denote a
+negative sentiment and values close to 1 correspond
+to a positive sentiment. We provide the model the
+sentence “The acting was bad, but the movie enjoyable”. The sentiment for this sentence is ≈ 0.8117,
+whereas the baseline sentiment is ≈ 0.5361, indicating a bias towards positive reviews. Individual effects
+(left) strongly vary between pure, partial and full effects, indicating the presence of higher-order interactions. Specifically, pure individual effects highlight the
+positive influence of “enjoyable”, whereas “bad” and
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+tributions, corresponding to m-fANOVA. Bordt and
+von Luxburg (2023) introduced the Shapley-GAM and
+unified SIs for marginal and conditional distributions,
+which relates to m-fANOVA and c-fANOVA.
+
+was
+
+Pure, Individual
+bad
+
+acting
+
+Partial, Individual
+the
+
+but
+
+7
+
+Full, Individual
+the
+
+movie
+
+Figure 4: Individual (left) and second order partial interaction (2-SVs, right) effects for the local explanation
+game of a sentiment analysis language model. While “but”
+has a negative pure effect, the partial and full effects are
+positive, indicating positive higher-order interactions. In
+fact, (“bad”,“but”), and (“but”,“enjoyable”) have a strong
+positive partial interaction effect.
+
+“but” have a negative influence. Interestingly, “acting” also shows a negative influence, which possibly indicates a bias in the prediction. The partial individual
+effect (SV) shows a stronger positive influence for “enjoyable”, and a weaker negative influence for “acting”
+and “bad”. In contrast, “but” now receives a positive
+partial influence, which indicates its involvement in
+positive higher-order interactions. In fact, the partial
+interaction effects up to order 2 (2-SVs, right) show
+that (“bad”,“but”), and (“but”,“enjoyable”) have a
+strong positive partial interaction effect. This observation is intuitive, since (“bad”,“but”) suggests that a
+negative sentiment can be reversed in meaning. Further experiments on other games, models, and effects
+are provided in Appendix G.
+
+6
+
+LIMITATIONS
+
+enjoyable
+
+RELATED WORK
+
+Several unified frameworks for individual feature influence measures were introduced: Lundberg and Lee
+(2017) propose SHAP, which applies the SV across
+different methods. Sundararajan and Najmi (2020)
+analyze the SV with baseline and marginal imputations, i.e. m- and b-fANOVA. Han et al. (2022) characterize local explanations using a function approximation. Lundstrom and Razaviyayn (2023) introduce
+synergy functions to interpret gradient-based explanations, which correspond to b-fANOVA effects, whereas
+Deng et al. (2024) unified gradient-based explanations
+with Taylor interactions, a fine-grained component of
+b-fANOVA effects. Covert et al. (2021) propose a
+framework for local and global explanations, which
+summarizes perturbation-based methods. Tan et al.
+(2023) unify global explanations by an additive decomposition and study how non-additive components
+influence the explanation. Beyond individual influence
+measures, Hiabu et al. (2023) unify the SV with PDP
+using a functional decomposition with marginal dis-
+
+Our unified framework covers a variety of local and
+global feature-based explanations, where Appendix B
+highlights a broader perspective. However, instancebased explanations, such as counterfactuals (Wachter
+et al., 2017), are not included. Moreover, featurebased explanations that rely on distance measures,
+such as LIME (Ribeiro et al., 2016) are related to
+SHAP (Lundberg and Lee, 2017), but not fully covered. Similarly, some gradient-based methods summarize derivatives on a more fine-grained level than
+the related b-fANOVA effects (Deng et al., 2024).
+For practical considerations, the m- and c-fANOVA
+requires the approximation of (conditional) expectations, where a variety of methods exist (Olsen et al.,
+2024), which we did not address here. Moreover,
+the SV and SIs require an exponential amount of
+game evaluations, which also necessitates approximation methods (Mitchell et al., 2022; Chen et al.,
+2023; Fumagalli et al., 2023, 2024; Kolpaczki et al.,
+2024). For tree-based models with distributional assumptions, it was shown that exact calculation is feasible (Lundberg et al., 2019; Muschalik et al., 2024b).
+
+8
+
+CONCLUSION
+
+We combined fANOVA, a popular tool in statistics,
+and cooperative game theory, to present a unified
+framework for feature-based explanations. Our framework includes three explanation games, one for local,
+and two for global explanations in terms of sensitivity and performance. Within each explanation game,
+we then presented three types of explanations: Individual and joint feature effects quantify the features’
+influence for individuals and groups of individuals,
+whereas interaction effects measure synergies and redundancies of groups of features. By choosing b-, mor c-fANOVA, practitioners are able to include increasing influence of the features’ distribution in their explanations, which we showcase on synthetic examples.
+We further proposed three game-theoretic concepts,
+including the SV and SIs, to quantify pure, partial and
+full effects that yield an increasing influence of higherorder interactions, which we again showcase on synthetic examples. Finally, we showed that our framework unifies a variety of existing feature-based explanations, offering clear guidance for their interpretation
+and application. We demonstrated its usefulness on
+synthetic and real-world datasets.
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+ACKNOWLEDGEMENTS
+We gratefully thank the anonymous reviewers for their
+valuable feedback for improving this work. Fabian Fumagalli and Maximilian Muschalik gratefully acknowledge funding by the Deutsche Forschungsgemeinschaft
+(DFG, German Research Foundation): TRR 318/1
+2021 – 438445824. Julia Herbinger gratefully acknowledges funding by the German Ministry for Education and Research through project Explaining 4.0
+(ref. 01IS200551), the European Union’s Horizon Europe Innovation program through project SPIN-FERT
+(ref. 101157265), and the German Federal Ministry
+of Education and Research (BMBF) through project
+DCropS4OneHealth-2 (ref. 16LW0528K). The authors
+of this work take full responsibility for its content.
+REFERENCES
+Aas, K., Jullum, M., and Løland, A. (2021). Explaining individual predictions when features are dependent: More accurate approximations to Shapley values. Artificial Intelligence, 298:103502.
+Ancona, M., Ceolini, E., Öztireli, C., and Gross, M.
+(2018). Towards better understanding of gradientbased attribution methods for Deep Neural Networks. In 6th International Conference on Learning Representations, ICLR 2018, Vancouver, BC,
+Canada, April 30 - May 3, 2018, Conference Track
+Proceedings. OpenReview.net.
+Apley, D. W. and Zhu, J. (2020). Visualizing the
+effects of predictor variables in black box supervised learning models. Journal of the Royal Statistical Society: Series B (Statistical Methodology),
+82(4):1059–1086.
+Au, Q., Herbinger, J., Stachl, C., Bischl, B., and
+Casalicchio, G. (2022). Grouped feature importance
+and combined features effect plot. Data Mining and
+Knowledge Discovery, 36(4):1401–1450.
+
+Bordt, S. and von Luxburg, U. (2023). From Shapley
+values to generalized additive models and back. In
+International Conference on Artificial Intelligence
+and Statistics, pages 709–745. PMLR.
+Breiman, L. (2001). Random Forests. Machine Learning, 45(1):5–32.
+Chastaing, G., Gamboa, F., and Prieur, C.
+(2012). Generalized Hoeffding-Sobol decomposition for dependent variables - application to sensitivity analysis. Electronic Journal of Statistics,
+6(none):2420–2448.
+Chen, H., Covert, I. C., Lundberg, S. M., and Lee,
+S.-I. (2023). Algorithms to estimate Shapley value
+feature attributions. Nature Machine Intelligence,
+5(6):590–601.
+Chen, T. and Guestrin, C. (2016). Xgboost: A scalable tree boosting system. Proceedings of the 22nd
+ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, pages 785–794.
+Covert, I., Lundberg, S., and Lee, S.-I. (2021). Explaining by removing: A unified framework for
+model explanation. Journal of Machine Learning
+Research, 22(209):1–90.
+Covert, I., Lundberg, S. M., and Lee, S.-I. (2020). Understanding Global Feature Contributions With Additive Importance Measures. In Advances in Neural
+Information Processing Systems, volume 33, pages
+17212–17223. Curran Associates, Inc.
+Deng, H., Zou, N., Du, M., Chen, W., Feng, G., Yang,
+Z., Li, Z., and Zhang, Q. (2024). Unifying Fourteen
+Post-Hoc Attribution Methods With Taylor Interactions. IEEE Transactions on Pattern Analysis and
+Machine Intelligence, 46(7):4625–4640.
+
+Aumann, R. J. and Shapley, L. S. (1974). Values of
+Non-Atomic Games. Princeton University Press.
+
+Erion, G. G., Janizek, J. D., Sturmfels, P., Lundberg,
+S. M., and Lee, S. (2021). Improving performance
+of deep learning models with axiomatic attribution
+priors and expected gradients. Nat. Mach. Intell.,
+3(7):620–631.
+
+Bach, S., Binder, A., Montavon, G., Klauschen, F.,
+Müller, K.-R., and Samek, W. (2015). On pixelwise explanations for non-linear classifier decisions
+by layer-wise relevance propagation. PloS one,
+10(7):e0130140.
+
+Ewald, F. K., Bothmann, L., Wright, M. N., Bischl,
+B., Casalicchio, G., and König, G. (2024). A Guide
+to Feature Importance Methods for Scientific Inference. In Explainable Artificial Intelligence, pages
+440–464, Cham. Springer Nature Switzerland.
+
+Baniecki, H., Casalicchio, G., Bischl, B., and Biecek,
+P. (2025). Efficient and Accurate Explanation Estimation with Distribution Compression. In The
+Thirteenth International Conference on Learning
+Representations (ICLR).
+
+Fisher, A., Rudin, C., and Dominici, F. (2019). All
+Models are Wrong, but Many are Useful: Learning a Variable’s Importance by Studying an Entire
+Class of Prediction Models Simultaneously. Journal
+of Machine Learning Research, 20(177):1–81.
+
+Blücher, S., Vielhaben, J., and Strodthoff, N. (2022).
+Preddiff: Explanations and interactions from conditional expectations. Artif. Intell., 312:103774.
+
+Friedman, E. J. (2004).
+Paths and consistency
+in additive cost sharing. Int. J. Game Theory,
+32(4):501–518.
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+Friedman, J. H. (2001). Greedy Function Approximation: A Gradient Boosting Machine. The Annals of
+Statistics, 29(5):1189–1232.
+Friedman, J. H. and Popescu, B. E. (2008). Predictive
+Learning via Rule Ensembles. The Annals of Applied
+Statistics, 2(3):916–954.
+Fujimoto, K., Kojadinovic, I., and Marichal, J. (2006).
+Axiomatic characterizations of probabilistic and
+cardinal-probabilistic interaction indices. Games
+and Economic Behavior, 55(1):72–99.
+Fumagalli, F., Muschalik, M., Kolpaczki, P.,
+Hüllermeier, E., and Hammer, B. (2024).
+KernelSHAP-IQ: Weighted Least Square Optimization for Shapley Interactions. In Forty-first
+International Conference on Machine Learning
+(ICML 2024).
+Fumagalli, F., Muschalik, M., Kolpaczki, P.,
+Hüllermeier, E., and Hammer, B. E. (2023). SHAPIQ: Unified Approximation of any-order Shapley Interactions. In Thirty-seventh Conference on Neural
+Information Processing Systems (NeurIPS 2023).
+Goldstein, A., Kapelner, A., Bleich, J., and Pitkin, E.
+(2015). Peeking Inside the Black Box: Visualizing
+Statistical Learning With Plots of Individual Conditional Expectation. Journal of Computational and
+Graphical Statistics, 24(1):44–65.
+Grabisch, M. (1997). k-order additive discrete fuzzy
+measures and their representation. Fuzzy Sets Syst.,
+92(2):167–189.
+Grabisch, M., Marichal, J.-L., and Roubens, M.
+(2000). Equivalent representations of set functions.
+Mathematics of Operations Research, 25(2):157–178.
+Grabisch, M. and Roubens, M. (1999). An axiomatic
+approach to the concept of interaction among players in cooperative games. International Journal of
+Game Theory, 28(4):547–565.
+Han, T., Srinivas, S., and Lakkaraju, H. (2022). Which
+explanation should I choose? A function approximation perspective to characterizing post hoc explanations. In Koyejo, S., Mohamed, S., Agarwal, A., Belgrave, D., Cho, K., and Oh, A., editors, Advances
+in Neural Information Processing Systems 35: Annual Conference on Neural Information Processing
+Systems 2022 (NeurIPS 2022).
+
+Herbinger, J., Bischl, B., and Casalicchio, G. (2022).
+Repid: Regional effect plots with implicit interaction detection. In International Conference on Artificial Intelligence and Statistics, pages 10209–10233.
+PMLR.
+Hiabu, M., Meyer, J. T., and Wright, M. N. (2023).
+Unifying local and global model explanations by
+functional decomposition of low dimensional structures. In International Conference on Artificial Intelligence and Statistics, pages 7040–7060. PMLR.
+Hoeffding, W. (1948). A Class of Statistics with
+Asymptotically Normal Distribution. The Annals
+of Mathematical Statistics, 19(3):293–325.
+Hooker, G. (2004). Discovering additive structure in
+black box functions. In Proceedings of the tenth
+ACM SIGKDD International Conference on Knowledge Discovery and Data mining, pages 575–580.
+Hooker, G. (2007). Generalized Functional ANOVA
+Diagnostics for High-Dimensional Functions of Dependent Variables. Journal of Computational and
+Graphical Statistics, 16(3):709–732.
+Iwasawa, H. and Matsumori, Y. (2024). Interaction
+Decomposition of prediction function.
+Janizek, J. D., Sturmfels, P., and Lee, S. (2021). Explaining Explanations: Axiomatic Feature Interactions for Deep Networks. J. Mach. Learn. Res.,
+22:104:1–104:54.
+Janzing, D., Minorics, L., and Blöbaum, P. (2020).
+Feature relevance quantification in explainable AI:
+A causal problem. In The 23rd International Conference on Artificial Intelligence and Statistics, AISTATS 2020, 26-28 August 2020, Online [Palermo,
+Sicily, Italy], volume 108 of Proceedings of Machine
+Learning Research, pages 2907–2916. PMLR.
+Kelley Pace, R. and Barry, R. (1997). Sparse spatial autoregressions. Statistics & Probability Letters,
+33(3):291–297.
+Koenen, N. and Wright, M. N. (2024). Toward Understanding the Disagreement Problem in Neural Network Feature Attribution. In Explainable Artificial
+Intelligence, page 247–269, Cham. Springer Nature
+Switzerland.
+
+Harris, C., Pymar, R., and Rowat, C. (2022). Joint
+Shapley values: a measure of joint feature importance. In Proceedings of the International Conference on Learning Representations (ICLR).
+
+Kolpaczki, P., Muschalik, M., Fumagalli, F., Hammer,
+B., and Hüllermeier, E. (2024). SVARM-IQ: Efficient Approximation of Any-order Shapley Interactions through Stratification. In Proceedings of The
+27th International Conference on Artificial Intelligence and Statistics, (AISTATS 2024), volume 238
+of Proceedings of Machine Learning Research, pages
+3520–3528. PMLR.
+
+Harsanyi, J. C. (1963). A simplified bargaining model
+for the n-person cooperative game. International
+Economic Review, 4(2):194–220.
+
+Lhoest, Q., Villanova del Moral, A., von Platen, P.,
+Wolf, T., Šaško, M., Jernite, Y., Thakur, A., Tunstall, L., Patil, S., Drame, M., Chaumond, J., Plu,
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+J., Davison, J., Brandeis, S., Sanh, V., Le Scao,
+T., Canwen Xu, K., Patry, N., Liu, S., McMillanMajor, A., Schmid, P., Gugger, S., Raw, N., Lesage,
+S., Lozhkov, A., Carrigan, M., Matussière, T.,
+von Werra, L., Debut, L., Bekman, S., and Delangue, C. (2021). Datasets: A community library
+for natural language processing. In Proceedings
+of the 2021 Conference on Empirical Methods in
+Natural Language Processing: System Demonstrations, (EMNLP 2021), pages 175–184. Association
+for Computational Linguistics.
+Lundberg, S. M., Erion, G. G., and Lee, S.-I. (2019).
+Consistent Individualized Feature Attribution for
+Tree Ensembles. arXiv preprint arXiv:1802.03888.
+Lundberg, S. M. and Lee, S.-I. (2017). A Unified Approach to Interpreting Model Predictions. In Advances in Neural Information Processing Systems,
+volume 30.
+Lundstrom, D. and Razaviyayn, M. (2023). A unifying
+framework to the analysis of interaction methods using synergy functions. In International Conference
+on Machine Learning, pages 23005–23032. PMLR.
+Maas, A. L., Daly, R. E., Pham, P. T., Huang, D.,
+Ng, A. Y., and Potts, C. (2011). Learning word
+vectors for sentiment analysis. In Proceedings of the
+49th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies, (HLT 2011), pages 142–150. Association for
+Computational Linguistics.
+Marichal, J., Kojadinovic, I., and Fujimoto, K. (2007).
+Axiomatic characterizations of generalized values.
+Discret. Appl. Math., 155(1):26–43.
+Mitchell, R., Cooper, J., Frank, E., and Holmes, G.
+(2022). Sampling Permutations for Shapley Value
+Estimation. J. Mach. Learn. Res., 23:43:1–43:46.
+Molnar, C., König, G., Bischl, B., and Casalicchio,
+G. (2023). Model-agnostic feature importance and
+effects with dependent features: a conditional subgroup approach. Data Mining and Knowledge Discovery, pages 1–39.
+Molnar, C., König, G., Herbinger, J., Freiesleben, T.,
+Dandl, S., Scholbeck, C. A., Casalicchio, G., GrosseWentrup, M., and Bischl, B. (2022). General pitfalls of model-agnostic interpretation methods for
+machine learning models. In xxAI-Beyond Explainable AI: International Workshop, Held in Conjunction with ICML 2020, July 18, 2020, Vienna, Austria, Revised and Extended Papers, pages 39–68.
+Springer.
+Muschalik, M., Baniecki, H., Fumagalli, F., Kolpaczki,
+P., Hammer, B., and Hüllermeier, E. (2024a).
+shapiq: Shapley Interactions for Machine Learning.
+
+In The Thirty-eight Conference on Neural Information Processing Systems Datasets and Benchmarks
+Track.
+Muschalik, M., Fumagalli, F., Hammer, B., and
+Hüllermeier, E. (2024b). Beyond TreeSHAP: Efficient Computation of Any-Order Shapley Interactions for Tree Ensembles. In Thirty-Eighth AAAI
+Conference on Artificial Intelligence, (AAAI 2024),
+pages 14388–14396. AAAI Press.
+Olsen, L. H. B., Glad, I. K., Jullum, M., and Aas, K.
+(2024). A comparative study of methods for estimating model-agnostic Shapley value explanations.
+Data Mining and Knowledge Discovery, pages 1–48.
+Owen, A. B. (2013). Variance Components and Generalized Sobol’ Indices. SIAM/ASA Journal on Uncertainty Quantification, 1(1):19–41.
+Owen, A. B. (2014). Sobol’ Indices and Shapley Value.
+SIAM/ASA Journal on Uncertainty Quantification,
+2(1):245–251.
+Owen, A. B. and Prieur, C. (2017). On Shapley
+Value for Measuring Importance of Dependent Inputs. SIAM/ASA Journal for Uncertainty Quantification, 5(1):986–1002.
+Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury,
+J., Chanan, G., Killeen, T., Lin, Z., Gimelshein,
+N., Antiga, L., Desmaison, A., Kopf, A., Yang, E.,
+DeVito, Z., Raison, M., Tejani, A., Chilamkurthy,
+S., Steiner, B., Fang, L., Bai, J., and Chintala,
+S. (2019). Pytorch: An imperative style, highperformance deep learning library. In Advances in
+Neural Information Processing Systems 32: Annual
+Conference on Neural Information Processing Systems 2019 (NeurIPS 2019), pages 8024–8035.
+Pedregosa, F., Varoquaux, G., Gramfort, A., Michel,
+V., Thirion, B., Grisel, O., Blondel, M., Prettenhofer, P., Weiss, R., Dubourg, V., Vanderplas, J.,
+Passos, A., Cournapeau, D., Brucher, M., Perrot,
+M., and Duchesnay, E. (2011). Scikit-learn: Machine
+Learning in Python. Journal of Machine Learning
+Research, 12:2825–2830.
+Ribeiro, M. T., Singh, S., and Guestrin, C. (2016).
+”Why Should I Trust You?”: Explaining the Predictions of Any Classifier. In Proceedings of the
+22nd ACM SIGKDD International Conference on
+Knowledge Discovery and Data Mining, San Francisco, CA, USA, August 13-17, 2016, pages 1135–
+1144. ACM.
+Robnik-Sikonja, M. and Kononenko, I. (2008). Explaining classifications for individual instances.
+IEEE Trans. Knowl. Data Eng., 20(5):589–600.
+Rota, G.-C. (1964). On the foundations of combinatorial theory: I. Theory of Möbius functions. In
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+Classic Papers in Combinatorics, pages 332–360.
+Springer.
+Sanh, V., Debut, L., Chaumond, J., and Wolf, T.
+(2019).
+Distilbert, a distilled version of bert:
+smaller, faster, cheaper and lighter.
+CoRR,
+abs/1910.01108.
+Shapley, L. S. (1953). A Value for N-person Games.
+Contributions to the Theory of Games, 2(28):307–
+317.
+Shrikumar, A., Greenside, P., and Kundaje, A. (2017).
+Learning Important Features Through Propagating Activation Differences. In Proceedings of the
+34th International Conference on Machine Learning, ICML 2017, Sydney, NSW, Australia, 6-11 August 2017, volume 70 of Proceedings of Machine
+Learning Research, page 3145–3153. PMLR.
+
+Sundararajan, M. and Najmi, A. (2020). The Many
+Shapley Values for Model Explanation. In Proceedings of the 37th International Conference on Machine Learning, ICML 2020, 13-18 July 2020, Virtual Event, volume 119 of Proceedings of Machine
+Learning Research, pages 9269–9278. PMLR.
+Sundararajan, M., Taly, A., and Yan, Q. (2017). Axiomatic Attribution for Deep Networks. In Proceedings of the 34th International Conference on Machine Learning, ICML 2017, Sydney, NSW, Australia, 6-11 August 2017, volume 70 of Proceedings
+of Machine Learning Research, pages 3319–3328.
+PMLR.
+Tan, S., Hooker, G., Koch, P., Gordo, A., and Caruana, R. (2023). Considerations when learning additive explanations for black-box models. Machine
+Learning, 112(9):3333–3359.
+
+Smilkov, D., Thorat, N., Kim, B., Viégas, F. B., and
+Wattenberg, M. (2017). SmoothGrad: removing
+noise by adding noise. CoRR, abs/1706.03825.
+
+Tsai, C.-P., Yeh, C.-K., and Ravikumar, P. (2023).
+Faith-shap: The faithful Shapley interaction index.
+Journal of Machine Learning Research, 24(94):1–42.
+
+Sobol’, I. M. (2001). Global sensitivity indices for nonlinear mathematical models and their Monte Carlo
+estimates. Mathematics and Computers in Simulation, 55(1):271–280.
+
+Tsang, M., Rambhatla, S., and Liu, Y. (2020). How
+does this interaction affect me? interpretable attribution for feature interactions. Advances in neural
+information processing systems, 33:6147–6159.
+
+Stone, C. J. (1994). The Use of Polynomial Splines
+and Their Tensor Products in Multivariate Function
+Estimation. The Annals of Statistics, 22(1):118 –
+171.
+
+Wachter, S., Mittelstadt, B. D., and Russell, C. (2017).
+Counterfactual Explanations without Opening the
+Black Box: Automated Decisions and the GDPR.
+CoRR, abs/1711.00399.
+
+Strobl, C., Boulesteix, A.-L., Kneib, T., Augustin, T.,
+and Zeileis, A. (2008). Conditional variable importance for random forests. BMC bioinformatics, 9:1–
+11.
+Strumbelj, E. and Kononenko, I. (2010). An Efficient Explanation of Individual Classifications using
+Game Theory. J. Mach. Learn. Res., 11:1–18.
+Štrumbelj, E. and Kononenko, I. (2014). Explaining
+prediction models and individual predictions with
+feature contributions. Knowledge and Information
+Systems, 41:647–665.
+Strumbelj, E., Kononenko, I., and Robnik-Sikonja, M.
+(2009). Explaining instance classifications with interactions of subsets of feature values. Data Knowl.
+Eng., 68(10):886–904.
+Sturmfels, P., Lundberg, S., and Lee, S.-I. (2020). Visualizing the Impact of Feature Attribution Baselines. Distill. https://distill.pub/2020/attributionbaselines.
+Sundararajan, M., Dhamdhere, K., and Agarwal, A.
+(2020). The Shapley Taylor interaction index. In
+International conference on machine learning, pages
+9259–9268. PMLR.
+
+Wolf, T., Debut, L., Sanh, V., Chaumond, J., Delangue, C., Moi, A., Cistac, P., Rault, T., Louf,
+R., Funtowicz, M., Davison, J., Shleifer, S., von
+Platen, P., Ma, C., Jernite, Y., Plu, J., Xu, C.,
+Scao, T. L., Gugger, S., Drame, M., Lhoest, Q., and
+Rush, A. M. (2020). Transformers: State-of-theart natural language processing. In Proceedings of
+the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations,
+(EMNLP 2020), pages 38–45. Association for Computational Linguistics.
+Zeiler, M. D. and Fergus, R. (2014). Visualizing and
+Understanding Convolutional Networks. In Computer Vision - ECCV 2014 - 13th European Conference, Zurich, Switzerland, September 6-12, 2014,
+Proceedings, Part I, volume 8689 of Lecture Notes
+in Computer Science, page 818–833. Springer.
+Zintgraf, L. M., Cohen, T. S., Adel, T., and Welling,
+M. (2017). Visualizing Deep Neural Network Decisions: Prediction Difference Analysis. In 5th International Conference on Learning Representations,
+ICLR 2017, Toulon, France, April 24-26, 2017,
+Conference Track Proceedings. OpenReview.net.
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+A PROOFS
+
+15
+
+A.1 Proof of Theorem 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+15
+
+A.2 Proof of Theorem 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+16
+
+A.3 Proof of Theorem 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+16
+
+A.4 Proof of Theorem 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+17
+
+A.5 Proof of Corollary 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+18
+
+A.6 Proof of Corollary 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+18
+
+B EXTENSIONS BEYOND OUR FRAMEWORK
+
+19
+
+B.1 Beyond b-, m- and c-fANOVA . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+19
+
+B.2 From Decompositions to Influence Measures and Back . . . . . . . . . . . . . . . . . . . . . . . .
+
+19
+
+C ADDITIONAL BACKGROUND
+
+20
+
+C.1 Background on Gradient-Based Attribution Methods . . . . . . . . . . . . . . . . . . . . . . . . .
+
+20
+
+C.2 Background on Cooperative Game Theory . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+20
+
+D ADDITIONAL DETAILS ON ILLUSTRATIVE EXAMPLES
+
+22
+
+D.1 Details on Illustration of fANOVA Decompositions . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+22
+
+D.1.1 Baseline fANOVA (b-fANOVA) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+22
+
+D.1.2 Marginal fANOVA (m-fANOVA) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+22
+
+D.1.3 Conditional fANOVA (c-fANOVA) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+23
+
+D.2 Details on Illustration of Feature Influence Methods . . . . . . . . . . . . . . . . . . . . . . . . .
+
+24
+
+E DETAILS ON UNIFYING FEATURE-BASED EXPLANATIONS
+
+26
+
+E.1 Unifying Local Feature-Based Explanations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+26
+
+E.1.1 Perturbation-Based Explanations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+26
+
+E.1.2 Gradient-Based Attribution Methods . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+28
+
+E.2 Unifying Global Feature-Based Explanations . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+31
+
+E.2.1 Sensitivity-Based Explanations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+31
+
+E.2.2 Performance-Based (Risk-Based) Explanations . . . . . . . . . . . . . . . . . . . . . . . .
+
+31
+
+F DETAILS ON EXPERIMENTAL SETUP AND REPRODUCIBILITY
+F.1 Synthetic Examples
+
+33
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+33
+
+F.2 Models and Datasets for Real-World Examples . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+33
+
+F.3 Experimental Setup . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+34
+
+F.4 Hardware Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+34
+
+G FURTHER EXPERIMENTAL RESULTS
+
+35
+
+G.1 Dissecting the Linear Models on Synthetic Data . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+35
+
+G.2 Additional Explanations on Real-World Data . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+35
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+A
+
+PROOFS
+
+In this section, we provide proofs for the claims made in the main paper. We will frequently use the following
+lemma.
+Lemma 1 (Inclusion-Exclusion Principle). For a set S and a subset L ⊆ S, the following holds
+(
+X
+1, if L = S,
+s−t
+(−1)
+=
+0, else.
+T ⊆S:T ⊇L
+Proof. It is clear that for L = S, we have T = S, and thus the sum equals 1. We therefore assume now L ⊂ S,
+and proceed to show
+
+
+s
+s
+X
+X
+X
+X
+s−ℓ
+(−1)s−t =
+(−1)s−t
+=
+(−1)s−t
+t−ℓ
+T ⊆S:T ⊇L
+
+T ⊆S:T ⊇L,|T |=t
+
+t=ℓ
+
+= (−1)s+ℓ
+
+s−ℓ
+X
+
+(−1)t
+
+
+
+t=0
+
+s−ℓ
+t
+
+
+
+t=ℓ
+
+= (−1)s+ℓ (−1 + 1)s−ℓ = 0,
+
+where we have used the binomial theorem in the last row, and s − ℓ > 0.
+A.1
+
+Proof of Theorem 1
+(b)
+
+Proof. To prove the result, we compute the b-fANOVA effect fS , which is given by definition as
+X
+X
+X (b)
+(b)
+(b)
+(b)
+(−1)s−t F (xT , b−T ),
+(−1)s−t FT (x) =
+fT (x) =
+fS (x) := FS (x) −
+T ⊂S
+
+T ⊆S
+
+T ⊆S
+
+(b)
+
+where the explicit form of fS is standard in the fANOVA literature, cf. Appendix A.5 for a derivation. Clearly,
+(b)
+for S = ∅, we have f∅ = F (b). For S with s > 0, by assumption, F can be represented by its infinite Taylor
+expansion evaluated at [xS , b−S ], cf. Eq. (3), as
+!
+(b)
+fS (x) =
+
+X
+
+(−1)s−t F (xT , b−T ) =
+
+T ⊆S
+
+X
+
+X
+
+(−1)s−t
+
+T ⊆S
+
+C(κ) · ∇F (κ) ·
+
+Y
+i∈T
+
+κ∈Nd
+0
+
+(xi − bi )κi
+
+Y
+
+(bi − bi )κi
+
+.
+
+i∈−T
+
+In the sum over κ terms vanish, if κi > 0 for a i ∈ −T , since then (bi − bi )κi is zero. Therefore, only terms
+remain, where κ ∈ ΩL with L ⊆ T . Hence, by definition of I, cf. Appendix C.1, and with exchanging sums
+!
+X
+X X
+Y
+(b)
+s−t
+κi
+fS (x) =
+(−1)
+C(κ) · ∇F (κ) ·
+(xi − bi )
+T ⊆S
+
+=
+
+X
+
+L⊆T κ∈ΩL
+s−t
+
+(−1)
+
+T ⊆S
+
+=
+
+X
+
+X X
+
+I(κ)
+
+L⊆T κ∈ΩL
+
+X
+
+(−1)s−t
+
+L⊆S T ⊆S:T ⊇L
+
+=
+
+i∈L
+
+X X
+
+I(κ)
+
+κ∈ΩL
+
+X
+
+I(κ)
+
+L⊆S κ∈ΩL
+
+X
+
+(−1)s−t .
+
+T ⊆S:T ⊇L
+
+By Lemma 1, this sum reduces to
+(b)
+fS (x) =
+
+(
+ψ(i), if S = i,
+I(κ) =
+J(S), if s > 1,
+κ∈Ω
+X
+
+S
+
+which concludes the proof.
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+A.2
+
+Proof of Theorem 2
+
+Proof. The fANOVA effects fS are determined via the value function FS . Hence it suffices to show that FS are
+equivalent under
+P these conditions, which was already partially stated by Lundberg and Lee (2017). For a linear
+model F (x) = i∈D βi xi , we have due to linearity of expectations
+X
+X
+(m)
+(b)
+FS (x) = E[F (xS , X−S )] =
+βi x i +
+βi E[Xi ] = FS (x),
+i∈S
+
+i∈−S
+
+which concludes equality of m- and b-fANOVA for a linear model. For independent features,
+(c)
+
+(m)
+
+FS (x) = E[F (X) | XS = xS ] = E[F (xS , X−S ) | XS = xS ] = E[F (xS , X−S )] = FS
+
+(x),
+
+since XS ⊥ X−S , which shows equality of m- and c-fANOVA. Second, assume F is additionally multilinear
+(linear in each feature), i.e. for a feature i ∈ D and x̃ := [x1 , . . . , αxi + β, . . . , xd ] it holds F (x̃) = αF (x) + β.
+This is known as a multilinear map, and thus F can be represented by
+X
+Y
+F (x) =
+cL
+xi ,
+i∈L
+
+L⊆D
+
+where cL ∈ R are some constants. Then, we have for the value function of m-fANOVA and bi := E[Xi ] due to
+independence and linearity of expectations
+Y
+Y
+X
+Y
+Y
+X
+(m)
+FS (x) = E[F (xS , X−S )] =
+cL E[
+xi
+Xi ] =
+cL
+xi
+E[Xi ]
+i∈L∩S
+
+L⊆D
+
+=
+
+X
+
+cL
+
+L⊆D
+
+Y
+
+Y
+
+xi
+
+i∈L∩S
+
+i∈L∩−S
+
+bi = F (xS , b−S ) = F
+
+i∈L∩S
+
+L⊆D
+(b)
+
+i∈L∩−S
+
+(xS , b−S ),
+
+i∈L∩−S
+
+which concludes the proof.
+Remark 2. Results derived from Theorem 2 for multilinear functions can be extended to linear combinations of
+multilinear functions, since expectations are linear. In summary, every model F that can be described as the sum
+of several weighted multilinear functions will have similar b- and m-fANOVA effects for independent features, if
+b := E[X].
+A.3
+
+Proof of Theorem 3
+
+Proof. In the following, our goal is to show that
+(c)
+
+(c)
+
+X
+
+m(sens) (S) = V[fS (X)] +
+
+(c)
+
+cov(fL (X), fL′ (X)).
+
+L∪L′ =S,L̸=L′
+
+P
+(c)
+(c)
+We begin by computing the global sensitivity game ν (sens) as the variance of the value function FT = S⊆T fS
+with
+X (c)
+X
+X
+(c)
+(c)
+(c)
+(c)
+ν (sens) (T ) := V[FT (X)] = V[
+fL (X)] =
+V[fL (X)] +
+cov(fL (X), fL′ (X)).
+L⊆T
+
+L,L′ ⊆T :L̸=L′
+
+L⊆T
+
+The MT is then given by definition as
+
+
+
+m(sens) (S) :=
+
+X
+
+(−1)s−t ν (sens) (T ) =
+
+T ⊆S
+
+X
+T ⊆S
+
+(−1)s−t 
+
+X
+
+(c)
+
+X
+
+V[fL (X)] +
+
+L⊆T
+
+(c)
+
+(c)
+
+cov(fL (X), fL′ (X))
+
+L,L′ ⊆T :L̸=L′
+
+We now proceed with each part separately: By exchanging sums and using Lemma 1, the first part of the sum
+reduces to
+X
+X
+X
+X
+X
+(c)
+(c)
+(c)
+(c)
+(−1)s−t
+V[fL (X)] =
+V[fL (X)]
+(−1)s−t =
+V[fL (X)]1L=S = V[fS (X)].
+T ⊆S
+
+L⊆T
+
+L⊆S
+
+T ⊆S:T ⊇S
+
+L⊆S
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+For the second part, a well-known result from sensitivity analysis (Owen, 2013) is that for independent features,
+fL and fL′ are independent as well for L ̸= L′ , and thus their covariance is zero. Hence, for independent features,
+the MT is equal to the first part. For dependent features, by exchanging sums, the second part becomes
+X
+X
+X
+X
+(c)
+(c)
+(c)
+(c)
+cov(fL (X), fL′ (X))
+(−1)s−t .
+cov(fL (X), fL′ (X)) =
+(−1)s−t
+T ⊆S
+
+T ⊆S:T ⊇L,T ⊇L′
+
+L,L′ ⊆S:L̸=L′
+
+L,L′ ⊆T :L̸=L′
+
+Moreover by applying Lemma 1, we obtain for the last sum
+X
+X
+(−1)s−t =
+T ⊆S:T ⊇L,T ⊇L′
+
+(−1)s−t = 1L∪L′ =S ,
+
+T ⊆S:T ⊇L∪L′
+
+and thus for the previous sum
+X
+(c)
+(c)
+cov(fL (X), fL′ (X))
+
+X
+T ⊆S:T ⊇L,T ⊇L′
+
+L,L′ ⊆S:L̸=L′
+
+X
+
+(−1)s−t =
+
+(c)
+
+(c)
+
+(c)
+
+(c)
+
+cov(fL (X), fL′ (X))1L∪L′ =S
+
+L,L′ ⊆S:L̸=L′
+
+X
+
+=
+
+cov(fL (X), fL′ (X)).
+
+L∪L′ =S,L̸=L′
+
+Together with the first part, we obtain
+(c)
+
+(c)
+
+X
+
+m(sens) (S) = V[fS (X)] +
+
+(c)
+
+cov(fL (X), fL′ (X)),
+
+L∪L′ =S,L̸=L′
+
+which concludes the proof.
+A.4
+
+Proof of Theorem 4
+
+Proof. Our goal is to show that the MT is distributed according to Table 2. Note that joint effects and interaction
+effects, as well as the formulas in Table 2, reduce to individual effects for S = i, and thus it suffices to prove
+the results for general S ⊆ D and joint and interaction effects. In the following, we heavily rely on the recovery
+property of the MT (Rota, 1964)
+X
+ν(T ) =
+m(S).
+S⊆T
+
+Joint effects. The pure joint effect is given by
+X
+X
+X
+ϕ∅ (S) = ν(S) − ν(∅) =
+m(L) − m(∅) =
+m(L) = m(S) +
+m(L),
+L⊆S
+
+∅̸=L⊆S
+
+as shown in Table 2. The full joint effect is given by
+X
+X
+ϕ+ (S) = ν(D) − ν(−S) =
+m(L) −
+m(L) =
+L⊆D
+
+= m(S) +
+
+X
+
+L⊆−S
+
+∅̸=L⊂S
+
+X
+L⊆D:L̸⊆−S
+
+m(L) =
+
+X
+
+m(L)
+
+L⊆D:L∩S̸=∅
+
+m(L),
+
+L⊆D:L∩S /
+∈{∅,S}
+
+as shown in Table 2. Lastly, the partial joint effect is a well-known result of GVs, cf. (Marichal et al., 2007,
+Proposition 4.3).
+Interaction effects. For interaction effects, the pure interaction effect is by definition the MT m(S), as shown
+in Table 2. Moreover, the full interaction effect is by definition the Co-MT, where the representation in Table 2 is
+a well-known result from cooperative game theory, cf. (Grabisch et al., 2000, Table 3, third row, second column).
+Lastly, the partial effect is a well-known result for interaction indices, cf. (Fujimoto et al., 2006, Proposition 4.1).
+Additionally, for SIs, the representations are given in the corresponding paper and are summarized in (Bordt
+and von Luxburg, 2023, Theorem 8).
+Since joint and interaction effects reduce to individual effects for S = i, this concludes the proof.
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+A.5
+
+Proof of Corollary 1
+
+Proof. This result follows directly by induction over the size of subsets s, where we omit the dependence of x0 in
+νx0 and mx0 for readability. For s = 0, we have f∅ = F∅ = ν(∅) = m(∅). According to the definition of fANOVA
+effects for individuals (s = 1), we have
+X
+X
+fi = Fi −
+fT = Fi − F∅ =
+(−1)1−t FT = m(i).
+T ⊂i
+
+T ⊆i
+
+Moreover, assume the statement holds for 1, . . . , s − 1 features, then
+X
+X X
+X
+X
+fS = FS −
+f T = FS −
+(−1)t−ℓ FL = FS −
+FL
+T ⊂S
+
+T ⊂S L⊆T
+
+L⊆S
+
+
+= FS −
+
+X
+
+FL 
+
+= FS − FS +
+
+X
+
+T ⊂S:T ⊇L
+
+
+X
+
+(−1)t−ℓ − (−1)s−ℓ  = FS −
+
+T ⊆S:T ⊇L
+
+L⊆S
+
+(−1)t−ℓ
+
+FL (−1)
+
+s−ℓ
+
+X
+
+X
+
+FL (−1)s−ℓ
+
+T ⊆S:T ⊇L
+
+L⊆S
+
+(−1)s−t +
+
+X
+
+FL (−1)s−ℓ
+
+L⊆S
+
+= m(S),
+
+L⊆S
+
+where we have used Lemma 1 in the last row.
+A.6
+
+Proof of Corollary 2
+
+The PD function ϕPD for a set of features S ⊆ D at x is defined as
+(m)
+
+ϕPD
+x (S) = E[F (xS , X−S )] = FS
+
+(x).
+
+On the other hand the M plot function is given by
+(c)
+
+ϕM
+x (S) = E[F (X) | XS = xS ] = FS (x).
+In summary, the underlying functions of PDP and M plot correspond to the value functions of m- and c-fANOVA.
+In practice, Monte Carlo sampling is used to approximate these functions (Friedman, 2001; Apley and Zhu, 2020).
+Using FS (x), we can compute m- and c-fANOVA, respectively.
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+B
+
+EXTENSIONS BEYOND OUR FRAMEWORK
+
+In this section, we additionally provide some details on a broader perspective of the framework.
+B.1
+
+Beyond b-, m- and c-fANOVA
+
+In our framework, we introduced three types of fANOVA decompositions, which correspond to the most prominent examples used in XAI literature. The decomposition is specified by the choice of imputation method in
+the value function FS . Less prominent examples include re-training of models (Strumbelj et al., 2009), where
+for a subset of features S ⊆ D the model is fit to the data using only the features in S. While b-, m-, and
+c-fANOVA compress the feature distribution information in the explanation, model re-training additionally includes the model fitting procedure. In future work, it would be interesting to extend our theoretical analysis to
+such extensions for simple examples, like the linear regression model.
+B.2
+
+From Decompositions to Influence Measures and Back
+
+Using a suitable type of imputation method, and thereby definition of FS , we obtain a fANOVA decomposition.
+This is ensured by the recursive definition of fANOVA effects from Eq. (1). In fact, for the last effect, we have
+X
+fD (x) = F (x) −
+fS (x),
+S⊂D
+
+which yields a decomposition, as described for instance by Apley and Zhu (2020); Iwasawa and Matsumori (2024).
+Moreover, this recursive definition related to the MT also ensures the orthogonality-like property (Apley and
+Zhu, 2020; Iwasawa and Matsumori, 2024). Notably, partial individual, joint and interaction effects summarize
+this fANOVA again into a functional decomposition (Bordt and von Luxburg, 2023) with components up to
+order k, i.e.
+
+F (x) =
+
+X
+
+ϕk (x, S).
+
+S⊆D:s≤k
+
+In this context, the explanation ϕk up to order k can be viewed as a restricted fANOVA with components up
+to order k. In future work, it would be interesting to understand how well such a low-complexity decomposition
+describes the model.
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+C
+
+ADDITIONAL BACKGROUND
+
+In this section, we provide additional theoretical background.
+C.1
+
+Background on Gradient-Based Attribution Methods
+
+Taylor interactions (Deng et al., 2024) are the components of the infinite Taylor expansion of F at a baseline b
+F (x) =
+
+X
+1
+∂ κ1 +···+κd F (b)
+· (x1 − b1 )κ1 . . . (xd − bd )κd =
+C(κ) · ∇F (κ) · π(κ)
+· κ1
+d
+κ1 ! . . . κd ! ∂ x1 . . . ∂κ xd
+d
+d
+
+X
+
+(3)
+
+κ∈N0
+
+κ∈N0
+k
+
+where ∂∂ kF are the k-th order partial derivative, and the Taylor interactions are defined as
+I(κ) := C(κ) · ∇F (κ) · π(κ) with
+1
+C(κ) :=
+κ1 ! . . . κd !
+∂ κ1 +···+κd F (b)
+∇F (κ) := κ1
+∂ x1 . . . ∂κd xd
+π(κ) := (x1 − b1 )κ1 . . . (xd − bd )κd .
+The sum ranges over all possible orders of partial derivatives per feature κ = [κ1 , . . . , κd ] ∈ Nd0 . This set can be
+partitioned into the following sets
+G
+G
+{κ ∈ Nd0 } = {[0, . . . , 0]} ⊔i∈D Ωi ⊔S⊆D,s>1 ΩS ,
+where ΩS := {κ | ∀i ∈ S : κi > 0, ∀i ∈
+/ S : κi = 0} is the set of degree vectors, where partial derivatives are
+computed exclusively for features in S. Notably, for κ = [0, . . . , 0], we have I(κ) = F (b). Therefore, the Taylor
+interactions can be summarized by three sums
+X
+X X
+X X
+X X
+X X
+F (x) =
+I(κ) = F (b) +
+I(κ) +
+I(κ) = F (b) +
+ϕ(κ) +
+I(κ),
+κ∈Nd
+0
+
+i∈D κ∈Ωi
+
+S⊆D,s>1 κ∈ΩS
+
+i∈D κ∈Ωi
+
+S⊆D,s>1 κ∈ΩS
+
+where we defined ϕ(κ) := I(κ) for κ ∈ Ωi . ϕ is called the Taylor independent effect, whereas I(κ) for κ ∈ ΩS
+with s > 1 is called the Taylor interaction effect. The Taylor independent and interaction effects can be further
+summarized according to the features i ∈ D and subsets S ⊆ D with s > 1 as
+X X
+X X
+X
+X
+F (x) = F (b) +
+ϕ(κ) +
+I(κ) = F (b) +
+ψ(i) +
+J(S),
+i∈D κ∈Ωi
+
+S⊆D,s>1 κ∈ΩS
+
+i∈D
+
+S⊆D,s>1
+
+where ψ is the generic independent effect, and J the generic interaction effect, defined by
+X
+X
+ψ(i) :=
+ϕ(κ) and J(S) :=
+I(κ).
+κ∈Ωi
+
+C.2
+
+(4)
+
+κ∈ΩS
+
+Background on Cooperative Game Theory
+
+In this section, we briefly cover the definitions of GVs (Marichal et al., 2007) and Interaction Indices (II)
+(Fujimoto et al., 2006). Both were introduced based on axioms as a weighted sum of joint marginal contributions
+and discrete derivatives as
+X
+X
+ϕGV (S) :=
+pst ∆[S] (T ) and ϕII (S) :=
+pst ∆S (T ).
+T ⊆D\S
+
+T ⊆D\S
+
+The weights pst correspond to a discrete probability distribution and depend only on the subset sizes of T and
+S. Particular instances of IIs and GVs are the Shapley II (Grabisch and Roubens, 1999) and the Shapley GV
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+
+d−s −1
+1
+(Marichal et al., 2007), which are obtained by pst = d−s+1
+. It was shown by Fujimoto et al. (2006);
+t
+Marichal et al. (2007) that GVs and IIs can be written via the MT as
+X
+X
+II
+s
+s
+ϕGV (S) =
+w|T
+w|T
+\S| m(T ).
+\S| m(T ) and ϕ (S) =
+T ⊆D:T ∩S̸=∅
+
+T ⊆D:T ⊇S
+
+The corresponding conversion formulas from p to w can be found in Fujimoto et al. (2006); Marichal et al. (2007).
+1
+For example, the Shapley GV and Shapley II are obtained with wℓs = ℓ+1
+.
+For machine learning applications, particularly for local explanations, these indices are not optimal, since they
+do not sum to the overall payout (model prediction), referred to as efficiency (Tsai et al., 2023). As a remedy,
+SIs ϕSI
+k are a sub-family of IIs, which are defined for subsets up to an explanation order k, i.e. for subsets S ⊆ D
+with 1 ≤ s ≤ k. It is required that SIs are efficient, i.e. the sum of all values yields the overall payout, which is
+particularly interesting for local explanations, as it requires that the sum of all explanations yields the model’s
+prediction. Given an explanation order k, we define
+X
+generalized efficiency: ν(D) =
+ϕSI
+k (S),
+S⊆D:s≤k
+
+where typically ϕSI
+k (∅) = ν(∅). SIs were built on the SII (Grabisch and Roubens, 1999), known as k-SVs (k-SII)
+(Bordt and von Luxburg, 2023). Moreover, the Shapley Taylor interaction index (Sundararajan et al., 2020) and
+the faithful Shapley interaction index (Tsai et al., 2023) have been proposed. These SIs differ by their choice
+of axioms, and it was shown that they differently summarize higher-order interactions (Bordt and von Luxburg,
+2023). Moreover, the SIs for k = 1 yield the SVs and for k = d the MT. The SIs thus have a complexity-accuracy
+trade-off with k. For the exact definition of weights, we refer to each paper.
+The JointSVs (Harris et al., 2022) are similar to SIs, as they are also based on an explanation order k and yield
+an efficient index. However, they are based on GVs, and we refer to the definition of weights to the corresponding
+paper.
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+D
+
+ADDITIONAL DETAILS ON ILLUSTRATIVE EXAMPLES
+
+In this section, we provide more details and derivations of the illustrative examples in Section 3.
+D.1
+
+Details on Illustration of fANOVA Decompositions
+
+In Section 3.1, we demonstrate the difference of b-, m- and c-fANOVA on a purely linear function Flin =
+β1 x1 + β2 x2 containing only the main effects of the two multivariate normally distributed features X ∼ N (µ, Σ)
+with mean vector µ ∈ R2 and covariance matrix Σ ∈ R2×2 , and a second function additionally containing the
+linear interaction between the two features: F2int = Flin + β12 x1 x2 . We now derive the main and two-way
+interaction fANOVA effects for each of the two functional relationships and each of the three distributional
+assumptions of the underlying fANOVA decomposition, which are summarized in Table 1 in the main paper.
+D.1.1
+
+Baseline fANOVA (b-fANOVA)
+
+Here, we define the functional components for the two functional relationships Flin and F2int based on the
+b-fANOVA.
+Linear Main Effect Model.
+(b)
+
+f∅
+
+= Flin (b)
+= β1 b1 + β2 b2
+
+(b)
+(b)
+fi (x) = Flin (xi , bj ) − f∅
+
+= βi xi + βj bj − (βi bi + βj bj )
+= βi (xi − bi )
+(b)
+
+(b)
+
+(b)
+
+(b)
+
+f12 (x) = Flin (x1 , x2 ) − f1 (x) − f2 (x) − f∅
+
+= β1 x1 + β2 x2 − β1 (x1 − b1 ) − β2 (x2 − b2 ) − (β1 b1 + β2 b2 )
+=0
+(b)
+
+(b)
+
+(b)
+
+It follows that Flin (x) = f∅ + f1 (x) + f2 (x), hence, the function can be decomposed into a constant plus
+the centered first-order (main) effects of the two features. The centering is based on the baseline value b for
+b-fANOVA.
+Linear Model with a Two-Way Interaction.
+(b)
+
+f∅
+
+= F2int (b)
+= β1 b1 + β2 b2 + β12 b1 b2
+
+(b)
+(b)
+fi (x) = F2int (xi , bj ) − f∅
+
+= βi xi + βj bj + βij xi bj − (βi bi + βj bj + βij bi bj )
+= βi (xi − bi ) + βij bj (xi − bi )
+(b)
+(b)
+(b)
+(b)
+f12 (x) = F2int (x1 , x2 ) − f1 (x) − f2 (x) − f∅
+
+= β1 x1 + β2 x2 + β12 x1 x2 − (β1 (x1 − b1 ) + β12 b2 (x1 − b1 ))
+(b)
+
+− (β2 (x2 − b2 ) + β12 b1 (x2 − b2 )) − f∅
+= β12 (x1 − b1 )(x2 − b2 )
+(b)
+
+(b)
+
+(b)
+
+(b)
+
+It follows that Fint (x) = f∅ + f1 (x) + f2 (x) + f12 (x), hence, the function can be decomposed into a constant,
+the centered first-order (main) effects of the two features, and their joint centered interaction.
+D.1.2
+
+Marginal fANOVA (m-fANOVA)
+
+Here, we define the functional components for the two functional relationships Flin and F2int based on the
+m-fANOVA.
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+Linear Main Effect Model.
+
+(m)
+
+f∅
+
+= E[Flin (X)]
+= β1 µ1 + β2 µ2
+
+(m)
+(m)
+fi (x) = E[Flin (xi , Xj )] − f∅
+
+= βi xi + βj µj − (βi µi + βj µj )
+= βi (xi − µi )
+(m)
+
+(m)
+
+f12 (x) = Flin (x1 , x2 ) − f1
+
+(m)
+
+(x) − f2
+
+(m)
+
+(x) − f∅
+
+= β1 x1 + β2 x2 − β1 (x1 − µ1 ) − β2 (x2 − µ2 ) − (β1 µ1 + β2 µ2 ))
+=0
+
+(m)
+
+(m)
+
+(m)
+
+It follows that Flin (x) = f∅ + f1 (x) + f2 (x), hence, the function can be decomposed into a constant plus
+the mean-centered first-order (main) effects of the two features. As shown in Theorem 2, b-fANOVA corresponds
+to m-fANOVA for this linear functional relationship if b := µ.
+
+Linear Model with a Two-Way Interaction.
+
+(m)
+
+f∅
+
+= E[F2int (X)]
+= β1 µ1 + β2 µ2 + β12 (σ12 + µ1 µ2 )
+
+(m)
+
+fi
+
+(m)
+
+(x) = E[F2int (xi , Xj )] − f∅
+
+= βi xi + βj µj + βij xi µj − (βi µi + βj µj + βij (σij + µi µj ))
+= βi (xi − µi ) + βij µj (xi − µi ) − βij σij
+(m)
+(m)
+(m)
+(m)
+f12 (x) = F2int (x1 , x2 ) − f1 (x) − f2 (x) − f∅
+
+= β1 x1 + β2 x2 + β12 x1 x2 − (β1 (x1 − µ1 ) + β12 µ2 (x1 − µ1 ) − β12 σ12 )
+(m)
+
+− (β2 (x2 − µ2 ) + β12 µ1 (x2 − µ2 ) − β12 σ12 ) − f∅
+= β12 (x1 − µ1 )(x2 − µ2 ) + β12 σ12
+
+with E[X1 X2 ] = cov(X1 , X2 ) + E[X1 ]E[X2 ] = σ12 + µ1 µ2 . The functional relationship can be decomposed
+(m)
+(m)
+(m)
+(m)
+by Fint (x) = f∅ + f1 (x) + f2 (x) + f12 (x) using m-fANOVA. Hence, the function can be decomposed
+into a constant, the mean-centered first-order (main) effects of the two features, and their joint mean-centered
+interaction. Since m-fANOVA integrates over the joint marginal distribution, correlations of features in −S can
+influence the functional components by an additive shift (here: β12 σ12 ). However, dependencies between S and
+−S in m-fANOVA are broken, and thus are not influencing the definition of the functional components.
+
+D.1.3
+
+Conditional fANOVA (c-fANOVA)
+
+Here, we define the functional components for the two functional relationships Flin and F2int based on the
+c-fANOVA.
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+Linear Main Effect Model.
+(c)
+
+f∅
+
+= E[Flin (X)]
+= β1 µ1 + β2 µ2
+
+(c)
+(c)
+fi (x) = E[Flin (X)|Xi = xi ] − f∅
+
+
+
+
+σij
+= βi xi + βj µj +
+(xi − µi ) − (βi µi + βj µj )
+V[Xi ]
+βj σij
+= βi (xi − µi ) + (xi − µi )
+V[Xi ]
+(c)
+
+(c)
+
+(c)
+
+(c)
+
+f12 (x) = Flin (x1 , x2 ) − f1 (x) − f2 (x) − f∅
+
+= β1 x1 + β2 x2 − β1 (x1 − µ1 ) − (x1 − µ1 )
+− β2 (x2 − µ2 ) − (x2 − µ2 )
+X
+
+=−
+
+(xℓ − µℓ )
+
+ℓ∈{1,2}
+
+β2 σ12
+V[X1 ]
+
+β1 σ12
+− (β1 µ1 + β2 µ2 )
+V[X2 ]
+
+β−ℓ σ−ℓ,ℓ
+V[Xℓ ]
+(c)
+
+σ
+
+(c)
+
+(c)
+
+(c)
+
+ij
+with E[X|Xi = xi ] = µj + V[X
+(xi − µi ). It follows that Flin (x) = f∅ + f1 (x) + f2 (x) + f12 (x), where
+i]
+the second-order term adjusts for the cross-correlation effects added in the first-order terms to account for the
+influence of the feature distribution.
+
+Linear Model with a Two-Way Interaction.
+(c)
+
+f∅
+
+= E[F2int (X)]
+= β1 µ1 + β2 µ2 + β12 (σ12 + µ1 µ2 )
+
+(c)
+(c)
+fi (x) = E[F2int (X)|Xi = xi ] − f∅
+
+
+
+
+
+σij
+σij
+= βi xi + βj µj +
+(xi − µi ) + βij xi µj +
+(xi − µi )
+V[Xi ]
+V[Xi ]
+− (βi µi + βj µj + βij (σij + µi µj )
+
+
+σij xi
+βj σij
++ βij (xi − µi ) µj +
+= βi (xi − µi ) + (xi − µi )
+− βij σij
+V[Xi ]
+V[Xi ]
+(c)
+
+(c)
+
+(c)
+
+(c)
+
+f12 (x) = F2int (x1 , x2 ) − f1 (x) − f2 (x) − f∅
+
+= βij (x1 − µ1 )(x2 − µ2 ) + β12 σ12
+
+
+X
+β−ℓ σ−ℓ,ℓ
+(x1 − µ1 )x1
+(x2 − µ2 )x2
+−
+(xℓ − µℓ )
+− β12 σ12
++
+V[Xℓ ]
+V[X1 ]
+V[X2 ]
+ℓ∈{1,2}
+
+
+(x1 − µ1 )x1
+(x2 − µ2 )x2
+(m)
+(c)
+= f2int + flin − β12 σ12
++
+V[X1 ]
+V[X2 ]
+σ
+
+ij
+with E[X1 X2 ] = cov(X1 , X2 ) + E[X1 ]E[X2 ] = σ12 + µ1 µ2 and E[X|Xi = xi ] = µj + V[X
+(xi − µi ). The functional
+i]
+
+(c)
+
+(c)
+
+(c)
+
+(c)
+
+relationship can be decomposed by Fint (x) = f∅ + f1 (x) + f2 (x) + f12 (x) using c-fANOVA. Compared to
+m-fANOVA, c-fANOVA integrates over the conditional distribution. Hence, features in −S may influence feature
+effects of S through cross-correlation effects if features are dependent on each other.
+D.2
+
+Details on Illustration of Feature Influence Methods
+
+In this section, we provide more detailed definitions of the feature influence methods of the illustrative example
+of Section 3.4. As defined in Section 3.4, we assume that we are given three independent and standard normally
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+distributed features X1 , X2 , X3 ∼ N (0, 1) and the following functional relationship: F (x) = x1 +x2 +x3 +x1 x2 +
+x1 x2 x3 . In this case the m-fANOVA is equivalent to the c-fANOVA and the b-fANOVA with b = E[X]. We
+now define the feature influence measures based on the fANOVA decomposition. The respective weights of each
+effect are summarized in Table 3 in the main paper.
+Individual Effects for i = 1.
+ϕ∅x (i) = f1 (x) = x1
+1
+1
+1
+1
+ϕSV
+x (i) = f1 (x) + f12 (x) + f123 (x) = x1 + x1 x2 + x1 x2 x3
+2
+3
+2
+3
+ϕ+
+x (i) = f1 (x) + f12 (x) + f123 (x) = x1 + x1 x2 + x1 x2 x3
+
+Joint Effects for ij = {1, 2}.
+ϕ∅ (ij) = f1 (x) + f2 (x) + f12 (x) = x1 + x2 + x1 x2
+ϕGV (ij) = f1 (x) + f2 (x) + f12 (x) + w12 f123 (x) = x1 + x2 + x1 x2 + w12 x1 x2 x3
+ϕ+ (ij) = f1 (x) + f2 (x) + f12 (x) + f123 (x) = x1 + x2 + x1 x2 + x1 x2 x3
+
+Interaction Effects for ij = {1, 2}.
+ϕI∅ (ij) = f12 (x) = x1 x2
+ϕSI (ij) = f12 (x) + w12 f123 (x) = x1 x2 + w12 x1 x2 x3
+ϕI+ (ij) = f12 (x) + f123 (x) = x1 x2 + x1 x2 x3
+
+where E[F (X)] = f∅ = 0 and E[F (xS , X−S )] = E[F (X)|XS = xS ] and E[Xi Xj ] = E[Xi ]E[Xj ] holds due to the
+above stated distributional assumptions.
+Note that for a linear functional relationship without interactions and uncorrelated features, the individual
+influence methods result in the same contribution defined by the main effect: ϕ∅ (i) = ϕSV (i) = ϕ+ (i) =
+βi · (xi − µi ), while the interaction influence methods become zero: ϕI∅ (S) = ϕSI (S) = ϕI+ (S) = 0.
+Similarly to individual influence methods, the pure, partial, and
+Pfull effects result
+P in the same contribution defined
+by the sum of the main effects: ϕ∅ (S) = ϕGV (S) = ϕ+ (S) = i∈S ϕ∅ (i) = i∈S βi · (xi − µi ).
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+E
+
+DETAILS ON UNIFYING FEATURE-BASED EXPLANATIONS
+
+In this section, we present a more comprehensive categorization of existing methods using our framework. We
+categorize all methods in Table 4. We further describe and explain our categorization for local explanations (Appendix E.1), global sensitivity analysis (Appendix E.2.1), and global risk-based explanations (Appendix E.2.2).
+Table 4: Categorization of XAI methods for local, sensitivity, and risk explanation game, where ∗ is based on gradients
+
+Distribution
+coverage
+
+Higher-order
+Interaction
+Influence
+
+Feature
+Influence
+
+pure (no)
+
+individual
+joint
+interaction
+individual
+
+b-fANOVA
+partial
+
+joint
+interaction
+
+BSHAP, Integrated Gradients,
+DeepSHAP∗ ,
+∗
+DeepLIFT
+Joint SVs
+Shapley Taylor Interaction, Faith-SHAP, Integrated
+Hessians∗
+
+full
+
+ICE, Occlusion-1, Gradient×Input∗ (more than full)
+ICE, Occlusion-patch
+
+pure (no)
+
+individual
+joint
+interaction
+
+PDP, Closed Sobol’ Index (τ )
+PDP, Closed Sobol’ Index (τ )
+Int. Shapley-GAM, H-statistic
+
+individual
+
+Int. SHAP, Expected Gradient∗ , Sobol’-SV, SAGE
+(in practice)
+
+partial
+
+joint
+interaction
+
+Int. k-SVs
+
+full
+
+individual
+joint
+interaction
+
+Total Sobol’ Index (τ̄ ), Superset measure (Υ2 ), PFI
+Total Sobol’ Index (τ̄ ), Grouped PFI
+Superset measure (Υ2 )
+
+pure (no)
+
+individual
+joint
+interaction
+
+M Plot, ALE∗
+M Plot
+Obs. Shapley-GAM, ALE∗
+
+individual
+joint
+interaction
+
+Obs. SHAP, TreeSHAP, Sobol’-SV, SAGE
+
+partial
+
+individual
+joint
+interaction
+
+CFI, PredDiff-1
+PredDiff-Patch
+PredDiff-Interaction
+
+full
+
+E.1
+
+ArchAttribute, Gradient×Input∗ (linear F ), LRP-ϵ∗
+ArchAttribute
+
+individual
+joint
+interaction
+
+m-fANOVA
+
+c-fANOVA
+
+Explanations
+
+Obs. k-SVs
+
+Unifying Local Feature-Based Explanations
+
+Here, we summarize local feature-based explanations, i.e. explanations based on the local explanation game.
+E.1.1
+
+Perturbation-Based Explanations
+
+First, we summarize perturbation-based explanations.
+Occlusion-1 and Occlusion-Patch. Occlusion-1 and Occlusion-Patch (Zeiler and Fergus, 2014) were introduced for image data. By masking the relevant feature (or feature patch) the change in prediction is measured.
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+More formally, in the general case, Occlusion-Patch computes for a patch of features S ⊆ D
+(b)
+
+ϕOcclusion-Patch (S) := F (x) − F−S (x) = νx(loc) (D) − νx(loc) (−S) = ϕ+ (S),
+using a baseline b. Hence, Occlusion-Patch corresponds to the full joint effect ϕ+ , and to the full individual effect
+for Occlusion-1 using b-fANOVA.
+PredDiff-1, PredDiff-Patch and PredDiff-Interaction PredDiff (Robnik-Sikonja and Kononenko, 2008)
+is a popular method for image classification tasks (Zintgraf et al., 2017). It measures similarly to Occlusion the
+change in prediction when masking features. However, instead of using a baseline, PredDiff uses the conditional
+distribution, i.e., for a patch S ⊆ D
+(c)
+
+ϕPredDiff-Patch (S) := F (x) − E[F (X) | X−S = x−S ] = F (x) − F−S (x) = νx(loc) (D) − νx(loc) (−S) = ϕ+ (S).
+Hence, PredDiff-Patch measures the full joint effect, and PredDiff-1 the full individual effect of c-fANOVA.
+PredDiff-Interaction (Blücher et al., 2022) measures the interaction by extracting individual effects, thereby
+measuring full interaction effects of c-fANOVA.
+Individual Conditional Expectations (ICE). ICE curves (Goldstein et al., 2015) visualize the influence
+of a feature of interest on the prediction in the presence of all other features. The ICE function itself is defined
+for individual or groups of features at some baseline value xS = bS which is typically chosen from XS , while the
+remaining features are set to the observed feature values of the instance to be explained:
+ϕICE (S) := F (bS , x−S )
+Centering ICE curves to remove additive shifts is typically done to understand and quantify the influence of
+feature interactions (Herbinger et al., 2022). One possibility is to center it according to the actual prediction of
+the instance, which leads to the full individual (S = i) and joint influence measure ϕ+ (S) using b-fANOVA. It
+is defined by
+X
+(b)
+(b)
+ϕc-ICE (S) := −(F (bS , x−S ) − F (x)) = fS (x) +
+fT (x).
+T ⊆D:T ∩S /
+∈{S,∅}
+
+Shapley Additive Explanations (SHAP). Baseline SHAP (BSHAP) (Strumbelj and Kononenko, 2010;
+(b)
+Sundararajan and Najmi, 2020) computes the SV on the set function ν (loc) (S) = FS (x0 ), i.e., the local explanation game. Therefore, BSHAP corresponds to the partial individual effect of b-fANOVA. On the contrary,
+interventional (int.) SHAP (Lundberg and Lee, 2017; Janzing et al., 2020) computes the SV on the marginal
+(m)
+expectations ν (loc) (S) = FS (x0 ), i.e., the partial individual effects of m-fANOVA. Lastly, observational (obs.)
+SHAP (Štrumbelj and Kononenko, 2014; Lundberg and Lee, 2017; Aas et al., 2021) computes the SV on the
+(c)
+conditional expectations ν (loc) (S) = FS (x0 ), i.e., the partial individual effect of c-fANOVA.
+TreeSHAP. TreeSHAP (Lundberg et al., 2019) is a model-specific method for tree-based models. It computes
+the exact SVs on the tree-induced conditional distribution, i.e., the conditional distribution approximated by
+the learned tree structure. Hence, TreeSHAP corresponds to the partial indivdual effect of c-fANOVA. Notably,
+conditional expectations approximated by trees might have significant drawbacks in practice (Aas et al., 2021).
+k-Shapley Values (k-SVs) and the Shapley-GAM. k-SVs (Bordt and von Luxburg, 2023) are an extension of pairwise Shapley interactions (Lundberg et al., 2019) introduced on trees. The k-SVs compute the
+Shapley interaction index (Grabisch and Roubens, 1999) for the highest order, and adjust lower-order interactions recursively. k-SVs can be applied with baseline, marginal (interventional), and conditional (observational)
+imputations, thereby measuring partial interaction effects of b-, m- and c-fANOVA, respectively. The ShapleyGAM (Bordt and von Luxburg, 2023) is the edge case of k-SVs for k = d. They provide the pure interaction
+effects for b-,m-, and c-fANOVA, depending on which imputation method is used.
+Shapley Taylor Interaction Index. The Shapley Taylor interaction index (Sundararajan et al., 2020) is
+an extension of the SV that measures partial interaction effects up to explanation order k. The highest-order
+interactions (order = k) thereby capture all higher-order interactions (order > k). In general, the Shapley-Taylor
+interactions can be applied with any set function, but were introduced on b-fANOVA.
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+Faithful Shapley Interaction Index (Faith-SHAP). The faithful Shapley interaction index (Faith-SHAP)
+(Tsai et al., 2023) is an extension of SVs, and specifies partial interactions up to explanation order k. In contrast
+to Shapley-Taylor interactions, it distributes higher-order interactions on all interactions that are computed.
+It thereby corresponds to a faithful approximation of the game given the Shapley-weighted regression problem
+(Tsai et al., 2023). Faith-SHAP can be applied to any set function, but was presented using a baseline, and
+therefore corresponds to b-fANOVA.
+Joint Shapley Values (JointSV). JointSVs (Harris et al., 2022) were introduced as an extension to SVs for
+interactions up to explanation order k. JointSVs are based on joint marginal contributions and thereby measure
+a partial joint effect. While JointSVs can be applied to any set function, they were introduced with baseline
+imputation, thereby corresponding to b-fANOVA.
+ArchAttribute. ArchAttribute (Tsang et al., 2020) is a feature attribution method that quantifies the pure
+effect of an individual feature or a group of features compared to a baseline context and is defined by:
+ϕArchAttr (S) := F (xS , b−S ) − F (b).
+(b)
+
+This definition directly corresponds to the individual pure effect ϕ∅x (i) = fi (x) for S = i and the joint pure
+P
+(b)
+effect ϕ∅x (S) = ∅̸=L⊆S fL (x) for |S| > 1 using b-fANOVA.
+Partial Dependence Plot (PDP). The PDP is a global feature effect method that visualizes the expected
+marginal effect of an individual or a group of features on the predicted outcome (Friedman, 2001). The underlying
+partial dependence (PD) function is defined at a data point xS ∈ XS by
+ϕPD (S) := E[F (xS , X−S )].
+Similarly to ICE curves, PDPs are centered to remove additive shifts (Herbinger et al., 2022). Centering the PD
+function with respect to mean prediction leads to the pure individual (S = i) and joint influence ϕ∅ (S) using the
+m-fANOVA. The centered PD function is defined by
+X (m)
+ϕc-PD (S) := E[F (xS , X−S )] − E[F (X)] =
+fL (x).
+∅̸=L⊆S
+
+Marginal (M) Plot. The M Plot is the conditional variant of the PDP, i.e., a global feature effect method
+that visualizes the conditional expected marginal effect of an individual or a group of features on the predicted
+outcome (Friedman, 2001; Apley and Zhu, 2020). The underlying marginal (M) function is defined at a data
+point xS ∈ XS by
+ϕM (S) := E[F (X)|XS = xS ].
+Such as for PDPs, also M Plots can be centered with respect to mean prediction which results in the pure
+individual (S = i) and joint influence ϕ∅ (S) using the c-fANOVA. The centered M function is defined by
+X (c)
+ϕc-M (S) := E[F (X)|XS = xS ] − E[F (X)] =
+fL (x).
+∅̸=L⊆S
+
+E.1.2
+
+Gradient-Based Attribution Methods
+
+In this section, we briefly introduce gradient-based attribution methods and categorize them according to our
+framework. There exist two categories of gradient-based methods: Methods either rely directly on the output,
+or compute attributions layer by layer and back-propagate these. It was shown (Ancona et al., 2018) that the
+layer-wise attribution computation is not necessary. In the following, we analyze layer-wise attribution methods
+for each layer independently, which follows Deng et al. (2024).
+Grad×Input. Grad×Input is a fundamental method to attribute importance to individual features (Shrikumar
+et al., 2017). The method simply computes
+ϕGrad×Input (i) :=
+
+∂F (x)
+xi .
+∂xi
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+This method typically assumes centered features, i.e. E[X] = 0, and we generalize it with the baseline b := E[X]
+as
+∂F (x)
+ϕGrad×Input (i) :=
+(xi − bi ).
+∂xi
+As discussed in Section 3, the gradient describes the sum of all fANOVA effects to
+∂F
+=
+∂xi
+
+(b)
+
+X
+S⊆D:i∈S
+
+∂fS (x)
+.
+∂xi
+
+By using the infinite Taylor expansion around b from Eq. (3), we find for b-fANOVA effects
+(xi − bi ) ·
+
+(b)
+X
+X
+∂fS (x)
+∂
+∂ Y
+C(κ) · ∇F (κ) ·
+C(κ) · ∇F (κ) ·
+= (xi − bi ) ·
+π(κ) = (xi − bi ) ·
+(xj − bj )κj
+∂xi
+∂xi
+∂xi
+κ∈ΩS
+κ∈ΩS
+j∈D
+Y
+X
+X
+κj
+C(κ) · ∇F (κ) · π(κ) ·κi .
+C(κ) · ∇F (κ) ·
+(xj − bj ) · κi =
+=
+|
+{z
+}
+j∈D
+
+κ∈ΩS
+
+κ∈ΩS
+
+ϕ(κ) for S=i, else I(κ)
+
+(b)
+
+Hence, Grad×Input computes a variant of the full effect, where every interaction effect fS involving i ∈ S is
+more than fully accounted in the explanation as
+X
+X
+X
+∂F (x)
+ϕGrad×Input (i) =
+(xi − bi ) =
+ϕ(κ) · κi +
+I(κ) · κi
+∂xi
+κ∈Ωi
+
+S⊆D:i∈S,s>1 κ∈ΩS
+(b)
+
+In fact, the Taylor interaction effect I(κ) contained in the b-fANOVA effect fS is weighted by the order κi ≥ 1
+of xi , which yields an even stronger influence of higher-order functions. If xi appears only linearly in each
+interaction, then it corresponds directly to the full effect.
+Moreover, when assuming a linear function, as shown by Deng et al. (2024), this attribution becomes equal to
+ϕ(κ) with κ = [0, . . . , κi = 1, . . . , 0] and the Taylor independent effect ϕ. In this case, by Eq. (4) ϕ(i) is part of the
+generic independent effect ψ(i), since ϕ(κ) ∈ Ωi . Hence, by Corollary 1, ϕ(i) is part of the pure b-fANOVA effect
+(b)
+(b)
+fi . If we assume linearity of F in xi around x0 , i.e., vanishing higher-order derivatives, then ϕ(i) = ψ(i) = fi .
+LRP-ϵ. Layer-wise relevance propagation (LRP) is a method proposed by Bach et al. (2015), and similar to
+Grad×Input. In fact, for ReLU activation functions, both methods coincide (Ancona et al., 2018). In general,
+LRP is applied layer-wise, by back-propagating attributions layer by layer, and in each layer, the method behaves
+similarly to Grad×Input (Deng et al., 2024). Thus, it measures in each layer the pure effect with the additional
+linearity assumption, similar to Grad×Input.
+DeepSHAP. DeepSHAP (Lundberg and Lee, 2017) computes attributions layer-wise, where the SV is used.
+It was shown by Deng et al. (2024), that for each layer, the layer-wise attribution is given by
+X 1
+X 1 (b)
+X
+X 1 X
+(b)
+I(κ) = ψ(i) +
+J(S) = fi +
+f ,
+ϕ(i) =
+ϕ(κ) +
+s
+s
+s S
+κ∈Ωi
+
+S⊃i:s>1
+
+κ∈ΩS
+
+S⊃i:s>1
+
+S⊃i:s>1
+
+which corresponds to the partial individual effect (SV) of b-fANOVA in Table 2.
+Integrated Gradients (IG). Integrated Gradient (IG) (Sundararajan et al., 2017) is a method motivated by
+the Aumann-SV (Aumann and Shapley, 1974) from the additive cost sharing literature (Friedman, 2004). IG
+computes the average gradient over a straight path from x0 to a baseline b as
+Z 1
+∂F (b + α · (x − b))
+dα.
+ϕIG (i) := (xi − bi ) ·
+∂xi
+α=0
+It was shown (Deng et al., 2024) that IG summarizes Taylor interactions as
+X X
+κ
+P i
+ϕIG (i) = ψ(i) +
+I(κ),
+i∈D κi
+i∈S:s>1 κ∈ΩS
+
+which corresponds to the b-fANOVA main effect and a partial b-fANOVA interaction effect.
+
+(5)
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+Expected Gradients (EG). Expected Gradients (EG) (Erion et al., 2021) is an extension of IG to random
+baselines, which computes IG as an expectation over baselines as
+
+
+Z 1
+∂F (b + α · (x − b))
+ϕEG (i) := Eb∼P (b) (xi − bi ) ·
+dα .
+∂xi
+α=0
+Using the non-recursive definition of b-fANOVA effects (Corollary 1) taking the expectation of b ∼ B, yields
+X
+X
+X
+(B)
+E[f (B) (x)] = E[
+(−1)s−ℓ FL (x)] = E[
+(−1)s−ℓ F (xL , B−L )] =
+(−1)s−ℓ E[F (xL , B−L )].
+L⊆S
+
+L⊆S
+
+L⊆S
+(m)
+
+The distribution of B is usually determined by the collected data, i.e., B ∼ X, hence E[F (xL , B−L )] = FL (x)
+corresponds to m-fANOVA. Reversing the previous equations, we obtain
+(B)
+
+(m)
+
+E[fS (x)] = fS
+
+(x).
+
+Similarly, the Taylor independent and interaction effects with b-fANOVA correspond to the Taylor independent
+and interaction effects with m-fANOVA, when the expectation is taken over b, where b follows the distribution
+of the features x. In conclusion, EG measures the partial individual effect with respect to m-fANOVA.
+DeepLIFT. DeepLIFT (Shrikumar et al., 2017) is a method that computes attributions layer by layer, similar
+to LRP but by including a baseline b. It was shown (Deng et al., 2024) that DeepLIFT similar to IG is applied
+in each layer, and thus DeepLIFT accounts in each layer for b-fANOVA effects partially.
+Integrated Hessians (IH). Integrated Hessians (IH) (Janizek et al., 2021) is an extension of IG to interactions. For two features i, j, IH computes
+Z 1 Z 1
+∂F (b + αi αj · (x − b))
+dαi dαj ,
+ϕIH (ij) := (xi − bi )(xj − bj ) ·
+αi αj
+∂xi ∂xj
+αi =0 αj =0
+i.e., applying IG for each feature. By taking the gradient, all effects vanish that do not involve feature xi , as
+seen in Eq. (5). In detail, for IG, we have
+Z 1
+X X Z 1 ∂Ib+α·(x−b) (κ)
+∂F (b + α · (x − b))
+dα =
+dα,
+∂xi
+∂xi
+α=0
+α=0
+S⊆D κ∈ΩS
+
+and moreover with the definition of Taylor interactions, we receive by Eq. (3)
+Z 1
+Z 1
+P
+∂Ib+α·(x−b) (κ)
+κi
+1
+κ
+P i
+dα = C(κ)∇F (κ)π(κ)
+α i∈D κi dα = I(κ)
+,
+∂x
+x
+−
+b
+x
+−
+b
+i
+i
+i α=0
+i
+i
+α=0
+i∈D κi
+which is the result provided by Deng et al. (2024), and stated in Equation (5). Note that all terms vanish, where
+κi = 0. Again, by repeating the same argument for xj , we obtain
+X X
+X X
+κκ
+κκ
+P i j 2 I(κ) = J(ij) +
+P i j
+I(κ),
+ϕIH (ij) =
+( i∈D κi )
+( i∈D κi )2
+ij⊆S κ∈ΩS
+
+ij⊆S:s>2 κ∈ΩS
+
+i.e., IH corresponds to a partial (pairwise) interaction effect of b-fANOVA.
+Accumulated Local Effects (ALE) Accumulated Local Effects (ALE) (Apley and Zhu, 2020) computes first
+the gradients using the conditional distribution and then averages over the feature’s values in a certain range
+Z xi
+∂F (X)
+ϕALE
+(i)
+:=
+E[
+| Xi = z]dz.
+x
+∂xi
+xmin
+ALE analyzes the conditional expectation of the partial derivative of F , which corresponds to the pure effect
+with c-fANOVA on the derivative. By averaging over the values Xi = z from z = xmin to xi , ALE captures
+effects related to F , which however are difficult to state precisely due to the unknown conditional distribution.
+ALE further computes second-order effects by applying ALE on both features consecutively, and subtracting
+main effects, thereby measuring interaction effects. This further ensures a full decomposition (Apley and Zhu,
+2020), if applied on all possible effects, which is a result of the MT-like computation of effects.
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+E.2
+
+Unifying Global Feature-Based Explanations
+
+In this section, we unify global feature-based explanations using our framework.
+E.2.1
+
+Sensitivity-Based Explanations
+
+We first discuss measures from sensitivity analysis, which are based on the global sensitivity game.
+Sobol’ Indices. The Sobol’ indices (Sobol’, 2001; Owen, 2013) were introduced as a global variance importance measure. The closed Sobol’ index τ measures the variance of marginalized predictions ϕClosedSobol’ (S) :=
+P
+(m)
+V[FS (X)] = T ⊆S σT2 , where feature independence is assumed, thereby corresponding to m-fANOVA. Clearly,
+the closed Sobol’ index is the pure joint effect, or pure individual effect. In contrast, the total Sobol’ index τ̄
+quantifies the full individual and joint effect of m-fANOVA, which is clear from its definition and Table 2.
+H-Statistic. The H-statistic (Friedman and Popescu, 2008) assumes feature independence, and was introduced
+as a measure of interaction. For two features i, j it approximates the variance of the joint minus the individual
+marginalized predictions as
+(m)
+
+ϕH-Statistic (ij) :=
+
+(m)
+
+V[Fij (X) − Fi
+
+(m)
+
+(X) − Fj
+
+(m)
+
+V[Fij (X)]
+
+(X)]
+
+(m)
+
+=
+
+V[fij (X)]
+(m)
+
+,
+
+V[Fij (X)]
+
+and thus corresponds to a scaled variant of the pure interaction effect of the global sensitivity game using
+m-fANOVA for independent features.
+Sobol’-SV. The Sobol’-SV was introduced for independent (Owen, 2014) and dependent (Owen and Prieur,
+2017) features, thereby corresponding to m- and c-fANOVA, respectively. It measures the partial individual
+effect due to the SV applied on the marginalized prediction FS .
+Superset Measure. The superset measure Υ2 measures the full interaction effect, which is clear by its definition and Table 2, i.e., Υ2 corresponds to the Co-MT applied on m-fANOVA.
+E.2.2
+
+Performance-Based (Risk-Based) Explanations
+
+In this section, we summarize performance-based measures that rely on the global risk game.
+Permutation Feature Importance (PFI) and Grouped PFI. The PFI (Breiman, 2001; Fisher et al.,
+2019) is a global feature importance method that measures the performance drop after removing an individual
+feature by marginally perturbing the feature of interest. Therefore, the PFI is defined by the full individual
+influence measure ϕ+ (i) based on the global risk game and m-fANOVA:
+X
+(m)
+ϕPFI (i) = E[ℓ(F−i (X), Y )] − E[ℓ(F (X), Y )] = ϕ+ (i) = m(risk) (i) +
+m(risk) (T ),
+T ⊃i
+(m)
+
+where F−i corresponds to the outcome when feature i is removed by marginalization in presence of the remaining
+features −i using m-fANOVA.
+The Grouped PFI (Au et al., 2022) is a global feature importance measure for groups of features and corresponds
+to PFI by marginally perturbing a feature group instead of an individual feature. Hence, it is defined by the full
+joint influence measure ϕ+ (S) based on the global risk game and m-fANOVA:
+X
+(m)
+ϕGPFI (S) = E[ℓ(F−S (X), Y )] − E[ℓ(F (X), Y )] = ϕ+ (S) = m(risk) (S) +
+m(risk) (T ).
+T ∩S /
+∈{S,∅}
+
+Conditional Feature Importance (CFI). Conditional Feature Importance (CFI) (Strobl et al., 2008; Molnar
+et al., 2023) is similar to PFI but relies on conditional expectations, thereby measuring the full individual and
+full joint effect of c-fANOVA.
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+Shapley Additive Global Importance (SAGE). Shapley additive global importance (SAGE) (Covert et al.,
+2020) was proposed as the SV on the normalized risk game using c-fANOVA, i.e.,
+(c)
+
+(c)
+
+ν SAGE (S) := ν (risk) (S) − ν (risk) (∅) = E[ℓ(F∅ (X), Y )] − E[ℓ(FS (X), Y )].
+Notably, the SV is not affected by such transformations. Hence, SAGE measures the partial individual effect
+of c-fANOVA. In practice, marginal expectations are used to compute SAGE values thereby corresponding to
+m-fANOVA.
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+F
+
+DETAILS ON EXPERIMENTAL SETUP AND REPRODUCIBILITY
+
+This section contains details on the experimental setup, models and datasets. All code and supplementary
+material is available at https://github.com/FFmgll/unifying_feature_based_explanations.
+F.1
+
+Synthetic Examples
+
+In this section, we describe in more detail the data settings and modeling approach of the synthetic example in
+Section 5.1 and of further examples analyzed in more detail in Appendix G.1.
+Datasets. For all our synthetic examples, we consider 4 features that are multivariate normally distributed,
+2
+i.e., X ∼ N (µ, Σ) with µ = 0, σii
+= 1 and σij = ρ for i ̸= j. We vary the correlation coefficient between
+no, medium, and high correlation by setting it to ρ ∈ {0, 0.5, 0.9}. For these three data settings, we define the
+following functional relationships
+Flin (x) = 2x1 + 2x2 + 2x3 ,
+Fint (x) = Flin + x1 x2 + x1 x2 x3 ,
+Fadd (x) = 2x1 + x22 + x33 ,
+where all of them are corrupted by noise N (0, 0.01) to generate the target Y .
+Models. To model the data-generating processes Flin , Fint , and Fadd , we randomly draw 10,000 samples and
+fit correctly specified linear models with sklearn (Pedregosa et al., 2011), ensuring correctly learned effects for
+each functional form. Input features are transformed to match the underlying functional relationships, with the
+relevant main effects and interaction terms selected accordingly. This method guarantees that the models retain
+linearity in the parameter space, consistent with the specified functional relationships. As a result, we obtain
+an almost perfect fit across all three synthetic datasets, achieving R2 values greater than 0.99 on a separately
+sampled test dataset of size 10,000 following the same distribution as defined above.
+F.2
+
+Models and Datasets for Real-World Examples
+
+In addition to the synthetic datasets, we evaluate the performance of our models on four real-world datasets:
+California housing, Bike sharing, titanic, and IMDB, including regression and classification tasks. In the following, we describe the datasets and the corresponding models. With the exception of IMDB, we fit models on
+each dataset and evaluate the performance on regression tasks with the mean squared error (MSE) and the the
+coefficient of determination (R2 ). For classification, we evaluate models using accuracy (ACC) and the F1 score.
+All results are averaged over five Monte Carlo cross-validation runs to ensure robustness. We use XGBoost for
+training gradient-boosted decision trees (Chen and Guestrin, 2016) and PyTorch for training neural networks
+(Paszke et al., 2019). All other trained models and preprocessing steps are implemented with sklearn (Pedregosa et al., 2011). In the case of the IMDB language data we do not fit a model but retrieve a pre-trained
+and fine-tuned model from the transformers framework (Wolf et al., 2020).
+California Housing. This dataset is used for a regression task, where the goal is to predict median house
+prices based on features such as population, median income, and location-related attributes. The following
+models were evaluated:
+• XGBoost: Applied directly to the raw dataset without additional preprocessing, this model achieved an
+R2 = 0.8330 ± 0.0028 and an MSE of 0.2207 ± 0.0014 using default hyperparameters.
+• Neural Network: A fully connected neural network with four hidden layers (sizes 100, 50, 10, 1) was
+trained on normalized data, where all features were treated as numeric and standardized. The neural
+network achieved an R2 = 0.7461 ± 0.0117 and an MSE of 0.5246 ± 0.7460.
+Bike Sharing. The Bike sharing dataset is used for a regression task, predicting the total number of bike
+rentals based on features such as weather conditions, season, and time of day. The dataset was preprocessed by
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+applying a RobustScaler to the numerical features to handle outliers, and ordinal encoding was applied to the
+categorical features season and weather. For neural network models, the target variable was log-normalized
+using the transformation y = log(y + 1) to stabilize variance and improve model performance. The following
+models were evaluated:
+• Random Forest: A random forest model with 50 trees was trained on the preprocessed data, achieving an
+R2 of 0.9471 ± 0.0024 and an MSE of 1 863 ± 103.
+• Neural Network: A fully connected neural network with four hidden layers (sizes 100, 50, 10, 1) was
+trained on the preprocessed data, where the categorical features were treated as numeric and standardized.
+The regression target variable was additionally log-normalized. This model achieved an R2 of 0.9436±0.0016
+and an MSE of 0.3299 ± 0.0055.
+Titanic. The Titanic dataset is used for a binary classification task that predicts the survival probability of
+passengers based on characteristics such as age, sex, class of travel, and fare. We preprocess the data by applying
+an OrdinalEncoder to the categorical features.
+• XGBoost: The model was applied to the preprocessed data using default hyperparameters, achieving an
+F1 score of 0.7408 ± 0.0236 and an accuracy (ACC) of 0.8119 ± 0.0215.
+IMBD. The sentiment analysis language data is based on the IMDB dataset (Maas et al., 2011; Lhoest et al.,
+2021) where example sentences to the model are self-created. The model is a pre-trained and fine-tuned version of
+DistilBERT (Sanh et al., 2019) on IMDB as provided with the transformers (Wolf et al., 2020) framework. The
+model predicts the sentiment of movie reviews with a sentiment score [−1, 1] where values close to −1 denote a
+negative predicted sentiment and values close to 1 correspond to a positive predicted sentiment. Sentiment scores
+close to 0 are considered neutral. In our experiments, we manually remove punctuation and special symbols.
+In case of b-fANOVA, we set out-of-coalition tokens to the MASK token of the transformer model. Notably, the
+selected DistilBERT variant assigns sentences provided only MASK tokens moderately high scores of around 0.50
+(i.e., on the positive side). We do not evaluate and report performance scores of the pre-trained model on a
+separate test set.
+F.3
+
+Experimental Setup
+
+We compute explanations for the models and datasets described in Appendices F.1 and F.2 based on the shapiq
+(Muschalik et al., 2024a) python library. To do so, we create three kinds of cooperative explanation games, a
+local explanation game (see Definition 4), a global risk game (see Definition 6), and a global sensitivity game (see
+Definition 5). Both the global risk and global sensitivity games are based on a collection of independent local
+explanation games. The local explanation game consists of a model, a data point, and an imputation strategy.
+The imputation strategies follow the definitions of FS in the b-fANOVA, m-fANOVA, and c-fANOVA. To model
+b-fANOVA, we compute mean feature values from a background dataset for each feature independently and
+impute missing features with these baseline values. For m-fANOVA, we sample replacement data points directly
+from a background dataset according to the joint marginal distribution. For the synthetic datasets and known
+functional dependencies (see Appendix F.1), we compute the c-fANOVA with the ground-truth conditional
+distributions. For real-world datasets and c-fANOVA, we rely on the conditional imputer implemented in the
+shapiq package (Muschalik et al., 2024b). For marginal and conditional imputation we average over 512 sampled
+replacement data points for each game evaluation. All imputation strategies operate on the test datasets.
+F.4
+
+Hardware Details
+
+All computations have been conducted on consumer hardware, i.e., Dell XPS 15 (Intel i7 13700H, 16GB RAM)
+and required only minor computation times. Overall computations took around 60 CPUh.
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+G
+
+FURTHER EXPERIMENTAL RESULTS
+
+This section contains additional empirical results. Appendix G.1 contains a deep dive into the synthetic setting
+mentioned throughout the main body of this work (see Sections 3 and 5). Appendix G.2 extends on Section 5.2
+and contains additional results on real-world data.
+G.1
+
+Dissecting the Linear Models on Synthetic Data
+
+Here, we provide more detailed explanations for the results of the synthetic experiments summarized in Section
+5.1 as well as of the other two functional relationships defined in Appendix F.1. We start with explaining the
+individual feature effects for Flin which is the basis for Fint being the model we analyzed in Section 5.1. We then
+show how the additionally multiplicative interaction term in Fint influences each feature’s effect. Finally, we
+demonstrate how individual effects for an additive (non-linear) main effect model Fadd differ from linear effects.
+All explanations are compared based on the instance x = (1, 1, 1, 1).
+Linear Main Effect Model. The left plot in Figure 5 illustrates the influence of feature distribution and of
+higher-order interactions for Flin . It shows that the pure, partial, and full effects have the same value (main
+effect) for all features for b- and m-fANOVA. This indicates that there are no feature interactions present
+between any of the features. Since both decompositions break the dependencies between the feature of interest
+and the remaining features in the dataset and due to a purely linear additive relationship of the features, feature
+dependencies do not influence the individual effects. Feature x4 does not have an influence on the model and thus
+has an individual effect of zero when b- or m-fANOVA are used. This changes for c-fANOVA since it accounts
+for cross-correlation effects with other influential features. Therefore, the pure individual effects of c-fANOVA
+are the same as the ones of b- and m-fANOVA for the uncorrelated setting, but adds to each individual effect the
+effect of the remaining features by the factor ρ in the correlated settings. Hence, the interpretation of the pure
+effect with c-fANOVA quantifies how much of the overall feature effects we account for if we add the feature of
+interest to an empty model while considering the underlying feature distribution. It follows that the full effect
+for ρ = 0.9 is almost zero for all features since the other three features have already been added to the model
+and account for the effects of the remaining feature through cross-correlation effects.
+Linear Model with Main and Interaction Effects. The right plot in Figure 5 is a reprint of the plot shown
+in Section 5.1 for the model Fint . It shows that pure and partial m-fANOVA effects of x3 are affected by ρ. This
+effect is caused by the interaction effect between x1 and x2 which influences the joint marginal distribution of
+x−3 by their covariance and hence influences the pure and partial individual effects of the feature x3 . The partial
+and full plots of b- and m-fANOVA clearly show that interactions are present between the first three features
+with a higher interaction between x1 and x2 . C-fANOVA again accounts for cross-correlation effects and thus
+shows the same pattern for pure effects as Flin , while indicating learned feature interactions for partial and full
+effects.
+Additive Main Effect Model. Figure 6 shows the local effects for Fadd . Comparable to Flin , b-fANOVA
+is neither influenced by the feature distribution (ρ) nor by the higher-order interactions. While m-fANOVA is
+equivalent to b-fANOVA for Flin , it differs for the still additive relationship, when effects are non-linear: The
+effect of x2 for the instance x = (1, 1, 1, 1) becomes 0 since f1 (x) = E[Fadd (x2 , X−2 )] − E[F (X)] = x2 + E[X1 +
+X33 ] − E[X1 + X22 + X33 ] = 0. However, as for b-fANOVA, pure, partial, and full effects are the same and thus
+indicating that no feature interactions have been learned by the model. Due to accounting for cross-correlation
+effects, x4 shows again an influence for pure and partial effects, when c-fANOVA is used. Moreover, full effects
+with c-fANOVA show a similar vanishing trend as for Flin and Fint .
+G.2
+
+Additional Explanations on Real-World Data
+
+This section describes additional explanation results on real-world benchmark data as shown in Figures 7 to 10.
+Titanic Data - Local Explanation Game. Figure 7 shows a series of local explanations with pure (a), partial
+(b), and full (c) higher-order interaction influence for the Titanic dataset. The local instance under analysis
+was a 49 year old man who embarked from Cherbourg, holding an upper-class ticket with a relatively high fare
+price. The XGBoost model correctly predicts that he survived the disaster. The explanations indicate that his
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+Correlation: ρ
+0.5
+
+0.9
+
+0.0
+
+0.5
+
+0.9
+
+Correlation: ρ
+0.0
+
+0.5
+
+x3
+x4
+
+0.0
+
+6
+4
+3
+2
+1
+0
+6
+5
+
+2
+1
+0
+6
+5
+4
+3
+2
+
+Effect
+
+3
+
+0.9
+
+0.0
+
+0.5
+
+0.9
+
+0.0
+
+0.5
+x1
+x2
+
+5
+
+4
+
+0.5
+
+x3
+x4
+
+6
+5
+4
+3
+2
+1
+0
+6
+5
+4
+3
+2
+1
+0
+6
+5
+4
+3
+2
+1
+0
+
+1
+0
+
+Pure
+Partial
+Full
+Influence of Higher − order Interaction
+
+0.9
+
+Effect
+
+Influence of Feature Distribution
+b
+m
+c
+
+x1
+x2
+
+0.9
+
+Influence of Feature Distribution
+b
+m
+c
+
+0.0
+
+Pure
+Partial
+Full
+Influence of Higher − order Interaction
+
+Figure 5: Individual local explanations for the instance x = (1, 1, 1, 1) and the linear model (left) with the ground-truth
+functional relationship Flin (x) = 2x1 + 2x2 + 2x3 and the linear model including interactions (right) with the ground-truth
+functional relationship Fint (x) = 2x1 + 2x2 + 2x3 + x1 x2 + x1 x2 x3 averaged over 30 repetitions of varying random seeds
+(fluctuation is shown by error bars).
+
+Sex (male) and Age (49 years) decrease his chances of survival. In contrast, his high fare price (Fa), the port of
+embarkation (Em), and his upper-class ticket substantially enhance his survival probability. This finding aligns
+with descriptive analyses of the Titanic dataset, which reveal that passengers who embarked from Cherbourg
+had the highest survival rate of 0.56 in comparison to Queenstown with 0.38 and 0.33 for Southampton. Notably,
+the model also highlights increased survival odds due to interactions between Em and Fa, as well as between Em
+and Age. Both of these second-order interactions are observed across all three higher-order interaction influences
+(a-c) depicted in Figure 7.
+Titanic Data - Global Sensitivity Game. Figure 8 displays pure (a), partial (b), and full (c) effects,
+reported as an individual (top row), interaction (middle row), and joint (bottom row) effect for the global
+sensitivity game for an XGBoost model fitted on the Titanic dataset. From the individual explanations it can
+be observed that the variables Sex and Pc (ticket class) are most important for the prediction. Moreover, the
+Pc, Fa (passenger fare), and Em (Port of Embarkation) features have relatively high full effects, indicating the
+presence of interactions. In fact, from the interactions up to order 2 (middle row) it can be observed that there
+are synergies (positive two-way interactions) between Em and Sex, as well as between Pc and Sex. Moreover,
+partial and full effects indicate that Fa is involved in higher-order interactions (order > 2). Lastly, the joint
+effects are very homogeneous, due to the dominating individual effect of the feature Sex, which is accounted for
+in all pairwise joint effects that involve this feature.
+California Housing Data - Global Risk Game. Figure 9 displays global feature importance in terms of the
+global risk game for a neural network trained on the California housing dataset. We report pure, partial (SAGE)
+and full (PFI) importances for individuals and second-order interactions. Looking at individual importances (top
+row), reveals that the features la (latitude of property) and lo (longitude of property) are strongly present in
+higher-order interactions. In fact, the pure importances appear negative, which is counter-intuitive. Due to the
+marginal imputation the model predicts worse, if only one of these features is known. As a consequence, pure
+effects of the risk game for complex models should be interpreted with care, if m-fANOVA or b-fANOVA is used
+(thereby breaking dependencies). From the interactions (bottom row), we observe a strong positive pure effect
+between la and lo indicating that the exact location of the property is important to the model’s performance.
+Bike Sharing Data - Global Risk Game. Figure 10 shows pure, partial, and full effects for the global risk
+game and the Bike sharing dataset using an XGBoost regression model. The partial effect (middle) for individuals (top row) corresponds thereby to SAGE, whereas the full effect (right) reported as individual importance
+(top row) to PFI. It can be observed that the feature ho (hour of the day) is most influential for the performance.
+Observing differences in pure and full effects, it is apparent that the wo (working day) feature increases its impor-
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+Correlation: ρ
+0.0
+
+0.5
+
+0.9
+
+0.0
+
+0.5
+
+0.9
+
+0.0
+
+0.5
+
+Influence of Feature Distribution
+b
+m
+c
+
+x1
+x2
+
+0.9
+x3
+x4
+
+6
+5
+4
+3
+2
+1
+0
+6
+5
+3
+2
+1
+
+Effect
+
+4
+
+0
+6
+5
+4
+3
+2
+1
+0
+
+Pure
+Partial
+Full
+Influence of Higher − order Interaction
+
+Figure 6: Individual local explanations for the instance x = (1, 1, 1, 1) and the additive main effect model (left) with
+the ground-truth functional relationship Fadd (x) = 2x1 + x22 + x33 averaged over 30 repetitions of varying random seeds
+(fluctuation is shown by error bars).
+
+tance indicating that it is involved in higher-order interactions. In fact, investigating second-order interactions,
+a positive interaction (synergy) of ho and wo is observed. In general, the differences between pure, partial and
+full effects are mostly minor indicating the absence of strong interaction effects.
+IMDB - Local Explanation Game. The local explanation game for the IMDB movie review dataset is based
+on Sundararajan et al. (2020), Tsai et al. (2023), and Muschalik et al. (2024b) and we rely on b-fANOVA with
+the MASK token as baseline. The sentiment scores are within [−1, 1] where values close to −1 denote a negative
+predicted sentiment and values close to 1 correspond to a positive predicted sentiment. Sentiment scores close to
+0 are considered neutral. The target sentence “The acting was bad, but the movie enjoyable” receives a positive
+predicted sentiment of approximately 0.8117, and the baseline prediction is also rather positive around 0.5361.
+Figure 11 depicts pure (left), partial (middle), and full (right) individual effects (upper row) and interactions
+up to the second order (lower row) with 2-SVs (2-SII) for the partial effect. All three effects show strong
+differences, which indicates the presence of higher-order interactions. The pure individual effects highlight the
+positive influence of “enjoyable”, whereas “bad” and “but” obtain negative influences. Interestingly, “acting”
+also receives negative influence, which possibly indicates a bias in the prediction. The partial individual effect
+(SV) shows a stronger positive influence for ”enjoyable”, and a weaker negative influence for “acting” and
+“bad”. In contrast, “but” now receives a positive partial influence, which indicates its involvement in higherorder interactions. In fact, “but” and “enjoyable” receives a strong positive interaction, as well as “bad” and
+“but”. Lastly, full effects show predominantly positive influences, which indicates the presence of many positive
+higher-order interactions.
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+SHAP
+Titanic (m-fANOVA, Partial, order: 1)
+
+Titanic (m-fANOVA, Full, order: 1)
+
+3
+
+3
+
+2
+
+2
+
+2
+
+1
+
+Effect
+
+3
+
+Effect
+
+Effect
+
+Titanic (m-fANOVA, Pure, order: 1)
+
+1
+
+1
+
+0
+
+0
+
+0
+
+−1
+
+−1
+
+−1
+
+−2
+
+−2
+
+Pc
+
+Sex
+
+SS
+
+Pa
+
+Em
+Ti
+Feature
+
+FD
+
+Age
+
+Pc
+
+Fa
+
+Sex
+
+SS
+
+Pa
+
+Em
+Ti
+Feature
+
+FD
+
+Age
+
+Fa
+
+−2
+
+Pc
+
+Titanic (m-fANOVA, Partial, order: 2)
+
+Titanic (m-fANOVA, Pure, order: 2)
+
+Sex
+
+SS
+
+Pa
+
+Em
+Ti
+Feature
+
+Age
+
+Fa
+
+SS
+
+Pa
+
+Pa
+Sex
+
+Sex
+
+Sex
+
+Em
+
+Em
+
+FD
+
+Titanic (m-fANOVA, Full, order: 2)
+
+SS
+
+Pa
+
+SS
+
+Em
+
+Pc
+
+Pc
+
+Pc
+
+Ti
+
+Ti
+
+Ti
+Fa
+
+Fa
+
+Fa
+FD
+
+FD
+Age
+
+Age
+
+FD
+Age
+
+(a) Pure
+
+(b) Partial
+
+(c) Full
+
+Figure 7: Local Explanation Game: Pure (a), partial (b), and full (c) feature influences for an XGBoost model fitted on
+Titanic. The first row depicts the individual explanations where (b) corresponds to interventional SHAP. The second row
+shows the pure, partial (2-SVs, 2-SII) and full interactions up to the second order. The local instance, which is explained
+has the following feature values: : xSex = male, xAge = 49, xSibSp = 1, xParch = 0, xFare = 56.9292, xEmbarked = C,
+xTitle = Rare Title, and xFsizeD = small.
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+Titanic (m-fANOVA, Pure, order: 1)
+
+10
+
+4
+
+8
+
+6
+
+Sensitivity
+
+Sensitivity
+
+Sensitivity
+
+6
+
+4
+
+2
+
+2
+
+0
+Pc
+
+Sex
+
+SS
+
+Pa
+
+Em
+Ti
+Feature
+
+FD
+
+Age
+
+Fa
+
+6
+
+4
+
+2
+
+Pc
+
+Sex
+
+SS
+
+Pa
+
+Em
+Ti
+Feature
+
+FD
+
+Age
+
+Fa
+
+0
+
+Titanic (m-fANOVA, Partial, order: 2)
+
+Titanic (m-fANOVA, Pure, order: 2)
+
+Pa
+
+Em
+Ti
+Feature
+
+FD
+
+Em
+
+Pc
+
+Pc
+
+Ti
+
+Pc
+
+Ti
+
+Fa
+
+Fa
+
+Fa
+
+FD
+
+FD
+
+FD
+Age
+
+Age
+
+Age
+
+Titanic (m-fANOVA, Partial, order: 2)
+
+Titanic (m-fANOVA, Pure, order: 2)
+
+Titanic (m-fANOVA, Full, order: 2)
+
+SS
+
+SS
+
+SS
+
+Pa
+
+Pa
+
+Pa
+Sex
+
+Sex
+
+Sex
+
+Em
+
+Em
+
+Fa
+
+Sex
+
+Em
+
+Ti
+
+Age
+
+SS
+
+Sex
+
+Em
+
+Em
+
+Pc
+
+Pc
+
+Ti
+
+Ti
+
+SS
+
+Pa
+
+Sex
+
+Pc
+
+Ti
+
+Fa
+
+Fa
+FD
+
+(a) Pure
+
+Sex
+
+Titanic (m-fANOVA, Full, order: 2)
+
+Pa
+
+Pa
+
+Age
+
+Pc
+
+SS
+
+SS
+
+FD
+
+Titanic (m-fANOVA, Full, order: 1)
+
+10
+
+8
+
+8
+
+0
+
+Titanic (m-fANOVA, Partial, order: 1)
+
+10
+
+Fa
+
+FD
+Age
+
+(b) Partial
+
+Age
+
+(c) Full
+
+Figure 8: Global Sensitivity Game: Pure (a), partial (b), and full (c) feature influences for an XGBoost model fitted
+on Titanic. The first row depicts the individual explanations, the second row interactions, and the third row the joint
+effects up to order 2. The column (c) corresponds to the superset measure Υ2 . This global risk game is based on 500
+randomly drawn local explanation games from the test dataset.
+
+Unifying Feature-Based Explanations with Functional ANOVA and Cooperative Game Theory
+
+SAGE
+
+California housing (m-fANOVA, Full, order: 1)
+
+2.0
+
+2.0
+
+1.5
+
+1.5
+
+1.5
+
+1.0
+
+1.0
+
+1.0
+
+0.5
+0.0
+
+Importance
+
+2.0
+
+Importance
+
+Importance
+
+PFI
+
+California housing (m-fANOVA, Partial, order: 1)
+
+California housing (m-fANOVA, Pure, order: 1)
+
+0.5
+0.0
+
+0.5
+0.0
+
+−0.5
+
+−0.5
+
+−0.5
+
+−1.0
+
+−1.0
+
+−1.0
+
+−1.5
+
+−1.5
+MI
+
+HA
+
+AR
+
+AB
+Po
+Feature
+
+AO
+
+La
+
+Lo
+
+MI
+
+HA
+
+AR
+
+AB
+Po
+Feature
+
+AO
+
+La
+
+Lo
+
+−1.5
+
+MI
+
+HA
+
+AR
+
+AB
+Po
+Feature
+
+AO
+
+La
+
+California housing (m-fANOVA, Pure, order: 2)
+
+California housing (m-fANOVA, Partial, order: 2)
+
+California housing (m-fANOVA, Full, order: 2)
+
+AR
+
+AR
+
+AR
+
+AB
+
+AB
+
+HA
+
+MI
+
+Po
+
+AO
+
+Lo
+
+HA
+
+AB
+
+MI
+
+Po
+
+AO
+
+Lo
+
+La
+
+La
+
+(a) Pure
+
+(b) Partial
+
+Lo
+
+HA
+
+MI
+
+Po
+
+AO
+
+Lo
+
+La
+
+(c) Full
+
+Figure 9: Global Risk Game: Pure (a), partial (b), and full (c) feature influences for a neural network fitted on
+California housing. The first row depicts the individual explanations where (b) corresponds to SAGE and (c) corresponds
+to PFI. The second row shows the pure, partial (2-SVs,2-SII) and full interactions up to the second-order. Importance is
+defined according to the global risk game by the change in performance measured by the mean squared error. This global
+risk game is based on 500 randomly drawn local explanation games from the test dataset.
+
+Fabian Fumagalli, Maximilian Muschalik, Eyke Hüllermeier, Barbara Hammer, Julia Herbinger
+
+SAGE
+
+Bike sharing (m-fANOVA, Full, order: 1)
+
+1.2
+
+1.2
+
+1.0
+
+1.0
+
+1.0
+
+0.8
+
+0.8
+
+0.8
+
+0.6
+0.4
+
+0.6
+0.4
+
+0.2
+
+0.2
+
+0.0
+
+0.0
+ho
+
+te
+
+fe
+
+hu
+
+wi
+
+Importance
+
+1.2
+
+Importance
+
+Importance
+
+PFI
+
+Bike sharing (m-fANOVA, Partial, order: 1)
+
+Bike sharing (m-fANOVA, Pure, order: 1)
+
+0.6
+0.4
+0.2
+0.0
+
+ho
+
+ye mo ho we wo se we
+Feature
+
+te
+
+fe
+
+hu
+
+wi
+
+ye mo ho we wo se we
+Feature
+
+ho
+
+Bike sharing (m-fANOVA, Partial, order: 2)
+
+Bike sharing (m-fANOVA, Pure, order: 2)
+
+te
+
+hu
+
+ye
+
+ho
+
+we
+
+ho
+
+ho
+
+we
+
+we
+
+se
+
+te
+
+mo
+
+ho
+
+ho
+
+we
+
+we
+
+we
+
+se
+
+(b) Partial
+
+(a) Pure
+
+se
+wo
+
+wo
+
+wo
+
+fe
+
+ye
+
+te
+
+mo
+
+ho
+
+mo
+
+ye mo ho we wo se we
+Feature
+
+hu
+
+ye
+
+te
+
+wi
+
+wi
+
+fe
+
+wi
+
+fe
+
+hu
+
+Bike sharing (m-fANOVA, Full, order: 2)
+
+hu
+
+wi
+
+fe
+
+(c) Full
+
+Figure 10: Global Risk Game: Pure (a), partial (b), and full (c) feature influences for a neural network fitted on Bike
+sharing. The first row depicts the individual explanations where (b) corresponds to SAGE and (c) corresponds to PFI.
+The second row shows the pure, partial (2-SVs, 2-SII) and full interactions up to the second-order. Importance is defined
+according to the global risk game by the change in performance measured by the mean squared error. This global risk
+game is based on 100 randomly drawn local explanation games from the test dataset.
+
+SHAP
+
+was
+
+was
+
+bad
+
+bad
+
+acting
+
+the
+
+but
+
+the
+
+enjoyable
+
+movie
+
+(a) Pure
+
+was
+
+acting
+
+bad
+
+the
+
+but
+
+the
+
+enjoyable
+
+movie
+
+(b) Partial
+
+acting
+
+the
+
+but
+
+the
+
+enjoyable
+
+movie
+
+(c) Full
+
+Figure 11: Local Explanation Game: Pure (a), partial (b), and full (c) feature influences for a sentiment analysis
+language model fine-tuned on the IMDB dataset (Tsai et al., 2023). The first row depicts the individual explanations
+where (b) corresponds to baseline SHAP using the MASK token, i.e., b-fANOVA. The second row shows pure, partial
+(2-SVs, 2-SII) and full interactions up to the second-order. The sentence The acting was bad, but the movie enjoyable
+receives a rather positive sentiment score of 0.8117. Note that the model predicts a score of 0.5361 for the empty set.
+
+

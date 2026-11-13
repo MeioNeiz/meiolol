@@ -1,5 +1,5 @@
 ---
-status: active
+status: answered
 priority: soon
 area: stats
 parent: frontier-experiments
@@ -12,42 +12,43 @@ Feeds: docs/plan/lab-frontier.md (gpu-box experiment programme), parent [[fronti
 
 ## Answer
 
-Our draft model has only 10 seats, so the best route skips approximate detectors.
-Compute the exact functional decomposition of the trained net over seats: Möbius
-(Shapley-GAM) terms for every seat, pair and triple, from 1,024 coalitions per draft
-(C3). Shapley-type indices of order n recover an order-n additive model exactly under an
-interventional value function. Plain SHAP spreads every interaction evenly over its
-members and hides it (C1). What a "pair effect" means is fixed only by the value function
-and weighting: here, what an absent seat is, best taken as the average over legal
-replacement champions in that role weighted by pick rate. This is the same choice as
-purification's data weight, and it can flip signs (C2). Averaging the decomposition over
-real drafts gives a global main, pair and triple table, and the share of the net's lean
-at each order. A discrete four-corner swap is the model-agnostic pair test. Integrated
-Hessians needs smooth nets and continuous inputs, so use it only on profile features
-(C11).
+Ranked, for 10 seats of ~170 champions near a coin flip (C20):
 
-Trust is the hard part, not computation. Off-the-shelf pair scores mostly flag two
-individually strong champions. Permutation p-values with BH do not control false
-discoveries; knockoff copies do, even crude permuted ones (C4). A single accurate net can
-rank planted interactions near chance, equally good models disagree, and NID reports
-linked pairs as triples (C5). Every detector was validated on clean, continuous synthetic
-data, never on a near-coin-flip outcome or 170-level categoricals (C6). So any pair or
-triple we name needs knockoff seats, planted effects and agreement across seeds,
-resamples and the shrunk logistic model.
+1. Name champion pairs from the direct fit: the shrunk additive-plus-pairs model fitted
+   to results (v2 with pair parents), purified before display. In our planted check the
+   direct cell was at least as good as a net's term from 50 games up, and the net
+   invented pairs in empty blocks that its seeds agreed on (C19). Interactions cost about
+   16x the data of mains and low-power hits overstate about 3x (C9).
+2. Read the black box by its exact functional decomposition over seats: Möbius terms of
+   all 1,024 coalitions per draft under the marginal value function (absent seats filled
+   from other real drafts, legal, never the present champion). It is unique, equals the
+   interventional Shapley-GAM, matches partial dependence, and was exact on a planted
+   truth (C1, C3, C16, C19). Use it for the share of each order and for what the net adds
+   to the additive model, not for naming cells. With the terms exact, a Shapley index is
+   only a way to fold higher orders into pairs: report the Möbius pair term and the
+   full effect, and Faith-Shap order 2 only if order 3+ is not small (C14, C15).
+3. Distil the black box into the sparse additive-plus-pairs form and compare term by
+   term with the label fit ([[distil-explainable]]); black box first, then a sparse
+   refit, is the standard pipeline, and the best order varies by data (C7).
+4. Guards on anything named from a net: an empty reference (knockoff seats), a planted
+   twin (Friedman's additive-null retrain) and seed agreement, all three (C4, C5, C13,
+   C19). Detectors were never validated on near-chance outcomes or 170-level
+   categoricals (C6).
 
-What to expect: black box first, then refit a sparse additive model with only the
-selected interactions, is the standard pipeline. The best order varies by data, and
-higher orders lose on held-out data where trends are low order (C7). Interactions cost
-about 16x the data of mains and low-power hits overstate about 3x (C9). In team games no
-3-way effect has ever been measured beyond pairs: Honor of Kings 3-5-way role terms
-added nothing, MOBA GBDTs did no better than pairwise models, NBA trio work has no
-held-out test. With too little data a real 3-way effect shows up as spurious lower-order
-terms (C8). Champion-level triples are out of reach at 1.4M games (a few dozen games
-each); only kit-group or class triples can be tested (C12). Neural GAMs (NODE-GA2M, NBM,
-SIAN) beat EBM by a few percent on continuous data, but they target-encode or one-hot
-the categoricals. They add nothing at champion-identity level over our shrunk role-pair
-blocks, and fit our profile features better (C10). Set-model explanation as such: 3
-searches found nothing specific; seat-level Möbius covers it.
+Not worth running: the H-statistic (one number per seat pair, its numerator is the
+purified pair term we already have, inflated where effects are flat, no null short of
+retraining: C13); EBM/FAST as a pair cross-check (pair terms cut nominal levels in index
+order; fine for mains only: C18); NAM, NODE-GA2M, NBM, GAMI-Net (categoricals one-hot or
+target-encoded, nothing at champion level over shrunk role-pair cells; they suit profile
+features: C10, C18); seat-masked training as the main reading (it describes how picks go
+together, not what the model does; one contrast run at most: C17); integrated Hessians
+(continuous inputs only: C11); plain SHAP (hides interactions: C1).
+
+What to expect: no 3-way effect beyond pairs has been measured in a team game, and a
+real one with too little data shows as spurious lower-order terms (C8). Our planted 2 pp
+class triple was not learnt at 1.2M games (C19). Champion-level triples are out of reach;
+only kit-group triples can be tested (C12). First experiment: C1 in
+docs/plan/lab-frontier.md (order spectrum of the teacher, declared rules).
 
 ## Claims
 
@@ -63,6 +64,14 @@ searches found nothing specific; seat-level Möbius covers it.
 - C10: Neural GAMs scale and beat EBM by a few percent on large continuous sets, but categoricals are target-encoded or one-hot, and glinternet selects whole categorical pairs; none models identity-level champion pairs better than per-block shrunk pair terms. for: [[chang-nodegam-2022#^f2]], [[chang-nodegam-2022#^f5]], [[radenovic-nbm-2022#^f2]], [[radenovic-nbm-2022#^f4]], [[lim-hastie-glinternet-2015#^f2]]
 - C11: A discrete second difference (both swapped, each swapped, neither) detects a pair in any black box in O(p^2) calls; Hessian methods see nothing in ReLU nets unless smoothed and need continuous inputs. for: [[tsang-archipelago-2020#^f3]], [[tsang-archipelago-2020#^f5]], [[janizek-integrated-hessians-2021#^f3]], [[janizek-integrated-hessians-2021#^f4]]
 - C12 (inferred): For us: exact seat-level Möbius decomposition of the set net with a legal-replacement value function, averaged to a global table and purified under the seat-weighted data; knockoff seats and planted pairs for FDR and power; keep a pair only if it holds across seeds, resamples and the logistic fit, then refit it as a shrunk term and judge by paired held-out log loss; test 3-way only at kit-group level. from: C1, C2, C3, C4, C5, C7, C8, C9
+- C13: Friedman's H-statistic is not a usable detector here: normalised H measures presence, not importance, and inflates where a pair's joint effect is flat; the unnormalised form removes that but has no null or threshold; both rest on partial dependence, so dependent inputs give false pairs with no remedy for nets; its only calibrated null is retraining the full model on labels drawn from an additive fit. for: [[friedman-popescu-hstat-2008#^f6]], [[friedman-popescu-hstat-2008#^f7]], [[friedman-popescu-hstat-2008#^f10]], [[inglis-vivid-unnormalised-h-2022#^f5]], [[inglis-vivid-unnormalised-h-2022#^f6]], [[molnar-iml-hstatistic#^f5]]
+- C14: Every order-2 Shapley-type index is a fixed linear map of the exact Möbius terms and differs only in where mass above order 2 goes: Shapley-Taylor puts all of it on pairs and can flip a pair's sign, Faith-Shap is the unique efficient least-squares order-2 fit and moves mains the opposite way. With Möbius terms exact, the index is a reporting choice, not an estimate. for: [[tsai-faithshap-2023#^f3]], [[tsai-faithshap-2023#^f5]], [[tsai-faithshap-2023#^f7]], [[tsai-faithshap-2023#^f10]], [[lundstrom-synergy-functions-2023#^f3]]
+- C15: Pure (Möbius, all others absent), partial (Shapley share) and full (all others present) effects answer different questions, and a pure-to-full gap signals higher orders. Marginal filling breaks dependence and evaluates unseen combinations; conditional filling credits a feature with its correlates (a noise feature gets the same pure effect at correlation 0.9). No source names a winner or tests categorical inputs. for: [[fumagalli-unifying-fanova-games-2025#^f3]], [[fumagalli-unifying-fanova-games-2025#^f5]], [[fumagalli-unifying-fanova-games-2025#^f6]], [[fumagalli-unifying-fanova-games-2025#^f9]], [[fumagalli-unifying-fanova-games-2025#^f12]]
+- C16: The marginal identification gives one global decomposition: the Möbius inverse of the model averaged over the absent features' joint marginal. It is the only one that matches partial dependence and splits evenly into interventional SHAP; the functional ANOVA constraint that purification uses is a different identification (observational SHAP). Its price is evaluating the model off the data support. for: [[hiabu-glex-2023#^f2]], [[hiabu-glex-2023#^f3]], [[hiabu-glex-2023#^f4]], [[hiabu-glex-2023#^f5]], [[hiabu-glex-2023#^f8]], [[hiabu-glex-2023#^f10]]
+- C17: Training with masked inputs yields the conditional decomposition, which describes the data's statistics, not the model's mechanism: a feature absent from the formula gets a main term and correlated inputs get redundancy pair terms. A masked GAM lost no accuracy on one dataset; no black-box ablation exists. On categoricals a replacement equal to the present value removes nothing. for: [[enouen-instashap-2025#^f2]], [[enouen-instashap-2025#^f6]], [[enouen-instashap-2025#^f17]], [[enouen-instashap-2025#^f20]]
+- C18: EBM treats nominal features properly only in mains (one bin per level, rare levels pooled, sorted by gradient each step); FAST and pair boosting cut categories in index order, so a champion x champion pair term is label-order blocks, not identity cells; no purification or heredity by default. GAMI-Net builds heredity and a marginal clarity penalty into the fit but one-hots categoricals and was tested to ~20k rows. for: [[interpretml-ebm-code#^f2]], [[interpretml-ebm-code#^f7]], [[interpretml-ebm-code#^f13]], [[interpretml-ebm-code#^f28]], [[yang-gaminet-2021#^f1]], [[yang-gaminet-2021#^f4]], [[yang-gaminet-2021#^f11]]
+- C19: On our drafts with planted labels (1.21M fit games): the exact reading returns a known truth; a net that learnt pairs shows 0.3-0.5% of its power above order 2 where none is planted; a net at the mains fit's loss has only noise to read; a hidden 2 pp class triple was not learnt; direct shrunk cells beat the net's pair terms from 50 games up; the net puts 0.2-0.3 pp pairs into empty blocks and its seeds agree on them. for: [[meiolol-mobius-plant-c0#^f1]], [[meiolol-mobius-plant-c0#^f2]], [[meiolol-mobius-plant-c0#^f3]], [[meiolol-mobius-plant-c0#^f4]], [[meiolol-mobius-plant-c0#^f5]], [[meiolol-mobius-plant-c0#^f6]]
+- C20 (inferred): Ranking for us: (1) direct shrunk additive-plus-pairs fit names the pairs; (2) exact Möbius terms under the marginal value function read the black box (order shares, what the net adds); (3) distillation into the additive form ships it; (4) knockoff block, planted twin and seeds guard every name. H-statistic, EBM/FAST pairs, neural GAMs and masked training are not worth running here. from: C1, C3, C7, C9, C13, C14, C16, C17, C18, C19
 
 ## Disagreements
 
@@ -72,16 +81,19 @@ searches found nothing specific; seat-level Möbius covers it.
   drafts would settle which score to use.
 - NODE-GA2M over EBM-GA2M (3.6% relative, paper) vs package defaults reported lower
   (search summary only, not read). Not decision-relevant for categorical seats.
+- Purification (functional ANOVA, data-weighted: Lengerich, A) and the marginal
+  identification (Hiabu, B) are different constraints and give different tables under
+  dependent picks. We read the net with the marginal one and purify shipped tables with
+  seat weights; C1 reports both for the additive model to size the gap.
 
 ## Open
 
-- Value function for an absent seat: role pick-rate replacement vs same-class
-  replacement vs a learnt "average champion" embedding; it fixes what every pair means
-- Knockoffs for drafts: a dummy seat drawn from the role's pick distribution ignores
-  within-draft dependence (no duplicates, comp tendencies); Diamond's permuted-copy
-  result suggests FDR holds at lost power, untested on categorical seats
-- Whether the DeepSets residual net holds any within-team pair at all beyond what the
-  shipped pair blocks have (its gain may be all comp-trait x enemy terms)
-- Power for 3-way at kit-group level at 1.4M games: needs a planted semi-synthetic run
-- Leads: Hiabu et al. 2023 glex functional decomposition; GAMI-Net; exact Möbius for
-  GNNs (2501.16944); distributing synergy functions (2305.03100)
+- Marginal against conditional filling: sources name no winner (C15). We take marginal
+  (what the model does); the gap to a seat-masked net would measure how much draft
+  dependence matters, unmeasured
+- Whether the set net on v2 holds anything above order 2 (comp traits x enemy): C1
+- Knockoff seats for drafts ignore within-draft dependence; Diamond's permuted-copy result
+  suggests FDR holds at lost power, untested on categorical seats
+- Power for 3-way terms at kit-group level when the kit is a net input: C4
+- Leads: Hooker 2007 generalised fANOVA; iLOCO intervals (2502.06661); kernel interaction
+  trick (1905.06501); exact Möbius for GNNs (2501.16944); ALE (1612.08468)

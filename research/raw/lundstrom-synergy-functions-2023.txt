@@ -1,0 +1,2220 @@
+                                             Distributing Synergy Functions: Unifying Game-Theoretic
+                                             Interaction Methods for Machine-Learning Explainability
+                                                                    Daniel Lundstrom∗                    Meisam Razaviyayn†
+
+
+
+
+arXiv:2305.03100v3 [cs.LG] 17 May 2023
+                                                                                          May 18, 2023
+
+
+                                                                                              Abstract
+                                                    Deep learning has revolutionized many areas of machine learning, from computer vision
+                                                to natural language processing, but these high-performance models are generally “black box.”
+                                                Explaining such models would improve transparency and trust in AI-powered decision making
+                                                and is necessary for understanding other practical needs such as robustness and fairness. A
+                                                popular means of enhancing model transparency is to quantify how individual input features
+                                                contribute to model outputs (called attributions) and the magnitude of interactions between
+                                                groups of inputs. A growing number of methods import concepts and results from game theory
+                                                to produce attributions and interactions. This work presents a unifying framework for game-
+                                                theory-inspired attribution and kth -order interaction methods. We show that, given modest
+                                                assumptions, a unique full account of interactions between features, called synergies, is possi-
+                                                ble for continuous input features. We identify how various methods are characterized by their
+                                                policy of distributing synergies. We also demonstrate that gradient-based methods are char-
+                                                acterized by their actions on monomials, a type of synergy function, and introduce unique
+                                                gradient-based methods. We show that the combination of various criteria uniquely defines the
+                                                attribution/interaction methods. Thus, the community needs to identify goals and contexts
+                                                when developing and employing attribution and interaction methods.1
+
+
+                                         1      Introduction
+                                         Explainability has become an ever increasing topic of interest among the Machine Learning (ML)
+                                         community. Various ML methods, including deep neural networks, have unprecedented accuracy and
+                                         functionality, but their functions are generally considered “black box” and unexplained. Without
+                                         “explaining” a model’s workings, it can be difficult to troubleshoot issues, improve performance,
+                                         guarantee accuracy, or ensure other performance criteria such as fairness.
+                                              A variety of approaches have been employed to address the explainability issue of neural networks.
+                                         Taking the taxonomy of [LPK20], some methods are universal in application (called model agnostic)
+                                         [RSG16], while other are limited to specific types of models (model specific) [BML+ 16]. Some model-
+                                          specific methods are limited to a certain data type, such as image [SCD+ 17] or tabular data [UR16].
+                                          Some methods are global, i.e., they seek to explain a model’s workings as a whole [ILMP19], while
+                                          others are local, explaining how a model works for a specific input [ZF14]. Finally, some methods
+                                          seek to make models that are intrinsically explainable [LRMM15], while others, called post hoc,
+                                          are designed to be applied to a black box model without explaining it [SDBR14]. These post hoc
+                                          methods may seek to ensure fairness, test model sensitivity, or indicate which features are important
+                                          to a model’s prediction.
+                                              This paper focuses on the concept of attributions and interactions. Attributions are local, post
+                                         hoc explanibility methods that indicate which features of an input contributed to a model’s output
+                                             ∗ lundstro@usc.edu, University of Southern California
+                                             † razaviya@usc.edu, University of Southern California
+                                             1 This work was supported in part with funding from the USC-Meta Center for Research and Education in AI &
+
+                                         Learning (REAL@USC center).
+
+
+
+                                                                                                     1
+[LL17], [STY17], [SN20], [BML+ 16], [SGK17]. Interactions, on the other hand, are methods that
+indicate which groups of features may have interacted, producing effects beyond the sum of their
+parts [MHX+ 21], [CY22], [SDA20], [JSL21], [TYR22], [BVS22], [ZXZ+ 21], [LSZ+ 20], [TCL+ 20],
+[HLZ+ 21], [TRL20], [HDWX21], [TCL17], [TLP+ 18]. A common and fruitful approach to attri-
+butions and interactions is to translate and apply results from game theoretic cost sharing [SS71],
+[AS74]. This has the advantages of already having a well-developed theory and producing methods
+that uniquely satisfy identified desirable qualities.
+   This work utilizes a game theoretic viewpoint to analyze, unify, and extend existing attribution
+and interaction methods. The contributions of this paper are as follows:
+    • This paper offers a method of analysis for attribution and k th order interaction methods of
+      continuous-input models through the concept of synergy functions. We show that, given nat-
+      ural and modest assumptions, synergy functions give a unique accounting of all interactions
+      between features. We also show any continuous input function has a unique synergy decompo-
+      sition.
+    • We highlight how various (existing) methods are governed by rules of synergy distribution,
+      and common axioms constrain the distribution of synergies. With this in mind, we highlight
+      the particular strengths and weaknesses of established methods.
+    • We show that under natural continuity criteria, gradient-based attribution and interaction
+      methods on analytic functions are uniquely characterized by their actions on monomials. This
+      collapses the question “how should we define interactions on analytic functions” to the question
+     “how should we define interactions of a monomial?” We then give two methods that serve as
+      potential answers to this question.
+    • We discuss the goal-dependent nature of attribution and interaction methods. Based on this
+      observation, we identify a method for producing new attributions and interactions.
+
+
+2     Background
+2.1     Notation and Terminology
+Let N = {1, ..., n} denote the set of feature indices in a machine learning model (e.g. pixel indices
+in an image classification model). For a, b ∈ Rn , let [a, b] = {x ∈ Rn : ai ≤ xi ≤ bi for all i ∈ N }
+denote the hyper-rectangle with opposite vertices a and b. Let F : [a, b] 7→ R denote a machine
+learning model taking an input data point x ∈ [a, b] and outputting a real number. For example,
+F (x) can be viewed as the output of a softmax layer (for a specific class) in a neural network classifier.
+We denote the class of such functions by F (a, b), or F if a, b may be inferred. Define a baseline
+attribution method as:
+Definition 1 (Baseline Attribution Method). A baseline attribution method is any function of the
+form A(x, x′ , F ) : D → Rn , where D ⊆ [a, b] × [a, b] × F . 2
+     Baseline attribution methods give the contribution of each feature in an input feature vector,
+denoted x ∈ [a, b], to a function’s output, F (x), with respect to some baseline feature vector x′ ∈
+[a, b].3 We denote a general baseline attribution by A, so that Ai (x, x′ , F ) is the attribution score
+of feature xi to F (x), with respect to the baseline feature values x′ . The definition allows for
+attributions with more restricted domains than [a, b] × [a, b] × F because baseline attributions may
+require conditions on F or x in order to be well defined. We will see a simple example of such
+conditions when we define Integrated Gradient method in section 2.3. For the purpose of this paper,
+all attribution methods are baseline attribution methods.
+   2 Some attribution and interaction methods also incorporate the internal structure of a model. We do not consider
+
+these here. In other words, the attribution methods we consider only depends on the function F (·) and does not
+depend on how this function is implemented in practice.
+   3 As an example, the first proposed baseline for image inputs was a black image, which corresponds to the zero
+
+vector [STY17]. The question of an appropriate baseline generally depends on the data. See [PS20] for a survey of
+baselines for image tasks.
+
+
+                                                         2
+    While attribution methods give a score to the contribution of each input feature, Interactions give
+a score to a group of features based on the group’s contribution to F (x) beyond the contributions of
+each feature [GR99]. For ease of reference, we may speak of a nonempty set S ⊆ N as being a group
+of features, by which we mean the group of features with indices in S. Let Pk = {S ⊆ N : |S| ≤ k}
+contain all subsets of N of size ≤ k. Then we can define a k th -order baseline interaction method by:
+Definition 2 (k th -Order Baseline Interaction Method). A k th -order baseline attribution method is
+any function of the form Ik (x, x′ , F ) : D → R|Pk | , where D ⊆ [a, b] × [a, b] × F .
+     k th -order interaction methods are a sort of expansion of attributions, giving a contribution for
+each group of features in Pk . For some S ∈ Pk , the term IkS (x, x′ , F ) indicates the component of
+Ik (x, x′ , F ) that gives interactions among the group of features S. When speaking of interactions
+among a group of features, there are multiple possible meanings: marginal interactions between
+members of a group, total interactions among members of the group, and average interactions among
+members of the group. Loosely speaking, if we let GS be the interactions among the features of S that
+are not accountedP     for by the interactions of sub-groups, then GS represents marginalPinteractions
+of features in S,        T ⊆S GT represents the total interactions of features in S, and              T ⊆S µT GT
+represents average interactions of features in S, where µT is some weight function. This paper
+focuses on marginal interactions.
+     Using quadratic regression as an example, suppose F (x1 , x2 , x3 ) = 2x1 − 3x2 + x1 x3 − 15, x =
+(1, 1, 1), x′ = (0, 0, 0). Then a 2nd -order baseline interaction method may report something like:
+I∅ (x, x′ , F ) = −15, I{1} (x, x′ , F ) = 2, I{2} (x, x′ , F ) = −3, and I{1,3} (x, x′ , F ) = 1, and the other
+interactions equal zero.
+     It should be noted that 1st -order interactions with I1∅ disregarded and baseline attributions have
+equivalent definitions. As with attributions, interactions may not be defined for all (x, x′ , F ). We
+denote the set of inputs where a given Ik is defined by DIk , or DA with regard to attributions. As
+with attributions, all interactions are baseline k th -order interactions for the purpose of this paper.
+We may drop x′ if the baseline is fixed, and also drop x, implying that some appropriate value is
+considered.
+
+2.2     Axioms
+The definitions provided in the previous subsection are extremely general and may lead to attribution
+functions that are not practical. To find practically-relevant attributions or interaction methods,
+the standard strategy is to identify certain axioms a method should satisfy. This guarantees a
+method has desirable properties and constrains the possible forms a method can take. In this
+subsection, we review the common axioms of attributions and interactions used in prior work [GR99]
+[SDA20], [SN20], [TYR22], [JSL21], [MR99], [ZCCZ20]. Axioms are only presented for interactions;
+they can be easily reformulated for attributions by setting k = 1 and disregarding I1∅ , so that
+I1 (x, x′ , F ) : D → Rn .
+    1. Completeness: S∈Pk ,|S|>0 IkS (x, x′ , F ) = F (x) − F (x′ ) for all (x, x′ , F ) ∈ DIk .
+                           P
+
+Completeness can be described as requiring the sum of all interactions to account for the change in
+function value between the input and the baseline. Completeness is sometimes called efficiency in
+the game-theoretic literature and derives from the concept of cost-sharing [SS71],[STY17]. In the
+cost-sharing problem, a cost function gives the cost of satisfying the demands of a set of agents
+[SS71]. A cost-share is a division of the cost among all agents, thus requiring the sum of all cost
+shares to equal the total cost. In attributions and interactions, requiring completeness grounds
+the meaning of the interaction values by requiring the method account for the total function value
+change F (x) − F (x′ ). Thus the value of IkS (x, x′ , F ) indicates that the marginal interaction between
+features in S contributed to the function changing by IkS (x, x′ , F ).
+   2. Linearity: If (x, x′ , F ), (x, x′ , G) ∈ DIk , a, b ∈ R, then (x, x′ , aF +bG) ∈ DIk , and Ik (x, x′ , aF +
+      bG) = aIk (x, x′ , F ) + bIk (x, x′ , G).
+
+
+
+                                                       3
+Linearity ensures that when a model is a linear combination of sub-models, the interactions or
+attributions of the model is a weighted sum of the interactions or attributions of the sub-models.
+    We say that a function F ∈ F does not vary in some feature xi if for any vector x ∈ [a, b],
+f (t) = F (x1 , .., xi−1 , t, xi+1 , ..., xn ) is constant. This indicates that F is not a function of xi . On
+the contrary, if it is false to say that F does not vary in xi , then we say F varies in xi . If F does
+not vary in xi , we call xi a null feature of F .
+   3. Null Feature: If (x, x′ , F ) ∈ DIk , F does not vary in xi , and i ∈ S, then IkS (x, x′ , F ) = 0.
+Null Feature asserts that there is no marginal interaction among a group if one of the features has
+no effect. There may be interactions between subsets of S so long as they do not contain a null
+feature.4
+     The three axioms above, completeness, linearity, and null features, are generally assumed in
+the literature on game-theoretic attributions and interactions. Besides these three, there are many
+other axioms (guiding principles) offered that generally serve one of two purposes: either they dis-
+tinguish a method as unique, or they show that a method satisfies desirable qualities. Among
+them are symmetry [SDA20], symmetry-preservation [STY17], [JSL21], [SN20], interaction symme-
+try [JSL21], [TYR22], interaction distribution [SDA20], binary dummy [GR99],[SDA20], sensitivity
+(sometimes called sensitivity (a))[STY17], [SBH21], implementation invariance [STY17], [SDA20],
+[JSL21], [SBH21], set attribution [TRL20], non-decreasing positivity [LHR22], recursive axioms
+[GR99], 2-Efficiency [GR99], [TYR22], faithfulness5 [TYR22], affine scale invaraince [Fri04], [SN20],
+[XVS20], demand monotonicity [SN20], proportionality [SN20], and causality [XVS20]. Some of the
+above axioms, such as linearity or implementation invariance, are satisfied by many methods, but no
+one method satisfies all axioms. For example, Faith-Shap [TYR22] agrees with the Shapley-Taylor’s
+[SDA20] axioms up to a point, but while Shapley-Taylor posits interaction distribution to gain a
+unique method, Faith-Shap instead posits a formulation of faithfulness to gain a unique method.
+     There are natural limitation to this setup, as some attributions in the literature do not satisfy
+these definitions and axioms. For example, GradCAM [SCD+ 17] does not use a baseline input, nor
+does Smoothgrad [STK+ 17]. Many methods, such as Layer-Wise Relevance Propagation [ZF14] or
+Deconvolutional networks [SDBR14], do not attempt to satisfy completeness, so that the magnitude
+of the attributions is governed by some other principle. It may be possible for some methods to be
+adjusted to have a baseline by taking the difference in attributions between an input and a baseline,
+or to satisfy completeness by scaling all attributions by some proportion. While considering adjusted
+methods could conceivably lead to interesting results, the methods in question are not designed to
+fit into a game-theoretic context, and we omit analysis of methods that need adjustment to fit in
+the game-theoretic paradigm.
+
+2.3     Attribution and Interaction Methods
+There are several well-known attributions based on cost sharing. Before we introduce them, we
+first introduce a necessary notation. For given features S ⊆ N and assumed baseline x′ , we define
+xS ∈ [a, b] by:                                 (
+                                                 xi if i ∈ S
+                                       (xS )i =                                                (1)
+                                                 x′i if i ∈
+                                                          / S,
+
+where xi is the ith element of x and x′i is the ith element of x′ . One well known attribution method
+is the Shapley Value [SS71], [LL17], given as:
+                                                            −1
+                                        1      X        n−1
+                        Shapi (x, F ) =                          (F (xS∪{i} ) − F (xS )),
+                                        n                |S|
+                                            S⊆N \{i}
+
+  4 Null feature is similar to dummy as stated in [STY17] and [SDA20].
+   5 While not stated as an axiom, “faithfulness” was given as a desirable property and used to constrain the form of
+
+an interaction.
+
+
+
+
+                                                          4
+                       (n−1)!
+where n−1       , (n−1−|S|)!(|S|)!
+              
+          |S|                      denotes the number of subsets of size |S| of n − 1 features. The
+Shapley value is a direct import of the famous Shapley value in cost sharing literature into the ML
+context; it is obtained by considering all possible ways in which a vector x′ can transition to x by
+sequentially toggling each component from the baseline value x′i to xi . Specifically, Shapi (x, F ) is
+the average function change of F when x′i toggles to xi , over all possible transition sequences. The
+Shapley value is an example of a binary features method, meaning it only considers F evaluated at
+the points {xS : S ⊆ N }; that is, points where each feature value is the input or baseline value. The
+Shapley value is well defined for all (x, x′ , F ) ∈ [a, b] × [a, b] × F and thus there is no need for domain
+restriction.
+    Several k th -order interactions that extend Shapley values have X       been proposed, all of which are
+binary feature methods [GR99],[TYR22]. First, define δS|T F (x) =               (−1)|S|−|W | F (xW ∪T ), which
+                                                                               W ⊆S
+intuitively measures the marginal impact of including the features in S when the features in T
+are already present based on the inclusion-exclusion principle. The Shapley-Taylor Interaction
+Index of order k [SDA20] is then given by:
+                                        P
+                                       k            δS|T F (x)
+                            k            n   T ⊆N \S (n−1)      if |S| = k
+                         STS (x, F ) =                  |T |                                (2)
+                                       δ (F )
+                                                   S|∅          if |S| < k.
+
+Shapley-Taylor prioritizes interactions of order k and its unique contribution is to satisfy the inter-
+action distribution axioms, which is discussed in 3.4.
+    Another well known attribution is the Integrated Gradients (IG) [STY17]:
+                                                          Z 1
+                                                                ∂F ′
+                              IGi (x, F ) = (xi − x′i )             (x + t(x − x′ ))dt.                    (3)
+                                                           0    ∂xi
+
+The IG is a direct translation of the well known cost-sharing method of Aumann-Shapley [AS74]
+to ML attributions. The IG has been called the continuous version of the Shapley value, insofar
+as it 1) makes use of the gradient, unlike binary features methods, and 2) is restricted to inputs
+(x, x′ , F ) such that F is integrable on the path x′ + t(x − x′ ).6 For the theoretical foundations of
+IG, see [STY17], [AS74], [LHR22]. Currently, no k th -order interactions extension of the Integrated
+Gradient has been proposed. However, a 2-order interaction, Integrated Hessian (IH), has been
+proposed in [JSL21]. This interaction method computes the pairwise interaction between xi and xj
+as:                                                        Z 1Z 1
+                                                                      ∂ 2F
+               IH{i,j} (x, F ) = 2(xi − x′i )(xj − x′j ) ×        st         (x′ + st(x − x′ ))dsdt.
+                                                            0  0     ∂xi ∂xj
+   The “main effect” of xi , or lone interaction (a misnomer), is defined as:
+                                                   Z 1Z 1
+                                                       ∂F ′
+                    IH{i} (x, F ) =(xi − x′i ) ×            (x + st(x − x′ ))dsdt
+                                                  0  0 ∂x i
+                                                    Z 1Z 1
+                                                              ∂2F
+                                              ′ 2
+                                     + (xi − xi ) ×         st 2 (x′ + st(x − x′ ))dsdt.
+                                                     0  0     ∂xi
+
+IH is what we label a recursive method since it is defined by using an attribution method recur-
+sively. Specifically, IH{i,j} (x, F ) = IGi (x, IGj (·, F )) + IGj (x, IGi (·, F )). Similarly, IH{i} (x, F ) =
+IGi (x, IGi (·, F )) [JSL21]. Note that the domain where IH is well defined is restricted to functions
+where components of the Hessian, Hf = ∇2 F (x), can be integrated along the path x′ + t(x − x′ ). We
+discuss the expansion of IH to a k th -order interaction and its properties in section 5.2 and appendix
+D.4.
+  6 For example, IG is not defined for F (x , x ) = max(x , x ) with x′ = (0, 0), x = (1, 1)
+                                           1   2         1   2
+
+
+
+
+                                                           5
+2.4    The Möbius Transform
+Lastly, we review the Möbius transform, which will be useful for our definition of the notion of
+“pure interactions” in section 3. Let v be a real-valued function on |N | binary variables, so that
+ v : {0, 1}N → R. For S ⊆ N , we write v(S) to denote v((11∈S , ..., 1n∈S )), where 1 is the indicator
+function. Recall that the Möbius transform of v is a function a(v) : {0, 1}N → R given by [Rot64]:
+                                             X
+                                  a(v)(S) =      (−1)|S|−|T | v(T ).                               (4)
+                                                T ⊆S
+
+The Möbius transform satisfies the following relation to v:
+
+                                          a(v)(T )1T ⊆S =
+                                      X                    X
+                             v(S) =                          a(v)(T ).                               (5)
+                                       T ⊆N                       T ⊆S
+
+   The Möbius transform can be conceptualized as a decomposition of v into the marginal effects
+on v for each subset of N . Each subset of S has its own marginal effect on the change in function
+value of v, so that v(S) is a sum of the individual effects, represented by a(v)(T ) in Eq. (5). For
+example, if N = {1, 2}, then for
+                                                                     
+             
+              α   if S = ∅                                           
+                                                                       α            if S = ∅
+                                                                     
+             β    if S = {1}                                         β − α         if S = {1}
+      v(S) =                               we have          a(v)(S) =
+             
+             
+              γ   if S = {2}                                         
+                                                                      
+                                                                       γ−α          if S = {2}
+               δ   if S = {1, 2}                                        δ−β−γ+α      if S = {1, 2}
+                                                                     
+
+
+3     Möbius Transforms as a Complete Account of Interactions
+3.1    Motivation: Pure Interactions
+In order to identify desirable qualities of an interaction method, it would be fruitful to answer
+the question: what sorts of function is a “pure interaction” of features in S? Specifically, is
+F (x1 , x2 , x3 ) = x1 x2 a function of pure interaction between x1 and x2 ? This question is useful
+because if F is a pure interaction of x1 and x2 (i.e. the only effects in F is an interaction between
+x1 and x2 ), then naturally it ought to be that I2S (x, F ) = 0 for S 6= {1, 2}. Indeed, to continue the
+example, suppose F is a general function and we can decompose F as follows:
+                                     X                X
+                        F (x) = f∅ +     f{i} (xi ) +    f{i,j} (xi , xj ) + f{1,2,3} (x),
+                                   1≤i≤3             1≤i<j≤3
+
+where f∅ is some constant, f{i} is pure main effect of xi ; f{i,j} gives pure pairwise interactions; and
+f{1,2,3} is pure interaction between x1 , x2 , and x3 . Assuming I2 conforms to linearity, we would
+gain:                                 X
+                        I2S (x, F ) =   I2S (x, fT ) = I2S (x, fS ) + I2S (x, f{1,2,3} ),
+                                    |T |≤3
+
+by applying the above principle, namely I2S (x, fT ) = 0 if S 6= T , |T | ≤ 2. That is, the 2nd -order
+interaction of F for S would be a sum of I2S acting on the pure interaction function for group S,
+written fS , and I2S acting on a pure interaction of size 3. This would generalize to higher order
+interactions, so that:                                    X
+                             IkS (x, F ) = IkS (x, fS ) +      IkS (x, fT ).
+                                                           T ⊆N,|T |>k
+
+We would then have to determine what rules should govern IkS (x, fS ), and IkS (x, fT ), |T | > k.
+
+
+
+
+                                                       6
+3.2    Unique Full-Order Interactions
+In the previous section we spoke intuitively regarding the notion of pure interaction; we now present
+a formal treatment. Let In be a nth -ordered interaction function, i.e., In gives the interaction between
+all possible subsets of features. In addition to the axioms of completeness and null features above, we
+propose two modest axioms for such a function; first, we propose a milder form of linearity, which
+requires linearity only for functions that InS assign no interaction to. We weaken linearity in the
+interest of establishing the notion of pure interactions with minimal assumptions.
+  4. Linearity of Zero-Valued Functions: If (x, x′ , G), (x, x′ , F ) ∈ DIn , S ⊆ N such that
+     InS (x, x′ , G) = 0, then InS (x, x′ , F + G) = InS (x, x′ , F ).
+Before introducing the next axiom, we consider the meaning of the baseline, x′ . In cost sharing, the
+baseline is the state where all agents make no demands [SS71]. If an agent makes no demands, there
+are no attributions, nor are there interactions with other players. Likewise, the original IG paper
+notes [STY17]:
+  “Let us briefly examine the need for the baseline in the definition of the attribution problem. A
+  common way for humans to perform attribution relies on counterfactual intuition. When we
+  assign blame to a certain cause we implicitly consider the absence of the cause as a baseline for
+  comparing outcomes. In a deep network, we model the absence using a single baseline input.”
+   As with the cost sharing literature and [STY17], we interpret the condition xi = x′i to indicate
+that the feature xi is not present. With this observation, and recalling that xS denotes a vector
+where the components in S are not fixed at the baseline values in x′ , we present the next axiom:
+  5. Baseline Test for Interactions (k = n): For baseline x′ , if F (xS ) is constant ∀x, then
+     InS (x, x′ , F ) = 0.
+This axiom states that if every variable ∈ / S is held at the baseline value, and the other variables
+∈ S are allowed to vary, but the function is a constant, then there is no interaction between the
+features of S. Why is this sensible? The critical observation is that a feature being at its baseline
+value indicates the feature is not present. If the features of S have no effect when other features are
+absent, then the features of F do not interact in and of themselves and their interaction measurement
+should be zero.
+    It should also be clarified that our definition of interactions allows F and x′ to be chosen sepa-
+rately. However, it is generally the case that a ML model will be trained on data which will inform
+the appropriate choice of baseline. It is possible that a model does not admit to a baseline repre-
+senting the absence of features, in which case game-theoretic baseline attributions and interactions
+may be ill-suited as explanation tools. We proceed to discuss the case when F has a baseline, and
+assume implicitly that x′ is chosen as the fitting baseline to F .
+Theorem 1. There is a unique n-order interaction method with domain [a, b]×[a, b]×F that satisfies
+completeness, null feature, linearity of zero-valued functions, and baseline test for interactions (n =
+k).
+    Proof of Theorem 1 can be found in Appendix C.1. We turn to explicitly defining the unique
+interaction function satisfying the conditions in Theorem 1. For a fixed x and implicit x′ , note
+that F (xS ) is a function of S. This implies it can be formulated as a function of binary variables
+indicating whether each input component of F takes value xi or x′i . Thus we can take the Möbius
+transform of F (x(·) ), written as a(F (x(·) )). Now, if we evaluate the Möbius transform of F (x(·) )
+for some S, given as a(F (x(·) ))(S), and allow x to vary, then this is a function of x. Recall that
+Pk = {S ⊂ N : |S| ≤ k}. Given a baseline x′ , define the synergy function as follows:
+Definition 3 (Synergy Function). For F ∈ F , S ∈ Pn , and implicit baseline x′ ∈ [a, b], the synergy
+function φ : PN × F → F is defined by the relation φS (F )(x) = a(F (x(·) ))(S).
+
+
+
+
+                                                   7
+    We present the following example to help illustrate the synergy function: let F (x1 , x2 ) = a+bx21 +
+c sin x2 +dx1 x22 , and suppose x′ = (0, 0) are the baseline values for x1 and x2 that indicate the features
+are not present. The synergy for the empty set is the constant F (x′ ) = a, indicating the baseline
+value of the function when no features are present. To obtain φ{1} (F ), we allow x1 to vary but keep
+x2 at the baseline, and subtract the value of F (x′ ). This gives us φ{1} (F )(x) = a + bx21 − a = bx21 .
+If instead we allow only x2 to vary, we get φ{2} (F )(x) = a + c sin(x2 ) − a = c sin(x2 ). Finally, if we
+allow both to vary and subtract of all the lower synergies, we get φ{1,2} (F )(x) = dx1 x22 .
+    With the definition of the synergy function, we turn to the following corollary:
+Corollary 1. The synergy function is the unique n-order interaction method that satisfies com-
+pleteness, null feature, linearity of zero-valued functions, and baseline test for interactions (n = k).
+    Proof of Corollary 1 is relegated to Appendix C.2. The properties of the synergy function stem
+from properties of the Möbius transform. Specifically, because the synergy function is defined by
+the Möbious Transform, it inherits many of its properties, including completeness, null feature,
+linearity of zero-valued functions, and baseline test for interactions (n = k). The primary precursor
+to the synergy function is the Harsanyi dividend [Har63], which is like the Möbius transform and is
+formulated for discrete-input settings. More recently, the Shapley-Taylor Interaction Index [STY17]
+takes the form of the Möbius Transform when k = n, where Shapley-Taylor imposes symmetry
+and interaction distribution axioms. Likewise, Faith-Shap [TYR22] takes the form of the Möbius
+Transform when k = n, where Faith-Shap primarily imposes a best-fit property dubbed faithfulness.
+The novelty of the synergy function is that, while previous works assumed F to be a set function
+(as in section 2.4), the synergy function is a linear functional between continuous input functions.
+Consequently, Corollary 1 is novel, not only because of the inclusion of baseline test for interactions
+(k = n), but also because all axioms do not assume F is a set function.
+
+3.3    Properties of the Synergy Function
+Given a function F , the synergy of a single feature xi is given by
+
+                                       φ{i} (F )(x) = F (x{i} ) − F (x′ ),
+
+and the pairwise synergy for features xi and xj is
+
+                      φ{i,j} (F )(x) = F (x{i,j} ) − φ{i} (F )(x) − φ{j} (F )(x) − F (x′ )
+                                                                                                                 (6)
+                                     = F (x{i,j} ) − F (x{i} ) − F (x{j} ) + F (x′ ).
+
+In general, the synergy function for a group of features S is
+                                                   X
+                            φS (F )(x) = F (xS ) −     φT (F )(x) − F (x′ )
+                                                         T (S,T 6=∅
+                                               X
+                                           =          (−1)|S|−|T | × F (xT ).
+                                               T ⊆S
+
+    With this we can define the notion of a pure interaction. A pure interaction function of the
+features S is a function that 1) takes a value of 0 if any feature in S takes its baseline value, and 2)
+varies and only varies in the features in S.7 This is exactly what the synergy function accomplishes:
+either φS (F )(x) = 0, or φS (F )(x) varies in exactly the features in S and is 0 whenever xi = x′i for
+any i ∈ S. More technically, define CS = {F ∈ F |F is a pure interaction function of S} to be the
+set of pure interactions of features S. Then we have the following corollary:
+Corollary 2. Suppose an implicit baseline x′ ∈ [a, b] and let F ∈ F , and S, T ∈ Pn . Then the
+following hold:
+   1. Pure interaction sets are disjoint, meaning CS ∩ CT = ∅ whenever S 6= T .
+  7 For the degenerate case where S = ∅, a pure interaction of the features of S would be a constant function.
+
+
+
+
+                                                           8
+  2. φS projects F onto CS ∪ {0}. That is, φS (F ) ∈ CS ∪ {0} and φS (φS (F )) = φS (F ).
+  3. For ΦT ∈ CT , we have φS (ΦT ) = 0 whenever S 6= T .
+  4. φ uniquely decomposes F ∈ F into a set of pure interaction
+                                                            P    functions on distinct groups of
+     features. That is, there exists P ⊂ Pn such that F = S∈P ΦS where each ΦS ∈ CS , only
+     one such representation exists, and ΦS = φS (F ) for each S ∈ P while φS (F ) = 0 for each
+     S ∈ Pn \ P.
+    Proof of Corollary 2 is relegated to Appendix C.3. For ease of notation, we will move forward
+assuming that if x′ is not stated, the implicit baseline value is x′ = 0 and is appropriate to F . We
+will also assume that the synergy functions S is applied using the proper implicit baseline choice.
+Lastly, we denote ΦS ∈ CS to be a pure interaction in S as defined above, or what we may also call
+a “synergy function” in S.
+
+3.4    Axioms and the Distribution of Synergies
+Now that we have the notion of pure interactions by way of the synergy function, we comment on
+the interplay between axioms and synergy functions. First, we present a version of the baseline test
+for interactions which applies for k ≤ n. The idea here is a generalization of the (k = n) case; that
+if Ik is a k th -order interaction and ΦS is some pure interaction function with |S| ≤ k, then Ik (ΦS )
+should not report interactions for any set but S. We give this as an axiom:
+  6. Baseline Test for Interactions (k ≤ n): For baseline x′ and any synergy function ΦS with
+     |S| ≤ k, if T ( S, then IkT (ΦS ) = 0.
+This is a weaker version of the defining axiom of Shapley-Taylor [SDA20], which states:
+  7. Interaction Distribution: For baseline x′ and any synergy function ΦS , if T ( S and
+     |T | < k, then IkT (ΦS ) = 0.
+The baseline test of interactions asserts that if a synergy function is for a group of at least size k,
+Ik should not report interactions for any other group. The interaction distribution asserts the same,
+and adds the caveat that if the synergy function is for a group of size larger than k, it must be
+distributed only to groups of size k.
+    We now detail how some of these axioms can be formulated as constraints on the distribution of
+synergies.
+1. Completeness: ensures that any method distributes a synergy among sets of inputs. Formally,
+                                              k
+                      P ΦS , we may say that IT (x, ΦS ) = wT (x, ΦS ) × ΦS (x), where wT is some
+   for a synergy function
+   function satisfying T ⊆Pk wT (x, ΦS ) = 1.
+
+2. Linearity: enforce that Ik (F ) is the sum of Ik applied to the synergies of F . Formally, Ik (F ) =
+   P        k
+     T ⊂Pk I (φT (F )).
+
+3. Null Feature: enforces that Ik only distributed ΦS to groups T ⊆ S.
+4. Baseline Test for Interaction(k ≤ n): enforces that ΦS is not distributed to groups T ( S when
+   |S| ≤ k.
+5. Interaction Distribution: enforces that ΦS is not distributed to groups T ( S when |S| ≤ k, and
+   is distributed only to groups of size k when |S| > k.
+
+6. Symmetry8 : enforces that a synergy ΦS be distributed equally among groups in the binary
+   features case.
+  8 See appendix B for a statement of symmetry axiom.
+
+
+
+
+                                                        9
+4       Binary Feature Methods and Synergies
+We now discuss the role of the synergy function in axiomatic attributions/interactions. [Har63]9 noticed
+that for a synergy function ΦS , the Shapley value is
+                                                  ( Φ (x)
+                                                      S
+                                                      |S|  if i ∈ S
+                                   Shapi (ΦS ) =                                                   (7)
+                                                    0      if i ∈
+                                                                / S.
+
+This means the Shapley value distributes the function gain from ΦS equally among all i ∈ S. Using
+the synergy representation of F and linearity of Shapley values, we get
+                                                          X          ΦS (x)
+                                       Shapi (F ) =                         .                                (8)
+                                                                      |S|
+                                                      S⊆N s.t. i∈S
+
+Thus, the Shapley value can be conceptualized as distributing each synergy Φ{i} to xi and distribut-
+ing all higher synergies, ΦS with |S| ≥ 2, equally among all features in S, e.g., Shap(Φ{1,2,3} ) =
+ Φ          Φ        Φ
+( {1,2,3}
+    3     , {1,2,3}
+              3     , {1,2,3}
+                        3     , 0, ..., 0). Indeed the Shapley value is characterized by its rule of distributing
+the synergy function.
+Proposition 1. ([Gra97, Thm 1]) The Shapley value is the unique attribution that satisfies linearity
+and acts on synergy functions as in (7).
+   For a synergy function ΦS , the Shapley-Taylor interaction index of order k for a group of features
+T ∈ Pk is given by:                       
+                                          ΦS (x) if T = S
+                                          
+                                          
+                                            ΦS (x)
+                                 k
+                             STT (ΦS ) =            if T ( S, |T | = k .                           (9)
+                                           (|S|
+                                              k )
+                                          
+                                          0        else
+The Shapley-Taylor distributes each synergy function of S to its group, unless is too large (|S| > k),
+in which case it distributes the synergy equally among all subsets of S of size k. We denote this type
+of k th -order interaction top-distributing, as it projects all synergies larger than the largest available
+size, k, to the largest groups available. This results in Shapley-Taylor emphasising interactions
+between features of size k, which may be an advantage or disadvantage, depending on the goal of
+the interaction.
+    As with the Shapley value, the Shapley-Taylor is characterized by this action on synergy func-
+tions:
+Proposition 2. ([SDA20, Prop 4]) The Shapley–Taylor Interatcion Index of order k is the unique
+k th -order interaction index that satisfies linearity and acts on synergy functions as in Eq. (9).
+    There is another binary feature k th -order interaction method similar to Shapley-Taylor, briefly
+motioned in [SDA20], with the distinction that it is not top-distributing. Here we detail and aug-
+ment the method. Similarly to the Integrated Hessian, we may take the Shapley value recursively
+to gain pairwise interaction between xi and xj , given by RS{i,j} (x, F ) = Shapi (x, Shapj (·, F )) +
+Shapj (x, Shapi (·, F )) = 2Shapi (x, Shapj (·, F )). Main effects for xi would be Shapi (x, Shapi (·, F )).
+    More generally, consider expanding the expression kykk1 , and let NTk denote the sum of coefficients
+associated exactly with the variables with indices in T . Then the Recursive Shapley of order k
+distributes synergy functions as such:
+                                                 ( k
+                                                    NT
+                                      k               k ΦS (x)  if T ⊆ S
+                                   RST (ΦS ) = |S|                        .                             (10)
+                                                    0           else
+                                            Nk
+where in the case T = S = ∅ we set |S|Tk := 1. This formulation, however, has the disadvantage
+of distributing a portion of synergy functions for groups sized ≤ k to subgroups. For example, the
+     9 [Har63] observed
+                     Eq. (7) and (8) in the binary feature setting with Möbius transforms. Here we state the
+continuous input form with synergy functions.
+
+
+                                                        10
+recursively Shapley reports that a synergy function Φ{1,2,3} (x) also has interactions for subgroup
+{1, 2}. This violates the baseline test for interactions (k ≤ n). We can modify the method to avoid
+this issue, causing Recursive Shapley to satisfy the baseline test for interactions (k ≤ n) axiom. We
+explicitly detail the Recursive Shapley and modification in D.1. As with the Shapley method and
+Shapley-Taylor, we have the following Theorem:
+Theorem 2. The Recursive Shapley of order k is the unique k th -order interaction index that satisfies
+linearity and acts on synergy functions as in Eq. (10).
+    Proof of this Theorem can be found in Appendix D.1.2.
+
+
+5     Synergy Distribution in Gradient-Based Methods
+A critical aspect of the above binary feature methods is that they treat all features in a synergy
+function as equal contributors to the function output. For example, consider the synergy function of
+S = {1, 2} given by F (x1 , x2 ) = (x1 −x′1 )100 (x2 −x′2 ). F evaluated at x = (x′1 +2, x′2 +2) yields F (x) =
+2100 21 = 2101 . The Shapley method applied to F treats both inputs as equal contributors, and
+                                                       101
+would indicate that x1 and x2 each contributed 2 2 to the function increase from the baseline. This
+assertion seems unsophisticated, not to mention intuitively incorrect, given we know the mechanism
+of the interaction function.
+    The IG exhibits the potential advantages of gradient-based attribution methods by providing a
+more sophisticated attribution. For m ∈ Nn , define (x − x′ )m = (xi − x′i )m1 · · · (xn − x′n )mn , taking
+the convention that if mi = 0 and xi = x′i , then (xi − x′i )mi = 1. Define m! = m1 ! · · · mn !, and define
+            ∂ kmk1 F                                                   m
+Dm F = ∂xm    1     mn . We notate the non-constant features of x        by Sm = {i|mi > 0}.
+            1 ···∂xn
+    We call a function of the form F (y) = (y − x ) a monomial centered at x′ , and note that any
+                                                       ′ m
+
+monomial centered at an assumed baseline x′ is a synergy function of Sm . Assuming mi > 0 and
+taking x′ = 0, the IG attribution to y m , a synergy function of Sm , is:
+
+                                                 Z 1
+                          IG{i} (x, y m ) = xi         mi (tx)(m1 ,...,mi −1,...,mn) dt
+                                                  0
+                                                 Z 1          P
+                                                                  mi −1 (m1 ,...,mi −1,...,mn )
+                                        = xi           mi t             x                         dt
+                                                  0
+                                                        P
+                                                t mj 1
+                                        = mi xm P
+                                                  mj 0
+                                           mi m
+                                        =      x                                                          (11)
+                                          kmk1
+
+This means that IG distributes the function change of F (y) = y m to xi in proportion to mi . For
+                                                                                    100 101 1 101
+example, the IG’s attribution to our previous problem is IG((2, 2), x1001 x2 ) = ( 101 2   , 101 2 ),
+a solution that seems much more equitable than the Shapley value. Thus the IG can distinguish
+between features based on the form of the synergy, unlike the Shapley value, which treats all features
+in a synergy functions as equal contributors.
+
+5.1    Continuity Condition
+We now move to more rigorously develop the connection between gradient-based methods and to
+monomials. To connect the action of attributions and interactions on monomials to broader functions,
+we now move towards defining the notion of an interaction being continuous in F . Let C ω denote
+the set of functions that are real-analytic on [a, b]. It is well known that any F ∈ C ω admits to a
+convergent multivariate Taylor Expansion centered at x′ :
+                                                 X Dm F (x′ )
+                                    F (x) =                             (x − x′ )m .                      (12)
+                                                              m!
+                                                 m∈Nn
+
+
+                                                            11
+     Functions in C w have continuous derivatives of all orders, and those derivatives are bounded in
+[a, b]. Thus, C ω it is a well-behaved class that gradient-based interactions ought to be able to assess.
+     Recall that the Taylor approximation of order l centered at x′ , denoted Fl , is given by:
+                                                 X           Dm (F )(x′ )
+                                  Tl (x) =                                (x − x′ )m .                            (13)
+                                                                 m!
+                                             m∈Nn ,kmk1 ≤l
+
+   The Taylor approximation for analytic functions has the property that Dm Tl uniformly converges
+to Dm F for any m ∈ Nn and x ∈ [a, b]. Given this fact, it would be natural to require that for a
+given k th -ordered interaction Ik defined for C w functions, liml→∞ Ik (Tl ) = Ik (F ).
+   This notion is further justified by the fact that many ML models are analytic. Particularly, NNs
+composed of fully connected and residual layers, analytic activation functions such as sigmoid, mish,
+swish, as well as softmax layers are real-analytic. While models using max or ReLU functions are not
+analytic, they can be approximated to arbitrary precision by analytic functions simply by replacing
+ReLU and max with the parameterized softplus and smoothmax functions, respectively.
+   With this, we propose a continuity axiom requiring interactions for a sequence of Taylor approx-
+imations of F to converge to the interactions at F .
+
+7. Continuity of Taylor Approximation for Analytic Functions: If Ik is defined for all
+   (x, x′ , F ) ∈ [a, b] × [a, b] × C ω , then for any F ∈ C ω , liml→∞ Ik (x, x′ , Tl ) = Ik (x, x′ , F ), where Tl is
+   the lth order Taylor approximation of F centered at x′ .
+
+From this we have the following result, who’s proof can be found in Appendix D.2:
+Theorem 3. Let Ik be an interaction method defined on [a, b]×[a, b]×C ω which satisfies linearity and
+continuity of Taylor approximation for analytic functions. Then Ik (x, x′ , F ) is uniquely determined
+by the the values Ik takes for the inputs in the set {(x, x′ , F ) : F (y) = (y − x′ )m , m ∈ Nn }.
+   In section 4 we saw that binary feature methods distribute synergy functions according to a rule,
+and that rule characterized the method as a whole. gradient-based methods satisfying linearity and
+the continuity condition are characterized by their actions on specific sets of elementary synergy
+functions, monomials. Thus, given our the continuity condition and linearity, we have collapsed
+the question of continuous interactions to the question of interactions of monomials centered at x′ .
+Specifically, if linearity and continuity are deemed desirable, and a means of distributing polynomials
+can be chosen, then the entire method is determined for analytic functions. This is illustrated by
+the following corollary, with accompanying proof located in Appendix D.3:
+Corollary 3. IG is the unique attribution method on analytic functions that satisfies linearity, the
+continuity condition, and acts on the inputs (x, x′ , (y − x′ )m ) as in Eq. (11).
+
+5.2     Integrated Hessians
+Next, we present two gradient-based interaction methods corresponding to Shapley-Taylor and Re-
+cursive Shapley.
+   For m ∈ Nn , the Integrated Hessian of F (y) = y m at x is:
+
+
+                                                2mi mj m                          m2i m
+                             IH{i,j} (y m ) =          x ,      IH{i} (y m ) =         x .
+                                                 kmk21                           kmk21
+
+    As in Recursive Shapley, IH distributes a portion of any pure interaction monomial to all
+nonempty subsets of features in Sm , breaking the baseline test for interactions(k ≤ n). For ex-
+ample, although F (x1 , x2 , x3 ) = x1 x2 is a synergy function of S = {1, 2}, IH distributes some of F
+to main effects. This can be remedied by directly distributing single and pairwise synergies, then
+using IH to distribute monomials involving 3 or more variables. This augmented IH is given below:
+
+
+
+
+                                                          12
+                                                                  X
+                           IH∗T (x, F ) = φT (F )(x) + IHT (x, F − φS (F )).
+                                                                   |S|≤2
+
+
+    Both IH and augmented IH can be extended to k th -ordered interactions to produce a monomial
+distribution scheme. Consider the expansion of kmkk1 , and let MTk (m) denote the sum of the terms
+of the expansion involving exactly the mi where i ∈ T . Explicitly,
+                                                           
+                                                X           k
+                                    k
+                                 MT (m) =                      ml .                            (14)
+                                              n
+                                                            l
+                                                l∈N ,|l|=k,Sl =T
+
+    The augmented IH of order k acts on monomial functions as follows:
+                                         m
+                                        x k
+                                                         if T = Sm
+                                         MT (m) m
+                           IHk∗  m
+                             T (y ) =           x         if T ( Sm , |Sm | > k .                   (15)
+                                         kmkk1
+                                            0             else
+                                        
+
+To explain, IHk∗ distributes all monomial synergies of size ≤ k to their groups, and distributes
+monomial synergies of size > k to subgroups of Sm in proportion to MTk (m). IH and augmented IH
+also satisfy completeness and null feature. A full treatment of both is given in appendix D.4.
+Corollary 4. IHk∗ is the unique attribution method on analytic functions that satisfies linearity,
+the continuity condition, and distributes monomials as in Eq. (15).
+
+5.3    Sum of Powers: A Top-Distributing Gradient-Based Method
+Previously we outlined a k th -order interaction that was not top-distributing. Now we now present the
+distribution scheme for a gradient-based top-distributed k th -order interaction we call Sum of Powers.10
+We present only its action on monomials here, and detail the method in Appendix D.5. Sum of Pow-
+ers distributes a monomial as such:
+                                     
+                                     
+                                      xm       P
+                                                             if T = Sm
+                                                  i∈T mi m
+                                     
+                          k    m           1
+                       SPT (y ) = (|Sm |−1) kmk1        x    if T ( Sm , |T | = k .               (16)
+                                         k−1
+                                     
+                                     0                      else
+
+The highlight is that Sum of Powers satisfies completeness, null feature, linearity, continuity condi-
+                                                                                         y m , |Sm | > k,
+tion, baseline test for interactions, and is a top-distributing method. Particularly for P
+                              m
+Sum of Powers distributes y only to top subgroups T , T = k, and in proportion to i∈T mi . We
+present a corollary below; see Appendix D.5 for full details.
+Corollary 5. Sum of Powers is the unique attribution method on analytic functions that satisfies
+linearity, the continuity condition, and distributes monomials as in Eq. (16).
+
+
+6     Concluding Remarks
+The paradigm of synergy distribution is a useful concept for the analysis and development of at-
+tribution and interaction methods. First, it can point out weaknesses in existing methods such
+as the Integrated Hessian and indicate improvements, second, it can lead to new methods such as
+the Sum of Powers method, and last, it allows new characterization results based on synergy or
+monomial distribution. As seen in the comparison of Shapley Value vs Integrated Gradient, synergy
+distribution can play an important role implicitly even when not explicitly discussed in the litera-
+ture. However, the application of this analysis tool does not settle the question, “which method is
+best?” There exists conflicting groups of axioms and various combinations of them produce unique
+
+
+                                                     13
+interactions. The choice of whether to use a top-distributing or recursively defined method, a binary
+features or gradient-based method, or some other method may vary with the goal. For example,
+top-distributed methods may be preferable when explicitly searching for strong interactions of size
+k, while an iterative approach may be preferable when seeking to emphasizing all interactions up to
+size k.
+    For problems with continuous inputs, gradient-based methods seem to offer a more sophisticated
+means of distributing synergies, as they distinguish between features when they distribute a synergy
+function. Here again, it is not clear if any given method represents a clear “winner” to distribute
+monomials. We have presented one top-distributing and one recursive method, but it is unclear if
+these methods are best in class. For instance, perhaps a top-distributing method that distributes
+monomials by some softmax-weighted scheme is preferable to Sum of Powers. In order to find such
+methods, one may try to find a linear operator LS : C ω → C ω where the continuity criteria apply
+and LS (y m ) = cS (y, m)y m for some desirable weighting function cS . Finding such linear operators
+could produce a variety of attribution and interaction methods.
+    In the authors’ opinion, the possibility of the existence of one “best” method is improbable
+as various combinations of different axioms lead to the development of unique methods. Thus,
+choosing methods based on the context of the application seems a more logical approach. Indeed,
+the existence of unique methods with individual strengths is already studied in game-theoretic cost-
+sharing literature11 .
+
+
+7     Acknowledgements
+This work was supported in part by a gift from the USC-Meta Center for Research and Education in
+AI and Learning. The authors are grateful to Mukund Sundararajan for comments and discussions
+on developing an interaction extension to the Integrated Gradient method.
+
+
+
+
+  11 See the Shaplye value vs Aumann-Shapley value vs serial cost for cost-sharing [FM99], or the Shapley vs Banzhaf
+
+interaction indices [GR99].
+
+
+                                                        14
+References
+[AS74]      Robert J. Aumann and Lloyd S. Shapley. Values of Non-Atomic Games. Princeton
+            University Press, Princeton, NJ, 1974.
+[BML+ 16] Alexander Binder, Grégoire Montavon, Sebastian Lapuschkin, Klaus-Robert Müller, and
+          Wojciech Samek. Layer-wise relevance propagation for neural networks with local renor-
+          malization layers. In International Conference on Artificial Neural Networks, pages
+          63–71. Springer, 2016.
+[BVS22]     Stefan Blücher, Johanna Vielhaben, and Nils Strodthoff. Preddiff: Explanations and
+            interactions from conditional expectations. Artificial Intelligence, 312:103774, 2022.
+[CY22]      Dangxing Chen and Weicheng Ye. Generalized gloves of neural additive models: Pur-
+            suing transparent and accurate machine learning models in finance. arXiv preprint
+            arXiv:2209.10082, 2022.
+[FM99]      Eric Friedman and Herve Moulin. Three methods to share joint costs or surplus. Journal
+            of economic Theory, 87(2):275–312, 1999.
+[Fri04]     Eric J Friedman. Paths and consistency in additive cost sharing. International Journal
+            of Game Theory, 32(4):501–518, 2004.
+[GR99]      Michel Grabisch and Marc Roubens. An axiomatic approach to the concept of interaction
+            among players in cooperative games. International Journal of game theory, 28(4):547–
+            565, 1999.
+[Gra97]     Michel Grabisch. K-order additive discrete fuzzy measures and their representation.
+            Fuzzy sets and systems, 92(2):167–189, 1997.
+[Har63]     John C Harsanyi. A simplified bargaining model for the n-person cooperative game.
+            International Economic Review, 4(2):194–220, 1963.
+[HDWX21] Yaru Hao, Li Dong, Furu Wei, and Ke Xu. Self-attention attribution: Interpreting
+         information interactions inside transformer. In Proceedings of the AAAI Conference on
+         Artificial Intelligence, volume 35, pages 12963–12971, 2021.
+[HLZ+ 21]   Mark Hamilton, Scott Lundberg, Lei Zhang, Stephanie Fu, and William T Freeman. Ax-
+            iomatic explanations for visual search, retrieval, and similarity learning. arXiv preprint
+            arXiv:2103.00370, 2021.
+[ILMP19]    Mark Ibrahim, Melissa Louie, Ceena Modarres, and John Paisley. Global explanations
+            of neural networks: Mapping the landscape of predictions. In Proceedings of the 2019
+            AAAI/ACM Conference on AI, Ethics, and Society, pages 279–287, 2019.
+[JSL21]     Joseph D Janizek, Pascal Sturmfels, and Su-In Lee. Explaining explanations: Axiomatic
+            feature interactions for deep networks. J. Mach. Learn. Res., 22:104–1, 2021.
+[LHR22]     Daniel D Lundstrom, Tianjian Huang, and Meisam Razaviyayn. A rigorous study of
+            integrated gradients method and extensions to internal neuron attributions. In Interna-
+            tional Conference on Machine Learning, pages 14485–14508. PMLR, 2022.
+[LL17]      Scott M Lundberg and Su-In Lee. A unified approach to interpreting model predictions.
+            Advances in neural information processing systems, 30, 2017.
+[LPK20]     Pantelis Linardatos, Vasilis Papastefanopoulos, and Sotiris Kotsiantis. Explainable ai:
+            A review of machine learning interpretability methods. Entropy, 23(1):18, 2020.
+[LRMM15] Benjamin Letham, Cynthia Rudin, Tyler H. McCormick, and David Madigan. Inter-
+         pretable classifiers using rules and Bayesian analysis: Building a better stroke prediction
+         model. The Annals of Applied Statistics, 9(3):1350 – 1371, 2015.
+
+                                                 15
+[LSZ+ 20]   Zirui Liu, Qingquan Song, Kaixiong Zhou, Ting-Hsiang Wang, Ying Shan, and Xia Hu.
+            Detecting interactions from neural networks via topological analysis. Advances in Neural
+            Information Processing Systems, 33:6390–6401, 2020.
+[MHX+ 21] Aria Masoomi, Davin Hill, Zhonghui Xu, Craig P Hersh, Edwin K Silverman, Peter J
+          Castaldi, Stratis Ioannidis, and Jennifer Dy. Explanations of black-box models based
+          on directional feature interactions. In International Conference on Learning Represen-
+          tations, 2021.
+[MR99]      Jean-Luc Marichal and Marc Roubens. The chaining interaction index among players
+            in cooperative games. In Advances in Decision Analysis, pages 69–85. Springer, 1999.
+[PS20]      Su-In Lee Pascal Sturmfels, Scott Lundberg. Visualizing the impact of feature attribu-
+            tion baselines, 2020.
+[Rot64]     Gian-Carlo Rota. On the foundations of combinatorial theory i. theory of möbius func-
+            tions. Zeitschrift für Wahrscheinlichkeitstheorie und verwandte Gebiete, 2(4):340–368,
+            1964.
+[RSG16]     Marco Tulio Ribeiro, Sameer Singh, and Carlos Guestrin. ” why should i trust you?”
+            explaining the predictions of any classifier. In Proceedings of the 22nd ACM SIGKDD in-
+            ternational conference on knowledge discovery and data mining, pages 1135–1144, 2016.
+[SBH21]     Sandipan Sikdar, Parantapa Bhattacharya, and Kieran Heese. Integrated directional
+            gradients: Feature interaction attribution for neural nlp models. In Proceedings of the
+            59th Annual Meeting of the Association for Computational Linguistics and the 11th In-
+            ternational Joint Conference on Natural Language Processing (Volume 1: Long Papers),
+            pages 865–878, 2021.
+[SCD+ 17]   Ramprasaath R Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam,
+            Devi Parikh, and Dhruv Batra. Grad-cam: Visual explanations from deep networks
+            via gradient-based localization. In Proceedings of the IEEE international conference on
+            computer vision, pages 618–626, 2017.
+[SDA20]     Mukund Sundararajan, Kedar Dhamdhere, and Ashish Agarwal. The shapley taylor
+            interaction index. In International conference on machine learning, pages 9259–9268.
+            PMLR, 2020.
+[SDBR14] Jost Tobias Springenberg, Alexey Dosovitskiy, Thomas Brox, and Martin Riedmiller.
+         Striving for simplicity: The all convolutional net. arXiv preprint arXiv:1412.6806, 2014.
+[SGK17]     Avanti Shrikumar, Peyton Greenside, and Anshul Kundaje. Learning important features
+            through propagating activation differences. In International Conference on Machine
+            Learning, pages 3145–3153. PMLR, 2017.
+[SN20]      Mukund Sundararajan and Amir Najmi. The many shapley values for model explanation.
+            In International conference on machine learning, pages 9269–9278. PMLR, 2020.
+[SS71]      Lloyd S Shapley and Martin Shubik. The assignment game i: The core. International
+            Journal of game theory, 1(1):111–130, 1971.
+[STK+ 17]   Daniel Smilkov, Nikhil Thorat, Been Kim, Fernanda Viégas, and Martin Wattenberg.
+            Smoothgrad: removing noise by adding noise. arXiv preprint arXiv:1706.03825, 2017.
+[STY17]     Mukund Sundararajan, Ankur Taly, and Qiqi Yan. Axiomatic attribution for deep
+            networks. In International Conference on Machine Learning, pages 3319–3328. PMLR,
+            2017.
+[TCL17]     Michael Tsang, Dehua Cheng, and Yan Liu. Detecting statistical interactions from
+            neural network weights. arXiv preprint arXiv:1705.04977, 2017.
+
+                                                16
+[TCL+ 20]   Michael Tsang, Dehua Cheng, Hanpeng Liu, Xue Feng, Eric Zhou, and Yan Liu. Feature
+            interaction interpretability: A case for explaining ad-recommendation systems via neural
+            interaction detection. arXiv preprint arXiv:2006.10966, 2020.
+[TLP+ 18]   Michael Tsang, Hanpeng Liu, Sanjay Purushotham, Pavankumar Murali, and Yan Liu.
+            Neural interaction transparency (nit): Disentangling learned interactions for improved
+            interpretability. Advances in Neural Information Processing Systems, 31, 2018.
+[TRL20]     Michael Tsang, Sirisha Rambhatla, and Yan Liu. How does this interaction affect me?
+            interpretable attribution for feature interactions. Advances in neural information pro-
+            cessing systems, 33:6147–6159, 2020.
+[TYR22]     Che-Ping Tsai, Chih-Kuan Yeh, and Pradeep Ravikumar. Faith-shap: The faithful
+            shapley interaction index. arXiv preprint arXiv:2203.00870, 2022.
+[UR16]      Berk Ustun and Cynthia Rudin. Supersparse linear integer models for optimized medical
+            scoring systems. Machine Learning, 102:349–391, 2016.
+[XVS20]     Shawn Xu, Subhashini Venugopalan, and Mukund Sundararajan. Attribution in scale
+            and space. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-
+            tern Recognition, pages 9680–9689, 2020.
+[ZCCZ20]    Hao Zhang, Xu Cheng, Yiting Chen, and Quanshi Zhang. Game-theoretic interactions
+            of different orders. arXiv preprint arXiv:2010.14978, 2020.
+[ZF14]      Matthew D Zeiler and Rob Fergus. Visualizing and understanding convolutional net-
+            works. In European conference on computer vision, pages 818–833. Springer, 2014.
+[ZXZ+ 21]   Hao Zhang, Yichen Xie, Longjie Zheng, Die Zhang, and Quanshi Zhang. Interpreting
+            multivariate shapley interactions in dnns. In Proceedings of the AAAI Conference on
+            Artificial Intelligence, volume 35, pages 10877–10886, 2021.
+
+
+
+
+                                                17
+Appendix
+A      Table of Methods
+All listed methods satisfy completeness, linearity, null feature, and symmetry. All gradient-based
+methods satisfy the continuity condition. All interaction methods also satisfy baseline test for
+interactions (k ≤ n) unless otherwise noted. We do not list interaction distribution, which is
+a combination of baseline test for interactions (k ≤ n) and being top-distributing in the binary
+features scheme.
+
+         Name                Properties                                Distribution Rule
+                                                                               (
+                          unique nth -order                                       ΦS if S = T
+    Synergy Function                                             φT (ΦS ) =
+                             interaction                                          0       if S 6= T
+                                                                                  (
+                                                                                     ΦS
+                        attribution method                                                   if i ∈ S
+     Shapley Value                                             Shapi (ΦS ) = |S|
+                          binary features                                            0       if i ∈ /S
+                                                                           (
+                                                                                mi     m
+                        attribution method                                           x        if  i ∈ Sm
+ Integrated Gradient                                         IGi (y m ) = kmk1
+                          gradient-based                                                      if i ∈
+                                                                          0                        / Sm
+                                                                          ΦS         if T = S
+                                                                         
+                                                                         
+                          binary features                                    ΦS
+     Shapley-Taylor                                       STT (ΦS ) = (|S|) if T ( S, |T | = k
+                                                             k
+                          top-distributing                               
+                                                                             k
+                                                                         0           else
+                                                               
+                                                                   m
+                                                               
+                                                                x         P
+                                                                                                 if T = Sm
+                           gradient-based                                      i∈T mi m
+                                                               
+                                                    k                 1
+     Sum of Powers                                      m
+                                                  SPT (y ) = (|Sm |−1) kmk1 x                    if T ( Sm , |T | = k
+                          top-distributing                     
+                                                                   k−1
+                                                               0                                else
+                          binary features
+                                                                           ( k
+                                                                               NT
+                                                                                    ΦS (x) if T ⊆ S
+  Recursive Shapley          iterative                      RSkT (ΦS ) = |S|k
+                        breaks baseline test                                  0                   else
+                                                                      
+                                                                      ΦSk(x)
+                                                                                          if T = S
+     Augmented             binary features                k∗             NT
+                                                       RST (ΦS ) = |S|k ΦS (x) if T ( S, |S| > k
+  Recursive Shapley           iterative                               
+                                                                         0                 else
+                                                                      
+                          gradient-based                                  ( M k (m)
+                                                                                T
+                                                                                      xm if T ⊆ Sm
+  Integrated Hessian         iterative                     IHkT (y m ) =      kmkk 1
+
+                        breaks baseline test                                0                  else
+                                                                     m
+                                                                    x k
+                                                                                       if T = Sm
+      Augmented            gradient-based               k∗ m           MT (m) m
+                                                     IHT (y ) =         kmkk
+                                                                                x       if T ( Sm , |Sm | > k
+  Integrated Hessian          iterative                                    1
+
+                                                                       0                else
+                                                                    
+
+
+B      Statement of Symmetry Axiom
+Let π be an ordering of the features in N . We loosely quote the definition of symmetry from [SDA20],
+altering the binary feature setting to a continuous feature setting:
+    8. Symmetry Axiom: for all F ∈ F , for all permutations π on N :
+                                 IkS (x, x′ , F ) = IkπS (πx, πx′ , F ◦ π −1 ),                            (17)
+      where ◦ denotes function composition, πS := {π(i) : i ∈ S}, and (πx)π(i) = xi .
+    This axioms implies that if we relabel the features, then interactions for the relabeled features
+will concur with interactions before relabeling. It requires that the domain, [a, b], is closed under
+permutations of inputs, meaning it is of the form [a1 , b1 ]n .
+
+                                                    18
+C     Proofs of Synergy Function Claims
+C.1     Proof of Theorem 1
+Proof. Let I be any n-ordered interaction that satisfies the given axioms, and let x, x′ ∈ [a, b] × [a, b]
+be arbitrarily chosen. We assume that all interactions are taken with respect to input x and baseline
+x′ . For ease of notation, we define FS (x) = F (xS ) for F ∈ F (x, x′ ).
+     For any nonempty S ∈ Pn , note that IS (F ) = IS (F − FS + FS ). Note that (F − FS )(xS ) is
+constant. Thus, IS (F − FS ) = 0 for any S ∈ Pk by the baseline test for interaction. Thus, by
+linearity of zero-valued functions, we have established that IS (F ) = IS (FS ) for any S ∈ Pk .
+     We now proceed by strong induction:
+     |S| = 1 case: Let i ∈ N and choose F ∈ F . Note that F{i} does not vary with any feature
+but xi . This implies that for S 6= {i}, IS (F{i} ) = 0 by null feature. By completeness, I{i} (F{i} ) =
+F{i} (x) − F{i} (x′ ), and I{i} (F ) is uniquely determined. Thus IS (F ) is uniquely determined for
+|S| = 1.
+     |S| ≤ k ⇒ |S| = k + 1 case: Suppose that for any G ∈ F [a, b] and any S ⊆ {1, ..., n} such that
+|S| ≤ k, IS (G) is uniquely determined. Let T ∈ Pn , |T | = k + 1, F ∈ F . It has been established that
+IT (F ) = IT (FT ). Note that for all S ( T , we have |S| ≤ k, so IS (FT ) is uniquely determined by
+the induction hypotheses. Since FT does not vary in each xi such P       that i ∈
+                                                                                / T , we have
+                                                                                            P IS (FT ) = 0
+                                                                 ′
+for S * T by null feature. By completeness,        FT (x) − FT (x  ) =     S⊆Pk SI (F T ) =   S⊆T IS (FT ).
+Thus IT (FT ) = FT (x) − FT (x′ ) − S(T IS (FT ). Since IT (F ) = IT (FT ) equals the sum of uniquely
+                                       P
+determined terms, IT (F ) is uniquely determined.
+
+C.2     Proof of Corollary 1
+We proceed to show the synergy function satisfies completeness, linearity, null feature, and baseline
+test for interactions (k ≤ n).
+Proof. Completeness: For any v : {0, 1}n → R, [SDA20, Appendix 7.1] shows that the Möbius
+transform has the property that,
+                                           X
+                                   v(T ) =    a(v)(S).                                (18)
+                                                       S⊆T
+
+Using this, observe,
+                                          X                     X
+                             F (x′ ) +           φS (F )(x) =         a(F (x(·) ))(S)
+                                          S∈Pn                  S⊆N
+                                                                                                              (19)
+                                                             = F (xN )
+                                                             = F (x),
+
+which established completeness.
+
+Linearity of Zero-Valued Functions: We simply establish φ is linear.
+
+
+            φS (cF + dG)(x) = a(cF (x(·) ) + dG(x(·) ))(S)
+                              X
+                                  (−1)|S|−|T | (cF (x(·) ) + dG(x(·) ))(T )
+                                                                          
+                            =
+                                T ⊆S
+                                   X                                       X                                  (20)
+                              =c          (−1)|S|−|T | F (x(·) )(T ) + d          (−1)|S|−|T | G(x(·) )(T )
+                                   T ⊆S                                    T ⊆S
+
+                              = cφS (F )(x) + dφS (G)(x)
+
+
+Baseline Test for Interactions: Suppose F (xS ) is constant.
+
+                                                        19
+                              φS (F )(x) = a(F (x(·) ))(S)
+                                           X
+                                         =     (−1)|S|−|T | F (xT )
+                                                 T ⊆S
+                                                 X
+                                             =          (−1)|S|−|T | F (x′ )
+                                                                                                           (21)
+                                                 T ⊆S
+                                                      X |S|
+                                                   ′
+                                             = F (x )        (−1)|S|−i
+                                                          i
+                                                          0≤i≤|S|
+
+                                             =0
+
+
+Null Feature: Suppose F does not vary in some xi and i ∈ S. Then,
+
+
+             φS (F )(x) = a(F (x(·) ))(S)
+                          X
+                        =     (−1)|S|−|T | F (xT )
+                           T ⊆S
+                             X                                      X
+                       =              (−1)|S|−|T | F (xT ) +                (−1)|S|−|T | F (xT )
+                           T ⊆S,i∈T                              T ⊆S,i /
+                                                                       ∈T
+                             X                                                 X                           (22)
+                       =              (−1)|S|−(|T |+1)
+                                                          F (xT ∪{i} ) +            (−1)|S|−|T | F (xT )
+                           T ⊆S\{i}                                        T ⊆S\{i}
+                                  X                                    X
+                       =−               (−1) |S|−|T |)
+                                                         F (xT ) +             (−1)|S|−|T | F (xT )
+                             T ⊆S\{i}                                T ⊆S\{i}
+
+                       =0
+
+
+
+C.3     Proof of Corollary 2
+Proof. We proceed in the order given in Corollary 2.
+
+1. Pure interaction sets are disjoint, meaning CS ∩ CT = ∅ whenever S 6= T .
+   Suppose S, T ∈ Pn with T 6= S. We proceed by contradiction and suppose F ∈ CS ∪CT . WLOG
+∃i ∈ S \ T , implying that F varies in feature i since F is a synergy function of S, and F does not
+vary in feature i, since F is a synergy function of T . This is a contradiction. Thus CS ∩ CT = ∅.
+
+2. φS projects F onto CS ∪ {0}. That is, φS (F ) ∈ CS ∪ {0} and φS (φS (F )) = φS (F )
+   Let F ∈ F . First, for the degenerate case, φ∅ (F ) = F (x′ ), which is a constant function. For any
+constant c, φ∅ (c) = c, implying φ∅ is a projection and surjective for the range C∅ ∪ {0}. Thus φ∅
+projects F onto C∅ ∪ {0}.
+   Now we will show that φS (F ) either is a pure interaction of S or is 0 in the non-degenerate case.
+Suppose xi = x′i for some i ∈ S. Then,
+
+
+
+
+                                                           20
+                            X
+             φS (F )(x) =          (−1)|S|−|T | F (xT )
+                            T ⊆S
+                              X                                        X
+                        =              (−1)|S|−|T | F (xT ) +                 (−1)|S|−|T | F (xT )
+                            T ⊆S,i∈T                               T ⊆S,i /
+                                                                         ∈T
+                              X                                                 X
+                        =              (−1) |S|−(|T |+1)
+                                                           F (xT ∪{i} ) +             (−1)|S|−|T | F (xT )
+                            T ⊆S\{i}                                          T ⊆S\{i}
+                                   X                                     X
+                        =−               (−1) |S|−|T |)
+                                                          F (xT ) +              (−1)|S|−|T | F (xT )
+                              T ⊆S\{i}                                 T ⊆S\{i}
+
+                        =0
+Thus φS (F ) = 0 whenever xi = x′i for some i ∈ S, and φS (F ) satisfies condition 1 for being a pure
+interaction of S.
+     Now, inspecting the definition, φS (F )(x) = T ⊆S (−1)|S|−|T | F (xT ), so φS (F ) does not vary in
+                                                  P
+xi , i ∈
+       / S. Lastly, suppose that F does not vary in some xi , i ∈ S. Since φ satisfies null feature,
+φS (F ) = 0. So either φS (F ) varies in all xi such that i ∈ S, or φS (F ) = 0. If the former, φS (F )
+satisfies condition 2 for being a pure interaction of S; if the latter, φS (F ) = 0. Thus φS (F ) = 0 or
+φS (F ) is a pure interaction function of S, implying the range of φS is CS ∪ {0}.
+     Now let ΦS ∈ CS . Note
+
+                                                     X
+                                     φS (ΦS )(x) =          (−1)|S|−|T | ΦS (xT )
+                                                     T ⊆S
+                                                     X
+                                                 =          (−1)|S|−|T | ΦS (xT )
+                                                     T =S
+                                                 = ΦS (xS )
+                                                 = ΦS (x)
+
+
+It is plain by the definition that φS (0) = 0. Thus φS is surjective for the range CS ∪ {0}. Since the
+range of φS is CS ∪ {0}, φ maps elements of CS to themselves, and maps 0 to 0, so φS is a projection.
+
+3. For ΦT ∈ CT , we have φS (ΦT ) = 0 whenever S 6= T .
+    Let ΦT ∈ CT and T 6= S. If ∃i ∈ S \ T , then φS (ΦT ) = 0 by null feature. Otherwise S ( T , and
+φS (ΦT ) = 0 be baseline test for interactions (k = n).
+
+4. φ uniquely decomposes F ∈ F into a set of pure interaction P          functions on distinct
+groups of features. That is, there exists P ⊂ Pn such that F = S∈P ΦS , where each
+ΦS ∈ CS . Further more, only one such representation exists, ΦS = φS (F ) for each S ∈ P,
+and φS (FP) = 0 for each S ∈ Pn \ P.
+    F = S∈Pn φS (F ), and each φS (F ) ∈ CS ∪ {0}. Since 0 + φ∅ (F ) ∈ C∅ and we may gather all
+the φS (F ) terms that are zero
+                           P into the C∅ term, we have shown a decomposition exists.
+    Let it be that F (x) = S∈P ΦS (x) for some P ∈ Pn , where each ΦS is an interaction function
+in S. By the results already established, we have for any T ∈ P
+
+                                                                  X
+                                              φS (F ) = φS (           ΦT )
+                                                                T ∈P
+                                                           X
+                                                     =            φS (ΦT )
+                                                           T ∈P
+                                                     = φS (ΦS )
+                                                     = ΦS
+
+
+                                                           21
+    If S ∈
+         / P, then
+
+                                                                  X
+                                               φS (F ) = φS (          ΦT )
+                                                                T ∈P
+                                                           X
+                                                       =          φS (ΦT )
+                                                           T ∈P
+                                                       =0
+
+    Now suppose that there are two decompositions, S∈P 1 Φ1S = F = S∈P 2 Φ2S . WLOG suppose
+                                                         P                  P
+S ∈ P 1 \ P 2 . Then φS (F ) = 0 since S ∈/ P 2 and φS (F ) = Φ1S since S ∈ P 1 . Thus Φ1S = 0 and S = ∅.
+Thus P △P equals either ∅ or {∅}, and in the case that P 1 △P 2 = {∅} the extra term corresponding
+        1      2
+
+to ∅ in one of the sums is 0, and does not effect the decomposition. Now, if P 1 △P 2 = ∅, then for
+any S ∈ P 1 , P 2 , we have Φ1S = φS (F ) = Φ2S . Thus, the decomposition is unique.
+
+
+D       Interaction Methods
+Here we give an in depth treatment of the Recursive Shapley, Integrated Hessian, and Sum of Powers
+methods, as well as the augmentations to the recursive methods. We define the methods and show
+that each method is the unique method that satisfies linearity, their distribution policy, and in
+the case of gradient methods, the continuity condition. We also prove that each method satisfies
+desirable properties such as completeness, null feature, symmetry, and, if applicable, baseline test
+for interactions (k ≤ n).
+
+D.1      Recursive Shapley and Augmented Recursive Shapley
+D.1.1     Defining Recursive Shapley
+Here we detail the properties of Recursive Shapley and Augmented Recursive Shapley. Let σTk be
+the set of sequences of length k such that the sequence is made of the elements of T 6= ∅ and each
+                                                        3
+element appears at least once. For example, σ{1,2}             = {(1, 1, 2), (1, 2, 1), (1, 2, 2), (2, 1, 1), (2, 1, 2),
+                                         k      k                         k         k
+                                                     P                      
+(2, 2, 1)}. Calculating the size of σT , |σT | =         |l|=k s.t. Sl =T l = NT . For a given sequence s,
+define IGt (x, F ) be a recursive implementation of the Shapley method according to the sequence s,
+i.e., Shap(1,2,3) (x, F ) = Shap3 (x, Shap2 (·, Shap1 (·, F ))). We can then define the k th -order Recursive
+Shapley for T 6= ∅ as:
+                                                        X
+                                       RSkT (x, F ) =        Shaps (x, F )                                         (23)
+                                                              k
+                                                           s∈σT
+
+and define RSk∅ (x, x′ , F ) := F (x′ ).
+   We now move to inspect this equation and establish some properties. Eq. (7) states that for a
+synergy function ΦS , S 6= ∅,                           ( Φ (x)
+                                                           S
+                                                           |S|  if i ∈ S
+                                       Shapi (x, ΦS ) =                                     (24)
+                                                         0      if i ∈
+                                                                     /S
+Then for a given sequence s ∈ σTk and synergy function ΦS , if T ⊆ S then,
+
+
+
+
+                                                           22
+                      Shaps (x, ΦS ) = Shapsk (x, Shapsk−1 (...Shaps1 (·, ΦS )....)
+                                                                           ΦS
+                                      = Shapsk (x, Shapsk−1 (...Shaps2 (·,     )....)
+                                                                           |S|
+                                                                            ΦS
+                                      = Shapsk (x, Shapsk−1 (...Shaps3 (·,      )....)
+                                                                           |S|2
+                                                                                                (25)
+                                      = ...
+                                                     ΦS
+                                      = Shapsk (x,        ))
+                                                   |S|k−1
+                                        ΦS (x)
+                                      =
+                                          |S|k
+However, if T ( S then there exists an element of s that is not in S, and:
+
+
+                                               Shaps (x, ΦS ) = 0,                              (26)
+
+due to some sj ∈
+               / S in the sequence.
+
+D.1.2   Recursive Shapley’s Distribution Policy
+Now, to show how Recursive Shapley distributes synergies, apply the definition of recursive Shapely
+for S 6= ∅ to get:
+                                           X
+                           RSkT (x, ΦS ) =     Shaps (x, ΦS )
+                                                       k
+                                                    s∈σT
+                                                                   ΦS (x)
+                                                    (P
+                                                               k
+                                                            s∈σT    |S|k     if T ⊆ S
+                                                =                                               (27)
+                                                                             if T * S
+                                                        P
+                                                               k 0
+                                                            s∈σT
+                                                         NTk
+                                                    (
+                                                        |S|k ΦS (x)     if T ⊆ S
+                                                =
+                                                        0               if T * S
+
+                                                     Nk
+We also gain the above for S = ∅ by setting |S|Tk = 1 when T = ∅. This establishes the distribution
+scheme in Eq. (10).
+    Recursive Shapley is also linear because it it the sum of function compositions of composition of
+linear functions. This establishes Theorem 2.
+
+D.1.3   Properties of Recursive Shapley
+To show Recursive Shapley satisfies completeness, observe for S 6= ∅:
+
+                                   X                                 X            ΦS (x)
+                                               RSkT (x, ΦS ) =              NTk
+                                                                                   |S|k
+                               T ∈Pk ,|T |>0                         T ⊆S
+
+                                                                     ΦS (x) X k
+                                                                 =           NT
+                                                                      |S|k                      (28)
+                                                                              T ⊆S
+                                                                   ΦS (x) k
+                                                                 =        |S|
+                                                                    |S|k
+                                                                 = ΦS (x)
+
+The case when S = ∅ is easily verified by inspecting the synergy distribution policy of RS.
+
+                                                            23
+    To show Recursive Shapley satisfies null feature, suppose that F does not vary in xi . Then for
+any S ∈ Pk such that i ∈ S, φS (F ) = 0 since the synergy function is an interaction satisfying null
+feature. Then if i ∈ T ,
+
+                                X
+               RSkT (x, F ) =          RSkT (x, φS (F ))
+                                S∈Pk
+                                    X                                         X
+                           =                    RSkT (x, φS (F )) +                      RSkT (x, φS (F ))
+                                S∈Pk s.t. i∈S                                       ∈S
+                                                                         S∈Pk s.t. i /                       (29)
+                                    X                                   X
+                           =                    RSkT (x, 0) +                       0
+                                S∈Pk s.t. i∈S                                  ∈S
+                                                                    S∈Pk s.t. i /
+
+                           =0
+
+Where the terms in the second sum are zero by Eq. (10).
+   To show Recursive Shapley satisfies symmetry, let π be a permutation on N . Note that for
+ΦS ∈ CS , we have ΦS ◦ π −1 is a pure interaction function in πS with baseline πx′ . Then
+
+                                                         (     k
+                                                              NπT         −1
+                   RSkπT (πx, πx′ , ΦS ◦ π −1 ) =            |πS|k ΦS ◦ π    (πx)       if πT ⊆ πS
+                                                             0                          if πT * πS
+                                                              NTk
+                                                         (
+                                                             |S|k
+                                                                    ΦS (x)   if T ⊆ S
+                                                    =
+                                                             0               if T * S
+                                                    = RSkT (x, x′ , ΦS )
+
+So RS is symmetric on synergy functions. Now use the synergy decomposition of F ∈ F to show
+RS is generally symmetric.
+
+D.1.4    Augmented Recursive Shapley and Properties
+The synergy function φ is taken implicitly with respect to a baseline appropriate to F . To make the
+baseline choice explicit, we write φ(F ) = φ(x′ , F ). Augmented Recursive Shapley is then defined as:
+                                                                       X
+                   RSk∗      ′             ′             k      ′
+                      T (x, x , F ) = φT (x , F )(x) + RST (x, x , F −   φS (x′ , F ))           (30)
+                                                                                    S∈Pk
+                                         k∗
+With the above augmentation, IH explicitly distributes synergies φT (F ) to group T whenever
+|T | ≤ k, and distributes higher synergies as IHk .
+     The above is a linear function of F . Plugging in ΦS to the above gains the following distribution
+policy:
+                                            
+                                            ΦS (x)
+                                                        if T = S
+                                                   NTk
+                                RSk∗
+                                  T (ΦS ) =       |S|k
+                                                         ΦS (x)       if T ( S, |S| > k                      (31)
+                                                
+                                                  0                   else
+                                                
+
+Because each F ha a unique synergy decomposition, we have
+Corollary 6. Augmented Recursive Shapley of order k is the unique k th -order interaction index
+that satisfies linearity and acts on synergy functions as in Eq. (31).
+    To show that Augmented Recursive Shapley satisfies null feature, let F not vary in some feature
+xi and let i ∈ T . Then
+
+
+
+
+                                                             24
+                                          X
+                       RSk∗
+                         T (x, F ) =            RSk∗
+                                                  T (x, φS (F ))
+                                         S∈Pn
+                                                                    X
+                                       = RSk∗
+                                           T (x, φT (F )) +                  RSk∗
+                                                                               T (x, φS (F ))
+                                                                T (S,|S|>k
+                                                                X       NTk
+                                       = RSk∗
+                                           T (x, 0) +                       φS (F )(x)
+                                                                       |S|k
+                                                          T (S,|S|>k
+                                                  X
+                                       =0+                 0
+                                              T (S,|S|>k
+
+                                       =0
+
+Thus Augmented Recursive Shapley satisfies null feature.
+    To show Augmented Recursive Shapley satisfies baseline test for interactions (k ≤ n), let T ( S,
+|S| ≤ k, and ΦS ∈ CS . Then RSk∗
+                              T (x, ΦS ) = 0 by Eq.(31).
+    To show Augmented Recursive Shapley satisfies completeness, consider the synergy function ΦS .
+If |S| ≤ k, Eq. (31) shows completeness. If |S| > k, then follow the proof of completeness for
+Recursive Shapley.
+    To show Augmented Recursive Shapley satisfies symmetry, consider a synergy function ΦS ∈ CS
+and permutation π. Note that for ΦS ∈ CS , we have ΦS ◦ π −1 is a pure interaction function in πS
+with baseline πx′ . Then
+
+                                                   k
+                                                     NπT        −1
+                                                   |πS|k ΦS ◦ π (πx)          if πT = πS
+                                                  
+                                                  
+                                                      k
+               RSk∗        ′
+                 πT (πx, πx , ΦS ◦ π
+                                     −1
+                                        )=           NπT        −1
+                                                                               if πT ( πS, |πS| > k
+                                                   |πS|k ΦS ◦ π (x)
+                                                  
+                                                  0                           else
+                                                   k
+                                                     NT
+                                                   |S|k ΦS (x)
+                                                  
+                                                                   if T ⊆ S
+                                                    k
+                                               = NTk ΦS (x)         if T ( S, |S| > k
+                                                 |S|
+                                                  
+                                                  0                else
+                                               = RSk∗     ′
+                                                   T (x, x , ΦS )
+
+
+D.2     Proof of Theorem 3
+Proof. Let Ik be a k th -order interaction method defined for all (x, x′ , F ) ∈ [a, b] × [a, b] × C ω . Fix x′
+and x. Let Tl be the lth order Taylor approximation of F at x′ . Then
+
+
+                     Ik (x, x′ , F ) = lim Ik (x, x′ , Tl )
+                                       l→∞
+                                             X         Dm (F )(x′ )
+                                   =                                 lim Ik (x, x′ , (y − x′ )m )
+                                                           m!       l→∞
+                                       m∈Nn ,kmk1 ≤l
+
+
+The last line is determined by the action of Ik on elements of the set {(x, x′ , F ) : F (y) = (y−x′ )m , m ∈
+Nn }, concluding the proof.
+
+
+D.3     Proof of Corollary 3
+[STY17] has shown that IG is linear and Eq. (11) shows the actions of IG on polynomials.
+
+
+
+                                                           25
+   Let F ∈ C ω and let Tl be the Taylor approximation of F of order l centered at x′ . It is known
+     ∂Tl    ∂F
+that ∂x i
+          → ∂x i
+                 uniformly on a compact domain, such as [a, b]. Thus,
+                                                                  Z 1
+                                                                        ∂Tl ′
+                           lim IGi (x, Tl ) = lim (xi − x′i )               (x + t(x − x′ ))dt
+                          l→∞                 l→∞                  0    ∂xi
+                                                            Z 1
+                                                                  ∂F ′                                            (32)
+                                            = (xi − x′i )             (x + t(x − x′ ))dt
+                                                             0    ∂xi
+                                            = IGi (x, F )
+
+Thus IG satisfies the continuity criteria. Apply Theorem 3 for result.
+
+D.4      Integrated Hessian and Augmented Integrated Hessian
+D.4.1     Definition of Integrated Hessian
+Here we give a complete definition of IH and detail how IH distributes monomials. We also detail
+IH∗ and show it satisfies Corollary 4. We then show both satisfy completeness, linearity, null feature,
+and symmetry, and augmented IH satisfies baseline test for interactions (k ≤ n).
+     Let σTk be the set of sequences of length k such that the sequence is made of the elements of T 6= ∅
+                                                              3
+and each element appears at least once. For example, σ{1,2}        = {(1, 1, 2), (1, 2, 1), (1, 2, 2), (2, 1, 1), (2, 1, 2),
+(2, 2, 1)}. For a given sequence s, define IGs (x, F ) to be a recursive implementation of IG according
+to the sequence s, i.e., IG(1,2,3) (x, F ) = IG3 (x, IG2 (·, IG1 (·, F ))).
+     We can then define the k-order Integrated Hessian for T 6= ∅ by:
+                                                       X
+                                        IHkT (x, F ) =       IGs (x, F ),                                        (33)
+                                                               k
+                                                            s∈σT
+
+and for T = ∅, we define IHk∅ (x, x′ , F ) = F (x′ ).
+
+D.4.2     IH Policy Distributing Monomials and Continuity Condition
+We now move to inspect this equation and establish some properties. First, IG is linear, establishing
+that IH is also linear by its form.
+   Next, we establish its policy distributing monomials centred at x′ . Eq. (11) states that for a
+monomial F (y) = (y − x′ )m , m 6= 0,
+                                                 (
+                                                     mi
+                                  ′        ′ m          (y − x′ )m if i ∈ Sm
+                         IGi (x, x , (y − x ) ) = kmk1                                           (34)
+                                                   0               if i ∈
+                                                                        / Sm
+
+Then for a given sequence s ∈ σTk and synergy function (y − x′ )m , T ⊆ Sm ,
+
+
+                   IGs (x, (y − x′ )m ) = IGsk (x, IGsk−1 (...IGs1 (·, (y − x′ )m )....)
+                                                                        ms1 (y − x′ )m
+                                         = IGsk (x, IGsk−1 (...IGs2 (·,                )....)
+                                                                            kmk1
+                                                                        ms1 ms2 (y − x′ )m
+                                         = IGsk (x, IGsk−1 (...IGs3 (·,                      )....)
+                                                                              kmk21
+                                                                                                                  (35)
+                                         = ...
+                                                  Π1≤i≤k−1 msi (y − x′ )m
+                                         = IGsk (x,                       )
+                                                          kmk1k−1
+                                           Π1≤i≤k msi
+                                         =            (x − x′ )m
+                                             kmkk1
+
+
+
+                                                            26
+However, if there exists any elements of s that is not in Sm , then:
+
+                                           IGs (x, x′ , (y − x′ )m ) = 0,                                               (36)
+
+due to some sj ∈
+               / Sm in the sequence.
+   Now, applying the definition of IH when m 6= 0, we get:
+
+                                               X
+                    IHkT (x, (y − x′ )m ) =            IGs (x, (y − x′ )m )
+                                                  k
+                                               s∈σT
+                                               (P             Π1≤i≤k msi
+                                                          k
+                                                       s∈σT     kmkk
+                                                                         (x − x′ )m             if T ⊆ Sm
+                                           =                        1
+                                                                                                                        (37)
+                                                                                                if T * Sm
+                                                   P
+                                                          k 0
+                                                       s∈σT
+                                                   MTk (m)
+                                               (
+                                                   kmkk
+                                                           (x − x′ )m             if T ⊆ Sm
+                                           =            1
+
+                                                   0                              if T * Sm ,
+
+                                                       k                 k            k!
+where we define MTk (m) =                                 l
+                             P                                              
+                                 |l|=k s.t. Sl =T      l m , with        l       = Πi∈S
+                                                                                        l
+                                                                                         li ! the multinomial coefficient. In
+                                 M k (m)
+the case T = Sm = ∅, we set kmkT
+                                  k  = 1.
+                                  1
+    Now let us turn to the question of the continuity of Taylor approximation for analytic functions.
+Let Tl be the Taylor approximation of some F ∈ C ω . Using Corollary 3, we have liml→∞ IGi (x, Tl ) =
+IGi (x, F ). This implies:
+
+
+                            IGi (x, F ) = lim IGi (x, Tl )
+                                               l→∞
+                                               X Dm (F )(x′ )
+                                           =                             IGi (x, (y − x′ )m )
+                                                              m!                                                        (38)
+                                               m∈Nn
+                                             X Dm (F )(x′ ) mi
+                                           =                     (x − x′ )m
+                                              n
+                                                   m!      kmk 1
+                                               m∈N
+
+That is, the above sum is convergent for all x ∈ [a, b], implying that IGi (·, F ) ∈ C ω . Also note:
+
+                                                X             Dm (F )(x′ ) mi
+                          IGi (x, Tl ) =                                       (x − x′ )m                               (39)
+                                                                  m!      kmk1
+                                           m∈Nn ,|m|≤l
+
+
+This shows that IG(x, Tl ) is a Taylor approximation of IGi (x, F ). Thus, for F ∈ C ω and a se-
+quence s, we can pull the limit out consecutively since we are simply dealing with a series of Taylor
+approximations.
+
+                       IGs (x, F ) = IGsk (x, IGsk−1 (...IGs1 (·, F )...))
+                                   = IGsk (x, IGsk−1 (... lim IGs1 (·, Tl )...))
+                                                                   l→∞
+                                   = IGsk (x, IGsk−1 (... lim IGs2 (·, IGs1 (·, Tl ))...))                              (40)
+                                                                   l→∞
+                                   = lim IGsk (x, IGsk−1 (...IGs1 (·, Tl )...))
+                                       l→∞
+                                   = lim IGs (x, Tl ),
+                                       l→∞
+
+
+which establishes that IHk satisfies the continuity property. This implies the following corollary:
+Corollary 7. Integrated Hessian of order k is the unique k th -order method to satisfy linearity, the
+continuity condition, and distributes monomials as in Eq. (37).
+
+
+
+                                                              27
+D.4.3     Establishing Further Properties of IH
+To show IH is complete, observe for a monomial F (y) = (y − x′ )m , m 6= 0,
+
+                        X                                    X       MTk (m)
+                                   IHkS (x, x′ , F ) =                        (x − x′ )m
+                                                                     kmkk1
+                     S∈Pk ,|S|>0                         S⊆Sm ,|S|>0
+                                                                                        k
+                                                                     P                     l
+                                                                       |l|=k s.t. Sl =S l m
+                                                            X
+                                                    =                                                (x − x′ )m
+                                                                                  kmkk1
+                                                         S⊆Sm ,|S|>0
+
+                                                         kmkk1
+                                                    =          (x − x′ )m
+                                                         kmkk1
+                                                    = (x − x′ )m
+
+When m = 0, we get IHkS (x, x′ , F ) = 0 except when S = ∅, in which case we get IHkS (x, x′ , F ) = 1.
+  Applying the Taylor decomposition of F and continuity property to a general F ∈ C ω , we get:
+
+          X                                    X
+                     IHkS (x, x′ , F ) =                 lim IHkS (x, x′ , Tl )
+                                                         l→∞
+       S∈Pk ,|S|>0                         S∈Pk ,|S|>0
+                                                     X                 X          Dm (F )(x′ ) k
+                                        = lim                                                 IHS (x, x′ , (y − x′ )m )
+                                           l→∞                                        m!
+                                                 S∈Pk ,|S|>0 m∈Nn ,0<kmk1 ≤l
+                                                         X             Dm (F )(x′ )         X
+                                        = lim                                                       IHkS (x, x′ , (y − x′ )m )
+                                           l→∞                             m!
+                                                 m∈Nn ,0<kmk1 ≤l                      S∈Pk ,|S|>0
+                                                         X             Dm (F )(x′ )
+                                        = lim                                       (x − x′ )m
+                                           l→∞                             m!
+                                                 m∈Nn ,0<kmk1 ≤l
+                                                       X          Dm (F )(x′ )
+                                        = lim                                  (x − x′ )m − F (x′ )
+                                           l→∞                        m!
+                                                 m∈Nn ,kmk1 ≤l
+
+                                        = F (x) − F (x′ )
+
+   To show IH satisfies null feature, we proceed as in the proof for Recursive Shapley and suppose
+that F does not vary in xi . Then for any S ∈ Pk such that i ∈ S, φS (F ) = 0 since the synergy
+function is an interaction satisfying null feature. Then if i ∈ T ,
+
+                                       X
+                 IHkT (x, F ) =               IHkT (x, φS (F ))
+                                       S∈Pk
+                                           X                                       X
+                                   =                   IHkT (x, φS (F )) +                      IHkT (x, φS (F ))
+                                       S∈Pk s.t. i∈S                                    ∈S
+                                                                             S∈Pk s.t. i /                                       (41)
+                                           X                                X
+                                   =                   IHkT (x, 0) +                    0
+                                       S∈Pk s.t. i∈S                               ∈S
+                                                                        S∈Pk s.t. i /
+
+                                   =0
+
+   To show symmetry, let π be a permutation. Note that since (πy)π(i) = yi , we also have (π −1 y)i =
+(π y)π−1 (π(i)) = yπ(i) . Then, if F (y) = (y − x′ )m , we get
+  −1
+
+
+
+
+                          F · π −1 (y) = (yπ(1) − x′1 )m1 · · · (yπ(n) − x′n )mn
+                                       = (y1 − x′π−1 (1) )mπ−1 (1) · · · (yn − x′π−1 (n) )mπ−1 (n)
+                                         = (y − πx′ )πm
+
+
+                                                                  28
+Also note that,
+
+                                      Sπm = {i : (πm)i > 0}
+                                          = {i : mπ−1 (i) > 0}
+                                           = {π(i) : mπ−1 (π(i)) > 0}
+                                           = {π(i) : mi > 0}
+                                           = {π(i) : i ∈ Sm }
+                                           = πSm
+
+Then,
+
+                                                  (     k
+                                                      MπT (πm)
+                                                               (πx − πx′ )πm           if πT ⊆ Sπm
+                  IHkπT (πx, πx′ , F ◦ π −1 ) =        kπmkk1
+                                                      0                                if πT * Sπm
+                                                      MTk (m)
+                                                  (
+                                                      kmkk
+                                                              (x − x′ )m        if T ⊆ S
+                                            =              1
+                                                      0                         if T * S
+                                            = IHkT (x, x′ , F )
+
+                                                                                                        ∂πj−1
+   Now, if we take π ∈ C ω and denote πj−1 to be the j th output of π −1 , then                          ∂xi    = 1j=π−1 (i) .
+Then we have
+                                                   n
+                               ∂(F ◦ π −1 )       X   ∂F −1       ∂πj−1
+                                            (y) =         (π (y))       (y)
+                                  ∂xi             j=1
+                                                      ∂xj          ∂xi
+                                                            ∂F
+                                                  =                 (π −1 (y)),
+                                                          ∂xπ−1 (i)
+
+
+which yields
+
+                                                          ∂ kπmk1 (F ◦ π −1 )
+                       Dπm (F ◦ π −1 )(πx′ ) =      (πm)        (πm)
+                                                                                  (πx′ )
+                                                  ∂x1 1 · · · ∂xn n
+                                                         kπmk1
+                                                                 ∂       F                 −1
+                                              =     mπ−1 (1)        mπ−1 (n) (π                 πx′ )
+                                                  ∂xπ−1 (1) · · · ∂xπ −1 (n)
+
+                                                     ∂ kmk1 F
+                                              =     m1            (x′ )
+                                                  ∂x1 · · · ∂xm
+                                                              n
+                                                                n
+
+                                                   m     ′
+                                              = D F (x )
+
+
+
+
+                                                            29
+From the above we have for general F ,
+                                                               X             Dm (F ◦ π −1 )(πx′ )
+    IHkπS (πx, πx′ , F ◦ π −1 ) = lim IHkπS (πx, πx′ ,                                            (y − πx′ )m )
+                                 l→∞                                                m!
+                                                         m∈Nn ,0<kmk1 ≤l
+                                              X           Dm (F ◦ π −1 )(πx′ ) k
+                              = lim                                           IHπS (πx, πx′ , (y − πx′ )m )
+                                 l→∞                             m!
+                                       m∈Nn ,0<kmk1 ≤l
+                                              X           Dπm (F ◦ π −1 )(πx′ ) k
+                              = lim                                            IHπS (πx, πx′ , (y − πx′ )πm )
+                                 l→∞                            (πm)!
+                                       m∈Nn ,0<kmk1 ≤l
+                                              X           Dm (F )(x′ ) k
+                              = lim                                   IHS (x, x′ , (y − x′ )m )
+                                 l→∞                          m!
+                                       m∈Nn ,0<kmk1 ≤l
+
+                              = lim IHS (x, x′ , Tl )
+                                 l→∞
+                              = IHS (x, x′ , F )
+
+D.4.4    Augmented Integrated Hessian and its Properties
+The synergy function φ is taken implicitly with respect to a baseline appropriate to F . To make the
+baseline choice explicit, we write φ(F ) = φ(x′ , F ). Augmented Integrated Hessian is then defined
+as:
+                                                                       X
+                   IHk∗      ′             ′             k      ′
+                      T (x, x , F ) = φT (x , F )(x) + IHT (x, x , F −   φS (x′ , F ))          (42)
+                                                                               S∈Pk
+
+As in Augmented Recursive Shapley, Augmented Integrated Hessian explicitly distributes φT (F ) to
+group T when |T | ≤ k, and distributes φT (F ) as IH when |T | > k.
+   To establish the monomial distribution policy we inspect the action of IHk∗          T in different cases.
+Plugging in (y − x′ )m to the above, if |Sm | ≤ k, the right term is zero and Eq. (15) holds, while if
+|Sm | > k, the left term is zero and the right term is IHkT (x, (y − x′ )m ). It is also easy to see that the
+above is linear.
+   Regarding the continuity condition, observe that:
+
+                                         X          Dm (F )(x′ )
+                          φS (F ) =                              (x − x′ )m
+                                                        m!
+                                      m∈Nn ,Sm =S
+                                                    X             Dm (F )(x′ )
+                                 = lim                                         (x − x′ )m
+                                      l→∞                             m!
+                                            m∈Nn ,kmk1 ≤l,Sm =S
+
+                                 = lim φS (Tl ),
+                                      l→∞
+
+which gains,
+                                                                                  X
+                      lim IHk∗                               k
+                            S (x, Tl ) = lim φS (Tl )(x) + IHS (x, Tl −                 φR (Tl ))
+                      l→∞                    l→∞
+                                                                                 R∈Pk
+                                                                                 X
+                                         = φS (F )(x) + IHkS (x, lim Tl −               φR (Tl ))
+                                                                    l→∞
+                                                                                 S∈Pk
+                                                           X
+                                         = IHkS (x, F −           φR (F ))
+                                                          R∈Pk
+
+                                         = IHk∗
+                                             S (x, F ),
+
+which establishes Corollary 4.
+    To show completeness, consider the decomposition F = S∈Pn φS (F ). Now IHk∗ satisfies com-
+                                                           P
+pleteness for the subset of functions ΦS ∈ CS , |S| ≤ k from the completeness of φ and Eq. (42).
+
+                                                         30
+Also, IHk∗ satisfies completeness for the subset of functions ΦS ∈ CS , |S| > k because IHk satisfies
+completeness. From this we have:
+
+                       X                                    X                          X
+                                    IHk∗     ′
+                                      T (x, x , F ) =                    IHk∗     ′
+                                                                           T (x, x ,          φS (F ))
+                   T ∈Pk ,|T |6=0                       T ∈Pk ,|T |6=0                 S∈Pn
+                                                         X          X
+                                                   =                          IHk∗     ′
+                                                                                T (x, x , φS (F ))
+                                                        S∈Pn T ∈Pk ,|T |6=0
+                                                            X
+                                                   =                  [φS (F )(x) − φS (F )(x′ )]
+                                                        S∈Pn ,|S|6=0
+                                                            X
+                                                   =                  [φS (F )(x)] + F (x′ ) − F (x′ )
+                                                        S∈Pn ,|S|6=0
+                                                         X
+                                                   =           [φS (F )(x)] − F (x′ )
+                                                        S∈Pn
+
+                                                   = F (x) − F (x′ )
+
+    Baseline test for interactions applies immediately from the definition of Augmented Integrated
+Hessian in Eq. (42). Concerning null feature, suppose F does not vary in some xi and i ∈ T . First,
+we have φT (F ) = 0. Also, F − R∈Pk φR (F ) does not vary in xi either, so, since IHk satisfies null
+                                 P
+
+feature. Thus we have IHk∗ (x, F ) = 0 by Eq. (42).
+    Lastly, concerning symmetry, let π be a permutation. Note that φ is symmetric, as it is the
+k = n case for Shapley-Taylor, which is symmetric. Then,
+
+                                                                                                    X
+IHk∗        ′
+  πT (πx, πx , F ◦ π
+                     −1
+                        ) = φπT (πx′ , F ◦ π −1 )(πx) + IHkπT (πx, πx′ , F ◦ π −1 −                       φπR (πx′ , F ◦ π −1 ))
+                                                                                                   R∈Pk
+                                                                                       X
+                           = φT (x , F )(x) + IHkT (πx, πx′ , φπR (πx′ ,
+                                       ′
+                                                                                                F ◦ π −1 ))
+                                                                                 R⊂N,|R|>k
+                                                        X
+                                       ′
+                           = φT (x , F )(x) +                     IHkT (πx, πx′ , φπR (πx′ , F ◦ π −1 ))
+                                                 R⊂N,|R|>k
+                                                        X
+                                       ′
+                           = φT (x , F )(x) +                     IHkT (x, x′ , φR (x′ , F ))
+                                                 R⊂N,|R|>k
+                                                                      X
+                           = φT (x′ , F )(x) + IHkT (x, x′ ,                   φR (x′ , F ))
+                                                                  R⊂N,|R|>k
+
+                           = IHk∗     ′
+                               T (x, x , F )
+
+
+D.5     Sum of Powers
+D.5.1    Defining Sum of Powers
+To define Sum of Powers, we first turn to defining a slight alteration of the Shapley-Taylor method.
+Suppose we performed Shapley-Taylor on a function F , but we treated F as a function of every
+variable except for xi , which we held at the input value. Specifically, for a given index i and
+coalition S with i ∈ S, we perform the (|S| − 1)-order Shapley-Taylor method for the coalition
+S \ {i}. We perform this on an alteration of F , so that F is a function of n − 1 variables because
+the xi value is fixed. We denote this function ST−i
+                                                 S , which has formula:
+
+                                                   |S| − 1 X δS\{i}|T ∪{i} F (x)
+                             ST−i     ′
+                               S (x, x , F ) =                      n−2                                                   (43)
+                                                    n−1
+                                                                          
+                                                                     |T |
+                                                               T ⊆N \S
+
+   With this, we define Sum of Powers for k ≥ 2 as:
+
+
+                                                             31
+                                           (P
+                                                         ST−i     ′           ′
+                                                                                    
+                                                           S (x, x , IGi (·, x , F ))    if |S| = k
+                     SPkS (x, x′ , F ) =       i∈S
+                                                                                                             (44)
+                                           φS (F )                                       if |S| < k
+
+We define the Sum of Powers for k = 1 as the IG, with the addition that SP1∅ (x, x′ , F ) = F (x′ ).
+   Similar to the alteration of the Shapley-Taylor, we can alter the Shapley method, giving us:
+                                           X      |S|!(n − |S| − 2)!
+               Shap−i     ′
+                                                                                                
+                   j (x, x , F ) =                                   F (xS∪{i,j} ) − F (xS∪{i} )             (45)
+                                                       (n − 1)!
+                                     S⊂N \{i,j}
+
+For the Sum of Powers k = 2 case, the altered Shapley-Taylor is a 1-order Shapley-Taylor method,
+and conforms to the Shapley method:
+                         (
+                                                                 −j
+        2       ′          Shap−i      ′           ′                    ′           ′
+                                j (x, x , IGi (·, x , F )) + Shapi (x, x , IGj (·, x , F )) if |S| = 2
+     SPi,j (x, x , F ) =                                                                               (46)
+                           φS (F )                                                          if |S| ≤ 1
+
+D.5.2     Proof of Corollary 5
+For the k = 1 case, Sum of Powers is the IG, which satisfies linearity, distributes as in Eq. 16, and
+satisfies the continuity condition.
+    We now assume k ≥ 2 for the rest of the section. First, SPkS satisfies linearity because IG is
+linear in F and ST−iS is linear in F .
+    We now proceed by cases to establish how SPk distributes monomials. We consider first the action
+of ST−i                       ′ m          −i
+       S on F (y) = (y − x ) . STS acts as the (|S| − 1)-order Shapley-Taylor on an augmented
+function F (y1 , ..., yi−1 , yi+1 , ..., yi ) := (xi − x′i )mi Πj6=i (yj − x′j )mj . Now, Πj6=i (yj − x′j )mj is a
+            −i
+
+synergy function of Sm \ {i}. Thus we can use the distribution rule of Shapley-Taylor, gaining
+
+                                                         |S|−1
+                           STS−i (x, x′ , F ) = STS\{i} (x−i , x′−i , F −i )
+                                                
+                                                 (x − x′ )m if S = Sm
+                                                 i ′ mi
+                                                
+                                                
+                                                  (xi −xi )                                                  (47)
+                                              =                  if S ( Sm , |S| = k ,
+                                                
+                                                  (|S|−1
+                                                      k−1 )
+                                                0               else
+
+where x−i denotes the vector x with the ith component removed.
+    With this established, we now show the action of the Sum of Powers method for an exhaustive
+set of cases:
+
+   1. (|S| < k, S = Sm ): SPkS (x, (y − x′ )m ) = φS ((y − x′ )m ) = (y − x′ )m .
+   2. (|S| < k, S 6= Sm ): SPkS (x, (y − x′ )m ) = φS ((y − x′ )m ) = 0.
+   3. (|S| = k, S ⊆ Sm ):
+                                                           X
+                         SPkS (x, x′ , (y − x′ )m ) =        ST−i     ′           ′        ′ m
+                                                                                               
+                                                               S (x, x , IGi (·, x , (y − x ) )
+                                                            i∈S
+                                                           X                                     
+                                                                                 mi
+                                                         =      ST−i S (x, x′
+                                                                              ,       (y −  x′ m
+                                                                                              )  )
+                                                                                kmk0
+                                                           i∈S
+                                                           X        1       mi
+                                                         =       |Sm |−1 kmk
+                                                                                  (x − x′ )m
+                                                                                0
+                                                           i∈S    |S|−1
+                                                                       P
+                                                               1             mi
+                                                         = |S |−1 i∈S            (x − x′ )m
+                                                              m         kmk0
+                                                              |S|−1
+
+
+
+
+                                                              32
+  4. (|S| = k, S * Sm ): Let i ∈ S. If i ∈ S \ Sm , then ST−i     ′           ′        ′ m
+                                                           S (x, x , IGi (·, x , (y − x ) )) =
+        −i    ′
+     STS (x, x , 0)) = 0.
+     If, on the other hand, i ∈ Sm , then ST−i     ′            ′       ′ m          −i   ′  mi     ′ m
+                                            S (x, x , IGi (·, x , (y−x ) )) = STS (x, x , kmk0 (y−x ) ).
+     Now, the altered Shapley-Taylor takes the value of zero for synergy functions of sets that are
+     not super-sets of the attributed group, S \ {i}. Also, (y − x′ )m is a synergy function of Sm ,
+     and Sm is not a super-set of S \ {i}. Thus STS−i (x, x′ , kmk mi
+                                                                      0
+                                                                        (y − x′ )m ) = 0.
+                                                       P        −i        ′          ′     ′ m
+                                                                                                
+     This established that each term in the sum          i∈S STS (x, x , IGi (·, x , (y − x ) )) is zero,
+     gaining SPkS (x, x′ , (y − x′ )m = 0.
+
+   Thus Sum of Powers has a distribution scheme that agrees with Eq. (16). To restate:
+
+                                        
+                                        
+                                         (x − x′ )m
+                                                   P
+                                                                                  if T = Sm
+                                                          i∈T mi
+                                        
+                                                 1                          ′ m
+               SPkT (x, (y − x)m ) =        |S
+                                          ( k−1
+                                            m
+                                                )|−1     kmk1      (x − x )       if T ( Sm , |T | = k      (48)
+                                        
+                                        
+                                        0                                        else
+
+    Finally, IG satisfies the continuity condition by Corollary 3, and it is easy to see that that ST−1
+                                                                                                     S
+satisfies the continuity condition. Thus Sum of Powers obeys the continuity condition.
+
+D.5.3    Establishing Further Properties for Sum of Powers
+To establish null feature, let F not vary in xi and let i ∈ S. Sum of Powers satisfies the continuity
+condition, so
+
+                                                 X        Dm F (x′ ) k
+                SPkS (x, x′ , F ) = lim                             SPS (x, x′ , (y − x′ )m )
+                                    l→∞                     m!
+                                          m∈Nn ,|m|≤l
+                                                     X          Dm F (x′ ) k
+                                 = lim                                    SPS (x, x′ , (y − x′ )m )
+                                    l→∞                           m!
+                                          m∈Nn ,|m|≤l,mi =0
+
+                                 = 0,
+
+
+where the second line is because Dm F (x′ ) = 0 if mi > 0 because F does not vary in xi , and the
+third line is because SPkS (x, x′ , (y − x′ )m ) = 0 if mi = 0.
+    To establish baseline test for interaction (k ≤ n), let ΦS ∈ C ω be a synergy function of S and let
+T ( S, |T | < k. Then SPkT (x, ΦS ) = φT (ΦS )(x) = 0.
+    To establish completeness, consider F (y) = (y − x′ )m , with |Sm | > k. Then,
+
+                     X                                   X
+                               SPkS (x, x′ , F ) =                 SPkS (x, x′ , (y − x′ )m )
+                 S∈Pk ,|S|>0                         S(Sm ,|S|=k
+                                                                                  P
+                                                                        1             i∈S mi
+                                                         X
+                                                 =                    |Sm |−1
+                                                                                               (x − x′ )m
+                                                                                  kmk1
+                                                                             
+                                                     S(Sm ,|S|=k       k−1
+                                                                ′ m
+                                                    (x − x )       X        X
+                                                 = |Sm |−1
+                                                                               mi
+                                                     k−1   kmk1 S(Sm ,|S|=k i∈S
+                                                    (x − x′ )m
+                                                                          
+                                                                 |Sm | − 1
+                                                 = |S |−1                  kmk1
+                                                     m
+                                                           kmk1    k−1
+                                                         k−1
+                                                 = F (x) − F (x′ )
+
+Now treating a general F ∈ C ω , the proof is identical to the proof for Integrated Hessian,
+
+                                                           33
+        X                                   X
+                   SPkT (x, x′ , F ) =                      lim SPkT (x, x′ , Tl )
+                                                        l→∞
+     S∈Pk ,|S|>0                         S∈Pk ,|S|>0
+                                                      X                 X                Dm (F )(x′ ) k
+                                   = lim                                                             SPT (x, x′ , (y − x′ )m )
+                                         l→∞                                                 m!
+                                               S∈Pk ,|S|>0 m∈Nn ,0<kmk1 ≤l
+                                                        X               Dm (F )(x′ )            X
+                                   = lim                                                                SPkT (x, x′ , (y − x′ )m )
+                                         l→∞                                m!
+                                               m∈Nn ,0<kmk1 ≤l                            S∈Pk ,|S|>0
+                                                                          m          ′
+                                                        X               D (F )(x )
+                                   = lim                                           (x − x′ )m
+                                         l→∞                               m!
+                                               m∈Nn ,0<kmk1 ≤l
+                                                       X             Dm (F )(x′ )
+                                   = lim                                          (x − x′ )m − F (x′ )
+                                         l→∞                             m!
+                                               m∈Nn ,kmk1 ≤l
+
+                                   = F (x) − F (x′ )
+
+    To show symmetry, the proof parallels the proof for Integrated Hessian in section D.4.3. Let
+π be a permutation. If we let F (y) = (y − x′ )m and follow what was previously established in
+section D.4.3, then
+
+                                         
+                                         
+                                          (πx − πx′P
+                                                    )πm                                             if πT = Sπm
+                                                               i∈πT (πm)i
+                                         
+                                                  1                                        ′ πm
+      SPkπT (πx, πx′ , F ◦ π −1 ) =          |S
+                                           ( πm     ) |−1       kπmk1       (πx − πx )              if πT ( Sπm , |πT | = k
+                                             k−1
+                                         
+                                         0                                                         else
+                                         
+                                         
+                                          (x − x′ )m
+                                                    P
+                                                                                         if T = Sm
+                                                              i∈T mi
+                                         
+                                                  1                           ′ m
+                                    =        |S   |−1         kmk1     (x − x )          if T ( Sm , |T | = k
+                                         
+                                          ( k−1
+                                             m
+                                                 )
+                                         0                                              else
+                                    = SPkT (x, x′ , F )
+
+From the above we have for general F ,
+                                                                          X               Dm (F ◦ π −1 )(πx′ )
+   SPkπS (πx, πx′ , F ◦ π −1 ) = lim SPkπS (πx, πx′ ,                                                          (y − πx′ )m )
+                                   l→∞                                                           m!
+                                                                   m∈Nn ,0<kmk1 ≤l
+                                                      X              Dm (F ◦ π −1 )(πx′ ) k
+                                = lim                                                    SPπS (πx, πx′ , (y − πx′ )m )
+                                   l→∞                                      m!
+                                           m∈Nn ,0<kmk1 ≤l
+                                                      X              Dπm (F ◦ π −1 )(πx′ ) k
+                                = lim                                                     SPπS (πx, πx′ , (y − πx′ )πm )
+                                   l→∞                                     (πm)!
+                                           m∈Nn ,0<kmk1 ≤l
+                                                      X              Dm (F )(x′ ) k
+                                = lim                                            SPS (x, x′ , (y − x′ )m )
+                                   l→∞                                   m!
+                                           m∈Nn ,0<kmk1 ≤l
+
+                                = lim SP(x, x′ , Tl )
+                                   l→∞
+                                = SP(x, x′ , F )
+
+
+
+
+                                                                   34
+

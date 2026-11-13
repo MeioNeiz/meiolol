@@ -1,0 +1,1979 @@
+The Annals of Applied Statistics
+2008, Vol. 2, No. 3, 916–954
+DOI: 10.1214/07-AOAS148
+c Institute of Mathematical Statistics, 2008
+
+arXiv:0811.1679v1 [stat.AP] 11 Nov 2008
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+By Jerome H. Friedman 1 and Bogdan E. Popescu2
+Stanford University
+General regression and classification models are constructed as
+linear combinations of simple rules derived from the data. Each rule
+consists of a conjunction of a small number of simple statements
+concerning the values of individual input variables. These rule ensembles are shown to produce predictive accuracy comparable to the
+best methods. However, their principal advantage lies in interpretation. Because of its simple form, each rule is easy to understand, as
+is its influence on individual predictions, selected subsets of predictions, or globally over the entire space of joint input variable values.
+Similarly, the degree of relevance of the respective input variables can
+be assessed globally, locally in different regions of the input space, or
+at individual prediction points. Techniques are presented for automatically identifying those variables that are involved in interactions
+with other variables, the strength and degree of those interactions,
+as well as the identities of the other variables with which they interact. Graphical representations are used to visualize both main and
+interaction effects.
+
+1. Introduction. Predictive learning is a common application in data
+mining, machine learning and pattern recognition. The purpose is to predict
+the unknown value of an attribute y of a system under study, using the
+known joint values of other attributes x = (x1 , x2 , . . . , xn ) associated with
+that system. The prediction takes the form ŷ = F (x), where the function
+F (x) maps a set of joint values of the “input” variables x to a value ŷ for
+the “output” variable y. The goal is to produce an accurate mapping. Lack
+of accuracy is defined by the prediction “risk”
+(1)
+
+R(F ) = Exy L(y, F (x)),
+
+Received May 2007; revised October 2007.
+Supported in part by the Department of Energy under contract DE-AC02-76SF00515
+and NSF Grant DMS-97-64431.
+2
+Supported in part by NSF Grant DMS-97-64431.
+Key words and phrases. Regression, classification, learning ensembles, rules, interaction effects, variable importance, machine learning, data mining.
+1
+
+This is an electronic reprint of the original article published by the
+Institute of Mathematical Statistics in The Annals of Applied Statistics,
+2008, Vol. 2, No. 3, 916–954. This reprint differs from the original in pagination
+and typographic detail.
+1
+
+2
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+where L(y, ŷ) represents a loss or cost for predicting a value ŷ when the
+actual value is y, and the expected value is over the joint distribution of
+all variables (x, y) for the data to be predicted. Using this definition, the
+optimal mapping (“target”) function is given by
+F ∗ (x) = arg min Exy L(y, F (x)).
+
+(2)
+
+F (x)
+
+With predictive learning, one is given a “training” sample of previously
+solved cases {xi , yi }N
+1 where the joint values of all variables have been determined. An approximation F (x) to F ∗ (x) is derived by applying a learning
+procedure to these data.
+2. Ensemble learning. Learning ensembles have emerged as being among
+the most powerful learning methods [see Breiman (1996, 2001), Freund and
+Schapire (1996), Friedman (2001)]. Their structural model takes the form
+(3)
+
+F (x) = a0 +
+
+M
+X
+
+am fm (x),
+
+m=1
+
+where M is the size of the ensemble and each ensemble member (“base
+learner”) fm (x) is a different function of the input variables x derived from
+the training data. Ensemble predictions F (x) are taken to be a linear combination of the predictions of each of the ensemble members, with {am }M
+0
+being the corresponding parameters specifying the particular linear combination. Ensemble methods differ in choice of particular base learners (function class), how they are derived from the data, and the prescription for
+obtaining the linear combination parameters {am }M
+0 .
+The approach taken here is based on the importance sampled learning
+ensemble (ISLE) methodology described in Friedman and Popescu (2003).
+Given a set of base learners {fm (x)}M
+1 , the parameters of the linear combination are obtained by a regularized linear regression on the training data
+{xi , yi }N
+1 ,
+(4)
+
+{âm }M
+0 = arg
+
+min
+
+N
+X
+
+{am }M
+0 i=1
+
+L yi , a0 +
+
+M
+X
+
+m=1
+
+!
+
+am fm (xi ) + λ ·
+
+M
+X
+
+m=1
+
+|am |.
+
+The first term in (4) measures the prediction risk (1) on the training sample, and the second (regularization) term penalizes large values for the coefficients of the base learners. The influence of this penalty is regulated by
+the value of λ ≥ 0. It is well known that for this (“lasso”) penalty, larger
+values of λ produce more overall shrinkage as well as increased dispersion
+among the values {|âm |}M
+1 , often with many being set to zero [see Tibshirani
+(1996), Donoho et al. (1995)]. Its value is taken to be that which minimizes
+an estimate of future prediction risk (1) based on a separate sample not
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+3
+
+used in training, or by full (multi-fold) cross-validation. Fast algorithms for
+solving (4) for all values of λ ≥ 0, using a variety of loss functions L(y, ŷ),
+are presented in Friedman and Popescu (2004).
+The base learners {fm (x)}M
+1 used in (3) and (4) to characterize the ensemble are randomly generated using the perturbation sampling technique
+described in Friedman and Popescu (2003). Each one is taken to be a simple function of the predictor variables characterized by a set of parameters
+p = (p1 , p2 , . . .). That is,
+(5)
+
+fm (x) = f (x; pm ),
+
+where pm represents a specific set of joint parameter values indexing a specific function fm (x) from the parameterized class f (x; p). Particular choices
+for such parameterized function classes are discussed below.
+Given a function class, the individual members of the ensemble are generated using the prescription presented in Friedman and Popescu (2003) and
+shown in Algorithm 1.
+Algorithm 1 (Ensemble
+generation).
+P
+L(y
+1 F0 (x) = arg minc N
+i , c)
+i=1
+2 For m = 1 to M { P
+3
+pm = arg minp i∈Sm (η) L(yi , Fm−1 (xi ) + f (xi ; p))
+4
+fm (x) = f (x; pm )
+5
+Fm (x) = Fm−1 (x) + ν · fm (x)
+6 }
+7 ensemble = {fm (x)}M
+1
+In line 3, Sm (η) represents a different subsample of size η < N randomly drawn without replacement from the original training data, Sm (η) ⊂
+{xi , yi }N
+1 . As discussed in Friedman and Popescu (2003), smaller values of η
+encourage increased dispersion (less correlation) among the ensemble members {fm (x)}M
+1 by training them on more diverse subsamples. Smaller values
+also reduce computation by a factor of N/η.
+At each step m, the “memory” function
+Fm−1 (x) = F0 (x) + ν ·
+
+m−1
+X
+
+fk (x)
+
+k=1
+
+contains partial information concerning the previously induced ensemble
+members {fk (x)}m−1
+as controlled by the value of the “shrinkage” parameter
+1
+0 ≤ ν ≤ 1. At one extreme, setting ν = 0 causes each base learner fm (x) to be
+generated without reference to those previously induced, whereas the other
+extreme ν = 1 maximizes their influence. Intermediate values 0 < ν < 1 vary
+the degree to which previously chosen base learners effect the generation of
+each successive one in the sequence.
+
+4
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+Several popular ensemble methods represent special cases of Algorithm 1.
+A “bagged” ensemble [Breiman (1996)] is obtained by using squared-error
+loss, L(y, ŷ) = (y − ŷ)2 , and setting ν = 0, and η = N/2 or, equivalently,
+choosing Sm (line 3) to be a bootstrap sample [Friedman and Hall (2007)].
+Random forests [Breiman (2001)] introduce increased ensemble dispersion by
+additionally randomizing the algorithm (“arg min,” line 3) used to solve for
+the ensemble members (large decision trees). In both cases the coefficients in
+(3) are set to a0 = ȳ, {am = 1/M }M
+1 so that predictions are a simple average
+of those of the ensemble members.
+AdaBoost [Freund and Schapire (1996)] uses exponential loss, L(y, ŷ) =
+exp(−y · ŷ) for y ∈ {−1, 1}, and is equivalent to setting ν = 1 and η = N in
+Algorithm 1. Predictions are taken to be the sign of the final memory function FM (x). MART [Friedman (2001)] uses a variety of loss criteria L(y, ŷ)
+for arbitrary y, and in default mode sets ν = 0.1 and η = N/2. Predictions
+are given by FM (x).
+Friedman and Popescu (2003) experimented with a variety of joint (ν, η)
+values for generating ensembles of small decision trees, followed by (4) to estimate the linear combination parameters. Their empirical results indicated
+that small but nonzero values of ν (ν ≃ 0.01) performed best in this context.
+Results were seen to be fairly insensitive to the value chosen for η, provided
+it was√ small (η . N/2) and grew less rapidly than the total sample size N
+(η ∼ N ) as N becomes large (N & 500).
+Although, in principle, most of these procedures can be used with other
+base learners, they have almost exclusively been applied with decision trees
+[Breiman et al. (1983), Quinlan (1993)].
+3. Rule based ensembles. The base learners considered here are simple
+rules. Let Sj be the set of all possible values for input variable xj , xj ∈ Sj ,
+and sjm be a specified subset of those values, sjm ⊆ Sj . Then each base
+learner takes the form of a conjunctive rule
+(6)
+
+rm (x) =
+
+n
+Y
+
+j=1
+
+I(xj ∈ sjm),
+
+where I(·) is an indicator of the truth of its argument. Each such base
+learner assumes two values rm (x) ∈ {0, 1}. It is nonzero when all of the
+input variables realize values that are simultaneously within their respective
+subsets {xj ∈ sjm }n1 . For variables that assume orderable values, the subsets
+are taken to be contiguous intervals
+sjm = (tjm , ujm ]
+defined by a lower and upper limit, tjm < xj ≤ ujm . For categorical variables
+assuming unorderable values (names), the subsets are explicitly enumerated.
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+5
+
+Such rules (6) can be regarded as parameterized functions of x (5), where the
+parameters pm are the quantities that define the respective subsets {sjm }.
+Note that for the case in which the subset of values sjm (real or categorical) appearing in a factor of (6) is in fact the entire set sjm = Sj , the
+corresponding factor can be omitted from the product. In this case the rule
+(6) can be expressed in the simpler form
+(7)
+
+rm (x) =
+
+Y
+
+sjm 6=Sj
+
+I(xj ∈ sjm).
+
+The particular input variables xj for which sjm 6= Sj are said to be those
+that “define” the rule rm (x). For purposes of interpretation, it is desirable
+that the ensemble be comprised of “simple” rules each defined by a small
+number of variables. As an example, the rule
+rm (x) =
+
+
+ I(18 ≤ age < 34)
+
+
+·I(marital status ∈ {single, living together-not married})
+·I(householder status = rent)
+
+is defined by three variables, and a nonzero value increases the odds of
+frequenting bars and night clubs.
+3.1. Rule generation. One way to attempt to generate a rule ensemble
+is to let the base learner f (x; p) appearing in Algorithm 1 take the form
+of a rule (6) and then try to solve the optimization problem on line 3 for
+the respective variable subsets {sjm }. Such a (combinatorial) optimization
+is generally infeasible for more that a few predictor variables, although fast
+approximate algorithms can be employed [Cohen and Singer (1999), Weiss
+and Indurkhya (2000)]. The approach used here is to view a decision tree as
+defining a collection of rules and take advantage of existing fast algorithms
+for producing decision tree ensembles. That is, decision trees are used as the
+base learner f (x; p) in Algorithm 1. Each node (interior and terminal) of
+each resulting tree fm (x) produces a rule of the form (7).
+This is illustrated in Figure 1 which shows a typical decision tree with
+five terminal nodes that could result from using a decision tree algorithm in
+conjunction with Algorithm 1. Associated with each interior node is one of
+the input variables xj . For variables that realize orderable values, a particular value of that variable (“split point”) is also associated with the node.
+For variables that assume unorderable categorical values, a specified subset
+of those values replaces the split point. For the tree displayed in Figure 1,
+nodes 0 and 4 are associated with orderable variable x14 with split points
+u and t respectively, node 1 is associated with categorical variable x32 with
+subset values {a, b, c}, and node 2 is associated with categorical variable x7
+with the single value {z}.
+
+6
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+Fig. 1. A decision tree. The rule corresponding to each node is given by the product of
+the indicator functions associated with all of the edges on the path from the root to that
+node.
+
+Each edge of the tree connecting a “parent”node to one of its two “daughter” nodes represents a factor in (7) contributing to the rules corresponding
+to all descendent nodes of the parent. These factors are shown in Figure 1
+for each such edge. The rule corresponding to any node in the tree is given
+by the product of the factors associated with all of the edges on the path
+from the root to that node. Note that there is no rule corresponding to the
+root node. As examples, in Figure 1 the rules corresponding to nodes 1, 4,
+6, and 7 are respectively:
+r1 (x) = I(x14 ≤ u),
+r4 (x) = I(x14 ≤ u) · I(x32 ∈
+/ {a, b, c}),
+r6 (x) = I(t < x14 ≤ u) · I(x32 ∈
+/ {a, b, c}),
+r7 (x) = I(x14 > u) · I(x7 = z).
+3.2. Rule fitting. The collection of all such rules derived from all of
+the trees {fm (x)}M
+1 produced by Algorithm 1 constitute the rule ensem-
+
+7
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+ble {rk (x)}K
+1 . The total number of rules is
+(8)
+
+M
+X
+
+K=
+
+m=1
+
+2(tm − 1),
+
+where tm is the number of terminal nodes for the mth tree. The predictive
+model is
+(9)
+
+F (x) = â0 +
+
+K
+X
+
+âk rk (x),
+
+k=1
+
+with
+(10)
+
+N
+X
+L
+{âk }K
+=
+arg
+min
+0
+{ak }K
+0 i=1
+
+yi , a0 +
+
+K
+X
+
+k=1
+
+!
+
+ak rk (xi ) + λ ·
+
+K
+X
+
+k=1
+
+|ak |.
+
+Fast algorithms for solving (10) for all values of λ ≥ 0, and procedures for
+choosing a value for λ, are discussed in Friedman and Popescu (2004).
+The solution to (10) for λ > 0 is not equivariant under different scaling
+transformations applied to each of the predicting rules rk (x). Increasing the
+scale of a rule by rk (x) ← bk · rk (x) (bk > 1) and decreasing its corresponding
+coefficient ak ← ak /bk produces the same loss in the first term of (10), but
+reduces its contribution to the second penalty term. Therefore, the coefficients of rules with larger scales are penalized less than those with smaller
+scales. The scale of a rule is characterized by its standard deviation
+(11)
+
+tk =
+
+q
+
+sk (1 − sk ),
+
+where sk is its support on the training data
+(12)
+
+sk =
+
+X
+1 N
+rk (xi ).
+N i=1
+
+A common practice is to give all predictors equal a priori influence, for
+example, by replacing each rule by a normalized version rk (x) ← rk (x)/tk in
+(10). The strategy applied here is to use the original unnormalized rules in
+(10). This places increased penalty on coefficients of rules with very small
+support sk ≃ 0 and on those with very large support sk ≃ 1. The overall
+effect is to reduce the variance of the estimated model (9) since rules with
+such small support, or the complement of those with such large support, are
+each defined by a correspondingly small number of training observations.
+3.3. Tree size. As seen in Figure 1 the size of each tree, as characterized
+by the number of its terminal nodes, along with the tree topology, determines the maximum number of factors appearing in the rules (7) derived
+from that tree. The topology of each individual tree is determined by the
+
+8
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+data. However, larger trees generally allow more complex rules to be produced in terms of the number of variables (factors) that define them. For
+example, the smallest trees with only two terminal nodes (“stumps”) generate rules limited to one factor in (7), whereas an L terminal node tree can,
+in principle, generate rules involving up to L − 1 factors. Thus, controlling
+tree size directly controls maximum complexity, and indirectly the average
+complexity, of the rules that comprise the ensemble.
+Controlling tree size, and thereby average rule complexity, also influences
+the type of target functions (2) that are most easily approximated by the
+ensemble. In order to capture interaction effects involving l variables, the
+ensemble must include rules with l or more factors. Thus, targets that involve
+strong high order interaction effects require larger trees than those that are
+dominately influenced by main effects and/or low order interactions. On the
+other hand, for a given size K (8), ensembles comprised of a large fraction of
+high order interaction rules will necessarily involve fewer of lower order that
+are best able to capture main and low order interaction effects. Therefore,
+larger trees can be counter productive for targets of this latter type. The best
+tree size is thus governed by the nature of the (unknown) target function.
+The strategy used here is to produce an ensemble of trees of varying sizes
+from which to extract the rules by letting the number of terminal nodes tm
+of each tree be a random variable
+tm = 2 + f l(γ).
+Here γ is randomly drawn from an exponential distribution with probability
+(13)
+
+Pr(γ) = exp(−γ/(L̄ − 2))/(L̄ − 2),
+
+and f l(γ) is the largest integer less than or equal to γ. The quantity L̄ ≥ 2
+represents the average number of terminal nodes for trees in the ensemble.
+For L̄ = 2, the entire ensemble will be composed of rules each involving only
+one of the input variables and thereby capture main effects only. Larger values produce trees of varying size tm , mostly with tm ≤ L̄, but many with
+tm > L̄ and some with tm ≫ L̄ producing some rules capable of capturing high order interactions, if present. The fitting procedure (10) can then
+attempt to select those rules most relevant for prediction. The use of an
+exponential distribution (13) counters the tendency of trees (of a given size)
+to produce more rules involving a larger number of factors owing to their
+hierarchical (binary tree) topology. The overall result is a more evenly distributed ensemble in terms of the complexity of its rules.
+The average tree size L̄ is a “meta”-parameter of the procedure that controls the distribution of the complexity of the rules {rk (x)}K
+1 comprising the
+ensemble. A choice for its value can be based on prior suspicions concerning
+the nature of the target F ∗ (x), or one can experiment with several values
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+9
+
+using an estimate of future predictive accuracy based on an independent
+sample or cross-validation. Also, examination of the actual rules chosen for
+prediction in (10) can suggest potential modifications.
+3.4. Loss functions. Any predictive learning method involves the specification of a loss function L(y, F ) that characterizes the loss or cost of
+predicting an outcome or response value F when the actual value is y. As
+described in Friedman and Popescu (2003, 2004), the ensemble procedures
+presented here can be implemented with a variety of different loss criteria.
+Specific choices can have a substantial effect on predictive models estimated
+from data, and are appropriate in different settings. For example, if the
+deviations from the target F ∗ (x) (2) follow a (homoskedastic) Gaussian distribution
+yi ∼ N (F ∗ (xi ), σ 2 ),
+
+(14)
+then squared-error loss
+
+L(y, F ) = (y − F )2
+
+(15)
+
+is most appropriate.
+For other distributions of a numeric outcome variable y, and especially in
+the presence of outliers, the Huber (1964) loss
+(16)
+
+L(y, F ) =
+
+
+
+(y − F )2 /2,
+δ(|y − F | − δ/2),
+
+|y − F | < δ,
+|y − F | ≥ δ,
+
+provides increased robustness, while sacrificing very little accuracy in situations characterized by (14) [see Friedman and Popescu (2004)]. It is a
+compromise between squared-error loss (15) and absolute deviation loss
+L(y, F ) = |y − F |. The value of the “transition” point δ differentiates the
+residuals that are treated as outliers being subject to absolute loss, from the
+other residuals subject to squared-error loss. Its value is taken to be the αth
+quantile of the data absolute residuals {|yi − F (xi )|}N
+1 , where the value of
+α controls the degree of robustness (break down) of the procedure; smaller
+values produce more robustness. For the simulated regression problems illustrated in the following squared-error loss, (15) is used, whereas for the real
+data example Huber loss, (16) with α = 0.9 was employed to guard against
+potential outliers.
+For binary classification y ∈ {−1, 1}, a variety of loss criteria have been
+proposed [see Hastie, Tibshirani and Friedman (2001)]. Here we use the
+squared-error ramp loss
+(17)
+
+L(y, F ) = [y − min(−1, max(1, F ))]2
+
+introduced and studied in Friedman and Popescu (2001, 2004). It was shown
+to produce comparable performance to other commonly used loss criteria,
+but with increased robustness against mislabeled training cases.
+
+10
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+4. Accuracy. An important property of any learning method is accuracy
+as characterized by its prediction risk (1). As noted in Section 2, decision
+tree ensembles are among the most competitive methods. Friedman and
+Popescu (2001) compared the performance of several decision tree ensemble
+methods in a simulation setting. These included bagging, random forests,
+boosting, and a variety of ISLEs using Algorithm 1 to construct the tree
+ensembles with various joint values for η and ν, followed by (4) to estimate
+the linear combination parameters. Here we compare the performance of
+rule based ensembles discussed in Section 3 to best performing tree based
+ensembles studied there.
+The simulation consisted of 100 data sets, each with N = 10000 observations and n = 40 input variables. Each data set was generated from the
+model
+(18)
+
+{yi = F ∗ (xi ) + εi }N
+1 ,
+
+with F ∗ (x) being a different target function for each data set. These 100
+target functions were themselves each randomly generated so as to produce
+a wide variety of different targets in terms of their dependence on the input
+variables x. Details concerning this random function generator are presented
+in Friedman (2001) and also in Friedman and Popescu (2003). The input
+variables were randomly generated according to a standard Gaussian distribution xj ∼ N (0, 1). The irreducible error ε was also randomly generated
+from a Gaussian, ε ∼ N (0, σ 2 ), with σ 2 = Varx F ∗ (x) to produce a one-to-one
+signal-to-noise ratio. In addition to regression, data for binary classification
+was produced by thresholding the response values for each data set at their
+respective medians
+(19)
+
+N
+{ỹi = sign(yi − median({yk }N
+1 ))}1 .
+
+The resulting optimal decision boundaries for each data set are quite different and fairly complex.
+Here we present a comparison of four methods. The first “MART” [Friedman (2001)] is a popular tree boosting method. The second “ISLE” is the
+best performing tree ensemble considered in Friedman and Popescu (2003)
+as averaged over these 100 data sets. It uses Algorithm 1 to generate the trees
+with η = N/5 and ν = 0.01, followed by (4) to estimate the linear combination parameters. In both cases the ensembles consisted of 500 six-terminal
+node trees. The third method “RuleFit” here uses exactly the same tree
+ensemble produced by ISLE to facilitate comparison, but then extracts the
+ten rules associated with each of the trees as described in Section 3.1. The
+resulting collection of K = 5000 rules (8) is then used to form the predictive model (9), (10). The last method RuleFit 200 uses the same procedure
+except that only the first 200 trees are used to extract K = 2000 rules for
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+11
+
+Fig. 2. Inaccuracy comparisons between tree ensemble methods (Mart, ISLE) and rule
+based ensembles (RuleFit, RuleFit 200).
+
+the final model. Although a large number of rules are used to fit the model
+in (10), typically only a small fraction (∼ 10%) have nonzero solution coefficient values and are thus required for prediction in (9).
+
+12
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+The upper left panel of Figure 2 shows the distributions (box plots) of
+the scaled absolute error
+Ex [|Fl∗ (x) − Fjl (x)|]
+(20)
+,
+l = 1, 100,
+ejl =
+Ex [|Fl∗ (x) − median Fl∗ (x)|]
+
+over the 100 regression data sets for each of the four methods. Here Fl∗ (x)
+is the true target function for the lth data set, and Fjl (x) is the corresponding estimate for the jth method (j = 1, 4). One sees that these 100 target
+functions represent a wide range of difficulty for all methods and that on
+average RuleFit provides slightly better performance. Using rules based on
+only 200 trees is still competitive with the 500 tree MART ensemble, but
+somewhat inferior to the 500 tree ISLE on these typically fairly complex
+target functions.
+The upper right panel of Figure 2 shows the corresponding distributions
+of the comparative absolute error defined by
+(21)
+
+cjl = ejl / min{ekl }4k=1 .
+
+This quantity facilitates individual comparisons by using the error of the
+best method for each data set to calibrate the difficulty of each respective
+problem. The best method j ∗ = arg minj {ejl }4j=1 for each data set receives
+the value cj ∗ l = 1, and the others larger values in proportion to their average
+error (20) on that data set. Here one sees that RuleFit based on 500 trees
+yields the best performance, or close to it, on nearly all of the 100 data sets.
+There are a few (∼ 5) for which one of the other methods was distinctly
+better. Of course, there are many for which the converse holds.
+The lower panels of Figure 2 show the corresponding results for the classification (19). Here lack of performance is measured in terms of error rate
+(22)
+
+ejl = Ex I[ỹ 6= sign(Fjl (x))].
+
+Again, these 100 classification problems present varying degrees of difficulty
+for all methods with error rates ranging by roughly a factor of three. Both
+rule based methods exhibit slightly superior average classification performance to the tree based ensembles. This is especially reflected in the corresponding comparative error rates (21), (22) shown in the lower right panel
+where RuleFit based on 500 trees was the best on almost every data set,
+and even RuleFit 200 was substantially better than either of the tree based
+ensembles with 500 trees.
+The results presented in Figure 2 suggest that the rule based approach to
+ensemble learning described in Section 3 produces accuracy comparable to
+that based on decision trees. Other tree based ensemble methods including
+bagging and random forests were compared to those presented here (MART,
+ISLE) in Friedman and Popescu (2003), and seen to exhibit somewhat lower
+accuracy over these 100 regression and classification data sets. Thus, rule
+based ensembles appear to be competitive in accuracy with the best tree
+based ensembles.
+
+13
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+5. Linear basis functions. With ensemble learning there is no requirement that the basis functions {fm (x)}M
+1 in (3) and (4) must be generated
+from the same parametric base learner (5). Other basis functions can be included, either generated from another parametric family using Algorithm 1,
+or by some other means. For increased accuracy, the different families should
+be chosen to complement each other in that each is capable of closely approximating target functions (2) for which the others have difficulty. For
+the purpose of interpretation, each such family should also produce easily
+understandable basis functions.
+Among the most difficult functions for rule (and tree) based ensembles to
+approximate are linear functions
+F ∗ (x) = b0 +
+
+(23)
+
+n
+X
+
+bj xj ,
+
+j=1
+
+for which a substantial number of the coefficients bj have relatively large
+absolute values. Such targets can require a large number of rules for accurate
+approximation. Especially if the training sample is not large and/or the
+signal-to-noise ratio is small, it may not be possible to reliably estimate
+models with large enough rule sets. Also, models with many roughly equally
+contributing rules are more difficult to interpret.
+These considerations suggest that both accuracy and interpretability might
+be improved by including the original variables {xj }n1 as additional basis
+functions in (9) and (10) to complement the rule ensemble. In the interest of
+robustness against input variable outliers we use the “Winsorized” versions
+lj (xj ) = min(δj+ , max(δj− , xj )),
+
+(24)
+
+where δj− and δj+ are respectively the β and (1 − β) quantiles of the data
+distribution {xij }N
+i=1 for each variable xj . The value chosen for β reflects
+ones, prior suspicions concerning the fraction of such outliers. Depending on
+the nature of the data, small values (β ≃ 0.025) are generally sufficient.
+With these additions, the predictive model (9) becomes
+(25)
+
+F (x) = â0 +
+
+K
+X
+
+âk rk (x) +
+
+n
+X
+
+b̂j lj (xj ),
+
+j=1
+
+k=1
+
+with
+n
+({âk }K
+0 , {b̂j }1 ) = arg
+
+(26)
+
+min
+
+N
+X
+
+n
+{ak }K
+0 ,{bj }1 i=1
+
++λ·
+
+K
+X
+
+k=1
+
+|ak | +
+
+L yi , a0 +
+
+K
+X
+
+k=1
+n
+X
+
+j=1
+
+!
+
+|bj | .
+
+ak rk (xi ) +
+
+n
+X
+
+j=1
+
+!
+
+bj lj (xij )
+
+14
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+In order to give each linear term (24) the same a priori influence as a typical
+rule, its normalized version
+lj (xj ) ← 0.4 · lj (xj )/std (lj (xj ))
+is used in (26), and then the corresponding solution coefficients {b̂j }n1 (and
+intercept â0 ) are transformed to reference the original lj (xj ) (24). Here
+std(lj (xj )) is the standard deviation of lj (xj ) over the training data and
+0.4 is the average standard deviation (11) of rules with a uniform support
+distribution sk ∼ U (0, 1).
+Owing to the selective nature of the lasso penalty in (26), many of the
+rule coefficient estimates âk as well as those b̂j of the less influential linear
+variables will often have zero values, and thus need not appear in the final
+predictive model (25).
+5.1. Illustration. To illustrate the potential benefit of including the original variables (24) as part of the ensemble, we consider simulated data generated from the model
+(27)
+
+(
+
+yi = 10 ·
+
+5
+Y
+
+j=1
+
+−2x2ij
+
+e
+
++
+
+35
+X
+
+j=6
+
+xij + εi
+
+)N
+
+,
+
+i=1
+
+with N = 10000 observations and n = 100 input variables, of which 65 have
+no influence on the response y. There is a strong nonlinear dependence
+on the first five input variables and a linear dependence of equal strength
+on 30 others. All input variables were randomly generated from a uniform
+distribution, xij ∼ U (0, 1), and the irreducible noise εi was generated from a
+Gaussian distribution, εi ∼ N (0, σ 2 ), with σ chosen to produce a two-to-one
+signal-to-noise ratio.
+Figure 3 shows the distribution (box plots) of the scaled absolute error
+(20) over 100 data sets randomly generated according to the above prescription, for three ensembles. The first “linear” involves no rules; only the
+n = 100 linear variables (24) comprise the ensemble. The second ensemble
+“rules” consists of K = 2000 rules generated as described in Section 3. The
+third ensemble “both” is the union of the first two; it includes the 100 linear
+variables and the 2000 rules. As seen in Figure 3, the purely linear model
+exhibits relatively poor performance; it has trouble capturing the highly
+nonlinear dependence on the first five input variables (27). The ensemble
+based only on rules provides somewhat improved performance by being better able to approximate the nonlinearity while crudely approximating the
+linear dependence by piecewise constants. The ensemble based on both linear
+variables and rules here provides the highest accuracy. The selection effect
+of the lasso penalty in (26) tends to give high influence to the best rules
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+15
+
+Fig. 3. Average absolute error for linear model, rules only model, and combined rules
+and linear base learners.
+
+for approximating the nonlinear dependencies as well as to the appropriate
+linear terms (24) for capturing the linear component in (27).
+This example was constructed to especially illustrate the potential advantage of including linear basis functions as part of rule based ensembles.
+In many applications the corresponding improvement is less dramatic. For
+example, the target functions generated by the random function generator
+used in Section 4 tend to be very highly nonlinear [see Friedman (2001)]
+and the performance of the rule based ensembles including linear functions
+(not shown) was virtually identical to that based on rules alone as shown in
+Figure 2. Also in many applications the numeric variables realize a relatively
+small number of distinct values and the piecewise constant approximations
+based on relatively few rules are at less of a disadvantage at capturing linear
+dependencies. Including linear functions in the basis provides the greatest
+improvement in situations where there are a substantial number of relevant
+numeric variables, each realizing many distinct values, on which the target
+has an approximate linear dependence. However, even in settings unfavorable to linear basis functions, as in Section 4, their inclusion seldom degrades
+performance again owing to the selection effect of the lasso penalty in (26).
+In all the examples presented below the ensemble includes the linear functions (24) for all of the input variables as part of the basis.
+6. Rule based interpretation. Rules of the form (7) represent easily understandable functions of the input variables x, as do the linear functions
+
+16
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+(24). Although a large number of such functions participate in the initial
+ensemble, the fitting procedure (26) generally sets the vast majority (∼ 80%
+n
+to 90%) of the corresponding coefficient estimates ({âk }K
+1 , {b̂j }1 ) to zero.
+As noted above, this selection property is a well-known aspect of the lasso
+penalty in (26). The remaining predictors [rules (7) or linear (24)] will have
+varying coefficient values depending on their estimated predictive relevance.
+A commonly used measure of relevance or importance Ik of any predictor
+in a linear model such as (25) is the absolute value of the coefficient of the
+corresponding standardized predictor. For rules, this becomes
+(28)
+
+Ik = |âk | ·
+
+q
+
+sk (1 − sk ),
+
+where sk is the rule support (12). For the linear predictors (24), the corresponding quantity is
+(29)
+
+Ij = |b̂j | · std (lj (xj )),
+
+where std(lj (xj )) is the standard deviation of lj (xj ) over the data. Those
+predictors (rules or linear) with the largest values for (28) and (29) are the
+most influential for prediction based on the predictive equation (25). These
+can then be selected and examined for interpretation.
+The importance measures (28) and (29) are global in that they reflect the
+average influence of each predictor over the distribution of all joint input
+variable values. A corresponding local measure of influence at each point x
+in that space is for rules (7)
+(30)
+
+Ik (x) = |âk | · |rk (x) − sk |,
+
+and for the linear terms (24)
+(31)
+
+Ij (xj ) = |b̂j | · |lj (xj ) − ¯lj |,
+
+where l¯j is the mean of lj (xj ) over the training data. These quantities measure the (absolute) change in the prediction F (x) when the corresponding
+predictor (rk (x) or lj (xj )) is removed from the predictive equation (25) and
+the intercept â0 is adjusted accordingly. That is, â0 ← â0 − âk sk for rules,
+and â0 ← â0 − b̂j l¯j for linear predictors. Note that the average (root-meansquare) of (30) and (31) over all x values equates to the corresponding global
+measures (28) and (29).
+For a given coefficient value |âk |, the importance (30) of the corresponding
+rule for a prediction at x depends on its value rk (x) ∈ {0, 1} at that point, as
+well as its global support (12). A rule is said to “fire” at a point x if rk (x) = 1.
+From (30) a rule that generally does not fire over the whole space (sk small)
+will have higher importance in regions where it does fire. Conversely, high
+support rules that usually fire will be correspondingly more important at
+points x where they do not fire, rk (x) = 0. This symmetry is a consequence
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+17
+
+of the fact that replacing a particular rule rk (x) by its complement 1 − rk (x)
+produces an equivalent fitted linear model, so that either one should be
+assigned the same influence as reflected in (28) and (30).
+The quantities (30) and (31) permit one to evaluate the relative influence
+of the respective predictors (rules or linear) for individual predictions F (x)
+at x. Those judged most influential can then be examined for interpreting that particular prediction. These quantities can also be averaged over
+selected subregions S of the input variable space
+(32)
+
+Ik (S) =
+
+1 X
+Ik (xi );
+|S| x ∈S
+
+Ij (S) =
+
+i
+
+1 X
+Ij (xij ),
+|S| x ∈S
+i
+
+where |S| is the cardinality of S. For example, one might be interested in
+those predictors that most heavily influence relatively large predicted values
+(33)
+
+S = {xi |F (xi ) ≥ u},
+
+where the threshold u might be a high quantile of the predictions {F (xi )}N
+1
+over the data set. Similarly, one might define S to be the set of lowest
+predicted values
+(34)
+
+S = {xi |F (xi ) ≤ t},
+
+with t being a low quantile. In classification, y ∈ {−1, 1}, one might be
+interested in those rules that most heavily influence the predictions for each
+of the two respective classes. In this case S = {xi |yi = 1} or S = {xi |yi = −1}
+would be appropriate.
+As with any linear model, the importance measures defined above are intended to estimate the influence of each individual predictor (rule or linear)
+after accounting for that of the others appearing in the ensemble. To the
+extent that the coefficient estimates are accurate, they will reflect the corresponding influence on the target function (2). These influence measures
+may or may not reflect the usefulness of individual predictors in the absence
+of others. For example, a predictor on which the target function (2) has no
+dependence at all may be useful if it is highly correlated with an important
+predictor, and the latter is removed from the ensemble. The influence measures used here are based on the joint contributions of all members of the
+ensemble.
+7. Input variable importance. In predictive learning a descriptive statistic that is often of interest is the relative importance or relevance of the
+respective input variables (x1 , x2 , . . . , xn ) to the predictive model. For the
+models (25) considered here, the most relevant input variables are those
+that preferentially define the most influential predictors (rules or linear) appearing in the model. Input variables that frequently appear in important
+
+18
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+predictors are judged to be more relevant than those that tend to appear
+only in less influential predictors.
+This concept can be captured by a measure of importance Jl (x) of input
+variable xl at each individual prediction point x as
+(35)
+
+Jl (x) = Il (x) +
+
+X
+
+Ik (x)/mk .
+
+xl ∈rk
+
+Here Il (x) is the importance (31) of the linear predictor (24) involving xl ,
+and the second term sums the importances of those rules (7) that contain
+xl (xl ∈ rk ) each divided by the total number of input variables mk that
+define the rule. In this sense the input variables that define a rule equally
+share its importance, and rules with more variables do not receive exaggerated influence by virtue of appearing in multiple input variable importance
+measures.
+The distribution of {Jl (x)}n1 (35) can be examined to ascertain the relative
+influence of the respective input variables locally at particular predictions
+x. As with rules, these quantities can be averaged over selected subregions
+of the input variable space using (32), or over the whole space using (28)
+and (29), in place of the corresponding local measures in (35). Illustrations
+are provided in the data examples below.
+8. Interaction effects. A function F (x) is said to exhibit an interaction
+between two of its variables xj and xk if the difference in the value of F (x) as
+a result of changing the value of xj depends on the value of xk . For numeric
+variables, this can be expressed as
+Ex
+
+
+
+∂ 2 F (x) 2
+>0
+∂xj ∂xk
+
+
+or by an analogous expression for categorical variables involving finite differences. If there is no interaction between these variables, the function F (x)
+can be expressed as the sum of two functions, one that does not depend on
+xj and the other that is independent of xk :
+(36)
+
+F (x) = f\j (x\j ) + f\k (x\k ).
+
+Here x\j and x\k respectively represent all variables except xj and xk . If a
+given variable xj interacts with none of the other variables, then the function
+can be expressed as
+(37)
+
+F (x) = fj (xj ) + f\j (x\j ),
+
+where the first term on the right is a function only of xj and the second is
+independent of xj . In this case F (x) is said to be “additive” in xj .
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+19
+
+A function F (x) is said to have an interaction between three (numeric)
+variables xj , xk and xl if
+∂ 3 F (x) 2
+> 0,
+Ex
+∂xj ∂xk ∂xl
+
+
+
+
+again with an analogous expression involving finite differences for categorical variables. If there is no such three-variable interaction, F (x) can be
+expressed as a sum of three functions, each independent of one of the three
+variables
+(38)
+
+F (x) = f\j (x\j ) + f\k (x\k ) + f\l (x\l ).
+
+Here x\j , x\k and x\l each respectively represent all of the variables except
+xj , xk and xl . Analogous expressions for the absence of even higher order
+interaction effects can be similarly defined.
+Knowing which variables are involved in interactions with other variables,
+the identities of the other variables with which they interact, as well as the
+order and strength of the respective interaction effects can provide useful
+information about the predictive process as represented by the target function F ∗ (x) (2). To the extent that the predictive model F (x) (25), (26)
+accurately represents the target, one can infer these properties by studying
+its interaction effects.
+As noted in Section 3.3, in order for the predictive model F (x) (25) to
+capture an interaction among a specified subset of its variables, it is necessary that it contain rules (7) jointly involving all of the variables in the
+subset. This is, however, not a sufficient condition for the presence of such
+an interaction effect in F (x). Different rules jointly involving these variables
+can combine to substantially reduce or possibly even eliminate various interaction effects between them as reflected in the overall model. Thus, the
+mere presence of rules involving multiple variables does not guarantee the
+existence of substantial interactions between the respective variables that
+define them. In order to uncover actual interaction effects, it is necessary
+to analyze the properties of the full predictive equation, not just individual components. Here we use the properties of partial dependence functions
+[Friedman (2001)] to study interaction effects in the predictive model.
+8.1. Partial dependence functions. Given any subset xs of the predictor
+variables indexed by s ⊂ {1, 2, . . . , n}, the partial dependence of a function
+F (x) on xs is defined as
+(39)
+
+Fs (xs ) = Ex\s [F (xs , x\s )],
+
+where xs is a prescribed set of joint values for the variables in the subset,
+and the expected value is over the marginal (joint) distribution of all variables x\s not represented in xs . Here x = (xs , x\s ) is the entire variable set.
+
+20
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+Partial dependence functions were used in Friedman (2001) to graphically
+examine the dependence of predictive models on low cardinality subsets of
+the variables, accounting for the averaged effects of the other variables. They
+can be estimated from data by
+N
+1 X
+F (xs , xi\s ),
+F̂s (xs ) =
+N i=1
+
+(40)
+
+where {xi\s }N
+1 are the data values of x\s . Here we use the properties of centered partial dependence functions to uncover and study interaction effects.
+In this section all partial dependence functions as well as the predictive
+model F (x) (25) are considered to be centered to have a mean value of zero.
+If two variables xj and xk do not interact, then from (36) the partial
+dependence of F (x) on xs = (xj , xk ) can be decomposed into the sum of the
+respective partial dependences on each variable separately:
+(41)
+
+Fjk (xj , xk ) = Fj (xj ) + Fk (xk ).
+
+Furthermore, if a given variable xj does not interact with any other variable,
+then from (37) one has
+(42)
+
+F (x) = Fj (xj ) + F\j (x\j ).
+
+Here F\j (x\j ) is the partial dependence of F (x) on all variables except xj .
+If variables xj , xk and xl do not participate in a joint three-variable
+interaction, then from (38) the partial dependence of F (x) on these three
+variables can be expressed in terms of the respective lower order partial
+dependencies as
+(43)
+
+Fjkl (xj , xk , xl ) = Fjk (xj , xk ) + Fjl (xj , xl ) + Fkl (xk , xl )
+− Fj (xj ) − Fk (xk ) − Fl (xl ).
+
+Analogous relationships can be derived for the absence of higher order interactions. These properties (41)–(43) of partial dependence functions are
+used to construct statistics to test for interaction effects of various types.
+To test for the presence of an interaction between two specified variables
+(xj , xk ), the statistic
+(44)
+
+2
+Hjk
+=
+
+N
+X
+i=1
+
+[F̂jk (xij , xik ) − F̂j (xij ) − F̂k (xik )]2
+
+N
+.X
+
+2
+F̂jk
+(xij , xik )
+
+i=1
+
+can be used based on (41) and the empirical estimates (40). It measures the
+fraction of variance of F̂jk (xj , xk ) not captured by F̂j (xj ) + F̂k (xk ) over the
+data distribution. It will have a value of zero if the predictive model F (x)
+(25), (26) exhibits no interaction between xj and xk and a correspondingly larger value for a stronger interaction effect between them. Similarly, a
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+21
+
+statistic for testing whether a specified variable xj interacts with any other
+variable would be from (42)
+(45)
+
+Hj2 =
+
+N
+X
+i=1
+
+[F (xi ) − F̂j (xij ) − F̂\j (xi\j )]2
+
+N
+.X
+
+F 2 (xi ).
+
+i=1
+
+This quantity will differ from zero to the extent that xj interacts with one
+or more other variables. By examining the values of {Hj }n1 , one can identify
+those variables that participate in interaction effects. For each variable xj so
+identified, the statistics {Hjk }k6=j (44) can be used to identify the variables
+that interact with xj . Note that only those variables that are deemed globally
+relevant via (28), (29) and (35) need be considered for interaction effects.
+This is often a small subset of all n predictor variables.
+If a particular variable xj is seen to interact with more than one other
+variable using (44), it is of interest to ascertain the order of these interactions. That is, whether xj interacts separately with each of them or whether
+subsets of these variables jointly participate in higher order interactions.
+Let xk and xl be two variables that are identified as interacting with xj .
+This could represent separate two-variable interactions between (xj , xk ) and
+(xj , xl ) only, or the additional presence of a three-variable interaction involving (xj , xk , xl ). A statistic for testing these alternatives is from (43)
+2
+Hjkl
+=
+
+N
+X
+i=1
+
+(46)
+
+[F̂jkl (xij , xik , xil ) − F̂jk (xij , xik )
+− F̂jl (xij , xil ) − F̂kl (xik , xil ) + F̂j (xij )
++ F̂k (xik ) + F̂l (xil )]2
+
+N
+.X
+
+2
+F̂jkl
+(xij , xik , xil ).
+
+i=1
+
+This quantity tests for the presence of a joint three-variable interaction between xj , xk , and xl by measuring the fraction of variance of F̂jkl (xj , xk , xl )
+not explained by the lower order interaction effects among these variables.
+Analogous statistics testing for even higher order interactions can be derived,
+if desired.
+By considering the fraction of unexplained variance, the statistics (44)
+and (46) test for the presence of the corresponding interaction effects in
+the predictive model F (x) but do not necessarily reflect the importance of
+these effects to the overall variation of F (x). It is possible for an interaction
+effect to be highly significant (see Section 8.3) but not very influential when
+compared to the other effects in the model. If for interpretational purposes
+one would like to uncover these as well as the more influential interactions,
+these statistics (44), (46) are appropriate. If it is desirable to ignore them
+so as to concentrate only on the highly influential interactions, then the
+
+22
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+statistics can be modified accordingly. Replacing the denominators in (44)
+and (46) with that in (45) will cause the resulting statistics to more closely
+reflect the importance of the corresponding interaction effects to the overall
+model F (x).
+8.2. Spurious interactions. The strategy outlined in the previous section
+is applied to the predictive model F (x) (25) (26). As such, it will uncover
+interaction effects present in that model. However, interest is in interaction
+effects present in the target function F ∗ (x) (2) representing the true underlying predictive relationships among the predictor variables x. It is possible
+that even a highly accurate predictive model can contain substantial interaction effects that are not present in the target F ∗ (x). These spurious
+interactions can occur when there is a high degree of collinearity among
+some (or all) of the predictor variables in the training data {xi }N
+1 .
+For example, if the target function exhibits a nonlinear additive dependence (37) on a variable xj , this dependence on xj can be equivalently
+approximated by a corresponding additive contribution to the model involving that variable alone, or by incorporating interaction effects involving
+other variables highly correlated with it. Thus, it is not possible to easily
+distinguish between low and higher order interactions among subsets of variables that are highly correlated with each other. If interpretive value is to
+be placed on the presence of various interaction effects, then such spurious
+interactions should not be reported.
+One way to discourage spurious interactions is to restrict their entry into
+the predictive model F (x) (25), (26). Interactions enter the model through
+rules (7) involving more than one predictor variable. Such rules are derived
+from trees that have splits on different variables at nodes along the path from
+the root node to the nodes that define the respective rules (see Figure 1).
+Thus, one can discourage the entry of unneeded interaction effects by placing
+an incentive for fewer variables along each such path.
+Trees are built in a top-down greedy fashion where the variable chosen
+for splitting at each node is the one that yields the maximal estimated
+improvement to tree predictions as a result of the split. The improvement Zj
+by potentially splitting the node on variable xj is estimated for all variables,
+and the one
+j ∗ = arg max Zj
+1≤j≤n
+
+is chosen for splitting the node in question. Spurious interactions can be
+discouraged by modifying this splitting strategy so as to place an incentive
+for repeated splits on the same variable. Specifically,
+j ∗ = arg max κj · Zj
+1≤j≤n
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+23
+
+is used to split the node where κj = 1 if the variable xj does not appear as a
+splitting variable at any ancestor node on the path from the root to the node
+being split, and κj = κ (κ > 1) if it does. This places a preference on fewer
+variables defining splits along such paths, and thereby defining the rules
+derived from the tree. In particular, once a variable xj is chosen for splitting
+a node, other variables that are highly correlated with it will be discouraged
+from splitting its descendants and thus appearing with it in the same rule.
+Note that this strategy does not necessarily discourage those variables that
+are highly correlated with xj from entering the overall predictive model
+F (x) (25), (26). They are not discouraged from splitting nodes in the same
+tree that do not contain a split on xj at an ancestor node, and from being
+used for splitting in different trees. This strategy only discourages highly
+correlated variables from defining the same rule (not different rules) and
+thereby suppresses spurious interaction effects in the predictive model caused
+by collinearity.
+The value chosen for the incentive parameter κ should be large enough
+to effectively discourage spurious interactions, but not so large as to inhibit
+genuine interactions from entering the predictive model. It should be set to
+the largest value that does not degrade predictive performance as estimated
+by a left out test set or full cross-validation.
+8.3. Null distribution. In order to use the statistics presented in Section
+8.1 for measuring the strength of various kinds of interaction effects, one
+must have an idea of their value in the absence of such effects. Even if a
+particular interaction effect is absent from the target F ∗ (x), the sample
+based estimate of the corresponding statistic will not necessarily be zero.
+Sampling fluctuations can introduce apparent interactions in the estimated
+model F (x). In addition, there are types of associations among the predictor
+variables other than collinearity that if present can also induce spurious
+interactions in the model [Hooker (2004)] for which the strategy discussed
+in Section 8.2 is less effective.
+Here we present a variant of the parametric bootstrap [Efron and Tibshirani (1993)] that can be used to derive a reference (null) distribution for any
+of the interaction test statistics presented in Section 8.1. The idea is to repeatedly compute these statistics on a series of artificial data sets generated
+from the training data, and then use the distribution of test statistic values
+so derived as a reference for the corresponding test statistic value obtained
+from the original data set.
+For regression, each artificial data set is given by {xi , ỹi }N
+1 , where
+(47)
+
+ỹi = FA (xi ) + (yp(i) − FA (xp(i) )).
+
+Here {p(i)}N
+1 represents a random permutation of the integers {1, 2, . . . , N }
+and FA (x) is the closest function to the target containing no interaction
+
+24
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+effects. For classification y ∈ {−1, 1}, the corresponding response values are
+(48)
+
+ỹi = 2bi − 1,
+
+where bi is a Bernoulli random variable generated with
+(49)
+
+Pr(bi = 1) = max(0, min(1, (1 + FA (xi ))/2)),
+
+and FA (x) is derived using (17). The “additive” model FA (x) can be estimated from the original training data set {xi , yi }N
+1 by restricting the rules
+used in (25) and (26) to each involve only a single predictor variable. This
+is, in turn, accomplished by restricting the trees produced by Algorithm 1 to
+all have tm = L̄ = 2 terminal nodes. Other techniques for estimating additive
+models could also be used [see Hastie and Tibshirani (1990)].
+By construction, each data set generated from (47) or (48) has a target FA (x) containing no interaction effects. It has the same predictor variable joint distribution as the original training data. It also has the same
+(marginal) distribution of the residuals {yi − F ∗ (xi )}N
+1 under the null hypothesis F ∗ (x) = FA (x).
+For each artificial data set {xi , ỹi }N
+1 (47), (48), a full predictive model
+F̃ (x) is obtained by applying the identical procedure (modeling parameters,
+etc.) used to obtain the predictive model F (x) on the original training data
+{xi , yi }N
+1 . The various interaction test statistics of interest obtained from
+F (x) are computed on F̃ (x). The collection of these computed values over
+all artificially generated data sets can then be used as a reference distribution
+for the corresponding values obtained from F (x), under the null hypothesis
+of no interaction effects in the target F ∗ (x). Illustrations are provided in the
+data examples below.
+8.4. Discussion. The general strategy of using partial dependence functions to detect and analyze interaction effects can be applied to any function
+F (x), not just to those of the form (25) and (26). All that is required to
+compute partial dependence functions (40) is the value of F (x) at various
+prediction points x. Thus, this approach can be used with “black-box” prediction models derived by any method providing a way to estimate FA (x)
+(47) (49). The strategy for discouraging spurious interactions outlined in
+Section 8.2 can only be used with tree based methods however. Inhibiting
+spurious interactions can help to make the strategy more sensitive to the
+presence of genuine interaction effects in the target F ∗ (x).
+9. Illustrations. In this section we present applications of the interpretational tools described in Sections 6–8 to two data sets. The first is artificially
+generated so that results can be compared to known truth. The second is one
+that is often used as a test bed for evaluating prediction methods. Following Friedman and Popescu (2003), the tree ensemble generation parameters
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+25
+
+√
+used in Algorithm 1 were ν = 0.01 and η = min(N/2, 100 + 6 N ), where N
+is the training sample size. The average tree size (13) was taken to be L̄ = 4
+terminal nodes. Rules were derived from ensembles of 333 trees producing
+approximately 2000 rules used in (26) to produce the predictive model (25).
+These “default” parameter settings are used here for illustration; it is possible that individual results could be improved by selective tuning of some
+of them.
+9.1. Artificial data. This data set consists of N = 5000 observations with
+n = 100 predictor variables. To somewhat realistically emulate actual data,
+the predictor variables were generated with ten discrete values xij ∈ {k/10}90 ,
+with the integers k randomly generated from a uniform distribution. Each
+response value was taken to be
+yi = F ∗ (xi ) + εi ,
+
+(50)
+where the target function is
+F ∗ (x) = 9
+(51)
+
+3
+Y
+
+j=1
+
+exp(−3(1 − xj )2 ) − 0.8 exp(−2(x4 − x5 ))
+
++ 2 sin2 (π · x6 ) − 2.5(x7 − x8 )
+
+and εi ∼ N (0, σ 2 ) with the value of σ was chosen to produce a two-to-one
+signal-to-noise ratio. Note that this target depends on only eight of the predictor variables; the other 92 are pure noise variables having no effect on the
+response. The coefficients multiplying each of the terms in (51) were chosen
+so as to give each of the first eight variables approximately equal global influence (28), (29), (35). The target function is seen from (51) to involve a
+strong three-variable interaction effect among (x1 , x2 , x3 ), a somewhat different two-variable interaction between x4 and x5 , a highly nonlinear additive
+dependence on x6 , and linear dependencies of opposite sign on x7 and x8 .
+Applying RuleFit to these data produced a model (25) involving 351 terms
+(rules + linear) with nonzero coefficients. The average absolute error
+(52)
+
+aae =
+
+Exy |y − F (x)|
+Exy |y − median(y)|
+
+was aae = 0.49 as estimated with 50000 independently generated test observations. The corresponding error for a model involving main effects only
+(L̄ = 2) (13) was 0.61. Using only linear basis functions (24) in (25) and (26)
+produced aae = 0.69. Thus, including additive nonlinear terms in the model
+improves prediction accuracy by ∼ 12% over a purely linear model, and allowing interaction effects produces another ∼ 20% improvement. However,
+these prediction errors include the irreducible error caused by the additive
+
+26
+
+J. H. FRIEDMAN AND B. E. POPESCU
+Table 1
+Simulated example: six most important rules—all predictions
+
+Imp.
+
+Coeff.
+
+sup.
+
+Rule
+
+100
+99
+83
+63
+61
+58
+
+0.57
+0.79
+−0.81
+0.61
+0.34
+−0.38
+
+0.49
+0.15
+
+0.25 ≤ x6 < 0.75
+x1 ≥ 0.35 and x2 ≥ 0.45 and x3 ≥ 0.45
+linear: x7
+linear: x8
+0.35 ≤ x6 < 0.85
+x4 < 0.35 and x5 ≥ 0.45
+
+0.51
+0.25
+
+random component εi in (50). The corresponding errors (20) in estimating
+the actual target function F ∗ (x) itself are respectively 0.18, 0.43, and 0.58.
+Thus, including interactions improved estimation accuracy by 58% over a
+purely additive model. Of course, with actual rather than artificially generated data, one can only estimate (52) and estimation inaccuracy on the
+target (20), while decreasing monotonically with (52), is unknown.
+9.1.1. Rule importance. Table 1 displays the six globally most important terms (28), (29) resulting from the RuleFit model (25), (26) in order
+of their estimated importance. Column 1 gives the respective importances
+scaled so that the highest estimate receives a value of 100. Column 2 shows
+the corresponding coefficients (â, b̂). For rules (7) the coefficient (â) value
+represents the change in predicted value if the rule is satisfied (“fires”). For
+linear terms (24) the coefficient is its corresponding slope parameter b̂. The
+third column gives the support (12), where appropriate, for the respective
+rules displayed in column 4.
+Comparing Table 1 with the (here known) target function (51), one sees
+that these six most important terms (out of 351 total) provide a reasonable
+qualitative description of its dependence on the 100 predictor variables. None
+of these terms include any of the noise variables {xi }100
+9 . The first and fifth
+rules indicate larger target function values when x6 is in the middle of its
+range of values. The second rule produces larger target values when x1 , x2
+and x3 simultaneously realize high values. The third and fourth terms reflect
+the linear dependences on x7 and x8 . The sixth rule indicates smaller target
+values when x4 is small and x5 is large.
+9.1.2. Input variable importance. The upper left frame of Figure 4 shows
+the relative importance of the ten most important input predictor variables
+(35), as averaged over all predictions (28) and (29), in descending order
+of estimated importance. By construction, the target (51) depends on each
+of the first eight variables x1 –x8 with roughly equal (global) strength and
+has no dependence on x9 –x100 . Even though the standard deviation of the
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+27
+
+Fig. 4. Input variable relative importances for the simulated data as averaged over all
+(upper left), the 10% lowest (lower left) and 10% highest (lower right) predictions, and for
+the single prediction point {xj = 0.5}n
+1 (upper right).
+
+irreducible error ε is here one half of that of the target function, one sees
+that none of the 92 noise variables has estimated relative importance greater
+than 5% of that for the eight relevant variables.
+The upper right frame in Figure 4 shows the relative importance of the
+first eight predictor variables plus the two most relevant noise variables
+(30), (31), (35). Here one sees
+for a single prediction point {xj = 0.5}100
+1
+varying importance for each of the relevant predictor variables with the
+(additive) variables {x6 , x7 , x8 } being somewhat more influential. The lower
+left and right frames respectively show the corresponding relative variable
+importances for the 10% lowest (32), (34), (35) and 10% highest (32), (33),
+(35) predicted target values. Here one sees that variables x1 , x2 and x3
+
+28
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+Fig. 5. Total interaction strength in excess of expected null value of the first ten input
+variables for the simulated data. The lower dark bars represent the null standard deviations.
+
+dominately influence the highest predicted values, whereas x4 –x8 are most
+influential for the lowest predictions.
+9.1.3. Interaction effects. Figure 5 displays the strengths of the interaction effects involving each of the first ten predictor variables. The height of
+each bar represents the corresponding value of
+(53)
+
+(0)
+
+H̃j = Hj − H̄j ,
+
+where Hj is given by (45) for each respective variable xj based on the orig(0)
+inal data, and H̄j is the mean (null) value of the same statistic averaged
+over ten runs of the parametric bootstrap as described in Section 8.3. Thus,
+each bar reflects the value of Hj in excess of its expected value under the null
+hypothesis of no interaction effects. The dark bars shown in Figure 5 are the
+(0)
+values of the standard deviations σj of the respective null distributions, so
+that one can visually gauge the significance of each corresponding interaction. The dark bars are plotted over the lighter ones so that the absence of
+a light bar indicates that the corresponding value of Hj is less than or equal
+(0)
+to one standard deviation above its null mean value H̄j .
+The results shown in Figure 5 suggest that variables x1 , x2 and x3 are
+each heavily involved in interactions with other variables. Variables x4 and
+
+29
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+Fig. 6. Two-variable interaction strengths of variables interacting with x1 (upper) and
+three-variable interaction strengths of variables interacting with x1 and x2 (lower) in excess
+of their expected null value for the simulated data. The lower dark bars represent the
+corresponding null standard deviations.
+
+x5 also substantially interact with other variables, but to a somewhat lesser
+extent. There is no evidence of any interaction effects involving variables
+x6 –x10 .
+After identifying those variables that interact with others, it is of interest
+to determine the particular other variables with which each one interacts.
+The upper frame of Figure 6 displays the values of {H̃1k }10
+2 , where
+(54)
+
+(0)
+
+H̃jk = Hjk − H̄jk .
+(0)
+
+Here Hjk is given by (44) for the respective variables (xj , xk ) and H̄jk is
+the corresponding expected null value averaged over ten replications of the
+parametric bootstrap (Section 8.3). The dark bars plotted over the light
+(0)
+ones reflect the corresponding null standard deviations σjk .
+Here one sees that x1 is dominately interacting with x2 and x3 and there
+is no strong evidence of x1 interacting with variables other than x2 and x3 .
+Since x1 is seen to interact with more than one other variable, one can
+proceed to determine the orders of the corresponding interactions. The lower
+
+30
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+Fig. 7. Two-variable interaction strengths of variables interacting with x4 (upper) and
+x5 (lower) in excess of expected null value for the simulated data. The lower dark bars
+represent the null standard deviations.
+
+frame of Figure 6 shows {H̃12l }10
+3 with
+(55)
+
+(0)
+
+H̃jkl = Hjkl − H̄jkl
+
+(0)
+
+being the null mean adjusted analog of (46), along with {σ12l }10
+3 (dark bars).
+This plot reveals that x1 and x2 jointly interact with x3 , but with no other
+variables, implying a three-variable interaction among these three variables
+but no other three-variable interactions involving x1 and x2 .
+The upper frame of Figure 7 shows {H̃4k }k6=4 (54) along with the corre(0)
+sponding σ4k (dark) for the first ten predictor variables. Here one sees that
+x4 tends to only interact with x5 . The lower frame shows the corresponding
+interaction plot for x5 , which is seen to only interact with x4 . Thus, x4 and
+x5 interact only with each other and there is no evidence that they interact
+with any other variables.
+The conclusion to be drawn from this analysis of interactions is that
+these data provide strong evidence for a three-variable interaction effect
+between x1 , x2 and x3 , and a two-variable interaction between x4 and x5 .
+There is no evidence for any other interaction effects. Note that the noise
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+31
+
+variables x9 and x10 that were judged from (35) to be irrelevant are seen to
+be inconsequential in the analysis of interaction effects and thus need not
+have been considered.
+The particular target function (51) generating these data was chosen to
+illustrate the properties the test statistics used to uncover various types of
+interactions. As such, it involved strong interaction effects among some of
+the variables and none at all among others. Target functions occurring in
+practice seldom have such sharp distinctions. Often the various predictor
+variables tend to be involved in a wide variety of interaction effects of varying types and strength, and the goal is to uncover those (if any) that are
+sufficiently important.
+9.1.4. Partial dependencies. Figure 8 displays partial dependence (40)
+plots on selected variables as suggested by the analysis of interactions above.
+For display purposes, all partial dependence functions are translated to have
+a minimum value of zero. The partial dependencies on (x1 , x3 ) and (x2 , x3 )
+are very similar to that shown for (x1 , x2 ) in the upper left frame, and that
+for x8 is very similar to that shown in the lower right frame for x7 but
+with opposite slope. Comparing these with the actual target function (51),
+one sees that they provide a fairly representative pictorial description of the
+dependence of the response on the predictor variables.
+9.2. Boston housing data. This is a well-known public data set often used
+to compare the performance of prediction methods. It consists of N = 506
+neighborhoods in the Boston metropolitan area. For each neighborhood,
+14 summary statistics were collected [Harrison and Rubinfield (1978)]. The
+goal is to predict the median house value (response) in the respective neighborhoods as a function of the n = 13 other (predictor) variables. Here we
+investigate the nature of the dependence of the response (measured in units
+of $1000) on these predictors using the tools described in Sections 6–8.
+Applying RuleFit to these data produced a model (25) involving 215 terms
+(rules + linear) with nonzero coefficients. The average absolute prediction
+error (52) was aae = 0.33, as estimated, by 50-fold cross-validation. The
+corresponding error for an additive model restricted to main effects only
+(L̄ = 2) (13) was 0.37, and that for a model involving only linear terms (24)
+was aae = 0.49. Thus, the target function appears to be highly nonlinear
+with some evidence for interaction effects.
+9.2.1. Rule importance. Table 2 shows the nine globally most important
+terms (28), (29) resulting from the RuleFit model (25), (26), in the same
+format as Table 1. The most important term by a substantial margin is the
+linear function of LSTAT (percent of lower status population). Its coefficient
+b̂ is negative, indicating that neighborhoods with larger values of LSTAT
+
+32
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+Fig. 8. Plots of partial dependence functions on selected single variables and variable
+pairs for the simulated example.
+
+tend to have lower valued homes. The linear predictor AGE (fraction of
+houses build before 1940) has a similar effect to a lesser degree.
+The coefficient â of the most important rule is roughly five times larger in
+absolute value than that of the others and indicates neighborhoods with exceptionally high housing values. These neighborhoods are characterized by
+being very close to Boston employment centers (DIS ), high pupil-teacher ratio (PTRATIO ), and very small LSTAT . This rule describes only five of the
+506 neighborhoods: two of the six neighborhoods in Back Bay, and all three
+in Beacon Hill. The other rules in Table 2 indicate that neighborhoods with
+larger houses (number of rooms RM ) and lower pollution (concentration
+of nitric oxide NOX ), as well as larger houses and lower PTRATIO , tend
+to have higher valued homes. Neighborhoods not very close to employment
+centers, combined with smaller houses and higher tax rates (TAX ), as well
+as combined with high PTRATIO , tend to have lower valued homes.
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+33
+
+9.2.2. Input variable importance. The upper left frame of Figure 9 shows
+the global relative importances of the 13 predictor variables (28), (29), (35)
+averaged over all neighborhoods. In addition to those variables presented
+in Table 2, there is some indication that crime rate (CRIM ) has some influence on housing values. The upper right frame shows the corresponding
+importances for predicting median home value in the single neighborhood
+comprising the town of Manchester (30), (31), (35). Here RM and TAX
+are relatively more influential for this prediction than on average, whereas
+LSTAT is considerably less influential. The lower left and right frames respectively show the corresponding relative variable importances for those
+neighborhoods with the 10% lowest (32), (34), (35) and 10% highest (32),
+(33), (35) predicted housing values. For the lowest predictions, the variable
+LSTAT dominates, being more than twice as important than any other variable. For the highest predicted values, RM is the most important variable
+and PTRATIO is nearly as important as LSTAT . Pollution NOX seems to
+be roughly equally relevant everywhere.
+9.2.3. Interaction effects. Figure 10 shows the values of {H̃j }13
+1 (53),
+along with the corresponding null standard deviations, for the Boston housing predictor variables. There is strong evidence for interactions involving
+NOX , RM , DIS , PTRATIO and LSTAT . Here we investigate further the
+nature of those involving RM and LSTAT .
+The upper frame of Figure 11 displays the values of {H̃RM ,k }k6=RM (54)
+along with the corresponding null standard deviations. One sees strong evidence for an interaction effect between RM and NOX and between RM
+and PTRATIO . The lower frame shows the corresponding plot for LSTAT
+indicating substantial interaction effects involving LSTAT and NOX , and
+LSTAT and DIS . Since RM and LSTAT are each seen to interact with
+more than one other variable, one can use (55) to investigate the presence
+Table 2
+Boston housing data: nine most important rules
+Imp.
+
+Coeff.
+
+100
+37
+36
+35
+26
+25
+20
+19
+18
+
+−0.40
+−0.036
+10.1
+2.26
+−2.27
+−1.40
+2.58
+1.30
+2.15
+
+Sup.
+
+Rule
+
+0.0099
+0.23
+0.88
+0.41
+0.049
+0.21
+0.057
+
+linear: LSTAT
+linear: AGE
+DIS < 1.40 and PTRATIO > 17.9 and LSTAT < 10.5
+RM > 6.62 and NOX < 0.67
+RM < 7.45 and DIS > 1.37 and TAX > 219.0
+DIS > 1.30 and PTRATIO > 19.4
+RM > 7.44 and PTRATIO < 17.9
+RM > 6.64 and NOX < 0.67
+RM > 7.45 and PTRATIO < 19.7
+
+34
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+Fig. 9. Input variable relative importances for the Boston housing data as averaged over
+all (upper left), the 10% lowest (lower left), and 10% highest (lower right) predictions, and
+for predicting the single neighborhood of Manchester (upper right).
+
+of three-variable interactions. In this case, however, the analysis revealed
+no evidence for any three-variable interactions involving RM or LSTAT .
+This strategy can be continued to potentially uncover additional interaction
+effects if any.
+9.2.4. Partial dependencies. Figure 12 displays partial dependence functions (40) on the four variable pairs indicated above as participating in
+two-variable interactions. From these plots one can study the detailed nature of the corresponding interaction effects. For example, the lower right
+plot indicates that housing values sharply increase when LSAT and DIS
+simultaneously have very small values.
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+35
+
+10. Related work. Predictive methods based on rules have a long history in the machine learning literature [see Mitchell (1997)]. Quinlan (1993)
+designed a variant of C4.5 (“C4.5 Rules”) where the final model consists of
+a set of rules. A single large decision tree is induced and then converted to
+a set of rules, one for each terminal node. Each such rule is subsequently
+pruned by removing the conditions (indicator functions) that improve its
+estimated prediction accuracy. Finally, the pruned rules {rm (x)} are each
+assigned a class label and then listed in ascending order of their estimated
+accuracy. To obtain a prediction at a point x, the single rule highest in this
+list for which rm (x) = 1 is used. Although there are fundamental differences,
+this approach is connected to the work presented here in that a decision tree
+induction algorithm is employed as a greedy mechanism for generating the
+rules.
+A different rule induction paradigm used in classification context is sequential covering, that underlies the Inductive Logic Programming (ILP)
+algorithms [Lavrač and Džeroski (1994)]. The generic sequential covering
+algorithm induces a disjunctive set of rules by learning one rule at a time.
+After each rule is derived, the algorithm removes from the training data set
+the “positive” examples (specified y-value) covered by the rule. The process is then iterated on the remaining training observations. As with C4.5
+Rules, the generated rule set is ordered and the single rule highest in the
+list that covers a point x is used for its prediction. Actual ILP algorithms
+such as CN2 [Clark and Niblett (1989)], RIPPER [Cohen (1995)], and PROGOL [Muggleton (1995)] differ with respect to the detailed techniques that
+implement the generic paradigm.
+
+Fig. 10. Total interaction strength in excess of expected null value of the input variables
+for the Boston housing data. The lower dark bars represent the null standard deviations.
+
+36
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+Fig. 11. Two-variable interaction strengths of variables interacting with RM (upper) and
+LST AT (lower) in excess of expected null value for the Boston housing data. The lower
+dark bars represent the null standard deviations.
+
+Although rule based, RuleFit produces fundamentally different models
+than the methods described above, both with respect to the methodology
+employed to derive the final model and the structure of this model. RuleFit
+models (25) are additive in rules (7) and linear terms (24) with optimized
+weights (coefficients), whereas the above methods produce disjunctive sets
+of rules using only one in the set for each prediction.
+Classification ensembles that combine simple “weak” learners that are
+unions of conjunctive rules can be found in algorithmic implementations
+of the stochastic discrimination paradigm [Kleinberg (1996)]. Each weak
+learner is produced by a random mechanism (e.g., a finite union of rectangular boxes where each box is generated using a random set of variables, random centering, and random length edges). The corresponding weak learners
+chosen for the final model are required to satisfy certain “enrichment” and
+“uniformity” conditions. Details are presented in Ho and Kleinberg (1996)
+and Kleinberg (2000). [See also Pfahringer et al. (2004)]. As with RuleFit,
+stochastic discrimination combines its base (weak) learners in an additive
+manner. The major differences are the mechanism employed to generate the
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+37
+
+Fig. 12. Plots of partial dependence functions on selected variable pairs for the Boston
+housing data.
+
+additive terms and the fact that stochastic discrimination performs a simple averaging, whereas the coefficients of RuleFit models are fit through a
+regularized regression (26).
+SLIPPER [Cohen and Singer (1999)] uses the AdaBoost strategy to produce a weighted ensemble of boosted RIPPER rules. While generally outperforming standard rule induction methods, this approach tends not to match
+the performance of boosted tree ensembles [Weiss and Indurkhya (2000)].
+Light weight rule induction [LRI, Weiss and Indurkhya (2000)] uses a simple heuristic strategy based on the boosting concept to produce unweighted
+rule ensembles having an equal number of rules for each class. They provide evidence that this approach tends to outperform SLIPPER and single
+trees for small rule sets, and with larger ensembles was competitive with the
+
+38
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+best methods available at the time. Both SLIPPER and LRI sequentially
+induce relatively small rule sets, all of which are used for prediction. RuleFit initially induces a large number of rules and then employs regularized
+regression (10), (26) to produce and weight the smaller set comprising the
+final predictive model.
+Designed for problems involving binary valued features, logic regression
+[Ruczinski, Kooperberg and LeBlanc (2003)] uses regression to fit the coefficients of a model that is additive in rules “logic trees.” A set of admissible
+operations is defined for modifying the logic trees and the model building
+process involves randomly applying these operations in a simulated annealing context. Due to the intensive nature of the computation involved with
+the simulated annealing approach, logic regression can accommodate models involving relatively few logic terms. Also, generalizations to numeric and
+multiple-valued categorical variables complicate this approach.
+Closer to the approach presented here is that of Rosset and Inger (2000).
+They constructed binary classification models using (unregularized) linear
+logistic regression where the predictors were taken to be the original input
+variables along with manually selected and modified C4.5 rules based on
+those variables.
+Ruckert and Kramer (2006) propose the use of regularized regression to
+construct weighted rule ensembles for classification. An initial set of rules
+is defined without reference to the outcome variable y. At each step one
+additional rule from this set is introduced into the model in a (user) predefined order. A regularized regression is performed on the rules currently
+in the model, and a upper bound on the true (population) value of the
+fitting criterion is computed based on its empirical value and the current
+number of rules. These steps are repeated until all of the initial rules have
+been included. The model in this sequence achieving the lowest upper bound
+on the criterion is then used for prediction. Three fitting criteria were proposed with the margin minus variance (MMV), with an l1 constraint on the
+weights being preferred among the three. Principal differences between this
+approach and RuleFit are that the latter uses information in the outcome
+variable y to preferentially generate a good initial rule set (Algorithm 1),
+and the order of rule entry is determined by the data directly through the
+regularized regression procedure (10), (26).
+For interpretation, Breiman et al. (1983) proposed a predictor variable
+importance measure for (single) trees. The relative importance for each variable was taken to be the sum of the improvements in squared-error risk on
+the training data at each nonterminal node split on that variable. Friedman
+(2001) and Breiman (2001) extended this measure to tree ensembles by simply averaging it over the trees appearing in the ensemble (“Gini” measure).
+Breiman (2001) also suggested a permutation based variable importance
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+39
+
+measure. The relevance of each variable was taken to be the increase in prediction risk of the model, as averaged over the training data, when the values
+of that variable were randomly permuted among the observations. Like those
+described in Sections 6 and 7, these measures reflect the marginal influence
+of each respective variable in the presence of the other variables. They need
+not reflect usefulness in the absence of other variables. Also, the permutation measure is essentially global in nature and is not readily extended to
+produce corresponding local measures at individual predictions (30), (31),
+(35). However, the Gini measure could be so extended.
+Roosen (1995), Owen (2001) and Jiang and Owen (2001) study interaction
+effects in “black-box” models using the functional ANOVA decomposition
+of F (x) and product measure. Hooker (2004) discusses the limitations of
+using product measure in the context of observational data and proposes
+alternatives that are intended to mitigate this constraint. Our approach
+to interactions based on partial dependence functions (Section 8.1) does
+not involve the functional ANOVA decomposition. Hooker (2004) observes
+that associations among the predictor variables can sometimes introduce
+distortion in partial dependence estimates based on empirical models. This
+motivates our approach of suppressing spurious interactions presented in
+Section 8.2, and using null distributions as derived in Section 8.3 to calibrate
+observed interaction effects.
+Acknowledgments. We gratefully acknowledge helpful discussions with
+Bradley Efron and Jonathan Taylor.
+REFERENCES
+Breiman, L. (1996). Bagging predictors. Machine Learning 26 123–140.
+Breiman, L. (2001). Random forests. Machine Learning 45 5–32.
+Breiman, L., Friedman, J. H., Olshen, R. and Stone, C. (1983). Classification and
+Regression Trees. Wadsworth, Belmont, CA. MR0726392
+Clark, P. and Niblett, R. (1989). The CN2 induction algorithm. In Machine Learning
+3 261–284.
+Cohen, W. (1995). Fast efficient rule induction. Machine Learning: Proceedings of the
+Twelfth International Conference 115–123. Morgan Kaufmann, Lake Tahoe, CA.
+Cohen, W. and Singer, Y. (1999). A simple, fast and efficient rule learner. In Proceedings
+of the Sixteenth National Conference on Artificial Intelligence (AAAI–99) 335–342.
+AAAI Press.
+Donoho, D., Johnstone, I., Kerkyacharian, G. and Picard, D. (1995). Wavelet
+shrinkage: asymptotia? (with discussion). J. Roy. Statist. Soc. Ser. B 57 301–337.
+MR1323344
+Efron, B. and Tibshirani, R. (1993). An Introduction to the Bootstrap. Chapman and
+Hall, New York. MR1270903
+Freund, Y. and Schapire, R. E. (1996). Experiments with a new boosting algorithm.
+Machine Learning: Proceedings of the Thirteenth International Conference 148–156.
+Morgan Kauffman, San Francisco.
+
+40
+
+J. H. FRIEDMAN AND B. E. POPESCU
+
+Friedman, J. H. (2001). Greedy function approximation: A gradient boosting machine.
+Ann. Statist. 29 1189–1232. MR1873328
+Friedman, J. H. and Hall, P. (2007). On bagging and nonlinear estimation. J. Statist.
+Plann. Inference 137 669–683.
+Friedman, J. H. and Popescu, B. E. (2003). Importance sampled learning ensembles.
+Technical report, Dept. Statistics, Stanford Univ.
+Friedman, J. H. and Popescu, B. E. (2004). Gradient directed regularization for linear
+regression and classification. Technical report, Dep. Statist. Dept. Statistics, Stanford
+Univ.
+Harrison, D. and Rubinfield, D. C. (1978). Hedonic prices and the demand for clean
+air. J. Environmental Economics and Management 8 276–290.
+Hastie, T. and Tibshirani, R. (1990). Generalized Additive Models. Chapman and Hall,
+London. MR1082147
+Hastie, T., Tibshirani, R. and Friedman, J. H. (2001). Elements of Statistical Learning. Springer, New York. MR1851606
+Ho, T. K. and Kleinberg, E. M. (1996). Building projectable classifiers of arbitrary
+complexity. In Proceedings of the 13th International Conference on Pattern Recognition
+880–885. Vienna, Austria.
+Hooker, G. (2004). Black box diagnostics and the problem of extrapolation: extending
+the functional ANOVA. Technical report, Dept. Statistics, Stanford Univ.
+Huber, P. (1964). Robust estimation of a location parameter. Ann. Math. Statist. 53
+73–101. MR0161415
+Jiang, T. and Owen, A. B. (2001). Quasi-regression for visualization and interpretation
+of black box functions. Technical report, Dept. Statistics, Stanford Univ.
+Kleinberg, E. M. (1996). An overtraining-resistant stochastic modelling method for
+pattern recognition. Ann. Statist. 24 2319–2349. MR1425956
+Kleinberg, E. M. (2000). On the algorithmic implementation of stochastic discrimination. IEEE Trans. Anal. Machine Intelligence 22 473–490.
+Lavrač, N. and Džeroski, S. (1994). Inductive Logic Programming: Techniques and
+Applications. Ellis Horwood.
+Mitchell, T. (1997). Machine Learning. McGraw-Hill, New York.
+Muggleton, S. (1995). Inverse entailment and PROGOL. New Generation Computing
+13 245–286.
+Owen, A. B. (2001). The dimension distribution and quadrature test functions. Statist.
+Sinica 13 1–17. MR1963917
+Pfahringer, B., Holmes, G. and Weng, C. (2004). Millions of random rules. In Proceedings of the 15th European Conference on Machine Learning (ECML/PKDD 2004).
+Morgan Kaufmann, San Mateo.
+Quinlan, R. (1993). C4.5: Programs for Machine Learning. Morgan Kaufmann, San Mateo.
+Roosen, C. (1995). Visualization and exploration of high–dimensional functions using the
+functional Anova decomposition. PH.D. thesis, Dept. Statistics, Stanford Univ.
+Rosset, S. and Inger, I. (2000). KDD–CUP 99: Knowledge discovery in a charitable
+organization’s donor data base. SIGKDD Explorations 1 85–90.
+Ruckert, U. and Kramer, S. (2006). A statistical approach to learning. In Proceedings
+of the 23rd International Conference on Machine Learning. Morgan Kaufmann, San
+Mateo.
+Ruczinski, I., Kooperberg, C. and LeBlanc, M. L. (2003). Logic regression. J. Comput. Graph. Statist. 12 475–511. MR2002632
+
+PREDICTIVE LEARNING VIA RULE ENSEMBLES
+
+41
+
+Tibshirani, R. (1996). Regression shrinkage and selection via the lasso. J. Roy. Statist.
+Soc. Ser. B 58 267–288. MR1379242
+Weiss, S. and Indurkhya, N. (2000). Lightweight rule induction. In Proceedings of the
+17th International Conference on Machine Learning (P. Langley, ed.) 1135–1142. Morgan Kaufmann, San Mateo.
+Department of Statistics
+Stanford University
+Stanford, California 94305
+USA
+E-mail: jhf@stanford.edu
+bogdan@stat.stanford.edu
+
+

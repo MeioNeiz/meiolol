@@ -9,12 +9,12 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 13 | 320 | 1452 |
-| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 182 | 640 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 13 | 321 | 1454 |
+| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 5 | 189 | 675 |
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 4 | 186 | 473 |
-| [stats](areas/stats.md) | estimation and recommendation methods | 31 | 403 | 2915 |
+| [stats](areas/stats.md) | estimation and recommendation methods | 31 | 415 | 3082 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 17 | 521 | 2704 |
-| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 11 | 203 | 896 |
+| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 11 | 209 | 930 |
 | [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 176 | 1981 |
 
 ## Questions
@@ -42,8 +42,9 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
 | answered | now | [How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data?](questions/identity-and-privacy.md): How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data? | 13 strong, 2 moderate, 2 weak, 1 contested | 25 | 17 (growing) | 2 |
+| answered | now | [What does Riot's production key review look like in late 2026: wait, what reviewers check, why apps fail, and what changed this year?](questions/prodkey-review-2026.md): What does Riot's production key review look like in late 2026: wait, what reviewers check, why apps fail, and what changed this year? | 4 strong, 3 moderate, 5 weak | 17 | 2 (thin) |  |
 | answered | soon | [What has Riot made League tools remove or change, when, and what does that predict for new features?](questions/league-tools-riot-removals.md): What has Riot made League tools remove or change, when, and what does that predict for new features? | 7 strong, 4 moderate | 23 | 0 |  |
-| answered | soon | [Would Riot grant meiolol a production API key, and what does the application need?](questions/riot-production-key.md): Would Riot grant meiolol a production API key, and what does the application need? | 9 strong, 5 moderate, 2 contested | 55 | 52 (saturated) | 1 |
+| answered | soon | [Would Riot grant meiolol a production API key, and what does the application need?](questions/riot-production-key.md): Would Riot grant meiolol a production API key, and what does the application need? | 9 strong, 5 moderate, 2 contested | 57 | 58 (growing) | 1 |
 | answered | soon | [How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages?](questions/streamer-mode-names.md): How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages? | - | 9 | 12 (saturated) |  |
 
 ### data
@@ -59,7 +60,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
-| active | soon | [How do we recover readable main, pair and higher-order effects (why a champion wins in a comp) from an accurate black-box model, and which interaction-detection and additive-plus-interaction methods hold up?](questions/frontier-interactions.md): How do we recover readable main, pair and higher-order effects (why a champion wins in a comp) from an accurate black-box model, and which interaction-detection and additive-plus-interaction methods hold up? | 10 strong, 2 moderate | 17 | 12 (growing) | 4 |
 | answered | now | [What practices and tools make AI coding agents run, train and analyse ML experiments faster and more reliably?](questions/agent-ml-practice.md): What practices and tools make AI coding agents run, train and analyse ML experiments faster and more reliably? | 14 strong, 7 moderate, 1 weak | 29 | 15 (growing) | 16 |
 | answered | now | [Which feature importance and attribution methods hold up under correlated features, for saying how much each thing matters to win prediction?](questions/correlated-importance.md): Which feature importance and attribution methods hold up under correlated features, for saying how much each thing matters to win prediction? | 6 strong, 1 moderate | 10 | 7 (growing) | 9 |
 | answered | now | [How do you distil GPU-trained models into small CPU models that stay explainable?](questions/distil-explainable.md): How do you distil GPU-trained models into small CPU models that stay explainable? | 5 strong, 8 moderate, 1 contested | 13 | 6 (growing) | 2 |
@@ -81,6 +81,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | answered | soon | [How can we estimate the best achievable accuracy for predicting a ranked game's winner from the draft (and from pre-game info), and how does matchmaking shape that ceiling?](questions/frontier-ceiling.md): How can we estimate the best achievable accuracy for predicting a ranked game's winner from the draft (and from pre-game info), and how does matchmaking shape that ceiling? | 8 strong, 3 moderate, 1 weak | 16 | 14 (growing) | 1 |
 | answered | soon | [How should champion strength be modelled over time (patch jumps, meta shifts, player adoption lag), and which dynamic rating methods beat static or per-patch fits on future games?](questions/frontier-dynamics.md): How should champion strength be modelled over time (patch jumps, meta shifts, player adoption lag), and which dynamic rating methods beat static or per-patch fits on future games? | 8 strong, 3 moderate, 1 weak | 18 | 17 (growing) | 1 |
 | answered | soon | [Which new experiments could push draft win prediction and our understanding of why drafts win past what meiolol has tried, given a 3080 gpu-box and 1.4M+ games?](questions/frontier-experiments.md): Which new experiments could push draft win prediction and our understanding of why drafts win past what meiolol has tried, given a 3080 gpu-box and 1.4M+ games? | 7 strong, 1 moderate | 21 | 0 |  |
+| answered | soon | [How do we recover readable main, pair and higher-order effects (why a champion wins in a comp) from an accurate black-box model, and which interaction-detection and additive-plus-interaction methods hold up?](questions/frontier-interactions.md): How do we recover readable main, pair and higher-order effects (why a champion wins in a comp) from an accurate black-box model, and which interaction-detection and additive-plus-interaction methods hold up? | 13 strong, 5 moderate, 2 weak | 29 | 18 (growing) | 8 |
 | answered | soon | [Can self-supervised pretraining over drafts (masked picks, contrastive) or entity embeddings from text (LLM embeddings of champion kits and patch notes) improve win prediction or rare-champion estimates in MOBAs or similar domains?](questions/frontier-pretrain.md): Can self-supervised pretraining over drafts (masked picks, contrastive) or entity embeddings from text (LLM embeddings of champion kits and patch notes) improve win prediction or rare-champion estimates in MOBAs or similar domains? | 3 strong, 8 moderate, 1 weak | 18 | 20 (saturated) | 3 |
 | answered | soon | [Do modern tabular learners (tabular foundation models, TabM, RealMLP, factorisation machines past 1M rows) and large stacked ensembles beat a strong shrunk logistic model on high-cardinality categorical, near-coin-flip outcomes, and how are such ensembles built without overfitting the validation set?](questions/frontier-tabular-ensembles.md): Do modern tabular learners (tabular foundation models, TabM, RealMLP, factorisation machines past 1M rows) and large stacked ensembles beat a strong shrunk logistic model on high-cardinality categorical, near-coin-flip outcomes, and how are such ensembles built without overfitting the validation set? | 10 strong, 3 moderate, 1 weak, 2 contested | 17 | 16 (growing) | 5 |
 | answered | soon | [Have graph neural nets helped match outcome prediction, and where?](questions/gnn-match-outcome.md): Have graph neural nets helped match outcome prediction, and where? | 1 strong, 6 moderate, 1 contested | 10 | 17 (saturated) | 2 |
@@ -117,7 +118,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
-| active | now | [How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost?](questions/box-disk-headroom.md): How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost? | 4 strong | 4 | 1 (thin) | 1 |
+| answered | now | [How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost?](questions/box-disk-headroom.md): How should the box's data disk keep up with ~5.5 GB a day (complete form day files plus databases): retention, compression or more storage, and what does each cost? | 14 strong, 2 moderate, 1 contested | 11 | 7 (growing) | 1 |
 | answered | now | [Does Cloudflare pass an origin's precompressed brotli (Content-Encoding: br) through to browsers, and how does it cache per encoding?](questions/brotli-through-cloudflare.md): Does Cloudflare pass an origin's precompressed brotli (Content-Encoding: br) through to browsers, and how does it cache per encoding? | 4 strong, 1 moderate | 1 | 1 (thin) |  |
 | answered | now | [What free or very cheap hosting and storage fits meiolol's site, API and data?](questions/free-hosting-storage.md): What free or very cheap hosting and storage fits meiolol's site, API and data? | 13 strong, 4 moderate, 2 unsupported | 34 | 7 (growing) | 4 |
 | answered | now | [Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines?](questions/hybrid-rendering-seo.md): Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines? | 12 strong, 9 moderate | 16 | 9 (growing) | 2 |
@@ -145,6 +146,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 89 questions, 1361 sources, 10369 findings
-- Open leads: 375 (`josearch leads`)
+- 90 questions, 1386 sources, 10605 findings
+- Open leads: 379 (`josearch leads`)
 - Lint: 0 errors, 6 warnings (`josearch lint`)
