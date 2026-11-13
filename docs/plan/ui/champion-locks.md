@@ -82,8 +82,8 @@ What a block needs from a row:
   (selecting a matchup dot is its lock)
 - L4 Trends: By patch (a patch point locks the period to that patch: E10), length,
   rank, First item done, End of game; their locks
-- L5 Charts: lane leads per minute in rows (size measured first), comeback, kills,
-  objectives
+- L5 Charts: objectives (L5a, done); lane leads at checkpoints in rows (size measured
+  first), comeback, kills (L5b)
 - L6 Meio in thin cells, per cell kind as it passes E2; the "how this was made" line
   (E9)
 - L7 Components the page lacks (Jacob's notes 122 and 123: Also play, Lane kills and
@@ -161,8 +161,8 @@ What a block needs from a row:
   lockanswer.count): won ±, its share of the champion-role's games, games; pick, ban,
   rank and the patch's move are the champion's, so hidden. A lane opponent's brief has
   Lock / Unlock (a button beside "Matchup ›", not tapping the dot: a dot shows its
-  brief first, and locking on every look would refetch the page). The bar says "Not
-  lane, length, players or end of game" (what still ignores locks)
+  brief first, and locking on every look would refetch the page). The bar says what
+  follows: "Applies to build, matchups, by patch, by rank, first item and objectives"
 
 - L4a Trends (`trends/...`, lockanswer.trends, one pass over the rows): By patch
   (patches and the newest patch's days; win rate only, pick, ban and place are the
@@ -171,6 +171,12 @@ What a block needs from a row:
   by ui-champtrends. Game length waits for duration in the cubes (L4b, rides m10's cube
   rebuild: lockrows flag 128 and a minutes byte, fingerprint unchanged); players,
   pick-up, also play and end of game are not in the rows
+
+- L5a Charts (`charts/...`, lockanswer.objectives): Objectives counts the locked rows
+  with a timeline and each First taken (as Build.firsts), against the unlocked card's
+  role tick. Lane, Won by lane gold and Lane kills wait for L5b: lane leads at a few
+  minutes and kill phases in the rows, from the day cubes' lanes (a lockrows format
+  change, no cube rebuild: ~17 B a row, measured on the snapshot before it ships)
 
 - Thin (J35) in the build panel: every rate with its 80% range (fmt.range, Wilson),
   faded past ±6, whole numbers from ±10, none hidden; counts don't fade

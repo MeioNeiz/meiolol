@@ -91,7 +91,7 @@ Y: shown; f: as a filter of the build page; -: not there. "Us" is the live site,
 | Stat strip: win, pick, ban, games, rank in role | Y (8 figures) | Y (6) | Y (3, trend arrows) | all | Y (6: rank in role, patch change) |
 | Tier letter | Y | Y | Y | all | - (Jacob 25 Oct: none) |
 | Build on the first screen | Y, one panel | runes, spells only | n (y 815) | Blitz Y | Y, one panel |
-| Most played vs highest win rate build toggle | Y | - | - | - | Y, and "best" per slot |
+| Most played vs highest win rate build toggle | Y | - | - | - | Y, a "highest" mark per slot pulled by k |
 | Build variants (AP, lethality, ...) | - | Y | - | Blitz | Y (Builds row: by first item, a lock) |
 | Full skill order, levels 1-18 | Y (4x18 grid) | Y (grid) | Y (15 squares) | LoG | Y (4x18 grid) |
 | Items 4, 5, 6 options by slot | Y (2-3 each) | Y (5-7 columns) | Y (5 rows each) | Blitz | Y (3 each, all when opened) |
@@ -122,7 +122,7 @@ Matchup (one opponent):
 | Level 2, first blood | - | - | - | METAsrc, Mobalytics | Y (Head to head) |
 | Opponent list on the page to switch | VS block | search chip | sidebar list | METAsrc master-detail | strip of every opponent in the head |
 | Win rate by game length for the pair | Y | - | - | | Y |
-| Supports in a bot lane matchup | - | - | - | - | - (data in stats file) |
+| Supports in a bot lane matchup | - | - | - | - | Y (Lane partners: each side's 5 most played) |
 | Matchup tips | - | - | user tips, empty | Mobalytics paid | - |
 
 ## What not to copy
