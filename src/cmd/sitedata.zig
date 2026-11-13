@@ -414,8 +414,9 @@ pub fn cmdMeio(c: *Cmd) !u8 {
     return 0;
 }
 
-/// `meio --time-leans FILE`: Model.leans over every champion-role and share cell of a
-/// meio.bin, all ranks every region and EUW1 Diamond+; per-number cost (E9a's budget)
+/// `meio --time-leans FILE`: Model.leans over every champion-role, share, pair and
+/// keystone or item cell of a meio.bin, all ranks every region and EUW1 Diamond+;
+/// per-number cost (E9a's budget)
 fn timeLeans(c: *Cmd, path: []const u8) !u8 {
     const io = c.init.io;
     const f = try std.Io.Dir.cwd().openFile(io, path, .{});
@@ -438,6 +439,22 @@ fn timeLeans(c: *Cmd, path: []const u8) !u8 {
         };
         inline for (.{ .{ meio.Kind.rune, &m.rune }, .{ meio.Kind.build, &m.build } }) |s| {
             var si = s[1].index.keyIterator();
+            while (si.next()) |k| if (m.leans(s[0], ask.region, ask.brackets, @intCast(k.* >> 16), k.* & 0xffff)) |l| {
+                n += 1;
+                usual += l.usual;
+            };
+        }
+        var pi = m.pair.index.keyIterator();
+        while (pi.next()) |k| {
+            const duo = k.* & 1 != 0;
+            const kind: meio.Kind = if (duo) .duo else .matchup;
+            if (m.leans(kind, ask.region, ask.brackets, @intCast(k.* >> 17), @intCast(k.* >> 1 & 0xffff))) |l| {
+                n += 1;
+                usual += l.usual;
+            }
+        }
+        inline for (.{ .{ meio.Kind.keystone, &m.keystone }, .{ meio.Kind.item, &m.item } }) |s| {
+            var si = s[1].inter_index.keyIterator();
             while (si.next()) |k| if (m.leans(s[0], ask.region, ask.brackets, @intCast(k.* >> 16), k.* & 0xffff)) |l| {
                 n += 1;
                 usual += l.usual;

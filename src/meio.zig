@@ -180,14 +180,42 @@ pub const Leans = struct {
     ranks: f64 = 0,
     /// The newest patch outside EUW1, for an EUW1 number
     region: f64 = 0,
-    /// The prior: the role's usual for a number this popular (or x's share in the role)
+    /// A pair or two-lock cell's own term: this matchup's, duo's or champion-role with
+    /// x's games, every patch (older ones counting less)
+    pair: f64 = 0,
+    /// x's role-wide term: the keystone or item on every champion of the role
+    wide: f64 = 0,
+    /// The priors: the role's usual for a number this popular (or x's share in the role);
+    /// for a pair or x, the spread such terms have
     usual: f64 = 1,
     /// Games behind each source: own unweighted; older, ranks and region weighted (older
-    /// games count less), as the fit counts them
+    /// games count less), as the fit counts them. Summed over both champion-roles of a
+    /// matchup or duo. pair_games: the pair term's newest-patch games in the slice, as
+    /// Estimate.own (the fitted file keeps no older ones)
     own_games: f64 = 0,
     older_games: f64 = 0,
     ranks_games: f64 = 0,
     region_games: f64 = 0,
+    pair_games: f64 = 0,
+
+    /// Adds l, the leans of a part with variance v, as variances (not yet shares)
+    fn add(acc: *Leans, l: Leans, v: f64) void {
+        inline for (.{ "own", "older", "ranks", "region", "pair", "wide", "usual" }) |name| {
+            @field(acc, name) += v * @field(l, name);
+        }
+        inline for (.{ "own_games", "older_games", "ranks_games", "region_games", "pair_games" }) |name| {
+            @field(acc, name) += @field(l, name);
+        }
+    }
+
+    /// A shrunk single term (pairNewton) of variance v under a prior of sd: v = 1/(P0+H),
+    /// so its data's v^2 H is v (1 - v / sd^2), the rest the prior's
+    fn addTerm(acc: *Leans, comptime source: []const u8, v: f64, sd: f64) f64 {
+        const data = if (sd > 0) v * @max(0, 1 - v / (sd * sd)) else 0;
+        @field(acc, source) += data;
+        acc.usual += v - data;
+        return v;
+    }
 };
 
 /// Weighted games and wins of one champion-role, by patch slot, bracket and EUW1
@@ -284,11 +312,15 @@ pub const Model = struct {
         m.gold.deinit(gpa);
     }
 
-    /// What rateIn's number leans on: the champion-role and shares so far, else null
+    /// What rateIn's number leans on; null where rateIn has no number or a fixed one
     pub fn leans(m: *const Model, kind: Kind, region: u1, brackets: Brackets, a: u16, b: u32) ?Leans {
         const i = m.index.get(a) orelse return null;
         switch (kind) {
             .champion => return leansOf(m.shape, &m.counts[i], &m.fitted[i], brackets, region),
+            .matchup, .duo, .keystone, .item, .keystone_matchup, .item_matchup, .keystone_item => {
+                const got = m.leansParts(kind, i, region, brackets, a, b) orelse return null;
+                return got.l;
+            },
             .rune, .build => {
                 const x = std.math.cast(u16, b) orelse return null;
                 const s = if (kind == .rune) &m.rune else &m.build;
@@ -373,6 +405,87 @@ pub const Model = struct {
 
     /// A cell's terms on top of its champion-role's own, on the logit scale
     const Part = struct { e: f64, v: f64, own: f64 };
+
+    /// rateIn's sum of independent parts, each part's variance split by source: the
+    /// champion-roles' by leansOf, a pair or x term's into its data and its prior. v: the
+    /// shown variance, as rateIn's
+    fn leansParts(m: *const Model, kind: Kind, i: u32, region: u1, brackets: Brackets, a: u16, b: u32) ?struct { l: Leans, v: f64 } {
+        const first: u16 = @truncate(b >> 16);
+        const second: u16 = @truncate(b);
+        var acc: Leans = .{ .usual = 0 };
+        var v = addChampion(&acc, m.shape, &m.counts[i], &m.fitted[i], brackets, region);
+        switch (kind) {
+            .matchup, .duo => {
+                const x = std.math.cast(u16, b) orelse return null;
+                if (kind == .matchup and a == x) return null;
+                v += m.pairLeans(&acc, a, x, kind == .duo, brackets, region) orelse return null;
+            },
+            .keystone, .item => {
+                const x = std.math.cast(u16, b) orelse return null;
+                v += m.condLeans(&acc, if (kind == .keystone) &m.keystone else &m.item, i, a, x, brackets, region);
+            },
+            .keystone_matchup, .item_matchup => {
+                if (a == second) return null;
+                v += m.pairLeans(&acc, a, second, false, brackets, region) orelse return null;
+                v += m.condLeans(&acc, if (kind == .keystone_matchup) &m.keystone else &m.item, i, a, first, brackets, region);
+            },
+            .keystone_item => {
+                v += m.condLeans(&acc, &m.keystone, i, a, first, brackets, region);
+                v += m.condLeans(&acc, &m.item, i, a, second, brackets, region);
+            },
+            else => return null,
+        }
+        if (!(v > 0)) return .{ .l = .{}, .v = v };
+        inline for (.{ "own", "older", "ranks", "region", "pair", "wide", "usual" }) |name| {
+            @field(acc, name) /= v;
+        }
+        return .{ .l = acc, .v = v };
+    }
+
+    /// pairPart's variance by source: b's champion-role and the pair term
+    fn pairLeans(m: *const Model, acc: *Leans, a: u16, b: u16, duo: bool, brackets: Brackets, region: u1) ?f64 {
+        const ib = m.index.get(b) orelse return null;
+        if (games(&m.counts[ib]) == 0) return null;
+        var v = addChampion(acc, m.shape, &m.counts[ib], &m.fitted[ib], brackets, region);
+        const lo: u16 = if (duo) a else @min(a, b);
+        const hi: u16 = if (duo) b else @max(a, b);
+        if (m.pair.index.get(pairKey(lo, hi, duo))) |pi| {
+            const p = &m.pair.terms[pi];
+            v += acc.addTerm("pair", p.v, m.pair.sd[p.class]);
+            acc.pair_games += ownOf(&p.own, brackets, region);
+        } else {
+            const s = m.pair.sd[pairClass(lo, duo)];
+            acc.usual += s * s;
+            v += s * s;
+        }
+        return v;
+    }
+
+    /// condPart's variance by source: x's role-wide term and the champion-role x term.
+    /// An interaction's class is role * n_bands + its group, and a group's id is its
+    /// commonest band (bandGroups), so inter_sd[role][class % n_bands] is its class's sd
+    fn condLeans(m: *const Model, acc: *Leans, c: *const Cond, i: u32, a: u16, x: u16, brackets: Brackets, region: u1) f64 {
+        const role = a >> 13;
+        var v: f64 = 0;
+        const main = c.main_index.get(@as(u32, role) << 16 | x);
+        if (main) |j| {
+            v += acc.addTerm("wide", c.mains[j].v, c.main_sd[role]);
+        } else {
+            acc.usual += c.main_sd[role] * c.main_sd[role];
+            v += c.main_sd[role] * c.main_sd[role];
+        }
+        if (c.inter_index.get(@as(u32, a) << 16 | x)) |j| {
+            const p = &c.inters[j];
+            v += acc.addTerm("pair", p.v, c.inter_sd[role][p.class % n_bands]);
+            acc.pair_games += ownOf(&p.own, brackets, region);
+        } else {
+            const s = @max(Cond.shareOf(0, games(&m.counts[i])), c.least[role]);
+            const sd = c.inter_sd[role][condBand(s)];
+            acc.usual += sd * sd;
+            v += sd * sd;
+        }
+        return v;
+    }
 
     /// Against a lane opponent (minus its number) or with a support (plus it), the level
     /// counted once (Pairs.level), and the pair's shrunk term; null: the other
@@ -611,6 +724,13 @@ fn leansOf(shape: Shape, c: *const Counts, f: *const Fitted, brackets: Brackets,
     }
     l.usual = @max(0, 1 - data);
     return l;
+}
+
+/// Adds a champion-role's newestOf leans to acc as variances; returns its variance
+fn addChampion(acc: *Leans, shape: Shape, c: *const Counts, f: *const Fitted, brackets: Brackets, region: u1) f64 {
+    const v = newestOf(shape, c, f, brackets, region).v;
+    acc.add(leansOf(shape, c, f, brackets, region), v);
+    return v;
 }
 
 /// A cell's games over a set of brackets and a region, as weights summing to 1. No games
@@ -1817,6 +1937,20 @@ test "a matchup is both champions' strength plus a shrunk pair term" {
     const d = m.rate(.duo, 0, 0, bot, sup).?;
     // One duo among mostly 50% champions: shrunk, but above the bottom's own rate
     try std.testing.expect(d.p > m.rate(.champion, 0, 0, bot, 0).?.p + 0.01);
+    // Every game is on an older patch, so how far the newest moved both champions is
+    // their patch terms' prior, most of the range. Of the rest the pair term's 1000
+    // lanes outweigh both champions' 9000 games, which pin their levels
+    const l = try expectLeans(&m, .matchup, 1, 3);
+    try std.testing.expect(l.usual > 0.5 and l.pair > 0.2 and l.pair > 5 * l.older and l.wide == 0);
+    try std.testing.expectEqual(@as(f64, 0), l.pair_games);
+    try std.testing.expectApproxEqAbs(18000, l.older_games, 1);
+    try std.testing.expectApproxEqAbs(l.pair, (try expectLeans(&m, .matchup, 3, 1)).pair, 1e-12);
+    // Unseen: the pair's spread is all prior
+    const u = try expectLeans(&m, .matchup, 1, 13);
+    try std.testing.expect(u.pair == 0 and u.usual > l.usual);
+    // The duo class's spread comes from one duo, so no claim on its split
+    _ = try expectLeans(&m, .duo, bot, sup);
+    try std.testing.expectEqual(@as(?Leans, null), m.leans(.matchup, 0, .all, 4, 4));
 }
 
 test "inside one bracket, a champion-role's matchups average its own rate" {
@@ -1909,6 +2043,16 @@ test "a keystone's rate is the champion-role's plus a role-wide term plus a shru
     const it = m.rate(.item, 0, 0, 3, 3071).?;
     try std.testing.expectApproxEqAbs(m.rate(.champion, 0, 0, 3, 0).?.p, it.p, 0.03);
     try std.testing.expectEqual(@as(?Estimate, null), m.rate(.gold14, 0, 0, 3, 0));
+    // A seen cell leans on its own 1000 games and on the keystone across the role
+    const l1 = try expectLeans(&m, .keystone, 1, 8010);
+    try std.testing.expect(l1.pair > 0.1 and l1.wide > 0.01 and l1.own > 0.05);
+    try std.testing.expectEqual(@as(f64, 1000), l1.pair_games);
+    // Nobody-played: no pair games, the interaction's spread is prior
+    const lu = try expectLeans(&m, .keystone, 20, 8010);
+    try std.testing.expect(lu.pair == 0 and lu.wide > 0 and lu.usual > l1.usual);
+    // Nobody in the role: both terms prior
+    try std.testing.expect((try expectLeans(&m, .keystone, 15, 8229)).wide == 0);
+    _ = try expectLeans(&m, .item, 3, 3071);
 }
 
 test "rare keystones get their own band's spread, so their ranges hold the truth" {
@@ -2059,8 +2203,23 @@ test "a share leans on the old patch until the new one's games arrive" {
 }
 
 fn expectSumsToOne(l: Leans) !void {
-    for ([_]f64{ l.own, l.older, l.ranks, l.region, l.usual }) |x| try std.testing.expect(x >= 0 and x <= 1);
-    try std.testing.expectApproxEqAbs(1, l.own + l.older + l.ranks + l.region + l.usual, 1e-9);
+    const parts = [_]f64{ l.own, l.older, l.ranks, l.region, l.pair, l.wide, l.usual };
+    var sum: f64 = 0;
+    for (parts) |x| {
+        try std.testing.expect(x >= 0 and x <= 1);
+        sum += x;
+    }
+    try std.testing.expectApproxEqAbs(1, sum, 1e-9);
+}
+
+/// A pair or two-lock cell's leans sum to 1 and split the variance rateIn shows
+fn expectLeans(m: *const Model, kind: Kind, a: u16, b: u32) !Leans {
+    const got = m.leansParts(kind, m.index.get(a).?, 0, .all, a, b).?;
+    try expectSumsToOne(got.l);
+    const e = m.rate(kind, 0, 0, a, b).?;
+    const s = (logit(e.hi) - logit(e.lo)) / (2 * z80);
+    try std.testing.expectApproxEqRel(s * s, got.v, 1e-6);
+    return got.l;
 }
 
 test "a champion-role's number leans on its own games as they arrive" {
@@ -2109,7 +2268,6 @@ test "a champion-role's number leans on its own games as they arrive" {
     try expectSumsToOne(euw);
     // A rare one leans on the role's usual
     try std.testing.expect(after.leans(.champion, 0, .all, 41, 0).?.usual > 0.5);
-    try std.testing.expectEqual(@as(?Leans, null), after.leans(.matchup, 0, .all, 40, 2));
 }
 
 test "lane gold at 14 is both champions' leads plus a shrunk pair term" {
@@ -2276,6 +2434,12 @@ test "a two-lock cell adds both parts' terms to the champion-role" {
     // An unseen pair still gets a number, with a wider range
     const far = m.rate(.keystone_matchup, 0, 0, 3, @as(u32, 8010) << 16 | 9).?;
     try std.testing.expect(far.hi - far.lo > km.hi - km.lo);
+    // Leans split the same summed variance
+    inline for (.{ .{ Kind.keystone_matchup, @as(u32, 8010) << 16 | 4 }, .{ Kind.keystone_item, @as(u32, 8010) << 16 | 3071 }, .{ Kind.item_matchup, @as(u32, 3071) << 16 | 4 }, .{ Kind.keystone_matchup, @as(u32, 8010) << 16 | 9 } }) |cell| {
+        const l = try expectLeans(&m, cell[0], 3, cell[1]);
+        try std.testing.expect(l.pair > 0 and l.wide > 0);
+    }
+    try std.testing.expectEqual(@as(?Leans, null), m.leans(.keystone_matchup, 0, .all, 3, @as(u32, 8010) << 16 | 3));
     try std.testing.expectEqual(@as(?Estimate, null), m.rate(.keystone_matchup, 0, 0, 3, @as(u32, 8010) << 16 | 3));
     try std.testing.expectEqual(@as(?Estimate, null), m.rate(.item_matchup, 0, 0, 3, @as(u32, 3071) << 16 | 40));
 }
