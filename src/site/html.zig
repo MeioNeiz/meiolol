@@ -101,6 +101,8 @@ pub const Page = struct {
     home: []const u8 = "EUW1",
     /// Footer: "in EUW, last 30 days, 5,123 games"
     data: []const u8,
+    /// Footer's Contact link (Options.contact); empty: none
+    contact: []const u8 = "",
     /// Preview: unlisted for search engines, with a banner saying so
     public: bool,
     /// Absolute URL search engines should file the page under (Options.origin); only

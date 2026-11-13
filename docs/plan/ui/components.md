@@ -69,6 +69,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 **Cards, tables and text**
 - Card: Card, its bands and SectionHead
 - Prose: a markdown doc (learned.md, model.md, the eval report) as nodes
+- Shots: pictures side by side, each at most its own size with its caption under it...
 - DataTable: a real table where the data is a table, as an island
 - TodayCard: a Card with a one-line title, real content and one action (home's Today...
 
@@ -440,9 +441,18 @@ Used by: textpage, adminmodels, adminlab
 `textpage.zig` `.c-textpage` site
 A page of running text: method, download, privacy, terms, the 404. Server side only, no
 island; the body is a prose Doc parsed from the page's markdown. Its words are the site's
-own policy and help text: held to no label or word budget, as Prose
+own policy and help text: held to no label or word budget, as Prose. Pictures (`shots`,
+ui.shots) after the body
 States: terms: date line, bullets, links; 404: lead and links; title only; wide: tables
 past the text's measure
+
+### Shots
+`shots.zig` `.c-shots` site
+Shots: pictures side by side, each at most its own size with its caption under it, one a
+row on a phone (download's desktop app screenshots, in TextPage). The caption says what
+the picture is, mock-up or real
+States: two, captions of different lengths; one
+Used by: textpage
 
 ### ModelBadge
 `modelbadge.zig` `.c-model`

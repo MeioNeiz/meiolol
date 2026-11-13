@@ -326,7 +326,7 @@ pub fn close(w: *Writer, p: Page) Writer.Error!void {
     var fba: std.heap.FixedBufferAllocator = .init(&buf);
     var t: ui.Tree = .{};
     var h: ui.H = .init(fba.allocator(), &t);
-    t.root = ui.site.foot(&h, .{ .data = p.data, .legal = boilerplate });
+    t.root = ui.site.foot(&h, .{ .data = p.data, .contact = p.contact, .legal = boilerplate });
     if (h.oom) return error.WriteFailed;
     try ui.html.write(&t, t.root, w);
     try w.writeAll("\n</body>\n</html>\n");

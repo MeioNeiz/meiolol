@@ -445,7 +445,8 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             // As the static build's .gz twins: jomify's nginx compresses only HTML itself
             // (stats.bin is ~12 MB raw, ~0.5 MB gzipped), and caches one copy per
             // Accept-Encoding by Vary
-            const compress = gzip and body.len >= 1024 and !std.mem.eql(u8, std.fs.path.extension(name), ".woff2");
+            const ext = std.fs.path.extension(name);
+            const compress = gzip and body.len >= 1024 and !std.mem.eql(u8, ext, ".woff2") and !std.mem.eql(u8, ext, ".webp");
             if (compress) {
                 const window = try arena.alloc(u8, store.raw.window_len);
                 body = try store.raw.compressWith(arena, window, body);
@@ -686,6 +687,7 @@ fn contentType(name: []const u8) []const u8 {
         .{ ".wasm", "application/wasm" },
         .{ ".svg", "image/svg+xml" },
         .{ ".jpg", "image/jpeg" },
+        .{ ".webp", "image/webp" },
         .{ ".woff2", "font/woff2" },
         .{ ".txt", "text/plain; charset=utf-8" },
     };

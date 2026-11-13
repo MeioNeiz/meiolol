@@ -432,6 +432,10 @@ fn modulesWith(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
     const names_zig = names.addOutputFileArg("asset_names.zig");
     names.addArg("inter.woff2");
     names.addFileArg(b.path("src/site/static/inter.woff2"));
+    for (app_shots) |f| {
+        names.addArg(f);
+        names.addFileArg(b.path(b.fmt("src/site/static/{s}", .{f})));
+    }
 
     // The site's islands, per page family (src/site/ui/wasm), with zjb's loaders
     for (ui_families) |f| {
@@ -447,6 +451,9 @@ fn modulesWith(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
 
     return .{ .core = core, .tpl = tpl, .ui = ui, .net = net, .store = store, .backend = backend, .app = app };
 }
+
+/// /download's pictures of the desktop app (src/site/assets.zig)
+const app_shots = [_][]const u8{ "app-mock-blind.webp", "app-mock-lane.webp", "app-windows.webp" };
 
 /// ui.wasm files, one per page family so each page loads only its islands (Jacob 25 Oct)
 const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "champtrends", "champcharts", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice", "picks", "teams", "finder", "findergrid", "learn", "patch", "pool", "poolgrid", "rankings", "daily", "dailyseat", "dailydays", "home", "homegame", "tester", "testercand", "your", "yourviews", "yourtime", "yourlookup", "yourfriends", "forget", "apply", "squad", "account", "sitesearch", "meionotes", "admin", "admincharts", "admintraffic", "adminops", "adminmodels", "adminlab", "adminruns" };

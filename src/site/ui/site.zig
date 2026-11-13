@@ -73,6 +73,7 @@ const W = struct {
     pub const champions = plain("Champions");
     pub const data = phrase.Phrase("Ranked solo/duo {d:text}. Updated daily.");
     pub const legal_pages = plain("Site");
+    pub const contact = plain("Contact");
     /// Riot: a personal key may not serve the public while a production key is in review
     pub const preview = plain("Preview: this site is in review for a Riot Games production API key and is not yet open to the public.");
     pub const region = plain("Region");
@@ -92,6 +93,8 @@ pub const Foot = struct {
     /// line (private pages)
     data: []const u8,
     links: []const Link = &foot_links,
+    /// An email address: "Contact" before Log in; empty: none
+    contact: []const u8 = "",
     /// Riot's legal line, quoted as given
     legal: []const u8,
 };
@@ -107,7 +110,7 @@ pub const foot_links = [_]Link{
 pub fn foot(h: *H, f: Foot) N {
     return h.el(.footer, .{ .class = "c-sitefoot" }, .{h.div(.{ .class = "in" }, .{
         if (f.data.len > 0) h.p(.{}, .{W.data.with(h, .{ .d = f.data })}) else null,
-        h.el(.nav, .{ .aria_label = W.legal_pages }, .{links(h, f.links)}),
+        h.el(.nav, .{ .aria_label = W.legal_pages }, .{footLinks(h, f)}),
         h.p(.{ .class = "legal", .data_prose = {} }, .{tree.Text{ .s = f.legal }}),
     })});
 }
@@ -238,7 +241,25 @@ fn groups(h: *H, gs: []const Group) []const N {
 
 fn links(h: *H, ls: []const Link) []const N {
     var l = h.list();
-    for (ls) |x| l.add(h.a(.{ .class = if (x.acct) "acct" else null, .href = x.href, .aria_current = if (x.current) "page" else null, .data_view = x.view, .hidden = x.hidden }, .{x.label}));
+    for (ls) |x| l.add(link(h, x));
+    return l.done();
+}
+
+fn link(h: *H, x: Link) N {
+    return h.a(.{ .class = if (x.acct) "acct" else null, .href = x.href, .aria_current = if (x.current) "page" else null, .data_view = x.view, .hidden = x.hidden }, .{x.label});
+}
+
+fn footLinks(h: *H, f: Foot) []const N {
+    var l = h.list();
+    var mail = f.contact.len > 0;
+    for (f.links) |x| {
+        if (mail and x.acct) {
+            l.add(h.a(.{ .href = h.fmt("mailto:{s}", .{f.contact}) }, .{W.contact}));
+            mail = false;
+        }
+        l.add(link(h, x));
+    }
+    if (mail) l.add(h.a(.{ .href = h.fmt("mailto:{s}", .{f.contact}) }, .{W.contact}));
     return l.done();
 }
 
@@ -400,6 +421,7 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("the main column, a notice in it", h.div(.{ .class = main_class }, .{note(h, plain("Early data: 1,234 games so far."))}));
     g.addFill("the foot", foot(h, .{
         .data = "in EUW, last 30 days, 23,210 games",
+        .contact = "privacy@meio.lol",
         .legal = "meiolol isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties.",
     }));
 }

@@ -10,6 +10,9 @@ const ui = @import("ui");
 pub const Hashed = struct { plain: []const u8, path: []const u8, data: []const u8 };
 
 pub const font = built("inter.woff2", @embedFile("static/inter.woff2"));
+pub const app_mock_blind = built("app-mock-blind.webp", @embedFile("static/app-mock-blind.webp"));
+pub const app_mock_lane = built("app-mock-lane.webp", @embedFile("static/app-mock-lane.webp"));
+pub const app_windows = built("app-windows.webp", @embedFile("static/app-windows.webp"));
 
 pub const stats_js = built("ui-stats.js", @embedFile("ui-stats.js"));
 pub const stats_wasm = built("ui-stats.wasm", @embedFile("ui-stats.wasm"));

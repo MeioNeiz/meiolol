@@ -1,7 +1,9 @@
 # Terms of use (draft)
 
-Not legal advice: a plain English draft written by Claude, extending the placeholder in
-src/site/textpages.zig. Jacob should read it before it goes live.
+Not legal advice: a plain English draft written by Claude. The live text, from this
+draft with the features since (accounts, Squads, testers, app editions, preview), is
+src/site/textpages.zig terms_md (13 Nov); it leaves out the operator's name, as /privacy
+does. Jacob should read it.
 
 ## Decisions for Jacob
 

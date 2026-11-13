@@ -1,9 +1,11 @@
 //! A page of running text: method, download, privacy, terms, the 404. Server side only, no
 //! island; the body is a prose Doc parsed from the page's markdown. Its words are the
-//! site's own policy and help text: held to no label or word budget, as Prose
+//! site's own policy and help text: held to no label or word budget, as Prose. Pictures
+//! (`shots`, ui.shots) after the body
 const std = @import("std");
 const tree = @import("tree.zig");
 const prose = @import("prose.zig");
+const shots_mod = @import("shots.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const H = tree.H;
 const N = tree.N;
@@ -18,6 +20,7 @@ pub const TextPage = struct {
     /// The page's point in a sentence, bigger than the body
     lead: []const u8 = "",
     body: prose.Doc = .{ .blocks = &.{} },
+    shots: []const shots_mod.Shot = &.{},
     /// After the body: what the page writer builds in code (the method page's chart,
     /// download's Apply)
     extra: N = .none,
@@ -30,6 +33,7 @@ pub const TextPage = struct {
             if (p.sub.len > 0) h.p(.{ .class = "sub" }, .{p.sub}) else null,
             if (p.lead.len > 0) h.p(.{ .class = "lead" }, .{p.lead}) else null,
             if (p.body.blocks.len > 0) prose.view(h, p.body, .{ .id_prefix = "" }) else null,
+            if (p.shots.len > 0) shots_mod.view(h, p.shots) else null,
             p.extra,
         });
     }

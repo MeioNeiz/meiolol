@@ -15,12 +15,13 @@ const Role = core.Role;
 const evalchart = @import("evalchart.zig");
 const extras = @import("extras.zig");
 const lean = @import("../lean.zig");
+const statemodel = @import("../statemodel.zig");
 
 const Writer = std.Io.Writer;
 const Allocator = std.mem.Allocator;
 
 /// Changed by hand with the text: the build date would claim a new policy every day
-const method_lead = "meiolol helps players understand how lane matchups unfold and compare their own lane with the typical curve. The statistics are champion and aggregate data from ranked games, and it never names a \"best pick\".";
+const method_lead = "meiolol reviews League of Legends games after they are played: your team's win chance at every minute, the moments that moved it, and your lane against the typical game in the same matchup. The statistics are champion and aggregate data from ranked games, and it never names a \"best pick\".";
 
 const method_md =
     \\**In short**
@@ -33,6 +34,37 @@ const method_md =
     \\  than ±6 points.
     \\- A matchup with few games leans on how its two champions usually do, and moves
     \\  toward its own games as they come in.
+    \\- A game's win chance by minute comes from a model trained on these games, and is
+    \\  shown only after the game, never in champ select.
+    \\
+    \\## Game review {#review}
+    \\
+    \\[Your games](/your) reviews a player's recent games (last 60 days: ranked solo/duo,
+    \\flex, draft and Swiftplay) after they are played.
+    \\
+    \\- **Win chance**: each team's chance of winning at every minute, from the state of
+    \\  the game then: every player's gold, experience, level, CS, items, unspent gold,
+    \\  deaths and time left dead; each team's towers, inhibitors, dragons and soul,
+    \\  elder, voidgrubs, herald and baron; the ten champions (how each usually does at
+    \\  that minute, and how the draft usually goes); and the region.
+    \\- **The model**: a logistic regression on those numbers, its weights changing
+    \\  smoothly with the minute, trained on {state_games} ranked solo/duo games with a
+    \\  match timeline from the collection below (Platinum IV and above, every region).
+    \\  It learns from champions and game state only, never from who the players are.
+    \\  Checked on games it never saw: at 15 minutes it ranks the eventual winner above
+    \\  the loser 85% of the time, and its chances hold true to about 1 point (of games
+    \\  it gives 70%, about 70 in 100 are won) through 30 minutes. Other queues use the
+    \\  same model.
+    \\- **Swing**: the minute in which the win chance moved most; a game's review opens
+    \\  on it.
+    \\- **Moments**: fights and objectives taken away from a fight, each with the kills,
+    \\  gold and objectives on both sides and how the win chance moved; filters pick out
+    \\  your own, the fights, the objectives or the deaths.
+    \\- **Your lane**: gold, level 6 and first item against the typical game in the same
+    \\  matchup and rank, from the [lane curves](#lane-curves) below.
+    \\- **What it is not**: the win chance describes the state of a game; a moment that
+    \\  moved it is not proof that it decided the game. It is never shown in champ select
+    \\  or during a game.
     \\
     \\## The data
     \\
@@ -229,23 +261,87 @@ const method_md =
     \\- Infer hidden ranks or matchmaking rating.
 ;
 
-const terms_updated = "12 October 2026";
+const terms_updated = "13 November 2026";
 
 const terms_md =
-    \\- meiolol (this site and the desktop app) is free to use. Its statistics are
-    \\  estimates from past games and come with no guarantee.
-    \\- You remain bound by Riot Games' Terms of Service when you play. meiolol only
-    \\  shows information; it never acts in the game client for you.
-    \\- Do not scrape the site at a rate that disrupts it or resell its data.
-    \\- The software is provided as is, without warranty of any kind.
-    \\- These terms may change; the date above shows the latest version.
+    \\These terms cover the meiolol website (meio.lol) and the meiolol desktop app. By using
+    \\either, you agree to them. meiolol is run from the United Kingdom; write to
+    \\[{contact}](mailto:{contact}) about anything here.
+    \\
+    \\## What meiolol is
+    \\
+    \\- A free tool for learning League of Legends: statistics from ranked games collected
+    \\  through the official Riot Games API, and a review of a player's recent games after
+    \\  they are played. Its numbers are estimates from past games: they describe what
+    \\  happened, not what you should do, and they can be wrong or out of date.
+    \\- It is a preview while Riot Games reviews it for a production API key: pages and
+    \\  features may change or be switched off without notice.
+    \\
+    \\## Using the site
+    \\
+    \\- Use it for your own learning, and share links and screenshots freely.
+    \\- Don't collect the site's data automatically at a rate that slows it for others,
+    \\  and don't resell it.
+    \\- Don't try to break or overload the site or get around its limits.
+    \\- Look up Riot IDs to review games, not to harass anyone. We may block lookups that
+    \\  look abusive.
+    \\- Anyone can remove their games from the site with "Remove a Riot ID" on
+    \\  [Your games](/your); what we keep and why is in the [privacy policy](/privacy).
+    \\
+    \\## Accounts
+    \\
+    \\- An account is a username and a password (people we invite may log in with an email
+    \\  address instead). Keep your password to yourself: what is done with your login is
+    \\  your responsibility.
+    \\- You can delete your account at any time on your account page. We may close an
+    \\  account used to break these terms.
+    \\
+    \\## Squads
+    \\
+    \\- Start, join or leave a squad only with a Riot ID that is yours; the profile icon
+    \\  check confirms it.
+    \\- A squad's name must not be offensive or impersonate anyone; we may rename or remove
+    \\  one that is.
+    \\- A squad's invite link shows its members' games to whoever has it: share it only
+    \\  with the squad.
+    \\
+    \\## The desktop app
+    \\
+    \\- Not released yet. There will be a public app, once Riot's review allows it, and
+    \\  a test edition for invited testers with features still being tried out. A tester's
+    \\  copy is for their own use: don't pass it or the login on.
+    \\- Applying to test ([the form](/download#apply)) doesn't promise a place; we choose
+    \\  testers by hand.
+    \\- The app reads champ select from the League client on your PC and only shows
+    \\  information. It never picks, bans, locks, dodges or does anything else in the
+    \\  client for you. Install it only from this site.
+    \\
+    \\## Riot Games
+    \\
+    \\You remain bound by Riot Games' Terms of Service and policies when you play; use
+    \\meiolol only in ways they allow. meiolol uses data from the Riot Games API under
+    \\Riot's developer terms, and Riot Games is not responsible for it.
+    \\
+    \\## No warranty
+    \\
+    \\- meiolol is free and provided as is. We try to keep it accurate and available, but
+    \\  don't promise that it will be, or that it suits any purpose.
+    \\- As far as the law allows, we are not liable for any loss from using it, including
+    \\  lost games, rank or League Points. Nothing here limits liability that the law
+    \\  doesn't allow to be limited, such as for death or personal injury caused by
+    \\  negligence, or for fraud.
+    \\
+    \\## Changes and law
+    \\
+    \\We may change these terms; the date above shows the latest version. If we stop
+    \\running meiolol, we'll say so on the site. These terms are governed by the law of
+    \\England and Wales; if you live elsewhere you keep your own country's mandatory
+    \\consumer protections.
     \\
     \\{legal}
-    \\
-    \\Contact: [{contact}](mailto:{contact}).
 ;
 
-const privacy_updated = "2 November 2026";
+const privacy_updated = "13 November 2026";
 
 const privacy_md =
     \\What meiolol collects, why, how long it keeps it and what you can ask us to do.
@@ -388,6 +484,14 @@ const privacy_md =
     \\Deletion requests passed on by Riot Games are honoured, and you can ask us
     \\directly to delete any data about your account (below).
     \\
+    \\We also use these games to train statistical models (machine learning): the win
+    \\chance by minute on Your games, the draft model behind Daily Draft, Learn and
+    \\Champion pool, and the estimates on champion pages. They learn from champions,
+    \\positions, ranks, regions, patches, champion mastery and each minute's game state
+    \\(gold, experience, items, deaths, objectives). Riot IDs and player identifiers are
+    \\never among them, and a trained model keeps no record of any one player or game.
+    \\How they work: [Method](/method#review).
+    \\
     \\## Where it is kept, and who else handles it
     \\
     \\The website, its database and its backups run on a server in Essex, England,
@@ -423,7 +527,21 @@ const download_md =
     \\
     \\Not released yet. Meanwhile the [matchup curves](/matchups) on this site show the
     \\same lane data.
+    \\
+    \\## What it looks like
+    \\
+    \\Mock-ups, not a real game: the app's window on a test computer, reading a simulated
+    \\champ select (October 2026). Screenshots from real ranked games come once testers
+    \\have played with it.
 ;
+
+/// docs/review-shots: the window against deploy/mock-cs.sh's mock client, then the top of
+/// windows-desktop-window.png
+const download_shots = [_]ui.shots.Shot{
+    .{ .src = "/" ++ assets.app_mock_blind.path, .alt = "The app in champ select before the enemy mid laner has picked: five champions from your pool, each with its reasons", .caption = "Mock-up: before your lane opponent picks, several options from your pool with their reasons.", .width = 393, .height = 600 },
+    .{ .src = "/" ++ assets.app_mock_lane.path, .alt = "The app once you have picked Garen: how Garen against Darius usually goes in gold by minute, then your pool", .caption = "Mock-up: once you have picked, how your lane matchup usually goes. The opponent's role is a guess.", .width = 393, .height = 600 },
+    .{ .src = "/" ++ assets.app_windows.path, .alt = "The app's window on Windows 11 waiting for the League client", .caption = "The app on Windows 11 (top of the window), waiting for the League client to start.", .width = 456, .height = 130 },
+};
 
 const not_found_md = "[Home](/) · [Champions](/champions) · [Matchups](/matchups)";
 
@@ -530,6 +648,7 @@ pub fn body(site: *const Site, w: *Writer, at: std.meta.Tag(urls.Page)) !bool {
                 .{ "gm", try std.fmt.allocPrint(a, "{d}", .{lean.gold_minute}) },
                 .{ "wm", try std.fmt.allocPrint(a, "{d}", .{lean.win_minute}) },
                 .{ "min", try std.fmt.allocPrint(a, "{d}", .{lean.min_games}) },
+                .{ "state_games", try std.fmt.allocPrint(a, "{f}", .{root.Thousands{ .n = statemodel.shipped().training_games }}) },
             }),
             .extra = evalchart.chart(&h, site.eval),
         },
@@ -547,6 +666,7 @@ pub fn body(site: *const Site, w: *Writer, at: std.meta.Tag(urls.Page)) !bool {
             .title = "Champ select helper (desktop app)",
             .lead = "In development: a small Windows app that, once you have picked your champion in champ select, shows how your lane matchup usually unfolds and your own record in it.",
             .body = try ui.prose.parse(a, download_md),
+            .shots = &download_shots,
             .extra = blk: {
                 const ap = try a.create(ui.apply.Apply);
                 ap.* = .{};

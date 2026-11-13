@@ -76,8 +76,11 @@ only until the record is copied to our archive, usually within a few days; the a
 copy has Riot IDs removed and player identifiers replaced by one-way codes.
 
 **Why.** To compute champion level and aggregate statistics: matchup curves, champion
-win rates, the Daily Draft. And to show a player their own games when someone looks up
-their Riot ID.
+win rates, the Daily Draft. To train statistical models (machine learning): the win
+chance by minute on Your games, the draft model, the champion page estimates; they learn
+from champions, positions, ranks, regions, patches, champion mastery and game state, never
+Riot IDs or player identifiers, and keep no record of any one player or game. And to show
+a player their own games when someone looks up their Riot ID.
 
 **Legal basis.** Legitimate interests (UK GDPR and EU GDPR Article 6(1)(f)). Most players
 in our data have never visited this site, so we can't ask for consent; instead we have

@@ -36,7 +36,7 @@ const groups = [_]Group{
     },
     .{
         .name = "Cards, tables and text",
-        .files = "card table today prose",
+        .files = "card table today prose shots",
     },
     .{
         .name = "Champions and builds",
