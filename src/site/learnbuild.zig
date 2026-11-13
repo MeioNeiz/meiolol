@@ -144,16 +144,19 @@ fn counters(site: *const Site) ![]const ld.Puzzle {
 const lane_min_games = 300;
 /// A matchup counts as one-sided in lane from this share of games led at 14
 const lane_lead_share = 0.6;
-/// The lane leader's win rate must sit this far below even, and 2 standard errors
+/// The lane leader's win rate, pulled toward even, must sit this far below it, and 2
+/// standard errors
 const lane_min_gap = 0.05;
 
-/// "Ahead in lane, so wins?": the matchup whose usual lane leader most clearly loses
-/// the game, from the all-ranks lane curves
-fn lanePuzzle(site: *const Site) !?ld.Puzzle {
-    const curves = site.curves orelse return null;
-    const Best = struct { lead: Champ, other: Champ, r: Role, led: f64, won: f64, games: u32 };
-    var best: ?Best = null;
-    for (curves.curves) |c| {
+const LaneLoss = struct { lead: u32, other: u32, r: Role, led: f64, won: f64, games: u32 };
+
+/// The matchup whose usual lane leader most clearly loses the game: largest led minus
+/// won, won pulled toward even by `ks` games (champion.usualK per role) so that over
+/// thousands of pairs a thin one's luck doesn't win. `won` stays the raw rate shown
+fn laneLoss(curves: []const curvesfile.Curve, ks: [Role.count]f64) ?LaneLoss {
+    var best: ?LaneLoss = null;
+    var best_score: f64 = 0;
+    for (curves) |c| {
         const h = c.header;
         if (!matchup.isPage(h) or h.a == h.b or h.role >= Role.count) continue;
         if (h.games < lane_min_games or h.lane_games < h.games / 2) continue;
@@ -162,44 +165,53 @@ fn lanePuzzle(site: *const Site) !?ld.Puzzle {
         const led = led_n / @as(f64, @floatFromInt(h.lane_games));
         if (led < lane_lead_share) continue;
         const wins = if (a_led) h.a_wins else h.games - h.a_wins;
-        const games: f64 = @floatFromInt(h.games);
-        const won = @as(f64, @floatFromInt(wins)) / games;
-        if (0.5 - won < lane_min_gap or 0.5 - won < 2 * @sqrt(won * (1 - won) / games)) continue;
-        if (best) |b| if (led - won <= b.led - b.won) continue;
-        const x = matchup.champ(site, h.a) orelse continue;
-        const y = matchup.champ(site, h.b) orelse continue;
+        const vs = champion.VsUsual.of(wins, h.games, 0.5, ks[h.role]);
+        if (-vs.mean < lane_min_gap or -vs.mean < 2 * vs.sd) continue;
+        const score = led - (0.5 + vs.mean);
+        if (best != null and score <= best_score) continue;
+        best_score = score;
         best = .{
-            .lead = if (a_led) x else y,
-            .other = if (a_led) y else x,
+            .lead = if (a_led) h.a else h.b,
+            .other = if (a_led) h.b else h.a,
             .r = @fromBackingInt(@intCast(h.role)),
             .led = led,
-            .won = won,
+            .won = @as(f64, @floatFromInt(wins)) / @as(f64, @floatFromInt(h.games)),
             .games = h.games,
         };
     }
-    const b = best orelse return null;
+    return best;
+}
+
+/// "Ahead in lane, so wins?" (laneLoss), from the all-ranks lane curves
+fn lanePuzzle(site: *const Site) !?ld.Puzzle {
+    const curves = site.curves orelse return null;
+    var ks: [Role.count]f64 = undefined;
+    for (Role.all, &ks) |r, *k| k.* = champion.usualK(&site.stats, r);
+    const loss = laneLoss(curves.curves, ks) orelse return null;
+    const leader = matchup.champ(site, loss.lead) orelse return null;
+    const trailer = matchup.champ(site, loss.other) orelse return null;
     const a = site.arena;
-    const won_pct = @round(100 * b.won);
+    const won_pct = @round(100 * loss.won);
     // By name, so the answer is not always the same button
-    const other_first = std.mem.lessThan(u8, b.other.name, b.lead.name);
-    const lead: ld.Choice = .{ .text = b.lead.name, .champ = uiChamp(b.lead), .shown = try a.print("won {d:.0}%", .{won_pct}), .games = b.games };
-    const other: ld.Choice = .{ .text = b.other.name, .champ = uiChamp(b.other), .shown = try a.print("won {d:.0}%", .{100 - won_pct}), .games = b.games };
+    const other_first = std.mem.lessThan(u8, trailer.name, leader.name);
+    const lead: ld.Choice = .{ .text = leader.name, .champ = uiChamp(leader), .shown = try a.print("won {d:.0}%", .{won_pct}), .games = loss.games };
+    const other: ld.Choice = .{ .text = trailer.name, .champ = uiChamp(trailer), .shown = try a.print("won {d:.0}%", .{100 - won_pct}), .games = loss.games };
     return .{
         .id = "lane",
         .q = "Who wins more of these games?",
-        .ctx = try a.print("{s} against {s}, {s}", .{ b.lead.name, b.other.name, laneName(b.r) }),
+        .ctx = try a.print("{s} against {s}, {s}", .{ leader.name, trailer.name, laneName(loss.r) }),
         .setup = .{ .chips = .{
-            .champs = try a.dupe(ld.Champ, &.{ uiChamp(b.lead), uiChamp(b.other) }),
-            .chips = try a.dupe([]const u8, &.{try a.print("{s} ahead at 14: {d:.0}%", .{ b.lead.name, @round(100 * b.led) })}),
+            .champs = try a.dupe(ld.Champ, &.{ uiChamp(leader), uiChamp(trailer) }),
+            .chips = try a.dupe([]const u8, &.{try a.print("{s} ahead at 14: {d:.0}%", .{ leader.name, @round(100 * loss.led) })}),
         } },
         .answer = .{ .pick = .{
             .right = if (other_first) 0 else 1,
             .choices = try a.dupe(ld.Choice, if (other_first) &.{ other, lead } else &.{ lead, other }),
         } },
-        .why = try a.print("{s} wins the lane, {s} the game.", .{ b.lead.name, b.other.name }),
+        .why = try a.print("{s} wins the lane, {s} the game.", .{ leader.name, trailer.name }),
         .tip = "Losing lane is not losing the game: against an early champion, play for later.",
-        .games = b.games,
-        .from = try a.print("This patch's ranked games, all ranks, {s}", .{laneName(b.r)}),
+        .games = loss.games,
+        .from = try a.print("This patch's ranked games, all ranks, {s}", .{laneName(loss.r)}),
     };
 }
 
@@ -919,6 +931,39 @@ test leanPicks {
     for (tiles, [2][3]u32{ .{ 1, 3, 5 }, .{ 4, 7, 8 } }) |t, want| for (t, want) |r, id| try std.testing.expectEqual(id, r.champion);
     try std.testing.expectEqual(9, asked.champion);
     try std.testing.expectEqual(null, leanPicks(rows[0..8], &hooks));
+}
+
+test laneLoss {
+    const curve = struct {
+        fn f(h: *curvesfile.Header, a: u32, b: u32, games: u32, lane_a: u32, a_wins: u32) curvesfile.Curve {
+            h.* = std.mem.zeroes(curvesfile.Header);
+            h.role = @backingInt(Role.top);
+            h.a = a;
+            h.b = b;
+            h.games = games;
+            h.a_wins = a_wins;
+            h.lane_games = games;
+            h.lane_a = lane_a;
+            h.lane_b = games - lane_a;
+            return .{ .header = h, .minutes = &.{} };
+        }
+    }.f;
+    var hs: [3]curvesfile.Header = undefined;
+    const curves = [_]curvesfile.Curve{
+        // 2 leads 70% of 4,000 lanes, wins 43%: pulled toward even by 500, 6.2 under
+        curve(&hs[0], 1, 2, 4_000, 1_200, 2_280),
+        // 70% and 35% of 300: the larger raw gap, but pulled to 44.4%
+        curve(&hs[1], 3, 4, 300, 210, 105),
+        // 43% of 300 clears 5 points and 2 SE raw, only 2.5 points once pulled
+        curve(&hs[2], 5, 6, 300, 180, 130),
+    };
+    const got = laneLoss(&curves, @splat(500)).?;
+    try std.testing.expectEqual(2, got.lead);
+    try std.testing.expectEqual(1, got.other);
+    try std.testing.expectApproxEqAbs(0.43, got.won, 1e-9);
+    // Unpulled, the thin pair's luck wins
+    try std.testing.expectEqual(3, laneLoss(&curves, @splat(0)).?.lead);
+    try std.testing.expectEqual(null, laneLoss(curves[2..], @splat(500)));
 }
 
 test beaten {
