@@ -842,6 +842,22 @@ pub fn trends(arena: Allocator, t: *const lockrows.Table, x: *const Index, champ
     return out;
 }
 
+/// `champion` in `role`'s Charts cards under `f` and `locks` (champion-locks.md L5a):
+/// Objectives' counts as builds.File.Build.firsts has them, the view's rows with a
+/// timeline, then those whose team took each First first; null as `count`
+pub fn objectives(arena: Allocator, t: *const lockrows.Table, x: *const Index, champion: u32, role: Role, f: Filter, locks: *const Locks) !?[1 + builds.firsts_len]Count {
+    const bi = t.blockIndex(champion, role) orelse return null;
+    const block = &x.blocks[bi];
+    const m: Match = try .init(arena, block, locks, &f);
+    var out: [1 + builds.firsts_len]Count = @splat(.{});
+    for (block.rows) |*r| {
+        if (!r.picks or !f.takes(r.start, r.platform, r.patch, if (r.rank == no_rank) null else r.rank) or !m.takes(r)) continue;
+        Counts.bump(&out[0], r.won);
+        for (out[1..], 0..) |*o, i| if (r.firsts >> @intCast(i) & 1 != 0) Counts.bump(o, r.won);
+    }
+    return out;
+}
+
 /// A store.schema.tiers index's bracket: 0 Iron-Silver, 1 Gold-Emerald, 2 Diamond+
 fn bracketOf(rank: u8) ?usize {
     const tier = if (rank < store.schema.tiers.len) store.schema.tiers[rank] else return null;

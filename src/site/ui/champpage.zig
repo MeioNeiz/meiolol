@@ -410,10 +410,10 @@ pub const W = struct {
     pub const build_usual = Phrase("{x:text}'s build");
     pub const no_lock_games = plain("No games with these locks.");
     pub const vs_lock = Phrase("vs {y:text}");
-    /// The parts that follow the locks, beside the head: the rest (Charts, champion-locks.md
-    /// L5; game length, no length in the cubes yet; players, pick-up, mains also play and
-    /// end of game, player-level) don't, and a list of those ran long and missed some
-    pub const lock_scope = plain("Applies to build, matchups, by patch, by rank and first item");
+    /// The parts that follow the locks, beside the head: the rest (Charts' lane cards,
+    /// champion-locks.md L5b; game length, no length in the cubes yet; players, pick-up,
+    /// mains also play and end of game, player-level) don't, and a list of those ran long
+    pub const lock_scope = plain("Applies to build, matchups, by patch, by rank, first item and objectives");
     /// The StatStrip under locks: their games out of the champion-role's
     pub const lock_share = plain("Of its games");
     pub const no_answer = plain("These locks can't be counted here yet.");
@@ -2203,6 +2203,14 @@ pub const Charts = struct {
     comeback: trend.Trend = .{ .label = W.comeback, .points = &.{} },
     /// Comeback.at's index: 10 or 15 minutes
     at: u8 = 0,
+    /// The champion page's locks (`lk`): Objectives shows the renderer's answer for them
+    /// (lockPath), fetched by ui-champcharts.wasm; the other cards stay unlocked (L5b)
+    locks: lockbar.Set = .{},
+    /// The answer shown and its path; roles empty: none for the path
+    answer: ?*const ChartsData = null,
+    answer_path: []const u8 = "",
+    /// The server's answer under `locks`, base64 (Build.ans)
+    ans: ?[]const u8 = null,
 
     const P = @This();
 
@@ -2213,15 +2221,46 @@ pub const Charts = struct {
         region: Region = .euw,
         period: PeriodPick = .days30,
         rank: Rank = .plat,
+        lk: url.Str(200) = .{},
     };
 
     fn r(p: *const P) *const ChartsRole {
         return &p.data.roles[p.cur];
     }
 
+    /// Under locks, the answer's role once one is in: the cards that follow locks draw it
+    fn locked(p: *const P) ?*const ChartsRole {
+        if (!p.locks.any()) return null;
+        const x = p.answer orelse return null;
+        return if (x.roles.len > 0) &x.roles[0] else null;
+    }
+
+    /// The answer the locks want, null without locks. At the URL's rank: the lock rows
+    /// have every rank, the unlocked files only Platinum+
+    pub fn lockWant(p: *const P, a: std.mem.Allocator) ?[]const u8 {
+        if (!p.locks.any() or p.cur >= p.data.roles.len) return null;
+        return lockPath(a, p.root, p.files.want.view, "charts", p.slug(), p.data.roles[p.cur].role, p.rank, p.locks.s.slice()) catch null;
+    }
+
+    /// From the data file's name, as Build.slug
+    fn slug(p: *const P) []const u8 {
+        const base = p.src[if (std.mem.findScalarLast(u8, p.src, '/')) |i| i + 1 else 0..];
+        return if (tree.endsWith(base, "-charts.bin")) base[0 .. base.len - "-charts.bin".len] else base;
+    }
+
+    pub fn setAnswer(p: *P, _: std.mem.Allocator, path: []const u8, d: *const ChartsData) void {
+        p.answer = d;
+        p.answer_path = path;
+    }
+
+    fn waiting(p: *const P, a: std.mem.Allocator) bool {
+        const w = p.lockWant(a) orelse return false;
+        return !tree.eql(w, p.answer_path);
+    }
+
     pub fn toUrl(p: *const P) Url {
         const w = p.files.want;
-        return .{ .role = p.want_role, .region = w.region(), .period = w.period(), .rank = p.rank };
+        return .{ .role = p.want_role, .region = w.region(), .period = w.period(), .rank = p.rank, .lk = p.locks.s };
     }
 
     pub fn fromUrl(p: *P, u: Url) void {
@@ -2230,6 +2269,7 @@ pub const Charts = struct {
         const k = Pick.of(u);
         p.files.want = .{ .view = k.view, .meio = k.meio };
         p.cur = roleIndex(p.data.roles, u.role);
+        p.locks.s = u.lk;
     }
 
     /// The loader's, once what files.want needs is in
@@ -2257,7 +2297,9 @@ pub const Charts = struct {
             .data_root = p.root,
             .data_js = p.js,
             .data_wasm = p.wasm,
-            .data_busy = p.files.busy(),
+            .data_busy = p.files.busy() or p.waiting(h.mem),
+            .data_lk = if (p.ans != null) p.locks.s.slice() else null,
+            .data_ans = p.ans,
         }, .{
             h.div(.{ .class = "row2" }, .{ p.laneCard(h), p.comebackCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.killsCard(h), p.objectivesCard(h) }),
@@ -2366,7 +2408,13 @@ pub const Charts = struct {
     /// How often the champion's team took each objective first, and won after it, each
     /// on a 0-100 track with the role's rate its tick
     fn objectivesCard(p: *P, h: *H) N {
-        const k = p.r().objectives orelse return noneCard(h, W.objectives_head, .none);
+        const unlocked = p.r().objectives orelse return noneCard(h, W.objectives_head, .none);
+        // Under locks the locked games' against the role's, which locks don't change
+        var k = unlocked;
+        if (p.locked()) |x| {
+            const mine = x.objectives orelse return noneCard(h, W.objectives_head, .none);
+            k.mine = mine.mine;
+        }
         var l = h.list();
         l.add(h.span(.{}, .{}));
         for (W.obj_kinds) |o| l.add(h.span(.{ .class = "oh" }, .{ objicon.view(h, o, .{ .s = .xl, .named = false }), objicon.label(o) }));

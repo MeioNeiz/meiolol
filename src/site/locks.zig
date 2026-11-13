@@ -113,6 +113,7 @@ pub fn answer(s: *Site, x: *const Answers, gpa: std.mem.Allocator, rest: []const
         .more => try ui.data.encode(s.arena, cp.MoreData, try more(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
         .top => try ui.data.encode(s.arena, cp.TopData, try top(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
         .trends => try ui.data.encode(s.arena, cp.TrendsData, try trends(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
+        .charts => try ui.data.encode(s.arena, cp.ChartsData, try charts(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
         // The Meio period: public, as the view's numbers are (estimates.md E0d)
         .meio => try ui.data.encode(s.arena, pd.Meio, try meioOf(s, x, ch, q.role, q.rank, &q.locks) orelse return null, &out),
     }
@@ -228,6 +229,25 @@ pub fn trends(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank,
         .timing = try champion.timingOf(a, &n.first_item, cp.min_games),
     };
     return .{ .name = ch.name, .ddragon = s.ddragon_version, .champs = &.{}, .roles = role[0..1], .lengths = &.{} };
+}
+
+/// `ch`'s Charts cards in `r` at rank `k` under `locks` that follow them (Objectives:
+/// the locked games' firsts; Objectives.role stays the unlocked card's, the role's), as
+/// a ChartsData of that one role, in `s.arena`; null as `build`. Objectives is null under
+/// cp.min_games games with a timeline, as the unlocked card's
+pub fn charts(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, locks: *const lockanswer.Locks) !?cp.ChartsData {
+    const a = s.arena;
+    const t = &x.table;
+    const f = filterOf(s, t, k) orelse return null;
+    const n = try lockanswer.objectives(a, t, &x.index, @intCast(ch.id), r, f, locks) orelse return null;
+    const role = try a.create(cp.ChartsRole);
+    role.* = .{ .role = champion.uiRole(r) };
+    if (n[0].games >= cp.min_games) {
+        var o: cp.Objectives = .{ .mine = undefined, .role = @splat(.{ .games = 0, .wins = 0 }) };
+        for (&o.mine, n) |*m, c| m.* = .{ .games = c.games, .wins = c.wins };
+        role.objectives = o;
+    }
+    return .{ .name = ch.name, .ddragon = s.ddragon_version, .champs = &.{}, .roles = role[0..1] };
 }
 
 /// Most keystones and items in a Meio answer; opponents are all listed (Matchups)
@@ -387,7 +407,7 @@ fn filterOf(s: *const Site, t: *const lockrows.Table, k: cp.Rank) ?lockanswer.Fi
 }
 
 /// The islands with lock answers
-pub const Island = enum { build, more, top, meio, trends };
+pub const Island = enum { build, more, top, meio, trends, charts };
 
 const Query = struct { island: Island, slug: []const u8, role: Role, rank: cp.Rank, locks: lockanswer.Locks };
 
@@ -439,6 +459,7 @@ test "lock paths parse only in their one form" {
     try std.testing.expectEqual(.more, parse("more/darius/top/plat/ks8010.bin").?.island);
     try std.testing.expectEqual(.top, parse("top/darius/top/plat/ks8010.bin").?.island);
     try std.testing.expectEqual(.trends, parse("trends/darius/top/plat/ks8010.bin").?.island);
+    try std.testing.expectEqual(.charts, parse("charts/darius/top/plat/ks8010.bin").?.island);
     for ([_][]const u8{
         "build/darius/top/emerald/vs86,ks8010.bin",
         "build/darius/top/emerald/.bin",

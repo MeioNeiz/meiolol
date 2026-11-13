@@ -860,12 +860,15 @@ test "fixture games to stats, curves and the website" {
         for (mk.opponents) |o| try testing.expectEqual(null, o.gold);
         // Other islands still need a lock set
         try testing.expectEqual(null, try loaded.get(arena, try lock(arena, "", 0, "build", "darius", .top, .plat, "none")));
+        // Charts' answer: its one role, Objectives as lockanswer.objectives counts them
+        const ch_ans = try site.ui.data.decode(arena, site.ui.champpage.ChartsData, (try loaded.get(arena, try lock(arena, "", 0, "charts", "darius", .top, .plat, "ks8010"))).?);
+        try testing.expectEqual(1, ch_ans.roles.len);
         // The page's own lock set rendered in: the LockBar, the answer inline for each
         // island that follows locks, the opponent by name; a set not in its one form
         // renders unlocked
         const page = (try loaded.getLocked(arena, "champions/darius/top.html", "ks8010,vs82")).?;
         try testing.expect(std.mem.find(u8, page, "data-lk=\"ks8010,vs82\"") != null);
-        try testing.expectEqual(4, std.mem.count(u8, page, "data-ans=\""));
+        try testing.expectEqual(5, std.mem.count(u8, page, "data-ans=\""));
         try testing.expect(std.mem.find(u8, page, "Of its games") != null);
         try testing.expect(std.mem.find(u8, page, "class=\"c-lockbar\"") != null);
         try testing.expect(std.mem.find(u8, page, "vs Mordekaiser") != null);
@@ -2464,6 +2467,10 @@ fn expectLocksAsBuilder(arena: std.mem.Allocator, t: *const lockrows.Table, x: *
             try testing.expectEqual((try lockanswer.count(arena, t, x, b.champion, b.role, any_rank, l)).?.games, tr.ranked.games);
             const hist: []const builds.Count = if (want) |f| if (f.get(b.champion, b.role)) |own_| own_.first_item else &.{} else &.{};
             for (tr.first_item, 0..) |c, i| try testing.expectEqual(if (i < hist.len) hist[i] else builds.Count{}, c);
+            // Charts' Objectives (site/locks.zig charts): the build file's firsts
+            const obj = (try lockanswer.objectives(arena, t, x, b.champion, b.role, filter, l)).?;
+            const firsts: []const builds.Count = if (want) |f| if (f.get(b.champion, b.role)) |own_| own_.firsts else &.{} else &.{};
+            for (obj, 0..) |c, i| try testing.expectEqual(if (i < firsts.len) firsts[i] else builds.Count{}, c);
             stacks += 1;
         }
     };

@@ -113,6 +113,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
     trends.fromUrl(.{ .role = shown.role });
     try lockTrends(site, &trends, ch, r);
     charts.fromUrl(.{ .role = shown.role });
+    try lockCharts(site, &charts, ch, r);
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
     // The role rendered for, when the path names it: the wasms' server state (dom.pageRole)
@@ -191,6 +192,21 @@ fn lockTrends(site: *const Site, trends: *cp.Trends, ch: Champ, r: Role) !void {
     const path = trends.lockWant(a) orelse return;
     trends.setAnswer(a, path, d);
     trends.ans = try base64(a, cp.TrendsData, d.*);
+}
+
+/// The request's lock set rendered into the Charts cards that follow it, as lockBuild
+fn lockCharts(site: *const Site, charts: *cp.Charts, ch: Champ, r: Role) !void {
+    const a = site.arena;
+    const x = site.answers orelse return;
+    const lk = locks.pageLocks(site.lk) orelse return;
+    const d = try a.create(cp.ChartsData);
+    d.* = try locks.charts(site, x, ch, r, .plat, &lk) orelse return;
+    var u = charts.toUrl();
+    u.lk.set(site.lk);
+    charts.fromUrl(u);
+    const path = charts.lockWant(a) orelse return;
+    charts.setAnswer(a, path, d);
+    charts.ans = try base64(a, cp.ChartsData, d.*);
 }
 
 fn base64(a: std.mem.Allocator, comptime D: type, d: D) ![]const u8 {
