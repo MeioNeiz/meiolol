@@ -2,13 +2,17 @@
 # Runs on the Mac every 30 min (launchd: deploy/net.jacob.meiolol-watch.plist): the box's
 # health check, toasted with `wz notify` when the problems change, and a daily mirror of
 # the box's backups (deploy/backup-mirror.sh: acked, so the box can drop its copy).
-# Catches what the box cannot report itself: the box down or unreachable.
+# Catches what the box cannot report itself: the box down or unreachable. Its last result
+# ($STATE/last) opens each Claude Code session here (deploy/hooks/claude-box-health.sh).
 set -u
 HOST=${MEIOLOL_HOST:-essex-vm}
 MIRROR=${MEIOLOL_MIRROR:-$HOME/Backups/meiolol}
 STATE=$HOME/.cache/meiolol-watch
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p "$STATE"
+# launchd starts it in /, read-only: `meiolol backup --mirror` makes ./data and failed
+# there (ReadOnlyFileSystem)
+cd "$STATE" || exit 1
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
 
 out=$(ssh -o ConnectTimeout=20 -o BatchMode=yes "$HOST" ml/meiolol/bin/health.sh 2>&1)

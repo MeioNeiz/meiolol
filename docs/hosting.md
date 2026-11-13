@@ -74,8 +74,7 @@ Megatron's pace. Without the cache, measured 26 Oct (Python, O_DIRECT, 2 GB file
   Megatron dropped for 5 min: disk up 10 s after they passed again, every unit within
   a minute, no hand step. Megatron pausing while up: `hard` stalls IO until it is back
 - Alerts: health.sh lines for a share or the disk not mounted; with the disk down
-  health.sh itself is missing, which mac-watch.sh reports (docs/data-safety.md "Health
-  alerts")
+  health.sh itself is missing, which mac-watch.sh reports (docs/health.md)
 - Left: fstrim.timer
 
 ## On the box

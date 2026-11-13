@@ -112,8 +112,8 @@ guards: .claude/doc-rules.json, skill context-review.
 - Production key requirements and policy limits on what the app may show:
   docs/production-key.md; sources and quotes in research/ (josearch store, see
   research/README.md)
-- Backups, health alerts, disk headroom, GDPR erasure (`meiolol backup|restore|forget`):
-  docs/data-safety.md
+- Backups, disk headroom, GDPR erasure (`meiolol backup|restore|forget`):
+  docs/data-safety.md; health checks and where they reach Jacob: docs/health.md
 - Builds, tests, pushes and the two push modes on the Mac: docs/dev-flow.md
 - Older next steps by area: docs/backlog.md. Finished team runs: docs/archive/
 - Team runs (a coordinator and several sessions): briefs, notes and handovers in

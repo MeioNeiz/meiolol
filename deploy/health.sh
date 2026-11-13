@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs on the box: prints one line per problem, exit 1 when there are any. Used by
-# deploy/health-loop.sh (box, ntfy) and deploy/mac-watch.sh (Mac, wz notify). Thresholds
-# in docs/data-safety.md. Keeps the crawler's last progress in data/health.state.
+# deploy/health-loop.sh (box, ntfy), deploy/mac-watch.sh (Mac, wz notify), the admin page
+# and `deploy/box.sh status`. Thresholds and where it reaches Jacob: docs/health.md.
+# Keeps the crawler's last progress in data/health.state.
 set -u
 if [[ $(uname) != Linux ]]; then
     echo "health.sh runs on the box (GNU date, stat, df, its units): deploy/box.sh health check" >&2
@@ -66,9 +67,9 @@ else
     dropped=$(grep -oE '[0-9]+ dropped' <<< "$report" | cut -d' ' -f1)
     (( ${dropped:-0} > 0 )) && problems+=("complete form dropped $dropped documents: its queue was full or a spool write failed")
     quarantined=$(find data/complete/spool/quarantine -type f 2> /dev/null | wc -l | tr -d ' ')
-    (( quarantined > 0 )) && problems+=("complete form: $quarantined spool segments quarantined after unclean runs (docs/data-safety.md \"Complete form quarantine\")")
+    (( quarantined > 0 )) && problems+=("complete form: $quarantined spool segments quarantined after unclean runs (docs/health.md \"Complete form quarantine\")")
     damaged=$(find data/complete -maxdepth 1 -name '*.cfd.damaged-*' 2> /dev/null | wc -l | tr -d ' ')
-    (( damaged > 0 )) && problems+=("complete form: $damaged day files set aside with a damaged frame (docs/data-safety.md \"Complete form damaged file\")")
+    (( damaged > 0 )) && problems+=("complete form: $damaged day files set aside with a damaged frame (docs/health.md \"Complete form damaged file\")")
     # Mastery blocks seal every minute or so: an open day file standing still means none do
     part=$(ls -t data/complete/*.cfd.part 2> /dev/null | head -n 1)
     if [[ -n "$part" ]] && (( now - $(stat -c %Y "$part") > 1800 )); then
@@ -183,6 +184,22 @@ IFS=$'\t' read -r at sha _ status detail <<< "$last"
 if [[ "$status" == failed && "$at" =~ ^[0-9]+$ ]]; then
     problems+=("deploy ${sha:0:7} failed $(date -u -d "@$at" '+%F %H:%MZ'): ${detail:0:200}")
 fi
+# A push that never reaches the box: the Mac's on-push.sh deploys and, asleep, queues (8
+# Nov: 8d32828e sat ~2 days). Every head it handles leaves a deploys.tsv row, skipped ones
+# too, so origin main's head missing there for BEHIND_H is that. MEIOLOL_ORIGIN (host.env)
+# empty: not checked; GitHub not answering: left as it was
+origin=${MEIOLOL_ORIGIN-https://github.com/MeioNeiz/meiolol.git}
+if [[ -n "$origin" ]] \
+    && head=$(timeout 20 git ls-remote "$origin" refs/heads/main 2> /dev/null | cut -f1) \
+    && [[ "$head" =~ ^[0-9a-f]{40}$ ]]; then
+    behind=1
+    cut -f2 data/deploys.tsv 2> /dev/null | grep -qxF "$head" && behind=0
+    if began=$(episode behind $behind); then
+        since=$(awk '$1 == "behind" { print $2 }' "$EPISODES")
+        (( now - since >= ${BEHIND_H:-2} * 3600 )) \
+            && problems+=("box behind origin main since $began: ${head:0:7} never reached it (the Mac's on-push.sh: asleep? .git/meiolol-deploy.log)")
+    fi
+fi
 
 if ! running meiolol-backup; then
     problems+=("backup loop not running (meiolol-backup)")
@@ -194,8 +211,11 @@ read -r _ scrub detail < data/complete-scrub.status 2> /dev/null || scrub=
 if [[ -n "$scrub" && "$scrub" != ok ]]; then
     problems+=("complete form scrub $scrub ${detail:-}: day files not brought up to the forgotten list")
 fi
+# Its cause: the line before backup-mirror.sh's FAILED line (that names the step)
 if systemctl --user -q is-failed meiolol-megatron-mirror.service 2> /dev/null; then
-    problems+=("Megatron mirror failed (data/backup-mirror.log)")
+    cause=$(grep -B1 ' backup mirror: FAILED' data/backup-mirror.log 2> /dev/null | tail -n 2 \
+        | tr '\n' ' ')
+    problems+=("Megatron mirror failed: ${cause:0:300}${cause:+ }(data/backup-mirror.log)")
 fi
 newest=$(ls -t "$BACKUPS"/state/state-*.db 2>/dev/null | head -n 1)
 if [[ -z "$newest" ]] || (( now - $(stat -c %Y "$newest") > 26 * 3600 )); then

@@ -16,6 +16,8 @@ RestartSec=60
 # kill counts as an unclean run (riot/complete.zig poison_starts)
 TimeoutStopSec=600
 RestartPreventExitStatus=3
+# Why it stopped, and who asked (systemctl's caller), into crawl.log and the journal
+ExecStopPost=-%h/ml/meiolol/bin/why-stopped.sh %n data/crawl.log
 
 [Install]
 WantedBy=default.target

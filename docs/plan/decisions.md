@@ -150,9 +150,6 @@ Unblocking work:
 - Phone alerts: a private ntfy.sh topic as NTFY_TOPIC in .env (health-loop.sh pushes
   once it is set). Recommended yes (review.md PR1: a site down when Riot looks means
   rejection); Jacob 30 Oct: not now
-- gpu-box: Windows Tailscale login (jmw) and WSL's sudo for Tailscale there, so its
-  backup mirror and archive pull run again (stale since 28 Oct). Recommended: when the PC
-  is on
 - Revised application text (production-key.md): don't paste while queued (editing
   reportedly resets the queue); keep it for Riot's reply
 - 16.21 frozen test look (patch-transfer.md, code frozen f58587b6): go when the gpu-box

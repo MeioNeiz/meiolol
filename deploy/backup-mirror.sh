@@ -46,7 +46,15 @@ if ! mkdir "$lock" 2> /dev/null; then
     log "stale lock taken over"
 fi
 echo "$$ $(boot_id)" > "$lock/owner"
-trap 'rm -rf "$lock"' EXIT
+# Any failed exit gets a dated line naming the step, after the failing command's own
+# output (its cause; health.sh shows both for Megatron)
+step=list
+finish() {
+    local rc=$?
+    rm -rf "$lock"
+    (( rc == 0 )) || log "FAILED (exit $rc) at $step"
+}
+trap finish EXIT
 
 serve list > "$dir/.list"
 manifest=$dir/.manifest
@@ -57,6 +65,7 @@ while read -r rel size want; do
         || { log "box listed a bad name: $rel"; exit 1; }
     # The box's sum at fetch time: a local scrub or rotation since does not refetch
     grep -qxF "$rel $want" "$manifest" && continue
+    step="fetch $rel"
     serve send "$rel" > "$dir/$rel.part"
     got=$(wc -c < "$dir/$rel.part" | tr -d ' ')
     [[ "$got" == "$size" ]] || { log "$rel: got $got of $size bytes"; rm -f "$dir/$rel.part"; exit 1; }
@@ -68,23 +77,33 @@ while read -r rel size want; do
 done < "$dir/.list"
 
 # Ack everything listed that this mirror holds, in one connection
+step=acks
 # shellcheck disable=SC2086 # remote is words
 grep -xFf <(awk '{ print $1 " " $3 }' "$dir/.list") "$manifest" \
     | if [[ $host == local ]]; then $remote acks "$name"
       else ssh "${ssh_opts[@]}" "$host" $remote acks "$name"; fi || log "acks failed"
 
-serve forgotten > "$dir/forgotten.txt.tmp"
+# The box's forget --export meets SQLite busy beside a writer (6 of ~400 Megatron runs, 5-8
+# Nov): two more tries a minute apart
+step="forgotten list"
+for try in 1 2 3; do
+    serve forgotten > "$dir/forgotten.txt.tmp" && break
+    (( try < 3 )) || exit 1
+    sleep 60
+done
 mv "$dir/forgotten.txt.tmp" "$dir/forgotten.txt"
 if [[ $name == gpu-box || $name == megatron ]]; then echo 730 > "$dir/mastery-keep-days"; else echo 32 > "$dir/mastery-keep-days"; fi
+step="backup --mirror (scrub, rotation)"
 "$bin" backup --mirror "$dir" --forgotten "$dir/forgotten.txt"
 # The complete form's sealed day files (riot/complete_scrub.zig), on Megatron only: a
 # mirror of files the box keeps and never changes but by a scrub or the 24-month delete
 # (at most 2 days, 6 files, a run), so --delete carries both here. Never a .part (still
 # being written). A box with fewer sealed files than this copy (a fresh disk, a restore
 # from elsewhere) must not empty it: refused, and deletes capped. Over 12 short stays
-# refused: by hand, docs/data-safety.md "Complete form mirror gap". Sealed: *.cfd and a
+# refused: by hand, docs/health.md "Complete form mirror gap". Sealed: *.cfd and a
 # seal's set-aside *.cfd.clash-<time>
 if [[ $name == megatron && $host == local ]]; then
+    step="complete form day files"
     src=$(dirname "$(dirname "$bin")")/data/complete
     mkdir -p "$dir/complete"
     have=$(find "$src" -maxdepth 1 \( -name '*.cfd' -o -name '*.cfd.clash-*' \) 2> /dev/null | wc -l | tr -d ' ')

@@ -65,7 +65,7 @@ sync() {
         _ "$target" "$cache" "$tree" "$cpu"
     # check-deploy.sh (zig build ci) reads both lists: each committed, every unit that runs
     # in ~/ml/meiolol listed, every script a unit or listed script runs listed
-    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh backup-mirror.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh box-lib.sh" s
+    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh backup-mirror.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh box-lib.sh why-stopped.sh" s
     local units="meiolol-crawl.service meiolol-web.service meiolol-render@.service meiolol-health.service meiolol-backup.service meiolol-cache-version.service meiolol-cache-version.path meiolol-cache-warm.service meiolol-megatron-mirror.service meiolol-megatron-mirror.timer" u
     local files=("$tree/zig-out/box/bin/meiolol")
     local on_box=("$DIR/bin/meiolol") want=() i
@@ -291,8 +291,20 @@ since \$(date -u +%FT%TZ)\" > data/heavy.who"
         ;;
     stop) ssh "$HOST" "systemctl --user disable -q --now meiolol-crawl" ;;
     status)
-        ssh "$HOST" "systemctl --user is-active meiolol-crawl; cd $DIR && bin/meiolol status; \
-            tail -n 3 data/crawl.log 2>/dev/null; du -sh data 2>/dev/null"
+        # Health first, live (under 1 s; up to a minute with the site not answering)
+        ssh "$HOST" "cd $DIR && bash -s" <<'EOF'
+out=$(bin/health.sh 2>&1)
+case $? in
+    0) echo "health: ok" ;;
+    1) echo "health: $(grep -c . <<< "$out") problems"; sed 's/^/  /' <<< "$out" ;;
+    *) echo "health: check failed: $out" ;;
+esac
+echo
+systemctl --user is-active meiolol-crawl
+bin/meiolol status
+tail -n 3 data/crawl.log 2> /dev/null
+du -sh data 2> /dev/null
+EOF
         ;;
     logs) ssh "$HOST" "tail -n ${2:-40} $DIR/data/crawl.log" ;;
     model)
@@ -480,7 +492,7 @@ SQL
         ;;
     backup | health)
         # Daily backups (deploy/backup-loop.sh), health checks with ntfy pushes
-        # (deploy/health-loop.sh). docs/data-safety.md
+        # (deploy/health-loop.sh). docs/data-safety.md, docs/health.md
         name=meiolol-$1 log=data/$1.log
         case "${2:-}" in
             start)
