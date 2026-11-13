@@ -84,11 +84,38 @@ tab shows people, unconfirmed and bots. Next, only if needed:
 ## Storage and hosts
 
 - Box disk: raw.db runs auto_vacuum=INCREMENTAL; prunes return free pages past 8 GB
-  (docs/data-safety.md "Raw archive"). The databases grow ~3.6 GB a day (meiolol.db and timeline.db ~8 KB a
-  match each); box backups prune once both mirrors hold them (backup-loop.sh re-execs
-  the deployed script each day). The admin's "full in ~N days" counts the databases only
-- Off-site: Megatron (J31); no rolling window on the box. The admin's "full in ~N days"
-  is the deadline for anything more
+  (docs/data-safety.md "Raw archive"); box backups prune once both mirrors hold them
+  (backup-loop.sh re-execs the deployed script each day)
+- Box disk growth (measured 3-10 Nov at ~145k matches a day; research question
+  box-disk-headroom): kept data ~5.2 GB a day: day files 2.84, timeline.db 1.43,
+  meiolol.db 0.85, partials 0.07; raw.db is a buffer (~25 GB back at S6). meiolol.db
+  holds 13 GB of free pages (mastery pruned 11 Nov), ~15 days of its growth. 351 GB free
+  (13 Nov) less the 10 GB valve lasts ~66 days from a crawl at that rate, health's 80%
+  line ~52. A production key allows 60x the requests: at 5x the crawl, two weeks
+- Compression is spent: recompressing day file frames with zstd gains 0-5% (levels,
+  long windows, groups of frames; trained dictionaries make it 0-5% worse), xz or
+  brotli 7-10% at 2-9x the CPU; compressing the databases (btrfs or ZFS under SQLite in
+  place of ext4) ~22% of their bytes. Not worth it; storage and retention are the levers
+- Off-site: Megatron (J31, 2.8 TB free on 13 Nov, ~10 GB a day for image and mirror);
+  nothing off Ethan's machines. The admin's "full in ~N days" is the deadline for D1
+- D1 (Ethan's yes; free, ~1 h): grow disk.img on Megatron to ~1 TB (losetup -c,
+  pvresize, lvextend, resize2fs online; split the cache off first if lvextend needs it)
+  before health's 80% line: ~100 more days
+- D2 (Jacob's call: ends "C01 keeps every document", Complete form): day files past 90
+  days leave C01 (~260 GB held), kept on the Megatron mirror, the gpu-box copy (S5) and
+  D3; the scrub and restore then run against the mirror for old days. C01 then grows
+  ~2.4 GB a day (databases): with D1, ~8 months. Rule kept instead: a 4 TB disk in
+  Ethan's host (~GBP 100-135 once), outgrown fast under a production key
+- D3 off-site for old day files: Hetzner Storage Box BX21 5 TB, EUR 10.90 a month net
+  (~13 with VAT), 730 days at today's rate (~2.1 TB); forget reaches it by a scrub over
+  SSH (or rewrite and re-upload); privacy.md names it. Backblaze B2 (~$15 a month at
+  2.1 TB) the alternative; not Glacier Deep Archive (180-day minimum against scrub
+  rewrites)
+- D4 with a production key: measure growth the first full day; size D2's window to fit
+  and D3 to the BX31/BX41 tier (10/20 TB, EUR 20.80/40.60 a month)
+- D5 only if the databases fill first: digests (rebuildable cache, ~0.5 GB a day) kept
+  for recent days only; compact timelines older than the views need, rebuilt from day
+  files
 - gpu-box C: at 90% (the archive is on the P3, safe). Left: docs/compute.md "gpu-box storage", Open
   "gpu-box storage", compacting the WSL disk (~120 GB back, C: to ~77%); it stops WSL,
   so when the gpu-box is idle, after warning its sessions

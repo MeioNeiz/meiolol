@@ -1,0 +1,1157 @@
+       μ Slope: High Compression and Fast Search
+                     on Semi-Structured Logs
+Rui Wang, YScope; Devin Gibson, YScope and University of Toronto; Kirk Rodrigues,
+ YScope; Yu Luo, YScope, Uber, and University of Toronto; Yun Zhang, Kaibo Wang,
+  Yupeng Fu, and Ting Chen, Uber; Ding Yuan, YScope and University of Toronto
+            https://www.usenix.org/conference/osdi24/presentation/wang-rui
+
+
+
+
+         This paper is included in the Proceedings of the
+         18th USENIX Symposium on Operating Systems
+                  Design and Implementation.
+                     July 10–12, 2024 • Santa Clara, CA, USA
+                                  978-1-939133-40-3
+
+
+                                          Open access to the Proceedings of the
+                                          18th USENIX Symposium on Operating
+                                           Systems Design and Implementation
+                                                    is sponsored by
+             µSlope: High Compression and Fast Search on Semi-Structured Logs
+
+                     Rui Wang†    Devin Gibson†⋆    Kirk Rodrigues†     Yu Luo†‡⋆
+               Yun Zhang‡    Kaibo Wang‡      Yupeng Fu‡     Ting Chen‡     Ding Yuan†⋆
+                                            YScope†               Uber ‡          University of Toronto⋆
+
+
+                                Abstract                                          that records may have arbitrarily different schemas. This flex-
+                                                                                  ibility allows programmers to easily log common data types
+Internet-scale services can produce a large amount of logs.
+                                                                                  in high-level programming languages, such as C struct, class,
+Such logs are increasingly appearing in semi-structured for-
+                                                                                  hash table, array, etc. Although Protocol Buffer and other
+mats such as JSON. At Uber, the amount of semi-structured
+                                                                                  formats require users to declare a schema to be used on all
+log data can exceed 10PB/day. It is prohibitively expensive
+                                                                                  records, they allow a field to be optional. As a result, different
+to store and analyze them. As a result, logs are only kept
+                                                                                  records may still have different structures.
+searchable for a few days.
+                                                                                     The dynamic schema structure imposes challenges for data
+   This paper proposes µSlope, a system that losslessly com-
+                                                                                  management. For example, naively extending conventional
+presses semi-structured log data, and allows search without
+                                                                                  relational databases would require creating one column for
+full decompression. It concisely represents the schema struc-
+                                                                                  each possible key. This results in a sparse table (i.e., each row
+tures, and only keeps this representation stored once per
+                                                                                  may have many NULL values), and it is challenging to handle
+dataset instead of interspersing it with each record. It further
+                                                                                  polymorphic typing (the value of the same key might have
+“structurizes” the semi-structured data by grouping the records
+                                                                                  different types).
+with the same schema structure into the same table, so that
+each table is also well structured. Our evaluation shows that                        Some existing semi-structured data management systems
+µSlope achieves 21.9:1 to 186.8:1 compression ratio, which is                     (SSDMS) use custom-designed data structures to store the
+at least a few times higher than any existing semi-structured                     schema structure of each record [2, 8, 20, 26, 29, 30]. These
+data management systems (SSDMS); The compression ratio                            systems were initially designed for user-generated data which
+is 2.34x as high as Zstandard and the search speed is 5.77x of                    is relatively small (and they primarily focused on fast search
+the other SSDMSes.                                                                speed). For example, most of the published works on SSDM-
+                                                                                  Ses use Twitter® datasets (i.e., Tweets in the Twitter data feed
+                                                                                  are in JSON) as their primary evaluation target [20,26,29,30].
+1    Introduction                                                                 Twitter reports that in 2023 there are a total of 500 million
+                                                                                  Tweets per day [13], which results in 140GB of Tweet data
+In the past two decades we have witnessed an explosive                            per day (assuming 280 characters for each Tweet).
+growth of log data from Internet-scale systems. Convention-                          In comparison, logs with machine-generated data can be or-
+ally, logs were only in the form of unstructured, free text                       ders of magnitude larger. The size of JSON logs at Uber from
+(e.g., output from printf()). However, they increasingly ap-                      all services exceed 10 Petabytes on a busy day, or 60PB/week,
+pear in semi-structured format, such as JSON [12] or Protocol                     which is more than 70,000x the size of tweets. Managing
+Buffers® [9]. 1 These data models have a tree-structure, where                    data at this scale with existing SSDMSes is prohibitively ex-
+each node (except for the root) is a key-value pair. The value                    pensive. These systems need to store one schema structure
+may include non-primitive data types such as nested values.                       for each record, resulting in a large amount of duplication
+   Different records may have different schema structures.                        when a large number of records share the same schema. As a
+This is why they are referred to as semi-structured. For exam-                    result, even if some systems can efficiently compress the data
+ple, JSON and YAML [15] formats are schema-less, meaning                          content [20, 30], the overall storage size is still large as it is
+    1While we do not have global data on the prevalence of the semi-
+                                                                                  dominated by the schema structures [20].
+structured logs versus unstructured ones, in Uber, the size of semi-structured       At Uber we have repeatedly suffered from scalability issues
+logs is about 10x of the unstructured. Part of the reason is that, even if some   as Uber grew. Initially we used Elasticsearch® [21] to manage
+third-party or legacy applications emit unstructured logs, our log aggregation    our JSON logs. It builds indexes for every word in a JSON
+tools would wrap them in JSON. This is also a common practice outside
+of Uber. For example, Amazon CloudWatch® [1] also wraps unstructured
+                                                                                  document to support full text search, hence the index size is at
+log outputs in JSON. Grafana Loki® [5] tags unstructured logs essentially         the same order of magnitude as the original data and needs to
+turning them into semi-structured logs for the purposes of search, and so on.     be stored on SSD for fast search. The resource cost, together
+
+
+
+USENIX Association                                      18th USENIX Symposium on Operating Systems Design and Implementation                   529
+with other issues (§2), forced us to migrate away from it                       Finally, µSlope uses a query processing algorithm that lever-
+around 2019. Since then we have been using ClickHouse® [4],                  ages the schema information and encoded tables. µSlope first
+a columnar RDBMS with features for handling JSON data.                       builds an abstract syntax tree (AST) from the query, and
+Its overall compression ratio on our setup is less than 4:1, and             systematically refines this AST by looking up the merged
+it also requires SSD for fast search. Therefore the resource                 parse tree and schema map. This leads to early termination of
+cost is still prohibitively expensive.                                       queries that do not match any schema structures, and allows
+   CLP [27] and LogGrep [31] are able to compress unstruc-                   µSlope to decompress and scan data only when necessary.
+tured logs and allow users to search compressed data without                    µSlope’s design was guided by a characterization study of
+full decompression. While effective on unstructured logs 2                   Uber’s semi-structured logs and queries (§3). We found that
+they are limited on semi-structured logs. Fundamentally, their               while records do have dynamic schema structures, there is
+storage structure is not designed for the semi-structured for-               enormous repetition as most records share a small number of
+mat. For example, CLP parses an unstructured log into three                  common schemas. In addition, nearly one third of the queries
+components: timestamp, log type, and variables. The entire                   that users performed can be terminated without table scanning
+log dataset can be stored in a table consisting of these three               because they do not match any of the schema structures.
+columns: each log message is stored in one row, and all of                      We evaluate µSlope on a total of 21 semi-structured log
+its variable values are stored as a list in the variables column.            datasets, and compare it with a number of widely used SS-
+Even if we extend CLP’s parser to recognize the key/value                    DMSes. Our result shows that µSlope achieves a compression
+structure (so the schema structure can be treated as the log                 ratio of 68.1:1 on average. This is at least 2.6x better any
+type), the values of all the fields are intertwined in the same              existing SSDMSes’. The compression ratio is even 2.34x of
+variables column of a single table. This hurts compression, but              Zstandard’s and 1.70x of LZMA’s at the default compression
+more importantly, querying any field requires tedious decom-                 level, even though they do not support search on compressed
+pression and scan of the entire variables column. Indeed, real-              data. µSlope’s search speed is 2.47x of ClickHouse’s, 8.09x
+world users who use CLP to manage JSON logs encounter                        of PostgreSQL’s, and 6.74x of MongoDB®’s.
+poor search performance exactly for these reasons [10]. In                      This paper makes two contributions. First, it proposes
+addition, these tools only support a wildcard substring query                µSlope, a resource efficient archival SSDMS that compresses
+model (like grep), but do not provide boolean algebra support                semi-structured log data and enables fast search without full
+to filter on multiple fields.                                                decompression. Second, we present an in-depth analysis of
+   We propose µSlope3 , an SSDMS for semi-structured log                     the characteristics of the semi-structured log data at Uber.
+data. µSlope focuses on storage efficiency by losslessly com-                   µSlope also has a few limitations. It is designed for semi-
+pressing the logs. And we show that fast search can be                       structured text logs, which are highly repetitive, instead of
+achieved with a careful system design without having to use                  being a general-purpose SSDMS. If every record uses a dif-
+an index (which would increase storage overhead). µSlope                     ferent schema structure it won’t work well on µSlope. Fur-
+does not require any user annotation as it automatically han-                thermore, µSlope uses an index-less design to optimize for
+dles the dynamic schema structures.                                          storage efficiency; its search speed, however, may not be as
+   µSlope incorporates three novel designs. The first is its con-            fast as index-based search tools like Elasticsearch.
+cise representation of the schema structures. Unlike existing
+SSDMSes that store separate schema information for each                      2     Background and Related Work
+record, µSlope proposes (1) a merged parse tree to store the
+schema structures generalized for patterns specific to logs, and             In this section we present the background information and
+(2) a schema map to concisely represent each schema with                     related work. We explain (1) the semi-structured data model,
+a set of leaf nodes in the tree. Each unique schema structure                (2) how prior SSDMSes manage the semi-structured data, and
+is stored only once in the schema map, instead of per record,                (3) commonly used compression algorithms.
+and it is decoupled from the storage of the value contents.
+   µSlope then partitions the records into different tables to
+                                                                             2.1    Semi-structured Data Model
+store their values, where the records in the same table have the
+same schema. Therefore each table is now perfectly structured:               Semi-structured data have a tree structure, and its data model
+all records have the same number of keys and each value                      can be defined as follows:
+is of the same type. This allows us to apply well-studied                                   Troot = Tob ject
+optimizations designed for relational tables. For example, we                             Tob ject = {key1 : Tvalue1 , ..., keyn : Tvaluen }
+can store and compress each table in a columnar manner that
+                                                                                           Tvalue = Tob ject |Tarray |Tprimitive
+maximizes the compression ratio and search speed [16].
+                                                                                          Tarray = [Tvalue , ..., Tvalue ]
+   2 CLP is deployed across Uber’s various data and ML platforms to manage
+                                                                                        Tprimitive = string|number|boolean|null
+the unstructured logs.
+    3 µSlope: Semi-structured LOg Processing Engine like a micro(µ)-scope.                   key = string
+
+
+
+
+530    18th USENIX Symposium on Operating Systems Design and Implementation                                                   USENIX Association
+{                                                                                     \x16\x00\x00\x00            // size (32-bit): 22 bytes
+    “level”: “error”,                                                                 \x02                        // 0x02 = value type String
+    “message”: “Can’t fetch flow 6, cell_32”,    level:str
+                                                                                      hello\x00                   // key name
+    “serviceA”: {                                message:str                          \x06\x00\x00\x00world\x00   // size of value (6 bytes), value
+        “traceID”: “abc-xyz”                                                          \x00                        // 0x00 = 'end of object'
+    },                                           serviceA:obj      traceID:str
+                                         root
+    “error”: “Error404”,                         error:str
+    “request”: {
+        “namespace”: “driver_onboarding”
+                                                 request:obj     namespace:str      Figure 3: The BSON representation of {“hello”: “world”}.
+    },                                           timestamp:str
+    “timestamp”: “2023-03-16T07:58:02.368”
+}
+
+{                                                                                As a result, existing SSDMSes either use natively designed
+                                                 level:str
+    “level”: “error”,
+    “message”: “Can’t fetch flow 8, cell_32”,
+                                                                                 storage format or extend RDBMS in sophisticated ways.
+                                                 message:str
+    “serviceB”: {
+                                                 serviceB:obj      traceID:str
+                                                                                 Native Support for Semi-structured Data. These SSDMSes
+        “traceID”: “def-uvw”
+    },                                   root
+                                                 request:str
+                                                                                 use custom data structures to represent the schema structure
+    “request”: “vehicle_compliance”,
+    “timestamp”: “2023-03-16T07:58:06.246”       timestamp:str                   of each record. MongoDB uses a concise binary format called
+}                                                                                BSON (Binary JSON) [2]. Figure 3 shows the BSON repre-
+      Figure 1: Two example log records and their schema trees.                  sentation of a simple JSON record {“hello”: “world”} [3]. It
+                            1 level:str
+                                                                                 stores the schema structure, including the type and size of
+                            2 message:str                                        each key/value pair, interspersed with the record content. The
+                            3 serviceA:obj      4 traceID:str                    BSON records can only be stored in a row-oriented manner,
+              0 root
+                            5 error:str                                          which limits both the compression and search speed because it
+                            6 request:obj       7 namespace:str                  has to scan the entire record even when the user only searches
+                            8 timestamp:str                                      for a specific key. Fast search can only be achieved via creat-
+                            9 serviceB:obj      10 traceID:str
+                                                                                 ing external indexes.
+                           11 request:str
+                                                                                    PostgreSQL®’s jsonb [8] and Oracle®’s OSON [26] are
+                                                                                 two other examples of custom schema structures. The former
+        Figure 2: The merged schema tree of the two records.
+                                                                                 is similar to BSON, while the latter stores more metadata
+                                                                                 information, such as the number and offsets of nested keys.
+ Each semi-structured log record, or record for short, cor-                         Steed [30] proposes both row and column oriented storage
+responds to a Troot . Figure 1 shows two sample records. A                       methods. It operates on the merged schema tree (MST). In-
+log dataset contains a number of such records. The schema                        stead of storing the key name with each record, Steed only
+of each record can be represented as a tree [30]. Figure 1                       needs to store the node ID of the key in the MST. However,
+shows the two schema trees. Each node records a field, which                     it still keeps one schema structure for each record in its row-
+consists of the name of the key and the type of its value.                       oriented method. Keeping track of the schema structure is
+   Only the leaf nodes can have primitive value types in the                     even more complex in its columnar method, as it splits the
+schema tree. Any non-leaf nodes would have non-primitive                         datasets into N independent columns where N is the number
+value types, that is, either object or array.                                    of keys, each column stores all the values of that key. Because
+   If two records have the same schema tree, we say they have                    the key/value pairs of a single record are now split, assem-
+the same schema. The two nodes in their respective trees are                     bling the original record’s schema structure requires even
+considered to be the same if and only if both the key and the                    more complex data structures (2 additional columns for each
+value type are the same. In a schema-less data format like                       key) and algorithms (finite state machine).
+JSON, a key could have “polymorphic” values, i.e., different                        Scuba [17] is an in-memory SSDMS that keeps records in
+value types in different records. For example, the “request”                     a compressed row-oriented format. Records are stored one
+field in the two schemas in Figure 1 have different value types.                 after another in a table. Therefore it needs to scan all records
+   The schema trees of multiple records can be merged into a                     in a table (and all the fields) during search. It stores the string
+single tree [30]. We call it the merged schema tree, or MST.                     values in a dictionary, and the dictionary is used as an index
+Specifically, given node N1 and N2 from two schema trees,                        during search. However, unlike CLP, the entire string is stored
+we can merge them if and only if: (1) N1 and N2 have the                         as a single entry instead of being parsed into timestamp, log
+same key name; (2) the value type are the same; and (3) all                      type, and variable values. It also has some restrictions on the
+the predecessor nodes of N1 and N2 in their respective schema                    data model, most notably it prohibits nested keys. Note that
+trees can be merged. Figure 2 shows the MST of the two                           Scuba is designed for general-purpose data storage instead of
+schema trees in Figure 1.                                                        narrowly focusing on logs.
+                                                                                 Extending RDBMS. Sinew [29] uses a hybrid design that
+2.2       Existing SSDMSes                                                       materializes a subset of the keys as separate columns, and
+                                                                                 stores the remainder using a binary format similar to BSON
+Different semi-structured records may have different schemas,                    in a single RDBMS column. JSON Tiles [20] extends the
+therefore we cannot naively store them in the RDMS table.                        idea of Sinew, reordering the records to group those with
+
+
+
+USENIX Association                                     18th USENIX Symposium on Operating Systems Design and Implementation                           531
+similar schemas into disjunct tiles. However, it still needs to        starting at D (distance) behind, the next L characters can be
+keep a binary schema structure for each record. Although               encoded with (D,L). This (D,L) pair is directly embedded in
+JSON Tiles applies compression to those separate columns,              the compressed data, hence search requires decompression
+the compression ratio is around 1 because the large size of            from the beginning.
+the per-record schema structure.                                       Log compression and search. Existing log compression
+   Some RDBMSes map semi-structured data into relational               techniques focus only on unstructured (i.e., free text) logs.
+tables. For instance, Argo [19] proposed two methods. The              CLP [27] uses a custom-designed log parser to split each
+first stores fields in a single table, while the second splits it to   message into three components: timestamp, static text (i.e.,
+three where each is used for a primitive value type. However,          log type), and variable values, structurizes logs into a table of
+the first method will result in sparse tables (many fields with        three columns. CLP stores the static text and repetitive vari-
+NULL values). Both methods take up too much storage space              able values into respective dictionaries, and the dictionaries
+due to repetitive key/values. Liu et al. proposed to store the         also serve as coarse-grained index during search to minimize
+entire JSON record in a single RDBMS column [25].                      decompression and scan. It then compresses the three-column
+Elasticsearch and ClickHouse: Experiences at Uber. Elas-               table in columnar order.
+ticsearch [21] is a JSON document store that supports search.             LogGrep [31] also compresses unstructured logs and al-
+It assumes the type of the field will never change by default          lows search. It uses a training phase to identify the com-
+and cannot handle fields with dynamic types easily. (By de-            mon patterns of messages. LogGrep identifies patterns in
+fault, Elasticsearch will drop records if a field has a different      much finer granularity (e.g., a variable can be further divided
+type than in a previous record.) It also struggles to handle the       into subcomponents if a different subcomponent is repetitive).
+case where every record has new unique keys (e.g., using a             Therefore a message is split into a larger number of subcom-
+UUID as a key) [18]. At Uber we used to use Elasticsearch,             ponents without clear mapping to program semantics, and it
+but migrated away (to ClickHouse) due to these issues as well          uses tables to store the complex mapping to assemble these
+as its excessive resource usage.                                       subcomponents into the original log message.
+   ClickHouse is a columnar RDBMS with features for han-
+dling JSON data. At Uber we built a layer to transform records
+before ingestion into ClickHouse. After experimenting with             3   Characterizing Semi-structured Log Data
+different storage formats, we settled on storing a handful of
+common fields in dedicated columns, and storing all other              We first provide a characterization study on semi-structured
+unique key-value pairs that are less than or equal to 3 lev-           log data before describing the design of µSlope. While prior
+els deep in a pair of arrays per type. For instance, string-           works have characterized semi-structured user-generated
+type fields were stored in two arrays, “String.names” and              data [30], we are the first to provide an understanding of
+“String.values”. To query a field, we first find the key in the        machine-generated semi-structured log data.
+String.names array, use the index of that key to index the                We collected 16 frequently used log datasets (LogA-LogP)
+String.values array, and finally compare the value against             from Uber and 5 log datasets from open-source software
+the query. We also keep a _source field that contains raw              (Apache Spark™, MongoDB, CockroachDB®, Elasticsearch,
+JSON and build inverted index on top of it. Finally, to im-            and PostgreSQL). All of these datasets are in JSON for-
+prove query performance for frequently accessed fields, our            mat. We limit each dataset to 1,000,000 log records. We
+abstraction layer temporarily extracts these fields into tempo-        also provide a characterization of real-world queries on semi-
+rary dedicated columns (materialized columns). This setup              structured log data by analyzing a total of 23,091 queries
+results in a compression ratio lower than 4:1.                         spanning twenty days from Uber; 7665 of them are unique.
+                                                                       Schema Variation. We first study the schema variation.
+2.3    Compressors                                                     JSON’s schema-less nature means that the variation of
+                                                                       schemas between records can range from zero (i.e. all records
+General-purpose compressors like Gzip [23] and Zstan-                  have the same schema) to 100% (i.e. all schemas are differ-
+dard [22] use a sliding window approach proposed by Lempel             ent). Recall from §2.1 that the schemas of two log records
+and Ziv [33]. They locate duplicates within a fixed-size slid-         are considered the same if and only if their schema trees are
+ing window, so they cannot detect duplications if the distance         identical. The degree of variation is a critical consideration to
+between the two duplicated patterns is larger than the size            the design of µSlope and prior systems. If there is no variation,
+of the sliding window. Therefore storing duplicated patterns           then one can easily store logs in an RDBMS by materializing
+close to each other would maximize the compression ratio.              one column for every leaf-node node.
+   Searching, unfortunately, requires decompressing the entire            Figure 4 shows the unique schemas for each dataset. All
+data. These compressors typically encode duplicates in length-         except two datasets have more than 1 unique schemas, with
+distance pairs [28, 33]. Starting from the current position,           LogE having the largest variation (6,176 unique schemas).
+if the next L (length) characters are the same as the ones             The median number of unique schemas of all datasets is 40.
+
+
+
+532    18th USENIX Symposium on Operating Systems Design and Implementation                                      USENIX Association
+                                                                                                                                                      number of schemas        100
+4096                                                                                                                                                  number of keys
+
+                                                                                                                                                                              10−1
+1024
+
+
+                                                                                                                                                                              10−2
+ 256
+
+
+  64                                                                                                                                                                          10−3
+
+
+
+  16                                                                                                                                                                          10−4
+
+
+  4                                                                                                                                                                           10−5
+
+
+  1
+                                                                                                                                                                              10−6
+
+           A       B       C       D      E       F      G       H      I      J      K       L       M       N       O        P       rk          DB         DB earch eSQL
+       Log     Log     Log     Log     Log    Log     Log    Log     Log    Log    Log    Log     Log     Log     Log      Log     Spa         ngo        ach    s      r
+                                                                                                                                            Mo         kro lastic Postg
+                                                                                                                                                   Coc      E
+
+
+                                 Figure 4: Number of unique schemas and keys for each dataset.                                                                                Figure 5: KF distribution of LogE
+
+
+   Despite the relatively large degree of variation, there also                                                           Type Composition. Next, we break down the value types.
+exists a large degree of repetition. On average, there are                                                                Recall from §2.1, the value type can be an object, array, or
+25,000 records in each dataset with the same schema; if we                                                                one of the primitive types. We further refine the types as
+increase the sample size, this repetition will be larger. Even                                                            follows. First, we break down the number type into integer and
+for the most noisy dataset, LogE, there are still an average of                                                           float. For strings, we separate single-word values from multi-
+162 records per schema.                                                                                                   word ones (using white space as word delimiter), because
+   To understand the schema variation, we further measure the                                                             the former is likely a variable (e.g., an identifier) whereas
+variation of individual keys. Figure 4 also shows the number                                                              the latter is free-text log. We call the former variable and the
+of unique keys for each dataset. Two keys are considered the                                                              latter log-text.
+same if and only if their full name and value types are the same.                                                            Figure 6 shows the breakdown of the value types in each
+A key’s full includes all the nested keys (i.e., predecessor                                                              dataset. On average, 70.8% of the values in each dataset are
+nodes in the schema tree). For example, “serviceA.traceID” is                                                             variables (i.e. single-word strings). 10.8% are objects, i.e.
+the full name whereas “traceID” is not. The median number                                                                 non-leaf nodes in the schema tree leading to nested keys. In
+of unique keys is 138, and it varies greatly. LogM has only 20                                                            comparison, the percentage of boolean, float, null are low,
+unique keys (and it has only 1 schema), whereas Spark logs                                                                averaging 1.74%, 1.21%, 0.22%.
+have 5,627 unique keys.                                                                                                      The percentage of array fields are also low at 0.79%. In
+   This result suggests that the variation in schemas is likely                                                           addition, only 28 of the 7,665 (0.4%) of the unique queries
+due to the variation of individual keys instead of their combi-                                                           explicitly search on an array field. Furthermore, these explicit
+natorial effect. In theory, a large variation in schemas could                                                            array searches only match 0.05% of the data on average.
+be the result of a small number of keys: n unique keys could                                                                 Each log record contains an average of 1.6 log-text keys.
+result in 2n different combinations, hence 2n schemas. How-                                                               In addition, 41% of the unique queries contain filters on log-
+ever, this is not the case with logs. In fact, in 18 out of 21                                                            text, so efficient search on log-text is important. In addition, a
+datasets the number of unique keys is larger than the number                                                              record contains 4.0 integer fields on average.
+of schemas, showing the opposite of a combinatorial effect.                                                               Repetitiveness of Variables. Next, we zoom into variable
+   To get better understand how keys are distributed within a                                                             fields (i.e., single-word strings), because they dominate the
+dataset, we measure the key frequency (KF). It is defined as                                                              composition of logs. The question we care about is: Are these
+                               number o f records that contain key x                                                      values repetitive? We use the repetition ratio to measure the
+               KF(x) =                                                                                                    repetition of variable fields. It is defined as
+                                    total number o f records
+                                                                                                                                                                       number o f all variable values
+ Figure 5 takes LogE as an example to show the distribution                                                                          repetition ratio =
+                                                                                                                                                                      number o f unique variable values
+of KF. Each bar represents a key. LogE has 6176 schemas and
+704 keys. There are a small number (21) of keys that have                                                                  A high repetition ratio means that unique variable values are
+KF = 1.0, indicating that they appear in every record. These                                                              much fewer and these fields are repetitive. Figure 6 shows
+are the keys uniformly added by the logging library, such as                                                              the repetition ratio. The median repetition ratio is 37.8 and
+“timestamp” and “level”.                                                                                                  the average is 58.2 across all datasets. It can be as high as
+   On the other hand, there is a long-tail in the KF distribution                                                         433.4 (LogD) and even the minimum is still 9.29 (LogC).
+of LogE. 83.0% of the keys has a KF <0.1. Most of them are                                                                This means dictionary deduplication can be effective.
+different data structures in the program that documents the                                                                  The variable fields are also frequently queried. The average
+program state relevant to a specific event. There are also cases                                                          query contains 3.450 filters with 2.663 of those being vari-
+where the variation in schemas is caused by a large variation                                                             able filters. For example, level:“warn” OR level:“error” is
+in the name of a key, like Spark using the pathname as the                                                                a query that has two string filters on the level key. The largest
+key name, or some datasets using the UUID as the key name.                                                                query has 93 string filters. Furthermore, filters that implicitly
+
+
+
+USENIX Association                                                           18th USENIX Symposium on Operating Systems Design and Implementation                                                          533
+average number of keys per record
+                                                                                              int            variable          bool           array                                              repetition ratio   512
+                                    80
+                                                                                              float          log-text          null           object                                                                256
+                                                                                                                                                                                                                    128
+
+
+
+
+                                                                                                                                                                                                                          repetition ratio
+                                    60
+                                                                                                                                                                                                                    64
+                                                                                                                                                                                                                    32
+                                    40
+                                                                                                                                                                                                                    16
+                                                                                                                                                                                                                    8
+                                    20                                                                                                                                                                              4
+                                                                                                                                                                                                                    2
+                                     0                                                                                                                                                                              1
+                                                                                                         I      J
+                                         Log
+                                             A
+                                                  Log
+                                                     B
+                                                         Log
+                                                            C
+                                                                Log
+                                                                   D
+                                                                       Log
+                                                                          E
+                                                                              Log
+                                                                                 F
+                                                                                     Log
+                                                                                        G
+                                                                                            Log
+                                                                                                  H
+                                                                                                      Log    Log    Log
+                                                                                                                       K
+                                                                                                                           Log
+                                                                                                                               L
+                                                                                                                                      Log
+                                                                                                                                          M
+                                                                                                                                              Log
+                                                                                                                                                 N
+                                                                                                                                                       Log
+                                                                                                                                                          O
+                                                                                                                                                              Log
+                                                                                                                                                                  P      a   rk        oD
+                                                                                                                                                                                          B
+                                                                                                                                                                                                  ch
+                                                                                                                                                                                                     DB    rch eSQL
+                                                                                                                                                                      Sp            ng                  ea     r
+                                                                                                                                                                                  Mo       c k roa stics ostg
+                                                                                                                                                                                        Co        Ela    P
+
+                                                 Figure 6: Average number of keys per record, broken down by different value types and repetition ratio of variables.
+
+    match all keys – "wildcard keys" – are common in practice.                                                             4       Overview of µSlope
+    For example, *:“aUUID” matches any keys as long as its value
+    is “aUUID”. Of the 7,665 unique queries 2,271 of them con-                                                             µSlope is a resource-efficient SSDMS that we designed from
+    tain a wildcard key. These filters are easier to express for                                                           the ground-up. µSlope has three major designs that are novel
+    users of search, but pose a significant performance hazard. In                                                         compared to other SSDMSes: (1) Decoupling the storage of
+    the worst case such filters can impose scans over the entire                                                           schema metadata from the storage of each record; (2) Group-
+    record, eliminating much of the benefit of querying structured                                                         ing records by schema to store them into well-structured ta-
+    data. However, using a dictionary to store the variables would                                                         bles, and apply efficient encoding; and (3) Optimized schema
+    significantly speed up such queries as we only need to search                                                          metadata lookup to speedup search.
+    the dictionary for matching values.                                                                                        Figure 7 shows µSlope’s architecture. When data is in-
+                                                                                                                           gested, µSlope parses each record and extracts its schema. It
+   Importance of Schema Search. Nearly one third (29%) of                                                                  uses two core data structures to track the schema structure: the
+   the unique queries do not match any of the schema structures.                                                           merged parse tree (MPT) and the schema map. The MPT and
+   That is, they can be returned without scanning the values.                                                              the schema map are collectively referred as schema metadata.
+   Examples include searching for a nonexistent key, the key                                                               It is critical to keep the schema metadata as small as possible,
+   exists but the value type does not match, or the conjunction                                                            yet still captures the highly repetitive structure of the log.
+   of keys/value types do not exist. For example, engineers per-                                                               The MPT is a more general form of the merged schema
+   forms such search to regularly verify the nonexistence of                                                               tree (MST) as described in §2.1. It has four differences when
+   certain error events. However, for existing SSDMSes (such                                                               compared to MST. First, the MPT can contain special un-
+   as MongoDB and PostgreSQL) this opportunity is wasted,                                                                  named nodes that mark the truncation of some key value pairs.
+   because the schema structure is interspersed with the values.                                                           Multiple rare keys can be mapped to the same unnamed node
+                                                                                                                           when the key names contain random data, such as UUID
+                                                                                                                           or file path. Including such non-repetitive key names would
+    Summary and Takeaways. Schemas are dynamic, and those                                                                  bloat the metadata. In contrast, sometimes the value of a key
+    unstructured keys are frequently queried. Therefore simple                                                             could be highly repetitive. For example, all the records from
+    extension of RDBMS to only materialize those structured                                                                the same application would have the same value under the
+    keys as columns is insufficient, and we need to precisely track                                                        application-name key. Therefore, the MPT also allows a node
+    the schema of semi-structured data. On the other hand, a                                                               to include the value (only if the value is highly repetitive).
+    large number of records have the same schema, presenting                                                                   The third difference is that MPT can encode the structure
+    opportunities to group them by the same schema so that each                                                            of strings with key-value pairs. This allows µSlope to capture
+    group is well-structured.                                                                                              more structural information from strings, improving compres-
+                                                                                                                           sion and search. For instance, given a record {.. “message”:
+      70.8% of the keys are single-word strings. They are highly                                                           “.. latency=35, status=OK, type=READ, ...”},              µSlope
+    repetitive, and commonly queried on. This indicates that stor-                                                         would create three nodes for “latency”, “status”, and “type”
+    ing them in a variable dictionary would effectively dedupli-                                                           respectively as the children of the “message” key. This
+    cate them, and at the same time, speedup the search.                                                                   requires that schemas contain an ordered region where we
+                                                                                                                           maintain some leaf nodes in a specific order, because the
+       Finally, efficiently storing the schema structure and decou-                                                        order of the keys in a string needs to be preserved.
+    ple it from the record value data would significantly speedup                                                              Another difference is that MPT stores more fine-grained
+    the 29% of the queries that can be completed only by querying                                                          string types. A string value could either be a timestamp, a
+    the schema structure.                                                                                                  single-word string, or a log-text. Storing fine-grained types
+
+
+
+    534                                  18th USENIX Symposium on Operating Systems Design and Implementation                                                                                USENIX Association
+                                                                                          Encoded Record Tables
+                                                                     Variable
+                      Parsing &                                      Dictionary
+                      Encoding                                                                        Schema 0                                       Search
+                                  Merged Parse Tree                  Log Type              Node     1      2 4     5 7 8            Compression
+                                                                     Dictionaries          Record 0 ..     .. ..   .. .. ..
+       Semi-structured Logs        ID     Leaf Nodes
+                                                                     Timestamp             Record 1 ..     .. ..   .. .. ..
+                                    0   [1, 2, 4, 5, 7, 8]                                   ...    ..     .. ..   .. .. ..
+                                                                     Dictionary
+                                    1   [1, 2, 10, 11, 8]                                                                                      Compressed
+                                     Schema Map                                             Archive                                            Archives
+
+
+                                                             Figure 7: Architecture of µSlope.
+
+
+enables more filtering opportunities on MPT, resulting in                            Log Type         ID      Log Type
+                                                                                     Dictionary       L0      Can’t fetch flow \INT, cell \DICTVAR
+better search performance.
+   The schema map stores each unique schema in the log                               Timestamp        ID      Format
+                                                                                     Dictionary       T0      yyyy-MM-dd’T’HH:mm:ss’.’SSS
+dataset in a hashmap. We make the observation that a schema
+can be unambiguously identified with the list of leaf nodes                          Variable Dictionary
+in the MPT. For example, the schema map in Figure 7 shows                            ID    Variable Value
+                                                                                     V0    error                              Schema 0 Encoded Record Table
+the two schemas of the two records in Figure 1, where the                            V1    cell_32                       Node   1     2    4 5 7            8
+node IDs corresponds to the MST shown in Figure 2. (In this                          V2    abc-xyz                       Values V0 L0 6,V1 V2 V3 V4       T0 1..8
+example, the MPT and the MST are the same.)                                          V3    Error404
+                                                                                     V4    driver_onboarding                  Schema 1 Encoded Record Table
+   The MPT and schema map deduplicate the highly repetitive                          V5    def-uvw                            Node   1     2    10   11     8
+                                                                                                                              Values V0 L0 8,V1 V5   V6   T0 1..6
+schema structures. Unlike prior SSDMSes §2.2 that store a                            V6    vehicle_compliance
+schema structure for every record, each unique schema is
+stored only once. In practice, the schema metadata size is                                     Figure 8: How µSlope encodes log records.
+typically less than 0.0001% of the total compressed data size.
+This design also enables fast search: the succinct metadata can                     stract syntax tree (AST) to perform a number of optimizations,
+be efficiently searched, providing powerful filtering capability.                   including determining if the query matches any schema and if
+   µSlope uses one table for each schema to store the values.                       the filter pattern matches any dictionary values. If not, µSlope
+Therefore each table only stores the values of the records that                     will terminate query processing early. Otherwise, only rele-
+have the same schema. As a result, there can be thousands of                        vant ERTs are finally decompressed and searched through.
+tables, one for each schema. The advantage is that each table                          Both compression and search are embarrassingly parallel.
+is now perfectly structured, as all records have the exact same                     During compression, when parsing a new record µSlope ex-
+keys and value types. µSlope essentially structurizes those                         tracts the key-value pairs of each log record. Corresponding
+semi-structured data.                                                               key nodes are added to the MPT, with leaf node IDs collec-
+   The tables are called Encoded Record Tables (ERT), be-                           tively representing a schema. Values are encoded by various
+cause instead of storing their raw value, µSlope performs                           methods and are stored in the ERTs. Upon identifying a new
+type-specific encoding. For example, single-word string will                        schema, µSlope dynamically creates a new ERT to store the
+be stored in a variable dictionary, so only an ID is stored                         encoded values. All the ERTs, dictionaries and schema meta-
+in the ERT. The dictionaries serve two purposes at the same                         data will be buffered in the memory. Once the buffer reaches
+time: it effectively deduplicates the highly repetitive patterns,                   a certain size, they are compressed using Zstandard before
+and it serves as coarse-grained index for search so µSlope                          stored to disk, creating what we call an archive. µSlope then
+only needs to scan the ERT that contains the matching record.                       clears the buffer and dictionaries before compressing newly ar-
+   Each ERT is stored and compressed in a columnar order.                           rived records. Therefore different archives can be compressed,
+This significantly improves both the compression ratio and                          searched, and decompressed independently in parallel.
+search performance [16], because a column groups the se-
+mantically similar values together so it maximizes general-                         5     Compression
+purpose compressors’ ability to find repetitions, and during
+search we only need to decompress and scan the columns                              We use simdjson [11] parser to parse the JSON structures.
+whose keys were searched for.                                                       Other log formats representable by the data model in §2.1
+   µSlope leverages the efficiency of metadata and dictionary                       can also be supported by integrating a parser to extract the
+lookup to optimize the search performance. It uses Kibana                           key-value pairs from the records.
+Query Language (KQL) as its query language, which is both                             µSlope uses different encoding techniques on different
+concise and powerful. µSlope transforms a query into an ab-                         value types. Next we describe them in turn.
+
+
+
+USENIX Association                                   18th USENIX Symposium on Operating Systems Design and Implementation                                      535
+                                                                      KQL Query              *.traceID: abc-xyz AND error: *404
+Strings. µSlope treats string values differently depending on
+whether it is (1) a timestamp, and if not, (2) a variable, i.e. a                                                 AND
+single-word string, or (3) log-text. µSlope uses CLP’s parser         Initial AST
+                                                                                     *.traceID<var>: abc-xyz         error<var, log-text, int, float>: *404
+to parse a string value. It uses heuristics to detect if the string
+is a timestamp. If so, µSlope encodes it into a Unix® epoch                                                              AND
+time and stores the format pattern in the timestamp dictionary.       After Key
+                                                                                                            OR                 5<var>: *404
+                                                                      Resolution
+As a result, each timestamp field is encoded into two columns                           4<var>: abc-xyz          10<var>: abc-xyz
+in the ERT: a timestamp dictionary ID and a Unix epoch time.
+The ID column consumes negligible space after compression                                                           OR                 False
+                                                                                                                                    Propagation
+because most of the time there is only one timestamp format.          After Schema
+                                                                      Resolution            AND<schema 0>                         AND<empty>
+   For a log-text, the CLP parser extracts the log type and
+                                                                                      4: abc-xyz      5: *404            10: abc-xyz          5: *404
+variables. The log type is stored in the log type dictionary.
+Different types of variable values are encoded differently. Inte-                       Figure 9: Example of query processing.
+gers and floating point numbers are directly encoded in binary
+format. Other variables are encoded as a variable dictionary
+                                                                      This means that arrays are typically searched by decoding
+ID after storing them in the variable dictionary. Therefore
+                                                                      and parsing their string representation. This is acceptable as
+a log-text also has two columns: a log type ID, and a list
+                                                                      §3 shows that arrays occur rarely and are seldom searched.
+of encoded variables stored in a single column. We extend
+                                                                      Note that the log type parsed from an array string is stored in
+CLP’s log parser [7] to allow users to specify rules to extract
+                                                                      a separate log type dictionary to avoid polluting the regular
+key/value pairs from log-text fields and store them as JSON
+                                                                      log type dictionary for log-text. We also support fully pars-
+fields. Therefore, if the log is in unstructured format (instead
+                                                                      ing arrays and recording their structure in the MPT under a
+of JSON), or dominated by unstructured text log (i.e. majority
+                                                                      non-default configuration. This approach offers performance
+of a record is an unstructured text message field with a few
+                                                                      benefits for array searches, but typically results in growth in
+additional fields containing metadata like hostname, verbosity,
+                                                                      schema size due to the diverse internal structures of arrays.
+etc.), µSlope essentially falls back to CLP encoding.
+                                                                      Preserving record order. Splitting the records into different
+   µSlope directly stores a single-word string in the variable
+                                                                      tables means that we lose the order between records of dif-
+dictionary and stores the dictionary ID in the ERT. The dic-
+                                                                      ferent schemas. Using timestamp to order them is unreliable
+tionary effectively deduplicates the repetitions in variables as
+                                                                      because records may have the same timestamp. To preserve
+we shown in §3. We use the same variable dictionary used for
+                                                                      the order, µSlope adds a column in each ERT to store the
+the log-text for maximum deduplication.
+                                                                      order of the record in the original log stream.
+   Figure 8 shows the contents of the dictionaries and encoded
+record tables for the example log records in Figure 1. Their          Random keys and invariant values. Recall that µSlope trun-
+MPT is the same as the MST shown Figure 2, except that the            cates the key name from the MPT if it is not repetitive, and
+MPT keeps a fine-grained string type on each string field. The        includes values that don’t change into the MPT. The heuristic
+schemas are shown in Figure 7. We use different prefix and            we use is that if a key does not appear in more than 1% of the
+colors for the different types of dictionary IDs: log type (‘L’),     records of the archive, it will be truncated; whereas a value
+timestamp (‘T’), and variable (‘V’). For example, consider            will be included in the MPT only if it never changes. We
+the first log record, which is stored in the ERT of schema            implement them by keeping counters for the keys and values
+0. Four of its keys (“level”, “serviceA.traceID”, “error”, “re-       as records are parsed and stored in the memory buffer; the
+quest.namespace”) have single-word strings; they have the             decision to truncate a field or include a value in the MPT is
+MPT node IDs 1, 4, 5, 7 respectively (Figure 2), and their            made when we write the buffered data to disk (into the archive
+values are encoded as V0, V2, V3, and V4 which are IDs into           format). The structures of a truncated field and its successors
+the variable dictionary. The “message” field (node ID 2) is a         (a truncated field may be a non-primitive type, in which case
+log-text. Its first column stores L0, which is the ID into the        all the subfields will be recursively truncated) are encoded
+log type dictionary, and the second column stores the two             in a row-oriented format similar to BSON, and stored in a
+encoded variables. Note that ‘\INT’ and ‘\DICTVAR’ in the             column that is mapped to a (special) MPT node located at the
+log type are special placeholder bytes for variables (of integer      place of the truncated node.
+and dictionary variable types respectively). The “timestamp”
+value is stored in the last 2 column (node 8); the value “1..8”       6      Search
+is the encoded timestamp in Unix epoch time.
+Integers, floating point, and boolean values are directly             µSlope search accepts queries which combine filters on one or
+encoded in binary form in the same way as in CLP [27].                more keys. The key names in the query may contain wildcards
+Arrays are stored as log-text strings by default, i.e., using         and be of ambiguous underlying type. Search takes advantage
+CLP to parse it into a log type and a list of variable values.        of the MPT, schema map, and dictionaries to evaluate queries
+
+
+
+536    18th USENIX Symposium on Operating Systems Design and Implementation                                                         USENIX Association
+efficiently. This is a multi-step process, each step performs         query. It first transforms the AST into OR of ANDs form (i.e.
+refinements and optimizations on a custom Abstract Syntax             sum of products). The key insight is that for an AND to ever
+Tree (AST) µSlope built from the query. Next, we explain              be true, all of its children must exist together in a schema. We
+each step using an example shown in Figure 9.                         implement this check by performing an intersection between
+Step 1: Constructing the initial search AST. Given a query            the set of MPT node IDs of the children of an AND node with
+µSlope transforms it into an AST where each leaf node speci-          each schema. If the intersection is empty, the entire AND
+fies a filter on some key, and each non-leaf node is a logical        sub-tree is removed by treating it as false, and we propagate
+AND or OR. Figure 9 shows an example KQL query. The                   this false along the AST.
+query consists of two filters joined by AND. The key name                The last AST in Figure 9 shows the AST after schema res-
+in first filter contains a wildcard, meaning it can match any         olution. The rightmost AND expression matches no schemas
+hierarchy of keys that end with “traceID”. The second filter          and can be removed since MST node 5 and 10 never appear
+contains a wildcard in the value pattern.                             in the same schema. In this case we are able to narrow down
+    µSlope parses this query into a search AST shown in Fig-          the ambiguous query to a single schema, schema 0, by only
+ure 9. Initially this AST contains two nodes, each maps to a          searching the schema metadata.
+filter. Each node also stores the possible value types inferred       Step 4: Search on strings. Next µSlope searches the dictio-
+from the query. The value type of the first filter is unambigu-       naries on relevant string filters. Search needs to be performed
+ous; it must be single-word string type (i.e., a variable) given      over the log type dictionary, the variable dictionary, or the
+the pattern is surrounded by ‘"’. The second filter, however,         timestamp dictionary. Searches on log-text are handled the
+has ambiguous type; it can either be a variable, a log-text, an       same way as CLP would. The ability of the dictionaries to
+integer, or a floating point number.                                  reject string queries is critically important for performance.
+Step 2: Key resolution further turns each key name into zero          Consider the query *:<uuid>, which is commonly issued at
+or more MPT leaf nodes by resolving ambiguities. Ambigui-             Uber. In archives that do not contain this uuid, this query can
+ties come from two sources: (1) ambiguous key name, i.e. a            be terminated early after searching the variable dictionary,
+key with wildcard can match more than one leaf of the MPT,            avoiding any column scan. In general, an empty dictionary
+and (2) ambiguous value type, when it is polymorphic. In              search would result in the AST node being eliminated, and
+both cases we replace the corresponding filter with an OR             the false value gets propagated to further simplify the AST.
+node where every child of the OR is the same filter with the          Step 5: Column decompression and scan is guided by the
+key replaced by each of the matching MPT leaf nodes in turn.          remaining nodes in the AST. Specifically, the remaining AST
+The “*.traceID<var>” in Figure 9 is an example of ambigu-             tells us exactly which ERT(s), and which column(s), should
+ous key name. It is resolved into two MPT leaf nodes, node            be scanned. This minimizes the decompression and scan.
+4 and 10, which corresponds to “serviceA.traceID” and “ser-              Note that we also add a simple timestamp range index at
+viceB.traceID” respectively. These two nodes are connected            the archive level. This is used to avoid having to decompress
+by OR in the refined AST after the key resolution.                    and scan any data in the archive when there is no overlap with
+    The “error<var,int,float>:*404” node in the initial AST has       the time range specified by the query.
+potentially ambiguous value type. In our example, because the
+only possible type for the “error” key is a variable (i.e., single-
+word string), we replace it with a single node “5<var>:*404”.         7   Implementation
+However, if “error” has polymorphic type, say an integer, in
+the dataset, then we need to consider both possibilities and          The implementation of µSlope closely follows the design
+connect them by an OR.                                                specified in the previous sections. However, some details not
+    When a key name matches no leaf nodes in the MPT, that            called out in the design are critical to the overall performance
+AST node is eliminated by replacing it as false and propagat-         of the system, so we highlight them here.
+ing this false up the AST, a process known as false propaga-             We have written a custom JSON serializer in order to im-
+tion. This can eliminate part or all of the query.                    prove decompression and search speed. With each schema
+    After key resolution each key in the search AST refers to a       precisely defining the structure of a log record, µSlope is
+leaf node from the MPT. The one exception is if the searched          able to generate a bytecode that describes how to reconstruct
+key name is a single wildcard ’*’. Expanding such keys would          records in terms of the columns they have been split into.
+result in a bloated AST because it can match any key name,            Unlike JSON serializers designed for dynamic objects, our
+adding combinatorial overhead to the later steps (particularly        serializer doesn’t require the creation or traversal of mutable
+if the query specifies multiple filters on ’*’ key). Wildcard         in-memory data structures during serialization. Instead, it uses
+keys are expanded dynamically only at the last step, before           the bytecode generated at the table granularity to directly ap-
+search on an ERT.                                                     pend the values to the serialization buffer. This approach has
+Step 3: Schema resolution looks up the schema map to find a           proven several times faster than conventional JSON serializers
+set of schemas that match the record structure implied by the         based on our experience.
+
+
+
+USENIX Association                             18th USENIX Symposium on Operating Systems Design and Implementation              537
+   Given that µSlope can sometimes produce archives contain-                                      Uncompressed      Number of
+                                                                                     Name
+                                                                                                      Size           Records
+ing many small ERTs, minimizing the overhead of storing and
+                                                                                     LogA           30.0GB          22,996,492
+loading ERTs is crucial. In µSlope, ERTs are concatenated
+                                                                                     LogB           47.1GB          16,606,964
+together into a single file, with a metadata file that describes                     LogC           60.4GB          15,306,125
+the location of each ERT within the file and the number of log                       LogD           50.7GB          58,309,754
+records within each ERT, which reduces I/O overhead. During                          LogE           91.8GB          22,345,071
+search, µSlope scans the AST to determine which ERTs need                            LogF           102.9GB         17,251,752
+loading, and then loads them following the storage order, thus                       LogG           30.9GB          3,046,845
+eliminating random I/O. Additionally, it optimizes bytecode             Uber         LogH           30.8GB          11,461,221
+generation by only producing bytecode for serializing records           Logs         LogI           39.7GB          27,209,375
+from an ERT after finding at least one matching record.                              LogJ           36.0GB          13,605,274
+                                                                                     LogK           30.2GB          57,919,224
+                                                                                     LogL           37.1GB          45,827,554
+8     Evaluation                                                                     LogM           36.5GB          42,206,452
+                                                                                     LogN           38.0GB          22,307,407
+We implement µSlope with about 18k lines of C++ code. We                             LogO           38.6GB          4,438,786
+evaluate the performance of µSlope on both Uber logs and                             LogP           38.3GB          34,840,347
+public logs. Specifically, we focus on the following aspects:                        Spark             2.0GB         1,011,651
+(1) the compression ratio and speed; (2) the query perfor-                         MongoDB            64.8GB        186,287,600
+                                                                        Public
+mance; (3) worst case performance on synthetic logs; (4) the             Logs    CockroachDB           9.8GB         16,520,377
+scalability of µSlope on large-scale logs.                                       elasticsearch         8.0GB        140,012,234
+                                                                                  PostgreSQL         392.8MB         1,000,000
+
+8.1    Experiment Setup                                                      Table 1: Log datasets used in our experiments.
+Overall we conduct the experiments in two setups: (1) single-
+thread, single-process experiments on smaller datasets (re-
+ferred as single-thread experiments), and (2) parallel setups       field, which can be parsed by ClickHouse functions. Both
+on larger scale Uber’s logs. For (1) we compare µSlope with         setups are commonly used in practice for JSON management.
+a number of other SSDMSes. The logs are from the same               (3) in a single JSON field, which is a new experimental data
+services as described in §3, except that here we increased          type introduced in v22.3. It can infer the schema of a JSON
+the data size. In addition, we include logs from five public        record and store every field in a separate file automatically.
+software, which are generated by running HiBench [24] and
+YCSB [14] benchmarks. Table 1 shows the size and the num-             For these systems we do not create any index for a fair
+ber of records of each log dataset. These datasets are relatively   comparison with µSlope, because µSlope is designed to be
+small because (1) we had problems to ingest larger data to          an archival SSDMS and does not have any external index.
+some of the tools we compare with (for example the inges-           MongoDB automatically builds an index on the default key
+tion throughput for Elasticsearch is 5MB/s), and (2) µSlope is      _id and we exclude the size of the index when calculating
+embarrassingly parallel, therefore its single-threaded perfor-      compression ratio.
+mance is the most critical. We also evaluate µSlope on larger
+Uber’s datasets in §8.5.                                              We also compare µSlope with two general-purpose com-
+   Single-thread experiments were performed on a Linux              pressors Zstandard and LZMA. Zstandard is the underlying
+server with Intel Xeon E5-2630v3 processor and 128GB of             compression method for µSlope and LZMA is known for its
+DDR4 memory. Both the uncompressed and compressed logs              high compression ratio.
+are stored in a distributed file system (MooseFS) running on
+multiple 7200RPM SATA HDDs.                                            We do not evaluate search on CLP because wildcard
+   We compare µSlope with SSDMSes including CLP 0.0.2,              queries (which CLP supports) are incompatible with semi-
+MongoDB 6.0.5, PostgreSQL 15.2, ClickHouse 23.3.1.2823,             structured data model. For example, a KQL query error:
+Elasticsearch 8.6.2, Zstandard 1.4.9 and XZ Utils (for LZMA         “*404” searches for the “error” field whose value ends with
+compression) 5.2.2. (we were informed that Steed [30]’s ar-         “404”; but CLP could return records like {“error”: “0”, “keyx”:
+tifact isn’t yet available upon contacting the authors). Mon-       “404”}, because ‘*’ could match an arbitrary amount of text.
+goDB and PostgreSQL have native JSON support (i.e. BSON             We do not evaluate search on Elasticsearch because we cannot
+and jsonb data type respectively). For ClickHouse, we explore       ingest the three datasets where we designed query benchmarks
+three setups to store JSON records: (1) in pair-wise arrays         on into Elasticsearch. Nevertheless, as we will show that Elas-
+which was described in §2.2. Here we only use two arrays and        ticsearch consumes too much storage space that cannot be
+do not differentiate types of the values. (2) in a single string    used as an archival SSDMS.
+
+
+
+538    18th USENIX Symposium on Operating Systems Design and Implementation                                    USENIX Association
+                                                                                                                                                                                                         186.78
+
+                    150                                                             µSlope                LZMA                                      ClickHouse-JSON          PostgreSQL
+                                                                                    CLP                   ClickHouse-String                         MongoDB                  Elasticsearch
+
+
+
+
+compression ratio
+                    125                                                             Zstandard             ClickHouse-Pairwise Array
+
+                    100
+
+                     75
+
+                     50
+
+                     25
+
+                                   ×    ×     ×    ×            ×    ×     ×    ×      ×   ×     ×    ×              ×   ×           ×          ×                       ×    ×        ××××       ×   ×            ×   ×
+                      0
+                          LogA   LogB       LogC       LogD   LogE       LogF       LogG       LogH       LogI    LogJ        LogK       LogL        LogM    LogN     LogO       LogP         Spar
+                                                                                                                                                                                                     k
+                                                                                                                                                                                                             goD
+                                                                                                                                                                                                                B    chD
+                                                                                                                                                                                                                         B
+                                                                                                                                                                                                                              earc
+                                                                                                                                                                                                                                   h eSQL
+                                                                                                                                                                                                          Mon Cockroa Elastics Postgr
+                                                                                                                             dataset
+
+   Figure 10: Compression ratio of µSlope and other tools on different JSON datasets. A "×" means the dataset cannot be ingested by the tool.
+
+
+  8.2                     Compression Ratio and Speed                                                                                                µSlope
+                                                                                                                                                        CLP
+                                                                                                                                                 Zstandard
+  Figure 10 shows the compression ratio of µSlope and other                                                                                           LZMA
+                                                                                                                                         ClickHouse-String
+  tools on different datasets. The compression level of Zstan-                                                                   ClickHouse-Pairwise Array
+  dard is set to 3 (default) for µSlope. For a fair comparison, we                                                                        ClickHouse-JSON
+                                                                                                                                                 MongoDB
+  use the same compression method and level for CLP, Click-                                                                                     PostgreSQL
+                                                                                                                                              Elasticsearch
+  House and MongoDB. PostgreSQL and Elasticsearch do not
+                                                                                                                                                                2      4          8            16      32      64         128   256    512
+  support Zstandard compression, so we use lz4 [32] instead.                                                                                                                                 ingestion speed (MB/s)
+  For LZMA, we use the default compression level 6.
+     Note that out of 21 datasets, ClickHouse-JSON can only                                                                                         Figure 11: Average ingestion speed (log scale).
+  ingest 10 and Elasticsearch can only ingest 9. The most com-
+  mon reason is that they cannot accept fields with the same                                                                     ClickHouse-JSON, MongoDB, PostgreSQL and Elasticsearch
+  key name but different types. Additionally, MongoDB and                                                                        by 19.3%, 186.7%, 419.8%, 1127.3% respectively. Addition-
+  PostgreSQL cannot ingest one dataset because of the escape                                                                     ally, it exceeds LZMA’s performance by 814.8%.
+  character. For the average compression ratio and speed com-
+  parison, we only include the datasets that are successfully
+                                                                                                                                 8.3            Search Performance
+  ingested by these systems.
+     µSlope achieves the highest compression ratio on all JSON                                                                   We use 15 queries to evaluate the search performance of
+  datasets. The average compression ratio of µSlope is 68.1:1,                                                                   µSlope and other tools on Uber LogF, LogO and MongoDB
+  ranging from 21.9:1 (LogK) to 186.8:1 (MongoDB). On av-                                                                        logs. For queries on LogF and LogO, they are the top queries
+  erage, µSlope’s compression ratio is 2.75x of ClickHouse-                                                                      performed in Uber (with repetitive patterns removed). For
+  String’s, 2.62x of ClickHouse-Pairwise Array’s, 1.34x of                                                                       queries on MongoDB, we try to cover different possible pat-
+  ClickHouse-JSON’s, 6.10x of MongoDB’s, 16.50x of Pos-                                                                          terns. Table 2 shows the queries in KQL [6]. For ClickHouse
+  greSQL’s, and 15.71x of Elasticsearch’s. It surpasses Zstan-                                                                   and PostgreSQL, we convert KQL queries to SQL queries
+  dard’s, LZMA’s, and CLP’s compression ratios by factors of                                                                     with their built-in functions and operators. For MongoDB, we
+  2.34x, 1.70x, and 1.50x respectively. but it is only 4.8% on                                                                   use their own query language.
+  average, which still makes µSlope’s compression ratio the                                                                         Query B is a special case. It does not specify any search
+  best among all.                                                                                                                key, but searches for all fields for the matched UUID. Other
+     We delve into the breakdown of compressed data size                                                                         tools does not natively support this kind of query so we have
+  in µSlope, using LogP as an example. Out of the 710 MB                                                                         to convert it to a full-text search instead. It works for Query B,
+  total compressed data, the MPT and schema map only oc-                                                                         but may get incorrect results for other queries that span across
+  cupy 3.6KB and 1.9KB, respectively. Dictionaries account                                                                       keys and values. MongoDB is required to have a text index
+  for 26.3% of the storage space, with the remaining 73.7%                                                                       on that table to do a full-text search. However, after running
+  attributed to compressed columns of ERTs.                                                                                      for 196 seconds, it reports an error.
+     Figure 11 shows the average ingestion speed on all datasets.                                                                   We clear the OS buffer cache before every run. This is
+  µSlope’s ingestion speed is slower than ClickHouse-String                                                                      to simulate search on archival storage. However, by default
+  and ClickHouse-Pairwise Array because ClickHouse-String                                                                        MongoDB uses about half of the memory (63.5G in our ma-
+  directly store the raw JSON string and does not parse it, while                                                                chine) to cache uncompressed data and the cache cannot be
+  ClickHouse-Pairwise Array only parses the top-level fields.                                                                    cleared, while others use only a minimum amount (or even
+  In comparison, µSlope parses every field of the entire JSON                                                                    no) or the cache can be cleared. For a fair comparison, we test
+  record. µSlope’s ingestion is slighter slower than CLP and                                                                     MongoDB with the minimum cache size.
+  faster than all other fully-parsed JSON tools, outperforming                                                                      Figure 12 shows the query latency of those 15 queries on
+
+
+
+  USENIX Association                                                                   18th USENIX Symposium on Operating Systems Design and Implementation                                                                           539
+                                                                                                          Queries for LogF
+                    A                                                      zone:... AND NOT @reserved.collector.filename:stdout AND runtime_env:staging
+                    B                                                                                       *: "d...-...-...-...-...9"
+                    C                                                                                level: error AND message: d...*
+                    D                                            timestamp >date("2022-04-14T08:00:00.000") AND timestamp <date("2022-04-14T08:15:00.000")
+                                                                                                         Queries for LogO
+                    E               headers.x-tenancy:testing* AND NOT headers.x-tenancy: testing/.../4...-...-...-...6d AND headers.caller-procedure:"fareEstimateV2" AND headers.x-source:public
+                    F                                                     headers.x-region-name:... AND headers.x-tenancy:"production" AND caller:*create*
+                    G        level: error AND NOT @reserved.collector.filename: executor AND runtime_env:production AND partition: compute-... AND instance: 3...5 AND mesos_executor_id: t...5-6
+                    H                                                                 level: error AND message: "Error handling inbound request."
+                    I                                                      glue.handler.method: get_ranked_products AND env: production AND level: error
+                                                                                             Queries for MongoDB logs (public dataset)
+                    J                                                                                           attr.tickets: *
+                    K                                                                                             id: 22419
+                    L                                                         attr.message.msg: log_release* AND attr.message.session_name: connection
+                    M                                               ctx: initandlisten AND (NOT msg: "WiredTiger message" OR attr.message.msg: log_remove*)
+                    N                                                                   c: WTWRTLOG AND attr.message.ts_sec >1679490000
+                    O                                                                      ctx: FlowControlRefresher and attr.numTrimmed: 0
+
+                                                  Table 2: Queries used in our experiments. “...” is used to anonymize (part) of the actual values.
+                    1024                                                                                                                           µSlope                  ClickHouse-Pairwise Array         PostgreSQL
+                     512                                                                                                                           ClickHouse-String       MongoDB
+                     256
+
+
+
+
+query latency (s)
+                     128
+                        64
+                        32
+                        16
+                         8
+                         4
+                         2
+                         1
+
+                                  A           B          C          D          E          F          G          H                              I              J        K         L          M          N          O
+                                                                                                              query
+
+                                                                    Figure 12: Query latency of µSlope and other tools (log scale).
+
+ different tools. It includes both the search time and the time                                                                                       µSlope(1000)          µSlope(10)            Zstandard(1000)
+                                                                                                                                                      µSlope(100)           µSlope(1)             Zstandard(1)
+ to write results to the disk. On average, the speed of µSlope
+                                                                                                                                     35
+ is 2.47x of the fastest setup of ClickHouse (ClickHouse-Pair
+ Array), 8.09x of PostgreSQL’s, and 6.74x of MongoDB’s.                                                                              30
+
+
+
+
+                                                                                                                 compression ratio
+    µSlope outperforms all other tools on 14 queries. The fast                                                                       25
+ search performance comes from its use of metadata (MPT
+                                                                                                                                     20
+ and schema map). For example, µSlope outperforms all other
+ tools by at least 116x on Query J. This query checks the                                                                            15
+ existence of a key and returns all the records containing that                                                                      10
+ key. In this case, there are only a small number of schemas
+                                                                                                                                     5
+ that contain this key, so after µSlope checks its MPT and
+ schema map, it only needs to decompress a small number of                                                                                0            10−4         10−3     10−2         10−1         0.5          1
+ ERTs. For other tools, they will have to scan nearly the entire                                                                                                  schema repetitiveness (P)
+
+ dataset. Query L, N, O are also similar as there are only a
+ small number of matching schemas and µSlope only needs                                                         Figure 13: Compression ratio of µSlope against Zstandard on syn-
+ to decompress small ERTs. Note that even for these queries,                                                    thetic logs. The number enclosed in brackets within the legend
+ the schema metadata lookup is not the bottleneck. For Query                                                    represents the repetition ratio of variable values.
+ J, for example, searching the MPT, schema map and ERTs
+ only accounts for 5.5% of the total query time and loading                                                     can perform a full-text search on the raw JSON string values,
+ dictionaries accounts for 73.0%. An even more extreme case                                                     without the need to decode them.
+ is that µSlope can return no-match right after the MPT and
+ schema map search, because, say, the query searches for a key                                                  8.4                           Synthetic Evaluation
+ that doesn’t exist. In fact, our query benchmark does not even
+ contain such best-case scenario for µSlope.                                                                    The efficiency of µSlope relies on the repetitiveness of
+    For Query B, µSlope is slower than ClickHouse-String and                                                    schemas and variable values. To demonstrate the boundaries
+ ClickHouse-Pairwise Array because µSlope needs to scan all                                                     of µSlope’s capabilities, we evaluate its compression and
+ the ERTs and decode them. , while the two ClickHouse setups                                                    search performance on a corpus of synthetic log data, which
+
+
+
+  540                        18th USENIX Symposium on Operating Systems Design and Implementation                                                                                           USENIX Association
+                    16                                                   repetition ratio                             1000
+
+                    14                                                           1000
+
+
+
+
+                                                                                                  compression ratio
+                                                                                 100
+
+
+
+
+query latency (s)
+                    12
+                                                                                 10                                   100
+                    10                                                           1
+
+                    8
+                                                                                                                       10
+                    6
+
+                    4
+
+                    2                                                                                                   1
+                                                                                                                             0%   10% 20% 30% 40% 50% 60% 70% 80% 90% 100%
+                         0   10   −4
+                                       10   −3
+                                                 10   −2
+                                                           10   −1
+                                                                          0.5               1                                              fraction of datasets
+                                       schema repetitiveness (P)
+                                                                                                Figure 15: Compression ratio distribution of 1378 datasets in Uber’s
+Figure 14: Query latency of µSlope for needle-in-haystack wildcard                              production logs.
+queries on synthetic logs.
+                                                                                                UUID value known as the “needle”, so we can benchmark the
+                                                                                                query *: "needle-value". The performance of this query
+varies in both repetitiveness of schemas and variable values.                                   is influenced by both the repetition ratio of variable values and
+    Each synthetic dataset contains 1GB of data, consisting                                     schema repetitiveness. Lower repetition ratio leads to larger
+of 670K records. Each record has 20 fields. Every key and                                       variable dictionaries, which are required to be loaded before
+value is a UUID. We use UUIDs because they are one of the                                       decompression and scan, introducing a constant overhead
+most common source of noises (i.e. non-repetitiveness) in                                       before any results can be returned. This explains the consistent
+the real logs. To vary the repetitiveness of variable values,                                   gap between each curve in Figure 14. As a result µSlope
+the logs are generated with repetition ratios (§3) of variable                                  sometimes struggles to achieve low response time for datasets
+values ranging from 1 to 1000, achieved by randomly drawing                                     with a low repetition ratio, although this challenge can be
+values from a uniform distribution. Specifically, we use four                                   partially addressed in practice by generating smaller archives.
+repetition ratios: 1, 10, 100, and 1000.                                                            Figure 14 shows a significant decline in query performance
+    To vary the repetitiveness of schemas, we draw schemas                                      as P approaches 0. This is because in this extreme case where
+from a power law distribution. Specifically, the n-th most                                      each record has a unique schema, we have a large number of
+frequent schema appears in P ×(1 −P)n of the records (where                                     small Encoded Record Tables where each has only one record.
+n starts from 0). P is a value within the range of (0, 1], and                                  This significantly slows down the decompression and scan as
+it is a constant within one dataset. For example, the most                                      we need to load a large number of small tables, and each table
+frequent schema (n = 0) appears in P of the records, the next                                   is decompressed using a different Zstandard stream.
+most frequent schema (n = 1) appears on P × (1 − P) of the
+records, and so on. We use a total of 7 different P values
+                                                                                                8.5                     Scalability Evaluation
+as shown in Figure 13. The degree of schema repetitiveness
+increases with P. When P is the smallest every log record has                                   We evaluate µSlope on 434TB of production logs from Uber
+a unique schema; when it increases to 1, all records have the                                   representing 1,378 datasets, and select a 26.2TB subset from
+same schema.                                                                                    Uber’s LogF to evaluate search scalability. This production
+    In total, we generate 28 (4 different repetition ratios com-                                dataset achieves an average compression ratio of 30.5:1, Fig-
+bined with 7 different P values) synthetic datasets each with                                   ure 15 shows the compression ratio for each of the 1378
+a different combination of schema repetitiveness and repe-                                      dataset in sorted order. The outliers with low compression
+tition ratio of the variable values. Figure 13 illustrates the                                  ratio typically contain large amounts of random non-repeating
+interplay among compression ratio, schema repetitiveness,                                       binary data such as base64 encoded binary data and UUIDs.
+and repetition ratio of variable values. In all scenarios, µSlope                               For example the index with the worst compression ratio has a
+outperforms Zstandard, with the compression ratio increasing                                    column which appears to contain several megabytes of base64
+as the repetition ratio of variable values increases. In the ex-                                encoded binary data in each log message.
+treme case where P approaches 0, the compression ratio drops                                       To evaluate the scalability of search we run queries A-G
+notably. This is attributed to each log record having a unique                                  from Table 2 on 26.2TB of Uber’s LogF data with increas-
+schema. The small tables and extra metadata overheads lead                                      ing amounts of parallelism. Values in the queries have been
+to a significant reduction in the compression ratio. However,                                   changed to match this dataset where appropriate. Results for
+the compression ratio quickly increases as P increases to the                                   query F have been omitted because its characteristics are
+next smallest value (10−4 ) and remains relatively stable.                                      identical to query E on this dataset.
+    We evaluate the search performance using a needle in the                                       Experiments are run across 8 containers, each has access to
+haystack query. One variable value is replaced with a fixed                                     96 cores, 2TB of network attached SSD, and 32GB of RAM.
+
+
+
+USENIX Association                                                   18th USENIX Symposium on Operating Systems Design and Implementation                               541
+                                  1024
+                                   512
+                                                                                      completion time (s)        response time (s)
+                                                                                                                                     that necessitate scanning the entire dataset and generating a
+                                                                                                                                     large number of results.
+
+
+
+
+query latency in log scale (s)
+                                   256
+                                   128
+                                    64                                                                                                  The current implementation of µSlope compresses each
+                                    32
+                                    16
+                                                                                                                                     table into its own Zstandard stream. We plan to implement
+                                     8                                                                                               optimizations to combine small tables into fewer streams (to
+                                     4
+                                     2                                                                                               improve compression ratio and amortize the cost of decom-
+                                     1
+                                    0.5
+                                                                                                                                     pressing each small table), and split large tables into several
+                                   0.25                                                                                              streams by columns (to avoid decompressing columns in large
+                                  0.125
+                                 0.0625
+                                                                                                                                     tables not being searched on unless necessary). We also plan
+                                          4    8 16 32   4   8 16 32   4    8 16 32    4    8 16 32   4     8 16 32   4    8 16 32
+                                              A(45.4M)       B(483)        C(767M)         D(35.8M)         E(0)          G(409K)    to improve scan performance and support more aggregation
+                                                                           number of workers
+                                                                                                                                     operators in the future.
+
+  Figure 16: Query completion time and response time of µSlope
+  (log scale) using 4, 8, 16 and 32 workers per container. The number                                                                10    Concluding Remarks
+  of matching records for each query is indicated at the bottom.
+                                                                                                                                     This paper presents µSlope, a resource efficient system for
+There are a total of 2,155 archives after compression. These
+                                                                                                                                     semi-structured log management that losslessly compresses
+archives are evenly distributed across the 8 containers. The
+                                                                                                                                     the log data, and enables search without full decompression.
+maximum skew between any two containers is 11% in both
+                                                                                                                                     Its design is guided by a careful analysis on the characteris-
+data size and in number of archives.
+                                                                                                                                     tics of real-world semi-structured logs and their query pat-
+    The searches are run using 4, 8, 16, and 32 workers per
+                                                                                                                                     terns. µSlope does not require any user annotation, and can
+container. Each archive is processed by a single worker pro-
+                                                                                                                                     automatically handle the dynamic schema structures. Our
+cess. We show two results: (1) end-to-end completion time
+                                                                                                                                     evaluation shows that µSlope achieves unprecedented com-
+including marshalling all matching records, and (2) time to get
+                                                                                                                                     pression ratio of up to 186.8:1, and its search speed is at least
+the first matching record, i.e. response time. This experiment
+                                                                                                                                     2.47x of the fastest existing SSDMSes. µSlope is available at
+was conducted before we implemented our optimizations for
+                                                                                                                                     https://github.com/y-scope/clp.
+JSON marshalling, so archives which contain many matching
+results can have an outsized impact on overall query perfor-
+mance. Figure 16 shows how the search performance scales                                                                             Acknowledgements
+with the increase of number of workers per container.
+    All of the queries scale well to 16 workers but have limited                                                                     We thank our shepherd, Andrew Warfield, and the anony-
+scalability to 32 workers. This limit is imposed by different                                                                        mous reviewers for their insightful feedback and comments.
+kinds of skew in the dataset. For example in Query A a single                                                                        Michael Stumm and Ashvin Goel have provided valuable
+archive becomes a bottleneck for completion time because                                                                             feedback on an early draft of the paper. Devin Gibson has
+it returns 5.9x more results than average, and in Query D all                                                                        been partially supported by an NSERC Alliance Missions
+19 archives with matching results happen to be allocated to                                                                          grant and a QEII-GSST scholarship.
+the same container. Query E is extremely fast because it only
+needs to consult the MPT before terminating.
+    In practice, we manage this sort of skew within a dataset                                                                        References
+by producing smaller archives.
+                                                                                                                                      [1] Amazon CloudWatch: Observe and monitor resources
+                                                                                                                                          and applications on AWS, on premises, and on other
+    9                                Limitations and Future Work                                                                          clouds.   https://aws.amazon.com/cloudwatch/,
+                                                                                                                                          2024.
+    µSlope is a system designed for storing and searching archival
+    semi-structured log data. It is not suitable for data that can                                                                    [2] BSON. https://bsonspec.org, 2024.
+    be updated or deleted. Since µSlope leverages the repetitive
+    nature of logs to achieve a high compression ratio, if the                                                                        [3] BSON example: How BSON is stored in MongoDB
+    data has too many different schema structures or values are                                                                           database. https://www.mongodb.com/basics/bson,
+    unique overall, µSlope may not be able to achieve a high                                                                              2024.
+    compression.
+       As for search, µSlope provides support for basic queries,                                                                      [4] Clickhouse. https://clickhouse.com, 2024.
+    including term search, field search, wildcard search, and range
+    search. However, currently it lacks support for more complex                                                                      [5] Grafana Loki.      https://grafana.com/oss/loki/,
+    queries like joins. Besides, µSlope may struggle with queries                                                                         2024.
+
+
+
+    542                                   18th USENIX Symposium on Operating Systems Design and Implementation                                                                 USENIX Association
+ [6] KQL: Kibana Query Language.           https:                  [21] Elasticsearch B.V. Elasticsearch, 2024. https:
+     //www.elastic.co/guide/en/kibana/current/                          //www.elastic.co/guide/en/elasticsearch/
+     kuery-query.html, 2024.                                            reference/8.7/index.html.
+
+ [7] Log-surgeon: a performant log parsing library. https:         [22] Facebook, Inc. Zstandard, 2024. https://facebook.
+     //github.com/y-scope/log-surgeon, 2024.                            github.io/zstd/.
+ [8] PostgrSQL JSON Types. https://www.postgresql.                 [23] Free Software Foundation, Inc. GNU Gzip, August
+     org/docs/current/datatype-json.html, 2024.                         2024. https://www.gnu.org/software/gzip/.
+ [9] Protocol Buffers - Google’s data interchange for-             [24] Shengsheng Huang, Jie Huang, Jinquan Dai, Tao Xie,
+     mat.     https://github.com/protocolbuffers/                       and Bo Huang. The hibench benchmark suite: Charac-
+     protobuf, 2024.                                                    terization of the mapreduce-based data analysis. In 2010
+                                                                        IEEE 26th International conference on data engineering
+[10] Search taking a lot of time using CLP. https://
+                                                                        workshops (ICDEW 2010), pages 41–51. IEEE, 2010.
+     github.com/y-scope/clp/issues/154, 2024.
+
+[11] simdjson.       https://github.com/simdjson/                  [25] Zhen Hua Liu, Beda Hammerschmidt, and Doug McMa-
+     simdjson, 2024.                                                    hon. Json data management: Supporting schema-less
+                                                                        development in rdbms. In Proceedings of the 2014 ACM
+[12] The JSON Data Interchange Standard. https://www.                   SIGMOD International Conference on Management of
+     json.org/json-en.html, 2024.                                       Data, SIGMOD ’14, page 1247–1258. ACM, 2014.
+
+[13] The Number of tweets per day in 2022. https://www.            [26] Zhen Hua Liu, Beda Hammerschmidt, Doug McMahon,
+     dsayce.com/social-media/tweets-day/, 2024.                         Ying Liu, and Hui Joe Chang. Closing the functional and
+                                                                        performance gap between sql and nosql. In Proceedings
+[14] Yahoo! Cloud Serving Benchmark. https://ycsb.                      of the 2016 ACM SIGMOD International Conference
+     site/, 2024.                                                       on Management of Data, SIGMOD ’16, page 227–238.
+                                                                        ACM, 2016.
+[15] YAML: YAML Ain’t Markup Language. https://
+     yaml.org/, 2024.                                              [27] Kirk Rodrigues, Yu Luo, and Ding Yuan. CLP: Efficient
+[16] Daniel Abadi, Samuel Madden, and Miguel Ferreira. In-              and scalable search on compressed text logs. In 15th
+     tegrating compression and execution in column-oriented             USENIX Symposium on Operating Systems Design and
+     database systems. In Proceedings of the 2006 ACM SIG-              Implementation (OSDI’ 21), pages 183–198. USENIX,
+     MOD International Conference on Management of Data,                July 2021.
+     SIGMOD ’06, page 671–682. ACM, 2006.
+                                                                   [28] James A Storer and Thomas G Szymanski. Data com-
+[17] Lior Abraham, John Allen, Oleksandr Barykin, Vinayak               pression via textual substitution. Journal of the ACM
+     Borkar, Bhuwan Chopra, Ciprian Gerea, Daniel Merl,                 (JACM), 29(4):928–951, 1982.
+     Josh Metzler, David Reiss, Subbu Subramanian, et al.
+                                                                   [29] Daniel Tahara, Thaddeus Diamond, and Daniel J Abadi.
+     Scuba: Diving into data at facebook. Proceedings of the
+                                                                        Sinew: a SQL system for multi-structured data. In Pro-
+     VLDB Endowment, 6(11):1057–1067, 2013.
+                                                                        ceedings of the 2014 International Conference on Man-
+[18] Konrad Beiske.       Six Ways to Crash Elas-                       agement of Data, SIGMOD ’14, pages 815–826. ACM,
+     ticsearch, September 2014.      https://www.                       2014.
+     elastic.co/blog/found-crash-elasticsearch#
+     mapping-explosion.                                            [30] Zhiyi Wang and Shimin Chen. Exploiting common
+                                                                        patterns for tree-structured data. In Proceedings of the
+[19] Craig Chasseur, Yinan Li, and Jignesh M Patel. Enabling            2017 ACM International Conference on Management of
+     json document stores in relational systems. In WebDB,              Data, SIGMOD ’17, page 883–896. ACM, 2017.
+     volume 13, pages 14–15, 2013.
+                                                                   [31] Junyu Wei, Guangyan Zhang, Junchao Chen, Yang
+[20] Dominik Durner, Viktor Leis, and Thomas Neumann.                   Wang, Weimin Zheng, Tingtao Sun, Jiesheng Wu, and
+     Json tiles: Fast analytics on semi-structured data. In Pro-        Jiangwei Jiang. Loggrep: Fast and cheap cloud log
+     ceedings of the 2021 International Conference on Man-              storage by exploiting both static and runtime patterns.
+     agement of Data, SIGMOD ’21, page 445–458. ACM,                    In Proceedings of the 18th European Conference on
+     2021.                                                              Computer Systems (EuroSys’ 23). ACM, 2024.
+
+
+
+USENIX Association                           18th USENIX Symposium on Operating Systems Design and Implementation           543
+[32] Yann Collet. LZ4, 2024. http://lz4.github.io/
+     lz4/.
+[33] Jacob Ziv and Abraham Lempel. A Universal Algorithm
+     for Sequential Data Compression. IEEE Transactions
+     on Information Theory, 23(3):337–343, 1977.
+
+
+
+
+544   18th USENIX Symposium on Operating Systems Design and Implementation   USENIX Association
+
