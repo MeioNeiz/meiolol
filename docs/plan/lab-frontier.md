@@ -62,7 +62,11 @@ bans unused.
   champion-roles; the lane card's expertise bonus double counts (fix: centre on the
   champion-role's mean mastery): "Strength at fixed mastery (D1)"
 - B1 draft ceiling: gate not met, see "Order and gates"
-- A4 pair cells that borrow strength: shipped (data-and-model.md)
+- C0 planted check of the Mobius reading (Python, one untuned net a scenario): exact on
+  a known truth; a net that learnt pairs shows no false higher orders but invents pairs
+  in empty blocks, on which its seeds agree; a hidden 2 pp class triple was not learnt;
+  direct shrunk cells name pairs better from 50 games up: "Planted check of the 10-seat
+  Möbius reading (C0)"
 
 ## Phase 0: before the gpu-box runs (CPU, Mac or box)
 
@@ -182,25 +186,50 @@ Build up, each step measured on the one before:
 
 ## Wave 3: why (explain the teacher)
 
-- C1 Interaction-order spectrum [interactions C1, C3, C12]: exact 10-seat Mobius
-  decomposition (1,024 coalitions a draft) of the draft teacher, absent seat filled by
-  legal same-role picks weighted by pick rate; share of each order per seed and
-  resample against a shuffled-outcome net. Says whether the gain is pairs, comp traits
-  or 3-way
-- C2 Pair table from the teacher, refit as shrunk terms: four-corner swap score per
-  pair, select, refit, judge on held-out log loss. Knockoff seats (dummy seat per role
-  from the pick distribution) for 20% FDR, planted 0.5/1/2 pp pairs for power, keep a
-  pair only if its sign holds over 10 seeds, two resamples and the logistic fit
-  [interactions C4, C5]. Decides which named pairs may go on the site
+Methods, best first [interactions C19; C0 in Results so far]:
+1. A named champion pair comes from the direct fit: v2's shrunk cells with A4's
+   parents, purified before display (C5)
+2. The teacher is read by exact 10-seat Mobius terms (1,024 coalitions a draft): each
+   order's share and what the net adds to v2; no Shapley index unless order 3+ is large
+3. What the teacher adds ships by distilling into v2's form (C3), not by quoting the
+   net; a name read off a net needs a knockoff block, a planted twin and agreeing seeds
+Not run [C13, C17, C18]: H-statistic (per seat pair, no null), EBM/FAST (pair terms cut
+champions in index order), neural GAMs (nothing at champion level over shrunk cells),
+seat-masked training as the main reading (describes how picks go together, not the model).
+
+- C1 Order spectrum of the teacher (declared 13 Nov, nothing run; dev only, nothing public)
+  - Models: B = additive v2 with pair parents (win-additive), T = the set net with
+    champion-role embedding on it (setid-wa, 18 Oct options), seeds 1-6 and their mean.
+    snap-20261023T2004Z, netcheck's dev block: fit below the dev cut, explain played
+    dev-val games (a seeded 20,000 for power, all for (3)). No test game is loaded
+  - Reading: Mobius terms of the logit per draft; absent seats from 32 fit drafts
+    sharing no champion with it (every mix legal), the same for all coalitions, in two
+    halves; an order's power = mean over drafts of the halves' summed product, pp^2.
+    Tool: `meiolol-lab mobius` (to write), checked by py/xcheck/mobius_plant.py
+  - (1) Tool gate: B without the damage mix has order 3+ power under 1e-6 pp^2, its pair
+    terms match its purified cells (r > 0.999), and Zig and Python agree on a planted
+    truth to 1e-4 pp. Else nothing is read
+  - (2) Higher orders there? H3 = T's order 3+ power. Twins: B and T (seeds 1-2) refitted
+    on three `plant:` relabellings of the fit games, mains and pair cells at v2's block
+    spreads, no mix. Yes when the smallest H3 of the six real seeds is over twice the
+    largest of the six twins (C0's twins: 0.3-1.6% of power)
+  - (3) Do they predict? T against its own terms up to pairs, paired log loss per game:
+    yes when d + 2.1 h < 0
+  - Both yes: C4 runs, C3's student gets comp terms beside pairs, the seat sets carrying
+    order 3+ are listed. Either no: the net's gain is main and pair structure single
+    cells can't hold; C3's student is v2's form alone, C4 waits for twice the games
+  - Reported, not deciding: power per order for B, T - B and T, per seed; T - B's pair
+    power per block; pair terms with the other seats absent against present [C15]
+- C2 Pairs the net moved: cells whose T - B term is over three times a knockoff
+  block's sd (a dummy seat per role), same sign in 6 of 6 seeds, refit as shrunk terms in
+  v2 and judged on held-out log loss [interactions C4, C5]: the pairs the site may name
 - C3 Distil the teacher into v2's form (out-of-fold soft targets, squared error on
-  logits, mains then pairs) and compare term by term with the label fit
-  (distil-explainable C8, C11): the shippable student, now that a teacher beats the
-  label fit
-- C4 Triple power test: plant 3-way kit-group terms, find the smallest detectable at
-  1.4M games, then test real class triples. Expected undetectable under ~2 pp
-  [interactions C8, C9]
-- C5 Purify before display: re-centre shipped and teacher terms under seat-weighted
-  data so mains don't hide in pairs [interactions C2]
+  logits, mains then pairs; `netcheck --fit-preds 1`, `effects --soft`) and compare term
+  by term with the label fit (distil-explainable C8, C11)
+- C4 Triple power test, only if C1 says yes: plant 3-way kit-group terms, smallest
+  detectable at this size, then real class triples [interactions C8, C9]
+- C5 Purify shipped and teacher terms under seat-weighted data before display, so mains
+  don't hide in pairs [interactions C2]
 
 ## Wave 4: causal and time
 
@@ -261,9 +290,9 @@ error bounds, 3-way champion-level terms, in-game chance as score or soft label
 
 Phase 0 -> wave 1 (B1, E1, A1, A2 run in parallel; D1, B4 on CPU) -> gate: B1's ceiling
 and A1's curves decide how much of wave 2 is draft architecture (A3, A4, A7) vs players
-(A8). Wave 3 needs a teacher that beats v2 sealed. Wave 4's patch items need 16.21 in
-dev; D4 needs API budget. Rough gpu-box time: wave 1 under a day, wave 2 two to four
-days, wave 3 a day, wave 4 a day plus the ARAM crawl.
+(A8). Wave 3 needs a teacher that beats v2 sealed (C1 alone runs on dev before). Wave 4's
+patch items need 16.21 in dev; D4 needs API budget. Rough gpu-box time: wave 1 under a
+day, wave 2 two to four days, wave 3 a day, wave 4 a day plus the ARAM crawl.
 
 B1's gate (docs/model.md "Draft ceiling (B1) rerun on 2004Z"): not met. Four blocks
 known perfectly: s 0.33 (~56.5%); the set net on v2 is 4.8 ± 0.9 milli-nats short, all
