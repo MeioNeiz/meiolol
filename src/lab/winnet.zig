@@ -194,12 +194,19 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var nbuf: [64 * 1024]u8 = undefined;
     var nw = net_file.writer(io, &nbuf);
     try nw.interface.writeAll(game_head);
+    // Train loss beside the held-out loss: together they bracket what more games can
+    // reach (docs/plan/lab-frontier.md A1)
+    var train_file = try dir.createFile(io, "train.tsv", .{});
+    defer train_file.close(io);
+    var tbuf: [4096]u8 = undefined;
+    var tw = train_file.writer(io, &tbuf);
+    try tw.interface.writeAll("fold\tfit_games\tseed\tcand_train\tcand_crossfit\tnet_train\n");
     const fit_file: ?Io.File = if (opts.fit_preds) try dir.createFile(io, "fit-preds.tsv", .{}) else null;
     defer if (fit_file) |f| f.close(io);
     var fpbuf: [64 * 1024]u8 = undefined;
     var fpw: ?Io.File.Writer = if (fit_file) |f| f.writer(io, &fpbuf) else null;
     if (fpw) |*x| try x.interface.writeAll("match_id\tblock\tseed\tp_blue\n");
-    const out: Out = .{ .folds = &fw.interface, .preds = &pw.interface, .cand = &cw.interface, .net = &nw.interface, .fit = if (fpw) |*x| &x.interface else null };
+    const out: Out = .{ .folds = &fw.interface, .preds = &pw.interface, .cand = &cw.interface, .net = &nw.interface, .train = &tw.interface, .fit = if (fpw) |*x| &x.interface else null };
 
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
@@ -244,7 +251,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         try summaryHead(w);
         try summaryRow(gpa, w, "folds", pooled.ys.items, pooled.cand.items, pooled.ens.items, null);
     }
-    for ([_]*Io.Writer{ out.folds, out.preds, out.cand, out.net }) |x| try x.flush();
+    for ([_]*Io.Writer{ out.folds, out.preds, out.cand, out.net, out.train }) |x| try x.flush();
     if (out.fit) |x| try x.flush();
     try w.flush();
     return 0;
@@ -616,10 +623,14 @@ pub const Fitted = struct {
     epochs: f64,
     val_loss: f64,
     seconds: f64,
+    /// The refitted net's loss on its own training games, as it saw them (set net:
+    /// cross-fitted offsets, leave-one-out profiles, no dropout); NaN when not measured
+    train_loss: f64 = std.math.nan(f64),
 };
 
-/// netcheck's output files: folds.tsv, preds.tsv, games-<cand>.tsv, games-<net>.tsv
-const Out = struct { folds: *Io.Writer, preds: *Io.Writer, cand: *Io.Writer, net: *Io.Writer, fit: ?*Io.Writer = null };
+/// netcheck's output files: folds.tsv, preds.tsv, games-<cand>.tsv, games-<net>.tsv,
+/// train.tsv
+const Out = struct { folds: *Io.Writer, preds: *Io.Writer, cand: *Io.Writer, net: *Io.Writer, train: *Io.Writer, fit: ?*Io.Writer = null };
 
 fn runBlock(
     gpa: std.mem.Allocator,
@@ -665,11 +676,23 @@ fn runBlock(
     defer gpa.free(want);
     @memset(want, false);
     for (scored.items) |gi| want[gi] = true;
+    // The same fit also scores its own fit games: the candidate's train loss
+    if (spec.fifth == null) for (fit.items) |gi| {
+        want[gi] = true;
+    };
     const p_all = try gpa.alloc(f32, d.games.len);
     defer gpa.free(p_all);
     @memset(p_all, std.math.nan(f32));
     const all_keep: FitKeep = .{ .spec = spec, .c = c, .fraction = opts.fraction };
     try candBlue(gpa, d, players, all_keep, want, p_all);
+    var cand_train: f64 = 0;
+    if (spec.fifth == null) {
+        for (fit.items) |gi| {
+            cand_train += loss1(@floatFromInt(1 - d.games[gi].winner), p_all[gi]);
+            p_all[gi] = std.math.nan(f32);
+        }
+        cand_train /= @floatFromInt(@max(fit.items.len, 1));
+    }
     const p_inner = try gpa.alloc(f32, d.games.len);
     defer gpa.free(p_inner);
     @memset(p_inner, std.math.nan(f32));
@@ -761,6 +784,19 @@ fn runBlock(
         for (g_val) |g| vl += loss1(g.y, sigmoid(g.off));
         try w.print("candidate on val (fitted on inner): {d:.5}\n", .{vl / @as(f64, @floatFromInt(@max(g_val.len, 1)))});
     }
+    // The candidate on its fit games, in-sample and cross-fitted (the nets' offset)
+    var cand_cross = std.math.nan(f64);
+    if (resid) {
+        cand_cross = 0;
+        for (g_fit) |g| cand_cross += loss1(g.y, sigmoid(g.off));
+        cand_cross /= @floatFromInt(@max(g_fit.len, 1));
+    }
+    try w.print("train loss on the {d} fit games: candidate {d:.5} (cross-fitted {d:.5}), net per seed", .{ fit.items.len, cand_train, cand_cross });
+    for (opts.seeds, fits) |seed, f| {
+        try w.print(" {d:.5}", .{f.train_loss});
+        try out.train.print("{s}\t{d}\t{d}\t{d:.6}\t{d:.6}\t{d:.6}\n", .{ name, fit.items.len, seed, cand_train, cand_cross, f.train_loss });
+    }
+    try w.writeAll("\n");
     try summaryHead(w);
     const cand_loss = meanLoss(ys, pc);
     const cand_auc = try auc(gpa, ys, pc);

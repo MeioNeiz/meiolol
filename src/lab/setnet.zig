@@ -600,7 +600,7 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
     predict(&full.net, scored, &w, pred);
     std.debug.print("netcheck: seed {d}: set net {d:.2} epochs, offset weight {d:.3}\n", .{ seed, tuned.epochs, full.net.s.a.at(full.net.p, 0).* });
     if (opts.export_net and s.block == .dev) try writeExport(gpa, io, opts, seed, &full.net, &p_all, s, scored, &w);
-    return .{ .pred = pred, .epochs = tuned.epochs, .val_loss = tuned.val_loss, .seconds = winnet.secondsSince(io, t0) };
+    return .{ .pred = pred, .epochs = tuned.epochs, .val_loss = tuned.val_loss, .seconds = winnet.secondsSince(io, t0), .train_loss = meanLoss(&full.net, all, &w) };
 }
 
 /// --export 1: one seed's dev fit as DIR/setnet-s<seed>.json (format meiolol-setnet,

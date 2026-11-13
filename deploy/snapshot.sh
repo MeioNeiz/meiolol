@@ -18,7 +18,8 @@
 # docs/golden.tsv's and any a run that hasn't ended names
 #
 # Builds from committed HEAD in a temp tree (other sessions edit the shared checkout).
-# Env: SNAP_GPU (gpu-box)
+# Env: SNAP_GPU (gpu-box); SNAP_FETCH=0: make leaves the snapshot on the gpu-box (no
+# fetch here, so no prune of older ones)
 set -euo pipefail
 # launchd's login bash finds Homebrew's zig (0.16) first and no wz: the pinned 0.17 and
 # wz live in ~/.local/bin
@@ -80,6 +81,12 @@ make_snap() {
     done
     ssh "$GPU" 'rm -f ml/awake.d/snapshot; cat ml/snapshot.log' || true
     [[ $rc == 0 ]] || die "snapshot-gpu.sh failed on $GPU for $name (${rc:-still running after 4 h})"
+    # A fetch prunes every older snapshot on both hosts (bar golden.tsv's): SNAP_FETCH=0
+    # while a pin not in golden.tsv is still in use
+    if [[ ${SNAP_FETCH:-1} == 0 ]]; then
+        log "$name stays on $GPU only (SNAP_FETCH=0): no fetch, no prune"
+        return 0
+    fi
     mkdir -p "$STATE"
     echo "$name" >> "$STATE/pending"
     fetch_snap "$name" || log "$name waits for a tick to fetch it here"

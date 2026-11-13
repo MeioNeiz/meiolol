@@ -49,6 +49,8 @@ pub const usage =
     \\                                  mastery; games-meta.tsv slices, picks-*.tsv
     \\                                  on dev-val, mains-*.tsv strengths with and
     \\                                  without mastery; lab/a10.zig)
+    \\                                  [--p4 1] (P4: seat mastery imputed, missing
+    \\                                  flags, flag x strength; full-m beside)
     \\                                  [--calibrate SIMS] (block variances corrected by
     \\                                  simulation: calibrated table, and full-cal, the
     \\                                  full model refitted with them fixed)
@@ -82,6 +84,7 @@ const Options = struct {
     calibrate: u32 = 0,
     param: Param = .v2,
     a10: bool = false,
+    p4: bool = false,
 };
 
 /// v2: identified matchups (additive.Variant.matchupGroups); v1: the 25 enemy blocks
@@ -163,6 +166,8 @@ const Model = struct {
     picks: bool = false,
     /// Champion-role strengths per block to mains-NAME.tsv (--a10, D1)
     mains: bool = false,
+    /// Fits and scores a10.fillP4's slots
+    p4: bool = false,
 };
 
 const Target = enum {
@@ -186,7 +191,7 @@ fn lanePair(r: usize, q: usize) bool {
     return r == q or (r == 3 and q == 4) or (r == 4 and q == 3);
 }
 
-fn models(arena: std.mem.Allocator, param: Param, with_a10: bool) ![]Model {
+fn models(arena: std.mem.Allocator, param: Param, with_a10: bool, with_p4: bool) ![]Model {
     var mains = A.Variant.mains();
     mains.matchup = param == .v2;
     var mix = mains;
@@ -240,6 +245,23 @@ fn models(arena: std.mem.Allocator, param: Param, with_a10: bool) ![]Model {
             .{ .name = "full-nomix-lsh", .variant = nomix_lsh, .picks = true },
             .{ .name = "full-m", .variant = fm, .mains = true },
             .{ .name = "full-lsh-m", .variant = lsh_m },
+        });
+    }
+    if (with_p4) {
+        const m: u8 = 1 << a10.slot_mastery;
+        const flag: u8 = 1 << a10.slot_missing;
+        const flag_strength: u8 = 1 << a10.slot_missing_strength;
+        var fm = full;
+        fm.cont |= m;
+        var mif = fm;
+        mif.cont |= flag;
+        var mifx = mif;
+        mifx.cont |= flag_strength;
+        if (!with_a10) try out.append(arena, .{ .name = "full-m", .variant = fm });
+        try out.appendSlice(arena, &.{
+            .{ .name = "full-mi", .variant = fm, .p4 = true },
+            .{ .name = "full-mif", .variant = mif, .p4 = true },
+            .{ .name = "full-mifx", .variant = mifx, .p4 = true },
         });
     }
     return out.toOwnedSlice(arena);
@@ -382,7 +404,7 @@ fn runBlock(
     }
     var mix = try Mix.init(gpa, d, is_fit, in.win);
     defer mix.deinit(gpa);
-    var ax: ?A10 = if (opts.a10) .{
+    var ax: ?A10 = if (opts.a10 or opts.p4) .{
         .block = try a10.Block.init(gpa, d, is_fit, mastery),
         .mix = &mix,
         .cands = undefined,
@@ -422,11 +444,25 @@ fn runBlock(
     }
     const scored_in = try arena.alloc(A.GameIn, scored.items.len);
     for (scored.items, scored_in) |gi, *s| s.* = gameIn(d, gi, in.win[gi], mix.diff(d, in, gi, false));
+    // P4's models: the same games with a10.fillP4's slots
+    const fit_p4 = try arena.alloc(A.GameIn, if (opts.p4) fit_win.len else 0);
+    const scored_p4 = try arena.alloc(A.GameIn, if (opts.p4) scored_in.len else 0);
     var sample_ids: std.ArrayList(u32) = .empty;
     if (ax) |*x| {
         for (scored.items, scored_in) |gi, *s| x.block.fill(d, in, mastery, gi, s);
         const mw = try files.meta(io);
-        for (scored.items, scored_in) |gi, *s| try mw.print("{s}\t{s}\t{d}\t{s}\t{d:.1}\n", .{ blockName(block), d.games[gi].match_id, d.games[gi].platform, a10.bracket_names[a10.bracket(d, in, gi)], a10.minFitGames(&x.block, s) });
+        for (scored.items, scored_in) |gi, *s| try mw.print("{s}\t{s}\t{d}\t{s}\t{d:.1}\t{d}\n", .{ blockName(block), d.games[gi].match_id, d.games[gi].platform, a10.bracket_names[a10.bracket(d, in, gi)], a10.minFitGames(&x.block, s), a10.knownSeats(in, mastery, gi) });
+        if (opts.p4) {
+            for (fit_idx.items, fit_win, fit_p4) |gi, fw, *o| {
+                o.* = fw;
+                x.block.fillP4(d, in, mastery, gi, o);
+            }
+            for (scored.items, scored_in, scored_p4) |gi, sc, *o| {
+                o.* = sc;
+                x.block.fillP4(d, in, mastery, gi, o);
+            }
+            try w.print("  p4: m's slope on rank_start within a champion-role {d:.5}\n", .{x.block.rank_slope});
+        }
         if (block == .dev) {
             var sample: std.ArrayList(A.GameIn) = .empty;
             for (scored.items, scored_in, 0..) |gi, s, i| if (i % a10.pick_every == 0) {
@@ -481,13 +517,15 @@ fn runBlock(
         fit_mix: []const A.GameIn,
         fit_gold: []const A.GameIn,
         scored: []const A.GameIn,
+        fit_p4: []const A.GameIn,
+        scored_p4: []const A.GameIn,
         slope: [3]f64,
         ax: ?*const A10,
         fn one(x: @This(), i: usize) !void {
             const t = x.tasks[i];
             var v = t.model.variant;
             if (t.without != 0) v.groups &= ~(@as(u64, 1) << @intCast(t.without));
-            const games = switch (t.model.target) {
+            const games = if (t.model.p4) x.fit_p4 else switch (t.model.target) {
                 .win => x.fit_win,
                 .gold => x.fit_gold,
                 .logit => x.fit_logit,
@@ -505,8 +543,9 @@ fn runBlock(
                 f.deinit(x.gpa);
                 f = fc;
             }
-            const pred = try x.gpa.alloc(f64, x.scored.len);
-            for (x.scored, pred) |*g, *o| {
+            const scored_games = if (t.model.p4) x.scored_p4 else x.scored;
+            const pred = try x.gpa.alloc(f64, scored_games.len);
+            for (scored_games, pred) |*g, *o| {
                 const e = A.predict(&p, &f, g);
                 o.* = switch (t.model.target) {
                     .win, .mix, .logit => sigmoid(e),
@@ -550,6 +589,8 @@ fn runBlock(
             .fit_mix = fit_mix,
             .fit_gold = fit_gold.items,
             .scored = scored_in,
+            .fit_p4 = fit_p4,
+            .scored_p4 = scored_p4,
             .slope = slope,
             .ax = if (ax) |*x| x else null,
         }, Ctx.one);
@@ -580,7 +621,7 @@ fn runBlock(
         const mean = s / n_sc;
         const se = @sqrt(@max(s2 / n_sc - mean * mean, 0) / @max(n_sc - 1, 1));
         try w.print("  {s}: {d:.5}, vs {s} {d:.5} +- {d:.5}\n", .{ t.label, l / n_sc, cand_name, mean, 1.96 * se });
-        if (opts.a10) {
+        if (opts.a10 or opts.p4) {
             try w.print("    cont terms {d:.5} {d:.5} {d:.5} {d:.5}, half-widths (1.96 / sqrt of own curvature)", .{ r.cont[0], r.cont[1], r.cont[2], r.cont[3] });
             for (r.cont_h) |h| try w.print(" {d:.5}", .{if (h > 0) 1.96 / @sqrt(h) else 0});
             try w.writeAll("\n");
@@ -725,7 +766,7 @@ const Files = struct {
     fn meta(f: *Files, io: Io) !*Io.Writer {
         if (f.games.get("meta")) |x| return &x.interface;
         const fw = try f.open(io, "games-meta.tsv");
-        try fw.interface.writeAll("block\tmatch_id\tplatform\tbracket\tmin_fit_games\n");
+        try fw.interface.writeAll("block\tmatch_id\tplatform\tbracket\tmin_fit_games\tknown_seats\n");
         try f.games.put(f.arena, "meta", fw);
         return &fw.interface;
     }
@@ -1029,6 +1070,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.param = std.meta.stringToEnum(Param, v) orelse return error.BadParam;
         } else if (std.mem.eql(u8, k, "--a10")) {
             o.a10 = std.mem.eql(u8, v, "1");
+        } else if (std.mem.eql(u8, k, "--p4")) {
+            o.p4 = std.mem.eql(u8, v, "1");
         } else if (!try winnet.setFlag(&o, k, v, &.{})) return error.UnknownOption;
     }
     return o;
@@ -1082,10 +1125,10 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     if (opts.shuffle != null) try w.writeAll("SHUFFLED LABELS: a control, every gain and sd must be ~0 (the candidate fits the real labels: its rows' y)\n\n");
     try w.flush();
 
-    const ms = try models(arena, opts.param, opts.a10);
-    const mastery: []f32 = if (opts.a10) try a10.loadMastery(gpa, io, snap, &data) else &.{};
+    const ms = try models(arena, opts.param, opts.a10, opts.p4);
+    const mastery: []f32 = if (opts.a10 or opts.p4) try a10.loadMastery(gpa, io, snap, &data) else &.{};
     defer gpa.free(mastery);
-    if (opts.a10) {
+    if (opts.a10 or opts.p4) {
         var known: usize = 0;
         for (mastery) |x| known += @intFromBool(!std.math.isNan(x));
         try w.print("a10: pre-game mastery on {d} of {d} rows\n\n", .{ known, mastery.len });

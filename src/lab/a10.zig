@@ -7,7 +7,13 @@
 //!   2: the line's hinge min(0, x - knot) (Meio's pop_knot): the rarest lose more
 //!   3: seat log mastery (lanecard.Expertise.feature), unknown seats at their
 //!      champion-role's mean among fetched fit seats, so strength is at m = 0
-//! Also the per-game slice file and the pick metric for additive fits
+//! Also the per-game slice file and the pick metric for additive fits.
+//! `--p4 1` (docs/model.md "P4: seat mastery with missing flags") fills the slots its
+//! own way for its models (fillP4):
+//!   1: seats without a pre-game mastery fetch, blue minus red
+//!   2: those seats' champion-role strength (missing flag x strength)
+//!   3: seat log mastery, a missing seat imputed from its champion-role's mean and,
+//!      when known, its rank at game start
 
 const std = @import("std");
 const api = @import("api");
@@ -22,6 +28,10 @@ const Io = std.Io;
 pub const slot_line = 1;
 pub const slot_hinge = 2;
 pub const slot_mastery = 3;
+pub const slot_missing = 1;
+pub const slot_missing_strength = 2;
+/// P4's champion-role strength: the logit of its fit win rate with this many even games
+const strength_prior = 200.0;
 /// Meio's pop_knot (src/meio.zig)
 pub const knot = -10.0;
 /// A champion-role the fit never saw counts this many games
@@ -75,6 +85,12 @@ pub const Block = struct {
     /// Champion-role mean m, shrunk to the role's
     m_mean: std.AutoHashMapUnmanaged(u64, f64) = .empty,
     role_m: [A.n_role]f64 = @splat(0),
+    /// P4: champion-role mean rank_start among fit seats with mastery and rank known,
+    /// and m's slope on rank within a champion-role over those seats
+    rank_mean: std.AutoHashMapUnmanaged(u64, f64) = .empty,
+    rank_slope: f64 = 0,
+    /// P4: logit of the champion-role's shrunk fit win rate
+    strength: std.AutoHashMapUnmanaged(u64, f64) = .empty,
 
     pub fn init(gpa: std.mem.Allocator, d: *const rows.Data, is_fit: []const bool, m: []const f32) !Block {
         var b: Block = .{};
@@ -82,13 +98,26 @@ pub const Block = struct {
         var acc: std.AutoHashMapUnmanaged(u64, [2]f64) = .empty;
         defer acc.deinit(gpa);
         var role_acc: [A.n_role][2]f64 = @splat(@splat(0));
+        // Per champion-role: wins; then sums of m and rank and their count over seats
+        // with both known
+        var wins: std.AutoHashMapUnmanaged(u64, f64) = .empty;
+        defer wins.deinit(gpa);
+        var both: std.AutoHashMapUnmanaged(u64, [3]f64) = .empty;
+        defer both.deinit(gpa);
         for (d.rows, m) |r, mv| {
             if (!is_fit[r.game]) continue;
             const role: usize = @backingInt(r.role);
             const k = key(r.champion, role);
             (try b.games.getOrPutValue(gpa, k, 0)).value_ptr.* += 1;
             b.role_games[role] += 1;
+            (try wins.getOrPutValue(gpa, k, 0)).value_ptr.* += @floatFromInt(@intFromBool(d.games[r.game].winner == r.side));
             if (std.math.isNan(mv)) continue;
+            if (r.rank_start) |rk| {
+                const e = try both.getOrPutValue(gpa, k, .{ 0, 0, 0 });
+                e.value_ptr[0] += mv;
+                e.value_ptr[1] += @floatFromInt(rk);
+                e.value_ptr[2] += 1;
+            }
             const e = try acc.getOrPutValue(gpa, k, .{ 0, 0 });
             e.value_ptr[0] += mv;
             e.value_ptr[1] += 1;
@@ -101,12 +130,33 @@ pub const Block = struct {
             const rm = b.role_m[@intCast(e.key_ptr.* & 7)];
             try b.m_mean.put(gpa, e.key_ptr.*, (e.value_ptr[0] + mastery_shrink * rm) / (e.value_ptr[1] + mastery_shrink));
         }
+        var wit = wins.iterator();
+        while (wit.next()) |e| {
+            const n = b.games.get(e.key_ptr.*).?;
+            const rate = (e.value_ptr.* + strength_prior / 2) / (n + strength_prior);
+            try b.strength.put(gpa, e.key_ptr.*, @log(rate / (1 - rate)));
+        }
+        var sxy: f64 = 0;
+        var sxx: f64 = 0;
+        for (d.rows, m) |r, mv| {
+            if (!is_fit[r.game] or std.math.isNan(mv)) continue;
+            const rk = r.rank_start orelse continue;
+            const a = both.get(key(r.champion, @backingInt(r.role))).?;
+            const dx = @as(f64, @floatFromInt(rk)) - a[1] / a[2];
+            sxy += dx * (mv - a[0] / a[2]);
+            sxx += dx * dx;
+        }
+        b.rank_slope = if (sxx > 0) sxy / sxx else 0;
+        var bit = both.iterator();
+        while (bit.next()) |e| try b.rank_mean.put(gpa, e.key_ptr.*, e.value_ptr[1] / e.value_ptr[2]);
         return b;
     }
 
     pub fn deinit(b: *Block, gpa: std.mem.Allocator) void {
         b.games.deinit(gpa);
         b.m_mean.deinit(gpa);
+        b.rank_mean.deinit(gpa);
+        b.strength.deinit(gpa);
     }
 
     pub fn fitGames(b: *const Block, champion: u32, role: usize) f64 {
@@ -145,6 +195,33 @@ pub const Block = struct {
         g.cont[slot_mastery] = @floatCast(sum);
     }
 
+    /// P4's slots 1-3 for game gi: a seat without a fetch counts in the missing terms and
+    /// gets its champion-role's mean m, moved by its rank when that is known
+    pub fn fillP4(b: *const Block, d: *const rows.Data, in: addinputs.Inputs, m: []const f32, gi: usize, g: *A.GameIn) void {
+        var sum: f64 = 0;
+        var missing: f64 = 0;
+        var missing_strength: f64 = 0;
+        for (in.by_game[in.first_row[gi]..in.first_row[gi + 1]]) |ri| {
+            const r = &d.rows[ri];
+            const role: usize = @backingInt(r.role);
+            const k = key(r.champion, role);
+            const sign: f64 = if (r.side == 0) 1 else -1;
+            var mv: f64 = m[ri];
+            if (std.math.isNan(m[ri])) {
+                mv = b.m_mean.get(k) orelse b.role_m[role];
+                if (r.rank_start) |rk| if (b.rank_mean.get(k)) |mean| {
+                    mv += b.rank_slope * (@as(f64, @floatFromInt(rk)) - mean);
+                };
+                missing += sign;
+                missing_strength += sign * (b.strength.get(k) orelse 0);
+            }
+            sum += sign * mv;
+        }
+        g.cont[slot_missing] = @floatCast(missing);
+        g.cont[slot_missing_strength] = @floatCast(missing_strength);
+        g.cont[slot_mastery] = @floatCast(sum);
+    }
+
     /// Per role, the champions with candidate_games+ fit games, ascending
     pub fn candidates(b: *const Block, gpa: std.mem.Allocator) ![A.n_role][]u32 {
         var lists: [A.n_role]std.ArrayList(u32) = @splat(.empty);
@@ -176,6 +253,13 @@ pub fn bracket(d: *const rows.Data, in: addinputs.Inputs, gi: usize) u8 {
     std.mem.sortUnstable(u8, ranks[0..n], {}, std.sort.asc(u8));
     const med = if (n % 2 == 1) @as(f64, @floatFromInt(ranks[n / 2])) else (@as(f64, @floatFromInt(ranks[n / 2 - 1])) + @as(f64, @floatFromInt(ranks[n / 2]))) / 2;
     return if (med < 12) 0 else if (med < 24) 1 else 2;
+}
+
+/// Seats of game gi with a pre-game mastery fetch
+pub fn knownSeats(in: addinputs.Inputs, m: []const f32, gi: usize) u8 {
+    var n: u8 = 0;
+    for (in.by_game[in.first_row[gi]..in.first_row[gi + 1]]) |ri| n += @intFromBool(!std.math.isNan(m[ri]));
+    return n;
 }
 
 pub const bracket_names = [_][]const u8{ "iron-silver", "gold-emerald", "diamond+", "unknown" };

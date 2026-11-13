@@ -6,7 +6,8 @@ Each BASE=MODEL pairs games-MODEL.tsv against games-BASE.tsv per game: milli-nat
 (MODEL minus BASE, negative better) +- 1.96 se over games, for dev-val and the folds
 pooled, overall and per slice from games-meta.tsv: rank bracket (median rank_start of
 6+ known seats), EUW1, and the fewest fit games among the ten champion-roles (rare
-under 100, thin 100-999, common 1000+). --picks: the pick metric from picks-*.tsv
+under 100, thin 100-999, common 1000+), and by seats with a pre-game mastery fetch when
+the meta has known_seats; each block's overall under the table. --picks: the pick metric from picks-*.tsv
 (dev-val sample): AUC of the real pick's percentile, winners against losers, the top-10%
 win rate, and MODEL minus BASE in AUC with a game bootstrap interval. Markdown out.
 """
@@ -38,6 +39,11 @@ def slices(meta):
     out["EUW1"] = m["euw1"].to_numpy()
     for p in ["rare", "thin", "common"]:
         out[p] = (m["pop"] == p).to_numpy()
+    if "known_seats" in m:
+        k = m["known_seats"].to_numpy()
+        out["no seat's mastery known"] = k == 0
+        out["1+ seats known"] = k > 0
+        out["all ten known"] = k == 10
     return out
 
 
@@ -99,6 +105,9 @@ def main():
             dv, nd = cell(d[mask & dev].dropna())
             fo, nf = cell(d[mask & ~dev].dropna())
             print(f"| {name} | {dv} | {nd:,} | {fo} | {nf:,} |")
+        blocks = meta.index.get_level_values(0)
+        per = [f"{b} {cell(d[blocks == b].dropna())[0]}" for b in sorted(set(blocks))]
+        print("\nPer block: " + ", ".join(per))
     for spec in o.picks:
         base, model = spec.split("=")
         n, res, dd, lo, hi = picks(o.run, base, model)
