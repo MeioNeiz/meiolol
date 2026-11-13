@@ -57,6 +57,7 @@ Why: official answers on what a production application needs.
 - [policy] Support site replaced app messaging for most contact (from 26 April 2024); approvals still via app messages. ^f14
   > For now, we’ll still be sending approvals/rejection reasons and RSO instructions in app messages.
 - [policy] Checked, not there: no mention of ML, AI, model training, or draft/pick tools. ^f15
+- [policy] Checked 2026-11-13, not there: page text unchanged since the snapshot; review time still stated as weekly, up to three weeks. ^f16
 
 ## Read
 

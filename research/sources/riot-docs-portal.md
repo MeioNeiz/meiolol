@@ -65,6 +65,7 @@ Why: the official registration flow, what reviewers look for, key types.
   or game integrity policies; a key type changes rate limits and audience, not which
   features are allowed. A private "op" tool for friends is a small private community
   use, but its features must still pass the same rules as a public one. ^f15
+- [policy] Checked 2026-11-13, not there: page text unchanged since the 2026-10-22 snapshot. ^f16
 
 ## Read
 

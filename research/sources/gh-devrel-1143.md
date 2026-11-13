@@ -4,8 +4,8 @@ url: https://api.github.com/repos/RiotGames/developer-relations/issues/1143
 kind: thread
 commit:
 for: [riot-production-key]
-looked: 2026-10-11
-depth: listed (issue and all 5 comments)
+looked: 2026-11-13
+depth: listed (issue and all 7 comments, to 2026-10-27)
 relevance: high
 grade: C/fair
 description: Applicant waited 8 months, was rejected because the site was unreachable at review time, and re-review went unanswered
@@ -31,6 +31,10 @@ Why: shows the cost of the product URL being down when the reviewer finally look
   > I was given no opportunity to appeal or contest the rejection in real time
 - [policy] Still waiting on 2026-05-06; Discord advice was to keep waiting. ^f4
   > I wrote a message in a channel 2 months ago and someone told me to wait..
+- [policy] Still no re-review on 2026-10-26, about 8 months after the issue opened. ^f5
+  > Still waiting btw
+- [policy] Another applicant (2026-10-27) says the same and blames volume of low-quality submissions. ^f6
+  > i suppose the poor gurus are flooded with ai slop
 
 ## Read
 

@@ -76,6 +76,7 @@ Why: League-specific rules for a champ select recommender, and what Riot evaluat
   > "eventType": "ChampSelectStartedEvent"  //Champ Select Begins
   > "eventType": "GameAllocatedToLsmEvent"  //Game Begins
   > Lobby events should only be used to audit Tournament matches as needed.
+- [policy] Checked 2026-11-13, not there: no change to the page since the snapshot apart from the Data Dragon version (16.22.1); no new champ select, AI or review rules. ^f19
 
 ## Read
 

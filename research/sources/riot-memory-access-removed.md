@@ -42,6 +42,7 @@ Why: did Riot change third-party app rules in Oct 2026 (memory reading, approved
   names the LCU, so whether LCU counts as "official" is unconfirmed. ^f6
 - [policy] Checked, not there: no published list of approved or known apps; no mention
   of champion select, the LCU, or the League Client API. ^f7
+- [policy] Checked 2026-11-13, not there: page text unchanged since the snapshot; still no mention of the LCU. ^f8
 
 ## Read
 

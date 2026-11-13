@@ -43,6 +43,7 @@ Why: check whether the help-centre copy adds anything on champ select or AI beyo
   > Products cannot display win rates for Augments or Arena Mode items.
 - [policy] Checked, not there: no mention of champion select specifically, pick
   recommendation, dodging, AI, machine learning or model training. ^f6
+- [policy] Checked 2026-11-13: League and TFT policy pages still show updated 1 year ago. ^f7
 
 ## Read
 

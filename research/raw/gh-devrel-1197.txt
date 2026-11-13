@@ -1,22 +1,7 @@
-url: https://github.com/RiotGames/developer-relations/issues/1197
-opened: 2026-10-06T08:14:52Z
-closed: null
-title:	[Application Review] Production API Key — Pending Review 38 days (App ID: 875612, TILT)
-state:	OPEN
-author:	1Terrikola (César Vaquero Vicente)
-labels:	
-comments:	2
-assignees:	
-projects:	
-milestone:	
-issue-type:	
-parent:	
-sub-issues:	
-sub-issues-completed:	
-blocked-by:	
-blocking:	
-number:	1197
---
+# #1197 [Application Review] Production API Key — Pending Review 38 days (App ID: 875612, TILT)
+
+Opened 2026-10-06T08:14:52Z by 1Terrikola, state open
+
 **Account Information**
 Riot ID: GothFeetEnjoyer#Canse
 I have played League of Legends for years; this is not an account created only for the Developer Portal.
@@ -46,19 +31,21 @@ The site is live on a development key, which expires every 24 hours and carries 
 **Request**
 Could someone check the status of App ID 875612, or tell me what else is needed to move it forward? Happy to provide anything that is missing.
 
-=== COMMENTS ===
---
-author: raimannma
-association: NONE
-date: 2026-10-06T08:16:07Z
---
+
+## Comment by raimannma (NONE) at 2026-10-06T08:16:07Z
+
 FYI: For Valorant Keys you have to wait 6-8 months, some wait for over an year.
 LoL should generally be a bit faster iirc.
 
---
-author: 1Terrikola
-association: NONE
-date: 2026-10-06T08:24:27Z
---
+
+## Comment by 1Terrikola (NONE) at 2026-10-06T08:24:27Z
+
 Hope so. It's really annoying having to update the API key every day just to be ready for whenever Riot checks the application.
+
+
+## Comment by bedair81 (NONE) at 2026-10-22T22:36:33Z
+
+> Hope so. It's really annoying having to update the API key every day just to be ready for whenever Riot checks the application.
+
+i have been waiting 9 months for my league prod api key to get approved :)
 

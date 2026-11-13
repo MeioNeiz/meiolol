@@ -1,22 +1,7 @@
-url: https://github.com/RiotGames/developer-relations/issues/1143
-opened: 2026-03-09T14:20:16Z
-closed: null
-title:	[Application Review] Waiting for 9 months (ID: 743452)
-state:	OPEN
-author:	arnauddorgans (Arnaud Dorgans)
-labels:	
-comments:	5
-assignees:	
-projects:	
-milestone:	
-issue-type:	
-parent:	
-sub-issues:	
-sub-issues-completed:	
-blocked-by:	
-blocking:	
-number:	1143
---
+# #1143 [Application Review] Waiting for 9 months (ID: 743452)
+
+Opened 2026-03-09T14:20:16Z by arnauddorgans, state open
+
 ### To summarize the timeline:
 
 - I initially submitted my app and waited **8 months** before receiving a review.
@@ -37,51 +22,50 @@ Thank you for your time and understanding.
 
 Best regards
 
-=== COMMENTS ===
---
-author: tadeasf
-association: NONE
-date: 2026-05-06T13:55:03Z
---
+
+## Comment by tadeasf (NONE) at 2026-05-06T13:55:03Z
+
 bro I thought it would take couple of weeks not 8 months jesus this is horrifying
 
---
-author: arnauddorgans
-association: NONE
-date: 2026-05-06T14:00:30Z
---
+
+## Comment by arnauddorgans (NONE) at 2026-05-06T14:00:30Z
+
 @tadeasf And I am still waiting 😆 
 
 
---
-author: tadeasf
-association: NONE
-date: 2026-05-06T14:14:45Z
---
+
+## Comment by tadeasf (NONE) at 2026-05-06T14:14:45Z
+
 > @tadeasf And I am still waiting 😆 
 > 
 
 have you contacted a guru om discord?
 
---
-author: arnauddorgans
-association: NONE
-date: 2026-05-06T14:24:34Z
---
+
+## Comment by arnauddorgans (NONE) at 2026-05-06T14:24:34Z
+
 > > [@tadeasf](https://github.com/tadeasf) And I am still waiting 😆
 > 
 > have you contacted a guru om discord?
 
 I wrote a message in a channel 2 months ago and someone told me to wait..
 
---
-author: Token07
-association: NONE
-date: 2026-05-06T14:33:01Z
---
+
+## Comment by Token07 (NONE) at 2026-05-06T14:33:01Z
+
 > > [@tadeasf](https://github.com/tadeasf) And I am still waiting 😆
 > 
 > have you contacted a guru om discord?
 
 The gurus have said wait longer or build a time machine
+
+
+## Comment by arnauddorgans (NONE) at 2026-10-26T11:49:42Z
+
+Still waiting btw
+
+
+## Comment by tadeasf (NONE) at 2026-10-27T21:51:28Z
+
+@arnauddorgans same. not a platform worth developing anything for in a current state. i suppose the poor gurus are flooded with ai slop (understandably) and riot doesn't want to give it more time and resources. i wouldn't mind going through automated process first which shouldn't be too difficult but clearly it's not their focus.
 

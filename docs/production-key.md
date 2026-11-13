@@ -13,7 +13,9 @@ Uncertain, leaning approvable; the wait is the real cost.
   known case of Riot removing one
 - Risk: docs/lol lists "Apps that dictate player decisions" as unapproved; docs/portal
   "products that solve our games". Several options with reasons is explicitly allowed
-- Review 3-9 months (2026 reports); editing the application reportedly resets the queue.
+- Review 6-12 months in late-2026 reports, Riot silent on every pending thread
+  (research/questions/prodkey-review-2026.md); a site down at review time means rejection;
+  editing the application reportedly resets the queue.
   New production keys reportedly start near personal limits; increases are a later
   support ticket (criteria: good standing, community benefit, outgrown the limit)
 - One product per key, and the key covers only the described use case. So the data
@@ -115,7 +117,11 @@ What differs from the submitted text, and what to check before pasting:
   `meiolol forget --list FILE` (docs/data-safety.md)
 - Check: the download page doesn't yet say queues or before/after lock-in (A1); the app
   text matches it as is. Update both together after the real champ select run
-- Check: the game count (about 210,000) against the home page on the day you paste
+- Check: scope and game count. The draft says EUW, about 210,000 games; the site now
+  crawls every region (/method: 2,174,957 games with a timeline, every region, 30 days).
+  Rewrite that sentence from /method on the day you paste
+- Check: the removal control's name matches ("Remove a Riot ID" here and on /privacy,
+  "Remove my data" on the page; docs/plan/review.md PR6)
 - Daily Draft (J10): recent games, per seat rank and scoreboard, still no names; "with
   no player names" above stays true. Privacy rules audit:
   docs/privacy-rules.md

@@ -285,15 +285,13 @@ detected cross-role kinds. Admin and /private only; the public draft tool follow
 
 ## Before the production review
 
-- Privacy/terms into src/site/textpages.zig from docs/legal once Jacob fills the
-  placeholders; objection by email (`meiolol forget`) until the form is live
+What Riot's reviewer would miss today, ranked: docs/plan/review.md (PR1-PR6).
+
 - Privacy rules (J10): docs/privacy-rules.md (each rule Riot, law or self-imposed, with
   quotes); Jacob's list at its end
 - Names (J18): Your games' Players panel lists all ten with champion, K/D/A and Riot ID
   as at the game, from api.db `match_names` (erased with the player, none for blocked
   PUUIDs; live API serves them); streamer mode only hides names live, so finished games
   show everyone. Daily Draft stays nameless unless Jacob says otherwise
-- Method page (estimates.md E9) before the review: no big rival publishes one (list 10)
-- Reviewer walk (screenshots docs/review-shots/), left: GIFs and a short demo video
 - Admin polish, low while the panel is Jacob's only (J9): fix3 leftovers R48-R50, R58,
   R60, R61 (plans in docs/archive/review-2026-10-17/fix3-notes-2026-10-17.md)

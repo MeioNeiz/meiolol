@@ -1,22 +1,7 @@
-url: https://github.com/RiotGames/developer-relations/issues/1192
-opened: 2026-09-17T10:56:03Z
-closed: null
-title:	[Application Review] Production API Key — Pending Review for 7+ months, 3 support tickets unanswered (App ID: 798301)
-state:	OPEN
-author:	axelvuillaume (axelvuillaume)
-labels:	
-comments:	1
-assignees:	
-projects:	
-milestone:	
-issue-type:	
-parent:	
-sub-issues:	
-sub-issues-completed:	
-blocked-by:	
-blocking:	
-number:	1192
---
+# #1192 [Application Review] Production API Key — Pending Review for 7+ months, 3 support tickets unanswered (App ID: 798301)
+
+Opened 2026-09-17T10:56:03Z by axelvuillaume, state open
+
 ## General Info
 
 - **App ID:** 798301
@@ -71,11 +56,31 @@ requirement, and happy to adjust anything in the application.
 
 Thank you for your time.
 
-=== COMMENTS ===
---
-author: Cypherous
-association: NONE
-date: 2026-09-17T13:00:09Z
---
+
+## Comment by Cypherous (NONE) at 2026-09-17T13:00:09Z
+
 Estimates are 3-8 months but it seems riot has been slacking off in that department, nobody here can speed this process up
+
+
+## Comment by Gombru22 (NONE) at 2026-10-16T07:45:29Z
+
+Any news? I've been waiting 7 months too, nearly 8 months rn.
+
+You can check my website or my app if you like!
+https://buildzcrank.com
+
+
+
+## Comment by Cypherous (NONE) at 2026-10-16T11:12:16Z
+
+> 2\. Any news? I've been waiting 7 months too, nearly 8 months rn.
+>     You can check my website or my app if you like!
+>     https://buildzcrank.com
+
+Yours will likely be rejected as you aren't allowed to tell users what they should be doing or building next, any advice you offer has to be extremely generic, you seem to be listing win rates etc in order to try to influence what they will pick, which isn't allowed
+
+
+## Comment by cosmicday (NONE) at 2026-10-24T04:22:07Z
+
+Hi, did your application end up getting approved? I'm in a similar situation (pending since March 2026), so I'd appreciate knowing how long it took in the end. Thanks!
 

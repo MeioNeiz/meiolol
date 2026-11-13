@@ -62,6 +62,7 @@ Why: which policy lines a champ select pick recommender must satisfy for a produ
 - [policy] (inferred) "All products must be registered and audited" ([[riot-policies-general#^f3]])
   has no key-type carve-out, so the game integrity section binds personal-key products
   too. ^f14
+- [policy] Checked 2026-11-13, not there: page text unchanged since the 2026-10-22 snapshot. ^f15
 
 ## Read
 

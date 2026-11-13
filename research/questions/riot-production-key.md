@@ -16,7 +16,7 @@ win rates, run publicly at scale (iTero, LoLDraftAI, Mobalytics, Porofessor, Bli
 champ select restrictions target player identity and automation, not pick suggestions (C1, C2). Riot's
 own rules draw the line at apps that "dictate player decisions" or "solve our games"; offering several
 options with reasons is explicitly allowed (C3). No public record of a Riot decision on a draft/AI app
-exists; two comparable 2026 applications are still pending (C4). Review is 3-9 months in practice (C5),
+exists; two comparable 2026 applications are still pending (C4). Review is 3-12 months in practice (C5),
 reported rejections are about broken or unclear sites (C6), a new production key starts near dev
 limits with increases via a later ticket (C7). Personal keys are not upgraded in place and cannot serve
 the public (C8). Nothing in Riot's terms or policies addresses ML training; the licence is framed
@@ -30,7 +30,7 @@ status under that change is unstated (C11).
 - C2: Riot's champ select restrictions target identity (names/stats in solo/duo) and automation, not pick suggestions. for: [[overwolf-riot-compliance#^f3]], [[riot-champ-select-anon-apps-1222#^f1]], [[itero-companion-apps#^f5]], [[itero-companion-apps#^f8]]
 - C3: Riot rejects apps that dictate decisions or solve the game, but allows highlighting decisions with multiple choices. for: [[riot-docs-lol#^f10]], [[riot-docs-portal#^f3]], [[riot-policies-general#^f6]], [[riot-support-third-party-apps#^f3]], [[pcgamesn-blitz-plugins#^f3]]
 - C4: No public Riot decision on draft/AI apps; comparable 2026 applications still pending. for: [[gh-devrel-1138#^f5]], [[gh-devrel-1192#^f2]], [[gh-devrel-1188#^f1]], [[gh-devrel-staff-activity#^f6]]
-- C5: LoL production review observed at 3-9 months in 2026, against an official 1-3 weeks. for: [[darkintaqt-riot-app#^f6]], [[gh-devrel-1126#^f2]], [[gh-devrel-1188#^f5]], [[gh-devrel-1139#^f1]] against: [[riot-faqs#^f2]]
+- C5: LoL production review observed at 3-12 months in 2026 (6-12 in Oct-Nov reports, [[prodkey-review-2026]]), against an official 1-3 weeks. for: [[darkintaqt-riot-app#^f6]], [[gh-devrel-1126#^f2]], [[gh-devrel-1188#^f5]], [[gh-devrel-1139#^f1]], [[gh-devrel-1207#^f2]], [[gh-devrel-1208#^f1]] against: [[riot-faqs#^f2]]
 - C6: Reported rejections are for broken, blank or unclear product URLs; Riot wants a working site with user flow, ToS and privacy policy. for: [[gh-devrel-1139#^f2]], [[gh-devrel-1139#^f6]], [[riot-faqs#^f7]], [[riot-docs-portal#^f4]], [[riot-docs-lol#^f7]]
 - C7: New production keys start near dev limits; increases need a separate ticket after approval. for: [[darkintaqt-riot-app#^f4]], [[gh-devrel-1126#^f3]], [[gh-devrel-1188#^f4]] against: [[riot-docs-portal#^f9]]
 - C8: Personal keys cannot serve the public (incl. open betas) and are not upgraded in place; PUUID encryption is per key. for: [[riot-docs-portal#^f8]], [[gh-devrel-1188#^f3]], [[darkintaqt-riot-app#^f8]]

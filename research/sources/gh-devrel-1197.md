@@ -4,8 +4,8 @@ url: https://api.github.com/repos/RiotGames/developer-relations/issues/1197
 kind: thread
 commit:
 for: [riot-production-key]
-looked: 2026-10-11
-depth: listed (issue and all 2 comments)
+looked: 2026-11-13
+depth: listed (issue and all 3 comments, to 2026-10-22)
 relevance: medium
 grade: C/fair
 description: Most recent LoL production application thread; riot.txt verified at submission, policy questions put in the application itself, FAQ timing quoted
@@ -38,6 +38,10 @@ Why: the newest LoL application thread; shows current applicant practice.
 - [policy] Community (2026-10-06): Valorant 6-8 months, LoL generally a bit faster. ^f6
   > For Valorant Keys you have to wait 6-8 months, some wait for over an year.
   > LoL should generally be a bit faster iirc.
+- [policy] Applicant keeps refreshing the 24-hour dev key daily in case Riot checks the site. ^f7
+  > It's really annoying having to update the API key every day just to be ready for whenever Riot checks the application.
+- [policy] Another LoL applicant (2026-10-22): waiting 9 months. ^f8
+  > i have been waiting 9 months for my league prod api key to get approved
 
 ## Read
 

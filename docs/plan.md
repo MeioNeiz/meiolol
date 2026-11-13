@@ -10,8 +10,9 @@ Product: "scout your own games" (docs/concept.md "Identity draft four"): the pla
 own games first, as stats nobody else shows, with the minute-by-minute matchup curves
 as the benchmark; Daily Draft, Learn, Pool kept; picks only as several options with
 reasons. Crawl is Platinum IV+ only, so "typical" means Platinum+. The application went
-in on 2026-10-11 (docs/production-key.md); review takes 3-9 months and Riot looks at
-the site at review time, so keep building and keep the site up. Don't edit the
+in on 2026-10-11 (docs/production-key.md); late-2026 reviews take 6-12 months and Riot
+looks at the site at review time, so keep building and keep the site up; what a reviewer
+would miss today: docs/plan/review.md (PR1-PR6). Don't edit the
 application while it queues. What pages and the app may show: docs/production-key.md
 "Product rules".
 
@@ -67,6 +68,7 @@ back. Jacob's open decisions: decisions.md "Open decisions".
 
 - docs/plan/site.md: the website by page (Your games, Daily Draft, Learn, search,
   champion, matchup, draft tester) and polish before the production review
+- docs/plan/review.md: what Riot's reviewer would miss on the live site, steps PR1-PR6
 - docs/plan/app.md: the two desktop apps (public and private), the policy line between
   them, Jacob's champ select list by edition, in-game companion, steps APP1-APP9
 - docs/plan/accounts.md: logins, roles (public, paid, private, admin, owner),

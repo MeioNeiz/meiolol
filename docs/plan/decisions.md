@@ -148,7 +148,8 @@ The one list: each with the recommended answer. Plan files point here.
 
 Unblocking work:
 - Phone alerts: a private ntfy.sh topic as NTFY_TOPIC in .env (health-loop.sh pushes
-  once it is set). Recommended yes; Jacob 30 Oct: not now
+  once it is set). Recommended yes (review.md PR1: a site down when Riot looks means
+  rejection); Jacob 30 Oct: not now
 - gpu-box: Windows Tailscale login (jmw) and WSL's sudo for Tailscale there, so its
   backup mirror and archive pull run again (stale since 28 Oct). Recommended: when the PC
   is on
