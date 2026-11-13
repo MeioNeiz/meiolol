@@ -62,6 +62,7 @@ pub const Client = struct {
         }
         const shown = logged(path, method);
         var limited: usize = 0;
+        c.freshClock();
         for (0..tries) |attempt| {
             const backoff: i64 = @as(i64, 1) << @intCast(attempt);
             const asked = c.now();
@@ -117,6 +118,20 @@ pub const Client = struct {
 
     fn now(c: *Client) u64 {
         return @intCast(std.Io.Clock.awake.now(c.io).nanoseconds);
+    }
+
+    const clock_refresh_s = 600;
+
+    /// std.http.Client reads the clock at its first HTTPS request and judges every later
+    /// certificate by that time. A crawler up since 6 Nov took Riot's certificate of
+    /// 10 Nov as not yet valid: every handshake TlsInitializationFailed for 74 h
+    fn freshClock(c: *Client) void {
+        const then = c.http.now orelse return;
+        const real = std.Io.Clock.real.now(c.io);
+        if (@abs(real.toSeconds() - then.toSeconds()) < clock_refresh_s) return;
+        c.http.ca_bundle_lock.lockUncancelable(c.io);
+        defer c.http.ca_bundle_lock.unlock(c.io);
+        c.http.now = real;
     }
 
     const tries = 6;
@@ -286,6 +301,23 @@ test "a body cut short is an error, not a shorter 200" {
     defer gpa.free(all);
     try std.testing.expectEqualStrings(doc, all);
     try std.testing.expectError(error.ReadFailed, testBody(gpa, chunked[0 .. chunked.len - 10]));
+}
+
+test "the HTTP client's clock follows the real one" {
+    var limiter: Limiter = undefined;
+    var c: Client = .init(std.testing.allocator, std.testing.io, "", &limiter);
+    defer c.deinit();
+    // Before the first HTTPS request std reads the clock itself
+    c.freshClock();
+    try std.testing.expectEqual(@as(?std.Io.Timestamp, null), c.http.now);
+    const real = std.Io.Clock.real.now(std.testing.io).toSeconds();
+    c.http.now = .{ .nanoseconds = @as(i96, real - 4 * 86400) * std.time.ns_per_s };
+    c.freshClock();
+    try std.testing.expect(@abs(c.http.now.?.toSeconds() - real) < 60);
+    const kept: std.Io.Timestamp = .{ .nanoseconds = @as(i96, real - 60) * std.time.ns_per_s };
+    c.http.now = kept;
+    c.freshClock();
+    try std.testing.expectEqual(kept, c.http.now.?);
 }
 
 test "a 403 is the key's only when Riot says so" {
