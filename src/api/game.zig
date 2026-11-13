@@ -596,23 +596,14 @@ fn seats(arena: Allocator, s: Summary, slot: u8, riot_ids: []const ?[]const u8) 
 /// Blue's win chance by minute from 0: statemodel (state, items, timers and champions)
 /// when each side has its five roles, else winchance (team gold and objectives)
 fn blueChances(arena: Allocator, s: Summary, t: timeline.Timeline, platform: []const u8, legendaries: []const u32) ![]const f64 {
-    if (t.participants == 10 and s.players.len == 10) seats: {
-        var teams: [10]i64 = undefined;
-        var positions: [10][]const u8 = undefined;
-        var champions: [10]u32 = undefined;
-        for (s.players, &teams, &positions) |p, *team, *pos| {
+    if (s.players.len == 10) {
+        var players: statemodel.Players = undefined;
+        for (s.players, &players.teams, &players.positions, &players.champions) |p, *team, *pos, *champion| {
             team.* = p.team;
             pos.* = p.position;
+            champion.* = p.champion;
         }
-        const seat_of = statemodel.Game.seats(teams, positions) orelse break :seats;
-        for (s.players, seat_of) |p, seat| champions[seat] = p.champion;
-        return statemodel.chances(arena, statemodel.shipped(), .{
-            .t = t,
-            .seat_of = seat_of,
-            .champions = champions,
-            .platform = platform,
-            .items = .sorted(&legendaries),
-        });
+        if (try statemodel.chancesOf(arena, statemodel.shipped(), players, t, platform, .sorted(&legendaries))) |chances| return chances;
     }
     var out: std.ArrayList(f64) = .empty;
     var m: u8 = 0;

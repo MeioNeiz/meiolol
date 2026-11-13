@@ -162,9 +162,12 @@ How to write a line:
   items and death timers plus the champions than from team gold and objectives: at 15
   minutes 85% against 83% of winners ranked above losers, honest to about 1 point
   through 30 minutes. A champion is worth most between 10 and 20 minutes and little
-  after 35. Sure: 2253Z, 100,848 games with a timeline, every fold better. Site: Your
-  games' win chance by minute (post-game only), never in champ select. Evidence:
-  docs/model.md "Rich state and champions (richc)"
+  after 35. On 16.21-16.22 still honest within half a point from minute 1; the
+  champions-only start is a sixth too spread, EUW1's blue 1 point high to 10 minutes,
+  flex's blue 2-4 points high before 15. Sure: 2253Z, 100,848 games with a timeline,
+  every fold better; then 207k ranked solo and 3,331 flex games. Site: Your games' win
+  chance by minute (post-game only), never in champ select. Evidence: docs/model.md
+  "Rich state and champions (richc)", "Win chance by minute on later patches and flex"
 - Champion pairs help a tiny bit once each champion is described by how it usually
   plays rather than by name: about half of what the damage mix adds, and nothing with
   shuffled descriptions. Sure: rule declared before the runs, passed at its margin;

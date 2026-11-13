@@ -6476,6 +6476,83 @@ and these are final; none is a TS5 input):
 - No learning curve: jumpers start about a point above 16.20 (mostly buffed) and stay
   there; +1 pp (the prediction) is 4 se out. Only 10 jumpers on 16.21
 
+### Win chance by minute on later patches and flex, 2026-11-13 (lab)
+
+Question: is Your games' win chance by minute (the shipped richc, fitted on ranked solo
+to 13 Oct, 16.19-16.20; "Win chance by minute (Your games)") still honest two patches
+on, and on flex, which it also scores? Rule declared 9 Nov before any run
+(data/team/2026-11-09-more/lab.md "Plan: item 10"): per minute block to 29 min, holds =
+every slope range overlaps 0.9-1.1, |in the large| < 1 point and ECE <= 0.015; off = a
+slope range outside 0.9-1.1 or |in the large| > 2 points; else between.
+
+Method: `meiolol-lab state-calib` scores each game as the site does (statemodel.chancesOf
+on the shipped model: the call api/game.zig makes) from the Mac's backup mirror, no box
+load; py/state/calib.py: in the large (mean chance - blue's win rate, points), slope
+(logistic of the result on the chance's logit), ECE over 10 equal-mass bins, 95% ranges
+from 1,000 whole-game bootstrap draws. Games without five roles a side (73 of 211k) get
+winchance on the site and are left out.
+- Solo: segments 25, 27, 29, 32, one game in 4 by match key, played after 23 Oct 20:04Z
+  (no game of 2004Z's): 45,307 on 16.21, 40,576 on 16.22
+- Confirm, added after the first pass read EUW1 16.22 as borderline: every 16.22 game
+  of segments 33-34 (3-10 Nov), 121,342, none in the first sample; same rule
+- Flex: the 3,331 flex games with a timeline in 2004Z, all 16.20, 3,285 on EUW1: the
+  fit's own weeks, so they test the queue, not the patch
+- Not checked: draft and Swiftplay (none crawled), rank (needs rank at game time), games
+  under 15:00 (27 in all). 16.22's finished items are 16.21's (138, Data Dragon)
+
+Each cell: in the large [95%] / slope [95%] / ECE.
+
+| min | 16.21 (45,307) | 16.22 (40,576) | 16.22 confirm (121,342) |
+|---|---|---|---|
+| 0 | +0.2 [-0.2, +0.7] / 0.96 [0.87, 1.05] / 0.0077 | +0.4 [-0.1, +0.9] / 0.86 [0.77, 0.96] / 0.0116 | +0.2 [-0.1, +0.5] / 0.84 [0.78, 0.90] / 0.0075 |
+| 1-4 | +0.0 [-0.4, +0.5] / 1.04 [1.01, 1.07] / 0.0042 | +0.3 [-0.1, +0.8] / 1.04 [1.01, 1.08] / 0.0049 | +0.1 [-0.2, +0.4] / 1.03 [1.01, 1.05] / 0.0029 |
+| 5-9 | +0.0 [-0.4, +0.4] / 1.01 [0.99, 1.03] / 0.0029 | +0.5 [+0.0, +0.9] / 1.02 [0.99, 1.04] / 0.0057 | +0.2 [-0.1, +0.4] / 1.00 [0.99, 1.01] / 0.0028 |
+| 10-14 | +0.1 [-0.3, +0.5] / 1.02 [1.00, 1.04] / 0.0044 | +0.4 [+0.0, +0.8] / 1.01 [0.99, 1.03] / 0.0074 | +0.2 [-0.1, +0.4] / 1.00 [0.99, 1.02] / 0.0035 |
+| 15-19 | +0.1 [-0.2, +0.5] / 1.01 [0.99, 1.03] / 0.0025 | +0.3 [-0.1, +0.7] / 1.01 [0.99, 1.02] / 0.0039 | +0.1 [-0.1, +0.4] / 1.01 [1.00, 1.02] / 0.0028 |
+| 20-24 | +0.1 [-0.3, +0.4] / 1.02 [1.00, 1.04] / 0.0025 | +0.2 [-0.1, +0.6] / 1.01 [1.00, 1.03] / 0.0052 | +0.1 [-0.1, +0.3] / 1.02 [1.01, 1.03] / 0.0039 |
+| 25-29 | +0.1 [-0.3, +0.5] / 1.00 [0.98, 1.02] / 0.0045 | +0.3 [-0.1, +0.7] / 1.01 [0.99, 1.03] / 0.0067 | +0.1 [-0.1, +0.4] / 1.01 [1.00, 1.02] / 0.0046 |
+| 30-40 | +0.2 [-0.5, +0.8] / 1.01 [0.99, 1.04] / 0.0076 | +0.5 [-0.2, +1.1] / 1.00 [0.97, 1.02] / 0.0094 | +0.3 [-0.1, +0.6] / 1.02 [1.01, 1.04] / 0.0060 |
+
+| min | EUW1 16.21 (15,045) | EUW1 16.22 (13,987) | EUW1 16.22 confirm (41,927) | flex 16.20 (3,331) |
+|---|---|---|---|---|
+| 0 | +0.8 [-0.1, +1.6] / 1.04 [0.88, 1.20] / 0.0104 | +1.3 [+0.5, +2.1] / 1.02 [0.86, 1.19] / 0.0134 | +1.0 [+0.5, +1.4] / 0.85 [0.75, 0.95] / 0.0118 | +4.4 [+2.6, +6.1] / 1.03 [0.71, 1.34] / 0.0438 |
+| 1-4 | +0.6 [-0.2, +1.4] / 0.99 [0.94, 1.05] / 0.0063 | +1.3 [+0.5, +2.1] / 1.08 [1.02, 1.14] / 0.0132 | +0.8 [+0.4, +1.3] / 1.04 [1.01, 1.08] / 0.0087 | +3.6 [+2.0, +5.3] / 1.19 [1.07, 1.33] / 0.0375 |
+| 5-9 | +0.5 [-0.2, +1.2] / 1.00 [0.96, 1.04] / 0.0056 | +1.2 [+0.5, +2.0] / 1.02 [0.98, 1.06] / 0.0122 | +0.8 [+0.3, +1.2] / 1.02 [0.99, 1.04] / 0.0076 | +2.6 [+1.1, +4.1] / 1.04 [0.96, 1.12] / 0.0259 |
+| 10-14 | +0.7 [+0.1, +1.3] / 1.01 [0.97, 1.04] / 0.0087 | +0.8 [+0.1, +1.5] / 0.98 [0.94, 1.01] / 0.0151 | +0.6 [+0.1, +1.0] / 1.02 [1.00, 1.04] / 0.0062 | +2.1 [+0.6, +3.4] / 0.98 [0.91, 1.05] / 0.0217 |
+| 15-19 | +0.8 [+0.2, +1.4] / 1.00 [0.97, 1.03] / 0.0080 | +0.5 [-0.2, +1.1] / 0.98 [0.95, 1.01] / 0.0079 | +0.4 [+0.0, +0.7] / 1.02 [1.00, 1.03] / 0.0047 | +1.3 [-0.0, +2.7] / 0.96 [0.90, 1.03] / 0.0151 |
+| 20-24 | +0.6 [-0.0, +1.2] / 1.01 [0.98, 1.05] / 0.0068 | +0.3 [-0.3, +0.9] / 1.00 [0.97, 1.03] / 0.0088 | +0.2 [-0.2, +0.6] / 1.01 [1.00, 1.03] / 0.0042 | +1.0 [-0.3, +2.3] / 0.96 [0.90, 1.03] / 0.0119 |
+| 25-29 | +0.5 [-0.1, +1.2] / 0.99 [0.96, 1.03] / 0.0091 | +0.0 [-0.7, +0.7] / 1.00 [0.97, 1.04] / 0.0082 | +0.0 [-0.4, +0.4] / 1.01 [0.99, 1.03] / 0.0041 | +0.6 [-0.8, +2.2] / 0.95 [0.89, 1.02] / 0.0209 |
+| 30-40 | +0.5 [-0.7, +1.6] / 1.00 [0.96, 1.04] / 0.0104 | +0.1 [-1.1, +1.2] / 0.98 [0.94, 1.03] / 0.0138 | +0.1 [-0.5, +0.7] / 1.05 [1.02, 1.07] / 0.0054 | +0.1 [-2.1, +2.3] / 1.01 [0.92, 1.10] / 0.0093 |
+
+Reading, by the rule:
+- Solo, every region, from 1 minute: holds on both patches and in the confirm. Slope
+  1.00-1.04, within 0.5 points in the large, ECE at most 0.0074 to 29 min (the fit's own
+  folds: 0.0035-0.0078). richc beats winchance in every block of every stratum (10-14
+  min: log loss 0.527 vs 0.552, AUC 0.811 vs 0.789 in the confirm, as on the folds)
+- 0:00, the champions alone: off on 16.22. Slope 0.84 [0.78, 0.90] in the confirm (0.86
+  in the first sample, 0.96 on 16.21): champion strengths fitted on 16.19-16.20 are
+  about a sixth too spread two patches on. In points it is small: a shown 58% is 56.7%,
+  ECE 0.0075. It is gone by minute 1, where the state carries the chance
+- EUW1 16.22: between. Blue is shown about 1 point too high through 10 minutes (+1.2 to
+  +1.3 in the first sample, +0.8 to +1.0 in the confirm, both ranges clear of 0), fading
+  to nothing by 25 minutes; slopes fine. Blue won 49.3-49.6% of EUW1's 16.22 games
+  against 50.1-50.3% over every region, and the model's EUW1 start is 50.6%. EUW1 16.21
+  leans the same way, +0.5 to +0.8
+- Flex: off before 15 minutes. Blue shown 4.4 points too high at 0:00, 2.1 at 10-14,
+  under 1 from 20; no slope range leaves 0.9-1.1 (highest 1.19 [1.07, 1.33] at 1-4
+  min). Blue won 46.1% of these flex games, so the gap is a level by side, not the
+  ranking (AUC 0.811 at 10-14, as solo).
+  Whether flex itself puts the stronger team on red or this sample does (players found
+  on the solo ladder, one region, one patch) is open
+- The ECE ranges are not shown: resampling adds its own noise to ECE, so a draw's ECE
+  sits above the sample's (calib.py prints them)
+
+Site (proposals; yourgames owns the page): the chart stands for ranked solo. Refit richc
+on a newer snapshot when one is cut (py/state/stateship.py): it resets the 0:00 slope
+and EUW1's level, and this check reruns in minutes. Flex: say the chance is fitted on
+ranked solo, or hold a per-queue level once a few 10k flex timelines exist; draft and
+Swiftplay stay unchecked until some are crawled.
+
 ### Site figures checked, 2026-11-02 (stats-review, polish run)
 
 data/snap (85,693 ranked solo games, 16.19 + 16.20, all regions), sqlite3 on the Mac;
@@ -6544,6 +6621,64 @@ after it:
 - D1: the mastery term's gain in log loss, beta with its interval, and v2's
   champion-role strengths with the term (at any fixed mastery, so at 50k points) against
   without
+
+### A1 at today's size, 2026-11-13 (draftmodel)
+
+Question (docs/plan/lab-frontier.md wave 1): the daily eval has been flat since ~2.4M
+games, but its test set moves. On fixed held-out games, what does each doubling of fit
+games past 1.2M give additive v2 and the set net on it, and does the net beat v2 now?
+
+Rules, declared before the pin was built:
+
+- Pin: a new snapshot of 13 Nov, the protocol's cuts ("Shared protocol"); held-out games
+  its dev-val and folds 1-5, fixed by those cuts before any fit. No test look
+- Models: additive v2 full (candidate win-additive) and the set net + embedding on it
+  (netcheck --net set --ids 1, seeds 1-3, 18 Oct options), each refitted per block on
+  1/16, 1/8, 1/4, 1/2 and all of its fit games (netcheck --fraction: nested hashed
+  shares, the same games at every size, spread over every day and patch)
+- Score: log loss on the same scored games at every size, the folds pooled the headline,
+  dev-val beside. Gain per doubling: loss at f minus loss at f/2, paired per game,
+  ± 1.96 se over games. The net against v2 at each size, paired
+- Train loss per size (train.tsv, new in netcheck): v2 on its own fit games, in-sample
+  and cross-fitted, and the net on its training games; with the held-out loss they
+  bracket what more games can reach [ceiling C6]
+- Done when each family has its gain for the last doubling (1/2 to all, past 1.2M fit
+  games in every block) and the one before, and the net minus v2 at each size. A family
+  has plateaued if its last doubling's interval includes 0; the net beats v2 at a size
+  if the paired interval excludes 0
+- Secondary, if the GPU is free: big on win-draft (seeds 1-10) at 1/2 and all, against
+  set on v2, paired: 2004Z's forecast was that big passes set on v2 by ~2.4M fit games
+- The fit spans 16.19 to 16.22, so a doubling here adds games across patches, as the
+  shipped model's 30-day window does; not comparable game for game with 2004Z's curve
+  (16.19-16.20 only), only in slope
+
+### P4: seat mastery with missing flags, 2026-11-13 (draftmodel)
+
+Question (data/team/2026-11-09-more/modelresearch-proposals.md P4, research
+context-aware-models C13-C15): pre-game mastery exists for some seats only (25% of fold
+1's seats, 84% of dev-val's). Does imputing the rest from what is known before the game,
+with a per-seat missing flag, add to the draft model, and does the rising coverage make
+the flags learn the era instead?
+
+Rules, the keep rule as proposed 9 Nov, the rest declared here before any run:
+
+- Data and blocks as A10 (a): snap-20261023T2004Z, dev-val and folds 1-5, no test look.
+  `effects --p4 1` (lab/a10.zig fillP4), every term blue minus red summed over seats,
+  fitted jointly with v2 full
+- full-m (D1's): m = log10(points + 1000) - 3, a seat without a fetch at its
+  champion-role's mean among the block's fetched fit seats
+- full-mi: the missing seat's m also moves with its rank_start, by m's slope on rank
+  within a champion-role (fit seats with both known)
+- Arm A, full-mif: full-mi + the missing flag (seats without a fetch)
+- Arm B, full-mifx: arm A + the flag times the champion-role's strength (logit of its
+  fit win rate with 200 even games added)
+- Keep rule, each paired per game, folds pooled unless said: (1) arm A against v2 full
+  on games with 1+ seat known: better by 2 se; (2) on games with no seat known: within
+  0.05 milli-nats of v2 full; (3) A's gain on dev-val (the newest block) is not below
+  half its gain on the folds, else the flags learnt the coverage era; (4) B kept over A
+  only if better by 2 se on all games
+- Reported beside: full-mi minus full-m (rank in the imputation) and full-mif minus
+  full-mi (the flag alone). The net arm is not part of this run
 
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 

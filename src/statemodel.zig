@@ -327,6 +327,25 @@ pub fn chances(arena: Allocator, m: Model, g: Game) ![]f64 {
     return out.items;
 }
 
+/// A game's ten players by participant id - 1, as a match gives them
+pub const Players = struct {
+    /// 100 blue, 200 red
+    teams: [10]i64,
+    /// Riot teamPosition
+    positions: [10][]const u8,
+    champions: [10]u32,
+};
+
+/// chances for players in participant order; null unless the timeline has 10
+/// participants and each side its five roles once
+pub fn chancesOf(arena: Allocator, m: Model, p: Players, t: timeline.Timeline, platform: []const u8, items: livestate.Items) !?[]f64 {
+    if (t.participants != 10) return null;
+    const seat_of = Game.seats(p.teams, p.positions) orelse return null;
+    var champions: [10]u32 = undefined;
+    for (p.champions, seat_of) |c, seat| champions[seat] = c;
+    return try chances(arena, m, .{ .t = t, .seat_of = seat_of, .champions = champions, .platform = platform, .items = items });
+}
+
 const testing = std.testing;
 
 test {
@@ -408,4 +427,18 @@ test "chances: the champions alone at the start, then the model while the game i
     const d = m.draft(champions, "EUW1");
     try testing.expectApproxEqAbs(m.intercept("EUW1"), d.logit, 1e-12);
     try testing.expectEqual(m.intercept("XX9"), m.float(m.default_off));
+
+    // Players in participant order, roles not in seat order: each champion lands on its
+    // seat, so the chances are those of the seat-ordered game
+    const mirror = [10]u8{ 0, 1, 2, 3, 4, 9, 8, 7, 6, 5 };
+    const want = try chances(arena, m, .{ .t = t, .seat_of = mirror, .champions = .{ 1, 2, 103, 222, 5, 6, 7, 8, 9, 10 }, .platform = "EUW1", .items = .sorted(&ids) });
+    var players: Players = .{
+        .teams = .{ 100, 100, 100, 100, 100, 200, 200, 200, 200, 200 },
+        .positions = .{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY", "UTILITY", "BOTTOM", "MIDDLE", "JUNGLE", "TOP" },
+        .champions = .{ 1, 2, 103, 222, 5, 10, 9, 8, 7, 6 },
+    };
+    try testing.expectEqualSlices(f64, want, (try chancesOf(arena, m, players, t, "EUW1", .sorted(&ids))).?);
+    try testing.expect(want[10] != p[10]);
+    players.positions[3] = "";
+    try testing.expectEqual(@as(?[]f64, null), try chancesOf(arena, m, players, t, "EUW1", .sorted(&ids)));
 }

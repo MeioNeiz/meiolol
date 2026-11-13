@@ -35,6 +35,7 @@ const effects = @import("lab/effects.zig");
 const patchdays = @import("lab/patchdays.zig");
 const eventvalue = @import("lab/eventvalue.zig");
 const stateexport = @import("lab/stateexport.zig");
+const statecalib = @import("lab/statecalib.zig");
 const pretrain = @import("lab/pretrain.zig");
 const playernet = @import("lab/playernet.zig");
 const stack = @import("lab/stack.zig");
@@ -102,7 +103,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ champcomp.usage ++ champgroups.usage ++ events.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ patchdays.usage ++ pairprior.usage ++ eventvalue.usage ++ stateexport.usage ++ compare.usage ++ looks.usage ++ coverage.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ champcomp.usage ++ champgroups.usage ++ events.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ patchdays.usage ++ pairprior.usage ++ eventvalue.usage ++ stateexport.usage ++ statecalib.usage ++ compare.usage ++ looks.usage ++ coverage.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -363,6 +364,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "state-export")) {
         return stateexport.main(init.gpa, init.io, argv[2..]);
     }
+    if (std.mem.eql(u8, cmd, "state-calib")) {
+        return statecalib.main(init.gpa, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "pairprior")) {
         return pairprior.main(init.gpa, arena, init.io, argv[2..]);
     }
@@ -484,6 +488,7 @@ test {
     _ = coverage;
     _ = eventvalue;
     _ = stateexport;
+    _ = statecalib;
 }
 
 /// x86 SSE runs ~100x slower on denormal floats, which Adam's decaying moments of rarely
