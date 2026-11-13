@@ -332,7 +332,7 @@ pub const Seat = struct {
                         .s = .l,
                     }),
                     toggletip.tip(h, "dp-range", W.range, W.range_note, false),
-                    h.p(.{ .class = "verdict" }, .{verdict(pp.blue, won)}),
+                    h.p(.{ .class = "verdict" }, .{verdict(pp, won)}),
                 }),
                 h.div(.{ .class = "edges" }, .{rows.done()}),
             }),
@@ -342,12 +342,12 @@ pub const Seat = struct {
 
 /// Which draft was better against who won, in words: the split above has the numbers.
 /// Drafts seldom differ by much (most of a puzzle's blue chances are 44-56%), so a
-/// point either side is even and under four is "slightly"
-pub fn verdict(blue: f32, won: dd.Side) tree.Text {
-    const lead = @abs(blue - 50);
-    if (lead < 1) return if (won == .blue) W.even_blue else W.even_red;
-    const better: dd.Side = if (blue > 50) .blue else .red;
-    const i: usize = @as(usize, @intFromBool(lead >= 4)) * 4 + @as(usize, @backingInt(better)) * 2 + @intFromBool(better != won);
+/// point either side is even, and "better" only when the 95% range excludes even
+pub fn verdict(pp: dd.Paper, won: dd.Side) tree.Text {
+    if (@abs(pp.blue - 50) < 1) return if (won == .blue) W.even_blue else W.even_red;
+    const better: dd.Side = if (pp.blue > 50) .blue else .red;
+    const clear = pp.low > 50 or pp.high < 50;
+    const i: usize = @as(usize, @intFromBool(clear)) * 4 + @as(usize, @backingInt(better)) * 2 + @intFromBool(better != won);
     return W.verdicts[i];
 }
 
@@ -404,7 +404,7 @@ const W = struct {
     const range_note = plain("The model's 95% range, given its assumptions.");
     const even_blue = plain("Even drafts. Blue won.");
     const even_red = plain("Even drafts. Red won.");
-    /// By [better by 4+][better side][an upset]
+    /// By [range clear of even][better side][an upset]
     const verdicts = [8]tree.Text{
         plain("Blue's draft was slightly better, and blue won."),
         plain("Blue's draft was slightly better, but red won."),

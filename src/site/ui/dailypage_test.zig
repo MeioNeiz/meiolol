@@ -481,10 +481,16 @@ test "Home reads the marks this page writes" {
 }
 
 test "On paper's verdict: which draft was better against who won" {
-    const v = dailyseat.verdict;
-    try testing.expectEqualStrings("Even drafts. Red won.", v(50.9, .red).s);
-    try testing.expectEqualStrings("Blue's draft was slightly better, and blue won.", v(51.3, .blue).s);
-    try testing.expectEqualStrings("Red's draft was slightly better, but blue won.", v(47.1, .blue).s);
-    try testing.expectEqualStrings("Red's draft was better, and red won.", v(41.1, .red).s);
-    try testing.expectEqualStrings("Blue's draft was better, but red won.", v(57.6, .red).s);
+    const v = struct {
+        fn f(blue: f32, low: f32, high: f32, won: dd.Side) []const u8 {
+            return dailyseat.verdict(.{ .blue = blue, .low = low, .high = high, .edges = @splat(0) }, won).s;
+        }
+    }.f;
+    try testing.expectEqualStrings("Even drafts. Red won.", v(50.9, 45.2, 56.5, .red));
+    try testing.expectEqualStrings("Blue's draft was slightly better, and blue won.", v(51.3, 45.6, 56.9, .blue));
+    try testing.expectEqualStrings("Red's draft was slightly better, but blue won.", v(47.1, 41.4, 52.9, .blue));
+    // 5+ points, but the range still holds even: only slightly
+    try testing.expectEqualStrings("Blue's draft was slightly better, but red won.", v(55.4, 49.6, 61.0, .red));
+    try testing.expectEqualStrings("Red's draft was better, and red won.", v(41.1, 35.6, 46.8, .red));
+    try testing.expectEqualStrings("Blue's draft was better, but red won.", v(57.6, 51.2, 63.7, .red));
 }
