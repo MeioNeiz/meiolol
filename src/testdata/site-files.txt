@@ -463,7 +463,7 @@ data/tiers-rank.bin 5f022127a6cbd175
 data/tiers.bin 3a3cc97d33ee232a
 download.html 9e7ee71bdb7f860a
 index.html f6d59f7289aa83eb
-learn.html 0decfab508e25a30
+learn.html fb4f19c0b3affbe5
 learn/champs.json 7c5a77a4464faa98
 learn/practice.json 4f53cda18c2baa0c
 matchups.html ed02b6f037365d4f

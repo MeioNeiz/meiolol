@@ -436,9 +436,10 @@ How to write a line:
   mastery from before the game only in 1 game in 15 (1 in 3 of the newest days), all ten
   ranks at game start in about half the games since 13 Oct. Models: seat mastery usable.
   Evidence: docs/model.md "The new pin, snap-20261023T2004Z"
-- Most lane matchups in a patch have a handful of games: of 166.5k matchup curves on
-  EUW 16.20, 58% had under 5 games, only 9% 50+. Site: Learn; `meiolol curves` writes
-  matchups from 10 games (docs/arch-stats.md "Lane curves")
+- Most lane matchups in a patch have a handful of games: of 31.5k (role and champion
+  pair) on EUW 16.21, 46% had under 5 games, only 19% 50+, yet those hold 90% of games.
+  Sure: all 428,616 ranked solo games of the patch, every rank. Site: Learn; `meiolol
+  curves` writes matchups from 10 games (docs/arch-stats.md "Lane curves")
 - Leaving out games that end before 15:00 without a remake flag (about 1.5%, mostly
   surrenders after a leaver) makes no detectable difference to draft predictions.
   Sure: 8,608 dev games, +0.00003 ± 0.00025 nats. Models: the lab harness and draft

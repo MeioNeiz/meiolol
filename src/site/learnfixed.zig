@@ -256,6 +256,18 @@ pub const sample: ld.Puzzle = .{
         "(snapshot of 17 Oct), split in halves",
 };
 
+pub const thin_matchups: ld.Puzzle = .{
+    .id = "thin-matchups",
+    .q = "What share of them reach that many games?",
+    .setup = .{ .facts = &.{ .{ .v = "31.5k", .label = "lane matchups played in one patch, EUW" }, .{ .v = "50+", .label = "games in one matchup" } } },
+    .answer = .{ .guess = .{ .lo = 0, .hi = 60, .step = 1, .real = 19, .tol = 3 } },
+    .why = "Only 19% reached 50 games; 46% had under 5.",
+    .tip = "Check a matchup's games before its win rate.",
+    .games = 428_616,
+    .from = "Ranked solo, every rank, EUW: every game of patch 16.21, matchups by role " ++
+        "and champion pair",
+};
+
 pub const rare_pick: ld.Puzzle = .{
     .id = "rare-pick",
     .q = "How often does it win the next week?",
@@ -361,8 +373,8 @@ pub const chapter2 = [_]ld.Puzzle{ fed, fed_role, lead_worth, surrender, bounty 
 pub const chapter3 = [_]ld.Puzzle{gold_nudge};
 pub const chapter4 = [_]ld.Puzzle{ counter_role, team_counter };
 pub const chapter5 = [_]ld.Puzzle{
-    splitpush, wincon,   sample, rare_pick,  item_wr,     support_gold,
-    scaling,   comeback, runes,  skillshots, style_types, luck,
+    splitpush, wincon,   sample, thin_matchups, rare_pick,   item_wr, support_gold,
+    scaling,   comeback, runes,  skillshots,    style_types, luck,
 };
 
 test "fixed puzzles: answers in range, games on every bar, no pick advice" {
