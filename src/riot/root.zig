@@ -9,6 +9,7 @@ pub const mastery = @import("mastery.zig");
 pub const crawl = @import("crawl.zig");
 pub const proxy = @import("proxy.zig");
 pub const writer = @import("writer.zig");
+pub const stall = @import("stall.zig");
 pub const complete = @import("complete.zig");
 pub const complete_scrub = @import("complete_scrub.zig");
 pub const fake = @import("fake.zig");

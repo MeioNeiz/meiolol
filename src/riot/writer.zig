@@ -16,6 +16,7 @@ const crawl = @import("crawl.zig");
 const sparse = @import("sparse.zig");
 const archive = @import("../archive.zig");
 const complete_form = @import("complete.zig");
+const stall = @import("stall.zig");
 
 const log = std.log.scoped(.crawl);
 
@@ -47,6 +48,10 @@ const linger_ms = 2000;
 const linger_jobs = 32;
 /// How often the raw valve (archive.valve) looks at free disk, when it is on
 const valve_check_s = 300;
+/// A batch not done this long, or a checkpoint round, gets a warning naming what it waits
+/// on (stall.zig); a commit over the writer's gets a line splitting its time
+const writer_stall_ms = 30_000;
+const checkpointer_stall_ms = 60_000;
 
 pub const Job = struct {
     arena: std.heap.ArenaAllocator,
@@ -142,6 +147,13 @@ pub const Writer = struct {
     /// When the checkpointer last copied every schema's WAL (s), for the writer's
     /// fallback; 0 before its first round
     checkpointed_at: std.atomic.Value(i64) = .init(0),
+    /// Where the writer and the checkpointer are (stall.zig), read by checkStalls
+    mark: stall.Mark = .{},
+    checkpoint_mark: stall.Mark = .{},
+    watch: stall.Watch = .{},
+    checkpoint_watch: stall.Watch = .{},
+    /// The last commit try: began, BEGIN got the lock, jobs applied (ns), for the split line
+    try_ns: [3]u64 = @splat(0),
 
     pub fn deinit(wr: *Writer) void {
         for (wr.pending.items) |job| job.destroy(wr.c.gpa);
@@ -249,6 +261,9 @@ pub const Writer = struct {
             }
             const now = std.Io.Clock.real.now(wr.c.io).toSeconds();
             const began = nowNs(wr.c.io);
+            const jobs: u8 = @intCast(@min(batch.items.len, 255));
+            wr.mark.start(.begin, jobs, began / std.time.ns_per_ms);
+            defer wr.mark.to(.idle, 0);
             var tries: u32 = 0;
             while (true) : (tries += 1) {
                 wr.commit(db, &s, batch.items) catch |err| {
@@ -256,6 +271,7 @@ pub const Writer = struct {
                         error.Busy => {},
                         else => return err,
                     }
+                    wr.mark.to(.busy_pause, jobs);
                     _ = wr.stats.busy.fetchAdd(1, .monotonic);
                     // Shutting down: give another process's lock a minute, then leave
                     // the items queued in the database for the next run
@@ -266,30 +282,35 @@ pub const Writer = struct {
                 };
                 break;
             }
-            Stats.add(&wr.stats.commit_ns, &wr.stats.commit_max_ns, nowNs(wr.c.io) - began);
+            const took = nowNs(wr.c.io) - began;
+            Stats.add(&wr.stats.commit_ns, &wr.stats.commit_max_ns, took);
             const quiet = now - @max(started, wr.checkpointed_at.load(.monotonic));
             if ((quiet > checkpointer_stall_s) != self_checkpoints) {
                 self_checkpoints = !self_checkpoints;
                 try db.exec(if (self_checkpoints) "PRAGMA wal_autocheckpoint = 1000" else "PRAGMA wal_autocheckpoint = 0");
                 if (self_checkpoints) {
-                    log.err("writer: no checkpoint for {d} s, the writer checkpoints again", .{quiet});
+                    var buf: [1024]u8 = undefined;
+                    log.err("writer: no checkpoint for {d} s, the writer checkpoints again{s}", .{ quiet, wr.stallState(&buf) });
                 } else log.info("writer: the checkpointer is back, the writer stops checkpointing", .{});
             }
             wr.counted(batch.items);
             if (wr.c.packer) |p| toPacker(p, batch.items);
             const pages = db.pageCounts();
+            if (took >= writer_stall_ms * std.time.ns_per_ms) wr.logSlowCommit(took, batch.items.len, tries, pages);
             wr.stats.pages_written.store(pages.written, .monotonic);
             wr.stats.pages_read.store(pages.missed, .monotonic);
             wr.mutex.lockUncancelable(wr.c.io);
             wr.committed_seq = batch.items[batch.items.len - 1].seq;
             wr.cond.broadcast(wr.c.io);
             wr.mutex.unlock(wr.c.io);
+            wr.mark.to(.prune, jobs);
             wr.prune.step(db, wr.c.io, wr.c.opts) catch |err| switch (err) {
                 error.Busy => {},
                 else => return err,
             };
             if (wr.c.opts.raw_valve_free_mb > 0 and now >= valve_at) {
                 valve_at = now + valve_check_s;
+                wr.mark.to(.valve, jobs);
                 wr.valve(db, now) catch |err| log.warn("writer: raw valve: {t}", .{err});
             }
         }
@@ -325,11 +346,68 @@ pub const Writer = struct {
     }
 
     fn commit(wr: *Writer, db: store.Db, s: *Stmts, jobs: []const *Job) !void {
+        const detail: u8 = @intCast(@min(jobs.len, 255));
         wr.stamp = std.Io.Clock.real.now(wr.c.io).toSeconds();
+        wr.try_ns[0] = nowNs(wr.c.io);
+        wr.mark.to(.begin, detail);
         try db.begin();
         errdefer db.rollback();
+        wr.try_ns[1] = nowNs(wr.c.io);
+        wr.mark.to(.apply, detail);
         for (jobs) |job| try wr.applyOne(db, s, job);
+        wr.try_ns[2] = nowNs(wr.c.io);
+        wr.mark.to(.commit, detail);
         try db.commit();
+    }
+
+    /// Where a commit over writer_stall_ms spent its time: the last try's BEGIN (waiting
+    /// for the write lock), applying the jobs, COMMIT (WAL write and sync), and pages the
+    /// writer read from disk (cache misses) and wrote in it
+    fn logSlowCommit(wr: *Writer, took: u64, jobs: usize, retries: u32, pages: anytype) void {
+        const now = nowNs(wr.c.io);
+        const t = wr.try_ns;
+        const s: f64 = std.time.ns_per_s;
+        log.info("writer: commit took {d:.1} s ({d} jobs): last try begin {d:.1} s, apply {d:.1} s, " ++
+            "commit {d:.1} s; {d} busy retries; pages read {d}, written {d}", .{
+            @as(f64, @floatFromInt(took)) / s,
+            jobs,
+            @as(f64, @floatFromInt(t[1] -| t[0])) / s,
+            @as(f64, @floatFromInt(t[2] -| t[1])) / s,
+            @as(f64, @floatFromInt(now -| t[2])) / s,
+            retries,
+            pages.missed -| wr.stats.pages_read.load(.monotonic),
+            pages.written -| wr.stats.pages_written.load(.monotonic),
+        });
+    }
+
+    /// From the crawl report's minute tick: one warning per batch stuck over
+    /// writer_stall_ms or checkpoint round over checkpointer_stall_ms, while it is on
+    pub fn checkStalls(wr: *Writer) void {
+        const now_ms = nowNs(wr.c.io) / std.time.ns_per_ms;
+        const writer_due = wr.watch.due(wr.mark.get(), now_ms, writer_stall_ms);
+        const checkpoint_due = wr.checkpoint_watch.due(wr.checkpoint_mark.get(), now_ms, checkpointer_stall_ms);
+        if (!writer_due and !checkpoint_due) return;
+        var buf: [1024]u8 = undefined;
+        log.warn("stall: {s}", .{wr.stallState(&buf)[2..]});
+    }
+
+    /// ", writer apply 47 s (12 jobs), checkpointer main truncate 3 s, whole checkpoint
+    /// 9 s ago | snapshot: ..." (stall.snapshot)
+    fn stallState(wr: *Writer, buf: []u8) []const u8 {
+        var w: std.Io.Writer = .fixed(buf);
+        const now_ms = nowNs(wr.c.io) / std.time.ns_per_ms;
+        const m = wr.mark.get();
+        const cm = wr.checkpoint_mark.get();
+        const ago = std.Io.Clock.real.now(wr.c.io).toSeconds() - wr.checkpointed_at.load(.monotonic);
+        w.print(", writer {t}", .{m.phase}) catch {};
+        if (m.phase != .idle) w.print(" {d} s ({d} jobs)", .{ (now_ms -| m.since_ms) / 1000, m.detail }) catch {};
+        w.writeAll(", checkpointer ") catch {};
+        if (cm.phase != .idle) {
+            w.print("{s} {t} {d} s", .{ schemas[@min(cm.detail, schemas.len - 1)], cm.phase, (now_ms -| cm.since_ms) / 1000 }) catch {};
+        } else w.writeAll("idle") catch {};
+        w.print(", whole checkpoint {d} s ago", .{ago}) catch {};
+        stall.snapshot(wr.c.gpa, wr.c.io, wr.c.opts.data_dir, &w);
+        return w.buffered();
     }
 
     fn counted(wr: *Writer, jobs: []const *Job) void {
@@ -462,6 +540,7 @@ pub const Writer = struct {
         try s.rows.write(doc, "riot", existed);
         const platform = doc.info.platformId orelse if (ep.platformOf(id)) |p| p.id else null;
         var game: sparse.Game = .{};
+        const game_day = @divFloor(doc.info.gameStartTimestamp orelse doc.info.gameCreation, std.time.ms_per_day);
         for (doc.info.participants, 0..) |p, slot| {
             game.lane(p.teamId, p.teamPosition, p.championId);
             const puuid = p.puuid orelse continue;
@@ -472,9 +551,14 @@ pub const Writer = struct {
             const key = store.schema.puuidKey(puuid);
             // Rank snapshot from ranks; storeRows took it from players, which keeps
             // only the scan pool
-            if (try s.rankOf(key)) |rank| {
+            const current = try s.rankOf(key);
+            if (current) |c| if (store.schema.unpackRank(c.rank)) |rank| {
                 try s.participant_rank.exec(.{ rank.tier, rank.division, id, slot });
                 game.rankTier(rank.tier);
+            };
+            // Not cleared when unknown now: a re-store only knows less than the first
+            if (try s.rank_start.after(current, key, game_day)) |start| {
+                try s.participant_rank_start.exec(.{ start, id, slot });
             }
             if (wr.c.opts.participant_players and sampled(key, wr.c.opts.player_sample)) {
                 try s.participant_player.exec(.{ puuid, platform, @tagName(r), t });
@@ -568,8 +652,10 @@ pub fn checkpoints(wr: *Writer) void {
         const began = nowNs(c.io);
         const now = std.Io.Clock.real.now(c.io).toSeconds();
         var whole = true;
-        for (schemas, &truncate_at) |schema, *at| {
-            const done = checkpoint(db, schema, now >= at.*) catch |err| blk: {
+        wr.checkpoint_mark.start(.passive, 0, began / std.time.ns_per_ms);
+        for (schemas, &truncate_at, 0..) |schema, *at, i| {
+            wr.checkpoint_mark.to(.passive, @intCast(i));
+            const done = checkpoint(db, schema, now >= at.*, &wr.checkpoint_mark, @intCast(i)) catch |err| blk: {
                 whole = false;
                 if (err == error.Busy) break :blk false;
                 if (now - warned_at >= checkpointer_warn_s) {
@@ -580,6 +666,7 @@ pub fn checkpoints(wr: *Writer) void {
             };
             if (done) |truncated| at.* = now + @as(i64, if (truncated) wal_truncate_s else wal_truncate_retry_s);
         }
+        wr.checkpoint_mark.to(.idle, 0);
         if (whole) wr.checkpointed_at.store(now, .monotonic);
         Stats.add(&wr.stats.checkpoint_ns, &wr.stats.checkpoint_max_ns, nowNs(c.io) - began);
         c.io.sleep(.fromSeconds(checkpoint_s), .awake) catch return;
@@ -594,7 +681,7 @@ const truncate_left_frames = 4096;
 
 /// A PASSIVE checkpoint of `schema`, then with `truncate` and nearly every frame copied a
 /// TRUNCATE one. Null when no truncate was tried, else whether it emptied the WAL
-fn checkpoint(db: store.Db, schema: [:0]const u8, truncate: bool) !?bool {
+fn checkpoint(db: store.Db, schema: [:0]const u8, truncate: bool, mark: *stall.Mark, index: u8) !?bool {
     var buf: [64]u8 = undefined;
     var s = try db.prepare(try std.mem.print(&buf, "PRAGMA {s}.wal_checkpoint(PASSIVE)", .{schema}));
     defer s.deinit();
@@ -607,11 +694,14 @@ fn checkpoint(db: store.Db, schema: [:0]const u8, truncate: bool) !?bool {
     // during its copy prevents. The truncate then synced all it had copied while holding
     // commits: 9 min after eval let go of a 2.4 GB WAL (5 Nov). So sync beside commits,
     // then copy what came meanwhile; the truncate syncs only that
+    mark.to(.sync, index);
     try db.syncFile(schema);
+    mark.to(.passive, index);
     if (!try s.step()) return null;
     if (s.int(1) - s.int(2) > truncate_left_frames) return false;
     s.reset();
     // Short: commits wait while the truncate waits on readers
+    mark.to(.truncate, index);
     db.setBusyTimeout(wal_truncate_busy_ms);
     defer db.setBusyTimeout(store.sqlite.busy_timeout_ms);
     var t = try db.prepare(try std.mem.print(&buf, "PRAGMA {s}.wal_checkpoint(TRUNCATE)", .{schema}));
@@ -839,6 +929,7 @@ const Stmts = struct {
     rank_change: store.Stmt,
     rank_get: store.Stmt,
     participant_rank: store.Stmt,
+    participant_rank_start: store.Stmt,
     ladder_player: store.Stmt,
     ladder_page: store.Stmt,
     mastery: store.Stmt,
@@ -864,6 +955,7 @@ const Stmts = struct {
     match_exists: store.Stmt,
     rows: match.Rows,
     drafts: store.draft.Builder,
+    rank_start: store.rankstart.Lookup,
 
     const sql = .{
         .forgotten = "SELECT EXISTS (SELECT 1 FROM forgotten WHERE puuid = ?)",
@@ -885,8 +977,9 @@ const Stmts = struct {
         \\    OR lp IS NOT excluded.lp OR wins IS NOT excluded.wins
         \\    OR losses IS NOT excluded.losses
         ,
-        .rank_get = "SELECT rank FROM ranks WHERE key = ?",
+        .rank_get = "SELECT seen_day, rank FROM ranks WHERE key = ?",
         .participant_rank = "UPDATE participants SET tier = ?, division = ? WHERE match_id = ? AND slot = ?",
+        .participant_rank_start = "UPDATE participants SET rank_start = ? WHERE match_id = ? AND slot = ?",
         .ladder_player =
         \\INSERT INTO players (puuid, tier, division, lp, wins, losses, rank_seen_at, source,
         \\    platform, region, seen_at, games_checked)
@@ -964,6 +1057,8 @@ const Stmts = struct {
 
     fn init(db: store.Db) !Stmts {
         var s: Stmts = undefined;
+        s.rank_start = try .init(db);
+        errdefer s.rank_start.deinit();
         s.drafts = try .init(db);
         errdefer s.drafts.deinit();
         s.rows = try .init(db);
@@ -983,10 +1078,11 @@ const Stmts = struct {
         inline for (stmt_names) |name| @field(s, name).deinit();
         s.rows.deinit();
         s.drafts.deinit();
+        s.rank_start.deinit();
     }
 
-    /// Every field but rows and drafts
-    const stmt_names = @typeInfo(Stmts).@"struct".field_names[0 .. @typeInfo(Stmts).@"struct".field_names.len - 2];
+    /// Every field but rows, drafts and rank_start
+    const stmt_names = @typeInfo(Stmts).@"struct".field_names[0 .. @typeInfo(Stmts).@"struct".field_names.len - 3];
 
     fn exists(s: *Stmts, match_id: []const u8) !bool {
         try s.match_exists.bind(.{match_id});
@@ -994,11 +1090,11 @@ const Stmts = struct {
         return try s.match_exists.step() and s.match_exists.int(0) == 1;
     }
 
-    fn rankOf(s: *Stmts, key: i64) !?store.schema.Rank {
+    fn rankOf(s: *Stmts, key: i64) !?store.rankstart.Sighting {
         try s.rank_get.bind(.{key});
         defer s.rank_get.reset();
         if (!try s.rank_get.step()) return null;
-        return store.schema.unpackRank(s.rank_get.int(0));
+        return .{ .day = s.rank_get.int(0), .rank = s.rank_get.int(1) };
     }
 
     fn isForgotten(s: *Stmts, puuid: []const u8) !bool {
@@ -1181,6 +1277,9 @@ test "a match whose document names another id is failed, not counted as stored" 
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM matches", .{}));
 }
 
+/// The checkpoint tests' phase marks, read by nothing
+var test_mark: stall.Mark = .{};
+
 test "the checkpointer copies the writer's WAL and truncates it once copied" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -1203,15 +1302,15 @@ test "the checkpointer copies the writer's WAL and truncates it once copied" {
     const db = try store.Db.open(path);
     defer db.close();
     try db.run("ATTACH ? AS raw", .{raw_path});
-    try std.testing.expectEqual(@as(?bool, null), try checkpoint(db, "raw", false));
+    try std.testing.expectEqual(@as(?bool, null), try checkpoint(db, "raw", false, &test_mark, 0));
     inline for (.{ "main", "raw" }) |schema| {
-        try std.testing.expectEqual(@as(?bool, true), try checkpoint(db, schema, true));
+        try std.testing.expectEqual(@as(?bool, true), try checkpoint(db, schema, true, &test_mark, 0));
         var s = try db.prepare("PRAGMA " ++ schema ++ ".wal_checkpoint(PASSIVE)");
         defer s.deinit();
         try std.testing.expect(try s.step());
         try std.testing.expectEqual(0, s.int(1));
     }
-    try std.testing.expectEqual(@as(?bool, null), try checkpoint(db, "main", true));
+    try std.testing.expectEqual(@as(?bool, null), try checkpoint(db, "main", true, &test_mark, 0));
 }
 
 /// C01's disk for the test below: a sync of the checkpointer's database file costs time
@@ -1290,7 +1389,7 @@ test "a truncate after a reader held the WAL back holds commits only briefly" {
     try db.exec("PRAGMA synchronous = NORMAL");
     _ = try db.scalar("SELECT count(*) FROM t", .{});
     try SlowSync.install(db);
-    try std.testing.expectEqual(@as(?bool, null), try checkpoint(db, "main", false));
+    try std.testing.expectEqual(@as(?bool, null), try checkpoint(db, "main", false, &test_mark, 0));
     reader.rollback();
 
     // The PASSIVE copies ~10 MB (~1 s to sync). The truncate holds commits through its
@@ -1299,7 +1398,7 @@ test "a truncate after a reader held the WAL back holds commits only briefly" {
     var committer: Committer = .{ .db = writer_db };
     const thread = try std.Thread.spawn(.{}, Committer.run, .{&committer});
     std.testing.io.sleep(.fromMilliseconds(30), .awake) catch {};
-    const done = checkpoint(db, "main", true);
+    const done = checkpoint(db, "main", true, &test_mark, 0);
     std.testing.io.sleep(.fromMilliseconds(30), .awake) catch {};
     committer.stop.store(true, .monotonic);
     thread.join();
@@ -1386,6 +1485,8 @@ test "ladder: ranks for everyone, player rows for the sample; matches take ranks
 
     var doc = try match.parse(arena.allocator(), @embedFile("testdata/match.json"));
     doc.metadata.matchId = "EUW1_1";
+    // Day 6, the day after the ladder saw the player: their rank before the game
+    doc.info.gameStartTimestamp = 6 * std.time.ms_per_day + 1000;
     const puuid = doc.info.participants[0].puuid.?;
     var jobs = [_]*Job{
         try .create(gpa, .{ .ladder = .{
@@ -1403,6 +1504,8 @@ test "ladder: ranks for everyone, player rows for the sample; matches take ranks
     const want = [_]struct { []const u8, i64 }{
         .{ "SELECT count(*) FROM ranks WHERE seen_day = 5", 1 },
         .{ "SELECT count(*) FROM participants WHERE match_id = 'EUW1_1' AND slot = 0 AND tier = 'GOLD' AND division = 'II'", 1 },
+        .{ "SELECT rank_start FROM participants WHERE match_id = 'EUW1_1' AND slot = 0", store.schema.packRank("GOLD", "II").? },
+        .{ "SELECT count(rank_start) FROM participants", 1 },
     };
     for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
     // 1 in 1000 sampled: almost surely none of the 11 PUUIDs

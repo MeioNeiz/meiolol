@@ -104,6 +104,7 @@ const usage = usage_head ++
     cmd_data.usage_rekey ++
     cmd_crawl.usage_champions ++
     cmd_crawl.usage_draft_backfill ++
+    cmd_crawl.usage_rank_backfill ++
     cmd_crawl.usage_digest ++
     cmd_data.usage_backup ++
     cmd_data.usage_restore ++
@@ -179,6 +180,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "rekey", cmd_data.cmdRekey },
     .{ "champions", cmd_crawl.cmdChampions },
     .{ "draft-backfill", cmd_crawl.cmdDraftBackfill },
+    .{ "rank-backfill", cmd_crawl.cmdRankBackfill },
     .{ "digest", cmd_crawl.cmdDigest },
     .{ "backup", cmd_data.cmdBackup },
     .{ "restore", cmd_data.cmdRestore },

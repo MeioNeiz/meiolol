@@ -181,15 +181,19 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
 - `meiolol.db`: crawl state (players, ladder_pages, match_queue and timeline_queue:
   pending, missing and failed only; stored ones leave) and tables kept forever (or
   `--keep-days` after game start: a rolling window): matches, participants (incl. final items, full rune page, and
-  tier/division = rank snapshot when the match was stored, gold10/14/15 = total
-  gold at those timeline minutes), bans, mastery (one
+  tier/division = rank snapshot when the match was stored, so after the game and
+  knowing its result; rank_start = packed rank before the game (src/store/rankstart.zig:
+  ranks or rank_history, sighted on an earlier day, at most 7 days before; NULL when
+  unknown, and before 13 Oct; the writer sets it, `meiolol rank-backfill` filled older
+  games; nothing reads it yet), gold10/14/15 = total gold at those timeline minutes), bans, mastery (one
   compact blob per player, src/riot/mastery.zig, ~0.7 KB), champions. Text-keyed
   tables are WITHOUT ROWID (no second copy of the key in an index)
 - `drafts` (meiolol.db, src/store/draft.zig): one row per complete ranked game (420/440,
   no remake, a winner, 5 v 5), kept forever whatever `--keep-days` says, for draft
   models that need millions of games over several patches. Platform, queue, patch, game
   day (unix day, not the start time), rank (median ladder rank snapshot of the players
-  with one, schema.packRank, NULL under 5 known; `ranked` = how many known), blue win,
+  with one, schema.packRank, NULL under 5 known; `ranked` = how many known; rank_start
+  the same of participants.rank_start, rows from 13 Nov 2026 on), blue win,
   picks (10 x u16: champion | (role + 1) << 13, blue then red), bans (10 x u16) and
   game length in whole minutes (capped at 255; added a few hours after launch, the
   migration put the rows written so far back on the backfill list to get theirs).

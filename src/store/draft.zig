@@ -21,7 +21,9 @@ const schema = @import("schema.zig");
 /// then red's in participant order, champion id | (role + 1) << 13, role 0..4 in Riot
 /// teamPosition order (core.Role), 0 when unknown. bans: 10 x u16 LE champion ids,
 /// blue's then red's in pick turn order, 0 for none. minutes: game length in whole
-/// minutes, at most 255 (last: added after the table went live, NULL in a few rows).
+/// minutes, at most 255 (added after the table went live, NULL in a few rows).
+/// rank_start: as rank, of the ranks before the game (rankstart.zig); NULL in rows from
+/// before the column.
 /// id: insertion order, so backups copy new rows by range and a restore keeps them
 pub const ddl =
     \\CREATE TABLE IF NOT EXISTS drafts (
@@ -35,7 +37,8 @@ pub const ddl =
     \\    blue_win INTEGER NOT NULL,
     \\    picks BLOB NOT NULL,
     \\    bans BLOB NOT NULL,
-    \\    minutes INTEGER
+    \\    minutes INTEGER,
+    \\    rank_start INTEGER
     \\);
     \\CREATE TABLE IF NOT EXISTS draft_backfill (match_id TEXT PRIMARY KEY) WITHOUT ROWID;
     \\
@@ -133,7 +136,7 @@ pub const Builder = struct {
         );
         errdefer match.deinit();
         var players = try db.prepare(
-            \\SELECT team_id, position, champion_id, tier, division
+            \\SELECT team_id, position, champion_id, tier, division, rank_start
             \\FROM participants WHERE match_id = ? ORDER BY slot
         );
         errdefer players.deinit();
@@ -143,7 +146,7 @@ pub const Builder = struct {
         errdefer bans.deinit();
         var insert = try db.prepare(
             \\INSERT INTO drafts (platform, queue, patch, day, rank, ranked, blue_win, picks, bans,
-            \\    minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            \\    minutes, rank_start) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         );
         errdefer insert.deinit();
         const take = try db.prepare("DELETE FROM draft_backfill WHERE match_id = ?");
@@ -184,6 +187,8 @@ pub const Builder = struct {
         var per_team = [2]usize{ 0, 0 };
         var ranks: [10]u8 = undefined;
         var ranked: usize = 0;
+        var starts: [10]u8 = undefined;
+        var started: usize = 0;
         try b.players.bind(.{match_id});
         defer b.players.reset();
         while (try b.players.step()) {
@@ -193,6 +198,7 @@ pub const Builder = struct {
                 champion: i64,
                 tier: ?[]const u8,
                 division: ?[]const u8,
+                rank_start: ?i64,
             });
             const t = team(p.team) orelse return false;
             if (per_team[t] == 5) return false;
@@ -202,6 +208,10 @@ pub const Builder = struct {
             } else null;
             picks[t * 5 + per_team[t]] = .{ .champion = @intCast(p.champion), .role = role };
             per_team[t] += 1;
+            if (p.rank_start) |r| if (r >= 0 and r < schema.tiers.len * schema.divisions.len) {
+                starts[started] = @intCast(r);
+                started += 1;
+            };
             const tier = p.tier orelse continue;
             const division = p.division orelse continue;
             if (schema.packRank(tier, division)) |r| {
@@ -237,6 +247,7 @@ pub const Builder = struct {
             sqlite.Blob{ .bytes = &pick_bytes },
             sqlite.Blob{ .bytes = &ban_bytes },
             @min(@divTrunc(@max(m.duration_s, 0), 60), 255),
+            medianRank(starts[0..started]),
         });
         return true;
     }
@@ -401,6 +412,12 @@ test "a match's row: teams, roles, bans, median rank; nothing else" {
     try db.exec("UPDATE matches SET duration_s = 99999");
     try testing.expect(try b.write("EUW1_1"));
     try testing.expectEqual(@as(?i64, 255), try db.scalar("SELECT max(minutes) FROM drafts", .{}));
+    try testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(rank_start) FROM drafts", .{}));
+
+    // Rank before the game: its own median, five known (packed 20..24, the third best)
+    try db.exec("UPDATE participants SET rank_start = 20 + slot WHERE slot < 5");
+    try testing.expect(try b.write("EUW1_1"));
+    try testing.expectEqual(@as(?i64, 22), try db.scalar("SELECT rank_start FROM drafts ORDER BY id DESC LIMIT 1", .{}));
 
     var none: Reader = try .init(testing.allocator, db, .{ .platforms = &.{"KR"} });
     defer none.deinit();
@@ -410,7 +427,7 @@ test "a match's row: teams, roles, bans, median rank; nothing else" {
     var cols = try db.prepare("SELECT group_concat(name) FROM pragma_table_info('drafts')");
     defer cols.deinit();
     try testing.expect(try cols.step());
-    const want = "id,platform,queue,patch,day,rank,ranked,blue_win,picks,bans,minutes";
+    const want = "id,platform,queue,patch,day,rank,ranked,blue_win,picks,bans,minutes,rank_start";
     try testing.expectEqualStrings(want, cols.bytes(0));
 }
 

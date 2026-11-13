@@ -12,7 +12,10 @@ overtaken: check the code and git log before acting.
 - Crawl pages per match, untested: `--no-participant-players` and dropping the
   participants_puuid index (only `forget` reads it); deploy/bench-crawl.sh with
   `--no-mastery` on a scratch copy
-- Rank at game time for participants and drafts from rank_history (not wired)
+- Rank at game time: participants.rank_start written and backfilled, not read yet.
+  Next: consumers switch (cubes, partials, stats, daily, example, crawl sampler and
+  snowball filter, builds, admin draft mix) with one cube rebuild; brackets become what
+  we crawl (Platinum-Emerald, Diamond+), a seat with no rank counts in all ranks only
 - Smart timeline picking (only matches with an under-sampled lane matchup) adds only
   +2-12% matches today, since 77-95% of matches still need one: revisit with the
   production key, when matchups saturate
@@ -66,6 +69,12 @@ overtaken: check the code and git log before acting.
 - Builds by matchup once pairs reach volume
 - A nav entry for builds only if Jacob wants them that visible (the application text
   does not mention builds)
+- Item effects at 10x: docs/model.md "Items given the state at purchase" ran on 118k
+  timeline games (item on the champion: nothing, bound 2.7-3.3 points). A rerun on a
+  patch's 1.2M could tighten the bound to about 1 point, with split halves (adjusted
+  against raw), a planted effect, and Hubris 16.20 -> 16.21 as a natural test. items.zig
+  went 23 Oct (code at 616e0a6f), a day to revive. Only if a page wants "this item
+  helps" numbers
 
 ## Learn
 

@@ -7,6 +7,7 @@ pub const rawpack = @import("rawpack.zig");
 pub const jsonpack = @import("jsonpack.zig");
 pub const dayfile = @import("dayfile.zig");
 pub const draft = @import("draft.zig");
+pub const rankstart = @import("rankstart.zig");
 pub const ahead = @import("ahead.zig");
 
 pub const Db = sqlite.Db;

@@ -41,7 +41,9 @@ const players_ddl =
 /// perk1-3 primary, perk4-5 secondary, then stat shards). tier/division: the player's
 /// ladder rank when the match was stored (players holds only the latest and loses
 /// everyone on rekey); NULL when not on the ladder then. gold10/14/15: total gold at
-/// timeline frames 10/14/15, set when the timeline is stored; NULL without one
+/// timeline frames 10/14/15, set when the timeline is stored; NULL without one.
+/// rank_start: packRank before the game (rankstart.zig), NULL when unknown or before
+/// 2026-10-13
 const participants_ddl =
     \\CREATE TABLE IF NOT EXISTS participants (
     \\    match_id TEXT NOT NULL,
@@ -69,6 +71,7 @@ const participants_ddl =
     \\    shard_offense INTEGER, shard_flex INTEGER, shard_defense INTEGER,
     \\    tier TEXT, division TEXT,
     \\    gold10 INTEGER, gold14 INTEGER, gold15 INTEGER,
+    \\    rank_start INTEGER,
     \\    PRIMARY KEY (match_id, slot)
     \\) WITHOUT ROWID;
     \\
@@ -492,6 +495,14 @@ fn migrate(db: sqlite.Db) !void {
             \\INSERT OR IGNORE INTO draft_backfill SELECT match_id FROM matches ORDER BY match_id;
         );
     }
+    if (!try hasColumn(db, "participants", "rank_start")) {
+        // Schema only: the writer fills new matches, `meiolol rank-backfill` older ones
+        try db.exec("ALTER TABLE participants ADD COLUMN rank_start INTEGER");
+    }
+    if (!try hasColumn(db, "drafts", "rank_start")) {
+        // New rows only: a draft row has no match id to find it by
+        try db.exec("ALTER TABLE drafts ADD COLUMN rank_start INTEGER");
+    }
     try db.commit();
 }
 
@@ -636,6 +647,7 @@ test "migrates an EUW-only database" {
         "SELECT count(*) FROM sqlite_master WHERE name = 'players_check'",
         .{},
     ));
+    try t.expect(try hasColumn(db, "participants", "rank_start"));
 }
 
 test "rekey keeps matches, forgets players" {
@@ -731,6 +743,7 @@ test "drafts: rows from before minutes go back on the backfill list" {
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM drafts", .{}));
     try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM draft_backfill", .{}));
     try std.testing.expect(try hasColumn(db, "drafts", "minutes"));
+    try std.testing.expect(try hasColumn(db, "drafts", "rank_start"));
 }
 
 test "openReadOnly: every schema read-only, data visible" {

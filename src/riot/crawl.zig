@@ -479,6 +479,7 @@ pub const Crawler = struct {
             w.buffered(),
         });
         c.reportTimes();
+        c.writer.checkStalls();
     }
 
     /// Each thread group's minute, % (slot wait, Riot, writer queue full, waiting for

@@ -1284,9 +1284,11 @@ fn lastNumber(s: []const u8) u64 {
 }
 
 /// Digits to N and id-like words and Riot IDs to …, so lines group and carry nothing that
-/// names a player or a game
+/// names a player or a game. A stall's snapshot (lock holders' command lines, riot/stall.zig)
+/// is cut: one row per kind of stall, not per holder
 fn normalise(arena: std.mem.Allocator, line: []const u8) ![]const u8 {
-    return scrub(arena, line, true);
+    const end = std.mem.find(u8, line, " | snapshot: ") orelse line.len;
+    return scrub(arena, line[0..end], true);
 }
 
 fn classify(msg: []const u8) Kind {
@@ -1355,6 +1357,7 @@ test "normalise log messages" {
     const p = try normalise(arena, "warning(riot): 504 on /lol/match/v5/matches/by-puuid/-3uog-_IosuG5ssbfFVk1cyKUZg0/ids, retrying");
     try std.testing.expect(std.mem.find(u8, p, "IosuG") == null);
     try std.testing.expectEqualStrings("warning(crawl): writer: database busy, retrying N jobs", try normalise(arena, "warning(crawl): writer: database busy, retrying 500 jobs"));
+    try std.testing.expectEqualStrings("warning(crawl): stall: writer apply N s (N jobs), checkpointer idle, whole checkpoint N s ago", try normalise(arena, "warning(crawl): stall: writer apply 47 s (12 jobs), checkpointer idle, whole checkpoint 3 s ago | snapshot: io some 28.9 full 27.7 | locks main-shm write W 4242 self, main-shm read1 R 5150 meiolol site"));
     // Lines as the crawler logs them on 17 Oct
     const cases = [_]struct { []const u8, Kind }{
         .{ "warning(riot): 503 on /lol/match/v5/matches/EUW1_7123456/timeline, retrying", .riot_server },

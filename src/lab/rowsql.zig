@@ -284,10 +284,7 @@ fn ladderRank(packed_rank: i64) ?u8 {
 
 const ms_per_day = 86_400_000;
 
-/// Row.rank_start: the player's ladder rank as last seen on a UTC day before the game's,
-/// from ranks when its last sighting (seen_day) is that old, else rank_history's latest
-/// change before that day (a row per day the ladder showed a change, from 2026-10-12).
-/// A sighting on the game's own day may come after the game, so it never counts.
+/// Row.rank_start: store.rankstart.pick from bulk scans, without its age cap.
 /// keys[i] is rows[i]'s schema.puuidKey, null when the PUUID is unknown
 fn fillRankStart(gpa: std.mem.Allocator, db: store.Db, games: []const Game, rws: []Row, keys: []const ?i64) !void {
     std.debug.assert(rws.len == keys.len);
@@ -322,18 +319,19 @@ fn fillRankStart(gpa: std.mem.Allocator, db: store.Db, games: []const Game, rws:
     for (rws, keys) |*r, k| {
         const p = want.get(k orelse continue).?;
         const day = @divFloor(games[r.game].start, ms_per_day);
-        if (p.seen_day < day) {
-            r.rank_start = ladderRank(p.rank);
-            continue;
-        }
+        const current: ?store.rankstart.Sighting = if (p.rank >= 0) .{ .day = p.seen_day, .rank = p.rank } else null;
+        var before: ?store.rankstart.Sighting = null;
         var i = p.len;
         while (i > 0) : (i -= 1) {
             const c = changes.items[p.first + i - 1];
             if (c.day < day) {
-                r.rank_start = ladderRank(c.rank);
+                before = .{ .day = c.day, .rank = c.rank };
                 break;
             }
         }
+        // No age cap: the lab's recorded results stay as they were
+        const rank = store.rankstart.pick(current, before, day, null) orelse continue;
+        r.rank_start = ladderRank(rank);
     }
 }
 
