@@ -41,6 +41,7 @@ pub const admin = @import("admin.zig");
 pub const adminmodels = @import("adminmodels.zig");
 pub const status = @import("status.zig");
 const cmd_crawl = @import("cmd/crawl.zig");
+const cmd_rankfill = @import("cmd/rankfill.zig");
 const cmd_sitedata = @import("cmd/sitedata.zig");
 const cmd_analysis = @import("cmd/analysis.zig");
 const cmd_site = @import("cmd/site.zig");
@@ -104,7 +105,7 @@ const usage = usage_head ++
     cmd_data.usage_rekey ++
     cmd_crawl.usage_champions ++
     cmd_crawl.usage_draft_backfill ++
-    cmd_crawl.usage_rank_backfill ++
+    cmd_rankfill.usage ++
     cmd_crawl.usage_digest ++
     cmd_data.usage_backup ++
     cmd_data.usage_restore ++
@@ -180,7 +181,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "rekey", cmd_data.cmdRekey },
     .{ "champions", cmd_crawl.cmdChampions },
     .{ "draft-backfill", cmd_crawl.cmdDraftBackfill },
-    .{ "rank-backfill", cmd_crawl.cmdRankBackfill },
+    .{ "rank-backfill", cmd_rankfill.cmdRankBackfill },
     .{ "digest", cmd_crawl.cmdDigest },
     .{ "backup", cmd_data.cmdBackup },
     .{ "restore", cmd_data.cmdRestore },
