@@ -228,10 +228,10 @@ How to write a line:
   2-3.5 points per 1,000 gold at 15:00. Site: no "carry" or "comeback champion" labels;
   lessons by role. Evidence: model.md "Carry and impact", "Champion given the state
   (scaling)"
-- (early) What a small net adds to the pair model is more pair effects, most between
-  enemies in different roles, not effects of three or more champions together: without
-  its three-and-up parts it predicts the same (0.015 ± 0.052 milli-nats apart). Sure: dev
-  only, 159k games. Site: nothing. Evidence: model.md "Order spectrum of the teacher (C1)"
+- (early) What a small net adds to the pair model is more pair effects, mostly between
+  enemies in other roles; no three-champion effect was found to help. Sure: not detected,
+  dev only, 159k games of 2004Z, -0.015 ± 0.052 milli-nats; ones worth ~0.03 would not
+  show here. Site: nothing. Evidence: model.md "Order spectrum of the teacher (C1)"
 - (early) Knowing how each champion plays in its role (gold, CS, deaths, damage, early
   lead) does not measurably improve win predictions beyond its own win record. Sure:
   not detected, dev only, 44,353 games, at most 0.0007 nats a game. Site: nothing.
