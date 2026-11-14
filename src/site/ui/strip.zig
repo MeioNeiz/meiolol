@@ -2,7 +2,8 @@
 //! label over each value, the answer larger, a value on the scale's colour where it has
 //! one, context after it small ("4th of 53"). A rate is a Rate: its count, range on hover
 //! and fade are the rate view's. Three to a row in a
-//! narrow container. A label can open a Toggletip; a figure can link to where it comes from, or be pressed
+//! narrow container. One figure can carry a line under the whole strip, small and
+//! wrapping, for what won't fit beside a value. A label can open a Toggletip; a figure can link to where it comes from, or be pressed
 //! (the game page's cells select their span; the selected one shows pressed)
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -29,6 +30,9 @@ pub const Item = struct {
     rate: N = .none,
     /// After the value, small
     ctx: ?tree.Text = null,
+    /// About this figure, a line under the whole strip that wraps (the first item's
+    /// that has one): longer than a cell is wide
+    under: ?tree.Text = null,
     /// The value's colour; null is plain ink
     step: ?fmt.Step = null,
     /// The figure the page answers with (one per strip)
@@ -47,7 +51,9 @@ const W = struct {
 
 pub fn view(h: *H, items: []const Item) N {
     var l = h.list();
+    var under: ?tree.Text = null;
     for (items, 0..) |it, i| {
+        if (under == null) under = it.under;
         const kids = .{ lab(h, it), val(h, it, true) };
         const cls = if (it.answer) "answer" else null;
         l.add(if (it.href) |href|
@@ -55,7 +61,7 @@ pub fn view(h: *H, items: []const Item) N {
         else
             h.div(.{ .key = i, .class = cls, .data_press = it.on != null }, kids));
     }
-    return h.div(.{ .class = "c-strip" }, .{l.done()});
+    return h.div(.{ .class = "c-strip" }, .{ l.done(), if (under) |u| h.small(.{ .class = "under" }, .{u}) else null });
 }
 
 /// A row of `rows`: plain label and value, no tip, link or press (Item's paths cost
@@ -116,6 +122,8 @@ pub const css =
     \\  .c-strip .val > .c-rate > .g { margin-left: 6px; font-size: var(--fs-s); }
     \\  .c-strip .val > .c-rate + .c { display: block; line-height: 1.2; }
     \\  .c-strip > .answer .val { font-size: var(--fs-xl); }
+    \\  .c-strip > .under { display: block; flex-basis: 100%; grid-column: 1 / -1; font-size: var(--fs-s);
+    \\    line-height: 1.3; color: var(--faint); }
     \\  .c-strip .val .us { color: var(--us-hot); }
     \\  .c-strip .val .them { color: var(--them-hot); }
     \\  .c-strip > a:hover { text-decoration: none; }
@@ -161,6 +169,16 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Pick"), .value = plain("11.1%") },
         .{ .label = plain("Ban"), .value = plain("4.1%") },
         .{ .label = plain("Games"), .value = plain("44,935") },
+    }));
+    g.add("a line under the answer", view(h, &.{
+        .{
+            .label = plain("Win rate"),
+            .rate = rate.view(h, .{ .pct = 50.8, .games = 41054, .half = 0.4 }, .{ .said = "", .worth = true }),
+            .under = plain("Leans on: 34% games on 16.22 (14,080) · 31% older patches · 20% other regions · 13% what's usual"),
+            .answer = true,
+        },
+        .{ .label = plain("Pick"), .value = plain("8.0%") },
+        .{ .label = plain("Ban"), .value = plain("15.5%") },
     }));
     g.add("six, one links", view(h, &.{
         .{ .label = plain("Won"), .rate = rate.view(h, .counted(64, 32), .{ .said = "" }), .ctx = plain("44th of 59"), .answer = true },

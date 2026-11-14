@@ -352,11 +352,12 @@ Used by: draftboard, teamrows, lobby, gamehead, gamerow, scoreboard, profilesum,
 StatStrip: a page's headline figures in one row, plain (no box per figure): a small label
 over each value, the answer larger, a value on the scale's colour where it has one,
 context after it small ("4th of 53"). A rate is a Rate: its count, range on hover and fade
-are the rate view's. Three to a row in a narrow container. A label can open a Toggletip; a
-figure can link to where it comes from, or be pressed (the game page's cells select their
-span; the selected one shows pressed)
-States: with an answer; six, one links; pressable, one pressed; rows: places on tracks,
-the ends named once; grown by a taller card
+are the rate view's. Three to a row in a narrow container. One figure can carry a line
+under the whole strip, small and wrapping, for what won't fit beside a value. A label can
+open a Toggletip; a figure can link to where it comes from, or be pressed (the game page's
+cells select their span; the selected one shows pressed)
+States: with an answer; a line under the answer; six, one links; pressable, one pressed;
+rows: places on tracks, the ends named once; grown by a taller card
 Used by: champhead, matchbrief, gamehead, gamepage, matchgrid, playerbar, adminpage,
 admincharts, admintraffic, champpage, matchpage
 
