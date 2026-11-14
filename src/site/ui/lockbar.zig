@@ -195,7 +195,7 @@ pub const css =
     \\  .c-lockbar .c-chip .c-art { --sz: 20px; }
     \\  .c-lockbar > .n { white-space: nowrap; font-variant-numeric: tabular-nums; }
     \\  .c-lockbar > .n > .c-rate > .v { font-weight: var(--w-b); }
-    \\  .c-lockbar > .s { white-space: nowrap; color: var(--faint); }
+    \\  .c-lockbar > .s { color: var(--faint); }
     \\  .c-lockbar > .c-btn { margin-left: auto; }
     \\  .c-lockmark { position: absolute; top: -5px; right: -5px; z-index: 1; width: 16px; height: 16px; border-radius: 50%;
     \\    background: var(--ctl-bg-2); box-shadow: 0 0 0 1.5px var(--panel); pointer-events: none; opacity: 0; }
