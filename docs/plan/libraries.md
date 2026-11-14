@@ -45,15 +45,16 @@ development).
   return) and client.zig (get/send on std.http.Client without fetch(), which panics on
   a failed body read; no redirects, a body cap, ShortBody on a cut body). Limits:
   device.signIn 20 s, update.zig manifest 30 s and each file 2 min plus 64 KB/s,
-  ddragon 60 s, Riot 30 s per try (retried), 5 min through the proxy (not retried)
+  ddragon 60 s, Riot 30 s per try (retried), 5 min through the proxy (not retried),
+  the League client 10 s a request (pinned.zig; a hung client is a client error and the
+  next poll tries again)
 
 ## Next, by how exposed the code is
 
 1. Backend fuzzing: a nightly run on the gpu-box; the crawler's other Riot replies
    (league, mastery, account ids)
 2. `net`: a stall limit (bytes per interval) instead of the whole-request one for big
-   downloads; a time limit for the LCU client (pinned.zig), the League client being
-   local
+   downloads (update.zig sets each file's limit from its size)
 
 ## Not planned
 

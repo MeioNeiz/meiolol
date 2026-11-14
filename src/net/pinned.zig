@@ -13,13 +13,15 @@
 //!     defer gpa.free(res.body);
 //!
 //! One request per connection (Connection: close). The answer's body is read by its
-//! Content-Length, chunks or to the close, up to `Request.max_body`. `getPlain` sends the
-//! same request without TLS, for a mock of the service.
+//! Content-Length, chunks or to the close, up to `Request.max_body`, all within
+//! `Request.timeout`. `getPlain` sends the same request without TLS, for a mock of the
+//! service.
 
 const std = @import("std");
 const builtin = @import("builtin");
 const Io = std.Io;
 const tls = std.crypto.tls;
+const deadline = @import("deadline.zig");
 
 pub const Response = struct {
     status: u16,
@@ -41,11 +43,20 @@ pub const Request = struct {
     headers: []const Header = &.{},
     /// A longer body is error.ResponseTooLarge
     max_body: usize = 32 * 1024 * 1024,
+    /// From connecting to the body's last byte: error.Timeout past it. The service is
+    /// local, so a request this slow is one it accepted and never answers (a hung League
+    /// client); null waits for ever
+    timeout: ?Io.Duration = .fromSeconds(10),
 };
 
 /// `req` over TLS, trusting only the first certificate in `root_pem`.
 /// error.ConnectionRefused when nothing listens
 pub fn get(gpa: std.mem.Allocator, io: Io, root_pem: []const u8, req: Request) !Response {
+    const t = req.timeout orelse return getNow(gpa, io, root_pem, req);
+    return deadline.within(io, t, getNow, .{ gpa, io, root_pem, req });
+}
+
+fn getNow(gpa: std.mem.Allocator, io: Io, root_pem: []const u8, req: Request) !Response {
     const stream = try connect(io, req.address);
     defer stream.close(io);
 
@@ -95,6 +106,11 @@ pub fn get(gpa: std.mem.Allocator, io: Io, root_pem: []const u8, req: Request) !
 
 /// `get` without TLS, for a mock of the service
 pub fn getPlain(gpa: std.mem.Allocator, io: Io, req: Request) !Response {
+    const t = req.timeout orelse return getPlainNow(gpa, io, req);
+    return deadline.within(io, t, getPlainNow, .{ gpa, io, req });
+}
+
+fn getPlainNow(gpa: std.mem.Allocator, io: Io, req: Request) !Response {
     const stream = try connect(io, req.address);
     defer stream.close(io);
     var read_buf: [16 * 1024]u8 = undefined;
@@ -319,6 +335,29 @@ test "getPlain sends the request and reads the answer; refused is ConnectionRefu
         .host = "x",
         .path = "/",
     }));
+}
+
+test "a server that accepts and never answers is error.Timeout" {
+    const io = testing.io;
+    var listener = try (try Io.net.IpAddress.parse("127.0.0.1", 0)).listen(io, .{ .reuse_address = true });
+    defer listener.deinit(io);
+    const Hold = struct {
+        fn one(l: *Io.net.Server) !void {
+            const s = try l.accept(io);
+            defer s.close(io);
+            try io.sleep(.fromSeconds(5), .awake);
+        }
+    };
+    var holding = try io.concurrent(Hold.one, .{&listener});
+    defer holding.cancel(io) catch {};
+    const started = Io.Clock.awake.now(io);
+    try testing.expectError(error.Timeout, getPlain(testing.allocator, io, .{
+        .address = listener.socket.address,
+        .host = "x",
+        .path = "/",
+        .timeout = .fromMilliseconds(100),
+    }));
+    try testing.expect(started.durationTo(Io.Clock.awake.now(io)).toMilliseconds() < 2000);
 }
 
 fn fuzzResponse(_: void, s: *testing.Smith) !void {
