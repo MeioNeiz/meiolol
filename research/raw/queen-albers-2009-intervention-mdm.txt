@@ -1,0 +1,1292 @@
+Intervention and causality: forecasting traffic flows
+        using a dynamic Bayesian network
+                        Catriona M. Queen Casper J. Albers
+                         The Open University, Milton Keynes, UK
+                                      January 23, 2009
+
+                                          Abstract
+
+       Real-time traffic flow data across entire networks can be used in a traffic man-
+agement system to monitor current traffic flows so that traffic can be directed and
+managed efficiently. Reliable short-term forecasting models of traffic flows are crucial
+for the success of any traffic management system.
+       The model proposed in this paper for forecasting traffic flows is a multivariate
+Bayesian dynamic model called the multiregression dynamic model (MDM). This
+model is an example of a dynamic Bayesian network and is designed to preserve the
+conditional independences and causal drive exhibited by the traffic flow series.
+       Sudden changes can occur in traffic flow series in response to such events as traffic
+accidents or roadworks. A traffic management system is particularly useful at such
+times of change. To ensure that the associated forecasting model continues to pro-
+duce reliable forecasts, despite the change, the MDM uses the technique of external
+intervention. This paper will demonstrate how intervention works in the MDM and
+how it can improve forecast performance at times of change.
+       External intervention has also been used in the context of Bayesian networks to
+identify causal relationships between variables, and in dynamic Bayesian networks to
+identify lagged causal relationships between time series. This paper goes beyond the
+   0
+    Catriona M. Queen and Casper J. Albers are lecturer and research fellow, respectively, at the
+Department of Mathematics and Statistics, Open University, Walton Hall, Milton Keynes, MK7
+6AA, U.K. (emails: c.queen@open.ac.uk and c.j.albers@open.ac.uk ). The authors would like to
+thank Kent County Council for providing the data used in this paper, and also the referees and
+Associate Editor for their useful comments.
+
+
+                                               1
+identification of lagged causal relationships previously addressed using intervention
+in dynamic Bayesian networks, to show how intervention in the MDM can be used to
+identify contemporaneous causal relationships between time series.
+
+Keywords: multivariate time series, Bayesian forecasting, dynamic linear model,
+multiregression dynamic model
+
+
+
+
+                                         2
+                                 1. INTRODUCTION
+
+   As the number of vehicles on roads worldwide continues to rise, the problem of
+keeping traffic flowing is becoming increasingly important. Many roads now have
+induction loops implanted into the road surface at various sites, providing real-time
+traffic flow data across entire traffic networks. These data can be used as part of
+a traffic management system to monitor traffic flows and reduce congestion by, for
+example, imposing variable speed limits or diverting traffic onto alternative routes.
+Reliable short-term forecasting models of traffic flows are crucial for the success of
+any such traffic management system.
+   The flows of traffic upstream and downstream of a particular data collection site
+S in the network are very informative about the flows at site S. Despite this, only
+a few short-term forecasting models make use of this fact by using lagged values at
+other data collection sites when modelling the flow at site S (Tebaldi, West and
+Karr 2002; Kamarianakis and Prastacos 2005; Stathopoulos and Karlaftis 2003).
+Whittaker, Garside and Lindveld (1997) and Sun, Zhang and Yu (2006) additionally
+use conditional independence so that only lagged flows of adjacent data collection sites
+are required in their models. When the distance between sites is such that vehicles
+are counted at a number of different sites during the same time period, the flow at
+other sites at lag 0 is useful for forecasting the flow at site S. The models used in this
+paper, Whitlock and Queen (2000) and Queen, Wright and Albers (2007), not only
+use traffic flows at upstream sites for modelling site S and conditional independence to
+reduce the number of upstream sites included in the model, but, unlike other models,
+also allow the inclusion of flows from other data collection sites at lag 0.
+   Following Whitlock and Queen (2000) and Queen et al. (2007), this paper uses
+a multivariate Bayesian dynamic model, called the multiregression dynamic model
+
+
+                                            3
+(MDM) (Queen and Smith 1993), for forecasting traffic flows. The MDM uses any
+conditional independence and causal structure across the time series and is an example
+of a dynamic Bayesian network. A Bayesian network (BN) is a directed acyclic
+graph in which variables are represented by nodes and arcs between nodes represent
+conditional dependencies between the variables. A dynamic BN is a Bayesian network
+for a sequence of variables such as a time series or stochastic process. Dynamic
+BNs of various forms have received a lot of interest in recent years (see for example
+Kjærulff 1995; Brillinger 1996; Farrow, Goldstein and Spiropoulos 1997; Dahlhaus
+2000; Dahlhaus and Eichler 2003; Sun et al. 2006; Smith and Figueroa 2007).
+   In the MDM, at each time t, the observable component series Yt (1), . . . , Yt (n) of
+the n-dimensional time series, and their associated state vectors θ t (1), . . . , θ t (n), are
+represented by a BN. These individual BNs are linked together over time to form a
+dynamic BN. As in Sun et al. (2006), the direction of traffic flow produces the causal
+drive in the system and the possible routes through the network are used to define
+a conditional independence structure across the time series. The MDM then uses
+the conditional independences and causal driving mechanism through the system, as
+represented by the dynamic BN, to break down the multivariate model into simpler
+univariate regression dynamic linear models (DLMs) (West and Harrison 1997) where
+contemporaneous traffic flows at upstream links in the network are used as regressors.
+Tebaldi et al. (2002) also use regression DLMs when modelling traffic flows. As in
+this paper, they use traffic flows at upstream links in the network as linear regressors.
+However, whereas the vehicle counts in this paper are for one-hour intervals, those in
+Tebaldi et al. (2002) are for one-minute intervals, and so regression on lagged flows
+(rather than contemporaneous flows) is required.
+   Traffic flows can exhibit sudden changes in response to events such as congestion,
+road traffic accidents, roadworks or adverse weather conditions. It is during these pe-
+
+                                              4
+riods of change when a traffic management system is often of most use and it is crucial
+to the success of a traffic management system that its associated forecasting model
+continues to perform well despite the change. To maintain forecast performance, the
+MDM uses the technique of external intervention in which forecast distributions are
+manipulated externally to the system. This is a long established technique in the
+context of DLMs (West and Harrison 1986, 1989, 1997).
+   External intervention has also been used in the context of BNs with the different
+aim of identifying causal relationships between variables (Pearl 1995, 2000; Spirtes,
+Glymour and Scheines 2000; Lauritzen 2000; Lauritzen and Richardson 2002; Dawid
+2002). Here, intervention for a random variable Xi means that the value of Xi is
+manipulated externally and is assigned the value xi . Then Xi is causal for Xj if
+intervention with respect to Xi affects Xj ’s distribution. Didelez (2003) and Eichler
+and Didelez (2007) consider the effects of external intervention in a dynamic setting
+for dynamic BNs. Here, a time series {Xt (i)} is said to be causal for the time series
+{Xt (j)} if an intervention with respect to Xt (i) affects the predictions of Xt+k (j),
+for some future time t + k. Thus intervention in dynamic BNs has been used to
+investigate lagged causal relationships between time series.
+   In this paper it will be shown how, in addition to maintaining good forecast
+performance, intervention in the MDM can aid the identification of contemporane-
+ous causal relationships between time series. This goes beyond the identification of
+lagged causal relationships previously addressed using intervention in dynamic BNs.
+The MDM uses contemporaneous causal relationships between component series ex-
+plicitly: different contemporaneous causal relationships produce different MDMs. It
+is therefore important that the correct causal relationships between traffic flow series
+are used when specifying the MDM. In normal traffic conditions, these are dictated
+by the direction of traffic flow and possible routes through the network: generally
+
+                                           5
+flow series at adjacent upstream sites to a particular site S are causal for the flow
+series at site S. However, queuing traffic can change causal relationships, because a
+queue at site S can feed upstream so that the flow series at site S can become (tem-
+porarily) causal for the flows at upstream sites, as well as for the flows at downstream
+sites. The MDM offers a method of identifying causal relationships on-line, ensuring
+that the ‘correct’ causal relationships, and consequently the ‘correct’ MDM, is always
+used.
+   Although the focus of this paper is the use of intervention in the MDM with
+respect to forecasting traffic flows, there are many potential application areas for
+the MDM, including modelling economic indicators such as energy consumption and
+GDP, environmental resource management problems, industrial product distribution
+flow problems and medical patient physiological monitoring. As a specific example,
+monthly brand sales in a competitive market are modelled using an MDM in Queen
+(1994) and Queen, Wright and Albers (2008). Here, the competition in the market
+is the causal drive in the system and is used to elicit a conditional independence
+structure across the time series: this is demonstrated in Queen (1997) and Queen,
+Smith and James (1994). Goldstein, Farrow and Spiropoulos (1993), Farrow et al.
+(1997) and Farrow (2003) also use dynamic BNs to represent brand relationships when
+forecasting time series of brand sales. Guo and Brown (2001) use a generalisation of
+the MDM to model bivariate hormone time series. Like the MDM, their model uses
+univariate structural models where structural parameters are functions of the other
+series. Their model reduces to the MDM in the special case in which the relationship
+between the two series is in one direction only. Fosen et al. (2006) also use similar
+ideas to the MDM, using parents from a dynamic BN as regressors, when analysing
+a trial of cancer patients with liver cirrhosis.
+   The intervention techniques and methods for identifying causal relationships de-
+
+                                            6
+tailed in this paper are potentially applicable to any series suitable for modelling using
+an MDM. Many series can exhibit sudden changes for which intervention is appropri-
+ate to maintain forecast performance. For example, sales series often exhibit sudden
+changes in response to marketing activity. Although the conditional independence
+structure related to causality is fairly straightforward to elicit for traffic networks
+under normal traffic conditions (see Queen et al. 2007), this is not necessarily the
+case for other potential application areas. Furthermore, like the traffic flow applica-
+tion, causal relationships across a multivariate time series may change over time. For
+example, when forecasting sales data in competitive markets, marketing activity can
+result in changes in the causal relationships between brand sales. Thus the methods
+presented in this paper represent a significant advance for using the MDM in practice,
+as well as for the notoriously difficult problem of identifying contemporaneous causal
+relationships in general multivariate time series problems.
+   The paper will focus on a single traffic network near London, UK. The network
+will be described in Section 2, while an MDM is defined for it in Section 3. Details
+of how intervention in the MDM works are presented in Section 4 before looking at
+intervention in practice in the London network in Section 5. Section 6 shows how the
+MDM can be used to identify contemporaneous causal relationships between series.
+Finally, Section 7 offers some concluding remarks.
+
+                            2. THE LONDON NETWORK
+
+   This paper focuses on using intervention when forecasting vehicle counts at the
+junction of three major roads — the M25, A2 and A296 — east of London, UK.
+Figure 1(a) shows an aerial photograph of the network. The traffic data are hourly
+counts of vehicles passing over induction loops in the road surface at a number of data
+collection sites in the network. A diagram of the network showing the layout of the
+
+                                            7
+                       (a)                                (b)
+
+
+
+
+Figure 1: The London network (a) aerial photograph (taken from Google Maps) (b)
+schematic diagram: the grey diamonds are the (numbered) data collection sites and
+the white arrows indicate the direction of traffic flow.
+
+data collection sites is given in Figure 1(b). The data used here were collected between
+31 January 1995 and 28 March 1995. Data for this network are freely available at
+http://trads.hatris.co.uk.
+   The network is such that traffic flows into the network, through a number of data
+collection sites, and then out of the network. During normal conditions it will only
+take a few minutes for a vehicle to traverse the network, so most vehicles are counted
+at a number of different sites during the same time period.
+   The vehicle counts have a strong seasonal pattern with peaks in the morning
+and evening rush hours. The daily pattern is different on a weekday than it is at
+the weekend, and also slightly different for Monday and Friday. It is possible to
+incorporate these differences into the model, but for clarity of presentation, only
+traffic flows for Tuesday–Thursday each week are considered here. The hourly counts
+
+                                           8
+in this network will be modelled by an MDM, as described in the next section.
+
+
+3. A MULTIREGRESSION DYNAMIC MODEL FOR THE LONDON NETWORK
+
+    In this section, an MDM (Queen and Smith, 1993) will be defined for the Lon-
+don network. Let Yt (i) be the vehicle count for site i at hour t. Then let Y t =
+(Yt (1), . . . , Yt (n))⊤ denote the n-dimensional multivariate time series and let Y t =
+(Y 1 , . . . , Y t )⊤ and Y t (i) = (Y1 (i), . . . , Yt (i))⊤ .
+    Suppose that the variables are ordered and indexed so that there is a conditional
+independence structure related to causality so that at each time t ∈ N, for i = 2, . . . , n,
+
+          Yt (i) ⊥⊥ ({Yt (1), . . . , Yt (i − 1)} \pa(Yt (i)))|pa(Yt (i)),
+                    ©© t
+                       Y (1), . . . , Y t (i − 1) \pa(Y t (i)) |(pa(Y t (i)), Y t−1 (i)).
+                                                   ª             ª
+          Yt (i) ⊥⊥
+
+The notation A⊥⊥B|C reads “A is independent of B given C” (Dawid 1979), “\” reads
+“excluding” and pa(Yt (i)) ⊆ {Yt (1), . . . , Yt (n)}. Each variable in the set pa(Yt (i)) is
+a parent of Yt (i) so that in a BN representing the conditional independence relation-
+ships, there is a directed arc to Yt (i) from each of its parents. Thus over time the
+conditional independence relationships are represented by a dynamic BN.
+    In Queen et al. (2007), the possible routes through the London network were used
+to elicit the conditional independences related to causality across Y t at each time t.
+A BN representing these relationships, suitable for use with an MDM, was elicited.
+Because some of the data collection sites were not operational, the BN separates out
+into two parts. The larger of these parts, representing vehicle counts at sites labelled
+167, 168, 170A, 170B, 169, 161 and 171, is presented here in Figure 2.
+    In the BN of Figure 2, Yt (170AB) denotes Yt (170A) + Yt (170B) and Yt (161.171)
+denotes Yt (161) + Yt (171). Each node θ t (i) is the parameter vector associated with
+
+
+                                                        9
+                                            Y t (167)                   θt (167)
+
+
+
+
+             θt (170AB)      Y t (170AB)                  Y t (168)
+
+
+
+
+              Y t (170A)      Y t (170B)                 θt (170B)                  Y t (169)              θt (169)
+
+
+
+
+                             θt (161.171)               Y t (161.171)
+
+
+
+
+                                            Y t (171)                   Y t (161)               θt (161)
+
+
+
+
+Figure 2: Part of the BN for each time t representing traffic flows in the London
+network of Figure 1.
+
+Yt (i) in the MDM. These are mutually independent at each time t within the MDM
+framework. Three variables are logical functions of their parents:
+
+                            Yt (168) = Yt (167) − Yt (170AB),
+
+                           Yt (170A) = Yt (170AB) − Yt (170B),                                                        (1)
+
+                            Yt (171) = Yt (161.171) − Yt (161).
+
+Following the terminology of WinBUGS software, these are called logical variables
+and denoted by double ovals. Note that all these logical variables are also general
+time series. However, it is not possible to model them directly, because then all
+the parameter vectors would no longer be mutually independent. (For full details
+regarding the BN of Figure 2 and how it was elicited, see Queen et al., 2007.)
+   Denote the information available at time t by Dt . The MDM for the n-dimensional
+vector time series Y t over times t = 1, 2, ..., is defined by the n observation equations,
+
+                                                            10
+the system equation, and information at time t − 1 as follows.
+
+ Observation equations:         Yt (i) = F t (i)⊤ θ t (i) + vt (i),   vt (i) ∼ (0, Vt (i)), 1 ≤ i ≤ n
+ System equation:               θ t = Gt θ t−1 + wt ,                 wt ∼ (0, W t )
+ Information:                   (θ t−1 | Dt−1 ) ∼ (mt−1 , C t−1 ).
+The mi -dimensional vector F t (i) contains an arbitrary, but known, function of the
+parents pa(Yt (i)) and possibly other known variables (which may include Y t−1 ); θ t (i)
+is the mi -dimensional parameter vector for Yt (i); Vt (1), . . . Vt (n) are the scalar ob-
+servation variances; θ ⊤           ⊤                 ⊤
+                       t = (θ t (1) , . . . , θ t (n) ) is the m-dimensional parameter vec-
+
+tor; mt−1 and C t−1 are the (posterior) moments for θ t−1 at time t − 1; and the
+block diagonal m × m matrices Gt , W t , and C t−1 are assumed known (and are
+not functions of pa(Yt (i))). The error vectors, v ⊤                                  ⊤
+                                                   t = (vt (1), . . . , vt (n)) and w t =
+
+(wt (1)⊤ , . . . , wt (n)⊤ ), are such that vt (1), . . . , vt (n) and wt (1), . . . , wt (n) are mutu-
+ally independent and {v t , wt }t∈N are mutually independent with time.
+    The MDM uses the conditional independence structure to model the multivariate
+time series by n separate univariate models — for Yt (1) and Yt (i)|pa(Yt (i)), i =
+2, . . . , n. Note that no distributional assumptions have been placed on the error
+terms or the distribution for θ t−1 . Also, there is no specific requirement that F t (i)
+be a linear function of pa(Yt (i)), just that the function is known. Thus the MDM
+is a very general model. When F t (i) is a linear function of pa(Yt (i)) and the error
+distributions are normal, then this is the special case of the linear multiregression
+dynamic model. In this case, each Yt (i) with parents is modelled by a regression DLM
+with its parents as (linear) regressors, and each Yt (i) without parents is modelled by
+any appropriate DLM. Linear MDMs are particularly simple to use analytically and
+will be used in this paper to forecast traffic flows in the London network.
+    From the BN in Figure 2, neither Yt (167) nor Yt (169) have parents so each of
+these is modelled separately by univariate DLMs. For i = 167, 169, to account for the
+
+                                                  11
+seasonality exhibited by each Yt (i), a seasonal factor model is used with a separate
+level parameter for each hour of the day. (This was shown to perform as well as the
+Fourier model, and has the added advantage of interpretability, which is helpful when
+using intervention.) Thus in this case, θ t (i) is a 24-dimensional vector with a seasonal
+factor for each of the 24 hours, F t (i)⊤ = (1, 0, . . . , 0) and, for a ∈ [0, 1],
+                                                                  
+                                      a 1 − a 0 ··· 0
+                                   0      0       1 ··· 0 
+                         Gt (i) =  ..                             .                 (2)
+                                                                  
+                                   .                      . . . 1 
+                                      1    0     ··· ··· 0
+
+So the system equation links the current hour parameter (hour t) with the parameter
+for the previous hour (hour t − 1), as well as the parameter for the corresponding
+hour the previous day (hour t − 24). The optimal value of a for the London network
+was found to be 0.01.
+   From Figure 2, series Yt (170AB), Yt (170B), Yt (161.171) and Yt (161) all have par-
+ents. Thus each is modelled by a regression DLM with its parents as regressors. In
+this case the regression parameters represent the proportion of traffic flowing from
+parents to Yt (i). These proportions exhibit a seasonal daily pattern which remains
+stable over time. Thus a separate regression parameter is defined for each hour for
+each parent, and, in the case where Yt (i) has a single parent, Gt (i) is given by (2)
+with a = 0. Thus the current hour parameter is linked with the parameter for the
+corresponding hour of the previous day.
+   The remaining series, Y t(168), Yt (170A) and Yt (171), are logical variables and
+their forecasts are simply derived from those of their parents in accordance with (1).
+   The value of the observation variances Vt (i) are estimated on-line using standard
+DLM variance learning techniques (see West and Harrison (1997), Section 2.5) and
+the evolution variance W t is estimated using established DLM discounting techniques
+
+
+                                               12
+(see West and Harrison (1997), Section 2.4).
+    As long as θ t (1), θ t (2), . . . , θ t (n) are mutually independent initially (i.e.       C0
+is block diagonal), then the block diagonal form of Gt and W t ensures that the
+θ t (i) remain mutually independent and that each θ t (i) can be updated separately
+in closed form from Yt (i)’s (conditional) univariate model. Forecasts for Yt (1) and
+Yt (i)|pa(Yt (i)), i = 2, . . . , n, and the k-step forecasts for Yt+k (1) and Yt+k (i)|pa(Yt+k (i)),
+k ∈ N, i = 2, . . . , n, could also then be found separately, often using established dy-
+namic model results. However, the values of pa(Yt (i)) are not available when forecast-
+ing Yt (i), since Yt (i) and pa(Yt (i)) are observed simultaneously. Similarly, the values
+of pa(Yt+k (i)) are not available when forecasting Yt+k (i). So the marginal forecasts
+for each Yt (i) and Yt+k (i), k ∈ N, without conditioning on the values of parents,
+are required. Unfortunately, the marginal forecast distributions for Yt (i) and Yt+k (i),
+k ∈ N, i = 2, . . . , n, will not generally be of a simple form. However, (under quadratic
+loss) the marginal moments of the forecast distributions are adequate for forecasting
+purposes, and these can be easily found for many MDMs. (See Queen and Smith
+(1993) and Queen et al. (2008) for further details.)
+    Because the MDM breaks the multivariate model into univariate components,
+computations in the MDM are fast and efficient, no matter how large and complex
+the network is. The software used in this paper was written in R and had a speed of
+over 1200 (roughly) forecasts per second.
+    It is important to realise that although two BNs can represent the same condi-
+tional independences, they can represent quite different conditional independences
+related to causality and consequently, quite different MDMs. For example, consider
+the BN in Figure 2 and a second BN which is exactly the same except that the
+arc between Yt (167) and Yt (170AB) is reversed. These two BNs are probabilisti-
+cally equivalent. However, the conditional independences related to causality re-
+
+                                                13
+late to two quite different MDMs. For the BN in Figure 2 an MDM would model
+Yt (167) and Yt (170AB)|Yt (167), whereas for the second BN, an MDM would model
+Yt (167)|Yt (170AB) and Yt (170AB).
+
+
+     4. INTERVENTION IN THE MULTIREGRESSION DYNAMIC MODEL
+
+    Intervention in the BN context is usually ‘atomic’ where Xi is assigned a specific
+(single) value xi . Intervention in the context of the DLM is instead ‘random’ where
+the distribution of the random variable is manipulated.
+    The need for intervention in the time series context can be triggered by poor
+model forecast performance or by expert information regarding external events (such
+as planned roadworks). As pointed out by West and Harrison (1997), detecting when
+intervention is required, and monitoring the intervention afterwards, can be informal,
+involving the forecaster’s subjective judgement (by examining the pattern and/or
+magnitude of the one-step forecast errors, for example), or can be based on more
+formal monitoring techniques. Formal monitoring techniques are long-established for
+DLMs (see West and Harrison, 1997, Chp. 11). Because the MDM decomposes into
+(conditional) DLMs, it should be relatively straightforward to develop such monitors
+for the MDM. In this paper, however, the focus lies in the use of intervention and
+informal monitoring only is used. The development of a suitable formal monitor for
+the MDM will be addressed in future work.
+    As is assumed in Lauritzen (2000) and Dawid (2002) with respect to BNs, inter-
+vention in the DLM always precedes observation, so that intervention at time t is
+done before forecasts are made and the series is observed at time t. In the MDM it is
+possible to intervene (separately) for any number and combination of the individual
+series Yt (1), . . . , Yt (n) and/or their associated parameter vectors θ t (1), . . . , θ t (n) at
+
+
+                                                14
+any particular time t. Thus, sequential decisions are made at each time point regard-
+ing intervention on the time series, as in Dawid and Didelez (2005). For simplicity
+here, only intervention at the single time point t for a single component Yt (i), and its
+associated parameter vector θ t (i), will be considered.
+   The observation equation for Yt (i) specifies the distribution Yt (i)|(θ t (i), pa(Yt (i))) ∼
+(F t (i)⊤ θ t (i), Vt (i)). Intervention for Yt (i) in the MDM involves manipulating this dis-
+tribution, to give the intervention distribution
+
+      Yt (i)|(θ t (i), pa(Yt (i)), intervention) ∼ (F t (i)⊤ θ t (i) + ht (i), Vt (i) + Ht (i)),   (3)
+
+for suitable scalars ht (i) and Ht (i). The system equation specifies the distribution
+θ t |θ t−1 ∼ (Gt θ t−1 , W t ). So when intervening for θ t (i), the part of the system equation
+associated with θ t (i) is manipulated to produce the intervention distribution
+
+                 θ t (i)|(θ t−1 (i), intervention) ∼ (Gt (i)∗ θ t−1 (i), W t (i)∗ ),
+
+for suitable matrices Gt (i)∗ and W t (i)∗ . The values of ht (i) and Gt (i)∗ reflect the
+expected change in Yt (i) and θ t (i), respectively, at time t, and Ht (i) and W t (i)∗
+reflect the uncertainty regarding the changes.
+   Because the MDM is a dynamic BN, intervention for Yt (i) or θ t (i) not only affects
+the manipulated distributions, but also affects other variables in the dynamic BN.
+This makes intervention in the MDM a very powerful forecasting technique. To
+investigate the effects of interventions, this paper will use influence diagrams.
+   An influence diagram is a generalisation of a BN with random nodes (drawn as
+ovals) and decision nodes (drawn as rectangles), which can be used to represent and
+solve Bayesian decision problems (Howard and Matheson 1984; Shachter 1986, 1988;
+Oliver and Smith 1990). The value of a decision node arises through external inter-
+vention by a decision maker. Arcs leading into random nodes represent conditional
+
+                                                 15
+dependencies, whereas arcs leading into decision nodes imply that information re-
+garding its parents is assumed available before a decision is made.
+    Following the ideas of Dawid (2002), introduce indicator variables σ(Yt (i)) and
+σ(θ t (i)), where σ(Yt (i)) only takes the value 1 when intervention for Yt (i) occurs,
+and σ(θ t (i)) only takes the values 1 when intervention for θ t (i) occurs. Note that,
+although similar in concept, the intervention variables used here are different to those
+used in Dawid (2002), where atomic interventions were used with a finite set of
+possible interventions. With random intervention the distribution for Yt (i) or θ t (i)
+can be manipulated arbitrarily at intervention. Thus, σ(Yt (i)) and σ(θ t (i)) are simply
+indicators as to whether intervention takes place or not. The conditional distributions
+can then be defined: Yt (i)|(θ t (i), pa(Yt (i)), σ(Yt (i))) and θ t (i)|(θ t−1 (i), σ(θ t (i))).
+    The intervention variables, σ(Yt (i)) and σ(θ t (i)), are decision variables whose
+values are controlled by the forecaster using the forecasting model. Following the
+ideas of Dawid (2002), σ(Yt (i)) and σ(θ t (i)), will be added as decision nodes to a
+dynamic BN of the MDM to produce an influence diagram of the MDM. The MDM
+uses the conditional independence structure related to causality represented in the
+influence diagram. As such, the descendants of σ(Yt (i)) will be affected by intervention
+for Yt (i), and the descendants of σ(θ t (i)) will be affected by interventions for θ t (i).
+    In order to draw an influence diagram which represents the general structure of
+all MDMs, define the following notation. Let
+
+                            X t (i)⊤ = (Yt (1), . . . , Yt (i − 1))
+
+                             Z t (i)⊤ = (Yt (i + 1), . . . , Yt (n))
+
+                             αt (i)⊤ = (θ t (1)⊤ , . . . , θ t (i − 1)⊤ )
+
+                             β t (i)⊤ = (θ t (i + 1)⊤ , . . . , θ t (n)⊤ ).
+
+Thus, for i = 2, . . . , n−1, the time series can be written as Y ⊤           ⊤                 ⊤
+                                                                  t = (X t (i) , Yt (i), Z t (i) ),
+
+
+                                                  16
+                                                                      X t (i )                        X t+k (i ) k ∈ IN
+
+
+
+                      αt −1(i )                 αt (i )                          αt +k (i ) k ∈ IN
+
+
+
+                                  σ(Y t (i ))              Y t (i )              Y t +k (i ) k ∈ IN
+
+
+
+         D t −1       θt −1(i )                 θt (i )                          θt +k (i ) k ∈ IN
+
+
+
+                                  σ(θt (i ))                          Z t (i )                        Z t +k (i ) k ∈ IN
+
+
+
+                      βt−1(i )                  βt ( i )                         βt +k (i ) k ∈ IN
+
+
+
+
+Figure 3: Influence diagram for the multiregression dynamic model before Y t is
+observed, together with the intervention decision variables, σ(Yt (i)) and σ(θ t (i)).
+
+with parameter vector θ ⊤          ⊤         ⊤         ⊤
+                        t = (αt (i) , θ t (i) , β t (i) ). Then since pa(Yt (i)) ⊆ X t (i),
+
+the vector F t (i) is a known function of X t (i), and Yt (i)|(X t (i), θ t (i)) has some dis-
+tribution with mean F t (i)⊤ θ t (i) and variance Vt (i).
+   Suppose that Y 1 , . . . , Y t−1 have been observed. An influence diagram, repre-
+senting the MDM before Y t is observed, is given in Figure 3. Also included in the
+influence diagram are the intervention decision variables, σ(Yt (i)) and σ(θ t (i)).
+   In the influence diagram there are arcs leading from Dt−1 and θ t−1 (i) to both
+σ(Yt (i)) and σ(θ t (i)) because the decision to intervene at time t is often a reflection
+of past behaviour of the series and/or its model. (It is also possible that the decision
+to intervene is entirely dictated by information external to the model.) The other
+
+
+
+                                                               17
+arcs in the influence diagram are direct consequences of the MDM. The parameter
+vectors αt−1 (i), θ t−1 (i) and β t−1 (i) each have the single parent Dt−1 , since the poste-
+rior distributions αt−1 (i)|Dt−1 , θ t−1 (i)|Dt−1 and β t−1 (i)|Dt−1 represent all knowledge
+of αt−1 (i), θ t−1 (i) and β t−1 (i), respectively, after the first t − 1 observations are
+made. The block diagonal form of C t−1 ensures that θ t−1 (1), . . . , θ t−1 (n) are all mu-
+tually independent given Dt−1 and so there are no arcs between αt−1 (i), θ t−1 (i) and
+β t−1 (i). The block diagonal forms of Gt , Gt+1 , . . . , Gt+k and W t , W t+1 , . . . , W t+k
+ensure that repeated use of the system equation specifies separate distributions for
+θ t (i)|θ t−1 (i) and each θ t+k (i)|θ t (i), i = 1, . . . , n, for k ∈ N. Therefore {αt+k (i), k ∈
+N}, {θ t+k (i), k ∈ N} and {β t+k (i), k ∈ N} have the single parents αt (i), θ t (i) and
+β t (i), respectively, which in turn have single parents αt−1 (i), θ t−1 (i) and β t−1 (i),
+respectively. The n observation equations at times t and t + k, k ∈ N define the
+distributions for Yt (i)|(θ t (i), pa(Yt (i))) and Yt+k (i)|(θ t+k (i), pa(Yt+k (i))), i = 1, . . . , n.
+So X t (i) has parent αt (i), {X t+k (i), k ∈ N} has parent {αt+k (i), k ∈ N}, Yt (i)
+has parents θ t (i) and X t (i), {Yt+k (i), k ∈ N} has parents {θ t+k (i), k ∈ N} and
+{X t+k (i), k ∈ N}, Z t (i) has parents β t (i), X t (i) and Yt (i), and {Z t+k (i), k ∈ N} has
+parents {β t+k (i), k ∈ N}, {X t+k (i), k ∈ N} and {Yt+k (i), k ∈ N}. Additionally Yt (i)
+and θ t (i) have parents σ(Yt (i)) and σ(θ t (i)), respectively.
+
+4.1 EFFECTS OF INTERVENTION IN THE MDM BEFORE OBSERVING Y t
+    The effects of intervention for Yt (i) and θ t (i) in the MDM can be easily seen
+by looking at the descendants of σ(Yt (i)) and σ(θ t (i)), respectively, in the influence
+diagram of Figure 3.
+    As σ(Yt (i)) has descendants Yt (i) and Z t (i), intervention for Yt (i) affects Yt (i)’s
+forecast and Z t (i)’s forecast only. Note that intervention for Yt (i) does not affect the
+forecasts for X t (i), nor the priors for any parameters at time t + k, nor the k-step
+
+
+
+                                                  18
+ahead forecasts for Y t+k .
+   On the other hand, σ(θ t (i)) has descendants θ t (i), Yt (i), Z t (i), {θ t+k (i), k ∈
+N}, {Yt+k (i), k ∈ N} and {Z t+k (i), k ∈ N}. Therefore intervention for θ t (i) affects:
+the prior for θ t (i), the one-step ahead forecasts for Yt (i) and Z t (i), the priors for
+{θ t+k (i), k ∈ N}, and the k-step ahead forecasts for {Yt+k (i), k ∈ N} and {Z t+k (i), k ∈
+N}. Intervening for θ t (i) does not affect the one-step, or k-step, ahead forecasts for
+X t (i), nor the priors for any parameters for components of Y t other than Yt (i), either
+at time t (that is, αt (i), β t (i)) or at future time periods (that is, {αt+k (i), k ∈ N},
+{β t+k (i), k ∈ N}).
+   The influence diagram given in Figure 3 is a generic representation of the struc-
+ture of all MDMs. For a specific MDM, not every variable in Z t (i) is necessarily a
+descendant of Yt (i). For example, in the dynamic BN of the London network given
+in Figure 2, when considering intervention for Yt (170B), say, then Yt (169) could be
+included in Z t (170B) although Yt (169) is not a descendant of Yt (170B) and so will
+not be affected by intervention for Yt (170B). As a result, intervention for Yt (i) will
+not necessarily affect the forecasts for all variables in Z t (i), but only the forecasts of
+those Yt (j) ∈ Z t (i) which are descendants of Yt (i). Similarly, intervention for θ t (i)
+will not affect the forecasts of all variables in Z t (i) or {Z t+k (i), k ∈ N}, but only
+those Yt (j) and Yt+k (j) for which Yt (j) ∈ Z t (i) are descendants of Yt (i).
+
+4.2 EFFECTS OF INTERVENTION IN THE MDM AFTER OBSERVING Y t
+   After observing Y t , the influence diagram in Figure 3 is no longer appropriate to
+represent the MDM. Each of the arcs (αt (i), X t (i)), (θ t (i), Yt (i)) and (β t (i), Z t (i))
+needs to be reversed to reflect the fact that the posterior distributions αt (i)|Y t ,
+θ t (i)|Y t and β t (i)|Y t are now of interest (rather than the distributions Yt (i)|θ t (i)
+specified by the observation equations used for forecasting each Yt (i)). Following
+
+
+
+                                              19
+                                                                    X t (i )                        X t+k (i ) k ∈ IN
+
+
+
+                     αt −1(i )                 αt (i )                         αt +k (i ) k ∈ IN
+
+
+
+                                 σ(Y t (i ))             Y t (i )              Y t +k (i ) k ∈ IN
+
+
+
+         D t −1      θt −1(i )                 θt (i )                         θt +k (i ) k ∈ IN
+
+
+
+                                 σ(θt (i ))                         Z t (i )                        Z t +k (i ) k ∈ IN
+
+
+
+                     βt−1(i )                            βt ( i )              βt+k (i ) k ∈ IN
+
+
+
+
+Figure 4: Influence diagram for the multiregression dynamic model, together with
+intervention indicator decision variables σ(Yt (i)) and σ(θ t (i)), after Y t is observed.
+
+Howard and Matheson’s (1984) Arc Reversal Theorem, extra arcs need to be intro-
+duced into the influence diagram. Explicitly, reversing the arc between any two nodes
+A and B means that A must inherit B’s parents and B must inherit A’s parents. The
+new influence diagram, after observing Y t , is given in Figure 4. Notice how the arc
+reversals have introduced several new arcs into the influence diagram.
+   It is important to note that the interventions for Yt (i) and/or θ t (i) still pre-
+cede the observation Y t . However, as the influence diagram representing the MDM
+changes after observing Y t , so the effects of the interventions will change after Y t
+is observed. The effects of intervention after Y t is observed are easily seen from the
+influence diagram in Figure 4 by again looking at the descendants of σ(Yt (i)) and
+
+
+
+                                                             20
+σ(θ t (i)), respectively. This time both σ(Yt (i)) and σ(θ t (i)) have the same descen-
+dants: Yt (i), θ t (i), Z t (i), β t (i), {θ t+k (i), k ∈ N}, {β t+k (i), k ∈ N}, {Yt+k (i), k ∈ N}
+and {Z t+k (i), k ∈ N}. Thus after observing Y t , intervention for Yt (i) and θ t (i) both
+affect the posterior for θ t (i) and also the posterior for β t (i), the priors for future
+θ t+k (i) and also the priors for future β t+k (i), the k-step forecasts for Yt+k (i) and the
+k-step forecasts for Z t+k (i). It is, however, important to note that although inter-
+vention for Yt (i) and θ t (i) both affect the same variables after Y t (i) is observed, they
+affect the variables in different ways. Neither intervention for Yt (i) nor θ t (i) affect
+the posterior for X t (i)’s parameter vector αt (i), the prior for future parameters αt+k ,
+nor the k-step forecasts for X t+k (i).
+    Notice that before Y t is observed, intervening for Yt (i) affects a different set of
+variables than intervening for θ t (i) does. On the other hand, after Y t is observed,
+intervening for Yt (i) affects exactly the same set of variables (although in different
+ways) as intervening for θ t (i). It is interesting to note that neither intervention affects
+the forecasts of {X t+k (i), k ∈ N}, nor the distributions of its parameters.
+
+
+                 5. INTERVENTION IN THE LONDON NETWORK
+
+    The specific method of intervention to be used when forecasting traffic flows nat-
+urally depends on the particular change to be accommodated for a given series. In
+this section, two specific interventions are considered — one for an observed series
+Yt (i) and the other for two state vectors. Both of these are typical of the type of
+interventions commonly required when forecasting traffic flows.
+
+5.1 INTERVENTION FOR A Yt (i)
+    Poor forecast performance, as identified by large forecast errors, can be an indica-
+tion that intervention might be useful. Such an instance of poor forecast performance
+
+
+                                                21
+occurs in series Yt (167), where an unusually large negative forecast error occurs at time
+560 followed by an unusually large positive forecast error. This pattern of forecast
+errors is consistent with a slowdown in traffic flow, for example due to a temporary
+block in the road following a crash, followed by an increase in traffic flow as the
+problem is resolved and delayed vehicles move through the network. Such patterns
+are not uncommon in traffic networks. A plot of the one-step ahead forecast errors
+with ±1.96 forecast standard deviation error bars for Yt (167) between times 500 and
+580 is shown in Figure 5(a). The forecast errors for times 560 and 561 are circled on
+the plot. The same pattern of forecast errors is also evident in Yt (167)’s children (see
+Figure 5(c)), and in other descendants (see Figure 5(e)). This is due to the fact that
+traffic from site 167 flows to sites 168, 170A or 170B, so any changes in traffic flow at
+site 167 will have a knock-on effect to the traffic flows at these sites, and, in turn, to
+the flows at sites further downstream. It is precisely these kinds of relationships be-
+tween flows at different sites in the network which the BN was designed to represent.
+Figure 5(g) shows a plot of the one-step forecast errors for Yt (169) over the same time
+period. It is interesting to note that Yt (169) is not a descendant of Yt (167) and does
+not show the same large forecast errors at times 560 and 561.
+   In order to improve forecast performance of Yt (167) and its descendants, interven-
+tion was used for Yt (167) as follows. The observation y560 (167) was unexpected and
+so was treated simply as an outlier (since it would not usually be known in advance
+that there would be a hold-up). Following the large forecast error for hour 560, a
+decision was made to intervene for Y561 (167). As the road blockage clears and vehicles
+start moving, the delayed vehicles (from hour 560) are expected to pass site 167, in
+addition to the vehicles that arrive during hour t = 561. The expected number of
+vehicles delayed from hour 560 is e560 (167) = f560 (167) − y560 (167), where f560 (167)
+is the one-step forecast (at time 559) for Y560 (167). Thus ht (i) in the intervention
+
+                                           22
+        (a) Yt (167) without intervention             (b) Yt (167) with intervention
+
+          500                                           500
+
+
+
+
+          0                                             0
+
+
+
+
+          −500                                          −500
+
+
+
+
+                        500   520   540   560   580                   500   520   540   560   580
+
+
+
+
+        (c) Yt (170AB) without intervention           (d) Yt (170AB) with intervention
+
+          200 400 600                                   200 400 600
+
+
+          0                                             0
+
+          −200                                          −200
+
+
+
+
+          −600                                          −600
+
+
+                        500   520   540   560   580                   500   520   540   560   580
+
+
+
+
+        (e) Yt (170B) without intervention            (f) Yt (170B) with intervention
+          300                                           300
+
+          200                                           200
+
+          100                                           100
+
+          0                                             0
+
+
+          −100                                          −100
+
+
+
+
+          −300                                          −300
+
+                        500   520   540   560   580                   500   520   540   560   580
+
+
+
+
+        (g) Yt (169) without intervention             (h) Yt (169) with intervention
+          60                                            60
+
+          40                                            40
+
+          20                                            20
+
+          0                                             0
+
+          −20                                           −20
+
+
+
+
+          −60                                           −60
+
+
+                        500   520   540   560   580                   500   520   540   560   580
+
+
+
+
+Figure 5: Plots of the one-step forecast errors (solid line) and ±1.96 forecast standard
+deviations (dotted lines) obtained using the linear multiregression dynamic model
+between times 500 and 580 for Yt (167), one of its children Yt (170AB), one of its
+‘grandchildren’ Yt (170B) and a non-descendant Yt (169). Plots on the left are the
+forecast errors obtained without intervention and those on the right are the forecast
+errors following intervention for Y561 (167). The observations at times 560 and 561 are
+circled for each series in each plot.
+                                            23
+distribution (3) was set to be e560 (167). The value of Ht (i) in the intervention dis-
+tribution (3) was set to be 10,000. This value was fairly arbitrary: it was chosen to
+be large enough to reflect increased uncertainty and to let the model adapt quickly
+after intervention. (The MSE was in fact found to be fairly robust with respect to
+the choice of Ht (i), provided that it is large enough, around 50% of Vt (167) in this
+case.)
+   From Section 4.1, before Y t is observed, intervention for Yt (i) should affect the
+one-step forecast for Yt (i) and its descendants, but should not affect the one-step
+forecasts for any non-descendants. This is indeed the case. Intervention for Y561 (167)
+not only improves the one-step forecast error for Y561 (167) (Figure 5(a)(b)), but it
+also improves the one-step forecast error for its children (Figure 5(c)(d)), its ‘grand-
+children’ (Figure 5(e)(f)) and indeed its ‘great grandchildren’ (not shown). On the
+other hand, it is clearly seen that the intervention for Y561 (167) has no affect on the
+one-step forecast error of Y561 (169) (Figure 5(g)(h)), a non-descendant of Yt (167).
+   In Section 4.1 it was shown that an intervention for Yt (i) will not affect any k-step
+ahead forecasts before Y t is observed. In contrast, in Section 4.2 it was shown that,
+after Y t is observed, the intervention does affect the k-step forecasts for Yt (i) and its
+descendants, but not the k-step forecasts of any non-descendants. To demonstrate
+the effect the intervention for Y561 (167) has on the k-step ahead forecasts, Table 1
+shows the k-step forecast means and standard deviations for some of the series at
+time t = 585 (24 hours later).
+   Columns 2–5 of Table 1 show 25-step forecast means and standard deviations
+made at time t = 560, after Y 560 has been observed and after any intervention for
+Y561 (167) has been done, but before observing Y 561 . Columns 2–3 show the 25-step
+forecast means and standard deviations when there is no intervention and columns 4–5
+show the results when there is intervention. As expected from Section 4.1, the k-step
+
+                                            24
+Table 1: The 24- and 25-step forecast means and standard deviations for time 585,
+with and without intervention for Y561 (167). The 25-step forecasts were made at
+time t = 560 after Y 560 has been observed and after any intervention has been done,
+but before observing Y 561 . The 24-step forecasts were made at time t = 561 after
+additionally observing Y 561 .
+                      Before Y 561 observed            After Y 561 observed
+                        (25-step forecasts)             (24-step forecasts)
+                  No intervention Intervention No intervention Intervention
+          Series mean         sd    mean sd mean             sd     mean sd
+        Yt (167) 4,653          152 4,653 152 4,357            146 5,457 195
+        Yt (168)   326           87   326    87     399         96    470 111
+    Yt (170AB) 4,212             61 4,212    61 4,112           59 4,846     69
+      Yt (170B) 1,431            76 1,431    76 1,372           73 1,617     85
+        Yt (161) 1,618          302 1,618 302 1,925            337 2,060 359
+        Yt (169)   514           26   514    26     507         24    507    24
+
+
+
+forecast distributions are exactly the same for all the series regardless of intervention.
+   Columns 6–9 of Table 1 show 24-step forecast means and standard deviations made
+at time t = 561, after any intervention for Y561 (167) has been done, and after observ-
+ing Y 561 . Columns 6–7 show the 24-step forecast means and standard deviations
+when there is no intervention and columns 8–9 show the results after intervening for
+Y561 (167). As expected from Section 4.2, this time it is clearly evident that the inter-
+vention does affect k-step forecasts as the distributions are quite different for Yt (167)
+and all its descendants (even as far away as Yt (161)). Notice, that also as expected,
+the k-step forecast moments for non-descendant Yt (169) are the same regardless of
+whether intervention took place or not.
+   From Figure 2, it can be seen that Y (167) does not have any parents. As a
+consequence, the MDM models Yt (167) by any suitable univariate DLM. Thus the
+effects of intervention for Y561 (167) within the DLM are also illustrated. In particular,
+
+
+
+                                           25
+                        3000
+
+
+
+                        2000
+
+
+
+                        1000
+
+
+
+                        0
+
+                               169   217   265        313   361   409
+
+
+
+
+Figure 6: Plot of Yt (161) (in dark grey) and Yt (171) (on top in light grey) between
+times 169 and 409 (exactly 4 days before and 2 days after the period of reduced flows).
+Dotted vertical lines mark the start and end of the reduced flows.
+
+it can be clearly seen that before Y 561 is observed, intervention for Y561 (167) does not
+affect the forecasts for Y585 (167). However, after Y 561 is observed, intervention does
+affect the forecast distributions for Y585 (167).
+
+5.2 INTERVENTION FOR TWO STATE VECTORS
+   The second intervention considered involves the state vectors for Yt (161.171) and
+for Yt (161), denoted as θ t (161.171) and θ t (161), respectively. At time t, Yt (161.171)
+is the number of vehicles leaving the M25 to join the A2, Yt (171) is the number of
+these vehicles who travel eastbound on the A2, and Yt (161) is the number who travel
+westbound.
+   From time 265 until time 360 (a period of four days) there was a reduction in
+the number of vehicles leaving the M25 to join the A2 (Yt (161.171)) and a reduction
+in the number of vehicles who travelled eastbound (Yt (171)). Traffic flow westbound
+(Yt (161)) remained, however, at the same level. This can be seen on the plot of the
+two series Yt (161) (in dark grey) and Yt (171) (on top in light grey) given in Figure 6.
+This sort of pattern in traffic flow is consistent with the expected consequences of
+roadworks eastbound on the A2, where drivers are forewarned of this on the M25 so
+that fewer vehicles leave the M25 to join the A2 eastbound.
+
+
+                                                 26
+   Intervention is required in order to accommodate these reductions in flows. As
+the reductions in flows are persistent over four days and not just one or two time
+points, intervention for the state vectors associated with Y265 (161.171) and Y265 (171)
+would be appropriate. However, since Yt (171) is a logical variable, the equivalent
+intervention for the parameters associated with Y265 (161.171) and Y265 (161) will be
+used instead. Thus, intervention for θ 265 (161.171) and θ 265 (161) is required.
+   The idea behind the intervention at time t = 265 is to scale the mean for
+θ 265 (161.171) by some value α, for 0 < α < 1, and, because Yt (161) does not change
+at time 265, to scale the mean for θ 265 (161) by 1/α. At time t = 361, traffic flows
+return to their pre-intervention levels, so a further intervention is required scaling the
+mean for θ 361 (161.171) by 1/α and the mean for θ 361 (161) by α.
+   When using intervention for planned roadworks at time 265, ideally expert infor-
+mation should be used to estimate α. However, unfortunately no expert information
+was available for these data. It is possible that a prior could be placed on α, and
+α could then be estimated on-line from the data. For simplicity though, in order to
+illustrate the affect of the intervention as if good expert information were available,
+here the data between times 265 and 360 are used to estimate α. Using these data,
+the flows for Yt (171) roughly decrease by 1/3 from time 265. So, since the traffic
+flows for Yt (161) and Yt (171) are similar, this suggests an estimate for α of 5/6. Un-
+certainty concerning the intervention is incorporated into the model by increasing
+the variances for θ 265 (161.171) and θ 265 (161). These are regression parameters and,
+as such, are not expected to vary greatly over time and so, because of the scale of
+the system error variance, are only increased by 0.01 and 0.005, respectively. The
+resulting intervention distributions for time t = 265 are as follows.
+
+              θ 265 (161.171)|(θ 264 (161.171), intervention)
+
+
+                                             27
+                    ∼ N (5/6 × G265 (161.171)θ 264 (161.171), W 265 (161.171) + 0.01I) ,
+
+            θ 265 (161)|(θ 264 (161), intervention)
+
+                      ∼ N (6/5 × G265 (161)θ 264 (161), W 265 (161) + 0.005I) ,
+
+where G265 (161.171), G265 (161), W 265 (161.171) and W 265 (161) are the pre-intervention
+matrices as defined by the system equation, and I is the identity matrix. At time
+t = 361, the mean for θ 361 (161.171) is instead scaled by 6/5, and that for θ 361 (161) by
+5/6. The system error variances are again increased by 0.01 and 0.005, respectively.
+   In Section 4.1, it was shown that before Yt (i) is observed, an intervention for
+θ t (i) will affect the one-step forecasts for Yt (i) and its descendants, but not affect
+any one-step forecasts of non-descendants. From Figure 7 it is clearly seen how
+the interventions for θ t (161.171) and θ t (161) have affected the one step forecasts
+for Yt (161.171) (plot (a)) and descendant Yt (171) (plot (c)). The one-step forecasts
+for Yt (161) are also affected, but to a much lesser extent (see plot (b)). This is
+because Yt (161) did not exhibit any change at the intervention period and so a change
+in its forecasts and forecast errors were not actually required. As expected, these
+interventions have no effect on the one-step forecasts for non-descendants.
+   Figure 7(d) shows a plot of the one-step prior mean for the first element of θ t (161).
+This element of θ t (161) is the parameter for 00:00–01:00 each day and is only updated
+every 24 hours. The effects on θ t (161) of the interventions at times 265 and 361 can
+be clearly seen: at time 265 the prior mean steps up to a new level which is sustained
+until the intervention at time 361 returns the mean to its former level.
+   In contrast to intervention for Yt (i) which does not affect any k-step forecasts
+before Y t is observed, but does after Y t is observed, intervention for θ t (i) affects
+the k-step forecasts of Yt (i) and its descendant both before and after Y t is observed.
+This is demonstrated in Table 2 which shows the k-step forecast means and standard
+
+                                              28
+        (a) One-step error Yt (161.171)          (b) One-step error Yt (161)
+           1000
+
+
+           500                                       200 400
+
+           0                                         0
+
+
+
+
+                                                     −400
+           −1000
+                   250   300    350       400                  250   300   350   400
+
+
+
+
+        (c) One-step error Yt (171)              (d) One-step prior mean θt (161)
+           1000                                      0.60
+
+           500                                       0.55
+
+           0                                         0.50
+
+
+                                                     0.45
+
+
+           −1000
+                                                     0.40
+
+                   250   300    350       400                  250   300   350   400
+
+
+
+
+Figure 7: (a)–(c) One-step forecast errors both with intervention for θ t (161.171) and
+θ t (161) (solid line) and without intervention (dotted line) for Yt (161.171), Yt (161) and
+their descendant Yt (171). (d) One-step prior mean for the first element of θ t (161).
+On all plots, dotted vertical lines mark times 265 and 361, when intervention took
+place.
+
+deviations for Yt (161.171) and Yt (161) at time t = 289 (24 hours after the intervention
+at time 265).
+   Columns 2–5 of Table 2 show the 25-step forecast means and standard deviations
+for time 289 made at time 264 after Y264 has been observed and after any interventions
+for θ 265 (161.171) and θ 265 (161) have been done, but before Y 265 is observed. Columns
+6–9 of Table 2 show the 24-step forecast means and standard deviations for time 289
+made at time 265 after any interventions for θ 265 (161.171) and θ 265 (161) have been
+done, and after Y 265 is observed. Columns 2–3 and 6–7 show the k-step forecast means
+and standard deviations when there is no intervention, and columns 4–5 and 8–9 show
+the results when there is intervention. From this table, the effects of the interventions
+
+
+                                                29
+Table 2: The 24- and 25-step forecast means and standard deviations for time 289,
+with and without intervention for θ 265 (161.171) and θ 265 (161). The 25-step forecasts
+were made at time t = 264 after Y 264 has been observed and after any intervention
+has been done, but before observing Y 265 . The 24-step forecasts were made at time
+t = 265 after additionally observing Y 265 .
+                      Before Y 265 observed               After Y 265 observed
+                        (25-step forecasts)                (24-step forecasts)
+                  No intervention Intervention No intervention Intervention
+          Series mean        sd     mean sd mean                sd     mean sd
+    Yt (161.171)    527        593     415 740       601          454    499 737
+         Yt (161)   318         84     447 147       294           74    372 133
+
+
+
+on k-step forecasts both before Y 265 is observed and after Y 265 is observed are clearly
+seen. Notice that the interventions will also affect the k-step forecasts both before and
+after Y 265 is observed for the descendant Yt (171) as this is simply a logical function
+of its parents.
+
+
+6. IDENTIFICATION OF CAUSAL RELATIONSHIPS BETWEEN TIME SERIES
+
+   Because the MDM is defined to preserve the conditional independence structure
+related to causality across a time series over time, the BN for the time series at
+time t represents contemporaneous causal relationships between the component series.
+The forecast performance of an MDM is therefore informative about these assumed
+contemporaneous causal relationships.
+   As mentioned in Section 3, two BNs can represent the same conditional inde-
+pendence statements, but have quite different conditional independence structures
+related to causality, and hence quite different MDMs. Suppose that there are sev-
+eral possible MDMs for Y t , each of which has the same conditional independence
+structure, but each with a different conditional independence structure related to
+
+                                           30
+causality. Following the ideas of multiprocess DLMs (Harrison and Stevens, 1976),
+each of these competing MDMs can be modelled simultaneously using a multiprocess
+MDM. In a multiprocess MDM, each competing MDM has an associated probability
+of being the ‘correct’ model, that is, the corresponding BN represents the ‘correct’
+contemporaneous causal relationships. As data are observed, these probabilities are
+updated, providing on-line assessments of causal relationships between time series.
+   As is known from BN theory, without intervention it can be extremely difficult
+to identify which causal relationships are ‘correct’ from a set of competing models
+with the same conditional independence structure. As a consequence, at times when
+there is no intervention, there should be little difference between the various model
+probabilities in a multiprocess MDM. However, this is not the case when intervention
+is used. As it was shown in Section 4, intervention for Yt (i) (or θ t (i)) will affect
+the distributions of its descendants. Therefore any MDM which continues to provide
+good forecasts for the descendants of Yt (i) is likely to be representing the ‘correct’
+causal structure, and the associated probability for that model will be larger than the
+others.
+   Explicitly, suppose there are m competing BNs for Y t with associated MDMs
+M1 , . . . , Mm . Let pt−1 (j) denote the prior probability that model Mj is ‘correct’
+given Dt−1 , for j = 1, . . . , m. The likelihood for observing Y t = y t under model Mj
+is the observed value of the one-step forecast distribution f (y t |Dt−1 , Mj ), which in
+the MDM is the product of the observed values of individual univariate conditionals.
+The posterior probability that Mj is ‘correct’ is thus given by
+                                        n
+                                        Y
+                    pt (j) ∝ pt−1 (j)         f (yt (i)|pa(yt (i)), Dt−1 , Mj ).
+                                        i=1
+
+The model probabilities are therefore updated over time and any decision at time
+t as to which causal structure is ‘correct’ is based on the posterior probabilities
+
+                                                  31
+pt (1), . . . , pt (m).
+    The multiprocess MDM will be illustrated for the London network. Suppose for
+simplicity that there are only two competing models:
+
+    • Model M1 : The MDM already used in Section 3 with BN given in Figure 2.
+
+    • Model M2 : An MDM using a BN which is the same as in Figure 2 except that
+        the arc between Yt (167) and Yt (170AB) is reversed.
+
+Notice that the influence diagrams for both models represent the same conditional
+independence structure, but represent different conditional independences related to
+causality. As there are only two possible models here, the ratio of the posterior model
+probabilities, pt (1)/pt (2), is of particular interest.
+    In order to illustrate how the multiprocess MDM can identify causal relationships,
+the ratio of the posterior model probabilities is calculated at two separate times — at
+time 540 when no intervention is required, and at time 561 following the intervention
+for Y561 (167) as detailed in Section 5.1. Time t = 540 was chosen fairly randomly
+to illustrate the value of the ratio of posterior model probabilities when the model is
+performing well and no intervention is required. When using model M1 , it was shown
+in Section 5.1 how intervention for Y561 (167) has a dramatic effect on the one-step
+forecasts and resulting forecast errors of Y561 (167) and its descendants (see Figure 5).
+Because Yt (167) has so many descendants in the influence diagram for M1 , the effects
+of the intervention for Y561 (167) are seen across almost the entire network. In model
+M2 , however, Yt (167) only has the single descendant Yt (168) and so intervention for
+Y561 (167) will have only a limited affect on the one-step forecasts over the network as
+a whole. In particular, intervention for Y561 (167) will have no effect in reducing the
+large one-step forecast errors for Y561 (170AB) and its descendants. So, although the
+same intervention for Y561 (167) should be used for M1 and M2 (after all, the same
+
+                                              32
+change is observed for Y561 (167)), the effects of the intervention are quite different for
+the two models and the observed likelihoods and hence the posterior probabilities,
+pt (1) and pt (2), will reflect this.
+    The initial two weeks of data were used to estimate priors for the parameters for
+both models. The models were then run (separately) and updated sequentially as
+usual up to time t = 539. For fairness, at time 539 both models are assigned the
+same prior probability so that p539 (1) = p539 (2) = 0.5. After observing Y 540 = y 540 ,
+the ratio of posterior probabilities, p540 (1)/p540 (2), is calculated to be 1.06. This
+is approximately equal to 1 as expected, illustrating how it is difficult to identify
+causality when no intervention is used. The models were then again run (separately)
+and updated sequentially as usual up to time t = 560. At time t = 561, intervention
+was performed for Y561 (167) using the same method as presented in Section 5.1 so that
+the distribution for Y561 (167)|(θ 561 (167), Mj ) was adjusted at intervention by adding
+e560 (167) to the mean and adding 10,000 to the variance. For fairness, at time 560
+again both models are assigned the same prior probability, so that p560 (1) = p560 (2) =
+0.5. After observing Y 561 = y 561 , the ratio of posterior probabilities, p561 (1)/p561 (2),
+is this time calculated to be 1.7 × 1030 providing overwhelming support for model M1
+as opposed to model M2 . Notice how the ratio of posterior probabilities is much larger
+at the time of intervention (t = 561), than at the time of no intervention (t = 540),
+thus illustrating how much easier it is to identify causal relationships at the time of an
+intervention than when there is no intervention. For this particular application, the
+context of the problem heuristically suggests that, under normal traffic conditions,
+Yt (167) is causal for Yt (170AB), since traffic flows from site 167 to sites 170A and
+170B. It is therefore reassuring that the multiprocess MDM so clearly confirms this
+when intervention is used.
+    As mentioned in Section 1, the causal relationships between traffic flow series
+
+                                             33
+can change temporarily in response to queueing traffic. Queueing traffic in itself can
+cause a change in traffic flows which can require intervention to maintain forecast
+performance at the source of the problem. The multiprocess MDM is then able to
+identify the ‘correct’ contemporaneous causal structure so that the ‘correct’ MDM
+can be used to maintain forecast performance across the entire multivariate series.
+This is, in fact, an important modelling issue when forecasting traffic flows in practice.
+To accommodate changes in causal relationships, multiprocess MDMs can be used at
+each time point to provide an on-line assessment of the most likely causal relationships
+at each time t. Further investigation of this will be the focus of future research.
+
+
+                            7. CONCLUDING REMARKS
+
+   This paper has shown how intervention in the MDM can be an extremely use-
+ful tool for forecasting traffic flows, enabling forecast performance to be maintained
+despite changes in the system. It is simple to implement since intervention is only
+required for the variable(s) at the root of the problem: the effects of any intervention
+is automatically passed on to other series also affected by the problem. Intervention
+can also be used to identify contemporaneous causal relationships between the series,
+going beyond the previous research using intervention for identifying lagged causal
+relationships between series.
+
+
+                                    REFERENCES
+
+
+Brillinger, D.R. (1996), “Remarks concerning graphical models for time series and
+point processes,” Revista de Econometria, 16, 1–23.
+
+Dahlhaus, R. (2000), “Graphical interaction models for multivariate time series,”
+Metrika, 51, 157–172.
+
+                                           34
+Dahlhaus, R., and Eichler, M. (2003), “Causality and graphical models for time
+series,” in Highly Structured Stochastic Systems, (eds.) P. Green, N. Hjort and S.
+Richardson. University Press Oxford, pp. 115-137.
+
+Dawid, A.P. (1979), “Conditional independence in statistical theory” (with discus-
+sion) Journal of the Royal Statistical Society, Series B, 41, 1–31.
+
+——– (2002), “Influence diagrams for causal modelling and inference,” International
+Statistical Review, 70, 161–189.
+
+Dawid, A.P., and Didelez, V. (2005), “Graphical models and sequential decisions,”
+Technical Report 262, University College London, UK
+
+Didelez, V. (2003), “Comments on graphical models for stochastic processes,” in
+Highly Structured Stochastic Systems, (eds.) P. Green, N. Hjort and S. Richardson.
+University Press Oxford.
+
+Eichler, M., and Didelez, V. (2007), “Causal reasoning in graphical time series mod-
+els,” in Proceedings of the 23rd Annual Conference on Uncertainty in Artificial Intelli-
+gence, (eds.) Ronald Parr and Linda van der Gaag, AUAI Press, Arlington, Virginia,
+pp 109–116.
+
+Farrow, M. (2003), “Practical building of subjective covariance structures for large
+complicated systems,” The Statistician, 52, 553–573.
+
+Farrow M., Goldstein M., and Spiropoulos T. (1997), “Developing a Bayes linear
+decision support system for a brewery,” in The Practice of Bayesian Analysis, (eds.)
+S. French and J. Q. Smith, Arnold: London, pp. 71-106.
+
+Fosen, J., Ferkingstad, E., Borgan, Ø., and AalenFosen, OO. (2006), “Dynamic path
+analysis – a new approach to analyzing time-dependent covariates,” Lifetime Data
+Analysis, 12, 143–167.
+
+
+                                          35
+Goldstein, M., Farrow, M. and Spiropoulos, T. (1993), “Prediction under the influ-
+ence: Bayes linear influence diagrams for prediction in a large brewery,” The Statis-
+tician, 42, 445-459.
+
+Guo, W. and Brown, M.B. (2001), “Cross-related structural time series models,”
+Statistica Sinica, 11, 961–979.
+
+Harrison, P.J., and Stevens, C. (1976), “Bayesian forecasting” (with discussion), Jour-
+nal of the Royal Statistical Society, Series B, 38, 205–247.
+
+Howard, R.A., and Matheson, J.E. (1984), “Influence diagrams,” in Readings in the
+Principles and Applications of Decision Analysis, (eds.) R.A. Howard and J.E. Math-
+eson. Menlo Park, CA: Strategic Decisions Group.
+
+Kamarianakis, Y., and Prastacos, P. (2005), “Space-time modeling of traffic flow,”
+Computers and Geosciences, 31, 119-133.
+
+Kjærulff, U. (1995), “dHugin: a computational system for dynamic time-sliced Bayes-
+ian networks,” International Journal of Forecasting, 11, 89–111.
+
+Lauritzen, S.L. (2000), “Causal inference from graphical models,” in Complex Stochas-
+tic Systems, (eds.) O.E. Barndorff-Nielsen, D.R. Cox and C. Klüppelberg, Chapter
+2, London: CRC Press, pp 63–107.
+
+Lauritzen, S.L., and Richardson, T.S. (2002), “Chain graph models and their causal
+interpretation” (with discussion), Journal of the Royal Statistical Society, Series B,
+64, 321–361.
+
+Oliver, R.M., and Smith, J.Q. (1990), Influence Diagrams, Belief Nets and Decision
+Analysis. Chichester, UK: John Wiley and Sons.
+
+Pearl, J. (1995), “Causal diagrams for empirical research (with Discussion),” Biometrika,
+82, 669–710.
+
+
+                                          36
+——– (2000), Causality. Cambridge University Press.
+
+Queen, C.M. (1994), “Using the multiregression dynamic model to forecast brand
+sales in a competitive product market,” The Statistician, 43, 87–98.
+
+——– (1997), “Model elicitation in competitive markets,” in The Practice of Bayesian
+Analysis, (eds.) S. French and J. Q. Smith, London: Arnold, pp. 229-243.
+
+Queen, C.M., Smith, J.Q., and James, D.M. (1994), “Bayesian forecasts in markets
+with overlapping structures,” International Journal of Forecasting, 10, 209–233.
+
+Queen, C.M., and Smith, J.Q. (1993), “Multiregression dynamic models,” Journal of
+the Royal Statistical Society, Series B, 55, 849–870.
+
+Queen, C.M., Wright, B.J., and Albers, C.J. (2007), “Eliciting a directed acyclic
+graph for a multivariate time series of vehicle counts in a traffic network,” Australian
+and New Zealand Journal of Statistics, 49, 221-239.
+
+——– (2008), “Forecast covariances in the linear multiregression dynamic model,”
+Journal of Forecasting, 27, 175–191.
+
+Shachter, R.D. (1986), “Evaluating influence diagrams,” Operations Research, 34,
+871–882.
+
+——– (1988), “Probabilistic Inference and Influence Diagrams,” Operations Research,
+36, 589-604.
+
+Smith, J.Q., and Figueroa, L.J. (2007), “A Causal Algebra for Dynamic Flow Net-
+works,” in Advances in Probabilistic Graphical Models, Springer, pp 39–54.
+
+Spirtes, P., Glymour, C., and Scheines, R. (2000), Causation, Prediction and Search.
+(2nd ed.) New York, N.Y.: MIT Press.
+
+Stathopoulos, A., and Karlaftis, G.M. (2003), “A multivariate state space approach
+for urban traffic flow modeling and prediction,” Transportation Research Part C, 11,
+
+                                          37
+121-135.
+
+Sun S.L., Zhang C.S., and Yu G.Q. (2006), “A Bayesian network approach to traffic
+flows forecasting,” IEEE Transactions on Intelligent Transportation Systems, 7, 124–
+132.
+
+Tebaldi, C., West, M., and Karr, A.K. (2002), “Statistical analyses of freeway traffic
+flows,” Journal of Forecasting, 21, 39–68.
+
+West, M., and Harrison, P.J. (1986), “Monitoring and adaptation in Bayesian fore-
+casting models,” Journal of the American Statistical Association, 81, 741–750.
+
+——– (1989), “Subjective intervention in formal models,” Journal of Forecasting, 8,
+33–53.
+
+——– (1997), Bayesian Forecasting and Dynamic Models (2nd ed.) Springer-Verlag.
+New York.
+
+Whitlock, M.E., and Queen, C.M. (2000), “Modelling a traffic network with missing
+data,” Journal of Forecasting, 19, 561–574.
+
+Whittaker, J., Garside, S., and Lindveld, K. (1997), “Tracking and predicting a
+network traffic process,” International Journal of Forecasting, 13, 51-61.
+
+
+
+
+                                         38
+

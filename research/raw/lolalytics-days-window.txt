@@ -1,0 +1,624 @@
+# Mel Build, Runes & Counters Guide for middle Mel
+
+<https://lolalytics.com/lol/mel/build/?patch=30&tier=all>
+
+Tier List
+Discord
+middle
+1.6%
+0.1%
+54.4%
+15.9%
+28.1%
+ALL RANKS
+30
+Days
+Ranked
+Solo/Duo
+GLOBAL
+Average All Ranks Win Rate: 50%
+?
+
+All Ranks Champions Analysed: 224,787,750
+?
+LoL Tier List
+Mel Build
+D-
+92%
+Mel Build, Runes & Counters for middle Mel
+P
+Q
+W
+E
+R
+
+Mel middle has a 46.79% win rate in All Ranks on Patch 30 coming in at rank 97 of 98 and graded D- Tier on the LoL Tierlist. Mel middle is a strong counter to Cassiopeia, Ahri & Vex while Mel is countered most by Xerath, Fizz & Aurelion Sol. The best Mel players have a 54.4% win rate with an average rank of Master on the Mel Leaderboard. Below is a detailed breakdown of the Mel build, runes & counters.
+
+46.79%
+Win Rate
+3.44%
+Pick Rate
+D-
+Tier
+?
+97 / 98
+Rank
+14.31%
+Ban Rate
+773,657
+Games
+Mel Build
+Mel Leaderboard
+Mel Counters
+Mel ProBuilds
+Highest Win Build
+Most Common Build
+Skill Priority
+?
+Q
+E
+W
+47.13% Win Rate 704,882 Games
+Summoner Spells
+48.4% Win Rate 44,863 Games
+Skill Order
+?
+Q
+2
+4
+5
+7
+9
+W
+3
+14
+15
+E
+1
+8
+10
+12
+13
+R
+6
+11
+52.85% Win Rate 19,102 Games
+Primary Runes
+Secondary
+47.83% Win Rate
+74,857 Games
+?
+Stat Mods
+Starting Items
+
+
+x 2
+
+
+46.99% Win Rate 699,864 Games
+Core Build
+
+
+48.4%
+50,651
+
+
+Item 4
+51.86%
+22,663
+OR
+51.18%
+145,783
+Item 5
+53.9%
+9,931
+OR
+51.59%
+74,459
+OR
+50.92%
+55,241
+Item 6
+51.45%
+18,197
+OR
+51.01%
+11,721
+OR
+50.97%
+13,800
+LEGEND:
+Overall
+Diamond+
+Emerald
+Platinum
+Gold
+Silver
+Bronze
+Iron
+Max Days
+7 Days
+14 Days
+Today
+Smooth
+Counters
+Common Matchup
+Strong Against
+Weak Against
+Delta
+Synergy
+Common Teammates
+Good Synergy
+Bad Synergy
+Synergy Delta
+Normalised Synergy Delta
+Counter
+Win Rate
+Delta 1
+?
+Delta 2
+?
+Pick Rate
+Games
+45.16
+-3.41
+-0.21
+4.73
+36,605
+47.12
+-3.11
+0.10
+4.72
+36,513
+47.54
+-2.72
+0.49
+4.49
+34,730
+44.37
+-4.13
+-0.93
+4.43
+34,310
+45.26
+-3.25
+-0.05
+4.12
+31,888
+45.26
+-3.10
+0.10
+4.11
+31,776
+45.35
+-3.11
+0.09
+3.43
+26,533
+46.66
+-3.86
+-0.65
+2.87
+22,172
+45.72
+-3.44
+-0.23
+2.62
+20,279
+45.96
+-3.80
+-0.59
+2.52
+19,474
+46.58
+-3.18
+0.03
+2.42
+18,745
+47.54
+-2.92
+0.29
+2.35
+18,205
+45.30
+-3.99
+-0.78
+2.29
+17,706
+46.70
+-1.87
+1.33
+2.16
+16,689
+46.67
+-3.01
+0.20
+2.01
+15,576
+47.25
+-3.60
+-0.39
+2.00
+15,446
+43.92
+-4.94
+-1.74
+1.95
+15,068
+46.50
+-3.18
+0.03
+1.84
+14,223
+45.96
+-3.87
+-0.66
+1.78
+13,809
+Counter
+Win Rate
+Delta 1
+?
+Delta 2
+?
+Pick Rate
+Games
+Counter
+Win Rate
+Delta 1
+?
+Delta 2
+?
+Pick Rate
+Games
+Counter
+Win Rate
+Delta 1
+?
+Delta 2
+?
+Pick Rate
+Games
+Counter
+Win Rate
+Delta 1
+?
+Delta 2
+?
+Pick Rate
+Games
+Summoner
+Spells
+Win Rate
+Pick Rate
+Games
+Starting Items
+Starting Item Sets
+Starting
+Items Sets
+Win Rate
+Pick Rate
+Games
+Early Items (10 min)
+Early Item Sets (10 min)
+Early Items
+(10 min)
+Win Rate
+Pick Rate
+Games
+Sets With
+Boots
+Exact Item Count
+?
+Actually Built Sets
+?
+Extrapolated Sets
+?
+Combined Sets
+?
+1
+2
+3
+4
+5
+1
+2
+3
+4
+5
+6
+2+
+3+
+4+
+5
+2+
+3+
+4+
+5+
+6
+-2
+-3
+-4
+-5
+-2
+-3
+-4
+-5
+-6
+-2+
+-3+
+-4+
+-2+
+-3+
+-4+
+-5+
+Win Rate
+Pick Rate
+Games
+Click Items Below to Filter Builds by Item and Item Buy Position
+Item
+1
+Win Rate
+Pick Rate
+Games
+Time
+Boots
+Win Rate
+Pick Rate
+Games
+Time
+Item
+2
+Win Rate
+Pick Rate
+Games
+Time
+Item
+3
+Win Rate
+Pick Rate
+Games
+Time
+Item
+4
+Win Rate
+Pick Rate
+Games
+Time
+Item
+5
+Win Rate
+Pick Rate
+Games
+Time
+Popular
+Items
+Win Rate
+Pick Rate
+Games
+Time
+Winning
+Items
+Win Rate
+Pick Rate
+Games
+Time
+All
+Items
+Win Rate
+Pick Rate
+Games
+Time
+Overview
+Level 6+
+Level 10+
+Level 15+
+Click Keystones Below to Filter Builds
+Overview
+Highest Win Rune Page
+Most Picked Rune Page
+Win Rate
+Pick Rate
+Games
+Win Rate
+Pick Rate
+Games
+Win Rate
+Pick Rate
+Games
+Win Rate
+Pick Rate
+Games
+Win Rate
+Pick Rate
+Games
+Win Rate
+Pick Rate
+Games
+Win Rate
+Pick Rate
+Games
+Win Rate
+Pick Rate
+Games
+Objective	Secure	Yield
+	%	Win %	%	Win %
+Blue Side	50.55	47.19
+Red Side	49.45	46.39
+First Blood	51.23	53.46	48.71	39.78
+First Tower	49.77	66.23	49.38	27.13
+First Inhibitor	40.63	88.18	45.74	9.51
+First Herald	47.18	60.64	47.51	32.59
+First Baron	34.5	77.3	37.69	17.92
+First Drake	49.84	59.11	49.85	34.44
+First Drake & Herald	26.97	69.32	27.17	24.56
+Dragon Soul	18.4	86.11	19.31	10.51
+Air Soul	3.09	88.79	3.24	8.42
+Chemtech Soul	3.07	84.63	3.26	11.44
+Earth Soul	3.08	86.81	3.23	9.96
+Fire Soul	3.09	85.1	3.22	11.43
+Hextech Soul	3.12	85.18	3.24	11.16
+Water Soul	2.97	86.2	3.13	10.65
+Best on Mel
+Last 7 Day Performance
+54.4% Win Rate
+
+Analyzing 1,351 games played by the top 211 Mel players worldwide over the last 7 days. The average rank of these top Mel players was Master .
+
+Taking into account win rate and summoner rank Mel is ranked 171 amongst all champions in the hands of an expert.
+
+Maximum 50 summoners are used per region with a minimum of Diamond IV and 50 games played on Mel to be eligible.
+
+Mel Leaderboard
+Name
+Win
+Games
+1
+CH
+Tommy Maximoff#SPEED
+62%
+52
+EUNE
+2
+CH
+uuyir#riyuu
+61%
+56
+BR
+3
+GM
+짐승거인#2005
+65%
+55
+KR
+4
+CH
+sofia#heime
+56%
+50
+BR
+5
+M
+slayyyterxcx#twtv
+63%
+89
+EUW
+6
+GM
+Baobei#Candy
+63%
+64
+NA
+7
+GM
+Kiều Quang#1808
+58%
+144
+VN
+8
+CH
+DE CADENA GRUESA#PERRO
+59%
+93
+LAS
+9
+M
+Fain#Trax
+70%
+50
+LAS
+10
+M
+Yogi Bear#twink
+60%
+65
+EUW
+11
+M
+the cold sun#dvn
+58%
+60
+EUW
+12
+M
+KZN Maktub#NN17
+62%
+58
+EUW
+Click For Full Mel Leaderboard
+Mel Resources
+Pros.lol
+
+Check out the latest Mel Probuilds from the worlds top pro players.
+
+XDX.gg
+
+Lighting fast summoner profiles can be found at the new dedicated site XDX.gg.
+
+Mobalytics
+
+Quality alternative Mel build stats and more from our friends at Mobalytics.
+
+Mel Stats
+Physical Damage:
+1,433
+62 / 98
+Magic Damage:
+25,343
+22 / 98
+True Damage:
+718
+76 / 98
+Total Damage:
+27,495
+38 / 98
+Damage Taken:
+22,107
+86 / 98
+Healing:
+2,543
+90 / 98
+Kills:
+9.52
+9 / 98
+Deaths:
+6.71
+48 / 98
+Assists:
+5.24
+85 / 98
+Max Kill Spree:
+4.21
+7 / 98
+Gold:
+13,032
+18 / 98
+Minions Killed:
+201.73
+24 / 98
+Jungle CS:
+3.02
+58 / 98
+LoLalytics isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc. Privacy Policy Update consent preferences
+English
+Deutsch
+English
+Español
+Français
+Italiano
+Nederlands
+Polski
+Português
+Limba română
+You control your privacy
+
+We and up to 1236 vendors process, store and/or access personal data from you and your device. This data can include your type of browser, settings, cookies, unique identifiers, IP address, and geo location. Your consent can be updated or withdrawn at any time by clicking the link in our privacy policy or footer.
+
+We're requesting consent to offer: Personalised advertising and content, advertising and content measurement, audience research and services development
+
+Advertising and content can be personalised based on your profile. Your activity on this service can be used to build or improve a profile about you for personalised advertising and content. Advertising and content performance can be measured. Reports can be generated based on your activity and those of others. Your activity on this service can help develop and improve products and services.
+
+Advanced Settings
+Accept
+
+Your consents are specific to this site & device.
