@@ -303,10 +303,10 @@ pub const patch_leader: ld.Puzzle = .{
     .answer = .{ .pick = .{ .right = 2, .choices = &.{
         .{ .text = "Diamond+ players", .shown = "Not detected" },
         .{ .text = "Korea", .shown = "Not detected" },
-        .{ .text = "Nobody: every rank moves at once" },
+        .{ .text = "Nobody shows it first" },
     } } },
     .why = "Neither Diamond+'s first days nor Korea's head start told where win rates went next.",
-    .tip = "Read a new patch from everyone's games: no rank or region shows it first.",
+    .tip = "Don't wait on Diamond+ or Korea: no rank or region shows a new patch first.",
     .games = 1_650_051,
     .from = "Ranked solo, every rank crawled, every region: 1.65M games in patch " ++
         "16.21's first 11 days, each champion-role's move from 16.20; " ++
