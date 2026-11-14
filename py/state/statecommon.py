@@ -23,8 +23,8 @@ WC = ["gold", "gold_curve", "xp", "towers", "inhibs_down", "dragons", "soul_poin
 
 
 class State:
-    def __init__(self, snap):
-        d = os.path.join(os.path.expanduser(snap), "state")
+    def __init__(self, snap, name="state"):
+        d = os.path.join(os.path.expanduser(snap), name)
         with open(os.path.join(d, "meta.json")) as f:
             self.meta = json.load(f)
         self.n = self.meta["n"]
@@ -33,13 +33,24 @@ class State:
         self.cols = {name: i for i, name in enumerate(self.meta["minute_columns"])}
         self.gcols = {name: i for i, name in enumerate(self.meta["game_columns"])}
         assert len(self.cols) == self.c
-        self.minute = np.memmap(os.path.join(d, "minute.f32"), dtype="<f4", mode="r", shape=(len(self.minutes), self.n, self.c))
+        # A windowed export (state-export --after/--before) holds rows for index.u32's games only
+        self.row_of = None
+        rows = self.n
+        if os.path.exists(os.path.join(d, "index.u32")):
+            index = np.fromfile(os.path.join(d, "index.u32"), dtype="<u4")
+            rows = len(index)
+            self.row_of = np.full(self.n, -1, np.int64)
+            self.row_of[index] = np.arange(rows)
+        self.minute = np.memmap(os.path.join(d, "minute.f32"), dtype="<f4", mode="r", shape=(len(self.minutes), rows, self.c))
         self.game = np.fromfile(os.path.join(d, "game.f32"), dtype="<f4").reshape(self.n, -1)
         with open(os.path.join(d, "match_id.txt")) as f:
             self.match_id = f.read().split("\n")[: self.n]
 
     def block(self, minute, games):
         """[len(games), c] rows at `minute` (NaN rows: not going)"""
+        if self.row_of is not None:
+            games = self.row_of[games]
+            assert (games >= 0).all(), "games outside the export's window"
         return np.asarray(self.minute[self.minutes.index(minute)][games])
 
 

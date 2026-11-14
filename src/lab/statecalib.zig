@@ -3,7 +3,11 @@
 //! and winchance.blue (its fallback)
 //! for the games of one queue in backup segments or a snapshot's meiolol.db, for a
 //! calibration check (docs/model.md "Win chance by minute on later patches").
-//! OUT is a TSV: match, platform, patch, duration_s, minute, p_richc, p_wc, blue_win.
+//! OUT is a TSV: match, platform, patch, duration_s, minute, p_richc, p_wc, blue_win;
+//! with --ranks also rank_known (seats with a rank at game start, store.rankstart: the
+//! site's rule) and rank_mean (their mean packed rank, 0 Challenger I .. 23 Platinum IV),
+//! which needs a snapshot's ranks and rank_history. --model scores a stateship.py file
+//! instead of the shipped one (a refit's check).
 //! LEGENDARIES is a snapshot's legendaries.tsv (patch, item); a patch missing there uses
 //! the newest patch it has
 
@@ -20,12 +24,15 @@ const Allocator = std.mem.Allocator;
 
 pub const usage =
     \\  state-calib OUT LEGENDARIES DB... [--queue Q] [--patch P]... [--every N]
-    \\                                  [--after MS] [--timelines DB]
-    \\                                  shipped win chance and winchance by minute for
-    \\                                  queue Q (420) games on the patches (16.21 and
-    \\                                  16.22) in backup segments, or a snapshot's
-    \\                                  meiolol.db with --timelines its timeline.db;
-    \\                                  one game in N by match key, game_start > MS:
+    \\                                  [--after MS] [--before MS] [--timelines DB]
+    \\                                  [--model FILE] [--ranks]
+    \\                                  shipped win chance (or FILE's, a stateship.py
+    \\                                  model) and winchance by minute for queue Q (420)
+    \\                                  games on the patches (16.21 and 16.22) in backup
+    \\                                  segments, or a snapshot's meiolol.db with
+    \\                                  --timelines its timeline.db; one game in N by
+    \\                                  match key, MS < game_start < MS; --ranks adds
+    \\                                  the seats' rank at game start (a snapshot):
     \\                                  OUT TSV (lab/statecalib.zig)
     \\
 ;
@@ -68,6 +75,9 @@ pub fn main(gpa: Allocator, io: Io, argv: []const []const u8) !u8 {
     const arena = arena_state.allocator();
     var every: u64 = 1;
     var after: i64 = 0;
+    var before: i64 = std.math.maxInt(i64);
+    var ranks = false;
+    var model = statemodel.shipped();
     var queue: i64 = 420;
     var timelines: ?[]const u8 = null;
     var patches: std.ArrayList([]const u8) = .empty;
@@ -79,6 +89,10 @@ pub fn main(gpa: Allocator, io: Io, argv: []const []const u8) !u8 {
             try segs.append(arena, flag);
             continue;
         }
+        if (std.mem.eql(u8, flag, "--ranks")) {
+            ranks = true;
+            continue;
+        }
         i += 1;
         if (i == argv.len) {
             std.debug.print("{s} needs a value\n", .{flag});
@@ -88,6 +102,11 @@ pub fn main(gpa: Allocator, io: Io, argv: []const []const u8) !u8 {
             every = try std.fmt.parseInt(u64, argv[i], 10);
         } else if (std.mem.eql(u8, flag, "--after")) {
             after = try std.fmt.parseInt(i64, argv[i], 10);
+        } else if (std.mem.eql(u8, flag, "--before")) {
+            before = try std.fmt.parseInt(i64, argv[i], 10);
+        } else if (std.mem.eql(u8, flag, "--model")) {
+            model = try statemodel.Model.parse(try Io.Dir.cwd().readFileAlloc(io, argv[i], arena, .limited(64 << 20)));
+            std.log.info("state-calib: model {s}: {s} ({s}), {d} games", .{ argv[i], model.snapshot, model.run, model.training_games });
         } else if (std.mem.eql(u8, flag, "--queue")) {
             queue = try std.fmt.parseInt(i64, argv[i], 10);
         } else if (std.mem.eql(u8, flag, "--patch")) {
@@ -105,7 +124,8 @@ pub fn main(gpa: Allocator, io: Io, argv: []const []const u8) !u8 {
     var out: Io.Writer.Allocating = .init(gpa);
     defer out.deinit();
     const w = &out.writer;
-    try w.writeAll("match\tplatform\tpatch\tduration_s\tminute\tp_richc\tp_wc\tblue_win\n");
+    try w.writeAll("match\tplatform\tpatch\tduration_s\tminute\tp_richc\tp_wc\tblue_win");
+    try w.writeAll(if (ranks) "\trank_known\trank_mean\n" else "\n");
     var games: usize = 0;
     var unmapped: usize = 0;
     var tl_arena: std.heap.ArenaAllocator = .init(gpa);
@@ -115,16 +135,22 @@ pub fn main(gpa: Allocator, io: Io, argv: []const []const u8) !u8 {
         defer db.close();
         if (timelines) |path| try db.run("ATTACH DATABASE ? AS tl", .{path});
         var q = try db.prepare(
-            \\SELECT m.match_id, m.platform, m.patch, m.duration_s, m.winning_team, t.data
+            \\SELECT m.match_id, m.platform, m.patch, m.duration_s, m.winning_team, t.data,
+            \\  m.game_start
             \\FROM matches m JOIN timelines t USING (match_id)
             \\WHERE m.queue_id = ? AND m.remake = 0
-            \\  AND m.winning_team IN (100, 200) AND m.game_start > ?
+            \\  AND m.winning_team IN (100, 200) AND m.game_start > ? AND m.game_start < ?
         );
         defer q.deinit();
-        var pq = try db.prepare("SELECT slot, team_id, position, champion_id FROM participants " ++
-            "WHERE match_id = ? ORDER BY slot");
+        // The PUUID (a snapshot's hash) is read only for --ranks, and only to key the lookup
+        var pq = try db.prepare(if (ranks)
+            "SELECT slot, team_id, position, champion_id, puuid FROM participants WHERE match_id = ? ORDER BY slot"
+        else
+            "SELECT slot, team_id, position, champion_id FROM participants WHERE match_id = ? ORDER BY slot");
         defer pq.deinit();
-        try q.bind(.{ queue, after });
+        var lookup: ?store.rankstart.Lookup = if (ranks) try store.rankstart.Lookup.init(db) else null;
+        defer if (lookup) |*l| l.deinit();
+        try q.bind(.{ queue, after, before });
         while (try q.step()) {
             const id = q.bytes(0);
             if (stats.matchKey(id) % every != 0) continue;
@@ -135,6 +161,9 @@ pub fn main(gpa: Allocator, io: Io, argv: []const []const u8) !u8 {
             _ = tl_arena.reset(.retain_capacity);
             const ta = tl_arena.allocator();
             var players: statemodel.Players = .{ .teams = @splat(0), .positions = @splat(""), .champions = @splat(0) };
+            var rank_known: u32 = 0;
+            var rank_sum: f64 = 0;
+            const day = @divFloor(q.int(6), std.time.ms_per_day);
             pq.reset();
             try pq.bind(.{id});
             while (try pq.step()) {
@@ -143,19 +172,28 @@ pub fn main(gpa: Allocator, io: Io, argv: []const []const u8) !u8 {
                 players.teams[slot] = pq.int(1);
                 players.positions[slot] = try ta.dupe(u8, pq.bytes(2));
                 players.champions[slot] = @intCast(pq.int(3));
+                if (lookup) |*l| {
+                    const puuid = pq.bytes(4);
+                    if (puuid.len == 0) continue;
+                    const rank = try l.rankStart(store.schema.puuidKey(puuid), day) orelse continue;
+                    rank_known += 1;
+                    rank_sum += @floatFromInt(rank);
+                }
             }
             const t = try timeline.decode(ta, try store.raw.decompress(ta, q.bytes(5)));
             // Null where Your games falls back to winchance: not richc's game
-            const p = try statemodel.chancesOf(ta, statemodel.shipped(), players, t, q.bytes(1), legs.items(patch)) orelse {
+            const p = try statemodel.chancesOf(ta, model, players, t, q.bytes(1), legs.items(patch)) orelse {
                 unmapped += 1;
                 continue;
             };
             const blue_win: u8 = if (q.int(4) == 100) 1 else 0;
             for (p, 0..) |pr, m| {
                 const wc = winchance.blue(t, @intCast(m)) orelse std.math.nan(f64);
-                try w.print("{s}\t{s}\t{s}\t{d}\t{d}\t{d:.5}\t{d:.5}\t{d}\n", .{
+                try w.print("{s}\t{s}\t{s}\t{d}\t{d}\t{d:.5}\t{d:.5}\t{d}", .{
                     id, q.bytes(1), patch, q.int(3), m, pr, wc, blue_win,
                 });
+                if (ranks) try w.print("\t{d}\t{d:.2}", .{ rank_known, if (rank_known > 0) rank_sum / @as(f64, @floatFromInt(rank_known)) else std.math.nan(f64) });
+                try w.writeByte('\n');
             }
             games += 1;
         }

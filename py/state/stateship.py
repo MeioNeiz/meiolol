@@ -9,7 +9,12 @@ for the fit rows, fit rows every other minute. The shipped draft logit is the fu
 chance per minute from the exported numbers for CHECK random games, which
 `meiolol-lab state-export SNAP --check MODEL CHECK` must reproduce from the timelines.
 
-usage: stateship.py SNAP [--out DIR] [--check N] [--run NAME]
+--after/--before MS (game start, unix ms) fit a window instead: a held-out check fits
+before a cut, and a snapshot too large for memory fits its newest games (12 GB at 287k
+games with a timeline). --state NAME reads SNAP/NAME, a state-export --dir of that window.
+
+usage: stateship.py SNAP [--out DIR] [--check N] [--run NAME] [--after MS] [--before MS]
+                    [--state NAME]
 """
 
 import argparse
@@ -140,15 +145,25 @@ def main():
     ap.add_argument("--out", default="out")
     ap.add_argument("--check", type=int, default=500)
     ap.add_argument("--run", default=os.path.basename(os.getcwd()))
+    ap.add_argument("--after", type=int)
+    ap.add_argument("--before", type=int)
+    ap.add_argument("--state", default="state")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     data = nnsets.load(a.snap)
-    state = sc.State(a.snap)
+    state = sc.State(a.snap, a.state)
     sc.check_join(state, data)
     has_tl = state.game[:, state.gcols["has_timeline"]] == 1
     played = (data.flags & nnsets.PLAYED) != 0
+    window = "every split, test included"
+    if a.after is not None:
+        played &= data.start >= a.after
+        window = f"start >= {a.after}"
+    if a.before is not None:
+        played &= data.start < a.before
+        window = f"{window}, start < {a.before}" if a.after is not None else f"start < {a.before}"
     fit = np.flatnonzero(played)
-    log(f"fit: {len(fit)} played games (every split, test included), {has_tl[fit].sum()} with a timeline")
+    log(f"fit: {len(fit)} played games ({window}), {has_tl[fit].sum()} with a timeline")
     logit, l2, vl, table, w = fit_ratings(data, fit)
     log(f"ratings l2 {l2} (newest 10%: {', '.join(f'{k}: {v:.5f}' for k, v in vl.items())})")
     fit_g = fit[has_tl[fit]]
@@ -185,7 +200,7 @@ def main():
         for gi, mi, p in zip(g, m, p_file):
             f.write(f"{data.match_id[gi]}\t{mi}\t{p:.9f}\n")
     with open(os.path.join(a.out, "report.md"), "w") as f:
-        f.write(f"# stateship\n\nsnapshot {snap}; {len(fit)} played games, {len(fit_g)} with a timeline "
+        f.write(f"# stateship\n\nsnapshot {snap}; {len(fit)} played games ({window}), {len(fit_g)} with a timeline "
                 f"fitted; newest game start {meta['newest']}\nratings l2 {l2}; richc l2 {l2c}\n"
                 f"champion effect sd by knot: {', '.join(f'{v:.3f}' for v in model.E[1:].std(0))}\n"
                 f"{n_terms} champion-role terms; check {len(games)} games, {len(g)} game-minutes, "

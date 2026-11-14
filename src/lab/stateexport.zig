@@ -8,6 +8,10 @@
 //!   game.f32 [n][G]       per game: timeline, length, result, firsts, shape targets
 //!   match_id.txt          one line per game (a check on the join)
 //!   meta.json             minutes, column names in order, n, snapshot
+//!   index.u32 [rows]      only with --after/--before: minute.f32 is then [M][rows][C]
+//!                         and row r is game index.u32[r]; a game outside the window
+//!                         counts as without a timeline (a snapshot's every minute row
+//!                         is held in memory: 36 KB a game at --every 1)
 //! Minute columns: going, t_ms; per seat s0..s9 (side * 5 + role, as champ.u8) the
 //! livestate.Seat fields; obj_<objectives.Feat> from objectives.stateBefore (blue minus
 //! red, so winchance's state is exactly reproducible); then per team b_/r_ the
@@ -31,10 +35,11 @@ const Feat = objectives.Feat;
 const nan = std.math.nan(f32);
 
 pub const usage =
-    \\  state-export SNAP [--every N] [--max M]
+    \\  state-export SNAP [--every N] [--max M] [--after MS] [--before MS] [--dir NAME]
     \\                                  game state by minute (0, N, .., M; default 5, 40)
     \\                                  per seat and team, firsts, shape targets: SNAP/state/
-    \\                                  (lab/stateexport.zig)
+    \\                                  or SNAP/NAME/; only games with MS <= game start <
+    \\                                  MS when given (lab/stateexport.zig)
     \\  state-export SNAP --check MODEL CHECK
     \\                                  statemodel.zig's win chance with MODEL (stateship.py's
     \\                                  state-model.bin) from the timelines against CHECK
@@ -47,6 +52,14 @@ pub const dir_name = "state";
 pub const Options = struct {
     every: u8 = 5,
     max: u8 = 40,
+    /// Minute rows only for games with after <= start < before
+    after: i64 = std.math.minInt(i64),
+    before: i64 = std.math.maxInt(i64),
+    dir: []const u8 = dir_name,
+
+    fn windowed(o: Options) bool {
+        return o.after != std.math.minInt(i64) or o.before != std.math.maxInt(i64);
+    }
 };
 
 pub const Seat = livestate.Seat;
@@ -266,6 +279,12 @@ pub fn main(gpa: Allocator, io: Io, argv: []const []const u8) !u8 {
             o.every = try std.fmt.parseInt(u8, argv[i + 1], 10);
         } else if (std.mem.eql(u8, argv[i], "--max")) {
             o.max = try std.fmt.parseInt(u8, argv[i + 1], 10);
+        } else if (std.mem.eql(u8, argv[i], "--after")) {
+            o.after = try std.fmt.parseInt(i64, argv[i + 1], 10);
+        } else if (std.mem.eql(u8, argv[i], "--before")) {
+            o.before = try std.fmt.parseInt(i64, argv[i + 1], 10);
+        } else if (std.mem.eql(u8, argv[i], "--dir")) {
+            o.dir = argv[i + 1];
         } else {
             std.debug.print("state-export: unknown {s}\nusage:\n{s}", .{ argv[i], usage });
             return 2;
@@ -276,7 +295,7 @@ pub fn main(gpa: Allocator, io: Io, argv: []const []const u8) !u8 {
     defer gpa.free(s.minutes);
     std.log.info("state-export: {d} games, {d} with a 10-player timeline, {d} unmapped, {d} rows " ++
         "disagreeing with objectives.stateBefore; {d} columns -> {s}/{s}", .{
-        s.games, s.timelines, s.unmapped, s.mismatches, n_col, argv[0], dir_name,
+        s.games, s.timelines, s.unmapped, s.mismatches, n_col, argv[0], o.dir,
     });
     for (s.minutes, s.going) |m, n| std.log.info("  minute {d}: {d} games going", .{ m, n });
     return 0;
@@ -309,7 +328,17 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, o: Options) !Summary {
         seat_of[r.game][r.slot] = @as(u8, r.side) * 5 + @backingInt(r.role);
     };
 
-    const minute_buf = try gpa.alloc(f32, minutes.len * n * n_col);
+    const no_row = std.math.maxInt(u32);
+    const row_of = try arena.alloc(u32, n);
+    var picked: std.ArrayList(u32) = .empty;
+    for (data.games, row_of, 0..) |g, *r, gi| {
+        r.* = no_row;
+        if (g.start < o.after or g.start >= o.before) continue;
+        r.* = @intCast(picked.items.len);
+        try picked.append(arena, @intCast(gi));
+    }
+    const n_rows = picked.items.len;
+    const minute_buf = try gpa.alloc(f32, minutes.len * n_rows * n_col);
     defer gpa.free(minute_buf);
     @memset(minute_buf, nan);
     const game_buf = try gpa.alloc([n_game_col]f32, n);
@@ -332,6 +361,8 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, o: Options) !Summary {
         const out = try arena.alloc([]f32, minutes.len);
         while (try q.step()) {
             const gi = index.get(stats.matchKey(q.bytes(0))) orelse continue;
+            const ri = row_of[gi];
+            if (ri == no_row) continue;
             _ = tl_arena.reset(.retain_capacity);
             const ta = tl_arena.allocator();
             const raw = try store.raw.decompress(ta, q.bytes(1));
@@ -342,7 +373,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, o: Options) !Summary {
                 continue;
             }
             sum.timelines += 1;
-            for (out, 0..) |*row, mi| row.* = minute_buf[(mi * n + gi) * n_col ..][0..n_col];
+            for (out, 0..) |*row, mi| row.* = minute_buf[(mi * n_rows + ri) * n_col ..][0..n_col];
             fill(.{ .t = t, .seat_of = seat_of[gi], .patch = data.games[gi].patch, .legendaries = &legendaries }, minutes, out, &game_buf[gi]);
             for (out, sum.going) |row, *c| {
                 if (std.math.isNan(row[0])) continue;
@@ -354,7 +385,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, o: Options) !Summary {
 
     comptime std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
     const cwd = Io.Dir.cwd();
-    const tmp_path = try arena.print("{s}/{s}.tmp", .{ snap, dir_name });
+    const tmp_path = try arena.print("{s}/{s}.tmp", .{ snap, o.dir });
     cwd.deleteTree(io, tmp_path) catch {};
     try cwd.createDirPath(io, tmp_path);
     errdefer cwd.deleteTree(io, tmp_path) catch {};
@@ -363,6 +394,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, o: Options) !Summary {
         defer dir.close(io);
         try dir.writeFile(io, .{ .sub_path = "minute.f32", .data = std.mem.sliceAsBytes(minute_buf) });
         try dir.writeFile(io, .{ .sub_path = "game.f32", .data = std.mem.sliceAsBytes(game_buf) });
+        if (o.windowed()) try dir.writeFile(io, .{ .sub_path = "index.u32", .data = std.mem.sliceAsBytes(picked.items) });
         var text: Io.Writer.Allocating = .init(gpa);
         defer text.deinit();
         for (data.games) |g| {
@@ -374,7 +406,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, o: Options) !Summary {
         try meta(&text.writer, snap, n, minutes);
         try dir.writeFile(io, .{ .sub_path = "meta.json", .data = text.written() });
     }
-    const path = try std.fs.path.join(arena, &.{ snap, dir_name });
+    const path = try std.fs.path.join(arena, &.{ snap, o.dir });
     cwd.deleteTree(io, path) catch {};
     try cwd.rename(tmp_path, cwd, path, io);
     return sum;

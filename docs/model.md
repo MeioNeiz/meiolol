@@ -7151,6 +7151,19 @@ logit  = sum_k h_k (b_k + sum_f (x_f - mu_f) / sd_f W[f,k]
 blue   = 1 / (1 + exp(-logit)); 0.5 at minute 0; none once the game has ended
 ```
 
+A snapshot too large for that (state-export holds every minute row in memory, 36 KB a
+game at `--every 1`; the fit peaked at 12.2 GB for 287k games on the 23 GB gpu-box) is
+fitted on a window of game starts: `state-export SNAP --every 1 --after MS --before MS
+--dir state-w` writes only the window's rows (index.u32 lists their games; the rest
+count as without a timeline) and `stateship.py SNAP --after MS --before MS --state
+state-w` fits them. The same flags fit before a cut for a held-out check, scored as the
+site scores: `meiolol-lab state-calib OUT LEG DB --timelines TL --model
+out/state-model.bin` (`--before MS` ends the scored window; `--ranks` adds each game's
+seats with a rank at game start and their mean rank, from a snapshot's ranks and
+rank_history), then `py/state/calib.py OUT.tsv new=NEW.tsv --base new=SHIPPED.tsv`: the
+calibration table per stratum (patch, EUW1, rank bracket with `--ranks`) and the paired
+log loss against the base file, whole-game bootstrap.
+
 Shipped file: run 20261014T211923Z-state-ship-2253Zr (snap-20261013T2253Z re-cut, 6dd6bfe):
 286,721 played games with a timeline (358,334 played; test included), 4,160,946 fit
 rows, ratings L2 1e-3, ridge 1e-5 (newest 10%: 0.50797 at 1e-5, 0.51191 at 3e-4: the
