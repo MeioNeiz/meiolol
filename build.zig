@@ -281,16 +281,17 @@ pub fn build(b: *std.Build) void {
     for ([_]*std.Build.Module{ tsan.core, tsan.app, tsan.net }, [_]*std.Build.Module{ fuzz.core, fuzz.app, fuzz.net }) |t, f| {
         t.sanitize_thread = true;
         check_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = t, .filters = test_filters })).step);
-        fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = fuzz_filters })).step);
+        fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = fuzz_filters, .use_llvm = true })).step);
     }
 
     // The backend's untrusted input (Riot replies, stored blobs, packs, API requests),
-    // searched by hand before a crawler or API change
+    // searched before a crawler or API change and nightly on the gpu-box. LLVM: x86_64's
+    // own Debug backend emits no coverage, so the fuzzer searched blind (pcs_len zero)
     const backend_fuzz = modules(b, target, .Debug);
     const backend_fuzz_step = b.step("backend-fuzz", "Fuzz the backend's parsers of Riot " ++
         "replies, stored blobs and API requests (--fuzz=N)");
     for ([_]*std.Build.Module{ backend_fuzz.backend, backend_fuzz.store }) |f| {
-        backend_fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = fuzz_filters })).step);
+        backend_fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = fuzz_filters, .use_llvm = true })).step);
     }
 }
 

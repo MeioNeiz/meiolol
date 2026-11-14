@@ -86,7 +86,17 @@ elif [[ $(systemctl --user show -p Result --value meiolol-accounts-pull.service)
 elif [[ -z $(find "$accounts" -maxdepth 1 -name 'accounts-*.db' -mmin -4320 2> /dev/null) ]]; then
     acct=old
 fi
-box_ssh disk "c$(use /mnt/c),wsl$(use /),arch$arch,acct$acct" || log "disk report failed"
+# So does the nightly backend fuzz (meiolol-fuzz, deploy/fuzz-nightly.sh): its last
+# outcome, old past 3 days; none before its first run ends, old when none has ended 3
+# days after gpu-box.sh install (its copy's mtime)
+fuzz=none
+if ! systemctl --user is-active -q meiolol-fuzz.timer; then fuzz=off
+elif read -r t _ state _ 2> /dev/null < "$HOME/ml/fuzz/last" && [[ $t =~ ^[0-9]+$ ]]; then
+    if (( $(date +%s) - t > 3 * 86400 )); then fuzz=old; else fuzz=$state; fi
+elif [[ -n $(find "$HOME/ml/bin/fuzz-nightly.sh" -mmin +4320 2> /dev/null) ]]; then
+    fuzz=old
+fi
+box_ssh disk "c$(use /mnt/c),wsl$(use /),arch$arch,acct$acct,fuzz$fuzz" || log "disk report failed"
 [[ -d "$archive" ]] || die "$archive missing: archive disk not attached"
 [[ -d "$copy" ]] || die "$copy missing: deploy/gpu-box.sh install makes it"
 touch "$awake"

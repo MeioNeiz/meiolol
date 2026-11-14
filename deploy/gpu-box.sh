@@ -2,7 +2,8 @@
 # The gpu-box's standing meiolol pieces, which no push deploys: the League watcher
 # (lab-watch.sh, and a timer for when it is stuck), the raw archive pull (archive-pull.sh),
 # the backup mirror (backup-mirror.sh, with the meiolol it runs `backup --mirror` with),
-# the meiolol-lab the pull runs (archive, complete-copy; lab runs build their own),
+# the meiolol-lab the pull runs (archive, complete-copy; lab runs build their own), the
+# nightly backend fuzz (fuzz-nightly.sh, which builds from its own clone),
 # their systemd user units, and the Windows side (deploy/windows, CRLF, in
 # %USERPROFILE%\.meiolol). Scripts and units install from HEAD's committed copy and
 # meiolol from a clean checkout of HEAD, never the working tree (jomify.sh's rule: 17 Oct,
@@ -26,12 +27,13 @@ HOST=${GPU_HOST:-gpu-box}
 [[ -z ${GPU_HOST-} ]] && grep -qsi microsoft /proc/version && HOST=local
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/deploy/lib.sh"
-SCRIPTS=(lab-watch.sh archive-pull.sh backup-mirror.sh accounts-pull.sh)
+SCRIPTS=(lab-watch.sh archive-pull.sh backup-mirror.sh accounts-pull.sh fuzz-nightly.sh)
 UNITS=(meiolol-lab-watch.service meiolol-lab-watch-stale.service meiolol-lab-watch-stale.timer
     meiolol-archive-pull.service meiolol-archive-pull.timer meiolol-backup-mirror.service
-    meiolol-backup-mirror.timer meiolol-accounts-pull.service meiolol-accounts-pull.timer)
+    meiolol-backup-mirror.timer meiolol-accounts-pull.service meiolol-accounts-pull.timer
+    meiolol-fuzz.service meiolol-fuzz.timer)
 TIMERS=(meiolol-lab-watch-stale.timer meiolol-archive-pull.timer meiolol-backup-mirror.timer
-    meiolol-accounts-pull.timer)
+    meiolol-accounts-pull.timer meiolol-fuzz.timer)
 ETC=(sysctl.d/60-meiolol-disk.conf udev/rules.d/60-meiolol-disk.rules default/earlyoom)
 # Root without a PATH: commands by full path
 WSL_ROOT="/mnt/c/Windows/System32/wsl.exe -u root -e"

@@ -1,0 +1,8 @@
+[Unit]
+Description=meiolol nightly backend fuzzing of origin main (deploy/fuzz-nightly.sh, gpu-box)
+
+[Service]
+Type=oneshot
+# Paused for League by the watcher (a run in ~/ml/runs), so no start timeout
+TimeoutStartSec=infinity
+ExecStart=%h/ml/bin/fuzz-nightly.sh

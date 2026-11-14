@@ -50,6 +50,7 @@ deploy/health.sh, on the box, prints one line per problem (exit 1 when any):
 | gpu-box | no raw archive ack for 12h (ACK_H) while exports wait or no pull reported for 12h (data/gpu-box.pull; nothing exported, e.g. the crawler stored nothing, stops acks too): PC off, asleep or WSL down; first export never acked; one export unacked for 12h while others are acked (see archive-pull.log on the gpu-box) |
 | gpu-box disks | C: (holds the WSL disk) or the WSL disk or the archive partition at 85%, or the partition not attached; reported by each archive pull |
 | gpu-box logins backup | the last accounts pull failed, its timer is not running, or the newest copy is over 3 days old; reported by each archive pull |
+| gpu-box backend fuzz | the nightly run (deploy/fuzz-nightly.sh) failed (a crash, or a fuzz test that doesn't build: the newest ~/ml/runs/*-backend-fuzz there has the log and crash-N inputs) or could not run, its timer is off, or none finished for 3 days; reported by each archive pull |
 | raw held | free disk above the raw valve under 3 days of raw (bytes sent to the gpu-box over the last 24 h, data/archive-sent.log): what an outage of the gpu-box can last before the valve drops unarchived raw; exports waiting on the box shown apart |
 | gpu-box archive | last pull reported a failure (data/gpu-box.pull, written by archive-serve.sh report): cause and since when, pushed once per failure |
 | raw valve | the disk valve dropped raw the archive never got in the last 24 h (raw-export --status drops_24h, data/raw-dropped.log) |

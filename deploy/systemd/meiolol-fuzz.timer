@@ -1,0 +1,10 @@
+[Unit]
+Description=meiolol backend fuzzing nightly (meiolol-fuzz.service, gpu-box)
+
+[Timer]
+OnCalendar=*-*-* 02:30
+# Asleep at 02:30: it runs on wake
+Persistent=true
+
+[Install]
+WantedBy=timers.target

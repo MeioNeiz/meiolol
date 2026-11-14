@@ -303,10 +303,10 @@ if read -r _ since outcome msg 2> /dev/null < data/gpu-box.pull && [[ "$outcome"
     began=$(date -u -d "@$since" '+%F %H:%MZ' 2> /dev/null || echo "?")
     problems+=("gpu-box archive failing since $began: ${msg:-no message}")
 fi
-# The gpu-box's disks and logins backup, reported by each archive pull
-# (deploy/archive-pull.sh). C: holds the WSL disk next to Windows and games
+# The gpu-box's disks, logins backup and nightly backend fuzz, reported by each archive
+# pull (deploy/archive-pull.sh). C: holds the WSL disk next to Windows and games
 if read -r _ use 2> /dev/null < data/gpu-box.disk; then
-    IFS=, read -r c wsl arch acct <<< "$use"
+    IFS=, read -r c wsl arch acct fuzz <<< "$use"
     (( ${c#c} >= 85 )) && problems+=("gpu-box C: at ${c#c}% (holds the WSL disk)")
     (( ${wsl#wsl} >= 85 )) && problems+=("gpu-box WSL disk at ${wsl#wsl}%")
     if [[ "$arch" == arch- ]]; then problems+=("gpu-box: archive partition not attached")
@@ -315,6 +315,13 @@ if read -r _ use 2> /dev/null < data/gpu-box.disk; then
         acctfail) problems+=("gpu-box logins backup failing (~/ml/accounts-pull.log)") ;;
         acctoff) problems+=("gpu-box logins backup timer not running (meiolol-accounts-pull)") ;;
         acctold) problems+=("gpu-box logins backup: newest copy over 3 days old") ;;
+    esac
+    # The run's log and crash inputs: ~/ml/runs/*-backend-fuzz there (docs/health.md)
+    case $fuzz in
+        fuzzfail) problems+=("gpu-box backend fuzz: a crash, or a fuzz test that doesn't build") ;;
+        fuzzerror) problems+=("gpu-box backend fuzz could not run (its run's log)") ;;
+        fuzzoff) problems+=("gpu-box backend fuzz timer not running (meiolol-fuzz)") ;;
+        fuzzold) problems+=("gpu-box backend fuzz: no run finished for 3 days") ;;
     esac
 fi
 # While the gpu-box is away raw stays in raw.db, a day's worth (what it was sent over the

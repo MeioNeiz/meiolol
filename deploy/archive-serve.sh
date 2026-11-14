@@ -2,7 +2,8 @@
 # On the box: forced command of the gpu-box's archive key in ~/.ssh/authorized_keys
 # (docs/data-safety.md "Raw archive"), so that key can do only this. The gpu-box runs
 # deploy/archive-pull.sh, which calls: export, list, send NAME, got NAME SHA256, ack NAME,
-# forgotten, disk USE (the gpu-box's disk use and logins backup for deploy/health.sh), report ok|fail
+# forgotten, disk USE (the gpu-box's disk use, logins backup and nightly fuzz for
+# deploy/health.sh), report ok|fail
 # MESSAGE (each round's outcome, so health.sh can say why acks stopped); days and day
 # NAME, the complete form's sealed day files (read only: the box keeps its own)
 set -euo pipefail
@@ -102,7 +103,8 @@ case "${cmd:-}" in
         ;;
     status) exec bin/meiolol raw-export --data data --status ;;
     disk)
-        [[ "$arg" =~ ^c[0-9]+,wsl[0-9]+,arch([0-9]+|-)(,acct(ok|fail|off|old))?$ ]] || { echo "bad disk use" >&2; exit 2; }
+        [[ "$arg" =~ ^c[0-9]+,wsl[0-9]+,arch([0-9]+|-)(,acct(ok|fail|off|old))?(,fuzz(ok|fail|error|off|old|none))?$ ]] \
+            || { echo "bad disk use" >&2; exit 2; }
         echo "$(date +%s) $arg" > data/gpu-box.disk
         ;;
     report)
