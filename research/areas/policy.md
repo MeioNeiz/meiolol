@@ -86,6 +86,7 @@ Riot developer policy, production key, player privacy and GDPR
 | [Hetzner Storage Box product page (2026)](../sources/hetzner-storage-box.md) | Hetzner's Storage Box overview: 1/5/10/20 TB backup boxes, unlimited traffic, SFTP/rsync/Borg/restic/rclone, snapshots, Germany or Finland, no minimum term | docs | ops privacy | docs (whole page, comparison table) | high | A/fair | 6/7 | 2026-10-11 |
 | [Hextechdocs - Your Application](../sources/hextechdocs-application.md) | Community-maintained (Riot-linked) note on applying for personal/production apps, 2021 | article | policy | docs (whole post) | low | B/weak | 2/2 | 2026-10-11 |
 | [Hextechdocs: [Obsolete] Using third-party-code to verify account ownership](../sources/hextechdocs-third-party-code.md) | Community dev docs guide to the old third-party-code ownership check, marked obsolete since its removal in March 2022 | article | data policy privacy tools | docs (whole article) | high | B/fair | 5/6 | 2026-10-11 |
+| [How to get your League of Legends 2025 recap (esports.gg, Dec 2025)](../sources/esportsgg-2025-lol-recap.md) | News guide: Riot partnered with the community site YearIn.LoL for League's official 2025 year recap; Riot ID lookup, stat list, donation-funded | article | fun market policy retention tools/accounts | docs (whole article) | high | B/fair | 4/5 | 2026-11-14 |
 | [How to Use the Mobalytics Overlay + Live Companion (Nov 2020 guide)](../sources/mobalytics-live-companion.md) | Mobalytics' Nov 2020 guide to its overlay and Live Companion: before-queue tier list, own champions and GPI focus; champ select player scouting with playstyle badges, opponent's record vs your champion; overlay with enemy level 6 and item pop-ups, standings, matchup info | docs | needs policy tools/accounts tools/phase tools/removed ux/desktop ux/features | docs (overlay section and Live Companion section to team analysis) | high | B/fair | 13/14 | 2026-10-22 |
 | [Hugging Face Content Policy (2026)](../sources/hf-content-policy.md) | Hugging Face's content policy: the Hub is for ML models, datasets and apps; bars content violating third parties' privacy | docs | ops privacy | docs (definitions, restricted content) | low | A/fair | 2/2 | 2026-10-11 |
 | [Hugging Face Hub storage limits (docs, 2026)](../sources/hf-storage-limits.md) | Hugging Face storage plans: free accounts get 100 GB private storage, PRO 1 TB then $18/TB-month; repos are git-backed, deletes need history rewrite or super-squash | docs | ops privacy | docs (Storage plans, repo limits, freeing space) | medium | A/fair | 7/8 | 2026-10-11 |
@@ -210,7 +211,7 @@ Riot developer policy, production key, player privacy and GDPR
 
 ## Findings by tag
 
-### policy: Riot developer policies, API key approval process, legal requirements (517)
+### policy: Riot developer policies, API key approval process, legal requirements (518)
 
 - [[baronbuff-home#^f8]] [policy] (inferred) Its homepage advertises auto-accept, which Riot said apps may not do ([[itero-companion-apps#^f5]]). (C/weak, verified)
 - [[blitz-lutris-description#^f1]] [data] [policy] Blitz said it fetched all data from Riot's League API and analysed it itself, using no other third-party stats. (C/weak, verified)
@@ -234,6 +235,7 @@ Riot developer policy, production key, player privacy and GDPR
 - [[draftgap#^f4]] [policy] (inferred) So DraftGap needs no Riot API key at all; its continued operation is not evidence about production key approval, only about Riot tolerating an LCU-reading pick recommender. (B/fair, unquoted)
 - [[draftgap#^f5]] [policy] Checked, not there: no mention of Riot approval, production key, registration or the "isn't endorsed" boilerplate in README or FAQ; no GitHub issue (16 total) about Riot policy, Vanguard or removed features. (B/fair, absence)
 - [[draftgap-site#^f11]] [policy] (inferred) Every number is a win rate to two decimals (team 60.38, each pick 53.59): the "+X% win rate" framing meio.lol's rules exclude. (B/weak, unquoted)
+- [[esportsgg-2025-lol-recap#^f1]] [retention] [policy] League's official 2025 recap was a partnership with the community-run site YearIn.LoL. (B/fair, verified)
 - [[esportsnet-lolking#^f4]] [policy] Checked, not there: no mention of a Riot API key problem in its closure. (C/weak, absence)
 - [[esportsnews-captainflowers-apps#^f1]] [needs] [policy] 29-30 May 2025, the day after Riot's in-game ad ban, a prominent caster asked Riot to ban in-game overlays altogether as automated player skill. (B/fair, verified)
 - [[esportsnews-captainflowers-apps#^f2]] [policy] [tools/removed] LoL's head of product Drew Levin replied that enemy ult tracking was already banned and jungle camp tracking was under internal discussion; the Aug 2025 guidelines then cut cooldowns and prompts ([[overwolf-aug-2025-riot-guidelines#^f4]]). (B/fair, verified)
