@@ -27,13 +27,7 @@ pub const Series = struct {
     /// The typical line: the estimated mean (curvefit), not the band's median
     line: []const f32 = &.{},
     prev: []const f32 = &.{},
-    /// Your figures at a few minutes only (a lock answer's), in place of `you`: joined
-    /// from 0:00, a dot on each, the tip with its games
-    points: []const Point = &.{},
 };
-
-/// `n`: the games behind it
-pub const Point = struct { m: u8, v: f32, n: u32 };
 
 pub const Metric = struct {
     label: tree.Text,
@@ -99,8 +93,7 @@ pub const Lane = struct {
 
     fn minutes(l: *const L) usize {
         const s = l.cur();
-        const pts: usize = if (s.points.len > 0) @as(usize, s.points[s.points.len - 1].m) + 1 else 0;
-        return @max(s.you.len, s.band.len, s.line.len, pts);
+        return @max(s.you.len, s.band.len, s.line.len);
     }
 
     pub fn update(l: *L, m: Msg, ev: *tree.Event) void {
@@ -169,10 +162,6 @@ pub const Lane = struct {
             up = @max(up, v);
             down = @max(down, -v);
         };
-        for (s.points) |q| {
-            up = @max(up, q.v);
-            down = @max(down, -q.v);
-        }
         // The smaller side at least a third of the larger, so its tick clears 0's
         return .{
             .x = .{ .lo = 0, .hi = @floatFromInt(@max(1, l.minutes() - 1)) },
@@ -222,25 +211,12 @@ pub const Lane = struct {
         if (l.k == 0) axis = marks(h, p, s, mk, &over);
         if (l.range) |r| over.add(chart.range(h, p.px(r[0]), p.px(r[1])));
         if (s.you.len >= 2) over.add(h.el(.i, .{ .class = "dot", .data_k = "you", .style = h.vars(.{ .x = p.px(s.you.len - 1), .y = p.py(s.you[s.you.len - 1]) }) }, .{}));
-        const pts = h.mem.alloc([2]f32, s.points.len + 1) catch {
-            h.oom = true;
-            return .none;
-        };
-        pts[0] = .{ 0, 0 };
-        for (pts[1..], s.points, 0..) |*o, q, i| {
-            o.* = .{ @floatFromInt(q.m), q.v };
-            over.add(h.el(.i, .{ .key = i, .class = "dot", .data_k = "you", .style = h.vars(.{ .x = p.px(q.m), .y = p.py(q.v) }) }, .{}));
-        }
         if (l.tip) |i| {
             var kids = h.list();
             kids.add(h.b(.{}, .{phrase.num(h, .time, @as(u32, i) * 60)}));
-            const at: ?Point = for (s.points) |q| {
-                if (q.m == i) break q;
-            } else null;
             if (i < s.you.len) kids.add(h.text(W.you.with(h, .{ .n = l.a, .v = round(s.you[i]) }).s));
-            if (at) |q| kids.add(h.text(W.you.with(h, .{ .n = l.a, .v = round(q.v) }).s));
             if (i < s.line.len) kids.add(h.text(W.typ.with(h, .{ .v = round(s.line[i]) }).s));
-            if (at) |q| kids.add(h.text(W.games.with(h, .{ .n = q.n }).s)) else if (i < l.games.len) kids.add(h.text(W.games.with(h, .{ .n = l.games[i] }).s));
+            if (i < l.games.len) kids.add(h.text(W.games.with(h, .{ .n = l.games[i] }).s));
             // Only when the frame cuts it off: the band shows the rest. Its own line, so the
             // tip fits a phone
             if (i < s.band.len and (s.band[i][1] > p.y.hi or s.band[i][0] < p.y.lo))
@@ -259,7 +235,6 @@ pub const Lane = struct {
                 chart.line(h, p, s.prev, .prev),
                 chart.line(h, p, s.line, .typ),
                 chart.line(h, p, s.you, .you),
-                if (s.points.len > 0) chart.lineAt(h, p, pts, .you) else .none,
             },
             .above = &.{h.div(.{ .class = "side" }, .{W.ahead.with(h, .{ .n = l.a })})},
             .below = &.{h.div(.{ .class = "side" }, .{W.ahead.with(h, .{ .n = l.b })})},
@@ -372,8 +347,6 @@ const lane_cs = Series{
     .line = &.{ 0, -1, -1, -2, -2, -3, -3, -3, 0, -6, -6, -7, -8, -7, -8, -6, -6, -7, -13, -13, -14, -16, -18, -21, -21 },
 };
 const lane_games = [_]u32{ 109, 109, 109, 109, 109, 109, 109, 109, 109, 109, 109, 109, 109, 109, 109, 109, 109, 109, 108, 108, 105, 105, 103, 99, 93 };
-/// Made up: a lock answer's mean at lockrows' minutes
-const lane_points = [_]Point{ .{ .m = 5, .v = 140, .n = 412 }, .{ .m = 10, .v = 310, .n = 409 }, .{ .m = 15, .v = 365, .n = 388 }, .{ .m = 20, .v = 520, .n = 301 } };
 /// Made up: a previous patch's median, for the dashed line
 const lane_prev = [_]f32{ 0, -11, 25, 56, 44, 112, 72, 18, 49, 7, 86, 9, 8, 116, 12, -63, -11, 18, 16, 63, 71, 130, 159, 247, 138 };
 
@@ -390,7 +363,6 @@ pub fn gallery(g: *Gallery) void {
         .{ "CS, minutes dragged", .{ .a = "LeBlanc", .b = "Yasuo", .metrics = &demo_metrics, .k = 2, .range = .{ 10, 15 } } },
         .{ "a floor under the band: it clips, dashed, and the tip says its range", .{ .a = "LeBlanc", .b = "Yasuo", .metrics = &.{.{ .label = plain("Gold"), .floor = 500, .s = .{ .you = lane_gold.you, .band = lane_gold.band, .line = lane_gold.line } }}, .games = &lane_games, .tip = 18 } },
         .{ "typical only (the matchup page)", .{ .a = "LeBlanc", .b = "Yasuo", .metrics = &.{.{ .label = plain("Gold"), .s = .{ .band = lane_gold.band, .line = lane_gold.line, .prev = &lane_prev } }} } },
-        .{ "points at a few minutes over the typical line (the champion page under locks), one tapped", .{ .a = "LeBlanc", .b = "Opponent", .metrics = &.{.{ .label = plain("Gold"), .floor = 500, .s = .{ .band = lane_gold.band, .line = lane_gold.line, .points = &lane_points } }}, .tip = 10 } },
     };
     for (states) |s| {
         const l = h.mem.create(Lane) catch {
@@ -486,20 +458,4 @@ test "floor: an even lane gets its floor, not the band's ±2,000; a real gap sti
     m[0].floor = null;
     try testing.expectEqual(2000, l.plane().y.hi);
     try testing.expectEqual(null, t.find(l.view(&h), "class", "clip"));
-}
-
-test "points: a lock answer's few minutes set the span and scale, the tip gives their games" {
-    var m = [_]Metric{.{ .label = plain("Gold"), .s = .{ .line = &.{ 0, 10, 20 }, .points = &lane_points } }};
-    var l: Lane = .{ .a = "LeBlanc", .b = "Opponent", .metrics = &m, .games = &.{ 900, 900, 900 }, .tip = 10 };
-    try testing.expectEqual(21, l.minutes());
-    try testing.expectEqual(600, l.plane().y.hi);
-    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
-    var t: tree.Tree = .{};
-    var h: H = .init(arena.allocator(), &t);
-    const n = l.view(&h);
-    var buf: [256]u8 = undefined;
-    var w: std.Io.Writer = .fixed(&buf);
-    try t.textOf(t.find(n, "class", "tip").?, &w);
-    try testing.expectEqualStrings("10:00 · LeBlanc +310 · 409 games", w.buffered());
 }

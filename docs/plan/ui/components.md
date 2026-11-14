@@ -906,9 +906,8 @@ head, a tap shows the minute's figures (ChartTip), a drag selects minutes into `
 (off with `select`, as on the matchup and champion pages). Used by the matchup and
 champion pages, LaneDuel and the app's game screen
 States: gold, a minute tapped; CS, minutes dragged; a floor under the band: it clips,
-dashed, and the tip says its range; typical only (the matchup page); points at a few
-minutes over the typical line (the champion page under locks), one tapped; marks (the
-matchup page)
+dashed, and the tip says its range; typical only (the matchup page); marks (the matchup
+page)
 Used by: champselect, gamescreen, app, laneduel, champpage, matchpage
 
 ### TimelineChart

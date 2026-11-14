@@ -214,15 +214,6 @@ pub fn line(h: *H, p: Plane, ys: []const f32, kind: Line) N {
     return h.path(.{ .class = "ln", .data_k = if (kind == .main) null else kind, .d = path.d.items }, .{});
 }
 
-/// A line through points at any x (the plane's x units, not point indices); fewer than 2
-/// draw nothing
-pub fn lineAt(h: *H, p: Plane, pts: []const [2]f32, kind: Line) N {
-    if (pts.len < 2) return .none;
-    var path: Path = .{ .h = h };
-    for (pts, 0..) |q, i| path.to(if (i == 0) 'M' else 'L', p.x.at(q[0]), p.py(q[1]));
-    return h.path(.{ .class = "ln", .data_k = if (kind == .main) null else kind, .d = path.d.items }, .{});
-}
-
 /// A level across the whole plot (a reference win rate, zero)
 pub fn level(h: *H, p: Plane, v: f32) N {
     const y = p.py(v);
