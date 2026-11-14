@@ -26,6 +26,14 @@ pub const Fake = struct {
     refuse: ?[]const u8 = null,
     /// Every account's profile icon (summoner-v4), for the icon checks
     icon: i64 = 1,
+    /// Fuzz tests: every answer (null: 404) passes through it
+    damage: ?Damage = null,
+
+    pub const Damage = struct {
+        ctx: *anyopaque,
+        /// Owns `body`; returns what the caller gets (caller frees)
+        func: *const fn (ctx: *anyopaque, gpa: std.mem.Allocator, path: []const u8, body: ?[]u8) anyerror!?[]u8,
+    };
 
     pub fn init(gpa: std.mem.Allocator, io: std.Io, latency_ms: u32) !Fake {
         var match: Template = try .init(gpa, @embedFile("testdata/match.json"), "NA1_5321429660");
@@ -54,6 +62,12 @@ pub const Fake = struct {
     /// As Client.get: body (caller frees) or null for 404
     pub fn get(f: *const Fake, gpa: std.mem.Allocator, route: []const u8, path: []const u8) !?[]u8 {
         try f.io.sleep(.fromMilliseconds(f.latency_ms), .awake);
+        const body = try f.answer(gpa, route, path);
+        const d = f.damage orelse return body;
+        return d.func(d.ctx, gpa, path, body);
+    }
+
+    fn answer(f: *const Fake, gpa: std.mem.Allocator, route: []const u8, path: []const u8) !?[]u8 {
         if (f.refuse) |r| if (std.mem.find(u8, path, r) != null) return error.KeyRejected;
         if (std.mem.startsWith(u8, path, "/lol/league-exp/v4/entries/")) return try ladder(gpa, route, path);
         if (std.mem.startsWith(u8, path, "/lol/champion-mastery/")) return try gpa.dupe(u8, f.mastery_json);

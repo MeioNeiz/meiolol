@@ -743,3 +743,61 @@ fn nextJob(arena: Allocator, db: store.Db) !?[]const u8 {
     if (!try q.step()) return null;
     return try arena.dupe(u8, q.bytes(0));
 }
+
+/// Riot's answers to a lookup, each maybe damaged; whole matches and timelines 404 (their
+/// own fuzz tests are riot/match.zig's and timeline.zig's, and they are slow here)
+const FuzzRiot = struct {
+    s: *std.testing.Smith,
+    arena: Allocator,
+
+    const league =
+        \\[{"leagueId":"5c1b7e2a-0d4f-4c1e-9a3b-2f6d8e0a1b3c","queueType":"RANKED_FLEX_SR",
+        \\"tier":"SILVER","rank":"I","puuid":"acct0.a.1","leaguePoints":12,"wins":5,"losses":7,
+        \\"veteran":false,"inactive":false,"freshBlood":false,"hotStreak":false},
+        \\{"leagueId":"8a2d4f6b-1c3e-4a5b-8d7f-9e0a1b2c3d4e","queueType":"RANKED_SOLO_5x5",
+        \\"tier":"GOLD","rank":"II","puuid":"acct0.a.1","leaguePoints":41,"wins":30,"losses":28,
+        \\"veteran":false,"inactive":false,"freshBlood":true,"hotStreak":false}]
+    ;
+
+    fn damage(ctx: *anyopaque, gpa: Allocator, path: []const u8, got: ?[]u8) anyerror!?[]u8 {
+        const r: *FuzzRiot = @ptrCast(@alignCast(ctx));
+        defer if (got) |b| gpa.free(b);
+        const matches = "/lol/match/v5/matches/";
+        if (std.mem.startsWith(u8, path, matches) and !std.mem.startsWith(u8, path, matches ++ "by-puuid/")) return null;
+        const valid = if (std.mem.startsWith(u8, path, "/lol/league/v4/entries/by-puuid/")) league else got orelse return null;
+        return try gpa.dupe(u8, try core.fuzz.mutate(r.s, r.arena, valid));
+    }
+};
+
+const core = @import("core");
+
+const FuzzLookup = struct { f: *Fetcher, fake: *riot.fake.Fake };
+
+fn fuzzLookup(ctx: FuzzLookup, s: *std.testing.Smith) !void {
+    const f = ctx.f;
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var riot_state: FuzzRiot = .{ .s = s, .arena = arena };
+    ctx.fake.damage = .{ .ctx = &riot_state, .func = FuzzRiot.damage };
+    f.db = try cache.open(":memory:");
+    defer f.db.close();
+    const puuid = f.resolve(arena, "a#1") catch return orelse return;
+    f.refresh(arena, puuid, "a#1") catch return;
+    while (f.history(arena, puuid) catch return) {}
+}
+
+test "fuzz: damaged account, region, league and match id replies to a lookup never crash" {
+    const gpa = std.testing.allocator;
+    const saved = std.testing.log_level;
+    defer std.testing.log_level = saved;
+    std.testing.log_level = .err;
+    var fake: riot.fake.Fake = try .init(gpa, std.testing.io, 0);
+    defer fake.deinit(gpa);
+    var f: Fetcher = .{ .gpa = gpa, .io = std.testing.io, .db = undefined, .opts = .{} };
+    defer f.deinit();
+    // Every route: a damaged region reply can name any platform, never a real call
+    for (endpoints.platforms) |p| (try f.route(p.host)).fake = &fake;
+    for (std.enums.values(endpoints.Region)) |r| (try f.route(@tagName(r))).fake = &fake;
+    try std.testing.fuzz(FuzzLookup{ .f = &f, .fake = &fake }, fuzzLookup, .{});
+}

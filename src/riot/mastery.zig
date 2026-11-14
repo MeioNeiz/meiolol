@@ -56,7 +56,10 @@ pub fn encode(gpa: Allocator, entries: []const Entry, fetched_at: i64) ![]u8 {
         prev = e.champion;
         try varint(&out, gpa, e.level);
         try varint(&out, gpa, e.points);
-        try varint(&out, gpa, @intCast(@max(0, @divFloor(fetched_at - e.last_play, 3600))));
+        // decode refuses more: a last play centuries back (a damaged reply) is kept as
+        // the oldest it can say, not a blob no reader takes
+        const hours = std.math.clamp(@divFloor(fetched_at - e.last_play, 3600), 0, std.math.maxInt(u32));
+        try varint(&out, gpa, @intCast(hours));
     }
     return out.toOwnedSlice(gpa);
 }
@@ -142,4 +145,38 @@ test "fixture round trip" {
     // Hours since last play of 2^64 - 1
     const huge = "\x01\x01\x01\x01\x01\xff\xff\xff\xff\xff\xff\xff\xff\xff\x01";
     try testing.expectError(error.BadMastery, decode(arena, huge, fetched_at));
+}
+
+test "a last play too far back to say in hours is stored as the oldest, still read" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    // The fuzz test's round trip: the blob was written and every reader refused it
+    const entries = try fromJson(arena, "[{\"championId\":1,\"lastPlayTime\":-9000000000000000000}]");
+    const fetched_at: i64 = 1791680000;
+    const back = try decode(arena, try encode(arena, entries, fetched_at), fetched_at);
+    try testing.expectEqual(fetched_at - @as(i64, std.math.maxInt(u32)) * 3600, back[0].last_play);
+}
+
+fn fuzzReply(body: []const u8, s: *testing.Smith) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const entries = fromJson(arena, try @import("core").fuzz.mutate(s, arena, body)) catch return;
+    const fetched_at: i64 = 1791680000;
+    const back = try decode(arena, try encode(arena, entries, fetched_at), fetched_at);
+    try testing.expectEqual(entries.len, back.len);
+    for (entries, back) |a, b| {
+        try testing.expectEqual(a.champion, b.champion);
+        try testing.expectEqual(a.level, b.level);
+        try testing.expectEqual(a.points, b.points);
+        try testing.expect(b.last_play <= fetched_at and b.last_play >= @min(a.last_play, fetched_at));
+    }
+}
+
+test "fuzz: a damaged mastery reply is stored as a blob that reads back, or fails" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const body = try @import("store").raw.decompress(arena_state.allocator(), @embedFile("testdata/mastery.json.gz"));
+    try testing.fuzz(@as([]const u8, body), fuzzReply, .{});
 }

@@ -1708,3 +1708,83 @@ test "non-priority jobs wait at half the queue, priority ones at full" {
     try std.testing.expect(Writer.room(max_pending - 1, true));
     try std.testing.expect(!Writer.room(max_pending, true));
 }
+
+const FuzzWriter = struct { db: store.Db, wr: *Writer, s: *Stmts };
+
+/// Applied as the writer would and rolled back: a reply that parses always stores. A
+/// job that fails loses the whole page or list, and a non-Sqlite error stops the writer
+fn fuzzApply(f: FuzzWriter, job: *Job) !void {
+    try f.db.begin();
+    defer f.db.rollback();
+    try f.wr.applyOne(f.db, f.s, job);
+    try std.testing.expect(job.stored);
+}
+
+fn fuzzWriter(comptime one: fn (FuzzWriter, *std.testing.Smith) anyerror!void) !void {
+    const gpa = std.testing.allocator;
+    const db = try store.schema.memory();
+    defer db.close();
+    var c: crawl.Crawler = .{ .gpa = gpa, .io = std.testing.io, .opts = .{ .data_dir = "", .key = "", .player_sample = 2 } };
+    var wr: Writer = .{ .c = &c };
+    defer wr.deinit();
+    var s: Stmts = try .init(db);
+    defer s.deinit();
+    try db.run("INSERT INTO forgotten VALUES (?, 1)", .{fuzz_puuids[1]});
+    try db.exec("INSERT INTO matches VALUES ('EUW1_7212345600', 'riot', 'EUW1', 420, '16.21', '16.21.1', 1, 1800, 100, 0)");
+    try std.testing.fuzz(FuzzWriter{ .db = db, .wr = &wr, .s = &s }, one, .{});
+}
+
+const fuzz_puuids = [_][]const u8{
+    "Xq3vL0f8sT2mN6bR1cK9wE4yH7uJ5aP0dG3zV8nM2kQ6tF1rS9eW4xC7bY5hL0jU3iO8pA2gD6vN1mZ",
+    "aB4cD8eF2gH6iJ0kL4mN8oP2qR6sT0uV4wX8yZ2aB6cD0eF4gH8iJ2kL6mN0oP4qR8sT2uV6wX0yZ4",
+};
+
+fn fuzzLadder(f: FuzzWriter, s: *std.testing.Smith) !void {
+    const gpa = std.testing.allocator;
+    const job = try Job.create(gpa, .none);
+    defer job.destroy(gpa);
+    const a = job.allocator();
+    const page = try std.fmt.allocPrint(a,
+        \\[{{"leagueId":"5c1b7e2a-0d4f-4c1e-9a3b-2f6d8e0a1b3c","queueType":"RANKED_SOLO_5x5",
+        \\"tier":"GOLD","rank":"II","puuid":"{s}","leaguePoints":40,"wins":30,"losses":28,
+        \\"veteran":false,"inactive":false,"freshBlood":true,"hotStreak":false}},
+        \\{{"queueType":"RANKED_SOLO_5x5","tier":"GOLD","rank":"II","puuid":"{s}",
+        \\"leaguePoints":100,"wins":61,"losses":59,"miniSeries":{{"target":3,"wins":1,
+        \\"losses":0,"progress":"WNNNN"}}}},
+        \\{{"queueType":"RANKED_SOLO_5x5","tier":"GOLD","rank":"II","leaguePoints":0,
+        \\"wins":0,"losses":0}}]
+    , .{ fuzz_puuids[0], fuzz_puuids[1] });
+    const entries = ep.parse([]const ep.LeagueEntry, a, try @import("core").fuzz.mutate(s, a, page)) catch return;
+    job.kind = .{ .ladder = .{
+        .platform = ep.platform("EUW1").?,
+        .tier = "GOLD",
+        .division = "II",
+        .page = 1,
+        .entries = entries,
+        .t = 5 * std.time.s_per_day,
+    } };
+    try fuzzApply(f, job);
+}
+
+test "fuzz: a damaged ladder page parses and stores, or fails, never crashes" {
+    try fuzzWriter(fuzzLadder);
+}
+
+fn fuzzMatchIds(f: FuzzWriter, s: *std.testing.Smith) !void {
+    const gpa = std.testing.allocator;
+    const job = try Job.create(gpa, .none);
+    defer job.destroy(gpa);
+    const a = job.allocator();
+    const list =
+        \\["EUW1_7212345678","EUW1_7212345600","EUW1_7212345111","EUW1_7212345678"]
+    ;
+    const ids = ep.parse([]const []const u8, a, try @import("core").fuzz.mutate(s, a, list)) catch return;
+    job.kind = .{ .match_ids = .{ .ids = ids, .discovered_at = 5, .region = .europe } };
+    try fuzzApply(f, job);
+    try std.testing.expect(job.kind.match_ids.found <= ids.len);
+    for (ids) |id| _ = ep.platformOf(id);
+}
+
+test "fuzz: a damaged match id list parses and queues, or fails, never crashes" {
+    try fuzzWriter(fuzzMatchIds);
+}
