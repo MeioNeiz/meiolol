@@ -512,7 +512,7 @@ pub const Summary = struct {
 };
 
 /// The minute frame at or before `s`, and the one at or after `e`
-fn frames(len: usize, s: Span) [2]usize {
+pub fn frames(len: usize, s: Span) [2]usize {
     const last = len -| 1;
     return .{ @min(last, s.a / 60), @min(last, (s.b + 59) / 60) };
 }

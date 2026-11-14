@@ -16,6 +16,7 @@ const gamestrip = @import("gamestrip.zig");
 const gamehead = @import("gamehead.zig");
 const timeline = @import("timeline.zig");
 const inspector = @import("inspector.zig");
+const review = @import("review.zig");
 const scoreboard = @import("scoreboard.zig");
 const laneduel = @import("laneduel.zig");
 const itemrow = @import("itemrow.zig");
@@ -383,23 +384,43 @@ pub const GameMore = struct {
     board: scoreboard.Board = .{},
     /// The looked-up game, for Players' seat links
     from: ?gamedata.Lookup = null,
+    /// The review walk over the game shown (`walk_of`: its Data.games index)
+    walk: review.Walk = undefined,
+    walk_of: ?u8 = null,
 
     const P = @This();
 
-    /// GamePage's keys but `gold`
-    pub const Url = struct { g: u8 = 0, m: u16 = 0, r: [2]u16 = .{ 0, 0 } };
+    /// GamePage's keys but `gold`; `v` the review step
+    pub const Url = struct { g: u8 = 0, m: u16 = 0, r: [2]u16 = .{ 0, 0 }, v: u8 = 0 };
 
     pub fn toUrl(p: *const P) Url {
         const u = p.s.toUrl();
-        return .{ .g = u.g, .m = u.m, .r = u.r };
+        return .{ .g = u.g, .m = u.m, .r = u.r, .v = if (p.walk_of != null) p.walk.step else 0 };
     }
 
     pub fn fromUrl(p: *P, u: Url) void {
         p.s.fromUrl(.{ .g = u.g, .m = u.m, .r = u.r, .gold = p.s.tl.mode == .gold });
+        p.bindWalk() catch return;
+        p.walk.step = u.v;
+        p.walk.follow();
+    }
+
+    /// The walk on the game shown, its steps worked out once per game; off on a new game
+    fn bindWalk(p: *P) !void {
+        p.s.bind();
+        if (p.walk_of != p.s.cur) {
+            const ms = (try p.s.prepare(p.s.cur)).ms;
+            const g = p.s.game();
+            p.walk = .{ .tl = &p.s.tl, .game = g, .champs = p.s.data.champs, .moments = ms, .keys = try review.keys(p.s.a, g, ms), .try_ = review.tryNext(g, ms) };
+            p.walk_of = p.s.cur;
+        }
+        p.walk.tl = &p.s.tl;
     }
 
     pub fn view(p: *P, h: *H) N {
-        p.s.bind();
+        p.bindWalk() catch {
+            h.oom = true;
+        };
         const g = p.s.game();
         const d = p.s.data;
         return h.div(.{
@@ -410,7 +431,7 @@ pub const GameMore = struct {
             .data_js = if (p.js.len > 0) p.js else null,
             .data_wasm = if (p.wasm.len > 0) p.wasm else null,
         }, .{
-            card.view(h, .{}, &.{p.s.insp.view(h)}),
+            card.view(h, .{}, &.{ p.walk.view(h), if (p.walk.onTry()) p.walk.tryView(h) else p.s.insp.view(h) }),
             card.view(h, .{}, &.{versus.split(h, .{}, p.objectives(h))}),
             card.view(h, .{ .flush = true }, &.{
                 card.head(h, W.players, null, &.{p.board.switcher(h)}),
@@ -696,4 +717,29 @@ test "cells: a win never behind and a loss never ahead say so, unpressable; Figh
     var h: H = .init(a, &t);
     const n = p.cells(&h);
     try testing.expect(t.find(n, "class", "us") != null and t.find(n, "class", "them") != null);
+}
+
+test "GameMore: the review step rides the URL; a graph off the step ends the walk" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d = &@import("game_demo.zig").data;
+    var more: GameMore = .{ .s = try GamePage.init(a, d) };
+    try testing.expectEqual(@as(u8, 0), more.toUrl().v);
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    _ = more.view(&h);
+    var ev: tree.Event = .{ .kind = .click };
+    more.walk.update(.{ .go = 2 }, &ev);
+    const u = more.toUrl();
+    try testing.expectEqual(@as(u8, 2), u.v);
+    var other: GameMore = .{ .s = try GamePage.init(a, d) };
+    other.fromUrl(u);
+    try testing.expectEqual(@as(u8, 2), other.walk.step);
+    try testing.expectEqual(more.walk.moment(), other.s.tl.cur);
+    var off = u;
+    off.r = .{ 0, 840 };
+    other.fromUrl(off);
+    try testing.expectEqual(@as(u8, 0), other.walk.step);
+    try testing.expectEqual(@as(u8, 0), other.toUrl().v);
 }

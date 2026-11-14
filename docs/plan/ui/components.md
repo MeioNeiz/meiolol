@@ -93,6 +93,7 @@ its CSS ships to the site, the gallery's states, and the components importing it
 - TeamRows: a game's five lanes as mirrored rows, our player left, theirs right, the...
 - GameStrip: your games as one scrolling row of small cards (champion, duration, a...
 - RangeInspector: what the game graph's selection holds (game-detail.md)
+- ReviewWalk: a game read as a walk (site.md RV1), Next alone from start to end: the...
 - GameHeader: one game at a glance, no sentence (game-detail.md "First screen")
 - GameRow: one of your games in the Your games list (your-games.md "Games"), tinted by...
 - Scoreboard: a game's players as five lane rows, your team left and theirs right...
@@ -203,9 +204,9 @@ on
 States: neutral; accent; us; them; few; patch note; patch buff; patch nerf; moment;
 caution
 Used by: modelbadge, matchbrief, champlist, draftboard, champselect, compview, appbar,
-versus, inspector, gamehead, gamerow, scoreboard, puzzle, candlist, learnpage, dailypage,
-dailyseat, dailydays, patchpage, homepage, adminpage, adminlab, adminruns, champpage,
-matchpage, tiers
+versus, inspector, review, gamehead, gamerow, scoreboard, puzzle, candlist, learnpage,
+dailypage, dailyseat, dailydays, patchpage, homepage, adminpage, adminlab, adminruns,
+champpage, matchpage, tiers
 
 ### Segmented
 `segmented.zig` `.c-seg` site
@@ -491,7 +492,7 @@ seat, a suggestion; beside its name
 Used by: bar, sitesearch, champsearch, champhead, matchbrief, matchstrip, champlist,
 hardagainst, draftboard, champselect, teamrows, compview, lobby, apphome, loadscreen,
 gamescreen, postgame, practice, picks, dotplot, timeline, versus, gamestrip, inspector,
-gamehead, gamerow, scoreboard, laneduel, choice, rankstrip, draftflow, candlist,
+review, gamehead, gamerow, scoreboard, laneduel, choice, rankstrip, draftflow, candlist,
 poolslots, heatgrid, matchgrid, finder, ranking, learnpage, dailypage, dailyseat,
 patchpage, poolpage, poolgrid, resultstrip, playerbar, profilesum, recordtile, yourpage,
 yourtime, yourfriends, squad, today, homepage, testerpage, testercand, champpage,
@@ -923,7 +924,7 @@ page's inspector reads `range` and `cur`; both live in the URL. Under 480 px of 
 epic objectives only, deaths as ticks
 States: the turning moment picked; gold, a range dragged, the tip; compact, a big fight
 picked
-Used by: inspector, gamepage, homepage
+Used by: inspector, review, gamepage, homepage
 
 ### PatchSpark
 `spark.zig` `.c-spark` site
@@ -1058,7 +1059,7 @@ ObjectiveIcon: a tower, inhibitor or epic monster as the game's own silhouette (
 history art via CommunityDragon, traced to paths; a CSS mask, like RoleIcon), in the
 taking team's colour. Named for screen readers unless the row around it says what it is
 States: each kind; by side, sizes
-Used by: versus, inspector, scoreboard, gamepage, champpage
+Used by: versus, inspector, review, scoreboard, gamepage, champpage
 
 ### Minimap
 `minimap.zig` `.c-map` site
@@ -1086,6 +1087,18 @@ range's moments as rows (MomentList: who died either side of the score), filtere
 chips. Shares the page's Timeline, so a row pressed here is the graph's moment too
 States: the turning minute; a moment picked in 25-33; the whole game; your deaths, none in
 the range; a flex game: win chance fitted on ranked solo
+Used by: gamepage
+
+### ReviewWalk
+`review.zig` `.c-walk` `.c-try` site
+ReviewWalk: a game read as a walk (site.md RV1), Next alone from start to end: the whole
+game, then the moments that moved win chance most in time order, each named Good or Costly
+for your team by how far it moved, then one thing to try next game. No grade and no
+per-player score: what moved, against what, is the inspector's. `Walk` sets the page's
+Timeline (range, moment); the Try card is facts of this game only, from fixed rules
+(`tryNext`), no model claim
+States: off: the start button; the whole game; a key moment; the last step; try: deaths
+before their objectives; try: deaths in lane
 Used by: gamepage
 
 ### GameHeader

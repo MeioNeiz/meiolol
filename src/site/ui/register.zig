@@ -45,7 +45,7 @@ const groups = [_]Group{
     },
     .{
         .name = "Games and drafts",
-        .files = "draftboard teamrows gamestrip inspector gamehead gamerow scoreboard " ++
+        .files = "draftboard teamrows gamestrip inspector review gamehead gamerow scoreboard " ++
             "laneduel itemrow dayhead playerbar profilesum recordtile highlights " ++
             "gametrend puzzle choice dailyseat dailydays",
     },
