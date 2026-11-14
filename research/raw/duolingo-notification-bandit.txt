@@ -1,0 +1,588 @@
+          A Sleeping, Recovering Bandit Algorithm for Optimizing
+                          Recurring Notifications
+                                 Kevin P. Yancey                                                                  Burr Settles
+                             kyancey@duolingo.com                                                              burr@duolingo.com
+                                     Duolingo                                                                       Duolingo
+                             Pittsburgh, Pennsylvania                                                       Pittsburgh, Pennsylvania
+
+ABSTRACT
+Many online and mobile applications rely on daily emails and push
+notifications to increase and maintain user engagement. The multi-
+armed bandit approach provides a useful framework for optimiz-
+ing the content of these notifications, but a number of complica-
+tions (such as novelty effects and conditional eligibility) make con-
+ventional bandit algorithms unsuitable in practice. In this paper,
+we introduce the Recovering Difference Softmax Algorithm
+to address the particular challenges of this problem domain, and
+use it to successfully optimize millions of daily reminders for the
+online language-learning app Duolingo. This lead to a 0.5 % in-
+crease in total daily active users (DAUs) and a 2 % increase in new
+user retention over a strong baseline. We provide technical details
+of its design and deployment, and demonstrate its efficacy through
+both offline and online evaluation experiments.
+
+CCS CONCEPTS                                                                                      Figure 1: Example daily reminder notifications.
+• Computing methodologies → Sequential decision making;
+• Mathematics of computing → Probability and statistics.
+
+KEYWORDS                                                                                    pools of hand-written templates (which may contain slots for user-
+Multi-Armed Bandits, Notification Content Optimization, Bayesian                            specific information) from which a single template is chosen to
+Approaches, Machine Learning                                                                generate the content of each notification.
+                                                                                               The multi-armed bandit problem provides a well-studied the-
+ACM Reference Format:                                                                       oretical framework for optimizing the selection of templates in
+Kevin P. Yancey and Burr Settles. 2020. A Sleeping, Recovering Bandit Al-                   this context. However, two complications arise that makes conven-
+gorithm for Optimizing Recurring Notifications. In Proceedings of the 26th
+                                                                                            tional bandit algorithms unsuitable for our scenario:
+ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD
+’20), August 23–27, 2020, Virtual Event, CA, USA. ACM, New York, NY, USA,                     (1) “Fresh” templates (which have not been recently seen) tend
+9 pages. https://doi.org/10.1145/3394486.3403351                                                  to have higher impact on user behavior. Thus, for good per-
+                                                                                                  formance, it is essential that the bandit algorithm not only
+1     INTRODUCTION                                                                                choose templates that perform well in general, but also vary
+                                                                                                  the selection of templates for each user over time in order
+To keep users engaged and promote recurring usage, many mobile                                    to exploit this novelty effect. Otherwise, the bandit will con-
+and online apps send regular email and push notifications to their                                verge to using the the same template for a given user day
+users. For Duolingo — the world’s most-downloaded language-                                       after day, which will get repetitive, desensitize users, and
+learning app with more than 300 million users — this involves                                     fail to improve engagement in the long run.
+sending daily practice reminder notifications, such as those shown                            (2) Many templates are based on conditions that are not appli-
+in Figure 1. The content of these notifications is generated from                                 cable to all users. For example, some templates in Table 1
+                                                                                                  reference a user’s “streak wager,” a game mechanic applica-
+Permission to make digital or hard copies of part or all of this work for personal or             ble to only a fraction of users on any given day. As such,
+classroom use is granted without fee provided that copies are not made or distributed             each template has defined eligibility criteria to prevent the
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for third-party components of this work must be honored.            template from being sent to an inappropriate user. However,
+For all other uses, contact the owner/author(s).                                                  the standard formulation of the multi-armed bandit prob-
+KDD ’20, August 23–27, 2020, Virtual Event, CA, USA                                               lem assumes that all options are available at all times, and
+© 2020 Copyright held by the owner/author(s).
+ACM ISBN 978-1-4503-7998-4/20/08.                                                                 the violation of this assumption substantially complicates
+https://doi.org/10.1145/3394486.3403351                                                           the evaluation of each option’s performance.
+  Table 1: Example templates and their eligibility criteria.                                In the sleeping bandits problem, certain arms may be ineligible
+                                                                                        some rounds, as is the case with the templates in our recurring
+  Template                                      Eligibility Criteria                    notifications setting. Kleinberg et al. [10] proposes a theoretical
+                                                                                        solution with proven regret-bounds by using the exp4 algorithm
+  You’re on fire                                Must have a 3+ day streak.1
+                                                                                        [2] to search for an optimal priority ordering of all arms in A.
+  Continue your 109 day Spanish
+                                                                                        However, since there exist |A|! possible orderings, this approach
+  streak on Duolingo.
+                                                                                        is intractable when there are more than a handful of arms. Further-
+  Streak wager reminder                         Must have a streak wager.2              more, this approach isn’t obviously compatible with the solutions
+  You’re on day 2 of your 7-day                                                         addressing the recovering bandits problem.
+  streak wager! Now get to day 3!                                                           In contrast, the Recovering Difference Softmax Algorithm
+  Ready for your trip?                          User’s profile must indicate            provides a practical solution that solves both of these sub-problems
+  Take 5 minutes to practice Italian            travel motivation.                      simultaneously. Furthermore, while much of the bandit literature
+  now                                                                                   focuses mainly on proving theoretical performance bounds of algo-
+                                                                                        rithms, our paper provides both offline and online empirical eval-
+                                                                                        uations in a real-world setting.
+   In this paper, we describe the Recovering Difference
+Softmax Algorithm, a novel variant of the bandit framework that                         1.2    Problem Definition and Notation
+addresses these two sub-problems. It has been deployed to select                        In our recurring notification optimization setting, any notification
+daily reminders for millions of users at Duolingo, resulting in sub-                    that is sent to any user constitutes a single round. Following con-
+stantial lifts in user engagement metrics.                                              vention, individual rounds are denoted with the variable t.
+                                                                                           Each arm corresponds to a template that can be chosen. A de-
+1.1     Related Work                                                                    notes the set of all arms, and At ⊆ A denotes the set of eligible
+The multi-armed bandit problem [13] is an optimization problem                          arms at round t.
+in which an agent repeatedly chooses from among a fixed set of                             Each round, a policy is applied to choose an arm, at , from among
+arms over some number of rounds. Some amount of reward is ob-                           the eligible arms, At . The policy that was applied for a given round,
+tained each round based upon the arm chosen. In our setting, the                        referred to in reinforcement learning as the “behavior policy” [17],
+arms represent different notification templates and the rewards                         is denoted bt , which is a discrete probability distribution over At .
+are successful user engagements. Since an arm’s reward can only                         Hence, bt (a | t) is the probability that arm a would be selected at
+be known by choosing it, there is a trade-off between exploration                       round t under the policy in place during round t. When we use the
+(choosing an arm to learn more about its expected reward) and ex-                       historical data to learn a new policy, we denote the new policy π .
+ploitation (choosing the best arm based on current information to                          The purpose of Duolingo practice reminders is to encourage
+maximize reward). This formalization is applicable to a wide range                      users to complete at least one language-learning lesson per day, so
+of real-world problems and a number of algorithms for this basic                        our reward should reflect that. However, a substantial percentage
+formulation have been proposed and studied, including ϵ-greedy                          of our completed lessons are organic: many users will complete
+[16], softmax [17], and Upper Confidence Bound (UCB) [3].                               a lesson whether we send a notification or not. It is not possible
+   Many variations of the multi-armed bandit problem exist, each                        to reliably distinguish between organic lessons from notification-
+making different assumptions that often require different solutions.                    driven lessons, which adds a degree of noise when evaluating the
+The two variations that most directly relate to the recurring noti-                     performance of different arms. To minimize the amount of organic
+fications setting studied in this paper are the “recovering bandits                     activity counted in our reward function, we only count lessons that
+problem” [12] and the “sleeping bandits problem” [10].                                  are completed within two hours of the notification. Thus, we define
+   In the recovering bandits problem, an arm’s expected reward                          the reward function, r t ∈ {0, 1}, as follows: the reward is 1 if the
+is given by an unknown function of the number of rounds since                           user completes a lesson within two hours of the reminder being
+the arm was last chosen. Pike-Burke et al. [12] propose two ban-                        sent, and 0 otherwise.
+dit algorithms that use Gaussian processes to model the unknown
+reward functions. A number of other papers [6, 11, 15] explore a                        2 RECOVERING DIFFERENCE SOFTMAX
+related problem, known as the “rested bandits problem,” where an                          ALGORITHM
+arm’s expected reward depends on the number of times the arm                            We now describe the Recovering Difference Softmax
+has been selected previously (rather than the how recently it was                       Algorithm in detail. The algorithm works by learning and
+last selected). In reality, both of these factors are likely relevant to                periodically updating a policy, π , that attempts to maximize
+addressing the novelty effect mentioned in the previous section.                        future rewards based on historical observations. For each arm,
+However, between the two, recency is probably more essential,                           a set of prior rounds where that arm was eligible are gathered,
+since reminders sent months or even years before should have little                     denoted Ha , such that for each t ∈ Ha the reward r t and behavior
+impact on their effectiveness today, regardless of their quantity.                      policy bt are known. These sets of historical rounds are used to
+1 “Streak” means the user has completed a lesson every day for some number of days.     evaluate the performance of each arm and build the policy π . This
+2 “Streak wager” is a gamification feature that awards the user extra in-app currency   learned policy is applied in future rounds to choose an arm until
+(i.e., “gems”) for completing lessons on 7 consecutive days.                            the policy is updated again.
+   Table 2: Reward measures for example template arms.                   arm was historically more likely to be used, such as rounds where
+                                                                         there were fewer alternative arms. So, estimating µ a+ by computing
+                   Avg. Reward     Avg. Reward                           a simple average of rewards from the rounds in Ha where arm a
+      Template                                       Rel. Diff.          was selected will produce biased results. The same problem arises
+                   When Used       When Eligible
+                                                                         when estimating µ a− . We use weighted importance sampling to cor-
+      A               0.2672            0.2682        -0.37 %
+                                                                         rect for this. Specifically, we define the estimates of these variables
+      G               0.1372            0.1352        +1.48 %
+                                                                         as follows:
+      H               0.1332            0.1362        -2.22 %                      ∑                      +
+                                                                               +      {t ∈H a |a t =a } w t r t         +              −1
+                                                                            µ̄ a = ∑                        + , where w t = bt (a | t)
+                                                                                       {t ∈H a |a t =a } w t
+2.1    Sleeping Arms                                                               ∑                      −
+                                                                               −      {t ∈H a |a t ,a } w t r t         −                    −1
+As mentioned previously, not all arms are available every round.            µ̄ a = ∑                        − , where w t = (1 − bt (a | t))
+                                                                                       {t ∈H a |a t ,a } w t
+This property makes the problem more challenging because eligi-
+bility criteria can act as confounding variables with regard to the      and where at is the arm chosen at round t.
+reward. For example, if arm A is available to only highly active            From these two expected reward estimations, we compute the
+users users and arm G is available to all users, then the historical     relative expected reward, referred to as the arm’s score, as follows:3
+rounds where arm A was chosen will probably have much higher
+                                                                                                                 µ̄ + − µ̄ −
+reward regardless of the arm’s efficacy.                                                                     sa = a − a                                         (1)
+                                                                                                                     µ̄ a
+   For example, we see in the first column of Table 2 that if we take
+the average reward when a given arm is chosen (independent of              These scores can then be used to compare performance between
+whether the other arms are eligible for those rounds), arm A has         arms with distinct eligibility criteria.
+much higher average reward. However, we see in the second col-
+umn that this difference is mostly explained by the fact the arms        2.2      Small Sample-Size Arms
+were eligible to distinct (but possibly overlapping) sets of rounds.     The estimated arm scores from the previous section will have high
+In fact, when we compute the relative difference between the first       variance for arms with small sample sizes (i.e., small |Ha |). This
+two columns, we see that, in fact, arm G has much higher lift, and       variance can cause problems when these estimates are used to
+that arm A barely performs better than average. For example, con-        choose templates for future rounds. For example, in the case of
+sider a user who is eligible for both arms A and G: which arm            very high estimates, the score may outweigh the recency penalty
+should we show them? Among all users eligible for arm A, inde-           (described in the next section) enough that the arm will be used re-
+pendent of whether they’re eligible for G, we see a lift of −0.37 %,     peatedly for all eligible rounds until the arm’s score converges to a
+and among all users eligible for arm G, the lift is +1.48 %. These       more accurate estimation. Worse, an arm may never recover from
+numbers indicate that for this user, we should prefer choosing arm       an initially low score estimation because it may be so low that it is
+G.                                                                       virtually never used, even with the exploration enabled by the use
+   Hence, choosing the template with the highest average histori-        of softmax (described in Section 2.4). In this case, the bandit may
+cal reward, such as is done by conventional bandit algorithms cited      take a long time to collect enough samples for that arm to correct
+earlier (e.g., ϵ-greedy [16], softmax [17], and Upper Confidence         its initially low estimation.
+Bounds (UCB) [3]) may yield poor results.                                    For example, Figure 2 plots the magnitudes of the scores for all
+   Furthermore, arms with new eligibility rules are introduced fre-      the arms from the offline evaluation experiment described in Sec-
+quently. Thus, as a design constraint, we do not want the bandit al-     tion 3.1. We can easily see that arms with small sample sizes tend to
+gorithm to directly depend on the eligibility rules. Otherwise, the      have higher magnitudes. Figure 3 shows the distribution of relative
+bandit algorithm implementation would need to be modified each           rewards for arms with a “large” effective sample size (defined here
+time a new set of eligibility rules were put into production, greatly    as being greater than 100,000). The distribution is approximately
+increasing the algorithm’s maintenance cost.                             normal, with 90 % of the scores being within ±3.4 %. However,
+   We instead propose a method to measure the efficacy of each           only 50 % of arms with smaller effective sample sizes come within
+arm while controlling for the effects of its eligibility criteria. We    this range, and 38 % dubiously have scores outside ±5 %, which
+do this by using the historical rounds, Ha , to estimate the typical     could cause highly degenerate behavior in the bandit, if used as-is.
+reward when arm a is used, which we denote µ a+ , and the typical            To regularize these scores, we use empirical Bayes estimation
+reward when the arm a is eligible but a different arm is chosen in-      to shrink both µ̄ a+ and µ̄ a− towards a Bayesian prior. Since both of
+stead, which we denote µ a− . We then compute a single performance       these variables are estimates of a proportion4 , we define the prior
+metric from these by taking the relative difference (see Equation 1).
+Since both expectations are estimated from a sample of historical        3 One might instead choose to use the absolute difference, µ̄ + − µ̄ − , instead of the rel-
+                                                                                                                                       a      a
+rounds that meet the same eligibility criteria, we effectively control   ative difference. It’s not necessarily clear which metric should be better in general. In
+                                                                         our case, we evaluated both metrics in the offline evaluation and found the differences
+for the effects of the eligibility criteria on the expected reward.      were negligible. As such, our decision to use relative difference was a pragmatic one:
+   Since the probability of an arm being used varies from round          the relative differences were more intuitive when reporting arm scores to employees
+to round depending on the policy in use at that time, collecting         via dashboards.
+                                                                         4 This is because our reward function is binary, and so the average reward is the pro-
+all historical instances where an arm was used will not produce a        portion of positive outcomes. A different reward function may warrant a different
+representative sample: it will be biased towards rounds where the        prior distribution.
+             8%
+
+             6%                                                              We then define a new arm score such that:
+             4%                                                                                           µ̂ + − µ̂ −
+                                                                                                     ŝa = a − a                                                (2)
+                                                                                                              µ̂ a
+  sa         2%
+                                                                             2.3      Recovering Arms
+             0%
+                                                                             Prior A/B tests5 at Duolingo that introduced new templates tended
+                    0              1           2                 3
+                                                                             to boost notification conversion rates, even when the those new
+                                       Sample Size                    ·107
+                                                                             templates did not outperform existing templates in the long run.
+                                                                             We surmised that this was due to a kind of “novelty effect”: tem-
+Figure 2: Scatter plot showing the absolute value of relative                plates that users had not previously seen generally had positive
+expected rewards |s a | vs. the sample size from which each                  impact. Under this hypothesis, the more often and recently a tem-
+arm score was computed.                                                      plate is used for a given user, the less impact it will have.
+                                                                                 We address this problem via a parametric approach using a
+             60                                                              cognitively-motivated formula. When an arm has previously been
+                                                                             selected for a given user, we apply a recency penalty to its score to
+                                                                             model the lack of a novelty effect. However, we hypothesize that
+             40                                                              this penalty should subside as the user’s memory of the prior no-
+                                                                             tification fades. Exponential decay functions have been shown to
+
+ # of Arms
+                                                                             model human memory well [7, 14]. Hence, we define a modified
+             20                                                              score of arm a for a given round as follows:
+
+                                                                                                          ∗
+                                                                                                         sa,t = ŝa − γ 0.5da,t /h                              (3)
+              0
+                  −6 % −4 % −2 % 0 % 2 %                       4%    6%      where da,t    is the number of days since arm a was last selected6 for
+                                Arm Score                                    the user corresponding to round t, and γ and h are both hyperpa-
+                                                                             rameters representing the base recency penalty and decay half-life,
+Figure 3: Histogram of arm scores with large effective sam-                  respectively. The latter two are estimated in Section 3.1.2.
+ple sizes (n > 105 ).
+                                                                             2.4      Arm Selection
+                                                                             We use softmax [17] to define a policy to choose arms each round
+using the beta distribution parameterized with σ and µ a such that:
+                                                                             based upon the previously computed arm scores. Specifically, we
+                    µ a+, µ a− ∼ Beta(µ a /σ, (1 − µ a )/σ )                 select arm a with probability:
+where µ a is the expected reward when arm a is eligible, which is                                                            ∗ /τ )
+                                                                                                                       exp (sa,t
+estimated from each arm, i.e.:                                                                     π (a | t) = ∑                   ∗                            (4)
+                                  ∑                                                                                 a ′ ∈At exp (s a ′ ,t /τ )
+                                    {t ∈H a } r t
+                            µa =                                             where τ is a hyperparameter that controls the amount of explo-
+                                      |Ha |
+                                                                             ration behavior (higher values lead to more exploration).
+    Here σ represents how much the expected reward varies de-
+pending upon which arm is chosen. It can be thought of as the                2.5      Arm Histories
+variance in µ a+ − µ a across all arms. This is treated as a hyperpa-
+                                                                             Here we detail how the histories, Ha , are compiled for each arm.
+rameter that is estimated from all arms that have large sample sizes
+                                                                             Rather than including all previous rounds where arm a is eligible,
+(i.e., arms from which we can derived estimates of µ a+ with narrow
+                                                                             we filter this set to control for variance and to favor more recent
+confidence intervals). In our case, σ was estimated from the data
+                                                                             data. We discuss each of these in the following sub-sections.
+shown in Figure 3 to be approximately 105 .
+    From the above Bayesian prior, we can derive the posterior es-           2.5.1 Controlling Variance. The variance for the estimates of µ̄ a+
+timates for µ a+ and µ a− as follows:                                        and µ̄ a− increase as na+ and na− approach zero, respectively. This can
+                     µ̄ +n + + µ a σ               µ̄ −n − + µ a σ           cause very large errors in these estimates when bt (a | t) is very
+              µ̂ a+ = a +a                  µ̂ a− = a −a                     large or very small, which can happen for arms that are performing
+                         na + σ                        na + σ
+                                                                             very well or very poorly. To prevent this, we exclude from Ha any
+where na+ and na− are Kish’s effective sample size [9] for the weighted
+samples from which µ̄ a+ and µ̄ a− were computed, respectively, which        5 An A/B test is a form of randomized controlled trial experiment, used to test two
+                                                                             versions of an app. Users are split randomly into buckets, and different business logic
+are computed as:                                                             is used depending on the user’s bucket (in this case, different copytext is included in
+         (∑                       )2         (∑                       )2     the notification rotation) and the performance of each bucket is evaluated.
+                                +                                   −        6 In the case that arm a has never been selected for the applicable user before, d
+            {t ∈H a |a t =a } w t               {t ∈H a |a t ,a } w t                                                                                            a,t
+   na+ = ∑                             na− = ∑                      −2
+                                                                             is treated as infinity, in which case the second term goes to 0 and modified relative
+                                +2
+            {t ∈H |a =a } w t
+                     a   t                      {t ∈H a |a t ,a } w t        expected reward is simply ŝ a .
+                                                                                             normalize the differences by dividing by µ̂ a− ). Instead, we could
+             600                                                                             have chosen to use the absolute difference (i.e., µ̂ a+ − µ̂ a− ). It is not
+                                                                                             clear which is a more representative comparison, and we posit this
+             400                                                                             is problem-dependent. However, our offline evaluations showed
+                                                                                             that both metrics performed similarly, and so the decision for us
+
+ # of Arms
+                                                                                             was a pragmatic one: since µ̂ a− was usually small (≈ 0.13 for most
+             200                                                                             arms) and the differences between arms were very small (±0.004),
+                                                                                             using the relative differences created more relatable scores (±3 %)
+               0                                                                             and also matched how business metrics are often evaluated at our
+                     0        50      100 150 200 250                           300          company: percentage lift over baseline rather than absolute lift.
+                                     Days of History in Ha
+                                                                                             2.6.2 Distribution of arms under µ a− . The variable µ a− represents
+                                                                                             the expected reward when arm a is not chosen. However, this de-
+Figure 4: Histogram of # of days of data needed for an arm                                   pends on the distribution with which alternative arms are chosen
+to reach a credible interval of ±0.15.                                                       when arm a is not chosen. In our case, we use the distribution de-
+                                                                                             fined by the behavior policy in effect at the time the historical data
+                                                                                             was collected. The drawback of this is that µ a− tends to increase over
+rounds where bt (a | t) < θ or 1 − bt (a | t) < θ , where θ is a
+                                                                                             time as the algorithm learns more optimal policies, which causes
+hyperparameter set to a very small value. In our case, we chose to
+                                                                                             the template scores to drift downwards over time. This downward
+set the threshold to 0.5 %7 , which only excludes an average of 3 %
+                                                                                             drift applies to all arms similarly, so it does not significantly affect
+of historical rounds.
+                                                                                             the overall performance of the algorithm. However, this drift ap-
+2.5.2 Favoring More Recent Rounds. The typical reward of an arm                              pears counter-intuitive to internal employees because it looks as
+may change gradually over time for a variety of reasons (e.g., sea-                          if the arms are performing worse over time, when in fact it is sim-
+sonal effects, changes in the demographic distribution of users,                             ply an artifact of the baseline moving upwards! Ideally, we would
+etc.). In the bandit literature, this is referred to as non-stationary                       instead use a fixed (e.g., uniform) distribution of alternative arms
+rewards [4]. If we include all of the historical rounds for each arm                         for µ a− , but this would increase the variance in the estimate.
+in Ha , then the scores for arms with long histories will change very
+slowly, as the new round data becomes diluted in the large history                           2.6.3 Recovery Formulas. As mentioned previously, we take a para-
+consisting mainly of very old rounds.                                                        metric approach to modeling the recovery function for arms. Gauss-
+   Thus, it makes sense to truncate older rounds in each arm’s his-                          ian process kernels have been proposed for this purpose [12], and
+tory in order to make the scores more responsive to non-stationary                           while they may work well for some problems, we believe the para-
+changes in arm rewards. However, there is a trade-off because trun-                          metric approach is better suited to our case. Gaussian process ker-
+cating too much data will increase variance due to small sample                              nels require many more than two parameters, and hence would
+sizes. To avoid this, we measure this variance using the arm score’s                         need much more data to fit accurately. Since the effect size of reusing
+95 % credible interval and retain only enough data in each arm his-                          recent templates is so small in absolute terms (e.g., around -0.0006
+tory to ensure that interval is smaller than a chosen threshold, φ,                          if we reuse the last template, per Table 6), it would likely take an
+beyond which additional reductions in variance are of little value.                          enormous amount of data to estimate a more complex recovery
+This credible interval can be calculated by multiplying 1.96 by the                          function with Gaussian process kernels, and there isn’t much rea-
+arm score’s standard error, which is:                                                        son to suspect the function being estimated is complex, anyway.
+                              √                                                                 Another option to consider is whether the number of times an
+                          1 µ̂ a+ (1 − µ̂ a+ ) µ̂ a− (1 − µ̂ a− )                            arm has been chosen for a user should be factored in [6, 11, 15] in
+              SE(ŝa ) = −                    +                     (5)
+                         µ̂ a    na+ + σ            na− + σ                                  addition to the recency. We chose to focus on recency since it is
+                                                                                             simpler, and only requires us to know the last time each arm was
+    For our deployment, we chose ±0.15 percentage points for the
+                                                                                             used each round, rather than the user’s full history. However, as
+hyperparameter φ. The number of days required to reach this thresh-
+                                                                                             future work we plan to experiment with alternative formulas that
+old depends on how often the arm is used, which will vary based on
+                                                                                             incorporate other variables about the user’s prior interaction with
+its eligibility and performance. Figure 4 shows a histogram of the
+                                                                                             template arms.
+number of days of data required to reach this threshold for various
+template arms in our deployment.
+                                                                                             3 EVALUATION
+2.6          Design Trade-offs                                                               In this section, we present two evaluations of the Recovering
+                                                                                             Difference Softmax Algorithm:
+In the following sub-sections, we discuss some of the alternatives
+and trade-offs made in the design of this algorithm.                                            (1) Offline experiments using Duolingo’s historical data to tune
+                                                                                                    hyperparameters and estimate the algorithm’s performance
+2.6.1 Relative vs Absolute Difference. In Equation 2 we use rela-                                   in terms of both the reward and the contribution of various
+tive difference to compare the performance between arms (i.e., we                                   components of the algorithm.
+7 In principle, it should be possible to find a θ that minimizes the variance for µ̄ + and
+                                                                                     a
+                                                                                                (2) An online experiment showing the impact of the bandit on
+µ̄ a− for each arm, but we’re not aware of a closed-form solution to this.                          Duolingo’s business metrics after it was rolled out.
+      Table 3: Summary of the offline evaluation datasets                    Table 4: Differences in arm scores by UI language.
+
+                Dataset    Duration    Row Count                                   Template         en           es          pt
+                Train       15 days       88M                                      A              0.13 %     −0.74 %     −1.77 %
+                Test        19 days       114M                                     F             −1.60 %     0.62 %      0.19 %
+                                                                                   L              1.13 %     2.98 %      2.17 %
+
+
+3.1     Offline Log Data Experiments                                     Table 5: Results from offline experiment 1 (UI language).
+For offline evaluation, we first collected 34 days of data from the
+legacy system, where templates were selected from the eligible               Bandit Algorithm            Avg. Reward (r )     Rel. Diff.
+templates at random using the uniform distribution. The data in-                                            ±0.00015
+cluded the notification’s timestamp, user ID, list of eligible tem-
+plates, selected template, history of templates sent to the same user        Baseline (random)                0.1295                 -
+over the prior 30 days, and reward (i.e., whether the user completed         Template                         0.1311              +1.2 %
+a lesson within 2 hours) for each captured round.                            Template+UI Language             0.1318              +1.8 %
+   We used the first 15 days as training data to learn the arm scores
+from which the policy was derived, as described in the previous
+section. We reserved the last 19 days as test data. These are sum-         As such, our first experiment evaluated two variations of the
+marized in Table 3.                                                     bandit algorithm: one where each template corresponded to a sin-
+   We used off-policy evaluation via weighted importance sam-           gle arm, and another where each template+UI-language pair was
+pling [8, 17] to estimate the average reward of the policy being        treated as a distinct arm. For this experiment, we ignored the re-
+evaluated. Specifically, the average reward for a policy, π , was es-   cency penalty, effectively making it 0. Both were compared to a
+timated as:                                                             baseline where the template was chosen at random using the uni-
+                             1 ∑ π (a | t)                              form distribution, as it was in the legacy system.
+                      rπ =                       rt                        The results are presented in Table 5. As expected, both varia-
+                            |T |      bt (a | t)
+                               t ∈T
+                                                                        tions of the bandit algorithm beat the random baseline, gaining
+where T is the set of rounds in the test set, and the behavior policy   more than 1 % lift in reward. However, the variation that treats
+bt equals |At | −1 (since the arm each round was selected via the       each template+UI-language pair as a distinct arm performs sub-
+uniform random distribution in this historical data).                   stantially better than the one-template-per-arm variation (1.8 % vs
+   Since exploration will reduce the expected reward in the short       1.2 %), confirming that it is worthwhile to take the different trans-
+term, we used argmax instead of softmax in the arm selection pol-       lations of each template into account when scoring arms.
+icy for our initial experiments. In other words, π (a | t) equals 1        In principle, it’s possible to incorporate other user properties
+if arm a has the highest modified score sa,t ∗ among eligible tem-
+                                                                        (such as region, device type, age, etc.) in a similar manner to exploit
+plates for that round, and 0 otherwise. Additionally, in the offline    other differences in template performance between users. How-
+experiments, we did not use the empirical Bayes estimation to com-      ever, this would greatly multiply the number of arms, and thus the
+pensate for the small sample sizes (in effect, σ = 0). This was not     amount of data needed to estimate arm scores. Hierarchical mod-
+a significant issue, as all arms started with 2 weeks of data and a     eling or contextual bandit approaches [1, 5] could address these
+followup experiment showed that adding the empirical Bayes esti-        concerns, but we leave them for a future work.
+mation after the fact did not significantly change the final policy’s
+total reward in the offline experiments.                                3.1.2 Offline Experiment 2: Estimating the Recency Penalty and
+                                                                        Half-life. We also evaluated the effects of the recency penalty de-
+3.1.1 Offline Experiment 1: Incorporating UI Language. Each of          scribed in Section 2.3. Based upon previous A/B tests at Duolingo,
+Duolingo’s push templates are translated into 25 different user in-     we guessed that the recency penalty should mostly decay within
+terface (UI) languages. The translation that is used for each noti-     the span of a few weeks to a month, and so we chose a half-life of
+fication is based upon what language the user has set as their UI       15 days. We then performed a grid search to estimate an optimal
+language to display in the app. We expected that each template          value for γ . As shown in Figure 5, the maximum is around 0.017.
+may perform differently depending upon the user’s UI language,             We then compared the performance of the policy with the re-
+due to nuanced variations in meaning among translations, cultural       cency penalty to three baselines: a policy where the arms are se-
+differences, and other demographic factors.                             lected with the uniform random distribution, a policy that always
+   When we compute the arm scores for each template on a per-UI         chooses the same arm as was last chosen for that user, and the
+language basis, we do find substantial differences between UI lan-      template+UI language policy from the previous section.
+guages for some templates. For example, Table 4 shows the scores           The results are presented in Table 6. We see that the policy with
+for three of Duolingo’s templates across three of its most common       the recency penalty beat the one from the last section by 0.2 per-
+UI languages (English, Spanish, and Portuguese). In some cases,         centage points (p < 0.1). However, this is likely an underestimate
+the scores are different by 1 percentage point or more, which is        of the gain in reward for applying the recency penalty in produc-
+substantial since the range of most of the scores is only ±3.4 %.       tion. This is because of a feedback effect that is not corrected for
+                 0.1320                                                                        Table 7: Estimated impact of τ values on average reward.
+
+
+
+ Avg. Reward r
+                 0.1319
+                 0.1318                                                                        Algorithm              Avg. Reward (r )   Rel. Diff.   Explore %†
+
+                 0.1317                                                                        Baseline (random)           0.1295            -          89 %
+                                                                                               softmax τ = 0.0200          0.1306          +0.8 %       73 %
+                                       10−2                        10−1                        softmax τ = 0.0100          0.1311          +1.2 %       57 %
+                                                                                               softmax τ = 0.0050          0.1316          +1.6 %       35 %
+                                                    γ
+                                                                                               softmax τ = 0.0025          0.1319          +1.9 %       17 %
+                                                                                               argmax                      0.1320          +1.9 %        0%
+          Figure 5: Average reward for values of γ (given h = 15).
+                                                                                                † percent of the time the top-scoring arm is not chosen
+
+                 Table 6: Results from offline experiment 2 (recency).
+
+                   Bandit Algorithm          Avg. Reward r           Rel. Diff.                  During the test, a subset of Duolingo’s users were split ran-
+                                               ±0.00015                                       domly between two experimental conditions: control and experi-
+                   Baseline (random)               0.1295                 -                   mental. The control group’s templates would be selected via the
+                   Reuse Last Template             0.1289              -0.5 %                 legacy algorithm (i.e., using a uniform random distribution over
+                   Template+UI Language            0.1318              +1.8 %                 the eligible templates each round). Since the pools of templates
+                   Template+UI Language            0.1320              +1.9 %                 and other aspects of the notification system had already been op-
+                     w/ Recency Penalty                                                       timized through years of A/B tests, this provided a strong baseline
+                                                                                              to compare against. The experimental group’s templates would be
+                                                                                              selected using the bandit algorithm as described in this paper. We
+                                                                                              tracked a variety of business metrics, but the main metrics we were
+in our offline evaluation setup: under the optimized bandit pol-                              interested in were:
+icy, high-peforming arms are likely to have small da,t since they
+are more likely to have been selected in previous rounds, whereas                                 Daily Active Users (DAUs): The number of distinct users in
+these are uncorrelated in the test dataset since arms were selected                                 the bucket that opened and interacted with the Duolingo
+using the uniform distribution.8 However, the baseline with a pol-                                  application on their device each day.
+icy that always reuses the last template gives us an idea of how                                  Total Lessons Completed: The total number of language
+important the recency penalty is in production: reusing the same                                    lessons that users in the bucket completed.
+template (as the bandit algorithm would often do if the recency                                   DX Recurring Retention: The percentage of users who
+penalty were not applied) hurts reward by 0.5 %.                                                    opened the Duolingo app on a given day who also did so
+                                                                                                    X days later. This is further divided into new users (those
+3.2                Online User Experiment                                                           whose accounts were created less than 48 hours before their
+                                                                                                    first notification in the experiment) and existing users.
+Following the offline evaluation, we evaluated the algorithm in
+production using an online controlled experiment (i.e., A/B test)                                We expected the short-term impact on DAUs to be less than the
+for Duolingo’s millions of daily practice reminders. Based on the                             1.9 % boost in the 2-hour conversion rate predicted by the offline
+results from the offline experiments, we scored one arm for each                              evaluation. This is because there is a significant amount of organic
+Template+UI Language pair, using γ = 0.017 and h = 15. See Sec-                               activity not originating from push notifications that would dilute
+tion A for more details on the production system.                                             the gains. On that basis, we hypothesized an increase in DAUs of
+    Unlike with the offline experiments, we wanted the bandit to                              0.5–1.5 %. We expected similar gains in lessons completed. We also
+exhibit some exploration behavior in production so that it could                              expected gains in recurring retention, but the magnitude of the
+adapt to non-stationary changes in arm performance and to al-                                 impact was more difficult to predict.
+low new templates to be introduced. Instead of choosing arms via                                 Table 8 summarizes the results of our online user experiment
+argmax, we used softmax, which includes a hyperparameter τ to                                 after two weeks. We do in fact see a gain in daily active users and
+control the amount of exploration. Table 7 summarizes our offline                             lessons completed of 0.5 % and 0.4 %, respectively. More striking,
+evaluation to estimate the short-term impact of different values of                           however, is that new user recurring retention increased by 2 %,
+τ .9 Based on this, we selected a value of 0.0025, which we estimated                         showing that the optimized reminders significantly help in retain-
+would allow a reasonable amount of exploration while retaining                                ing new users (a critical component to an app’s growth). This may
+more than 90 % of the potential gains.                                                        be because the behavior of new users may be more sensitive to
+                                                                                              these kinds of optimizations, while their daily interaction with the
+8 For this same reason, the γ estimated via grid search in the previous paragraph may         app is still establishing habitual routines.
+be underestimated. But, subsequent production A/B tests showed that increasing γ                 After the experiment completed, the bandit was launched to all
+even to as much as 3.4 did not significantly impact business metrics.                         users. Five months later, the bandit’s performance in production
+9 We should emphasize that, since the training dataset is fixed in this offline setup, this
+experiment only estimates the short-term cost of exploration. Hence, these results do         was re-evaluated against a holdout set created by randomly using
+not imply that argmax would yield the best the reward in production in the long-run.          the uniform arm selection policy for 5 % of rounds (see Section A.4
+                Table 8: Operational A/B test results.                                        arXiv preprint arXiv:1710.10657 (2017).
+                                                                                          [7] Hermann Ebbinghaus. 1885. Memory: a contribution to experimental psychol-
+                                                                                              ogy. 1885. New York: Teachers College, Columbia University (1885).
+             Metric                                           Gain                        [8] Daniel G Horvitz and Donovan J Thompson. 1952. A generalization of sampling
+                                                                                              without replacement from a finite universe. Journal of the American statistical
+             Daily Active Users (DAUs)                        +0.5 % *                        Association 47, 260 (1952), 663–685.
+                                                                                          [9] Leslie Kish. 1965. Survey Sampling.] ohn Wiley. New York (1965).
+             Total Lessons Completed                          +0.4 % *                   [10] Robert Kleinberg, Alexandru Niculescu-Mizil, and Yogeshwer Sharma. 2010. Re-
+                                                                                              gret bounds for sleeping experts and bandits. Machine learning 80, 2-3 (2010),
+             Existing User D1 Retention                       +0.5 % *                        245–272.
+             Existing User D7 Retention                       +0.2 %                     [11] Nir Levine, Koby Crammer, and Shie Mannor. 2017. Rotting bandits. In Advances
+             New User D1 Retention                            +2.2 % *                        in neural information processing systems. 3074–3083.
+                                                                                         [12] Ciara Pike-Burke and Steffen Grunewalder. 2019. Recovering Bandits. In Ad-
+             New User D7 Retention                            +2.0 % *                        vances in Neural Information Processing Systems. 14122–14131.
+                                                                                         [13] Herbert Robbins. 1952. Some aspects of the sequential design of experiments.
+             * statistically significant (p < 0.05)
+                                                                                              Bull. Amer. Math. Soc. 58, 5 (1952), 527–535.
+                                                                                         [14] Burr Settles and Brendan Meeder. 2016. A trainable spaced repetition model for
+                                                                                              language learning. In Proceedings of the 54th Annual Meeting of the Association
+                                                                                              for Computational Linguistics. ACL, 1848–1858.
+                                                                                         [15] Julien Seznec, Andrea Locatelli, Alexandra Carpentier, Alessandro Lazaric, and
+for details). The 95 % of rounds that used the bandit’s optimized pol-                        Michal Valko. 2018. Rotting bandits are no harder than stochastic ones. arXiv
+icy had 2.5 % higher reward than the holdout set, further demon-                              preprint arXiv:1811.11043 (2018).
+                                                                                         [16] Aleksandrs Slivkins et al. 2019. Introduction to multi-armed bandits. Foundations
+strating that the bandit continues to maintain business gains on                              and Trends® in Machine Learning 12, 1-2 (2019), 1–286.
+par with what was predicted in our offline experiments.                                  [17] Richard S Sutton and Andrew G Barto. 2018. Reinforcement learning: An intro-
+                                                                                              duction. MIT press.
+4    CONCLUSION
+In this paper, we have introduced the Recovering Difference
+Softmax Algorithm, a novel and practical multi-armed bandit                              A DEPLOYMENT DESIGN
+variant for optimizing the content of recurring notifications. This                      In this appendix, we discuss how the Recovering Difference
+algorithm solves a pair of key problems that are common in this                          Softmax Algorithm was productionized at scale at Duolingo to
+setting that were not adequately addressed in the literature pre-                        optimize its push notifications.
+viously. Via offline evaluations, we demonstrated how the rela-
+tive difference scoring and recency penalties — the latter of which
+was inspired by cognitively-motivated theories about novelty ef-                         A.1      Architecture
+fects — each contribute to maximizing the reward. We furthermore                         Figure 6 diagrams how the bandit algorithm was integrated with
+showed via our online evaluation that the algorithm can be practi-                       Duolingo’s notification service. The main components of the ban-
+cally scaled to millions of users to boost user engagement.                              dit are identified by the dashed box.
+   Going forward, we plan to apply this algorithm to other types                            Each time a notification is sent, the selected arm and other infor-
+of messages, media, and calls to action; to experiment with recov-                       mation needs to be captured so that the reward can be calculated
+ery formulas that model quantity in addition to recency; and to                          and the arms can be scored. We refer to this as the “Decision Log”.
+incorporate additional features that will yield more personalized                        The minimum information needed to support the algorithm is de-
+reward predictions for each user. To facilitate further research in                      scribed in Table 9. The decision log must handle a large volume of
+this area, we have made a version of the data for our experiments                        writes, rows are never updated once inserted, and data is retained
+in Section 3.1 available at: https://doi.org/10.7910/DVN/23ZWVI.                         indefinitely, so we chose to implement the decision log using a data
+                                                                                         streaming service, writing to flat files that can later be processed
+ACKNOWLEDGMENTS                                                                          via Spark or another big data framework.
+We would like to offer our special thanks to our colleagues, Klin-                          In addition, an auxiliary database, referred to in the diagram
+ton Bicknell, Andrew Runge, Chris Brust, and Will Monroe, who                            as the User Arm History, is used to track the last time each arm
+provided invaluable feedback in the writing of this paper.                               was selected for each user. This is needed to calculate the recency
+                                                                                         penalties each round. Since, unlike the decision log, this data is
+REFERENCES                                                                               frequently overwritten, a relational database or key-value store is
+ [1] Peter Auer. 2002. Using confidence bounds for exploitation-exploration trade-       well-suited for this purpose.
+     offs. Journal of Machine Learning Research 3, Nov (2002), 397–422.
+ [2] Peter Auer, Nicolo Cesa-Bianchi, and Paul Fischer. 2002. Finite-time analysis of       The Scorer runs as a batch job to compute and update each
+     the multiarmed bandit problem. Machine learning 47, 2-3 (2002), 235–256.            arm’s score. It does this by joining the decision log data with event
+ [3] Peter Auer, Nicolo Cesa-Bianchi, Yoav Freund, and Robert E Schapire. 2002. The      information stored in the events database to compute the reward
+     nonstochastic multiarmed bandit problem. SIAM journal on computing 32, 1
+     (2002), 48–77.                                                                      for each decision. The arm scores are written to a data store, which
+ [4] Omar Besbes, Yonatan Gur, and Assaf Zeevi. 2014. Stochastic multi-armed-            is read and used by the Arm Selector. The Arm Selector inte-
+     bandit problem with non-stationary rewards. In Advances in neural information
+     processing systems. 199–207.
+                                                                                         grates with the notification service and decides which arm to use
+ [5] Wei Chu, Lihong Li, Lev Reyzin, and Robert Schapire. 2011. Contextual ban-          for each send. It is provided a list of eligible arms, and it queries the
+     dits with linear payoff functions. In Proceedings of the Fourteenth International   Arm Scores and User Arm History data stores to compute the
+     Conference on Artificial Intelligence and Statistics. 208–214.
+ [6] Corinna Cortes, Giulia DeSalvo, Vitaly Kuznetsov, Mehryar Mohri, and Scott          probability for each arm using Equation 4. It then uses a random
+     Yang. 2017. Discrepancy-based algorithms for non-stationary rested bandits.         number generator (RNG) function to select the arm using those
+                                         decision                           decision                    BANDIT SYSTEM
+                                         logger                             logs
+                                                                                                              scorer
+                                         arm                                arm
+                                         selector                           scores
+
+
+                                                        user arm
+                                                        histories
+                                                                                                              event
+                                                                                                              logs
+
+
+
+
+                                         notification                                                         event
+                                         sender                                                               logger
+
+
+                                           Figure 6: System diagram of our deployment architecture.
+
+                                                     Table 9: Minimal list of decision log fields.
+
+      Name                     Type              Description
+   Timestamp                DateTime             The date and time that the bandit decision was made.
+    User ID                  UserID              Identifies the user that the decision applies to. This along with timestamp are used to compute
+                                                 reward when reconciling the data with the metrics database.
+   Arm Prob.         Map[ArmID, float]           A map of the pre-decision probability of each arm being selected. This is used to determine
+                                                 which arms were eligible and to compute the importance weights when estimating µ a+ and µ a− .
+ Selected Arm                 ArmID              The arm that was selected.
+
+
+probabilities and logs the decision via the Decision Logger be-                      interval to ±0.15 percentage points for most arms (see Figure 4).
+fore returning the selected arm to the notification sender, which                    However, this does mean that the use of Bayesian priors to regular-
+then applies the corresponding template.                                             ize relative reward estimates for small sample sizes, as described
+                                                                                     in Section 2.2, is very important. Otherwise, even a very poor tem-
+A.2     Introducing New Arms                                                         plate could initially get a very high arm score (because of the small
+The design of the bandit system allows new templates to be intro-                    sample size of its historical data) and so would get used almost ex-
+duced without any special handling. Without historical data a new                    clusively once the arm scores were updated. In that case, without
+arm’s score will be computed as 0. The recency penalty and explo-                    the Bayesian priors, it would take the bandit algorithm a full day
+ration provided by softmax means that the bandit algorithm will                      to correct its mistake.
+occasionally try new templates so that data can be collected, and
+a more accurate score can be estimated.                                              A.4    Holdout Set
+                                                                                     5 months after launching the algorithm, we added a provision that,
+A.3     Batch Processing Arm Scores                                                  for a small percentage of rounds (5 %), the arm is selected using the
+As mentioned previously, the arm scores are updated via a batch                      random uniform distribution instead of the bandit’s learned policy.
+process daily, rather than immediately after the reward of each de-                  This small holdout set has a very small impact on the gains of the
+cision is known. So that millions of rows do not have to be repro-                   algorithm, while providing two advantages:
+cessed each time the batch job runs, values for µ̄ a+ , µ̄ a− , na+ , and na−           (1) It provides us a way to monitor the bandit’s ongoing per-
+can be computed from a single day’s data and saved. Those daily                             formance and detect if the bandit ever fails to beat the ran-
+values can then be aggregated to compute the complete arm scores.                           dom baseline, as might happen if a bug were introduced that
+    The batch processing greatly simplifies the arm score update                            would otherwise be too subtle to be noticed.
+process and makes it more scalable. However, this delays the feed-                      (2) It provides valuable training data, especially for arms that
+back loop between a decision and an arm’s score being updated.                              perform poorly and are thus rarely used by the bandit algo-
+Most bandit algorithms, in fact, assume instantaneous feedback.                             rithm. The probabilities for these templates can get so low
+This is not a significant drawback for our application, however, be-                        that the importance weighting creates high variance in the
+cause the arm scores do not change much in a single day. In fact,                           arm score estimates. The training data provided by this 5 %
+it takes roughly 1–5 weeks of data to narrow the 95 % confidence                            holdout set can offset that.
+

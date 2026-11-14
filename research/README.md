@@ -27,6 +27,7 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `needs` | product | what players say they want, pain points, complaints about existing tools |
 | `learning` | product | improvement and coaching tools: VOD/replay review, matchup guides, feedback |
 | `fun` | product | games, quizzes, social and friend features, community and creative tools |
+| `retention` | product | what brings users back: streaks, recaps, digests, notifications, goals, habit, churn |
 | `privacy` | policy | player identity, Riot ID lookup, consent, data retention, GDPR, privacy policies |
 | `stats` | stats | statistical estimation: smoothing, shrinkage, pooling, sample sizes, uncertainty |
 | `gui` | ui | desktop GUI libraries and native windowing for the app |

@@ -1,0 +1,812 @@
+UBICOMP '15, SEPTEMBER 7–11, 2015, OSAKA, JAPAN
+
+
+
+
+            A Lived Informatics Model of Personal Informatics
+                            Daniel A. Epstein1, An Ping2, James Fogarty1, Sean A. Munson2
+                      1
+                          Computer Science & Engineering, 2Human Centered Design & Engineering
+                                           DUB Group, University of Washington
+                           {depstein, jfogarty}@cs.washington.edu, {anping, smunson}@uw.edu
+ABSTRACT                                                                                The first and most commonly used model for understanding
+Current models of how people use personal informatics                                   how people use personal informatics tools is Li et al.’s
+systems are largely based in behavior change goals. They do                             five-stage model [21]. The model characterizes how people
+not adequately characterize the integration of self-tracking                            transition between preparation, collection, integration,
+into everyday life by people with varying goals. We build                               reflection, and action, describing the iterative nature of these
+upon prior work by embracing the perspective of lived                                   stages and the barriers that prevent transitions. The model
+informatics to propose a new model of personal informatics.                             emphasizes an end goal of knowledge supporting behavior
+We examine how lived informatics manifests in the habits of                             change. The model has since been expanded and clarified,
+self-trackers across a variety of domains, first by surveying                           dividing and combining stages. For goal-oriented trackers,
+105, 99, and 83 past and present trackers of physical activity,                         reflection can be divided into maintenance and discovery
+finances, and location and then by interviewing 22 trackers                             [22]. For some trackers, engagement with and gaining an
+regarding their lived informatics experiences. We develop a                             understanding of personal data may be the goal in itself,
+model characterizing tracker processes of deciding to track                             causing the action stage to be foregone [41]. Reflection often
+and selecting a tool, elaborate on tool usage during collection,                        occurs during collection rather than being a separate stage
+integration, and reflection as components of tracking and                               [6], which leads to an alternative three-stage iterative model
+acting, and discuss the lapsing and potential resuming of                               of configuration, data capture, and feedback [7].
+tracking. We use our model to surface underexplored
+challenges in lived informatics, thus identifying future                                However, research on everyday self-tracking behavior
+directions for personal informatics design and research.                                identifies several uses of personal informatics not described
+                                                                                        by current models. For example, the five-stage model
+Author Keywords                                                                         describes self-trackers switching tools to better fit their
+Lived Informatics; Personal Informatics; Self-Tracking;                                 information needs [21]. People also switch tools because
+Lapsing; Physical Activity; Finances; Location.                                         their devices break [16,34], they change phones [34], or
+ACM Classification Keywords                                                             because they receive a new recommendation [34].
+H.5.m. Information interfaces and presentation (e.g., HCI).                             Self-trackers also fail to sustain the habit or get frustrated and
+                                                                                        give up on tools [11]. Articulating a model that encompasses
+INTRODUCTION                                                                            these behaviors can offer better guidance to designers.
+Personal informatics, or collecting and reflecting on personal
+information, has become increasingly prevalent. Personal                                To develop this model, we studied self-tracking of a variety
+informatics can serve a goal-driven purpose, such as tracking                           of behaviors to understand how lived informatics manifests
+weight loss, increasing physical activity, having a record of                           in the habits of self-trackers. Specifically, we surveyed 105,
+places visited, or tracking student loan payments. Beyond                               99, and 83 past and present trackers of physical activity,
+these goal-driven motivations, self-tracking tools are now a                            finances, and location on their habits and conducted 22
+part of everyday life, or “lived informatics”, with people                              interviews. We report on how people decide to start tracking
+tracking out of curiosity or a fascination with numbers [34].                           and pick a tool, how they use that tool, how and why people
+The pervasiveness of self-tracking tools has led researchers                            switch between tools, and why people stop tracking. We
+to study people’s use of commercial tools for tracking                                  develop an expanded model that captures the practices of
+location [24,30], finances [20], food [11], weight [19,25],                             self-trackers motivated to track to change behaviors,
+and physical activity [16,34] and to develop research                                   instrumenting an activity, and curiosity.
+prototypes to expand our understanding of usage [3,8,12,40].                            Specifically, we find:
+                                                                                        • In addition to being motivated to track in support of
+Permission to make digital or hard copies of all or part of this work for                 behavior change goals, people start tracking to instrument
+personal or classroom use is granted without fee provided that copies are
+not made or distributed for profit or commercial advantage and that copies
+                                                                                          an activity or out of pure curiosity.
+bear this notice and the full citation on the first page. Copyrights for                • People’s motivations for tracking guide the selection of
+components of this work owned by others than ACM must be honored.                         tracking tools. Behavior-change trackers do substantial
+Abstracting with credit is permitted. To copy otherwise, or republish, to                 background research and optimize a tool for their goal,
+post on servers or to redistribute to lists, requires prior specific permission
+and/or a fee. Request permissions from permissions@acm.org.                               instrumental trackers try to maximize their benefit from
+UbiComp '15, September 7-11, 2015, Osaka, Japan.                                          the tools, and curiosity-driven trackers often do not
+Copyright 2015 © ACM 978-1-4503-3574-4/15/09...$15.00.                                    actively consider tool selection.
+http://dx.doi.org/10.1145/2750858.2804250
+
+
+                                                                                  731
+                                                                                UBICOMP '15, SEPTEMBER 7–11, 2015, OSAKA, JAPAN
+
+
+
+• Usage of tools varies by domain and reason for tracking,
+  primarily because people’s motivations are different in
+  each domain. Behavior change trackers collect and review
+  data frequently and are bothered by inaccurate logs,
+  instrumental trackers track when the benefits outweigh the
+  effort, and curiosity-driven trackers are motivated by how
+  interesting they find the data they are tracking.
+• People frequently switch tools, and in doing so learn about
+  what and how they are interested in tracking.
+• People lapse in their tool use in four different ways:
+  forgetting to track, difficulty managing upkeep,                     Figure 1. Li et al.’s five-stage model of personal informatics,
+  intentionally skipping entries, and suspending tracking.             reprinted with permission [21]. Primarily informed by
+                                                                       tracking toward behavior change, the model emphasizes data
+These findings inform a revised model of how people use                barriers toward a presumed action. We extend this model to
+self-tracking tools, independent of original motivation,               characterize challenges in lived informatics.
+supplementing the stage-based model for behavior-change                 technology, including reflection through data capture as well
+tracking. This informs a set of open design problems:                   as through feedback [7]. Similarly, Whooley et al. note the
+• Designing to resume tracking after a lapse, including how             potential for personal informatics tools to support Schön’s
+  to use historical data collected before, or even during, the          reflection-in-action [36], where self-trackers contemplate
+  lapse. For example, should a food journal present                     their data and change their behavior while tracking [41].
+  someone’s previous eating habits when they decide to                 These models describe trackers who have a behavior change
+  resume tracking to aid in weight loss? If so, how?                   goal, but some have other motivations. People also self-track
+• Designing to avoid inertia around a long-used tool that no           for self-understanding [34], never acting upon their data.
+  longer supports a self-tracker’s goal. For example, how
+  can a financial tracking tool integrate historical data and          Starting to Track
+  provide an intuitive interface to a person who has managed           Many people start tracking because they have goals in mind
+  their finances with a custom spreadsheet for years?                  [15,19,22,34]. Weight trackers often have a specific target
+                                                                       weight, and use the weight as a proxy for their progress
+• Designing to support people’s various goals and transitions
+                                                                       towards other fitness goals [19]. Although many physical
+  between them. How can the design of a location-tracking
+                                                                       activity trackers track to change or maintain a behavior,
+  application like Foursquare support someone who, upon
+                                                                       others start without a specific goal or use tools to help set
+  receiving a badge for frequent check-ins, becomes curious
+                                                                       goals (e.g., determine what actions to take to fix a problem
+  or even concerned about how much they spend at
+                                                                       [22] or identify the “baseline” to observe changes [34]).
+  restaurants? Can a location diary like Moves show
+  someone who tries the application out of curiosity how it            Rewards, such as discounts or badges, motivate many people
+  can help them achieve their fitness goals?                           to track location (e.g., Foursquare [24]) and physical activity
+BACKGROUND                                                             [34]. Some start tracking physical activity to generate
+This section reviews prior work on models of personal                  income (e.g., recording workouts on Pact) [34]. Many
+informatics use, research examining how people use tools,              Foursquare users also start tracking to offer awareness to
+and how that use changes over time.                                    friends and see where they are, or simply to keep track of
+                                                                       places they have been (e.g., bars and restaurants) [21].
+Models of Personal Informatics                                         People also start tracking to keep a record for later retrieval,
+Li et al. develop a stage-based model of personal informatics          such as TV shows and movies watched [22].
+systems and describe barriers people face in each stage
+(Figure 1) [21]. The model has five stages: 1) preparation, or         Another common motivation to start tracking is out of
+starting to collect data and thinking about what information           curiosity [24] or an interest in quantitative data [21]. Some
+to record and how to collect it; 2) collection, or gathering           food journalers [11] and physical activity trackers [34] start
+data; 3) integration, or preparing data to reflect upon;               tracking to learn more about their behavior, such as their
+4) reflection, or examining and exploring data; and 5) action,         eating habits or steps walked in their daily commute.
+or taking one’s newfound understanding of themselves to                People select specific tracking tools based on features,
+inform changes. Motivated by the Transtheoretical Model of             branding, convenience (e.g., whether it is easy to carry),
+Behavior Change (TTM) [32], Li et al. later identify two               recommendations of friends and relatives, and reviews in app
+phases of reflection, discovery and maintenance, and note              stores and media [20,21,34]. People often receive tools as
+people ask different types of questions in each phase [22].            gifts, which is a selection on their behalf [34].
+From studying practices of the Quantified Self movement,               How People Track
+Choe et al. learn that reflection often occurs when data is            People collect personal data with varying frequency based on
+captured [6] and propose a new model for self-monitoring               the kind of data. For example, food consumption is typically
+
+
+                                                                 732
+SESSION: PERSUASIVE AND PERSONAL
+
+
+
+tracked several times a day, while one may only track books               studies progress [23]. Participants mention inconvenience,
+read a few times per month [21]. People may also track only               forgetting to log, and forgetting to put on a wearable device
+some of their activities (e.g., particular cycle rides or hikes),         as reasons for the reducing their use. Abandonment of
+or everything (e.g., a food log or a complete step count) [34].           consumer technology has been studied in other areas of HCI.
+                                                                          Dawe reports that 35% of purchased assistive technologies
+The length of tool usage varies by domain. Many who track
+                                                                          are not adopted, and recommends that designs be simple to
+physical activity have kept records for a year or more [16],
+                                                                          configure, upgrade, and replace (in addition to interact with)
+though newcomers reduce the average duration of use [34].
+                                                                          [13]. Schoenebeck notes that people take breaks from social
+Financial trackers use tools for longer, such as non-digital
+                                                                          media to spend more time on their “real lives” [35].
+systems to keep track of investment in municipal bonds for
+nearly 50 years [20]. Food journalers vary in how long they               METHODS
+keep the habit, ranging from 1 week to over 2 years, with a               We selected three domains of self-tracking to study: physical
+median of 7-12 months [10]. Tool usage also varies by                     activity, location, and finances. We strived for diversity in
+availability. Commercial activity trackers are much newer than            the types of data tracked, similar to the original five-stage
+non-digital methods often used to track finances and food.                model [21] and its proposed expansions and clarifications
+                                                                          [6,22,41]. Physical activity was selected because it is perhaps
+People rarely maintain use of the same tool and often switch              the most common topic of self-tracking today, is included by
+and mix tools when tracking [34]. Some people track the                   default with present and announced wearables (e.g., Apple
+same habit with two tools, which leads to synchronization                 HealthKit and Watch, Microsoft Band), and is often studied
+complications (e.g., step tracking with a pedometer and a                 when making broader claims about personal informatics
+phone app syncing to MyFitnessPal) [21]. Others track                     (e.g., [15,16,34]). Finances were selected because people
+different types of activities with different tools (e.g., Map My          have long tracked them manually (e.g., ledgers and then
+Run for running and Wii Fit for weight monitoring [34]),                  spreadsheets) and there are now tools that support tracking
+which usually leads to difficulties in organizing and                     finances automatically (e.g., tools from a bank or an
+reviewing data across separate tools and formats [21].                    aggregator such as Mint.com). Location tracking is common
+Many physical activity trackers look at their information                 and is a historically important branch of research in the
+immediately after collection [21] to gain awareness of                    Ubicomp community (e.g. [9,18,24,37,38]). Prior work
+current status and correct behavior towards goals (e.g., see              suggests that location tracking may differ from the other
+their current step total and how many more steps needed for               domains, in that it is often socially motivated and goals are
+10,000 steps) [16,34]. Some people show little interest in                typically less articulated and numeric compared to other
+reflecting on long-term data [34], while others use it to see             domains. The equivalent of “walk 10,000 steps today” or
+patterns and trends over time [22]. Financial trackers use the            “save $1,000 this month” is unclear for location tracking.
+idea of a financial touch, or a quick glimpse at data to gain             Survey Methods
+awareness into their financial situations [20].                           We surveyed people on Amazon Mechanical Turk (AMT),
+People change their goals and practices over time, which is               which has been shown to be closer to U.S. demographics than
+not well-supported by personal informatics systems [22].                  conventional convenience samples [5]. One potential concern
+These changes sometimes lead to selecting a new tool [21].                is that people on AMT potentially represent a younger, more
+Some people who start without clear goals narrow their data               technologically literate population, but we believe this is
+collection once they identify actionable goals, moving from               consistent with demographics of current self-trackers.
+discovery phase to maintenance phase of reflecting [22].                  We restricted participation to Turkers in the United States.
+People also switch tools as their practices evolve over time              To ensure response quality, we further restricted
+and what a system supports does no longer matches their                   participation to Turkers who had a task acceptance rate of at
+priorities (e.g., a jogger starting to do yoga) [16].                     least 95% and had completed at least 1,000 tasks. We
+Lapsing and Infrequent Use                                                surveyed 200 Turkers, compensating each with $0.50 for a
+Documentary tracking focuses on documenting activities                    short screener survey (less than 2 minutes) in which they
+instead of changing them. It can be accomplished with a                   indicated all (if any) self-tracking tools they had used
+relatively short-term endeavor to build up a collection of data           previously. Finally, Turkers were presented a short free
+for reflection, and many people stop tracking after reflecting            response question that the first author analyzed for quality, a
+[34]. However, this is not true for everyone. Some long-term              recommended practice in AMT surveys [14]. We rejected
+physical activity trackers continue to track after they have              three tasks as spam: two left the free response question
+learned their patterns and routines, because they either                  effectively blank (e.g., “N/A”); one did not enter a code
+benefit from the continuous reflection or the application                 showing they had completed the survey.
+continues to keep a record without interaction (e.g., passively           We invited each Turker who had self-tracked in a domain
+recording activity from phone accelerometer data) [16].                   (i.e., physical activity, location, finances) to complete a
+In studies of research prototypes, some participants reduce               longer survey for that domain. They were compensated $2.00
+their interactions from a daily basis to a few times a week as            for completing the approximately 15-minute survey. This
+
+
+                                                                    733
+                                                                                                 UBICOMP '15, SEPTEMBER 7–11, 2015, OSAKA, JAPAN
+
+
+
+                            Temporal use                                                 through a discussion with all interviewers. Two interviewers
+Domain Demographics          (avg # tools)           Tools Mentioned                     qualitatively coded each interview, with codes iteratively
+                                             FitBit (19), MapMyRun (18),
+         N=105: 44 F,      93 current (1.25) RunKeeper (13), MyFitnessPal (12),          refined through discussion.
+         60 M, 1 FTM                         Nike+ (10)
+Physical
+Activity
+         Age: avg 31.47,                     RunKeeper (12), MapMyRun (9),               The screener survey, full survey, and interview protocol are
+         min 19, max 63 53 stopped (1.16) FitBit (8), Nike+ (8),
+                                             MyFitnessPal (4)
+                                                                                         publicly available: https://github.com/depstein/lived-informatics
+         N=99: 46 F, 52 M, 96 current (1.58) Spreadsheets (60), Credit Card              Limitations
+         1 FTM                               tools (34), Mint (34), Quicken (11)
+Finances                                     Quicken (21), Mint (8),                     We focused on three common, yet diverse, domains in which
+         Age: avg 33.46, 43 stopped (1.07) Spreadsheets (7),
+         min 19, max 70
+                                                                                         people self-track. People self-track in many other domains,
+                                             Credit Card tools (7)
+                                             Facebook (56), Instagram (23),              including to manage chronic illnesses, in which people might
+         N=83: 36 F, 46 M, 80 current (1.86) Google Latitude (19), Twitter (17),
+         1 no answer                                                                     have different motivations or tracking habits. Although we
+                                             Foursquare (16), FindMyFriends (8)
+Location
+                                             Foursquare (24), Facebook (9),              believe our findings are extensible to domains other than the
+         Age: avg 30.75,
+         min 19, max 70 44 stopped (1.29) Google Latitude (7), Instagram (5),            three on which we report (e.g., biometric or food tracking),
+                                             Twitter (5), FindMyFriends (4)
+                                                                                         they do not necessarily cover all motivations and usages.
+Table 1. We surveyed demographically diverse participants
+using a variety of tools in three distinct self-tracking domains.                        Some people track the domains we study using different
+                                                                                         classes of tools that we do not extensively report on, such as
+means a single Turker could complete three surveys, one for                              tools that passively record location (e.g., Moves, SenseCam
+each domain. 103, 95, and 83 Turkers completed the survey                                [17]). Although we believe this suggests these are used
+for physical activity, finances, and location (79.8%, 78.5%,                             relatively infrequently compared to those we report on
+76.1% respectively of those who qualified), plus an                                      (or possible limitations in our recruitment techniques), our
+additional two and four responses with no corresponding task                             findings on tracking in a particular domain may not
+for physical activity and finances. We believe these                                     generalize to all tools or people tracking that type of data.
+responses came from Turkers who started the task on AMT,
+completed the survey, but did not submit the task before it                              We believe our recruitment overrepresents people who
+expired (one hour after they started the task on AMT).                                   currently identify as self-trackers, as our recruitment
+                                                                                         materials were likely to draw people who were currently
+In total, 168 unique people of the 169 eligible completed the                            interested in self-tracking (e.g., posting the task on AMT as
+full survey in at least one domain. We rejected two additional                           a “Survey on Location, Physical Activity, and Finance
+responses (one physical activity, one location) because the                              Tracking”). This is one weakness of our research, and future
+Turker indicated they did not use any self-tracking tools in                             work should further explore people’s reasons for deciding
+the full survey. A summary of the results and demographics                               not to return to tracking.
+from the survey can be found in Table 1.
+                                                                                         DEVELOPMENT OF A LIVED INFORMATICS MODEL
+The full survey consisted of free response questions about                               Based on results of our survey and interviews, we develop a
+each current and previous tool, asking why they started and                              new model of personal informatics reflecting a “lived
+stopped using that tool as appropriate. The first two authors                            informatics” [34] view of usage. The stage-based model [21]
+affinity diagrammed these responses, identified themes, and                              assumes a desire for action, which we believe corresponds to
+then separately qualitatively coded the responses, iteratively                           the behavior change nature of the model but does not
+refining codes through discussion.                                                       encompass self-tracking motivated for other reasons.
+Interview Methods                                                                        Furthermore, Li et al.’s model describes people switching to
+After completion of qualitative coding of the survey data, the                           a new tool when their current tool does not meet their
+first two authors identified questions that required further                             information needs [21]. We have found that people’s reasons
+in-depth interviews to address. Of Turkers who indicated in                              for switching tools are more varied. The prior models also do
+the survey that they were willing to be contacted for interviews,                        not describe the ways in which and reasons why people lapse
+36 respondents were identified as having representative tracking                         in their tracking or stop entirely [11]. We integrate lapses and
+motivations, behaviors, and experiences and were verbose in                              resumption into our model, which appears in Figure 2.
+responses, of which 6 responded. We supplemented these
+interviews with another 16 recruited through university                                  Deciding to Track
+mailing lists and posts to social media. These interviewees                              We divide the preparation stage of Li et al.’s model [21] into
+were screened for the same criteria as the Turkers.                                      two stages: deciding and selecting. The deciding stage refers
+                                                                                         to the decision to track personal data. This stage mirrors the
+Interviews lasted an average of 38 minutes (min 16, max 59)                              precontemplation and contemplation stages of the TTM for
+and were each conducted by two members of the research                                   people with a behavior change goal [32]. People decide to
+team (12 researchers conducted interviews in total).                                     track for varied reasons, including to see other’s activity, to
+9 interviewees identified as male, 13 as female. They ranged                             share activity with others, to receive rewards, or curiosity.
+in age from 24 to 39 (mean: 29.7, median: 29.5). Interview                               People can decide to track having never tracked before, or
+participants were compensated with a $20 Amazon gift card.                               can return to tracking from a prior experience.
+Interview themes were identified and codes were created
+
+
+                                                                                   734
+SESSION: PERSUASIVE AND PERSONAL
+
+
+
+                                                                           Instead, they may resume integrating or reflecting upon their
+                                                                           previous data, deciding later whether more collection is
+                                                                           needed. This decision varies by the tracker and the domain.
+                                                                           MODEL STAGES ACROSS DOMAINS
+                                                                           In this section, we discuss how our model describes
+                                                                           self-tracking across domains. We report on themes present
+                                                                           across all three domains we studied, noting exceptions
+                                                                           specific to particular tracking domains. We believe the
+                                                                           similarities in tracking experiences across domains indicate
+                                                                           the potential for the model’s applicability to other domains.
+                                                                           This section contains quotes from our 168 survey and 22
+                                                                           interview participants. We quote participants as p##, where
+                                                                           p1-p22 were interviewed and p16-p184 were surveyed.
+                                                                           Note this means that p16-p22 completed both.
+                                                                           Different Motivations for Deciding to Track
+                                                                           Most models of personal informatics and self-monitoring
+Figure 2. Our lived informatics model of personal
+                                                                           describe the practices of people who engage in self-tracking
+informatics. It includes the process of deciding to track
+and selecting tools, tracking and acting as an ongoing                     with a specific behavior change goal in mind [1,21,32].
+process of collection, integration, and reflection, and                    Although this describes much self-tracking behavior, people
+                                                                           also begin and continue to self-track for reasons not well
+lapsing of tracking that may later be resumed.
+                                                                           described by these models. We describe three classes of
+Selecting Tools                                                            self-tracker motivations: behavior change, instrumentation,
+Following the decision to track, people select a tool with                 and curiosity. These initial motivations inform how
+which to track. This is sometimes minimal or coupled with                  self-trackers select, use, and lapse in tool usage.
+the decision to track (e.g., when someone received a tracking
+                                                                           Behavior Change Goals
+tool as a gift and decides to use it). This decision can also be
+                                                                           Prior work has described how behavior change goals can
+difficult and require extensive comparison of tools (e.g.,
+                                                                           motivate someone to start tracking [15,19,22,34]. Personal
+online, through brief use). Tool selection can depend on
+                                                                           informatics tools support principle and program-level goals
+features, aesthetics, and convenience, and choices can be
+                                                                           in Powers’ categorization of goals [31]. Principle-level goals
+limited by the tracker’s mobile platform or budget.
+                                                                           are relatively abstract and ideal guiding principles that one
+Tracking and Acting                                                        tries to attain, such as goals described by p5 “get in better
+Choe [7] and Whooley et al. [41] suggest self-trackers learn               shape”, p86 “to have more control over my finances”, and 92
+about their behavior and make changes to their practices while             others. Program goals are more specific and actionable
+they collect and integrate data (e.g., reflection-in-action [36]).         (e.g., p89 “get[ting] out of debt”, 39 others). We identified
+We define this practice of tracking and acting as the ongoing              48 financial trackers motivated to receive a financial touch
+process of collecting, integrating, and reflecting. These three            [20], such as p90 “just wanted a clearer snapshot of my
+activities are distinct and do have data dependencies, but in              finances.” We believe such trackers intend to change their
+contrast to Li et al.’s model [21] we do not separate them into            behavior if they notice something they find concerning, such
+stages. These activities can and do occur simultaneously.                  as p164 “[I] wanted to know if I should cut down on anything.”
+Lapsing                                                                    Even when people track to aid in behavior change, they
+The lapsing stage occurs when someone stops actively using                 sometimes track primarily to gain motivation or increase
+a self-tracking tool. Lapsing typically begins with barriers to            their accountability, rather than for insights or awareness of
+collection, but can also be caused by barriers to integration              their own behavior [2]. p72 started tracking “because I felt I
+or reflection [21]. We later describe four categories of lapses:           needed to get more motivation for my fitness”, while p73
+forgetting, upkeep, skipping, and suspending. For some, a                  tracked finances “to be accountable with how I spend my
+lapse is a temporary break in tracking, while others do not                money” (mentioned by 11 and 2 others respectively). Support
+return to tracking and have no intention to track again.                   for these goals may have different design requirements than
+Resuming                                                                   supporting informational goals. Adding features that let
+Short-term lapses (e.g., forgetting to bring a pedometer on a              people share progress may create channels for accountability
+weekend trip) often are followed by a quick resumption of                  [27,28], but merely having a record in the tool or online can
+tracking. In these cases, someone may not revisit their                    also help motivate people and make them feel accountable to
+decision to track and the selection of a tool.                             the tool [26]. For some people, the record’s support for
+                                                                           accountability is more valuable than insights derived.
+After a longer lapse (e.g., stopping tracking for months), the
+self-tracker may not necessarily resume collecting more data.
+
+
+                                                                     735
+                                                                                  UBICOMP '15, SEPTEMBER 7–11, 2015, OSAKA, JAPAN
+
+
+
+Instrumental Tracking Goals                                               (9 people) were the most common means of selection.
+We define instrumental tracking as tracking without the goal              10 people mentioned online reviews, such as p7 “It was the
+of changing a behavior. Instead, the goal is to obtain a record           first result on Amazon, and it had good reviews”.
+of a particular behavior, such as going to a particular place or
+watching a particular movie. Some are motivated to track by               Trackers motivated by behavior change try to select
+rewards that data about their behaviors can unlock, such as               applications with features that best support their goals [16].
+discounts or badges [24]. p162 started tracking his physical              p177 chose RunKeeper because it integrated with another
+activity because he “got rewards points with my insurance”,               tool he was already using: “it works well… with my other
+an increasingly common trend for health insurers [29].                    app… Nexercise.” p78 needed a specific feature, “I wanted
+                                                                          to be able to download and import my bank statements so I
+Location trackers often instrument to achieve social benefits.            could keep track of my spending”, and decided Quicken best
+35 mentioned tracking to share where they went, including                 fit his needs. Behavior change trackers typically do
+p173 for practical reasons, “I like to let friends know where I           substantial background research when selecting a tool, such
+am in case I am in the area” and p42 for social engagement,               as looking at many reviews “I read a lot of tech blogs…
+“to get likes”. Others were motivated to start tracking to see            FitBit has consistently gotten really good reviews” (p19,
+where others were “my friends had it so I got it too to see               7 others). p5 and 2 others described seeking out opinions on
+where they were” (p107, 19 others). These social motivations              tools from her social network: “a lot of times if I know that
+often are related to other goals, such as p82 sharing to inform           I’m looking for something new, I will quite often ask around
+friends: “I ate at this Thai restaurant that I loved, so I wanted         on Facebook and such, ‘has anyone tried this’?”
+to share it with friends so they could check it out.”
+                                                                          Instrumental trackers look to maximize benefit they receive
+Curiosity                                                                 from a tool based on social influence or potential rewards.
+Many people decide to track without any behavioral goal, but              For instrumental trackers who are tracking to see others or
+out of curiosity about what it would be like or would offer.              for others to see, selecting a tool is dependent on what tools
+People described thinking tracking would be “fun”, “cool”,                others use. Location tagging on large social networks is
+“neat”, and wanted to “try it out” (19, 12, 6, 5 people).                 popular because “everyone else is using it” (p57) and it is
+Curiosity is often driven by a desire to keep up with new                 easy to engage with a large audience. People also look to
+technology, such as p68 trying Quicken because “it seemed                 maximize the rewards they receive, such as selecting a FitBit
+like the latest way to keep up with my expenses.” Curiosity               because it is supported by a work wellness program (p18).
+also spread socially, such as for p41 “everyone was using
+Foursquare and I thought I’d finally jump on a bandwagon.”                Trackers motivated by curiosity often do not actively think
+                                                                          about selecting a tool, instead beginning to use whatever tool
+Many phones and computers include self-tracking programs                  prompted their initial curiosity. Frequent media references
+by default, such as Google Now, Apple HealthKit, and                      led p154 to be curious about self-tracking: “I started using
+Quicken. People also start tracking because they receive apps             Apple HealthKit since there was hype in the media about how
+and devices as gifts (10 people), they were free (7 people),              great this app is”, but it did not live up to his expectations
+or their “phone asked if I wanted to”, referring to the GPS               “I used it for less than a week and was not impressed.”
+tracking permission models of many common phone apps
+(p63, 11 others). These events often make people curious                  Using Tools for Value and Insight
+enough to start tracking, such as for p150: “it was offered               People with varied tracking motivations use tools differently
+free of charge so I thought I’d give it a try.”                           during the collection, integration, and reflection stages of the
+                                                                          personal informatics model [21], which we define as the
+Differences by Domain                                                     practice of tracking and acting. This section separately
+The prevalence of tracking motivations varies by domain.                  discusses how people collect, integrate, and reflect on data,
+Behavior change goals were common reasons for physical                    but we reiterate that these processes occur simultaneously in
+activity or financial tracking (82% and 73% of trackers),                 practice. We report on and discuss differences in usage in
+while instrumental tracking was a major motivator for                     both self-tracking data and self-tracker motivation.
+location trackers (67% of trackers). Curiosity was prevalent
+across all three domains, but was mentioned by more                       Collection
+location trackers (10%, 6%, and 20% of physical activity,                 We notice a trend toward long-term use of current tracking
+finances, and location trackers). Our participants used                   tools (Figure 3), but people appear to abandon location and
+primarily socially-oriented location tracking tools. We expect            physical activity tracking tools more quickly than financial
+goals of self-oriented location trackers (e.g., location diaries)         tracking tools (45% and 44% of people abandoned tools for
+would be more similar to physical activity or financial trackers.         location and physical activity within three months, versus
+                                                                          26% for financial tools). Respondents also used location
+Selecting Tools to Support Tracking Motivation                            tracking tools less frequently than other tools (Figure 4a),
+Rooksby et al. describe reasons why self-trackers pick tools,             and many respondents logged physical activity every day
+including recommendations, reading media articles, and online             (Figure 4b). We infer that people have a daily or weekly habit
+reviews [34]. We note the same practices. Recommendations                 of collecting their finances or physical activity, while
+from friends (28 people) or family and significant others
+
+
+                                                                    736
+SESSION: PERSUASIVE AND PERSONAL
+
+
+
+
+                                                                        (a)
+
+
+
+
+                                                                        (b)
+
+
+
+
+Figure 3. Respondents reported using financial tracking
+tools for longer than other tracking tools, and were
+quickest to abandon location tracking tools.                            Figure 4. Respondents (a) often make daily or weekly use
+                                                                        of physical activity and financial tools, while (b) location
+location tracking appeared more intermittent. However,
+many participants reported having not used their tracking               tools were typically used less than twice in the past week.
+tools in the past week (24%, 26%, and 36% of physical                   The frequency with which curiosity-driven trackers collect
+activity, finances, and location trackers).                             data is inconsistent, and depends on how compelling they
+                                                                        find the data they track. Many curiosity-motivated trackers
+People who track to support behavior change tend to collect             will discover another value to tracking and increase their tool
+data frequently, such as p21 “the FitBit’s on every day,                use, such as p85, who started location tracking because it
+almost 24 hours”. Behavior change trackers were bothered                “was a trendy thing to do, but later on I've realized its
+when records were not accurate “I had a few accounts that I             benefits.” p132 started tracking physical activity because an
+could never get added properly… it was an inaccurate                    app came preinstalled on his phone, and later realized the app
+picture of our finances” (p19). p162 wanted credit for his              was “an ideal tool to record my physical activity.”
+activity “[my app] wouldn’t always acknowledge when I was
+at the gym”, a common problem in prior work [8,16].                     Location trackers tended to have motivations that were
+For people trying to maintain a level of activity, accuracy             instrumental or curious, use their tracking tools less
+was less important. p11 noted “I do keep an eye on trends. If           frequently (only 49% report tracking in the past week), and
+I’m trending negative, or trending positive in my accounts”,            abandon tracking most quickly (18% of past trackers used
+and emphasized trying to keep his spending constant.                    their tool for less than one week). We note that 75% of
+Kay et al. previously noted trends matter more than accuracy            current location trackers report using their tools for at least a
+for people who were trying to maintain, not lose, weight [19].          year, which we believe coincides with the feature’s inclusion
+                                                                        in popular social network applications.
+Financial trackers typically have behavior change motivations,
+and their usage of tools reflects this. 45% of financial                Integration
+trackers reported using their current tool for at least two             People integrate self-tracking data to help make sense of it.
+years, with 73% reporting having used their tool within the             Integration can be trivial or time-consuming, depending on
+past week. 63% of our financial trackers were currently using           how much responsibility the person bears in preparing the
+spreadsheets, which require substantial manual entry. This              collected data for reflection [21]. Many of the tools used by
+level of sustained and frequent engagement with financial               our self-trackers do not require integration, such as for
+tracking is notable given the high burdens of data entry                MapMyRun, “there is this whole dashboard on the website”
+relative to our other domains. Kaye et al. suggest people are           (p16). For some behavior change tools, such as Mint, the
+willing to exert this effort to manage their finances and often         purpose of the application is integration: “I thought it would
+prefer it to using financial aggregation tools [20].                    be beneficial to have all my finances in one place and see
+                                                                        what I spend my money on” (p178).
+Instrumental trackers tend to engage in tracking when the
+benefits of doing so exceed the costs, such as the effort to            For instrumental trackers, it is important the data they track
+record activities or to remember to charge and wear a device.           integrate into the system that provides the corresponding
+For p143, this meant tracking when he was somewhere                     benefits. Tracking location for social reasons is only valuable
+interesting: “to brag about a cool place I’m at like                    if it the people a tracker cares about can see it. For p6, it was
+Disneyworld.” p18 was motivated to track by the incentives              important to select a tracker that integrates with his insurance
+of her health insurance plan, and she continues because                 program. He describes the integration process: “FitBit sends
+“I get rewards [from my health insurance plan] for making               [my data] to the health plan, then you can view it through the
+so many steps a day and for logging my food daily.”                     health plan’s app to track your progress.” Trackers
+                                                                        motivated by curiosity in our study did not describe any
+
+
+                                                                  737
+                                                                                       UBICOMP '15, SEPTEMBER 7–11, 2015, OSAKA, JAPAN
+
+
+
+
+(a)                                                                           tool for a month or more. We believe people still see themselves
+                                                                              as trackers and participate in the underlying behavior. p30
+                                                                              identified he was no longer tracking, and when asked why he
+                                                                              stopped tracking, he stated, “technically, I haven’t [stopped] – I
+                                                                              am just in between usages…”
+                                                                              Participants in our study described four types of lapses:
+                                                                              forgetting, upkeep, skipping, and suspending. We discuss the
+                                                                              causes of each of these lapses and how they manifest.
+                                                                              Lapsing may be intentional or unintentional, and may or may
+                                                                              not lead to stopping entirely.
+                                                                              Forgetting. People do not always remember to use their
+                                                                              tracking tools, or cannot use them, regardless of their original
+(b)                                                                           motivations for tracking. p13 states she “never purposefully
+                                                                              stopped using” her FitBit, but she has “left it in a coworkers
+                                                                              car after happy hour once. That was embarrassing.”
+                                                                              Substantial personal informatics research has explored how
+                                                                              to reduce the likelihood of forgetting, including providing
+                                                                              reminders [4] and automatically sensing behaviors that are
+                                                                              typically journaled [33,39].
+                                                                              Although forgetting typically results in a short-term lapse,
+Figure 5. Respondents (a) often reviewed physical activity                    people may decide that tracking is not worth the trouble after
+data at least weekly, while (b) the majority of location                      forgetting several times. p177 stopped using RunKeeper,
+trackers had not reviewed their data in the past week.                        explaining: “[I] haven’t used it as much as I would want to.
+                                                                              I guess I forget to use it.” p3 mentions falling out of the habit:
+integration work, but prior work has shown integration can                    “I just didn’t make it a habit and then kind of forgot about it.”
+surface habits self-trackers want to know more about [15].
+                                                                              Upkeep. Devices and tools often require maintenance to
+Reflection
+                                                                              continue tracking. The simplest example is charging the
+Our survey respondents reported reviewing their physical                      battery of a wearable device. 8 people mentioned forgetting
+activity most regularly (Figure 5a), and most current trackers                to charge their devices, leaving them without tracking for an
+did not review their location in the past 7 days (Figure 5b).                 extended period of time. When talking about her FitBit, p19
+Financial trackers reported reviewing weekly (35% and 33%                     said, “right now it’s out of battery so I haven’t used it all
+of current and past trackers), while location trackers reported               week.” Although she intends to continue using it, she often
+reviewing once a month or less (44% and 45% of current and                    needs a reminder to resume tracking: “I’ll probably charge it
+past trackers). We note some respondents across all domains                   tonight, just because we’re talking about it.”
+made a daily habit out of reviewing their data (20%, 12%,
+and 4% of physical activity, financial, and location trackers                 Upkeep becomes a barrier to success for behavior change
+reported reviewing their data every day for the past 7 days).                 trackers. p19, who used spreadsheets to track her finances,
+                                                                              said “we just kind of stopped updating it because it was too
+Behavior change oriented trackers regularly reviewed their                    much work to keep up to date”, with p174 adding that he
+data, such as p22 “I usually log on to Mint almost every day.                 “grew tired of managing it.” For curiosity-driven trackers,
+Sometimes I check a couple times a day when I am expecting                    upkeep becomes a barrier to usage. p20 wanted to use the
+a big expense”. Physical activity trackers reviewed their data                lifelogging app Saga, “It would log everything… that sounds
+most frequently (e.g., “I guess I would check in pretty much                  exactly like I’d wanted”, but gave up quickly because “I felt
+daily on how many steps I had taken, maybe 2 or 3 times a                     it was eating too much of my battery.”
+day” p17), while aggregation across a week or month may be
+enough for to receive value from financial data.                              Skipping. People make the decision not to log everything
+                                                                              they track. Sometimes, they already know the data and do not
+Instrumental and curiosity-driven trackers tend not to                        see the benefit: “I run this one little loop that I already know
+frequently review or reflect on their data, such as p2 “I would               the distance, so I don’t really bother with keeping track on
+say a couple of times a week. Not that frequently”. For                       the app” (p11). p20 mentions that some locations represent
+instrumental-motivated trackers, the act of tracking is more                  events too private to record: “some of these appointments are
+important than looking back later, “it’s just about entering it               personal private things… ‘do I check in publicly so that I can
+in that moment” (p16).                                                        keep track?’” The desire to maintain a complete record is in
+Four Categories of Lapsing                                                    tension with privacy in systems that emphasize sharing.
+15%, 14%, and 17% of physical activity, finances, and location
+trackers identified as current trackers despite having not used their
+
+
+                                                                        738
+SESSION: PERSUASIVE AND PERSONAL
+
+
+
+People also skip tracking entries when the entry is too                    comparison.” p121 started using their bank’s tracking tools
+difficult, such as entering every ingredient in a recipe [11].             “to compare it to other software tools”, but later decided that
+This difficulty led p16 to stop tracking food entirely “what               other tools were better and stopped using her bank tools.
+caused me to stop is that… you have to break down every single
+                                                                           For instrumental trackers, tool switching often occurs when
+thing you eat into all these component ingredients.”
+                                                                           a new tool offers more benefits. p57 switched from location
+Suspending. People temporarily suspend tracking because                    tagging on Facebook to Twitter and Instagram because
+they do not need or want to track a time period. p122 stopped              “everyone moved on to other social media platforms… so I
+using Nike+ because of the holidays: “the holidays and                     followed those trends instead.” p6 described using multiple
+family visiting me has stopped me from using it.” p12 does                 pedometers at once, because his health plan would “pick the
+not food journal while she is on vacation: “I put [entries] in             best numbers from all of those”, before settling on the one
+MyFitnessPal every single day, except if I’m on a holiday or               that gave the largest rewards.
+something.” p6 notes that he has “taken breaks during the
+                                                                           We did not observe many instances of curiosity-motivated
+winter season from [activity] tracking.” p180 describes
+                                                                           trackers switching tools, perhaps because use of one tool
+taking a break from Mint and later returning: “because I
+                                                                           tended to satisfy their curiosity. After trying tracking, some
+didn’t really have the financial need for it at the time—not much
+                                                                           of these trackers developed behavior change goals and
+money was coming in. But I recently started using it again”.
+                                                                           switched tools that better matched their new goals.
+Suspending tracking differs from suspending the activity that
+                                                                           Stopping Tracking
+is being tracked. Examples of suspending activities include                Although extended or repeated lapses often lead people to
+injuries (e.g., “I got injured and stopped running” p106,                  stop tracking, people also stop tracking for other reasons.
+“I stopped running due to knee injury” p16) or changing life               Some trackers motivated by behavior change stop tracking
+habits “I travel less now” (p46). For these examples, the tracking         when they successfully change the behavior, and move on to
+tool is no longer relevant to the person. Although these                   maintaining their desired behavior [32]. p142 and 2 others
+suspensions may be temporary and may appear the same from                  stopped tracking because they “met my weight goal.”
+the perspective of what data is captured, this distinction is              For others, the behavior change is no longer necessary, “I’m
+important in how people think about and use their tools.                   not as financially strapped as when I was using Mint, so
+Transitioning to a New Tool                                                that’s a big reason why I stopped using it” (p15).
+Self-trackers regularly transition to new tools. In our survey,
+                                                                           Instrumental trackers stop tracking when the benefits from
+53%, 72%, and 78% of physical activity, finances, and
+                                                                           instrumenting fade or are withdrawn. p164 stopped using
+location trackers had used more than one tool. Changes are
+                                                                           Foursquare because “the possibility of deals wasn’t enticing
+sometimes forced by reasons outside of tool selection, such
+                                                                           enough.” For many social-oriented location trackers, this
+as changing phones ([34], “I switched mobile platforms” p22,
+                                                                           occurs when others stop using the tool: “everyone else stopped
+3 others) or because the tool stopped being supported (e.g.,
+                                                                           using it” (p170, 10 others). However, some people who start
+“Microsoft Money quit supporting their software” p77, 5
+                                                                           as instrumental trackers find other benefits for tracking.
+others). We focus on people choosing to stop using a tool and
+                                                                           Although p18 would not have purchased her FitBit except
+beginning to use another, with or without a lapse in between.
+                                                                           for her work wellness program, she said she would continue
+As suggested by Li et al., behavior change motivated trackers              to use it if the wellness program no longer supported it.
+switch to tools that better meet their information needs [21].
+                                                                           Some motivated to track by curiosity stop when that curiosity
+25 people described switching to a new tool that was
+                                                                           fades. p109 stopped using Foursquare when “the novelty
+“better”, such as p186 switching from Quicken “someone
+                                                                           wore off” and p72 stopped using Google Latitude because “it
+recommended MoneyDance and I liked it a lot better” and
+                                                                           was boring.” p27 and 2 others described starting to track
+p95 from RunKeeper “found a better alternative
+                                                                           because they “like new technology”, and may have moved
+(MapMyRun).” People often describe what is better about a
+                                                                           onto a new curiosity when the novelty of the tool faded.
+new tool in terms of features (e.g., “I wanted a more robust
+app option that would keep my weight and body                              Stopping tracking is not necessarily a permanent decision,
+measurements” p47, 12 others), ease of use (e.g., “I like my               and people sometimes return to tracking. Finding a new tool
+online banking app better and it is easier” p72), or accuracy              to integrate with may motivate someone to resume tracking.
+(e.g., “I upgraded to a smartphone with data that could track              p20 stopped using Foursquare because there was “less of a
+my actual location and track more accurately” p54).                        motivation to check in”, but later resumed because she “got
+                                                                           a Pebble and you can check in on Foursquare from your
+Trackers motivated by behavior change often use and
+                                                                           Pebble.” People also return to tools when their goals align
+compare multiple tools at once, then decide what tool they
+                                                                           with what the tools can support. p18 used MyFitnessPal to
+prefer. When p5 decided to try switching from an analog
+                                                                           help her lose weight, lost interest in the tool, and resumed
+pedometer to a FitBit, she wore both of them: “I put them
+                                                                           using MyFitnessPal to help with weight loss two years later.
+both on to see what the FitBit would be like and compare
+them” and later returned the FitBit because it was “way off in
+
+
+
+                                                                     739
+                                                                                   UBICOMP '15, SEPTEMBER 7–11, 2015, OSAKA, JAPAN
+
+
+
+DISCUSSION                                                                   potential data loss. I don’t know if that matters, sometimes it
+Our revised model of personal informatics offers guidance and                does, but usually it’s something that I just kind of gave up on.
+design challenges for the personal informatics community.                  The overhead of setting up a profile, learning a new interface,
+Some guidelines are consistent with those suggested by                     and losing his data were too much for p11 to consider
+Rooksby et al., including to consider the agency of people                 switching tools. While he desires other features, saying
+and how they want to self-track [34]. We supplement these                  “I want to have an aggregate sense of how many miles I’ve
+guidelines by recommending that designers plan for lapse                   run for the past three months”, he is unwilling to switch to a
+and resumption, consider people migrating between tools,                   new tool and lose all of his built-up knowledge. Although
+and support people adjusting their tracking goals.                         lock-in may be desirable from an application or device
+Returning to Tracking with the Same Tool after a Lapse                     manufacturer’s point of view, personal informatics tools
+It is unclear how personal informatics tools should behave                 could better support their users with designs that support
+when someone decides to resume use after a lapse. A                        evolving motivations and feature needs and allow people to
+person’s historical data may be helpful for setting new goals,             migrate when the tool no longer best supports their goals.
+such as defining a new budget based on their previous
+                                                                           Supporting Migration between Goals
+spending habits. However, seeing historical data (and                      Some curiosity and instrumentally-motivated participants
+potential failures surfaced) may be demotivating for someone               found other benefits from their tracking tools that motivated
+looking to resume use of a calorie-tracking app to lose weight.            their sustained tracking even as they satisfied their initial
+Historical data offers opportunities to bootstrap the data                 curiosity or as the instrumental benefits faded. Others did not
+collection process, but its use requires careful consideration.            find such alternative benefits. This suggests that designers
+Some self-tracking tools passively collect information for as              may be able to do more to help people see benefits in
+long as the tool is not disabled or uninstalled (e.g., Apple               continuing to track. This might include realizing the value of
+HealthKit, Moves, Mint). Although someone may not look                     tracking to support behavior change goals they already have,
+at their data for months or even years, the tool continues to              or even setting new goals. For example, an app that someone
+collect and store their information. It is unclear what, if                starts to use out of curiosity regarding how active they are
+anything, the tool should do with this historical data when                could illustrate benefits achieved by others who started from
+someone resumes using the tool after an extended lapse.                    the same activity level and walked a bit more each week.
+Although prior research has considered the challenge of                    In other cases, data from personal informatics applications
+presenting a large amount of personal data in an easily                    may prompt people to question their behavior. For example,
+consumable manner [3,15], it remains unclear how to                        someone who tracks their location to share with friends or
+summarize this data based on the reason the person resumed                 receive discounts might receive a badge for eating out often,
+tracking. Furthermore, perhaps the passively collected data                or realize they check-in at restaurants much more than their
+should not be summarized at all. Instead, the person may                   friends, and wonder how much they could save by cooking.
+want start over with a clean slate, and looking at their
+previous data may create a negative reaction if they view                  CONCLUSION
+their previous tracking experience as a failure.                           We offer a model of personal informatics informed by the
+                                                                           perspective of lived informatics, expanding upon prior
+Effective Migration between Tools
+                                                                           models based primarily in behavior change and maintenance.
+When describing design choices for assistive technology,                   We identify three initial motivations for tracking: the desire
+Dawe notes the difficulty in replacing broken or outdated                  to change behavior, instrumenting for rewards or social
+technology, particularly with regards to cost [13]. Although               engagement, and curiosity regarding data and habits.
+many tools are free, some self-trackers are concerned with                 Our model captures the practices of self-trackers with such
+the cost of others. Loss can cause a lapse when someone                    diverse goals, offers a better understanding of how they use
+cannot afford a replacement, such as FitBit wearer p155                    self-tracking tools, and helps surface relatively unexplored
+“it got lost or stolen and I didn’t want to spend the money to             challenges for future designers and researchers.
+replace [it]” and Quicken user p53 “it costs money, and I
+realized I could do everything I wanted with Excel.” More                  ACKNOWLEDGMENTS
+commonly, people change their motivation and needs for                     We thank Kelly Campbell, Monica Caraway, Season Dai, Yoanna
+tracking, such that tools no longer support the new needs.                 Dosouto, Nicole Fugere, Coimbra Jackson, Bradley Jacobson,
+                                                                           Chuck Johnston, Kim Lambert, Alex Pease, Sreedev Sidharthan,
+Although some self-trackers are not concerned with                         Maria Suhardi, Megan Taylor, and Frank Xu for their
+abandoning tools and the data they have collected, others                  contributions through survey design and participant interviews.
+avoid switching tools, even when a better tool exists. p11                 We also thank Elena Agapie, Elizabeth Bales, Lucas Franco
+describes why he avoids switching tools:                                   Colusso, Felicia Cordeiro, and Ravi Karkar for early feedback and
+                                                                           design of visuals. This work is sponsored in part by the Intel
+  I try to avoid it as much as possible… When you transition from
+                                                                           Science and Technology Center for Pervasive Computing, Nokia
+  tools, there’s a lot of transaction costs in terms of switching
+  between one and the other. You just have to get your profile set
+                                                                           Research, the AHRQ under award 1R21HS023654, and the NSF
+  up again, you have to learn to interact with a tool. There’s             under awards OAI-1028195 and SCH-1344613.
+
+
+
+                                                                     740
+SESSION: PERSUASIVE AND PERSONAL
+
+
+
+REFERENCES                                                           15. Epstein, D.A., Cordeiro, F., Bales, E., Fogarty, J., and
+1.  Bandura, A. Social Cognitive Theory of Self-Regulation.              Munson, S.A. Taming Data Complexity in Lifelogs:
+    J Organ Behav Hum Dec, 50 (1991), 248-287.                           Exploring Visual Cuts of Personal Informatics Data.
+2. Baumer, E.P.S., Khovanskaya, V., Matthews, M.,                        DIS 2014, 667-676.
+    Reynolds, L., Sosik, V.S., and Gay, G. Reviewing                 16. Fritz, T., Huang, E.M., Murphy, G.C., and
+    Reflection: On the Use of Reflection in Interactive                  Zimmermann, T. Persuasive Technology in the Real
+    System Design. DIS 2014, 93-102.                                     World : A Study of Long-Term Use of Activity
+3. Bentley, F., Tollmar, K., Stephenson, P., Levy, L.,                   Sensing Devices for Fitness. CHI 2014, 487-496.
+    Jones, B., Robertson, S., Price, E., Catrambone, R., and         17. Hodges, S., Williams, L., Berry, E., Izadi, S.,
+    Wilson, J. Health Mashups : Presenting Statistical                   Srinivasan, J., Butler, A., Smyth, G., Kapur, N., and
+    Patterns between Wellbeing Data and Context in                       Wood, K. SenseCam: A Retrospective Memory Aid.
+    Natural Language to Promote Behavior Change.                         UbiComp 2006, 177-193.
+    TOCHI 20, 5 (2013), 1-27.                                        18. Humphreys, L. Mobile Social Networks and Social
+4. Bentley, F. and Tollmar, K. The Power of Mobile                       Practice: A Case Study of Dodgeball. J Compu-Mediat
+    Notifications to Increase Wellbeing Logging Behavior.                Comm 13, (2007), 341-360.
+    CHI 2013, 1095-1098.                                             19. Kay, M., Morris, D., schraefel, m.c., and Kientz, J.A.
+5. Berinsky, A.J., Huber, G.A., and Lenz, G.S. Evaluating                There’s No Such Thing as Gaining a Pound:
+    Online Labor Markets for Experimental Research:                      Reconsidering the Bathroom Scale User Interface.
+    Amazon.com’s Mechanical Turk. Political Analysis 20,                 UbiComp 2013, 401-410.
+    (2012), 351-368.                                                 20. Kaye, J.J., Mccuistion, M., Gulotta, R., and Shamma,
+6. Choe, E.K., Lee, N.B., Lee, B., Pratt, W., and Kientz,                D.A. Money Talks: Tracking Personal Finances.
+    J.A. Understanding Quantified-Selfers’ Practices in                  CHI 2014, 521-530.
+    Collecting and Exploring Personal Data. CHI 2014,                21. Li, I., Dey, A., and Forlizzi, J. A Stage-Based Model of
+    1143-1152.                                                           Personal Informatics Systems. CHI 2010, 557-566.
+7. Choe, E.K. Designing Self-Monitoring Technology to                22. Li, I., Dey, A.K.A., and Forlizzi, J. Understanding My
+    Promote Data Capture and Reflection. PhD Dissertation.               Data, Myself: Supporting Self-Reflection with
+    The Information School, University of Washington,                    Ubicomp Technologies. UbiComp 2011, 405-414.
+    Seattle Washington.
+                                                                     23. Lin, J.J., Mamykina, L., Lindtner, S., Delajoux, G., and
+8. Consolvo, S., Everitt, K., Smith, I., and Landay, J.A.                Strub, H.B. Fish’n'Steps: Encouraging Physical Activity
+    Design Requirements for Technologies that Encourage                  with an Interactive Computer Game. UbiComp 2006,
+    Physical Activity. CHI 2006, 457-466.                                261-278.
+9. Consolvo, S., Smith, I.E., Matthews, T., LaMarca, A.,             24. Lindqvist, J., Cranshaw, J., Wiese, J., Hong, J., and
+    and Tabert, J. Location Disclosure to Social Relations:              Zimmerman, J. I’m the Mayor of My House: Examining
+    Why, When, & What People Want to Share. CHI 2005,                    Why People Use Foursquare-A Social-Driven Location
+    81-90.                                                               Sharing Application. CHI 2011, 2409-2418.
+10. Cordeiro, F., Bales, E., Cherry, E., and Fogarty, J.             25. Maitland, J. and Chalmers, M. Designing for Peer
+    Rethinking the Mobile Food Journal: Exploring                        Involvement in Weight Management. CHI 2011, 315-324.
+    Opportunities for Lightweight Photo-Based Capture.
+                                                                     26. Munson, S.A. and Consolvo, S. Exploring Goal-Setting,
+    CHI 2015, 3207-3216.
+                                                                         Rewards, Self-Monitoring, and Sharing to Motivate
+11. Cordeiro, F., Epstein, D.A., Thomaz, E., Bales, E.,                  Physical Activity. PervasiveHealth 2012, 25-32.
+    Jagannathan, A.K., Abowd, G.D., and Fogarty, J.
+                                                                     27. Munson, S.A., Krupka, E., Richardson, C., and
+    Barriers and Negative Nudges : Exploring Challenges
+                                                                         Resnick, P. Effects of Public Commitments and
+    in Food Journaling. CHI 2015, 1159-1162.
+                                                                         Accountability in a Technology-Supported Physical
+12. Curmi, F., Ferrario, M.A., Southern, J., and Whittle, J.             Activity Intervention. CHI 2015, 1135-1144.
+    HeartLink : Open Broadcast of Live Biometric Data to
+                                                                     28. Newman, M., Lauterbach, D., Munson, S.A., Resnick,
+    Social Networks. CHI 2013, 1749-1758.
+                                                                         P., and Morris, M.E. “It’s not that I don't have
+13. Dawe, M. Desperately Seeking Simplicity: How                         problems, I'm just not putting them on Facebook”:
+    Young Adults with Cognitive Disabilities and Their                   Challenges and Opportunities in Using Online Social
+    Families Adopt Assistive Technologies. CHI 2006,                     Networks for Health. CSCW 2011, 341-350.
+    1143-1152.
+                                                                     29. Olson, P. Wearable Tech is Plugging into Health
+14. Downs, J.S., Holbrook, M.B., Sheng, S., and Cranor, L.F.             Insurance. Forbes.
+    Are your Participants Gaming the System? Screening                   http://www.forbes.com/sites/parmyolson/2014/06/19/
+    Mechanical Turk Workers. CHI 2010, 2399-2402.                        wearable-tech-health-insurance/.
+
+
+
+
+                                                               741
+                                                                           UBICOMP '15, SEPTEMBER 7–11, 2015, OSAKA, JAPAN
+
+
+
+30. Page, X. and Kobsa, A. Navigating the Social Terrain           37. Smith, I., Consolvo, S., Lamarca, A., Hightower, J.,
+    with Google Latitude. iConference 2010, 174-178.                   Scott, J., Sohn, T., Hughes, J., Iachello, G., and
+31. Powers, W.T. Behavior: The Control of Perception.                  Abowd, G.D. Social Disclosure of Place: From
+    Benchmark Publications, 2005.                                      Location Technology to Communication Practices.
+32. Prochaska, J.O. and Velcier, W.F. The Transtheoretical             Pervasive 2005, 134-151.
+    Model of Health Behavior Change. American Journal              38. Tang, K.P., Lin, J., Hong, J.I., Siewiorek, D.P., and
+    of Health Promotion 12, 1 (1997), 38-48.                           Sadeh, N. Rethinking Location Sharing: Exploring the
+33. Rahman, T., Adams, A.T., Zhang, M., Cherry, E.,                    Implications of Social-Driven vs. Purpose-Driven
+    Zhou, B., Peng, H., and Choudhury, T. BodyBeat : A                 Location Sharing. UbiComp 2010, 85-94.
+    Mobile System for Sensing Non-Speech Body Sounds.              39. Thomaz, E., Zhang, C., Essa, I., and Abowd, G.D.
+    MobiSys 2014, 2-13.                                                Inferring Meal Eating Activities in Real World Settings
+34. Rooksby, J., Rost, M., Morrison, A., and Chalmers, M.              from Ambient Sounds: A Feasibility Study. IUI 2015,
+    Personal Tracking as Lived Informatics. CHI 2014,                  427-431.
+    1163-1172.                                                     40. Toscos, T., Faber, A., Connelly, K., and Upoma, A.M.
+35. Schoenebeck, S.Y. Giving up Twitter for Lent: How                  Encouraging Physical Activity in Teens: Can
+    and Why We Take Breaks from Social Media.                          Technology Help Reduce Barriers to Physical Activity
+    CHI 2014, 773-782.                                                 in Adolescent Girls? PervasiveHealth 2008, 218-221.
+36. Schön, D.A. The Reflective Practitioner. Basic Books,          41. Whooley, M., Gray, K., Ploderer, B., and Gray, K. On
+    1983.                                                              the Integration of Self-tracking Data amongst
+                                                                       Quantified Self Members. HCI 2014, 151-160.
+
+
+
+
+                                                             742
+

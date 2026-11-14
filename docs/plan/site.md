@@ -61,13 +61,17 @@ Next:
   (spread needs curvesfile percentiles)
 - A champion page opened mid-browse with ?period=patch takes the kept rank (a shared
   link only stays exact in a fresh tab)
-- Example review per role (B7); "what your draft was up against" from comp leans
-  (data-and-model.md step 4)
+- "What your draft was up against" from comp leans (data-and-model.md step 4)
 - RV1 (research/questions/competitor-steal-beat-avoid.md 1-3) No per-game grade; a walk:
   summary, then Next through your moments, each saying what it moved against what, good
   ones named too, ending on one thing to try. Done when Next alone reads a whole review
-- RV2 (same, 7) Progress: lane gold at 14, deaths and win chance lows over your last 10+
-  games. Done when the trend shows beside the game list
+
+## Bringing players back (proposal; evidence: research/questions/stat-site-retention.md)
+
+- RT1 Since you were last here: new games, then the week against earlier weeks and typical
+- RT2 Season and year review by December: records, odd stats, a card (share after the key)
+- RT3 One focus a week from the player's numbers, checked next week, apart from streaks
+- RT4 Streaks (Daily, Learn) count one action, forgive misses, never say "streak lost"
 
 ## Daily Draft
 
@@ -149,7 +153,6 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
 (research champion-matchup-gap C1-C18).
 
 ### Steps
-
 
 CH0 on decisions.md's recommendations (Jacob to confirm): no blind-safe score (J2
 measured no win)
