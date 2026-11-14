@@ -21,7 +21,7 @@ import pandas as pd
 
 
 def games(run, model):
-    g = pd.read_csv(run / f"games-{model}.tsv", sep="\t")
+    g = pd.read_csv(run / f"games-{model}.tsv", sep="\t", dtype={"block": str})
     g = g[g["outcome"] == "win"]
     p = g["pred"].clip(1e-6, 1 - 1e-6)
     g["loss"] = -(g["y"] * np.log(p) + (1 - g["y"]) * np.log(1 - p))
@@ -91,7 +91,8 @@ def main():
     ap.add_argument("pairs", nargs="+")
     ap.add_argument("--picks", nargs="*", default=[])
     o = ap.parse_args()
-    meta = pd.read_csv(o.run / "games-meta.tsv", sep="\t").set_index(["block", "match_id"])
+    meta = pd.read_csv(o.run / "games-meta.tsv", sep="\t", dtype={"block": str})
+    meta = meta.set_index(["block", "match_id"])
     for spec in o.pairs:
         base, model = spec.split("=")
         a, b = games(o.run, base), games(o.run, model)

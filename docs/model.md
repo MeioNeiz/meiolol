@@ -6622,6 +6622,87 @@ after it:
   champion-role strengths with the term (at any fixed mastery, so at 50k points) against
   without
 
+Run 20261113T210247Z-a10-2004Z (gpu-box, 6887ab3b, `effects SNAP --param v2 --a10 1`,
+cand win-draft; data/runs, tables by py/xcheck/slices.py, copies in
+data/team/2026-11-13-max/draftmodel-a10/). The baselines reproduce P2 (v2 full dev-val
+0.68422, folds 0.68480; shipped form 0.68474). Dev only.
+
+The line, fitted per block: +0.034 to +0.036 logit per ln share (half as popular in the
+role: 0.6 pp less at an even game), hinge +0.25 to +0.28 per ln below e^-10 of the role
+(one pick in 22,000). Model with the line minus the same model without, milli-nats a
+game (negative better), dev-val | folds pooled:
+
+| slice | games (dev-val, folds) | line, v2 full | line + hinge, v2 full | line + hinge, shipped form |
+| --- | --- | --- | --- | --- |
+| all | 158,728, 595,231 | -0.05 ± 0.05, -0.11 ± 0.03 | -0.08 ± 0.07, -0.13 ± 0.04 | -0.07 ± 0.07, -0.13 ± 0.04 |
+| Iron-Silver | 0, 0 | | | |
+| Gold-Emerald | 111,554, 405,433 | -0.05 ± 0.06, -0.13 ± 0.04 | -0.08 ± 0.08, -0.15 ± 0.05 | -0.07 ± 0.08, -0.15 ± 0.05 |
+| Diamond+ | 35,638, 119,991 | -0.02 ± 0.11, -0.03 ± 0.07 | -0.03 ± 0.15, -0.07 ± 0.09 | -0.03 ± 0.14, -0.07 ± 0.08 |
+| rank unknown | 11,536, 69,807 | -0.13 ± 0.21, -0.12 ± 0.10 | -0.21 ± 0.27, -0.10 ± 0.14 | -0.20 ± 0.26, -0.11 ± 0.14 |
+| EUW1 | 30,898, 130,851 | +0.01 ± 0.12, -0.12 ± 0.07 | -0.02 ± 0.16, -0.13 ± 0.09 | -0.01 ± 0.16, -0.14 ± 0.09 |
+| rare (a pick under 100 fit games) | 768, 5,236 | -13.2 ± 6.2, -9.4 ± 2.1 | -18.6 ± 12.3, -11.9 ± 4.1 | -17.7 ± 12.1, -11.8 ± 4.1 |
+| thin (100-999) | 12,201, 74,708 | +0.10 ± 0.52, -0.17 ± 0.19 | +0.05 ± 0.44, -0.14 ± 0.16 | +0.09 ± 0.44, -0.15 ± 0.16 |
+| common (all 1,000+) | 145,759, 515,287 | +0.01 ± 0.02, -0.00 ± 0.01 | +0.01 ± 0.02, -0.00 ± 0.01 | +0.01 ± 0.02, -0.00 ± 0.01 |
+
+Line + hinge on v2 full per fold: -0.16, -0.09, -0.21, -0.14, -0.02 (each ± ~0.1). The
+hinge over the straight line: -0.02 ± 0.02 on the folds, rare -2.5 ± 2.4. Pick metric
+(dev-val, 198,408 picks): AUC 0.5256 -> 0.5261 on v2 full (+0.0005, 95% +0.0002 to
++0.0007), 0.5248 -> 0.5251 on the shipped form (+0.0003, +0.0001 to +0.0006); the
+top-10% win rate 52.8% -> 52.6% and 52.8% -> 52.7%, with the real pick in the model's
+top tenth 8% and 7% more often.
+
+Shuffle control (run 20261113T213547Z-a10-shuffle-2004Z, 6aa607e1, fold 1 with its fit
+labels shuffled): line + hinge minus full -0.00 ± 0.01 (real fold 1: -0.16 ± 0.10), rare
+-0.11 ± 0.76 on 1,679 games (real -10.8 ± 6.1), the straight line +0.00 ± 0.00, the
+shipped form the same; the fitted line -0.0001 ± 0.0015 and hinge +0.05 ± 0.07. The
+mastery term +0.06 ± 0.04 (real -1.03 ± 0.19), beta 0.011 ± 0.020: a term fitted to
+noise costs a little and gains nothing. Every gain ~0, as the rule asks.
+
+Reading (dev), by the declared rule:
+- The gain is where it was expected: games with a pick under 100 fit games (1 game in
+  115 on the folds), -12 ± 4 milli-nats there, nothing on games whose ten picks all
+  have 1,000+; the overall -0.13 ± 0.04 is that slice diluted. No bracket or EUW1 slice
+  differs from the overall beyond its interval; Iron-Silver is empty on this pin (the
+  crawl's floor) and patch days 0-3 can't be scored on it
+- The straight line carries it; the hinge is not detected on its own (rare -2.5 ± 2.4)
+- The rule's ship condition holds (overall <= 0, rare beyond 2 se, in v2 full and in
+  the shipped form), so: proposal to ship the line in the stats file's v2, after one
+  sealed check on the next pin, declared here before that pin exists: `effects --a10 1`
+  on its dev blocks, shipped form with line + hinge minus without, pass if the folds'
+  overall interval is not above 0 and the rare slice gains beyond 2 se
+- A10 (b), the rank bracket terms, waits on rank at game time for the fit games
+
+D1 inside v2 (full-m minus full, the same run):
+
+| slice | dev-val | folds pooled |
+| --- | --- | --- |
+| all | -3.15 ± 0.43 | -2.39 ± 0.18 |
+| Gold-Emerald | -2.99 ± 0.51 | -2.57 ± 0.22 |
+| Diamond+ | -3.18 ± 0.93 | -2.10 ± 0.45 |
+| EUW1 | -4.25 ± 0.90 | -2.06 ± 0.31 |
+| rare | -5.2 ± 6.2 | -2.7 ± 1.9 |
+
+Per fold -1.03, -2.46, -2.71, -2.58, -3.19: it grows with the share of seats that have
+a fetch (25% of fold 1's, 84% of dev-val's). Beside the line it is the same (-2.36 ±
+0.18 on full-lsh). beta per tenfold points with v2's pair blocks fitted: 0.084 ± 0.003
+on dev-val's fit (1.19M games; the half-width is 1.96 / sqrt of beta's own curvature,
+the other terms held), folds 0.057 ± 0.020, 0.092, 0.091, 0.088, 0.084 ± 0.003; the
+strength-only refit had 0.080 ("Strength at fixed mastery (D1)"), so the pair terms
+don't change it. Strengths with the term against without, champion-roles with 1,000+ fit
+games (463 on dev-val's fit), each against its role's games-weighted mean: the move has
+sd 0.47 pp, rank r per role 0.949 to 0.986, the same champions as the strength-only
+refit (Locke middle +1.60, Locke jungle +1.56, Corki top +1.50, Zaahen top +1.19,
+Yunara +1.12; Zoe top -1.02, Riven middle -0.99, Katarina middle -0.97, Shaco jungle
+-0.95). beta * m at 50k points is the same for every champion, so this is the ranking
+at 50k.
+
+Reading (dev): seat mastery inside the draft model is worth twice what v2 gained over
+win-draft (-2.4 against -1.2 on the folds) and still rising with coverage; a tier list
+at fixed mastery moves the same few champions as D1 found. All ten seats' mastery is
+player input: the internal teacher's (A8) unless docs/production-key.md allows more.
+Not done: the replay's hit rate with the lane card fix. P4 below takes the missing
+seats on.
+
 ### A1 at today's size, 2026-11-13 (draftmodel)
 
 Question (docs/plan/lab-frontier.md wave 1): the daily eval has been flat since ~2.4M
