@@ -102,6 +102,16 @@ pub const rows = [_]Row{
         .{ .card = "147 champion-roles", .doc = "147 champion-roles" },
         .{ .card = "Under 100", .doc = "under 100 games in 30 days" },
     } },
+    // The doc rounds the card's 51,852 games
+    .{ .id = "patch-day", .doc = .learned, .figures = &.{
+        .{ .card = "1.9 points", .doc = "1.9 pp for the 12 changed" },
+        .{ .card = "0.5 points", .doc = "0.5 the rest" },
+        .{ .card = "51,852 games", .doc = "day one 52k games" },
+    } },
+    .{ .id = "patch-leader", .doc = .learned, .figures = &.{
+        .{ .card = "Diamond+", .doc = "Diamond+ doesn't move first" },
+        .{ .card = "Korea", .doc = "nor KR before EUW1" },
+    } },
     .{ .id = "item-wr", .doc = .learned, .figures = &.{
         .{ .card = "2.9M", .doc = "2.9M purchases" },
     } },

@@ -405,11 +405,11 @@ How to write a line:
   the new patch's own games: win rates and items catch up after 2-3 days, matchups,
   duos and lane gold still trail after a week. Sure: two patch boundaries replayed. Site:
   30 days stays the default. Evidence: docs/plan/estimates.md "E2 baseline"
-- A new patch moves champions' win rates beyond noise, mostly the changed ones (0.75 pp
-  RMS on 16.21's day one, 1.9 pp for the 12 changed); Diamond+ doesn't move first, nor KR
+- A new patch moves champions' win rates beyond noise, mostly the changed ones (16.21 day
+  one RMS: 1.9 pp for the 12 changed, 0.5 the rest); Diamond+ doesn't move first, nor KR
   before EUW1, and a pick that jumps starts about a point up and stays. Sure: day one 52k
-  games; 16.21 (KR 16.22 too): no lead, no curve (late - early -0.2 ± 0.3 pp). Site: Learn.
-  Evidence: model.md "Patch 16.21's first day", "Who leads a patch move (TS2, TS4)"
+  games; 16.21 (KR 16.22 too): no lead, no curve (late - early -0.2 ± 0.3 pp). Site:
+  Learn. Evidence: model.md "Patch 16.21's first day", "Who leads a patch move (TS2, TS4)"
 - (early) Across a patch, pooling every old game with a small per-patch champion offset
   predicts the new patch best from its second day, better on changed champions. Sure: dev,
   16.21 days 1-3, 428k games, -0.28 ± 0.07 milli-nats a game vs plain pooling; a

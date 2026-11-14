@@ -264,8 +264,8 @@ pub const thin_matchups: ld.Puzzle = .{
     .why = "Only 19% reached 50 games; 46% had under 5.",
     .tip = "Check a matchup's games before its win rate.",
     .games = 428_616,
-    .from = "Ranked solo, every rank, EUW: every game of patch 16.21, matchups by role " ++
-        "and champion pair",
+    .from = "Ranked solo, every rank crawled, EUW: every game of patch 16.21, " ++
+        "matchups by role and champion pair",
 };
 
 pub const rare_pick: ld.Puzzle = .{
@@ -308,8 +308,9 @@ pub const patch_leader: ld.Puzzle = .{
     .why = "Neither Diamond+'s first days nor Korea's head start told where win rates went next.",
     .tip = "Read a new patch from everyone's games: no rank or region shows it first.",
     .games = 1_650_051,
-    .from = "Ranked solo, every rank, every region: 1.65M games in patch 16.21's first 11 " ++
-        "days, each champion-role's move from 16.20; Korea's lead on 16.22 too",
+    .from = "Ranked solo, every rank crawled, every region: 1.65M games in patch " ++
+        "16.21's first 11 days, each champion-role's move from 16.20; " ++
+        "Korea's lead on 16.22 too",
 };
 
 pub const item_wr: ld.Puzzle = .{
