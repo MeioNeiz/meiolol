@@ -280,6 +280,38 @@ pub const rare_pick: ld.Puzzle = .{
         "100 games in the 30 days before patch 16.21, their 4,810 games the week after",
 };
 
+pub const patch_day: ld.Puzzle = .{
+    .id = "patch-day",
+    .q = "How much further did the changed champions move?",
+    .setup = .{ .facts = &.{ .{ .v = "0.5 points", .label = "how far a patch moved the others' win rates, day one" }, .{ .v = "12", .label = "champions the patch changed" } } },
+    .answer = .{ .pick = .{ .right = 2, .choices = &.{
+        .{ .text = "About as far" },
+        .{ .text = "Twice as far" },
+        .{ .text = "Four times as far", .shown = "1.9 points" },
+    } } },
+    .why = "The 12 changed champions moved 1.9 points on day one, the rest 0.5.",
+    .tip = "After a patch, trust old numbers least on the champions it changed.",
+    .games = 51_852,
+    .from = "Ranked solo, Platinum IV and up, every region: 51,852 games on patch 16.21's " ++
+        "first day against 632k of 16.20's last week, each region's own rates",
+};
+
+pub const patch_leader: ld.Puzzle = .{
+    .id = "patch-leader",
+    .q = "Whose games show a patch's winners first?",
+    .setup = .{ .facts = &.{ .{ .v = "Days 1-3", .label = "of a new patch, Diamond+ games" }, .{ .v = "Korea", .label = "plays each patch before EUW" } } },
+    .answer = .{ .pick = .{ .right = 2, .choices = &.{
+        .{ .text = "Diamond+ players", .shown = "Not detected" },
+        .{ .text = "Korea", .shown = "Not detected" },
+        .{ .text = "Nobody: every rank moves at once" },
+    } } },
+    .why = "Neither Diamond+'s first days nor Korea's head start told where win rates went next.",
+    .tip = "Read a new patch from everyone's games: no rank or region shows it first.",
+    .games = 1_650_051,
+    .from = "Ranked solo, every rank, every region: 1.65M games in patch 16.21's first 11 " ++
+        "days, each champion-role's move from 16.20; Korea's lead on 16.22 too",
+};
+
 pub const item_wr: ld.Puzzle = .{
     .id = "item-wr",
     .q = "Why do its buyers win more?",
@@ -373,8 +405,8 @@ pub const chapter2 = [_]ld.Puzzle{ fed, fed_role, lead_worth, surrender, bounty 
 pub const chapter3 = [_]ld.Puzzle{gold_nudge};
 pub const chapter4 = [_]ld.Puzzle{ counter_role, team_counter };
 pub const chapter5 = [_]ld.Puzzle{
-    splitpush, wincon,   sample, thin_matchups, rare_pick,   item_wr, support_gold,
-    scaling,   comeback, runes,  skillshots,    style_types, luck,
+    splitpush,    wincon,  sample,   thin_matchups, rare_pick,  patch_day,   patch_leader, item_wr,
+    support_gold, scaling, comeback, runes,         skillshots, style_types, luck,
 };
 
 test "fixed puzzles: answers in range, games on every bar, no pick advice" {

@@ -408,7 +408,7 @@ How to write a line:
 - A new patch moves champions' win rates beyond noise, mostly the changed ones (0.75 pp
   RMS on 16.21's day one, 1.9 pp for the 12 changed); Diamond+ doesn't move first, nor KR
   before EUW1, and a pick that jumps starts about a point up and stays. Sure: day one 52k
-  games; 16.21 (KR 16.22 too): no lead, no curve (late minus early -0.2 ± 0.3 pp).
+  games; 16.21 (KR 16.22 too): no lead, no curve (late - early -0.2 ± 0.3 pp). Site: Learn.
   Evidence: model.md "Patch 16.21's first day", "Who leads a patch move (TS2, TS4)"
 - (early) Across a patch, pooling every old game with a small per-patch champion offset
   predicts the new patch best from its second day, better on changed champions. Sure: dev,
