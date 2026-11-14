@@ -102,6 +102,7 @@ what the Riot API serves and how to crawl it
 | [League of Graphs homepage](../sources/leagueofgraphs-home.md) | League of Graphs homepage, Oct 2026: redesign with optional account for preferences, many aggregate stat pages (win rate by experience, snowballing), replays, links to Porofessor Arcade | docs | data fun tools ux/features ux/layout | skimmed (homepage text, logged out) | medium | B/weak | 4/5 | 2026-10-17 |
 | [League of Graphs: Darius stats (Wayback, Mar 2026)](../sources/leagueofgraphs-darius-stats.md) | League of Graphs champion stats page: aggregate curves by game duration (gold, CS, kills, deaths, win rate), snowballing win rate by kill lead at 10 and 20 minutes, kill and death position maps | docs | data tools ux/features | docs (whole page, Wayback copy 2026-03-08, patch 16.4; live site 403) | high | B/fair | 6/7 | 2026-10-11 |
 | [League of Legends Patch 26.1 Notes (Riot)](../sources/lol-patch-26-1.md) | Riot's season 2026 opening patch notes; source of the current minion wave, minion bounty, first blood and role quest rules | docs | data learning | docs (Role Quests, kills, epic objectives, minions sections; grepped the rest) | high | A/fair | 8/8 | 2026-10-20 |
+| [League of Legends Patch 26.22 Notes (Riot, 2026-11-03)](../sources/lol-patch-26-22.md) | Riot's official 26.22 notes, read for what changed on Summoner's Rift, 14 champions and two items, no runes, as the input to Meio's 16.22 day-0 checks | docs | data | docs | medium | A/fair | 2/3 | 2026-11-14 |
 | [League of Legends the affect of Team Composition on Win Rate (Rosenberg, UMich student project)](../sources/cram678-comp-winrate.md) | Student project (UMich) on about 9.6k games: champion class counts from the wiki as win features; class-only models score 0.515-0.516 accuracy, champions plus class counts plus opponent 0.55 | project | data draft method | docs (full write-up page; code not read) | medium | D/weak | 6/6 | 2026-10-13 |
 | [League of Legends Wiki: Caster minion](../sources/lol-wiki-caster-minion.md) | Community wiki page on caster minions: flat 14 gold, 31 XP since V26.01 | docs | data | docs (infobox, V26.01 history) | medium | B/fair | 2/2 | 2026-10-20 |
 | [League of Legends Wiki: Champion gold bounties](../sources/lol-wiki-champion-gold-bounties.md) | Community wiki page on champion kill gold: base bounty by level, assist gold, first blood, accrual, shutdowns, suppression | docs | data learning | docs (whole page incl. patch history to V5.22) | high | B/fair | 6/7 | 2026-10-20 |
@@ -214,7 +215,7 @@ what the Riot API serves and how to crawl it
 
 ## Findings by tag
 
-### data: Riot API, match data, sampling, patches, rate limits (445)
+### data: Riot API, match data, sampling, patches, rate limits (449)
 
 - [[agarwala-pearce-2014#^f1]] [data] 40,000 matches from one patch (Oct to Dec 2014), All Pick and Captain's Mode, no leavers, mixed skill; hero profiles from about 1,500 pro games on DatDota. (C/fair, verified)
 - [[akhmedov-dota-ml-2021#^f3]] [data] Rows are overlapping windows of L lagged steps per game; 3,833 rows by 70 columns, split at random 80/20, so near-identical windows of one game land in both train and test. Sections V-B, VI (D/weak, verified)
@@ -434,6 +435,10 @@ what the Riot API serves and how to crawl it
 - [[lol-patch-26-1#^f3]] [data] New minion XP: melee 62, ranged 31, cannon 75; melee gold 20. (A/fair, verified)
 - [[lol-patch-26-1#^f4]] [data] [learning] Cannon gold now grows 1 per 90 s from 50 (was 60 + 3 per 90 s), so the cannon's late value was cut sharply. (A/fair, verified)
 - [[lol-patch-26-1#^f7]] [learning] [data] Role quests change farm value by role: laners get 25% less minion gold and XP outside their lane until level 3; after quest completion the bot laner gets +2 gold per minion and +50 per takedown, the top laner 12.5% more XP and level cap 20, the jungler +10 gold and +10 XP per la... (A/fair, verified)
+- [[lol-patch-26-22#^f1]] [data] Summoner's Rift champion changes in 26.22: 14 champions (Aurelion Sol, Corki, Kayle, Locke, Maokai, Mel, Naafiri, Rumble, Shen, Smolder, Thresh, Viktor, Yasuo, Zaahen), Mel a midscope rework (Champions section headings). (A/fair, verified)
+- [[lol-patch-26-22#^f2]] [data] Two Summoner's Rift items changed: Doran's Bow (a start item) and Overlord's Bloodmail, which Riot calls a net buff for most users other than Sett. (A/fair, verified)
+- [[lol-patch-26-22#^f3]] [data] Checked, not there: no rune or keystone change anywhere in the notes; the Items section has no Gluttonous Greaves entry though the intro names it. (A/fair, absence)
+- [[lol-patch-26-22#^f4]] [data] The notes are dated 3 Nov 2026 and a third of the text is other modes (ARAM: Mayhem augments, Classic champions and items), which ranked data never sees. (A/fair, unquoted)
 - [[lol-player-champion-experience#^f3]] [data] Sampling: random players, each one's most recent ranked match, 5000 unique matches, NA, Iron to Diamond 2020. (D/weak, verified)
 - [[lol-player-champion-experience#^f4]] [data] [method] Features: mastery points, the player's ranked win rate on that champion over the 2020 season, season games on it, and recent games on it among the last 20. (D/weak, verified)
 - [[lol-player-champion-experience#^f9]] [data] (inferred) Riot API needs per player: champion-mastery-v4 (points, a current snapshot only) and a season champion win rate, which Riot does not serve directly: it means crawling that player's match-v5 history and counting games before the game time. (D/weak, unquoted)

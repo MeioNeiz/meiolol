@@ -6839,6 +6839,67 @@ Pair cells, pairs scenario, fm 8 seed 1 (correlation with the truth's cell):
   not filtered for duplicate champions. C1 in docs/plan/lab-frontier.md runs the same
   reading on the teacher with these as its null
 
+### A lead from the early platforms (P3), 16.21 and 16.22, 2026-11-14 (meio2)
+
+Question (data/team/2026-11-09-more/modelresearch-proposals.md P3): Meio's EUW1 item and
+keystone shares lose to the raw 30 days on a patch's day 0, though Meio already counts
+every early platform's newest-patch games from before EUW1's first (T0) at full weight.
+Two arms: (A) KR and VN2's pre-T0 games left out of Meio's fit, the two platforms least
+like EUW1 ("Regions as neighbours"); (B) EUW1's share logit moved on top by beta x m x
+200 / (200 + EUW1's newest-patch games of the champion-role), m the shrunk move of JP1,
+SG2, TW2 and OC1 (ASIA4) from their previous patch to their pre-T0 games. Arms, beta's
+grid and the keep rule declared before any run (data/team/2026-11-13-max/meio2.md,
+21:35Z 13 Nov). What Riot changed in 16.22: research/sources/lol-patch-26-22.md.
+
+B's beta, fitted on 16.21 only: truth, origin 0, EUW1 all ranks day 0, Meio minus the raw
+30 days, milli-nats a target game:
+
+| beta | -0.5 | -0.25 | 0 | 0.25 | 0.5 | 0.75 | 1.0 |
+| --- | --: | --: | --: | --: | --: | --: | --: |
+| item share | +0.35 | +0.07 | -0.02 | +0.09 | +0.42 | +0.99 | +1.85 |
+| keystone share | +0.23 | +0.08 | +0.08 | +0.22 | +0.51 | +0.98 | +1.64 |
+| sum | 0.58 | 0.15 | 0.06 | 0.31 | 0.93 | 1.97 | 3.49 |
+
+Lowest at 0, not a grid end (a parabola through the middle three bottoms at -0.06): B
+with its fitted beta is base, gains nothing on 16.22 and fails rule 1 without a run.
+
+A against base: truth on data/cubes-20261109, 16.22 origins 0-2 and 16.21 origins 0-13,
+Meio minus the raw 30 days, all ranks, every region unless EUW1, ± 2 se over cells:
+
+| row | 16.22 base | A | 16.21 base | A |
+| --- | --: | --: | --: | --: |
+| EUW1 item share, day 0 | +0.08 ± 0.03 | +0.03 ± 0.02 | -0.02 ± 0.04 | +0.07 ± 0.04 |
+| EUW1 keystone share, day 0 | +0.09 ± 0.06 | +0.12 ± 0.07 | +0.08 ± 0.10 | +0.46 ± 0.21 |
+| item share, day 0 | +0.08 ± 0.03 | +0.04 ± 0.02 | +0.04 ± 0.03 | +0.10 ± 0.03 |
+| keystone share, day 0 | +0.12 ± 0.05 | +0.14 ± 0.05 | +0.09 ± 0.07 | +0.49 ± 0.14 |
+| EUW1 item share, day 1 | -0.15 ± 0.04 | -0.15 ± 0.03 | -0.15 ± 0.04 | -0.15 ± 0.04 |
+| EUW1 keystone share, day 1 | -0.14 ± 0.05 | -0.15 ± 0.05 | -0.12 ± 0.04 | -0.12 ± 0.04 |
+
+Rule for A: (1) 16.22 EUW1 day 0: item share 0.05 better, keystone share 0.03 worse,
+summed gain 0.02 where 0.076 was needed, fail; (2) shares on days 1+, 48 rows, none worse
+than 0.01, pass; (3) win rates, 304 rows, none worse than 0.01, pass; (4) bracket rows
+worse beyond 2 se: 35 of 1,520, 32 of them on 16.21 and mostly day-0 shares (keystone
+share +0.4 to +0.7 in every bracket, both regions), fail. Beside: 16.22's day-0 lane
+gold is worse beyond 2 se too. Neither arm is kept and there is no candidate for the
+16.23 look: Meio keeps every early platform's pre-T0 games at full weight.
+
+Reading:
+- KR and VN2's games from before EUW1 help day 0: without them 16.21's keystone shares
+  are 0.4 milli-nats worse and its item shares 0.1; 16.22 is a wash. Least like EUW1 in
+  taste, but an option that moves there on a patch mostly moves on EUW1 too. Days 1+ are
+  the same either way: EUW1's own games have taken over
+- ASIA4's move holds nothing for EUW1's day 0 beyond what Meio takes from the same
+  games: the loss grows on both sides of beta 0, as a noise term's would. A lead Meio
+  had not used would put the lowest loss at a positive beta
+- Limit of B as declared: tau by moments over every option of a champion-role with 30+
+  games a side came out at 0.90 logit (keystones) and 1.16 (items), so rare options (0
+  picks against 3) set it and most moves stay near full size. A lead over options with
+  picks on both sides is untested; with beta's best at or under 0 it is a weak bet
+- One boundary for beta, two for A; 16.22's targets end on day 4 (cubes of 9 Nov)
+
+Outputs, the rule script and the arms' diff (experiment flags on 6aa607e1, not on main):
+data/team/2026-11-14-loads/meio2-p3/.
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now

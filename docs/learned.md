@@ -416,12 +416,12 @@ How to write a line:
   changed-champions list adds nothing. Evidence: model.md "The latest patch day by day on
   16.21"
 - A patch moves pick shares alike everywhere but not as one (EUW1 vs the rest r 0.85-0.88;
-  KR, VN2 least alike). Games before EUW1 carry real balance; an early-platforms term and
-  an EUW1 patch term in shares both missed their bars. EUW1's next days come from its own
-  early move shrunk; the rest's (KR, VN2 out) adds 0.004-0.013 milli-nats on items, nil
-  on champion-roles. Sure: 16.21, 16.22. Evidence: docs/model.md "The patch's games from
-  before EUW1", "An early-platforms term", "Regions as neighbours", "EUW1's own patch
-  move in Meio's shares", "EUW1's share move from own days and the rest's"
+  KR, VN2 least alike). Games before EUW1 carry real balance, KR's and VN2's too (without
+  them 16.21's day-0 keystone shares are 0.4 milli-nats worse); an early-platforms term,
+  an EUW1 patch term and a JP SG TW OC lead all missed. EUW1's next days come from its
+  own early move shrunk; the rest's adds 0.004-0.013 on items. Sure: 16.21, 16.22.
+  Evidence: model.md "An early-platforms term", "Regions as neighbours", "EUW1's share
+  move from own days and the rest's", "A lead from the early platforms (P3)"
 - On a patch's first day most players have not played it: 75-89% of players checked
   had no game on it; players just seen in a new game give 3.1-3.5 new games per call.
   Crawler: snowball and patch-start reset. Evidence:
