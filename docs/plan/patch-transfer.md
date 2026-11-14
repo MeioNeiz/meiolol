@@ -4,7 +4,8 @@ We mostly analyse the latest patch and keep it simple: the model is evaluated ag
 latest-patch games only (J25). Old patches always stay in, with a correction between
 patches, never latest patch only (J28).
 Research: research/questions/patch-transfer.md (ratings level, cited [pt C1]) and its
-child patch-shift-nets.md (nets, cited [psn C1]). lab-frontier.md E2-E3 run here (A2,
+child patch-shift-nets.md (nets, cited [psn C1]) and early-patch-forecast.md (what others
+do in a patch's first days, cited [epf C1]). lab-frontier.md E2-E3 run here (A2,
 A3); E4-E5 only if PT3 finds a jump worth modelling.
 
 ## The approach
@@ -74,6 +75,24 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
 - PT9 A second patch: replay 16.22's days 0-3 as PT3 did 16.21 (A0, A1, A2, C) on a new
   pin once 16.22 has ~7 days, then its own declared test look. With 16.21's look, two
   patches decide PT5, not one
+- PT10 Arms from prior art, for a declared look on 16.23. Nobody found scores a forecast
+  of patch moves out of sample, and the big stat sites reset or show an unweighted
+  window [epf C1, C10], so each arm is a test, not a port. Knobs fitted on 16.21 and
+  16.22, scored on 16.23's days 0-3 by day bucket against A2 (patchdays) and Meio's
+  champion-role kind (truth); rule and numbers declared before 16.23's first game
+
+  | arm | what | fitted | why |
+  | --- | --- | --- | --- |
+  | S1 signed mean | A2, offset mean = sign x m for champions the notes change directly; label (buff, nerf; adjustments 0) coded from Riot's notes before any game | m per sign | the one arm that can beat A1 on day 0; sign codes 87-99% reliably, one in-sample backtest cut error 16% [epf C9, C10]; buffs miss more than nerfs [epf C11] |
+  | S2 pad by forecast error | per kind, the pad X = 4 / sd^2 games that best predicts the next 7 days from every origin | X per kind | the fitted pad came out a third of the formula's in sport [epf C5]; ours is 7-10k games a champion-role [epf C13]. A check on MacKay's sd: kept only if X differs over 2x and wins |
+  | S3 micropatch boundary | a champion Riot changes mid-patch gets a new offset slot from that day | none | day 0 of a hotfixed champion is another champion [epf C14]; only if 16.23 has one |
+  | S4 reversion | S1's champions, mean = -b x last patch's distance from the role's middle | b | misses are corrected next patch [epf C8]; a hint on 16.21's 12 changed; beside S1 only |
+
+  Size: changed champions carry about half of day 0's ~1.1 milli-nats, so S1 can gain
+  ~0.1-0.2 at most, on day 0 and day 1; m and b come from ~25 changed champions over two
+  boundaries. Not arms: sizes from the notes before S1 passes, designer sizes (none
+  published), means for unchanged champions, a changed-champion variance (A3) [epf C8,
+  C9, C11, C12]. Beside: LoLalytics, U.GG and OP.GG defaults saved on 16.23's days 0-1
 - PT5 Ship: the winning rule on the box (daily update, refit per patch); the daily eval
   (deploy/web-loop.sh, data/eval-history.tsv) scores latest-patch games only
 - PT7 Patches as experiments (Jacob, 4 Nov; Meio M8 in estimates.md): patchnotes.zig's
