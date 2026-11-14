@@ -228,10 +228,10 @@ How to write a line:
   2-3.5 points per 1,000 gold at 15:00. Site: no "carry" or "comeback champion" labels;
   lessons by role. Evidence: model.md "Carry and impact", "Champion given the state
   (scaling)"
-- (early) A small neural network that reads what each team's champions typically do
-  finds mostly the damage-mix effect again (up to two-thirds of the hand-made term), and
-  nothing confirmed on top of it. Sure: dev only, 44,353 games, -0.00037 ± 0.00021 nats.
-  Site: nothing. Evidence: docs/model.md "Set net: DeepSets on champion profiles"
+- (early) What a small net adds to the pair model is more pair effects, most between
+  enemies in different roles, not effects of three or more champions together: without
+  its three-and-up parts it predicts the same (0.015 ± 0.052 milli-nats apart). Sure: dev
+  only, 159k games. Site: nothing. Evidence: model.md "Order spectrum of the teacher (C1)"
 - (early) Knowing how each champion plays in its role (gold, CS, deaths, damage, early
   lead) does not measurably improve win predictions beyond its own win record. Sure:
   not detected, dev only, 44,353 games, at most 0.0007 nats a game. Site: nothing.

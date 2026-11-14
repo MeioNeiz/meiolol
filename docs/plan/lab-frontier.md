@@ -67,6 +67,12 @@ bans unused.
   in empty blocks, on which its seeds agree; a hidden 2 pp class triple was not learnt;
   direct shrunk cells name pairs better from 50 games up: "Planted check of the 10-seat
   Möbius reading (C0)"
+- C1 order spectrum of the teacher (`meiolol-lab mobius`, exact terms of v2 and the set
+  net on it, 2004Z dev): the net's gain is pair structure v2's single cells can't hold,
+  three fifths of the pair power it adds in cross-role enemy blocks. Order 3+ is there
+  (0.17 pp^2 a draft beside 31 of pairs; idle twins ~0) but does not predict: the teacher
+  against its own terms up to pairs -0.015 ± 0.052 milli-nats on 159k games. The twins'
+  nets learnt nothing, so they are a weak null: "Order spectrum of the teacher (C1)"
 
 ## Phase 0: before the gpu-box runs (CPU, Mac or box)
 
@@ -197,37 +203,17 @@ Not run [C13, C17, C18]: H-statistic (per seat pair, no null), EBM/FAST (pair te
 champions in index order), neural GAMs (nothing at champion level over shrunk cells),
 seat-masked training as the main reading (describes how picks go together, not the model).
 
-- C1 Order spectrum of the teacher (declared 13 Nov, nothing run; dev only, nothing public)
-  - Models: B = additive v2 with pair parents (win-additive), T = the set net with
-    champion-role embedding on it (setid-wa, 18 Oct options), seeds 1-6 and their mean.
-    snap-20261023T2004Z, netcheck's dev block: fit below the dev cut, explain played
-    dev-val games (a seeded 20,000 for power, all for (3)). No test game is loaded
-  - Reading: Mobius terms of the logit per draft; absent seats from 32 fit drafts
-    sharing no champion with it (every mix legal), the same for all coalitions, in two
-    halves; an order's power = mean over drafts of the halves' summed product, pp^2.
-    Tool: `meiolol-lab mobius` (to write), checked by py/xcheck/mobius_plant.py
-  - (1) Tool gate: B without the damage mix has order 3+ power under 1e-6 pp^2, its pair
-    terms match its purified cells (r > 0.999), and Zig and Python agree on a planted
-    truth to 1e-4 pp. Else nothing is read
-  - (2) Higher orders there? H3 = T's order 3+ power. Twins: B and T (seeds 1-2) refitted
-    on three `plant:` relabellings of the fit games, mains and pair cells at v2's block
-    spreads, no mix. Yes when the smallest H3 of the six real seeds is over twice the
-    largest of the six twins (C0's twins: 0.3-1.6% of power)
-  - (3) Do they predict? T against its own terms up to pairs, paired log loss per game:
-    yes when d + 2.1 h < 0
-  - Both yes: C4 runs, C3's student gets comp terms beside pairs, the seat sets carrying
-    order 3+ are listed. Either no: the net's gain is main and pair structure single
-    cells can't hold; C3's student is v2's form alone, C4 waits for twice the games
-  - Reported, not deciding: power per order for B, T - B and T, per seed; T - B's pair
-    power per block; pair terms with the other seats absent against present [C15]
+- C1 Order spectrum of the teacher: done (Results so far). Higher orders are there but
+  don't predict, so C3's student is v2's form alone and C4 waits
 - C2 Pairs the net moved: cells whose T - B term is over three times a knockoff
   block's sd (a dummy seat per role), same sign in 6 of 6 seeds, refit as shrunk terms in
   v2 and judged on held-out log loss [interactions C4, C5]: the pairs the site may name
 - C3 Distil the teacher into v2's form (out-of-fold soft targets, squared error on
   logits, mains then pairs; `netcheck --fit-preds 1`, `effects --soft`) and compare term
   by term with the label fit (distil-explainable C8, C11)
-- C4 Triple power test, only if C1 says yes: plant 3-way kit-group terms, smallest
-  detectable at this size, then real class triples [interactions C8, C9]
+- C4 Triple power test, waits for twice C1's games (1.19M fit; snap-20261113T2130Z packs
+  4.07M): plant 3-way kit-group terms, smallest detectable at this size, then real class
+  triples [interactions C8, C9]
 - C5 Purify shipped and teacher terms under seat-weighted data before display, so mains
   don't hide in pairs [interactions C2]
 

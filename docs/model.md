@@ -6949,6 +6949,182 @@ Reading:
 Outputs, the rule script and the arms' diff (experiment flags on 6aa607e1, not on main):
 data/team/2026-11-14-loads/meio2-p3/.
 
+### Order spectrum of the teacher (C1), 2026-11-14 (mobius)
+
+Question (lab-frontier wave 3): does the set net on additive v2 predict with effects of
+three or more champions together, or is its gain over v2 main and pair structure that
+v2's single cells can't hold? Dev only, nothing public; no test game loaded.
+
+Declared 13 Nov before any run (docs/plan/lab-frontier.md at 7f8161d7, copied here):
+- Models: B = additive v2 with pair parents (win-additive), T = the set net with
+  champion-role embedding on it (setid-wa, 18 Oct options), seeds 1-6 and their mean.
+  snap-20261023T2004Z, netcheck's dev block: fit below the dev cut, explain played
+  dev-val games (a seeded 20,000 for power, all for (3))
+- Reading: Möbius terms of the logit per draft; absent seats from 32 fit drafts sharing no
+  champion with it (every mix legal), the same for all coalitions, in two halves; an
+  order's power = mean over drafts of the halves' summed product, pp^2
+- (1) Tool gate: B without the damage mix has order 3+ power under 1e-6 pp^2, its pair
+  terms match its purified cells (r > 0.999), and Zig and Python agree on a planted truth
+  to 1e-4 pp. Else nothing is read
+- (2) Higher orders there? H3 = T's order 3+ power. Twins: B and T (seeds 1-2) refitted on
+  three `plant:` relabellings of the fit games, mains and pair cells at v2's block
+  spreads, no mix. Yes when the smallest H3 of the six real seeds is over twice the
+  largest of the six twins
+- (3) Do they predict? T against its own terms up to pairs, paired log loss per game: yes
+  when d + 2.1 h < 0
+- Both yes: C4 runs, C3's student gets comp terms beside pairs. Either no: the net's gain
+  is main and pair structure single cells can't hold; C3's student is v2's form alone, C4
+  waits for twice the games
+
+Readings the declaration left open, fixed 13 Nov before a C1 number existed
+(data/team/2026-11-13-max/mobius.md): backgrounds drawn seeded by game index from the dev
+block's fit drafts, redrawn while one shares a champion, halves = even and odd, the same
+drafts and backgrounds in the real run and the twins; (1a) B without the mix = blueLogit
+minus mixLogit on the 20,000 sample; (1b) B's raw cells read with every other seat
+empty, centred over the draft's own 32 backgrounds, against the tool's order-2 terms
+over sample drafts x 45 seat pairs; (1c) the Python reading in float64 dumps C0's triple
+2 pp truth on 500 2004Z drafts x 32 backgrounds, Zig recomputes all 1,024 terms of both
+halves; (2) H3 per seed on T whole (B's mix included), twins `plant:seed=K,v2=1` K = 1-3
+(iid normal cells at v2's block sds from run 20261024T003414Z-add-v2-2004Z, no mix), B
+refitted, nets seeds 1-2, same options; (3) T = the logit mean of seeds 1-6 on every
+played dev-val game, T<=2 = the sum of its mean terms of order 0-2, h = 1.96 se; a seed
+that early stopping leaves at 0 epochs stays in.
+
+Tool: `meiolol-lab mobius SNAP --nets DIR` (src/lab/mobius.zig, -Dcand win-additive). B is
+refitted as netcheck fits it and read as a black box per coalition, apart from its mix
+(cand mixLogit); a net (netcheck `--export 1`'s file) by its phi output cached per
+champion-role; terms are linear in the model, so T's are a x B's + the net's own.
+Checked per run: each file's refs, the reader on them, B against the refs' offsets (1e-3:
+the same fit as the nets' base), and every draft's terms summing to the model on it
+(worst 6e-15 logit).
+
+Runs (gpu-box, lab binary f7f4a4d3eaa69f41 = 39a4692f before a format-only change; copies
+in data/runs/): 20261114T030538Z-c1-nets-2004Z (the six nets, `netcheck --net set --ids
+1 --seeds 1-6 --blocks dev --export 1`), 20261114T034625Z-c1-dump and
+20261114T034710Z-c1-plantcheck (1c), 20261114T034755Z-c1-mobius-2004Z (the 20,000
+sample), 20261114T035146Z-c1-twin1-nets to 20261114T043705Z-c1-twin3-mobius (three twins,
+nets then reading), 20261114T045205Z-c1-mobius-all-2004Z (`--all 1`: every dev-val game
+for (3)). Fit 1,190,461 games, dev-val 158,728. The nets on all of dev-val against B,
+milli-nats a game: seeds -0.54, -0.56, -0.21, -0.65, -0.48, -0.54 (each ± 0.15 to 0.21),
+their mean -0.66 ± 0.16 (0.68356 against 0.68422), 3.5 to 7 epochs.
+
+(1) The tool gate passes:
+- (1a) B without the mix: order 3+ power -4.1e-30 pp^2 (under 1e-6)
+- (1b) its order-2 terms against its purified cells: r 1.00000000 over 1,800,000 terms,
+  largest difference 7.0e-15 pp
+- (1c) Zig against Python on the planted triple: largest difference 0 pp over 1,024,000
+  terms (bit for bit); power by order 24.40, 25.92, 8.75, then 0, from both
+
+Power by order, pp^2, mean over the 20,000 drafts (± 95% over drafts):
+
+| model | 1 | 2 | 3 | 4 | 5 | 6-10 | 3+ | 3+ share of 1+ |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| B without the mix | 30.14 ± 0.33 | 17.04 ± 0.15 | 0 | 0 | 0 | 0 | 0 | 0 |
+| B | 30.49 ± 0.37 | 24.70 ± 0.18 | 0.079 | 0.000 | 0 | 0 | 0.080 ± 0.002 | 0.14% |
+| T seed 1 | 31.27 | 31.45 | 0.158 | 0.023 | 0.009 | 0.027 | 0.217 ± 0.036 | 0.35% |
+| T seed 2 | 32.08 | 32.73 | 0.167 | 0.040 | 0.009 | 0.016 | 0.231 ± 0.032 | 0.36% |
+| T seed 3 | 33.32 | 32.70 | 0.223 | 0.097 | 0.020 | 0.023 | 0.363 ± 0.039 | 0.55% |
+| T seed 4 | 29.68 | 32.24 | 0.205 | 0.081 | 0.026 | 0.043 | 0.355 ± 0.050 | 0.57% |
+| T seed 5 | 30.89 | 30.48 | 0.175 | 0.025 | 0.016 | 0.035 | 0.252 ± 0.034 | 0.41% |
+| T seed 6 | 31.98 | 32.38 | 0.227 | 0.072 | 0.022 | 0.028 | 0.348 ± 0.035 | 0.54% |
+| T, the seeds' mean | 31.25 ± 0.38 | 31.46 ± 0.22 | 0.138 | 0.030 | 0.004 | 0.001 | 0.174 ± 0.007 | 0.28% |
+| T - B, seeds 1-6 | 0.12 to 1.24 | 2.34 to 4.04 | 0.072 to 0.143 | 0.023 to 0.096 | 0.009 to 0.026 | 0.016 to 0.043 | 0.131 to 0.281 | 3.6 to 7.2% |
+| T - B, the seeds' mean | 0.09 | 2.91 ± 0.03 | 0.054 | 0.030 | 0.004 | 0.001 | 0.089 ± 0.007 | 2.9% |
+
+The twins (B's log loss on dev-val 0.66895, 0.67102, 0.67449; the real B 0.68422):
+
+| twin | B: 1 | 2 | 3+ | net epochs, seeds 1, 2 | T - B: 1 | 2 | T's 3+ (H3), seeds 1, 2 | T - B's 3+ share |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 116.93 | 12.38 | 0.00001 | 0.75, 0.50 | 0.002, 0.007 | 0.0002, 0.0009 | 0.00005, 0.00024 | 2.1%, 2.8% |
+| 2 | 102.80 | 12.40 | 0 | 0, 0 | 0, 0 | 0, 0 | 0, 0 | - |
+| 3 | 89.28 | 11.02 | 0 | 0.50, 0.50 | 0.021, 0.061 | 0.0035, 0.0050 | 0.00057, 0.00069 | 2.3%, 1.0% |
+
+(2) Higher orders there? Yes by the rule: the smallest H3 of the six real seeds is 0.217
+pp^2, the largest of the six twins 0.00069.
+
+What that yes is worth:
+- The twins bound an idle net, not a net that learnt pairs. B fits a truth of v2's own
+  form whole, so early stopping left the twins' nets at 0 to 0.75 epochs with under 0.07
+  pp^2 of power of any order (none helped on dev-val: +0.00 to +0.04 milli-nats). The
+  rule was passed 300 times over because the real nets do something at all. As a share
+  of the net's own power the twins' order 3+ is 1.0 to 2.8% a seed, the real nets' 3.6 to
+  7.2%, C0's nets that learnt planted pairs 0.3 to 0.5%. Also, with iid cells the twins'
+  mains carry 3 to 4 times the real fit's power (89 to 117 pp^2 against 30) and pairs
+  0.7 times
+- Of T's 0.174, 0.080 is B's damage mix (a function of a team's five, read as order 3
+  within a team). The nets' own part is 0.13 to 0.28 a seed and 0.089 in the seeds' mean:
+  about a third of a seed's order 3+ power is common to the seeds (a seed's own averages
+  0.210, and six unrelated seeds would leave 0.035), against four fifths of its pair
+  power (2.91 in the mean, 3.44 a seed)
+- The nets' own order 3+ is thin and mostly across the teams, where B has none: 0.074 of
+  0.089. Two of a team with one enemy 0.042 over 100 seat sets, three with one enemy
+  0.022 over 100, a team's own triples 0.013 over 20; the largest single set (a team's
+  jungle, mid and support) 0.0011. In size: an sd of 0.42 pp a draft for all of T's order
+  3+, against 5.6 pp for its pairs and 5.6 pp for its mains
+
+(3) Do they predict? No. T (the logit mean of seeds 1-6) against the sum of its own
+terms up to pairs on all 158,728 dev-val games: d -0.015, h 0.052 milli-nats a game, d +
+2.1 h = +0.093, not under 0 (recomputed from the run's per-game trunc.tsv: the same). On
+the 20,000 sample alone +0.04 ± 0.15. Each model minus its own terms up to an order, and
+against B, milli-nats a game (negative: the whole model better), ± 95%:
+
+| model | log loss | minus terms to order 1 | to order 2 | to order 3 | minus B | terms to order 2 minus B |
+| --- | --- | --- | --- | --- | --- | --- |
+| B | 0.68422 | -4.64 ± 0.47 | +0.00 ± 0.03 | +0.00 ± 0.00 | | -0.00 ± 0.03 |
+| T seed 1 | 0.68368 | -5.53 ± 0.53 | -0.02 ± 0.08 | -0.57 ± 0.15 | -0.54 ± 0.17 | -0.53 ± 0.18 |
+| T seed 2 | 0.68365 | -5.57 ± 0.55 | +0.01 ± 0.08 | -0.46 ± 0.14 | -0.56 ± 0.18 | -0.57 ± 0.19 |
+| T seed 3 | 0.68401 | -5.53 ± 0.55 | -0.10 ± 0.09 | -0.35 ± 0.15 | -0.21 ± 0.21 | -0.11 ± 0.22 |
+| T seed 4 | 0.68357 | -5.69 ± 0.54 | -0.13 ± 0.09 | -0.53 ± 0.18 | -0.65 ± 0.19 | -0.52 ± 0.20 |
+| T seed 5 | 0.68374 | -5.41 ± 0.52 | -0.08 ± 0.08 | -0.40 ± 0.15 | -0.48 ± 0.15 | -0.40 ± 0.16 |
+| T seed 6 | 0.68368 | -5.55 ± 0.54 | -0.11 ± 0.09 | -0.36 ± 0.15 | -0.54 ± 0.17 | -0.43 ± 0.18 |
+| T, the seeds' mean | 0.68356 | -5.63 ± 0.53 | -0.015 ± 0.052 | -0.07 ± 0.07 | -0.66 ± 0.16 | -0.64 ± 0.16 |
+
+- All of the net's gain sits in its terms up to pairs: T's sum to order 2 beats B by 0.64
+  ± 0.16, T whole by 0.66 ± 0.16. Pairs carry it: without them T is 5.63 ± 0.53 worse, B
+  4.64 ± 0.47
+- B's own order 3 (the mix's 0.080 pp^2) predicts nothing: +0.00 ± 0.03
+- (3) could hardly have said yes at this size: a calibrated part of power P is worth
+  about P / 8 in log loss (lab-frontier "The bar"), so T's 0.174 pp^2 of order 3+ would
+  be worth 0.03 milli-nats if all of it were true, under the 0.05 that 159k games resolve
+- Per seed, reported only: four of the six are 0.08 to 0.13 better whole than cut at
+  pairs, each 95% interval clear of 0, none by the 2.1 rule (d + 2.1 h +0.07 to +0.17).
+  Read as noise of the cut, not signal: a cut sum is taken over 32 backgrounds and its
+  higher terms swing most over them. Cutting at order 3, which keeps more of the model,
+  is worse still (0.35 to 0.57 a seed), where the power left above order 3 (0.06 to 0.15
+  pp^2) would cost 0.01 to 0.03 if dropped cleanly; and in the seeds' mean, where a
+  seed's own part averages away, the gap at pairs is 0.015
+
+Result, as declared for "either no": the net's gain over v2 is main and pair structure
+that v2's single cells can't hold, not effects of three or more champions together. C3's
+student is v2's form alone; C4 waits for twice the games. Order 3+ is there in the net
+(2) but too small to predict with, or to test, at 1.19M fit games.
+
+Reported, not deciding:
+- What the net adds is pair power, 2.91 pp^2 against 0.09 of mains, and it adds it to
+  B's own (T's pair power 31.46 against B's 24.70: the two parts agree in sign). Three
+  fifths of it sits in the ten cross-role enemy blocks (table below), where B1's ceiling
+  put most of what is left. The largest T - B blocks: jungle v support 0.278, mid v
+  support 0.276, jungle v mid 0.210, top v support 0.185, bot v support 0.160, top v mid
+  0.152, top v jungle 0.151; the smallest lane bot 0.034 and top with bot 0.040
+- The mix is mostly pairs too: it lifts B's order-2 power from 17.04 to 24.70 and adds
+  0.080 above
+- A pair's term with the other eight seats absent against present (r over drafts x seat
+  pairs): B 0.995, T 0.988, T - B 0.925 for the seeds' mean and 0.81 to 0.88 a seed: a
+  pair means nearly the same whatever the rest of the draft
+
+Pair power by block, pp^2, both teams' seat pairs summed:
+
+| blocks | B | T | T - B |
+| --- | --- | --- | --- |
+| 10 ally | 10.77 | 12.76 | 0.74 |
+| 5 lanes | 9.26 | 10.82 | 0.43 |
+| 10 cross-role enemy | 4.67 | 7.89 | 1.74 |
+
+Limits: one snapshot and one dev block; 32 backgrounds a draft, so a truncated model
+carries background noise the power figures don't (it counts against the truncation, so
+towards a yes in (3)); the twins as above; T is this teacher (v2 with the set net), not
+the big nets or a stack.
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now
