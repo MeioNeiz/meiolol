@@ -6761,6 +6761,55 @@ Rules, the keep rule as proposed 9 Nov, the rest declared here before any run:
 - Reported beside: full-mi minus full-m (rank in the imputation) and full-mif minus
   full-mi (the flag alone). The net arm is not part of this run
 
+Run 20261114T025205Z-p4-2004Z (gpu-box, 6aa607e1, `effects SNAP --param v2 --p4 1`,
+cand win-draft; tables by py/xcheck/slices.py, copies in
+data/team/2026-11-14-loads/draftmodel-p4/). Dev only. Scored seats with a fetch: fold 1
+25%, then 50%, 64%, 70%, 76%, dev-val 84%; games with no seat known: 35,799 of fold 1's
+119,046, 10,390, 4,261, 1,488, 354, and 91 of dev-val's 158,728. Model minus v2 full,
+milli-nats a game (negative better), dev-val | folds pooled:
+
+| games | full-m | full-mi | arm A, full-mif | arm B, full-mifx |
+| --- | --- | --- | --- | --- |
+| all (158,728, 595,231) | -3.15 ± 0.43, -2.39 ± 0.18 | -3.15 ± 0.43, -2.40 ± 0.18 | -3.20 ± 0.43, -2.29 ± 0.19 | -3.02 ± 0.43, -0.48 ± 0.22 |
+| 1+ seats known (158,637, 542,939) | -3.15 ± 0.43, -2.62 ± 0.20 | -3.16 ± 0.43, -2.63 ± 0.20 | -3.21 ± 0.43, -2.51 ± 0.21 | -3.02 ± 0.43, -0.55 ± 0.24 |
+| no seat known (91, 52,292) | -0.51 ± 0.80, +0.01 ± 0.01 | +0.41 ± 1.38, +0.04 ± 0.03 | +0.43 ± 1.39, +0.04 ± 0.03 | +1.00 ± 1.83, +0.17 ± 0.18 |
+| all ten known (54,838, 77,158) | -2.76 ± 0.79, -3.64 ± 0.68 | the same | the same | -2.58 ± 0.80, -1.48 ± 0.79 |
+
+The steps, paired: rank in the imputation (full-mi minus full-m) -0.01 ± 0.02 on
+dev-val, -0.00 ± 0.01 on the folds (m rises 0.020 to 0.021 per division within a
+champion-role; fold 1's fit has no seat with both, slope 0). The flag alone (full-mif
+minus full-mi) -0.05 ± 0.02 on dev-val, +0.11 ± 0.04 on the folds: fold 1 +0.64 ± 0.20,
+folds 2-5 -0.01, -0.01, -0.03, -0.04 (each ± 0.02 to 0.03); the fitted flag is -0.004 to
+-0.009 logit per missing seat (± 0.004 to 0.009) in every block but fold 1, there +0.060
+± 0.078. Arm A against full-m: -0.06 ± 0.03 on dev-val, +0.11 ± 0.04 on the folds. The
+flag times strength (full-mifx minus full-mif) +0.18 ± 0.08 on dev-val, +1.80 ± 0.15 on
+the folds, every block worse; its coefficient 0.24 on dev-val's fit, 0.35 to 1.13 on
+the folds'.
+
+By the keep rule:
+- (1) holds: arm A against v2 full on games with 1+ seat known -2.51 ± 0.21
+- (2) holds on the point: +0.04 ± 0.03 on the 52,292 fold games with no seat known,
+  under the 0.05 allowed; the interval reaches 0.07
+- (3) holds: A's gain on dev-val (-3.20) is above its gain on the folds (-2.29)
+- (4) fails: B is worse than A on all games, so B is dropped
+
+Reading (dev):
+- Arm A is kept by the rule, but the rule had no test of A against D1's plain term, and
+  beside it A adds nothing that holds: all of A's gain is full-m's. The rank in the
+  imputation moves nothing. The flag is worth 0.05 ± 0.02 on the newest block, 0.01 to
+  0.04 on folds 2-5, and costs 0.64 where a quarter of the seats have a fetch and its
+  coefficient is noise (fold 1)
+- The era worry did not show: wherever half the seats or more have a fetch the flag is
+  small and steady (a seat without a fetch wins about 0.1 to 0.2 pp less than its
+  champion-role's mean mastery says), so missing-ness says little about who wins
+- Arm B as built is not a fair test of its idea: the strength it multiplies is the
+  block's own fit win rate, an unpenalised way round v2's shrinkage for the seats that
+  miss, so it gains in-sample and loses held-out, most where most fit seats miss. A
+  cross-fitted strength would be another arm; not run
+- So a model that takes seat mastery uses D1's form: a missing seat at its
+  champion-role's mean, no flag. The net arm (missing indicators into a set net) stays
+  open
+
 ### Planted check of the 10-seat Möbius reading (C0), 2026-11-13 (rinteract)
 
 Question (lab-frontier wave 3): if we decompose a trained draft net exactly into main,
