@@ -16,6 +16,9 @@ pub const ObjKind = enum { tower, inhibitor, dragon, elder, grubs, herald, baron
 
 pub const no_slot = 255;
 
+/// Game.queue of Ranked Solo/Duo: the in-game win chance model is fitted on it alone
+pub const solo_queue = "Ranked solo";
+
 /// `Data.arts` index for none: an empty slot, or a summary that predates loadouts
 pub const no_art = std.math.maxInt(u16);
 
@@ -107,7 +110,7 @@ pub const Game = struct {
     /// "23 Oct"
     day: []const u8,
     patch: []const u8,
-    /// "Ranked solo"
+    /// "Ranked solo" (`solo_queue`)
     queue: []const u8,
     /// Seconds
     dur: u16,

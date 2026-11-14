@@ -26,7 +26,7 @@ pub const Who = struct {
 };
 
 const queues = [_]struct { i64, []const u8 }{
-    .{ 420, "Ranked solo" }, .{ 440, "Ranked flex" }, .{ 400, "Draft" }, .{ 480, "Swiftplay" },
+    .{ 420, gd.solo_queue }, .{ 440, "Ranked flex" }, .{ 400, "Draft" }, .{ 480, "Swiftplay" },
 };
 
 const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };

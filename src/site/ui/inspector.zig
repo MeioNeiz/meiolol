@@ -10,6 +10,7 @@ const phrase = @import("phrase.zig");
 const champ = @import("champ.zig");
 const chip = @import("chip.zig");
 const badge = @import("badge.zig");
+const tip = @import("tip.zig");
 const minimap = @import("minimap.zig");
 const objicon = @import("objicon.zig");
 const timeline = @import("timeline.zig");
@@ -34,6 +35,7 @@ const W = struct {
     pub const esc = plain("Esc");
     pub const clear = plain("Clear the selection");
     pub const wc = plain("Win chance");
+    pub const solo_fit = plain("Fitted on ranked solo: other queues' early minutes can read a few points off");
     pub const kills = plain("Kills");
     pub const gold = plain("Gold lead");
     pub const objs = plain("Objectives");
@@ -188,7 +190,7 @@ pub const Inspector = struct {
             objs.add(h.span(.{ .key = n, .title = o.name }, .{objicon.view(h, o.kind, .{ .ours = o.ours, .named = false })}));
         }
         return h.div(.{ .class = "rows" }, .{
-            h.span(.{ .class = "k" }, .{W.wc}),
+            if (tree.eql(i.game.queue, gamedata.solo_queue)) h.span(.{ .class = "k" }, .{W.wc}) else h.span(.{ .class = "k" }, .{tip.view(h, W.solo_fit, .{W.wc}, .{ .narrow = true })}),
             h.span(.{ .class = "v" }, .{
                 h.span(.{ .class = "wb", .aria_hidden = true, .data_d = if (d > 0) "gain" else if (d < 0) "drop" else null, .style = h.vars(.{ .a = lo, .b = hi, .f = sum.wc[0] }) }, .{}),
                 h.b(.{}, .{W.from_to_pct.with(h, .{ .a = sum.wc[0], .b = sum.wc[1] })}),
@@ -404,9 +406,42 @@ pub fn gallery(g: *Gallery) void {
         }
         g.addFill(s[0], i.view(h));
     }
+    const flex = demoInspector(h, .{ .game = &dummy }, .all) orelse {
+        h.oom = true;
+        return;
+    };
+    const fg = h.mem.create(gamedata.Game) catch {
+        h.oom = true;
+        return;
+    };
+    fg.* = demo.games[0];
+    fg.queue = "Ranked flex";
+    flex.game = fg;
+    g.addFill("a flex game: win chance fitted on ranked solo", flex.view(h));
 }
 
 const testing = std.testing;
+
+test "win chance says it is fitted on ranked solo, in other queues only" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    const i = demoInspector(&h, .{ .game = undefined }, .all).?;
+    const said = struct {
+        fn f(al: std.mem.Allocator, tt: *tree.Tree, n: N) !bool {
+            var w: std.Io.Writer.Allocating = .init(al);
+            try @import("html.zig").write(tt, n, &w.writer);
+            return std.mem.find(u8, w.written(), "Fitted on ranked solo") != null;
+        }
+    }.f;
+    try testing.expect(!try said(a, &t, i.view(&h)));
+    var flex = demo.games[0];
+    flex.queue = "Ranked flex";
+    i.game = &flex;
+    try testing.expect(try said(a, &t, i.view(&h)));
+}
 
 test "the summary follows the pick, the list the range; filters, a row press, arrows, Esc" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);

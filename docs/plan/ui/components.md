@@ -276,7 +276,7 @@ to open, is a Toggletip. The native title and attr(data-tip) are uilint debt tha
 here
 States: closed: hover, focus or tap; open, above; open, end; open, below; hover, then
 Escape: shut until the pointer leaves; open, wraps
-Used by: chip, draftboard, versus, champpage
+Used by: chip, draftboard, versus, inspector, champpage
 
 ### StatCell
 `stat.zig` `.c-stat` site
@@ -1085,7 +1085,7 @@ lead before → after, kills and objectives, each seat's part (FightTable); then
 range's moments as rows (MomentList: who died either side of the score), filtered by
 chips. Shares the page's Timeline, so a row pressed here is the graph's moment too
 States: the turning minute; a moment picked in 25-33; the whole game; your deaths, none in
-the range
+the range; a flex game: win chance fitted on ranked solo
 Used by: gamepage
 
 ### GameHeader
