@@ -362,7 +362,7 @@ pub const LaneReport = struct {
     lane_kills: u32,
     curve: ?CurveReport,
     /// Biggest fall and rise over `stretch_len` minutes in the lane phase, measured
-    /// against the typical median when there is a curve, else against an even lane
+    /// against the typical line when there is a curve, else against an even lane
     fall: ?Stretch,
     rise: ?Stretch,
 };
@@ -373,7 +373,9 @@ pub const CurveReport = struct {
     /// True when your tier's bracket was too thin and all ranks are shown instead
     pooled: bool,
     games: u32,
-    /// Per minute: games still going, then [p25, p50, p75] from your side
+    /// Per minute: games still going, then [p25, line, p75] from your side: the band is
+    /// the games' middle half, the line the estimated mean (curvefit: shrunk toward the
+    /// champions' baseline), as the matchup pages draw it
     n: []const u32,
     gold: []const [3]i16,
     xp: []const [3]i16,
@@ -1093,9 +1095,9 @@ fn curveReport(arena: Allocator, file: *const CurveSet.File, r: Role, bracket: c
     for (0..m) |i| {
         const mi = v.minute(i);
         n[i] = mi.n;
-        gold[i] = .{ mi.gold.p25, mi.gold.p50, mi.gold.p75 };
-        xp[i] = .{ mi.xp.p25, mi.xp.p50, mi.xp.p75 };
-        cs[i] = .{ mi.cs.p25, mi.cs.p50, mi.cs.p75 };
+        gold[i] = .{ mi.gold.p25, v.estimate(.gold, i).mean, mi.gold.p75 };
+        xp[i] = .{ mi.xp.p25, v.estimate(.xp, i).mean, mi.xp.p75 };
+        cs[i] = .{ mi.cs.p25, v.estimate(.cs, i).mean, mi.cs.p75 };
     }
     const l6 = v.level6();
     const fi = v.firstItem();
@@ -1113,7 +1115,7 @@ fn curveReport(arena: Allocator, file: *const CurveSet.File, r: Role, bracket: c
     };
 }
 
-/// Typical median gold difference at minute `m` (1-based); 0 at minute 0
+/// Typical gold difference (the estimated mean) at minute `m` (1-based); 0 at minute 0
 fn typical(c: CurveReport, m: usize) ?i32 {
     if (m == 0) return 0;
     if (m > c.n.len or c.n[m - 1] < min_minute_games) return null;
@@ -1341,6 +1343,39 @@ test "curve set picks the covering file, else the newest" {
     try testing.expect((CurveSet{}).forPatch("16.20") == null);
 }
 
+test "typical is the matchup's estimated mean, not its median; a thin bracket pools" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var b: curvesfile.Builder = .{ .gpa = testing.allocator };
+    defer b.deinit();
+    // Champion 1 against 2: three games in four at +500 by 14, one at -1500, so the
+    // median is +500 and the mean far below it. Others give the baseline it shrinks to
+    for (0..240) |i| {
+        const vs = i < 40;
+        const at14: i32 = if (!vs) 0 else if (i % 4 == 0) -1500 else 500;
+        var l: curvesfile.Lane = .{ .role = .top, .bracket = .mid, .a = if (vs) 1 else @intCast(3 + i % 5), .b = if (vs) 2 else @intCast(8 + i % 5), .a_won = i % 2 == 0, .minutes = 20 };
+        for (0..20) |m| l.gold[m] = @intCast(@divTrunc(at14 * @as(i32, @intCast(m + 1)), lane_end));
+        try b.addLane(l);
+        b.addGame();
+    }
+    var aw: std.Io.Writer.Allocating = .init(arena);
+    try b.write(&aw.writer, "16.20", 1);
+    const file: CurveSet.File = .{ .label = "16.20", .curves = try .parse(arena, aw.written()) };
+
+    const c = (try curveReport(arena, &file, .top, .mid, 1, 2)).?;
+    const at = c.gold[lane_end - 1];
+    const est = file.curves.get(.top, .mid, 1, 2).?.estimate(.gold, lane_end - 1).mean;
+    try testing.expectEqual(est, at[1]);
+    try testing.expect(at[1] < 500 and at[1] > -1500);
+    try testing.expectEqual(@as(?i32, at[1]), typical(c, lane_end));
+    try testing.expectEqualStrings("Gold to Emerald", c.bracket);
+    // Silver: no Iron to Silver games, so all games, and the label says so
+    const low = (try curveReport(arena, &file, .top, Rank.bracket(.{ .tier = "SILVER" }), 1, 2)).?;
+    try testing.expect(low.pooled);
+    try testing.expectEqualStrings("All games", low.bracket);
+}
+
 fn testSummary(arena: Allocator) !Summary {
     const players = try arena.alloc(Summary.Player, 10);
     for (players, 0..) |*p, i| p.* = .{
@@ -1417,7 +1452,8 @@ test "a real timeline from both sides, with and without a curve" {
     try testing.expectEqual(@as(u32, 1), c.games);
     // One game: below min_minute_games, so no stretch is measured against it
     try testing.expect(with.lane.?.fall == null and with.lane.?.rise == null);
-    for (rl.gold[0..lane_end], c.gold[0..lane_end]) |mine_gold, q| try testing.expectEqual(mine_gold, q[1]);
+    // Its band is that game; the line is the shrunk estimate (test above)
+    for (rl.gold[0..lane_end], c.gold[0..lane_end]) |mine_gold, q| try testing.expectEqual(mine_gold, q[0]);
 
     // Whole game: win chance from both sides adds up, deaths match the lane count
     try testing.expect(blue.win_chance.len > lane_end);

@@ -69,7 +69,7 @@ _v/all-patch/data/pool/lanes/twitch.bin a7f3d931b8b13730
 _v/all-patch/data/search.bin 305561e34fffe2a3
 _v/all-patch/data/stats.bin 1c6b64a93978f120
 _v/all-patch/data/tiers.bin 75a2d0119be70470
-_v/all-patch/index.html bf4fc88cc5636aa9
+_v/all-patch/index.html c3efc00127b3d962
 _v/all-patch/matchups.html d70b43494578e42b
 _v/all-patch/matchups/bot/kaisa-vs-twitch.html 8b6416ae503d6e34
 _v/all-patch/matchups/bot/twitch-vs-kaisa.html 7b9515fef296f5d7
@@ -186,7 +186,7 @@ _v/all/data/pool/lanes/twitch.bin a7f3d931b8b13730
 _v/all/data/search.bin 305561e34fffe2a3
 _v/all/data/stats.bin 7b37d059d60f077f
 _v/all/data/tiers.bin 07de938f17a1a57e
-_v/all/index.html b0958340bc247e08
+_v/all/index.html 331b781ccf538ba2
 _v/all/matchups.html f3026e77428af8fa
 _v/all/matchups/bot/kaisa-vs-twitch.html 4056e8b85eccc773
 _v/all/matchups/bot/twitch-vs-kaisa.html e2c5644dcbf180fd
@@ -303,7 +303,7 @@ _v/patch/data/pool/lanes/twitch.bin a7f3d931b8b13730
 _v/patch/data/search.bin 305561e34fffe2a3
 _v/patch/data/stats.bin 1c6b64a93978f120
 _v/patch/data/tiers.bin 0058779cd855156e
-_v/patch/index.html 5cfcf80486c55ba1
+_v/patch/index.html 346f151c3c40488d
 _v/patch/matchups.html def90588af7755a8
 _v/patch/matchups/bot/kaisa-vs-twitch.html fcad2503d5b7f304
 _v/patch/matchups/bot/twitch-vs-kaisa.html dc8c39a019aef8f9
@@ -462,7 +462,7 @@ data/tiers-rank-patch.bin 2a8bf5237b87b755
 data/tiers-rank.bin 5f022127a6cbd175
 data/tiers.bin 3a3cc97d33ee232a
 download.html 9e7ee71bdb7f860a
-index.html f6d59f7289aa83eb
+index.html 5affc94363eafd93
 learn.html fb4f19c0b3affbe5
 learn/champs.json 7c5a77a4464faa98
 learn/practice.json 4f53cda18c2baa0c
@@ -477,7 +477,7 @@ matchups/support/pyke-vs-rakan.html 4a763304c3a813e0
 matchups/support/rakan-vs-pyke.html b0bbf644e507eba0
 matchups/top/darius-vs-mordekaiser.html b43499a30497afe3
 matchups/top/mordekaiser-vs-darius.html 2bad43bc289b1ef4
-method.html 48d103886dec9f93
+method.html d271a86fe23014f3
 patch.html 25bbde2fc5bcb0bb
 patch/15-12.html 06ac0e858d9fb6f9
 pickup.html 6b17bdcfdcdfdf24

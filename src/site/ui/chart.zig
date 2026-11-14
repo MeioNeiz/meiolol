@@ -198,7 +198,7 @@ pub const Line = enum {
     main,
     /// Your own line against a typical one
     you,
-    /// A typical (median) line, dashed
+    /// A typical line, dashed
     typ,
     /// A previous patch's, dashed and faint
     prev,
@@ -211,6 +211,15 @@ pub fn line(h: *H, p: Plane, ys: []const f32, kind: Line) N {
     if (ys.len < 2) return .none;
     var path: Path = .{ .h = h };
     for (ys, 0..) |v, i| path.to(if (i == 0) 'M' else 'L', p.px(i), p.py(v));
+    return h.path(.{ .class = "ln", .data_k = if (kind == .main) null else kind, .d = path.d.items }, .{});
+}
+
+/// A line through points at any x (the plane's x units, not point indices); fewer than 2
+/// draw nothing
+pub fn lineAt(h: *H, p: Plane, pts: []const [2]f32, kind: Line) N {
+    if (pts.len < 2) return .none;
+    var path: Path = .{ .h = h };
+    for (pts, 0..) |q, i| path.to(if (i == 0) 'M' else 'L', p.x.at(q[0]), p.py(q[1]));
     return h.path(.{ .class = "ln", .data_k = if (kind == .main) null else kind, .d = path.d.items }, .{});
 }
 

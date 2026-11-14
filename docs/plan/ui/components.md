@@ -900,14 +900,15 @@ States: six runs, three models
 ### LaneChart
 `lane.zig` `.c-lane` site
 LaneChart: you minus your lane opponent by minute (gold, XP or CS), against the typical
-middle half as a band and its median dashed; a previous patch's median fainter. Each side
+middle half as a band and its estimated mean dashed; a previous patch's fainter. Each side
 gets its own top, so a one-sided lane uses the room. A Gold | XP | CS switch for the chart
 head, a tap shows the minute's figures (ChartTip), a drag selects minutes into `range`
 (off with `select`, as on the matchup and champion pages). Used by the matchup and
 champion pages, LaneDuel and the app's game screen
 States: gold, a minute tapped; CS, minutes dragged; a floor under the band: it clips,
-dashed, and the tip says its range; typical only (the matchup page); marks (the matchup
-page)
+dashed, and the tip says its range; typical only (the matchup page); points at a few
+minutes over the typical line (the champion page under locks), one tapped; marks (the
+matchup page)
 Used by: champselect, gamescreen, app, laneduel, champpage, matchpage
 
 ### TimelineChart

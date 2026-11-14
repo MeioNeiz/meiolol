@@ -39,7 +39,7 @@ pub const Player = struct {
 /// Your gold lead over your lane opponent at 14 min, against the matchup's typical
 pub const Lane14 = struct {
     you: i32,
-    /// [p25, p50, p75]; null when the curve is thin there
+    /// [p25, estimated mean, p75]; null when the curve is thin there
     typ: ?[3]i16 = null,
 };
 

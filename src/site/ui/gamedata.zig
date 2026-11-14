@@ -81,7 +81,7 @@ pub const Lane = struct {
     /// Seconds, yours and theirs
     level6: [2]?u16 = .{ null, null },
     first_item: [2]?u16 = .{ null, null },
-    /// Your biggest fall and rise against the typical median
+    /// Your biggest fall and rise against the typical line
     fall: ?Stretch = null,
     rise: ?Stretch = null,
     typical: ?Typical = null,
@@ -94,7 +94,7 @@ pub const Typical = struct {
     games: u32,
     /// "Gold to Emerald"; "All games" when yours was too thin
     bracket: []const u8,
-    /// [p25, p50, p75] from your side
+    /// [p25, estimated mean, p75] from your side
     gold: []const [3]i16,
     xp: []const [3]i16,
     cs: []const [3]i16,

@@ -61,7 +61,8 @@ const method_md =
     \\  gold and objectives on both sides and how the win chance moved; filters pick out
     \\  your own, the fights, the objectives or the deaths.
     \\- **Your lane**: gold, level 6 and first item against the typical game in the same
-    \\  matchup and rank, from the [lane curves](#lane-curves) below.
+    \\  matchup, from the [lane curves](#lane-curves) below: games at your rank where there
+    \\  are enough, else all games (nearly all Platinum+), and the chart names which.
     \\- **What it is not**: the win chance describes the state of a game; a moment that
     \\  moved it is not proof that it decided the game. It is never shown in champ select
     \\  or during a game.

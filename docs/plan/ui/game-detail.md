@@ -152,8 +152,8 @@ against one opponent with a "typical" range, so the UI is a duel:
   - First item: 11:54, 10:16, typical 11:21, +33s
   - CS at 10: 64 vs 69 (a count, drawn as a track 0-100 CS)
 - Under the races, one bullet (component `bullet-range`): gold lead at 14, −768, on a
-  track with the typical middle half shaded (−1,677 to +511) and the median tick at
-  −63. "Below half the games" goes: the marker outside
+  track with the typical middle half shaded (−1,677 to +511) and the typical tick (the
+  estimated mean, as the matchup pages' line) at −63. "Below half the games" goes: the marker outside
   the band says it
 - Deaths and kills before 14 as two icon counts (✕✕ and ⚔⚔), no table
 
