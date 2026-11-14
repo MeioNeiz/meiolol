@@ -356,6 +356,9 @@ takeaway. A first visit lands on chapter 1; chapter 0 (basics) one tap away.
   ui-learn.wasm runs it. `#p=<id>` links a puzzle
 - learnfixed.zig: hand-written puzzles from finished checks (chapters 1, 2, 5); edit
   there, a deploy makes it live
+- sources.zig: a row per fixed puzzle: each figure as the card shows it and as its doc
+  writes it (docs/learned.md: all in one finding; research/raw measured files). Its
+  test fails when either side changes alone, and for a card without a row
 - learnbuild.zig: chapter 0 roles (tiles of each role's top 90%+ champions), chapter 3
   lane (all-ranks curves) and early or late (`meiolol lean`), chapter 4 counters (every
   region, 30 days curves). A puzzle ships only when clear (J11); empty chapters drop
