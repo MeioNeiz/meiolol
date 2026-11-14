@@ -111,13 +111,14 @@ fn answers() void {
             continue;
         };
         gpa.free(path);
-        if (k == 0) state.setAnswer(x.path, @ptrCast(@alignCast(x.d))) else state.setMeio(x.path, @as(*const ?ui.pvdata.Est, @ptrCast(@alignCast(x.d))).*);
+        if (k == 0) state.setAnswer(x.path, @ptrCast(@alignCast(x.d))) else state.setMeio(x.path, @as(*const ui.pvdata.Head, @ptrCast(@alignCast(x.d))).*);
         shown = true;
     }
     if (shown) i.render();
 }
 
-/// A lock answer (cp.TopData), or Meio's estimate (?ui.pvdata.Est, null where it has none)
+/// A lock answer (cp.TopData), or Meio's head (ui.pvdata.Head, its stack null where it has
+/// no number)
 const Kept = struct { path: []const u8, d: *const anyopaque };
 
 fn keptAt(path: []const u8) ?*const Kept {
@@ -146,8 +147,11 @@ fn answered(k: i32, bytes: ?[]u8) void {
         if (bytes) |b| t.* = ui.data.decode(gpa, cp.TopData, b) catch t.*;
         break :top t;
     } else meio: {
-        const e = gpa.create(?ui.pvdata.Est) catch return;
-        e.* = if (bytes) |b| ui.data.decodeField(ui.pvdata.Meio, "stack", b) catch null else null;
+        const e = gpa.create(ui.pvdata.Head) catch return;
+        e.* = .{ .stack = null, .leans = null };
+        if (bytes) |b| if (ui.data.decodeHead(gpa, ui.pvdata.Meio, ui.pvdata.Head, b)) |m| {
+            e.* = m.head;
+        } else |_| {};
         break :meio e;
     };
     keep(.{ .path = path, .d = d });

@@ -114,7 +114,8 @@ fn answered(k: i32, bytes: ?[]u8) void {
     const b = bytes orelse "";
     if (bytes == null) dom.dom.warn("champmore: no answer");
     if (k == @backingInt(Kind.meio)) {
-        if (ui.data.decodeHead(gpa, ui.pvdata.Meio, ui.matchgrid.Meio, b)) |m| x.meio = m.head else |_| {}
+        const Head = struct { stack: ?ui.pvdata.Est, leans: ?[]const u8, opponents: []const ui.pvdata.Choice };
+        if (ui.data.decodeHead(gpa, ui.pvdata.Meio, Head, b)) |m| x.meio = .{ .stack = m.head.stack, .opponents = m.head.opponents } else |_| {}
     } else {
         const d = gpa.create(cp.MoreData) catch return;
         d.* = ui.data.decode(gpa, cp.MoreData, b) catch empty;

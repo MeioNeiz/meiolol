@@ -109,8 +109,8 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   by the rank picked (raw modes), and Meio uses E3-E5's bracket terms. Rank is the one
   at game start (rank_history, from 12 Oct), never the post-game one (learned.md Data
   quality)
-- E9 Explain: a "how this was made" line per number (Trust rules) and a method page
-  section with E2's daily scores per mode. Done before Meio becomes the default
+- E9 Explain: a "leans on" line per number (Trust rules; meio.Model.leans, shown under
+  the champion page's main number) and E2's daily scores on /method. Before the default
 - E10 History views, "show it all": any past patch, a season, and a champion's or
   matchup's number over patches as a line with each patch's range, from E7's cubes (a
   past patch is a sum of its days). Where the estimate moved a number at a boundary,

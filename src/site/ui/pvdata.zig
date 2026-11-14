@@ -45,10 +45,13 @@ pub const Gap = enum {
 };
 
 /// Meio under a champion page's lock stack (site/locks.zig meioOf), the lock island "meio"
-/// `stack` and `opponents` lead: ui-champion reads `stack` alone (data.decodeField) and
-/// ui-champmore both (data.decodeHead), neither decoding the rest
+/// `stack`, `leans` and `opponents` lead: ui-champion reads Head, ui-champmore those and
+/// `opponents` (data.decodeHead), neither decoding the rest
 pub const Meio = struct {
     stack: ?Est,
+    /// What `stack` leans on, in words (champpage.leansLine, written with the answer: the
+    /// islands show it and carry no code for it); null with it
+    leans: ?[]const u8 = null,
     /// Every lane opponent in the view, not cut to the others' length (Matchups)
     opponents: []const Choice,
     gap: Gap,
@@ -64,5 +67,8 @@ pub const Meio = struct {
     /// Each role the model has the champion in; empty with a gap
     roles: []const RoleEst = &.{},
 };
+
+/// Meio's head as the champion page's answer card reads it
+pub const Head = struct { stack: ?Est, leans: ?[]const u8 };
 
 pub const no_locks = "none";

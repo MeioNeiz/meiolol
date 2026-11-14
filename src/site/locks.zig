@@ -287,16 +287,28 @@ const Stack = struct {
 
     /// Meio's win rate for `cr` under the stack; null deeper than two or where it has none
     fn rate(st: Stack, m: *const meio.Model, region: u1, br: meio.Brackets, cr: u16) ?meio.Estimate {
+        const kind, const b = st.cell(cr) orelse return null;
+        return m.rateIn(kind, region, br, cr, b);
+    }
+
+    /// What rate's number leans on
+    fn leans(st: Stack, m: *const meio.Model, region: u1, br: meio.Brackets, cr: u16) ?meio.Leans {
+        const kind, const b = st.cell(cr) orelse return null;
+        return m.leans(kind, region, br, cr, b);
+    }
+
+    /// Meio's cell kind and second key for the stack
+    fn cell(st: Stack, cr: u16) ?struct { meio.Kind, u32 } {
         const opp: ?u16 = if (st.opponent) |o| crOf(o, cr) else null;
         const ks: u32 = st.keystone orelse 0;
         const item: u32 = st.item orelse 0;
         return switch (st.depth()) {
-            0 => m.rateIn(.champion, region, br, cr, 0),
-            1 => if (opp) |o| m.rateIn(.matchup, region, br, cr, o) else if (st.keystone != null) m.rateIn(.keystone, region, br, cr, ks) else m.rateIn(.item, region, br, cr, item),
+            0 => .{ .champion, 0 },
+            1 => if (opp) |o| .{ .matchup, o } else if (st.keystone != null) .{ .keystone, ks } else .{ .item, item },
             2 => if (opp) |o|
-                if (st.keystone != null) m.rateIn(.keystone_matchup, region, br, cr, ks << 16 | o) else m.rateIn(.item_matchup, region, br, cr, item << 16 | o)
+                if (st.keystone != null) .{ .keystone_matchup, ks << 16 | o } else .{ .item_matchup, item << 16 | o }
             else
-                m.rateIn(.keystone_item, region, br, cr, ks << 16 | item),
+                .{ .keystone_item, ks << 16 | item },
             else => null,
         };
     }
@@ -340,6 +352,9 @@ fn meioOf(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, loc
     const lane_gold = st != null and st.?.keystone == null and st.?.item == null;
     if (m) |model| {
         d.stack = est(st.?.rate(model, region, br.?, cr));
+        if (d.stack != null) if (st.?.leans(model, region, br.?, cr)) |l| {
+            d.leans = try leansLine(a, leansOf(l, st.?.depth()), s.patch, ch.name);
+        };
         if (lane_gold) {
             const o: u32 = if (st.?.opponent) |id| crOf(id, cr) else 0;
             d.gold = est(model.avgIn(.gold14, region, br.?, cr, o));
@@ -382,6 +397,34 @@ fn meioOf(s: *const Site, x: *const Answers, ch: Champ, r: Role, k: cp.Rank, loc
 fn champName(s: *const Site, id: u32) []const u8 {
     for (s.champs) |c| if (c.id == id) return c.name;
     return "";
+}
+
+/// champpage.leansLine's words; null when no source is large enough to name
+fn leansLine(a: std.mem.Allocator, l: cp.Leans, patch: []const u8, champ_name: []const u8) !?[]const u8 {
+    var t: ui.tree.Tree = .{};
+    var h: ui.tree.H = .init(a, &t);
+    const line = cp.leansLine(&h, l, patch, champ_name).s;
+    if (h.oom) return error.OutOfMemory;
+    return if (line.len > 0) line else null;
+}
+
+fn leansOf(l: meio.Leans, depth: u8) cp.Leans {
+    const pct = struct {
+        fn f(v: f64) u8 {
+            return @intFromFloat(std.math.clamp(@round(100 * v), 0, 100));
+        }
+    }.f;
+    return .{
+        .locks = depth,
+        .own = pct(l.own),
+        .older = pct(l.older),
+        .ranks = pct(l.ranks),
+        .region = pct(l.region),
+        .pair = pct(l.pair),
+        .wide = pct(l.wide),
+        .usual = pct(l.usual),
+        .own_games = @intFromFloat(std.math.clamp(@round(l.own_games), 0, std.math.maxInt(u32))),
+    };
 }
 
 fn est(e: ?meio.Estimate) ?pd.Est {

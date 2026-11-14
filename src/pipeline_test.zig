@@ -844,6 +844,17 @@ test "fixture games to stats, curves and the website" {
         const m0 = try pm(loaded, arena, .plat, "none");
         try testing.expectEqual(.none, m0.gap);
         try testing.expect(m0.stack != null and m0.games >= mk.games);
+        // What each number leans on, in words: the champion's own sources with no lock,
+        // the locks' under them; the parts named (5% and up) make most of the whole
+        for ([_]site.ui.pvdata.Meio{ m0, mk }, [_][]const []const u8{ &.{ "lock", "overall", "other champions" }, &.{ "games on", "older patches", "other ranks", "other regions" } }) |m, never| {
+            const l = m.leans.?;
+            try testing.expect(std.mem.startsWith(u8, l, "Leans on: "));
+            for (never) |w| try testing.expectEqual(null, std.mem.find(u8, l, w));
+            var sum: u32 = 0;
+            var parts = std.mem.splitSequence(u8, l["Leans on: ".len..], " · ");
+            while (parts.next()) |part| sum += try std.fmt.parseInt(u32, part[0..std.mem.findScalar(u8, part, '%').?], 10);
+            try testing.expect(sum >= 80 and sum <= 103);
+        }
         try testing.expectEqual(.master, (try pm(loaded, arena, .master, "ks8010")).gap);
         try testing.expectEqual(.kind, (try pm(loaded, arena, .plat, "c23071.6333")).gap);
         // A lock set not in its one form names nothing

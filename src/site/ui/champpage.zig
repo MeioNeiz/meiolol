@@ -537,6 +537,18 @@ pub const W = struct {
     pub const sub_meio = Phrase("{r:text} · Win rate and lane matchups: Meio's estimate for {p:text}; the rest: 30 days");
     /// `t`: meio_tip
     pub const meio_note = Phrase("{t:text}: worth {n:count} games, against the {o:count} it played on {p:text}.");
+    /// Under Meio's number: what it leans on, the largest sources (leansLine, written
+    /// with the answer: none of these reach an island)
+    pub const leans_on = plain("Leans on: ");
+    pub const lean_own = Phrase("{v:pct} games on {p:text} ({n:count})");
+    pub const lean_older = Phrase("{v:pct} older patches");
+    pub const lean_ranks = Phrase("{v:pct} other ranks");
+    pub const lean_region = Phrase("{v:pct} other regions");
+    pub const lean_pair = Phrase("{v:pct} with this lock");
+    pub const lean_pairs = Phrase("{v:pct} with these locks");
+    pub const lean_wide = Phrase("{v:pct} on other champions");
+    pub const lean_champ = Phrase("{v:pct} {c:text} overall");
+    pub const lean_usual = Phrase("{v:pct} what's usual");
     pub const raw = plain("no estimate");
     /// Master+, a lock it doesn't model, three locks, or its answer not in
     pub const raw_note = plain("No Meio estimate here: the rate the games give.");
@@ -924,6 +936,8 @@ pub const Top = struct {
     /// Meio's estimate for the pick and the locks, null where it has none, and its
     /// answer's path (meioWant)
     meio: ?pd.Est = null,
+    /// pd.Meio.leans
+    leans: ?[]const u8 = null,
     meio_path: []const u8 = "",
 
     const P = @This();
@@ -999,8 +1013,9 @@ pub const Top = struct {
         return lockPath(a, p.root, w.view, if (meio) "meio" else "top", p.data.slug, p.data.roles[p.cur].role, w.rank, lk) catch null;
     }
 
-    pub fn setMeio(p: *P, path: []const u8, e: ?pd.Est) void {
-        p.meio = e;
+    pub fn setMeio(p: *P, path: []const u8, m: pd.Head) void {
+        p.meio = m.stack;
+        p.leans = m.leans;
         p.meio_path = path;
     }
 
@@ -1193,6 +1208,7 @@ pub const Top = struct {
                 rt = .{ .pct = 100 * e.p, .games = n, .half = 100 * (e.hi - e.lo) / 2 };
                 worth = true;
                 it.ctx = null;
+                it.under = if (p.leans) |l| .{ .s = l } else null;
                 it.tip.?.note = W.meio_note.with(h, .{ .t = W.meio_tip.with(h, .{ .p = p.data.patch }).s, .n = n, .o = e.own, .p = p.data.patch });
             }
         }
@@ -1200,6 +1216,65 @@ pub const Top = struct {
         return it;
     }
 };
+
+/// What Meio's number leans on (meio.Leans), each source in whole percents of its
+/// variance, and the asked slice's own games (the newest patch, this region and rank).
+/// `locks`: the stack's depth, 0 for the champion alone (own .. region its games), else
+/// pair is the locks' own term and wide the lock's on other champions
+pub const Leans = struct {
+    locks: u8,
+    own: u8,
+    older: u8,
+    ranks: u8,
+    region: u8,
+    pair: u8,
+    wide: u8,
+    usual: u8,
+    own_games: u32,
+};
+
+/// What Meio's number leans on, largest first, parts under 5% left out: "Leans on: 58%
+/// games on 16.22 (4,100) · 34% older patches · 8% other ranks"; "" with no part. Under
+/// locks the champion's own sources are one part, beside the locks' own games and the
+/// lock on other champions. For pd.Meio.leans (site/locks.zig): its nine phrases and
+/// the sort are ~1 KB gz in an island, more than ui-champion has
+pub fn leansLine(h: *H, l: Leans, patch: []const u8, champ_name: []const u8) tree.Text {
+    const Part = struct { v: u8, t: tree.Text = .{ .s = "" } };
+    var parts: [6]Part = undefined;
+    var n: usize = 0;
+    const add = struct {
+        fn f(ps: *[6]Part, k: *usize, v: u8) ?*Part {
+            if (v < 5) return null;
+            ps[k.*] = .{ .v = v };
+            k.* += 1;
+            return &ps[k.* - 1];
+        }
+    }.f;
+    if (l.locks == 0) {
+        if (add(&parts, &n, l.own)) |x| x.t = W.lean_own.with(h, .{ .v = l.own, .n = l.own_games, .p = patch });
+        if (add(&parts, &n, l.older)) |x| x.t = W.lean_older.with(h, .{ .v = l.older });
+        if (add(&parts, &n, l.ranks)) |x| x.t = W.lean_ranks.with(h, .{ .v = l.ranks });
+        if (add(&parts, &n, l.region)) |x| x.t = W.lean_region.with(h, .{ .v = l.region });
+    } else {
+        const own: u8 = @min(100, @as(u16, l.own) + l.older + l.ranks + l.region);
+        if (add(&parts, &n, l.pair)) |x| x.t = if (l.locks == 1) W.lean_pair.with(h, .{ .v = l.pair }) else W.lean_pairs.with(h, .{ .v = l.pair });
+        if (add(&parts, &n, own)) |x| x.t = W.lean_champ.with(h, .{ .v = own, .c = champ_name });
+        if (add(&parts, &n, l.wide)) |x| x.t = W.lean_wide.with(h, .{ .v = l.wide });
+    }
+    if (add(&parts, &n, l.usual)) |x| x.t = W.lean_usual.with(h, .{ .v = l.usual });
+    std.mem.sort(Part, parts[0..n], {}, struct {
+        fn more(_: void, a: Part, b: Part) bool {
+            return a.v > b.v;
+        }
+    }.more);
+    var strs: [12][]const u8 = undefined;
+    strs[0] = W.leans_on.s;
+    for (parts[0..n], 0..) |x, i| {
+        strs[2 * i + 1] = x.t.s;
+        strs[2 * i + 2] = " · ";
+    }
+    return .{ .s = h.cat(strs[0..if (n == 0) 0 else 2 * n]) };
+}
 
 /// Each role's build panel (null without a build), set up in place: its rows point into
 /// it
@@ -2578,6 +2653,21 @@ test "Meio's matchups: the lane's rates are Meio's; another relation is the 30 d
     try testing.expect(std.mem.indexOf(u8, w.written(), ">30 days<") != null);
 }
 
+test "under locks Meio's number leans on the locks, the champion and what's usual" {
+    var t: tree.Tree = .{};
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var h: H = .init(arena.allocator(), &t);
+    const one = leansLine(&h, .{ .locks = 1, .own = 20, .older = 8, .ranks = 2, .region = 0, .pair = 41, .wide = 3, .usual = 26, .own_games = 900 }, "16.22", "Ornn");
+    try std.testing.expectEqualStrings("Leans on: 41% with this lock · 30% Ornn overall · 26% what's usual", one.s);
+    const day0 = leansLine(&h, .{ .locks = 0, .own = 0, .older = 70, .ranks = 0, .region = 0, .pair = 0, .wide = 0, .usual = 30, .own_games = 0 }, "16.23", "Ornn");
+    try std.testing.expectEqualStrings("Leans on: 70% older patches · 30% what's usual", day0.s);
+    const own = leansLine(&h, .{ .locks = 0, .own = 58, .older = 34, .ranks = 6, .region = 0, .pair = 0, .wide = 0, .usual = 2, .own_games = 4100 }, "16.22", "Ornn");
+    try std.testing.expectEqualStrings("Leans on: 58% games on 16.22 (4,100) · 34% older patches · 6% other ranks", own.s);
+    const none = leansLine(&h, .{ .locks = 0, .own = 0, .older = 0, .ranks = 0, .region = 0, .pair = 0, .wide = 0, .usual = 0, .own_games = 0 }, "16.22", "Ornn");
+    try std.testing.expectEqualStrings("", none.s);
+}
+
 test "a view's files sit beside the page's; rank files at the root" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -2636,7 +2726,7 @@ test "Meio: the strip's win rate is Meio's with its worth and no place; raw mark
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), W.raw_note.s) == null);
-    p.setMeio(p.meioWant(a).?, .{ .p = 0.512, .lo = 0.506, .hi = 0.518, .own = 412 });
+    p.setMeio(p.meioWant(a).?, .{ .stack = .{ .p = 0.512, .lo = 0.506, .hi = 0.518, .own = 412 }, .leans = "Leans on: 58% games on 16.22 (412) · 34% older patches" });
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     const out = w.written();
@@ -2644,11 +2734,12 @@ test "Meio: the strip's win rate is Meio's with its worth and no place; raw mark
     try std.testing.expect(std.mem.indexOf(u8, out, "worth ") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, ">~") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "against the 412 it played on 16.22") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, ">Leans on: 58% games on 16.22 (412) · 34% older patches<") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "lane matchups: Meio") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "3rd of 50") == null);
     try std.testing.expect(std.mem.indexOf(u8, out, "data-busy") == null);
 
-    p.setMeio(p.meio_path, null);
+    p.setMeio(p.meio_path, .{ .stack = null, .leans = null });
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "52.2%") != null);
