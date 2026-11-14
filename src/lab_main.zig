@@ -45,6 +45,7 @@ const synth = @import("lab/synth.zig");
 const health = @import("lab/health.zig");
 const compare = @import("lab/compare.zig");
 const looks = @import("lab/looks.zig");
+const mobius = @import("lab/mobius.zig");
 
 const ptx: [:0]const u8 = @embedFile("kernels.ptx") ++ "";
 
@@ -103,7 +104,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ champcomp.usage ++ champgroups.usage ++ events.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ patchdays.usage ++ pairprior.usage ++ eventvalue.usage ++ stateexport.usage ++ statecalib.usage ++ compare.usage ++ looks.usage ++ coverage.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ champcomp.usage ++ champgroups.usage ++ events.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ patchdays.usage ++ pairprior.usage ++ eventvalue.usage ++ stateexport.usage ++ statecalib.usage ++ compare.usage ++ looks.usage ++ coverage.usage ++ mobius.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -355,6 +356,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "compcheck")) {
         return compcheck.main(init.gpa, arena, init.io, argv[2..]);
     }
+    if (std.mem.eql(u8, cmd, "mobius")) {
+        return mobius.main(init.gpa, arena, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "netcheck")) {
         return winnet.main(init.gpa, arena, init.io, argv[2..], ptx);
     }
@@ -489,6 +493,7 @@ test {
     _ = eventvalue;
     _ = stateexport;
     _ = statecalib;
+    _ = mobius;
 }
 
 /// x86 SSE runs ~100x slower on denormal floats, which Adam's decaying moments of rarely

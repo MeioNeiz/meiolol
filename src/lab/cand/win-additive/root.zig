@@ -356,6 +356,16 @@ pub fn blueLogit(m: *const Model, teams: [2][n_role]u32, platform: u8) f64 {
     return x;
 }
 
+/// The damage mix's part of blueLogit: blueLogit minus it is mains and pair cells only
+/// (lab/mobius.zig reads the two apart)
+pub fn mixLogit(m: *const Model, teams: [2][n_role]u32) f64 {
+    var prof: [2][n_role]?[2]f64 = @splat(@splat(null));
+    for (0..2) |s| for (teams[s], 0..) |c, role| {
+        if (c != 0) prof[s][role] = m.mix.profile(c, role, null);
+    };
+    return m.theta[n_platforms] * Mix.diff(&prof);
+}
+
 pub fn predict(m: *const Model, q: *const api.Query) api.Prediction {
     var out: api.Prediction = api.no_opinion;
     const p = sigmoid(blueLogit(m, q.teams, q.platform));

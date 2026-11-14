@@ -16,6 +16,9 @@
 //!             bottom and support crossed only
 //!   mix       per sd of win-comp's mix form (f - 0.5)^2, blue minus red; f the team's
 //!             damage-weighted magic share from champion-role profiles over all rows
+//!   v2=1      base, pairs and counters as additive v2 believes them: every champion-role,
+//!             ally pair and matchup cell (all 15 role pairs) normal at its block's
+//!             spread (v2_main, v2_ally, v2_enemy), in place of champ, pair_sd, counter_sd
 //!   skill     per player per log1p(earlier games on the champion), blue minus red
 //!   champ_melee  for the `cell`-th most common champion-role, per sd of the enemy team's
 //!             melee count (base attack range under champcomp.melee_range, from seat
@@ -53,6 +56,8 @@ pub const Spec = struct {
     champ_melee: f64 = 0,
     /// Which champion-role champ_melee plants, by games: 1 the most common
     cell: u32 = 1,
+    /// 1: mains and every pair cell at additive v2's block spreads
+    v2: u32 = 0,
 
     pub fn parse(text: []const u8) !Spec {
         var s: Spec = .{};
@@ -72,7 +77,7 @@ pub const Spec = struct {
             }
             if (!found) return error.BadPlantSpec;
         }
-        if (s.pair == 0 or s.cell == 0 or s.lanes > 2) return error.BadPlantSpec;
+        if (s.pair == 0 or s.cell == 0 or s.lanes > 2 or s.v2 > 1) return error.BadPlantSpec;
         return s;
     }
 };
@@ -155,6 +160,18 @@ fn gameKey(g: rows.Game) u64 {
 
 /// Blue's role against red's: the five lanes, then bottom and support crossed
 const lane_pairs = [_][2]usize{ .{ 0, 0 }, .{ 1, 1 }, .{ 2, 2 }, .{ 3, 3 }, .{ 4, 4 }, .{ 3, 4 }, .{ 4, 3 } };
+
+/// Additive v2's block spreads, win pp: `effects --param v2` on snap-20261023T2004Z's
+/// 1,190,461 dev-visible games (run 20261024T003414Z-add-v2-2004Z, components.tsv).
+/// Mains by role; ally blocks (0,1) (0,2) .. (3,4); enemy blocks r <= q: (0,0) (0,1) ..
+/// (4,4)
+const v2_main = [5]f64{ 2.371, 4.228, 2.593, 2.777, 4.911 };
+const v2_ally = [10]f64{ 0.194, 0.421, 0.317, 0.289, 0.614, 0.401, 0.256, 0.417, 0.429, 1.236 };
+const v2_enemy = [15]f64{ 2.332, 0.810, 0.730, 0.495, 0.488, 1.237, 1.032, 0.658, 0.976, 2.094, 0.759, 0.734, 1.090, 1.178, 1.306 };
+
+fn enemyBlock(r: usize, q: usize) usize {
+    return r * 5 - r * (r -| 1) / 2 + (q - r);
+}
 
 const Count = struct { key: u64, n: u32 };
 
@@ -319,7 +336,7 @@ pub fn truth(gpa: std.mem.Allocator, d: *const rows.Data, spec: Spec) !Truth {
     var matchup_games: u32 = 0;
     for (d.games, parts, 0..) |g, *p, gi| {
         var base: f64 = spec.side;
-        for (0..5) |r| base += spec.champ * (hnorm(spec.seed, Stream.champ, key(g.teams[0][r], r)) - hnorm(spec.seed, Stream.champ, key(g.teams[1][r], r)));
+        for (0..5) |r| base += (if (spec.v2 != 0) v2_main[r] else spec.champ) * (hnorm(spec.seed, Stream.champ, key(g.teams[0][r], r)) - hnorm(spec.seed, Stream.champ, key(g.teams[1][r], r)));
         p[@backingInt(Term.base)] = @floatCast(base * pp);
 
         var syn: f64 = 0;
@@ -355,6 +372,27 @@ pub fn truth(gpa: std.mem.Allocator, d: *const rows.Data, spec: Spec) !Truth {
         p[@backingInt(Term.counter)] = @floatCast(spec.counter * ctr * pp);
         p[@backingInt(Term.counters)] = @floatCast(spec.counter_sd * ctrs * pp);
 
+        if (spec.v2 != 0) {
+            var pv: f64 = 0;
+            for (g.teams, [2]f64{ 1, -1 }) |t, sign| {
+                var k: usize = 0;
+                for (0..5) |a| for (a + 1..5) |b| {
+                    pv += sign * v2_ally[k] * hnorm(spec.seed, Stream.pair, pairKey(key(t[a], a), key(t[b], b)));
+                    k += 1;
+                };
+            }
+            p[@backingInt(Term.pairs)] = @floatCast(pv * pp);
+            // A cell per unordered pair of champion-roles, to the lower key: v2's own form
+            var cv: f64 = 0;
+            for (0..5) |br| for (0..5) |rr| {
+                const kb = key(g.teams[0][br], br);
+                const kr = key(g.teams[1][rr], rr);
+                if (kb == kr) continue;
+                const sign: f64 = if (kb < kr) 1 else -1;
+                cv += sign * v2_enemy[enemyBlock(@min(br, rr), @max(br, rr))] * hnorm(spec.seed, Stream.counter, pairKey(@min(kb, kr), @max(kb, kr)));
+            };
+            p[@backingInt(Term.counters)] = @floatCast(cv * pp);
+        }
         if (mix_sd > 0) p[@backingInt(Term.mix)] = @floatCast(spec.mix * mix_x[gi] / mix_sd * pp);
         var sk: f64 = 0;
         for (skill_x[gi][0], skill_x[gi][1]) |b, rd| sk += b - rd;
@@ -852,6 +890,42 @@ test "plant spec and argument parse" {
     try std.testing.expectEqualStrings("/home/x/snap", a.path);
     try std.testing.expectEqual(@as(f64, 1), a.spec.skill);
     try std.testing.expect(try parseArg("/home/x/snap") == null);
+}
+
+test "v2 preset: block spreads, and a mirrored draft's logit flips" {
+    const gpa = std.testing.allocator;
+    try std.testing.expectError(error.BadPlantSpec, Spec.parse("v2=2"));
+    try std.testing.expectEqual(14, enemyBlock(4, 4));
+    try std.testing.expectEqual(5, enemyBlock(1, 1));
+    try std.testing.expectEqual(8, enemyBlock(1, 4));
+    const spec = try Spec.parse("seed=4,v2=1");
+    var d = try draft(gpa, 4_000, spec);
+    defer d.deinit();
+    // The second half mirrors the first: teams swapped
+    for (d.games[2_000..], d.games[0..2_000]) |*m, g| m.teams = .{ g.teams[1], g.teams[0] };
+    var t = try truth(gpa, &d, spec);
+    defer t.deinit(gpa);
+    var ss: [3]f64 = @splat(0);
+    for (t.parts[0..2_000], t.parts[2_000..]) |p, q| {
+        for ([_]Term{ .base, .pairs, .counters }, &ss) |term, *s| {
+            const x = p[@backingInt(term)];
+            try std.testing.expectApproxEqAbs(-x, q[@backingInt(term)], 1e-6);
+            s.* += @as(f64, x) * x;
+        }
+    }
+    // Per game: 10 mains, 20 ally cells, 25 matchups, each at its block's variance
+    var want: [3]f64 = @splat(0);
+    for (v2_main) |x| want[0] += 2 * x * x;
+    for (v2_ally) |x| want[1] += 2 * x * x;
+    for (0..5) |r| for (0..5) |q| {
+        const x = v2_enemy[enemyBlock(@min(r, q), @max(r, q))];
+        want[2] += x * x;
+    };
+    for (ss, want) |s, w| {
+        // Loose: a few common cells carry most games
+        const got = s / 2_000 * pp_per_logit * pp_per_logit;
+        try std.testing.expect(got / w > 0.4 and got / w < 2.5);
+    }
 }
 
 /// Columns: each planted term's part (scaled to logit 1 per unit of spec) and a constant

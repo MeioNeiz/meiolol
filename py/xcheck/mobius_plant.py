@@ -17,12 +17,20 @@ all pair and higher power is noise), triple 2 and 1 pp.
 --fm D adds a dot-product term of width D per role-pair block (a field-aware FM), the
 form that can learn the low-rank half.
 
+--dump PATH writes the triple2 truth's tables, the first --dump-n explained drafts, their
+backgrounds and the float64 Mobius terms (two halves), and stops: `meiolol-lab mobius
+plant-check PATH` recomputes them in Zig (C1's tool gate). --fixture PATH the same from
+made-up drafts of 8 champions, no SNAP: src/testdata/lab/mobius-plant.bin, the lab test.
+
 usage: mobius_plant.py SNAP [--fm 0] [--explain 3000] [--bg 32] [--cellbg 512]
-       [--only NAMES]
+       [--only NAMES] [--dump PATH [--dump-n 500]]
+       mobius_plant.py --fixture PATH
 """
 
 import argparse
+import copy
 import math
+import struct
 import time
 
 import numpy as np
@@ -217,6 +225,39 @@ def decompose(fn, x, bg, n_bg):
     return [h / (n_bg / 2) for h in halves]
 
 
+def write_dump(truth, ex, bg, path, need_triple=False):
+    """MOBP file, little-endian: "MOBP", u32 version 1, champions, drafts, backgrounds, the
+    3 triple roles; f64 triple size; f64 main [5, C], ally and enemy [5, 5, C, C], z
+    [5, C]; i32 drafts [N, 10], backgrounds [B, N, 10]; f64 terms [2, N, 1024] (half =
+    background index % 2, each the mean over its backgrounds). All in float64 on the CPU.
+    need_triple: False without writing when no order-3 term is over 1e-3"""
+    t = copy.copy(truth)
+    t.main, t.ally, t.enemy, t.z = (v.double().cpu() for v in (truth.main, truth.ally, truth.enemy, truth.z))
+    t.r = truth.r.cpu()
+    ex, bg = ex.cpu(), bg.cpu()
+    halves = [torch.zeros(len(ex), 1024, dtype=torch.float64) for _ in range(2)]
+    with torch.no_grad():
+        for j in range(len(bg)):
+            for i in range(0, len(ex), 192):
+                halves[j % 2][i : i + 192] += mobius(t.logit, ex[i : i + 192], bg[j][i : i + 192])
+    terms = torch.stack(halves) / (len(bg) / 2)
+    order = torch.tensor([bin(m).count("1") for m in range(1024)])
+    if need_triple and float(terms[:, :, order == 3].abs().max()) < 1e-3:
+        return False
+    with open(path, "wb") as f:
+        f.write(b"MOBP")
+        f.write(struct.pack("<7I", 1, t.main.shape[1], len(ex), len(bg), *TRIPLE_ROLES))
+        f.write(struct.pack("<d", t.triple))
+        for a in (t.main, t.ally, t.enemy, t.z):
+            f.write(a.numpy().astype("<f8").tobytes())
+        f.write(ex.numpy().astype("<i4").tobytes())
+        f.write(bg.numpy().astype("<i4").tobytes())
+        f.write(terms.numpy().astype("<f8").tobytes())
+    power = [float((terms[0] * terms[1])[:, order == k].sum(1).mean()) * PP * PP for k in range(1, 11)]
+    print(f"dump {path}: {len(ex)} drafts x {len(bg)} backgrounds, {t.main.shape[1]} champions; power pp^2 by order " + " ".join(f"{v:.6f}" for v in power))
+    return True
+
+
 def four_corner(fn, i, j, cells, z):
     """Purified cell of seats (i, j): mean over backgrounds of the second difference"""
     out = torch.zeros(len(cells), device=z.device)
@@ -272,13 +313,27 @@ def corr(a, b):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("snap")
+    ap.add_argument("snap", nargs="?")
     ap.add_argument("--explain", type=int, default=3000)
     ap.add_argument("--bg", type=int, default=32)
     ap.add_argument("--cellbg", type=int, default=512)
     ap.add_argument("--only", default="")
     ap.add_argument("--fm", type=int, default=0)
+    ap.add_argument("--dump", default="")
+    ap.add_argument("--dump-n", type=int, default=500)
+    ap.add_argument("--fixture", default="")
     args = ap.parse_args()
+    if args.fixture:
+        g = torch.Generator().manual_seed(3)
+        c = 8
+        for seed in range(11, 40):
+            truth = Truth(c, torch.full((5, c), 1.0 / c), seed, 1.0, 2.0, torch.device("cpu"))
+            if bool(torch.isfinite(truth.z).all()):
+                break
+        # Drafts whose backgrounds differ on the triple's seats, so order 3 is exercised
+        while not write_dump(truth, torch.randint(c, (2, 10), generator=g), torch.randint(c, (2, 2, 10), generator=g), args.fixture, True):
+            pass
+        return
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data = nnsets.load(args.snap)
     played = (data.flags & nnsets.PLAYED) != 0
@@ -312,6 +367,10 @@ def main():
             continue
         t0 = time.time()
         truth = Truth(c, pick, 11, pair_scale, triple_pp, dev)
+        if args.dump:
+            if name == "triple2":
+                write_dump(truth, ex[: args.dump_n], bg[:, : args.dump_n], args.dump)
+            continue
         lg = batched(truth.logit, x_all)
         y_all = torch.bernoulli(torch.sigmoid(lg), generator=torch.Generator(device=dev).manual_seed(5))
         y_fit, y_val = y_all[:-n_val], y_all[-n_val:]
