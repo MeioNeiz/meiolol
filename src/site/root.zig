@@ -512,6 +512,7 @@ test {
     _ = @import("dailydata.zig");
     _ = @import("daily.zig");
     _ = @import("locks.zig");
+    _ = @import("sources.zig");
 }
 
 test robots {

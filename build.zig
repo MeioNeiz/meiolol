@@ -416,6 +416,12 @@ fn modulesWith(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
         .imports = &.{ .{ .name = "core", .module = core }, .{ .name = "net", .module = net }, .{ .name = "build_options", .module = desktop_options } },
     }));
     backend.addAnonymousImport("scenarios", .{ .root_source_file = b.path("testdata/lcu/scenarios/all.zig") });
+    // The docs Learn's typed figures cite: a site test finds each figure there (src/site/sources.zig)
+    backend.addAnonymousImport("learned.md", .{ .root_source_file = b.path("docs/learned.md") });
+    for ([_][]const u8{ "fed-player-win-rate", "gold-deficit-comeback", "kill-gold-by-rank", "split-pusher-rank" }) |name| {
+        const file = b.fmt("{s}-measured.md", .{name});
+        backend.addAnonymousImport(file, .{ .root_source_file = b.path(b.fmt("research/raw/{s}", .{file})) });
+    }
     const app = b.createModule(.{
         .root_source_file = b.path("src/app_main.zig"),
         .target = target,
