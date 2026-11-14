@@ -420,6 +420,7 @@ pub const GameMore = struct {
     pub fn view(p: *P, h: *H) N {
         p.bindWalk() catch {
             h.oom = true;
+            return .none;
         };
         const g = p.s.game();
         const d = p.s.data;
