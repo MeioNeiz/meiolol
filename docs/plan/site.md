@@ -63,8 +63,8 @@ Next:
   link only stays exact in a fresh tab)
 - "What your draft was up against" from comp leans (data-and-model.md step 4)
 - RV1 (research/questions/competitor-steal-beat-avoid.md 1-3) No per-game grade; a walk:
-  summary, then Next through your moments, each saying what it moved against what, good
-  ones named too, ending on one thing to try. Done when Next alone reads a whole review
+  built (ReviewWalk, src/site/ui/review.zig, in the game page's inspector card). Left: a
+  step left in the hash can bring the walk back unasked; the Try rules read on real games
 
 ## Bringing players back (proposal; evidence: research/questions/stat-site-retention.md)
 
