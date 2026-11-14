@@ -2,7 +2,8 @@
 //! CandidateList (rows open their ReasonBreakdown, two at most) and On paper. Its own
 //! island (ui-dailyseat.wasm), loaded by ui-daily.wasm once the puzzle is answered; the
 //! answers and the board's selected seat from that island's root (`read`). Empty until
-//! then; dailypage.layout places its cards beside and under the board
+//! then; dailypage.layout places its cards beside and under the board. On paper's Try row
+//! swaps the selected seat's pick for one of its listed others and moves the split
 const std = @import("std");
 const tree = @import("tree.zig");
 const dd = @import("dailydata.zig");
@@ -16,6 +17,7 @@ const candlist = @import("candlist.zig");
 const reasons = @import("reasons.zig");
 const split = @import("split.zig");
 const toggletip = @import("toggletip.zig");
+const chip = @import("chip.zig");
 const phrase = @import("phrase.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
@@ -37,11 +39,13 @@ pub const Seat = struct {
     open: [2]?u16 = .{ null, null },
     /// The hidden seat's picks beyond the options shown
     more: bool = false,
+    /// The pick On paper tries in the selected seat instead of the played one (champion)
+    tried: ?u16 = null,
     /// The server's render: this family's files, for ui-daily.wasm to load
     js: []const u8 = "",
     wasm: []const u8 = "",
 
-    pub const Msg = union(enum) { cand: u16, more };
+    pub const Msg = union(enum) { cand: u16, more, try_: u16 };
 
     pub fn init(_: std.mem.Allocator, p: *const dd.Puzzle) Seat {
         return .{ .p = p, .seat = dp.hiddenSeat(p) };
@@ -60,6 +64,7 @@ pub const Seat = struct {
                 }
             },
             .more => s.more = !s.more,
+            .try_ => |c| s.tried = if (c == s.p.seats[s.seat / 5][s.seat % 5].champ or s.tried == c) null else c,
         }
     }
 
@@ -73,6 +78,7 @@ pub const Seat = struct {
             s.seat = to;
             s.open = .{ null, null };
             s.more = false;
+            s.tried = null;
         }
     }
 
@@ -297,48 +303,120 @@ pub const Seat = struct {
         };
     }
 
-    fn paper(s: *const Seat, h: *H) N {
+    fn paper(s: *Seat, h: *H) N {
         const pp = s.p.paper orelse return .none;
-        var rows = h.list();
+        const won = s.p.result.winner;
+        const x = s.p.seats[s.seat / 5][s.seat % 5];
+        const side: dd.Side = @fromBackingInt(@intCast(s.seat / 5));
+        const played = candOf(x, x.champ);
+        const tried: ?dd.Cand = if (s.tried) |c| if (played != null) candOf(x, c) else null else null;
+        const at: Moved = if (tried) |c| moved(pp, side, played.?, c) else .{ .blue = pp.blue, .lo = pp.low, .hi = pp.high };
         var most: f32 = 0.5;
         for (pp.edges) |e| most = @max(most, @abs(e));
-        for (pp.edges, W.kinds, 0..) |e, k, i| {
-            const side: dd.Side = if (e >= 0) .blue else .red;
-            // Edges come to one decimal: under 0.05 shows as 0.0
-            const even = @abs(e) < 0.05;
-            const w = 50 * @min(@abs(e) / most, 1);
-            rows.add(h.div(.{ .key = i, .class = "e" }, .{
-                h.span(.{ .class = "lab" }, .{k}),
-                h.span(.{ .class = "bar", .aria_hidden = true }, .{if (even) null else h.el(.i, .{
-                    .data_side = dp.sideOf(side),
-                    .style = h.vars(.{ .l = if (side == .blue) 50 - w else 50, .w = w }),
-                }, .{})}),
-                h.span(.{ .class = "v", .data_side = if (even) null else dp.sideOf(side) }, .{
-                    if (even) W.edge_even else W.edge.with(h, .{ .side = dp.sideWord(side).s, .d = @abs(e) }),
-                }),
-            }));
-        }
-        const won = s.p.result.winner;
+        var rows = h.list();
+        // The edges are the played draft's terms: a tried pick shows only its change, on
+        // their scale, so the bar keeps its width as picks are tried
+        if (tried != null) {
+            most = @max(most, @abs(at.blue - pp.blue));
+            rows.add(edgeRow(h, 4, W.vs_played.with(h, .{ .n = s.champOf(x.champ).name }), at.blue - pp.blue, most));
+        } else for (pp.edges, W.kinds, 0..) |e, k, i| rows.add(edgeRow(h, i, k, e, most));
         return h.div(.{ .key = 2, .class = "onpaper" }, .{card.view(h, .{ .label = W.paper }, &.{
             card.head(h, W.paper, null, &.{}),
             h.div(.{ .class = "paper" }, .{
                 h.div(.{}, .{
+                    s.tryRow(h, x, played),
                     split.view(h, .{
-                        .p = pp.blue,
-                        .lo = pp.low,
-                        .hi = pp.high,
+                        .p = at.blue,
+                        .lo = at.lo,
+                        .hi = at.hi,
                         .range_tip = "dp-range",
-                        .won = if (won == .blue) .blue else .red,
+                        .won = if (tried != null) null else if (won == .blue) .blue else .red,
                         .s = .l,
                     }),
                     toggletip.tip(h, "dp-range", W.range, W.range_note, false),
-                    h.p(.{ .class = "verdict" }, .{verdict(pp, won)}),
+                    h.p(.{ .class = "verdict" }, .{if (tried) |c|
+                        W.instead.with(h, .{ .n = s.champOf(c.champ).name, .p = s.champOf(x.champ).name })
+                    else
+                        verdict(pp, won)}),
                 }),
                 h.div(.{ .class = "edges" }, .{rows.done()}),
             }),
         })});
     }
+
+    /// The selected seat's picks in its list (the options offered on the hidden seat), the
+    /// played one first and pressed until another is tried; none with fewer than two
+    fn tryRow(s: *Seat, h: *H, x: dd.Seat, played: ?dd.Cand) ?N {
+        const pc = played orelse return null;
+        const fold = s.seat == dp.hiddenSeat(s.p) and offeredAll(s.p, x);
+        var row_ = h.list();
+        row_.add(s.tryChip(h, pc.champ, true));
+        for (x.cands) |c| {
+            if (c.champ == pc.champ or (fold and !isOption(s.p, c.champ))) continue;
+            row_.add(s.tryChip(h, c.champ, false));
+        }
+        if (row_.items.items.len < 2) return null;
+        return h.div(.{ .class = "try" }, .{
+            h.span(.{ .class = "tl" }, .{W.try_in}),
+            row_.done(),
+        });
+    }
+
+    fn tryChip(s: *Seat, h: *H, c: u16, played: bool) N {
+        const nm = s.champOf(c).name;
+        const pressed = if (s.tried) |t| t == c else played;
+        return chip.view(h, .{
+            .pressed = pressed,
+            .label = if (played) W.try_played.with(h, .{ .n = nm }) else W.try_.with(h, .{ .n = nm }),
+            .on = h.on(s, .{ .try_ = c }),
+        }, .{champ.view(h, s.champOf(c), .{ .px = .@"24", .named = false })});
+    }
 };
+
+/// One kind's edge, points to blue (negative: red's), as a bar from the middle on a scale
+/// of `most` points
+fn edgeRow(h: *H, key: usize, label: tree.Text, e: f32, most: f32) N {
+    const side: dd.Side = if (e >= 0) .blue else .red;
+    // Edges come to one decimal: under 0.05 shows as 0.0
+    const even = @abs(e) < 0.05;
+    const w = 50 * @min(@abs(e) / most, 1);
+    return h.div(.{ .key = key, .class = "e" }, .{
+        h.span(.{ .class = "lab" }, .{label}),
+        h.span(.{ .class = "bar", .aria_hidden = true }, .{if (even) null else h.el(.i, .{
+            .data_side = dp.sideOf(side),
+            .style = h.vars(.{ .l = if (side == .blue) 50 - w else 50, .w = w }),
+        }, .{})}),
+        h.span(.{ .class = "v", .data_side = if (even) null else dp.sideOf(side) }, .{
+            if (even) W.edge_even else W.edge.with(h, .{ .side = dp.sideWord(side).s, .d = @abs(e) }),
+        }),
+    });
+}
+
+fn candOf(x: dd.Seat, c: u16) ?dd.Cand {
+    for (x.cands) |k| if (k.champ == c) return k;
+    return null;
+}
+
+pub const Moved = struct { blue: f32, lo: ?f32, hi: ?f32 };
+
+/// Blue's chance with `c` in place of the seat's played pick: the played draft's chance
+/// moved by the model's gap between the two, so the played pick reads exactly as the
+/// draft. The range only where the pick has one
+pub fn moved(pp: dd.Paper, side: dd.Side, played: dd.Cand, c: dd.Cand) Moved {
+    const sign: f32 = if (side == .blue) 1 else -1;
+    const at = struct {
+        fn f(pp_: dd.Paper, sg: f32, from: f32, to: ?f32) ?f32 {
+            return std.math.clamp(pp_.blue + sg * ((to orelse return null) - from), 0, 100);
+        }
+    }.f;
+    const lo = if (side == .blue) c.low else c.high;
+    const hi = if (side == .blue) c.high else c.low;
+    return .{
+        .blue = at(pp, sign, played.win, c.win).?,
+        .lo = if (lo != null and hi != null) at(pp, sign, played.win, lo) else null,
+        .hi = if (lo != null and hi != null) at(pp, sign, played.win, hi) else null,
+    };
+}
 
 /// Which draft was better against who won, in words: the split above has the numbers.
 /// Drafts seldom differ by much (most of a puzzle's blue chances are 44-56%), so a
@@ -400,6 +478,11 @@ const W = struct {
     const kinds = [4]tree.Text{ plain("Champions"), plain("Teammates"), plain("Lanes"), plain("Matchups") };
     const edge = Phrase("{side:text} {d:points} points");
     const edge_even = plain("Even");
+    const try_in = plain("Try");
+    const try_ = Phrase("Try {n:text}");
+    const try_played = Phrase("{n:text}, played");
+    const instead = Phrase("With {n:text} instead of {p:text}.");
+    const vs_played = Phrase("vs {n:text}");
     const range = plain("95% range");
     const range_note = plain("The model's 95% range, given its assumptions.");
     const even_blue = plain("Even drafts. Blue won.");
@@ -448,6 +531,8 @@ pub const css =
     \\  .c-dseat .yours { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--t2); }
     \\  .c-dseat .none { color: var(--muted); font-size: var(--fs-s); }
     \\  .c-dseat .paper { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: center; }
+    \\  .c-dseat .try { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+    \\  .c-dseat .try .tl { font-size: var(--fs-xs); color: var(--faint); }
     \\  .c-dseat .verdict { margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--t2); }
     \\  .c-dseat .edges { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px var(--sp-2); align-items: center;
     \\    font-size: var(--fs-s); }
@@ -506,4 +591,10 @@ pub fn gallery(g: *@import("gallery.zig").Gallery) void {
         g.addFill("another seat, one the model can't rate", dp.both(h, p, .{ null, null }));
     }
     if (dp.shown(h, &dp.pro, 1, 1, .red)) |p| g.addFill("the played pick's reasons open", dp.both(h, p, .{ 5, null }));
+    if (dp.shown(h, &dd.sample, 1, 1, .red)) |p| if (h.mem.create(Seat)) |x| {
+        x.* = .{ .p = p.p, .seat = p.seat, .guess = p.guess, .done = true, .tried = 10 };
+        g.addFill("tried: another option On paper", dp.layout(h, p.view(h), x.view(h)));
+    } else |_| {
+        h.oom = true;
+    };
 }

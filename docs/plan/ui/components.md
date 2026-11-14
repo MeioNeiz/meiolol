@@ -183,7 +183,7 @@ rest of a list (expand). Scope and reason chips are labels, not controls: flat, 
 States: toggle; pressed; disabled; removable; expand; link; scope; reason; reason, hover
 tip; a filter row
 Used by: scopechip, card, champselect, practice, table, buildpanel, lockbar, inspector,
-gamepage, candlist, patchpage, idlookup, admincharts, champpage, tiers
+gamepage, candlist, dailyseat, patchpage, idlookup, admincharts, champpage, tiers
 
 ### ScopeChip
 `scopechip.zig` `.c-scope` site
@@ -1351,10 +1351,11 @@ Daily Draft's review after the reveal (docs/plan/ui/daily.md): the selected seat
 CandidateList (rows open their ReasonBreakdown, two at most) and On paper. Its own island
 (ui-dailyseat.wasm), loaded by ui-daily.wasm once the puzzle is answered; the answers and
 the board's selected seat from that island's root (`read`). Empty until then;
-dailypage.layout places its cards beside and under the board
+dailypage.layout places its cards beside and under the board. On paper's Try row swaps the
+selected seat's pick for one of its listed others and moves the split
 States: wrong pick: yours tagged in the list, On paper; more picks opened; wrong pick off
 the list: named in a line; another seat, one the model can't rate; the played pick's
-reasons open
+reasons open; tried: another option On paper
 Used by: dailypage
 
 ### DailyDays

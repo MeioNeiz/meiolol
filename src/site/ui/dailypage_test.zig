@@ -494,3 +494,43 @@ test "On paper's verdict: which draft was better against who won" {
     try testing.expectEqualStrings("Red's draft was better, and red won.", v(41.1, 35.6, 46.8, .red));
     try testing.expectEqualStrings("Blue's draft was better, but red won.", v(57.6, 51.2, 63.7, .red));
 }
+
+test "try: another pick moves On paper by the model's gap, for either side; back on the played one" {
+    var p: SeatIsland = undefined;
+    try p.init(&dd.sample);
+    defer p.deinit();
+    p.state.read("done", "5", "1");
+    p.i.render();
+    var out = try p.shown();
+    try testing.expect(std.mem.find(u8, out, "class=\"try\"") != null);
+    try testing.expect(std.mem.find(u8, out, "Blue's draft") != null or std.mem.find(u8, out, "Red's draft") != null or std.mem.find(u8, out, "Even drafts") != null);
+    const pp = dd.sample.paper.?;
+    // Red top: the played pick at 48.9, Gnar at 49.9 (48.5 to 51.3), a point for red
+    p.click(p.id("aria-label", "Try Gnar"));
+    try testing.expectEqual(@as(?u16, 10), p.state.tried);
+    out = try p.shown();
+    try testing.expect(std.mem.find(u8, out, "instead of") != null);
+    try testing.expect(std.mem.find(u8, out, "vs Jayce") != null);
+    try testing.expect(std.mem.find(u8, out, "Teammates") == null);
+    const m = dailyseat.moved(pp, .red, dd.sample.seats[1][0].cands[2], dd.sample.seats[1][0].cands[0]);
+    try testing.expectApproxEqAbs(pp.blue - 1.0, m.blue, 0.001);
+    try testing.expectApproxEqAbs(pp.blue - 2.4, m.lo.?, 0.001);
+    try testing.expectApproxEqAbs(pp.blue + 0.4, m.hi.?, 0.001);
+    // Pressed again, or the played one: the played draft
+    p.click(p.id("aria-label", "Try Gnar"));
+    try testing.expectEqual(@as(?u16, null), p.state.tried);
+    p.click(p.id("aria-label", "Try Gnar"));
+    p.click(p.id("aria-label", "Jayce, played"));
+    try testing.expectEqual(@as(?u16, null), p.state.tried);
+    try testing.expect(std.mem.find(u8, try p.shown(), "Teammates") != null);
+    // A new seat drops it
+    p.click(p.id("aria-label", "Try Gnar"));
+    p.state.read("done", "0", "1");
+    try testing.expectEqual(@as(?u16, null), p.state.tried);
+    // Blue: the same gap the other way; no range without the pick's
+    const played: dd.Cand = .{ .champ = 0, .rank = 2, .win = pp.blue, .terms = &.{}, .rest = 0 };
+    const top: dd.Cand = .{ .champ = 1, .rank = 1, .win = pp.blue + 2, .terms = &.{}, .rest = 0 };
+    const b = dailyseat.moved(pp, .blue, played, top);
+    try testing.expectApproxEqAbs(pp.blue + 2, b.blue, 0.001);
+    try testing.expectEqual(@as(?f32, null), b.lo);
+}
