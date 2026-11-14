@@ -45,7 +45,8 @@ of raw.db's free pages instead of moving pages back to the disk.
   Riot's new certificate (valid from 10 Nov) by the time of the crawler's start (6 Nov),
   so every handshake failed (TlsInitializationFailed, ladder GaveUp). Fixed in
   riot/client.zig (the client's clock follows the real one). Health logged "no new
-  matches" hourly to nobody: no ntfy topic (Storage and hosts)
+  matches" hourly to nobody: no ntfy topic (Storage and hosts). Now a crawler with no
+  answer for 3 h is restarted, guarded (docs/health.md "Crawler auto restart")
 - Sea runs ~98% (93-95% on C01 before the fix): one request at a time, ~0.7 s of each
   1.2 s slot in Riot's answer (time %: 36-40 slot wait, 56-61 Riot). Two in flight
   would not help: every minute sea still waits 25%+ on the limiter, whose catch-up

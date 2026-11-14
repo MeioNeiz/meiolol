@@ -37,7 +37,8 @@ deploy/health.sh, on the box, prints one line per problem (exit 1 when any):
 | complete form scrub | data/complete-scrub.status, the last scrub by any `forget` or `backup`, is not `ok`: day files failed (`failed N`) or the scrub stopped (`error NAME`); the next run retries. The forgotten list is exported before the scrub, so mirrors and the archive still get it |
 | Megatron mirror | unit `meiolol-megatron-mirror` failed: the line carries the cause (backup-mirror.sh's dated `FAILED (exit N) at STEP` line in data/backup-mirror.log and the output before it), e.g. its day files rsync |
 | complete form quarantine | files in data/complete/spool/quarantine (below) |
-| WAL not checkpointed | a data/*.db-wal over 4 GB (crawler's checkpointer stuck, or a reader holding it) |
+| WAL not checkpointed | a data/*.db-wal over 4 GB (crawler's checkpointer stuck, or a reader holding it); names the processes holding a WAL read mark (/proc/locks on the -shm, bytes 124-127) other than the crawler: unit, command, pid, minutes up |
+| crawler auto restart | deploy/crawl-revive.sh (below) restarted the crawler in the last 24 h (the line says why), or gave up on it |
 | site | unit `meiolol-web` not active, or last upload in web.log older than 26h |
 | site loop step | a step's latest outcome in data/web-steps.tsv failed (web-loop.sh: digest, curves, curves-push, lockrows and meio (pass or refit), site, upload, views, desktop, admin; daily builds, prev-curves, eval, example, lean, truth, tester, storage); clears when the step next succeeds |
 | site end to end | from C01 through https://meio.lol (Cloudflare tunnel, nginx): the home, a lock answer (data/lock/meio/darius/top/plat/none.bin) or /api/health not 200, or served from nginx's copy (X-Meiolol-Render STALE or ANY-*: the renderer did not answer); MEIOLOL_SITE in host.env, empty for none |
@@ -53,6 +54,20 @@ deploy/health.sh, on the box, prints one line per problem (exit 1 when any):
 | gpu-box archive | last pull reported a failure (data/gpu-box.pull, written by archive-serve.sh report): cause and since when, pushed once per failure |
 | raw valve | the disk valve dropped raw the archive never got in the last 24 h (raw-export --status drops_24h, data/raw-dropped.log) |
 | backup mirrors | backups not mirrored for 26 h, or a mirror silent for 48 h (backup-serve.sh status) |
+
+## Crawler auto restart
+
+deploy/crawl-revive.sh, first in each health-loop.sh round: a crawler up 3 h (REVIVE_H)
+whose report counters (stored matches, answered requests by region, platform req,
+ladder pages) have not moved for 3 h, or with no report line for 3 h, is restarted
+(10-13 Nov: 74 h of failed TLS handshakes in one process; a restart fixed it). Not
+04-07 UTC, not while `meiolol curves` runs, at most one per 24 h (REVIVE_GAP_H), and
+never again on a crawler its last restart started that has had no answer since: that
+needs a person, and health says so until someone restarts it. Outcomes in
+data/crawl-revive.log (restarts, and each held reason once: why, since when, the
+commonest recent warning), a line in crawl.log before the restart, and why-stopped.sh
+names the caller (`systemctl --user restart meiolol-crawl < bash bin/crawl-revive.sh <
+bash bin/health-loop.sh`). health-loop.sh re-execs itself when a deploy replaces it.
 
 ## Logs for afterwards
 

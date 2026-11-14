@@ -65,7 +65,7 @@ sync() {
         _ "$target" "$cache" "$tree" "$cpu"
     # check-deploy.sh (zig build ci) reads both lists: each committed, every unit that runs
     # in ~/ml/meiolol listed, every script a unit or listed script runs listed
-    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh backup-mirror.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh box-lib.sh why-stopped.sh" s
+    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh backup-mirror.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh box-lib.sh why-stopped.sh crawl-revive.sh" s
     local units="meiolol-crawl.service meiolol-web.service meiolol-render@.service meiolol-health.service meiolol-backup.service meiolol-cache-version.service meiolol-cache-version.path meiolol-cache-warm.service meiolol-megatron-mirror.service meiolol-megatron-mirror.timer" u
     local files=("$tree/zig-out/box/bin/meiolol")
     local on_box=("$DIR/bin/meiolol") want=() i

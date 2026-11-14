@@ -123,11 +123,35 @@ else
     fi
 fi
 
-# The crawler's checkpointer keeps WALs to ~64 MB; a long reader can hold one at ~1 GB
+# deploy/crawl-revive.sh's last outcome: a restart for a day, or a crawler it gave up on
+read -r at what why < <(tail -n 1 data/crawl-revive.log 2> /dev/null)
+if [[ "${what:-}" == restarted: ]] && (( now - $(date -d "$at" +%s) < 86400 )); then
+    problems+=("crawler auto-restarted $at: ${why:0:200} (data/crawl-revive.log)")
+elif [[ "$(cat data/crawl-revive.held 2> /dev/null)" == failed ]]; then
+    problems+=("crawler auto restart didn't help, not trying again: needs a look (data/crawl-revive.log)")
+fi
+
+# The crawler's checkpointer keeps WALs to ~64 MB; a reader holding a WAL read mark (-shm
+# bytes 124-127; /proc/locks) stops it restarting the WAL, so it grows (13 Nov: a 43 min
+# sqlite3 box job, 6.6 GB). Names those holders, the crawler's own aside
+wal_readers() {
+    local inode pid unit out=
+    inode=$(stat -c %i "$1" 2> /dev/null) || return
+    for pid in $(awk -v i="$inode" '$2 != "->" && $4 == "READ" && split($6, d, ":") == 3 \
+        && d[3] == i && $7 >= 124 && $7 <= 127 { print $5 }' /proc/locks | sort -un); do
+        unit=$(sed -n 's#.*/\([^/]*\.service\)$#\1#p' "/proc/$pid/cgroup" 2> /dev/null)
+        [[ "$unit" == meiolol-crawl.service ]] && continue
+        out+="${out:+; }${unit:+$unit: }$(tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | cut -c1-80 | sed "s/ *$//")"
+        out+=" (pid $pid, up $(( $(ps -o etimes= -p "$pid" 2> /dev/null || echo 0) / 60 )) min)"
+    done
+    echo "$out"
+}
 for wal in data/*.db-wal; do
     [[ -f "$wal" ]] || continue
     size=$(stat -c %s "$wal")
-    (( size > 4 << 30 )) && problems+=("${wal#data/} at $(( size >> 30 )) GB: WAL not checkpointed (crawl.log checkpointer lines)")
+    (( size > 4 << 30 )) || continue
+    readers=$(wal_readers "${wal%-wal}-shm")
+    problems+=("${wal#data/} at $(( size >> 30 )) GB: WAL not checkpointed, ${readers:+held by $readers}${readers:-no reader besides the crawler (crawl.log checkpointer and stall lines)}")
 done
 
 if ! running meiolol-web; then
